@@ -29,7 +29,12 @@ import {
   revealSavedPassword,
   updateSavedPassword
 } from './browser-data-sync'
-import { SERVER_READY_TIMEOUT_MS, WORKSPACE_CONNECTION_CHANNEL, WORKSPACE_STARTUP_READY_CHANNEL } from './constants'
+import {
+  MANAGER_CONNECTION_CHANNEL,
+  SERVER_READY_TIMEOUT_MS,
+  WORKSPACE_CONNECTION_CHANNEL,
+  WORKSPACE_STARTUP_READY_CHANNEL
+} from './constants'
 import { openFilesystemFileInExternalOpener } from './filesystem-file-opener'
 import {
   captureMobileDeviceScreenshot,
@@ -231,6 +236,7 @@ interface IpcHandlersInput {
   forgetWorkspaceFolder: (workspaceFolder: string) => void
   getDesktopIconPreviewDataUrl: (settings: Partial<DesktopSettings>) => string | undefined
   getDesktopSettings: (windowRecord?: WindowRecord) => Promise<DesktopSettings>
+  getManagerConnection: () => Promise<{ serverBaseUrl: string }>
   getUpdateStatus: () => DesktopUpdateStatus
   getGlobalInterfaceLanguageConfig: () => Promise<DesktopInterfaceLanguageConfig>
   hideDesktopContextCaptureOverlay: () => void
@@ -276,6 +282,7 @@ export const registerIpcHandlers = ({
   forgetWorkspaceFolder,
   getDesktopIconPreviewDataUrl,
   getDesktopSettings,
+  getManagerConnection,
   getUpdateStatus,
   getGlobalInterfaceLanguageConfig,
   hideDesktopContextCaptureOverlay,
@@ -305,6 +312,7 @@ export const registerIpcHandlers = ({
   updateGlobalInterfaceLanguageConfig
 }: IpcHandlersInput) => {
   ipcMain.handle('desktop:get-settings', (event) => getDesktopSettings(findWindowRecordForWebContents(event.sender)))
+  ipcMain.handle(MANAGER_CONNECTION_CHANNEL, () => getManagerConnection())
   ipcMain.handle('desktop:get-update-status', () => getUpdateStatus())
   ipcMain.handle('desktop:check-for-updates', (_event, input: unknown) => (
     checkForUpdates({

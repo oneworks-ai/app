@@ -36,6 +36,7 @@ const normalizeDesktopBuildSource = (value: unknown): DesktopBuildSource | undef
   const branch = normalizeText(value.branch)
   const buildTime = normalizeText(value.buildTime)
   const gitHash = normalizeText(value.gitHash)
+  const runtimePackageBuildFingerprint = normalizeRuntimePackageCacheVersion(value.runtimePackageBuildFingerprint)
   const runtimePackageCacheVersion = normalizeRuntimePackageCacheVersion(value.runtimePackageCacheVersion)
   if (branch == null || buildTime == null || gitHash == null) {
     return undefined
@@ -45,6 +46,7 @@ const normalizeDesktopBuildSource = (value: unknown): DesktopBuildSource | undef
     branch,
     buildTime,
     gitHash,
+    ...(runtimePackageBuildFingerprint == null ? {} : { runtimePackageBuildFingerprint }),
     ...(runtimePackageCacheVersion == null ? {} : { runtimePackageCacheVersion })
   }
 }
@@ -76,3 +78,6 @@ export const readDesktopBuildSource = (): DesktopBuildSource | undefined => {
 }
 
 export const readDesktopBuildRuntimePackageCacheVersion = () => readDesktopBuildSource()?.runtimePackageCacheVersion
+
+export const readDesktopBuildRuntimePackageBuildFingerprint = () =>
+  readDesktopBuildSource()?.runtimePackageBuildFingerprint

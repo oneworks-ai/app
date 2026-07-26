@@ -8,10 +8,12 @@ interface DesktopBuildSource {
   branch: string
   buildTime: string
   gitHash: string
+  runtimePackageBuildFingerprint: string
   runtimePackageCacheVersion: string
 }
 
 interface ResolveDesktopBuildSourceOptions {
+  createBuildFingerprint?: () => string
   cwd?: string
   env?: Record<string, string | undefined>
   now?: () => Date
@@ -27,10 +29,17 @@ const {
 }
 
 const fixedBuildDate = new Date('2026-05-19T01:02:03.000Z')
+const fixedBuildFingerprint = 'build-fixed-fingerprint'
+
+const resolveFixedDesktopBuildSource = (options: ResolveDesktopBuildSourceOptions) =>
+  resolveDesktopBuildSource({
+    createBuildFingerprint: () => fixedBuildFingerprint,
+    ...options
+  })
 
 describe('desktop build source metadata', () => {
   it('uses explicit desktop build source env values', () => {
-    expect(resolveDesktopBuildSource({
+    expect(resolveFixedDesktopBuildSource({
       env: {
         ONEWORKS_DESKTOP_BUILD_GIT_BRANCH: 'codex/macos-desktop-dmg-ci',
         ONEWORKS_DESKTOP_BUILD_GIT_HASH: 'abcdef1234567890',
@@ -43,12 +52,13 @@ describe('desktop build source metadata', () => {
       branch: 'codex/macos-desktop-dmg-ci',
       buildTime: '2026-05-19T01:02:03.000Z',
       gitHash: 'abcdef1234567890',
+      runtimePackageBuildFingerprint: fixedBuildFingerprint,
       runtimePackageCacheVersion: 'dev-abcdef123456-20260519010203'
     })
   })
 
   it('prefers GitHub pull request head branch over the merge ref name', () => {
-    expect(resolveDesktopBuildSource({
+    expect(resolveFixedDesktopBuildSource({
       env: {
         GITHUB_HEAD_REF: 'feature/source-branch',
         GITHUB_REF_NAME: '123/merge',
@@ -59,6 +69,7 @@ describe('desktop build source metadata', () => {
       branch: 'feature/source-branch',
       buildTime: '2026-05-19T01:02:03.000Z',
       gitHash: 'github-sha',
+      runtimePackageBuildFingerprint: fixedBuildFingerprint,
       runtimePackageCacheVersion: 'dev-githubsha-20260519010203'
     })
   })
@@ -69,7 +80,7 @@ describe('desktop build source metadata', () => {
       'rev-parse HEAD': 'local-hash'
     }
 
-    expect(resolveDesktopBuildSource({
+    expect(resolveFixedDesktopBuildSource({
       cwd: '/repo',
       env: {},
       now: () => fixedBuildDate,
@@ -78,12 +89,13 @@ describe('desktop build source metadata', () => {
       branch: 'local-branch',
       buildTime: '2026-05-19T01:02:03.000Z',
       gitHash: 'local-hash',
+      runtimePackageBuildFingerprint: fixedBuildFingerprint,
       runtimePackageCacheVersion: 'dev-localhash-20260519010203'
     })
   })
 
   it('allows an explicit packaged runtime cache version', () => {
-    expect(resolveDesktopBuildSource({
+    expect(resolveFixedDesktopBuildSource({
       env: {
         ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION: 'dev-local'
       },
@@ -97,12 +109,13 @@ describe('desktop build source metadata', () => {
       branch: 'local-branch',
       buildTime: '2026-05-19T01:02:03.000Z',
       gitHash: 'local-hash',
+      runtimePackageBuildFingerprint: fixedBuildFingerprint,
       runtimePackageCacheVersion: 'dev-local'
     })
   })
 
   it('does not emit build source metadata for release builds', () => {
-    expect(resolveDesktopBuildSource({
+    expect(resolveFixedDesktopBuildSource({
       env: {
         ONEWORKS_DESKTOP_RELEASE_BUILD: 'true',
         GITHUB_REF_NAME: 'main',

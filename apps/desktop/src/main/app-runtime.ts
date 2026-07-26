@@ -38,6 +38,7 @@ import {
 import { registerIpcHandlers } from './ipc-handlers'
 import { createLauncherClientServiceManager } from './launcher-client-service'
 import { toElectronAccelerator } from './launcher-shortcut'
+import { createManagerServiceManager } from './manager-service-manager'
 import { createAppMenuManager } from './menu'
 import {
   QUIT_CONFIRMATION_RESPONSE,
@@ -96,6 +97,18 @@ export const createDesktopApp = () => {
   let launcherShortcutRegistered = false
   let preserveLegacyDesktopSettings = false
   let quitConfirmationPromise: Promise<void> | undefined
+  let desktopClientOrigin: string | undefined
+  let resolveDesktopClientOrigin: ((origin: string) => void) | undefined
+  const desktopClientOriginPromise = new Promise<string>((resolve) => {
+    resolveDesktopClientOrigin = resolve
+  })
+
+  const publishDesktopClientOrigin = (origin: string) => {
+    if (desktopClientOrigin != null) return
+    desktopClientOrigin = origin
+    resolveDesktopClientOrigin?.(origin)
+    resolveDesktopClientOrigin = undefined
+  }
 
   const resolveDesktopSystemLocale = () =>
     resolveQuitConfirmationSystemLocale({
@@ -300,6 +313,7 @@ export const createDesktopApp = () => {
   }
 
   const getDesktopClientOrigin = () => {
+    if (desktopClientOrigin != null) return desktopClientOrigin
     const clientUrl = runtimeState.launcherClientService?.clientUrl
     if (clientUrl == null) return undefined
     try {
@@ -379,8 +393,14 @@ export const createDesktopApp = () => {
     broadcastWorkspaceSelectorState()
   }
 
+  const managerServiceManager = createManagerServiceManager({
+    getClientOrigin: async () => desktopClientOrigin ?? await desktopClientOriginPromise,
+    getIsQuitting: () => runtimeState.isQuitting,
+    runtimeState
+  })
   const launcherClientServiceManager = createLauncherClientServiceManager({
     getIsQuitting: () => runtimeState.isQuitting,
+    onClientOriginAvailable: publishDesktopClientOrigin,
     runtimeState
   })
   const serviceManager = createWorkspaceServiceManager({
@@ -402,6 +422,7 @@ export const createDesktopApp = () => {
 
   windowManager = createWindowManager({
     ensureLauncherClientService: launcherClientServiceManager.ensureLauncherClientService,
+    ensureManagerService: managerServiceManager.ensureManagerService,
     ensureWorkspaceService: serviceManager.ensureWorkspaceService,
     forgetWorkspaceFolder,
     refreshAppMenu,
@@ -438,6 +459,14 @@ export const createDesktopApp = () => {
       stopped,
       workspaceFolder: normalizedWorkspaceFolder
     }
+  }
+
+  const getManagerConnection = async () => {
+    const service = await managerServiceManager.ensureManagerService()
+    if (service.serverUrl == null) {
+      throw new Error('The local One Works manager server did not publish a URL.')
+    }
+    return { serverBaseUrl: service.serverUrl }
   }
 
   menuManager = createAppMenuManager({
@@ -546,6 +575,7 @@ export const createDesktopApp = () => {
       getDesktopIconPreviewDataUrl,
       getDesktopSettings: (windowRecord?: WindowRecord) =>
         buildDesktopSettings(windowRecord, { applyProjectUpdateChannel: true }),
+      getManagerConnection,
       getUpdateStatus: autoUpdateManager.getStatus,
       getGlobalInterfaceLanguageConfig: readGlobalInterfaceLanguageConfig,
       hideDesktopContextCaptureOverlay: contextCaptureOverlayController.hide,
@@ -810,11 +840,6 @@ export const createDesktopApp = () => {
         console.warn('[oneworks-desktop] failed to initialize project desktop update settings', error)
       })
     const hasPendingLaunchRequest = runtimeState.pendingLaunchRequests.length > 0
-    const opensLauncherOnStartup = startupWorkspaceFolder == null && !hasPendingLaunchRequest
-    if (opensLauncherOnStartup) {
-      warmWorkspaceRuntimeCacheSoon()
-      logDesktopStartup(`startup workspace package cache warm scheduled elapsed=${elapsedMs(startedAt)}`)
-    }
 
     if (startupWorkspaceFolder != null && !hasPendingLaunchRequest) {
       try {
@@ -831,10 +856,8 @@ export const createDesktopApp = () => {
       await windowManager.createLauncherWindow()
     }
 
-    if (!opensLauncherOnStartup) {
-      warmWorkspaceRuntimeCacheSoon()
-      logDesktopStartup(`startup workspace package cache warm scheduled elapsed=${elapsedMs(startedAt)}`)
-    }
+    warmWorkspaceRuntimeCacheSoon()
+    logDesktopStartup(`startup workspace package cache warm scheduled elapsed=${elapsedMs(startedAt)}`)
     await projectDesktopUpdateSettingsPromise
     await quitConfirmationLanguagePromise
     autoUpdateManager.start()
@@ -857,6 +880,7 @@ export const createDesktopApp = () => {
       }
     }
     void launcherClientServiceManager.stopLauncherClientService(runtimeState.launcherClientService)
+    void managerServiceManager.stopManagerService(runtimeState.managerService)
   }
 
   const bootstrap = () => {

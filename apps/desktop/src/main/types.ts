@@ -50,6 +50,16 @@ export interface WorkspaceService {
   workspaceFolder: string
 }
 
+export interface ManagerService {
+  port?: number
+  serverProcess?: ChildProcess
+  serverUrl?: string
+  startPromise?: Promise<ManagerService>
+  status: WorkspaceServiceStatus
+  stopPromise?: Promise<void>
+  stopping: boolean
+}
+
 export interface LauncherClientService {
   clientPort?: number
   clientProcess?: ChildProcess
@@ -65,6 +75,7 @@ export interface DesktopRuntimeState {
   desktopState: DesktopState
   isQuitting: boolean
   launcherClientService?: LauncherClientService
+  managerService?: ManagerService
   pendingLaunchRequests: LaunchRequest[]
   services: Map<string, WorkspaceService>
   windows: Map<number, WindowRecord>

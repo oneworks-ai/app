@@ -59,12 +59,18 @@ try {
   const {
     ensureBuiltinAdapterPackageCache,
     ensureBuiltinPluginPackageCache,
-    ensureBuiltinRuntimePackageCache
+    ensureBuiltinRuntimePackageCache,
+    runBuiltinPackageCachePreparationOnce
   } = require('./builtin-adapter-cache.cjs')
-  ensureBuiltinRuntimePackageCache({ trustManifest: true })
-  ensureBuiltinAdapterPackageCache({ trustManifest: true })
-  ensureBuiltinPluginPackageCache({ trustManifest: true })
-  logServerChildStartup('builtin package cache prepare complete')
+  const prepared = runBuiltinPackageCachePreparationOnce({
+    env: process.env,
+    prepare: () => {
+      ensureBuiltinRuntimePackageCache({ env: process.env, trustManifest: true })
+      ensureBuiltinAdapterPackageCache({ env: process.env, trustManifest: true })
+      ensureBuiltinPluginPackageCache({ env: process.env, trustManifest: true })
+    }
+  })
+  logServerChildStartup(`builtin package cache prepare ${prepared ? 'complete' : 'skipped inherited'}`)
 } catch (error) {
   console.error('[desktop] failed to prepare built-in package cache:', error)
 }
@@ -89,9 +95,19 @@ const serverPackageDir = resolveConfiguredServerPackageDir() ??
   path.dirname(require.resolve('@oneworks/server/package.json'))
 logServerChildStartup(`server package resolved path=${serverPackageDir}`)
 
-logServerChildStartup('handoff to cli package entrypoint')
-require('@oneworks/cli-helper/entry').runCliPackageEntrypoint({
-  packageDir: serverPackageDir,
-  sourceEntry: './src/index.ts',
-  distEntry: './dist/__INTERNAL__home/index.js'
-})
+const isManagerServer = process.env.__ONEWORKS_PROJECT_SERVER_ROLE__ === 'manager'
+
+logServerChildStartup(`handoff to ${isManagerServer ? 'manager cli' : 'server'} package entrypoint`)
+require('@oneworks/cli-helper/entry').runCliPackageEntrypoint(
+  isManagerServer
+    ? {
+      packageDir: serverPackageDir,
+      sourceEntry: './src/cli.ts',
+      distEntry: './dist/cli.js'
+    }
+    : {
+      packageDir: serverPackageDir,
+      sourceEntry: './src/index.ts',
+      distEntry: './dist/__INTERNAL__home/index.js'
+    }
+)

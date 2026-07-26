@@ -15,6 +15,7 @@ import type { DesktopRuntimeState, LauncherClientService } from './types'
 
 interface LauncherClientServiceManagerInput {
   getIsQuitting: () => boolean
+  onClientOriginAvailable?: (origin: string) => void
   runtimeState: DesktopRuntimeState
 }
 
@@ -44,6 +45,7 @@ const closeServer = (server: Server) =>
 
 export const createLauncherClientServiceManager = ({
   getIsQuitting,
+  onClientOriginAvailable,
   runtimeState
 }: LauncherClientServiceManagerInput) => {
   const stopLauncherClientService = async (service?: LauncherClientService) => {
@@ -101,6 +103,7 @@ export const createLauncherClientServiceManager = ({
     const startedAt = Date.now()
     logClientStartup('startup begin mode=dev')
     const clientPort = await getAvailablePort()
+    onClientOriginAvailable?.(`http://${SERVER_HOST}:${clientPort}`)
     logClientStartup(`startup port allocated port=${clientPort} elapsed=${elapsedMs(startedAt)}`)
     const clientExecutable = resolveClientDevExecutable()
     logClientStartup(`startup spawning executable=${clientExecutable} elapsed=${elapsedMs(startedAt)}`)
@@ -147,6 +150,7 @@ export const createLauncherClientServiceManager = ({
     logClientStartup(`startup dist resolved path=${distPath} elapsed=${elapsedMs(startedAt)}`)
 
     const clientPort = await getAvailablePort()
+    onClientOriginAvailable?.(`http://${SERVER_HOST}:${clientPort}`)
     logClientStartup(`startup port allocated port=${clientPort} elapsed=${elapsedMs(startedAt)}`)
     const { clientUrl, server } = await startPackagedLauncherStaticServer({
       clientBase: CLIENT_BASE,

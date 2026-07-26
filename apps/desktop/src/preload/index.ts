@@ -12,6 +12,7 @@ const browserControlPageCommandChannel = 'desktop:browser-control:page-command'
 const desktopSettingsChannel = 'desktop:settings'
 const desktopUpdateStatusChannel = 'desktop:update-status'
 const globalInterfaceLanguageChannel = 'desktop:global-interface-language'
+const managerConnectionChannel = 'desktop:manager-connection'
 const interactionPanelWebviewCommentElementChannel = 'desktop:interaction-panel-webview-comment-element'
 const toggleSidebarChannel = 'desktop:toggle-sidebar'
 const viewShortcutChannel = 'desktop:view-shortcut'
@@ -231,6 +232,7 @@ contextBridge.exposeInMainWorld('oneworksDesktop', {
   revealBrowserDownload: (id: string) => ipcRenderer.invoke('desktop:reveal-browser-download', id),
   getUpdateStatus: () => ipcRenderer.invoke('desktop:get-update-status'),
   getGlobalInterfaceLanguageConfig: () => ipcRenderer.invoke('desktop:get-global-interface-language-config'),
+  getManagerConnection: () => ipcRenderer.invoke(managerConnectionChannel),
   getWindowFullscreenState: () => ipcRenderer.invoke('desktop:get-window-fullscreen-state'),
   getWorkspaceConnection: () => ipcRenderer.invoke(workspaceConnectionChannel),
   getWorkspaceSelectorState: () => ipcRenderer.invoke('desktop:get-workspace-selector-state'),

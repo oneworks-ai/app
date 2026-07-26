@@ -15,6 +15,7 @@ import { resolveProjectWorkspaceFolder } from '../workspace-state.cjs'
 import { createBrowserWindowFactory } from './browser-window-factory'
 import { WORKSPACE_RESOURCE_REQUEST_CHANNEL } from './constants'
 import type { LauncherClientServiceManager } from './launcher-client-service'
+import type { ManagerServiceManager } from './manager-service-manager'
 import type {
   DesktopRuntimeState,
   LauncherWorkspacePluginSearchResponse,
@@ -57,12 +58,7 @@ const launcherStartupShellHtml = `<!doctype html>
   <style>
     :root {
       color-scheme: light dark;
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
       background: transparent;
-    }
-
-    * {
-      box-sizing: border-box;
     }
 
     html,
@@ -75,100 +71,11 @@ const launcherStartupShellHtml = `<!doctype html>
     }
 
     body {
-      display: grid;
-      place-items: center;
-      color: rgba(31, 35, 31, 0.86);
-    }
-
-    .shell {
-      width: 100%;
-      height: 100%;
-      display: grid;
-      grid-template-rows: 1fr auto;
-      padding: 34px;
-      border: 1px solid rgba(255, 255, 255, 0.54);
-      border-radius: 24px;
-      background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(246, 248, 243, 0.78)),
-        rgba(248, 250, 246, 0.78);
-      box-shadow: inset 0 1px rgba(255, 255, 255, 0.78);
       -webkit-app-region: drag;
-    }
-
-    .brand {
-      align-self: center;
-      display: grid;
-      justify-items: center;
-      gap: 14px;
-    }
-
-    .mark {
-      width: 52px;
-      height: 52px;
-      display: grid;
-      place-items: center;
-      border-radius: 16px;
-      color: white;
-      background: linear-gradient(135deg, #2d8ea0, #38566b);
-      box-shadow: 0 16px 34px rgba(20, 43, 52, 0.22);
-      font-size: 26px;
-      font-weight: 700;
-      letter-spacing: 0;
-    }
-
-    .title {
-      font-size: 18px;
-      font-weight: 650;
-      letter-spacing: 0;
-    }
-
-    .status {
-      font-size: 13px;
-      color: rgba(31, 35, 31, 0.54);
-      letter-spacing: 0;
-    }
-
-    .bar {
-      height: 44px;
-      border-radius: 14px;
-      background: rgba(255, 255, 255, 0.56);
-      border: 1px solid rgba(31, 35, 31, 0.08);
-    }
-
-    @media (prefers-color-scheme: dark) {
-      body {
-        color: rgba(242, 244, 239, 0.9);
-      }
-
-      .shell {
-        border-color: rgba(255, 255, 255, 0.1);
-        background:
-          linear-gradient(180deg, rgba(43, 48, 45, 0.88), rgba(29, 33, 31, 0.84)),
-          rgba(32, 35, 33, 0.82);
-        box-shadow: inset 0 1px rgba(255, 255, 255, 0.08);
-      }
-
-      .status {
-        color: rgba(242, 244, 239, 0.56);
-      }
-
-      .bar {
-        background: rgba(255, 255, 255, 0.07);
-        border-color: rgba(255, 255, 255, 0.08);
-      }
     }
   </style>
 </head>
-<body>
-  <main class="shell" aria-label="One Works is starting">
-    <section class="brand">
-      <div class="mark">1</div>
-      <div class="title">One Works</div>
-      <div class="status">Starting...</div>
-    </section>
-    <div class="bar"></div>
-  </main>
-</body>
+<body aria-busy="true"></body>
 </html>`
 const launcherStartupShellUrl = `data:text/html;charset=utf-8,${encodeURIComponent(launcherStartupShellHtml)}`
 
@@ -344,6 +251,7 @@ const buildStoredResourcesScript = () =>
 
 interface WindowManagerInput {
   ensureLauncherClientService: LauncherClientServiceManager['ensureLauncherClientService']
+  ensureManagerService: ManagerServiceManager['ensureManagerService']
   ensureWorkspaceService: WorkspaceServiceManager['ensureWorkspaceService']
   forgetWorkspaceFolder: (workspaceFolder: string) => void
   refreshAppMenu: () => void
@@ -354,6 +262,7 @@ interface WindowManagerInput {
 
 export const createWindowManager = ({
   ensureLauncherClientService,
+  ensureManagerService,
   ensureWorkspaceService,
   forgetWorkspaceFolder,
   refreshAppMenu,
@@ -580,16 +489,23 @@ export const createWindowManager = ({
 
     let service: Awaited<ReturnType<typeof ensureLauncherClientService>>
     try {
-      logDesktopTiming(`launcher waiting for shared client elapsed=${elapsedMs(startedAt)}`)
-      service = await ensureLauncherClientService()
+      logDesktopTiming(`launcher waiting for shared client and manager elapsed=${elapsedMs(startedAt)}`)
+      const clientServicePromise = ensureLauncherClientService()
+      const managerServicePromise = ensureManagerService()
+      const [clientService, managerService] = await Promise.all([clientServicePromise, managerServicePromise])
+      service = clientService
       logDesktopTiming(
-        `launcher shared client ready url=${service.clientUrl ?? 'none'} elapsed=${elapsedMs(startedAt)}`
+        `launcher runtimes ready client=${service.clientUrl ?? 'none'} ` +
+          `manager=${managerService.serverUrl ?? 'none'} elapsed=${elapsedMs(startedAt)}`
       )
       if (!isWindowRecordUsable(windowRecord)) {
         return
       }
       if (service.clientUrl == null) {
         throw new Error('The local One Works launcher client did not publish a URL.')
+      }
+      if (managerService.serverUrl == null) {
+        throw new Error('The local One Works manager server did not publish a URL.')
       }
     } catch (error) {
       if (!isWindowRecordUsable(windowRecord)) {
@@ -600,10 +516,7 @@ export const createWindowManager = ({
         windowRecord.window.close()
         return
       }
-      await loadWorkspaceSelectorWindow(windowRecord, {
-        errorMessage: getErrorMessage(error),
-        mode: 'initial'
-      })
+      console.error('[oneworks-desktop] failed to load launcher runtimes', error)
       if (shouldShow && !windowRecord.window.isVisible()) {
         showLauncherWindowRecord(windowRecord)
       }
@@ -814,7 +727,10 @@ export const createWindowManager = ({
 
   const openStandaloneTabWindow = async (routePath: string) => {
     const standaloneRoutePath = normalizeStandaloneRoutePath(routePath)
-    const clientUrl = await ensureSharedClientUrl()
+    const [clientUrl] = await Promise.all([
+      ensureSharedClientUrl(),
+      ensureManagerService()
+    ])
     const targetUrl = buildStandaloneTabUrl(clientUrl, standaloneRoutePath)
     const windowRecord = createWindowRecord({ kind: 'standalone' })
     if (isStandaloneDeviceRoutePath(standaloneRoutePath)) {

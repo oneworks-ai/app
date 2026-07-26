@@ -1,4 +1,5 @@
 const { spawnSync } = require('node:child_process')
+const crypto = require('node:crypto')
 const fs = require('node:fs')
 const path = require('node:path')
 
@@ -82,6 +83,7 @@ const resolveRuntimePackageCacheVersion = ({ buildSource, env }) => {
 }
 
 const resolveDesktopBuildSource = ({
+  createBuildFingerprint = () => `build-${crypto.randomUUID()}`,
   cwd = process.cwd(),
   env = process.env,
   now = () => new Date(),
@@ -112,6 +114,7 @@ const resolveDesktopBuildSource = ({
   }
   return {
     ...buildSource,
+    runtimePackageBuildFingerprint: normalizeRuntimePackageCacheVersion(createBuildFingerprint()),
     runtimePackageCacheVersion: resolveRuntimePackageCacheVersion({ buildSource, env })
   }
 }

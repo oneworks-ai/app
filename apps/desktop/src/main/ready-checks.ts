@@ -82,7 +82,8 @@ export const waitForClientReady = ({ port, startedAt = Date.now() }: { port: num
 
 export const waitForServerReadyEvent = (
   child: ChildProcess,
-  startedAt = Date.now()
+  startedAt = Date.now(),
+  timeoutMs = SERVER_READY_TIMEOUT_MS
 ) =>
   new Promise<void>((resolve, reject) => {
     if (child.stdout == null) {
@@ -94,7 +95,7 @@ export const waitForServerReadyEvent = (
     const timer = setTimeout(() => {
       cleanup()
       reject(new Error('Timed out while waiting for the One Works server ready event.'))
-    }, Math.max(SERVER_READY_TIMEOUT_MS - (Date.now() - startedAt), 1))
+    }, Math.max(timeoutMs - (Date.now() - startedAt), 1))
 
     const cleanup = () => {
       clearTimeout(timer)
@@ -159,10 +160,13 @@ export const waitForChildStartup = (
     )
   })
 
-export const waitForServerStartup = (child: ChildProcess) =>
+export const waitForServerStartup = (
+  child: ChildProcess,
+  timeoutMs = SERVER_READY_TIMEOUT_MS
+) =>
   waitForChildStartup(
     child,
-    () => waitForServerReadyEvent(child),
+    () => waitForServerReadyEvent(child, Date.now(), timeoutMs),
     'One Works server exited before it was ready'
   )
 
