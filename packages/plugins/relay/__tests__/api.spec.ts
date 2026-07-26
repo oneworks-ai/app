@@ -1096,6 +1096,44 @@ describe('relay plugin scoped API', () => {
     expect(loginUrl.searchParams.get('server_id')).toBe(DEFAULT_OFFICIAL_RELAY_SERVER_ID)
   })
 
+  it('loads native login methods from the default official Cloudflare service', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input))
+      expect(url.origin).toBe(new URL(OFFICIAL_RELAY_CLOUDFLARE_BASE_URL).origin)
+      expect(url.pathname).toBe('/api/auth/login-options')
+      expect(url.searchParams.get('server_id')).toBe(DEFAULT_OFFICIAL_RELAY_SERVER_ID)
+      return new Response(
+        JSON.stringify({
+          loginMethods: {
+            default: 'password',
+            enabled: ['password', 'passkey', 'verification_code']
+          }
+        }),
+        {
+          headers: { 'content-type': 'application/json' }
+        }
+      )
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { apis } = await createPluginHarness({})
+
+    const response = await apis.get('relay')?.handler?.({
+      body: Buffer.from(JSON.stringify({ serverId: DEFAULT_OFFICIAL_RELAY_SERVER_ID })),
+      method: 'POST',
+      path: 'login-options'
+    }) as {
+      body?: { options?: { loginMethods?: { default?: string; enabled?: string[] } } }
+      status?: number
+    }
+
+    expect(response.status).toBe(200)
+    expect(response.body?.options?.loginMethods).toEqual({
+      default: 'password',
+      enabled: ['password', 'passkey', 'verification_code']
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
   it('does not reopen remote workspace proxies for offline devices', async () => {
     const workspaceFolder = '/workspaces/offline-app'
     const workspaceId = createTestRemoteWorkspaceId({

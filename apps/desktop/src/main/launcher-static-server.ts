@@ -1,4 +1,5 @@
 /* eslint-disable max-lines -- packaged launcher static server keeps base rewriting and file serving together. */
+import { Buffer } from 'node:buffer'
 import { createReadStream } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
 import { createServer } from 'node:http'
@@ -9,6 +10,7 @@ import path from 'node:path'
 import { CLIENT_BASE, SERVER_HOST } from './constants'
 
 const DEFAULT_BASE_PLACEHOLDER = '/__ONEWORKS_PROJECT_CLIENT_BASE__/'
+const PLUGIN_RUNTIME_PROXY_PREFIX = '/__oneworks_plugin_runtime__/'
 const CONTENT_TYPES: Record<string, string> = {
   '.css': 'text/css; charset=utf-8',
   '.html': 'text/html; charset=utf-8',
@@ -113,6 +115,106 @@ const sendFile = async (
   return true
 }
 
+const isLoopbackHostname = (hostname: string) => (
+  hostname === '127.0.0.1' ||
+  hostname === '::1' ||
+  hostname === '[::1]' ||
+  hostname === 'localhost'
+)
+
+const resolvePluginRuntimeProxyUrl = (requestUrl: URL) => {
+  if (!requestUrl.pathname.startsWith(PLUGIN_RUNTIME_PROXY_PREFIX)) {
+    return undefined
+  }
+
+  const proxyPath = requestUrl.pathname.slice(PLUGIN_RUNTIME_PROXY_PREFIX.length)
+  const originSeparator = proxyPath.indexOf('/')
+  if (originSeparator <= 0) {
+    return null
+  }
+
+  try {
+    const encodedOrigin = proxyPath.slice(0, originSeparator)
+    const decodedOrigin = decodeURIComponent(encodedOrigin)
+    const runtimeOrigin = new URL(decodedOrigin)
+    if (
+      (runtimeOrigin.protocol !== 'http:' && runtimeOrigin.protocol !== 'https:') ||
+      !isLoopbackHostname(runtimeOrigin.hostname) ||
+      runtimeOrigin.username !== '' ||
+      runtimeOrigin.password !== '' ||
+      runtimeOrigin.pathname !== '/' ||
+      runtimeOrigin.search !== '' ||
+      runtimeOrigin.hash !== '' ||
+      runtimeOrigin.origin !== decodedOrigin
+    ) {
+      return null
+    }
+
+    const upstreamPath = proxyPath.slice(originSeparator)
+    if (/%2f|%5c/i.test(upstreamPath)) {
+      return null
+    }
+    const upstreamUrl = new URL(`${upstreamPath}${requestUrl.search}`, runtimeOrigin.origin)
+    const segments = upstreamUrl.pathname.split('/')
+    const scope = decodeURIComponent(segments[3] ?? '')
+    if (
+      upstreamUrl.origin !== runtimeOrigin.origin ||
+      segments[1] !== 'api' ||
+      segments[2] !== 'plugins' ||
+      !/^[a-z\d][\w.-]*$/i.test(scope) ||
+      (segments[4] !== 'client' && segments[4] !== 'dev' && segments[4] !== 'shared') ||
+      segments.length < 6 ||
+      segments[5] === ''
+    ) {
+      return null
+    }
+    return upstreamUrl
+  } catch {
+    return null
+  }
+}
+
+const proxyPluginRuntimeAsset = async (
+  request: IncomingMessage,
+  response: ServerResponse,
+  upstreamUrl: URL
+) => {
+  const upstreamResponse = await fetch(upstreamUrl, {
+    headers: {
+      accept: request.headers.accept ?? '*/*'
+    },
+    method: request.method,
+    redirect: 'manual'
+  })
+  if (upstreamResponse.status >= 300 && upstreamResponse.status < 400) {
+    writeText(request, response, 502, 'Plugin asset redirect refused', 'text/plain; charset=utf-8')
+    return
+  }
+
+  const headers: Record<string, string> = {}
+  for (
+    const header of [
+      'cache-control',
+      'content-type',
+      'etag',
+      'last-modified',
+      'x-content-type-options'
+    ]
+  ) {
+    const value = upstreamResponse.headers.get(header)
+    if (value != null) headers[header] = value
+  }
+  const body = request.method === 'HEAD' || upstreamResponse.body == null
+    ? undefined
+    : Buffer.from(await upstreamResponse.arrayBuffer())
+  response.writeHead(upstreamResponse.status, headers)
+  if (body == null) {
+    response.end()
+    return
+  }
+  response.end(body)
+}
+
 const listen = (server: ReturnType<typeof createServer>, port: number) =>
   new Promise<number>((resolve, reject) => {
     const onListening = () => {
@@ -165,7 +267,18 @@ export const startPackagedLauncherStaticServer = async ({
     }
 
     try {
-      const requestPath = new URL(request.url ?? '/', `http://${SERVER_HOST}`).pathname
+      const requestUrl = new URL(request.url ?? '/', `http://${SERVER_HOST}`)
+      const requestPath = requestUrl.pathname
+      const pluginRuntimeProxyUrl = resolvePluginRuntimeProxyUrl(requestUrl)
+      if (pluginRuntimeProxyUrl !== undefined) {
+        if (pluginRuntimeProxyUrl == null) {
+          writeText(request, response, 403, 'Forbidden', 'text/plain; charset=utf-8')
+          return
+        }
+        await proxyPluginRuntimeAsset(request, response, pluginRuntimeProxyUrl)
+        return
+      }
+
       const trimmedBases = supportedBases.map(trimTrailingSlash)
       if (requestPath === '/' || trimmedBases.includes(requestPath)) {
         response.writeHead(308, { Location: normalizedBase })
