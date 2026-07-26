@@ -16,6 +16,7 @@
   - `browser-window-factory.ts`：统一 BrowserWindow 创建、titlebar 风格、`window.open` 管控和窗口关闭清理
   - `window-manager.ts`：BrowserWindow 记录、项目选择页 / launcher / workspace 窗口切换
   - `launcher-client-service.ts`：桌面共享 client dev server / packaged static server 生命周期
+  - `manager-service-manager.ts`：桌面用户级 manager server 生命周期；为 Launcher 的插件与账号能力提供独立控制面
   - `workspace-service-manager.ts`：每个 workspace 的内置 server 生命周期
   - `window-titles.ts`：workspace、launcher、selector 的窗口标题和加载页 URL 组装
   - `deep-link.ts`：`oneworks://` / `one-works://` schema URL 解析；Relay SSO 根据发起 runtime 回跳到 Launcher 插件页或具体 workspace 插件页，Manager 回跳不能把 manager home 当作 workspace 打开
@@ -59,13 +60,13 @@
 ## 当前边界
 
 - Electron main 进程不重复实现 server 业务逻辑；桌面端 server 仍通过 `src/server-child.cjs` 复用 server workspace package。
-- 本地 dev 安装包启动 workspace 时，安装包内 cli/server/client 是 runtime cache 的来源：`src/main/workspace-service-manager.ts` 和 `src/server-child.cjs` 会通过 `src/builtin-adapter-cache.cjs` 按 `desktop-build-source.json` 里的 dev cacheVersion 刷新 `~/.oneworks/bootstrap/npm/oneworks__cli/<cacheVersion>`、`oneworks__server/<cacheVersion>` 与 `oneworks__client/<cacheVersion>`。排查“安装包还是旧代码”时必须核对这个 cache 里的真实文件，不要只看 `/Applications/.../Resources/app`。
+- 本地 dev 安装包启动 workspace 时，安装包内 cli/server/client 是 runtime cache 的来源：`src/main/workspace-service-manager.ts` 和 `src/server-child.cjs` 会通过 `src/builtin-adapter-cache.cjs` 按 `desktop-build-source.json` 里的 dev cacheVersion 刷新 `~/.oneworks/bootstrap/npm/oneworks__cli/<cacheVersion>`、`oneworks__server/<cacheVersion>` 与 `oneworks__client/<cacheVersion>`；manifest 快路径还必须匹配每次打包唯一的 `runtimePackageBuildFingerprint` 及当前 platform/arch。排查“安装包还是旧代码”时必须核对这个 cache 里的真实文件，不要只看 `/Applications/.../Resources/app`。
 - `pnpm desktop:dev` 默认打开不绑定 workspace 的空项目启动页；`pnpm desktop:dev:workspace` 才以当前仓库作为 workspace 启动。两者都转发到统一 `dev-service ensure` 生命周期，由 Electron 启动共享 Vite client，并为每个 workspace 启动独立本机 server；前端改动应走共享 client 的 HMR，不需要重复构建静态 dist。`electron` 与 `electron-workspace` 受单实例约束，切换前必须先获得用户对当前 target 的显式停止授权。
 - 多 worktree / 多 AI 会话可能同时运行桌面开发态实例；排查崩溃或端口占用时，不要因为看到其他 worktree 的 Electron、`apps/desktop/src/server-child.cjs` 或 `apps/client/cli.cjs` 进程就直接清理。先列出 PID、启动时间、worktree 路径和命令来源，只有确认属于当前终端会话、明确是当前崩溃实例残留，或用户同意后才停止。
 - 桌面 main / preload 使用 `electron-vite` 构建，Electron 运行入口是 `dist/main/index.js`。
 - 外部 CDP 只作为 agent 控制面使用，默认关闭；通过 `ONEWORKS_DESKTOP_CDP_PORT` / `--oneworks-cdp-port` 显式启用，并优先配合独立 `ONEWORKS_DESKTOP_USER_DATA_DIR` / `--oneworks-user-data-dir` 冷启动，避免被单实例锁转发到真实用户实例。
 - 完整 agent bridge protocol、runtime evidence 编排和 `desktop-control` CLI 属于仓库 `scripts/` 层，入口见 `scripts/AGENTS.md` 和 `scripts/desktop-control-protocol.md`；桌面 app 侧只维护 bootstrap 前的 opt-in CDP hook。
-- 空项目启动页和所有 workspace 窗口共用 launcher client service 管理的 client；workspace service 只启动 server。打开 workspace 后，main/preload 通过 IPC 告诉对应 renderer 当前窗口绑定的 `serverBaseUrl`，请求仍由前端直连 server HTTP / WebSocket。不要再为每个 workspace 启动独立 client。
+- 空项目启动页和所有 workspace 窗口共用 launcher client service 管理的 client；Electron 另行维护一个用户级 manager server，Launcher 必须通过 preload IPC 获取其精确 `serverBaseUrl`，不能回退到固定 8787；每个 workspace service 仍只启动自己的 server。打开 workspace 后，main/preload 通过 IPC 告诉对应 renderer 当前窗口绑定的 `serverBaseUrl`，请求仍由前端直连 server HTTP / WebSocket。不要再为每个 workspace 启动独立 client。
 - 空项目启动页默认可通过 `CommandOrControl+Space` 全局快捷键打开；快捷键值来自 Electron 注入的 desktop settings，可在桌面端配置页更新。macOS 上如果系统快捷键占用了 `Command+Space`，Electron 注册会失败并只打印 warning，不要在代码里静默换成另一个快捷键。
 - 桌面窗口统一使用隐藏 titlebar / traffic light 风格；新建窗口、右键会话新窗口、launcher 和 workspace selector 都必须通过 `browser-window-factory` 创建，避免出现系统默认标题栏。
 - macOS workspace 窗口的原生毛玻璃依赖 `vibrancy: 'sidebar'` 和 `transparent: true` 同时存在；client 侧会把 sidebar / titlebar 背景让给原生窗口材质。不要只设置透明背景色或只改前端 CSS，否则展开态 sidebar 容易退成实色灰块，和 launcher / 折叠态表现不一致。

@@ -4,6 +4,7 @@ export const SERVER_HOST = '127.0.0.1'
 export const CLIENT_BASE = '/ui'
 export const CLIENT_READY_PATH = `${CLIENT_BASE}/`
 export const CLIENT_READY_TIMEOUT_MS = 30000
+export const MANAGER_READY_TIMEOUT_MS = 120000
 export const SERVER_READY_TIMEOUT_MS = 30000
 export const SERVER_STOP_TIMEOUT_MS = 3000
 export const DEVTOOLS_MENU_ACCELERATOR = process.platform === 'darwin' ? 'Alt+Command+I' : 'Ctrl+Shift+I'
@@ -17,6 +18,7 @@ export const WORKSPACE_SELECTOR_STATE_CHANNEL = 'desktop:workspace-selector-stat
 export const DESKTOP_SETTINGS_CHANNEL = 'desktop:settings'
 export const DESKTOP_UPDATE_STATUS_CHANNEL = 'desktop:update-status'
 export const GLOBAL_INTERFACE_LANGUAGE_CHANNEL = 'desktop:global-interface-language'
+export const MANAGER_CONNECTION_CHANNEL = 'desktop:manager-connection'
 export const TOGGLE_SIDEBAR_CHANNEL = 'desktop:toggle-sidebar'
 export const VIEW_SHORTCUT_CHANNEL = 'desktop:view-shortcut'
 export const WINDOW_FULLSCREEN_STATE_CHANNEL = 'desktop:window-fullscreen-state'

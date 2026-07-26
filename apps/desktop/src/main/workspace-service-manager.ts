@@ -106,7 +106,7 @@ const quoteNodeOptionValue = (value: string) => (
   /[\s"']/u.test(value) ? JSON.stringify(value) : value
 )
 
-const resolveDirectSourceLoaderEnv = (
+export const resolveDirectSourceLoaderEnv = (
   executable: string
 ): Pick<NodeJS.ProcessEnv, 'NODE_OPTIONS' | '__IS_LOADER_CLI__'> | {} => {
   if (!isDev) return {}
@@ -147,7 +147,10 @@ export const resolveDesktopDevRuntimeVersionEnv = (
 ):
   | Pick<
     NodeJS.ProcessEnv,
-    '__ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION__' | '__ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION__'
+    | '__ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION__'
+    | '__ONEWORKS_DESKTOP_RUNTIME_PACKAGE_BUILD_FINGERPRINT__'
+    | '__ONEWORKS_DESKTOP_TRUST_DEV_RUNTIME_CACHE_MANIFEST__'
+    | '__ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION__'
   >
   | {} => resolveDesktopRuntimePackageCacheVersionEnv(env)
 

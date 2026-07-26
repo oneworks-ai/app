@@ -113,6 +113,10 @@ const assertInstalledBuildSource = (appPath) => {
   const branch = assertTextField({ field: 'branch', metadata })
   const buildTime = assertTextField({ field: 'buildTime', metadata })
   const gitHash = assertTextField({ field: 'gitHash', metadata })
+  const runtimePackageBuildFingerprint = assertTextField({
+    field: 'runtimePackageBuildFingerprint',
+    metadata
+  })
   const runtimePackageCacheVersion = assertTextField({ field: 'runtimePackageCacheVersion', metadata })
   assertExpectedBuildSourceValue({
     actual: branch,
@@ -131,7 +135,7 @@ const assertInstalledBuildSource = (appPath) => {
   })
   console.log(
     `[desktop] installed app build source ${gitHash.slice(0, 12)} on ${branch} at ${buildTime} ` +
-      `runtimeCache=${runtimePackageCacheVersion}`
+      `runtimeCache=${runtimePackageCacheVersion} buildFingerprint=${runtimePackageBuildFingerprint}`
   )
 }
 

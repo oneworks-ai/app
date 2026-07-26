@@ -15,7 +15,7 @@ const appMetadata = resolveDesktopAppMetadata()
 const appName = appMetadata.productName
 const host = '127.0.0.1'
 
-const createWorkspaceRuntimeEnv = (runtimePackageCacheVersion) => {
+const createWorkspaceRuntimeEnv = (runtimePackageCacheVersion, runtimePackageBuildFingerprint) => {
   const env = { ...process.env }
   delete env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__
   env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__ = workspaceRoot
@@ -23,20 +23,29 @@ const createWorkspaceRuntimeEnv = (runtimePackageCacheVersion) => {
     env.__ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION__ = runtimePackageCacheVersion
     env.__ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION__ = runtimePackageCacheVersion
   }
+  if (runtimePackageBuildFingerprint != null) {
+    env.__ONEWORKS_DESKTOP_RUNTIME_PACKAGE_BUILD_FINGERPRINT__ = runtimePackageBuildFingerprint
+    env.__ONEWORKS_DESKTOP_TRUST_DEV_RUNTIME_CACHE_MANIFEST__ = '1'
+  }
   return env
 }
 
-const readRuntimePackageCacheVersion = (resourcesDir) => {
+const readRuntimePackageCacheMetadata = (resourcesDir) => {
   try {
     const buildSource = JSON.parse(
       fs.readFileSync(path.join(resourcesDir, 'desktop-build-source.json'), 'utf8')
     )
-    return typeof buildSource.runtimePackageCacheVersion === 'string' &&
-        buildSource.runtimePackageCacheVersion.startsWith('dev-')
-      ? buildSource.runtimePackageCacheVersion
-      : undefined
+    return {
+      runtimePackageBuildFingerprint: typeof buildSource.runtimePackageBuildFingerprint === 'string'
+        ? buildSource.runtimePackageBuildFingerprint
+        : undefined,
+      runtimePackageCacheVersion: typeof buildSource.runtimePackageCacheVersion === 'string' &&
+          buildSource.runtimePackageCacheVersion.startsWith('dev-')
+        ? buildSource.runtimePackageCacheVersion
+        : undefined
+    }
   } catch {
-    return undefined
+    return {}
   }
 }
 
@@ -97,6 +106,7 @@ const resolvePackagedPaths = () => {
   if (process.platform === 'darwin') {
     const bundleDir = path.join(packageDir, `${appName}.app`)
     const resourcesDir = path.join(bundleDir, 'Contents/Resources')
+    const runtimePackageCacheMetadata = readRuntimePackageCacheMetadata(resourcesDir)
     return {
       appDir: path.join(resourcesDir, 'app'),
       clientDistDir: path.join(resourcesDir, 'dist'),
@@ -104,11 +114,12 @@ const resolvePackagedPaths = () => {
         path.join(bundleDir, 'Contents/MacOS', appMetadata.executableName),
         path.join(bundleDir, 'Contents/MacOS', appMetadata.artifactBaseName)
       ),
-      runtimePackageCacheVersion: readRuntimePackageCacheVersion(resourcesDir)
+      ...runtimePackageCacheMetadata
     }
   }
 
   const resourcesDir = path.join(packageDir, 'resources')
+  const runtimePackageCacheMetadata = readRuntimePackageCacheMetadata(resourcesDir)
   const executableName = process.platform === 'win32'
     ? `${appMetadata.executableName}.exe`
     : appMetadata.executableName
@@ -119,7 +130,7 @@ const resolvePackagedPaths = () => {
       path.join(packageDir, executableName),
       path.join(packageDir, `${appName}.exe`)
     ),
-    runtimePackageCacheVersion: readRuntimePackageCacheVersion(resourcesDir)
+    ...runtimePackageCacheMetadata
   }
 }
 
@@ -250,7 +261,10 @@ const main = async () => {
   const paths = resolvePackagedPaths()
   assertPackagedRelayPlugin(paths.appDir)
   const port = await getAvailablePort()
-  const workspaceEnv = createWorkspaceRuntimeEnv(paths.runtimePackageCacheVersion)
+  const workspaceEnv = createWorkspaceRuntimeEnv(
+    paths.runtimePackageCacheVersion,
+    paths.runtimePackageBuildFingerprint
+  )
   const smokeRoot = resolveProjectHomePath(workspaceRoot, workspaceEnv, '.local', 'desktop-smoke')
   const dataDir = path.join(smokeRoot, 'data')
   const logDir = resolveProjectHomePath(workspaceRoot, workspaceEnv, 'logs', 'desktop-smoke')

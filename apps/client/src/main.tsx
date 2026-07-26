@@ -28,6 +28,7 @@ import {
 import { setupMobileViewport } from '#~/utils/mobile-viewport.js'
 
 import App from './App'
+import { installDesktopManagerRuntimeIfAvailable } from './desktop/manager-runtime'
 import { normalizeAppLanguage } from './i18n'
 import { getRestorableWorkspaceConnection } from './workspace-connection-restore'
 import {
@@ -158,6 +159,7 @@ const renderApp = () => {
 }
 
 const startApp = async () => {
+  await installDesktopManagerRuntimeIfAvailable()
   await installWorkspaceRouteRuntimeIfAvailable()
   await installDesktopWorkspaceRuntimeIfAvailable()
   setupMobileViewport()

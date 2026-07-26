@@ -29,6 +29,9 @@ const RUNTIME_PACKAGE_CACHE_VERSION_ENV = '__ONEWORKS_RUNTIME_PACKAGE_CACHE_VERS
 const PUBLIC_RUNTIME_PACKAGE_CACHE_VERSION_ENV = 'ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION'
 const DESKTOP_DEV_RUNTIME_VERSION_ENV = '__ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION__'
 const PUBLIC_DESKTOP_DEV_RUNTIME_VERSION_ENV = 'ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION'
+const BUILTIN_PACKAGE_CACHE_PREPARED_ENV = '__ONEWORKS_DESKTOP_BUILTIN_PACKAGE_CACHE_PREPARED__'
+const RUNTIME_PACKAGE_BUILD_FINGERPRINT_ENV = '__ONEWORKS_DESKTOP_RUNTIME_PACKAGE_BUILD_FINGERPRINT__'
+const TRUST_DEV_RUNTIME_CACHE_MANIFEST_ENV = '__ONEWORKS_DESKTOP_TRUST_DEV_RUNTIME_CACHE_MANIFEST__'
 const PACKAGE_CACHE_VERSION_PATTERN = /^[\w.+-]+$/u
 const SKIPPED_PACKAGE_ENTRIES = new Set(['node_modules'])
 
@@ -67,6 +70,30 @@ const resolveDesktopDevRuntimeVersion = (env = process.env) => (
     normalizePackageCacheVersion(env[PUBLIC_RUNTIME_PACKAGE_CACHE_VERSION_ENV]) ??
     normalizePackageCacheVersion(env[DESKTOP_DEV_RUNTIME_VERSION_ENV]) ??
     normalizePackageCacheVersion(env[PUBLIC_DESKTOP_DEV_RUNTIME_VERSION_ENV])
+)
+
+const resolveRuntimePackageBuildFingerprint = (options = {}) => (
+  normalizePackageCacheVersion(options.sourceCacheVersion) ??
+    normalizePackageCacheVersion(options.env?.[RUNTIME_PACKAGE_BUILD_FINGERPRINT_ENV])
+)
+
+const shouldTrustPackageCacheManifest = ({
+  cacheVersion,
+  env = process.env,
+  sourceCacheVersion,
+  trustManifest = false
+}) => (
+  trustManifest === true &&
+  (
+    (
+      sourceCacheVersion != null &&
+      env[TRUST_DEV_RUNTIME_CACHE_MANIFEST_ENV] === '1'
+    ) ||
+    (
+      sourceCacheVersion == null &&
+      !cacheVersion?.startsWith('dev-')
+    )
+  )
 )
 
 const resolveAdapterPackagesRoot = (homeDir = resolveRealHomeDir(), packageCacheRootDir) => (
@@ -404,7 +431,7 @@ const isCurrentCachedPackage = ({ cacheDir, cacheVersion, integrity, packageName
 }
 
 const isCurrentCachedPackageManifest = (
-  { cacheDir, cacheVersion, manifestFile = MANIFEST_FILE, packageName, version }
+  { arch, cacheDir, cacheVersion, manifestFile = MANIFEST_FILE, packageName, platform, sourceCacheVersion, version }
 ) => {
   const packageDir = manifestFile === MANIFEST_FILE
     ? resolveAdapterPackageInstallDir(cacheDir, packageName)
@@ -416,9 +443,16 @@ const isCurrentCachedPackageManifest = (
 
   const manifest = readManifest(cacheDir, manifestFile)
   return manifest?.source === 'builtin' &&
+    manifest.arch === arch &&
     (manifest.cacheVersion ?? manifest.version) === cacheVersion &&
     manifest.layoutVersion === PACKAGE_CACHE_LAYOUT_VERSION &&
     manifest.name === packageName &&
+    manifest.platform === platform &&
+    (
+      sourceCacheVersion == null
+        ? manifest.sourceCacheVersion == null
+        : manifest.sourceCacheVersion === sourceCacheVersion
+    ) &&
     manifest.version === version
 }
 
@@ -451,10 +485,13 @@ const isCurrentCachedNpmPackage = ({ cacheDir, cacheVersion, integrity, packageN
 }
 
 const materializeBuiltinAdapterPackage = ({
+  arch = process.arch,
   cacheVersion,
   homeDir,
   packageCacheRootDir,
   packageName,
+  platform = process.platform,
+  sourceCacheVersion,
   sourcePackageDir,
   trustManifest = false
 }) => {
@@ -468,9 +505,12 @@ const materializeBuiltinAdapterPackage = ({
   if (
     trustManifest === true &&
     isCurrentCachedPackageManifest({
+      arch,
       cacheDir,
       cacheVersion: resolvedCacheVersion,
       packageName,
+      platform,
+      sourceCacheVersion,
       version: packageInfo.version
     })
   ) {
@@ -493,6 +533,25 @@ const materializeBuiltinAdapterPackage = ({
       version: packageInfo.version
     })
   ) {
+    const manifest = readManifest(cacheDir)
+    if (
+      manifest?.arch !== arch ||
+      manifest?.platform !== platform ||
+      manifest?.sourceCacheVersion !== sourceCacheVersion
+    ) {
+      writeManifest(cacheDir, {
+        arch,
+        cacheVersion: resolvedCacheVersion,
+        createdAt: manifest?.createdAt ?? new Date().toISOString(),
+        integrity,
+        layoutVersion: PACKAGE_CACHE_LAYOUT_VERSION,
+        name: packageName,
+        platform,
+        source: 'builtin',
+        ...(sourceCacheVersion == null ? {} : { sourceCacheVersion }),
+        version: packageInfo.version
+      })
+    }
     return {
       cacheVersion: resolvedCacheVersion,
       cacheDir,
@@ -508,12 +567,15 @@ const materializeBuiltinAdapterPackage = ({
   try {
     copyPackageClosure(packageName, sourcePackageDir, path.join(stagingDir, 'node_modules'))
     writeManifest(stagingDir, {
+      arch,
       cacheVersion: resolvedCacheVersion,
       createdAt: new Date().toISOString(),
       integrity,
       layoutVersion: PACKAGE_CACHE_LAYOUT_VERSION,
       name: packageName,
+      platform,
       source: 'builtin',
+      ...(sourceCacheVersion == null ? {} : { sourceCacheVersion }),
       version: packageInfo.version
     })
 
@@ -535,10 +597,13 @@ const materializeBuiltinAdapterPackage = ({
 }
 
 const materializeBuiltinPluginPackage = ({
+  arch = process.arch,
   cacheVersion = 'latest',
   homeDir,
   packageCacheRootDir,
   packageName,
+  platform = process.platform,
+  sourceCacheVersion,
   sourcePackageDir,
   trustManifest = false
 }) => {
@@ -551,10 +616,13 @@ const materializeBuiltinPluginPackage = ({
   if (
     trustManifest === true &&
     isCurrentCachedPackageManifest({
+      arch,
       cacheDir,
       cacheVersion,
       manifestFile: NPM_PACKAGE_MANIFEST_FILE,
       packageName,
+      platform,
+      sourceCacheVersion,
       version: packageInfo.version
     })
   ) {
@@ -575,6 +643,25 @@ const materializeBuiltinPluginPackage = ({
       version: packageInfo.version
     })
   ) {
+    const manifest = readManifest(cacheDir, NPM_PACKAGE_MANIFEST_FILE)
+    if (
+      manifest?.arch !== arch ||
+      manifest?.platform !== platform ||
+      manifest?.sourceCacheVersion !== sourceCacheVersion
+    ) {
+      writeManifest(cacheDir, {
+        arch,
+        cacheVersion,
+        createdAt: manifest?.createdAt ?? new Date().toISOString(),
+        integrity,
+        layoutVersion: PACKAGE_CACHE_LAYOUT_VERSION,
+        name: packageName,
+        platform,
+        source: 'builtin',
+        ...(sourceCacheVersion == null ? {} : { sourceCacheVersion }),
+        version: packageInfo.version
+      }, NPM_PACKAGE_MANIFEST_FILE)
+    }
     return {
       cacheDir,
       packageDir: resolveNpmPackageInstallDir(cacheDir, packageName),
@@ -588,12 +675,15 @@ const materializeBuiltinPluginPackage = ({
   try {
     copyPackageClosure(packageName, sourcePackageDir, path.join(stagingDir, 'node_modules'))
     writeManifest(stagingDir, {
+      arch,
       cacheVersion,
       createdAt: new Date().toISOString(),
       integrity,
       layoutVersion: PACKAGE_CACHE_LAYOUT_VERSION,
       name: packageName,
+      platform,
       source: 'builtin',
+      ...(sourceCacheVersion == null ? {} : { sourceCacheVersion }),
       version: packageInfo.version
     }, NPM_PACKAGE_MANIFEST_FILE)
 
@@ -613,10 +703,13 @@ const materializeBuiltinPluginPackage = ({
 }
 
 const materializeBuiltinStaticNpmPackage = ({
+  arch = process.arch,
   cacheVersion,
   homeDir,
   packageCacheRootDir,
   packageName,
+  platform = process.platform,
+  sourceCacheVersion,
   sourcePackageDir,
   trustManifest = false
 }) => {
@@ -629,10 +722,13 @@ const materializeBuiltinStaticNpmPackage = ({
   if (
     trustManifest === true &&
     isCurrentCachedPackageManifest({
+      arch,
       cacheDir,
       cacheVersion,
       manifestFile: NPM_PACKAGE_MANIFEST_FILE,
       packageName,
+      platform,
+      sourceCacheVersion,
       version: packageInfo.version
     })
   ) {
@@ -653,6 +749,25 @@ const materializeBuiltinStaticNpmPackage = ({
       version: packageInfo.version
     })
   ) {
+    const manifest = readManifest(cacheDir, NPM_PACKAGE_MANIFEST_FILE)
+    if (
+      manifest?.arch !== arch ||
+      manifest?.platform !== platform ||
+      manifest?.sourceCacheVersion !== sourceCacheVersion
+    ) {
+      writeManifest(cacheDir, {
+        arch,
+        cacheVersion,
+        createdAt: manifest?.createdAt ?? new Date().toISOString(),
+        integrity,
+        layoutVersion: PACKAGE_CACHE_LAYOUT_VERSION,
+        name: packageName,
+        platform,
+        source: 'builtin',
+        ...(sourceCacheVersion == null ? {} : { sourceCacheVersion }),
+        version: packageInfo.version
+      }, NPM_PACKAGE_MANIFEST_FILE)
+    }
     return {
       cacheDir,
       packageDir: resolveNpmPackageInstallDir(cacheDir, packageName),
@@ -667,12 +782,15 @@ const materializeBuiltinStaticNpmPackage = ({
     const targetPackageDir = resolveNpmPackageInstallDir(stagingDir, packageName)
     copyPackageBody(sourcePackageDir, targetPackageDir)
     writeManifest(stagingDir, {
+      arch,
       cacheVersion,
       createdAt: new Date().toISOString(),
       integrity,
       layoutVersion: PACKAGE_CACHE_LAYOUT_VERSION,
       name: packageName,
+      platform,
       source: 'builtin',
+      ...(sourceCacheVersion == null ? {} : { sourceCacheVersion }),
       version: packageInfo.version
     }, NPM_PACKAGE_MANIFEST_FILE)
 
@@ -709,14 +827,24 @@ const ensureBuiltinAdapterPackageCache = (options = {}) => {
   const packageCacheRootDir = options.packageCacheRootDir ?? resolvePackageCacheRootDir(options.env, homeDir)
   const packages = options.packages ?? BUILTIN_ADAPTER_PACKAGES
   const cacheVersion = options.cacheVersion ?? resolveDesktopDevRuntimeVersion(options.env)
+  const sourceCacheVersion = resolveRuntimePackageBuildFingerprint(options)
+  const trustManifest = shouldTrustPackageCacheManifest({
+    cacheVersion,
+    env: options.env,
+    sourceCacheVersion,
+    trustManifest: options.trustManifest
+  })
   const seededPackages = packages.map((packageName) =>
     materializeBuiltinAdapterPackage({
+      arch: options.arch,
       cacheVersion,
       homeDir,
       packageCacheRootDir,
       packageName,
+      platform: options.platform,
+      sourceCacheVersion: trustManifest ? sourceCacheVersion : undefined,
       sourcePackageDir: options.resolvePackageDir?.(packageName) ?? resolveBuiltinAdapterPackageDir(packageName),
-      trustManifest: options.trustManifest === true
+      trustManifest
     })
   )
   const packageMetadata = Object.fromEntries(
@@ -743,7 +871,13 @@ const ensureBuiltinPluginPackageCache = (options = {}) => {
   const packages = options.packages ?? BUILTIN_PLUGIN_PACKAGES
   const runtimeCacheVersion = normalizePackageCacheVersion(options.cacheVersion) ??
     resolveDesktopDevRuntimeVersion(options.env)
-  const trustManifest = options.trustManifest === true && !runtimeCacheVersion?.startsWith('dev-')
+  const sourceCacheVersion = resolveRuntimePackageBuildFingerprint(options)
+  const trustManifest = shouldTrustPackageCacheManifest({
+    cacheVersion: runtimeCacheVersion,
+    env: options.env,
+    sourceCacheVersion,
+    trustManifest: options.trustManifest
+  })
   return packages.flatMap((packageName) => {
     const sourcePackageDir = options.resolvePackageDir?.(packageName) ?? resolveBuiltinPluginPackageDir(packageName)
     const packageInfo = readPackageInfo(sourcePackageDir)
@@ -755,10 +889,13 @@ const ensureBuiltinPluginPackageCache = (options = {}) => {
       .filter((version, index, versions) => versions.indexOf(version) === index)
     return cacheVersions.map(cacheVersion =>
       materializeBuiltinPluginPackage({
+        arch: options.arch,
         cacheVersion,
         homeDir,
         packageCacheRootDir,
         packageName,
+        platform: options.platform,
+        sourceCacheVersion: trustManifest ? sourceCacheVersion : undefined,
         sourcePackageDir,
         trustManifest
       })
@@ -773,16 +910,25 @@ const ensureBuiltinRuntimePackageCache = (options = {}) => {
 
   const homeDir = options.homeDir ?? resolveRealHomeDir(options.env)
   const packageCacheRootDir = options.packageCacheRootDir ?? resolvePackageCacheRootDir(options.env, homeDir)
-  const trustManifest = options.trustManifest === true && !cacheVersion.startsWith('dev-')
+  const sourceCacheVersion = resolveRuntimePackageBuildFingerprint(options)
+  const trustManifest = shouldTrustPackageCacheManifest({
+    cacheVersion,
+    env: options.env,
+    sourceCacheVersion,
+    trustManifest: options.trustManifest
+  })
   const seeded = []
 
   const cliPackageDir = options.resolvePackageDir?.(BUILTIN_RUNTIME_CLI_PACKAGE) ??
     resolveBuiltinPluginPackageDir(BUILTIN_RUNTIME_CLI_PACKAGE)
   seeded.push(materializeBuiltinPluginPackage({
+    arch: options.arch,
     cacheVersion,
     homeDir,
     packageCacheRootDir,
     packageName: BUILTIN_RUNTIME_CLI_PACKAGE,
+    platform: options.platform,
+    sourceCacheVersion: trustManifest ? sourceCacheVersion : undefined,
     sourcePackageDir: cliPackageDir,
     trustManifest
   }))
@@ -790,10 +936,13 @@ const ensureBuiltinRuntimePackageCache = (options = {}) => {
   const serverPackageDir = options.resolvePackageDir?.(BUILTIN_RUNTIME_SERVER_PACKAGE) ??
     resolveBuiltinPluginPackageDir(BUILTIN_RUNTIME_SERVER_PACKAGE)
   seeded.push(materializeBuiltinPluginPackage({
+    arch: options.arch,
     cacheVersion,
     homeDir,
     packageCacheRootDir,
     packageName: BUILTIN_RUNTIME_SERVER_PACKAGE,
+    platform: options.platform,
+    sourceCacheVersion: trustManifest ? sourceCacheVersion : undefined,
     sourcePackageDir: serverPackageDir,
     trustManifest
   }))
@@ -802,10 +951,13 @@ const ensureBuiltinRuntimePackageCache = (options = {}) => {
     resolveBundledRuntimeClientPackageDir()
   if (clientPackageDir != null) {
     seeded.push(materializeBuiltinStaticNpmPackage({
+      arch: options.arch,
       cacheVersion,
       homeDir,
       packageCacheRootDir,
       packageName: BUILTIN_RUNTIME_CLIENT_PACKAGE,
+      platform: options.platform,
+      sourceCacheVersion: trustManifest ? sourceCacheVersion : undefined,
       sourcePackageDir: clientPackageDir,
       trustManifest
     }))
@@ -814,7 +966,22 @@ const ensureBuiltinRuntimePackageCache = (options = {}) => {
   return seeded
 }
 
+const runBuiltinPackageCachePreparationOnce = ({
+  env = process.env,
+  prepare
+}) => {
+  if (env[BUILTIN_PACKAGE_CACHE_PREPARED_ENV] === '1') return false
+  if (typeof prepare !== 'function') {
+    throw new TypeError('prepare must be a function')
+  }
+
+  prepare()
+  env[BUILTIN_PACKAGE_CACHE_PREPARED_ENV] = '1'
+  return true
+}
+
 module.exports = {
+  BUILTIN_PACKAGE_CACHE_PREPARED_ENV,
   BUILTIN_ADAPTER_PACKAGES,
   BUILTIN_ADAPTER_PACKAGE_ENV,
   BUILTIN_PLUGIN_PACKAGES,
@@ -827,7 +994,9 @@ module.exports = {
   PACKAGE_CACHE_LAYOUT_VERSION,
   PUBLIC_DESKTOP_DEV_RUNTIME_VERSION_ENV,
   PUBLIC_RUNTIME_PACKAGE_CACHE_VERSION_ENV,
+  RUNTIME_PACKAGE_BUILD_FINGERPRINT_ENV,
   RUNTIME_PACKAGE_CACHE_VERSION_ENV,
+  TRUST_DEV_RUNTIME_CACHE_MANIFEST_ENV,
   ensureBuiltinAdapterPackageCache,
   ensureBuiltinPluginPackageCache,
   ensureBuiltinRuntimePackageCache,
@@ -844,5 +1013,6 @@ module.exports = {
   resolveNpmPackageInstallDir,
   resolvePackageCacheRootDir,
   resolveRealHomeDir,
+  runBuiltinPackageCachePreparationOnce,
   sanitizePackageName
 }

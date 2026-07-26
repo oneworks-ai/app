@@ -4,16 +4,19 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const require = createRequire(import.meta.url)
 const {
+  BUILTIN_PACKAGE_CACHE_PREPARED_ENV,
   BUILTIN_ADAPTER_PACKAGE_ENV,
   DESKTOP_DEV_RUNTIME_VERSION_ENV,
   MANIFEST_FILE,
   NPM_PACKAGE_MANIFEST_FILE,
   PUBLIC_DESKTOP_DEV_RUNTIME_VERSION_ENV,
   PUBLIC_RUNTIME_PACKAGE_CACHE_VERSION_ENV,
+  RUNTIME_PACKAGE_BUILD_FINGERPRINT_ENV,
+  TRUST_DEV_RUNTIME_CACHE_MANIFEST_ENV,
   ensureBuiltinAdapterPackageCache,
   ensureBuiltinPluginPackageCache,
   ensureBuiltinRuntimePackageCache,
@@ -25,6 +28,7 @@ const {
   resolveAdapterPackageInstallDir,
   resolveNpmPackageCacheDir,
   resolveNpmPackageInstallDir,
+  runBuiltinPackageCachePreparationOnce,
   sanitizePackageName
 } = require('../src/builtin-adapter-cache.cjs') as typeof import('../src/builtin-adapter-cache.cjs')
 
@@ -35,6 +39,8 @@ afterEach(async () => {
   delete process.env[DESKTOP_DEV_RUNTIME_VERSION_ENV]
   delete process.env[PUBLIC_DESKTOP_DEV_RUNTIME_VERSION_ENV]
   delete process.env[PUBLIC_RUNTIME_PACKAGE_CACHE_VERSION_ENV]
+  delete process.env[RUNTIME_PACKAGE_BUILD_FINGERPRINT_ENV]
+  delete process.env[TRUST_DEV_RUNTIME_CACHE_MANIFEST_ENV]
   await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
 })
 
@@ -642,6 +648,89 @@ describe('desktop built-in adapter package cache', () => {
     })
   })
 
+  it('refreshes a source-dev adapter even when startup requests manifest trust', async () => {
+    const tempDir = await createTempDir('oneworks-desktop-adapter-source-dev-refresh-')
+    const homeDir = path.join(tempDir, 'home')
+    const packageName = '@acme/adapter-source-dev-refresh'
+    const sourcePackageDir = await writeSourceAdapterPackage(tempDir, packageName, '1.2.3', 'first')
+    const options = {
+      env: {
+        [PUBLIC_RUNTIME_PACKAGE_CACHE_VERSION_ENV]: 'dev-worktree'
+      },
+      homeDir,
+      packages: [packageName],
+      resolvePackageDir: () => sourcePackageDir,
+      trustManifest: true
+    }
+
+    ensureBuiltinAdapterPackageCache(options)
+    await writeFile(path.join(sourcePackageDir, 'src', 'models.ts'), 'export const builtinModels = ["second"]\n')
+    const [refreshed] = ensureBuiltinAdapterPackageCache(options)
+
+    expect(refreshed.seeded).toBe(true)
+    await expect(readFile(path.join(refreshed.packageDir, 'src', 'models.ts'), 'utf8')).resolves.toContain('second')
+  })
+
+  it('trusts a packaged adapter manifest only for the same build fingerprint', async () => {
+    const tempDir = await createTempDir('oneworks-desktop-adapter-packaged-manifest-')
+    const homeDir = path.join(tempDir, 'home')
+    const packageName = '@acme/adapter-packaged-manifest'
+    const sourcePackageDir = await writeSourceAdapterPackage(tempDir, packageName, '1.2.3', 'first')
+    const createOptions = (runtimePackageBuildFingerprint: string) => ({
+      env: {
+        [PUBLIC_RUNTIME_PACKAGE_CACHE_VERSION_ENV]: 'local-cache',
+        [RUNTIME_PACKAGE_BUILD_FINGERPRINT_ENV]: runtimePackageBuildFingerprint,
+        [TRUST_DEV_RUNTIME_CACHE_MANIFEST_ENV]: '1'
+      },
+      homeDir,
+      packages: [packageName],
+      resolvePackageDir: () => sourcePackageDir,
+      trustManifest: true
+    })
+
+    ensureBuiltinAdapterPackageCache(createOptions('build-a'))
+    await writeFile(path.join(sourcePackageDir, 'src', 'models.ts'), 'export const builtinModels = ["second"]\n')
+    const [cached] = ensureBuiltinAdapterPackageCache(createOptions('build-a'))
+    expect(cached.seeded).toBe(false)
+    await expect(readFile(path.join(cached.packageDir, 'src', 'models.ts'), 'utf8')).resolves.toContain('first')
+
+    const [refreshed] = ensureBuiltinAdapterPackageCache(createOptions('build-b'))
+    expect(refreshed.seeded).toBe(true)
+    await expect(readFile(path.join(refreshed.packageDir, 'src', 'models.ts'), 'utf8')).resolves.toContain('second')
+  })
+
+  it('refreshes a packaged adapter when the architecture changes under the same fingerprint', async () => {
+    const tempDir = await createTempDir('oneworks-desktop-adapter-packaged-arch-')
+    const homeDir = path.join(tempDir, 'home')
+    const packageName = '@acme/adapter-packaged-arch'
+    const sourcePackageDir = await writeSourceAdapterPackage(tempDir, packageName, '1.2.3', 'first')
+    const createOptions = (arch: string) => ({
+      arch,
+      env: {
+        [PUBLIC_RUNTIME_PACKAGE_CACHE_VERSION_ENV]: 'local-cache',
+        [RUNTIME_PACKAGE_BUILD_FINGERPRINT_ENV]: 'build-shared',
+        [TRUST_DEV_RUNTIME_CACHE_MANIFEST_ENV]: '1'
+      },
+      homeDir,
+      packages: [packageName],
+      platform: 'darwin',
+      resolvePackageDir: () => sourcePackageDir,
+      trustManifest: true
+    })
+
+    ensureBuiltinAdapterPackageCache(createOptions('x64'))
+    await writeFile(path.join(sourcePackageDir, 'src', 'models.ts'), 'export const builtinModels = ["arm64"]\n')
+    const [refreshed] = ensureBuiltinAdapterPackageCache(createOptions('arm64'))
+
+    expect(refreshed.seeded).toBe(true)
+    await expect(readFile(path.join(refreshed.packageDir, 'src', 'models.ts'), 'utf8')).resolves.toContain('arm64')
+    const manifest = JSON.parse(await readFile(path.join(refreshed.cacheDir, MANIFEST_FILE), 'utf8')) as {
+      arch?: string
+      platform?: string
+    }
+    expect(manifest).toMatchObject({ arch: 'arm64', platform: 'darwin' })
+  })
+
   it('honors the configured package cache root in the startup helper', async () => {
     const tempDir = await createTempDir('oneworks-desktop-adapter-configured-cache-')
     const packageCacheRoot = path.join(tempDir, 'package-cache')
@@ -796,6 +885,140 @@ describe('desktop built-in adapter package cache', () => {
     expect(require(path.join(packageDir, 'dist', 'hooks.js'))).toEqual({ refreshed: true })
   })
 
+  it('trusts a dev plugin manifest when the packaged build fingerprint is immutable', async () => {
+    const tempDir = await createTempDir('oneworks-desktop-plugin-packaged-dev-manifest-')
+    const homeDir = path.join(tempDir, 'home')
+    const packageName = '@acme/plugin-packaged-dev-manifest'
+    const sourcePackageDir = await writeSourcePluginPackage(tempDir, packageName, '1.2.3')
+    const env = {
+      __ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION__: 'dev-packaged-build',
+      [RUNTIME_PACKAGE_BUILD_FINGERPRINT_ENV]: 'build-packaged',
+      [TRUST_DEV_RUNTIME_CACHE_MANIFEST_ENV]: '1'
+    }
+    const options = {
+      env,
+      homeDir,
+      packages: [packageName],
+      resolvePackageDir: () => sourcePackageDir,
+      trustManifest: true
+    }
+
+    ensureBuiltinPluginPackageCache(options)
+    await writeFile(path.join(sourcePackageDir, 'dist', 'hooks.js'), 'module.exports = { changed: true }\n')
+    const cached = ensureBuiltinPluginPackageCache(options)
+
+    expect(cached.every(item => item.seeded === false)).toBe(true)
+    const packageDir = resolveNpmPackageInstallDir(
+      resolveNpmPackageCacheDir(packageName, '1.2.3', homeDir),
+      packageName
+    )
+    expect(require(path.join(packageDir, 'dist', 'hooks.js'))).toEqual({ ok: true })
+  })
+
+  it('refreshes a dev plugin when the packaged build fingerprint changes', async () => {
+    const tempDir = await createTempDir('oneworks-desktop-plugin-new-packaged-dev-build-')
+    const homeDir = path.join(tempDir, 'home')
+    const packageName = '@acme/plugin-new-packaged-dev-build'
+    const sourcePackageDir = await writeSourcePluginPackage(tempDir, packageName, '1.2.3')
+    const createOptions = (runtimePackageBuildFingerprint: string) => ({
+      env: {
+        __ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION__: 'local-cache',
+        [RUNTIME_PACKAGE_BUILD_FINGERPRINT_ENV]: runtimePackageBuildFingerprint,
+        [TRUST_DEV_RUNTIME_CACHE_MANIFEST_ENV]: '1'
+      },
+      homeDir,
+      packages: [packageName],
+      resolvePackageDir: () => sourcePackageDir,
+      trustManifest: true
+    })
+
+    ensureBuiltinPluginPackageCache(createOptions('dev-packaged-build-a'))
+    await writeFile(path.join(sourcePackageDir, 'dist', 'hooks.js'), 'module.exports = { changed: true }\n')
+    const refreshed = ensureBuiltinPluginPackageCache(createOptions('dev-packaged-build-b'))
+
+    expect(refreshed.every(item => item.seeded)).toBe(true)
+    const packageDir = resolveNpmPackageInstallDir(
+      resolveNpmPackageCacheDir(packageName, '1.2.3', homeDir),
+      packageName
+    )
+    expect(require(path.join(packageDir, 'dist', 'hooks.js'))).toEqual({ changed: true })
+  })
+
+  it('does not let a release trust a manifest written by a packaged dev build', async () => {
+    const tempDir = await createTempDir('oneworks-desktop-plugin-dev-release-collision-')
+    const homeDir = path.join(tempDir, 'home')
+    const packageName = '@acme/plugin-dev-release-collision'
+    const sourcePackageDir = await writeSourcePluginPackage(tempDir, packageName, '1.2.3')
+    const commonOptions = {
+      homeDir,
+      packages: [packageName],
+      resolvePackageDir: () => sourcePackageDir,
+      trustManifest: true
+    }
+
+    ensureBuiltinPluginPackageCache({
+      ...commonOptions,
+      env: {
+        [PUBLIC_RUNTIME_PACKAGE_CACHE_VERSION_ENV]: '1.2.3',
+        [RUNTIME_PACKAGE_BUILD_FINGERPRINT_ENV]: 'build-dev',
+        [TRUST_DEV_RUNTIME_CACHE_MANIFEST_ENV]: '1'
+      }
+    })
+    await writeFile(path.join(sourcePackageDir, 'dist', 'hooks.js'), 'module.exports = { release: true }\n')
+    const refreshed = ensureBuiltinPluginPackageCache({
+      ...commonOptions,
+      env: {
+        [PUBLIC_RUNTIME_PACKAGE_CACHE_VERSION_ENV]: '1.2.3'
+      }
+    })
+
+    expect(refreshed.every(item => item.seeded)).toBe(true)
+    const packageDir = resolveNpmPackageInstallDir(
+      resolveNpmPackageCacheDir(packageName, '1.2.3', homeDir),
+      packageName
+    )
+    const manifest = JSON.parse(
+      await readFile(
+        path.join(resolveNpmPackageCacheDir(packageName, '1.2.3', homeDir), NPM_PACKAGE_MANIFEST_FILE),
+        'utf8'
+      )
+    ) as { sourceCacheVersion?: string }
+    expect(require(path.join(packageDir, 'dist', 'hooks.js'))).toEqual({ release: true })
+    expect(manifest.sourceCacheVersion).toBeUndefined()
+  })
+
+  it('refreshes a release plugin manifest when the architecture changes', async () => {
+    const tempDir = await createTempDir('oneworks-desktop-plugin-release-arch-')
+    const homeDir = path.join(tempDir, 'home')
+    const packageName = '@acme/plugin-release-arch'
+    const sourcePackageDir = await writeSourcePluginPackage(tempDir, packageName, '1.2.3')
+    const createOptions = (arch: string) => ({
+      arch,
+      env: {
+        [PUBLIC_RUNTIME_PACKAGE_CACHE_VERSION_ENV]: '1.2.3'
+      },
+      homeDir,
+      packages: [packageName],
+      platform: 'darwin',
+      resolvePackageDir: () => sourcePackageDir,
+      trustManifest: true
+    })
+
+    ensureBuiltinPluginPackageCache(createOptions('x64'))
+    await writeFile(path.join(sourcePackageDir, 'dist', 'hooks.js'), 'module.exports = { arm64: true }\n')
+    const refreshed = ensureBuiltinPluginPackageCache(createOptions('arm64'))
+
+    expect(refreshed.every(item => item.seeded)).toBe(true)
+    const cacheDir = resolveNpmPackageCacheDir(packageName, '1.2.3', homeDir)
+    const packageDir = resolveNpmPackageInstallDir(cacheDir, packageName)
+    const manifest = JSON.parse(await readFile(path.join(cacheDir, NPM_PACKAGE_MANIFEST_FILE), 'utf8')) as {
+      arch?: string
+      platform?: string
+    }
+    expect(require(path.join(packageDir, 'dist', 'hooks.js'))).toEqual({ arm64: true })
+    expect(manifest).toMatchObject({ arch: 'arm64', platform: 'darwin' })
+  })
+
   it('materializes a static built-in npm package under a dev cache version', async () => {
     const tempDir = await createTempDir('oneworks-desktop-static-runtime-cache-')
     const homeDir = path.join(tempDir, 'home')
@@ -908,5 +1131,74 @@ describe('desktop built-in adapter package cache', () => {
     expect(refreshed.map(item => item.seeded)).toEqual([false, true, true])
     expect(require(path.join(serverPackageDir, 'dist', 'hooks.js'))).toEqual({ refreshed: true })
     await expect(readFile(path.join(clientPackageDir, 'dist', 'index.html'), 'utf8')).resolves.toBe('client-refreshed')
+  })
+
+  it('refreshes packaged runtime caches when the build fingerprint changes under a fixed cache version', async () => {
+    const tempDir = await createTempDir('oneworks-desktop-runtime-new-packaged-build-')
+    const homeDir = path.join(tempDir, 'home')
+    const cliPackage = '@oneworks/cli'
+    const serverPackage = '@oneworks/server'
+    const clientPackage = '@oneworks/client'
+    const cliSource = await writeSourcePluginPackage(tempDir, cliPackage, '1.2.3')
+    const serverSource = await writeSourcePluginPackage(tempDir, serverPackage, '1.2.3')
+    const clientSource = await writeSourceStaticPackage(tempDir, clientPackage, '1.2.3', 'client-first')
+    const createOptions = (runtimePackageBuildFingerprint: string) => ({
+      env: {
+        [PUBLIC_RUNTIME_PACKAGE_CACHE_VERSION_ENV]: 'local-cache',
+        [RUNTIME_PACKAGE_BUILD_FINGERPRINT_ENV]: runtimePackageBuildFingerprint,
+        [TRUST_DEV_RUNTIME_CACHE_MANIFEST_ENV]: '1'
+      },
+      homeDir,
+      resolvePackageDir: (packageName: string) => {
+        if (packageName === cliPackage) return cliSource
+        if (packageName === serverPackage) return serverSource
+        return clientSource
+      },
+      trustManifest: true
+    })
+
+    ensureBuiltinRuntimePackageCache(createOptions('build-a'))
+    await writeFile(path.join(serverSource, 'dist', 'hooks.js'), 'module.exports = { refreshed: true }\n')
+    await writeFile(path.join(clientSource, 'dist', 'index.html'), 'client-refreshed')
+    const cached = ensureBuiltinRuntimePackageCache(createOptions('build-a'))
+    expect(cached.map(item => item.seeded)).toEqual([false, false, false])
+
+    const refreshed = ensureBuiltinRuntimePackageCache(createOptions('build-b'))
+    expect(refreshed.map(item => item.seeded)).toEqual([false, true, true])
+    const serverPackageDir = resolveNpmPackageInstallDir(
+      resolveNpmPackageCacheDir(serverPackage, 'local-cache', homeDir),
+      serverPackage
+    )
+    const clientPackageDir = resolveNpmPackageInstallDir(
+      resolveNpmPackageCacheDir(clientPackage, 'local-cache', homeDir),
+      clientPackage
+    )
+    expect(require(path.join(serverPackageDir, 'dist', 'hooks.js'))).toEqual({ refreshed: true })
+    await expect(readFile(path.join(clientPackageDir, 'dist', 'index.html'), 'utf8')).resolves.toBe('client-refreshed')
+  })
+
+  it('prepares built-in package caches only once across the inherited loader process', () => {
+    const env: NodeJS.ProcessEnv = {}
+    const prepare = vi.fn()
+
+    expect(runBuiltinPackageCachePreparationOnce({ env, prepare })).toBe(true)
+    expect(runBuiltinPackageCachePreparationOnce({ env, prepare })).toBe(false)
+    expect(prepare).toHaveBeenCalledTimes(1)
+    expect(env[BUILTIN_PACKAGE_CACHE_PREPARED_ENV]).toBe('1')
+  })
+
+  it('allows a failed built-in package cache preparation to retry', () => {
+    const env: NodeJS.ProcessEnv = {}
+    const failure = new Error('cache unavailable')
+
+    expect(() =>
+      runBuiltinPackageCachePreparationOnce({
+        env,
+        prepare: () => {
+          throw failure
+        }
+      })
+    ).toThrow(failure)
+    expect(env[BUILTIN_PACKAGE_CACHE_PREPARED_ENV]).toBeUndefined()
   })
 })

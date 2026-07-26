@@ -99,7 +99,8 @@ describe('desktop runtime consumer bootstrap path', () => {
           branch: 'local',
           buildTime: '2026-06-22T01:02:03.000Z',
           gitHash: 'abcdef1234567890',
-          runtimePackageCacheVersion: 'dev-packaged'
+          runtimePackageBuildFingerprint: 'build-packaged',
+          runtimePackageCacheVersion: 'local-cache'
         }),
         'utf8'
       )
@@ -113,8 +114,52 @@ describe('desktop runtime consumer bootstrap path', () => {
       const { resolveDesktopDevRuntimeVersionEnv } = await import('../src/main/workspace-service-manager')
 
       expect(resolveDesktopDevRuntimeVersionEnv({})).toEqual({
-        __ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION__: 'dev-packaged',
-        __ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION__: 'dev-packaged'
+        __ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION__: 'local-cache',
+        __ONEWORKS_DESKTOP_RUNTIME_PACKAGE_BUILD_FINGERPRINT__: 'build-packaged',
+        __ONEWORKS_DESKTOP_TRUST_DEV_RUNTIME_CACHE_MANIFEST__: '1',
+        __ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION__: 'local-cache'
+      })
+    } finally {
+      if (previousResourcesPath == null) {
+        delete (process as { resourcesPath?: string }).resourcesPath
+      } else {
+        Object.defineProperty(process, 'resourcesPath', previousResourcesPath)
+      }
+      await rm(tempDir, { force: true, recursive: true })
+    }
+  })
+
+  it('keeps the immutable package fingerprint when an env override replaces the cache version', async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'oneworks-desktop-runtime-version-override-'))
+    const previousResourcesPath = Object.getOwnPropertyDescriptor(process, 'resourcesPath')
+    try {
+      await writeFile(
+        path.join(tempDir, 'desktop-build-source.json'),
+        JSON.stringify({
+          branch: 'local',
+          buildTime: '2026-06-22T01:02:03.000Z',
+          gitHash: 'abcdef1234567890',
+          runtimePackageBuildFingerprint: 'build-packaged',
+          runtimePackageCacheVersion: 'dev-packaged'
+        }),
+        'utf8'
+      )
+      Object.defineProperty(process, 'resourcesPath', {
+        configurable: true,
+        value: tempDir
+      })
+      electronMock.isPackaged = true
+      vi.resetModules()
+
+      const { resolveDesktopDevRuntimeVersionEnv } = await import('../src/main/workspace-service-manager')
+
+      expect(resolveDesktopDevRuntimeVersionEnv({
+        __ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION__: 'dev-worktree'
+      })).toEqual({
+        __ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION__: 'dev-worktree',
+        __ONEWORKS_DESKTOP_RUNTIME_PACKAGE_BUILD_FINGERPRINT__: 'build-packaged',
+        __ONEWORKS_DESKTOP_TRUST_DEV_RUNTIME_CACHE_MANIFEST__: '1',
+        __ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION__: 'dev-worktree'
       })
     } finally {
       if (previousResourcesPath == null) {
@@ -173,6 +218,7 @@ describe('desktop runtime consumer bootstrap path', () => {
           branch: 'local',
           buildTime: '2026-06-22T01:02:03.000Z',
           gitHash: 'abcdef1234567890',
+          runtimePackageBuildFingerprint: 'build-packaged',
           runtimePackageCacheVersion: 'dev-packaged'
         }),
         'utf8'
@@ -188,6 +234,8 @@ describe('desktop runtime consumer bootstrap path', () => {
 
       expect(resolvePackagedLauncherClientRuntimeEnv({})).toEqual({
         __ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION__: 'dev-packaged',
+        __ONEWORKS_DESKTOP_RUNTIME_PACKAGE_BUILD_FINGERPRINT__: 'build-packaged',
+        __ONEWORKS_DESKTOP_TRUST_DEV_RUNTIME_CACHE_MANIFEST__: '1',
         __ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION__: 'dev-packaged'
       })
     } finally {
@@ -214,6 +262,43 @@ describe('desktop runtime consumer bootstrap path', () => {
       dbPath: expect.stringMatching(new RegExp(`${escapedHomeProjectsDir}.*\\.local[\\/]server[\\/]db\\.sqlite$`)),
       logDir: expect.stringMatching(new RegExp(`${escapedHomeProjectsDir}.*logs[\\/]server$`))
     })
+  })
+
+  it('isolates the desktop manager server from workspace and fixed-port state', async () => {
+    const homeProjectsDir = mkdtempSync(path.join(tmpdir(), 'oneworks-desktop-manager-projects-'))
+    const launchCwd = mkdtempSync(path.join(tmpdir(), 'oneworks-desktop-manager-cwd-'))
+    const workspaceFolder = mkdtempSync(path.join(tmpdir(), 'oneworks-desktop-manager-workspace-'))
+    const clientOrigin = 'http://127.0.0.1:53124'
+    vi.stubEnv('__ONEWORKS_PROJECT_HOME_PROJECTS_DIR__', homeProjectsDir)
+
+    const { createManagerRuntimeEnv } = await import('../src/main/manager-service-manager')
+    const runtimeEnv = createManagerRuntimeEnv({
+      clientOrigin,
+      env: {
+        ...process.env,
+        __ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__: workspaceFolder,
+        __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: workspaceFolder,
+        __ONEWORKS_PROJECT_WORKSPACE_FOLDER_RESOLVE_CWD__: workspaceFolder
+      },
+      launchCwd,
+      port: 54321
+    })
+    const escapedHomeProjectsDir = homeProjectsDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+    expect(runtimeEnv).toMatchObject({
+      __ONEWORKS_PROJECT_CLIENT_MODE__: 'none',
+      __ONEWORKS_PROJECT_HOME_PROJECT_DIR__: 'manager',
+      __ONEWORKS_PROJECT_SERVER_ALLOW_CORS__: 'true',
+      __ONEWORKS_PROJECT_SERVER_CORS_ORIGIN__: clientOrigin,
+      __ONEWORKS_PROJECT_SERVER_HOST__: '127.0.0.1',
+      __ONEWORKS_PROJECT_SERVER_PORT__: '54321',
+      __ONEWORKS_PROJECT_SERVER_ROLE__: 'manager',
+      __ONEWORKS_PROJECT_WEB_AUTH_ENABLED__: 'false',
+      DB_PATH: expect.stringMatching(new RegExp(`${escapedHomeProjectsDir}.*\\.local[\\/]server[\\/]db\\.sqlite$`))
+    })
+    expect(runtimeEnv.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__).toBeUndefined()
+    expect(runtimeEnv.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__).toBeUndefined()
+    expect(runtimeEnv.__ONEWORKS_PROJECT_WORKSPACE_FOLDER_RESOLVE_CWD__).toBeUndefined()
   })
 
   it('passes cached server package dirs to workspace server children only in packaged mode', async () => {

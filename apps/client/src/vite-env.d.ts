@@ -116,6 +116,10 @@ interface DesktopWorkspaceConnection {
   workspaceFolder?: string
 }
 
+interface DesktopManagerConnection {
+  serverBaseUrl: string
+}
+
 interface DesktopWorkspaceFileSearchResult {
   directory: string
   name: string
@@ -194,6 +198,8 @@ interface DesktopBuildSource {
   branch: string
   buildTime: string
   gitHash: string
+  runtimePackageBuildFingerprint?: string
+  runtimePackageCacheVersion?: string
 }
 
 type DesktopContextCaptureOverlayPlacement = 'auto' | 'above' | 'below'
@@ -716,6 +722,7 @@ interface Window {
     revealBrowserDownload?: (id: string) => Promise<void>
     getUpdateStatus?: () => Promise<DesktopUpdateStatus>
     getGlobalInterfaceLanguageConfig?: () => Promise<DesktopInterfaceLanguageConfig>
+    getManagerConnection?: () => Promise<DesktopManagerConnection>
     getWindowFullscreenState?: () => Promise<boolean>
     getWorkspaceConnection?: () => Promise<DesktopWorkspaceConnection | undefined>
     getWorkspaceSelectorState?: () => Promise<DesktopWorkspaceSelectorState>
@@ -841,6 +848,7 @@ interface Window {
     __ONEWORKS_PROJECT_CLIENT_DEV_SERVER__: string
     __ONEWORKS_PROJECT_CLIENT_VERSION__: string
     __ONEWORKS_PROJECT_CLIENT_COMMIT_HASH__: string
+    __ONEWORKS_PROJECT_MANAGER_SERVER_BASE_URL__: string
     __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: string
   }>
 }

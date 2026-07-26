@@ -4,9 +4,14 @@ import process from 'node:process'
 
 import { app } from 'electron'
 
-import { readDesktopBuildRuntimePackageCacheVersion } from './build-source'
+import {
+  readDesktopBuildRuntimePackageBuildFingerprint,
+  readDesktopBuildRuntimePackageCacheVersion
+} from './build-source'
 
 const runtimePackageCacheVersionPattern = /^[\w.+-]+$/u
+export const RUNTIME_PACKAGE_BUILD_FINGERPRINT_ENV = '__ONEWORKS_DESKTOP_RUNTIME_PACKAGE_BUILD_FINGERPRINT__'
+export const TRUST_DEV_RUNTIME_CACHE_MANIFEST_ENV = '__ONEWORKS_DESKTOP_TRUST_DEV_RUNTIME_CACHE_MANIFEST__'
 
 const normalizeRuntimePackageCacheVersion = (value: string | null | undefined) => {
   const normalized = value?.trim()
@@ -47,15 +52,27 @@ export const resolveDesktopRuntimePackageCacheVersionEnv = (
 ):
   | Pick<
     NodeJS.ProcessEnv,
-    '__ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION__' | '__ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION__'
+    | '__ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION__'
+    | '__ONEWORKS_DESKTOP_RUNTIME_PACKAGE_BUILD_FINGERPRINT__'
+    | '__ONEWORKS_DESKTOP_TRUST_DEV_RUNTIME_CACHE_MANIFEST__'
+    | '__ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION__'
   >
   | {} =>
 {
   const runtimePackageCacheVersion = resolveDesktopRuntimePackageCacheVersion(env)
+  const runtimePackageBuildFingerprint = readDesktopBuildRuntimePackageBuildFingerprint()
+  const trustsPackagedManifest = app.isPackaged &&
+    runtimePackageBuildFingerprint != null
   return runtimePackageCacheVersion == null
     ? {}
     : {
       __ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION__: runtimePackageCacheVersion,
+      ...(trustsPackagedManifest
+        ? {
+          [RUNTIME_PACKAGE_BUILD_FINGERPRINT_ENV]: runtimePackageBuildFingerprint,
+          [TRUST_DEV_RUNTIME_CACHE_MANIFEST_ENV]: '1'
+        }
+        : {}),
       __ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION__: runtimePackageCacheVersion
     }
 }

@@ -39,6 +39,7 @@ export interface DesktopBuildSource {
   branch: string
   buildTime: string
   gitHash: string
+  runtimePackageBuildFingerprint?: string
   runtimePackageCacheVersion?: string
 }
 
