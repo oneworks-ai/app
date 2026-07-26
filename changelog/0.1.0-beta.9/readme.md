@@ -8,3 +8,4 @@
 - Keep packaged Codex accounts usable when One Works starts outside a shell by resolving the managed CLI to Codex's bundled native executable and preferring a newer matching `~/.codex/auth.json` session over stale inline credentials.
 - Keep packaged runtime caches aligned with the final desktop release version so a newly installed build cannot silently reuse server and adapter code from the previous release.
 - Preserve Node-style request lifecycle events in the Cloudflare Relay Fetch adapter so device job long polling can forward remote sessions instead of failing immediately.
+- Keep the desktop packaging command from leaving workspace dependencies in a production-only state, so packaged-server verification runs against the artifact immediately after packaging.

@@ -142,6 +142,11 @@ const runPnpm = (args) => {
   }
 }
 
+const restoreWorkspaceDependencies = () => {
+  console.log('[desktop] restoring workspace dependencies after pnpm deploy')
+  runPnpm(['install', '--frozen-lockfile', '--prod=false'])
+}
+
 const pnpmSupportsLegacyDeploy = () => {
   if (pnpmSupportsLegacyDeployCache != null) {
     return pnpmSupportsLegacyDeployCache
@@ -608,8 +613,12 @@ async function main() {
   fs.rmSync(outputDir, { recursive: true, force: true })
   fs.rmSync(releaseDir, { recursive: true, force: true })
 
-  for (const targetArch of targetArchs) {
-    await packageDesktopArch(targetArch, { buildSourceResources })
+  try {
+    for (const targetArch of targetArchs) {
+      await packageDesktopArch(targetArch, { buildSourceResources })
+    }
+  } finally {
+    restoreWorkspaceDependencies()
   }
 }
 

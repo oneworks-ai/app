@@ -120,6 +120,7 @@
 - 改签名逻辑时，不要破坏“默认关闭签名”的本地与 CI 行为；当前只有显式设置 `ONEWORKS_DESKTOP_SIGN=true` 或 CI 打开 `DESKTOP_SIGN=true` 时才进入签名流程。macOS App Store 外分发使用 Developer ID Application 证书签 `.app`，Developer ID Installer 证书签 `.pkg`，并通过 Apple notarization 完成认证；当前 CI 目标包含 `pkg`，所以开启签名时两套证书 secret 都必须存在。
 - 改版本号传递或 artifact 命名时，保持 `pkg/oneworks-desktop/v*` tag、`artifactName` 与 `latest*.yml` 中的 URL 一致，否则自动更新会直接失效。
 - 正式包的 runtime package cache version 必须读取 Electron 最终应用版本（`app.getVersion()`），不能读取依赖包版本。打包 staging 的应用 manifest 必须先写入 `ONEWORKS_DESKTOP_VERSION`，保证 Electron runtime、原生 bundle 与 runtime cache 目录使用同一最终版本；release tag 覆盖桌面版本但内部 workspace 包尚未对齐时也不能复用上一版 server / adapter 缓存。
+- `pnpm deploy --legacy --prod` 会让共享 workspace 的依赖状态暂时变成 production-only；`scripts/package.cjs` 在所有架构完成或失败后都必须用 frozen lockfile 恢复 dev dependencies，之后才能运行 packaged server smoke 或其他 workspace 脚本。不要依赖调用方额外执行 `pnpm install` 来修复打包命令留下的状态。
 
 ## 已验证经验
 
