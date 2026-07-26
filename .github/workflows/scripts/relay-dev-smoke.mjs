@@ -1,14 +1,22 @@
 import process from 'node:process'
 
-const origin = (process.env.RELAY_DEV_ORIGIN ?? '').trim().replace(/\/+$/, '')
-const expectedVersion = (process.env.RELAY_DEV_EXPECTED_VERSION ?? '').trim()
-const expectedProviders = (process.env.RELAY_DEV_EXPECTED_SSO_PROVIDERS ?? '')
+const origin = (process.env.RELAY_ORIGIN ?? process.env.RELAY_DEV_ORIGIN ?? '').trim().replace(/\/+$/, '')
+const expectedVersion = (
+  process.env.RELAY_EXPECTED_VERSION ??
+    process.env.RELAY_DEV_EXPECTED_VERSION ??
+    ''
+).trim()
+const expectedProviders = (
+  process.env.RELAY_EXPECTED_SSO_PROVIDERS ??
+    process.env.RELAY_DEV_EXPECTED_SSO_PROVIDERS ??
+    ''
+)
   .split(',')
   .map(item => item.trim())
   .filter(Boolean)
 
 if (origin === '') {
-  throw new Error('Set RELAY_DEV_ORIGIN for the Relay dev smoke check.')
+  throw new Error('Set RELAY_ORIGIN for the Relay deployment smoke check.')
 }
 
 const fetchText = async (path, input) => {

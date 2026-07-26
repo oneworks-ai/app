@@ -13,6 +13,7 @@
 - `AVATAR_DEPLOY_TOKEN`：从 `oneworks-ai/app` 触发 `oneworks-ai/avatar` 的 GitHub Pages 部署 workflow。
 - `HOMEPAGE_DEPLOY_TOKEN`：从 `oneworks-ai/app` 触发 `oneworks-ai/oneworks-ai.github.io` 的 GitHub Pages 部署 workflow。
 - `RELAY_DEV_CLOUDFLARE_API_TOKEN`、`RELAY_DEV_CLOUDFLARE_ACCOUNT_ID`：部署官方 Cloudflare dev Relay/Admin。
+- `RELAY_PROD_CLOUDFLARE_API_TOKEN`、`RELAY_PROD_CLOUDFLARE_ACCOUNT_ID`：在没有配置外部 Relay 发布仓库时，直接部署官方 Cloudflare production Relay/Admin。迁移期间可以回退复用权限覆盖 Workers Scripts / Cloudflare Pages 的 dev 凭据，但应优先维护独立 production 凭据。
 - `APPLE_ID`、`APPLE_ID_PASSWORD`、`APPLE_TEAM_ID`、`DESKTOP_CSC_LINK`、`DESKTOP_CSC_KEY_PASSWORD`、`DESKTOP_CSC_INSTALLER_LINK`、`DESKTOP_CSC_INSTALLER_KEY_PASSWORD`：macOS App Store 外分发签名和 notarization；未做 Apple Developer 签名时可以缺省。
 
 Chrome Web Store 发布不使用长期 OAuth refresh token 或 service-account JSON key，因此不新增 repository secret。它使用 GitHub OIDC -> Google Cloud Workload Identity Federation -> Chrome Web Store service account 的短期 token。
@@ -195,3 +196,23 @@ Avatar Pages token 的配置、轮换和验证见 [avatar-github-pages.md](./ava
 ## Relay Dev Deploy
 
 Relay dev deployment workflow secrets、variables 和 smoke check 维护方式见 [Relay dev deploy GitHub Actions](./relay-dev-deploy-github-actions.md)。
+
+## Relay Production Deploy
+
+`.github/workflows/deploy-relay-server.yml` 优先使用 `RELAY_SERVER_DEPLOY_TOKEN`、`RELAY_SERVER_DEPLOY_REPOSITORY` 和 `RELAY_SERVER_DEPLOY_WORKFLOW` 触发外部不可变 SHA 发布。如果这组外部目标没有配置，workflow 会直接发布官方 Cloudflare production slot，而不是在只完成 build / smoke 时报告部署成功。
+
+Cloudflare direct deploy 优先读取：
+
+- `RELAY_PROD_CLOUDFLARE_API_TOKEN`
+- `RELAY_PROD_CLOUDFLARE_ACCOUNT_ID`
+
+迁移期间缺少独立 production 凭据时，workflow 可以回退到已有的 `RELAY_DEV_CLOUDFLARE_API_TOKEN` / `RELAY_DEV_CLOUDFLARE_ACCOUNT_ID`。回退 token 必须实际具备目标账号的 Workers Scripts 与 Cloudflare Pages 权限；生产凭据补齐后应让同名 production secrets 覆盖回退。
+
+可选 repository variables：
+
+- `RELAY_PROD_CF_WORKER_NAME`：默认 `pro`。
+- `RELAY_PROD_CF_PAGES_PROJECT`：默认 `oneworks`。
+- `RELAY_PROD_CF_ORIGIN`：默认 `https://cf.oneworks.cloud`。
+- `RELAY_PROD_EXPECTED_SSO_PROVIDERS`：production smoke 必须看到的 provider id，逗号分隔。
+
+如果外部目标和 Cloudflare direct deploy 凭据都不可用，workflow 必须失败，不能以 notice 跳过真正部署。Cloudflare deploy 后必须验证 `/health.version` 与当前 `apps/relay-server/package.json` 一致、未授权 Admin API 返回 `401`，并确认 `/login` 注入登录配置。
