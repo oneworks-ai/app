@@ -8,11 +8,7 @@ import { Fragment, createElement, useCallback, useEffect, useMemo, useRef, useSt
 
 import { buildApiUrl } from '#~/api/base'
 import type { NotificationApi, UiNotificationHandle, UiNotificationInput } from '#~/notifications/notification-types'
-import {
-  createServerUrlFromBase,
-  isDesktopClientMode,
-  normalizeServerBaseUrl
-} from '#~/runtime-config'
+import { createServerUrlFromBase, isDesktopClientMode, normalizeServerBaseUrl } from '#~/runtime-config'
 
 import { listPluginRuntimeEndpoints } from './api'
 import { createPluginI18nContext } from './plugin-i18n'

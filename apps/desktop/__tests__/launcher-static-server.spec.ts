@@ -193,8 +193,7 @@ describe('launcher static server', () => {
 
     const launcherOrigin = new URL(launcher.clientUrl).origin
     const encodedOrigin = encodeURIComponent(`http://127.0.0.1:${upstreamPort}`)
-    const interruptedAssetUrl =
-      `${launcherOrigin}/__oneworks_plugin_runtime__/${encodedOrigin}` +
+    const interruptedAssetUrl = `${launcherOrigin}/__oneworks_plugin_runtime__/${encodedOrigin}` +
       '/api/plugins/relay/client/interrupted.js'
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     try {

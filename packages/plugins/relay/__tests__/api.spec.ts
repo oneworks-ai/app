@@ -1102,14 +1102,17 @@ describe('relay plugin scoped API', () => {
       expect(url.origin).toBe(new URL(OFFICIAL_RELAY_CLOUDFLARE_BASE_URL).origin)
       expect(url.pathname).toBe('/api/auth/login-options')
       expect(url.searchParams.get('server_id')).toBe(DEFAULT_OFFICIAL_RELAY_SERVER_ID)
-      return new Response(JSON.stringify({
-        loginMethods: {
-          default: 'password',
-          enabled: ['password', 'passkey', 'verification_code']
+      return new Response(
+        JSON.stringify({
+          loginMethods: {
+            default: 'password',
+            enabled: ['password', 'passkey', 'verification_code']
+          }
+        }),
+        {
+          headers: { 'content-type': 'application/json' }
         }
-      }), {
-        headers: { 'content-type': 'application/json' }
-      })
+      )
     })
     vi.stubGlobal('fetch', fetchMock)
     const { apis } = await createPluginHarness({})

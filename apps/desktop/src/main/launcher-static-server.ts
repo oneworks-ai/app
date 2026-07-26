@@ -192,13 +192,15 @@ const proxyPluginRuntimeAsset = async (
   }
 
   const headers: Record<string, string> = {}
-  for (const header of [
-    'cache-control',
-    'content-type',
-    'etag',
-    'last-modified',
-    'x-content-type-options'
-  ]) {
+  for (
+    const header of [
+      'cache-control',
+      'content-type',
+      'etag',
+      'last-modified',
+      'x-content-type-options'
+    ]
+  ) {
     const value = upstreamResponse.headers.get(header)
     if (value != null) headers[header] = value
   }
