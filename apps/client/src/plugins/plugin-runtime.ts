@@ -8,7 +8,11 @@ import { Fragment, createElement, useCallback, useEffect, useMemo, useRef, useSt
 
 import { buildApiUrl } from '#~/api/base'
 import type { NotificationApi, UiNotificationHandle, UiNotificationInput } from '#~/notifications/notification-types'
-import { createServerUrlFromBase, normalizeServerBaseUrl } from '#~/runtime-config'
+import {
+  createServerUrlFromBase,
+  isDesktopClientMode,
+  normalizeServerBaseUrl
+} from '#~/runtime-config'
 
 import { listPluginRuntimeEndpoints } from './api'
 import { createPluginI18nContext } from './plugin-i18n'
@@ -224,10 +228,71 @@ export const invokePluginRuntimeChannel = async (
   return normalized.payload
 }
 
-const resolveEntryUrl = (instance: PluginRuntimeInstance) => {
-  return import.meta.env.DEV && instance.devClientEntryUrl != null && instance.devClientEntryUrl !== ''
+const isLoopbackHostname = (hostname: string) => (
+  hostname === '127.0.0.1' ||
+  hostname === '::1' ||
+  hostname === '[::1]' ||
+  hostname === 'localhost'
+)
+
+export const resolvePluginClientEntryUrl = ({
+  clientOrigin = globalThis.location?.origin,
+  instance,
+  isDevelopment = import.meta.env.DEV,
+  runtimeEndpoint,
+  serverBaseUrl,
+  useDesktopProxy = isDesktopClientMode()
+}: {
+  clientOrigin?: string
+  instance: PluginRuntimeInstance
+  isDevelopment?: boolean
+  runtimeEndpoint?: PluginRuntimeEndpoint
+  serverBaseUrl?: string
+  useDesktopProxy?: boolean
+}) => {
+  const useDevelopmentEntry = isDevelopment &&
+    instance.devClientEntryUrl != null &&
+    instance.devClientEntryUrl !== ''
+  const entryUrl = useDevelopmentEntry
     ? instance.devClientEntryUrl
     : instance.clientEntryUrl
+
+  if (
+    entryUrl == null ||
+    entryUrl === '' ||
+    useDevelopmentEntry ||
+    isAbsoluteOrProtocolRelativeUrl(entryUrl) ||
+    /^[a-z][a-z\d+.-]*:/i.test(entryUrl)
+  ) {
+    return entryUrl
+  }
+
+  const entryServerBaseUrl = normalizeServerBaseUrl(runtimeEndpoint?.serverBaseUrl) ??
+    normalizeServerBaseUrl(serverBaseUrl)
+  const resolvedEntryUrl = entryServerBaseUrl == null
+    ? buildApiUrl(entryUrl)
+    : createServerUrlFromBase(entryServerBaseUrl, entryUrl)
+  if (!useDesktopProxy || entryServerBaseUrl == null || clientOrigin == null) {
+    return resolvedEntryUrl
+  }
+
+  try {
+    const clientUrl = new URL(clientOrigin)
+    const runtimeUrl = new URL(resolvedEntryUrl)
+    if (
+      runtimeUrl.origin === clientUrl.origin ||
+      !isLoopbackHostname(runtimeUrl.hostname)
+    ) {
+      return resolvedEntryUrl
+    }
+    return new URL(
+      `/__oneworks_plugin_runtime__/${encodeURIComponent(runtimeUrl.origin)}` +
+        `${runtimeUrl.pathname}${runtimeUrl.search}${runtimeUrl.hash}`,
+      clientUrl.origin
+    ).toString()
+  } catch {
+    return resolvedEntryUrl
+  }
 }
 
 export async function activatePluginClient({
@@ -249,7 +314,11 @@ export async function activatePluginClient({
   runtimeEndpoint?: PluginRuntimeEndpoint
   serverBaseUrl?: string
 }) {
-  const entryUrl = resolveEntryUrl(instance)
+  const entryUrl = resolvePluginClientEntryUrl({
+    instance,
+    runtimeEndpoint,
+    serverBaseUrl
+  })
   if (entryUrl == null || entryUrl === '') return
   if (!isActivationCurrent()) return
 

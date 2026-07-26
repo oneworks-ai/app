@@ -1,8 +1,10 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { startPackagedLauncherStaticServer } from '../src/main/launcher-static-server'
 
@@ -77,5 +79,138 @@ describe('launcher static server', () => {
     const directFontResponse = await fetch(`${launcher.clientUrl}assets/font.woff2`)
     expect(directFontResponse.status).toBe(200)
     expect(await directFontResponse.text()).toBe('font-data')
+  })
+
+  it('proxies only scoped plugin assets from loopback runtime servers', async () => {
+    const upstreamRequests: string[] = []
+    const upstream = createServer((request, response) => {
+      upstreamRequests.push(request.url ?? '')
+      response.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' })
+      response.end(`export const asset = ${JSON.stringify(request.url)}`)
+    })
+    await new Promise<void>((resolve, reject) => {
+      upstream.once('error', reject)
+      upstream.listen(0, '127.0.0.1', () => resolve())
+    })
+    servers.push({
+      close: () =>
+        new Promise<void>((resolve, reject) => {
+          upstream.close(error => error == null ? resolve() : reject(error))
+        })
+    })
+    const upstreamPort = (upstream.address() as AddressInfo).port
+
+    const distPath = await createDistFixture()
+    const launcher = await startPackagedLauncherStaticServer({
+      clientBase: '/ui',
+      distPath,
+      port: 0
+    })
+    servers.push({
+      close: () =>
+        new Promise<void>((resolve, reject) => {
+          launcher.server.close(error => error == null ? resolve() : reject(error))
+        })
+    })
+
+    const launcherOrigin = new URL(launcher.clientUrl).origin
+    const encodedOrigin = encodeURIComponent(`http://127.0.0.1:${upstreamPort}`)
+    const proxyBase = `${launcherOrigin}/__oneworks_plugin_runtime__/${encodedOrigin}`
+    const entryResponse = await fetch(
+      `${proxyBase}/api/plugins/relay/client/index.js?pluginVersion=3`
+    )
+    expect(entryResponse.status).toBe(200)
+    expect(entryResponse.headers.get('content-type')).toContain('text/javascript')
+    expect(await entryResponse.text()).toContain(
+      '/api/plugins/relay/client/index.js?pluginVersion=3'
+    )
+
+    const chunkResponse = await fetch(`${proxyBase}/api/plugins/relay/client/chunk.js`)
+    expect(chunkResponse.status).toBe(200)
+    const sharedResponse = await fetch(`${proxyBase}/api/plugins/relay/shared/runtime.js`)
+    expect(sharedResponse.status).toBe(200)
+    expect(await sharedResponse.text()).toContain('/api/plugins/relay/shared/runtime.js')
+
+    const headResponse = await fetch(`${proxyBase}/api/plugins/relay/client/index.js`, {
+      method: 'HEAD'
+    })
+    expect(headResponse.status).toBe(200)
+    expect(await headResponse.text()).toBe('')
+    expect(upstreamRequests).toEqual([
+      '/api/plugins/relay/client/index.js?pluginVersion=3',
+      '/api/plugins/relay/client/chunk.js',
+      '/api/plugins/relay/shared/runtime.js',
+      '/api/plugins/relay/client/index.js'
+    ])
+
+    const remoteOriginResponse = await fetch(
+      `${launcherOrigin}/__oneworks_plugin_runtime__/${encodeURIComponent('https://example.com')}` +
+        '/api/plugins/relay/client/index.js'
+    )
+    expect(remoteOriginResponse.status).toBe(403)
+
+    const unrelatedPathResponse = await fetch(
+      `${proxyBase}/api/config`
+    )
+    expect(unrelatedPathResponse.status).toBe(403)
+    expect(upstreamRequests).toHaveLength(4)
+  })
+
+  it('recovers when an upstream plugin asset response is interrupted', async () => {
+    const upstream = createServer((_request, response) => {
+      response.writeHead(200, {
+        'Content-Length': '64',
+        'Content-Type': 'text/javascript; charset=utf-8'
+      })
+      response.flushHeaders()
+      response.write('export const partial = true')
+      setImmediate(() => response.destroy())
+    })
+    await new Promise<void>((resolve, reject) => {
+      upstream.once('error', reject)
+      upstream.listen(0, '127.0.0.1', () => resolve())
+    })
+    servers.push({
+      close: () =>
+        new Promise<void>((resolve, reject) => {
+          upstream.close(error => error == null ? resolve() : reject(error))
+        })
+    })
+    const upstreamPort = (upstream.address() as AddressInfo).port
+
+    const distPath = await createDistFixture()
+    const launcher = await startPackagedLauncherStaticServer({
+      clientBase: '/ui',
+      distPath,
+      port: 0
+    })
+    servers.push({
+      close: () =>
+        new Promise<void>((resolve, reject) => {
+          launcher.server.close(error => error == null ? resolve() : reject(error))
+        })
+    })
+
+    const launcherOrigin = new URL(launcher.clientUrl).origin
+    const encodedOrigin = encodeURIComponent(`http://127.0.0.1:${upstreamPort}`)
+    const interruptedAssetUrl =
+      `${launcherOrigin}/__oneworks_plugin_runtime__/${encodedOrigin}` +
+      '/api/plugins/relay/client/interrupted.js'
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const interruptedResponse = await fetch(interruptedAssetUrl)
+      expect(interruptedResponse.status).toBe(500)
+      expect(await interruptedResponse.text()).toBe('Failed to load UI')
+      expect(errorSpy).toHaveBeenCalledWith(
+        '[oneworks-client:launcher] failed to serve launcher client',
+        expect.anything()
+      )
+    } finally {
+      errorSpy.mockRestore()
+    }
+
+    const recoveryResponse = await fetch(`${launcher.clientUrl}assets/font.woff2`)
+    expect(recoveryResponse.status).toBe(200)
+    expect(await recoveryResponse.text()).toBe('font-data')
   })
 })

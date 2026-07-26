@@ -9,7 +9,7 @@ import i18n from '#~/i18n'
 import { createPluginI18nContext, localizePluginContributionItem } from '#~/plugins/plugin-i18n'
 import type { PluginRuntimeInstance } from '#~/plugins/plugin-manifest'
 import { PluginRegistry } from '#~/plugins/plugin-registry'
-import { activatePluginClient } from '#~/plugins/plugin-runtime'
+import { activatePluginClient, resolvePluginClientEntryUrl } from '#~/plugins/plugin-runtime'
 import {
   buildRoutePluginSidebarContextMenu,
   resolveRouteContributionText,
@@ -879,6 +879,61 @@ describe('client plugin host registry', () => {
     expect(registry.getSnapshot().extensionPoints).toEqual([])
     expect(registry.getSnapshot().extensionContributions['demo/actions']).toBeUndefined()
     expect(registry.getSnapshot().pluginApis).toEqual([])
+  })
+
+  it('loads packaged desktop client entries through the same-origin runtime proxy', () => {
+    const instance: PluginRuntimeInstance = {
+      requestId: 'relay',
+      scope: 'relay',
+      clientEntryUrl: '/api/plugins/relay/client/index.js',
+      devClientEntryUrl: '/ui/@fs/workspace/packages/plugins/relay/src/client/index.ts'
+    }
+    const runtimeEndpoint = {
+      id: 'workspace:test',
+      role: 'workspace' as const,
+      serverBaseUrl: 'http://127.0.0.1:50982'
+    }
+
+    expect(resolvePluginClientEntryUrl({
+      clientOrigin: 'http://127.0.0.1:50802',
+      instance,
+      isDevelopment: false,
+      runtimeEndpoint,
+      useDesktopProxy: true
+    })).toBe(
+      'http://127.0.0.1:50802/__oneworks_plugin_runtime__/' +
+        'http%3A%2F%2F127.0.0.1%3A50982/api/plugins/relay/client/index.js'
+    )
+
+    expect(resolvePluginClientEntryUrl({
+      clientOrigin: 'http://127.0.0.1:50802',
+      instance,
+      isDevelopment: true,
+      runtimeEndpoint,
+      useDesktopProxy: true
+    })).toBe('/ui/@fs/workspace/packages/plugins/relay/src/client/index.ts')
+
+    expect(resolvePluginClientEntryUrl({
+      clientOrigin: 'http://127.0.0.1:50802',
+      instance,
+      isDevelopment: false,
+      runtimeEndpoint,
+      useDesktopProxy: false
+    })).toBe('http://127.0.0.1:50982/api/plugins/relay/client/index.js')
+
+    expect(resolvePluginClientEntryUrl({
+      clientOrigin: 'http://127.0.0.1:50802',
+      instance,
+      isDevelopment: false,
+      runtimeEndpoint: {
+        ...runtimeEndpoint,
+        serverBaseUrl: 'http://[::1]:50982'
+      },
+      useDesktopProxy: true
+    })).toBe(
+      'http://127.0.0.1:50802/__oneworks_plugin_runtime__/' +
+        'http%3A%2F%2F%5B%3A%3A1%5D%3A50982/api/plugins/relay/client/index.js'
+    )
   })
 
   it('preserves typed details from failed remote plugin commands', async () => {
