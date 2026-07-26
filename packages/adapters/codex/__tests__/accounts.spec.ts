@@ -163,6 +163,101 @@ describe('prepareCodexSessionHome', () => {
     expect((await lstat(sessionAuthPath)).isSymbolicLink()).toBe(false)
   })
 
+  it('uses a matching real-home credential without changing the configured account key', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-global-auth-local-refresh-'))
+    const realHome = join(workspace, 'real-home')
+    const mockHome = resolveTestMockHome(workspace, realHome)
+    const configuredAuthContent =
+      '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_global","refresh_token":"old"}}\n'
+    const realHomeAuthContent =
+      '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_global","refresh_token":"current"}}\n'
+    const realHomeAuthPath = join(realHome, '.codex', 'auth.json')
+    tempDirs.push(workspace)
+    await mkdir(join(realHome, '.codex'), { recursive: true })
+    await writeFile(realHomeAuthPath, realHomeAuthContent)
+
+    const ctx = createTestCtx(workspace, {
+      env: {
+        HOME: mockHome,
+        __ONEWORKS_PROJECT_REAL_HOME__: realHome
+      },
+      configs: [{
+        adapters: {
+          codex: {
+            defaultAccount: 'work',
+            accounts: {
+              work: {
+                title: 'Work',
+                auth: {
+                  type: 'codex-auth-json',
+                  encoding: 'base64',
+                  token: Buffer.from(configuredAuthContent, 'utf8').toString('base64')
+                }
+              }
+            }
+          }
+        }
+      } as any]
+    })
+
+    const result = await prepareCodexSessionHome({
+      ctx,
+      sessionId: 'session'
+    })
+    const sessionAuthPath = join(result.homeDir, '.codex', 'auth.json')
+
+    expect(result.accountKey).toBe('work')
+    expect(result.authFilePath).toBe(realHomeAuthPath)
+    expect(await readlink(sessionAuthPath)).toBe(realHomeAuthPath)
+    expect(await readFile(sessionAuthPath, 'utf8')).toBe(realHomeAuthContent)
+  })
+
+  it('does not replace a configured credential with a different real-home account', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-global-auth-account-boundary-'))
+    const realHome = join(workspace, 'real-home')
+    const mockHome = resolveTestMockHome(workspace, realHome)
+    const configuredAuthContent = '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_work","refresh_token":"work"}}\n'
+    const realHomeAuthPath = join(realHome, '.codex', 'auth.json')
+    tempDirs.push(workspace)
+    await mkdir(join(realHome, '.codex'), { recursive: true })
+    await writeFile(
+      realHomeAuthPath,
+      '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_personal","refresh_token":"personal"}}\n'
+    )
+
+    const result = await prepareCodexSessionHome({
+      ctx: createTestCtx(workspace, {
+        env: {
+          HOME: mockHome,
+          __ONEWORKS_PROJECT_REAL_HOME__: realHome
+        },
+        configs: [{
+          adapters: {
+            codex: {
+              defaultAccount: 'work',
+              accounts: {
+                work: {
+                  auth: {
+                    type: 'codex-auth-json',
+                    encoding: 'base64',
+                    token: Buffer.from(configuredAuthContent, 'utf8').toString('base64')
+                  }
+                }
+              }
+            }
+          }
+        } as any]
+      }),
+      sessionId: 'session'
+    })
+    const sessionAuthPath = join(result.homeDir, '.codex', 'auth.json')
+
+    expect(result.accountKey).toBe('work')
+    expect(result.authFilePath).toBe(sessionAuthPath)
+    expect((await lstat(sessionAuthPath)).isSymbolicLink()).toBe(false)
+    expect(await readFile(sessionAuthPath, 'utf8')).toBe(configuredAuthContent)
+  })
+
   it('links real home git config into the isolated Codex session home', async () => {
     const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-session-home-'))
     const realHome = join(workspace, 'real-home')

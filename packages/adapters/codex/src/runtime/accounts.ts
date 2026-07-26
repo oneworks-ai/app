@@ -1049,7 +1049,7 @@ const probeCodexAccount = async (params: {
 }): Promise<CodexAccountProbe> => {
   const { ctx, homeDir, authFilePath, refresh, fetchProfile, logKey } = params
   const logger = resolveProbeLogger(ctx, logKey)
-  const binaryPath = resolveCodexBinaryPath(ctx.env)
+  const binaryPath = resolveCodexBinaryPath(ctx.env, ctx.cwd)
   const spawnEnv = buildSpawnEnv(ctx)
   const authIdentity = await readCodexAuthIdentityFromFile(authFilePath)
   spawnEnv.HOME = homeDir
@@ -1536,6 +1536,24 @@ const pickPreferredCodexDescriptor = (
   left: CodexAccountDescriptor,
   right: CodexAccountDescriptor
 ) => {
+  const configuredAccount = left.sourceKind === 'global-config'
+    ? left
+    : right.sourceKind === 'global-config'
+    ? right
+    : undefined
+  const realHomeAccount = left.sourceKind === 'real-home'
+    ? left
+    : right.sourceKind === 'real-home'
+    ? right
+    : undefined
+  if (configuredAccount != null && realHomeAccount?.authFilePath != null) {
+    return {
+      ...configuredAccount,
+      authContent: undefined,
+      authFilePath: realHomeAccount.authFilePath
+    }
+  }
+
   if (left.status !== right.status) {
     if (left.status === 'ready') return left
     if (right.status === 'ready') return right
@@ -1902,7 +1920,7 @@ const runCodexLogin = async (params: {
   signal?: AbortSignal
 }) => {
   const { ctx, onProgress, signal } = params
-  const binaryPath = resolveCodexBinaryPath(ctx.env)
+  const binaryPath = resolveCodexBinaryPath(ctx.env, ctx.cwd)
   const spawnEnv = buildSpawnEnv(ctx)
   const loginKey = `login-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
   const homeDir = resolveCodexProbeHomeDir(ctx, loginKey)

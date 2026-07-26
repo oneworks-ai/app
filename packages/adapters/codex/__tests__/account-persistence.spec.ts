@@ -8,7 +8,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { AdapterCtx } from '@oneworks/types'
 import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
+import { resolveManagedNpmCliPaths } from '@oneworks/utils/managed-npm-cli'
 
+import { CODEX_CLI_PACKAGE, CODEX_CLI_VERSION } from '#~/paths.js'
 import { manageCodexAccount } from '#~/runtime/accounts.js'
 
 const tempDirs: string[] = []
@@ -140,5 +142,46 @@ describe('codex account persistence', () => {
       await readFile(join(realHome, '.oneworks', '.oo.config.json'), 'utf8')
     ) as any
     expect(globalConfig.adapters.codex.accounts.work.title).toBe('Old Work')
+  })
+
+  it('runs login from the managed CLI cache when the app PATH has no codex binary', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-login-managed-cli-'))
+    const realHome = join(workspace, 'real-home')
+    const authContent = '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_managed"}}\n'
+    const env = {
+      HOME: resolveTestMockHome(workspace, realHome),
+      __ONEWORKS_PROJECT_REAL_HOME__: realHome
+    }
+    const managedPaths = resolveManagedNpmCliPaths({
+      adapterKey: 'codex',
+      binaryName: 'codex',
+      cwd: workspace,
+      env,
+      packageName: CODEX_CLI_PACKAGE,
+      version: CODEX_CLI_VERSION
+    })
+    tempDirs.push(workspace)
+    await mkdir(join(realHome, '.oneworks'), { recursive: true })
+    await mkdir(managedPaths.binDir, { recursive: true })
+    await writeFakeCodexLogin({
+      path: managedPaths.binaryPath,
+      authContent
+    })
+
+    const result = await manageCodexAccount(createTestCtx(workspace, { env }), {
+      action: 'add',
+      account: 'managed'
+    })
+
+    expect(result.accountKey).toBe('managed')
+    const globalConfig = JSON.parse(
+      await readFile(join(realHome, '.oneworks', '.oo.config.json'), 'utf8')
+    ) as any
+    expect(
+      Buffer.from(
+        globalConfig.adapters.codex.accounts.managed.auth.token,
+        'base64'
+      ).toString('utf8')
+    ).toBe(authContent)
   })
 })
