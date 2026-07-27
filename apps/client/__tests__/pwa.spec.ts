@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs'
+import { runInNewContext } from 'node:vm'
+
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { setupPwa } from '../src/pwa'
@@ -6,6 +9,7 @@ const originalNavigator = globalThis.navigator
 const originalWindow = globalThis.window
 const originalCaches = globalThis.caches
 const originalSessionStorage = globalThis.sessionStorage
+const serviceWorkerSource = readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8')
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -133,5 +137,114 @@ describe('pwa setup', () => {
       expect.stringMatching(/^\/ui\/sw\.js\?v=.+/),
       { scope: '/ui/' }
     )
+  })
+
+  it('keeps the previous PWA caches when a new app shell cannot be warmed', async () => {
+    let installHandler: ((event: { waitUntil: (task: Promise<unknown>) => void }) => void) | undefined
+    const skipWaiting = vi.fn()
+    const deleteCache = vi.fn(async () => true)
+    const failedResponse = new Response('temporarily unavailable', { status: 503 })
+    const context: Record<string, unknown> = {
+      URL,
+      Request,
+      Response,
+      caches: {
+        delete: deleteCache,
+        keys: vi.fn(async () => ['oneworks-web-app-v4']),
+        open: vi.fn(async () => ({
+          put: vi.fn(async () => undefined)
+        }))
+      },
+      clients: {
+        claim: vi.fn(async () => undefined)
+      },
+      console,
+      fetch: vi.fn(async () => failedResponse),
+      location: new URL('https://example.com/ui/sw.js?v=next'),
+      registration: {
+        scope: 'https://example.com/ui/'
+      },
+      skipWaiting,
+      addEventListener: (
+        event: string,
+        handler: (event: { waitUntil: (task: Promise<unknown>) => void }) => void
+      ) => {
+        if (event === 'install') installHandler = handler
+      }
+    }
+    context.globalThis = context
+    runInNewContext(serviceWorkerSource, context)
+
+    let installTask: Promise<unknown> | undefined
+    installHandler?.({
+      waitUntil: task => {
+        installTask = task
+      }
+    })
+
+    await expect(installTask).rejects.toThrow('App shell warmup returned HTTP 503.')
+    expect(skipWaiting).not.toHaveBeenCalled()
+    expect(deleteCache).toHaveBeenCalledWith('oneworks-web-app-v5-next')
+    expect(deleteCache).toHaveBeenCalledWith('oneworks-web-static-v5-next')
+    expect(deleteCache).not.toHaveBeenCalledWith('oneworks-web-app-v4')
+  })
+
+  it('rejects a new app shell when a required script cannot be warmed', async () => {
+    let installHandler: ((event: { waitUntil: (task: Promise<unknown>) => void }) => void) | undefined
+    const skipWaiting = vi.fn()
+    const deleteCache = vi.fn(async () => true)
+    const context: Record<string, unknown> = {
+      URL,
+      Request,
+      Response,
+      caches: {
+        delete: deleteCache,
+        keys: vi.fn(async () => ['oneworks-web-app-v4', 'oneworks-web-static-v4']),
+        open: vi.fn(async () => ({
+          put: vi.fn(async () => undefined)
+        }))
+      },
+      clients: {
+        claim: vi.fn(async () => undefined)
+      },
+      console,
+      fetch: vi.fn(async (request: Request) => (
+        new URL(request.url).pathname === '/ui/'
+          ? new Response(
+            '<!doctype html><script type="module" src="./assets/app-next.js"></script>',
+            { headers: { 'content-type': 'text/html' }, status: 200 }
+          )
+          : new Response('temporarily unavailable', { status: 503 })
+      )),
+      location: new URL('https://example.com/ui/sw.js?v=next'),
+      registration: {
+        scope: 'https://example.com/ui/'
+      },
+      skipWaiting,
+      addEventListener: (
+        event: string,
+        handler: (event: { waitUntil: (task: Promise<unknown>) => void }) => void
+      ) => {
+        if (event === 'install') installHandler = handler
+      }
+    }
+    context.globalThis = context
+    runInNewContext(serviceWorkerSource, context)
+
+    let installTask: Promise<unknown> | undefined
+    installHandler?.({
+      waitUntil: task => {
+        installTask = task
+      }
+    })
+
+    await expect(installTask).rejects.toThrow(
+      'App shell asset "https://example.com/ui/assets/app-next.js" returned HTTP 503.'
+    )
+    expect(skipWaiting).not.toHaveBeenCalled()
+    expect(deleteCache).toHaveBeenCalledWith('oneworks-web-app-v5-next')
+    expect(deleteCache).toHaveBeenCalledWith('oneworks-web-static-v5-next')
+    expect(deleteCache).not.toHaveBeenCalledWith('oneworks-web-app-v4')
+    expect(deleteCache).not.toHaveBeenCalledWith('oneworks-web-static-v4')
   })
 })
