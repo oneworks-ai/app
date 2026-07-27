@@ -2024,11 +2024,32 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
     }
   }
 
+  const resolveStoredSessionToken = (
+    server: Pick<ResolvedRelayServer, 'id' | 'remoteBaseUrl'>,
+    storedServer: RelayStoredServer | undefined,
+    authStore: OneWorksAuthStore
+  ) => {
+    if (storedServer == null || !isSessionAuthenticated(storedServer)) return ''
+    const sessionToken = storedServer.sessionToken ?? ''
+    const matchingAccount = authStore.accounts.find(account =>
+      accountMatchesRelayServer(account, server) &&
+      account.sessionToken === sessionToken
+    )
+    if (
+      matchingAccount != null &&
+      (matchingAccount.enabled === false || !isSessionAuthenticated(matchingAccount))
+    ) {
+      return ''
+    }
+    return sessionToken
+  }
+
   const createStoredServerSessionSource = (
-    server: Pick<ResolvedRelayServer, 'id'>,
-    storedServer: RelayStoredServer | undefined
+    server: Pick<ResolvedRelayServer, 'id' | 'remoteBaseUrl'>,
+    storedServer: RelayStoredServer | undefined,
+    authStore: OneWorksAuthStore
   ): RelayDeviceListSource | undefined => {
-    const sessionToken = storedServer?.sessionToken ?? ''
+    const sessionToken = resolveStoredSessionToken(server, storedServer, authStore)
     if (sessionToken === '') return undefined
     return {
       authToken: sessionToken,
@@ -2073,12 +2094,15 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
     authStore: OneWorksAuthStore
   ) => {
     const storedServer = getStoredServer(store, server)
+    const sessionSources = [
+      createStoredServerSessionSource(server, storedServer, authStore),
+      ...createAccountDeviceListSources(server, authStore)
+    ].filter((source): source is RelayDeviceListSource => source != null)
+    const sources = sessionSources.length > 0
+      ? sessionSources
+      : [createStoredServerDeviceSource(server, storedServer)]
     return dedupeDeviceListSources(
-      [
-        createStoredServerDeviceSource(server, storedServer),
-        createStoredServerSessionSource(server, storedServer),
-        ...createAccountDeviceListSources(server, authStore)
-      ].filter((source): source is RelayDeviceListSource => source != null)
+      sources.filter((source): source is RelayDeviceListSource => source != null)
     )
   }
 
@@ -3018,6 +3042,15 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
     const publicActiveServerId = summaryState.activeServerId || activeServer?.id || options.activeServerId
     const store = await deviceStore.readStore()
     const authStore = await readOneWorksAuthStore()
+    const connectionStateSnapshot = new Map(
+      [...options.servers, ...listKnownRelayServers(authStore)].map(server => [
+        server.id,
+        getConnectionState(server)
+      ])
+    )
+    const getPublicConnectionState = (
+      server: Pick<ResolvedRelayServer, 'id' | 'remoteBaseUrl'>
+    ) => connectionStateSnapshot.get(server.id) ?? getConnectionState(server)
     const storedActiveServer = activeServer == null ? undefined : getStoredServer(store, activeServer)
     const activeAccount = activeServer == null ? undefined : preferredAuthAccountForRelayServer(authStore, activeServer)
     const enrichDocumentSyncStatus = async (
@@ -3072,7 +3105,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
         { id: activeAccountId, type: 'account' }
       )
     const serverStatuses = await Promise.all(
-      createServerStatuses(store, options, getConnectionState, activeServer?.id).map(
+      createServerStatuses(store, options, getPublicConnectionState, activeServer?.id).map(
         async (serverStatus) => {
           const server = options.servers.find(item => item.id === serverStatus.id)
           if (server == null) return serverStatus
@@ -3093,7 +3126,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
         if (server == null) return undefined
         const storedServer = getStoredServer(store, server)
         const account = preferredAuthAccountForRelayServer(authStore, server)
-        const connection = getConnectionState(server)
+        const connection = getPublicConnectionState(server)
         const serviceInfo = readRelayServiceInfo(server)
         const result = await listRelayDevicesForServer(server, store, authStore)
         const storedSessionAuthenticated = (storedServer?.sessionToken ?? '') !== '' &&
@@ -4261,8 +4294,10 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
       const deviceId = readTextField(payload, 'deviceId') || store.deviceId
       const managementServer = await resolveRelayManagementServerRegistration(ctx, managementServerStore)
       const storedServer = getStoredServer(store, activeServer)
+      const storedSessionToken = resolveStoredSessionToken(activeServer, storedServer, authStore)
       const authToken = transientAuthToken ||
         authAccount?.sessionToken ||
+        storedSessionToken ||
         storedServer?.deviceToken ||
         authAccount?.deviceToken ||
         activeServer.pairingToken

@@ -3,6 +3,7 @@ import { Buffer } from 'node:buffer'
 import { readFileSync } from 'node:fs'
 import type { IncomingMessage, Server } from 'node:http'
 import { createRequire } from 'node:module'
+import process from 'node:process'
 import type { Duplex } from 'node:stream'
 import { URL } from 'node:url'
 
@@ -65,12 +66,26 @@ const chiiWebSocketKeepAliveIntervalMs = 25_000
 const chiiTargetServerUrlQueryKey = 'oneworks_chii_server_url'
 let chiiTargetScriptCache: string | undefined
 
+const loadChiiDependency = <T>(request: string): T => {
+  const hadTlsOverride = Object.prototype.hasOwnProperty.call(process.env, 'NODE_TLS_REJECT_UNAUTHORIZED')
+  const previousTlsOverride = process.env.NODE_TLS_REJECT_UNAUTHORIZED
+  try {
+    return nodeRequire(request) as T
+  } finally {
+    if (hadTlsOverride) {
+      process.env.NODE_TLS_REJECT_UNAUTHORIZED = previousTlsOverride
+    } else {
+      delete process.env.NODE_TLS_REJECT_UNAUTHORIZED
+    }
+  }
+}
+
 const loadChiiRouter = () => (
-  nodeRequire('chii/server/middle/router') as ChiiRouterFactory
+  loadChiiDependency<ChiiRouterFactory>('chii/server/middle/router')
 )
 
 const loadChiiWebSocketServer = () => (
-  nodeRequire('chii/server/lib/WebSocketServer') as ChiiWebSocketServerConstructor
+  loadChiiDependency<ChiiWebSocketServerConstructor>('chii/server/lib/WebSocketServer')
 )
 
 const getChiiTargetScript = () => {

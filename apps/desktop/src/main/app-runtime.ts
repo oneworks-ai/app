@@ -51,7 +51,7 @@ import type { QuitConfirmationLanguage } from './quit-confirmation'
 import { createDesktopRuntimeState } from './runtime-state'
 import { resolveDesktopRecordingThemeSource, setDesktopThemeSource } from './theme-source'
 import type { DesktopSettings, LaunchRequest, WindowRecord, WorkspaceSelectorWindowInput } from './types'
-import { DEFAULT_DESKTOP_AUTO_UPDATE, DEFAULT_DESKTOP_UPDATE_CHANNEL, isDesktopUpdateChannel } from './update-types'
+import { DEFAULT_DESKTOP_AUTO_UPDATE, isDesktopUpdateChannel, resolveDefaultDesktopUpdateChannel } from './update-types'
 import type { DesktopUpdateStatus } from './update-types'
 import { createAutoUpdateManager, refreshWorkspaceRuntimeCacheInBackground } from './updates'
 import { createWindowManager } from './window-manager'
@@ -74,6 +74,8 @@ const resolveStandaloneTabLaunchRequest = (rawTab: string | undefined): LaunchRe
 
 export const createDesktopApp = () => {
   const runtimeState = createDesktopRuntimeState()
+  const defaultDesktopUpdateChannel = resolveDefaultDesktopUpdateChannel(app.getVersion())
+  runtimeState.desktopState.updateChannel = defaultDesktopUpdateChannel
   const initialWorkspaceFolder = resolveDesktopLaunchWorkspaceFolder({
     env: process.env
   })
@@ -161,7 +163,7 @@ export const createDesktopApp = () => {
     const updateSettings = await loadWorkspaceDesktopUpdateSettings(workspaceFolder)
     const settings = {
       autoUpdate: updateSettings.autoUpdate ?? DEFAULT_DESKTOP_AUTO_UPDATE,
-      updateChannel: updateSettings.updateChannel ?? DEFAULT_DESKTOP_UPDATE_CHANNEL
+      updateChannel: updateSettings.updateChannel ?? defaultDesktopUpdateChannel
     }
     setRuntimeDesktopUpdateSettings(settings)
     return settings
@@ -183,7 +185,7 @@ export const createDesktopApp = () => {
     const updateSettings = await loadWorkspaceDesktopUpdateSettings(windowRecord?.workspaceFolder)
     const desktopUpdateSettings = {
       autoUpdate: updateSettings.autoUpdate ?? DEFAULT_DESKTOP_AUTO_UPDATE,
-      updateChannel: updateSettings.updateChannel ?? DEFAULT_DESKTOP_UPDATE_CHANNEL
+      updateChannel: updateSettings.updateChannel ?? defaultDesktopUpdateChannel
     }
     if (options.applyProjectUpdateChannel === true) {
       setRuntimeDesktopUpdateSettings(desktopUpdateSettings)
@@ -841,6 +843,11 @@ export const createDesktopApp = () => {
       })
     const hasPendingLaunchRequest = runtimeState.pendingLaunchRequests.length > 0
 
+    if (startupWorkspaceFolder == null) {
+      warmWorkspaceRuntimeCacheSoon()
+      logDesktopStartup(`startup workspace package cache warm scheduled elapsed=${elapsedMs(startedAt)}`)
+    }
+
     if (startupWorkspaceFolder != null && !hasPendingLaunchRequest) {
       try {
         await windowManager.openWorkspaceWindow(startupWorkspaceFolder)
@@ -856,8 +863,10 @@ export const createDesktopApp = () => {
       await windowManager.createLauncherWindow()
     }
 
-    warmWorkspaceRuntimeCacheSoon()
-    logDesktopStartup(`startup workspace package cache warm scheduled elapsed=${elapsedMs(startedAt)}`)
+    if (startupWorkspaceFolder != null) {
+      warmWorkspaceRuntimeCacheSoon()
+      logDesktopStartup(`startup workspace package cache warm scheduled elapsed=${elapsedMs(startedAt)}`)
+    }
     await projectDesktopUpdateSettingsPromise
     await quitConfirmationLanguagePromise
     autoUpdateManager.start()

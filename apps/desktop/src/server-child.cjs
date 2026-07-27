@@ -54,6 +54,8 @@ const configurePackagedEsbuildBinary = () => {
 configurePackagedEsbuildBinary()
 logServerChildStartup('packaged esbuild configured')
 
+const isManagerServer = process.env.__ONEWORKS_PROJECT_SERVER_ROLE__ === 'manager'
+
 try {
   logServerChildStartup('builtin package cache prepare begin')
   const {
@@ -65,6 +67,10 @@ try {
   const prepared = runBuiltinPackageCachePreparationOnce({
     env: process.env,
     prepare: () => {
+      if (isManagerServer) {
+        ensureBuiltinPluginPackageCache({ env: process.env, trustManifest: true })
+        return
+      }
       ensureBuiltinRuntimePackageCache({ env: process.env, trustManifest: true })
       ensureBuiltinAdapterPackageCache({ env: process.env, trustManifest: true })
       ensureBuiltinPluginPackageCache({ env: process.env, trustManifest: true })
@@ -94,8 +100,6 @@ logServerChildStartup('resolving server package')
 const serverPackageDir = resolveConfiguredServerPackageDir() ??
   path.dirname(require.resolve('@oneworks/server/package.json'))
 logServerChildStartup(`server package resolved path=${serverPackageDir}`)
-
-const isManagerServer = process.env.__ONEWORKS_PROJECT_SERVER_ROLE__ === 'manager'
 
 logServerChildStartup(`handoff to ${isManagerServer ? 'manager cli' : 'server'} package entrypoint`)
 require('@oneworks/cli-helper/entry').runCliPackageEntrypoint(

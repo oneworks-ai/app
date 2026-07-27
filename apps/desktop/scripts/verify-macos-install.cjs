@@ -16,6 +16,8 @@ const releaseDir = path.join(desktopRoot, 'release')
 const host = '127.0.0.1'
 const appMetadata = resolveDesktopAppMetadata()
 
+const isTruthy = value => /^(?:1|true|yes|on)$/i.test(value?.trim() ?? '')
+
 const createWorkspaceRuntimeEnv = () => {
   const env = { ...process.env }
   delete env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__
@@ -59,6 +61,20 @@ const findDmgArtifact = (targetArch) => {
   return path.join(releaseDir, images.at(-1))
 }
 
+const findPkgArtifact = (targetArch) => {
+  const suffix = `-mac-${targetArch}.pkg`
+  const installers = fs.readdirSync(releaseDir, { withFileTypes: true })
+    .filter(entry => entry.isFile())
+    .map(entry => entry.name)
+    .filter(name => name.startsWith(`${appMetadata.artifactBaseName}-`) && name.endsWith(suffix))
+    .sort()
+
+  if (installers.length === 0) {
+    throw new Error(`No macOS ${targetArch} pkg artifact was found in ${releaseDir}`)
+  }
+  return path.join(releaseDir, installers.at(-1))
+}
+
 const assertInstalledAppMetadata = (appPath) => {
   const plistPath = path.join(appPath, 'Contents', 'Info.plist')
   const info = JSON.parse(run('plutil', ['-convert', 'json', '-o', '-', plistPath]))
@@ -72,6 +88,24 @@ const assertInstalledAppMetadata = (appPath) => {
   const executablePath = path.join(appPath, 'Contents', 'MacOS', appMetadata.executableName)
   fs.accessSync(executablePath, fs.constants.X_OK)
   return executablePath
+}
+
+const assertInstalledAppSignature = ({ appPath, dmgPath, targetArch }) => {
+  if (!isTruthy(process.env.ONEWORKS_DESKTOP_SIGN)) return
+  const pkgPath = findPkgArtifact(targetArch)
+  run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', appPath], { stdio: 'inherit' })
+  run('codesign', ['--verify', '--verbose=2', dmgPath], { stdio: 'inherit' })
+  run('spctl', ['--assess', '--type', 'execute', '--verbose=2', appPath], { stdio: 'inherit' })
+  run(
+    'spctl',
+    ['--assess', '--type', 'open', '--context', 'context:primary-signature', '--verbose=2', dmgPath],
+    { stdio: 'inherit' }
+  )
+  run('pkgutil', ['--check-signature', pkgPath], { stdio: 'inherit' })
+  run('spctl', ['--assess', '--type', 'install', '--verbose=2', pkgPath], { stdio: 'inherit' })
+  run('xcrun', ['stapler', 'validate', appPath], { stdio: 'inherit' })
+  run('xcrun', ['stapler', 'validate', dmgPath], { stdio: 'inherit' })
+  run('xcrun', ['stapler', 'validate', pkgPath], { stdio: 'inherit' })
 }
 
 const assertTextField = ({ field, metadata }) => {
@@ -292,6 +326,7 @@ const main = async () => {
   console.log(`[desktop] verifying install artifact ${dmgPath}`)
   installDmgArtifact({ appPath, dmgPath })
   const executablePath = assertInstalledAppMetadata(appPath)
+  assertInstalledAppSignature({ appPath, dmgPath, targetArch })
   assertInstalledBuildSource(appPath)
   await smokeInstalledServer({ appPath, executablePath })
   console.log(`[desktop] installed app verified at ${appPath}`)

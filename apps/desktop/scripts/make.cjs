@@ -171,7 +171,9 @@ const buildElectronBuilderArgs = ({ appVersion, publishMode, targetArch, updateC
     `--config.nsisWeb.shortcutName=${appMetadata.productName}`,
     `--config.extraMetadata.version=${appVersion}`,
     `--config.publish.channel=${builderChannel}`,
-    ...(isTruthy(process.env.ONEWORKS_DESKTOP_SIGN) ? ['--config.forceCodeSigning=true'] : []),
+    ...(isTruthy(process.env.ONEWORKS_DESKTOP_SIGN)
+      ? ['--config.forceCodeSigning=true', '--config.dmg.sign=true']
+      : []),
     ...(updateChannel === 'stable' ? [] : ['--config.publish.releaseType=prerelease']),
     ...macIconConfigArgs(),
     '--prepackaged',
