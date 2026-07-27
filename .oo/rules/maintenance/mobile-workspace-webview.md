@@ -97,7 +97,7 @@
 ## PR 与 CI 收口
 
 - UI 变更需要 changelog 和截图资产，确保 `pnpm tools pr-change-check <base> <head> --body <file>` 通过。
-- resolve conflict 后运行 `pnpm exec dprint fmt` 或至少全量 `dprint check`，不要只格式化刚编辑的文件；冲突标记附近最容易触发 format-check。
+- resolve conflict 后运行 `pnpm dprint fmt` 或至少全量 `pnpm dprint check`，不要只格式化刚编辑的文件；冲突标记附近最容易触发 format-check。
 - `pnpm typecheck` 可能因为 `node_modules` 落后于 `origin/main` 新依赖而失败；先跑 `pnpm install --frozen-lockfile` 同步依赖，再判断是否是代码问题。
 - 不要重复声明已经提升到 `@oneworks/types` 的 DTO / error details。server manager、route 和 client API 应使用同一份共享类型。
 - 本地 Android build 产物可能让 `pnpm exec eslint .` 扫到 `apps/android/app/build/**` 生成文件；确认这些文件未入库，CI 在干净环境才是源码 lint 结论。需要本地全量 lint 前先清理生成目录或使用 repo 已约定的 lint 范围。

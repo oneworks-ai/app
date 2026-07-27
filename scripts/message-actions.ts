@@ -21,7 +21,7 @@ const messageActionVerificationSteps: MessageActionsVerificationStep[] = [
   {
     label: 'Run dprint format check',
     command: 'pnpm',
-    args: ['exec', 'dprint', 'check']
+    args: ['dprint', 'check']
   },
   {
     label: 'Run typecheck',

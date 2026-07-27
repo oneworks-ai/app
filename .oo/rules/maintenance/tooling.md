@@ -30,7 +30,7 @@ pnpm tools message-actions verify --quiet
 
 ```bash
 pnpm exec eslint .
-pnpm exec dprint check
+pnpm dprint check
 pnpm typecheck
 ```
 

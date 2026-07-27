@@ -404,7 +404,7 @@ export function activatePlugin(ctx) {
 - 验证 `workbenchAddMenu.tab` 创建的是新 tab 实例，不是常驻 tab。
 - 调用 server command 和 scoped API，确认 scope 不串。
 - 改本地路径 plugin 的 `client/src/view.tsx` 或样式文件后，宿主 Vite dev server 应能触发模块 HMR / React Fast Refresh；改 `client/src/index.tsx`、普通 TS / 数据 / i18n / model 模块、manifest、server 或 README 后，plugin watch 触发 scope 级 reload，不需要重启 Electron。
-- 如果改了宿主代码，运行相关 `vitest`、`pnpm typecheck` 和 `pnpm exec dprint check`。
+- 如果改了宿主代码，运行相关 `vitest`、`pnpm typecheck` 和 `pnpm dprint check`。
 
 ## 文档同步
 

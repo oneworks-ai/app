@@ -40,4 +40,4 @@ CI 要求 PR body 中存在二级标题 `## Experience Review`，并在该 secti
 - `pnpm exec vitest run scripts/__tests__/pr-change-check.spec.ts`
 - 创建 PR 前先从 `.github/pull_request_template.md` 准备已忽略的 `.logs/pr-body.md`，再运行 `pnpm tools pr-preflight origin/main HEAD --body-file .logs/pr-body.md`。
 - `pnpm tools pr-change-check <base> <head> --body-file <path>`
-- `pnpm exec dprint check .github/workflows .github/pull_request_template.md .oo/rules/maintenance/pr-experience-review.md scripts/pr-change-policy.ts scripts/pr-change-check.ts scripts/pr-preflight.ts scripts/__tests__/pr-change-check.spec.ts`
+- `pnpm dprint check .github/workflows .github/pull_request_template.md .oo/rules/maintenance/pr-experience-review.md scripts/pr-change-policy.ts scripts/pr-change-check.ts scripts/pr-preflight.ts scripts/__tests__/pr-change-check.spec.ts`

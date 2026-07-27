@@ -4,7 +4,7 @@
 
 - loader: `scripts/run-tools.mjs`；commander 入口: `scripts/cli.ts`
 
-不要再往 `package.json` 新增一串独立脚本名。新增维护命令时，优先给 `scripts/cli.ts` 增加子命令，再在文档里写 `pnpm tools ...` 的调用方式。
+不要再往 `package.json` 新增一串独立脚本名。新增维护命令时，优先给 `scripts/cli.ts` 增加子命令，再在文档里写 `pnpm tools ...` 的调用方式。依赖型质量检查是冷 worktree 的例外：`scripts/run-workspace-check.mjs` 必须在加载任何 workspace 依赖前调用共享的 `workspace-dependency-bootstrap.mjs`，让并行检查串行准备依赖、随后各自执行真实命令并透传退出码；dprint 统一使用 `pnpm dprint check` / `pnpm dprint fmt`，桌面 package preflight 使用 `pnpm -C apps/desktop test:package-preflight`，不要改回直接并行的 `pnpm exec dprint` / `pnpm exec vitest`。
 
 仓库长期开发服务也走同一个 CLI：当用户要求拉取最新代码并启动 web / daemon / Electron / PWA / homepage / docs / Relay / desktop-control / Android emulator 时，直接在仓库根目录运行 `pnpm --silent tools dev-service ensure <target> --json`。`scripts/run-tools.mjs` 会注册 TS，缺少 register 依赖时先执行 `pnpm install`；统一入口会按需校验 workspace 安装，并在操作租约内复用或启动对应服务。
 

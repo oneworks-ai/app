@@ -81,8 +81,8 @@ target 映射：`web`、`daemon`、`electron`、`electron-workspace`、`pwa`、`
 
 ```bash
 pnpm exec eslint .
-pnpm exec dprint check
-pnpm exec dprint fmt
+pnpm dprint check
+pnpm dprint fmt
 pnpm typecheck
 pnpm tools message-actions verify
 pnpm tools commitmsg-check <base> <head>

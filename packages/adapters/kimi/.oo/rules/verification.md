@@ -33,7 +33,7 @@ npx ow run \
 ## 本地检查
 
 ```bash
-pnpm exec dprint check
+pnpm dprint check
 pnpm exec eslint .
 pnpm typecheck
 pnpm exec vitest run \

@@ -56,7 +56,7 @@
 本地修复后至少验证这些点：
 
 ```bash
-pnpm exec dprint check <changed-files>
+pnpm dprint check <changed-files>
 pnpm exec vitest run --workspace vitest.workspace.ts --project node apps/desktop/__tests__/builtin-adapter-cache.spec.ts apps/desktop/__tests__/runtime-consumer-cli-path.spec.ts
 pnpm -C apps/desktop run package
 pnpm -C apps/desktop run make:from-package

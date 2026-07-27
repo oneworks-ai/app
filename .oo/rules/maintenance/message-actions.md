@@ -50,7 +50,7 @@
 ### 2. PR `format-check` 失败
 
 - `dprint` 对 JSX 缩进和 import 排序比肉眼更严格。
-- 提交前直接跑 `pnpm exec dprint check`；如果失败，用 `pnpm exec dprint fmt <files...>` 修，不要手工对格式。
+- 提交前直接跑 `pnpm dprint check`；如果失败，用 `pnpm dprint fmt <files...>` 修，不要手工对格式。
 
 ### 3. `commit-message` 失败不一定是 commit title 本身有问题
 
