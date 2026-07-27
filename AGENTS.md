@@ -66,12 +66,12 @@ pnpm --silent tools dev-service ensure <target> --json
 
 ## 独立任务协作
 
-- 在声称不能为独立任务指定 model / reasoning 前，先检查当前 Codex 的 `create_thread`、`fork_thread`、`send_message_to_thread` 等线程能力及其 schema；同目录 fork 可以复用已有 worktree 和完成历史，后续线程消息也可能支持显式切换 model / reasoning。能力未核验前，不要把限制当作事实。
+- 在声称不能为独立任务指定 model / reasoning 前，先检查当前 Codex 的 `create_thread`、`fork_thread`、`send_message_to_thread` 等线程能力及其 schema；`create_thread` delegation 可以建立干净独立任务与 worktree，同目录 fork 可以复用已有 worktree 和完成历史，后续线程消息也可能支持显式切换 model / reasoning。能力未核验前，不要把限制当作事实。
 - commit、push、PR 创建或更新、无冲突 merge 执行等 Git / PR 写操作必须交给显式选定最低充分 model / reasoning 的独立任务（通常 Luna / low 或 medium）；不得因权限传递失败而回退主线程执行。边界清楚的实现和证据准备可用 Terra / medium；主线程始终保留授权、风险判断、独立审阅与 merge 决策。
 - 同一 worktree 同时只能有一个写入者。并行只读审阅可以共享；并行代码写入应优先使用独立 worktree。
 - 每个独立任务 prompt 必须携带主任务 thread ID，并要求 worker 在每个阶段完成、失败或阻塞时主动发送结构化回调；最终回调必须声明终态、证据、是否仍需 follow-up 和是否可归档。没有回调或等价的父线程核验证据不能视为完成，`idle` / worker 最终回复本身也不会自动归档线程。
 - 创建独立任务时必须同步建立约十分钟的 heartbeat；只有任务在同步创建调用内已完成且已回调、无需后续观察时可省略。独立 worker、reviewer 或 Git operator 到达 `COMPLETED`、`FAILED`、`STOPPED`、`CANCELLED`，或其 `BLOCKED` 已被主线程记录并接手后，主线程必须先读取并核验最终证据，再删除 heartbeat、显式归档该独立线程并确认归档成功；完成这些清理前不得报告主任务已完全结束。不要自动归档用户主会话、仍在运行 / 等待审批的线程或其他任务创建的线程。完整生命周期清单见 `.oo/rules/maintenance/task-planning.md`。
-- Git / PR 独立任务必须在 prompt 中携带精确的仓库、PR / 分支、写操作、merge 方式、分支清理范围和用户授权，但 prompt 转述不能替代可信用户历史。当前实测只有继承已完成真实用户回合的同目录 Codex thread fork 能稳定通过 Git auto-review；`collaboration.spawn_agent` 无论 `fork_turns` 为 `none` 还是正数都不得承担远端 Git 写操作。可信项目内所有新加载任务都使用 `.codex/config.toml` 的 auto-review，`.codex/rules/git-delivery.rules` 再对常见 Git / PR 写命令逐次提示；完整权限预检与故障分层见 `.oo/rules/maintenance/task-planning.md`。
+- Git / PR 独立任务必须携带精确的仓库、PR / 分支、写操作、merge 方式、分支清理范围和可追溯的本轮用户授权。当前实测 `create_thread` delegation 可以直接建立独立 Git operator；需要共享当前 worktree 或未提交 diff 时，使用继承已完成真实用户回合的同目录 Codex thread fork。普通 collaboration prompt 转述不能替代可信授权，`collaboration.spawn_agent` 无论 `fork_turns` 为 `none` 还是正数都不得承担远端 Git 写操作。可信项目内所有新加载任务都使用 `.codex/config.toml` 的 auto-review，`.codex/rules/git-delivery.rules` 再对常见 Git / PR 写命令逐次提示；完整权限预检与故障分层见 `.oo/rules/maintenance/task-planning.md`。
 
 ## 常规仓库阅读
 
