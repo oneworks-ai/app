@@ -18,6 +18,7 @@
     "desktop:make:pkg:icon:from-package": "pnpm -C apps/desktop make:pkg:icon:from-package",
     "desktop:package": "pnpm -C apps/desktop package",
     "desktop:package:icon": "pnpm -C apps/desktop package:icon",
+    "dprint": "node ./scripts/run-workspace-check.mjs --require-bin dprint -- pnpm exec dprint",
     "start": "pnpm tools dev-service ensure web",
     "tools": "node ./scripts/run-tools.mjs",
     "test:e2e:adapters": "pnpm tools adapter-e2e test",

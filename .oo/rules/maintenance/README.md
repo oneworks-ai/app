@@ -59,9 +59,9 @@ target、状态查询、操作租约和 handoff 见 [开发服务跨会话协作
 - **Lint 检查**: `pnpm exec eslint .`
   - 场景：检查代码风格、潜在错误和类型安全（如 `strict-boolean-expressions`）。
   - 注意：项目使用 `@antfu/eslint-config`，对 `Promise` 处理、`any` 使用和显式空值检查有严格要求。
-- **格式检查**: `pnpm exec dprint check`
+- **格式检查**: `pnpm dprint check`
   - 场景：在 CI 或提交前校验格式是否已按 `dprint.json` 对齐。
-- **代码格式化**: `pnpm exec dprint fmt`
+- **代码格式化**: `pnpm dprint fmt`
   - 场景：统一代码格式。
 - **类型检查**: `pnpm typecheck`
   - 场景：在重构或修改共享包 (`packages/core`) 后，确保全量类型安全。

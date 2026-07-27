@@ -128,7 +128,7 @@ pnpm exec vitest run \
 质量检查：
 
 ```bash
-pnpm exec dprint check <touched-files...>
+pnpm dprint check <touched-files...>
 pnpm exec eslint <touched-files...>
 pnpm typecheck
 ```

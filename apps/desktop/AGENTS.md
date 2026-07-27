@@ -109,7 +109,7 @@
 - 改 launcher 全局快捷键时，还要检查 `src/main/app-runtime.ts` 的 `globalShortcut` 注册 / 注销逻辑、`src/main/desktop-state-store.ts` 的持久化，以及 preload 注入给前端的 `getDesktopSettings` / `updateDesktopSettings`，避免 app 退出后快捷键残留或普通 Web 前端误展示桌面配置。
 - 改打包资源布局时，`scripts/package.cjs`、`scripts/make.cjs`、`scripts/sync-icons.cjs`、`scripts/mac-*.cjs`、`electron-builder.yml` 与 smoke test 要一起看；不要只改其中一个入口。
 - 改本地 dev 打包、workspace server 启动或 runtime package cache 时，必须同时检查 `scripts/package.cjs`、`src/builtin-adapter-cache.cjs`、`src/main/workspace-service-manager.ts`、`src/main/updates.ts`、`src/server-child.cjs` 和 `packages/types/src/adapter-package-cache.ts`；验证时至少核对安装后的 `desktop-build-source.json`、`/Applications/.../Resources/app/runtime-packages/@oneworks/client`、以及 `~/.oneworks/bootstrap/npm/oneworks__cli/<cacheVersion>` / `oneworks__server/<cacheVersion>` / `oneworks__client/<cacheVersion>` 里的真实文件内容。
-- 改打包脚本、图标同步脚本或生成资产时，提交前跑全仓 `pnpm exec dprint check` 和 `pnpm exec eslint .`，不要只跑改动文件范围；CI 的 format / lint 就是全仓检查。
+- 改打包脚本、图标同步脚本或生成资产时，提交前跑全仓 `pnpm dprint check` 和 `pnpm exec eslint .`，不要只跑改动文件范围；CI 的 format / lint 就是全仓检查。
 - 改图标生成资产时，同时检查 `dprint.json` 与 `.gitattributes`：生成 SVG 可按产物排除，`.icns` / `.ico` / `.png` 等二进制图标必须使用 `-text`，避免 Git EOL 规范化破坏文件。
 - 改 make target 校验时，要对照 `.github/workflows/desktop-package.yml`：PR 快路径使用 `ONEWORKS_DESKTOP_MAKE_TARGETS=dmg`，main / tag / 手动完整构建使用 `dmg,zip,pkg`，两者都依赖 `dmg` 产物做安装验证。
 - 改 auto-update 时，要一起验证：

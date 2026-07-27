@@ -174,7 +174,7 @@ After production is stable:
 - If the release changed this SOP, `RELAY-DEPLOYMENT.md`, AGENTS files, or public docs, run:
 
 ```bash
-pnpm exec dprint check
+pnpm dprint check
 git diff --check
 ```
 

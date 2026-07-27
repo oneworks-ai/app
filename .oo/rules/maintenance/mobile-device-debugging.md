@@ -113,7 +113,7 @@ iOS standalone 调试的基础层是 WebDriverAgent / XCTest，不是 Android AD
 
 收口前本地跑：
 
-- `pnpm exec dprint check`
+- `pnpm dprint check`
 - `pnpm exec eslint .`
 - `pnpm typecheck`
 

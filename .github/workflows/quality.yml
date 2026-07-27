@@ -33,7 +33,7 @@ jobs:
           - name: lint
             command: pnpm exec eslint .
           - name: format-check
-            command: pnpm exec dprint check
+            command: pnpm dprint check
           - name: typecheck
             command: pnpm typecheck
     steps:
