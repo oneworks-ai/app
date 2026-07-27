@@ -21,7 +21,7 @@ const buildDir = path.join(desktopRoot, 'build')
 const outputIconsDir = path.join(buildDir, 'icons')
 const defaultTheme = 'metal'
 const fallbackMode = 'dark'
-const themes = ['industrial', 'metal', 'matrix']
+const themes = ['industrial', 'metal', 'matrix', 'linear']
 const modes = ['light', 'dark']
 const platformIconDirs = ['macos', 'windows', 'linux']
 const solidBackgrounds = {
@@ -36,6 +36,10 @@ const solidBackgrounds = {
   metal: {
     light: [242, 244, 240],
     dark: [17, 22, 21]
+  },
+  linear: {
+    light: [248, 250, 252],
+    dark: [8, 10, 13]
   }
 }
 const sourceIconSize = 1024

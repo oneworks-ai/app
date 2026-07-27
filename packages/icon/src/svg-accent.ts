@@ -27,6 +27,20 @@ export const themeAccent = (theme: string, mode: string) => {
       }
   }
 
+  if (theme === 'linear') {
+    return mode === 'dark'
+      ? {
+        glow: 'rgba(226,235,242,0.12)',
+        shadow: 'rgba(226,235,242,0.08)',
+        stroke: 'rgba(226,235,242,0.18)'
+      }
+      : {
+        glow: 'rgba(20,29,36,0.1)',
+        shadow: 'rgba(20,29,36,0.08)',
+        stroke: 'rgba(20,29,36,0.16)'
+      }
+  }
+
   return mode === 'dark'
     ? {
       glow: 'rgba(245,246,232,0.18)',

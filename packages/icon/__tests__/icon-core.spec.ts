@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { createMobiusCore, createSeededRandom, normalizeSeed } from '../src/core.js'
+import { ONEWORKS_ICON_THEMES, normalizeIconTheme } from '../src/presets.js'
 import { createMobiusSvg } from '../src/svg.js'
 
 describe('@oneworks/icon core', () => {
@@ -36,6 +37,28 @@ describe('@oneworks/icon svg', () => {
     expect(svg).toContain('<svg xmlns="http://www.w3.org/2000/svg"')
     expect(svg).toContain('oneworks-industrial-dark-brand-v1-128')
     expect(svg).toContain('shape-rendering="geometricPrecision"')
+  })
+
+  it('renders the linear theme as a flat single-color ribbon', () => {
+    const svg = createMobiusSvg({
+      backgroundStyle: 'transparent',
+      mode: 'dark',
+      seed: 'brand-v1',
+      size: 128,
+      theme: 'linear'
+    })
+
+    expect(ONEWORKS_ICON_THEMES).toContain('linear')
+    expect(normalizeIconTheme('linear')).toBe('linear')
+    expect(svg).toContain('oneworks-linear-dark-brand-v1-128')
+    expect(svg).toContain('data-oneworks-surface="linear"')
+    expect(svg).toContain('fill="rgb(226,235,242)"')
+    expect(svg).toContain('fill="rgba(8,10,13,0.9)" stroke="none"')
+    expect(svg).toContain('data-oneworks-ribbon-border="true"')
+    const borderPaths = svg.match(
+      /<path d="M[^"]+ Z" fill="rgba\(8,10,13,0\.9\)" stroke="none" data-oneworks-ribbon-border="true"\/>/g
+    )
+    expect(borderPaths).toHaveLength(236)
   })
 
   it('renders solid and transparent background variants', () => {

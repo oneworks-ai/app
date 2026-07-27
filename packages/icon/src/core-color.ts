@@ -59,6 +59,10 @@ export const themeFill = (
     return rgb(mixColor(palette[3], palette[4], (emphasis - 0.82) / 0.18))
   }
 
+  if (theme === 'linear') {
+    return mode === 'light' ? 'rgb(20,29,36)' : 'rgb(226,235,242)'
+  }
+
   const emphasis = clamp(0.82 * over + 0.1 * twistLight + 0.08 * rim)
   const shade = mode === 'dark'
     ? Math.max(18, Math.min(242, Math.round(14 + 226 * emphasis)))
@@ -71,8 +75,12 @@ export const themeSolidBackgroundFill = (theme: string, mode: string): string =>
   if (theme === 'industrial') return mode === 'light' ? '#FFF1E8' : '#180804'
   if (theme === 'matrix') return mode === 'light' ? '#E9FFF1' : '#001B0D'
   if (theme === 'metal') return mode === 'light' ? '#F2F4F0' : '#111615'
+  if (theme === 'linear') return mode === 'light' ? '#F8FAFC' : '#080A0D'
   return mode === 'light' ? '#F3F5F2' : '#111514'
 }
+
+export const themeLinearBorder = (mode: string): string =>
+  mode === 'light' ? 'rgba(248,250,252,0.9)' : 'rgba(8,10,13,0.9)'
 
 export const clamp = (value: number, min = 0, max = 1): number => Math.max(min, Math.min(max, value))
 

@@ -241,8 +241,8 @@ interface DesktopSettings {
   iconAppearance?: 'system' | 'light' | 'dark'
   iconBackground?: 'transparent' | 'solid' | 'textured'
   syncAppIcon?: boolean
-  iconTheme?: 'industrial' | 'metal' | 'matrix'
-  primaryColor?: '#E23F12' | '#3F7E8F' | '#00B454' | '#8B9493'
+  iconTheme?: 'industrial' | 'metal' | 'matrix' | 'linear'
+  primaryColor?: '#E23F12' | '#3F7E8F' | '#00B454' | '#7C8A96' | '#8B9493'
   themeMode?: 'system' | 'light' | 'dark'
   themePack?: string
   themePacks?: Record<string, Record<string, unknown> | undefined>

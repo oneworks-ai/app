@@ -282,7 +282,7 @@ describe('config schema bundle', () => {
     const properties = appearance.properties as Record<string, unknown>
 
     expect(properties.primaryColor).toMatchObject({
-      enum: ['#E23F12', '#3F7E8F', '#00B454', '#8B9493']
+      enum: ['#E23F12', '#3F7E8F', '#00B454', '#7C8A96', '#8B9493']
     })
     expect(properties.themeMode).toMatchObject({
       enum: ['system', 'light', 'dark']
@@ -342,6 +342,11 @@ describe('config schema bundle', () => {
     })
     expect(legacyMetal.success).toBe(true)
 
+    const linear = await validateConfigSection('appearance', {
+      primaryColor: '#7C8A96'
+    })
+    expect(linear.success).toBe(true)
+
     const legacyIconBackground = await validateConfigSection('appearance', {
       iconBackground: 'solid',
       primaryColor: '#00B454'
@@ -393,7 +398,7 @@ describe('config schema bundle', () => {
       enum: ['transparent', 'solid', 'textured']
     })
     expect(properties.iconTheme).toMatchObject({
-      enum: ['industrial', 'metal', 'matrix']
+      enum: ['industrial', 'metal', 'matrix', 'linear']
     })
     expect(properties.openLastWorkspaceOnStartup).toMatchObject({
       type: 'boolean'
@@ -426,7 +431,7 @@ describe('config schema bundle', () => {
       syncAppIcon: true,
       iconAppearance: 'system',
       iconBackground: 'solid',
-      iconTheme: 'metal',
+      iconTheme: 'linear',
       autoUpdate: false,
       updateChannel: 'beta'
     })

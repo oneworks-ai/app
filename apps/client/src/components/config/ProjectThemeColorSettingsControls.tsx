@@ -67,7 +67,9 @@ export function ProjectThemeColorSettingsControls({
             role='radiogroup'
             aria-label={themeAriaLabel}
             style={{
-              '--config-project-theme-active-index': selectedThemeIndex
+              '--config-project-theme-active-index': selectedThemeIndex,
+              '--config-project-theme-option-count': ONEWORKS_THEME_COLOR_PRESETS.length,
+              '--config-project-theme-total-gap': `${Math.max(0, ONEWORKS_THEME_COLOR_PRESETS.length - 1) * 4}px`
             } as CSSProperties}
           >
             {ONEWORKS_THEME_COLOR_PRESETS.map((preset) => {

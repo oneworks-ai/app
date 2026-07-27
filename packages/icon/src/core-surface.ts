@@ -135,7 +135,14 @@ export const buildMesh = (
       const depth = quad.reduce((sum, point) => sum + point.z, 0) / 4
       const u = MOBIUS_PARAM_PHASE + (2 * Math.PI * (i + 0.5)) / MOBIUS_U_SEGMENTS
       const v = -MOBIUS_W + (2 * MOBIUS_W * (j + 0.5)) / MOBIUS_V_SEGMENTS
-      mesh.push({ depth, points: expandedQuad(quad, 0.82), sortDepth: depth + 0.11 * Math.cos(u), u, v })
+      mesh.push({
+        depth,
+        outlinePoints: quad,
+        points: expandedQuad(quad, 0.82),
+        sortDepth: depth + 0.11 * Math.cos(u),
+        u,
+        v
+      })
     }
   }
 

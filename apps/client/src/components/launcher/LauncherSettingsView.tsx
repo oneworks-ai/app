@@ -8,13 +8,16 @@ import { useAtom } from 'jotai'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+import useSWR from 'swr'
 
+import type { ConfigResponse, ConfigSection } from '@oneworks/types'
 import { matchesPinyinSearch, normalizePinyinSearchQuery } from '@oneworks/utils/pinyin-search'
 
+import { getConfig, updateConfig } from '#~/api'
 import { ShortcutInput } from '#~/components/config/ConfigShortcutInput'
 import { ProjectThemeColorSettingsControls } from '#~/components/config/ProjectThemeColorSettingsControls'
 import { ThemeModeRadioGroup } from '#~/components/config/ThemeModeRadioGroup'
-import { normalizeDesktopIconSettings } from '#~/components/config/app-icon-settings-model'
+import { iconThemes, normalizeDesktopIconSettings } from '#~/components/config/app-icon-settings-model'
 import type {
   DesktopIconBackground,
   DesktopIconSync,
@@ -76,9 +79,19 @@ interface LauncherSettingSection {
   title: string
 }
 
+type GlobalDesktopConfig = NonNullable<ConfigSection['desktop']>
+type GlobalAppearanceConfig = NonNullable<ConfigSection['appearance']>
+
+const cloneGlobalDesktopConfig = (value: GlobalDesktopConfig | undefined): GlobalDesktopConfig => ({
+  ...(value ?? {})
+})
+
+const cloneGlobalAppearanceConfig = (value: GlobalAppearanceConfig | undefined): GlobalAppearanceConfig => ({
+  ...(value ?? {})
+})
+
 const themeModes = ['system', 'light', 'dark'] as const satisfies readonly ThemeMode[]
 const appLanguageValues = appLanguageOptions.map(option => option.value)
-const iconThemes = ['industrial', 'metal', 'matrix'] as const satisfies readonly DesktopIconTheme[]
 type DesktopUpdateChannel = DesktopSettings['updateChannel']
 const desktopUpdateChannels = ['stable', 'rc', 'beta', 'alpha'] as const satisfies readonly DesktopUpdateChannel[]
 const textSizeValues = ['default', 'large'] as const
@@ -206,6 +219,13 @@ export function LauncherSettingsView({
   const { resolvedThemeMode } = useResolvedThemeMode()
   const desktopApi = window.oneworksDesktop
   const desktopPlatform = desktopApi?.platform
+  const canUseApiConfig = desktopApi == null
+  const { data: configRes, mutate: mutateConfig } = useSWR<ConfigResponse>(
+    canUseApiConfig ? '/api/config' : null,
+    getConfig
+  )
+  const rawGlobalDesktop = configRes?.sources?.global?.desktop
+  const rawGlobalAppearance = configRes?.sources?.global?.appearance
   const isMac = desktopPlatform === 'darwin'
   const currentLanguage = i18n.resolvedLanguage ?? i18n.language
   const { resetGlobalInterfaceLanguage, updateGlobalInterfaceLanguage } = useInterfaceLanguageConfig()
@@ -233,6 +253,7 @@ export function LauncherSettingsView({
   const [activeSectionId, setActiveSectionId] = useState<string>()
   const canUpdateDesktopIcon = desktopApi?.getDesktopSettings != null &&
     desktopApi.updateDesktopSettings != null
+  const canUpdateAppIconPreferences = canUpdateDesktopIcon || (canUseApiConfig && configRes != null)
   const launcherShortcut = desktopSettings.launcherShortcut
   const iconTheme = desktopIconSettings.iconTheme
   const iconBackground = desktopIconSettings.iconBackground
@@ -332,10 +353,23 @@ export function LauncherSettingsView({
   ) => {
     const previousSettings = desktopIconSettings
     setDesktopIconSettings(prev => normalizeDesktopIconSettings({ ...prev, ...patch }))
-    if (desktopApi?.updateDesktopSettings == null) return
-
     setSavingDesktopIconSettings(true)
-    void desktopApi.updateDesktopSettings(patch)
+    const update = desktopApi?.updateDesktopSettings == null
+      ? canUseApiConfig && configRes != null
+        ? updateConfig('global', 'desktop', {
+          ...cloneGlobalDesktopConfig(rawGlobalDesktop),
+          ...patch
+        }).then(async () => {
+          const nextConfig = await mutateConfig()
+          return nextConfig?.sources?.merged?.desktop ?? {
+            ...cloneGlobalDesktopConfig(rawGlobalDesktop),
+            ...patch
+          }
+        })
+        : Promise.reject(new Error('App icon settings are not available.'))
+      : desktopApi.updateDesktopSettings(patch)
+
+    void update
       .then(value => setDesktopIconSettings(normalizeDesktopIconSettings(value)))
       .catch((error) => {
         console.error('[launcher-settings] failed to update app icon settings', error)
@@ -343,7 +377,16 @@ export function LauncherSettingsView({
         void message.error(t('config.desktopSettings.appIcon.saveFailed'))
       })
       .finally(() => setSavingDesktopIconSettings(false))
-  }, [desktopApi, desktopIconSettings, message, t])
+  }, [
+    canUseApiConfig,
+    configRes,
+    desktopApi,
+    desktopIconSettings,
+    message,
+    mutateConfig,
+    rawGlobalDesktop,
+    t
+  ])
   const updateThemeMode = useCallback((nextThemeMode: ThemeMode) => {
     const previousThemeMode = themeMode
     setThemeMode(nextThemeMode)
@@ -365,11 +408,28 @@ export function LauncherSettingsView({
   const updateIconTheme = useCallback((nextIconTheme: DesktopIconTheme) => {
     const preset = getPresetByTheme(nextIconTheme)
     if (canUpdatePrimaryColor) {
-      void desktopApi?.updateGlobalAppearanceConfig?.({ primaryColor: preset.primaryColor })
-        .then(value => setDesktopSettings(normalizeDesktopSettings(value)))
-        .catch((error) => {
-          console.error('[launcher-settings] failed to update global primary color', error)
-        })
+      const updatePrimaryColor = desktopApi?.updateGlobalAppearanceConfig == null
+        ? canUseApiConfig && configRes != null
+          ? updateConfig('global', 'appearance', {
+            ...cloneGlobalAppearanceConfig(rawGlobalAppearance),
+            primaryColor: preset.primaryColor
+          }).then(async () => {
+            const nextConfig = await mutateConfig()
+            return {
+              ...(nextConfig?.sources?.merged?.desktop ?? {}),
+              ...(nextConfig?.sources?.merged?.appearance ?? {})
+            }
+          })
+          : undefined
+        : desktopApi.updateGlobalAppearanceConfig({ primaryColor: preset.primaryColor })
+
+      if (updatePrimaryColor != null) {
+        void updatePrimaryColor
+          .then(value => setDesktopSettings(normalizeDesktopSettings(value)))
+          .catch((error) => {
+            console.error('[launcher-settings] failed to update global primary color', error)
+          })
+      }
     }
     updateDesktopIconSettings({
       iconAppearance: desktopIconSettings.iconAppearance,
@@ -381,6 +441,10 @@ export function LauncherSettingsView({
     desktopIconSettings.iconAppearance,
     iconBackground,
     canUpdatePrimaryColor,
+    canUseApiConfig,
+    configRes,
+    mutateConfig,
+    rawGlobalAppearance,
     updateDesktopIconSettings
   ])
   const updateIconBackground = useCallback((nextIconBackground: DesktopIconBackground) => {
@@ -422,7 +486,18 @@ export function LauncherSettingsView({
   }, [updateDesktopIconSettings, updateThemeMode])
 
   useEffect(() => {
-    if (!canUpdateDesktopIcon) return
+    if (!canUpdateDesktopIcon) {
+      if (!canUseApiConfig || configRes == null) return
+
+      const nextSettings = normalizeDesktopSettings({
+        ...(configRes.sources?.merged?.desktop ?? {}),
+        ...(configRes.sources?.merged?.appearance ?? {})
+      })
+      setDesktopSettingsLoaded(true)
+      setDesktopSettings(nextSettings)
+      setDesktopIconSettings(normalizeDesktopIconSettings(configRes.sources?.merged?.desktop))
+      return
+    }
 
     let disposed = false
     void desktopApi?.getDesktopSettings?.()
@@ -451,7 +526,7 @@ export function LauncherSettingsView({
       disposed = true
       dispose?.()
     }
-  }, [canUpdateDesktopIcon, desktopApi, setThemeMode])
+  }, [canUpdateDesktopIcon, canUseApiConfig, configRes, desktopApi, setThemeMode])
 
   const sections = useMemo<LauncherSettingSection[]>(() => [
     {
@@ -804,9 +879,10 @@ export function LauncherSettingsView({
               <div className='launcher-settings__icon-controls'>
                 <ProjectThemeColorSettingsControls
                   canUpdateDesktopIcon={canUpdateDesktopIcon}
+                  disabled={!canUpdateAppIconPreferences}
                   iconBackground={iconBackground}
                   previewSources={previewSources}
-                  saving={savingDesktopIconSettings || !canUpdateDesktopIcon}
+                  saving={savingDesktopIconSettings}
                   selectedTheme={iconTheme}
                   syncAppIcon={syncAppIcon}
                   syncAppIconDescription={t('launcher.settings.items.appIcon.syncDesc')}
@@ -821,7 +897,7 @@ export function LauncherSettingsView({
             </div>
           ),
           description: t('launcher.settings.items.appIcon.desc'),
-          handleActivate: () => updateSyncAppIcon(!syncAppIcon),
+          handleActivate: canUpdateDesktopIcon ? () => updateSyncAppIcon(!syncAppIcon) : undefined,
           handleAdjust: direction => updateIconTheme(getCycledValue(iconThemes, iconTheme, direction)),
           icon: 'app_shortcut',
           id: 'app-icon',
@@ -841,6 +917,7 @@ export function LauncherSettingsView({
     hideAfterAction,
     iconBackground,
     iconTheme,
+    canUpdateAppIconPreferences,
     canUpdateDesktopIcon,
     desktopPlatform,
     isMac,

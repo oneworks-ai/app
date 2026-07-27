@@ -16,6 +16,7 @@ import type { ConfigResponse } from '@oneworks/types'
 
 import { getConfig, updateConfig } from '#~/api'
 import { getCurrentWorkspaceBrowserActivityRouteState } from '#~/components/browser-activity/browser-activity-route-state'
+import { iconThemes } from '#~/components/config/app-icon-settings-model'
 import { renderIconAsset } from '#~/components/icons/IconAsset'
 import type { IconAsset } from '#~/components/icons/IconAsset'
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
@@ -1440,11 +1441,15 @@ export function NavRail({
     getGlobalThemePrimaryColor(configRes) ?? DEFAULT_THEME_PRIMARY_COLOR,
     themes
   )
+  const configuredIconTheme = configRes?.sources?.merged?.desktop?.iconTheme
   const activeIconTheme = React.useMemo(
     () =>
-      ONEWORKS_THEME_COLOR_PRESETS.find(preset => preset.primaryColor === activeThemePrimaryColor)?.theme ??
-        ONEWORKS_THEME_COLOR_PRESETS[0].theme,
-    [activeThemePrimaryColor]
+      typeof configuredIconTheme === 'string' &&
+        iconThemes.includes(configuredIconTheme)
+        ? configuredIconTheme
+        : ONEWORKS_THEME_COLOR_PRESETS.find(preset => preset.primaryColor === activeThemePrimaryColor)?.theme ??
+          ONEWORKS_THEME_COLOR_PRESETS[0].theme,
+    [activeThemePrimaryColor, configuredIconTheme]
   )
   const moreButtonIconSrc = React.useMemo(() =>
     createOneWorksIconDataUri({

@@ -105,7 +105,17 @@ export const syncRendererOptions = (
 }
 
 const syncClasses = (host: HTMLElement, renderer: CanvasRenderer): void => {
-  host.classList.remove('metal', 'industrial', 'matrix', 'mode-light', 'mode-dark', 'no-bg', 'no-shadow', 'fullscreen')
+  host.classList.remove(
+    'metal',
+    'industrial',
+    'matrix',
+    'linear',
+    'mode-light',
+    'mode-dark',
+    'no-bg',
+    'no-shadow',
+    'fullscreen'
+  )
   host.classList.add(renderer.theme, `mode-${renderer.mode}`)
   host.classList.toggle('no-bg', renderer.noBackground)
   host.classList.toggle('no-shadow', renderer.noShadow)

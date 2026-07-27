@@ -1,4 +1,4 @@
-export const DESKTOP_ICON_THEMES = ['industrial', 'metal', 'matrix'] as const
+export const DESKTOP_ICON_THEMES = ['industrial', 'metal', 'matrix', 'linear'] as const
 export const DESKTOP_ICON_APPEARANCES = ['system', 'light', 'dark'] as const
 export const DESKTOP_ICON_BACKGROUNDS = ['transparent', 'solid', 'textured'] as const
 

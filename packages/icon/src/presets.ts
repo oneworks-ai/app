@@ -1,6 +1,11 @@
 import type { OneWorksIconAppearance, OneWorksIconMode, OneWorksIconTheme } from './types.js'
 
-export const ONEWORKS_ICON_THEMES = ['metal', 'industrial', 'matrix'] as const satisfies readonly OneWorksIconTheme[]
+export const ONEWORKS_ICON_THEMES = [
+  'metal',
+  'industrial',
+  'matrix',
+  'linear'
+] as const satisfies readonly OneWorksIconTheme[]
 export const ONEWORKS_ICON_MODES = ['light', 'dark'] as const satisfies readonly OneWorksIconMode[]
 export const ONEWORKS_ICON_APPEARANCES = [
   'system',
@@ -19,6 +24,10 @@ export const ONEWORKS_THEME_COLOR_PRESETS = [
   {
     theme: 'matrix',
     primaryColor: '#00B454'
+  },
+  {
+    theme: 'linear',
+    primaryColor: '#7C8A96'
   }
 ] as const satisfies readonly {
   theme: OneWorksIconTheme
