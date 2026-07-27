@@ -109,28 +109,31 @@ Safe to archive: yes / no
 
 ### Git operator 的可信授权传递
 
-Git / PR 写操作需要同时满足“任务范围精确”和“用户授权来自可信历史”。父 agent 在普通 worker prompt 中复述“用户已授权”只提供任务上下文，不会把用户权限转化为可供 auto-review 采信的 capability。
+Git / PR 写操作需要同时满足“任务范围精确”和“用户授权可追溯”。父 agent 在普通 collaboration worker prompt 中复述“用户已授权”只提供任务上下文，不会把用户权限转化为可供 auto-review 采信的 capability。平台生成的 `create_thread` delegation 不等同于普通 worker prompt：它会成为新独立任务的直接输入，当前实测可以形成可信的 Git operator 授权链路，但允许范围仍不得超过来源用户请求。
 
 当前 Codex 工具的实测边界：
 
-| 独立任务入口                                       | 用户历史来源                                | Git auto-review 结果                              | 当前用途               |
+| 独立任务入口                                       | 授权上下文来源                              | Git auto-review 结果                              | 当前用途               |
 | -------------------------------------------------- | ------------------------------------------- | ------------------------------------------------- | ---------------------- |
 | `collaboration.spawn_agent` + `fork_turns: "none"` | 只有父 prompt 转述                          | 在 Git 命令启动前拒绝                             | 只读审阅、无远端写实现 |
 | `collaboration.spawn_agent` + 正数 `fork_turns`    | 携带近期对话，但没有可采信的授权 capability | 在 Git 命令启动前拒绝                             | 只读审阅、无远端写实现 |
-| `codex_app.fork_thread` + `same-directory`         | 继承源任务已完成的真实用户历史              | 已验证可通过受限 `git push --dry-run` auto-review | Git / PR operator      |
+| `codex_app.create_thread` + project worktree       | 新任务直接收到可追溯的 delegation 输入      | 已验证通过 dry-run，并完成真实 push / PR / merge  | 独立 worktree operator |
+| `codex_app.fork_thread` + `same-directory`         | 继承源任务已完成的真实用户历史              | 已验证可通过受限 `git push --dry-run` auto-review | 同目录 operator        |
 
 标准处理：
 
-1. 用户对目标仓库、分支 / PR 和写操作的授权必须已经进入源任务的已完成历史；same-directory fork 不复制仍在运行的 active turn。
-2. 创建前核验 `fork_thread`、`send_message_to_thread`、`wait_threads` 和归档工具的当前 schema，确认能显式指定并回读最低充分 model / reasoning；不要用旧记忆猜参数。
-3. 通过 `codex_app.fork_thread` 创建同目录独立任务，同步登记 thread / worktree、约十分钟 heartbeat、deadline 和 cleanup cutoff。再用 `send_message_to_thread` 下发精确操作范围，明确“你就是执行者，不得再委派”。prompt 仍要包含仓库、提交 / 分支、允许动作、禁止动作、merge 与分支清理边界，但这些字段用于收窄 capability，不冒充用户授权。
+1. 先按状态共享需求选择入口：
+   - 已审阅状态能由目标仓库、base、ref / commit / branch 或 operator 自己的受限改动精确定位时，优先用 `create_thread` 创建 project worktree。delegation 必须直接写清来源任务、仓库、状态锚点、允许的 Git / PR 动作、merge 方式和分支清理范围；该新任务本身就是 operator，不要求它再 fork。
+   - 必须读取当前 worktree 或未提交 diff 时，用 `fork_thread` + `same-directory`。用户授权必须已经进入源任务的已完成历史，因为 same-directory fork 不复制仍在运行的 active turn。
+2. 创建前核验 `create_thread`、`fork_thread`、`send_message_to_thread`、`wait_threads` 和归档工具的当前 schema，确认项目 / worktree 选择、状态锚点以及 model / reasoning 能力；不要用旧记忆猜参数。
+3. 创建后同步登记 thread / worktree、约十分钟 heartbeat、deadline 和 cleanup cutoff，并要求 operator 在阶段边界回调主任务。无论使用哪种入口，都要明确“你就是执行者，不得再委派”；任务输入用于收窄 capability，不得自行扩大来源用户授权。
 4. 第一次写入前完成只读 preflight：确认目标 worktree、已审阅的 diff、当前分支 / ref、远端同步、已有或重复 PR、base branch、适用 PR policy、Draft / merge 授权、merge 方式和分支清理范围。前置条件未满足时停在只读阶段；不要先创建 PR 再补查这些边界。
 5. 新 operator 执行 `git push --dry-run` 或等价的无写入远端协商。只有这条受限命令通过 Codex 审批并真实到达 Git 远端，才能证明该命令的可信授权链路有效；它不授权后续 `commit`、真实 `push`、PR 创建 / 更新或 merge。每一项 Git / PR 写操作仍须在精确 scope 下逐次通过 auto-review。
 6. preflight 和授权链路均通过后，operator 才按授权依次 commit、push、创建或复用 PR；required checks 和审批在 PR 上继续等待、核验。主线程保留是否满足 merge 条件的判断，operator 只执行已明确授权的 merge 方式和清理范围。
 7. 用 `wait_threads` 获取紧凑进度；终态证据核验后删除 heartbeat，立即 `set_thread_archived` 并确认归档成功，不要把执行日志重新灌入主线程。
-8. 如果授权只存在于当前 active turn，编排层应把 operator 排到该用户回合进入 completed history 之后；当前工具无法形成可信 capability 时，记录并修复能力缺口，不让用户复述授权，也不回退主线程执行。
+8. 如果授权只存在于当前 active turn，且状态可以交给独立 project worktree，使用带精确 delegation 的 `create_thread`；如果必须走 same-directory fork，则等该用户回合进入 completed history 后再创建。两条路径都无法形成可信 capability 时，记录并修复能力缺口，不让用户复述授权，也不回退主线程执行。
 
-复制完整历史只是当前兼容路径，不是长期权限模型。目标能力应是由运行时传递结构化授权：来源用户回合、目标仓库、提交 / 分支、允许操作、有效期和禁止事项。结构化 capability 可用后，应替代依赖完整历史的 fork，并重新执行真实 Git auto-review 验收。
+继承完整历史的 same-directory fork 只是共享当前状态的兼容路径，不是唯一可信路径。`create_thread` delegation 已实测可以直接承担独立 Git operator；长期目标仍是由运行时传递结构化授权：来源用户回合、目标仓库、提交 / 分支、允许操作、有效期和禁止事项。能力变化后应重新执行真实 Git auto-review 验收。
 
 ### 区分 Codex 审批与 GitHub 授权
 
