@@ -47,6 +47,7 @@ import { buildWorkspaceClientBase, isServerManagerRole, mergeRuntimeEnv } from '
 import { copyTextWithFeedback } from '#~/utils/copy'
 import { deferImeCompositionEnd, isImeCompositionKeyEvent } from '#~/utils/keyboard-events'
 import { createOneWorksIconDataUri } from '#~/utils/oneworks-icon'
+import { isShortcutMatch } from '#~/utils/shortcutUtils'
 import { resolveWorkspaceFileOpenerSelectModels } from '#~/utils/workspace-file-openers'
 import { rememberWorkspaceConnection } from '#~/workspace-connection-state'
 import { normalizePluginLauncherSearchResults } from './launcher-plugin-search'
@@ -999,6 +1000,9 @@ export function LauncherRoute({
   const isSearchComposingRef = useRef(false)
   const isSearchInputComposing = useCallback(() => isSearchComposingRef.current, [])
   const desktopApi = window.oneworksDesktop
+  const isMacShortcutLayout = desktopApi == null
+    ? navigator.platform.includes('Mac')
+    : desktopApi.platform === 'darwin'
   const [serverLauncherAvailability, setServerLauncherAvailability] = useState<ServerLauncherAvailability>(() =>
     desktopApi == null ? (isServerManagerRole() ? 'available' : 'checking') : 'unavailable'
   )
@@ -3813,6 +3817,40 @@ export function LauncherRoute({
   useEffect(() => {
     if (!active) return
 
+    const handleLauncherSettingsShortcut = (event: globalThis.KeyboardEvent) => {
+      if (
+        openingWorkspace != null ||
+        isImeCompositionKeyEvent(event, isSearchInputComposing()) ||
+        !isShortcutMatch(event, 'mod+,', isMacShortcutLayout)
+      ) {
+        return
+      }
+
+      const target = event.target
+      if (target instanceof HTMLElement && target.closest('.config-shortcut-input') != null) {
+        return
+      }
+
+      event.preventDefault()
+      event.stopPropagation()
+      openLauncherView('settings')
+    }
+
+    window.addEventListener('keydown', handleLauncherSettingsShortcut, true)
+    return () => {
+      window.removeEventListener('keydown', handleLauncherSettingsShortcut, true)
+    }
+  }, [
+    active,
+    isMacShortcutLayout,
+    isSearchInputComposing,
+    openLauncherView,
+    openingWorkspace
+  ])
+
+  useEffect(() => {
+    if (!active) return
+
     const handleLauncherKeyDown = (event: globalThis.KeyboardEvent) => {
       if (isImeCompositionKeyEvent(event, isSearchInputComposing())) {
         return
@@ -3845,18 +3883,6 @@ export function LauncherRoute({
         navigateSearchHistory(
           event.key === ']' || event.code === 'BracketRight' ? 1 : -1
         )
-        return
-      }
-
-      if ((event.metaKey && (event.key === ',' || event.code === 'Comma'))) {
-        const target = event.target
-        if (target instanceof HTMLElement && target.closest('.config-shortcut-input') != null) {
-          return
-        }
-
-        event.preventDefault()
-        event.stopPropagation()
-        openLauncherView('settings')
         return
       }
 
@@ -3900,7 +3926,6 @@ export function LauncherRoute({
     isSearchInputComposing,
     launcherViewMode,
     navigateSearchHistory,
-    openLauncherView,
     setLauncherViewModeWithUrl,
     openingWorkspace
   ])

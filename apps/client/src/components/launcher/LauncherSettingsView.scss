@@ -21,19 +21,16 @@
       var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4))
     );
   border-radius: 0;
-  background: var(
-    --oneworks-launcher-tab-bar-background,
-    color-mix(in srgb, var(--bg-color) 92%, var(--sub-bg-color))
-  );
+  background: var(--oneworks-launcher-tab-bar-background, transparent);
   backdrop-filter: var(
     --oneworks-launcher-tab-bar-backdrop-filter,
-    blur(18px) saturate(1.35)
+    none
   );
   box-sizing: border-box;
   scrollbar-width: none;
   -webkit-backdrop-filter: var(
     --oneworks-launcher-tab-bar-backdrop-filter,
-    blur(18px) saturate(1.35)
+    none
   );
 }
 
@@ -45,7 +42,7 @@
   position: relative;
   min-width: 0;
   min-height: var(--launcher-tab-height, 28px);
-  padding: 0 var(--launcher-tab-gap, 10px);
+  padding: 0;
   border: 0;
   border-radius: var(
     --launcher-tab-radius,

@@ -3,6 +3,23 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 describe('launcher command item visual contract', () => {
+  it('keeps settings tabs unpadded and transparent by default', () => {
+    const settingsStyles = readFileSync(
+      new URL(
+        '../src/components/launcher/LauncherSettingsView.scss',
+        import.meta.url
+      ),
+      'utf8'
+    )
+
+    expect(settingsStyles).toMatch(
+      /\.launcher-settings__tabs\s*\{[^}]*background:\s*var\(--oneworks-launcher-tab-bar-background,\s*transparent\)/
+    )
+    expect(settingsStyles).toMatch(
+      /\.launcher-settings__tab\s*\{[^}]*padding:\s*0;/
+    )
+  })
+
   it('keeps default hover surfaces transparent while preserving theme overrides', () => {
     const routeStyles = readFileSync(
       new URL('../src/routes/LauncherRoute.scss', import.meta.url),
@@ -55,6 +72,20 @@ describe('launcher command item visual contract', () => {
     )
     expect(styles).not.toMatch(
       /\.launcher-command-item\.is-active\s+:is\([^)]*\.launcher-command-item__action/
+    )
+  })
+
+  it('hides the native shortcut placeholder behind the styled display', () => {
+    const styles = readFileSync(
+      new URL(
+        '../src/components/config/ConfigShortcutInput.scss',
+        import.meta.url
+      ),
+      'utf8'
+    )
+
+    expect(styles).toMatch(
+      /\.config-shortcut-input__native::placeholder\s*\{[^}]*color:\s*transparent;[^}]*opacity:\s*0;/
     )
   })
 })
