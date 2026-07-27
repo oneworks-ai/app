@@ -408,6 +408,15 @@ importers:
       '@oneworks/icon':
         specifier: workspace:*
         version: link:../../packages/icon
+      '@oneworks/plugin-browser-driver':
+        specifier: workspace:*
+        version: link:../../packages/plugins/browser-driver
+      '@oneworks/plugin-chrome-driver':
+        specifier: workspace:*
+        version: link:../../packages/plugins/chrome-driver
+      '@oneworks/plugin-cua-driver':
+        specifier: workspace:*
+        version: link:../../packages/plugins/cua-driver
       '@oneworks/plugin-logger':
         specifier: workspace:*
         version: link:../../packages/plugins/logger
@@ -632,9 +641,15 @@ importers:
       pino-pretty:
         specifier: ^13.1.3
         version: 13.1.3
+      strip-literal:
+        specifier: ^3.1.0
+        version: 3.1.0
       uuid:
         specifier: ^9.0.1
         version: 9.0.1
+      vite:
+        specifier: ^5.4.8
+        version: 5.4.21(@types/node@22.18.12)(sass@1.97.2)(terser@5.46.1)
       ws:
         specifier: ^8.17.0
         version: 8.19.0
@@ -666,6 +681,9 @@ importers:
       '@types/ws':
         specifier: ^8.18.1
         version: 8.18.1
+      rollup:
+        specifier: ^4.52.5
+        version: 4.52.5
 
   apps/vscode-extension:
     devDependencies:
@@ -1116,6 +1134,10 @@ importers:
       proper-lockfile:
         specifier: 4.1.2
         version: 4.1.2
+    devDependencies:
+      vite:
+        specifier: ^5.4.8
+        version: 5.4.21(@types/node@24.12.2)(sass@1.97.2)(terser@5.46.1)
 
   packages/plugins/demo:
     dependencies:

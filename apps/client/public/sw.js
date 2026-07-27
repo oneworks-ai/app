@@ -1,8 +1,11 @@
+/* eslint-disable max-lines -- the service worker keeps cache installation, activation, and fetch policy in one lifecycle boundary. */
 const CACHE_PREFIX = 'oneworks-web'
-const CACHE_VERSION = 'v4'
+const serviceWorkerGlobal = globalThis
+const scriptUrl = new URL(serviceWorkerGlobal.location.href)
+const buildVersion = scriptUrl.searchParams.get('v')?.trim().replace(/[^\w.-]/g, '-')
+const CACHE_VERSION = buildVersion ? `v5-${buildVersion}` : 'v5'
 const APP_CACHE = `${CACHE_PREFIX}-app-${CACHE_VERSION}`
 const STATIC_CACHE = `${CACHE_PREFIX}-static-${CACHE_VERSION}`
-const serviceWorkerGlobal = globalThis
 
 const appScopeUrl = new URL(serviceWorkerGlobal.registration.scope)
 
@@ -58,6 +61,11 @@ const shouldCacheNestedAssetUrl = url => {
     pathname.endsWith('.svg')
 }
 
+const isRequiredAppShellAsset = url => {
+  const pathname = url.pathname.toLowerCase()
+  return pathname.endsWith('.css') || pathname.endsWith('.js') || pathname.endsWith('.mjs')
+}
+
 const isStaticAssetRequest = url => (
   url.pathname.includes('/assets/') ||
   url.pathname.endsWith('/apple-touch-icon.png') ||
@@ -82,25 +90,32 @@ const pruneOldCaches = async () => {
 
 const cacheReferencedAssets = async (cache, response, baseUrl, depth = 0) => {
   const text = await response.clone().text()
-  const urls = extractAppAssetUrls(text, baseUrl)
+  const assets = extractAppAssetUrls(text, baseUrl)
     .filter(url => depth === 0 || shouldCacheNestedAssetUrl(url))
+    .map(url => ({
+      required: depth === 0 && isRequiredAppShellAsset(url),
+      url
+    }))
 
-  await Promise.all(
-    urls.map(async url => {
-      try {
-        const request = new Request(url.href, { cache: 'reload' })
-        const assetResponse = await fetch(request)
-        if (!assetResponse.ok) return
+  const results = await Promise.allSettled(
+    assets.map(async ({ url }) => {
+      const request = new Request(url.href, { cache: 'reload' })
+      const assetResponse = await fetch(request)
+      if (!assetResponse.ok) {
+        throw new Error(`App shell asset "${url.href}" returned HTTP ${assetResponse.status}.`)
+      }
 
-        await cache.put(request, assetResponse.clone())
-        if (depth < 1 && shouldParseNestedAssets(url, assetResponse)) {
-          await cacheReferencedAssets(cache, assetResponse, url.href, depth + 1)
-        }
-      } catch {
-        // One optional asset should not block the rest of the PWA cache warmup.
+      await cache.put(request, assetResponse.clone())
+      if (depth < 1 && shouldParseNestedAssets(url, assetResponse)) {
+        await cacheReferencedAssets(cache, assetResponse, url.href, depth + 1)
       }
     })
   )
+  for (const [index, result] of results.entries()) {
+    if (assets[index]?.required === true && result.status === 'rejected') {
+      throw result.reason
+    }
+  }
 }
 
 const cacheAppShell = async () => {
@@ -110,12 +125,18 @@ const cacheAppShell = async () => {
   try {
     const request = new Request(appScopeUrl.href, { cache: 'reload' })
     const response = await fetch(request)
-    if (!response.ok) return
+    if (!response.ok) {
+      throw new Error(`App shell warmup returned HTTP ${response.status}.`)
+    }
 
     await appCache.put(appScopeUrl.href, response.clone())
     await cacheReferencedAssets(staticCache, response, appScopeUrl.href)
-  } catch {
-    // Installing should still succeed if the first shell refresh races the network.
+  } catch (error) {
+    await Promise.allSettled([
+      caches.delete(APP_CACHE),
+      caches.delete(STATIC_CACHE)
+    ])
+    throw error
   }
 }
 

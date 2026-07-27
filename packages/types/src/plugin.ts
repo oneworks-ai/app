@@ -479,14 +479,23 @@ export type PluginContributionSettingsPage =
     | {
       /** Plugin-owned view mounted through the shared PluginViewHost runtime. */
       clientView: string
+      pluginConfig?: never
       schema?: never
       uiSchema?: never
     }
     | {
       /** Host-rendered options form persisted to this plugin instance. */
       clientView?: never
+      pluginConfig?: never
       schema: ConfigJsonSchema
       uiSchema?: ConfigUiObjectSchema
+    }
+    | {
+      /** Host-rendered options form using the plugin's top-level config schema. */
+      clientView?: never
+      pluginConfig: true
+      schema?: never
+      uiSchema?: never
     }
   )
 
@@ -697,9 +706,11 @@ export interface PluginRuntimeInstance {
   client?: PluginClientManifest & {
     clientEntryUrl?: string
     devClientEntryUrl?: string
+    devClientEntryKind?: 'dev-server' | 'host-vite' | 'runtime-source'
   }
   clientEntryUrl?: string
   devClientEntryUrl?: string
+  devClientEntryKind?: 'dev-server' | 'host-vite' | 'runtime-source'
   contributions?: PluginContributionManifest
   apis?: PluginRuntimeApiRegistration[]
   plugin?: {

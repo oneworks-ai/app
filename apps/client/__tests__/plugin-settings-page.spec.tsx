@@ -16,6 +16,20 @@ vi.mock('#~/plugins/plugin-context', () => ({
     refreshPlugins,
     snapshot: {
       instances: [{
+        manifest: {
+          config: {
+            schema: {
+              properties: {
+                enabled: {
+                  description: 'Allow the feature',
+                  title: 'Enabled',
+                  type: 'boolean'
+                }
+              },
+              type: 'object'
+            }
+          }
+        },
         options: { enabled: true },
         requestId: 'demo',
         scope: 'demo'
@@ -72,6 +86,27 @@ describe('plugin settings page host', () => {
               type: 'object'
             },
             title: 'Preferences'
+          }}
+        />
+      </App>
+    )
+
+    expect(html).toContain('config-view__field-row')
+    expect(html).toContain('Enabled')
+    expect(html).toContain('Allow the feature')
+    expect(html).toContain('ant-switch')
+  })
+
+  it('reuses the plugin config schema for a host-rendered settings page', () => {
+    const html = renderToStaticMarkup(
+      <App>
+        <PluginSettingsPage
+          page={{
+            group: 'external-control',
+            id: 'computer-use',
+            pluginConfig: true,
+            pluginScope: 'demo',
+            title: 'Computer Use'
           }}
         />
       </App>

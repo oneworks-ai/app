@@ -48,7 +48,8 @@ describe('cua workflow concurrency', () => {
     const execution = service.call('execute_workflows', {
       workflows: [sleepWorkflow('com.example.bundle-31', 1), sleepWorkflow('com.example.bundle-91', 2)]
     })
-    await vi.waitFor(() => expect(started).toEqual([1, 2]))
+    await vi.waitFor(() => expect(started).toHaveLength(2))
+    expect([...started].sort()).toEqual([1, 2])
     expect(service.getQueuedResourceCount()).toBe(2)
     releases.get(1)?.()
     releases.get(2)?.()

@@ -32,6 +32,8 @@ import { loadConfigState } from '#~/services/config/index.js'
 import { listLauncherWorkspaceRuntimeEndpoints } from '#~/services/launcher/manager.js'
 import { logger } from '#~/utils/logger.js'
 
+import { compilePluginClientSource } from './client-source-compiler.js'
+import type { CompiledPluginClientSource } from './client-source-compiler.js'
 import { discoverPluginInstances } from './discovery.js'
 import { loadPluginRuntimeManifest, resolvePluginClientAssetRoot, resolvePluginServerEntryPath } from './manifest.js'
 import { isLoopbackProxyTarget, proxyToLoopbackTarget } from './proxy.js'
@@ -61,6 +63,12 @@ interface RuntimeRecord {
   channels: Map<string, PluginRuntimeChannelHandler>
   apis: Map<string, PluginApiRegistration>
   disposables: Array<() => unknown | Promise<unknown>>
+  clientSource?: {
+    cachedBytes: number
+    compiled: Map<string, Promise<CompiledPluginClientSource>>
+    entryRequestPath: string
+    sourceRoot: string
+  }
   watchTimer?: NodeJS.Timeout
   watcher?: FSWatcher
 }
@@ -106,6 +114,10 @@ const BUILTIN_SCOPE_KEYS = new Set([
 ])
 
 const PLUGIN_WATCH_DEBOUNCE_MS = 120
+const MAX_PLUGIN_CLIENT_SOURCE_CACHE_BYTES = 64 * 1024 * 1024
+const MAX_PLUGIN_CLIENT_SOURCE_CACHE_ENTRIES = 64
+const MAX_PLUGIN_CLIENT_SOURCE_COMPILE_CONCURRENCY = 4
+const MAX_PLUGIN_CLIENT_SOURCE_COMPILE_QUEUE = 64
 const MAX_PLUGIN_README_BYTES = 1024 * 1024
 const MAX_PLUGIN_DETAIL_ASSET_BYTES = 256 * 1024
 const MAX_PLUGIN_DETAIL_ASSET_FILES = 200
@@ -476,6 +488,107 @@ const getHostViteDevClientAllowedRoots = () => [
   ...parseHostViteExtraAllowedRoots()
 ]
 
+const usesRuntimeClientSourceCompiler = () => {
+  const clientMode = process.env.__ONEWORKS_PROJECT_CLIENT_MODE__?.trim()
+  return clientMode === 'desktop' || clientMode === 'static'
+}
+
+interface RuntimeClientSourceEntry {
+  requestPath: string
+  sourceRoot: string
+}
+
+const resolveRuntimeClientSourceEntry = async (
+  pluginRoot: string,
+  manifest: PluginRuntimeManifest,
+  raw: ResolvedPluginInstance,
+  watchEnabled: boolean,
+  managedSource: boolean
+): Promise<RuntimeClientSourceEntry | undefined> => {
+  if (
+    !usesRuntimeClientSourceCompiler() ||
+    !watchEnabled ||
+    managedSource ||
+    raw.sourceType !== 'directory'
+  ) {
+    return undefined
+  }
+  if (manifest.plugin?.client?.devServer != null) return undefined
+  const normalizedEntry = normalizeEntryPathForUrl(manifest.plugin?.client?.devEntry)
+  if (normalizedEntry == null) return undefined
+  const absoluteEntry = path.resolve(pluginRoot, normalizedEntry)
+  const entryStat = await stat(absoluteEntry).catch(() => undefined)
+  if (entryStat?.isFile() !== true) return undefined
+  const [realPluginRoot, realEntry] = await Promise.all([
+    realpath(pluginRoot).catch(() => path.resolve(pluginRoot)),
+    realpath(absoluteEntry)
+  ])
+  if (!isPathInside(realPluginRoot, realEntry)) return undefined
+  return {
+    requestPath: normalizedEntry,
+    sourceRoot: await realpath(path.dirname(realEntry))
+  }
+}
+
+const normalizeRuntimeClientSourceRequestPath = (requestPath: string) => {
+  const posixRequestPath = requestPath.replace(/\\/g, '/')
+  const versionedMatch = /^@v\/([^/]+)\/(.+)$/.exec(posixRequestPath)
+  if (
+    posixRequestPath.startsWith('@v/') &&
+    (
+      versionedMatch == null ||
+      !/^[\w.-]{1,64}$/.test(versionedMatch[1] ?? '')
+    )
+  ) {
+    return undefined
+  }
+  const sourcePath = versionedMatch?.[2] ?? posixRequestPath
+  const segments = sourcePath.split('/')
+  if (
+    sourcePath === '' ||
+    sourcePath.startsWith('/') ||
+    sourcePath.includes('\0') ||
+    segments.some(segment => segment === '' || segment === '.' || segment === '..')
+  ) {
+    return undefined
+  }
+  return sourcePath
+}
+
+const resolveRuntimeClientSourceAssetPath = async (
+  pluginRoot: string,
+  sourceRoot: string,
+  requestPath: string
+) => {
+  const normalizedRequestPath = normalizeRuntimeClientSourceRequestPath(requestPath)
+  if (normalizedRequestPath == null) return undefined
+
+  const absoluteRequestPath = path.resolve(pluginRoot, normalizedRequestPath)
+  if (!isPathInside(pluginRoot, absoluteRequestPath)) return undefined
+  const requestExtension = path.extname(absoluteRequestPath).toLowerCase()
+  const candidates = requestExtension === '.js'
+    ? [
+      absoluteRequestPath,
+      ...['.ts', '.tsx', '.mts', '.cts', '.jsx'].map(extension => (
+        `${absoluteRequestPath.slice(0, -requestExtension.length)}${extension}`
+      ))
+    ]
+    : [absoluteRequestPath]
+  const realSourceRoot = await realpath(sourceRoot).catch(() => path.resolve(sourceRoot))
+  for (const candidate of candidates) {
+    const candidateStat = await stat(candidate).catch(() => undefined)
+    if (candidateStat?.isFile() !== true) continue
+    const realCandidate = await realpath(candidate)
+    if (isPathInside(realSourceRoot, realCandidate)) {
+      return {
+        cacheKey: toPosixPath(path.relative(realSourceRoot, realCandidate)),
+        entryPath: realCandidate
+      }
+    }
+  }
+  return undefined
+}
+
 interface HostViteClientChangePaths {
   builtEntry?: string
   devEntry?: string
@@ -584,6 +697,8 @@ const shouldReloadForDiscoveryPath = (relativePath: string) => {
 }
 
 export class PluginManager {
+  private clientSourceCompileActive = 0
+  private clientSourceCompileWaiters: Array<() => void> = []
   private loading?: Promise<void>
   private reloading?: Promise<void>
   private loaded = false
@@ -592,10 +707,29 @@ export class PluginManager {
   private discoveryWatchers: DiscoveryWatcher[] = []
   private discoveryWatchTimer?: NodeJS.Timeout
   private enabledOverrides = new Map<string, boolean>()
+  private managedPluginRoots: string[] = []
   private watchOverrides = new Map<string, boolean>()
   private watchSubscribers = new Map<PluginWatchSubscriber, string | undefined>()
   private workspaceFolder = ''
   private projectHome = ''
+
+  private async runClientSourceCompile<T>(compile: () => Promise<T>) {
+    if (this.clientSourceCompileActive >= MAX_PLUGIN_CLIENT_SOURCE_COMPILE_CONCURRENCY) {
+      if (this.clientSourceCompileWaiters.length >= MAX_PLUGIN_CLIENT_SOURCE_COMPILE_QUEUE) {
+        throw new Error('Plugin client source compiler is busy. Retry after pending builds finish.')
+      }
+      await new Promise<void>((resolve) => {
+        this.clientSourceCompileWaiters.push(resolve)
+      })
+    }
+    this.clientSourceCompileActive += 1
+    try {
+      return await compile()
+    } finally {
+      this.clientSourceCompileActive -= 1
+      this.clientSourceCompileWaiters.shift()?.()
+    }
+  }
 
   async load() {
     if (this.loaded) return
@@ -847,6 +981,63 @@ export class PluginManager {
       filePath: asset.filePath,
       size: asset.size,
       stream: createReadStream(asset.filePath)
+    }
+  }
+
+  async resolveClientSource(scope: string, requestPath: string) {
+    await this.load()
+    const record = this.records.get(scope)
+    if (record == null || !record.instance.enabled || record.clientSource == null) {
+      return undefined
+    }
+
+    const sourceAsset = await resolveRuntimeClientSourceAssetPath(
+      record.instance.pluginRoot,
+      record.clientSource.sourceRoot,
+      requestPath || record.clientSource.entryRequestPath
+    )
+    if (sourceAsset == null) return undefined
+    const cached = record.clientSource.compiled.get(sourceAsset.cacheKey)
+    if (cached == null && record.clientSource.compiled.size >= MAX_PLUGIN_CLIENT_SOURCE_CACHE_ENTRIES) {
+      throw new Error(
+        `Plugin "${scope}" client source cache exceeded ${MAX_PLUGIN_CLIENT_SOURCE_CACHE_ENTRIES} modules.`
+      )
+    }
+    const pending = cached ?? this.runClientSourceCompile(() =>
+      compilePluginClientSource({
+        cacheDir: path.resolve(this.projectHome, '.cache', 'plugin-client-source'),
+        entryPath: sourceAsset.entryPath,
+        pluginRoot: record.instance.pluginRoot,
+        scope
+      })
+    ).then((compiled) => {
+      const nextCachedBytes = record.clientSource!.cachedBytes + compiled.size
+      if (nextCachedBytes > MAX_PLUGIN_CLIENT_SOURCE_CACHE_BYTES) {
+        throw new Error(
+          `Plugin "${scope}" client source cache exceeded ${MAX_PLUGIN_CLIENT_SOURCE_CACHE_BYTES} bytes.`
+        )
+      }
+      record.clientSource!.cachedBytes = nextCachedBytes
+      return compiled
+    })
+    record.clientSource.compiled.set(sourceAsset.cacheKey, pending)
+    try {
+      return await pending
+    } catch (error) {
+      if (record.clientSource.compiled.get(sourceAsset.cacheKey) === pending) {
+        record.clientSource.compiled.delete(sourceAsset.cacheKey)
+      }
+      record.instance.diagnostics = record.instance.diagnostics.filter(
+        diagnostic => diagnostic.code !== 'plugin_client_source_compile_failed'
+      )
+      record.instance.diagnostics.push({
+        level: 'error',
+        code: 'plugin_client_source_compile_failed',
+        message: `Failed to compile client source for plugin "${scope}": ${toErrorMessage(error)}`,
+        scope,
+        pluginRoot: record.instance.pluginRoot
+      })
+      throw error
     }
   }
 
@@ -1195,6 +1386,7 @@ export class PluginManager {
 
     this.workspaceFolder = discovered.workspaceFolder
     this.projectHome = discovered.projectHome
+    this.managedPluginRoots = discovered.managedPluginRoots
 
     for (const raw of discovered.instances) {
       await this.addInstance(raw)
@@ -1238,15 +1430,25 @@ export class PluginManager {
         manifest,
         manifest.plugin?.client?.devEntry ?? manifest.plugin?.client?.entry
       )
-      const hostViteDevClientEntryUrl = await resolveHostViteDevClientEntryUrl(
+      const runtimeClientSourceEntry = await resolveRuntimeClientSourceEntry(
         pluginRoot,
         manifest,
-        manifest.plugin?.client?.devEntry,
-        [
-          this.workspaceFolder,
-          ...getHostViteDevClientAllowedRoots()
-        ]
+        raw,
+        watchEnabled,
+        this.managedPluginRoots.some(root => isPathInside(root, pluginRoot))
       )
+      const hostViteDevClientEntryUrl = runtimeClientSourceEntry == null &&
+          !usesRuntimeClientSourceCompiler()
+        ? await resolveHostViteDevClientEntryUrl(
+          pluginRoot,
+          manifest,
+          manifest.plugin?.client?.devEntry,
+          [
+            this.workspaceFolder,
+            ...getHostViteDevClientAllowedRoots()
+          ]
+        )
+        : undefined
       const clientAssetRoot = await resolvePluginClientAssetRoot(pluginRoot, manifest)
       const client = manifest.plugin?.client == null
         ? undefined
@@ -1254,9 +1456,24 @@ export class PluginManager {
           ...manifest.plugin.client,
           ...(clientEntry != null ? { clientEntryUrl: `/api/plugins/${scope}/client/${clientEntry}` } : {}),
           ...(manifest.plugin.client.devServer != null && devClientEntry != null
-            ? { devClientEntryUrl: `/api/plugins/${scope}/dev/${devClientEntry}` }
+            ? {
+              devClientEntryKind: 'dev-server' as const,
+              devClientEntryUrl: `/api/plugins/${scope}/dev/${devClientEntry}`
+            }
+            : runtimeClientSourceEntry != null
+            ? {
+              devClientEntryKind: 'runtime-source' as const,
+              devClientEntryUrl: `/api/plugins/${scope}/client-source/${
+                encodeURI(runtimeClientSourceEntry.requestPath)
+                  .replaceAll('#', '%23')
+                  .replaceAll('?', '%3F')
+              }`
+            }
             : hostViteDevClientEntryUrl != null
-            ? { devClientEntryUrl: hostViteDevClientEntryUrl }
+            ? {
+              devClientEntryKind: 'host-vite' as const,
+              devClientEntryUrl: hostViteDevClientEntryUrl
+            }
             : {})
         }
 
@@ -1268,6 +1485,16 @@ export class PluginManager {
         channels: new Map(),
         apis: new Map(),
         disposables: [],
+        ...(runtimeClientSourceEntry == null
+          ? {}
+          : {
+            clientSource: {
+              cachedBytes: 0,
+              compiled: new Map(),
+              entryRequestPath: runtimeClientSourceEntry.requestPath,
+              sourceRoot: runtimeClientSourceEntry.sourceRoot
+            }
+          }),
         instance: {
           scope,
           name,

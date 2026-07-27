@@ -4,7 +4,10 @@ const RELEASE_PRODUCT_NAME = 'One Works'
 
 const isTruthy = value => /^(1|true|yes|on)$/i.test(value ?? '')
 
-const isReleaseBuild = (env = process.env) => isTruthy(env.ONEWORKS_DESKTOP_RELEASE_BUILD)
+const isOfficialReleaseBuild = (env = process.env) => isTruthy(env.ONEWORKS_DESKTOP_OFFICIAL_RELEASE_BUILD)
+
+const isReleaseBuild = (env = process.env) =>
+  isTruthy(env.ONEWORKS_DESKTOP_RELEASE_BUILD) || isOfficialReleaseBuild(env)
 
 const resolveDesktopAppMetadata = ({ env = process.env, platform = process.platform } = {}) => {
   const isDevBuild = !isReleaseBuild(env)
@@ -26,6 +29,7 @@ const resolveDesktopAppMetadata = ({ env = process.env, platform = process.platf
 }
 
 module.exports = {
+  isOfficialReleaseBuild,
   isReleaseBuild,
   resolveDesktopAppMetadata
 }

@@ -6,7 +6,10 @@ const net = require('node:net')
 const path = require('node:path')
 
 const { resolveProjectHomePath } = require('@oneworks/register/dotenv')
-const { resolveDesktopAppMetadata } = require('./desktop-app-metadata.cjs')
+const {
+  isOfficialReleaseBuild,
+  resolveDesktopAppMetadata
+} = require('./desktop-app-metadata.cjs')
 const { normalizeArch } = require('./desktop-archs.cjs')
 const { DESKTOP_BUILD_SOURCE_FILE } = require('./desktop-build-source.cjs')
 
@@ -132,15 +135,15 @@ const assertExpectedBuildSourceValue = ({ actual, field, expected }) => {
 
 const assertInstalledBuildSource = (appPath) => {
   const buildSourcePath = path.join(appPath, 'Contents', 'Resources', DESKTOP_BUILD_SOURCE_FILE)
-  if (!appMetadata.isDevBuild) {
+  if (isOfficialReleaseBuild()) {
     if (fs.existsSync(buildSourcePath)) {
-      throw new Error(`Release app should not include build source metadata: ${buildSourcePath}`)
+      throw new Error(`Official release app should not include build source metadata: ${buildSourcePath}`)
     }
     return
   }
 
   if (!fs.existsSync(buildSourcePath)) {
-    throw new Error(`Dev app is missing build source metadata: ${buildSourcePath}`)
+    throw new Error(`Local or CI app is missing build source metadata: ${buildSourcePath}`)
   }
 
   const metadata = JSON.parse(fs.readFileSync(buildSourcePath, 'utf8'))

@@ -32,9 +32,21 @@ const DISABLE_DEFAULT_OFFICIAL_PLUGINS_ENV = '__ONEWORKS_PROJECT_DISABLE_DEFAULT
 const DIRECTORY_MANIFEST_FILES = ['plugin.json', 'plugin.yaml', 'plugin.yml', 'package.json'] as const
 const KNOWN_PLUGIN_ASSET_DIRS = ['rules', 'skills', 'specs', 'entities', 'mcp', 'hooks', 'client', 'server', 'plugins']
 const DEFAULT_OFFICIAL_PLUGIN_CONFIGS: PluginConfig = [
+  { id: '@oneworks/plugin-browser-driver' },
+  { id: '@oneworks/plugin-chrome-driver' },
+  { id: '@oneworks/plugin-cua-driver' },
   { id: '@oneworks/plugin-relay' }
 ]
-const DEFAULT_OFFICIAL_PLUGIN_PACKAGE_IDS = new Set(['@oneworks/plugin-relay', 'relay'])
+const DEFAULT_OFFICIAL_PLUGIN_PACKAGE_IDS = new Set([
+  '@oneworks/plugin-browser-driver',
+  '@oneworks/plugin-chrome-driver',
+  '@oneworks/plugin-cua-driver',
+  '@oneworks/plugin-relay',
+  'browser-driver',
+  'chrome-driver',
+  'cua-driver',
+  'relay'
+])
 const PLUGIN_SERVER_RUNTIME_ROLES = new Set<PluginServerRuntimeRole>(['manager', 'workspace'])
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
@@ -1126,6 +1138,46 @@ const removeResolvedPluginByKey = (
   }
 }
 
+const removeResolvedPlugins = (
+  instances: ResolvedPluginInstance[],
+  resolvedKeys: string[],
+  predicate: (instance: ResolvedPluginInstance) => boolean
+) => {
+  for (let index = instances.length - 1; index >= 0; index--) {
+    if (!predicate(instances[index])) continue
+    resolvedKeys.splice(index, 1)
+    instances.splice(index, 1)
+  }
+}
+
+const removeCrossSourcePluginByManifestIdentity = (
+  instances: ResolvedPluginInstance[],
+  resolvedKeys: string[],
+  instance: ResolvedPluginInstance
+) => {
+  const manifestName = instance.manifest?.name?.trim()
+  const packageIdentity = instance.packageId ?? manifestName
+  if (instance.sourceType === 'directory' && manifestName != null) {
+    removeResolvedPlugins(
+      instances,
+      resolvedKeys,
+      candidate =>
+        candidate.sourceType === 'package' &&
+        (candidate.packageId === manifestName || candidate.manifest?.name?.trim() === manifestName)
+    )
+    return
+  }
+  if (instance.sourceType === 'package' && packageIdentity != null) {
+    removeResolvedPlugins(
+      instances,
+      resolvedKeys,
+      candidate =>
+        candidate.sourceType === 'directory' &&
+        candidate.manifest?.name?.trim() === packageIdentity
+    )
+  }
+}
+
 const assertUniquePluginScopes = (instances: ResolvedPluginInstance[]) => {
   const seen = new Map<string, ResolvedPluginInstance>()
   for (const instance of flattenPluginInstances(instances)) {
@@ -1159,20 +1211,23 @@ export const resolveConfiguredPluginInstances = async (params: {
       autoInstallManaged: params.autoInstallManaged,
       preferBundledOfficialPlugins: params.preferBundledOfficialPlugins
     })
+    if (config.enabled === false && params.includeDisabled !== true) {
+      removeResolvedPluginByKey(instances, resolvedKeys, toResolvedPluginKey(reference))
+      continue
+    }
+    const instance = await resolveInstance({
+      cwd: params.cwd,
+      config,
+      instancePath: String(index),
+      overlaySource: params.overlaySource,
+      resolvedReference: reference,
+      autoInstallManaged: params.autoInstallManaged,
+      preferBundledOfficialPlugins: params.preferBundledOfficialPlugins
+    })
     const key = toResolvedPluginKey(reference)
     removeResolvedPluginByKey(instances, resolvedKeys, key)
-    if (config.enabled === false && params.includeDisabled !== true) continue
-    instances.push(
-      await resolveInstance({
-        cwd: params.cwd,
-        config,
-        instancePath: String(index),
-        overlaySource: params.overlaySource,
-        resolvedReference: reference,
-        autoInstallManaged: params.autoInstallManaged,
-        preferBundledOfficialPlugins: params.preferBundledOfficialPlugins
-      })
-    )
+    removeCrossSourcePluginByManifestIdentity(instances, resolvedKeys, instance)
+    instances.push(instance)
     resolvedKeys.push(key)
   }
   assertUniquePluginScopes(instances)

@@ -9,7 +9,11 @@ import i18n from '#~/i18n'
 import { createPluginI18nContext, localizePluginContributionItem } from '#~/plugins/plugin-i18n'
 import type { PluginRuntimeInstance } from '#~/plugins/plugin-manifest'
 import { PluginRegistry } from '#~/plugins/plugin-registry'
-import { activatePluginClient, resolvePluginClientEntryUrl } from '#~/plugins/plugin-runtime'
+import {
+  activatePluginClient,
+  addPluginClientImportVersion,
+  resolvePluginClientEntryUrl
+} from '#~/plugins/plugin-runtime'
 import {
   buildRoutePluginSidebarContextMenu,
   resolveRouteContributionText,
@@ -896,7 +900,28 @@ describe('client plugin host registry', () => {
 
     expect(resolvePluginClientEntryUrl({
       clientOrigin: 'http://127.0.0.1:50802',
-      instance,
+      instance: {
+        ...instance,
+        devClientEntryKind: 'runtime-source',
+        devClientEntryUrl: '/api/plugins/relay/client-source/client/src/index.ts',
+        watch: { enabled: true }
+      },
+      isDevelopment: false,
+      runtimeEndpoint,
+      useDesktopProxy: true
+    })).toBe(
+      'http://127.0.0.1:50802/__oneworks_plugin_runtime__/' +
+        'http%3A%2F%2F127.0.0.1%3A50982/api/plugins/relay/client-source/client/src/index.ts'
+    )
+
+    expect(resolvePluginClientEntryUrl({
+      clientOrigin: 'http://127.0.0.1:50802',
+      instance: {
+        ...instance,
+        devClientEntryKind: 'dev-server',
+        devClientEntryUrl: '/api/plugins/relay/dev/client/src/index.ts',
+        watch: { enabled: true }
+      },
       isDevelopment: false,
       runtimeEndpoint,
       useDesktopProxy: true
@@ -933,6 +958,21 @@ describe('client plugin host registry', () => {
     })).toBe(
       'http://127.0.0.1:50802/__oneworks_plugin_runtime__/' +
         'http%3A%2F%2F%5B%3A%3A1%5D%3A50982/api/plugins/relay/client/index.js'
+    )
+  })
+
+  it('versions the complete runtime-source module namespace', () => {
+    expect(addPluginClientImportVersion(
+      'http://127.0.0.1:50802/__oneworks_plugin_runtime__/' +
+        'http%3A%2F%2F127.0.0.1%3A50982/api/plugins/demo/client-source/client/src/index.ts',
+      7
+    )).toBe(
+      'http://127.0.0.1:50802/__oneworks_plugin_runtime__/' +
+        'http%3A%2F%2F127.0.0.1%3A50982/api/plugins/demo/client-source/' +
+        '@v/7/client/src/index.ts?pluginVersion=7'
+    )
+    expect(addPluginClientImportVersion(encodeModule('export const ok = true'), 7)).toBe(
+      encodeModule('export const ok = true')
     )
   })
 

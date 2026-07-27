@@ -75,6 +75,7 @@ const normalizePluginInstance = (instance: PluginRuntimeInstance): PluginRuntime
   ...instance,
   clientEntryUrl: instance.clientEntryUrl ?? instance.client?.clientEntryUrl,
   devClientEntryUrl: instance.devClientEntryUrl ?? instance.client?.devClientEntryUrl,
+  devClientEntryKind: instance.devClientEntryKind ?? instance.client?.devClientEntryKind,
   plugin: instance.plugin ?? (
     instance.contributions == null
       ? undefined

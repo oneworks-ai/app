@@ -20,6 +20,7 @@ import { setupPwa } from '#~/pwa.js'
 import {
   buildWorkspaceClientBase,
   getClientBase,
+  isDesktopClientMode,
   mergeRuntimeEnv,
   normalizeServerBaseUrl,
   resolveDevDocumentTitle,
@@ -165,10 +166,12 @@ const startApp = async () => {
   setupMobileViewport()
 
   appClientBase = getClientBase()
-  setupPwa({
+  const shouldRender = await setupPwa({
     clientBase: appClientBase,
+    isDesktop: isDesktopClientMode(),
     isProd: import.meta.env.PROD
   })
+  if (shouldRender === false) return
 
   if (__ONEWORKS_PROJECT_HOMEPAGE_PREVIEW__) {
     await installHomepagePreviewRuntimeIfEnabled()

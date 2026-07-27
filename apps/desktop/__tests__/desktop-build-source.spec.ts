@@ -1,4 +1,7 @@
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
@@ -22,10 +25,14 @@ interface ResolveDesktopBuildSourceOptions {
 
 const {
   DESKTOP_BUILD_SOURCE_FILE,
-  resolveDesktopBuildSource
+  resolveDesktopBuildSource,
+  writeDesktopBuildSourceFile
 } = require('../scripts/desktop-build-source.cjs') as {
   DESKTOP_BUILD_SOURCE_FILE: string
   resolveDesktopBuildSource: (options?: ResolveDesktopBuildSourceOptions) => DesktopBuildSource | undefined
+  writeDesktopBuildSourceFile: (
+    options: ResolveDesktopBuildSourceOptions & { outputPath: string }
+  ) => DesktopBuildSource | undefined
 }
 
 const fixedBuildDate = new Date('2026-05-19T01:02:03.000Z')
@@ -114,15 +121,49 @@ describe('desktop build source metadata', () => {
     })
   })
 
-  it('does not emit build source metadata for release builds', () => {
+  it('keeps a unique runtime cache version for local release-identity builds', () => {
     expect(resolveFixedDesktopBuildSource({
       env: {
         ONEWORKS_DESKTOP_RELEASE_BUILD: 'true',
+        GITHUB_REF_NAME: 'main',
+        GITHUB_SHA: 'local-release-sha'
+      },
+      now: () => fixedBuildDate
+    })).toEqual({
+      branch: 'main',
+      buildTime: '2026-05-19T01:02:03.000Z',
+      gitHash: 'local-release-sha',
+      runtimePackageBuildFingerprint: fixedBuildFingerprint,
+      runtimePackageCacheVersion: 'dev-localrelease-20260519010203'
+    })
+  })
+
+  it('does not emit build source metadata for official release builds', () => {
+    expect(resolveDesktopBuildSource({
+      env: {
+        ONEWORKS_DESKTOP_OFFICIAL_RELEASE_BUILD: 'true',
         GITHUB_REF_NAME: 'main',
         GITHUB_SHA: 'release-sha'
       },
       now: () => fixedBuildDate
     })).toBeUndefined()
+  })
+
+  it('removes stale local metadata before packaging an official release', () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), 'oneworks-official-desktop-build-source-'))
+    const outputPath = path.join(tempDir, DESKTOP_BUILD_SOURCE_FILE)
+    try {
+      writeFileSync(outputPath, '{"runtimePackageCacheVersion":"dev-stale"}\n')
+
+      expect(writeDesktopBuildSourceFile({
+        cwd: '/repo',
+        env: { ONEWORKS_DESKTOP_OFFICIAL_RELEASE_BUILD: 'true' },
+        outputPath
+      })).toBeUndefined()
+      expect(existsSync(outputPath)).toBe(false)
+    } finally {
+      rmSync(tempDir, { force: true, recursive: true })
+    }
   })
 
   it('exports the packaged resource file name', () => {

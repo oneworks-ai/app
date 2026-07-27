@@ -921,6 +921,39 @@ describe('desktop built-in adapter package cache', () => {
     expect(require(path.join(packageDir, 'dist', 'hooks.js'))).toEqual({ changed: true })
   })
 
+  it('keeps trusted plugin links valid through a cache-root alias with different path depth', async () => {
+    const tempDir = await createTempDir('oneworks-desktop-plugin-cache-alias-')
+    const homeDir = path.join(tempDir, 'home')
+    const packageName = '@acme/plugin-cache-alias'
+    const sourcePackageDir = await writeSourcePluginPackage(
+      path.join(tempDir, 'source'),
+      packageName,
+      '1.2.3'
+    )
+    const physicalCacheRoot = path.join(tempDir, 'nested', 'physical', 'cache')
+    const packageCacheRootDir = path.join(tempDir, 'cache-alias')
+    await mkdir(physicalCacheRoot, { recursive: true })
+    await symlink(physicalCacheRoot, packageCacheRootDir, 'dir')
+
+    const seeded = ensureBuiltinPluginPackageCache({
+      env: {
+        [RUNTIME_PACKAGE_BUILD_FINGERPRINT_ENV]: 'build-packaged',
+        [TRUST_DEV_RUNTIME_CACHE_MANIFEST_ENV]: '1'
+      },
+      homeDir,
+      packageCacheRootDir,
+      packages: [packageName],
+      resolvePackageDir: () => sourcePackageDir,
+      trustManifest: true
+    })
+    const realSourcePackageDir = await realpath(sourcePackageDir)
+
+    expect(seeded.map(item => path.basename(item.cacheDir))).toEqual(['latest', '1.2.3'])
+    await Promise.all(
+      seeded.map(item => expect(realpath(item.packageDir)).resolves.toBe(realSourcePackageDir))
+    )
+  })
+
   it('relinks a trusted release plugin when the installed app source moves', async () => {
     const tempDir = await createTempDir('oneworks-desktop-plugin-release-source-move-')
     const homeDir = path.join(tempDir, 'home')

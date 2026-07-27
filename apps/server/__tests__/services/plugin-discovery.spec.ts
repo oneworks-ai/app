@@ -73,6 +73,30 @@ describe('plugin discovery', () => {
     expect(result.instances[0]?.sourceGroup).toBe('project')
   })
 
+  it.each([
+    '@oneworks/plugin-browser-driver',
+    '@oneworks/plugin-chrome-driver',
+    '@oneworks/plugin-cua-driver'
+  ])('attributes the default bundled package %s to the host', async (packageId) => {
+    mocks.loadConfigState.mockResolvedValue({
+      globalConfig: {},
+      mergedConfig: {},
+      workspaceFolder: '/workspace'
+    })
+    mocks.resolveConfiguredPluginInstances.mockResolvedValue([{
+      children: [],
+      packageId,
+      requestId: packageId,
+      rootDir: `/cache/${packageId}`,
+      scope: packageId,
+      sourceType: 'package'
+    }])
+
+    const result = await discoverPluginInstances()
+
+    expect(result.instances[0]?.sourceGroup).toBe('builtIn')
+  })
+
   it('attributes an explicit project override before a global marketplace declaration', async () => {
     const marketplace = {
       type: 'oneworks' as const,
@@ -101,6 +125,42 @@ describe('plugin discovery', () => {
 
     const result = await discoverPluginInstances()
 
+    expect(result.instances[0]?.sourceGroup).toBe('project')
+  })
+
+  it('returns marketplace-managed plugin roots so runtime source compilation can exclude them', async () => {
+    const managedPluginRoot = '/workspace/.oo/.local/plugins/codex/theme/current/oneworks'
+    const marketplace = {
+      type: 'oneworks' as const,
+      plugins: { '@example/theme': { enabled: true } }
+    }
+    mocks.loadConfigState.mockResolvedValue({
+      globalConfig: {},
+      mergedConfig: { marketplaces: { project: marketplace } },
+      projectSource: { resolvedConfig: { marketplaces: { project: marketplace } } },
+      workspaceFolder: '/workspace'
+    })
+    mocks.listManagedPluginInstalls.mockResolvedValue([{
+      config: {
+        source: {
+          type: 'marketplace',
+          marketplace: 'project',
+          plugin: '@example/theme'
+        }
+      },
+      oneworksPluginDir: managedPluginRoot
+    }])
+    mocks.resolveConfiguredPluginInstances.mockResolvedValue([{
+      children: [],
+      requestId: '@example/theme',
+      rootDir: managedPluginRoot,
+      scope: 'theme',
+      sourceType: 'directory'
+    }])
+
+    const result = await discoverPluginInstances()
+
+    expect(result.managedPluginRoots).toEqual([managedPluginRoot])
     expect(result.instances[0]?.sourceGroup).toBe('project')
   })
 })

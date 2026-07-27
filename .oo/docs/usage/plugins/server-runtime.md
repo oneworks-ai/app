@@ -193,6 +193,6 @@ Web UI 左侧有「插件市场」入口，路径是 `/ui/plugins`。这里展�
 
 Watch 模式可以在插件市场或详情页单独打开 / 关闭。打开后，server 会监听该 plugin 根目录的文件变化，忽略 `.git`、`node_modules` 和 `.DS_Store`，然后通过 websocket 的 `channel=plugin` 发送 `plugin.changed` 事件。前端收到后会重新加载 plugin 列表并重新 import 对应 entry，不需要重启 Electron，也不需要手动硬刷新整个页面。
 
-本地路径 plugin 在 watch 开启或位于 `.oo/plugins.dev/*` 时，前端开发态会优先使用 `exports["./client"].source` 生成的宿主 Vite `/ui/@fs/...` entry；否则从 `/api/plugins/<scope>/client/<entry>` 加载发布态静态 JS。新插件不要配置 `plugin.client.devServer`；HMR、TS / TSX 转译、source map 和 React Fast Refresh 都由宿主 Vite dev server 提供。
+本地目录 plugin 在 watch 开启或位于 `.oo/plugins.dev/*` 时会优先使用 `exports["./client"].source`：开发态由宿主 Vite `/ui/@fs/...` 提供 HMR、TS / TSX 转译和 source map；packaged Electron 与静态宿主则由 workspace runtime 使用受控 Vite build 按需编译入口及运行时动态请求的同插件源码模块，再经保留源码相对路径的同源 plugin runtime 代理加载。这个流程不读取 plugin 自己的 Vite 配置，也不写入 plugin 目录。关闭 watch、npm / 下载来源或正常发布时仍从 `/api/plugins/<scope>/client/<entry>` 加载 `exports["./client"].default` 对应的静态 JS，因此发布包仍必须包含 `dist`。
 
 当前仓库自带一个可直接加载的 demo package，位置是 `packages/plugins/demo/`，并通过根目录 `.oo.config.json` 的 `plugins` 声明显式启用。它演示了左侧入口、菜单项、chat header action、点击 `+` 后创建 workbench tab、右侧 workspace drawer tab、launcher 搜索、server command 和 scoped API。

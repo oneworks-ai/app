@@ -24,6 +24,7 @@
 - `src/resources/`：静态资源、适配器元数据和 i18n 文案。
 - `src/styles/`：client 全局样式入口。共享设计 token 不在这里定义，统一来自 `@oneworks/route-layout/design-tokens.css`。
 - `public/browser-use-lab.*`：Browser Driver 的本地确定性验收页，覆盖表单、异步状态、筛选、展开和长滚动；修改内置浏览器控制协议或主题桥接时用它做 Electron 回归。
+- `public/sw.js`：PWA app shell 的版本化缓存交接。新版本 HTML 及其首层必需 JavaScript / CSS 全部预热成功前，不得调用 `skipWaiting` 或清理旧版本 cache；任一必需请求失败时只删除本次新 cache，保留旧 worker 的有效 app shell。修改 install / activate 流程时运行 `apps/client/__tests__/pwa.spec.ts`，同时覆盖 HTML 失败和 HTML 成功但必需 JS / CSS 失败两条回归路径。
 
 ## 约定
 

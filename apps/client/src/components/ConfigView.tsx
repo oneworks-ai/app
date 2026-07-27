@@ -480,6 +480,7 @@ export function ConfigView() {
   const validPluginSettingsPages = useMemo(() =>
     pluginSettingsPages.filter(page => (
       (typeof page.clientView === 'string' && page.clientView.trim() !== '') ||
+      page.pluginConfig === true ||
       (page.schema != null && typeof page.schema === 'object' && !Array.isArray(page.schema))
     )), [pluginSettingsPages])
   const { defaultPages: defaultPluginSettingsPages, externalControlPages } = useMemo(

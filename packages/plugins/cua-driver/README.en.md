@@ -15,6 +15,7 @@ The plugin does not embed Cua's agent loop.
 - procedural `execute_workflow` for submitting predictable serial steps once while the runtime refreshes window state, resolves semantic targets, waits, and verifies
 - `execute_workflows` for advancing independent apps concurrently while keeping same-app workflows serial and pointer actions globally protected
 - `resume_workflow` and `get_workflow_step_results` for checkpoint recovery and progressive `run_id + step_id` detail lookup
+- per-application operation permissions keyed by macOS bundle id: no confirmation, ask every time, or deny access
 - generic `toolUsePresentations` metadata for localized tool titles, action icons, compact targets, and structured details
 
 ## Install and enable
@@ -44,7 +45,9 @@ Package installation makes a best-effort attempt to install the signed `CuaDrive
 ONEWORKS_CUA_DRIVER_SKIP_POSTINSTALL=1 pnpm install
 ```
 
-Normal usage requires no manual preparation. The agent only invokes the `cua-driver` skill; before MCP tools become available, the plugin installs missing components, prepares its background service, checks permissions, and enables the virtual Agent pointer. By default, the plugin deterministically assigns a different color to each OneWorks session. The Config tab can switch to a fixed default, while an agent may choose any valid hex color for its current session. Every workflow starts from the main-display center when `cursor_start` is omitted; an agent may pass logical main-display coordinates or use `set_session_cursor_start` before the next low-level pointer action. CUA owns color selection and when the pointer is applied; the reusable `@oneworks/cursor` package renders the safe rounded SVG with a contrasting border. `ensure` remains available only for diagnostics and repair:
+Normal usage requires no manual preparation. The agent only invokes the `cua-driver` skill; before MCP tools become available, the plugin installs missing components, prepares its background service, checks permissions, and enables the virtual Agent pointer. Users configure application access by bundle id under One Works Settings → External Control → Computer Use. An unmatched or unidentified target asks every time by default. Ask mode prompts once per MCP tool call, combining every app in a batch workflow; an explicit denial fails closed before launch, focus, inspection, or input. Changes apply to newly started CUA tool sessions.
+
+By default, the plugin deterministically assigns a different color to each OneWorks session. The same settings page can switch to a fixed default, while an agent may choose any valid hex color for its current session. Every workflow starts from the main-display center when `cursor_start` is omitted; an agent may pass logical main-display coordinates or use `set_session_cursor_start` before the next low-level pointer action. CUA owns color selection and when the pointer is applied; the reusable `@oneworks/cursor` package renders the safe rounded SVG with a contrasting border. `ensure` remains available only for diagnostics and repair:
 
 ```bash
 ow-cua-driver ensure
@@ -85,6 +88,9 @@ The API includes title, description, input, output, and header schema metadata i
 
 ## Safety boundaries
 
+- application rules govern CUA operations issued by OneWorks; they never grant or replace macOS TCC permission
+- rules match bundle ids exactly, case-insensitively, and explicit denial takes priority over ask and allow
+- pid/window identity is resolved again after confirmation; a changed target fails closed and must be retried
 - postinstall only runs best-effort on macOS, outside CI, when the app is missing
 - the installer does not modify global Codex, Claude, or OpenCode skills and does not register MCP
 - `ow-cua-driver uninstall` does not delete user config, recordings, MCP configuration, or TCC grants

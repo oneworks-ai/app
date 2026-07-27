@@ -14,6 +14,9 @@ const BUILTIN_ADAPTER_PACKAGES = [
 ]
 
 const BUILTIN_PLUGIN_PACKAGES = [
+  '@oneworks/plugin-browser-driver',
+  '@oneworks/plugin-chrome-driver',
+  '@oneworks/plugin-cua-driver',
   '@oneworks/plugin-logger',
   '@oneworks/plugin-relay'
 ]
@@ -380,10 +383,12 @@ const createPackageGraphEntries = (packageName, sourcePackageDir, targetNodeModu
 
 const symlinkPackageDir = (targetPackageDir, sourcePackageDir) => {
   fs.rmSync(targetPackageDir, { force: true, recursive: true })
-  fs.mkdirSync(path.dirname(targetPackageDir), { recursive: true })
+  const targetParentDir = path.dirname(targetPackageDir)
+  fs.mkdirSync(targetParentDir, { recursive: true })
+  const realSourcePackageDir = fs.realpathSync(sourcePackageDir)
   const linkTarget = process.platform === 'win32'
-    ? sourcePackageDir
-    : path.relative(path.dirname(targetPackageDir), sourcePackageDir) || '.'
+    ? realSourcePackageDir
+    : path.relative(fs.realpathSync(targetParentDir), realSourcePackageDir) || '.'
   fs.symlinkSync(linkTarget, targetPackageDir, process.platform === 'win32' ? 'junction' : 'dir')
 }
 

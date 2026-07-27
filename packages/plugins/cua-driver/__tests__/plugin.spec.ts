@@ -95,6 +95,38 @@ const mcpProxy = require('../bin/mcp-proxy.cjs') as {
     name: string
   }>
 }
+const applicationPermissions = require('../bin/application-permissions.cjs') as {
+  createApplicationApprovalRequester: (options: {
+    isSupported: () => boolean
+    write: (message: Record<string, unknown>) => void
+  }) => {
+    handleResponse: (message: Record<string, unknown>) => boolean
+    request: (input: {
+      targets: Array<{ bundleId?: string; name?: string }>
+      toolName: string
+    }) => Promise<boolean>
+    stop: () => void
+  }
+  createApplicationPermissionGuard: (options: {
+    callTool: (name: string, args: Record<string, unknown>) => Promise<unknown>
+    config: {
+      defaultMode: 'always_allow' | 'always_ask' | 'deny'
+      rules: Array<{ bundleId: string; mode: 'always_allow' | 'always_ask' | 'deny' }>
+    }
+    getWorkflowBundleIds?: (runId: string) => string[]
+    requestApproval?: (input: {
+      targets: Array<{ bundleId?: string; name?: string }>
+      toolName: string
+    }) => Promise<boolean>
+    supportsApproval?: () => boolean
+  }) => {
+    authorize: (name: string, args: Record<string, unknown>) => Promise<unknown>
+  }
+  readApplicationPermissionConfig: (env: Record<string, string>) => {
+    defaultMode: 'always_allow' | 'always_ask' | 'deny'
+    rules: Array<{ bundleId: string; mode: 'always_allow' | 'always_ask' | 'deny' }>
+  }
+}
 const evidence = require('../bin/evidence-mcp.cjs') as {
   finalizeRecording: (
     payload: { expected_state_text?: string[]; output_dir: string },
@@ -363,6 +395,342 @@ describe('cua-driver plugin contract', () => {
     }))
   })
 
+  it('enforces per-application CUA rules before dispatch', async () => {
+    const requestApproval = vi.fn().mockResolvedValue(true)
+    const callTool = vi.fn().mockResolvedValue({
+      structuredContent: {
+        apps: [
+          { bundle_id: 'com.apple.TextEdit', name: 'TextEdit', pid: 110 },
+          { bundle_id: 'com.apple.Safari', name: 'Safari', pid: 120 }
+        ]
+      }
+    })
+    const guard = applicationPermissions.createApplicationPermissionGuard({
+      callTool,
+      config: {
+        defaultMode: 'always_ask',
+        rules: [
+          { bundleId: 'com.apple.TextEdit', mode: 'always_allow' },
+          { bundleId: 'com.apple.Safari', mode: 'deny' }
+        ]
+      },
+      requestApproval,
+      supportsApproval: () => true
+    })
+
+    await expect(guard.authorize('type_text', { pid: 110, text: 'hello' })).resolves.toMatchObject({
+      mode: 'always_allow'
+    })
+    await expect(guard.authorize('click', { pid: 120, element_index: 1 })).rejects.toMatchObject({
+      code: 'APPLICATION_ACCESS_DENIED',
+      rpcCode: -32003,
+      data: expect.objectContaining({
+        applications: [{ bundle_id: 'com.apple.Safari', label: 'Safari (com.apple.Safari)' }],
+        decision: 'deny',
+        retryOriginalTask: false
+      })
+    })
+    expect(requestApproval).not.toHaveBeenCalled()
+  })
+
+  it('checks pid and window identities together so a denied window cannot borrow an allowed pid', async () => {
+    const callTool = vi.fn(async (name: string) =>
+      name === 'list_apps'
+        ? {
+          structuredContent: {
+            apps: [
+              { bundle_id: 'com.allowed.Editor', name: 'Editor', pid: 110 },
+              { bundle_id: 'com.denied.Mail', name: 'Mail', pid: 120 }
+            ]
+          }
+        }
+        : {
+          structuredContent: {
+            windows: [{ window_id: 22, pid: 120 }]
+          }
+        }
+    )
+    const guard = applicationPermissions.createApplicationPermissionGuard({
+      callTool,
+      config: {
+        defaultMode: 'always_ask',
+        rules: [
+          { bundleId: 'com.allowed.Editor', mode: 'always_allow' },
+          { bundleId: 'com.denied.Mail', mode: 'deny' }
+        ]
+      },
+      requestApproval: vi.fn().mockResolvedValue(true),
+      supportsApproval: () => true
+    })
+
+    await expect(guard.authorize('click', {
+      element_index: 1,
+      pid: 110,
+      window_id: 22
+    })).rejects.toMatchObject({
+      code: 'APPLICATION_ACCESS_DENIED',
+      rpcCode: -32003,
+      data: expect.objectContaining({
+        applications: [{ bundle_id: 'com.denied.Mail', label: 'Mail (com.denied.Mail)' }],
+        decision: 'deny'
+      })
+    })
+    expect(callTool.mock.calls.map(([name]) => name)).toEqual(['list_apps', 'list_windows'])
+  })
+
+  it('applies the default policy when a supplied pid or window identity cannot be resolved', async () => {
+    const callTool = vi.fn(async (name: string) =>
+      name === 'list_apps'
+        ? {
+          structuredContent: {
+            apps: [{ bundle_id: 'com.allowed.Editor', name: 'Editor', pid: 110 }]
+          }
+        }
+        : { structuredContent: { windows: [] } }
+    )
+    const guard = applicationPermissions.createApplicationPermissionGuard({
+      callTool,
+      config: {
+        defaultMode: 'deny',
+        rules: [{ bundleId: 'com.allowed.Editor', mode: 'always_allow' }]
+      },
+      requestApproval: vi.fn().mockResolvedValue(true),
+      supportsApproval: () => true
+    })
+
+    await expect(guard.authorize('click', {
+      element_index: 1,
+      pid: 110,
+      window_id: 404
+    })).rejects.toMatchObject({
+      code: 'APPLICATION_ACCESS_DENIED',
+      data: expect.objectContaining({
+        applications: [{ label: 'Unresolved computer-control target' }],
+        decision: 'deny'
+      })
+    })
+  })
+
+  it('asks once for a multi-application workflow and rechecks resumed runs', async () => {
+    const requestApproval = vi.fn().mockResolvedValue(true)
+    const guard = applicationPermissions.createApplicationPermissionGuard({
+      callTool: vi.fn().mockResolvedValue({ structuredContent: { apps: [] } }),
+      config: { defaultMode: 'always_ask', rules: [] },
+      getWorkflowBundleIds: runId =>
+        runId === 'run_1'
+          ? ['com.apple.TextEdit', 'com.apple.Calculator']
+          : [],
+      requestApproval,
+      supportsApproval: () => true
+    })
+    await guard.authorize('execute_workflows', {
+      workflows: [
+        { contexts: { editor: { bundle_id: 'com.apple.TextEdit' } }, steps: [] },
+        { contexts: { calculator: { bundle_id: 'com.apple.Calculator' } }, steps: [] }
+      ]
+    })
+    await guard.authorize('resume_workflow', { run_id: 'run_1', decision: 'continue' })
+
+    expect(requestApproval).toHaveBeenCalledTimes(2)
+    expect(requestApproval.mock.calls[0]?.[0].targets).toHaveLength(2)
+    expect(requestApproval.mock.calls[1]?.[0].targets).toHaveLength(2)
+  })
+
+  it('fails closed when required confirmation is unavailable or declined', async () => {
+    const base = {
+      callTool: vi.fn().mockResolvedValue({ structuredContent: { apps: [] } }),
+      config: { defaultMode: 'always_ask' as const, rules: [] }
+    }
+    const unsupported = applicationPermissions.createApplicationPermissionGuard({
+      ...base,
+      requestApproval: vi.fn().mockResolvedValue(true),
+      supportsApproval: () => false
+    })
+    await expect(unsupported.authorize('launch_app', {
+      bundle_id: 'com.apple.TextEdit'
+    })).rejects.toMatchObject({
+      code: 'APPLICATION_CONFIRMATION_UNSUPPORTED',
+      rpcCode: -32005
+    })
+
+    const declined = applicationPermissions.createApplicationPermissionGuard({
+      ...base,
+      requestApproval: vi.fn().mockResolvedValue(false),
+      supportsApproval: () => true
+    })
+    await expect(declined.authorize('launch_app', {
+      bundle_id: 'com.apple.TextEdit'
+    })).rejects.toMatchObject({
+      code: 'APPLICATION_ACCESS_NOT_APPROVED',
+      rpcCode: -32004
+    })
+  })
+
+  it('fails closed when the pid points to another app after confirmation', async () => {
+    const callTool = vi.fn()
+      .mockResolvedValueOnce({
+        structuredContent: {
+          apps: [{ bundle_id: 'com.apple.TextEdit', name: 'TextEdit', pid: 110 }]
+        }
+      })
+      .mockResolvedValueOnce({
+        structuredContent: {
+          apps: [{ bundle_id: 'com.apple.Safari', name: 'Safari', pid: 110 }]
+        }
+      })
+    const guard = applicationPermissions.createApplicationPermissionGuard({
+      callTool,
+      config: { defaultMode: 'always_ask', rules: [] },
+      requestApproval: vi.fn().mockResolvedValue(true),
+      supportsApproval: () => true
+    })
+
+    await expect(guard.authorize('type_text', {
+      pid: 110,
+      text: 'hello'
+    })).rejects.toMatchObject({
+      code: 'APPLICATION_PERMISSION_CONTEXT_CHANGED',
+      rpcCode: -32006,
+      data: expect.objectContaining({
+        applications: [{ bundle_id: 'com.apple.Safari', label: 'Safari (com.apple.Safari)' }],
+        decision: 'changed'
+      })
+    })
+  })
+
+  it('rechecks both pid and window identities after confirmation', async () => {
+    let appResolution = 0
+    const callTool = vi.fn(async (name: string) => {
+      if (name === 'list_windows') {
+        return {
+          structuredContent: {
+            windows: [{ window_id: 22, pid: appResolution === 1 ? 110 : 120 }]
+          }
+        }
+      }
+      appResolution += 1
+      return {
+        structuredContent: {
+          apps: [
+            { bundle_id: 'com.apple.TextEdit', name: 'TextEdit', pid: 110 },
+            { bundle_id: 'com.apple.Mail', name: 'Mail', pid: 120 }
+          ]
+        }
+      }
+    })
+    const guard = applicationPermissions.createApplicationPermissionGuard({
+      callTool,
+      config: { defaultMode: 'always_ask', rules: [] },
+      requestApproval: vi.fn().mockResolvedValue(true),
+      supportsApproval: () => true
+    })
+
+    await expect(guard.authorize('click', {
+      element_index: 1,
+      pid: 110,
+      window_id: 22
+    })).rejects.toMatchObject({
+      code: 'APPLICATION_PERMISSION_CONTEXT_CHANGED',
+      rpcCode: -32006,
+      data: expect.objectContaining({
+        applications: expect.arrayContaining([
+          { bundle_id: 'com.apple.TextEdit', label: 'TextEdit (com.apple.TextEdit)' },
+          { bundle_id: 'com.apple.Mail', label: 'Mail (com.apple.Mail)' }
+        ]),
+        decision: 'changed'
+      })
+    })
+    expect(callTool.mock.calls.map(([name]) => name)).toEqual([
+      'list_apps',
+      'list_windows',
+      'list_apps',
+      'list_windows'
+    ])
+  })
+
+  it('uses a one-operation MCP elicitation request for ask mode', async () => {
+    const writes: Array<Record<string, any>> = []
+    const requester = applicationPermissions.createApplicationApprovalRequester({
+      isSupported: () => true,
+      write: message => writes.push(message)
+    })
+    const pending = requester.request({
+      targets: [{ bundleId: 'com.apple.TextEdit', name: 'TextEdit' }],
+      toolName: 'type_text'
+    })
+    expect(writes).toHaveLength(1)
+    expect(writes[0]).toMatchObject({
+      method: 'elicitation/create',
+      params: {
+        mode: 'form',
+        requestedSchema: { type: 'object', properties: {} },
+        _meta: {
+          codex_approval_kind: 'mcp_tool_call',
+          tool_params: {
+            applications: ['TextEdit (com.apple.TextEdit)'],
+            tool: 'type_text'
+          }
+        }
+      }
+    })
+    expect(requester.handleResponse({
+      jsonrpc: '2.0',
+      id: writes[0].id,
+      result: { action: 'accept', content: {} }
+    })).toBe(true)
+    await expect(pending).resolves.toBe(true)
+    requester.stop()
+  })
+
+  it('normalizes application permission configuration safely', () => {
+    expect(applicationPermissions.readApplicationPermissionConfig({
+      ONEWORKS_CUA_DEFAULT_APPLICATION_PERMISSION: 'deny',
+      ONEWORKS_CUA_APPLICATION_PERMISSIONS: JSON.stringify([
+        { bundleId: 'com.apple.TextEdit', mode: 'always_allow' },
+        { bundleId: 'COM.APPLE.TEXTEDIT', mode: 'deny' },
+        { bundleId: 'com.apple.Safari', mode: 'invalid' }
+      ])
+    })).toEqual({
+      defaultMode: 'deny',
+      rules: [
+        { bundleId: 'com.apple.TextEdit', mode: 'deny' },
+        { bundleId: 'com.apple.Safari', mode: 'always_ask' }
+      ]
+    })
+    expect(applicationPermissions.readApplicationPermissionConfig({
+      ONEWORKS_CUA_DEFAULT_APPLICATION_PERMISSION: 'unknown',
+      ONEWORKS_CUA_APPLICATION_PERMISSIONS: '{'
+    })).toEqual({ defaultMode: 'always_ask', rules: [] })
+  })
+
+  it('enforces the strictest case-insensitive duplicate application rule', async () => {
+    const config = applicationPermissions.readApplicationPermissionConfig({
+      ONEWORKS_CUA_DEFAULT_APPLICATION_PERMISSION: 'always_allow',
+      ONEWORKS_CUA_APPLICATION_PERMISSIONS: JSON.stringify([
+        { bundleId: 'com.apple.TextEdit', mode: 'always_allow' },
+        { bundleId: 'COM.APPLE.TEXTEDIT', mode: 'deny' }
+      ])
+    })
+    const guard = applicationPermissions.createApplicationPermissionGuard({
+      callTool: vi.fn().mockResolvedValue({
+        structuredContent: {
+          apps: [{ bundle_id: 'com.apple.TextEdit', name: 'TextEdit', pid: 110 }]
+        }
+      }),
+      config,
+      requestApproval: vi.fn().mockResolvedValue(true),
+      supportsApproval: () => true
+    })
+
+    await expect(guard.authorize('type_text', {
+      pid: 110,
+      text: 'hello'
+    })).rejects.toMatchObject({
+      code: 'APPLICATION_ACCESS_DENIED',
+      data: expect.objectContaining({ decision: 'deny' })
+    })
+  })
+
   it('maps MCP startup failures to actionable recovery data', () => {
     expect(mcpProxy.parseRecoveryFromOutput(
       '[cua-driver] permission-required: Accessibility, Screen & System Audio Recording\n'
@@ -600,6 +968,7 @@ describe('cua-driver plugin contract', () => {
     ])
     const plugin = manifest.plugin as {
       contributions: {
+        settingsPages: Array<Record<string, unknown>>
         toolUsePresentations: Array<Record<string, unknown>>
       }
       server: { roles: string[] }
@@ -608,7 +977,9 @@ describe('cua-driver plugin contract', () => {
     const config = manifest.config as {
       schema: {
         properties: {
+          applicationPermissions: { default: unknown[]; maxItems: number }
           cursorColorStrategy: { default: string; oneOf: Array<{ const: string }> }
+          defaultApplicationPermission: { default: string; oneOf: Array<{ const: string }> }
           defaultCursorColor: { default: string; pattern: string }
         }
       }
@@ -632,6 +1003,18 @@ describe('cua-driver plugin contract', () => {
       default: '#E3E7ED',
       pattern: '^#[0-9A-Fa-f]{3}(?:[0-9A-Fa-f]{3})?$'
     }))
+    expect(config.schema.properties.defaultApplicationPermission).toEqual(expect.objectContaining({
+      default: 'always_ask'
+    }))
+    expect(config.schema.properties.defaultApplicationPermission.oneOf.map(option => option.const)).toEqual([
+      'always_allow',
+      'always_ask',
+      'deny'
+    ])
+    expect(config.schema.properties.applicationPermissions).toEqual(expect.objectContaining({
+      default: [],
+      maxItems: 200
+    }))
     expect(await readJson('mcp/cua-driver.json')).toEqual({
       command: '${' + 'ONEWORKS_NODE_EXECUTABLE}',
       args: ['${' + 'ONEWORKS_PLUGIN_ROOT}/bin/mcp-proxy.cjs'],
@@ -639,7 +1022,9 @@ describe('cua-driver plugin contract', () => {
         HOME: '${' + 'ONEWORKS_REAL_HOME}',
         USERPROFILE: '${' + 'ONEWORKS_REAL_HOME}',
         ONEWORKS_CUA_CURSOR_STRATEGY: '${' + 'ONEWORKS_PLUGIN_OPTION:cursorColorStrategy}',
-        ONEWORKS_CUA_DEFAULT_CURSOR_COLOR: '${' + 'ONEWORKS_PLUGIN_OPTION:defaultCursorColor}'
+        ONEWORKS_CUA_DEFAULT_CURSOR_COLOR: '${' + 'ONEWORKS_PLUGIN_OPTION:defaultCursorColor}',
+        ONEWORKS_CUA_DEFAULT_APPLICATION_PERMISSION: '${' + 'ONEWORKS_PLUGIN_OPTION:defaultApplicationPermission}',
+        ONEWORKS_CUA_APPLICATION_PERMISSIONS: '${' + 'ONEWORKS_PLUGIN_OPTION:applicationPermissions}'
       },
       default_tools_approval_mode: 'approve',
       startup_timeout_sec: 30
@@ -647,6 +1032,18 @@ describe('cua-driver plugin contract', () => {
     await expect(readFile(new URL('../mcp/cua-evidence.json', import.meta.url), 'utf8'))
       .rejects.toMatchObject({ code: 'ENOENT' })
     expect(plugin.server.roles).toEqual(['manager', 'workspace'])
+    expect(plugin.contributions.settingsPages).toEqual([
+      expect.objectContaining({
+        group: 'external-control',
+        id: 'computer-use',
+        clientView: 'control',
+        title: 'Computer Use',
+        titleI18n: {
+          en: 'Computer Use',
+          'zh-Hans': '电脑操作'
+        }
+      })
+    ])
     expect(plugin.contributions).not.toHaveProperty('launcherSearchProviders')
     expect(plugin.contributions.toolUsePresentations).toEqual(expect.arrayContaining([
       expect.objectContaining({
@@ -695,11 +1092,16 @@ describe('cua-driver plugin contract', () => {
       })
     ]))
     expect(exports['.']).toBe('./plugin.json')
+    expect(exports['./client']).toEqual({
+      source: './client/src/index.tsx',
+      default: './client/dist/index.js'
+    })
     expect(serverExport).toEqual({
       source: './server/src/index.ts',
       default: './server/dist/index.js'
     })
     expect(packageJson.files).toContain('mcp')
+    expect(packageJson.files).toContain('client/dist')
   })
 
   it('registers scoped commands and documented status API metadata', async () => {

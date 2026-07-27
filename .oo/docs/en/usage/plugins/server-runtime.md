@@ -78,7 +78,7 @@ New plugins should rely on `package.json` exports for `./client` and `./server` 
 
 `watch: true` enables file watching for a plugin directory and refreshes relevant plugin runtimes through the plugin watch channel. Plugins auto-discovered from `.oo/plugins.dev` enable watch by default.
 
-Use watch mode for local plugin development. Local plugin sources use the host Vite dev server for `exports["./client"].source`, so HMR, TypeScript / TSX transforms, source maps, and React Fast Refresh are host-provided. Do not configure `plugin.client.devServer` for new plugins. For published plugins, rely on package versions and normal dependency updates.
+Use watch mode for local directory plugin development. In a development host, `exports["./client"].source` uses the host Vite server for HMR, TypeScript / TSX transforms, source maps, and React Fast Refresh. In packaged Electron and static hosts, the workspace runtime uses a controlled Vite build to compile the source entry and any same-plugin source modules requested later by runtime dynamic imports. It serves those in-memory ESM modules through a same-origin plugin runtime proxy that preserves their source-relative paths. The host does not load the plugin's own Vite config or write build output into the plugin directory. Package/download sources and watch-disabled or published plugins continue to use `exports["./client"].default`, so published packages must still contain `dist`.
 
 ## Debugging
 

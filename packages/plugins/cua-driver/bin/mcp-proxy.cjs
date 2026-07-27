@@ -5,6 +5,11 @@ const { resolve } = require('node:path')
 const process = require('node:process')
 
 const {
+  createApplicationApprovalRequester,
+  createApplicationPermissionGuard,
+  readApplicationPermissionConfig
+} = require('./application-permissions.cjs')
+const {
   createSessionCursorController,
   pointerActionTools,
   sessionCursorStartToolDefinition,
@@ -236,6 +241,7 @@ function main() {
   let stopping = false
   let diagnosticOutput = ''
   let internalCallSequence = 0
+  let clientSupportsElicitation = false
   const pendingDriverCalls = new Map()
   const callDriverTool = (name, args) =>
     new Promise((resolveCall, rejectCall) => {
@@ -276,6 +282,17 @@ function main() {
   const workflowService = createWorkflowService({
     callTool: (name, args, actionStyle) => cursorController.callTool(name, args, actionStyle)
   })
+  const approvalRequester = createApplicationApprovalRequester({
+    isSupported: () => clientSupportsElicitation,
+    write: message => writeJson(process.stdout, message)
+  })
+  const applicationPermissionGuard = createApplicationPermissionGuard({
+    callTool: callDriverTool,
+    config: readApplicationPermissionConfig(process.env),
+    getWorkflowBundleIds: runId => workflowService.getRunBundleIds(runId),
+    requestApproval: request => approvalRequester.request(request),
+    supportsApproval: () => clientSupportsElicitation
+  })
   const enqueueSessionOperation = createSerialTaskQueue()
   const stopForProtocolError = (response) => {
     if (stopping) return
@@ -285,14 +302,7 @@ function main() {
     child.stdin.end()
     child.kill('SIGTERM')
   }
-  const clientReader = createLineReader((line) => {
-    if (line.trim() === '' || stopping) return
-    const parsed = parseJsonLine(line)
-    if (!parsed.ok) return stopForProtocolError(parsed.error)
-    if (isMessage(parsed.value) && parsed.value.method === 'initialize') {
-      pendingInitializeId = parsed.value.id
-    }
-    const transformed = transformClientMessage(parsed.value, pendingToolLists)
+  const dispatchTransformed = (transformed) => {
     if (transformed.respond != null) return writeJson(process.stdout, transformed.respond)
     if (transformed.localCall != null) {
       const call = transformed.localCall
@@ -329,7 +339,8 @@ function main() {
           errorResponse(
             call.id,
             error.rpcCode ?? -32603,
-            error.message
+            error.message,
+            error.data
           )
         )
       })
@@ -346,11 +357,45 @@ function main() {
           result
         })
       }).catch(error => {
-        writeJson(process.stdout, errorResponse(call.id, -32603, error.message))
+        writeJson(process.stdout, errorResponse(call.id, error.rpcCode ?? -32603, error.message, error.data))
       })
       return
     }
     writeJson(child.stdin, transformed.forward)
+  }
+  const clientReader = createLineReader((line) => {
+    if (line.trim() === '' || stopping) return
+    const parsed = parseJsonLine(line)
+    if (!parsed.ok) return stopForProtocolError(parsed.error)
+    if (approvalRequester.handleResponse(parsed.value)) return
+    if (isMessage(parsed.value) && parsed.value.method === 'initialize') {
+      pendingInitializeId = parsed.value.id
+      clientSupportsElicitation = isMessage(parsed.value.params?.capabilities?.elicitation)
+    }
+    const transformed = transformClientMessage(parsed.value, pendingToolLists)
+    if (
+      transformed.respond == null &&
+      isMessage(parsed.value) &&
+      parsed.value.method === 'tools/call'
+    ) {
+      const toolName = parsed.value.params?.name
+      const toolArguments = isMessage(parsed.value.params?.arguments) ? parsed.value.params.arguments : {}
+      applicationPermissionGuard.authorize(toolName, toolArguments)
+        .then(() => dispatchTransformed(transformed))
+        .catch(error => {
+          writeJson(
+            process.stdout,
+            errorResponse(
+              parsed.value.id,
+              error.rpcCode ?? -32603,
+              error.message,
+              error.data
+            )
+          )
+        })
+      return
+    }
+    dispatchTransformed(transformed)
   })
   const serverReader = createLineReader((line) => {
     if (line.trim() === '' || stopping) return
@@ -395,6 +440,7 @@ function main() {
   process.stdin.on('data', chunk => clientReader.push(chunk))
   process.stdin.on('end', () => {
     clientReader.end()
+    approvalRequester.stop()
     child.stdin.end()
   })
   child.stdout.on('data', chunk => serverReader.push(chunk))
@@ -410,6 +456,7 @@ function main() {
     process.exitCode = 1
   })
   child.once('exit', (code, signal) => {
+    approvalRequester.stop()
     for (const pending of pendingDriverCalls.values()) {
       pending.reject(new Error('Cua Driver stopped before the workflow step completed.'))
     }

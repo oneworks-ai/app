@@ -60,12 +60,14 @@ describe('launcher static server', () => {
 
     const indexResponse = await fetch(`${launcher.clientUrl}`)
     expect(indexResponse.status).toBe(200)
+    expect(indexResponse.headers.get('cache-control')).toBe('no-store')
     const indexHtml = await indexResponse.text()
     expect(indexHtml).toContain('/ui/assets/app.css')
     expect(indexHtml).toContain('window.__ONEWORKS_PROJECT_RUNTIME_ENV__=')
 
     const cssResponse = await fetch(`${launcher.clientUrl}assets/app.css`)
     expect(cssResponse.status).toBe(200)
+    expect(cssResponse.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
     expect(cssResponse.headers.get('content-type')).toContain('text/css')
     expect(await cssResponse.text()).toContain('/__ONEWORKS_PROJECT_CLIENT_BASE__/assets/font.woff2')
 
@@ -79,6 +81,22 @@ describe('launcher static server', () => {
     const directFontResponse = await fetch(`${launcher.clientUrl}assets/font.woff2`)
     expect(directFontResponse.status).toBe(200)
     expect(await directFontResponse.text()).toBe('font-data')
+
+    const serviceWorkerResponse = await fetch(`${launcher.clientUrl}sw.js`)
+    expect(serviceWorkerResponse.status).toBe(200)
+    expect(serviceWorkerResponse.headers.get('cache-control')).toBe('no-store')
+
+    const missingAssetResponse = await fetch(`${launcher.clientUrl}assets/stale.js`)
+    expect(missingAssetResponse.status).toBe(404)
+    expect(missingAssetResponse.headers.get('content-type')).toContain('text/plain')
+    expect(await missingAssetResponse.text()).toBe('Not Found')
+
+    const routeResponse = await fetch(`${launcher.clientUrl}launcher/plugins/catalog/foo.bar`, {
+      headers: { Accept: 'text/html' }
+    })
+    expect(routeResponse.status).toBe(200)
+    expect(routeResponse.headers.get('content-type')).toContain('text/html')
+    expect(await routeResponse.text()).toContain('<body>launcher</body>')
   })
 
   it('proxies only scoped plugin assets from loopback runtime servers', async () => {
@@ -125,6 +143,15 @@ describe('launcher static server', () => {
       '/api/plugins/relay/client/index.js?pluginVersion=3'
     )
 
+    const sourceEntryResponse = await fetch(
+      `${proxyBase}/api/plugins/relay/client-source/index.js?pluginVersion=4`
+    )
+    expect(sourceEntryResponse.status).toBe(200)
+    expect(sourceEntryResponse.headers.get('content-type')).toContain('text/javascript')
+    expect(await sourceEntryResponse.text()).toContain(
+      '/api/plugins/relay/client-source/index.js?pluginVersion=4'
+    )
+
     const chunkResponse = await fetch(`${proxyBase}/api/plugins/relay/client/chunk.js`)
     expect(chunkResponse.status).toBe(200)
     const sharedResponse = await fetch(`${proxyBase}/api/plugins/relay/shared/runtime.js`)
@@ -138,6 +165,7 @@ describe('launcher static server', () => {
     expect(await headResponse.text()).toBe('')
     expect(upstreamRequests).toEqual([
       '/api/plugins/relay/client/index.js?pluginVersion=3',
+      '/api/plugins/relay/client-source/index.js?pluginVersion=4',
       '/api/plugins/relay/client/chunk.js',
       '/api/plugins/relay/shared/runtime.js',
       '/api/plugins/relay/client/index.js'
@@ -153,7 +181,7 @@ describe('launcher static server', () => {
       `${proxyBase}/api/config`
     )
     expect(unrelatedPathResponse.status).toBe(403)
-    expect(upstreamRequests).toHaveLength(4)
+    expect(upstreamRequests).toHaveLength(5)
   })
 
   it('recovers when an upstream plugin asset response is interrupted', async () => {
