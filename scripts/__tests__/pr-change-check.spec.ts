@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+
 import { describe, expect, it } from 'vitest'
 
 import { evaluatePrChangePolicy } from '../pr-change-check'
@@ -92,6 +94,23 @@ describe('pr-change-check', () => {
     expect(result.violations).toEqual([])
   })
 
+  it('keeps the PR template actionable without treating its guidance as screenshot evidence', () => {
+    const result = evaluatePrChangePolicy({
+      changedFiles: [
+        'apps/client/src/components/module-updates/ModuleManagementView.tsx',
+        'changelog/4.0.0-alpha/client.md'
+      ],
+      commitSubjects: ['feat: add module update management'],
+      prBody: readFileSync('.github/pull_request_template.md', 'utf8')
+    })
+
+    expect(result.hasChangelog).toBe(true)
+    expect(result.hasScreenshot).toBe(false)
+    expect(result.violations).toContain(
+      'Feature/fix PRs that change UI surfaces must include a screenshot in the PR body.'
+    )
+  })
+
   it('does not treat module guidance under UI source folders as a UI surface', () => {
     const result = evaluatePrChangePolicy({
       changedFiles: [
@@ -149,5 +168,16 @@ describe('pr-change-check', () => {
 
     expect(result.hasExperienceReview).toBe(true)
     expect(result.violations).toEqual([])
+  })
+
+  it('reruns only the PR policy job on PR body edits', () => {
+    const qualityWorkflow = readFileSync('.github/workflows/quality.yml', 'utf8')
+
+    expect(qualityWorkflow).toContain('      - edited')
+    expect(qualityWorkflow).toContain('  pr-change-policy:')
+    expect(qualityWorkflow).toContain('    name: pr-change-policy')
+    expect(qualityWorkflow.match(/github\.event\.action != 'edited'/gu)).toHaveLength(2)
+    expect(qualityWorkflow).toContain('PR_BODY: $' + '{{ github.event.pull_request.body }}')
+    expect(qualityWorkflow).not.toContain('gh pr view')
   })
 })

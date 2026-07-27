@@ -600,6 +600,52 @@ describe('scripts cli', () => {
     })
   })
 
+  it('dispatches Git delivery readiness checks', async () => {
+    const runGitDeliveryCheck = vi.fn(async () => {})
+    const cli = createScriptsCli({
+      runGitDeliveryCheck
+    })
+
+    await cli.parseAsync([
+      'node',
+      'oneworks-dev',
+      'git-delivery',
+      'check',
+      '--repository',
+      'oneworks-ai/app',
+      '--json'
+    ])
+
+    expect(runGitDeliveryCheck).toHaveBeenCalledWith({
+      json: true,
+      repository: 'oneworks-ai/app'
+    })
+  })
+
+  it('dispatches local PR preflight checks with defaults', async () => {
+    const runPrPreflight = vi.fn(async () => {})
+    const cli = createScriptsCli({
+      runPrPreflight
+    })
+
+    await cli.parseAsync([
+      'node',
+      'oneworks-dev',
+      'pr-preflight',
+      '--body-file',
+      '/tmp/pr-body.md',
+      '--json'
+    ])
+
+    expect(runPrPreflight).toHaveBeenCalledWith({
+      base: undefined,
+      head: undefined,
+      body: undefined,
+      bodyFile: '/tmp/pr-body.md',
+      json: true
+    })
+  })
+
   it('dispatches chrome debug targets with parsed options', async () => {
     const runChromeDebugTargets = vi.fn(async () => {})
     const cli = createScriptsCli({

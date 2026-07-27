@@ -103,6 +103,10 @@
   - 校验一个 git range 里的 commit title 是否符合 Conventional Commit；GitHub 默认 merge commit 例外
 - `pnpm tools pr-change-check [base] [head] --body-file <path>`
   - 检查 PR body 是否包含已勾选的 `Experience Review` checklist；功能新增 / bug 修复类 PR 如果改动产品代码，还会要求对应 changelog；如果改动 UI 交互面，还会要求 PR 正文包含截图
+- `pnpm tools pr-preflight [base] [head] --body-file <path> [--json]`
+  - 创建 PR 前的本地入口；默认比较 `origin/main...HEAD`，复用与 CI 相同的 changelog、截图和 Experience Review 规则，并给出可直接修复的违规项。正文草稿放在已忽略的 `.logs/pr-body.md`，避免草稿自身让工作区变脏
+- `pnpm tools git-delivery check [--repository <owner/name>] [--json]`
+  - 在启动独立 Git operator 前检查项目 auto-review 配置、本机 `gh` 登录、仓库写权限和 SSH remote 可用性；GitHub Connector 写权限是独立外部授权，不作为本机交付链的前置条件
 - `pnpm tools release-tags plan <base> <head> [--json]`
   - 比较两个提交之间 workspace package manifest 的版本变化，生成需要创建的 `pkg/<normalized-package-name>/v<version>` tag 候选
   - release PR 合入 `main` 后由 `.github/workflows/release-tags.yml` 调用；不会把根目录开发用 `package.json` 纳入候选

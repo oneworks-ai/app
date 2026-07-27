@@ -13,7 +13,7 @@
 
 ## Workflow 地图
 
-- `quality.yml`：所有 `main` push / PR / 手动触发都会跑 lint、format、typecheck、commit message 检查。
+- `quality.yml`：所有 `main` push / PR / 手动触发都会跑 lint、format、typecheck、commit message 检查；PR 正文 `edited` 时只运行同 workflow 内的 `pr-change-policy`，避免重跑全量 Quality 且保持 required-check 身份不变。
 - `pr-experience-review.yml`：PR 创建、编辑或同步时通过 Pull Requests API upsert 经验复盘提醒 review summary；硬门禁仍由 `quality.yml` 的 `pr-change-policy` 调用 `pnpm tools pr-change-check` 执行。
 - `release-tags.yml`：按 package version / scripts 相关路径触发，创建 `pkg/*/v*` release tags，并按 tag 显式调度对应发布 workflow。
 - `npm-publish-alpha.yml`：手动发布 npm alpha 包；默认走 Trusted Publishing，新增包 bootstrap 才允许显式使用 `NPM_TOKEN`。
