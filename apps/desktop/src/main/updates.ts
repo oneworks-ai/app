@@ -10,14 +10,15 @@ import { autoUpdater } from 'electron-updater'
 
 import { resolvePackagedCliPathEnv } from './cli-path-env'
 import { AUTO_UPDATE_CONFIG_FILES } from './constants'
+import { findDesktopReleaseTagInAtomFeed, parseDesktopReleaseTagChannel } from './desktop-release-channel'
 import { builtinPackageCachePath, resolveBundledRuntimeConsumerBootstrapPath } from './paths'
 import { writeProcessLine } from './process-utils'
 import { resolveDesktopRuntimePackageCacheVersionEnv } from './runtime-cache-version'
 import {
   DEFAULT_DESKTOP_AUTO_UPDATE,
-  DEFAULT_DESKTOP_UPDATE_CHANNEL,
   normalizeDesktopAutoUpdate,
-  normalizeDesktopUpdateChannel
+  normalizeDesktopUpdateChannel,
+  resolveDesktopUpdateChannelPolicy
 } from './update-types'
 import type { DesktopUpdateChannel, DesktopUpdateStatus } from './update-types'
 
@@ -213,21 +214,18 @@ const buildGitHubDownloadBaseUrl = (config: GitHubAutoUpdateConfig, tagName: str
     `/releases/download/${encodeURIComponent(tagName)}/`
 }
 
+const buildGitHubReleaseFeedUrl = (config: GitHubAutoUpdateConfig) => {
+  const host = config.host == null || config.host === 'api.github.com' ? 'github.com' : config.host
+  return `${config.protocol ?? 'https'}://${host}/${encodePathSegment(config.owner)}/${
+    encodePathSegment(config.repo)
+  }/releases.atom`
+}
+
 const resolveGitHubApiToken = () => (
   githubTokenEnvNames
     .map(envName => process.env[envName]?.trim())
     .find(value => value != null && value !== '')
 )
-
-const parseDesktopReleaseTagChannel = (tagName: string, tagNamePrefix: string): DesktopUpdateChannel | undefined => {
-  if (!tagName.startsWith(tagNamePrefix)) return undefined
-  const version = tagName.slice(tagNamePrefix.length)
-  const match = /^\d+\.\d+\.\d+(?:-([0-9A-Za-z]+)(?:[.-][0-9A-Za-z.-]+)?)?$/u.exec(version)
-  if (match == null) return undefined
-  return match[1] == null
-    ? DEFAULT_DESKTOP_UPDATE_CHANNEL
-    : normalizeDesktopUpdateChannel(match[1])
-}
 
 const fetchLatestDesktopRelease = async (
   updateChannel: DesktopUpdateChannel,
@@ -247,27 +245,44 @@ const fetchLatestDesktopRelease = async (
       },
       signal: controller.signal
     })
-    if (!response.ok) {
-      throw new Error(`GitHub releases request failed with ${response.status}.`)
+    let tagName: string | undefined
+    if (response.ok) {
+      const releases = await response.json()
+      if (!Array.isArray(releases)) {
+        throw new TypeError('GitHub releases response is invalid.')
+      }
+      tagName = releases
+        .filter((value): value is GitHubReleaseRecord => isRecord(value))
+        .filter(value => value.draft !== true && typeof value.tag_name === 'string')
+        .find(value => parseDesktopReleaseTagChannel(value.tag_name ?? '', config.tagNamePrefix) === updateChannel)
+        ?.tag_name
+    } else {
+      const feedResponse = await fetch(buildGitHubReleaseFeedUrl(config), {
+        headers: {
+          accept: 'application/atom+xml',
+          'user-agent': `OneWorks/${app.getVersion()}`
+        },
+        signal: controller.signal
+      })
+      if (!feedResponse.ok) {
+        throw new Error(
+          `GitHub releases request failed with ${response.status}; release feed failed with ${feedResponse.status}.`
+        )
+      }
+      tagName = findDesktopReleaseTagInAtomFeed(
+        await feedResponse.text(),
+        config.tagNamePrefix,
+        updateChannel
+      )
     }
 
-    const releases = await response.json()
-    if (!Array.isArray(releases)) {
-      throw new TypeError('GitHub releases response is invalid.')
-    }
-
-    const release = releases
-      .filter((value): value is GitHubReleaseRecord => isRecord(value))
-      .filter(value => value.draft !== true && typeof value.tag_name === 'string')
-      .find(value => parseDesktopReleaseTagChannel(value.tag_name ?? '', config.tagNamePrefix) === updateChannel)
-
-    if (release?.tag_name == null) {
+    if (tagName == null) {
       throw new Error(`No ${updateChannel} desktop release was found.`)
     }
 
     return {
-      downloadBaseUrl: buildGitHubDownloadBaseUrl(config, release.tag_name),
-      tagName: release.tag_name
+      downloadBaseUrl: buildGitHubDownloadBaseUrl(config, tagName),
+      tagName
     }
   } finally {
     clearTimeout(timeout)
@@ -451,11 +466,12 @@ export const createAutoUpdateManager = (input: {
   const configureFeedForUpdateChannel = async () => {
     const updateChannel = getUpdateChannel()
     const githubConfig = readGitHubAutoUpdateConfig()
+    const channelPolicy = resolveDesktopUpdateChannelPolicy(updateChannel)
     autoUpdater.autoDownload = getAutoUpdateEnabled() && !isAutoUpdateDownloadDisabled()
     autoUpdater.autoInstallOnAppQuit = true
-    autoUpdater.allowPrerelease = updateChannel !== 'stable'
-    autoUpdater.channel = updateChannel === 'stable' ? 'latest' : updateChannel
-    autoUpdater.allowDowngrade = updateChannel !== 'stable'
+    autoUpdater.allowPrerelease = channelPolicy.allowPrerelease
+    autoUpdater.channel = channelPolicy.providerChannel
+    autoUpdater.allowDowngrade = channelPolicy.allowDowngrade
 
     const release = await fetchLatestDesktopRelease(updateChannel, githubConfig)
     const feedKey = `generic:${updateChannel}:${release.tagName}`
@@ -463,7 +479,7 @@ export const createAutoUpdateManager = (input: {
       autoUpdater.setFeedURL({
         provider: 'generic',
         url: release.downloadBaseUrl,
-        channel: updateChannel === 'stable' ? 'latest' : updateChannel
+        channel: channelPolicy.providerChannel
       })
       configuredFeedKey = feedKey
     }
@@ -700,8 +716,7 @@ const buildBundledRuntimeCacheRefreshScript = () => `
 const cacheModule = require(${JSON.stringify(builtinPackageCachePath)})
 const entries = [
   ...(cacheModule.ensureBuiltinRuntimePackageCache?.({ env: process.env, trustManifest: true }) ?? []),
-  ...(cacheModule.ensureBuiltinAdapterPackageCache?.({ env: process.env, trustManifest: true }) ?? []),
-  ...(cacheModule.ensureBuiltinPluginPackageCache?.({ env: process.env, trustManifest: true }) ?? [])
+  ...(cacheModule.ensureBuiltinAdapterPackageCache?.({ env: process.env, trustManifest: true }) ?? [])
 ]
 process.stdout.write(JSON.stringify({ entries }) + '\\n')
 `

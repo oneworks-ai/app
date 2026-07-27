@@ -1,5 +1,5 @@
 /* eslint-disable max-lines -- desktop package cache tests cover adapter, runtime, and alias closure behavior together. */
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -846,6 +846,10 @@ describe('desktop built-in adapter package cache', () => {
       resolveNpmPackageCacheDir(packageName, 'latest', homeDir),
       resolveNpmPackageCacheDir(packageName, '1.2.3', homeDir)
     ])
+    const latestNodeModulesStat = await lstat(
+      path.join(resolveNpmPackageCacheDir(packageName, 'latest', homeDir), 'node_modules')
+    )
+    expect(latestNodeModulesStat.isSymbolicLink()).toBe(true)
     await expect(
       readFile(path.join(resolveNpmPackageInstallDir(seeded[1].cacheDir, packageName), 'package.json'), 'utf8')
     ).resolves.toContain('"version": "1.2.3"')
@@ -912,7 +916,42 @@ describe('desktop built-in adapter package cache', () => {
       resolveNpmPackageCacheDir(packageName, '1.2.3', homeDir),
       packageName
     )
-    expect(require(path.join(packageDir, 'dist', 'hooks.js'))).toEqual({ ok: true })
+    const packageStat = await lstat(packageDir)
+    expect(packageStat.isSymbolicLink()).toBe(true)
+    expect(require(path.join(packageDir, 'dist', 'hooks.js'))).toEqual({ changed: true })
+  })
+
+  it('relinks a trusted release plugin when the installed app source moves', async () => {
+    const tempDir = await createTempDir('oneworks-desktop-plugin-release-source-move-')
+    const homeDir = path.join(tempDir, 'home')
+    const packageName = '@acme/plugin-release-source-move'
+    const firstSourcePackageDir = await writeSourcePluginPackage(
+      path.join(tempDir, 'mounted-dmg'),
+      packageName,
+      '1.2.3'
+    )
+    const installedSourcePackageDir = await writeSourcePluginPackage(
+      path.join(tempDir, 'applications'),
+      packageName,
+      '1.2.3'
+    )
+    const createOptions = (sourcePackageDir: string) => ({
+      env: { HOME: homeDir },
+      homeDir,
+      packages: [packageName],
+      resolvePackageDir: () => sourcePackageDir,
+      trustManifest: true
+    })
+
+    ensureBuiltinPluginPackageCache(createOptions(firstSourcePackageDir))
+    const relinked = ensureBuiltinPluginPackageCache(createOptions(installedSourcePackageDir))
+    const packageDir = resolveNpmPackageInstallDir(
+      resolveNpmPackageCacheDir(packageName, '1.2.3', homeDir),
+      packageName
+    )
+
+    expect(relinked.every(item => item.seeded)).toBe(true)
+    await expect(realpath(packageDir)).resolves.toBe(await realpath(installedSourcePackageDir))
   })
 
   it('refreshes a dev plugin when the packaged build fingerprint changes', async () => {
@@ -1013,10 +1052,13 @@ describe('desktop built-in adapter package cache', () => {
     const packageDir = resolveNpmPackageInstallDir(cacheDir, packageName)
     const manifest = JSON.parse(await readFile(path.join(cacheDir, NPM_PACKAGE_MANIFEST_FILE), 'utf8')) as {
       arch?: string
+      integrity?: string
       platform?: string
     }
     expect(require(path.join(packageDir, 'dist', 'hooks.js'))).toEqual({ arm64: true })
     expect(manifest).toMatchObject({ arch: 'arm64', platform: 'darwin' })
+    expect(manifest.integrity).toMatch(/^trusted-/u)
+    expect((await lstat(packageDir)).isSymbolicLink()).toBe(true)
   })
 
   it('materializes a static built-in npm package under a dev cache version', async () => {
@@ -1164,7 +1206,7 @@ describe('desktop built-in adapter package cache', () => {
     expect(cached.map(item => item.seeded)).toEqual([false, false, false])
 
     const refreshed = ensureBuiltinRuntimePackageCache(createOptions('build-b'))
-    expect(refreshed.map(item => item.seeded)).toEqual([false, true, true])
+    expect(refreshed.map(item => item.seeded)).toEqual([true, true, true])
     const serverPackageDir = resolveNpmPackageInstallDir(
       resolveNpmPackageCacheDir(serverPackage, 'local-cache', homeDir),
       serverPackage

@@ -8,4 +8,5 @@ This directory owns server-level browser debugging runtimes that can be reused b
 - The runtime response includes the current DevTools asset version. UI consumers should carry it into the `chii_app.html` query so already-running sessions do not keep using an older patched asset URL after a dev server restart.
 - In dev, the client Vite server must proxy the Chii base path so browser-facing script URLs stay same-origin with the iframe page and satisfy the app CSP.
 - Chii target sockets can be hidden behind the Vite proxy; keep server-side WebSocket ping enabled and do not delete a target on a stale close event while the channel manager still points to a live socket for the same id.
+- Loading Chii's proxy mutates `NODE_TLS_REJECT_UNAUTHORIZED`; the integration boundary must restore the process environment immediately so optional web debugging never disables certificate verification for Relay or other server HTTPS traffic.
 - Keep page metadata, favicon lookup, and ordinary webpage fetching in `services/webpage/`. Do not put debug runtime state there.

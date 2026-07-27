@@ -19,7 +19,7 @@ export const setDesktopThemeSource = (value: unknown) => {
 }
 
 export const resolveDesktopRecordingThemeSource = (
-  env: Pick<NodeJS.ProcessEnv, 'ONEWORKS_DESKTOP_RECORDING_THEME_MODE'> = process.env
+  env: NodeJS.ProcessEnv = process.env
 ): DesktopThemeSource | undefined => (
   isDesktopThemeSource(env.ONEWORKS_DESKTOP_RECORDING_THEME_MODE)
     ? env.ONEWORKS_DESKTOP_RECORDING_THEME_MODE

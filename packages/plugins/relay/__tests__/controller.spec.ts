@@ -259,6 +259,68 @@ describe('relay plugin controller', () => {
     disposers.forEach(dispose => dispose())
   })
 
+  it('uses a valid stored account session instead of probing a stale device token', async () => {
+    const deviceListTokens: string[] = []
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const authorization = new Headers(init?.headers).get('authorization') ?? ''
+      if (String(input) === 'https://relay.example/api/relay/devices') {
+        deviceListTokens.push(authorization)
+        return new Response(JSON.stringify({ devices: [] }), { status: 200 })
+      }
+      if (String(input) === 'https://relay.example/api/relay/devices/register') {
+        return new Response(JSON.stringify({ deviceToken: 'fresh-device-token' }), { status: 200 })
+      }
+      return new Response(JSON.stringify({}), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { commands, disposers } = await createPluginHarness(
+      {
+        enableOfficialCloudflareRelay: false,
+        enableOfficialVercelRelay: false,
+        servers: [
+          {
+            id: 'prod',
+            baseUrl: 'https://relay.example/'
+          }
+        ]
+      },
+      {
+        prepareProjectHome: async projectHome => {
+          await createRelayDeviceStore(projectHome).writeStore({
+            deviceId: 'stored-device-id',
+            deviceName: 'Office Mac',
+            deviceSecret: 'stored-device-secret',
+            servers: {
+              prod: {
+                deviceToken: 'stale-device-token',
+                id: 'prod',
+                registeredAt: '2026-06-15T00:00:00.000Z',
+                remoteBaseUrl: 'https://relay.example',
+                sessionExpiresAt: '2999-01-01T00:00:00.000Z',
+                sessionToken: 'account-session-token',
+                updatedAt: '2026-06-15T00:00:00.000Z'
+              }
+            }
+          })
+        }
+      }
+    )
+    let status: RelayPluginStatus | undefined
+    for (let index = 0; index < 20; index += 1) {
+      status = await commands.get('status')?.() as RelayPluginStatus
+      if (status.connection.state === 'registered') break
+      await new Promise(resolve => setTimeout(resolve, 5))
+    }
+
+    expect(deviceListTokens.length).toBeGreaterThan(0)
+    expect(new Set(deviceListTokens)).toEqual(new Set(['Bearer account-session-token']))
+    const registerInit = fetchMock.mock.calls.find(([url]) =>
+      String(url) === 'https://relay.example/api/relay/devices/register'
+    )?.[1]
+    expect(new Headers(registerInit?.headers).get('authorization')).toBe('Bearer account-session-token')
+    disposers.forEach(dispose => dispose())
+  })
+
   it('restores stored relay device connections when the plugin starts', async () => {
     const fetchMock = stubRelayFetch('restored-device-token')
     const { commands, disposers, projectHome } = await createPluginHarness(

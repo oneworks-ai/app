@@ -292,6 +292,27 @@ const hashPackageClosure = (packageName, packageDir) => {
   return `sha256-${hash.digest('hex')}`
 }
 
+const resolveTrustedPackageIntegrity = ({
+  arch,
+  cacheVersion,
+  packageName,
+  platform,
+  sourcePackageDir,
+  sourceCacheVersion,
+  version
+}) =>
+  `trusted-${
+    hashString([
+      arch,
+      cacheVersion,
+      packageName,
+      platform,
+      sourcePackageDir == null ? '' : fs.realpathSync(sourcePackageDir),
+      sourceCacheVersion ?? '',
+      version
+    ].join('\0'))
+  }`
+
 const readManifest = (cacheDir, manifestFile = MANIFEST_FILE) => {
   try {
     const parsed = JSON.parse(fs.readFileSync(path.join(cacheDir, manifestFile), 'utf8'))
@@ -315,6 +336,7 @@ const copyPackageBody = (sourcePackageDir, targetPackageDir) => {
       path.join(targetPackageDir, entry.name),
       {
         dereference: true,
+        mode: fs.constants.COPYFILE_FICLONE,
         recursive: true
       }
     )
@@ -523,7 +545,16 @@ const materializeBuiltinAdapterPackage = ({
     }
   }
 
-  const integrity = hashPackageClosure(packageName, sourcePackageDir)
+  const integrity = trustManifest
+    ? resolveTrustedPackageIntegrity({
+      arch,
+      cacheVersion: resolvedCacheVersion,
+      packageName,
+      platform,
+      sourceCacheVersion,
+      version: packageInfo.version
+    })
+    : hashPackageClosure(packageName, sourcePackageDir)
   if (
     isCurrentCachedPackage({
       cacheDir,
@@ -613,27 +644,17 @@ const materializeBuiltinPluginPackage = ({
   }
 
   const cacheDir = resolveNpmPackageCacheDir(packageName, cacheVersion, homeDir, packageCacheRootDir)
-  if (
-    trustManifest === true &&
-    isCurrentCachedPackageManifest({
+  const integrity = trustManifest
+    ? resolveTrustedPackageIntegrity({
       arch,
-      cacheDir,
       cacheVersion,
-      manifestFile: NPM_PACKAGE_MANIFEST_FILE,
       packageName,
       platform,
+      sourcePackageDir,
       sourceCacheVersion,
       version: packageInfo.version
     })
-  ) {
-    return {
-      cacheDir,
-      packageDir: resolveNpmPackageInstallDir(cacheDir, packageName),
-      seeded: false
-    }
-  }
-
-  const integrity = hashPackageClosure(packageName, sourcePackageDir)
+    : hashPackageClosure(packageName, sourcePackageDir)
   if (
     isCurrentCachedNpmPackage({
       cacheDir,
@@ -673,7 +694,14 @@ const materializeBuiltinPluginPackage = ({
   fs.rmSync(stagingDir, { recursive: true, force: true })
   fs.mkdirSync(stagingDir, { recursive: true })
   try {
-    copyPackageClosure(packageName, sourcePackageDir, path.join(stagingDir, 'node_modules'))
+    if (trustManifest) {
+      symlinkPackageDir(
+        resolveNpmPackageInstallDir(stagingDir, packageName),
+        sourcePackageDir
+      )
+    } else {
+      copyPackageClosure(packageName, sourcePackageDir, path.join(stagingDir, 'node_modules'))
+    }
     writeManifest(stagingDir, {
       arch,
       cacheVersion,
@@ -685,6 +713,80 @@ const materializeBuiltinPluginPackage = ({
       source: 'builtin',
       ...(sourceCacheVersion == null ? {} : { sourceCacheVersion }),
       version: packageInfo.version
+    }, NPM_PACKAGE_MANIFEST_FILE)
+
+    fs.mkdirSync(path.dirname(cacheDir), { recursive: true })
+    fs.rmSync(cacheDir, { recursive: true, force: true })
+    fs.renameSync(stagingDir, cacheDir)
+  } catch (error) {
+    fs.rmSync(stagingDir, { recursive: true, force: true })
+    throw error
+  }
+
+  return {
+    cacheDir,
+    packageDir: resolveNpmPackageInstallDir(cacheDir, packageName),
+    seeded: true
+  }
+}
+
+const linkBuiltinPluginPackageCache = ({
+  arch = process.arch,
+  cacheVersion,
+  homeDir,
+  packageCacheRootDir,
+  packageName,
+  platform = process.platform,
+  sourceCacheDir,
+  sourceCacheVersion,
+  version
+}) => {
+  const sourceManifest = readManifest(sourceCacheDir, NPM_PACKAGE_MANIFEST_FILE)
+  if (sourceManifest?.source !== 'builtin' || typeof sourceManifest.integrity !== 'string') {
+    throw new Error(`Invalid source cache for built-in plugin: ${packageName}`)
+  }
+
+  const cacheDir = resolveNpmPackageCacheDir(packageName, cacheVersion, homeDir, packageCacheRootDir)
+  const manifest = readManifest(cacheDir, NPM_PACKAGE_MANIFEST_FILE)
+  if (
+    isCurrentCachedPackageManifest({
+      arch,
+      cacheDir,
+      cacheVersion,
+      manifestFile: NPM_PACKAGE_MANIFEST_FILE,
+      packageName,
+      platform,
+      sourceCacheVersion,
+      version
+    }) &&
+    manifest?.integrity === sourceManifest.integrity
+  ) {
+    return {
+      cacheDir,
+      packageDir: resolveNpmPackageInstallDir(cacheDir, packageName),
+      seeded: false
+    }
+  }
+
+  const stagingDir = `${cacheDir}.tmp-${process.pid}-${Date.now()}`
+  fs.rmSync(stagingDir, { recursive: true, force: true })
+  try {
+    fs.mkdirSync(stagingDir, { recursive: true })
+    symlinkPackageDir(
+      path.join(stagingDir, 'node_modules'),
+      path.join(sourceCacheDir, 'node_modules')
+    )
+    writeManifest(stagingDir, {
+      arch,
+      cacheVersion,
+      createdAt: new Date().toISOString(),
+      integrity: sourceManifest.integrity,
+      layoutVersion: PACKAGE_CACHE_LAYOUT_VERSION,
+      name: packageName,
+      platform,
+      source: 'builtin',
+      ...(sourceCacheVersion == null ? {} : { sourceCacheVersion }),
+      version
     }, NPM_PACKAGE_MANIFEST_FILE)
 
     fs.mkdirSync(path.dirname(cacheDir), { recursive: true })
@@ -739,7 +841,16 @@ const materializeBuiltinStaticNpmPackage = ({
     }
   }
 
-  const integrity = hashPackageDirectory(sourcePackageDir)
+  const integrity = trustManifest
+    ? resolveTrustedPackageIntegrity({
+      arch,
+      cacheVersion,
+      packageName,
+      platform,
+      sourceCacheVersion,
+      version: packageInfo.version
+    })
+    : hashPackageDirectory(sourcePackageDir)
   if (
     isCurrentCachedNpmPackage({
       cacheDir,
@@ -885,21 +996,31 @@ const ensureBuiltinPluginPackageCache = (options = {}) => {
       throw new Error(`Invalid built-in plugin package: ${packageName}`)
     }
 
-    const cacheVersions = ['latest', packageInfo.version]
-      .filter((version, index, versions) => versions.indexOf(version) === index)
-    return cacheVersions.map(cacheVersion =>
-      materializeBuiltinPluginPackage({
-        arch: options.arch,
-        cacheVersion,
-        homeDir,
-        packageCacheRootDir,
-        packageName,
-        platform: options.platform,
-        sourceCacheVersion: trustManifest ? sourceCacheVersion : undefined,
-        sourcePackageDir,
-        trustManifest
-      })
-    )
+    const versionCache = materializeBuiltinPluginPackage({
+      arch: options.arch,
+      cacheVersion: packageInfo.version,
+      homeDir,
+      packageCacheRootDir,
+      packageName,
+      platform: options.platform,
+      sourceCacheVersion: trustManifest ? sourceCacheVersion : undefined,
+      sourcePackageDir,
+      trustManifest
+    })
+    if (packageInfo.version === 'latest') return [versionCache]
+
+    const latestCache = linkBuiltinPluginPackageCache({
+      arch: options.arch,
+      cacheVersion: 'latest',
+      homeDir,
+      packageCacheRootDir,
+      packageName,
+      platform: options.platform,
+      sourceCacheDir: versionCache.cacheDir,
+      sourceCacheVersion: trustManifest ? sourceCacheVersion : undefined,
+      version: packageInfo.version
+    })
+    return [latestCache, versionCache]
   })
 }
 
