@@ -7,13 +7,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
+import useSWR from 'swr'
 
 import { RouteContainerHeaderActionButton } from '@oneworks/components/route-layout'
 import type { RouteContainerHeaderActionItem, RouteContainerHeaderBreadcrumb } from '@oneworks/components/route-layout'
-import { DEFAULT_ICON_THEME } from '@oneworks/icon/presets'
+import { DEFAULT_ICON_THEME, ONEWORKS_ICON_THEMES } from '@oneworks/icon/presets'
+import type { ConfigResponse } from '@oneworks/types'
 import { matchesPinyinSearch, normalizePinyinSearchQuery } from '@oneworks/utils/pinyin-search'
 
-import { getApiErrorMessage } from '#~/api'
+import { getApiErrorMessage, getConfig } from '#~/api'
 import {
   createLauncherWorkspaceInDirectory,
   forgetLauncherWorkspace,
@@ -527,7 +529,7 @@ const launcherIconBackgrounds = new Set<LauncherDesktopIconSettings['iconBackgro
   'solid',
   'textured'
 ])
-const launcherIconThemes = new Set<LauncherDesktopIconSettings['iconTheme']>(['industrial', 'metal', 'matrix'])
+const launcherIconThemes = new Set<LauncherDesktopIconSettings['iconTheme']>(ONEWORKS_ICON_THEMES)
 
 interface LauncherCommand {
   action: () => Promise<void> | void
@@ -713,14 +715,25 @@ const useLauncherIconSrc = ({
   desktopApi: Window['oneworksDesktop']
   mode: 'dark' | 'light'
 }) => {
+  const canUseApiConfig = desktopApi == null
+  const { data: configRes } = useSWR<ConfigResponse>(canUseApiConfig ? '/api/config' : null, getConfig)
+  const webIconSettings = useMemo(
+    () => normalizeLauncherIconSettings(configRes?.sources?.merged?.desktop),
+    [configRes?.sources?.merged?.desktop]
+  )
+  const webIconMode = webIconSettings.iconAppearance === 'system'
+    ? mode
+    : webIconSettings.iconAppearance
   const fallbackIconSrc = useMemo(() =>
     createOneWorksIconDataUri({
-      backgroundStyle: defaultLauncherIconSettings.iconBackground,
-      mode,
+      backgroundStyle: canUseApiConfig
+        ? webIconSettings.iconBackground
+        : defaultLauncherIconSettings.iconBackground,
+      mode: canUseApiConfig ? webIconMode : mode,
       size: 64,
-      theme: defaultLauncherIconSettings.iconTheme,
+      theme: canUseApiConfig ? webIconSettings.iconTheme : defaultLauncherIconSettings.iconTheme,
       title: 'OneWorks'
-    }), [mode])
+    }), [canUseApiConfig, mode, webIconMode, webIconSettings.iconBackground, webIconSettings.iconTheme])
   const [desktopIconSrc, setDesktopIconSrc] = useState<string>()
 
   useEffect(() => {

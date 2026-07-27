@@ -104,6 +104,11 @@ export const mountOneWorksIconLoader = (
     redraw()
   }
 
+  const resizeObserver = typeof ResizeObserver === 'undefined'
+    ? null
+    : new ResizeObserver(handleResize)
+  resizeObserver?.observe(host)
+
   const handleMediaChange = () => {
     if (disposed) return
     syncRendererOptions(core, host, canvas, renderer, options, resolveMode(options, prefersDark))
@@ -119,6 +124,7 @@ export const mountOneWorksIconLoader = (
     disposed = true
     stop()
     window.removeEventListener('resize', handleResize)
+    resizeObserver?.disconnect()
     prefersReducedMotion?.removeEventListener?.('change', handleMediaChange)
     prefersDark?.removeEventListener?.('change', handleMediaChange)
     disposeRenderer(renderer)

@@ -34,6 +34,12 @@ export const drawCanvasBackground = (renderer: CanvasRenderer, time: number): vo
     return
   }
 
+  if (theme === 'linear') {
+    ctx.fillStyle = mode === 'light' ? '#F8FAFC' : '#080A0D'
+    ctx.fillRect(0, 0, width, height)
+    return
+  }
+
   if (theme === 'metal') {
     drawMetalBackground(renderer, time)
     return

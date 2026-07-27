@@ -1,7 +1,7 @@
 export type OneWorksIconAppearance = 'system' | 'light' | 'dark'
 export type OneWorksIconBackgroundStyle = 'transparent' | 'solid' | 'textured'
 export type OneWorksIconMode = 'light' | 'dark'
-export type OneWorksIconTheme = 'metal' | 'industrial' | 'matrix'
+export type OneWorksIconTheme = 'metal' | 'industrial' | 'matrix' | 'linear'
 
 export type ColorRgb = readonly [number, number, number]
 export type Vec3 = readonly [number, number, number]
@@ -18,6 +18,7 @@ export interface MobiusProjectedPoint extends MobiusSourcePoint {
 }
 
 export interface MobiusQuad {
+  outlinePoints?: MobiusProjectedPoint[]
   points: MobiusProjectedPoint[]
   depth: number
   sortDepth: number

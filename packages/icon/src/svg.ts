@@ -1,4 +1,12 @@
-import { MOTION_LOOP_SECONDS, VIEW, createMobiusCore, themeFill, themeSolidBackgroundFill } from './core.js'
+import {
+  MOTION_LOOP_SECONDS,
+  VIEW,
+  createMobiusCore,
+  themeFill,
+  themeLinearBorder,
+  themeSolidBackgroundFill
+} from './core.js'
+import { getLinearRibbonBorderQuad, overlapLinearRibbonBorderQuad } from './linear-ribbon.js'
 import { DEFAULT_ICON_SEED, DEFAULT_ICON_SIZE, normalizeIconMode, normalizeIconTheme } from './presets.js'
 import { themeAccent } from './svg-accent.js'
 import { createBackground } from './svg-backgrounds.js'
@@ -74,14 +82,35 @@ export const createMobiusSvg = (options: OneWorksIconRenderOptions = {}): string
     )
   }
 
-  const surfacePaths = mesh.map((quad) => {
+  const surfacePaths = mesh.flatMap((quad) => {
     const fill = themeFill(theme, mode, quad.depth, quad.u, quad.v, frame)
-    return `<path d="${quadPath(quad, offset, scale)}" fill="${fill}" stroke="${fill}" stroke-width="${
+    const surfaceQuad = theme === 'linear' && quad.outlinePoints != null
+      ? { ...quad, points: quad.outlinePoints }
+      : quad
+    const fillPath = `<path d="${quadPath(surfaceQuad, offset, scale)}" fill="${fill}" stroke="${fill}" stroke-width="${
       formatNumber(Math.max(0.5, size / 512))
     }"/>`
+    const paths: string[] = []
+    paths.push(fillPath)
+    const borderQuad = theme === 'linear' ? getLinearRibbonBorderQuad(quad) : null
+    if (borderQuad != null) {
+      const expandedBorderQuad = overlapLinearRibbonBorderQuad(
+        borderQuad,
+        Math.max(0.4, size / 512) / scale
+      )
+      paths.push(
+        `<path d="${quadPath({ ...quad, points: expandedBorderQuad }, offset, scale)}" ` +
+          `fill="${themeLinearBorder(mode)}" stroke="none" data-oneworks-ribbon-border="true"/>`
+      )
+    }
+    return paths
   })
   const surfaceFilter = noBackground && shadow ? ` filter="url(#${id}-surface-shadow)"` : ''
-  body.push(`<g${surfaceFilter} shape-rendering="geometricPrecision" opacity="0.98">`, ...surfacePaths, '</g>')
+  body.push(
+    `<g${surfaceFilter} shape-rendering="geometricPrecision" opacity="0.98" data-oneworks-surface="${theme}">`,
+    ...surfacePaths,
+    '</g>'
+  )
 
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',

@@ -4886,7 +4886,8 @@
         "themeOptions": {
           "industrial": "工业",
           "metal": "金属",
-          "matrix": "矩阵"
+          "matrix": "矩阵",
+          "linear": "线性"
         }
       },
       "launcherShortcut": {

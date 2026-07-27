@@ -694,10 +694,13 @@
 
 .config-view__project-theme-radio-group {
   --config-project-theme-active-index: 0;
+  --config-project-theme-option-count: 1;
+  --config-project-theme-total-gap: 0px;
   position: relative;
   isolation: isolate;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns:
+    repeat(var(--config-project-theme-option-count), minmax(0, 1fr));
   gap: 4px;
   width: 100%;
   min-width: 0;
@@ -709,7 +712,12 @@
   z-index: 0;
   top: 0;
   left: 0;
-  width: calc((100% - 8px) / 3);
+  width: calc(
+    (
+      100% - var(--config-project-theme-total-gap)
+    ) /
+      var(--config-project-theme-option-count)
+  );
   height: 32px;
   border-radius: var(--oneworks-control-radius, 6px);
   background: var(--subpage-content-card-bg);

@@ -425,7 +425,7 @@ export interface MessageLinksConfig {
   plainWorkspacePathMode?: MessagePlainWorkspacePathMode
 }
 
-export type AppearancePrimaryColor = '#E23F12' | '#3F7E8F' | '#00B454' | '#8B9493'
+export type AppearancePrimaryColor = '#E23F12' | '#3F7E8F' | '#00B454' | '#7C8A96' | '#8B9493'
 export type AppearanceHistoryTimelineMode = 'event-line' | 'node'
 export type AppearanceThemeMode = 'system' | 'light' | 'dark'
 export type AppearanceThemePack = string
@@ -448,7 +448,7 @@ export interface AppearanceConfig {
 
 export type DesktopIconAppearance = 'system' | 'light' | 'dark'
 export type DesktopIconBackground = IconBackground
-export type DesktopIconTheme = 'industrial' | 'metal' | 'matrix'
+export type DesktopIconTheme = 'industrial' | 'metal' | 'matrix' | 'linear'
 export type DesktopUpdateChannel = 'stable' | 'rc' | 'beta' | 'alpha'
 export type DesktopModuleUpdateChannels = Record<string, DesktopUpdateChannel>
 export type DesktopContextCaptureOverlayPlacement = 'auto' | 'above' | 'below'

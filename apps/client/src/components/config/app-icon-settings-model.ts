@@ -11,7 +11,7 @@ export interface NormalizedDesktopIconSettings {
   iconTheme: DesktopIconTheme
 }
 
-export const iconThemes = ['industrial', 'metal', 'matrix'] as const satisfies readonly DesktopIconTheme[]
+export const iconThemes = ['industrial', 'metal', 'matrix', 'linear'] as const satisfies readonly DesktopIconTheme[]
 export const iconAppearances = ['system', 'light', 'dark'] as const satisfies readonly DesktopIconAppearance[]
 export const iconBackgrounds = [
   'transparent',

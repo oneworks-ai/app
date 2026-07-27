@@ -174,13 +174,13 @@ export const messageLinksConfigSchema = z.object({
     .describe('Whether plain workspace file paths in message text become links')
 })
 
-const appearancePrimaryColorSchema = z.enum(['#E23F12', '#3F7E8F', '#00B454', '#8B9493'])
+const appearancePrimaryColorSchema = z.enum(['#E23F12', '#3F7E8F', '#00B454', '#7C8A96', '#8B9493'])
 const appearanceHistoryTimelineModeSchema = z.enum(['event-line', 'node'])
 const appearanceThemeModeSchema = z.enum(['system', 'light', 'dark'])
 const appearanceThemePackSchema = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,63}$/)
 const iconBackgroundSchema = z.enum(['transparent', 'solid', 'textured'])
 const desktopIconAppearanceSchema = z.enum(['system', 'light', 'dark'])
-const desktopIconThemeSchema = z.enum(['industrial', 'metal', 'matrix'])
+const desktopIconThemeSchema = z.enum(['industrial', 'metal', 'matrix', 'linear'])
 const desktopUpdateChannelSchema = z.enum(['stable', 'rc', 'beta', 'alpha'])
 const desktopContextCaptureOverlayPlacementSchema = z.enum(['auto', 'above', 'below'])
 

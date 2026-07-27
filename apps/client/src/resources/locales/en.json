@@ -4885,7 +4885,8 @@
         "themeOptions": {
           "industrial": "Industrial",
           "metal": "Metal",
-          "matrix": "Matrix"
+          "matrix": "Matrix",
+          "linear": "Linear"
         }
       },
       "launcherShortcut": {

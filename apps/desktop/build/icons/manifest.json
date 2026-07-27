@@ -39,7 +39,8 @@
   "themes": [
     "industrial",
     "metal",
-    "matrix"
+    "matrix",
+    "linear"
   ],
   "modes": [
     "light",

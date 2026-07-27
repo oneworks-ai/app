@@ -1,3 +1,6 @@
+import { Buffer } from 'node:buffer'
+import { readFileSync } from 'node:fs'
+
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -42,8 +45,8 @@ describe('desktop icon settings', () => {
   })
 
   it('normalizes partial update patches without touching missing fields', () => {
-    expect(normalizeDesktopIconSettingsPatch({ iconTheme: 'matrix' })).toEqual({
-      iconTheme: 'matrix'
+    expect(normalizeDesktopIconSettingsPatch({ iconTheme: 'linear' })).toEqual({
+      iconTheme: 'linear'
     })
     expect(normalizeDesktopIconSettingsPatch({
       iconAppearance: 'light',
@@ -64,5 +67,31 @@ describe('desktop icon settings', () => {
     expect(resolveDesktopIconMode('system', true)).toBe('dark')
     expect(resolveDesktopIconMode('system', false)).toBe('light')
     expect(resolveDesktopIconMode('light', true)).toBe('light')
+  })
+
+  it('ships the linear runtime icon assets for every background and platform', () => {
+    const iconRoot = new URL('../build/icons/linear/', import.meta.url)
+    const backgrounds = ['', 'solid/', 'transparent/']
+    const platforms = ['', 'linux/', 'macos/', 'windows/']
+
+    for (const background of backgrounds) {
+      for (const platform of platforms) {
+        for (const mode of ['light', 'dark']) {
+          const png = readFileSync(new URL(`${background}${platform}${mode}.png`, iconRoot))
+          expect(png.subarray(0, 8)).toEqual(
+            Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+          )
+        }
+      }
+    }
+
+    expect(readFileSync(new URL('dark.svg', iconRoot), 'utf8')).toContain(
+      'data-oneworks-surface="linear"'
+    )
+    expect(
+      JSON.parse(readFileSync(new URL('../build/icons/manifest.json', import.meta.url), 'utf8'))
+    ).toMatchObject({
+      themes: expect.arrayContaining(['linear'])
+    })
   })
 })

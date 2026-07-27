@@ -49,7 +49,7 @@ export interface DesktopSettings {
   iconBackground: DesktopIconBackground
   syncAppIcon: DesktopIconSync
   iconTheme: DesktopIconTheme
-  primaryColor?: '#E23F12' | '#3F7E8F' | '#00B454' | '#8B9493'
+  primaryColor?: '#E23F12' | '#3F7E8F' | '#00B454' | '#7C8A96' | '#8B9493'
   themeMode?: 'system' | 'light' | 'dark'
   themePack?: AppearanceThemePack
   themePacks?: AppearanceThemePackConfigMap
