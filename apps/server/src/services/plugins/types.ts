@@ -97,6 +97,7 @@ export interface PluginRuntimeInstance {
   client?: PluginClientManifest & {
     clientEntryUrl?: string
     devClientEntryUrl?: string
+    devClientEntryKind?: 'dev-server' | 'host-vite' | 'runtime-source'
   }
   apis?: PluginRuntimeApiRegistration[]
   contributions?: PluginContributionManifest

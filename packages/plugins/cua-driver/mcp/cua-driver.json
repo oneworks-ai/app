@@ -7,7 +7,9 @@
     "HOME": "${ONEWORKS_REAL_HOME}",
     "USERPROFILE": "${ONEWORKS_REAL_HOME}",
     "ONEWORKS_CUA_CURSOR_STRATEGY": "${ONEWORKS_PLUGIN_OPTION:cursorColorStrategy}",
-    "ONEWORKS_CUA_DEFAULT_CURSOR_COLOR": "${ONEWORKS_PLUGIN_OPTION:defaultCursorColor}"
+    "ONEWORKS_CUA_DEFAULT_CURSOR_COLOR": "${ONEWORKS_PLUGIN_OPTION:defaultCursorColor}",
+    "ONEWORKS_CUA_DEFAULT_APPLICATION_PERMISSION": "${ONEWORKS_PLUGIN_OPTION:defaultApplicationPermission}",
+    "ONEWORKS_CUA_APPLICATION_PERMISSIONS": "${ONEWORKS_PLUGIN_OPTION:applicationPermissions}"
   },
   "default_tools_approval_mode": "approve",
   "startup_timeout_sec": 30

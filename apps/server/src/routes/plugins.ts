@@ -436,6 +436,23 @@ export function pluginsRouter(): Router {
     ctx.body = asset.stream
   })
 
+  router.get('/:scope/client-source/:assetPath(.*)', async (ctx) => {
+    const source = await getPluginManager().resolveClientSource(
+      String(ctx.params.scope ?? ''),
+      toAssetPath(ctx.params.assetPath)
+    )
+    if (source == null) {
+      throw notFound('Plugin client source not found', undefined, 'plugin_client_source_not_found')
+    }
+
+    ctx.state.skipApiEnvelope = true
+    ctx.type = 'text/javascript'
+    ctx.length = source.size
+    ctx.set('Cache-Control', 'private, no-cache')
+    ctx.set('X-Content-Type-Options', 'nosniff')
+    ctx.body = source.code
+  })
+
   router.get('/:scope/shared/:assetPath(.*)', async (ctx) => {
     const asset = await getPluginManager().resolveClientSharedAsset(
       String(ctx.params.scope ?? ''),

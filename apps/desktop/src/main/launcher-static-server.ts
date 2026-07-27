@@ -76,9 +76,13 @@ const writeText = (
   response: ServerResponse,
   statusCode: number,
   body: string,
-  contentType: string
+  contentType: string,
+  headers: Record<string, string> = {}
 ) => {
-  response.writeHead(statusCode, { 'Content-Type': contentType })
+  response.writeHead(statusCode, {
+    'Content-Type': contentType,
+    ...headers
+  })
   if (request.method === 'HEAD') {
     response.end()
     return
@@ -89,7 +93,8 @@ const writeText = (
 const sendFile = async (
   request: IncomingMessage,
   response: ServerResponse,
-  filePath: string
+  filePath: string,
+  cacheControl: string
 ) => {
   const fileStat = await stat(filePath).catch(() => null)
   if (fileStat == null || !fileStat.isFile()) {
@@ -99,7 +104,7 @@ const sendFile = async (
   response.writeHead(200, {
     'Content-Length': fileStat.size,
     'Content-Type': getContentType(filePath),
-    ...(path.basename(filePath) === 'sw.js' ? { 'Cache-Control': 'no-cache' } : {})
+    'Cache-Control': cacheControl
   })
   if (request.method === 'HEAD') {
     response.end()
@@ -162,7 +167,12 @@ const resolvePluginRuntimeProxyUrl = (requestUrl: URL) => {
       segments[1] !== 'api' ||
       segments[2] !== 'plugins' ||
       !/^[a-z\d][\w.-]*$/i.test(scope) ||
-      (segments[4] !== 'client' && segments[4] !== 'dev' && segments[4] !== 'shared') ||
+      (
+        segments[4] !== 'client' &&
+        segments[4] !== 'client-source' &&
+        segments[4] !== 'dev' &&
+        segments[4] !== 'shared'
+      ) ||
       segments.length < 6 ||
       segments[5] === ''
     ) {
@@ -299,12 +309,26 @@ export const startPackagedLauncherStaticServer = async ({
         : requestPath.slice(matchedBase.length)
       if (relativePath !== '') {
         const resolved = resolveStaticFile(distPath, relativePath)
-        if (resolved != null && await sendFile(request, response, resolved)) {
+        const cacheControl = path.basename(relativePath) === 'sw.js'
+          ? 'no-store'
+          : relativePath.startsWith('assets/')
+          ? 'public, max-age=31536000, immutable'
+          : 'no-cache'
+        if (resolved != null && await sendFile(request, response, resolved, cacheControl)) {
+          return
+        }
+        const acceptsHtml = request.headers.accept?.includes('text/html') === true
+        if (relativePath.startsWith('assets/') || !acceptsHtml) {
+          writeText(request, response, 404, 'Not Found', 'text/plain; charset=utf-8', {
+            'Cache-Control': 'no-store'
+          })
           return
         }
       }
 
-      writeText(request, response, 200, await loadIndexHtml(), 'text/html; charset=utf-8')
+      writeText(request, response, 200, await loadIndexHtml(), 'text/html; charset=utf-8', {
+        'Cache-Control': 'no-store'
+      })
     } catch (error) {
       console.error('[oneworks-client:launcher] failed to serve launcher client', error)
       writeText(request, response, 500, 'Failed to load UI', 'text/plain; charset=utf-8')

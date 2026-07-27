@@ -1089,7 +1089,12 @@ function createWorkflowService(options) {
     }
   }
 
-  return { call, getQueuedResourceCount: () => resourceQueue.size, runs }
+  const getRunBundleIds = runId =>
+    (
+      runs.get(runId)?.resource_keys ?? []
+    ).flatMap(key => typeof key === 'string' && key.startsWith('app:') ? [key.slice(4)] : [])
+
+  return { call, getQueuedResourceCount: () => resourceQueue.size, getRunBundleIds, runs }
 }
 
 module.exports = {

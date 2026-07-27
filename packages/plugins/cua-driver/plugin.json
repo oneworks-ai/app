@@ -60,11 +60,64 @@
           "x-oneworks-ui": {
             "icon": "format_color_fill"
           }
+        },
+        "defaultApplicationPermission": {
+          "type": "string",
+          "default": "always_ask",
+          "titleI18n": {
+            "en": "Default application access",
+            "zh-Hans": "默认应用访问权限"
+          },
+          "descriptionI18n": {
+            "en": "Used when an application has no explicit rule or the target application cannot be identified.",
+            "zh-Hans": "应用没有专属规则或无法识别目标应用时使用。"
+          },
+          "oneOf": [
+            {
+              "const": "always_allow",
+              "titleI18n": { "en": "No confirmation", "zh-Hans": "无需询问" }
+            },
+            {
+              "const": "always_ask",
+              "titleI18n": { "en": "Ask every time", "zh-Hans": "每次询问" }
+            },
+            {
+              "const": "deny",
+              "titleI18n": { "en": "Deny access", "zh-Hans": "拒绝访问" }
+            }
+          ]
+        },
+        "applicationPermissions": {
+          "type": "array",
+          "default": [],
+          "maxItems": 200,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["bundleId", "mode"],
+            "properties": {
+              "bundleId": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 255,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9.-]+$"
+              },
+              "name": {
+                "type": "string",
+                "maxLength": 160
+              },
+              "mode": {
+                "type": "string",
+                "enum": ["always_allow", "always_ask", "deny"]
+              }
+            }
+          }
         }
       }
     }
   },
   "plugin": {
+    "client": {},
     "server": {
       "roles": [
         "manager",
@@ -72,6 +125,23 @@
       ]
     },
     "contributions": {
+      "settingsPages": [
+        {
+          "id": "computer-use",
+          "title": "Computer Use",
+          "titleI18n": {
+            "en": "Computer Use",
+            "zh-Hans": "电脑操作"
+          },
+          "descriptionI18n": {
+            "en": "Configure computer-control behavior while keeping operating-system permissions explicit.",
+            "zh-Hans": "配置电脑控制行为；操作系统权限仍需显式授予。"
+          },
+          "group": "external-control",
+          "icon": "computer",
+          "clientView": "control"
+        }
+      ],
       "toolUsePresentations": [
         {
           "id": "execute-workflow",

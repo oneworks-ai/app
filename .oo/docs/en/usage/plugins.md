@@ -11,10 +11,31 @@ For Claude Code plugins and marketplaces, see [Adapter Native Plugins and Market
 
 ## Installation
 
-- Relay is a built-in One Works plugin enabled by default and can be disabled through explicit plugin config. It is not duplicated in the marketplace install list.
+- Relay, the in-app browser driver (IAB), the external Chrome Driver, and the computer-use driver (CUA) are built-in One Works plugins enabled by default. External Chrome and CUA settings live in the shared External Control group. CUA supports per-bundle-id policies for no confirmation, ask every time, or deny access; unmatched apps ask every time by default.
 - Built-in One Works plugins resolve from the global package cache at the version declared by the runtime. Missing packages are installed into that cache.
 - Other plugins are installed into your project workspace through npm or referenced by directory path. Resolution failure is an error.
 - `id` supports shorthand. For example, `logger` first resolves as `logger`, then as `@oneworks/plugin-logger`; legacy `@vibe-forge/plugin-logger` remains a compatibility fallback.
+
+Disable a host driver explicitly when a workspace does not need it. This does not remove the plugin from the desktop package:
+
+```json
+{
+  "plugins": [
+    {
+      "id": "@oneworks/plugin-browser-driver",
+      "enabled": false
+    },
+    {
+      "id": "@oneworks/plugin-chrome-driver",
+      "enabled": false
+    },
+    {
+      "id": "@oneworks/plugin-cua-driver",
+      "enabled": false
+    }
+  ]
+}
+```
 
 Standard Development remains available as a standalone npm package for existing configurations, but the official marketplace no longer exposes a second top-level entry. New configurations should enable the optional `standard-dev` child of `@oneworks/plugin-demo`.
 

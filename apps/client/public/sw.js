@@ -1,8 +1,10 @@
 const CACHE_PREFIX = 'oneworks-web'
-const CACHE_VERSION = 'v4'
+const serviceWorkerGlobal = globalThis
+const scriptUrl = new URL(serviceWorkerGlobal.location.href)
+const buildVersion = scriptUrl.searchParams.get('v')?.trim().replace(/[^\w.-]/g, '-')
+const CACHE_VERSION = buildVersion ? `v5-${buildVersion}` : 'v5'
 const APP_CACHE = `${CACHE_PREFIX}-app-${CACHE_VERSION}`
 const STATIC_CACHE = `${CACHE_PREFIX}-static-${CACHE_VERSION}`
-const serviceWorkerGlobal = globalThis
 
 const appScopeUrl = new URL(serviceWorkerGlobal.registration.scope)
 

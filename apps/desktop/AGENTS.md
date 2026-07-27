@@ -51,7 +51,7 @@
   - 签名开关
   - macOS 双架构 `latest-mac.yml` 合并
 - `scripts/smoke-packaged-server.cjs`
-  - 包内 server smoke test 契约；除基础 server 探活外，还必须确认默认内置 Relay 的生产入口存在、runtime 已激活且没有 diagnostics
+  - 包内 server smoke test 契约；除基础 server 探活外，还必须确认默认内置 Relay、IAB、Chrome Driver 和 CUA 的生产入口存在、runtime 已激活且没有 diagnostics
 - `electron-builder.yml`
   - 目标平台、artifact 命名、GitHub publish 配置
 - `build/app-update.yml`
@@ -76,7 +76,8 @@
 - macOS 会话右键“在新窗口打开”应创建同风格 workspace 窗口，并通过 URL 参数让左侧栏默认折叠。
 - 最小窗口宽度当前支持到 `300px`；改 header / nav / sender 布局时要验证这个尺寸，不要只看大窗口。
 - `pnpm desktop:package`、`pnpm desktop:make` 仍依赖静态 client dist，并默认先构建 client。
-- `pnpm desktop:package` / `package:icon` 必须先运行 `build:plugins`，为 `BUILTIN_PLUGIN_PACKAGES` 中带生产 client/server entry 的插件准备 `dist`。Relay 默认内置后，正式包至少要包含 `dist/client/index.js`、`dist/server/index.js` 与 config 的 CJS/ESM 产物；只把 workspace package overlay 进 staging 不能替代构建。
+- `pnpm desktop:package` / `package:icon` 必须先运行 `build:plugins`，为 `BUILTIN_PLUGIN_PACKAGES` 中带生产 client/server entry 的插件准备 `dist`。Chrome Driver 必须包含 client/server 产物，Relay 必须包含 client/server 与 config 的 CJS/ESM 产物；只把 workspace package overlay 进 staging 不能替代构建。
+- `BUILTIN_PLUGIN_PACKAGES` 必须与 `apps/desktop/package.json` 的 production dependencies、`packages/utils/src/plugin-resolver.ts` 的默认官方插件，以及 `apps/server/src/services/plugins/discovery.ts` 的宿主来源归类保持一致。Browser Driver 与 Cua Driver 是桌面默认内置能力；源码仓库可用同 manifest `name` 的 directory plugin 覆盖内置副本以继续 watch 调试，但不能同时生成两个运行实例。
 - macOS `.pkg` 安装向导包通过 `pnpm desktop:make:pkg` 或 `node apps/desktop/scripts/make.cjs --target pkg` 生成；`ONEWORKS_DESKTOP_MAKE_TARGETS` 只作为 CI / 临时覆盖入口，不作为用户文档里的主要入口。
 - 当前 GitHub `desktop-package` workflow 先收口 macOS：生成 `arm64,x64` 预打包 app 与 `.dmg` / `.pkg` / `.zip`，再挂载 `arm64` `.dmg`、复制安装到 `/Applications`，并从已安装 app 跑 smoke。Windows / Linux builder 目标保留，但暂时不作为 CI gate。
 - 桌面图标资产来自 `assets/icon` submodule；更新 submodule 后运行 `pnpm desktop:icons:sync`，默认根图标是工业风格。macOS package / make 默认 `--mac-icon auto`，只有完整 Xcode 26+ 的 `actool` 支持 Icon Composer 时才启用 `.icon` / `Assets.car`，否则继续使用 `.icns`；显式验证可用 `pnpm desktop:make:pkg:icon`。
@@ -133,8 +134,8 @@
   - `pnpm desktop:make` 负责基于 prepackaged app 生成安装 / 分发产物
     这两段混在一起排查时最容易看错问题发生层级。
 - 当用户要求本地编译桌面包时，先询问是否需要自动安装验证；确认后先完成本地构建与 `pnpm -C apps/desktop smoke:package`，再用 `ditto "apps/desktop/out/One Works Dev-darwin-arm64/One Works Dev.app" "/Applications/One Works Dev.app"` 覆盖安装 Dev 版并校验 bundle metadata。默认不要卸载或覆盖正式 `/Applications/One Works.app`。
-- GitHub 普通 PR / main artifact 和本地构建一样使用 `One Works Dev` 身份；只有 `pkg/oneworks-desktop/v*` release 或手动 release 输入会通过 `ONEWORKS_DESKTOP_RELEASE_BUILD=true` 切回正式 `One Works` 身份。
-- 非 release 桌面包会注入 `desktop-build-source.json`，由配置页“关于 / 应用来源”展示 git hash、分支和构建时间；正式 release 包必须保持不注入，避免稳定版本出现开发来源信息。
+- GitHub 普通 PR / main artifact 和默认本地构建一样使用 `One Works Dev` 身份；`pkg/oneworks-desktop/v*` release、手动 release 输入或明确的本地 production 验证可以通过 `ONEWORKS_DESKTOP_RELEASE_BUILD=true` 切到正式 `One Works` 身份，但本地 production 验证不能冒充官方不可变发布。
+- 本地或普通 CI 桌面包会注入 `desktop-build-source.json`，由配置页“关于 / 应用来源”展示 git hash、分支、构建时间和唯一 runtime cacheVersion；即使本地显式使用正式 `One Works` 身份，也必须保留该文件，避免同一 semver 的连续本地 production 构建复用旧 client/server/plugin。只有带 `ONEWORKS_DESKTOP_OFFICIAL_RELEASE_BUILD=true` 的官方 tag / release workflow 产物才不注入，继续按不可变 semver 复用缓存。
 - macOS 双架构打包依赖 `scripts/make.cjs` 在 release 目录里合并 `latest-mac.yml`；改动多架构逻辑后，要确认最终只留下一个对外使用的 `latest-mac.yml`。
 - 包内 server 是否真的可启动，不要只看 Electron 能不能打开窗口；优先跑 `pnpm -C apps/desktop smoke:package`，让 packaged server 真正响应 `/api/auth/status`。
 - `node-pty`、`node-notifier` 这类平台相关依赖会直接影响包体大小和运行稳定性；改 native 依赖或目标架构时，要连同 `scripts/package.cjs` 里的裁剪逻辑一起验证。

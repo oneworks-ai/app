@@ -9,6 +9,10 @@
   },
   "exports": {
     ".": "./plugin.json",
+    "./client": {
+      "source": "./client/src/index.tsx",
+      "default": "./client/dist/index.js"
+    },
     "./server": {
       "source": "./server/src/index.ts",
       "default": "./server/dist/index.js"
@@ -24,6 +28,7 @@
     "README.md",
     "assets",
     "bin",
+    "client/dist",
     "mcp",
     "plugin.json",
     "resources",
@@ -32,7 +37,8 @@
     "skills"
   ],
   "scripts": {
-    "build": "pnpm run build:server",
+    "build": "pnpm run build:client && pnpm run build:server",
+    "build:client": "tsc -p client/tsconfig.json --noEmit && vite build --config client/vite.config.ts",
     "build:server": "tsc -p server/tsconfig.json",
     "postinstall": "node scripts/postinstall.cjs",
     "prepublish": "pnpm build",
@@ -42,5 +48,8 @@
   "dependencies": {
     "@oneworks/cursor": "workspace:*",
     "proper-lockfile": "4.1.2"
+  },
+  "devDependencies": {
+    "vite": "^5.4.8"
   }
 }

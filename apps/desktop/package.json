@@ -12,7 +12,7 @@
   "scripts": {
     "build:electron": "electron-vite build --config electron.vite.config.ts --outDir dist --ignoreConfigWarning",
     "build:client": "pnpm -C ../client exec vite build",
-    "build:plugins": "pnpm --filter @oneworks/plugin-relay build",
+    "build:plugins": "pnpm --filter @oneworks/plugin-chrome-driver --filter @oneworks/plugin-cua-driver --filter @oneworks/plugin-relay build",
     "dev": "pnpm run build:electron && electron .",
     "icons:sync": "node ./scripts/sync-icons.cjs",
     "make": "pnpm run package && node ./scripts/make.cjs",
@@ -41,6 +41,9 @@
     "@oneworks/config": "workspace:*",
     "@oneworks/cursor": "workspace:*",
     "@oneworks/icon": "workspace:*",
+    "@oneworks/plugin-browser-driver": "workspace:*",
+    "@oneworks/plugin-chrome-driver": "workspace:*",
+    "@oneworks/plugin-cua-driver": "workspace:*",
     "@oneworks/plugin-logger": "workspace:*",
     "@oneworks/plugin-relay": "workspace:*",
     "@oneworks/register": "workspace:*",

@@ -3,7 +3,7 @@ const crypto = require('node:crypto')
 const fs = require('node:fs')
 const path = require('node:path')
 
-const { isReleaseBuild } = require('./desktop-app-metadata.cjs')
+const { isOfficialReleaseBuild } = require('./desktop-app-metadata.cjs')
 
 const DESKTOP_BUILD_SOURCE_FILE = 'desktop-build-source.json'
 const RUNTIME_PACKAGE_CACHE_VERSION_PATTERN = /^[\w.+-]+$/
@@ -89,7 +89,7 @@ const resolveDesktopBuildSource = ({
   now = () => new Date(),
   runGitCommand = runGit
 } = {}) => {
-  if (isReleaseBuild(env)) {
+  if (isOfficialReleaseBuild(env)) {
     return undefined
   }
 

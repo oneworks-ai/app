@@ -2,6 +2,7 @@ const { spawn } = require('node:child_process')
 const fs = require('node:fs')
 const http = require('node:http')
 const net = require('node:net')
+const os = require('node:os')
 const path = require('node:path')
 
 const { resolveProjectHomePath } = require('@oneworks/register/dotenv')
@@ -22,10 +23,28 @@ const serverReadyTimeoutMs = (() => {
   return value
 })()
 
-const createWorkspaceRuntimeEnv = (runtimePackageCacheVersion, runtimePackageBuildFingerprint) => {
+const createWorkspaceRuntimeEnv = (
+  runtimePackageCacheVersion,
+  runtimePackageBuildFingerprint,
+  workspaceFolder,
+  realHomeDir,
+  packageCacheRootDir
+) => {
   const env = { ...process.env }
   delete env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__
-  env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__ = workspaceRoot
+  env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__ = workspaceFolder
+  if (realHomeDir != null) {
+    delete env.__ONEWORKS_DESKTOP_BUILTIN_ADAPTER_PACKAGES__
+    delete env.__ONEWORKS_DESKTOP_SERVER_PACKAGE_DIR__
+    delete env.__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__
+    delete env.__ONEWORKS_PROJECT_PACKAGE_DIR__
+    delete env.__ONEWORKS_RUNTIME_PROTOCOL_CONSUMER_CLI_PATH__
+    delete env.__ONEWORKS_RUNTIME_PROTOCOL_FALLBACK_BOOTSTRAP_PATH__
+    env.__ONEWORKS_PROJECT_REAL_HOME__ = realHomeDir
+  }
+  if (packageCacheRootDir != null) {
+    env.__ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__ = packageCacheRootDir
+  }
   if (runtimePackageCacheVersion != null) {
     env.__ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION__ = runtimePackageCacheVersion
     env.__ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION__ = runtimePackageCacheVersion
@@ -88,19 +107,47 @@ const firstExistingPath = (...candidates) => {
   return found
 }
 
-const assertPackagedRelayPlugin = (appDir) => {
-  const packageDir = path.join(appDir, 'node_modules', '@oneworks', 'plugin-relay')
-  const requiredPaths = [
+const packagedBuiltinPluginRequirements = {
+  '@oneworks/plugin-browser-driver': [
+    'package.json',
+    'plugin.json',
+    'bin/browser-driver.cjs',
+    'mcp/browser-driver.json',
+    'skills/browser-driver/SKILL.md'
+  ],
+  '@oneworks/plugin-chrome-driver': [
+    'package.json',
+    'plugin.json',
+    'client/dist/index.js',
+    'server/dist/index.js',
+    'extension/manifest.json',
+    'mcp/chrome-driver.json',
+    'skills/chrome-driver/SKILL.md'
+  ],
+  '@oneworks/plugin-cua-driver': [
+    'package.json',
+    'plugin.json',
+    'bin/cua-driver.cjs',
+    'mcp/cua-driver.json',
+    'server/dist/index.js',
+    'skills/cua-driver/SKILL.md'
+  ],
+  '@oneworks/plugin-relay': [
     'package.json',
     'dist/client/index.js',
     'dist/config.cjs',
     'dist/config.js',
     'dist/server/index.js'
   ]
-  const missingPaths = requiredPaths.filter(relativePath => !fs.existsSync(path.join(packageDir, relativePath)))
-  if (missingPaths.length > 0) {
+}
+
+const assertPackagedBuiltinPlugins = (appDir) => {
+  for (const [packageName, requiredPaths] of Object.entries(packagedBuiltinPluginRequirements)) {
+    const packageDir = path.join(appDir, 'node_modules', ...packageName.split('/'))
+    const missingPaths = requiredPaths.filter(relativePath => !fs.existsSync(path.join(packageDir, relativePath)))
+    if (missingPaths.length === 0) continue
     throw new Error(
-      `Packaged Relay plugin is missing production entries:\n${
+      `Packaged built-in plugin ${packageName} is missing production entries:\n${
         missingPaths.map(relativePath => path.join(packageDir, relativePath)).join('\n')
       }`
     )
@@ -210,11 +257,11 @@ const waitForServer = ({ logPath, port, startedAt = Date.now() }) =>
     request.once('error', retry)
   })
 
-const readPluginCatalog = port =>
+const readServerText = (port, requestPath, label) =>
   new Promise((resolve, reject) => {
     const request = http.get({
       hostname: host,
-      path: '/api/plugins',
+      path: requestPath,
       port,
       timeout: 5000
     }, (response) => {
@@ -225,70 +272,204 @@ const readPluginCatalog = port =>
       })
       response.on('end', () => {
         if (response.statusCode !== 200) {
-          reject(new Error(`Packaged plugin catalog returned HTTP ${response.statusCode}: ${body}`))
+          reject(new Error(`${label} returned HTTP ${response.statusCode}: ${body}`))
           return
         }
-        try {
-          resolve(JSON.parse(body))
-        } catch {
-          reject(new Error(`Packaged plugin catalog returned invalid JSON: ${body}`))
-        }
+        resolve(body)
       })
     })
     request.once('timeout', () => {
-      request.destroy(new Error('Packaged plugin catalog request timed out.'))
+      request.destroy(new Error(`${label} request timed out.`))
     })
     request.once('error', reject)
   })
 
-const assertRelayRuntimeActive = (catalog) => {
-  const plugins = Array.isArray(catalog?.data?.plugins)
+const readPluginCatalog = async (port) => {
+  const body = await readServerText(port, '/api/plugins', 'Packaged plugin catalog')
+  try {
+    return JSON.parse(body)
+  } catch {
+    throw new Error(`Packaged plugin catalog returned invalid JSON: ${body}`)
+  }
+}
+
+const getCatalogPlugins = catalog => (
+  Array.isArray(catalog?.data?.plugins)
     ? catalog.data.plugins
     : Array.isArray(catalog?.plugins)
     ? catalog.plugins
     : []
+)
+
+const getCatalogDiagnostics = catalog => [
+  ...(Array.isArray(catalog?.diagnostics) ? catalog.diagnostics : []),
+  ...(Array.isArray(catalog?.data?.diagnostics) ? catalog.data.diagnostics : [])
+]
+
+const assertBuiltinRuntimeActive = (catalog, options = {}) => {
+  const catalogDiagnostics = getCatalogDiagnostics(catalog)
+  if (catalogDiagnostics.length > 0) {
+    throw new Error(`Packaged plugin catalog reported diagnostics: ${JSON.stringify(catalogDiagnostics)}`)
+  }
+
+  const plugins = getCatalogPlugins(catalog)
+  const requiredPackageIds = [
+    '@oneworks/plugin-browser-driver',
+    '@oneworks/plugin-chrome-driver',
+    '@oneworks/plugin-cua-driver',
+    '@oneworks/plugin-relay'
+  ]
+  for (const packageId of requiredPackageIds) {
+    const plugin = plugins.find(candidate => candidate?.packageId === packageId || candidate?.name === packageId)
+    if (plugin == null) {
+      const packageIds = plugins.map(candidate => candidate?.packageId ?? candidate?.name ?? candidate?.scope)
+        .filter(Boolean)
+      throw new Error(
+        `Packaged plugin catalog does not contain default plugin ${packageId}. ` +
+          `Found: ${JSON.stringify(packageIds)}`
+      )
+    }
+    if (plugin.enabled !== true) {
+      throw new Error(`Packaged default plugin ${packageId} is present but not enabled.`)
+    }
+    if (Array.isArray(plugin.diagnostics) && plugin.diagnostics.length > 0) {
+      throw new Error(
+        `Packaged default plugin ${packageId} reported diagnostics: ${JSON.stringify(plugin.diagnostics)}`
+      )
+    }
+    if (options.requireBuiltInSource === true && plugin.sourceGroup !== 'builtIn') {
+      throw new Error(
+        `Packaged default plugin ${packageId} was not attributed to the host: ${JSON.stringify(plugin)}`
+      )
+    }
+  }
+
   const relay = plugins.find(plugin => plugin?.packageId === '@oneworks/plugin-relay')
-  if (relay == null) {
-    const packageIds = plugins.map(plugin => plugin?.packageId ?? plugin?.scope).filter(Boolean)
-    throw new Error(
-      `Packaged plugin catalog does not contain the default Relay plugin. Found: ${JSON.stringify(packageIds)}`
-    )
-  }
-  if (relay.enabled !== true) {
-    throw new Error('Packaged Relay plugin is present but not enabled.')
-  }
-  if (Array.isArray(relay.diagnostics) && relay.diagnostics.length > 0) {
-    throw new Error(`Packaged Relay plugin reported diagnostics: ${JSON.stringify(relay.diagnostics)}`)
-  }
   if (relay.client?.clientEntryUrl == null) {
     throw new Error('Packaged Relay plugin did not expose its client production entry.')
   }
+}
 
-  const cua = plugins.find(plugin => plugin?.name === '@oneworks/plugin-cua-driver')
-  if (cua == null) {
-    throw new Error('Packaged workspace did not discover the configured CUA plugin.')
-  }
-  if (cua.enabled !== true) {
-    throw new Error(
-      `Packaged CUA plugin is present but not enabled: ${JSON.stringify(cua.diagnostics ?? [])}`
+const assertLocalClientSourcesCompile = async (catalog, port) => {
+  const requiredScopes = [
+    'china-red-theme',
+    'neo-workshop-theme',
+    'focus-workbench-theme',
+    'warm-cowork-theme',
+    'chrome',
+    'demo',
+    'demo-extension'
+  ]
+  const plugins = getCatalogPlugins(catalog)
+  for (const scope of requiredScopes) {
+    const plugin = plugins.find(candidate => candidate?.scope === scope)
+    if (plugin == null) {
+      throw new Error(`Packaged workspace did not discover watched local plugin "${scope}".`)
+    }
+    const entryUrl = plugin.client?.devClientEntryUrl
+    if (
+      plugin.watch?.enabled !== true ||
+      plugin.client?.devClientEntryKind !== 'runtime-source' ||
+      typeof entryUrl !== 'string' ||
+      !entryUrl.startsWith(`/api/plugins/${scope}/client-source/`)
+    ) {
+      throw new Error(
+        `Packaged local plugin "${scope}" did not expose its compiled source entry: ${JSON.stringify(plugin)}`
+      )
+    }
+    const versionedEntryUrl = entryUrl.replace('/client-source/', '/client-source/@v/desktop-smoke/')
+    const source = await readServerText(
+      port,
+      `${versionedEntryUrl}?pluginVersion=desktop-smoke`,
+      `Packaged local plugin source "${scope}"`
     )
-  }
-  if (Array.isArray(cua.diagnostics) && cua.diagnostics.length > 0) {
-    throw new Error(`Packaged CUA plugin reported diagnostics: ${JSON.stringify(cua.diagnostics)}`)
+    if (!source.includes('activatePlugin')) {
+      throw new Error(`Packaged local plugin source "${scope}" is not an executable plugin module.`)
+    }
   }
 }
 
-const main = async () => {
-  const paths = resolvePackagedPaths()
-  assertPackagedRelayPlugin(paths.appDir)
+const readPackageInfo = (packageDir) => {
+  const packageInfoPath = path.join(packageDir, 'package.json')
+  const parsed = JSON.parse(fs.readFileSync(packageInfoPath, 'utf8'))
+  if (typeof parsed.name !== 'string' || typeof parsed.version !== 'string') {
+    throw new TypeError(`Packaged plugin has invalid package metadata: ${packageInfoPath}`)
+  }
+  return {
+    name: parsed.name,
+    version: parsed.version
+  }
+}
+
+const sanitizePackageName = packageName => packageName.replace(/^@/, '').replace(/[\\/]/g, '__')
+
+const assertIsolatedBuiltinPluginCache = (appDir, packageCacheRootDir) => {
+  for (
+    const packageName of [
+      '@oneworks/plugin-browser-driver',
+      '@oneworks/plugin-chrome-driver',
+      '@oneworks/plugin-cua-driver'
+    ]
+  ) {
+    const packagedPluginDir = path.join(appDir, 'node_modules', ...packageName.split('/'))
+    const packageInfo = readPackageInfo(packagedPluginDir)
+    for (const cacheVersion of ['latest', packageInfo.version]) {
+      const cacheDir = path.join(
+        packageCacheRootDir,
+        'npm',
+        sanitizePackageName(packageName),
+        cacheVersion
+      )
+      const cachedPluginDir = path.join(cacheDir, 'node_modules', ...packageName.split('/'))
+      const manifestPath = path.join(cacheDir, '.oneworks-package-cache.json')
+      if (!fs.existsSync(cachedPluginDir) || !fs.existsSync(manifestPath)) {
+        throw new Error(`Packaged built-in plugin was not materialized in isolated cache: ${cacheDir}`)
+      }
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+      if (
+        manifest.cacheVersion !== cacheVersion ||
+        manifest.name !== packageName ||
+        manifest.source !== 'builtin' ||
+        manifest.version !== packageInfo.version
+      ) {
+        throw new Error(`Invalid isolated built-in plugin cache manifest: ${JSON.stringify(manifest)}`)
+      }
+      const cachedPackageInfo = readPackageInfo(cachedPluginDir)
+      if (cachedPackageInfo.name !== packageName || cachedPackageInfo.version !== packageInfo.version) {
+        throw new Error(`Isolated built-in plugin cache contains the wrong package: ${cachedPluginDir}`)
+      }
+    }
+  }
+}
+
+const runPackagedServerSmoke = async ({
+  assertCatalog,
+  envOverrides,
+  packageCacheRootDir,
+  paths,
+  realHomeDir,
+  smokeLabel,
+  workspaceFolder
+}) => {
   const port = await getAvailablePort()
-  const workspaceEnv = createWorkspaceRuntimeEnv(
-    paths.runtimePackageCacheVersion,
-    paths.runtimePackageBuildFingerprint
+  const workspaceEnv = {
+    ...createWorkspaceRuntimeEnv(
+      paths.runtimePackageCacheVersion,
+      paths.runtimePackageBuildFingerprint,
+      workspaceFolder,
+      realHomeDir,
+      packageCacheRootDir
+    ),
+    ...envOverrides
+  }
+  const smokeRoot = resolveProjectHomePath(
+    workspaceFolder,
+    workspaceEnv,
+    '.local',
+    `desktop-smoke-${smokeLabel}`
   )
-  const smokeRoot = resolveProjectHomePath(workspaceRoot, workspaceEnv, '.local', 'desktop-smoke')
   const dataDir = path.join(smokeRoot, 'data')
-  const logDir = resolveProjectHomePath(workspaceRoot, workspaceEnv, 'logs', 'desktop-smoke')
+  const logDir = resolveProjectHomePath(workspaceFolder, workspaceEnv, 'logs', `desktop-smoke-${smokeLabel}`)
   fs.rmSync(smokeRoot, { recursive: true, force: true })
   fs.rmSync(logDir, { recursive: true, force: true })
   fs.mkdirSync(dataDir, { recursive: true })
@@ -297,7 +478,7 @@ const main = async () => {
   const logPath = path.join(logDir, 'server.log')
   const logStream = fs.createWriteStream(logPath)
   const child = spawn(paths.executablePath, [path.join(paths.appDir, 'src/server-child.cjs')], {
-    cwd: workspaceRoot,
+    cwd: workspaceFolder,
     env: {
       ...workspaceEnv,
       DB_PATH: path.join(smokeRoot, 'db.sqlite'),
@@ -331,14 +512,59 @@ const main = async () => {
       exitPromise
     ])
     if (result instanceof Error) throw result
-    assertRelayRuntimeActive(await readPluginCatalog(port))
-    console.log(result)
+    const pluginCatalog = await readPluginCatalog(port)
+    await assertCatalog(pluginCatalog, port)
+    return result
   } finally {
     if (!child.killed) {
       child.kill('SIGTERM')
     }
     logStream.end()
   }
+}
+
+const main = async () => {
+  const paths = resolvePackagedPaths()
+  assertPackagedBuiltinPlugins(paths.appDir)
+
+  const sourceResult = await runPackagedServerSmoke({
+    assertCatalog: async (pluginCatalog, port) => {
+      assertBuiltinRuntimeActive(pluginCatalog)
+      await assertLocalClientSourcesCompile(pluginCatalog, port)
+    },
+    paths,
+    smokeLabel: 'source-workspace',
+    workspaceFolder: workspaceRoot
+  })
+
+  const emptyRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'oneworks-desktop-builtin-smoke-'))
+  const emptyWorkspace = path.join(emptyRoot, 'workspace')
+  const isolatedHome = path.join(emptyRoot, 'home')
+  const isolatedPackageCacheRoot = path.join(isolatedHome, '.oneworks', 'bootstrap')
+  fs.mkdirSync(emptyWorkspace, { recursive: true })
+  fs.mkdirSync(isolatedHome, { recursive: true })
+  try {
+    await runPackagedServerSmoke({
+      assertCatalog: async pluginCatalog =>
+        assertBuiltinRuntimeActive(
+          pluginCatalog,
+          { requireBuiltInSource: true }
+        ),
+      envOverrides: {
+        __ONEWORKS_PROJECT_DISABLE_GLOBAL_CONFIG__: '1'
+      },
+      packageCacheRootDir: isolatedPackageCacheRoot,
+      paths,
+      realHomeDir: isolatedHome,
+      smokeLabel: 'empty-workspace',
+      workspaceFolder: emptyWorkspace
+    })
+    assertIsolatedBuiltinPluginCache(paths.appDir, isolatedPackageCacheRoot)
+  } finally {
+    fs.rmSync(emptyRoot, { recursive: true, force: true })
+  }
+
+  console.log(sourceResult)
 }
 
 main().catch((error) => {

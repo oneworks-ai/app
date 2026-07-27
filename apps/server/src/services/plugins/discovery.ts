@@ -15,6 +15,9 @@ import { buildConfigJsonVariables, loadConfigState } from '#~/services/config/in
 
 const pluginConfigKey = (plugin: { id: string; scope?: string }) => `${plugin.id}\0${plugin.scope ?? ''}`
 const bundledOfficialPluginPackageIds = new Set([
+  '@oneworks/plugin-browser-driver',
+  '@oneworks/plugin-chrome-driver',
+  '@oneworks/plugin-cua-driver',
   '@oneworks/plugin-demo',
   '@oneworks/plugin-demo-extension',
   '@oneworks/plugin-logger',
@@ -143,6 +146,7 @@ export const discoverPluginInstances = async () => {
     workspaceFolder,
     projectHome: resolveProjectHomePath(workspaceFolder, process.env),
     jsonVariables: buildConfigJsonVariables(workspaceFolder),
+    managedPluginRoots: [...managedSourceGroups.keys()],
     instances
   }
 }

@@ -13,6 +13,9 @@ import { buildPluginConfigUiSchema } from './plugin-config-json-schema'
 import { createPluginSettingsOptionsSaveController } from './plugin-settings-options-save'
 
 type SettingsPageContribution = PluginContributionSettingsPage & { pluginScope: string }
+type SchemaSettingsPageContribution =
+  | Extract<SettingsPageContribution, { pluginConfig: true }>
+  | Extract<SettingsPageContribution, { schema: Record<string, unknown> }>
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
@@ -24,7 +27,7 @@ function PluginSettingsSchemaPage({
   page,
   plugin
 }: {
-  page: Extract<SettingsPageContribution, { schema: Record<string, unknown> }>
+  page: SchemaSettingsPageContribution
   plugin: PluginRuntimeInstance
 }) {
   const { message } = App.useApp()
@@ -32,11 +35,17 @@ function PluginSettingsSchemaPage({
   const { pluginServerBaseUrl, refreshPlugins } = usePluginContext()
   const initialOptions = useMemo(() => normalizeOptions(plugin.options), [plugin.options])
   const [draftOptions, setDraftOptions] = useState(initialOptions)
-  const schema = useMemo(() =>
-    buildPluginConfigUiSchema({
+  const configManifest = page.pluginConfig === true
+    ? plugin.manifest?.config
+    : {
       schema: page.schema,
       uiSchema: page.uiSchema
-    }, i18n.resolvedLanguage ?? i18n.language), [i18n.language, i18n.resolvedLanguage, page.schema, page.uiSchema])
+    }
+  const schema = useMemo(() =>
+    buildPluginConfigUiSchema(
+      configManifest,
+      i18n.resolvedLanguage ?? i18n.language
+    ), [configManifest, i18n.language, i18n.resolvedLanguage])
 
   const saveControllerRef = useRef<ReturnType<typeof createPluginSettingsOptionsSaveController>>()
   if (saveControllerRef.current == null) {
@@ -102,7 +111,7 @@ export function PluginSettingsPage({ page }: { page: SettingsPageContribution })
       />
     )
   }
-  if ('schema' in page && isRecord(page.schema)) {
+  if (page.pluginConfig === true || ('schema' in page && isRecord(page.schema))) {
     return <PluginSettingsSchemaPage page={page} plugin={plugin} />
   }
   return null

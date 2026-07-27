@@ -1,8 +1,10 @@
+import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 
 import { describe, expect, it } from 'vitest'
 
 const require = createRequire(import.meta.url)
+const workspaceManifest = readFileSync(new URL('../../../pnpm-workspace.yaml', import.meta.url), 'utf8')
 
 const desktopPackageJson = require('../package.json') as {
   dependencies?: Record<string, string>
@@ -26,6 +28,9 @@ const bundledAdapterPackages = [
 ]
 
 const bundledPluginPackages = [
+  '@oneworks/plugin-browser-driver',
+  '@oneworks/plugin-chrome-driver',
+  '@oneworks/plugin-cua-driver',
   '@oneworks/plugin-logger',
   '@oneworks/plugin-relay'
 ]
@@ -47,9 +52,13 @@ describe('desktop runtime dependencies', () => {
     )
     expect(BUILTIN_PLUGIN_PACKAGES).toEqual(bundledPluginPackages)
     expect(desktopPackageJson.scripts?.['build:plugins']).toBe(
-      'pnpm --filter @oneworks/plugin-relay build'
+      'pnpm --filter @oneworks/plugin-chrome-driver --filter @oneworks/plugin-cua-driver ' +
+        '--filter @oneworks/plugin-relay build'
     )
     expect(desktopPackageJson.scripts?.package).toContain('pnpm run build:plugins')
+    expect(workspaceManifest).toContain(
+      "'@oneworks/plugin-cua-driver@file:packages/plugins/cua-driver': true"
+    )
   })
 
   it('ships the Relay presentation icon in the built-in plugin package', () => {

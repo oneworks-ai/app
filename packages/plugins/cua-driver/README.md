@@ -15,6 +15,7 @@
 - 过程化 `execute_workflow`：一次提交可预测的串行步骤，在运行时自动刷新窗口状态、解析语义目标、等待并验证；只在 checkpoint、失败或完成时返回
 - `execute_workflows`：不同 App 的独立工作流可并行推进，同一 App 仍严格串行，点击动作继续受全局光标事务保护
 - `resume_workflow` 与 `get_workflow_step_results`：断点恢复，以及通过 `run_id + step_id` 渐进查询步骤详情
+- 按 macOS Bundle ID 配置应用操作权限：无需询问、每次询问或拒绝访问
 - 通过通用 `toolUsePresentations` 贡献为工具调用提供本地化标题、操作图标、摘要目标和结构化展开内容
 
 ## 安装与启用
@@ -44,7 +45,9 @@ macOS 非 CI 环境安装 package 时，会 best-effort 安装官方签名的 `C
 ONEWORKS_CUA_DRIVER_SKIP_POSTINSTALL=1 pnpm install
 ```
 
-正常使用无需手动准备环境。agent 只需调用 `cua-driver` skill；插件会在 MCP 工具可用前自动安装缺失组件、准备后台服务、检查权限，并启用 Agent 虚拟指针。默认会按 OneWorks 会话稳定分配不同颜色；用户可在插件详情的「配置」页切换为固定默认色，agent 也可为当前会话传入任意合法十六进制颜色。每个 workflow 未传 `cursor_start` 时会从主屏中心开始；Agent 可传入主屏逻辑坐标，或在低层恢复流程中调用 `set_session_cursor_start` 配置下一次指针动作的起点。CUA 负责选择颜色和决定何时应用光标；共享的 `@oneworks/cursor` 包负责生成带圆角和对比边框的安全 SVG。`ensure` 仅保留为诊断或修复命令：
+正常使用无需手动准备环境。agent 只需调用 `cua-driver` skill；插件会在 MCP 工具可用前自动安装缺失组件、准备后台服务、检查权限，并启用 Agent 虚拟指针。用户可在 One Works「设置 → 外部控制 → 电脑操作」中按 Bundle ID 配置应用权限；未匹配或无法识别的目标默认每次询问。每次询问以一个 MCP 工具调用为单位，批量 workflow 涉及多个应用时合并为一次确认；显式拒绝会在启动、聚焦、检查或输入动作前失败关闭。修改对新启动的 CUA 工具会话生效。
+
+默认会按 OneWorks 会话稳定分配不同颜色；用户也可在同一设置页切换为固定默认色，agent 仍可为当前会话传入任意合法十六进制颜色。每个 workflow 未传 `cursor_start` 时会从主屏中心开始；Agent 可传入主屏逻辑坐标，或在低层恢复流程中调用 `set_session_cursor_start` 配置下一次指针动作的起点。CUA 负责选择颜色和决定何时应用光标；共享的 `@oneworks/cursor` 包负责生成带圆角和对比边框的安全 SVG。`ensure` 仅保留为诊断或修复命令：
 
 ```bash
 ow-cua-driver ensure
@@ -85,6 +88,9 @@ API 在插件详情中包含标题、说明、输入、输出和 header schema �
 
 ## 安全边界
 
+- 应用权限只约束 OneWorks 发出的 CUA 操作，不会授予或替代 macOS TCC 权限
+- 规则按 Bundle ID 精确匹配且忽略大小写；显式拒绝优先于询问和允许
+- 等待确认期间会重新解析 pid/window 对应的应用；目标发生变化时拒绝执行，要求重新发起
 - postinstall 只在 macOS、非 CI、App 缺失时 best-effort 执行
 - 安装脚本不会修改全局 Codex / Claude / OpenCode skill，也不会注册 MCP
 - `ow-cua-driver uninstall` 不会删除用户配置、录制、MCP 配置或 TCC 授权

@@ -246,7 +246,13 @@ export const resolvePluginClientEntryUrl = ({
   serverBaseUrl?: string
   useDesktopProxy?: boolean
 }) => {
-  const useDevelopmentEntry = isDevelopment &&
+  const useDevelopmentEntry = (
+    isDevelopment ||
+    (
+      instance.watch?.enabled === true &&
+      instance.devClientEntryKind === 'runtime-source'
+    )
+  ) &&
     instance.devClientEntryUrl != null &&
     instance.devClientEntryUrl !== ''
   const entryUrl = useDevelopmentEntry
@@ -256,7 +262,7 @@ export const resolvePluginClientEntryUrl = ({
   if (
     entryUrl == null ||
     entryUrl === '' ||
-    useDevelopmentEntry ||
+    (useDevelopmentEntry && isDevelopment) ||
     isAbsoluteOrProtocolRelativeUrl(entryUrl) ||
     /^[a-z][a-z\d+.-]*:/i.test(entryUrl)
   ) {
@@ -289,6 +295,20 @@ export const resolvePluginClientEntryUrl = ({
   } catch {
     return resolvedEntryUrl
   }
+}
+
+export const addPluginClientImportVersion = (entryUrl: string, importVersion: number) => {
+  if (entryUrl.startsWith('data:')) return entryUrl
+  const clientSourceMarker = '/client-source/'
+  const clientSourceMarkerIndex = entryUrl.indexOf(clientSourceMarker)
+  const versionedClientSourceEntryUrl = clientSourceMarkerIndex < 0
+    ? entryUrl
+    : `${entryUrl.slice(0, clientSourceMarkerIndex + clientSourceMarker.length)}@v/${
+      encodeURIComponent(String(importVersion))
+    }/${entryUrl.slice(clientSourceMarkerIndex + clientSourceMarker.length)}`
+  return `${versionedClientSourceEntryUrl}${
+    versionedClientSourceEntryUrl.includes('?') ? '&' : '?'
+  }pluginVersion=${importVersion}`
 }
 
 export async function activatePluginClient({
@@ -421,9 +441,7 @@ export async function activatePluginClient({
 
   const registrationCheckpoint = registry.createScopeRegistrationCheckpoint(instance.scope)
   try {
-    const versionedEntryUrl = entryUrl.startsWith('data:')
-      ? entryUrl
-      : `${entryUrl}${entryUrl.includes('?') ? '&' : '?'}pluginVersion=${getImportVersion()}`
+    const versionedEntryUrl = addPluginClientImportVersion(entryUrl, getImportVersion())
     const module = await import(/* @vite-ignore */ versionedEntryUrl) as PluginClientModule
     if (!isActivationCurrent()) return
     const cleanup = await module.activatePlugin?.(ctx)

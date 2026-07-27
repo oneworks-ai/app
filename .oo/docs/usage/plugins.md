@@ -11,10 +11,31 @@ One Works 现在有两套并行的插件使用方式：
 
 ## 安装方式
 
-- Relay 是默认启用的内置 One Works 插件，可通过显式插件配置禁用。它不会重复出现在插件市场的可安装列表中。
+- Relay、浏览器驱动（IAB）、外部 Chrome 驱动和电脑操作驱动（CUA）是默认启用的内置 One Works 插件。外部 Chrome 与 CUA 的设置入口统一位于“外部控制”分组；CUA 可按 macOS Bundle ID 配置“无需询问 / 每次询问 / 拒绝访问”，未匹配应用默认每次询问。
 - 内置 One Works 插件会按运行时声明的版本从全局 package cache 解析；缺失时会安装到该 cache。
 - 其他插件通过 npm 安装到你的项目 workspace，或使用目录路径引用；如果包解析不到，会直接报错。
 - `id` 支持简写：例如配置 `logger` 时，会优先解析 `logger`，失败后再尝试 `@oneworks/plugin-logger`；旧的 `@vibe-forge/plugin-logger` 仍作为兼容路径解析。
+
+如果某个 workspace 不需要宿主驱动，可以显式关闭；这不会卸载安装包里的插件：
+
+```json
+{
+  "plugins": [
+    {
+      "id": "@oneworks/plugin-browser-driver",
+      "enabled": false
+    },
+    {
+      "id": "@oneworks/plugin-chrome-driver",
+      "enabled": false
+    },
+    {
+      "id": "@oneworks/plugin-cua-driver",
+      "enabled": false
+    }
+  ]
+}
+```
 
 Standard Development 继续作为独立 npm 包兼容已有配置，但官方市场不再提供第二个顶层入口。新配置应通过
 `@oneworks/plugin-demo` 的可选 `standard-dev` child 启用它。

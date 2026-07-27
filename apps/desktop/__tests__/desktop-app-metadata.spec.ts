@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 const require = createRequire(import.meta.url)
 const {
+  isOfficialReleaseBuild,
   isReleaseBuild,
   resolveDesktopAppMetadata
 } = require('../scripts/desktop-app-metadata.cjs') as typeof import('../scripts/desktop-app-metadata.cjs')
@@ -46,5 +47,17 @@ describe('desktop app metadata', () => {
 
   it('detects explicit release builds', () => {
     expect(isReleaseBuild({ ONEWORKS_DESKTOP_RELEASE_BUILD: 'true' })).toBe(true)
+  })
+
+  it('uses the release identity for official release builds', () => {
+    const env = { ONEWORKS_DESKTOP_OFFICIAL_RELEASE_BUILD: 'true' }
+
+    expect(isOfficialReleaseBuild(env)).toBe(true)
+    expect(isReleaseBuild(env)).toBe(true)
+    expect(resolveDesktopAppMetadata({ env, platform: 'darwin' })).toMatchObject({
+      appId: 'ai.oneworks.desktop',
+      isDevBuild: false,
+      productName: 'One Works'
+    })
   })
 })

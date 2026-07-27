@@ -16,6 +16,8 @@ If you do not want to start from source, install the desktop app directly:
 
 Current desktop builds are unsigned by default. macOS may show a first-launch security warning.
 
+Desktop installers bundle and enable OneWorks Relay, the in-app Browser Driver (IAB), the external Chrome Driver, and the Cua Driver by default. They remain available in an empty workspace without depending on a source checkout's `node_modules` or project plugin configuration, while project configuration may still disable or override them explicitly. The External Control settings group hosts external Chrome pairing and CUA behavior. IAB controls only OneWorks in-app browser tabs. Chrome extension capabilities and Cua computer control still require explicit browser pairing and the required macOS Accessibility and Screen Recording permissions.
+
 ## Project Selection and Multiple Windows
 
 The desktop app always works inside a workspace. When launched without a project, it asks you to choose a recent project or open a directory.

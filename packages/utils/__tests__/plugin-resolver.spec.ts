@@ -599,6 +599,9 @@ describe('plugin resolver', () => {
       env: { __ONEWORKS_PROJECT_DISABLE_GLOBAL_CONFIG__: '1' },
       includeDefaultOfficialPlugins: true
     })).resolves.toEqual([
+      { id: '@oneworks/plugin-browser-driver' },
+      { id: '@oneworks/plugin-chrome-driver' },
+      { id: '@oneworks/plugin-cua-driver' },
       { id: '@oneworks/plugin-relay' }
     ])
 
@@ -608,6 +611,9 @@ describe('plugin resolver', () => {
       includeDefaultOfficialPlugins: true,
       plugins: [{ id: '@oneworks/plugin-relay', enabled: false }]
     })).resolves.toEqual([
+      { id: '@oneworks/plugin-browser-driver' },
+      { id: '@oneworks/plugin-chrome-driver' },
+      { id: '@oneworks/plugin-cua-driver' },
       { id: '@oneworks/plugin-relay', enabled: false }
     ])
 
@@ -811,6 +817,93 @@ describe('plugin resolver', () => {
     expect(instances[0]).toMatchObject({
       rootDir: pluginRoot,
       scope: 'custom'
+    })
+  })
+
+  it('lets an explicit source directory replace its bundled package by manifest identity', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'oneworks-plugin-resolver-'))
+    tempDirs.push(tempDir)
+
+    const workspace = join(tempDir, 'workspace')
+    const runtimePackageDir = join(tempDir, 'runtime')
+    const packageName = '@oneworks/plugin-browser-driver'
+    const bundledPluginRoot = join(runtimePackageDir, 'node_modules/@oneworks/plugin-browser-driver')
+    const sourcePluginRoot = join(workspace, 'packages/plugins/browser-driver')
+    await mkdir(workspace, { recursive: true })
+    await writeLoggerPluginPackage(bundledPluginRoot, '1.0.0', packageName)
+    await mkdir(sourcePluginRoot, { recursive: true })
+    await writeFile(
+      join(sourcePluginRoot, 'plugin.json'),
+      JSON.stringify({
+        __oneWorksPluginManifest: true,
+        name: packageName,
+        plugin: { contributions: {} },
+        version: '1.0.0'
+      })
+    )
+
+    vi.stubEnv('__ONEWORKS_PROJECT_PACKAGE_DIR__', runtimePackageDir)
+
+    const instances = await resolveConfiguredPluginInstances({
+      cwd: workspace,
+      plugins: [
+        { id: packageName },
+        { id: sourcePluginRoot, scope: 'browser', watch: true }
+      ],
+      preferBundledOfficialPlugins: true
+    })
+
+    expect(instances).toHaveLength(1)
+    expect(instances[0]).toMatchObject({
+      packageId: undefined,
+      requestId: sourcePluginRoot,
+      rootDir: sourcePluginRoot,
+      scope: 'browser',
+      sourceType: 'directory',
+      watch: true
+    })
+  })
+
+  it('lets a later bundled package replace a source directory by manifest identity', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'oneworks-plugin-resolver-'))
+    tempDirs.push(tempDir)
+
+    const workspace = join(tempDir, 'workspace')
+    const runtimePackageDir = join(tempDir, 'runtime')
+    const packageName = '@oneworks/plugin-browser-driver'
+    const bundledPluginRoot = join(runtimePackageDir, 'node_modules/@oneworks/plugin-browser-driver')
+    const sourcePluginRoot = join(workspace, 'packages/plugins/browser-driver')
+    await mkdir(workspace, { recursive: true })
+    await writeLoggerPluginPackage(bundledPluginRoot, '1.0.0', packageName)
+    await mkdir(sourcePluginRoot, { recursive: true })
+    await writeFile(
+      join(sourcePluginRoot, 'plugin.json'),
+      JSON.stringify({
+        __oneWorksPluginManifest: true,
+        name: packageName,
+        plugin: { contributions: {} },
+        version: '1.0.0'
+      })
+    )
+
+    vi.stubEnv('__ONEWORKS_PROJECT_PACKAGE_DIR__', runtimePackageDir)
+
+    const instances = await resolveConfiguredPluginInstances({
+      cwd: workspace,
+      plugins: [
+        { id: sourcePluginRoot, scope: 'browser-source', watch: true },
+        { id: packageName, scope: 'browser-bundled' }
+      ],
+      preferBundledOfficialPlugins: true
+    })
+
+    expect(instances).toHaveLength(1)
+    expect(instances[0]).toMatchObject({
+      packageId: packageName,
+      requestId: packageName,
+      rootDir: bundledPluginRoot,
+      scope: 'browser-bundled',
+      sourceType: 'package'
     })
   })
 

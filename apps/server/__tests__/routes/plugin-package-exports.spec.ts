@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promis
 import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 import Router from '@koa/router'
 import Koa from 'koa'
@@ -9,7 +10,7 @@ import bodyParser from 'koa-bodyparser'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { pluginsRouter } from '#~/routes/plugins.js'
-import { resetPluginManagerForTests } from '#~/services/plugins/index.js'
+import { getPluginManager, resetPluginManagerForTests } from '#~/services/plugins/index.js'
 
 const mocks = vi.hoisted(() => ({
   loadConfigState: vi.fn()
@@ -32,6 +33,7 @@ describe('plugin package export conventions', () => {
   }
 
   beforeEach(async () => {
+    vi.stubEnv('__ONEWORKS_PROJECT_DISABLE_DEFAULT_OFFICIAL_PLUGINS__', '1')
     workspaceFolder = await mkdtemp(path.join(os.tmpdir(), 'ow-plugin-package-exports-'))
     const app = new Koa()
     const rootRouter = new Router({ prefix: '/api/plugins' })
@@ -245,29 +247,40 @@ describe('plugin package export conventions', () => {
     })
   })
 
-  it('keeps bundled official packages in the built-in source group when enabled by project config', async () => {
+  it('keeps explicitly configured package plugins on built client output in packaged runtimes', async () => {
+    vi.stubEnv('__ONEWORKS_PROJECT_CLIENT_MODE__', 'desktop')
     const pluginRoot = path.join(
       workspaceFolder,
       'node_modules',
-      '@oneworks',
+      '@example',
       'plugin-logger'
     )
-    await mkdir(pluginRoot, { recursive: true })
+    await mkdir(path.join(pluginRoot, 'client', 'src'), { recursive: true })
+    await mkdir(path.join(pluginRoot, 'client', 'dist'), { recursive: true })
+    await writeFile(path.join(pluginRoot, 'client', 'src', 'index.ts'), 'export const sourceOnly = true\n')
+    await writeFile(path.join(pluginRoot, 'client', 'dist', 'index.js'), 'export const builtOnly = true\n')
     await writeFile(
       path.join(pluginRoot, 'package.json'),
       JSON.stringify({
-        name: '@oneworks/plugin-logger',
-        version: '0.1.0'
+        name: '@example/plugin-logger',
+        version: '0.1.0',
+        exports: {
+          './client': {
+            source: './client/src/index.ts',
+            default: './client/dist/index.js'
+          },
+          './package.json': './package.json'
+        }
       })
     )
     await writeFile(
       path.join(pluginRoot, 'plugin.json'),
       JSON.stringify({
         displayName: 'Logger',
-        name: '@oneworks/plugin-logger'
+        name: '@example/plugin-logger'
       })
     )
-    const pluginConfig = { id: '@oneworks/plugin-logger', scope: 'logger' }
+    const pluginConfig = { id: '@example/plugin-logger', scope: 'logger', watch: true }
     mocks.loadConfigState.mockResolvedValue({
       workspaceFolder,
       mergedConfig: { plugins: [pluginConfig] },
@@ -276,12 +289,29 @@ describe('plugin package export conventions', () => {
 
     const listResponse = await fetch(`${baseUrl}/api/plugins`)
     const listPayload = await listResponse.json() as {
-      plugins: Array<{ packageId?: string; sourceGroup?: string }>
+      plugins: Array<{
+        client?: {
+          clientEntryUrl?: string
+          devClientEntryKind?: string
+          devClientEntryUrl?: string
+        }
+        packageId?: string
+        sourceGroup?: string
+      }>
     }
     expect(listPayload.plugins[0]).toMatchObject({
-      packageId: '@oneworks/plugin-logger',
-      sourceGroup: 'builtIn'
+      client: {
+        clientEntryUrl: '/api/plugins/logger/client/dist/index.js'
+      },
+      packageId: '@example/plugin-logger',
+      sourceGroup: 'project'
     })
+    expect(listPayload.plugins[0]?.client?.devClientEntryKind).toBeUndefined()
+    expect(listPayload.plugins[0]?.client?.devClientEntryUrl).toBeUndefined()
+    const sourceResponse = await fetch(
+      `${baseUrl}/api/plugins/logger/client-source/client/src/index.ts`
+    )
+    expect(sourceResponse.status).toBe(404)
   })
 
   it('requires package export server entries to declare runtime roles', async () => {
@@ -629,6 +659,217 @@ describe('plugin package export conventions', () => {
         process.env.__ONEWORKS_PROJECT_CLIENT_BASE__ = previousBase
       }
     }
+  })
+
+  it('compiles watched local client source for packaged desktop runtimes', async () => {
+    vi.stubEnv('__ONEWORKS_PROJECT_CLIENT_MODE__', 'desktop')
+    const pluginRoot = path.join(workspaceFolder, 'plugins', 'packaged-source')
+    await mkdir(path.join(pluginRoot, 'client', 'src'), { recursive: true })
+    await writeFile(
+      path.join(pluginRoot, 'client', 'src', 'theme.css'),
+      ':root { --packaged-source-color: #123456; }\n'
+    )
+    await writeFile(
+      path.join(pluginRoot, 'client', 'src', 'theme.ts'),
+      "import css from './theme.css?inline'\nexport const packagedSourceCss: string = css\n"
+    )
+    await writeFile(
+      path.join(pluginRoot, 'client', 'src', 'peer.ts'),
+      "export const peerValue = 'compiled-peer-v1'\n"
+    )
+    await mkdir(path.join(pluginRoot, 'server'), { recursive: true })
+    const serverSecretPath = path.join(pluginRoot, 'server', 'secret.ts')
+    await writeFile(serverSecretPath, "export const secret = 'server-only'\n")
+    await symlink(serverSecretPath, path.join(pluginRoot, 'client', 'src', 'leak.ts'))
+    await writeFile(
+      path.join(pluginRoot, 'client', 'src', 'index.ts'),
+      `
+        import { packagedSourceCss } from './theme'
+        const importPeer = (request: string) => import(/* @vite-ignore */ request)
+        export const readPeerValue = async () => (await importPeer('./peer.js')).peerValue
+        export async function activatePlugin(ctx: { themes: { register: (theme: unknown) => unknown } }) {
+          const peerValue = await readPeerValue()
+          return ctx.themes.register({ id: 'packaged-source', css: packagedSourceCss, peerValue })
+        }
+      `
+    )
+    await writeFile(
+      path.join(pluginRoot, 'package.json'),
+      JSON.stringify(
+        {
+          name: '@local/plugin-packaged-source',
+          exports: {
+            './client': {
+              source: './client/src/index.ts',
+              default: './client/dist/index.js'
+            },
+            './package.json': './package.json'
+          }
+        },
+        null,
+        2
+      )
+    )
+    await writeFile(path.join(pluginRoot, 'plugin.json'), JSON.stringify({ plugin: {} }, null, 2))
+    mocks.loadConfigState.mockResolvedValue({
+      workspaceFolder,
+      mergedConfig: { plugins: [{ id: pluginRoot, scope: 'packaged-source', watch: true }] }
+    })
+
+    const listResponse = await fetch(`${baseUrl}/api/plugins`)
+    const listPayload = await listResponse.json() as {
+      plugins: Array<{
+        client?: {
+          clientEntryUrl?: string
+          devClientEntryKind?: string
+          devClientEntryUrl?: string
+        }
+      }>
+    }
+    expect(listPayload.plugins[0]).toMatchObject({
+      client: {
+        clientEntryUrl: '/api/plugins/packaged-source/client/dist/index.js',
+        devClientEntryKind: 'runtime-source',
+        devClientEntryUrl: '/api/plugins/packaged-source/client-source/client/src/index.ts'
+      }
+    })
+
+    const sourceModuleBase = '/api/plugins/packaged-source/client-source/@v/1/client/src'
+    const sourceResponse = await fetch(
+      `${baseUrl}${sourceModuleBase}/index.ts`
+    )
+    const sourceText = await sourceResponse.text()
+    expect(sourceResponse.status, sourceText).toBe(200)
+    expect(sourceResponse.headers.get('content-type')).toContain('text/javascript')
+    expect(sourceText).toContain('activatePlugin')
+    expect(sourceText).toContain('--packaged-source-color')
+    expect(sourceText).not.toContain("from './theme'")
+
+    const peerResponse = await fetch(
+      `${baseUrl}${sourceModuleBase}/peer.js`
+    )
+    const peerText = await peerResponse.text()
+    expect(peerResponse.status, peerText).toBe(200)
+    expect(peerResponse.headers.get('content-type')).toContain('text/javascript')
+    expect(peerText).toContain('compiled-peer-v1')
+
+    const moduleRoot = path.join(workspaceFolder, 'runtime-modules')
+    const versionOneRoot = path.join(moduleRoot, 'v1')
+    await mkdir(versionOneRoot, { recursive: true })
+    await writeFile(path.join(versionOneRoot, 'package.json'), JSON.stringify({ type: 'module' }))
+    await writeFile(path.join(versionOneRoot, 'index.mjs'), sourceText)
+    await writeFile(path.join(versionOneRoot, 'peer.js'), peerText)
+    const versionOneModule = await import(pathToFileURL(path.join(versionOneRoot, 'index.mjs')).href)
+    await expect(versionOneModule.readPeerValue()).resolves.toBe('compiled-peer-v1')
+
+    const siblingServerResponse = await fetch(
+      `${baseUrl}/api/plugins/packaged-source/client-source/@v/1/server/secret.ts`
+    )
+    expect(siblingServerResponse.status).toBe(404)
+    const symlinkEscapeResponse = await fetch(
+      `${baseUrl}/api/plugins/packaged-source/client-source/@v/1/client/src/leak.ts`
+    )
+    expect(symlinkEscapeResponse.status).toBe(404)
+    const invalidVersionResponse = await fetch(
+      `${baseUrl}/api/plugins/packaged-source/client-source/@v/not%20valid/client/src/index.ts`
+    )
+    expect(invalidVersionResponse.status).toBe(404)
+
+    await writeFile(
+      path.join(pluginRoot, 'client', 'src', 'peer.ts'),
+      "export const peerValue = 'compiled-peer-v2'\n"
+    )
+    const manager = getPluginManager()
+    const changedEvent = new Promise<{ path?: string; scope?: string; type?: string }>((resolve) => {
+      const unsubscribe = manager.subscribeWatchEvents({
+        send: (data) => {
+          const event = JSON.parse(data) as { path?: string; scope?: string; type?: string }
+          if (event.type !== 'plugin.changed' || event.scope !== 'packaged-source') return
+          unsubscribe()
+          resolve(event)
+        }
+      }, 'packaged-source')
+    })
+    const managerReload = manager as unknown as {
+      scheduleRecordReload: (record: unknown, relativePath: string) => void
+    }
+    const packagedSourceRecord = manager.getRecord('packaged-source')
+    expect(packagedSourceRecord).toBeDefined()
+    managerReload.scheduleRecordReload(
+      packagedSourceRecord,
+      'client/src/peer.ts'
+    )
+    await expect(changedEvent).resolves.toMatchObject({
+      path: 'client/src/peer.ts',
+      scope: 'packaged-source',
+      type: 'plugin.changed'
+    })
+    const versionTwoModuleBase = '/api/plugins/packaged-source/client-source/@v/2/client/src'
+    const versionTwoEntryResponse = await fetch(`${baseUrl}${versionTwoModuleBase}/index.ts`)
+    const versionTwoEntry = await versionTwoEntryResponse.text()
+    expect(versionTwoEntryResponse.status, versionTwoEntry).toBe(200)
+    const versionTwoPeerResponse = await fetch(`${baseUrl}${versionTwoModuleBase}/peer.js`)
+    const versionTwoPeer = await versionTwoPeerResponse.text()
+    expect(versionTwoPeerResponse.status, versionTwoPeer).toBe(200)
+    const versionTwoRoot = path.join(moduleRoot, 'v2')
+    await mkdir(versionTwoRoot, { recursive: true })
+    await writeFile(path.join(versionTwoRoot, 'package.json'), JSON.stringify({ type: 'module' }))
+    await writeFile(path.join(versionTwoRoot, 'index.mjs'), versionTwoEntry)
+    await writeFile(path.join(versionTwoRoot, 'peer.js'), versionTwoPeer)
+    const versionTwoModule = await import(pathToFileURL(path.join(versionTwoRoot, 'index.mjs')).href)
+    await expect(versionTwoModule.readPeerValue()).resolves.toBe('compiled-peer-v2')
+    await expect(versionOneModule.readPeerValue()).resolves.toBe('compiled-peer-v1')
+  })
+
+  it('uses built client output when a local directory plugin has watch disabled', async () => {
+    vi.stubEnv('__ONEWORKS_PROJECT_CLIENT_MODE__', 'desktop')
+    const pluginRoot = path.join(workspaceFolder, 'plugins', 'packaged-built')
+    await mkdir(path.join(pluginRoot, 'client', 'src'), { recursive: true })
+    await mkdir(path.join(pluginRoot, 'client', 'dist'), { recursive: true })
+    await writeFile(path.join(pluginRoot, 'client', 'src', 'index.ts'), 'export const sourceOnly = true\n')
+    await writeFile(path.join(pluginRoot, 'client', 'dist', 'index.js'), 'export const builtOnly = true\n')
+    await writeFile(
+      path.join(pluginRoot, 'package.json'),
+      JSON.stringify(
+        {
+          name: '@local/plugin-packaged-built',
+          exports: {
+            './client': {
+              source: './client/src/index.ts',
+              default: './client/dist/index.js'
+            },
+            './package.json': './package.json'
+          }
+        },
+        null,
+        2
+      )
+    )
+    await writeFile(path.join(pluginRoot, 'plugin.json'), JSON.stringify({ plugin: {} }, null, 2))
+    mocks.loadConfigState.mockResolvedValue({
+      workspaceFolder,
+      mergedConfig: { plugins: [{ id: pluginRoot, scope: 'packaged-built', watch: false }] }
+    })
+
+    const listResponse = await fetch(`${baseUrl}/api/plugins`)
+    const listPayload = await listResponse.json() as {
+      plugins: Array<{
+        client?: {
+          clientEntryUrl?: string
+          devClientEntryKind?: string
+          devClientEntryUrl?: string
+        }
+      }>
+    }
+    expect(listPayload.plugins[0]?.client).toMatchObject({
+      clientEntryUrl: '/api/plugins/packaged-built/client/dist/index.js'
+    })
+    expect(listPayload.plugins[0]?.client?.devClientEntryKind).toBeUndefined()
+    expect(listPayload.plugins[0]?.client?.devClientEntryUrl).toBeUndefined()
+    const sourceResponse = await fetch(
+      `${baseUrl}/api/plugins/packaged-built/client-source/client/src/index.ts`
+    )
+    expect(sourceResponse.status).toBe(404)
   })
 
   it('does not expose host Vite source entries outside allowed local roots', async () => {
