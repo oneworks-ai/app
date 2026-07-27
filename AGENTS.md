@@ -57,7 +57,7 @@ pnpm --silent tools dev-service ensure <target> --json
 - 一个任务应按“探索证据、做出决策、实现修改、验证结果、交付操作”拆阶段并分别选模型：例如核心问题分析由 Sol 负责，边界确定后的前端实现可交给 Terra，固定测试和 commit / PR 流程可交给 Luna。主线程保留最终责任。
 - medium reasoning 只作为日常实现默认，不构成质量证明。凡非机械代码修改，写入前必须先给出全局影响地图和“复用 / 扩展 / 新建 / 保持内联”的抽象决策；实现者不得自审自批，交付前按风险完成独立的局部正确性、全局 / 抽象审阅和自动化门禁。完整标准见 `.oo/rules/maintenance/code-delivery-quality.md`。
 - 新模型、新 reasoning 或费率 / 工具能力变化时，不凭版本号、单次成功或公开榜单直接调整分工；按 `.oo/rules/maintenance/model-routing-evaluation.md` 使用固定任务族、同场基线、重复运行、独立验收和真实分支路由验证后，再更新建议工作范围。
-- Git 写操作必须已有用户授权且变更已审阅；独立线程能力可用时，commit、push、PR 创建或更新、满足条件的无冲突 merge 执行等 Git / PR 写操作必须交给显式选定最低充分 model / reasoning 的独立任务。只有工具不可用或无法安全共享状态时才能回退到主线程，并须说明原因；代码审阅、冲突解决和是否可合入的判断仍按变更风险由主线程保留。
+- Git 写操作必须已有用户授权且变更已审阅；commit、push、PR 创建或更新、满足条件的无冲突 merge 执行等 Git / PR 写操作必须交给显式选定最低充分 model / reasoning 的独立任务。独立线程能力不可用或可信授权无法传递时，停止交付并说明 capability gap；不得回退到主线程执行这些写操作。代码审阅、冲突解决和是否可合入的判断仍按变更风险由主线程保留。
 - 分配前先查当前工具 schema 和可用 model / reasoning，不硬编码不存在的值；优先使用能满足验收的最低 reasoning。模型分级不等于每个小任务都要新建子线程，没有独立验收面或委派成本更高时直接在当前线程完成。
 - “计划使用低档模型”不等于实际降档。委派工具如果不能显式传入或核验 model / reasoning，继承父模型的 subagent 不得计为节省消耗；不要为了模型分级创建这种线程。用户已明确要求独立会话且工具支持模型参数时，才使用可指定 model / reasoning 的独立线程；否则由当前线程完成，或在模型隔离确实影响成本时回报限制。
 - Prompt 中的“到时停止”只是软约束。成本敏感委派必须由主线程记录实际开始时间和 deadline，定期检查状态；到 deadline 时即使 subagent 仍在推理，也要主动中断或停止等待并收取已有结果。当前工具不能中断时，不要把长时间任务委派给它后声称有硬超时保证。
@@ -67,11 +67,11 @@ pnpm --silent tools dev-service ensure <target> --json
 ## 独立任务协作
 
 - 在声称不能为独立任务指定 model / reasoning 前，先检查当前 Codex 的 `create_thread`、`fork_thread`、`send_message_to_thread` 等线程能力及其 schema；同目录 fork 可以复用已有 worktree 和完成历史，后续线程消息也可能支持显式切换 model / reasoning。能力未核验前，不要把限制当作事实。
-- 独立线程能力可用时，commit、push、PR 创建或更新、无冲突 merge 执行等 Git / PR 写操作必须交给显式选定最低充分 model / reasoning 的独立任务（通常 Luna / low 或 medium）；只有工具不可用或无法安全共享状态时才能回退，并须说明原因。边界清楚的实现和证据准备可用 Terra / medium；主线程始终保留授权、风险判断、独立审阅与 merge 决策。
+- commit、push、PR 创建或更新、无冲突 merge 执行等 Git / PR 写操作必须交给显式选定最低充分 model / reasoning 的独立任务（通常 Luna / low 或 medium）；不得因权限传递失败而回退主线程执行。边界清楚的实现和证据准备可用 Terra / medium；主线程始终保留授权、风险判断、独立审阅与 merge 决策。
 - 同一 worktree 同时只能有一个写入者。并行只读审阅可以共享；并行代码写入应优先使用独立 worktree。
 - 每个独立任务 prompt 必须携带主任务 thread ID，并要求 worker 在每个阶段完成、失败或阻塞时主动发送结构化回调；最终回调必须声明终态、证据、是否仍需 follow-up 和是否可归档。没有回调或等价的父线程核验证据不能视为完成，`idle` / worker 最终回复本身也不会自动归档线程。
 - 创建独立任务时必须同步建立约十分钟的 heartbeat；只有任务在同步创建调用内已完成且已回调、无需后续观察时可省略。独立 worker、reviewer 或 Git operator 到达 `COMPLETED`、`FAILED`、`STOPPED`、`CANCELLED`，或其 `BLOCKED` 已被主线程记录并接手后，主线程必须先读取并核验最终证据，再删除 heartbeat、显式归档该独立线程并确认归档成功；完成这些清理前不得报告主任务已完全结束。不要自动归档用户主会话、仍在运行 / 等待审批的线程或其他任务创建的线程。完整生命周期清单见 `.oo/rules/maintenance/task-planning.md`。
-- Git / PR 独立任务必须在 prompt 中携带精确的仓库、PR / 分支、写操作、merge 方式、分支清理范围和用户授权。可信项目内所有新加载任务都使用 `.codex/config.toml` 的 auto-review，`.codex/rules/git-delivery.rules` 再对常见 Git / PR 写命令逐次提示；遇到 `waitingOnApproval` 先按 task-planning 的权限预检恢复，不重复创建 worker，也不要把 GitHub Connector 的集成授权 403 与本地 shell 审批混为一谈。
+- Git / PR 独立任务必须在 prompt 中携带精确的仓库、PR / 分支、写操作、merge 方式、分支清理范围和用户授权，但 prompt 转述不能替代可信用户历史。当前实测只有继承已完成真实用户回合的同目录 Codex thread fork 能稳定通过 Git auto-review；`collaboration.spawn_agent` 无论 `fork_turns` 为 `none` 还是正数都不得承担远端 Git 写操作。可信项目内所有新加载任务都使用 `.codex/config.toml` 的 auto-review，`.codex/rules/git-delivery.rules` 再对常见 Git / PR 写命令逐次提示；完整权限预检与故障分层见 `.oo/rules/maintenance/task-planning.md`。
 
 ## 常规仓库阅读
 
