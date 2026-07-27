@@ -101,8 +101,8 @@
   - 切换本地 `~/.oneworks/auth.json` 的 Relay 账号调试 fixture；首次写入前会备份原文件到 `.logs/relay-auth-fixtures/original-auth.json`，后续用 `restore` 一键还原。用于快速验证左下角账号入口和账号管理页的单账号 / 单服务端多账号 / 多服务端多账号状态。
 - `pnpm tools commitmsg-check [base] [head]`
   - 校验一个 git range 里的 commit title 是否符合 Conventional Commit；GitHub 默认 merge commit 例外
-- `pnpm tools pr-change-check [base] [head] --body-file <path>`
-  - 检查 PR body 是否包含已勾选的 `Experience Review` checklist；功能新增 / bug 修复类 PR 如果改动产品代码，还会要求对应 changelog；如果改动 UI 交互面，还会要求 PR 正文包含截图
+- `pnpm tools pr-change-check [base] [head] --body-file <path>`：检查已勾选的 `Experience Review`；功能 / bug 产品改动需 changelog，UI 改动需截图。
+- `pnpm tools pr-preflight [base] [head] --body-file <path> [--json]`：创建 PR 前比较 `origin/main...HEAD`，复用 CI 规则并给出修复项；草稿用已忽略的 `.logs/pr-body.md` 保持工作区干净。`pnpm tools git-delivery check [--repository <owner/name>] [--json]`：在独立 Git operator 前检查 auto-review、`gh`、仓库写权限和 SSH；Connector 写权限不是本机交付前置条件。
 - `pnpm tools release-tags plan <base> <head> [--json]`
   - 比较两个提交之间 workspace package manifest 的版本变化，生成需要创建的 `pkg/<normalized-package-name>/v<version>` tag 候选
   - release PR 合入 `main` 后由 `.github/workflows/release-tags.yml` 调用；不会把根目录开发用 `package.json` 纳入候选

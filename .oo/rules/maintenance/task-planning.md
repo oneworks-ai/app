@@ -99,11 +99,12 @@ Safe to archive: yes / no
 ## 权限预检与审批恢复
 
 - Git / PR 独立任务的 prompt 必须包含精确的仓库、PR / 分支、允许的写操作、merge 方式、是否删除远端分支和本轮用户授权；只写“处理 PR”或“合入”不足以让审批者判断边界。
+- 创建 Git operator 前先运行 `pnpm tools git-delivery check --repository <owner/name> --json`。只有项目 auto-review、本机 `gh`、仓库写权限和 remote 认证都 ready 时才开始 commit / push / PR；不要等到收尾阶段才发现授权链断裂。
 - 本项目通过 `.codex/config.toml` 保持 `on-request` 审批并把 eligible prompt 交给 auto-review。该项目层配置有意作用于可信项目内所有新加载任务，不只作用于独立 worker，并可能覆盖用户层较严格的 reviewer / approval 默认值（managed requirements 与显式启动覆盖仍有更高优先级）；它只替换审批者，不扩大 sandbox、网络或 GitHub 权限。
 - `.codex/rules/git-delivery.rules` 对常见的 commit、push、PR 写操作、`gh api`、`git -C` / `git -c` 和常见 executable wrapper 使用更严格的 `prompt`，以最严格规则覆盖用户层可能存在的宽泛 `allow`。规则是纵深防护，不是不可绕过的命令沙箱；自定义 wrapper 或可执行路径仍必须依赖 sandbox、auto-review 与明确 prompt 边界。
-- 新项目配置与规则只对重新加载后的任务生效。真实验收必须创建干净的独立 Git operator，让它执行一条已明确授权的远端写操作，并确认没有停在人工 `waitingOnApproval`；旧线程成功不能证明新配置已加载。
-- 如果 worker 进入 `waitingOnApproval`，先检查任务是否加载了可信项目层、`approval_policy` / `approvals_reviewer` 的有效值、命中规则和授权上下文；修复后创建至多一个干净验证任务。需要共享同一 worktree 时，prompt 必须明确“你就是执行者，不得再委派”。权限传递仍失败时记录 capability gap，不能让主线程接管远端 Git 写操作，也不能要求用户重复已经明确给出的授权。
-- GitHub Connector 返回 `Resource not accessible by integration` 表示外部 GitHub App / 集成授权不足，可能来自安装仓库范围、App permission 或组织策略，与本地 shell approval 是两个权限层。只有补齐对应组织 / 仓库授权并复测 connector 写操作后，才能声称 Connector 已修复；在此之前，远端写入使用本机已认证 `gh`，但仍经过上述逐次审批。
+- 新项目配置与规则只对重新加载后的任务生效。Git 写操作必须交给通过项目线程能力新建、会重新加载 `.codex/config.toml` 的干净独立 Git operator；不要把继承父任务有效 `AskForApproval=Never` 的 collaboration child 当作交付 operator。真实验收让新 operator 执行一条已明确授权的远端写操作，并确认没有停在人工 `waitingOnApproval`；旧线程成功不能证明新配置已加载。
+- 如果 worker 进入 `waitingOnApproval`，先检查任务是否加载了可信项目层、`approval_policy` / `approvals_reviewer` 的有效值、命中规则和授权上下文；修复后创建至多一个干净验证任务。不要连续 fork 带有长协调历史的主任务：这种 fork 可能把自己误判成协调器并继续创建 worker。需要共享同一 worktree 时，prompt 必须明确“你就是执行者，不得再委派”。权限传递仍失败时记录 capability gap，不能让主线程接管远端 Git 写操作，也不能要求用户重复已经明确给出的授权。
+- GitHub Connector 返回 `Resource not accessible by integration` 表示外部 GitHub App / 集成授权不足，可能来自安装仓库范围、App permission 或组织策略，与本地 shell approval 是两个权限层。只有补齐对应组织 / 仓库授权并复测 connector 写操作后，才能声称 Connector 已修复；`git-delivery check` 已确认本机 `gh` ready 时立即切到 `gh`，不要反复尝试 Connector 或网页 UI。远端写入仍经过上述逐次审批。
 - 不要用永久 `allow` 放行 `gh pr merge`、`git push` 或 `gh api`。prefix 只能约束命令前缀，后续 URL / flags 仍可能改变目标；需要零人工停顿时由 auto-review 根据精确用户授权逐次判断，而不是取消边界。
 
 ### Git operator 的可信授权传递
@@ -145,7 +146,7 @@ Git / PR 写操作需要同时满足“任务范围精确”和“用户授权�
 - 非机械代码修改必须独立检查局部正确性与全局 / 抽象影响；低风险窄改可由一个独立 reviewer 同时覆盖，中高风险或跨模块修改拆成两个关注面。审阅必须直接读取 diff 和相关调用方，不以实现者自报结论代替。
 - 验证按风险选择：窄改跑局部测试；跨模块或用户流程跑类型检查、相关单测、浏览器回归和 CI 状态检查。
 - 合入后如果发现提交信息、CI 或文档边界问题，优先 follow-up PR；需要 rewrite / force push 时必须有明确授权。
-- `pr` 不等于“创建 PR 即完成”。创建、复用或收口 PR 前逐项检查适用的 PR policy、CI、changelog、真实 UI 截图、Experience Review、Draft / merge 授权、重复 PR、工作区是否干净、远端是否同步和正文隐私。PR 正文不得包含用户名、本机绝对路径、worktree ID、临时路径、会话 ID 或任何秘密。
+- `pr` 不等于“创建 PR 即完成”。创建 PR 前从 `.github/pull_request_template.md` 准备已忽略的 `.logs/pr-body.md`，并运行 `pnpm tools pr-preflight origin/main HEAD --body-file .logs/pr-body.md`；通过后再创建、复用或收口 PR。逐项检查适用的 PR policy、CI、changelog、真实 UI 截图、Experience Review、Draft / merge 授权、重复 PR、工作区是否干净、远端是否同步和正文隐私。PR 正文不得包含用户名、本机绝对路径、worktree ID、临时路径、会话 ID 或任何秘密。
 - UI 截图先用 `pnpm --silent tools dev-service status <target> --json` 或 `ensure` 核验服务属于目标 worktree / 分支，再用 DOM 证据和可见截图共同证明目标变化；不能因端口已存在就相信它对应本任务。
 - 测试、失败和完成的独立任务按约定归档；测试 PR 未获明确授权不得 merge。收口时删除 heartbeat，并清理为测试创建且不再需要的远端分支。
 - 最终收口回复要列清：落地文件、采纳的审阅建议、未采纳建议及原因、验证结果、剩余风险、follow-up 和已归档线程。不要把长过程日志塞进最终回复。

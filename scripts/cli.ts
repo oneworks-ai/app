@@ -43,9 +43,11 @@ import {
   runDevServiceCommand as runDevServiceCommandEntry,
   runDevStart as runDevStartCommand
 } from './dev-start'
+import { runGitDeliveryCheck } from './git-delivery-check'
 import { runHomebrewTapSyncOneWorks } from './homebrew-tap'
 import { runMessageActionsVerify } from './message-actions'
 import { runPrChangeCheck } from './pr-change-check'
+import { runPrPreflight } from './pr-preflight'
 import { parseRelayAuthFixtureCommand, runRelayAuthFixture } from './relay-auth-fixture'
 import { runRelayConfigLiveSmoke } from './relay-config-live-smoke'
 import { runRelayConfigSmoke } from './relay-config-smoke'
@@ -108,7 +110,9 @@ interface ScriptsCliDeps {
     base?: string
     head?: string
   }) => Promise<void>
+  runGitDeliveryCheck: typeof runGitDeliveryCheck
   runPrChangeCheck: typeof runPrChangeCheck
+  runPrPreflight: typeof runPrPreflight
   runReleaseTagsPlan: typeof runReleaseTagsPlan
   runReleaseVerify: typeof runReleaseVerify
   runReleaseVerifyAgent: typeof runReleaseVerifyAgent
@@ -159,7 +163,9 @@ const defaultDeps: ScriptsCliDeps = {
       process.exitCode = result.code
     }
   },
+  runGitDeliveryCheck,
   runPrChangeCheck,
+  runPrPreflight,
   runReleaseTagsPlan,
   runReleaseVerify,
   runReleaseVerifyAgent,
@@ -1056,6 +1062,25 @@ export const createScriptsCli = (inputDeps: Partial<ScriptsCliDeps> = {}) => {
       })
     })
 
+  const gitDeliveryCommand = program
+    .command('git-delivery')
+    .description('Check local Git and GitHub delivery readiness')
+
+  gitDeliveryCommand
+    .command('check')
+    .description('Validate project approval config, gh access, repository permission, and SSH')
+    .option('--repository <owner/name>', 'GitHub repository; defaults to the origin remote')
+    .option('--json', 'Print machine-readable JSON', false)
+    .action(async (options: {
+      json?: boolean
+      repository?: string
+    }) => {
+      await deps.runGitDeliveryCheck({
+        json: options.json ?? false,
+        repository: options.repository
+      })
+    })
+
   program
     .command('commitmsg-check [base] [head]')
     .description('Validate commit subjects in a git revision range')
@@ -1080,6 +1105,26 @@ export const createScriptsCli = (inputDeps: Partial<ScriptsCliDeps> = {}) => {
         head,
         body: options.body,
         bodyFile: options.bodyFile
+      })
+    })
+
+  program
+    .command('pr-preflight [base] [head]')
+    .description('Preflight PR changelog, screenshot, and experience-review requirements')
+    .option('--body <markdown>', 'Pull request body markdown')
+    .option('--body-file <path>', 'File containing the pull request body markdown')
+    .option('--json', 'Print machine-readable JSON', false)
+    .action(async (base: string | undefined, head: string | undefined, options: {
+      body?: string
+      bodyFile?: string
+      json?: boolean
+    }) => {
+      await deps.runPrPreflight({
+        base,
+        head,
+        body: options.body,
+        bodyFile: options.bodyFile,
+        json: options.json ?? false
       })
     })
 
