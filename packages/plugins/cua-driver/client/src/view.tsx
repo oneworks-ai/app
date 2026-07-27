@@ -1,5 +1,6 @@
 /* @jsxRuntime classic */
 /* @jsx h */
+/* eslint-disable max-lines -- the plugin view keeps its two tab panels on one host-rendered settings contract. */
 
 import {
   applicationBundleIdPattern,
@@ -88,7 +89,7 @@ export function CuaDriverView({ ctx, react, view }) {
     })
   const commitCursorColor = value => {
     const normalized = value.trim()
-    if (!/^#[0-9A-Fa-f]{3}(?:[0-9A-Fa-f]{3})?$/.test(normalized)) {
+    if (!/^#[0-9a-f]{3}(?:[0-9a-f]{3})?$/i.test(normalized)) {
       setFailure(t('Enter a CSS hex color such as #625BF6.', '请输入 #625BF6 这样的十六进制颜色。'))
       setCursorColor(savedCursorColor)
       return

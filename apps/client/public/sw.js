@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- the service worker keeps cache installation, activation, and fetch policy in one lifecycle boundary. */
 const CACHE_PREFIX = 'oneworks-web'
 const serviceWorkerGlobal = globalThis
 const scriptUrl = new URL(serviceWorkerGlobal.location.href)

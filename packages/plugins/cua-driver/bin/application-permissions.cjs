@@ -1,3 +1,6 @@
+/* eslint-disable max-lines -- application identity resolution and authorization must remain one auditable safety boundary. */
+const process = require('node:process')
+
 const applicationPermissionModes = new Set(['always_allow', 'always_ask', 'deny'])
 const applicationPermissionPriority = {
   always_allow: 0,

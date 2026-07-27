@@ -1,5 +1,5 @@
 export const applicationPermissionModes = new Set(['always_allow', 'always_ask', 'deny'])
-export const applicationBundleIdPattern = /^[A-Za-z0-9][A-Za-z0-9.-]{2,254}$/
+export const applicationBundleIdPattern = /^[a-z0-9][a-z0-9.-]{2,254}$/i
 const applicationPermissionPriority: Record<string, number> = {
   always_allow: 0,
   always_ask: 1,

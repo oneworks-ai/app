@@ -11,7 +11,7 @@
 - `native-host.ts`：聚合各 adapter 对真实用户 Home 原生插件的只读发现；原生条目与 OneWorks runtime plugin 分开返回，不能进入 runtime activation。
 - `manifest.ts`：读取目录或 package manifest 中的 `plugin.client/server/contributions` runtime 字段，并按 `package.json` exports 约定补齐 `./client`、`./server` 默认入口。
 - `client-source-compiler.ts`：为 packaged/static runtime 中显式开启 watch 的本地目录插件，将 `exports["./client"].source` 通过受控 Vite library build 编译成单个内存 ESM；不读取插件自己的 Vite / PostCSS 配置、不写回插件目录，也不替代 package / 下载插件的 `dist`。
-- `client-source-boundary.ts`、`client-source-css-boundary.ts`、`client-source-paths.ts`：约束源码编译的模块、资源、CSS 和真实路径边界。运行时字符串动态 import、静态模块和 CSS / asset 依赖只允许 source entry 目录内的规范真实路径，整组模块通过版本命名空间失效；当前只支持受检的普通 CSS `?inline`，CSS Modules / 预处理器 / `image-set()` 在有独立安全适配器前保持拒绝。编译并发、模块数、单模块大小和单插件缓存总量都必须保持有界。
+- `client-source-boundary.ts`、`client-source-css-boundary.ts`、`client-source-paths.ts`：约束源码编译的模块、资源、CSS 和真实路径边界。插件自身的相对 / 绝对 / `file:` 模块、运行时字符串动态 import 和 CSS / asset 文件依赖只允许 source entry 目录内的规范真实路径；正常 bare npm 依赖仍可由 Vite 解析并打包，但解析到 plugin root 内 source root 之外的本地文件必须拒绝。整组源码模块通过版本命名空间失效；当前只支持受检的普通 CSS `?inline`，CSS Modules / 预处理器 / `image-set()` 在有独立安全适配器前保持拒绝。编译并发、模块数、单模块大小和单插件缓存总量都必须保持有界。
 - `proxy.ts`：loopback target 校验和 HTTP 代理转发。
 - `types.ts`：server 内部窄类型；共享 contract 完成后应迁移到 `packages/types/src/plugin.ts`。
 

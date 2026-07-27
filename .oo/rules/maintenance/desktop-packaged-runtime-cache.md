@@ -64,7 +64,8 @@ pnpm -C apps/desktop verify:macos-install
 
 安装后继续核对：
 
-- `/Applications/One Works Dev.app/Contents/Resources/desktop-build-source.json` 包含新的 `runtimePackageCacheVersion`。
+- 所有非官方 packaged build，无论使用 `One Works Dev` 还是本地 production `One Works` 身份，其实际安装路径的 `Contents/Resources/desktop-build-source.json` 都必须存在，并包含本次唯一的 `runtimePackageCacheVersion` 与 `runtimePackageBuildFingerprint`。
+- 只有显式设置 `ONEWORKS_DESKTOP_OFFICIAL_RELEASE_BUILD=true` 的官方不可变 build 才应缺少 `desktop-build-source.json`；这条反向断言必须和非官方包的存在性检查一起验证，且 runtime cache 应使用最终应用版本。
 - `~/.oneworks/bootstrap/npm/oneworks__client/<cacheVersion>/node_modules/@oneworks/client/dist` 来自本次 build。
 - `~/.oneworks/bootstrap/npm/oneworks__server/<cacheVersion>/node_modules/@oneworks/server` 来自本次 build。
 - 启动日志中 shared client 和 workspace server 都解析到同一个 `<cacheVersion>`。

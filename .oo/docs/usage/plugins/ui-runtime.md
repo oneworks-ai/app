@@ -67,7 +67,7 @@ my-plugin/
 静态 `/client` 入口不会在宿主里再做 TypeScript 或 JSX 转译。也就是说，未编译的 `client/src/index.tsx` 不能作为静态入口直接加载。新的 TypeScript / TSX 插件按这条链路处理：
 
 - 本地目录 plugin 在 watch 开启或位于 `.oo/plugins.dev/*` 时，开发态宿主会把 `exports["./client"].source` 转成同源 `/ui/@fs/...` entry，由宿主 Vite dev server 负责 TypeScript / TSX 转译、source map、样式模块 HMR 和 React Fast Refresh。
-- packaged Electron / 静态宿主会把同一个 source entry 通过受控的 Vite library build 编译为内存 ESM，并经保留源码相对路径的 workspace runtime 同源代理加载；字符串形式的运行时动态 import 会在请求对应源码模块时继续按需编译。每次插件 reload 会切换整组源码模块的版本命名空间，避免浏览器复用旧的动态子模块。运行时动态模块、静态模块和资源只能位于 source entry 所在目录及其子目录；跨到 server 或其他同级目录的请求会被拒绝。编译不读取 plugin 自己的 Vite / PostCSS 配置、不执行 plugin build script，也不向 plugin 目录写 `dist`。当前受控编译器支持普通 CSS 的 `?inline` 导入，并校验其中的 `url()` / `@import`；CSS Modules、Sass / Less / Stylus 和 `image-set()` 暂不支持，先编译为 source 根内的普通 CSS。其他独立资产也应使用 Vite 的 `?inline` 形式。
+- packaged Electron / 静态宿主会把同一个 source entry 通过受控的 Vite library build 编译为内存 ESM，并经保留源码相对路径的 workspace runtime 同源代理加载；字符串形式的运行时动态 import 会在请求对应源码模块时继续按需编译。每次插件 reload 会切换整组源码模块的版本命名空间，避免浏览器复用旧的动态子模块。插件自身的相对 / 绝对 / `file:` 模块、运行时动态模块和资源必须位于 source entry 所在目录及其子目录；跨到 server 或其他同级本地目录的请求会被拒绝。普通 bare npm 依赖仍可由 Vite 正常解析并打包。编译不读取 plugin 自己的 Vite / PostCSS 配置、不执行 plugin build script，也不向 plugin 目录写 `dist`。当前受控编译器支持普通 CSS 的 `?inline` 导入，并校验其中的 `url()` / `@import`；CSS Modules、Sass / Less / Stylus 和 `image-set()` 暂不支持，先编译为 source 根内的普通 CSS。其他独立资产也应使用 Vite 的 `?inline` 形式。
 - package / 下载来源、watch 关闭以及可提交 / 发布态仍加载 `exports["./client"].default`。发布前继续运行 plugin 自己的 build，把 TypeScript / TSX 编译到 `client/dist/index.js`。
 - 新插件不要配置 `plugin.client.devServer`；本地源码转换由宿主提供。
 

@@ -5,6 +5,11 @@ const { resolve } = require('node:path')
 const process = require('node:process')
 
 const {
+  createApplicationApprovalRequester,
+  createApplicationPermissionGuard,
+  readApplicationPermissionConfig
+} = require('./application-permissions.cjs')
+const {
   createSessionCursorController,
   pointerActionTools,
   sessionCursorStartToolDefinition,
@@ -17,11 +22,6 @@ const {
   workflowToolDefinitions,
   workflowToolNames
 } = require('./workflow-runtime.cjs')
-const {
-  createApplicationApprovalRequester,
-  createApplicationPermissionGuard,
-  readApplicationPermissionConfig
-} = require('./application-permissions.cjs')
 
 const sessionCursorToolDefinitions = [
   sessionCursorToolDefinition,
