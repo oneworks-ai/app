@@ -6,6 +6,10 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   NODE_OPTIONS: --max-old-space-size=4096
 
+concurrency:
+  group: desktop-package-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+
 on:
   pull_request:
     branches:
@@ -123,6 +127,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Run desktop package preflight
+        run: pnpm -C apps/desktop test:package-preflight
+
       - name: Resolve desktop release metadata
         id: desktop_release
         shell: bash
@@ -178,18 +185,43 @@ jobs:
         shell: bash
         run: echo "time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve desktop build policy
+        id: desktop_build_policy
+        shell: bash
+        env:
+          DESKTOP_SIGN_REQUESTED: ${{ vars.DESKTOP_SIGN || 'false' }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          archs="arm64,x64"
+          make_targets="dmg,zip,pkg"
+          sign=false
+
+          case "$DESKTOP_SIGN_REQUESTED" in
+            true|TRUE|1|yes|YES|on|ON) sign=true ;;
+          esac
+
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            archs="arm64"
+            make_targets="dmg"
+            sign=false
+          fi
+
+          echo "archs=$archs" >> "$GITHUB_OUTPUT"
+          echo "make_targets=$make_targets" >> "$GITHUB_OUTPUT"
+          echo "sign=$sign" >> "$GITHUB_OUTPUT"
+
       - name: Validate desktop signing credentials
         shell: bash
         env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          DESKTOP_CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.DESKTOP_CSC_INSTALLER_KEY_PASSWORD }}
-          DESKTOP_CSC_INSTALLER_LINK: ${{ secrets.DESKTOP_CSC_INSTALLER_LINK }}
-          DESKTOP_CSC_KEY_PASSWORD: ${{ secrets.DESKTOP_CSC_KEY_PASSWORD }}
-          DESKTOP_CSC_LINK: ${{ secrets.DESKTOP_CSC_LINK }}
+          APPLE_ID: ${{ steps.desktop_build_policy.outputs.sign == 'true' && secrets.APPLE_ID || '' }}
+          APPLE_ID_PASSWORD: ${{ steps.desktop_build_policy.outputs.sign == 'true' && secrets.APPLE_ID_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ steps.desktop_build_policy.outputs.sign == 'true' && secrets.APPLE_TEAM_ID || '' }}
+          DESKTOP_CSC_INSTALLER_KEY_PASSWORD: ${{ steps.desktop_build_policy.outputs.sign == 'true' && secrets.DESKTOP_CSC_INSTALLER_KEY_PASSWORD || '' }}
+          DESKTOP_CSC_INSTALLER_LINK: ${{ steps.desktop_build_policy.outputs.sign == 'true' && secrets.DESKTOP_CSC_INSTALLER_LINK || '' }}
+          DESKTOP_CSC_KEY_PASSWORD: ${{ steps.desktop_build_policy.outputs.sign == 'true' && secrets.DESKTOP_CSC_KEY_PASSWORD || '' }}
+          DESKTOP_CSC_LINK: ${{ steps.desktop_build_policy.outputs.sign == 'true' && secrets.DESKTOP_CSC_LINK || '' }}
           DESKTOP_RELEASE_ENABLED: ${{ steps.desktop_release.outputs.enabled }}
-          DESKTOP_SIGN: ${{ vars.DESKTOP_SIGN || 'false' }}
+          DESKTOP_SIGN: ${{ steps.desktop_build_policy.outputs.sign }}
         run: |
           case "$DESKTOP_SIGN" in
             true|TRUE|1|yes|YES|on|ON) ;;
@@ -226,7 +258,7 @@ jobs:
       - name: Package desktop app
         run: pnpm desktop:package
         env:
-          ONEWORKS_DESKTOP_ARCHS: ${{ runner.os == 'macOS' && 'arm64,x64' || '' }}
+          ONEWORKS_DESKTOP_ARCHS: ${{ steps.desktop_build_policy.outputs.archs }}
           ONEWORKS_DESKTOP_BUILD_GIT_BRANCH: ${{ github.head_ref || github.ref_name }}
           ONEWORKS_DESKTOP_BUILD_GIT_HASH: ${{ github.sha }}
           ONEWORKS_DESKTOP_BUILD_TIME: ${{ steps.desktop_build_source.outputs.time }}
@@ -249,23 +281,23 @@ jobs:
       - name: Build desktop artifacts
         run: pnpm -C apps/desktop make:from-package
         env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.DESKTOP_CSC_INSTALLER_KEY_PASSWORD }}
-          CSC_INSTALLER_LINK: ${{ secrets.DESKTOP_CSC_INSTALLER_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.DESKTOP_CSC_KEY_PASSWORD }}
-          CSC_LINK: ${{ secrets.DESKTOP_CSC_LINK }}
+          APPLE_ID: ${{ steps.desktop_build_policy.outputs.sign == 'true' && secrets.APPLE_ID || '' }}
+          APPLE_ID_PASSWORD: ${{ steps.desktop_build_policy.outputs.sign == 'true' && secrets.APPLE_ID_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ steps.desktop_build_policy.outputs.sign == 'true' && secrets.APPLE_TEAM_ID || '' }}
+          CSC_INSTALLER_KEY_PASSWORD: ${{ steps.desktop_build_policy.outputs.sign == 'true' && secrets.DESKTOP_CSC_INSTALLER_KEY_PASSWORD || '' }}
+          CSC_INSTALLER_LINK: ${{ steps.desktop_build_policy.outputs.sign == 'true' && secrets.DESKTOP_CSC_INSTALLER_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ steps.desktop_build_policy.outputs.sign == 'true' && secrets.DESKTOP_CSC_KEY_PASSWORD || '' }}
+          CSC_LINK: ${{ steps.desktop_build_policy.outputs.sign == 'true' && secrets.DESKTOP_CSC_LINK || '' }}
           DEBUG: electron-builder
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ONEWORKS_DESKTOP_ARCHS: ${{ runner.os == 'macOS' && 'arm64,x64' || '' }}
-          ONEWORKS_DESKTOP_MAKE_TARGETS: dmg,zip,pkg
+          ONEWORKS_DESKTOP_ARCHS: ${{ steps.desktop_build_policy.outputs.archs }}
+          ONEWORKS_DESKTOP_MAKE_TARGETS: ${{ steps.desktop_build_policy.outputs.make_targets }}
           ONEWORKS_DESKTOP_OFFICIAL_RELEASE_BUILD: ${{ steps.desktop_release.outputs.enabled }}
           ONEWORKS_DESKTOP_PUBLISH: never
           ONEWORKS_DESKTOP_RELEASE_BUILD: ${{ steps.desktop_release.outputs.enabled }}
           ONEWORKS_DESKTOP_UPDATE_CHANNEL: ${{ steps.desktop_release.outputs.update_channel }}
           ONEWORKS_DESKTOP_VERSION: ${{ steps.desktop_release.outputs.version }}
-          ONEWORKS_DESKTOP_SIGN: ${{ vars.DESKTOP_SIGN || 'false' }}
+          ONEWORKS_DESKTOP_SIGN: ${{ steps.desktop_build_policy.outputs.sign }}
 
       - name: Verify macOS install artifact
         run: pnpm -C apps/desktop verify:macos-install
@@ -276,7 +308,7 @@ jobs:
           ONEWORKS_DESKTOP_INSTALL_ARCH: arm64
           ONEWORKS_DESKTOP_OFFICIAL_RELEASE_BUILD: ${{ steps.desktop_release.outputs.enabled }}
           ONEWORKS_DESKTOP_RELEASE_BUILD: ${{ steps.desktop_release.outputs.enabled }}
-          ONEWORKS_DESKTOP_SIGN: ${{ vars.DESKTOP_SIGN || 'false' }}
+          ONEWORKS_DESKTOP_SIGN: ${{ steps.desktop_build_policy.outputs.sign }}
 
       - name: Upload installer artifacts
         uses: actions/upload-artifact@v4
