@@ -25,6 +25,7 @@
 - server-child 刷新了 dev runtime cache，但 shared client 静态服务仍按默认版本解析 `@oneworks/client`，导致前端旧、后端新。
 - runtime package closure 复制依赖时只按 `package.json.name` 匹配依赖名，漏掉 pnpm alias 依赖，例如依赖键是 `function-bind`，真实包名是 `@nolyfill/function-bind`。这种情况下 cache 目录看似存在，server 启动时才报 `Cannot find module ...`。
 - runtime package closure 只遍历 `dependencies` / `optionalDependencies`，没有把非重复的 `peerDependencies` 连同 optional peer 语义纳入闭包。插件可能在 workspace 中依靠提升后的 peer 正常运行，复制进独立 cache 后才缺包；materialize 必须显式复制 peer closure。
+- trusted packaged cache 的相对 symlink 如果直接按逻辑路径计算，在 macOS `/var` → `/private/var` 这类目录别名下可能指向错误层级，表现为 manifest 已写入但 package link 不存在。创建链接前必须对目标父目录和 source 都做 `realpath`，再计算相对路径；回归测试要让 cache alias 与真实目录具有不同深度，并让 source 位于 alias 之外。
 - packaged launcher 首屏期间可以提前预热 workspace package cache，但预热必须在 `ELECTRON_RUN_AS_NODE` 子进程里执行，覆盖 cli / server / client runtime、内置 adapters 和内置 plugins。不要在 Electron main 进程里同步 seed 这些包；首次 3/3 或 9/13 changed 时会抢占 launcher renderer，造成首屏 ready 变慢。
 - 只验证 Electron 窗口能打开，没有验证 packaged server 是否真正响应 `/api/auth/status`。
 
