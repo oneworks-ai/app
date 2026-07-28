@@ -109,12 +109,19 @@
 .config-shortcut-input__native {
   position: absolute;
   inset: 0 34px 0 0;
+  padding: 0;
   border: 0;
   outline: 0;
   background: transparent;
   color: transparent;
   caret-color: transparent;
   cursor: text;
+  font: inherit;
+}
+
+.config-shortcut-input__native::placeholder {
+  color: transparent;
+  opacity: 0;
 }
 
 .config-shortcut-input.is-empty .config-shortcut-input__native {
