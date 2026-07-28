@@ -60,8 +60,8 @@ export function activatePlugin(ctx: CuaPluginContext) {
 
   ctx.registerApi('status', {
     title: {
-      en: 'Cua Driver status API',
-      'zh-Hans': 'Cua Driver 状态 API'
+      en: 'Computer Control status API',
+      'zh-Hans': '电脑控制状态 API'
     },
     description: {
       en: 'Reports the local Cua Driver installation, resolved binary, and daemon status without installing anything.',

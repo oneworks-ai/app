@@ -520,7 +520,7 @@ describe('browser control broker', () => {
     expect(page.executeJavaScript).toHaveBeenCalledOnce()
   })
 
-  it('renders the shared Browser Driver cursor inside the controlled page', async () => {
+  it('renders the shared Browser Control cursor inside the controlled page', async () => {
     const { createBrowserControlBroker } = await import('../src/main/browser-control-broker')
     const page = fakeWebContents(9)
     const host = { id: 23, isDestroyed: vi.fn(() => false) }

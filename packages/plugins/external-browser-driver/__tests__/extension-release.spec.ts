@@ -251,7 +251,7 @@ describe('chrome Web Store V2 publishing', () => {
     const workflow = readFileSync(join(repositoryRoot, '.github/workflows/chrome-extension-release.yml'), 'utf8')
     const releaseTags = readFileSync(join(repositoryRoot, '.github/workflows/release-tags.yml'), 'utf8')
     const publishCli = readFileSync(
-      join(repositoryRoot, 'packages/plugins/chrome-driver/bin/publish-chrome-web-store.cjs'),
+      join(repositoryRoot, 'packages/plugins/external-browser-driver/bin/publish-chrome-web-store.cjs'),
       'utf8'
     )
 
@@ -274,10 +274,10 @@ describe('chrome Web Store V2 publishing', () => {
       'dispatch_chrome_extension_release "$tag" true'
     ])
     expect(releaseTags).toMatch(
-      /if git rev-parse[\s\S]*?pkg\/oneworks-plugin-chrome-driver\/v\*\)[\s\S]*?dispatch_chrome_extension_release "\$tag" false[\s\S]*?continue/u
+      /if git rev-parse[\s\S]*?pkg\/oneworks-plugin-external-browser-driver\/v\*\)[\s\S]*?dispatch_chrome_extension_release "\$tag" false[\s\S]*?continue/u
     )
     expect(releaseTags).toMatch(
-      /Creating \$tag[\s\S]*?pkg\/oneworks-plugin-chrome-driver\/v\*\)[\s\S]*?dispatch_chrome_extension_release "\$tag" true/u
+      /Creating \$tag[\s\S]*?pkg\/oneworks-plugin-external-browser-driver\/v\*\)[\s\S]*?dispatch_chrome_extension_release "\$tag" true/u
     )
     expect(ciWorkflow.match(/- \.github\/workflows\/release-tags\.yml/gu)).toHaveLength(2)
   })

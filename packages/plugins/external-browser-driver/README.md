@@ -1,26 +1,26 @@
-# OneWorks
+# 浏览器控制
 
-OneWorks Chrome 扩展让 OneWorks Agent 接管用户明确配对的 Chrome。它复用 Browser Driver 的工作流和渐进式结果基础设施，但使用独立的 Chrome extension bridge、稳定的 `windowId` / `tabId` / `frameId` / `documentId` 与 typed tools；不依赖“当前标签页”猜测。任意 JavaScript/CDP、完整 Cookie 值和页面敏感字段默认关闭，用户可在设置或扩展 popup 中为当前浏览器会话显式开启。
+浏览器控制通过浏览器扩展让 OneWorks Agent 接管用户明确配对的外部浏览器。当前实现和发行包仅支持 Google Chrome；能力与产品名称保持浏览器级语义，以便未来接入 Firefox 等支持扩展的浏览器。它复用内置浏览器控制的工作流和渐进式结果基础设施，但使用独立的 Chrome extension bridge、稳定的 `windowId` / `tabId` / `frameId` / `documentId` 与 typed tools；不依赖“当前标签页”猜测。任意 JavaScript/CDP、完整 Cookie 值和页面敏感字段默认关闭，用户可在设置或扩展 popup 中为当前浏览器会话显式开启。
 
 [English](./README.en.md)
 
 ## 安装开发版扩展
 
 ```bash
-pnpm --filter @oneworks/plugin-chrome-driver build:extension
+pnpm --filter @oneworks/plugin-external-browser-driver build:extension
 ```
 
-在 `chrome://extensions` 开启开发者模式，选择“加载已解压的扩展程序”，加载 `packages/plugins/chrome-driver/dist-extension/privileged`。随后打开 OneWorks 设置中的“外部浏览器”子页面，在扩展 popup 中选择“Connect this OneWorks tab”，再回到页面点击“连接浏览器”。
+在 `chrome://extensions` 开启开发者模式，选择“加载已解压的扩展程序”，加载 `packages/plugins/external-browser-driver/dist-extension/privileged`。随后打开 OneWorks 设置中的“外部浏览器”子页面，在扩展 popup 中选择“Connect this OneWorks tab”，再回到页面点击“连接浏览器”。
 
 正式开发者发行版声明 `debugger` 与 `proxy`，用于受控网络/控制台/DOM/性能调试、全页截图、PDF 和代理控制；书签、历史、Cookie、下载、站点数据等能力仍在 popup 中按能力组申请，并继续经过会话开关、风险确认和审计。若只需要基础语义操作，可运行 `build:extension:minimal` 并加载 `dist-extension/base`。`build:extension:e2e` 仅供隔离 profile 自动化测试，不应安装到日常浏览器。
 
 ## 构建可分发 ZIP
 
 ```bash
-pnpm --filter @oneworks/plugin-chrome-driver package:extension:all
+pnpm --filter @oneworks/plugin-external-browser-driver package:extension:all
 ```
 
-产物位于 `packages/plugins/chrome-driver/dist-package/`：
+产物位于 `packages/plugins/external-browser-driver/dist-package/`：
 
 - `oneworks-v<version>.zip`：正式开发者发行版，包含 `debugger` / `proxy`，用于 Chrome Web Store 上传或解压后旁加载。
 - `oneworks-v<version>-minimal.zip`：可选的最小权限备用包，不会上传 Chrome Web Store。
@@ -31,7 +31,7 @@ Chrome 应用商店的版本化截图、宣传图和审核文案维护在 [`stor
 
 ZIP 根目录直接包含 `manifest.json`。构建会把 workspace semver 映射为 Chrome 可比较的四段整数版本，并用 `version_name` 保留原始版本；例如 `0.1.0-beta.6` 映射为 `0.1.0.20006`。同一源码和版本重复构建会得到相同 SHA-256。`package:extension:all` 会同时校验固定扩展身份、图标、运行时入口、权限 flavor 和 E2E 泄漏。
 
-`.github/workflows/chrome-extension-ci.yml` 在相关 PR / main 变更时构建并保留开发者版、minimal 版和 `SHA256SUMS`。main 上首次创建 `pkg/oneworks-plugin-chrome-driver/v*` tag 时，Release Tags 会显式触发 `.github/workflows/chrome-extension-release.yml`：创建带 provenance attestation 的 GitHub Release，并在通过 `chrome-web-store` environment 后，使用短期 WIF service-account token 自动上传完整开发者版和提交审核。重跑已有 tag 默认只恢复 GitHub Release，避免重复提交商店；商店失败可从同一 tag 手动 dispatch 并设置 `publish_store=true` 重试。
+`.github/workflows/chrome-extension-ci.yml` 在相关 PR / main 变更时构建并保留开发者版、minimal 版和 `SHA256SUMS`。main 上首次创建 `pkg/oneworks-plugin-external-browser-driver/v*` tag 时，Release Tags 会显式触发 `.github/workflows/chrome-extension-release.yml`：创建带 provenance attestation 的 GitHub Release，并在通过 `chrome-web-store` environment 后，使用短期 WIF service-account token 自动上传完整开发者版和提交审核。重跑已有 tag 默认只恢复 GitHub Release，避免重复提交商店；商店失败可从同一 tag 手动 dispatch 并设置 `publish_store=true` 重试。
 
 ## 能力矩阵
 

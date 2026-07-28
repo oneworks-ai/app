@@ -1,4 +1,4 @@
-# @oneworks/plugin-cua-driver
+# 电脑控制 - CUA
 
 这是 OneWorks 对 [Cua Driver](https://github.com/trycua/cua/tree/main/libs/cua-driver) 的薄插件封装。Cua Driver 是 macOS 后台 computer-use driver；OneWorks 继续负责模型、会话、agent loop、取消和日志，插件通过 MCP 资产把原生 GUI 工具注入会话，并在 MCP 进程启动时完成运行环境准备。
 

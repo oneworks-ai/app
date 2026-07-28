@@ -1,10 +1,10 @@
 {
   "__oneWorksPluginManifest": true,
   "name": "@oneworks/plugin-cua-driver",
-  "displayName": "Cua Driver",
+  "displayName": "Computer Control - CUA",
   "displayNameI18n": {
-    "en": "Cua Driver",
-    "zh-Hans": "Cua 驱动"
+    "en": "Computer Control - CUA",
+    "zh-Hans": "电脑控制 - CUA"
   },
   "icon": "./assets/icon.svg",
   "version": "0.1.0-beta.8",
@@ -16,8 +16,8 @@
     "schema": {
       "type": "object",
       "titleI18n": {
-        "en": "Cua Driver options",
-        "zh-Hans": "Cua Driver 选项"
+        "en": "Computer Control options",
+        "zh-Hans": "电脑控制选项"
       },
       "properties": {
         "cursorColorStrategy": {

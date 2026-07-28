@@ -116,8 +116,8 @@ out
 # Nuxt.js build / generate output
 .nuxt
 dist
-packages/plugins/chrome-driver/dist-extension/
-packages/plugins/chrome-driver/dist-package/
+packages/plugins/external-browser-driver/dist-extension/
+packages/plugins/external-browser-driver/dist-package/
 *.vsix
 
 # Gatsby files

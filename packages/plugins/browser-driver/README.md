@@ -1,4 +1,4 @@
-# @oneworks/plugin-browser-driver
+# 内置浏览器控制
 
 OneWorks 内置浏览器的 Agent 控制插件。它通过桌面端托管的受控 broker 操作当前 workspace / session 的 interaction-panel webview，用户不需要配置调试端口或启动外部浏览器。
 

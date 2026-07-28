@@ -1,5 +1,7 @@
-# @oneworks/plugin-chrome-driver 0.1.0-beta.9
+# @oneworks/plugin-external-browser-driver 0.1.0-beta.9
 
+- Renamed the host plugin identity from Chrome Driver to External Browser Driver, changed the host-facing product
+  name to Browser Control, and kept Google Chrome as the current transport.
 - Moved the External Browser capability page under the new host-owned External Control group in Settings.
 - Split the capability page into host-native Connection, Advanced access, Website permissions, Web Frame, and Review & audit tabs so each task stays focused.
 - Made advanced-access preferences configurable while disconnected, persisted the boolean choices in OneWorks, and synchronized safe defaults or saved values when a compatible browser connects. Settings is the sole preference writer; the extension popup now reports only the effective policy.

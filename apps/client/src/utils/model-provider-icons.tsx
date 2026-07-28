@@ -37,6 +37,9 @@ const builtinImageIconMap: Record<string, BuiltinImageIcon> = {
   'oneworks-cua-driver': {
     src: new URL('../../../../packages/plugins/cua-driver/assets/icon.svg', import.meta.url).href
   },
+  'oneworks-external-browser-driver': {
+    src: new URL('../../../../packages/plugins/external-browser-driver/assets/icon.svg', import.meta.url).href
+  },
   'oneworks-focus-workbench-theme': {
     src: new URL('../../../../packages/plugins/focus-workbench-theme/assets/icon.svg', import.meta.url).href
   },

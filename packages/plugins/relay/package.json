@@ -202,6 +202,9 @@
     "entry": "./dist/config.cjs"
   },
   "plugin": {
+    "client": {
+      "sourceRoot": "./src"
+    },
     "server": {
       "roles": [
         "manager",

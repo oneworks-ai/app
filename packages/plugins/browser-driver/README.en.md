@@ -1,4 +1,4 @@
-# @oneworks/plugin-browser-driver
+# In-App Browser Control
 
 Agent control for the OneWorks internal browser. It operates interaction-panel webviews through a desktop-managed, workspace/session-scoped broker, so users never configure a debug port or launch an external browser.
 

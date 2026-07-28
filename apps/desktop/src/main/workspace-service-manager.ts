@@ -93,6 +93,33 @@ const createWorkspaceRuntimeEnv = (workspaceFolder: string): NodeJS.ProcessEnv =
   return env
 }
 
+const parseClientFsAllow = (raw: string | undefined) => {
+  const value = raw?.trim()
+  if (value == null || value === '') return []
+  try {
+    const parsed = JSON.parse(value) as unknown
+    if (Array.isArray(parsed)) {
+      return parsed.filter((entry): entry is string => typeof entry === 'string' && entry.trim() !== '')
+    }
+  } catch {}
+  return value.split(path.delimiter).filter(entry => entry.trim() !== '')
+}
+
+export const resolveDesktopDevClientFsAllowEnv = (
+  env: NodeJS.ProcessEnv = process.env
+): Pick<NodeJS.ProcessEnv, '__ONEWORKS_PROJECT_CLIENT_FS_ALLOW__'> | {} => {
+  if (!isDev) return {}
+  const allowedRoots = Array.from(
+    new Set([
+      repoRoot,
+      ...parseClientFsAllow(env.__ONEWORKS_PROJECT_CLIENT_FS_ALLOW__).map(entry => path.resolve(entry))
+    ])
+  )
+  return {
+    __ONEWORKS_PROJECT_CLIENT_FS_ALLOW__: JSON.stringify(allowedRoots)
+  }
+}
+
 const isPathInside = (parentPath: string, targetPath: string) => {
   const relativePath = path.relative(path.resolve(parentPath), path.resolve(targetPath))
   return relativePath === '' || (
@@ -299,6 +326,7 @@ export const createWorkspaceServiceManager = ({
           ...resolveRuntimeConsumerBootstrapEnv(),
           ...resolveCachedServerPackageEnv(packagedWorkspaceRuntimeEnv),
           ...directSourceLoaderEnv,
+          ...resolveDesktopDevClientFsAllowEnv(packagedWorkspaceRuntimeEnv),
           ...getBrowserControlEnv(workspaceFolder),
           __ONEWORKS_PROJECT_CLIENT_BASE__: CLIENT_BASE,
           __ONEWORKS_PROJECT_CLIENT_DIST_PATH__: clientDistPath ?? '',

@@ -13,6 +13,7 @@ import { isChildProcessRunning, killChildProcess, writePrefixedChunk } from './p
 import { getAvailablePort, waitForServerStartup } from './ready-checks'
 import type { DesktopRuntimeState, ManagerService } from './types'
 import {
+  resolveDesktopDevClientFsAllowEnv,
   resolveDesktopDevRuntimeVersionEnv,
   resolveDirectSourceLoaderEnv,
   resolveRuntimeConsumerBootstrapEnv
@@ -79,6 +80,7 @@ export const createManagerRuntimeEnv = ({
     ...resolveRuntimeConsumerBootstrapEnv(),
     ...resolveCachedServerPackageEnv(packagedRuntimeEnv),
     ...resolveDirectSourceLoaderEnv(serverExecutable),
+    ...resolveDesktopDevClientFsAllowEnv(packagedRuntimeEnv),
     __ONEWORKS_PROJECT_CLIENT_BASE__: CLIENT_BASE,
     __ONEWORKS_PROJECT_CLIENT_MODE__: 'none',
     __ONEWORKS_PROJECT_SERVER_ALLOW_CORS__: 'true',

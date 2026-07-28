@@ -110,9 +110,13 @@ export const createClientSourceBoundaryPlugin = ({
     const packageManifest = await realpath(path.join(pluginRoot, 'package.json')).catch(() => undefined)
     for (const watchFile of this.getWatchFiles()) {
       const realWatchFile = await resolveRealModuleFile(watchFile)
+      const isBundledDependencyManifest = realWatchFile != null &&
+        path.basename(realWatchFile) === 'package.json' &&
+        [...bundledModuleFiles].some(moduleFile => isPathInside(path.dirname(realWatchFile), moduleFile))
       if (
         realWatchFile != null &&
         realWatchFile !== packageManifest &&
+        !isBundledDependencyManifest &&
         !bundledModuleFiles.has(realWatchFile) &&
         !isNodeModulesPath(watchFile) &&
         !isNodeModulesPath(realWatchFile) &&

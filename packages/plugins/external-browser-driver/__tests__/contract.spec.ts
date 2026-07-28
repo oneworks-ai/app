@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 
 import { describe, expect, it, vi } from 'vitest'
@@ -5,6 +6,8 @@ import { describe, expect, it, vi } from 'vitest'
 const require = createRequire(import.meta.url)
 const manifest = require('../plugin.json') as {
   displayName: string
+  displayNameI18n: { en: string; 'zh-Hans': string }
+  icon: string
   version: string
   plugin: { contributions: Record<string, unknown> & { settingsPages?: Array<Record<string, unknown>> } }
 }
@@ -29,9 +32,16 @@ const createWorkflowController = require('../../browser-driver/bin/browser-drive
 }
 
 describe('external browser MCP contract', () => {
-  it('injects its control view into Settings instead of the main navigation', () => {
+  it('injects its control view into Settings instead of the main navigation', async () => {
     const contributions = manifest.plugin.contributions
-    expect(manifest.displayName).toBe('OneWorks')
+    expect(manifest.displayName).toBe('Browser Control')
+    expect(manifest.displayNameI18n).toEqual({
+      en: 'Browser Control',
+      'zh-Hans': '浏览器控制'
+    })
+    expect(manifest.icon).toBe('./assets/icon.svg')
+    expect(await readFile(new URL('../skills/external-browser-driver/SKILL.md', import.meta.url), 'utf8'))
+      .toContain('# Browser Control')
     expect(manifest.version).toBe(packageManifest.version)
     expect(contributions.navItems).toBeUndefined()
     expect(contributions.routes).toBeUndefined()

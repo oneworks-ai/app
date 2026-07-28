@@ -51,7 +51,7 @@
   - 签名开关
   - macOS 双架构 `latest-mac.yml` 合并
 - `scripts/smoke-packaged-server.cjs`
-  - 包内 server smoke test 契约；除基础 server 探活外，还必须确认默认内置 Relay、IAB、Chrome Driver 和 CUA 的生产入口存在、runtime 已激活且没有 diagnostics
+  - 包内 server smoke test 契约；除基础 server 探活外，还必须确认默认内置 Relay、In-App Browser Control、Browser Control Chrome transport 和 Computer Control - CUA 的生产入口存在、runtime 已激活且没有 diagnostics
 - `electron-builder.yml`
   - 目标平台、artifact 命名、GitHub publish 配置
 - `build/app-update.yml`
@@ -76,8 +76,8 @@
 - macOS 会话右键“在新窗口打开”应创建同风格 workspace 窗口，并通过 URL 参数让左侧栏默认折叠。
 - 最小窗口宽度当前支持到 `300px`；改 header / nav / sender 布局时要验证这个尺寸，不要只看大窗口。
 - `pnpm desktop:package`、`pnpm desktop:make` 仍依赖静态 client dist，并默认先构建 client。
-- `pnpm desktop:package` / `package:icon` 必须先运行 `build:plugins`，为 `BUILTIN_PLUGIN_PACKAGES` 中带生产 client/server entry 的插件准备 `dist`。Chrome Driver 必须包含 client/server 产物，Relay 必须包含 client/server 与 config 的 CJS/ESM 产物；只把 workspace package overlay 进 staging 不能替代构建。
-- `BUILTIN_PLUGIN_PACKAGES` 必须与 `apps/desktop/package.json` 的 production dependencies、`packages/utils/src/plugin-resolver.ts` 的默认官方插件，以及 `apps/server/src/services/plugins/discovery.ts` 的宿主来源归类保持一致。Browser Driver 与 Cua Driver 是桌面默认内置能力；源码仓库可用同 manifest `name` 的 directory plugin 覆盖内置副本以继续 watch 调试，但不能同时生成两个运行实例。
+- `pnpm desktop:package` / `package:icon` 必须先运行 `build:plugins`，为 `BUILTIN_PLUGIN_PACKAGES` 中带生产 client/server entry 的插件准备 `dist`。Browser Control 必须包含 client/server 产物，Relay 必须包含 client/server 与 config 的 CJS/ESM 产物；只把 workspace package overlay 进 staging 不能替代构建。
+- `BUILTIN_PLUGIN_PACKAGES` 必须与 `apps/desktop/package.json` 的 production dependencies、`packages/utils/src/plugin-resolver.ts` 的默认官方插件，以及 `apps/server/src/services/plugins/discovery.ts` 的宿主来源归类保持一致。In-App Browser Control、Browser Control 的当前 Chrome transport 与 Computer Control - CUA 是桌面默认内置能力；源码仓库可用同 manifest `name` 的 directory plugin 覆盖内置副本以继续 watch 调试，但不能同时生成两个运行实例。
 - macOS `.pkg` 安装向导包通过 `pnpm desktop:make:pkg` 或 `node apps/desktop/scripts/make.cjs --target pkg` 生成；`ONEWORKS_DESKTOP_MAKE_TARGETS` 只作为 CI / 临时覆盖入口，不作为用户文档里的主要入口。
 - 当前 GitHub `desktop-package` workflow 先收口 macOS：相关改动会先跑 package preflight；PR 使用 unsigned Dev identity，只生成代表主用户安装路径的 `arm64` `.dmg` 并完成挂载、复制到 `/Applications` 和已安装 app smoke，main / tag / 手动模式继续按仓库签名策略生成 `arm64,x64` 预打包 app 与 `.dmg` / `.pkg` / `.zip`。Windows / Linux builder 目标保留，但暂时不作为 CI gate。
 - 桌面图标资产来自 `assets/icon` submodule；更新 submodule 后运行 `pnpm desktop:icons:sync`，默认根图标是工业风格。macOS package / make 默认 `--mac-icon auto`，只有完整 Xcode 26+ 的 `actool` 支持 Icon Composer 时才启用 `.icon` / `Assets.car`，否则继续使用 `.icns`；显式验证可用 `pnpm desktop:make:pkg:icon`。

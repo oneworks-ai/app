@@ -65,6 +65,7 @@ const EMPTY_NATIVE_PLUGINS: NativeHostPlugin[] = []
 
 export function PluginStoreRoute() {
   const { i18n, t } = useTranslation()
+  const language = i18n.resolvedLanguage ?? i18n.language
   const { message } = App.useApp()
   const navigate = useNavigate()
   const location = useLocation()
@@ -123,11 +124,11 @@ export function PluginStoreRoute() {
   )
   const installedItems = useMemo(() =>
     buildPluginListItems({
-      language: i18n.resolvedLanguage ?? i18n.language,
+      language,
       nativePlugins,
       plugins,
       serverBaseUrl: pluginServerBaseUrl
-    }), [i18n.language, i18n.resolvedLanguage, nativePlugins, pluginServerBaseUrl, plugins])
+    }), [language, nativePlugins, pluginServerBaseUrl, plugins])
   const selectedPlugin = useMemo(
     () => scope === '' ? undefined : plugins.find(plugin => plugin.scope === scope),
     [plugins, scope]
@@ -175,7 +176,7 @@ export function PluginStoreRoute() {
   const selectedDetailItem: PluginRuntimeInstance | NativeHostPlugin | PluginMarketplaceCatalogPlugin | undefined =
     selectedPlugin ?? selectedNativePlugin ?? selectedMarketplacePlugin
   const headerTitle = selectedPlugin != null
-    ? resolvePluginDisplayName(selectedPlugin, i18n.resolvedLanguage ?? i18n.language)
+    ? resolvePluginDisplayName(selectedPlugin, language)
     : selectedNativePlugin != null
     ? selectedNativePlugin.displayName ?? selectedNativePlugin.name
     : selectedMarketplacePlugin != null
@@ -254,11 +255,11 @@ export function PluginStoreRoute() {
     if (keyword === '') return plugins
 
     return plugins.filter((plugin) => {
-      return getPluginPresentationSearchText(plugin, i18n.resolvedLanguage ?? i18n.language)
+      return getPluginPresentationSearchText(plugin, language)
         .toLowerCase()
         .includes(keyword)
     })
-  }, [i18n.language, i18n.resolvedLanguage, pluginQuery, plugins])
+  }, [language, pluginQuery, plugins])
   const visibleNativePlugins = useMemo(() => {
     const keyword = pluginQuery.trim().toLowerCase()
     if (keyword === '') return nativePlugins
@@ -421,15 +422,14 @@ export function PluginStoreRoute() {
         visiblePlugins,
         pluginGroupMode,
         t,
-        i18n.resolvedLanguage ?? i18n.language,
+        language,
         pluginServerBaseUrl,
         createPluginContextMenuItems,
         visibleNativePlugins
       ),
     [
       createPluginContextMenuItems,
-      i18n.language,
-      i18n.resolvedLanguage,
+      language,
       pluginGroupMode,
       pluginServerBaseUrl,
       visibleNativePlugins,

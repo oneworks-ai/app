@@ -16,24 +16,40 @@ interface CompilePluginClientSourceOptions {
   entryPath: string
   pluginRoot: string
   scope: string
+  sourceRoot?: string
 }
 
 const MAX_COMPILED_PLUGIN_CLIENT_SOURCE_BYTES = 16 * 1024 * 1024
 
-const resolveSourceEntry = async (pluginRoot: string, entryPath: string) => {
+const resolveSourceEntry = async (
+  pluginRoot: string,
+  entryPath: string,
+  configuredSourceRoot: string | undefined
+) => {
   const absoluteEntry = path.resolve(pluginRoot, entryPath)
+  const absoluteSourceRoot = configuredSourceRoot == null
+    ? path.dirname(absoluteEntry)
+    : path.resolve(pluginRoot, configuredSourceRoot)
   const [realPluginRoot, realEntry] = await Promise.all([
     realpath(pluginRoot),
     realpath(absoluteEntry)
   ])
-  const entryStat = await stat(realEntry)
-  if (!entryStat.isFile() || !isPathInside(realPluginRoot, realEntry)) {
+  const [entryStat, realSourceRoot] = await Promise.all([
+    stat(realEntry),
+    realpath(absoluteSourceRoot)
+  ])
+  if (
+    !entryStat.isFile() ||
+    !isPathInside(realPluginRoot, realEntry) ||
+    !isPathInside(realPluginRoot, realSourceRoot) ||
+    !isPathInside(realSourceRoot, realEntry)
+  ) {
     throw new Error('Client source entry must be a file inside the plugin root.')
   }
   return {
     entryPath: realEntry,
     pluginRoot: realPluginRoot,
-    sourceRoot: path.dirname(realEntry)
+    sourceRoot: realSourceRoot
   }
 }
 
@@ -41,9 +57,10 @@ export const compilePluginClientSource = async ({
   cacheDir,
   entryPath,
   pluginRoot,
-  scope
+  scope,
+  sourceRoot
 }: CompilePluginClientSourceOptions): Promise<CompiledPluginClientSource> => {
-  const source = await resolveSourceEntry(pluginRoot, entryPath)
+  const source = await resolveSourceEntry(pluginRoot, entryPath, sourceRoot)
   const { build } = await import('vite')
   const result = await build({
     appType: 'custom',
@@ -60,6 +77,9 @@ export const compilePluginClientSource = async ({
     logLevel: 'silent',
     plugins: [createClientSourceBoundaryPlugin(source)],
     publicDir: false,
+    resolve: {
+      conditions: ['browser', '__oneworks__', 'module', 'import', 'development']
+    },
     root: source.pluginRoot,
     build: {
       assetsInlineLimit: Number.MAX_SAFE_INTEGER,

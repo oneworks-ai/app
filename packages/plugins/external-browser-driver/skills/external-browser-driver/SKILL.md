@@ -1,9 +1,13 @@
 ---
-name: chrome-driver
+name: external-browser-driver
 description: Control a user-paired external browser through a Chrome extension, explicit typed targets, and semantic operations.
 ---
 
-# External Browser Driver
+# Browser Control
+
+Browser Control currently controls Google Chrome through the OneWorks extension. Its browser-facing contract is
+transport-neutral so future extension transports, such as Firefox, can implement the same capability without
+renaming the product.
 
 1. Call `chrome_capabilities` before using a capability family for the first time. Missing permissions are recoverable: ask the user to grant the named group from the Chrome extension popup, then retry. The OneWorks page reports permission state but never grants Chrome permissions itself.
 2. Discover targets with `chrome_windows`, `chrome_tabs`, and `chrome_frames`. Never guess IDs or rely on an implicit current tab.

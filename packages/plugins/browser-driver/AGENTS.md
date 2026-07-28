@@ -1,6 +1,8 @@
-# Browser Driver Plugin
+# In-App Browser Control Plugin
 
 This package controls only OneWorks interaction-panel browser webviews through the authenticated desktop broker.
+
+Its host-facing display name is `In-App Browser Control` / `内置浏览器控制`, which distinguishes this embedded-webview capability from the external, extension-backed `Browser Control` / `浏览器控制`.
 
 - `bin/browser-driver.cjs`: MCP transport, in-app-browser-prefixed semantic tools, page-keyed scheduling, compact results, screenshots, and progressive step lookup. Operations are serial within one `page_id`; independent pages may run concurrently.
 - Visible interaction tools carry a stable per-process `driver_instance_id` plus per-action `agent_operation_id` into the desktop broker. The host tab chrome owns the Agent-action indicator and lifecycle cleanup; MCP cancellation, stdin close, process signals, and driver disconnect must release the exact current lease without mutating the controlled page favicon or allowing a stale cancellation to clear its successor.

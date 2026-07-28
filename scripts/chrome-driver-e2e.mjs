@@ -26,7 +26,7 @@ const evidencePath = join(outputRoot, 'evidence.json')
 const storeAssetsOutput = process.env.CHROME_DRIVER_E2E_STORE_ASSETS == null
   ? undefined
   : resolve(process.env.CHROME_DRIVER_E2E_STORE_ASSETS)
-const sourceExtension = join(workspaceFolder, 'packages/plugins/chrome-driver/extension')
+const sourceExtension = join(workspaceFolder, 'packages/plugins/external-browser-driver/extension')
 const demoMode = process.env.CHROME_DRIVER_E2E_DEMO === '1'
 const demoControlPath = process.env.CHROME_DRIVER_E2E_DEMO_CONTROL
 const demoStartPath = process.env.CHROME_DRIVER_E2E_DEMO_START
@@ -505,7 +505,7 @@ async function confirmedControl(credentials, ui, op, args, targetKey) {
 async function runMcpWorkflow(tabId) {
   const child = spawn(
     process.execPath,
-    [join(workspaceFolder, 'packages/plugins/chrome-driver/bin/chrome-driver.cjs')],
+    [join(workspaceFolder, 'packages/plugins/external-browser-driver/bin/chrome-driver.cjs')],
     {
       cwd: workspaceFolder,
       env: {

@@ -26,7 +26,7 @@
       "watch": true
     },
     {
-      "id": "./packages/plugins/chrome-driver",
+      "id": "./packages/plugins/external-browser-driver",
       "scope": "chrome",
       "watch": true
     },

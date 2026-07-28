@@ -75,7 +75,7 @@ const writeDirectoryPlugin = async (
     icon: './assets/icon.svg',
     name: 'workspace-tools',
     plugin: {
-      client: { entry: './client/index.js' },
+      client: { entry: './client/index.js', sourceRoot: './client' },
       server: { entry: './server/index.js', roles: ['workspace'] },
       contributions: {
         navItems: [{ id: 'dashboard', title: 'Dashboard', route: '/plugins/workspace-tools/dashboard' }]
@@ -484,14 +484,24 @@ describe('plugin resolver', () => {
         en: 'Workspace Tools',
         'zh-Hans': '工作区工具'
       },
-      icon: './assets/icon.svg'
+      icon: './assets/icon.svg',
+      plugin: {
+        client: {
+          sourceRoot: './client'
+        }
+      }
     })
     expect(instances[3]?.manifest).toMatchObject({
       displayNameI18n: {
         en: 'Workspace Tools',
         'zh-Hans': '工作区工具'
       },
-      icon: './assets/icon.svg'
+      icon: './assets/icon.svg',
+      plugin: {
+        client: {
+          sourceRoot: './client'
+        }
+      }
     })
   })
 
@@ -600,7 +610,7 @@ describe('plugin resolver', () => {
       includeDefaultOfficialPlugins: true
     })).resolves.toEqual([
       { id: '@oneworks/plugin-browser-driver' },
-      { id: '@oneworks/plugin-chrome-driver' },
+      { id: '@oneworks/plugin-external-browser-driver' },
       { id: '@oneworks/plugin-cua-driver' },
       { id: '@oneworks/plugin-relay' }
     ])
@@ -612,7 +622,7 @@ describe('plugin resolver', () => {
       plugins: [{ id: '@oneworks/plugin-relay', enabled: false }]
     })).resolves.toEqual([
       { id: '@oneworks/plugin-browser-driver' },
-      { id: '@oneworks/plugin-chrome-driver' },
+      { id: '@oneworks/plugin-external-browser-driver' },
       { id: '@oneworks/plugin-cua-driver' },
       { id: '@oneworks/plugin-relay', enabled: false }
     ])

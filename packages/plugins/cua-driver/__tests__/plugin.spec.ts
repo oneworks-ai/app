@@ -990,6 +990,11 @@ describe('cua-driver plugin contract', () => {
 
     expect(manifest.__oneWorksPluginManifest).toBe(true)
     expect(manifest.name).toBe('@oneworks/plugin-cua-driver')
+    expect(manifest.displayName).toBe('Computer Control - CUA')
+    expect(manifest.displayNameI18n).toEqual({
+      en: 'Computer Control - CUA',
+      'zh-Hans': '电脑控制 - CUA'
+    })
     expect(manifest.version).toBe(packageJson.version)
     expect(dependencies['@oneworks/cursor']).toBe('workspace:*')
     expect(assets.skills).toBe('skills')
