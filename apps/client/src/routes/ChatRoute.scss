@@ -47,7 +47,7 @@
       align-items: center;
       justify-content: center;
       overflow: auto;
-      padding: calc(var(--chat-header-overlay-content-offset) + 12px) 24px 16px;
+      padding: calc(var(--chat-header-overlay-content-offset) + 12px) 0 16px;
     }
   }
 }

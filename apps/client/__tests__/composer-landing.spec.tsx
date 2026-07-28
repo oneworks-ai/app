@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
@@ -5,6 +7,29 @@ import { ComposerLanding } from '#~/components/composer-landing/ComposerLanding'
 import { ComposerStarterGuide } from '#~/components/composer-landing/ComposerStarterGuide'
 
 describe('composer landing', () => {
+  it('keeps starter layout horizontal spacing owned by the shared 10px surface padding', () => {
+    const layoutStyles = readFileSync(
+      new URL(
+        '../src/components/composer-landing/ComposerStarterLayout.scss',
+        import.meta.url
+      ),
+      'utf8'
+    )
+    const routeStyles = readFileSync(
+      new URL('../src/routes/ChatRoute.scss', import.meta.url),
+      'utf8'
+    )
+
+    expect(layoutStyles).toContain('--chat-surface-padding: 10px')
+    expect(layoutStyles).not.toContain('--chat-surface-padding: 6px')
+    expect(routeStyles).toContain(
+      'padding: calc(var(--chat-header-overlay-content-offset) + 12px) 0 16px'
+    )
+    expect(routeStyles).not.toContain(
+      'padding: calc(var(--chat-header-overlay-content-offset) + 12px) 24px 16px'
+    )
+  })
+
   it('keeps starter content inside one full-height landing region', () => {
     const html = renderToStaticMarkup(
       <ComposerLanding className='composer-landing--starter'>
