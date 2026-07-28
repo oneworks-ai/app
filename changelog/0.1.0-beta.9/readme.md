@@ -10,3 +10,6 @@
 - Preserve Node-style request lifecycle events in the Cloudflare Relay Fetch adapter so device job long polling can forward remote sessions instead of failing immediately.
 - Keep the desktop packaging command from leaving workspace dependencies in a production-only state, so packaged-server verification runs against the artifact immediately after packaging.
 - Make packaged-server verification tolerate clean-runner runtime cache preparation and print the server log when readiness still times out.
+- Retire the Standard Development plugin from the repository defaults and remove its obsolete launcher presets.
+- Keep Plugin Demo and Demo Extension available for optional installation without enabling them in repository defaults.
+- Keep new conversations at the product-level Medium reasoning default instead of inheriting a model metadata recommendation.

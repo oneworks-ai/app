@@ -26,7 +26,7 @@ export const CHAT_EFFORT_OPTIONS = [
 
 type EffortSelectionSource = 'configured' | 'fallback' | 'session' | 'stored' | 'user'
 
-interface EffortSelection {
+export interface EffortSelection {
   effort: ExplicitChatEffort
   source: EffortSelectionSource
 }
@@ -95,6 +95,23 @@ const getFallbackSelection = (
   }
 }
 
+export const reconcileConfiguredChatEffort = ({
+  configuredEffort,
+  current,
+  supportedEfforts
+}: {
+  configuredEffort: ExplicitChatEffort
+  current: EffortSelection
+  supportedEfforts: readonly ExplicitChatEffort[]
+}): EffortSelection => {
+  const isSupported = supportedEfforts.includes(current.effort)
+  const isExplicit = current.source !== 'fallback' && current.source !== 'configured'
+  const isCurrentConfig = current.source === 'configured' && current.effort === configuredEffort
+  return isSupported && (isExplicit || isCurrentConfig)
+    ? current
+    : { effort: configuredEffort, source: 'configured' }
+}
+
 export function useChatEffort({
   adapter,
   model
@@ -126,10 +143,10 @@ export function useChatEffort({
     }).effort
     return resolvePreferredChatEffort({
       configuredEffort: resolvedEffort,
-      fallbackEffort: modelCapabilities.defaultEffort ?? FALLBACK_CHAT_EFFORT,
+      fallbackEffort: FALLBACK_CHAT_EFFORT,
       supportedEfforts
     })
-  }, [adapter, configRes?.sources?.merged, model, modelCapabilities.defaultEffort, supportedEfforts])
+  }, [adapter, configRes?.sources?.merged, model, supportedEfforts])
   const [selection, setSelection] = useState<EffortSelection>(() => {
     const storedEffort = readStoredEffort()
     return {
@@ -144,16 +161,7 @@ export function useChatEffort({
     }
 
     setSelection((current) => {
-      if (!supportedEfforts.includes(current.effort)) {
-        return { effort: configuredEffort, source: 'configured' }
-      }
-      if (current.source !== 'fallback' && current.source !== 'configured') {
-        return current
-      }
-      if (current.source === 'configured' && current.effort === configuredEffort) {
-        return current
-      }
-      return { effort: configuredEffort, source: 'configured' }
+      return reconcileConfiguredChatEffort({ configuredEffort, current, supportedEfforts })
     })
   }, [configRes, configuredEffort, supportedEfforts])
 
