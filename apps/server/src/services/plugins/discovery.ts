@@ -18,8 +18,6 @@ const bundledOfficialPluginPackageIds = new Set([
   '@oneworks/plugin-browser-driver',
   '@oneworks/plugin-external-browser-driver',
   '@oneworks/plugin-cua-driver',
-  '@oneworks/plugin-demo',
-  '@oneworks/plugin-demo-extension',
   '@oneworks/plugin-logger',
   '@oneworks/plugin-relay'
 ])

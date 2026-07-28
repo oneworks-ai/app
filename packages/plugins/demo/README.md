@@ -1,7 +1,8 @@
 # Plugin Demo
 
-Built-in workspace plugin loaded from `@oneworks/plugin-demo`. It is intentionally small, but it exercises the plugin
-detail page with README language variants, localized contribution names, contribution descriptions, and search.
+Optional workspace plugin installed from `@oneworks/plugin-demo`. It is not enabled by default; install and configure it
+only when you need a reference implementation for plugin development. It intentionally stays small, but exercises the
+plugin detail page with README language variants, localized contribution names, contribution descriptions, and search.
 
 The package also declares `@oneworks/plugin-standard-dev` as an optional child capability. A project can enable that
 child with the `std` scope while keeping Plugin Demo as the only top-level runtime instance:

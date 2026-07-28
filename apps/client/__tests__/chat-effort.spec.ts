@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
 import { resolveAdapterModelRuntimeCapabilities } from '#~/hooks/chat/model-runtime-capabilities'
-import { CHAT_EFFORT_OPTIONS, resolvePreferredChatEffort } from '#~/hooks/chat/use-chat-effort'
+import {
+  CHAT_EFFORT_OPTIONS,
+  reconcileConfiguredChatEffort,
+  resolvePreferredChatEffort
+} from '#~/hooks/chat/use-chat-effort'
 
 describe('chat effort preference', () => {
   it('keeps only explicit effort levels in the slider options', () => {
@@ -15,7 +19,7 @@ describe('chat effort preference', () => {
     ])
   })
 
-  it('uses model metadata for supported efforts and Fast availability', () => {
+  it('uses model metadata for supported efforts and Fast availability without adopting its default effort', () => {
     expect(resolveAdapterModelRuntimeCapabilities({
       adapter: 'codex',
       model: 'gpt-next',
@@ -30,10 +34,29 @@ describe('chat effort preference', () => {
         }]
       }
     })).toEqual({
-      defaultEffort: 'high',
       supportedEfforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
       supportsFastMode: true
     })
+  })
+
+  it('keeps the product fallback at medium when model metadata recommends low', () => {
+    const capabilities = resolveAdapterModelRuntimeCapabilities({
+      adapter: 'codex',
+      model: 'gpt-next',
+      adapterBuiltinModels: {
+        codex: [{
+          value: 'gpt-next',
+          title: 'GPT Next',
+          description: 'Next Codex model',
+          defaultEffort: 'low',
+          supportedEfforts: ['low', 'medium', 'high']
+        }]
+      }
+    })
+
+    expect(resolvePreferredChatEffort({
+      supportedEfforts: capabilities.supportedEfforts
+    })).toBe('medium')
   })
 
   it('does not expose native Fast mode for routed model services', () => {
@@ -72,6 +95,38 @@ describe('chat effort preference', () => {
       configuredEffort: 'default',
       storedEffort: undefined
     })).toBe('medium')
+  })
+
+  it('safely downgrades when medium is not supported by the selected model', () => {
+    expect(resolvePreferredChatEffort({
+      supportedEfforts: ['low', 'high']
+    })).toBe('low')
+  })
+
+  it.each(['session', 'user', 'stored'] as const)(
+    'keeps a supported %s effort authoritative and falls back when it becomes unsupported',
+    (source) => {
+      const current = { effort: 'high', source } as const
+
+      expect(reconcileConfiguredChatEffort({
+        configuredEffort: 'low',
+        current,
+        supportedEfforts: ['low', 'medium', 'high']
+      })).toBe(current)
+      expect(reconcileConfiguredChatEffort({
+        configuredEffort: 'low',
+        current,
+        supportedEfforts: ['low', 'medium']
+      })).toEqual({ effort: 'low', source: 'configured' })
+    }
+  )
+
+  it('reconciles a fallback selection to the configured effort', () => {
+    expect(reconcileConfiguredChatEffort({
+      configuredEffort: 'low',
+      current: { effort: 'medium', source: 'fallback' },
+      supportedEfforts: ['low', 'medium', 'high']
+    })).toEqual({ effort: 'low', source: 'configured' })
   })
 
   it('clamps stored and configured values to the selected model capabilities', () => {
