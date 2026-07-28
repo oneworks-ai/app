@@ -1,6 +1,6 @@
 import './ChatStatusBar.scss'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 
@@ -61,16 +61,38 @@ export function ChatStatusBar({
   const { isCompactLayout } = useResponsiveLayout()
   const [searchParams] = useSearchParams()
   const [uncontrolledCollapsed, setUncontrolledCollapsed] = useState(false)
+  const statusBarRef = useRef<HTMLDivElement>(null)
+  const collapseButtonRef = useRef<HTMLButtonElement>(null)
+  const expandButtonRef = useRef<HTMLButtonElement>(null)
+  const pendingFocusTargetRef = useRef<'collapse' | 'expand' | null>(null)
   const selectedAccountQuotaWindows = accountOptions
     ?.find(option => option.value === selectedAccount)
     ?.quotaWindows
   const collapsed = collapsible && (controlledCollapsed ?? uncontrolledCollapsed)
   const setCollapsed = (nextCollapsed: boolean) => {
+    pendingFocusTargetRef.current = nextCollapsed ? 'expand' : 'collapse'
     if (controlledCollapsed == null) {
       setUncontrolledCollapsed(nextCollapsed)
     }
     onCollapsedChange?.(nextCollapsed)
   }
+  useEffect(() => {
+    const statusBar = statusBarRef.current
+    if (collapsible && collapsed) {
+      statusBar?.setAttribute('inert', '')
+    } else {
+      statusBar?.removeAttribute('inert')
+    }
+
+    const focusTarget = collapsed ? 'expand' : 'collapse'
+    if (pendingFocusTargetRef.current === focusTarget) {
+      pendingFocusTargetRef.current = null
+      const target = collapsed ? expandButtonRef.current : collapseButtonRef.current
+      target?.focus()
+    }
+
+    return () => statusBar?.removeAttribute('inert')
+  }, [collapsed, collapsible])
   const defaultAdapterSelectOpen = sessionId == null &&
     searchParams.get('owPreview') === 'homepage' &&
     searchParams.get('adapterSelect') === 'open'
@@ -89,7 +111,7 @@ export function ChatStatusBar({
 
   return (
     <div className={statusBarFrameClassName}>
-      <div className={statusBarClassName}>
+      <div ref={statusBarRef} className={statusBarClassName}>
         <div className='chat-status-bar__content' aria-hidden={collapsible && collapsed}>
           {sessionId != null && sessionId !== ''
             ? (
@@ -112,6 +134,7 @@ export function ChatStatusBar({
         </div>
         {collapsible && (
           <button
+            ref={collapseButtonRef}
             type='button'
             className='chat-status-bar__collapse-toggle'
             aria-label={t('chat.collapseStatusBar')}
@@ -151,6 +174,7 @@ export function ChatStatusBar({
       </div>
       {collapsible && (
         <button
+          ref={expandButtonRef}
           type='button'
           className='chat-status-bar__collapsed-line'
           aria-label={t('chat.expandStatusBar')}

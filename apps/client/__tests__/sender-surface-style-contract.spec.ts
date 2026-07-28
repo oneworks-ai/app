@@ -82,6 +82,9 @@ describe('shared sender surface toolbar contract', () => {
       /\.chat-status-bar-frame\s*\{[^}]*min-height:\s*calc\(\s*var\(--chat-surface-status-row-height\)\s*\+\s*var\(--chat-surface-status-divider-layout-width\)/
     )
     expect(styles).toMatch(
+      /\.chat-status-bar-frame\.chat-status-bar--collapsible\.is-collapsed\s*\{[^}]*min-height:\s*var\(--chat-surface-status-collapsed-hit-height\);[^}]*max-height:\s*var\(--chat-surface-status-collapsed-hit-height\)/
+    )
+    expect(styles).toMatch(
       /\.chat-status-bar::before\s*\{[^}]*border-bottom:\s*var\(--chat-surface-status-divider-overlay-width\)/
     )
     expect(styles).toMatch(

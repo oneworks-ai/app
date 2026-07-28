@@ -1,4 +1,4 @@
-import { Button, Dropdown, Empty } from 'antd'
+import { Button, Dropdown } from 'antd'
 import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import useSWR from 'swr'
@@ -33,7 +33,6 @@ export function DraftWorktreeEnvironmentDropdown({
     : value != null && value !== ''
     ? toDisplayEnvironmentName(value)
     : t('chat.sessionWorkspaceEnvironmentDefault')
-  const hasEnvironments = environments.length > 0
   const handleChange = useCallback((nextValue?: string) => {
     onChange(nextValue)
     setMobileOpen(false)
@@ -54,44 +53,35 @@ export function DraftWorktreeEnvironmentDropdown({
           </span>
         </OverlayAction>
 
-        {hasEnvironments
-          ? environments.map((environment) => {
-            const environmentReference = toEnvironmentReference(environment)
-            const isActive = environmentReference === value || environment.id === value
-            return (
-              <OverlayAction
-                key={`${environment.source}:${environment.id}`}
-                className={`chat-header-git__menu-row ${isActive ? 'is-selected' : ''}`}
-                disabled={disabled}
-                title={environment.path}
-                onClick={() => handleChange(environmentReference)}
-              >
-                <span className='chat-header-git__menu-row-main'>
-                  <span className='chat-header-git__row-icon material-symbols-rounded'>
-                    {environment.isLocal ? 'person' : 'folder'}
-                  </span>
-                  <span className='chat-header-git__menu-row-title'>
-                    {toDisplayEnvironmentName(environment.id)}
-                  </span>
+        {environments.map((environment) => {
+          const environmentReference = toEnvironmentReference(environment)
+          const isActive = environmentReference === value || environment.id === value
+          return (
+            <OverlayAction
+              key={`${environment.source}:${environment.id}`}
+              className={`chat-header-git__menu-row ${isActive ? 'is-selected' : ''}`}
+              disabled={disabled}
+              title={environment.path}
+              onClick={() => handleChange(environmentReference)}
+            >
+              <span className='chat-header-git__menu-row-main'>
+                <span className='chat-header-git__row-icon material-symbols-rounded'>
+                  {environment.isLocal ? 'person' : 'folder'}
                 </span>
-                <span className='chat-header-git__menu-row-trailing'>
-                  <span className='chat-header-git__menu-row-value'>
-                    {environment.isLocal
-                      ? t('chat.sessionWorkspaceEnvironmentLocal')
-                      : t('chat.sessionWorkspaceEnvironmentProject')}
-                  </span>
+                <span className='chat-header-git__menu-row-title'>
+                  {toDisplayEnvironmentName(environment.id)}
                 </span>
-              </OverlayAction>
-            )
-          })
-          : (
-            <div className='chat-header-git__empty chat-header-git__empty--environment'>
-              <Empty
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description={t('chat.sessionWorkspaceNoEnvironments')}
-              />
-            </div>
-          )}
+              </span>
+              <span className='chat-header-git__menu-row-trailing'>
+                <span className='chat-header-git__menu-row-value'>
+                  {environment.isLocal
+                    ? t('chat.sessionWorkspaceEnvironmentLocal')
+                    : t('chat.sessionWorkspaceEnvironmentProject')}
+                </span>
+              </span>
+            </OverlayAction>
+          )
+        })}
       </>
     )
 
@@ -106,7 +96,7 @@ export function DraftWorktreeEnvironmentDropdown({
           {rows}
         </OverlayPanel>
       )
-  }, [compact, disabled, environments, handleChange, hasEnvironments, t, value])
+  }, [compact, disabled, environments, handleChange, t, value])
 
   const triggerButton = (
     <Button
