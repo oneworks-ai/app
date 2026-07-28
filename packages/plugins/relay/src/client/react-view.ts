@@ -188,6 +188,34 @@ interface TokenEditorState {
 }
 
 const DOCUMENT_PREVIEW_CLOSE_ANIMATION_MS = 260
+export const RELAY_SERVER_INFO_REFRESH_INTERVAL_MS = 65_000
+
+export const startRelayServerInfoPolling = <T>(input: {
+  load: (serverKey: string) => Promise<T | undefined>
+  onValue: (serverKey: string, value: T) => void
+  serverKeys: string[]
+}) => {
+  let disposed = false
+  let refreshTimer: ReturnType<typeof setTimeout> | undefined
+  const refresh = async () => {
+    await Promise.all(input.serverKeys.map(async serverKey => {
+      const value = await input.load(serverKey).catch(() => undefined)
+      if (disposed || value == null) return
+      input.onValue(serverKey, value)
+    }))
+    if (!disposed) {
+      refreshTimer = setTimeout(() => {
+        void refresh()
+      }, RELAY_SERVER_INFO_REFRESH_INTERVAL_MS)
+    }
+  }
+  void refresh()
+  return () => {
+    disposed = true
+    if (refreshTimer != null) clearTimeout(refreshTimer)
+  }
+}
+
 const projectRuleAssignmentSaveQueue = createSerializedSaveQueue()
 const projectRuleAssignmentSaveKey = (
   accountKey: string,
@@ -4625,6 +4653,7 @@ const ServersPage = (props: {
 }) => {
   const { ctx, onChanged, react, status, view } = props
   const servers = getServers(status)
+  const activeServerId = cleanText(status?.connection?.activeServerId)
   const [editingKey, setEditingKey] = react.useState('')
   const [draft, setDraft] = react.useState<ServerDraft>({ remoteBaseUrl: '' })
   const [serviceInfoByServer, setServiceInfoByServer] = react.useState<
@@ -4641,28 +4670,24 @@ const ServersPage = (props: {
     .map(server => `${cleanText(server.id) ?? ''}\0${cleanText(server.remoteBaseUrl) ?? ''}`)
     .join('\0')
   react.useEffect(() => {
-    let disposed = false
     setServiceInfoByServer({})
-    for (const server of servers) {
-      const key = cleanText(server.id) ?? cleanText(server.remoteBaseUrl)
-      if (key == null) continue
-      void requestJson<{
-        availabilityError?: string
-        avatarUrl?: string
-        lastCheckedAt?: string
-        lastSuccessfulAt?: string
-        name?: string
-        online?: boolean
-      }>(ctx, 'server-info', { serverId: key })
-        .then(serviceInfo => {
-          if (disposed) return
-          setServiceInfoByServer(current => ({ ...current, [key]: serviceInfo }))
-        })
-        .catch(() => undefined)
-    }
-    return () => {
-      disposed = true
-    }
+    return startRelayServerInfoPolling({
+      load: async serverKey =>
+        await requestJson<{
+          availabilityError?: string
+          avatarUrl?: string
+          lastCheckedAt?: string
+          lastSuccessfulAt?: string
+          name?: string
+          online?: boolean
+        }>(ctx, 'server-info', { serverId: serverKey }),
+      onValue: (serverKey, serviceInfo) => {
+        setServiceInfoByServer(current => ({ ...current, [serverKey]: serviceInfo }))
+      },
+      serverKeys: servers
+        .map(server => cleanText(server.id) ?? cleanText(server.remoteBaseUrl))
+        .filter((serverKey): serverKey is string => serverKey != null)
+    })
   }, [ctx, serverSignature])
   const saveDraft = async () => {
     const update = view?.options?.update
@@ -4730,8 +4755,12 @@ const ServersPage = (props: {
             { react },
             serverManagementForm,
             ...servers.map((server, index) => {
-              const key = cleanText(server.id) ?? cleanText(server.remoteBaseUrl) ?? `server-${index}`
+              const serverId = cleanText(server.id)
+              const key = serverId ?? cleanText(server.remoteBaseUrl) ?? `server-${index}`
               const official = server.official === true || isOfficialServerId(cleanText(server.id))
+              const isDefaultLoginServer = activeServerId == null
+                ? server.active === true
+                : serverId === activeServerId
               const editing = editingKey === key
               const serviceInfo = serviceInfoByServer[key]
               const title = officialServerLabel(server) ?? cleanText(serviceInfo?.name) ?? serverDisplayName(server)
@@ -4773,8 +4802,11 @@ const ServersPage = (props: {
               return react.createElement(
                 'div',
                 {
-                  'aria-label': editing ? undefined : `登录到 ${title}，${presenceAccessibleLabel}`,
+                  'aria-label': editing
+                    ? undefined
+                    : `登录到 ${title}，${isDefaultLoginServer ? '默认登录服务器，' : ''}${presenceAccessibleLabel}`,
                   className: `${adminListSurfaceClassNames.nativeRow} oneworks-relay__server-row`,
+                  'data-default-login-server': isDefaultLoginServer ? 'true' : 'false',
                   'data-editing': editing ? 'true' : 'false',
                   key,
                   onClick: editing ? undefined : openServerLogin,
@@ -4814,7 +4846,22 @@ const ServersPage = (props: {
                   : react.createElement(
                     'span',
                     { className: adminListSurfaceClassNames.nativeMain },
-                    react.createElement('strong', { className: adminListSurfaceClassNames.nativeTitle }, title)
+                    react.createElement(
+                      'span',
+                      { className: 'oneworks-relay__server-title-row' },
+                      react.createElement('strong', { className: adminListSurfaceClassNames.nativeTitle }, title),
+                      isDefaultLoginServer
+                        ? react.createElement(
+                          'span',
+                          {
+                            className: 'oneworks-relay__server-default-label',
+                            title: '默认登录服务器'
+                          },
+                          renderIcon(react, view, 'check_circle', { size: 14 }),
+                          react.createElement('span', null, '默认登录')
+                        )
+                        : null
+                    )
                   ),
                 official && !editing
                   ? null
