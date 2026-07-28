@@ -35,6 +35,71 @@ describe('launcher command item visual contract', () => {
     )
   })
 
+  it('shares icon-label spacing between the search row and settings tabs', () => {
+    const routeStyles = readFileSync(
+      new URL('../src/routes/LauncherRoute.scss', import.meta.url),
+      'utf8'
+    )
+    const settingsStyles = readFileSync(
+      new URL(
+        '../src/components/launcher/LauncherSettingsView.scss',
+        import.meta.url
+      ),
+      'utf8'
+    )
+
+    expect(routeStyles).toMatch(
+      /--launcher-icon-label-gap:\s*var\(--oneworks-launcher-icon-label-gap,\s*6px\);/
+    )
+    expect(routeStyles).toMatch(
+      /\.launcher-command-search__input-row\s*\{[^}]*gap:\s*var\(--launcher-icon-label-gap\);/
+    )
+    expect(settingsStyles).toMatch(
+      /\.launcher-settings__tab\s*\{[^}]*gap:\s*var\(--launcher-icon-label-gap\);/
+    )
+  })
+
+  it('keeps launcher menus opaque while preserving theme ownership', () => {
+    const routeStyles = readFileSync(
+      new URL('../src/routes/LauncherRoute.scss', import.meta.url),
+      'utf8'
+    )
+
+    expect(routeStyles).toMatch(
+      /--launcher-menu-background:\s*var\(\s*--oneworks-launcher-menu-background,\s*var\(--bg-color\)\s*\);/
+    )
+    expect(routeStyles).toMatch(
+      /\.launcher-command-dropdown\.ant-dropdown,[^{]*\{[\s\S]*?\.ant-dropdown-menu\s*\{[^}]*background:\s*var\(--launcher-menu-background\)\s*!important;/
+    )
+    expect(routeStyles).toMatch(
+      /\.launcher-command-menu-submenu\.ant-dropdown-menu-submenu-popup\s*\{[^}]*--launcher-menu-background:\s*var\(\s*--oneworks-launcher-menu-background,\s*var\(--bg-color\)\s*\);[^}]*background:\s*var\(--launcher-menu-background\)\s*!important;/
+    )
+    expect(routeStyles).not.toMatch(
+      /\.launcher-command-dropdown\.ant-dropdown,[^{]*\{[\s\S]*?\.ant-dropdown-menu\s*\{[^}]*background:\s*var\(--oneworks-overlay-surface/
+    )
+  })
+
+  it('shows the platform settings shortcut in the launcher menu', () => {
+    const routeSource = readFileSync(
+      new URL('../src/routes/LauncherRoute.tsx', import.meta.url),
+      'utf8'
+    )
+    const routeStyles = readFileSync(
+      new URL('../src/routes/LauncherRoute.scss', import.meta.url),
+      'utf8'
+    )
+
+    expect(routeSource).toContain(
+      "getShortcutDisplayTokens('mod+,', isMacShortcutLayout)"
+    )
+    expect(routeSource).toMatch(
+      /key:\s*'settings',[\s\S]*?extra:\s*\([\s\S]*?className='launcher-command-menu__shortcut'/
+    )
+    expect(routeStyles).toMatch(
+      /\.launcher-command-menu__shortcut\s*\{[^}]*color:\s*var\(--launcher-muted-color\);[^}]*font-size:\s*11px;/
+    )
+  })
+
   it('keeps default hover surfaces transparent while preserving theme overrides', () => {
     const routeStyles = readFileSync(
       new URL('../src/routes/LauncherRoute.scss', import.meta.url),

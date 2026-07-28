@@ -144,6 +144,7 @@ html.oneworks-launcher-window.dark {
   );
   --launcher-item-padding: var(--oneworks-launcher-item-padding, 4px 8px);
   --launcher-item-gap: var(--oneworks-launcher-item-gap, 8px);
+  --launcher-icon-label-gap: var(--oneworks-launcher-icon-label-gap, 6px);
   --launcher-item-radius: var(
     --oneworks-launcher-item-radius,
     var(--oneworks-control-radius, 7px)
@@ -179,6 +180,10 @@ html.oneworks-launcher-window.dark {
   );
   --launcher-tab-height: var(--oneworks-launcher-tab-height, 28px);
   --launcher-tab-gap: var(--oneworks-launcher-tab-gap, 10px);
+  --launcher-menu-background: var(
+    --oneworks-launcher-menu-background,
+    var(--bg-color)
+  );
   --launcher-tab-radius: var(
     --oneworks-launcher-tab-radius,
     var(--oneworks-control-radius, 6px)
@@ -328,7 +333,7 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--launcher-icon-label-gap);
 }
 
 .launcher-command-search__file-icon {
@@ -1046,7 +1051,7 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
 
   .ant-dropdown-menu {
     min-width: 220px;
-    background: var(--oneworks-overlay-surface, var(--bg-color)) !important;
+    background: var(--launcher-menu-background) !important;
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
@@ -1087,6 +1092,15 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
   }
 }
 
+.launcher-command-menu-submenu.ant-dropdown-menu-submenu-popup {
+  --launcher-menu-background: var(
+    --oneworks-launcher-menu-background,
+    var(--bg-color)
+  );
+
+  background: var(--launcher-menu-background) !important;
+}
+
 .launcher-command-menu__icon.material-symbols-rounded {
   width: var(--oneworks-overlay-icon-size);
   min-width: var(--oneworks-overlay-icon-size);
@@ -1094,6 +1108,14 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
   color: var(--launcher-muted-color);
   font-size: var(--oneworks-overlay-icon-size);
   line-height: 1;
+}
+
+.launcher-command-menu__shortcut {
+  color: var(--launcher-muted-color);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .launcher-command-menu__icon.is-active {

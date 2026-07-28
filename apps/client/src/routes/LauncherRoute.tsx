@@ -47,7 +47,7 @@ import { buildWorkspaceClientBase, isServerManagerRole, mergeRuntimeEnv } from '
 import { copyTextWithFeedback } from '#~/utils/copy'
 import { deferImeCompositionEnd, isImeCompositionKeyEvent } from '#~/utils/keyboard-events'
 import { createOneWorksIconDataUri } from '#~/utils/oneworks-icon'
-import { isShortcutMatch } from '#~/utils/shortcutUtils'
+import { getShortcutDisplayTokens, isShortcutMatch } from '#~/utils/shortcutUtils'
 import { resolveWorkspaceFileOpenerSelectModels } from '#~/utils/workspace-file-openers'
 import { rememberWorkspaceConnection } from '#~/workspace-connection-state'
 import { normalizePluginLauncherSearchResults } from './launcher-plugin-search'
@@ -3737,6 +3737,9 @@ export function LauncherRoute({
 
   const currentLanguage = i18n.resolvedLanguage ?? i18n.language
   const activeLanguage = getActiveAppLanguageOption(currentLanguage)
+  const launcherSettingsShortcutLabel = getShortcutDisplayTokens('mod+,', isMacShortcutLayout)
+    .map(token => token.value)
+    .join(isMacShortcutLayout ? '' : '+')
   const menuIcon = (icon: string, isActive = false) => (
     <span className={`material-symbols-rounded launcher-command-menu__icon ${isActive ? 'is-active' : ''}`}>
       {icon}
@@ -3747,6 +3750,11 @@ export function LauncherRoute({
       icon: menuIcon('settings'),
       key: 'settings',
       label: t('launcher.menu.settings'),
+      extra: (
+        <span className='launcher-command-menu__shortcut'>
+          {launcherSettingsShortcutLabel}
+        </span>
+      ),
       onClick: () => {
         openLauncherView('settings')
       }
@@ -3787,6 +3795,7 @@ export function LauncherRoute({
     activeLanguage?.value,
     checkDesktopUpdates,
     desktopApi?.checkForUpdates,
+    launcherSettingsShortcutLabel,
     openLauncherView,
     t,
     updateGlobalInterfaceLanguage
