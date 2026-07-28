@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { activatePlugin } from '../src/client/index.js'
-import { RelayHomeView, readJsonResponse, renderAvatar } from '../src/client/react-view.js'
+import { RelayHomeView, renderAvatar } from '../src/client/react-view.js'
 import { relayClientCss } from '../src/client/styles.js'
 import type { PluginClientContext, PluginReactHost, PluginViewRegistration } from '../src/client/types.js'
 
@@ -86,6 +86,12 @@ const createContext = (status: Record<string, unknown> = { accounts: [], servers
   }
 }
 
+const directLoginFooterContribution = {
+  icon: 'login',
+  id: 'account-login',
+  route: '/plugins/relay/home/accounts/login',
+  title: 'Log in'
+}
 afterEach(() => {
   vi.unstubAllGlobals()
 })
@@ -125,12 +131,21 @@ describe('relay plugin client view registration', () => {
     const cleanup = await activatePlugin(ctx)
 
     await vi.waitFor(() => {
-      expect(registerSlot).toHaveBeenCalledWith('nav.footer.before', {
-        icon: 'login',
-        id: 'account-login',
-        route: '/plugins/relay/home/accounts/login',
-        title: 'Log in'
-      })
+      expect(registerSlot).toHaveBeenCalledWith('nav.footer.before', directLoginFooterContribution)
+    })
+
+    cleanup.dispose()
+  })
+
+  it('registers a direct login footer action when account status is unavailable', async () => {
+    installBrowser()
+    const { ctx, registerSlot } = createContext()
+    ctx.api.fetch = vi.fn(async () => new Response('Unavailable', { status: 503 }))
+
+    const cleanup = await activatePlugin(ctx)
+
+    await vi.waitFor(() => {
+      expect(registerSlot).toHaveBeenCalledWith('nav.footer.before', directLoginFooterContribution)
     })
 
     cleanup.dispose()
@@ -242,17 +257,6 @@ describe('relay plugin client view registration', () => {
 
     cleanup.dispose()
   })
-
-  it('uses JSON error fields instead of displaying the raw JSON body', async () => {
-    await expect(readJsonResponse(
-      new Response(JSON.stringify({ error: 'fetch failed' }), { status: 500 }),
-      'profile'
-    )).rejects.toThrow('fetch failed')
-    await expect(readJsonResponse(
-      new Response(JSON.stringify({ message: 'Profile service unavailable' }), { status: 503 }),
-      'profile'
-    )).rejects.toThrow('Profile service unavailable')
-  })
 })
 
 describe('relay plugin client view styles', () => {
@@ -304,11 +308,22 @@ describe('relay plugin client view styles', () => {
     )
 
     expect(source).toContain('serviceInfo == null ? server.avatarUrl : serviceInfo.avatarUrl')
+    expect(source).toContain('export const RELAY_SERVER_INFO_REFRESH_INTERVAL_MS = 65_000')
+    expect(serversPageSource).toContain('return startRelayServerInfoPolling({')
     expect(serversPageSource).toContain("role: editing ? undefined : 'link'")
     expect(serversPageSource).toContain('onClick: editing ? undefined : openServerLogin')
     expect(serversPageSource).toContain(
       'officialServerLabel(server) ?? cleanText(serviceInfo?.name) ?? serverDisplayName(server)'
     )
+    expect(serversPageSource).toContain(
+      'const activeServerId = cleanText(status?.connection?.activeServerId)'
+    )
+    expect(serversPageSource).toMatch(
+      /const isDefaultLoginServer = activeServerId == null[\s\S]*?: serverId === activeServerId/u
+    )
+    expect(serversPageSource).toContain("'data-default-login-server': isDefaultLoginServer ? 'true' : 'false'")
+    expect(serversPageSource).toContain("className: 'oneworks-relay__server-title-row'")
+    expect(serversPageSource).toContain("react.createElement('span', null, '默认登录')")
     expect(serversPageSource).not.toContain("placeholder: '服务名称'")
     expect(serversPageSource).not.toContain('className: adminListSurfaceClassNames.nativeMeta')
     expect(serversPageSource).not.toContain('title: address')
@@ -316,7 +331,7 @@ describe('relay plugin client view styles', () => {
     expect(serversPageSource.indexOf('serverManagementForm,')).toBeLessThan(
       serversPageSource.indexOf('...servers.map')
     )
-    expect(serversPageSource).toContain('`登录到 $' + '{title}，$' + '{presenceAccessibleLabel}`')
+    expect(serversPageSource).toContain("isDefaultLoginServer ? '默认登录服务器，' : ''")
     expect(serversPageSource).not.toContain("icon: 'login'")
     expect(relayClientCss).toContain('.oneworks-relay--login-route .oneworks-relay__shell { background-image: none; }')
     expect(relayClientCss).toContain('background: transparent; box-shadow: none;')
@@ -329,6 +344,9 @@ describe('relay plugin client view styles', () => {
     expect(relayClientCss).not.toContain('.oneworks-relay__server-url-input {')
     expect(relayClientCss).not.toContain(
       '.oneworks-relay__server-editor .plugin-host-control-input.ant-input-affix-wrapper'
+    )
+    expect(relayClientCss).toContain(
+      '.oneworks-relay__server-default-label { flex: 0 0 auto; display: inline-flex;'
     )
     expect(relayClientCss).toContain(
       '.oneworks-relay__account-avatar-image:not([hidden]) + .oneworks-relay__account-avatar-fallback'
@@ -382,9 +400,12 @@ describe('relay plugin client view styles', () => {
       '.oneworks-relay--project-rule-route .oneworks-relay__surface { align-content: stretch; }'
     )
     expect(relayClientCss).toContain(
-      'background-image: linear-gradient(var(--oneworks-relay-surface-background), var(--oneworks-relay-surface-background));'
+      '.oneworks-relay__personal-docs-list .interaction-list__items { min-height: 100%; height: 100%; flex: 1 0 auto; background: transparent; }'
     )
     expect(relayClientCss).toContain(
+      '.oneworks-relay__personal-docs-list-pane { min-width: 0; min-height: 0; height: 100%; display: flex; align-self: stretch; background: transparent; }'
+    )
+    expect(relayClientCss).not.toContain(
       '.oneworks-relay__personal-docs-list .interaction-list__items { background-image:'
     )
     expect(relayClientCss).toContain(
