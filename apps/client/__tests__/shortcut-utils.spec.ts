@@ -75,6 +75,13 @@ describe('isShortcutMatch', () => {
     expect(isShortcutMatch(createKeyboardEvent({ isComposing: true }), 'enter', true)).toBe(false)
     expect(isShortcutMatch(createKeyboardEvent({ keyCode: 229 }), 'enter', true)).toBe(false)
   })
+
+  it('maps mod comma to the platform settings shortcut', () => {
+    expect(isShortcutMatch(createKeyboardEvent({ key: ',', metaKey: true }), 'mod+,', true)).toBe(true)
+    expect(isShortcutMatch(createKeyboardEvent({ ctrlKey: true, key: ',' }), 'mod+,', false)).toBe(true)
+    expect(isShortcutMatch(createKeyboardEvent({ ctrlKey: true, key: ',' }), 'mod+,', true)).toBe(false)
+    expect(isShortcutMatch(createKeyboardEvent({ key: ',', metaKey: true }), 'mod+,', false)).toBe(false)
+  })
 })
 
 describe('resolveSendShortcut', () => {

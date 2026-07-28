@@ -7,14 +7,15 @@
 
 .launcher-settings__tabs {
   position: sticky;
-  top: 0;
+  top: -10px;
   z-index: 2;
   display: flex;
   align-items: flex-end;
   gap: var(--launcher-tab-gap, 10px);
   min-width: 0;
   overflow-x: auto;
-  padding: 0;
+  margin: -10px calc(var(--launcher-command-list-padding-inline, 14px) * -1) 0;
+  padding: 10px var(--launcher-command-list-padding-inline, 14px) 0;
   border-bottom: 1px solid
     var(
       --border-color,
@@ -44,8 +45,7 @@
 .launcher-settings__tab {
   position: relative;
   min-width: 0;
-  min-height: var(--launcher-tab-height, 28px);
-  padding: 0 var(--launcher-tab-gap, 10px);
+  padding: 0 0 10px;
   border: 0;
   border-radius: var(
     --launcher-tab-radius,
@@ -55,7 +55,7 @@
   flex: 0 0 auto;
   align-items: center;
   justify-content: flex-start;
-  gap: 6px;
+  gap: var(--launcher-icon-label-gap);
   background: transparent;
   color: var(--sub-text-color, var(--ant-color-text-secondary, #57606a));
   cursor: pointer;
@@ -140,7 +140,7 @@
 .launcher-settings__items {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
 }
 
 .launcher-settings__item {

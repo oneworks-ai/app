@@ -23,6 +23,7 @@
 
 ## 设置页快捷键
 
+- Launcher 级设置入口使用 macOS `Command+,`、Windows/Linux `Ctrl+,` 直接打开设置页；监听需在菜单接管按键前生效，同时继续避开 IME composition 和快捷键录入控件。
 - section tabs 支持 `⌘1/⌘2/⌘3` 或 Windows/Linux 的 `Ctrl+1/2/3` 直达，tabs 聚焦时支持 `←/→` 和 `Home/End`。
 - 快捷键提示不要常驻挤占标题。按住 Command/Ctrl 0.5s 后，才在 tab 标题右侧显示 shortcut chip；松开 modifier、窗口失焦或页面隐藏时立即收起。
 - shortcut chip 必须带 tooltip，用于解释“按 xx 切换到 yy”。界面常态不写长说明。

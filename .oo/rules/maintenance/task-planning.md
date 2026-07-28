@@ -99,6 +99,7 @@ Safe to archive: yes / no
 ## 权限预检与审批恢复
 
 - Git / PR 独立任务的 prompt 必须包含精确的仓库、PR / 分支、允许的写操作、merge 方式、是否删除远端分支和本轮用户授权；只写“处理 PR”或“合入”不足以让审批者判断边界。
+- 流程或 skill 要求“获得明确批准后再修复”时，先从当前任务历史解析已有授权；批准约束的是操作范围，不要求必须在诊断结果之后重复发生。用户已明确要求为当前变更创建 PR 并 merge 时，该授权覆盖为同一 PR 补齐 changelog、真实截图、Experience Review、PR body 和其他不扩大产品改动范围的合并门禁材料，以及对应的 commit、push 和 PR 更新。应告知门禁失败与处理内容，但不要让用户重复授权。只有修复会扩大产品代码范围、改变 merge 方式或分支清理范围、需要 rebase / rewrite / force push，或引入新的外部 / 破坏性操作时，才重新确认。
 - 创建 Git operator 前先运行 `pnpm tools git-delivery check --repository <owner/name> --json`。只有项目 auto-review、本机 `gh`、仓库写权限和 remote 认证都 ready 时才开始 commit / push / PR；不要等到收尾阶段才发现授权链断裂。
 - 本项目通过 `.codex/config.toml` 保持 `on-request` 审批并把 eligible prompt 交给 auto-review。该项目层配置有意作用于可信项目内所有新加载任务，不只作用于独立 worker，并可能覆盖用户层较严格的 reviewer / approval 默认值（managed requirements 与显式启动覆盖仍有更高优先级）；它只替换审批者，不扩大 sandbox、网络或 GitHub 权限。
 - `.codex/rules/git-delivery.rules` 对常见的 commit、push、PR 写操作、`gh api`、`git -C` / `git -c` 和常见 executable wrapper 使用更严格的 `prompt`，以最严格规则覆盖用户层可能存在的宽泛 `allow`。规则是纵深防护，不是不可绕过的命令沙箱；自定义 wrapper 或可执行路径仍必须依赖 sandbox、auto-review 与明确 prompt 边界。
