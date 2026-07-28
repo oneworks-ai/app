@@ -528,7 +528,6 @@ export function ConfigView() {
       label: t('config.sections.adapters'),
       value: currentSource?.adapters
     },
-    { key: 'plugins', icon: 'extension', label: t('config.sections.plugins'), value: currentSource?.plugins },
     ...defaultPluginSettingsPages.map(page => ({
       key: getPluginSettingsPageKey(page.pluginScope, page.id),
       icon: page.icon ?? 'extension',
@@ -715,8 +714,8 @@ export function ConfigView() {
   ])
   useEffect(() => {
     if (!shouldRedirectUnavailablePluginPage) return
-    updateConfigRoute({ detail: '', section: '', tab: 'plugins' })
-  }, [shouldRedirectUnavailablePluginPage, updateConfigRoute])
+    updateConfigRoute({ detail: '', section: '', tab: queryTabKey })
+  }, [queryTabKey, shouldRedirectUnavailablePluginPage, updateConfigRoute])
   useEffect(() => {
     const requestedSource = searchParams.get('source')
     if (requestedSource != null) {

@@ -31,4 +31,12 @@ describe('plugin settings route resolution', () => {
       snapshotStatus: 'error'
     })).toBe('plugins')
   })
+
+  it('falls back to general settings when plugin management is not a settings tab', () => {
+    expect(resolveSettingsTabKey({
+      availableTabKeys: new Set(['general']),
+      requestedTabKey: 'plugin:disabled:page',
+      snapshotStatus: 'ready'
+    })).toBe('general')
+  })
 })
