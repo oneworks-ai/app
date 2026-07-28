@@ -299,7 +299,7 @@ const buildRelayAccountFooterContribution = (
   const servers = Array.isArray(status?.servers) ? status.servers : []
   const manageAccount = accounts.length === 1 ? accounts[0] : undefined
 
-  if (status != null && accounts.length === 0) {
+  if (accounts.length === 0) {
     return {
       ...getAccountLoginAction(ctx),
       icon: 'login',
