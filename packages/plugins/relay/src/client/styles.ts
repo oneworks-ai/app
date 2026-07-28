@@ -300,6 +300,9 @@ ${adminListSurfaceCss}
 }
 .oneworks-relay__servers { min-width: 0; display: grid; align-content: start; gap: 10px; }
 .oneworks-relay__server-management-form { --relay-admin-list-native-row-columns: var(--app-chrome-icon-size, 18px) minmax(0, 1fr) auto; }
+.oneworks-relay__server-title-row { min-width: 0; display: flex; align-items: center; gap: 6px; }
+.oneworks-relay__server-title-row .relay-admin-list-table__native-title { flex: 1 1 auto; }
+.oneworks-relay__server-default-label { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; color: var(--primary-color, var(--ant-color-primary, #1677ff)); font: 650 11px/1 ui-sans-serif, system-ui, sans-serif; white-space: nowrap; }
 .oneworks-relay__messages { min-width: 0; display: grid; gap: 0; padding: 0; }
 .relay-message-center { display: grid; gap: 0; min-width: 0; }
 .relay-message-center__filters { display: grid; gap: 8px; min-width: 0; padding: 0 0 var(--subpage-tertiary-padding, var(--ant-padding-xs, 8px)); }
@@ -341,14 +344,11 @@ ${adminListSurfaceCss}
 .oneworks-relay__profile-fact { min-width: 0; display: grid; gap: 2px; }
 .oneworks-relay__profile-fact-label { color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 650 10px/1.2 ui-sans-serif, system-ui, sans-serif; text-transform: uppercase; }
 .oneworks-relay__profile-fact-value { min-width: 0; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); font: 600 12px/1.35 ui-sans-serif, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.oneworks-relay__personal-docs { position: relative; min-width: 0; min-height: min(520px, calc(100dvh - 240px)); display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 0; overflow: hidden; padding-block-start: 0; background: var(--bg-color, var(--ant-color-bg-container, #fff)); }
-.oneworks-relay__personal-docs-list-pane { min-width: 0; min-height: 0; height: 100%; display: flex; align-self: stretch; background: var(--bg-color, var(--ant-color-bg-container, #fff)); }
+.oneworks-relay__personal-docs { position: relative; min-width: 0; min-height: min(520px, calc(100dvh - 240px)); display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 0; overflow: hidden; padding-block-start: 0; background: transparent; }
+.oneworks-relay__personal-docs-list-pane { min-width: 0; min-height: 0; height: 100%; display: flex; align-self: stretch; background: transparent; }
 .oneworks-relay__personal-docs-list { min-width: 0; min-height: 92px; height: 100%; display: flex; }
-.oneworks-relay__personal-docs-list .interaction-list__scroll { min-height: 0; height: 100%; flex: 1 1 auto; background: var(--bg-color, var(--ant-color-bg-container, #fff)); }
-.oneworks-relay__personal-docs-list .interaction-list__items { min-height: 100%; height: 100%; flex: 1 0 auto; background: var(--bg-color, var(--ant-color-bg-container, #fff)); }
-.oneworks-relay__personal-docs-list-pane,
-.oneworks-relay__personal-docs-list .interaction-list__scroll,
-.oneworks-relay__personal-docs-list .interaction-list__items { background-image: linear-gradient(var(--oneworks-relay-surface-background), var(--oneworks-relay-surface-background)); }
+.oneworks-relay__personal-docs-list .interaction-list__scroll { min-height: 0; height: 100%; flex: 1 1 auto; background: transparent; }
+.oneworks-relay__personal-docs-list .interaction-list__items { min-height: 100%; height: 100%; flex: 1 0 auto; background: transparent; }
 .oneworks-relay__document-preview { position: absolute; inset-block: 0; inset-inline-end: 0; z-index: 2; width: min(680px, max(420px, calc(100% - 300px))); min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); border-left: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); background: var(--bg-color, var(--ant-color-bg-container, #fff)); box-shadow: -12px 0 24px rgb(0 0 0 / 6%); }
 .oneworks-relay__document-preview--closing { pointer-events: none; animation: oneworks-relay-document-preview-out .26s ease-in both; }
 .oneworks-relay__document-preview-head { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 0 0 var(--subpage-tertiary-padding, var(--ant-padding-xs, 8px)); border-bottom: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); }
