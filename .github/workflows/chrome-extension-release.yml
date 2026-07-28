@@ -2,11 +2,11 @@ name: Chrome Extension Release
 on:
   push:
     tags:
-      - "pkg/oneworks-plugin-chrome-driver/v*"
+      - "pkg/oneworks-plugin-external-browser-driver/v*"
   workflow_dispatch:
     inputs:
       release_tag:
-        description: Release tag to package. Must start with pkg/oneworks-plugin-chrome-driver/v.
+        description: Release tag to package. Must start with pkg/oneworks-plugin-external-browser-driver/v.
         required: true
         type: string
       publish_store:
@@ -17,7 +17,7 @@ on:
 permissions:
   contents: read
 env:
-  CHROME_EXTENSION_RELEASE_TAG_PREFIX: pkg/oneworks-plugin-chrome-driver/v
+  CHROME_EXTENSION_RELEASE_TAG_PREFIX: pkg/oneworks-plugin-external-browser-driver/v
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 concurrency:
   group: chrome-extension-release-${{ github.ref }}
@@ -59,7 +59,7 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
         run: |
           tag_name="${INPUT_RELEASE_TAG:-$REF_NAME}"
-          package_version="$(node -p "require('./packages/plugins/chrome-driver/package.json').version")"
+          package_version="$(node -p "require('./packages/plugins/external-browser-driver/package.json').version")"
           case "$tag_name" in
             ${CHROME_EXTENSION_RELEASE_TAG_PREFIX}*) ;;
             *)
@@ -81,25 +81,25 @@ jobs:
           echo "tag=$tag_name" >> "$GITHUB_OUTPUT"
           echo "value=$package_version" >> "$GITHUB_OUTPUT"
       - name: Typecheck extension plugin
-        run: pnpm --filter @oneworks/plugin-chrome-driver typecheck
+        run: pnpm --filter @oneworks/plugin-external-browser-driver typecheck
       - name: Test extension plugin
-        run: pnpm --filter @oneworks/plugin-chrome-driver test
+        run: pnpm --filter @oneworks/plugin-external-browser-driver test
       - name: Build extension plugin
-        run: pnpm --filter @oneworks/plugin-chrome-driver build
+        run: pnpm --filter @oneworks/plugin-external-browser-driver build
       - name: Package developer and minimal extensions
-        run: pnpm --filter @oneworks/plugin-chrome-driver package:extension:all
+        run: pnpm --filter @oneworks/plugin-external-browser-driver package:extension:all
       - name: Write package checksums
-        working-directory: packages/plugins/chrome-driver/dist-package
+        working-directory: packages/plugins/external-browser-driver/dist-package
         run: sha256sum *.zip > SHA256SUMS
       - name: Attest extension packages
         uses: actions/attest@v4
         with:
-          subject-path: packages/plugins/chrome-driver/dist-package/*.zip
+          subject-path: packages/plugins/external-browser-driver/dist-package/*.zip
       - name: Upload extension artifacts
         uses: actions/upload-artifact@v4
         with:
           name: oneworks-v${{ steps.version.outputs.value }}
-          path: packages/plugins/chrome-driver/dist-package/*
+          path: packages/plugins/external-browser-driver/dist-package/*
           if-no-files-found: error
           retention-days: 14
   release:
@@ -196,5 +196,5 @@ jobs:
           CHROME_WEB_STORE_EXTENSION_ID: ${{ vars.CHROME_WEB_STORE_EXTENSION_ID }}
           CHROME_WEB_STORE_PUBLISHER_ID: ${{ vars.CHROME_WEB_STORE_PUBLISHER_ID }}
         run: >-
-          pnpm --filter @oneworks/plugin-chrome-driver publish:chrome-web-store --
+          pnpm --filter @oneworks/plugin-external-browser-driver publish:chrome-web-store --
           --archive "${{ github.workspace }}/dist/${{ needs.build.outputs.store_archive }}"

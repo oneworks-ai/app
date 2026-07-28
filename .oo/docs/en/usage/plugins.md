@@ -11,7 +11,7 @@ For Claude Code plugins and marketplaces, see [Adapter Native Plugins and Market
 
 ## Installation
 
-- Relay, the in-app browser driver (IAB), the external Chrome Driver, and the computer-use driver (CUA) are built-in One Works plugins enabled by default. External Chrome and CUA settings live in the shared External Control group. CUA supports per-bundle-id policies for no confirmation, ask every time, or deny access; unmatched apps ask every time by default.
+- Relay, In-App Browser Control (IAB), Browser Control, and Computer Control - CUA are built-in One Works plugins enabled by default. Browser Control currently supports Chrome only; external browser and CUA settings live in the shared External Control group. CUA supports per-bundle-id policies for no confirmation, ask every time, or deny access; unmatched apps ask every time by default.
 - Built-in One Works plugins resolve from the global package cache at the version declared by the runtime. Missing packages are installed into that cache.
 - Other plugins are installed into your project workspace through npm or referenced by directory path. Resolution failure is an error.
 - `id` supports shorthand. For example, `logger` first resolves as `logger`, then as `@oneworks/plugin-logger`; legacy `@vibe-forge/plugin-logger` remains a compatibility fallback.
@@ -26,7 +26,7 @@ Disable a host driver explicitly when a workspace does not need it. This does no
       "enabled": false
     },
     {
-      "id": "@oneworks/plugin-chrome-driver",
+      "id": "@oneworks/plugin-external-browser-driver",
       "enabled": false
     },
     {

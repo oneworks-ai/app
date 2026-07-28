@@ -917,6 +917,22 @@ describe('client plugin host registry', () => {
     expect(resolvePluginClientEntryUrl({
       clientOrigin: 'http://127.0.0.1:50802',
       instance: {
+        requestId: 'relay',
+        scope: 'relay',
+        clientEntryUrl: '/api/plugins/relay/client-source/client/src/index.ts',
+        watch: { enabled: false }
+      },
+      isDevelopment: false,
+      runtimeEndpoint,
+      useDesktopProxy: true
+    })).toBe(
+      'http://127.0.0.1:50802/__oneworks_plugin_runtime__/' +
+        'http%3A%2F%2F127.0.0.1%3A50982/api/plugins/relay/client-source/client/src/index.ts'
+    )
+
+    expect(resolvePluginClientEntryUrl({
+      clientOrigin: 'http://127.0.0.1:50802',
+      instance: {
         ...instance,
         devClientEntryKind: 'dev-server',
         devClientEntryUrl: '/api/plugins/relay/dev/client/src/index.ts',

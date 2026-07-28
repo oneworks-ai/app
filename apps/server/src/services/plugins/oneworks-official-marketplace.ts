@@ -29,7 +29,7 @@ export interface OneWorksOfficialPluginDefinition {
 export const ONEWORKS_OFFICIAL_PLUGINS: OneWorksOfficialPluginDefinition[] = [
   {
     category: 'automation',
-    displayName: 'Browser Driver',
+    displayName: 'In-App Browser Control',
     icon: { kind: 'builtin', id: 'oneworks-browser-driver' },
     name: '@oneworks/plugin-browser-driver'
   },
@@ -50,9 +50,9 @@ export const ONEWORKS_OFFICIAL_PLUGINS: OneWorksOfficialPluginDefinition[] = [
   },
   {
     category: 'automation',
-    displayName: 'Chrome Driver',
-    icon: { kind: 'material', name: 'web' },
-    name: '@oneworks/plugin-chrome-driver'
+    displayName: 'Browser Control',
+    icon: { kind: 'builtin', id: 'oneworks-external-browser-driver' },
+    name: '@oneworks/plugin-external-browser-driver'
   },
   {
     category: 'developer-tools',
@@ -62,7 +62,7 @@ export const ONEWORKS_OFFICIAL_PLUGINS: OneWorksOfficialPluginDefinition[] = [
   },
   {
     category: 'automation',
-    displayName: 'CUA Driver',
+    displayName: 'Computer Control - CUA',
     featured: true,
     icon: { kind: 'builtin', id: 'oneworks-cua-driver' },
     name: '@oneworks/plugin-cua-driver'

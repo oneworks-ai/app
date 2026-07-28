@@ -440,6 +440,31 @@ const resolveClientEntryUrlPath = (manifest: PluginRuntimeManifest, entry = mani
   return path.posix.basename(normalizedEntry)
 }
 
+const isClientEntryAvailable = async (
+  pluginRoot: string,
+  clientAssetRoot: string,
+  declaredEntry: string | undefined
+) => {
+  const entry = declaredEntry?.trim()
+  if (entry == null || entry === '' || path.isAbsolute(entry)) return false
+  const entryPath = path.resolve(pluginRoot, entry)
+  if (!isPathInside(pluginRoot, entryPath)) return false
+  const [realPluginRoot, realClientAssetRoot, realEntry, entryStat] = await Promise.all([
+    realpath(pluginRoot).catch(() => undefined),
+    realpath(clientAssetRoot).catch(() => undefined),
+    realpath(entryPath).catch(() => undefined),
+    stat(entryPath).catch(() => undefined)
+  ])
+  return (
+    realPluginRoot != null &&
+    realClientAssetRoot != null &&
+    realEntry != null &&
+    entryStat?.isFile() === true &&
+    isPathInside(realPluginRoot, realEntry) &&
+    isPathInside(realClientAssetRoot, realEntry)
+  )
+}
+
 const normalizeHostViteBasePath = () => {
   const rawBase = process.env.__ONEWORKS_PROJECT_CLIENT_BASE__?.trim() || '/'
   const base = /^[a-z][a-z\d+.-]*:\/\//i.test(rawBase) || rawBase.startsWith('/') ? rawBase : `/${rawBase}`
@@ -490,7 +515,12 @@ const getHostViteDevClientAllowedRoots = () => [
 
 const usesRuntimeClientSourceCompiler = () => {
   const clientMode = process.env.__ONEWORKS_PROJECT_CLIENT_MODE__?.trim()
-  return clientMode === 'desktop' || clientMode === 'static'
+  return (
+    clientMode === 'desktop' ||
+    clientMode === 'independent' ||
+    clientMode === 'standalone' ||
+    clientMode === 'static'
+  )
 }
 
 interface RuntimeClientSourceEntry {
@@ -503,13 +533,15 @@ const resolveRuntimeClientSourceEntry = async (
   manifest: PluginRuntimeManifest,
   raw: ResolvedPluginInstance,
   watchEnabled: boolean,
-  managedSource: boolean
+  managedSource: boolean,
+  needsClientEntryFallback: boolean
 ): Promise<RuntimeClientSourceEntry | undefined> => {
   if (
     !usesRuntimeClientSourceCompiler() ||
-    !watchEnabled ||
-    managedSource ||
-    raw.sourceType !== 'directory'
+    (
+      !needsClientEntryFallback &&
+      (!watchEnabled || managedSource || raw.sourceType !== 'directory')
+    )
   ) {
     return undefined
   }
@@ -519,14 +551,26 @@ const resolveRuntimeClientSourceEntry = async (
   const absoluteEntry = path.resolve(pluginRoot, normalizedEntry)
   const entryStat = await stat(absoluteEntry).catch(() => undefined)
   if (entryStat?.isFile() !== true) return undefined
-  const [realPluginRoot, realEntry] = await Promise.all([
+  const configuredSourceRoot = manifest.plugin?.client?.sourceRoot?.trim() || undefined
+  const absoluteSourceRoot = configuredSourceRoot == null
+    ? path.dirname(absoluteEntry)
+    : path.resolve(pluginRoot, configuredSourceRoot)
+  const [realPluginRoot, realEntry, realSourceRoot] = await Promise.all([
     realpath(pluginRoot).catch(() => path.resolve(pluginRoot)),
-    realpath(absoluteEntry)
+    realpath(absoluteEntry),
+    realpath(absoluteSourceRoot).catch(() => undefined)
   ])
-  if (!isPathInside(realPluginRoot, realEntry)) return undefined
+  if (
+    realSourceRoot == null ||
+    !isPathInside(realPluginRoot, realEntry) ||
+    !isPathInside(realPluginRoot, realSourceRoot) ||
+    !isPathInside(realSourceRoot, realEntry)
+  ) {
+    return undefined
+  }
   return {
     requestPath: normalizedEntry,
-    sourceRoot: await realpath(path.dirname(realEntry))
+    sourceRoot: realSourceRoot
   }
 }
 
@@ -990,15 +1034,16 @@ export class PluginManager {
     if (record == null || !record.instance.enabled || record.clientSource == null) {
       return undefined
     }
+    const clientSource = record.clientSource
 
     const sourceAsset = await resolveRuntimeClientSourceAssetPath(
       record.instance.pluginRoot,
-      record.clientSource.sourceRoot,
-      requestPath || record.clientSource.entryRequestPath
+      clientSource.sourceRoot,
+      requestPath || clientSource.entryRequestPath
     )
     if (sourceAsset == null) return undefined
-    const cached = record.clientSource.compiled.get(sourceAsset.cacheKey)
-    if (cached == null && record.clientSource.compiled.size >= MAX_PLUGIN_CLIENT_SOURCE_CACHE_ENTRIES) {
+    const cached = clientSource.compiled.get(sourceAsset.cacheKey)
+    if (cached == null && clientSource.compiled.size >= MAX_PLUGIN_CLIENT_SOURCE_CACHE_ENTRIES) {
       throw new Error(
         `Plugin "${scope}" client source cache exceeded ${MAX_PLUGIN_CLIENT_SOURCE_CACHE_ENTRIES} modules.`
       )
@@ -1008,24 +1053,25 @@ export class PluginManager {
         cacheDir: path.resolve(this.projectHome, '.cache', 'plugin-client-source'),
         entryPath: sourceAsset.entryPath,
         pluginRoot: record.instance.pluginRoot,
-        scope
+        scope,
+        sourceRoot: clientSource.sourceRoot
       })
     ).then((compiled) => {
-      const nextCachedBytes = record.clientSource!.cachedBytes + compiled.size
+      const nextCachedBytes = clientSource.cachedBytes + compiled.size
       if (nextCachedBytes > MAX_PLUGIN_CLIENT_SOURCE_CACHE_BYTES) {
         throw new Error(
           `Plugin "${scope}" client source cache exceeded ${MAX_PLUGIN_CLIENT_SOURCE_CACHE_BYTES} bytes.`
         )
       }
-      record.clientSource!.cachedBytes = nextCachedBytes
+      clientSource.cachedBytes = nextCachedBytes
       return compiled
     })
-    record.clientSource.compiled.set(sourceAsset.cacheKey, pending)
+    clientSource.compiled.set(sourceAsset.cacheKey, pending)
     try {
       return await pending
     } catch (error) {
-      if (record.clientSource.compiled.get(sourceAsset.cacheKey) === pending) {
-        record.clientSource.compiled.delete(sourceAsset.cacheKey)
+      if (clientSource.compiled.get(sourceAsset.cacheKey) === pending) {
+        clientSource.compiled.delete(sourceAsset.cacheKey)
       }
       record.instance.diagnostics = record.instance.diagnostics.filter(
         diagnostic => diagnostic.code !== 'plugin_client_source_compile_failed'
@@ -1430,12 +1476,20 @@ export class PluginManager {
         manifest,
         manifest.plugin?.client?.devEntry ?? manifest.plugin?.client?.entry
       )
+      const clientAssetRoot = await resolvePluginClientAssetRoot(pluginRoot, manifest)
+      const clientEntryAvailable = await isClientEntryAvailable(
+        pluginRoot,
+        clientAssetRoot,
+        manifest.plugin?.client?.entry
+      )
+      const needsClientEntryFallback = clientEntry != null && !clientEntryAvailable
       const runtimeClientSourceEntry = await resolveRuntimeClientSourceEntry(
         pluginRoot,
         manifest,
         raw,
         watchEnabled,
-        this.managedPluginRoots.some(root => isPathInside(root, pluginRoot))
+        this.managedPluginRoots.some(root => isPathInside(root, pluginRoot)),
+        needsClientEntryFallback
       )
       const hostViteDevClientEntryUrl = runtimeClientSourceEntry == null &&
           !usesRuntimeClientSourceCompiler()
@@ -1449,25 +1503,43 @@ export class PluginManager {
           ]
         )
         : undefined
-      const clientAssetRoot = await resolvePluginClientAssetRoot(pluginRoot, manifest)
+      const runtimeClientSourceEntryUrl = runtimeClientSourceEntry == null
+        ? undefined
+        : `/api/plugins/${scope}/client-source/${
+          encodeURI(runtimeClientSourceEntry.requestPath)
+            .replaceAll('#', '%23')
+            .replaceAll('?', '%3F')
+        }`
+      const fallbackClientEntryUrl = needsClientEntryFallback
+        ? runtimeClientSourceEntryUrl ?? hostViteDevClientEntryUrl
+        : undefined
+      if (needsClientEntryFallback && fallbackClientEntryUrl == null) {
+        diagnostics.push({
+          level: 'error',
+          code: 'plugin_client_entry_unavailable',
+          message: `Plugin "${scope}" client entry is missing and no safe source fallback is available.`,
+          scope,
+          pluginRoot
+        })
+      }
       const client = manifest.plugin?.client == null
         ? undefined
         : {
           ...manifest.plugin.client,
-          ...(clientEntry != null ? { clientEntryUrl: `/api/plugins/${scope}/client/${clientEntry}` } : {}),
+          ...(clientEntryAvailable
+            ? { clientEntryUrl: `/api/plugins/${scope}/client/${clientEntry}` }
+            : fallbackClientEntryUrl == null
+            ? {}
+            : { clientEntryUrl: fallbackClientEntryUrl }),
           ...(manifest.plugin.client.devServer != null && devClientEntry != null
             ? {
               devClientEntryKind: 'dev-server' as const,
               devClientEntryUrl: `/api/plugins/${scope}/dev/${devClientEntry}`
             }
-            : runtimeClientSourceEntry != null
+            : runtimeClientSourceEntryUrl != null
             ? {
               devClientEntryKind: 'runtime-source' as const,
-              devClientEntryUrl: `/api/plugins/${scope}/client-source/${
-                encodeURI(runtimeClientSourceEntry.requestPath)
-                  .replaceAll('#', '%23')
-                  .replaceAll('?', '%3F')
-              }`
+              devClientEntryUrl: runtimeClientSourceEntryUrl
             }
             : hostViteDevClientEntryUrl != null
             ? {
@@ -1854,10 +1926,28 @@ export class PluginManager {
     if (!record.instance.enabled) return
     if (!this.shouldActivateServerEntry(record)) return
 
-    const entryPath = await resolvePluginServerEntryPath(record.instance.pluginRoot, record.manifest)
-    if (entryPath == null) return
-
     try {
+      let entryPath = await resolvePluginServerEntryPath(record.instance.pluginRoot, record.manifest)
+      if (entryPath == null) {
+        const sourceManifest = await loadPluginRuntimeManifest(
+          this.workspaceFolder,
+          { ...record.raw, watch: true }
+        )
+        const sourceEntry = sourceManifest?.plugin?.server?.entry
+        if (
+          sourceManifest != null &&
+          sourceEntry != null &&
+          sourceEntry !== record.manifest.plugin?.server?.entry
+        ) {
+          entryPath = await resolvePluginServerEntryPath(record.instance.pluginRoot, sourceManifest)
+        }
+      }
+      if (entryPath == null) {
+        throw new Error(
+          `Plugin server entry "${record.manifest.plugin?.server?.entry ?? ''}" is unavailable ` +
+            'and no source fallback could be loaded.'
+        )
+      }
       const mod = await loadPluginServerModule(entryPath, record.instance.pluginRoot)
       const moduleRecord = isRecord(mod) ? mod : {}
       const defaultRecord = isRecord(moduleRecord.default) ? moduleRecord.default : undefined

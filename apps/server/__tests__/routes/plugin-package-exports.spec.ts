@@ -247,6 +247,62 @@ describe('plugin package export conventions', () => {
     })
   })
 
+  it('falls back to a package source server entry when built output is missing', async () => {
+    const pluginRoot = path.join(workspaceFolder, 'plugins', 'server-source-fallback')
+    await mkdir(path.join(pluginRoot, 'server', 'src'), { recursive: true })
+    await writeFile(
+      path.join(pluginRoot, 'server', 'src', 'index.ts'),
+      `
+      export async function activatePlugin(ctx: { registerCommand: (id: string, handler: () => string) => void }) {
+        ctx.registerCommand('ping', () => 'pong-source-fallback')
+      }
+    `
+    )
+    await writeFile(
+      path.join(pluginRoot, 'package.json'),
+      JSON.stringify(
+        {
+          name: '@local/plugin-server-source-fallback',
+          exports: {
+            './server': {
+              source: './server/src/index.ts',
+              default: './server/dist/index.mjs'
+            },
+            './package.json': './package.json'
+          }
+        },
+        null,
+        2
+      )
+    )
+    await writeFile(
+      path.join(pluginRoot, 'plugin.json'),
+      JSON.stringify({ plugin: { server: { roles: ['workspace'] } } }, null, 2)
+    )
+    mocks.loadConfigState.mockResolvedValue({
+      workspaceFolder,
+      mergedConfig: {
+        plugins: [{ id: pluginRoot, scope: 'server-source-fallback', watch: false }]
+      }
+    })
+
+    const commandResponse = await fetch(
+      `${baseUrl}/api/plugins/server-source-fallback/commands/ping`,
+      { method: 'POST' }
+    )
+    await expect(commandResponse.text()).resolves.toBe('pong-source-fallback')
+
+    const listResponse = await fetch(`${baseUrl}/api/plugins`)
+    const listPayload = await listResponse.json() as {
+      plugins: Array<{ diagnostics?: unknown[]; enabled?: boolean; watch?: { enabled?: boolean } }>
+    }
+    expect(listPayload.plugins[0]).toMatchObject({
+      diagnostics: [],
+      enabled: true,
+      watch: { enabled: false }
+    })
+  })
+
   it('keeps explicitly configured package plugins on built client output in packaged runtimes', async () => {
     vi.stubEnv('__ONEWORKS_PROJECT_CLIENT_MODE__', 'desktop')
     const pluginRoot = path.join(
@@ -728,7 +784,7 @@ describe('plugin package export conventions', () => {
     }
     expect(listPayload.plugins[0]).toMatchObject({
       client: {
-        clientEntryUrl: '/api/plugins/packaged-source/client/dist/index.js',
+        clientEntryUrl: '/api/plugins/packaged-source/client-source/client/src/index.ts',
         devClientEntryKind: 'runtime-source',
         devClientEntryUrl: '/api/plugins/packaged-source/client-source/client/src/index.ts'
       }
@@ -872,6 +928,148 @@ describe('plugin package export conventions', () => {
     expect(sourceResponse.status).toBe(404)
   })
 
+  it.each(['desktop', 'independent', 'standalone', 'static'])(
+    'falls back to bounded client source in %s mode when built output is missing and watch is disabled',
+    async (clientMode) => {
+      vi.stubEnv('__ONEWORKS_PROJECT_CLIENT_MODE__', clientMode)
+      const pluginRoot = path.join(workspaceFolder, 'plugins', 'packaged-source-fallback')
+      await mkdir(path.join(pluginRoot, 'src', 'client'), { recursive: true })
+      await mkdir(path.join(pluginRoot, 'src', 'shared'), { recursive: true })
+      await writeFile(
+        path.join(pluginRoot, 'src', 'shared', 'value.ts'),
+        'export const sharedFallback = true\n'
+      )
+      await writeFile(
+        path.join(pluginRoot, 'index.js'),
+        'export const unrelatedRootEntry = true\n'
+      )
+      await writeFile(
+        path.join(pluginRoot, 'src', 'client', 'index.ts'),
+        [
+          "import { sharedFallback } from '../shared/value'",
+          'export const sourceFallback = sharedFallback',
+          'export const activatePlugin = () => undefined'
+        ].join('\n')
+      )
+      await writeFile(
+        path.join(pluginRoot, 'package.json'),
+        JSON.stringify(
+          {
+            name: '@local/plugin-packaged-source-fallback',
+            exports: {
+              './client': {
+                source: './src/client/index.ts',
+                default: './dist/client/index.js'
+              },
+              './package.json': './package.json'
+            }
+          },
+          null,
+          2
+        )
+      )
+      await writeFile(
+        path.join(pluginRoot, 'plugin.json'),
+        JSON.stringify({ plugin: { client: { sourceRoot: 'src' } } }, null, 2)
+      )
+      mocks.loadConfigState.mockResolvedValue({
+        workspaceFolder,
+        mergedConfig: {
+          plugins: [{ id: pluginRoot, scope: 'packaged-source-fallback', watch: false }]
+        }
+      })
+
+      const listResponse = await fetch(`${baseUrl}/api/plugins`)
+      const listPayload = await listResponse.json() as {
+        plugins: Array<{
+          client?: {
+            clientEntryUrl?: string
+            devClientEntryKind?: string
+            devClientEntryUrl?: string
+          }
+          diagnostics?: unknown[]
+          watch?: { enabled?: boolean }
+        }>
+      }
+      const fallbackEntry = '/api/plugins/packaged-source-fallback/client-source/src/client/index.ts'
+      expect(listPayload.plugins[0]).toMatchObject({
+        client: {
+          clientEntryUrl: fallbackEntry,
+          devClientEntryKind: 'runtime-source',
+          devClientEntryUrl: fallbackEntry
+        },
+        diagnostics: [],
+        watch: { enabled: false }
+      })
+
+      const sourceResponse = await fetch(`${baseUrl}${fallbackEntry}`)
+      const sourceText = await sourceResponse.text()
+      expect(sourceResponse.status, sourceText).toBe(200)
+      expect(sourceResponse.headers.get('content-type')).toContain('text/javascript')
+      expect(sourceText).toContain('activatePlugin')
+      expect(sourceText).toContain('sourceFallback')
+      expect(sourceText).not.toContain('unrelatedRootEntry')
+    }
+  )
+
+  it('falls back to client source when a built entry symlink escapes its asset root', async () => {
+    vi.stubEnv('__ONEWORKS_PROJECT_CLIENT_MODE__', 'desktop')
+    const pluginRoot = path.join(workspaceFolder, 'plugins', 'symlinked-built-entry')
+    const outsideEntry = path.join(workspaceFolder, 'outside-built-entry.js')
+    await mkdir(path.join(pluginRoot, 'client', 'src'), { recursive: true })
+    await mkdir(path.join(pluginRoot, 'client', 'dist'), { recursive: true })
+    await writeFile(outsideEntry, 'export const escapedBuiltEntry = true\n')
+    await symlink(outsideEntry, path.join(pluginRoot, 'client', 'dist', 'index.js'))
+    await writeFile(
+      path.join(pluginRoot, 'client', 'src', 'index.ts'),
+      'export const safeSourceFallback = true\n'
+    )
+    await writeFile(
+      path.join(pluginRoot, 'package.json'),
+      JSON.stringify(
+        {
+          name: '@local/plugin-symlinked-built-entry',
+          exports: {
+            './client': {
+              source: './client/src/index.ts',
+              default: './client/dist/index.js'
+            },
+            './package.json': './package.json'
+          }
+        },
+        null,
+        2
+      )
+    )
+    await writeFile(path.join(pluginRoot, 'plugin.json'), JSON.stringify({ plugin: {} }, null, 2))
+    mocks.loadConfigState.mockResolvedValue({
+      workspaceFolder,
+      mergedConfig: {
+        plugins: [{ id: pluginRoot, scope: 'symlinked-built-entry', watch: false }]
+      }
+    })
+
+    const listResponse = await fetch(`${baseUrl}/api/plugins`)
+    const listPayload = await listResponse.json() as {
+      plugins: Array<{ client?: { clientEntryUrl?: string }; diagnostics?: unknown[] }>
+    }
+    const fallbackEntry = '/api/plugins/symlinked-built-entry/client-source/client/src/index.ts'
+    expect(listPayload.plugins[0]).toMatchObject({
+      client: { clientEntryUrl: fallbackEntry },
+      diagnostics: []
+    })
+
+    const builtResponse = await fetch(
+      `${baseUrl}/api/plugins/symlinked-built-entry/client/dist/index.js`
+    )
+    expect(builtResponse.status).toBe(404)
+    const sourceResponse = await fetch(`${baseUrl}${fallbackEntry}`)
+    const sourceText = await sourceResponse.text()
+    expect(sourceResponse.status, sourceText).toBe(200)
+    expect(sourceText).toContain('safeSourceFallback')
+    expect(sourceText).not.toContain('escapedBuiltEntry')
+  })
+
   it('does not expose host Vite source entries outside allowed local roots', async () => {
     const pluginRoot = await mkdtemp(path.join(os.tmpdir(), 'ow-plugin-host-vite-outside-'))
     try {
@@ -962,6 +1160,81 @@ describe('plugin package export conventions', () => {
           devClientEntryUrl: await toHostViteFsPath(path.join(pluginRoot, 'client', 'src', 'index.tsx'), '/ui')
         },
         name: '@local/plugin-host-vite-allowed'
+      })
+    } finally {
+      if (previousAllow == null) {
+        delete process.env.__ONEWORKS_PROJECT_CLIENT_FS_ALLOW__
+      } else {
+        process.env.__ONEWORKS_PROJECT_CLIENT_FS_ALLOW__ = previousAllow
+      }
+      if (previousBase == null) {
+        delete process.env.__ONEWORKS_PROJECT_CLIENT_BASE__
+      } else {
+        process.env.__ONEWORKS_PROJECT_CLIENT_BASE__ = previousBase
+      }
+      await rm(pluginRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('uses an allowed host Vite source when external built output is missing and watch is disabled', async () => {
+    const previousAllow = process.env.__ONEWORKS_PROJECT_CLIENT_FS_ALLOW__
+    const previousBase = process.env.__ONEWORKS_PROJECT_CLIENT_BASE__
+    process.env.__ONEWORKS_PROJECT_CLIENT_BASE__ = '/ui/'
+    const pluginRoot = await mkdtemp(path.join(os.tmpdir(), 'ow-plugin-host-vite-fallback-'))
+    process.env.__ONEWORKS_PROJECT_CLIENT_FS_ALLOW__ = JSON.stringify([pluginRoot])
+    try {
+      await mkdir(path.join(pluginRoot, 'client', 'src'), { recursive: true })
+      await writeFile(
+        path.join(pluginRoot, 'client', 'src', 'index.tsx'),
+        'export const sourceFallback = true\n'
+      )
+      await writeFile(
+        path.join(pluginRoot, 'package.json'),
+        JSON.stringify(
+          {
+            name: '@local/plugin-host-vite-fallback',
+            exports: {
+              './client': {
+                source: './client/src/index.tsx',
+                default: './client/dist/index.js'
+              },
+              './package.json': './package.json'
+            }
+          },
+          null,
+          2
+        )
+      )
+      await writeFile(path.join(pluginRoot, 'plugin.json'), JSON.stringify({ plugin: {} }, null, 2))
+      mocks.loadConfigState.mockResolvedValue({
+        workspaceFolder,
+        mergedConfig: {
+          plugins: [{ id: pluginRoot, scope: 'host-vite-fallback', watch: false }]
+        }
+      })
+
+      const listResponse = await fetch(`${baseUrl}/api/plugins`)
+      const listPayload = await listResponse.json() as {
+        plugins: Array<{
+          client?: {
+            clientEntryUrl?: string
+            devClientEntryKind?: string
+            devClientEntryUrl?: string
+          }
+          diagnostics?: unknown[]
+        }>
+      }
+      const fallbackEntry = await toHostViteFsPath(
+        path.join(pluginRoot, 'client', 'src', 'index.tsx'),
+        '/ui'
+      )
+      expect(listPayload.plugins[0]).toMatchObject({
+        client: {
+          clientEntryUrl: fallbackEntry,
+          devClientEntryKind: 'host-vite',
+          devClientEntryUrl: fallbackEntry
+        },
+        diagnostics: []
       })
     } finally {
       if (previousAllow == null) {

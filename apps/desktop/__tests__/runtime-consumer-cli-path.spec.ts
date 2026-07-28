@@ -47,6 +47,24 @@ describe('desktop runtime consumer bootstrap path', () => {
     })
   })
 
+  it('shares the desktop Vite source roots with development server children', async () => {
+    const customRoot = path.join(tmpdir(), 'oneworks-desktop-custom-client-root')
+    vi.stubEnv('__ONEWORKS_PROJECT_CLIENT_FS_ALLOW__', JSON.stringify([customRoot]))
+    const { resolveDesktopDevClientFsAllowEnv } = await import('../src/main/workspace-service-manager')
+    const { repoRoot } = await import('../src/main/paths')
+
+    const runtimeEnv = resolveDesktopDevClientFsAllowEnv(process.env)
+    expect(JSON.parse(runtimeEnv.__ONEWORKS_PROJECT_CLIENT_FS_ALLOW__ ?? '[]')).toEqual([
+      repoRoot,
+      path.resolve(customRoot)
+    ])
+
+    electronMock.isPackaged = true
+    vi.resetModules()
+    const packaged = await import('../src/main/workspace-service-manager')
+    expect(packaged.resolveDesktopDevClientFsAllowEnv(process.env)).toEqual({})
+  })
+
   it('prefers the bundled bootstrap path for packaged workspace server children', async () => {
     electronMock.isPackaged = true
     vi.resetModules()

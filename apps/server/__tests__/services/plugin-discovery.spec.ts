@@ -75,7 +75,7 @@ describe('plugin discovery', () => {
 
   it.each([
     '@oneworks/plugin-browser-driver',
-    '@oneworks/plugin-chrome-driver',
+    '@oneworks/plugin-external-browser-driver',
     '@oneworks/plugin-cua-driver'
   ])('attributes the default bundled package %s to the host', async (packageId) => {
     mocks.loadConfigState.mockResolvedValue({

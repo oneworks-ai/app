@@ -288,10 +288,10 @@ const buildBrowserDriverExpectedReply = () => {
 const buildBrowserDriverPrompt = (pageOrigin: string, expectedReply: string) => (
   '请使用当前工作区的 browser/browser-driver skill 验证内置浏览器，不要使用外部浏览器，也不要修改代码。' +
   `先在默认右侧打开 ${pageOrigin}/ui/browser-use-lab.html?instance=right，` +
-  '获取快照后，用 workflow 依次输入任务标题 Browser Driver right page、原生选择 High、勾选确认、创建任务，并等待 Task created successfully。' +
+  '获取快照后，用 workflow 依次输入任务标题 In-App Browser Control right page、原生选择 High、勾选确认、创建任务，并等待 Task created successfully。' +
   '在 right 页面使用 in_app_browser_scroll 向下滚动 640 像素，再向上滚动 -640 像素返回顶部。' +
   `再在底部打开 ${pageOrigin}/ui/browser-use-lab.html?instance=bottom，` +
-  '获取第二个页面快照，输入 Browser Driver bottom page、选择 Urgent 并勾选确认。' +
+  '获取第二个页面快照，输入 In-App Browser Control bottom page、选择 Urgent 并勾选确认。' +
   '调用 in_app_browser_list_pages，确认两个页面 ID 不同；随后分别使用各自 page_id 再获取快照，确认 right 页面仍是成功状态、bottom 页面仍是未提交状态。' +
   `全部成功后，只回复下面字符去掉空格后的结果，不要解释：${Array.from(expectedReply).join(' ')}`
 )
@@ -299,7 +299,7 @@ const buildBrowserDriverPrompt = (pageOrigin: string, expectedReply: string) => 
 const buildBrowserDriverCancelPrompt = (pageOrigin: string) => (
   '请使用当前工作区的 browser/browser-driver skill 验证内置浏览器，不要使用外部浏览器，也不要修改代码。' +
   `在默认右侧打开 ${pageOrigin}/ui/browser-use-lab.html?instance=cancel&dynamic_favicon=1，` +
-  '获取快照后，用一个 workflow 依次输入任务标题 Browser Driver cancelled action、选择 High、勾选确认，' +
+  '获取快照后，用一个 workflow 依次输入任务标题 In-App Browser Control cancelled action、选择 High、勾选确认，' +
   '然后等待 30000 毫秒。现在开始执行；如果用户中断，立即停止且不要继续调用工具。'
 )
 
@@ -400,19 +400,19 @@ export const demoVideoScenarios = [
       height: 900,
       width: 1440
     },
-    description: '通过聊天 Agent 使用 Browser Driver 操作右侧与底部两个内置页面，验证多 Tab 隔离。',
+    description: '通过聊天 Agent 使用 In-App Browser Control 操作右侧与底部两个内置页面，验证多 Tab 隔离。',
     followCdpTargets: true,
     id: 'launcher-browser-driver-agent-tour',
     requiresUrl: false,
     showActionCursor: false,
-    title: 'Electron Browser Driver Agent 演示',
+    title: 'Electron In-App Browser Control Agent 演示',
     run: async (ctx) => {
       await ctx.openDesktopWorkspace(ctx.requireWorkspace())
       await ctx.recordUntilSelector(chatRouteReadySelector, { timeoutMs: 90_000 })
       await ctx.recordUntilSelectorAbsent('.workspace-opening-overlay', { timeoutMs: 90_000 })
       await ctx.recordFor(300)
       const pageUrl = ctx.url == null ? undefined : new URL(ctx.url)
-      if (pageUrl == null) throw new Error('Browser Driver demo requires the Electron renderer URL.')
+      if (pageUrl == null) throw new Error('In-App Browser Control demo requires the Electron renderer URL.')
       const expectedReply = buildBrowserDriverExpectedReply()
       await ctx.clickSelector('[aria-label="收起侧边栏"], [aria-label="Collapse sidebar"]', {
         settleMs: 400,

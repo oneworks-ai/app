@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+
 import { createInstance } from 'i18next'
 import { describe, expect, it } from 'vitest'
 
@@ -52,5 +54,21 @@ describe('i18n resources', () => {
     expect(i18n.getResourceBundle('en', 'translation')).toEqual({
       title: 'New title'
     })
+  })
+
+  it('keeps interface-language synchronization in the dedicated config hook', () => {
+    const appPreferencesSource = readFileSync(
+      new URL('../src/hooks/use-app-preferences.ts', import.meta.url),
+      'utf8'
+    )
+    const interfaceLanguageSource = readFileSync(
+      new URL('../src/hooks/use-interface-language-config.ts', import.meta.url),
+      'utf8'
+    )
+
+    expect(appPreferencesSource).not.toContain('changeAppLanguage')
+    expect(appPreferencesSource).not.toContain('interfaceLanguage')
+    expect(interfaceLanguageSource).toContain('updateGlobalInterfaceLanguage')
+    expect(interfaceLanguageSource).toContain('changeAppLanguage')
   })
 })

@@ -29,7 +29,7 @@ const bundledAdapterPackages = [
 
 const bundledPluginPackages = [
   '@oneworks/plugin-browser-driver',
-  '@oneworks/plugin-chrome-driver',
+  '@oneworks/plugin-external-browser-driver',
   '@oneworks/plugin-cua-driver',
   '@oneworks/plugin-logger',
   '@oneworks/plugin-relay'
@@ -52,7 +52,7 @@ describe('desktop runtime dependencies', () => {
     )
     expect(BUILTIN_PLUGIN_PACKAGES).toEqual(bundledPluginPackages)
     expect(desktopPackageJson.scripts?.['build:plugins']).toBe(
-      'pnpm --filter @oneworks/plugin-chrome-driver --filter @oneworks/plugin-cua-driver ' +
+      'pnpm --filter @oneworks/plugin-external-browser-driver --filter @oneworks/plugin-cua-driver ' +
         '--filter @oneworks/plugin-relay build'
     )
     expect(desktopPackageJson.scripts?.package).toContain('pnpm run build:plugins')

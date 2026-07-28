@@ -21,7 +21,7 @@ const browserDriverManifest = JSON.parse(readFileSync(
 
 const readBrowserDriverPresentation = (id: string): RuntimeToolUsePresentation => {
   const contribution = browserDriverManifest.plugin.contributions.toolUsePresentations.find(item => item.id === id)
-  if (contribution == null) throw new Error(`Missing Browser Driver tool presentation: ${id}`)
+  if (contribution == null) throw new Error(`Missing Browser Control tool presentation: ${id}`)
   return { ...contribution, pluginScope: 'browser/browser-driver' }
 }
 
@@ -182,7 +182,7 @@ describe('plugin tool-use presentation', () => {
     })
   })
 
-  it('renders Browser Driver workflow outputs from the actual plugin manifest without object coercion', () => {
+  it('renders Browser Control workflow outputs from the actual plugin manifest without object coercion', () => {
     const workflow = buildPluginToolResultPresentation({
       structuredContent: {
         outcome: 'succeeded',

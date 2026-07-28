@@ -1,14 +1,12 @@
 import type { ThemeConfig } from 'antd'
 import { useAtomValue, useSetAtom } from 'jotai'
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import useSWR from 'swr'
 
 import { DEFAULT_THEME_PRIMARY_COLOR, normalizeThemePrimaryColor } from '@oneworks/icon/presets'
 import type { AppearanceThemePackConfigMap, ConfigResponse } from '@oneworks/types'
 
 import { getConfig } from '#~/api'
-import { changeAppLanguage } from '#~/i18n'
 import type { PluginThemeRuntimeRegistration, PluginThemeSettingsValue } from '#~/plugins/plugin-theme-contract'
 import { usePluginThemes } from '#~/plugins/plugin-themes'
 import {
@@ -106,7 +104,6 @@ export const applyThemePrimaryColorVariables = (primaryColor: string) => {
 }
 
 export function useAppPreferences(): AppPreferences {
-  const { i18n } = useTranslation()
   const themes = usePluginThemes()
   const setThemeMode = useSetAtom(themeAtom)
   const setThemePack = useSetAtom(themePackAtom)
@@ -116,7 +113,6 @@ export function useAppPreferences(): AppPreferences {
   const themePackSettings = useAtomValue(themePackSettingsAtom)
   const [storedPrimaryColor, setStoredPrimaryColor] = useState(() => getStoredThemePrimaryColor())
   const { data: configRes } = useSWR<ConfigResponse>('/api/config', getConfig)
-  const interfaceLanguage = configRes?.sources?.merged?.general?.interfaceLanguage
   const globalThemeMode = getGlobalThemeMode(configRes)
   const globalThemePack = getGlobalAppearanceThemePack(configRes)
   const globalThemePackSettings = useMemo(() => getGlobalThemePackSettingsMap(configRes), [configRes])
@@ -163,12 +159,6 @@ export function useAppPreferences(): AppPreferences {
     () => applyThemePackToDocument(themePack, activeTheme, themeSettings),
     [activeTheme, themePack, themeSettings]
   )
-  useEffect(() => {
-    if (interfaceLanguage && i18n.language !== interfaceLanguage) {
-      void changeAppLanguage(interfaceLanguage)
-    }
-  }, [i18n, interfaceLanguage])
-
   const themeConfig = useMemo(() =>
     buildThemePackConfig({
       isDarkMode,

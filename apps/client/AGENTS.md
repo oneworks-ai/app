@@ -23,7 +23,7 @@
 - `src/store/`：全局状态原子。
 - `src/resources/`：静态资源、适配器元数据和 i18n 文案。
 - `src/styles/`：client 全局样式入口。共享设计 token 不在这里定义，统一来自 `@oneworks/route-layout/design-tokens.css`。
-- `public/browser-use-lab.*`：Browser Driver 的本地确定性验收页，覆盖表单、异步状态、筛选、展开和长滚动；修改内置浏览器控制协议或主题桥接时用它做 Electron 回归。
+- `public/browser-use-lab.*`：In-App Browser Control 的本地确定性验收页，覆盖表单、异步状态、筛选、展开和长滚动；修改内置浏览器控制协议或主题桥接时用它做 Electron 回归。
 - `public/sw.js`：PWA app shell 的版本化缓存交接。新版本 HTML 及其首层必需 JavaScript / CSS 全部预热成功前，不得调用 `skipWaiting` 或清理旧版本 cache；任一必需请求失败时只删除本次新 cache，保留旧 worker 的有效 app shell。修改 install / activate 流程时运行 `apps/client/__tests__/pwa.spec.ts`，同时覆盖 HTML 失败和 HTML 成功但必需 JS / CSS 失败两条回归路径。
 
 ## 约定
@@ -77,7 +77,7 @@
 - client 入口必须先引入 `@oneworks/route-layout/design-tokens.css`，再引入本应用自己的 `src/styles/global.scss`。
 - `src/styles/global.scss` 只维护 client 专属全局样式、overlay、AntD 细节覆盖和页面级通用样式；不要在这里重新定义 `--bg-color`、`--text-color`、`--border-color`、`--primary-color` 或暗色 token 表。
 - 修改共享颜色、chrome 尺寸、route header 或 nav rail token 时，去 `packages/route-layout/src/design-tokens.css`，并同步检查 Relay Admin 是否受影响。
-- `useAppPreferences` 负责把主题状态同步到 `html.dark` 和 AntD `ConfigProvider`；新增主题入口时不要只改 CSS token 而漏掉 AntD theme。
+- `useAppPreferences` 只负责把主题状态同步到 `html.dark` 和 AntD `ConfigProvider`；界面语言的读取、持久化与 i18n 同步统一由 `use-interface-language-config.ts` 负责，避免桌面配置与服务端配置相互覆盖。新增主题入口时不要只改 CSS token 而漏掉 AntD theme。
 - `appearance.themePack` 选择当前样式包，主题私有配置放在 `appearance.themePacks.<theme-id>`；除宿主 `default` 外，主题由客户端插件通过 `ctx.themes.register(...)` 注册，插件拥有 id、文案、内置主题色、normalizer、AntD token、CSS、素材和专属 tabs。宿主只保留通用注册、选择、持久化和渲染能力，不得增加主题 id 分支。
 - 主题内置颜色只覆盖运行时 effective primary color，不能改写已保存的 `appearance.primaryColor`，切回默认主题后必须恢复。默认主题只读；插件 tab 必须映射回自己的 `appearance.themePacks.<theme-id>`，数值型覆盖同时呈现 `enabled` 和实际 `value`，其中主题预设值只读、开关只控制是否应用。主题插件缺失时保留保存值并安全回退默认样式。
 - manager 角色的本地 dev client 必须优先使用当前 Vite origin，让 `/api/*` 走同一 worktree 的代理；历史保存的 server address 只用于 standalone / static manager 等连接选择场景，不能把本地开发页导向另一份旧服务。显式 runtime server base URL 仍保持最高优先级。

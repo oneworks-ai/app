@@ -33,6 +33,7 @@ export interface PluginClientManifest {
   root?: string
   devEntry?: string
   devServer?: string
+  sourceRoot?: string
 }
 
 export interface PluginServerManifest {

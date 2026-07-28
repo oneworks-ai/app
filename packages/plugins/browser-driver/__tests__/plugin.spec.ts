@@ -12,6 +12,10 @@ process.env.__ONEWORKS_DESKTOP_BROWSER_CONTROL_TOKEN__ = 'test-token'
 process.env.__ONEWORKS_PROJECT_SESSION_ID__ = 'session-browser'
 
 const require = createRequire(import.meta.url)
+const manifest = require('../plugin.json') as {
+  displayName: string
+  displayNameI18n: { en: string; 'zh-Hans': string }
+}
 const createWorkflowController = require('../bin/browser-driver-workflows.cjs') as (
   callOperation: (op: string, args: Record<string, unknown>) => Promise<Record<string, unknown>>
 ) => {
@@ -42,6 +46,19 @@ afterEach(async () => {
 })
 
 describe('browser-driver plugin contract', () => {
+  it('distinguishes in-app control from external browser control across user-facing surfaces', async () => {
+    expect(manifest.displayName).toBe('In-App Browser Control')
+    expect(manifest.displayNameI18n).toEqual({
+      en: 'In-App Browser Control',
+      'zh-Hans': '内置浏览器控制'
+    })
+    const skill = await readFile(new URL('../skills/browser-driver/SKILL.md', import.meta.url), 'utf8')
+    const lab = await readFile(new URL('../../../../apps/client/public/browser-use-lab.html', import.meta.url), 'utf8')
+    expect(skill).toContain('# OneWorks In-App Browser Control')
+    expect(lab).toContain('OneWorks · In-App Browser Control')
+    expect(lab).toContain('Verify In-App Browser Control')
+  })
+
   it('exposes semantic tools without raw JavaScript or CDP escape hatches', () => {
     const names = driver.tools.map(tool => tool.name)
     expect(names).toEqual([

@@ -16,7 +16,7 @@ import { buildConfigJsonVariables, loadConfigState } from '#~/services/config/in
 const pluginConfigKey = (plugin: { id: string; scope?: string }) => `${plugin.id}\0${plugin.scope ?? ''}`
 const bundledOfficialPluginPackageIds = new Set([
   '@oneworks/plugin-browser-driver',
-  '@oneworks/plugin-chrome-driver',
+  '@oneworks/plugin-external-browser-driver',
   '@oneworks/plugin-cua-driver',
   '@oneworks/plugin-demo',
   '@oneworks/plugin-demo-extension',
@@ -41,6 +41,11 @@ const registerPluginConfigSources = (
   }
 }
 
+const getMarketplacePluginConfig = (
+  marketplace: MarketplaceConfig[string] | undefined,
+  pluginName: string
+) => marketplace?.plugins?.[pluginName]
+
 const getMarketplacePluginSourceGroup = (
   marketplaceKey: string,
   pluginName: string,
@@ -48,7 +53,7 @@ const getMarketplacePluginSourceGroup = (
 ) =>
   sources.find(({ config }) => {
     const marketplace = config?.[marketplaceKey]
-    const plugin = marketplace?.plugins?.[pluginName]
+    const plugin = getMarketplacePluginConfig(marketplace, pluginName)
     return marketplace?.enabled !== false && plugin != null && plugin.enabled !== false
   })?.sourceGroup
 
@@ -59,7 +64,7 @@ const getOneWorksMarketplacePluginSourceGroup = (
   sources.find(({ config }) =>
     Object.values(config ?? {}).some((marketplace) => {
       if (marketplace.type !== 'oneworks' || marketplace.enabled === false) return false
-      const plugin = marketplace.plugins?.[instance.requestId]
+      const plugin = getMarketplacePluginConfig(marketplace, instance.requestId)
       return plugin != null && plugin.enabled !== false && (
         plugin.scope == null || plugin.scope === instance.scope
       )

@@ -142,7 +142,7 @@ jobs:
             if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
               echo "Release tag already exists: $tag"
               case "$tag" in
-                pkg/oneworks-plugin-chrome-driver/v*)
+                pkg/oneworks-plugin-external-browser-driver/v*)
                   dispatch_chrome_extension_release "$tag" false
                   ;;
               esac
@@ -168,7 +168,7 @@ jobs:
                   --ref "$tag" \
                   -f release_tag="$tag"
                 ;;
-              pkg/oneworks-plugin-chrome-driver/v*)
+              pkg/oneworks-plugin-external-browser-driver/v*)
                 dispatch_chrome_extension_release "$tag" true
                 ;;
               *)

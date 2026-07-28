@@ -25,7 +25,7 @@ The extension communicates only with the authenticated OneWorks bridge bound to 
 
 - `chrome.storage.local` stores the paired bridge URL, trusted origin, reconnect client token, and OneWorks tab identifier under the connection record.
 - `chrome.storage.session` stores the extension session identifier, cursor session/state, and advanced-access policy. Session data is cleared when the Chrome session ends.
-- Operation results may be processed or retained by the paired OneWorks runtime, the active session, and configured model, AI, or tool providers according to their configuration and policies. OneWorks persists only redacted audit summaries in its Chrome Driver audit file. The extension does not create a separate cloud advertising profile or analytics database.
+- Operation results may be processed or retained by the paired OneWorks runtime, the active session, and configured model, AI, or tool providers according to their configuration and policies. OneWorks persists only redacted audit summaries in its Browser Control audit file. The extension does not create a separate cloud advertising profile or analytics database.
 - OneWorks stores the URL match patterns that users enter for website permissions in the local project data directory; query strings and fragments are neither accepted in patterns nor used for matching.
 - Execution-target verification is separate from website-permission matching. Guard messages carry only a SHA-256 fingerprint of the complete canonical URL, not plaintext query strings or fragments, and errors expose at most fingerprint prefixes.
 - Users can disconnect or forget a connection, remove website-permission rules, revoke Chrome permissions, clear extension data, or uninstall the extension.

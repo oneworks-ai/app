@@ -1,26 +1,26 @@
-# OneWorks
+# Browser Control
 
-The OneWorks Chrome extension lets a OneWorks Agent control an explicitly paired browser. It reuses Browser Driver workflow and progressive-result infrastructure while keeping a separate Chrome bridge, stable `windowId` / `tabId` / `frameId` / `documentId` targets, and typed tools. It never guesses an implicit current tab. Arbitrary JavaScript/CDP, complete cookie values, and sensitive page fields are off by default; OneWorks Settings stores the user's explicit preferences independently of connection state and applies them to a compatible browser after it connects.
+Browser Control lets a OneWorks Agent control an explicitly paired external browser through a browser extension. The current implementation and release artifacts support Google Chrome only; the capability and product name remain browser-level so extension-capable browsers such as Firefox can be added in the future. It reuses In-App Browser Control workflow and progressive-result infrastructure while keeping a separate Chrome bridge, stable `windowId` / `tabId` / `frameId` / `documentId` targets, and typed tools. It never guesses an implicit current tab. Arbitrary JavaScript/CDP, complete cookie values, and sensitive page fields are off by default; OneWorks Settings stores the user's explicit preferences independently of connection state and applies them to a compatible browser after it connects.
 
 [简体中文](./README.md)
 
 ## Install the development extension
 
 ```bash
-pnpm --filter @oneworks/plugin-chrome-driver build:extension
+pnpm --filter @oneworks/plugin-external-browser-driver build:extension
 ```
 
-Enable Developer mode at `chrome://extensions`, choose “Load unpacked”, and load `packages/plugins/chrome-driver/dist-extension/privileged`. Open “External Browser” in OneWorks Settings, choose “Connect this OneWorks tab” in the extension popup, then click “Connect browser” in OneWorks.
+Enable Developer mode at `chrome://extensions`, choose “Load unpacked”, and load `packages/plugins/external-browser-driver/dist-extension/privileged`. Open “External Browser” in OneWorks Settings, choose “Connect this OneWorks tab” in the extension popup, then click “Connect browser” in OneWorks.
 
 The official developer package declares `debugger` and `proxy` for bounded network/console/DOM/performance debugging, full-page screenshots, PDF output, and proxy control. Bookmarks, history, cookies, downloads, and site-data capabilities remain grouped popup requests and still pass through session switches, risk confirmation, and auditing. For semantic-only operation, run `build:extension:minimal` and load `dist-extension/base`. `build:extension:e2e` is for isolated-profile automation only and must not be installed in a daily browser.
 
 ## Build distributable ZIPs
 
 ```bash
-pnpm --filter @oneworks/plugin-chrome-driver package:extension:all
+pnpm --filter @oneworks/plugin-external-browser-driver package:extension:all
 ```
 
-Artifacts are written under `packages/plugins/chrome-driver/dist-package/`:
+Artifacts are written under `packages/plugins/external-browser-driver/dist-package/`:
 
 - `oneworks-v<version>.zip` is the official developer package with `debugger` / `proxy`, for Chrome Web Store upload or unpacked sideloading.
 - `oneworks-v<version>-minimal.zip` is the optional minimum-permission fallback and is not uploaded to Chrome Web Store.
@@ -31,7 +31,7 @@ Versioned screenshots, promotional artwork, and review copy for Chrome Web Store
 
 Each ZIP has `manifest.json` at its root. Packaging maps the workspace semver to Chrome's comparable four-integer version while retaining the original string in `version_name`; for example, `0.1.0-beta.6` becomes `0.1.0.20006`. Rebuilding the same source and version produces the same SHA-256. `package:extension:all` also validates the fixed extension identity, icons, runtime entries, flavor permissions, and absence of E2E capabilities.
 
-`.github/workflows/chrome-extension-ci.yml` builds the developer and minimal ZIPs plus `SHA256SUMS` for relevant pull requests and `main` changes. When `main` first creates a `pkg/oneworks-plugin-chrome-driver/v*` tag, Release Tags explicitly dispatches `.github/workflows/chrome-extension-release.yml`: it creates a GitHub Release with provenance attestations and, after the `chrome-web-store` environment gate, obtains a short-lived WIF service-account token to upload the full developer package and submit it for review automatically. Rerunning an existing tag restores only the GitHub Release by default so it cannot double-submit to the Store; a failed Store submission can be retried manually from the same tag with `publish_store=true`.
+`.github/workflows/chrome-extension-ci.yml` builds the developer and minimal ZIPs plus `SHA256SUMS` for relevant pull requests and `main` changes. When `main` first creates a `pkg/oneworks-plugin-external-browser-driver/v*` tag, Release Tags explicitly dispatches `.github/workflows/chrome-extension-release.yml`: it creates a GitHub Release with provenance attestations and, after the `chrome-web-store` environment gate, obtains a short-lived WIF service-account token to upload the full developer package and submit it for review automatically. Rerunning an existing tag restores only the GitHub Release by default so it cannot double-submit to the Store; a failed Store submission can be retried manually from the same tag with `publish_store=true`.
 
 ## Capability matrix
 

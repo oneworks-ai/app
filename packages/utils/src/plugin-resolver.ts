@@ -33,18 +33,18 @@ const DIRECTORY_MANIFEST_FILES = ['plugin.json', 'plugin.yaml', 'plugin.yml', 'p
 const KNOWN_PLUGIN_ASSET_DIRS = ['rules', 'skills', 'specs', 'entities', 'mcp', 'hooks', 'client', 'server', 'plugins']
 const DEFAULT_OFFICIAL_PLUGIN_CONFIGS: PluginConfig = [
   { id: '@oneworks/plugin-browser-driver' },
-  { id: '@oneworks/plugin-chrome-driver' },
+  { id: '@oneworks/plugin-external-browser-driver' },
   { id: '@oneworks/plugin-cua-driver' },
   { id: '@oneworks/plugin-relay' }
 ]
 const DEFAULT_OFFICIAL_PLUGIN_PACKAGE_IDS = new Set([
   '@oneworks/plugin-browser-driver',
-  '@oneworks/plugin-chrome-driver',
+  '@oneworks/plugin-external-browser-driver',
   '@oneworks/plugin-cua-driver',
   '@oneworks/plugin-relay',
   'browser-driver',
-  'chrome-driver',
   'cua-driver',
+  'external-browser-driver',
   'relay'
 ])
 const PLUGIN_SERVER_RUNTIME_ROLES = new Set<PluginServerRuntimeRole>(['manager', 'workspace'])
@@ -259,6 +259,10 @@ const toPluginManifest = (value: unknown): PluginManifest | undefined => {
               : {}),
             ...(typeof value.plugin.client.devServer === 'string' && value.plugin.client.devServer.trim() !== ''
               ? { devServer: value.plugin.client.devServer.trim() }
+              : {}),
+            ...(typeof value.plugin.client.sourceRoot === 'string' &&
+                value.plugin.client.sourceRoot.trim() !== ''
+              ? { sourceRoot: value.plugin.client.sourceRoot.trim() }
               : {})
           }
           : undefined,

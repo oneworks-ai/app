@@ -11,9 +11,11 @@ const repositoryPluginSources = [
   ['neo-workshop-theme', 'client/src/index.ts'],
   ['focus-workbench-theme', 'client/src/index.ts'],
   ['warm-cowork-theme', 'client/src/index.ts'],
-  ['chrome-driver', 'client/src/index.tsx'],
+  ['external-browser-driver', 'client/src/index.tsx'],
+  ['cua-driver', 'client/src/index.tsx'],
   ['demo', 'client/src/index.tsx'],
-  ['demo-extension', 'client/src/index.tsx']
+  ['demo-extension', 'client/src/index.tsx'],
+  ['relay', 'src/client/index.ts', 'src']
 ] as const
 
 describe('plugin client source compiler', () => {
@@ -23,14 +25,15 @@ describe('plugin client source compiler', () => {
     await Promise.all(temporaryRoots.splice(0).map(root => rm(root, { recursive: true, force: true })))
   })
 
-  for (const [pluginName, entry] of repositoryPluginSources) {
+  for (const [pluginName, entry, sourceRoot] of repositoryPluginSources) {
     it(`compiles the ${pluginName} local plugin into one executable module`, async () => {
       const pluginRoot = path.resolve('packages', 'plugins', pluginName)
       const compiled = await compilePluginClientSource({
         cacheDir: path.resolve(os.tmpdir(), 'oneworks-plugin-client-source-test-cache'),
         entryPath: path.join(pluginRoot, entry),
         pluginRoot,
-        scope: pluginName
+        scope: pluginName,
+        sourceRoot
       })
 
       expect(compiled.fileName).toBe('index.js')
@@ -51,6 +54,24 @@ describe('plugin client source compiler', () => {
       entryPath: outsideEntry,
       pluginRoot,
       scope: 'outside'
+    })).rejects.toThrow('inside the plugin root')
+  })
+
+  it('rejects an explicit client source root outside the plugin root', async () => {
+    const outerRoot = await mkdtemp(path.join(os.tmpdir(), 'ow-plugin-client-explicit-root-'))
+    temporaryRoots.push(outerRoot)
+    const pluginRoot = path.join(outerRoot, 'plugin')
+    const sourceRoot = path.join(pluginRoot, 'client')
+    await mkdir(sourceRoot, { recursive: true })
+    const entryPath = path.join(sourceRoot, 'index.ts')
+    await writeFile(entryPath, 'export const inside = true\n')
+
+    await expect(compilePluginClientSource({
+      cacheDir: path.join(pluginRoot, '.cache'),
+      entryPath,
+      pluginRoot,
+      scope: 'explicit-root-escape',
+      sourceRoot: outerRoot
     })).rejects.toThrow('inside the plugin root')
   })
 

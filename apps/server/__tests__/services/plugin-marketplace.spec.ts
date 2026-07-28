@@ -131,6 +131,15 @@ describe('plugin marketplace catalog', () => {
     expect(official).toHaveLength(12)
     expect(official.map(plugin => plugin.name)).not.toContain('@oneworks/plugin-relay')
     expect(official.map(plugin => plugin.name)).not.toContain('@oneworks/plugin-standard-dev')
+    expect(official).toContainEqual(expect.objectContaining({
+      displayName: 'In-App Browser Control',
+      name: '@oneworks/plugin-browser-driver'
+    }))
+    expect(official).toContainEqual(expect.objectContaining({
+      displayName: 'Browser Control',
+      icon: { kind: 'builtin', id: 'oneworks-external-browser-driver' },
+      name: '@oneworks/plugin-external-browser-driver'
+    }))
     expect(official.filter(plugin => plugin.featured).map(plugin => plugin.name)).toEqual([
       '@oneworks/plugin-china-red-theme',
       '@oneworks/plugin-cua-driver',
@@ -157,7 +166,7 @@ describe('plugin marketplace catalog', () => {
     }))
     expect(official).toContainEqual(expect.objectContaining({
       category: 'automation',
-      displayName: 'CUA Driver',
+      displayName: 'Computer Control - CUA',
       featured: true,
       icon: { kind: 'builtin', id: 'oneworks-cua-driver' },
       name: '@oneworks/plugin-cua-driver'

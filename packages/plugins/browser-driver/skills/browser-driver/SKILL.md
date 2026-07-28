@@ -3,7 +3,7 @@ name: browser-driver
 description: Control the current OneWorks session's internal browser tabs with semantic snapshots, reliable element refs, screenshots, waits, and page-safe concurrent workflows.
 ---
 
-# OneWorks Browser Driver
+# OneWorks In-App Browser Control
 
 Use this skill for websites shown in the OneWorks internal browser. It does not control external Chrome or native desktop applications.
 

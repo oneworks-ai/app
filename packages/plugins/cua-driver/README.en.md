@@ -1,4 +1,4 @@
-# @oneworks/plugin-cua-driver
+# Computer Control - CUA
 
 This is OneWorks' thin integration for [Cua Driver](https://github.com/trycua/cua/tree/main/libs/cua-driver), the background macOS computer-use driver. OneWorks remains responsible for the model, sessions, agent loop, cancellation, and logs. The plugin projects the native GUI tools into sessions as an MCP asset and prepares the runtime when that MCP process starts.
 

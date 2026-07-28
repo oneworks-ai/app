@@ -35,7 +35,7 @@ export default config(
       'packages/adapters/codex/__tests__/**/*.js',
       'packages/adapters/opencode/src/**/*.js',
       'packages/adapters/opencode/__tests__/**/*.js',
-      'packages/plugins/chrome-driver/dist-extension/**'
+      'packages/plugins/external-browser-driver/dist-extension/**'
     ],
     stylistic: false,
     rules: {
@@ -77,7 +77,7 @@ export default config(
   },
   {
     files: [
-      'packages/plugins/chrome-driver/extension/**/*.js'
+      'packages/plugins/external-browser-driver/extension/**/*.js'
     ],
     languageOptions: {
       globals: {
@@ -91,8 +91,8 @@ export default config(
   },
   {
     files: [
-      'packages/plugins/chrome-driver/extension/background.js',
-      'packages/plugins/chrome-driver/extension/operations/browser-data.js'
+      'packages/plugins/external-browser-driver/extension/background.js',
+      'packages/plugins/external-browser-driver/extension/operations/browser-data.js'
     ],
     rules: {
       'max-lines': 'off'
@@ -100,7 +100,7 @@ export default config(
   },
   {
     files: [
-      'packages/plugins/chrome-driver/extension/operations/page.js'
+      'packages/plugins/external-browser-driver/extension/operations/page.js'
     ],
     rules: {
       // Semantic snapshots need rendered, visibility-aware text rather than raw textContent.

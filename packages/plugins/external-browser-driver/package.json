@@ -1,11 +1,11 @@
 {
-  "name": "@oneworks/plugin-chrome-driver",
+  "name": "@oneworks/plugin-external-browser-driver",
   "type": "module",
   "version": "0.1.0-beta.8",
   "repository": {
     "type": "git",
     "url": "https://github.com/oneworks-ai/app.git",
-    "directory": "packages/plugins/chrome-driver"
+    "directory": "packages/plugins/external-browser-driver"
   },
   "exports": {
     ".": "./plugin.json",
@@ -23,6 +23,7 @@
     "AGENTS.md",
     "README.en.md",
     "README.md",
+    "assets",
     "bin",
     "client/dist",
     "extension",
@@ -45,7 +46,7 @@
     "validate:extension-package": "node bin/validate-extension-package.cjs",
     "build:client": "tsc -p client/tsconfig.json --noEmit && vite build --config client/vite.config.ts",
     "build:server": "tsc -p server/tsconfig.json",
-    "test": "pnpm -C ../../.. exec vitest run --workspace vitest.workspace.ts --project bundler packages/plugins/chrome-driver/__tests__",
+    "test": "pnpm -C ../../.. exec vitest run --workspace vitest.workspace.ts --project bundler packages/plugins/external-browser-driver/__tests__",
     "typecheck": "tsc -p server/tsconfig.json --noEmit && tsc -p client/tsconfig.json --noEmit"
   },
   "dependencies": {

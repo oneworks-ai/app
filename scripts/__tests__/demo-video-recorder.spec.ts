@@ -15,6 +15,12 @@ describe('demo video scenario target following', () => {
     expect(getDemoVideoScenario('launcher-open-workspace-chat-smoke').followCdpTargets).toBe(true)
     expect(getDemoVideoScenario('launcher-browser-driver-agent-tour').followCdpTargets).toBe(true)
   })
+
+  it('labels the embedded-browser scenario as In-App Browser Control', () => {
+    const scenario = getDemoVideoScenario('launcher-browser-driver-agent-tour')
+    expect(scenario.title).toBe('Electron In-App Browser Control Agent 演示')
+    expect(scenario.description).toContain('In-App Browser Control')
+  })
 })
 
 describe('demo video recorder system capture timing', () => {

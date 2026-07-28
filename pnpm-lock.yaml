@@ -74,9 +74,9 @@ importers:
       '@oneworks/plugin-browser-driver':
         specifier: workspace:*
         version: link:packages/plugins/browser-driver
-      '@oneworks/plugin-chrome-driver':
+      '@oneworks/plugin-external-browser-driver':
         specifier: workspace:*
-        version: link:packages/plugins/chrome-driver
+        version: link:packages/plugins/external-browser-driver
       '@oneworks/plugin-cua-driver':
         specifier: workspace:*
         version: link:packages/plugins/cua-driver
@@ -411,9 +411,9 @@ importers:
       '@oneworks/plugin-browser-driver':
         specifier: workspace:*
         version: link:../../packages/plugins/browser-driver
-      '@oneworks/plugin-chrome-driver':
+      '@oneworks/plugin-external-browser-driver':
         specifier: workspace:*
-        version: link:../../packages/plugins/chrome-driver
+        version: link:../../packages/plugins/external-browser-driver
       '@oneworks/plugin-cua-driver':
         specifier: workspace:*
         version: link:../../packages/plugins/cua-driver
@@ -1108,7 +1108,7 @@ importers:
         specifier: workspace:*
         version: link:../../types
 
-  packages/plugins/chrome-driver:
+  packages/plugins/external-browser-driver:
     dependencies:
       '@oneworks/cursor':
         specifier: workspace:*

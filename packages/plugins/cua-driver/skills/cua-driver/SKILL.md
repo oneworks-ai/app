@@ -3,7 +3,7 @@ name: cua-driver
 description: Drive native macOS apps through the Cua Driver tools. Use when a task asks to open, inspect, click, type, scroll, capture a final screenshot, or verify a real macOS app without stealing the user's focus.
 ---
 
-# Cua Driver
+# Computer Control - CUA
 
 Use the Cua Driver MCP tools contributed by this plugin. OneWorks owns the session and agent loop; the plugin runtime owns driver installation, daemon startup, permission preflight, and the long-lived MCP transport.
 
