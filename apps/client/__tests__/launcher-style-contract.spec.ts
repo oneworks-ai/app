@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 describe('launcher command item visual contract', () => {
-  it('keeps settings tabs unpadded and transparent by default', () => {
+  it('keeps settings tabs content-sized with a full-bleed sticky surface', () => {
     const settingsStyles = readFileSync(
       new URL(
         '../src/components/launcher/LauncherSettingsView.scss',
@@ -13,10 +13,25 @@ describe('launcher command item visual contract', () => {
     )
 
     expect(settingsStyles).toMatch(
-      /\.launcher-settings__tabs\s*\{[^}]*background:\s*var\(--oneworks-launcher-tab-bar-background,\s*transparent\)/
+      /\.launcher-settings__tabs\s*\{[^}]*top:\s*-10px;/
     )
     expect(settingsStyles).toMatch(
-      /\.launcher-settings__tab\s*\{[^}]*padding:\s*0;/
+      /\.launcher-settings__tabs\s*\{[^}]*margin:\s*-10px\s+calc\(var\(--launcher-command-list-padding-inline,\s*14px\)\s*\*\s*-1\)\s+0;/
+    )
+    expect(settingsStyles).toMatch(
+      /\.launcher-settings__tabs\s*\{[^}]*padding:\s*10px\s+var\(--launcher-command-list-padding-inline,\s*14px\)\s+0;/
+    )
+    expect(settingsStyles).toMatch(
+      /\.launcher-settings__tabs\s*\{[^}]*background:\s*var\(\s*--oneworks-launcher-tab-bar-background,\s*color-mix\(in srgb,\s*var\(--bg-color\)\s*92%,\s*var\(--sub-bg-color\)\)\s*\);/
+    )
+    expect(settingsStyles).toMatch(
+      /\.launcher-settings__tab\s*\{[^}]*padding:\s*0\s+0\s+10px;/
+    )
+    expect(settingsStyles).not.toMatch(
+      /\.launcher-settings__tab\s*\{[^}]*min-height:/
+    )
+    expect(settingsStyles).toMatch(
+      /\.launcher-settings__items\s*\{[^}]*gap:\s*10px;/
     )
   })
 
