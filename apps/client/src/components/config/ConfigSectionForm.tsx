@@ -1733,6 +1733,36 @@ export const SectionForm = ({
       })
       const shouldRenderJsonFallback = !isKnownEntry && uiSection.recordMap.unknownEditor === 'json'
       const discriminatorField = uiSection.recordMap.discriminatorField ?? 'type'
+      const accountItemSchema = sectionKey === 'adapters'
+        ? itemSchema?.recordFields?.accounts?.itemSchema
+        : undefined
+      const isAdapterAccountsNestedRoute = sectionKey === 'adapters' &&
+        detailRoute?.nestedPath?.[0] === 'accounts'
+
+      if (isAdapterAccountsNestedRoute) {
+        return (
+          <div className='config-view__detail-panel'>
+            {detailNotice}
+            <AdapterAccountsManager
+              adapterKey={detailMeta.itemKey}
+              value={detailMeta.item}
+              accountsData={adapterAccountsData}
+              accountItemSchema={accountItemSchema}
+              onChange={writeDetailItem}
+              nestedPath={detailRoute.nestedPath}
+              onOpenNestedPath={(nextPath) => {
+                onOpenDetailRoute?.({
+                  kind: detailRoute.kind,
+                  fieldPath: detailMeta.field.path,
+                  itemKey: detailMeta.itemKey,
+                  nestedPath: nextPath
+                })
+              }}
+              t={t}
+            />
+          </div>
+        )
+      }
 
       if (shouldRenderJsonFallback) {
         return (
@@ -1749,8 +1779,6 @@ export const SectionForm = ({
 
       if (itemSchema != null) {
         if (sectionKey === 'adapters') {
-          const accountItemSchema = itemSchema.recordFields?.accounts?.itemSchema
-          const isAccountsNestedRoute = detailRoute?.nestedPath?.[0] === 'accounts'
           const hiddenFieldPaths = [
             ...(isKnownEntry && uiSection.recordMap.mode === 'discriminated' ? [[discriminatorField]] : []),
             ['accounts']
@@ -1853,31 +1881,6 @@ export const SectionForm = ({
                 .map(field => field.path)
             }
           ]
-
-          if (isAccountsNestedRoute) {
-            return (
-              <div className='config-view__detail-panel'>
-                {detailNotice}
-                <AdapterAccountsManager
-                  adapterKey={detailMeta.itemKey}
-                  value={detailMeta.item}
-                  accountsData={adapterAccountsData}
-                  accountItemSchema={accountItemSchema}
-                  onChange={writeDetailItem}
-                  nestedPath={detailRoute?.nestedPath}
-                  onOpenNestedPath={(nextPath) => {
-                    onOpenDetailRoute?.({
-                      kind: detailRoute?.kind ?? 'detailCollectionItem',
-                      fieldPath: detailMeta.field.path,
-                      itemKey: detailMeta.itemKey,
-                      nestedPath: nextPath
-                    })
-                  }}
-                  t={t}
-                />
-              </div>
-            )
-          }
 
           return (
             <div className='config-view__detail-panel'>

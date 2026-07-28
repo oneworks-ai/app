@@ -246,6 +246,85 @@ describe('config schema form', () => {
     expect(html).not.toContain('config.detail.inheritedReadonly')
   })
 
+  it('opens a runtime adapter account when its config schema is unavailable', () => {
+    const onChange = vi.fn()
+    const uiSection: ConfigUiSection = {
+      key: 'adapters',
+      kind: 'recordMap',
+      recordMap: {
+        mode: 'keyed',
+        keyPlaceholder: 'Adapter key',
+        schemas: {},
+        unknownSchema: {
+          fields: []
+        },
+        unknownEditor: 'json'
+      }
+    }
+
+    const html = renderToStaticMarkup(
+      <SectionForm
+        sectionKey='adapters'
+        uiSection={uiSection}
+        value={{}}
+        onChange={onChange}
+        mergedModelServices={{}}
+        mergedAdapters={{}}
+        detailRoute={{
+          kind: 'detailCollectionItem',
+          fieldPath: [],
+          itemKey: 'codex',
+          nestedPath: ['accounts', 'work']
+        }}
+        t={t}
+      />
+    )
+
+    expect(html).toContain('adapter-account-manager__state')
+    expect(html).not.toContain('config-view__complex-editor')
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('keeps the JSON fallback for an unknown adapter without an account route', () => {
+    const uiSection: ConfigUiSection = {
+      key: 'adapters',
+      kind: 'recordMap',
+      recordMap: {
+        mode: 'keyed',
+        keyPlaceholder: 'Adapter key',
+        schemas: {},
+        unknownSchema: {
+          fields: []
+        },
+        unknownEditor: 'json'
+      }
+    }
+
+    const html = renderToStaticMarkup(
+      <SectionForm
+        sectionKey='adapters'
+        uiSection={uiSection}
+        value={{
+          custom: {
+            enabled: true
+          }
+        }}
+        onChange={() => undefined}
+        mergedModelServices={{}}
+        mergedAdapters={{}}
+        detailRoute={{
+          kind: 'detailCollectionItem',
+          fieldPath: [],
+          itemKey: 'custom'
+        }}
+        t={t}
+      />
+    )
+
+    expect(html).toContain('config-view__complex-editor')
+    expect(html).not.toContain('adapter-account-manager__')
+  })
+
   it('renders a schema-driven adapter detail route as a second-level config page', () => {
     const uiSection: ConfigUiSection = {
       key: 'adapters',
