@@ -13,7 +13,8 @@ export const resolveSettingsTabKey = ({
 }) => {
   if (availableTabKeys.has(requestedTabKey)) return requestedTabKey
   if (isPluginSettingsTabKey(requestedTabKey)) {
-    return snapshotStatus === 'loading' ? requestedTabKey : 'plugins'
+    if (snapshotStatus === 'loading') return requestedTabKey
+    return availableTabKeys.has('plugins') ? 'plugins' : 'general'
   }
   return 'general'
 }
