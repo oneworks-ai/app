@@ -1,3 +1,6 @@
+import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
+
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { discoverPluginInstances } from '#~/services/plugins/discovery.js'
@@ -48,6 +51,32 @@ describe('plugin discovery', () => {
     }))
   })
 
+  it('keeps the repository defaults focused on production plugins and presets', async () => {
+    const configPath = resolve(process.cwd(), '.oo.config.json')
+    const config = JSON.parse(await readFile(configPath, 'utf8')) as {
+      conversation?: { startupPresets?: Array<{ target?: string }> }
+      plugins?: Array<{ children?: Array<{ id?: string; scope?: string }>; id?: string; scope?: string }>
+    }
+    const configuredPlugins = (config.plugins ?? []).flatMap(plugin => [
+      { id: plugin.id, scope: plugin.scope },
+      ...(plugin.children ?? []).map(child => ({ id: child.id, scope: child.scope }))
+    ])
+
+    expect(configuredPlugins).toEqual(expect.arrayContaining([
+      { id: './packages/plugins/browser-driver', scope: 'browser' },
+      { id: './packages/plugins/cua-driver', scope: 'cua' },
+      { id: './packages/plugins/external-browser-driver', scope: 'chrome' }
+    ]))
+    const configuredPluginIds = configuredPlugins.map(plugin => plugin.id)
+    expect(configuredPluginIds).not.toContain('./packages/plugins/demo')
+    expect(configuredPluginIds).not.toContain('./packages/plugins/demo-extension')
+    expect(configuredPluginIds).not.toContain('standard-dev')
+    expect(configuredPlugins.map(plugin => plugin.scope)).not.toContain('std')
+    expect(config.conversation?.startupPresets ?? []).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ target: expect.stringMatching(/^std\//) })
+    ]))
+  })
+
   it('attributes an official package selected by the project marketplace to the project', async () => {
     const marketplace = {
       type: 'oneworks' as const,
@@ -95,6 +124,29 @@ describe('plugin discovery', () => {
     const result = await discoverPluginInstances()
 
     expect(result.instances[0]?.sourceGroup).toBe('builtIn')
+  })
+
+  it.each([
+    '@oneworks/plugin-demo',
+    '@oneworks/plugin-demo-extension'
+  ])('does not attribute the optional package %s to the host', async (packageId) => {
+    mocks.loadConfigState.mockResolvedValue({
+      globalConfig: {},
+      mergedConfig: {},
+      workspaceFolder: '/workspace'
+    })
+    mocks.resolveConfiguredPluginInstances.mockResolvedValue([{
+      children: [],
+      packageId,
+      requestId: packageId,
+      rootDir: `/cache/${packageId}`,
+      scope: packageId,
+      sourceType: 'package'
+    }])
+
+    const result = await discoverPluginInstances()
+
+    expect(result.instances[0]?.sourceGroup).toBe('project')
   })
 
   it('attributes an explicit project override before a global marketplace declaration', async () => {

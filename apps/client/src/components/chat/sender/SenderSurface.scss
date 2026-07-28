@@ -921,8 +921,8 @@
 .sender-container--chat-surface
   .chat-status-bar-frame.chat-status-bar--collapsible.is-collapsed {
   z-index: 2;
-  min-height: 0;
-  max-height: 0;
+  min-height: var(--chat-surface-status-collapsed-hit-height);
+  max-height: var(--chat-surface-status-collapsed-hit-height);
   pointer-events: none;
 }
 

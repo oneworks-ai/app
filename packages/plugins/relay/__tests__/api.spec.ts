@@ -178,17 +178,62 @@ describe('relay plugin scoped API', () => {
       enableOfficialVercelRelay: false,
       servers: [{ baseUrl: 'https://relay.example', id: 'prod' }]
     })
+    const timeoutTriggers: Array<() => void> = []
+    const realSetTimeout = globalThis.setTimeout
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(
+      ((
+        callback: (...args: unknown[]) => void,
+        delay?: number
+      ) => {
+        if (delay === 8_000) timeoutTriggers.push(() => callback())
+        return 0 as unknown as ReturnType<typeof setTimeout>
+      }) as typeof setTimeout
+    )
     const responsePromise = apis.get('relay')?.handler?.({
       body: Buffer.from(JSON.stringify({ serverId: 'prod' })),
       method: 'POST',
       path: 'server-info'
     })
+    for (let attempt = 0; attempt < 20 && timeoutTriggers.length < 1; attempt += 1) {
+      await new Promise(resolve => realSetTimeout(resolve, 0))
+    }
+    expect(timeoutTriggers).toHaveLength(1)
+    timeoutTriggers[0]?.()
+    for (let attempt = 0; attempt < 20 && timeoutTriggers.length < 2; attempt += 1) {
+      await new Promise(resolve => realSetTimeout(resolve, 0))
+    }
+    expect(timeoutTriggers).toHaveLength(2)
+    timeoutTriggers[1]?.()
 
     await expect(responsePromise).resolves.toMatchObject({
       body: { availabilityError: 'timeout', online: false },
       status: 200
     })
-  }, 6_000)
+  })
+
+  it('retries transient service discovery failures before marking the server online', async () => {
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new Error('connection reset'))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ name: 'Relay Cloud' }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { apis } = await createPluginHarness({
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false,
+      servers: [{ baseUrl: 'https://relay.example', id: 'prod' }]
+    })
+
+    await expect(
+      apis.get('relay')?.handler?.({
+        body: Buffer.from(JSON.stringify({ serverId: 'prod' })),
+        method: 'POST',
+        path: 'server-info'
+      })
+    ).resolves.toMatchObject({
+      body: { name: 'Relay Cloud', online: true },
+      status: 200
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
 
   it('keeps a reachable service online when optional avatar metadata is malformed', async () => {
     vi.stubGlobal(

@@ -31,22 +31,6 @@
       "watch": true
     },
     {
-      "id": "./packages/plugins/demo",
-      "scope": "demo",
-      "watch": true,
-      "children": [
-        {
-          "id": "standard-dev",
-          "scope": "std"
-        }
-      ]
-    },
-    {
-      "id": "./packages/plugins/demo-extension",
-      "scope": "demo-extension",
-      "watch": true
-    },
-    {
       "id": "./packages/plugins/china-red-theme",
       "scope": "china-red-theme",
       "watch": true
@@ -114,44 +98,6 @@
   "conversation": {
     "worktreeEnvironment": "default",
     "startupPresets": [
-      {
-        "title": "标准开发 Agent",
-        "description": "使用 std/dev-planner 起步，带默认工作树和较高推理强度。",
-        "icon": "group_work",
-        "mode": "agent",
-        "target": "std/dev-planner",
-        "adapter": "codex",
-        "effort": "high",
-        "worktree": {
-          "create": true,
-          "environment": "default"
-        },
-        "prompt": "请先阅读仓库规则和当前上下文，拆解方案后开始推进实现。",
-        "rules": [
-          ".oo/rules/ARCHITECTURE.md",
-          ".oo/rules/CODING-STYLE.md"
-        ],
-        "skills": [
-          "std/standard-dev-flow"
-        ]
-      },
-      {
-        "title": "标准开发 Flow",
-        "description": "直接按标准开发流程推进当前需求，适合需求完整的实现型任务。",
-        "icon": "account_tree",
-        "mode": "spec",
-        "target": "std/standard-dev-flow",
-        "adapter": "codex",
-        "effort": "high",
-        "worktree": {
-          "create": true,
-          "environment": "default"
-        },
-        "prompt": "请按照标准开发流程推进当前需求，必要时同步给出计划、实现、验证和回顾。",
-        "skills": [
-          "std/standard-dev-flow"
-        ]
-      },
       {
         "title": "Bug 修复模式",
         "description": "聚焦当前缺陷定位与修复，优先给出复现路径、根因分析和验证结果。",

@@ -29,7 +29,6 @@ export const resolveAdapterModelRuntimeCapabilities = ({
       }) === true
 
   return {
-    defaultEffort: metadata?.defaultEffort,
     supportedEfforts,
     supportsFastMode
   }

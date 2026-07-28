@@ -159,7 +159,8 @@ const initialState = (): RelayConnectionState => ({
 const RELAY_FIXTURE_SESSION_TOKEN_PREFIX = 'relay-fixture:'
 const RELAY_DEVICE_LIST_CACHE_TTL_MS = 10_000
 const RELAY_SERVICE_INFO_CACHE_TTL_MS = 60_000
-const RELAY_SERVICE_INFO_TIMEOUT_MS = 2_500
+const RELAY_SERVICE_INFO_MAX_ATTEMPTS = 2
+const RELAY_SERVICE_INFO_TIMEOUT_MS = 8_000
 const RELAY_DEVICE_LIST_ERROR_BASE_INTERVAL_MS = 3_000
 const RELAY_DEVICE_LIST_ERROR_MAX_INTERVAL_MS = 30_000
 const RELAY_DEVICE_LIST_ERROR_LOG_INTERVAL_MS = 30_000
@@ -1835,64 +1836,68 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
 
     const entry: RelayServiceInfoCacheEntry = existing ?? { fetchedAt: 0, value: {} }
     entry.inFlight = (async () => {
-      const abortController = new AbortController()
-      const timeout = setTimeout(() => abortController.abort(), RELAY_SERVICE_INFO_TIMEOUT_MS)
-      try {
-        const response = await fetch(new URL('/api/relay/info', server.remoteBaseUrl), {
-          headers: { accept: 'application/json' },
-          signal: abortController.signal
-        })
-        const lastCheckedAt = new Date().toISOString()
-        if (!response.ok) {
-          return {
-            ...entry.value,
-            availabilityError: `HTTP ${response.status}`,
+      let availabilityError = 'unreachable'
+      for (let attempt = 0; attempt < RELAY_SERVICE_INFO_MAX_ATTEMPTS; attempt += 1) {
+        const abortController = new AbortController()
+        const timeout = setTimeout(() => abortController.abort(), RELAY_SERVICE_INFO_TIMEOUT_MS)
+        try {
+          const response = await fetch(new URL('/api/relay/info', server.remoteBaseUrl), {
+            headers: { accept: 'application/json' },
+            signal: abortController.signal
+          })
+          const lastCheckedAt = new Date().toISOString()
+          if (!response.ok) {
+            return {
+              ...entry.value,
+              availabilityError: `HTTP ${response.status}`,
+              lastCheckedAt,
+              online: false
+            }
+          }
+          const body = await readResponseJson(response)
+          const name = readOptionalText(body.name)
+          const avatarSource = readOptionalText(body.avatarUrl)
+          let avatarUrl: URL | undefined
+          if (avatarSource != null) {
+            try {
+              avatarUrl = new URL(avatarSource)
+            } catch {
+              avatarUrl = undefined
+            }
+          }
+          const discoveredAvatarUrl = avatarUrl != null &&
+              (avatarUrl.protocol === 'http:' || avatarUrl.protocol === 'https:')
+            ? avatarUrl.toString()
+            : entry.value.avatarUrl
+          const discoveredName = name ?? entry.value.name
+          const value = {
+            ...(discoveredAvatarUrl == null ? {} : { avatarUrl: discoveredAvatarUrl }),
             lastCheckedAt,
-            online: false
-          }
-        }
-        const body = await readResponseJson(response)
-        const name = readOptionalText(body.name)
-        const avatarSource = readOptionalText(body.avatarUrl)
-        let avatarUrl: URL | undefined
-        if (avatarSource != null) {
-          try {
-            avatarUrl = new URL(avatarSource)
-          } catch {
-            avatarUrl = undefined
-          }
-        }
-        const discoveredAvatarUrl = avatarUrl != null &&
-            (avatarUrl.protocol === 'http:' || avatarUrl.protocol === 'https:')
-          ? avatarUrl.toString()
-          : entry.value.avatarUrl
-        const discoveredName = name ?? entry.value.name
-        const value = {
-          ...(discoveredAvatarUrl == null ? {} : { avatarUrl: discoveredAvatarUrl }),
-          lastCheckedAt,
-          lastSuccessfulAt: lastCheckedAt,
-          ...(discoveredName == null ? {} : { name: discoveredName }),
-          online: true as const
-        }
-        await serviceInfoStore
-          .writeServiceInfo(server.remoteBaseUrl, {
-            ...(value.avatarUrl == null ? {} : { avatarUrl: value.avatarUrl }),
             lastSuccessfulAt: lastCheckedAt,
-            ...(value.name == null ? {} : { name: value.name })
-          })
-          .catch(error => {
-            ctx.logger.warn({ err: error, scope: ctx.scope }, '[relay] service info cache write failed')
-          })
-        return value
-      } catch {
-        return {
-          ...entry.value,
-          availabilityError: abortController.signal.aborted ? 'timeout' : 'unreachable',
-          lastCheckedAt: new Date().toISOString(),
-          online: false
+            ...(discoveredName == null ? {} : { name: discoveredName }),
+            online: true as const
+          }
+          await serviceInfoStore
+            .writeServiceInfo(server.remoteBaseUrl, {
+              ...(value.avatarUrl == null ? {} : { avatarUrl: value.avatarUrl }),
+              lastSuccessfulAt: lastCheckedAt,
+              ...(value.name == null ? {} : { name: value.name })
+            })
+            .catch(error => {
+              ctx.logger.warn({ err: error, scope: ctx.scope }, '[relay] service info cache write failed')
+            })
+          return value
+        } catch {
+          availabilityError = abortController.signal.aborted ? 'timeout' : 'unreachable'
+        } finally {
+          clearTimeout(timeout)
         }
-      } finally {
-        clearTimeout(timeout)
+      }
+      return {
+        ...entry.value,
+        availabilityError,
+        lastCheckedAt: new Date().toISOString(),
+        online: false
       }
     })()
     serviceInfoCache.set(cacheKey, entry)

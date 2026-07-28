@@ -395,9 +395,7 @@ const assertLocalClientSourcesCompile = async (catalog, port) => {
     'neo-workshop-theme',
     'focus-workbench-theme',
     'warm-cowork-theme',
-    'chrome',
-    'demo',
-    'demo-extension'
+    'chrome'
   ]
   const plugins = getCatalogPlugins(catalog)
   for (const scope of requiredScopes) {
