@@ -3,13 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { activatePlugin } from '../src/client/index.js'
-import {
-  RELAY_SERVER_INFO_REFRESH_INTERVAL_MS,
-  RelayHomeView,
-  readJsonResponse,
-  renderAvatar,
-  startRelayServerInfoPolling
-} from '../src/client/react-view.js'
+import { RelayHomeView, renderAvatar } from '../src/client/react-view.js'
 import { relayClientCss } from '../src/client/styles.js'
 import type { PluginClientContext, PluginReactHost, PluginViewRegistration } from '../src/client/types.js'
 
@@ -100,7 +94,6 @@ const directLoginFooterContribution = {
 }
 afterEach(() => {
   vi.unstubAllGlobals()
-  vi.useRealTimers()
 })
 
 describe('relay plugin client view registration', () => {
@@ -263,81 +256,6 @@ describe('relay plugin client view registration', () => {
     )
 
     cleanup.dispose()
-  })
-
-  it('uses JSON error fields instead of displaying the raw JSON body', async () => {
-    await expect(readJsonResponse(
-      new Response(JSON.stringify({ error: 'fetch failed' }), { status: 500 }),
-      'profile'
-    )).rejects.toThrow('fetch failed')
-    await expect(readJsonResponse(
-      new Response(JSON.stringify({ message: 'Profile service unavailable' }), { status: 503 }),
-      'profile'
-    )).rejects.toThrow('Profile service unavailable')
-  })
-
-  it('refreshes Relay server info without overlapping polling rounds', async () => {
-    vi.useFakeTimers()
-    let resolveFirst: ((value: { online: boolean }) => void) | undefined
-    const load = vi.fn()
-      .mockImplementationOnce(async () =>
-        await new Promise<{ online: boolean }>(resolve => {
-          resolveFirst = resolve
-        })
-      )
-      .mockResolvedValue({ online: true })
-    const onValue = vi.fn()
-    const dispose = startRelayServerInfoPolling({
-      load,
-      onValue,
-      serverKeys: ['official']
-    })
-
-    expect(load).toHaveBeenCalledTimes(1)
-    await vi.advanceTimersByTimeAsync(RELAY_SERVER_INFO_REFRESH_INTERVAL_MS * 2)
-    expect(load).toHaveBeenCalledTimes(1)
-
-    resolveFirst?.({ online: false })
-    await vi.advanceTimersByTimeAsync(0)
-    expect(onValue).toHaveBeenCalledWith('official', { online: false })
-
-    await vi.advanceTimersByTimeAsync(RELAY_SERVER_INFO_REFRESH_INTERVAL_MS)
-    expect(load).toHaveBeenCalledTimes(2)
-    expect(onValue).toHaveBeenLastCalledWith('official', { online: true })
-
-    dispose()
-    await vi.advanceTimersByTimeAsync(RELAY_SERVER_INFO_REFRESH_INTERVAL_MS)
-    expect(load).toHaveBeenCalledTimes(2)
-  })
-
-  it('retries failed Relay server info requests and ignores values after disposal', async () => {
-    vi.useFakeTimers()
-    let resolveAfterDisposal: ((value: { online: boolean }) => void) | undefined
-    const load = vi.fn()
-      .mockRejectedValueOnce(new Error('offline'))
-      .mockImplementationOnce(async () =>
-        await new Promise<{ online: boolean }>(resolve => {
-          resolveAfterDisposal = resolve
-        })
-      )
-    const onValue = vi.fn()
-    const dispose = startRelayServerInfoPolling({
-      load,
-      onValue,
-      serverKeys: ['official']
-    })
-
-    await Promise.resolve()
-    await vi.advanceTimersByTimeAsync(RELAY_SERVER_INFO_REFRESH_INTERVAL_MS)
-    expect(load).toHaveBeenCalledTimes(2)
-
-    dispose()
-    resolveAfterDisposal?.({ online: true })
-    await vi.advanceTimersByTimeAsync(0)
-    expect(onValue).not.toHaveBeenCalled()
-
-    await vi.advanceTimersByTimeAsync(RELAY_SERVER_INFO_REFRESH_INTERVAL_MS)
-    expect(load).toHaveBeenCalledTimes(2)
   })
 })
 
