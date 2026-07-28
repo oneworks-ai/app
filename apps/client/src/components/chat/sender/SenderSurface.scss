@@ -914,6 +914,11 @@
 }
 
 .sender-container--chat-surface
+  .chat-status-bar-frame:has(.sender-select-shell--account.is-open) {
+  z-index: 4;
+}
+
+.sender-container--chat-surface
   .chat-status-bar-frame.chat-status-bar--collapsible.is-collapsed {
   z-index: 2;
   min-height: var(--chat-surface-status-collapsed-hit-height);
@@ -1309,7 +1314,7 @@
 
 .sender-container--chat-surface
   .chat-status-bar__actions
-  > :not(:first-child)::before {
+  > :is(.chat-status-bar__account-group, .adapter-select-tooltip-target):not(:first-child)::before {
   content: '';
   position: absolute;
   top: 50%;
@@ -1322,7 +1327,9 @@
   pointer-events: none;
 }
 
-.sender-container--chat-surface .chat-status-bar__actions > :not(:first-child) {
+.sender-container--chat-surface
+  .chat-status-bar__actions
+  > :is(.chat-status-bar__account-group, .adapter-select-tooltip-target):not(:first-child) {
   position: relative;
 }
 
@@ -1333,13 +1340,13 @@
 
 .sender-container--chat-surface
   .chat-status-bar__account-group
-  > :not(:first-child) {
+  > :is(.sender-select-shell--account, .account-quota-indicators):not(:first-child) {
   position: relative;
 }
 
 .sender-container--chat-surface
   .chat-status-bar__account-group
-  > :not(:first-child)::before {
+  > :is(.sender-select-shell--account, .account-quota-indicators):not(:first-child)::before {
   content: '';
   position: absolute;
   top: 50%;
