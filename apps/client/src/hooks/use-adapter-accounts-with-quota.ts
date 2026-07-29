@@ -24,7 +24,7 @@ export const useAdapterAccountsWithQuota = ({
     normalizedAdapter == null ? null : () => getAdapterAccounts(normalizedAdapter, { model: normalizedModel })
   )
   const { data: refreshedData } = useSWR<AdapterAccountsResult>(
-    normalizedAdapter == null || baseData == null || baseData.accounts.length === 0
+    normalizedAdapter == null
       ? null
       : ['/api/adapters/accounts-quota', normalizedAdapter, normalizedModel ?? ''],
     normalizedAdapter == null

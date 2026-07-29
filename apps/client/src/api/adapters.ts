@@ -48,7 +48,7 @@ export async function getAdapterAccountDetail(
 
 export async function manageAdapterAccount(
   adapter: string,
-  options: Pick<AdapterManageAccountOptions, 'action' | 'account' | 'model' | 'refresh'>,
+  options: Pick<AdapterManageAccountOptions, 'action' | 'account' | 'creditId' | 'model' | 'refresh'>,
   requestOptions?: Pick<RequestInit, 'signal'>
 ): Promise<AdapterManageAccountResult> {
   return fetchApiJson<AdapterManageAccountResult>(

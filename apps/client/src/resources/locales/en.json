@@ -3554,6 +3554,34 @@
       "readyCount": "{{count}} ready",
       "defaultHint": "Default: {{account}}",
       "quotaTitle": "Quota",
+      "resetCredits": {
+        "title": "Rate-limit reset credits",
+        "available": "{{count}} available",
+        "itemTitle": "Reset credit {{index}}",
+        "fullResetTitle": "Full quota reset",
+        "summaryDescription": "Resets one eligible Codex rate-limit window.",
+        "fields": {
+          "grantedAt": "Granted",
+          "expiresAt": "Expires"
+        },
+        "remaining": {
+          "daysHours": "{{days}}d {{hours}}h remaining",
+          "days": "{{count}}d remaining",
+          "hours": "{{count}}h remaining",
+          "expired": "Expired"
+        },
+        "use": "Use reset credit",
+        "unavailable": "This reset credit is currently unavailable",
+        "confirmTitle": "Use one rate-limit reset credit?",
+        "confirmDescription": "This spends one earned credit to reset an eligible Codex rate-limit window. The quota will refresh afterward.",
+        "confirmAction": "Use credit",
+        "outcomes": {
+          "reset": "Reset credit used and quota refreshed",
+          "alreadyRedeemed": "This reset credit was already redeemed",
+          "nothingToReset": "No eligible rate-limit window needs resetting",
+          "noCredit": "No reset credit is available"
+        }
+      },
       "settingsTitle": "Account settings",
       "settingsDescription": "These fields edit the adapter config entry for this account. When supported, they override the stored workspace snapshot.",
       "adapterKeyHint": "Adapter: {{adapter}}",
@@ -3600,7 +3628,8 @@
       "actionFailed": {
         "add": "Failed to connect account",
         "refresh": "Failed to refresh quota",
-        "remove": "Failed to remove account snapshot"
+        "remove": "Failed to remove account snapshot",
+        "consumeResetCredit": "Failed to use reset credit"
       },
       "authFileDefaultLookup": "Leave empty to use {{path}}."
     },

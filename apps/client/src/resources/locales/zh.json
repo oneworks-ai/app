@@ -3555,6 +3555,34 @@
       "readyCount": "{{count}} 个可用",
       "defaultHint": "默认：{{account}}",
       "quotaTitle": "额度",
+      "resetCredits": {
+        "title": "额度重置卡",
+        "available": "{{count}} 张可用",
+        "itemTitle": "重置卡 {{index}}",
+        "fullResetTitle": "完整额度重置",
+        "summaryDescription": "用于重置符合条件的 Codex 额度窗口。",
+        "fields": {
+          "grantedAt": "获得时间",
+          "expiresAt": "到期时间"
+        },
+        "remaining": {
+          "daysHours": "剩余 {{days}} 天 {{hours}} 小时",
+          "days": "剩余 {{count}} 天",
+          "hours": "剩余 {{count}} 小时",
+          "expired": "已过期"
+        },
+        "use": "使用额度重置卡",
+        "unavailable": "这张额度重置卡当前不可用",
+        "confirmTitle": "使用一张额度重置卡？",
+        "confirmDescription": "这会消耗一张已获得的重置卡，并重置一个符合条件的 Codex 额度窗口。完成后会自动刷新额度。",
+        "confirmAction": "确认使用",
+        "outcomes": {
+          "reset": "已使用重置卡并刷新额度",
+          "alreadyRedeemed": "这张重置卡已经使用过了",
+          "nothingToReset": "当前没有需要重置的额度窗口",
+          "noCredit": "当前没有可用的重置卡"
+        }
+      },
       "settingsTitle": "账号配置",
       "settingsDescription": "这里编辑的是适配器配置里的账号字段；如果适配器支持，会覆盖 workspace 保存的登录快照。",
       "adapterKeyHint": "适配器：{{adapter}}",
@@ -3601,7 +3629,8 @@
       "actionFailed": {
         "add": "账号接入失败",
         "refresh": "刷新额度失败",
-        "remove": "删除账号快照失败"
+        "remove": "删除账号快照失败",
+        "consumeResetCredit": "使用重置卡失败"
       },
       "authFileDefaultLookup": "留空时默认读取 {{path}}。"
     },

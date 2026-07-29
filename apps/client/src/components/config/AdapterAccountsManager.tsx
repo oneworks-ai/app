@@ -8,14 +8,17 @@ import useSWR, { useSWRConfig } from 'swr'
 import type {
   AdapterAccountActionDescriptor,
   AdapterAccountInfo,
+  AdapterAccountRateLimitResetCredit,
   AdapterAccountsResult,
   ConfigUiObjectSchema
 } from '@oneworks/types'
 
 import { getAdapterAccountDetail, getAdapterAccounts, getApiErrorMessage, manageAdapterAccount } from '#~/api'
 import { QuotaUsageRing } from '#~/components/account-quota/QuotaUsageRing'
+import { InlineActionButton } from '#~/components/inline-action-button'
 import { useAdapterAccountQuotaDetail } from '#~/hooks/use-adapter-account-quota-detail'
 
+import { FieldRow } from './ConfigFieldRow'
 import { getFieldDescription, getFieldLabel, getValueByPath, setValueByPath } from './configUtils'
 import type { TranslationFn } from './configUtils'
 import { SchemaObjectEditor } from './record-editors/SchemaObjectEditor'
@@ -88,6 +91,47 @@ const getActionDescription = (action: AdapterAccountActionDescriptor, t: Transla
 
 const normalizeText = (value: string | undefined) => value?.trim().toLowerCase() ?? ''
 const normalizeDisplayText = (value: string | undefined) => value?.trim() ?? ''
+
+const formatEpochSeconds = (value: number | undefined) => {
+  if (value == null || !Number.isFinite(value) || value <= 0) return undefined
+
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  }).format(new Date(value * 1000))
+}
+
+const getResetCreditTitle = (
+  credit: AdapterAccountRateLimitResetCredit,
+  index: number,
+  t: TranslationFn
+) => (
+  normalizeText(credit.title) === 'full reset'
+    ? t('config.accounts.resetCredits.fullResetTitle')
+    : credit.title ?? t('config.accounts.resetCredits.itemTitle', { index: index + 1 })
+)
+
+const formatResetCreditRemaining = (
+  expiresAt: number | undefined,
+  t: TranslationFn
+) => {
+  if (expiresAt == null || !Number.isFinite(expiresAt) || expiresAt <= 0) return undefined
+
+  const remainingMs = expiresAt * 1000 - Date.now()
+  if (remainingMs <= 0) return t('config.accounts.resetCredits.remaining.expired')
+
+  const totalHours = Math.max(1, Math.ceil(remainingMs / (60 * 60 * 1000)))
+  const days = Math.floor(totalHours / 24)
+  const hours = totalHours % 24
+
+  if (days > 0 && hours > 0) {
+    return t('config.accounts.resetCredits.remaining.daysHours', { days, hours })
+  }
+  if (days > 0) {
+    return t('config.accounts.resetCredits.remaining.days', { count: days })
+  }
+  return t('config.accounts.resetCredits.remaining.hours', { count: totalHours })
+}
 
 const dedupeDisplayTexts = (...values: Array<string | undefined>) => {
   const uniqueValues = new Set<string>()
@@ -366,51 +410,65 @@ const AccountDetailView = ({
   const detail = data?.account
   const statusMeta = formatStatus(detail?.status, t)
   const detailActions = detail?.actions ?? []
-  const detailFacts = detail == null
+  const resetCredits = detail?.quota?.rateLimitResetCredits
+  const resetCreditDetails = resetCredits?.credits ?? []
+  const quotaMetrics = detail?.quota?.metrics?.filter((metric) => {
+    if (typeof metric.value === 'string') return metric.value.trim() !== ''
+    return metric.value != null
+  }) ?? []
+  const normalizedPlanType = normalizeText(detail?.planType)
+  const hasMatchingQuotaPlan = normalizedPlanType !== '' && quotaMetrics.some(metric => (
+    metric.id === 'plan' &&
+    typeof metric.value === 'string' &&
+    normalizeText(metric.value) === normalizedPlanType
+  ))
+  const normalizedEmail = normalizeText(detail?.email)
+  const normalizedTitle = normalizeText(detail?.title)
+  const sourceLabel = detail?.source?.label?.trim() ?? ''
+  const sourceDescription = detail?.source?.description?.trim() ?? ''
+  const normalizedSourceLabel = normalizeText(sourceLabel)
+  const normalizedSourceDescription = normalizeText(sourceDescription)
+  const detailDescription = detail?.description?.trim() ?? ''
+  const normalizedDetailDescription = normalizeText(detailDescription)
+  const detailMetadata = detail == null
     ? []
     : [
-      {
-        key: 'key',
-        icon: 'key',
-        label: t('config.accounts.facts.key'),
-        value: detail.key
-      },
       {
         key: 'email',
         icon: 'mail',
         label: t('config.accounts.facts.email'),
-        value: detail.email
-      },
-      {
-        key: 'accountType',
-        icon: 'account_circle',
-        label: t('config.accounts.facts.type'),
-        value: detail.accountType
+        value: normalizedEmail !== '' && normalizedTitle.includes(normalizedEmail)
+          ? undefined
+          : detail.email
       },
       {
         key: 'planType',
         icon: 'workspace_premium',
         label: t('config.accounts.facts.plan'),
-        value: detail.planType
+        value: hasMatchingQuotaPlan ? undefined : detail.planType
       },
       {
         key: 'source',
         icon: 'database',
         label: t('config.accounts.facts.source'),
-        value: detail.source?.label,
-        description: detail.source?.description
+        value: sourceLabel || sourceDescription,
+        description: sourceLabel !== '' &&
+            normalizedSourceDescription !== '' &&
+            normalizedSourceDescription !== normalizedSourceLabel
+          ? sourceDescription
+          : undefined
       },
       {
         key: 'description',
         icon: 'notes',
         label: t('config.accounts.facts.description'),
-        value: detail.description
+        value: normalizedDetailDescription !== '' &&
+            normalizedDetailDescription !== normalizedSourceLabel &&
+            normalizedDetailDescription !== normalizedSourceDescription
+          ? detailDescription
+          : undefined
       }
-    ].filter(fact => fact.value != null && fact.value.trim() !== '')
-  const quotaMetrics = detail?.quota?.metrics?.filter((metric) => {
-    if (typeof metric.value === 'string') return metric.value.trim() !== ''
-    return metric.value != null
-  }) ?? []
+    ].filter(item => item.value != null && item.value.trim() !== '')
 
   const handleRunAction = async (action: AdapterAccountActionDescriptor) => {
     setLoadingAction(action.key)
@@ -439,6 +497,80 @@ const AccountDetailView = ({
     } finally {
       setLoadingAction(undefined)
     }
+  }
+
+  const handleConsumeResetCredit = async (credit?: AdapterAccountRateLimitResetCredit) => {
+    const loadingKey = `consume-reset-credit:${credit?.id ?? 'next'}`
+    setLoadingAction(loadingKey)
+    try {
+      const result = await manageAdapterAccount(adapterKey, {
+        action: 'consume-reset-credit',
+        account: accountKey,
+        creditId: credit?.id
+      })
+      await onChanged()
+      if (result.account != null) {
+        await mutate({ account: result.account }, { revalidate: false })
+      } else {
+        const next = await getAdapterAccountDetail(adapterKey, accountKey, { refresh: true })
+        await mutate(next, { revalidate: false })
+      }
+
+      const resultMessage = result.outcome == null
+        ? result.message ?? t('config.accounts.resetCredits.outcomes.reset')
+        : t(`config.accounts.resetCredits.outcomes.${result.outcome}`, {
+          defaultValue: result.message
+        })
+      if (result.outcome === 'nothingToReset' || result.outcome === 'noCredit') {
+        void message.warning(resultMessage)
+      } else {
+        void message.success(resultMessage)
+      }
+    } catch (error) {
+      void message.error(getApiErrorMessage(
+        error,
+        t('config.accounts.actionFailed.consumeResetCredit')
+      ))
+    } finally {
+      setLoadingAction(undefined)
+    }
+  }
+
+  const renderResetCreditAction = (credit?: AdapterAccountRateLimitResetCredit) => {
+    const loadingKey = `consume-reset-credit:${credit?.id ?? 'next'}`
+    const normalizedStatus = normalizeText(credit?.status)
+    const disabled = resetCredits?.canConsume !== true ||
+      (resetCredits?.availableCount ?? 0) <= 0 ||
+      ['expired', 'redeemed', 'used'].includes(normalizedStatus) ||
+      (credit?.expiresAt != null && credit.expiresAt <= Date.now() / 1000)
+    const actionLabel = t('config.accounts.resetCredits.use')
+
+    return (
+      <Tooltip
+        title={disabled
+          ? t('config.accounts.resetCredits.unavailable')
+          : actionLabel}
+      >
+        <span className='adapter-account-manager__reset-credit-action-wrap'>
+          <Popconfirm
+            title={t('config.accounts.resetCredits.confirmTitle')}
+            description={t('config.accounts.resetCredits.confirmDescription')}
+            okText={t('config.accounts.resetCredits.confirmAction')}
+            cancelText={t('common.cancel')}
+            disabled={disabled}
+            onConfirm={() => handleConsumeResetCredit(credit)}
+          >
+            <InlineActionButton
+              aria-label={actionLabel}
+              className='adapter-account-manager__reset-credit-action'
+              disabled={disabled}
+              loading={loadingAction === loadingKey}
+              icon='restart_alt'
+            />
+          </Popconfirm>
+        </span>
+      </Tooltip>
+    )
   }
 
   return (
@@ -486,47 +618,140 @@ const AccountDetailView = ({
             </div>
           </div>
 
-          {detailFacts.length > 0 && (
-            <div className='adapter-account-manager__facts'>
-              {detailFacts.map(fact => (
-                <div key={fact.key} className='adapter-account-manager__fact'>
-                  <span className='material-symbols-rounded adapter-account-manager__fact-icon' aria-hidden='true'>
-                    {fact.icon}
+          {detailMetadata.length > 0 && (
+            <dl className='adapter-account-manager__metadata'>
+              {detailMetadata.map(item => (
+                <div key={item.key} className='adapter-account-manager__metadata-item'>
+                  <span className='material-symbols-rounded adapter-account-manager__metadata-icon' aria-hidden='true'>
+                    {item.icon}
                   </span>
-                  <div className='adapter-account-manager__fact-body'>
-                    <div className='adapter-account-manager__fact-label'>{fact.label}</div>
-                    <div className='adapter-account-manager__fact-value'>{fact.value}</div>
-                    {fact.description != null && fact.description.trim() !== '' && fact.description !== fact.value && (
-                      <div className='adapter-account-manager__muted'>{fact.description}</div>
-                    )}
-                  </div>
+                  <dt className='adapter-account-manager__metadata-label'>{item.label}</dt>
+                  <dd className='adapter-account-manager__metadata-value'>
+                    <span>{item.value}</span>
+                    {item.description != null &&
+                      item.description.trim() !== '' &&
+                      item.description !== item.value && (
+                        <span className='adapter-account-manager__metadata-description'>
+                          {item.description}
+                        </span>
+                      )}
+                  </dd>
                 </div>
               ))}
-            </div>
+            </dl>
           )}
 
-          {quotaMetrics.length > 0 && (
+          {(quotaMetrics.length > 0 || resetCredits != null) && (
             <div className='adapter-account-manager__section'>
               <div className='adapter-account-manager__section-title'>
                 <span className='material-symbols-rounded'>query_stats</span>
                 <span>{t('config.accounts.quotaTitle', { defaultValue: 'Quota' })}</span>
               </div>
-              <div className='adapter-account-manager__metrics'>
-                {quotaMetrics.map(metric => (
-                  <div key={metric.id} className='adapter-account-manager__metric'>
-                    <div className='adapter-account-manager__metric-label'>
-                      {metric.label}
+              {quotaMetrics.length > 0 && (
+                <div className='adapter-account-manager__metrics'>
+                  {quotaMetrics.map(metric => (
+                    <div key={metric.id} className='adapter-account-manager__metric'>
+                      <div className='adapter-account-manager__metric-label'>
+                        {metric.label}
+                      </div>
+                      <div className='adapter-account-manager__metric-value'>
+                        {metric.value ?? '-'}
+                        <QuotaUsageRing value={metric.value} />
+                      </div>
+                      {metric.description != null && metric.description.trim() !== '' && (
+                        <div className='adapter-account-manager__metric-description'>{metric.description}</div>
+                      )}
                     </div>
-                    <div className='adapter-account-manager__metric-value'>
-                      {metric.value ?? '-'}
-                      <QuotaUsageRing value={metric.value} />
+                  ))}
+                </div>
+              )}
+
+              {resetCredits != null && (
+                <div className='adapter-account-manager__reset-credits'>
+                  <div className='adapter-account-manager__reset-credits-heading'>
+                    <div className='adapter-account-manager__section-title'>
+                      <span className='material-symbols-rounded' aria-hidden='true'>
+                        confirmation_number
+                      </span>
+                      <span>{t('config.accounts.resetCredits.title')}</span>
                     </div>
-                    {metric.description != null && metric.description.trim() !== '' && (
-                      <div className='adapter-account-manager__metric-description'>{metric.description}</div>
-                    )}
+                    <span className='adapter-account-manager__muted'>
+                      {t('config.accounts.resetCredits.available', {
+                        count: resetCredits.availableCount
+                      })}
+                    </span>
                   </div>
-                ))}
-              </div>
+
+                  <div
+                    className={'adapter-account-manager__reset-credit-list ' +
+                      'config-view__field-list config-view__field-list--grouped'}
+                  >
+                    {resetCreditDetails.length > 0
+                      ? resetCreditDetails.map((credit, index) => {
+                        const grantedAt = formatEpochSeconds(credit.grantedAt)
+                        const expiresAt = formatEpochSeconds(credit.expiresAt)
+                        const remaining = formatResetCreditRemaining(credit.expiresAt, t)
+                        const details = [
+                          {
+                            key: 'grantedAt',
+                            label: t('config.accounts.resetCredits.fields.grantedAt'),
+                            value: grantedAt,
+                            secondaryValue: undefined
+                          },
+                          {
+                            key: 'expiresAt',
+                            label: t('config.accounts.resetCredits.fields.expiresAt'),
+                            value: expiresAt,
+                            secondaryValue: remaining
+                          }
+                        ].filter((item): item is typeof item & { value: string } => (
+                          item.value != null && item.value !== ''
+                        ))
+
+                        return (
+                          <FieldRow
+                            key={credit.id}
+                            icon='restart_alt'
+                            title={getResetCreditTitle(credit, index, t)}
+                            description={
+                              <span className='adapter-account-manager__reset-credit-details'>
+                                {details.map(item => (
+                                  <span
+                                    key={item.key}
+                                    className='adapter-account-manager__reset-credit-detail'
+                                  >
+                                    <span className='adapter-account-manager__reset-credit-detail-label'>
+                                      {item.label}
+                                    </span>
+                                    <span className='adapter-account-manager__reset-credit-detail-value'>
+                                      {item.value}
+                                    </span>
+                                    {item.secondaryValue != null && (
+                                      <span className='adapter-account-manager__reset-credit-detail-remaining'>
+                                        {item.secondaryValue}
+                                      </span>
+                                    )}
+                                  </span>
+                                ))}
+                              </span>
+                            }
+                          >
+                            {renderResetCreditAction(credit)}
+                          </FieldRow>
+                        )
+                      })
+                      : (
+                        <FieldRow
+                          icon='confirmation_number'
+                          title={t('config.accounts.resetCredits.title')}
+                          description={t('config.accounts.resetCredits.summaryDescription')}
+                        >
+                          {renderResetCreditAction()}
+                        </FieldRow>
+                      )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

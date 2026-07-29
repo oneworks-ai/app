@@ -12,7 +12,12 @@ import { bridgeRealHomeToMockHome } from '@oneworks/register/mock-home-bridge'
 import type { AdapterCtx } from '@oneworks/types'
 import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 
-import { getCodexAccounts, manageCodexAccount, prepareCodexSessionHome } from '#~/runtime/accounts.js'
+import {
+  getCodexAccountDetail,
+  getCodexAccounts,
+  manageCodexAccount,
+  prepareCodexSessionHome
+} from '#~/runtime/accounts.js'
 
 const tempDirs: string[] = []
 const originalHome = process.env.HOME
@@ -667,6 +672,156 @@ describe('getCodexAccounts', () => {
 })
 
 describe('manageCodexAccount', () => {
+  it('shows every Codex rate-limit bucket and consumes an earned reset credit', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-reset-credit-'))
+    const realHome = join(workspace, 'real-home')
+    const fakeCodexPath = join(workspace, 'fake-codex-app-server.mjs')
+    const authFilePath = join(workspace, 'auth.json')
+    tempDirs.push(workspace)
+
+    await writeFile(authFilePath, '{"auth_mode":"chatgpt"}\n')
+    await writeFile(
+      fakeCodexPath,
+      `#!/usr/bin/env node
+import readline from 'node:readline'
+
+let availableCount = 2
+const buildRateLimits = () => ({
+  rateLimits: {
+    limitId: 'codex',
+    primary: {
+      usedPercent: 2,
+      windowDurationMins: 10080,
+      resetsAt: 1785902972
+    },
+    planType: 'pro'
+  },
+  rateLimitsByLimitId: {
+    codex: {
+      limitId: 'codex',
+      primary: {
+        usedPercent: 2,
+        windowDurationMins: 10080,
+        resetsAt: 1785902972
+      },
+      planType: 'pro'
+    },
+    codex_bengalfox: {
+      limitId: 'codex_bengalfox',
+      limitName: 'GPT-5.3-Codex-Spark',
+      primary: {
+        usedPercent: 0,
+        windowDurationMins: 10080,
+        resetsAt: 1785913033
+      },
+      planType: 'pro'
+    }
+  },
+  rateLimitResetCredits: {
+    availableCount,
+    credits: [{
+      id: 'credit-a',
+      resetType: 'weekly',
+      status: 'available',
+      title: 'Weekly reset',
+      description: 'Earned reset credit',
+      grantedAt: 1785200000,
+      expiresAt: 1786500000
+    }]
+  }
+})
+
+const input = readline.createInterface({ input: process.stdin })
+input.on('line', (line) => {
+  const message = JSON.parse(line)
+  if (message.id == null) return
+
+  let result = {}
+  if (message.method === 'account/read') {
+    result = {
+      account: {
+        type: 'chatgpt',
+        email: 'work@example.com',
+        planType: 'pro'
+      }
+    }
+  } else if (message.method === 'account/rateLimits/read') {
+    result = buildRateLimits()
+  } else if (message.method === 'account/rateLimitResetCredit/consume') {
+    const valid = message.params?.creditId === 'credit-a' &&
+      typeof message.params?.idempotencyKey === 'string' &&
+      message.params.idempotencyKey.length > 0
+    if (valid) availableCount = 1
+    result = { outcome: valid ? 'reset' : 'noCredit' }
+  }
+
+  process.stdout.write(JSON.stringify({
+    jsonrpc: '2.0',
+    id: message.id,
+    result
+  }) + '\\n')
+})
+`
+    )
+    await chmod(fakeCodexPath, 0o755)
+
+    const ctx = createTestCtx(workspace, {
+      env: {
+        HOME: resolveTestMockHome(workspace, realHome),
+        __ONEWORKS_PROJECT_REAL_HOME__: realHome,
+        __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__: fakeCodexPath
+      },
+      configs: [{
+        adapters: {
+          codex: {
+            accounts: {
+              work: {
+                title: 'Work',
+                authFile: authFilePath
+              }
+            }
+          }
+        }
+      } as any]
+    })
+
+    const detail = await getCodexAccountDetail(ctx, {
+      account: 'work',
+      refresh: true
+    })
+    expect(detail.account.quota?.metrics).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'primary-usage',
+        label: '7d used',
+        value: '2%'
+      }),
+      expect.objectContaining({
+        id: 'codex-bengalfox-primary-usage',
+        label: 'GPT-5.3-Codex-Spark · 7d used',
+        value: '0%'
+      })
+    ]))
+    expect(detail.account.quota?.rateLimitResetCredits).toMatchObject({
+      availableCount: 2,
+      canConsume: true,
+      credits: [
+        expect.objectContaining({
+          id: 'credit-a',
+          status: 'available',
+          title: 'Weekly reset'
+        })
+      ]
+    })
+
+    const result = await manageCodexAccount(ctx, {
+      action: 'consume-reset-credit',
+      account: 'work',
+      creditId: 'credit-a'
+    })
+    expect(result.outcome).toBe('reset')
+    expect(result.account?.quota?.rateLimitResetCredits?.availableCount).toBe(1)
+  })
+
   it('stores Codex login auth in the global OneWorks config', async () => {
     const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-login-global-'))
     const realHome = join(workspace, 'real-home')

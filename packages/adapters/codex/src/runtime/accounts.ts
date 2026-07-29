@@ -104,7 +104,10 @@ interface CodexAccountDescriptor {
 interface CodexAccountProbe extends CodexAccountIdentity {
   avatarUrl?: string
   quota?: AdapterAccountInfo['quota']
+  resetCreditOutcome?: CodexRateLimitResetCreditOutcome
 }
+
+type CodexRateLimitResetCreditOutcome = 'reset' | 'alreadyRedeemed' | 'nothingToReset' | 'noCredit'
 
 interface CodexStoredAuthTokens {
   account_id?: unknown
@@ -408,7 +411,13 @@ const cloneQuotaInfo = (quota: AdapterAccountInfo['quota']) => (
     ? undefined
     : {
       ...quota,
-      metrics: quota.metrics?.map(metric => ({ ...metric }))
+      metrics: quota.metrics?.map(metric => ({ ...metric })),
+      rateLimitResetCredits: quota.rateLimitResetCredits == null
+        ? undefined
+        : {
+          ...quota.rateLimitResetCredits,
+          credits: quota.rateLimitResetCredits.credits?.map(credit => ({ ...credit }))
+        }
     }
 )
 
@@ -1005,6 +1014,71 @@ const collectRateLimitEntries = (value: unknown) => {
   return Array.from(uniqueEntries.values())
 }
 
+const normalizeQuotaMetricId = (value: string) => (
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'limit'
+)
+
+const parseRateLimitResetCredits = (
+  value: unknown
+): NonNullable<AdapterAccountInfo['quota']>['rateLimitResetCredits'] => {
+  if (!isRecord(value)) {
+    return undefined
+  }
+
+  const parsedCredits = Array.isArray(value.credits)
+    ? value.credits.flatMap((entry) => {
+      if (!isRecord(entry)) {
+        return []
+      }
+
+      const id = normalizeNonEmptyString(entry.id)
+      if (id == null) {
+        return []
+      }
+
+      return [{
+        id,
+        resetType: normalizeNonEmptyString(entry.resetType),
+        status: normalizeNonEmptyString(entry.status),
+        title: normalizeNonEmptyString(entry.title),
+        description: normalizeNonEmptyString(entry.description),
+        grantedAt: parseFiniteNumber(entry.grantedAt),
+        expiresAt: parseFiniteNumber(entry.expiresAt)
+      }]
+    })
+    : undefined
+  const availableCount = parseFiniteNumber(value.availableCount) ?? parsedCredits?.length
+  if (availableCount == null) {
+    return undefined
+  }
+
+  return {
+    availableCount: Math.max(0, Math.trunc(availableCount)),
+    canConsume: true,
+    ...(parsedCredits != null ? { credits: parsedCredits } : {})
+  }
+}
+
+const parseResetCreditOutcome = (value: unknown): CodexRateLimitResetCreditOutcome | undefined => {
+  if (!isRecord(value) || typeof value.outcome !== 'string') {
+    return undefined
+  }
+
+  switch (value.outcome) {
+    case 'reset':
+    case 'alreadyRedeemed':
+    case 'nothingToReset':
+    case 'noCredit':
+      return value.outcome
+    default:
+      return undefined
+  }
+}
+
 const resolveRealHomeAuthPath = (ctx: Pick<AdapterCtx, 'env'>) => {
   const realHome = normalizeNonEmptyString(ctx.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
     normalizeNonEmptyString(process.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
@@ -1046,8 +1120,12 @@ const probeCodexAccount = async (params: {
   refresh?: boolean
   fetchProfile?: boolean
   logKey: string
+  consumeResetCredit?: {
+    creditId?: string
+    idempotencyKey: string
+  }
 }): Promise<CodexAccountProbe> => {
-  const { ctx, homeDir, authFilePath, refresh, fetchProfile, logKey } = params
+  const { ctx, homeDir, authFilePath, refresh, fetchProfile, logKey, consumeResetCredit } = params
   const logger = resolveProbeLogger(ctx, logKey)
   const binaryPath = resolveCodexBinaryPath(ctx.env, ctx.cwd)
   const spawnEnv = buildSpawnEnv(ctx)
@@ -1098,6 +1176,14 @@ const probeCodexAccount = async (params: {
     })
     rpc.notify('initialized', {})
 
+    const consumeResult = consumeResetCredit == null
+      ? undefined
+      : await rpc.request('account/rateLimitResetCredit/consume', {
+        idempotencyKey: consumeResetCredit.idempotencyKey,
+        ...(normalizeNonEmptyString(consumeResetCredit.creditId) != null
+          ? { creditId: consumeResetCredit.creditId }
+          : {})
+      })
     const accountResult = await rpc.request('account/read', {
       ...(refresh === true ? { refreshToken: true } : {})
     })
@@ -1164,6 +1250,8 @@ const probeCodexAccount = async (params: {
       label: string
       payload: unknown
       primary?: boolean
+      idPrefix?: string
+      labelPrefix?: string
     }) => {
       const payload = isRecord(params.payload) ? params.payload : undefined
       const usedPercent = parseFiniteNumber(payload?.usedPercent)
@@ -1178,8 +1266,12 @@ const probeCodexAccount = async (params: {
       const resetDescription = formatRateLimitResetAt(resetAt)
 
       metrics.push({
-        id: `${params.key}-usage`,
-        label: windowLabel == null ? params.label : `${windowLabel} ${params.label}`,
+        id: `${params.idPrefix ?? ''}${params.key}-usage`,
+        label: [
+          params.labelPrefix,
+          windowLabel == null ? params.label : `${windowLabel} ${params.label}`
+        ].filter((value): value is string => value != null && value !== '')
+          .join(' · '),
         value,
         ...(resetDescription != null ? { description: `Resets ${resetDescription}` } : {}),
         primary: params.primary
@@ -1211,6 +1303,50 @@ const probeCodexAccount = async (params: {
       })
     }
 
+    rateLimits
+      .filter(rateLimit => rateLimit !== primaryRateLimit)
+      .forEach((rateLimit, index) => {
+        const limitId = normalizeNonEmptyString(rateLimit.limitId) ?? `additional-${index + 1}`
+        const displayName = normalizeNonEmptyString(rateLimit.limitName) ?? limitId
+        const idPrefix = `${normalizeQuotaMetricId(limitId)}-`
+
+        pushUsageMetric({
+          key: 'primary',
+          label: 'used',
+          payload: rateLimit.primary,
+          idPrefix,
+          labelPrefix: displayName
+        })
+        pushUsageMetric({
+          key: 'secondary',
+          label: 'used',
+          payload: rateLimit.secondary,
+          idPrefix,
+          labelPrefix: displayName
+        })
+
+        const bucketCredits = isRecord(rateLimit.credits) ? rateLimit.credits : undefined
+        if (bucketCredits?.unlimited === true) {
+          metrics.push({
+            id: `${idPrefix}credits`,
+            label: `${displayName} · Credits`,
+            value: 'Unlimited'
+          })
+        } else if (bucketCredits?.hasCredits === true) {
+          const balance = parseFiniteNumber(bucketCredits.balance)
+          if (balance != null) {
+            metrics.push({
+              id: `${idPrefix}credits`,
+              label: `${displayName} · Credits`,
+              value: formatCreditsValue(balance)
+            })
+          }
+        }
+      })
+
+    const rateLimitResetCredits = parseRateLimitResetCredits(
+      isRecord(rateLimitsResult) ? rateLimitsResult.rateLimitResetCredits : undefined
+    )
     const summary = [
       formattedPlan,
       primaryUsageSummary,
@@ -1225,11 +1361,15 @@ const probeCodexAccount = async (params: {
       email: email ?? authIdentity?.email,
       planType: planType ?? authIdentity?.planType,
       avatarUrl,
-      quota: summary === '' && metrics.length === 0
+      resetCreditOutcome: parseResetCreditOutcome(consumeResult),
+      quota: summary === '' &&
+          metrics.length === 0 &&
+          rateLimitResetCredits == null
         ? undefined
         : {
           summary: summary === '' ? undefined : summary,
           metrics,
+          rateLimitResetCredits,
           updatedAt: Date.now()
         }
     }
@@ -2373,6 +2513,68 @@ export const manageCodexAccount = async (
   ctx: AdapterCtx,
   options: AdapterManageAccountOptions
 ): Promise<AdapterManageAccountResult> => {
+  if (options.action === 'consume-reset-credit') {
+    const normalizedAccount = normalizeNonEmptyString(options.account)
+    if (normalizedAccount == null) {
+      throw new Error('Codex reset credit consumption requires an account key.')
+    }
+
+    const { descriptor, defaultAccount, configuredAccount } = await resolveExistingCodexAccount(
+      ctx,
+      normalizedAccount
+    )
+    const authSource = await writeDescriptorAuthSourceFile({
+      ctx,
+      descriptor,
+      scope: 'consume-reset-credit'
+    })
+    if (authSource == null) {
+      throw new Error(`Codex account "${normalizedAccount}" has no usable authentication source.`)
+    }
+
+    const probe = await probeCodexAccount({
+      ctx,
+      homeDir: authSource.homeDir,
+      authFilePath: authSource.authFilePath,
+      refresh: true,
+      fetchProfile: false,
+      logKey: `consume-reset-credit-${descriptor.key}`,
+      consumeResetCredit: {
+        creditId: normalizeNonEmptyString(options.creditId),
+        idempotencyKey: randomUUID()
+      }
+    })
+    await writeProbeMetadata({
+      ctx,
+      descriptor,
+      probe
+    })
+
+    const outcome = probe.resetCreditOutcome
+    if (outcome == null) {
+      throw new Error('Codex returned an unknown reset credit outcome.')
+    }
+
+    const messages: Record<CodexRateLimitResetCreditOutcome, string> = {
+      reset: 'Used one Codex reset credit and refreshed the quota.',
+      alreadyRedeemed: 'This Codex reset credit was already redeemed.',
+      nothingToReset: 'No eligible Codex rate-limit window needs resetting.',
+      noCredit: 'No Codex reset credit is available.'
+    }
+
+    return {
+      accountKey: normalizedAccount,
+      outcome,
+      account: buildCodexAccountDetail({
+        descriptor,
+        defaultAccount,
+        configuredAccount,
+        probe
+      }),
+      message: messages[outcome]
+    }
+  }
+
   if (options.action === 'refresh') {
     const normalizedAccount = normalizeNonEmptyString(options.account)
     if (normalizedAccount == null) {
