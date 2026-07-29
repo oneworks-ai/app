@@ -126,7 +126,7 @@ UI PR 的 `pr-change-policy` 只检查 PR body 是否有截图证据，不会判
 
 ## Android 设备调试页改错 worktree 或 CI 收口失败
 
-症状关键词：`standalone devices debug`、`设备状态`、`Android Emulator`、`emulator-5554`、`IAB tab not found`、`/api/mobile-debug/environment 404`、`max-lines`、`macOS installer pending`。
+症状关键词：`standalone devices debug`、`设备状态`、`Android Emulator`、`emulator-5554`、`IAB tab not found`、`/api/mobile-debug/environment 404`、`max-lines`、`macOS release installer pending`。
 
 标准处理：
 
@@ -135,11 +135,11 @@ UI PR 的 `pr-change-policy` 只检查 PR body 是否有截图证据，不会判
 - 不要只凭当前 `cwd` 改代码。先确认 IAB 页面实际由哪个 worktree 的 dev server 提供；必要时用 `rg` 在 `.codex/worktrees` 内定位目标文件。
 - 后端 mobile-debug route / service 修改后，如果 API 仍 404，先运行 `pnpm --silent tools dev-service status web --json` 确认是否仍是旧服务。纯前端改动优先依赖 Vite HMR，不主动重启；后端、启动时配置或其他非 HMR 代码变更必须让对应进程重新加载。需要 `restart web` 时先查当前任务是否已有匹配的用户重启授权租约：有则直接运行统一 `restart`，没有则只询问一次；不要用 `ensure` 的健康复用冒充代码已加载，也不要把旧 server 误判成前端路由问题。
 - 设备状态面板要拆 Battery / Cellular / Location / Phone / Fingerprint 组件；状态型控制实时生效，事件型控制保留按钮。
-- PR 收口必须补 changelog、截图、Experience Review checklist，并跑 `pr-change-check`。远端如果只剩 `macOS installer` pending，用 `gh run view <run> --json jobs` 看具体步骤，避免长时间 `gh pr checks --watch` 刷屏。
+- PR 收口必须补 changelog、截图、Experience Review checklist，并跑 `pr-change-check`。完整的 `macOS release installer` 只在桌面 release tag 或手动 dispatch 时运行，PR 上同名兼容门禁不会构建安装包；查看发版长任务进度时用 `gh run view <run> --json jobs` 看具体步骤，避免长时间 watcher 刷屏。
 
 原因：
 
-Android 设备调试页同时跨 IAB、前端 interaction panel、desktop preload、server ADB service、scrcpy 视频流和 PR policy。最常见失败不是单点代码错误，而是改错 worktree、旧 server 未重启、组件堆到 lint 超行、PR body 缺 policy 材料或误判长时间 installer 为卡死。
+Android 设备调试页同时跨 IAB、前端 interaction panel、desktop preload、server ADB service、scrcpy 视频流和 PR policy。最常见失败不是单点代码错误，而是改错 worktree、旧 server 未重启、组件堆到 lint 超行、PR body 缺 policy 材料，或在单独的发版验包任务中误判长时间 installer 为卡死。
 
 ## 移动端 WebView / 工作区 tabs 反复返工
 
