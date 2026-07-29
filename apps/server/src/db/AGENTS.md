@@ -6,7 +6,7 @@
 - channelSessions/：channel session 领域目录，包含 schema 与 repo
 - automation/：automation 领域目录，包含 schema 与 repo
 - agentRooms/：Agent Room 领域目录，包含 room/member/run/message 的 schema 与 repo；改 room 持久化前先读 `agentRooms/AGENTS.md`
-- usage/：Token 用量 ledger，负责 observation schema、历史消息回填、累计 / 增量去重与 workspace 级聚合
+- usage/：Token 用量 ledger，负责 observation schema、历史消息回填、累计 / 增量去重与 workspace 级聚合；改 observation identity、资源归因或 report 契约前先读 `../../../../.oo/rules/maintenance/token-usage-analytics.md`
 - repo.utils.ts：repo 层共享的 SQL update 语句构建 helper
 
 分层约定：新增表结构或迁移时，不要继续往单一 schema 文件累加；应在对应领域目录内的 schema.ts 维护，并由 db/index.ts 注入到 initSchema。
