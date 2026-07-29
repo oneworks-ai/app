@@ -6,7 +6,7 @@ import './AccountSelectDropdown.scss'
 
 import { App, Button, Modal, Tooltip } from 'antd'
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
-import { useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useSWRConfig } from 'swr'
@@ -24,6 +24,17 @@ import {
 } from '../mobile-select-drawer/SenderMobileSelectDrawer'
 import { AccountAvatar } from './AccountAvatar'
 import { AccountQuotaIndicators } from './AccountQuotaIndicators'
+import { AccountQuotaDialog } from './AccountQuotaModal'
+
+interface AccountQuotaDialogTarget {
+  adapter?: string
+  option: ChatAdapterAccountOption
+}
+
+interface PendingAccountQuotaDialog extends AccountQuotaDialogTarget {
+  source: 'desktop' | 'mobile'
+  token: number
+}
 
 const renderSelectArrow = (onMouseDown: (event: ReactMouseEvent<HTMLSpanElement>) => void) => (
   <span className='material-symbols-rounded sender-select-arrow' onMouseDown={onMouseDown}>
@@ -56,10 +67,20 @@ export function AccountSelectControl({
   const { isCompactLayout, isTouchInteraction } = useResponsiveLayout()
   const { isThinking, modelUnavailable, selectedAccount, selectedAdapter, showAccountSelector } = state
   const { accountOptions } = data
-  const [showAccountSelect, setShowAccountSelect] = useState(false)
+  const [showAccountSelect, setShowAccountSelectState] = useState(false)
   const [creatingAccount, setCreatingAccount] = useState(false)
   const [cancelingCreateAccount, setCancelingCreateAccount] = useState(false)
+  const [mobileDrawerMotionInstance, setMobileDrawerMotionInstance] = useState(0)
+  const [pendingQuotaDialog, setPendingQuotaDialogState] = useState<PendingAccountQuotaDialog>()
+  const [quotaDialog, setQuotaDialog] = useState<AccountQuotaDialogTarget>()
+  const [quotaDialogOpen, setQuotaDialogOpenState] = useState(false)
+  const accountTriggerRef = useRef<HTMLButtonElement>(null)
   const createAccountAbortRef = useRef<AbortController | null>(null)
+  const pendingQuotaDialogRef = useRef<PendingAccountQuotaDialog>()
+  const quotaDialogOpenRef = useRef(false)
+  const quotaHandoffTokenRef = useRef(0)
+  const showAccountSelectRef = useRef(false)
+  const suppressNextCompactTriggerFocusRef = useRef(false)
   const isCompactControl = isCompactLayout || isTouchInteraction
 
   const selectedOption = useMemo(
@@ -67,6 +88,93 @@ export function AccountSelectControl({
     [accountOptions, selectedAccount]
   )
   const isDisabled = modelUnavailable || isThinking
+
+  const setPendingQuotaDialog = useCallback((pending: PendingAccountQuotaDialog | undefined) => {
+    pendingQuotaDialogRef.current = pending
+    setPendingQuotaDialogState(pending)
+  }, [])
+
+  const setQuotaDialogOpen = useCallback((open: boolean) => {
+    quotaDialogOpenRef.current = open
+    setQuotaDialogOpenState(open)
+  }, [])
+
+  const cancelPendingQuotaDialog = useCallback(() => {
+    quotaHandoffTokenRef.current += 1
+    suppressNextCompactTriggerFocusRef.current = false
+    setPendingQuotaDialog(undefined)
+  }, [setPendingQuotaDialog])
+
+  const setAccountSelectOpen = useCallback((open: boolean) => {
+    showAccountSelectRef.current = open
+    if (open) {
+      if (pendingQuotaDialogRef.current?.source === 'mobile') {
+        // Remount the motion owner so an interrupted leave cannot finish under a newer handoff token.
+        setMobileDrawerMotionInstance(instance => instance + 1)
+      }
+      cancelPendingQuotaDialog()
+    }
+    setShowAccountSelectState(open)
+  }, [cancelPendingQuotaDialog])
+
+  const completeQuotaDialogHandoff = useCallback((
+    source: PendingAccountQuotaDialog['source'],
+    token: number | string | undefined
+  ) => {
+    const pending = pendingQuotaDialogRef.current
+    if (
+      typeof token !== 'number' ||
+      pending == null ||
+      pending.source !== source ||
+      pending.token !== token ||
+      showAccountSelectRef.current
+    ) {
+      return
+    }
+
+    setPendingQuotaDialog(undefined)
+    setQuotaDialog({
+      adapter: pending.adapter,
+      option: pending.option
+    })
+    setQuotaDialogOpen(true)
+  }, [setPendingQuotaDialog, setQuotaDialogOpen])
+
+  const handleDesktopPopupCloseComplete = useCallback((closeRequestKey: number | string | undefined) => {
+    completeQuotaDialogHandoff('desktop', closeRequestKey)
+  }, [completeQuotaDialogHandoff])
+
+  const handleMobileDrawerAfterOpenChange = useCallback((
+    open: boolean,
+    closeRequestKey: number | string | undefined
+  ) => {
+    if (!open) {
+      completeQuotaDialogHandoff('mobile', closeRequestKey)
+    }
+  }, [completeQuotaDialogHandoff])
+
+  const handleQuotaDialogAfterClose = useCallback(() => {
+    setQuotaDialog(undefined)
+    const trigger = accountTriggerRef.current
+    if (trigger == null) {
+      return
+    }
+
+    suppressNextCompactTriggerFocusRef.current = isCompactControl
+    const wasFocused = document.activeElement === trigger
+    trigger.focus({ preventScroll: true })
+    if (wasFocused || document.activeElement !== trigger) {
+      suppressNextCompactTriggerFocusRef.current = false
+    }
+  }, [isCompactControl])
+
+  useEffect(() => {
+    const pending = pendingQuotaDialogRef.current
+    const expectedSource = isCompactControl ? 'mobile' : 'desktop'
+    if (pending != null && pending.source !== expectedSource) {
+      cancelPendingQuotaDialog()
+    }
+  }, [cancelPendingQuotaDialog, isCompactControl])
 
   if (!showAccountSelector || accountOptions == null || accountOptions.length === 0) {
     return null
@@ -77,7 +185,7 @@ export function AccountSelectControl({
       return
     }
 
-    setShowAccountSelect(false)
+    setAccountSelectOpen(false)
     void navigate(
       `/config/adapters/${encodeURIComponent(selectedAdapter)}/accounts?source=user`
     )
@@ -88,7 +196,7 @@ export function AccountSelectControl({
       return
     }
 
-    setShowAccountSelect(false)
+    setAccountSelectOpen(false)
     const abortController = new AbortController()
     createAccountAbortRef.current = abortController
     setCreatingAccount(true)
@@ -145,7 +253,7 @@ export function AccountSelectControl({
       return
     }
 
-    setShowAccountSelect(false)
+    setAccountSelectOpen(false)
     void navigate(
       `/config/adapters/${encodeURIComponent(selectedAdapter)}/accounts/${encodeURIComponent(accountKey)}?source=user`
     )
@@ -153,17 +261,39 @@ export function AccountSelectControl({
 
   const handleAccountSelection = (value: string) => {
     handlers.onAccountChange?.(value)
-    setShowAccountSelect(false)
+    setAccountSelectOpen(false)
   }
 
   const openCompactAccountSelect = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!isCompactControl || isDisabled || showAccountSelect) {
+    if (
+      !isCompactControl ||
+      isDisabled ||
+      showAccountSelect ||
+      pendingQuotaDialogRef.current != null ||
+      quotaDialogOpenRef.current
+    ) {
       return
     }
 
     event.preventDefault()
     event.stopPropagation()
-    setShowAccountSelect(true)
+    setAccountSelectOpen(true)
+  }
+
+  const openAccountQuota = (option: ChatAdapterAccountOption) => {
+    const token = quotaHandoffTokenRef.current + 1
+    quotaHandoffTokenRef.current = token
+    const source = isCompactControl ? 'mobile' : 'desktop'
+    if (source === 'mobile') {
+      suppressNextCompactTriggerFocusRef.current = true
+    }
+    setPendingQuotaDialog({
+      adapter: selectedAdapter,
+      option,
+      source,
+      token
+    })
+    setAccountSelectOpen(false)
   }
 
   const renderOption = (option: ChatAdapterAccountOption) => (
@@ -180,6 +310,7 @@ export function AccountSelectControl({
           <AccountQuotaIndicators
             adapter={selectedAdapter}
             account={option.value}
+            onRequestOpen={() => openAccountQuota(option)}
             quota={option.quota}
             windows={option.quotaWindows}
           />
@@ -259,6 +390,7 @@ export function AccountSelectControl({
             onPointerDownCapture={openCompactAccountSelect}
           >
             <button
+              ref={accountTriggerRef}
               type='button'
               className='account-select account-select--responsive sender-responsive-select-button sender-responsive-select-button--account'
               aria-label={selectedOption?.label ?? t('chat.accountSelectPlaceholder')}
@@ -266,13 +398,22 @@ export function AccountSelectControl({
               onMouseDown={(event) => {
                 event.preventDefault()
                 event.stopPropagation()
-                setShowAccountSelect(true)
+                setAccountSelectOpen(true)
               }}
-              onFocus={() => setShowAccountSelect(true)}
+              onFocus={() => {
+                if (suppressNextCompactTriggerFocusRef.current) {
+                  suppressNextCompactTriggerFocusRef.current = false
+                  return
+                }
+                if (pendingQuotaDialogRef.current != null || quotaDialogOpenRef.current) {
+                  return
+                }
+                setAccountSelectOpen(true)
+              }}
               onClick={(event) => {
                 event.preventDefault()
                 event.stopPropagation()
-                setShowAccountSelect(true)
+                setAccountSelectOpen(true)
               }}
             >
               {selectedOption == null
@@ -293,7 +434,10 @@ export function AccountSelectControl({
               open={showAccountSelect}
               title={t('chat.accountSelectPlaceholder')}
               className='account-mobile-select-drawer'
-              onClose={() => setShowAccountSelect(false)}
+              closeRequestKey={pendingQuotaDialog?.source === 'mobile' ? pendingQuotaDialog.token : undefined}
+              motionInstanceKey={mobileDrawerMotionInstance}
+              onAfterOpenChange={handleMobileDrawerAfterOpenChange}
+              onClose={() => setAccountSelectOpen(false)}
             >
               <div className='sender-mobile-select-list' role='listbox'>
                 {accountOptions.map(option => (
@@ -350,15 +494,18 @@ export function AccountSelectControl({
             controlTrigger={{
               ariaLabel: selectedOption?.label ?? t('chat.accountSelectPlaceholder'),
               className: 'sender-select-body-trigger',
+              ref: accountTriggerRef,
               stopPropagation: true,
               wrapperClassName: 'sender-select-shell sender-select-shell--account'
             }}
             open={showAccountSelect}
+            popupCloseKey={pendingQuotaDialog?.source === 'desktop' ? pendingQuotaDialog.token : undefined}
             value={selectedAccount}
             options={accountOptions}
             disabled={isDisabled}
             onChange={handleAccountSelection}
-            onOpenChange={setShowAccountSelect}
+            onOpenChange={setAccountSelectOpen}
+            onPopupCloseComplete={handleDesktopPopupCloseComplete}
             optionRender={(option) => renderOption(option.data as ChatAdapterAccountOption)}
             optionLabelProp='label'
             placeholder={t('chat.accountSelectPlaceholder')}
@@ -369,10 +516,19 @@ export function AccountSelectControl({
             suffixIcon={renderSelectArrow((event) => {
               event.preventDefault()
               event.stopPropagation()
-              setShowAccountSelect(prev => !prev)
+              setAccountSelectOpen(!showAccountSelectRef.current)
             })}
           />
         )}
+      <AccountQuotaDialog
+        open={quotaDialogOpen}
+        adapter={quotaDialog?.adapter}
+        account={quotaDialog?.option.value}
+        focusTriggerAfterClose={false}
+        quota={quotaDialog?.option.quota}
+        onAfterClose={handleQuotaDialogAfterClose}
+        onClose={() => setQuotaDialogOpen(false)}
+      />
       <Modal
         open={creatingAccount}
         centered

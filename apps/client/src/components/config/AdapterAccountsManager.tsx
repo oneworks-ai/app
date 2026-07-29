@@ -22,6 +22,7 @@ import {
   getAdapterResetCreditOutcomeTone,
   useAdapterAccountQuotaDetail
 } from '#~/hooks/use-adapter-account-quota-detail'
+import { isUsableAdapterResetCredit } from '#~/utils/account-quota'
 
 import { FieldRow } from './ConfigFieldRow'
 import { getFieldDescription, getFieldLabel, getValueByPath, setValueByPath } from './configUtils'
@@ -423,9 +424,12 @@ const AccountDetailView = ({
   const detailActions = detail?.actions ?? []
   const resetCredits = detail?.quota?.rateLimitResetCredits
   const resetCreditDetails = resetCredits?.credits ?? []
+  const usableResetCreditDetailCount = resetCreditDetails
+    .filter(credit => isUsableAdapterResetCredit(credit))
+    .length
   const missingResetCreditDetailCount = Math.max(
     0,
-    (resetCredits?.availableCount ?? 0) - resetCreditDetails.length
+    (resetCredits?.availableCount ?? 0) - usableResetCreditDetailCount
   )
   const quotaMetrics = detail?.quota?.metrics?.filter((metric) => {
     if (typeof metric.value === 'string') return metric.value.trim() !== ''
@@ -569,13 +573,11 @@ const AccountDetailView = ({
     fallbackKey = 'next'
   ) => {
     const loadingKey = `consume-reset-credit:${credit?.id ?? fallbackKey}`
-    const normalizedStatus = normalizeText(credit?.status)
     const consumeResetCreditPending = loadingAction?.startsWith('consume-reset-credit:') === true
     const disabled = resetCredits?.canConsume !== true ||
       (resetCredits?.availableCount ?? 0) <= 0 ||
       consumeResetCreditPending ||
-      ['expired', 'redeemed', 'used'].includes(normalizedStatus) ||
-      (credit?.expiresAt != null && credit.expiresAt <= Date.now() / 1000)
+      (credit != null && !isUsableAdapterResetCredit(credit))
     const actionLabel = t('config.accounts.resetCredits.use')
 
     return (

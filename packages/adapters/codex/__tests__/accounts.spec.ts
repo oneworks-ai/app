@@ -1,5 +1,6 @@
 /* eslint-disable max-lines -- codex account coverage keeps migration and credential scenarios together. */
 import { Buffer } from 'node:buffer'
+import { createHash } from 'node:crypto'
 import { chmod, lstat, mkdir, mkdtemp, readFile, readlink, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -8,6 +9,7 @@ import { PassThrough } from 'node:stream'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { withCanonicalConfigWriteLock } from '@oneworks/config'
 import { bridgeRealHomeToMockHome } from '@oneworks/register/mock-home-bridge'
 import type { AdapterCtx } from '@oneworks/types'
 import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
@@ -1023,13 +1025,31 @@ input.on('line', (line) => {
     const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-reset-credit-persist-failure-'))
     const realHome = join(workspace, 'real-home')
     const fakeCodexPath = join(workspace, 'fake-codex-app-server.mjs')
+    const globalConfigPath = join(realHome, '.oneworks', '.oo.config.json')
     const authContent = '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_persist"}}\n'
+    const globalConfig = {
+      adapters: {
+        codex: {
+          accounts: {
+            work: {
+              auth: {
+                type: 'codex-auth-json',
+                encoding: 'base64',
+                token: Buffer.from(authContent, 'utf8').toString('base64')
+              }
+            }
+          }
+        }
+      }
+    }
     tempDirs.push(workspace)
 
-    await mkdir(join(realHome, '.oneworks', '.oo.config.json'), { recursive: true })
+    await mkdir(join(realHome, '.oneworks'), { recursive: true })
+    await writeFile(globalConfigPath, JSON.stringify(globalConfig))
     await writeFile(
       fakeCodexPath,
       `#!/usr/bin/env node
+import { mkdirSync, rmSync } from 'node:fs'
 import readline from 'node:readline'
 
 const input = readline.createInterface({ input: process.stdin })
@@ -1039,6 +1059,8 @@ input.on('line', (line) => {
 
   let result = {}
   if (message.method === 'account/rateLimitResetCredit/consume') {
+    rmSync(${JSON.stringify(globalConfigPath)}, { force: true })
+    mkdirSync(${JSON.stringify(globalConfigPath)}, { recursive: true })
     result = { outcome: 'reset' }
   } else if (message.method === 'account/read') {
     result = { account: { type: 'chatgpt', planType: 'pro' } }
@@ -1070,21 +1092,7 @@ input.on('line', (line) => {
           __ONEWORKS_PROJECT_REAL_HOME__: realHome,
           __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__: fakeCodexPath
         },
-        configs: [{
-          adapters: {
-            codex: {
-              accounts: {
-                work: {
-                  auth: {
-                    type: 'codex-auth-json',
-                    encoding: 'base64',
-                    token: Buffer.from(authContent, 'utf8').toString('base64')
-                  }
-                }
-              }
-            }
-          }
-        } as any]
+        configs: [globalConfig as any]
       }),
       {
         action: 'consume-reset-credit',
@@ -1269,6 +1277,271 @@ input.on('line', (line) => {
       value: '33%'
     }))
     expect(Buffer.from(persistedAccount.auth.token, 'base64').toString('utf8')).toBe(newAuthContent)
+    expect(persistedAccount.quota).toBeUndefined()
+  })
+
+  it('rejects a stale reset-credit request after its global credential is replaced', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-stale-consume-credential-'))
+    const realHome = join(workspace, 'real-home')
+    const fakeCodexPath = join(workspace, 'fake-codex-app-server.mjs')
+    const consumeMarkerPath = join(workspace, 'consume.marker')
+    const globalConfigPath = join(realHome, '.oneworks', '.oo.config.json')
+    const oldAuthContent = '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_old"}}\n'
+    const newAuthContent = '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_new"}}\n'
+    const buildGlobalConfig = (authContent: string) => ({
+      adapters: {
+        codex: {
+          accounts: {
+            work: {
+              auth: {
+                type: 'codex-auth-json',
+                encoding: 'base64',
+                token: Buffer.from(authContent, 'utf8').toString('base64')
+              }
+            }
+          }
+        }
+      }
+    })
+    const staleConfig = buildGlobalConfig(oldAuthContent)
+    tempDirs.push(workspace)
+
+    await mkdir(join(realHome, '.oneworks'), { recursive: true })
+    await writeFile(globalConfigPath, JSON.stringify(staleConfig))
+    await writeFile(
+      fakeCodexPath,
+      `#!/usr/bin/env node
+import { writeFileSync } from 'node:fs'
+import readline from 'node:readline'
+
+const input = readline.createInterface({ input: process.stdin })
+input.on('line', (line) => {
+  const message = JSON.parse(line)
+  if (message.id == null) return
+
+  if (message.method === 'account/rateLimitResetCredit/consume') {
+    writeFileSync(${JSON.stringify(consumeMarkerPath)}, 'consumed')
+  }
+  process.stdout.write(JSON.stringify({
+    jsonrpc: '2.0',
+    id: message.id,
+    result: message.method === 'account/rateLimitResetCredit/consume'
+      ? { outcome: 'reset' }
+      : {}
+  }) + '\\n')
+})
+`
+    )
+    await chmod(fakeCodexPath, 0o755)
+
+    let releaseCanonicalLock = () => {}
+    let markCanonicalLockAcquired = () => {}
+    const canonicalLockRelease = new Promise<void>((resolvePromise) => {
+      releaseCanonicalLock = resolvePromise
+    })
+    const canonicalLockAcquired = new Promise<void>((resolvePromise) => {
+      markCanonicalLockAcquired = resolvePromise
+    })
+    const heldLock = withCanonicalConfigWriteLock(globalConfigPath, async () => {
+      markCanonicalLockAcquired()
+      await canonicalLockRelease
+    })
+    await canonicalLockAcquired
+
+    const consumeOutcome = manageCodexAccount(
+      createTestCtx(workspace, {
+        env: {
+          HOME: resolveTestMockHome(workspace, realHome),
+          __ONEWORKS_PROJECT_REAL_HOME__: realHome,
+          __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__: fakeCodexPath
+        },
+        configs: [staleConfig as any]
+      }),
+      {
+        action: 'consume-reset-credit',
+        account: 'work',
+        operationId: 'stale-reset-credit-request'
+      }
+    ).then(
+      () => ({ error: undefined }),
+      (error: unknown) => ({ error })
+    )
+
+    await writeFile(globalConfigPath, JSON.stringify(buildGlobalConfig(newAuthContent)))
+    releaseCanonicalLock()
+    await heldLock
+
+    const { error } = await consumeOutcome
+    expect(error).toBeInstanceOf(Error)
+    expect((error as Error).message).toContain('changed while this reset-credit request was waiting')
+    await expect(readFile(consumeMarkerPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('releases the canonical config lock when reset-credit RPC hangs', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-reset-credit-timeout-'))
+    const realHome = join(workspace, 'real-home')
+    const fakeCodexPath = join(workspace, 'fake-codex-app-server.mjs')
+    const consumeMarkerPath = join(workspace, 'consume.marker')
+    const globalConfigPath = join(realHome, '.oneworks', '.oo.config.json')
+    const authContent = '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_timeout"}}\n'
+    const globalConfig = {
+      adapters: {
+        codex: {
+          accounts: {
+            work: {
+              auth: {
+                type: 'codex-auth-json',
+                encoding: 'base64',
+                token: Buffer.from(authContent, 'utf8').toString('base64')
+              }
+            }
+          }
+        }
+      }
+    }
+    tempDirs.push(workspace)
+
+    await mkdir(join(realHome, '.oneworks'), { recursive: true })
+    await writeFile(globalConfigPath, JSON.stringify(globalConfig))
+    await writeFile(
+      fakeCodexPath,
+      `#!/usr/bin/env node
+import { writeFileSync } from 'node:fs'
+import readline from 'node:readline'
+
+const input = readline.createInterface({ input: process.stdin })
+input.on('line', (line) => {
+  const message = JSON.parse(line)
+  if (message.id == null) return
+
+  if (message.method === 'account/rateLimitResetCredit/consume') {
+    writeFileSync(${JSON.stringify(consumeMarkerPath)}, 'received')
+    return
+  }
+  process.stdout.write(JSON.stringify({
+    jsonrpc: '2.0',
+    id: message.id,
+    result: {}
+  }) + '\\n')
+})
+`
+    )
+    await chmod(fakeCodexPath, 0o755)
+
+    await expect(manageCodexAccount(
+      createTestCtx(workspace, {
+        env: {
+          HOME: resolveTestMockHome(workspace, realHome),
+          __ONEWORKS_PROJECT_REAL_HOME__: realHome,
+          __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__: fakeCodexPath,
+          __ONEWORKS_PROJECT_ADAPTER_CODEX_RESET_CREDIT_OPERATION_TIMEOUT_MS__: '1000'
+        },
+        configs: [globalConfig as any]
+      }),
+      {
+        action: 'consume-reset-credit',
+        account: 'work',
+        operationId: 'reset-credit-timeout'
+      }
+    )).rejects.toThrow('timed out after 1000ms')
+
+    await expect(readFile(consumeMarkerPath, 'utf8')).resolves.toBe('received')
+    await expect(withCanonicalConfigWriteLock(
+      globalConfigPath,
+      async () => 'released'
+    )).resolves.toBe('released')
+  })
+
+  it('does not restore removed inline auth from a stale refresh descriptor', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-stale-refresh-removed-auth-'))
+    const realHome = join(workspace, 'real-home')
+    const fakeCodexPath = join(workspace, 'fake-codex-app-server.mjs')
+    const globalConfigPath = join(realHome, '.oneworks', '.oo.config.json')
+    const oldAuthContent = '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_removed"}}\n'
+    const authDigest = createHash('sha256').update(oldAuthContent).digest('hex')
+    const staleConfig = {
+      adapters: {
+        codex: {
+          accounts: {
+            work: {
+              authDigest,
+              auth: {
+                type: 'codex-auth-json',
+                encoding: 'base64',
+                token: Buffer.from(oldAuthContent, 'utf8').toString('base64')
+              }
+            }
+          }
+        }
+      }
+    }
+    const currentConfig = {
+      adapters: {
+        codex: {
+          accounts: {
+            work: {
+              authDigest
+            }
+          }
+        }
+      }
+    }
+    tempDirs.push(workspace)
+
+    await mkdir(join(realHome, '.oneworks'), { recursive: true })
+    await writeFile(globalConfigPath, JSON.stringify(currentConfig))
+    await writeFile(
+      fakeCodexPath,
+      `#!/usr/bin/env node
+import readline from 'node:readline'
+
+const input = readline.createInterface({ input: process.stdin })
+input.on('line', (line) => {
+  const message = JSON.parse(line)
+  if (message.id == null) return
+
+  let result = {}
+  if (message.method === 'account/read') {
+    result = { account: { type: 'chatgpt', planType: 'pro' } }
+  } else if (message.method === 'account/rateLimits/read') {
+    result = {
+      rateLimits: {
+        limitId: 'codex',
+        primary: { usedPercent: 44, windowDurationMins: 10080 },
+        planType: 'pro'
+      }
+    }
+  }
+
+  process.stdout.write(JSON.stringify({
+    jsonrpc: '2.0',
+    id: message.id,
+    result
+  }) + '\\n')
+})
+`
+    )
+    await chmod(fakeCodexPath, 0o755)
+
+    await getCodexAccountDetail(
+      createTestCtx(workspace, {
+        env: {
+          HOME: resolveTestMockHome(workspace, realHome),
+          __ONEWORKS_PROJECT_REAL_HOME__: realHome,
+          __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__: fakeCodexPath
+        },
+        configs: [staleConfig as any]
+      }),
+      {
+        account: 'work',
+        refresh: true
+      }
+    )
+
+    const persistedConfig = JSON.parse(await readFile(globalConfigPath, 'utf8')) as any
+    const persistedAccount = persistedConfig.adapters.codex.accounts.work
+    expect(persistedAccount.auth).toBeUndefined()
+    expect(persistedAccount.authDigest).toBe(authDigest)
     expect(persistedAccount.quota).toBeUndefined()
   })
 

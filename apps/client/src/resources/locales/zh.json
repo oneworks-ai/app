@@ -2116,7 +2116,11 @@
       "daysHours": "剩余 {{days}} 天 {{hours}} 小时",
       "hours": "剩余 {{hours}} 小时",
       "expired": "已过期",
-      "noCredits": "暂无可用额度重置卡"
+      "noCredits": "暂无可用额度重置卡",
+      "refreshing": "正在刷新最新额度，完成前无法使用重置卡…",
+      "refreshFailed": "无法刷新最新额度，当前显示上一次获取的使用量。",
+      "stale": "尚未确认重置卡当前是否可用，当前显示上一次获取的使用量。",
+      "retryRefresh": "重试刷新额度"
     },
     "effortSelectPlaceholder": "推理强度",
     "effortSliderLabel": "推理强度：{{value}}",
@@ -3589,7 +3593,7 @@
         "confirmAction": "确认使用",
         "refreshFailed": "重置结果已确认，但暂时无法刷新最新额度。",
         "outcomes": {
-          "reset": "已使用重置卡并刷新额度",
+          "reset": "额度重置卡已使用。",
           "alreadyRedeemed": "这张重置卡已经使用过了",
           "nothingToReset": "当前没有需要重置的额度窗口",
           "noCredit": "当前没有可用的重置卡"

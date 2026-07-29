@@ -5,7 +5,17 @@ import { Drawer, Select as AntdSelect, Spin } from 'antd'
 import type { RefSelectProps, SelectProps } from 'antd'
 import type { BaseOptionType, DefaultOptionType } from 'antd/es/select'
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactElement, ReactNode, Ref } from 'react'
-import { forwardRef, isValidElement, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import {
+  forwardRef,
+  isValidElement,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState
+} from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { ControlTrigger } from '#~/components/control-trigger/ControlTrigger'
@@ -13,6 +23,7 @@ import { useResponsiveLayout } from '#~/hooks/use-responsive-layout'
 
 const DRAG_CLOSE_THRESHOLD = 72
 const SEARCH_OPTION_THRESHOLD = 8
+const useIsomorphicLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect
 const defaultSuffixIcon = (
   <span className='material-symbols-rounded oneworks-select__suffix-icon'>keyboard_arrow_down</span>
 )
@@ -52,9 +63,12 @@ export interface MobileAwareSelectControlTrigger {
   ariaLabel: string
   className?: string
   content?: ReactNode
+  ref?: Ref<HTMLButtonElement>
   wrapperClassName?: string
   stopPropagation?: boolean
 }
+
+export type MobileAwareSelectPopupCloseKey = number | string
 
 export type MobileAwareSelectProps<
   ValueType = unknown,
@@ -62,6 +76,8 @@ export type MobileAwareSelectProps<
 > = SelectProps<ValueType, OptionType> & {
   controlTrigger?: MobileAwareSelectControlTrigger
   mobileTitle?: ReactNode
+  onPopupCloseComplete?: (closeKey: MobileAwareSelectPopupCloseKey | undefined) => void
+  popupCloseKey?: MobileAwareSelectPopupCloseKey
 }
 
 const mergeClassNames = (...classNames: Array<false | null | string | undefined>) =>
@@ -218,7 +234,9 @@ function MobileAwareSelectInner<
   {
     controlTrigger,
     mobileTitle,
+    onPopupCloseComplete,
     options,
+    popupCloseKey,
     value,
     mode,
     disabled,
@@ -248,7 +266,11 @@ function MobileAwareSelectInner<
   const [open, setOpen] = useState(false)
   const [searchValue, setSearchValue] = useState('')
   const dragStateRef = useRef<DrawerDragState | null>(null)
+  const desktopPopupWasOpenRef = useRef(false)
+  const drawerOpenRef = useRef(false)
+  const focusAnimationFrameRef = useRef<number>()
   const internalSelectRef = useRef<RefSelectProps | null>(null)
+  const onPopupCloseCompleteRef = useRef(onPopupCloseComplete)
   const dragOffsetRef = useRef(0)
   const [dragOffset, setDragOffset] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
@@ -312,12 +334,37 @@ function MobileAwareSelectInner<
     }
   }, [ref])
 
+  const cancelPendingSelectFocus = useCallback(() => {
+    if (focusAnimationFrameRef.current == null) {
+      return
+    }
+    window.cancelAnimationFrame(focusAnimationFrameRef.current)
+    focusAnimationFrameRef.current = undefined
+  }, [])
+
   const setDrawerOpen = useCallback((nextOpen: boolean) => {
+    drawerOpenRef.current = nextOpen
+    if (!nextOpen) {
+      cancelPendingSelectFocus()
+    }
     if (controlledOpen == null) {
       setOpen(nextOpen)
     }
     onOpenChange?.(nextOpen)
-  }, [controlledOpen, onOpenChange])
+  }, [cancelPendingSelectFocus, controlledOpen, onOpenChange])
+
+  useIsomorphicLayoutEffect(() => {
+    drawerOpenRef.current = drawerOpen
+    if (!drawerOpen) {
+      cancelPendingSelectFocus()
+    }
+  }, [cancelPendingSelectFocus, drawerOpen])
+
+  useEffect(() => cancelPendingSelectFocus, [cancelPendingSelectFocus])
+
+  useEffect(() => {
+    onPopupCloseCompleteRef.current = onPopupCloseComplete
+  }, [onPopupCloseComplete])
 
   const updateSearchValue = useCallback((nextValue: string) => {
     if (controlledSearchValue == null) {
@@ -364,6 +411,80 @@ function MobileAwareSelectInner<
       window.removeEventListener('pointerdown', handleOutsidePointerDown, true)
     }
   }, [drawerOpen, isMobileSelect, selectInstanceClass, setDrawerOpen])
+
+  useEffect(() => {
+    if (isMobileSelect) {
+      desktopPopupWasOpenRef.current = false
+      return undefined
+    }
+    if (drawerOpen) {
+      desktopPopupWasOpenRef.current = true
+      return undefined
+    }
+    if (!desktopPopupWasOpenRef.current) {
+      return undefined
+    }
+
+    desktopPopupWasOpenRef.current = false
+    if (onPopupCloseCompleteRef.current == null || typeof document === 'undefined') {
+      return undefined
+    }
+
+    const closeKey = popupCloseKey
+    const popupSelector = `.oneworks-select-popup.${selectInstanceClass}`
+    const selectRoot = document.querySelector<HTMLElement>(`.oneworks-select.${selectInstanceClass}`)
+    const queryRoot = selectRoot?.getRootNode() as ParentNode | undefined
+    const findPopup = () => (
+      queryRoot?.querySelector<HTMLElement>(popupSelector) ??
+        document.querySelector<HTMLElement>(popupSelector)
+    )
+    const isHidden = (popup: HTMLElement) => (
+      Array.from(popup.classList).some(className => className.endsWith('-select-dropdown-hidden')) ||
+      popup.hidden ||
+      popup.getAttribute('aria-hidden') === 'true' ||
+      popup.style.display === 'none'
+    )
+    let completed = false
+    let observer: MutationObserver | undefined
+    const completeWhenHidden = () => {
+      if (completed) {
+        return
+      }
+      const popup = findPopup()
+      if (popup != null && popup.isConnected && !isHidden(popup)) {
+        return
+      }
+
+      completed = true
+      observer?.disconnect()
+      onPopupCloseCompleteRef.current?.(closeKey)
+    }
+
+    const popup = findPopup()
+    completeWhenHidden()
+    if (completed || typeof MutationObserver === 'undefined') {
+      return undefined
+    }
+
+    observer = new MutationObserver(completeWhenHidden)
+    observer.observe(popup?.parentNode ?? queryRoot ?? document.body, {
+      attributeFilter: ['aria-hidden', 'class', 'hidden', 'style'],
+      attributes: true,
+      childList: true,
+      subtree: true
+    })
+    completeWhenHidden()
+
+    return () => {
+      completed = true
+      observer?.disconnect()
+    }
+  }, [
+    drawerOpen,
+    isMobileSelect,
+    popupCloseKey,
+    selectInstanceClass
+  ])
 
   const updateDragOffset = useCallback((clientY: number) => {
     const dragState = dragStateRef.current
@@ -468,7 +589,13 @@ function MobileAwareSelectInner<
   const setOpenFromControlTrigger = (nextOpen: boolean) => {
     setDrawerOpen(nextOpen)
     if (nextOpen) {
-      window.requestAnimationFrame(() => internalSelectRef.current?.focus())
+      cancelPendingSelectFocus()
+      focusAnimationFrameRef.current = window.requestAnimationFrame(() => {
+        focusAnimationFrameRef.current = undefined
+        if (drawerOpenRef.current) {
+          internalSelectRef.current?.focus()
+        }
+      })
     }
   }
 
@@ -476,9 +603,11 @@ function MobileAwareSelectInner<
     ariaLabel,
     className,
     content,
+    ref: controlTriggerRef,
     stopPropagation
   }: MobileAwareSelectControlTrigger) => (
     <ControlTrigger
+      ref={controlTriggerRef}
       variant={content == null ? 'overlay' : 'content'}
       className={className}
       aria-label={ariaLabel}

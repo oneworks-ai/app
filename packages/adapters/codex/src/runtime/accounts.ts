@@ -7,7 +7,7 @@ import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
 
-import { updateConfigFile } from '@oneworks/config'
+import { updateConfigFile, withCanonicalConfigWriteLock } from '@oneworks/config'
 import { resolveMockHome } from '@oneworks/hooks'
 import { bridgeRealHomeToMockHome } from '@oneworks/register/mock-home-bridge'
 import type {
@@ -156,6 +156,8 @@ const CODEX_ACCOUNT_DETAIL_ACTIONS: AdapterAccountActionDescriptor[] = [
 ]
 
 const CODEX_QUOTA_CACHE_TTL_MS = 5 * 60 * 1000
+const CODEX_RESET_CREDIT_OPERATION_TIMEOUT_MS = 20_000
+const CODEX_RESET_CREDIT_OPERATION_TIMEOUT_ENV = '__ONEWORKS_PROJECT_ADAPTER_CODEX_RESET_CREDIT_OPERATION_TIMEOUT_MS__'
 const CODEX_INLINE_AUTH_TYPE = 'codex-auth-json'
 const CODEX_INLINE_AUTH_ENCODING = 'base64'
 const codexAccountQuotaCacheTails = new Map<string, Promise<void>>()
@@ -379,6 +381,13 @@ const parseFiniteNumber = (value: unknown) => {
   }
 
   return undefined
+}
+
+const resolveCodexResetCreditOperationTimeoutMs = (env: AdapterCtx['env']) => {
+  const configuredTimeout = parseFiniteNumber(env[CODEX_RESET_CREDIT_OPERATION_TIMEOUT_ENV])
+  return configuredTimeout != null && configuredTimeout > 0
+    ? Math.floor(configuredTimeout)
+    : CODEX_RESET_CREDIT_OPERATION_TIMEOUT_MS
 }
 
 const formatRateLimitWindow = (minutes: number | undefined) => {
@@ -1177,6 +1186,39 @@ const updateCodexGlobalAdapterConfig = async (
   })
 }
 
+const assertCodexGlobalCredentialIsCurrent = async (params: {
+  descriptor: CodexAccountDescriptor
+  targetPath: string
+}) => {
+  const config = JSON.parse(await readFile(params.targetPath, 'utf8')) as unknown
+  const adapters = isRecord(config) && isRecord(config.adapters) ? config.adapters : undefined
+  const codexConfig = isRecord(adapters?.codex) ? adapters.codex : undefined
+  const accounts = isRecord(codexConfig?.accounts) ? codexConfig.accounts : undefined
+  const configuredAccount = isRecord(accounts?.[params.descriptor.key])
+    ? accounts[params.descriptor.key] as CodexConfiguredAccount
+    : undefined
+  const currentAuthContent = decodeCodexInlineAuthContent(configuredAccount?.auth)
+  const descriptorAuthDigest = normalizeNonEmptyString(params.descriptor.metadata?.authDigest) ??
+    (
+      params.descriptor.authContent == null
+        ? undefined
+        : createHash('sha256').update(params.descriptor.authContent).digest('hex')
+    )
+  const currentAuthDigest = currentAuthContent == null
+    ? undefined
+    : createHash('sha256').update(currentAuthContent).digest('hex')
+
+  if (
+    currentAuthDigest == null ||
+    descriptorAuthDigest == null ||
+    currentAuthDigest !== descriptorAuthDigest
+  ) {
+    throw new Error(
+      `Codex account "${params.descriptor.key}" changed while this reset-credit request was waiting. Retry with the current account.`
+    )
+  }
+}
+
 const buildMetadataFromConfiguredAccount = (
   key: string,
   configuredAccount: CodexConfiguredAccount,
@@ -1322,7 +1364,7 @@ const updateCodexGlobalAccountMetadata = async (
       )
     const existingAuthContent = decodeCodexInlineAuthContent(existing.auth)
     const existingAuthDigest = existingAuthContent == null
-      ? normalizeNonEmptyString(existing.authDigest)
+      ? undefined
       : createHash('sha256').update(existingAuthContent).digest('hex')
     if (
       params.descriptor.sourceKind === 'global-config' &&
@@ -1591,8 +1633,9 @@ const probeCodexAccount = async (params: {
     creditId?: string
     idempotencyKey: string
   }
+  timeoutMs?: number
 }): Promise<CodexAccountProbe> => {
-  const { ctx, homeDir, authFilePath, refresh, fetchProfile, logKey, consumeResetCredit } = params
+  const { ctx, homeDir, authFilePath, refresh, fetchProfile, logKey, consumeResetCredit, timeoutMs } = params
   const logger = resolveProbeLogger(ctx, logKey)
   const binaryPath = resolveCodexBinaryPath(ctx.env, ctx.cwd)
   const spawnEnv = buildSpawnEnv(ctx)
@@ -1614,6 +1657,15 @@ const probeCodexAccount = async (params: {
   })
   const rpc = new CodexRpcClient(proc, logger)
   let didExit = false
+  const timeout = timeoutMs == null
+    ? undefined
+    : setTimeout(() => {
+      rpc.destroy(`codex account probe timed out after ${timeoutMs}ms`)
+      if (!didExit) {
+        proc.kill('SIGKILL')
+      }
+    }, timeoutMs)
+  timeout?.unref()
 
   proc.stderr?.on('data', (chunk) => {
     logger.debug('[codex account] stderr', { chunk: String(chunk) })
@@ -1870,6 +1922,7 @@ const probeCodexAccount = async (params: {
         }
     }
   } finally {
+    clearTimeout(timeout)
     rpc.destroy('codex account probe finished')
     if (!didExit) {
       proc.kill()
@@ -3091,18 +3144,29 @@ export const manageCodexAccount = async (
         throw new Error(`Codex account "${normalizedAccount}" has no usable authentication source.`)
       }
 
-      const liveProbe = await probeCodexAccount({
-        ctx,
-        homeDir: authSource.homeDir,
-        authFilePath: authSource.authFilePath,
-        refresh: true,
-        fetchProfile: false,
-        logKey: `consume-reset-credit-${descriptor.key}`,
-        consumeResetCredit: {
-          creditId: normalizeNonEmptyString(options.creditId),
-          idempotencyKey: operationId
-        }
-      })
+      const consume = () =>
+        probeCodexAccount({
+          ctx,
+          homeDir: authSource.homeDir,
+          authFilePath: authSource.authFilePath,
+          refresh: true,
+          fetchProfile: false,
+          logKey: `consume-reset-credit-${descriptor.key}`,
+          consumeResetCredit: {
+            creditId: normalizeNonEmptyString(options.creditId),
+            idempotencyKey: operationId
+          },
+          timeoutMs: resolveCodexResetCreditOperationTimeoutMs(ctx.env)
+        })
+      const liveProbe = descriptor.sourceKind === 'global-config'
+        ? await withCanonicalConfigWriteLock(
+          resolveCodexGlobalConfigPath(ctx),
+          async (targetPath) => {
+            await assertCodexGlobalCredentialIsCurrent({ descriptor, targetPath })
+            return consume()
+          }
+        )
+        : await consume()
       const outcome = liveProbe.resetCreditOutcome
       if (outcome == null) {
         throw new Error('Codex returned an unknown reset credit outcome.')

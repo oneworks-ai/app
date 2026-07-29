@@ -1,4 +1,4 @@
-import type { AdapterAccountInfo, AdapterAccountQuotaMetric } from '@oneworks/types'
+import type { AdapterAccountInfo, AdapterAccountQuotaMetric, AdapterAccountRateLimitResetCredit } from '@oneworks/types'
 
 export const ACCOUNT_QUOTA_CACHE_TTL_MS = 5 * 60 * 1000
 
@@ -14,6 +14,19 @@ export interface AccountQuotaWindow {
 const normalizeOptionalText = (value: string | undefined) => {
   const normalized = value?.trim()
   return normalized == null || normalized === '' ? undefined : normalized
+}
+
+const TERMINAL_RESET_CREDIT_STATUSES = new Set(['expired', 'redeemed', 'used'])
+
+export const isUsableAdapterResetCredit = (
+  credit: AdapterAccountRateLimitResetCredit,
+  nowSeconds = Date.now() / 1000
+) => {
+  const status = normalizeOptionalText(credit.status)?.toLowerCase()
+  if (status != null && TERMINAL_RESET_CREDIT_STATUSES.has(status)) {
+    return false
+  }
+  return credit.expiresAt == null || credit.expiresAt > nowSeconds
 }
 
 export const parseQuotaPercent = (value: string | undefined) => {

@@ -2115,7 +2115,11 @@
       "daysHours": "{{days}}d {{hours}}h remaining",
       "hours": "{{hours}}h remaining",
       "expired": "Expired",
-      "noCredits": "No reset credits available"
+      "noCredits": "No reset credits available",
+      "refreshing": "Refreshing the latest quota before reset credits can be used…",
+      "refreshFailed": "The latest quota could not be refreshed. Showing the last known usage.",
+      "stale": "Reset-credit eligibility has not been confirmed. Showing the last known usage.",
+      "retryRefresh": "Retry quota refresh"
     },
     "effortSelectPlaceholder": "Effort",
     "effortSliderLabel": "Reasoning effort: {{value}}",
@@ -3588,7 +3592,7 @@
         "confirmAction": "Use credit",
         "refreshFailed": "The reset result is confirmed, but the latest quota could not be refreshed.",
         "outcomes": {
-          "reset": "Reset credit used and quota refreshed",
+          "reset": "Reset credit used.",
           "alreadyRedeemed": "This reset credit was already redeemed",
           "nothingToReset": "No eligible rate-limit window needs resetting",
           "noCredit": "No reset credit is available"
