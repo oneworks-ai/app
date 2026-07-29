@@ -120,8 +120,7 @@
   line-height: 1.4;
 }
 
-.adapter-account-manager__metric,
-.adapter-account-manager__fact {
+.adapter-account-manager__metric {
   border: 1px solid var(--border-color);
   border-radius: 12px;
   background: var(--bg-elevated);
@@ -167,13 +166,12 @@
 
 .adapter-account-manager__overview-icon .material-symbols-rounded,
 .adapter-account-manager__overview-arrow,
-.adapter-account-manager__fact-icon {
+.adapter-account-manager__metadata-icon {
   font-size: 18px;
 }
 
 .adapter-account-manager__overview-body,
-.adapter-account-manager__hero-body,
-.adapter-account-manager__fact-body {
+.adapter-account-manager__hero-body {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
@@ -195,7 +193,8 @@
 .adapter-account-manager__detail-subtitle,
 .adapter-account-manager__text,
 .adapter-account-manager__muted,
-.adapter-account-manager__fact-label,
+.adapter-account-manager__metadata-label,
+.adapter-account-manager__metadata-description,
 .adapter-account-manager__metric-label,
 .adapter-account-manager__metric-description {
   color: var(--text-color-secondary);
@@ -336,20 +335,48 @@
   color: var(--primary-color);
 }
 
-.adapter-account-manager__facts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 10px;
-}
-
-.adapter-account-manager__fact {
+.adapter-account-manager__metadata {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  min-width: 0;
+  margin: 0;
 }
 
-.adapter-account-manager__fact-value,
+.adapter-account-manager__metadata-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.adapter-account-manager__metadata-icon {
+  flex: 0 0 auto;
+  color: var(--text-color-secondary);
+}
+
+.adapter-account-manager__metadata-label,
+.adapter-account-manager__metadata-value {
+  margin: 0;
+}
+
+.adapter-account-manager__metadata-value {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 6px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.adapter-account-manager__metadata-description::before {
+  content: '·';
+  margin-inline-end: 6px;
+}
+
 .adapter-account-manager__metric-value {
   font-size: 13px;
   font-weight: 600;
@@ -372,6 +399,106 @@
   flex-direction: column;
   gap: 6px;
   padding: 12px;
+}
+
+.adapter-account-manager__reset-credits {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.adapter-account-manager__reset-credits-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.adapter-account-manager__reset-credit-list {
+  width: 100%;
+}
+
+.adapter-account-manager__reset-credit-list .config-view__field-row {
+  flex-direction: row;
+  align-items: center;
+}
+
+.adapter-account-manager__reset-credit-list .config-view__field-meta {
+  flex: 1 1 auto;
+  align-items: flex-start;
+}
+
+.adapter-account-manager__reset-credit-list .config-view__field-desc {
+  overflow: visible;
+  white-space: normal;
+  text-overflow: clip;
+}
+
+.adapter-account-manager__reset-credit-list .config-view__field-control {
+  flex: 0 0 auto;
+  width: auto;
+  max-width: none;
+}
+
+.adapter-account-manager__reset-credit-details {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  gap: 4px 28px;
+  min-width: 0;
+}
+
+.adapter-account-manager__reset-credit-detail {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+.adapter-account-manager__reset-credit-detail-label {
+  color: var(--placeholder-color);
+}
+
+.adapter-account-manager__reset-credit-detail-value {
+  color: var(--sub-text-color);
+  font-variant-numeric: tabular-nums;
+}
+
+.adapter-account-manager__reset-credit-detail-remaining {
+  color: var(--text-color);
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.adapter-account-manager__reset-credit-list
+  .config-view__field-control
+  > .adapter-account-manager__reset-credit-action-wrap {
+  display: inline-flex;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+}
+
+.adapter-account-manager__reset-credit-action.oneworks-inline-action-button.ant-btn {
+  justify-content: center;
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 5px !important;
+}
+
+@media (max-width: 960px) {
+  .adapter-account-manager__reset-credit-details {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .adapter-account-manager__reset-credit-details {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .adapter-account-manager__editor {

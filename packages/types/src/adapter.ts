@@ -126,9 +126,26 @@ export interface AdapterAccountQuotaMetric {
   primary?: boolean
 }
 
+export interface AdapterAccountRateLimitResetCredit {
+  id: string
+  resetType?: string
+  status?: string
+  title?: string
+  description?: string
+  grantedAt?: number
+  expiresAt?: number
+}
+
+export interface AdapterAccountRateLimitResetCredits {
+  availableCount: number
+  canConsume?: boolean
+  credits?: AdapterAccountRateLimitResetCredit[]
+}
+
 export interface AdapterAccountQuotaInfo {
   summary?: string
   metrics?: AdapterAccountQuotaMetric[]
+  rateLimitResetCredits?: AdapterAccountRateLimitResetCredits
   updatedAt?: number
 }
 
@@ -196,9 +213,10 @@ export interface AdapterManageAccountProgressEvent {
 }
 
 export interface AdapterManageAccountOptions {
-  action: 'add' | 'refresh' | 'remove'
+  action: 'add' | 'refresh' | 'remove' | 'consume-reset-credit'
   model?: string
   account?: string
+  creditId?: string
   refresh?: boolean
   onProgress?: (event: AdapterManageAccountProgressEvent) => void
   signal?: AbortSignal
@@ -207,6 +225,7 @@ export interface AdapterManageAccountOptions {
 export interface AdapterManageAccountResult {
   accountKey?: string
   message?: string
+  outcome?: string
   account?: AdapterAccountDetail
   artifacts?: AdapterAccountCredentialArtifact[]
   removeStoredAccount?: boolean

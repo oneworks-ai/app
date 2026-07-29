@@ -168,6 +168,56 @@ describe('adapter routes', () => {
     expect(payload.account?.quota?.summary).toBe('Plan: Pro')
   })
 
+  it('forwards reset credit consumption to the adapter account manager', async () => {
+    const manageAccount = vi.fn().mockResolvedValue({
+      accountKey: 'work',
+      outcome: 'reset',
+      message: 'Reset credit used.'
+    })
+    mocks.loadAdapter.mockResolvedValue({
+      manageAccount,
+      getAccountDetail: vi.fn().mockResolvedValue({
+        account: {
+          key: 'work',
+          title: 'Work',
+          status: 'ready',
+          quota: {
+            rateLimitResetCredits: {
+              availableCount: 1,
+              canConsume: true
+            }
+          }
+        }
+      })
+    })
+
+    const response = await fetch(`${baseUrl}/api/adapters/codex/accounts/actions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'consume-reset-credit',
+        account: 'work',
+        creditId: 'credit-a'
+      })
+    })
+    const payload = await response.json() as {
+      outcome?: string
+      account?: { quota?: { rateLimitResetCredits?: { availableCount?: number } } }
+    }
+
+    expect(response.status).toBe(200)
+    expect(payload.outcome).toBe('reset')
+    expect(payload.account?.quota?.rateLimitResetCredits?.availableCount).toBe(1)
+    expect(manageAccount).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        action: 'consume-reset-credit',
+        account: 'work',
+        creditId: 'credit-a'
+      })
+    )
+  })
+
   it('returns empty accounts when the adapter package has not been cached yet', async () => {
     const error = new Error(
       "Cannot find module '@oneworks/adapter-codex'\nRequire stack:\n- /workspace/__oneworks_adapter_loader__.cjs"
