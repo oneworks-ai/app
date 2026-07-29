@@ -171,7 +171,7 @@ const resolveCanonicalWriteTarget = async (configPath: string) => {
   }
 }
 
-const withCanonicalConfigWriteLock = async <T>(
+export const withCanonicalConfigWriteLock = async <T>(
   configPath: string,
   callback: (targetPath: string) => Promise<T>
 ) => {

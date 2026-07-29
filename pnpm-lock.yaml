@@ -43,7 +43,7 @@ importers:
     devDependencies:
       '@antfu/eslint-config':
         specifier: ^6.0.0
-        version: 6.0.0(@vue/compiler-sfc@3.5.22)(eslint@9.38.0(jiti@2.6.1))(typescript@5.9.3)(vitest@2.1.9(@types/node@22.18.12)(sass@1.97.2)(terser@5.46.1))
+        version: 6.0.0(@vue/compiler-sfc@3.5.22)(eslint@9.38.0(jiti@2.6.1))(typescript@5.9.3)(vitest@2.1.9(@types/node@22.18.12)(happy-dom@20.11.1)(sass@1.97.2)(terser@5.46.1))
       '@mizchi/lsmcp':
         specifier: ^0.10.0
         version: 0.10.0
@@ -74,9 +74,6 @@ importers:
       '@oneworks/plugin-browser-driver':
         specifier: workspace:*
         version: link:packages/plugins/browser-driver
-      '@oneworks/plugin-external-browser-driver':
-        specifier: workspace:*
-        version: link:packages/plugins/external-browser-driver
       '@oneworks/plugin-cua-driver':
         specifier: workspace:*
         version: link:packages/plugins/cua-driver
@@ -86,6 +83,9 @@ importers:
       '@oneworks/plugin-demo-extension':
         specifier: workspace:*
         version: link:packages/plugins/demo-extension
+      '@oneworks/plugin-external-browser-driver':
+        specifier: workspace:*
+        version: link:packages/plugins/external-browser-driver
       '@oneworks/plugin-logger':
         specifier: workspace:*
         version: link:packages/plugins/logger
@@ -133,7 +133,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^2.0.5
-        version: 2.1.9(@types/node@22.18.12)(sass@1.97.2)(terser@5.46.1)
+        version: 2.1.9(@types/node@22.18.12)(happy-dom@20.11.1)(sass@1.97.2)(terser@5.46.1)
 
   apps/android: {}
 
@@ -315,6 +315,9 @@ importers:
       devicon:
         specifier: ^2.17.0
         version: 2.17.0
+      happy-dom:
+        specifier: 20.11.1
+        version: 20.11.1
       i18next:
         specifier: ^25.7.4
         version: 25.7.4(typescript@5.9.3)
@@ -368,7 +371,7 @@ importers:
         version: 5.4.21(@types/node@24.12.2)(sass@1.97.2)(terser@5.46.1)
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/debug@4.1.12)(@types/node@24.12.2)(sass@1.97.2)(terser@5.46.1)
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@24.12.2)(happy-dom@20.11.1)(sass@1.97.2)(terser@5.46.1)
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -411,12 +414,12 @@ importers:
       '@oneworks/plugin-browser-driver':
         specifier: workspace:*
         version: link:../../packages/plugins/browser-driver
-      '@oneworks/plugin-external-browser-driver':
-        specifier: workspace:*
-        version: link:../../packages/plugins/external-browser-driver
       '@oneworks/plugin-cua-driver':
         specifier: workspace:*
         version: link:../../packages/plugins/cua-driver
+      '@oneworks/plugin-external-browser-driver':
+        specifier: workspace:*
+        version: link:../../packages/plugins/external-browser-driver
       '@oneworks/plugin-logger':
         specifier: workspace:*
         version: link:../../packages/plugins/logger
@@ -1108,22 +1111,6 @@ importers:
         specifier: workspace:*
         version: link:../../types
 
-  packages/plugins/external-browser-driver:
-    dependencies:
-      '@oneworks/cursor':
-        specifier: workspace:*
-        version: link:../../cursor
-      '@oneworks/plugin-browser-driver':
-        specifier: workspace:*
-        version: link:../browser-driver
-    devDependencies:
-      fflate:
-        specifier: ^0.8.2
-        version: 0.8.3
-      vite:
-        specifier: ^5.4.8
-        version: 5.4.21(@types/node@24.12.2)(sass@1.97.2)(terser@5.46.1)
-
   packages/plugins/cli-skills: {}
 
   packages/plugins/cua-driver:
@@ -1151,6 +1138,22 @@ importers:
 
   packages/plugins/demo-extension:
     devDependencies:
+      vite:
+        specifier: ^5.4.8
+        version: 5.4.21(@types/node@24.12.2)(sass@1.97.2)(terser@5.46.1)
+
+  packages/plugins/external-browser-driver:
+    dependencies:
+      '@oneworks/cursor':
+        specifier: workspace:*
+        version: link:../../cursor
+      '@oneworks/plugin-browser-driver':
+        specifier: workspace:*
+        version: link:../browser-driver
+    devDependencies:
+      fflate:
+        specifier: ^0.8.2
+        version: 0.8.3
       vite:
         specifier: ^5.4.8
         version: 5.4.21(@types/node@24.12.2)(sass@1.97.2)(terser@5.46.1)
@@ -3328,6 +3331,9 @@ packages:
   '@types/vscode@1.95.0':
     resolution: {integrity: sha512-0LBD8TEiNbet3NvWsmn59zLzOFu/txSlGxnv5yAFHCrhG9WvAnR3IvfHzMOs2aeWqgvNjq9pO99IUw8d3n+unw==}
 
+  '@types/whatwg-mimetype@3.0.2':
+    resolution: {integrity: sha512-c2AKvDT8ToxLIOUlN51gTiHXflsfIFisS4pO7pDPoKouJCESkhZnEy623gwP9laCy5lnLDAw1vAzu2vM2YLOrA==}
+
   '@types/ws@8.18.1':
     resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
 
@@ -3861,6 +3867,10 @@ packages:
 
   buffer-from@1.1.2:
     resolution: {integrity: sha512-E+XQCRwSbaaiChtv6k6Dwgc+bx+Bs6vuKJHHl5kox/BaKbhiXzqQOwK4cO22yElGp2OCmjwVhT3HmxgyPGnJfQ==}
+
+  buffer-image-size@0.6.4:
+    resolution: {integrity: sha512-nEh+kZOPY1w+gcCMobZ6ETUp9WfibndnosbpwB1iJk/8Gt5ZF2bhS6+B6bPYz424KtwsR6Rflc3tCz1/ghX2dQ==}
+    engines: {node: '>=4.0'}
 
   buffer@5.7.1:
     resolution: {integrity: sha512-EHcyIPBQ4BSGlvjB16k5KgAJ27CIsHY/2JBmCRReo48y9rQ3MaUzWX3KVlBa4U7MyX02HdVj0K7C3WaB3ju7FQ==}
@@ -5276,6 +5286,10 @@ packages:
     resolution: {integrity: sha512-4E71E0rpOaQuJR2A3xDZ+GM1HyWYv1clR58tC8emQNeQe3RH7MAzSbat+V0wG78LQBo6m6bzSG/L4pBuCsgnUQ==}
     engines: {node: '>=0.4.7'}
     hasBin: true
+
+  happy-dom@20.11.1:
+    resolution: {integrity: sha512-XSt8tMzbW9ymE7687xztkO1ckR7qJNQ3LywY9vlYGhGi3zXrGBHuUo2Cl1ztZaICW+1eAGdkLbj6iwVqDT33kg==}
+    engines: {node: '>=20.0.0'}
 
   harfbuzzjs@0.10.3:
     resolution: {integrity: sha512-GJnLUrgLMadlMYrBGEXwYEimObbysy3prWT4HyPpFQERvgTU/OZ+ReUlEPOum6w4RBtFXzXiCCmECOr4sz3qwQ==}
@@ -8183,6 +8197,10 @@ packages:
     engines: {node: '>=18'}
     deprecated: Use @exodus/bytes instead for a more spec-conformant and faster implementation
 
+  whatwg-mimetype@3.0.0:
+    resolution: {integrity: sha512-nt+N2dzIutVRxARx1nghPKGv1xHikU7HKdfafKkLNLindmPU/ch3U31NOCGGA/dmPcmb1VlofO0vnKAcsm0o/Q==}
+    engines: {node: '>=12'}
+
   whatwg-mimetype@4.0.0:
     resolution: {integrity: sha512-QaKxh0eNIi2mE9p2vEdzfagOKHCcj1pJ56EEHGQOVxp8r9/iszLUUV7v89x9O1p/T+NlTM5W7jW6+cz4Fq1YVg==}
     engines: {node: '>=18'}
@@ -8234,6 +8252,18 @@ packages:
 
   ws@8.19.0:
     resolution: {integrity: sha512-blAT2mjOEIi0ZzruJfIhb3nps74PRWTCz1IjglWEEpQl5XS/UNama6u2/rjFkDDouqr4L67ry+1aGIALViWjDg==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+
+  ws@8.21.1:
+    resolution: {integrity: sha512-+0NTnW77fFN/DjQi6k/Sq/Yvk4Sgajw7urW8V+asjXnRgDs9gyGkdb7EzgfhA4goXsRIZKE28fzIXBHEzhuiWw==}
     engines: {node: '>=10.0.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -8387,7 +8417,7 @@ snapshots:
       resize-observer-polyfill: 1.5.1
       throttle-debounce: 5.0.2
 
-  '@antfu/eslint-config@6.0.0(@vue/compiler-sfc@3.5.22)(eslint@9.38.0(jiti@2.6.1))(typescript@5.9.3)(vitest@2.1.9(@types/node@22.18.12)(sass@1.97.2)(terser@5.46.1))':
+  '@antfu/eslint-config@6.0.0(@vue/compiler-sfc@3.5.22)(eslint@9.38.0(jiti@2.6.1))(typescript@5.9.3)(vitest@2.1.9(@types/node@22.18.12)(happy-dom@20.11.1)(sass@1.97.2)(terser@5.46.1))':
     dependencies:
       '@antfu/install-pkg': 1.1.0
       '@clack/prompts': 0.11.0
@@ -8396,7 +8426,7 @@ snapshots:
       '@stylistic/eslint-plugin': 5.5.0(eslint@9.38.0(jiti@2.6.1))
       '@typescript-eslint/eslint-plugin': 8.46.2(@typescript-eslint/parser@8.46.2(eslint@9.38.0(jiti@2.6.1))(typescript@5.9.3))(eslint@9.38.0(jiti@2.6.1))(typescript@5.9.3)
       '@typescript-eslint/parser': 8.46.2(eslint@9.38.0(jiti@2.6.1))(typescript@5.9.3)
-      '@vitest/eslint-plugin': 1.3.23(eslint@9.38.0(jiti@2.6.1))(typescript@5.9.3)(vitest@2.1.9(@types/node@22.18.12)(sass@1.97.2)(terser@5.46.1))
+      '@vitest/eslint-plugin': 1.3.23(eslint@9.38.0(jiti@2.6.1))(typescript@5.9.3)(vitest@2.1.9(@types/node@22.18.12)(happy-dom@20.11.1)(sass@1.97.2)(terser@5.46.1))
       ansis: 4.2.0
       cac: 6.7.14
       eslint: 9.38.0(jiti@2.6.1)
@@ -10170,7 +10200,7 @@ snapshots:
 
   '@types/accepts@1.3.7':
     dependencies:
-      '@types/node': 22.18.12
+      '@types/node': 22.19.15
 
   '@types/babel__core@7.20.5':
     dependencies:
@@ -10196,7 +10226,7 @@ snapshots:
   '@types/body-parser@1.19.6':
     dependencies:
       '@types/connect': 3.4.38
-      '@types/node': 22.18.12
+      '@types/node': 22.19.15
 
   '@types/cacache@20.0.1':
     dependencies:
@@ -10217,7 +10247,7 @@ snapshots:
 
   '@types/connect@3.4.38':
     dependencies:
-      '@types/node': 22.18.12
+      '@types/node': 22.19.15
 
   '@types/content-disposition@0.5.9': {}
 
@@ -10226,7 +10256,7 @@ snapshots:
       '@types/connect': 3.4.38
       '@types/express': 5.0.6
       '@types/keygrip': 1.0.6
-      '@types/node': 22.18.12
+      '@types/node': 22.19.15
 
   '@types/d3-scale-chromatic@3.1.0': {}
 
@@ -10250,7 +10280,7 @@ snapshots:
 
   '@types/express-serve-static-core@5.1.1':
     dependencies:
-      '@types/node': 22.18.12
+      '@types/node': 22.19.15
       '@types/qs': 6.14.0
       '@types/range-parser': 1.2.7
       '@types/send': 1.2.1
@@ -10411,12 +10441,12 @@ snapshots:
 
   '@types/send@1.2.1':
     dependencies:
-      '@types/node': 22.18.12
+      '@types/node': 22.19.15
 
   '@types/serve-static@2.2.0':
     dependencies:
       '@types/http-errors': 2.0.5
-      '@types/node': 22.18.12
+      '@types/node': 22.19.15
 
   '@types/ssri@7.1.5':
     dependencies:
@@ -10435,6 +10465,8 @@ snapshots:
     optional: true
 
   '@types/vscode@1.95.0': {}
+
+  '@types/whatwg-mimetype@3.0.2': {}
 
   '@types/ws@8.18.1':
     dependencies:
@@ -10591,14 +10623,14 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@vitest/eslint-plugin@1.3.23(eslint@9.38.0(jiti@2.6.1))(typescript@5.9.3)(vitest@2.1.9(@types/node@22.18.12)(sass@1.97.2)(terser@5.46.1))':
+  '@vitest/eslint-plugin@1.3.23(eslint@9.38.0(jiti@2.6.1))(typescript@5.9.3)(vitest@2.1.9(@types/node@22.18.12)(happy-dom@20.11.1)(sass@1.97.2)(terser@5.46.1))':
     dependencies:
       '@typescript-eslint/scope-manager': 8.46.2
       '@typescript-eslint/utils': 8.46.2(eslint@9.38.0(jiti@2.6.1))(typescript@5.9.3)
       eslint: 9.38.0(jiti@2.6.1)
     optionalDependencies:
       typescript: 5.9.3
-      vitest: 2.1.9(@types/node@22.18.12)(sass@1.97.2)(terser@5.46.1)
+      vitest: 2.1.9(@types/node@22.18.12)(happy-dom@20.11.1)(sass@1.97.2)(terser@5.46.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -11169,6 +11201,10 @@ snapshots:
   buffer-equal-constant-time@1.0.1: {}
 
   buffer-from@1.1.2: {}
+
+  buffer-image-size@0.6.4:
+    dependencies:
+      '@types/node': 22.19.15
 
   buffer@5.7.1:
     dependencies:
@@ -12894,6 +12930,19 @@ snapshots:
       wordwrap: 1.0.0
     optionalDependencies:
       uglify-js: 3.19.3
+
+  happy-dom@20.11.1:
+    dependencies:
+      '@types/node': 22.19.15
+      '@types/whatwg-mimetype': 3.0.2
+      '@types/ws': 8.18.1
+      buffer-image-size: 0.6.4
+      entities: 7.0.1
+      whatwg-mimetype: 3.0.0
+      ws: 8.21.1
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
 
   harfbuzzjs@0.10.3: {}
 
@@ -14853,7 +14902,7 @@ snapshots:
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.0
-      '@types/node': 22.18.12
+      '@types/node': 22.19.15
       long: 5.3.2
 
   proxy-addr@2.0.7:
@@ -16296,7 +16345,7 @@ snapshots:
       sass: 1.97.2
       terser: 5.46.1
 
-  vitest@2.1.9(@types/node@22.18.12)(sass@1.97.2)(terser@5.46.1):
+  vitest@2.1.9(@types/node@22.18.12)(happy-dom@20.11.1)(sass@1.97.2)(terser@5.46.1):
     dependencies:
       '@vitest/expect': 2.1.9
       '@vitest/mocker': 2.1.9(vite@5.4.21(@types/node@22.18.12)(sass@1.97.2)(terser@5.46.1))
@@ -16320,6 +16369,7 @@ snapshots:
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 22.18.12
+      happy-dom: 20.11.1
     transitivePeerDependencies:
       - less
       - lightningcss
@@ -16331,7 +16381,7 @@ snapshots:
       - supports-color
       - terser
 
-  vitest@3.2.4(@types/debug@4.1.12)(@types/node@24.12.2)(sass@1.97.2)(terser@5.46.1):
+  vitest@3.2.4(@types/debug@4.1.12)(@types/node@24.12.2)(happy-dom@20.11.1)(sass@1.97.2)(terser@5.46.1):
     dependencies:
       '@types/chai': 5.2.3
       '@vitest/expect': 3.2.4
@@ -16359,6 +16409,7 @@ snapshots:
     optionalDependencies:
       '@types/debug': 4.1.12
       '@types/node': 24.12.2
+      happy-dom: 20.11.1
     transitivePeerDependencies:
       - less
       - lightningcss
@@ -16399,6 +16450,8 @@ snapshots:
   whatwg-encoding@3.1.1:
     dependencies:
       iconv-lite: 0.6.3
+
+  whatwg-mimetype@3.0.0: {}
 
   whatwg-mimetype@4.0.0: {}
 
@@ -16446,6 +16499,8 @@ snapshots:
       signal-exit: 4.1.0
 
   ws@8.19.0: {}
+
+  ws@8.21.1: {}
 
   wsl-utils@0.1.0:
     dependencies:

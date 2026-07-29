@@ -13,6 +13,8 @@ interface DrawerDragState {
   startY: number
 }
 
+export type SenderMobileSelectDrawerCloseKey = number | string
+
 export const handleSenderMobileSelectOptionKeyDown = (
   event: KeyboardEvent<HTMLElement>,
   onActivate: () => void
@@ -74,12 +76,21 @@ export function SenderMobileSelectDrawer({
   title,
   children,
   className,
+  closeRequestKey,
+  motionInstanceKey,
+  onAfterOpenChange,
   onClose
 }: {
   open: boolean
   title: ReactNode
   children: ReactNode
   className?: string
+  closeRequestKey?: SenderMobileSelectDrawerCloseKey
+  motionInstanceKey?: SenderMobileSelectDrawerCloseKey
+  onAfterOpenChange?: (
+    open: boolean,
+    closeRequestKey: SenderMobileSelectDrawerCloseKey | undefined
+  ) => void
   onClose: () => void
 }) {
   const { t } = useTranslation()
@@ -87,6 +98,13 @@ export function SenderMobileSelectDrawer({
   const dragOffsetRef = useRef(0)
   const [dragOffset, setDragOffset] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
+
+  const handleAfterOpenChange = useCallback((nextOpen: boolean) => {
+    onAfterOpenChange?.(
+      nextOpen,
+      nextOpen ? undefined : closeRequestKey
+    )
+  }, [closeRequestKey, onAfterOpenChange])
 
   useEffect(() => {
     if (!open) {
@@ -223,6 +241,7 @@ export function SenderMobileSelectDrawer({
 
   return (
     <Drawer
+      key={motionInstanceKey}
       open={open}
       placement='bottom'
       height='auto'
@@ -231,6 +250,7 @@ export function SenderMobileSelectDrawer({
       className={['sender-mobile-select-drawer', className ?? '', isDragging ? 'is-dragging' : ''].filter(Boolean)
         .join(' ')}
       style={drawerStyle}
+      afterOpenChange={handleAfterOpenChange}
       onClose={onClose}
     >
       <div className='sender-mobile-select-drawer__sheet'>

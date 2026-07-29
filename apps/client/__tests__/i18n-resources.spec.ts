@@ -71,4 +71,25 @@ describe('i18n resources', () => {
     expect(interfaceLanguageSource).toContain('updateGlobalInterfaceLanguage')
     expect(interfaceLanguageSource).toContain('changeAppLanguage')
   })
+
+  it('does not claim quota refresh before reset-credit revalidation settles', () => {
+    const readLocale = (locale: 'en' | 'zh') =>
+      JSON.parse(readFileSync(
+        new URL(`../src/resources/locales/${locale}.json`, import.meta.url),
+        'utf8'
+      )) as {
+        config: {
+          accounts: {
+            resetCredits: {
+              outcomes: {
+                reset: string
+              }
+            }
+          }
+        }
+      }
+
+    expect(readLocale('en').config.accounts.resetCredits.outcomes.reset).toBe('Reset credit used.')
+    expect(readLocale('zh').config.accounts.resetCredits.outcomes.reset).toBe('额度重置卡已使用。')
+  })
 })

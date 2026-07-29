@@ -35,13 +35,15 @@ vi.mock('antd', () => ({
   Button: ({
     'aria-label': ariaLabel,
     children,
+    disabled,
     icon
   }: {
     'aria-label'?: string
     children?: ReactNode
+    disabled?: boolean
     icon?: ReactNode
   }) => (
-    <button type='button' aria-label={ariaLabel}>{icon}{children}</button>
+    <button type='button' aria-label={ariaLabel} disabled={disabled}>{icon}{children}</button>
   ),
   Empty: ({ description }: { description?: ReactNode }) => <div>{description}</div>,
   Input: () => <input readOnly />,
@@ -131,14 +133,18 @@ vi.mock('swr', () => ({
             ]
           }
         },
+        error: undefined,
         isLoading: false,
+        isValidating: false,
         mutate: testState.mutate
       }
     }
 
     return {
       data: undefined,
+      error: undefined,
       isLoading: false,
+      isValidating: false,
       mutate: vi.fn()
     }
   },
@@ -330,6 +336,39 @@ describe('adapter accounts manager', () => {
     expect(html.match(/用于重置符合条件的 Codex 额度窗口。/g)).toHaveLength(2)
   })
 
+  it('replaces terminal detailed credits with anonymous usable fallback rows', async () => {
+    testState.resetCredits = {
+      availableCount: 1,
+      canConsume: true,
+      credits: [
+        {
+          id: 'credit-redeemed',
+          status: 'redeemed',
+          title: 'Redeemed credit',
+          expiresAt: 1786500000
+        }
+      ]
+    }
+    const { AdapterAccountsManager } = await import('#~/components/config/AdapterAccountsManager')
+    const html = renderToStaticMarkup(
+      <AdapterAccountsManager
+        adapterKey='codex'
+        value={{ accounts: { work: {} } }}
+        accountsData={{ accounts: [], actions: [] }}
+        nestedPath={['accounts', 'work']}
+        onChange={vi.fn()}
+        onOpenNestedPath={vi.fn()}
+        t={t}
+      />
+    )
+
+    expect(html).toContain('Redeemed credit')
+    expect(html.match(/完整额度重置/g)).toHaveLength(1)
+    expect(html.match(/aria-label="使用重置卡"/g)).toHaveLength(2)
+    expect(html.match(/disabled=""/g)).toHaveLength(1)
+    expect(html.match(/用于重置符合条件的 Codex 额度窗口。/g)).toHaveLength(1)
+  })
+
   it('shows the empty state only when the available count and detail list are both empty', async () => {
     testState.resetCredits = {
       availableCount: 0,
@@ -402,5 +441,50 @@ describe('adapter accounts manager', () => {
     expect(testState.messageWarning).toHaveBeenCalledWith(
       'config.accounts.resetCredits.refreshFailed'
     )
+  })
+
+  it('reports reset completion separately from a rejected quota refresh', async () => {
+    testState.resetCredits = {
+      availableCount: 1,
+      canConsume: true,
+      credits: [
+        {
+          id: 'credit-reset',
+          status: 'available',
+          title: 'Full reset',
+          expiresAt: 1786500000
+        }
+      ]
+    }
+    testState.manageAdapterAccount.mockResolvedValue({
+      outcome: 'reset',
+      account: {
+        key: 'work',
+        title: 'Work'
+      }
+    })
+    testState.mutate.mockRejectedValueOnce(new Error('refresh failed'))
+    const { AdapterAccountsManager } = await import('#~/components/config/AdapterAccountsManager')
+    renderToStaticMarkup(
+      <AdapterAccountsManager
+        adapterKey='codex'
+        value={{ accounts: { work: {} } }}
+        accountsData={{ accounts: [], actions: [] }}
+        nestedPath={['accounts', 'work']}
+        onChange={vi.fn()}
+        onOpenNestedPath={vi.fn()}
+        t={t}
+      />
+    )
+
+    await testState.popconfirmOnConfirms[0]?.()
+
+    expect(testState.messageSuccess).toHaveBeenCalledWith(
+      'config.accounts.resetCredits.outcomes.reset'
+    )
+    expect(testState.messageWarning).toHaveBeenCalledWith(
+      'config.accounts.resetCredits.refreshFailed'
+    )
+    expect(testState.messageError).not.toHaveBeenCalled()
   })
 })

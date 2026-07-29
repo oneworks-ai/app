@@ -21,7 +21,7 @@ import {
   getAdapterResetCreditOutcomeTone,
   useAdapterAccountQuotaDetail
 } from '#~/hooks/use-adapter-account-quota-detail'
-import { parseQuotaPercent } from '#~/utils/account-quota'
+import { isUsableAdapterResetCredit, parseQuotaPercent } from '#~/utils/account-quota'
 
 const formatRemaining = (
   expiresAt: number | undefined,
@@ -71,12 +71,10 @@ function ResetCreditRow({
   onConsume: (credit: AdapterAccountRateLimitResetCredit | undefined, fallbackKey: string) => Promise<void>
 }) {
   const { t } = useTranslation()
-  const normalizedStatus = credit?.status?.trim().toLowerCase() ?? ''
   const disabled = canConsume !== true ||
     availableCount <= 0 ||
     consumePending ||
-    ['redeemed', 'used', 'expired'].includes(normalizedStatus) ||
-    (credit?.expiresAt != null && credit.expiresAt <= Date.now() / 1000)
+    (credit != null && !isUsableAdapterResetCredit(credit))
   const remaining = formatRemaining(credit?.expiresAt, t)
   const timeDetails = [
     {
@@ -176,7 +174,6 @@ export function AccountQuotaModal({
   quota?: AdapterAccountQuotaInfo
   trigger: ReactElement<{ onClick?: (event: MouseEvent) => void }>
 }) {
-  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
 
   return (
@@ -187,20 +184,50 @@ export function AccountQuotaModal({
           setOpen(true)
         }
       })}
-      {open && (
-        <Modal
-          open
-          title={t('chat.accountQuotaModal.title')}
-          footer={null}
-          centered
-          destroyOnHidden
-          className='account-quota-modal'
-          onCancel={() => setOpen(false)}
-        >
-          <AccountQuotaModalBody adapter={adapter} account={account} quota={quota} />
-        </Modal>
-      )}
+      <AccountQuotaDialog
+        open={open}
+        adapter={adapter}
+        account={account}
+        quota={quota}
+        onClose={() => setOpen(false)}
+      />
     </>
+  )
+}
+
+export function AccountQuotaDialog({
+  account,
+  adapter,
+  focusTriggerAfterClose,
+  open,
+  quota,
+  onAfterClose,
+  onClose
+}: {
+  account?: string
+  adapter?: string
+  focusTriggerAfterClose?: boolean
+  open: boolean
+  quota?: AdapterAccountQuotaInfo
+  onAfterClose?: () => void
+  onClose: () => void
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <Modal
+      open={open}
+      title={t('chat.accountQuotaModal.title')}
+      footer={null}
+      centered
+      destroyOnHidden
+      focusTriggerAfterClose={focusTriggerAfterClose}
+      className='account-quota-modal'
+      afterClose={onAfterClose}
+      onCancel={onClose}
+    >
+      <AccountQuotaModalBody adapter={adapter} account={account} quota={quota} />
+    </Modal>
   )
 }
 
@@ -219,7 +246,9 @@ export function AccountQuotaModalBody({
   const {
     consumeResetCredit,
     data,
+    error,
     isLoading,
+    isValidating,
     refreshAccountDetail,
     setAccountDetail
   } = useAdapterAccountQuotaDetail({ adapter, account })
@@ -239,8 +268,19 @@ export function AccountQuotaModalBody({
     }), [quota?.metrics])
   const credits = quota?.rateLimitResetCredits?.credits ?? []
   const availableCredits = quota?.rateLimitResetCredits?.availableCount ?? 0
-  const missingCreditCount = Math.max(0, availableCredits - credits.length)
+  const usableDetailedCreditCount = credits.filter(credit => isUsableAdapterResetCredit(credit)).length
+  const missingCreditCount = Math.max(0, availableCredits - usableDetailedCreditCount)
   const consumePending = loadingCreditKey != null
+  const detailRefreshing = isLoading || isValidating === true
+  const hasFreshQuotaDetail = data?.account.quota != null && error == null && !detailRefreshing
+  const freshnessMessageKey = error != null
+    ? 'chat.accountQuotaModal.refreshFailed'
+    : detailRefreshing
+    ? 'chat.accountQuotaModal.refreshing'
+    : 'chat.accountQuotaModal.stale'
+  const refreshQuotaDetail = () => {
+    void refreshAccountDetail().catch(() => undefined)
+  }
   const refreshAccountListQuota = async () => {
     await mutateCache((key) => (
       Array.isArray(key) &&
@@ -306,6 +346,24 @@ export function AccountQuotaModalBody({
 
   return (
     <div className='account-quota-modal__body'>
+      {!hasFreshQuotaDetail && (
+        <div
+          className={[
+            'account-quota-modal__freshness',
+            error == null ? 'is-refreshing' : 'is-error'
+          ].join(' ')}
+          role={error == null ? 'status' : 'alert'}
+        >
+          <span>{t(freshnessMessageKey)}</span>
+          {!detailRefreshing && (
+            <InlineActionButton
+              icon='refresh'
+              aria-label={t('chat.accountQuotaModal.retryRefresh')}
+              onClick={refreshQuotaDetail}
+            />
+          )}
+        </div>
+      )}
       <section className='account-quota-modal__summary'>
         <div className='account-quota-modal__section-title'>{t('chat.accountQuotaModal.weekly')}</div>
         {windows.map(window => (
@@ -337,7 +395,8 @@ export function AccountQuotaModalBody({
               displayIndex={index}
               fallbackKey={credit.id}
               availableCount={availableCredits}
-              canConsume={adapter != null &&
+              canConsume={hasFreshQuotaDetail &&
+                adapter != null &&
                 account != null &&
                 quota?.rateLimitResetCredits?.canConsume === true}
               consumePending={consumePending}
@@ -353,7 +412,8 @@ export function AccountQuotaModalBody({
               displayIndex={credits.length + index}
               fallbackKey={fallbackKey}
               availableCount={availableCredits}
-              canConsume={adapter != null &&
+              canConsume={hasFreshQuotaDetail &&
+                adapter != null &&
                 account != null &&
                 quota?.rateLimitResetCredits?.canConsume === true}
               consumePending={consumePending}

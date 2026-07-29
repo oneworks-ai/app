@@ -29,6 +29,29 @@
   gap: 16px;
 }
 
+.account-quota-modal__freshness {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 8px 6px 10px;
+  border: 1px solid
+    color-mix(in srgb, var(--warning-color, #faad14) 42%, transparent);
+  border-radius: 8px;
+  color: var(--sub-text-color, #6b7280);
+  background: color-mix(in srgb, var(--warning-color, #faad14) 9%, transparent);
+  font-size: 12px;
+}
+
+.account-quota-modal__freshness.is-error {
+  color: var(--warning-color, #ad6800);
+}
+
+.account-quota-modal__freshness .oneworks-inline-action-button {
+  flex: 0 0 auto;
+}
+
 .account-quota-modal__state {
   min-height: 120px;
   display: flex;
