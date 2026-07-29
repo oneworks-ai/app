@@ -7,6 +7,7 @@ import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
 
+import { updateConfigFile } from '@oneworks/config'
 import { resolveMockHome } from '@oneworks/hooks'
 import { bridgeRealHomeToMockHome } from '@oneworks/register/mock-home-bridge'
 import type {
@@ -55,6 +56,7 @@ interface CodexConfiguredAccount {
   organizationTitle?: string
   organizationRole?: string
   quota?: AdapterAccountInfo['quota']
+  resetCreditDetailsCapturedAt?: number
   source?: string
   createdAt?: number
   updatedAt?: number
@@ -83,6 +85,7 @@ interface CodexStoredAccountMetadata extends CodexAccountIdentity {
   description?: string
   avatarUrl?: string
   quota?: AdapterAccountInfo['quota']
+  resetCreditDetailsCapturedAt?: number
   source?: string
   createdAt?: number
   updatedAt?: number
@@ -104,6 +107,7 @@ interface CodexAccountDescriptor {
 interface CodexAccountProbe extends CodexAccountIdentity {
   avatarUrl?: string
   quota?: AdapterAccountInfo['quota']
+  resetCreditDetailsCapturedAt?: number
   resetCreditOutcome?: CodexRateLimitResetCreditOutcome
 }
 
@@ -154,6 +158,7 @@ const CODEX_ACCOUNT_DETAIL_ACTIONS: AdapterAccountActionDescriptor[] = [
 const CODEX_QUOTA_CACHE_TTL_MS = 5 * 60 * 1000
 const CODEX_INLINE_AUTH_TYPE = 'codex-auth-json'
 const CODEX_INLINE_AUTH_ENCODING = 'base64'
+const codexAccountQuotaCacheTails = new Map<string, Promise<void>>()
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
@@ -421,6 +426,63 @@ const cloneQuotaInfo = (quota: AdapterAccountInfo['quota']) => (
     }
 )
 
+const getReusableResetCreditDetails = (
+  resetCredits: NonNullable<AdapterAccountInfo['quota']>['rateLimitResetCredits']
+) =>
+  (resetCredits?.credits ?? []).filter((credit) => {
+    const status = normalizeNonEmptyString(credit.status)?.toLowerCase()
+    if (status === 'expired' || status === 'redeemed' || status === 'used') return false
+    return credit.expiresAt == null || credit.expiresAt > Date.now() / 1000
+  })
+
+const mergeRateLimitResetCredits = (
+  previous: NonNullable<AdapterAccountInfo['quota']>['rateLimitResetCredits'],
+  incoming: NonNullable<AdapterAccountInfo['quota']>['rateLimitResetCredits']
+) => {
+  if (incoming == null) return undefined
+  if (previous == null || previous.availableCount !== incoming.availableCount) {
+    return {
+      ...incoming,
+      credits: incoming.credits?.map(credit => ({ ...credit }))
+    }
+  }
+
+  const incomingCredits = incoming.credits ?? []
+  const reusablePreviousCredits = getReusableResetCreditDetails(previous)
+  if (
+    reusablePreviousCredits.length === 0 ||
+    incomingCredits.length >= incoming.availableCount
+  ) {
+    return {
+      ...incoming,
+      credits: incoming.credits?.map(credit => ({ ...credit }))
+    }
+  }
+
+  const incomingIds = new Set(incomingCredits.map(credit => credit.id))
+  const mergedCredits = [
+    ...incomingCredits,
+    ...reusablePreviousCredits.filter(credit => !incomingIds.has(credit.id))
+  ].slice(0, incoming.availableCount)
+
+  return {
+    ...incoming,
+    credits: mergedCredits.map(credit => ({ ...credit }))
+  }
+}
+
+const mergeQuotaInfo = (
+  previous: AdapterAccountInfo['quota'],
+  incoming: NonNullable<AdapterAccountInfo['quota']>
+): NonNullable<AdapterAccountInfo['quota']> => ({
+  ...incoming,
+  metrics: incoming.metrics?.map(metric => ({ ...metric })),
+  rateLimitResetCredits: mergeRateLimitResetCredits(
+    previous?.rateLimitResetCredits,
+    incoming.rateLimitResetCredits
+  )
+})
+
 const normalizeCodexIdentity = (
   identity: CodexAccountIdentity | undefined
 ): CodexAccountIdentity | undefined => {
@@ -453,17 +515,30 @@ const mergeCodexAccountProbes = (
 
     const normalizedIdentity = normalizeCodexIdentity(source)
     if (normalizedIdentity != null) {
-      Object.assign(merged, normalizedIdentity)
+      for (const [key, value] of Object.entries(normalizedIdentity)) {
+        if (value != null) {
+          merged[key as keyof CodexAccountIdentity] = value
+        }
+      }
     }
 
     if ('quota' in source && source.quota != null) {
-      merged.quota = cloneQuotaInfo(source.quota)
+      merged.quota = mergeQuotaInfo(merged.quota, source.quota)
     }
     const avatarUrl = 'avatarUrl' in source
       ? normalizeNonEmptyString(source.avatarUrl)
       : undefined
     if (avatarUrl != null) {
       merged.avatarUrl = avatarUrl
+    }
+    if (
+      'resetCreditDetailsCapturedAt' in source &&
+      source.resetCreditDetailsCapturedAt != null
+    ) {
+      merged.resetCreditDetailsCapturedAt = source.resetCreditDetailsCapturedAt
+    }
+    if ('resetCreditOutcome' in source && source.resetCreditOutcome != null) {
+      merged.resetCreditOutcome = source.resetCreditOutcome
     }
   }
 
@@ -555,6 +630,22 @@ const readCodexAuthIdentityFromFile = async (authFilePath: string | undefined) =
   }
 }
 
+const readCodexAuthSourceFingerprintFromFile = async (authFilePath: string | undefined) => {
+  if (authFilePath == null) {
+    return undefined
+  }
+
+  try {
+    const authContent = await readFile(authFilePath, 'utf8')
+    return {
+      authDigest: createHash('sha256').update(authContent).digest('hex'),
+      identity: readCodexAuthIdentityFromContent(authContent)
+    }
+  } catch {
+    return undefined
+  }
+}
+
 const isSameCodexAccountIdentity = (
   left: CodexAccountIdentity | undefined,
   right: CodexAccountIdentity | undefined
@@ -628,7 +719,8 @@ const buildProbeFromMetadata = (metadata: CodexStoredAccountMetadata | undefined
       organizationTitle: metadata.organizationTitle,
       organizationRole: metadata.organizationRole,
       avatarUrl: metadata.avatarUrl,
-      quota: metadata.quota
+      quota: metadata.quota,
+      resetCreditDetailsCapturedAt: metadata.resetCreditDetailsCapturedAt
     }
   )
 }
@@ -649,32 +741,371 @@ const getCachedProbe = (
   return buildProbeFromMetadata(metadata)
 }
 
-type CodexAccountFileCtx = Pick<AdapterCtx, 'cwd' | 'env'> & Partial<Pick<AdapterCtx, 'ctxId' | 'logger'>>
-
-const warnInvalidJsonFile = (ctx: CodexAccountFileCtx, filePath: string, error: SyntaxError) => {
-  ctx.logger?.warn('[codex account] ignoring invalid JSON metadata file', {
-    filePath,
-    error: error.message
+const buildAccountQuotaCacheAddress = (
+  ctx: Pick<AdapterCtx, 'cwd'>,
+  descriptor: CodexAccountDescriptor
+) => {
+  const workspace = resolve(ctx.cwd)
+  const identity = normalizeCodexIdentity({
+    ...descriptor.metadata,
+    ...descriptor.identity
   })
-}
+  const authDigest = normalizeNonEmptyString(descriptor.metadata?.authDigest) ??
+    (
+      descriptor.authContent == null
+        ? undefined
+        : createHash('sha256').update(descriptor.authContent).digest('hex')
+    )
+  const hasStableRealHomeIdentity = descriptor.sourceKind === 'real-home' && (
+    identity?.accountId != null ||
+    identity?.email != null ||
+    identity?.organizationId != null
+  )
+  const fingerprint = createHash('sha256')
+    .update(JSON.stringify({
+      identity: {
+        accountId: identity?.accountId ?? null,
+        accountType: identity?.accountType ?? null,
+        email: identity?.email?.toLowerCase() ?? null,
+        organizationId: identity?.organizationId ?? null,
+        organizationRole: identity?.organizationRole ?? null,
+        organizationTitle: identity?.organizationTitle?.toLowerCase() ?? null,
+        planType: identity?.planType ?? null
+      },
+      source: {
+        // A signed-in Codex home rotates access/refresh tokens during ordinary reads.
+        // Once it exposes stable account identity, let that identity isolate the cache
+        // instead of treating routine token rotation as an account replacement.
+        authDigest: hasStableRealHomeIdentity ? null : authDigest ?? null,
+        authFilePath: descriptor.authFilePath == null ? null : resolve(descriptor.authFilePath),
+        kind: descriptor.sourceKind ?? null,
+        metadataSource: normalizeNonEmptyString(descriptor.metadata?.source) ?? null
+      }
+    }))
+    .digest('hex')
 
-const readJsonFileIfPresent = async <T>(
-  filePath: string,
-  options: { onInvalidJson?: (error: SyntaxError) => void } = {}
-): Promise<T | undefined> => {
-  try {
-    return JSON.parse(await readFile(filePath, 'utf8')) as T
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return undefined
-    }
-    if (error instanceof SyntaxError) {
-      options.onInvalidJson?.(error)
-      return undefined
-    }
-    throw error
+  return {
+    workspace,
+    accountKey: descriptor.key,
+    fingerprint,
+    cacheKey: JSON.stringify([2, workspace, descriptor.key, fingerprint])
   }
 }
+
+interface CodexAccountQuotaCacheEntry {
+  workspace?: string
+  accountKey?: string
+  fingerprint?: string
+  quota: NonNullable<AdapterAccountInfo['quota']>
+  resetCreditDetailsCapturedAt?: number
+}
+
+const normalizeAccountQuotaCacheEntry = (
+  value: unknown
+): CodexAccountQuotaCacheEntry | undefined => {
+  if (!isRecord(value)) return undefined
+
+  const rawQuota = isRecord(value.quota) ? value.quota : value
+  const quota = cloneQuotaInfo(rawQuota as NonNullable<AdapterAccountInfo['quota']>)
+  if (quota == null) return undefined
+
+  const resetCreditDetailsCapturedAt = parseFiniteNumber(value.resetCreditDetailsCapturedAt) ??
+    (
+      getReusableResetCreditDetails(quota.rateLimitResetCredits).length > 0
+        ? parseFiniteNumber(quota.updatedAt)
+        : undefined
+    )
+
+  return {
+    workspace: normalizeNonEmptyString(value.workspace),
+    accountKey: normalizeNonEmptyString(value.accountKey),
+    fingerprint: normalizeNonEmptyString(value.fingerprint),
+    quota,
+    resetCreditDetailsCapturedAt
+  }
+}
+
+const parseAccountQuotaCacheKey = (cacheKey: string) => {
+  try {
+    const parts = JSON.parse(cacheKey)
+    if (!Array.isArray(parts)) return undefined
+
+    if (parts[0] === 2) {
+      return {
+        workspace: normalizeNonEmptyString(parts[1]),
+        accountKey: normalizeNonEmptyString(parts[2])
+      }
+    }
+
+    return {
+      workspace: normalizeNonEmptyString(parts[0]),
+      accountKey: normalizeNonEmptyString(parts[1])
+    }
+  } catch {
+    return undefined
+  }
+}
+
+const isAccountQuotaCacheEntryForAccount = (params: {
+  cacheKey: string
+  value: unknown
+  workspace: string
+  accountKey: string
+}) => {
+  const entry = normalizeAccountQuotaCacheEntry(params.value)
+  const parsedKey = parseAccountQuotaCacheKey(params.cacheKey)
+  return (entry?.workspace ?? parsedKey?.workspace) === params.workspace &&
+    (entry?.accountKey ?? parsedKey?.accountKey) === params.accountKey
+}
+
+const isQuotaSnapshotFresh = (timestamp: number | undefined) => (
+  timestamp != null &&
+  timestamp > 0 &&
+  Date.now() - timestamp <= CODEX_QUOTA_CACHE_TTL_MS
+)
+
+const stripStaleResetCreditDetails = (
+  quota: AdapterAccountInfo['quota'],
+  resetCreditDetailsCapturedAt: number | undefined
+) => {
+  const clonedQuota = cloneQuotaInfo(quota)
+  const resetCredits = clonedQuota?.rateLimitResetCredits
+  if (
+    resetCredits == null ||
+    resetCredits.credits == null ||
+    isQuotaSnapshotFresh(resetCreditDetailsCapturedAt)
+  ) {
+    return clonedQuota
+  }
+
+  return {
+    ...clonedQuota,
+    rateLimitResetCredits: {
+      ...resetCredits,
+      credits: undefined
+    }
+  }
+}
+
+const mergeLiveQuotaSnapshot = (params: {
+  previous?: NonNullable<AdapterAccountInfo['quota']>
+  incoming?: NonNullable<AdapterAccountInfo['quota']>
+  previousResetCreditDetailsCapturedAt?: number
+  preservePreviousResetCreditDetails: boolean
+}) => {
+  const {
+    previous,
+    incoming,
+    previousResetCreditDetailsCapturedAt,
+    preservePreviousResetCreditDetails
+  } = params
+  const previousResetCredits = previous?.rateLimitResetCredits
+  const incomingResetCredits = incoming?.rateLimitResetCredits
+  const previousHasReusableDetails = getReusableResetCreditDetails(previousResetCredits).length > 0
+  const previousDetailsAreFresh = previousHasReusableDetails &&
+    isQuotaSnapshotFresh(previousResetCreditDetailsCapturedAt)
+  const canReusePreviousResetCreditDetails = preservePreviousResetCreditDetails && previousDetailsAreFresh
+
+  if (incoming == null) {
+    if (
+      !canReusePreviousResetCreditDetails ||
+      previous == null ||
+      !isQuotaSnapshotFresh(parseFiniteNumber(previous.updatedAt))
+    ) {
+      return {
+        quota: undefined,
+        resetCreditDetailsCapturedAt: undefined
+      }
+    }
+
+    return {
+      quota: cloneQuotaInfo(previous),
+      resetCreditDetailsCapturedAt: previousResetCreditDetailsCapturedAt
+    }
+  }
+
+  const countChanged = previousResetCredits != null &&
+    incomingResetCredits != null &&
+    previousResetCredits.availableCount !== incomingResetCredits.availableCount
+  const incomingWithResetCredits: NonNullable<AdapterAccountInfo['quota']> = incomingResetCredits == null &&
+      previousResetCredits != null &&
+      canReusePreviousResetCreditDetails
+    ? {
+      ...incoming,
+      rateLimitResetCredits: {
+        ...previousResetCredits,
+        credits: getReusableResetCreditDetails(previousResetCredits).map(credit => ({ ...credit }))
+      }
+    }
+    : incoming
+  const previousForMerge = canReusePreviousResetCreditDetails
+    ? previous
+    : previous == null
+    ? undefined
+    : {
+      ...previous,
+      rateLimitResetCredits: previousResetCredits == null
+        ? undefined
+        : {
+          ...previousResetCredits,
+          credits: undefined
+        }
+    }
+  const quota = preservePreviousResetCreditDetails
+    ? mergeQuotaInfo(previousForMerge, incomingWithResetCredits)
+    : mergeQuotaInfo(undefined, incomingWithResetCredits)
+  const incomingReusableDetails = getReusableResetCreditDetails(incomingResetCredits)
+  const reusableMergedDetails = getReusableResetCreditDetails(quota.rateLimitResetCredits)
+  const resetCreditDetailsCapturedAt = incomingReusableDetails.length > 0
+    ? Date.now()
+    : countChanged || reusableMergedDetails.length === 0
+    ? undefined
+    : previousResetCreditDetailsCapturedAt
+
+  return {
+    quota,
+    resetCreditDetailsCapturedAt
+  }
+}
+
+const withCodexAccountQuotaCacheLock = async <T>(
+  ctx: Pick<AdapterCtx, 'cwd' | 'env'>,
+  task: () => Promise<T>
+): Promise<T> => {
+  const lockKey = resolveCodexGlobalConfigPath(ctx)
+  const previousTail = codexAccountQuotaCacheTails.get(lockKey) ?? Promise.resolve()
+  let releaseCurrent: () => void = () => {}
+  const currentGate = new Promise<void>((resolvePromise) => {
+    releaseCurrent = resolvePromise
+  })
+  const currentTail = previousTail.catch(() => {}).then(() => currentGate)
+  codexAccountQuotaCacheTails.set(lockKey, currentTail)
+
+  await previousTail.catch(() => {})
+  try {
+    return await task()
+  } finally {
+    releaseCurrent()
+    if (codexAccountQuotaCacheTails.get(lockKey) === currentTail) {
+      codexAccountQuotaCacheTails.delete(lockKey)
+    }
+  }
+}
+
+const mergeProbeWithCachedQuotaUnlocked = async (params: {
+  ctx: Pick<AdapterCtx, 'cwd' | 'cache'>
+  descriptor: CodexAccountDescriptor
+  probe?: CodexAccountProbe
+  live?: boolean
+}) => {
+  const address = buildAccountQuotaCacheAddress(params.ctx, params.descriptor)
+  const rawCachedQuotas = await params.ctx.cache.get('adapter.codex.account-quotas')
+  const cachedQuotas = isRecord(rawCachedQuotas) ? rawCachedQuotas : {}
+  const cachedEntry = normalizeAccountQuotaCacheEntry(cachedQuotas[address.cacheKey])
+  const nextCachedQuotas = { ...cachedQuotas }
+  let cacheChanged = false
+
+  for (const [cacheKey, value] of Object.entries(cachedQuotas)) {
+    if (
+      cacheKey !== address.cacheKey &&
+      isAccountQuotaCacheEntryForAccount({
+        cacheKey,
+        value,
+        workspace: address.workspace,
+        accountKey: address.accountKey
+      })
+    ) {
+      delete nextCachedQuotas[cacheKey]
+      cacheChanged = true
+    }
+  }
+
+  const metadataProbe = buildProbeFromMetadata(params.descriptor.metadata)
+  const metadataQuota = cloneQuotaInfo(metadataProbe?.quota)
+  const metadataResetCreditDetailsCapturedAt = parseFiniteNumber(metadataProbe?.resetCreditDetailsCapturedAt) ??
+    (
+      getReusableResetCreditDetails(metadataQuota?.rateLimitResetCredits).length > 0
+        ? parseFiniteNumber(metadataQuota?.updatedAt)
+        : undefined
+    )
+  const previousQuota = cachedEntry?.quota ?? metadataQuota
+  const previousResetCreditDetailsCapturedAt = cachedEntry?.resetCreditDetailsCapturedAt ??
+    metadataResetCreditDetailsCapturedAt
+  const mergedProbe = mergeCodexAccountProbes(
+    metadataProbe == null ? undefined : { ...metadataProbe, quota: undefined },
+    params.probe == null ? undefined : { ...params.probe, quota: undefined }
+  ) ?? {}
+  const liveQuota = params.probe?.quota
+  const mergedQuotaResult = params.live === true
+    ? mergeLiveQuotaSnapshot({
+      previous: previousQuota,
+      incoming: liveQuota,
+      previousResetCreditDetailsCapturedAt,
+      preservePreviousResetCreditDetails: params.probe?.resetCreditOutcome == null
+    })
+    : {
+      quota: stripStaleResetCreditDetails(
+        cachedEntry?.quota ?? liveQuota ?? metadataQuota,
+        cachedEntry?.resetCreditDetailsCapturedAt ?? metadataResetCreditDetailsCapturedAt
+      ),
+      resetCreditDetailsCapturedAt: isQuotaSnapshotFresh(previousResetCreditDetailsCapturedAt)
+        ? previousResetCreditDetailsCapturedAt
+        : undefined
+    }
+
+  mergedProbe.resetCreditDetailsCapturedAt = mergedQuotaResult.resetCreditDetailsCapturedAt
+  if (mergedQuotaResult.quota != null) {
+    mergedProbe.quota = mergedQuotaResult.quota
+    nextCachedQuotas[address.cacheKey] = {
+      workspace: address.workspace,
+      accountKey: address.accountKey,
+      fingerprint: address.fingerprint,
+      quota: mergedQuotaResult.quota,
+      resetCreditDetailsCapturedAt: mergedQuotaResult.resetCreditDetailsCapturedAt
+    }
+    cacheChanged = true
+  } else if (address.cacheKey in nextCachedQuotas) {
+    delete nextCachedQuotas[address.cacheKey]
+    cacheChanged = true
+  }
+
+  if (cacheChanged) {
+    await params.ctx.cache.set('adapter.codex.account-quotas', nextCachedQuotas)
+  }
+
+  return Object.keys(mergedProbe).length > 0 ? mergedProbe : undefined
+}
+
+const clearCodexAccountQuotaCacheUnlocked = async (
+  ctx: Pick<AdapterCtx, 'cwd' | 'cache'>,
+  accountKey: string
+) => {
+  const workspace = resolve(ctx.cwd)
+  const rawCachedQuotas = await ctx.cache.get('adapter.codex.account-quotas')
+  if (!isRecord(rawCachedQuotas)) return
+
+  const nextCachedQuotas = { ...rawCachedQuotas }
+  let cacheChanged = false
+  for (const [cacheKey, value] of Object.entries(rawCachedQuotas)) {
+    if (
+      isAccountQuotaCacheEntryForAccount({
+        cacheKey,
+        value,
+        workspace,
+        accountKey
+      })
+    ) {
+      delete nextCachedQuotas[cacheKey]
+      cacheChanged = true
+    }
+  }
+
+  if (cacheChanged) {
+    await ctx.cache.set('adapter.codex.account-quotas', nextCachedQuotas)
+  }
+}
+
+type CodexAccountFileCtx = Pick<AdapterCtx, 'cwd' | 'env'> & Partial<Pick<AdapterCtx, 'ctxId' | 'logger'>>
 
 const writeTextFileAtomically = async (filePath: string, content: string) => {
   await mkdir(dirname(filePath), { recursive: true })
@@ -686,10 +1117,6 @@ const writeTextFileAtomically = async (filePath: string, content: string) => {
     await rm(tempPath, { force: true }).catch(() => {})
     throw error
   }
-}
-
-const writeJsonFile = async (filePath: string, value: unknown) => {
-  await writeTextFileAtomically(filePath, `${JSON.stringify(value, null, 2)}\n`)
 }
 
 const resolveConfiguredAuthFilePath = (ctx: Pick<AdapterCtx, 'cwd'>, authFile: string | undefined) => {
@@ -728,23 +1155,6 @@ const decodeCodexInlineAuthContent = (auth: CodexInlineAuthConfig | undefined) =
   return Buffer.from(token, CODEX_INLINE_AUTH_ENCODING).toString('utf8')
 }
 
-const readCodexGlobalConfigFile = async (
-  ctx: CodexAccountFileCtx
-): Promise<Record<string, unknown>> => {
-  const configPath = resolveCodexGlobalConfigPath(ctx)
-  const config = await readJsonFileIfPresent<Record<string, unknown>>(configPath, {
-    onInvalidJson: error => warnInvalidJsonFile(ctx, configPath, error)
-  })
-  return isRecord(config) ? config : {}
-}
-
-const writeCodexGlobalConfigFile = async (
-  ctx: Pick<AdapterCtx, 'env'>,
-  config: Record<string, unknown>
-) => {
-  await writeJsonFile(resolveCodexGlobalConfigPath(ctx), config)
-}
-
 const updateCodexGlobalAdapterConfig = async (
   ctx: CodexAccountFileCtx,
   updater: (
@@ -752,15 +1162,19 @@ const updateCodexGlobalAdapterConfig = async (
     accounts: Record<string, unknown>
   ) => Record<string, unknown>
 ) => {
-  const config = await readCodexGlobalConfigFile(ctx)
-  const adapters = isRecord(config.adapters) ? { ...config.adapters } : {}
-  const codexConfig = isRecord(adapters.codex) ? { ...adapters.codex } : {}
-  const accounts = isRecord(codexConfig.accounts) ? { ...codexConfig.accounts } : {}
-  const nextCodexConfig = updater(codexConfig, accounts)
-
-  adapters.codex = nextCodexConfig
-  config.adapters = adapters
-  await writeCodexGlobalConfigFile(ctx, config)
+  await updateConfigFile({
+    env: ctx.env,
+    workspaceFolder: ctx.cwd,
+    source: 'global',
+    section: 'adapters',
+    resolveValue: (currentConfig) => {
+      const adapters = isRecord(currentConfig.adapters) ? { ...currentConfig.adapters } : {}
+      const codexConfig = isRecord(adapters.codex) ? { ...adapters.codex } : {}
+      const accounts = isRecord(codexConfig.accounts) ? { ...codexConfig.accounts } : {}
+      adapters.codex = updater(codexConfig, accounts)
+      return adapters
+    }
+  })
 }
 
 const buildMetadataFromConfiguredAccount = (
@@ -796,6 +1210,7 @@ const buildMetadataFromConfiguredAccount = (
     organizationTitle: probe?.organizationTitle,
     organizationRole: probe?.organizationRole,
     quota: cloneQuotaInfo(probe?.quota),
+    resetCreditDetailsCapturedAt: parseFiniteNumber(configuredAccount.resetCreditDetailsCapturedAt),
     source: normalizeNonEmptyString(configuredAccount.source),
     createdAt: parseFiniteNumber(configuredAccount.createdAt),
     updatedAt: parseFiniteNumber(configuredAccount.updatedAt),
@@ -826,6 +1241,7 @@ const buildCodexGlobalAccountConfig = (params: {
   organizationTitle: params.metadata.organizationTitle,
   organizationRole: params.metadata.organizationRole,
   quota: cloneQuotaInfo(params.metadata.quota),
+  resetCreditDetailsCapturedAt: params.metadata.resetCreditDetailsCapturedAt,
   source: params.metadata.source,
   createdAt: params.metadata.createdAt,
   updatedAt: params.metadata.updatedAt,
@@ -898,23 +1314,71 @@ const updateCodexGlobalAccountMetadata = async (
       return codexConfig
     }
 
+    const descriptorAuthDigest = normalizeNonEmptyString(params.descriptor.metadata?.authDigest) ??
+      (
+        params.descriptor.authContent == null
+          ? undefined
+          : createHash('sha256').update(params.descriptor.authContent).digest('hex')
+      )
+    const existingAuthContent = decodeCodexInlineAuthContent(existing.auth)
+    const existingAuthDigest = existingAuthContent == null
+      ? normalizeNonEmptyString(existing.authDigest)
+      : createHash('sha256').update(existingAuthContent).digest('hex')
+    if (
+      params.descriptor.sourceKind === 'global-config' &&
+      (
+        normalizeNonEmptyString(existing.authFile) != null ||
+        descriptorAuthDigest == null ||
+        existingAuthDigest == null ||
+        descriptorAuthDigest !== existingAuthDigest
+      )
+    ) {
+      ctx.logger?.warn('[codex account] skipped stale account metadata update after credential replacement', {
+        account: params.descriptor.key
+      })
+      return codexConfig
+    }
+
+    const existingProbe = buildProbeFromMetadata({
+      email: existing.email,
+      planType: existing.planType,
+      accountType: existing.accountType,
+      accountId: existing.accountId,
+      organizationId: existing.organizationId,
+      organizationTitle: existing.organizationTitle,
+      organizationRole: existing.organizationRole,
+      avatarUrl: existing.avatarUrl,
+      quota: existing.quota,
+      resetCreditDetailsCapturedAt: existing.resetCreditDetailsCapturedAt
+    })
+    const persistedProbe = mergeCodexAccountProbes(
+      existingProbe == null
+        ? undefined
+        : {
+          ...existingProbe,
+          quota: undefined,
+          resetCreditDetailsCapturedAt: undefined
+        },
+      params.probe
+    ) ?? params.probe
     const nextMetadata: CodexStoredAccountMetadata = {
       ...params.descriptor.metadata,
-      ...(params.probe.email != null ? { email: params.probe.email } : {}),
-      ...(params.probe.planType != null ? { planType: params.probe.planType } : {}),
-      ...(params.probe.accountType != null ? { accountType: params.probe.accountType } : {}),
-      ...(params.probe.accountId != null ? { accountId: params.probe.accountId } : {}),
-      ...(params.probe.organizationId != null ? { organizationId: params.probe.organizationId } : {}),
-      ...(params.probe.organizationTitle != null ? { organizationTitle: params.probe.organizationTitle } : {}),
-      ...(params.probe.organizationRole != null ? { organizationRole: params.probe.organizationRole } : {}),
-      ...(params.probe.quota != null ? { quota: cloneQuotaInfo(params.probe.quota) } : {}),
+      quota: cloneQuotaInfo(persistedProbe.quota),
+      resetCreditDetailsCapturedAt: parseFiniteNumber(params.probe.resetCreditDetailsCapturedAt),
+      ...(persistedProbe.email != null ? { email: persistedProbe.email } : {}),
+      ...(persistedProbe.planType != null ? { planType: persistedProbe.planType } : {}),
+      ...(persistedProbe.accountType != null ? { accountType: persistedProbe.accountType } : {}),
+      ...(persistedProbe.accountId != null ? { accountId: persistedProbe.accountId } : {}),
+      ...(persistedProbe.organizationId != null ? { organizationId: persistedProbe.organizationId } : {}),
+      ...(persistedProbe.organizationTitle != null ? { organizationTitle: persistedProbe.organizationTitle } : {}),
+      ...(persistedProbe.organizationRole != null ? { organizationRole: persistedProbe.organizationRole } : {}),
       avatarUrl: normalizeNonEmptyString(params.descriptor.metadata?.avatarUrl) ??
         normalizeNonEmptyString(existing.avatarUrl) ??
-        normalizeNonEmptyString(params.probe.avatarUrl),
+        normalizeNonEmptyString(persistedProbe.avatarUrl),
       title: resolveCodexAccountTitle({
         key: params.descriptor.key,
         title: params.descriptor.title ?? params.descriptor.metadata?.title,
-        probe: mergeCodexAccountProbes(params.descriptor.identity, params.descriptor.metadata, params.probe)
+        probe: mergeCodexAccountProbes(params.descriptor.identity, params.descriptor.metadata, persistedProbe)
       }),
       description: params.descriptor.description ?? params.descriptor.metadata?.description,
       source: params.descriptor.metadata?.source,
@@ -922,7 +1386,7 @@ const updateCodexGlobalAccountMetadata = async (
       createdAt: params.descriptor.metadata?.createdAt ?? existing.createdAt ?? Date.now(),
       updatedAt: Date.now()
     }
-    const authContent = params.descriptor.authContent ?? decodeCodexInlineAuthContent(existing.auth)
+    const authContent = params.descriptor.authContent ?? existingAuthContent
 
     accounts[params.descriptor.key] = authContent == null
       ? {
@@ -942,7 +1406,10 @@ const updateCodexGlobalAccountMetadata = async (
       })
 
     params.descriptor.metadata = nextMetadata
-    params.descriptor.identity = mergeCodexAccountProbes(params.descriptor.identity, nextMetadata)
+    params.descriptor.identity = normalizeCodexIdentity({
+      ...params.descriptor.identity,
+      ...nextMetadata
+    })
     params.descriptor.title = resolveCodexAccountTitle({
       key: params.descriptor.key,
       title: params.descriptor.title,
@@ -1184,15 +1651,44 @@ const probeCodexAccount = async (params: {
           ? { creditId: consumeResetCredit.creditId }
           : {})
       })
-    const accountResult = await rpc.request('account/read', {
-      ...(refresh === true ? { refreshToken: true } : {})
-    })
-    const [rateLimitsResult, avatarUrl] = await Promise.all([
-      rpc.request('account/rateLimits/read'),
-      fetchProfile === false
-        ? Promise.resolve(undefined)
-        : fetchCodexProfileAvatarFromFile(authFilePath)
-    ])
+    let accountResult: unknown
+    let rateLimitsResult: unknown
+    let avatarUrl: string | undefined
+    if (consumeResetCredit == null) {
+      accountResult = await rpc.request('account/read', {
+        ...(refresh === true ? { refreshToken: true } : {})
+      })
+      const snapshotResult = await Promise.all([
+        rpc.request('account/rateLimits/read'),
+        fetchProfile === false
+          ? Promise.resolve(undefined)
+          : fetchCodexProfileAvatarFromFile(authFilePath)
+      ])
+      rateLimitsResult = snapshotResult[0]
+      avatarUrl = snapshotResult[1]
+    } else {
+      try {
+        accountResult = await rpc.request('account/read', {
+          ...(refresh === true ? { refreshToken: true } : {})
+        })
+      } catch (error) {
+        logger.warn('[codex account] reset credit was consumed, but account refresh failed', {
+          error: error instanceof Error ? error.message : String(error)
+        })
+      }
+
+      try {
+        rateLimitsResult = await rpc.request('account/rateLimits/read')
+      } catch (error) {
+        logger.warn('[codex account] reset credit was consumed, but quota refresh failed', {
+          error: error instanceof Error ? error.message : String(error)
+        })
+      }
+
+      if (fetchProfile !== false) {
+        avatarUrl = await fetchCodexProfileAvatarFromFile(authFilePath)
+      }
+    }
 
     const account = isRecord(accountResult) && isRecord(accountResult.account)
       ? accountResult.account
@@ -1595,14 +2091,17 @@ const collectConfiguredAccountDescriptors = async (
   for (const [key, configuredAccount] of Object.entries(configuredAccounts)) {
     const configuredAuthFilePath = resolveConfiguredAuthFilePath(ctx, configuredAccount.authFile)
     const hasConfiguredAuthFile = configuredAuthFilePath != null && await pathExists(configuredAuthFilePath)
-    const authFileIdentity = hasConfiguredAuthFile
-      ? await readCodexAuthIdentityFromFile(configuredAuthFilePath)
+    const authFileFingerprint = hasConfiguredAuthFile
+      ? await readCodexAuthSourceFingerprintFromFile(configuredAuthFilePath)
       : undefined
     const authContent = decodeCodexInlineAuthContent(configuredAccount.auth)
     const metadata = buildMetadataFromConfiguredAccount(key, configuredAccount, authContent)
+    if (authFileFingerprint?.authDigest != null) {
+      metadata.authDigest = authFileFingerprint.authDigest
+    }
     const mergedIdentity = mergeCodexAccountProbes(
       buildProbeFromMetadata(metadata),
-      authFileIdentity
+      authFileFingerprint?.identity
     )
     const hasInlineAuth = authContent != null
     const sourceKind = hasConfiguredAuthFile
@@ -1766,22 +2265,34 @@ const writeProbeMetadata = async (params: {
   probe: CodexAccountProbe
 }) => {
   const { ctx, descriptor, probe } = params
+  const mergedProbe = mergeCodexAccountProbes(
+    normalizeCodexIdentity(descriptor.identity),
+    descriptor.metadata == null
+      ? undefined
+      : {
+        ...descriptor.metadata,
+        quota: undefined,
+        resetCreditDetailsCapturedAt: undefined
+      },
+    probe
+  ) ?? probe
   const nextMetadata: CodexStoredAccountMetadata = {
     ...descriptor.metadata,
-    ...(probe.email != null ? { email: probe.email } : {}),
-    ...(probe.planType != null ? { planType: probe.planType } : {}),
-    ...(probe.accountType != null ? { accountType: probe.accountType } : {}),
-    ...(probe.accountId != null ? { accountId: probe.accountId } : {}),
-    ...(probe.organizationId != null ? { organizationId: probe.organizationId } : {}),
-    ...(probe.organizationTitle != null ? { organizationTitle: probe.organizationTitle } : {}),
-    ...(probe.organizationRole != null ? { organizationRole: probe.organizationRole } : {}),
-    ...(probe.quota != null ? { quota: cloneQuotaInfo(probe.quota) } : {}),
+    quota: cloneQuotaInfo(mergedProbe.quota),
+    resetCreditDetailsCapturedAt: parseFiniteNumber(probe.resetCreditDetailsCapturedAt),
+    ...(mergedProbe.email != null ? { email: mergedProbe.email } : {}),
+    ...(mergedProbe.planType != null ? { planType: mergedProbe.planType } : {}),
+    ...(mergedProbe.accountType != null ? { accountType: mergedProbe.accountType } : {}),
+    ...(mergedProbe.accountId != null ? { accountId: mergedProbe.accountId } : {}),
+    ...(mergedProbe.organizationId != null ? { organizationId: mergedProbe.organizationId } : {}),
+    ...(mergedProbe.organizationTitle != null ? { organizationTitle: mergedProbe.organizationTitle } : {}),
+    ...(mergedProbe.organizationRole != null ? { organizationRole: mergedProbe.organizationRole } : {}),
     avatarUrl: normalizeNonEmptyString(descriptor.metadata?.avatarUrl) ??
-      normalizeNonEmptyString(probe.avatarUrl),
+      normalizeNonEmptyString(mergedProbe.avatarUrl),
     title: resolveCodexAccountTitle({
       key: descriptor.key,
       title: descriptor.title ?? descriptor.metadata?.title,
-      probe: mergeCodexAccountProbes(descriptor.identity, descriptor.metadata, probe)
+      probe: mergedProbe
     }),
     description: descriptor.description ?? descriptor.metadata?.description,
     createdAt: descriptor.metadata?.createdAt ?? Date.now(),
@@ -1789,7 +2300,10 @@ const writeProbeMetadata = async (params: {
   }
 
   descriptor.metadata = nextMetadata
-  descriptor.identity = mergeCodexAccountProbes(descriptor.identity, nextMetadata)
+  descriptor.identity = normalizeCodexIdentity({
+    ...descriptor.identity,
+    ...nextMetadata
+  })
   descriptor.title = resolveCodexAccountTitle({
     key: descriptor.key,
     title: descriptor.title,
@@ -1802,13 +2316,13 @@ const writeProbeMetadata = async (params: {
       logger: ctx.logger
     }, {
       descriptor,
-      probe
+      probe: mergedProbe
     })
   }
 }
 
-const getCodexAccountProbe = async (params: {
-  ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'ctxId'>
+const getCodexAccountProbeUnlocked = async (params: {
+  ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'ctxId' | 'cache'>
   descriptor: CodexAccountDescriptor
   refresh?: boolean
   scope: string
@@ -1816,23 +2330,35 @@ const getCodexAccountProbe = async (params: {
   const { ctx, descriptor, refresh, scope } = params
   const cachedProbe = getCachedProbe(descriptor.metadata, refresh)
   if (cachedProbe != null) {
-    return cachedProbe
+    return mergeProbeWithCachedQuotaUnlocked({ ctx, descriptor, probe: cachedProbe })
   }
 
   if (!hasCodexAccountAuth(descriptor)) {
-    return buildProbeFromMetadata(descriptor.metadata)
+    return mergeProbeWithCachedQuotaUnlocked({
+      ctx,
+      descriptor,
+      probe: buildProbeFromMetadata(descriptor.metadata)
+    })
   }
 
   if (refresh !== true) {
-    return buildProbeFromMetadata(descriptor.metadata)
+    return mergeProbeWithCachedQuotaUnlocked({
+      ctx,
+      descriptor,
+      probe: buildProbeFromMetadata(descriptor.metadata)
+    })
   }
 
   const authSource = await writeDescriptorAuthSourceFile({ ctx, descriptor, scope })
   if (authSource == null) {
-    return buildProbeFromMetadata(descriptor.metadata)
+    return mergeProbeWithCachedQuotaUnlocked({
+      ctx,
+      descriptor,
+      probe: buildProbeFromMetadata(descriptor.metadata)
+    })
   }
 
-  const probe = await probeCodexAccount({
+  const liveProbe = await probeCodexAccount({
     ctx,
     homeDir: authSource.homeDir,
     authFilePath: authSource.authFilePath,
@@ -1840,6 +2366,13 @@ const getCodexAccountProbe = async (params: {
     fetchProfile: normalizeNonEmptyString(descriptor.metadata?.avatarUrl) == null,
     logKey: `${scope}-${descriptor.key}`
   })
+  const probe = await mergeProbeWithCachedQuotaUnlocked({
+    ctx,
+    descriptor,
+    probe: liveProbe,
+    live: true
+  })
+  if (probe == null) return undefined
   await writeProbeMetadata({
     ctx,
     descriptor,
@@ -1847,6 +2380,17 @@ const getCodexAccountProbe = async (params: {
   })
 
   return probe
+}
+
+const getCodexAccountProbe = async (params: {
+  ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'ctxId' | 'cache'>
+  descriptor: CodexAccountDescriptor
+  refresh?: boolean
+  scope: string
+}): Promise<CodexAccountProbe | undefined> => {
+  return withCodexAccountQuotaCacheLock(params.ctx, async () => {
+    return getCodexAccountProbeUnlocked(params)
+  })
 }
 
 const compareCodexAccountDescriptors = (
@@ -2001,7 +2545,11 @@ const buildCodexAccountDetail = (params: {
     configuredAccount,
     overrideError
   } = params
-  const mergedProbe = mergeCodexAccountProbes(descriptor.identity, descriptor.metadata, probe)
+  const mergedProbe = mergeCodexAccountProbes(
+    normalizeCodexIdentity(descriptor.identity),
+    descriptor.metadata == null ? undefined : { ...descriptor.metadata, quota: undefined },
+    probe
+  )
   const baseTitle = resolveCodexAccountTitle({
     key: descriptor.key,
     title: descriptor.title,
@@ -2019,7 +2567,7 @@ const buildCodexAccountDetail = (params: {
     description: baseDescription,
     status,
     isDefault: descriptor.key === defaultAccount,
-    quota: overrideError == null ? probe?.quota : undefined,
+    quota: overrideError == null ? mergedProbe?.quota : undefined,
     avatarUrl: normalizeNonEmptyString(configuredAccount?.avatarUrl) ??
       normalizeNonEmptyString(descriptor.metadata?.avatarUrl) ??
       normalizeNonEmptyString(probe?.avatarUrl),
@@ -2468,45 +3016,51 @@ export const getCodexAccountDetail = async (
   ctx: AdapterCtx,
   options: AdapterAccountDetailQueryOptions
 ): Promise<AdapterAccountDetailResult> => {
-  const { descriptor, defaultAccount, configuredAccount } = await resolveExistingCodexAccount(ctx, options.account, {
-    refresh: options.refresh
-  })
-
-  if (!hasCodexAccountAuth(descriptor)) {
-    return {
-      account: buildCodexAccountDetail({
-        descriptor,
-        defaultAccount,
-        configuredAccount
-      })
-    }
-  }
-
-  try {
-    const probe = await getCodexAccountProbe({
+  return withCodexAccountQuotaCacheLock(ctx, async () => {
+    const { descriptor, defaultAccount, configuredAccount } = await resolveExistingCodexAccount(
       ctx,
-      descriptor,
-      refresh: options.refresh,
-      scope: 'detail'
-    })
-    return {
-      account: buildCodexAccountDetail({
-        descriptor,
-        defaultAccount,
-        configuredAccount,
-        probe
-      })
+      options.account,
+      {
+        refresh: options.refresh
+      }
+    )
+
+    if (!hasCodexAccountAuth(descriptor)) {
+      return {
+        account: buildCodexAccountDetail({
+          descriptor,
+          defaultAccount,
+          configuredAccount
+        })
+      }
     }
-  } catch (error) {
-    return {
-      account: buildCodexAccountDetail({
+
+    try {
+      const probe = await getCodexAccountProbeUnlocked({
+        ctx,
         descriptor,
-        defaultAccount,
-        configuredAccount,
-        overrideError: error instanceof Error ? error.message : String(error)
+        refresh: options.refresh,
+        scope: 'detail'
       })
+      return {
+        account: buildCodexAccountDetail({
+          descriptor,
+          defaultAccount,
+          configuredAccount,
+          probe
+        })
+      }
+    } catch (error) {
+      return {
+        account: buildCodexAccountDetail({
+          descriptor,
+          defaultAccount,
+          configuredAccount,
+          overrideError: error instanceof Error ? error.message : String(error)
+        })
+      }
     }
-  }
+  })
 }
 
 export const manageCodexAccount = async (
@@ -2518,61 +3072,93 @@ export const manageCodexAccount = async (
     if (normalizedAccount == null) {
       throw new Error('Codex reset credit consumption requires an account key.')
     }
-
-    const { descriptor, defaultAccount, configuredAccount } = await resolveExistingCodexAccount(
-      ctx,
-      normalizedAccount
-    )
-    const authSource = await writeDescriptorAuthSourceFile({
-      ctx,
-      descriptor,
-      scope: 'consume-reset-credit'
-    })
-    if (authSource == null) {
-      throw new Error(`Codex account "${normalizedAccount}" has no usable authentication source.`)
+    const operationId = normalizeNonEmptyString(options.operationId)
+    if (operationId == null) {
+      throw new Error('Codex reset credit consumption requires an operation ID.')
     }
 
-    const probe = await probeCodexAccount({
-      ctx,
-      homeDir: authSource.homeDir,
-      authFilePath: authSource.authFilePath,
-      refresh: true,
-      fetchProfile: false,
-      logKey: `consume-reset-credit-${descriptor.key}`,
-      consumeResetCredit: {
-        creditId: normalizeNonEmptyString(options.creditId),
-        idempotencyKey: randomUUID()
+    return withCodexAccountQuotaCacheLock(ctx, async () => {
+      const { descriptor, defaultAccount, configuredAccount } = await resolveExistingCodexAccount(
+        ctx,
+        normalizedAccount
+      )
+      const authSource = await writeDescriptorAuthSourceFile({
+        ctx,
+        descriptor,
+        scope: 'consume-reset-credit'
+      })
+      if (authSource == null) {
+        throw new Error(`Codex account "${normalizedAccount}" has no usable authentication source.`)
+      }
+
+      const liveProbe = await probeCodexAccount({
+        ctx,
+        homeDir: authSource.homeDir,
+        authFilePath: authSource.authFilePath,
+        refresh: true,
+        fetchProfile: false,
+        logKey: `consume-reset-credit-${descriptor.key}`,
+        consumeResetCredit: {
+          creditId: normalizeNonEmptyString(options.creditId),
+          idempotencyKey: operationId
+        }
+      })
+      const outcome = liveProbe.resetCreditOutcome
+      if (outcome == null) {
+        throw new Error('Codex returned an unknown reset credit outcome.')
+      }
+
+      let probe = liveProbe
+      try {
+        probe = await mergeProbeWithCachedQuotaUnlocked({
+          ctx,
+          descriptor,
+          probe: liveProbe,
+          live: true
+        }) ?? liveProbe
+      } catch (error) {
+        ctx.logger.warn('[codex account] reset credit outcome succeeded, but quota cache update failed', {
+          account: descriptor.key,
+          operationId,
+          error: error instanceof Error ? error.message : String(error)
+        })
+      }
+
+      try {
+        await writeProbeMetadata({
+          ctx,
+          descriptor,
+          probe
+        })
+      } catch (error) {
+        ctx.logger.warn('[codex account] reset credit outcome succeeded, but metadata persistence failed', {
+          account: descriptor.key,
+          operationId,
+          error: error instanceof Error ? error.message : String(error)
+        })
+      }
+
+      const messages: Record<CodexRateLimitResetCreditOutcome, string> = {
+        reset: probe.quota == null
+          ? 'Used one Codex reset credit. Refresh the quota to load the latest limits.'
+          : 'Used one Codex reset credit and refreshed the quota.',
+        alreadyRedeemed: 'This Codex reset credit was already redeemed.',
+        nothingToReset: 'No eligible Codex rate-limit window needs resetting.',
+        noCredit: 'No Codex reset credit is available.'
+      }
+
+      return {
+        accountKey: normalizedAccount,
+        outcome,
+        account: buildCodexAccountDetail({
+          descriptor,
+          defaultAccount,
+          configuredAccount,
+          probe
+        }),
+        message: messages[outcome]
       }
     })
-    await writeProbeMetadata({
-      ctx,
-      descriptor,
-      probe
-    })
-
-    const outcome = probe.resetCreditOutcome
-    if (outcome == null) {
-      throw new Error('Codex returned an unknown reset credit outcome.')
-    }
-
-    const messages: Record<CodexRateLimitResetCreditOutcome, string> = {
-      reset: 'Used one Codex reset credit and refreshed the quota.',
-      alreadyRedeemed: 'This Codex reset credit was already redeemed.',
-      nothingToReset: 'No eligible Codex rate-limit window needs resetting.',
-      noCredit: 'No Codex reset credit is available.'
-    }
-
-    return {
-      accountKey: normalizedAccount,
-      outcome,
-      account: buildCodexAccountDetail({
-        descriptor,
-        defaultAccount,
-        configuredAccount,
-        probe
-      }),
-      message: messages[outcome]
-    }
   }
 
   if (options.action === 'refresh') {
@@ -2600,20 +3186,23 @@ export const manageCodexAccount = async (
       throw new Error('Codex remove requires an account key.')
     }
 
-    const { descriptor, configuredAccount } = await resolveExistingCodexAccount(ctx, normalizedAccount)
+    await withCodexAccountQuotaCacheLock(ctx, async () => {
+      const { descriptor, configuredAccount } = await resolveExistingCodexAccount(ctx, normalizedAccount)
 
-    if (descriptor.sourceKind !== 'global-config') {
-      if (configuredAccount?.authFile != null && configuredAccount.authFile.trim() !== '') {
+      if (descriptor.sourceKind !== 'global-config') {
+        if (configuredAccount?.authFile != null && configuredAccount.authFile.trim() !== '') {
+          throw new Error(
+            `Codex account "${normalizedAccount}" is backed by adapters.codex.accounts.${normalizedAccount}.authFile. Remove that config entry instead.`
+          )
+        }
         throw new Error(
-          `Codex account "${normalizedAccount}" is backed by adapters.codex.accounts.${normalizedAccount}.authFile. Remove that config entry instead.`
+          `Codex account "${normalizedAccount}" is not stored in the global OneWorks config.`
         )
       }
-      throw new Error(
-        `Codex account "${normalizedAccount}" is not stored in the global OneWorks config.`
-      )
-    }
 
-    await removeCodexGlobalAccountConfig(ctx, normalizedAccount)
+      await removeCodexGlobalAccountConfig(ctx, normalizedAccount)
+      await clearCodexAccountQuotaCacheUnlocked(ctx, normalizedAccount)
+    })
 
     return {
       accountKey: normalizedAccount,
@@ -2669,15 +3258,19 @@ export const manageCodexAccount = async (
       avatarUrl: normalizeNonEmptyString(existingConfiguredAccount?.metadata?.avatarUrl) ??
         normalizeNonEmptyString(probe?.avatarUrl),
       quota: cloneQuotaInfo(probe?.quota),
+      resetCreditDetailsCapturedAt: parseFiniteNumber(probe?.resetCreditDetailsCapturedAt),
       source: 'codex-login',
       authDigest,
       createdAt: existingConfiguredAccount?.metadata?.createdAt ?? Date.now(),
       updatedAt: Date.now()
     }
-    await upsertCodexGlobalAccountConfig(ctx, {
-      key: accountKey,
-      authContent,
-      metadata
+    await withCodexAccountQuotaCacheLock(ctx, async () => {
+      await upsertCodexGlobalAccountConfig(ctx, {
+        key: accountKey,
+        authContent,
+        metadata
+      })
+      await clearCodexAccountQuotaCacheUnlocked(ctx, accountKey)
     })
     const detail = buildCodexAccountDetail({
       descriptor: {

@@ -48,7 +48,10 @@ export async function getAdapterAccountDetail(
 
 export async function manageAdapterAccount(
   adapter: string,
-  options: Pick<AdapterManageAccountOptions, 'action' | 'account' | 'creditId' | 'model' | 'refresh'>,
+  options: Pick<
+    AdapterManageAccountOptions,
+    'action' | 'account' | 'creditId' | 'model' | 'operationId' | 'refresh'
+  >,
   requestOptions?: Pick<RequestInit, 'signal'>
 ): Promise<AdapterManageAccountResult> {
   return fetchApiJson<AdapterManageAccountResult>(
@@ -61,3 +64,9 @@ export async function manageAdapterAccount(
     }
   )
 }
+
+export const createAdapterAccountOperationId = () => (
+  typeof globalThis.crypto?.randomUUID === 'function'
+    ? globalThis.crypto.randomUUID()
+    : `adapter-account-${Date.now()}-${Math.random().toString(36).slice(2)}`
+)

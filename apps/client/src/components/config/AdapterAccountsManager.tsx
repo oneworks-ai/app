@@ -10,13 +10,18 @@ import type {
   AdapterAccountInfo,
   AdapterAccountRateLimitResetCredit,
   AdapterAccountsResult,
+  AdapterManageAccountResult,
   ConfigUiObjectSchema
 } from '@oneworks/types'
 
-import { getAdapterAccountDetail, getAdapterAccounts, getApiErrorMessage, manageAdapterAccount } from '#~/api'
+import { getAdapterAccounts, getApiErrorMessage, manageAdapterAccount } from '#~/api'
 import { QuotaUsageRing } from '#~/components/account-quota/QuotaUsageRing'
 import { InlineActionButton } from '#~/components/inline-action-button'
-import { useAdapterAccountQuotaDetail } from '#~/hooks/use-adapter-account-quota-detail'
+import {
+  getAdapterResetCreditOutcome,
+  getAdapterResetCreditOutcomeTone,
+  useAdapterAccountQuotaDetail
+} from '#~/hooks/use-adapter-account-quota-detail'
 
 import { FieldRow } from './ConfigFieldRow'
 import { getFieldDescription, getFieldLabel, getValueByPath, setValueByPath } from './configUtils'
@@ -402,7 +407,13 @@ const AccountDetailView = ({
   t: TranslationFn
 }) => {
   const { message } = App.useApp()
-  const { data, isLoading, mutate } = useAdapterAccountQuotaDetail({
+  const {
+    consumeResetCredit,
+    data,
+    isLoading,
+    refreshAccountDetail,
+    setAccountDetail
+  } = useAdapterAccountQuotaDetail({
     adapter: adapterKey,
     account: accountKey
   })
@@ -412,6 +423,10 @@ const AccountDetailView = ({
   const detailActions = detail?.actions ?? []
   const resetCredits = detail?.quota?.rateLimitResetCredits
   const resetCreditDetails = resetCredits?.credits ?? []
+  const missingResetCreditDetailCount = Math.max(
+    0,
+    (resetCredits?.availableCount ?? 0) - resetCreditDetails.length
+  )
   const quotaMetrics = detail?.quota?.metrics?.filter((metric) => {
     if (typeof metric.value === 'string') return metric.value.trim() !== ''
     return metric.value != null
@@ -486,10 +501,9 @@ const AccountDetailView = ({
       }
 
       if (result.account != null) {
-        await mutate({ account: result.account }, { revalidate: false })
+        await setAccountDetail(result.account)
       } else {
-        const next = await getAdapterAccountDetail(adapterKey, accountKey, { refresh: true })
-        await mutate(next, { revalidate: false })
+        await refreshAccountDetail()
       }
       void message.success(result.message ?? t(`config.accounts.actionSuccess.${action.key}`))
     } catch (error) {
@@ -499,48 +513,67 @@ const AccountDetailView = ({
     }
   }
 
-  const handleConsumeResetCredit = async (credit?: AdapterAccountRateLimitResetCredit) => {
-    const loadingKey = `consume-reset-credit:${credit?.id ?? 'next'}`
+  const handleConsumeResetCredit = async (
+    credit?: AdapterAccountRateLimitResetCredit,
+    fallbackKey = 'next'
+  ) => {
+    const loadingKey = `consume-reset-credit:${credit?.id ?? fallbackKey}`
     setLoadingAction(loadingKey)
+    let result: AdapterManageAccountResult
     try {
-      const result = await manageAdapterAccount(adapterKey, {
-        action: 'consume-reset-credit',
-        account: accountKey,
-        creditId: credit?.id
+      result = await consumeResetCredit({
+        creditId: credit?.id,
+        fallbackKey
       })
-      await onChanged()
-      if (result.account != null) {
-        await mutate({ account: result.account }, { revalidate: false })
-      } else {
-        const next = await getAdapterAccountDetail(adapterKey, accountKey, { refresh: true })
-        await mutate(next, { revalidate: false })
-      }
-
-      const resultMessage = result.outcome == null
-        ? result.message ?? t('config.accounts.resetCredits.outcomes.reset')
-        : t(`config.accounts.resetCredits.outcomes.${result.outcome}`, {
-          defaultValue: result.message
-        })
-      if (result.outcome === 'nothingToReset' || result.outcome === 'noCredit') {
-        void message.warning(resultMessage)
-      } else {
-        void message.success(resultMessage)
-      }
     } catch (error) {
       void message.error(getApiErrorMessage(
         error,
         t('config.accounts.actionFailed.consumeResetCredit')
       ))
+      setLoadingAction(undefined)
+      return
+    }
+
+    const outcome = getAdapterResetCreditOutcome(result.outcome)
+    const resultMessage = outcome == null
+      ? result.message ?? t('config.accounts.resetCredits.outcomes.reset')
+      : t(`config.accounts.resetCredits.outcomes.${outcome}`, {
+        defaultValue: result.message
+      })
+    const outcomeTone = getAdapterResetCreditOutcomeTone(outcome)
+    if (outcomeTone === 'success') {
+      void message.success(resultMessage)
+    } else if (outcomeTone === 'warning') {
+      void message.warning(resultMessage)
+    } else {
+      void message.info(resultMessage)
+    }
+
+    try {
+      const refreshResults = await Promise.allSettled([
+        onChanged(),
+        result.account == null
+          ? refreshAccountDetail()
+          : setAccountDetail(result.account)
+      ])
+      if (refreshResults.some(refreshResult => refreshResult.status === 'rejected')) {
+        void message.warning(t('config.accounts.resetCredits.refreshFailed'))
+      }
     } finally {
       setLoadingAction(undefined)
     }
   }
 
-  const renderResetCreditAction = (credit?: AdapterAccountRateLimitResetCredit) => {
-    const loadingKey = `consume-reset-credit:${credit?.id ?? 'next'}`
+  const renderResetCreditAction = (
+    credit?: AdapterAccountRateLimitResetCredit,
+    fallbackKey = 'next'
+  ) => {
+    const loadingKey = `consume-reset-credit:${credit?.id ?? fallbackKey}`
     const normalizedStatus = normalizeText(credit?.status)
+    const consumeResetCreditPending = loadingAction?.startsWith('consume-reset-credit:') === true
     const disabled = resetCredits?.canConsume !== true ||
       (resetCredits?.availableCount ?? 0) <= 0 ||
+      consumeResetCreditPending ||
       ['expired', 'redeemed', 'used'].includes(normalizedStatus) ||
       (credit?.expiresAt != null && credit.expiresAt <= Date.now() / 1000)
     const actionLabel = t('config.accounts.resetCredits.use')
@@ -558,7 +591,7 @@ const AccountDetailView = ({
             okText={t('config.accounts.resetCredits.confirmAction')}
             cancelText={t('common.cancel')}
             disabled={disabled}
-            onConfirm={() => handleConsumeResetCredit(credit)}
+            onConfirm={() => handleConsumeResetCredit(credit, fallbackKey)}
           >
             <InlineActionButton
               aria-label={actionLabel}
@@ -686,69 +719,85 @@ const AccountDetailView = ({
                     className={'adapter-account-manager__reset-credit-list ' +
                       'config-view__field-list config-view__field-list--grouped'}
                   >
-                    {resetCreditDetails.length > 0
-                      ? resetCreditDetails.map((credit, index) => {
-                        const grantedAt = formatEpochSeconds(credit.grantedAt)
-                        const expiresAt = formatEpochSeconds(credit.expiresAt)
-                        const remaining = formatResetCreditRemaining(credit.expiresAt, t)
-                        const details = [
-                          {
-                            key: 'grantedAt',
-                            label: t('config.accounts.resetCredits.fields.grantedAt'),
-                            value: grantedAt,
-                            secondaryValue: undefined
-                          },
-                          {
-                            key: 'expiresAt',
-                            label: t('config.accounts.resetCredits.fields.expiresAt'),
-                            value: expiresAt,
-                            secondaryValue: remaining
-                          }
-                        ].filter((item): item is typeof item & { value: string } => (
-                          item.value != null && item.value !== ''
-                        ))
+                    {resetCreditDetails.length === 0 && missingResetCreditDetailCount === 0 && (
+                      <div className='adapter-account-manager__reset-credit-empty'>
+                        {t('config.accounts.resetCredits.noCredits')}
+                      </div>
+                    )}
+                    {resetCreditDetails.map((credit, index) => {
+                      const grantedAt = formatEpochSeconds(credit.grantedAt)
+                      const expiresAt = formatEpochSeconds(credit.expiresAt)
+                      const remaining = formatResetCreditRemaining(credit.expiresAt, t)
+                      const timeDetails = [
+                        {
+                          key: 'grantedAt',
+                          label: t('config.accounts.resetCredits.fields.grantedAt'),
+                          value: grantedAt
+                        },
+                        {
+                          key: 'expiresAt',
+                          label: t('config.accounts.resetCredits.fields.expiresAt'),
+                          value: expiresAt
+                        }
+                      ].filter((item): item is typeof item & { value: string } => (
+                        item.value != null && item.value !== ''
+                      ))
 
-                        return (
-                          <FieldRow
-                            key={credit.id}
-                            icon='restart_alt'
-                            title={getResetCreditTitle(credit, index, t)}
-                            description={
-                              <span className='adapter-account-manager__reset-credit-details'>
-                                {details.map(item => (
-                                  <span
-                                    key={item.key}
-                                    className='adapter-account-manager__reset-credit-detail'
-                                  >
-                                    <span className='adapter-account-manager__reset-credit-detail-label'>
-                                      {item.label}
-                                    </span>
-                                    <span className='adapter-account-manager__reset-credit-detail-value'>
-                                      {item.value}
-                                    </span>
-                                    {item.secondaryValue != null && (
-                                      <span className='adapter-account-manager__reset-credit-detail-remaining'>
-                                        {item.secondaryValue}
-                                      </span>
-                                    )}
-                                  </span>
-                                ))}
-                              </span>
-                            }
-                          >
-                            {renderResetCreditAction(credit)}
-                          </FieldRow>
-                        )
-                      })
-                      : (
+                      return (
                         <FieldRow
-                          icon='confirmation_number'
-                          title={t('config.accounts.resetCredits.title')}
-                          description={t('config.accounts.resetCredits.summaryDescription')}
+                          key={credit.id}
+                          icon='restart_alt'
+                          title={getResetCreditTitle(credit, index, t)}
                         >
-                          {renderResetCreditAction()}
+                          <div className='adapter-account-manager__reset-credit-control'>
+                            {remaining != null && (
+                              <Tooltip
+                                placement='top'
+                                title={timeDetails.length > 0
+                                  ? (
+                                    <div className='adapter-account-manager__tooltip'>
+                                      {timeDetails.map(item => (
+                                        <div
+                                          key={item.key}
+                                          className='adapter-account-manager__reset-credit-tooltip-row'
+                                        >
+                                          <span className='adapter-account-manager__tooltip-title'>
+                                            {item.label}
+                                          </span>
+                                          <span className='adapter-account-manager__tooltip-description'>
+                                            {item.value}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )
+                                  : undefined}
+                                trigger={['hover', 'focus']}
+                              >
+                                <span
+                                  aria-label={remaining}
+                                  className='adapter-account-manager__reset-credit-remaining'
+                                  tabIndex={timeDetails.length > 0 ? 0 : undefined}
+                                >
+                                  {remaining}
+                                </span>
+                              </Tooltip>
+                            )}
+                            {renderResetCreditAction(credit)}
+                          </div>
                         </FieldRow>
-                      )}
+                      )
+                    })}
+                    {Array.from({ length: missingResetCreditDetailCount }, (_, index) => (
+                      <FieldRow
+                        key={`pending-reset-credit-${index}`}
+                        icon='confirmation_number'
+                        title={t('config.accounts.resetCredits.fullResetTitle')}
+                        description={t('config.accounts.resetCredits.summaryDescription')}
+                      >
+                        {renderResetCreditAction(undefined, `next-${index}`)}
+                      </FieldRow>
+                    ))}
                   </div>
                 </div>
               )}
