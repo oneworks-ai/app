@@ -50,17 +50,16 @@ gh secret set APPLE_TEAM_ID --repo oneworks-ai/app
 
 ## 验证
 
-验证发布链路：
+发版前验证签名包构建时，不创建或修改 GitHub Release：
 
 ```bash
 gh workflow run desktop-package.yml \
   --repo oneworks-ai/app \
   --ref main \
-  -f create_release=true \
-  -f release_tag=pkg/oneworks-desktop/v0.1.0-alpha.0
+  -f create_release=false
 ```
 
-如果只是验证签名包 artifact，不想创建 GitHub Release，可以把 `create_release=false`，下载 workflow artifact 后在 macOS 上验证：
+下载 workflow artifact 后在 macOS 上验证：
 
 ```bash
 codesign --verify --deep --strict "/Applications/One Works.app"
@@ -69,4 +68,15 @@ pkgutil --check-signature oneworks-*-mac-*.pkg
 spctl --assess --type install --verbose oneworks-*-mac-*.pkg
 xcrun stapler validate oneworks-*-mac-*.dmg
 xcrun stapler validate oneworks-*-mac-*.pkg
+```
+
+只有明确要创建或更新正式 GitHub Release 时才使用
+`create_release=true` 并传入实际 release tag；该操作会写入远端 Release 与资产：
+
+```bash
+gh workflow run desktop-package.yml \
+  --repo oneworks-ai/app \
+  --ref main \
+  -f create_release=true \
+  -f release_tag=pkg/oneworks-desktop/v0.1.0-alpha.0
 ```
