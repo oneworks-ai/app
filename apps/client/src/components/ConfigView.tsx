@@ -1065,36 +1065,45 @@ export function ConfigView() {
       }
       return toLabel(segment)
     }
-    const ancestors = nestedSegments.length === 0
-      ? []
-      : [
-        {
-          title: activeConfigDetail.meta.itemLabel,
-          onSelect: () => {
+    const trail = [
+      {
+        title: activeContentTab.label,
+        onSelect: () => setDetailQuery('')
+      },
+      {
+        title: activeConfigDetail.meta.itemLabel,
+        onSelect: nestedSegments.length === 0
+          ? undefined
+          : () => {
             setDetailQuery(serializeConfigDetailRoute({
               ...route,
               nestedPath: []
             }))
           }
-        },
-        ...nestedSegments.slice(0, -1).map((segment, index) => ({
-          title: getNestedSegmentLabel(segment, index),
-          onSelect: () => {
+      },
+      ...nestedSegments.map((segment, index) => ({
+        title: getNestedSegmentLabel(segment, index),
+        onSelect: index === nestedSegments.length - 1
+          ? undefined
+          : () => {
             setDetailQuery(serializeConfigDetailRoute({
               ...route,
               nestedPath: nestedSegments.slice(0, index + 1)
             }))
           }
-        }))
-      ]
-    const currentTitle = nestedSegments.length > 0
-      ? getNestedSegmentLabel(nestedSegments[nestedSegments.length - 1]!, nestedSegments.length - 1)
-      : activeConfigDetail.meta.itemLabel
+      }))
+    ]
+    const ancestors = trail.slice(0, -2).map(item => ({
+      title: item.title,
+      ...(item.onSelect == null ? {} : { onSelect: item.onSelect })
+    }))
+    const parent = trail.at(-2)!
+    const current = trail.at(-1)!
 
     return {
       ancestors,
-      currentTitle,
-      parentTitle: activeContentTab.label,
+      currentTitle: current.title,
+      parentTitle: parent.title,
       onBack: closeConfigDetail
     }
   }, [

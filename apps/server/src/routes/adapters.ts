@@ -115,15 +115,22 @@ export function adaptersRouter(): Router {
     const body = (ctx.request.body ?? {}) as {
       action?: unknown
       account?: unknown
+      creditId?: unknown
       model?: unknown
       refresh?: unknown
     }
     const action = typeof body.action === 'string' ? body.action.trim() : ''
     const account = typeof body.account === 'string' ? body.account.trim() : undefined
+    const creditId = typeof body.creditId === 'string' ? body.creditId.trim() : undefined
     const model = typeof body.model === 'string' ? body.model.trim() : undefined
     const refresh = body.refresh === true || body.refresh === 'true' || body.refresh === 1 || body.refresh === '1'
 
-    if (action !== 'add' && action !== 'refresh' && action !== 'remove') {
+    if (
+      action !== 'add' &&
+      action !== 'refresh' &&
+      action !== 'remove' &&
+      action !== 'consume-reset-credit'
+    ) {
       throw badRequest('Invalid account action', { action: body.action }, 'invalid_adapter_account_action')
     }
 
@@ -149,6 +156,7 @@ export function adaptersRouter(): Router {
       const result = await adapter.manageAccount(adapterCtx, {
         action: action as AdapterManageAccountOptions['action'],
         account,
+        creditId,
         model,
         refresh,
         signal: abortController.signal
