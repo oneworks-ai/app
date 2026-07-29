@@ -13,15 +13,16 @@ App Store 外分发不走 Mac App Store 证书，使用 Apple Developer Program 
 - `APPLE_TEAM_ID`：Apple Developer Team ID。
 - `DESKTOP_SIGN=true`：仓库 variable，显式打开桌面签名。
 
-PR 的 arm64 DMG 快路径固定不签名，也不读取签名 secrets。普通 main artifact 按仓库
-variable 决定是否签名；正式 release artifact 强制要求签名与 notarization。所有 secret
-配好后，还必须设置仓库 variable：
+桌面 workflow 在 PR 上只运行不构建产物的轻量兼容门禁；真正的安装包只由
+`pkg/oneworks-desktop/v*` tag 或手动 dispatch 触发。手动 artifact 按仓库 variable
+决定是否签名；正式 release artifact 强制要求签名与 notarization。所有 secret 配好后，
+还必须设置仓库 variable：
 
 ```bash
 gh variable set DESKTOP_SIGN --repo oneworks-ai/app --body true
 ```
 
-当前 `desktop-package.yml` 的 main / tag / 手动完整构建会同时生成 `.dmg`、`.zip` 和 `.pkg`；因此开启 `DESKTOP_SIGN=true` 时，Application 和 Installer 两套证书都必须存在。缺任何一个，workflow 会在 `Validate desktop signing credentials` 失败，不允许继续生成半加签产物。PR 快路径只生成 unsigned `.dmg`，不会因仓库已开启正式签名而要求 fork 或普通 PR 暴露证书。
+当前 `desktop-package.yml` 的 tag / 手动构建会同时生成 `.dmg`、`.zip` 和 `.pkg`；因此开启 `DESKTOP_SIGN=true` 时，Application 和 Installer 两套证书都必须存在。缺任何一个，workflow 会在 `Validate desktop signing credentials` 失败，不允许继续生成半加签产物。普通 PR 只运行轻量门禁，不进入安装包 job，也不会读取签名 secrets。
 
 手动 `create_release=true` 或 `pkg/oneworks-desktop/v*` tag 构建如果没有启用签名，也必须在凭据校验阶段失败，不能发布会被 Gatekeeper 拦截的 ad-hoc “正式包”。
 
@@ -49,17 +50,16 @@ gh secret set APPLE_TEAM_ID --repo oneworks-ai/app
 
 ## 验证
 
-验证发布链路：
+发版前验证签名包构建时，不创建或修改 GitHub Release：
 
 ```bash
 gh workflow run desktop-package.yml \
   --repo oneworks-ai/app \
   --ref main \
-  -f create_release=true \
-  -f release_tag=pkg/oneworks-desktop/v0.1.0-alpha.0
+  -f create_release=false
 ```
 
-如果只是验证签名包 artifact，不想创建 GitHub Release，可以把 `create_release=false`，下载 workflow artifact 后在 macOS 上验证：
+下载 workflow artifact 后在 macOS 上验证：
 
 ```bash
 codesign --verify --deep --strict "/Applications/One Works.app"
@@ -68,4 +68,15 @@ pkgutil --check-signature oneworks-*-mac-*.pkg
 spctl --assess --type install --verbose oneworks-*-mac-*.pkg
 xcrun stapler validate oneworks-*-mac-*.dmg
 xcrun stapler validate oneworks-*-mac-*.pkg
+```
+
+只有明确要创建或更新正式 GitHub Release 时才使用
+`create_release=true` 并传入实际 release tag；该操作会写入远端 Release 与资产：
+
+```bash
+gh workflow run desktop-package.yml \
+  --repo oneworks-ai/app \
+  --ref main \
+  -f create_release=true \
+  -f release_tag=pkg/oneworks-desktop/v0.1.0-alpha.0
 ```

@@ -79,7 +79,7 @@
 - `pnpm desktop:package` / `package:icon` 必须先运行 `build:plugins`，为 `BUILTIN_PLUGIN_PACKAGES` 中带生产 client/server entry 的插件准备 `dist`。Browser Control 必须包含 client/server 产物，Relay 必须包含 client/server 与 config 的 CJS/ESM 产物；只把 workspace package overlay 进 staging 不能替代构建。
 - `BUILTIN_PLUGIN_PACKAGES` 必须与 `apps/desktop/package.json` 的 production dependencies、`packages/utils/src/plugin-resolver.ts` 的默认官方插件，以及 `apps/server/src/services/plugins/discovery.ts` 的宿主来源归类保持一致。In-App Browser Control、Browser Control 的当前 Chrome transport 与 Computer Control - CUA 是桌面默认内置能力；源码仓库可用同 manifest `name` 的 directory plugin 覆盖内置副本以继续 watch 调试，但不能同时生成两个运行实例。
 - macOS `.pkg` 安装向导包通过 `pnpm desktop:make:pkg` 或 `node apps/desktop/scripts/make.cjs --target pkg` 生成；`ONEWORKS_DESKTOP_MAKE_TARGETS` 只作为 CI / 临时覆盖入口，不作为用户文档里的主要入口。
-- 当前 GitHub `desktop-package` workflow 先收口 macOS：相关改动会先跑 package preflight；PR 使用 unsigned Dev identity，只生成代表主用户安装路径的 `arm64` `.dmg` 并完成挂载、复制到 `/Applications` 和已安装 app smoke，main / tag / 手动模式继续按仓库签名策略生成 `arm64,x64` 预打包 app 与 `.dmg` / `.pkg` / `.zip`。Windows / Linux builder 目标保留，但暂时不作为 CI gate。
+- 当前 GitHub `desktop-package` workflow 先收口 macOS：普通 PR 只运行几秒钟的同名 `macOS installer` required-check 兼容门禁，不使用 macOS runner，也不构建安装包。真正的 `macOS release installer` 只由 `pkg/oneworks-desktop/v*` tag 或手动 dispatch 触发，运行 package preflight 后按仓库签名策略生成 `arm64,x64` 预打包 app 与 `.dmg` / `.pkg` / `.zip`，并完成挂载、复制到 `/Applications` 和已安装 app smoke。main push 不构建完整安装包；发版前可手动 dispatch 验证。Windows / Linux builder 目标保留，但暂时不作为 CI gate。
 - 桌面图标资产来自 `assets/icon` submodule；更新 submodule 后运行 `pnpm desktop:icons:sync`，默认根图标是工业风格。macOS package / make 默认 `--mac-icon auto`，只有完整 Xcode 26+ 的 `actool` 支持 Icon Composer 时才启用 `.icon` / `Assets.car`，否则继续使用 `.icns`；显式验证可用 `pnpm desktop:make:pkg:icon`。
 - 内置本机服务默认关闭 `webAuth`；server 数据库、日志和运行数据写入 project home。桌面自身运行状态（例如最近项目）继续写入 Electron `userData`；launcher 快捷键与系统应用图标同步偏好写入全局 `~/.oneworks/.oo.config.json` 的 `desktop` section。
 - 当前打包保持 `asar: false`，因为 staging 仍依赖 `pnpm deploy` 生成的依赖布局与原生模块路径。
@@ -111,15 +111,15 @@
 - 改本地 dev 打包、workspace server 启动或 runtime package cache 时，必须同时检查 `scripts/package.cjs`、`src/builtin-adapter-cache.cjs`、`src/main/workspace-service-manager.ts`、`src/main/updates.ts`、`src/server-child.cjs` 和 `packages/types/src/adapter-package-cache.ts`；验证时至少核对安装后的 `desktop-build-source.json`、`/Applications/.../Resources/app/runtime-packages/@oneworks/client`、以及 `~/.oneworks/bootstrap/npm/oneworks__cli/<cacheVersion>` / `oneworks__server/<cacheVersion>` / `oneworks__client/<cacheVersion>` 里的真实文件内容。
 - 改打包脚本、图标同步脚本或生成资产时，提交前跑全仓 `pnpm dprint check` 和 `pnpm exec eslint .`，不要只跑改动文件范围；CI 的 format / lint 就是全仓检查。
 - 改图标生成资产时，同时检查 `dprint.json` 与 `.gitattributes`：生成 SVG 可按产物排除，`.icns` / `.ico` / `.png` 等二进制图标必须使用 `-text`，避免 Git EOL 规范化破坏文件。
-- 改 make target 校验时，要对照 `.github/workflows/desktop-package.yml`：PR 快路径使用 `ONEWORKS_DESKTOP_MAKE_TARGETS=dmg`，main / tag / 手动完整构建使用 `dmg,zip,pkg`，两者都依赖 `dmg` 产物做安装验证。
+- 改 make target 校验时，要对照 `.github/workflows/desktop-package.yml`：tag / 手动完整构建使用 `ONEWORKS_DESKTOP_MAKE_TARGETS=dmg,zip,pkg`，并依赖 `dmg` 产物做安装验证。
 - 改 auto-update 时，要一起验证：
   - `build/app-update.yml`
   - `electron-builder.yml` 的 `publish`
   - `ONEWORKS_DESKTOP_ENABLE_AUTO_UPDATE`
   - `DESKTOP_AUTO_UPDATE`
-    目标是继续保证 PR / main artifact 不会误进稳定更新通道。
-- 改签名逻辑时，不要破坏“默认关闭签名”的本地与 CI 行为；当前只有显式设置 `ONEWORKS_DESKTOP_SIGN=true`，或 main / tag / 手动完整构建读取到 `DESKTOP_SIGN=true` 时才进入签名流程。PR 的 DMG-only 快路径固定 unsigned，不读取签名 secrets；完整 CI 目标包含 `pkg`，开启签名时仍要求 Application 与 Installer 两套证书 secret。
-- PR artifact 固定使用未签名的 Dev identity；普通 main artifact 按 `DESKTOP_SIGN` 决定是否签名，但 `pkg/oneworks-desktop/v*` 或手动 `create_release=true` 的正式 identity 必须强制签名和 notarization。凭据缺失时应在发布前失败，不能上传只有 ad-hoc 签名、会被 Gatekeeper 拦截的正式 release。
+    目标是继续保证手动非 release artifact 不会误进稳定更新通道。
+- 改签名逻辑时，不要破坏“默认关闭签名”的本地与 CI 行为；当前只有显式设置 `ONEWORKS_DESKTOP_SIGN=true`，或 tag / 手动构建读取到 `DESKTOP_SIGN=true` 时才进入签名流程。普通 PR 只运行轻量门禁，不进入安装包 job，也不读取签名 secrets；完整 CI 目标包含 `pkg`，开启签名时仍要求 Application 与 Installer 两套证书 secret。
+- 手动非 release artifact 按 `DESKTOP_SIGN` 决定是否签名，但 `pkg/oneworks-desktop/v*` 或手动 `create_release=true` 的正式 identity 必须强制签名和 notarization。凭据缺失时应在发布前失败，不能上传只有 ad-hoc 签名、会被 Gatekeeper 拦截的正式 release。
 - 正式 macOS 构建不仅要 notarize `.app`：生成后的 `.dmg` 与 Developer ID Installer 签名 `.pkg` 也必须提交 notarization 并 staple；安装验证同时覆盖 `codesign` / `spctl --type execute`、`pkgutil` / `spctl --type install` 和 installer staple，避免只验证 DMG 内应用却发布不可安装的 PKG。
 - 改版本号传递或 artifact 命名时，保持 `pkg/oneworks-desktop/v*` tag、`artifactName` 与 `latest*.yml` 中的 URL 一致，否则自动更新会直接失效。
 - 正式包的 runtime package cache version 必须读取 Electron 最终应用版本（`app.getVersion()`），不能读取依赖包版本。打包 staging 的应用 manifest 必须先写入 `ONEWORKS_DESKTOP_VERSION`，保证 Electron runtime、原生 bundle 与 runtime cache 目录使用同一最终版本；release tag 覆盖桌面版本但内部 workspace 包尚未对齐时也不能复用上一版 server / adapter 缓存。
@@ -134,7 +134,7 @@
   - `pnpm desktop:make` 负责基于 prepackaged app 生成安装 / 分发产物
     这两段混在一起排查时最容易看错问题发生层级。
 - 当用户要求本地编译桌面包时，先询问是否需要自动安装验证；确认后先完成本地构建与 `pnpm -C apps/desktop smoke:package`，再用 `ditto "apps/desktop/out/One Works Dev-darwin-arm64/One Works Dev.app" "/Applications/One Works Dev.app"` 覆盖安装 Dev 版并校验 bundle metadata。默认不要卸载或覆盖正式 `/Applications/One Works.app`。
-- GitHub 普通 PR / main artifact 和默认本地构建一样使用 `One Works Dev` 身份；`pkg/oneworks-desktop/v*` release、手动 release 输入或明确的本地 production 验证可以通过 `ONEWORKS_DESKTOP_RELEASE_BUILD=true` 切到正式 `One Works` 身份，但本地 production 验证不能冒充官方不可变发布。
+- GitHub 手动非 release artifact 和默认本地构建一样使用 `One Works Dev` 身份；`pkg/oneworks-desktop/v*` release、手动 release 输入或明确的本地 production 验证可以通过 `ONEWORKS_DESKTOP_RELEASE_BUILD=true` 切到正式 `One Works` 身份，但本地 production 验证不能冒充官方不可变发布。
 - 本地或普通 CI 桌面包会注入 `desktop-build-source.json`，由配置页“关于 / 应用来源”展示 git hash、分支、构建时间和唯一 runtime cacheVersion；即使本地显式使用正式 `One Works` 身份，也必须保留该文件，避免同一 semver 的连续本地 production 构建复用旧 client/server/plugin。只有带 `ONEWORKS_DESKTOP_OFFICIAL_RELEASE_BUILD=true` 的官方 tag / release workflow 产物才不注入，继续按不可变 semver 复用缓存。
 - macOS 双架构打包依赖 `scripts/make.cjs` 在 release 目录里合并 `latest-mac.yml`；改动多架构逻辑后，要确认最终只留下一个对外使用的 `latest-mac.yml`。
 - 包内 server 是否真的可启动，不要只看 Electron 能不能打开窗口；优先跑 `pnpm -C apps/desktop smoke:package`，让 packaged server 真正响应 `/api/auth/status`。
@@ -146,10 +146,10 @@
 
 - 验证“GitHub 流水线产物能安装”时，必须触发 GitHub Actions、下载该 run 上传的 artifact，再用下载回来的 `.dmg` 安装验证；本地 `pnpm desktop:make` 产物只能证明本机打包链路，不等价于流水线产物。
 - macOS 用户主安装路径是 `.dmg`，不要只验证 `.pkg` 或 prepackaged `.app`。`.pkg` 只能作为 Installer.app 流程的补充验证，不能替代 DMG 下载后挂载、复制到 `/Applications` 的路径。
-- 普通 PR / main / workflow_dispatch artifact 必须继续使用 `One Works Dev` 与 `ai.oneworks.desktop.dev`，否则下载到开发机后会覆盖正式 `/Applications/One Works.app`。只有 `pkg/oneworks-desktop/v*` release 或手动 release 输入允许设置 `ONEWORKS_DESKTOP_RELEASE_BUILD=true`。
+- 手动非 release artifact 必须继续使用 `One Works Dev` 与 `ai.oneworks.desktop.dev`，否则下载到开发机后会覆盖正式 `/Applications/One Works.app`。只有 `pkg/oneworks-desktop/v*` release 或手动 release 输入允许设置 `ONEWORKS_DESKTOP_RELEASE_BUILD=true`。
 - `pnpm -C apps/desktop smoke:package` 只证明 prepackaged app 内的 server 能启动；它不能证明 `.dmg` 内容、安装复制路径、bundle metadata、构建来源元数据或安装后的资源路径正确。安装产物验证要跑 `pnpm -C apps/desktop verify:macos-install`，并在需要时从下载的 artifact 目录执行。
 - GitHub Actions 可能提示 Node.js 20 actions deprecation。该 warning 不影响当前 macOS DMG 验证结果，但后续升级 `actions/checkout`、`actions/setup-node`、`actions/upload-artifact` 或 `pnpm/action-setup` 时要重新跑 desktop-package workflow。
-- `desktop-package.yml` 的变更判断必须同时覆盖桌面直接源码和正式包内的 workspace 依赖：`apps/bootstrap`、`apps/cli`、`apps/client`、`apps/server` 与 `packages/**`。内置 adapter / plugin、server 或 client 改动即使没有触碰 `apps/desktop`，也必须生成安装包验证。
+- 普通 PR 不再自动生成安装包；触及桌面直接源码、正式包内 workspace 依赖、内置 adapter / plugin、server 或 client 的发版，应在 release tag 前手动 dispatch `desktop-package.yml` 验证真实安装产物。
 - `smoke:package` 之后 pnpm 可能把 `apps/desktop/node_modules` 重建成 production-only，导致后续 `make:from-package` 找不到 `electron-builder`。如果 CI 顺序保持 smoke 在 make 前，make 前必须先用 `pnpm install --frozen-lockfile --prod=false` 恢复 devDependencies；否则就把 make 放到 smoke 前。
 
 ## 常见坑位

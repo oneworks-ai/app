@@ -156,8 +156,8 @@ merge 经验：
 - `main` 是保护分支，直接 `git push origin HEAD:main` 会被 required checks 拒绝。走 PR，不要尝试绕过。
 - 如果主 worktree checkout 着 `main` 且有本地改动，不要在里面 merge。用当前干净 worktree 开 PR 分支，或临时 detached worktree 做只读/试合并。
 - 仓库可能不允许 GitHub auto-merge。`gh pr merge --auto` 返回 `Auto merge is not allowed for this repository` 时，等待所有 required checks 全绿后再 `gh pr merge <pr> --merge`。
-- `gh pr checks --watch` 输出很长。只剩 `macOS installer` 这类长任务时，停止 watcher，用 `gh run view <run> --json jobs` 看它是在排队还是正在 `Build desktop artifacts`，避免刷爆上下文。
-- `macOS installer` 可能跑 10 分钟以上；只要仍在正常步骤中，不要提前 admin bypass。
+- `gh pr checks --watch` 输出很长。只剩长任务时，停止 watcher，用 `gh run view <run> --json jobs` 看具体步骤，避免刷爆上下文。
+- 完整的 `macOS release installer` 只在桌面 release tag 或手动 dispatch 时运行，可能超过 10 分钟；PR 上同名兼容门禁不会构建安装包。只要发版验包仍在正常步骤中，不要提前取消或重启。
 
 ## 最小落地清单
 
