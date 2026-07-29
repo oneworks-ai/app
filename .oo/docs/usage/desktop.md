@@ -55,7 +55,7 @@ npx oneworks app --no-cache
 - `File -> Running Projects`：在已经运行的项目窗口之间快速切换
 - `View`：提供侧栏、终端、文件树、浏览器页、窗口重载、会话切换、前进后退与缩放快捷操作
 - `One Works -> Check for Updates...`（macOS）或 `Help -> Check for Updates...`（Windows / Linux）：手动检测桌面更新；正式安装包也会在启动后自动检测，有可用更新时前进 / 后退按钮右侧会显示更新按钮。配置页和 launcher 设置页可以开启 / 关闭自动更新，并选择 Stable / RC / Beta / Alpha 默认更新通道，保存到当前 workspace 的 `.oo.config.json`。
-- 左下角菜单里的“检查更新”：进入独立页面，按 Core / Adapters / Plugins 分组检测并更新 web shell、client UI、server、内置 adapter 包和内置 plugin 包，更新文件写入 bootstrap cache。模块默认继承 `desktop.updateChannel`，也可以在页面里为单个模块选择 Stable / RC / Beta / Alpha 覆盖通道，覆盖值保存到当前 workspace `.oo.config.json` 的 `desktop.moduleUpdateChannels`。页面支持按分组批量更新；adapter 更新后新会话生效，web shell、client UI、server 和 plugin 更新后需要重启对应运行时。
+- 左下角菜单里的“检查更新”：进入独立页面，按 Core / Adapters / Plugins 分组检测并更新桌面端实际使用的 client UI、server、内置 adapter 包和内置 plugin 包，更新文件写入 bootstrap cache；Web shell 只在集成 Web 宿主中管理。模块默认继承 `desktop.updateChannel`，也可以在页面里为单个模块选择 Stable / RC / Beta / Alpha 覆盖通道，覆盖值保存到当前 workspace `.oo.config.json` 的 `desktop.moduleUpdateChannels`。页面支持按分组批量更新；adapter 更新后新会话生效，client UI、server 和 plugin 更新后需要重启对应运行时。
 - `Developer -> Open One Works DevTools`：打开当前桌面窗口的 DevTools
 
 macOS Dock 图标右键菜单也会展示最近项目、当前打开窗口、`Open Launcher`、`New Window`、`Open...`、`Open Folder...` 和 `Open Recent`。

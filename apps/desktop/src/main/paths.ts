@@ -5,7 +5,8 @@ import process from 'node:process'
 
 import { app } from 'electron'
 
-import { resolveExistingNpmPackageDir } from '@oneworks/types'
+import { resolveActiveModulePackageDirSync } from '@oneworks/server/module-update-cache'
+import { comparePackageCacheVersions, resolveExistingNpmPackageDir } from '@oneworks/types'
 
 const nodeRequire = createRequire(__filename)
 const desktopRoot = app.getAppPath()
@@ -19,14 +20,53 @@ export const isDev = !app.isPackaged
 const CLIENT_PACKAGE_NAME = '@oneworks/client'
 const SERVER_PACKAGE_NAME = '@oneworks/server'
 
+const readPackageVersion = (packageDir: string, packageName: string) => {
+  try {
+    const packageInfo = JSON.parse(fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8')) as {
+      name?: unknown
+      version?: unknown
+    }
+    return packageInfo.name === packageName && typeof packageInfo.version === 'string'
+      ? packageInfo.version
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
+const resolvePreferredPackageDir = (
+  packageName: string,
+  env: NodeJS.ProcessEnv,
+  validatePackageDir: (packageDir: string) => boolean = () => true
+) =>
+  [
+    resolveExistingNpmPackageDir(packageName, env),
+    resolveActiveModulePackageDirSync(packageName, env)
+  ]
+    .filter((packageDir): packageDir is string => packageDir != null && validatePackageDir(packageDir))
+    .map(packageDir => ({ packageDir, version: readPackageVersion(packageDir, packageName) }))
+    .filter((entry): entry is { packageDir: string; version: string } => entry.version != null)
+    .sort((left, right) => comparePackageCacheVersions(right.version, left.version))[0]
+    ?.packageDir
+
+export const resolveClientPackageDir = (env: NodeJS.ProcessEnv = process.env): string | undefined => {
+  if (!app.isPackaged) return path.join(repoRoot, 'apps/client')
+
+  return resolvePreferredPackageDir(
+    CLIENT_PACKAGE_NAME,
+    env,
+    packageDir => fs.existsSync(path.join(packageDir, 'dist/index.html'))
+  )
+}
+
 export const resolveClientDistPath = (env: NodeJS.ProcessEnv = process.env): string | undefined => {
-  const cachedClientPackageDir = app.isPackaged ? resolveExistingNpmPackageDir(CLIENT_PACKAGE_NAME, env) : undefined
+  const clientPackageDir = resolveClientPackageDir(env)
   const packagedClientDistPath = typeof process.resourcesPath === 'string'
     ? path.join(process.resourcesPath, 'dist')
     : undefined
   const candidates = app.isPackaged
     ? [
-      cachedClientPackageDir == null ? undefined : path.join(cachedClientPackageDir, 'dist'),
+      clientPackageDir == null ? undefined : path.join(clientPackageDir, 'dist'),
       packagedClientDistPath
     ]
     : [
@@ -47,7 +87,9 @@ export const resolveServerExecutable = () => {
 }
 
 export const resolveCachedServerPackageDir = (env: NodeJS.ProcessEnv = process.env) => (
-  app.isPackaged ? resolveExistingNpmPackageDir(SERVER_PACKAGE_NAME, env) : undefined
+  app.isPackaged
+    ? resolvePreferredPackageDir(SERVER_PACKAGE_NAME, env)
+    : undefined
 )
 
 export const resolveCachedServerPackageEnv = (env: NodeJS.ProcessEnv = process.env):

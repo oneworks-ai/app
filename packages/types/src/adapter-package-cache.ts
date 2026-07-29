@@ -112,7 +112,7 @@ const isCompatibleWithMinimumVersion = (version: string, minimumVersion: string)
     parsedVersion.patch === parsedMinimum.patch
 }
 
-const comparePackageCacheVersions = (left: string, right: string) => {
+export const comparePackageCacheVersions = (left: string, right: string) => {
   const leftSemver = parseSemver(left)
   const rightSemver = parseSemver(right)
   if (leftSemver != null && rightSemver != null) return compareSemver(leftSemver, rightSemver)

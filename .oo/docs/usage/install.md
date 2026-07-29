@@ -37,7 +37,7 @@ npx oneworks app --no-cache
 
 其中 `bootstrap app` 依赖对应平台已经公开发布桌面 release；当前 macOS、Linux 可用，Windows 仍以正式安装产物补齐为准。
 
-通过 `oneworks web`、`@oneworks/web` 或桌面 workspace 打开的 Web UI，左下角菜单提供“模块管理”页面，可以按 Core / Adapters / Plugins 分组检查和更新。可下载安装到 bootstrap cache 的模块包括 `@oneworks/web`、`@oneworks/client`、`@oneworks/server`、内置 adapter 包和内置 plugin 包；页面支持按默认更新通道、单模块覆盖通道或分组批量更新。默认通道保存为当前 workspace `.oo.config.json` 的 `desktop.updateChannel`，模块覆盖保存为 `desktop.moduleUpdateChannels`。adapter 更新后新会话会优先使用缓存版本；web shell、client UI、server 和 plugin 更新后需要重启对应运行时才会生效。
+通过 `oneworks web`、`@oneworks/web` 或桌面 workspace 打开的 Web UI，左下角菜单提供“模块管理”页面，可以按 Core / Adapters / Plugins 分组检查和更新。Core 列表只显示当前宿主实际使用的运行时：集成 Web 显示 `@oneworks/web`，独立 server 显示 `@oneworks/server`，桌面端显示 `@oneworks/client` 和 `@oneworks/server`；内置 adapter 与 plugin 继续按对应分组显示。页面支持按默认更新通道、单模块覆盖通道或分组批量更新，并拒绝把已安装模块降级到更旧版本。默认通道保存为当前 workspace `.oo.config.json` 的 `desktop.updateChannel`，模块覆盖保存为 `desktop.moduleUpdateChannels`。adapter 更新后新会话会优先使用缓存版本；web shell、client UI、server 和 plugin 更新后需要重启对应运行时才会生效。
 `bootstrap app` 的项目行为：
 
 - 当前命令所在目录会传给桌面应用作为 workspace
