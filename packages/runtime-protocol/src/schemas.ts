@@ -121,6 +121,22 @@ export const RuntimeCorrelationFieldsSchema = z.object({
   visibility: RuntimeVisibilitySchema.optional()
 })
 
+const RuntimeUsageSchema = z.object({
+  account: z.string().optional(),
+  aggregationMode: z.enum(['cumulative', 'delta']).optional(),
+  cacheCreationInputTokens: z.number().nonnegative().optional(),
+  cacheReadInputTokens: z.number().nonnegative().optional(),
+  costUsd: z.number().nonnegative().optional(),
+  id: z.string().optional(),
+  inputTokens: z.number().nonnegative(),
+  model: z.string().optional(),
+  modelService: z.string().optional(),
+  observedAt: z.number().optional(),
+  outputTokens: z.number().nonnegative(),
+  quality: z.enum(['estimated', 'provider_reported', 'reported']).optional(),
+  reasoningOutputTokens: z.number().nonnegative().optional()
+})
+
 export const RuntimeCommandSchema = RuntimeCorrelationFieldsSchema.extend({
   protocolVersion: RuntimeProtocolVersionSchema,
   supportedProtocolRange: z.string().optional(),
@@ -231,6 +247,7 @@ export const RuntimeEventSchema = RuntimeCorrelationFieldsSchema.extend({
   fatal: z.boolean().optional(),
   adapter: z.string().optional(),
   model: z.string().optional(),
+  usage: RuntimeUsageSchema.optional(),
   artifactId: z.string().optional(),
   path: z.string().optional(),
   mimeType: z.string().optional(),

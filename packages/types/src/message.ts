@@ -76,6 +76,17 @@ export type RoomEventMessage =
     summary: string
   }
 
+export interface MessageTokenUsage {
+  input_tokens: number
+  output_tokens: number
+  cache_read_input_tokens?: number
+  cache_creation_input_tokens?: number
+  reasoning_output_tokens?: number
+  total_cost_usd?: number
+  aggregation_mode?: 'cumulative' | 'delta'
+  quality?: 'estimated' | 'provider_reported' | 'reported'
+}
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant' | 'system'
@@ -92,12 +103,7 @@ export interface ChatMessage {
     causedByCommandId?: string
   }
   model?: string
-  usage?: {
-    input_tokens: number
-    output_tokens: number
-    cache_read_input_tokens?: number
-    cache_creation_input_tokens?: number
-  }
+  usage?: MessageTokenUsage
   toolCall?: {
     id?: string
     name: string

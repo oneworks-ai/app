@@ -95,7 +95,10 @@ describe('claude-code incoming error handling', () => {
             input_tokens: 0,
             cache_creation_input_tokens: 0,
             cache_read_input_tokens: 0,
-            output_tokens: 0
+            output_tokens: 0,
+            aggregation_mode: 'cumulative',
+            quality: 'provider_reported',
+            total_cost_usd: 0
           }
         }
       }

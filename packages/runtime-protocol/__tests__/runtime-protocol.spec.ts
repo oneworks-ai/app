@@ -146,10 +146,24 @@ describe('runtime event schema', () => {
       operationId: 'op_1',
       roomId: 'room_1',
       memberKey: 'entity:dev',
+      usage: {
+        aggregationMode: 'delta',
+        inputTokens: 120,
+        model: 'kimi-k2.5',
+        modelService: 'kimi-api',
+        outputTokens: 30,
+        quality: 'provider_reported'
+      },
       visibility: 'room'
     })
 
     expect(result.success).toBe(true)
+    expect(result.data?.usage).toEqual(expect.objectContaining({
+      inputTokens: 120,
+      model: 'kimi-k2.5',
+      modelService: 'kimi-api',
+      outputTokens: 30
+    }))
   })
 
   it('rejects events with invalid protocol versions or unsupported types', () => {

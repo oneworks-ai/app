@@ -1,7 +1,7 @@
 export type LauncherRoutingMode = 'embedded' | 'url'
-export type LauncherViewMode = 'about' | 'commands' | 'plugin' | 'preview' | 'settings'
+export type LauncherViewMode = 'about' | 'commands' | 'plugin' | 'preview' | 'settings' | 'usage'
 
-const launcherUrlViewModes = new Set<LauncherViewMode>(['about', 'preview', 'settings'])
+const launcherUrlViewModes = new Set<LauncherViewMode>(['about', 'preview', 'settings', 'usage'])
 
 const safeDecodePathSegment = (value: string | undefined) => {
   if (value == null || value === '') return undefined
@@ -26,7 +26,7 @@ const readLauncherViewModeFromSearch = (search: string): LauncherViewMode | unde
 }
 
 export const buildLauncherViewRoutePath = (mode: LauncherViewMode) => (
-  mode === 'about' || mode === 'preview' || mode === 'settings'
+  mode === 'about' || mode === 'preview' || mode === 'settings' || mode === 'usage'
     ? `/launcher/${mode}`
     : '/launcher'
 )

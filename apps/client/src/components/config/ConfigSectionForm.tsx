@@ -11,6 +11,7 @@ import { getAdapterAccounts } from '#~/api'
 import { normalizeSendShortcut, resolveSendShortcut } from '#~/utils/shortcutUtils'
 
 import { MobileAwareSelect as Select } from '#~/components/mobile-aware-select/MobileAwareSelect'
+import { UsagePanel } from '#~/components/usage/UsagePanel'
 import { AdapterAccountsManager, mergeAccounts } from './AdapterAccountsManager'
 import type { AdapterImportAction } from './AdapterImportRow'
 import { DisplayValue } from './ConfigDisplayValue'
@@ -140,7 +141,8 @@ const collectionTabPathByKey = {
   advanced: ['advanced'],
   apiKeys: ['api-keys'],
   profiles: ['profiles'],
-  service: []
+  service: [],
+  usage: ['usage']
 } as const
 type CollectionTabKey = keyof typeof collectionTabPathByKey
 const modelServiceDetailTabPathByKey = {
@@ -149,7 +151,8 @@ const modelServiceDetailTabPathByKey = {
   display: ['display'],
   models: ['models'],
   plan: ['plan'],
-  service: []
+  service: [],
+  usage: ['usage']
 } as const
 type ModelServiceDetailTabKey = keyof typeof modelServiceDetailTabPathByKey
 
@@ -158,6 +161,7 @@ const collectionTabKeyFromPath = (nestedPath: string[] | undefined): CollectionT
   if (segment === 'profiles') return 'profiles'
   if (segment === 'api-keys') return 'apiKeys'
   if (segment === 'advanced') return 'advanced'
+  if (segment === 'usage') return 'usage'
   return 'service'
 }
 const modelServiceDetailTabKeyFromPath = (nestedPath: string[] | undefined): ModelServiceDetailTabKey => {
@@ -167,6 +171,7 @@ const modelServiceDetailTabKeyFromPath = (nestedPath: string[] | undefined): Mod
   if (segment === 'display') return 'display'
   if (segment === 'models') return 'models'
   if (segment === 'plan') return 'plan'
+  if (segment === 'usage') return 'usage'
   return 'service'
 }
 const isVisibleConfigField = (
@@ -1477,6 +1482,21 @@ export const SectionForm = ({
           )
         },
         {
+          key: 'usage',
+          label: tabLabel('data_usage', t('usage.title')),
+          children: (
+            <div className='config-view__subsection-body'>
+              <UsagePanel
+                key={`model-service-usage:${detailMeta.itemKey}`}
+                initialFilters={{ modelService: detailMeta.itemKey }}
+                lockedFilters={['modelService']}
+                surface='workspace'
+                variant='embedded'
+              />
+            </div>
+          )
+        },
+        {
           key: 'profiles',
           label: tabLabel(
             'account_tree',
@@ -1582,7 +1602,8 @@ export const SectionForm = ({
         display: [],
         models: [],
         plan: [],
-        service: []
+        service: [],
+        usage: []
       })
       const openModelServiceTab = (tabKey: ModelServiceDetailTabKey) => {
         onOpenDetailRoute?.({
@@ -1627,10 +1648,16 @@ export const SectionForm = ({
           key: 'advanced',
           icon: 'tune',
           label: t('config.modelServices.collectionTabs.advanced', { defaultValue: '高级配置' })
+        },
+        {
+          key: 'usage',
+          icon: 'data_usage',
+          label: t('usage.title')
         }
       ]
       const tabItems = tabDefinitions
         .filter(({ key }) =>
+          key === 'usage' ||
           tabFields[key].some(field => isVisibleConfigField(field, modelServiceCurrentValue, modelServiceResolvedValue))
         )
         .map(({ key, icon, label }) => ({
@@ -1638,14 +1665,24 @@ export const SectionForm = ({
           label: tabLabel(icon, label),
           children: (
             <div className='config-view__subsection-body'>
-              {renderFieldGroups({
-                currentFields: tabFields[key],
-                currentValue: modelServiceCurrentValue,
-                currentResolvedValue: modelServiceResolvedValue,
-                onCurrentValueChange: isInheritedModelService ? () => undefined : writeDetailItem,
-                keyPrefix: `detail:${detailMeta.field.path.join('.')}:${detailMeta.itemKey}:${key}`,
-                readOnly: isInheritedModelService
-              })}
+              {key === 'usage'
+                ? (
+                  <UsagePanel
+                    key={`model-service-usage:${detailMeta.itemKey}`}
+                    initialFilters={{ modelService: detailMeta.itemKey }}
+                    lockedFilters={['modelService']}
+                    surface='workspace'
+                    variant='embedded'
+                  />
+                )
+                : renderFieldGroups({
+                  currentFields: tabFields[key],
+                  currentValue: modelServiceCurrentValue,
+                  currentResolvedValue: modelServiceResolvedValue,
+                  onCurrentValueChange: isInheritedModelService ? () => undefined : writeDetailItem,
+                  keyPrefix: `detail:${detailMeta.field.path.join('.')}:${detailMeta.itemKey}:${key}`,
+                  readOnly: isInheritedModelService
+                })}
             </div>
           )
         }))

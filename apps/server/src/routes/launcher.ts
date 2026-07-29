@@ -13,9 +13,11 @@ import {
   restartLauncherWorkspaceById,
   stopLauncherWorkspace
 } from '#~/services/launcher/manager.js'
+import { getLauncherUsageReport } from '#~/services/usage/index.js'
 import { notFound } from '#~/utils/http.js'
 
 import { proxyLauncherWorkspaceResource } from './launcher-workspace-resource-proxy'
+import { parseUsageQuery } from './usage'
 
 const normalizeLauncherClientOrigin = (value: string | undefined) => {
   const trimmedValue = value?.trim()
@@ -48,6 +50,10 @@ export function launcherRouter(env: ReturnType<typeof loadEnv>): Router {
 
   router.get('/workspaces', async (ctx) => {
     ctx.body = await listLauncherWorkspaces()
+  })
+
+  router.get('/usage', async (ctx) => {
+    ctx.body = await getLauncherUsageReport(parseUsageQuery(ctx.query))
   })
 
   router.post('/workspaces/open', async (ctx) => {

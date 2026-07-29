@@ -29,6 +29,8 @@ import type { SessionRuntimeState } from './sessions/repo'
 import { sessionsSchemaModule } from './sessions/schema'
 import { createTagsRepo } from './sessions/tags.repo'
 import type { SqliteDatabase } from './sqlite'
+import { createUsageRepo } from './usage/repo'
+import { usageSchemaModule } from './usage/schema'
 
 const dbSchemaModules = [
   sessionsSchemaModule,
@@ -37,7 +39,8 @@ const dbSchemaModules = [
   channelMessagesSchemaModule,
   channelActionTokensSchemaModule,
   agentRoomsSchemaModule,
-  automationSchemaModule
+  automationSchemaModule,
+  usageSchemaModule
 ] as const
 
 export interface SqliteDbOptions {
@@ -56,6 +59,7 @@ export class SqliteDb {
   private agentRooms: ReturnType<typeof createAgentRoomsRepo>
   private tags: ReturnType<typeof createTagsRepo>
   private automation: ReturnType<typeof createAutomationRepo>
+  private usage: ReturnType<typeof createUsageRepo>
 
   constructor(options: SqliteDbOptions = {}) {
     this.db = options.db ?? createConnection().db
@@ -70,6 +74,7 @@ export class SqliteDb {
     this.agentRooms = createAgentRoomsRepo(this.db)
     this.tags = createTagsRepo(this.db)
     this.automation = createAutomationRepo(this.db)
+    this.usage = createUsageRepo(this.db)
   }
 
   getSessions(filter: 'active' | 'archived' | 'all' = 'active') {
@@ -134,7 +139,27 @@ export class SqliteDb {
   }
 
   saveMessage(sessionId: string, data: unknown) {
-    return this.messages.save(sessionId, data)
+    const didSave = this.messages.save(sessionId, data)
+    if (didSave) {
+      this.usage.recordSessionEvent(sessionId, data)
+    }
+    return didSave
+  }
+
+  getUsageReport(query?: Parameters<typeof this.usage.report>[0]) {
+    return this.usage.report(query)
+  }
+
+  listUsageObservations() {
+    return this.usage.list()
+  }
+
+  recordUsageObservation(observation: Parameters<typeof this.usage.recordObservation>[0]) {
+    return this.usage.recordObservation(observation)
+  }
+
+  recordSessionUsageEvent(sessionId: string, event: unknown) {
+    return this.usage.recordSessionEvent(sessionId, event)
   }
 
   getMessages(sessionId: string) {

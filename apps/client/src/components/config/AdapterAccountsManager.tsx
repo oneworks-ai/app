@@ -1,7 +1,7 @@
 /* eslint-disable max-lines -- account management keeps list, detail, and action flows in one surface. */
 import './AdapterAccountsManager.scss'
 
-import { App, Button, Empty, Input, Popconfirm, Spin, Tooltip } from 'antd'
+import { App, Button, Collapse, Empty, Input, Popconfirm, Spin, Tooltip } from 'antd'
 import { useMemo, useState } from 'react'
 import useSWR, { useSWRConfig } from 'swr'
 
@@ -17,6 +17,7 @@ import type {
 import { getAdapterAccounts, getApiErrorMessage, manageAdapterAccount } from '#~/api'
 import { QuotaUsageRing } from '#~/components/account-quota/QuotaUsageRing'
 import { InlineActionButton } from '#~/components/inline-action-button'
+import { UsagePanel } from '#~/components/usage/UsagePanel'
 import {
   getAdapterResetCreditOutcome,
   getAdapterResetCreditOutcomeTone,
@@ -805,6 +806,30 @@ const AccountDetailView = ({
               )}
             </div>
           )}
+
+          <Collapse
+            className='adapter-account-manager__usage'
+            expandIconPosition='end'
+            ghost
+            items={[{
+              key: 'usage',
+              label: (
+                <span className='adapter-account-manager__section-title'>
+                  <span className='material-symbols-rounded' aria-hidden='true'>data_usage</span>
+                  <span>{t('usage.title')}</span>
+                </span>
+              ),
+              children: (
+                <UsagePanel
+                  key={`account-usage:${adapterKey}:${accountKey}`}
+                  initialFilters={{ account: accountKey, tool: adapterKey }}
+                  lockedFilters={['account', 'tool']}
+                  surface='workspace'
+                  variant='embedded'
+                />
+              )
+            }]}
+          />
 
           <AccountEditor
             adapterKey={adapterKey}

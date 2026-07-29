@@ -2,6 +2,7 @@ import type {
   AdapterContextCompactionData,
   AdapterInteractionRequest,
   AdapterSessionUpdateData,
+  AdapterUsageData,
   ChatMessage,
   ChatMessageContent,
   TaskRuntime
@@ -38,6 +39,7 @@ export type HookBridgeOutputEvent =
   | { type: 'session_update'; data: AdapterSessionUpdateData }
   | { type: 'summary'; data: unknown }
   | { type: 'message'; data: ChatMessage }
+  | { type: 'usage'; data: AdapterUsageData }
   | { type: 'interaction_request'; data: AdapterInteractionRequest }
   | { type: 'error'; data: unknown }
   | { type: 'exit'; data: { exitCode?: number; stderr?: string } }

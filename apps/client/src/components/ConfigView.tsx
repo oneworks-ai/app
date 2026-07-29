@@ -101,6 +101,7 @@ import { toLabel } from './config/record-editors/schemaRecordUtils'
 import { toDisplayEnvironmentName, toEnvironmentReference } from './config/worktree-environment-panel-model'
 import { PluginSettingsPage } from './plugins/PluginSettingsPage'
 import { isPluginSettingsTabKey, resolveSettingsTabKey } from './plugins/plugin-settings-route'
+import { UsagePanel } from './usage/UsagePanel'
 
 interface ConfigDraftConflict {
   draftKey: string
@@ -149,7 +150,8 @@ const modelServiceDetailTabPathSegments = new Set([
   'management',
   'models',
   'plan',
-  'profiles'
+  'profiles',
+  'usage'
 ])
 const isConfigSourceKey = (value: string): value is ConfigSource => (
   configSourceKeys.includes(value as ConfigSource)
@@ -550,6 +552,7 @@ export function ConfigView() {
       ]
       : []),
     { key: 'group-app', type: 'group', label: t('config.groups.app') },
+    { key: 'usage', icon: 'data_usage', label: t('config.sections.usage') },
     { key: 'externalSessions', icon: 'history', label: t('config.sections.externalSessions') },
     ...(hasDesktopSettings
       ? [{ key: 'desktop', icon: 'desktop_windows', label: t('config.sections.desktop') }]
@@ -1029,6 +1032,7 @@ export function ConfigView() {
         })
       }
       if (index === 0 && segment === 'profiles') return t('config.sectionGroups.profiles')
+      if (index === 0 && segment === 'usage') return t('usage.title')
       if (
         index === 1 &&
         nestedSegments[0] === 'profiles' &&
@@ -1922,6 +1926,9 @@ export function ConfigView() {
           }}
         />
       )}
+      {tab.key === 'usage' && (
+        <UsagePanel surface='workspace' />
+      )}
       {'pluginSettingsPage' in tab && tab.pluginSettingsPage != null && (
         <PluginSettingsPage page={tab.pluginSettingsPage} />
       )}
@@ -1932,6 +1939,7 @@ export function ConfigView() {
         tab.key !== 'savedPasswords' &&
         tab.key !== 'appearance' &&
         tab.key !== 'themes' &&
+        tab.key !== 'usage' &&
         tab.key !== 'externalSessions' &&
         tab.key !== 'worktreeEnvironments' &&
         !('pluginSettingsPage' in tab) &&

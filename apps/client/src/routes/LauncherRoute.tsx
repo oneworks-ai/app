@@ -34,6 +34,7 @@ import {
 import { LauncherAboutView } from '#~/components/launcher/LauncherAboutView'
 import { LauncherSettingsView } from '#~/components/launcher/LauncherSettingsView'
 import type { LauncherKeyboardHint, LauncherSettingsResetAction } from '#~/components/launcher/LauncherSettingsView'
+import { UsagePanel } from '#~/components/usage/UsagePanel'
 import { WorkspaceOpeningOverlay } from '#~/components/workspace/WorkspaceOpeningOverlay'
 import { getProjectFileIconMeta } from '#~/components/workspace/project-file-tree/project-file-tree-icons'
 import { useInterfaceLanguageConfig } from '#~/hooks/use-interface-language-config'
@@ -2874,6 +2875,14 @@ export function LauncherRoute({
   // manifest routes or launcher search providers so disabled/missing plugins do not leak commands.
   const builtinCommands = useMemo<LauncherCommand[]>(() => [
     {
+      action: () => openLauncherView('usage'),
+      icon: 'data_usage',
+      id: 'builtin:usage',
+      keywords: ['usage', 'token', 'cost', '用量', '统计', '消耗'],
+      subtitle: t('launcher.builtin.usageHint'),
+      title: t('launcher.menu.usage')
+    },
+    {
       action: () => openLauncherView('settings'),
       icon: 'settings',
       id: 'builtin:settings',
@@ -3747,6 +3756,14 @@ export function LauncherRoute({
   )
   const launcherMenuItems = useMemo<MenuProps['items']>(() => [
     {
+      icon: menuIcon('data_usage'),
+      key: 'usage',
+      label: t('launcher.menu.usage'),
+      onClick: () => {
+        openLauncherView('usage')
+      }
+    },
+    {
       icon: menuIcon('settings'),
       key: 'settings',
       label: t('launcher.menu.settings'),
@@ -4112,6 +4129,8 @@ export function LauncherRoute({
     ? t('launcher.pluginSearchPlaceholder', { title: launcherPluginSearchTitle })
     : launcherViewMode === 'settings'
     ? t('launcher.settings.searchPlaceholder')
+    : launcherViewMode === 'usage'
+    ? t('usage.searchPlaceholder')
     : launcherViewMode === 'about'
     ? t('launcher.about.searchPlaceholder')
     : isCloneRepositoryMode
@@ -4131,6 +4150,8 @@ export function LauncherRoute({
     ? t('launcher.pluginSearchLabel', { title: launcherPluginSearchTitle })
     : launcherViewMode === 'settings'
     ? t('launcher.settings.searchLabel')
+    : launcherViewMode === 'usage'
+    ? t('usage.title')
     : launcherViewMode === 'about'
     ? t('launcher.about.searchLabel')
     : isCloneRepositoryMode
@@ -4148,6 +4169,8 @@ export function LauncherRoute({
     ? launcherPluginChromeTitle
     : launcherViewMode === 'settings'
     ? t('launcher.settings.title')
+    : launcherViewMode === 'usage'
+    ? t('usage.title')
     : launcherViewMode === 'about'
     ? t('launcher.about.title')
     : isDirectoryBrowserMode
@@ -4163,6 +4186,8 @@ export function LauncherRoute({
     ? launcherPluginChromeIcon
     : launcherViewMode === 'settings'
     ? 'settings'
+    : launcherViewMode === 'usage'
+    ? 'data_usage'
     : launcherViewMode === 'about'
     ? 'info'
     : isCloneRepositoryMode
@@ -4252,65 +4277,68 @@ export function LauncherRoute({
       className={[
         'launcher-route',
         launcherViewMode === 'plugin' ? 'is-plugin-route' : '',
+        launcherViewMode === 'usage' ? 'is-usage-route' : '',
         isDirectoryBrowserMode ? 'is-directory-browser-route' : '',
         openingWorkspace != null ? 'is-opening-workspace' : ''
       ].filter(Boolean).join(' ')}
       aria-busy={openingWorkspace != null}
     >
       <div className='launcher-command-shell'>
-        <div className='launcher-command-search'>
-          <div className='launcher-command-search__input-row'>
-            {(viewLeadingIcon != null || viewLeadingAvatar != null) && (
-              <Tooltip
-                align={{ offset: [-10, 6] }}
-                autoAdjustOverflow
-                classNames={{ root: 'launcher-command-tooltip launcher-command-search__icon-tooltip' }}
-                getPopupContainer={getLauncherPopupContainer}
-                placement='bottomLeft'
-                title={viewLeadingIconTooltip ?? viewSearchLabel}
-              >
-                <span
-                  className={viewLeadingAvatar == null
-                    ? [
-                      'launcher-command-search__file-icon',
-                      isFileSearchMode ? 'launcher-command-search__slash-icon' : 'material-symbols-rounded'
-                    ].join(' ')
-                    : 'launcher-command-search__avatar'}
-                  aria-label={viewLeadingIconTooltip ?? viewSearchLabel}
+        {launcherViewMode !== 'usage' && (
+          <div className='launcher-command-search'>
+            <div className='launcher-command-search__input-row'>
+              {(viewLeadingIcon != null || viewLeadingAvatar != null) && (
+                <Tooltip
+                  align={{ offset: [-10, 6] }}
+                  autoAdjustOverflow
+                  classNames={{ root: 'launcher-command-tooltip launcher-command-search__icon-tooltip' }}
+                  getPopupContainer={getLauncherPopupContainer}
+                  placement='bottomLeft'
+                  title={viewLeadingIconTooltip ?? viewSearchLabel}
                 >
-                  {viewLeadingAvatar == null
-                    ? viewLeadingIcon
-                    : viewLeadingAvatar.url == null
-                    ? viewLeadingAvatar.initials
-                    : (
-                      <img
-                        alt=''
-                        draggable={false}
-                        src={viewLeadingAvatar.url}
-                      />
-                    )}
-                </span>
-              </Tooltip>
-            )}
-            <input
-              ref={searchInputRef}
-              aria-activedescendant={activeCommandId}
-              aria-label={viewSearchLabel}
-              className='launcher-command-search__input'
-              placeholder={viewSearchPlaceholder}
-              value={query}
-              onChange={event => setLauncherQueryWithUrl(event.target.value)}
-              onCompositionEnd={() =>
-                deferImeCompositionEnd((active) => {
-                  isSearchComposingRef.current = active
-                })}
-              onCompositionStart={() => {
-                isSearchComposingRef.current = true
-              }}
-              onKeyDown={handleKeyDown}
-            />
+                  <span
+                    className={viewLeadingAvatar == null
+                      ? [
+                        'launcher-command-search__file-icon',
+                        isFileSearchMode ? 'launcher-command-search__slash-icon' : 'material-symbols-rounded'
+                      ].join(' ')
+                      : 'launcher-command-search__avatar'}
+                    aria-label={viewLeadingIconTooltip ?? viewSearchLabel}
+                  >
+                    {viewLeadingAvatar == null
+                      ? viewLeadingIcon
+                      : viewLeadingAvatar.url == null
+                      ? viewLeadingAvatar.initials
+                      : (
+                        <img
+                          alt=''
+                          draggable={false}
+                          src={viewLeadingAvatar.url}
+                        />
+                      )}
+                  </span>
+                </Tooltip>
+              )}
+              <input
+                ref={searchInputRef}
+                aria-activedescendant={activeCommandId}
+                aria-label={viewSearchLabel}
+                className='launcher-command-search__input'
+                placeholder={viewSearchPlaceholder}
+                value={query}
+                onChange={event => setLauncherQueryWithUrl(event.target.value)}
+                onCompositionEnd={() =>
+                  deferImeCompositionEnd((active) => {
+                    isSearchComposingRef.current = active
+                  })}
+                onCompositionStart={() => {
+                  isSearchComposingRef.current = true
+                }}
+                onKeyDown={handleKeyDown}
+              />
+            </div>
           </div>
-        </div>
+        )}
 
         <div
           ref={commandListRef}
@@ -4320,6 +4348,8 @@ export function LauncherRoute({
             ? t('launcher.preview.listLabel')
             : launcherViewMode === 'settings'
             ? t('launcher.settings.listLabel')
+            : launcherViewMode === 'usage'
+            ? t('usage.title')
             : launcherViewMode === 'about'
             ? t('launcher.about.listLabel')
             : t('launcher.commandListLabel')}
@@ -4334,6 +4364,9 @@ export function LauncherRoute({
           )}
           {launcherViewMode === 'about' && (
             <LauncherAboutView />
+          )}
+          {launcherViewMode === 'usage' && (
+            <UsagePanel surface='launcher' />
           )}
           {launcherViewMode === 'plugin' && launcherPluginRouteState != null && launcherPluginRoute != null && (
             <div className='launcher-plugin-route-view'>

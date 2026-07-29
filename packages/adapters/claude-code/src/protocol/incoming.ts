@@ -152,7 +152,15 @@ export const handleIncomingEvent = (
       content: textContent,
       createdAt: Date.now(),
       model: data.message.model || data.model,
-      usage: data.message.usage
+      ...(data.message.usage == null
+        ? {}
+        : {
+          usage: {
+            ...data.message.usage,
+            aggregation_mode: 'delta',
+            quality: 'provider_reported'
+          }
+        })
     }
 
     if (toolUsePart != null) {
@@ -270,7 +278,16 @@ export const handleIncomingEvent = (
         role: 'assistant',
         content: data.result,
         createdAt: Date.now(),
-        usage: data.usage
+        ...(data.usage == null
+          ? {}
+          : {
+            usage: {
+              ...data.usage,
+              aggregation_mode: 'cumulative',
+              quality: 'provider_reported',
+              total_cost_usd: data.total_cost_usd
+            }
+          })
       }
     }
     onEvent({ type: 'stop', data: messageData })

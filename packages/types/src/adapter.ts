@@ -33,6 +33,22 @@ export interface AdapterSessionUpdateData {
   title?: string
 }
 
+export interface AdapterUsageData {
+  account?: string
+  aggregationMode?: 'cumulative' | 'delta'
+  cacheCreationInputTokens?: number
+  cacheReadInputTokens?: number
+  costUsd?: number
+  id?: string
+  inputTokens: number
+  model?: string
+  modelService?: string
+  observedAt?: number
+  outputTokens: number
+  quality?: 'estimated' | 'provider_reported' | 'reported'
+  reasoningOutputTokens?: number
+}
+
 export type AdapterOperationEventType =
   | 'operation_started'
   | 'operation_completed'
@@ -56,6 +72,7 @@ export type AdapterOutputEvent =
   | { type: 'session_update'; data: AdapterSessionUpdateData }
   | { type: 'summary'; data: SessionSummaryInfo }
   | { type: 'message'; data: ChatMessage }
+  | { type: 'usage'; data: AdapterUsageData }
   | { type: 'interaction_request'; data: AdapterInteractionRequest }
   | { type: 'error'; data: AdapterErrorData }
   | { type: 'exit'; data: { exitCode?: number; stderr?: string } }

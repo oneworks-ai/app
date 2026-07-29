@@ -30,6 +30,7 @@
 - `marketplace/`：技能商店和插件商店共用的卡片、能力标签、双列结果区与分页。新增 marketplace 类列表时传入业务标题、来源、描述、能力与 action slot，不要再复制卡片边框、三行截断、分页或响应式双列 CSS。
 - `stage-slider/`：离散档位的通用 slider，负责原生 range 键盘语义、阶段点、主题 token 和可选的末档动画；业务组件只提供档位 value / label，并通过 CSS 变量调整局部宽高，不复制轨道与滑块样式。
 - `workspace-scope-select/`：项目 / 会话范围选择的通用 Select。历史、下载、运行记录、审计记录这类需要按 workspace project 或 session 过滤的页面优先复用 `WorkspaceProjectSelect` / `WorkspaceSessionSelect`，并显式提供“全部项目 / 全部会话”选项；不要在业务组件里再临时拼一排 project/session chip。
+- `usage/`：Launcher 全局入口与 workspace 配置子页复用的 Token 用量视图；默认按 surface 决定全局或当前 workspace scope，只有存在多个候选项时才展示收纳后的筛选入口。
 - `Sidebar.tsx`：侧边栏数据装配、route sidebar 接入和列表状态。
 - `sidebar/SidebarHeader.tsx`：侧边栏顶部入口区、搜索区、入口 actions 和入口右键菜单触发。
 - `interaction-list/`：通用交互列表，只处理 selection、item 渲染、context menu 触发和外部 action 调用，不承载具体业务语义。需要分隔语义时通过模式声明：文档、团队、设备、配置、版本等可扫描资源列表使用 `resource`，账号分组、侧栏导航树等层级入口使用 `grouped`，launcher 内打开的插件页面使用 `launcher`；不要在业务模块里靠局部 padding / border 复制一套列表节奏。

@@ -498,6 +498,25 @@
   border-radius: 5px !important;
 }
 
+.adapter-account-manager__usage.ant-collapse {
+  border-block: 1px solid
+    color-mix(in srgb, var(--border-color) 78%, transparent);
+  border-radius: 0;
+}
+
+.adapter-account-manager__usage.ant-collapse
+  > .ant-collapse-item
+  > .ant-collapse-header {
+  padding: 13px 2px;
+}
+
+.adapter-account-manager__usage.ant-collapse
+  > .ant-collapse-item
+  > .ant-collapse-content
+  > .ant-collapse-content-box {
+  padding: 4px 0 2px;
+}
+
 .adapter-account-manager__editor {
   padding-top: 4px;
 }

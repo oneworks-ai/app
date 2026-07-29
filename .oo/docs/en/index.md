@@ -12,6 +12,7 @@ This documentation is the user-facing entry point for integrating One Works into
 - [VS Code Extension](./usage/vscode-extension.md)
 - [Web UI and Terminal View](./usage/web.md)
 - [Adapter Configuration and Multiple Accounts](./usage/adapters.md)
+- [Token Usage](./usage/token-usage.md)
 - [PWA and Standalone Deployment](./usage/pwa.md)
 - [Relay Hosting, Login, and Identity Model](./usage/relay.md)
 - [Channel Session Binding](./usage/channels.md)

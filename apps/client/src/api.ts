@@ -162,6 +162,7 @@ export { installSkillHubItem, listSkillHubRegistries, searchSkillHub } from './a
 
 // 基础响应类型与会话交互类型
 export type { ApiOkResponse, ApiRemoveResponse, SessionInteraction, SessionMessagesResponse } from './api/types'
+export { getUsageReport } from './api/usage'
 export { listSpeechToTextServices, transcribeSpeechToText } from './api/voice'
 export type {
   SpeechToTextServicesResponse,

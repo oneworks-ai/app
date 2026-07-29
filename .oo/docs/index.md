@@ -12,6 +12,7 @@
 - [VS Code 扩展](./usage/vscode-extension.md)
 - [Web UI 与 Terminal 视图](./usage/web.md)
 - [适配器配置与多账号](./usage/adapters.md)
+- [Token 用量统计](./usage/token-usage.md)
 - [PWA 与独立部署](./usage/pwa.md)
 - [Relay 托管、登录与身份模型](./usage/relay.md)
 - [Channel 会话绑定](./usage/channels.md)
