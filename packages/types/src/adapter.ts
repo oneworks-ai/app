@@ -214,6 +214,7 @@ export interface AdapterManageAccountProgressEvent {
 
 export interface AdapterManageAccountOptions {
   action: 'add' | 'refresh' | 'remove' | 'consume-reset-credit'
+  operationId?: string
   model?: string
   account?: string
   creditId?: string

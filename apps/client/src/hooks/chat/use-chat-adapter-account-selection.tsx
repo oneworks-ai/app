@@ -14,6 +14,7 @@ export interface ChatAdapterAccountOption {
   meta?: string
   email?: string
   avatarUrl?: string
+  quota?: AdapterAccountInfo['quota']
   quotaWindows?: AccountQuotaWindow[]
 }
 const ACCOUNT_STORAGE_KEY_PREFIX = 'oneworks_chat_adapter_account:'
@@ -109,6 +110,7 @@ export function useChatAdapterAccountSelection({
         meta: formatQuotaMeta(account.quota),
         email: inferAccountEmail(account),
         avatarUrl: account.avatarUrl,
+        quota: account.quota,
         quotaWindows: getAccountQuotaWindows(account.quota)
       }))
   }, [data?.accounts])

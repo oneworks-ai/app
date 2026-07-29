@@ -43,9 +43,11 @@ afterEach(async () => {
 
 const createTestCtx = (
   workspace: string,
-  overrides: Partial<Pick<AdapterCtx, 'env' | 'configs' | 'logger'>> = {}
+  overrides: Partial<Pick<AdapterCtx, 'env' | 'configs' | 'logger' | 'cache'>> & {
+    cacheStore?: Map<string, unknown>
+  } = {}
 ): AdapterCtx => {
-  const cacheStore = new Map<string, unknown>()
+  const cacheStore = overrides.cacheStore ?? new Map<string, unknown>()
 
   return {
     ctxId: 'ctx',
@@ -54,7 +56,7 @@ const createTestCtx = (
       HOME: resolveTestMockHome(workspace, join(workspace, 'missing-real-home')),
       __ONEWORKS_PROJECT_REAL_HOME__: join(workspace, 'missing-real-home')
     },
-    cache: {
+    cache: overrides.cache ?? {
       set: async (key: any, value: unknown) => {
         cacheStore.set(String(key), value)
         return { cachePath: '' }
@@ -672,6 +674,16 @@ describe('getCodexAccounts', () => {
 })
 
 describe('manageCodexAccount', () => {
+  it('requires a caller-stable operation ID before consuming a reset credit', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-reset-credit-operation-id-'))
+    tempDirs.push(workspace)
+
+    await expect(manageCodexAccount(createTestCtx(workspace), {
+      action: 'consume-reset-credit',
+      account: 'work'
+    })).rejects.toThrow('requires an operation ID')
+  })
+
   it('shows every Codex rate-limit bucket and consumes an earned reset credit', async () => {
     const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-reset-credit-'))
     const realHome = join(workspace, 'real-home')
@@ -719,15 +731,17 @@ const buildRateLimits = () => ({
   },
   rateLimitResetCredits: {
     availableCount,
-    credits: [{
-      id: 'credit-a',
-      resetType: 'weekly',
-      status: 'available',
-      title: 'Weekly reset',
-      description: 'Earned reset credit',
-      grantedAt: 1785200000,
-      expiresAt: 1786500000
-    }]
+    ...(availableCount > 1 ? {
+      credits: [{
+        id: 'credit-a',
+        resetType: 'weekly',
+        status: 'available',
+        title: 'Weekly reset',
+        description: 'Earned reset credit',
+        grantedAt: 1785200000,
+        expiresAt: 1786500000
+      }]
+    } : {})
   }
 })
 
@@ -816,10 +830,1008 @@ input.on('line', (line) => {
     const result = await manageCodexAccount(ctx, {
       action: 'consume-reset-credit',
       account: 'work',
-      creditId: 'credit-a'
+      creditId: 'credit-a',
+      operationId: 'reset-credit-operation-a'
     })
     expect(result.outcome).toBe('reset')
     expect(result.account?.quota?.rateLimitResetCredits?.availableCount).toBe(1)
+    expect(result.account?.quota?.rateLimitResetCredits?.credits).toBeUndefined()
+  })
+
+  it('keeps a successful reset outcome when account and quota refresh fail afterward', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-reset-credit-read-failure-'))
+    const realHome = join(workspace, 'real-home')
+    const fakeCodexPath = join(workspace, 'fake-codex-app-server.mjs')
+    const authFilePath = join(workspace, 'auth.json')
+    const operationMarkerPath = join(workspace, 'operation-id.txt')
+    tempDirs.push(workspace)
+
+    await writeFile(authFilePath, '{"auth_mode":"chatgpt"}\n')
+    await writeFile(
+      fakeCodexPath,
+      `#!/usr/bin/env node
+import { writeFileSync } from 'node:fs'
+import readline from 'node:readline'
+
+const input = readline.createInterface({ input: process.stdin })
+input.on('line', (line) => {
+  const message = JSON.parse(line)
+  if (message.id == null) return
+
+  if (message.method === 'account/rateLimitResetCredit/consume') {
+    writeFileSync(${JSON.stringify(operationMarkerPath)}, message.params.idempotencyKey)
+    process.stdout.write(JSON.stringify({
+      jsonrpc: '2.0',
+      id: message.id,
+      result: { outcome: 'reset' }
+    }) + '\\n')
+    return
+  }
+
+  if (message.method === 'account/read' || message.method === 'account/rateLimits/read') {
+    process.stdout.write(JSON.stringify({
+      jsonrpc: '2.0',
+      id: message.id,
+      error: { code: -32000, message: 'snapshot unavailable' }
+    }) + '\\n')
+    return
+  }
+
+  process.stdout.write(JSON.stringify({
+    jsonrpc: '2.0',
+    id: message.id,
+    result: {}
+  }) + '\\n')
+})
+`
+    )
+    await chmod(fakeCodexPath, 0o755)
+
+    const result = await manageCodexAccount(
+      createTestCtx(workspace, {
+        env: {
+          HOME: resolveTestMockHome(workspace, realHome),
+          __ONEWORKS_PROJECT_REAL_HOME__: realHome,
+          __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__: fakeCodexPath
+        },
+        configs: [{
+          adapters: {
+            codex: {
+              accounts: {
+                work: { authFile: authFilePath }
+              }
+            }
+          }
+        } as any]
+      }),
+      {
+        action: 'consume-reset-credit',
+        account: 'work',
+        operationId: 'reset-credit-read-failure'
+      }
+    )
+
+    expect(result.outcome).toBe('reset')
+    expect(result.account?.quota).toBeUndefined()
+    expect(result.message).toContain('Refresh the quota')
+    await expect(readFile(operationMarkerPath, 'utf8')).resolves.toBe('reset-credit-read-failure')
+  })
+
+  it('retries a disconnected consumption with the same operation ID without consuming twice', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-reset-credit-disconnect-'))
+    const realHome = join(workspace, 'real-home')
+    const fakeCodexPath = join(workspace, 'fake-codex-app-server.mjs')
+    const authFilePath = join(workspace, 'auth.json')
+    const statePath = join(workspace, 'consume-state.json')
+    tempDirs.push(workspace)
+
+    await writeFile(authFilePath, '{"auth_mode":"chatgpt"}\n')
+    await writeFile(
+      fakeCodexPath,
+      `#!/usr/bin/env node
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import readline from 'node:readline'
+
+const input = readline.createInterface({ input: process.stdin })
+input.on('line', (line) => {
+  const message = JSON.parse(line)
+  if (message.id == null) return
+
+  let result = {}
+  if (message.method === 'account/rateLimitResetCredit/consume') {
+    const state = existsSync(${JSON.stringify(statePath)})
+      ? JSON.parse(readFileSync(${JSON.stringify(statePath)}, 'utf8'))
+      : { consumeCalls: 0, consumptions: 0, operationIds: [], operations: {} }
+    const operationId = message.params.idempotencyKey
+    state.consumeCalls += 1
+    state.operationIds.push(operationId)
+    if (state.operations[operationId] == null) {
+      state.operations[operationId] = 'reset'
+      state.consumptions += 1
+    }
+    writeFileSync(${JSON.stringify(statePath)}, JSON.stringify(state))
+    if (state.consumeCalls === 1) {
+      process.exit(0)
+      return
+    }
+    result = { outcome: state.operations[operationId] }
+  } else if (message.method === 'account/read') {
+    result = { account: { type: 'chatgpt', planType: 'pro' } }
+  } else if (message.method === 'account/rateLimits/read') {
+    result = {
+      rateLimits: {
+        limitId: 'codex',
+        primary: { usedPercent: 0, windowDurationMins: 10080 },
+        planType: 'pro'
+      },
+      rateLimitResetCredits: { availableCount: 0 }
+    }
+  }
+
+  process.stdout.write(JSON.stringify({
+    jsonrpc: '2.0',
+    id: message.id,
+    result
+  }) + '\\n')
+})
+`
+    )
+    await chmod(fakeCodexPath, 0o755)
+
+    const ctx = createTestCtx(workspace, {
+      env: {
+        HOME: resolveTestMockHome(workspace, realHome),
+        __ONEWORKS_PROJECT_REAL_HOME__: realHome,
+        __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__: fakeCodexPath
+      },
+      configs: [{
+        adapters: {
+          codex: {
+            accounts: {
+              work: { authFile: authFilePath }
+            }
+          }
+        }
+      } as any]
+    })
+    const options = {
+      action: 'consume-reset-credit' as const,
+      account: 'work',
+      operationId: 'reset-credit-disconnected-request'
+    }
+
+    await expect(manageCodexAccount(ctx, options)).rejects.toThrow()
+    const retryResult = await manageCodexAccount(ctx, options)
+    const state = JSON.parse(await readFile(statePath, 'utf8')) as {
+      consumeCalls: number
+      consumptions: number
+      operationIds: string[]
+    }
+
+    expect(retryResult.outcome).toBe('reset')
+    expect(state).toMatchObject({
+      consumeCalls: 2,
+      consumptions: 1,
+      operationIds: [
+        'reset-credit-disconnected-request',
+        'reset-credit-disconnected-request'
+      ]
+    })
+  })
+
+  it('returns the successful reset outcome when global metadata persistence fails', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-reset-credit-persist-failure-'))
+    const realHome = join(workspace, 'real-home')
+    const fakeCodexPath = join(workspace, 'fake-codex-app-server.mjs')
+    const authContent = '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_persist"}}\n'
+    tempDirs.push(workspace)
+
+    await mkdir(join(realHome, '.oneworks', '.oo.config.json'), { recursive: true })
+    await writeFile(
+      fakeCodexPath,
+      `#!/usr/bin/env node
+import readline from 'node:readline'
+
+const input = readline.createInterface({ input: process.stdin })
+input.on('line', (line) => {
+  const message = JSON.parse(line)
+  if (message.id == null) return
+
+  let result = {}
+  if (message.method === 'account/rateLimitResetCredit/consume') {
+    result = { outcome: 'reset' }
+  } else if (message.method === 'account/read') {
+    result = { account: { type: 'chatgpt', planType: 'pro' } }
+  } else if (message.method === 'account/rateLimits/read') {
+    result = {
+      rateLimits: {
+        limitId: 'codex',
+        primary: { usedPercent: 0, windowDurationMins: 10080 },
+        planType: 'pro'
+      },
+      rateLimitResetCredits: { availableCount: 0 }
+    }
+  }
+
+  process.stdout.write(JSON.stringify({
+    jsonrpc: '2.0',
+    id: message.id,
+    result
+  }) + '\\n')
+})
+`
+    )
+    await chmod(fakeCodexPath, 0o755)
+
+    const result = await manageCodexAccount(
+      createTestCtx(workspace, {
+        env: {
+          HOME: resolveTestMockHome(workspace, realHome),
+          __ONEWORKS_PROJECT_REAL_HOME__: realHome,
+          __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__: fakeCodexPath
+        },
+        configs: [{
+          adapters: {
+            codex: {
+              accounts: {
+                work: {
+                  auth: {
+                    type: 'codex-auth-json',
+                    encoding: 'base64',
+                    token: Buffer.from(authContent, 'utf8').toString('base64')
+                  }
+                }
+              }
+            }
+          }
+        } as any]
+      }),
+      {
+        action: 'consume-reset-credit',
+        account: 'work',
+        operationId: 'reset-credit-persist-failure'
+      }
+    )
+
+    expect(result.outcome).toBe('reset')
+    expect(result.account?.quota?.rateLimitResetCredits?.availableCount).toBe(0)
+  })
+
+  it('persists the successful reset snapshot even when the quota cache fails', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-reset-credit-cache-failure-'))
+    const realHome = join(workspace, 'real-home')
+    const fakeCodexPath = join(workspace, 'fake-codex-app-server.mjs')
+    const globalConfigPath = join(realHome, '.oneworks', '.oo.config.json')
+    const authContent = '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_cache_failure"}}\n'
+    const globalConfig = {
+      adapters: {
+        codex: {
+          accounts: {
+            work: {
+              auth: {
+                type: 'codex-auth-json',
+                encoding: 'base64',
+                token: Buffer.from(authContent, 'utf8').toString('base64')
+              }
+            }
+          }
+        }
+      }
+    }
+    tempDirs.push(workspace)
+
+    await mkdir(join(realHome, '.oneworks'), { recursive: true })
+    await writeFile(globalConfigPath, JSON.stringify(globalConfig))
+    await writeFile(
+      fakeCodexPath,
+      `#!/usr/bin/env node
+import readline from 'node:readline'
+
+const input = readline.createInterface({ input: process.stdin })
+input.on('line', (line) => {
+  const message = JSON.parse(line)
+  if (message.id == null) return
+
+  let result = {}
+  if (message.method === 'account/rateLimitResetCredit/consume') {
+    result = { outcome: 'reset' }
+  } else if (message.method === 'account/read') {
+    result = { account: { type: 'chatgpt', planType: 'pro' } }
+  } else if (message.method === 'account/rateLimits/read') {
+    result = {
+      rateLimits: {
+        limitId: 'codex',
+        primary: { usedPercent: 0, windowDurationMins: 10080 },
+        planType: 'pro'
+      },
+      rateLimitResetCredits: { availableCount: 0 }
+    }
+  }
+
+  process.stdout.write(JSON.stringify({
+    jsonrpc: '2.0',
+    id: message.id,
+    result
+  }) + '\\n')
+})
+`
+    )
+    await chmod(fakeCodexPath, 0o755)
+
+    const result = await manageCodexAccount(
+      createTestCtx(workspace, {
+        env: {
+          HOME: resolveTestMockHome(workspace, realHome),
+          __ONEWORKS_PROJECT_REAL_HOME__: realHome,
+          __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__: fakeCodexPath
+        },
+        configs: [globalConfig as any],
+        cache: {
+          get: async () => {
+            throw new Error('cache unavailable')
+          },
+          set: async () => {
+            throw new Error('cache unavailable')
+          }
+        }
+      }),
+      {
+        action: 'consume-reset-credit',
+        account: 'work',
+        operationId: 'reset-credit-cache-failure'
+      }
+    )
+
+    const persistedConfig = JSON.parse(await readFile(globalConfigPath, 'utf8')) as any
+    expect(result.outcome).toBe('reset')
+    expect(persistedConfig.adapters.codex.accounts.work.quota.rateLimitResetCredits.availableCount).toBe(0)
+  })
+
+  it('does not let a stale refresh overwrite a replaced global credential', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-stale-refresh-credential-'))
+    const realHome = join(workspace, 'real-home')
+    const fakeCodexPath = join(workspace, 'fake-codex-app-server.mjs')
+    const globalConfigPath = join(realHome, '.oneworks', '.oo.config.json')
+    const oldAuthContent = '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_old"}}\n'
+    const newAuthContent = '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_new"}}\n'
+    const buildGlobalConfig = (authContent: string) => ({
+      adapters: {
+        codex: {
+          accounts: {
+            work: {
+              auth: {
+                type: 'codex-auth-json',
+                encoding: 'base64',
+                token: Buffer.from(authContent, 'utf8').toString('base64')
+              }
+            }
+          }
+        }
+      }
+    })
+    const staleConfig = buildGlobalConfig(oldAuthContent)
+    tempDirs.push(workspace)
+
+    await mkdir(join(realHome, '.oneworks'), { recursive: true })
+    await writeFile(globalConfigPath, JSON.stringify(buildGlobalConfig(newAuthContent)))
+    await writeFile(
+      fakeCodexPath,
+      `#!/usr/bin/env node
+import readline from 'node:readline'
+
+const input = readline.createInterface({ input: process.stdin })
+input.on('line', (line) => {
+  const message = JSON.parse(line)
+  if (message.id == null) return
+
+  let result = {}
+  if (message.method === 'account/read') {
+    result = { account: { type: 'chatgpt', planType: 'pro' } }
+  } else if (message.method === 'account/rateLimits/read') {
+    result = {
+      rateLimits: {
+        limitId: 'codex',
+        primary: { usedPercent: 33, windowDurationMins: 10080 },
+        planType: 'pro'
+      }
+    }
+  }
+
+  process.stdout.write(JSON.stringify({
+    jsonrpc: '2.0',
+    id: message.id,
+    result
+  }) + '\\n')
+})
+`
+    )
+    await chmod(fakeCodexPath, 0o755)
+
+    const detail = await getCodexAccountDetail(
+      createTestCtx(workspace, {
+        env: {
+          HOME: resolveTestMockHome(workspace, realHome),
+          __ONEWORKS_PROJECT_REAL_HOME__: realHome,
+          __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__: fakeCodexPath
+        },
+        configs: [staleConfig as any]
+      }),
+      {
+        account: 'work',
+        refresh: true
+      }
+    )
+
+    const persistedConfig = JSON.parse(await readFile(globalConfigPath, 'utf8')) as any
+    const persistedAccount = persistedConfig.adapters.codex.accounts.work
+    expect(detail.account.quota?.metrics).toContainEqual(expect.objectContaining({
+      id: 'primary-usage',
+      value: '33%'
+    }))
+    expect(Buffer.from(persistedAccount.auth.token, 'base64').toString('utf8')).toBe(newAuthContent)
+    expect(persistedAccount.quota).toBeUndefined()
+  })
+
+  it('keeps fresh real-home reset credit details across partial probes without reviving changed cards', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-reset-credit-cache-'))
+    const realHome = join(workspace, 'real-home')
+    const fakeCodexPath = join(workspace, 'fake-codex-app-server.mjs')
+    const markerPath = join(workspace, 'count-only.marker')
+    const authFilePath = join(realHome, '.codex', 'auth.json')
+    const sharedCache = new Map<string, unknown>()
+    tempDirs.push(workspace)
+
+    await mkdir(join(realHome, '.codex'), { recursive: true })
+    await writeFile(
+      authFilePath,
+      '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_cache","refresh_token":"initial"}}\n'
+    )
+    await writeFile(
+      fakeCodexPath,
+      `#!/usr/bin/env node
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import readline from 'node:readline'
+
+const probeIndex = existsSync(${JSON.stringify(markerPath)})
+  ? Number(readFileSync(${JSON.stringify(markerPath)}, 'utf8'))
+  : 0
+writeFileSync(${JSON.stringify(markerPath)}, String(probeIndex + 1))
+
+const input = readline.createInterface({ input: process.stdin })
+input.on('line', (line) => {
+  const message = JSON.parse(line)
+  if (message.id == null) return
+
+  let result = {}
+  if (message.method === 'account/read') {
+    writeFileSync(
+      process.env.HOME + '/.codex/auth.json',
+      JSON.stringify({
+        auth_mode: 'chatgpt',
+        tokens: {
+          account_id: 'acct_cache',
+          refresh_token: 'refreshed-' + probeIndex
+        }
+      }) + '\\n'
+    )
+    result = {
+      account: {
+        type: 'chatgpt',
+        email: 'work@example.com',
+        planType: 'pro'
+      }
+    }
+  } else if (message.method === 'account/rateLimits/read') {
+    result = {
+      rateLimits: {
+        limitId: 'codex',
+        primary: {
+          usedPercent: 2,
+          windowDurationMins: 10080,
+          resetsAt: 1785902972
+        },
+        planType: 'pro'
+      },
+      ...(probeIndex === 2 ? {} : {
+        rateLimitResetCredits: {
+          availableCount: probeIndex >= 4 ? 1 : 2,
+          ...(probeIndex === 0 ? {
+          credits: [
+            {
+              id: 'credit-a',
+              status: 'available',
+              title: 'Full reset',
+              grantedAt: 1785200000,
+              expiresAt: 4102444800
+            },
+            {
+              id: 'credit-b',
+              status: 'available',
+              title: 'Full reset',
+              grantedAt: 1785600000,
+              expiresAt: 4102444800
+            }
+          ]
+          } : {})
+        }
+      })
+    }
+  }
+
+  process.stdout.write(JSON.stringify({
+    jsonrpc: '2.0',
+    id: message.id,
+    result
+  }) + '\\n')
+})
+`
+    )
+    await chmod(fakeCodexPath, 0o755)
+
+    const createCtx = () =>
+      createTestCtx(workspace, {
+        cacheStore: sharedCache,
+        env: {
+          HOME: resolveTestMockHome(workspace, realHome),
+          __ONEWORKS_PROJECT_REAL_HOME__: realHome,
+          __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__: fakeCodexPath
+        }
+      })
+
+    const first = await getCodexAccounts(createCtx(), { refresh: true })
+    const accountKey = first.accounts[0]?.key
+    expect(accountKey).toBeDefined()
+    const cachedAfterAuthRotation = await getCodexAccountDetail(createCtx(), {
+      account: accountKey!
+    })
+    expect(cachedAfterAuthRotation.account.quota?.rateLimitResetCredits?.credits).toMatchObject([
+      expect.objectContaining({ id: 'credit-a' }),
+      expect.objectContaining({ id: 'credit-b' })
+    ])
+
+    const second = await getCodexAccountDetail(createCtx(), {
+      account: accountKey!,
+      refresh: true
+    })
+
+    expect(second.account.quota?.rateLimitResetCredits).toMatchObject({
+      availableCount: 2,
+      credits: [
+        expect.objectContaining({
+          id: 'credit-a',
+          grantedAt: 1785200000,
+          expiresAt: 4102444800
+        }),
+        expect.objectContaining({
+          id: 'credit-b',
+          grantedAt: 1785600000,
+          expiresAt: 4102444800
+        })
+      ]
+    })
+
+    const third = await getCodexAccountDetail(createCtx(), {
+      account: accountKey!,
+      refresh: true
+    })
+    expect(third.account.quota?.rateLimitResetCredits?.credits).toMatchObject([
+      expect.objectContaining({ id: 'credit-a' }),
+      expect.objectContaining({ id: 'credit-b' })
+    ])
+
+    const cachedQuotas = sharedCache.get('adapter.codex.account-quotas') as Record<
+      string,
+      { resetCreditDetailsCapturedAt?: number }
+    >
+    for (const entry of Object.values(cachedQuotas)) {
+      entry.resetCreditDetailsCapturedAt = Date.now() - 5 * 60 * 1000 - 1
+    }
+
+    const fourth = await getCodexAccountDetail(createCtx(), {
+      account: accountKey!,
+      refresh: true
+    })
+    expect(fourth.account.quota?.rateLimitResetCredits).toEqual({
+      availableCount: 2,
+      canConsume: true
+    })
+
+    const fifth = await getCodexAccountDetail(createCtx(), {
+      account: accountKey!,
+      refresh: true
+    })
+    expect(fifth.account.quota?.rateLimitResetCredits).toEqual({
+      availableCount: 1,
+      canConsume: true
+    })
+  })
+
+  it('does not reuse expired reset credit details from global config on non-refresh reads', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-reset-credit-global-cache-'))
+    const authContent = '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_stale"}}\n'
+    const staleUpdatedAt = Date.now() - 6 * 60 * 1000
+    tempDirs.push(workspace)
+
+    const detail = await getCodexAccountDetail(
+      createTestCtx(workspace, {
+        configs: [{
+          adapters: {
+            codex: {
+              defaultAccount: 'work',
+              accounts: {
+                work: {
+                  auth: {
+                    type: 'codex-auth-json',
+                    encoding: 'base64',
+                    token: Buffer.from(authContent, 'utf8').toString('base64')
+                  },
+                  quota: {
+                    updatedAt: staleUpdatedAt,
+                    rateLimitResetCredits: {
+                      availableCount: 2,
+                      canConsume: true,
+                      credits: [
+                        {
+                          id: 'credit-a',
+                          status: 'available',
+                          expiresAt: 4102444800
+                        },
+                        {
+                          id: 'credit-b',
+                          status: 'available',
+                          expiresAt: 4102444800
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } as any]
+      }),
+      { account: 'work' }
+    )
+
+    expect(detail.account.quota?.rateLimitResetCredits).toEqual({
+      availableCount: 2,
+      canConsume: true,
+      credits: undefined
+    })
+  })
+
+  it('keeps the original reset-credit capture timestamp across persistence and cache restart', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-reset-credit-capture-ttl-'))
+    const realHome = join(workspace, 'real-home')
+    const fakeCodexPath = join(workspace, 'fake-codex-app-server.mjs')
+    const globalConfigPath = join(realHome, '.oneworks', '.oo.config.json')
+    const authContent = '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_capture"}}\n'
+    const baseNow = Date.now()
+    const capturedAt = baseNow - 4 * 60 * 1000
+    const globalConfig = {
+      adapters: {
+        codex: {
+          accounts: {
+            work: {
+              auth: {
+                type: 'codex-auth-json',
+                encoding: 'base64',
+                token: Buffer.from(authContent, 'utf8').toString('base64')
+              },
+              quota: {
+                updatedAt: capturedAt,
+                rateLimitResetCredits: {
+                  availableCount: 2,
+                  canConsume: true,
+                  credits: [
+                    { id: 'credit-a', status: 'available', expiresAt: 4102444800 },
+                    { id: 'credit-b', status: 'available', expiresAt: 4102444800 }
+                  ]
+                }
+              },
+              resetCreditDetailsCapturedAt: capturedAt
+            }
+          }
+        }
+      }
+    }
+    tempDirs.push(workspace)
+
+    await mkdir(join(realHome, '.oneworks'), { recursive: true })
+    await writeFile(globalConfigPath, JSON.stringify(globalConfig))
+    await writeFile(
+      fakeCodexPath,
+      `#!/usr/bin/env node
+import readline from 'node:readline'
+
+const input = readline.createInterface({ input: process.stdin })
+input.on('line', (line) => {
+  const message = JSON.parse(line)
+  if (message.id == null) return
+
+  let result = {}
+  if (message.method === 'account/read') {
+    result = { account: { type: 'chatgpt', planType: 'pro' } }
+  } else if (message.method === 'account/rateLimits/read') {
+    result = {
+      rateLimits: {
+        limitId: 'codex',
+        primary: { usedPercent: 4, windowDurationMins: 10080 },
+        planType: 'pro'
+      },
+      rateLimitResetCredits: { availableCount: 2 }
+    }
+  }
+
+  process.stdout.write(JSON.stringify({
+    jsonrpc: '2.0',
+    id: message.id,
+    result
+  }) + '\\n')
+})
+`
+    )
+    await chmod(fakeCodexPath, 0o755)
+
+    const refreshed = await getCodexAccountDetail(
+      createTestCtx(workspace, {
+        env: {
+          HOME: resolveTestMockHome(workspace, realHome),
+          __ONEWORKS_PROJECT_REAL_HOME__: realHome,
+          __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__: fakeCodexPath
+        },
+        configs: [globalConfig as any]
+      }),
+      { account: 'work', refresh: true }
+    )
+    expect(refreshed.account.quota?.rateLimitResetCredits?.credits).toHaveLength(2)
+
+    const persistedConfig = JSON.parse(await readFile(globalConfigPath, 'utf8')) as any
+    const persistedAccount = persistedConfig.adapters.codex.accounts.work
+    expect(persistedAccount.resetCreditDetailsCapturedAt).toBe(capturedAt)
+    expect(persistedAccount.quota.updatedAt).toBeGreaterThan(capturedAt)
+
+    const dateNow = vi.spyOn(Date, 'now').mockReturnValue(baseNow + 2 * 60 * 1000)
+    try {
+      const restarted = await getCodexAccountDetail(
+        createTestCtx(workspace, {
+          cacheStore: new Map(),
+          env: {
+            HOME: resolveTestMockHome(workspace, realHome),
+            __ONEWORKS_PROJECT_REAL_HOME__: realHome
+          },
+          configs: [persistedConfig]
+        }),
+        { account: 'work' }
+      )
+
+      expect(restarted.account.quota?.rateLimitResetCredits).toEqual({
+        availableCount: 2,
+        canConsume: true,
+        credits: undefined
+      })
+    } finally {
+      dateNow.mockRestore()
+    }
+  })
+
+  it('isolates and removes cached quota when identity, organization, or auth source changes', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-quota-fingerprint-'))
+    tempDirs.push(workspace)
+
+    for (const scenario of ['identity', 'organization', 'authFile', 'authFileContent'] as const) {
+      const accountKey = `work-${scenario}`
+      const firstAuthFilePath = join(workspace, `${scenario}-first-auth.json`)
+      const secondAuthFilePath = join(workspace, `${scenario}-second-auth.json`)
+      const sharedCache = new Map<string, unknown>()
+      await writeFile(
+        firstAuthFilePath,
+        '{"auth_mode":"chatgpt","tokens":{"refresh_token":"first"}}\n'
+      )
+      await writeFile(
+        secondAuthFilePath,
+        '{"auth_mode":"chatgpt","tokens":{"refresh_token":"first"}}\n'
+      )
+
+      const createAccountCtx = (account: Record<string, unknown>) =>
+        createTestCtx(workspace, {
+          cacheStore: sharedCache,
+          configs: [{
+            adapters: {
+              codex: {
+                accounts: {
+                  [accountKey]: account
+                }
+              }
+            }
+          } as any]
+        })
+      const initialAccount = {
+        accountId: 'acct-a',
+        organizationId: 'org-a',
+        authFile: firstAuthFilePath,
+        quota: {
+          summary: `cached-${scenario}`,
+          updatedAt: Date.now()
+        }
+      }
+
+      const first = await getCodexAccountDetail(createAccountCtx(initialAccount), {
+        account: accountKey
+      })
+      expect(first.account.quota?.summary).toBe(`cached-${scenario}`)
+
+      const replacementAccount: Record<string, unknown> = {
+        accountId: scenario === 'identity' ? 'acct-b' : 'acct-a',
+        organizationId: scenario === 'organization' ? 'org-b' : 'org-a',
+        authFile: scenario === 'authFile' ? secondAuthFilePath : firstAuthFilePath
+      }
+      if (scenario === 'authFileContent') {
+        await writeFile(
+          firstAuthFilePath,
+          '{"auth_mode":"chatgpt","tokens":{"refresh_token":"second"}}\n'
+        )
+      }
+
+      const replacement = await getCodexAccountDetail(createAccountCtx(replacementAccount), {
+        account: accountKey
+      })
+      expect(
+        Object.keys(
+          (sharedCache.get('adapter.codex.account-quotas') as Record<string, unknown> | undefined) ?? {}
+        ),
+        scenario
+      ).toEqual([])
+      expect(replacement.account.quota, scenario).toBeUndefined()
+    }
+  })
+
+  it('removes quota cache entries when a global account is deleted', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-quota-cache-remove-'))
+    const realHome = join(workspace, 'real-home')
+    const globalConfigPath = join(realHome, '.oneworks', '.oo.config.json')
+    const sharedCache = new Map<string, unknown>()
+    const authContent = '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_remove"}}\n'
+    const globalConfig = {
+      adapters: {
+        codex: {
+          accounts: {
+            work: {
+              auth: {
+                type: 'codex-auth-json',
+                encoding: 'base64',
+                token: Buffer.from(authContent, 'utf8').toString('base64')
+              },
+              quota: {
+                summary: 'cached-remove',
+                updatedAt: Date.now()
+              }
+            }
+          }
+        }
+      }
+    }
+    tempDirs.push(workspace)
+
+    await mkdir(join(realHome, '.oneworks'), { recursive: true })
+    await writeFile(globalConfigPath, JSON.stringify(globalConfig))
+    const ctx = createTestCtx(workspace, {
+      cacheStore: sharedCache,
+      env: {
+        HOME: resolveTestMockHome(workspace, realHome),
+        __ONEWORKS_PROJECT_REAL_HOME__: realHome
+      },
+      configs: [globalConfig as any]
+    })
+
+    const detail = await getCodexAccountDetail(ctx, { account: 'work' })
+    expect(detail.account.quota?.summary).toBe('cached-remove')
+    expect(
+      Object.keys(sharedCache.get('adapter.codex.account-quotas') as Record<string, unknown>)
+    ).toHaveLength(1)
+
+    await manageCodexAccount(ctx, {
+      action: 'remove',
+      account: 'work'
+    })
+
+    expect(sharedCache.get('adapter.codex.account-quotas')).toEqual({})
+  })
+
+  it('serializes concurrent quota probes through cache and global metadata persistence', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-quota-concurrent-persist-'))
+    const realHome = join(workspace, 'real-home')
+    const fakeCodexPath = join(workspace, 'fake-codex-app-server.mjs')
+    const probeCounterPath = join(workspace, 'probe-count.txt')
+    const globalConfigPath = join(realHome, '.oneworks', '.oo.config.json')
+    const authContent = '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_concurrent"}}\n'
+    const globalConfig = {
+      adapters: {
+        codex: {
+          accounts: {
+            work: {
+              auth: {
+                type: 'codex-auth-json',
+                encoding: 'base64',
+                token: Buffer.from(authContent, 'utf8').toString('base64')
+              }
+            }
+          }
+        }
+      }
+    }
+    tempDirs.push(workspace)
+
+    await mkdir(join(realHome, '.oneworks'), { recursive: true })
+    await writeFile(globalConfigPath, JSON.stringify(globalConfig))
+    await writeFile(
+      fakeCodexPath,
+      `#!/usr/bin/env node
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import readline from 'node:readline'
+
+const probeIndex = existsSync(${JSON.stringify(probeCounterPath)})
+  ? Number(readFileSync(${JSON.stringify(probeCounterPath)}, 'utf8'))
+  : 0
+writeFileSync(${JSON.stringify(probeCounterPath)}, String(probeIndex + 1))
+
+const input = readline.createInterface({ input: process.stdin })
+const respond = (id, result) => {
+  process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\\n')
+}
+input.on('line', (line) => {
+  const message = JSON.parse(line)
+  if (message.id == null) return
+
+  if (message.method === 'account/read') {
+    respond(message.id, { account: { type: 'chatgpt', planType: 'pro' } })
+    return
+  }
+  if (message.method === 'account/rateLimits/read') {
+    const result = {
+      rateLimits: {
+        limitId: 'codex',
+        primary: {
+          usedPercent: probeIndex === 0 ? 10 : 20,
+          windowDurationMins: 10080
+        },
+        planType: 'pro'
+      }
+    }
+    setTimeout(() => respond(message.id, result), probeIndex === 0 ? 150 : 0)
+    return
+  }
+
+  respond(message.id, {})
+})
+`
+    )
+    await chmod(fakeCodexPath, 0o755)
+
+    const ctx = createTestCtx(workspace, {
+      cacheStore: new Map(),
+      env: {
+        HOME: resolveTestMockHome(workspace, realHome),
+        __ONEWORKS_PROJECT_REAL_HOME__: realHome,
+        __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__: fakeCodexPath
+      },
+      configs: [globalConfig as any]
+    })
+    const results = await Promise.all([
+      getCodexAccountDetail(ctx, { account: 'work', refresh: true }),
+      getCodexAccountDetail(ctx, { account: 'work', refresh: true })
+    ])
+    const usageValues = results
+      .map(result => result.account.quota?.metrics?.find(metric => metric.id === 'primary-usage')?.value)
+      .sort()
+
+    expect(usageValues).toEqual(['10%', '20%'])
+    await expect(readFile(probeCounterPath, 'utf8')).resolves.toBe('2')
+
+    const persistedConfig = JSON.parse(await readFile(globalConfigPath, 'utf8')) as any
+    const persistedUsage = persistedConfig.adapters.codex.accounts.work.quota.metrics
+      .find((metric: { id?: string }) => metric.id === 'primary-usage')
+    expect(persistedUsage?.value).toBe('20%')
   })
 
   it('stores Codex login auth in the global OneWorks config', async () => {

@@ -8,9 +8,16 @@ import Koa from 'koa'
 import bodyParser from 'koa-bodyparser'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { AdapterCtx } from '@oneworks/types'
 import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 
 import { adaptersRouter } from '#~/routes/adapters.js'
+
+declare module '@oneworks/types' {
+  interface Cache {
+    'test.adapter-account-request-count': number
+  }
+}
 
 const mocks = vi.hoisted(() => ({
   loadConfigState: vi.fn(),
@@ -168,6 +175,30 @@ describe('adapter routes', () => {
     expect(payload.account?.quota?.summary).toBe('Plan: Pro')
   })
 
+  it('shares adapter account cache across HTTP request contexts for the same workspace', async () => {
+    mocks.loadAdapter.mockResolvedValue({
+      getAccountDetail: vi.fn().mockImplementation(async (adapterCtx: AdapterCtx) => {
+        const previous = await adapterCtx.cache.get('test.adapter-account-request-count') ?? 0
+        await adapterCtx.cache.set('test.adapter-account-request-count', previous + 1)
+        return {
+          account: {
+            key: 'work',
+            title: `Request ${previous + 1}`,
+            status: 'ready'
+          }
+        }
+      })
+    })
+
+    const firstResponse = await fetch(`${baseUrl}/api/adapters/codex/accounts/work`)
+    const secondResponse = await fetch(`${baseUrl}/api/adapters/codex/accounts/work`)
+    const firstPayload = await firstResponse.json() as { account?: { title?: string } }
+    const secondPayload = await secondResponse.json() as { account?: { title?: string } }
+
+    expect(firstPayload.account?.title).toBe('Request 1')
+    expect(secondPayload.account?.title).toBe('Request 2')
+  })
+
   it('forwards reset credit consumption to the adapter account manager', async () => {
     const manageAccount = vi.fn().mockResolvedValue({
       accountKey: 'work',
@@ -197,7 +228,8 @@ describe('adapter routes', () => {
       body: JSON.stringify({
         action: 'consume-reset-credit',
         account: 'work',
-        creditId: 'credit-a'
+        creditId: 'credit-a',
+        operationId: 'reset-credit-operation-a'
       })
     })
     const payload = await response.json() as {
@@ -213,9 +245,75 @@ describe('adapter routes', () => {
       expect.objectContaining({
         action: 'consume-reset-credit',
         account: 'work',
-        creditId: 'credit-a'
+        creditId: 'credit-a',
+        operationId: 'reset-credit-operation-a'
       })
     )
+  })
+
+  it('rejects reset credit consumption without a caller operation ID', async () => {
+    const manageAccount = vi.fn()
+    mocks.loadAdapter.mockResolvedValue({ manageAccount })
+
+    const response = await fetch(`${baseUrl}/api/adapters/codex/accounts/actions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'consume-reset-credit',
+        account: 'work',
+        creditId: 'credit-a'
+      })
+    })
+    expect(response.status).toBe(400)
+    expect(manageAccount).not.toHaveBeenCalled()
+  })
+
+  it('returns account detail from the manage result without probing the account again', async () => {
+    const getAccountDetail = vi.fn()
+    mocks.loadAdapter.mockResolvedValue({
+      manageAccount: vi.fn().mockResolvedValue({
+        accountKey: 'work',
+        account: {
+          key: 'work',
+          title: 'Work',
+          status: 'ready',
+          quota: {
+            rateLimitResetCredits: {
+              availableCount: 2,
+              canConsume: true,
+              credits: [
+                { id: 'credit-a', status: 'available' },
+                { id: 'credit-b', status: 'available' }
+              ]
+            }
+          }
+        },
+        message: 'Quota refreshed.'
+      }),
+      getAccountDetail
+    })
+
+    const response = await fetch(`${baseUrl}/api/adapters/codex/accounts/actions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'refresh',
+        account: 'work'
+      })
+    })
+    const payload = await response.json() as {
+      account?: {
+        quota?: {
+          rateLimitResetCredits?: {
+            credits?: Array<{ id: string }>
+          }
+        }
+      }
+    }
+
+    expect(response.status).toBe(200)
+    expect(payload.account?.quota?.rateLimitResetCredits?.credits).toHaveLength(2)
+    expect(getAccountDetail).not.toHaveBeenCalled()
   })
 
   it('returns empty accounts when the adapter package has not been cached yet', async () => {

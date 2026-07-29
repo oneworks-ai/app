@@ -6,8 +6,11 @@ import { createLogger } from '@oneworks/utils/create-logger'
 
 import { loadConfigState } from '#~/services/config/index.js'
 
-const createTransientCache = (): AdapterCtx['cache'] => {
-  const store = new Map<string, unknown>()
+const accountCacheStores = new Map<string, Map<string, unknown>>()
+
+const createTransientCache = (workspaceFolder: string): AdapterCtx['cache'] => {
+  const store = accountCacheStores.get(workspaceFolder) ?? new Map<string, unknown>()
+  accountCacheStores.set(workspaceFolder, store)
 
   return {
     set: async (key, value) => {
@@ -43,7 +46,7 @@ export const createServerAdapterAccountContext = async (adapterKey: string) => {
     ctxId: `server-adapter-accounts-${adapterKey}`,
     cwd: workspaceFolder,
     env,
-    cache: createTransientCache(),
+    cache: createTransientCache(workspaceFolder),
     logger: createLogger(workspaceFolder, `server/adapter-accounts/${adapterKey}`, 'server', '', 'info', env),
     configs: [
       runtimeConfigState.effectiveProjectConfig ?? runtimeConfigState.projectConfig,

@@ -1,40 +1,130 @@
-import type { ReactNode } from 'react'
+import type { ReactElement, ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AccountAvatar } from '#~/components/chat/sender/@components/account-select/AccountAvatar'
 import { AccountQuotaIndicators } from '#~/components/chat/sender/@components/account-select/AccountQuotaIndicators'
+import { AccountQuotaModalBody } from '#~/components/chat/sender/@components/account-select/AccountQuotaModal'
+import {
+  getAdapterResetCreditOutcome,
+  getAdapterResetCreditOutcomeTone,
+  useAdapterAccountQuotaDetail
+} from '#~/hooks/use-adapter-account-quota-detail'
 import { useAdapterAccountsWithQuota } from '#~/hooks/use-adapter-accounts-with-quota'
 import { getAccountQuotaWindows, parseQuotaPercent } from '#~/utils/account-quota'
 
-const { getAdapterAccountsMock, useSWRMock } = vi.hoisted(() => ({
+const {
+  createAdapterAccountOperationIdMock,
+  getAdapterAccountDetailMock,
+  getAdapterAccountsMock,
+  manageAdapterAccountMock,
+  messageErrorMock,
+  messageInfoMock,
+  messageSuccessMock,
+  messageWarningMock,
+  mutateMock,
+  popconfirmOnConfirms,
+  useSWRConfigMutateMock,
+  useSWRMock
+} = vi.hoisted(() => ({
+  createAdapterAccountOperationIdMock: vi.fn(),
+  getAdapterAccountDetailMock: vi.fn(),
   getAdapterAccountsMock: vi.fn(),
+  manageAdapterAccountMock: vi.fn(),
+  messageErrorMock: vi.fn(),
+  messageInfoMock: vi.fn(),
+  messageSuccessMock: vi.fn(),
+  messageWarningMock: vi.fn(),
+  mutateMock: vi.fn(),
+  popconfirmOnConfirms: [] as Array<() => Promise<void> | void>,
+  useSWRConfigMutateMock: vi.fn(),
   useSWRMock: vi.fn()
 }))
 
 vi.mock('antd', () => ({
+  App: {
+    useApp: () => ({
+      message: {
+        error: messageErrorMock,
+        info: messageInfoMock,
+        success: messageSuccessMock,
+        warning: messageWarningMock
+      }
+    })
+  },
+  Button: ({
+    'aria-label': ariaLabel,
+    children,
+    icon
+  }: {
+    'aria-label'?: string
+    children?: ReactNode
+    icon?: ReactNode
+  }) => <button type='button' aria-label={ariaLabel}>{icon}{children}</button>,
+  Modal: ({ children }: { children?: ReactNode }) => <>{children}</>,
+  Popconfirm: ({
+    children,
+    onConfirm
+  }: {
+    children?: ReactNode
+    onConfirm?: () => Promise<void> | void
+  }) => {
+    if (onConfirm != null) {
+      popconfirmOnConfirms.push(onConfirm)
+    }
+    return <>{children}</>
+  },
+  Spin: () => <span>loading</span>,
   Tooltip: ({ children }: { children?: ReactNode }) => <>{children}</>
 }))
 
 vi.mock('swr', () => ({
-  default: useSWRMock
+  default: useSWRMock,
+  useSWRConfig: () => ({ mutate: useSWRConfigMutateMock })
 }))
 
 vi.mock('#~/api', () => ({
-  getAdapterAccounts: getAdapterAccountsMock
+  createAdapterAccountOperationId: createAdapterAccountOperationIdMock,
+  getAdapterAccountDetail: getAdapterAccountDetailMock,
+  getAdapterAccounts: getAdapterAccountsMock,
+  manageAdapterAccount: manageAdapterAccountMock
 }))
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, options?: Record<string, string>) => {
+    t: (key: string, options?: Record<string, unknown>) => {
       if (key === 'chat.accountQuota') return '账号额度'
-      if (key === 'chat.accountQuotaWindow') return `${options?.window} 额度：已使用 ${options?.value}`
+      if (key === 'chat.accountQuotaWindow') {
+        return `${String(options?.window)} 额度：已使用 ${String(options?.value)}`
+      }
       return key
     }
   })
 }))
 
 describe('account quota indicators', () => {
+  beforeEach(() => {
+    createAdapterAccountOperationIdMock.mockReset()
+    getAdapterAccountDetailMock.mockReset()
+    getAdapterAccountsMock.mockReset()
+    manageAdapterAccountMock.mockReset()
+    messageErrorMock.mockReset()
+    messageInfoMock.mockReset()
+    messageSuccessMock.mockReset()
+    messageWarningMock.mockReset()
+    mutateMock.mockReset()
+    mutateMock.mockResolvedValue(undefined)
+    popconfirmOnConfirms.length = 0
+    useSWRConfigMutateMock.mockReset()
+    useSWRConfigMutateMock.mockResolvedValue(undefined)
+    useSWRMock.mockReset()
+    useSWRMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      mutate: mutateMock
+    })
+  })
+
   it('starts the quota refresh without waiting for the account snapshot', async () => {
     const refreshedData = {
       accounts: [
@@ -111,6 +201,181 @@ describe('account quota indicators', () => {
     expect(html).toContain('aria-label="5h 额度：已使用 48%"')
     expect(html).toContain('aria-label="7d 额度：已使用 8%"')
     expect(html.match(/quota-usage-ring--compact/g)).toHaveLength(2)
+  })
+
+  it('isolates the quota trigger from its parent select option', () => {
+    const element = AccountQuotaIndicators({
+      windows: [
+        { id: 'primary-usage', label: '5h', percent: 48, value: '48%' }
+      ]
+    }) as ReactElement<{
+      trigger: ReactElement<{
+        onClick?: (event: { preventDefault: () => void; stopPropagation: () => void }) => void
+        onMouseDown?: (event: { preventDefault: () => void; stopPropagation: () => void }) => void
+      }>
+    }>
+    const event = {
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn()
+    }
+
+    element.props.trigger.props.onMouseDown?.(event)
+    element.props.trigger.props.onClick?.(event)
+
+    expect(event.preventDefault).toHaveBeenCalledTimes(2)
+    expect(event.stopPropagation).toHaveBeenCalledTimes(2)
+  })
+
+  it('renders anonymous actions instead of an empty state for count-only reset credits', () => {
+    const html = renderToStaticMarkup(
+      <AccountQuotaModalBody
+        adapter='codex'
+        account='work'
+        quota={{
+          metrics: [
+            { id: 'primary-usage', label: '5h used', value: '48%' }
+          ],
+          rateLimitResetCredits: {
+            availableCount: 2,
+            canConsume: true
+          }
+        }}
+      />
+    )
+
+    expect(html).toContain('chat.accountQuotaModal.available')
+    expect(html).not.toContain('config.accounts.resetCredits.noCredits')
+    expect(html.match(/config\.accounts\.resetCredits\.fullResetTitle/g)).toHaveLength(2)
+    expect(html.match(/config\.accounts\.resetCredits\.summaryDescription/g)).toHaveLength(2)
+    expect(html.match(/aria-label="config\.accounts\.resetCredits\.use"/g)).toHaveLength(2)
+  })
+
+  it('uses the same non-success outcome messaging in the quota modal', async () => {
+    createAdapterAccountOperationIdMock.mockReturnValue('modal-operation')
+    manageAdapterAccountMock.mockResolvedValue({
+      outcome: 'noCredit',
+      account: {
+        key: 'work',
+        title: 'Work'
+      }
+    })
+    renderToStaticMarkup(
+      <AccountQuotaModalBody
+        adapter='codex'
+        account='work'
+        quota={{
+          rateLimitResetCredits: {
+            availableCount: 1,
+            canConsume: true,
+            credits: [
+              {
+                id: 'credit-modal',
+                status: 'available'
+              }
+            ]
+          }
+        }}
+      />
+    )
+
+    await popconfirmOnConfirms[0]?.()
+
+    expect(manageAdapterAccountMock).toHaveBeenCalledWith('codex', {
+      action: 'consume-reset-credit',
+      account: 'work',
+      creditId: 'credit-modal',
+      operationId: 'modal-operation'
+    })
+    expect(messageWarningMock).toHaveBeenCalledWith(
+      'config.accounts.resetCredits.outcomes.noCredit'
+    )
+    expect(messageSuccessMock).not.toHaveBeenCalled()
+    expect(messageErrorMock).not.toHaveBeenCalled()
+  })
+
+  it('keeps a pending anonymous operation id across unmount and rotates it after a definite outcome', async () => {
+    type ConsumeResetCredit = ReturnType<typeof useAdapterAccountQuotaDetail>['consumeResetCredit']
+    type RefreshAccountDetail = ReturnType<typeof useAdapterAccountQuotaDetail>['refreshAccountDetail']
+    let consumeResetCredit: ConsumeResetCredit | undefined
+    let refreshAccountDetail: RefreshAccountDetail | undefined
+
+    const Harness = () => {
+      const quotaDetail = useAdapterAccountQuotaDetail({
+        adapter: 'codex',
+        account: 'operation-reuse'
+      })
+      consumeResetCredit = quotaDetail.consumeResetCredit
+      refreshAccountDetail = quotaDetail.refreshAccountDetail
+      return null
+    }
+
+    createAdapterAccountOperationIdMock
+      .mockReturnValueOnce('operation-reused')
+      .mockReturnValueOnce('operation-after-outcome')
+    manageAdapterAccountMock
+      .mockRejectedValueOnce(new TypeError('connection lost'))
+      .mockResolvedValueOnce({ outcome: 'reset' })
+      .mockResolvedValueOnce({ outcome: 'reset' })
+
+    renderToStaticMarkup(<Harness />)
+    await expect(
+      consumeResetCredit?.({ fallbackKey: 'next-0' })
+    ).rejects.toThrow('connection lost')
+
+    renderToStaticMarkup(<Harness />)
+    await expect(
+      consumeResetCredit?.({ fallbackKey: 'next-0' })
+    ).resolves.toMatchObject({ outcome: 'reset' })
+    expect(manageAdapterAccountMock.mock.calls[0]?.[1]).toMatchObject({
+      operationId: 'operation-reused'
+    })
+    expect(manageAdapterAccountMock.mock.calls[1]?.[1]).toMatchObject({
+      operationId: 'operation-reused'
+    })
+
+    mutateMock.mockRejectedValueOnce(new Error('refresh failed'))
+    await expect(refreshAccountDetail?.()).rejects.toThrow('refresh failed')
+    await expect(
+      consumeResetCredit?.({ fallbackKey: 'next-0' })
+    ).resolves.toMatchObject({ outcome: 'reset' })
+    expect(manageAdapterAccountMock.mock.calls[2]?.[1]).toMatchObject({
+      operationId: 'operation-after-outcome'
+    })
+  })
+
+  it('does not share pending operation ids across accounts or reset-credit keys', async () => {
+    type ConsumeResetCredit = ReturnType<typeof useAdapterAccountQuotaDetail>['consumeResetCredit']
+    const consumers = new Map<string, ConsumeResetCredit>()
+    const Harness = ({ account }: { account: string }) => {
+      const quotaDetail = useAdapterAccountQuotaDetail({ adapter: 'codex', account })
+      consumers.set(account, quotaDetail.consumeResetCredit)
+      return null
+    }
+
+    createAdapterAccountOperationIdMock
+      .mockReturnValueOnce('operation-account-a-card-a')
+      .mockReturnValueOnce('operation-account-b-card-a')
+      .mockReturnValueOnce('operation-account-a-card-b')
+    manageAdapterAccountMock.mockRejectedValue(new TypeError('connection lost'))
+
+    renderToStaticMarkup(<Harness account='operation-account-a' />)
+    renderToStaticMarkup(<Harness account='operation-account-b' />)
+    await expect(consumers.get('operation-account-a')?.({ creditId: 'credit-a' })).rejects.toThrow()
+    await expect(consumers.get('operation-account-b')?.({ creditId: 'credit-a' })).rejects.toThrow()
+    await expect(consumers.get('operation-account-a')?.({ creditId: 'credit-b' })).rejects.toThrow()
+
+    expect(manageAdapterAccountMock.mock.calls.map(call => call[1]?.operationId)).toEqual([
+      'operation-account-a-card-a',
+      'operation-account-b-card-a',
+      'operation-account-a-card-b'
+    ])
+  })
+
+  it('maps every known consume outcome to a non-success-specific notice tone', () => {
+    expect(getAdapterResetCreditOutcomeTone(getAdapterResetCreditOutcome('reset'))).toBe('success')
+    expect(getAdapterResetCreditOutcomeTone(getAdapterResetCreditOutcome('alreadyRedeemed'))).toBe('info')
+    expect(getAdapterResetCreditOutcomeTone(getAdapterResetCreditOutcome('nothingToReset'))).toBe('info')
+    expect(getAdapterResetCreditOutcomeTone(getAdapterResetCreditOutcome('noCredit'))).toBe('warning')
   })
 
   it('keeps a deterministic pixel fallback behind a remote account avatar', () => {

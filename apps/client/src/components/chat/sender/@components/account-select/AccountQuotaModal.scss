@@ -1,0 +1,175 @@
+.account-quota-modal__trigger {
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.account-quota-modal .ant-modal-content {
+  background: var(--card-bg, var(--bg-color, #fff));
+  border: 1px solid var(--border-color);
+  border-radius: 18px;
+  box-shadow: var(--shadow-lg, 0 18px 48px rgba(0, 0, 0, .24));
+}
+
+.account-quota-modal .ant-modal-header,
+.account-quota-modal .ant-modal-body {
+  background: transparent;
+}
+
+.account-quota-modal .ant-modal-title {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.account-quota-modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.account-quota-modal__state {
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.account-quota-modal__summary,
+.account-quota-modal__credits {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: color-mix(
+    in srgb,
+    var(--card-bg, var(--bg-color, #fff)) 92%,
+    var(--text-color, #111827)
+  );
+}
+
+.account-quota-modal__section-title {
+  color: var(--text-color);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.account-quota-modal__window {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.account-quota-modal__window-copy,
+.account-quota-modal__credit-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.account-quota-modal__window-copy span,
+.account-quota-modal__credit-meta,
+.account-quota-modal__empty {
+  color: var(--sub-text-color, #6b7280);
+  font-size: 12px;
+}
+
+.account-quota-modal__credit-meta {
+  width: fit-content;
+  font-variant-numeric: tabular-nums;
+  line-height: 20px;
+}
+
+.account-quota-modal__credit-meta:focus-visible {
+  border-radius: 2px;
+  outline: 1px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+.account-quota-modal__window-value {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  color: var(--sub-text-color, #6b7280);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.account-quota-modal__credits-heading,
+.account-quota-modal__credit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.account-quota-modal__available {
+  padding: 3px 9px;
+  border-radius: 999px;
+  color: var(--success-color, #52c41a);
+  background: color-mix(
+    in srgb,
+    var(--success-color, #52c41a) 16%,
+    transparent
+  );
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.account-quota-modal__credit {
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+}
+
+.account-quota-modal__credit-title {
+  font-weight: 650;
+}
+
+.account-quota-modal__credit-action-wrap {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  flex: 0 0 20px;
+}
+
+.account-quota-modal__credit-action.oneworks-inline-action-button.ant-btn {
+  justify-content: center;
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 5px !important;
+}
+
+.account-quota-modal__time-tooltip {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.account-quota-modal__time-tooltip-row {
+  display: grid;
+  grid-template-columns: max-content max-content;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.account-quota-modal__time-tooltip-label {
+  font-weight: 600;
+}
+
+.account-quota-modal__time-tooltip-value {
+  color: var(--oneworks-overlay-muted, var(--sub-text-color, #9ca3af));
+}
+
+@media (max-width: 560px) {
+  .account-quota-modal__window {
+    grid-template-columns: 1fr auto;
+  }
+}

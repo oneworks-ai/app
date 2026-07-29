@@ -1,5 +1,10 @@
 /* eslint-disable max-lines -- central client API barrel keeps imports stable across the app. */
-export { getAdapterAccountDetail, getAdapterAccounts, manageAdapterAccount } from './api/adapters'
+export {
+  createAdapterAccountOperationId,
+  getAdapterAccountDetail,
+  getAdapterAccounts,
+  manageAdapterAccount
+} from './api/adapters'
 export {
   getAgentRoom,
   getAgentRoomByHostSession,

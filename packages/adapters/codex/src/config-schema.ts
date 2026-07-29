@@ -24,6 +24,8 @@ const codexAdapterAccountSchema = adapterAccountConfigCommonSchema.extend({
   organizationTitle: z.string().optional().describe('Cached Codex organization title'),
   organizationRole: z.string().optional().describe('Cached Codex organization role'),
   quota: jsonValueSchema.optional().describe('Cached Codex quota snapshot'),
+  resetCreditDetailsCapturedAt: z.number().optional()
+    .describe('Timestamp when detailed Codex reset-credit cards were captured'),
   source: z.string().optional().describe('Codex account source'),
   createdAt: z.number().optional().describe('Account creation timestamp'),
   updatedAt: z.number().optional().describe('Account update timestamp'),

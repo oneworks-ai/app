@@ -2107,6 +2107,16 @@
     "accountSelectOpenAccountConfig": "Open {{account}} settings",
     "accountQuota": "Account quota",
     "accountQuotaWindow": "{{window}} quota: {{value}} used",
+    "accountQuotaModal": {
+      "title": "Usage",
+      "weekly": "Usage limits",
+      "available": "{{count}} available",
+      "expires": "Expires {{date}}",
+      "daysHours": "{{days}}d {{hours}}h remaining",
+      "hours": "{{hours}}h remaining",
+      "expired": "Expired",
+      "noCredits": "No reset credits available"
+    },
     "effortSelectPlaceholder": "Effort",
     "effortSliderLabel": "Reasoning effort: {{value}}",
     "effortLabels": {
@@ -3570,11 +3580,13 @@
           "hours": "{{count}}h remaining",
           "expired": "Expired"
         },
+        "noCredits": "No reset credits available",
         "use": "Use reset credit",
         "unavailable": "This reset credit is currently unavailable",
         "confirmTitle": "Use one rate-limit reset credit?",
         "confirmDescription": "This spends one earned credit to reset an eligible Codex rate-limit window. The quota will refresh afterward.",
         "confirmAction": "Use credit",
+        "refreshFailed": "The reset result is confirmed, but the latest quota could not be refreshed.",
         "outcomes": {
           "reset": "Reset credit used and quota refreshed",
           "alreadyRedeemed": "This reset credit was already redeemed",

@@ -420,6 +420,11 @@
   width: 100%;
 }
 
+.adapter-account-manager__reset-credit-empty {
+  color: var(--sub-text-color);
+  font-size: 12px;
+}
+
 .adapter-account-manager__reset-credit-list .config-view__field-row {
   flex-direction: row;
   align-items: center;
@@ -442,38 +447,42 @@
   max-width: none;
 }
 
-.adapter-account-manager__reset-credit-details {
-  display: grid;
-  grid-template-columns: repeat(2, max-content);
-  gap: 4px 28px;
-  min-width: 0;
+.adapter-account-manager__reset-credit-list
+  .config-view__field-control
+  > .adapter-account-manager__reset-credit-control {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  width: auto;
 }
 
-.adapter-account-manager__reset-credit-detail {
-  display: flex;
-  align-items: flex-start;
-  flex-direction: column;
-  gap: 2px;
+.adapter-account-manager__reset-credit-remaining {
+  color: var(--sub-text-color);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 20px;
   white-space: nowrap;
 }
 
-.adapter-account-manager__reset-credit-detail-label {
-  color: var(--placeholder-color);
+.adapter-account-manager__reset-credit-remaining:focus-visible {
+  border-radius: 2px;
+  outline: 1px solid var(--primary-color);
+  outline-offset: 2px;
 }
 
-.adapter-account-manager__reset-credit-detail-value {
-  color: var(--sub-text-color);
-  font-variant-numeric: tabular-nums;
-}
-
-.adapter-account-manager__reset-credit-detail-remaining {
-  color: var(--text-color);
-  font-weight: 500;
-  line-height: 1.35;
+.adapter-account-manager__reset-credit-tooltip-row {
+  display: grid;
+  grid-template-columns: max-content max-content;
+  align-items: baseline;
+  gap: 12px;
 }
 
 .adapter-account-manager__reset-credit-list
   .config-view__field-control
+  > .adapter-account-manager__reset-credit-action-wrap,
+.adapter-account-manager__reset-credit-control
   > .adapter-account-manager__reset-credit-action-wrap {
   display: inline-flex;
   flex: 0 0 20px;
@@ -487,18 +496,6 @@
   min-width: 20px;
   height: 20px;
   border-radius: 5px !important;
-}
-
-@media (max-width: 960px) {
-  .adapter-account-manager__reset-credit-details {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 560px) {
-  .adapter-account-manager__reset-credit-details {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 .adapter-account-manager__editor {

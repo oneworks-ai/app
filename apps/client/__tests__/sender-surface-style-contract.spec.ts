@@ -8,6 +8,13 @@ describe('shared sender surface toolbar contract', () => {
       new URL('../src/components/chat/sender/SenderSurface.scss', import.meta.url),
       'utf8'
     )
+    const accountQuotaIndicatorStyles = readFileSync(
+      new URL(
+        '../src/components/chat/sender/@components/account-select/AccountQuotaIndicators.scss',
+        import.meta.url
+      ),
+      'utf8'
+    )
 
     expect(styles).toContain('--chat-surface-toolbar-gap: 12px')
     expect(styles).toContain('--chat-surface-toolbar-left-gap: 14px')
@@ -147,8 +154,21 @@ describe('shared sender surface toolbar contract', () => {
     expect(styles).toMatch(
       /:is\(\.account-select, \.adapter-select\)\s+\.ant-select-selector\s*\{[^}]*font-size:\s*var\(--chat-surface-control-font-size\) !important;[^}]*font-weight:\s*var\(--chat-surface-control-font-weight\) !important;[^}]*line-height:\s*var\(--chat-surface-control-line-height\) !important;[^}]*background:\s*transparent !important;[^}]*color:\s*var\(--chat-surface-status-default-color\) !important/
     )
-    expect(styles).toContain('--quota-usage-ring-inner-bg: var(')
-    expect(styles).toContain('.quota-usage-ring__inner')
+    expect(accountQuotaIndicatorStyles).toMatch(
+      /\.account-quota-indicators\s*\{[^}]*--quota-usage-ring-inner-bg:\s*var\(/
+    )
+    expect(accountQuotaIndicatorStyles).toMatch(
+      /\.account-quota-indicators \.quota-usage-ring__inner\s*\{[^}]*background:\s*var\(--chat-surface-status-bg,[^}]*color:\s*var\(--sub-text-color/
+    )
+    expect(styles).toMatch(
+      /\.account-quota-indicators:is\(:hover, :focus-within\)\s+\.quota-usage-ring\s*\{[^}]*filter:\s*none;[^}]*transform:\s*none/
+    )
+    expect(styles).not.toMatch(
+      /\.account-quota-indicators:is\(:hover, :focus-within\)\s*\{[^}]*--quota-usage-ring-inner-bg:/
+    )
+    expect(styles).not.toMatch(
+      /\.account-quota-indicators:is\(:hover, :focus-within\)\s+\.quota-usage-ring__inner\s*\{[^}]*color:/
+    )
     expect(styles).toContain(
       '.sender-container--chat-surface.sender-container--chat-surface\n  .chat-status-bar'
     )

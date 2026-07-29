@@ -65,9 +65,8 @@ export function ChatStatusBar({
   const collapseButtonRef = useRef<HTMLButtonElement>(null)
   const expandButtonRef = useRef<HTMLButtonElement>(null)
   const pendingFocusTargetRef = useRef<'collapse' | 'expand' | null>(null)
-  const selectedAccountQuotaWindows = accountOptions
+  const selectedAccountOption = accountOptions
     ?.find(option => option.value === selectedAccount)
-    ?.quotaWindows
   const collapsed = collapsible && (controlledCollapsed ?? uncontrolledCollapsed)
   const setCollapsed = (nextCollapsed: boolean) => {
     pendingFocusTargetRef.current = nextCollapsed ? 'expand' : 'collapse'
@@ -157,7 +156,14 @@ export function ChatStatusBar({
                 data={{ accountOptions }}
                 handlers={{ onAccountChange }}
               />
-              {!isCompactLayout && <AccountQuotaIndicators windows={selectedAccountQuotaWindows} />}
+              {!isCompactLayout && selectedAccountOption != null && (
+                <AccountQuotaIndicators
+                  adapter={selectedAdapter}
+                  account={selectedAccountOption.value}
+                  quota={selectedAccountOption.quota}
+                  windows={selectedAccountOption.quotaWindows}
+                />
+              )}
             </div>
           )}
           <AdapterSelectControl

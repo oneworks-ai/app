@@ -1505,19 +1505,6 @@
 }
 
 .sender-container--chat-surface
-  .chat-status-bar__account-group
-  .account-quota-indicators:is(:hover, :focus-within) {
-  --quota-usage-ring-inner-bg: var(--chat-surface-status-action-hover-bg);
-}
-
-.sender-container--chat-surface
-  .chat-status-bar__account-group
-  .account-quota-indicators:is(:hover, :focus-within)
-  .quota-usage-ring__inner {
-  color: var(--chat-surface-status-action-hover-color);
-}
-
-.sender-container--chat-surface
   .chat-status-bar__actions
   :is(.account-select, .adapter-select, .account-select *, .adapter-select
     *, .sender-select-arrow, .adapter-option__icon, .adapter-option__icon--fallback) {

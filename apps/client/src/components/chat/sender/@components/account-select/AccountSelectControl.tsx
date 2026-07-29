@@ -177,7 +177,12 @@ export function AccountSelectControl({
       </div>
       {option.quotaWindows != null && option.quotaWindows.length > 0 && (
         <div className='account-option__quota'>
-          <AccountQuotaIndicators windows={option.quotaWindows} />
+          <AccountQuotaIndicators
+            adapter={selectedAdapter}
+            account={option.value}
+            quota={option.quota}
+            windows={option.quotaWindows}
+          />
         </div>
       )}
       <div className='account-option__actions'>

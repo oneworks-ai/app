@@ -2108,6 +2108,16 @@
     "accountSelectOpenAccountConfig": "打开 {{account}} 设置",
     "accountQuota": "账号额度",
     "accountQuotaWindow": "{{window}} 额度：已使用 {{value}}",
+    "accountQuotaModal": {
+      "title": "使用量",
+      "weekly": "使用限额",
+      "available": "可用 {{count}} 次",
+      "expires": "将于 {{date}} 到期",
+      "daysHours": "剩余 {{days}} 天 {{hours}} 小时",
+      "hours": "剩余 {{hours}} 小时",
+      "expired": "已过期",
+      "noCredits": "暂无可用额度重置卡"
+    },
     "effortSelectPlaceholder": "推理强度",
     "effortSliderLabel": "推理强度：{{value}}",
     "effortLabels": {
@@ -3571,11 +3581,13 @@
           "hours": "剩余 {{count}} 小时",
           "expired": "已过期"
         },
+        "noCredits": "暂无可用额度重置卡",
         "use": "使用额度重置卡",
         "unavailable": "这张额度重置卡当前不可用",
         "confirmTitle": "使用一张额度重置卡？",
         "confirmDescription": "这会消耗一张已获得的重置卡，并重置一个符合条件的 Codex 额度窗口。完成后会自动刷新额度。",
         "confirmAction": "确认使用",
+        "refreshFailed": "重置结果已确认，但暂时无法刷新最新额度。",
         "outcomes": {
           "reset": "已使用重置卡并刷新额度",
           "alreadyRedeemed": "这张重置卡已经使用过了",
