@@ -49,7 +49,7 @@ import type {
 } from './optimistic-session-creation'
 import type { PendingSessionCreationContext } from './session-creation-context'
 import type { ChatEffort } from './use-chat-effort'
-import type { PermissionMode } from './use-chat-permission-mode'
+import type { PermissionMode, PermissionModeDraftCreationToken } from './use-chat-permission-mode'
 import { syncSessionQueuedMessages } from './use-chat-session-messages'
 
 const closeSocket = (socket: WebSocket | undefined) => {
@@ -103,6 +103,9 @@ export function useChatSessionActions({
   workspaceSourceSessionId,
   navigateOnCreate = true,
   collapseSenderHeaderOnCreate = true,
+  completePermissionModeDraftSessionCreation,
+  createPermissionModeDraftCreationToken,
+  discardPermissionModeDraftSessionCreation,
   onSessionCreated,
   sessionTargetDraft,
   sessionCreationContext,
@@ -123,6 +126,14 @@ export function useChatSessionActions({
   workspaceSourceSessionId?: string
   navigateOnCreate?: boolean
   collapseSenderHeaderOnCreate?: boolean
+  completePermissionModeDraftSessionCreation?: (
+    token: PermissionModeDraftCreationToken | undefined,
+    createdSession: Pick<Session, 'createdAt' | 'id'>
+  ) => boolean
+  createPermissionModeDraftCreationToken?: () => PermissionModeDraftCreationToken | undefined
+  discardPermissionModeDraftSessionCreation?: (
+    token: PermissionModeDraftCreationToken | undefined
+  ) => void
   onSessionCreated?: (session: Session) => void
   sessionTargetDraft?: ChatSessionTargetDraft
   sessionCreationContext?: PendingSessionCreationContext
@@ -239,8 +250,12 @@ export function useChatSessionActions({
     }
   }, [])
 
-  const handleResolvedSessionCreation = useCallback(async (newSession: Session) => {
+  const handleResolvedSessionCreation = useCallback(async (
+    newSession: Session,
+    permissionModeDraftCreationToken?: PermissionModeDraftCreationToken
+  ) => {
     if (isOptimisticSessionDiscarded(newSession.id)) {
+      discardPermissionModeDraftSessionCreation?.(permissionModeDraftCreationToken)
       removeOptimisticCreation(newSession.id)
       await removeSessionFromCache(newSession.id)
       try {
@@ -259,9 +274,15 @@ export function useChatSessionActions({
     if (collapseSenderHeaderOnCreate) {
       setHeaderCollapsed(true)
     }
+    completePermissionModeDraftSessionCreation?.(
+      permissionModeDraftCreationToken,
+      newSession
+    )
     return true
   }, [
     collapseSenderHeaderOnCreate,
+    completePermissionModeDraftSessionCreation,
+    discardPermissionModeDraftSessionCreation,
     insertSessionIntoCache,
     removeOptimisticCreation,
     removeSessionFromCache,
@@ -376,9 +397,15 @@ export function useChatSessionActions({
       await progressSocket?.ready
       const { session: newSession } = await createSessionWithTimeout(request)
 
-      return await handleResolvedSessionCreation(newSession)
+      return await handleResolvedSessionCreation(
+        newSession,
+        request.permissionModeDraftCreationToken
+      )
     } catch (err) {
       console.error(err)
+      discardPermissionModeDraftSessionCreation?.(
+        request.permissionModeDraftCreationToken
+      )
       const recoveredSession = await resolveCreatedSession(request.id)
       if (recoveredSession != null) {
         return await handleResolvedSessionCreation(recoveredSession)
@@ -398,6 +425,7 @@ export function useChatSessionActions({
     }
   }, [
     createSessionWithTimeout,
+    discardPermissionModeDraftSessionCreation,
     handleResolvedSessionCreation,
     openCreationProgressSocket,
     removeOptimisticCreation,
@@ -481,7 +509,8 @@ export function useChatSessionActions({
         title: sessionCreationContext?.title,
         initialMessage: text.trim(),
         model: modelForQuery,
-        options: buildCreateSessionOptions(id)
+        options: buildCreateSessionOptions(id),
+        permissionModeDraftCreationToken: createPermissionModeDraftCreationToken?.()
       })
       return true
     }
@@ -496,6 +525,7 @@ export function useChatSessionActions({
     }
   }, [
     buildCreateSessionOptions,
+    createPermissionModeDraftCreationToken,
     hasAvailableModels,
     isThinking,
     message,
@@ -526,7 +556,8 @@ export function useChatSessionActions({
         title: sessionCreationContext?.title,
         initialContent: content,
         model: modelForQuery,
-        options: buildCreateSessionOptions(id)
+        options: buildCreateSessionOptions(id),
+        permissionModeDraftCreationToken: createPermissionModeDraftCreationToken?.()
       })
       return true
     }
@@ -541,6 +572,7 @@ export function useChatSessionActions({
     }
   }, [
     buildCreateSessionOptions,
+    createPermissionModeDraftCreationToken,
     hasAvailableModels,
     isThinking,
     message,
@@ -576,6 +608,9 @@ export function useChatSessionActions({
       })
 
       if (isCreatingSession) {
+        discardPermissionModeDraftSessionCreation?.(
+          optimisticCreation?.request.permissionModeDraftCreationToken
+        )
         markOptimisticSessionDiscarded(sessionId)
         removeOptimisticCreation(sessionId)
         await removeSessionFromCache(sessionId)
@@ -593,6 +628,7 @@ export function useChatSessionActions({
     }
   }, [
     isThinking,
+    discardPermissionModeDraftSessionCreation,
     message,
     optimisticCreation?.status,
     removeOptimisticCreation,

@@ -15,7 +15,12 @@ import type {
   ModelSelectMenuGroup,
   ModelSelectOption
 } from '#~/hooks/chat/use-chat-model-adapter-selection'
-import type { PermissionMode } from '#~/hooks/chat/use-chat-permission-mode'
+import type {
+  PermissionMode,
+  PermissionModeChangeHandler,
+  PermissionModeOption,
+  PermissionModeRequestHandler
+} from '#~/hooks/chat/use-chat-permission-mode'
 
 import type {
   AnnotationReferenceRequest,
@@ -71,6 +76,9 @@ export interface SenderProps {
   onCancel?: () => void
   submitLabel?: string
   submitLoading?: boolean
+  sendBlocked?: boolean
+  sendBlockedTooltip?: string
+  selectionControlsDisabled?: boolean
   stopLoading?: boolean
   forceEffortControl?: boolean
   hideReferenceActions?: boolean
@@ -102,8 +110,10 @@ export interface SenderProps {
   supportsFastMode?: boolean
   onFastModeChange?: (enabled: boolean) => void
   permissionMode?: PermissionMode
-  permissionModeOptions?: Array<{ value: PermissionMode; label: ReactNode }>
-  onPermissionModeChange?: (mode: PermissionMode) => void
+  permissionModeTransitionPending?: boolean
+  permissionModeOptions?: PermissionModeOption[]
+  onPermissionModeChange?: PermissionModeChangeHandler
+  onPermissionModeRequest?: PermissionModeRequestHandler
   selectedAdapter?: string
   adapterOptions?: ChatAdapterSelectOption[]
   hiddenBuiltinAdapterOptions?: HiddenBuiltinAdapterOption[]

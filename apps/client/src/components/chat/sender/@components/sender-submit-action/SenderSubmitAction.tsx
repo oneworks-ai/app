@@ -187,6 +187,7 @@ export function SenderSubmitAction({
               className={buttonClasses}
               role='button'
               tabIndex={0}
+              aria-disabled
               aria-label={t('chat.send')}
               onClick={handleSendClick}
               onKeyDown={event => handleActionKeyDown(event, handleSendClick)}

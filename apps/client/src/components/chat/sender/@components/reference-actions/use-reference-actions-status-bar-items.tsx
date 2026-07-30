@@ -20,6 +20,7 @@ export function useReferenceActionsStatusBarItems({
   isInlineEdit,
   isThinking,
   modelUnavailable,
+  selectionControlsDisabled,
   selectedAccount,
   selectedAdapter,
   showAccountSelector,
@@ -31,6 +32,7 @@ export function useReferenceActionsStatusBarItems({
     | 'isInlineEdit'
     | 'isThinking'
     | 'modelUnavailable'
+    | 'selectionControlsDisabled'
     | 'selectedAccount'
     | 'selectedAdapter'
     | 'showAccountSelector'
@@ -54,8 +56,8 @@ export function useReferenceActionsStatusBarItems({
     const selectedAdapterOption = availableAdapterOptions.find(option => option.value === selectedAdapter)
     const canShowAccount = showAccountSelector && availableAccountOptions.length > 0
     const canShowAdapter = availableAdapterOptions.length > 1 || hiddenAdapterOptions.length > 0
-    const accountDisabled = modelUnavailable || isThinking
-    const adapterDisabled = adapterLocked || modelUnavailable || isThinking
+    const accountDisabled = modelUnavailable || isThinking || selectionControlsDisabled
+    const adapterDisabled = adapterLocked || modelUnavailable || isThinking || selectionControlsDisabled
     const items: OverlayMenuItem[] = []
     const selectedKeys: string[] = []
 
@@ -126,6 +128,7 @@ export function useReferenceActionsStatusBarItems({
     isInlineEdit,
     isThinking,
     modelUnavailable,
+    selectionControlsDisabled,
     selectedAccount,
     selectedAdapter,
     showAccountSelector,

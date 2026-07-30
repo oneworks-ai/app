@@ -37,10 +37,13 @@ import {
   DEFAULT_CHAT_SESSION_WORKSPACE_DRAFT,
   getChatSessionWorkspaceDraftFromConfig
 } from '#~/hooks/chat/chat-session-workspace-draft'
+import { createDraftPermissionModeIncarnation } from '#~/hooks/chat/permission-mode-acknowledgement'
+import { deriveCanonicalPermissionModeOwner } from '#~/hooks/chat/permission-mode-owner'
 import { useChatAdapterAccountSelection } from '#~/hooks/chat/use-chat-adapter-account-selection'
 import { useChatEffort } from '#~/hooks/chat/use-chat-effort'
 import { useChatModelAdapterSelection } from '#~/hooks/chat/use-chat-model-adapter-selection'
 import { useChatPermissionMode } from '#~/hooks/chat/use-chat-permission-mode'
+import { useDraftPermissionModeLifecycle } from '#~/hooks/chat/use-draft-permission-mode-lifecycle'
 
 import type {
   PluginHostActionItem,
@@ -1013,6 +1016,18 @@ const toSenderSubmitResult = async (result: unknown) => {
 function PluginSenderHost(props: PluginHostSenderComponentProps) {
   const workspaceDraftDirtyRef = useRef(false)
   const { data: configRes } = useSWR<ConfigResponse>('/api/config', getConfig)
+  const permissionModeOwner = useMemo(
+    () =>
+      deriveCanonicalPermissionModeOwner({
+        workspaceFolder: configRes?.meta?.workspaceFolder
+      }),
+    [configRes?.meta?.workspaceFolder]
+  )
+  const permissionModeIncarnation = useMemo(createDraftPermissionModeIncarnation, [])
+  const permissionModeLifecycle = useDraftPermissionModeLifecycle({
+    incarnation: permissionModeIncarnation,
+    ownerIdentity: permissionModeOwner
+  })
   const defaultWorkspaceDraft = useMemo(() => (
     configRes == null ? DEFAULT_CHAT_SESSION_WORKSPACE_DRAFT : getChatSessionWorkspaceDraftFromConfig(configRes)
   ), [configRes])
@@ -1048,7 +1063,16 @@ function PluginSenderHost(props: PluginHostSenderComponentProps) {
     adapter: selectedAdapter,
     model: selectedModelWithService
   })
-  const { permissionMode, setPermissionMode, permissionModeOptions } = useChatPermissionMode()
+  const {
+    permissionMode,
+    permissionModeTransitionPending,
+    setPermissionMode,
+    permissionModeOptions
+  } = useChatPermissionMode({
+    draftIdentity: `plugin-host:${permissionModeOwner ?? 'unbound'}`,
+    draftLifecycle: permissionModeLifecycle,
+    ownerIdentity: permissionModeOwner
+  })
   const modelUnavailable = props.modelUnavailable ?? !hasAvailableModels
   const showStatusBar = props.showStatusBar ?? props.hideSelectionControls !== true
   const defaultSelectionKeyRef = useRef<string | null>(null)
@@ -1113,9 +1137,10 @@ function PluginSenderHost(props: PluginHostSenderComponentProps) {
         onAdapterChange={setSelectedAdapter}
         onEffortChange={setEffort}
         onModelChange={setSelectedModel}
-        onPermissionModeChange={setPermissionMode}
+        onPermissionModeRequest={setPermissionMode}
         onToggleRecommendedModel={toggleRecommendedModel}
         permissionMode={permissionMode}
+        permissionModeTransitionPending={permissionModeTransitionPending}
         permissionModeOptions={permissionModeOptions}
         recommendedModelOptions={recommendedModelOptions}
         selectedAdapter={selectedAdapter}

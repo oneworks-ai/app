@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { OverlayMenuList } from './OverlayMenuList'
 import type { OverlayMenuProps } from './overlay-menu-props'
-import { getFirstSelectedChildPath, getMenuColumns, hasChildren } from './overlay-menu-utils'
+import * as menuUtils from './overlay-menu-utils'
 import type { OverlayMenuActionItem } from './overlay-types'
 import { mergeClassNames } from './overlay-utils'
 import { useOverlayMenuBoundaryOffsets } from './use-overlay-menu-boundary-offsets'
@@ -28,6 +28,7 @@ export function OverlayMenu({
   primaryPanelClassName,
   selectedKeys,
   submenuPlacement = 'right',
+  submenuWidth,
   submenuTrigger = 'hover',
   surface = false,
   width,
@@ -36,19 +37,16 @@ export function OverlayMenu({
 }: OverlayMenuProps) {
   const selectedKeySet = useMemo(() => new Set(selectedKeys ?? []), [selectedKeys])
   const [uncontrolledOpenKeys, setUncontrolledOpenKeys] = useState(() =>
-    defaultOpenKeys ?? getFirstSelectedChildPath(items, selectedKeySet)
+    defaultOpenKeys ?? menuUtils.getFirstSelectedChildPath(items, selectedKeySet)
   )
   const [pendingConfirmKey, setPendingConfirmKey] = useState<string | null>(null)
   const activeOpenKeys = openKeys ?? uncontrolledOpenKeys
-  const columns = getMenuColumns(items, activeOpenKeys, alignSubmenus)
+  const columns = menuUtils.getMenuColumns(items, activeOpenKeys, alignSubmenus)
   const renderedColumns = columns.map((column, level) => ({ column, level }))
   if (submenuPlacement === 'left') {
     renderedColumns.reverse()
   }
-  const compositeStyle = {
-    '--oneworks-overlay-menu-column-count': renderedColumns.length,
-    '--oneworks-overlay-menu-column-gap-count': Math.max(renderedColumns.length - 1, 0)
-  } as CSSProperties
+  const compositeStyle = menuUtils.createOverlayMenuCompositeStyle(renderedColumns.length, submenuWidth)
   const setOpenKeys = (keys: string[]) => {
     if (openKeys == null) {
       setUncontrolledOpenKeys(keys)
@@ -57,7 +55,7 @@ export function OverlayMenu({
   }
   const openSubmenu = (level: number, item: OverlayMenuActionItem, options?: { toggle?: boolean }) => {
     if (item.disabled === true) return
-    if (!hasChildren(item)) {
+    if (!menuUtils.hasChildren(item)) {
       setOpenKeys(activeOpenKeys.slice(0, level))
       return
     }
@@ -69,7 +67,7 @@ export function OverlayMenu({
   }
   const activateItem = (item: OverlayMenuActionItem, level: number) => {
     if (item.disabled === true) return
-    if (hasChildren(item)) {
+    if (menuUtils.hasChildren(item)) {
       openSubmenu(level, item)
       return
     }
@@ -186,7 +184,7 @@ export function OverlayMenu({
               submenuPlacement={submenuPlacement}
               submenuTrigger={submenuTrigger}
               surface={surface}
-              width={width}
+              width={level === 0 ? width : submenuWidth ?? width}
               onActivateItem={activateItem}
               onConfirmItem={confirmItem}
               onOpenSubmenu={openSubmenu}

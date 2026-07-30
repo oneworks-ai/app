@@ -1,4 +1,3 @@
-import { Tooltip } from 'antd'
 import { useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -12,7 +11,7 @@ import type {
   SenderToolbarRefs,
   SenderToolbarState
 } from '../../@types/sender-toolbar-types'
-import { permissionModeIconMap } from '../../@utils/sender-constants'
+import { CollapsedPermissionModeStatus } from '../permission-mode-control/CollapsedPermissionModeStatus'
 import { PermissionModeControl } from '../permission-mode-control/PermissionModeControl'
 import { SenderSessionTargetBar } from '../session-target/SenderSessionTargetBar'
 
@@ -70,6 +69,8 @@ export function SenderHeaderControls({
           state={{
             showPermissionActions: toolbarState.showPermissionActions,
             permissionMode: toolbarState.permissionMode,
+            permissionModeTransitionPending: toolbarState.permissionModeTransitionPending,
+            selectionControlsDisabled: toolbarState.selectionControlsDisabled,
             canOpenReferenceActions: toolbarState.canOpenReferenceActions,
             isMac: toolbarState.isMac
           }}
@@ -104,22 +105,13 @@ export function SenderHeaderControls({
   const headerToggle = (
     <div className={`chat-input-header-toggle-shell ${headerStateClass}`}>
       {showPermissionControl && isHeaderCollapsed && (
-        <Tooltip
-          title={selectedPermissionOption?.label ?? t('chat.referencePermission')}
-          placement='top'
-          destroyOnHidden
-        >
-          <div
-            className={`chat-input-header-toggle-mode-indicator chat-input-header-toggle-mode-indicator--${toolbarState.permissionMode}`}
-            aria-label={selectedPermissionOption?.label?.toString() ?? t('chat.referencePermission')}
-          >
-            <span
-              className={`material-symbols-rounded chat-input-header-toggle-mode-icon sender-permission-trigger__icon--${toolbarState.permissionMode}`}
-            >
-              {permissionModeIconMap[toolbarState.permissionMode]}
-            </span>
-          </div>
-        </Tooltip>
+        <CollapsedPermissionModeStatus
+          permissionMode={toolbarState.permissionMode}
+          selectedOption={selectedPermissionOption}
+          transitionPending={toolbarState.permissionModeTransitionPending ||
+            toolbarState.selectionControlsDisabled}
+          onRestoreDefault={() => toolbarHandlers.onSelectPermissionMode('default')}
+        />
       )}
       <button
         type='button'

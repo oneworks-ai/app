@@ -2,6 +2,7 @@ import type { ReactNode, RefObject } from 'react'
 
 import type { RefSelectProps } from 'antd'
 
+import type { PermissionModeSelectionStart } from '#~/hooks/chat/use-permission-mode-selection-guard'
 import type { SenderProps } from '../@types/sender-props'
 import type { SenderToolbarData, SenderToolbarHandlers, SenderToolbarRefs } from '../@types/sender-toolbar-types'
 
@@ -22,6 +23,7 @@ export const buildSenderToolbar = ({
   showConfirmInteractionAction,
   confirmInteractionLabel,
   onConfirmInteractionOption,
+  onPermissionModeChange,
   message,
   props,
   refs,
@@ -53,6 +55,7 @@ export const buildSenderToolbar = ({
   showConfirmInteractionAction: boolean
   confirmInteractionLabel?: string
   onConfirmInteractionOption?: () => void
+  onPermissionModeChange: (mode: NonNullable<SenderProps['permissionMode']>) => PermissionModeSelectionStart
   message: { warning: (content: ReactNode) => unknown }
   props: SenderProps
   refs: {
@@ -91,16 +94,16 @@ export const buildSenderToolbar = ({
   return createSenderToolbarBindings({
     attachments,
     callbacks: {
-      onAdapterChange: props.onAdapterChange,
-      onAccountChange: props.onAccountChange,
-      onEffortChange: props.onEffortChange,
+      onAdapterChange: props.selectionControlsDisabled ? undefined : props.onAdapterChange,
+      onAccountChange: props.selectionControlsDisabled ? undefined : props.onAccountChange,
+      onEffortChange: props.selectionControlsDisabled ? undefined : props.onEffortChange,
       onFastModeChange: props.onFastModeChange,
       onInterrupt: props.onInterrupt,
-      onModelChange: props.onModelChange,
+      onModelChange: props.selectionControlsDisabled ? undefined : props.onModelChange,
       onToggleRecommendedModel: props.onToggleRecommendedModel,
       onConnectMoreModelServices: props.onConnectMoreModelServices,
       onOpenModelServicesConfig: props.onOpenModelServicesConfig,
-      onPermissionModeChange: props.onPermissionModeChange,
+      onPermissionModeChange,
       onQueueModeChange: props.onQueueModeChange,
       onCancel: props.onCancel,
       onConfirmInteractionOption,
@@ -120,6 +123,7 @@ export const buildSenderToolbar = ({
       modelMenuGroups: props.modelMenuGroups,
       modelSearchOptions: props.modelSearchOptions,
       permissionMode: props.permissionMode ?? 'default',
+      permissionModeTransitionPending: props.permissionModeTransitionPending === true,
       permissionModeOptions: props.permissionModeOptions ?? [],
       queueMode: props.queueMode ?? 'steer',
       queuedMessageShortcuts,
@@ -139,6 +143,7 @@ export const buildSenderToolbar = ({
       isInlineEdit,
       isMac,
       isThinking,
+      selectionControlsDisabled: props.selectionControlsDisabled === true,
       sendBlocked,
       sendBlockedTooltip,
       showConfirmInteractionAction,

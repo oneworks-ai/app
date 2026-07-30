@@ -22,7 +22,10 @@ export function AdapterSelectControl({
   data,
   handlers
 }: {
-  state: Pick<SenderToolbarState, 'adapterLocked' | 'modelUnavailable' | 'isThinking' | 'selectedAdapter'>
+  state: Pick<
+    SenderToolbarState,
+    'adapterLocked' | 'modelUnavailable' | 'isThinking' | 'selectedAdapter' | 'selectionControlsDisabled'
+  >
   data: Pick<SenderToolbarData, 'adapterOptions' | 'hiddenBuiltinAdapterOptions'> & {
     defaultOpen?: boolean
   }
@@ -30,10 +33,10 @@ export function AdapterSelectControl({
 }) {
   const { t } = useTranslation()
   const { isCompactLayout, isTouchInteraction } = useResponsiveLayout()
-  const { adapterLocked, modelUnavailable, isThinking, selectedAdapter } = state
+  const { adapterLocked, modelUnavailable, isThinking, selectedAdapter, selectionControlsDisabled } = state
   const { adapterOptions, defaultOpen, hiddenBuiltinAdapterOptions } = data
   const { onAdapterChange } = handlers
-  const isDisabled = adapterLocked || modelUnavailable || isThinking
+  const isDisabled = adapterLocked || modelUnavailable || isThinking || selectionControlsDisabled
   const isCompactControl = isCompactLayout || isTouchInteraction
   const [showAdapterSelect, setShowAdapterSelect] = useState(defaultOpen === true)
   const visibleAdapterOptions = adapterOptions ?? []

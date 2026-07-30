@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- desktop, compact, reset, and keyboard permission paths share one busy owner. */
+
 import './PermissionModeControl.scss'
 
 import { ShortcutTooltip } from '@oneworks/components/route-layout'
@@ -5,6 +7,7 @@ import { Dropdown } from 'antd'
 import type { MouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { getPermissionModeRiskLevel } from '#~/hooks/chat/use-chat-permission-mode'
 import { useResponsiveLayout } from '#~/hooks/use-responsive-layout'
 
 import type {
@@ -16,6 +19,7 @@ import type {
 import { permissionModeIconMap } from '../../@utils/sender-constants'
 import { SenderMobileSelectDrawer } from '../mobile-select-drawer/SenderMobileSelectDrawer'
 import { PermissionModeMenu } from './PermissionModeMenu'
+import { PermissionModeResetButton } from './PermissionModeResetButton'
 
 export function PermissionModeControl({
   state,
@@ -25,7 +29,12 @@ export function PermissionModeControl({
 }: {
   state: Pick<
     SenderToolbarState,
-    'showPermissionActions' | 'permissionMode' | 'canOpenReferenceActions' | 'isMac'
+    | 'showPermissionActions'
+    | 'permissionMode'
+    | 'permissionModeTransitionPending'
+    | 'selectionControlsDisabled'
+    | 'canOpenReferenceActions'
+    | 'isMac'
   >
   data: Pick<SenderToolbarData, 'permissionModeOptions' | 'composerControlShortcuts'>
   refs: Pick<SenderToolbarRefs, 'permissionMenuNavigation'>
@@ -38,14 +47,28 @@ export function PermissionModeControl({
 }) {
   const { t } = useTranslation()
   const { isCompactLayout, isTouchInteraction } = useResponsiveLayout()
-  const { showPermissionActions, permissionMode, canOpenReferenceActions, isMac } = state
+  const {
+    showPermissionActions,
+    permissionMode,
+    permissionModeTransitionPending,
+    selectionControlsDisabled,
+    canOpenReferenceActions,
+    isMac
+  } = state
   const { permissionModeOptions, composerControlShortcuts } = data
   const { permissionMenuNavigation } = refs
   const { onPermissionOpenChange, onPermissionMenuKeyDown, onSelectPermissionMode } = handlers
   const selectedPermissionOption = permissionModeOptions.find(option => option.value === permissionMode)
+  const riskLevel = getPermissionModeRiskLevel(permissionMode)
   const isCompactControl = isCompactLayout || isTouchInteraction
+  const permissionSelectionDisabled = permissionModeTransitionPending || selectionControlsDisabled
 
   const handleTriggerClick = (event: MouseEvent<HTMLButtonElement>) => {
+    if (permissionSelectionDisabled) {
+      event.preventDefault()
+      event.stopPropagation()
+      return
+    }
     if (!isCompactControl && canOpenReferenceActions) {
       return
     }
@@ -66,6 +89,7 @@ export function PermissionModeControl({
     <PermissionModeMenu
       ariaLabel={t('chat.referencePermission')}
       compact={isCompactControl}
+      disabled={permissionSelectionDisabled}
       handlers={{ onPermissionMenuKeyDown, onSelectPermissionMode }}
       permissionMode={permissionMode}
       permissionModeOptions={permissionModeOptions}
@@ -77,8 +101,12 @@ export function PermissionModeControl({
     <>
       <Dropdown
         popupRender={() => permissionMenu}
-        open={isCompactControl ? false : showPermissionActions}
+        open={isCompactControl || permissionSelectionDisabled ? false : showPermissionActions}
         onOpenChange={(nextOpen) => {
+          if (permissionSelectionDisabled) {
+            if (showPermissionActions) onPermissionOpenChange(false)
+            return
+          }
           onPermissionOpenChange(nextOpen)
           if (nextOpen) {
             focusSelectedPermission()
@@ -100,15 +128,25 @@ export function PermissionModeControl({
             className={[
               'sender-permission-trigger',
               `sender-permission-trigger--${permissionMode}`,
+              riskLevel != null ? 'is-high-risk' : '',
               showPermissionActions ? 'is-open' : ''
             ].filter(Boolean).join(' ')}
             aria-label={t('chat.referencePermission')}
             aria-haspopup='menu'
             aria-expanded={showPermissionActions}
+            aria-busy={permissionSelectionDisabled}
+            disabled={permissionSelectionDisabled}
             onClick={handleTriggerClick}
             onKeyDown={(event) => {
               const isActivationKey = event.key === 'Enter' || event.key === ' '
               const isOpenKey = event.key === 'ArrowDown' || event.key === 'ArrowUp'
+              if (permissionSelectionDisabled) {
+                if (isActivationKey || isOpenKey) {
+                  event.preventDefault()
+                  event.stopPropagation()
+                }
+                return
+              }
 
               if (isActivationKey || isOpenKey) {
                 event.preventDefault()
@@ -145,14 +183,32 @@ export function PermissionModeControl({
               >
                 {selectedPermissionOption?.label ?? t('chat.referencePermission')}
               </span>
+              <span
+                className={[
+                  'sender-permission-risk-badge',
+                  riskLevel == null
+                    ? 'is-placeholder'
+                    : `sender-permission-risk-badge--${riskLevel}`
+                ].join(' ')}
+                aria-hidden={riskLevel == null}
+              >
+                {t(`chat.permissionModes.risk.${riskLevel ?? 'critical'}`)}
+              </span>
             </span>
             <span className='material-symbols-rounded sender-permission-trigger__chevron'>expand_more</span>
           </button>
         </ShortcutTooltip>
       </Dropdown>
+      <PermissionModeResetButton
+        isMac={isMac}
+        permissionMode={permissionMode}
+        riskLevel={riskLevel}
+        transitionPending={permissionSelectionDisabled}
+        onRestoreDefault={() => onSelectPermissionMode('default')}
+      />
       {isCompactControl && (
         <SenderMobileSelectDrawer
-          open={showPermissionActions}
+          open={showPermissionActions && !permissionSelectionDisabled}
           title={t('chat.referencePermission')}
           className='sender-permission-mobile-drawer'
           onClose={() => onPermissionOpenChange(false)}

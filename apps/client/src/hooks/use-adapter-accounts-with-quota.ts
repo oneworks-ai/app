@@ -17,13 +17,23 @@ export const useAdapterAccountsWithQuota = ({
   adapter?: string
   model?: string
 }) => {
+  return useAdapterAccountsWithQuotaState({ adapter, model }).data
+}
+
+export const useAdapterAccountsWithQuotaState = ({
+  adapter,
+  model
+}: {
+  adapter?: string
+  model?: string
+}) => {
   const normalizedAdapter = normalizeOptionalText(adapter)
   const normalizedModel = normalizeOptionalText(model)
-  const { data: baseData } = useSWR<AdapterAccountsResult>(
+  const { data: baseData, error: baseError } = useSWR<AdapterAccountsResult>(
     normalizedAdapter == null ? null : ['/api/adapters/accounts', normalizedAdapter, normalizedModel ?? ''],
     normalizedAdapter == null ? null : () => getAdapterAccounts(normalizedAdapter, { model: normalizedModel })
   )
-  const { data: refreshedData } = useSWR<AdapterAccountsResult>(
+  const { data: refreshedData, error: refreshError } = useSWR<AdapterAccountsResult>(
     normalizedAdapter == null || baseData == null || baseData.accounts.length === 0
       ? null
       : ['/api/adapters/accounts-quota', normalizedAdapter, normalizedModel ?? ''],
@@ -36,5 +46,10 @@ export const useAdapterAccountsWithQuota = ({
     }
   )
 
-  return refreshedData ?? baseData
+  const data = refreshedData ?? baseData
+  return {
+    data,
+    error: data == null ? baseError ?? refreshError : undefined,
+    pending: normalizedAdapter != null && baseData == null && baseError == null
+  }
 }

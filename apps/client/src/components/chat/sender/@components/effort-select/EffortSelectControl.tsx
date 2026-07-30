@@ -34,6 +34,7 @@ export function EffortSelectControl({
     SenderToolbarState,
     | 'isThinking'
     | 'modelUnavailable'
+    | 'selectionControlsDisabled'
     | 'showModelSelect'
     | 'showEffortSelect'
     | 'effort'
@@ -56,7 +57,16 @@ export function EffortSelectControl({
 }) {
   const { t } = useTranslation()
   const { isCompactLayout, isTouchInteraction } = useResponsiveLayout()
-  const { isThinking, modelUnavailable, showEffortSelect, effort, fastMode, supportsFastMode, isMac } = state
+  const {
+    isThinking,
+    modelUnavailable,
+    selectionControlsDisabled,
+    showEffortSelect,
+    effort,
+    fastMode,
+    supportsFastMode,
+    isMac
+  } = state
   const { effortOptions, composerControlShortcuts } = data
   const { effortSelectRef } = refs
   const {
@@ -101,7 +111,7 @@ export function EffortSelectControl({
   }
 
   const openCompactEffortSelect = () => {
-    if (modelUnavailable || isThinking || isEffortSelectOpen) {
+    if (modelUnavailable || isThinking || selectionControlsDisabled || isEffortSelectOpen) {
       return
     }
 
@@ -173,7 +183,7 @@ export function EffortSelectControl({
                 type='button'
                 className='effort-select effort-select--responsive sender-responsive-select-button sender-responsive-select-button--effort'
                 aria-label={t('chat.effortShortcutTooltip')}
-                disabled={modelUnavailable || isThinking}
+                disabled={modelUnavailable || isThinking || selectionControlsDisabled}
                 onMouseDown={(event) => {
                   event.preventDefault()
                   event.stopPropagation()
@@ -210,7 +220,7 @@ export function EffortSelectControl({
                 ariaLabel={t('chat.effortSliderLabel', { value: selectedEffortLabel })}
                 value={displayedEffort}
                 options={effortStages}
-                disabled={modelUnavailable || isThinking}
+                disabled={modelUnavailable || isThinking || selectionControlsDisabled}
                 onChange={nextEffort => onEffortChange?.(nextEffort)}
                 onFocus={handleStageSliderFocus}
                 onBlur={() => onShowEffortSelectChange(false)}
@@ -268,7 +278,7 @@ export function EffortSelectControl({
             className={`sender-fast-mode-toggle ${fastMode ? 'is-active' : ''}`.trim()}
             aria-label={t(fastMode ? 'chat.fastModeDisable' : 'chat.fastModeEnable')}
             aria-pressed={fastMode}
-            disabled={modelUnavailable || isThinking}
+            disabled={modelUnavailable || isThinking || selectionControlsDisabled}
             onMouseDown={event => event.preventDefault()}
             onClick={toggleFastMode}
           >

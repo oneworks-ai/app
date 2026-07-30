@@ -35,8 +35,10 @@ export function ReferenceActionsControl({
     | 'canOpenReferenceActions'
     | 'isThinking'
     | 'modelUnavailable'
+    | 'selectionControlsDisabled'
     | 'showReferenceActions'
     | 'permissionMode'
+    | 'permissionModeTransitionPending'
     | 'selectedAccount'
     | 'selectedAdapter'
     | 'showAccountSelector'
@@ -139,6 +141,8 @@ export function ReferenceActionsControl({
           open={showReferenceActions}
           isInlineEdit={isInlineEdit}
           permissionMode={permissionMode}
+          permissionModeTransitionPending={state.permissionModeTransitionPending}
+          selectionControlsDisabled={state.selectionControlsDisabled}
           permissionModeOptions={permissionModeOptions}
           refs={refs}
           handlers={handlers}

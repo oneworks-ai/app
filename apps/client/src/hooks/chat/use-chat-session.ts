@@ -6,6 +6,8 @@ import { useTranslation } from 'react-i18next'
 import type { Session } from '@oneworks/core'
 
 import { getActiveOptimisticSessionCreation, optimisticSessionCreationsAtom } from './optimistic-session-creation'
+import type { DraftPermissionModeLifecycle } from './permission-mode-acknowledgement'
+import type { CanonicalPermissionModeOwner } from './permission-mode-owner'
 import { getSessionActivityLabel } from './session-activity-label'
 import { useChatAdapterAccountSelection } from './use-chat-adapter-account-selection'
 import { useChatEffort } from './use-chat-effort'
@@ -15,14 +17,25 @@ import { useChatModelAdapterSelection } from './use-chat-model-adapter-selection
 import { useChatPermissionMode } from './use-chat-permission-mode'
 import { useChatSessionMessages } from './use-chat-session-messages'
 import { useChatView } from './use-chat-view'
-import { useSessionPermissionModeChange } from './use-session-permission-mode-change'
 
 type ObservedSessionSelection = Pick<
   Session,
   'id' | 'model' | 'permissionMode' | 'adapter' | 'account' | 'effort' | 'fastMode'
 >
 
-export function useChatSession({ enableTimelineView, session }: { enableTimelineView?: boolean; session?: Session }) {
+export function useChatSession({
+  draftIdentity,
+  draftPermissionModeLifecycle,
+  permissionModeOwnerIdentity,
+  enableTimelineView,
+  session
+}: {
+  draftIdentity?: string
+  draftPermissionModeLifecycle?: DraftPermissionModeLifecycle
+  permissionModeOwnerIdentity?: CanonicalPermissionModeOwner
+  enableTimelineView?: boolean
+  session?: Session
+}) {
   const { t } = useTranslation()
   const optimisticCreations = useAtomValue(optimisticSessionCreationsAtom)
   const optimisticCreation = getActiveOptimisticSessionCreation(session, optimisticCreations)
@@ -39,6 +52,7 @@ export function useChatSession({ enableTimelineView, session }: { enableTimeline
     builtinPreviewModelOptions,
     modelSearchOptions,
     recommendedModelOptions,
+    resolveUserSelectionTransition,
     servicePreviewModelOptions,
     toggleRecommendedModel,
     updatingRecommendedModelValue,
@@ -56,8 +70,29 @@ export function useChatSession({ enableTimelineView, session }: { enableTimeline
     adapter: selectedAdapter,
     model: selectedModelWithService
   })
-  const { permissionMode, setPermissionMode, permissionModeOptions } = useChatPermissionMode()
-  const { applySessionEffort, effort, setEffort, effortOptions } = useChatEffort({
+  const {
+    completePermissionModeDraftSessionCreation,
+    createPermissionModeDraftCreationToken,
+    discardPermissionModeDraftSessionCreation,
+    permissionMode,
+    permissionModeTransitionPending,
+    setPermissionMode,
+    permissionModeOptions
+  } = useChatPermissionMode({
+    draftIdentity,
+    draftLifecycle: draftPermissionModeLifecycle,
+    ownerIdentity: permissionModeOwnerIdentity,
+    session
+  })
+  const {
+    applySessionEffort,
+    effort,
+    effortSelection,
+    setEffort,
+    effortOptions,
+    resolveEffortSelectionForSelection,
+    resolveEffortOptionsForSelection
+  } = useChatEffort({
     adapter: selectedAdapter,
     model: selectedModelWithService
   })
@@ -107,7 +142,6 @@ export function useChatSession({ enableTimelineView, session }: { enableTimeline
     reconcileAfterInteraction()
     submitInteractionResponse(id, data)
   }, [reconcileAfterInteraction, submitInteractionResponse])
-  const handlePermissionModeChange = useSessionPermissionModeChange(session?.id, setPermissionMode)
   const lastObservedSessionRef = useRef<ObservedSessionSelection | null>(null)
   const isThinking = session?.status === 'running'
   const sessionActivityLabel = getSessionActivityLabel(sessionOperationInfo, t)
@@ -134,10 +168,6 @@ export function useChatSession({ enableTimelineView, session }: { enableTimeline
       applySessionAccountSelection({
         account: session.account
       })
-    }
-
-    if (sessionChanged || previous?.permissionMode !== session.permissionMode) {
-      setPermissionMode(session.permissionMode)
     }
 
     if (sessionChanged || previous?.effort !== session.effort) {
@@ -168,8 +198,7 @@ export function useChatSession({ enableTimelineView, session }: { enableTimeline
     session?.permissionMode,
     applySessionSelection,
     applySessionEffort,
-    applySessionFastMode,
-    setPermissionMode
+    applySessionFastMode
   ])
 
   return {
@@ -205,15 +234,23 @@ export function useChatSession({ enableTimelineView, session }: { enableTimeline
     updatingRecommendedModelValue,
     selectedModel,
     modelForQuery: selectedModelWithService,
+    resolveUserSelectionTransition,
     setSelectedModel,
     effort,
+    effortSelection,
     setEffort,
     effortOptions,
+    resolveEffortSelectionForSelection,
+    resolveEffortOptionsForSelection,
     fastMode,
     setFastMode,
     supportsFastMode,
     permissionMode,
-    setPermissionMode: handlePermissionModeChange,
+    permissionModeTransitionPending,
+    completePermissionModeDraftSessionCreation,
+    createPermissionModeDraftCreationToken,
+    discardPermissionModeDraftSessionCreation,
+    setPermissionMode,
     permissionModeOptions,
     selectedAdapter,
     setSelectedAdapter,

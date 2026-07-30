@@ -62,6 +62,7 @@ export function ModelSelectControl({
     SenderToolbarState,
     | 'isThinking'
     | 'modelUnavailable'
+    | 'selectionControlsDisabled'
     | 'showModelSelect'
     | 'selectedModel'
     | 'modelSearchValue'
@@ -92,7 +93,15 @@ export function ModelSelectControl({
 }) {
   const { t } = useTranslation()
   const { isCompactLayout, isTouchInteraction } = useResponsiveLayout()
-  const { isThinking, modelUnavailable, showModelSelect, selectedModel, modelSearchValue, isMac } = state
+  const {
+    isThinking,
+    modelUnavailable,
+    selectionControlsDisabled,
+    showModelSelect,
+    selectedModel,
+    modelSearchValue,
+    isMac
+  } = state
   const {
     modelMenuGroups,
     modelSearchOptions,
@@ -142,7 +151,7 @@ export function ModelSelectControl({
   }
 
   const openCompactModelSelect = () => {
-    if (modelUnavailable || isThinking || isModelSelectOpen) {
+    if (modelUnavailable || isThinking || selectionControlsDisabled || isModelSelectOpen) {
       return
     }
 
@@ -208,7 +217,7 @@ export function ModelSelectControl({
               'sender-select-shell--model',
               'sender-select-shell--compact',
               isModelSelectOpen ? 'is-open' : '',
-              modelUnavailable || isThinking ? 'is-disabled' : ''
+              modelUnavailable || isThinking || selectionControlsDisabled ? 'is-disabled' : ''
             ].filter(Boolean).join(' ')}
             onPointerDownCapture={handleCompactModelPointerDown}
           >
@@ -216,7 +225,7 @@ export function ModelSelectControl({
               type='button'
               className='model-select model-select--responsive sender-responsive-select-button sender-responsive-select-button--model'
               aria-label={t('chat.modelShortcutTooltip')}
-              disabled={modelUnavailable || isThinking}
+              disabled={modelUnavailable || isThinking || selectionControlsDisabled}
               onMouseDown={(event) => {
                 event.preventDefault()
                 event.stopPropagation()
@@ -281,7 +290,7 @@ export function ModelSelectControl({
             options={modelSearchOptions ?? []}
             showSearch={false}
             allowClear={false}
-            disabled={modelUnavailable || isThinking}
+            disabled={modelUnavailable || isThinking || selectionControlsDisabled}
             onChange={handleModelSelection}
             onOpenChange={(nextOpen) => {
               if (nextOpen) {

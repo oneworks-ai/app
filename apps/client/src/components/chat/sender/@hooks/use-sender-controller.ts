@@ -1,6 +1,6 @@
 /* eslint-disable max-lines */
 import { App } from 'antd'
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { buildSenderControllerResult } from '#~/components/chat/sender/@core/build-sender-controller-result'
@@ -8,6 +8,7 @@ import { buildSenderToolbar } from '#~/components/chat/sender/@core/build-sender
 import { getSenderInteractionState } from '#~/components/chat/sender/@core/get-sender-interaction-state'
 import { getSenderRuntimeState } from '#~/components/chat/sender/@core/get-sender-runtime-state'
 import type { SenderProps } from '#~/components/chat/sender/@types/sender-props'
+import { requestPermissionModeChange } from '#~/hooks/chat/use-chat-permission-mode'
 
 import { useSenderAttachments } from './use-sender-attachments'
 import { useSenderAutofocus } from './use-sender-autofocus'
@@ -44,6 +45,18 @@ export const useSenderController = (props: SenderProps) => {
   const handledTextSelectionReferenceRequestIdRef = useRef<number | null>(null)
   const handledFileCommentReferenceRequestIdRef = useRef<number | null>(null)
   const handledPendingReferenceDraftRequestIdRef = useRef<number | null>(null)
+  const selectionControlsDisabledRef = useRef(props.selectionControlsDisabled === true)
+  const permissionModeTransitionPendingRef = useRef(props.permissionModeTransitionPending === true)
+  const sameDispatchPermissionOwnerRef = useRef({ active: false, generation: 0 })
+  useLayoutEffect(() => {
+    selectionControlsDisabledRef.current = props.selectionControlsDisabled === true
+  }, [props.selectionControlsDisabled])
+  useLayoutEffect(() => {
+    permissionModeTransitionPendingRef.current = props.permissionModeTransitionPending === true
+    if (permissionModeTransitionPendingRef.current) {
+      sameDispatchPermissionOwnerRef.current.active = false
+    }
+  }, [props.permissionModeTransitionPending])
   const { isInlineEdit, isMac, isThinking, isBusy, supportsEffort } = getSenderRuntimeState(props)
   const composer = useSenderComposerState(props.initialContent)
   const completion = useSenderCompletion({
@@ -71,12 +84,76 @@ export const useSenderController = (props: SenderProps) => {
     setPendingImages: composer.setPendingImages,
     setPendingFiles: composer.setPendingFiles
   })
+  const restoreEditorFocusAfterPermissionConfirmation = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      const editor = editorRef.current
+      if (editor != null && !editor.isDisabled()) {
+        editor.focus()
+      }
+    })
+  }, [editorRef])
+  const handlePermissionModeSelect = useCallback((
+    mode: NonNullable<SenderProps['permissionMode']>
+  ) => {
+    if (
+      selectionControlsDisabledRef.current ||
+      permissionModeTransitionPendingRef.current ||
+      sameDispatchPermissionOwnerRef.current.active
+    ) {
+      return {
+        accepted: false,
+        completion: Promise.resolve(false),
+        result: 'transition-pending' as const
+      }
+    }
+    const selection = requestPermissionModeChange(
+      {
+        legacyHandler: props.onPermissionModeChange,
+        onError: () => {
+          void message.error(t('chat.permissionModes.updateFailed'))
+        },
+        requestHandler: props.onPermissionModeRequest
+      },
+      mode,
+      {
+        onAfterConfirmationClose: restoreEditorFocusAfterPermissionConfirmation
+      }
+    )
+    // React may defer the render that exposes disabled controls. Claim the
+    // existing event-time owner synchronously so a second queued event in the
+    // same propagation stack cannot pass through before that DOM commit.
+    if (selection.accepted && selection.result !== 'confirmation-required') {
+      const generation = sameDispatchPermissionOwnerRef.current.generation + 1
+      sameDispatchPermissionOwnerRef.current = { active: true, generation }
+      queueMicrotask(() => {
+        if (
+          sameDispatchPermissionOwnerRef.current.generation === generation &&
+          permissionModeTransitionPendingRef.current !== true
+        ) {
+          sameDispatchPermissionOwnerRef.current.active = false
+        }
+      })
+      void selection.completion.finally(() => {
+        if (sameDispatchPermissionOwnerRef.current.generation === generation) {
+          sameDispatchPermissionOwnerRef.current.active = false
+        }
+      })
+    }
+    return selection
+  }, [
+    message,
+    props.onPermissionModeChange,
+    props.onPermissionModeRequest,
+    props.permissionModeTransitionPending,
+    restoreEditorFocusAfterPermissionConfirmation,
+    t
+  ])
   const referenceActions = useSenderReferenceActions({
     initialContent: props.initialContent,
     isInlineEdit,
     permissionMode: props.permissionMode ?? 'default',
     permissionModeValues: (props.permissionModeOptions ?? []).map(option => option.value),
-    onPermissionSelect: (mode) => props.onPermissionModeChange?.(mode),
+    onPermissionSelect: handlePermissionModeSelect,
     onReferenceImageSelect: attachments.handleImageUpload,
     onOpenContextPicker: attachments.handleOpenContextPicker
   })
@@ -84,7 +161,7 @@ export const useSenderController = (props: SenderProps) => {
     initialContent: props.initialContent,
     isInlineEdit,
     isThinking,
-    modelUnavailable: props.modelUnavailable,
+    modelUnavailable: props.modelUnavailable || props.selectionControlsDisabled,
     supportsEffort,
     modelSelectRef,
     effortSelectRef
@@ -101,14 +178,17 @@ export const useSenderController = (props: SenderProps) => {
   const isPermissionInteraction = !isInlineEdit && props.interactionRequest?.payload.kind === 'permission'
   const showConfirmInteractionAction = isPermissionInteraction &&
     (props.interactionOptionNavigation?.optionCount ?? 0) > 0
-  const sendBlockedTooltip = isPermissionInteraction ? t('chat.permissionSendBlockedTooltip') : undefined
+  const sendBlocked = isPermissionInteraction || props.sendBlocked === true
+  const sendBlockedTooltip = isPermissionInteraction
+    ? t('chat.permissionSendBlockedTooltip')
+    : props.sendBlockedTooltip
   const { clearInputShortcut, composerControlShortcuts, resolvedSendShortcut, queuedMessageShortcuts } =
     useSenderShortcuts({
       enabled: !hideSender && !attachments.showContextPicker && !isInlineEdit,
       isInlineEdit,
       isMac,
       isThinking,
-      modelUnavailable: props.modelUnavailable,
+      modelUnavailable: props.modelUnavailable || props.selectionControlsDisabled,
       permissionModeOptions: props.permissionModeOptions ?? [],
       referenceActions,
       selectOverlays
@@ -152,8 +232,8 @@ export const useSenderController = (props: SenderProps) => {
     if (props.hideSubmitAction === true) {
       return
     }
-    if (isPermissionInteraction) {
-      handleBlockedSendAttempt()
+    if (sendBlocked) {
+      if (isPermissionInteraction) handleBlockedSendAttempt()
       return
     }
 
@@ -171,9 +251,9 @@ export const useSenderController = (props: SenderProps) => {
   const voiceInput = useSenderVoiceInput({
     canSendAfterTranscription: props.hideSubmitAction !== true &&
       !props.modelUnavailable &&
-      !isPermissionInteraction &&
+      !sendBlocked &&
       props.submitLoading !== true,
-    canStartRecording: !isBusy && !props.modelUnavailable && !isPermissionInteraction,
+    canStartRecording: !isBusy && !props.modelUnavailable && !sendBlocked,
     editorRef,
     enabled: props.enableVoiceInput === true && !isInlineEdit && !hideSender,
     input: composer.input,
@@ -435,11 +515,12 @@ export const useSenderController = (props: SenderProps) => {
     isInlineEdit,
     isMac,
     isThinking,
-    sendBlocked: isPermissionInteraction,
+    sendBlocked,
     sendBlockedTooltip,
     showConfirmInteractionAction,
     confirmInteractionLabel: showConfirmInteractionAction ? t('chat.permissionConfirmOption') : undefined,
     onConfirmInteractionOption: showConfirmInteractionAction ? props.interactionOptionNavigation?.onSubmit : undefined,
+    onPermissionModeChange: handlePermissionModeSelect,
     message,
     props,
     refs: { fileInputRef, modelSelectRef, effortSelectRef },

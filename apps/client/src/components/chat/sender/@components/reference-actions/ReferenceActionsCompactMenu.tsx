@@ -15,6 +15,8 @@ export function ReferenceActionsCompactMenu({
   isInlineEdit,
   open,
   permissionMode,
+  permissionModeTransitionPending,
+  selectionControlsDisabled,
   permissionModeOptions,
   refs,
   handlers,
@@ -24,6 +26,8 @@ export function ReferenceActionsCompactMenu({
   isInlineEdit: boolean
   open: boolean
   permissionMode: SenderToolbarState['permissionMode']
+  permissionModeTransitionPending: boolean
+  selectionControlsDisabled: boolean
   permissionModeOptions: SenderToolbarData['permissionModeOptions']
   refs: Pick<SenderToolbarRefs, 'referenceMenuNavigation' | 'permissionMenuNavigation'>
   handlers: Pick<
@@ -95,6 +99,7 @@ export function ReferenceActionsCompactMenu({
           </div>
           <PermissionModeMenuItems
             handlers={{ onPermissionMenuKeyDown, onSelectPermissionMode }}
+            disabled={permissionModeTransitionPending || selectionControlsDisabled}
             permissionMode={permissionMode}
             permissionModeOptions={permissionModeOptions}
             refs={{ permissionMenuNavigation }}

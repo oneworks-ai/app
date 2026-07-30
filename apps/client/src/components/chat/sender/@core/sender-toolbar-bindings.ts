@@ -6,6 +6,7 @@ import type { ChatEffort } from '#~/hooks/chat/use-chat-effort'
 import type { ModelSelectMenuGroup, ModelSelectOption } from '#~/hooks/chat/use-chat-model-adapter-selection'
 import type { PermissionMode } from '#~/hooks/chat/use-chat-permission-mode'
 
+import type { PermissionModeSelectionStart } from '#~/hooks/chat/use-permission-mode-selection-guard'
 import type {
   SenderToolbarData,
   SenderToolbarHandlers,
@@ -38,7 +39,7 @@ export const createSenderToolbarBindings = ({
     onToggleRecommendedModel?: (option: ModelSelectOption) => void | Promise<void>
     onConnectMoreModelServices?: () => void
     onOpenModelServicesConfig?: (serviceKey?: string) => void
-    onPermissionModeChange?: (mode: PermissionMode) => void
+    onPermissionModeChange: (mode: PermissionMode) => PermissionModeSelectionStart
     onQueueModeChange?: (mode: SessionQueuedMessageMode) => void
     onCancel?: () => void
     onConfirmInteractionOption?: () => void
@@ -57,6 +58,7 @@ export const createSenderToolbarBindings = ({
     modelMenuGroups?: ModelSelectMenuGroup[]
     modelSearchOptions?: ModelSelectOption[]
     permissionMode: PermissionMode
+    permissionModeTransitionPending: boolean
     permissionModeOptions: SenderToolbarData['permissionModeOptions']
     queueMode: SessionQueuedMessageMode
     queuedMessageShortcuts: Pick<SenderToolbarData['composerControlShortcuts'], 'queueNext' | 'queueSteer'>
@@ -80,6 +82,7 @@ export const createSenderToolbarBindings = ({
     isInlineEdit: boolean
     isMac: boolean
     isThinking: boolean
+    selectionControlsDisabled: boolean
     sendBlocked: boolean
     sendBlockedTooltip?: string
     showConfirmInteractionAction: boolean
@@ -121,6 +124,7 @@ export const createSenderToolbarBindings = ({
     isInlineEdit: ui.isInlineEdit,
     isThinking: ui.isThinking,
     modelUnavailable: Boolean(ui.modelUnavailable),
+    selectionControlsDisabled: ui.selectionControlsDisabled,
     sendBlocked: ui.sendBlocked,
     sendBlockedTooltip: ui.sendBlockedTooltip,
     showConfirmInteractionAction: ui.showConfirmInteractionAction,
@@ -142,6 +146,7 @@ export const createSenderToolbarBindings = ({
     fastMode: selection.fastMode,
     supportsFastMode: selection.supportsFastMode,
     permissionMode: selection.permissionMode,
+    permissionModeTransitionPending: selection.permissionModeTransitionPending,
     selectedAdapter: selection.selectedAdapter,
     selectedAccount: selection.selectedAccount,
     showAccountSelector: ui.showAccountSelector,
@@ -191,6 +196,5 @@ export const createSenderToolbarBindings = ({
     selectOverlays: ui.selectOverlays,
     t: resources.t
   })
-
   return { toolbarState, toolbarData, toolbarRefs, toolbarHandlers }
 }

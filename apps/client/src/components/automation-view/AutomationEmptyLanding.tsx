@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- landing composes the complete guarded draft Sender surface. */
+
 import './AutomationEmptyLanding.scss'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -21,10 +23,13 @@ import {
   DEFAULT_CHAT_SESSION_WORKSPACE_DRAFT,
   getChatSessionWorkspaceDraftFromConfig
 } from '#~/hooks/chat/chat-session-workspace-draft'
+import { createDraftPermissionModeIncarnation } from '#~/hooks/chat/permission-mode-acknowledgement'
+import { deriveCanonicalPermissionModeOwner } from '#~/hooks/chat/permission-mode-owner'
 import { useChatEffort } from '#~/hooks/chat/use-chat-effort'
 import { useChatModelAdapterSelection } from '#~/hooks/chat/use-chat-model-adapter-selection'
 import { useChatPermissionMode } from '#~/hooks/chat/use-chat-permission-mode'
 import { useChatSessionActions } from '#~/hooks/chat/use-chat-session-actions'
+import { useDraftPermissionModeLifecycle } from '#~/hooks/chat/use-draft-permission-mode-lifecycle'
 import { useResponsiveLayout } from '#~/hooks/use-responsive-layout'
 import { buildAutomationCreationContent, buildAutomationCreationText } from './@utils/automation-empty-message'
 import { AutomationEmptyGuide } from './AutomationEmptyGuide'
@@ -47,6 +52,18 @@ export function AutomationEmptyLanding({
   const { t } = useTranslation()
   const { isCompactLayout, isTouchInteraction } = useResponsiveLayout()
   const { data: configRes } = useSWR<ConfigResponse>('/api/config', getConfig)
+  const permissionModeOwner = useMemo(
+    () =>
+      deriveCanonicalPermissionModeOwner({
+        workspaceFolder: configRes?.meta?.workspaceFolder
+      }),
+    [configRes?.meta?.workspaceFolder]
+  )
+  const permissionModeIncarnation = useMemo(createDraftPermissionModeIncarnation, [])
+  const permissionModeLifecycle = useDraftPermissionModeLifecycle({
+    incarnation: permissionModeIncarnation,
+    ownerIdentity: permissionModeOwner
+  })
   const workspaceDraftDirtyRef = useRef(false)
   const defaultWorkspaceDraft = useMemo(() => (
     configRes == null ? DEFAULT_CHAT_SESSION_WORKSPACE_DRAFT : getChatSessionWorkspaceDraftFromConfig(configRes)
@@ -77,12 +94,27 @@ export function AutomationEmptyLanding({
     adapter: selectedAdapter,
     model: selectedModelWithService
   })
-  const { permissionMode, setPermissionMode, permissionModeOptions } = useChatPermissionMode()
+  const {
+    completePermissionModeDraftSessionCreation,
+    createPermissionModeDraftCreationToken,
+    discardPermissionModeDraftSessionCreation,
+    permissionMode,
+    permissionModeTransitionPending,
+    setPermissionMode,
+    permissionModeOptions
+  } = useChatPermissionMode({
+    draftIdentity: `automation-create:${permissionModeOwner ?? 'unbound'}`,
+    draftLifecycle: permissionModeLifecycle,
+    ownerIdentity: permissionModeOwner
+  })
   const { isCreating: isCreatingSession, isStopping, send, sendContent, interrupt } = useChatSessionActions({
     modelForQuery: selectedModelWithService,
     hasAvailableModels,
     effort,
     permissionMode,
+    completePermissionModeDraftSessionCreation,
+    createPermissionModeDraftCreationToken,
+    discardPermissionModeDraftSessionCreation,
     adapter: selectedAdapter,
     sessionTargetDraft,
     workspaceDraft,
@@ -117,8 +149,9 @@ export function AutomationEmptyLanding({
         effortOptions={effortOptions}
         onEffortChange={setEffort}
         permissionMode={permissionMode}
+        permissionModeTransitionPending={permissionModeTransitionPending}
         permissionModeOptions={permissionModeOptions}
-        onPermissionModeChange={setPermissionMode}
+        onPermissionModeRequest={setPermissionMode}
         selectedAdapter={selectedAdapter}
         adapterOptions={adapterOptions}
         hiddenBuiltinAdapterOptions={hiddenBuiltinAdapterOptions}

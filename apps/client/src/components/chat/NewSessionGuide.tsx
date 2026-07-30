@@ -17,13 +17,15 @@ export function NewSessionGuide({
   startupPresets,
   builtinActions,
   composer,
+  starterPending = false,
   onApplyStarter
 }: {
   announcements: string[]
   startupPresets: ConversationStarterConfig[]
   builtinActions: ConversationStarterConfig[]
   composer: ReactNode
-  onApplyStarter: (starter: ConversationStarterConfig) => void
+  starterPending?: boolean
+  onApplyStarter: (starter: ConversationStarterConfig) => boolean | Promise<boolean>
 }) {
   const { t } = useTranslation()
   const [showAnnouncements, setShowAnnouncements] = useAtom(showAnnouncementsAtom)
@@ -74,6 +76,7 @@ export function NewSessionGuide({
           <NewSessionGuideStarterList
             startupPresets={visibleStartupPresets}
             builtinActions={visibleBuiltinActions}
+            disabled={starterPending}
             onApplyStarter={onApplyStarter}
           />
         )

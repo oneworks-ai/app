@@ -2089,6 +2089,44 @@
     "referenceAttachmentsDescription": "选择图片或项目文件作为引用内容。",
     "referencePermission": "权限模式",
     "referencePermissionDescription": "控制工具执行前的授权策略。",
+    "permissionModes": {
+      "default": {
+        "label": "默认",
+        "description": "沿用项目或适配器策略，需要授权的操作仍会先询问。"
+      },
+      "acceptEdits": {
+        "label": "接受编辑",
+        "description": "常规文件编辑可直接执行；命令和其他敏感操作仍需授权。"
+      },
+      "plan": {
+        "label": "计划",
+        "description": "使用适配器的规划行为。限制因适配器而异：部分适配器会禁止编辑，但已批准的命令或已配置的 workspace 写入仍可能可用。"
+      },
+      "dontAsk": {
+        "label": "不询问",
+        "description": "在适配器支持时请求非交互处理。根据适配器，操作可能执行、被拒绝，或仍沿用其默认授权策略。"
+      },
+      "bypassPermissions": {
+        "label": "跳过权限",
+        "description": "后续工具可能在无授权或沙箱保护下执行命令、修改文件和访问网络。仅限隔离且可信的环境。"
+      },
+      "risk": {
+        "high": "高风险",
+        "critical": "最高风险"
+      },
+      "restoreDefault": "恢复默认权限模式",
+      "highRiskStatusAndRestore": "{{mode}}，{{risk}}。恢复默认权限模式",
+      "updateFailed": "权限模式未能更新，已恢复为之前的模式。",
+      "initialUpdateFailed": "权限模式未能启用，之前的模式仍在生效。",
+      "compensationFailedSelectedRemains": "权限模式未能恢复，所选模式仍在生效。",
+      "transitionPending": "请等待当前权限模式切换完成。",
+      "confirmation": {
+        "title": "启用高风险权限模式？",
+        "confirm": "启用此模式",
+        "dontAskImpact": "此设置会影响当前会话后续的工具操作。仅在任务和 workspace 均可信、且不需要交互授权时继续。",
+        "bypassPermissionsImpact": "此设置会影响当前会话后续的工具操作，并可能移除关键保护。仅在允许不受限文件、命令和网络访问的隔离环境中继续。"
+      }
+    },
     "collapseHeaderControls": "收起顶部栏",
     "expandHeaderControls": "展开顶部栏",
     "collapseStatusBar": "隐藏状态栏",
@@ -2962,6 +3000,7 @@
       "loading": "正在加载...",
       "searchPlaceholder": "搜索动作、提示词或目标",
       "recentTitle": "最近使用",
+      "applyFailed": "无法应用此会话启动项",
       "emptySearch": "没有匹配的动作",
       "showMore": "展开剩余 {{count}} 项",
       "showLess": "收起列表",

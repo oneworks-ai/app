@@ -5,6 +5,8 @@ import { isActivationKey } from '#~/components/chat/sender/@utils/sender-utils'
 import type { PermissionMode } from '#~/hooks/chat/use-chat-permission-mode'
 import { useRovingFocusList } from '#~/hooks/use-roving-focus-list'
 
+import type { PermissionModeSelectionStart } from '#~/hooks/chat/use-permission-mode-selection-guard'
+
 export const useSenderReferenceActions = ({
   initialContent,
   isInlineEdit,
@@ -18,7 +20,7 @@ export const useSenderReferenceActions = ({
   isInlineEdit: boolean
   permissionMode: PermissionMode
   permissionModeValues: PermissionMode[]
-  onPermissionSelect: (mode: PermissionMode) => void
+  onPermissionSelect: (mode: PermissionMode) => PermissionModeSelectionStart
   onReferenceImageSelect: () => void
   onOpenContextPicker: () => void
 }) => {
@@ -123,12 +125,13 @@ export const useSenderReferenceActions = ({
         closeReferenceActions({ restoreFocus: true })
         return
       }
-      if (!isActivationKey(event.key)) {
-        return
-      }
+      if (!isActivationKey(event.key)) return
+
       event.preventDefault()
-      onPermissionSelect(key)
-      closeReferenceActions({ restoreFocus: true })
+      const selectionResult = onPermissionSelect(key)
+      closeReferenceActions({
+        restoreFocus: selectionResult.result !== 'confirmation-required'
+      })
     }
   }
 }

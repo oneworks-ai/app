@@ -24,6 +24,7 @@ export interface OverlayMenuProps {
   primaryPanelClassName?: string
   selectedKeys?: string[]
   submenuPlacement?: OverlaySubmenuPlacement
+  submenuWidth?: CSSProperties['width']
   submenuTrigger?: OverlaySubmenuTrigger
   surface?: boolean
   width?: CSSProperties['width']

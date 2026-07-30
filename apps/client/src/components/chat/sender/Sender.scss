@@ -42,6 +42,14 @@
   --chat-input-header-transition: .24s cubic-bezier(.4, 0, .2, 1);
   --chat-input-header-toggle-offset-top: 6px;
   --chat-input-session-header-max-height: 52px;
+  --sender-control-height: var(--chat-input-header-toggle-size);
+  --sender-control-radius: 8px;
+  --sender-control-hover-bg: color-mix(
+    in srgb,
+    var(--primary-color) 8%,
+    transparent
+  );
+  --sender-control-hover-color: var(--primary-color);
 
   position: relative;
   display: flex;
@@ -241,7 +249,38 @@
   gap: 0;
 
   .chat-input-header-toggle-mode-indicator {
-    display: none;
+    width: var(--chat-input-header-tab-height);
+    min-width: var(--chat-input-header-tab-height);
+    height: var(--chat-input-header-tab-height);
+    border-radius: var(--sender-control-radius) 0 0
+      var(--sender-control-radius);
+    display: inline-flex;
+    opacity: 1;
+    transform: none;
+  }
+
+  .chat-input-header-toggle-mode-indicator.is-high-risk {
+    cursor: pointer;
+
+    &:hover,
+    &:focus-visible {
+      border-color: currentColor;
+      background: var(--sender-control-hover-bg);
+      color: var(--sender-control-hover-color);
+    }
+
+    &:focus-visible {
+      outline: 2px solid color-mix(in srgb, currentColor 32%, transparent);
+      outline-offset: 1px;
+    }
+  }
+
+  .chat-input-header-toggle-mode-indicator--dontAsk.is-high-risk {
+    color: var(--sender-permission-dont-ask-color);
+  }
+
+  .chat-input-header-toggle-mode-indicator--bypassPermissions.is-high-risk {
+    color: var(--sender-permission-bypass-color);
   }
 
   .chat-input-header-toggle-tab {

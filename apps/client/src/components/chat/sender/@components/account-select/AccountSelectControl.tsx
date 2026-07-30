@@ -44,7 +44,12 @@ export function AccountSelectControl({
 }: {
   state: Pick<
     SenderToolbarState,
-    'isThinking' | 'modelUnavailable' | 'selectedAccount' | 'selectedAdapter' | 'showAccountSelector'
+    | 'isThinking'
+    | 'modelUnavailable'
+    | 'selectedAccount'
+    | 'selectedAdapter'
+    | 'selectionControlsDisabled'
+    | 'showAccountSelector'
   >
   data: Pick<SenderToolbarData, 'accountOptions'>
   handlers: Pick<SenderToolbarHandlers, 'onAccountChange'>
@@ -54,7 +59,14 @@ export function AccountSelectControl({
   const navigate = useNavigate()
   const { mutate } = useSWRConfig()
   const { isCompactLayout, isTouchInteraction } = useResponsiveLayout()
-  const { isThinking, modelUnavailable, selectedAccount, selectedAdapter, showAccountSelector } = state
+  const {
+    isThinking,
+    modelUnavailable,
+    selectedAccount,
+    selectedAdapter,
+    selectionControlsDisabled,
+    showAccountSelector
+  } = state
   const { accountOptions } = data
   const [showAccountSelect, setShowAccountSelect] = useState(false)
   const [creatingAccount, setCreatingAccount] = useState(false)
@@ -66,7 +78,7 @@ export function AccountSelectControl({
     () => accountOptions?.find(option => option.value === selectedAccount),
     [accountOptions, selectedAccount]
   )
-  const isDisabled = modelUnavailable || isThinking
+  const isDisabled = modelUnavailable || isThinking || selectionControlsDisabled
 
   if (!showAccountSelector || accountOptions == null || accountOptions.length === 0) {
     return null

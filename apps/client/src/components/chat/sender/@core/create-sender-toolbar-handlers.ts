@@ -5,6 +5,7 @@ import type { ModelSelectOption } from '#~/hooks/chat/use-chat-model-adapter-sel
 import type { PermissionMode } from '#~/hooks/chat/use-chat-permission-mode'
 import type { SessionQueuedMessageMode } from '@oneworks/core'
 
+import type { PermissionModeSelectionStart } from '#~/hooks/chat/use-permission-mode-selection-guard'
 import type { SenderToolbarHandlers } from '../@types/sender-toolbar-types'
 
 export const createSenderToolbarHandlers = ({
@@ -51,7 +52,7 @@ export const createSenderToolbarHandlers = ({
   onToggleRecommendedModel?: (option: ModelSelectOption) => void | Promise<void>
   onConnectMoreModelServices?: () => void
   onOpenModelServicesConfig?: (serviceKey?: string) => void
-  onPermissionModeChange?: (mode: PermissionMode) => void
+  onPermissionModeChange: (mode: PermissionMode) => PermissionModeSelectionStart
   onQueueModeChange?: (mode: SessionQueuedMessageMode) => void
   onCancel?: () => void
   onConfirmInteractionOption?: () => void
@@ -117,8 +118,11 @@ export const createSenderToolbarHandlers = ({
     onOpenContextPicker: attachments.handleOpenContextPicker,
     onReferenceImageSelect: attachments.handleImageUpload,
     onSelectPermissionMode: (mode) => {
-      onPermissionModeChange?.(mode)
-      referenceActions.closeReferenceActions({ restoreFocus: true })
+      const selectionResult = onPermissionModeChange(mode)
+      referenceActions.closeReferenceActions({
+        restoreFocus: selectionResult.result !== 'confirmation-required'
+      })
+      return selectionResult
     },
     onReferenceMenuKeyDown: referenceActions.handleReferenceMenuKeyDown,
     onPermissionMenuKeyDown: referenceActions.handlePermissionMenuKeyDown,

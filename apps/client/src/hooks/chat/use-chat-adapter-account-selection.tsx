@@ -1,8 +1,10 @@
+/* eslint-disable max-lines -- account option resolution and persisted selection share one compatibility source. */
+
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import type { AdapterAccountInfo, AdapterAccountQuotaMetric } from '@oneworks/types'
 
-import { useAdapterAccountsWithQuota } from '#~/hooks/use-adapter-accounts-with-quota'
+import { useAdapterAccountsWithQuotaState } from '#~/hooks/use-adapter-accounts-with-quota'
 import { getAccountQuotaWindows } from '#~/utils/account-quota'
 import type { AccountQuotaWindow } from '#~/utils/account-quota'
 import { normalizeNonEmptyString } from './model-selector'
@@ -83,7 +85,7 @@ const readStoredAccount = (adapter: string | undefined) => {
   }
 }
 
-export function useChatAdapterAccountSelection({
+export function useChatAdapterAccountOptions({
   adapter,
   model
 }: {
@@ -91,13 +93,11 @@ export function useChatAdapterAccountSelection({
   model?: string
 }) {
   const normalizedAdapter = normalizeNonEmptyString(adapter)
-  const [selectedAccount, setSelectedAccountState] = useState<string | undefined>(() => readStoredAccount(adapter))
-
-  useEffect(() => {
-    setSelectedAccountState(readStoredAccount(normalizedAdapter))
-  }, [normalizedAdapter])
-
-  const data = useAdapterAccountsWithQuota({ adapter: normalizedAdapter, model })
+  const {
+    data,
+    error: catalogError,
+    pending: catalogPending
+  } = useAdapterAccountsWithQuotaState({ adapter: normalizedAdapter, model })
 
   const accountOptions = useMemo<ChatAdapterAccountOption[]>(() => {
     return (data?.accounts ?? [])
@@ -112,6 +112,24 @@ export function useChatAdapterAccountSelection({
         quotaWindows: getAccountQuotaWindows(account.quota)
       }))
   }, [data?.accounts])
+  const catalogRevision = useMemo(() => {
+    if (data == null) {
+      return catalogError == null
+        ? 'pending'
+        : `error:${catalogError instanceof Error ? catalogError.message : String(catalogError)}`
+    }
+    return JSON.stringify({
+      accounts: data.accounts
+        .map(account => ({
+          email: account.email,
+          key: account.key,
+          status: account.status,
+          title: account.title
+        }))
+        .sort((left, right) => left.key.localeCompare(right.key)),
+      defaultAccount: data.defaultAccount
+    })
+  }, [catalogError, data])
 
   const findAccountOptionByAlias = useCallback((value?: string) => {
     const normalizedValue = normalizeNonEmptyString(value)
@@ -150,6 +168,37 @@ export function useChatAdapterAccountSelection({
     return accountOptions[0]?.value
   }, [accountOptions, data?.defaultAccount, findAccountOptionByAlias])
 
+  return {
+    accountOptions,
+    catalogError,
+    catalogPending,
+    catalogRevision,
+    dataReady: data != null,
+    resolveSelectableAccount,
+    showAccountSelector: normalizedAdapter != null && accountOptions.length > 0
+  }
+}
+
+export function useChatAdapterAccountSelection({
+  adapter,
+  model
+}: {
+  adapter?: string
+  model?: string
+}) {
+  const normalizedAdapter = normalizeNonEmptyString(adapter)
+  const [selectedAccount, setSelectedAccountState] = useState<string | undefined>(() => readStoredAccount(adapter))
+  const {
+    accountOptions,
+    dataReady,
+    resolveSelectableAccount,
+    showAccountSelector
+  } = useChatAdapterAccountOptions({ adapter, model })
+
+  useEffect(() => {
+    setSelectedAccountState(readStoredAccount(normalizedAdapter))
+  }, [normalizedAdapter])
+
   useEffect(() => {
     if (normalizedAdapter == null) {
       setSelectedAccountState(undefined)
@@ -176,10 +225,10 @@ export function useChatAdapterAccountSelection({
   }, [normalizedAdapter, selectedAccount])
 
   const applySessionSelection = useCallback((params: { account?: string }) => {
-    const nextAccount = resolveSelectableAccount(params.account, data == null) ??
+    const nextAccount = resolveSelectableAccount(params.account, !dataReady) ??
       normalizeNonEmptyString(params.account)
     setSelectedAccountState((prev) => prev === nextAccount ? prev : nextAccount)
-  }, [data, resolveSelectableAccount])
+  }, [dataReady, resolveSelectableAccount])
 
   const updateSelectedAccount = useCallback((value?: string) => {
     const nextAccount = resolveSelectableAccount(value)
@@ -188,9 +237,9 @@ export function useChatAdapterAccountSelection({
 
   return {
     accountOptions,
-    selectedAccount: resolveSelectableAccount(selectedAccount, data == null) ?? selectedAccount,
+    selectedAccount: resolveSelectableAccount(selectedAccount, !dataReady) ?? selectedAccount,
     setSelectedAccount: updateSelectedAccount,
     applySessionSelection,
-    showAccountSelector: normalizedAdapter != null && accountOptions.length > 0
+    showAccountSelector
   }
 }

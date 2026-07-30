@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- effort state and pure cross-model compatibility resolution share one capability source. */
+
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import useSWR from 'swr'
@@ -24,7 +26,7 @@ export const CHAT_EFFORT_OPTIONS = [
   { value: 'ultra', label: 'Ultra' }
 ] as const satisfies ReadonlyArray<{ value: ExplicitChatEffort; label: string }>
 
-type EffortSelectionSource = 'configured' | 'fallback' | 'session' | 'stored' | 'user'
+export type EffortSelectionSource = 'configured' | 'fallback' | 'session' | 'starter' | 'stored' | 'user'
 
 export interface EffortSelection {
   effort: ExplicitChatEffort
@@ -189,10 +191,55 @@ export function useChatEffort({
   const effortOptions = useMemo<Array<{ value: ChatEffort; label: ReactNode }>>(() => [
     ...CHAT_EFFORT_OPTIONS.filter(option => supportedEfforts.includes(option.value))
   ], [supportedEfforts])
+  const resolveEffortSelectionForSelection = useCallback((
+    current: EffortSelection,
+    selection: { adapter?: string; model?: string }
+  ): EffortSelection => {
+    const mergedConfig = configRes?.sources?.merged
+    const nextCapabilities = resolveAdapterModelRuntimeCapabilities({
+      adapter: selection.adapter,
+      adapterBuiltinModels: mergedConfig?.adapterBuiltinModels as
+        | Record<string, AdapterBuiltinModel[]>
+        | undefined,
+      model: selection.model
+    })
+    const adapters = (mergedConfig?.adapters ?? {}) as Record<string, unknown>
+    const models = (mergedConfig?.models ?? {}) as Record<string, ModelMetadataConfig>
+    const nextConfiguredEffort = resolveEffectiveEffort({
+      model: selection.model,
+      adapterConfig: selection.adapter == null ? undefined : adapters[selection.adapter],
+      configEffort: mergedConfig?.general?.effort,
+      models
+    }).effort
+    const configuredEffort = resolvePreferredChatEffort({
+      configuredEffort: nextConfiguredEffort,
+      supportedEfforts: nextCapabilities.supportedEfforts
+    })
+    return reconcileConfiguredChatEffort({
+      configuredEffort,
+      current,
+      supportedEfforts: nextCapabilities.supportedEfforts
+    })
+  }, [configRes?.sources?.merged])
+  const resolveEffortOptionsForSelection = useCallback((
+    selection: { adapter?: string; model?: string }
+  ): Array<{ value: ChatEffort; label: ReactNode }> => {
+    const nextCapabilities = resolveAdapterModelRuntimeCapabilities({
+      adapter: selection.adapter,
+      adapterBuiltinModels: configRes?.sources?.merged?.adapterBuiltinModels as
+        | Record<string, AdapterBuiltinModel[]>
+        | undefined,
+      model: selection.model
+    })
+    return CHAT_EFFORT_OPTIONS.filter(option => nextCapabilities.supportedEfforts.includes(option.value))
+  }, [configRes?.sources?.merged?.adapterBuiltinModels])
 
   return {
     applySessionEffort,
     effort: selection.effort,
+    effortSelection: selection,
+    resolveEffortSelectionForSelection,
+    resolveEffortOptionsForSelection,
     setEffort,
     effortOptions
   }

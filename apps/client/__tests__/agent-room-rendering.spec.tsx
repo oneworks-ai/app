@@ -385,12 +385,15 @@ const renderChatHistoryShell = async ({
             servicePreviewModelOptions={[modelOption]}
             onToggleRecommendedModel={noop}
             selectedModel='gpt-5'
+            resolveModelAdapterSelectionTransition={current => current}
             onModelChange={noop}
-            effort='default'
+            effortSelection={{ effort: 'high', source: 'user' }}
             effortOptions={[
               { value: 'default', label: 'Default' },
               { value: 'high', label: 'High' }
             ]}
+            resolveEffortSelectionForSelection={current => current}
+            resolveEffortOptionsForSelection={() => []}
             onEffortChange={noop}
             permissionMode='default'
             permissionModeOptions={[
@@ -440,6 +443,7 @@ const toolbarState: SenderToolbarState = {
   isInlineEdit: false,
   isThinking: false,
   modelUnavailable: false,
+  selectionControlsDisabled: false,
   sendBlocked: false,
   showConfirmInteractionAction: false,
   adapterLocked: false,

@@ -56,7 +56,7 @@
 .reference-actions-menu-composite {
   --reference-actions-menu-gap: var(--oneworks-overlay-item-gap, 0px);
   --reference-actions-menu-width: 188px;
-  --reference-actions-submenu-width: 196px;
+  --reference-actions-submenu-width: min(340px, calc(100vw - 24px));
   --oneworks-overlay-menu-width: 188px;
 
   position: relative;
@@ -95,22 +95,16 @@
   overscroll-behavior: contain;
 }
 
-.reference-actions-menu-composite
-  .oneworks-overlay-menu-column.is-submenu:has(.reference-actions-menu-branch-tree)
-  .reference-actions-menu-panel {
-  width: min(376px, calc(100vw - 24px));
-  min-width: min(376px, calc(100vw - 24px));
-  padding: 0;
-  overflow: hidden;
-}
+.reference-actions-permission-mode-item {
+  .oneworks-overlay-menu-label__description {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
 
-.reference-actions-menu-composite
-  .oneworks-overlay-menu-column.is-submenu:has(.reference-actions-menu-branch-tree)
-  .reference-actions-menu {
-  width: 100%;
-  min-width: 100%;
-  max-height: none;
-  overflow: visible;
+  .sender-permission-risk-badge {
+    align-self: center;
+  }
 }
 
 .reference-actions-menu-branch-tree {

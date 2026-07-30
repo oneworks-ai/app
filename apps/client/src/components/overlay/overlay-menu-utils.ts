@@ -1,5 +1,18 @@
+import type { CSSProperties } from 'react'
 import { isOverlayMenuAction, isOverlayMenuDivider } from './overlay-types'
+
 import type { OverlayMenuActionItem, OverlayMenuItem } from './overlay-types'
+
+export function createOverlayMenuCompositeStyle(
+  columnCount: number,
+  submenuWidth: CSSProperties['width']
+) {
+  return {
+    '--oneworks-overlay-menu-column-count': columnCount,
+    '--oneworks-overlay-menu-column-gap-count': Math.max(columnCount - 1, 0),
+    '--oneworks-overlay-submenu-width': submenuWidth
+  } as CSSProperties
+}
 
 export interface OverlayMenuColumn {
   activeKey?: string

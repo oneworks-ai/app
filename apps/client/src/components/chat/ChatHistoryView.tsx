@@ -72,15 +72,25 @@ import {
   pendingSessionInitialContentAtom,
   shouldUsePendingSessionCreationContext
 } from '#~/hooks/chat/session-creation-context'
+import { useChatAdapterAccountOptions } from '#~/hooks/chat/use-chat-adapter-account-selection'
 import type { ChatAdapterAccountOption } from '#~/hooks/chat/use-chat-adapter-account-selection'
-import type { ChatEffort } from '#~/hooks/chat/use-chat-effort'
+import { isExplicitChatEffort } from '#~/hooks/chat/use-chat-effort'
+import type { ChatEffort, EffortSelection } from '#~/hooks/chat/use-chat-effort'
 import type {
   ChatAdapterSelectOption,
+  ChatModelAdapterSelection,
+  ChatModelAdapterSelectionTransition,
   HiddenBuiltinAdapterOption,
   ModelSelectMenuGroup,
   ModelSelectOption
 } from '#~/hooks/chat/use-chat-model-adapter-selection'
-import type { PermissionMode } from '#~/hooks/chat/use-chat-permission-mode'
+import type {
+  PermissionMode,
+  PermissionModeDraftCreationToken,
+  PermissionModeOption,
+  PermissionModeRequestHandler,
+  PermissionModeSelectionStart
+} from '#~/hooks/chat/use-chat-permission-mode'
 import { useChatScroll } from '#~/hooks/chat/use-chat-scroll'
 import { useChatSessionActions } from '#~/hooks/chat/use-chat-session-actions'
 import { useResponsiveLayout } from '#~/hooks/use-responsive-layout'
@@ -111,12 +121,7 @@ import { buildMessageBranchNavigationMap } from './messages/message-branch-navig
 import type { ChatRenderItem } from './messages/message-render-types'
 import { buildMessageTurns } from './messages/message-turns'
 import { processMessages } from './messages/message-utils'
-import {
-  buildConversationStarterInitialContent,
-  buildConversationStarterTargetDraft,
-  buildConversationStarterWorkspacePatch,
-  getNewSessionGuideData
-} from './new-session-guide-config'
+import { getNewSessionGuideData } from './new-session-guide-config'
 import { SenderInteractionPanel } from './sender/@components/sender-interaction-panel/SenderInteractionPanel'
 import type {
   AnnotationReferenceRequest,
@@ -138,6 +143,21 @@ import { Sender } from './sender/Sender'
 import { SessionCreationProgressBanner } from './session-creation-progress/SessionCreationProgressBanner'
 import { ChatStatusBar } from './status-bar/ChatStatusBar'
 import { ToolGroup } from './tools/core/ToolGroup'
+import { useConversationStarterApplication } from './use-conversation-starter-application'
+import type {
+  ConversationStarterBundleSnapshot,
+  ConversationStarterConfiguredFields,
+  PreparedConversationStarterCommitValidation
+} from './use-conversation-starter-bundle'
+import { useConversationStarterBundle } from './use-conversation-starter-bundle'
+
+interface ConversationStarterAccountSelectionValidation {
+  account?: string
+  catalogKey: string
+  catalogRevision: string
+  error?: Error
+  status: 'pending' | 'ready' | 'failed'
+}
 
 const modelServiceConfigSourcePriority: ConfigSource[] = ['user', 'project', 'global']
 
@@ -226,26 +246,33 @@ export function ChatHistoryView({
   servicePreviewModelOptions,
   onToggleRecommendedModel,
   updatingRecommendedModelValue,
-  selectedModel,
-  modelForQuery,
-  onModelChange,
-  effort,
+  selectedModel: selectedModelProp,
+  modelForQuery: modelForQueryProp,
+  resolveModelAdapterSelectionTransition,
+  onModelChange: onModelChangeProp,
+  effortSelection: effortSelectionProp,
   effortOptions,
-  onEffortChange,
+  resolveEffortSelectionForSelection,
+  resolveEffortOptionsForSelection,
+  onEffortChange: onEffortChangeProp,
   fastMode = false,
   supportsFastMode = false,
   onFastModeChange,
-  permissionMode,
+  completePermissionModeDraftSessionCreation,
+  createPermissionModeDraftCreationToken,
+  discardPermissionModeDraftSessionCreation,
+  permissionMode: permissionModeProp,
+  permissionModeTransitionPending = false,
   permissionModeOptions,
   onPermissionModeChange,
-  selectedAdapter,
+  selectedAdapter: selectedAdapterProp,
   adapterOptions,
   hiddenBuiltinAdapterOptions,
-  onAdapterChange,
-  selectedAccount,
+  onAdapterChange: onAdapterChangeProp,
+  selectedAccount: selectedAccountProp,
   accountOptions,
   showAccountSelector,
-  onAccountChange,
+  onAccountChange: onAccountChangeProp,
   modelUnavailable,
   hasAvailableModels,
   agentRoomTranscript,
@@ -305,16 +332,36 @@ export function ChatHistoryView({
   updatingRecommendedModelValue?: string
   selectedModel?: string
   modelForQuery?: string
+  resolveModelAdapterSelectionTransition: (
+    current: ChatModelAdapterSelection,
+    transition: ChatModelAdapterSelectionTransition
+  ) => ChatModelAdapterSelection | undefined
   onModelChange: (model: string) => void
-  effort: ChatEffort
+  effortSelection: EffortSelection
   effortOptions: Array<{ value: ChatEffort; label: React.ReactNode }>
+  resolveEffortSelectionForSelection: (
+    current: EffortSelection,
+    selection: ChatModelAdapterSelection
+  ) => EffortSelection
+  resolveEffortOptionsForSelection: (
+    selection: ChatModelAdapterSelection
+  ) => Array<{ value: ChatEffort; label: React.ReactNode }>
   onEffortChange: (effort: ChatEffort) => void
   fastMode?: boolean
   supportsFastMode?: boolean
   onFastModeChange?: (enabled: boolean) => void
+  completePermissionModeDraftSessionCreation?: (
+    token: PermissionModeDraftCreationToken | undefined,
+    createdSession: Pick<Session, 'createdAt' | 'id'>
+  ) => boolean
+  createPermissionModeDraftCreationToken?: () => PermissionModeDraftCreationToken | undefined
+  discardPermissionModeDraftSessionCreation?: (
+    token: PermissionModeDraftCreationToken | undefined
+  ) => void
   permissionMode: PermissionMode
-  permissionModeOptions: Array<{ value: PermissionMode; label: React.ReactNode }>
-  onPermissionModeChange: (mode: PermissionMode) => void
+  permissionModeTransitionPending?: boolean
+  permissionModeOptions: PermissionModeOption[]
+  onPermissionModeChange: PermissionModeRequestHandler
   selectedAdapter?: string
   adapterOptions: ChatAdapterSelectOption[]
   hiddenBuiltinAdapterOptions: HiddenBuiltinAdapterOption[]
@@ -373,13 +420,472 @@ export function ChatHistoryView({
   const pendingSessionInitialContent = useAtomValue(pendingSessionInitialContentAtom)
   const setPendingSessionCreationContext = useSetAtom(pendingSessionCreationContextAtom)
   const setPendingSessionInitialContent = useSetAtom(pendingSessionInitialContentAtom)
-  const [sessionTargetDraft, setSessionTargetDraft] = useState<ChatSessionTargetDraft>(() => ({
+  const [baseSessionTargetDraft, setBaseSessionTargetDraft] = useState<ChatSessionTargetDraft>(() => ({
     ...DEFAULT_CHAT_SESSION_TARGET_DRAFT
   }))
-  const [workspaceDraft, setWorkspaceDraft] = useState(() => ({
+  const [baseWorkspaceDraft, setBaseWorkspaceDraft] = useState(() => ({
     ...DEFAULT_CHAT_SESSION_WORKSPACE_DRAFT
   }))
-  const [newSessionInitialContent, setNewSessionInitialContent] = useState<ChatMessageContent[] | undefined>(undefined)
+  const [baseNewSessionInitialContent, setBaseNewSessionInitialContent] = useState<ChatMessageContent[] | undefined>(
+    undefined
+  )
+  const normalizeStarterBundle = useCallback((
+    snapshot: ConversationStarterBundleSnapshot,
+    configuredFields: ConversationStarterConfiguredFields
+  ): ConversationStarterBundleSnapshot => {
+    let selection: ChatModelAdapterSelection = {
+      adapter: selectedAdapterProp,
+      model: selectedModelProp
+    }
+    if (configuredFields.adapter.present) {
+      const nextSelection = resolveModelAdapterSelectionTransition(
+        selection,
+        { field: 'adapter', value: configuredFields.adapter.value }
+      )
+      if (nextSelection == null) {
+        throw new Error(`Invalid conversation starter adapter: ${configuredFields.adapter.value ?? ''}`)
+      }
+      selection = nextSelection
+    }
+    if (configuredFields.model.present) {
+      const nextSelection = resolveModelAdapterSelectionTransition(
+        selection,
+        { field: 'model', value: configuredFields.model.value }
+      )
+      if (nextSelection == null) {
+        throw new Error(`Invalid conversation starter model: ${configuredFields.model.value ?? ''}`)
+      }
+      selection = nextSelection
+    }
+    const selectionChanged = selection.adapter !== selectedAdapterProp ||
+      selection.model !== selectedModelProp
+    return {
+      ...snapshot,
+      ...selection,
+      account: configuredFields.account.present
+        ? configuredFields.account.value
+        : selectionChanged
+        ? undefined
+        : selectedAccountProp,
+      effortSelection: resolveEffortSelectionForSelection(snapshot.effortSelection, selection)
+    }
+  }, [
+    resolveEffortSelectionForSelection,
+    resolveModelAdapterSelectionTransition,
+    selectedAccountProp,
+    selectedAdapterProp,
+    selectedModelProp
+  ])
+  const starterScopeId = session == null ? `draft:${location.key}` : `session:${session.id}:${session.createdAt}`
+  const {
+    commitPreparedStarterBundle,
+    configuredFields: activeStarterConfiguredFields,
+    discardPreparedStarterBundle,
+    hasActiveStarter,
+    invalidatePreparedStarterBundle,
+    pendingStarterBundle,
+    prepareStarterBundle,
+    prepareStarterBundleUpdate,
+    settleStarterSelectionValidation,
+    updateStarterBundle,
+    snapshot: configuredStarterSnapshot
+  } = useConversationStarterBundle({
+    current: {
+      account: selectedAccountProp,
+      adapter: selectedAdapterProp,
+      effortSelection: effortSelectionProp,
+      initialContent: baseNewSessionInitialContent,
+      model: selectedModelProp,
+      permissionMode: permissionModeProp,
+      sessionTargetDraft: baseSessionTargetDraft,
+      workspaceDraft: baseWorkspaceDraft,
+      workspaceDraftDirty: workspaceDraftDirtyRef.current
+    },
+    normalizeSnapshot: normalizeStarterBundle,
+    scopeId: starterScopeId
+  })
+  const accountValidationCandidate = pendingStarterBundle?.snapshot ?? configuredStarterSnapshot
+  const accountValidationConfiguredFields = pendingStarterBundle?.configuredFields ??
+    activeStarterConfiguredFields
+  const validationAccountSelection = useChatAdapterAccountOptions({
+    adapter: accountValidationCandidate.adapter,
+    model: accountValidationCandidate.model
+  })
+  const activeStarterAccountSelection = useChatAdapterAccountOptions({
+    adapter: hasActiveStarter ? configuredStarterSnapshot.adapter : selectedAdapterProp,
+    model: hasActiveStarter ? configuredStarterSnapshot.model : selectedModelProp
+  })
+  const validatedAccountPresentationRef = useRef<{
+    accountOptions: ChatAdapterAccountOption[]
+    scopeId: string
+    showAccountSelector: boolean
+  }>()
+  useLayoutEffect(() => {
+    if (!hasActiveStarter) {
+      validatedAccountPresentationRef.current = undefined
+      return
+    }
+    if (pendingStarterBundle != null) return
+    validatedAccountPresentationRef.current = {
+      accountOptions: activeStarterAccountSelection.accountOptions,
+      scopeId: starterScopeId,
+      showAccountSelector: activeStarterAccountSelection.showAccountSelector
+    }
+  }, [
+    activeStarterAccountSelection.accountOptions,
+    activeStarterAccountSelection.showAccountSelector,
+    hasActiveStarter,
+    pendingStarterBundle,
+    starterScopeId
+  ])
+  const accountCatalogKey = `${accountValidationCandidate.adapter ?? ''}\u0000${accountValidationCandidate.model ?? ''}`
+  const accountSelectionValidation = useMemo<ConversationStarterAccountSelectionValidation>(() => {
+    if (accountValidationCandidate.adapter == null) {
+      return {
+        account: undefined,
+        catalogKey: accountCatalogKey,
+        catalogRevision: 'not-required',
+        status: 'ready' as const
+      }
+    }
+    if (validationAccountSelection.catalogError != null) {
+      return {
+        catalogKey: accountCatalogKey,
+        catalogRevision: validationAccountSelection.catalogRevision,
+        error: validationAccountSelection.catalogError instanceof Error
+          ? validationAccountSelection.catalogError
+          : new Error(String(validationAccountSelection.catalogError)),
+        status: 'failed' as const
+      }
+    }
+    if (validationAccountSelection.catalogPending || !validationAccountSelection.dataReady) {
+      return {
+        catalogKey: accountCatalogKey,
+        catalogRevision: validationAccountSelection.catalogRevision,
+        status: 'pending' as const
+      }
+    }
+
+    const requestedAccount = accountValidationCandidate.account
+    const account = validationAccountSelection.resolveSelectableAccount(requestedAccount)
+    if (
+      accountValidationConfiguredFields?.account.present === true &&
+      requestedAccount != null &&
+      account == null
+    ) {
+      return {
+        catalogKey: accountCatalogKey,
+        catalogRevision: validationAccountSelection.catalogRevision,
+        error: new Error(`No selectable account is available for ${accountValidationCandidate.adapter}`),
+        status: 'failed' as const
+      }
+    }
+    return {
+      account,
+      catalogKey: accountCatalogKey,
+      catalogRevision: validationAccountSelection.catalogRevision,
+      status: 'ready' as const
+    }
+  }, [
+    accountCatalogKey,
+    accountValidationCandidate.account,
+    accountValidationCandidate.adapter,
+    accountValidationConfiguredFields?.account.present,
+    validationAccountSelection.catalogError,
+    validationAccountSelection.catalogPending,
+    validationAccountSelection.catalogRevision,
+    validationAccountSelection.dataReady,
+    validationAccountSelection.resolveSelectableAccount
+  ])
+  const accountSelectionValidationRef = useRef(accountSelectionValidation)
+  useLayoutEffect(() => {
+    accountSelectionValidationRef.current = accountSelectionValidation
+  }, [accountSelectionValidation])
+  const getPreparedStarterValidation = useCallback(
+    (): PreparedConversationStarterCommitValidation => {
+      const validation = accountSelectionValidationRef.current
+      return validation.status === 'ready'
+        ? {
+          account: validation.account,
+          catalogRevision: validation.catalogRevision,
+          status: 'ready'
+        }
+        : {
+          catalogRevision: validation.catalogRevision,
+          status: 'invalid'
+        }
+    },
+    []
+  )
+  useEffect(() => {
+    if (
+      pendingStarterBundle == null ||
+      pendingStarterBundle.snapshot.selectionValidation?.status === 'ready' ||
+      accountSelectionValidation.status === 'pending'
+    ) {
+      return
+    }
+    settleStarterSelectionValidation({
+      account: accountSelectionValidation.account,
+      catalogKey: accountSelectionValidation.catalogKey,
+      catalogRevision: accountSelectionValidation.catalogRevision,
+      error: accountSelectionValidation.status === 'failed'
+        ? accountSelectionValidation.error
+        : undefined,
+      id: pendingStarterBundle.id,
+      status: accountSelectionValidation.status
+    })
+  }, [
+    accountSelectionValidation,
+    pendingStarterBundle,
+    settleStarterSelectionValidation
+  ])
+  useEffect(() => {
+    const validation = pendingStarterBundle?.snapshot.selectionValidation
+    if (
+      pendingStarterBundle?.kind !== 'application' ||
+      validation?.status !== 'ready'
+    ) {
+      return
+    }
+    const candidateIsCurrent = accountSelectionValidation.status === 'ready' &&
+      accountSelectionValidation.catalogRevision === validation.catalogRevision &&
+      accountSelectionValidation.account === pendingStarterBundle.snapshot.account
+    if (candidateIsCurrent) return
+    invalidatePreparedStarterBundle(
+      pendingStarterBundle.id,
+      accountSelectionValidation.status === 'failed'
+        ? accountSelectionValidation.error
+        : new Error('Conversation starter account catalog changed during confirmation')
+    )
+  }, [
+    accountSelectionValidation,
+    invalidatePreparedStarterBundle,
+    pendingStarterBundle
+  ])
+  const resolvedStarterAccount = hasActiveStarter
+    ? configuredStarterSnapshot.account
+    : selectedAccountProp
+  const starterBundle = useMemo(() => ({
+    ...configuredStarterSnapshot,
+    account: resolvedStarterAccount,
+    selectionValidation: hasActiveStarter
+      ? configuredStarterSnapshot.selectionValidation ??
+        { catalogKey: '', status: 'ready' as const }
+      : { catalogKey: '', status: 'not-required' as const }
+  }), [
+    configuredStarterSnapshot,
+    hasActiveStarter,
+    resolvedStarterAccount
+  ])
+  const {
+    account: selectedAccount,
+    adapter: selectedAdapter,
+    effortSelection,
+    initialContent: newSessionInitialContent,
+    model: selectedModel,
+    permissionMode,
+    sessionTargetDraft,
+    workspaceDraft
+  } = starterBundle
+  const effort = effortSelection.effort
+  const pendingValidatedAccountPresentation = pendingStarterBundle != null &&
+      validatedAccountPresentationRef.current?.scopeId === starterScopeId
+    ? validatedAccountPresentationRef.current
+    : undefined
+  const resolvedAccountOptions = hasActiveStarter
+    ? pendingValidatedAccountPresentation?.accountOptions ??
+      activeStarterAccountSelection.accountOptions
+    : accountOptions
+  const resolvedShowAccountSelector = hasActiveStarter
+    ? pendingValidatedAccountPresentation?.showAccountSelector ??
+      activeStarterAccountSelection.showAccountSelector
+    : showAccountSelector
+  const starterSelectionValidationPending = pendingStarterBundle != null
+  const starterSelectionValidationFailed = pendingStarterBundle?.kind === 'edit' &&
+    accountSelectionValidation.status === 'failed'
+  const starterSelectionValidationBlocked = starterSelectionValidationPending ||
+    starterSelectionValidationFailed
+  useEffect(() => {
+    if (!starterSelectionValidationFailed) return
+    void message.error({
+      content: getApiErrorMessage(
+        accountSelectionValidation.error,
+        t('chat.newSessionGuide.applyFailed')
+      ),
+      key: 'chat-new-session-guide-account-validation-failed'
+    })
+  }, [
+    accountSelectionValidation.error,
+    message,
+    starterSelectionValidationFailed,
+    t
+  ])
+  const modelForQuery = starterBundle.model ?? modelForQueryProp
+  const resolvedEffortOptions = hasActiveStarter
+    ? resolveEffortOptionsForSelection({
+      adapter: starterBundle.adapter,
+      model: starterBundle.model
+    })
+    : effortOptions
+  const updateStarterSelection = useCallback((
+    current: ConversationStarterBundleSnapshot,
+    transition: ChatModelAdapterSelectionTransition
+  ) => {
+    const nextSelection = resolveModelAdapterSelectionTransition(
+      { adapter: current.adapter, model: current.model },
+      transition
+    )
+    if (nextSelection == null) return current
+    return {
+      ...current,
+      ...nextSelection,
+      effortSelection: resolveEffortSelectionForSelection(current.effortSelection, nextSelection)
+    }
+  }, [resolveEffortSelectionForSelection, resolveModelAdapterSelectionTransition])
+  const onModelChange = useCallback((model: string) => {
+    if (updateStarterBundle(current => updateStarterSelection(current, { field: 'model', value: model }))) return
+    onModelChangeProp(model)
+  }, [onModelChangeProp, updateStarterBundle, updateStarterSelection])
+  const onAdapterChange = useCallback((adapter: string) => {
+    if (
+      updateStarterBundle(current => updateStarterSelection(current, { field: 'adapter', value: adapter }))
+    ) return
+    onAdapterChangeProp(adapter)
+  }, [onAdapterChangeProp, updateStarterBundle, updateStarterSelection])
+  const onAccountChange = useCallback((account: string) => {
+    if (updateStarterBundle(current => ({ ...current, account }))) return
+    onAccountChangeProp(account)
+  }, [onAccountChangeProp, updateStarterBundle])
+  const onEffortChange = useCallback((nextEffort: ChatEffort) => {
+    if (
+      updateStarterBundle(current => ({
+        ...current,
+        effortSelection: resolveEffortSelectionForSelection(
+          isExplicitChatEffort(nextEffort)
+            ? { effort: nextEffort, source: 'user' }
+            : { effort: current.effortSelection.effort, source: 'fallback' },
+          { adapter: current.adapter, model: current.model }
+        )
+      }))
+    ) return
+    onEffortChangeProp(nextEffort)
+  }, [onEffortChangeProp, resolveEffortSelectionForSelection, updateStarterBundle])
+  const handlePermissionModeRequest: PermissionModeRequestHandler = useCallback((
+    mode,
+    options
+  ) => {
+    if (!hasActiveStarter) return onPermissionModeChange(mode, options)
+
+    let canceled = false
+    let prepared: Awaited<ReturnType<typeof prepareStarterBundleUpdate>>
+    let permissionSelection: PermissionModeSelectionStart | undefined
+    const completion = (async () => {
+      try {
+        prepared = await prepareStarterBundleUpdate(current => ({
+          ...current,
+          permissionMode: mode
+        }))
+        if (prepared === false || canceled) return false
+        const preparedBundle = prepared
+        const isPreparedCurrent = () => {
+          const validation = getPreparedStarterValidation()
+          return !canceled &&
+            options?.isCurrent?.() !== false &&
+            validation.status === 'ready' &&
+            validation.catalogRevision === preparedBundle.catalogRevision
+        }
+        permissionSelection = onPermissionModeChange(mode, {
+          ...options,
+          deferFinalize: true,
+          isCurrent: isPreparedCurrent
+        })
+        const outcome = await Promise.race([
+          permissionSelection.completion.then(selected => ({
+            kind: 'permission' as const,
+            selected
+          })),
+          preparedBundle.invalidated.then(error => ({
+            error,
+            kind: 'invalidated' as const
+          }))
+        ])
+        if (outcome.kind === 'invalidated') {
+          await permissionSelection.cancel?.()
+          throw outcome.error
+        }
+        if (!outcome.selected || canceled) return false
+        const committed = commitPreparedStarterBundle(
+          preparedBundle,
+          getPreparedStarterValidation()
+        )
+        if (!committed) await permissionSelection.cancel?.()
+        else await permissionSelection.finalize?.()
+        return committed
+      } catch (error) {
+        void message.error({
+          content: getApiErrorMessage(error, t('chat.newSessionGuide.applyFailed')),
+          key: 'chat-new-session-guide-permission-validation-failed'
+        })
+        return false
+      } finally {
+        if (prepared !== false && prepared != null) {
+          discardPreparedStarterBundle(prepared)
+        }
+      }
+    })()
+    return {
+      accepted: true,
+      cancel: async () => {
+        canceled = true
+        await permissionSelection?.cancel?.()
+        if (prepared !== false && prepared != null) {
+          discardPreparedStarterBundle(prepared)
+        }
+      },
+      completion,
+      result: 'transition-pending'
+    }
+  }, [
+    commitPreparedStarterBundle,
+    discardPreparedStarterBundle,
+    getPreparedStarterValidation,
+    hasActiveStarter,
+    message,
+    onPermissionModeChange,
+    prepareStarterBundleUpdate,
+    t
+  ])
+  const setSessionTargetDraft = useCallback((next: React.SetStateAction<ChatSessionTargetDraft>) => {
+    if (
+      updateStarterBundle(current => ({
+        ...current,
+        sessionTargetDraft: typeof next === 'function' ? next(current.sessionTargetDraft) : next
+      }))
+    ) return
+    setBaseSessionTargetDraft(next)
+  }, [updateStarterBundle])
+  const setWorkspaceDraft = useCallback((next: React.SetStateAction<ChatSessionWorkspaceDraft>) => {
+    if (
+      updateStarterBundle(current => ({
+        ...current,
+        workspaceDraft: typeof next === 'function' ? next(current.workspaceDraft) : next,
+        workspaceDraftDirty: true
+      }))
+    ) return
+    setBaseWorkspaceDraft(next)
+  }, [updateStarterBundle])
+  const setNewSessionInitialContent = useCallback((
+    next: React.SetStateAction<ChatMessageContent[] | undefined>
+  ) => {
+    if (
+      updateStarterBundle(current => ({
+        ...current,
+        initialContent: typeof next === 'function' ? next(current.initialContent) : next
+      }))
+    ) return
+    setBaseNewSessionInitialContent(next)
+  }, [updateStarterBundle])
   const hasPersistedSession = hasPersistedSessionCreationTarget(session)
   const shouldApplyPendingSessionCreationContext = shouldUsePendingSessionCreationContext(session)
   const handleSessionCreated = useCallback((createdSession: Session) => {
@@ -523,11 +1029,14 @@ export function ChatHistoryView({
     workspaceSourceSessionId,
     navigateOnCreate,
     collapseSenderHeaderOnCreate: true,
+    completePermissionModeDraftSessionCreation,
+    createPermissionModeDraftCreationToken,
+    discardPermissionModeDraftSessionCreation,
     onSessionCreated: handleSessionCreated,
     sessionTargetDraft,
     sessionCreationContext: shouldApplyPendingSessionCreationContext ? pendingSessionCreationContext : undefined,
     workspaceDraft,
-    workspaceDraftDirty: workspaceDraftDirtyRef.current,
+    workspaceDraftDirty: starterBundle.workspaceDraftDirty,
     workspaceConfigReady: configRes != null,
     onClearMessages
   })
@@ -671,6 +1180,9 @@ export function ChatHistoryView({
   }, [message, messageLinksConfig.workspaceFileOpener, session?.id, t])
 
   const handleSendContent = async (content: ChatMessageContent[], mode?: SessionQueuedMessageMode) => {
+    if (starterSelectionValidationBlocked) {
+      return false
+    }
     if (!validateSessionTarget()) {
       return false
     }
@@ -710,6 +1222,9 @@ export function ChatHistoryView({
   }
 
   const handleSend = async (text: string, mode?: SessionQueuedMessageMode) => {
+    if (starterSelectionValidationBlocked) {
+      return false
+    }
     if (!validateSessionTarget()) {
       return false
     }
@@ -848,14 +1363,14 @@ export function ChatHistoryView({
       return
     }
 
-    if (workspaceDraftDirtyRef.current) {
+    if (workspaceDraftDirtyRef.current || starterBundle.workspaceDraftDirty) {
       return
     }
 
     setWorkspaceDraft({
       ...configWorkspaceDraft
     })
-  }, [configWorkspaceDraft, session?.id])
+  }, [configWorkspaceDraft, session?.id, starterBundle.workspaceDraftDirty])
   useEffect(() => {
     setActiveInteractionOptionIndex(0)
   }, [interactionRequest?.id])
@@ -945,56 +1460,24 @@ export function ChatHistoryView({
     resizeObserver.observe(composerStackElement, { box: 'border-box' })
     return () => resizeObserver.disconnect()
   }, [shouldShowNewSessionGuide])
-  const handleApplyConversationStarter = useCallback((starter: ConversationStarterConfig) => {
-    if (session?.id != null) {
-      return
-    }
-
-    if (starter.mode != null) {
-      setSessionTargetDraft(buildConversationStarterTargetDraft(starter))
-    }
-
-    const workspacePatch = buildConversationStarterWorkspacePatch(starter)
-    if (workspacePatch != null) {
-      workspaceDraftDirtyRef.current = true
-      setWorkspaceDraft(current => ({
-        ...current,
-        ...workspacePatch
-      }))
-    }
-
-    const model = starter.model?.trim()
-    if (model != null && model !== '') {
-      onModelChange(model)
-    }
-
-    const adapter = starter.adapter?.trim()
-    if (adapter != null && adapter !== '') {
-      onAdapterChange(adapter)
-    }
-
-    const account = starter.account?.trim()
-    if (account != null && account !== '') {
-      onAccountChange(account)
-    }
-
-    if (starter.effort != null) {
-      onEffortChange(starter.effort)
-    }
-
-    if (starter.permissionMode != null) {
-      onPermissionModeChange(starter.permissionMode)
-    }
-
-    setNewSessionInitialContent(buildConversationStarterInitialContent(starter))
-  }, [
-    onAccountChange,
-    onAdapterChange,
-    onEffortChange,
-    onModelChange,
-    onPermissionModeChange,
-    session?.id
-  ])
+  const {
+    applyConversationStarter: handleApplyConversationStarter,
+    starterApplicationPending
+  } = useConversationStarterApplication({
+    commitPreparedStarterBundle,
+    discardPreparedStarterBundle,
+    getPreparedStarterValidation,
+    onError: (error) => {
+      void message.error({
+        content: getApiErrorMessage(error, t('chat.newSessionGuide.applyFailed')),
+        key: 'chat-new-session-guide-apply-failed'
+      })
+    },
+    onPermissionModeChange: handlePermissionModeRequest,
+    permissionModeTransitionPending,
+    prepareStarterBundle,
+    sessionId: session?.id
+  })
   const renderItems = useMemo(() => {
     if (isAgentRoomMode) {
       return []
@@ -1797,7 +2280,7 @@ export function ChatHistoryView({
             key={isAgentRoomMode ? agentRoomComposerTarget?.requestId ?? agentRoomTranscript.room.id : undefined}
             onSend={isAgentRoomMode ? handleSendAgentRoomText : handleSend}
             onSendContent={isAgentRoomMode ? handleSendAgentRoomContent : handleSendContent}
-            adapterLocked={senderAdapterLocked}
+            adapterLocked={senderAdapterLocked || starterSelectionValidationPending}
             sessionId={senderSessionId}
             sessionStatus={senderSessionStatus}
             onInterrupt={isAgentRoomMode ? () => undefined : interrupt}
@@ -1819,7 +2302,14 @@ export function ChatHistoryView({
             autoFocusKey={senderAutoFocusKey}
             placeholder={senderPlaceholder}
             submitLabel={senderSubmitLabel}
-            submitLoading={isAgentRoomMode ? agentRoomSubmitLoading : undefined}
+            submitLoading={isAgentRoomMode
+              ? agentRoomSubmitLoading
+              : starterApplicationPending || starterSelectionValidationPending}
+            sendBlocked={!isAgentRoomMode && starterSelectionValidationBlocked}
+            sendBlockedTooltip={starterSelectionValidationBlocked
+              ? t('chat.newSessionGuide.applyFailed')
+              : undefined}
+            selectionControlsDisabled={starterSelectionValidationPending}
             modelMenuGroups={modelMenuGroups}
             builtinPreviewModelOptions={builtinPreviewModelOptions}
             modelSearchOptions={modelSearchOptions}
@@ -1832,21 +2322,22 @@ export function ChatHistoryView({
             selectedModel={selectedModel}
             onModelChange={onModelChange}
             effort={effort}
-            effortOptions={effortOptions}
+            effortOptions={resolvedEffortOptions}
             onEffortChange={onEffortChange}
             fastMode={fastMode}
             supportsFastMode={supportsFastMode}
             onFastModeChange={onFastModeChange}
             permissionMode={permissionMode}
+            permissionModeTransitionPending={permissionModeTransitionPending}
             permissionModeOptions={permissionModeOptions}
-            onPermissionModeChange={onPermissionModeChange}
+            onPermissionModeRequest={handlePermissionModeRequest}
             selectedAdapter={selectedAdapter}
             adapterOptions={adapterOptions}
             hiddenBuiltinAdapterOptions={hiddenBuiltinAdapterOptions}
             onAdapterChange={onAdapterChange}
             selectedAccount={selectedAccount}
-            accountOptions={accountOptions}
-            showAccountSelector={showAccountSelector}
+            accountOptions={resolvedAccountOptions}
+            showAccountSelector={resolvedShowAccountSelector}
             onAccountChange={onAccountChange}
             showStatusBarControlsInMore={useChatSenderSurface && statusBarCollapsed}
             statusBarGitControlsInMore={statusBarGitControlsInMore}
@@ -1856,7 +2347,7 @@ export function ChatHistoryView({
               : {
                 draft: session?.id != null ? getChatSessionTargetDraftFromSession(session) : sessionTargetDraft,
                 locked: session?.id != null,
-                disabled: isCreating,
+                disabled: isCreating || starterSelectionValidationPending,
                 onChange: setSessionTargetDraft
               }}
             agentRoomTargetMembers={isAgentRoomMode ? agentRoomTranscript.members : undefined}
@@ -1881,7 +2372,7 @@ export function ChatHistoryView({
           />
           <ChatStatusBar
             draftWorkspace={workspaceDraft}
-            isCreating={!isAgentRoomMode && isCreating}
+            isCreating={!isAgentRoomMode && (isCreating || starterSelectionValidationPending)}
             sessionId={senderSessionId}
             adapterLocked={senderAdapterLocked}
             isThinking={senderIsThinking}
@@ -1891,8 +2382,8 @@ export function ChatHistoryView({
             hiddenBuiltinAdapterOptions={hiddenBuiltinAdapterOptions}
             onAdapterChange={onAdapterChange}
             selectedAccount={selectedAccount}
-            accountOptions={accountOptions}
-            showAccountSelector={showAccountSelector}
+            accountOptions={resolvedAccountOptions}
+            showAccountSelector={resolvedShowAccountSelector}
             collapsible={useChatSenderSurface}
             collapsed={statusBarCollapsed}
             onCollapsedChange={setStatusBarCollapsed}
@@ -2050,6 +2541,7 @@ export function ChatHistoryView({
               startupPresets={startupPresets}
               builtinActions={builtinActions}
               composer={composerContent}
+              starterPending={starterApplicationPending || starterSelectionValidationPending}
               onApplyStarter={handleApplyConversationStarter}
             />
           </div>

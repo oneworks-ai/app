@@ -2088,6 +2088,44 @@
     "referenceAttachmentsDescription": "Choose images or project files as references.",
     "referencePermission": "Permission mode",
     "referencePermissionDescription": "Control how tool actions are authorized.",
+    "permissionModes": {
+      "default": {
+        "label": "Default",
+        "description": "Use the project or adapter policy and ask before actions that require approval."
+      },
+      "acceptEdits": {
+        "label": "Accept Edits",
+        "description": "Allow routine file edits without asking; commands and other sensitive actions still require approval."
+      },
+      "plan": {
+        "label": "Plan",
+        "description": "Use the adapter's planning behavior. Limits vary: some adapters deny edits, while approved commands or configured workspace writes may remain available."
+      },
+      "dontAsk": {
+        "label": "Don't Ask",
+        "description": "Request non-interactive handling where supported. Depending on the adapter, actions may run, be denied, or still follow its default approval policy."
+      },
+      "bypassPermissions": {
+        "label": "Bypass Permissions",
+        "description": "Subsequent tools may run commands, change files, and access the network without approval or sandbox protection. Use only in an isolated, trusted environment."
+      },
+      "risk": {
+        "high": "High risk",
+        "critical": "Highest risk"
+      },
+      "restoreDefault": "Restore default permission mode",
+      "highRiskStatusAndRestore": "{{mode}}, {{risk}}. Restore default permission mode",
+      "updateFailed": "Permission mode was not changed. The previous mode has been restored.",
+      "initialUpdateFailed": "Permission mode could not be enabled. The previous mode is still active.",
+      "compensationFailedSelectedRemains": "Permission mode could not be restored. The selected mode is still active.",
+      "transitionPending": "Wait for the current permission mode change to finish.",
+      "confirmation": {
+        "title": "Enable a high-risk permission mode?",
+        "confirm": "Enable mode",
+        "dontAskImpact": "This affects subsequent tool actions in this conversation. Continue only when the task and workspace are trusted and no interactive approval is expected.",
+        "bypassPermissionsImpact": "This affects subsequent tool actions in this conversation and can remove key safeguards. Continue only in an isolated environment where unrestricted file, command, and network access is acceptable."
+      }
+    },
     "collapseHeaderControls": "Collapse top bar",
     "expandHeaderControls": "Expand top bar",
     "collapseStatusBar": "Hide status bar",
@@ -2961,6 +2999,7 @@
       "loading": "Loading...",
       "searchPlaceholder": "Search actions, prompts, or targets",
       "recentTitle": "Recent",
+      "applyFailed": "Could not apply this conversation starter",
       "emptySearch": "No matching actions",
       "showMore": "Show {{count}} more",
       "showLess": "Show less",

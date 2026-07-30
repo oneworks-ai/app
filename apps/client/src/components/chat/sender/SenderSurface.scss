@@ -181,6 +181,7 @@
 .sender-container--chat-surface .chat-input-container {
   --chat-input-container-padding: var(--chat-surface-input-padding);
   --chat-input-header-toggle-size: var(--chat-surface-control-height);
+  --chat-input-header-tab-height: var(--chat-surface-control-height);
   --chat-surface-expanded-editor-margin: var(--chat-input-container-padding);
   --chat-input-header-toggle-offset-top: var(
     --chat-surface-control-row-padding-block
@@ -223,6 +224,26 @@
   -webkit-text-fill-color: var(--chat-surface-toggle-default-color) !important;
   box-shadow: none !important;
   transition: var(--chat-surface-text-color-transition);
+}
+
+.sender-container--chat-surface .chat-input-header-toggle-mode-indicator {
+  width: var(--chat-surface-control-height);
+  min-width: var(--chat-surface-control-height);
+  height: var(--chat-surface-control-height);
+  border-color: transparent !important;
+  border-radius: var(--chat-surface-icon-button-radius) 0 0
+    var(--chat-surface-icon-button-radius);
+  background: transparent !important;
+  box-shadow: none !important;
+  transition: var(--chat-surface-text-color-transition);
+}
+
+.sender-container--chat-surface
+  .chat-input-header-toggle-mode-indicator:is(:hover, :focus-visible, :active) {
+  border-color: transparent !important;
+  background: var(--chat-surface-control-hover-bg) !important;
+  color: var(--chat-surface-control-hover-color) !important;
+  box-shadow: var(--chat-surface-control-hover-shadow) !important;
 }
 
 .sender-container--chat-surface

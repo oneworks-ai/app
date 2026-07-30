@@ -58,11 +58,15 @@ export function InteractionPanelSessionView({
     updatingRecommendedModelValue,
     selectedModel,
     modelForQuery,
+    resolveUserSelectionTransition,
     setSelectedModel,
-    effort,
+    effortSelection,
     setEffort,
     effortOptions,
+    resolveEffortSelectionForSelection,
+    resolveEffortOptionsForSelection,
     permissionMode,
+    permissionModeTransitionPending,
     setPermissionMode,
     permissionModeOptions,
     selectedAdapter,
@@ -124,11 +128,15 @@ export function InteractionPanelSessionView({
         updatingRecommendedModelValue={updatingRecommendedModelValue}
         selectedModel={selectedModel}
         modelForQuery={modelForQuery}
+        resolveModelAdapterSelectionTransition={resolveUserSelectionTransition}
         onModelChange={setSelectedModel}
-        effort={effort}
+        effortSelection={effortSelection}
         effortOptions={effortOptions}
+        resolveEffortSelectionForSelection={resolveEffortSelectionForSelection}
+        resolveEffortOptionsForSelection={resolveEffortOptionsForSelection}
         onEffortChange={setEffort}
         permissionMode={permissionMode}
+        permissionModeTransitionPending={permissionModeTransitionPending}
         permissionModeOptions={permissionModeOptions}
         onPermissionModeChange={setPermissionMode}
         selectedAdapter={selectedAdapter}

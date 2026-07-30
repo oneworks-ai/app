@@ -2,6 +2,8 @@
 
 import { useTranslation } from 'react-i18next'
 
+import { getPermissionModeRiskLevel } from '#~/hooks/chat/use-chat-permission-mode'
+
 import { OverlayMenu } from '#~/components/overlay'
 import type { OverlayMenuActionItem, OverlayMenuItem } from '#~/components/overlay'
 
@@ -33,6 +35,8 @@ interface ReferenceActionsDesktopMenuProps {
     | 'adapterLocked'
     | 'isThinking'
     | 'modelUnavailable'
+    | 'selectionControlsDisabled'
+    | 'permissionModeTransitionPending'
     | 'selectedAccount'
     | 'selectedAdapter'
     | 'showAccountSelector'
@@ -139,12 +143,30 @@ function ReferenceActionsDesktopMenuContent({
         trailing: selectedPermissionOption?.label == null
           ? undefined
           : <span className='reference-actions-menu-current'>{selectedPermissionOption.label}</span>,
-        children: permissionModeOptions.map(option => ({
-          key: `${permissionModeMenuKeyPrefix}${option.value}`,
-          label: option.label,
-          icon: permissionModeIconMap[option.value],
-          selected: permissionMode === option.value
-        }))
+        children: permissionModeOptions.map((option) => {
+          const riskLevel = getPermissionModeRiskLevel(option.value)
+          return {
+            key: `${permissionModeMenuKeyPrefix}${option.value}`,
+            label: option.label,
+            description: option.description,
+            icon: permissionModeIconMap[option.value],
+            selected: permissionMode === option.value,
+            disabled: state.permissionModeTransitionPending || state.selectionControlsDisabled,
+            className: `reference-actions-permission-mode-item reference-actions-permission-mode-item--${option.value}`,
+            trailing: riskLevel == null
+              ? undefined
+              : (
+                <span
+                  className={[
+                    'sender-permission-risk-badge',
+                    `sender-permission-risk-badge--${riskLevel}`
+                  ].join(' ')}
+                >
+                  {t(`chat.permissionModes.risk.${riskLevel}`)}
+                </span>
+              )
+          }
+        })
       }]
       : []),
     ...statusGitItems.items,
@@ -171,6 +193,7 @@ function ReferenceActionsDesktopMenuContent({
     }
 
     if (item.key.startsWith(permissionModeMenuKeyPrefix)) {
+      if (state.permissionModeTransitionPending || state.selectionControlsDisabled) return
       const mode = item.key.slice(permissionModeMenuKeyPrefix.length) as SenderToolbarState['permissionMode']
       if (permissionModeOptions.some(option => option.value === mode)) {
         onSelectPermissionMode(mode)
@@ -194,6 +217,7 @@ function ReferenceActionsDesktopMenuContent({
     <OverlayMenu
       className='reference-actions-menu-composite'
       defaultOpenKeys={closedSubmenuKeys}
+      submenuWidth='var(--reference-actions-submenu-width)'
       menuClassName='reference-actions-menu'
       panelClassName='reference-actions-menu-panel'
       selectedKeys={[

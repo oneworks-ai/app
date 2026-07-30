@@ -45,6 +45,7 @@ export function Sender(props: SenderProps) {
 
   const content = (
     <div
+      aria-busy={props.submitLoading === true}
       className={[
         'chat-input-wrapper',
         controller.hideSender ? 'chat-input-wrapper--permission' : '',

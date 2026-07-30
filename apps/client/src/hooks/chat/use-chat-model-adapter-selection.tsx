@@ -74,6 +74,15 @@ export interface HiddenBuiltinAdapterOption {
 
 type SelectionDriver = 'adapter' | 'model'
 
+export interface ChatModelAdapterSelection {
+  adapter?: string
+  model?: string
+}
+
+export type ChatModelAdapterSelectionTransition =
+  | { field: 'adapter'; value?: string }
+  | { field: 'model'; value?: string }
+
 const ADAPTER_STORAGE_KEY = 'oneworks_chat_adapter'
 const MODEL_STORAGE_KEY = 'oneworks_chat_selected_model'
 const DRIVER_STORAGE_KEY = 'oneworks_chat_selection_driver'
@@ -262,12 +271,15 @@ export function useChatModelAdapterSelection({
   ), [activeBuiltinModelValues, availableAdapters, availableServiceModels])
 
   const isModelAvailableForAdapter = useCallback((model: string | undefined, adapter: string | undefined) => {
+    const normalizedModel = normalizeNonEmptyString(model)
+    if (normalizedModel == null) return false
     return resolveChatModelSelection({
       value: model,
       builtinModels: buildBuiltinModelValues(adapter != null ? adapterBuiltinModels[adapter] : undefined),
       serviceModels: getServiceModelsForAdapter(adapter),
-      defaultModelService
-    }) != null
+      defaultModelService,
+      preserveUnknown: false
+    }) === normalizedModel
   }, [adapterBuiltinModels, defaultModelService, getServiceModelsForAdapter])
 
   const resolveSelectableModel = useCallback(
@@ -339,8 +351,8 @@ export function useChatModelAdapterSelection({
     mergedAdapters
   ])
 
-  const resolveAdapterForModel = useCallback((model?: string) => {
-    const currentAdapter = resolveAdapterValue(selectedAdapter)
+  const resolveAdapterForModel = useCallback((model?: string, adapter?: string) => {
+    const currentAdapter = resolveAdapterValue(adapter ?? selectedAdapter)
     if (isModelAvailableForAdapter(model, currentAdapter)) return currentAdapter
 
     return resolveAdapterForChatModelSelection({
@@ -465,44 +477,77 @@ export function useChatModelAdapterSelection({
     })
   }, [])
 
-  const updateSelectedModel = useCallback((value?: string) => {
+  const resolveUserSelectionTransition = useCallback((
+    current: ChatModelAdapterSelection,
+    transition: ChatModelAdapterSelectionTransition
+  ): ChatModelAdapterSelection | undefined => {
+    if (transition.field === 'adapter') {
+      const nextAdapter = resolveAdapterValue(transition.value)
+      return {
+        adapter: nextAdapter,
+        model: adapterLocked ? current.model : resolveModelForAdapter(nextAdapter)
+      }
+    }
+
     const builtinModels = adapterLocked
-      ? buildBuiltinModelValues(selectedAdapter != null ? adapterBuiltinModels[selectedAdapter] : undefined)
+      ? buildBuiltinModelValues(
+        current.adapter != null ? adapterBuiltinModels[current.adapter] : undefined
+      )
       : allBuiltinModelValues
-    const nextModel = resolveSelectableModel(value, builtinModels, false)
-    if (!nextModel) return
-
-    setSelectionDriver('model')
+    const nextModel = resolveChatModelSelection({
+      value: transition.value,
+      builtinModels,
+      serviceModels: getServiceModelsForAdapter(current.adapter),
+      defaultModelService,
+      preserveUnknown: false
+    })
+    if (nextModel == null) return undefined
     const nextAdapter = adapterLocked
-      ? selectedAdapter
-      : (resolveAdapterForModel(nextModel) ?? resolveAdapterValue(selectedAdapter))
-    const resolvedNextModel = resolveCompatibleModelForAdapter(nextAdapter, nextModel)
-    setSelectedModel((prev) => prev === resolvedNextModel ? prev : resolvedNextModel)
-
-    if (adapterLocked) return
-
-    setSelectedAdapter((prev) => prev === nextAdapter ? prev : nextAdapter)
+      ? current.adapter
+      : (resolveAdapterForModel(nextModel, current.adapter) ?? resolveAdapterValue(current.adapter))
+    return {
+      adapter: nextAdapter,
+      model: resolveCompatibleModelForAdapter(nextAdapter, nextModel)
+    }
   }, [
     adapterBuiltinModels,
     adapterLocked,
     allBuiltinModelValues,
-    resolveCompatibleModelForAdapter,
+    defaultModelService,
+    getServiceModelsForAdapter,
     resolveAdapterForModel,
     resolveAdapterValue,
-    resolveSelectableModel,
-    selectedAdapter
+    resolveCompatibleModelForAdapter,
+    resolveModelForAdapter
   ])
 
+  const updateSelectedModel = useCallback((value?: string) => {
+    const next = resolveUserSelectionTransition(
+      { adapter: selectedAdapter, model: selectedModel },
+      { field: 'model', value }
+    )
+    if (next == null) return
+
+    setSelectionDriver('model')
+    setSelectedModel((prev) => prev === next.model ? prev : next.model)
+    if (!adapterLocked) {
+      setSelectedAdapter((prev) => prev === next.adapter ? prev : next.adapter)
+    }
+  }, [adapterLocked, resolveUserSelectionTransition, selectedAdapter, selectedModel])
+
   const updateSelectedAdapter = useCallback((value?: string) => {
-    const nextAdapter = resolveAdapterValue(value)
+    const next = resolveUserSelectionTransition(
+      { adapter: selectedAdapter, model: selectedModel },
+      { field: 'adapter', value }
+    )
+    if (next == null) return
+
     setSelectionDriver('adapter')
-    setSelectedAdapter((prev) => prev === nextAdapter ? prev : nextAdapter)
-
-    if (adapterLocked) return
-
-    const nextModel = resolveModelForAdapter(nextAdapter)
-    setSelectedModel((prev) => prev === nextModel ? prev : nextModel)
-  }, [adapterLocked, resolveAdapterValue, resolveModelForAdapter])
+    setSelectedAdapter((prev) => prev === next.adapter ? prev : next.adapter)
+    if (!adapterLocked) {
+      setSelectedModel((prev) => prev === next.model ? prev : next.model)
+    }
+  }, [adapterLocked, resolveUserSelectionTransition, selectedAdapter, selectedModel])
 
   const applySessionSelection = useCallback((params: { model?: string; adapter?: string }) => {
     const nextAdapter = normalizeNonEmptyString(params.adapter) ?? resolveAdapterValue(undefined)
@@ -762,6 +807,7 @@ export function useChatModelAdapterSelection({
     modelOptions,
     modelSearchOptions,
     recommendedModelOptions,
+    resolveUserSelectionTransition,
     servicePreviewModelOptions,
     selectedAdapter,
     selectedModel,

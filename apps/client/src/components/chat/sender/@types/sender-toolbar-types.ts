@@ -11,7 +11,8 @@ import type {
   ModelSelectMenuGroup,
   ModelSelectOption
 } from '#~/hooks/chat/use-chat-model-adapter-selection'
-import type { PermissionMode } from '#~/hooks/chat/use-chat-permission-mode'
+import type { PermissionMode, PermissionModeOption } from '#~/hooks/chat/use-chat-permission-mode'
+import type { PermissionModeSelectionStart } from '#~/hooks/chat/use-permission-mode-selection-guard'
 import type { ReferenceMenuKey, RovingFocusNavigation } from './sender-types'
 
 export interface SenderToolbarShortcuts {
@@ -26,6 +27,7 @@ export interface SenderToolbarState {
   isInlineEdit: boolean
   isThinking: boolean
   modelUnavailable: boolean
+  selectionControlsDisabled: boolean
   sendBlocked: boolean
   sendBlockedTooltip?: string
   showConfirmInteractionAction: boolean
@@ -47,6 +49,7 @@ export interface SenderToolbarState {
   fastMode: boolean
   supportsFastMode: boolean
   permissionMode: PermissionMode
+  permissionModeTransitionPending: boolean
   selectedAdapter?: string
   selectedAccount?: string
   showAccountSelector: boolean
@@ -66,7 +69,7 @@ export interface SenderToolbarData {
   servicePreviewModelOptions?: ModelSelectOption[]
   updatingRecommendedModelValue?: string
   effortOptions: Array<{ value: ChatEffort; label: ReactNode }>
-  permissionModeOptions: Array<{ value: PermissionMode; label: ReactNode }>
+  permissionModeOptions: PermissionModeOption[]
   adapterOptions?: ChatAdapterSelectOption[]
   hiddenBuiltinAdapterOptions?: HiddenBuiltinAdapterOption[]
   accountOptions?: ChatAdapterAccountOption[]
@@ -92,7 +95,7 @@ export interface SenderToolbarHandlers {
   onModelSearchValueChange: (value: string) => void
   onOpenContextPicker: () => void
   onReferenceImageSelect: () => void
-  onSelectPermissionMode: (mode: PermissionMode) => void
+  onSelectPermissionMode: (mode: PermissionMode) => PermissionModeSelectionStart
   onReferenceMenuKeyDown: (event: KeyboardEvent<HTMLButtonElement>, key: ReferenceMenuKey) => void
   onPermissionMenuKeyDown: (event: KeyboardEvent<HTMLButtonElement>, key: PermissionMode) => void
   onOpenModelSelector: () => void

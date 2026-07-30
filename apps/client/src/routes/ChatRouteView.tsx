@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useSearchParams } from 'react-router-dom'
+import { useLocation, useSearchParams } from 'react-router-dom'
 
 import type { ChatMessageContent, Session } from '@oneworks/core'
 import type { ConversationStarterConfig } from '@oneworks/types'
@@ -18,8 +18,11 @@ import type {
   PendingFileComment
 } from '#~/components/chat/sender/@types/sender-composer'
 import type { ContextPickerFile, ContextReferenceRequest } from '#~/components/workspace/context-file-types'
+import { createDraftPermissionModeIncarnation } from '#~/hooks/chat/permission-mode-acknowledgement'
+import { deriveCanonicalPermissionModeOwner } from '#~/hooks/chat/permission-mode-owner'
 import { useChatRouteDeepLinkView } from '#~/hooks/chat/use-chat-route-deep-link-view'
 import { useChatSession } from '#~/hooks/chat/use-chat-session'
+import { useDraftPermissionModeLifecycle } from '#~/hooks/chat/use-draft-permission-mode-lifecycle'
 import { useSessionTimelineExperiment } from '#~/hooks/chat/use-session-timeline-experiment'
 import type { WorkspaceFileLinkTarget } from '#~/utils/link-targets'
 
@@ -138,6 +141,22 @@ export function ChatRouteView({
   sessionActivityLabel?: string
   agentRoomTranscript?: ChatRouteAgentRoomTranscript
 }) {
+  const location = useLocation()
+  const permissionModeOwnerIdentity = useMemo(
+    () =>
+      deriveCanonicalPermissionModeOwner({
+        workspaceFolder: projectWorkspaceFolder
+      }),
+    [projectWorkspaceFolder]
+  )
+  const draftPermissionModeIncarnation = useMemo(
+    createDraftPermissionModeIncarnation,
+    [location.key]
+  )
+  const draftPermissionModeLifecycle = useDraftPermissionModeLifecycle({
+    incarnation: draftPermissionModeIncarnation,
+    ownerIdentity: permissionModeOwnerIdentity
+  })
   const { t } = useTranslation()
   const [searchParams, setSearchParams] = useSearchParams()
   const [contextReferenceRequest, setContextReferenceRequest] = useState<ContextReferenceRequest | null>(null)
@@ -214,14 +233,21 @@ export function ChatRouteView({
     updatingRecommendedModelValue,
     selectedModel,
     modelForQuery,
+    resolveUserSelectionTransition,
     setSelectedModel,
-    effort,
+    effortSelection,
     setEffort,
     effortOptions,
+    resolveEffortSelectionForSelection,
+    resolveEffortOptionsForSelection,
     fastMode,
     setFastMode,
     supportsFastMode,
+    completePermissionModeDraftSessionCreation,
+    createPermissionModeDraftCreationToken,
+    discardPermissionModeDraftSessionCreation,
     permissionMode,
+    permissionModeTransitionPending,
     setPermissionMode,
     permissionModeOptions,
     selectedAdapter,
@@ -234,7 +260,13 @@ export function ChatRouteView({
     hiddenBuiltinAdapterOptions,
     hasAvailableModels,
     modelUnavailable
-  } = useChatSession({ enableTimelineView: canUseTimelineView, session })
+  } = useChatSession({
+    draftIdentity: `${permissionModeOwnerIdentity ?? 'unbound'}:${location.key}`,
+    draftPermissionModeLifecycle,
+    permissionModeOwnerIdentity,
+    enableTimelineView: canUseTimelineView,
+    session
+  })
   const targetMessageId = searchParams.get('messageId') ?? undefined
   const targetToolUseId = searchParams.get('toolUseId') ?? undefined
   useEffect(() => {
@@ -347,14 +379,21 @@ export function ChatRouteView({
       updatingRecommendedModelValue={updatingRecommendedModelValue}
       selectedModel={selectedModel}
       modelForQuery={modelForQuery}
+      resolveModelAdapterSelectionTransition={resolveUserSelectionTransition}
       onModelChange={setSelectedModel}
-      effort={effort}
+      effortSelection={effortSelection}
       effortOptions={effortOptions}
+      resolveEffortSelectionForSelection={resolveEffortSelectionForSelection}
+      resolveEffortOptionsForSelection={resolveEffortOptionsForSelection}
       onEffortChange={setEffort}
       fastMode={fastMode}
       supportsFastMode={supportsFastMode}
       onFastModeChange={setFastMode}
+      completePermissionModeDraftSessionCreation={completePermissionModeDraftSessionCreation}
+      createPermissionModeDraftCreationToken={createPermissionModeDraftCreationToken}
+      discardPermissionModeDraftSessionCreation={discardPermissionModeDraftSessionCreation}
       permissionMode={permissionMode}
+      permissionModeTransitionPending={permissionModeTransitionPending}
       permissionModeOptions={permissionModeOptions}
       onPermissionModeChange={setPermissionMode}
       selectedAdapter={selectedAdapter}
@@ -392,7 +431,10 @@ export function ChatRouteView({
     fileCommentReferenceRequest,
     creationProgress,
     currentSessionId,
-    effort,
+    completePermissionModeDraftSessionCreation,
+    createPermissionModeDraftCreationToken,
+    discardPermissionModeDraftSessionCreation,
+    effortSelection,
     effortOptions,
     fastMode,
     handleClearMessages,
@@ -406,6 +448,7 @@ export function ChatRouteView({
     isReady,
     messages,
     modelForQuery,
+    resolveUserSelectionTransition,
     modelMenuGroups,
     modelSearchOptions,
     modelUnavailable,
@@ -415,10 +458,13 @@ export function ChatRouteView({
     pendingAnnotationReferenceCount,
     setPendingAnnotationPreview,
     permissionMode,
+    permissionModeTransitionPending,
     permissionModeOptions,
     placeholder,
     queuedMessages,
     recommendedModelOptions,
+    resolveEffortSelectionForSelection,
+    resolveEffortOptionsForSelection,
     retryConnection,
     resolvedSessionActivityLabel,
     selectedAccount,

@@ -39,11 +39,13 @@ const resolveStarterIcon = (starter: ConversationStarterConfig) => {
 export function NewSessionGuideStarterList({
   startupPresets,
   builtinActions,
+  disabled = false,
   onApplyStarter
 }: {
   startupPresets: ConversationStarterConfig[]
   builtinActions: ConversationStarterConfig[]
-  onApplyStarter: (starter: ConversationStarterConfig) => void
+  disabled?: boolean
+  onApplyStarter: (starter: ConversationStarterConfig) => boolean | Promise<boolean>
 }) {
   const { t } = useTranslation()
   const items = useMemo<Array<ComposerStarterListItem<ConversationStarterConfig>>>(() => (
@@ -79,6 +81,7 @@ export function NewSessionGuideStarterList({
       items={items}
       labels={labels}
       storageKeys={NEW_SESSION_STARTER_STORAGE_KEYS}
+      disabled={disabled}
       onSelect={item => onApplyStarter(item.value)}
     />
   )

@@ -6,6 +6,7 @@ import type { CSSProperties } from 'react'
 import { InteractionList } from '#~/components/interaction-list'
 import type { InteractionListItem } from '#~/components/interaction-list'
 
+import { ComposerStarterListFooter } from './ComposerStarterListFooter'
 import type { ComposerStarterListItem } from './composer-starter-list-items'
 import {
   areComposerStarterKeyListsEqual,
@@ -31,6 +32,11 @@ export interface ComposerStarterListStorageKeys {
   recent: string
 }
 
+export type ComposerStarterListSelectionResult =
+  | boolean
+  | void
+  | Promise<boolean | void>
+
 interface ComposerStarterInteractionItem<TValue> extends InteractionListItem {
   starter: ComposerStarterListItem<TValue>
 }
@@ -38,6 +44,7 @@ interface ComposerStarterInteractionItem<TValue> extends InteractionListItem {
 export function ComposerStarterList<TValue>({
   className,
   defaultVisibleItemCount = DEFAULT_VISIBLE_ITEM_COUNT,
+  disabled = false,
   items,
   labels,
   maxRecentCount = DEFAULT_MAX_RECENT_COUNT,
@@ -46,11 +53,14 @@ export function ComposerStarterList<TValue>({
 }: {
   className?: string
   defaultVisibleItemCount?: number
+  disabled?: boolean
   items: Array<ComposerStarterListItem<TValue>>
   labels: ComposerStarterListLabels
   maxRecentCount?: number
   storageKeys?: ComposerStarterListStorageKeys
-  onSelect: (item: ComposerStarterListItem<TValue>) => void
+  onSelect: (
+    item: ComposerStarterListItem<TValue>
+  ) => ComposerStarterListSelectionResult
 }) {
   const [favoriteKeys, setFavoriteKeys] = useState<string[]>(() => (
     readStoredComposerStarterKeys(storageKeys?.favorites)
@@ -118,18 +128,20 @@ export function ComposerStarterList<TValue>({
     setFavoriteKeys(current => current.includes(key) ? current.filter(item => item !== key) : [...current, key])
   }
 
-  const handleSelect = (item: ComposerStarterListItem<TValue>) => {
-    setRecentKeys(current => [item.key, ...current.filter(key => key !== item.key)].slice(0, maxRecentCount))
-    onSelect(item)
+  const handleSelect = async (item: ComposerStarterListItem<TValue>) => {
+    try {
+      const selected = await onSelect(item)
+      if (selected === false) return
+      setRecentKeys(current => [item.key, ...current.filter(key => key !== item.key)].slice(0, maxRecentCount))
+    } catch {}
   }
 
   const isExpanded = showAllRemaining && !visibleState.isSearchMode
-  const shouldShowExpand = !visibleState.isSearchMode && visibleState.hiddenRemainingCount > 0
-  const shouldShowCollapse = isExpanded && visibleState.totalRemainingCount > defaultVisibleItemCount
   const visibleItems = [...visibleState.favorites, ...visibleState.visibleRemaining]
   const interactionItems: Array<ComposerStarterInteractionItem<TValue>> = visibleItems.map(item => ({
     badge: visibleState.recentKeys.includes(item.key) ? labels.recent : undefined,
     description: item.description,
+    disabled,
     icon: item.icon,
     key: item.key,
     searchText: item.searchText,
@@ -144,11 +156,13 @@ export function ComposerStarterList<TValue>({
     <div
       ref={containerRef}
       className={['composer-starter-list', isExpanded ? 'is-expanded' : '', className].filter(Boolean).join(' ')}
+      aria-busy={disabled}
       style={style}
     >
       <InteractionList
         actionDisplay='inline'
         actions={item => [{
+          disabled,
           icon: favoriteKeys.includes(item.key) ? 'star' : 'star_outline',
           key: 'favorite',
           label: favoriteKeys.includes(item.key) ? labels.unfavorite : labels.favorite,
@@ -167,31 +181,19 @@ export function ComposerStarterList<TValue>({
         }}
         showItemDescription={false}
         splitActionHover
-        onSelect={item => handleSelect(item.starter)}
+        onSelect={item => void handleSelect(item.starter)}
       />
-      {(shouldShowExpand || shouldShowCollapse) && (
-        <div className='composer-starter-list__footer'>
-          {shouldShowExpand && (
-            <button
-              type='button'
-              className='composer-starter-list__more-button'
-              onClick={() => setShowAllRemaining(true)}
-            >
-              <span className='material-symbols-rounded'>expand_more</span>
-              <span>{labels.showMore(visibleState.hiddenRemainingCount)}</span>
-            </button>
-          )}
-          {shouldShowCollapse && (
-            <button
-              type='button'
-              className='composer-starter-list__more-button'
-              onClick={() => setShowAllRemaining(false)}
-            >
-              <span className='material-symbols-rounded'>expand_less</span>
-              <span>{labels.showLess}</span>
-            </button>
-          )}
-        </div>
+      {!visibleState.isSearchMode && (
+        <ComposerStarterListFooter
+          defaultVisibleItemCount={defaultVisibleItemCount}
+          disabled={disabled}
+          hiddenRemainingCount={visibleState.hiddenRemainingCount}
+          isExpanded={isExpanded}
+          labels={labels}
+          totalRemainingCount={visibleState.totalRemainingCount}
+          onCollapse={() => setShowAllRemaining(false)}
+          onExpand={() => setShowAllRemaining(true)}
+        />
       )}
     </div>
   )

@@ -11,6 +11,8 @@ import type {
 } from '@oneworks/core'
 import type { GitBranchKind } from '@oneworks/types'
 
+import type { PermissionModeDraftCreationToken } from './permission-mode-acknowledgement'
+
 export interface OptimisticSessionCreationOptions {
   start?: boolean
   parentSessionId?: string
@@ -42,6 +44,7 @@ export interface OptimisticSessionCreationRequest {
   initialContent?: ChatMessageContent[]
   model?: string
   options: OptimisticSessionCreationOptions
+  permissionModeDraftCreationToken?: PermissionModeDraftCreationToken
 }
 
 export interface OptimisticSessionCreation {
