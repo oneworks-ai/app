@@ -1,10 +1,14 @@
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const workflow = readFileSync('.github/workflows/desktop-package.yml', 'utf8')
+const homepageWorkflow = readFileSync(
+  '.github/workflows/deploy-homepage.yml',
+  'utf8'
+)
 const credentials = [
   'APPLE_ID',
   'APPLE_ID_PASSWORD',
@@ -66,11 +70,178 @@ function runWithOutput(script: string, env: NodeJS.ProcessEnv) {
   }
 }
 
+function runReleaseTagGuard(status: number, output = '', sourceSha = 'a'.repeat(40)) {
+  const commandDir = mkdtempSync(path.join(tmpdir(), 'oneworks-desktop-workflow-bin-'))
+  const gitPath = path.join(commandDir, 'git')
+  writeFileSync(
+    gitPath,
+    `#!/usr/bin/env bash\nprintf '%s' "$FAKE_GIT_OUTPUT"\nexit "$FAKE_GIT_STATUS"\n`
+  )
+  chmodSync(gitPath, 0o755)
+
+  try {
+    return runBash(
+      extractRunScript('Verify release tag source'),
+      {
+        FAKE_GIT_OUTPUT: output,
+        FAKE_GIT_STATUS: String(status),
+        PATH: `${commandDir}:${process.env.PATH}`,
+        SOURCE_SHA: sourceSha,
+        TAG: 'pkg/oneworks-desktop/v0.1.0-beta.11'
+      }
+    )
+  } finally {
+    rmSync(commandDir, { force: true, recursive: true })
+  }
+}
+
 describe('desktop package workflow', () => {
+  it('keeps pull requests lightweight and moves macOS packaging to nightly canaries', () => {
+    expect(workflow).toContain('schedule:\n    - cron: "0 18 * * *"')
+    expect(workflow).toContain('pr-policy:\n    name: macOS installer')
+    expect(workflow).toContain('runs-on: ubuntu-latest')
+    expect(workflow).toContain("github.event_name != 'pull_request'")
+
+    const nightlyPolicy = runWithOutput(
+      extractRunScript('Resolve desktop build policy'),
+      {
+        DESKTOP_SIGN_REQUESTED: 'true',
+        EVENT_NAME: 'schedule'
+      }
+    )
+    expect(nightlyPolicy.status).toBe(0)
+    expect(nightlyPolicy.output).toContain('archs=arm64')
+    expect(nightlyPolicy.output).toContain('make_targets=dmg')
+    expect(nightlyPolicy.output).toContain('sign=false')
+  })
+
+  it('builds a release-identity candidate without publishing it', () => {
+    const metadata = runWithOutput(
+      extractRunScript('Resolve desktop release metadata'),
+      {
+        CREATE_RELEASE_REQUESTED: 'false',
+        DESKTOP_AUTO_UPDATE_REQUESTED: 'true',
+        DESKTOP_RELEASE_TAG_PREFIX: 'pkg/oneworks-desktop/v',
+        EVENT_NAME: 'workflow_dispatch',
+        GITHUB_REF: 'refs/heads/main',
+        GITHUB_REF_NAME: 'main',
+        RELEASE_TAG_INPUT: 'pkg/oneworks-desktop/v0.1.0-beta.11'
+      }
+    )
+
+    expect(metadata.status).toBe(0)
+    expect(metadata.output).toContain('enabled=true')
+    expect(metadata.output).toContain('auto_update=true')
+    expect(metadata.output).toContain('tag=pkg/oneworks-desktop/v0.1.0-beta.11')
+    expect(metadata.output).toContain('update_channel=beta')
+    expect(metadata.output).toContain('version=0.1.0-beta.11')
+  })
+
+  it('rejects a manual release before packaging when its tag is missing', () => {
+    const metadata = runWithOutput(
+      extractRunScript('Resolve desktop release metadata'),
+      {
+        CREATE_RELEASE_REQUESTED: 'true',
+        DESKTOP_AUTO_UPDATE_REQUESTED: 'true',
+        DESKTOP_RELEASE_TAG_PREFIX: 'pkg/oneworks-desktop/v',
+        EVENT_NAME: 'workflow_dispatch',
+        GITHUB_REF: 'refs/heads/main',
+        GITHUB_REF_NAME: 'main',
+        RELEASE_TAG_INPUT: ''
+      }
+    )
+
+    expect(metadata.status).toBe(1)
+    expect(metadata.stderr).toContain(
+      'release_tag is required when create_release is enabled manually.'
+    )
+  })
+
+  it('can promote a verified candidate run without rebuilding', () => {
+    const invalidCandidate = runBash(
+      extractRunScript('Validate desktop workflow request'),
+      {
+        CANDIDATE_RUN_ID: 'not-a-run',
+        CREATE_RELEASE_REQUESTED: 'true',
+        RELEASE_TAG_INPUT: 'pkg/oneworks-desktop/v0.1.0-beta.11'
+      }
+    )
+
+    expect(invalidCandidate.status).toBe(1)
+    expect(invalidCandidate.stderr).toContain(
+      'candidate_run_id must be a numeric GitHub Actions run id.'
+    )
+    expect(workflow).toContain('candidate_run_id:')
+    expect(workflow).toContain("inputs.candidate_run_id != ''")
+    expect(workflow).toContain(
+      `run-id: \${{ github.event_name == 'workflow_dispatch' && inputs.candidate_run_id || github.run_id }}`
+    )
+    expect(workflow).toContain(
+      'node apps/desktop/scripts/release-candidate-manifest.cjs verify release-artifacts'
+    )
+    expect(workflow).toContain('actions: read\n      contents: write')
+    expect(workflow).toContain(
+      `SOURCE_SHA: \${{ steps.candidate.outputs.source_sha }}`
+    )
+    expect(workflow).toContain(
+      'Release tag $TAG points to $resolved_source_sha, not verified candidate $SOURCE_SHA.'
+    )
+  })
+
+  it('publishes the homepage only after the GitHub Release succeeds', () => {
+    expect(workflow).toContain('homepage:\n    name: Publish Homepage')
+    expect(workflow).toContain("if: needs.release.result == 'success'")
+    expect(workflow).toContain('uses: ./.github/workflows/deploy-homepage.yml')
+    expect(workflow).toContain(
+      `source_sha: \${{ needs.release.outputs.source_sha }}`
+    )
+    expect(workflow).not.toContain('secrets: inherit')
+    expect(workflow).toContain(
+      `HOMEPAGE_DEPLOY_TOKEN: \${{ secrets.HOMEPAGE_DEPLOY_TOKEN }}`
+    )
+    expect(homepageWorkflow).toContain(
+      'secrets:\n      HOMEPAGE_DEPLOY_TOKEN:'
+    )
+  })
+
+  it('fails closed when the release tag source cannot be verified', () => {
+    const tag = 'pkg/oneworks-desktop/v0.1.0-beta.11'
+    const sourceSha = 'a'.repeat(40)
+    const matched = runReleaseTagGuard(
+      0,
+      `${sourceSha}\trefs/tags/${tag}\n`,
+      sourceSha
+    )
+    const matchedAnnotated = runReleaseTagGuard(
+      0,
+      `${'c'.repeat(40)}\trefs/tags/${tag}\n${sourceSha}\trefs/tags/${tag}^{}\n`,
+      sourceSha
+    )
+    const mismatched = runReleaseTagGuard(
+      0,
+      `${'b'.repeat(40)}\trefs/tags/${tag}\n`,
+      sourceSha
+    )
+    const absent = runReleaseTagGuard(2, '', sourceSha)
+    const unavailable = runReleaseTagGuard(128, '', sourceSha)
+
+    expect(matched.status, matched.stderr).toBe(0)
+    expect(matchedAnnotated.status, matchedAnnotated.stderr).toBe(0)
+    expect(mismatched.status).toBe(1)
+    expect(mismatched.stderr).toContain('not verified candidate')
+    expect(absent.status).toBe(0)
+    expect(absent.stdout).toContain('does not exist yet')
+    expect(unavailable.status).toBe(1)
+    expect(unavailable.stderr).toContain('Unable to query release tag')
+  })
+
   it('keeps unsigned releases on the full artifact path', () => {
     const policy = runWithOutput(
       extractRunScript('Resolve desktop build policy'),
-      { DESKTOP_SIGN_REQUESTED: 'false' }
+      {
+        DESKTOP_SIGN_REQUESTED: 'false',
+        EVENT_NAME: 'workflow_dispatch'
+      }
     )
     const validation = runBash(
       extractRunScript('Validate desktop signing credentials'),

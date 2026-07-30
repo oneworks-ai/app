@@ -7,7 +7,22 @@ on:
     paths:
       - .oo/docs/**
       - .github/workflows/deploy-homepage.yml
+  workflow_call:
+    inputs:
+      source_sha:
+        description: Exact app repository commit to use as the homepage source.
+        required: true
+        type: string
+    secrets:
+      HOMEPAGE_DEPLOY_TOKEN:
+        description: Token scoped to dispatch and read homepage repository Actions.
+        required: true
   workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact app repository commit to use as the homepage source. Defaults to the selected ref.
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -29,7 +44,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.HOMEPAGE_DEPLOY_TOKEN }}
           SOURCE_REF: main
-          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
         run: |
           set -euo pipefail
 
