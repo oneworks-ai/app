@@ -1,7 +1,12 @@
 import { existsSync } from 'node:fs'
 import process from 'node:process'
 
-import { buildCommand, getStore, trimRequired } from './runtime-store-shared'
+import {
+  assertRuntimeActivationPayload,
+  buildCommand,
+  getStore,
+  trimRequired
+} from './runtime-store-shared'
 import type { AppendRuntimeCommandParams } from './runtime-store-shared'
 
 export const appendRuntimeCommand = async (params: AppendRuntimeCommandParams) => {
@@ -10,9 +15,15 @@ export const appendRuntimeCommand = async (params: AppendRuntimeCommandParams) =
   const session = store.session(sessionId)
   if (!existsSync(session.sessionPath)) throw new Error(`Runtime session "${sessionId}" not found.`)
 
-  const content = params.type === 'send_message' || params.type === 'resume'
-    ? trimRequired(params.message, 'message')
-    : params.message?.trim()
+  const content = params.message?.trim() || undefined
+  if (params.type === 'send_message' || params.type === 'resume') {
+    assertRuntimeActivationPayload({
+      content,
+      contentItems: params.contentItems,
+      runtimeContentItems: params.runtimeContentItems,
+      runtimeMessage: params.runtimeMessage
+    })
+  }
   const requestId = params.type === 'submit_input'
     ? trimRequired(params.requestId, 'request')
     : params.requestId?.trim()
@@ -27,9 +38,13 @@ export const appendRuntimeCommand = async (params: AppendRuntimeCommandParams) =
     type: params.type,
     ts: (params.now ?? Date.now)(),
     content,
+    contentItems: params.contentItems,
     commandId: params.commandId,
     memberKey: params.memberKey,
     priority: params.priority,
+    projectConfigPolicy: params.projectConfigPolicy,
+    runtimeContentItems: params.runtimeContentItems,
+    runtimeMessage: params.runtimeMessage,
     requestId,
     roomId: params.roomId,
     runId: params.runId,

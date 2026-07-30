@@ -16,7 +16,8 @@ const dictionary = {
   'chat.sessionErrorHelp': 'Check the latest tool output or terminal logs.',
   'chat.sessionCreateFailedTitle': 'Session creation failed',
   'chat.sessionCreateFailedHelp': 'Retry with the same message.',
-  'chat.sessionErrorCode': 'Error code: {{code}}'
+  'chat.sessionErrorCode': 'Error code: {{code}}',
+  'chat.projectConfigRecovery.help': 'Open the failing project config or retry with global config.'
 } satisfies Record<string, string>
 
 const t = (key: string, options?: Record<string, unknown>) => {
@@ -86,6 +87,72 @@ describe('buildChatHistoryStatusNotices', () => {
         title: 'Session creation failed'
       }
     ])
+  })
+
+  it('exposes the exact failing project config location and recovery contract', () => {
+    expect(buildChatHistoryStatusNotices({
+      errorState: {
+        kind: 'session',
+        message: 'Codex could not parse the active workspace project config.',
+        code: 'codex_project_config_invalid',
+        details: {
+          adapter: 'codex-alias',
+          runtimeAdapter: 'codex',
+          configPath: '.codex/config.toml',
+          configSource: 'project',
+          workspaceSource: 'active-session-workspace',
+          workspaceFolder: '/workspace/root',
+          sessionId: 'session-project-config',
+          reason: 'wire_api is unsupported',
+          runtimeEventId: 'evt-project-config-failure',
+          runtimeEventSeq: 12,
+          line: 8,
+          column: 5
+        }
+      },
+      modelUnavailable: false,
+      t
+    })).toEqual([
+      {
+        detail: 'Open the failing project config or retry with global config.',
+        icon: 'error',
+        id: 'session-error',
+        message: 'Codex could not parse the active workspace project config.',
+        meta: '/workspace/root/.codex/config.toml:8:5',
+        projectConfigRecovery: {
+          configPath: '.codex/config.toml',
+          failureEventId: 'evt-project-config-failure',
+          failureEventSeq: 12,
+          sessionId: 'session-project-config',
+          workspaceFolder: '/workspace/root',
+          line: 8,
+          column: 5
+        },
+        tone: 'error',
+        title: 'Task failed'
+      }
+    ])
+  })
+
+  it('does not expose recovery actions for malformed known error details', () => {
+    const [notice] = buildChatHistoryStatusNotices({
+      errorState: {
+        kind: 'session',
+        message: 'Invalid project config.',
+        code: 'codex_project_config_invalid',
+        details: {
+          configPath: '../../forged.toml',
+          workspaceFolder: '/tmp/forged',
+          line: 0.5,
+          column: -1
+        }
+      },
+      modelUnavailable: false,
+      t
+    })
+
+    expect(notice).not.toHaveProperty('projectConfigRecovery')
+    expect(notice?.detail).toBe('Check the latest tool output or terminal logs.')
   })
 
   it('combines model setup and live connection notices', () => {

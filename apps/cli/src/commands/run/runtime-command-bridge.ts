@@ -1,8 +1,18 @@
 import type { ChatMessageContent } from '@oneworks/core'
-import { orderRuntimeCommands } from '@oneworks/runtime-store'
-import type { RuntimeCommand } from '@oneworks/runtime-store'
+import path from 'node:path'
+import {
+  RuntimeActivationCommandSchema,
+  RuntimeActivationContentItemSchema,
+  isRuntimeActivationCommand
+} from '@oneworks/runtime-protocol'
+import {
+  FileRuntimeSessionStore,
+  isAuthenticProjectConfigRecovery,
+  orderRuntimeCommands
+} from '@oneworks/runtime-store'
+import type { RuntimeCommand, RuntimeEvent } from '@oneworks/runtime-store'
 
-import { readRuntimeCommands, readRuntimeEvents } from '../agent/runtime-store'
+import { resolveRuntimeSessionStore } from '../agent/runtime-store'
 import type { RuntimeEventSink } from './runtime-event-sink'
 import type { CliInputSession } from './types'
 
@@ -10,10 +20,29 @@ export interface RuntimeCommandBridgeSession extends CliInputSession {
   kill?: () => void
 }
 
+export class RuntimeDeliveryCrashError extends Error {
+  constructor(readonly boundary: 'before_emit' | 'after_accepted' | 'after_completed') {
+    super(`Injected runtime delivery crash at ${boundary}.`)
+    this.name = 'RuntimeDeliveryCrashError'
+  }
+}
+
+// The adapter session has synchronous local acceptance but no durable dedupe
+// acknowledgement. Recovery therefore guarantees at-least-once delivery with
+// a stable deliveryId: it never acknowledges before acceptance, while a crash
+// after acceptance and before completion may replay the same deliveryId.
+export const RUNTIME_RECOVERY_DELIVERY_GUARANTEE = 'at-least-once' as const
+
 export interface RuntimeCommandBridgeOptions {
+  adapter?: string
+  deliveryCrashHook?: (
+    boundary: 'before_emit' | 'after_accepted' | 'after_completed',
+    command: RuntimeCommand
+  ) => Promise<void> | void
   cwd: string
   env?: NodeJS.ProcessEnv
   intervalMs?: number
+  runtimeAdapter?: string
   session: RuntimeCommandBridgeSession
   sessionId: string
   sink: RuntimeEventSink
@@ -21,6 +50,9 @@ export interface RuntimeCommandBridgeOptions {
 }
 
 const toMessageContent = (command: RuntimeCommand): ChatMessageContent[] => {
+  if (isRuntimeActivationCommand(command)) {
+    RuntimeActivationCommandSchema.parse(command)
+  }
   const runtimeContentItems = normalizeCommandContentItems(command.runtimeContentItems)
   if (runtimeContentItems != null) {
     return runtimeContentItems
@@ -33,36 +65,19 @@ const toMessageContent = (command: RuntimeCommand): ChatMessageContent[] => {
 
   const content = typeof command.runtimeMessage === 'string'
     ? command.runtimeMessage
-    : command.content ?? command.message ?? ''
+    : command.content ?? command.message
+  if (content == null || content.trim() === '') {
+    throw new Error(`${command.type} command requires a supported nonempty activation payload.`)
+  }
   return [{ type: 'text', text: content }]
 }
 
-const isChatMessageContent = (item: unknown): item is ChatMessageContent => {
-  if (item == null || typeof item !== 'object') {
-    return false
-  }
-  const record = item as Record<string, unknown>
-  switch (record.type) {
-    case 'text':
-      return typeof record.text === 'string'
-    case 'image':
-      return typeof record.url === 'string'
-    case 'file':
-      return typeof record.path === 'string'
-    case 'tool_use':
-      return typeof record.id === 'string' && typeof record.name === 'string'
-    case 'tool_result':
-      return typeof record.tool_use_id === 'string'
-    default:
-      return false
-  }
-}
-
 const normalizeCommandContentItems = (value: unknown): ChatMessageContent[] | undefined => {
-  if (!Array.isArray(value) || !value.every(isChatMessageContent)) {
-    return undefined
-  }
-  return structuredClone(value)
+  if (!Array.isArray(value)) return undefined
+  const parsed = value.map(item => RuntimeActivationContentItemSchema.safeParse(item))
+  return parsed.every(item => item.success)
+    ? parsed.map(item => item.data) as ChatMessageContent[]
+    : undefined
 }
 
 const toSubmitData = (command: RuntimeCommand): string | string[] => {
@@ -88,15 +103,11 @@ const dispatchCommand = async (
   switch (command.type) {
     case 'send_message':
     case 'resume':
-      await options.sink.ackCommand(command)
-      await options.sink.recordMessageCommand(command)
-      options.session.emit({ type: 'message', content: toMessageContent(command) })
+      await dispatchMessageCommand(command, options)
       return
     case 'start':
       if (command.messageDelivery === 'bridge') {
-        await options.sink.ackCommand(command)
-        await options.sink.recordMessageCommand(command)
-        options.session.emit({ type: 'message', content: toMessageContent(command) })
+        await dispatchMessageCommand(command, options)
       }
       return
     case 'submit_input':
@@ -122,16 +133,41 @@ const dispatchCommand = async (
   }
 }
 
+const dispatchMessageCommand = async (
+  command: RuntimeCommand,
+  options: RuntimeCommandBridgeOptions
+) => {
+  if (command.recovery == null) {
+    options.session.emit({ type: 'message', content: toMessageContent(command) })
+    await options.sink.recordMessageCommand(command)
+    await options.sink.ackCommand(command)
+    return
+  }
+  const deliveryId = `runtime-delivery:${command.id}`
+  await options.sink.recordCommandDelivery(command, deliveryId, 'prepared')
+  await options.deliveryCrashHook?.('before_emit', command)
+  options.session.emit({
+    type: 'message',
+    content: toMessageContent(command),
+    deliveryId
+  })
+  await options.sink.recordCommandDelivery(command, deliveryId, 'accepted')
+  await options.deliveryCrashHook?.('after_accepted', command)
+  await options.sink.recordCommandDelivery(command, deliveryId, 'completed')
+  await options.deliveryCrashHook?.('after_completed', command)
+  await options.sink.recordMessageCommand(command)
+  await options.sink.ackCommand(command)
+}
+
 const PROCESSED_COMMAND_EVENT_TYPES = new Set([
   'command_ack',
+  'command_delivery_completed',
   'command_failed',
   'command_cancelled',
   'input_submitted'
 ])
 
-const readProcessedCommandIds = async (options: RuntimeCommandBridgeOptions) => {
-  const processed = new Set<string>()
-  const events = await readRuntimeEvents(options.cwd, options.sessionId, options.env)
+const addProcessedCommandIds = (processed: Set<string>, events: RuntimeEvent[]) => {
   for (const event of events) {
     if (
       typeof event.commandId === 'string' &&
@@ -141,23 +177,72 @@ const readProcessedCommandIds = async (options: RuntimeCommandBridgeOptions) => 
       processed.add(event.commandId)
     }
   }
-  return processed
+}
+
+const readReplacedActivationIds = (
+  commands: RuntimeCommand[],
+  events: RuntimeEvent[],
+  options: Pick<RuntimeCommandBridgeOptions, 'adapter' | 'cwd' | 'runtimeAdapter' | 'sessionId'>
+) => {
+  const replaced = new Set<string>()
+  const authenticRecoveryIds = new Set<string>()
+  for (const command of commands) {
+    if (command.recovery == null) continue
+    const parsed = RuntimeActivationCommandSchema.safeParse(command)
+    const adapter = options.adapter?.trim() ?? ''
+    const authentic = parsed.success &&
+      adapter !== '' &&
+      options.runtimeAdapter === 'codex' &&
+      isAuthenticProjectConfigRecovery(
+        command,
+        commands,
+        events,
+        {
+          workspaceFolder: path.resolve(options.cwd),
+          adapter,
+          runtimeAdapter: 'codex',
+          sessionId: options.sessionId
+        }
+      )
+    if (authentic) {
+      authenticRecoveryIds.add(command.id)
+      replaced.add(parsed.data.recovery!.replacedActivationCommandId)
+    }
+  }
+  return { replaced, authenticRecoveryIds }
 }
 
 export const attachRuntimeCommandBridge = async (options: RuntimeCommandBridgeOptions) => {
-  const processed = await readProcessedCommandIds(options)
+  const processed = new Set<string>()
   let stopped = false
   let tickQueue = Promise.resolve()
 
   const tick = async () => {
-    const commands = await readRuntimeCommands(options.cwd, options.sessionId, options.env)
-    const pending = orderRuntimeCommands(commands.filter(command => !processed.has(command.id)))
+    const store = await resolveRuntimeSessionStore(
+      options.cwd,
+      options.sessionId,
+      options.env
+    )
+    const { commands, events } = await new FileRuntimeSessionStore(
+      store.storePath,
+      options.sessionId
+    ).readCommandEventSnapshot('runtime-command-bridge-read')
+    addProcessedCommandIds(processed, events)
+    const recovery = readReplacedActivationIds(commands, events, options)
+    const pending = orderRuntimeCommands(commands.filter(command =>
+      !processed.has(command.id) && !recovery.replaced.has(command.id)
+    ))
     for (const command of pending) {
       processed.add(command.id)
       try {
+        if (command.recovery != null && !recovery.authenticRecoveryIds.has(command.id)) {
+          throw new Error('Recovery command does not match its authoritative failed activation.')
+        }
         await dispatchCommand(command, options)
       } catch (error) {
-        await options.sink.failCommand(command, error)
+        if (!(error instanceof RuntimeDeliveryCrashError)) {
+          await options.sink.failCommand(command, error)
+        }
       }
     }
   }

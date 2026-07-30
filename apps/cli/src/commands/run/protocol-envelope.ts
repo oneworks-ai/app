@@ -46,7 +46,15 @@ const readStringField = (input: unknown, field: string) => {
   return typeof value === 'string' && value.trim() !== '' ? value : undefined
 }
 
-export const fallbackProtocolCommand = (input: unknown): RuntimeSessionCommandEnvelope => {
+type RuntimeSessionCommandIdentity = {
+  commandId: string
+  protocolVersion: string
+  sessionId?: string
+  supportedProtocolRange?: string
+  type: RuntimeSessionCommandEnvelope['type']
+}
+
+export const fallbackProtocolCommand = (input: unknown): RuntimeSessionCommandIdentity => {
   const type = readStringField(input, 'type')
   return {
     protocolVersion: getCurrentProtocolVersion(),
@@ -60,7 +68,7 @@ export const fallbackProtocolCommand = (input: unknown): RuntimeSessionCommandEn
 export const parseRuntimeProtocolCommand = (input: unknown) => {
   const command = RuntimeSessionCommandEnvelopeSchema.parse(
     defaultProtocolFields(input)
-  ) as RuntimeSessionCommandEnvelope
+  )
   assertProtocolCompatible(command.protocolVersion, DEFAULT_SUPPORTED_PROTOCOL_RANGE)
   if (command.supportedProtocolRange != null) {
     assertProtocolCompatible(getCurrentProtocolVersion(), command.supportedProtocolRange)
@@ -87,7 +95,7 @@ export const toSuccessResult = (
 })
 
 export const toErrorResult = (
-  command: RuntimeSessionCommandEnvelope,
+  command: RuntimeSessionCommandIdentity,
   error: unknown
 ): RuntimeSessionResultEnvelope => ({
   protocolVersion: getCurrentProtocolVersion(),

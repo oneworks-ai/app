@@ -8,6 +8,7 @@ import { resolveProjectHomePath } from '@oneworks/utils'
 
 import { handleChannelSessionEvent } from '#~/channels/index.js'
 import { getDb } from '#~/db/index.js'
+import { createPublicProjectionContext } from '#~/services/runtime-store/public-runtime-event.js'
 import { applySessionEvent } from '#~/services/session/events.js'
 import {
   getSessionInteraction,
@@ -288,7 +289,7 @@ describe('session interaction service', () => {
       }
     ])
 
-    expect(getSessionInteraction('sess-1')).toEqual({
+    expect(getSessionInteraction('sess-1', createPublicProjectionContext())).toEqual({
       id: 'interaction-2',
       payload: {
         sessionId: 'sess-1',
@@ -326,7 +327,7 @@ describe('session interaction service', () => {
       }
     ])
 
-    expect(getSessionInteraction('sess-1')).toEqual({
+    expect(getSessionInteraction('sess-1', createPublicProjectionContext())).toEqual({
       id: 'interaction-1',
       payload: {
         sessionId: 'sess-1',
@@ -351,7 +352,7 @@ describe('session interaction service', () => {
       }
     ])
 
-    expect(getSessionInteraction('sess-1')).toBeUndefined()
+    expect(getSessionInteraction('sess-1', createPublicProjectionContext())).toBeUndefined()
   })
 
   it('treats sessions parked in the external runtime store as external for interaction responses', async () => {
@@ -390,19 +391,47 @@ describe('session interaction service', () => {
         sessionId: 'sess-1',
         question: '第一个问题'
       }
-    })
+    }, createPublicProjectionContext())
     setSessionInteraction('sess-1', {
       id: 'interaction-2',
       payload: {
         sessionId: 'sess-1',
         question: '第二个问题'
       }
-    })
+    }, createPublicProjectionContext())
 
     await handleInteractionResponse('sess-1', 'interaction-1', '继续')
 
     expect(runtime.interactions.map(interaction => interaction.id)).toEqual(['interaction-2'])
     expect(updateSession).toHaveBeenCalledWith('sess-1', { status: 'waiting_input' })
+  })
+
+  it('projects interaction state through the same fresh public constructor for memory and history', () => {
+    const runtime = createSessionConnectionState()
+    externalSessionStore.set('sess-1', runtime)
+    const sentinel = 'SENTINEL_INTERACTION_PRIVATE_STATE'
+    const payload = {
+      sessionId: 'sess-1',
+      question: 'Continue?',
+      options: [{ label: 'Yes', value: 'yes', privateToken: sentinel }],
+      privateToken: sentinel
+    }
+    expect(setSessionInteraction(
+      'sess-1',
+      { id: 'interaction-safe', payload: payload as any },
+      createPublicProjectionContext()
+    )).toBe(true)
+    payload.options[0]!.label = 'mutated after storage'
+
+    expect(getSessionInteraction('sess-1', createPublicProjectionContext())).toEqual({
+      id: 'interaction-safe',
+      payload: {
+        sessionId: 'sess-1',
+        question: 'Continue?',
+        options: [{ label: 'Yes', value: 'yes' }]
+      }
+    })
+    expect(JSON.stringify(runtime.interactions)).not.toContain(sentinel)
   })
 
   it('queues submit_input commands for external runtime approval responses', async () => {

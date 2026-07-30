@@ -1,11 +1,11 @@
 /* eslint-disable max-lines */
 
 import { randomUUID } from 'node:crypto'
-import { appendFile } from 'node:fs/promises'
 import { env as processEnv } from 'node:process'
 
 import { DEFAULT_SUPPORTED_PROTOCOL_RANGE, getCurrentProtocolVersion } from '@oneworks/runtime-protocol'
 import type { RuntimeCommand } from '@oneworks/runtime-protocol'
+import { FileRuntimeSessionStore } from '@oneworks/runtime-store'
 
 import type {
   AgentRoom,
@@ -156,7 +156,7 @@ const appendRuntimeSessionMessage = async (
     commandId: `agent-room-message-${randomUUID()}`,
     content: buildRuntimeRoomMessageContent(content, context)
   } satisfies RuntimeCommand
-  await appendFile(store.commandsPath, `${JSON.stringify(command)}\n`, 'utf8')
+  await new FileRuntimeSessionStore(store.storePath, sessionId).appendCommand(command)
   return true
 }
 

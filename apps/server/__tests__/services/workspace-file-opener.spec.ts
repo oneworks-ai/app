@@ -1,5 +1,6 @@
 /* eslint-disable import/first -- hoisted Vitest mocks must be declared before importing the service */
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { EventEmitter } from 'node:events'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -30,6 +31,18 @@ const findExecFileCallback = (values: unknown[]): ExecFileCallback | undefined =
   values.find((value): value is ExecFileCallback => typeof value === 'function')
 )
 
+const createSpawnChild = (event: 'spawn' | 'error' = 'spawn') => {
+  const child = Object.assign(new EventEmitter(), { unref: vi.fn() })
+  queueMicrotask(() => {
+    if (event === 'spawn') {
+      child.emit('spawn')
+    } else {
+      child.emit('error', Object.assign(new Error('spawn ENOENT'), { code: 'ENOENT' }))
+    }
+  })
+  return child
+}
+
 describe('workspace file opener service', () => {
   let availableCommands: Map<string, string>
   let workspaceDir: string
@@ -44,7 +57,7 @@ describe('workspace file opener service', () => {
 
     childProcessMocks.execFile.mockReset()
     childProcessMocks.spawn.mockReset()
-    childProcessMocks.spawn.mockReturnValue({ unref: vi.fn() })
+    childProcessMocks.spawn.mockImplementation(() => createSpawnChild())
     childProcessMocks.execFile.mockImplementation(
       (command: string, args?: unknown, options?: unknown, callback?: unknown) => {
         const query = Array.isArray(args) ? String(args.at(-1)) : ''
@@ -124,6 +137,20 @@ describe('workspace file opener service', () => {
       ['--reuse-window', workspaceDir, '--goto', `${join(workspaceDir, 'src', 'index.ts')}:7`],
       expect.objectContaining({ detached: true })
     )
+  })
+
+  it('rejects an asynchronous child spawn error before reporting success', async () => {
+    availableCommands.set('code', '/missing/code')
+    const child = createSpawnChild('error')
+    childProcessMocks.spawn.mockReturnValueOnce(child)
+
+    await expect(
+      openWorkspaceFileInExternalOpener('src/index.ts', { opener: 'vscode' })
+    ).rejects.toMatchObject({
+      status: 500,
+      code: 'workspace_file_open_failed'
+    } satisfies Partial<HttpError>)
+    expect(child.unref).not.toHaveBeenCalled()
   })
 
   it('opens the workspace folder in the requested app', async () => {

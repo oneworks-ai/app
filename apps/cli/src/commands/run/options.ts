@@ -95,11 +95,22 @@ export const mergeListConfig = (
 
 export const resolveResumeAdapterOptions = (
   cached: CliSessionResumeRecord['adapterOptions'],
-  opts: Pick<RunOptions, 'model' | 'effort' | 'fastMode' | 'includeTool' | 'excludeTool'>
+  opts: Pick<
+    RunOptions,
+    'model' | 'effort' | 'fastMode' | 'projectConfigPolicy' | 'includeTool' | 'excludeTool'
+  >
 ): CliSessionResumeRecord['adapterOptions'] => ({
   ...cached,
   ...(opts.model != null ? { model: opts.model } : {}),
   ...(opts.effort != null ? { effort: opts.effort } : {}),
   ...(opts.fastMode != null ? { fastMode: opts.fastMode } : {}),
+  ...(opts.projectConfigPolicy != null ? { projectConfigPolicy: opts.projectConfigPolicy } : {}),
   tools: mergeListConfig(cached.tools, opts.includeTool, opts.excludeTool)
 })
+
+export const resolvePersistedResumeAdapterOptions = (
+  options: CliSessionResumeRecord['adapterOptions']
+): CliSessionResumeRecord['adapterOptions'] => {
+  const { projectConfigPolicy: _oneShotProjectConfigPolicy, ...persisted } = options
+  return persisted
+}

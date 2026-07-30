@@ -16,6 +16,7 @@ import {
   DEFAULT_RUNTIME_PROTOCOL_VERSION,
   DEFAULT_SUPPORTED_PROTOCOL_RANGE,
   FileRuntimeStore,
+  acquireLockFile,
   appendJsonlLine
 } from '@oneworks/runtime-store'
 import type { RuntimeEvent, RuntimeEventDraft, RuntimeMeta, RuntimeState } from '@oneworks/runtime-store'
@@ -1479,27 +1480,37 @@ const importConversation = async (
     } satisfies RuntimeMeta
   )
 
-  const existingEvents = await session.replayEvents()
-  const existingEventIds = new Set(existingEvents.map(event => event.id))
-  const events = toRuntimeEvents(conversation)
-  let lastSeq = existingEvents.at(-1)?.seq ?? 0
+  const eventLock = await acquireLockFile(session.getLockPath('events.append'), {
+    kind: 'events.append',
+    operation: HISTORY_IMPORT_SOURCE
+  })
+  let lastSeq = 0
   let importedEvents = 0
-  for (const event of events) {
-    if (existingEventIds.has(event.id!)) {
-      continue
+  try {
+    const existingEvents = await session.replayEvents()
+    const existingEventIds = new Set(existingEvents.map(event => event.id))
+    const events = toRuntimeEvents(conversation)
+    lastSeq = existingEvents.at(-1)?.seq ?? 0
+    for (const event of events) {
+      if (existingEventIds.has(event.id!)) {
+        continue
+      }
+      lastSeq += 1
+      const nextEvent = {
+        ...event,
+        protocolVersion: event.protocolVersion ?? DEFAULT_RUNTIME_PROTOCOL_VERSION,
+        supportedProtocolRange: event.supportedProtocolRange ?? DEFAULT_SUPPORTED_PROTOCOL_RANGE,
+        id: event.id ?? `evt_${lastSeq}`,
+        seq: event.seq ?? lastSeq,
+        ts: event.ts ?? Date.now()
+      } satisfies RuntimeEvent
+      await eventLock.assertOwned()
+      await appendJsonlLine(path.join(session.sessionPath, 'events.jsonl'), nextEvent)
+      existingEventIds.add(nextEvent.id)
+      importedEvents += 1
     }
-    lastSeq += 1
-    const nextEvent = {
-      ...event,
-      protocolVersion: event.protocolVersion ?? DEFAULT_RUNTIME_PROTOCOL_VERSION,
-      supportedProtocolRange: event.supportedProtocolRange ?? DEFAULT_SUPPORTED_PROTOCOL_RANGE,
-      id: event.id ?? `evt_${lastSeq}`,
-      seq: event.seq ?? lastSeq,
-      ts: event.ts ?? Date.now()
-    } satisfies RuntimeEvent
-    await appendJsonlLine(path.join(session.sessionPath, 'events.jsonl'), nextEvent)
-    existingEventIds.add(nextEvent.id)
-    importedEvents += 1
+  } finally {
+    await eventLock.release()
   }
   const state: RuntimeState = {
     protocolVersion: DEFAULT_RUNTIME_PROTOCOL_VERSION,

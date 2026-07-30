@@ -21,6 +21,7 @@ import {
   resolveCodexAdapterConfig
 } from './config'
 import { buildMcpServerPermissionSubjectKeys, resolveManagedPermissionDecision } from './permissions'
+import { validateCodexProjectConfig } from './project-config'
 import { CODEX_PROXY_META_HEADER_NAME, encodeCodexProxyMeta, ensureCodexProxyServer } from './proxy'
 
 export type CodexApprovalPolicy = 'never' | 'unlessTrusted' | 'onRequest'
@@ -152,6 +153,13 @@ export function toCodexOutboundApprovalPolicy(
  * Encode a string value as a TOML inline string (JSON encoding is a valid subset).
  */
 const toToml = (value: string) => JSON.stringify(value)
+
+export const buildCodexProjectConfigPolicyOverrideArgs = (
+  cwd: string,
+  projectConfigPolicy: AdapterQueryOptions['projectConfigPolicy']
+) => projectConfigPolicy === 'global-only'
+  ? ['-c', `projects.${JSON.stringify(resolve(cwd))}.trust_level=${toToml('untrusted')}`]
+  : []
 
 const ONEWORKS_CODEX_DEVELOPER_INSTRUCTIONS = [
   'One Works runtime behavior:',
@@ -892,6 +900,12 @@ export async function resolveSessionBase(
     configs: ctx.configs
   })
   const { common: commonConfig, native: nativeConfig } = resolveCodexAdapterConfig(ctx)
+  await validateCodexProjectConfig({
+    adapter: readOptionalString(env.__ONEWORKS_PROJECT_ADAPTER__) ?? 'codex',
+    cwd,
+    projectConfigPolicy: options.projectConfigPolicy,
+    sessionId: options.sessionId
+  })
 
   const {
     sandboxPolicy: configSandboxPolicy,
@@ -1001,6 +1015,11 @@ export async function resolveSessionBase(
   })
   startupProfiler.mark('codex.session.buildConfigOverrides', configOverridesStartedAt)
 
+  if (options.projectConfigPolicy === 'global-only') {
+    for (const nativeProviderConfigOverride of nativeProviderConfigOverrides) {
+      configOverrideArgs.push('-c', nativeProviderConfigOverride)
+    }
+  }
   const nativeConfigOverrideArgs = buildNativeConfigOverrideArgs(configOverrides)
   configOverrideArgs.push(...nativeConfigOverrideArgs)
   configFingerprintArgs.push(...nativeConfigOverrideArgs)
@@ -1014,6 +1033,16 @@ export async function resolveSessionBase(
   if (options.fastMode === true) {
     configOverrideArgs.push('-c', `service_tier=${toToml('fast')}`)
     configFingerprintArgs.push('-c', `service_tier=${toToml('fast')}`)
+  }
+  if (options.projectConfigPolicy === 'global-only') {
+    // This is intentionally appended after native config overrides. It is the sole
+    // recovery-specific override and prevents Codex from loading cwd/.codex/config.toml.
+    const projectConfigPolicyOverrideArgs = buildCodexProjectConfigPolicyOverrideArgs(
+      cwd,
+      options.projectConfigPolicy
+    )
+    configOverrideArgs.push(...projectConfigPolicyOverrideArgs)
+    configFingerprintArgs.push(...projectConfigPolicyOverrideArgs)
   }
 
   const filteredMcpServers: Record<string, unknown> = options.assetPlan?.mcpServers ?? (() => {
@@ -1057,6 +1086,7 @@ export async function resolveSessionBase(
     ctx,
     sessionId: options.sessionId,
     account: options.account,
+    projectConfigPolicy: options.projectConfigPolicy,
     nativeProviderConfigOverrides
   })
   startupProfiler.mark('codex.session.prepareSessionHome', sessionHomeStartedAt)

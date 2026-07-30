@@ -1,14 +1,10 @@
 import { readFile } from 'node:fs/promises'
 
-import type { RuntimeCommand } from '@oneworks/runtime-protocol'
+import { RuntimeCommandSchema } from '@oneworks/runtime-protocol'
 
 import { projectRuntimeEvent } from './projection.js'
 import type { RuntimeEvent, RuntimeSessionMetadata } from './types.js'
 import type { RuntimeStoreReplayOptions } from './watcher.js'
-
-const isRecord = (value: unknown): value is Record<string, unknown> => (
-  value != null && typeof value === 'object' && !Array.isArray(value)
-)
 
 const getRoomForMetadata = (
   metadata: RuntimeSessionMetadata,
@@ -103,15 +99,15 @@ export const readStartCommandSummary = async (commandsPath: string) => {
       continue
     }
 
-    if (!isRecord(parsed) || parsed.type !== 'start') {
+    const command = RuntimeCommandSchema.safeParse(parsed)
+    if (!command.success || command.data.type !== 'start') {
       continue
     }
 
-    const command = parsed as RuntimeCommand
-    return typeof command.content === 'string' && command.content.trim() !== ''
-      ? command.content.trim()
-      : typeof command.message === 'string' && command.message.trim() !== ''
-      ? command.message.trim()
+    return typeof command.data.content === 'string' && command.data.content.trim() !== ''
+      ? command.data.content.trim()
+      : typeof command.data.message === 'string' && command.data.message.trim() !== ''
+      ? command.data.message.trim()
       : undefined
   }
 

@@ -215,6 +215,27 @@ describe('createCodexSession RPC approval policy mapping', () => {
     expect(events.some((event: AdapterOutputEvent) => event.type === 'exit')).toBe(true)
   })
 
+  it('spawns a global-only recovery with an explicit untrusted active workspace', async () => {
+    process.env.HOME = '/tmp'
+    const { proc } = makeProc()
+    spawnMock.mockReturnValue(proc)
+
+    const session = await createCodexSession(makeCtx(), {
+      type: 'create',
+      runtime: 'server',
+      sessionId: 'session-global-only',
+      description: 'Reply with pong.',
+      projectConfigPolicy: 'global-only',
+      onEvent: () => {}
+    } as any)
+
+    const spawnArgs = spawnMock.mock.calls[0]?.[1] as string[]
+    const overrides = getConfigOverrides(spawnArgs)
+    expect(overrides).toContain('projects."/tmp".trust_level="untrusted"')
+
+    session.kill()
+  })
+
   it('emits user-visible operation events while starting Codex stream turns', async () => {
     process.env.HOME = '/tmp'
     const { proc } = makeProc()
@@ -1616,6 +1637,53 @@ describe('createCodexSession RPC approval policy mapping', () => {
     expect(sessionConfig).toContain('http_headers={"X.Provider.Id" = "tenant-1"}')
     expect(sessionConfig).toContain('env_http_headers={X-Project = "AZURE_PROJECT"}')
     expect(sessionConfig).toContain('query_params={"filters[tag]" = "2025-04-01-preview"}')
+
+    session.kill()
+  })
+
+  it('keeps explicit session provider overrides above the lossless global recovery base', async () => {
+    process.env.HOME = '/tmp'
+    const { proc } = makeProc()
+    spawnMock.mockReturnValue(proc)
+
+    const session = await createCodexSession(
+      makeCtx({
+        configs: [{
+          modelServices: {
+            company: {
+              title: 'Company',
+              apiBaseUrl: 'https://example.invalid/v1',
+              extra: {
+                codex: {
+                  nativeProvider: true,
+                  providerId: 'company',
+                  envKey: 'COMPANY_API_KEY',
+                  wireApi: 'responses'
+                }
+              }
+            }
+          }
+        }, undefined]
+      }),
+      {
+        type: 'create',
+        runtime: 'server',
+        sessionId: 'session-native-provider-global-recovery',
+        model: 'company,gpt-5.6',
+        description: 'Reply with pong.',
+        projectConfigPolicy: 'global-only',
+        onEvent: () => {}
+      } as any
+    )
+
+    const spawnArgs = spawnMock.mock.calls[0]?.[1] as string[]
+    const overrides = getConfigOverrides(spawnArgs)
+    expect(overrides).toContain('model_provider="company"')
+    expect(overrides).toContain('model_providers.company.wire_api="responses"')
+    expect(overrides).toContain('projects."/tmp".trust_level="untrusted"')
+    expect(overrides.indexOf('model_provider="company"')).toBeLessThan(
+      overrides.indexOf('projects."/tmp".trust_level="untrusted"')
+    )
 
     session.kill()
   })

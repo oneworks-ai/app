@@ -1,3 +1,6 @@
+import { Buffer } from 'node:buffer'
+import { Readable } from 'node:stream'
+
 import Router from '@koa/router'
 import type { Context } from 'koa'
 
@@ -7,9 +10,9 @@ import type {
   EffortLevel,
   SessionPanelState,
   SessionPermissionMode,
-  SessionQueuedMessageMode,
   WSEvent
 } from '@oneworks/core'
+import { CODEX_PROJECT_CONFIG_RELATIVE_PATH } from '@oneworks/runtime-protocol'
 import type { GitBranchKind, SessionInfo, SessionInitInfo, SessionPromptType } from '@oneworks/types'
 
 import { getDb } from '#~/db/index.js'
@@ -31,6 +34,15 @@ import {
   createServerRuntimeSession,
   summarizeRuntimeSessionContent
 } from '#~/services/runtime-store/session-control.js'
+import {
+  sanitizePublicAdapterEventData,
+  sanitizePublicQueuedSessionMessage,
+  sanitizePublicSessionRecord,
+  sanitizePublicStoredSessionEvent,
+  createPublicProjectionContext,
+  projectPublicResponse
+} from '#~/services/runtime-store/public-runtime-event.js'
+import type { PublicProjectionContext } from '#~/services/runtime-store/public-runtime-event.js'
 import { deleteRuntimeSessionStores } from '#~/services/runtime-store/session-delete.js'
 import { createSessionWithInitialMessage } from '#~/services/session/create.js'
 import { cancelSessionCreation, isSessionCreationCancelledError } from '#~/services/session/creation-cancellation.js'
@@ -40,12 +52,14 @@ import {
   killSession,
   processUserMessage,
   requestSessionTermination,
+  resolveExternalRuntimeProjectConfigFailure,
+  retryExternalRuntimeSessionProjectConfig,
   updateAndNotifySession
 } from '#~/services/session/index.js'
 import {
   getSessionInteraction,
   handleInteractionResponse,
-  setSessionInteraction
+  projectAndSetSessionInteraction
 } from '#~/services/session/interaction.js'
 import {
   createSessionQueuedMessage,
@@ -78,10 +92,51 @@ import { listWorkspaceTree } from '#~/services/workspace/tree.js'
 import { badRequest, conflict, methodNotAllowed, notFound } from '#~/utils/http.js'
 
 import { sendWorkspaceMediaResponse } from './workspace-media-response'
+import {
+  parseSessionPatchRequest,
+  parseSessionQueueCreateRequest,
+  parseSessionQueueMoveRequest,
+  parseSessionQueueReorderRequest,
+  parseSessionQueueUpdateRequest
+} from './session-request-plans'
 
 export function sessionsRouter(): Router {
   const router = new Router()
   const db = getDb()
+  // A request owns exactly one aggregate projection budget.  This applies
+  // after the route-specific fresh constructors, protecting every list item
+  // and response branch (including create/branch/fork/queue responses).
+  router.use(async (ctx, next) => {
+    const context = createPublicProjectionContext()
+    ctx.state.publicProjectionContext = context
+    await next()
+    if (ctx.body == null) return
+    if (
+      ctx.state.skipApiEnvelope === true ||
+      Buffer.isBuffer(ctx.body) ||
+      ctx.body instanceof Readable
+    ) return
+    const publicBody = projectPublicResponse(ctx.body, context)
+    if (publicBody === undefined) {
+      throw badRequest('Response exceeds public projection budget', undefined, 'public_projection_too_large')
+    }
+    ctx.body = publicBody
+  })
+  const responseContext = (ctx: Context) => {
+    ctx.state ??= {}
+    ctx.state.publicProjectionContext ??= createPublicProjectionContext()
+    return ctx.state.publicProjectionContext as PublicProjectionContext
+  }
+  const publicSession = (
+    session: unknown,
+    sessionId: string | undefined,
+    context: PublicProjectionContext
+  ) => sanitizePublicSessionRecord(session, sessionId, context)
+  const publicQueuedMessages = (sessionId: string, context: PublicProjectionContext) =>
+    listSessionQueuedMessages(sessionId).flatMap(message => {
+      const publicMessage = sanitizePublicQueuedSessionMessage(message, sessionId, context)
+      return publicMessage == null ? [] : [publicMessage]
+    })
   const sessionPermissionModes = new Set<SessionPermissionMode>([
     'default',
     'acceptEdits',
@@ -94,13 +149,12 @@ export function sessionsRouter(): Router {
   const nativeHistoryProjectScopes = new Set<NativeHistoryProjectScope>(['current-project', 'all-projects'])
   const nativeHistoryThreadScopes = new Set<NativeHistoryThreadScope>(['all', 'user', 'subagent'])
   const nativeHistoryTimeSorts = new Set<NativeHistoryTimeSort>(['activity', 'createdAt', 'updatedAt'])
-  const normalizeTags = (value: unknown) => (
-    Array.isArray(value)
-      ? value
-        .map(tag => typeof tag === 'string' ? tag.trim() : '')
-        .filter(tag => tag !== '')
-      : undefined
-  )
+  const normalizeTags = (value: unknown) => {
+    if (!Array.isArray(value)) return undefined
+    if (value.length > 64 || value.some(tag => typeof tag !== 'string')) return undefined
+    const tags = value.map(tag => tag.trim())
+    return tags.some(tag => tag === '' || tag.length > 128) ? undefined : tags
+  }
   const isSessionPermissionMode = (value: unknown): value is SessionPermissionMode => (
     typeof value === 'string' && sessionPermissionModes.has(value as SessionPermissionMode)
   )
@@ -332,11 +386,17 @@ export function sessionsRouter(): Router {
   }
 
   router.get(['/', ''], (ctx) => {
-    ctx.body = { sessions: db.getSessions('active') }
+    ctx.body = { sessions: db.getSessions('active').flatMap(session => {
+      const publicRecord = publicSession(session, session.id, responseContext(ctx))
+      return publicRecord == null ? [] : [publicRecord]
+    }) }
   })
 
   router.get('/archived', (ctx) => {
-    ctx.body = { sessions: db.getSessions('archived') }
+    ctx.body = { sessions: db.getSessions('archived').flatMap(session => {
+      const publicRecord = publicSession(session, session.id, responseContext(ctx))
+      return publicRecord == null ? [] : [publicRecord]
+    }) }
   })
 
   router.post('/native-history-import', async (ctx) => {
@@ -409,7 +469,7 @@ export function sessionsRouter(): Router {
       throw notFound('Session not found', { id }, 'session_not_found')
     }
 
-    ctx.body = { session }
+    ctx.body = { session: publicSession(session, id, responseContext(ctx)) }
   })
 
   router.get('/:id/messages', (ctx) => {
@@ -423,7 +483,8 @@ export function sessionsRouter(): Router {
     if (session == null) {
       throw notFound('Session not found', { id }, 'session_not_found')
     }
-    const interaction = getSessionInteraction(id)
+    const messagesContext = responseContext(ctx)
+    const interaction = getSessionInteraction(id, messagesContext)
 
     const parsedLimit = parseLimit(limit)
     const parsedBeforeId = parsePositiveInt(beforeId)
@@ -438,12 +499,22 @@ export function sessionsRouter(): Router {
           limit: parsedLimit ?? 200
         }
     )
+    const workspaceFolder = db.getSessionWorkspace(id)?.workspaceFolder
     ctx.body = {
       cursor: messageWindow.cursor,
-      messages: messageWindow.messages,
-      session,
+      messages: messageWindow.messages.flatMap(message => {
+        const publicMessage = sanitizePublicStoredSessionEvent(
+          message,
+          id,
+          workspaceFolder,
+          session.adapter,
+          messagesContext
+        )
+        return publicMessage == null ? [] : [publicMessage]
+      }),
+      session: publicSession(session, id, messagesContext),
       interaction,
-      queuedMessages: listSessionQueuedMessages(id)
+      queuedMessages: publicQueuedMessages(id, messagesContext)
     }
   })
 
@@ -476,6 +547,60 @@ export function sessionsRouter(): Router {
 
     void processUserMessage(id, content).catch(() => undefined)
     ctx.body = { ok: true }
+  })
+
+  router.post('/:id/retry-project-config', async (ctx) => {
+    const { id } = ctx.params as { id: string }
+    const session = db.getSession(id)
+    if (session == null) {
+      throw notFound('Session not found', { id }, 'session_not_found')
+    }
+    if (session.status !== 'failed') {
+      throw conflict(
+        'Only a failed session can retry project config recovery.',
+        { id, status: session.status },
+        'session_not_failed'
+      )
+    }
+    const result = await retryExternalRuntimeSessionProjectConfig(id)
+    if ('reason' in result && result.reason === 'runtime_store_missing') {
+      throw conflict(
+        'The runtime store required to retry this session is unavailable.',
+        { id },
+        'runtime_store_missing'
+      )
+    }
+    if ('reason' in result && result.reason === 'current_failure_ineligible') {
+      throw conflict(
+        'The current runtime failure is not eligible for project config recovery.',
+        { id },
+        'project_config_recovery_unavailable'
+      )
+    }
+    ctx.body = { ok: true, ...result }
+  })
+
+  router.post('/:id/project-config/open', async (ctx) => {
+    const { id } = ctx.params as { id: string }
+    if (db.getSession(id) == null) {
+      throw notFound('Session not found', { id }, 'session_not_found')
+    }
+    const failure = await resolveExternalRuntimeProjectConfigFailure(id)
+    if (!failure.available) {
+      throw conflict(
+        'The current runtime failure has no safe project config target.',
+        { id, reason: failure.reason },
+        'project_config_recovery_unavailable'
+      )
+    }
+    ctx.body = await openWorkspaceFileInExternalOpener(
+      CODEX_PROJECT_CONFIG_RELATIVE_PATH,
+      {
+        column: failure.details.column,
+        line: failure.details.line,
+        workspaceFolder: failure.workspaceFolder
+      }
+    )
   })
 
   router.get('/:id/workspace', async (ctx) => {
@@ -556,22 +681,9 @@ export function sessionsRouter(): Router {
 
   router.patch('/:id', (ctx) => {
     const { id } = ctx.params as { id: string }
-    const { title, isStarred, isArchived, tags, panelState, permissionMode } = ctx.request.body as {
-      title?: string
-      isStarred?: boolean
-      isArchived?: boolean
-      tags?: string[]
-      panelState?: SessionPanelState
-      permissionMode?: unknown
-    }
-    if (permissionMode !== undefined && !isSessionPermissionMode(permissionMode)) {
-      throw badRequest(
-        'Invalid permission mode',
-        { permissionMode },
-        'invalid_permission_mode'
-      )
-    }
-
+    const plan = parseSessionPatchRequest(ctx.request.body)
+    if (plan == null) throw badRequest('Invalid session update', undefined, 'invalid_session_update')
+    const { title, isStarred, isArchived, tags, panelState, permissionMode } = plan
     if (
       title !== undefined ||
       isStarred !== undefined ||
@@ -581,7 +693,7 @@ export function sessionsRouter(): Router {
       updateAndNotifySession(id, {
         title,
         isStarred,
-        panelState,
+        panelState: panelState as SessionPanelState | undefined,
         ...(permissionMode !== undefined ? { permissionMode } : {})
       })
     }
@@ -596,9 +708,8 @@ export function sessionsRouter(): Router {
       }
     }
 
-    const normalizedTags = normalizeTags(tags)
-    if (tags !== undefined && normalizedTags != null) {
-      db.updateSessionTags(id, normalizedTags)
+    if (tags !== undefined) {
+      db.updateSessionTags(id, tags)
       const updatedSession = db.getSession(id)
       if (updatedSession != null) {
         notifySessionUpdated(id, updatedSession)
@@ -700,7 +811,9 @@ export function sessionsRouter(): Router {
       }
       throw error
     }
-    ctx.body = { session }
+    ctx.body = {
+      session: publicSession(session, session.id, responseContext(ctx))
+    }
   })
 
   router.post('/:id/terminate', async (ctx) => {
@@ -820,12 +933,18 @@ export function sessionsRouter(): Router {
     }
 
     if (body.type === 'interaction_request' && body.id && body.payload) {
-      const event: WSEvent = {
-        type: 'interaction_request',
-        id: body.id,
-        payload: body.payload
+      const event = projectAndSetSessionInteraction(
+        id,
+        { id: body.id, payload: body.payload },
+        createPublicProjectionContext()
+      )
+      if (event == null) {
+        throw badRequest(
+          'Invalid interaction request payload',
+          undefined,
+          'invalid_interaction_request'
+        )
       }
-      setSessionInteraction(id, { id: body.id, payload: body.payload })
       applySessionEvent(id, event, {
         broadcast: (ev) => broadcastSessionEvent(id, ev),
         onSessionUpdated
@@ -848,9 +967,23 @@ export function sessionsRouter(): Router {
     }
 
     if (body.type === 'adapter_event' && body.data != null) {
+      const data = sanitizePublicAdapterEventData(
+        body.data,
+        id,
+        db.getSessionWorkspace(id)?.workspaceFolder,
+        existing.adapter,
+        createPublicProjectionContext()
+      )
+      if (data == null) {
+        throw badRequest(
+          'Invalid adapter event payload',
+          undefined,
+          'invalid_adapter_event'
+        )
+      }
       const event: WSEvent = {
         type: 'adapter_event',
-        data: body.data
+        data
       }
       applySessionEvent(id, event, {
         broadcast: (ev) => broadcastSessionEvent(id, ev),
@@ -965,15 +1098,8 @@ export function sessionsRouter(): Router {
 
   router.post('/:id/queued-messages', (ctx) => {
     const { id } = ctx.params as { id: string }
-    const { mode, content } = ctx.request.body as {
-      mode?: SessionQueuedMessageMode
-      content?: ChatMessageContent[]
-    }
-
-    if (mode !== 'steer' && mode !== 'next') {
-      throw badRequest('Invalid queued message mode', { mode }, 'invalid_queued_message_mode')
-    }
-    if (!Array.isArray(content) || content.length === 0) {
+    const plan = parseSessionQueueCreateRequest(ctx.request.body)
+    if (plan == null) {
       throw badRequest('Queued message content cannot be empty', undefined, 'empty_queued_message_content')
     }
 
@@ -982,24 +1108,29 @@ export function sessionsRouter(): Router {
       throw notFound('Session not found', { id }, 'session_not_found')
     }
 
-    const queuedMessage = createSessionQueuedMessage(id, mode, content)
-    ctx.body = { queuedMessage, queuedMessages: listSessionQueuedMessages(id) }
+    const queuedMessage = createSessionQueuedMessage(id, plan.mode, plan.content)
+    ctx.body = {
+      queuedMessage: sanitizePublicQueuedSessionMessage(queuedMessage, id, responseContext(ctx)),
+      queuedMessages: publicQueuedMessages(id, responseContext(ctx))
+    }
   })
 
   router.patch('/:id/queued-messages/:queueId', (ctx) => {
     const { id, queueId } = ctx.params as { id: string; queueId: string }
-    const { content } = ctx.request.body as { content?: ChatMessageContent[] }
-
-    if (!Array.isArray(content) || content.length === 0) {
+    const plan = parseSessionQueueUpdateRequest(ctx.request.body)
+    if (plan == null) {
       throw badRequest('Queued message content cannot be empty', undefined, 'empty_queued_message_content')
     }
 
-    const updated = updateSessionQueuedMessage(id, queueId, content)
+    const updated = updateSessionQueuedMessage(id, queueId, plan.content)
     if (updated == null) {
       throw notFound('Queued message not found', { id, queueId }, 'queued_message_not_found')
     }
 
-    ctx.body = { queuedMessage: updated, queuedMessages: listSessionQueuedMessages(id) }
+    ctx.body = {
+      queuedMessage: sanitizePublicQueuedSessionMessage(updated, id, responseContext(ctx)),
+      queuedMessages: publicQueuedMessages(id, responseContext(ctx))
+    }
   })
 
   router.delete('/:id/queued-messages/:queueId', (ctx) => {
@@ -1008,48 +1139,41 @@ export function sessionsRouter(): Router {
     if (!removed) {
       throw notFound('Queued message not found', { id, queueId }, 'queued_message_not_found')
     }
-    ctx.body = { ok: true, queuedMessages: listSessionQueuedMessages(id) }
+    ctx.body = { ok: true, queuedMessages: publicQueuedMessages(id, responseContext(ctx)) }
   })
 
   router.post('/:id/queued-messages/:queueId/move', (ctx) => {
     const { id, queueId } = ctx.params as { id: string; queueId: string }
-    const { mode } = ctx.request.body as {
-      mode?: SessionQueuedMessageMode
+    const plan = parseSessionQueueMoveRequest(ctx.request.body)
+    if (plan == null) {
+      throw badRequest('Invalid queued message mode', undefined, 'invalid_queued_message_mode')
     }
 
-    if (mode !== 'steer' && mode !== 'next') {
-      throw badRequest('Invalid queued message mode', { mode }, 'invalid_queued_message_mode')
-    }
-
-    const moved = moveSessionQueuedMessage(id, queueId, mode)
+    const moved = moveSessionQueuedMessage(id, queueId, plan.mode)
     if (moved == null) {
       throw notFound('Queued message not found', { id, queueId }, 'queued_message_not_found')
     }
 
-    ctx.body = { queuedMessage: moved, queuedMessages: listSessionQueuedMessages(id) }
+    ctx.body = {
+      queuedMessage: sanitizePublicQueuedSessionMessage(moved, id, responseContext(ctx)),
+      queuedMessages: publicQueuedMessages(id, responseContext(ctx))
+    }
   })
 
   router.post('/:id/queued-messages/reorder', (ctx) => {
     const { id } = ctx.params as { id: string }
-    const { mode, ids } = ctx.request.body as {
-      mode?: SessionQueuedMessageMode
-      ids?: string[]
-    }
-
-    if (mode !== 'steer' && mode !== 'next') {
-      throw badRequest('Invalid queued message mode', { mode }, 'invalid_queued_message_mode')
-    }
-    if (!Array.isArray(ids) || ids.some(item => typeof item !== 'string' || item.trim() === '')) {
-      throw badRequest('Invalid queued message order', { ids }, 'invalid_queued_message_order')
+    const plan = parseSessionQueueReorderRequest(ctx.request.body)
+    if (plan == null) {
+      throw badRequest('Invalid queued message order', undefined, 'invalid_queued_message_order')
     }
 
     try {
-      reorderSessionQueuedMessages(id, mode, ids)
+      reorderSessionQueuedMessages(id, plan.mode, plan.ids)
     } catch (error) {
-      throw badRequest('Invalid queued message order', { ids }, 'invalid_queued_message_order')
+      throw badRequest('Invalid queued message order', undefined, 'invalid_queued_message_order')
     }
 
-    ctx.body = { queuedMessages: listSessionQueuedMessages(id) }
+    ctx.body = { queuedMessages: publicQueuedMessages(id, responseContext(ctx)) }
   })
 
   router.post('/:id/messages/:messageId/branch', async (ctx) => {
@@ -1096,7 +1220,10 @@ export function sessionsRouter(): Router {
       })
     }
 
-    ctx.body = { session: db.getSession(branchResult.session.id) ?? branchResult.session }
+    const branchedSession = db.getSession(branchResult.session.id) ?? branchResult.session
+    ctx.body = {
+      session: publicSession(branchedSession, branchResult.session.id, responseContext(ctx))
+    }
   })
 
   router.post('/:id/fork', async (ctx) => {
@@ -1164,7 +1291,9 @@ export function sessionsRouter(): Router {
 
     notifySessionUpdated(newSession.id, newSession)
 
-    ctx.body = { session: newSession }
+    ctx.body = {
+      session: publicSession(newSession, newSession.id, responseContext(ctx))
+    }
   })
 
   router.all('/:id', (ctx) => {

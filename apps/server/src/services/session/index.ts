@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readFile } from 'node:fs/promises'
+import { mkdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { env as processEnv } from 'node:process'
 
@@ -13,8 +13,28 @@ import type {
   SessionPermissionMode,
   WSEvent
 } from '@oneworks/core'
-import { DEFAULT_SUPPORTED_PROTOCOL_RANGE, getCurrentProtocolVersion } from '@oneworks/runtime-protocol'
-import type { RuntimeCommand, RuntimeEvent } from '@oneworks/runtime-protocol'
+import {
+  CODEX_PROJECT_CONFIG_INVALID_ERROR_CODE,
+  CODEX_PROJECT_CONFIG_RELATIVE_PATH,
+  CodexProjectConfigInvalidDetailsSchema,
+  DEFAULT_SUPPORTED_PROTOCOL_RANGE,
+  getCurrentProtocolVersion,
+  hasRuntimeActivationPayload,
+  isRuntimeActivationCommand
+} from '@oneworks/runtime-protocol'
+import type {
+  CodexProjectConfigInvalidDetails,
+  RuntimeCommand,
+  RuntimeEvent,
+  RuntimeRecoveryContext
+} from '@oneworks/runtime-protocol'
+import {
+  FileRuntimeSessionStore,
+  buildProjectConfigRecoveryIdempotencyKey,
+  isAuthenticProjectConfigRecovery,
+  projectConfigRecoveryPayloadDigest,
+  projectConfigRecoveryGrantRecordsFromEvents
+} from '@oneworks/runtime-store'
 import type {
   AdapterErrorData,
   AdapterOperationData,
@@ -47,7 +67,10 @@ import {
   writeChannelMessageContext
 } from '#~/services/session/channel-context.js'
 import { buildChatMarkdownSystemPrompt } from '#~/services/session/chat-markdown-prompt.js'
-import { applySessionEvent } from '#~/services/session/events.js'
+import {
+  applySessionEvent,
+  sanitizePublicSessionEvent
+} from '#~/services/session/events.js'
 import {
   canRequestInteraction,
   requestInteraction,
@@ -434,11 +457,14 @@ const resolvePermissionInteractionDecision = (
 }
 
 const emitSessionError = (sessionId: string, data: AdapterErrorData) => {
-  const event: WSEvent = {
+  const session = getDb().getSession(sessionId)
+  if (session == null) return
+  const event = sanitizePublicSessionEvent({
     type: 'error',
     data,
     message: data.message
-  }
+  }, sessionId, getDb().getSessionWorkspace(sessionId)?.workspaceFolder, session.adapter)
+  if (event == null) return
 
   applySessionEvent(sessionId, event, {
     broadcast: (ev) => broadcastSessionEvent(sessionId, ev),
@@ -804,7 +830,11 @@ export async function startAdapterSession(
       }
 
       applySessionEvent(sessionId, wsEvent, {
-        broadcast: (ev) => emitRuntimeEvent(connectionState, ev),
+        broadcast: (ev) => emitRuntimeEvent(
+          connectionState,
+          ev,
+          { expectedSessionId: sessionId }
+        ),
         onSessionUpdated: (session) => {
           notifySessionUpdated(sessionId, session)
         }
@@ -952,17 +982,25 @@ export async function startAdapterSession(
 
           const broadcast = (ev: WSEvent) => {
             serverLogger.info({ event: 'broadcast', data: ev }, 'Broadcasting event')
-            emitRuntimeEvent(connectionState, ev)
+            emitRuntimeEvent(connectionState, ev, { expectedSessionId: sessionId })
           }
 
           const applyEvent = (ev: WSEvent) => {
-            applySessionEvent(sessionId, ev, {
+            const activeSession = getDb().getSession(sessionId)
+            const publicEvent = activeSession == null ? undefined : sanitizePublicSessionEvent(
+              ev,
+              sessionId,
+              getDb().getSessionWorkspace(sessionId)?.workspaceFolder,
+              activeSession.adapter
+            )
+            if (publicEvent == null) return
+            applySessionEvent(sessionId, publicEvent, {
               broadcast,
               onSessionUpdated: (session) => {
                 notifySessionUpdated(sessionId, session)
               }
             })
-            forwardSessionEventToChannel(sessionId, ev)
+            forwardSessionEventToChannel(sessionId, publicEvent)
           }
 
           switch (event.type) {
@@ -1352,7 +1390,10 @@ export async function startAdapterSession(
                   },
                   message: errorMessage
                 }
-                emitRuntimeEvent(connectionState, errorEvent, { recordMessage: false })
+                emitRuntimeEvent(connectionState, errorEvent, {
+                  expectedSessionId: sessionId,
+                  recordMessage: false
+                })
                 forwardSessionEventToChannel(sessionId, errorEvent)
               }
 
@@ -1526,6 +1567,44 @@ const buildExternalRuntimeSessionStopCommand = (sessionId: string): RuntimeComma
     mode: 'kill'
   }) satisfies RuntimeCommand
 
+const buildExternalRuntimeProjectConfigRetryCommand = (
+  sessionId: string,
+  recovery: RuntimeRecoveryContext | undefined,
+  failedAttempt: RuntimeCommand,
+  authority: {
+    adapter: string
+    runtimeCommandId?: string
+  }
+): RuntimeCommand => ({
+  protocolVersion: getCurrentProtocolVersion(),
+  supportedProtocolRange: DEFAULT_SUPPORTED_PROTOCOL_RANGE,
+  id: authority.runtimeCommandId ?? `cmd_resume_${uuidv4()}`,
+  ts: Date.now(),
+  sessionId,
+  type: 'resume',
+  priority: 20,
+  // This source is part of the durable recovery authorization contract.  The
+  // bridge will not suppress an original activation for a caller-authored
+  // `resume` that merely carries recovery-shaped fields.
+  source: 'project_config_recovery',
+  commandId: `session-project-config-retry-${uuidv4()}`,
+  ...(failedAttempt.content != null ? { content: failedAttempt.content } : {}),
+  adapter: authority.adapter,
+  ...(failedAttempt.message != null ? { message: failedAttempt.message } : {}),
+  ...(failedAttempt.contentItems != null
+    ? { contentItems: structuredClone(failedAttempt.contentItems) }
+    : {}),
+  ...(failedAttempt.runtimeMessage != null
+    ? { runtimeMessage: failedAttempt.runtimeMessage }
+    : {}),
+  ...(failedAttempt.runtimeContentItems != null
+    ? { runtimeContentItems: structuredClone(failedAttempt.runtimeContentItems) }
+    : {}),
+  messageDelivery: 'bridge',
+  projectConfigPolicy: 'global-only',
+  ...(recovery != null ? { recovery } : {})
+})
+
 const buildExternalRuntimeUserMessageEvent = (
   command: RuntimeCommand,
   content: string | ChatMessageContent[]
@@ -1570,8 +1649,350 @@ const appendExternalRuntimeSessionMessageCommand = async (
     return false
   }
 
-  await appendFile(store.commandsPath, `${JSON.stringify(command)}\n`, 'utf8')
+  await new FileRuntimeSessionStore(store.storePath, sessionId).appendCommand(command)
   return true
+}
+
+interface CurrentProjectConfigFailure {
+  attemptCommand: RuntimeCommand
+  attemptCommandId: string
+  details: CodexProjectConfigInvalidDetails
+  failureEventId: string
+  failureEventSeq: number
+}
+
+const TERMINAL_RUNTIME_EVENT_TYPES = new Set([
+  'session_failed',
+  'session_completed',
+  'session_stopped'
+])
+
+const ATTEMPT_RUNTIME_EVENT_TYPES = new Set([
+  'session_started',
+  'session_resumed'
+])
+
+const readCurrentProjectConfigFailure = async (params: {
+  adapter: string
+  commands: RuntimeCommand[]
+  events: RuntimeEvent[]
+  sessionId: string
+  workspaceFolder: string
+}): Promise<CurrentProjectConfigFailure | undefined> => {
+  const { commands, events } = params
+  const latestTerminalEvent = events.findLast(event => TERMINAL_RUNTIME_EVENT_TYPES.has(event.type))
+  if (
+    latestTerminalEvent?.type !== 'session_failed' ||
+    typeof latestTerminalEvent.seq !== 'number' ||
+    !Number.isInteger(latestTerminalEvent.seq) ||
+    latestTerminalEvent.seq < 0 ||
+    latestTerminalEvent.fatal !== true ||
+    latestTerminalEvent.code !== CODEX_PROJECT_CONFIG_INVALID_ERROR_CODE
+  ) {
+    return undefined
+  }
+
+  const attemptCommandId = latestTerminalEvent.causedByCommandId
+  if (typeof attemptCommandId !== 'string' || attemptCommandId.trim() === '') {
+    return undefined
+  }
+  const attemptCommandIndex = commands.findIndex(command =>
+    command.id === attemptCommandId &&
+    command.sessionId === params.sessionId &&
+    isRuntimeActivationCommand(command)
+  )
+  if (attemptCommandIndex < 0) {
+    return undefined
+  }
+  const attemptCommand = commands[attemptCommandIndex]!
+  if (!hasRuntimeActivationPayload(attemptCommand)) {
+    return undefined
+  }
+
+  const parsedDetails = CodexProjectConfigInvalidDetailsSchema.safeParse(latestTerminalEvent.details)
+  if (!parsedDetails.success) {
+    return undefined
+  }
+  const details = parsedDetails.data
+  if (
+    latestTerminalEvent.sessionId !== params.sessionId ||
+    details.sessionId !== params.sessionId ||
+    details.adapter !== params.adapter ||
+    details.runtimeAdapter !== 'codex' ||
+    details.configSource !== 'project' ||
+    details.configPath !== CODEX_PROJECT_CONFIG_RELATIVE_PATH ||
+    details.workspaceSource !== 'active-session-workspace' ||
+    details.workspaceFolder !== path.resolve(params.workspaceFolder)
+  ) {
+    return undefined
+  }
+
+  const supersededByEvent = events.some(event =>
+    event.seq > latestTerminalEvent.seq &&
+    (
+      ATTEMPT_RUNTIME_EVENT_TYPES.has(event.type) ||
+      (event.type === 'status_changed' && event.status === 'running')
+    )
+  )
+  const supersededByCommand = commands.slice(attemptCommandIndex + 1).some(command =>
+    command.sessionId === params.sessionId &&
+    isRuntimeActivationCommand(command) &&
+    command.recovery == null
+  )
+  if (supersededByEvent || supersededByCommand) {
+    return undefined
+  }
+
+  return {
+    attemptCommand,
+    attemptCommandId,
+    details,
+    failureEventId: latestTerminalEvent.id,
+    failureEventSeq: latestTerminalEvent.seq
+  }
+}
+
+const buildProjectConfigRecoveryContext = (
+  sessionId: string,
+  failure: CurrentProjectConfigFailure
+): Omit<
+  RuntimeRecoveryContext,
+  'grantEventId' | 'grantEventSeq' | 'grantAuthorizationId' | 'grantCommandIndex'
+> => ({
+  kind: 'codex-project-config',
+  attemptCommandId: failure.attemptCommandId,
+  replacedActivationCommandId: failure.attemptCommandId,
+  failureEventId: failure.failureEventId,
+  failureEventSeq: failure.failureEventSeq,
+  idempotencyKey: buildProjectConfigRecoveryIdempotencyKey(
+    sessionId,
+    failure.attemptCommandId,
+    failure.failureEventId,
+    failure.failureEventSeq
+  )
+})
+
+const resolveExternalRuntimeProjectConfigStore = async (sessionId: string) => {
+  const workspace = await resolveSessionWorkspace(sessionId).catch(() => undefined)
+  if (workspace?.workspaceFolder == null) {
+    return undefined
+  }
+
+  const env = createWorkspaceRuntimeEnv(workspace.workspaceFolder, processEnv)
+  await migrateRuntimeRoots({ cwd: workspace.workspaceFolder, env })
+  const runtimeRoot = resolveSessionRuntimeStoreRoot(workspace.workspaceFolder, env)
+  const stores = await discoverRuntimeSessionStores([runtimeRoot])
+  const store = stores.find(item => item.sessionId === sessionId)
+  if (store == null) {
+    return undefined
+  }
+
+  return {
+    runtimeRoot,
+    store,
+    workspaceFolder: workspace.workspaceFolder
+  }
+}
+
+export async function resolveExternalRuntimeProjectConfigFailure(sessionId: string) {
+  const session = getDb().getSession(sessionId)
+  if (session?.adapter == null || session.status !== 'failed') {
+    return { available: false as const, reason: 'current_failure_ineligible' as const }
+  }
+  const resolved = await resolveExternalRuntimeProjectConfigStore(sessionId)
+  if (resolved == null) {
+    return { available: false as const, reason: 'runtime_store_missing' as const }
+  }
+
+  const runtimeSession = new FileRuntimeSessionStore(resolved.store.storePath, sessionId)
+  const snapshot = await runtimeSession.acquireCommandEventSnapshot('project-config-recovery-read')
+  try {
+    const lockedSession = getDb().getSession(sessionId)
+    if (lockedSession?.adapter == null || lockedSession.status !== 'failed') {
+      return { available: false as const, reason: 'current_failure_ineligible' as const }
+    }
+    const lockedWorkspace = await resolveSessionWorkspace(sessionId).catch(() => undefined)
+    if (
+      lockedWorkspace?.workspaceFolder == null ||
+      path.resolve(lockedWorkspace.workspaceFolder) !== path.resolve(resolved.workspaceFolder)
+    ) {
+      return { available: false as const, reason: 'current_failure_ineligible' as const }
+    }
+    const [commands, events] = await Promise.all([
+      runtimeSession.readCommands(),
+      runtimeSession.replayEvents()
+    ])
+    const failure = await readCurrentProjectConfigFailure({
+      adapter: lockedSession.adapter,
+      commands,
+      events,
+      sessionId,
+      workspaceFolder: resolved.workspaceFolder
+    })
+    if (failure == null) {
+      return { available: false as const, reason: 'current_failure_ineligible' as const }
+    }
+    return {
+      available: true as const,
+      attemptCommandId: failure.attemptCommandId,
+      details: failure.details,
+      failureEventId: failure.failureEventId,
+      failureEventSeq: failure.failureEventSeq,
+      workspaceFolder: resolved.workspaceFolder
+    }
+  } finally {
+    await snapshot.release()
+  }
+}
+
+export async function retryExternalRuntimeSessionProjectConfig(sessionId: string) {
+  const session = getDb().getSession(sessionId)
+  if (session?.adapter == null || session.status !== 'failed') {
+    return { queued: false, reason: 'current_failure_ineligible' as const }
+  }
+  const resolved = await resolveExternalRuntimeProjectConfigStore(sessionId)
+  if (resolved == null) {
+    return { queued: false, reason: 'runtime_store_missing' as const }
+  }
+  await watchRuntimeStoreRoot(resolved.runtimeRoot)
+
+  const runtimeSession = new FileRuntimeSessionStore(resolved.store.storePath, sessionId)
+  const snapshot = await runtimeSession.acquireCommandEventSnapshot('project-config-recovery')
+  try {
+    const lockedSession = getDb().getSession(sessionId)
+    if (lockedSession?.adapter == null) {
+      return { queued: false, reason: 'current_failure_ineligible' as const }
+    }
+    const lockedWorkspace = await resolveSessionWorkspace(sessionId).catch(() => undefined)
+    if (
+      lockedWorkspace?.workspaceFolder == null ||
+      path.resolve(lockedWorkspace.workspaceFolder) !== path.resolve(resolved.workspaceFolder)
+    ) {
+      return { queued: false, reason: 'current_failure_ineligible' as const }
+    }
+    const [commands, events] = await Promise.all([
+      runtimeSession.readCommands(),
+      runtimeSession.replayEvents()
+    ])
+    const failure = await readCurrentProjectConfigFailure({
+      adapter: lockedSession.adapter,
+      commands,
+      events,
+      sessionId,
+      workspaceFolder: resolved.workspaceFolder
+    })
+    if (failure == null) {
+      return { queued: false, reason: 'current_failure_ineligible' as const }
+    }
+
+    const recoverySeed = buildProjectConfigRecoveryContext(sessionId, failure)
+    const existing = commands.find(command =>
+      command.recovery?.idempotencyKey === recoverySeed.idempotencyKey &&
+      isAuthenticProjectConfigRecovery(command, commands, events, {
+        sessionId,
+        workspaceFolder: path.resolve(resolved.workspaceFolder),
+        adapter: lockedSession.adapter,
+        runtimeAdapter: 'codex'
+      })
+    )
+    if (existing != null) {
+      return {
+        queued: false,
+        reason: 'already_queued' as const,
+        commandId: existing.id,
+        failureEventId: failure.failureEventId,
+        failureEventSeq: failure.failureEventSeq
+      }
+    }
+    if (lockedSession.status !== 'failed') {
+      return { queued: false, reason: 'current_failure_ineligible' as const }
+    }
+
+    const provisionalCommand = buildExternalRuntimeProjectConfigRetryCommand(
+      sessionId,
+      undefined,
+      failure.attemptCommand,
+      { adapter: lockedSession.adapter }
+    )
+    const payloadDigest = projectConfigRecoveryPayloadDigest(provisionalCommand)
+    if (payloadDigest == null) {
+      return { queued: false, reason: 'current_failure_ineligible' as const }
+    }
+    const reusableGrantRecord = projectConfigRecoveryGrantRecordsFromEvents(events).find(record =>
+      record.grant.idempotencyKey === recoverySeed.idempotencyKey &&
+      record.grant.sessionId === sessionId &&
+      record.grant.attemptCommandId === failure.attemptCommandId &&
+      record.grant.failureEventId === failure.failureEventId &&
+      record.grant.failureEventSeq === failure.failureEventSeq &&
+      record.grant.payloadDigest === payloadDigest &&
+      record.grant.workspaceFolder === path.resolve(resolved.workspaceFolder) &&
+      record.grant.adapter === lockedSession.adapter &&
+      record.grant.runtimeAdapter === 'codex' &&
+      record.grant.commandIndex === commands.length &&
+      !commands.some(command => command.id === record.grant.recoveryCommandId)
+    )
+    await snapshot.assertOwned()
+    const grant = reusableGrantRecord?.grant ?? {
+      schemaVersion: 1,
+      type: 'project_config_recovery_grant' as const,
+      recoveryCommandId: provisionalCommand.id,
+      idempotencyKey: recoverySeed.idempotencyKey,
+      sessionId,
+      attemptCommandId: failure.attemptCommandId,
+      failureEventId: failure.failureEventId,
+      failureEventSeq: failure.failureEventSeq,
+      payloadDigest,
+      authorizationId: uuidv4(),
+      commandIndex: commands.length,
+      workspaceFolder: path.resolve(resolved.workspaceFolder),
+      adapter: lockedSession.adapter,
+      runtimeAdapter: 'codex'
+    }
+    const eventLock = snapshot.getLock(runtimeSession.getLockPath('events.append'))
+    if (eventLock == null) {
+      throw new Error('Recovery transaction is missing its events append lock.')
+    }
+    const grantEvent = reusableGrantRecord ?? await runtimeSession.appendEventAlreadyLocked({
+      protocolVersion: getCurrentProtocolVersion(),
+      ts: Date.now(),
+      type: 'project_config_recovery_granted',
+      source: 'server:project-config-recovery',
+      recoveryGrant: grant
+    }, eventLock).then(event => ({
+      eventId: event.id,
+      eventSeq: event.seq,
+      grant
+    }))
+    const recovery: RuntimeRecoveryContext = {
+      ...recoverySeed,
+      grantEventId: grantEvent.eventId,
+      grantEventSeq: grantEvent.eventSeq,
+      grantAuthorizationId: grant.authorizationId,
+      grantCommandIndex: grant.commandIndex
+    }
+    const command = buildExternalRuntimeProjectConfigRetryCommand(
+      sessionId,
+      recovery,
+      failure.attemptCommand,
+      {
+        adapter: lockedSession.adapter,
+        runtimeCommandId: grant.recoveryCommandId
+      }
+    )
+    const commandLock = snapshot.getLock(runtimeSession.getLockPath('commands.append'))
+    if (commandLock == null) {
+      throw new Error('Recovery transaction is missing its commands append lock.')
+    }
+    await runtimeSession.appendCommandAlreadyLocked(command, commandLock)
+    return {
+      queued: true as const,
+      commandId: command.id,
+      failureEventId: failure.failureEventId,
+      failureEventSeq: failure.failureEventSeq
+    }
+  } finally {
+    await snapshot.release()
+  }
 }
 
 export async function processUserMessage(

@@ -59,10 +59,17 @@ export interface RuntimeEvent extends Record<string, unknown> {
   source?: string
   sourceLabel?: string
   error?: string
+  code?: string
+  details?: unknown
   message?: string
   fatal?: boolean
   adapter?: string
   model?: string
+  artifactId?: string
+  path?: string
+  mimeType?: string
+  deliveryId?: string
+  deliveryState?: 'prepared' | 'accepted' | 'completed'
   operationId?: string
   roomId?: string
   roomTitle?: string

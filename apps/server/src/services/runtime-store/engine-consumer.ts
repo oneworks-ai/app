@@ -7,7 +7,13 @@ import { createRequire } from 'node:module'
 import path from 'node:path'
 import process from 'node:process'
 
-import type { RuntimeCommand, RuntimeHeartbeat } from '@oneworks/runtime-protocol'
+import {
+  RuntimeCommandSchema,
+  RuntimeHeartbeatSchema,
+  hasRuntimeActivationPayload,
+  isRuntimeActivationCommand
+} from '@oneworks/runtime-protocol'
+import type { RuntimeCommand, RuntimeHeartbeat, RuntimeProjectConfigPolicy } from '@oneworks/runtime-protocol'
 import { resolveAdapterPackageName, resolveExistingAdapterPackageCacheDir } from '@oneworks/types'
 import { resolveProjectOoBaseDir } from '@oneworks/utils'
 
@@ -101,9 +107,11 @@ export interface RuntimeConsumerStartCommand {
   fastMode?: boolean
   entity?: string
   messageDelivery?: string
+  hasActivationPayload?: boolean
   message?: string
   model?: string
   permissionMode?: string
+  projectConfigPolicy?: RuntimeProjectConfigPolicy
   promptName?: string
   promptType?: string
   systemPrompt?: string
@@ -122,6 +130,7 @@ export interface RuntimeConsumerQueuedCommand {
   message?: string
   model?: string
   permissionMode?: string
+  projectConfigPolicy?: RuntimeProjectConfigPolicy
   promptName?: string
   promptType?: string
   systemPrompt?: string
@@ -148,6 +157,10 @@ const readString = (value: unknown) => (
 )
 
 const readBoolean = (value: unknown) => typeof value === 'boolean' ? value : undefined
+
+const readProjectConfigPolicy = (value: unknown): RuntimeProjectConfigPolicy | undefined => (
+  value === 'include' || value === 'global-only' ? value : undefined
+)
 
 const errorMessage = (error: unknown) => (
   error instanceof Error ? error.message : String(error)
@@ -262,8 +275,10 @@ const readRuntimeConsumerCommandFields = (command: RuntimeCommand): RuntimeConsu
   entity: readString(command.entity),
   message: readString(command.content) ?? readString(command.message),
   messageDelivery: readString(command.messageDelivery),
+  hasActivationPayload: hasRuntimeActivationPayload(command),
   model: readString(command.model),
   permissionMode: readString(command.permissionMode),
+  projectConfigPolicy: readProjectConfigPolicy(command.projectConfigPolicy),
   ...(readString(command.name) != null ? { promptName: readString(command.name) } : {}),
   ...(readString(command.taskType) != null ? { promptType: readString(command.taskType) } : {}),
   ...(readString(command.systemPrompt) != null ? { systemPrompt: readString(command.systemPrompt) } : {}),
@@ -300,12 +315,12 @@ export async function readRuntimeConsumerStartCommand(
       continue
     }
 
-    if (!isRecord(parsed) || parsed.type !== 'start') {
+    const parsedCommand = RuntimeCommandSchema.safeParse(parsed)
+    if (!parsedCommand.success || parsedCommand.data.type !== 'start') {
       continue
     }
 
-    const command = parsed as RuntimeCommand
-    return readRuntimeConsumerCommandFields(command)
+    return readRuntimeConsumerCommandFields(parsedCommand.data)
   }
 
   return undefined
@@ -338,12 +353,14 @@ export async function readLatestRuntimeConsumerQueuedCommand(
       continue
     }
 
-    if (!isRecord(parsed) || typeof parsed.type !== 'string' || parsed.type === 'start') {
+    const parsedCommand = RuntimeCommandSchema.safeParse(parsed)
+    if (!parsedCommand.success || parsedCommand.data.type === 'start') {
       continue
     }
 
-    const command = parsed as RuntimeCommand
-    const candidate = readRuntimeConsumerCommandFields(command) as RuntimeConsumerQueuedCommand
+    const candidate = readRuntimeConsumerCommandFields(
+      parsedCommand.data
+    ) as RuntimeConsumerQueuedCommand
     if (latest == null || (candidate.ts ?? 0) >= (latest.ts ?? 0)) {
       latest = candidate
     }
@@ -357,10 +374,8 @@ export async function readRuntimeConsumerHeartbeat(
 ): Promise<RuntimeHeartbeat | undefined> {
   try {
     const parsed = JSON.parse(await readFile(path.join(store.storePath, 'heartbeat.json'), 'utf8')) as unknown
-    if (!isRecord(parsed)) {
-      return undefined
-    }
-    return parsed as RuntimeHeartbeat
+    const heartbeat = RuntimeHeartbeatSchema.safeParse(parsed)
+    return heartbeat.success ? heartbeat.data as RuntimeHeartbeat : undefined
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       return undefined
@@ -599,10 +614,11 @@ const getLatestTerminalUpdatedAt = (
   )
 
 const isMessageCommand = (command: RuntimeConsumerStartCommand | undefined) =>
-  command?.type === 'resume' || command?.type === 'send_message'
+  command != null && isRuntimeActivationCommand(command) && command.type !== 'start'
 
 const isBridgeDeliveredCommand = (command: RuntimeConsumerStartCommand) =>
-  command.messageDelivery === 'bridge' || command.type === 'resume' || command.type === 'send_message'
+  command.messageDelivery === 'bridge' ||
+  (isRuntimeActivationCommand(command) && command.type !== 'start')
 
 const writeRuntimeConsumerStartFailure = async (params: {
   error: unknown
@@ -703,8 +719,8 @@ export function buildRuntimeConsumerSpawnPlan(params: {
   const promptName = params.command.promptName ?? readString(params.metadata.promptName)
   const message = params.command.message
   const launchMode = params.launchMode ?? 'create'
-  const shouldPassInitialPrompt = !isBridgeDeliveredCommand(params.command)
-  if (shouldPassInitialPrompt && message == null) {
+  const shouldPassInitialPrompt = !isBridgeDeliveredCommand(params.command) && message != null
+  if (params.command.hasActivationPayload === true && message == null && !isBridgeDeliveredCommand(params.command)) {
     throw new Error(`Runtime session ${sessionId} is missing a start message.`)
   }
 
@@ -760,6 +776,11 @@ export function buildRuntimeConsumerSpawnPlan(params: {
     args,
     '--permission-mode',
     params.command.permissionMode ?? readString(params.metadata.permissionMode)
+  )
+  pushOption(
+    args,
+    '--project-config-policy',
+    params.command.projectConfigPolicy
   )
   if (shouldPassInitialPrompt && message != null) {
     args.push(message)
@@ -831,6 +852,16 @@ export async function startServerRuntimeConsumer(params: {
   const launchMode = shouldResumeTerminalSession ? 'resume' : 'create'
   if (activationCommand == null) {
     return undefined
+  }
+
+  const authoritativeSystemPrompt =
+    readString(params.metadata.systemPrompt) ?? startCommand?.systemPrompt
+  if (authoritativeSystemPrompt != null) {
+    await writeFile(
+      path.join(params.store.storePath, RUNTIME_SYSTEM_PROMPT_FILENAME),
+      authoritativeSystemPrompt,
+      'utf8'
+    )
   }
 
   let plan: RuntimeConsumerSpawnPlan

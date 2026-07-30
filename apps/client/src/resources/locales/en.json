@@ -1992,6 +1992,17 @@
     "sessionStopRequestedMessage": "Session stop requested",
     "sessionStopFailedMessage": "Failed to stop session",
     "sessionErrorCode": "Error code: {{code}}",
+    "projectConfigRecovery": {
+      "openConfig": "Open project config",
+      "openFailed": "Could not open the failing project config",
+      "retryGlobal": "Retry with global config",
+      "help": "The active workspace Codex project config is invalid. Open the exact failing location to fix it, or use the complete global config for this recovery attempt only.",
+      "confirmTitle": "Retry with the global Codex config?",
+      "confirmDescription": "This retry ignores the current project's Codex config and reads the complete global Codex config. It does not modify either file.",
+      "queued": "Retry queued with the global config",
+      "alreadyQueued": "The same recovery retry is already queued",
+      "retryFailed": "Could not retry with the global config"
+    },
     "retryConnection": "Retry",
     "retrySessionCreation": "Retry creating session",
     "retrySessionCreationRequired": "Use the retry button in the error notice first.",

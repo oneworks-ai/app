@@ -1,13 +1,31 @@
 /* eslint-disable max-lines -- session service coverage is intentionally consolidated. */
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { RuntimeCommand } from '@oneworks/runtime-protocol'
+import {
+  FileRuntimeSessionStore,
+  acquireLockFile,
+  buildProjectConfigRecoveryIdempotencyKey,
+  isAuthenticProjectConfigRecovery,
+  projectConfigRecoveryPayloadDigest
+} from '@oneworks/runtime-store'
+
+import { attachRuntimeCommandBridge } from '../../../cli/src/commands/run/runtime-command-bridge.js'
+import { createRuntimeEventSink } from '../../../cli/src/commands/run/runtime-event-sink.js'
 import { getDb } from '#~/db/index.js'
 import { resolveSessionRuntimeStoreRoot } from '#~/services/runtime-store/session-control.js'
-import { killSession, processUserMessage, requestSessionTermination } from '#~/services/session/index.js'
+import { applySessionEvent } from '#~/services/session/events.js'
+import {
+  killSession,
+  processUserMessage,
+  requestSessionTermination,
+  resolveExternalRuntimeProjectConfigFailure,
+  retryExternalRuntimeSessionProjectConfig
+} from '#~/services/session/index.js'
 import { maybeNotifySession } from '#~/services/session/notification.js'
 import {
   adapterSessionStore,
@@ -187,6 +205,34 @@ describe('session service', () => {
       type: 'message',
       content: [{ type: 'text', text: 'hello world' }],
       parentUuid: 'assistant-1'
+    })
+  })
+
+  it('drops arbitrary error details at the shared persistence and broadcast boundary', () => {
+    const sentinel = 'SENTINEL_SESSION_EVENT_SECRET'
+    const broadcast = vi.fn()
+
+    applySessionEvent('sess-1', {
+      type: 'error',
+      data: {
+        code: 'future_session_error',
+        details: { privateToken: sentinel },
+        fatal: true,
+        message: 'Future session failure'
+      },
+      message: 'Future session failure'
+    }, { broadcast })
+
+    expect(JSON.stringify(saveMessage.mock.calls)).not.toContain(sentinel)
+    expect(JSON.stringify(broadcast.mock.calls)).not.toContain(sentinel)
+    expect(saveMessage).toHaveBeenCalledWith('sess-1', {
+      type: 'error',
+      data: {
+        code: 'future_session_error',
+        fatal: true,
+        message: 'Future session failure'
+      },
+      message: 'Future session failure'
     })
   })
 
@@ -393,6 +439,393 @@ describe('session service', () => {
       permissionMode: 'bypassPermissions'
     }))
   })
+
+  it('reuses a grant-only crash and stores the locked final adapter exactly once', async () => {
+    const runtimeAiBaseDir = await mkdtemp(path.join(os.tmpdir(), 'ow-session-runtime-project-config-'))
+    tempRuntimeRoot = runtimeAiBaseDir
+    const runtimeRoot = path.join(runtimeAiBaseDir, 'runtime')
+    process.env.__ONEWORKS_PROJECT_BASE_DIR__ = runtimeAiBaseDir
+    process.env.__ONEWORKS_PROJECT_HOME_PROJECTS_DIR__ = path.join(runtimeAiBaseDir, 'home-projects')
+    const sessionStore = path.join(runtimeRoot, 'sessions', 'sess-1')
+    await mkdir(sessionStore, { recursive: true })
+    await writeFile(path.join(sessionStore, 'commands.jsonl'), `${JSON.stringify({
+      protocolVersion: '1.0.0',
+      id: 'cmd-start-attempt',
+      ts: 90,
+      sessionId: 'sess-1',
+      type: 'start',
+      priority: 20,
+      source: 'test',
+      content: 'visible recovery prompt',
+      message: 'visible recovery prompt',
+      contentItems: [
+        { type: 'file', path: '/workspace/root/context.md' }
+      ],
+      runtimeContentItems: [
+        { type: 'text', text: 'exact runtime recovery prompt' },
+        { type: 'file', path: '/workspace/root/context.md' }
+      ]
+    })}\n`, 'utf8')
+    const recoveryIdempotencyKey = buildProjectConfigRecoveryIdempotencyKey(
+      'sess-1',
+      'cmd-start-attempt',
+      'evt-current-project-config-failure',
+      7
+    )
+    const crashedRecoveryCommand: RuntimeCommand = {
+      protocolVersion: '1.0.0',
+      id: 'cmd-recovery-after-grant-crash',
+      ts: 101,
+      sessionId: 'sess-1',
+      type: 'resume',
+      priority: 20,
+      source: 'project_config_recovery',
+      adapter: 'custom-codex',
+      content: 'visible recovery prompt',
+      message: 'visible recovery prompt',
+      contentItems: [{ type: 'file', path: '/workspace/root/context.md' }],
+      runtimeContentItems: [
+        { type: 'text', text: 'exact runtime recovery prompt' },
+        { type: 'file', path: '/workspace/root/context.md' }
+      ],
+      messageDelivery: 'bridge',
+      projectConfigPolicy: 'global-only',
+      recovery: {
+        kind: 'codex-project-config',
+        attemptCommandId: 'cmd-start-attempt',
+        replacedActivationCommandId: 'cmd-start-attempt',
+        failureEventId: 'evt-current-project-config-failure',
+        failureEventSeq: 7,
+        grantEventId: 'evt-recovery-grant',
+        grantEventSeq: 8,
+        grantAuthorizationId: '11111111-1111-4111-8111-111111111111',
+        grantCommandIndex: 1,
+        idempotencyKey: recoveryIdempotencyKey
+      }
+    }
+    const failureEvent = {
+      protocolVersion: '1.0.0',
+      id: 'evt-current-project-config-failure',
+      seq: 7,
+      ts: 100,
+      sessionId: 'sess-1',
+      type: 'session_failed',
+      causedByCommandId: 'cmd-start-attempt',
+      fatal: true,
+      code: 'codex_project_config_invalid',
+      details: {
+        adapter: 'custom-codex',
+        runtimeAdapter: 'codex',
+        configSource: 'project',
+        configPath: '.codex/config.toml',
+        workspaceSource: 'active-session-workspace',
+        workspaceFolder: '/workspace/root',
+        sessionId: 'sess-1',
+        reason: 'wire_api is unsupported',
+        line: 2,
+        column: 1
+      }
+    }
+    const grantOnlyCrashEvent = {
+      protocolVersion: '1.0.0',
+      id: 'evt-recovery-grant',
+      seq: 8,
+      ts: 101,
+      sessionId: 'sess-1',
+      type: 'project_config_recovery_granted',
+      source: 'server:project-config-recovery',
+      recoveryGrant: {
+        schemaVersion: 1,
+        type: 'project_config_recovery_grant',
+        authorizationId: '11111111-1111-4111-8111-111111111111',
+        commandIndex: 1,
+        recoveryCommandId: crashedRecoveryCommand.id,
+        idempotencyKey: recoveryIdempotencyKey,
+        sessionId: 'sess-1',
+        attemptCommandId: 'cmd-start-attempt',
+        failureEventId: 'evt-current-project-config-failure',
+        failureEventSeq: 7,
+        payloadDigest: projectConfigRecoveryPayloadDigest(crashedRecoveryCommand)!,
+        workspaceFolder: '/workspace/root',
+        adapter: 'custom-codex',
+        runtimeAdapter: 'codex'
+      }
+    }
+    await writeFile(
+      path.join(sessionStore, 'events.jsonl'),
+      `${JSON.stringify(failureEvent)}\n${JSON.stringify(grantOnlyCrashEvent)}\n`,
+      'utf8'
+    )
+    currentSession = {
+      ...currentSession,
+      adapter: 'custom-codex',
+      status: 'failed'
+    }
+
+    const results = await Promise.all([
+      retryExternalRuntimeSessionProjectConfig('sess-1'),
+      retryExternalRuntimeSessionProjectConfig('sess-1')
+    ])
+    const migratedRuntimeRoot = resolveSessionRuntimeStoreRoot('/workspace/root')
+    const commands = (await readFile(
+      path.join(migratedRuntimeRoot, 'sessions', 'sess-1', 'commands.jsonl'),
+      'utf8'
+    ))
+      .trim()
+      .split('\n')
+      .map(line => JSON.parse(line) as Record<string, unknown>)
+
+    expect(results.filter(result => result.queued)).toHaveLength(1)
+    expect(results.filter(result => 'reason' in result && result.reason === 'already_queued')).toHaveLength(1)
+    expect(results.find(result => result.queued)?.commandId).toBe('cmd-recovery-after-grant-crash')
+    expect(commands).toEqual([
+      expect.objectContaining({
+        id: 'cmd-start-attempt',
+        type: 'start'
+      }),
+      expect.objectContaining({
+        content: 'visible recovery prompt',
+        adapter: 'custom-codex',
+        contentItems: [
+          { type: 'file', path: '/workspace/root/context.md' }
+        ],
+        message: 'visible recovery prompt',
+        messageDelivery: 'bridge',
+        projectConfigPolicy: 'global-only',
+        recovery: {
+          kind: 'codex-project-config',
+          attemptCommandId: 'cmd-start-attempt',
+          replacedActivationCommandId: 'cmd-start-attempt',
+          failureEventId: 'evt-current-project-config-failure',
+          failureEventSeq: 7,
+          grantEventId: 'evt-recovery-grant',
+          grantEventSeq: 8,
+          grantAuthorizationId: '11111111-1111-4111-8111-111111111111',
+          grantCommandIndex: 1,
+          idempotencyKey: expect.any(String)
+        },
+        sessionId: 'sess-1',
+        source: 'project_config_recovery',
+        type: 'resume',
+        runtimeContentItems: [
+          { type: 'text', text: 'exact runtime recovery prompt' },
+          { type: 'file', path: '/workspace/root/context.md' }
+        ]
+      })
+    ])
+    const runtimeSession = new FileRuntimeSessionStore(
+      path.join(migratedRuntimeRoot, 'sessions', 'sess-1'),
+      'sess-1'
+    )
+    const recoveryGrants = (await runtimeSession.replayEvents()).filter(
+      event => event.type === 'project_config_recovery_granted'
+    )
+    expect(recoveryGrants).toEqual([
+      expect.objectContaining({
+        protocolVersion: '1.0.0',
+        sessionId: 'sess-1',
+        source: 'server:project-config-recovery',
+        recoveryGrant: expect.objectContaining({
+          schemaVersion: 1,
+          type: 'project_config_recovery_grant',
+          authorizationId: '11111111-1111-4111-8111-111111111111',
+          commandIndex: 1,
+          sessionId: 'sess-1',
+          attemptCommandId: 'cmd-start-attempt',
+          failureEventId: 'evt-current-project-config-failure',
+          failureEventSeq: 7,
+          workspaceFolder: '/workspace/root',
+          adapter: 'custom-codex',
+          runtimeAdapter: 'codex'
+        })
+      })
+    ])
+    const [storedCommands, storedEvents] = await Promise.all([
+      runtimeSession.readCommands(),
+      runtimeSession.replayEvents()
+    ])
+    expect(isAuthenticProjectConfigRecovery(
+      storedCommands.at(-1)!,
+      storedCommands,
+      storedEvents,
+      {
+        adapter: 'custom-codex',
+        runtimeAdapter: 'codex',
+        sessionId: 'sess-1',
+        workspaceFolder: '/workspace/root'
+      }
+    )).toBe(true)
+
+    const emitted: unknown[] = []
+    const sink = await createRuntimeEventSink({
+      cwd: '/workspace/root',
+      env: process.env,
+      sessionId: 'sess-1'
+    })
+    const stopBridge = await attachRuntimeCommandBridge({
+      adapter: 'custom-codex',
+      cwd: '/workspace/root',
+      env: process.env,
+      runtimeAdapter: 'codex',
+      session: { emit: event => emitted.push(event) },
+      sessionId: 'sess-1',
+      sink
+    })
+    await stopBridge()
+    await sink.flush()
+    expect(emitted).toEqual([{
+      type: 'message',
+      deliveryId: 'runtime-delivery:cmd-recovery-after-grant-crash',
+      content: [
+        { type: 'text', text: 'exact runtime recovery prompt' },
+        { type: 'file', path: '/workspace/root/context.md' }
+      ]
+    }])
+  })
+
+  it('rejects recovery when a later unrelated failure supersedes the project config failure', async () => {
+    const runtimeAiBaseDir = await mkdtemp(path.join(os.tmpdir(), 'ow-session-runtime-stale-project-config-'))
+    tempRuntimeRoot = runtimeAiBaseDir
+    const runtimeRoot = path.join(runtimeAiBaseDir, 'runtime')
+    process.env.__ONEWORKS_PROJECT_BASE_DIR__ = runtimeAiBaseDir
+    process.env.__ONEWORKS_PROJECT_HOME_PROJECTS_DIR__ = path.join(runtimeAiBaseDir, 'home-projects')
+    const sessionStore = path.join(runtimeRoot, 'sessions', 'sess-1')
+    await mkdir(sessionStore, { recursive: true })
+    await writeFile(path.join(sessionStore, 'events.jsonl'), [
+      {
+        protocolVersion: '1.0.0',
+        id: 'evt-old-project-config-failure',
+        seq: 7,
+        ts: 100,
+        sessionId: 'sess-1',
+        type: 'session_failed',
+        fatal: true,
+        code: 'codex_project_config_invalid',
+        details: {
+          adapter: 'codex',
+          runtimeAdapter: 'codex',
+          configSource: 'project',
+          configPath: '.codex/config.toml',
+          workspaceSource: 'active-session-workspace',
+          workspaceFolder: '/workspace/root',
+          sessionId: 'sess-1',
+          reason: 'wire_api is unsupported'
+        }
+      },
+      {
+        protocolVersion: '1.0.0',
+        id: 'evt-later-unrelated-failure',
+        seq: 9,
+        ts: 200,
+        sessionId: 'sess-1',
+        type: 'session_failed',
+        fatal: true,
+        code: 'adapter_runtime_failed'
+      }
+    ].map(event => JSON.stringify(event)).join('\n') + '\n', 'utf8')
+    currentSession = {
+      ...currentSession,
+      adapter: 'codex',
+      status: 'failed'
+    }
+
+    await expect(retryExternalRuntimeSessionProjectConfig('sess-1')).resolves.toEqual({
+      queued: false,
+      reason: 'current_failure_ineligible'
+    })
+  })
+
+  it.each([
+    { commandId: 'cmd-ordinary-resume', source: 'user', type: 'resume' as const },
+    { commandId: 'cmd-agent-room-message', source: 'agent-room', type: 'send_message' as const }
+  ])(
+    'rejects an obsolete failure after $type append but before DB projection',
+    async ({ commandId, source, type }) => {
+      const runtimeAiBaseDir = await mkdtemp(path.join(os.tmpdir(), 'ow-session-runtime-attempt-race-'))
+      tempRuntimeRoot = runtimeAiBaseDir
+      const runtimeRoot = path.join(runtimeAiBaseDir, 'runtime')
+      process.env.__ONEWORKS_PROJECT_BASE_DIR__ = runtimeAiBaseDir
+      process.env.__ONEWORKS_PROJECT_HOME_PROJECTS_DIR__ = path.join(runtimeAiBaseDir, 'home-projects')
+      const sourceSessionStore = path.join(runtimeRoot, 'sessions', 'sess-1')
+      await mkdir(sourceSessionStore, { recursive: true })
+      await writeFile(path.join(sourceSessionStore, 'commands.jsonl'), `${JSON.stringify({
+        protocolVersion: '1.0.0',
+        id: 'cmd-start-attempt',
+        ts: 90,
+        sessionId: 'sess-1',
+        type: 'start',
+        priority: 20,
+        source: 'test',
+        content: 'failed prompt',
+        message: 'failed prompt'
+      })}\n`, 'utf8')
+      await writeFile(path.join(sourceSessionStore, 'events.jsonl'), `${JSON.stringify({
+        protocolVersion: '1.0.0',
+        id: 'evt-project-config-failure',
+        seq: 7,
+        ts: 100,
+        sessionId: 'sess-1',
+        type: 'session_failed',
+        causedByCommandId: 'cmd-start-attempt',
+        fatal: true,
+        code: 'codex_project_config_invalid',
+        details: {
+          adapter: 'codex',
+          runtimeAdapter: 'codex',
+          configSource: 'project',
+          configPath: '.codex/config.toml',
+          workspaceSource: 'active-session-workspace',
+          workspaceFolder: '/workspace/root',
+          sessionId: 'sess-1',
+          reason: 'wire_api is unsupported'
+        }
+      })}\n`, 'utf8')
+      currentSession = {
+        ...currentSession,
+        adapter: 'codex',
+        status: 'failed'
+      }
+
+      await expect(resolveExternalRuntimeProjectConfigFailure('sess-1')).resolves.toMatchObject({
+        available: true,
+        failureEventId: 'evt-project-config-failure'
+      })
+      const migratedRuntimeRoot = resolveSessionRuntimeStoreRoot('/workspace/root')
+      const migratedSessionStore = path.join(migratedRuntimeRoot, 'sessions', 'sess-1')
+      const session = new FileRuntimeSessionStore(migratedSessionStore, 'sess-1')
+      const projectionGate = await acquireLockFile(session.getLockPath('events.append'), {
+        operation: 'hold-db-projection'
+      })
+      let recoveryPromise: ReturnType<typeof retryExternalRuntimeSessionProjectConfig> | undefined
+      try {
+        await session.appendCommand({
+          protocolVersion: '1.0.0',
+          id: commandId,
+          ts: 110,
+          sessionId: 'sess-1',
+          type,
+          priority: 20,
+          source,
+          content: 'continue normally',
+          message: 'continue normally'
+        })
+        recoveryPromise = retryExternalRuntimeSessionProjectConfig('sess-1')
+      } finally {
+        await projectionGate.release()
+      }
+      await expect(recoveryPromise!).resolves.toEqual({
+        queued: false,
+        reason: 'current_failure_ineligible'
+      })
+
+      const commands = await session.readCommands()
+      expect(commands.map(command => command.id)).toEqual([
+        'cmd-start-attempt',
+        commandId
+      ])
+      expect(currentSession.status).toBe('failed')
+    }
+  )
 
   it('queues external runtime messages with a per-message model override', async () => {
     const runtimeAiBaseDir = await mkdtemp(path.join(os.tmpdir(), 'ow-session-runtime-model-'))

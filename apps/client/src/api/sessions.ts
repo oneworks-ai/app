@@ -13,11 +13,34 @@ import type {
   SessionWorkspace,
   WorkspaceFileOpenResponse
 } from '@oneworks/types'
+import { z } from 'zod'
 
 import { createApiUrl, fetchApiJson, fetchApiJsonOrThrow, jsonHeaders } from './base'
 import type { ApiOkResponse, ApiRemoveResponse, SessionMessagesResponse } from './types'
 import type { WorkspaceFileContent, WorkspacePathRevealResponse, WorkspaceTreeEntry } from './workspace'
 import { routeWorkspaceResourceUrlThroughLauncher } from './workspace-resource'
+
+const WorkspaceFileOpenResponseSchema = z.object({
+  ok: z.literal(true),
+  opener: z.object({
+    available: z.boolean(),
+    iconUrl: z.string().optional(),
+    id: z.enum([
+      'vscode',
+      'cursor',
+      'windsurf',
+      'zed',
+      'intellij',
+      'webstorm',
+      'pycharm',
+      'goland',
+      'textedit'
+    ]),
+    source: z.enum(['path', 'macApp', 'uri']).optional(),
+    title: z.string()
+  }).strict(),
+  path: z.string()
+}).strict()
 
 export async function listSessions(
   filter: 'active' | 'archived' | 'all' = 'active'
@@ -301,6 +324,34 @@ export async function sendSessionMessage(
       permissionMode: options.permissionMode
     })
   })
+}
+
+export async function retrySessionProjectConfig(
+  id: string
+): Promise<ApiOkResponse & { queued?: boolean; reason?: 'already_queued' }> {
+  const result = await fetchApiJson<ApiOkResponse & { queued?: boolean; reason?: 'already_queued' }>(
+    `/api/sessions/${id}/retry-project-config`,
+    {
+      method: 'POST'
+    }
+  )
+  if (result.ok !== true || (result.queued !== true && result.reason !== 'already_queued')) {
+    throw new TypeError('Project config recovery returned an invalid response.')
+  }
+  return result
+}
+
+export async function openSessionProjectConfig(
+  id: string
+): Promise<WorkspaceFileOpenResponse> {
+  const response = await fetchApiJson<unknown>(`/api/sessions/${id}/project-config/open`, {
+    method: 'POST'
+  })
+  const parsed = WorkspaceFileOpenResponseSchema.safeParse(response)
+  if (!parsed.success) {
+    throw new TypeError('Project config opener returned an invalid response.')
+  }
+  return parsed.data
 }
 
 export async function terminateSession(id: string): Promise<ApiOkResponse> {

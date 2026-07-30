@@ -191,6 +191,57 @@ describe('runtime store engine consumer', () => {
     expect(plan.env.__ONEWORKS_AGENT_ROOM_HOST_SESSION_ID__).toBe('')
   })
 
+  it('propagates one-shot project config recovery into the resumed CLI process', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'ow-runtime-consumer-project-config-retry-'))
+    const store = createStore(root, 'sess-web')
+    const plan = buildRuntimeConsumerSpawnPlan({
+      baseEnv: {
+        __ONEWORKS_RUNTIME_PROTOCOL_CONSUMER_CLI_PATH__: '/tmp/fake-ow.js'
+      } as NodeJS.ProcessEnv,
+      command: {
+        type: 'resume',
+        projectConfigPolicy: 'global-only'
+      },
+      cwd: '/workspace',
+      launchMode: 'resume',
+      metadata: {
+        sessionId: 'sess-web',
+        cwd: '/workspace',
+        adapter: 'codex',
+        needsEngineConsumer: true,
+        createdAt: 100
+      } as RuntimeSessionMetadata,
+      store
+    })
+
+    expect(plan.args).toContain('--resume')
+    expect(plan.args).toContain('--project-config-policy')
+    expect(plan.args.at(plan.args.indexOf('--project-config-policy') + 1)).toBe('global-only')
+    expect(plan.args).not.toContain('undefined')
+
+    const ordinaryResumePlan = buildRuntimeConsumerSpawnPlan({
+      baseEnv: {
+        __ONEWORKS_RUNTIME_PROTOCOL_CONSUMER_CLI_PATH__: '/tmp/fake-ow.js'
+      } as NodeJS.ProcessEnv,
+      command: {
+        type: 'resume'
+      },
+      cwd: '/workspace',
+      launchMode: 'resume',
+      metadata: {
+        sessionId: 'sess-web',
+        cwd: '/workspace',
+        adapter: 'codex',
+        needsEngineConsumer: true,
+        createdAt: 100,
+        projectConfigPolicy: 'global-only'
+      } as RuntimeSessionMetadata,
+      store
+    })
+
+    expect(ordinaryResumePlan.args).not.toContain('--project-config-policy')
+  })
+
   it('passes the initial message as prompt text without prefixing the run command', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'ow-runtime-consumer-prompt-'))
     const store = createStore(root, 'sess-web')
@@ -1054,6 +1105,119 @@ describe('runtime store engine consumer', () => {
     })
   })
 
+  it('materializes deferred public systemPrompt from authoritative meta before consumer spawn', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'ow-runtime-consumer-deferred-system-prompt-'))
+    const store = createStore(root)
+    const consumerCli = path.join(root, 'dyai')
+    const argsPath = path.join(root, 'args.txt')
+    await mkdir(store.storePath, { recursive: true })
+    await writeFile(
+      consumerCli,
+      `#!/bin/sh\nprintf '%s\\n' "$@" > ${JSON.stringify(argsPath)}\nexit 0\n`
+    )
+    await chmod(consumerCli, 0o755)
+    await writeFile(store.commandsPath, JSON.stringify({
+      protocolVersion: '1.0.0',
+      id: 'cmd_public_start',
+      ts: 100,
+      sessionId: store.sessionId,
+      type: 'start',
+      priority: 20,
+      source: 'runtime-protocol',
+      account: 'work',
+      systemPrompt: 'Authoritative deferred prompt',
+      updateConfiguredSkills: true,
+      content: 'Run deferred task'
+    }))
+
+    const child = await startServerRuntimeConsumer({
+      baseEnv: {
+        __ONEWORKS_RUNTIME_PROTOCOL_CONSUMER_CLI_PATH__: consumerCli
+      },
+      metadata: {
+        protocolVersion: '1.0.0',
+        sessionId: store.sessionId,
+        cwd: root,
+        account: 'work',
+        systemPrompt: 'Authoritative deferred prompt',
+        updateConfiguredSkills: true,
+        createdAt: 100
+      },
+      store
+    })
+
+    expect(child).toBeDefined()
+    await new Promise<void>(resolve => child?.once('exit', () => resolve()))
+    expect(await readFile(
+      path.join(store.storePath, 'system-prompt.txt'),
+      'utf8'
+    )).toBe('Authoritative deferred prompt')
+    expect((await readFile(argsPath, 'utf8')).trim().split('\n')).toEqual(expect.arrayContaining([
+      '--account',
+      'work',
+      '--update-skills'
+    ]))
+  })
+
+  it('ignores malformed raw JSONL command records before runtime consumer selection', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'ow-runtime-consumer-invalid-command-'))
+    const store = createStore(root)
+    await mkdir(store.storePath, { recursive: true })
+    await writeFile(store.commandsPath, [
+      JSON.stringify({ id: 'missing-protocol', ts: 1, sessionId: store.sessionId, type: 'start', priority: 20, source: 'test', content: 'ignored' }),
+      JSON.stringify({ protocolVersion: '1.0.0', id: 'extra', ts: 2, sessionId: store.sessionId, type: 'start', priority: 20, source: 'test', content: 'ignored', private: true }),
+      JSON.stringify({ protocolVersion: 'unsupported', id: 'unsupported-protocol', ts: 2.5, sessionId: store.sessionId, type: 'start', priority: 20, source: 'test', content: 'ignored' }),
+      JSON.stringify({ protocolVersion: '1.0.0', id: 'unsupported-type', ts: 2.6, sessionId: store.sessionId, type: 'spawn_private', priority: 20, source: 'test', content: 'ignored' }),
+      JSON.stringify({ protocolVersion: '1.0.0', id: 'empty-resume', ts: 2.7, sessionId: store.sessionId, type: 'resume', priority: 20, source: 'test' }),
+      JSON.stringify({ protocolVersion: '1.0.0', id: 'valid', ts: 3, sessionId: store.sessionId, type: 'start', priority: 20, source: 'test', content: 'selected' })
+    ].join('\n'))
+    await expect(readRuntimeConsumerStartCommand(store.commandsPath)).resolves.toEqual(expect.objectContaining({
+      message: 'selected', type: 'start', ts: 3
+    }))
+  })
+
+  it('does not spawn a runtime consumer from only malformed raw JSONL commands', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'ow-runtime-consumer-invalid-only-'))
+    const store = createStore(root)
+    await mkdir(store.storePath, { recursive: true })
+    await writeFile(store.commandsPath, [
+      JSON.stringify({ id: 'missing-fields', sessionId: store.sessionId, type: 'start' }),
+      JSON.stringify({
+        protocolVersion: '1.0.0',
+        id: 'extra-field',
+        ts: 2,
+        sessionId: store.sessionId,
+        type: 'start',
+        priority: 20,
+        source: 'test',
+        content: 'must not spawn',
+        privateRuntimeSelector: 'codex'
+      }),
+      JSON.stringify({
+        protocolVersion: '1.0.0',
+        id: 'unsupported-command',
+        ts: 3,
+        sessionId: store.sessionId,
+        type: 'spawn_private',
+        priority: 20,
+        source: 'test',
+        content: 'must not spawn'
+      })
+    ].join('\n'))
+
+    await expect(readRuntimeConsumerStartCommand(store.commandsPath)).resolves.toBeUndefined()
+    await expect(readLatestRuntimeConsumerQueuedCommand(store.commandsPath)).resolves.toBeUndefined()
+    await expect(startServerRuntimeConsumer({
+      metadata: {
+        protocolVersion: '1.0.0',
+        sessionId: store.sessionId,
+        cwd: root,
+        createdAt: 1
+      },
+      store
+    })).resolves.toBeUndefined()
+  })
+
   it('reads the newest queued non-start command for terminal consumer recovery', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'ow-runtime-consumer-queued-command-'))
     const store = createStore(root)
@@ -1062,22 +1226,35 @@ describe('runtime store engine consumer', () => {
       store.commandsPath,
       [
         JSON.stringify({
+          protocolVersion: '1.0.0',
           id: 'cmd_start_1',
           ts: 100,
           sessionId: 'sess-room-dev',
-          type: 'start'
+          type: 'start',
+          priority: 20,
+          source: 'web',
+          content: 'Initial task'
         }),
         JSON.stringify({
+          protocolVersion: '1.0.0',
           id: 'cmd_message_1',
           ts: 200,
           sessionId: 'sess-room-dev',
-          type: 'send_message'
+          type: 'send_message',
+          priority: 20,
+          source: 'web',
+          content: 'Follow-up message'
         }),
         JSON.stringify({
+          protocolVersion: '1.0.0',
           id: 'cmd_submit_1',
           ts: 300,
           sessionId: 'sess-room-dev',
-          type: 'submit_input'
+          type: 'submit_input',
+          priority: 20,
+          source: 'web',
+          interactionId: 'interaction-1',
+          value: 'approved'
         })
       ].join('\n')
     )
@@ -1100,6 +1277,7 @@ describe('runtime store engine consumer', () => {
       store.commandsPath,
       [
         JSON.stringify({
+          protocolVersion: '1.0.0',
           id: 'cmd_start_1',
           ts: 100,
           sessionId: store.sessionId,
@@ -1110,6 +1288,7 @@ describe('runtime store engine consumer', () => {
           messageDelivery: 'bridge'
         }),
         JSON.stringify({
+          protocolVersion: '1.0.0',
           id: 'cmd_resume_1',
           ts: 300,
           sessionId: store.sessionId,

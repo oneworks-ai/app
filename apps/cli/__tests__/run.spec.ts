@@ -26,6 +26,7 @@ import {
   registerRunCommand,
   resolveDefaultOneworksMcpServerOption,
   resolveInjectDefaultSystemPromptOption,
+  resolvePersistedResumeAdapterOptions,
   resolvePrintableStopText,
   resolveResumeAdapterOptions,
   resolveRunMode,
@@ -442,6 +443,25 @@ describe('run command print output', () => {
         include: ['read', 'grep'],
         exclude: ['edit', 'bash']
       }
+    })
+  })
+
+  it('keeps global-only project recovery scoped to the current resume attempt', () => {
+    const effective = resolveResumeAdapterOptions({
+      runtime: 'cli',
+      sessionId: 'session-demo',
+      mode: 'direct',
+      model: 'gpt-5.6'
+    }, {
+      projectConfigPolicy: 'global-only'
+    })
+
+    expect(effective.projectConfigPolicy).toBe('global-only')
+    expect(resolvePersistedResumeAdapterOptions(effective)).toEqual({
+      runtime: 'cli',
+      sessionId: 'session-demo',
+      mode: 'direct',
+      model: 'gpt-5.6'
     })
   })
 

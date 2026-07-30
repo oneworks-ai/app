@@ -2,8 +2,11 @@
 import { mkdir, readFile, rm } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 
+import { RuntimeCommandSchema, RuntimeEventSchema } from '@oneworks/runtime-protocol'
+
 import { appendJsonlLine, readJsonFile, readJsonlFile, tailJsonlFile, writeJsonFileAtomic } from './json'
-import { acquireLockFile, createOwnerMetadata, isRuntimeOwnerStale } from './lock'
+import { acquireLockFile, acquireLockFiles, createOwnerMetadata, isRuntimeOwnerStale } from './lock'
+import type { RuntimeLockHandle } from './lock'
 import type {
   RuntimeCommand,
   RuntimeEvent,
@@ -17,6 +20,10 @@ import type {
   RuntimeState
 } from './types'
 import { DEFAULT_RUNTIME_PROTOCOL_VERSION, DEFAULT_SUPPORTED_PROTOCOL_RANGE } from './types'
+
+type SessionRuntimeEventDraft = Omit<RuntimeEventDraft, 'sessionId'> & {
+  sessionId?: string
+}
 
 export class FileRuntimeSessionStore {
   readonly locksPath: string
@@ -44,6 +51,7 @@ export class FileRuntimeSessionStore {
   async writeState(state: RuntimeState) {
     const lock = await acquireLockFile(this.getLockPath('state.write'), { kind: 'state.write' })
     try {
+      await lock.assertOwned()
       await writeJsonFileAtomic(join(this.sessionPath, 'state.json'), state)
     } finally {
       await lock.release()
@@ -63,53 +71,108 @@ export class FileRuntimeSessionStore {
   }
 
   async appendCommand(command: RuntimeCommand) {
+    const parsedCommand = RuntimeCommandSchema.parse(command)
     const lock = await acquireLockFile(this.getLockPath('commands.append'), { kind: 'commands.append' })
     try {
-      await appendJsonlLine(join(this.sessionPath, 'commands.jsonl'), command)
+      await this.appendCommandAlreadyLocked(parsedCommand, lock)
     } finally {
       await lock.release()
     }
-    return command
+    return parsedCommand
+  }
+
+  async appendCommandAlreadyLocked(command: RuntimeCommand, lock: RuntimeLockHandle) {
+    if (lock.path !== this.getLockPath('commands.append')) {
+      throw new Error('appendCommandAlreadyLocked requires the matching commands.append lock.')
+    }
+    const parsedCommand = RuntimeCommandSchema.parse(command)
+    await lock.assertOwned()
+    await appendJsonlLine(join(this.sessionPath, 'commands.jsonl'), parsedCommand)
+    return parsedCommand
   }
 
   async readCommands() {
-    return readJsonlFile<RuntimeCommand>(join(this.sessionPath, 'commands.jsonl'))
+    const rawCommands = await readJsonlFile<unknown>(join(this.sessionPath, 'commands.jsonl'))
+    return rawCommands.flatMap((rawCommand) => {
+      const parsed = RuntimeCommandSchema.safeParse(rawCommand)
+      return parsed.success ? [parsed.data] : []
+    })
   }
 
-  async appendEvent(event: RuntimeEventDraft) {
+  async appendEvent(event: SessionRuntimeEventDraft) {
     const lock = await acquireLockFile(this.getLockPath('events.append'), { kind: 'events.append' })
     try {
-      const existing = await this.replayEvents()
-      const lastSeq = existing.at(-1)?.seq ?? 0
-      const seq = event.seq ?? lastSeq + 1
-      const protocolVersion = typeof event.protocolVersion === 'string'
-        ? event.protocolVersion
-        : DEFAULT_RUNTIME_PROTOCOL_VERSION
-      const supportedProtocolRange = typeof event.supportedProtocolRange === 'string'
-        ? event.supportedProtocolRange
-        : DEFAULT_SUPPORTED_PROTOCOL_RANGE
-      const nextEvent = {
-        ...event,
-        protocolVersion,
-        supportedProtocolRange,
-        id: event.id ?? `evt_${seq}`,
-        seq,
-        ts: event.ts ?? Date.now()
-      } satisfies RuntimeEvent
-      await appendJsonlLine(join(this.sessionPath, 'events.jsonl'), nextEvent)
-      return nextEvent
+      return await this.appendEventAlreadyLocked(event, lock)
     } finally {
       await lock.release()
     }
   }
 
+  /** Append while the caller owns this session's events.append lock. */
+  async appendEventAlreadyLocked(event: SessionRuntimeEventDraft, lock: RuntimeLockHandle) {
+    if (lock.path !== this.getLockPath('events.append')) {
+      throw new Error('appendEventAlreadyLocked requires the matching events.append lock.')
+    }
+    await lock.assertOwned()
+    const existing = await this.replayEvents()
+    const lastSeq = existing.at(-1)?.seq ?? 0
+    const seq = lastSeq + 1
+    const nextEvent = RuntimeEventSchema.parse({
+      ...event,
+      protocolVersion: event.protocolVersion ?? DEFAULT_RUNTIME_PROTOCOL_VERSION,
+      supportedProtocolRange: event.supportedProtocolRange ?? DEFAULT_SUPPORTED_PROTOCOL_RANGE,
+      id: `evt_${seq}`,
+      seq,
+      ts: event.ts ?? Date.now(),
+      sessionId: this.sessionId
+    }) as RuntimeEvent
+    await appendJsonlLine(join(this.sessionPath, 'events.jsonl'), nextEvent)
+    return nextEvent
+  }
+
   async replayEvents(afterSeq = 0) {
-    const events = await readJsonlFile<RuntimeEvent>(join(this.sessionPath, 'events.jsonl'))
-    return events.filter(event => event.seq > afterSeq)
+    const rawEvents = await readJsonlFile<unknown>(join(this.sessionPath, 'events.jsonl'))
+    return rawEvents.flatMap((rawEvent) => {
+      const parsed = RuntimeEventSchema.safeParse(rawEvent)
+      return parsed.success && parsed.data.seq > afterSeq
+        ? [parsed.data as RuntimeEvent]
+        : []
+    })
   }
 
   async tailEvents(offset = 0) {
     return tailJsonlFile<RuntimeEvent>(join(this.sessionPath, 'events.jsonl'), offset)
+  }
+
+  async acquireCommandEventSnapshot(operation: string) {
+    await this.ensure()
+    return acquireLockFiles([
+      {
+        path: this.getLockPath('commands.append'),
+        metadata: { kind: 'commands.append', operation }
+      },
+      {
+        path: this.getLockPath('events.append'),
+        metadata: { kind: 'events.append', operation }
+      }
+    ], {
+      staleMs: 5_000,
+      timeoutMs: 30_000
+    })
+  }
+
+  async readCommandEventSnapshot(operation: string) {
+    const snapshot = await this.acquireCommandEventSnapshot(operation)
+    try {
+      await snapshot.assertOwned()
+      const [commands, events] = await Promise.all([
+        this.readCommands(),
+        this.replayEvents()
+      ])
+      return { commands, events }
+    } finally {
+      await snapshot.release()
+    }
   }
 
   async acquireOwnerLock(runtimeId: string) {
@@ -178,6 +241,7 @@ export class FileRuntimeStore {
     try {
       const index = await this.readIndex()
       index.sessions[sessionId] = entry
+      await lock.assertOwned()
       await writeJsonFileAtomic(join(this.root, 'index.json'), index)
       return index
     } finally {
@@ -194,6 +258,7 @@ export class FileRuntimeStore {
     try {
       const index = await this.readIndex()
       delete index.sessions[sessionId]
+      await lock.assertOwned()
       await writeJsonFileAtomic(join(this.root, 'index.json'), index)
     } finally {
       await lock.release()

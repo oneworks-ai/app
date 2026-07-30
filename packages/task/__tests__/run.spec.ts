@@ -27,6 +27,16 @@ vi.mock('#~/prepare.js', () => ({
 }))
 
 vi.mock('@oneworks/types', () => ({
+  AdapterStartupError: class AdapterStartupError extends Error {
+    code: string
+    details?: unknown
+
+    constructor(message: string, code: string, details?: unknown) {
+      super(message)
+      this.code = code
+      this.details = details
+    }
+  },
   loadAdapter: loadAdapterMock,
   resolveAdapterRuntimeTarget: (adapterKey: string, options?: { config?: { adapters?: Record<string, unknown> } }) => {
     const adapterConfig = options?.config?.adapters?.[adapterKey]
@@ -39,7 +49,11 @@ vi.mock('@oneworks/types', () => ({
     return {
       instanceKey: adapterKey,
       loadSpecifier,
-      runtimeAdapter: loadSpecifier === '@oneworks/adapter-codex' ? 'codex' : adapterKey,
+      runtimeAdapter: loadSpecifier.startsWith('@oneworks/adapter-')
+        ? loadSpecifier.slice('@oneworks/adapter-'.length)
+        : loadSpecifier.replaceAll('\\', '/').endsWith('/adapter-codex')
+        ? 'codex'
+        : adapterKey,
       ...(typeof packageId === 'string' ? { packageId } : {})
     }
   },
@@ -112,10 +126,13 @@ describe('task run adapter init', () => {
       kill: vi.fn(),
       emit: vi.fn()
     })
-    loadAdapterMock.mockResolvedValue({
+    loadAdapterMock.mockImplementation(async (specifier: string) => ({
+      ...(specifier === 'codex' || specifier === '@oneworks/adapter-codex'
+        ? { supportedProjectConfigPolicies: ['include', 'global-only'] }
+        : {}),
       init: initMock,
       query: queryMock
-    })
+    }))
     createAdapterHookBridgeMock.mockReturnValue({
       start: vi.fn().mockResolvedValue(undefined),
       prepareInitialPrompt: vi.fn(async (prompt?: string) => prompt),
@@ -199,6 +216,7 @@ describe('task run adapter init', () => {
     })
 
     expect(result.resolvedAdapter).toBe('claude-code')
+    expect(result.runtimeAdapter).toBe('claude-code')
   })
 
   it('loads a configured runtime package while preserving the adapter instance key', async () => {
@@ -225,6 +243,7 @@ describe('task run adapter init', () => {
       runtime: 'cli',
       sessionId: 'session-dynamic-instance',
       description: 'hello',
+      projectConfigPolicy: 'global-only',
       onEvent: vi.fn()
     })
 
@@ -259,9 +278,123 @@ describe('task run adapter init', () => {
         }
       }
     })
+    expect(queryMock.mock.calls[0]?.[1]).toMatchObject({
+      projectConfigPolicy: 'global-only'
+    })
     expect(ctx.env.__ONEWORKS_PROJECT_ADAPTER__).toBe('fast')
     expect(ctx.env.__ONEWORKS_RUNTIME_PROTOCOL_DEFAULT_ADAPTER__).toBe('fast')
     expect(result.resolvedAdapter).toBe('fast')
+    expect(result.runtimeAdapter).toBe('codex')
+  })
+
+  it('requires the loaded Codex package itself to declare global-only support', async () => {
+    const ctx = createCtx()
+    ctx.configs = [{
+      adapters: createAdapters({
+        fast: {
+          packageId: '@oneworks/adapter-codex'
+        }
+      })
+    }, undefined] as unknown as AdapterCtx['configs']
+    prepareMock.mockResolvedValue([ctx])
+    loadAdapterMock.mockResolvedValueOnce({
+      init: initMock,
+      query: queryMock
+    })
+
+    await expect(run({
+      adapter: 'fast',
+      cwd: ctx.cwd,
+      env: {}
+    }, {
+      type: 'create',
+      runtime: 'cli',
+      sessionId: 'session-codex-package-capability',
+      description: 'hello',
+      projectConfigPolicy: 'global-only',
+      onEvent: vi.fn()
+    })).rejects.toMatchObject({
+      code: 'project_config_policy_unsupported',
+      details: {
+        adapter: 'fast',
+        runtimeAdapter: 'codex',
+        projectConfigPolicy: 'global-only'
+      }
+    })
+
+    expect(queryMock).not.toHaveBeenCalled()
+  })
+
+  it('validates a custom path adapter against its final Codex runtime and loaded capability', async () => {
+    const ctx = createCtx()
+    ctx.configs = [{
+      adapters: createAdapters({
+        local: {
+          packageId: './vendor/adapter-codex'
+        }
+      })
+    }, undefined] as unknown as AdapterCtx['configs']
+    prepareMock.mockResolvedValue([ctx])
+    loadAdapterMock.mockResolvedValueOnce({
+      id: 'custom-codex',
+      init: initMock,
+      query: queryMock,
+      supportedProjectConfigPolicies: ['global-only']
+    })
+
+    await run({
+      adapter: 'local',
+      cwd: ctx.cwd,
+      env: {}
+    }, {
+      type: 'create',
+      runtime: 'cli',
+      sessionId: 'session-custom-path-codex',
+      description: 'hello',
+      projectConfigPolicy: 'global-only',
+      onEvent: vi.fn()
+    })
+
+    expect(loadAdapterMock).toHaveBeenCalledWith('./vendor/adapter-codex')
+    expect(queryMock.mock.calls[0]?.[1]).toMatchObject({
+      projectConfigPolicy: 'global-only'
+    })
+    expect(ctx.env.__ONEWORKS_PROJECT_ADAPTER__).toBe('local')
+  })
+
+  it('rejects global-only recovery after resolving a final non-Codex adapter alias', async () => {
+    const ctx = createCtx()
+    ctx.configs = [{
+      adapters: createAdapters({
+        fast: {
+          packageId: '@oneworks/adapter-claude-code'
+        }
+      })
+    }, undefined] as unknown as AdapterCtx['configs']
+    prepareMock.mockResolvedValue([ctx])
+
+    await expect(run({
+      adapter: 'fast',
+      cwd: ctx.cwd,
+      env: {}
+    }, {
+      type: 'create',
+      runtime: 'cli',
+      sessionId: 'session-non-codex-recovery',
+      description: 'hello',
+      projectConfigPolicy: 'global-only',
+      onEvent: vi.fn()
+    })).rejects.toMatchObject({
+      code: 'project_config_policy_unsupported',
+      details: {
+        adapter: 'fast',
+        runtimeAdapter: 'claude-code',
+        projectConfigPolicy: 'global-only'
+      }
+    })
+
+    expect(loadAdapterMock).toHaveBeenCalledWith('@oneworks/adapter-claude-code')
+    expect(queryMock).not.toHaveBeenCalled()
   })
 
   it('inherits parent session adapter and model from env when omitted by the task input', async () => {

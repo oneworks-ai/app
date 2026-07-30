@@ -1,11 +1,28 @@
 import type { ChatMessage, ChatMessageContent, Session, WSEvent } from '@oneworks/core'
 
 import { getDb } from '#~/db/index.js'
+import {
+  createPublicProjectionContext,
+  sanitizePublicRuntimeTransportEvent
+} from '#~/services/runtime-store/public-runtime-event.js'
 
 export interface SessionEventCallbacks {
   broadcast?: (event: WSEvent) => void
   onSessionUpdated?: (session: Session) => void
 }
+
+export const sanitizePublicSessionEvent = (
+  event: WSEvent,
+  expectedSessionId: string | undefined,
+  expectedWorkspaceFolder: string | undefined,
+  expectedAdapter: string | undefined
+) => sanitizePublicRuntimeTransportEvent(
+  event,
+  expectedSessionId,
+  expectedWorkspaceFolder,
+  expectedAdapter,
+  createPublicProjectionContext()
+)
 
 export function extractTextFromMessage(message: ChatMessage): string | undefined {
   if (typeof message.content === 'string') {
@@ -32,29 +49,40 @@ export function applySessionEvent(
   callbacks: SessionEventCallbacks = {}
 ) {
   const db = getDb()
-  if (event.type !== 'session_updated') {
-    const didSave = db.saveMessage(sessionId, event)
+  // Do not let a caller choose the authority used to expose a runtime event.
+  // This also re-projects legacy/database events before they can leave history.
+  const authoritativeSession = db.getSession(sessionId)
+  if (authoritativeSession == null) return
+  const publicEvent = sanitizePublicSessionEvent(
+    event,
+    sessionId,
+    db.getSessionWorkspace(sessionId)?.workspaceFolder,
+    authoritativeSession.adapter
+  )
+  if (publicEvent == null) return
+  if (publicEvent.type !== 'session_updated') {
+    const didSave = db.saveMessage(sessionId, publicEvent)
     if (didSave === false) {
       return
     }
   }
 
   const updates: Partial<Omit<Session, 'id' | 'createdAt' | 'messageCount'>> = {}
-  if (event.type === 'message') {
-    const text = extractTextFromMessage(event.message)
+  if (publicEvent.type === 'message') {
+    const text = extractTextFromMessage(publicEvent.message)
     if (text != null && text !== '') {
       updates.lastMessage = text
-      if (event.message.role === 'user') {
+      if (publicEvent.message.role === 'user') {
         updates.lastUserMessage = text
       }
     }
     updates.status = 'running'
-  } else if (event.type === 'interaction_request') {
+  } else if (publicEvent.type === 'interaction_request') {
     updates.status = 'waiting_input'
-  } else if (event.type === 'interaction_response') {
+  } else if (publicEvent.type === 'interaction_response') {
     updates.status = 'running'
-  } else if (event.type === 'error') {
-    if (event.data.fatal !== false) {
+  } else if (publicEvent.type === 'error') {
+    if (publicEvent.data.fatal !== false) {
       updates.status = 'failed'
     }
   }
@@ -68,6 +96,6 @@ export function applySessionEvent(
   }
 
   if (callbacks.broadcast) {
-    callbacks.broadcast(event)
+    callbacks.broadcast(publicEvent)
   }
 }

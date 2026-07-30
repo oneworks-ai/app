@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import type { ChildProcess } from 'node:child_process'
 
 import type { WorkspaceFileOpenResponse } from '@oneworks/types'
 
@@ -101,6 +102,35 @@ const stripPrivateOpenerFields = ({
   ...opener
 }: ResolvedFileOpener) => opener
 
+const waitForChildLaunch = (child: ChildProcess) => new Promise<void>((resolve, reject) => {
+  let settled = false
+  const ignoreLateError = () => {}
+  const cleanupLateErrorGuard = () => {
+    child.off('error', ignoreLateError)
+  }
+  const guardLateErrors = () => {
+    child.off('error', onError)
+    child.on('error', ignoreLateError)
+    child.once('close', cleanupLateErrorGuard)
+  }
+  const onSpawn = () => {
+    if (settled) return
+    settled = true
+    guardLateErrors()
+    resolve()
+  }
+  const onError = (error: Error) => {
+    if (settled) return
+    settled = true
+    child.off('spawn', onSpawn)
+    guardLateErrors()
+    reject(error)
+  }
+
+  child.once('spawn', onSpawn)
+  child.on('error', onError)
+})
+
 export const openWorkspaceFileInExternalOpener = async (
   rawPath: string | undefined,
   options: {
@@ -125,6 +155,7 @@ export const openWorkspaceFileInExternalOpener = async (
       stdio: 'ignore',
       windowsHide: true
     })
+    await waitForChildLaunch(child)
     child.unref()
   } catch (error) {
     throw internalServerError('Failed to open workspace file in external app', {

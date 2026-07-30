@@ -3,14 +3,30 @@
 import type { z } from 'zod'
 
 import type {
+  CodexProjectConfigInvalidDetailsSchema,
+  ProjectedCodexProjectConfigInvalidDetailsSchema,
+  ProjectedRuntimeKnownErrorDataSchema,
+  ProjectedRuntimePublicErrorDataSchema,
+  RuntimeCommandDraftSchema,
+  RuntimeCommandSchema,
   RuntimeCommandTypeSchema,
+  RuntimeActivationContentItemSchema,
   RuntimeEventTypeSchema,
   RuntimeInteractionKindSchema,
   RuntimeMemberKindSchema,
   RuntimePermissionModeSchema,
+  RuntimeProjectConfigPolicySchema,
   RuntimeRequestKindSchema,
+  RuntimeRecoveryContextSchema,
+  RuntimeProjectConfigRecoveryGrantEventDraftSchema,
+  RuntimeProjectConfigRecoveryGrantEventSchema,
+  RuntimeProjectConfigRecoveryGrantSchema,
+  RuntimePublicErrorDataSchema,
   RuntimeRoleSchema,
+  RuntimeStructuredErrorDataSchema,
+  RuntimeSessionCommandEnvelopeSchema,
   RuntimeSessionCommandEnvelopeTypeSchema,
+  RuntimeSessionCommandPayloadSchema,
   RuntimeStatusSchema,
   RuntimeVisibilitySchema
 } from '#~/schemas.js'
@@ -19,51 +35,35 @@ export type RuntimeJsonObject = Record<string, unknown>
 export type RuntimeVisibility = z.infer<typeof RuntimeVisibilitySchema>
 export type RuntimeStatus = z.infer<typeof RuntimeStatusSchema>
 export type RuntimeCommandType = z.infer<typeof RuntimeCommandTypeSchema>
+export type RuntimeActivationContentItem = z.infer<typeof RuntimeActivationContentItemSchema>
 export type RuntimeEventType = z.infer<typeof RuntimeEventTypeSchema>
 export type RuntimeRole = z.infer<typeof RuntimeRoleSchema>
 export type RuntimeSessionCommandEnvelopeType = z.infer<typeof RuntimeSessionCommandEnvelopeTypeSchema>
+export type RuntimeSessionCommandPayload = z.infer<typeof RuntimeSessionCommandPayloadSchema>
+export type RuntimeSessionCommandEnvelope = z.infer<typeof RuntimeSessionCommandEnvelopeSchema>
 export type RuntimeRequestKind = z.infer<typeof RuntimeRequestKindSchema>
 export type RuntimeInteractionKind = z.infer<typeof RuntimeInteractionKindSchema>
 export type RuntimeMemberKind = z.infer<typeof RuntimeMemberKindSchema>
 export type RuntimePermissionMode = z.infer<typeof RuntimePermissionModeSchema>
+export type RuntimeProjectConfigPolicy = z.infer<typeof RuntimeProjectConfigPolicySchema>
+export type RuntimeRecoveryContext = z.infer<typeof RuntimeRecoveryContextSchema>
+export type RuntimeProjectConfigRecoveryGrant = z.infer<typeof RuntimeProjectConfigRecoveryGrantSchema>
+export type RuntimeProjectConfigRecoveryGrantEvent =
+  z.infer<typeof RuntimeProjectConfigRecoveryGrantEventSchema>
+export type RuntimeProjectConfigRecoveryGrantEventDraft =
+  z.infer<typeof RuntimeProjectConfigRecoveryGrantEventDraftSchema>
+export type CodexProjectConfigInvalidDetails = z.infer<typeof CodexProjectConfigInvalidDetailsSchema>
+export type ProjectedCodexProjectConfigInvalidDetails =
+  z.infer<typeof ProjectedCodexProjectConfigInvalidDetailsSchema>
+export type ProjectedRuntimeKnownErrorData = z.infer<typeof ProjectedRuntimeKnownErrorDataSchema>
+export type ProjectedRuntimePublicErrorData = z.infer<typeof ProjectedRuntimePublicErrorDataSchema>
+export type RuntimePublicErrorData = z.infer<typeof RuntimePublicErrorDataSchema>
+export type RuntimeStructuredErrorData = z.infer<typeof RuntimeStructuredErrorDataSchema>
 export type TaskDefinitionType = 'default' | 'entity' | 'spec' | 'workspace'
 
 export interface RuntimeProtocolEnvelope {
   protocolVersion: string
   supportedProtocolRange?: string
-}
-
-export interface RuntimeSessionCommandEnvelope
-  extends RuntimeJsonObject, RuntimeCorrelationFields, RuntimeProtocolEnvelope
-{
-  commandId: string
-  type: RuntimeSessionCommandEnvelopeType
-  priority?: number
-  source?: string
-  sessionId?: string
-  entity?: string
-  title?: string
-  message?: string
-  content?: string
-  requestId?: string
-  interactionId?: string
-  value?: unknown
-  data?: string | string[]
-  payload?: RuntimeJsonObject
-  mode?: string
-  adapter?: string
-  model?: string
-  account?: string
-  effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra'
-  fastMode?: boolean
-  background?: boolean
-  permissionMode?: RuntimePermissionMode
-  hostSessionId?: string
-  parentSessionId?: string
-  roomTitle?: string
-  memberAvatar?: string
-  memberLabel?: string
-  runTitle?: string
 }
 
 export interface RuntimeSessionResultEnvelope
@@ -95,6 +95,13 @@ export interface RuntimeContentItem extends RuntimeJsonObject {
   type: string
 }
 
+export type RuntimeActivationPayload =
+  | { runtimeContentItems: RuntimeActivationContentItem[] }
+  | { contentItems: RuntimeActivationContentItem[] }
+  | { runtimeMessage: string }
+  | { content: string }
+  | { message: string }
+
 export interface RuntimeInteractionOption extends RuntimeJsonObject {
   label: string
   value?: string
@@ -109,67 +116,8 @@ export interface RuntimeMember extends RuntimeJsonObject {
   subtitle?: string
 }
 
-export interface RuntimeCommand extends RuntimeJsonObject, RuntimeCorrelationFields, RuntimeProtocolEnvelope {
-  id: string
-  ts: number
-  sessionId: string
-  type: RuntimeCommandType
-  priority: number
-  source: string
-  actorId?: string
-  ackTimeoutMs?: number
-  resultTimeoutMs?: number
-  title?: string
-  description?: string
-  taskType?: string
-  name?: string
-  entity?: string
-  adapter?: string
-  effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra'
-  fastMode?: boolean
-  model?: string
-  permissionMode?: RuntimePermissionMode
-  background?: boolean
-  content?: string
-  message?: string
-  mode?: string
-  interactionId?: string
-  requestId?: string
-  value?: unknown
-  data?: string | string[]
-}
-
-export interface RuntimeCommandDraft
-  extends RuntimeJsonObject, RuntimeCorrelationFields, Partial<RuntimeProtocolEnvelope>
-{
-  id: string
-  ts?: number
-  sessionId: string
-  type: RuntimeCommandType
-  priority?: number
-  source: string
-  actorId?: string
-  ackTimeoutMs?: number
-  resultTimeoutMs?: number
-  title?: string
-  description?: string
-  taskType?: string
-  name?: string
-  entity?: string
-  adapter?: string
-  effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra'
-  fastMode?: boolean
-  model?: string
-  permissionMode?: RuntimePermissionMode
-  background?: boolean
-  content?: string
-  message?: string
-  mode?: string
-  interactionId?: string
-  requestId?: string
-  value?: unknown
-  data?: string | string[]
-}
+export type RuntimeCommand = z.infer<typeof RuntimeCommandSchema>
+export type RuntimeCommandDraft = z.infer<typeof RuntimeCommandDraftSchema>
 
 export interface RuntimeEvent extends RuntimeJsonObject, RuntimeCorrelationFields, RuntimeProtocolEnvelope {
   id: string
@@ -177,6 +125,8 @@ export interface RuntimeEvent extends RuntimeJsonObject, RuntimeCorrelationField
   ts: number
   sessionId: string
   type: RuntimeEventType
+  source?: string
+  recoveryGrant?: RuntimeProjectConfigRecoveryGrant
   title?: string
   parentSessionId?: string
   status?: RuntimeStatus
@@ -191,11 +141,15 @@ export interface RuntimeEvent extends RuntimeJsonObject, RuntimeCorrelationField
   options?: RuntimeInteractionOption[]
   multiselect?: boolean
   error?: string
+  code?: string
+  details?: unknown
   message?: string
   fatal?: boolean
   adapter?: string
   model?: string
   artifactId?: string
+  deliveryId?: string
+  deliveryState?: 'prepared' | 'accepted' | 'completed'
   path?: string
   mimeType?: string
   roomTitle?: string
@@ -216,6 +170,8 @@ export interface RuntimeEventDraft
   ts?: number
   sessionId: string
   type: RuntimeEventType
+  source?: string
+  recoveryGrant?: RuntimeProjectConfigRecoveryGrant
   title?: string
   parentSessionId?: string
   status?: RuntimeStatus
@@ -230,11 +186,15 @@ export interface RuntimeEventDraft
   options?: RuntimeInteractionOption[]
   multiselect?: boolean
   error?: string
+  code?: string
+  details?: unknown
   message?: string
   fatal?: boolean
   adapter?: string
   model?: string
   artifactId?: string
+  deliveryId?: string
+  deliveryState?: 'prepared' | 'accepted' | 'completed'
   path?: string
   mimeType?: string
   roomTitle?: string
@@ -252,9 +212,12 @@ export interface RuntimeMeta extends RuntimeJsonObject, RuntimeProtocolEnvelope 
   title?: string
   entity?: string
   adapter?: string
+  account?: string
   effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra'
   fastMode?: boolean
   model?: string
+  systemPrompt?: string
+  updateConfiguredSkills?: boolean
   permissionMode?: RuntimePermissionMode
   cwd?: string
   parentSessionId?: string
@@ -308,26 +271,44 @@ export interface RuntimeCommandBase extends Partial<RuntimeProtocolEnvelope> {
   source: RuntimeCommandSource
 }
 
-export interface StartRuntimeCommand extends RuntimeCommandBase {
+export type StartRuntimeCommand = RuntimeCommandBase & {
   type: 'start'
   description: string
+  content?: string
+  contentItems?: RuntimeActivationContentItem[]
+  message?: string
   title?: string
   taskType?: TaskDefinitionType
   name?: string
   adapter?: string
+  account?: string
   effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra'
   fastMode?: boolean
   model?: string
+  projectConfigPolicy?: RuntimeProjectConfigPolicy
   permissionMode?: RuntimePermissionMode
   background?: boolean
-}
+  systemPrompt?: string
+  updateConfiguredSkills?: boolean
+  runtimeContentItems?: RuntimeActivationContentItem[]
+  runtimeMessage?: string
+} & (
+  // Structured starts intentionally carry no deliverable prompt.  Any start
+  // that declares a delivery mode must carry one of the strict payload forms.
+  | { messageDelivery?: undefined }
+  | ({ messageDelivery: 'initial_prompt' } & RuntimeActivationPayload)
+  | ({ messageDelivery: 'bridge' } & RuntimeActivationPayload)
+)
 
-export interface SendMessageRuntimeCommand extends RuntimeCommandBase {
+export type SendMessageRuntimeCommand = RuntimeCommandBase & {
   type: 'send_message'
   content?: string
-  message: string
+  contentItems?: RuntimeActivationContentItem[]
+  message?: string
   mode?: 'direct' | 'steer'
-}
+  runtimeContentItems?: RuntimeActivationContentItem[]
+  runtimeMessage?: string
+} & RuntimeActivationPayload
 
 export interface StopRuntimeCommand extends RuntimeCommandBase {
   type: 'stop'
@@ -342,11 +323,17 @@ export interface SubmitInputRuntimeCommand extends RuntimeCommandBase {
   value?: unknown
 }
 
-export interface ResumeRuntimeCommand extends RuntimeCommandBase {
+export type ResumeRuntimeCommand = RuntimeCommandBase & {
   type: 'resume'
   content?: string
-  message: string
-}
+  contentItems?: RuntimeActivationContentItem[]
+  message?: string
+  messageDelivery?: 'bridge'
+  projectConfigPolicy?: RuntimeProjectConfigPolicy
+  recovery?: RuntimeRecoveryContext
+  runtimeContentItems?: RuntimeActivationContentItem[]
+  runtimeMessage?: string
+} & RuntimeActivationPayload
 
 export type TaskRuntimeCommand =
   | ResumeRuntimeCommand

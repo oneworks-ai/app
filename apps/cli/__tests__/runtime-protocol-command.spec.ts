@@ -1,12 +1,14 @@
 /* eslint-disable max-lines -- protocol command coverage intentionally exercises multiple envelopes together */
 import fs from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { Readable, Writable } from 'node:stream'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { getCurrentProtocolVersion } from '@oneworks/runtime-protocol'
+import { RuntimeCommandSchema, getCurrentProtocolVersion } from '@oneworks/runtime-protocol'
+import { projectConfigRecoveryPayloadDigest } from '@oneworks/runtime-store'
 import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 
 import {
@@ -17,12 +19,16 @@ import {
   readRuntimeStatus
 } from '#~/commands/agent/runtime-store.js'
 import {
+  buildRuntimeResumeConsumerArgs,
   executeRuntimeProtocolCommand,
   runRuntimeProtocolStdio,
   shouldStartRuntimeConsumer,
   shouldStartRuntimeResumeConsumer
 } from '#~/commands/run.js'
-import { attachRuntimeCommandBridge } from '#~/commands/run/runtime-command-bridge.js'
+import {
+  RuntimeDeliveryCrashError,
+  attachRuntimeCommandBridge
+} from '#~/commands/run/runtime-command-bridge.js'
 import { createCliRuntimeEventSink, createRuntimeEventSink } from '#~/commands/run/runtime-event-sink.js'
 
 const tempDirs: string[] = []
@@ -44,6 +50,90 @@ const resolveExpectedStorePath = (
   env: NodeJS.ProcessEnv = process.env
 ) => resolveProjectHomePath(cwd, env, 'runtime', 'sessions', sessionId)
 
+const projectConfigRecoveryKey = (
+  sessionId: string,
+  attemptCommandId: string,
+  failureEventId: string,
+  failureEventSeq: number
+) => createHash('sha256')
+  .update(`${sessionId}\0${attemptCommandId}\0${failureEventId}\0${failureEventSeq}`)
+  .digest('hex')
+
+const projectConfigFailureEvent = (params: {
+  adapter?: string
+  sessionId: string
+  commandId: string
+  workspaceFolder: string
+  id?: string
+  seq?: number
+}) => {
+  const id = params.id ?? 'evt_failed_attempt'
+  const seq = params.seq ?? 7
+  return {
+    protocolVersion: getCurrentProtocolVersion(),
+    id,
+    seq,
+    ts: 150,
+    sessionId: params.sessionId,
+    type: 'session_failed',
+    causedByCommandId: params.commandId,
+    code: 'codex_project_config_invalid',
+    fatal: true,
+    message: 'Invalid project config',
+    details: {
+      adapter: params.adapter ?? 'codex',
+      runtimeAdapter: 'codex',
+      configSource: 'project',
+      configPath: '.codex/config.toml',
+      workspaceSource: 'active-session-workspace',
+      workspaceFolder: params.workspaceFolder,
+      sessionId: params.sessionId,
+      reason: 'Invalid project Codex config.'
+    }
+  }
+}
+
+const projectConfigRecoveryGrantEvent = (
+  recoveryCommand: Record<string, unknown>,
+  failureEvent: ReturnType<typeof projectConfigFailureEvent>,
+  workspaceFolder: string
+) => {
+  const recovery = recoveryCommand.recovery as {
+    grantAuthorizationId: string
+    grantCommandIndex: number
+    grantEventId: string
+    grantEventSeq: number
+    idempotencyKey: string
+  }
+  return {
+    protocolVersion: getCurrentProtocolVersion(),
+    id: recovery.grantEventId,
+    seq: recovery.grantEventSeq,
+    ts: failureEvent.ts + 1,
+    sessionId: failureEvent.sessionId,
+    type: 'project_config_recovery_granted',
+    source: 'server:project-config-recovery',
+    recoveryGrant: {
+      schemaVersion: 1,
+      type: 'project_config_recovery_grant',
+      authorizationId: recovery.grantAuthorizationId,
+      commandIndex: recovery.grantCommandIndex,
+      recoveryCommandId: recoveryCommand.id,
+      idempotencyKey: recovery.idempotencyKey,
+      sessionId: failureEvent.sessionId,
+      attemptCommandId: failureEvent.causedByCommandId,
+      failureEventId: failureEvent.id,
+      failureEventSeq: failureEvent.seq,
+      payloadDigest: projectConfigRecoveryPayloadDigest(
+        RuntimeCommandSchema.parse(recoveryCommand)
+      )!,
+      workspaceFolder,
+      adapter: String(recoveryCommand.adapter ?? 'codex'),
+      runtimeAdapter: 'codex'
+    }
+  }
+}
+
 afterEach(async () => {
   if (originalProjectWorkspaceFolder == null) {
     delete process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__
@@ -60,52 +150,52 @@ afterEach(async () => {
 
 describe('runtime protocol command mode', () => {
   it('starts a background consumer by default when protocol mode has an environment', () => {
-    expect(shouldStartRuntimeConsumer({ type: 'session.start' } as any, {})).toBe(true)
-    expect(shouldStartRuntimeConsumer({ type: 'session.start', background: false } as any, {})).toBe(false)
-    expect(shouldStartRuntimeConsumer({ type: 'session.start' } as any, {
+    expect(shouldStartRuntimeConsumer({ type: 'session.start' }, {})).toBe(true)
+    expect(shouldStartRuntimeConsumer({ type: 'session.start', background: false }, {})).toBe(false)
+    expect(shouldStartRuntimeConsumer({ type: 'session.start' }, {
       ONEWORKS_RUNTIME_PROTOCOL_DISABLE_CONSUMER: '1'
     } as NodeJS.ProcessEnv)).toBe(false)
-    expect(shouldStartRuntimeConsumer({ type: 'session.start' } as any, {
+    expect(shouldStartRuntimeConsumer({ type: 'session.start' }, {
       __ONEWORKS_PROJECT_BASE_DIR__: '/runtime-base',
       __ONEWORKS_AGENT_ROOM_HOST_SESSION_ID__: 'host-session'
     } as NodeJS.ProcessEnv)).toBe(false)
     expect(shouldStartRuntimeConsumer({
       type: 'session.start',
       hostSessionId: 'host-session'
-    } as any, {
+    }, {
       __ONEWORKS_PROJECT_BASE_DIR__: '/runtime-base'
     } as NodeJS.ProcessEnv)).toBe(false)
-    expect(shouldStartRuntimeConsumer({ type: 'session.start' } as any, {
+    expect(shouldStartRuntimeConsumer({ type: 'session.start' }, {
       __ONEWORKS_PROJECT_BASE_DIR__: '/runtime-base',
       ONEWORKS_RUNTIME_PROTOCOL_FORCE_LOCAL_CONSUMER: '1',
       __ONEWORKS_AGENT_ROOM_HOST_SESSION_ID__: 'host-session'
     } as NodeJS.ProcessEnv)).toBe(true)
-    expect(shouldStartRuntimeConsumer({ type: 'session.start' } as any)).toBe(false)
+    expect(shouldStartRuntimeConsumer({ type: 'session.start' })).toBe(false)
   })
 
   it('starts a resume consumer for terminal follow-up messages', () => {
     expect(shouldStartRuntimeResumeConsumer({
-      command: { type: 'session.message' } as any,
+      command: { type: 'session.message' },
       env: {},
       status: 'completed'
     })).toBe(true)
     expect(shouldStartRuntimeResumeConsumer({
-      command: { type: 'session.message' } as any,
+      command: { type: 'session.message' },
       env: {},
       status: 'failed'
     })).toBe(true)
     expect(shouldStartRuntimeResumeConsumer({
-      command: { type: 'session.message' } as any,
+      command: { type: 'session.message' },
       env: {},
       status: 'running'
     })).toBe(false)
     expect(shouldStartRuntimeResumeConsumer({
-      command: { background: false, type: 'session.message' } as any,
+      command: { background: false, type: 'session.message' },
       env: {},
       status: 'completed'
     })).toBe(false)
     expect(shouldStartRuntimeResumeConsumer({
-      command: { type: 'session.message' } as any,
+      command: { type: 'session.message' },
       env: { ONEWORKS_RUNTIME_PROTOCOL_DISABLE_CONSUMER: '1' } as NodeJS.ProcessEnv,
       status: 'completed'
     })).toBe(false)
@@ -151,6 +241,150 @@ describe('runtime protocol command mode', () => {
         type: 'start'
       })
     ])
+  })
+
+  it('preserves structured-only protocol start content for bridge delivery without empty text', async () => {
+    const cwd = await createTempDir()
+    const result = await executeRuntimeProtocolCommand({
+      protocolVersion: getCurrentProtocolVersion(),
+      commandId: 'proto-structured-start',
+      type: 'session.start',
+      sessionId: 'sess-structured-start',
+      entity: 'dev',
+      contentItems: [{ type: 'file', path: '/tmp/structured-start.md' }]
+    }, { cwd, now: () => 100 })
+
+    expect(result.ok).toBe(true)
+    expect(await readRuntimeCommands(cwd, 'sess-structured-start')).toEqual([
+      expect.objectContaining({
+        type: 'start',
+        contentItems: [{ type: 'file', path: '/tmp/structured-start.md' }],
+        messageDelivery: 'bridge'
+      })
+    ])
+  })
+
+  it('stores deferred systemPrompt, account, and updateConfiguredSkills symmetrically', async () => {
+    const cwd = await createTempDir()
+    const sessionId = 'sess-deferred-public-fields'
+    const result = await executeRuntimeProtocolCommand({
+      protocolVersion: getCurrentProtocolVersion(),
+      commandId: 'proto-deferred-fields',
+      type: 'session.start',
+      sessionId,
+      entity: 'dev',
+      message: 'Run deferred task',
+      account: 'work',
+      systemPrompt: 'Authoritative deferred prompt',
+      updateConfiguredSkills: true
+    }, { cwd, now: () => 100 })
+
+    expect(result.ok).toBe(true)
+    expect((await readRuntimeStatus(cwd, sessionId)).meta).toEqual(expect.objectContaining({
+      account: 'work',
+      systemPrompt: 'Authoritative deferred prompt',
+      updateConfiguredSkills: true
+    }))
+    expect(await readRuntimeCommands(cwd, sessionId)).toEqual([
+      expect.objectContaining({
+        account: 'work',
+        systemPrompt: 'Authoritative deferred prompt',
+        updateConfiguredSkills: true
+      })
+    ])
+  })
+
+  it.each([
+    ['session.resume', 'account', 'work'],
+    ['session.message', 'systemPrompt', 'must not leak into a resume'],
+    ['session.stop', 'updateConfiguredSkills', true]
+  ] as const)(
+    'rejects the start-only %s.%s field before runtime dispatch',
+    async (type, field, value) => {
+      const cwd = await createTempDir()
+      const sessionId = `sess-start-only-${field}`
+      await createRuntimeSession({
+        cwd,
+        entity: 'dev',
+        env: { ONEWORKS_RUNTIME_PROTOCOL_DISABLE_CONSUMER: '1' },
+        message: 'Start',
+        sessionId
+      })
+      const before = await readRuntimeCommands(cwd, sessionId)
+      const result = await executeRuntimeProtocolCommand({
+        protocolVersion: getCurrentProtocolVersion(),
+        commandId: `proto-invalid-${field}`,
+        type,
+        sessionId,
+        ...(type === 'session.stop' ? {} : { message: 'Continue' }),
+        [field]: value
+      }, { cwd })
+
+      expect(result).toEqual(expect.objectContaining({
+        commandId: `proto-invalid-${field}`,
+        ok: false
+      }))
+      expect(await readRuntimeCommands(cwd, sessionId)).toEqual(before)
+    }
+  )
+
+  it('keeps project config recovery command-local across public resume persistence and spawn args', async () => {
+    const cwd = await createTempDir()
+    const env = {
+      ONEWORKS_RUNTIME_PROTOCOL_DISABLE_CONSUMER: '1'
+    } as NodeJS.ProcessEnv
+    await createRuntimeSession({
+      cwd,
+      entity: 'dev',
+      env,
+      message: 'Start',
+      sessionId: 'sess-proto-recovery'
+    })
+
+    const recoveryResult = await executeRuntimeProtocolCommand({
+      protocolVersion: getCurrentProtocolVersion(),
+      commandId: 'proto-resume-recovery',
+      type: 'session.resume',
+      sessionId: 'sess-proto-recovery',
+      message: 'Retry with global config',
+      projectConfigPolicy: 'global-only'
+    }, { cwd, env })
+    const ordinaryResult = await executeRuntimeProtocolCommand({
+      protocolVersion: getCurrentProtocolVersion(),
+      commandId: 'proto-resume-ordinary',
+      type: 'session.resume',
+      sessionId: 'sess-proto-recovery',
+      message: 'Resume normally'
+    }, { cwd, env })
+
+    expect(recoveryResult.ok).toBe(true)
+    expect(ordinaryResult.ok).toBe(true)
+    const commands = await readRuntimeCommands(cwd, 'sess-proto-recovery', env)
+    expect(commands.at(-2)).toEqual(expect.objectContaining({
+      type: 'resume',
+      projectConfigPolicy: 'global-only'
+    }))
+    expect(commands.at(-1)).toEqual(expect.objectContaining({
+      type: 'resume'
+    }))
+    expect(commands.at(-1)).not.toHaveProperty('projectConfigPolicy')
+    expect((await readRuntimeStatus(cwd, 'sess-proto-recovery', env)).meta)
+      .not.toHaveProperty('projectConfigPolicy')
+
+    expect(buildRuntimeResumeConsumerArgs({
+      cliEntrypoint: '/tmp/ow.js',
+      projectConfigPolicy: 'global-only',
+      sessionId: 'sess-proto-recovery'
+    })).toEqual(expect.arrayContaining([
+      '--resume',
+      'sess-proto-recovery',
+      '--project-config-policy',
+      'global-only'
+    ]))
+    expect(buildRuntimeResumeConsumerArgs({
+      cliEntrypoint: '/tmp/ow.js',
+      sessionId: 'sess-proto-recovery'
+    })).not.toContain('--project-config-policy')
   })
 
   it('uses the project-home runtime dir for protocol writes with server env', async () => {
@@ -443,7 +677,9 @@ describe('runtime protocol command mode', () => {
 
     const emitted: unknown[] = []
     const stopBridge = await attachRuntimeCommandBridge({
+      adapter: 'codex',
       cwd,
+      runtimeAdapter: 'codex',
       session: {
         emit: event => emitted.push(event)
       },
@@ -469,6 +705,7 @@ describe('runtime protocol command mode', () => {
       path.join(storePath, 'commands.jsonl'),
       `${
         JSON.stringify({
+          protocolVersion: getCurrentProtocolVersion(),
           id: 'cmd_start_1',
           ts: 100,
           sessionId,
@@ -494,7 +731,9 @@ describe('runtime protocol command mode', () => {
 
     const emitted: unknown[] = []
     const stopBridge = await attachRuntimeCommandBridge({
+      adapter: 'codex',
       cwd,
+      runtimeAdapter: 'codex',
       session: {
         emit: event => emitted.push(event)
       },
@@ -515,7 +754,7 @@ describe('runtime protocol command mode', () => {
     ])
   })
 
-  it('acks initial prompt start commands without duplicating the projected user message', async () => {
+  it('durably completes an initial prompt only after adapter acceptance without duplicating it', async () => {
     const cwd = await createTempDir()
     const sessionId = 'sess-initial-prompt-start'
     const storePath = resolveExpectedStorePath(cwd, sessionId)
@@ -524,6 +763,7 @@ describe('runtime protocol command mode', () => {
       path.join(storePath, 'commands.jsonl'),
       `${
         JSON.stringify({
+          protocolVersion: getCurrentProtocolVersion(),
           id: 'cmd_start_1',
           ts: 100,
           sessionId,
@@ -544,7 +784,16 @@ describe('runtime protocol command mode', () => {
       startAlreadyAcked: false,
       shouldRunInitialPrompt: true
     }))
+    expect(await readRuntimeEvents(cwd, sessionId)).toEqual([])
+
+    // This is the synchronous adapter/session acceptance boundary.  A crash
+    // before it leaves the start unacknowledged for at-least-once replay.
+    await sink.completeInitialPromptDelivery()
     expect((await readRuntimeEvents(cwd, sessionId)).map(event => event.type)).toEqual([
+      'command_delivery_prepared',
+      'command_delivery_accepted',
+      'command_delivery_completed',
+      'message',
       'command_ack'
     ])
 
@@ -559,6 +808,10 @@ describe('runtime protocol command mode', () => {
     })
     await sink.flush()
     expect((await readRuntimeEvents(cwd, sessionId)).map(event => event.type)).toEqual([
+      'command_delivery_prepared',
+      'command_delivery_accepted',
+      'command_delivery_completed',
+      'message',
       'command_ack'
     ])
   })
@@ -572,6 +825,7 @@ describe('runtime protocol command mode', () => {
       path.join(storePath, 'commands.jsonl'),
       `${
         JSON.stringify({
+          protocolVersion: getCurrentProtocolVersion(),
           id: 'cmd_start_1',
           ts: 100,
           sessionId,
@@ -618,6 +872,429 @@ describe('runtime protocol command mode', () => {
       })
     )
   })
+
+  it.each(['resume', 'send_message'] as const)(
+    'dispatches a server-stored recovery for an adapter-less unacknowledged %s attempt',
+    async (failedType) => {
+    const cwd = await createTempDir()
+    const sessionId = `sess-project-config-recovery-${failedType}`
+    const storePath = resolveExpectedStorePath(cwd, sessionId)
+    await fs.mkdir(storePath, { recursive: true })
+    const failedCommand = {
+      protocolVersion: getCurrentProtocolVersion(),
+      id: 'cmd_failed_attempt',
+      ts: 100,
+      sessionId,
+      type: failedType,
+      priority: 20,
+      source: 'user',
+      content: 'visible recovery prompt',
+      runtimeContentItems: [
+        { type: 'text', text: 'exact failed prompt' },
+        { type: 'file', path: '/tmp/recovery-context.md' }
+      ]
+    }
+    const recoveryCommand = {
+      protocolVersion: getCurrentProtocolVersion(),
+      id: 'cmd_recovery_1',
+      ts: 200,
+      sessionId,
+      type: 'resume',
+      priority: 20,
+      source: 'project_config_recovery',
+      adapter: 'custom-codex',
+      content: 'visible recovery prompt',
+      message: 'visible recovery prompt',
+      messageDelivery: 'bridge',
+      projectConfigPolicy: 'global-only',
+      runtimeContentItems: failedCommand.runtimeContentItems,
+      recovery: {
+        kind: 'codex-project-config',
+        attemptCommandId: 'cmd_failed_attempt',
+        replacedActivationCommandId: 'cmd_failed_attempt',
+        failureEventId: 'evt_failed_attempt',
+        failureEventSeq: 7,
+        grantEventId: 'evt_grant_cmd_recovery_1',
+        grantEventSeq: 8,
+        grantAuthorizationId: '11111111-1111-4111-8111-111111111111',
+        grantCommandIndex: 1,
+        idempotencyKey: projectConfigRecoveryKey(
+          sessionId,
+          'cmd_failed_attempt',
+          'evt_failed_attempt',
+          7
+        )
+      }
+    }
+    await fs.writeFile(
+      path.join(storePath, 'commands.jsonl'),
+      `${JSON.stringify(failedCommand)}\n${JSON.stringify(recoveryCommand)}\n`
+    )
+    const failureEvent = projectConfigFailureEvent({
+      adapter: 'custom-codex',
+      sessionId,
+      commandId: failedCommand.id,
+      workspaceFolder: cwd
+    })
+    const grantEvent = projectConfigRecoveryGrantEvent(recoveryCommand, failureEvent, cwd)
+    await fs.writeFile(
+      path.join(storePath, 'events.jsonl'),
+      `${JSON.stringify(failureEvent)}\n${JSON.stringify(grantEvent)}\n`
+    )
+
+    const sink = await createRuntimeEventSink({ cwd, sessionId })
+    await sink.recordStartup(await readRuntimeCommands(cwd, sessionId))
+    const emitted: unknown[] = []
+    const stopBridge = await attachRuntimeCommandBridge({
+      adapter: 'custom-codex',
+      cwd,
+      runtimeAdapter: 'codex',
+      session: {
+        emit: event => emitted.push(event)
+      },
+      sessionId,
+      sink
+    })
+    await stopBridge()
+    await sink.flush()
+
+    expect(emitted).toEqual([
+      {
+        type: 'message',
+        deliveryId: 'runtime-delivery:cmd_recovery_1',
+        content: [
+          { type: 'text', text: 'exact failed prompt' },
+          { type: 'file', path: '/tmp/recovery-context.md' }
+        ]
+      }
+    ])
+    expect((await readRuntimeEvents(cwd, sessionId)).filter(event =>
+      event.type === 'command_ack' && event.commandId === 'cmd_recovery_1'
+    )).toHaveLength(1)
+    expect((await readRuntimeEvents(cwd, sessionId)).filter(event =>
+      event.type === 'command_ack' && event.commandId === 'cmd_failed_attempt'
+    )).toHaveLength(0)
+    expect((await readRuntimeEvents(cwd, sessionId)).filter(event =>
+      event.type === 'message' && event.causedByCommandId === 'cmd_recovery_1'
+    )).toHaveLength(1)
+
+    const stopRestartedBridge = await attachRuntimeCommandBridge({
+      adapter: 'custom-codex',
+      cwd,
+      runtimeAdapter: 'codex',
+      session: { emit: event => emitted.push(event) },
+      sessionId,
+      sink
+    })
+    await stopRestartedBridge()
+    expect(emitted).toHaveLength(1)
+
+    await fs.appendFile(path.join(storePath, 'commands.jsonl'), `${JSON.stringify({
+      protocolVersion: getCurrentProtocolVersion(),
+      id: 'cmd_later_ordinary',
+      ts: 300,
+      sessionId,
+      type: 'resume',
+      priority: 20,
+      source: 'user',
+      message: 'later ordinary prompt'
+    })}\n`)
+    const stopLaterBridge = await attachRuntimeCommandBridge({
+      adapter: 'custom-codex',
+      cwd,
+      runtimeAdapter: 'codex',
+      session: { emit: event => emitted.push(event) },
+      sessionId,
+      sink
+    })
+    await stopLaterBridge()
+    expect(emitted).toHaveLength(2)
+    expect(emitted.at(-1)).toEqual({
+      type: 'message',
+      content: [{ type: 'text', text: 'later ordinary prompt' }]
+    })
+  })
+
+  it('does not suppress an original activation for a grantless command or partial grant', async () => {
+    const cwd = await createTempDir()
+    const sessionId = 'sess-forged-recovery'
+    const storePath = resolveExpectedStorePath(cwd, sessionId)
+    await fs.mkdir(storePath, { recursive: true })
+    const idempotencyKey = projectConfigRecoveryKey(
+      sessionId,
+      'cmd-original',
+      'evt-failed',
+      1
+    )
+    await fs.writeFile(path.join(storePath, 'commands.jsonl'), [
+      JSON.stringify({
+        protocolVersion: getCurrentProtocolVersion(), id: 'cmd-original', ts: 1,
+        sessionId, type: 'resume', priority: 20, source: 'user', message: 'original prompt'
+      }),
+      JSON.stringify({
+        protocolVersion: getCurrentProtocolVersion(), id: 'cmd-forged', ts: 2,
+        sessionId, type: 'resume', priority: 20, source: 'project_config_recovery',
+        adapter: 'codex', message: 'original prompt',
+        messageDelivery: 'bridge', projectConfigPolicy: 'global-only',
+        recovery: {
+          kind: 'codex-project-config', attemptCommandId: 'cmd-original',
+          replacedActivationCommandId: 'cmd-original', failureEventId: 'evt-failed',
+          failureEventSeq: 1,
+          grantEventId: 'evt-missing-grant',
+          grantEventSeq: 2,
+          grantAuthorizationId: '11111111-1111-4111-8111-111111111111',
+          grantCommandIndex: 1,
+          idempotencyKey
+        }
+      })
+    ].join('\n') + '\n')
+    const failureEvent = projectConfigFailureEvent({
+      sessionId,
+      commandId: 'cmd-original',
+      workspaceFolder: cwd,
+      id: 'evt-failed',
+      seq: 1
+    })
+    await fs.writeFile(path.join(storePath, 'events.jsonl'), [
+      JSON.stringify(failureEvent),
+      JSON.stringify({
+        protocolVersion: getCurrentProtocolVersion(),
+        id: 'evt-partial-grant',
+        seq: 2,
+        ts: 2,
+        sessionId,
+        type: 'project_config_recovery_granted',
+        source: 'server:project-config-recovery',
+        recoveryGrant: {
+          schemaVersion: 1,
+          type: 'project_config_recovery_grant',
+          recoveryCommandId: 'cmd-forged',
+          idempotencyKey
+        }
+      })
+    ].join('\n') + '\n')
+
+    const sink = await createRuntimeEventSink({ cwd, sessionId })
+    const emitted: unknown[] = []
+    const stop = await attachRuntimeCommandBridge({
+      adapter: 'codex',
+      cwd,
+      runtimeAdapter: 'codex',
+      sessionId,
+      sink,
+      session: { emit: event => emitted.push(event) }
+    })
+    await stop()
+
+    expect(emitted).toEqual([{
+      type: 'message', content: [{ type: 'text', text: 'original prompt' }]
+    }])
+    expect((await readRuntimeEvents(cwd, sessionId)).some(event =>
+      event.type === 'command_failed' && event.commandId === 'cmd-forged'
+    )).toBe(true)
+  })
+
+  it('remains lossless after a grant-only writer crash and later exact-command retry', async () => {
+    const cwd = await createTempDir()
+    const sessionId = 'sess-grant-command-observation'
+    const storePath = resolveExpectedStorePath(cwd, sessionId)
+    await fs.mkdir(storePath, { recursive: true })
+    const original = {
+      protocolVersion: getCurrentProtocolVersion(),
+      id: 'cmd-original',
+      ts: 1,
+      sessionId,
+      type: 'resume',
+      priority: 20,
+      source: 'user',
+      message: 'durable prompt'
+    }
+    const recovery = {
+      protocolVersion: getCurrentProtocolVersion(),
+      id: 'cmd-recovery',
+      ts: 2,
+      sessionId,
+      type: 'resume',
+      priority: 20,
+      source: 'project_config_recovery',
+      adapter: 'codex',
+      message: original.message,
+      messageDelivery: 'bridge',
+      projectConfigPolicy: 'global-only',
+      recovery: {
+        kind: 'codex-project-config',
+        attemptCommandId: original.id,
+        replacedActivationCommandId: original.id,
+        failureEventId: 'evt-failure',
+        failureEventSeq: 1,
+        grantEventId: 'evt_grant_cmd-recovery',
+        grantEventSeq: 2,
+        grantAuthorizationId: '11111111-1111-4111-8111-111111111111',
+        grantCommandIndex: 1,
+        idempotencyKey: projectConfigRecoveryKey(
+          sessionId,
+          original.id,
+          'evt-failure',
+          1
+        )
+      }
+    }
+    const failureEvent = projectConfigFailureEvent({
+      sessionId,
+      commandId: original.id,
+      workspaceFolder: cwd,
+      id: 'evt-failure',
+      seq: 1
+    })
+    const grantEvent = projectConfigRecoveryGrantEvent(recovery, failureEvent, cwd)
+    await fs.writeFile(path.join(storePath, 'commands.jsonl'), `${JSON.stringify(original)}\n`)
+    await fs.writeFile(
+      path.join(storePath, 'events.jsonl'),
+      `${JSON.stringify(failureEvent)}\n${JSON.stringify(grantEvent)}\n`
+    )
+
+    const emitted: unknown[] = []
+    const sink = await createRuntimeEventSink({ cwd, sessionId })
+    const stopGrantOnlyObservation = await attachRuntimeCommandBridge({
+      adapter: 'codex',
+      cwd,
+      runtimeAdapter: 'codex',
+      sessionId,
+      sink,
+      session: { emit: event => emitted.push(event) }
+    })
+    await stopGrantOnlyObservation()
+    expect(emitted).toEqual([{
+      type: 'message',
+      content: [{ type: 'text', text: 'durable prompt' }]
+    }])
+
+    await fs.appendFile(
+      path.join(storePath, 'commands.jsonl'),
+      `${JSON.stringify(recovery)}\n`
+    )
+    const stopAfterCommand = await attachRuntimeCommandBridge({
+      adapter: 'codex',
+      cwd,
+      runtimeAdapter: 'codex',
+      sessionId,
+      sink,
+      session: { emit: event => emitted.push(event) }
+    })
+    await stopAfterCommand()
+    expect(emitted.at(-1)).toEqual({
+      type: 'message',
+      deliveryId: 'runtime-delivery:cmd-recovery',
+      content: [{ type: 'text', text: 'durable prompt' }]
+    })
+  })
+
+  it.each([
+    ['before_emit', 0, 1, 'resume'],
+    ['before_emit', 0, 1, 'send_message'],
+    ['after_accepted', 1, 2, 'resume'],
+    ['after_accepted', 1, 2, 'send_message'],
+    ['after_completed', 1, 1, 'resume'],
+    ['after_completed', 1, 1, 'send_message']
+  ] as const)(
+    'uses honest at-least-once recovery delivery at %s (%i→%i) for %s',
+    async (boundary, beforeRestart, afterRestart, failedType) => {
+      const cwd = await createTempDir()
+      const sessionId = `sess-delivery-crash-${boundary}`
+      const storePath = resolveExpectedStorePath(cwd, sessionId)
+      await fs.mkdir(storePath, { recursive: true })
+      const recovery = {
+        protocolVersion: getCurrentProtocolVersion(),
+        id: 'cmd-recovery',
+        ts: 2,
+        sessionId,
+        type: 'resume',
+        priority: 20,
+        source: 'project_config_recovery',
+        adapter: 'codex',
+        projectConfigPolicy: 'global-only',
+        runtimeContentItems: [
+          { type: 'text', text: 'recover this prompt' },
+          { type: 'file', path: '/tmp/crash-recovery-context.md' }
+        ],
+        messageDelivery: 'bridge',
+        recovery: {
+          kind: 'codex-project-config',
+          attemptCommandId: 'cmd-original',
+          replacedActivationCommandId: 'cmd-original',
+          failureEventId: 'evt-failure',
+          failureEventSeq: 1,
+          grantEventId: 'evt_grant_cmd-recovery',
+          grantEventSeq: 2,
+          grantAuthorizationId: '11111111-1111-4111-8111-111111111111',
+          grantCommandIndex: 1,
+          idempotencyKey: projectConfigRecoveryKey(
+            sessionId,
+            'cmd-original',
+            'evt-failure',
+            1
+          )
+        }
+      }
+      await fs.writeFile(path.join(storePath, 'commands.jsonl'), [
+        JSON.stringify({
+          protocolVersion: getCurrentProtocolVersion(),
+          id: 'cmd-original',
+          ts: 1,
+          sessionId,
+          type: failedType,
+          priority: 20,
+          source: 'user',
+          runtimeContentItems: recovery.runtimeContentItems
+        }),
+        JSON.stringify(recovery)
+      ].join('\n') + '\n')
+      const failureEvent = projectConfigFailureEvent({
+        sessionId,
+        commandId: 'cmd-original',
+        workspaceFolder: cwd,
+        id: 'evt-failure',
+        seq: 1
+      })
+      const grantEvent = projectConfigRecoveryGrantEvent(recovery, failureEvent, cwd)
+      await fs.writeFile(
+        path.join(storePath, 'events.jsonl'),
+        `${JSON.stringify(failureEvent)}\n${JSON.stringify(grantEvent)}\n`
+      )
+      const sink = await createRuntimeEventSink({ cwd, sessionId })
+      const emitted: unknown[] = []
+      const stopCrashed = await attachRuntimeCommandBridge({
+        adapter: 'codex',
+        cwd,
+        deliveryCrashHook: current => {
+          if (current === boundary) throw new RuntimeDeliveryCrashError(boundary)
+        },
+        runtimeAdapter: 'codex',
+        session: { emit: event => emitted.push(event) },
+        sessionId,
+        sink
+      })
+      await stopCrashed()
+      expect(emitted).toHaveLength(beforeRestart)
+
+      const stopRestarted = await attachRuntimeCommandBridge({
+        adapter: 'codex',
+        cwd,
+        runtimeAdapter: 'codex',
+        session: { emit: event => emitted.push(event) },
+        sessionId,
+        sink
+      })
+      await stopRestarted()
+      expect(emitted).toHaveLength(afterRestart)
+      expect(emitted.every(event =>
+        (event as { deliveryId?: string }).deliveryId === 'runtime-delivery:cmd-recovery'
+      )).toBe(true)
+      expect(emitted.every(event =>
+        JSON.stringify(event).includes('/tmp/crash-recovery-context.md')
+      )).toBe(true)
+    }
+  )
 
   it('reads JSONL protocol commands from stdin and writes JSONL result envelopes', async () => {
     const cwd = await createTempDir()
@@ -729,6 +1406,7 @@ describe('runtime protocol command mode', () => {
     const sink = await createRuntimeEventSink({ cwd, sessionId: 'sess-consumer-complete' })
 
     await sink.recordStartup(await readRuntimeCommands(cwd, 'sess-consumer-complete'))
+    await sink.completeInitialPromptDelivery()
     await sink.handleAdapterEvent({
       type: 'init',
       data: {
@@ -762,18 +1440,21 @@ describe('runtime protocol command mode', () => {
     }))
     const events = await readRuntimeEvents(cwd, 'sess-consumer-complete')
     expect(events.map(event => event.type)).toEqual([
-      'command_ack',
+      'command_delivery_prepared',
+      'command_delivery_accepted',
+      'command_delivery_completed',
       'message',
+      'command_ack',
       'session_started',
       'message',
       'session_completed'
     ])
-    expect(events[3]).toEqual(expect.objectContaining({
+    expect(events[6]).toEqual(expect.objectContaining({
       type: 'message',
       visibility: 'private'
     }))
-    expect(events[3]).not.toHaveProperty('publicSummary')
-    expect(events[4]).toEqual(expect.objectContaining({
+    expect(events[6]).not.toHaveProperty('publicSummary')
+    expect(events[7]).toEqual(expect.objectContaining({
       type: 'session_completed',
       summary: 'Consumer finished.',
       visibility: 'room'
@@ -792,6 +1473,7 @@ describe('runtime protocol command mode', () => {
       sessionId: 'sess-cli-direct',
       title: 'Read README'
     })
+    await sink.completeInitialPromptDelivery()
 
     await sink.handleAdapterEvent({
       type: 'init',
@@ -847,8 +1529,11 @@ describe('runtime protocol command mode', () => {
       type: 'start'
     }))
     expect((await readRuntimeEvents(cwd, 'sess-cli-direct')).map(event => event.type)).toEqual([
-      'command_ack',
+      'command_delivery_prepared',
+      'command_delivery_accepted',
+      'command_delivery_completed',
       'message',
+      'command_ack',
       'session_started',
       'message',
       'session_completed'
@@ -932,6 +1617,7 @@ describe('runtime protocol command mode', () => {
     const firstSink = await createRuntimeEventSink({ cwd, sessionId: 'sess-consumer-startup-replay' })
 
     const firstStartup = await firstSink.recordStartup(commands)
+    await firstSink.completeInitialPromptDelivery()
     await firstSink.flush()
 
     expect(firstStartup).toEqual(expect.objectContaining({
@@ -940,8 +1626,11 @@ describe('runtime protocol command mode', () => {
       shouldRunInitialPrompt: true
     }))
     expect((await readRuntimeEvents(cwd, 'sess-consumer-startup-replay')).map(event => event.type)).toEqual([
-      'command_ack',
-      'message'
+      'command_delivery_prepared',
+      'command_delivery_accepted',
+      'command_delivery_completed',
+      'message',
+      'command_ack'
     ])
 
     const secondSink = await createRuntimeEventSink({ cwd, sessionId: 'sess-consumer-startup-replay' })
@@ -954,8 +1643,11 @@ describe('runtime protocol command mode', () => {
       shouldRunInitialPrompt: false
     }))
     expect((await readRuntimeEvents(cwd, 'sess-consumer-startup-replay')).map(event => event.type)).toEqual([
-      'command_ack',
-      'message'
+      'command_delivery_prepared',
+      'command_delivery_accepted',
+      'command_delivery_completed',
+      'message',
+      'command_ack'
     ])
   })
 
@@ -1059,6 +1751,7 @@ describe('runtime protocol command mode', () => {
     const sink = await createRuntimeEventSink({ cwd, sessionId: 'sess-consumer-failed-terminal' })
 
     await sink.recordStartup(await readRuntimeCommands(cwd, 'sess-consumer-failed-terminal'))
+    await sink.completeInitialPromptDelivery()
     await sink.handleAdapterEvent({
       type: 'error',
       data: {
@@ -1076,8 +1769,11 @@ describe('runtime protocol command mode', () => {
       lastMessage: 'adapter stream disconnected'
     }))
     expect((await readRuntimeEvents(cwd, 'sess-consumer-failed-terminal')).map(event => event.type)).toEqual([
-      'command_ack',
+      'command_delivery_prepared',
+      'command_delivery_accepted',
+      'command_delivery_completed',
       'message',
+      'command_ack',
       'session_failed'
     ])
   })

@@ -43,6 +43,7 @@ import {
   mergeListConfig,
   resolveDefaultOneworksMcpServerOption,
   resolveInjectDefaultSystemPromptOption,
+  resolvePersistedResumeAdapterOptions,
   resolvePermissionModeOption,
   resolveResumeAdapterOptions,
   resolveRunMode
@@ -154,6 +155,11 @@ const configureRunCommand = (command: Command) => {
     .option('--model <model>', 'Model to use')
     .option('--effort <effort>', 'Effort to use (low, medium, high, xhigh, max, ultra)')
     .addOption(new Option('--fast-mode <mode>', 'Use Codex Fast mode (on or off)').argParser(parseFastMode))
+    .addOption(
+      new Option('--project-config-policy <policy>')
+        .choices(['include', 'global-only'])
+        .hideHelp()
+    )
     .addOption(createAdapterOption('Adapter to use', { allowCliVersion: true }))
     .option('--account <account>', 'Adapter account to use')
     .option('--system-prompt <prompt>', 'System prompt')
@@ -322,7 +328,8 @@ Notes:
                 message: description.trim() === '' ? '继续' : description,
                 model: opts.model,
                 effort: toRuntimeResumeEffort(opts.effort),
-                permissionMode: toRuntimeResumePermissionMode(opts.permissionMode)
+                permissionMode: toRuntimeResumePermissionMode(opts.permissionMode),
+                projectConfigPolicy: opts.projectConfigPolicy
               }, {
                 cwd,
                 env: mergeProcessEnvWithProjectEnv({
@@ -572,6 +579,7 @@ Notes:
               account: opts.account,
               effort: opts.effort,
               fastMode: opts.fastMode,
+              projectConfigPolicy: opts.projectConfigPolicy,
               systemPrompt: mergeSystemPrompts({
                 generatedSystemPrompt: resolvedConfig.systemPrompt,
                 userSystemPrompt: opts.systemPrompt ?? runtimeSystemPrompt,
@@ -606,8 +614,9 @@ Notes:
         const {
           type: _adapterType,
           description: _adapterDescription,
-          ...cachedAdapterOptions
+          ...resumableAdapterOptions
         } = adapterOptions
+        const cachedAdapterOptions = resolvePersistedResumeAdapterOptions(resumableAdapterOptions)
         const runTaskOptions = isResume || isFork
           ? undefined
           : {
@@ -699,6 +708,7 @@ Notes:
             message: record.resume.description,
             model: record.resume.adapterOptions.model,
             permissionMode: toRuntimeResumePermissionMode(record.resume.adapterOptions.permissionMode),
+            projectConfigPolicy: adapterOptions.projectConfigPolicy,
             sessionId,
             title: record.detail.description ?? record.resume.description ?? sessionId
           })
@@ -833,7 +843,7 @@ Notes:
 
         const runStartedAt = startupProfiler.now()
         await recordAdapterCliPrepareOperation('operation_started', ADAPTER_CLI_PREPARE_STARTED_MESSAGE)
-        const { session, resolvedAdapter } = await run({
+        const { session, resolvedAdapter, runtimeAdapter } = await run({
           adapter: record.resume.resolvedAdapter ?? record.resume.taskOptions.adapter,
           cwd: record.resume.taskOptions.cwd ?? record.resume.cwd,
           ctxId,
@@ -945,6 +955,10 @@ Notes:
         })
         startupProfiler.mark('cli.task.run', runStartedAt)
         boundSession = session
+        // `run()` is the synchronous adapter/session acceptance boundary.
+        // Complete the durable initial-start delivery only after this point;
+        // a crash earlier leaves the command prepared for at-least-once replay.
+        await runtimeEventSink?.completeInitialPromptDelivery()
         record.resume = {
           ...record.resume,
           resolvedAdapter: resolvedAdapter ?? record.resume.resolvedAdapter,
@@ -963,8 +977,10 @@ Notes:
         exitController.bindSession(session)
         if (runtimeEventSink != null) {
           stopRuntimeCommandBridge = await attachRuntimeCommandBridge({
+            adapter: resolvedAdapter,
             cwd,
             env: process.env,
+            runtimeAdapter,
             session,
             sessionId,
             sink: runtimeEventSink,

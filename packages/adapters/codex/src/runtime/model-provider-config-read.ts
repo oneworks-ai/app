@@ -113,11 +113,12 @@ const terminateProcess = async (proc: ChildProcess) => {
 export const readCodexConfigFromAppServer = async (params: {
   binaryPath: string
   codexHome: string
+  configOverrideArgs?: readonly string[]
   cwd?: string
   env: AdapterCtx['env']
   includeLayers: boolean
 }): Promise<CodexConfigReadResult> => {
-  const proc = spawn(params.binaryPath, ['app-server'], {
+  const proc = spawn(params.binaryPath, ['app-server', ...(params.configOverrideArgs ?? [])], {
     cwd: params.cwd ?? params.codexHome,
     env: buildConfigReadEnv(params.env, params.codexHome),
     stdio: ['pipe', 'pipe', 'pipe']

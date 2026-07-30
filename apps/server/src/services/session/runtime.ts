@@ -12,6 +12,7 @@ import type { WebSocket } from 'ws'
 
 import { getDb } from '#~/db/index.js'
 import { publishClientEvent } from '#~/services/client-events.js'
+import { createPublicProjectionContext, sanitizePublicRuntimeTransportEvent } from '#~/services/runtime-store/public-runtime-event.js'
 import { safeJsonStringify } from '#~/utils/json.js'
 
 export interface SessionInteractionState {
@@ -159,35 +160,82 @@ export function getSessionQueueRuntimeState(sessionId: string) {
 export function emitRuntimeEvent(
   runtime: SessionConnectionState,
   event: WSEvent,
-  options: { recordMessage?: boolean } = {}
+  options: {
+    expectedSessionId?: string
+    expectedWorkspaceFolder?: string
+    expectedAdapter?: string
+    recordMessage?: boolean
+  } = {}
 ) {
-  if (options.recordMessage !== false) {
-    runtime.messages.push(event)
+  const session = options.expectedSessionId == null ? undefined : getDb().getSession(options.expectedSessionId)
+  const publicEvent = sanitizePublicRuntimeTransportEvent(
+    event,
+    options.expectedSessionId,
+    options.expectedWorkspaceFolder ?? (
+      options.expectedSessionId == null
+        ? undefined
+        : getDb().getSessionWorkspace(options.expectedSessionId)?.workspaceFolder
+    ),
+    options.expectedAdapter ?? session?.adapter,
+    createPublicProjectionContext()
+  )
+  if (publicEvent == null) return
+  emitSanitizedRuntimeEvent(runtime, publicEvent, options.recordMessage)
+}
+
+export function emitSanitizedRuntimeEvent(
+  runtime: SessionConnectionState,
+  publicEvent: WSEvent,
+  recordMessage = true
+) {
+  if (recordMessage) {
+    runtime.messages.push(publicEvent)
   }
 
-  sendEventToSockets(runtime.sockets, event)
+  sendEventToSockets(runtime.sockets, publicEvent)
 }
 
 export function broadcastSessionEvent(sessionId: string, event: WSEvent) {
+  const session = getDb().getSession(sessionId)
+  if (session == null) return
+  const workspaceFolder = getDb().getSessionWorkspace(sessionId)?.workspaceFolder
+  const publicEvent = sanitizePublicRuntimeTransportEvent(
+    event,
+    sessionId,
+    workspaceFolder,
+    session.adapter,
+    createPublicProjectionContext()
+  )
+  if (publicEvent == null) return
   const adapterRuntime = adapterSessionStore.get(sessionId)
   if (adapterRuntime != null) {
-    emitRuntimeEvent(adapterRuntime, event)
+    emitSanitizedRuntimeEvent(adapterRuntime, publicEvent)
   }
 
   const externalRuntime = externalSessionStore.get(sessionId)
   if (externalRuntime != null) {
-    emitRuntimeEvent(externalRuntime, event)
+    emitSanitizedRuntimeEvent(externalRuntime, publicEvent)
   }
 
   publishClientEvent('sessions', {
-    type: event.type === 'message' ? 'session_message_appended' : 'session_event_appended',
+    type: publicEvent.type === 'message' ? 'session_message_appended' : 'session_event_appended',
     sessionId,
-    event
+    event: publicEvent
   })
 }
 
 export function notifySessionUpdated(sessionId: string, session: Session | { id: string; isDeleted: boolean }) {
-  const event: WSEvent = { type: 'session_updated', session }
+  const authoritativeSession = getDb().getSession(sessionId)
+  if (authoritativeSession == null && !('isDeleted' in session)) return
+  const event = sanitizePublicRuntimeTransportEvent(
+    { type: 'session_updated', session },
+    sessionId,
+    getDb().getSessionWorkspace(sessionId)?.workspaceFolder,
+    authoritativeSession?.adapter,
+    createPublicProjectionContext()
+  )
+  if (event == null) return
+  if (event.type !== 'session_updated') return
   const runtime = getSessionConnectionState(sessionId)
 
   sendEventToSockets(runtime?.sockets ?? [], event)
@@ -195,32 +243,41 @@ export function notifySessionUpdated(sessionId: string, session: Session | { id:
   publishClientEvent('sessions', {
     type: 'session_updated',
     sessionId,
-    session
+    session: event.session
   })
 }
 
 export function notifyConfigUpdated(workspaceFolder: string) {
-  const event = {
+  const event = sanitizePublicRuntimeTransportEvent({
     type: 'config_updated',
     workspaceFolder,
     updatedAt: Date.now()
-  } as const
+  }, undefined, undefined, undefined, createPublicProjectionContext())
+  if (event == null) return
   sendEventToSockets(sessionSubscriberSockets, event)
   publishClientEvent('config', event)
 }
 
 export function notifyWorkspacePanelStateUpdated(panelState: SessionPanelState, updatedAt: number) {
-  const event = {
+  const event = sanitizePublicRuntimeTransportEvent({
     type: 'workspace_panel_state_updated',
     panelState,
     updatedAt
-  } as const
+  }, undefined, undefined, undefined, createPublicProjectionContext())
+  if (event == null) return
   sendEventToSockets(sessionSubscriberSockets, event)
   publishClientEvent('workspace', event)
 }
 
 export function notifySessionCreationProgress(sessionId: string, progress: SessionCreationProgressEvent) {
-  const event: WSEvent = { type: 'session_creation_progress', sessionId, progress }
+  const event = sanitizePublicRuntimeTransportEvent(
+    { type: 'session_creation_progress', sessionId, progress },
+    sessionId,
+    undefined,
+    undefined,
+    createPublicProjectionContext()
+  )
+  if (event == null) return
   const payload = safeJsonStringify(event)
   const runtime = getSessionConnectionState(sessionId)
 

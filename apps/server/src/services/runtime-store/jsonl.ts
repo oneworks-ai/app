@@ -1,9 +1,18 @@
 import { Buffer } from 'node:buffer'
 import { readFile } from 'node:fs/promises'
 
+import {
+  RuntimeCommandSchema,
+  RuntimeEventSchema
+} from '@oneworks/runtime-protocol'
 import type { RuntimeCommand } from '@oneworks/runtime-protocol'
 
 import type { RuntimeEvent, RuntimeEventCheckpoint, RuntimeEventReplayResult } from './types.js'
+import {
+  createPublicProjectionContext,
+  normalizePublicRuntimeEvent,
+  sanitizePublicRuntimeAuditEvent
+} from './public-runtime-event.js'
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
@@ -11,52 +20,24 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
 
 const asString = (value: unknown) => typeof value === 'string' && value.trim() !== '' ? value : undefined
 
-const asNumber = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? value : undefined
-
-export const normalizeRuntimeEvent = (value: unknown): RuntimeEvent | undefined => {
-  if (!isRecord(value)) {
-    return undefined
-  }
-
-  const id = asString(value.id)
-  const sessionId = asString(value.sessionId)
-  const type = asString(value.type)
-  if (id == null || sessionId == null || type == null) {
-    return undefined
-  }
-
-  return {
-    ...value,
-    id,
-    sessionId,
-    type,
-    ...(asNumber(value.seq) != null ? { seq: asNumber(value.seq) } : {}),
-    ...(asNumber(value.ts) != null ? { ts: asNumber(value.ts) } : {})
-  } as RuntimeEvent
-}
+export const sanitizeRuntimeAuditEvent = (event: RuntimeEvent) =>
+  sanitizePublicRuntimeAuditEvent(event, createPublicProjectionContext())
+export const normalizeRuntimeEvent = (
+  value: unknown,
+  expectedSessionId?: string,
+  expectedWorkspaceFolder?: string,
+  expectedAdapter?: string
+) => normalizePublicRuntimeEvent(
+  value,
+  expectedSessionId,
+  expectedWorkspaceFolder,
+  expectedAdapter,
+  createPublicProjectionContext()
+)
 
 export const normalizeRuntimeCommand = (value: unknown): RuntimeCommand | undefined => {
-  if (!isRecord(value)) {
-    return undefined
-  }
-
-  const id = asString(value.id)
-  const sessionId = asString(value.sessionId)
-  const type = asString(value.type)
-  const source = asString(value.source)
-  if (id == null || sessionId == null || type == null || source == null) {
-    return undefined
-  }
-
-  return {
-    ...value,
-    id,
-    sessionId,
-    type,
-    source,
-    ts: asNumber(value.ts) ?? Date.now(),
-    priority: asNumber(value.priority) ?? 0
-  } as RuntimeCommand
+  const parsed = RuntimeCommandSchema.safeParse(value)
+  return parsed.success ? parsed.data : undefined
 }
 
 export async function readRuntimeCommandsJsonl(commandsPath: string): Promise<RuntimeCommand[]> {
@@ -92,9 +73,44 @@ export async function readRuntimeCommandsJsonl(commandsPath: string): Promise<Ru
   return commands
 }
 
+/**
+ * Strict internal replay for runtime authority decisions. Unlike public
+ * replay, this preserves server-only events such as recovery grants and never
+ * routes them through a client projection.
+ */
+export async function readInternalRuntimeEventsJsonl(eventsPath: string): Promise<RuntimeEvent[]> {
+  let content: string
+  try {
+    content = await readFile(eventsPath, 'utf8')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return []
+    }
+    throw error
+  }
+
+  const events: RuntimeEvent[] = []
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim()
+    if (trimmed === '') continue
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(trimmed) as unknown
+    } catch {
+      continue
+    }
+    const event = RuntimeEventSchema.safeParse(parsed)
+    if (event.success) events.push(event.data as RuntimeEvent)
+  }
+  return events
+}
+
 export async function replayRuntimeEventsJsonl(
   eventsPath: string,
-  checkpoint: RuntimeEventCheckpoint = { offset: 0 }
+  checkpoint: RuntimeEventCheckpoint = { offset: 0 },
+  expectedSessionId?: string,
+  expectedWorkspaceFolder?: string,
+  expectedAdapter?: string
 ): Promise<RuntimeEventReplayResult> {
   let buffer: Buffer
   try {
@@ -132,7 +148,12 @@ export async function replayRuntimeEventsJsonl(
       continue
     }
 
-    const event = normalizeRuntimeEvent(parsed)
+    const event = normalizeRuntimeEvent(
+      parsed,
+      expectedSessionId,
+      expectedWorkspaceFolder,
+      expectedAdapter
+    )
     if (event == null) {
       continue
     }

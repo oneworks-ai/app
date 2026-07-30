@@ -6,6 +6,7 @@ import path from 'node:path'
 import process from 'node:process'
 
 import type { WSEvent } from '@oneworks/core'
+import { isRuntimeActivationCommand } from '@oneworks/runtime-protocol'
 import type { RuntimeCommand } from '@oneworks/runtime-protocol'
 import {
   RuntimeStoreLockError,
@@ -156,16 +157,13 @@ const isTerminalRuntimeStatus = (status: string | undefined) =>
   status === 'cancelled' ||
   status === 'killed'
 
-const isSessionActivationCommand = (command: RuntimeCommand) =>
-  command.type === 'start' || command.type === 'resume' || command.type === 'send_message'
-
 const hasActivationCommandAfterRuntimeState = (
   commands: RuntimeCommand[],
   stateUpdatedAt: number | undefined
 ) => (
   typeof stateUpdatedAt === 'number' &&
   commands.some(command =>
-    isSessionActivationCommand(command) &&
+    isRuntimeActivationCommand(command) &&
     typeof command.ts === 'number' &&
     command.ts > stateUpdatedAt
   )
@@ -205,7 +203,14 @@ export async function replayRuntimeStore(
     projectRuntimeCommand(options.db, command, options.broadcast ?? false)
   }
 
-  const result = await replayRuntimeEventsJsonl(store.eventsPath, options.checkpoint)
+  const authoritativeSession = options.db.getSession(store.sessionId)
+  const result = await replayRuntimeEventsJsonl(
+    store.eventsPath,
+    options.checkpoint,
+    store.sessionId,
+    options.db.getSessionWorkspace(store.sessionId)?.workspaceFolder ?? metadata?.cwd,
+    authoritativeSession?.adapter ?? metadata?.adapter
+  )
   for (const event of result.events) {
     const projection = projectRuntimeEvent(event, {
       db: options.db,
@@ -217,7 +222,7 @@ export async function replayRuntimeStore(
   }
 
   const state = await readRuntimeSessionState(store)
-  const session = options.db.getSession(store.sessionId)
+  const session = authoritativeSession
   const projectedStateStatus = runtimeStatusToSessionStatus(state?.status)
   if (
     state != null &&

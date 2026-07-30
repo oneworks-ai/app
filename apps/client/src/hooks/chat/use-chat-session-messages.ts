@@ -705,7 +705,8 @@ export function useChatSessionMessages({
         ? {
           kind: 'session' as const,
           message: latestFatalError.message,
-          code: latestFatalError.code
+          code: latestFatalError.code,
+          details: latestFatalError.details
         }
         : null
       const nextQueuedMessages = res.queuedMessages ?? EMPTY_QUEUED_MESSAGES
@@ -1138,7 +1139,8 @@ export function useChatSessionMessages({
               const nextErrorState = {
                 kind: 'session',
                 message: fatalError.message,
-                code: fatalError.code
+                code: fatalError.code,
+                details: fatalError.details
               } satisfies ChatErrorState
               setErrorState(nextErrorState)
               updateSessionViewCache(session.id, {
@@ -1150,6 +1152,13 @@ export function useChatSessionMessages({
 
           if (data.type === 'session_updated') {
             const updatedSession = data.session as SessionUpdate
+            if (!isDeletedSessionUpdate(updatedSession) && updatedSession.status === 'running') {
+              fatalSessionErrorRef.current = false
+              setErrorState(null)
+              updateSessionViewCache(session.id, {
+                errorState: null
+              })
+            }
             if (isDeletedSessionUpdate(updatedSession)) {
               removeSessionViewCache(updatedSession.id)
             } else if (isSessionCompactionCompleteStatus(updatedSession.status)) {

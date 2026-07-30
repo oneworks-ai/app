@@ -31,6 +31,7 @@ export interface RuntimeOwnerMetadata extends RuntimeJsonObject {
   runtimeId: string
   pid?: number
   host?: string
+  processStartedAt?: number
   createdAt: number
   updatedAt: number
 }

@@ -2,11 +2,21 @@ import { existsSync } from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
 
-import { DEFAULT_SUPPORTED_PROTOCOL_RANGE, getCurrentProtocolVersion } from '@oneworks/runtime-protocol'
+import {
+  DEFAULT_SUPPORTED_PROTOCOL_RANGE,
+  getCurrentProtocolVersion,
+  hasRuntimeActivationPayload
+} from '@oneworks/runtime-protocol'
 import { getSessionStorePath, resolveRuntimeRoot } from '@oneworks/runtime-store'
 import type { RuntimeHeartbeat, RuntimeMeta, RuntimeState } from '@oneworks/runtime-store'
 
-import { buildCommand, createSessionId, getStore, trimRequired } from './runtime-store-shared'
+import {
+  assertRuntimeActivationPayload,
+  buildCommand,
+  createSessionId,
+  getStore,
+  trimRequired
+} from './runtime-store-shared'
 import type { CreateRuntimeSessionParams } from './runtime-store-shared'
 
 export const createRuntimeRoomIdForHostSession = (hostSessionId: string) => `room_${hostSessionId}`
@@ -35,9 +45,24 @@ export const createRuntimeSession = async (params: CreateRuntimeSessionParams) =
   const now = params.now ?? Date.now
   const sessionId = params.sessionId ?? createSessionId()
   const entity = trimRequired(params.entity, 'entity')
-  const content = trimRequired(params.message, 'message')
+  const content = params.message?.trim() || undefined
+  const hasPrompt = hasRuntimeActivationPayload({
+    content,
+    contentItems: params.contentItems,
+    runtimeContentItems: params.runtimeContentItems,
+    runtimeMessage: params.runtimeMessage
+  })
+  if (hasPrompt) {
+    assertRuntimeActivationPayload({
+      content,
+      contentItems: params.contentItems,
+      runtimeContentItems: params.runtimeContentItems,
+      runtimeMessage: params.runtimeMessage
+    })
+  }
   const title = params.title?.trim() || `${entity} session`
   const adapter = params.adapter?.trim() || undefined
+  const account = params.account?.trim() || undefined
   const effort = params.effort
   const fastMode = params.fastMode
   const model = params.model?.trim() || undefined
@@ -62,9 +87,14 @@ export const createRuntimeSession = async (params: CreateRuntimeSessionParams) =
       title,
       entity,
       ...(adapter != null ? { adapter } : {}),
+      ...(account != null ? { account } : {}),
       ...(effort != null ? { effort } : {}),
       ...(fastMode != null ? { fastMode } : {}),
       ...(model != null ? { model } : {}),
+      ...(params.systemPrompt != null ? { systemPrompt: params.systemPrompt } : {}),
+      ...(params.updateConfiguredSkills != null
+        ? { updateConfiguredSkills: params.updateConfiguredSkills }
+        : {}),
       ...(permissionMode != null ? { permissionMode } : {}),
       cwd: params.cwd,
       ...(parentSessionId != null ? { parentSessionId } : {}),
@@ -90,15 +120,25 @@ export const createRuntimeSession = async (params: CreateRuntimeSessionParams) =
     sessionId,
     type: 'start',
     ts,
-    content,
+    ...(content != null ? { content } : {}),
+    ...(params.contentItems != null ? { contentItems: params.contentItems } : {}),
     commandId: params.commandId,
     entity,
     adapter,
+    account,
     effort,
     fastMode,
     model,
     memberKey,
     permissionMode,
+    projectConfigPolicy: params.projectConfigPolicy,
+    systemPrompt: params.systemPrompt,
+    updateConfiguredSkills: params.updateConfiguredSkills,
+    ...(params.runtimeContentItems != null
+      ? { runtimeContentItems: params.runtimeContentItems }
+      : {}),
+    ...(params.runtimeMessage != null ? { runtimeMessage: params.runtimeMessage } : {}),
+    ...(content == null && hasPrompt ? { messageDelivery: 'bridge' as const } : {}),
     priority: params.priority,
     ...(roomId != null ? { roomId } : {}),
     runId,

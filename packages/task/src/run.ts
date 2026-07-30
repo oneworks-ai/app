@@ -10,7 +10,7 @@ import type {
   TaskDetail,
   WorkspaceAssetAdapter
 } from '@oneworks/types'
-import { loadAdapter, resolveAdapterRuntimeTarget } from '@oneworks/types'
+import { AdapterStartupError, loadAdapter, resolveAdapterRuntimeTarget } from '@oneworks/types'
 import {
   createStartupProfiler,
   listServiceModels,
@@ -267,6 +267,22 @@ export const run = async (
     adapter: adapterType,
     runtimeAdapter: runtimeAdapterType
   })
+  const loadedAdapterSupportsGlobalOnly =
+    adapter.supportedProjectConfigPolicies?.includes('global-only') === true
+  if (
+    effectiveAdapterOptions.projectConfigPolicy === 'global-only' &&
+    (runtimeAdapterType !== 'codex' || !loadedAdapterSupportsGlobalOnly)
+  ) {
+    throw new AdapterStartupError(
+      `The loaded adapter "${adapterType}" (runtime "${runtimeAdapterType}") does not support project config recovery.`,
+      'project_config_policy_unsupported',
+      {
+        adapter: adapterType,
+        runtimeAdapter: runtimeAdapterType,
+        projectConfigPolicy: effectiveAdapterOptions.projectConfigPolicy
+      }
+    )
+  }
   const resolvedModel = compatibilityResult.model ?? resolvedSelection.model
   const selectionWarnings = compatibilityResult.warning != null ? [compatibilityResult.warning] : undefined
   if (!supportsEffort && effectiveAdapterOptions.effort != null) {
@@ -494,6 +510,7 @@ export const run = async (
       }
     },
     ctx: runtimeCtx,
-    resolvedAdapter: adapterType
+    resolvedAdapter: adapterType,
+    runtimeAdapter: runtimeAdapterType
   }
 }

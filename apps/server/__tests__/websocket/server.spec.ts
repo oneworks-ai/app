@@ -13,8 +13,10 @@ const handleInteractionResponse = vi.fn()
 const processUserMessage = vi.fn()
 const interruptSession = vi.fn()
 const killSession = vi.fn()
+const applySessionEvent = vi.fn()
 const getSession = vi.fn()
 const getSessionRuntimeState = vi.fn()
+const getSessionWorkspace = vi.fn()
 const resolveWebAuthConfig = vi.fn()
 const verifySessionToken = vi.fn()
 const getBearerTokenFromHeader = vi.fn()
@@ -40,7 +42,8 @@ vi.mock('ws', () => {
 vi.mock('#~/db/index.js', () => ({
   getDb: vi.fn(() => ({
     getSession,
-    getSessionRuntimeState
+    getSessionRuntimeState,
+    getSessionWorkspace
   }))
 }))
 
@@ -59,6 +62,10 @@ vi.mock('#~/services/session/index.js', () => ({
   killSession
 }))
 
+vi.mock('#~/services/session/events.js', () => ({
+  applySessionEvent
+}))
+
 vi.mock('#~/services/session/interaction.js', () => ({
   handleInteractionResponse
 }))
@@ -74,7 +81,8 @@ vi.mock('#~/services/session/runtime.js', () => ({
 vi.mock('#~/utils/logger.js', () => ({
   getSessionLogger: vi.fn(() => ({
     info: vi.fn(),
-    error: vi.fn()
+    error: vi.fn(),
+    warn: vi.fn()
   }))
 }))
 
@@ -90,6 +98,7 @@ describe('setupWebSocket', () => {
       runtimeKind: 'interactive',
       historySeedPending: false
     })
+    getSessionWorkspace.mockReturnValue({ workspaceFolder: '/workspace/root' })
 
     const { setupWebSocket } = await import('#~/websocket/server.js')
     setupWebSocket({} as Server, {
@@ -168,7 +177,7 @@ describe('setupWebSocket', () => {
     }
 
     await connectionHandler?.(ws, {
-      url: '/ws?sessionId=sess-1',
+      url: '/ws?sessionId=sess-1&effort=high&fastMode=true&account=work',
       headers: { host: 'localhost' }
     })
 
@@ -176,12 +185,15 @@ describe('setupWebSocket', () => {
     expect(startAdapterSession).toHaveBeenCalledOnce()
     expect(startAdapterSession).toHaveBeenCalledWith('sess-1', {
       model: undefined,
+      effort: 'high',
+      fastMode: true,
       systemPrompt: undefined,
       appendSystemPrompt: true,
       permissionMode: undefined,
       promptType: undefined,
       promptName: undefined,
-      adapter: undefined
+      adapter: undefined,
+      account: 'work'
     })
     expect(attachSocketToSession).toHaveBeenCalledWith('sess-1', ws, 'adapter')
   })
@@ -208,8 +220,25 @@ describe('setupWebSocket', () => {
   })
 
   it('sends a structured error payload when adapter startup fails', async () => {
-    startAdapterSession.mockRejectedValueOnce(new Error('adapter init failed'))
-    getSession.mockReturnValue({ id: 'sess-1', status: 'running' })
+    startAdapterSession.mockRejectedValueOnce(Object.assign(
+      new Error('adapter init failed'),
+      {
+        code: 'codex_project_config_invalid',
+        details: {
+          adapter: 'codex',
+          runtimeAdapter: 'codex',
+          configSource: 'project',
+          configPath: '.codex/config.toml',
+          workspaceSource: 'active-session-workspace',
+          workspaceFolder: '/workspace/root',
+          sessionId: 'sess-1',
+          reason: 'wire_api is unsupported',
+          line: 2,
+          column: 3
+        }
+      }
+    ))
+    getSession.mockReturnValue({ id: 'sess-1', status: 'running', adapter: 'codex' })
 
     const ws = {
       on: vi.fn(),
@@ -227,10 +256,133 @@ describe('setupWebSocket', () => {
       type: 'error',
       data: {
         message: 'adapter init failed',
+        code: 'codex_project_config_invalid',
+        details: {
+          adapter: 'codex',
+          runtimeAdapter: 'codex',
+          configSource: 'project',
+          configPath: '.codex/config.toml',
+          workspaceSource: 'active-session-workspace',
+          workspaceFolder: '/workspace/root',
+          sessionId: 'sess-1',
+          reason: 'wire_api is unsupported',
+          line: 2,
+          column: 3
+        },
         fatal: true
       },
       message: 'adapter init failed'
     })
+    expect(applySessionEvent).toHaveBeenCalledWith('sess-1', {
+      type: 'error',
+      data: {
+        message: 'adapter init failed',
+        code: 'codex_project_config_invalid',
+        details: {
+          adapter: 'codex',
+          runtimeAdapter: 'codex',
+          configSource: 'project',
+          configPath: '.codex/config.toml',
+          workspaceSource: 'active-session-workspace',
+          workspaceFolder: '/workspace/root',
+          sessionId: 'sess-1',
+          reason: 'wire_api is unsupported',
+          line: 2,
+          column: 3
+        },
+        fatal: true
+      },
+      message: 'adapter init failed'
+    })
+  })
+
+  it('does not expose malformed known error details as a recovery contract', async () => {
+    startAdapterSession.mockRejectedValueOnce(Object.assign(
+      new Error('adapter init failed'),
+      {
+        code: 'codex_project_config_invalid',
+        details: {
+          configPath: '../../forged.toml',
+          workspaceFolder: '/tmp/forged'
+        }
+      }
+    ))
+    getSession.mockReturnValue({ id: 'sess-1', status: 'running' })
+    const ws = {
+      on: vi.fn(),
+      readyState: 1,
+      send: vi.fn()
+    }
+
+    await connectionHandler?.(ws, {
+      url: '/ws?sessionId=sess-1',
+      headers: { host: 'localhost' }
+    })
+
+    const event = JSON.parse(String(ws.send.mock.calls[0]?.[0]))
+    expect(event.data).toEqual({
+      code: 'adapter_startup_failed',
+      fatal: true,
+      message: 'adapter init failed'
+    })
+    expect(applySessionEvent).toHaveBeenCalledWith('sess-1', event)
+  })
+
+  it('drops arbitrary future error details from both the live socket and persisted event', async () => {
+    const sentinel = 'SENTINEL_LIVE_SOCKET_SECRET'
+    startAdapterSession.mockRejectedValueOnce(Object.assign(
+      new Error('future adapter failure'),
+      {
+        code: 'future_adapter_error',
+        details: {
+          privateToken: sentinel
+        }
+      }
+    ))
+    getSession.mockReturnValue({ id: 'sess-1', status: 'running' })
+    const ws = {
+      on: vi.fn(),
+      readyState: 1,
+      send: vi.fn()
+    }
+
+    await connectionHandler?.(ws, {
+      url: '/ws?sessionId=sess-1',
+      headers: { host: 'localhost' }
+    })
+
+    const serialized = String(ws.send.mock.calls[0]?.[0])
+    expect(serialized).not.toContain(sentinel)
+    expect(JSON.parse(serialized).data).toEqual({
+      code: 'future_adapter_error',
+      fatal: true,
+      message: 'future adapter failure'
+    })
+    expect(JSON.stringify(applySessionEvent.mock.calls)).not.toContain(sentinel)
+  })
+
+  it('keeps startup failure visible when history persistence also fails', async () => {
+    startAdapterSession.mockRejectedValueOnce(new Error('adapter init failed'))
+    applySessionEvent.mockImplementationOnce(() => {
+      throw new Error('database unavailable')
+    })
+    getSession.mockReturnValue({ id: 'sess-1', status: 'running' })
+    const ws = {
+      on: vi.fn(),
+      readyState: 1,
+      send: vi.fn()
+    }
+
+    await connectionHandler?.(ws, {
+      url: '/ws?sessionId=sess-1',
+      headers: { host: 'localhost' }
+    })
+
+    expect(ws.send).toHaveBeenCalledOnce()
+    expect(JSON.parse(String(ws.send.mock.calls[0]?.[0]))).toEqual(expect.objectContaining({
+      type: 'error',
+      message: 'adapter init failed'
+    }))
   })
 
   it('sends a structured error payload when a websocket message is invalid JSON', async () => {

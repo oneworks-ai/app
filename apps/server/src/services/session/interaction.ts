@@ -13,12 +13,18 @@ import { handleChannelSessionEvent } from '#~/channels/index.js'
 import { getDb } from '#~/db/index.js'
 import { discoverRuntimeSessionStores, migrateRuntimeRoots } from '#~/services/runtime-store/discovery.js'
 import { resolveSessionRuntimeStoreRoot } from '#~/services/runtime-store/session-control.js'
+import {
+  createPublicProjectionContext,
+  sanitizePublicStoredSessionEvent,
+  sanitizePublicRuntimeTransportEvent
+} from '#~/services/runtime-store/public-runtime-event.js'
+import type { PublicProjectionContext } from '#~/services/runtime-store/public-runtime-event.js'
 import { createWorkspaceRuntimeEnv } from '#~/services/runtime-store/workspace-env.js'
 import { applySessionEvent } from '#~/services/session/events.js'
 import {
   broadcastSessionEvent,
   deletePendingSessionInteraction,
-  emitRuntimeEvent,
+  emitSanitizedRuntimeEvent,
   getExternalSessionRuntime,
   getPendingSessionInteraction,
   getSessionConnectionState,
@@ -27,6 +33,42 @@ import {
 } from '#~/services/session/runtime.js'
 import { resolveSessionWorkspace } from '#~/services/session/workspace.js'
 import { getSessionLogger } from '#~/utils/logger.js'
+
+const getInteractionAuthority = (sessionId: string) => {
+  const db = getDb()
+  const session = db.getSession(sessionId)
+  if (session == null) return undefined
+  return {
+    sessionId,
+    workspaceFolder: db.getSessionWorkspace(sessionId)?.workspaceFolder,
+    adapter: session.adapter
+  }
+}
+
+const sanitizeInteractionEvent = (
+  sessionId: string,
+  event: WSEvent,
+  context: PublicProjectionContext,
+  root = false
+) => {
+  const authority = getInteractionAuthority(sessionId)
+  if (authority == null) return undefined
+  return root
+    ? sanitizePublicRuntimeTransportEvent(
+      event,
+      authority.sessionId,
+      authority.workspaceFolder,
+      authority.adapter,
+      context
+    )
+    : sanitizePublicStoredSessionEvent(
+      event,
+      authority.sessionId,
+      authority.workspaceFolder,
+      authority.adapter,
+      context
+    )
+}
 
 const canDeliverInteraction = (sessionId: string) => {
   const runtime = getSessionConnectionState(sessionId)
@@ -80,15 +122,27 @@ export async function waitForInteractionDeliveryPath(
   return canRequestInteraction(sessionId)
 }
 
-const getStoredSessionInteractions = (sessionId: string) => {
+const getStoredSessionInteractions = (
+  sessionId: string,
+  context: PublicProjectionContext
+) => {
   const session = getDb().getSession(sessionId)
   if (session?.status !== 'waiting_input' && session?.status !== 'running') {
     return []
   }
 
+  const authority = getInteractionAuthority(sessionId)
+  if (authority == null) return []
   const messages = getDb().getMessages(sessionId) as WSEvent[]
   const pending = new Map<string, { id: string; payload: AskUserQuestionParams }>()
-  for (const event of messages) {
+  for (const rawEvent of messages) {
+    const event = rawEvent == null ? undefined : sanitizePublicRuntimeTransportEvent(
+      rawEvent,
+      authority.sessionId,
+      authority.workspaceFolder,
+      authority.adapter,
+      context
+    )
     if (event == null) continue
 
     if (event.type === 'interaction_response') {
@@ -106,29 +160,71 @@ const getStoredSessionInteractions = (sessionId: string) => {
   return [...pending.values()]
 }
 
-export function getSessionInteraction(sessionId: string) {
+export function getSessionInteraction(
+  sessionId: string,
+  context: PublicProjectionContext
+) {
   const current = getSessionConnectionState(sessionId)?.interactions[0]
   if (current != null) {
-    return current
+    const event = sanitizeInteractionEvent(sessionId, {
+      type: 'interaction_request',
+      id: current.id,
+      payload: current.payload
+    }, context)
+    if (event?.type === 'interaction_request') {
+      return { id: event.id, payload: event.payload }
+    }
   }
 
-  return getStoredSessionInteractions(sessionId)[0]
+  return getStoredSessionInteractions(sessionId, context)[0]
 }
 
-const hasSessionInteraction = (sessionId: string, interactionId: string) => {
+const hasSessionInteraction = (
+  sessionId: string,
+  interactionId: string,
+  context: PublicProjectionContext
+) => {
   const current = getSessionConnectionState(sessionId)?.interactions
   if (current?.some(interaction => interaction.id === interactionId) === true) {
     return true
   }
 
-  return getStoredSessionInteractions(sessionId).some(interaction => interaction.id === interactionId)
+  return getStoredSessionInteractions(sessionId, context)
+    .some(interaction => interaction.id === interactionId)
 }
 
-export function setSessionInteraction(sessionId: string, interaction: { id: string; payload: AskUserQuestionParams }) {
+const storeSessionInteraction = (
+  sessionId: string,
+  event: Extract<WSEvent, { type: 'interaction_request' }>
+) => {
   const runtime = getSessionConnectionState(sessionId)
-  if (runtime != null && !runtime.interactions.some(current => current.id === interaction.id)) {
-    runtime.interactions.push(interaction)
+  if (runtime != null && !runtime.interactions.some(current => current.id === event.id)) {
+    runtime.interactions.push({ id: event.id, payload: event.payload })
   }
+  return true
+}
+
+export function projectAndSetSessionInteraction(
+  sessionId: string,
+  interaction: { id: string; payload: AskUserQuestionParams },
+  context: PublicProjectionContext
+) {
+  const event = sanitizeInteractionEvent(sessionId, {
+    type: 'interaction_request',
+    id: interaction.id,
+    payload: interaction.payload
+  }, context)
+  if (event?.type !== 'interaction_request') return undefined
+  storeSessionInteraction(sessionId, event)
+  return event
+}
+
+export function setSessionInteraction(
+  sessionId: string,
+  interaction: { id: string; payload: AskUserQuestionParams },
+  context: PublicProjectionContext
+) {
+  return projectAndSetSessionInteraction(sessionId, interaction, context) != null
 }
 
 export function clearSessionInteraction(sessionId: string, interactionId: string) {
@@ -226,13 +322,18 @@ export async function requestInteraction(
   }
 
   const interactionId = options.interactionId ?? uuidv4()
+  const projectionContext = createPublicProjectionContext()
   const event: WSEvent = {
     type: 'interaction_request',
     id: interactionId,
     payload: params
   }
 
-  setSessionInteraction(sessionId, { id: interactionId, payload: params })
+  const publicEvent = sanitizeInteractionEvent(sessionId, event, projectionContext, true)
+  if (publicEvent?.type !== 'interaction_request' ||
+      !storeSessionInteraction(sessionId, publicEvent)) {
+    return Promise.reject(new Error(`Session ${sessionId} has invalid interaction data`))
+  }
   serverLogger.info({
     sessionId,
     interactionId,
@@ -242,12 +343,12 @@ export async function requestInteraction(
     hasActiveWebSocket: delivery.hasActiveWebSocket,
     hasChannelBinding: delivery.hasChannelBinding
   }, '[interaction] Queued interaction request')
-  emitRuntimeEvent(runtime, event, { recordMessage: false })
+  emitSanitizedRuntimeEvent(runtime, publicEvent, false)
 
   let deliveredToChannel = false
   if (delivery.hasChannelBinding) {
     try {
-      deliveredToChannel = await handleChannelSessionEvent(sessionId, event)
+      deliveredToChannel = await handleChannelSessionEvent(sessionId, publicEvent)
     } catch (error) {
       serverLogger.warn({
         sessionId,
@@ -268,7 +369,7 @@ export async function requestInteraction(
     return Promise.reject(new Error(`Session ${sessionId} is not active`))
   }
 
-  applySessionEvent(sessionId, event, {
+  applySessionEvent(sessionId, publicEvent, {
     onSessionUpdated: (session) => {
       notifySessionUpdated(sessionId, session)
     }
@@ -287,11 +388,21 @@ export async function requestInteraction(
 
 export async function handleInteractionResponse(sessionId: string, interactionId: string, data: unknown) {
   const serverLogger = getSessionLogger(sessionId, 'server')
+  const projectionContext = createPublicProjectionContext()
   const isExternalSession = getExternalSessionRuntime(sessionId) != null ||
     getDb().getSessionRuntimeState(sessionId)?.runtimeKind === 'external'
-  const event: WSEvent = { type: 'interaction_response', id: interactionId, data: data as string | string[] }
+  const event = sanitizeInteractionEvent(sessionId, {
+    type: 'interaction_response',
+    id: interactionId,
+    data
+  } as WSEvent, projectionContext)
+  if (event?.type !== 'interaction_response') return false
   const pending = getPendingSessionInteraction(interactionId)
-  const hasMatchingStoredInteraction = hasSessionInteraction(sessionId, interactionId)
+  const hasMatchingStoredInteraction = hasSessionInteraction(
+    sessionId,
+    interactionId,
+    projectionContext
+  )
 
   if (isExternalSession || pending != null || hasMatchingStoredInteraction) {
     serverLogger.info({
@@ -311,7 +422,7 @@ export async function handleInteractionResponse(sessionId: string, interactionId
       const didAppendCommand = await appendExternalRuntimeInteractionResponse(
         sessionId,
         interactionId,
-        data as string | string[]
+        event.data
       )
       if (!didAppendCommand) {
         serverLogger.warn({
@@ -326,16 +437,20 @@ export async function handleInteractionResponse(sessionId: string, interactionId
       broadcast: (nextEvent) => broadcastSessionEvent(sessionId, nextEvent)
     })
 
-    const nextInteraction = getSessionInteraction(sessionId)
+    const nextInteraction = getSessionInteraction(sessionId, projectionContext)
     if (nextInteraction != null) {
-      setSessionInteraction(sessionId, nextInteraction)
+      storeSessionInteraction(sessionId, {
+        type: 'interaction_request',
+        id: nextInteraction.id,
+        payload: nextInteraction.payload
+      })
       getDb().updateSession(sessionId, { status: 'waiting_input' })
     }
     const updatedSession = getDb().getSession(sessionId)
     if (updatedSession != null) notifySessionUpdated(sessionId, updatedSession)
 
     if (pending != null) {
-      pending.resolve(data as string | string[])
+      pending.resolve(event.data)
       deletePendingSessionInteraction(interactionId)
     }
 

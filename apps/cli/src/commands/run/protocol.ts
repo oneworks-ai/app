@@ -60,6 +60,15 @@ const optionalPermissionMode = (value: unknown): RuntimeSessionCommandEnvelope['
     : undefined
 }
 
+const optionalProjectConfigPolicy = (
+  value: unknown
+): RuntimeSessionCommandEnvelope['projectConfigPolicy'] => {
+  const normalized = optionalString(value)
+  return normalized === 'include' || normalized === 'global-only'
+    ? normalized
+    : undefined
+}
+
 const envDefault = (env: NodeJS.ProcessEnv | undefined, key: string) => trimOptional(env?.[key])
 
 const pushOption = (args: string[], flag: string, value: string | undefined) => {
@@ -79,8 +88,14 @@ const CODEX_PARENT_RUNTIME_ENV_KEYS = [
   '__ONEWORKS_HOOK_BRIDGE_ADAPTER__'
 ] as const
 
+type RuntimeConsumerCommand = Pick<RuntimeSessionCommandEnvelope, 'type'> &
+  Partial<Pick<
+    RuntimeSessionCommandEnvelope,
+    'background' | 'hostSessionId' | 'roomId'
+  >>
+
 const shouldDeferRuntimeConsumerToServer = (
-  command: RuntimeSessionCommandEnvelope,
+  command: RuntimeConsumerCommand,
   env: NodeJS.ProcessEnv | undefined
 ) =>
   (
@@ -103,7 +118,7 @@ const sanitizeRuntimeConsumerEnv = (env: NodeJS.ProcessEnv) => {
   return nextEnv
 }
 
-export const shouldStartRuntimeConsumer = (command: RuntimeSessionCommandEnvelope, env?: NodeJS.ProcessEnv) =>
+export const shouldStartRuntimeConsumer = (command: RuntimeConsumerCommand, env?: NodeJS.ProcessEnv) =>
   env != null &&
   command.background !== false &&
   env?.ONEWORKS_RUNTIME_PROTOCOL_DISABLE_CONSUMER !== '1' &&
@@ -111,7 +126,7 @@ export const shouldStartRuntimeConsumer = (command: RuntimeSessionCommandEnvelop
   !shouldDeferRuntimeConsumerToServer(command, env)
 
 export const shouldStartRuntimeResumeConsumer = (params: {
-  command: RuntimeSessionCommandEnvelope
+  command: RuntimeConsumerCommand
   env?: NodeJS.ProcessEnv
   status?: string
 }) =>
@@ -124,15 +139,19 @@ export const shouldStartRuntimeResumeConsumer = (params: {
 
 const startRuntimeConsumer = (params: {
   adapter?: string
+  account?: string
   command: RuntimeSessionCommandEnvelope
   cwd: string
   effort?: RuntimeSessionCommandEnvelope['effort']
   fastMode?: boolean
   entity: string
   env?: NodeJS.ProcessEnv
-  message: string
+  message?: string
   model?: string
   permissionMode?: RuntimeSessionCommandEnvelope['permissionMode']
+  projectConfigPolicy?: RuntimeSessionCommandEnvelope['projectConfigPolicy']
+  systemPrompt?: string
+  updateConfiguredSkills?: boolean
   sessionId: string
 }) => {
   const cliEntrypoint = process.argv[1]
@@ -152,11 +171,15 @@ const startRuntimeConsumer = (params: {
     params.entity
   ]
   pushOption(args, '--adapter', params.adapter)
+  pushOption(args, '--account', params.account)
   pushOption(args, '--model', params.model)
   pushOption(args, '--effort', params.effort)
   if (params.fastMode != null) args.push('--fast-mode', params.fastMode ? 'on' : 'off')
   pushOption(args, '--permission-mode', params.permissionMode)
-  args.push(params.message)
+  pushOption(args, '--project-config-policy', params.projectConfigPolicy)
+  pushOption(args, '--system-prompt', params.systemPrompt)
+  if (params.updateConfiguredSkills === true) args.push('--update-skills')
+  if (params.message != null && params.message.trim() !== '') args.push(params.message)
 
   const child = spawn(process.execPath, args, {
     cwd: params.cwd,
@@ -172,22 +195,17 @@ const startRuntimeConsumer = (params: {
   return child.pid
 }
 
-const startRuntimeResumeConsumer = (params: {
-  cwd: string
+export const buildRuntimeResumeConsumerArgs = (params: {
+  cliEntrypoint: string
   effort?: RuntimeSessionCommandEnvelope['effort']
   fastMode?: boolean
-  env?: NodeJS.ProcessEnv
   model?: string
   permissionMode?: RuntimeSessionCommandEnvelope['permissionMode']
+  projectConfigPolicy?: RuntimeSessionCommandEnvelope['projectConfigPolicy']
   sessionId: string
 }) => {
-  const cliEntrypoint = process.argv[1]
-  if (cliEntrypoint == null || cliEntrypoint.trim() === '') {
-    throw new Error('Unable to resolve One Works CLI entrypoint for runtime resume consumer.')
-  }
-
   const args = [
-    cliEntrypoint,
+    params.cliEntrypoint,
     '__run',
     '--print',
     '--output-format',
@@ -199,6 +217,34 @@ const startRuntimeResumeConsumer = (params: {
   pushOption(args, '--effort', params.effort)
   if (params.fastMode != null) args.push('--fast-mode', params.fastMode ? 'on' : 'off')
   pushOption(args, '--permission-mode', params.permissionMode)
+  pushOption(args, '--project-config-policy', params.projectConfigPolicy)
+  return args
+}
+
+const startRuntimeResumeConsumer = (params: {
+  cwd: string
+  effort?: RuntimeSessionCommandEnvelope['effort']
+  fastMode?: boolean
+  env?: NodeJS.ProcessEnv
+  model?: string
+  permissionMode?: RuntimeSessionCommandEnvelope['permissionMode']
+  projectConfigPolicy?: RuntimeSessionCommandEnvelope['projectConfigPolicy']
+  sessionId: string
+}) => {
+  const cliEntrypoint = process.argv[1]
+  if (cliEntrypoint == null || cliEntrypoint.trim() === '') {
+    throw new Error('Unable to resolve One Works CLI entrypoint for runtime resume consumer.')
+  }
+
+  const args = buildRuntimeResumeConsumerArgs({
+    cliEntrypoint,
+    effort: params.effort,
+    fastMode: params.fastMode,
+    model: params.model,
+    permissionMode: params.permissionMode,
+    projectConfigPolicy: params.projectConfigPolicy,
+    sessionId: params.sessionId
+  })
 
   const child = spawn(process.execPath, args, {
     cwd: params.cwd,
@@ -227,12 +273,16 @@ const appendFollowUpRuntimeCommand = async (
     env: options.env,
     memberKey: command.memberKey,
     message: command.message ?? command.content,
+    contentItems: command.contentItems,
     now: options.now,
     priority: command.priority,
     roomId: command.roomId,
     runId: command.runId,
     sessionId,
     source: command.source,
+    projectConfigPolicy: optionalProjectConfigPolicy(command.projectConfigPolicy),
+    runtimeContentItems: command.runtimeContentItems,
+    runtimeMessage: command.runtimeMessage,
     type
   })
   const consumerPid = shouldStartRuntimeResumeConsumer({
@@ -247,6 +297,7 @@ const appendFollowUpRuntimeCommand = async (
       env: options.env,
       model: optionalString(command.model),
       permissionMode: optionalPermissionMode(command.permissionMode),
+      projectConfigPolicy: optionalProjectConfigPolicy(command.projectConfigPolicy),
       sessionId
     })
     : undefined
@@ -284,12 +335,13 @@ export const executeRuntimeProtocolCommand = async (
         const permissionMode = optionalPermissionMode(command.permissionMode) ??
           optionalPermissionMode(envDefault(options.env, '__ONEWORKS_RUNTIME_PROTOCOL_DEFAULT_PERMISSION_MODE__'))
         const entity = requiredString(command, 'entity')
-        const message = command.message ?? command.content ?? ''
+        const message = command.message ?? command.content
         const result = await createRuntimeSession({
           cwd: options.cwd,
           commandId: command.commandId,
           entity,
           adapter,
+          account: command.account,
           effort,
           fastMode: command.fastMode,
           model,
@@ -299,6 +351,7 @@ export const executeRuntimeProtocolCommand = async (
           memberKey: command.memberKey,
           memberLabel: command.memberLabel,
           message,
+          contentItems: command.contentItems,
           now: options.now,
           parentSessionId: command.parentSessionId ?? hostSessionId,
           priority: command.priority,
@@ -309,11 +362,17 @@ export const executeRuntimeProtocolCommand = async (
           sessionId: command.sessionId,
           source: command.source,
           permissionMode,
+          projectConfigPolicy: optionalProjectConfigPolicy(command.projectConfigPolicy),
+          systemPrompt: command.systemPrompt,
+          updateConfiguredSkills: command.updateConfiguredSkills,
+          runtimeContentItems: command.runtimeContentItems,
+          runtimeMessage: command.runtimeMessage,
           title: command.title
         })
         const consumerPid = shouldStartRuntimeConsumer(command, options.env)
           ? startRuntimeConsumer({
             adapter,
+            account: command.account,
             command,
             cwd: options.cwd,
             effort,
@@ -323,6 +382,9 @@ export const executeRuntimeProtocolCommand = async (
             message,
             model,
             permissionMode,
+            projectConfigPolicy: optionalProjectConfigPolicy(command.projectConfigPolicy),
+            systemPrompt: command.systemPrompt,
+            updateConfiguredSkills: command.updateConfiguredSkills,
             sessionId: result.sessionId
           })
           : undefined

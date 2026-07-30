@@ -1,6 +1,6 @@
 /* eslint-disable max-lines -- websocket setup keeps auth, terminal, plugin watch, and session channels together. */
 
-import type { Buffer } from 'node:buffer'
+import { Buffer } from 'node:buffer'
 import type { IncomingMessage, Server } from 'node:http'
 import type { Duplex } from 'node:stream'
 import { URL } from 'node:url'
@@ -9,7 +9,10 @@ import { v4 as uuidv4 } from 'uuid'
 import { WebSocketServer } from 'ws'
 import type { WebSocket } from 'ws'
 
-import type { ServerEnv } from '@oneworks/core'
+import type { ServerEnv, WSEvent } from '@oneworks/core'
+import {
+  sanitizeRuntimePublicErrorData
+} from '@oneworks/runtime-protocol'
 import { WORKSPACE_TERMINAL_SESSION_ID } from '@oneworks/types'
 
 import { getDb } from '#~/db/index.js'
@@ -22,7 +25,12 @@ import {
 } from '#~/services/auth/index.js'
 import { handleMobileDeviceVideoStreamSocket } from '#~/services/mobile-debug/index.js'
 import { getPluginManager } from '#~/services/plugins/index.js'
+import {
+  createPublicProjectionContext,
+  sanitizePublicRuntimeTransportEvent
+} from '#~/services/runtime-store/public-runtime-event.js'
 import { interruptSession, killSession, processUserMessage, startAdapterSession } from '#~/services/session/index.js'
+import { applySessionEvent } from '#~/services/session/events.js'
 import { handleInteractionResponse } from '#~/services/session/interaction.js'
 import {
   addSessionSubscriberSocket,
@@ -50,14 +58,71 @@ const parseRequestPathname = (request: IncomingMessage) => {
   }
 }
 
-const sendSocketError = (ws: WebSocket, error: unknown) => {
-  if (ws.readyState !== WEBSOCKET_OPEN) return
-  const message = error instanceof Error ? error.message : String(error)
-  ws.send(safeJsonStringify({
-    type: 'error',
-    data: { message, fatal: true },
+export const buildSocketErrorEvent = (
+  error: unknown,
+  expectedSessionId?: string,
+  expectedWorkspaceFolder?: string,
+  expectedAdapter?: string
+): Extract<WSEvent, { type: 'error' }> => {
+  const rawMessage = error instanceof Error ? error.message : String(error)
+  const message = Buffer.byteLength(rawMessage, 'utf8') <= 16 * 1024
+    ? rawMessage
+    : 'Adapter startup failed'
+  const rawCode = error != null &&
+      typeof error === 'object' &&
+      'code' in error &&
+      typeof error.code === 'string'
+    ? error.code
+    : undefined
+  const rawDetails = error != null && typeof error === 'object' && 'details' in error
+    ? error.details
+    : undefined
+  const data = sanitizeRuntimePublicErrorData({
+    code: rawCode ?? 'adapter_startup_failed',
+    details: rawDetails,
+    fatal: true,
     message
-  }))
+  }, 'adapter_startup_failed') ?? { code: 'adapter_startup_failed', message, fatal: true }
+  const hasKnownErrorAuthority =
+    typeof expectedSessionId === 'string' && expectedSessionId.trim() !== '' &&
+    typeof expectedWorkspaceFolder === 'string' && expectedWorkspaceFolder.trim() !== '' &&
+    typeof expectedAdapter === 'string' && expectedAdapter.trim() !== ''
+  const authoritativeData = data.code === 'codex_project_config_invalid' &&
+      (
+        !hasKnownErrorAuthority ||
+        data.details.sessionId !== expectedSessionId ||
+        data.details.workspaceFolder !== expectedWorkspaceFolder ||
+        data.details.adapter !== expectedAdapter
+      )
+    ? { code: 'adapter_startup_failed', message, fatal: true as const }
+    : data
+  return {
+    type: 'error',
+    data: authoritativeData,
+    message
+  }
+}
+
+const sendSocketError = (
+  ws: WebSocket,
+  error: unknown,
+  event = buildSocketErrorEvent(error),
+  expectedSessionId?: string,
+  expectedWorkspaceFolder?: string,
+  expectedAdapter?: string
+) => {
+  const publicEvent = sanitizePublicRuntimeTransportEvent(
+    event,
+    expectedSessionId,
+    expectedWorkspaceFolder,
+    expectedAdapter,
+    createPublicProjectionContext()
+  )
+  if (publicEvent == null || publicEvent.type !== 'error') return undefined
+  if (ws.readyState === WEBSOCKET_OPEN) {
+    ws.send(safeJsonStringify(publicEvent))
+  }
+  return publicEvent
 }
 
 export function setupWebSocket(server: Server, env: ServerEnv) {
@@ -172,9 +237,12 @@ export function setupWebSocket(server: Server, env: ServerEnv) {
 
     const serverLogger = getSessionLogger(sessionId, 'server')
     serverLogger.info({ sessionId }, '[server] Connection established')
+    // Keep the authoritative database binding available to both sides of the
+    // startup boundary.  A startup failure must be reported/persisted rather
+    // than being hidden by a catch-path ReferenceError.
+    const db = getDb()
 
     try {
-      const db = getDb()
       const sessionData = db.getSession(sessionId)
       const sessionRuntimeState = db.getSessionRuntimeState(sessionId)
       const isExternalSession = sessionRuntimeState?.runtimeKind === 'external'
@@ -214,7 +282,31 @@ export function setupWebSocket(server: Server, env: ServerEnv) {
         attachSocketToSession(sessionId, ws, 'external')
       }
     } catch (err) {
-      sendSocketError(ws, err)
+      const currentSession = db.getSession(sessionId)
+      const workspaceFolder = db.getSessionWorkspace(sessionId)?.workspaceFolder
+      const event = buildSocketErrorEvent(
+        err,
+        sessionId,
+        workspaceFolder,
+        currentSession?.adapter
+      )
+      const publicEvent = sendSocketError(
+        ws,
+        err,
+        event,
+        sessionId,
+        workspaceFolder,
+        currentSession?.adapter
+      )
+      if (publicEvent == null) return
+      try {
+        applySessionEvent(sessionId, publicEvent)
+      } catch (persistenceError) {
+        serverLogger.warn(
+          { error: persistenceError, sessionId },
+          '[websocket] Failed to persist adapter startup error'
+        )
+      }
       return
     }
 
@@ -249,7 +341,16 @@ export function setupWebSocket(server: Server, env: ServerEnv) {
           killSession(sessionId)
         }
       } catch (err) {
-        sendSocketError(ws, err)
+        const workspaceFolder = getDb().getSessionWorkspace(sessionId)?.workspaceFolder
+        const currentAdapter = getDb().getSession(sessionId)?.adapter
+        sendSocketError(
+          ws,
+          err,
+          buildSocketErrorEvent(err, sessionId, workspaceFolder, currentAdapter),
+          sessionId,
+          workspaceFolder,
+          currentAdapter
+        )
       }
     })
 

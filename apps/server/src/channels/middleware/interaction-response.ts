@@ -1,4 +1,5 @@
 import { getSessionInteraction, handleInteractionResponse } from '#~/services/session/interaction.js'
+import { createPublicProjectionContext } from '#~/services/runtime-store/public-runtime-event.js'
 import { getSessionLogger } from '#~/utils/logger.js'
 
 import {
@@ -100,7 +101,7 @@ export const interactionResponseMiddleware: ChannelMiddleware = async (ctx, next
     return
   }
 
-  const interaction = getSessionInteraction(ctx.sessionId)
+  const interaction = getSessionInteraction(ctx.sessionId, createPublicProjectionContext())
   if (interaction == null) {
     await next()
     return

@@ -1993,6 +1993,17 @@
     "sessionStopRequestedMessage": "已请求终止会话",
     "sessionStopFailedMessage": "终止会话失败",
     "sessionErrorCode": "错误码：{{code}}",
+    "projectConfigRecovery": {
+      "openConfig": "打开项目配置",
+      "openFailed": "无法打开失败的项目配置",
+      "retryGlobal": "使用全局配置重试",
+      "help": "当前工作区的 Codex 项目配置无效。可以打开准确的失败位置修复，或仅为本次恢复改用完整的全局配置。",
+      "confirmTitle": "使用全局 Codex 配置重试？",
+      "confirmDescription": "本次重试会忽略当前项目的 Codex 配置，只读取完整的全局 Codex 配置；不会修改项目或全局配置文件。",
+      "queued": "已使用全局配置重新排队",
+      "alreadyQueued": "同一恢复重试已经在队列中",
+      "retryFailed": "无法使用全局配置重试"
+    },
     "retryConnection": "重试连接",
     "retrySessionCreation": "重试创建会话",
     "retrySessionCreationRequired": "请先点击错误提示中的重试创建按钮",

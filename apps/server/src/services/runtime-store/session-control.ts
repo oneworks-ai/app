@@ -5,6 +5,7 @@ import { env as processEnv } from 'node:process'
 import { v4 as uuidv4 } from 'uuid'
 
 import type { ChatMessageContent, EffortLevel, SessionPermissionMode } from '@oneworks/core'
+import type { RuntimeProjectConfigPolicy } from '@oneworks/runtime-protocol'
 import {
   DEFAULT_RUNTIME_PROTOCOL_VERSION,
   DEFAULT_SUPPORTED_PROTOCOL_RANGE,
@@ -64,6 +65,7 @@ export async function createServerRuntimeSession(params: {
   message?: string
   model?: string
   permissionMode?: SessionPermissionMode
+  projectConfigPolicy?: RuntimeProjectConfigPolicy
   promptName?: string
   promptType?: SessionPromptType
   sessionId: string
@@ -139,6 +141,7 @@ export async function createServerRuntimeSession(params: {
     ...(params.fastMode != null ? { fastMode: params.fastMode } : {}),
     ...(params.model != null ? { model: params.model } : {}),
     ...(params.permissionMode != null ? { permissionMode: params.permissionMode } : {}),
+    ...(params.projectConfigPolicy != null ? { projectConfigPolicy: params.projectConfigPolicy } : {}),
     ...(params.promptType != null ? { taskType: params.promptType } : {}),
     ...(params.promptName != null ? { name: params.promptName } : {}),
     ...(params.systemPrompt != null ? { systemPrompt: params.systemPrompt } : {}),

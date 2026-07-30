@@ -327,6 +327,115 @@ describe('prepareCodexSessionHome', () => {
     expect(await readFile(join(realHome, '.codex', 'config.toml'), 'utf8')).toBe('model = "real"\n')
   })
 
+  it('copies the complete global Codex config byte-for-byte for one global-only recovery', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-global-recovery-'))
+    const realHome = join(workspace, 'real-home')
+    const mockHome = resolveTestMockHome(workspace, realHome)
+    tempDirs.push(workspace)
+    const globalConfig = [
+      'model = "gpt-5.6"',
+      'model_provider = "company"',
+      '',
+      '[model_providers.company]',
+      'name = "Company"',
+      'base_url = "https://example.invalid/v1"',
+      'wire_api = "responses"',
+      '',
+      '[profiles.review]',
+      'model = "gpt-5.6"',
+      '',
+      '[notices]',
+      'hide_rate_limit_model_nudge = true',
+      ''
+    ].join('\n')
+    await mkdir(join(realHome, '.codex'), { recursive: true })
+    await mkdir(join(mockHome, '.codex'), { recursive: true })
+    await writeFile(join(realHome, '.codex', 'config.toml'), globalConfig)
+    await writeFile(join(mockHome, '.codex', 'config.toml'), 'model = "managed-project-default"\n')
+
+    const result = await prepareCodexSessionHome({
+      ctx: {
+        cwd: workspace,
+        env: {
+          HOME: mockHome,
+          __ONEWORKS_PROJECT_REAL_HOME__: realHome
+        },
+        ctxId: 'ctx',
+        configs: []
+      },
+      sessionId: 'session',
+      nativeProviderConfigOverrides: [
+        'model_provider="managed-project-default"',
+        'model_providers.managed-project-default.wire_api="chat"'
+      ],
+      projectConfigPolicy: 'global-only'
+    })
+
+    expect(await readFile(join(result.homeDir, '.codex', 'config.toml'), 'utf8')).toBe(globalConfig)
+    expect(await readFile(join(realHome, '.codex', 'config.toml'), 'utf8')).toBe(globalConfig)
+    expect(await readFile(join(mockHome, '.codex', 'config.toml'), 'utf8')).toBe(
+      'model = "managed-project-default"\n'
+    )
+
+    const ordinaryResume = await prepareCodexSessionHome({
+      ctx: {
+        cwd: workspace,
+        env: {
+          HOME: mockHome,
+          __ONEWORKS_PROJECT_REAL_HOME__: realHome
+        },
+        ctxId: 'ctx',
+        configs: []
+      },
+      sessionId: 'session'
+    })
+    const ordinaryConfig = await readFile(join(ordinaryResume.homeDir, '.codex', 'config.toml'), 'utf8')
+    expect(ordinaryConfig).toContain('model = "managed-project-default"')
+    expect(ordinaryConfig).not.toContain('[notices]')
+    expect(await readFile(join(realHome, '.codex', 'config.toml'), 'utf8')).toBe(globalConfig)
+  })
+
+  it('uses the configured global CODEX_HOME as the lossless recovery source', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-custom-home-recovery-'))
+    const realHome = join(workspace, 'real-home')
+    const customCodexHome = join(workspace, 'custom-codex-home')
+    const mockHome = resolveTestMockHome(workspace, realHome)
+    tempDirs.push(workspace)
+    const customConfig = [
+      'model_provider = "custom"',
+      '[model_providers.custom]',
+      'wire_api = "responses"',
+      '[profiles.review]',
+      'model_provider = "custom"',
+      '[notices]',
+      'hide_rate_limit_model_nudge = true',
+      ''
+    ].join('\n')
+    await mkdir(join(realHome, '.codex'), { recursive: true })
+    await mkdir(customCodexHome, { recursive: true })
+    await mkdir(join(mockHome, '.codex'), { recursive: true })
+    await writeFile(join(realHome, '.codex', 'config.toml'), 'model = "wrong-source"\n')
+    await writeFile(join(customCodexHome, 'config.toml'), customConfig)
+
+    const result = await prepareCodexSessionHome({
+      ctx: {
+        cwd: workspace,
+        env: {
+          CODEX_HOME: customCodexHome,
+          HOME: mockHome,
+          __ONEWORKS_PROJECT_REAL_HOME__: realHome
+        },
+        ctxId: 'ctx',
+        configs: []
+      },
+      sessionId: 'session',
+      projectConfigPolicy: 'global-only'
+    })
+
+    expect(await readFile(join(result.homeDir, '.codex', 'config.toml'), 'utf8')).toBe(customConfig)
+    expect(await readFile(join(customCodexHome, 'config.toml'), 'utf8')).toBe(customConfig)
+  })
+
   it('keeps global Codex runtime caches out of the isolated session home', async () => {
     const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-session-home-pruned-'))
     const realHome = join(workspace, 'real-home')

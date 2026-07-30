@@ -1,4 +1,8 @@
 import type { AskUserQuestionParams, Session, WSEvent } from '@oneworks/core'
+import {
+  CODEX_PROJECT_CONFIG_INVALID_ERROR_CODE,
+  ProjectedRuntimeKnownErrorDataSchema
+} from '@oneworks/runtime-protocol'
 
 import { stripAnsi } from '#~/utils/strip-ansi'
 
@@ -12,6 +16,7 @@ export interface ChatErrorState {
   kind: 'connection' | 'session'
   message: string
   code?: string
+  details?: unknown
   recoverable?: boolean
   reason?: 'error' | 'closed'
 }
@@ -19,6 +24,7 @@ export interface ChatErrorState {
 export interface FatalSessionErrorState {
   message: string
   code?: string
+  details?: unknown
 }
 
 const normalizeErrorMessage = (value: string) => stripAnsi(value).trim()
@@ -32,11 +38,20 @@ export const getFatalSessionError = (event: WSEvent): FatalSessionErrorState | n
     return null
   }
 
-  const code = event.data != null && typeof event.data === 'object' &&
+  const rawCode = event.data != null && typeof event.data === 'object' &&
       'code' in event.data &&
       typeof event.data.code === 'string' &&
       event.data.code.trim() !== ''
     ? event.data.code
+    : undefined
+  const knownError = rawCode === CODEX_PROJECT_CONFIG_INVALID_ERROR_CODE
+    ? ProjectedRuntimeKnownErrorDataSchema.safeParse(event.data)
+    : undefined
+  const code = rawCode === CODEX_PROJECT_CONFIG_INVALID_ERROR_CODE && knownError?.success !== true
+    ? 'session_failed'
+    : rawCode
+  const details = knownError?.success === true
+    ? knownError.data.details
     : undefined
 
   if (event.data != null && typeof event.data === 'object' && 'message' in event.data) {
@@ -46,7 +61,8 @@ export const getFatalSessionError = (event: WSEvent): FatalSessionErrorState | n
       if (normalizedMessage !== '') {
         return {
           message: normalizedMessage,
-          code
+          code,
+          details
         }
       }
     }
@@ -57,7 +73,8 @@ export const getFatalSessionError = (event: WSEvent): FatalSessionErrorState | n
     if (normalizedMessage !== '') {
       return {
         message: normalizedMessage,
-        code
+        code,
+        details
       }
     }
   }

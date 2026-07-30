@@ -1,7 +1,16 @@
 import { randomUUID } from 'node:crypto'
 import process from 'node:process'
 
-import { DEFAULT_SUPPORTED_PROTOCOL_RANGE, getCurrentProtocolVersion } from '@oneworks/runtime-protocol'
+import {
+  DEFAULT_SUPPORTED_PROTOCOL_RANGE,
+  RuntimeCommandSchema,
+  getCurrentProtocolVersion,
+  hasRuntimeActivationPayload
+} from '@oneworks/runtime-protocol'
+import type {
+  RuntimeActivationContentItem,
+  RuntimeProjectConfigPolicy
+} from '@oneworks/runtime-protocol'
 import { FileRuntimeStore, resolveRuntimeRoot } from '@oneworks/runtime-store'
 import type { RuntimeCommand } from '@oneworks/runtime-store'
 
@@ -17,8 +26,12 @@ export interface CreateRuntimeSessionParams {
   cwd: string
   entity: string
   title?: string
-  message: string
+  message?: string
+  contentItems?: RuntimeActivationContentItem[]
+  runtimeContentItems?: RuntimeActivationContentItem[]
+  runtimeMessage?: string
   adapter?: string
+  account?: string
   effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra'
   fastMode?: boolean
   model?: string
@@ -38,6 +51,9 @@ export interface CreateRuntimeSessionParams {
   sessionId?: string
   source?: string
   permissionMode?: 'default' | 'acceptEdits' | 'plan' | 'dontAsk' | 'bypassPermissions'
+  projectConfigPolicy?: RuntimeProjectConfigPolicy
+  systemPrompt?: string
+  updateConfiguredSkills?: boolean
 }
 
 export interface AppendRuntimeCommandParams {
@@ -46,8 +62,12 @@ export interface AppendRuntimeCommandParams {
   type: Exclude<RuntimeCommandType, 'start'>
   commandId?: string
   message?: string
+  contentItems?: RuntimeActivationContentItem[]
+  runtimeContentItems?: RuntimeActivationContentItem[]
+  runtimeMessage?: string
   memberKey?: string
   priority?: number
+  projectConfigPolicy?: RuntimeProjectConfigPolicy
   requestId?: string
   roomId?: string
   runId?: string
@@ -94,24 +114,32 @@ export const buildCommand = (params: {
   type: RuntimeCommandType
   ts: number
   content?: string
+  contentItems?: RuntimeActivationContentItem[]
   commandId?: string
   requestId?: string
   value?: unknown
   data?: string | string[]
   entity?: string
   adapter?: string
+  account?: string
   effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra'
   fastMode?: boolean
   model?: string
   memberKey?: string
   permissionMode?: 'default' | 'acceptEdits' | 'plan' | 'dontAsk' | 'bypassPermissions'
+  projectConfigPolicy?: RuntimeProjectConfigPolicy
+  systemPrompt?: string
+  updateConfiguredSkills?: boolean
+  runtimeContentItems?: RuntimeActivationContentItem[]
+  runtimeMessage?: string
   roomId?: string
   runId?: string
   priority?: number
   source?: string
   title?: string
+  messageDelivery?: 'bridge' | 'initial_prompt'
 }): RuntimeCommand => {
-  const command: RuntimeCommand = {
+  const command = {
     protocolVersion: getCurrentProtocolVersion(),
     supportedProtocolRange: DEFAULT_SUPPORTED_PROTOCOL_RANGE,
     id: `cmd_${params.type}_${randomUUID()}`,
@@ -119,24 +147,51 @@ export const buildCommand = (params: {
     sessionId: params.sessionId,
     type: params.type,
     priority: params.priority ?? getCommandPriority(params.type),
-    source: params.source ?? 'cli'
+    source: params.source ?? 'cli',
+    ...(params.commandId != null ? { commandId: params.commandId } : {}),
+    ...(params.content != null ? { content: params.content } : {}),
+    ...(params.contentItems != null
+      ? { contentItems: structuredClone(params.contentItems) }
+      : {}),
+    ...(params.requestId != null ? { requestId: params.requestId } : {}),
+    ...(params.value != null ? { value: params.value } : {}),
+    ...(params.data != null ? { data: params.data } : {}),
+    ...(params.entity != null ? { entity: params.entity } : {}),
+    ...(params.adapter != null ? { adapter: params.adapter } : {}),
+    ...(params.account != null ? { account: params.account } : {}),
+    ...(params.effort != null ? { effort: params.effort } : {}),
+    ...(params.fastMode != null ? { fastMode: params.fastMode } : {}),
+    ...(params.model != null ? { model: params.model } : {}),
+    ...(params.permissionMode != null ? { permissionMode: params.permissionMode } : {}),
+    ...(params.projectConfigPolicy != null
+      ? { projectConfigPolicy: params.projectConfigPolicy }
+      : {}),
+    ...(params.systemPrompt != null ? { systemPrompt: params.systemPrompt } : {}),
+    ...(params.updateConfiguredSkills != null
+      ? { updateConfiguredSkills: params.updateConfiguredSkills }
+      : {}),
+    ...(params.runtimeContentItems != null
+      ? { runtimeContentItems: structuredClone(params.runtimeContentItems) }
+      : {}),
+    ...(params.runtimeMessage != null ? { runtimeMessage: params.runtimeMessage } : {}),
+    ...(params.memberKey != null ? { memberKey: params.memberKey } : {}),
+    ...(params.roomId != null ? { roomId: params.roomId } : {}),
+    ...(params.runId != null ? { runId: params.runId } : {}),
+    ...(params.title != null ? { title: params.title } : {}),
+    ...(params.messageDelivery != null ? { messageDelivery: params.messageDelivery } : {}),
+    ...(commandTypeToMode(params.type) != null ? { mode: commandTypeToMode(params.type) } : {})
   }
-  if (params.commandId != null) command.commandId = params.commandId
-  if (params.content != null) command.content = params.content
-  if (params.requestId != null) command.requestId = params.requestId
-  if (params.value != null) command.value = params.value
-  if (params.data != null) command.data = params.data
-  if (params.entity != null) command.entity = params.entity
-  if (params.adapter != null) command.adapter = params.adapter
-  if (params.effort != null) command.effort = params.effort
-  if (params.fastMode != null) command.fastMode = params.fastMode
-  if (params.model != null) command.model = params.model
-  if (params.permissionMode != null) command.permissionMode = params.permissionMode
-  if (params.memberKey != null) command.memberKey = params.memberKey
-  if (params.roomId != null) command.roomId = params.roomId
-  if (params.runId != null) command.runId = params.runId
-  if (params.title != null) command.title = params.title
-  const mode = commandTypeToMode(params.type)
-  if (mode != null) command.mode = mode
-  return command
+  return RuntimeCommandSchema.parse(command)
+}
+
+export const assertRuntimeActivationPayload = (params: {
+  content?: unknown
+  contentItems?: unknown
+  message?: unknown
+  runtimeContentItems?: unknown
+  runtimeMessage?: unknown
+}) => {
+  if (!hasRuntimeActivationPayload(params)) {
+    throw new Error('message or supported content items are required.')
+  }
 }

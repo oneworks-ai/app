@@ -1995,6 +1995,7 @@ export function ChatHistoryView({
               <MessageStatusNotice
                 key={notice.id}
                 notice={notice}
+                sessionId={session?.id}
                 onRetryConnection={onRetryConnection}
                 onRetrySessionCreation={() => {
                   void retrySessionCreation()

@@ -1,3 +1,8 @@
+import {
+  CODEX_PROJECT_CONFIG_INVALID_ERROR_CODE,
+  ProjectedCodexProjectConfigInvalidDetailsSchema
+} from '@oneworks/runtime-protocol'
+
 import type { ChatErrorState } from '#~/hooks/chat/interaction-state'
 import type { SessionCompactionInfo, SessionCompactionStatus } from '#~/hooks/chat/session-compaction'
 
@@ -10,6 +15,15 @@ export interface ChatHistoryStatusNotice {
   id: string
   message: string
   meta?: string
+  projectConfigRecovery?: {
+    column?: number
+    configPath: string
+    failureEventId: string
+    failureEventSeq: number
+    line?: number
+    sessionId: string
+    workspaceFolder: string
+  }
   tone: 'error' | 'info' | 'warning'
   title: string
 }
@@ -56,14 +70,47 @@ const createSessionNotice = (
   state: ChatErrorState
 ): ChatHistoryStatusNotice => {
   const isCreateFailure = state.action === 'retry-session-creation'
+  const recoveryResult = state.code === CODEX_PROJECT_CONFIG_INVALID_ERROR_CODE
+    ? ProjectedCodexProjectConfigInvalidDetailsSchema.safeParse(state.details)
+    : undefined
+  const recoveryDetails = recoveryResult?.success === true ? recoveryResult.data : undefined
+  const configPath = recoveryDetails?.configPath
+  const line = recoveryDetails?.line
+  const column = recoveryDetails?.column
+  const recoverySource = recoveryDetails == null
+    ? undefined
+    : `${recoveryDetails.workspaceFolder.replace(/[\\/]+$/u, '')}/${recoveryDetails.configPath}`
 
   return {
     ...(state.action == null ? {} : { action: state.action }),
-    detail: isCreateFailure ? t('chat.sessionCreateFailedHelp') : t('chat.sessionErrorHelp'),
+    detail: isCreateFailure
+      ? t('chat.sessionCreateFailedHelp')
+      : recoveryDetails == null
+      ? t('chat.sessionErrorHelp')
+      : t('chat.projectConfigRecovery.help'),
     icon: 'error',
     id: isCreateFailure ? 'session-create-failed' : 'session-error',
     message: state.message,
-    ...(!isCreateFailure && state.code != null && state.code !== ''
+    ...(recoveryDetails == null
+      ? {}
+      : {
+        projectConfigRecovery: {
+          configPath: recoveryDetails.configPath,
+          failureEventId: recoveryDetails.runtimeEventId,
+          failureEventSeq: recoveryDetails.runtimeEventSeq,
+          sessionId: recoveryDetails.sessionId,
+          workspaceFolder: recoveryDetails.workspaceFolder,
+          ...(line == null ? {} : { line }),
+          ...(column == null ? {} : { column })
+        }
+      }),
+    ...(!isCreateFailure && recoveryDetails != null
+      ? {
+        meta: `${recoverySource}${
+          line == null ? '' : `:${line}${column == null ? '' : `:${column}`}`
+        }`
+      }
+      : !isCreateFailure && state.code != null && state.code !== ''
       ? { meta: t('chat.sessionErrorCode', { code: state.code }) }
       : {}),
     tone: 'error',

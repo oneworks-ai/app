@@ -17,6 +17,20 @@ export interface AdapterErrorData {
   fatal?: boolean
 }
 
+export type ProjectConfigPolicy = 'include' | 'global-only'
+
+export class AdapterStartupError extends Error {
+  code: string
+  details?: unknown
+
+  constructor(message: string, code: string, details?: unknown) {
+    super(message)
+    this.name = 'AdapterStartupError'
+    this.code = code
+    this.details = details
+  }
+}
+
 export interface AdapterInteractionRequest {
   id: string
   payload: AskUserQuestionParams
@@ -221,6 +235,7 @@ export interface AdapterQueryOptions {
   account?: string
   effort?: EffortLevel
   fastMode?: boolean
+  projectConfigPolicy?: ProjectConfigPolicy
   mode?: 'stream' | 'direct'
   systemPrompt?: string
   appendSystemPrompt?: boolean
@@ -256,6 +271,7 @@ export interface AdapterSession {
 }
 
 export interface Adapter {
+  supportedProjectConfigPolicies?: readonly ProjectConfigPolicy[]
   init?: (
     ctx: AdapterCtx
   ) => Promise<void>

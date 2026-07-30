@@ -17,6 +17,12 @@ import type {
   RuntimeMeta,
   RuntimeState
 } from '@oneworks/runtime-store'
+import {
+  hasRuntimeActivationPayload,
+  isRuntimeActivationCommand,
+  sanitizeRuntimePublicErrorData,
+  type RuntimeProjectConfigPolicy
+} from '@oneworks/runtime-protocol'
 import type { AdapterOutputEvent } from '@oneworks/types'
 import { extractTextFromMessage } from '@oneworks/utils/chat-message'
 
@@ -47,6 +53,7 @@ export interface CliRuntimeEventSinkOptions extends RuntimeEventSinkOptions {
   message?: string
   model?: string
   permissionMode?: RuntimeMeta['permissionMode']
+  projectConfigPolicy?: RuntimeProjectConfigPolicy
   title?: string
 }
 
@@ -120,11 +127,11 @@ const isChatMessageContent = (item: unknown): item is ChatMessageContent => {
 }
 
 const normalizeCommandContent = (command: RuntimeCommand): RuntimeEventDraft['content'] => {
-  const contentItems = command.contentItems
+  const contentItems = command.runtimeContentItems ?? command.contentItems
   if (Array.isArray(contentItems) && contentItems.every(isChatMessageContent)) {
     return structuredClone(contentItems)
   }
-  return command.content ?? command.message
+  return command.runtimeMessage ?? command.content ?? command.message
 }
 
 const normalizeSubmitValue = (value: unknown) => {
@@ -144,13 +151,13 @@ const buildCliRuntimeTitle = (options: CliRuntimeEventSinkOptions) =>
     trimOptional(options.message)?.split('\n')[0]?.trim() ??
     options.sessionId
 
-const INITIAL_PROMPT_DELIVERY = 'initial_prompt'
-
 export class RuntimeEventSink {
   private queue = Promise.resolve()
   private readonly commandBackedUserMessageTexts: string[] = []
   private lastAssistantText: string | undefined
   private sawFatalError = false
+  private activeAttemptCommandId: string | undefined
+  private pendingInitialPromptCommand: RuntimeCommand | undefined
   private readonly runtimeId: string
 
   constructor(
@@ -163,10 +170,14 @@ export class RuntimeEventSink {
   }
 
   async recordStartup(commands: RuntimeCommand[]): Promise<RuntimeStartupRecord> {
+    this.activeAttemptCommandId = commands.findLast(isRuntimeActivationCommand)?.id
     const startCommand = commands.find(command => command.type === 'start')
     if (startCommand != null) {
       const events = await this.store.session(this.sessionId).replayEvents()
-      const alreadyAcked = events.some(event => event.type === 'command_ack' && event.commandId === startCommand.id)
+      const alreadyAcked = events.some(event =>
+        (event.type === 'command_ack' || event.type === 'command_delivery_completed') &&
+        event.commandId === startCommand.id
+      )
       if (alreadyAcked) {
         await this.writeHeartbeat('running')
         return {
@@ -185,35 +196,15 @@ export class RuntimeEventSink {
         }
       }
 
-      if (startCommand.messageDelivery === INITIAL_PROMPT_DELIVERY) {
-        this.rememberCommandBackedUserContent(startCommand.content ?? startCommand.message)
-        await this.ackCommand(startCommand)
-        await this.writeHeartbeat('running')
-        return {
-          startAlreadyAcked: false,
-          startCommand,
-          shouldRunInitialPrompt: true
-        }
-      }
-
-      await this.ackCommand(startCommand)
-      const content = startCommand.content ?? startCommand.message
-      if (content != null && content.trim() !== '') {
-        await this.append({
-          type: 'message',
-          role: 'user',
-          content,
-          causedByCommandId: startCommand.id,
-          commandId: startCommand.commandId,
-          visibility: 'private'
-        })
-        this.rememberCommandBackedUserContent(content)
-      }
+      // A start command is not acknowledged merely because the CLI process
+      // opened its store.  The caller completes this durable delivery after
+      // `run()` has synchronously handed the prompt to the adapter session.
+      this.pendingInitialPromptCommand = startCommand
       await this.writeHeartbeat('running')
       return {
         startAlreadyAcked: false,
         startCommand,
-        shouldRunInitialPrompt: true
+        shouldRunInitialPrompt: hasRuntimeActivationPayload(startCommand)
       }
     }
     await this.writeHeartbeat('running')
@@ -223,11 +214,55 @@ export class RuntimeEventSink {
     }
   }
 
+  /** Complete the initial start after the adapter has accepted the run. */
+  async completeInitialPromptDelivery() {
+    const command = this.pendingInitialPromptCommand
+    if (command == null) return
+    const events = await this.store.session(this.sessionId).replayEvents()
+    const completed = events.some(event =>
+      (event.type === 'command_ack' || event.type === 'command_delivery_completed') &&
+      event.commandId === command.id
+    )
+    if (completed) {
+      this.pendingInitialPromptCommand = undefined
+      return
+    }
+
+    if (hasRuntimeActivationPayload(command)) {
+      const deliveryId = `runtime-delivery:${command.id}`
+      const prepared = events.some(event =>
+        event.type === 'command_delivery_prepared' && event.commandId === command.id
+      )
+      if (!prepared) await this.recordCommandDelivery(command, deliveryId, 'prepared')
+      await this.recordCommandDelivery(command, deliveryId, 'accepted')
+      await this.recordCommandDelivery(command, deliveryId, 'completed')
+      await this.recordMessageCommand(command)
+    }
+    await this.ackCommand(command)
+    this.pendingInitialPromptCommand = undefined
+  }
+
   ackCommand(command: RuntimeCommand) {
     return this.append({
       type: 'command_ack',
       commandId: command.id,
       causedByCommandId: command.commandId,
+      visibility: 'audit',
+      message: command.type
+    })
+  }
+
+  recordCommandDelivery(
+    command: RuntimeCommand,
+    deliveryId: string,
+    deliveryState: 'prepared' | 'accepted' | 'completed'
+  ) {
+    return this.append({
+      type: `command_delivery_${deliveryState}`,
+      commandId: command.id,
+      causedByCommandId: command.commandId,
+      deliveryId,
+      deliveryState,
       visibility: 'audit',
       message: command.type
     })
@@ -302,6 +337,9 @@ export class RuntimeEventSink {
         title: event.data.title ?? this.meta?.title,
         adapter: event.data.adapter,
         model: event.data.model,
+        ...(this.activeAttemptCommandId != null
+          ? { causedByCommandId: this.activeAttemptCommandId }
+          : {}),
         visibility: 'system'
       })
     }
@@ -353,12 +391,28 @@ export class RuntimeEventSink {
       if (event.data.fatal !== false) {
         this.sawFatalError = true
       }
+      const publicError = sanitizeRuntimePublicErrorData({
+        code: event.data.code ?? 'adapter_error',
+        details: event.data.details,
+        fatal: event.data.fatal !== false,
+        message: event.data.message
+      }, 'adapter_error') ?? {
+        code: 'adapter_error',
+        fatal: event.data.fatal !== false,
+        message: event.data.message
+      }
       return this.append({
         type: event.data.fatal === false ? 'command_failed' : 'session_failed',
         status: event.data.fatal === false ? undefined : 'failed',
-        error: event.data.message,
-        message: event.data.message,
-        summary: event.data.message,
+        error: publicError.message,
+        code: publicError.code,
+        ...('details' in publicError ? { details: publicError.details } : {}),
+        fatal: publicError.fatal,
+        message: publicError.message,
+        summary: publicError.message,
+        ...(this.activeAttemptCommandId != null
+          ? { causedByCommandId: this.activeAttemptCommandId }
+          : {}),
         visibility: 'room'
       })
     }
@@ -395,12 +449,33 @@ export class RuntimeEventSink {
 
   recordFailure(error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
+    const rawCode = error != null &&
+        typeof error === 'object' &&
+        'code' in error &&
+        typeof error.code === 'string'
+      ? error.code
+      : undefined
+    const rawDetails = error != null && typeof error === 'object' && 'details' in error
+      ? error.details
+      : undefined
+    const publicError = sanitizeRuntimePublicErrorData({
+      code: rawCode ?? 'session_failed',
+      details: rawDetails,
+      fatal: true,
+      message
+    }) ?? { code: 'session_failed', fatal: true, message }
     return this.append({
       type: 'session_failed',
       status: 'failed',
-      error: message,
-      message,
-      summary: message,
+      error: publicError.message,
+      code: publicError.code,
+      ...('details' in publicError ? { details: publicError.details } : {}),
+      fatal: true,
+      message: publicError.message,
+      summary: publicError.message,
+      ...(this.activeAttemptCommandId != null
+        ? { causedByCommandId: this.activeAttemptCommandId }
+        : {}),
       visibility: 'room'
     })
   }
@@ -586,7 +661,8 @@ export const createCliRuntimeEventSink = async (options: CliRuntimeEventSinkOpti
         source: 'cli',
         content: message,
         message,
-        title
+        title,
+        ...(options.projectConfigPolicy != null ? { projectConfigPolicy: options.projectConfigPolicy } : {})
       } satisfies RuntimeCommand
     )
 

@@ -31,7 +31,8 @@ vi.mock('@oneworks/app-runtime', () => ({
       kill: vi.fn(),
       stop: vi.fn()
     },
-    resolvedAdapter: 'codex'
+    resolvedAdapter: 'codex',
+    runtimeAdapter: 'codex'
   }))
 }))
 

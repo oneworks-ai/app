@@ -7,6 +7,7 @@ import {
   getDisallowedResumeFlags,
   resolveDefaultOneworksMcpServerOption,
   resolveInjectDefaultSystemPromptOption,
+  resolvePersistedResumeAdapterOptions,
   resolveResumeAdapterOptions,
   resolveRunMode
 } from './run/options'
@@ -20,6 +21,7 @@ import {
 } from './run/output'
 import { createPrintIdleTimeoutController, parsePrintIdleTimeoutSeconds } from './run/print-idle-timeout'
 import {
+  buildRuntimeResumeConsumerArgs,
   executeRuntimeProtocolCommand,
   shouldStartRuntimeConsumer,
   shouldStartRuntimeResumeConsumer
@@ -32,6 +34,7 @@ export {
   RUN_INPUT_FORMATS,
   RUN_OUTPUT_FORMATS,
   applyAdapterCliVersionEnv,
+  buildRuntimeResumeConsumerArgs,
   createAdapterOption,
   createPrintIdleTimeoutController,
   createSessionExitController,
@@ -51,6 +54,7 @@ export {
   registerRunCommand,
   resolveDefaultOneworksMcpServerOption,
   resolveInjectDefaultSystemPromptOption,
+  resolvePersistedResumeAdapterOptions,
   resolvePrintableStopText,
   resolveResumeAdapterOptions,
   resolveRunMode,

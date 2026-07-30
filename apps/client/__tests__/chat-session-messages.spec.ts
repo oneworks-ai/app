@@ -924,4 +924,69 @@ describe('chat session interaction state', () => {
       code: 'session_failed'
     })
   })
+
+  it('accepts only the projected typed project config failure contract at the client boundary', () => {
+    const details = {
+      adapter: 'codex-alias',
+      runtimeAdapter: 'codex',
+      configSource: 'project',
+      configPath: '.codex/config.toml',
+      workspaceSource: 'active-session-workspace',
+      workspaceFolder: '/workspace/root',
+      sessionId: 'session-project-config',
+      reason: 'wire_api is unsupported',
+      runtimeEventId: 'evt-project-config',
+      runtimeEventSeq: 4,
+      line: 2,
+      column: 1
+    }
+    expect(getFatalSessionError({
+      type: 'error',
+      data: {
+        code: 'codex_project_config_invalid',
+        details,
+        fatal: true,
+        message: 'Invalid project config.'
+      }
+    })).toEqual({
+      code: 'codex_project_config_invalid',
+      details,
+      message: 'Invalid project config.'
+    })
+
+    expect(getFatalSessionError({
+      type: 'error',
+      data: {
+        code: 'codex_project_config_invalid',
+        details: {
+          configPath: '../../forged.toml',
+          workspaceFolder: '/tmp/forged'
+        },
+        fatal: true,
+        message: 'Invalid project config.'
+      }
+    })).toEqual({
+      code: 'session_failed',
+      message: 'Invalid project config.'
+    })
+  })
+
+  it('drops arbitrary unknown error details at the live client boundary', () => {
+    const sentinel = 'SENTINEL_CLIENT_ERROR_SECRET'
+    const error = getFatalSessionError({
+      type: 'error',
+      data: {
+        code: 'future_runtime_error',
+        details: { privateToken: sentinel },
+        fatal: true,
+        message: 'Future runtime failure'
+      }
+    })
+
+    expect(error).toEqual({
+      code: 'future_runtime_error',
+      message: 'Future runtime failure'
+    })
+    expect(JSON.stringify(error)).not.toContain(sentinel)
+  })
 })

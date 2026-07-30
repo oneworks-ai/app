@@ -1,5 +1,5 @@
 import type { ChatMessageContent } from '@oneworks/core'
-import type { TaskDetail } from '@oneworks/types'
+import type { ProjectConfigPolicy, TaskDetail } from '@oneworks/types'
 
 import type { CliSessionResumeRecord } from '#~/session-cache.js'
 
@@ -15,6 +15,7 @@ export interface RunOptions {
   model?: string
   effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra'
   fastMode?: boolean
+  projectConfigPolicy?: ProjectConfigPolicy
   adapter?: string
   account?: string
   systemPrompt?: string
@@ -59,7 +60,7 @@ export type CliInputControlEvent =
 export interface CliInputSession {
   emit(
     event:
-      | { type: 'message'; content: ChatMessageContent[] }
+      | { type: 'message'; content: ChatMessageContent[]; deliveryId?: string }
       | { type: 'interrupt' }
       | { type: 'stop' }
   ): void

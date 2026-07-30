@@ -1,4 +1,9 @@
 import type { WSEvent } from '@oneworks/core'
+import {
+  CODEX_PROJECT_CONFIG_INVALID_ERROR_CODE,
+  CodexProjectConfigInvalidDetailsSchema,
+  ProjectedCodexProjectConfigInvalidDetailsSchema
+} from '@oneworks/runtime-protocol'
 
 import type { RuntimeEvent } from './types.js'
 
@@ -52,18 +57,39 @@ const getRuntimeFailureMessage = (event: RuntimeEvent) => {
 
 export const buildRuntimeFailureErrorEvent = (event: RuntimeEvent): Extract<WSEvent, { type: 'error' }> => {
   const message = getRuntimeFailureMessage(event)
+  const knownDetails = event.code === CODEX_PROJECT_CONFIG_INVALID_ERROR_CODE
+    ? CodexProjectConfigInvalidDetailsSchema.safeParse(event.details)
+    : undefined
+  const projectedDetails = knownDetails?.success === true
+    ? ProjectedCodexProjectConfigInvalidDetailsSchema.safeParse({
+      ...knownDetails.data,
+      runtimeEventId: event.id,
+      runtimeEventSeq: event.seq
+    })
+    : undefined
+  if (projectedDetails?.success === true) {
+    return {
+      type: 'error',
+      message,
+      data: {
+        code: CODEX_PROJECT_CONFIG_INVALID_ERROR_CODE,
+        details: projectedDetails.data,
+        fatal: true,
+        message
+      }
+    }
+  }
+
+  const malformedKnownError = event.code === CODEX_PROJECT_CONFIG_INVALID_ERROR_CODE
+  const safeCode = malformedKnownError
+    ? 'session_failed'
+    : getNonEmptyString(event.code) ?? 'session_failed'
 
   return {
     type: 'error',
     message,
     data: {
-      code: 'session_failed',
-      details: {
-        runtimeEventId: event.id,
-        runtimeEventSeq: event.seq,
-        runtimeEventType: event.type,
-        runtimeSessionId: event.sessionId
-      },
+      code: safeCode,
       fatal: event.fatal ?? true,
       message
     }

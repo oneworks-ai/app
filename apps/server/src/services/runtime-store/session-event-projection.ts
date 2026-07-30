@@ -6,6 +6,7 @@ import { setSessionInteraction } from '#~/services/session/interaction.js'
 import { broadcastSessionEvent, notifySessionUpdated } from '#~/services/session/runtime.js'
 
 import { extractTextFromContent, normalizeMessageContent } from './content.js'
+import { createPublicProjectionContext, normalizePublicRuntimeEvent } from './public-runtime-event.js'
 import { projectFailureToSession } from './session-failure-projection.js'
 import {
   getEventTime,
@@ -153,14 +154,33 @@ const projectApprovalToSession = (db: SqliteDb, event: RuntimeEvent, broadcast: 
     status: 'waiting_input'
   })
   if (didPersist) {
-    setSessionInteraction(event.sessionId, { id: interactionId, payload })
+    setSessionInteraction(
+      event.sessionId,
+      { id: interactionId, payload },
+      createPublicProjectionContext()
+    )
     return [{ sessionId: event.sessionId, event: wsEvent }]
   }
   return []
 }
 
 const projectAuditToSession = (db: SqliteDb, event: RuntimeEvent, broadcast: boolean) => {
-  persistSessionEvent(db, event.sessionId, { type: 'adapter_event', data: { runtimeEvent: event } }, { broadcast })
+  const session = db.getSession(event.sessionId)
+  if (session == null) return
+  const publicEvent = normalizePublicRuntimeEvent(
+    event,
+    event.sessionId,
+    db.getSessionWorkspace(event.sessionId)?.workspaceFolder,
+    session.adapter,
+    createPublicProjectionContext()
+  )
+  if (publicEvent == null) return
+  persistSessionEvent(
+    db,
+    publicEvent.sessionId,
+    { type: 'adapter_event', data: { runtimeEvent: publicEvent } },
+    { broadcast }
+  )
 }
 export function projectRuntimeSessionEvent(
   db: SqliteDb,
@@ -174,6 +194,9 @@ export function projectRuntimeSessionEvent(
     return projectApprovalToSession(db, event, broadcast)
   } else if (
     event.type === 'command_ack' ||
+    event.type === 'command_delivery_prepared' ||
+    event.type === 'command_delivery_accepted' ||
+    event.type === 'command_delivery_completed' ||
     event.type === 'command_failed' ||
     event.type === 'command_cancelled' ||
     event.type === 'operation_started' ||

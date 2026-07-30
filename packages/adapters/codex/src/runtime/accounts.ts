@@ -19,7 +19,8 @@ import type {
   AdapterAccountsResult,
   AdapterCtx,
   AdapterManageAccountOptions,
-  AdapterManageAccountResult
+  AdapterManageAccountResult,
+  ProjectConfigPolicy
 } from '@oneworks/types'
 import {
   DEFAULT_GLOBAL_OO_CONFIG_FILE,
@@ -1005,11 +1006,20 @@ const collectRateLimitEntries = (value: unknown) => {
   return Array.from(uniqueEntries.values())
 }
 
-const resolveRealHomeAuthPath = (ctx: Pick<AdapterCtx, 'env'>) => {
-  const realHome = normalizeNonEmptyString(ctx.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
+const resolveRealHome = (ctx: Pick<AdapterCtx, 'env'>) => (
+  normalizeNonEmptyString(ctx.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
     normalizeNonEmptyString(process.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
     normalizeNonEmptyString(process.env.HOME) ??
     homedir()
+)
+
+const resolveRealCodexHome = (ctx: Pick<AdapterCtx, 'env'>) => (
+  normalizeNonEmptyString(ctx.env.CODEX_HOME) ??
+  resolve(resolveRealHome(ctx), '.codex')
+)
+
+const resolveRealHomeAuthPath = (ctx: Pick<AdapterCtx, 'env'>) => {
+  const realHome = resolveRealHome(ctx)
   return realHome != null && realHome !== ''
     ? resolve(realHome, '.codex', 'auth.json')
     : undefined
@@ -2100,14 +2110,26 @@ const writeCodexSessionConfigFile = async (params: {
   ctx: Pick<AdapterCtx, 'cwd' | 'env'>
   homeDir: string
   nativeProviderConfigOverrides?: string[]
+  projectConfigPolicy?: ProjectConfigPolicy
 }) => {
-  const mockHome = resolveMockHome(params.ctx.cwd, params.ctx.env)
-  const sharedConfigPath = join(mockHome, '.codex', 'config.toml')
   let sharedConfigContent: string | undefined
-  try {
-    sharedConfigContent = await readFile(sharedConfigPath, 'utf8')
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+  if (params.projectConfigPolicy === 'global-only') {
+    // Recovery precedence starts with the complete real-home config. Do not parse,
+    // normalize, or merge it here: ordinary per-session CLI overrides remain higher
+    // precedence without rewriting this byte-for-byte base.
+    try {
+      sharedConfigContent = await readFile(join(resolveRealCodexHome(params.ctx), 'config.toml'), 'utf8')
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    }
+  } else {
+    const mockHome = resolveMockHome(params.ctx.cwd, params.ctx.env)
+    const sharedConfigPath = join(mockHome, '.codex', 'config.toml')
+    try {
+      sharedConfigContent = await readFile(sharedConfigPath, 'utf8')
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    }
   }
 
   const configPath = join(params.homeDir, '.codex', 'config.toml')
@@ -2115,11 +2137,13 @@ const writeCodexSessionConfigFile = async (params: {
   await rm(configPath, { force: true })
   await writeFile(
     configPath,
-    buildCodexSessionConfigContent({
-      cwd: params.ctx.cwd,
-      nativeProviderConfigOverrides: params.nativeProviderConfigOverrides,
-      sharedConfigContent
-    }),
+    params.projectConfigPolicy === 'global-only'
+      ? sharedConfigContent ?? ''
+      : buildCodexSessionConfigContent({
+        cwd: params.ctx.cwd,
+        nativeProviderConfigOverrides: params.nativeProviderConfigOverrides,
+        sharedConfigContent
+      }),
     { encoding: 'utf8', mode: 0o600 }
   )
 
@@ -2165,6 +2189,7 @@ export const prepareCodexSessionHome = async (params: {
   sessionId: string
   account?: string
   nativeProviderConfigOverrides?: string[]
+  projectConfigPolicy?: ProjectConfigPolicy
 }) => {
   const { ctx, sessionId } = params
   const startupProfiler = createStartupProfiler({
@@ -2221,13 +2246,16 @@ export const prepareCodexSessionHome = async (params: {
   const sessionConfigPath = await writeCodexSessionConfigFile({
     ctx,
     homeDir,
+    projectConfigPolicy: params.projectConfigPolicy,
     nativeProviderConfigOverrides: params.nativeProviderConfigOverrides
   })
-  await ensureCodexNativeHookTrustState({
-    configPath: sessionConfigPath,
-    hooksPath: join(homeDir, '.codex', 'hooks.json')
-  })
-  await ensureCodexConfigCliCompatibility(sessionConfigPath)
+  if (params.projectConfigPolicy !== 'global-only') {
+    await ensureCodexNativeHookTrustState({
+      configPath: sessionConfigPath,
+      hooksPath: join(homeDir, '.codex', 'hooks.json')
+    })
+    await ensureCodexConfigCliCompatibility(sessionConfigPath)
+  }
   startupProfiler.mark('codex.accounts.writeSessionConfig', sessionConfigStartedAt)
   const authStartedAt = startupProfiler.now()
   const sessionAuthPath = join(homeDir, '.codex', 'auth.json')

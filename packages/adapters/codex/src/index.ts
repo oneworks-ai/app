@@ -7,6 +7,7 @@ import { initCodexAdapter } from './runtime/init'
 import { createCodexSession } from './runtime/session'
 
 export default defineAdapter({
+  supportedProjectConfigPolicies: ['include', 'global-only'] as const,
   init: initCodexAdapter,
   getAccounts: getCodexAccounts,
   getAccountDetail: getCodexAccountDetail,

@@ -12,12 +12,208 @@ import { SqliteDb } from '#~/db/index.js'
 import { createSqliteDatabase } from '#~/db/sqlite.js'
 import { createAgentRoomService } from '#~/services/agent-room/index.js'
 import { discoverRuntimeSessionStores } from '#~/services/runtime-store/discovery.js'
+import {
+  readInternalRuntimeEventsJsonl,
+  replayRuntimeEventsJsonl
+} from '#~/services/runtime-store/jsonl.js'
 import { projectRuntimeEvent } from '#~/services/runtime-store/projection.js'
 import type { RuntimeEvent, RuntimeSessionMetadata, RuntimeSessionStore } from '#~/services/runtime-store/types.js'
 import { RuntimeStoreWatcher, replayRuntimeStore } from '#~/services/runtime-store/watcher.js'
 import { createWorkspaceRuntimeEnv } from '#~/services/runtime-store/workspace-env.js'
+import {
+  createPublicProjectionContext,
+  projectPublicResponse,
+  sanitizePublicSessionRecord,
+  sanitizePublicRuntimeTransportEvent
+} from '#~/services/runtime-store/public-runtime-event.js'
+import type { PublicProjectionContext } from '#~/services/runtime-store/public-runtime-event.js'
+
+const transportProjectionContract: (
+  event: WSEvent,
+  sessionId: string | undefined,
+  workspaceFolder: string | undefined,
+  adapter: string | undefined,
+  context: PublicProjectionContext
+) => WSEvent | undefined = sanitizePublicRuntimeTransportEvent
+void transportProjectionContract
+import {
+  createSessionConnectionState,
+  externalSessionStore
+} from '#~/services/session/runtime.js'
 
 describe('runtime store projection', () => {
+  it('keeps strict internal recovery grants out of public replay', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ow-runtime-internal-public-events-'))
+    const eventsPath = path.join(root, 'events.jsonl')
+    await writeFile(eventsPath, [
+      JSON.stringify({
+        protocolVersion: '1.0.0',
+        id: 'evt_failure',
+        seq: 1,
+        ts: 1,
+        sessionId: 'sess_1',
+        type: 'session_failed',
+        causedByCommandId: 'cmd_attempt',
+        code: 'codex_project_config_invalid',
+        fatal: true,
+        details: {
+          adapter: 'codex',
+          runtimeAdapter: 'codex',
+          configSource: 'project',
+          configPath: '.codex/config.toml',
+          workspaceSource: 'active-session-workspace',
+          workspaceFolder: '/workspace/root',
+          sessionId: 'sess_1',
+          reason: 'Invalid project config.'
+        }
+      }),
+      JSON.stringify({
+        protocolVersion: '1.0.0',
+        id: 'evt_grant',
+        seq: 2,
+        ts: 2,
+        sessionId: 'sess_1',
+        type: 'project_config_recovery_granted',
+        source: 'server:project-config-recovery',
+        recoveryGrant: {
+          schemaVersion: 1,
+          type: 'project_config_recovery_grant',
+          recoveryCommandId: 'cmd_recovery',
+          idempotencyKey: 'recovery-key',
+          sessionId: 'sess_1',
+          attemptCommandId: 'cmd_attempt',
+          failureEventId: 'evt_failure',
+          failureEventSeq: 1,
+          payloadDigest: 'a'.repeat(64),
+          authorizationId: '11111111-1111-4111-8111-111111111111',
+          commandIndex: 1,
+          workspaceFolder: '/workspace/root',
+          adapter: 'codex',
+          runtimeAdapter: 'codex'
+        }
+      })
+    ].join('\n') + '\n')
+
+    const internal = await readInternalRuntimeEventsJsonl(eventsPath)
+    const publicReplay = await replayRuntimeEventsJsonl(
+      eventsPath,
+      { offset: 0 },
+      'sess_1',
+      '/workspace/root',
+      'codex'
+    )
+
+    expect(internal.map(event => event.type)).toEqual([
+      'session_failed',
+      'project_config_recovery_granted'
+    ])
+    expect(publicReplay.events.map(event => event.type)).toEqual(['session_failed'])
+    expect(JSON.stringify(publicReplay.events)).not.toContain('recovery-key')
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('enforces one aggregate response budget across fields and list items', () => {
+    const atLimit = projectPublicResponse(
+      Object.fromEntries(
+        Array.from({ length: 8 }, (_, index) => [
+          `field${index}`,
+          'x'.repeat(16 * 1024)
+        ])
+      ),
+      createPublicProjectionContext()
+    )
+    expect(atLimit).toBeDefined()
+    const overLimit = projectPublicResponse({
+      fields: [
+        ...Array.from({ length: 8 }, () => 'x'.repeat(16 * 1024)),
+        'x'
+      ]
+    }, createPublicProjectionContext())
+    expect(overLimit).toBeUndefined()
+  })
+
+  it('does not count nested session constructors again at the HTTP response root', () => {
+    const context = createPublicProjectionContext()
+    const sessions = Array.from({ length: 7 }, (_, index) =>
+      sanitizePublicSessionRecord({
+        id: `session-${index}`,
+        createdAt: index + 1,
+        title: 'x'.repeat(10 * 1024)
+      }, `session-${index}`, context)
+    )
+
+    expect(sessions.every(Boolean)).toBe(true)
+    expect(projectPublicResponse({ sessions }, context)).toBeDefined()
+    expect(context.bytes).toBeLessThan(128 * 1024)
+  })
+
+  it('uses deterministic per-string exact-limit behavior in a shared event context', () => {
+    expect(projectPublicResponse({ message: 'x'.repeat(16 * 1024) }, createPublicProjectionContext()))
+      .toEqual({ message: 'x'.repeat(16 * 1024) })
+    expect(projectPublicResponse({ message: 'x'.repeat((16 * 1024) + 1) }, createPublicProjectionContext()))
+      .toBeUndefined()
+  })
+
+  it('keeps projection contexts compile-required below public response roots', () => {
+    type TransportContextIsRequired =
+      Parameters<typeof sanitizePublicRuntimeTransportEvent> extends [
+        WSEvent,
+        string | undefined,
+        string | undefined,
+        string | undefined,
+        PublicProjectionContext
+      ] ? true : false
+    type ResponseContextIsRequired =
+      Parameters<typeof projectPublicResponse> extends [unknown, PublicProjectionContext]
+        ? true
+        : false
+    const compileContracts: [TransportContextIsRequired, ResponseContextIsRequired] = [true, true]
+    expect(compileContracts).toEqual([true, true])
+    expect(createPublicProjectionContext()).toEqual(expect.objectContaining({
+      bytes: 0,
+      items: 0,
+      nodes: 0
+    }))
+  })
+
+  it('charges repeated object occurrences and returns a fresh graph without aliases', () => {
+    const shared = { value: 'x'.repeat(16 * 1024) }
+    const atLimit = projectPublicResponse(
+      { items: Array.from({ length: 8 }, () => shared) },
+      createPublicProjectionContext()
+    ) as { items: Array<{ value: string }> } | undefined
+    const overLimit = projectPublicResponse(
+      { items: Array.from({ length: 9 }, () => shared) },
+      createPublicProjectionContext()
+    )
+
+    expect(atLimit).toBeDefined()
+    expect(atLimit!.items[0]).not.toBe(atLimit!.items[1])
+    expect(atLimit!.items[0]).not.toBe(shared)
+    shared.value = 'mutated after projection'
+    expect(atLimit!.items[0]!.value).toHaveLength(16 * 1024)
+    expect(overLimit).toBeUndefined()
+  })
+
+  it('rechecks finalized constructors after mutation instead of trusting object identity', () => {
+    const context = createPublicProjectionContext()
+    const receipt = sanitizePublicSessionRecord({
+      id: 'session-receipt',
+      createdAt: 1,
+      title: 'safe'
+    }, 'session-receipt', context) as Record<string, unknown>
+    expect(projectPublicResponse({ session: receipt }, context)).toBeDefined()
+
+    receipt.privateToken = 'SENTINEL_POST_FINALIZATION'
+    expect(projectPublicResponse({ session: receipt }, context))
+      .toBeUndefined()
+
+    delete receipt.privateToken
+    receipt.title = 'x'.repeat((16 * 1024) + 1)
+    expect(projectPublicResponse({ session: receipt }, createPublicProjectionContext()))
+      .toBeUndefined()
+  })
+
   const originalProjectHomeProjectsDir = process.env.__ONEWORKS_PROJECT_HOME_PROJECTS_DIR__
   let db: SqliteDb
   let tempRoot: string | undefined
@@ -31,6 +227,7 @@ describe('runtime store projection', () => {
   })
 
   afterEach(async () => {
+    externalSessionStore.clear()
     db.close()
     vi.useRealTimers()
     if (originalProjectHomeProjectsDir == null) {
@@ -130,6 +327,20 @@ describe('runtime store projection', () => {
       sessionId: 'sess-dev',
       status: 'failed',
       type: 'session_failed',
+      code: 'codex_project_config_invalid',
+      details: {
+        adapter: 'codex',
+        runtimeAdapter: 'codex',
+        configPath: '.codex/config.toml',
+        configSource: 'project',
+        workspaceSource: 'active-session-workspace',
+        workspaceFolder: '/workspace/root',
+        sessionId: 'sess-dev',
+        reason: 'wire_api is unsupported',
+        line: 4,
+        column: 3
+      },
+      fatal: true,
       visibility: 'room'
     }
 
@@ -142,15 +353,291 @@ describe('runtime store projection', () => {
         type: 'error',
         message: 'Model is not supported by this account.',
         data: {
-          code: 'session_failed',
+          code: 'codex_project_config_invalid',
           details: {
+            adapter: 'codex',
+            runtimeAdapter: 'codex',
+            configPath: '.codex/config.toml',
+            configSource: 'project',
+            workspaceSource: 'active-session-workspace',
+            workspaceFolder: '/workspace/root',
+            sessionId: 'sess-dev',
+            reason: 'wire_api is unsupported',
+            line: 4,
+            column: 3,
             runtimeEventId: 'evt-failed',
-            runtimeEventSeq: 1,
-            runtimeEventType: 'session_failed',
-            runtimeSessionId: 'sess-dev'
+            runtimeEventSeq: 1
           },
           fatal: true,
           message: 'Model is not supported by this account.'
+        }
+      }
+    ])
+  })
+
+  it('downgrades malformed known error details instead of projecting a forged recovery target', () => {
+    project({
+      id: 'evt-forged-known-error',
+      seq: 1,
+      sessionId: 'sess-dev',
+      type: 'session_failed',
+      code: 'codex_project_config_invalid',
+      details: {
+        configPath: '../../forged.toml',
+        workspaceFolder: '/tmp/forged'
+      },
+      error: 'Invalid project config',
+      fatal: true
+    })
+
+    expect(db.getMessages('sess-dev')).toEqual([
+      expect.objectContaining({
+        type: 'error',
+        data: expect.objectContaining({
+          code: 'session_failed'
+        })
+      })
+    ])
+    expect(JSON.stringify(db.getMessages('sess-dev'))).not.toContain('details')
+  })
+
+  it('drops arbitrary details from unknown runtime failures before history projection', () => {
+    const sentinel = 'SENTINEL_RUNTIME_HISTORY_SECRET'
+    project({
+      id: 'evt-future-error',
+      seq: 1,
+      sessionId: 'sess-dev',
+      type: 'session_failed',
+      code: 'future_runtime_error',
+      details: {
+        privateToken: sentinel
+      },
+      error: 'Future runtime failure',
+      fatal: true
+    })
+
+    const messages = db.getMessages('sess-dev')
+    expect(messages).toEqual([
+      expect.objectContaining({
+        data: {
+          code: 'future_runtime_error',
+          fatal: true,
+          message: 'Future runtime failure'
+        },
+        type: 'error'
+      })
+    ])
+    expect(JSON.stringify(messages)).not.toContain(sentinel)
+  })
+
+  it('deeply rebuilds public nested tool and adapter result values without aliases or secrets', () => {
+    const sentinel = 'SENTINEL_NESTED_PUBLIC_SECRET'
+    const toolInput = { nested: { visible: 'ok', privateToken: sentinel } }
+    const tool = sanitizePublicRuntimeTransportEvent({
+      type: 'message',
+      message: {
+        id: 'nested-tool', role: 'assistant', createdAt: 1,
+        content: [{ type: 'tool_use', id: 'tool-1', name: 'read', input: toolInput }]
+      }
+    } as WSEvent, 'sess-dev', undefined, undefined, createPublicProjectionContext())
+    toolInput.nested.visible = 'mutated'
+    const result = sanitizePublicRuntimeTransportEvent({
+      type: 'adapter_result',
+      result: { output: { privateToken: sentinel, visible: 'result' } },
+      usage: { privateToken: sentinel, input_tokens: 1 }
+    } as WSEvent, 'sess-dev', undefined, undefined, createPublicProjectionContext())
+
+    expect(tool).toEqual(expect.objectContaining({
+      type: 'message',
+      message: expect.objectContaining({
+        content: [{ type: 'tool_use', id: 'tool-1', name: 'read', input: { nested: { visible: 'ok' } }]
+      })
+    }))
+    expect(result).toEqual({
+      type: 'adapter_result',
+      result: { output: { visible: 'result' } },
+      usage: { input_tokens: 1 }
+    })
+    expect(JSON.stringify([tool, result])).not.toContain(sentinel)
+  })
+
+  it('rejects bounded public JSON payloads that exceed string or aggregate graph limits', () => {
+    const overlong = sanitizePublicRuntimeTransportEvent({
+      type: 'adapter_result', result: { output: 'x'.repeat(16 * 1024 + 1) }
+    } as WSEvent, 'sess-dev', undefined, undefined, createPublicProjectionContext())
+    const aggregate = sanitizePublicRuntimeTransportEvent({
+      type: 'adapter_result',
+      result: Array.from({ length: 1_025 }, (_, index) => ({ index, value: 'safe' }))
+    } as WSEvent, 'sess-dev', undefined, undefined, createPublicProjectionContext())
+    expect(overlong).toBeUndefined()
+    expect(aggregate).toBeUndefined()
+  })
+
+  it('charges permission, session-info, and adapter delivery direct strings to one event budget', () => {
+    const permissionAtLimit = sanitizePublicRuntimeTransportEvent({
+      type: 'interaction_request',
+      id: 'interaction',
+      payload: {
+        sessionId: 'sess-dev',
+        question: 'continue?',
+        kind: 'permission',
+        permissionContext: {
+          reasons: Array.from({ length: 7 }, () => 'x'.repeat(16 * 1024))
+        }
+      }
+    } as WSEvent, 'sess-dev', undefined, undefined, createPublicProjectionContext())
+    const permissionOverLimit = sanitizePublicRuntimeTransportEvent({
+      type: 'interaction_request',
+      id: 'interaction',
+      payload: {
+        sessionId: 'sess-dev',
+        question: 'continue?',
+        kind: 'permission',
+        permissionContext: {
+          reasons: Array.from({ length: 8 }, () => 'x'.repeat(16 * 1024))
+        }
+      }
+    } as WSEvent, 'sess-dev', undefined, undefined, createPublicProjectionContext())
+    const summary = sanitizePublicRuntimeTransportEvent({
+      type: 'session_info',
+      info: {
+        type: 'summary',
+        summary: 's'.repeat(16 * 1024),
+        leafUuid: 'u'.repeat(16 * 1024)
+      }
+    } as WSEvent, 'sess-dev', undefined, undefined, createPublicProjectionContext())
+    const deliveryContext = createPublicProjectionContext()
+    const delivery = sanitizePublicRuntimeTransportEvent({
+      type: 'adapter_event',
+      data: {
+        source: 'runtime_host_request_delivery',
+        deliveryKey: 'd'.repeat(16 * 1024),
+        runtimeEventId: 'e'.repeat(16 * 1024),
+        childSessionId: 'c'.repeat(16 * 1024),
+        runKey: 'r'.repeat(16 * 1024),
+        interactionId: 'i'.repeat(16 * 1024),
+        requestKind: 'q'.repeat(16 * 1024),
+        extraPublicOne: 'x'.repeat(16 * 1024),
+        extraPublicTwo: 'y'.repeat(16 * 1024)
+      }
+    } as WSEvent, 'sess-dev', undefined, undefined, deliveryContext)
+
+    expect(permissionAtLimit).toBeDefined()
+    expect(permissionOverLimit).toBeUndefined()
+    expect(summary).toBeDefined()
+    // Unknown adapter delivery fields are stripped; the known direct fields
+    // stay bounded and do not inherit aliases.
+    expect(delivery).toEqual(expect.objectContaining({
+      type: 'adapter_event'
+    }))
+    expect(deliveryContext.bytes).toBeGreaterThan(96 * 1024)
+  })
+
+  it('allowlists raw legacy JSONL audit failures before DB history projection', async () => {
+    tempRoot = await mkdtemp(path.join(os.tmpdir(), 'ow-runtime-store-audit-sanitize-'))
+    const root = path.join(tempRoot, '.oneworks/runtime')
+    const storePath = path.join(root, 'sessions/sess-audit-sanitize')
+    const sentinel = 'SENTINEL_RAW_JSONL_AUDIT_SECRET'
+    await mkdir(storePath, { recursive: true })
+    await writeFile(path.join(root, 'index.json'), JSON.stringify({
+      protocolVersion: '1.0.0',
+      sessions: {
+        'sess-audit-sanitize': {
+          storePath: 'sessions/sess-audit-sanitize',
+          status: 'running'
+        }
+      }
+    }))
+    await writeFile(path.join(storePath, 'meta.json'), JSON.stringify({
+      protocolVersion: '1.0.0',
+      sessionId: 'sess-audit-sanitize',
+      title: 'Legacy custom runtime',
+      createdAt: 1
+    }))
+    await writeFile(path.join(storePath, 'events.jsonl'), [
+      {
+        id: 'evt-command-failed',
+        seq: 1,
+        ts: 10,
+        sessionId: 'sess-audit-sanitize',
+        type: 'command_failed',
+        commandId: 'cmd-old-runtime',
+        causedByCommandId: 'cmd-public-envelope',
+        code: 'future_custom_error',
+        message: 'Legacy command failed',
+        fatal: false,
+        details: { privateToken: sentinel },
+        customRuntimePayload: { privateToken: sentinel }
+      },
+      {
+        id: 'evt-operation-failed',
+        seq: 2,
+        ts: 20,
+        sessionId: 'sess-audit-sanitize',
+        type: 'operation_failed',
+        operationId: 'old-operation',
+        code: 'codex_project_config_invalid',
+        message: 'Malformed known error at an invalid event type',
+        fatal: true,
+        details: {
+          adapter: 'codex',
+          runtimeAdapter: 'codex',
+          configSource: 'project',
+          configPath: '.codex/config.toml',
+          workspaceSource: 'active-session-workspace',
+          workspaceFolder: '/forged',
+          sessionId: 'sess-audit-sanitize',
+          reason: sentinel
+        },
+        oldRuntimeExtra: sentinel
+      }
+    ].map(event => JSON.stringify(event)).join('\n') + '\n')
+
+    const store = (await discoverRuntimeSessionStores([root]))[0] as RuntimeSessionStore
+    const send = vi.fn()
+    const runtime = createSessionConnectionState()
+    runtime.sockets.add({ readyState: 1, send } as never)
+    externalSessionStore.set('sess-audit-sanitize', runtime)
+    await replayRuntimeStore(store, { db, broadcast: true })
+
+    const serialized = JSON.stringify(db.getMessages('sess-audit-sanitize'))
+    expect(serialized).not.toContain(sentinel)
+    expect(JSON.stringify(send.mock.calls)).not.toContain(sentinel)
+    expect(send).toHaveBeenCalledTimes(2)
+    expect(db.getMessages('sess-audit-sanitize')).toEqual([
+      {
+        type: 'adapter_event',
+        data: {
+          runtimeEvent: {
+            id: 'evt-command-failed',
+            sessionId: 'sess-audit-sanitize',
+            type: 'command_failed',
+            seq: 1,
+            ts: 10,
+            commandId: 'cmd-old-runtime',
+            causedByCommandId: 'cmd-public-envelope',
+            code: 'future_custom_error',
+            error: 'Legacy command failed',
+            message: 'Legacy command failed',
+            fatal: false
+          }
+        }
+      },
+      {
+        type: 'adapter_event',
+        data: {
+          runtimeEvent: {
+            id: 'evt-operation-failed',
+            sessionId: 'sess-audit-sanitize',
+            type: 'operation_failed',
+            seq: 2,
+            ts: 20,
+            operationId: 'old-operation',
+            code: 'session_failed',
+            error: 'Malformed known error at an invalid event type',
+            message: 'Malformed known error at an invalid event type',
+            fatal: true
+          }
         }
       }
     ])
@@ -308,6 +795,7 @@ describe('runtime store projection', () => {
         })
       })
     ])
+    expect(JSON.stringify(db.getMessages('sess-dev'))).not.toContain('preserved')
   })
 
   it('updates session status from status_changed events', () => {
@@ -968,7 +1456,7 @@ describe('runtime store projection', () => {
     await flushDelivery()
   })
 
-  it('stores command acknowledgements as audit adapter events and preserves compatible unknown fields', () => {
+  it('stores command acknowledgements as fresh allowlisted audit adapter events', () => {
     project({
       id: 'evt-ack',
       seq: 1,
@@ -987,9 +1475,7 @@ describe('runtime store projection', () => {
           runtimeEvent: expect.objectContaining({
             type: 'command_ack',
             commandId: 'cmd-1',
-            futureField: {
-              preserved: true
-            }
+            commandId: 'cmd-1'
           })
         }
       })
