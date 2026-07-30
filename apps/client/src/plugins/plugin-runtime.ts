@@ -119,12 +119,6 @@ const noopNotificationApi: NotificationApi = {
   unmuteSource: () => {}
 }
 
-const toDisposable = (cleanup: PluginCleanup): { dispose: () => void } | undefined => {
-  if (cleanup == null) return undefined
-  if (typeof cleanup === 'function') return { dispose: cleanup }
-  return cleanup
-}
-
 const isAbsoluteOrProtocolRelativeUrl = (path: string) => /^(?:[a-z][a-z\d+.-]*:)?\/\//i.test(path)
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
@@ -338,7 +332,15 @@ export async function activatePluginClient({
   if (entryUrl == null || entryUrl === '') return
   if (!isActivationCurrent()) return
 
+  const registrationOwner = registry.createScopeRegistrationCheckpoint(instance.scope)
+  const isRegistrationCurrent = () =>
+    isActivationCurrent() &&
+    registry.isScopeRegistrationOwnerActive(instance.scope, registrationOwner)
   const hotCallbacks = new Set<() => void | Promise<void>>()
+  const rollbackActivation = () => {
+    hotCallbacks.clear()
+    registry.rollbackScopeRegistrations(instance.scope, registrationOwner)
+  }
   const notificationSource = {
     icon: 'extension',
     kind: 'plugin' as const,
@@ -357,50 +359,63 @@ export async function activatePluginClient({
     commands: {
       execute: (commandId, payload) => registry.executeCommand(instance.scope, commandId, payload, { serverBaseUrl }),
       register: (commandId, handler) =>
-        isActivationCurrent() ? registry.registerCommand(instance.scope, commandId, handler) : noopDisposable
+        isRegistrationCurrent()
+          ? registry.registerCommand(instance.scope, commandId, handler, registrationOwner)
+          : noopDisposable
     },
     hot: {
       accept: (callback) => {
-        if (!isActivationCurrent()) return noopDisposable
+        if (!isRegistrationCurrent()) return noopDisposable
         hotCallbacks.add(callback)
-        const disposable = { dispose: () => hotCallbacks.delete(callback) }
-        registry.addDisposable(instance.scope, disposable)
-        return disposable
+        return registry.addDisposable(
+          instance.scope,
+          { dispose: () => hotCallbacks.delete(callback) },
+          registrationOwner
+        )
       },
-      reload: () => reloadPlugin(instance.scope)
+      reload: () =>
+        isRegistrationCurrent()
+          ? reloadPlugin(instance.scope)
+          : Promise.resolve()
     },
     i18n: createPluginI18nContext(),
     launcher: {
       registerSearchProvider: provider =>
-        isActivationCurrent()
-          ? registry.registerLauncherSearchProvider(instance.scope, provider)
+        isRegistrationCurrent()
+          ? registry.registerLauncherSearchProvider(instance.scope, provider, registrationOwner)
           : noopDisposable
     },
     notifications: {
       close: notifications.close,
       muteCurrentPlugin: () => notifications.muteSource(notificationSource),
       show: input =>
-        isActivationCurrent()
+        isRegistrationCurrent()
           ? notifications.show({ ...input, source: notificationSource })
           : noopNotificationHandle
     },
     extensionPoints: {
       contribute: (target, contribution) =>
-        isActivationCurrent()
-          ? registry.contributeExtensionPoint(instance.scope, target, contribution)
+        isRegistrationCurrent()
+          ? registry.contributeExtensionPoint(instance.scope, target, contribution, registrationOwner)
           : noopDisposable,
-      has: target => isActivationCurrent() && registry.hasExtensionPoint(instance.scope, target),
+      has: target => isRegistrationCurrent() && registry.hasExtensionPoint(instance.scope, target),
       onAvailable: (target, callback) =>
-        isActivationCurrent()
-          ? registry.onExtensionPointAvailable(instance.scope, target, callback)
+        isRegistrationCurrent()
+          ? registry.onExtensionPointAvailable(instance.scope, target, callback, registrationOwner)
           : noopDisposable,
-      register: point => isActivationCurrent() ? registry.registerExtensionPoint(instance.scope, point) : noopDisposable
+      register: point =>
+        isRegistrationCurrent()
+          ? registry.registerExtensionPoint(instance.scope, point, registrationOwner)
+          : noopDisposable
     },
     manifest: instance.manifest,
     options: instance.options ?? {},
     pluginApis: {
       call: (target, input, options) => registry.callPluginApi(instance.scope, target, input, options),
-      register: api => isActivationCurrent() ? registry.registerPluginApi(instance.scope, api) : noopDisposable
+      register: api =>
+        isRegistrationCurrent()
+          ? registry.registerPluginApi(instance.scope, api, registrationOwner)
+          : noopDisposable
     },
     react: {
       Fragment,
@@ -412,7 +427,10 @@ export async function activatePluginClient({
       useState
     },
     routes: {
-      register: route => isActivationCurrent() ? registry.registerRoute(instance.scope, route) : noopDisposable
+      register: route =>
+        isRegistrationCurrent()
+          ? registry.registerRoute(instance.scope, route, registrationOwner)
+          : noopDisposable
     },
     runtime: {
       endpoint: runtimeEndpoint,
@@ -423,43 +441,52 @@ export async function activatePluginClient({
     scope: instance.scope,
     slots: {
       register: (slot, contribution) =>
-        isActivationCurrent() ? registry.registerSlot(instance.scope, slot, contribution) : noopDisposable
+        isRegistrationCurrent()
+          ? registry.registerSlot(instance.scope, slot, contribution, registrationOwner)
+          : noopDisposable
     },
     themes: {
-      register: theme => isActivationCurrent() ? registry.registerTheme(instance.scope, theme) : noopDisposable
+      register: theme =>
+        isRegistrationCurrent()
+          ? registry.registerTheme(instance.scope, theme, registrationOwner)
+          : noopDisposable
     },
     views: {
       register: (viewId, renderer) =>
-        isActivationCurrent()
+        isRegistrationCurrent()
           ? registry.registerView(
             instance.scope,
-            typeof renderer === 'function' ? { id: viewId, render: renderer } : { ...renderer, id: viewId }
+            typeof renderer === 'function' ? { id: viewId, render: renderer } : { ...renderer, id: viewId },
+            registrationOwner
           )
           : noopDisposable
     }
   }
 
-  const registrationCheckpoint = registry.createScopeRegistrationCheckpoint(instance.scope)
   try {
     const versionedEntryUrl = addPluginClientImportVersion(entryUrl, getImportVersion())
     const module = await import(/* @vite-ignore */ versionedEntryUrl) as PluginClientModule
-    if (!isActivationCurrent()) return
-    const cleanup = await module.activatePlugin?.(ctx)
-    if (!isActivationCurrent()) {
-      toDisposable(cleanup)?.dispose()
-      hotCallbacks.clear()
+    if (!isRegistrationCurrent()) {
+      rollbackActivation()
       return
     }
-    registry.addDisposable(instance.scope, cleanup)
+    const cleanup = await module.activatePlugin?.(ctx)
+    registry.addDisposable(instance.scope, cleanup, registrationOwner)
+    if (!isRegistrationCurrent()) {
+      rollbackActivation()
+      return
+    }
     registry.addDisposable(instance.scope, () => {
       hotCallbacks.forEach((callback) => {
         void callback()
       })
       hotCallbacks.clear()
-    })
+    }, registrationOwner)
+    if (!isRegistrationCurrent()) rollbackActivation()
   } catch (error) {
-    if (!isActivationCurrent()) return
-    registry.rollbackScopeRegistrations(instance.scope, registrationCheckpoint)
+    const isCurrent = isRegistrationCurrent()
+    rollbackActivation()
+    if (!isCurrent) return
     registry.addDiagnostic({
       level: 'error',
       message: `Failed to activate plugin "${instance.scope}": ${

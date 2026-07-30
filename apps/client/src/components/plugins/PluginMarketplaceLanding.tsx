@@ -23,12 +23,16 @@ import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
 import { MarketplaceCapabilityTags, MarketplaceCard } from '#~/components/marketplace/MarketplaceCard'
 import { MarketplaceResults } from '#~/components/marketplace/MarketplaceResults'
 import { MobileAwareSelect as Select } from '#~/components/mobile-aware-select/MobileAwareSelect'
+import { isMarketplacePluginInstallable } from '#~/hooks/marketplace-plugin-selection'
+import type { MarketplacePluginSelectionController } from '#~/hooks/marketplace-plugin-selection'
 import {
   listPluginMarketplaceCatalog,
   resolvePluginMarketplaceVersions,
   syncPluginMarketplaceSelection
 } from '#~/plugins/marketplace-api'
 import { renderIconRef } from '#~/utils/model-provider-icons'
+
+export { isMarketplacePluginInstallable, isPluginInstalledForTarget } from '#~/hooks/marketplace-plugin-selection'
 
 type MarketplaceConfigSource = PluginMarketplaceConfigSource
 type MarketplacePanel = 'config' | 'filter'
@@ -40,10 +44,10 @@ type MarketplaceFormatFilter = MarketplaceFormat | 'all'
 type MarketplaceSortKey = 'default' | 'nameAsc' | 'nameDesc'
 
 interface PluginMarketplaceLandingProps {
+  marketplaceSelection: MarketplacePluginSelectionController
   query: string
   serverBaseUrl?: string
   onOpenPlugin: (plugin: PluginMarketplaceCatalogPlugin) => void
-  onPluginsChanged: () => Promise<void>
   onQueryChange: (query: string) => void
 }
 
@@ -72,18 +76,6 @@ const pluginInstallTargets: Array<{ icon: string; target: PluginMarketplaceInsta
   { icon: 'folder', target: 'project' },
   { icon: 'public', target: 'global' }
 ]
-
-export const isPluginInstalledForTarget = (
-  item: PluginMarketplaceCatalogPlugin,
-  target: PluginMarketplaceInstallTarget
-) =>
-  target === 'global'
-    ? item.installedSources?.includes('global') === true
-    : item.installedSources?.some(source => source === 'project' || source === 'user') === true
-
-export const isMarketplacePluginInstallable = (item: PluginMarketplaceCatalogPlugin) => (
-  item.installable !== false && item.marketplaceEnabled
-)
 
 const marketplaceFormatPresentation: Record<MarketplaceFormat, { iconId: string; label: string }> = {
   oneworks: { iconId: 'extension', label: 'One Works' },
@@ -344,8 +336,8 @@ const formatSourceSummary = (entry: MarketplaceConfigEntry) => {
 }
 
 export function PluginMarketplaceLanding({
+  marketplaceSelection,
   onOpenPlugin,
-  onPluginsChanged,
   onQueryChange,
   query,
   serverBaseUrl
@@ -360,7 +352,6 @@ export function PluginMarketplaceLanding({
   )
   const [sourceModalOpen, setSourceModalOpen] = useState(false)
   const [savingSourceKey, setSavingSourceKey] = useState<string>()
-  const [savingPluginKey, setSavingPluginKey] = useState<string>()
   const [expandedPanel, setExpandedPanel] = useState<MarketplacePanel>()
   const [sourceFilter, setSourceFilter] = useState<MarketplaceSourceFilter>('all')
   const [statusFilter, setStatusFilter] = useState<MarketplaceStatusFilter>('all')
@@ -557,31 +548,6 @@ export function PluginMarketplaceLanding({
       void message.error(getApiErrorMessage(error, t('pluginStore.marketplaceSourceSaveFailed')))
     } finally {
       setSavingSourceKey(undefined)
-    }
-  }
-
-  const handleTogglePlugin = async (
-    item: PluginMarketplaceCatalogPlugin,
-    target: PluginMarketplaceInstallTarget
-  ) => {
-    if (!isMarketplacePluginInstallable(item)) return
-    const enabled = !isPluginInstalledForTarget(item, target)
-    const savingKey = `${item.marketplace}:${item.name}:${target}`
-    setSavingPluginKey(savingKey)
-    try {
-      await syncPluginMarketplaceSelection(item.marketplace, item.name, enabled, target, { serverBaseUrl })
-      await Promise.all([mutateConfig(), mutateCatalog(), onPluginsChanged()])
-      void message.success(t(
-        enabled
-          ? target === 'global'
-            ? 'pluginStore.marketplacePluginInstalledGlobal'
-            : 'pluginStore.marketplacePluginInstalledProject'
-          : 'pluginStore.marketplacePluginRemoved'
-      ))
-    } catch (error) {
-      void message.error(getApiErrorMessage(error, t('pluginStore.marketplacePluginSaveFailed')))
-    } finally {
-      setSavingPluginKey(undefined)
     }
   }
 
@@ -822,13 +788,14 @@ export function PluginMarketplaceLanding({
                 total={filteredPluginItems.length}
                 onPageChange={setPluginPage}
                 renderItem={(item) => {
-                  const pluginKey = `${item.marketplace}:${item.name}`
                   const displayedVersion = item.version ?? resolvedPluginVersionMap.get(
                     JSON.stringify([item.marketplace, item.name])
                   )
-                  const projectInstalled = isPluginInstalledForTarget(item, 'project')
-                  const globalInstalled = isPluginInstalledForTarget(item, 'global')
-                  const isSavingPlugin = savingPluginKey?.startsWith(`${pluginKey}:`) === true
+                  const projectState = marketplaceSelection.getState(item, 'project')
+                  const globalState = marketplaceSelection.getState(item, 'global')
+                  const projectInstalled = projectState.installed
+                  const globalInstalled = globalState.installed
+                  const isSavingPlugin = projectState.pending || globalState.pending
                   const sourceKind = item.builtIn === true
                     ? t('pluginStore.marketplaceSourceBuiltIn')
                     : t(`config.sources.${item.configSource ?? 'user'}`)
@@ -871,7 +838,8 @@ export function PluginMarketplaceLanding({
                         </>
                       }
                       actions={pluginInstallTargets.map(({ icon, target }) => {
-                        const installed = target === 'global' ? globalInstalled : projectInstalled
+                        const selectionState = target === 'global' ? globalState : projectState
+                        const { installed, pending } = selectionState
                         const title = t(
                           installed
                             ? 'pluginStore.removeMarketplacePlugin'
@@ -886,12 +854,12 @@ export function PluginMarketplaceLanding({
                               className='marketplace-card__icon-button'
                               aria-label={title}
                               disabled={!isMarketplacePluginInstallable(item) || (
-                                isSavingPlugin && savingPluginKey !== `${pluginKey}:${target}`
+                                isSavingPlugin && !pending
                               )}
-                              loading={savingPluginKey === `${pluginKey}:${target}`}
+                              loading={pending}
                               onClick={(event) => {
                                 event.stopPropagation()
-                                void handleTogglePlugin(item, target)
+                                void marketplaceSelection.toggle(item, target)
                               }}
                               icon={<MaterialSymbol name={icon} />}
                             />

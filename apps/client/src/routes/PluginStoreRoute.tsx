@@ -25,11 +25,7 @@ import { PluginCreateLanding } from '#~/components/plugins/PluginCreateLanding'
 import { PluginDetailPanel } from '#~/components/plugins/PluginDetailPanel'
 import { PluginDiagnostics } from '#~/components/plugins/PluginDiagnostics'
 import { PluginHomeView } from '#~/components/plugins/PluginHomeView'
-import {
-  PluginMarketplaceLanding,
-  isMarketplacePluginInstallable,
-  isPluginInstalledForTarget
-} from '#~/components/plugins/PluginMarketplaceLanding'
+import { PluginMarketplaceLanding } from '#~/components/plugins/PluginMarketplaceLanding'
 import { PluginRuntimeListView } from '#~/components/plugins/PluginRuntimeListView'
 import {
   PluginGroupModeControls,
@@ -38,12 +34,10 @@ import {
 } from '#~/components/plugins/PluginStoreSidebarControls'
 import type { PluginGroupMode } from '#~/components/plugins/PluginStoreSidebarControls'
 import { buildPluginListItems, createNativePluginRouteKey } from '#~/components/plugins/plugin-runtime-list-items'
+import { isMarketplacePluginInstallable } from '#~/hooks/marketplace-plugin-selection'
+import { useMarketplacePluginSelection } from '#~/hooks/use-marketplace-plugin-selection'
 import { listNativeHostPlugins, setPluginEnabled, setPluginWatch } from '#~/plugins/api'
-import {
-  listPluginMarketplaceCatalog,
-  resolvePluginMarketplaceVersions,
-  syncPluginMarketplaceSelection
-} from '#~/plugins/marketplace-api'
+import { listPluginMarketplaceCatalog, resolvePluginMarketplaceVersions } from '#~/plugins/marketplace-api'
 import { usePluginContext } from '#~/plugins/plugin-context'
 import type { PluginRuntimeInstance } from '#~/plugins/plugin-manifest'
 import {
@@ -79,7 +73,6 @@ export function PluginStoreRoute() {
   } = useRoutePluginChrome('plugins')
   const [updatingEnabledAction, setUpdatingEnabledAction] = useState<string>()
   const [updatingWatchScope, setUpdatingWatchScope] = useState<string>()
-  const [installingMarketplaceTarget, setInstallingMarketplaceTarget] = useState<PluginMarketplaceInstallTarget>()
   const [pluginQuery, setPluginQuery] = useState('')
   const [pluginGroupMode, setPluginGroupMode] = useState<PluginGroupMode>('enabled')
   const [pluginMarketplaceQuery, setPluginMarketplaceQuery] = useState('')
@@ -102,6 +95,23 @@ export function PluginStoreRoute() {
       : null,
     () => listPluginMarketplaceCatalog({ serverBaseUrl: pluginServerBaseUrl })
   )
+  const marketplaceSelection = useMarketplacePluginSelection({
+    mutateCatalog: mutateMarketplaceCatalog,
+    onError: error => {
+      void message.error(getApiErrorMessage(error, t('pluginStore.marketplacePluginSaveFailed')))
+    },
+    onSuccess: ({ enabled, target }) => {
+      void message.success(t(
+        enabled
+          ? target === 'global'
+            ? 'pluginStore.marketplacePluginInstalledGlobal'
+            : 'pluginStore.marketplacePluginInstalledProject'
+          : 'pluginStore.marketplacePluginRemoved'
+      ))
+    },
+    refreshPlugins,
+    serverBaseUrl: pluginServerBaseUrl
+  })
   const encodedScope = encodeURIComponent(scope)
   const isDiagnosticsPage = scope !== '' && location.pathname.endsWith(`/${encodedScope}/diagnostics`)
   const detailParentPage = location.pathname.startsWith('/plugins/store/') ? 'store' : 'list'
@@ -308,33 +318,6 @@ export function PluginStoreRoute() {
       })
   }, [message, pluginServerBaseUrl, refreshPlugins, t])
 
-  const toggleMarketplacePlugin = useCallback(async (target: PluginMarketplaceInstallTarget) => {
-    if (selectedMarketplacePlugin == null || !isMarketplacePluginInstallable(selectedMarketplacePlugin)) return
-    const enabled = !isPluginInstalledForTarget(selectedMarketplacePlugin, target)
-    setInstallingMarketplaceTarget(target)
-    try {
-      await syncPluginMarketplaceSelection(
-        selectedMarketplacePlugin.marketplace,
-        selectedMarketplacePlugin.name,
-        enabled,
-        target,
-        { serverBaseUrl: pluginServerBaseUrl }
-      )
-      await Promise.all([mutateMarketplaceCatalog(), refreshPlugins()])
-      void message.success(t(
-        enabled
-          ? target === 'global'
-            ? 'pluginStore.marketplacePluginInstalledGlobal'
-            : 'pluginStore.marketplacePluginInstalledProject'
-          : 'pluginStore.marketplacePluginRemoved'
-      ))
-    } catch (error) {
-      void message.error(getApiErrorMessage(error, t('pluginStore.marketplacePluginSaveFailed')))
-    } finally {
-      setInstallingMarketplaceTarget(undefined)
-    }
-  }, [message, mutateMarketplaceCatalog, pluginServerBaseUrl, refreshPlugins, selectedMarketplacePlugin, t])
-
   const createPluginContextMenuItems = useCallback(
     (plugin: PluginRuntimeInstance): RouteSidebarListContextMenuItems => {
       const isPluginEnabled = plugin.enabled !== false
@@ -524,12 +507,17 @@ export function PluginStoreRoute() {
         { icon: 'folder', target: 'project' },
         { icon: 'public', target: 'global' }
       ]
-      for (const { icon, target } of targets) {
-        const installed = isPluginInstalledForTarget(selectedMarketplacePlugin, target)
+      const targetStates = targets.map(item => ({
+        ...item,
+        state: marketplaceSelection.getState(selectedMarketplacePlugin, item.target)
+      }))
+      const hasPendingSelection = targetStates.some(item => item.state.pending)
+      for (const { icon, state, target } of targetStates) {
+        const { installed, pending } = state
         items.push({
           active: installed,
           disabled: !isMarketplacePluginInstallable(selectedMarketplacePlugin) ||
-            installingMarketplaceTarget != null,
+            (hasPendingSelection && !pending),
           icon,
           key: `marketplace-install-${target}`,
           label: t(
@@ -541,8 +529,8 @@ export function PluginStoreRoute() {
               ? 'pluginStore.removeMarketplacePlugin'
               : 'pluginStore.installMarketplacePluginProject'
           ),
-          loading: installingMarketplaceTarget === target,
-          onSelect: () => void toggleMarketplacePlugin(target)
+          loading: pending,
+          onSelect: () => void marketplaceSelection.toggle(selectedMarketplacePlugin, target)
         })
       }
     }
@@ -550,8 +538,7 @@ export function PluginStoreRoute() {
   }, [
     isDiagnosticsPage,
     detailPath,
-    toggleMarketplacePlugin,
-    installingMarketplaceTarget,
+    marketplaceSelection,
     navigate,
     pluginLocation.page,
     routePluginHeaderActions,
@@ -658,6 +645,7 @@ export function PluginStoreRoute() {
               )
               : (
                 <PluginMarketplaceLanding
+                  marketplaceSelection={marketplaceSelection}
                   query={pluginMarketplaceQuery}
                   serverBaseUrl={pluginServerBaseUrl}
                   onOpenPlugin={plugin =>
@@ -668,7 +656,6 @@ export function PluginStoreRoute() {
                         )
                       }`
                     )}
-                  onPluginsChanged={refreshPlugins}
                   onQueryChange={setPluginMarketplaceQuery}
                 />
               )
