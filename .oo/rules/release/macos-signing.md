@@ -15,8 +15,9 @@ App Store 外分发不走 Mac App Store 证书，使用 Apple Developer Program 
 
 桌面 workflow 在 PR 上只运行不构建产物的轻量兼容门禁；真正的安装包只由
 `pkg/oneworks-desktop/v*` tag 或手动 dispatch 触发。手动 artifact 按仓库 variable
-决定是否签名；正式 release artifact 强制要求签名与 notarization。所有 secret 配好后，
-还必须设置仓库 variable：
+决定是否签名；tag 和手动 release 同样遵循 `DESKTOP_SIGN`。未启用时允许发布未签名
+安装包，GitHub Release 会明确标记为 unsigned；启用时要求完整签名与 notarization。
+所有 secret 配好后，还必须设置仓库 variable：
 
 ```bash
 gh variable set DESKTOP_SIGN --repo oneworks-ai/app --body true
@@ -24,7 +25,7 @@ gh variable set DESKTOP_SIGN --repo oneworks-ai/app --body true
 
 当前 `desktop-package.yml` 的 tag / 手动构建会同时生成 `.dmg`、`.zip` 和 `.pkg`；因此开启 `DESKTOP_SIGN=true` 时，Application 和 Installer 两套证书都必须存在。缺任何一个，workflow 会在 `Validate desktop signing credentials` 失败，不允许继续生成半加签产物。普通 PR 只运行轻量门禁，不进入安装包 job，也不会读取签名 secrets。
 
-手动 `create_release=true` 或 `pkg/oneworks-desktop/v*` tag 构建如果没有启用签名，也必须在凭据校验阶段失败，不能发布会被 Gatekeeper 拦截的 ad-hoc “正式包”。
+手动 `create_release=true` 或 `pkg/oneworks-desktop/v*` tag 构建没有启用签名时会继续生成并发布 unsigned 安装包。macOS Gatekeeper 可能要求用户手动批准；下载页和 Release notes 不得把这类产物描述为已签名或已公证。
 
 ## 创建证书
 
@@ -70,7 +71,7 @@ xcrun stapler validate oneworks-*-mac-*.dmg
 xcrun stapler validate oneworks-*-mac-*.pkg
 ```
 
-只有明确要创建或更新正式 GitHub Release 时才使用
+只有明确要创建或更新 GitHub Release 时才使用
 `create_release=true` 并传入实际 release tag；该操作会写入远端 Release 与资产：
 
 ```bash
