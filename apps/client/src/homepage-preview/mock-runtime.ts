@@ -7,7 +7,11 @@ import type {
   AgentRoomRun,
   ConfigResponse,
   TerminalSessionCommand,
-  TerminalSessionEvent
+  TerminalSessionEvent,
+  UsageFacetKey,
+  UsageFacetOption,
+  UsageReport,
+  UsageSummary
 } from '@oneworks/types'
 
 import type {
@@ -26,6 +30,7 @@ import type {
   SpecSummary,
   WorkspaceSummary
 } from '#~/api.js'
+import { USAGE_DIRECT_TRANSPORT_ID } from '#~/api/usage'
 import i18n from '#~/i18n'
 import { SERVER_BASE_URL_STORAGE_KEY } from '#~/runtime-config'
 
@@ -88,6 +93,147 @@ const OFFICIAL_HOMEPAGE_PREVIEW_HOSTS = new Set([
 ])
 const HOMEPAGE_PREVIEW_RUNTIME_STORAGE_KEY = 'oneworks:homepage-preview-runtime'
 const DEFAULT_SESSION_ID = 'homepage-preview'
+
+const previewUsageSummary = (total: number, observations: number): UsageSummary => ({
+  input: Math.round(total * 0.66),
+  output: Math.round(total * 0.19),
+  cacheRead: Math.round(total * 0.12),
+  cacheCreation: Math.round(total * 0.03),
+  reasoning: Math.round(total * 0.05),
+  total,
+  costUsd: total / 1_000_000 * 2.48,
+  observationCount: observations
+})
+
+const previewUsageFacet = (
+  values: Array<[string, string, number]>,
+  observations = 80
+): UsageFacetOption[] =>
+  values.map(([id, label, total]) => ({
+    id,
+    label,
+    ...previewUsageSummary(total, observations)
+  }))
+
+const buildPreviewUsageReport = (global: boolean, searchParams = new URLSearchParams()): UsageReport => {
+  const total = global ? 12_840_000 : 4_920_000
+  const now = new Date()
+  now.setHours(0, 0, 0, 0)
+  const activity = Array.from({ length: 84 }, (_, index) => {
+    const date = new Date(now)
+    date.setDate(now.getDate() - (83 - index))
+    const active = index > 19 && ![0, 6].includes(date.getDay())
+    const dayTotal = active
+      ? Math.round((52_000 + (index * 27_391) % 192_000) * (index % 11 === 0 ? 1.8 : 1))
+      : 0
+    return {
+      key: [
+        date.getFullYear(),
+        String(date.getMonth() + 1).padStart(2, '0'),
+        String(date.getDate()).padStart(2, '0')
+      ].join('-'),
+      from: date.getTime(),
+      to: date.getTime() + 86_399_999,
+      ...previewUsageSummary(dayTotal, dayTotal === 0 ? 0 : 4 + index % 9)
+    }
+  })
+  const facets: Record<UsageFacetKey, UsageFacetOption[]> = {
+    workspace: global
+      ? previewUsageFacet([
+        ['workspace:oneworks', 'OneWorks App', 6_100_000],
+        ['workspace:relay', 'Relay Server', 4_020_000],
+        ['workspace:homepage', 'Homepage', 2_720_000]
+      ])
+      : previewUsageFacet([['workspace:oneworks', 'OneWorks App', total]]),
+    tool: previewUsageFacet([
+      ['claude-code', 'Claude Code', Math.round(total * 0.47)],
+      ['codex', 'Codex', Math.round(total * 0.34)],
+      ['kimi', 'Kimi CLI', Math.round(total * 0.19)]
+    ]),
+    modelService: previewUsageFacet([
+      ['kimi-api', 'Kimi API', Math.round(total * 0.44)],
+      ['openai-official', 'OpenAI Official', Math.round(total * 0.37)],
+      ['anthropic', 'Anthropic', Math.round(total * 0.19)]
+    ]),
+    model: previewUsageFacet([
+      ['kimi-k2.5', 'Kimi K2.5', Math.round(total * 0.41)],
+      ['gpt-5.6-codex', 'GPT-5.6 Codex', Math.round(total * 0.35)],
+      ['claude-opus-4.6', 'Claude Opus 4.6', Math.round(total * 0.24)]
+    ]),
+    account: previewUsageFacet([
+      ['kimi-team', 'Kimi Team · jie@oneworks', Math.round(total * 0.43)],
+      ['openai-pro', 'OpenAI Pro · Jie Yi', Math.round(total * 0.36)],
+      ['anthropic-api', 'Anthropic API · production', Math.round(total * 0.21)]
+    ]),
+    device: global
+      ? previewUsageFacet([
+        ['macbook-pro', 'MacBook Pro', Math.round(total * 0.73)],
+        ['build-station', 'Build Station', Math.round(total * 0.27)]
+      ])
+      : previewUsageFacet([['macbook-pro', 'MacBook Pro', total]]),
+    authorityPlugin: previewUsageFacet([
+      ['oneworks.core', 'OneWorks Core', Math.round(total * 0.73)],
+      ['relay.remote-kimi', 'Remote Kimi Provider', Math.round(total * 0.27)]
+    ]),
+    transportPlugin: global
+      ? previewUsageFacet([
+        [USAGE_DIRECT_TRANSPORT_ID, 'Direct', Math.round(total * 0.73)],
+        ['oneworks.relay', 'Relay', Math.round(total * 0.27)]
+      ])
+      : previewUsageFacet([[USAGE_DIRECT_TRANSPORT_ID, 'Direct', total]])
+  }
+  const filterFacets: Array<[string, UsageFacetKey]> = [
+    ['workspaces', 'workspace'],
+    ['tools', 'tool'],
+    ['modelServices', 'modelService'],
+    ['models', 'model'],
+    ['accounts', 'account'],
+    ['devices', 'device'],
+    ['authorityPlugins', 'authorityPlugin'],
+    ['transportPlugins', 'transportPlugin']
+  ]
+  const selectedRatios = filterFacets.flatMap(([queryKey, facetKey]) => {
+    const selected = searchParams.get(queryKey)?.split(',').filter(Boolean) ?? []
+    if (selected.length === 0) return []
+    const selectedTotal = facets[facetKey]
+      .filter(item => selected.includes(item.id))
+      .reduce((sum, item) => sum + item.total, 0)
+    return selectedTotal === 0 ? [] : [selectedTotal / total]
+  })
+  const filteredRatio = selectedRatios.reduce((ratio, selectedRatio) => ratio * selectedRatio, 1)
+  const filteredTotal = Math.round(total * filteredRatio)
+  const filteredActivity = activity.map(bucket => ({
+    ...bucket,
+    ...previewUsageSummary(
+      Math.round(bucket.total * filteredRatio),
+      Math.round(bucket.observationCount * filteredRatio)
+    )
+  }))
+  return {
+    activity: filteredActivity,
+    coverage: global
+      ? [
+        { id: 'workspace:oneworks', kind: 'workspace', label: 'OneWorks App', status: 'available' },
+        { id: 'oneworks.relay', kind: 'plugin', label: 'Relay', status: 'available' }
+      ]
+      : [{ id: 'workspace:oneworks', kind: 'workspace', label: 'OneWorks App', status: 'available' }],
+    facets,
+    generatedAt: Date.now(),
+    observations: [],
+    query: {
+      scope: global ? 'all' : 'workspace',
+      ...Object.fromEntries(filterFacets.flatMap(([queryKey]) => {
+        const selected = searchParams.get(queryKey)?.split(',').filter(Boolean)
+        return selected == null || selected.length === 0 ? [] : [[queryKey, selected]]
+      }))
+    },
+    resources: [],
+    summary: previewUsageSummary(
+      filteredTotal,
+      Math.max(0, Math.round((global ? 631 : 248) * filteredRatio))
+    )
+  }
+}
 const ROOM_HOST_SESSION_ID = 'homepage-room-host'
 const DEFAULT_ROOM_ID = 'homepage-agent-room'
 const GITHUB_RELEASES_URL = 'https://github.com/oneworks-ai/app/releases'
@@ -1998,7 +2144,19 @@ const handleApiRequest = async (
   }
 
   if (path === '/api/config/schema' && method === 'GET') {
-    return { body: { sections: [] } }
+    return {
+      body: {
+        base: { jsonSchema: {} },
+        workspace: {
+          jsonSchema: {},
+          uiSchema: { version: 1, sections: {} }
+        }
+      }
+    }
+  }
+
+  if ((path === '/api/usage' || path === '/api/launcher/usage') && method === 'GET') {
+    return { body: buildPreviewUsageReport(path === '/api/launcher/usage', url.searchParams) }
   }
 
   if (path === '/api/sessions' && method === 'GET') {

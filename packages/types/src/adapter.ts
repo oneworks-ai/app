@@ -6,6 +6,7 @@ import type { AskUserQuestionParams } from './interaction'
 import type { Logger } from './logger'
 import type { ChatMessage, ChatMessageContent } from './message'
 import type { AdapterModelFallbackWarning } from './model-selection'
+import type { UsageQuery, UsageSourceResult } from './usage'
 import type { AdapterAssetPlan, AssetDiagnostic, WorkspaceAssetBundle } from './workspace'
 
 export type AdapterMessageContent = ChatMessageContent
@@ -33,6 +34,22 @@ export interface AdapterSessionUpdateData {
   title?: string
 }
 
+export interface AdapterUsageData {
+  account?: string
+  aggregationMode?: 'cumulative' | 'delta'
+  cacheCreationInputTokens?: number
+  cacheReadInputTokens?: number
+  costUsd?: number
+  id?: string
+  inputTokens: number
+  model?: string
+  modelService?: string
+  observedAt?: number
+  outputTokens: number
+  quality?: 'estimated' | 'provider_reported' | 'reported'
+  reasoningOutputTokens?: number
+}
+
 export type AdapterOperationEventType =
   | 'operation_started'
   | 'operation_completed'
@@ -56,6 +73,7 @@ export type AdapterOutputEvent =
   | { type: 'session_update'; data: AdapterSessionUpdateData }
   | { type: 'summary'; data: SessionSummaryInfo }
   | { type: 'message'; data: ChatMessage }
+  | { type: 'usage'; data: AdapterUsageData }
   | { type: 'interaction_request'; data: AdapterInteractionRequest }
   | { type: 'error'; data: AdapterErrorData }
   | { type: 'exit'; data: { exitCode?: number; stderr?: string } }
@@ -279,6 +297,10 @@ export interface Adapter {
   init?: (
     ctx: AdapterCtx
   ) => Promise<void>
+  getUsage?: (
+    ctx: AdapterCtx,
+    query: UsageQuery
+  ) => Promise<UsageSourceResult>
   getAccounts?: (
     ctx: AdapterCtx,
     options: AdapterAccountsQueryOptions

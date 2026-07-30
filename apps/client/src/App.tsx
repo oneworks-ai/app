@@ -89,6 +89,17 @@ export default function App() {
     )
   }
 
+  if (
+    homepagePreviewActiveRef.current &&
+    (location.pathname === '/launcher' || location.pathname.startsWith('/launcher/'))
+  ) {
+    return (
+      <Suspense fallback={null}>
+        <LauncherApp />
+      </Suspense>
+    )
+  }
+
   if (homepagePreviewActiveRef.current) {
     return (
       <Suspense fallback={null}>

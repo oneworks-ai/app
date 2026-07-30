@@ -366,6 +366,17 @@ export interface PluginContributionLauncherSearchProvider extends PluginContribu
   command: string
 }
 
+/**
+ * A provider of normalized usage observations. The command receives a
+ * `UsageQuery` payload and returns a `UsageSourceResult`.
+ */
+export interface PluginContributionUsageSource extends PluginContributionBase {
+  command: string
+  id: string
+  kind?: 'collector' | 'transport'
+  title: string
+}
+
 export type PluginContributionToolUseFieldFormat =
   | 'inline'
   | 'text'
@@ -569,6 +580,7 @@ export interface PluginContributionManifest extends PluginContributionAvailabili
   workspaceDrawerTabs?: PluginContributionWorkspaceDrawerTab[]
   cliCommands?: PluginContributionCliCommand[]
   launcherSearchProviders?: PluginContributionLauncherSearchProvider[]
+  usageSources?: PluginContributionUsageSource[]
   /**
    * Declarative presentation metadata for tool-use rows in chat. The host owns
    * rendering and plugins provide only matching and display semantics.

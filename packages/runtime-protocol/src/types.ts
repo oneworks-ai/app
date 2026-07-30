@@ -195,6 +195,21 @@ export interface RuntimeEvent extends RuntimeJsonObject, RuntimeCorrelationField
   fatal?: boolean
   adapter?: string
   model?: string
+  usage?: {
+    account?: string
+    aggregationMode?: 'cumulative' | 'delta'
+    cacheCreationInputTokens?: number
+    cacheReadInputTokens?: number
+    costUsd?: number
+    id?: string
+    inputTokens: number
+    model?: string
+    modelService?: string
+    observedAt?: number
+    outputTokens: number
+    quality?: 'estimated' | 'provider_reported' | 'reported'
+    reasoningOutputTokens?: number
+  }
   artifactId?: string
   path?: string
   mimeType?: string
@@ -234,6 +249,21 @@ export interface RuntimeEventDraft
   fatal?: boolean
   adapter?: string
   model?: string
+  usage?: {
+    account?: string
+    aggregationMode?: 'cumulative' | 'delta'
+    cacheCreationInputTokens?: number
+    cacheReadInputTokens?: number
+    costUsd?: number
+    id?: string
+    inputTokens: number
+    model?: string
+    modelService?: string
+    observedAt?: number
+    outputTokens: number
+    quality?: 'estimated' | 'provider_reported' | 'reported'
+    reasoningOutputTokens?: number
+  }
   artifactId?: string
   path?: string
   mimeType?: string

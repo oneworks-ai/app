@@ -3,6 +3,58 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 describe('launcher command item visual contract', () => {
+  it('keeps usage search inside the usage page', () => {
+    const routeSource = readFileSync(
+      new URL('../src/routes/LauncherRoute.tsx', import.meta.url),
+      'utf8'
+    )
+    const usageStyles = readFileSync(
+      new URL('../src/components/usage/UsagePanel.scss', import.meta.url),
+      'utf8'
+    )
+    const usageSource = readFileSync(
+      new URL('../src/components/usage/UsagePanel.tsx', import.meta.url),
+      'utf8'
+    )
+    const routeStyles = readFileSync(
+      new URL('../src/routes/LauncherRoute.scss', import.meta.url),
+      'utf8'
+    )
+
+    expect(routeSource).not.toContain("launcherViewMode !== 'usage' && (")
+    expect(routeSource).not.toMatch(
+      /launcherViewMode === 'usage'[\s\S]{0,100}setLauncherViewModeWithUrl\('commands'/
+    )
+    expect(routeSource).toContain('usagePanelRef.current?.handleSearchKeyDown(event)')
+    expect(routeSource).toContain('onSearchQueryChange={setLauncherQueryWithUrl}')
+    expect(routeSource).toContain('searchQuery={query}')
+    expect(routeSource).toContain("t('usage.searchPlaceholder')")
+    expect(usageSource).toContain("className='usage-panel__search-results'")
+    expect(usageSource).toContain("'launcher-command-item'")
+    expect(usageStyles).toMatch(
+      /\.usage-panel--launcher\s*\{[^}]*padding:\s*0 0 34px;/
+    )
+    expect(usageStyles).not.toMatch(
+      /\.usage-panel__metrics\s*\{[^}]*linear-gradient/
+    )
+    expect(usageStyles).toMatch(
+      /\.usage-panel\s*\{[^}]*gap:\s*var\(--subpage-tertiary-gap,\s*10px\);/
+    )
+    expect(usageStyles).toMatch(
+      /\.usage-panel__heatmap-months,\s*\.usage-panel__heatmap-row\s*\{[^}]*justify-content:\s*space-between;/
+    )
+    expect(usageSource).not.toContain("t('usage.activity.description')")
+    expect(usageSource).toMatch(
+      /<div className='usage-panel__section-heading'>\s*<h3>[\s\S]*?<\/h3>\s*<div className='usage-panel__activity-meta'>/
+    )
+    expect(routeStyles).toMatch(
+      /html\.oneworks-launcher-web \.launcher-route,\s*\.launcher-web-overlay \.launcher-route\s*\{[^}]*width:\s*720px;/u
+    )
+    expect(routeStyles).not.toMatch(
+      /\.launcher-route\.is-usage-route\s*\{[^}]*width:/u
+    )
+  })
+
   it('keeps settings tabs content-sized with a full-bleed sticky surface', () => {
     const settingsStyles = readFileSync(
       new URL(

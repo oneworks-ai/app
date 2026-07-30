@@ -1114,6 +1114,7 @@
     "builtin": {
       "title": "Built In",
       "accountHint": "View signed-in accounts or sign in another account",
+      "usageHint": "View token usage across tools, model services, accounts, and workspaces",
       "settingsHint": "Adjust launcher and app preferences",
       "aboutHint": "View OneWorks version and app information",
       "checkUpdateHint": "Check whether a desktop update is available",
@@ -1125,6 +1126,7 @@
     "menu": {
       "open": "Open OneWorks menu",
       "account": "Account",
+      "usage": "Usage",
       "settings": "Settings",
       "about": "About",
       "checkUpdate": "Check Updates",
@@ -3433,6 +3435,86 @@
       "uiSchema": "Settings UI schema"
     }
   },
+  "usage": {
+    "title": "Usage",
+    "globalScope": "All data sources",
+    "workspaceScope": "Current workspace",
+    "globalDescription": "Token usage across available workspaces and extension sources.",
+    "workspaceDescription": "Token usage for the current workspace.",
+    "scope": {
+      "selectorLabel": "Select usage scope",
+      "global": "Global",
+      "workspaces": "Workspaces",
+      "current": "Current",
+      "selectedCount_one": "{{count}} workspace",
+      "selectedCount_other": "{{count}} workspaces"
+    },
+    "searchLabel": "Search usage filters",
+    "searchPlaceholder": "Search model services, tools, accounts, or plugins",
+    "searchResultsLabel": "Usage filter search results",
+    "searchNoResults": "No matching usage filters",
+    "searchClear": "Clear search",
+    "loadFailed": "Failed to load usage",
+    "loadFailedDescription": "Usage data is temporarily unavailable.",
+    "observationCount_one": "{{count}} usage record",
+    "observationCount_other": "{{count}} usage records",
+    "coveragePartial_one": "{{count}} data source is offline or incomplete",
+    "coveragePartial_other": "{{count}} data sources are offline or incomplete",
+    "range": {
+      "label": "Time range",
+      "days30": "Last 30 days",
+      "days90": "Last 90 days",
+      "year": "Last year"
+    },
+    "filters": {
+      "label": "Usage filters",
+      "action": "Filter",
+      "activeCount": "{{count}} active",
+      "all": "All",
+      "direct": "Direct",
+      "current": "Viewing",
+      "reset": "Back to overview",
+      "workspace": "Workspace",
+      "tool": "Tool",
+      "modelService": "Model service",
+      "model": "Model",
+      "account": "Account",
+      "device": "Device",
+      "authorityPlugin": "Owning plugin",
+      "transportPlugin": "Sync plugin"
+    },
+    "metrics": {
+      "label": "Usage summary",
+      "total": "Total tokens",
+      "input": "Input",
+      "output": "Output",
+      "cached": "Cached input",
+      "cost": "Reported cost"
+    },
+    "activity": {
+      "title": "Token activity",
+      "description": "Daily reported token usage over the past year.",
+      "label": "Daily token usage over the past year",
+      "less": "Less",
+      "more": "More",
+      "legendLabel": "Token usage intensity",
+      "noUsageDayLabel": "No token usage on {{date}}",
+      "dayLabel": "{{tokens}} tokens on {{date}}",
+      "selectionSummary_one": "{{count}} day · {{tokens}} tokens",
+      "selectionSummary_other": "{{count}} days · {{tokens}} tokens"
+    },
+    "breakdowns": {
+      "modelServices": "Model services",
+      "accounts": "Accounts",
+      "tools": "Tools"
+    },
+    "empty": {
+      "noSourcesTitle": "No usage sources connected",
+      "noSourcesDescription": "Token records are collected after a supported tool, workspace, or extension becomes available.",
+      "title": "No reported token usage",
+      "description": "Usage appears after a supported tool or extension reports token counts."
+    }
+  },
   "config": {
     "title": "System Configuration",
     "readOnlyHint": "Configuration supports in-app editing and saves to json/yaml files.",
@@ -4876,6 +4958,7 @@
       "mcp": "MCP",
       "shortcuts": "Shortcuts",
       "desktop": "Desktop",
+      "usage": "Usage",
       "externalSessions": "External Sessions",
       "browserHistory": "History",
       "browserDownloads": "Downloads",

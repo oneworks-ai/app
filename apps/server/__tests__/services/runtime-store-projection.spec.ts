@@ -453,6 +453,46 @@ describe('runtime store projection', () => {
     ])
   })
 
+  it('projects terminal runtime usage into the workspace usage ledger', () => {
+    db.createSession('Usage session', 'sess-usage', 'running')
+    db.updateSession('sess-usage', {
+      adapter: 'claude-code',
+      model: 'kimi-api,kimi-k2.5'
+    })
+    project({
+      id: 'evt-completed-with-usage',
+      seq: 1,
+      ts: 1_800_000_000_000,
+      sessionId: 'sess-usage',
+      type: 'session_completed',
+      model: 'kimi-k2.5',
+      usage: {
+        inputTokens: 120,
+        outputTokens: 30,
+        aggregationMode: 'cumulative',
+        costUsd: 0.42,
+        quality: 'provider_reported',
+        model: 'kimi-k2.5',
+        modelService: 'kimi-api'
+      }
+    }, {
+      adapter: 'claude-code',
+      model: 'kimi-api,kimi-k2.5'
+    })
+
+    const report = db.getUsageReport({
+      from: 1_799_999_000_000,
+      to: 1_800_001_000_000
+    })
+    expect(report.summary).toMatchObject({
+      costUsd: 0.42,
+      observationCount: 1,
+      total: 150
+    })
+    expect(report.facets.modelService[0]).toMatchObject({ id: 'kimi-api' })
+    expect(report.facets.model[0]).toMatchObject({ id: 'kimi-k2.5' })
+  })
+
   it('deduplicates repeated completed summaries for the same child turn', () => {
     project({
       id: 'evt-child-final',

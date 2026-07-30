@@ -34,6 +34,8 @@ import {
 import { LauncherAboutView } from '#~/components/launcher/LauncherAboutView'
 import { LauncherSettingsView } from '#~/components/launcher/LauncherSettingsView'
 import type { LauncherKeyboardHint, LauncherSettingsResetAction } from '#~/components/launcher/LauncherSettingsView'
+import { UsagePanel } from '#~/components/usage/UsagePanel'
+import type { UsagePanelHandle } from '#~/components/usage/UsagePanel'
 import { WorkspaceOpeningOverlay } from '#~/components/workspace/WorkspaceOpeningOverlay'
 import { getProjectFileIconMeta } from '#~/components/workspace/project-file-tree/project-file-tree-icons'
 import { useInterfaceLanguageConfig } from '#~/hooks/use-interface-language-config'
@@ -922,6 +924,7 @@ export function LauncherRoute({
       : ''
   )
   const [activeCommandId, setActiveCommandId] = useState<string>()
+  const [usageSearchActiveDescendant, setUsageSearchActiveDescendant] = useState<string>()
   const [canCloneRepository, setCanCloneRepository] = useState(false)
   const [directoryBrowserMode, setDirectoryBrowserMode] = useState<LauncherDirectoryBrowserMode | undefined>(
     launcherDirectoryRouteState?.mode
@@ -990,6 +993,7 @@ export function LauncherRoute({
   const [settingsResetAction, setSettingsResetAction] = useState<LauncherSettingsResetAction>()
   const searchInputRef = useRef<HTMLInputElement>(null)
   const commandListRef = useRef<HTMLDivElement>(null)
+  const usagePanelRef = useRef<UsagePanelHandle>(null)
   const pendingLauncherSearchRef = useRef<string | undefined>(undefined)
   const searchHistoryRef = useRef<LauncherSearchHistoryState>({
     entries: [initialLauncherSearchHistoryEntry],
@@ -2874,6 +2878,14 @@ export function LauncherRoute({
   // manifest routes or launcher search providers so disabled/missing plugins do not leak commands.
   const builtinCommands = useMemo<LauncherCommand[]>(() => [
     {
+      action: () => openLauncherView('usage'),
+      icon: 'data_usage',
+      id: 'builtin:usage',
+      keywords: ['usage', 'token', 'cost', '用量', '统计', '消耗'],
+      subtitle: t('launcher.builtin.usageHint'),
+      title: t('launcher.menu.usage')
+    },
+    {
       action: () => openLauncherView('settings'),
       icon: 'settings',
       id: 'builtin:settings',
@@ -3747,6 +3759,14 @@ export function LauncherRoute({
   )
   const launcherMenuItems = useMemo<MenuProps['items']>(() => [
     {
+      icon: menuIcon('data_usage'),
+      key: 'usage',
+      label: t('launcher.menu.usage'),
+      onClick: () => {
+        openLauncherView('usage')
+      }
+    },
+    {
       icon: menuIcon('settings'),
       key: 'settings',
       label: t('launcher.menu.settings'),
@@ -3908,6 +3928,13 @@ export function LauncherRoute({
         return
       }
 
+      if (launcherViewMode === 'usage' && query !== '') {
+        setLauncherQueryWithUrl('', { replace: true })
+        focusSearchInput()
+        event.stopPropagation()
+        return
+      }
+
       if (launcherViewMode !== 'commands') {
         setLauncherViewModeWithUrl('commands', { query: '', replace: true })
         focusSearchInput()
@@ -3935,6 +3962,8 @@ export function LauncherRoute({
     isSearchInputComposing,
     launcherViewMode,
     navigateSearchHistory,
+    query,
+    setLauncherQueryWithUrl,
     setLauncherViewModeWithUrl,
     openingWorkspace
   ])
@@ -3946,6 +3975,13 @@ export function LauncherRoute({
 
     if (openingWorkspace != null) {
       event.preventDefault()
+      return
+    }
+
+    if (
+      launcherViewMode === 'usage' &&
+      usagePanelRef.current?.handleSearchKeyDown(event) === true
+    ) {
       return
     }
 
@@ -4112,6 +4148,8 @@ export function LauncherRoute({
     ? t('launcher.pluginSearchPlaceholder', { title: launcherPluginSearchTitle })
     : launcherViewMode === 'settings'
     ? t('launcher.settings.searchPlaceholder')
+    : launcherViewMode === 'usage'
+    ? t('usage.searchPlaceholder')
     : launcherViewMode === 'about'
     ? t('launcher.about.searchPlaceholder')
     : isCloneRepositoryMode
@@ -4131,6 +4169,8 @@ export function LauncherRoute({
     ? t('launcher.pluginSearchLabel', { title: launcherPluginSearchTitle })
     : launcherViewMode === 'settings'
     ? t('launcher.settings.searchLabel')
+    : launcherViewMode === 'usage'
+    ? t('usage.searchLabel')
     : launcherViewMode === 'about'
     ? t('launcher.about.searchLabel')
     : isCloneRepositoryMode
@@ -4148,6 +4188,8 @@ export function LauncherRoute({
     ? launcherPluginChromeTitle
     : launcherViewMode === 'settings'
     ? t('launcher.settings.title')
+    : launcherViewMode === 'usage'
+    ? t('usage.title')
     : launcherViewMode === 'about'
     ? t('launcher.about.title')
     : isDirectoryBrowserMode
@@ -4163,6 +4205,8 @@ export function LauncherRoute({
     ? launcherPluginChromeIcon
     : launcherViewMode === 'settings'
     ? 'settings'
+    : launcherViewMode === 'usage'
+    ? 'data_usage'
     : launcherViewMode === 'about'
     ? 'info'
     : isCloneRepositoryMode
@@ -4243,6 +4287,12 @@ export function LauncherRoute({
     ]
     : launcherViewMode === 'settings'
     ? settingsOperationHints
+    : launcherViewMode === 'usage' && query !== ''
+    ? [
+      { key: 'move', keys: '↑↓', label: t('launcher.footerHints.move') },
+      { key: 'filter', keys: 'Enter', label: t('usage.filters.action') },
+      { key: 'clear', keys: 'Esc', label: t('usage.searchClear') }
+    ]
     : [
       { key: 'back', keys: 'Esc', label: t('launcher.footerHints.back') }
     ]
@@ -4252,6 +4302,7 @@ export function LauncherRoute({
       className={[
         'launcher-route',
         launcherViewMode === 'plugin' ? 'is-plugin-route' : '',
+        launcherViewMode === 'usage' ? 'is-usage-route' : '',
         isDirectoryBrowserMode ? 'is-directory-browser-route' : '',
         openingWorkspace != null ? 'is-opening-workspace' : ''
       ].filter(Boolean).join(' ')}
@@ -4294,7 +4345,9 @@ export function LauncherRoute({
             )}
             <input
               ref={searchInputRef}
-              aria-activedescendant={activeCommandId}
+              aria-activedescendant={launcherViewMode === 'usage'
+                ? usageSearchActiveDescendant
+                : activeCommandId}
               aria-label={viewSearchLabel}
               className='launcher-command-search__input'
               placeholder={viewSearchPlaceholder}
@@ -4320,6 +4373,8 @@ export function LauncherRoute({
             ? t('launcher.preview.listLabel')
             : launcherViewMode === 'settings'
             ? t('launcher.settings.listLabel')
+            : launcherViewMode === 'usage'
+            ? t('usage.title')
             : launcherViewMode === 'about'
             ? t('launcher.about.listLabel')
             : t('launcher.commandListLabel')}
@@ -4334,6 +4389,15 @@ export function LauncherRoute({
           )}
           {launcherViewMode === 'about' && (
             <LauncherAboutView />
+          )}
+          {launcherViewMode === 'usage' && (
+            <UsagePanel
+              ref={usagePanelRef}
+              onSearchActiveDescendantChange={setUsageSearchActiveDescendant}
+              onSearchQueryChange={setLauncherQueryWithUrl}
+              searchQuery={query}
+              surface='launcher'
+            />
           )}
           {launcherViewMode === 'plugin' && launcherPluginRouteState != null && launcherPluginRoute != null && (
             <div className='launcher-plugin-route-view'>

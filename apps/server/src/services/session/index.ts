@@ -1079,6 +1079,16 @@ export async function startAdapterSession(
                 }
               }
               break
+            case 'usage':
+              applyEvent({
+                type: 'adapter_event',
+                data: {
+                  source: 'adapter_usage',
+                  adapter: resolvedAdapter ?? options.adapter,
+                  usage: event.data
+                }
+              })
+              break
             case 'interaction_request': {
               const interaction = event.data
               const permissionContext = interaction.payload.kind === 'permission'
@@ -1383,6 +1393,12 @@ export async function startAdapterSession(
                   'role' in event.data
                 ? event.data as ChatMessage
                 : undefined
+              if (stopMessage?.usage != null) {
+                getDb().recordSessionUsageEvent(sessionId, {
+                  type: 'message',
+                  message: stopMessage
+                })
+              }
               forwardSessionEventToChannel(sessionId, buildChannelSessionStopEvent(stopMessage))
               const latestSession = getDb().getSession(sessionId)
               void finalizeSessionWorkspaceChangeTracking(
