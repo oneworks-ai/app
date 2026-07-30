@@ -60,7 +60,6 @@ const buildInstanceConfig = (plugin: PluginRuntimeInstance) => ({
   id: plugin.requestId,
   options: plugin.options ?? {},
   packageId: plugin.packageId,
-  pluginRoot: plugin.pluginRoot ?? plugin.rootDir,
   scope: plugin.scope,
   sourceGroup: plugin.sourceGroup,
   watch: plugin.watch?.enabled === true

@@ -82,6 +82,9 @@ const normalizeCatalog = async (
       : await resolvePathWithinRoot(rootDir, sourcePath, `Codex plugin ${name}`)
     const manifest = pluginRoot == null ? undefined : await parseCodexPluginManifest(pluginRoot)
     const manifestInterface = manifest?.interface
+    const displayName = normalizeNonEmptyString(value.displayName) ??
+      normalizeNonEmptyString(manifest?.displayName) ??
+      normalizeNonEmptyString(manifestInterface?.displayName)
     const iconRef = manifestInterface?.logo ??
       manifestInterface?.logoDark ??
       manifestInterface?.composerIcon
@@ -105,9 +108,7 @@ const normalizeCatalog = async (
       ...(normalizeNonEmptyString(value.version) ?? manifest?.version) != null
         ? { version: normalizeNonEmptyString(value.version) ?? manifest?.version }
         : {},
-      ...(normalizeNonEmptyString(manifestInterface?.displayName) != null
-        ? { displayName: normalizeNonEmptyString(manifestInterface?.displayName) }
-        : {}),
+      ...(displayName == null ? {} : { displayName }),
       ...(icon != null ? { icon: { kind: 'data' as const, value: icon } } : {}),
       ...(agents.length > 0 ? { agents } : {}),
       ...(commands.length > 0 ? { commands } : {}),

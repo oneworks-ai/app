@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { resolvePluginSourceGroup } from '../src/components/plugins/PluginStoreSidebarControls'
 import type { PluginRuntimeInstance } from '../src/plugins/plugin-manifest'
 import {
+  getNativePluginPresentationSearchText,
   getPluginPresentationSearchText,
   resolvePluginDisplayName,
   resolvePluginPresentationIcon
@@ -70,5 +71,37 @@ describe('plugin presentation', () => {
     })
 
     expect(getPluginPresentationSearchText(renamedLogger, 'en')).not.toContain('Logger')
+  })
+
+  it('indexes root-free public plugin metadata and ignores native display paths', () => {
+    const plugin = createPlugin({
+      name: 'Codex Docs'
+    })
+
+    const searchText = getPluginPresentationSearchText(plugin, 'en')
+
+    expect(searchText).toContain('Codex Docs')
+    expect(plugin).not.toHaveProperty('pluginRoot')
+    expect(plugin).not.toHaveProperty('rootDir')
+    expect(getNativePluginPresentationSearchText({
+      adapter: 'codex',
+      capabilities: {
+        disable: 'unsupported',
+        discover: 'available',
+        enable: 'unsupported',
+        import: 'unsupported',
+        install: 'unsupported',
+        uninstall: 'unsupported',
+        update: 'unsupported'
+      },
+      id: 'docs',
+      name: 'Codex Docs',
+      scope: 'user',
+      source: {
+        displayPath: '/Users/example/.codex/plugins/docs',
+        kind: 'installed-copy'
+      },
+      state: 'enabled'
+    })).toBe('Codex Docs docs codex user')
   })
 })

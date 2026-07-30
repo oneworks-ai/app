@@ -74,6 +74,6 @@ That location is private runtime data and should not be committed.
 
 ## Native Plugin Marketplaces
 
-One Works supports both Claude Code and Codex plugin marketplaces. Reusable skills, commands, agents, MCP servers, and hooks are converted into the unified asset layer. Codex `.app.json` integrations remain Codex-specific and are not converted.
+One Works supports both Claude Code and Codex plugin marketplaces. Reusable skills, commands, agents, MCP servers, and hooks are converted into the unified asset layer. Safe, bounded presentation metadata from Codex `.app.json` files is shown with the plugin's apps, capabilities, permissions, authentication, and connection requirements; it is not activated as a One Works app runtime.
 
 Marketplace-managed installs automatically participate in runtime plugin discovery. Direct path or package installs still require an explicit top-level `plugins` entry.

@@ -336,7 +336,7 @@ const formatSourceSummary = (entry: MarketplaceConfigEntry) => {
       return {
         detail: source.name ?? '',
         icon: 'tune',
-        title: source.metadata?.pluginRoot ?? source.name ?? 'settings'
+        title: source.name ?? 'settings'
       }
     case 'hostPattern':
       return { detail: '', icon: 'language', title: source.hostPattern }

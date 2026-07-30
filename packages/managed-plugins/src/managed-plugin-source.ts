@@ -4,6 +4,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 
 import type { ManagedPluginSource } from '@oneworks/types'
+import { resolveManagedNpmRegistryAuthority } from '@oneworks/utils/managed-plugin'
 
 export const pathExists = async (target: string) => {
   try {
@@ -111,11 +112,12 @@ export const installManagedPluginSource = async (
 ) => {
   await fs.mkdir(tempDir, { recursive: true })
   if (source.type === 'npm') {
+    const registry = resolveManagedNpmRegistryAuthority(source.registry)
     const packResult = await runProcess('npm', [
       'pack',
       source.spec,
       '--json',
-      ...(source.registry != null ? ['--registry', source.registry] : []),
+      ...(source.registry != null ? ['--registry', registry] : []),
       '--pack-destination',
       tempDir
     ])
@@ -193,8 +195,5 @@ export const resolveManagedPluginSource = async (
       ...(ref != null && ref !== '' ? { ref } : {})
     }
   }
-  return {
-    type: 'npm',
-    spec: trimmed
-  }
+  return { spec: trimmed, type: 'npm' }
 }

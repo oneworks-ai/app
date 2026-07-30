@@ -2,6 +2,7 @@ import type { NativeHostPlugin } from '@oneworks/types'
 
 import type { PluginRuntimeInstance } from '#~/plugins/plugin-manifest'
 import {
+  getNativePluginPresentationSearchText,
   getPluginPresentationSearchText,
   resolvePluginDescription,
   resolvePluginDisplayName,
@@ -72,15 +73,7 @@ export const buildPluginListItems = ({
     kind: 'native',
     name: plugin.displayName ?? plugin.name,
     native: plugin,
-    searchText: [
-      plugin.displayName,
-      plugin.name,
-      plugin.id,
-      plugin.adapter,
-      plugin.marketplace,
-      plugin.scope,
-      plugin.source.displayPath
-    ].filter(Boolean).join(' '),
+    searchText: getNativePluginPresentationSearchText(plugin),
     source: plugin.scope,
     state: plugin.state,
     version: plugin.version

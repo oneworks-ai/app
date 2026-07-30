@@ -1,3 +1,5 @@
+import type { NativeHostPlugin } from '@oneworks/types'
+
 import type { IconAsset } from '#~/components/icons/IconAsset'
 
 import loggerIcon from '../../../../packages/plugins/logger/assets/icon.svg?raw'
@@ -76,5 +78,16 @@ export const getPluginPresentationSearchText = (plugin: PluginRuntimeInstance, l
     plugin.name ?? ''
   } ${plugin.description ?? ''} ${Object.values(plugin.descriptionI18n ?? {}).join(' ')} ${plugin.scope} ${
     plugin.packageId ?? ''
-  } ${plugin.requestId ?? ''} ${plugin.pluginRoot ?? plugin.rootDir ?? ''}`
+  } ${plugin.requestId ?? ''}`
 }
+
+export const getNativePluginPresentationSearchText = (plugin: NativeHostPlugin) => (
+  [
+    plugin.displayName,
+    plugin.name,
+    plugin.id,
+    plugin.adapter,
+    plugin.marketplace,
+    plugin.scope
+  ].filter(Boolean).join(' ')
+)

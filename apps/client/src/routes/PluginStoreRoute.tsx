@@ -47,6 +47,7 @@ import {
 import { usePluginContext } from '#~/plugins/plugin-context'
 import type { PluginRuntimeInstance } from '#~/plugins/plugin-manifest'
 import {
+  getNativePluginPresentationSearchText,
   getPluginPresentationSearchText,
   resolvePluginDisplayName,
   resolvePluginPresentationIcon
@@ -263,15 +264,7 @@ export function PluginStoreRoute() {
   const visibleNativePlugins = useMemo(() => {
     const keyword = pluginQuery.trim().toLowerCase()
     if (keyword === '') return nativePlugins
-    return nativePlugins.filter(plugin =>
-      [
-        plugin.displayName,
-        plugin.name,
-        plugin.adapter,
-        plugin.marketplace,
-        plugin.source.displayPath
-      ].filter(Boolean).join(' ').toLowerCase().includes(keyword)
-    )
+    return nativePlugins.filter(plugin => getNativePluginPresentationSearchText(plugin).toLowerCase().includes(keyword))
   }, [nativePlugins, pluginQuery])
   const toggleWatch = useCallback(async (scope: string, enabled: boolean) => {
     setUpdatingWatchScope(scope)
@@ -339,7 +332,6 @@ export function PluginStoreRoute() {
     (plugin: PluginRuntimeInstance): RouteSidebarListContextMenuItems => {
       const isPluginEnabled = plugin.enabled !== false
       const nextPluginEnabled = !isPluginEnabled
-      const pluginRoot = plugin.pluginRoot ?? plugin.rootDir
       const pluginSourceGroup = resolvePluginSourceGroup(plugin)
       const isWatchEnabled = plugin.watch?.enabled === true
       const nextWatchEnabled = !isWatchEnabled
@@ -395,22 +387,7 @@ export function PluginStoreRoute() {
               text: plugin.scope
             })
           }
-        },
-        ...(pluginRoot == null || pluginRoot === ''
-          ? []
-          : [{
-            key: `copy-root:${plugin.scope}`,
-            label: t('pluginStore.copyPluginRoot'),
-            icon: <MaterialSymbol name='folder_open' />,
-            onClick: () => {
-              void copyTextWithFeedback({
-                failureMessage: t('common.copyFailed'),
-                messageApi: message,
-                successMessage: t('pluginStore.pluginRootCopied'),
-                text: pluginRoot
-              })
-            }
-          }])
+        }
       ]
     },
     [message, navigate, t, togglePluginEnabled, toggleWatch, updatingEnabledAction, updatingWatchScope]

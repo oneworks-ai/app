@@ -8,6 +8,7 @@ import type {
 } from '#~/components/layout/route-sidebar-context'
 import type { PluginRuntimeInstance } from '#~/plugins/plugin-manifest'
 import {
+  getNativePluginPresentationSearchText,
   getPluginPresentationSearchText,
   resolvePluginDisplayName,
   resolvePluginPresentationIcon
@@ -63,13 +64,7 @@ const createNativePluginListItem = (plugin: NativeHostPlugin) => ({
     : { alt: plugin.displayName ?? plugin.name, src: plugin.icon, type: 'image' as const },
   key: createNativePluginRouteKey(plugin),
   label: plugin.displayName ?? plugin.name,
-  searchText: [
-    plugin.displayName,
-    plugin.name,
-    plugin.adapter,
-    plugin.marketplace,
-    plugin.source.displayPath
-  ].filter(Boolean).join(' ')
+  searchText: getNativePluginPresentationSearchText(plugin)
 })
 
 const resolveNativeSourceGroup = (plugin: NativeHostPlugin): PluginSourceGroup => {
