@@ -125,7 +125,7 @@
 - 正式包的 runtime package cache version 必须读取 Electron 最终应用版本（`app.getVersion()`），不能读取依赖包版本。打包 staging 的应用 manifest 必须先写入 `ONEWORKS_DESKTOP_VERSION`，保证 Electron runtime、原生 bundle 与 runtime cache 目录使用同一最终版本；release tag 覆盖桌面版本但内部 workspace 包尚未对齐时也不能复用上一版 server / adapter 缓存。
 - 可信 packaged cache 首次落盘可以用 immutable cache version / build fingerprint 作为完整性标识，并在 APFS 等支持的文件系统上优先 clone 文件；不要在启动关键路径重复哈希和物理复制相同 bundle 内容。built-in plugin 的版本 cache 只读链接回不可变应用包，`latest` cache 再作为版本 cache 的轻量别名；应用位置或 build fingerprint 变化时必须由 manifest 校验重建链接。
 - `pnpm deploy --legacy --prod` 会让共享 workspace 的依赖状态暂时变成 production-only；`scripts/package.cjs` 在所有架构完成或失败后都必须用 frozen lockfile 恢复 dev dependencies，之后才能运行 packaged server smoke 或其他 workspace 脚本。不要依赖调用方额外执行 `pnpm install` 来修复打包命令留下的状态。
-- packaged server smoke 会在干净 runner 上首次准备完整 runtime package cache；默认 readiness deadline 必须覆盖低速 CI 的冷缓存路径，并在超时时输出 `server.log` 尾部，不能只留下无上下文的 “did not become ready”。如需实验性收紧可设置 `ONEWORKS_DESKTOP_SMOKE_TIMEOUT_MS`，但正式 workflow 使用覆盖冷启动的默认值。
+- packaged server smoke 会在干净 runner 上首次准备完整 runtime package cache；默认 readiness deadline 必须覆盖低速 CI 的冷缓存路径，并在超时时输出 `server.log` 尾部，不能只留下无上下文的 “did not become ready”。如需实验性收紧可设置 `ONEWORKS_DESKTOP_SMOKE_TIMEOUT_MS`，但正式 workflow 使用覆盖冷启动的默认值。首次编译本地插件源码也可能超过普通 HTTP 请求时限，使用独立的 `ONEWORKS_DESKTOP_SMOKE_REQUEST_TIMEOUT_MS`（默认 30 秒）控制，不能通过跳过源码请求来规避发布 smoke。
 
 ## 已验证经验
 

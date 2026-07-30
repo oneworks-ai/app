@@ -16,13 +16,27 @@ const outputDir = path.join(desktopRoot, 'out')
 const appMetadata = resolveDesktopAppMetadata()
 const appName = appMetadata.productName
 const host = '127.0.0.1'
-const serverReadyTimeoutMs = (() => {
-  const value = Number.parseInt(process.env.ONEWORKS_DESKTOP_SMOKE_TIMEOUT_MS?.trim() || '120000', 10)
+const resolvePositiveTimeoutMs = (env, name, fallbackMs) => {
+  const rawValue = env[name]?.trim() || String(fallbackMs)
+  if (!/^[1-9]\d*$/u.test(rawValue)) {
+    throw new Error(`${name} must be a positive integer, received: ${rawValue}`)
+  }
+  const value = Number(rawValue)
   if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new Error(`ONEWORKS_DESKTOP_SMOKE_TIMEOUT_MS must be a positive integer, received: ${value}`)
+    throw new Error(`${name} must be a positive integer, received: ${rawValue}`)
   }
   return value
-})()
+}
+const serverReadyTimeoutMs = resolvePositiveTimeoutMs(
+  process.env,
+  'ONEWORKS_DESKTOP_SMOKE_TIMEOUT_MS',
+  120000
+)
+const serverRequestTimeoutMs = resolvePositiveTimeoutMs(
+  process.env,
+  'ONEWORKS_DESKTOP_SMOKE_REQUEST_TIMEOUT_MS',
+  30000
+)
 
 const createWorkspaceRuntimeEnv = (
   runtimePackageCacheVersion,
@@ -329,13 +343,14 @@ const waitForServer = ({ logPath, port, startedAt = Date.now() }) =>
     request.once('error', retry)
   })
 
-const readServerText = (port, requestPath, label) =>
+const readServerText = (port, requestPath, label, options = {}) =>
   new Promise((resolve, reject) => {
-    const request = http.get({
+    const httpGet = options.httpGet ?? http.get
+    const request = httpGet({
       hostname: host,
       path: requestPath,
       port,
-      timeout: 5000
+      timeout: options.timeoutMs ?? serverRequestTimeoutMs
     }, (response) => {
       let body = ''
       response.setEncoding('utf8')
@@ -660,7 +675,15 @@ const main = async () => {
   console.log(sourceResult)
 }
 
-main().catch((error) => {
-  console.error(error)
-  process.exit(1)
-})
+module.exports = {
+  readServerText,
+  serverRequestTimeoutMs,
+  resolvePositiveTimeoutMs
+}
+
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error)
+    process.exit(1)
+  })
+}
