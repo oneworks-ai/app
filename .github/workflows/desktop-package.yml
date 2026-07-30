@@ -51,6 +51,8 @@ jobs:
     if: github.event_name != 'pull_request'
     runs-on: macos-26
     timeout-minutes: 120
+    outputs:
+      signed: ${{ steps.desktop_build_policy.outputs.sign }}
 
     steps:
       - name: Checkout repository
@@ -156,17 +158,12 @@ jobs:
           DESKTOP_CSC_INSTALLER_LINK: ${{ steps.desktop_build_policy.outputs.sign == 'true' && secrets.DESKTOP_CSC_INSTALLER_LINK || '' }}
           DESKTOP_CSC_KEY_PASSWORD: ${{ steps.desktop_build_policy.outputs.sign == 'true' && secrets.DESKTOP_CSC_KEY_PASSWORD || '' }}
           DESKTOP_CSC_LINK: ${{ steps.desktop_build_policy.outputs.sign == 'true' && secrets.DESKTOP_CSC_LINK || '' }}
-          DESKTOP_RELEASE_ENABLED: ${{ steps.desktop_release.outputs.enabled }}
           DESKTOP_SIGN: ${{ steps.desktop_build_policy.outputs.sign }}
         run: |
           case "$DESKTOP_SIGN" in
             true|TRUE|1|yes|YES|on|ON) ;;
             *)
-              if [[ "$DESKTOP_RELEASE_ENABLED" == "true" ]]; then
-                echo "Desktop release artifacts must be signed and notarized. Configure signing credentials and set DESKTOP_SIGN=true." >&2
-                exit 1
-              fi
-              echo "Desktop signing is disabled."
+              echo "Desktop signing is disabled; release artifacts will be unsigned."
               exit 0
               ;;
           esac
@@ -311,22 +308,37 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "update_channel=$update_channel" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve release notes
+        id: release_notes
+        env:
+          SIGNED: ${{ needs.package.outputs.signed }}
+          TAG: ${{ steps.release.outputs.tag }}
+        shell: bash
+        run: |
+          if [[ "$SIGNED" == "true" ]]; then
+            signing_note="- Developer ID signed and Apple-notarized macOS installers"
+          else
+            signing_note="- Unsigned macOS installers; Gatekeeper may require manual approval"
+          fi
+
+          {
+            echo "notes<<EOF"
+            echo "One Works desktop release ${TAG}"
+            echo
+            echo "$signing_note"
+            echo "- Intel (x64) and Apple Silicon (arm64): .dmg, .pkg, .zip"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Create or update GitHub Release
         env:
           GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NOTES: ${{ steps.release_notes.outputs.notes }}
           TAG: ${{ steps.release.outputs.tag }}
           UPDATE_CHANNEL: ${{ steps.release.outputs.update_channel }}
         shell: bash
         run: |
-          NOTES=$(cat <<EOF
-          One Works desktop release ${TAG}
-
-          - Developer ID signed and Apple-notarized macOS installers
-          - Intel (x64) and Apple Silicon (arm64): .dmg, .pkg, .zip
-          EOF
-          )
-
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists."
             if [[ "$UPDATE_CHANNEL" == "stable" ]]; then
