@@ -70,6 +70,14 @@ Primary implementation entrypoints for Codex hooks:
   - treats a missing native schema version as version 1, rejects unsupported versions, treats an empty lifecycle script as absent, and fails the whole candidate closed when any non-empty declared lifecycle script is invalid or oversized
   - maps Codex `setup` scripts to One Works `create` scripts and `cleanup` scripts to `destroy`; platform scripts override the base script, while Codex actions are reported as skipped and never become `start`
   - returns discovery candidates only; the server owns validation, additions-only persistence, and source conflict handling
+- `src/runtime/usage.ts`
+  - implements the optional adapter usage source consumed by the Launcher usage overview
+  - scans only date-bounded Codex session JSONL files and reads `session_meta`, `turn_context`, and `token_count` records; prompt and response content never enters the usage report
+  - converts cumulative snapshots to deltas and excludes One Works-originated sessions because those are already owned by the workspace usage ledger
+- `src/usage.ts`
+  - exposes the lightweight usage collector subpath so the server can bypass an older installed adapter runtime cache while retaining the standard optional adapter capability
+- `src/runtime/usage-history-files.ts` / `src/runtime/usage-history-parser.ts`
+  - keep filesystem discovery separate from the privacy-bounded JSONL parser
 - `src/runtime/session-common.ts`
   - enables `hooks`, injects runtime config, model/provider settings, and session env
 - `src/hook-bridge.ts`

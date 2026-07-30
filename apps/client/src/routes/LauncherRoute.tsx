@@ -35,6 +35,7 @@ import { LauncherAboutView } from '#~/components/launcher/LauncherAboutView'
 import { LauncherSettingsView } from '#~/components/launcher/LauncherSettingsView'
 import type { LauncherKeyboardHint, LauncherSettingsResetAction } from '#~/components/launcher/LauncherSettingsView'
 import { UsagePanel } from '#~/components/usage/UsagePanel'
+import type { UsagePanelHandle } from '#~/components/usage/UsagePanel'
 import { WorkspaceOpeningOverlay } from '#~/components/workspace/WorkspaceOpeningOverlay'
 import { getProjectFileIconMeta } from '#~/components/workspace/project-file-tree/project-file-tree-icons'
 import { useInterfaceLanguageConfig } from '#~/hooks/use-interface-language-config'
@@ -923,6 +924,7 @@ export function LauncherRoute({
       : ''
   )
   const [activeCommandId, setActiveCommandId] = useState<string>()
+  const [usageSearchActiveDescendant, setUsageSearchActiveDescendant] = useState<string>()
   const [canCloneRepository, setCanCloneRepository] = useState(false)
   const [directoryBrowserMode, setDirectoryBrowserMode] = useState<LauncherDirectoryBrowserMode | undefined>(
     launcherDirectoryRouteState?.mode
@@ -991,6 +993,7 @@ export function LauncherRoute({
   const [settingsResetAction, setSettingsResetAction] = useState<LauncherSettingsResetAction>()
   const searchInputRef = useRef<HTMLInputElement>(null)
   const commandListRef = useRef<HTMLDivElement>(null)
+  const usagePanelRef = useRef<UsagePanelHandle>(null)
   const pendingLauncherSearchRef = useRef<string | undefined>(undefined)
   const searchHistoryRef = useRef<LauncherSearchHistoryState>({
     entries: [initialLauncherSearchHistoryEntry],
@@ -3925,6 +3928,13 @@ export function LauncherRoute({
         return
       }
 
+      if (launcherViewMode === 'usage' && query !== '') {
+        setLauncherQueryWithUrl('', { replace: true })
+        focusSearchInput()
+        event.stopPropagation()
+        return
+      }
+
       if (launcherViewMode !== 'commands') {
         setLauncherViewModeWithUrl('commands', { query: '', replace: true })
         focusSearchInput()
@@ -3952,6 +3962,8 @@ export function LauncherRoute({
     isSearchInputComposing,
     launcherViewMode,
     navigateSearchHistory,
+    query,
+    setLauncherQueryWithUrl,
     setLauncherViewModeWithUrl,
     openingWorkspace
   ])
@@ -3963,6 +3975,13 @@ export function LauncherRoute({
 
     if (openingWorkspace != null) {
       event.preventDefault()
+      return
+    }
+
+    if (
+      launcherViewMode === 'usage' &&
+      usagePanelRef.current?.handleSearchKeyDown(event) === true
+    ) {
       return
     }
 
@@ -4151,7 +4170,7 @@ export function LauncherRoute({
     : launcherViewMode === 'settings'
     ? t('launcher.settings.searchLabel')
     : launcherViewMode === 'usage'
-    ? t('usage.title')
+    ? t('usage.searchLabel')
     : launcherViewMode === 'about'
     ? t('launcher.about.searchLabel')
     : isCloneRepositoryMode
@@ -4268,6 +4287,12 @@ export function LauncherRoute({
     ]
     : launcherViewMode === 'settings'
     ? settingsOperationHints
+    : launcherViewMode === 'usage' && query !== ''
+    ? [
+      { key: 'move', keys: '↑↓', label: t('launcher.footerHints.move') },
+      { key: 'filter', keys: 'Enter', label: t('usage.filters.action') },
+      { key: 'clear', keys: 'Esc', label: t('usage.searchClear') }
+    ]
     : [
       { key: 'back', keys: 'Esc', label: t('launcher.footerHints.back') }
     ]
@@ -4284,61 +4309,61 @@ export function LauncherRoute({
       aria-busy={openingWorkspace != null}
     >
       <div className='launcher-command-shell'>
-        {launcherViewMode !== 'usage' && (
-          <div className='launcher-command-search'>
-            <div className='launcher-command-search__input-row'>
-              {(viewLeadingIcon != null || viewLeadingAvatar != null) && (
-                <Tooltip
-                  align={{ offset: [-10, 6] }}
-                  autoAdjustOverflow
-                  classNames={{ root: 'launcher-command-tooltip launcher-command-search__icon-tooltip' }}
-                  getPopupContainer={getLauncherPopupContainer}
-                  placement='bottomLeft'
-                  title={viewLeadingIconTooltip ?? viewSearchLabel}
+        <div className='launcher-command-search'>
+          <div className='launcher-command-search__input-row'>
+            {(viewLeadingIcon != null || viewLeadingAvatar != null) && (
+              <Tooltip
+                align={{ offset: [-10, 6] }}
+                autoAdjustOverflow
+                classNames={{ root: 'launcher-command-tooltip launcher-command-search__icon-tooltip' }}
+                getPopupContainer={getLauncherPopupContainer}
+                placement='bottomLeft'
+                title={viewLeadingIconTooltip ?? viewSearchLabel}
+              >
+                <span
+                  className={viewLeadingAvatar == null
+                    ? [
+                      'launcher-command-search__file-icon',
+                      isFileSearchMode ? 'launcher-command-search__slash-icon' : 'material-symbols-rounded'
+                    ].join(' ')
+                    : 'launcher-command-search__avatar'}
+                  aria-label={viewLeadingIconTooltip ?? viewSearchLabel}
                 >
-                  <span
-                    className={viewLeadingAvatar == null
-                      ? [
-                        'launcher-command-search__file-icon',
-                        isFileSearchMode ? 'launcher-command-search__slash-icon' : 'material-symbols-rounded'
-                      ].join(' ')
-                      : 'launcher-command-search__avatar'}
-                    aria-label={viewLeadingIconTooltip ?? viewSearchLabel}
-                  >
-                    {viewLeadingAvatar == null
-                      ? viewLeadingIcon
-                      : viewLeadingAvatar.url == null
-                      ? viewLeadingAvatar.initials
-                      : (
-                        <img
-                          alt=''
-                          draggable={false}
-                          src={viewLeadingAvatar.url}
-                        />
-                      )}
-                  </span>
-                </Tooltip>
-              )}
-              <input
-                ref={searchInputRef}
-                aria-activedescendant={activeCommandId}
-                aria-label={viewSearchLabel}
-                className='launcher-command-search__input'
-                placeholder={viewSearchPlaceholder}
-                value={query}
-                onChange={event => setLauncherQueryWithUrl(event.target.value)}
-                onCompositionEnd={() =>
-                  deferImeCompositionEnd((active) => {
-                    isSearchComposingRef.current = active
-                  })}
-                onCompositionStart={() => {
-                  isSearchComposingRef.current = true
-                }}
-                onKeyDown={handleKeyDown}
-              />
-            </div>
+                  {viewLeadingAvatar == null
+                    ? viewLeadingIcon
+                    : viewLeadingAvatar.url == null
+                    ? viewLeadingAvatar.initials
+                    : (
+                      <img
+                        alt=''
+                        draggable={false}
+                        src={viewLeadingAvatar.url}
+                      />
+                    )}
+                </span>
+              </Tooltip>
+            )}
+            <input
+              ref={searchInputRef}
+              aria-activedescendant={launcherViewMode === 'usage'
+                ? usageSearchActiveDescendant
+                : activeCommandId}
+              aria-label={viewSearchLabel}
+              className='launcher-command-search__input'
+              placeholder={viewSearchPlaceholder}
+              value={query}
+              onChange={event => setLauncherQueryWithUrl(event.target.value)}
+              onCompositionEnd={() =>
+                deferImeCompositionEnd((active) => {
+                  isSearchComposingRef.current = active
+                })}
+              onCompositionStart={() => {
+                isSearchComposingRef.current = true
+              }}
+              onKeyDown={handleKeyDown}
+            />
           </div>
-        )}
+        </div>
 
         <div
           ref={commandListRef}
@@ -4366,7 +4391,13 @@ export function LauncherRoute({
             <LauncherAboutView />
           )}
           {launcherViewMode === 'usage' && (
-            <UsagePanel surface='launcher' />
+            <UsagePanel
+              ref={usagePanelRef}
+              onSearchActiveDescendantChange={setUsageSearchActiveDescendant}
+              onSearchQueryChange={setLauncherQueryWithUrl}
+              searchQuery={query}
+              surface='launcher'
+            />
           )}
           {launcherViewMode === 'plugin' && launcherPluginRouteState != null && launcherPluginRoute != null && (
             <div className='launcher-plugin-route-view'>

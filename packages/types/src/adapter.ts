@@ -6,6 +6,7 @@ import type { AskUserQuestionParams } from './interaction'
 import type { Logger } from './logger'
 import type { ChatMessage, ChatMessageContent } from './message'
 import type { AdapterModelFallbackWarning } from './model-selection'
+import type { UsageQuery, UsageSourceResult } from './usage'
 import type { AdapterAssetPlan, AssetDiagnostic, WorkspaceAssetBundle } from './workspace'
 
 export type AdapterMessageContent = ChatMessageContent
@@ -296,6 +297,10 @@ export interface Adapter {
   init?: (
     ctx: AdapterCtx
   ) => Promise<void>
+  getUsage?: (
+    ctx: AdapterCtx,
+    query: UsageQuery
+  ) => Promise<UsageSourceResult>
   getAccounts?: (
     ctx: AdapterCtx,
     options: AdapterAccountsQueryOptions

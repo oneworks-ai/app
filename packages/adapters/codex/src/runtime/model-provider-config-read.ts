@@ -2,7 +2,6 @@ import { spawn } from 'node:child_process'
 import type { ChildProcess } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
-import { homedir } from 'node:os'
 import { resolve } from 'node:path'
 import process from 'node:process'
 import { Writable } from 'node:stream'
@@ -11,6 +10,9 @@ import type { AdapterCtx, Logger } from '@oneworks/types'
 
 import { resolveCodexBinaryPath } from '#~/paths.js'
 import { CodexRpcClient } from '#~/protocol/rpc.js'
+import { resolveRealCodexHome, resolveRealHome } from './real-home'
+
+export { resolveRealCodexHome } from './real-home'
 
 const CODEX_CONFIG_READ_TIMEOUT_MS = 10_000
 
@@ -47,16 +49,6 @@ export const isCodexConfigRecord = (value: unknown): value is Record<string, unk
 
 const readString = (value: unknown) => (
   typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
-)
-
-const resolveRealHome = (env: AdapterCtx['env']) => (
-  readString(env.__ONEWORKS_PROJECT_REAL_HOME__) ??
-    readString(process.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
-    homedir()
-)
-
-export const resolveRealCodexHome = (env: AdapterCtx['env']) => (
-  resolve(readString(env.CODEX_HOME) ?? resolve(resolveRealHome(env), '.codex'))
 )
 
 const buildConfigReadEnv = (env: AdapterCtx['env'], codexHome: string): NodeJS.ProcessEnv => {

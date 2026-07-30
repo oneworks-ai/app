@@ -1,0 +1,104 @@
+.usage-workspace-scope-select.oneworks-select {
+  --usage-workspace-scope-bleed: 2px;
+  --oneworks-select-content-height: 18px;
+  --oneworks-select-padding-block: 2px;
+  --oneworks-select-padding-inline: 2px;
+
+  width: min(220px, 32vw);
+  height: var(--oneworks-select-control-height);
+  min-width: 0;
+  margin: calc(var(--usage-workspace-scope-bleed) * -1);
+  align-self: center;
+
+  .ant-select-selector {
+    height: var(--oneworks-select-control-height);
+    overflow: hidden;
+  }
+
+  .ant-select-selection-wrap,
+  .ant-select-selection-overflow {
+    height: var(--oneworks-select-content-height);
+    min-height: var(--oneworks-select-content-height);
+    min-width: 0;
+    align-self: center;
+    flex-wrap: nowrap;
+  }
+
+  .ant-select-selection-overflow-item,
+  .ant-select-selection-overflow-item-rest {
+    max-width: 100%;
+    height: var(--oneworks-select-content-height);
+    align-items: center;
+  }
+
+  &.ant-select-multiple .ant-select-selector .ant-select-selection-item {
+    box-sizing: border-box;
+    max-width: 100%;
+    height: var(--oneworks-select-content-height);
+    min-height: var(--oneworks-select-content-height);
+    margin: 0;
+    padding-inline: 2px;
+    line-height: 14px;
+  }
+}
+
+.usage-workspace-scope-popup.oneworks-select-popup {
+  --oneworks-overlay-icon-gap: 5px;
+  --oneworks-overlay-select-item-min-height: 26px;
+  --oneworks-overlay-select-item-padding: 3px 8px 3px 12px;
+  --oneworks-overlay-select-panel-padding-y: 4px;
+  --oneworks-overlay-line-inset: 5px;
+  --oneworks-overlay-line-offset: 4px;
+
+  .ant-select-item-option-content {
+    width: 100%;
+  }
+}
+
+.usage-workspace-scope-summary {
+  height: 14px;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--app-chrome-action-gap, 4px);
+  color: var(--text-color);
+  font-size: 11px;
+}
+
+.usage-workspace-scope-summary .material-symbols-rounded,
+.usage-workspace-scope-option .material-symbols-rounded {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  font-size: 14px;
+  line-height: 14px;
+}
+
+.usage-workspace-scope-summary__label,
+.usage-workspace-scope-option__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.usage-workspace-scope-option {
+  width: 100%;
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--oneworks-overlay-icon-gap, 6px);
+}
+
+.usage-workspace-scope-option__current {
+  margin-inline-start: auto;
+  color: var(--sub-text-color);
+  font-size: 10px;
+}
+
+@media (max-width: 720px) {
+  .usage-workspace-scope-select.oneworks-select {
+    width: min(168px, 42vw);
+  }
+}

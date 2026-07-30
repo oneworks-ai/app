@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import type {
+  Adapter,
+  AdapterCtx,
   PluginContributionUsageSource,
   PluginRuntimeInstance,
   UsageObservation,
@@ -9,7 +11,13 @@ import type {
 } from '@oneworks/types'
 
 import { USAGE_DIRECT_TRANSPORT_ID, buildUsageReport } from '#~/db/usage/repo.js'
-import { isUsageSourceAvailable, mergeUsageReports } from '#~/services/usage/index.js'
+import {
+  collectAdapterUsageReports,
+  isUsageSourceAvailable,
+  mergeUsageReports,
+  rebaseUsageReportWorkspace,
+  resolveLauncherUsageWorkspaceLabel
+} from '#~/services/usage/index.js'
 
 const query: UsageQuery = {
   from: 1_799_999_000_000,
@@ -127,6 +135,63 @@ describe('usage report aggregation', () => {
     ])
   })
 
+  it('rebases workspace runtime observations onto launcher workspace ids before filtering', () => {
+    const workspaceReport = buildUsageReport(
+      [createObservation(false)],
+      query,
+      [{ id: 'workspace:remote', kind: 'workspace', label: 'Remote workspace' }]
+    )
+    const launcherWorkspace = {
+      id: 'w_remote12345678',
+      label: 'Remote workspace'
+    }
+    const report = mergeUsageReports(
+      [rebaseUsageReportWorkspace(workspaceReport, launcherWorkspace)],
+      {
+        ...query,
+        workspaces: [launcherWorkspace.id]
+      }
+    )
+
+    expect(report.summary).toMatchObject({
+      observationCount: 1,
+      total: 100
+    })
+    expect(report.observations).toEqual([
+      expect.objectContaining({
+        workspaceId: launcherWorkspace.id,
+        workspaceLabel: launcherWorkspace.label
+      })
+    ])
+    expect(report.facets.workspace).toEqual([
+      expect.objectContaining({
+        id: launcherWorkspace.id,
+        label: launcherWorkspace.label,
+        total: 100
+      })
+    ])
+    expect(report.resources).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: launcherWorkspace.id,
+        kind: 'workspace',
+        label: launcherWorkspace.label
+      })
+    ]))
+  })
+
+  it('uses a public workspace label instead of exposing the endpoint folder', () => {
+    expect(resolveLauncherUsageWorkspaceLabel(
+      '/Users/private/projects/iohook',
+      'w_remote12345678',
+      'workspace:w_remote12345678'
+    )).toBe('iohook')
+    expect(resolveLauncherUsageWorkspaceLabel(
+      undefined,
+      'w_remote12345678',
+      'workspace:w_remote12345678'
+    )).toBe('w_remote12345678')
+  })
+
   it('keeps one attributed authority filterable beside unattributed local usage', () => {
     const plugin = buildUsageReport([createObservation(true)], query, resources)
     const local = buildUsageReport([{
@@ -153,6 +218,74 @@ describe('usage report aggregation', () => {
         authorityPlugins: ['remote-kimi']
       }).summary.total
     ).toBe(100)
+  })
+
+  it('accepts reports from older workspace runtimes without coverage metadata', () => {
+    const legacyReport = buildUsageReport([createObservation(false)], query)
+    delete (legacyReport as { coverage?: unknown }).coverage
+
+    expect(mergeUsageReports([legacyReport], query)).toMatchObject({
+      coverage: [],
+      summary: {
+        observationCount: 1,
+        total: 100
+      }
+    })
+  })
+
+  it('collects optional native adapter usage as a local launcher source', async () => {
+    const adapter = {
+      getUsage: async () => ({
+        coverage: {
+          id: 'adapter:codex-history',
+          kind: 'local' as const,
+          label: 'Codex local history',
+          status: 'available' as const
+        },
+        observations: [createObservation(false)],
+        resources
+      }),
+      query: async () => ({
+        emit: () => undefined,
+        kill: () => undefined
+      })
+    } satisfies Adapter
+    const createContext = async () => ({
+      adapter,
+      adapterCtx: {} as AdapterCtx
+    })
+
+    const reports = await collectAdapterUsageReports(query, ['codex'], createContext)
+
+    expect(reports).toHaveLength(1)
+    expect(reports[0]?.summary.total).toBe(100)
+    expect(reports[0]?.coverage).toEqual([
+      expect.objectContaining({
+        id: 'adapter:codex-history',
+        kind: 'local',
+        status: 'available'
+      })
+    ])
+    expect(reports[0]?.observations[0]?.provenance.origin).toBe('local')
+  })
+
+  it('reports a built-in usage source as unavailable when its adapter context cannot load', async () => {
+    const reports = await collectAdapterUsageReports(
+      query,
+      ['codex'],
+      async () => {
+        throw new Error('adapter context failed')
+      }
+    )
+
+    expect(reports).toHaveLength(1)
+    expect(reports[0]?.coverage).toEqual([
+      expect.objectContaining({
+        id: 'adapter:codex',
+        message: 'adapter context failed',
+        status: 'unavailable'
+      })
+    ])
   })
 })
 

@@ -21,6 +21,7 @@ import type {
 } from '@oneworks/types'
 import type { ConfigDetailRoute } from './config/configDetail'
 
+import { getLauncherWorkspaceSelectorState } from '#~/api/launcher'
 import { RouteErrorState } from '#~/components/error-state'
 import { RouteContainerHeader } from '#~/components/layout/RouteContainerHeader'
 import { RouteContainerLayout } from '#~/components/layout/RouteContainerLayout'
@@ -34,6 +35,7 @@ import {
 import { usePluginContext } from '#~/plugins/plugin-context'
 import { usePluginSlot } from '#~/plugins/plugin-slots'
 import { useRoutePluginChrome } from '#~/plugins/route-plugin-chrome'
+import { getRuntimeWorkspaceId } from '#~/runtime-config'
 import { mergeAppearanceConfigForEditing } from '#~/utils/appearance-config'
 
 import {
@@ -101,6 +103,13 @@ import { toLabel } from './config/record-editors/schemaRecordUtils'
 import { toDisplayEnvironmentName, toEnvironmentReference } from './config/worktree-environment-panel-model'
 import { PluginSettingsPage } from './plugins/PluginSettingsPage'
 import { isPluginSettingsTabKey, resolveSettingsTabKey } from './plugins/plugin-settings-route'
+import { UsageWorkspaceScopeControl } from './usage/@components/UsageWorkspaceScopeControl'
+import {
+  createDefaultUsageWorkspaceSelection,
+  createUsageWorkspaceScopeOptions,
+  normalizeUsageWorkspaceSelection,
+  resolveUsagePanelDataScope
+} from './usage/@core/usage-workspace-scope'
 import { UsagePanel } from './usage/UsagePanel'
 
 interface ConfigDraftConflict {
@@ -306,6 +315,7 @@ export function ConfigView() {
   const { pluginSnapshotStatus, snapshot: pluginSnapshot } = usePluginContext()
   const navigate = useNavigate()
   const location = useLocation()
+  const runtimeWorkspaceId = getRuntimeWorkspaceId()
   const setPendingSessionInitialContent = useSetAtom(pendingSessionInitialContentAtom)
   const setPendingSessionCreationContext = useSetAtom(pendingSessionCreationContextAtom)
   const {
@@ -643,6 +653,53 @@ export function ConfigView() {
     pluginSnapshotStatus !== 'loading' &&
     !tabKeys.has(queryValues.tab)
   const [activeTabKey, setActiveTabKeyState] = useState(queryTabKey)
+  const [usageWorkspaceSelection, setUsageWorkspaceSelection] = useState(
+    () => createDefaultUsageWorkspaceSelection(runtimeWorkspaceId)
+  )
+  const {
+    data: usageWorkspaceSelectorState,
+    error: usageWorkspaceSelectorError
+  } = useSWR(
+    activeTabKey === 'usage'
+      ? ['usage-workspace-selector', runtimeWorkspaceId ?? 'manager']
+      : null,
+    getLauncherWorkspaceSelectorState,
+    {
+      keepPreviousData: true,
+      revalidateOnFocus: false
+    }
+  )
+  const usageWorkspaceOptions = useMemo(
+    () =>
+      createUsageWorkspaceScopeOptions(
+        usageWorkspaceSelectorState,
+        runtimeWorkspaceId,
+        t('usage.scope.current')
+      ),
+    [runtimeWorkspaceId, t, usageWorkspaceSelectorState]
+  )
+  useEffect(() => {
+    if (usageWorkspaceSelectorState == null) return
+    setUsageWorkspaceSelection(current => {
+      const next = normalizeUsageWorkspaceSelection(
+        current,
+        usageWorkspaceOptions,
+        runtimeWorkspaceId
+      )
+      return next.length === current.length &&
+          next.every((value, index) => value === current[index])
+        ? current
+        : next
+    })
+  }, [
+    runtimeWorkspaceId,
+    usageWorkspaceOptions,
+    usageWorkspaceSelectorState
+  ])
+  const usageDataScope = useMemo(
+    () => resolveUsagePanelDataScope(usageWorkspaceSelection, runtimeWorkspaceId),
+    [runtimeWorkspaceId, usageWorkspaceSelection]
+  )
   const hasModelServiceImportQuery = useMemo(() => (
     modelServiceImportQueryKeys.some(key => searchParams.has(key))
   ), [searchParams])
@@ -1927,7 +1984,11 @@ export function ConfigView() {
         />
       )}
       {tab.key === 'usage' && (
-        <UsagePanel surface='workspace' />
+        <UsagePanel
+          dataScope={usageDataScope}
+          key={`workspace-usage:${usageWorkspaceSelection.join('|')}`}
+          surface='workspace'
+        />
       )}
       {'pluginSettingsPage' in tab && tab.pluginSettingsPage != null && (
         <PluginSettingsPage page={tab.pluginSettingsPage} />
@@ -2114,6 +2175,17 @@ export function ConfigView() {
       header={
         <RouteContainerHeader
           actionItems={headerActionItems}
+          actions={activeTabKey === 'usage'
+            ? (
+              <UsageWorkspaceScopeControl
+                globalAvailable={usageWorkspaceSelectorState != null &&
+                  usageWorkspaceSelectorError == null}
+                options={usageWorkspaceOptions}
+                selection={usageWorkspaceSelection}
+                onChange={setUsageWorkspaceSelection}
+              />
+            )
+            : undefined}
           breadcrumb={headerBreadcrumb}
           icon={activeContentTab?.icon ?? 'settings'}
           onOpenSidebar={openRouteSidebar}

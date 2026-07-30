@@ -3442,7 +3442,18 @@
     "workspaceScope": "当前工作区",
     "globalDescription": "汇总所有可用工作区与扩展数据源的 Token 用量。",
     "workspaceDescription": "默认展示当前工作区的 Token 用量。",
-    "searchPlaceholder": "可在下方按条件筛选用量",
+    "scope": {
+      "selectorLabel": "选择用量统计范围",
+      "global": "全局",
+      "workspaces": "工作区",
+      "current": "当前",
+      "selectedCount": "{{count}} 个工作区"
+    },
+    "searchLabel": "搜索用量筛选项",
+    "searchPlaceholder": "搜索模型服务、工具、账号或插件",
+    "searchResultsLabel": "用量筛选搜索结果",
+    "searchNoResults": "没有匹配的用量筛选项",
+    "searchClear": "清空搜索",
     "loadFailed": "用量数据加载失败",
     "loadFailedDescription": "当前暂时无法读取用量数据。",
     "observationCount": "{{count}} 条用量记录",
@@ -3480,8 +3491,14 @@
     },
     "activity": {
       "title": "Token 活动",
-      "description": "所选时间范围内每天上报的 Token 用量。",
-      "label": "每日 Token 用量热力图"
+      "description": "过去一年每天上报的 Token 用量。",
+      "label": "过去一年的每日 Token 用量",
+      "less": "少",
+      "more": "多",
+      "legendLabel": "Token 用量强度",
+      "noUsageDayLabel": "{{date}}没有 Token 用量",
+      "dayLabel": "{{date}} · {{tokens}} Token",
+      "selectionSummary": "{{count}} 天 · {{tokens}} Token"
     },
     "breakdowns": {
       "modelServices": "模型服务",
@@ -3489,6 +3506,8 @@
       "tools": "工具"
     },
     "empty": {
+      "noSourcesTitle": "尚未连接用量数据源",
+      "noSourcesDescription": "打开支持的工具、工作区或扩展后，会自动汇总可用的 Token 记录。",
       "title": "暂无已上报的 Token 用量",
       "description": "支持的工具或扩展上报 Token 后，会在这里展示。"
     }

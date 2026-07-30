@@ -82,6 +82,15 @@
         "require": "./dist/worktree-environment-import.js"
       }
     },
+    "./usage": {
+      "__oneworks__": {
+        "default": "./src/usage.ts"
+      },
+      "default": {
+        "import": "./dist/usage.mjs",
+        "require": "./dist/usage.js"
+      }
+    },
     "./icon": {
       "__oneworks__": {
         "default": "./src/icon.ts"

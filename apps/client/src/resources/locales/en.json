@@ -3441,7 +3441,19 @@
     "workspaceScope": "Current workspace",
     "globalDescription": "Token usage across available workspaces and extension sources.",
     "workspaceDescription": "Token usage for the current workspace.",
-    "searchPlaceholder": "Usage filters are available below",
+    "scope": {
+      "selectorLabel": "Select usage scope",
+      "global": "Global",
+      "workspaces": "Workspaces",
+      "current": "Current",
+      "selectedCount_one": "{{count}} workspace",
+      "selectedCount_other": "{{count}} workspaces"
+    },
+    "searchLabel": "Search usage filters",
+    "searchPlaceholder": "Search model services, tools, accounts, or plugins",
+    "searchResultsLabel": "Usage filter search results",
+    "searchNoResults": "No matching usage filters",
+    "searchClear": "Clear search",
     "loadFailed": "Failed to load usage",
     "loadFailedDescription": "Usage data is temporarily unavailable.",
     "observationCount_one": "{{count}} usage record",
@@ -3481,8 +3493,15 @@
     },
     "activity": {
       "title": "Token activity",
-      "description": "Daily reported token usage during the selected period.",
-      "label": "Daily token usage heatmap"
+      "description": "Daily reported token usage over the past year.",
+      "label": "Daily token usage over the past year",
+      "less": "Less",
+      "more": "More",
+      "legendLabel": "Token usage intensity",
+      "noUsageDayLabel": "No token usage on {{date}}",
+      "dayLabel": "{{tokens}} tokens on {{date}}",
+      "selectionSummary_one": "{{count}} day · {{tokens}} tokens",
+      "selectionSummary_other": "{{count}} days · {{tokens}} tokens"
     },
     "breakdowns": {
       "modelServices": "Model services",
@@ -3490,6 +3509,8 @@
       "tools": "Tools"
     },
     "empty": {
+      "noSourcesTitle": "No usage sources connected",
+      "noSourcesDescription": "Token records are collected after a supported tool, workspace, or extension becomes available.",
       "title": "No reported token usage",
       "description": "Usage appears after a supported tool or extension reports token counts."
     }
