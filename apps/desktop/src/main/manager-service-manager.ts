@@ -8,7 +8,14 @@ import { resolveProjectHomePath } from '@oneworks/register/dotenv'
 
 import { resolvePackagedCliPathEnv } from './cli-path-env'
 import { CLIENT_BASE, MANAGER_READY_TIMEOUT_MS, SERVER_HOST } from './constants'
-import { isDev, repoRoot, resolveCachedServerPackageEnv, resolveServerExecutable, serverChildPath } from './paths'
+import {
+  isDev,
+  repoRoot,
+  resolveCachedServerPackageEnv,
+  resolveClientPackageDir,
+  resolveServerExecutable,
+  serverChildPath
+} from './paths'
 import { isChildProcessRunning, killChildProcess, writePrefixedChunk } from './process-utils'
 import { getAvailablePort, waitForServerStartup } from './ready-checks'
 import type { DesktopRuntimeState, ManagerService } from './types'
@@ -70,6 +77,7 @@ export const createManagerRuntimeEnv = ({
     ...baseEnv,
     ...runtimePackageCacheVersionEnv
   }
+  const clientPackageDir = resolveClientPackageDir(packagedRuntimeEnv)
   const serverExecutable = resolveServerExecutable()
 
   return {
@@ -83,6 +91,7 @@ export const createManagerRuntimeEnv = ({
     ...resolveDesktopDevClientFsAllowEnv(packagedRuntimeEnv),
     __ONEWORKS_PROJECT_CLIENT_BASE__: CLIENT_BASE,
     __ONEWORKS_PROJECT_CLIENT_MODE__: 'none',
+    __ONEWORKS_PROJECT_CLIENT_PACKAGE_DIR__: clientPackageDir ?? '',
     __ONEWORKS_PROJECT_SERVER_ALLOW_CORS__: 'true',
     __ONEWORKS_PROJECT_SERVER_CORS_ORIGIN__: clientOrigin,
     __ONEWORKS_PROJECT_SERVER_DATA_DIR__: dataDir,

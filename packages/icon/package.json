@@ -1,7 +1,7 @@
 {
   "name": "@oneworks/icon",
   "type": "module",
-  "version": "0.1.0-beta.9",
+  "version": "0.1.0-beta.10",
   "description": "OneWorks icon geometry, canvas renderer, SVG renderer, and browser loader",
   "repository": {
     "type": "git",

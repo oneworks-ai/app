@@ -5,7 +5,6 @@ import process from 'node:process'
 import { InvalidArgumentError, program } from 'commander'
 
 import { applyServerRuntimeEnv, runRuntimeEntry } from '@oneworks/server/cli-runtime'
-import { resolveActiveModulePackageDirSync } from '@oneworks/server/module-update-cache'
 
 import { getWebDescription, getWebVersion } from './package-config'
 
@@ -65,8 +64,7 @@ Examples:
   )
   .action(async (options: WebCliOptions) => {
     const packageDir = process.env.__ONEWORKS_PROJECT_PACKAGE_DIR__ ?? resolve(process.cwd(), 'apps/web')
-    const serverPackageDir = resolveActiveModulePackageDirSync('@oneworks/server') ??
-      dirname(nodeRequire.resolve('@oneworks/server/package.json'))
+    const serverPackageDir = dirname(nodeRequire.resolve('@oneworks/server/package.json'))
     const isWorkspaceWeb = hasConfiguredWorkspace(options)
     const env = applyServerRuntimeEnv({
       cwd: process.cwd(),
