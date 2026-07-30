@@ -13,6 +13,7 @@ import {
   normalizeServerBaseUrl
 } from '#~/runtime-config'
 
+import type { AuthStatus } from './auth'
 import { fetchApiJson, jsonHeaders } from './base'
 import type { ApiOkResponse } from './types'
 
@@ -25,6 +26,10 @@ export const getLauncherManagerServerBaseUrl = (managerServerBaseUrl?: string) =
 
 export const createLauncherApiUrl = (path: string, managerServerBaseUrl?: string) => (
   createServerUrlFromBase(getLauncherManagerServerBaseUrl(managerServerBaseUrl), path)
+)
+
+export const getLauncherAuthStatus = () => (
+  fetchApiJson<AuthStatus>(createLauncherApiUrl('/api/auth/status'))
 )
 
 export const createLauncherClientOriginHeaders = (): Record<string, string> => {

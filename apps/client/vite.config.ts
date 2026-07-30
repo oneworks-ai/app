@@ -1,8 +1,10 @@
 /* eslint-disable max-lines -- Vite config keeps dev-server plugins and production build policy together. */
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
+import { types } from 'node:util'
 
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
@@ -44,6 +46,28 @@ const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
 const clientPackageJson = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as {
   version?: string
 }
+const require = createRequire(import.meta.url)
+const {
+  parseAppBuildInfoJson
+} = require('../../packages/types/src/app-build-info-runtime.js') as {
+  parseAppBuildInfoJson: (value: string) => {
+    buildTime: string | null
+    commit: string | null
+    version: string
+  }
+}
+
+const normalizeViteVersion = (value: unknown) => {
+  if (typeof value !== 'string') return undefined
+  const normalized = parseAppBuildInfoJson(JSON.stringify({ version: value })).version
+  return normalized === value.trim() ? normalized : undefined
+}
+const normalizeViteCommit = (value: unknown) => (
+  parseAppBuildInfoJson(JSON.stringify({ commit: value })).commit
+)
+const normalizeViteBuildTime = (value: unknown) => (
+  parseAppBuildInfoJson(JSON.stringify({ buildTime: value })).buildTime
+)
 
 const readGit = (args: string[]) =>
   execFileSync('git', args, {
@@ -72,10 +96,78 @@ const resolveGitCommitHash = () => {
   }
 }
 
+const firstNormalized = <T>(
+  values: unknown[],
+  normalize: (value: unknown) => T | null | undefined
+) => {
+  for (const value of values) {
+    if (types.isProxy(value)) continue
+    const normalized = normalize(value)
+    if (normalized != null) return normalized
+  }
+  return undefined
+}
+
+const resolveSourceDateEpoch = (value: string | undefined) => {
+  const normalized = value?.trim() ?? ''
+  if (!/^\d{1,15}$/u.test(normalized)) return ''
+  const milliseconds = Number(normalized) * 1_000
+  if (!Number.isSafeInteger(milliseconds)) return ''
+  const date = new Date(milliseconds)
+  return Number.isNaN(date.getTime()) ? '' : normalizeViteBuildTime(date.toISOString()) ?? ''
+}
+
+const resolveGitCommitTime = (commitHash: string) => {
+  try {
+    return normalizeViteBuildTime(readGit(['show', '-s', '--format=%cI', commitHash])) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+export const resolveViteBuildMetadata = (candidates: {
+  buildTime: unknown[]
+  commit: unknown[]
+  version: unknown[]
+}) => ({
+  buildTime: firstNormalized(candidates.buildTime, normalizeViteBuildTime) ?? '',
+  commit: firstNormalized(candidates.commit, normalizeViteCommit) ?? '',
+  version: firstNormalized(candidates.version, normalizeViteVersion) ?? ''
+})
+
 const devGitRef = isDev ? resolveDevGitRef() : ''
+const explicitBuildMetadata = resolveViteBuildMetadata({
+  buildTime: [
+    process.env.__ONEWORKS_PROJECT_CLIENT_BUILD_TIME__,
+    process.env.ONEWORKS_CLIENT_BUILD_TIME,
+    resolveSourceDateEpoch(process.env.SOURCE_DATE_EPOCH)
+  ],
+  commit: [
+    process.env.__ONEWORKS_PROJECT_CLIENT_COMMIT_HASH__,
+    process.env.ONEWORKS_CLIENT_COMMIT_HASH,
+    process.env.GITHUB_SHA,
+    resolveGitCommitHash()
+  ],
+  version: [
+    process.env.__ONEWORKS_PROJECT_CLIENT_VERSION__,
+    process.env.ONEWORKS_CLIENT_VERSION,
+    clientPackageJson.version
+  ]
+})
+const clientCommitHash = explicitBuildMetadata.commit
+const explicitClientBuildTime = explicitBuildMetadata.buildTime
+const clientBuildTime = explicitClientBuildTime ||
+  (clientCommitHash === '' ? '' : resolveGitCommitTime(clientCommitHash))
+const clientBuildTimeSource = clientBuildTime === ''
+  ? 'unavailable'
+  : explicitClientBuildTime === ''
+  ? 'commit'
+  : 'build'
 process.env.__ONEWORKS_PROJECT_DEV_GIT_REF__ = devGitRef
-process.env.__ONEWORKS_PROJECT_CLIENT_VERSION__ ??= clientPackageJson.version ?? ''
-process.env.__ONEWORKS_PROJECT_CLIENT_COMMIT_HASH__ ??= resolveGitCommitHash()
+process.env.__ONEWORKS_PROJECT_CLIENT_VERSION__ = explicitBuildMetadata.version
+process.env.__ONEWORKS_PROJECT_CLIENT_COMMIT_HASH__ = clientCommitHash
+process.env.__ONEWORKS_PROJECT_CLIENT_BUILD_TIME__ = clientBuildTime
+process.env.__ONEWORKS_PROJECT_CLIENT_BUILD_TIME_SOURCE__ = clientBuildTimeSource
 const normalizeTitle = (title: string) => title.trim().replace(/\s+\[[^\]]+\]$/, '')
 const normalizeProxyHost = (value?: string) => {
   const host = value?.trim()

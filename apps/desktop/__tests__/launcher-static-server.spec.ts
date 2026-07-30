@@ -64,6 +64,7 @@ describe('launcher static server', () => {
     const indexHtml = await indexResponse.text()
     expect(indexHtml).toContain('/ui/assets/app.css')
     expect(indexHtml).toContain('window.__ONEWORKS_PROJECT_RUNTIME_ENV__=')
+    expect(indexHtml).toContain('window.__ONEWORKS_PROJECT_RUNTIME_ENV_JSON__=')
 
     const cssResponse = await fetch(`${launcher.clientUrl}assets/app.css`)
     expect(cssResponse.status).toBe(200)

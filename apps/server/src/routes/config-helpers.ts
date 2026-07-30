@@ -83,6 +83,7 @@ export const loadAdapterBuiltinModels = (
 export const buildConfigAbout = async () => {
   const appInfo = await getServerAppInfo()
   return {
+    build: appInfo.build,
     version: appInfo.version,
     lastReleaseAt: appInfo.lastReleaseAt,
     urls: {

@@ -1,6 +1,8 @@
 const path = require('node:path')
+const { types } = require('node:util')
 
 const packageJson = require('./package.json')
+const { parseAppBuildInfoJson } = require('@oneworks/types/app-build-info')
 
 const DEFAULT_CLIENT_BASE = '/ui/'
 const DEFAULT_BASE_PLACEHOLDER = '/__ONEWORKS_PROJECT_CLIENT_BASE__/'
@@ -65,21 +67,58 @@ const replaceBase = (content, base, placeholder) => {
   return content.split(placeholder).join(base)
 }
 
+const readNodeEnvironment = (env) => {
+  if (env == null || typeof env !== 'object' || Array.isArray(env) || types.isProxy(env)) {
+    return {}
+  }
+  const prototype = Object.getPrototypeOf(env)
+  if (prototype !== Object.prototype && prototype !== null) return {}
+
+  const result = {}
+  for (const key of [
+    '__ONEWORKS_PROJECT_CLIENT_VERSION__',
+    '__ONEWORKS_PROJECT_CLIENT_COMMIT_HASH__',
+    '__ONEWORKS_PROJECT_CLIENT_BUILD_TIME__',
+    '__ONEWORKS_PROJECT_CLIENT_BUILD_TIME_SOURCE__',
+    '__ONEWORKS_PROJECT_SERVER_BASE_URL__',
+    '__ONEWORKS_PROJECT_SERVER_HOST__',
+    '__ONEWORKS_PROJECT_SERVER_PORT__',
+    '__ONEWORKS_PROJECT_SERVER_WS_PATH__',
+    '__ONEWORKS_PROJECT_CLIENT_MODE__'
+  ]) {
+    const descriptor = Object.getOwnPropertyDescriptor(env, key)
+    if (descriptor != null && Object.hasOwn(descriptor, 'value')) result[key] = descriptor.value
+  }
+  return result
+}
+
 const createRuntimeScript = (base, env) => {
+  const trustedEnv = readNodeEnvironment(env)
+  const clientBuild = parseAppBuildInfoJson(JSON.stringify({
+    version: trustedEnv.__ONEWORKS_PROJECT_CLIENT_VERSION__ ?? packageJson.version,
+    commit: trustedEnv.__ONEWORKS_PROJECT_CLIENT_COMMIT_HASH__,
+    buildTime: trustedEnv.__ONEWORKS_PROJECT_CLIENT_BUILD_TIME__,
+    buildTimeSource: trustedEnv.__ONEWORKS_PROJECT_CLIENT_BUILD_TIME_SOURCE__
+  }), packageJson.version)
   const runtimeEnv = {
-    __ONEWORKS_PROJECT_SERVER_BASE_URL__: env.__ONEWORKS_PROJECT_SERVER_BASE_URL__,
-    __ONEWORKS_PROJECT_SERVER_HOST__: env.__ONEWORKS_PROJECT_SERVER_HOST__,
-    __ONEWORKS_PROJECT_SERVER_PORT__: env.__ONEWORKS_PROJECT_SERVER_PORT__,
+    __ONEWORKS_PROJECT_SERVER_BASE_URL__: trustedEnv.__ONEWORKS_PROJECT_SERVER_BASE_URL__,
+    __ONEWORKS_PROJECT_SERVER_HOST__: trustedEnv.__ONEWORKS_PROJECT_SERVER_HOST__,
+    __ONEWORKS_PROJECT_SERVER_PORT__: trustedEnv.__ONEWORKS_PROJECT_SERVER_PORT__,
     __ONEWORKS_PROJECT_SERVER_WS_PATH__: normalizePath(
-      env.__ONEWORKS_PROJECT_SERVER_WS_PATH__,
+      trustedEnv.__ONEWORKS_PROJECT_SERVER_WS_PATH__,
       DEFAULT_SERVER_WS_PATH
     ),
-    __ONEWORKS_PROJECT_CLIENT_MODE__: env.__ONEWORKS_PROJECT_CLIENT_MODE__ ?? 'static',
+    __ONEWORKS_PROJECT_CLIENT_MODE__: trustedEnv.__ONEWORKS_PROJECT_CLIENT_MODE__ ?? 'static',
     __ONEWORKS_PROJECT_CLIENT_BASE__: trimTrailingSlash(base),
-    __ONEWORKS_PROJECT_CLIENT_VERSION__: env.__ONEWORKS_PROJECT_CLIENT_VERSION__ ?? packageJson.version,
-    __ONEWORKS_PROJECT_CLIENT_COMMIT_HASH__: env.__ONEWORKS_PROJECT_CLIENT_COMMIT_HASH__ ?? ''
+    __ONEWORKS_PROJECT_CLIENT_VERSION__: clientBuild.version,
+    __ONEWORKS_PROJECT_CLIENT_COMMIT_HASH__: clientBuild.commit ?? '',
+    __ONEWORKS_PROJECT_CLIENT_BUILD_TIME__: clientBuild.buildTime ?? '',
+    __ONEWORKS_PROJECT_CLIENT_BUILD_TIME_SOURCE__: clientBuild.buildTimeSource
   }
-  return `<script>window.__ONEWORKS_PROJECT_RUNTIME_ENV__=${JSON.stringify(runtimeEnv)}</script>`
+  const serializedRuntimeEnv = JSON.stringify(runtimeEnv).replace(/</gu, '\\u003c')
+  const runtimeEnvJsonLiteral = JSON.stringify(serializedRuntimeEnv).replace(/</gu, '\\u003c')
+  const clientBuildJsonLiteral = JSON.stringify(JSON.stringify(clientBuild)).replace(/</gu, '\\u003c')
+  return `<script>window.__ONEWORKS_PROJECT_RUNTIME_ENV_JSON__=${runtimeEnvJsonLiteral};window.__ONEWORKS_PROJECT_CLIENT_BUILD_INFO_JSON__=${clientBuildJsonLiteral};window.__ONEWORKS_PROJECT_RUNTIME_ENV__=JSON.parse(window.__ONEWORKS_PROJECT_RUNTIME_ENV_JSON__)</script>`
 }
 
 const getContentType = (filePath) => {

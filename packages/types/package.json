@@ -26,6 +26,15 @@
         "require": "./dist/standalone-route.js"
       }
     },
+    "./app-build-info": {
+      "types": "./src/app-build-info-runtime.d.ts",
+      "__oneworks__": {
+        "default": "./src/app-build-info.ts"
+      },
+      "import": "./src/app-build-info-runtime.js",
+      "require": "./src/app-build-info-runtime.js",
+      "default": "./src/app-build-info-runtime.js"
+    },
     "./package.json": "./package.json"
   }
 }

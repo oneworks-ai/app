@@ -7,8 +7,8 @@
 }
 
 .launcher-about .config-about__card,
-.launcher-about .config-about__list,
-.launcher-about .config-about__build-source {
+.launcher-about .config-about__fingerprint,
+.launcher-about .config-about__list {
   border-radius: var(--oneworks-group-radius, 7px);
   background: color-mix(in srgb, var(--bg-color) 86%, transparent);
 }

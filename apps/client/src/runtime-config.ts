@@ -9,6 +9,8 @@ export type RuntimeEnv = Partial<{
   __ONEWORKS_PROJECT_CLIENT_DEV_SERVER__: string
   __ONEWORKS_PROJECT_CLIENT_VERSION__: string
   __ONEWORKS_PROJECT_CLIENT_COMMIT_HASH__: string
+  __ONEWORKS_PROJECT_CLIENT_BUILD_TIME__: string
+  __ONEWORKS_PROJECT_CLIENT_BUILD_TIME_SOURCE__: string
   __ONEWORKS_PROJECT_MANAGER_SERVER_BASE_URL__: string
   __ONEWORKS_PROJECT_WORKSPACE_ID__: string
   __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: string
@@ -39,17 +41,73 @@ export const resolveDevDocumentTitle = (
 }
 
 const getGlobalRuntimeEnv = () => {
-  const globalScope = globalThis as { __ONEWORKS_PROJECT_RUNTIME_ENV__?: RuntimeEnv }
-  return globalScope.__ONEWORKS_PROJECT_RUNTIME_ENV__
+  const globalScope = globalThis as {
+    __ONEWORKS_PROJECT_RUNTIME_ENV__?: unknown
+    __ONEWORKS_PROJECT_RUNTIME_ENV_JSON__?: unknown
+  }
+  if (typeof globalScope.__ONEWORKS_PROJECT_RUNTIME_ENV_JSON__ === 'string') {
+    try {
+      const parsed = JSON.parse(globalScope.__ONEWORKS_PROJECT_RUNTIME_ENV_JSON__)
+      return parsed != null && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? parsed as RuntimeEnv
+        : undefined
+    } catch {
+      return undefined
+    }
+  }
+
+  // Android's bundled asset loader is a trusted native producer during the
+  // migration. Read only own primitive data properties; never invoke getters.
+  const legacy = globalScope.__ONEWORKS_PROJECT_RUNTIME_ENV__
+  if (legacy == null || typeof legacy !== 'object' || Array.isArray(legacy)) return undefined
+  const result: RuntimeEnv = {}
+  for (const key of runtimeEnvKeys) {
+    const descriptor = Object.getOwnPropertyDescriptor(legacy, key)
+    if (descriptor != null && Object.hasOwn(descriptor, 'value') && typeof descriptor.value === 'string') {
+      result[key] = descriptor.value
+    }
+  }
+  return result
+}
+
+const runtimeEnvKeys: Array<keyof RuntimeEnv> = [
+  '__ONEWORKS_PROJECT_SERVER_BASE_URL__',
+  '__ONEWORKS_PROJECT_SERVER_HOST__',
+  '__ONEWORKS_PROJECT_SERVER_PORT__',
+  '__ONEWORKS_PROJECT_SERVER_ROLE__',
+  '__ONEWORKS_PROJECT_SERVER_WS_PATH__',
+  '__ONEWORKS_PROJECT_CLIENT_MODE__',
+  '__ONEWORKS_PROJECT_CLIENT_BASE__',
+  '__ONEWORKS_PROJECT_CLIENT_DEV_SERVER__',
+  '__ONEWORKS_PROJECT_WORKSPACE_ID__',
+  '__ONEWORKS_PROJECT_WORKSPACE_FOLDER__'
+]
+
+export const getRuntimeEnvJson = () => {
+  const globalScope = globalThis as { __ONEWORKS_PROJECT_RUNTIME_ENV_JSON__?: unknown }
+  return typeof globalScope.__ONEWORKS_PROJECT_RUNTIME_ENV_JSON__ === 'string'
+    ? globalScope.__ONEWORKS_PROJECT_RUNTIME_ENV_JSON__
+    : undefined
+}
+
+export const getRuntimeClientBuildInfoJson = () => {
+  const globalScope = globalThis as { __ONEWORKS_PROJECT_CLIENT_BUILD_INFO_JSON__?: unknown }
+  return typeof globalScope.__ONEWORKS_PROJECT_CLIENT_BUILD_INFO_JSON__ === 'string'
+    ? globalScope.__ONEWORKS_PROJECT_CLIENT_BUILD_INFO_JSON__
+    : undefined
 }
 
 export const mergeRuntimeEnv = (patch: RuntimeEnv) => {
-  const globalScope = globalThis as { __ONEWORKS_PROJECT_RUNTIME_ENV__?: RuntimeEnv }
+  const globalScope = globalThis as {
+    __ONEWORKS_PROJECT_RUNTIME_ENV__?: RuntimeEnv
+    __ONEWORKS_PROJECT_RUNTIME_ENV_JSON__?: string
+  }
   const nextRuntimeEnv = {
-    ...(globalScope.__ONEWORKS_PROJECT_RUNTIME_ENV__ ?? {}),
+    ...(getGlobalRuntimeEnv() ?? {}),
     ...patch
   }
   globalScope.__ONEWORKS_PROJECT_RUNTIME_ENV__ = nextRuntimeEnv
+  globalScope.__ONEWORKS_PROJECT_RUNTIME_ENV_JSON__ = JSON.stringify(nextRuntimeEnv)
   return nextRuntimeEnv
 }
 

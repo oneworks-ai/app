@@ -111,6 +111,9 @@ class BundledAssetLoader(private val context: Context) {
                 __ONEWORKS_PROJECT_SERVER_ROLE__: 'manager'
               })
           };
+          globalThis.__ONEWORKS_PROJECT_RUNTIME_ENV_JSON__ = JSON.stringify(
+            globalThis.__ONEWORKS_PROJECT_RUNTIME_ENV__
+          );
 
           const diagnostics = globalThis.__ONEWORKS_ANDROID_CLIENT_DIAGNOSTICS__ = {
             errors: []

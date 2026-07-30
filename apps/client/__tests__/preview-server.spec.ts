@@ -63,6 +63,9 @@ describe('startPreviewServer', () => {
       host: '127.0.0.1',
       port: 0,
       runtimeEnv: {
+        __ONEWORKS_PROJECT_CLIENT_BUILD_TIME__: '2026-07-30T00:09:10.000Z',
+        __ONEWORKS_PROJECT_CLIENT_BUILD_TIME_SOURCE__: 'build',
+        __ONEWORKS_PROJECT_CLIENT_COMMIT_HASH__: 'abcdef0123456789abcdef0123456789abcdef01',
         __ONEWORKS_PROJECT_CLIENT_MODE__: 'static',
         __ONEWORKS_PROJECT_SERVER_PORT__: '8787'
       }
@@ -78,7 +81,15 @@ describe('startPreviewServer', () => {
     const html = await htmlResponse.text()
     expect(html).toContain('/ui/assets/main.js')
     expect(html).toContain('window.__ONEWORKS_PROJECT_RUNTIME_ENV__=')
+    expect(html).toContain('window.__ONEWORKS_PROJECT_CLIENT_BUILD_INFO_JSON__=')
     expect(html).toContain('"__ONEWORKS_PROJECT_SERVER_PORT__":"8787"')
+    expect(html).toContain(
+      '"__ONEWORKS_PROJECT_CLIENT_COMMIT_HASH__":"abcdef0123456789abcdef0123456789abcdef01"'
+    )
+    expect(html).toContain(
+      '"__ONEWORKS_PROJECT_CLIENT_BUILD_TIME__":"2026-07-30T00:09:10.000Z"'
+    )
+    expect(html).toContain('"__ONEWORKS_PROJECT_CLIENT_BUILD_TIME_SOURCE__":"build"')
 
     const assetResponse = await fetch(`${preview.origin}/ui/assets/main.js`)
     expect(assetResponse.status).toBe(200)
@@ -97,5 +108,62 @@ describe('startPreviewServer', () => {
 
     const serviceWorkerResponse = await fetch(`${preview.origin}/ui/sw.js`)
     expect(serviceWorkerResponse.headers.get('cache-control')).toBe('no-cache')
+  })
+
+  it('serializes malicious runtime values without allowing a second inline script', async () => {
+    const fixture = createDistFixture()
+    cleanups.push(fixture.cleanup)
+    const payload = '</script><script>globalThis.previewRuntimePwned=true</script>'
+    const preview = await startPreviewServer({
+      base: '/ui',
+      distPath: fixture.distPath,
+      host: '127.0.0.1',
+      port: 0,
+      runtimeEnv: {
+        __ONEWORKS_PROJECT_CLIENT_COMMIT_HASH__: payload,
+        __ONEWORKS_PROJECT_CLIENT_VERSION__: '01.2.3',
+        __ONEWORKS_PROJECT_SERVER_BASE_URL__: payload
+      }
+    })
+    servers.push(preview)
+
+    const html = await (await fetch(`${preview.origin}/ui/`)).text()
+    expect(html).not.toContain(payload)
+    expect(html).toContain('\\u003c/script>\\u003cscript>globalThis.previewRuntimePwned=true\\u003c/script>')
+    expect(html.match(/<script/gu)).toHaveLength(2)
+    expect(html).toContain('"__ONEWORKS_PROJECT_CLIENT_VERSION__":"0.1.0-beta.9"')
+    expect(html).toContain('"__ONEWORKS_PROJECT_CLIENT_COMMIT_HASH__":""')
+  })
+
+  it('rejects Proxy runtime metadata before reading an accessor or trap', async () => {
+    const fixture = createDistFixture()
+    cleanups.push(fixture.cleanup)
+    let trapCount = 0
+    const runtimeEnv = new Proxy({}, {
+      get: () => {
+        trapCount += 1
+        return undefined
+      },
+      getOwnPropertyDescriptor: () => {
+        trapCount += 1
+        return undefined
+      },
+      getPrototypeOf: () => {
+        trapCount += 1
+        return null
+      }
+    })
+    const preview = await startPreviewServer({
+      base: '/ui',
+      distPath: fixture.distPath,
+      host: '127.0.0.1',
+      port: 0,
+      runtimeEnv: runtimeEnv as Record<string, string>
+    })
+    servers.push(preview)
+
+    const html = await (await fetch(`${preview.origin}/ui/`)).text()
+    expect(html).toContain('"__ONEWORKS_PROJECT_CLIENT_COMMIT_HASH__":""')
+    expect(trapCount).toBe(0)
   })
 })

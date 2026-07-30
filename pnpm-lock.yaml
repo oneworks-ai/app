@@ -227,6 +227,9 @@ importers:
       '@oneworks/route-layout':
         specifier: workspace:*
         version: link:../../packages/route-layout
+      '@oneworks/types':
+        specifier: workspace:*
+        version: link:../../packages/types
       '@yume-chan/scrcpy':
         specifier: 2.3.0
         version: 2.3.0
@@ -285,9 +288,6 @@ importers:
       '@oneworks/plugin-chrome-devtools':
         specifier: workspace:*
         version: link:../../packages/plugins/chrome-devtools
-      '@oneworks/types':
-        specifier: workspace:*
-        version: link:../../packages/types
       '@oneworks/utils':
         specifier: workspace:*
         version: link:../../packages/utils

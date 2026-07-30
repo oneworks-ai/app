@@ -22,10 +22,14 @@ export function authRouter(env: ServerEnv): Router {
   const getPublicStatus = async (
     config: Awaited<ReturnType<typeof resolveWebAuthConfig>>,
     authenticated: boolean
-  ) => ({
-    ...toAuthPublicStatus(config, authenticated),
-    version: (await getServerAppInfo()).version
-  })
+  ) => {
+    const appInfo = await getServerAppInfo()
+    return {
+      ...toAuthPublicStatus(config, authenticated),
+      build: appInfo.build,
+      version: appInfo.version
+    }
+  }
 
   router.get('/status', async (ctx) => {
     const config = await resolveWebAuthConfig(env)

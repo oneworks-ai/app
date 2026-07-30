@@ -4846,15 +4846,40 @@
     },
     "about": {
       "software": "Software Info",
+      "client": "Client",
+      "server": "Server",
       "version": "Version",
       "clientVersion": "Client Version",
       "serverVersion": "Server Version",
       "commitHash": "Build Commit",
       "lastRelease": "Last Release",
       "checkUpdate": "Check Updates",
+      "copyDiagnostics": "Copy diagnostics",
+      "copySuccess": "Diagnostic information copied",
+      "copyFailed": "Could not copy diagnostic information",
+      "retry": "Retry",
       "docs": "Documentation",
       "contact": "Contact Us",
       "feedback": "Feedback",
+      "fingerprint": {
+        "version": "Version",
+        "commit": "Commit",
+        "buildTime": "Build time",
+        "commitTimeSource": "commit time"
+      },
+      "connection": {
+        "connected": "Connected",
+        "loading": "Connecting",
+        "error": "Connection failed",
+        "unavailable": "Unavailable",
+        "loadingDescription": "Reading Server build information…",
+        "errorDescription": "Server build information could not be read. Check the connection and try again.",
+        "unavailableDescription": "This Server did not provide build information. Retry after checking the Server version."
+      },
+      "mismatch": {
+        "version": "Client and Server versions are incompatible. Update them to compatible releases.",
+        "commit": "Client and Server were built from different commits."
+      },
       "buildSource": {
         "title": "App Source",
         "gitHash": "Git Hash",

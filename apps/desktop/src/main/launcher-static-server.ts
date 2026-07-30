@@ -53,7 +53,8 @@ const createRuntimeScript = (clientBase: string) => {
     __ONEWORKS_PROJECT_CLIENT_BASE__: clientBase,
     __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: ''
   }
-  return `<script>window.__ONEWORKS_PROJECT_RUNTIME_ENV__=${JSON.stringify(runtimeEnv)}</script>`
+  const runtimeEnvJsonLiteral = JSON.stringify(JSON.stringify(runtimeEnv)).replace(/</gu, '\\u003c')
+  return `<script>window.__ONEWORKS_PROJECT_RUNTIME_ENV_JSON__=${runtimeEnvJsonLiteral};window.__ONEWORKS_PROJECT_RUNTIME_ENV__=JSON.parse(window.__ONEWORKS_PROJECT_RUNTIME_ENV_JSON__)</script>`
 }
 
 const resolveStaticFile = (distPath: string, requestPath: string) => {
