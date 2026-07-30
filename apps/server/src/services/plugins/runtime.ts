@@ -10,6 +10,7 @@ import process from 'node:process'
 import { pathToFileURL } from 'node:url'
 
 import { updateConfigFile } from '@oneworks/config'
+import { withManagedPluginMutationLock } from '@oneworks/managed-plugins'
 import type {
   PluginConfig,
   PluginContributionAvailability,
@@ -878,6 +879,11 @@ export class PluginManager {
     return this.records.get(scope)
   }
 
+  forgetRuntimeMutationState(scope: string) {
+    this.enabledOverrides.delete(scope)
+    this.watchOverrides.delete(scope)
+  }
+
   subscribeWatchEvents(subscriber: PluginWatchSubscriber, scope?: string) {
     this.watchSubscribers.set(subscriber, scope)
     return () => {
@@ -909,24 +915,26 @@ export class PluginManager {
   }
 
   async setEnabled(scope: string, enabled: boolean, target: 'workspace' | 'global' = 'workspace') {
-    await this.load()
     validateId('scope', scope)
-    const record = this.records.get(scope)
-    if (record == null) {
-      throw new Error(`Plugin scope "${scope}" is not registered.`)
-    }
+    return this.withCurrentWorkspacePluginMutation(async () => {
+      await this.load()
+      const record = this.records.get(scope)
+      if (record == null) {
+        throw new Error(`Plugin scope "${scope}" is not registered.`)
+      }
 
-    await this.writePluginEnabledConfig(record.raw, enabled, target)
-    this.enabledOverrides.set(scope, enabled)
-    await this.reload()
-    const nextRecord = this.records.get(scope)
-    this.notifyWatchEvent({
-      type: 'plugin.changed',
-      scope
+      await this.writePluginEnabledConfig(record.raw, enabled, target)
+      this.enabledOverrides.set(scope, enabled)
+      await this.reload()
+      const nextRecord = this.records.get(scope)
+      this.notifyWatchEvent({
+        type: 'plugin.changed',
+        scope
+      })
+      return {
+        enabled: nextRecord?.instance.enabled ?? enabled
+      }
     })
-    return {
-      enabled: nextRecord?.instance.enabled ?? enabled
-    }
   }
 
   async setOptions(
@@ -934,23 +942,25 @@ export class PluginManager {
     options: Record<string, unknown>,
     target: 'workspace' | 'global' = 'workspace'
   ) {
-    await this.load()
     validateId('scope', scope)
-    const record = this.records.get(scope)
-    if (record == null) {
-      throw new Error(`Plugin scope "${scope}" is not registered.`)
-    }
+    return this.withCurrentWorkspacePluginMutation(async () => {
+      await this.load()
+      const record = this.records.get(scope)
+      if (record == null) {
+        throw new Error(`Plugin scope "${scope}" is not registered.`)
+      }
 
-    await this.writePluginOptionsConfig(record.raw, options, target)
-    await this.reload()
-    const nextRecord = this.records.get(scope)
-    this.notifyWatchEvent({
-      type: 'plugin.changed',
-      scope
+      await this.writePluginOptionsConfig(record.raw, options, target)
+      await this.reload()
+      const nextRecord = this.records.get(scope)
+      this.notifyWatchEvent({
+        type: 'plugin.changed',
+        scope
+      })
+      return {
+        options: nextRecord?.instance.options ?? options
+      }
     })
-    return {
-      options: nextRecord?.instance.options ?? options
-    }
   }
 
   async invokeCommand(scope: string, commandId: string, invocation: PluginCommandInvocation) {
@@ -1615,6 +1625,20 @@ export class PluginManager {
     return Array.isArray(config?.plugins) ? config.plugins : []
   }
 
+  private async withCurrentWorkspacePluginMutation<T>(callback: () => Promise<T>) {
+    const initialState = await loadConfigState()
+    return withManagedPluginMutationLock({
+      cwd: initialState.workspaceFolder,
+      env: process.env
+    }, async () => {
+      const currentState = await loadConfigState()
+      if (path.resolve(currentState.workspaceFolder) !== path.resolve(initialState.workspaceFolder)) {
+        throw new Error('Workspace changed before the plugin mutation could be applied.')
+      }
+      return callback()
+    })
+  }
+
   private async writePluginEnabledConfig(
     raw: ResolvedPluginInstance,
     enabled: boolean,
@@ -1622,35 +1646,34 @@ export class PluginManager {
   ) {
     const state = await loadConfigState()
     const source = target === 'global' ? 'global' : 'project'
-    const targetConfig = target === 'global' ? state.globalSource?.rawConfig : state.projectSource?.rawConfig
-    const plugins = [...this.getConfigPlugins(targetConfig)]
-    const index = plugins.findIndex(plugin => this.isPluginConfigMatch(plugin, raw))
-
-    const nextPlugin: PluginInstanceConfig = index >= 0
-      ? { ...plugins[index] }
-      : {
-        id: raw.requestId,
-        ...(raw.scope != null ? { scope: raw.scope } : {}),
-        ...(raw.watch === true ? { watch: true } : {})
-      }
-
-    if (enabled) {
-      delete nextPlugin.enabled
-    } else {
-      nextPlugin.enabled = false
-    }
-
-    if (index >= 0) {
-      plugins[index] = nextPlugin
-    } else {
-      plugins.push(nextPlugin)
-    }
-
     await updateConfigFile({
       workspaceFolder: state.workspaceFolder,
       source,
       section: 'plugins',
-      value: { plugins }
+      resolveValue: (currentConfig) => {
+        const plugins = [...this.getConfigPlugins(currentConfig)]
+        const index = plugins.findIndex(plugin => this.isPluginConfigMatch(plugin, raw))
+        const nextPlugin: PluginInstanceConfig = index >= 0
+          ? { ...plugins[index] }
+          : {
+            id: raw.requestId,
+            ...(raw.scope != null ? { scope: raw.scope } : {}),
+            ...(raw.watch === true ? { watch: true } : {})
+          }
+
+        if (enabled) {
+          delete nextPlugin.enabled
+        } else {
+          nextPlugin.enabled = false
+        }
+
+        if (index >= 0) {
+          plugins[index] = nextPlugin
+        } else {
+          plugins.push(nextPlugin)
+        }
+        return { plugins }
+      }
     })
   }
 
@@ -1662,35 +1685,40 @@ export class PluginManager {
     const state = await loadConfigState()
     const source = target === 'global' ? 'global' : 'project'
     const targetConfig = target === 'global' ? state.globalSource?.rawConfig : state.projectSource?.rawConfig
-    const plugins = [...this.getConfigPlugins(targetConfig)]
-    const index = plugins.findIndex(plugin => this.isPluginConfigMatch(plugin, raw))
+    const index = this.getConfigPlugins(targetConfig).findIndex(plugin => this.isPluginConfigMatch(plugin, raw))
     if (Object.keys(options).length === 0 && index < 0) return
-
-    const nextPlugin: PluginInstanceConfig = index >= 0
-      ? { ...plugins[index] }
-      : {
-        id: raw.requestId,
-        ...(raw.scope != null ? { scope: raw.scope } : {}),
-        ...(raw.watch === true ? { watch: true } : {})
-      }
-
-    if (Object.keys(options).length === 0) {
-      delete nextPlugin.options
-    } else {
-      nextPlugin.options = options
-    }
-
-    if (index >= 0) {
-      plugins[index] = nextPlugin
-    } else {
-      plugins.push(nextPlugin)
-    }
 
     await updateConfigFile({
       workspaceFolder: state.workspaceFolder,
       source,
       section: 'plugins',
-      value: { plugins }
+      resolveValue: (currentConfig) => {
+        const plugins = [...this.getConfigPlugins(currentConfig)]
+        const currentIndex = plugins.findIndex(plugin => this.isPluginConfigMatch(plugin, raw))
+        if (Object.keys(options).length === 0 && currentIndex < 0) {
+          return { plugins }
+        }
+        const nextPlugin: PluginInstanceConfig = currentIndex >= 0
+          ? { ...plugins[currentIndex] }
+          : {
+            id: raw.requestId,
+            ...(raw.scope != null ? { scope: raw.scope } : {}),
+            ...(raw.watch === true ? { watch: true } : {})
+          }
+
+        if (Object.keys(options).length === 0) {
+          delete nextPlugin.options
+        } else {
+          nextPlugin.options = options
+        }
+
+        if (currentIndex >= 0) {
+          plugins[currentIndex] = nextPlugin
+        } else {
+          plugins.push(nextPlugin)
+        }
+        return { plugins }
+      }
     })
   }
 

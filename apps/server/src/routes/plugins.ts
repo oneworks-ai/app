@@ -12,11 +12,16 @@ import type {
 import { getPluginManager } from '#~/services/plugins/index.js'
 import { setPluginMarketplaceSelection } from '#~/services/plugins/marketplace-selection.js'
 import { syncPluginMarketplaceSelection } from '#~/services/plugins/marketplace-sync.js'
+import {
+  PluginMarketplaceUninstallStaleError,
+  getPluginMarketplaceUninstallPlan,
+  uninstallPluginMarketplacePlugin
+} from '#~/services/plugins/marketplace-uninstall.js'
 import { resolvePluginMarketplaceVersions } from '#~/services/plugins/marketplace-version-resolver.js'
 import { listPluginMarketplaceCatalog } from '#~/services/plugins/marketplace.js'
 import { listNativeHostPluginAssets, listNativeHostPlugins } from '#~/services/plugins/native-host.js'
 import { normalizeRuntimeEndpoint, readProxyHandlerBody } from '#~/services/plugins/runtime.js'
-import { HttpError, badRequest, notFound } from '#~/utils/http.js'
+import { HttpError, badRequest, conflict, notFound } from '#~/utils/http.js'
 
 const HOP_BY_HOP_HEADERS = new Set([
   'connection',
@@ -242,6 +247,36 @@ export function pluginsRouter(): Router {
     })
     await getPluginManager().reload()
     ctx.body = { results }
+  })
+
+  router.get('/:scope/uninstall-plan', async (ctx) => {
+    ctx.body = await getPluginMarketplaceUninstallPlan(String(ctx.params.scope ?? ''))
+  })
+
+  router.post('/:scope/uninstall', async (ctx) => {
+    const body = ctx.request.body as { token?: unknown }
+    if (typeof body?.token !== 'string' || !/^[a-f0-9]{64}$/.test(body.token)) {
+      throw badRequest(
+        '"token" must be a valid uninstall plan token.',
+        undefined,
+        'invalid_plugin_uninstall_request'
+      )
+    }
+    try {
+      ctx.body = await uninstallPluginMarketplacePlugin({
+        scope: String(ctx.params.scope ?? ''),
+        token: body.token
+      })
+    } catch (error) {
+      if (error instanceof PluginMarketplaceUninstallStaleError) {
+        throw conflict(
+          'The uninstall plan is stale. Request a new plan and retry.',
+          undefined,
+          'plugin_uninstall_plan_stale'
+        )
+      }
+      throw error
+    }
   })
 
   router.post('/launcher/search', async (ctx) => {

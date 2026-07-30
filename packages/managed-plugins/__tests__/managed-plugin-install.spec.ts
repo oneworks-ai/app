@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { syncConfiguredMarketplacePlugins } from '#~/managed-plugin-install.js'
 import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
+import { withDirectoryInstallLock } from '@oneworks/utils/install-lock'
 import { getManagedPluginInstallDir } from '@oneworks/utils/managed-plugin'
 import { convertClaudePluginToOneWorks } from '../../adapters/claude-code/src/plugins/convert'
 import {
@@ -28,12 +29,18 @@ vi.mock('@oneworks/types', async (importOriginal) => {
 
 const tempDirs: string[] = []
 const originalProjectHomeProjectsDir = process.env.__ONEWORKS_PROJECT_HOME_PROJECTS_DIR__
+const originalWorkspaceFolder = process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__
 
 afterEach(async () => {
   if (originalProjectHomeProjectsDir == null) {
     delete process.env.__ONEWORKS_PROJECT_HOME_PROJECTS_DIR__
   } else {
     process.env.__ONEWORKS_PROJECT_HOME_PROJECTS_DIR__ = originalProjectHomeProjectsDir
+  }
+  if (originalWorkspaceFolder == null) {
+    delete process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__
+  } else {
+    process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__ = originalWorkspaceFolder
   }
   vi.restoreAllMocks()
   await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
@@ -167,6 +174,37 @@ describe('syncConfiguredMarketplacePlugins', () => {
       )
     ).resolves.toEqual(expect.objectContaining({ isDirectory: expect.any(Function) }))
     await expect(stat(path.join(workspace, '.oo/plugins/reviewer'))).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('reuses the live sync lease for nested install under inherited workspace authority', async () => {
+    const { workspace } = await createMarketplaceWorkspace()
+    const authority = await mkdtemp(path.join(tmpdir(), 'ow-marketplace-authority-'))
+    tempDirs.push(authority)
+    process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__ = authority
+    loadAdapterPluginInstallerMock.mockResolvedValue(mockInstaller)
+    const events: Array<{ event: 'acquired' | 'reused'; lockDir: string }> = []
+    let lockAdapterCalls = 0
+    await syncConfiguredMarketplacePlugins({
+      cwd: workspace,
+      mutationRuntime: {
+        onLeaseEvent: (event, lockDir) => events.push({ event, lockDir }),
+        withLock: (options, callback) => {
+          lockAdapterCalls += 1
+          return withDirectoryInstallLock(options, callback)
+        }
+      },
+      marketplaces: {
+        'team-tools': {
+          type: 'claude-code',
+          syncOnRun: false,
+          plugins: { reviewer: { scope: 'review' } }
+        }
+      }
+    })
+
+    expect(events.map(({ event }) => event)).toEqual(['acquired', 'reused'])
+    expect(events[0]?.lockDir).toBe(events[1]?.lockDir)
+    expect(lockAdapterCalls).toBe(1)
   })
 
   it('updates declared marketplace plugins on run when syncOnRun is enabled', async () => {

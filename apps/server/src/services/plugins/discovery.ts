@@ -1,6 +1,8 @@
 import path from 'node:path'
 import process from 'node:process'
 
+import { isManagedPluginMutationActive, recoverManagedPluginRemovals } from '@oneworks/managed-plugins'
+import type { ManagedPluginRemovalIdentity } from '@oneworks/managed-plugins'
 import type { MarketplaceConfig, PluginConfig, PluginRuntimeSourceGroup } from '@oneworks/types'
 import {
   listManagedPluginInstalls,
@@ -43,6 +45,20 @@ const getMarketplacePluginConfig = (
   marketplace: MarketplaceConfig[string] | undefined,
   pluginName: string
 ) => marketplace?.plugins?.[pluginName]
+
+const isProjectManagedPluginDeclarationPresent = (
+  marketplaces: MarketplaceConfig | undefined,
+  identity: ManagedPluginRemovalIdentity
+) => {
+  const marketplace = marketplaces?.[identity.marketplace]
+  const plugin = marketplace?.plugins?.[identity.plugin]
+  const adapterMatches = (marketplace?.type === 'codex' && identity.adapter === 'codex') ||
+    (marketplace?.type === 'claude-code' && identity.adapter === 'claude')
+  return adapterMatches &&
+    marketplace?.enabled !== false &&
+    plugin != null &&
+    plugin.enabled !== false
+}
 
 const getMarketplacePluginSourceGroup = (
   marketplaceKey: string,
@@ -90,6 +106,19 @@ export const discoverPluginInstances = async () => {
   } = await loadConfigState()
   const disableGlobalConfig = mergedConfig?.disableGlobalConfig === true ||
     (globalConfig == null && globalSource?.resolvedConfig?.disableGlobalConfig === true)
+  if (!isManagedPluginMutationActive({ cwd: workspaceFolder, env: process.env })) {
+    await recoverManagedPluginRemovals({
+      cwd: workspaceFolder,
+      env: process.env,
+      isDeclarationPresent: async (identity) => {
+        const currentState = await loadConfigState()
+        return isProjectManagedPluginDeclarationPresent(
+          currentState.projectSource?.rawConfig?.marketplaces,
+          identity
+        )
+      }
+    })
+  }
   const plugins = await resolveRuntimePluginConfig({
     cwd: workspaceFolder,
     disableGlobalConfig,

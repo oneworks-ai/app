@@ -4,8 +4,11 @@ import { join } from 'node:path'
 import type { ManagedPluginSource } from '@oneworks/types'
 import type { ManagedPluginInstall } from '@oneworks/utils/managed-plugin'
 import { listManagedPluginInstalls } from '@oneworks/utils/managed-plugin'
+import { mergeProcessEnvWithProjectEnv } from '@oneworks/utils/project-env'
 
 import { addAdapterPlugin } from './managed-plugin-install'
+import { withManagedPluginMutationLock } from './managed-plugin-mutation'
+import type { ManagedPluginMutationRuntime } from './managed-plugin-mutation'
 
 const resolveMarketplacePluginAdapter = (type: string) => {
   switch (type) {
@@ -74,10 +77,11 @@ export const assertUniqueMarketplacePluginScopes = (marketplaces: MarketplaceSyn
   }
 }
 
-export const syncConfiguredMarketplacePlugins = async (params: {
+const syncConfiguredMarketplacePluginsUnlocked = async (params: {
   cwd: string
   env?: Record<string, string | null | undefined>
   marketplaces: MarketplaceSyncConfig | undefined
+  mutationRuntime?: ManagedPluginMutationRuntime
 }) => {
   const results: Array<{
     marketplace: string
@@ -145,4 +149,18 @@ export const syncConfiguredMarketplacePlugins = async (params: {
   }
 
   return results
+}
+
+export const syncConfiguredMarketplacePlugins = async (params: {
+  cwd: string
+  env?: Record<string, string | null | undefined>
+  marketplaces: MarketplaceSyncConfig | undefined
+  mutationRuntime?: ManagedPluginMutationRuntime
+}) => {
+  const env = mergeProcessEnvWithProjectEnv(params.env, { workspaceFolder: params.cwd })
+  const effectiveParams = { ...params, env }
+  return withManagedPluginMutationLock(
+    { cwd: params.cwd, env, runtime: params.mutationRuntime },
+    () => syncConfiguredMarketplacePluginsUnlocked(effectiveParams)
+  )
 }
