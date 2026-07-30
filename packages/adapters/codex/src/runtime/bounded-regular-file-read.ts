@@ -11,6 +11,11 @@ const isPathInside = (parent: string, child: string) => {
 
 export const readBoundedRegularFileNoFollow = async (params: {
   canonicalParent: string
+  expectedIdentity?: {
+    device: number
+    inode: number
+    size: number
+  }
   filePath: string
   maxBytes: number
 }): Promise<string | undefined> => {
@@ -21,6 +26,14 @@ export const readBoundedRegularFileNoFollow = async (params: {
   try {
     const before = await handle.stat({ bigint: true })
     if (!before.isFile() || before.size > BigInt(params.maxBytes)) return undefined
+    if (
+      params.expectedIdentity != null &&
+      (
+        before.dev !== BigInt(params.expectedIdentity.device) ||
+        before.ino !== BigInt(params.expectedIdentity.inode) ||
+        before.size !== BigInt(params.expectedIdentity.size)
+      )
+    ) return undefined
 
     const canonicalAfter = await realpath(params.filePath)
     if (!isPathInside(params.canonicalParent, canonicalAfter)) return undefined

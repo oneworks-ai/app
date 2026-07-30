@@ -313,6 +313,14 @@ const runFetch = async (url: string, init?: ApiRequestInit) => {
   }
 }
 
+export const fetchApiResponse = async (
+  pathOrUrl: string | URL,
+  init?: ApiRequestInit
+) => {
+  const url = typeof pathOrUrl === 'string' ? buildApiUrl(pathOrUrl) : pathOrUrl.toString()
+  return runFetch(url, init)
+}
+
 const fetchAndUnwrapApiResponse = async <T>(
   url: string,
   init?: ApiRequestInit,

@@ -7,17 +7,17 @@ import {
   collectAppMetadataFiles,
   getAppManifestEntries,
   getManifestCapabilities,
-  readBoundedAppManifest,
   toBoundedDiagnosticValue,
-  toGeneratedAppPath,
   toSafeRelativeAppPath
 } from './app-metadata-files'
+import { toGeneratedAppPath } from './app-metadata-generated-path'
 import { inspectAppMetadataShape } from './app-metadata-inspection'
 import {
   hasOnlyOwnAllowedAppMetadataKeys,
   isPlainAppMetadataRecord,
   normalizeDeclarativeValue
 } from './app-metadata-normalization'
+import { readBoundedAppManifest } from './app-metadata-reader'
 import type { CodexPluginManifest } from './source'
 
 const MAX_APP_MANIFEST_TOTAL_BYTES = 1024 * 1024
@@ -74,11 +74,20 @@ export const collectCodexAppMetadata = async (
 
   let totalBytes = 0
   let appLimitReached = false
-  for (const filePath of collection.files) {
+  for (const file of collection.files) {
     if (appLimitReached) break
-    const relativePath = toSafeRelativeAppPath(pluginRoot, filePath)
+    const relativePath = toSafeRelativeAppPath(pluginRoot, file.path)
     const diagnosticPath = toBoundedDiagnosticValue(relativePath, 'metadata')
-    const bounded = await readBoundedAppManifest(filePath)
+    let bounded: Awaited<ReturnType<typeof readBoundedAppManifest>>
+    try {
+      bounded = await readBoundedAppManifest(file)
+    } catch {
+      diagnostics.push(diagnostic(
+        'codex_app_metadata_file_invalid',
+        `Codex app metadata "${diagnosticPath}" changed before it could be read.`
+      ))
+      continue
+    }
     if (bounded.oversized) {
       diagnostics.push(diagnostic(
         'codex_app_metadata_file_limit',

@@ -1,11 +1,8 @@
 import { Buffer } from 'node:buffer'
 import { createHash } from 'node:crypto'
-import { constants } from 'node:fs'
 import type { Dirent } from 'node:fs'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-
-import { isCredentialLikeNativeAppKey } from '@oneworks/utils'
 
 import {
   containsControlCharacter,
@@ -16,24 +13,35 @@ import {
 import type { CodexPluginManifest } from './source'
 import { pathExists, resolveCodexPathWithinPluginRoot } from './source'
 
-const MAX_APP_MANIFEST_BYTES = 256 * 1024
 const MAX_APP_MANIFEST_ENTRIES = 64
 const MAX_APP_MANIFEST_ENTRY_BYTES = 1024
 const MAX_APP_MANIFEST_FILES = 64
 const MAX_APP_TREE_DEPTH = 6
 const MAX_APP_TREE_ENTRIES = 4096
 const MAX_DIAGNOSTIC_PATH_BYTES = 512
-const DANGEROUS_METADATA_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
 
 interface AppManifestFileCollection {
-  files: string[]
+  files: AppManifestFile[]
   treeEntries: number
   treeLimit: boolean
   truncated: boolean
 }
 
+export interface AppManifestFile {
+  canonicalRoot: string
+  device: number
+  inode: number
+  path: string
+  size: number
+}
+
+const hasCollectedFile = (collection: AppManifestFileCollection, filePath: string) => (
+  collection.files.some(file => file.path === filePath)
+)
+
 const collectAppManifestFiles = async (
   pluginRoot: string,
+  canonicalRoot: string,
   targetPath: string,
   collection: AppManifestFileCollection,
   depth = 0
@@ -53,12 +61,18 @@ const collectAppManifestFiles = async (
     throw new Error('Codex app metadata paths must not use symbolic links.')
   }
   if (targetStat.isFile()) {
-    if (!resolved.toLowerCase().endsWith('.app.json') || collection.files.includes(resolved)) return
+    if (!resolved.toLowerCase().endsWith('.app.json') || hasCollectedFile(collection, resolved)) return
     if (collection.files.length >= MAX_APP_MANIFEST_FILES) {
       collection.truncated = true
       return
     }
-    collection.files.push(resolved)
+    collection.files.push({
+      canonicalRoot,
+      device: targetStat.dev,
+      inode: targetStat.ino,
+      path: resolved,
+      size: targetStat.size
+    })
     return
   }
   if (!targetStat.isDirectory()) return
@@ -78,16 +92,26 @@ const collectAppManifestFiles = async (
       throw new Error('Codex app metadata paths must not use symbolic links.')
     }
     if (entry.isDirectory()) {
-      await collectAppManifestFiles(pluginRoot, candidate, collection, depth + 1)
+      await collectAppManifestFiles(pluginRoot, canonicalRoot, candidate, collection, depth + 1)
       continue
     }
     if (!entry.isFile() || !entry.name.toLowerCase().endsWith('.app.json')) continue
-    if (collection.files.includes(candidate)) continue
+    if (hasCollectedFile(collection, candidate)) continue
     if (collection.files.length >= MAX_APP_MANIFEST_FILES) {
       collection.truncated = true
       continue
     }
-    collection.files.push(candidate)
+    const fileStat = await fs.lstat(candidate)
+    if (!fileStat.isFile() || fileStat.isSymbolicLink()) {
+      throw new Error('Codex app metadata paths must not use symbolic links.')
+    }
+    collection.files.push({
+      canonicalRoot,
+      device: fileStat.dev,
+      inode: fileStat.ino,
+      path: candidate,
+      size: fileStat.size
+    })
   }
 }
 
@@ -142,46 +166,11 @@ export const toBoundedDiagnosticValue = (value: string, prefix: string) => (
     : `${prefix}-${createHash('sha256').update(value).digest('hex').slice(0, 16)}`
 )
 
-export const toGeneratedAppPath = (relativePath: string) => {
-  const candidate = relativePath.startsWith('apps/')
-    ? relativePath.slice('apps/'.length)
-    : relativePath
-  const safe = Buffer.byteLength(candidate, 'utf8') <= MAX_DIAGNOSTIC_PATH_BYTES &&
-    candidate.split('/').every((segment) => {
-      const stem = segment.replace(/\.app\.json$/iu, '')
-      return (
-        /^[a-z0-9][\w.-]{0,127}$/iu.test(segment) &&
-        !DANGEROUS_METADATA_KEYS.has(stem) &&
-        !isCredentialLikeNativeAppKey(stem) &&
-        !isCredentialShapedValue(stem)
-      )
-    })
-  return safe
-    ? candidate
-    : `metadata-${createHash('sha256').update(relativePath).digest('hex').slice(0, 16)}.app.json`
-}
-
-export const readBoundedAppManifest = async (filePath: string) => {
-  const handle = await fs.open(filePath, constants.O_RDONLY)
-  try {
-    const fileStat = await handle.stat()
-    if (fileStat.size > MAX_APP_MANIFEST_BYTES) return { oversized: true as const }
-    const content = await handle.readFile()
-    if (content.byteLength > MAX_APP_MANIFEST_BYTES) return { oversized: true as const }
-    return {
-      bytes: content.byteLength,
-      content: content.toString('utf8'),
-      oversized: false as const
-    }
-  } finally {
-    await handle.close()
-  }
-}
-
 export const collectAppMetadataFiles = async (
   pluginRoot: string,
   entries: string[]
 ) => {
+  const canonicalRoot = await fs.realpath(pluginRoot)
   const collection: AppManifestFileCollection = {
     files: [],
     treeEntries: 0,
@@ -189,8 +178,8 @@ export const collectAppMetadataFiles = async (
     truncated: false
   }
   for (const entry of entries) {
-    await collectAppManifestFiles(pluginRoot, entry, collection)
+    await collectAppManifestFiles(pluginRoot, canonicalRoot, entry, collection)
   }
-  collection.files.sort((left, right) => left.localeCompare(right))
+  collection.files.sort((left, right) => left.path.localeCompare(right.path))
   return collection
 }

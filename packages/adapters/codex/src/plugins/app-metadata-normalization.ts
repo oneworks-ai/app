@@ -9,6 +9,7 @@ import type { NativeAppDeclarativeField } from '@oneworks/utils'
 
 const MAX_IDENTIFIER_BYTES = 512
 const MAX_ROUTE_OR_URL_BYTES = 2048
+const MAX_CREDENTIAL_VALUE_DECODE_DEPTH = 4
 const DANGEROUS_METADATA_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
 
 export const isPlainAppMetadataRecord = (
@@ -51,7 +52,21 @@ export const containsEncodedFilesystemPath = (value: string) => {
 
 export const isCredentialShapedValue = (
   value: string
-) => isCredentialLikeNativeAppValue(value)
+) => {
+  let candidate = value
+  for (let depth = 0; depth <= MAX_CREDENTIAL_VALUE_DECODE_DEPTH; depth += 1) {
+    if (isCredentialLikeNativeAppValue(candidate)) return true
+    let decoded: string
+    try {
+      decoded = decodeURIComponent(candidate)
+    } catch {
+      return true
+    }
+    if (decoded === candidate) return false
+    candidate = decoded
+  }
+  return true
+}
 
 export const containsControlCharacter = (value: string) => (
   [...value].some(character => {

@@ -71,6 +71,22 @@ describe('private-root redaction', () => {
     ].join(' '))
   })
 
+  it('preserves balanced parentheses in valid URLs while redacting adjacent roots', () => {
+    const value = [
+      'https://example.test/oauth/(callback)?next=(safe)',
+      'https://example.test/path_(kept),/data/private',
+      'https://example.test/(nested(one))/custom/private',
+      '/custom/private'
+    ].join(' ')
+
+    expect(redactPrivateRoots(value, ['/data', '/custom'])).toBe([
+      'https://example.test/oauth/(callback)?next=(safe)',
+      'https://example.test/path_(kept),[local path]',
+      'https://example.test/(nested(one))/custom/private',
+      '[local path]'
+    ].join(' '))
+  })
+
   it('redacts configured literal roots with delimiters without matching prefix cousins', () => {
     const roots = [
       '/custom/My Project',

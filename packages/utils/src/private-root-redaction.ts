@@ -7,7 +7,7 @@ const MAX_DECODE_DEPTH = 4
 const TOKEN_PATTERN = /[^\s:"'`<>()[\]{},;=]+/gu
 const FILE_URL_PATTERN = /file:\/\/\/[^\s:"'`<>()[\]{},;=]+/giu
 const HTTP_URL_START_PATTERN = /https?:\/\//giu
-const HTTP_URL_END_PATTERN = /[\s"'`<>{}()]/u
+const HTTP_URL_END_PATTERN = /[\s"'`<>{}]/u
 
 export type PrivateRootRedactionField = 'route' | 'text' | 'url'
 
@@ -111,7 +111,15 @@ const findProtectedHttpUrlEnd = (
   roots: string[]
 ) => {
   let tokenEnd = start
-  while (tokenEnd < value.length && !HTTP_URL_END_PATTERN.test(value[tokenEnd] ?? '')) {
+  let parentheses = 0
+  while (tokenEnd < value.length) {
+    const character = value[tokenEnd] ?? ''
+    if (HTTP_URL_END_PATTERN.test(character)) break
+    if (character === '(') parentheses += 1
+    if (character === ')') {
+      if (parentheses === 0) break
+      parentheses -= 1
+    }
     tokenEnd += 1
   }
   const token = value.slice(start, tokenEnd)

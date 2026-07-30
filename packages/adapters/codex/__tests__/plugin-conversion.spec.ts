@@ -9,6 +9,8 @@ import { resolveManagedPluginScope } from '@oneworks/utils'
 
 import { installAdapterPluginWithInstaller } from '../../../../apps/cli/src/commands/@core/plugin-install'
 import { collectCodexAppMetadata } from '../src/plugins/app-metadata'
+import { collectAppMetadataFiles } from '../src/plugins/app-metadata-files'
+import { readBoundedAppManifest } from '../src/plugins/app-metadata-reader'
 import { codexPluginInstaller } from '../src/plugins/index'
 
 const tempDirs: string[] = []
@@ -31,6 +33,46 @@ afterEach(async () => {
 })
 
 describe('codex plugin conversion', () => {
+  it('fails closed when a discovered app metadata leaf is replaced with a symlink', async () => {
+    const cwd = await createTempDir()
+    const pluginRoot = path.join(cwd, 'codex-plugin')
+    const appsDir = path.join(pluginRoot, 'apps')
+    const appPath = path.join(appsDir, 'docs.app.json')
+    const outsidePath = path.join(cwd, 'outside.app.json')
+    await fs.mkdir(appsDir, { recursive: true })
+    await fs.writeFile(appPath, JSON.stringify({ apps: {} }))
+    await fs.writeFile(outsidePath, JSON.stringify({ apps: { outside: {} } }))
+
+    const collection = await collectAppMetadataFiles(pluginRoot, ['apps'])
+    const discovered = collection.files[0]
+    expect(discovered).toBeDefined()
+    await fs.rename(appPath, `${appPath}.preserved`)
+    await fs.symlink(outsidePath, appPath)
+
+    await expect(readBoundedAppManifest(discovered!)).rejects.toThrow(/changed|symbolic|ELOOP/i)
+    await expect(fs.readFile(outsidePath, 'utf8')).resolves.toContain('outside')
+  })
+
+  it('fails closed when an app metadata ancestor is replaced with an outside symlink', async () => {
+    const cwd = await createTempDir()
+    const pluginRoot = path.join(cwd, 'codex-plugin')
+    const appsDir = path.join(pluginRoot, 'apps')
+    const outsideDir = path.join(cwd, 'outside-apps')
+    await fs.mkdir(appsDir, { recursive: true })
+    await fs.mkdir(outsideDir, { recursive: true })
+    await fs.writeFile(path.join(appsDir, 'docs.app.json'), JSON.stringify({ apps: { docs: {} } }))
+    await fs.writeFile(path.join(outsideDir, 'docs.app.json'), JSON.stringify({ apps: { outside: {} } }))
+
+    const collection = await collectAppMetadataFiles(pluginRoot, ['apps'])
+    const discovered = collection.files[0]
+    expect(discovered).toBeDefined()
+    await fs.rename(appsDir, `${appsDir}.preserved`)
+    await fs.symlink(outsideDir, appsDir)
+
+    await expect(readBoundedAppManifest(discovered!)).rejects.toThrow(/changed/i)
+    await expect(fs.readFile(path.join(outsideDir, 'docs.app.json'), 'utf8')).resolves.toContain('outside')
+  })
+
   it('preserves a safe npm spec as the generated package source identity', async () => {
     const cwd = await createTempDir()
     const pluginRoot = path.join(cwd, 'codex-plugin')
@@ -351,6 +393,52 @@ describe('codex plugin conversion', () => {
     expect(JSON.stringify(result)).not.toContain('must-not-leak')
     expect(JSON.stringify(result)).not.toContain('AKIAIOSFODNN7EXAMPLE')
     expect(JSON.stringify(result)).not.toContain('AIzaSyD-abcdefghijklmnopqrstuvwxyz1234')
+  })
+
+  it('rejects repeatedly encoded credential values from public app URL fields', async () => {
+    const cwd = await createTempDir()
+    const pluginRoot = path.join(cwd, 'codex-plugin')
+    const encodedAuthorizationValue = ['sk', '%252D', 'abcdefghijklmnop'].join('')
+    const encodedCallbackValue = ['api', '%255F', 'key', '%253D', 'abcdefghijklmnop'].join('')
+    const encodedTokenValue = ['ghp', '%252D', 'abcdefghijklmnop'].join('')
+    await fs.mkdir(path.join(pluginRoot, 'apps'), { recursive: true })
+    await fs.writeFile(
+      path.join(pluginRoot, 'apps', 'encoded-credentials.app.json'),
+      JSON.stringify({
+        apps: {
+          encodedAuthorization: {
+            authentication: {
+              authorizationUrl: `https://example.test/oauth?state=${encodedAuthorizationValue}`,
+              type: 'oauth2'
+            },
+            id: 'connector_encoded_authorization'
+          },
+          encodedCallback: {
+            authentication: {
+              callbackPath: `/oauth/callback?state=${encodedCallbackValue}`,
+              type: 'oauth2'
+            },
+            id: 'connector_encoded_callback'
+          },
+          encodedToken: {
+            authentication: {
+              tokenUrl: `https://example.test/token?state=${encodedTokenValue}`,
+              type: 'oauth2'
+            },
+            id: 'connector_encoded_token'
+          }
+        }
+      })
+    )
+
+    const result = await collectCodexAppMetadata(pluginRoot, {
+      apps: './apps',
+      name: 'codex-demo'
+    })
+
+    expect(result.apps).toEqual([])
+    expect(result.generatedFiles).toEqual([])
+    expect(result.diagnostics).toHaveLength(3)
   })
 
   it('uses the public native app limit during conversion and reports the boundary', async () => {
