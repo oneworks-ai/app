@@ -37,6 +37,11 @@ const serverRequestTimeoutMs = resolvePositiveTimeoutMs(
   'ONEWORKS_DESKTOP_SMOKE_REQUEST_TIMEOUT_MS',
   30000
 )
+const serverCompileTimeoutMs = resolvePositiveTimeoutMs(
+  process.env,
+  'ONEWORKS_DESKTOP_SMOKE_COMPILE_TIMEOUT_MS',
+  120000
+)
 
 const createWorkspaceRuntimeEnv = (
   runtimePackageCacheVersion,
@@ -393,6 +398,22 @@ const getCatalogDiagnostics = catalog => [
   ...(Array.isArray(catalog?.data?.diagnostics) ? catalog.data.diagnostics : [])
 ]
 
+const readLocalPluginClientSource = (
+  port,
+  versionedEntryUrl,
+  scope,
+  options = {}
+) =>
+  readServerText(
+    port,
+    `${versionedEntryUrl}?pluginVersion=desktop-smoke`,
+    `Packaged local plugin source "${scope}"`,
+    {
+      ...options,
+      timeoutMs: options.timeoutMs ?? serverCompileTimeoutMs
+    }
+  )
+
 const assertBuiltinRuntimeActive = async (catalog, port, options = {}) => {
   const catalogDiagnostics = getCatalogDiagnostics(catalog)
   if (catalogDiagnostics.length > 0) {
@@ -484,10 +505,10 @@ const assertLocalClientSourcesCompile = async (catalog, port) => {
       )
     }
     const versionedEntryUrl = entryUrl.replace('/client-source/', '/client-source/@v/desktop-smoke/')
-    const source = await readServerText(
+    const source = await readLocalPluginClientSource(
       port,
-      `${versionedEntryUrl}?pluginVersion=desktop-smoke`,
-      `Packaged local plugin source "${scope}"`
+      versionedEntryUrl,
+      scope
     )
     if (!source.includes('activatePlugin')) {
       throw new Error(`Packaged local plugin source "${scope}" is not an executable plugin module.`)
@@ -676,7 +697,9 @@ const main = async () => {
 }
 
 module.exports = {
+  readLocalPluginClientSource,
   readServerText,
+  serverCompileTimeoutMs,
   serverRequestTimeoutMs,
   resolvePositiveTimeoutMs
 }

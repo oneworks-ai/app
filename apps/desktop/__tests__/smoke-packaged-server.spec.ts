@@ -6,10 +6,21 @@ import { describe, expect, it } from 'vitest'
 
 const requireModule = createRequire(import.meta.url)
 const {
+  readLocalPluginClientSource,
   readServerText,
+  serverCompileTimeoutMs,
   serverRequestTimeoutMs,
   resolvePositiveTimeoutMs
 } = requireModule('../scripts/smoke-packaged-server.cjs') as {
+  readLocalPluginClientSource: (
+    port: number,
+    versionedEntryUrl: string,
+    scope: string,
+    options?: {
+      httpGet?: typeof import('node:http').get
+      timeoutMs?: number
+    }
+  ) => Promise<string>
   readServerText: (
     port: number,
     requestPath: string,
@@ -19,6 +30,7 @@ const {
       timeoutMs?: number
     }
   ) => Promise<string>
+  serverCompileTimeoutMs: number
   serverRequestTimeoutMs: number
   resolvePositiveTimeoutMs: (
     env: NodeJS.ProcessEnv,
@@ -62,6 +74,50 @@ describe('packaged server smoke timeouts', () => {
       )
     }
   )
+
+  it('uses a separate two minute deadline for cold plugin compilation', async () => {
+    let capturedOptions: RequestOptions | undefined
+    const httpGet = ((
+      options: RequestOptions,
+      onResponse: (response: IncomingMessage) => void
+    ) => {
+      capturedOptions = options
+      const request = new EventEmitter()
+      const response = new EventEmitter()
+      Object.assign(request, {
+        destroy: (error?: Error) => {
+          if (error != null) request.emit('error', error)
+          return request
+        }
+      })
+      Object.assign(response, {
+        setEncoding: () => response,
+        statusCode: 200
+      })
+
+      queueMicrotask(() => {
+        onResponse(response as unknown as IncomingMessage)
+        response.emit('data', 'compiled-source')
+        response.emit('end')
+      })
+
+      return request as unknown as ClientRequest
+    }) as typeof import('node:http').get
+
+    await expect(
+      readLocalPluginClientSource(
+        43110,
+        '/api/plugins/china-red-theme/client-source/@v/desktop-smoke/index.ts',
+        'china-red-theme',
+        { httpGet }
+      )
+    ).resolves.toBe('compiled-source')
+    expect(serverCompileTimeoutMs).toBe(120000)
+    expect(capturedOptions?.timeout).toBe(serverCompileTimeoutMs)
+    expect(capturedOptions?.path).toBe(
+      '/api/plugins/china-red-theme/client-source/@v/desktop-smoke/index.ts?pluginVersion=desktop-smoke'
+    )
+  })
 
   it('wires the 30 second default into packaged server HTTP reads', async () => {
     let capturedOptions: RequestOptions | undefined
