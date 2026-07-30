@@ -59,6 +59,16 @@
 - 已经在 registry 上出现目标版本的包，不要重复发布
 - 分别核对 npm registry、远端分支和远端 tag，缺什么补什么
 
+## macOS 桌面候选与提升
+
+- 普通 PR 保持轻量 `macOS installer` 策略检查，不占用 macOS runner。完整 package / smoke / install verify 由每日 nightly 的 unsigned arm64 DMG 提前兜底。
+- 正式发版仍构建 arm64+x64 的 DMG / PKG / ZIP。构建成功后必须生成 `oneworks-desktop-release-candidate.json`，记录 tag、源 SHA、签名状态、架构、目标和每个文件的 SHA-256；后续发布前必须重新核对清单。
+- 需要先验收候选但暂不发布时，手动触发 `desktop-package.yml`，传 `release_tag` 且保持 `create_release=false`。这会使用正式版本身份构建，但只保存 Actions artifact。
+- 提升已验证候选时，再触发同一 workflow，设置 `create_release=true`、相同 `release_tag` 和原成功构建的 `candidate_run_id`。package job 会跳过，GitHub Release 只消费并校验原候选，不重新编译或打包。
+- GitHub Release job 失败时优先 rerun failed jobs；成功的 package job 和 artifact 不需要重跑。跨 run 恢复时使用 `candidate_run_id`，不能临时拿本地产物替换。
+- Release 资产上传成功后，workflow 必须复用 `deploy-homepage.yml` 触发并等待 homepage Pages。官网失败只重试 release / homepage 阶段，不重建候选。
+- nightly 只覆盖发布打包回归，不替代正式候选的双架构、全目标、签名 / notarization 和清单验证。
+
 ## VS Code 扩展发布
 
 - VS Code Marketplace 不支持 `0.1.0-alpha.0` 这种 semver prerelease 字符串；预发布必须使用 `major.minor.patch` 三段式版本，再通过 `vsce package --pre-release` 和 `vsce publish --pre-release` 标记。

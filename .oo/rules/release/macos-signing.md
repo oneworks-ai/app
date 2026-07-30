@@ -13,8 +13,9 @@ App Store 外分发不走 Mac App Store 证书，使用 Apple Developer Program 
 - `APPLE_TEAM_ID`：Apple Developer Team ID。
 - `DESKTOP_SIGN=true`：仓库 variable，显式打开桌面签名。
 
-桌面 workflow 在 PR 上只运行不构建产物的轻量兼容门禁；真正的安装包只由
-`pkg/oneworks-desktop/v*` tag 或手动 dispatch 触发。手动 artifact 按仓库 variable
+桌面 workflow 在 PR 上只运行不构建产物的轻量兼容门禁；每日 nightly 使用 unsigned
+arm64 DMG 跑 package / smoke / install verify，不读取签名 secret。真正的双架构安装包
+只由 `pkg/oneworks-desktop/v*` tag 或手动 dispatch 触发。手动 artifact 按仓库 variable
 决定是否签名；tag 和手动 release 同样遵循 `DESKTOP_SIGN`。未启用时允许发布未签名
 安装包，GitHub Release 会明确标记为 unsigned；启用时要求完整签名与 notarization。
 所有 secret 配好后，还必须设置仓库 variable：
@@ -51,13 +52,24 @@ gh secret set APPLE_TEAM_ID --repo oneworks-ai/app
 
 ## 验证
 
-发版前验证签名包构建时，不创建或修改 GitHub Release：
+发版前验证普通双架构包、但不创建或修改 GitHub Release：
 
 ```bash
 gh workflow run desktop-package.yml \
   --repo oneworks-ai/app \
   --ref main \
   -f create_release=false
+```
+
+需要构建可直接提升的正式身份候选时，同时传入目标 tag。候选 artifact 会携带源 SHA
+和文件摘要清单：
+
+```bash
+gh workflow run desktop-package.yml \
+  --repo oneworks-ai/app \
+  --ref main \
+  -f create_release=false \
+  -f release_tag=pkg/oneworks-desktop/v0.1.0-beta.11
 ```
 
 下载 workflow artifact 后在 macOS 上验证：
@@ -80,4 +92,15 @@ gh workflow run desktop-package.yml \
   --ref main \
   -f create_release=true \
   -f release_tag=pkg/oneworks-desktop/v0.1.0-alpha.0
+```
+
+如果候选构建已经成功，不要重新打包；用候选 run id 提升同一份 artifact：
+
+```bash
+gh workflow run desktop-package.yml \
+  --repo oneworks-ai/app \
+  --ref main \
+  -f create_release=true \
+  -f release_tag=pkg/oneworks-desktop/v0.1.0-beta.11 \
+  -f candidate_run_id=<successful-desktop-package-run-id>
 ```
