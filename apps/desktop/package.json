@@ -27,7 +27,7 @@
     "smoke:package": "node ./scripts/smoke-packaged-server.cjs",
     "verify:macos-install": "node ./scripts/verify-macos-install.cjs",
     "test": "pnpm -C ../.. exec vitest run --workspace vitest.workspace.ts --project node apps/desktop/__tests__",
-    "test:package-preflight": "node ../../scripts/run-workspace-check.mjs --require-bin vitest -- pnpm -C ../.. exec vitest run --workspace vitest.workspace.ts --project node apps/desktop/__tests__/builtin-adapter-cache.spec.ts apps/desktop/__tests__/desktop-package-version.spec.ts apps/desktop/__tests__/runtime-consumer-cli-path.spec.ts scripts/__tests__/desktop-package-workflow.spec.ts scripts/__tests__/workspace-dependency-bootstrap.spec.ts",
+    "test:package-preflight": "node ../../scripts/run-workspace-check.mjs --require-bin vitest -- pnpm -C ../.. exec vitest run --workspace vitest.workspace.ts --project node apps/desktop/__tests__/builtin-adapter-cache.spec.ts apps/desktop/__tests__/desktop-package-version.spec.ts apps/desktop/__tests__/runtime-consumer-cli-path.spec.ts apps/desktop/__tests__/smoke-packaged-server.spec.ts scripts/__tests__/desktop-package-workflow.spec.ts scripts/__tests__/workspace-dependency-bootstrap.spec.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
