@@ -37,6 +37,7 @@ export function SenderToolbar({
   statusBarGitControlsInMore?: SenderProps['statusBarGitControlsInMore']
   voiceInput?: SenderVoiceInputController
 }) {
+  const isVoiceRequesting = voiceInput?.state.phase === 'requesting'
   const isVoiceRecording = voiceInput?.state.phase === 'recording'
   const isVoiceTranscribing = voiceInput?.state.phase === 'transcribing'
   const voiceSubmitAvailable = voiceInput?.state.canSendAfterTranscription === true
@@ -55,7 +56,7 @@ export function SenderToolbar({
       )}
 
       <div className='toolbar-left'>
-        {(isVoiceRecording || isVoiceTranscribing) && voiceInput != null
+        {(isVoiceRequesting || isVoiceRecording || isVoiceTranscribing) && voiceInput != null
           ? (
             <SenderVoiceRecordingBar voiceInput={voiceInput} />
           )
@@ -104,17 +105,18 @@ export function SenderToolbar({
           {!state.hideSubmitAction && (
             <SenderSubmitAction
               isInlineEdit={state.isInlineEdit}
-              submitLoading={isVoiceTranscribing || state.submitLoading}
+              submitLoading={isVoiceRequesting || isVoiceTranscribing || state.submitLoading}
               submitLabel={data.submitLabel}
-              hasComposerContent={isVoiceRecording || isVoiceTranscribing || state.hasComposerContent}
-              modelUnavailable={(isVoiceRecording && !voiceSubmitAvailable) || isVoiceTranscribing ||
-                state.modelUnavailable}
-              sendBlocked={!isVoiceRecording && state.sendBlocked}
+              hasComposerContent={isVoiceRequesting || isVoiceRecording || isVoiceTranscribing ||
+                state.hasComposerContent}
+              modelUnavailable={isVoiceRequesting || (isVoiceRecording && !voiceSubmitAvailable) ||
+                isVoiceTranscribing || state.modelUnavailable}
+              sendBlocked={!isVoiceRequesting && !isVoiceRecording && state.sendBlocked}
               sendBlockedTooltip={isVoiceRecording ? undefined : state.sendBlockedTooltip}
-              showConfirmInteractionAction={!isVoiceRecording && !isVoiceTranscribing &&
+              showConfirmInteractionAction={!isVoiceRequesting && !isVoiceRecording && !isVoiceTranscribing &&
                 state.showConfirmInteractionAction}
               confirmInteractionLabel={data.confirmInteractionLabel}
-              isThinking={!isVoiceRecording && !isVoiceTranscribing && state.isThinking}
+              isThinking={!isVoiceRequesting && !isVoiceRecording && !isVoiceTranscribing && state.isThinking}
               stopLoading={state.stopLoading}
               resolvedSendShortcut={state.resolvedSendShortcut}
               queueSteerShortcut={data.composerControlShortcuts.queueSteer}

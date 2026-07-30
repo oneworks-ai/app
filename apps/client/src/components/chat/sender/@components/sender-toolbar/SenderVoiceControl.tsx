@@ -69,16 +69,29 @@ export function SenderVoiceControl({
       handlers.selectService(key.slice('service:'.length))
     }
   }
+  const isRequesting = state.phase === 'requesting'
   const isRecording = state.phase === 'recording'
   const isTranscribing = state.phase === 'transcribing'
   const isVoiceActive = isRecording || isTranscribing
-  const buttonDisabled = !isVoiceActive && (state.loadingServices || state.unsupported || !state.canStartRecording)
+  const buttonDisabled = isRequesting || (!isVoiceActive && state.loadingServices)
   const buttonClickDisabled = !isVoiceActive && (buttonDisabled || state.setupOpen)
   const serviceMenu = { items: menuItems, onClick: handleMenuClick }
   const activeButtonLabel = isTranscribing ? t('common.cancel') : t('chat.voiceInput.stop')
-  const buttonTooltip = isVoiceActive ? activeButtonLabel : state.selectedServiceLabel ?? t('chat.voiceInput.tooltip')
-  const buttonAriaLabel = isVoiceActive ? activeButtonLabel : t('chat.voiceInput.start')
-  const buttonIcon = isTranscribing || state.loadingServices ? 'progress_activity' : isRecording ? 'stop' : 'mic'
+  const buttonTooltip = isRequesting
+    ? t('chat.voiceInput.requestingPermission')
+    : isVoiceActive
+    ? activeButtonLabel
+    : state.selectedServiceLabel ?? t('chat.voiceInput.tooltip')
+  const buttonAriaLabel = isRequesting
+    ? t('chat.voiceInput.requestingPermission')
+    : isVoiceActive
+    ? activeButtonLabel
+    : t('chat.voiceInput.start')
+  const buttonIcon = isRequesting || isTranscribing || state.loadingServices
+    ? 'progress_activity'
+    : isRecording
+    ? 'stop'
+    : 'mic'
   const handleVoiceButtonClick = () => {
     if (buttonClickDisabled) return
     if (isTranscribing) {
@@ -126,7 +139,7 @@ export function SenderVoiceControl({
             className={[
               'toolbar-btn',
               'sender-voice-control__button',
-              state.loadingServices || isTranscribing ? 'is-loading' : '',
+              state.loadingServices || isRequesting || isTranscribing ? 'is-loading' : '',
               isRecording ? 'is-recording' : '',
               state.setupOpen ? 'is-click-disabled' : ''
             ].filter(Boolean).join(' ')}

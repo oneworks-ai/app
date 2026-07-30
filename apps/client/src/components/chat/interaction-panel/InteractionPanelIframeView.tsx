@@ -23,6 +23,7 @@ import type {
   PendingAnnotationTarget
 } from '#~/components/chat/sender/@types/sender-composer'
 import type { SenderEditorHandle, SenderEditorSelection } from '#~/components/chat/sender/@types/sender-editor'
+import type { SenderVoiceInputController } from '#~/components/chat/sender/@types/sender-voice-input'
 import { OverlayAction, OverlayDivider, OverlayPanel } from '#~/components/overlay'
 import { addDesktopViewShortcutListener } from '#~/desktop/view-shortcuts'
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
@@ -36,6 +37,7 @@ import { InteractionPanelIframeAddressBar } from './InteractionPanelIframeAddres
 import { InteractionPanelIframeNavigation } from './InteractionPanelIframeNavigation'
 import { InteractionPanelIframeToolbarActions } from './InteractionPanelIframeToolbarActions'
 import { InteractionPanelPageDebuggerListView } from './InteractionPanelPageDebuggerListView'
+import { cancelAnnotationVoiceInput, getAnnotationVoiceActivity } from './annotation-voice-input'
 import {
   buildChiiScriptSnippet,
   injectChiiTargetScript,
@@ -1636,6 +1638,7 @@ export function InteractionPanelIframeView({
   const annotationEditorRef = useRef<HTMLDivElement | null>(null)
   const annotationInputRef = useRef<HTMLTextAreaElement | null>(null)
   const annotationTargetRef = useRef<IframeAnnotationTarget | null>(annotationTarget)
+  const annotationVoiceInputRef = useRef<SenderVoiceInputController | undefined>()
   const annotationVoiceEditorRef = useRef<SenderEditorHandle | null>(null)
   const webviewAnnotationHoverRequestIdRef = useRef(0)
   const webviewContextMenuViewportPointRef = useRef<WebviewViewportPointSnapshot | null>(null)
@@ -2085,14 +2088,19 @@ export function InteractionPanelIframeView({
     setAnnotationHoverTarget(current => areAnnotationTargetsEqual(current, nextTarget) ? current : nextTarget)
   }, [])
 
+  const cancelAnnotationVoiceForTargetChange = useCallback(() => {
+    cancelAnnotationVoiceInput(annotationVoiceInputRef.current)
+  }, [])
+
   const resetAnnotationSelection = useCallback(() => {
+    cancelAnnotationVoiceForTargetChange()
     setAnnotationTarget(null)
     setAnnotationComment('')
     setAnnotationEditorPlacement(null)
     setAnnotationEditorExpanded(false)
     setIsAnnotationConfigOpen(false)
     setAnnotationHoverRectIfChanged(null)
-  }, [setAnnotationHoverRectIfChanged])
+  }, [cancelAnnotationVoiceForTargetChange, setAnnotationHoverRectIfChanged])
 
   const exitAnnotationMode = useCallback(() => {
     setIsAnnotationMode(false)
@@ -2468,6 +2476,7 @@ export function InteractionPanelIframeView({
   ), [visiblePendingAnnotationMarkers])
 
   const openAnnotationEditorForTarget = useCallback((target: IframeAnnotationTarget, initialComment = '') => {
+    cancelAnnotationVoiceForTargetChange()
     setAnnotationEditorPlacement(resolveAnnotationEditorPlacement(target, false))
     setAnnotationEditorExpanded(false)
     setIsAnnotationConfigOpen(false)
@@ -2478,7 +2487,12 @@ export function InteractionPanelIframeView({
     setAnnotationTarget(target)
     setAnnotationComment(initialComment)
     setIsAnnotationMode(true)
-  }, [resolveAnnotationEditorPlacement, setAnnotationHoverRectIfChanged, setAnnotationHoverTargetIfChanged])
+  }, [
+    cancelAnnotationVoiceForTargetChange,
+    resolveAnnotationEditorPlacement,
+    setAnnotationHoverRectIfChanged,
+    setAnnotationHoverTargetIfChanged
+  ])
 
   const openWebviewAnnotationEditorFromContextMenu = useCallback(async (value: unknown) => {
     const request = normalizeWebviewElementCommentRequest(value)
@@ -2883,11 +2897,16 @@ export function InteractionPanelIframeView({
     },
     setInput: setAnnotationVoiceInput
   })
+  annotationVoiceInputRef.current = annotationVoiceInput
   const annotationVoicePhase = annotationVoiceInput?.state.phase ?? 'idle'
-  const isAnnotationVoiceRecording = annotationVoicePhase === 'recording'
-  const isAnnotationVoiceTranscribing = annotationVoicePhase === 'transcribing'
-  const isAnnotationVoiceActive = isAnnotationVoiceRecording || isAnnotationVoiceTranscribing
+  const {
+    isActive: isAnnotationVoiceActive,
+    isRecording: isAnnotationVoiceRecording,
+    isRequesting: isAnnotationVoiceRequesting,
+    isTranscribing: isAnnotationVoiceTranscribing
+  } = getAnnotationVoiceActivity(annotationVoicePhase)
   const isAnnotationVoiceButtonDisabled = annotationVoiceInput == null ||
+    isAnnotationVoiceRequesting ||
     (!isAnnotationVoiceActive && (
       annotationVoiceInput.state.loadingServices ||
       annotationVoiceInput.state.unsupported ||
@@ -2895,12 +2914,14 @@ export function InteractionPanelIframeView({
       annotationVoiceInput.state.setupOpen
     ))
   const annotationVoiceButtonIcon =
-    isAnnotationVoiceTranscribing || annotationVoiceInput?.state.loadingServices === true
+    isAnnotationVoiceRequesting || isAnnotationVoiceTranscribing || annotationVoiceInput?.state.loadingServices === true
       ? 'progress_activity'
       : isAnnotationVoiceRecording
       ? 'stop'
       : 'mic'
-  const annotationVoiceButtonLabel = isAnnotationVoiceTranscribing
+  const annotationVoiceButtonLabel = isAnnotationVoiceRequesting
+    ? t('chat.voiceInput.requestingPermission')
+    : isAnnotationVoiceTranscribing
     ? t('common.cancel')
     : isAnnotationVoiceRecording
     ? t('chat.voiceInput.stop')
@@ -2908,6 +2929,7 @@ export function InteractionPanelIframeView({
 
   const handleAnnotationVoiceButtonClick = () => {
     if (annotationVoiceInput == null || isAnnotationVoiceButtonDisabled) return
+    if (isAnnotationVoiceRequesting) return
     if (isAnnotationVoiceTranscribing) {
       annotationVoiceInput.handlers.cancelTranscription()
       return
@@ -2921,6 +2943,7 @@ export function InteractionPanelIframeView({
   }
 
   const handleAnnotationConfirmClick = () => {
+    if (isAnnotationVoiceRequesting) return
     if (isAnnotationVoiceRecording) {
       annotationVoiceInput?.handlers.stopRecording({ sendAfterTranscription: true })
       return
@@ -3633,13 +3656,7 @@ export function InteractionPanelIframeView({
 
   useEffect(() => {
     if (annotationTarget != null || annotationVoiceInput == null) return
-    if (annotationVoiceInput.state.phase === 'recording') {
-      annotationVoiceInput.handlers.cancelRecording()
-      return
-    }
-    if (annotationVoiceInput.state.phase === 'transcribing') {
-      annotationVoiceInput.handlers.cancelTranscription()
-    }
+    cancelAnnotationVoiceInput(annotationVoiceInput)
   }, [annotationTarget, annotationVoiceInput])
 
   useEffect(() => {
@@ -4202,7 +4219,8 @@ export function InteractionPanelIframeView({
                       className={[
                         'chat-interaction-panel__annotation-editor-icon-btn',
                         isAnnotationVoiceRecording ? 'is-recording' : '',
-                        isAnnotationVoiceTranscribing || annotationVoiceInput?.state.loadingServices === true
+                        isAnnotationVoiceRequesting || isAnnotationVoiceTranscribing ||
+                          annotationVoiceInput?.state.loadingServices === true
                           ? 'is-loading'
                           : ''
                       ].filter(Boolean).join(' ')}
@@ -4216,7 +4234,8 @@ export function InteractionPanelIframeView({
                       type='button'
                       className='chat-interaction-panel__annotation-editor-icon-btn is-primary'
                       aria-label={t('chat.interactionPanel.iframeAnnotationSubmit')}
-                      disabled={isSubmittingAnnotation || isAnnotationVoiceTranscribing ||
+                      disabled={isSubmittingAnnotation || isAnnotationVoiceRequesting ||
+                        isAnnotationVoiceTranscribing ||
                         (!isAnnotationVoiceRecording && annotationComment.trim() === '')}
                       onClick={handleAnnotationConfirmClick}
                     >
@@ -4237,7 +4256,9 @@ export function InteractionPanelIframeView({
                     ))}
                   </div>
                   <span className='chat-interaction-panel__annotation-editor-voice-time'>
-                    {isAnnotationVoiceTranscribing
+                    {isAnnotationVoiceRequesting
+                      ? t('chat.voiceInput.requestingPermission')
+                      : isAnnotationVoiceTranscribing
                       ? t('chat.voiceInput.transcribing')
                       : formatAnnotationVoiceElapsedTime(annotationVoiceInput.state.elapsedSeconds)}
                   </span>
@@ -4320,7 +4341,8 @@ export function InteractionPanelIframeView({
                       className={[
                         'chat-interaction-panel__annotation-editor-icon-btn',
                         isAnnotationVoiceRecording ? 'is-recording' : '',
-                        isAnnotationVoiceTranscribing || annotationVoiceInput?.state.loadingServices === true
+                        isAnnotationVoiceRequesting || isAnnotationVoiceTranscribing ||
+                          annotationVoiceInput?.state.loadingServices === true
                           ? 'is-loading'
                           : ''
                       ].filter(Boolean).join(' ')}
@@ -4334,7 +4356,8 @@ export function InteractionPanelIframeView({
                       type='button'
                       className='chat-interaction-panel__annotation-editor-icon-btn is-primary'
                       aria-label={t('chat.interactionPanel.iframeAnnotationSubmit')}
-                      disabled={isSubmittingAnnotation || isAnnotationVoiceTranscribing ||
+                      disabled={isSubmittingAnnotation || isAnnotationVoiceRequesting ||
+                        isAnnotationVoiceTranscribing ||
                         (!isAnnotationVoiceRecording && annotationComment.trim() === '')}
                       onClick={handleAnnotationConfirmClick}
                     >

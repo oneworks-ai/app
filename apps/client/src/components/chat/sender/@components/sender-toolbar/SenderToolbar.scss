@@ -265,6 +265,22 @@
   white-space: nowrap;
 }
 
+.sender-voice-recording--requesting {
+  width: auto;
+  grid-template-columns: auto minmax(0, 1fr);
+
+  .sender-voice-recording__time {
+    min-width: 0;
+    text-align: left;
+  }
+}
+
+.sender-voice-recording__pending-icon {
+  color: var(--primary-color, #2563eb);
+  font-size: 16px;
+  animation: sender-voice-spin .9s linear infinite;
+}
+
 .sender-voice-waveform {
   height: 20px;
   min-width: 0;

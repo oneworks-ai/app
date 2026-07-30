@@ -5,10 +5,12 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import useSWR from 'swr'
 
-import { getApiErrorMessage, getConfig, listSpeechToTextServices, transcribeSpeechToText, updateConfig } from '#~/api'
 import type { SpeechToTextServiceSummary } from '@oneworks/types'
+
+import { getApiErrorMessage, getConfig, listSpeechToTextServices, transcribeSpeechToText, updateConfig } from '#~/api'
+
 import type { SenderEditorHandle, SenderEditorSelection } from '../@types/sender-editor'
-import type { SenderVoiceInputController } from '../@types/sender-voice-input'
+import type { SenderVoiceInputController, SenderVoiceInputPhase } from '../@types/sender-voice-input'
 import {
   BROWSER_WEB_SPEECH_SERVICE_ID,
   createBrowserSpeechRecognition,
@@ -23,6 +25,11 @@ import type {
   BrowserSpeechRecognitionResultEvent,
   SenderSpeechToTextServiceSummary
 } from '../@utils/client-speech-to-text'
+import {
+  getRecordingStartErrorMessageKey,
+  hasAnySpeechInputSupport,
+  hasRecordingSupport
+} from '../@utils/recording-support'
 
 const DEFAULT_WAVEFORM_BAR_COUNT = 36
 const MIN_WAVEFORM_BAR_COUNT = 16
@@ -30,6 +37,17 @@ const MAX_WAVEFORM_BAR_COUNT = 160
 const createDefaultWaveformLevels = (count = DEFAULT_WAVEFORM_BAR_COUNT) => Array.from({ length: count }, () => .14)
 const DEFAULT_WAVEFORM_LEVELS = createDefaultWaveformLevels()
 const WAVEFORM_SAMPLE_INTERVAL_MS = 72
+
+interface RecordingStartRequest {
+  generation: number
+  recognition: BrowserSpeechRecognition | null
+  recorder: MediaRecorder | null
+  stream: MediaStream | null
+}
+
+const stopMediaStream = (stream: MediaStream) => {
+  stream.getTracks().forEach(track => track.stop())
+}
 
 const getMediaRecorderMimeType = () => {
   if (typeof MediaRecorder === 'undefined') return undefined
@@ -40,22 +58,6 @@ const getMediaRecorderMimeType = () => {
   ]
   return candidates.find(candidate => MediaRecorder.isTypeSupported(candidate))
 }
-
-const hasAudioCaptureSupport = () => (
-  typeof navigator !== 'undefined' &&
-  typeof navigator.mediaDevices?.getUserMedia === 'function'
-)
-
-const hasRecordingSupport = () => (
-  hasAudioCaptureSupport() &&
-  typeof MediaRecorder !== 'undefined'
-)
-
-const hasAnySpeechInputSupport = () =>
-  hasRecordingSupport() || (
-    hasAudioCaptureSupport() &&
-    isBrowserWebSpeechRecognitionAvailable()
-  )
 
 const getBrowserSpeechLanguage = () => (
   document.documentElement.lang.trim() ||
@@ -153,7 +155,7 @@ export const useSenderVoiceInput = ({
   } = useSWR(configCacheKey, getConfig, {
     revalidateOnFocus: false
   })
-  const [phase, setPhase] = useState<'idle' | 'recording' | 'transcribing'>('idle')
+  const [phase, setPhase] = useState<SenderVoiceInputPhase>('idle')
   const [setupOpen, setSetupOpen] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | undefined>()
   const [errorCanOpenConfig, setErrorCanOpenConfig] = useState(true)
@@ -162,14 +164,13 @@ export const useSenderVoiceInput = ({
   const [settingDefaultServiceId, setSettingDefaultServiceId] = useState<string | undefined>()
   const [waveformLevels, setWaveformLevels] = useState(DEFAULT_WAVEFORM_LEVELS)
   const waveformCapacityRef = useRef(DEFAULT_WAVEFORM_BAR_COUNT)
-  const recorderRef = useRef<MediaRecorder | null>(null)
-  const recordingStreamRef = useRef<MediaStream | null>(null)
+  const recordingRequestGenerationRef = useRef(0)
+  const recordingRequestRef = useRef<RecordingStartRequest | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
   const waveformFrameRef = useRef<number | null>(null)
   const recordingTimeoutRef = useRef<number | null>(null)
   const recordingStartedAtRef = useRef(0)
   const chunksRef = useRef<BlobPart[]>([])
-  const browserSpeechRecognitionRef = useRef<BrowserSpeechRecognition | null>(null)
   const browserSpeechTranscriptRef = useRef('')
   const browserSpeechErrorRef = useRef<BrowserSpeechRecognitionErrorEvent['error'] | null>(null)
   const browserSpeechCanceledRef = useRef(false)
@@ -246,31 +247,83 @@ export const useSenderVoiceInput = ({
     }
   }, [])
 
-  const cleanupBrowserSpeechRecognition = useCallback((options: { abort?: boolean } = {}) => {
-    const recognition = browserSpeechRecognitionRef.current
-    browserSpeechRecognitionRef.current = null
-    if (recognition == null) return
+  const isCurrentRecordingRequest = useCallback((request: RecordingStartRequest) => (
+    recordingRequestRef.current === request &&
+    recordingRequestGenerationRef.current === request.generation
+  ), [])
 
-    recognition.onend = null
-    recognition.onerror = null
-    recognition.onresult = null
-    if (options.abort === true) {
+  const disposeRecordingRequest = useCallback((request: RecordingStartRequest) => {
+    const recognition = request.recognition
+    request.recognition = null
+    if (recognition != null) {
+      recognition.onend = null
+      recognition.onerror = null
+      recognition.onresult = null
       try {
         recognition.abort()
       } catch {}
     }
+
+    const recorder = request.recorder
+    request.recorder = null
+    if (recorder != null) {
+      recorder.ondataavailable = null
+      recorder.onerror = null
+      recorder.onstop = null
+      if (recorder.state !== 'inactive') {
+        try {
+          recorder.stop()
+        } catch {}
+      }
+    }
+
+    const stream = request.stream
+    request.stream = null
+    if (stream != null) {
+      stopMediaStream(stream)
+    }
   }, [])
 
-  const cleanupRecordingResources = useCallback(() => {
-    cleanupRecordingTimeout()
-    cleanupWaveform()
-    cleanupBrowserSpeechRecognition({ abort: true })
-    recordingStreamRef.current?.getTracks().forEach(track => track.stop())
-    recordingStreamRef.current = null
-    recorderRef.current = null
-  }, [cleanupBrowserSpeechRecognition, cleanupRecordingTimeout, cleanupWaveform])
+  const cleanupRecordingResources = useCallback((request?: RecordingStartRequest | null) => {
+    const target = request === undefined ? recordingRequestRef.current : request
+    const isCurrent = target != null && isCurrentRecordingRequest(target)
+    if (request === undefined || isCurrent) {
+      recordingRequestRef.current = null
+      recordingRequestGenerationRef.current += 1
+      cleanupRecordingTimeout()
+      cleanupWaveform()
+    }
+    if (target != null) {
+      disposeRecordingRequest(target)
+    }
+    return isCurrent
+  }, [cleanupRecordingTimeout, cleanupWaveform, disposeRecordingRequest, isCurrentRecordingRequest])
 
-  useEffect(() => () => cleanupRecordingResources(), [cleanupRecordingResources])
+  const beginRecordingRequest = useCallback(() => {
+    cleanupRecordingResources()
+    const request: RecordingStartRequest = {
+      generation: recordingRequestGenerationRef.current + 1,
+      recognition: null,
+      recorder: null,
+      stream: null
+    }
+    recordingRequestGenerationRef.current = request.generation
+    recordingRequestRef.current = request
+    return request
+  }, [cleanupRecordingResources])
+
+  const claimRecordingStream = useCallback((request: RecordingStartRequest, stream: MediaStream) => {
+    if (!isCurrentRecordingRequest(request)) {
+      stopMediaStream(stream)
+      return false
+    }
+    request.stream = stream
+    return true
+  }, [isCurrentRecordingRequest])
+
+  useEffect(() => () => {
+    cleanupRecordingResources()
+  }, [cleanupRecordingResources])
 
   const resetWaveformLevels = useCallback(() => {
     setWaveformLevels(createDefaultWaveformLevels(waveformCapacityRef.current))
@@ -454,10 +507,14 @@ export const useSenderVoiceInput = ({
     }
   }, [clearRetryAudio, completeTranscription, editorRef, setVoiceError, t])
 
-  const finishRecording = useCallback(async (recorderMimeType: string) => {
+  const finishRecording = useCallback(async (request: RecordingStartRequest, recorderMimeType: string) => {
+    if (!isCurrentRecordingRequest(request)) {
+      disposeRecordingRequest(request)
+      return
+    }
     const sendAfterTranscription = sendAfterStopRef.current
     sendAfterStopRef.current = false
-    cleanupRecordingResources()
+    cleanupRecordingResources(request)
 
     const blob = new Blob(chunksRef.current, {
       type: recorderMimeType || 'audio/webm'
@@ -466,9 +523,13 @@ export const useSenderVoiceInput = ({
     const filename = recorderMimeType.includes('mp4') ? 'recording.mp4' : 'recording.webm'
 
     await submitAudioForTranscription({ blob, filename, sendAfterTranscription })
-  }, [cleanupRecordingResources, submitAudioForTranscription])
+  }, [cleanupRecordingResources, disposeRecordingRequest, isCurrentRecordingRequest, submitAudioForTranscription])
 
-  const finishBrowserSpeechRecognition = useCallback(() => {
+  const finishBrowserSpeechRecognition = useCallback((request: RecordingStartRequest) => {
+    if (!isCurrentRecordingRequest(request)) {
+      disposeRecordingRequest(request)
+      return
+    }
     const sendAfterTranscription = sendAfterStopRef.current
     const transcript = browserSpeechTranscriptRef.current.trim()
     const error = browserSpeechErrorRef.current
@@ -477,8 +538,7 @@ export const useSenderVoiceInput = ({
     browserSpeechTranscriptRef.current = ''
     browserSpeechErrorRef.current = null
     browserSpeechCanceledRef.current = false
-    browserSpeechRecognitionRef.current = null
-    cleanupRecordingResources()
+    cleanupRecordingResources(request)
 
     if (wasCanceled) {
       clearRetryAudio()
@@ -500,21 +560,36 @@ export const useSenderVoiceInput = ({
     setVoiceError(t(error == null ? 'chat.voiceInput.emptyRecording' : getBrowserSpeechErrorMessageKey(error)), {
       canOpenConfig: false
     })
-  }, [cleanupRecordingResources, clearRetryAudio, completeTranscription, editorRef, setVoiceError, t])
+  }, [
+    cleanupRecordingResources,
+    clearRetryAudio,
+    completeTranscription,
+    disposeRecordingRequest,
+    editorRef,
+    isCurrentRecordingRequest,
+    setVoiceError,
+    t
+  ])
 
-  const startBrowserSpeechRecognition = useCallback(async () => {
-    const recognition = createBrowserSpeechRecognition()
-    if (recognition == null) {
-      setVoiceError(t('chat.voiceInput.unsupported'))
-      return
-    }
-
+  const startBrowserSpeechRecognition = useCallback(async (request: RecordingStartRequest) => {
     try {
+      const recognition = createBrowserSpeechRecognition()
+      if (recognition == null) {
+        if (!cleanupRecordingResources(request)) return
+        setPhase('idle')
+        setVoiceError(t('chat.voiceInput.unsupported'), { canOpenConfig: false })
+        return
+      }
+      request.recognition = recognition
+      if (!isCurrentRecordingRequest(request)) {
+        disposeRecordingRequest(request)
+        return
+      }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      if (!claimRecordingStream(request, stream)) return
       browserSpeechTranscriptRef.current = ''
       browserSpeechErrorRef.current = null
       browserSpeechCanceledRef.current = false
-      recordingStreamRef.current = stream
       recordingStartedAtRef.current = Date.now()
       setElapsedSeconds(0)
       resetWaveformLevels()
@@ -524,6 +599,7 @@ export const useSenderVoiceInput = ({
       recognition.interimResults = true
       recognition.lang = getBrowserSpeechLanguage()
       recognition.onresult = (event: BrowserSpeechRecognitionResultEvent) => {
+        if (!isCurrentRecordingRequest(request)) return
         let transcript = ''
         for (let index = 0; index < event.results.length; index += 1) {
           transcript += event.results[index][0]?.transcript ?? ''
@@ -531,23 +607,32 @@ export const useSenderVoiceInput = ({
         browserSpeechTranscriptRef.current = transcript
       }
       recognition.onerror = (event: BrowserSpeechRecognitionErrorEvent) => {
+        if (!isCurrentRecordingRequest(request)) return
         browserSpeechErrorRef.current = event.error
       }
-      recognition.onend = finishBrowserSpeechRecognition
-      browserSpeechRecognitionRef.current = recognition
+      recognition.onend = () => finishBrowserSpeechRecognition(request)
       recognition.start()
+      if (!isCurrentRecordingRequest(request)) {
+        disposeRecordingRequest(request)
+        return
+      }
       setPhase('recording')
       setSetupOpen(false)
     } catch (error) {
-      cleanupRecordingResources()
+      if (!cleanupRecordingResources(request)) return
       setPhase('idle')
-      if (error instanceof DOMException && error.name === 'NotAllowedError') {
-        setVoiceError(t('chat.voiceInput.permissionDenied'), { canOpenConfig: false })
-        return
-      }
-      setVoiceError(t('chat.voiceInput.recordingFailed'), { canOpenConfig: false })
+      setVoiceError(t(getRecordingStartErrorMessageKey(error)), { canOpenConfig: false })
     }
-  }, [cleanupRecordingResources, finishBrowserSpeechRecognition, setVoiceError, startWaveform, t])
+  }, [
+    claimRecordingStream,
+    cleanupRecordingResources,
+    disposeRecordingRequest,
+    finishBrowserSpeechRecognition,
+    isCurrentRecordingRequest,
+    setVoiceError,
+    startWaveform,
+    t
+  ])
 
   const startRecording = useCallback(async () => {
     if (!enabled || phase !== 'idle') return
@@ -555,28 +640,39 @@ export const useSenderVoiceInput = ({
     setErrorMessage(undefined)
     clearRetryAudio()
 
-    if (!hasAnySpeechInputSupport()) {
-      setVoiceError(t('chat.voiceInput.unsupported'))
+    if (!hasAnySpeechInputSupport(isBrowserWebSpeechRecognitionAvailable())) {
+      setVoiceError(t('chat.voiceInput.unsupported'), { canOpenConfig: false })
       return
     }
 
     if (!canStartRecording) {
-      notifyWarning(t('chat.voiceInput.unavailable'))
+      const message = t('chat.voiceInput.unavailable')
+      setErrorCanOpenConfig(false)
+      setErrorMessage(message)
+      notifyWarning(message)
       return
     }
 
+    const request = beginRecordingRequest()
+    setPhase('requesting')
     let response = servicesData
     try {
       response ??= await mutateServices()
     } catch (error) {
+      if (!isCurrentRecordingRequest(request)) return
       if (!isBrowserWebSpeechRecognitionAvailable()) {
+        cleanupRecordingResources(request)
+        setPhase('idle')
         setVoiceError(getApiErrorMessage(error, t('chat.voiceInput.loadServicesFailed')))
         return
       }
     }
+    if (!isCurrentRecordingRequest(request)) return
     const availableServices = mergeSpeechToTextServices(response?.services ?? [])
       .filter(service => service.enabled)
     if (availableServices.length === 0) {
+      cleanupRecordingResources(request)
+      setPhase('idle')
       setSetupOpen(true)
       return
     }
@@ -590,46 +686,60 @@ export const useSenderVoiceInput = ({
     }
 
     if (isClientSpeechToTextService(activeService)) {
-      await startBrowserSpeechRecognition()
+      await startBrowserSpeechRecognition(request)
       return
     }
 
     if (!hasRecordingSupport()) {
-      setVoiceError(t('chat.voiceInput.unsupported'))
+      cleanupRecordingResources(request)
+      setPhase('idle')
+      setVoiceError(t('chat.voiceInput.unsupported'), { canOpenConfig: false })
       return
     }
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      if (!claimRecordingStream(request, stream)) return
       const mimeType = getMediaRecorderMimeType()
       const recorder = new MediaRecorder(stream, mimeType == null ? undefined : { mimeType })
+      if (!isCurrentRecordingRequest(request)) {
+        stopMediaStream(stream)
+        return
+      }
+      request.recorder = recorder
       chunksRef.current = []
-      recordingStreamRef.current = stream
-      recorderRef.current = recorder
       recordingStartedAtRef.current = Date.now()
       setElapsedSeconds(0)
       resetWaveformLevels()
       startWaveform(stream)
       recorder.ondataavailable = (event) => {
+        if (!isCurrentRecordingRequest(request)) return
         if (event.data.size > 0) {
           chunksRef.current.push(event.data)
         }
       }
       recorder.onerror = () => {
+        if (!isCurrentRecordingRequest(request)) return
         recorder.onstop = null
         chunksRef.current = []
         sendAfterStopRef.current = false
-        cleanupRecordingResources()
+        cleanupRecordingResources(request)
         setPhase('idle')
         setVoiceError(t('chat.voiceInput.recordingFailed'))
       }
       recorder.onstop = () => {
-        void finishRecording(recorder.mimeType)
+        if (!isCurrentRecordingRequest(request)) return
+        void finishRecording(request, recorder.mimeType)
       }
       recorder.start()
+      if (!isCurrentRecordingRequest(request)) {
+        disposeRecordingRequest(request)
+        return
+      }
       if (activeService?.maxDurationSeconds != null && activeService.maxDurationSeconds > 0) {
         recordingTimeoutRef.current = window.setTimeout(() => {
-          const activeRecorder = recorderRef.current
+          if (!isCurrentRecordingRequest(request)) return
+          const activeRecorder = request.recorder
           if (activeRecorder == null || activeRecorder.state === 'inactive') return
           sendAfterStopRef.current = false
           setPhase('transcribing')
@@ -637,28 +747,28 @@ export const useSenderVoiceInput = ({
             activeRecorder.requestData()
             activeRecorder.stop()
           } catch {
-            void finishRecording(activeRecorder.mimeType)
+            void finishRecording(request, activeRecorder.mimeType)
           }
         }, activeService.maxDurationSeconds * 1000)
       }
       setPhase('recording')
       setSetupOpen(false)
     } catch (error) {
-      cleanupRecordingResources()
+      if (!cleanupRecordingResources(request)) return
       setPhase('idle')
-      if (error instanceof DOMException && error.name === 'NotAllowedError') {
-        setVoiceError(t('chat.voiceInput.permissionDenied'), { canOpenConfig: false })
-        return
-      }
-      setVoiceError(t('chat.voiceInput.recordingFailed'))
+      setVoiceError(t(getRecordingStartErrorMessageKey(error)), { canOpenConfig: false })
     }
   }, [
+    beginRecordingRequest,
     canStartRecording,
+    claimRecordingStream,
     clearRetryAudio,
     cleanupRecordingResources,
+    disposeRecordingRequest,
     editorRef,
     enabled,
     finishRecording,
+    isCurrentRecordingRequest,
     mergeSpeechToTextServices,
     mutateServices,
     notifyWarning,
@@ -671,27 +781,13 @@ export const useSenderVoiceInput = ({
   ])
 
   const cancelRecording = useCallback(() => {
-    if (phase !== 'recording') return
+    if (phase !== 'requesting' && phase !== 'recording') return
     sendAfterStopRef.current = false
     chunksRef.current = []
-    const recognition = browserSpeechRecognitionRef.current
+    const request = recordingRequestRef.current
+    const recognition = request?.recognition
     if (recognition != null) {
       browserSpeechCanceledRef.current = true
-      cleanupRecordingResources()
-      clearRetryAudio()
-      setPhase('idle')
-      setElapsedSeconds(0)
-      resetWaveformLevels()
-      editorRef.current?.focus()
-      return
-    }
-    const recorder = recorderRef.current
-    recorder?.stream.getTracks().forEach(track => track.stop())
-    if (recorder != null && recorder.state !== 'inactive') {
-      recorder.onstop = null
-      try {
-        recorder.stop()
-      } catch {}
     }
     cleanupRecordingResources()
     clearRetryAudio()
@@ -714,31 +810,39 @@ export const useSenderVoiceInput = ({
 
   const stopRecording = useCallback((options?: { sendAfterTranscription?: boolean }) => {
     if (phase !== 'recording') return
-    const recognition = browserSpeechRecognitionRef.current
+    const request = recordingRequestRef.current
+    if (request == null || !isCurrentRecordingRequest(request)) return
+    const recognition = request.recognition
     if (recognition != null) {
       sendAfterStopRef.current = options?.sendAfterTranscription === true && canSendAfterTranscription
       setPhase('transcribing')
       try {
         recognition.stop()
       } catch {
-        finishBrowserSpeechRecognition()
+        finishBrowserSpeechRecognition(request)
       }
       return
     }
-    const recorder = recorderRef.current
+    const recorder = request.recorder
     sendAfterStopRef.current = options?.sendAfterTranscription === true && canSendAfterTranscription
     setPhase('transcribing')
     if (recorder == null || recorder.state === 'inactive') {
-      void finishRecording('audio/webm')
+      void finishRecording(request, 'audio/webm')
       return
     }
     try {
       recorder.requestData()
       recorder.stop()
     } catch {
-      void finishRecording(recorder.mimeType)
+      void finishRecording(request, recorder.mimeType)
     }
-  }, [canSendAfterTranscription, finishBrowserSpeechRecognition, finishRecording, phase])
+  }, [
+    canSendAfterTranscription,
+    finishBrowserSpeechRecognition,
+    finishRecording,
+    isCurrentRecordingRequest,
+    phase
+  ])
 
   const retryTranscription = useCallback(() => {
     if (phase !== 'idle') return
@@ -753,11 +857,13 @@ export const useSenderVoiceInput = ({
 
   const cancelTranscription = useCallback(() => {
     if (phase !== 'transcribing') return
-    const recognition = browserSpeechRecognitionRef.current
+    const request = recordingRequestRef.current
+    const recognition = request?.recognition
     if (recognition != null) {
       browserSpeechCanceledRef.current = true
-      cleanupRecordingResources()
     }
+    chunksRef.current = []
+    cleanupRecordingResources()
     transcriptionCanceledRef.current = true
     transcriptionAbortControllerRef.current?.abort()
     setPhase('idle')
@@ -834,7 +940,7 @@ export const useSenderVoiceInput = ({
       settingDefaultServiceId,
       services,
       setupOpen,
-      unsupported: !hasAnySpeechInputSupport(),
+      unsupported: !hasAnySpeechInputSupport(isBrowserWebSpeechRecognitionAvailable()),
       waveformLevels
     }
   }), [

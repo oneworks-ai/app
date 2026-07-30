@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { SenderVoiceInputController } from '../../@types/sender-voice-input'
@@ -20,32 +20,63 @@ export function SenderVoiceRecordingBar({
   const { t } = useTranslation()
   const { state } = voiceInput
   const { setWaveformCapacity } = voiceInput.handlers
-  const waveformRef = useRef<HTMLDivElement | null>(null)
+  const [waveformNode, setWaveformNode] = useState<HTMLDivElement | null>(null)
+  const waveformRef = useCallback((node: HTMLDivElement | null) => {
+    setWaveformNode(node)
+  }, [])
+  const isRequesting = state.phase === 'requesting'
   const isTranscribing = state.phase === 'transcribing'
+  const phaseAnnouncement = isTranscribing
+    ? t('chat.voiceInput.transcribing')
+    : t('chat.voiceInput.stop')
 
   useEffect(() => {
-    const node = waveformRef.current
-    if (node == null) return undefined
+    if (waveformNode == null) return undefined
 
     const updateCapacity = () => {
-      const width = node.getBoundingClientRect().width
+      const width = waveformNode.getBoundingClientRect().width
       setWaveformCapacity(Math.floor((width + WAVEFORM_BAR_GAP) / (WAVEFORM_BAR_WIDTH + WAVEFORM_BAR_GAP)))
     }
     updateCapacity()
 
     const resizeObserver = new ResizeObserver(updateCapacity)
-    resizeObserver.observe(node)
+    resizeObserver.observe(waveformNode)
     return () => resizeObserver.disconnect()
-  }, [setWaveformCapacity])
+  }, [setWaveformCapacity, waveformNode])
+
+  if (isRequesting) {
+    return (
+      <div
+        className='sender-voice-recording sender-voice-recording--requesting'
+        role='status'
+        aria-live='polite'
+        aria-atomic='true'
+      >
+        <span className='material-symbols-rounded sender-voice-recording__pending-icon' aria-hidden='true'>
+          progress_activity
+        </span>
+        <div className='sender-voice-recording__time'>
+          {t('chat.voiceInput.requestingPermission')}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className='sender-voice-recording'>
-      <div className='sender-voice-waveform' aria-hidden='true' ref={waveformRef}>
+      <div className='sender-voice-waveform' ref={waveformRef}>
+        <span
+          role='status'
+          aria-live='polite'
+          aria-atomic='true'
+          aria-label={phaseAnnouncement}
+        />
         {state.waveformLevels.map((level, index) => (
           <span
             // Waveform bars are positional; no stable domain id exists.
             key={index}
             className='sender-voice-waveform__bar'
+            aria-hidden='true'
             style={{ transform: `scaleY(${Math.max(.08, level)})` }}
           />
         ))}

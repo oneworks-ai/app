@@ -1,6 +1,6 @@
 import type { SenderSpeechToTextServiceSummary } from '../@utils/client-speech-to-text'
 
-export type SenderVoiceInputPhase = 'idle' | 'recording' | 'transcribing'
+export type SenderVoiceInputPhase = 'idle' | 'requesting' | 'recording' | 'transcribing'
 
 export interface SenderVoiceInputState {
   canRetry: boolean
