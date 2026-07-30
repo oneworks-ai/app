@@ -11,8 +11,10 @@ vi.mock('#~/services/auth/index.js', () => ({
   verifySessionToken
 }))
 
-const createCtx = (path = '/api/sessions', authorization = '') => ({
+const createCtx = (path = '/api/sessions', authorization = '', method = 'GET') => ({
+  method,
   path,
+  query: {},
   get: vi.fn((name: string) => name === 'Authorization' ? authorization : ''),
   cookies: {
     get: vi.fn(() => 'token')
@@ -68,5 +70,65 @@ describe('authMiddleware', () => {
 
     expect(verifySessionToken).toHaveBeenCalledWith(expect.anything(), 'bearer-token')
     expect(next).toHaveBeenCalledOnce()
+  })
+
+  it('marks asset auth config faults as explicit pre-commit failures', async () => {
+    resolveWebAuthConfig.mockRejectedValueOnce(new Error('config storage unavailable'))
+    const { authMiddleware } = await import('#~/middlewares/auth.js')
+
+    await expect(
+      authMiddleware({} as any)(
+        createCtx('/api/ai/assets', '', 'POST') as any,
+        vi.fn()
+      )
+    ).rejects.toMatchObject({
+      code: 'asset_auth_config_failed',
+      details: { committed: false },
+      status: 500
+    })
+  })
+
+  it('marks asset token verification faults as explicit pre-commit failures', async () => {
+    resolveWebAuthConfig.mockResolvedValueOnce({ enabled: true })
+    verifySessionToken.mockRejectedValueOnce(new Error('token store unavailable'))
+    const { authMiddleware } = await import('#~/middlewares/auth.js')
+
+    await expect(
+      authMiddleware({} as any)(
+        createCtx('/api/ai/assets', '', 'POST') as any,
+        vi.fn()
+      )
+    ).rejects.toMatchObject({
+      code: 'asset_auth_verification_failed',
+      details: { committed: false },
+      status: 500
+    })
+  })
+
+  it('preserves non-asset auth config fault semantics', async () => {
+    const fault = new Error('config storage unavailable')
+    resolveWebAuthConfig.mockRejectedValueOnce(fault)
+    const { authMiddleware } = await import('#~/middlewares/auth.js')
+
+    await expect(
+      authMiddleware({} as any)(
+        createCtx('/api/sessions') as any,
+        vi.fn()
+      )
+    ).rejects.toBe(fault)
+  })
+
+  it('preserves non-asset token verification fault semantics', async () => {
+    const fault = new Error('token store unavailable')
+    resolveWebAuthConfig.mockResolvedValueOnce({ enabled: true })
+    verifySessionToken.mockRejectedValueOnce(fault)
+    const { authMiddleware } = await import('#~/middlewares/auth.js')
+
+    await expect(
+      authMiddleware({} as any)(
+        createCtx('/api/sessions') as any,
+        vi.fn()
+      )
+    ).rejects.toBe(fault)
   })
 })

@@ -54,9 +54,13 @@ const toResolvedDefinitions = <TDefinition extends { name?: string }>(
 
 export class DefinitionLoader {
   private readonly cwd: string
+  private readonly env?: Record<string, string | null | undefined>
 
-  constructor(cwd: string = process.cwd()) {
+  constructor(cwd: string = process.cwd(), options: {
+    env?: Record<string, string | null | undefined>
+  } = {}) {
     this.cwd = cwd
+    this.env = options.env
   }
 
   private async scan(
@@ -123,7 +127,10 @@ export class DefinitionLoader {
   private async loadWorkspaceDefinitions<TDefinition extends { name?: string }>(
     select: (bundle: Awaited<ReturnType<typeof resolveWorkspaceAssetBundle>>) => WorkspaceDefinitionAsset<TDefinition>[]
   ): Promise<Definition<TDefinition>[]> {
-    const bundle = await resolveWorkspaceAssetBundle({ cwd: this.cwd })
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: this.cwd,
+      ...(this.env == null ? {} : { env: this.env })
+    })
     return toResolvedDefinitions(select(bundle))
   }
 

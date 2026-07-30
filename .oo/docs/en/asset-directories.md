@@ -116,6 +116,18 @@ This resolves the AI base directory to `./.oo` and the entities directory to `./
 
 ## What Changes
 
+### Create from the Knowledge Base
+
+The Knowledge Base can create project-owned entities, flows, and rules. Enter a name and optional description; flows can also declare named parameters. The form previews the generated project-relative file name, creates only in configured project asset directories that remain inside the current trusted workspace, and refreshes the affected list after the server completes publication. If the refresh fails, retrying refresh does not create a second file.
+
+Reading still supports the absolute asset directories described above. To preserve the creation authority and atomic-publication boundary, Knowledge Base creation does not write to an absolute directory outside the workspace. Preview and create reject such a destination; use a workspace-contained directory or have a project maintainer manage the external asset manually.
+
+The created templates use the same discovery conventions as existing assets: `entities/<name>.md`, `specs/<name>.md`, and `rules/<name>.md`. Names are converted to a shared canonical slug and conflicting local or plugin definitions are rejected.
+
+Once publication may be visible in the workspace, the server never deletes or restores the target by path. A later durability, identity-probe, or response failure is reported as committed-degraded or committed-indeterminate. The Knowledge Base closes that submission and refreshes the list to reconcile status; it never automatically repeats the create request. A deliberate retry is safe only when the server explicitly reports that nothing committed.
+
+When native identity-bound cleanup is unavailable, the server retains the private staging file owned by that generation and reports degradation instead of risking deletion of a replacement through its path. Project maintainers can inspect reported `.asset-create-*.tmp` residue; asset loaders do not treat those files as definitions.
+
 These variables affect the main project asset consumers:
 
 - workspace assets: `rules`, `skills`, `specs`, `entities`, `mcp`

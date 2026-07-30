@@ -22,8 +22,33 @@ import {
   resolveProjectOoPath,
   resolveProjectWorkspaceFolder
 } from '#~/ai-path.js'
+import { toCanonicalAssetSlug } from '#~/asset-slug.js'
 
 describe('ai path utils', () => {
+  it('keeps astral characters intact and rejects Windows-reserved or unsafe asset names', () => {
+    expect(toCanonicalAssetSlug('🚀 Review')).toBe('review')
+    expect(toCanonicalAssetSlug('客户 反馈')).toBe('客户-反馈')
+    const astralLetter = String.fromCodePoint(0x10400)
+    const truncatedAstral = toCanonicalAssetSlug(astralLetter.repeat(81)) ?? ''
+    expect(Array.from(truncatedAstral)).toHaveLength(50)
+    expect(truncatedAstral).toBe(astralLetter.toLowerCase().repeat(50))
+    expect(toCanonicalAssetSlug('CON')).toBeUndefined()
+    expect(toCanonicalAssetSlug('review.')).toBeUndefined()
+    expect(toCanonicalAssetSlug('review ')).toBeUndefined()
+  })
+
+  it('fails closed instead of truncating a multi-code-point grapheme without Segmenter', () => {
+    const originalSegmenter = Intl.Segmenter
+    Object.defineProperty(Intl, 'Segmenter', { configurable: true, value: undefined })
+    try {
+      const family = '👨‍👩‍👧‍👦'
+      expect(toCanonicalAssetSlug(`review-${'a'.repeat(79)}-${family}`)).toBeUndefined()
+      expect(toCanonicalAssetSlug('客户反馈')).toBe('客户反馈')
+    } finally {
+      Object.defineProperty(Intl, 'Segmenter', { configurable: true, value: originalSegmenter })
+    }
+  })
+
   it('uses the default base dir and entities dir names', () => {
     expect(resolveProjectOoBaseDirName({})).toBe(DEFAULT_PROJECT_OO_BASE_DIR)
     expect(resolveProjectOoEntitiesDirName({})).toBe(DEFAULT_PROJECT_OO_ENTITIES_DIR)
