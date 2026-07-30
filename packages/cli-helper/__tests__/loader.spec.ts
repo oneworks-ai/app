@@ -1,10 +1,20 @@
 import { spawnSync } from 'node:child_process'
 import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { delimiter, resolve } from 'node:path'
+import { delimiter, join, resolve } from 'node:path'
 import process from 'node:process'
 
 import { afterEach, describe, expect, it } from 'vitest'
+
+const nodeRequire = createRequire(import.meta.url)
+const { resolveActiveCliPackageDir } = nodeRequire('../entry.js') as {
+  resolveActiveCliPackageDir: (
+    packageName: string,
+    packageDir: string,
+    env?: Record<string, string | undefined>
+  ) => string
+}
 
 const tempDirs: string[] = []
 
@@ -13,6 +23,39 @@ afterEach(async () => {
 })
 
 describe('cli-helper loader wrapper', () => {
+  it('redirects a direct package bin to its validated active module package', async () => {
+    const tempDir = await mkdtemp(resolve(tmpdir(), 'ow-cli-helper-active-package-'))
+    tempDirs.push(tempDir)
+
+    const packageName = '@oneworks/server'
+    const bundledPackageDir = join(tempDir, 'bundled-server')
+    const activePackageDir = join(tempDir, 'active-server')
+    const metadataDir = join(tempDir, '.oneworks', 'bootstrap', 'module-updates')
+    await mkdir(bundledPackageDir, { recursive: true })
+    await mkdir(activePackageDir, { recursive: true })
+    await mkdir(metadataDir, { recursive: true })
+    await writeFile(
+      join(activePackageDir, 'package.json'),
+      JSON.stringify({ name: packageName, version: '3.5.0' })
+    )
+    await writeFile(
+      join(metadataDir, 'oneworks__server.json'),
+      JSON.stringify({ packageDir: activePackageDir, packageName, version: '3.5.0' })
+    )
+
+    expect(resolveActiveCliPackageDir(packageName, bundledPackageDir, {
+      __ONEWORKS_PROJECT_REAL_HOME__: tempDir
+    })).toBe(activePackageDir)
+
+    await writeFile(
+      join(metadataDir, 'oneworks__server.json'),
+      JSON.stringify({ packageDir: activePackageDir, packageName, version: '3.6.0' })
+    )
+    expect(resolveActiveCliPackageDir(packageName, bundledPackageDir, {
+      __ONEWORKS_PROJECT_REAL_HOME__: tempDir
+    })).toBe(bundledPackageDir)
+  })
+
   it('propagates the spawned cli exit code', async () => {
     const tempDir = await mkdtemp(resolve(tmpdir(), 'ow-cli-helper-'))
     tempDirs.push(tempDir)

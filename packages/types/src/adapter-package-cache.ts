@@ -13,6 +13,12 @@ interface ExistingPackageCacheEntry {
   version: string
 }
 
+interface ActiveModulePackageMetadata {
+  packageDir: string
+  packageName: string
+  version: string
+}
+
 const normalizeEnvPath = (value: string | null | undefined) => {
   const trimmed = value?.trim()
   return trimmed != null && trimmed !== '' ? trimmed : undefined
@@ -143,6 +149,36 @@ const readInstalledPackageInfo = (packageDir: string) => {
       name: typeof parsed.name === 'string' ? parsed.name : undefined,
       version: typeof parsed.version === 'string' ? parsed.version : undefined
     }
+  } catch {
+    return undefined
+  }
+}
+
+export const resolveActiveModulePackageDirSync = (
+  packageName: string,
+  env: PackageCacheEnv = process.env
+) => {
+  try {
+    const metadataPath = join(
+      resolvePackageCacheHomeDir(env),
+      '.oneworks',
+      'bootstrap',
+      'module-updates',
+      `${sanitizePackageName(packageName)}.json`
+    )
+    const parsed = JSON.parse(readFileSync(metadataPath, 'utf8')) as Partial<ActiveModulePackageMetadata>
+    if (
+      parsed.packageName !== packageName ||
+      typeof parsed.version !== 'string' ||
+      typeof parsed.packageDir !== 'string'
+    ) {
+      return undefined
+    }
+
+    const packageInfo = readInstalledPackageInfo(parsed.packageDir)
+    return packageInfo?.name === packageName && packageInfo.version === parsed.version
+      ? parsed.packageDir
+      : undefined
   } catch {
     return undefined
   }

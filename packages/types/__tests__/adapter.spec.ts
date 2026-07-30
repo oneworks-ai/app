@@ -12,6 +12,7 @@ import {
   loadAdapterModelProviderImportCapability,
   loadAdapterWorktreeEnvironmentImportCapability,
   normalizeAdapterPackageId,
+  resolveActiveModulePackageDirSync,
   resolveAdapterPackageName,
   resolveAdapterRuntimeTarget,
   resolveExistingNpmPackageDirs,
@@ -483,6 +484,43 @@ describe('adapter package helpers', () => {
       ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION: 'dev-missing',
       __ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__: packageCacheRoot
     })).toEqual([])
+  })
+
+  it('resolves only the package that matches the active module pointer metadata', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'ow-active-module-package-'))
+    tempDirs.push(tempDir)
+
+    const packageName = '@oneworks/client'
+    const packageDir = join(tempDir, 'installed-client')
+    const metadataPath = join(
+      tempDir,
+      '.oneworks',
+      'bootstrap',
+      'module-updates',
+      `${sanitizePackageName(packageName)}.json`
+    )
+    await mkdir(packageDir, { recursive: true })
+    await mkdir(join(metadataPath, '..'), { recursive: true })
+    await writeFile(
+      join(packageDir, 'package.json'),
+      JSON.stringify({ name: packageName, version: '3.5.0' }, null, 2)
+    )
+    await writeFile(
+      metadataPath,
+      JSON.stringify({ packageDir, packageName, version: '3.5.0' }, null, 2)
+    )
+
+    expect(resolveActiveModulePackageDirSync(packageName, {
+      __ONEWORKS_PROJECT_REAL_HOME__: tempDir
+    })).toBe(packageDir)
+
+    await writeFile(
+      metadataPath,
+      JSON.stringify({ packageDir, packageName, version: '3.6.0' }, null, 2)
+    )
+    expect(resolveActiveModulePackageDirSync(packageName, {
+      __ONEWORKS_PROJECT_REAL_HOME__: tempDir
+    })).toBeUndefined()
   })
 
   it('prefers the user-home adapter package cache over the default runtime package dir', async () => {

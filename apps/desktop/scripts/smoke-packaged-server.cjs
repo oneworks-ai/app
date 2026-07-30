@@ -172,6 +172,60 @@ const assertPackagedBuiltinPlugins = (appDir) => {
   }
 }
 
+const packagedMainSmokeMarker = '[oneworks-desktop] packaged main smoke ready'
+
+const runPackagedMainSmoke = async (paths) => {
+  const smokeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'oneworks-desktop-main-smoke-'))
+  const userDataDir = path.join(smokeRoot, 'user-data')
+  fs.mkdirSync(userDataDir, { recursive: true })
+
+  try {
+    await new Promise((resolve, reject) => {
+      const child = spawn(paths.executablePath, [`--user-data-dir=${userDataDir}`], {
+        env: {
+          ...process.env,
+          ONEWORKS_DESKTOP_PACKAGE_MAIN_SMOKE: '1'
+        },
+        stdio: ['ignore', 'pipe', 'pipe']
+      })
+      let output = ''
+      let settled = false
+      const finish = (error) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timeout)
+        if (error == null) resolve()
+        else reject(error)
+      }
+      const timeout = setTimeout(() => {
+        child.kill('SIGKILL')
+        finish(new Error(`Packaged Electron main smoke timed out.\n${output}`))
+      }, 30000)
+
+      child.stdout.on('data', chunk => {
+        output += chunk
+      })
+      child.stderr.on('data', chunk => {
+        output += chunk
+      })
+      child.once('error', finish)
+      child.once('exit', (code, signal) => {
+        if (code !== 0 || signal != null) {
+          finish(new Error(`Packaged Electron main smoke exited with code=${code} signal=${signal}.\n${output}`))
+          return
+        }
+        if (!output.includes(packagedMainSmokeMarker)) {
+          finish(new Error(`Packaged Electron main smoke did not report readiness.\n${output}`))
+          return
+        }
+        finish()
+      })
+    })
+  } finally {
+    fs.rmSync(smokeRoot, { recursive: true, force: true })
+  }
+}
+
 const resolvePackagedPaths = () => {
   const packageDir = findPackageDir()
 
@@ -557,6 +611,7 @@ const runPackagedServerSmoke = async ({
 const main = async () => {
   const paths = resolvePackagedPaths()
   assertPackagedBuiltinPlugins(paths.appDir)
+  await runPackagedMainSmoke(paths)
 
   const sourceResult = await runPackagedServerSmoke({
     assertCatalog: async (pluginCatalog, port) => {

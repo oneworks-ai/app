@@ -5,8 +5,11 @@ import process from 'node:process'
 
 import { app } from 'electron'
 
-import { resolveActiveModulePackageDirSync } from '@oneworks/server/module-update-cache'
-import { comparePackageCacheVersions, resolveExistingNpmPackageDir } from '@oneworks/types'
+import {
+  comparePackageCacheVersions,
+  resolveActiveModulePackageDirSync,
+  resolveExistingNpmPackageDir
+} from '@oneworks/types'
 
 const nodeRequire = createRequire(__filename)
 const desktopRoot = app.getAppPath()
