@@ -14,6 +14,7 @@ import {
   resolveBundledRuntimeConsumerBootstrapPath,
   resolveCachedServerPackageEnv,
   resolveClientDistPath,
+  resolveClientPackageDir,
   resolveServerExecutable,
   serverChildPath
 } from './paths'
@@ -313,6 +314,7 @@ export const createWorkspaceServiceManager = ({
         ...runtimePackageCacheVersionEnv
       }
       const clientDistPath = isDev ? undefined : resolveClientDistPath(packagedWorkspaceRuntimeEnv)
+      const clientPackageDir = resolveClientPackageDir(packagedWorkspaceRuntimeEnv)
       if (!isDev && clientDistPath == null) {
         throw new Error('Client dist was not found. Run `pnpm -C apps/desktop build:client` first.')
       }
@@ -331,6 +333,7 @@ export const createWorkspaceServiceManager = ({
           __ONEWORKS_PROJECT_CLIENT_BASE__: CLIENT_BASE,
           __ONEWORKS_PROJECT_CLIENT_DIST_PATH__: clientDistPath ?? '',
           __ONEWORKS_PROJECT_CLIENT_MODE__: isDev ? 'none' : 'desktop',
+          __ONEWORKS_PROJECT_CLIENT_PACKAGE_DIR__: clientPackageDir ?? '',
           __ONEWORKS_PROJECT_SERVER_DATA_DIR__: workspaceServiceDataPaths.dataDir,
           __ONEWORKS_PROJECT_SERVER_HOST__: SERVER_HOST,
           __ONEWORKS_PROJECT_SERVER_LOG_DIR__: workspaceServiceDataPaths.logDir,

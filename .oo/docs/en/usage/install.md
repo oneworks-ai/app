@@ -37,7 +37,7 @@ npx oneworks app --no-cache
 
 `bootstrap app` depends on a published desktop release for the current platform. macOS and Linux are available; Windows depends on published installer artifacts.
 
-When opened through `oneworks web`, `@oneworks/web`, or a desktop workspace, the Web UI includes a module management page from the lower-left menu. It can inspect and update Core, Adapters, and Plugins. The default update channel is saved to the current workspace `.oo.config.json` as `desktop.updateChannel`; per-module overrides are saved as `desktop.moduleUpdateChannels`.
+When opened through `oneworks web`, `@oneworks/web`, or a desktop workspace, the Web UI includes a module management page from the lower-left menu. It can inspect and update Core, Adapters, and Plugins. Core entries are scoped to the active host: integrated Web manages `@oneworks/web`, standalone server manages `@oneworks/server`, and desktop manages `@oneworks/client` plus `@oneworks/server`. The installer rejects versions older than the active or already cached package. The default update channel is saved to the current workspace `.oo.config.json` as `desktop.updateChannel`; per-module overrides are saved as `desktop.moduleUpdateChannels`.
 
 Project behavior of `bootstrap app`:
 
