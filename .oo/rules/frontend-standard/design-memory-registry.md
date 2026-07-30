@@ -198,7 +198,3 @@ Source:
 Effective date:
 Automatic enforcement:
 ```
-
-## 已替代规范
-
-当前无。规范被替代后保留旧 ID、最后 revision、生效区间、替代它的新 ID 和用户确认来源。
