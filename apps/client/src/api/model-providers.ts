@@ -4,6 +4,7 @@ import type {
   AdapterModelProviderImporterDescriptor,
   ConfigSource,
   ModelProviderDefinition,
+  ModelProviderHostMatcher,
   ModelProviderIdentity,
   ModelServiceConfig,
   ProviderAccountStatus,
@@ -12,10 +13,11 @@ import type {
   ProviderManagementTokenCreateInput,
   ProviderManagementTokenProfileResult,
   ProviderManagementTokenUpdateInput,
-  ProviderModelInfo,
+  ProviderModelDiscoveryResult,
   ProviderSecretResult,
   ProviderServiceStatus
 } from '@oneworks/types'
+import { getModelProviderCatalog, installModelProviderCatalog } from '@oneworks/utils/model-providers'
 
 import { fetchApiJsonOrThrow, jsonHeaders } from './base'
 
@@ -27,12 +29,47 @@ export interface ModelProviderProbeResponse {
   issues: Array<{ type: string; path?: string[]; message: string }>
 }
 
+export interface ModelProviderCatalogResponse {
+  catalog: { schemaVersion: 1; source: 'bundled' | 'managed'; version?: string }
+  hostMatchers: ModelProviderHostMatcher[]
+  providers: ModelProviderDefinition[]
+}
+
 export const listModelProviders = () => (
-  fetchApiJsonOrThrow<{ providers: ModelProviderDefinition[] }>(
+  fetchApiJsonOrThrow<{
+    catalog?: { schemaVersion?: unknown; source?: unknown; version?: unknown }
+    hostMatchers?: ModelProviderHostMatcher[]
+    providers: ModelProviderDefinition[]
+  }>(
     '/api/model-providers',
     { method: 'GET' },
     '[api] list model providers failed:'
-  )
+  ).then((result): ModelProviderCatalogResponse => {
+    const hasCompleteCatalog = result.catalog?.schemaVersion === 1 &&
+      Array.isArray(result.hostMatchers) && result.providers.length > 0
+    if (hasCompleteCatalog) {
+      installModelProviderCatalog({
+        schemaVersion: result.catalog?.schemaVersion,
+        hostMatchers: result.hostMatchers,
+        providers: result.providers
+      })
+    }
+
+    const activeCatalog = getModelProviderCatalog()
+    return {
+      catalog: hasCompleteCatalog
+        ? {
+          schemaVersion: 1,
+          source: result.catalog?.source === 'managed' ? 'managed' : 'bundled',
+          ...(typeof result.catalog?.version === 'string' ? { version: result.catalog.version } : {})
+        }
+        : { schemaVersion: 1, source: 'bundled' },
+      hostMatchers: [...activeCatalog.hostMatchers],
+      providers: hasCompleteCatalog || result.providers.length === 0
+        ? [...activeCatalog.providers]
+        : result.providers
+    }
+  })
 )
 
 export const probeModelProvider = (service: ModelServiceConfig) => (
@@ -84,7 +121,7 @@ export const listModelServiceModels = (
   serviceKey: string,
   params?: { service?: ModelServiceConfig; source?: ConfigSource }
 ) => (
-  fetchApiJsonOrThrow<{ models: ProviderModelInfo[] }>(
+  fetchApiJsonOrThrow<ProviderModelDiscoveryResult>(
     `/api/model-services/${encodeURIComponent(serviceKey)}/models/list`,
     {
       method: 'POST',

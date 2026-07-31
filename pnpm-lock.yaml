@@ -587,6 +587,9 @@ importers:
       '@oneworks/managed-plugins':
         specifier: workspace:*
         version: link:../../packages/managed-plugins
+      '@oneworks/model-provider-catalog':
+        specifier: workspace:*
+        version: link:../../packages/model-provider-catalog
       '@oneworks/register':
         specifier: workspace:*
         version: link:../../packages/register
@@ -1091,6 +1094,12 @@ importers:
         specifier: ^3.24.1
         version: 3.25.76
 
+  packages/model-provider-catalog:
+    dependencies:
+      '@oneworks/types':
+        specifier: workspace:*
+        version: link:../types
+
   packages/plugins/browser-driver: {}
 
   packages/plugins/china-red-theme:
@@ -1297,6 +1306,9 @@ importers:
       '@npmcli/arborist':
         specifier: ^9.7.0
         version: 9.8.0
+      '@oneworks/model-provider-catalog':
+        specifier: workspace:*
+        version: link:../model-provider-catalog
       '@oneworks/types':
         specifier: workspace:*
         version: link:../types

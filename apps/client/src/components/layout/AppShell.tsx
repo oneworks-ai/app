@@ -76,7 +76,7 @@ const DESKTOP_SIMULATION_QUERY_VALUE = 'macos'
 const DESKTOP_SIMULATION_FULLSCREEN_QUERY_PARAM = '__oneworks_fullscreen'
 const DESKTOP_SIMULATION_TOGGLE_KEY_COUNT = 5
 const DESKTOP_SIMULATION_TOGGLE_SEQUENCE_MS = 2_000
-const GLOBAL_MODULE_UPDATE_GROUPS = new Set<ModuleUpdateGroup>(['adapter', 'core'])
+const GLOBAL_MODULE_UPDATE_GROUPS = new Set<ModuleUpdateGroup>(['adapter', 'catalog', 'core'])
 const APP_SHELL_STARTUP_READY_SELECTOR = '.app-shell'
 
 const compactTextParts = (...values: Array<string | undefined>) => (

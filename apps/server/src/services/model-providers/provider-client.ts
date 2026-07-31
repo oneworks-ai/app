@@ -12,6 +12,7 @@ import type {
   ProviderManagementTokenCreateInput,
   ProviderManagementTokenProfileResult,
   ProviderManagementTokenUpdateInput,
+  ProviderModelDiscoveryResult,
   ProviderModelInfo,
   ProviderSecretResult,
   ProviderServiceStatus,
@@ -19,6 +20,9 @@ import type {
   ResolvedModelServiceConfig
 } from '@oneworks/types'
 import { getModelProviderDefinition, resolveModelServiceConfig, resolveModelServiceModels } from '@oneworks/utils'
+
+import { readModelDiscoveryCache, writeModelDiscoveryCache } from './model-discovery-cache.js'
+import type { ModelDiscoveryCacheOptions } from './model-discovery-cache.js'
 
 export type ProviderActionErrorCode =
   | 'provider_unsupported'
@@ -135,26 +139,95 @@ const mapModel = (value: unknown): ProviderModelInfo | undefined => {
   const record = asRecord(value)
   const id = normalizeString(record.id)
   if (id == null) return undefined
+  const title = normalizeString(record.name) ?? normalizeString(record.title)
+  const ownedBy = normalizeString(record.owned_by) ?? normalizeString(record.ownedBy)
+  const createdAt = asNumber(record.created)
   return {
     id,
-    title: normalizeString(record.name) ?? normalizeString(record.title),
-    ownedBy: normalizeString(record.owned_by) ?? normalizeString(record.ownedBy),
-    createdAt: asNumber(record.created)
+    ...(title == null ? {} : { title }),
+    ...(ownedBy == null ? {} : { ownedBy }),
+    ...(createdAt == null ? {} : { createdAt })
   }
 }
 
-export const listProviderModels = async (serviceConfig: ModelServiceConfig): Promise<ProviderModelInfo[]> => {
+export interface ProviderModelDiscoveryOptions extends ModelDiscoveryCacheOptions {
+  serviceKey?: string
+  source?: string
+}
+
+const resolveFallbackModelResult = (
+  service: ResolvedModelServiceConfig,
+  warning?: ProviderModelDiscoveryResult['warning']
+): ProviderModelDiscoveryResult => {
+  const source = service.models != null && service.models.length > 0 ? 'configured' : 'provider_catalog'
+  return {
+    models: resolveModelServiceModels(service).map(id => ({ id })),
+    source,
+    ...(warning == null ? {} : { warning })
+  }
+}
+
+const isCacheFallbackError = (error: unknown) => (
+  error instanceof ProviderActionError &&
+  (error.code === 'upstream_network_error' || error.code === 'upstream_unavailable')
+)
+
+export const discoverProviderModels = async (
+  serviceConfig: ModelServiceConfig,
+  options: ProviderModelDiscoveryOptions = {}
+): Promise<ProviderModelDiscoveryResult> => {
   const service = resolveService(serviceConfig)
   const provider = service.providerDefinition ?? getModelProviderDefinition(service.provider)
-  const configuredModels = resolveModelServiceModels(service)
   if (provider?.capabilities?.listModels !== 'api') {
-    return configuredModels.map(id => ({ id }))
+    return resolveFallbackModelResult(service)
   }
-  const payload = await fetchJson(joinApiPath(resolveApiRoot(service), 'models'), { headers: authHeaders(service) })
-  const data = Array.isArray(asRecord(payload).data) ? asRecord(payload).data as unknown[] : []
-  const models = data.map(mapModel).filter((item): item is ProviderModelInfo => item != null)
-  return models.length > 0 ? models : configuredModels.map(id => ({ id }))
+  const cacheScope = {
+    apiBaseUrl: resolveApiRoot(service),
+    apiKey: service.apiKey,
+    provider: provider.id,
+    serviceKey: options.serviceKey,
+    source: options.source
+  }
+
+  try {
+    const payload = await fetchJson(joinApiPath(cacheScope.apiBaseUrl, 'models'), { headers: authHeaders(service) })
+    const data = Array.isArray(asRecord(payload).data) ? asRecord(payload).data as unknown[] : []
+    const remoteModels = data.map(mapModel).filter((item): item is ProviderModelInfo => item != null)
+    if (remoteModels.length === 0) {
+      return resolveFallbackModelResult(service, {
+        code: 'empty_remote_catalog',
+        message: 'Provider returned no models; using configured or bundled catalog models.'
+      })
+    }
+
+    const modelIds = new Set(remoteModels.map(model => model.id))
+    const configuredModels = (service.models ?? [])
+      .filter(id => !modelIds.has(id))
+      .map(id => ({ id }))
+    const models = [...remoteModels, ...configuredModels]
+    const fetchedAt = new Date(options.now?.() ?? Date.now()).toISOString()
+    await writeModelDiscoveryCache(cacheScope, models, options).catch(() => undefined)
+    return { fetchedAt, models, source: 'remote' }
+  } catch (error) {
+    if (!isCacheFallbackError(error)) throw error
+    const cached = await readModelDiscoveryCache(cacheScope, options)
+    if (cached == null) throw error
+    return {
+      fetchedAt: cached.fetchedAt,
+      models: cached.models,
+      source: 'remote_cache',
+      stale: true,
+      warning: {
+        code: (error as ProviderActionError).code,
+        message: 'Provider is temporarily unavailable; using the last successful model list.'
+      }
+    }
+  }
 }
+
+export const listProviderModels = async (serviceConfig: ModelServiceConfig): Promise<ProviderModelInfo[]> => (
+  (await discoverProviderModels(serviceConfig)).models
+)
 
 const firstBalanceNumber = (...values: unknown[]) => values.map(asNumber).find(value => value != null)
 const NEW_API_QUOTA_PER_USD = 500_000

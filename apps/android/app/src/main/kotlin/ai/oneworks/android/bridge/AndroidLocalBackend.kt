@@ -183,7 +183,17 @@ class AndroidLocalBackend(
         }
 
         if (path == "/api/model-providers" && method == "GET") {
-            return jsonResponse(JSONObject().put("providers", JSONArray()))
+            return jsonResponse(
+                JSONObject()
+                    .put(
+                        "catalog",
+                        JSONObject()
+                            .put("schemaVersion", 1)
+                            .put("source", "bundled")
+                    )
+                    .put("hostMatchers", JSONArray())
+                    .put("providers", JSONArray())
+            )
         }
 
         if (path.startsWith("/api/model-services/")) {

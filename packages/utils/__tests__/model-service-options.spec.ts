@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import {
+  installModelProviderCatalog,
+  resetModelProviderCatalog,
   resolveModelProviderIdentity,
   resolveModelServiceBilling,
   resolveModelServiceCodingPlan,
@@ -13,6 +15,19 @@ import { filterServiceModelsForAdapter, listServiceModelOptions, listServiceMode
 import type { ModelServiceConfig } from '@oneworks/types'
 
 describe('model service options', () => {
+  afterEach(() => resetModelProviderCatalog())
+
+  it('can replace bundled provider metadata with a validated managed catalog', () => {
+    installModelProviderCatalog({
+      schemaVersion: 1,
+      providers: [{ id: 'managed', title: 'Managed provider', category: 'official' }],
+      hostMatchers: [{ provider: 'managed', hosts: ['managed.example.com'] }]
+    })
+
+    expect(resolveModelProviderIdentity({ apiBaseUrl: 'https://managed.example.com/v1' }).provider).toBe('managed')
+    expect(resolveModelServiceDescription({ provider: 'deepseek' })).toBeUndefined()
+  })
+
   it('resolves official provider defaults without explicit apiBaseUrl', () => {
     const result = resolveModelServiceConfig({
       provider: 'moonshot-cn',

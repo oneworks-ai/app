@@ -4,6 +4,7 @@ import path from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { writeActiveModulePackage } from '#~/module-update-cache.js'
 import { checkModuleUpdates, installModuleUpdate } from '#~/services/module-updates.js'
 
 const mocks = vi.hoisted(() => ({
@@ -66,6 +67,52 @@ afterEach(async () => {
 })
 
 describe('module update runtime scoping', () => {
+  it('exposes the model provider catalog as an independently updateable global module', async () => {
+    const realHome = await createTempDir()
+    const serverPackageDir = await writePackage(
+      path.join(realHome, 'runtime', 'server'),
+      '@oneworks/server',
+      '0.1.0-beta.10'
+    )
+    vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', realHome)
+    vi.stubEnv('__ONEWORKS_PROJECT_PACKAGE_DIR__', serverPackageDir)
+    vi.stubEnv('__ONEWORKS_PROJECT_SERVER_ENTRY_KIND__', 'server')
+
+    const response = await checkModuleUpdates({ publishedVersionResolver: async () => '0.1.0-beta.11' })
+
+    expect(response.modules).toContainEqual(expect.objectContaining({
+      activation: 'restart',
+      group: 'catalog',
+      id: 'catalog:model-providers',
+      kind: 'catalog',
+      packageName: '@oneworks/model-provider-catalog'
+    }))
+  })
+
+  it('reports the active managed catalog version after restart', async () => {
+    const realHome = await createTempDir()
+    const packageDir = await writePackage(
+      path.join(realHome, 'active-catalog'),
+      '@oneworks/model-provider-catalog',
+      '0.1.0-beta.11'
+    )
+    vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', realHome)
+    await writeActiveModulePackage({
+      packageDir,
+      packageName: '@oneworks/model-provider-catalog',
+      version: '0.1.0-beta.11'
+    })
+
+    const response = await checkModuleUpdates({ publishedVersionResolver: async () => '0.1.0-beta.11' })
+    const catalog = response.modules.find(item => item.id === 'catalog:model-providers')
+
+    expect(catalog).toMatchObject({
+      currentVersion: '0.1.0-beta.11',
+      needsActivation: false,
+      updateAvailable: false
+    })
+  })
+
   it('uses the selected desktop runtime package versions and ignores stale caches from other hosts', async () => {
     const realHome = await createTempDir()
     const cacheVersion = 'dev-47f2aed57cf2-20260729190050'

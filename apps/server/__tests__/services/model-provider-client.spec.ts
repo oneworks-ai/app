@@ -1,15 +1,82 @@
+import { mkdtemp, rm } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   createProviderManagementToken,
+  discoverProviderModels,
   getProviderAccountStatus,
   getProviderManagementSnapshot,
   getProviderManagementTokenProfile
 } from '#~/services/model-providers/provider-client.js'
 
+const tempDirs: string[] = []
+
 describe('model provider client', () => {
-  afterEach(() => {
+  afterEach(async () => {
     vi.unstubAllGlobals()
+    await Promise.all(tempDirs.splice(0).map(tempDir => rm(tempDir, { force: true, recursive: true })))
+  })
+
+  it('prefers the official model API and falls back to its scoped last-known cache on outages', async () => {
+    const cacheDir = await mkdtemp(path.join(os.tmpdir(), 'oneworks-model-discovery-'))
+    tempDirs.push(cacheDir)
+    const service = {
+      apiBaseUrl: 'https://api.moonshot.cn/v1',
+      apiKey: 'secret-kimi',
+      models: ['configured-only'],
+      provider: 'moonshot-cn'
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ data: [{ id: 'remote-model', owned_by: 'moonshot' }] }), { status: 200 })
+      )
+    )
+
+    const remote = await discoverProviderModels(service, { cacheDir, serviceKey: 'kimi', source: 'user' })
+    expect(remote).toMatchObject({
+      models: [{ id: 'remote-model', ownedBy: 'moonshot' }, { id: 'configured-only' }],
+      source: 'remote'
+    })
+
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
+    const cached = await discoverProviderModels(service, { cacheDir, serviceKey: 'kimi', source: 'user' })
+    expect(cached).toMatchObject({
+      models: remote.models,
+      source: 'remote_cache',
+      stale: true,
+      warning: { code: 'upstream_network_error' }
+    })
+
+    await expect(discoverProviderModels(service, {
+      cacheDir,
+      serviceKey: 'other-profile',
+      source: 'user'
+    })).rejects.toMatchObject({ code: 'upstream_network_error' })
+  })
+
+  it('does not hide authentication errors behind a model cache', async () => {
+    const cacheDir = await mkdtemp(path.join(os.tmpdir(), 'oneworks-model-discovery-auth-'))
+    tempDirs.push(cacheDir)
+    const service = {
+      apiBaseUrl: 'https://api.moonshot.cn/v1',
+      apiKey: 'secret-kimi',
+      provider: 'moonshot-cn'
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ data: [{ id: 'remote-model' }] }), { status: 200 })
+      )
+    )
+    await discoverProviderModels(service, { cacheDir, serviceKey: 'kimi' })
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 401 })))
+    await expect(discoverProviderModels(service, { cacheDir, serviceKey: 'kimi' }))
+      .rejects.toMatchObject({ code: 'upstream_unauthorized' })
   })
 
   it('uses USD as the Moonshot international balance fallback currency', async () => {
