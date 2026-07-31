@@ -1836,23 +1836,23 @@ describe('createCodexSession RPC approval policy mapping', () => {
                   apiKey: 'test-key',
                   extra: {
                     codex: {
-                      wireApi: 'chat',
-                    },
-                  },
-                },
-              },
+                      wireApi: 'chat'
+                    }
+                  }
+                }
+              }
             },
-            undefined,
-          ],
+            undefined
+          ]
         }),
         {
           cwd: '/tmp/workspace',
           model: 'legacy,legacy-model',
-          prompt: 'hello',
-        } as any,
-      ),
+          prompt: 'hello'
+        } as any
+      )
     ).rejects.toThrow(
-      'Codex no longer supports modelServices.legacy.extra.codex.wireApi="chat"',
+      'Codex no longer supports modelServices.legacy.extra.codex.wireApi="chat"'
     )
 
     expect(spawnMock).not.toHaveBeenCalled()

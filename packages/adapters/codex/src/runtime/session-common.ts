@@ -339,7 +339,7 @@ const resolveCodexWireApi = (serviceKey: string, value: unknown): 'responses' | 
 
   throw new Error(
     `Codex no longer supports modelServices.${serviceKey}.extra.codex.wireApi=${JSON.stringify(wireApi)}. ` +
-    'Use "responses" with a Responses-compatible provider.'
+      'Use "responses" with a Responses-compatible provider.'
   )
 }
 

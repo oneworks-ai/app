@@ -1,9 +1,9 @@
 /* eslint-disable max-lines -- model provider resolution keeps host matching, defaults, and plan metadata together. */
 import type {
   IconRef,
-  ModelProviderDefinition,
   ModelProviderCodingPlanDefinition,
   ModelProviderCodingPlanRegion,
+  ModelProviderDefinition,
   ModelProviderIdentity,
   ModelProviderProtocolEndpoint,
   ModelServiceBillingConfig,
