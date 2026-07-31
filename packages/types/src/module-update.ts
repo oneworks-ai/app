@@ -2,9 +2,9 @@ export const moduleUpdateChannels = ['stable', 'rc', 'beta', 'alpha'] as const
 
 export type ModuleUpdateChannel = typeof moduleUpdateChannels[number]
 
-export type ModuleUpdateGroup = 'adapter' | 'core' | 'plugin'
+export type ModuleUpdateGroup = 'adapter' | 'catalog' | 'core' | 'plugin'
 
-export type ModuleUpdateKind = 'adapter' | 'client' | 'plugin' | 'runtime' | 'server'
+export type ModuleUpdateKind = 'adapter' | 'catalog' | 'client' | 'plugin' | 'runtime' | 'server'
 
 export type ModuleUpdateActivation = 'new-session' | 'restart'
 

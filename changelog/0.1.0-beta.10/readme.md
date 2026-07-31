@@ -5,3 +5,4 @@
 - Add per-application CUA access rules keyed by macOS Bundle ID, with allow, ask-every-time, and deny policies plus session cursor preferences.
 - Keep local production-identity desktop builds isolated from official immutable releases so rebuilt client, server, adapter, and plugin runtimes cannot silently reuse an older cache.
 - Preserve the last valid PWA app shell when an update cannot fetch required HTML, JavaScript, or CSS assets instead of activating a partial cache.
+- Split model-provider metadata into an independently updateable catalog package, load compatible managed catalogs after restart, and prefer official provider model-list APIs with scoped last-known cache fallback during outages.

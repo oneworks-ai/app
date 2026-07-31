@@ -501,6 +501,7 @@
     },
     "kind": {
       "adapter": "适配器",
+      "catalog": "数据目录",
       "client": "客户端",
       "plugin": "插件",
       "runtime": "运行时",
@@ -508,6 +509,7 @@
     },
     "groups": {
       "adapter": "Adapters",
+      "catalog": "数据目录",
       "core": "Core",
       "plugin": "Plugins"
     },

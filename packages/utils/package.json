@@ -224,6 +224,7 @@
   },
   "dependencies": {
     "@npmcli/arborist": "^9.7.0",
+    "@oneworks/model-provider-catalog": "workspace:*",
     "@oneworks/types": "workspace:*",
     "js-yaml": "^4.1.1",
     "node-notifier": "^10.0.1",

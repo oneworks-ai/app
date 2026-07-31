@@ -56,6 +56,7 @@
     "@oneworks/definition-core": "workspace:*",
     "@oneworks/definition-loader": "workspace:*",
     "@oneworks/managed-plugins": "workspace:*",
+    "@oneworks/model-provider-catalog": "workspace:*",
     "@oneworks/register": "workspace:*",
     "@oneworks/runtime-protocol": "workspace:*",
     "@oneworks/runtime-store": "workspace:*",

@@ -500,6 +500,7 @@
     },
     "kind": {
       "adapter": "Adapter",
+      "catalog": "Catalog",
       "client": "Client",
       "plugin": "Plugin",
       "runtime": "Runtime",
@@ -507,6 +508,7 @@
     },
     "groups": {
       "adapter": "Adapters",
+      "catalog": "Catalogs",
       "core": "Core",
       "plugin": "Plugins"
     },

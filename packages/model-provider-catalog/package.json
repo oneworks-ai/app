@@ -1,0 +1,47 @@
+{
+  "name": "@oneworks/model-provider-catalog",
+  "version": "0.1.0-beta.10",
+  "description": "Versioned model provider metadata catalog for One Works",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "packages/model-provider-catalog"
+  },
+  "imports": {
+    "#~/*.js": {
+      "__oneworks__": {
+        "default": "./src/*.ts"
+      },
+      "default": {
+        "import": "./dist/*.mjs",
+        "require": "./dist/*.js"
+      }
+    }
+  },
+  "exports": {
+    ".": {
+      "__oneworks__": {
+        "default": "./src/index.ts"
+      },
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/index.mjs && esbuild src/index.ts --bundle --platform=node --format=cjs --outfile=dist/index.js",
+    "prepack": "pnpm run build",
+    "test": "pnpm -C ../.. exec vitest run --workspace vitest.workspace.ts --project bundler packages/model-provider-catalog/__tests__"
+  },
+  "dependencies": {
+    "@oneworks/types": "workspace:*"
+  },
+  "devDependencies": {
+    "esbuild": "^0.27.2"
+  }
+}

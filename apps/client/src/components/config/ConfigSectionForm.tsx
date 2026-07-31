@@ -5,9 +5,9 @@ import type { ReactNode } from 'react'
 import { Fragment, useMemo, useState } from 'react'
 import useSWR from 'swr'
 
-import type { ConfigSource, ConfigUiObjectSchema, ConfigUiSection } from '@oneworks/types'
+import type { ConfigSource, ConfigUiObjectSchema, ConfigUiSection, ModelProviderDefinition } from '@oneworks/types'
 
-import { getAdapterAccounts } from '#~/api'
+import { getAdapterAccounts, listModelProviders } from '#~/api'
 import { normalizeSendShortcut, resolveSendShortcut } from '#~/utils/shortcutUtils'
 
 import { MobileAwareSelect as Select } from '#~/components/mobile-aware-select/MobileAwareSelect'
@@ -27,8 +27,8 @@ import { RecommendedModelsItemEditor } from './RecommendedModelsItemEditor'
 import type { ConfigDetailRoute } from './configDetail'
 import { resolveConfigDetailRouteMeta } from './configDetail'
 import { getConfigDetailPlaceholderEntries } from './configDetailPlaceholders'
-import type { FieldSpec } from './configSchema'
-import { configGroupMeta, configGroupOrder, configSchema } from './configSchema'
+import type { DetailCollectionSpec, FieldSpec } from './configSchema'
+import { configGroupMeta, configGroupOrder, configSchema, resolveModelProviderOptions } from './configSchema'
 import {
   getFieldDescription,
   getFieldLabel,
@@ -83,6 +83,26 @@ const modelServiceProfileFieldKeys = new Set([
   'maxOutputTokens',
   'extra'
 ])
+const withModelProviderOptions = (
+  fields: FieldSpec[],
+  providers: ModelProviderDefinition[] | undefined
+): FieldSpec[] =>
+  fields.map((field) => {
+    const itemFields = field.detailCollection?.itemFields
+    const nextField: FieldSpec = {
+      ...field,
+      ...(field.path.length === 1 && field.path[0] === 'provider' && providers != null
+        ? { options: resolveModelProviderOptions(providers) }
+        : {})
+    }
+    if (itemFields != null && field.detailCollection != null) {
+      nextField.detailCollection = {
+        ...field.detailCollection,
+        itemFields: withModelProviderOptions(itemFields, providers)
+      } as DetailCollectionSpec
+    }
+    return nextField
+  })
 const toFlatField = (field: FieldSpec): FieldSpec => ({
   ...field,
   group: 'default',
@@ -245,7 +265,20 @@ export const SectionForm = ({
   modelServiceImportAction?: AdapterImportAction
   t: TranslationFn
 }) => {
-  const fields = providedFields ?? configSchema[sectionKey] ?? []
+  const baseFields = providedFields ?? configSchema[sectionKey] ?? []
+  const { data: modelProviderCatalog } = useSWR(
+    sectionKey === 'modelServices' ? '/api/model-providers' : null,
+    listModelProviders,
+    {
+      dedupingInterval: 60_000,
+      keepPreviousData: true,
+      revalidateOnFocus: false
+    }
+  )
+  const fields = useMemo(
+    () => withModelProviderOptions(baseFields, modelProviderCatalog?.providers),
+    [baseFields, modelProviderCatalog?.providers]
+  )
   const [newModelServiceProfileKey, setNewModelServiceProfileKey] = useState('')
   const detailContext = {
     mergedModelServices,
@@ -707,7 +740,7 @@ export const SectionForm = ({
         ? worktreeEnvironmentOptions ?? []
         : (field.options ?? []).map(option => ({
           value: option.value,
-          label: <span>{t(option.label)}</span>
+          label: <span>{t(option.label, { defaultValue: option.fallbackLabel ?? option.label })}</span>
         }))
       control = (
         <Select

@@ -552,10 +552,14 @@ describe('model provider routes', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const response = await request(`${baseUrl}/api/model-services/kimi/models/list`, { method: 'POST' })
-    const payload = await response.json() as { models?: Array<{ id: string; ownedBy?: string }> }
+    const payload = await response.json() as {
+      models?: Array<{ id: string; ownedBy?: string }>
+      source?: string
+    }
 
     expect(response.status).toBe(200)
     expect(payload.models).toEqual([{ id: 'kimi-k2', ownedBy: 'moonshot' }])
+    expect(payload.source).toBe('remote')
     expect(fetchMock).toHaveBeenCalledWith('https://api.moonshot.cn/v1/models', {
       headers: { Authorization: 'Bearer secret-kimi' }
     })
