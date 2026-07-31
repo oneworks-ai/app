@@ -1822,6 +1822,42 @@ describe('createCodexSession RPC approval policy mapping', () => {
     session.kill()
   })
 
+  it('rejects the removed chat wire API before starting codex', async () => {
+    process.env.HOME = '/tmp'
+
+    await expect(
+      createCodexSession(
+        makeCtx({
+          configs: [
+            {
+              modelServices: {
+                legacy: {
+                  apiBaseUrl: 'https://example.test/v1',
+                  apiKey: 'test-key',
+                  extra: {
+                    codex: {
+                      wireApi: 'chat'
+                    }
+                  }
+                }
+              }
+            },
+            undefined
+          ]
+        }),
+        {
+          cwd: '/tmp/workspace',
+          model: 'legacy,legacy-model',
+          prompt: 'hello'
+        } as any
+      )
+    ).rejects.toThrow(
+      'Codex no longer supports modelServices.legacy.extra.codex.wireApi="chat"'
+    )
+
+    expect(spawnMock).not.toHaveBeenCalled()
+  })
+
   it('routes provider-only model services with default base URL through the local proxy', async () => {
     process.env.HOME = '/tmp'
     const { proc } = makeProc()

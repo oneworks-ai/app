@@ -169,6 +169,11 @@ export interface ModelProviderStatusDefinition {
   notes?: string
 }
 
+export interface ModelProviderAdapterSupport {
+  includeModels?: string[]
+  excludeModels?: string[]
+}
+
 export interface ModelProviderDefinition {
   id: string
   title: string
@@ -181,6 +186,7 @@ export interface ModelProviderDefinition {
   codingPlan?: ModelProviderCodingPlanDefinition
   portal?: ModelProviderPortalLinks
   capabilities?: ModelProviderCapabilities
+  adapterSupport?: Record<string, ModelProviderAdapterSupport>
   status?: ModelProviderStatusDefinition
 }
 
