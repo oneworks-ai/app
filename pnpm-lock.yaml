@@ -1099,6 +1099,10 @@ importers:
       '@oneworks/types':
         specifier: workspace:*
         version: link:../types
+    devDependencies:
+      esbuild:
+        specifier: ^0.27.2
+        version: 0.27.2
 
   packages/plugins/browser-driver: {}
 
