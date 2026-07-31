@@ -2,12 +2,12 @@
   "extends": "../tsconfigs/tsconfig.bundler.json",
   "compilerOptions": {
     "composite": false,
+    "rootDir": "src",
     "declaration": true,
     "declarationMap": false,
     "emitDeclarationOnly": true,
     "noEmit": false,
     "outDir": "dist",
-    "rootDir": "src",
     "sourceMap": false
   },
   "include": [
