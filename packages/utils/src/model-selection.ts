@@ -13,6 +13,7 @@ import {
   flattenModelServices,
   getModelProviderDefinition,
   normalizeIconRef,
+  resolveModelProviderIdentity,
   resolveModelServiceConfig,
   resolveModelServiceIcon,
   resolveModelServiceModels
@@ -289,12 +290,37 @@ const hasResponsesModelServiceBaseUrl = (service: ModelServiceConfig | undefined
   ) === true
 )
 
+const resolveProviderAdapterCompatibility = (params: {
+  adapter: string
+  model?: string
+  service: ModelServiceConfig
+}) => {
+  const providerId = resolveModelProviderIdentity(params.service).provider
+  const support = getModelProviderDefinition(providerId)?.adapterSupport?.[params.adapter]
+  if (support == null) return undefined
+
+  const model = normalizeNonEmptyString(params.model)
+  const excludeModels = normalizeStringList(support.excludeModels)
+  if (model != null && excludeModels.includes(model)) return false
+
+  const includeModels = normalizeStringList(support.includeModels)
+  if (includeModels.length > 0) return model == null ? true : includeModels.includes(model)
+
+  return true
+}
+
 export const isModelServiceCompatibleWithAdapter = (params: {
   adapter?: string
+  model?: string
   service?: ModelServiceConfig
 }) => {
   const adapter = normalizeNonEmptyString(params.adapter)
   if (!adapter || params.service == null) return true
+
+  if (adapter === 'codex') {
+    const codexWireApi = normalizeNonEmptyString(getModelServiceExtraRecord(params.service, 'codex').wireApi)
+    if (codexWireApi != null && codexWireApi !== 'responses') return false
+  }
 
   const explicitCompatibility = resolveAdapterCompatibilityOverride({
     adapter,
@@ -302,6 +328,13 @@ export const isModelServiceCompatibleWithAdapter = (params: {
     unsupportedAdapters: params.service.unsupportedAdapters
   })
   if (explicitCompatibility != null) return explicitCompatibility
+
+  const providerCompatibility = resolveProviderAdapterCompatibility({
+    adapter,
+    model: params.model,
+    service: params.service
+  })
+  if (providerCompatibility != null) return providerCompatibility
 
   if (adapter === 'codex') {
     const codexExtra = getModelServiceExtraRecord(params.service, 'codex')
@@ -362,6 +395,7 @@ export const filterServiceModelsForAdapter = <TEntry extends ServiceModelEntry>(
 
     return isModelServiceCompatibleWithAdapter({
       adapter,
+      model: entry.model,
       service: modelServices[entry.serviceKey]
     })
   })

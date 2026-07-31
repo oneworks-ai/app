@@ -1,6 +1,7 @@
 /* eslint-disable max-lines -- model provider resolution keeps host matching, defaults, and plan metadata together. */
 import type {
   IconRef,
+  ModelProviderDefinition,
   ModelProviderCodingPlanDefinition,
   ModelProviderCodingPlanRegion,
   ModelProviderIdentity,
@@ -28,7 +29,9 @@ export interface ModelServiceResolutionResult {
   issues: ModelServiceResolutionIssue[]
 }
 
-const MODEL_PROVIDER_DEFINITION_MAP = new Map(MODEL_PROVIDER_DEFINITIONS.map(provider => [provider.id, provider]))
+const MODEL_PROVIDER_DEFINITION_MAP = new Map<string, ModelProviderDefinition>(
+  MODEL_PROVIDER_DEFINITIONS.map(provider => [provider.id, provider])
+)
 
 const matchHost = (url: URL, host: string) => url.hostname.toLowerCase() === host
 const matchHostSuffix = (url: URL, suffix: string) => url.hostname.toLowerCase().endsWith(suffix)

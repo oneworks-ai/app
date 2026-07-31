@@ -166,6 +166,11 @@ export const MODEL_PROVIDER_DEFINITIONS = [
     description: 'Official DeepSeek OpenAI-compatible API service.',
     defaultApiBaseUrl: 'https://api.deepseek.com',
     defaultModels: ['deepseek-v4-flash', 'deepseek-v4-pro', 'deepseek-chat', 'deepseek-reasoner'],
+    adapterSupport: {
+      codex: {
+        includeModels: ['deepseek-v4-flash']
+      }
+    },
     portal: portal('https://platform.deepseek.com', {
       billing: 'https://platform.deepseek.com/usage',
       apiKeys: 'https://platform.deepseek.com/api_keys',

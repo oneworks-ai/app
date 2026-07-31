@@ -300,7 +300,7 @@ describe('model service options', () => {
     })
   })
 
-  it('does not expose provider-only official services to codex without explicit compatibility', () => {
+  it('does not expose provider-only official services to codex without declared compatibility', () => {
     const providerOnlyServices: Record<string, ModelServiceConfig> = {
       kimi: { provider: 'moonshot-cn', apiKey: 'token' }
     }
@@ -315,7 +315,22 @@ describe('model service options', () => {
     ).toEqual([])
   })
 
-  it('keeps explicitly codex-compatible provider services selectable for codex', () => {
+  it('exposes only the currently supported DeepSeek Responses model to codex', () => {
+    const deepseekServices: Record<string, ModelServiceConfig> = {
+      deepseek: { provider: 'deepseek', apiKey: 'token' }
+    }
+    const serviceModels = listServiceModels(deepseekServices)
+
+    expect(
+      filterServiceModelsForAdapter({
+        adapter: 'codex',
+        modelServices: deepseekServices,
+        serviceModels
+      }).map(entry => entry.selectorValue)
+    ).toEqual(['deepseek,deepseek-v4-flash'])
+  })
+
+  it('rejects legacy chat wire services for codex', () => {
     const codexCompatibleServices: Record<string, ModelServiceConfig> = {
       kimi: {
         provider: 'moonshot-cn',
@@ -335,6 +350,6 @@ describe('model service options', () => {
         modelServices: codexCompatibleServices,
         serviceModels
       }).map(entry => entry.selectorValue)
-    ).toEqual(['kimi,kimi-k2.7-code', 'kimi,kimi-k2.6', 'kimi,kimi-k2.5', 'kimi,kimi-k2-0905-preview', 'kimi,kimi-k2'])
+    ).toEqual([])
   })
 })
