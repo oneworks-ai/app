@@ -10,7 +10,15 @@ import useSWR from 'swr'
 import type { AgentRoomSummaryListResponse, Session, UpdateAgentRoomMetadataRequest } from '@oneworks/core'
 import type { ConfigResponse } from '@oneworks/types'
 
-import { deleteSession, listAgentRoomSummaries, updateSession, updateSessionTitle } from '#~/api'
+import type { NativeHistoryImportPreviewResult } from '#~/api'
+import {
+  deleteSession,
+  isNativeHistoryAdapter,
+  listAgentRoomSummaries,
+  previewNativeProjectHistory,
+  updateSession,
+  updateSessionTitle
+} from '#~/api'
 import { renderIconAsset } from '#~/components/icons/IconAsset'
 import { InteractionList } from '#~/components/interaction-list'
 import type {
@@ -28,6 +36,7 @@ import {
   SidebarListCollapsedActions
 } from '#~/components/sidebar-list/SidebarListHeader'
 import { addDesktopViewShortcutListener } from '#~/desktop/view-shortcuts'
+import { activeChatAdapterAtom } from '#~/hooks/chat/active-chat-adapter'
 import {
   markOptimisticSessionDiscarded,
   mergeOptimisticSessions,
@@ -36,12 +45,13 @@ import {
 } from '#~/hooks/chat/optimistic-session-creation'
 import type { PendingSessionCreationContext } from '#~/hooks/chat/session-creation-context'
 import { pendingSessionCreationContextAtom } from '#~/hooks/chat/session-creation-context'
+import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
 import { useResponsiveLayout } from '#~/hooks/use-responsive-layout'
 import { useSidebarQueryState } from '#~/hooks/use-sidebar-query-state'
 import type { SidebarSessionSortOrder } from '#~/hooks/use-sidebar-query-state'
 import { useGlobalShortcut } from '#~/hooks/useGlobalShortcut'
 import { useQueryParams } from '#~/hooks/useQueryParams'
-import { getAdapterDisplay } from '#~/resources/adapters.js'
+import { getAdapterDisplay, resolveAdapterDisplayIcon } from '#~/resources/adapters.js'
 import {
   INTERACTION_STRUCTURE_BASE_PATH,
   buildInteractionStructureNavigationTarget,
@@ -56,6 +66,7 @@ import {
 import type { InteractionStructureItem, InteractionStructureRouteKey } from '#~/routes/dev/interaction-structure-model'
 import { isSidebarResizingAtom } from '#~/store/index'
 
+import { buildExternalSessionsRoute } from './config/external-sessions-route'
 import { SessionList } from './sidebar/SessionList'
 import { SidebarHeader } from './sidebar/SidebarHeader'
 import type { SidebarRoomItem } from './sidebar/conversation-items'
@@ -187,7 +198,9 @@ export function Sidebar({
   const location = useLocation()
   const navigate = useNavigate()
   const { isTouchInteraction } = useResponsiveLayout()
+  const { resolvedThemeMode } = useResolvedThemeMode()
   const isMac = navigator.platform.includes('Mac')
+  const activeChatAdapter = useAtomValue(activeChatAdapterAtom)
   const optimisticCreations = useAtomValue(optimisticSessionCreationsAtom)
   const setOptimisticCreations = useSetAtom(optimisticSessionCreationsAtom)
   const setPendingSessionCreationContext = useSetAtom(pendingSessionCreationContextAtom)
@@ -394,6 +407,61 @@ export function Sidebar({
       )
     })
   }, [adapterFilters, rooms, searchQuery, tagFilters])
+  const nativeHistoryAdapter = isNativeHistoryAdapter(activeChatAdapter)
+    ? activeChatAdapter
+    : undefined
+  const shouldPreviewNativeHistory = nativeHistoryAdapter != null &&
+    !isInteractionStructureRoute &&
+    routeSidebar == null &&
+    sessionsRes != null &&
+    roomsRes != null &&
+    sidebarSessions.length === 0 &&
+    rooms.length === 0 &&
+    searchQuery.trim() === '' &&
+    !hasActiveFilterConditions
+  const { data: nativeHistoryPreview } = useSWR<NativeHistoryImportPreviewResult>(
+    shouldPreviewNativeHistory
+      ? ['sidebar-native-history-import-preview', nativeHistoryAdapter]
+      : null,
+    () =>
+      previewNativeProjectHistory({
+        adapters: nativeHistoryAdapter == null ? undefined : [nativeHistoryAdapter],
+        candidateScope: 'unarchived',
+        limit: 1,
+        projectScope: 'current-project',
+        threadScope: 'user',
+        timeSort: 'activity'
+      }),
+    {
+      dedupingInterval: 30_000,
+      keepPreviousData: false,
+      revalidateOnFocus: true
+    }
+  )
+  const nativeHistoryImportEmptyAction = useMemo(() => {
+    if (nativeHistoryAdapter == null) return undefined
+    const adapterPreview = nativeHistoryPreview?.adapters.find(
+      preview => preview.adapter === nativeHistoryAdapter
+    )
+    if ((adapterPreview?.candidates.length ?? 0) === 0) return undefined
+
+    const display = getAdapterDisplay(nativeHistoryAdapter)
+    return {
+      iconSrc: resolveAdapterDisplayIcon(display, resolvedThemeMode),
+      label: t('nativeHistoryImport.quickImport', { platform: display.title }),
+      onClick: () => {
+        onRequestClose?.()
+        void navigate(buildExternalSessionsRoute(nativeHistoryAdapter))
+      }
+    }
+  }, [
+    nativeHistoryAdapter,
+    nativeHistoryPreview?.adapters,
+    navigate,
+    onRequestClose,
+    resolvedThemeMode,
+    t
+  ])
   const selectableIds = useMemo(() => [
     ...filteredRooms.map(room => getRoomSidebarId(room.id)),
     ...filteredSessions.map(session => session.id)
@@ -1454,6 +1522,7 @@ export function Sidebar({
           )
           : (
             <SessionList
+              emptyStateAction={nativeHistoryImportEmptyAction}
               hasActiveFilters={hasActiveFilterConditions}
               isLoading={isSessionsLoading || isRoomsLoading}
               rooms={filteredRooms}

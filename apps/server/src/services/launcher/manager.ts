@@ -292,11 +292,11 @@ const getRecentWorkspaces = async () => {
   return dedupeWorkspaceFolders(recentWorkspaces).slice(0, MAX_RECENT_WORKSPACES)
 }
 
-const rememberRecentWorkspace = async (workspaceFolder: string) => {
+export const rememberLauncherWorkspaces = async (workspaceFolders: unknown[]) => {
   const state = await readLauncherState()
   const recentWorkspaces = Array.isArray(state.recentWorkspaces) ? state.recentWorkspaces : []
   const nextRecentWorkspaces = dedupeWorkspaceFolders([
-    workspaceFolder,
+    ...workspaceFolders,
     ...recentWorkspaces
   ]).slice(0, MAX_RECENT_WORKSPACES)
   await writeLauncherState({
@@ -305,6 +305,10 @@ const rememberRecentWorkspace = async (workspaceFolder: string) => {
   })
   return nextRecentWorkspaces
 }
+
+const rememberRecentWorkspace = async (workspaceFolder: string) => (
+  await rememberLauncherWorkspaces([workspaceFolder])
+)
 
 const removeRecentWorkspace = async (workspaceFolder: string) => {
   const state = await readLauncherState()

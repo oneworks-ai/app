@@ -10,7 +10,7 @@ import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import useSWR from 'swr'
 
-import type { ConfigResponse, ConfigSection } from '@oneworks/types'
+import type { ConfigResponse, ConfigSection, LauncherWorkspaceSelectorProject } from '@oneworks/types'
 import { matchesPinyinSearch, normalizePinyinSearchQuery } from '@oneworks/utils/pinyin-search'
 
 import { getConfig, updateConfig } from '#~/api'
@@ -35,6 +35,7 @@ import {
 } from '#~/components/config/project-theme-color-settings-model'
 import { useProjectThemePreviewSources } from '#~/components/config/use-project-theme-preview-sources'
 import { MobileAwareSelect } from '#~/components/mobile-aware-select/MobileAwareSelect'
+import { NativeTabs } from '#~/components/native-tabs'
 import { useInterfaceLanguageConfig } from '#~/hooks/use-interface-language-config'
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
 import { appLanguageOptions, getActiveAppLanguageOption } from '#~/i18n'
@@ -43,6 +44,9 @@ import { normalizeThemeMode, themeAtom } from '#~/store/index.js'
 import type { ThemeMode } from '#~/store/index.js'
 import { deferImeCompositionEnd, isImeCompositionKeyEvent } from '#~/utils/keyboard-events'
 import { getDesktopShortcutFromEvent, parseShortcut } from '#~/utils/shortcutUtils'
+
+import { LauncherExternalSessionsView } from './LauncherExternalSessionsView'
+import type { LauncherSearchChromeExtension } from './launcher-search-chrome'
 
 export interface LauncherKeyboardHint {
   key: string
@@ -72,10 +76,12 @@ interface LauncherSettingItem {
 }
 
 interface LauncherSettingSection {
+  content?: ReactNode
   icon: string
   id: string
   items: LauncherSettingItem[]
-  resetAction: () => void
+  keywords?: string[]
+  resetAction?: () => void
   title: string
 }
 
@@ -204,13 +210,21 @@ function LanguageSelectControl({
 export function LauncherSettingsView({
   isSearchInputComposing,
   query,
+  onExternalSessionsImportComplete,
   onKeyboardHintsChange,
-  onResetActionChange
+  onQueryChange,
+  onSearchChromeChange,
+  onResetActionChange,
+  workspaceProjects
 }: {
   isSearchInputComposing: () => boolean
   query: string
+  onExternalSessionsImportComplete: () => Promise<void> | void
   onKeyboardHintsChange: (hints: LauncherKeyboardHint[]) => void
+  onQueryChange: (query: string) => void
+  onSearchChromeChange: (extension: LauncherSearchChromeExtension | undefined) => void
   onResetActionChange: (action: LauncherSettingsResetAction | undefined) => void
+  workspaceProjects: LauncherWorkspaceSelectorProject[]
 }) {
   const { message } = App.useApp()
   const themes = usePluginThemes()
@@ -906,6 +920,32 @@ export function LauncherSettingsView({
           title: t('launcher.settings.items.appIcon.title')
         }
       ]
+    },
+    {
+      content: (
+        <LauncherExternalSessionsView
+          config={configRes?.sources?.global?.general?.nativeHistoryImport}
+          onImportComplete={onExternalSessionsImportComplete}
+          onQueryChange={onQueryChange}
+          onSearchChromeChange={onSearchChromeChange}
+          query={query}
+          workspaceProjects={workspaceProjects}
+        />
+      ),
+      icon: 'history',
+      id: 'external-sessions',
+      items: [],
+      keywords: [
+        'external sessions',
+        'history',
+        'import',
+        'codex',
+        'claude code',
+        '外部会话',
+        '历史会话',
+        '导入'
+      ],
+      title: t('launcher.settings.sections.externalSessions')
     }
   ], [
     currentLanguage,
@@ -919,11 +959,15 @@ export function LauncherSettingsView({
     iconTheme,
     canUpdateAppIconPreferences,
     canUpdateDesktopIcon,
+    configRes,
     desktopPlatform,
     isMac,
     launcherShortcut,
     launchAtLogin,
     normalizeLauncherShortcut,
+    onExternalSessionsImportComplete,
+    onQueryChange,
+    onSearchChromeChange,
     previewSources,
     resetAppearanceSettings,
     resetBehaviorSettings,
@@ -947,44 +991,69 @@ export function LauncherSettingsView({
     updateDesktopUpdateChannel,
     updateOpenLastWorkspaceOnStartup,
     updateSyncAppIcon,
-    windowMode
+    windowMode,
+    workspaceProjects
   ])
-  const normalizedQuery = normalizePinyinSearchQuery(query)
+  const normalizedQuery = normalizePinyinSearchQuery(
+    activeSectionId === 'external-sessions' ? '' : query
+  )
   const filteredSections = useMemo(() =>
     sections
       .map(section => ({
         ...section,
         items: section.items.filter(item => matchesQuery(normalizedQuery, item))
       }))
-      .filter(section => section.items.length > 0), [normalizedQuery, sections])
+      .filter(section =>
+        section.items.length > 0 ||
+        (
+          section.content != null &&
+          (
+            normalizedQuery === '' ||
+            matchesPinyinSearch(normalizedQuery, [
+              section.title,
+              section.icon,
+              ...(section.keywords ?? [])
+            ])
+          )
+        )
+      ), [normalizedQuery, sections])
   const activeSection = filteredSections.find(section => section.id === activeSectionId) ?? filteredSections[0]
+  const selectedSection = sections.find(section => section.id === activeSectionId)
   const flatItems = useMemo(() => activeSection?.items ?? [], [activeSection?.items])
   const [activeSettingId, setActiveSettingId] = useState<string>()
   const activeSetting = flatItems.find(item => item.id === activeSettingId) ?? flatItems[0]
   const sectionShortcutModifierLabel = isMac ? '⌘' : 'Ctrl'
+  const activateSection = useCallback((
+    nextSection: LauncherSettingSection,
+    options: { focusTab?: boolean } = {}
+  ) => {
+    if (
+      selectedSection != null &&
+      (selectedSection.content != null) !== (nextSection.content != null) &&
+      query !== ''
+    ) {
+      onQueryChange('')
+    }
+    setActiveSectionId(nextSection.id)
+    if (options.focusTab === true) {
+      requestAnimationFrame(() => {
+        document.getElementById(`launcher-settings-tab-${nextSection.id}`)?.focus()
+      })
+    }
+  }, [onQueryChange, query, selectedSection])
   const switchSectionByOffset = useCallback((offset: -1 | 1, options: { focusTab?: boolean } = {}) => {
     if (filteredSections.length < 2) return
     const activeIndex = Math.max(0, filteredSections.findIndex(section => section.id === activeSection?.id))
     const nextSection = filteredSections[(activeIndex + offset + filteredSections.length) % filteredSections.length]
     if (nextSection == null) return
-    setActiveSectionId(nextSection.id)
-    if (options.focusTab === true) {
-      requestAnimationFrame(() => {
-        document.getElementById(`launcher-settings-tab-${nextSection.id}`)?.focus()
-      })
-    }
-  }, [activeSection?.id, filteredSections])
+    activateSection(nextSection, options)
+  }, [activateSection, activeSection?.id, filteredSections])
   const selectSectionByIndex = useCallback((sectionIndex: number, options: { focusTab?: boolean } = {}) => {
     const nextSection = filteredSections[sectionIndex]
     if (nextSection == null) return false
-    setActiveSectionId(nextSection.id)
-    if (options.focusTab === true) {
-      requestAnimationFrame(() => {
-        document.getElementById(`launcher-settings-tab-${nextSection.id}`)?.focus()
-      })
-    }
+    activateSection(nextSection, options)
     return true
-  }, [filteredSections])
+  }, [activateSection, filteredSections])
   const keyboardHints = useMemo<LauncherKeyboardHint[]>(() =>
     [
       filteredSections.length > 1
@@ -1017,7 +1086,7 @@ export function LauncherSettingsView({
     t
   ])
   const resetAction = useMemo<LauncherSettingsResetAction | undefined>(() => (
-    activeSection == null
+    activeSection?.resetAction == null
       ? undefined
       : {
         ariaLabel: t('launcher.settings.resetSection', { section: activeSection.title }),
@@ -1134,7 +1203,6 @@ export function LauncherSettingsView({
         return
       }
       const targetInput = target instanceof HTMLInputElement ? target : undefined
-      const targetTab = target instanceof HTMLElement ? target.closest('.launcher-settings__tab') : null
       const sectionNumberMatch = event.code.match(/^Digit([1-9])$/u) ?? event.code.match(/^Numpad([1-9])$/u)
       const hasSectionNumberModifier = isMac
         ? event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey
@@ -1151,20 +1219,6 @@ export function LauncherSettingsView({
       if (event.ctrlKey && !event.metaKey && !event.altKey && event.key === 'Tab') {
         event.preventDefault()
         switchSectionByOffset(event.shiftKey ? -1 : 1)
-        return
-      }
-
-      if (targetTab != null) {
-        if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
-          event.preventDefault()
-          switchSectionByOffset(event.key === 'ArrowRight' ? 1 : -1, { focusTab: true })
-          return
-        }
-        if (event.key === 'Home' || event.key === 'End') {
-          event.preventDefault()
-          selectSectionByIndex(event.key === 'Home' ? 0 : filteredSections.length - 1, { focusTab: true })
-          return
-        }
         return
       }
 
@@ -1230,8 +1284,11 @@ export function LauncherSettingsView({
 
   return (
     <div
-      className='launcher-settings'
-      role='listbox'
+      className={[
+        'launcher-settings',
+        activeSection?.content != null ? 'launcher-settings--content' : ''
+      ].filter(Boolean).join(' ')}
+      role={activeSection?.content == null ? 'listbox' : undefined}
       aria-label={t('launcher.settings.listLabel')}
       onCompositionEnd={() =>
         deferImeCompositionEnd((active) => {
@@ -1241,81 +1298,89 @@ export function LauncherSettingsView({
         isSettingsComposingRef.current = true
       }}
     >
-      <div className='launcher-settings__tabs' role='tablist' aria-label={t('launcher.settings.sectionsLabel')}>
-        {filteredSections.map((section, sectionIndex) => {
-          const sectionShortcut = `${sectionShortcutModifierLabel}${sectionIndex + 1}`
-          return (
-            <button
-              type='button'
-              className={`launcher-settings__tab ${section.id === activeSection?.id ? 'is-active' : ''}`}
-              id={`launcher-settings-tab-${section.id}`}
-              key={section.id}
-              role='tab'
-              aria-selected={section.id === activeSection?.id}
-              aria-controls={`launcher-settings-panel-${section.id}`}
-              onClick={() => setActiveSectionId(section.id)}
-            >
-              <span className='material-symbols-rounded launcher-settings__tab-icon' aria-hidden='true'>
-                {section.icon}
-              </span>
-              <span className='launcher-settings__tab-title'>{section.title}</span>
-              {showSectionShortcuts && sectionIndex < 9 && filteredSections.length > 1 && (
-                <Tooltip
-                  title={t('launcher.settings.sectionShortcutTooltip', {
-                    section: section.title,
-                    shortcut: sectionShortcut
-                  })}
-                  placement='bottom'
-                  classNames={{ root: 'launcher-command-tooltip launcher-settings__tab-shortcut-tooltip' }}
-                  getPopupContainer={getLauncherPopupContainer}
-                >
-                  <span className='launcher-settings__tab-shortcut' aria-hidden='true'>
-                    {sectionShortcut}
-                  </span>
-                </Tooltip>
-              )}
-            </button>
-          )
-        })}
+      <div className='launcher-settings__tabs-surface'>
+        <NativeTabs
+          activeKey={activeSection?.id}
+          ariaLabel={t('launcher.settings.sectionsLabel')}
+          className='launcher-settings__tabs'
+          items={filteredSections.map((section, sectionIndex) => {
+            const sectionShortcut = `${sectionShortcutModifierLabel}${sectionIndex + 1}`
+            return {
+              ariaControls: `launcher-settings-panel-${section.id}`,
+              icon: section.icon,
+              id: `launcher-settings-tab-${section.id}`,
+              key: section.id,
+              label: (
+                <>
+                  <span className='launcher-settings__tab-title'>{section.title}</span>
+                  {showSectionShortcuts && sectionIndex < 9 && filteredSections.length > 1 && (
+                    <Tooltip
+                      title={t('launcher.settings.sectionShortcutTooltip', {
+                        section: section.title,
+                        shortcut: sectionShortcut
+                      })}
+                      placement='bottom'
+                      classNames={{ root: 'launcher-command-tooltip launcher-settings__tab-shortcut-tooltip' }}
+                      getPopupContainer={getLauncherPopupContainer}
+                    >
+                      <span className='launcher-settings__tab-shortcut' aria-hidden='true'>
+                        {sectionShortcut}
+                      </span>
+                    </Tooltip>
+                  )}
+                </>
+              )
+            }
+          })}
+          onChange={sectionId => {
+            const section = filteredSections.find(candidate => candidate.id === sectionId)
+            if (section != null) activateSection(section)
+          }}
+        />
       </div>
       <section
-        className='launcher-settings__panel'
+        className={[
+          'launcher-settings__panel',
+          activeSection?.content != null ? 'launcher-settings__panel--content' : ''
+        ].filter(Boolean).join(' ')}
         id={`launcher-settings-panel-${activeSection?.id ?? 'empty'}`}
         role='tabpanel'
         aria-labelledby={`launcher-settings-tab-${activeSection?.id ?? 'empty'}`}
       >
-        <div className='launcher-settings__items'>
-          {flatItems.map(item => (
-            <div
-              className={[
-                'launcher-settings__item',
-                item.layout === 'stacked' ? 'is-stacked' : '',
-                item.id === activeSetting?.id ? 'is-active' : ''
-              ].filter(Boolean).join(' ')}
-              data-launcher-setting-id={item.id}
-              key={item.id}
-              role='option'
-              aria-selected={item.id === activeSetting?.id}
-            >
-              <div className='launcher-settings__item-main'>
-                <span className='material-symbols-rounded launcher-settings__item-icon' aria-hidden='true'>
-                  {item.icon}
-                </span>
-                <span className='launcher-settings__item-text'>
-                  <span className='launcher-settings__item-title'>{item.title}</span>
-                  <span className='launcher-settings__item-desc'>{item.description}</span>
-                </span>
-              </div>
+        {activeSection?.content ?? (
+          <div className='launcher-settings__items'>
+            {flatItems.map(item => (
               <div
-                className={`launcher-settings__control ${
-                  item.layout === 'stacked' ? 'launcher-settings__control--wide' : ''
-                }`}
+                className={[
+                  'launcher-settings__item',
+                  item.layout === 'stacked' ? 'is-stacked' : '',
+                  item.id === activeSetting?.id ? 'is-active' : ''
+                ].filter(Boolean).join(' ')}
+                data-launcher-setting-id={item.id}
+                key={item.id}
+                role='option'
+                aria-selected={item.id === activeSetting?.id}
               >
-                {item.control}
+                <div className='launcher-settings__item-main'>
+                  <span className='material-symbols-rounded launcher-settings__item-icon' aria-hidden='true'>
+                    {item.icon}
+                  </span>
+                  <span className='launcher-settings__item-text'>
+                    <span className='launcher-settings__item-title'>{item.title}</span>
+                    <span className='launcher-settings__item-desc'>{item.description}</span>
+                  </span>
+                </div>
+                <div
+                  className={`launcher-settings__control ${
+                    item.layout === 'stacked' ? 'launcher-settings__control--wide' : ''
+                  }`}
+                >
+                  {item.control}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </section>
     </div>
   )
