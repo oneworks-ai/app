@@ -1,4 +1,4 @@
-import type { Session, SessionStatus, WSEvent } from '@oneworks/core'
+import type { Session, SessionHistoryImport, SessionStatus, WSEvent } from '@oneworks/core'
 
 import type { SqliteDb } from '#~/db/index.js'
 
@@ -86,6 +86,25 @@ const hasUnresolvedInteractionRequest = (db: SqliteDb, sessionId: string) => {
   return false
 }
 
+const getHistoryImport = (metadata?: RuntimeSessionMetadata): SessionHistoryImport | undefined => {
+  const value = metadata?.historyImport
+  if (
+    value == null ||
+    typeof value !== 'object' ||
+    typeof value.adapter !== 'string' ||
+    !Number.isFinite(value.importedAt) ||
+    !Number.isFinite(value.sourceUpdatedAt)
+  ) {
+    return undefined
+  }
+
+  return {
+    adapter: value.adapter,
+    importedAt: value.importedAt,
+    sourceUpdatedAt: value.sourceUpdatedAt
+  }
+}
+
 export const shouldPreserveWaitingInteraction = (
   db: SqliteDb,
   sessionId: string,
@@ -112,13 +131,17 @@ export const ensureRuntimeSession = (db: SqliteDb, event: RuntimeEvent, metadata
     ? getRuntimeEventSessionStatus(event) ?? 'running'
     : getRuntimeEventSessionStatus(event)
   const existing = db.getSession(event.sessionId)
+  const historyImport = getHistoryImport(metadata)
   if (existing == null) {
     db.createSession(
       getSessionTitle(event, metadata),
       event.sessionId,
       status,
       event.parentSessionId ?? metadata?.parentSessionId,
-      { runtimeKind: 'external' }
+      {
+        runtimeKind: 'external',
+        ...(historyImport == null ? {} : { historyImport })
+      }
     )
   } else {
     db.updateSessionRuntimeState(event.sessionId, { runtimeKind: 'external' })
@@ -141,7 +164,8 @@ export const ensureRuntimeSession = (db: SqliteDb, event: RuntimeEvent, metadata
     ...(effort != null ? { effort } : {}),
     ...(fastMode != null ? { fastMode } : {}),
     ...(model != null ? { model } : {}),
-    ...(permissionMode != null ? { permissionMode } : {})
+    ...(permissionMode != null ? { permissionMode } : {}),
+    ...(historyImport != null ? { historyImport } : {})
   }
   const title = getSessionTitle(event, metadata)
   if (title !== event.sessionId && (existing?.title == null || event.type === 'session_started')) {

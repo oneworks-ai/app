@@ -558,20 +558,29 @@ describe('native project history import', () => {
     ) as {
       cwd?: string
       historyImport?: {
+        importedAt?: number
         nativeCwd?: string
+        sourceUpdatedAt?: number
         workspaceCwd?: string
       }
     }
     expect(importedMeta).toEqual(expect.objectContaining({
       cwd: canonicalRealPath,
       historyImport: expect.objectContaining({
+        importedAt: expect.any(Number),
         nativeCwd: staleWorktree,
+        sourceUpdatedAt: 2_000_000,
         workspaceCwd: canonicalRealPath
       })
     }))
     const importedDb = await replayImportedSessions(canonicalRuntimeRoot)
     expect(importedDb.getSession(importedSessionId)).toEqual(expect.objectContaining({
-      id: importedSessionId
+      id: importedSessionId,
+      historyImport: expect.objectContaining({
+        adapter: 'codex',
+        importedAt: expect.any(Number),
+        sourceUpdatedAt: 2_000_000
+      })
     }))
     importedDb.close()
   })
@@ -1828,6 +1837,7 @@ describe('native project history import', () => {
     const home = path.join(root, 'home')
     const codexHistoryDir = path.join(home, '.codex', 'sessions')
     const env = createTestEnv(workspace, home)
+    vi.stubEnv('DB_PATH', path.join(root, 'db.sqlite'))
 
     await mkdir(workspace, { recursive: true })
     await writeJsonl(path.join(codexHistoryDir, 'first-open.jsonl'), [

@@ -13,6 +13,8 @@
 - Refine Codex quota interactions with compact reset-card rows, consistent icon actions, stable quota indicators, and a focused usage modal for the active account.
 - Add unified token usage analytics across Launcher, workspace settings, model-service details, and account details, including local adapters, plugin/Relay sources, multiple accounts, model attribution, and adaptive filters.
 - Load the active provider catalog from the server so newly published providers appear in model-service settings without requiring a full client release, and expose catalog updates as their own module group.
+- Preserve the original imported-session timestamp separately from list activity recency.
+- Show a provenance divider at the top of migrated Codex history.
 
 ![New-session composer with consistent edge spacing](./compact-composer-padding.jpg)
 

@@ -31,7 +31,8 @@ export const sessionsSchemaModule: SchemaModule = {
         fastMode INTEGER,
         promptType TEXT,
         promptName TEXT,
-        panelState TEXT
+        panelState TEXT,
+        historyImport TEXT
       );
 
       CREATE TABLE IF NOT EXISTS messages (
@@ -96,6 +97,7 @@ export const sessionsSchemaModule: SchemaModule = {
     ensureColumn('sessions', 'promptType', 'TEXT')
     ensureColumn('sessions', 'promptName', 'TEXT')
     ensureColumn('sessions', 'panelState', 'TEXT')
+    ensureColumn('sessions', 'historyImport', 'TEXT')
     ensureColumn('messages', 'eventKey', 'TEXT')
     exec(`
       CREATE INDEX IF NOT EXISTS idx_messages_session_eventKey ON messages(sessionId, eventKey);
@@ -113,6 +115,27 @@ export const sessionsSchemaModule: SchemaModule = {
 
       UPDATE sessions
       SET permissionState = COALESCE(permissionState, '{"allow":[],"deny":[],"onceAllow":[],"onceDeny":[]}');
+
+      UPDATE sessions
+      SET historyImport = json_object(
+        'adapter', adapter,
+        'importedAt', createdAt,
+        'sourceUpdatedAt', COALESCE(
+          (
+            SELECT MAX(json_extract(messages.data, '$.message.createdAt'))
+            FROM messages
+            WHERE messages.sessionId = sessions.id
+              AND json_valid(messages.data)
+          ),
+          createdAt
+        )
+      )
+      WHERE historyImport IS NULL
+        AND adapter IN ('codex', 'claude-code')
+        AND (
+          id LIKE 'imported_codex_%'
+          OR id LIKE 'imported_claude_code_%'
+        );
     `)
   }
 }

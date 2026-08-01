@@ -102,6 +102,7 @@
     "createScheduledTask": "Create scheduled task",
     "moreActions": "More actions",
     "createdAt": "Created at",
+    "lastActivityAt": "Last activity",
     "sessionLinkCopied": "Session link copied to clipboard",
     "resumeCommandCopied": "Resume command copied to clipboard",
     "sessionIdCopied": "Session ID copied to clipboard",
@@ -1931,6 +1932,9 @@
     "childSessionPlaceholder": "Type a message in this child session...",
     "send": "Send",
     "thinking": "Thinking",
+    "historyImport": {
+      "dividerLabel": "Migrated from {{source}} at {{time}}"
+    },
     "voiceInput": {
       "tooltip": "Voice input",
       "start": "Start recording",

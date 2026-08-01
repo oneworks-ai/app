@@ -118,7 +118,8 @@ describe('db schema modules', () => {
       'adapter',
       'fastMode',
       'permissionMode',
-      'panelState'
+      'panelState',
+      'historyImport'
     ]))
     expect(channelColumns.map(column => column.name)).toEqual(expect.arrayContaining([
       'senderId',
@@ -166,5 +167,41 @@ describe('db schema modules', () => {
       'archivedAt',
       'favoritedAt'
     ]))
+  })
+
+  it('backfills imported session provenance from the original message timeline', () => {
+    sqlite = createSqliteDatabase(':memory:')
+    sqlite.exec(`
+      CREATE TABLE sessions (
+        id TEXT PRIMARY KEY,
+        adapter TEXT,
+        createdAt INTEGER NOT NULL
+      );
+      CREATE TABLE messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sessionId TEXT NOT NULL,
+        data TEXT NOT NULL,
+        createdAt INTEGER NOT NULL
+      );
+      INSERT INTO sessions (id, adapter, createdAt)
+      VALUES ('imported_codex_legacy', 'codex', 2000);
+      INSERT INTO messages (sessionId, data, createdAt)
+      VALUES (
+        'imported_codex_legacy',
+        '{"type":"message","message":{"createdAt":1000}}',
+        2000
+      );
+    `)
+
+    initSchema(sqlite, [sessionsSchemaModule])
+    initSchema(sqlite, [sessionsSchemaModule])
+
+    const row = sqlite.prepare('SELECT historyImport FROM sessions WHERE id = ?')
+      .get<{ historyImport: string }>('imported_codex_legacy')
+    expect(JSON.parse(row!.historyImport)).toEqual({
+      adapter: 'codex',
+      importedAt: 2000,
+      sourceUpdatedAt: 1000
+    })
   })
 })

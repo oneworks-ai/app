@@ -150,6 +150,12 @@ export interface SessionPanelState {
   right: SessionPanelAreaState
 }
 
+export interface SessionHistoryImport {
+  adapter: string
+  importedAt: number
+  sourceUpdatedAt: number
+}
+
 export interface Session {
   id: string
   parentSessionId?: string
@@ -176,6 +182,7 @@ export interface Session {
   promptType?: SessionPromptType
   promptName?: string
   panelState?: SessionPanelState
+  historyImport?: SessionHistoryImport
 }
 
 export interface SessionWorkspace {
