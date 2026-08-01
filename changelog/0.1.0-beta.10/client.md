@@ -12,6 +12,7 @@
 - Show Codex quota usage and reset credits in both the composer and account details, keep all available reset cards visible after refresh, and require confirmation before consuming a card.
 - Refine Codex quota interactions with compact reset-card rows, consistent icon actions, stable quota indicators, and a focused usage modal for the active account.
 - Add unified token usage analytics across Launcher, workspace settings, model-service details, and account details, including local adapters, plugin/Relay sources, multiple accounts, model attribution, and adaptive filters.
+- Load the active provider catalog from the server so newly published providers appear in model-service settings without requiring a full client release, and expose catalog updates as their own module group.
 
 ![New-session composer with consistent edge spacing](./compact-composer-padding.jpg)
 

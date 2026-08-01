@@ -5,6 +5,7 @@ import type {
   ProviderManagementTokenUpdateInput
 } from '@oneworks/types'
 import {
+  getModelProviderCatalog,
   getModelProviderDefinition,
   listModelProviderDefinitions,
   resolveModelProviderIdentity,
@@ -14,16 +15,17 @@ import {
 
 import { loadConfigState } from '#~/services/config/index.js'
 
+import { getActiveModelProviderCatalogInfo } from './catalog-loader.js'
 import { ModelProvidersServiceError } from './errors.js'
 import {
   createProviderManagementToken,
   createProviderSecret,
   deleteProviderManagementToken,
+  discoverProviderModels,
   getProviderAccountStatus,
   getProviderManagementSnapshot,
   getProviderManagementTokenProfile,
   getProviderServiceStatus,
-  listProviderModels,
   updateProviderManagementToken
 } from './provider-client.js'
 
@@ -89,6 +91,8 @@ const resolveServiceConfig = async (params: {
 }
 
 export const listProviderCatalog = () => ({
+  catalog: getActiveModelProviderCatalogInfo(),
+  hostMatchers: getModelProviderCatalog().hostMatchers,
   providers: listModelProviderDefinitions()
 })
 
@@ -109,9 +113,11 @@ export const listModelServiceModels = async (params: {
   draft?: unknown
   serviceKey: string
   source?: unknown
-}) => ({
-  models: await listProviderModels(await resolveServiceConfig(params))
-})
+}) =>
+  discoverProviderModels(await resolveServiceConfig(params), {
+    serviceKey: params.serviceKey,
+    source: normalizeString(params.source) ?? 'merged'
+  })
 
 export const getModelServiceBalance = async (params: {
   draft?: unknown

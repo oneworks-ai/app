@@ -26,6 +26,7 @@ export type RecordKind = 'json' | 'modelServices' | 'mcpServers' | 'boolean' | '
 export interface FieldOption {
   value: string
   label: string
+  fallbackLabel?: string
 }
 
 export interface FieldGroupContext {
@@ -133,15 +134,20 @@ export interface ConfigGroupMeta {
   defaultExpanded?: boolean
 }
 
-const modelProviderOptions: FieldSpec['options'] = [
+export const resolveModelProviderOptions = (
+  providers = listModelProviderDefinitions()
+): FieldSpec['options'] => [
   { value: '', label: 'config.options.modelProviders.custom' },
-  ...listModelProviderDefinitions()
+  ...providers
     .filter(provider => provider.category !== 'custom')
     .map(provider => ({
       value: provider.id,
-      label: `config.options.modelProviders.${provider.id}`
+      label: `config.options.modelProviders.${provider.id}`,
+      fallbackLabel: provider.title
     }))
 ]
+
+const modelProviderOptions = resolveModelProviderOptions()
 
 const modelServiceKindOptions: FieldSpec['options'] = [
   { value: '', label: 'config.options.modelServiceKind.service' },

@@ -174,7 +174,7 @@ interface CodexModelProviderExtra {
   envHeaders?: Record<string, string>
   envKey?: string
   envKeyInstructions?: string
-  wireApi?: string
+  wireApi?: 'responses'
   queryParams?: Record<string, string>
   headers?: Record<string, string>
   nativeProvider?: boolean
@@ -333,6 +333,16 @@ const normalizeProviderBaseUrl = (apiBaseUrl: string | undefined, wireApi: strin
     : apiBaseUrl
 }
 
+const resolveCodexWireApi = (serviceKey: string, value: unknown): 'responses' | undefined => {
+  const wireApi = readOptionalString(value)
+  if (wireApi == null || wireApi === 'responses') return wireApi
+
+  throw new Error(
+    `Codex no longer supports modelServices.${serviceKey}.extra.codex.wireApi=${JSON.stringify(wireApi)}. ` +
+      'Use "responses" with a Responses-compatible provider.'
+  )
+}
+
 /**
  * Encode a flat string→string record as a TOML inline table: `{key = "value", …}`.
  */
@@ -479,8 +489,9 @@ function buildCodexConfigOverrides(params: {
           useBuiltinProvider,
           useOpenAIBaseUrl,
           websocketConnectTimeoutMs,
-          wireApi
+          wireApi: configuredWireApi
         } = codexExtra
+        const wireApi = resolveCodexWireApi(serviceKey, configuredWireApi)
         const providerId = readOptionalString(configuredProviderId) ?? serviceKey
         const prefix = `model_providers.${toTomlDottedKeySegment(providerId)}`
         const normalizedBaseUrl = normalizeProviderBaseUrl(apiBaseUrl, wireApi)
@@ -929,6 +940,9 @@ export async function resolveSessionBase(
   const routedService = routedServiceKey != null ? mergedModelServices[routedServiceKey] : undefined
   const resolvedRoutedService = resolveConfiguredModelService(routedService)
   const routedCodexExtra = (resolvedRoutedService?.extra?.codex as CodexModelProviderExtra | undefined) ?? {}
+  const routedWireApi = routedServiceKey != null
+    ? resolveCodexWireApi(routedServiceKey, routedCodexExtra.wireApi)
+    : undefined
   const shouldUseProxy = routedCodexExtra.nativeProvider !== true &&
     typeof resolvedRoutedService?.apiBaseUrl === 'string' &&
     resolvedRoutedService.apiBaseUrl.trim() !== ''
@@ -953,7 +967,7 @@ export async function resolveSessionBase(
       proxyBaseUrl,
       upstreamBaseUrl: normalizeProviderBaseUrl(
         resolvedRoutedService?.apiBaseUrl,
-        ((resolvedRoutedService?.extra?.codex as CodexModelProviderExtra | undefined) ?? {}).wireApi
+        routedWireApi
       ) ?? resolvedRoutedService?.apiBaseUrl
     })
   }

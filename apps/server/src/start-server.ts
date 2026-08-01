@@ -11,6 +11,7 @@ import type { ProjectHomeMigratedSegment } from '@oneworks/utils/project-home-mi
 
 import { loadConfigState } from '#~/services/config/index.js'
 import { acquireConfigWatchRuntime } from '#~/services/config/watch.js'
+import { initializeModelProviderCatalog } from '#~/services/model-providers/catalog-loader.js'
 import { getPluginManager } from '#~/services/plugins/index.js'
 import { autoImportNativeProjectHistoryAndReplay } from '#~/services/runtime-store/history-import.js'
 import { startRuntimeStoreWatcher } from '#~/services/runtime-store/watcher.js'
@@ -179,6 +180,9 @@ export async function createServerRuntime(logStartup?: StartupLog): Promise<Serv
   logStartup?.('project home segment migration deferred')
   const env = loadEnv()
   logStartup?.('env loaded')
+  logStartup?.('model provider catalog load begin')
+  await initializeModelProviderCatalog(process.env)
+  logStartup?.('model provider catalog load complete')
   if (!hasConfiguredEnvPath('__ONEWORKS_PROJECT_SERVER_DATA_DIR__')) {
     logStartup?.('default server data dir migration begin')
     await migrateDefaultServerDataDir(process.cwd(), process.env).catch(() => undefined)

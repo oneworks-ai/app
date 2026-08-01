@@ -88,8 +88,8 @@ interface ModuleUpdateSummaryChange {
 }
 
 const moduleUpdateChannelOptions = ['stable', 'rc', 'beta', 'alpha'] as const satisfies readonly ModuleUpdateChannel[]
-const moduleUpdateGroupOrder = ['core', 'adapter', 'plugin'] as const satisfies readonly ModuleUpdateGroup[]
-const moduleUpdateGlobalGroups = new Set<ModuleUpdateGroup>(['adapter', 'core'])
+const moduleUpdateGroupOrder = ['core', 'catalog', 'adapter', 'plugin'] as const satisfies readonly ModuleUpdateGroup[]
+const moduleUpdateGlobalGroups = new Set<ModuleUpdateGroup>(['adapter', 'catalog', 'core'])
 
 const getModuleUpdateVersionRange = (item: ModuleUpdateItem, fallback: string) => ({
   from: item.changelog?.fromVersion ?? item.currentVersion ?? fallback,

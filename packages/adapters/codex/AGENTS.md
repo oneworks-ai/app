@@ -436,7 +436,9 @@ This emits (in order):
 -c 'model_providers.myProvider.http_headers={X-OneWorks-Proxy-Meta = "<base64url-json>"}'
 ```
 
-`wire_api` defaults to `"responses"`. Override per service via `service.extra.codex.wireApi`.
+`wire_api` defaults to `"responses"`. Current Codex releases have removed the legacy
+`"chat"` wire API, so `service.extra.codex.wireApi` may only be `"responses"`; chat-only
+providers need a real Responses-to-Chat translation layer outside this adapter.
 Static provider headers, query params, upstream base URL, and `maxOutputTokens` are encoded into the proxy metadata header and restored by the local proxy before the request is forwarded upstream.
 
 The local proxy is started automatically by the adapter. Users do not need to run it manually. The proxy listens on a random loopback port and is reused across repeated routed Codex sessions in the same process.

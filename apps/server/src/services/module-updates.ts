@@ -26,6 +26,7 @@ import type {
 import {
   readPackageInfo,
   readPackageInfoSync,
+  resolveActiveModulePackageDirSync,
   resolveAdapterPackageCacheDir,
   resolveAdapterPackageInstallDir,
   resolveBootstrapDataDir,
@@ -80,6 +81,14 @@ const RUNTIME_CACHE_VERSION_ENV_KEYS = [
 ] as const
 
 const moduleUpdateTargets: ModuleUpdateTarget[] = [
+  {
+    activation: 'restart',
+    group: 'catalog',
+    id: 'catalog:model-providers',
+    kind: 'catalog',
+    label: 'Model provider catalog',
+    packageName: '@oneworks/model-provider-catalog'
+  },
   {
     activation: 'restart',
     group: 'core',
@@ -436,6 +445,9 @@ const resolveSelectedRuntimePackageDir = (packageName: string) => {
 
 const readCurrentPackageVersion = (target: ModuleUpdateTarget) => {
   const explicitPackageJsonPaths = [
+    target.kind === 'catalog'
+      ? resolveActiveModulePackageDirSync(target.packageName)
+      : undefined,
     target.id === 'client'
       ? normalizeEnvValue(process.env.__ONEWORKS_PROJECT_CLIENT_PACKAGE_DIR__)
       : undefined,
