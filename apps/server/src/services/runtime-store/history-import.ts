@@ -1608,6 +1608,12 @@ const importConversation = async (
   const store = new FileRuntimeStore(params.runtimeRoot)
   const sessionId = toRuntimeSessionId(conversation)
   const title = buildTitle(conversation)
+  const existingMeta = await store.session(sessionId).readMeta()
+  const existingHistoryImport = isRecord(existingMeta?.historyImport) ? existingMeta.historyImport : undefined
+  const importedAt = typeof existingHistoryImport?.importedAt === 'number' &&
+      Number.isFinite(existingHistoryImport.importedAt)
+    ? existingHistoryImport.importedAt
+    : Date.now()
   const session = await store.createSession(
     {
       protocolVersion: DEFAULT_RUNTIME_PROTOCOL_VERSION,
@@ -1620,9 +1626,11 @@ const importConversation = async (
       createdAt: conversation.createdAt,
       historyImport: {
         adapter: conversation.adapter,
+        importedAt,
         nativeCwd: conversation.cwd,
         nativeSessionId: conversation.nativeSessionId,
         sourcePath: conversation.sourcePath,
+        sourceUpdatedAt: conversation.updatedAt,
         workspaceCwd: params.workspaceCwd
       }
     } satisfies RuntimeMeta

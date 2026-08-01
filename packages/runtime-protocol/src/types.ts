@@ -299,7 +299,18 @@ export interface RuntimeMeta extends RuntimeJsonObject, RuntimeProtocolEnvelope 
   runId?: string
   runTitle?: string
   operationId?: string
+  historyImport?: RuntimeHistoryImportMetadata
   createdAt: number
+}
+
+export interface RuntimeHistoryImportMetadata extends RuntimeJsonObject {
+  adapter: string
+  importedAt: number
+  nativeCwd?: string
+  nativeSessionId?: string
+  sourcePath?: string
+  sourceUpdatedAt: number
+  workspaceCwd?: string
 }
 
 export interface RuntimeState extends RuntimeJsonObject, RuntimeCorrelationFields, RuntimeProtocolEnvelope {

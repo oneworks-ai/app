@@ -9,9 +9,7 @@ export type SessionMessageBranchAction = 'fork' | 'recall' | 'edit'
 export type SessionWorkspaceKind = 'managed_worktree' | 'shared_workspace' | 'external_workspace'
 export type SessionWorkspaceState = 'provisioning' | 'ready' | 'deleting' | 'deleted' | 'broken'
 export type SessionWorkspaceCleanupPolicy = 'delete_on_session_delete' | 'retain'
-
 export type SessionQueuedMessageMode = 'steer' | 'next'
-
 export type SessionCreationProgressStatus = 'running' | 'success' | 'error' | 'skipped'
 export type SessionCreationProgressPhase = 'worktree' | 'environment' | 'workspace'
 export type SessionCreationProgressStep =
@@ -150,6 +148,12 @@ export interface SessionPanelState {
   right: SessionPanelAreaState
 }
 
+export interface SessionHistoryImport {
+  adapter: string
+  importedAt: number
+  sourceUpdatedAt: number
+}
+
 export interface Session {
   id: string
   parentSessionId?: string
@@ -176,6 +180,7 @@ export interface Session {
   promptType?: SessionPromptType
   promptName?: string
   panelState?: SessionPanelState
+  historyImport?: SessionHistoryImport
 }
 
 export interface SessionWorkspace {

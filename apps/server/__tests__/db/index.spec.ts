@@ -86,6 +86,26 @@ describe('sqliteDb', () => {
     })
   })
 
+  it('persists imported session provenance through create and update', () => {
+    const historyImport = { adapter: 'codex', importedAt: 2_000, sourceUpdatedAt: 1_000 }
+    const session = db.createSession('Imported session', 'imported_codex_test', 'completed', undefined, {
+      historyImport
+    })
+    expect(db.getSession(session.id)?.historyImport).toEqual(historyImport)
+
+    db.updateSession(session.id, {
+      historyImport: {
+        ...historyImport,
+        sourceUpdatedAt: 1_500
+      }
+    })
+    expect(db.getSession(session.id)?.historyImport?.sourceUpdatedAt).toBe(1_500)
+
+    sqlite.prepare('UPDATE sessions SET historyImport = ? WHERE id = ?').run('{invalid', session.id)
+    expect(db.getSession(session.id)?.historyImport).toBeUndefined()
+    expect(db.getSessions('all').some(({ id }) => id === session.id)).toBe(true)
+  })
+
   it('deduplicates persisted session events by stable event key', () => {
     const session = db.createSession('Runtime session', 'session-runtime', 'running')
     const messageEvent = {

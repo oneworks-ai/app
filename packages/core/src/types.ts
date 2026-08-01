@@ -50,6 +50,7 @@ export type {
   RoomEventResumeKind,
   RoomEventRun,
   Session,
+  SessionHistoryImport,
   SessionMessageBranchAction,
   SessionMessageQueueState,
   SessionPanelArea,

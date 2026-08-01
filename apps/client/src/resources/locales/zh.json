@@ -103,6 +103,7 @@
     "createScheduledTask": "创建定时任务",
     "moreActions": "更多操作",
     "createdAt": "创建时间",
+    "lastActivityAt": "最后活动时间",
     "sessionLinkCopied": "会话链接已复制到剪贴板",
     "resumeCommandCopied": "控制台指令已复制到剪贴板",
     "sessionIdCopied": "Session ID 已复制到剪贴板",
@@ -1932,6 +1933,9 @@
     "childSessionPlaceholder": "输入消息继续子会话...",
     "send": "发送",
     "thinking": "正在思考",
+    "historyImport": {
+      "dividerLabel": "于 {{time}} 迁移自 {{source}}"
+    },
     "voiceInput": {
       "tooltip": "语音输入",
       "start": "开始录音",

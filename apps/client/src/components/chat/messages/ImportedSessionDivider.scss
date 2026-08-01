@@ -1,0 +1,24 @@
+.imported-session-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 4px 0 6px;
+  color: var(--sub-text-color);
+  font-size: 11px;
+  line-height: 1.4;
+
+  &__line {
+    flex: 1 1 24px;
+    min-width: 12px;
+    height: 1px;
+    background: color-mix(in srgb, var(--border-color) 82%, transparent);
+  }
+
+  &__label {
+    min-width: 0;
+    text-align: center;
+    overflow-wrap: anywhere;
+  }
+}

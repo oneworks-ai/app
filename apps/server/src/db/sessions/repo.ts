@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid'
 
-import type { Session } from '@oneworks/core'
+import type { Session, SessionHistoryImport } from '@oneworks/core'
 import { createEmptySessionPermissionState, normalizeSessionPermissionState } from '@oneworks/utils'
 import type { SessionPermissionState } from '@oneworks/utils'
 
@@ -47,6 +47,7 @@ interface SessionRow {
   promptType: string | null
   promptName: string | null
   panelState: string | null
+  historyImport: string | null
 }
 
 type SessionUpdate = Partial<Omit<Session, 'id' | 'createdAt' | 'messageCount'>>
@@ -60,6 +61,7 @@ type SessionCreateOptions =
       | 'messageBranchGroupId'
       | 'messageBranchSourceMessageId'
       | 'messageBranchSourceSessionId'
+      | 'historyImport'
     >
   >
 type SessionRuntimeUpdate = Partial<{
@@ -103,6 +105,7 @@ const sessionUpdateFields = [
   { key: 'promptType' },
   { key: 'promptName' },
   { key: 'panelState', toParam: value => JSON.stringify(normalizeSessionPanelState(value)) },
+  { key: 'historyImport', toParam: value => value == null ? null : JSON.stringify(value) },
   { key: 'messageBranchGroupId' },
   { key: 'messageBranchSourceSessionId' },
   { key: 'messageBranchSourceMessageId' },
@@ -135,8 +138,33 @@ const parsePermissionState = (value: string | null) => {
   }
 }
 
+const parseHistoryImport = (value: string | null): SessionHistoryImport | undefined => {
+  if (value == null || value.trim() === '') {
+    return undefined
+  }
+
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>
+    if (
+      typeof parsed.adapter !== 'string' ||
+      !Number.isFinite(parsed.importedAt) ||
+      !Number.isFinite(parsed.sourceUpdatedAt)
+    ) {
+      return undefined
+    }
+    return {
+      adapter: parsed.adapter,
+      importedAt: parsed.importedAt as number,
+      sourceUpdatedAt: parsed.sourceUpdatedAt as number
+    }
+  } catch {
+    return undefined
+  }
+}
+
 function mapSessionRow(row: SessionRow): Session {
   const panelState = parseSessionPanelState(row.panelState)
+  const historyImport = parseHistoryImport(row.historyImport)
   return {
     id: row.id,
     parentSessionId: row.parentSessionId ?? undefined,
@@ -162,7 +190,8 @@ function mapSessionRow(row: SessionRow): Session {
     fastMode: row.fastMode == null ? undefined : row.fastMode === 1,
     promptType: (row.promptType as any) ?? undefined,
     promptName: row.promptName ?? undefined,
-    ...(panelState == null ? {} : { panelState })
+    ...(panelState == null ? {} : { panelState }),
+    ...(historyImport == null ? {} : { historyImport })
   }
 }
 
@@ -189,7 +218,11 @@ export function createSessionsRepo(db: SqliteDatabase) {
     const stmt = db.prepare(`
       ${SESSION_SELECT}
       ${whereClause}
-      ORDER BY isStarred DESC, createdAt DESC
+      ORDER BY isStarred DESC,
+        CASE
+          WHEN json_valid(historyImport) THEN COALESCE(json_extract(historyImport, '$.sourceUpdatedAt'), createdAt)
+          ELSE createdAt
+        END DESC
     `)
     const rows = stmt.all<SessionRow>()
     return rows.map(mapSessionRow)
@@ -266,7 +299,8 @@ export function createSessionsRepo(db: SqliteDatabase) {
       messageBranchAction: options.messageBranchAction,
       title,
       createdAt: Date.now(),
-      status: (status as any) ?? undefined
+      status: (status as any) ?? undefined,
+      historyImport: options.historyImport
     }
     const runtimeKind = options.runtimeKind ?? (parentSessionId != null ? 'external' : 'interactive')
     const historySeed = options.historySeed ?? null
@@ -286,9 +320,10 @@ export function createSessionsRepo(db: SqliteDatabase) {
         historySeed,
         historySeedPending,
         permissionState,
+        historyImport,
         createdAt,
         status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     stmt.run(
       session.id,
@@ -303,6 +338,7 @@ export function createSessionsRepo(db: SqliteDatabase) {
       historySeed,
       historySeedPending,
       permissionState,
+      session.historyImport == null ? null : JSON.stringify(session.historyImport),
       session.createdAt,
       session.status ?? null
     )
