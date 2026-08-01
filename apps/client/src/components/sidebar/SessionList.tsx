@@ -26,6 +26,11 @@ interface SessionListProps {
   sessions: Session[]
   rooms?: SidebarRoomItem[]
   activeId?: string
+  emptyStateAction?: {
+    iconSrc?: string
+    label: string
+    onClick: () => void
+  }
   hasActiveFilters: boolean
   isLoading?: boolean
   isBatchMode: boolean
@@ -71,6 +76,7 @@ export function SessionList({
   sessions,
   rooms = [],
   activeId,
+  emptyStateAction,
   hasActiveFilters,
   isLoading = false,
   isBatchMode,
@@ -133,6 +139,7 @@ export function SessionList({
     sortOrder
   })
   const showInitialLoading = isLoading && conversationItems.length === 0
+  const showEmptyStateAction = emptyStateAction != null && !searchQuery && !hasActiveFilters
 
   const resolveTooltipTitle = (title?: string) => isTouchInteraction ? undefined : title
 
@@ -207,8 +214,38 @@ export function SessionList({
             emptyText: showInitialLoading
               ? <SessionListLoadingSkeleton label={t('chat.newSessionGuide.loading')} />
               : (
-                <div className='empty-text'>
-                  {searchQuery || hasActiveFilters ? t('common.noSessions') : t('common.startNewChat')}
+                <div className='session-list-empty'>
+                  <div className='empty-text'>
+                    {searchQuery || hasActiveFilters ? t('common.noSessions') : t('common.startNewChat')}
+                  </div>
+                  {showEmptyStateAction && (
+                    <button
+                      type='button'
+                      className='session-list-empty__action'
+                      onClick={emptyStateAction.onClick}
+                    >
+                      {emptyStateAction.iconSrc == null
+                        ? (
+                          <MaterialSymbol
+                            className='session-list-empty__action-icon'
+                            name='deployed_code'
+                          />
+                        )
+                        : (
+                          <img
+                            className='session-list-empty__action-icon'
+                            src={emptyStateAction.iconSrc}
+                            alt=''
+                            aria-hidden='true'
+                          />
+                        )}
+                      <span>{emptyStateAction.label}</span>
+                      <MaterialSymbol
+                        className='session-list-empty__action-arrow'
+                        name='arrow_forward'
+                      />
+                    </button>
+                  )}
                 </div>
               )
           }}

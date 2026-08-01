@@ -8,6 +8,7 @@
 - 左下角只承载 app 级入口，例如项目图标和菜单；右下角只表达当前选中项能做什么。不要把全局入口和当前 item 操作混在一起。
 - 保持 command palette 的密度。控件要紧凑、可扫、少解释文本；不要把 launcher 做成 dashboard 或营销页。
 - Launcher 内部页面继续保留顶部搜索 chrome 及其固定行高，不因内容页切换而拆掉这层交互。输入语义由各页面显式拥有；没有实现页面内搜索的页面不要在文档或契约中声称会自动返回全局命令搜索。内容区不要重复顶部 chrome 已表达的页面标题、作用域或说明文案。
+- Launcher 子页需要自定义搜索 placeholder、aria label 或右侧 actions 时，通过 `launcher-search-chrome.ts` 的注入契约提升到顶部搜索 chrome；离开子页时必须清理注入，不要在内容区再渲染第二条搜索栏。
 - 用量统计页拥有自己的文本搜索：顶部输入用于查找模型服务、工具、账号和所属插件，选中结果后应用对应筛选并留在用量页；非空查询时 `Esc` 先清空搜索，空查询时才返回 Launcher。
 
 ## Footer 与按键提示
@@ -26,7 +27,7 @@
 ## 设置页快捷键
 
 - Launcher 级设置入口使用 macOS `Command+,`、Windows/Linux `Ctrl+,` 直接打开设置页；监听需在菜单接管按键前生效，同时继续避开 IME composition 和快捷键录入控件。
-- section tabs 支持 `⌘1/⌘2/⌘3` 或 Windows/Linux 的 `Ctrl+1/2/3` 直达，tabs 聚焦时支持 `←/→` 和 `Home/End`。
+- section tabs 支持 `⌘1…9` 或 Windows/Linux 的 `Ctrl+1…9` 按当前可见顺序直达，tabs 聚焦时支持 `←/→` 和 `Home/End`。
 - 快捷键提示不要常驻挤占标题。按住 Command/Ctrl 0.5s 后，才在 tab 标题右侧显示 shortcut chip；松开 modifier、窗口失焦或页面隐藏时立即收起。
 - shortcut chip 必须带 tooltip，用于解释“按 xx 切换到 yy”。界面常态不写长说明。
 

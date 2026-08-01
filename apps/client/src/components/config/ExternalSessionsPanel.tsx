@@ -1,12 +1,14 @@
-import { InputNumber, Switch, Tabs } from 'antd'
+/* eslint-disable max-lines -- shared configuration and import-only launcher composition stay together. */
+import { InputNumber, Switch } from 'antd'
 import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { NativeHistoryAdapter, NativeHistoryProjectScope } from '#~/api'
+import type { ActionSearchToolbarAction } from '#~/components/action-search-toolbar/ActionSearchToolbar'
+import { NativeTabs } from '#~/components/native-tabs'
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
 import { getAdapterDisplay, resolveAdapterDisplayIcon } from '#~/resources/adapters'
 import { getRuntimeWorkspaceId } from '#~/runtime-config'
-
 import { FieldRow } from './ConfigFieldRow'
 import { ConfigSectionFrame } from './ConfigSectionFrame'
 import { ExternalSessionsAdapterTab } from './ExternalSessionsAdapterTab'
@@ -16,7 +18,7 @@ import {
   getAdapterLabelKey,
   nativeHistoryAdapters
 } from './external-sessions-panel-model'
-import type { NativeHistoryImportSettings } from './external-sessions-panel-model'
+import type { ExternalSessionsProjectOption, NativeHistoryImportSettings } from './external-sessions-panel-model'
 import { useNativeHistoryImportAction } from './use-native-history-import-action'
 
 const bytesToMegabytes = (value: number | null | undefined) => value == null ? null : value / 1024 / 1024
@@ -24,25 +26,58 @@ const megabytesToBytes = (value: number | null) => value == null ? null : Math.r
 const hasOwn = (value: object, key: string) => Object.prototype.hasOwnProperty.call(value, key)
 
 export function ExternalSessionsPanel({
+  activeAdapter,
   config,
+  fixedProjectScope,
+  initialShowAllTime = false,
+  onActiveAdapterChange,
   onConfigChange,
-  showHeader = true
+  onImportComplete,
+  onQueryChange,
+  onToolbarActionsChange,
+  projectOptions,
+  query,
+  showConfiguration = true,
+  showHeader = true,
+  toolbarPlacement = 'inline'
 }: {
+  activeAdapter: NativeHistoryAdapter
   config?: NativeHistoryImportSettings
+  fixedProjectScope?: NativeHistoryProjectScope
+  initialShowAllTime?: boolean
+  onActiveAdapterChange: (adapter: NativeHistoryAdapter) => void
   onConfigChange: (next: NativeHistoryImportSettings | undefined) => void
+  onImportComplete?: () => Promise<void> | void
+  onQueryChange?: (query: string) => void
+  onToolbarActionsChange?: (actions: ActionSearchToolbarAction[]) => void
+  projectOptions?: ExternalSessionsProjectOption[]
+  query?: string
+  showConfiguration?: boolean
   showHeader?: boolean
+  toolbarPlacement?: 'external' | 'inline'
 }) {
   const { i18n, t } = useTranslation()
   const { resolvedThemeMode } = useResolvedThemeMode()
-  const hasCurrentProjectScope = getRuntimeWorkspaceId() != null
-  const [activeAdapter, setActiveAdapter] = useState<NativeHistoryAdapter>('codex')
-  const [projectScope, setProjectScope] = useState<NativeHistoryProjectScope>(
-    hasCurrentProjectScope ? 'current-project' : 'all-projects'
+  const runtimeHasCurrentProjectScope = getRuntimeWorkspaceId() != null
+  const [uncontrolledProjectScope, setUncontrolledProjectScope] = useState<NativeHistoryProjectScope>(
+    runtimeHasCurrentProjectScope ? 'current-project' : 'all-projects'
   )
+  const projectScope = fixedProjectScope ?? uncontrolledProjectScope
+  const [projectPaths, setProjectPaths] = useState<string[]>([])
+  const hasCurrentProjectScope = fixedProjectScope == null && runtimeHasCurrentProjectScope
   const { isImporting, runImport } = useNativeHistoryImportAction()
   const globalSizeLimit = config != null && hasOwn(config, 'maxFileSizeBytes')
     ? config.maxFileSizeBytes
     : defaultNativeHistoryImportMaxFileSizeBytes
+  const runImportAndRefreshProjects = useCallback(async (
+    request: Parameters<typeof runImport>[0]
+  ) => {
+    const result = await runImport(request)
+    if (result != null) {
+      await onImportComplete?.()
+    }
+    return result
+  }, [onImportComplete, runImport])
 
   const updateConfig = useCallback((patch: Partial<NativeHistoryImportSettings>) => {
     onConfigChange(compactNativeHistoryImportSettings({
@@ -100,67 +135,69 @@ export function ExternalSessionsPanel({
       title={showHeader ? t('config.sections.externalSessions') : undefined}
     >
       <div className='config-view__app-settings-list'>
-        <FieldRow
-          title={t('nativeHistoryImport.manager.globalAutoImportTitle')}
-          description={t('nativeHistoryImport.manager.globalAutoImportDescription')}
-          icon='autorenew'
-        >
-          <Switch
-            className='config-view__external-session-switch'
-            checked={config?.autoImport === true}
-            onChange={checked => updateConfig({ autoImport: checked })}
-          />
-        </FieldRow>
+        {showConfiguration && (
+          <>
+            <FieldRow
+              title={t('nativeHistoryImport.manager.globalAutoImportTitle')}
+              description={t('nativeHistoryImport.manager.globalAutoImportDescription')}
+              icon='autorenew'
+            >
+              <Switch
+                className='config-view__external-session-switch'
+                checked={config?.autoImport === true}
+                onChange={checked => updateConfig({ autoImport: checked })}
+              />
+            </FieldRow>
 
-        <FieldRow
-          title={t('nativeHistoryImport.manager.globalSizeLimitTitle')}
-          description={t('nativeHistoryImport.manager.globalSizeLimitDescription')}
-          icon='data_thresholding'
-        >
-          <InputNumber
-            min={1}
-            precision={0}
-            placeholder={globalSizeLimit == null ? t('nativeHistoryImport.manager.unlimited') : '50'}
-            suffix='MB'
-            value={bytesToMegabytes(globalSizeLimit)}
-            onChange={value => updateConfig({ maxFileSizeBytes: megabytesToBytes(value) })}
-          />
-        </FieldRow>
+            <FieldRow
+              title={t('nativeHistoryImport.manager.globalSizeLimitTitle')}
+              description={t('nativeHistoryImport.manager.globalSizeLimitDescription')}
+              icon='data_thresholding'
+            >
+              <InputNumber
+                min={1}
+                precision={0}
+                placeholder={globalSizeLimit == null ? t('nativeHistoryImport.manager.unlimited') : '50'}
+                suffix='MB'
+                value={bytesToMegabytes(globalSizeLimit)}
+                onChange={value => updateConfig({ maxFileSizeBytes: megabytesToBytes(value) })}
+              />
+            </FieldRow>
+          </>
+        )}
 
-        <Tabs
+        <NativeTabs
           className='config-view__external-session-tabs'
           activeKey={activeAdapter}
-          animated={false}
-          onChange={key => setActiveAdapter(key as NativeHistoryAdapter)}
+          ariaLabel={t('config.sections.adapters')}
+          onChange={onActiveAdapterChange}
           items={nativeHistoryAdapters.map(adapter => ({
-            key: adapter,
-            label: (() => {
+            ariaControls: `external-sessions-panel-${adapter}`,
+            icon: (() => {
               const adapterDisplay = getAdapterDisplay(adapter)
               const adapterIcon = resolveAdapterDisplayIcon(adapterDisplay, resolvedThemeMode)
-              return (
-                <span className='config-view__external-session-tab-label'>
-                  {adapterIcon == null
-                    ? (
-                      <span
-                        className='config-view__external-session-tab-icon config-view__external-session-tab-icon--fallback material-symbols-rounded'
-                        aria-hidden='true'
-                      >
-                        deployed_code
-                      </span>
-                    )
-                    : (
-                      <img
-                        className='config-view__external-session-tab-icon'
-                        src={adapterIcon}
-                        alt=''
-                        aria-hidden='true'
-                      />
-                    )}
-                  <span>{t(getAdapterLabelKey(adapter))}</span>
-                </span>
-              )
+              return adapterIcon == null
+                ? 'deployed_code'
+                : { src: adapterIcon, type: 'image' as const }
             })(),
-            children: (
+            id: `external-sessions-tab-${adapter}`,
+            key: adapter,
+            label: t(getAdapterLabelKey(adapter))
+          }))}
+        />
+        <div
+          className='config-view__external-session-tabs-panel'
+          data-native-tabs-panel='true'
+        >
+          {nativeHistoryAdapters.map(adapter => (
+            <div
+              aria-labelledby={`external-sessions-tab-${adapter}`}
+              className='config-view__external-session-tab-pane'
+              hidden={activeAdapter !== adapter}
+              id={`external-sessions-panel-${adapter}`}
+              key={adapter}
+              role='tabpanel'
+            >
               <ExternalSessionsAdapterTab
                 adapter={adapter}
                 config={config}
@@ -170,14 +207,23 @@ export function ExternalSessionsPanel({
                 isActive={activeAdapter === adapter}
                 isImporting={isImporting}
                 hasCurrentProjectScope={hasCurrentProjectScope}
+                initialShowAllTime={initialShowAllTime}
                 onAdapterConfigChange={patch => updateAdapterConfig(adapter, patch)}
-                onProjectScopeChange={setProjectScope}
+                onProjectScopeChange={setUncontrolledProjectScope}
+                onProjectPathsChange={setProjectPaths}
+                onQueryChange={onQueryChange}
+                onToolbarActionsChange={onToolbarActionsChange}
                 projectScope={projectScope}
-                runImport={runImport}
+                projectOptions={projectOptions}
+                projectPaths={projectPaths}
+                query={query}
+                runImport={runImportAndRefreshProjects}
+                showSettings={showConfiguration}
+                toolbarPlacement={toolbarPlacement}
               />
-            )
-          }))}
-        />
+            </div>
+          ))}
+        </div>
       </div>
     </ConfigSectionFrame>
   )

@@ -5,22 +5,20 @@
   padding-bottom: 10px;
 }
 
-.launcher-settings__tabs {
+.launcher-settings--content {
+  height: 100%;
+  min-height: 0;
+  padding-bottom: 0;
+  overflow: hidden;
+}
+
+.launcher-settings__tabs-surface {
   position: sticky;
   top: -10px;
   z-index: 2;
-  display: flex;
-  align-items: flex-end;
-  gap: var(--launcher-tab-gap, 10px);
   min-width: 0;
-  overflow-x: auto;
   margin: -10px calc(var(--launcher-command-list-padding-inline, 14px) * -1) 0;
   padding: 10px var(--launcher-command-list-padding-inline, 14px) 0;
-  border-bottom: 1px solid
-    var(
-      --border-color,
-      var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4))
-    );
   border-radius: 0;
   background: var(
     --oneworks-launcher-tab-bar-background,
@@ -31,67 +29,14 @@
     blur(18px) saturate(1.35)
   );
   box-sizing: border-box;
-  scrollbar-width: none;
   -webkit-backdrop-filter: var(
     --oneworks-launcher-tab-bar-backdrop-filter,
     blur(18px) saturate(1.35)
   );
 }
 
-.launcher-settings__tabs::-webkit-scrollbar {
-  display: none;
-}
-
-.launcher-settings__tab {
-  position: relative;
-  min-width: 0;
-  padding: 0 0 10px;
-  border: 0;
-  border-radius: var(
-    --launcher-tab-radius,
-    var(--oneworks-control-radius, 6px)
-  );
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: flex-start;
-  gap: var(--launcher-icon-label-gap);
-  background: transparent;
-  color: var(--sub-text-color, var(--ant-color-text-secondary, #57606a));
-  cursor: pointer;
-  font: 700 14px/1.2 ui-sans-serif, system-ui, sans-serif;
-  transition: color .16s ease;
-}
-
-.launcher-settings__tab::after {
-  position: absolute;
-  inset-inline: 0;
-  bottom: -1px;
-  height: 2px;
-  content: '';
-  opacity: 0;
-  background: var(--primary-color, var(--ant-color-primary, #1677ff));
-  display: var(--launcher-tab-ink-display, block);
-}
-
-.launcher-settings__tab:hover,
-.launcher-settings__tab:focus-visible {
-  background: var(--launcher-item-hover-bg, transparent);
-  color: var(--primary-color, var(--ant-color-primary, #1677ff));
-}
-
-.launcher-settings__tab.is-active {
-  background: var(--launcher-item-active-bg, transparent);
-  color: var(--primary-color, var(--ant-color-primary, #1677ff));
-}
-
-.launcher-settings__tab:focus-visible {
-  outline: 1px solid var(--primary-color, var(--ant-color-primary, #1677ff));
-  outline-offset: -1px;
-}
-
-.launcher-settings__tab.is-active::after {
-  opacity: 1;
+.launcher-settings__tabs {
+  --native-tabs-gap: var(--launcher-tab-gap, 10px);
 }
 
 .launcher-settings__tab-title {
@@ -100,13 +45,6 @@
   font: inherit;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.launcher-settings__tab-icon {
-  width: 18px;
-  min-width: 18px;
-  font-size: 18px;
-  line-height: 1;
 }
 
 .launcher-settings__tab-shortcut {
@@ -135,6 +73,13 @@
 
 .launcher-settings__panel {
   min-width: 0;
+}
+
+.launcher-settings__panel--content {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .launcher-settings__items {

@@ -1,0 +1,26 @@
+.launcher-external-sessions {
+  --subpage-tertiary-padding: 10px;
+  --subpage-tertiary-gap: var(--subpage-tertiary-padding);
+  --subpage-tertiary-radius: var(--oneworks-group-radius, 8px);
+
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.launcher-external-sessions > .config-view__editor-wrap {
+  height: 100%;
+}
+
+.launcher-external-sessions .config-view__external-session-panel--filter {
+  padding-top: 0;
+}
+
+.launcher-external-sessions
+  .config-view__external-session-candidate-group
+  > .config-view__field-row:first-child {
+  padding-top: 0;
+}

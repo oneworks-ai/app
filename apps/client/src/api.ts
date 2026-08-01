@@ -120,6 +120,7 @@ export {
   listSessionWorkspaceTree,
   listSessions,
   moveQueuedMessage,
+  nativeHistoryAdapters,
   openSessionWorkspaceFileInExternalOpener,
   previewNativeProjectHistory,
   readSessionWorkspaceFile,
@@ -135,11 +136,13 @@ export {
   updateSessionTitle,
   updateSessionWorkspaceFile
 } from './api/sessions'
+export { isNativeHistoryAdapter } from './api/sessions'
 export type {
   NativeHistoryAdapter,
   NativeHistoryCandidateScope,
   NativeHistoryImportAdapterPreview,
   NativeHistoryImportPreviewCandidate,
+  NativeHistoryImportPreviewProject,
   NativeHistoryImportPreviewResult,
   NativeHistoryImportResult,
   NativeHistoryImportSession,

@@ -13,6 +13,7 @@ import type {
 import type { GitBranchKind, SessionInfo, SessionInitInfo, SessionPromptType } from '@oneworks/types'
 
 import { getDb } from '#~/db/index.js'
+import { rememberLauncherWorkspaces } from '#~/services/launcher/manager.js'
 import {
   consumeNativeProjectHistoryImportPrompt,
   importNativeProjectHistoryAndReplay,
@@ -181,6 +182,29 @@ export function sessionsRouter(): Router {
     return Array.from(new Set(sourcePaths))
   }
 
+  const normalizeNativeHistoryProjectPaths = (value: unknown) => {
+    if (value === undefined) {
+      return undefined
+    }
+    if (!Array.isArray(value)) {
+      throw badRequest(
+        'Invalid native history project paths',
+        { projectPaths: value },
+        'invalid_native_history_project_paths'
+      )
+    }
+
+    const projectPaths = value.map(projectPath => typeof projectPath === 'string' ? projectPath.trim() : '')
+    if (projectPaths.includes('')) {
+      throw badRequest(
+        'Invalid native history project path',
+        { projectPaths: value },
+        'invalid_native_history_project_path'
+      )
+    }
+    return Array.from(new Set(projectPaths))
+  }
+
   const normalizeNativeHistoryProjectScope = (value: unknown) => {
     if (value === undefined) {
       return undefined
@@ -340,7 +364,9 @@ export function sessionsRouter(): Router {
   })
 
   router.post('/native-history-import', async (ctx) => {
-    ctx.body = await consumeNativeProjectHistoryImportPrompt()
+    const result = await consumeNativeProjectHistoryImportPrompt()
+    await rememberLauncherWorkspaces(result.sessions.map(session => session.workspaceCwd ?? session.cwd))
+    ctx.body = result
   })
 
   router.post('/native-history-import/preview', async (ctx) => {
@@ -349,6 +375,7 @@ export function sessionsRouter(): Router {
       candidateScope?: unknown
       cursor?: unknown
       limit?: unknown
+      projectPaths?: unknown
       projectScope?: unknown
       sourcePaths?: unknown
       threadScope?: unknown
@@ -359,6 +386,7 @@ export function sessionsRouter(): Router {
     const candidateScope = normalizeNativeHistoryCandidateScope(body.candidateScope)
     const previewCursor = normalizeNativeHistoryPreviewCursor(body.cursor)
     const previewLimit = normalizeNativeHistoryPreviewLimit(body.limit)
+    const projectPaths = normalizeNativeHistoryProjectPaths(body.projectPaths)
     const projectScope = normalizeNativeHistoryProjectScope(body.projectScope)
     const sourcePaths = normalizeNativeHistorySourcePaths(body.sourcePaths)
     const threadScope = normalizeNativeHistoryThreadScope(body.threadScope)
@@ -369,6 +397,7 @@ export function sessionsRouter(): Router {
       ...(candidateScope == null ? {} : { candidateScope }),
       ...(previewCursor == null ? {} : { previewCursor }),
       ...(previewLimit == null ? {} : { previewLimit }),
+      ...(projectPaths == null ? {} : { projectPaths }),
       ...(projectScope == null ? {} : { projectScope }),
       ...(sourcePaths == null ? {} : { sourcePaths }),
       ...(threadScope == null ? {} : { threadScope }),
@@ -380,6 +409,7 @@ export function sessionsRouter(): Router {
   router.post('/native-history-import/run', async (ctx) => {
     const body = (ctx.request.body ?? {}) as {
       adapters?: unknown
+      projectPaths?: unknown
       projectScope?: unknown
       sourcePaths?: unknown
       threadScope?: unknown
@@ -387,19 +417,23 @@ export function sessionsRouter(): Router {
       timeSort?: unknown
     }
     const adapters = normalizeNativeHistoryAdapters(body.adapters)
+    const projectPaths = normalizeNativeHistoryProjectPaths(body.projectPaths)
     const projectScope = normalizeNativeHistoryProjectScope(body.projectScope)
     const sourcePaths = normalizeNativeHistorySourcePaths(body.sourcePaths)
     const threadScope = normalizeNativeHistoryThreadScope(body.threadScope)
     const timeFilter = normalizeNativeHistoryTimeFilter(body.timeFilter)
     const timeSort = normalizeNativeHistoryTimeSort(body.timeSort)
-    ctx.body = await importNativeProjectHistoryAndReplay({
+    const result = await importNativeProjectHistoryAndReplay({
       ...(adapters == null ? {} : { adapters }),
+      ...(projectPaths == null ? {} : { projectPaths }),
       ...(projectScope == null ? {} : { projectScope }),
       ...(sourcePaths == null ? {} : { sourcePaths }),
       ...(threadScope == null ? {} : { threadScope }),
       ...(timeFilter == null ? {} : { timeFilter }),
       ...(timeSort == null ? {} : { timeSort })
     })
+    await rememberLauncherWorkspaces(result.sessions.map(session => session.workspaceCwd ?? session.cwd))
+    ctx.body = result
   })
 
   router.get('/:id', (ctx) => {

@@ -65,23 +65,21 @@ describe('launcher command item visual contract', () => {
     )
 
     expect(settingsStyles).toMatch(
-      /\.launcher-settings__tabs\s*\{[^}]*top:\s*-10px;/
+      /\.launcher-settings__tabs-surface\s*\{[^}]*top:\s*-10px;/
     )
     expect(settingsStyles).toMatch(
-      /\.launcher-settings__tabs\s*\{[^}]*margin:\s*-10px\s+calc\(var\(--launcher-command-list-padding-inline,\s*14px\)\s*\*\s*-1\)\s+0;/
+      /\.launcher-settings__tabs-surface\s*\{[^}]*margin:\s*-10px\s+calc\(var\(--launcher-command-list-padding-inline,\s*14px\)\s*\*\s*-1\)\s+0;/
     )
     expect(settingsStyles).toMatch(
-      /\.launcher-settings__tabs\s*\{[^}]*padding:\s*10px\s+var\(--launcher-command-list-padding-inline,\s*14px\)\s+0;/
+      /\.launcher-settings__tabs-surface\s*\{[^}]*padding:\s*10px\s+var\(--launcher-command-list-padding-inline,\s*14px\)\s+0;/
     )
     expect(settingsStyles).toMatch(
-      /\.launcher-settings__tabs\s*\{[^}]*background:\s*var\(\s*--oneworks-launcher-tab-bar-background,\s*color-mix\(in srgb,\s*var\(--bg-color\)\s*92%,\s*var\(--sub-bg-color\)\)\s*\);/
+      /\.launcher-settings__tabs-surface\s*\{[^}]*background:\s*var\(\s*--oneworks-launcher-tab-bar-background,\s*color-mix\(in srgb,\s*var\(--bg-color\)\s*92%,\s*var\(--sub-bg-color\)\)\s*\);/
     )
     expect(settingsStyles).toMatch(
-      /\.launcher-settings__tab\s*\{[^}]*padding:\s*0\s+0\s+10px;/
+      /\.launcher-settings__tabs\s*\{[^}]*--native-tabs-gap:\s*var\(--launcher-tab-gap,\s*10px\);/
     )
-    expect(settingsStyles).not.toMatch(
-      /\.launcher-settings__tab\s*\{[^}]*min-height:/
-    )
+    expect(settingsStyles).not.toContain('.launcher-settings__tab {')
     expect(settingsStyles).toMatch(
       /\.launcher-settings__items\s*\{[^}]*gap:\s*10px;/
     )
@@ -106,9 +104,7 @@ describe('launcher command item visual contract', () => {
     expect(routeStyles).toMatch(
       /\.launcher-command-search__input-row\s*\{[^}]*gap:\s*var\(--launcher-icon-label-gap\);/
     )
-    expect(settingsStyles).toMatch(
-      /\.launcher-settings__tab\s*\{[^}]*gap:\s*var\(--launcher-icon-label-gap\);/
-    )
+    expect(settingsStyles).not.toContain('.launcher-settings__tab {')
   })
 
   it('keeps launcher menus opaque while preserving theme ownership', () => {
@@ -171,9 +167,7 @@ describe('launcher command item visual contract', () => {
     expect(routeStyles).toMatch(
       /\.launcher-command-item:hover,[^{]*\{[^}]*background:\s*var\(--launcher-item-hover-bg\)/
     )
-    expect(settingsStyles).toMatch(
-      /\.launcher-settings__tab:hover,[^{]*\{[^}]*background:\s*var\(--launcher-item-hover-bg,\s*transparent\)/
-    )
+    expect(settingsStyles).not.toContain('.launcher-settings__tab:hover')
   })
 
   it('uses complete active foreground semantics for command content', () => {

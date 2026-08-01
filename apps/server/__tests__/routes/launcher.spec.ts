@@ -14,7 +14,9 @@ import {
   createLauncherWorkspaceClientBase,
   createLauncherWorkspaceId,
   createWorkspaceServerEnv,
+  listLauncherWorkspaces,
   openLauncherWorkspace,
+  rememberLauncherWorkspaces,
   resolveLauncherProjectWorkspaceFolder,
   resolveLauncherWorkspaceInstanceIdentity
 } from '#~/services/launcher/manager.js'
@@ -247,6 +249,19 @@ describe('launcher routes', () => {
         workspaceFolder,
         workspaceId: createLauncherWorkspaceId(workspaceFolder)
       })
+    ])
+  })
+
+  it('registers imported workspace folders as recent launcher projects', async () => {
+    const firstWorkspace = fs.realpathSync.native(await mkdtemp(path.join(tempHome, 'imported-first-')))
+    const secondWorkspace = fs.realpathSync.native(await mkdtemp(path.join(tempHome, 'imported-second-')))
+
+    await rememberLauncherWorkspaces([firstWorkspace, secondWorkspace, firstWorkspace])
+
+    const state = await listLauncherWorkspaces()
+    expect(state.recentProjects.map(project => project.workspaceFolder)).toEqual([
+      firstWorkspace,
+      secondWorkspace
     ])
   })
 
