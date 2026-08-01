@@ -1,4 +1,7 @@
-import type { NativeHistoryAdapter } from '#~/api'
+import { nativeHistoryAdapters } from '#~/api'
+import type { NativeHistoryAdapter, NativeHistoryImportAdapterPreview } from '#~/api'
+
+export { nativeHistoryAdapters }
 
 export interface NativeHistoryImportAdapterSettings {
   autoImport?: boolean
@@ -11,9 +14,14 @@ export interface NativeHistoryImportSettings {
   adapters?: Partial<Record<NativeHistoryAdapter, NativeHistoryImportAdapterSettings>>
 }
 
-export const defaultNativeHistoryImportMaxFileSizeBytes = 50 * 1024 * 1024
+export interface ExternalSessionsProjectOption {
+  description?: string
+  isCurrent?: boolean
+  label: string
+  value: string
+}
 
-export const nativeHistoryAdapters: NativeHistoryAdapter[] = ['codex', 'claude-code']
+export const defaultNativeHistoryImportMaxFileSizeBytes = 50 * 1024 * 1024
 
 export const nativeHistoryAdapterIcons: Record<NativeHistoryAdapter, string> = {
   codex: 'terminal',
@@ -25,6 +33,31 @@ export const getAdapterLabelKey = (adapter: NativeHistoryAdapter) => (
     ? 'nativeHistoryImport.platforms.codex'
     : 'nativeHistoryImport.platforms.claudeCode'
 )
+
+export const removeImportedNativeHistoryPreviewCandidates = (
+  pages: Array<NativeHistoryImportAdapterPreview | undefined> | undefined,
+  importedSourcePaths: ReadonlySet<string>
+) => {
+  if (pages == null || importedSourcePaths.size === 0) {
+    return pages
+  }
+  return pages.map((page) => {
+    if (page == null) {
+      return page
+    }
+    const candidates = page.candidates.filter(
+      candidate => !importedSourcePaths.has(candidate.sourcePath)
+    )
+    return {
+      ...page,
+      candidates,
+      largeFiles: candidates.filter(candidate => candidate.isLarge).length,
+      largestFileBytes: Math.max(0, ...candidates.map(candidate => candidate.fileSizeBytes)),
+      matchedFiles: candidates.length,
+      totalBytes: candidates.reduce((sum, candidate) => sum + candidate.fileSizeBytes, 0)
+    }
+  })
+}
 
 const compactAdapterSettings = (
   settings: NativeHistoryImportAdapterSettings | undefined

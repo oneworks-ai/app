@@ -13,11 +13,13 @@ const createImportSession = (
 ): NativeHistoryImportSession => ({
   adapter,
   createdAt: updatedAt - 1,
+  cwd: `/workspace/${sessionId}`,
   importedEvents: 2,
   sessionId,
   sourcePath: `/history/${sessionId}.jsonl`,
   title: sessionId,
-  updatedAt
+  updatedAt,
+  workspaceCwd: `/workspace/${sessionId}`
 })
 
 describe('native history import prompt helpers', () => {

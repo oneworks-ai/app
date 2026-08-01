@@ -21,6 +21,7 @@ import type {
 } from '@oneworks/types'
 import type { ConfigDetailRoute } from './config/configDetail'
 
+import type { NativeHistoryAdapter } from '#~/api'
 import { getLauncherWorkspaceSelectorState } from '#~/api/launcher'
 import { RouteErrorState } from '#~/components/error-state'
 import { RouteContainerHeader } from '#~/components/layout/RouteContainerHeader'
@@ -90,6 +91,12 @@ import {
 import { cloneValue, collectUnsetPaths, getValueByPath, isEmptyValue } from './config/configUtils'
 import { editableConfigSectionKeys } from './config/editableConfigSections'
 import type { NativeHistoryImportSettings } from './config/external-sessions-panel-model'
+import {
+  externalSessionsAdapterQueryKey,
+  externalSessionsRouteQueryKeys,
+  parseExternalSessionsAdapter,
+  parseExternalSessionsShowAllTime
+} from './config/external-sessions-route'
 import {
   buildModelServiceConfigSessionInitialContent,
   buildModelServiceConfigSessionTitle,
@@ -368,6 +375,14 @@ export function ConfigView() {
     location.state
   ])
   const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search])
+  const externalSessionsAdapter = useMemo(
+    () => parseExternalSessionsAdapter(searchParams) ?? 'codex',
+    [searchParams]
+  )
+  const externalSessionsShowAllTime = useMemo(
+    () => parseExternalSessionsShowAllTime(searchParams),
+    [searchParams]
+  )
   const pathValues = useMemo(() => parseConfigPathState(location.pathname), [location.pathname])
   const queryValues = useMemo<ConfigQueryParams>(() => {
     const legacyTab = searchParams.get('tab') ?? ''
@@ -711,6 +726,9 @@ export function ConfigView() {
     const nextSearchParams = new URLSearchParams(location.search)
 
     configLegacyRouteQueryKeys.forEach(key => nextSearchParams.delete(key))
+    if (nextTab !== 'externalSessions') {
+      externalSessionsRouteQueryKeys.forEach(key => nextSearchParams.delete(key))
+    }
 
     const defaultSource = resolveConfigSourceForMissingQuery(nextTab, configPresent)
     if (patch.source != null || nextSearchParams.get('source') === defaultSource) {
@@ -756,6 +774,24 @@ export function ConfigView() {
     location.state,
     navigate,
     sourceKey
+  ])
+  const setExternalSessionsAdapter = useCallback((adapter: NativeHistoryAdapter) => {
+    const nextSearchParams = new URLSearchParams(location.search)
+    nextSearchParams.set(externalSessionsAdapterQueryKey, adapter)
+    const nextSearch = `?${nextSearchParams.toString()}`
+    if (nextSearch === location.search) return
+
+    void navigate({
+      pathname: location.pathname,
+      search: nextSearch,
+      hash: location.hash
+    }, { replace: true, state: location.state })
+  }, [
+    location.hash,
+    location.pathname,
+    location.search,
+    location.state,
+    navigate
   ])
   useEffect(() => {
     if (hasModelServiceImportQuery) return
@@ -1973,7 +2009,10 @@ export function ConfigView() {
       )}
       {tab.key === 'externalSessions' && (
         <ExternalSessionsPanel
+          activeAdapter={externalSessionsAdapter}
           config={generalDraftValue.nativeHistoryImport as NativeHistoryImportSettings | undefined}
+          initialShowAllTime={externalSessionsShowAllTime}
+          onActiveAdapterChange={setExternalSessionsAdapter}
           showHeader={false}
           onConfigChange={(next) => {
             handleDraftChange('general', {

@@ -20,6 +20,7 @@ export function useNativeHistoryImportAction() {
 
   const runImport = useCallback(async (request?: {
     adapters?: NativeHistoryAdapter[]
+    projectPaths?: string[]
     projectScope?: NativeHistoryProjectScope
     sourcePaths?: string[]
     threadScope?: NativeHistoryThreadScope

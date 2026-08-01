@@ -31,9 +31,11 @@ import {
   listLauncherRelayDirectories,
   openLauncherRelayWorkspace
 } from '#~/api/launcher-relay'
+import { ActionSearchToolbarActions } from '#~/components/action-search-toolbar/ActionSearchToolbar'
 import { LauncherAboutView } from '#~/components/launcher/LauncherAboutView'
 import { LauncherSettingsView } from '#~/components/launcher/LauncherSettingsView'
 import type { LauncherKeyboardHint, LauncherSettingsResetAction } from '#~/components/launcher/LauncherSettingsView'
+import type { LauncherSearchChromeExtension } from '#~/components/launcher/launcher-search-chrome'
 import { UsagePanel } from '#~/components/usage/UsagePanel'
 import type { UsagePanelHandle } from '#~/components/usage/UsagePanel'
 import { WorkspaceOpeningOverlay } from '#~/components/workspace/WorkspaceOpeningOverlay'
@@ -991,6 +993,7 @@ export function LauncherRoute({
   const [openingWorkspace, setOpeningWorkspace] = useState<LauncherOpeningWorkspace>()
   const [settingsOperationHints, setSettingsOperationHints] = useState<LauncherKeyboardHint[]>([])
   const [settingsResetAction, setSettingsResetAction] = useState<LauncherSettingsResetAction>()
+  const [injectedSearchChrome, setInjectedSearchChrome] = useState<LauncherSearchChromeExtension>()
   const searchInputRef = useRef<HTMLInputElement>(null)
   const commandListRef = useRef<HTMLDivElement>(null)
   const usagePanelRef = useRef<UsagePanelHandle>(null)
@@ -1409,6 +1412,24 @@ export function LauncherRoute({
       dispose?.()
     }
   }, [active, desktopApi])
+
+  const refreshImportedWorkspaceProjects = useCallback(async () => {
+    const statePromise = desktopApi?.getWorkspaceSelectorState?.() ??
+      (desktopApi == null ? getLauncherWorkspaceSelectorState() : undefined)
+    if (statePromise == null) {
+      return
+    }
+    try {
+      const state = await statePromise
+      setSelectorState(normalizeWorkspaceSelectorState(state))
+      setDismissedProjectContextFolder(undefined)
+      if (desktopApi == null) {
+        setServerLauncherAvailability('available')
+      }
+    } catch (error) {
+      console.error('[launcher] failed to refresh imported workspaces', error)
+    }
+  }, [desktopApi])
 
   useEffect(() => {
     if (
@@ -4142,7 +4163,7 @@ export function LauncherRoute({
   const launcherPluginChromeAvatarUrl = cleanLauncherText(pluginRouteLauncherChrome?.avatarUrl)
   const launcherPluginSearchTitle = cleanLauncherText(pluginRouteLauncherChrome?.searchTitle) ??
     launcherPluginChromeTitle
-  const viewSearchPlaceholder = launcherViewMode === 'preview'
+  const defaultViewSearchPlaceholder = launcherViewMode === 'preview'
     ? t('launcher.preview.searchPlaceholder')
     : launcherViewMode === 'plugin'
     ? t('launcher.pluginSearchPlaceholder', { title: launcherPluginSearchTitle })
@@ -4163,7 +4184,7 @@ export function LauncherRoute({
       ? t('launcher.files.globalSearchPlaceholder')
       : t('launcher.files.searchPlaceholder', { project: contextProject.name })
     : searchPlaceholder
-  const viewSearchLabel = launcherViewMode === 'preview'
+  const defaultViewSearchLabel = launcherViewMode === 'preview'
     ? t('launcher.preview.searchLabel')
     : launcherViewMode === 'plugin'
     ? t('launcher.pluginSearchLabel', { title: launcherPluginSearchTitle })
@@ -4182,6 +4203,8 @@ export function LauncherRoute({
     : isFileSearchMode
     ? t('launcher.files.searchLabel')
     : t('launcher.searchLabel')
+  const viewSearchPlaceholder = injectedSearchChrome?.placeholder ?? defaultViewSearchPlaceholder
+  const viewSearchLabel = injectedSearchChrome?.ariaLabel ?? defaultViewSearchLabel
   const viewLeadingIconTooltip = launcherViewMode === 'preview'
     ? t('launcher.preview.title')
     : launcherViewMode === 'plugin'
@@ -4362,6 +4385,7 @@ export function LauncherRoute({
               }}
               onKeyDown={handleKeyDown}
             />
+            <ActionSearchToolbarActions actions={injectedSearchChrome?.actions ?? []} />
           </div>
         </div>
 
@@ -4383,8 +4407,12 @@ export function LauncherRoute({
             <LauncherSettingsView
               query={query}
               isSearchInputComposing={isSearchInputComposing}
+              onExternalSessionsImportComplete={refreshImportedWorkspaceProjects}
               onKeyboardHintsChange={setSettingsOperationHints}
+              onQueryChange={setLauncherQueryWithUrl}
               onResetActionChange={setSettingsResetAction}
+              onSearchChromeChange={setInjectedSearchChrome}
+              workspaceProjects={mergedProjects}
             />
           )}
           {launcherViewMode === 'about' && (

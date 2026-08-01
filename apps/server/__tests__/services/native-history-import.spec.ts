@@ -1,14 +1,15 @@
 /* eslint-disable max-lines -- native history import fixtures cover parser, matching, preview, and size-limit behavior together. */
-import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 
 import { SqliteDb } from '#~/db/index.js'
 import { createSqliteDatabase } from '#~/db/sqlite.js'
+import { listLauncherWorkspaces, rememberLauncherWorkspaces } from '#~/services/launcher/manager.js'
 import { discoverRuntimeSessionStores } from '#~/services/runtime-store/discovery.js'
 import {
   importNativeProjectHistory,
@@ -187,6 +188,7 @@ const replayImportedSessions = async (runtimeRoot: string) => {
 }
 
 afterEach(async () => {
+  vi.unstubAllEnvs()
   await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { force: true, recursive: true })))
 })
 
@@ -386,6 +388,264 @@ describe('native project history import', () => {
     ])
     currentDb.close()
     otherDb.close()
+  })
+
+  it('maps a deleted Codex worktree to an existing checkout and imports it as an openable project', async () => {
+    const root = await createTempRoot()
+    const workspace = path.join(root, 'manager-workspace')
+    const canonicalWorkspace = path.join(root, 'codes', 'modeldriveprotocol')
+    const wrongOriginWorkspace = path.join(root, 'codes', 'unrelated')
+    const staleWorktree = path.join(root, '.codex', 'worktrees', 'a482', 'modeldriveprotocol')
+    const home = path.join(root, 'home')
+    const sourcePath = path.join(home, '.codex', 'sessions', 'target.jsonl')
+    const remoteUrl = 'https://github.com/modeldriveprotocol/modeldriveprotocol.git'
+    const env = createTestEnv(workspace, home)
+
+    await Promise.all([
+      mkdir(workspace, { recursive: true }),
+      mkdir(canonicalWorkspace, { recursive: true }),
+      mkdir(wrongOriginWorkspace, { recursive: true })
+    ])
+    await writeGitOrigin(canonicalWorkspace, remoteUrl)
+    await writeGitOrigin(wrongOriginWorkspace, 'https://github.com/example/unrelated.git')
+    await writeJsonl(sourcePath, [
+      {
+        type: 'session_meta',
+        timestamp: '2026-06-01T00:00:00.000Z',
+        payload: {
+          id: 'codex-stale-worktree',
+          cwd: staleWorktree
+        }
+      },
+      {
+        type: 'event_msg',
+        timestamp: '2026-06-01T00:00:01.000Z',
+        payload: {
+          type: 'user_message',
+          message: 'Import from a deleted worktree'
+        }
+      }
+    ])
+    await writeCodexThreadState(home, [
+      {
+        createdAt: 1_000,
+        cwd: staleWorktree,
+        gitOriginUrl: remoteUrl,
+        id: 'codex-stale-worktree',
+        rolloutPath: sourcePath,
+        title: 'Deleted worktree session',
+        updatedAt: 2_000
+      },
+      {
+        createdAt: 1_000,
+        cwd: canonicalWorkspace,
+        gitOriginUrl: remoteUrl,
+        id: 'codex-canonical-1',
+        rolloutPath: path.join(home, '.codex', 'sessions', 'canonical-1.jsonl'),
+        title: 'Canonical checkout one',
+        updatedAt: 2_000
+      },
+      {
+        createdAt: 1_000,
+        cwd: canonicalWorkspace,
+        gitOriginUrl: remoteUrl,
+        id: 'codex-canonical-2',
+        rolloutPath: path.join(home, '.codex', 'sessions', 'canonical-2.jsonl'),
+        title: 'Canonical checkout two',
+        updatedAt: 2_000
+      },
+      {
+        createdAt: 1_000,
+        cwd: wrongOriginWorkspace,
+        gitOriginUrl: remoteUrl,
+        id: 'codex-wrong-origin-1',
+        rolloutPath: path.join(home, '.codex', 'sessions', 'wrong-origin-1.jsonl'),
+        title: 'Incorrect metadata one',
+        updatedAt: 2_000
+      },
+      {
+        createdAt: 1_000,
+        cwd: wrongOriginWorkspace,
+        gitOriginUrl: remoteUrl,
+        id: 'codex-wrong-origin-2',
+        rolloutPath: path.join(home, '.codex', 'sessions', 'wrong-origin-2.jsonl'),
+        title: 'Incorrect metadata two',
+        updatedAt: 2_000
+      },
+      {
+        createdAt: 1_000,
+        cwd: wrongOriginWorkspace,
+        gitOriginUrl: remoteUrl,
+        id: 'codex-wrong-origin-3',
+        rolloutPath: path.join(home, '.codex', 'sessions', 'wrong-origin-3.jsonl'),
+        title: 'Incorrect metadata three',
+        updatedAt: 2_000
+      }
+    ])
+
+    const canonicalRealPath = await realpath(canonicalWorkspace)
+    const preview = await previewNativeProjectHistory({
+      adapters: ['codex'],
+      cwd: workspace,
+      env,
+      homeDir: home,
+      projectPaths: [canonicalWorkspace],
+      projectScope: 'all-projects',
+      sourcePaths: [sourcePath]
+    })
+    const firstImport = await importNativeProjectHistory({
+      adapters: ['codex'],
+      cwd: workspace,
+      env,
+      homeDir: home,
+      projectPaths: [canonicalWorkspace],
+      projectScope: 'all-projects',
+      sourcePaths: [sourcePath]
+    })
+    const secondImport = await importNativeProjectHistory({
+      adapters: ['codex'],
+      cwd: workspace,
+      env,
+      homeDir: home,
+      projectPaths: [canonicalWorkspace],
+      projectScope: 'all-projects',
+      sourcePaths: [sourcePath]
+    })
+
+    expect(preview.adapters[0]).toEqual(expect.objectContaining({
+      candidates: [
+        expect.objectContaining({
+          cwd: canonicalRealPath,
+          nativeSessionId: 'codex-stale-worktree'
+        })
+      ],
+      projects: [{ path: canonicalRealPath, sessionCount: 1 }]
+    }))
+    expect(firstImport).toEqual(expect.objectContaining({
+      importedEvents: 1,
+      importedSessions: 1,
+      matchedFiles: 1,
+      sessions: [
+        expect.objectContaining({
+          cwd: staleWorktree,
+          workspaceCwd: canonicalRealPath
+        })
+      ]
+    }))
+    expect(secondImport).toEqual(expect.objectContaining({
+      importedEvents: 0,
+      importedSessions: 0,
+      matchedFiles: 0
+    }))
+
+    vi.stubEnv('HOME', home)
+    vi.stubEnv('__ONEWORKS_PROJECT_HOME_PROJECT_DIR__', 'manager')
+    await rememberLauncherWorkspaces(firstImport.sessions.map(session => session.workspaceCwd))
+    const launcherState = await listLauncherWorkspaces()
+    expect(launcherState.recentProjects).toEqual([
+      expect.objectContaining({
+        workspaceFolder: canonicalRealPath
+      })
+    ])
+
+    const canonicalRuntimeRoot = resolveWorkspaceRuntimeStoreRoot(
+      canonicalRealPath,
+      createWorkspaceRuntimeEnv(canonicalRealPath, env)
+    )
+    const importedSessionId = firstImport.sessions[0]!.sessionId
+    const importedMeta = JSON.parse(
+      await readFile(path.join(canonicalRuntimeRoot, 'sessions', importedSessionId, 'meta.json'), 'utf8')
+    ) as {
+      cwd?: string
+      historyImport?: {
+        nativeCwd?: string
+        workspaceCwd?: string
+      }
+    }
+    expect(importedMeta).toEqual(expect.objectContaining({
+      cwd: canonicalRealPath,
+      historyImport: expect.objectContaining({
+        nativeCwd: staleWorktree,
+        workspaceCwd: canonicalRealPath
+      })
+    }))
+    const importedDb = await replayImportedSessions(canonicalRuntimeRoot)
+    expect(importedDb.getSession(importedSessionId)).toEqual(expect.objectContaining({
+      id: importedSessionId
+    }))
+    importedDb.close()
+  })
+
+  it('filters all-project previews by selected project roots before pagination', async () => {
+    const root = await createTempRoot()
+    const workspace = path.join(root, 'workspace')
+    const selectedWorkspace = path.join(root, 'selected')
+    const selectedConversationCwd = path.join(selectedWorkspace, 'packages', 'app')
+    const home = path.join(root, 'home')
+    const codexHistoryDir = path.join(home, '.codex', 'sessions')
+    const env = createTestEnv(workspace, home)
+
+    await Promise.all([
+      mkdir(workspace, { recursive: true }),
+      mkdir(selectedConversationCwd, { recursive: true })
+    ])
+    await writeJsonl(path.join(codexHistoryDir, 'workspace.jsonl'), [
+      {
+        type: 'session_meta',
+        timestamp: '2026-06-02T00:00:00.000Z',
+        payload: {
+          id: 'codex-workspace-project',
+          cwd: workspace
+        }
+      },
+      {
+        type: 'event_msg',
+        timestamp: '2026-06-02T00:00:01.000Z',
+        payload: {
+          type: 'user_message',
+          message: 'Workspace project history'
+        }
+      }
+    ])
+    await writeJsonl(path.join(codexHistoryDir, 'selected.jsonl'), [
+      {
+        type: 'session_meta',
+        timestamp: '2026-06-01T00:00:00.000Z',
+        payload: {
+          id: 'codex-selected-project',
+          cwd: selectedConversationCwd
+        }
+      },
+      {
+        type: 'event_msg',
+        timestamp: '2026-06-01T00:00:01.000Z',
+        payload: {
+          type: 'user_message',
+          message: 'Selected project history'
+        }
+      }
+    ])
+
+    const preview = await previewNativeProjectHistory({
+      adapters: ['codex'],
+      cwd: workspace,
+      env,
+      homeDir: home,
+      previewLimit: 1,
+      projectPaths: [selectedWorkspace],
+      projectScope: 'all-projects'
+    })
+    expect(preview).toEqual(expect.objectContaining({
+      matchedFiles: 1,
+      scannedFiles: 2
+    }))
+    expect(preview.adapters[0]!.candidates.map(candidate => candidate.title)).toEqual([
+      'Selected project history'
+    ])
+    expect(preview.adapters[0]!.projects).toEqual(expect.arrayContaining([
+      { path: await realpath(selectedConversationCwd), sessionCount: 1 },
+      { path: await realpath(workspace), sessionCount: 1 }
+    ]))
   })
 
   it('imports Codex sessions from another checkout with the same git remote', async () => {
@@ -672,7 +932,7 @@ describe('native project history import', () => {
 
     expect(preview).toEqual(expect.objectContaining({
       matchedFiles: 1,
-      scannedFiles: 2
+      scannedFiles: 1
     }))
     expect(preview.adapters[0]!.candidates[0]).toEqual(expect.objectContaining({
       isArchived: true,
@@ -1395,6 +1655,104 @@ describe('native project history import', () => {
       scannedFiles: 1
     }))
     expect(result.adapters[0]!.candidates).toEqual([])
+  })
+
+  it('reads only explicitly requested history files inside adapter source roots', async () => {
+    const root = await createTempRoot()
+    const workspace = path.join(root, 'workspace')
+    const home = path.join(root, 'home')
+    const codexHistoryDir = path.join(home, '.codex', 'sessions')
+    const requestedSourcePath = path.join(codexHistoryDir, 'requested.jsonl')
+    const unrequestedSourcePath = path.join(codexHistoryDir, 'unrequested.jsonl')
+    const outsideSourcePath = path.join(home, 'outside.jsonl')
+    const env = createTestEnv(workspace, home)
+
+    await mkdir(workspace, { recursive: true })
+    await Promise.all([
+      writeJsonl(requestedSourcePath, [
+        {
+          type: 'session_meta',
+          timestamp: '2026-06-07T00:00:00.000Z',
+          payload: {
+            id: 'codex-requested',
+            cwd: workspace
+          }
+        },
+        {
+          type: 'event_msg',
+          timestamp: '2026-06-07T00:00:01.000Z',
+          payload: {
+            type: 'user_message',
+            message: 'Import requested source'
+          }
+        }
+      ]),
+      writeJsonl(unrequestedSourcePath, [
+        {
+          type: 'session_meta',
+          timestamp: '2026-06-07T00:00:00.000Z',
+          payload: {
+            id: 'codex-unrequested',
+            cwd: workspace
+          }
+        },
+        {
+          type: 'event_msg',
+          timestamp: '2026-06-07T00:00:01.000Z',
+          payload: {
+            type: 'user_message',
+            message: 'Do not import this source'
+          }
+        }
+      ]),
+      writeJsonl(outsideSourcePath, [
+        {
+          type: 'session_meta',
+          timestamp: '2026-06-07T00:00:00.000Z',
+          payload: {
+            id: 'codex-outside',
+            cwd: workspace
+          }
+        },
+        {
+          type: 'event_msg',
+          timestamp: '2026-06-07T00:00:01.000Z',
+          payload: {
+            type: 'user_message',
+            message: 'Do not import outside source roots'
+          }
+        }
+      ])
+    ])
+
+    const preview = await previewNativeProjectHistory({
+      adapters: ['codex'],
+      cwd: workspace,
+      env,
+      homeDir: home,
+      sourcePaths: [requestedSourcePath, outsideSourcePath]
+    })
+    const imported = await importNativeProjectHistory({
+      adapters: ['codex'],
+      cwd: workspace,
+      env,
+      homeDir: home,
+      sourcePaths: [requestedSourcePath, outsideSourcePath]
+    })
+
+    expect(preview).toEqual(expect.objectContaining({
+      matchedFiles: 1,
+      scannedFiles: 1
+    }))
+    expect(preview.adapters[0]!.candidates.map(candidate => candidate.nativeSessionId)).toEqual([
+      'codex-requested'
+    ])
+    expect(imported).toEqual(expect.objectContaining({
+      importedSessions: 1,
+      matchedFiles: 1,
+      scannedFiles: 1
+    }))
+    expect(imported.sessions.map(session => session.sourcePath)).toEqual([requestedSourcePath])
   })
 
   it('skips native history files above the configured import size limit', async () => {

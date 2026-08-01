@@ -29,6 +29,43 @@ export interface ActionSearchToolbarProps {
   query: string
 }
 
+export function ActionSearchToolbarActions({
+  actions
+}: {
+  actions: ActionSearchToolbarAction[]
+}) {
+  if (actions.length === 0) {
+    return null
+  }
+
+  return (
+    <div className='action-search-toolbar__actions'>
+      {actions.map(action => (
+        <span
+          key={action.key}
+          className={[
+            'action-search-toolbar__action',
+            action.hasIndicator ? 'has-indicator' : ''
+          ].filter(Boolean).join(' ')}
+        >
+          <RouteContainerHeaderActionButton
+            item={{
+              active: action.active ?? action.pressed,
+              disabled: action.disabled,
+              icon: action.icon,
+              key: action.key,
+              label: action.ariaLabel,
+              loading: action.loading,
+              onSelect: action.onClick,
+              title: typeof action.title === 'string' ? action.title : action.ariaLabel
+            }}
+          />
+        </span>
+      ))}
+    </div>
+  )
+}
+
 export function ActionSearchToolbar({
   actions = [],
   className,
@@ -53,32 +90,7 @@ export function ActionSearchToolbar({
         value={query}
         onChange={event => onQueryChange(event.target.value)}
       />
-      {actions.length > 0 && (
-        <div className='action-search-toolbar__actions'>
-          {actions.map(action => (
-            <span
-              key={action.key}
-              className={[
-                'action-search-toolbar__action',
-                action.hasIndicator ? 'has-indicator' : ''
-              ].filter(Boolean).join(' ')}
-            >
-              <RouteContainerHeaderActionButton
-                item={{
-                  active: action.active ?? action.pressed,
-                  disabled: action.disabled,
-                  icon: action.icon,
-                  key: action.key,
-                  label: action.ariaLabel,
-                  loading: action.loading,
-                  onSelect: action.onClick,
-                  title: typeof action.title === 'string' ? action.title : action.ariaLabel
-                }}
-              />
-            </span>
-          ))}
-        </div>
-      )}
+      <ActionSearchToolbarActions actions={actions} />
     </div>
   )
 }
