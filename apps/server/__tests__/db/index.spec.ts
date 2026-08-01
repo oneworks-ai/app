@@ -87,23 +87,15 @@ describe('sqliteDb', () => {
   })
 
   it('persists imported session provenance through create and update', () => {
+    const historyImport = { adapter: 'codex', importedAt: 2_000, sourceUpdatedAt: 1_000 }
     const session = db.createSession('Imported session', 'imported_codex_test', 'completed', undefined, {
-      historyImport: {
-        adapter: 'codex',
-        importedAt: 2_000,
-        sourceUpdatedAt: 1_000
-      }
+      historyImport
     })
-    expect(db.getSession(session.id)?.historyImport).toEqual({
-      adapter: 'codex',
-      importedAt: 2_000,
-      sourceUpdatedAt: 1_000
-    })
+    expect(db.getSession(session.id)?.historyImport).toEqual(historyImport)
 
     db.updateSession(session.id, {
       historyImport: {
-        adapter: 'codex',
-        importedAt: 2_000,
+        ...historyImport,
         sourceUpdatedAt: 1_500
       }
     })
@@ -111,9 +103,7 @@ describe('sqliteDb', () => {
 
     sqlite.prepare('UPDATE sessions SET historyImport = ? WHERE id = ?').run('{invalid', session.id)
     expect(db.getSession(session.id)?.historyImport).toBeUndefined()
-    expect(db.getSessions('all')).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: session.id })
-    ]))
+    expect(db.getSessions('all').some(({ id }) => id === session.id)).toBe(true)
   })
 
   it('deduplicates persisted session events by stable event key', () => {
