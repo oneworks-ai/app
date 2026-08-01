@@ -186,6 +186,101 @@ describe('session workspace service', () => {
     })
   })
 
+  it('reports why a session cannot be derived into a managed worktree', async () => {
+    const {
+      createSessionManagedWorktree,
+      resolveSessionWorkspaceWithDerivationEligibility
+    } = await import('#~/services/session/workspace.js')
+    const session = db.createSession('Eligibility', 'sess-eligibility')
+
+    db.upsertSessionWorkspace({
+      sessionId: session.id,
+      kind: 'shared_workspace',
+      workspaceFolder: workspaceRoot,
+      cleanupPolicy: 'retain',
+      state: 'ready'
+    })
+
+    await expect(resolveSessionWorkspaceWithDerivationEligibility(session.id)).resolves.toMatchObject({
+      worktreeDerivation: { eligible: true }
+    })
+
+    await writeFile(path.join(workspaceRoot, 'uncommitted.txt'), 'dirty\n', 'utf8')
+    await expect(resolveSessionWorkspaceWithDerivationEligibility(session.id)).resolves.toMatchObject({
+      worktreeDerivation: { eligible: false, disabledReason: 'dirty_worktree' }
+    })
+    await expect(createSessionManagedWorktree(session.id)).rejects.toMatchObject({
+      code: 'session_workspace_derivation_unavailable'
+    })
+
+    await rm(path.join(workspaceRoot, 'uncommitted.txt'))
+    await expect(resolveSessionWorkspaceWithDerivationEligibility(session.id)).resolves.toMatchObject({
+      worktreeDerivation: { eligible: true }
+    })
+  })
+
+  it('reports non-repository, session-type, and runtime derivation limits', async () => {
+    const {
+      createSessionManagedWorktree,
+      resolveSessionWorkspaceWithDerivationEligibility
+    } = await import('#~/services/session/workspace.js')
+    const nonGitRoot = await mkdtemp(path.join(os.tmpdir(), 'ow-session-workspace-non-git-'))
+    const nonGitSession = db.createSession('Non Git', 'sess-non-git')
+    const externalSession = db.createSession('External runtime', 'sess-external-runtime')
+    const managedSession = db.createSession('Managed', 'sess-managed')
+    const unavailableSession = db.createSession('Unavailable', 'sess-unavailable')
+
+    db.upsertSessionWorkspace({
+      sessionId: nonGitSession.id,
+      kind: 'shared_workspace',
+      workspaceFolder: nonGitRoot,
+      cleanupPolicy: 'retain',
+      state: 'ready'
+    })
+    db.upsertSessionWorkspace({
+      sessionId: externalSession.id,
+      kind: 'shared_workspace',
+      workspaceFolder: workspaceRoot,
+      cleanupPolicy: 'retain',
+      state: 'ready'
+    })
+    db.updateSessionRuntimeState(externalSession.id, { runtimeKind: 'external' })
+    db.upsertSessionWorkspace({
+      sessionId: managedSession.id,
+      kind: 'managed_worktree',
+      workspaceFolder: workspaceRoot,
+      worktreePath: workspaceRoot,
+      cleanupPolicy: 'delete_on_session_delete',
+      state: 'ready'
+    })
+    db.upsertSessionWorkspace({
+      sessionId: unavailableSession.id,
+      kind: 'shared_workspace',
+      workspaceFolder: workspaceRoot,
+      cleanupPolicy: 'retain',
+      state: 'broken'
+    })
+
+    await expect(resolveSessionWorkspaceWithDerivationEligibility(nonGitSession.id)).resolves.toMatchObject({
+      worktreeDerivation: { eligible: false, disabledReason: 'not_repository' }
+    })
+    await expect(resolveSessionWorkspaceWithDerivationEligibility(externalSession.id)).resolves.toMatchObject({
+      worktreeDerivation: { eligible: false, disabledReason: 'external_runtime' }
+    })
+    await expect(resolveSessionWorkspaceWithDerivationEligibility(managedSession.id)).resolves.toMatchObject({
+      worktreeDerivation: { eligible: false, disabledReason: 'already_managed_worktree' }
+    })
+    await expect(createSessionManagedWorktree(managedSession.id)).rejects.toMatchObject({
+      code: 'session_workspace_derivation_unavailable'
+    })
+    await expect(resolveSessionWorkspaceWithDerivationEligibility(unavailableSession.id)).resolves.toMatchObject({
+      worktreeDerivation: { eligible: false, disabledReason: 'workspace_unavailable' }
+    })
+    expect(db.getSessionWorkspace(unavailableSession.id)?.state).toBe('broken')
+
+    await rm(nonGitRoot, { recursive: true, force: true })
+  })
+
   it('does not attach a worktree environment to an explicitly shared workspace', async () => {
     const { provisionSessionWorkspace } = await import('#~/services/session/workspace.js')
     db.createSession('Shared Env', 'sess-shared-env')

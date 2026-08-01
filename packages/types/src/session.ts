@@ -9,6 +9,20 @@ export type SessionMessageBranchAction = 'fork' | 'recall' | 'edit'
 export type SessionWorkspaceKind = 'managed_worktree' | 'shared_workspace' | 'external_workspace'
 export type SessionWorkspaceState = 'provisioning' | 'ready' | 'deleting' | 'deleted' | 'broken'
 export type SessionWorkspaceCleanupPolicy = 'delete_on_session_delete' | 'retain'
+export type SessionWorktreeDerivationDisabledReason =
+  | 'already_managed_worktree'
+  | 'workspace_unavailable'
+  | 'external_runtime'
+  | 'not_repository'
+  | 'git_not_installed'
+  | 'repository_unavailable'
+  | 'dirty_worktree'
+
+export interface SessionWorktreeDerivationEligibility {
+  eligible: boolean
+  disabledReason?: SessionWorktreeDerivationDisabledReason
+}
+
 export type SessionQueuedMessageMode = 'steer' | 'next'
 export type SessionCreationProgressStatus = 'running' | 'success' | 'error' | 'skipped'
 export type SessionCreationProgressPhase = 'worktree' | 'environment' | 'workspace'
@@ -197,4 +211,5 @@ export interface SessionWorkspace {
   createdAt: number
   updatedAt: number
   deletedAt?: number
+  worktreeDerivation?: SessionWorktreeDerivationEligibility
 }

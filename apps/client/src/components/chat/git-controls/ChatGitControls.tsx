@@ -42,10 +42,7 @@ export function ChatGitControls({
           mode={{
             type: 'session',
             isBusy: git.isBusy,
-            canCreateManagedWorktree: git.repoState?.available === true &&
-              git.workspace != null &&
-              git.workspace.kind !== 'managed_worktree' &&
-              (git.workspace.worktreePath == null || git.workspace.worktreePath.trim() === ''),
+            worktreeDerivation: git.workspace?.worktreeDerivation,
             canTransferToLocal: git.workspace?.kind === 'managed_worktree',
             onCreateManagedWorktree: git.handleCreateManagedWorktree,
             onTransferToLocal: git.handleTransferWorkspaceToLocal

@@ -48,7 +48,7 @@ export function useChatGitControls(sessionId: string) {
   const { data: workspaceData, mutate: mutateWorkspaceData } = useSWR<{ workspace: SessionWorkspace }>(
     ['session-workspace', sessionId],
     () => getSessionWorkspace(sessionId),
-    { revalidateOnFocus: false }
+    { refreshInterval: 5_000, revalidateOnFocus: false }
   )
   const { data: repoState, mutate: mutateRepoState } = useSWR<GitRepositoryState>(
     ['session-git-state', sessionId],

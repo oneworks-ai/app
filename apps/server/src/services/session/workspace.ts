@@ -6,7 +6,12 @@ import { env as processEnv } from 'node:process'
 
 import type { WSEvent } from '@oneworks/core'
 import { resolvePrimaryWorkspaceFolder } from '@oneworks/register/dotenv'
-import type { SessionCreationProgressEvent, SessionInfo } from '@oneworks/types'
+import type {
+  SessionCreationProgressEvent,
+  SessionInfo,
+  SessionWorkspace,
+  SessionWorktreeDerivationEligibility
+} from '@oneworks/types'
 import {
   PROJECT_WORKSPACE_FOLDER_ENV,
   addGitWorktree,
@@ -137,6 +142,47 @@ const getSessionOrThrow = (sessionId: string) => {
     throw notFound('Session not found', { sessionId }, 'session_not_found')
   }
   return session
+}
+
+const getWorktreeDerivationEligibility = async (
+  sessionId: string,
+  workspace: SessionWorkspace
+): Promise<SessionWorktreeDerivationEligibility> => {
+  if (workspace.kind === 'managed_worktree') {
+    return { eligible: false, disabledReason: 'already_managed_worktree' }
+  }
+
+  if (workspace.state !== 'ready') {
+    return { eligible: false, disabledReason: 'workspace_unavailable' }
+  }
+
+  if (getDb().getSessionRuntimeState(sessionId)?.runtimeKind === 'external') {
+    return { eligible: false, disabledReason: 'external_runtime' }
+  }
+
+  let repositoryRoot: string
+  try {
+    repositoryRoot = await resolveGitRepositoryRoot(workspace.workspaceFolder)
+  } catch (error) {
+    if (isGitMissingError(error)) {
+      return { eligible: false, disabledReason: 'git_not_installed' }
+    }
+    if (isGitNotRepositoryError(error)) {
+      return { eligible: false, disabledReason: 'not_repository' }
+    }
+    return { eligible: false, disabledReason: 'repository_unavailable' }
+  }
+
+  try {
+    const { stdout } = await runGitCommand(['status', '--short'], repositoryRoot)
+    if (stdout.trim() !== '') {
+      return { eligible: false, disabledReason: 'dirty_worktree' }
+    }
+  } catch {
+    return { eligible: false, disabledReason: 'repository_unavailable' }
+  }
+
+  return { eligible: true }
 }
 
 const resolveRepositoryDirectoryName = (repositoryRoot: string, fallback: string) => {
@@ -453,12 +499,30 @@ export const resolveSessionWorkspaceFolder = async (sessionId: string) => {
   return workspace.workspaceFolder
 }
 
+const resolveSessionWorkspaceForDerivation = async (sessionId: string) => {
+  return getDb().getSessionWorkspace(sessionId) ?? await resolveSessionWorkspace(sessionId)
+}
+
+export const resolveSessionWorkspaceWithDerivationEligibility = async (sessionId: string) => {
+  getSessionOrThrow(sessionId)
+  const workspace = await resolveSessionWorkspaceForDerivation(sessionId)
+  return {
+    ...workspace,
+    worktreeDerivation: await getWorktreeDerivationEligibility(sessionId, workspace)
+  }
+}
+
 export const createSessionManagedWorktree = async (sessionId: string) => {
   getSessionOrThrow(sessionId)
 
-  const existing = await resolveSessionWorkspace(sessionId)
-  if (existing.kind === 'managed_worktree') {
-    return existing
+  const existing = await resolveSessionWorkspaceForDerivation(sessionId)
+  const derivationEligibility = await getWorktreeDerivationEligibility(sessionId, existing)
+  if (!derivationEligibility.eligible) {
+    throw conflict(
+      'Session workspace cannot be derived into a managed worktree',
+      { sessionId, reason: derivationEligibility.disabledReason },
+      'session_workspace_derivation_unavailable'
+    )
   }
 
   try {

@@ -4,7 +4,12 @@ import { Button, Dropdown, Switch } from 'antd'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import type { GitWorktreeSummary, SessionWorkspace } from '@oneworks/types'
+import type {
+  GitWorktreeSummary,
+  SessionWorkspace,
+  SessionWorktreeDerivationDisabledReason,
+  SessionWorktreeDerivationEligibility
+} from '@oneworks/types'
 
 import { OverlayAction, OverlayActionRow, OverlayPanel, OverlaySearchRow } from '#~/components/overlay'
 
@@ -24,10 +29,18 @@ interface DraftWorktreeMenuMode {
 interface SessionWorktreeMenuMode {
   type: 'session'
   isBusy: boolean
-  canCreateManagedWorktree: boolean
+  worktreeDerivation?: SessionWorktreeDerivationEligibility
   canTransferToLocal: boolean
   onCreateManagedWorktree: () => void
   onTransferToLocal: () => void
+}
+
+const getWorktreeDerivationDisabledReason = (
+  reason: SessionWorktreeDerivationDisabledReason | undefined,
+  t: (key: string) => string
+) => {
+  if (reason == null) return undefined
+  return t(`chat.sessionWorkspaceDerivationDisabled.${reason}`)
 }
 
 const getWorkspaceKindIcon = (kind: SessionWorkspace['kind']) => {
@@ -256,16 +269,24 @@ export function GitWorktreeDropdown({
         </OverlayAction>
       )}
 
-      {mode.type === 'session' && mode.canCreateManagedWorktree && (
+      {mode.type === 'session' && (
         <OverlayAction
           className='chat-header-git__menu-row'
-          disabled={mode.isBusy}
+          disabled={mode.isBusy || mode.worktreeDerivation?.eligible !== true}
+          title={getWorktreeDerivationDisabledReason(mode.worktreeDerivation?.disabledReason, t)}
           onClick={mode.onCreateManagedWorktree}
         >
           <span className='chat-header-git__menu-row-main'>
             <span className='chat-header-git__row-icon material-symbols-rounded'>add</span>
-            <span className='chat-header-git__menu-row-title'>
-              {t('chat.sessionWorkspaceMenuCreateWorktree')}
+            <span className='chat-header-git__row-copy'>
+              <span className='chat-header-git__menu-row-title'>
+                {t('chat.sessionWorkspaceMenuCreateWorktree')}
+              </span>
+              {mode.worktreeDerivation?.eligible === false && (
+                <span className='chat-header-git__row-subtitle'>
+                  {getWorktreeDerivationDisabledReason(mode.worktreeDerivation.disabledReason, t)}
+                </span>
+              )}
             </span>
           </span>
         </OverlayAction>
