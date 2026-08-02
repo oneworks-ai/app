@@ -38,6 +38,7 @@ import { handleAdminSecurityTokens } from './security/admin-route.js'
 import { attachAuditLogger } from './security/audit.js'
 import { createRelayRateLimiter, sendRateLimitExceeded } from './security/rate-limit.js'
 import { getSessionJobLongPollDeviceId, handleListJobsWithoutStoreLock } from './session-forwarding/job-handlers.js'
+import type { ForwardingJobAvailableObserver } from './session-forwarding/job-handlers.js'
 import { setForwardingPayloadRepository } from './session-forwarding/payloads.js'
 import type { RelayStoreRepository } from './storage/repository.js'
 import { createRelayTelemetry } from './telemetry/metrics.js'
@@ -62,6 +63,7 @@ const handleInfo = (res: ServerResponse, args: RelayServerArgs, store: RelayStor
   const providers = enabledRelayAuthProviders(args, store)
   sendJson(res, 200, {
     avatarUrl: args.avatarUrl ?? null,
+    ...(args.deviceTransport == null ? {} : { deviceTransport: args.deviceTransport }),
     name: 'OneWorks Relay',
     version: VERSION,
     features: {
@@ -105,7 +107,8 @@ const handleRelayRequestWithStore = async (
   args: RelayServerArgs,
   telemetry: RelayTelemetry,
   storeRepository: RelayStoreRepository,
-  store: RelayStore
+  store: RelayStore,
+  onForwardingJobAvailable?: ForwardingJobAvailableObserver
 ) => {
   const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`)
   if (req.method === 'GET' && url.pathname === '/health') {
@@ -223,7 +226,18 @@ const handleRelayRequestWithStore = async (
       await handleDeviceUpdate(req, res, args, store, storeRepository, deviceId, telemetry)
       return
     }
-    if (await handleRelaySessionsRoute(req, res, args, store, storeRepository, url, telemetry)) {
+    if (
+      await handleRelaySessionsRoute(
+        req,
+        res,
+        args,
+        store,
+        storeRepository,
+        url,
+        telemetry,
+        onForwardingJobAvailable
+      )
+    ) {
       return
     }
     if (url.pathname.startsWith('/api/admin/security/tokens')) {
@@ -256,7 +270,8 @@ const handleRelayRequestWithStore = async (
 export const createRelayHandler = (
   args: RelayServerArgs,
   telemetry: RelayTelemetry = createRelayTelemetry(),
-  storeRepository?: RelayStoreRepository
+  storeRepository?: RelayStoreRepository,
+  options: { onForwardingJobAvailable?: ForwardingJobAvailableObserver } = {}
 ) => {
   let defaultStoreRepository: Promise<RelayStoreRepository> | undefined
   const loadStoreRepository = async () => {
@@ -295,9 +310,21 @@ export const createRelayHandler = (
     }
 
     if (activeStoreRepository.withStore != null) {
+      const pendingForwardingNotifications = new Set<string>()
       await activeStoreRepository.withStore(async (store, requestRepository) => {
-        await handleRelayRequestWithStore(req, res, args, telemetry, requestRepository, store)
+        await handleRelayRequestWithStore(
+          req,
+          res,
+          args,
+          telemetry,
+          requestRepository,
+          store,
+          deviceId => pendingForwardingNotifications.add(deviceId)
+        )
       })
+      for (const deviceId of pendingForwardingNotifications) {
+        options.onForwardingJobAvailable?.(deviceId)
+      }
       return
     }
     await handleRelayRequestWithStore(
@@ -306,7 +333,8 @@ export const createRelayHandler = (
       args,
       telemetry,
       activeStoreRepository,
-      await activeStoreRepository.read()
+      await activeStoreRepository.read(),
+      options.onForwardingJobAvailable
     )
   }
 }

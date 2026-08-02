@@ -45,6 +45,7 @@ jobs:
       CF_API_TOKEN: ${{ secrets.RELAY_DEV_CLOUDFLARE_API_TOKEN }}
       CF_ACCOUNT_ID: ${{ secrets.RELAY_DEV_CLOUDFLARE_ACCOUNT_ID }}
       CF_WORKER_NAME: ${{ vars.RELAY_DEV_CF_WORKER_NAME }}
+      RELAY_DEV_CF_DEVICE_API_ORIGIN: ${{ vars.RELAY_DEV_CF_DEVICE_API_ORIGIN || 'https://oneworks-relay-dev.oneworks.workers.dev' }}
       CF_PAGES_PROJECT: ${{ vars.RELAY_DEV_CF_PAGES_PROJECT }}
       RELAY_DEV_CF_ORIGIN: ${{ vars.RELAY_DEV_CF_ORIGIN }}
       RELAY_DEV_EXPECTED_SSO_PROVIDERS: ${{ vars.RELAY_DEV_EXPECTED_SSO_PROVIDERS }}
@@ -106,12 +107,15 @@ jobs:
           set -euo pipefail
           worker_name="${CF_WORKER_NAME:-oneworks-relay-dev}"
           public_origin="${RELAY_DEV_CF_ORIGIN:-https://dev.cf.oneworks.cloud}"
+          device_api_origin="${RELAY_DEV_CF_DEVICE_API_ORIGIN:-https://oneworks-relay-dev.oneworks.workers.dev}"
           pnpm dlx "wrangler@${WRANGLER_VERSION}" deploy \
             --config apps/relay-server/wrangler.jsonc \
             --name "$worker_name" \
             --var "ONEWORKS_RELAY_PUBLIC_URL:${public_origin}" \
             --var "ONEWORKS_RELAY_ALLOW_ORIGIN:${public_origin}" \
             --var "ONEWORKS_RELAY_AVATAR_URL:${public_origin}/admin/assets/favicon-light.svg" \
+            --var "ONEWORKS_RELAY_DEVICE_API_URL:${device_api_origin}" \
+            --var "ONEWORKS_RELAY_DEVICE_CONTROL_WS_URL:${device_api_origin/https:/wss:}/api/relay/devices/control" \
             --var "ONEWORKS_RELAY_LOGIN_REDIRECT_ORIGINS:http://127.0.0.1:5175,http://localhost:5175"
 
       - name: Deploy Relay Admin Pages

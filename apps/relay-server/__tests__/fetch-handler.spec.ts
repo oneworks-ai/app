@@ -43,7 +43,7 @@ describe('relay fetch handler', () => {
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({
       jobs: [],
-      nextPollMs: 250
+      nextPollMs: 60_000
     })
   })
 

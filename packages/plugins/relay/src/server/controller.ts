@@ -42,7 +42,8 @@ import {
 } from './config-source-preferences.js'
 import { syncRelayConfigSnapshot } from './config-sync.js'
 import type { RelayConfigSyncResult } from './config-sync.js'
-import { startHeartbeat } from './heartbeat.js'
+import { createRelayDeviceControlChannel } from './device-control-channel.js'
+import type { RelayDeviceTransport } from './device-control-channel.js'
 import { createRelayLoopLeaseManager } from './loop-lease.js'
 import type { RelayLoopLease } from './loop-lease.js'
 import { normalizeOptions, resolveActiveRelayServer, resolveRelayServers } from './options.js'
@@ -229,12 +230,43 @@ interface RelayServiceInfo {
   lastSuccessfulAt?: string
   name?: string
   online?: boolean
+  /** Ephemeral device-only transport; deliberately never persisted in service-info store. */
+  deviceTransport?: RelayDeviceTransport
 }
 
 interface RelayServiceInfoCacheEntry {
   fetchedAt: number
   inFlight?: Promise<RelayServiceInfo>
   value: RelayServiceInfo
+}
+
+const isLoopbackTransportHost = (hostname: string) => (
+  hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
+)
+
+export const normalizeRelayDeviceTransport = (value: unknown): RelayDeviceTransport | undefined => {
+  if (!isRecord(value) || value.version !== 1) return undefined
+  const apiBaseUrl = readOptionalText(value.apiBaseUrl)
+  const controlWebSocketUrl = readOptionalText(value.controlWebSocketUrl)
+  if (apiBaseUrl == null || controlWebSocketUrl == null) return undefined
+  try {
+    const api = new URL(apiBaseUrl)
+    const control = new URL(controlWebSocketUrl)
+    if (!['http:', 'https:'].includes(api.protocol) || !['ws:', 'wss:'].includes(control.protocol)) return undefined
+    if (api.username !== '' || api.password !== '' || control.username !== '' || control.password !== '') {
+      return undefined
+    }
+    if (api.protocol !== 'https:' && !isLoopbackTransportHost(api.hostname)) return undefined
+    if (control.protocol !== 'wss:' && !isLoopbackTransportHost(control.hostname)) return undefined
+    if (`${api.hostname}:${api.port}` !== `${control.hostname}:${control.port}`) return undefined
+    if (api.pathname !== '/' || api.search !== '' || api.hash !== '') return undefined
+    if (control.pathname !== '/api/relay/devices/control' || control.search !== '' || control.hash !== '') {
+      return undefined
+    }
+    return { apiBaseUrl: api.toString(), controlWebSocketUrl: control.toString(), version: 1 }
+  } catch {
+    return undefined
+  }
 }
 
 interface RelayDeviceListSource {
@@ -1709,7 +1741,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
   const deviceStore = createRelayDeviceStore(ctx.projectHome)
   const managementServerStore = createRelayManagementServerStore(ctx.projectHome)
   const serviceInfoStore = createRelayServiceInfoStore()
-  const heartbeats = new Map<string, ReturnType<typeof startHeartbeat>>()
+  const controlChannels = new Map<string, ReturnType<typeof createRelayDeviceControlChannel>>()
   const sessionWorkers = new Map<string, ReturnType<typeof createRelaySessionWorker>>()
   const loopLeases = new Map<string, RelayLoopLease>()
   const loopConnectionKeysByLeaseKey = new Map<string, string>()
@@ -1855,6 +1887,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
             }
           }
           const body = await readResponseJson(response)
+          const validDeviceTransport = normalizeRelayDeviceTransport(body.deviceTransport)
           const name = readOptionalText(body.name)
           const avatarSource = readOptionalText(body.avatarUrl)
           let avatarUrl: URL | undefined
@@ -1875,6 +1908,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
             lastCheckedAt,
             lastSuccessfulAt: lastCheckedAt,
             ...(discoveredName == null ? {} : { name: discoveredName }),
+            ...(validDeviceTransport == null ? {} : { deviceTransport: validDeviceTransport }),
             online: true as const
           }
           await serviceInfoStore
@@ -2321,8 +2355,8 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
   }
 
   const stopRemoteLoop = (connectionKey: string) => {
-    heartbeats.get(connectionKey)?.stop()
-    heartbeats.delete(connectionKey)
+    controlChannels.get(connectionKey)?.stop()
+    controlChannels.delete(connectionKey)
     sessionWorkers.get(connectionKey)?.stop()
     sessionWorkers.delete(connectionKey)
     const lease = loopLeases.get(connectionKey)
@@ -2344,7 +2378,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
   }
 
   const stopRemoteLoops = () => {
-    for (const serverId of new Set([...heartbeats.keys(), ...sessionWorkers.keys()])) {
+    for (const serverId of new Set([...controlChannels.keys(), ...sessionWorkers.keys()])) {
       stopRemoteLoop(serverId)
     }
   }
@@ -4306,7 +4340,12 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
         storedServer?.deviceToken ||
         authAccount?.deviceToken ||
         activeServer.pairingToken
-      const registerUrl = new URL('/api/relay/devices/register', activeServer.remoteBaseUrl)
+      // Resolve the ephemeral device transport from the public origin before the first
+      // registration. This is bounded by the existing service-info timeout and never
+      // writes the transport into auth or user configuration.
+      const serviceInfo = await fetchRelayServiceInfo(activeServer)
+      const deviceApiBaseUrl = serviceInfo?.deviceTransport?.apiBaseUrl ?? activeServer.remoteBaseUrl
+      const registerUrl = new URL('/api/relay/devices/register', deviceApiBaseUrl)
       setConnectionState(activeServer.id, {
         state: 'connecting',
         message: `Registering ${deviceId} with ${activeServer.name}.`,
@@ -4427,45 +4466,48 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
         }
         if (!disposed && (nextStoredServer?.deviceToken ?? '') !== '') {
           const auth = {
+            apiBaseUrl: deviceApiBaseUrl,
             deviceId,
             deviceToken: nextStoredServer?.deviceToken ?? '',
             remoteBaseUrl: activeServer.remoteBaseUrl
           }
-          heartbeats.set(
-            connectionKey,
-            startHeartbeat({
-              capabilities: options.capabilities,
-              deviceInfo: createRelayDeviceEnvironmentInfo(),
-              deviceId: auth.deviceId,
-              deviceName: options.deviceName,
-              deviceToken: auth.deviceToken,
-              logger: ctx.logger,
-              managementServerEnvironment: createRelayDeviceEnvironmentInfo(),
-              managementServerId: managementServer.id,
-              managementServerKind: managementServer.kind,
-              managementServerName: managementServer.name,
-              managementServerProjects: [createCurrentWorkspaceProject(ctx)],
-              pluginScope: ctx.scope,
-              remoteBaseUrl: auth.remoteBaseUrl,
-              serverId: activeServer.id,
-              workspaceFolder: ctx.workspaceFolder
-            })
-          )
-          if (options.capabilities.workspaceLauncher || (options.capabilities.sessions && ctx.sessions != null)) {
-            const sessionWorker = createRelaySessionWorker({
+          const shouldRunSessionWorker = options.capabilities.workspaceLauncher ||
+            (options.capabilities.sessions && ctx.sessions != null)
+          const sessionWorker = shouldRunSessionWorker
+            ? createRelaySessionWorker({
               adapter: ctx.sessions ?? undefined,
               auth,
+              autoStart: false,
               logger: ctx.logger,
               serverId: activeServer.id
             })
-            sessionWorkers.set(connectionKey, sessionWorker)
-            void sessionWorker.runOnce().catch(error => {
-              ctx.logger.warn(
-                { err: error, scope: ctx.scope, serverId: activeServer.id },
-                '[relay] session forwarding bootstrap failed'
-              )
-            })
+            : undefined
+          if (sessionWorker != null) sessionWorkers.set(connectionKey, sessionWorker)
+          const heartbeat = {
+            capabilities: options.capabilities,
+            deviceInfo: createRelayDeviceEnvironmentInfo(),
+            deviceId: auth.deviceId,
+            deviceName: options.deviceName,
+            deviceToken: auth.deviceToken,
+            managementServerEnvironment: createRelayDeviceEnvironmentInfo(),
+            managementServerId: managementServer.id,
+            managementServerKind: managementServer.kind,
+            managementServerName: managementServer.name,
+            managementServerProjects: [createCurrentWorkspaceProject(ctx)],
+            pluginScope: ctx.scope,
+            apiBaseUrl: auth.apiBaseUrl,
+            remoteBaseUrl: auth.remoteBaseUrl,
+            workspaceFolder: ctx.workspaceFolder
           }
+          controlChannels.set(
+            connectionKey,
+            createRelayDeviceControlChannel({
+              heartbeat,
+              logger: ctx.logger,
+              sessionWorker,
+              transport: serviceInfo.deviceTransport
+            })
+          )
           loopLeases.set(connectionKey, loopLease)
           loopConnectionKeysByLeaseKey.set(loopLeaseKey, connectionKey)
           loopLeaseAttached = true
@@ -4526,7 +4568,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
       if (hasRestorableAccount) continue
       const storedServer = getStoredServer(store, server)
       if ((storedServer?.deviceToken ?? '') === '') continue
-      if (heartbeats.has(server.id) || sessionWorkers.has(server.id)) {
+      if (controlChannels.has(server.id) || sessionWorkers.has(server.id)) {
         restoredServerIds.push(server.id)
         continue
       }
@@ -4555,7 +4597,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
       )
       for (const account of accounts) {
         if (restoreWasSuperseded()) return restoredServerIds
-        if (heartbeats.has(account.accountKey) || sessionWorkers.has(account.accountKey)) {
+        if (controlChannels.has(account.accountKey) || sessionWorkers.has(account.accountKey)) {
           if (!restoredServerIds.includes(server.id)) restoredServerIds.push(server.id)
           continue
         }

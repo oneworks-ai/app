@@ -73,6 +73,8 @@ export interface RelayLocalSessionAdapter {
 }
 
 export interface RelaySessionClientAuth {
+  /** Device-only origin advertised by Relay. Never use this for browser auth. */
+  apiBaseUrl?: string
   deviceId: string
   deviceToken: string
   remoteBaseUrl: string

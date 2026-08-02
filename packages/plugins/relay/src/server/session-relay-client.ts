@@ -23,7 +23,7 @@ const toOptionalString = (value: unknown) => {
 }
 
 const createRelayUrl = (auth: RelaySessionClientAuth, path: string) => {
-  const baseUrl = normalizeRemoteBaseUrl(auth.remoteBaseUrl)
+  const baseUrl = normalizeRemoteBaseUrl(auth.apiBaseUrl ?? auth.remoteBaseUrl)
   if (baseUrl === '') throw new Error('remoteBaseUrl is required.')
   return new URL(path, baseUrl).toString()
 }
@@ -86,7 +86,8 @@ const normalizeRelayForwardingJob = (value: unknown): RelayForwardingJob | undef
 
 export const pushRelaySessionSnapshot = async (
   auth: RelaySessionClientAuth,
-  snapshot: RelayLocalSessionSnapshot
+  snapshot: RelayLocalSessionSnapshot,
+  options: { signal?: AbortSignal } = {}
 ) => {
   const response = await fetch(
     createRelayUrl(
@@ -96,7 +97,8 @@ export const pushRelaySessionSnapshot = async (
     {
       method: 'POST',
       headers: authHeaders(auth),
-      body: JSON.stringify(snapshot)
+      body: JSON.stringify(snapshot),
+      signal: options.signal
     }
   )
   await ensureOk(response)
@@ -108,6 +110,7 @@ export const pollRelaySessionForwardingJobs = async (
   options: {
     limit?: number
     status?: 'active' | 'all' | RelayForwardingJob['status']
+    signal?: AbortSignal
     waitMs?: number
   } = {}
 ): Promise<RelayForwardingJobPollResult> => {
@@ -123,7 +126,8 @@ export const pollRelaySessionForwardingJobs = async (
     ),
     {
       method: 'GET',
-      headers: authHeaders(auth)
+      headers: authHeaders(auth),
+      signal: options.signal
     }
   )
   await ensureOk(response)
