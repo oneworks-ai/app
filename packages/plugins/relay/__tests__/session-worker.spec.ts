@@ -23,7 +23,9 @@ const waitFor = async (predicate: () => boolean, timeoutMs = 500) => {
 describe('relay plugin session worker', () => {
   it('supports controlled claims without starting a legacy polling timer', async () => {
     vi.useFakeTimers()
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ jobs: [] }), { status: 200 }))
+    const fetchMock = vi.fn<typeof fetch>(
+      async () => new Response(JSON.stringify({ jobs: [] }), { status: 200 })
+    )
     vi.stubGlobal('fetch', fetchMock)
     const abortController = new AbortController()
     const worker = createRelaySessionWorker({

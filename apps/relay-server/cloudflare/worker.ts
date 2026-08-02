@@ -228,6 +228,8 @@ export class RelayDurableObject {
       socket.close(1008, 'invalid attachment')
       return
     }
+    const attachmentDeviceId = attachment.deviceId
+    const attachmentDeviceTokenHash = attachment.deviceTokenHash
     let frame: unknown
     try {
       frame = JSON.parse(typeof message === 'string' ? message : new TextDecoder().decode(message))
@@ -241,9 +243,9 @@ export class RelayDurableObject {
     }
     const applyHeartbeat = async (store: RelayStore, storeRepository: RelayStoreRepository) => {
       const device = store.devices.find(item => (
-        item.id === attachment.deviceId && (
-          item.deviceTokenHash === attachment.deviceTokenHash ||
-          (item.deviceToken != null && hashDeviceToken(item.deviceToken) === attachment.deviceTokenHash)
+        item.id === attachmentDeviceId && (
+          item.deviceTokenHash === attachmentDeviceTokenHash ||
+          (item.deviceToken != null && hashDeviceToken(item.deviceToken) === attachmentDeviceTokenHash)
         )
       ))
       const principal = device == null ? undefined : devicePrincipalForDevice(device)
@@ -257,7 +259,7 @@ export class RelayDurableObject {
         return
       }
       if (device.deviceTokenHash == null && device.deviceToken != null) {
-        device.deviceTokenHash = attachment.deviceTokenHash
+        device.deviceTokenHash = attachmentDeviceTokenHash
         delete device.deviceToken
       }
       await applyDeviceHeartbeat({

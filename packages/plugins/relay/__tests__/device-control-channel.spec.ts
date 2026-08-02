@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { Mocked } from 'vitest'
 
 import {
   RELAY_CONTROL_FALLBACK_HEARTBEAT_MS,
@@ -11,6 +12,7 @@ import {
   RELAY_CONTROL_SNAPSHOT_MS,
   createRelayDeviceControlChannel
 } from '../src/server/device-control-channel.js'
+import type { RelayHeartbeatOptions } from '../src/server/heartbeat.js'
 import type { RelaySessionWorker } from '../src/server/session-worker.js'
 
 afterEach(() => {
@@ -44,7 +46,12 @@ class FakeSocket extends EventEmitter {
 }
 
 const heartbeat = {
-  capabilities: { sessions: true },
+  capabilities: {
+    sessions: true,
+    terminal: false,
+    workspaceFiles: false,
+    workspaceLauncher: false
+  },
   deviceId: 'device-1',
   deviceToken: 'super-secret-token',
   managementServerId: 'manager-1',
@@ -52,14 +59,13 @@ const heartbeat = {
   pluginScope: 'manager',
   remoteBaseUrl: 'https://cf.oneworks.cloud',
   workspaceFolder: '/workspace'
-}
+} satisfies RelayHeartbeatOptions
 
-const createWorker = () =>
-  ({
-    refreshSnapshot: vi.fn(async () => {}),
-    runOnce: vi.fn(async () => {}),
-    stop: vi.fn()
-  }) satisfies RelaySessionWorker
+const createWorker = (): Mocked<RelaySessionWorker> => ({
+  refreshSnapshot: vi.fn<RelaySessionWorker['refreshSnapshot']>(async () => {}),
+  runOnce: vi.fn<RelaySessionWorker['runOnce']>(async () => {}),
+  stop: vi.fn<RelaySessionWorker['stop']>()
+})
 
 const transport = {
   apiBaseUrl: 'https://oneworks-relay-server.example.workers.dev/',
@@ -74,7 +80,7 @@ describe('relay device control channel', () => {
     vi.stubGlobal('fetch', fetchMock)
     const socket = new FakeSocket()
     const worker = createWorker()
-    const factory = vi.fn(() => socket)
+    const factory = vi.fn<(url: string, headers: Record<string, string>) => FakeSocket>(() => socket)
     const channel = createRelayDeviceControlChannel({
       heartbeat,
       sessionWorker: worker,
@@ -155,7 +161,9 @@ describe('relay device control channel', () => {
 
   it('uses one bounded fallback cycle and stays below the daily request budget', async () => {
     vi.useFakeTimers()
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }))
+    const fetchMock = vi.fn<typeof fetch>(
+      async () => new Response(JSON.stringify({ ok: true }), { status: 200 })
+    )
     vi.stubGlobal('fetch', fetchMock)
     const worker = createWorker()
     worker.runOnce.mockImplementation(async input => {
@@ -179,7 +187,9 @@ describe('relay device control channel', () => {
 
   it('keeps heartbeat-only devices out of the session job fallback', async () => {
     vi.useFakeTimers()
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }))
+    const fetchMock = vi.fn<typeof fetch>(
+      async () => new Response(JSON.stringify({ ok: true }), { status: 200 })
+    )
     vi.stubGlobal('fetch', fetchMock)
     const channel = createRelayDeviceControlChannel({
       heartbeat,
