@@ -43,14 +43,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ "${CHECKED_OUT_REF}" != "refs/heads/main" ]; then
-            echo "::error::Relay production promotion must run from the main branch, got ${CHECKED_OUT_REF}."
-            exit 1
-          fi
-          if [ "${APPROVED_SOURCE_SHA}" != "${CHECKED_OUT_SOURCE_SHA}" ]; then
-            echo "::error::Approved source SHA ${APPROVED_SOURCE_SHA} does not match checked out main SHA ${CHECKED_OUT_SOURCE_SHA}."
-            exit 1
-          fi
+          if [ "${CHECKED_OUT_REF}" != "refs/heads/main" ]; then echo "::error::Relay production promotion must run from the main branch, got ${CHECKED_OUT_REF}."; exit 1; fi
+          if [ "${APPROVED_SOURCE_SHA}" != "${CHECKED_OUT_SOURCE_SHA}" ]; then echo "::error::Approved source SHA ${APPROVED_SOURCE_SHA} does not match checked out main SHA ${CHECKED_OUT_SOURCE_SHA}."; exit 1; fi
       - name: Build Relay server deployment artifact
         run: pnpm -C apps/relay-server build:vercel
       - name: Run Relay live smoke against built Admin assets
@@ -76,14 +70,8 @@ jobs:
           [ -n "${GH_TOKEN}" ] && configured=$((configured + 1))
           [ -n "${RELAY_SERVER_DEPLOY_REPOSITORY}" ] && configured=$((configured + 1))
           [ -n "${RELAY_SERVER_DEPLOY_WORKFLOW}" ] && configured=$((configured + 1))
-          if [ "$configured" -eq 0 ]; then
-            echo "external=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if [ "$configured" -eq 3 ]; then
-            echo "external=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+          if [ "$configured" -eq 0 ]; then echo "external=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          if [ "$configured" -eq 3 ]; then echo "external=true" >> "$GITHUB_OUTPUT"; exit 0; fi
           echo "::error::External Relay deployment must configure token, repository, and workflow together."
           exit 1
       - name: Trigger external Relay server deployment
@@ -174,101 +162,17 @@ jobs:
             --branch main \
             --commit-hash "${GITHUB_SHA}" \
             --commit-message "Deploy Relay production ${GITHUB_SHA}"
-      - name: Resolve Vercel production project
-        id: vercel-project
+      - name: Deploy Relay and Admin to Vercel production
+        if: steps.deployment-target.outputs.external != 'true'
         env:
           PROD_TOKEN: ${{ secrets.RELAY_PROD_VERCEL_TOKEN }}
           PROD_ORG_ID: ${{ secrets.RELAY_PROD_VERCEL_ORG_ID }}
           PROD_PROJECT_ID: ${{ secrets.RELAY_PROD_VERCEL_PROJECT_ID }}
           DEV_TOKEN: ${{ secrets.RELAY_DEV_VERCEL_TOKEN }}
           DEV_ORG_ID: ${{ secrets.RELAY_DEV_VERCEL_ORG_ID }}
-          RELAY_PROD_VERCEL_PROJECT_ID: ${{ vars.RELAY_PROD_VERCEL_PROJECT_ID }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          prod_configured=0
-          [ -n "${PROD_TOKEN}" ] && prod_configured=$((prod_configured + 1))
-          [ -n "${PROD_ORG_ID}" ] && prod_configured=$((prod_configured + 1))
-          if [ "$prod_configured" -eq 1 ]; then
-            echo "::error::Vercel production token and org id must be configured together."
-            exit 1
-          fi
-          if [ "$prod_configured" -eq 2 ]; then
-            vercel_token="$PROD_TOKEN"
-            vercel_org_id="$PROD_ORG_ID"
-          else
-            dev_configured=0
-            [ -n "${DEV_TOKEN}" ] && dev_configured=$((dev_configured + 1))
-            [ -n "${DEV_ORG_ID}" ] && dev_configured=$((dev_configured + 1))
-            if [ "$dev_configured" -ne 2 ]; then
-              echo "::error::Configure an atomic Vercel production credential pair; the migration fallback is also incomplete."
-              exit 1
-            fi
-            echo "::notice::Using the migration fallback Vercel credential pair for this production promotion."
-            vercel_token="$DEV_TOKEN"
-            vercel_org_id="$DEV_ORG_ID"
-          fi
-
-          vercel_project_id="${PROD_PROJECT_ID:-${RELAY_PROD_VERCEL_PROJECT_ID:-}}"
-          if [ -z "$vercel_project_id" ]; then
-            export VERCEL_TOKEN="$vercel_token"
-            export VERCEL_ORG_ID="$vercel_org_id"
-            vercel_project_id="$(node <<'NODE'
-            const required = ['VERCEL_TOKEN', 'VERCEL_ORG_ID']
-            for (const name of required) {
-              if (!process.env[name]) throw new Error(`${name} is required`)
-            }
-            const request = async (path) => {
-              const response = await fetch(`https://api.vercel.com${path}`, {
-                headers: { Authorization: `Bearer ${process.env.VERCEL_TOKEN}` }
-              })
-              if (!response.ok) throw new Error(`Vercel API request failed: ${response.status}`)
-              return response.json()
-            }
-            const teamId = encodeURIComponent(process.env.VERCEL_ORG_ID)
-            const projects = []
-            let until
-            do {
-              const query = until == null ? `?teamId=${teamId}&limit=100` : `?teamId=${teamId}&limit=100&until=${until}`
-              const page = await request(`/v9/projects${query}`)
-              projects.push(...(page.projects ?? []))
-              until = page.pagination?.next ?? null
-            } while (until != null)
-            const matches = []
-            for (const project of projects) {
-              const projectId = project.id
-              const domains = await request(`/v9/projects/${encodeURIComponent(projectId)}/domains?teamId=${teamId}`)
-              if ((domains.domains ?? []).some((domain) => domain.name === 'vc.oneworks.cloud')) matches.push(projectId)
-            }
-            if (matches.length !== 1) throw new Error(`Expected exactly one Vercel project for vc.oneworks.cloud, found ${matches.length}`)
-            process.stdout.write(matches[0])
-            NODE
-            )"
-          fi
-          echo "::add-mask::$vercel_token"
-          echo "::add-mask::$vercel_org_id"
-          echo "::add-mask::$vercel_project_id"
-          {
-            echo "token=$vercel_token"
-            echo "org_id=$vercel_org_id"
-            echo "project_id=$vercel_project_id"
-          } >> "$GITHUB_OUTPUT"
-      - name: Deploy Relay and Admin to Vercel production
-        working-directory: apps/relay-server
-        env:
-          VERCEL_TOKEN: ${{ steps.vercel-project.outputs.token }}
-          VERCEL_ORG_ID: ${{ steps.vercel-project.outputs.org_id }}
-          VERCEL_PROJECT_ID: ${{ steps.vercel-project.outputs.project_id }}
-          ONEWORKS_RELAY_BUILD_SHA: ${{ github.sha }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p .vercel
-          node -e 'require("node:fs").writeFileSync(".vercel/project.json", JSON.stringify({orgId: process.env.VERCEL_ORG_ID, projectId: process.env.VERCEL_PROJECT_ID}))'
-          pnpm dlx "vercel@${VERCEL_VERSION}" pull --environment=production --yes --token "$VERCEL_TOKEN"
-          pnpm dlx "vercel@${VERCEL_VERSION}" build --prod --yes --token "$VERCEL_TOKEN"
-          pnpm prepare:vercel-output
-          pnpm dlx "vercel@${VERCEL_VERSION}" deploy --prebuilt --prod --yes --token "$VERCEL_TOKEN" --env "ONEWORKS_RELAY_BUILD_SHA=${GITHUB_SHA}"
+          EXPLICIT_PROJECT_ID: ${{ vars.RELAY_PROD_VERCEL_PROJECT_ID }}
+          RELAY_PROD_VC_ORIGIN: ${{ vars.RELAY_PROD_VC_ORIGIN }}
+        run: node .github/workflows/scripts/relay-vercel-production.mjs
       - name: Smoke check Relay Cloudflare production
         env:
           RELAY_PROD_ORIGIN: ${{ vars.RELAY_PROD_ORIGIN }}
@@ -291,24 +195,4 @@ jobs:
             sleep 20
           done
           echo "::error::Cloudflare production did not become healthy at ${origin} within 10 minutes."
-          exit 1
-      - name: Smoke check Relay Vercel production
-        env:
-          RELAY_PROD_VERCEL_ORIGIN: ${{ vars.RELAY_PROD_VERCEL_ORIGIN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          origin="${RELAY_PROD_VERCEL_ORIGIN:-https://vc.oneworks.cloud}"
-          version="$(node -p "require('./apps/relay-server/package.json').version")"
-          for attempt in $(seq 1 30); do
-            echo "Production Vercel smoke attempt ${attempt}/30 against ${origin}"
-            if RELAY_ORIGIN="$origin" \
-              RELAY_EXPECTED_BUILD_SHA="${GITHUB_SHA}" \
-              RELAY_EXPECTED_VERSION="$version" \
-              node .github/workflows/scripts/relay-dev-smoke.mjs; then
-              exit 0
-            fi
-            sleep 20
-          done
-          echo "::error::Vercel production did not become healthy at ${origin} within 10 minutes."
           exit 1
