@@ -38,4 +38,15 @@ describe('findProjectId', () => {
     expect(() => chooseCredentials({ PROD_TOKEN: 'token' })).toThrow('configured together')
     expect(() => chooseCredentials({ DEV_TOKEN: 'token' })).toThrow('fallback are incomplete')
   })
+
+  it('keeps production credentials isolated from a dev project id', () => {
+    expect(chooseCredentials({ PROD_TOKEN: 'prod-token', PROD_ORG_ID: 'prod-org', DEV_PROJECT_ID: 'dev-project' }))
+      .toEqual(['prod-token', 'prod-org'])
+  })
+
+  it('accepts a dev project id only with the dev fallback pair', () => {
+    expect(chooseCredentials({ DEV_TOKEN: 'dev-token', DEV_ORG_ID: 'dev-org', DEV_PROJECT_ID: 'dev-project' })).toEqual(
+      ['dev-token', 'dev-org']
+    )
+  })
 })

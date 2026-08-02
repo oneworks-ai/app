@@ -170,6 +170,7 @@ jobs:
           PROD_PROJECT_ID: ${{ secrets.RELAY_PROD_VERCEL_PROJECT_ID }}
           DEV_TOKEN: ${{ secrets.RELAY_DEV_VERCEL_TOKEN }}
           DEV_ORG_ID: ${{ secrets.RELAY_DEV_VERCEL_ORG_ID }}
+          DEV_PROJECT_ID: ${{ secrets.RELAY_DEV_VERCEL_PROJECT_ID }}
           EXPLICIT_PROJECT_ID: ${{ vars.RELAY_PROD_VERCEL_PROJECT_ID }}
           RELAY_PROD_VC_ORIGIN: ${{ vars.RELAY_PROD_VC_ORIGIN }}
         run: node .github/workflows/scripts/relay-vercel-production.mjs

@@ -43,11 +43,12 @@ export async function findProjectId({ domain, fetchImpl, orgId, token }) {
   return matches[0]
 }
 
-async function resolveProjectId() {
+async function resolveProjectId({ allowDevProjectId }) {
   const explicit = process.env.PROD_PROJECT_ID || process.env.EXPLICIT_PROJECT_ID
+  if (explicit) return explicit
+  if (allowDevProjectId && process.env.DEV_PROJECT_ID) return process.env.DEV_PROJECT_ID
   const domain = new URL(process.env.RELAY_PROD_VC_ORIGIN || 'https://vc.oneworks.cloud').hostname
-  return explicit ||
-    findProjectId({ domain, fetchImpl: fetch, orgId: process.env.VERCEL_ORG_ID, token: process.env.VERCEL_TOKEN })
+  return findProjectId({ domain, fetchImpl: fetch, orgId: process.env.VERCEL_ORG_ID, token: process.env.VERCEL_TOKEN })
 }
 
 export function chooseCredentials(env) {
@@ -88,13 +89,22 @@ async function smoke() {
 }
 
 async function main() {
+  const usingDevFallback = !(process.env.PROD_TOKEN && process.env.PROD_ORG_ID)
   const [token, orgId] = chooseCredentials(process.env)
   process.env.VERCEL_TOKEN = token
   process.env.VERCEL_ORG_ID = orgId
   for (
-    const name of ['PROD_TOKEN', 'PROD_ORG_ID', 'PROD_PROJECT_ID', 'DEV_TOKEN', 'DEV_ORG_ID', 'EXPLICIT_PROJECT_ID']
+    const name of [
+      'PROD_TOKEN',
+      'PROD_ORG_ID',
+      'PROD_PROJECT_ID',
+      'DEV_TOKEN',
+      'DEV_ORG_ID',
+      'DEV_PROJECT_ID',
+      'EXPLICIT_PROJECT_ID'
+    ]
   ) delete process.env[name]
-  const projectId = await resolveProjectId()
+  const projectId = await resolveProjectId({ allowDevProjectId: usingDevFallback })
   for (const value of [token, orgId, projectId]) console.log(`::add-mask::${value}`)
   process.env.VERCEL_PROJECT_ID = projectId
   try {
