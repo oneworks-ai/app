@@ -10,10 +10,11 @@ import {
 describe('getVercelLayout', () => {
   it('keeps the workspace link and output separate from the relay package link', () => {
     expect(getVercelLayout('/runner/work/app/app')).toEqual({
-      linkDir: '/runner/work/app/app/.vercel',
-      outputDir: '/runner/work/app/app/.vercel/output',
-      relayDir: '/runner/work/app/app/apps/relay-server',
-      relayLinkDir: '/runner/work/app/app/apps/relay-server/.vercel'
+      buildLinkDir: '/runner/work/app/app/apps/relay-server/.vercel',
+      buildOutputDir: '/runner/work/app/app/apps/relay-server/.vercel/output',
+      deployLinkDir: '/runner/work/app/app/.vercel',
+      deployOutputDir: '/runner/work/app/app/.vercel/output',
+      relayDir: '/runner/work/app/app/apps/relay-server'
     })
   })
 })
