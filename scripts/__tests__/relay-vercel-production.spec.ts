@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { chooseCredentials, findProjectId } from '../../.github/workflows/scripts/relay-vercel-production.mjs'
+import {
+  chooseCredentials,
+  findProjectId,
+  selectProjectCandidate
+} from '../../.github/workflows/scripts/relay-vercel-production.mjs'
 
 describe('findProjectId', () => {
   it('paginates projects and requires the exact production domain once', async () => {
@@ -39,14 +43,24 @@ describe('findProjectId', () => {
     expect(() => chooseCredentials({ DEV_TOKEN: 'token' })).toThrow('fallback are incomplete')
   })
 
-  it('keeps production credentials isolated from a dev project id', () => {
-    expect(chooseCredentials({ PROD_TOKEN: 'prod-token', PROD_ORG_ID: 'prod-org', DEV_PROJECT_ID: 'dev-project' }))
-      .toEqual(['prod-token', 'prod-org'])
+  it('does not select a dev project id on the production path', () => {
+    expect(selectProjectCandidate({ DEV_PROJECT_ID: 'dev-project' }, false)).toBeUndefined()
   })
 
-  it('accepts a dev project id only with the dev fallback pair', () => {
-    expect(chooseCredentials({ DEV_TOKEN: 'dev-token', DEV_ORG_ID: 'dev-org', DEV_PROJECT_ID: 'dev-project' })).toEqual(
-      ['dev-token', 'dev-org']
+  it('selects a dev project id only on the dev fallback path', () => {
+    expect(selectProjectCandidate({ DEV_PROJECT_ID: 'dev-project' }, true)).toBe('dev-project')
+  })
+
+  it('prioritizes production secret then production variable', () => {
+    expect(
+      selectProjectCandidate({
+        EXPLICIT_PROJECT_ID: 'prod-variable',
+        PROD_PROJECT_ID: 'prod-secret',
+        DEV_PROJECT_ID: 'dev'
+      }, true)
+    ).toBe('prod-secret')
+    expect(selectProjectCandidate({ EXPLICIT_PROJECT_ID: 'prod-variable', DEV_PROJECT_ID: 'dev' }, true)).toBe(
+      'prod-variable'
     )
   })
 })
