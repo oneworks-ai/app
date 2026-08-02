@@ -14,7 +14,7 @@ Cloudflare direct deploy 优先读取：
 - `RELAY_PROD_CF_WORKER_NAME`：默认 `oneworks-relay-server`。
 - `RELAY_PROD_CF_PAGES_PROJECT`：默认 `oneworks`。
 - `RELAY_PROD_CF_ORIGIN`：默认 `https://cf.oneworks.cloud`。
-- `RELAY_PROD_ORIGIN`：所有 production 发布路径最终 smoke 的公网 origin；缺省时回退到 `RELAY_PROD_CF_ORIGIN`。
+- `RELAY_PROD_ORIGIN`：Cloudflare direct 或 external production 路径最终 smoke 的公网 origin；缺省时回退到 `RELAY_PROD_CF_ORIGIN`。Vercel direct deploy 单独使用 `RELAY_PROD_VC_ORIGIN`，缺省为 `https://vc.oneworks.cloud`。
 - `RELAY_PROD_EXPECTED_SSO_PROVIDERS`：production smoke 必须看到的 provider id，逗号分隔。
 
 Vercel direct deploy 优先读取完整 pair：

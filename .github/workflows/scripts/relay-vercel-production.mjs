@@ -15,7 +15,7 @@ function run(command, args, options = {}) {
   })
 }
 
-export async function findProjectId({ fetchImpl, orgId, token }) {
+export async function findProjectId({ domain, fetchImpl, orgId, token }) {
   const request = async (path) => {
     const response = await fetchImpl(`https://api.vercel.com${path}`, {
       headers: { Authorization: `Bearer ${token}` }
@@ -35,27 +35,28 @@ export async function findProjectId({ fetchImpl, orgId, token }) {
   const matches = []
   for (const project of projects) {
     const domains = await request(`/v9/projects/${encodeURIComponent(project.id)}/domains?teamId=${teamId}`)
-    if ((domains.domains ?? []).some((domain) => domain.name === 'vc.oneworks.cloud')) matches.push(project.id)
+    if ((domains.domains ?? []).some((entry) => entry.name === domain)) matches.push(project.id)
   }
   if (matches.length !== 1) {
-    throw new Error(`Expected exactly one Vercel project for vc.oneworks.cloud, found ${matches.length}`)
+    throw new Error(`Expected exactly one Vercel project for ${domain}, found ${matches.length}`)
   }
   return matches[0]
 }
 
 async function resolveProjectId() {
   const explicit = process.env.PROD_PROJECT_ID || process.env.EXPLICIT_PROJECT_ID
+  const domain = new URL(process.env.RELAY_PROD_VC_ORIGIN || 'https://vc.oneworks.cloud').hostname
   return explicit ||
-    findProjectId({ fetchImpl: fetch, orgId: process.env.VERCEL_ORG_ID, token: process.env.VERCEL_TOKEN })
+    findProjectId({ domain, fetchImpl: fetch, orgId: process.env.VERCEL_ORG_ID, token: process.env.VERCEL_TOKEN })
 }
 
-function chooseCredentials() {
-  const prod = [process.env.PROD_TOKEN, process.env.PROD_ORG_ID]
+export function chooseCredentials(env) {
+  const prod = [env.PROD_TOKEN, env.PROD_ORG_ID]
   if (prod.filter(Boolean).length === 1) {
     throw new Error('Vercel production token and org id must be configured together.')
   }
   if (prod.every(Boolean)) return prod
-  const dev = [process.env.DEV_TOKEN, process.env.DEV_ORG_ID]
+  const dev = [env.DEV_TOKEN, env.DEV_ORG_ID]
   if (!dev.every(Boolean)) throw new Error('Vercel production credential pair and migration fallback are incomplete.')
   console.log('::notice::Using the migration fallback Vercel credential pair for this production promotion.')
   return dev
@@ -71,7 +72,8 @@ async function smoke() {
       await run(process.execPath, ['.github/workflows/scripts/relay-dev-smoke.mjs'], {
         cwd: workspace,
         env: {
-          ...process.env,
+          HOME: process.env.HOME,
+          PATH: process.env.PATH,
           RELAY_ORIGIN: origin,
           RELAY_EXPECTED_BUILD_SHA: process.env.GITHUB_SHA,
           RELAY_EXPECTED_VERSION: version
@@ -86,9 +88,12 @@ async function smoke() {
 }
 
 async function main() {
-  const [token, orgId] = chooseCredentials()
+  const [token, orgId] = chooseCredentials(process.env)
   process.env.VERCEL_TOKEN = token
   process.env.VERCEL_ORG_ID = orgId
+  for (
+    const name of ['PROD_TOKEN', 'PROD_ORG_ID', 'PROD_PROJECT_ID', 'DEV_TOKEN', 'DEV_ORG_ID', 'EXPLICIT_PROJECT_ID']
+  ) delete process.env[name]
   const projectId = await resolveProjectId()
   for (const value of [token, orgId, projectId]) console.log(`::add-mask::${value}`)
   process.env.VERCEL_PROJECT_ID = projectId
