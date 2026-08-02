@@ -167,11 +167,9 @@ gh workflow run deploy-pwa.yml \
 
 当前 token 来源：
 
-- Token name: `oneworks-app-trigger-pwa`
-- Resource owner: `oneworks-ai`
+- Token name: `oneworks-app-trigger-pwa`; Resource owner: `oneworks-ai`
 - Repository access: only `oneworks-ai/pwa`
-- Expiration: 366 days, ending on 2027-06-12
-- Permissions: `Actions` read/write, `Metadata` read-only
+- Expiration: 366 days, ending on 2027-06-12; Permissions: `Actions` read/write, `Metadata` read-only
 
 轮换方式：
 
