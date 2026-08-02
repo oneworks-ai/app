@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { randomUUID } from 'node:crypto'
-import { readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { dirname } from 'node:path'
 import process from 'node:process'
 
 let release
@@ -25,7 +26,11 @@ const input = JSON.parse(readFileSync(0, 'utf8'))
 let current
 try {
   current = JSON.parse(readFileSync(input.path, 'utf8'))
-} catch {}
+} catch {
+  try {
+    current = JSON.parse(readFileSync(input.fallbackPath, 'utf8'))
+  } catch {}
+}
 
 const expected = input.expected
 const matches = expected == null || (
@@ -55,7 +60,17 @@ const next = {
   updatedAt: new Date().toISOString()
 }
 const tempPath = `${input.path}.tmp-${process.pid}-${randomUUID()}`
+mkdirSync(dirname(input.path), { recursive: true })
 writeFileSync(tempPath, `${JSON.stringify(next, null, 2)}\n`)
 renameSync(tempPath, input.path)
+if (input.mirrorPath != null && existsSync(dirname(input.mirrorPath))) {
+  const mirrorTempPath = `${input.mirrorPath}.tmp-${process.pid}-${randomUUID()}`
+  try {
+    writeFileSync(mirrorTempPath, `${JSON.stringify(next, null, 2)}\n`)
+    renameSync(mirrorTempPath, input.mirrorPath)
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error
+  }
+}
 process.stdout.write(`${JSON.stringify({ matched: true, state: next })}\n`)
 await release?.()

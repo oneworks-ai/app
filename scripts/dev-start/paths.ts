@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import process from 'node:process'
@@ -14,6 +15,7 @@ export const machineServiceDir = join(
   resolve(normalizeText(process.env.__ONEWORKS_PROJECT_REAL_HOME__) ?? process.env.HOME ?? homedir()),
   '.oneworks/dev-service'
 )
+export const worktreeRegistryDir = join(machineServiceDir, 'worktrees')
 export const serviceChildArg = '--service-child'
 export const clientBase = '/ui'
 
@@ -21,9 +23,24 @@ export const isMachineScopedTarget = (target: DevStartTarget) => (
   target === 'android-emulator' || target === 'electron' || target === 'electron-workspace'
 )
 
-export const targetStateDir = (target: DevStartTarget) => isMachineScopedTarget(target) ? machineServiceDir : logDir
+export const worktreeServiceDir = (root = repoRoot) =>
+  join(
+    worktreeRegistryDir,
+    createHash('sha256').update(resolve(root)).digest('hex').slice(0, 24)
+  )
 
-export const statePath = (target: DevStartTarget) => join(targetStateDir(target), `dev-start-${target}.json`)
+export const targetStateDir = (target: DevStartTarget, root = repoRoot) => (
+  isMachineScopedTarget(target) ? machineServiceDir : join(resolve(root), '.logs')
+)
+
+export const legacyStatePath = (target: DevStartTarget, root = repoRoot) => (
+  join(targetStateDir(target, root), `dev-start-${target}.json`)
+)
+export const statePath = (target: DevStartTarget, root = repoRoot) =>
+  join(
+    isMachineScopedTarget(target) ? machineServiceDir : worktreeServiceDir(root),
+    `dev-start-${target}.json`
+  )
 export const managerLogPath = (target: DevStartTarget) =>
   join(
     targetStateDir(target),
@@ -34,9 +51,9 @@ export const componentLogPath = (target: DevStartTarget, component: string) =>
     targetStateDir(target),
     `dev-start-${target}.${component}.log`
   )
-export const eventsPath = (target: DevStartTarget) =>
+export const eventsPath = (target: DevStartTarget, root = repoRoot) =>
   join(
-    targetStateDir(target),
+    targetStateDir(target, root),
     `dev-start-${target}.events.jsonl`
   )
 export const resourceKey = (target: DevStartTarget) => (
@@ -46,9 +63,16 @@ export const resourceKey = (target: DevStartTarget) => (
     ? 'manager-family'
     : target
 )
-export const leasePath = (target: DevStartTarget) =>
+export const registryEventsPath = (target: DevStartTarget, root = repoRoot) =>
   join(
-    target === 'electron' || target === 'electron-workspace' ? machineServiceDir : targetStateDir(target),
+    isMachineScopedTarget(target) ? machineServiceDir : worktreeServiceDir(root),
+    `dev-start-${target}.events.jsonl`
+  )
+export const leasePath = (target: DevStartTarget, root = repoRoot) =>
+  join(
+    target === 'electron' || target === 'electron-workspace'
+      ? machineServiceDir
+      : worktreeServiceDir(root),
     target === 'electron' || target === 'electron-workspace'
       ? 'dev-start-electron-family.operation.lock'
       : `dev-start-${resourceKey(target)}.operation.lock`

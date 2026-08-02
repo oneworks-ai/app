@@ -3,7 +3,7 @@ import { join, resolve } from 'node:path'
 import process from 'node:process'
 
 import { withCrossProcessLock } from './file-lock'
-import { normalizeText, repoRoot } from './paths'
+import { normalizeText, repoRoot, worktreeServiceDir } from './paths'
 
 const resolveGlobalLockRoot = () => {
   const realHome = normalizeText(process.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
@@ -21,6 +21,6 @@ export const withDevStartPreparationLock = async <T>(run: () => Promise<T>) => (
   await withCrossProcessLock(join(repoRoot, '.logs/dev-start-worktree-preparation'), run)
 )
 
-export const withDevStartLifecycleLock = async <T>(run: () => Promise<T>) => (
-  await withCrossProcessLock(join(repoRoot, '.logs/dev-start-worktree-lifecycle'), run)
+export const withDevStartLifecycleLock = async <T>(run: () => Promise<T>, ownerRoot = repoRoot) => (
+  await withCrossProcessLock(join(worktreeServiceDir(ownerRoot), 'dev-start-worktree-lifecycle'), run)
 )
