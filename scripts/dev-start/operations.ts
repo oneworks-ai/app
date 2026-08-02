@@ -1,14 +1,24 @@
 /* eslint-disable max-lines -- command dispatch and its bounded machine-output serializers share one contract. */
-import { readFileSync, realpathSync } from 'node:fs'
-import { basename, isAbsolute, relative } from 'node:path'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
+import { basename, isAbsolute, relative, resolve } from 'node:path'
 import process from 'node:process'
 
 import { readDevServiceEvents, readDevServiceLease, withDevServiceOperation } from './coordination'
 import { runMain } from './manager'
-import { eventsPath, leasePath, managerLogPath, repoRoot, resourceKey, statePath, targetStateDir } from './paths'
+import {
+  eventsPath,
+  isMachineScopedTarget,
+  leasePath,
+  managerLogPath,
+  registryEventsPath,
+  repoRoot,
+  resourceKey,
+  statePath,
+  targetStateDir
+} from './paths'
 import { withDevStartLifecycleLock } from './port-lock'
-import { readState } from './process'
-import { forgetStaleManagedState, stateReady, stopManagedState } from './readiness'
+import { readRegisteredWorktreeStates, readState } from './process'
+import { forgetStaleManagedState, stateHasOwnedLiveProcesses, stateReady, stopManagedState } from './readiness'
 import { redactDevServiceText } from './redaction'
 import { updateDevServiceStateIfCurrent } from './state'
 import { devStartTargets } from './types'
@@ -21,6 +31,7 @@ export interface DevServiceCommandInput {
   forgetStale?: boolean
   json?: boolean
   limit?: number
+  ownerRoot?: string
   target?: DevStartTarget
   workspace?: boolean
 }
@@ -73,44 +84,107 @@ export const ensureDevService = async (
   })
 }
 
-export const stopDevService = async (target: DevStartTarget, options: { forgetStale?: boolean } = {}) => {
-  await withDevStartLifecycleLock(async () => {
-    await withDevServiceOperation(target, 'stop', async (operation) => {
-      if (options.forgetStale === true) await forgetStaleManagedState(target, operation)
-      else await stopManagedState(target, operation)
-      if (process.env.ONEWORKS_DEV_SERVICE_JSON !== '1') console.log(`[dev-service] stopped ${target}`)
-    })
-  })
+const resolveOwnerRoot = (ownerRoot: string | undefined) => resolve(ownerRoot ?? repoRoot)
+
+const assertOwnerRootSupported = (target: DevStartTarget, ownerRoot: string | undefined) => {
+  if (ownerRoot != null && isMachineScopedTarget(target)) {
+    throw new Error(`--owner-root is only valid for worktree-scoped targets, not ${target}.`)
+  }
 }
 
-const getStatus = async (target: DevStartTarget): Promise<DevServiceStatus> => {
-  const state = readState(target)
+export const resolveDevServiceEventsPath = (target: DevStartTarget, ownerRoot = repoRoot) => (
+  isMachineScopedTarget(target) || existsSync(ownerRoot)
+    ? eventsPath(target, ownerRoot)
+    : registryEventsPath(target, ownerRoot)
+)
+
+export const isOrphanedDevServiceState = (
+  state: DevServiceStatus['state'],
+  dependencies: {
+    hasOwnedProcesses?: (state: DevServiceStatus['state']) => boolean
+    rootExists?: (root: string) => boolean
+  } = {}
+) => {
+  if (state?.scope !== 'worktree' || typeof state.root !== 'string') return false
+  const rootExists = dependencies.rootExists ?? existsSync
+  const hasOwnedProcesses = dependencies.hasOwnedProcesses ?? stateHasOwnedLiveProcesses
+  return !rootExists(state.root) && hasOwnedProcesses(state)
+}
+
+export const stopDevService = async (
+  target: DevStartTarget,
+  options: { forgetStale?: boolean; ownerRoot?: string } = {}
+) => {
+  assertOwnerRootSupported(target, options.ownerRoot)
+  const ownerRoot = resolveOwnerRoot(options.ownerRoot)
+  const operationEventsPath = resolveDevServiceEventsPath(target, ownerRoot)
+  await withDevStartLifecycleLock(async () => {
+    await withDevServiceOperation(target, 'stop', async (operation) => {
+      if (options.forgetStale === true) await forgetStaleManagedState(target, operation, ownerRoot)
+      else await stopManagedState(target, operation, { ownerRoot })
+      if (process.env.ONEWORKS_DEV_SERVICE_JSON !== '1') console.log(`[dev-service] stopped ${target}`)
+    }, {
+      events: operationEventsPath,
+      lease: leasePath(target, ownerRoot)
+    })
+  }, ownerRoot)
+}
+
+const getStatus = async (target: DevStartTarget, ownerRoot = repoRoot): Promise<DevServiceStatus> => {
+  const state = readState(target, ownerRoot)
+  const orphaned = !isMachineScopedTarget(target) && isOrphanedDevServiceState(state)
+  const resolvedLeasePath = leasePath(target, ownerRoot)
   return {
-    eventsPath: eventsPath(target),
-    lease: readDevServiceLease(target),
-    leasePath: leasePath(target),
-    ready: await stateReady(state),
+    eventsPath: resolveDevServiceEventsPath(target, ownerRoot),
+    lease: readDevServiceLease(target, resolvedLeasePath),
+    leasePath: resolvedLeasePath,
+    orphaned,
+    ready: !orphaned && await stateReady(state, ownerRoot),
     resourceKey: resourceKey(target),
     state,
-    statePath: statePath(target),
+    statePath: statePath(target, ownerRoot),
     target
   }
 }
 
 export const getDevServiceStatus = async (
-  target?: DevStartTarget
-): Promise<DevServiceStatusDocument> => ({
-  generatedAt: new Date().toISOString(),
-  protocol: 'oneworks.dev-service',
-  root: repoRoot,
-  services: await Promise.all((target == null ? devStartTargets : [target]).map(getStatus)),
-  version: 1
-})
+  target?: DevStartTarget,
+  ownerRoot?: string
+): Promise<DevServiceStatusDocument> => {
+  if (ownerRoot != null && target == null) throw new Error('--owner-root requires an explicit target.')
+  if (target != null) assertOwnerRootSupported(target, ownerRoot)
+  const resolvedOwnerRoot = resolveOwnerRoot(ownerRoot)
+  const orphanedStates = ownerRoot == null
+    ? readRegisteredWorktreeStates(target).filter(state => (
+      isOrphanedDevServiceState(state)
+    ))
+    : []
+  return {
+    generatedAt: new Date().toISOString(),
+    ...(orphanedStates.length === 0
+      ? {}
+      : {
+        orphanedServices: await Promise.all(orphanedStates.map(async state => (
+          await getStatus(state.target as DevStartTarget, state.root)
+        )))
+      }),
+    protocol: 'oneworks.dev-service',
+    root: repoRoot,
+    services: await Promise.all(
+      (target == null ? devStartTargets : [target]).map(async serviceTarget => (
+        await getStatus(serviceTarget, resolvedOwnerRoot)
+      ))
+    ),
+    version: 1
+  }
+}
 
 const printStatus = (document: DevServiceStatusDocument) => {
-  for (const service of document.services) {
+  for (const service of [...document.services, ...(document.orphanedServices ?? [])]) {
     const phase = service.lease == null
-      ? service.ready
+      ? service.orphaned === true
+        ? 'orphaned'
+        : service.ready
         ? 'ready'
         : service.state?.phase === 'ready'
         ? 'unhealthy'
@@ -182,14 +256,17 @@ export const runDevServiceCommand = async (input: DevServiceCommandInput) => {
     }
 
     if (input.action === 'stop') {
-      await stopDevService(input.target ?? 'web', { forgetStale: input.forgetStale })
-      const document = await getDevServiceStatus(input.target ?? 'web')
+      await stopDevService(input.target ?? 'web', {
+        forgetStale: input.forgetStale,
+        ownerRoot: input.ownerRoot
+      })
+      const document = await getDevServiceStatus(input.target ?? 'web', input.ownerRoot)
       if (input.json === true) printJson(document)
       return document
     }
 
     if (input.action === 'status') {
-      const document = await getDevServiceStatus(input.target)
+      const document = await getDevServiceStatus(input.target, input.ownerRoot)
       if (input.json === true) printJson(document)
       else printStatus(document)
       return document
@@ -199,9 +276,12 @@ export const runDevServiceCommand = async (input: DevServiceCommandInput) => {
     if (target == null) throw new Error(`${input.action} requires a target.`)
     const limit = input.limit ?? 80
     if (input.action === 'events') {
+      assertOwnerRootSupported(target, input.ownerRoot)
+      const ownerRoot = resolveOwnerRoot(input.ownerRoot)
+      const path = resolveDevServiceEventsPath(target, ownerRoot)
       const value = {
-        events: readDevServiceEvents(target, limit),
-        path: eventsPath(target),
+        events: readDevServiceEvents(target, limit, path),
+        path,
         target
       }
       printJson(value)
@@ -221,7 +301,7 @@ export const runDevServiceCommand = async (input: DevServiceCommandInput) => {
       const target = input.target ?? (input.action === 'status' ? undefined : 'web')
       let status: DevServiceStatusDocument | undefined
       try {
-        status = target == null ? undefined : await getDevServiceStatus(target)
+        status = target == null ? undefined : await getDevServiceStatus(target, input.ownerRoot)
       } catch {}
       printJson({
         error: {

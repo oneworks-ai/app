@@ -14,7 +14,12 @@ import {
   terminateTrackedPid
 } from './process-identity'
 import { redactDevServiceText } from './redaction'
-import { updateDevServiceState, updateDevServiceStateIfCurrent, writeDevServiceState } from './state'
+import {
+  registerLegacyDevServiceState,
+  updateDevServiceState,
+  updateDevServiceStateIfCurrent,
+  writeDevServiceState
+} from './state'
 import type { DevServiceComponentState, DevServiceOperation, DevStartState, DevStartTarget } from './types'
 
 export const printReady = (state: DevStartState) => {
@@ -55,10 +60,10 @@ const componentReady = async (component: DevServiceComponentState, state: DevSta
   return component.pid != null || component.healthUrl != null || component.kind === 'device'
 }
 
-export const stateReady = async (state: DevStartState | undefined) => {
+export const stateReady = async (state: DevStartState | undefined, expectedRoot = repoRoot) => {
   if (state == null) return false
   if (state.schemaVersion !== 2) return false
-  if (state.scope !== 'machine' && state.root !== repoRoot) return false
+  if (state.scope !== 'machine' && state.root !== expectedRoot) return false
   if (state.phase !== 'ready') return false
   if (state.components == null || state.components.length === 0) return false
   const readiness = await Promise.all(state.components.map(async component => await componentReady(component, state)))
@@ -87,7 +92,38 @@ export const stateHasLiveProcesses = (state: DevStartState | undefined) => (
   ].some(pid => pidRunning(pid))
 )
 
+export const stateHasOwnedLiveProcesses = (
+  state: DevStartState | undefined,
+  dependencies: {
+    fingerprint?: (pid: number) => string | undefined
+    isRunning?: (pid: number | undefined) => boolean
+  } = {}
+) => {
+  const readFingerprint = dependencies.fingerprint ?? processFingerprint
+  const isRunning = dependencies.isRunning ?? pidRunning
+  const identities = [
+    [state?.servicePid, state?.serviceFingerprint],
+    [state?.clientPid, state?.clientFingerprint],
+    [state?.serverPid, state?.serverFingerprint],
+    [
+      state?.desktopPid,
+      state?.components?.find(component => component.pid === state.desktopPid)?.fingerprint
+    ],
+    [
+      state?.devicePid,
+      state?.components?.find(component => component.pid === state.devicePid)?.fingerprint
+    ],
+    ...(state?.components ?? []).map(component => [component.pid, component.fingerprint])
+  ] as Array<[number | undefined, string | undefined]>
+  return identities.some(([pid, recordedFingerprint]) => (
+    pid != null &&
+    isRunning(pid) &&
+    processFingerprintMatches(readFingerprint(pid), recordedFingerprint)
+  ))
+}
+
 export const assertTargetStartable = (target: DevStartTarget) => {
+  registerLegacyDevServiceState(target)
   const state = readState(target)
   if (!stateHasLiveProcesses(state)) return
   throw new Error(
@@ -97,6 +133,7 @@ export const assertTargetStartable = (target: DevStartTarget) => {
 }
 
 export const reuseIfReady = async (target: DevStartTarget, launchIdentity?: string) => {
+  registerLegacyDevServiceState(target)
   const state = readState(target)
   if (
     (target === 'electron' || target === 'electron-workspace') &&
@@ -113,10 +150,12 @@ export const reuseIfReady = async (target: DevStartTarget, launchIdentity?: stri
 export const stopManagedState = async (
   target: DevStartTarget,
   operation?: DevServiceOperation,
-  options: { error?: string; finalPhase?: 'failed' | 'stopped' } = {}
+  options: { error?: string; finalPhase?: 'failed' | 'stopped'; ownerRoot?: string } = {}
 ) => {
-  const state = readState(target)
-  if (state == null || (!isMachineScopedTarget(target) && state.root !== repoRoot)) return
+  const ownerRoot = options.ownerRoot ?? repoRoot
+  registerLegacyDevServiceState(target, ownerRoot)
+  const state = readState(target, ownerRoot)
+  if (state == null || (!isMachineScopedTarget(target) && state.root !== ownerRoot)) return
 
   const tracked = new Map<number, { fingerprint?: string; label: string }>()
   const resolveFingerprint = (pid: number | undefined, fingerprint: string | undefined) => {
@@ -165,13 +204,13 @@ export const stopManagedState = async (
     serviceFingerprint: state.servicePid == null ? state.serviceFingerprint : tracked.get(state.servicePid)?.fingerprint
   }
   if (state.schemaVersion === 2) {
-    updateDevServiceState(target, stoppingPatch)
+    updateDevServiceState(target, stoppingPatch, ownerRoot)
   } else {
     writeDevServiceState(target, {
       ...state,
       ...stoppingPatch,
       ownerRoot: state.ownerRoot ?? state.root
-    })
+    }, ownerRoot)
   }
 
   try {
@@ -218,7 +257,7 @@ export const stopManagedState = async (
       error: error instanceof Error ? error.message : String(error),
       operation: operation ?? state.operation,
       phase: 'failed'
-    })
+    }, ownerRoot)
     throw error
   }
   updateDevServiceState(target, {
@@ -237,7 +276,7 @@ export const stopManagedState = async (
     serviceFingerprint: undefined,
     serverPid: undefined,
     servicePid: undefined
-  })
+  }, ownerRoot)
 }
 
 export const assertStateCanBeForgotten = async (
@@ -300,13 +339,15 @@ export const assertStateCanBeForgotten = async (
 
 export const forgetStaleManagedState = async (
   target: DevStartTarget,
-  operation?: DevServiceOperation
+  operation?: DevServiceOperation,
+  ownerRoot = repoRoot
 ) => {
   if (isMachineScopedTarget(target)) {
     throw new Error(`Refusing to forget stale state for machine-scoped target ${target}.`)
   }
-  const state = readState(target)
-  if (state == null || state.root !== repoRoot) return
+  registerLegacyDevServiceState(target, ownerRoot)
+  const state = readState(target, ownerRoot)
+  if (state == null || state.root !== ownerRoot) return
   await assertStateCanBeForgotten(target, state)
   // Recheck immediately before the CAS write so a recovering health endpoint
   // or a newly matching process identity cannot be forgotten mid-operation.
@@ -329,7 +370,7 @@ export const forgetStaleManagedState = async (
     serverPid: undefined,
     serviceFingerprint: undefined,
     servicePid: undefined
-  })
+  }, ownerRoot)
   if (updated == null) {
     throw new Error(`Refusing to forget stale state for ${target}: shared state changed during recovery.`)
   }

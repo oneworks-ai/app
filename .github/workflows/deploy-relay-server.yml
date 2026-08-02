@@ -12,6 +12,7 @@ permissions:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   WRANGLER_VERSION: 4.49.0
+  VERCEL_VERSION: 58.4.4
 concurrency:
   group: relay-server-deploy-${{ github.ref }}
   cancel-in-progress: false
@@ -19,7 +20,7 @@ jobs:
   deploy:
     name: deploy-relay-server
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -42,14 +43,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ "${CHECKED_OUT_REF}" != "refs/heads/main" ]; then
-            echo "::error::Relay production promotion must run from the main branch, got ${CHECKED_OUT_REF}."
-            exit 1
-          fi
-          if [ "${APPROVED_SOURCE_SHA}" != "${CHECKED_OUT_SOURCE_SHA}" ]; then
-            echo "::error::Approved source SHA ${APPROVED_SOURCE_SHA} does not match checked out main SHA ${CHECKED_OUT_SOURCE_SHA}."
-            exit 1
-          fi
+          if [ "${CHECKED_OUT_REF}" != "refs/heads/main" ]; then echo "::error::Relay production promotion must run from the main branch, got ${CHECKED_OUT_REF}."; exit 1; fi
+          if [ "${APPROVED_SOURCE_SHA}" != "${CHECKED_OUT_SOURCE_SHA}" ]; then echo "::error::Approved source SHA ${APPROVED_SOURCE_SHA} does not match checked out main SHA ${CHECKED_OUT_SOURCE_SHA}."; exit 1; fi
       - name: Build Relay server deployment artifact
         run: pnpm -C apps/relay-server build:vercel
       - name: Run Relay live smoke against built Admin assets
@@ -75,14 +70,8 @@ jobs:
           [ -n "${GH_TOKEN}" ] && configured=$((configured + 1))
           [ -n "${RELAY_SERVER_DEPLOY_REPOSITORY}" ] && configured=$((configured + 1))
           [ -n "${RELAY_SERVER_DEPLOY_WORKFLOW}" ] && configured=$((configured + 1))
-          if [ "$configured" -eq 0 ]; then
-            echo "external=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if [ "$configured" -eq 3 ]; then
-            echo "external=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+          if [ "$configured" -eq 0 ]; then echo "external=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          if [ "$configured" -eq 3 ]; then echo "external=true" >> "$GITHUB_OUTPUT"; exit 0; fi
           echo "::error::External Relay deployment must configure token, repository, and workflow together."
           exit 1
       - name: Trigger external Relay server deployment
@@ -173,7 +162,19 @@ jobs:
             --branch main \
             --commit-hash "${GITHUB_SHA}" \
             --commit-message "Deploy Relay production ${GITHUB_SHA}"
-      - name: Smoke check Relay production
+      - name: Deploy Relay and Admin to Vercel production
+        if: steps.deployment-target.outputs.external != 'true'
+        env:
+          PROD_TOKEN: ${{ secrets.RELAY_PROD_VERCEL_TOKEN }}
+          PROD_ORG_ID: ${{ secrets.RELAY_PROD_VERCEL_ORG_ID }}
+          PROD_PROJECT_ID: ${{ secrets.RELAY_PROD_VERCEL_PROJECT_ID }}
+          DEV_TOKEN: ${{ secrets.RELAY_DEV_VERCEL_TOKEN }}
+          DEV_ORG_ID: ${{ secrets.RELAY_DEV_VERCEL_ORG_ID }}
+          DEV_PROJECT_ID: ${{ secrets.RELAY_DEV_VERCEL_PROJECT_ID }}
+          EXPLICIT_PROJECT_ID: ${{ vars.RELAY_PROD_VERCEL_PROJECT_ID }}
+          RELAY_PROD_VC_ORIGIN: ${{ vars.RELAY_PROD_VC_ORIGIN }}
+        run: node .github/workflows/scripts/relay-vercel-production.mjs
+      - name: Smoke check Relay Cloudflare production
         env:
           RELAY_PROD_ORIGIN: ${{ vars.RELAY_PROD_ORIGIN }}
           RELAY_PROD_CF_ORIGIN: ${{ vars.RELAY_PROD_CF_ORIGIN }}
