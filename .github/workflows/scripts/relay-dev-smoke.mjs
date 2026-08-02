@@ -7,6 +7,12 @@ const expectedVersion = (
     ''
 ).trim()
 const expectedBuildSha = (process.env.RELAY_EXPECTED_BUILD_SHA ?? '').trim()
+const expectedDeviceApiOrigin = (
+  process.env.RELAY_EXPECTED_DEVICE_API_ORIGIN ??
+    process.env.RELAY_DEV_CF_DEVICE_API_ORIGIN ??
+    process.env.RELAY_PROD_CF_DEVICE_API_ORIGIN ??
+    ''
+).trim().replace(/\/+$/, '')
 const expectedProviders = (
   process.env.RELAY_EXPECTED_SSO_PROVIDERS ??
     process.env.RELAY_DEV_EXPECTED_SSO_PROVIDERS ??
@@ -41,17 +47,55 @@ const fetchJson = async path => {
 }
 
 const health = await fetchJson('/health')
-assert(health.ok === true, `/health did not return ok=true: ${JSON.stringify(health)}`)
-if (expectedVersion !== '') {
-  assert(
-    health.version === expectedVersion,
-    `/health.version should be "${expectedVersion}", got "${String(health.version ?? '')}".`
-  )
+const assertExpectedHealth = (payload, label) => {
+  assert(payload.ok === true, `${label} did not return ok=true: ${JSON.stringify(payload)}`)
+  if (expectedVersion !== '') {
+    assert(
+      payload.version === expectedVersion,
+      `${label}.version should be "${expectedVersion}", got "${String(payload.version ?? '')}".`
+    )
+  }
+  if (expectedBuildSha !== '') {
+    assert(
+      payload.buildSha === expectedBuildSha,
+      `${label}.buildSha should be "${expectedBuildSha}", got "${String(payload.buildSha ?? '')}".`
+    )
+  }
 }
-if (expectedBuildSha !== '') {
+assertExpectedHealth(health, '/health')
+
+let directDeviceHealth
+let deviceTransport
+if (expectedDeviceApiOrigin !== '') {
+  const deviceApiUrl = new URL(`${expectedDeviceApiOrigin}/`)
   assert(
-    health.buildSha === expectedBuildSha,
-    `/health.buildSha should be "${expectedBuildSha}", got "${String(health.buildSha ?? '')}".`
+    deviceApiUrl.protocol === 'https:' && deviceApiUrl.pathname === '/' && deviceApiUrl.search === '' &&
+      deviceApiUrl.hash === '' && deviceApiUrl.username === '' && deviceApiUrl.password === '',
+    'RELAY_EXPECTED_DEVICE_API_ORIGIN must be a credential-free HTTPS origin without a path.'
+  )
+  const directHealthResponse = await fetch(new URL('/health', deviceApiUrl))
+  const directHealthText = await directHealthResponse.text()
+  assert(
+    directHealthResponse.ok,
+    `Direct device /health returned ${directHealthResponse.status}: ${directHealthText.slice(0, 500)}`
+  )
+  directDeviceHealth = JSON.parse(directHealthText)
+  assertExpectedHealth(directDeviceHealth, 'Direct device /health')
+
+  const info = await fetchJson('/api/relay/info')
+  deviceTransport = info.deviceTransport
+  const expectedControlUrl = new URL('/api/relay/devices/control', deviceApiUrl)
+  expectedControlUrl.protocol = 'wss:'
+  assert(deviceTransport?.version === 1, '/api/relay/info did not advertise deviceTransport.version=1.')
+  assert(
+    deviceTransport.apiBaseUrl === deviceApiUrl.toString(),
+    `/api/relay/info device API should be ${deviceApiUrl.toString()}, got ${String(deviceTransport?.apiBaseUrl ?? '')}.`
+  )
+  assert(
+    deviceTransport.controlWebSocketUrl === expectedControlUrl.toString(),
+    `/api/relay/info control WebSocket should be ${expectedControlUrl.toString()}, got ${
+      String(deviceTransport?.controlWebSocketUrl ?? '')
+    }.`
   )
 }
 
@@ -118,6 +162,7 @@ console.log(
     {
       health,
       origin,
+      ...(directDeviceHealth == null ? {} : { directDeviceHealth, deviceTransport }),
       adminAssets: {
         script: adminScript,
         style: adminStyle

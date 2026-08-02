@@ -199,7 +199,7 @@ describe('relay server session forwarding jobs', () => {
     expect(polled.response.status).toBe(200)
     expect(polled.body).toMatchObject({
       jobs: [],
-      nextPollMs: 250
+      nextPollMs: 60_000
     })
   })
 })

@@ -50,10 +50,12 @@ const WORKSPACE_WS_CLOSE_MODE = 'workspace-ws-close'
 const WORKSPACE_WS_OPEN_MODE = 'workspace-ws-open'
 const WORKSPACE_WS_RECEIVE_MODE = 'workspace-ws-receive'
 const WORKSPACE_WS_SEND_MODE = 'workspace-ws-send'
-const SESSION_JOB_LONG_POLL_MAX_MS = 10_000
+const SESSION_JOB_LONG_POLL_MAX_MS = 60_000
 const SESSION_JOB_LONG_POLL_FALLBACK_MS = 1_000
-const SESSION_JOB_EMPTY_NEXT_POLL_MS = 250
+const SESSION_JOB_EMPTY_NEXT_POLL_MS = 60_000
 const sessionForwardingJobEvents = new EventEmitter()
+
+export type ForwardingJobAvailableObserver = (deviceId: string) => void
 
 sessionForwardingJobEvents.setMaxListeners(0)
 
@@ -104,8 +106,12 @@ export const getSessionJobLongPollDeviceId = (req: IncomingMessage, url: URL) =>
 
 const forwardingJobEventName = (deviceId: string) => `forwarding-job:${deviceId}`
 
-const notifyForwardingJobAvailable = (deviceId: string) => {
+const notifyForwardingJobAvailable = (
+  deviceId: string,
+  onForwardingJobAvailable?: ForwardingJobAvailableObserver
+) => {
   sessionForwardingJobEvents.emit(forwardingJobEventName(deviceId))
+  onForwardingJobAvailable?.(deviceId)
 }
 
 const auditActorForListJobsContext = (context: ListJobsContext) => {
@@ -360,7 +366,8 @@ export const handleSubmitJob = async (
   storeRepository: RelayStoreRepository,
   deviceId: string,
   sessionId: string,
-  telemetry?: RelayTelemetry
+  telemetry?: RelayTelemetry,
+  onForwardingJobAvailable?: ForwardingJobAvailableObserver
 ) => {
   const access = requireDeviceAccess(req, res, args, store, deviceId)
   if (access == null) return
@@ -399,7 +406,7 @@ export const handleSubmitJob = async (
   })
   await clearPrunedForwardingJobs(store)
   await persistStore(storeRepository, store)
-  notifyForwardingJobAvailable(deviceId)
+  notifyForwardingJobAvailable(deviceId, onForwardingJobAvailable)
   telemetry?.metrics.recordJobSubmitted({
     deviceId,
     jobId: job.id
@@ -423,7 +430,8 @@ export const handleSubmitWorkspaceRequestJob = async (
   store: RelayStore,
   storeRepository: RelayStoreRepository,
   deviceId: string,
-  telemetry?: RelayTelemetry
+  telemetry?: RelayTelemetry,
+  onForwardingJobAvailable?: ForwardingJobAvailableObserver
 ) => {
   const access = requireDeviceAccess(req, res, args, store, deviceId)
   if (access == null) return
@@ -467,7 +475,7 @@ export const handleSubmitWorkspaceRequestJob = async (
   })
   await clearPrunedForwardingJobs(store)
   await persistStore(storeRepository, store)
-  notifyForwardingJobAvailable(deviceId)
+  notifyForwardingJobAvailable(deviceId, onForwardingJobAvailable)
   telemetry?.metrics.recordJobSubmitted({
     deviceId,
     jobId: job.id

@@ -140,6 +140,50 @@ const findDeviceByToken = (store: RelayStore, token: string) => (
   token === '' ? undefined : store.devices.find(device => deviceTokenMatches(device, token))
 )
 
+/** Shared mutation used by the HTTP route and Cloudflare's pre-authenticated control socket. */
+export const applyDeviceHeartbeat = async (input: {
+  args: RelayServerArgs
+  body: unknown
+  connectionIp?: string
+  device: RelayDevice
+  store: RelayStore
+  storeRepository: RelayStoreRepository
+  telemetry?: RelayTelemetry
+}) => {
+  const { args, body, connectionIp: heartbeatIp, device, store, storeRepository, telemetry } = input
+  const record = isRecord(body) ? body : {}
+  const heartbeatAt = now()
+  device.lastSeenAt = heartbeatAt
+  const metadata = visibleDevicePrivateMetadata(args, device)
+  if (typeof record.deviceName === 'string' && record.deviceName.trim() !== '') {
+    metadata.name = record.deviceName.trim()
+  }
+  if (isRecord(record.capabilities)) metadata.capabilities = record.capabilities
+  const deviceInfo = normalizeDeviceEnvironmentInfo(record.deviceInfo)
+  if (deviceInfo != null) metadata.deviceInfo = { ...metadata.deviceInfo, ...deviceInfo }
+  if (heartbeatIp != null) metadata.lastSeenIp = heartbeatIp
+  if (typeof record.workspaceFolder === 'string') metadata.workspaceFolder = record.workspaceFolder
+  if (typeof record.pluginScope === 'string') metadata.pluginScope = record.pluginScope
+  upsertDeviceManagementServerMetadata(
+    metadata,
+    {
+      ...managementServerInputFromBody(body),
+      ...(heartbeatIp == null ? {} : { lastSeenIp: heartbeatIp })
+    },
+    heartbeatAt
+  )
+  storeEncryptedDevicePrivateMetadata(args, device, metadata)
+  await storeRepository.write(store)
+  const status = deviceStatusFor(device, args)
+  telemetry?.metrics.recordHeartbeat({ deviceId: device.id, status, userId: device.userId })
+  recordRelayTraceEvent(telemetry, 'debug', 'relay.device.heartbeat', {
+    deviceId: device.id,
+    status,
+    userId: device.userId
+  })
+  return { device: redactDevice(device, args, metadata), ok: true }
+}
+
 const userDeviceCount = (store: RelayStore, userId: string) =>
   store.devices.filter(device => device.userId === userId).length
 
@@ -383,47 +427,16 @@ export const handleDeviceHeartbeat = async (
     sendJson(res, 403, { error: 'Permission denied.' }, args.allowOrigin)
     return
   }
-  const heartbeatAt = now()
-  device.lastSeenAt = heartbeatAt
-  const metadata = visibleDevicePrivateMetadata(args, device)
-  if (typeof body.deviceName === 'string' && body.deviceName.trim() !== '') {
-    metadata.name = body.deviceName.trim()
-  }
-  if (isRecord(body.capabilities)) {
-    metadata.capabilities = body.capabilities
-  }
-  const deviceInfo = normalizeDeviceEnvironmentInfo(body.deviceInfo)
-  if (deviceInfo != null) {
-    metadata.deviceInfo = { ...metadata.deviceInfo, ...deviceInfo }
-  }
-  metadata.lastSeenIp = heartbeatIp
-  if (typeof body.workspaceFolder === 'string') {
-    metadata.workspaceFolder = body.workspaceFolder
-  }
-  if (typeof body.pluginScope === 'string') {
-    metadata.pluginScope = body.pluginScope
-  }
-  upsertDeviceManagementServerMetadata(metadata, {
-    ...managementServerInputFromBody(body),
-    lastSeenIp: heartbeatIp
-  }, heartbeatAt)
-  storeEncryptedDevicePrivateMetadata(args, device, metadata)
   device.deviceTokenHash = hashDeviceToken(token)
   delete device.deviceToken
-  await storeRepository.write(store)
-  const status = deviceStatusFor(device, args)
-  telemetry?.metrics.recordHeartbeat({
-    deviceId: device.id,
-    status,
-    userId: device.userId
+  const result = await applyDeviceHeartbeat({
+    args,
+    body,
+    connectionIp: heartbeatIp,
+    device,
+    store,
+    storeRepository,
+    telemetry
   })
-  recordRelayTraceEvent(telemetry, 'debug', 'relay.device.heartbeat', {
-    ...traceContextFromRequest(req),
-    capabilityKeys: Object.keys(metadata.capabilities),
-    deviceId: device.id,
-    pluginScope: metadata.pluginScope,
-    status,
-    userId: device.userId
-  })
-  sendJson(res, 200, { device: redactDevice(device, args, metadata), ok: true }, args.allowOrigin)
+  sendJson(res, 200, result, args.allowOrigin)
 }

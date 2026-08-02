@@ -65,8 +65,14 @@ describe('relay plugin controller', () => {
     }
   })
 
-  it('registers a device with the configured remote relay', async () => {
-    const fetchMock = stubRelayFetch()
+  it('uses discovered device transport without moving public APIs or persisting the transport', async () => {
+    const fetchMock = stubRelayFetch('remote-device-token', {
+      deviceTransport: {
+        apiBaseUrl: 'http://127.0.0.1:1/',
+        controlWebSocketUrl: 'ws://127.0.0.1:1/api/relay/devices/control',
+        version: 1
+      }
+    })
     const { commands, homeDir, projectHome } = await createPluginHarness({
       deviceName: 'Office Mac',
       enableOfficialCloudflareRelay: false,
@@ -84,7 +90,9 @@ describe('relay plugin controller', () => {
     })
 
     const status = await commands.get('connect')?.() as RelayPluginStatus
-    const [, init] = fetchMock.mock.calls[0]
+    const [, init] = fetchMock.mock.calls.find(([url]) => (
+      String(url) === 'http://127.0.0.1:1/api/relay/devices/register'
+    )) ?? []
     const requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>
     const store = await readDeviceStore(projectHome)
     const snapshot = await readConfigSnapshot(projectHome)
@@ -92,7 +100,10 @@ describe('relay plugin controller', () => {
     expect(status.connection.state).toBe('registered')
     expect(status.device.hasToken).toBe(true)
     expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(3)
-    expect(String(fetchMock.mock.calls[0][0])).toBe('https://relay.example/api/relay/devices/register')
+    expect(String(fetchMock.mock.calls[0][0])).toBe('https://relay.example/api/relay/info')
+    expect(fetchMock.mock.calls.some(([url]) => (
+      String(url) === 'http://127.0.0.1:1/api/relay/devices/register'
+    ))).toBe(true)
     expect(fetchMock.mock.calls.some(([url]) => String(url) === 'https://relay.example/api/relay/config/global'))
       .toBe(true)
     expect(fetchMock.mock.calls.some(([url]) => String(url) === 'https://relay.example/api/relay/config-snapshot'))
@@ -134,6 +145,12 @@ describe('relay plugin controller', () => {
     expect(status.storePath).not.toContain(projectHome)
     expect(store).not.toHaveProperty('deviceToken')
     expect(store).not.toHaveProperty('remoteBaseUrl')
+    const persistedServiceInfo = await readFile(
+      join(homeDir, '.oneworks', 'relay', 'service-info-cache.json'),
+      'utf8'
+    )
+    expect(persistedServiceInfo).not.toContain('deviceTransport')
+    expect(persistedServiceInfo).not.toContain('127.0.0.1:1')
     expect(store.servers).toMatchObject({
       prod: {
         account: {

@@ -68,13 +68,16 @@ describe('relay plugin heartbeat', () => {
   it('sends heartbeat metadata to the remote relay', async () => {
     const fetchMock = createHeartbeatFetch()
 
-    const body = await sendHeartbeat(createHeartbeatOptions(fetchMock))
+    const body = await sendHeartbeat({
+      ...createHeartbeatOptions(fetchMock),
+      apiBaseUrl: 'https://worker.example/'
+    })
     const [, init] = fetchMock.mock.calls[0]
     const requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>
 
     expect(body).toEqual({ ok: true })
     expect(fetchMock).toHaveBeenCalledOnce()
-    expect(String(fetchMock.mock.calls[0][0])).toBe('https://relay.example/api/relay/devices/heartbeat')
+    expect(String(fetchMock.mock.calls[0][0])).toBe('https://worker.example/api/relay/devices/heartbeat')
     expect(init?.headers).toMatchObject({
       authorization: 'Bearer device-token',
       'content-type': 'application/json'

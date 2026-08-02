@@ -8,6 +8,7 @@ export interface RelayServerArgs {
   dataPath: string
   defaultLoginMethod?: RelayLoginMethod
   deviceMetadataSecret?: string
+  deviceTransport?: RelayDeviceTransport
   deviceOnlineTtlMs?: number
   email?: RelayEmailConfig
   emailProvider?: RelayEmailProvider
@@ -21,6 +22,14 @@ export interface RelayServerArgs {
   publicBaseUrl?: string
   sessionTtlMs?: number
   storageDriver?: RelayStorageDriver
+}
+
+/** Optional device-only transport. It is deliberately separate from publicBaseUrl:
+ * browser login, OAuth and passkeys always remain on the public origin. */
+export interface RelayDeviceTransport {
+  apiBaseUrl: string
+  controlWebSocketUrl: string
+  version: 1
 }
 
 export type RelayAuthProvider = string

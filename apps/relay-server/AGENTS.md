@@ -22,6 +22,7 @@
 - `src/platform/fetch-handler.ts`：把 Fetch `Request` 适配到现有 Node-style route handler；Cloudflare Worker 入口使用它，不要在 Worker 中重复实现 route。
 - `api/relay.ts`：Vercel Node Function 入口，使用 Postgres driver；Vercel 单项目部署时 `/admin` 由构建脚本复制出的静态 Admin 资源承载，不走这个函数。
 - `cloudflare/worker.ts`：Cloudflare Worker + Durable Object 入口，使用 `cloudflare-do` driver，禁用内嵌 `/admin` 静态页。
+- Cloudflare device control 使用 Durable Object Hibernation WebSocket：固定 endpoint 为 `/api/relay/devices/control`，device id 只放 `x-oneworks-relay-device-id`，token 只放 `Authorization`；socket attachment 的凭据只保存 token hash，另保存设备标识和可选连接 IP 供共享 heartbeat metadata 使用。实例级 job observer 必须从 handler dependency 注入，不得使用 module-global observer。
 - `scripts/prepare-vercel-build.mjs`：`build:vercel` 的最后一步，把 `apps/relay-admin/dist/admin` 复制到 `apps/relay-server/public/admin`，让同一个 Vercel project 同时提供 `/admin` 和 Relay API。
 - `scripts/prepare-vercel-output.mjs`：本地 `vercel build --prebuilt` 后处理，把 pnpm workspace 下的 Postgres 与 WebAuthn runtime package 依赖闭包拷进 `.vercel/output/functions/api/relay.func/node_modules/`；本地 CLI prebuilt 部署前必须跑。
 - `src/telemetry/`：Relay trace 日志。

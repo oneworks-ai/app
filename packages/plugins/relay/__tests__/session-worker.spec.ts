@@ -21,6 +21,33 @@ const waitFor = async (predicate: () => boolean, timeoutMs = 500) => {
 }
 
 describe('relay plugin session worker', () => {
+  it('supports controlled claims without starting a legacy polling timer', async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi.fn<typeof fetch>(
+      async () => new Response(JSON.stringify({ jobs: [] }), { status: 200 })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const abortController = new AbortController()
+    const worker = createRelaySessionWorker({
+      auth: {
+        apiBaseUrl: 'https://worker.example',
+        deviceId: 'device-1',
+        deviceToken: 'device-token',
+        remoteBaseUrl: 'https://relay.example'
+      },
+      autoStart: false
+    })
+
+    await vi.advanceTimersByTimeAsync(24 * 60 * 60_000)
+    expect(fetchMock).not.toHaveBeenCalled()
+    await worker.runOnce({ refreshSnapshot: false, signal: abortController.signal, waitMs: 0 })
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
+      'https://worker.example/api/relay/devices/device-1/session-jobs?status=queued&limit=50&waitMs=0'
+    )
+    expect(fetchMock.mock.calls[0]?.[1]?.signal).toBe(abortController.signal)
+    worker.stop()
+  })
+
   it('pushes snapshots, polls queued jobs, and posts job results', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)

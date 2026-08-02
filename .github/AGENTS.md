@@ -44,7 +44,7 @@ Relay production 通过 `deploy-relay-server.yml` 人工 promotion。外部发�
 - secret: `RELAY_SERVER_DEPLOY_TOKEN`
 - variables: `RELAY_SERVER_DEPLOY_REPOSITORY`、`RELAY_SERVER_DEPLOY_WORKFLOW`
 
-外部目标缺省时，使用完整成对的 `RELAY_PROD_CLOUDFLARE_API_TOKEN` / `RELAY_PROD_CLOUDFLARE_ACCOUNT_ID` 直发 Cloudflare production；迁移期间两项 production secret 都缺省时，才允许回退到完整成对的 dev Cloudflare 凭据；不能跨 production / dev 拼接 token 和 account id。production Worker / Pages / origin 可通过 `RELAY_PROD_CF_WORKER_NAME`、`RELAY_PROD_CF_PAGES_PROJECT`、`RELAY_PROD_CF_ORIGIN` 覆盖。
+外部目标缺省时，使用完整成对的 `RELAY_PROD_CLOUDFLARE_API_TOKEN` / `RELAY_PROD_CLOUDFLARE_ACCOUNT_ID` 直发 Cloudflare production；迁移期间两项 production secret 都缺省时，才允许回退到完整成对的 dev Cloudflare 凭据；不能跨 production / dev 拼接 token 和 account id。production Worker / Pages / origin 可通过 `RELAY_PROD_CF_WORKER_NAME`、`RELAY_PROD_CF_PAGES_PROJECT`、`RELAY_PROD_CF_ORIGIN` 覆盖。`RELAY_PROD_CF_DEVICE_API_ORIGIN` 可把设备 bearer API 指向同一 Worker 的直连 HTTPS origin；workflow 会生成同源 WSS control endpoint，浏览器登录 / OAuth / Passkey 仍使用公开 Pages origin。
 
 同一 manual production promotion 在非 external 接管路径还部署官方 Vercel 单项目 Relay/Admin。优先使用完整 `RELAY_PROD_VERCEL_TOKEN` / `RELAY_PROD_VERCEL_ORG_ID`，两项都缺省时才回退到完整的现有 dev pair；`RELAY_PROD_VERCEL_PROJECT_ID` 可显式指定，否则按精确 `vc.oneworks.cloud` 域名唯一发现项目。常规 dev 部署仍由 Vercel GitHub App 完成，不能把这条 production CLI 路径用于 dev。
 
@@ -56,6 +56,7 @@ Relay production 通过 `deploy-relay-server.yml` 人工 promotion。外部发�
 官方 Relay dev slot：
 
 - Cloudflare dev 需要 `RELAY_DEV_CLOUDFLARE_API_TOKEN`、`RELAY_DEV_CLOUDFLARE_ACCOUNT_ID`。
+- `RELAY_DEV_CF_DEVICE_API_ORIGIN` 可覆盖 dev Worker 的设备直连 HTTPS origin；不得包含 token、userinfo 或路径。
 - Vercel dev 通过 Vercel GitHub App 连接 `oneworks-ai/app` 的 `main` 分支和 `apps/relay-server` root directory；GitHub 侧只配置可选变量 `RELAY_DEV_VC_ORIGIN` 和 smoke 相关变量，不配置 `RELAY_DEV_VERCEL_TOKEN`。
 
 桌面签名需要但当前未配置的 secrets：

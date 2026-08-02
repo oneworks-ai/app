@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 import { createRelayHandler } from '../server.js'
+import type { ForwardingJobAvailableObserver } from '../session-forwarding/job-handlers.js'
 import type { RelayStoreRepository } from '../storage/repository.js'
 import type { RelayTelemetry } from '../telemetry/metrics.js'
 import type { RelayServerArgs } from '../types.js'
@@ -127,12 +128,17 @@ export const createRelayFetchHandler = (
   options: {
     storeRepository: RelayStoreRepository
     telemetry?: RelayTelemetry
+    onForwardingJobAvailable?: ForwardingJobAvailableObserver
   }
 ) => {
-  const handler = createRelayHandler(args, options.telemetry, options.storeRepository)
+  const handler = createRelayHandler(args, options.telemetry, options.storeRepository, {
+    onForwardingJobAvailable: options.onForwardingJobAvailable
+  })
   return async (request: Request) => {
     const body = new Uint8Array(await request.arrayBuffer())
     const response = new RelayFetchServerResponse()
+    const responsePromise = response.toResponse()
+    void responsePromise.catch(() => undefined)
     const incomingMessage = new RelayFetchIncomingMessage(request, body, () => {
       const error = new Error('Request aborted.')
       error.name = 'AbortError'
@@ -140,16 +146,31 @@ export const createRelayFetchHandler = (
     })
     const req = incomingMessage as unknown as IncomingMessage
     const res = response as unknown as ServerResponse
-    void handler(req, res).catch(error => {
+    let lateHandlerError: unknown
+    const handlerPromise = handler(req, res).catch(error => {
       if (response.headersSent) {
-        response.destroy(error instanceof Error ? error : new Error(String(error)))
+        lateHandlerError = error
         return
       }
       response.writeHead(500, { 'content-type': 'application/json; charset=utf-8' })
       response.end(`${JSON.stringify({ error: error instanceof Error ? error.message : String(error) })}\n`)
     })
     try {
-      return await response.toResponse()
+      await handlerPromise
+      if (lateHandlerError != null) {
+        return new Response(
+          `${
+            JSON.stringify({
+              error: lateHandlerError instanceof Error ? lateHandlerError.message : String(lateHandlerError)
+            })
+          }\n`,
+          {
+            headers: { 'content-type': 'application/json; charset=utf-8' },
+            status: 500
+          }
+        )
+      }
+      return await responsePromise
     } finally {
       incomingMessage.dispose()
     }

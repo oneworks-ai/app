@@ -278,7 +278,10 @@ export const createRelayConfigSnapshotFixture = () => ({
   version: 'snapshot-v1'
 })
 
-export const stubRelayFetch = (deviceToken = 'remote-device-token') => {
+export const stubRelayFetch = (
+  deviceToken = 'remote-device-token',
+  options: { deviceTransport?: Record<string, unknown> } = {}
+) => {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
     const url = String(input)
     const body = url.endsWith('/api/relay/config-snapshot')
@@ -286,6 +289,7 @@ export const stubRelayFetch = (deviceToken = 'remote-device-token') => {
       : url.endsWith('/api/relay/info')
       ? {
         avatarUrl: 'https://cdn.example.com/relay.png',
+        ...(options.deviceTransport == null ? {} : { deviceTransport: options.deviceTransport }),
         name: 'Example Relay'
       }
       : url.endsWith('/api/relay/config/global')

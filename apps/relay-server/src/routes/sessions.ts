@@ -10,6 +10,7 @@ import {
   handleSubmitWorkspaceRequestJob,
   handleUpdateJobStatus
 } from '../session-forwarding/job-handlers.js'
+import type { ForwardingJobAvailableObserver } from '../session-forwarding/job-handlers.js'
 import { handleListSessions, handleSnapshotUpdate } from '../session-forwarding/session-handlers.js'
 import type { RelayStoreRepository } from '../storage/repository.js'
 import type { RelayTelemetry } from '../telemetry/metrics.js'
@@ -26,7 +27,8 @@ export const handleRelaySessionsRoute = async (
   store: RelayStore,
   storeRepository: RelayStoreRepository,
   url: URL,
-  telemetry?: RelayTelemetry
+  telemetry?: RelayTelemetry,
+  onForwardingJobAvailable?: ForwardingJobAvailableObserver
 ) => {
   const deviceSessionsMatch = /^\/api\/relay\/devices\/([^/]+)\/sessions$/.exec(url.pathname)
   if (deviceSessionsMatch != null) {
@@ -60,7 +62,8 @@ export const handleRelaySessionsRoute = async (
         storeRepository,
         decodeSegment(submitMatch[1]),
         decodeSegment(submitMatch[2]),
-        telemetry
+        telemetry,
+        onForwardingJobAvailable
       )
       return true
     }
@@ -78,7 +81,8 @@ export const handleRelaySessionsRoute = async (
         store,
         storeRepository,
         decodeSegment(workspaceRequestMatch[1]),
-        telemetry
+        telemetry,
+        onForwardingJobAvailable
       )
       return true
     }
