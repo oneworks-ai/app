@@ -22,7 +22,7 @@ Vercel direct deploy 优先读取完整 pair：
 - `RELAY_PROD_VERCEL_TOKEN`
 - `RELAY_PROD_VERCEL_ORG_ID`
 
-迁移期间 production pair 两项都缺省时，才允许回退到完整的 `RELAY_DEV_VERCEL_TOKEN` / `RELAY_DEV_VERCEL_ORG_ID`。不能跨 production / dev 拼接 token 和 org id。项目 ID 可通过 `RELAY_PROD_VERCEL_PROJECT_ID` secret 或 repository variable 明确配置；未配置时，workflow 用当前选定 token / org 查询 Vercel API，并且只在精确 `vc.oneworks.cloud` 域名命中唯一项目时继续。token、org 和项目 ID 都须在 Actions 日志中 mask，不能写入 artifact。
+迁移期间 production pair 两项都缺省时，才允许回退到完整的 `RELAY_DEV_VERCEL_TOKEN` / `RELAY_DEV_VERCEL_ORG_ID`，并可使用同一 pair 的 `RELAY_DEV_VERCEL_PROJECT_ID`；不能跨 production / dev 拼接 token、org 或 project。项目 ID 可通过 `RELAY_PROD_VERCEL_PROJECT_ID` secret 或 repository variable 明确配置；未配置时，workflow 用当前选定 token / org 查询 Vercel API，并且只在精确 `vc.oneworks.cloud` 域名命中唯一项目时继续。token、org 和项目 ID 都须在 Actions 日志中 mask，不能写入 artifact。
 
 Vercel 使用固定 CLI `58.4.4`，在 `apps/relay-server` 依次执行 `vercel pull --environment=production`、`vercel build --prod`、`pnpm prepare:vercel-output`、`vercel deploy --prebuilt --prod`。deploy 的 runtime `--env` 写入 `ONEWORKS_RELAY_BUILD_SHA=$GITHUB_SHA`，随后 smoke 必须核对 `https://vc.oneworks.cloud/health` 的 version 和精确 build SHA。常规 dev slot 仍由 Vercel GitHub App 发布；此 CLI 路径只用于 manual production promotion。
 

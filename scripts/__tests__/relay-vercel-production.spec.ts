@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { chooseCredentials, findProjectId } from '../../.github/workflows/scripts/relay-vercel-production.mjs'
+import {
+  chooseCredentials,
+  findProjectId,
+  selectProjectCandidate
+} from '../../.github/workflows/scripts/relay-vercel-production.mjs'
 
 describe('findProjectId', () => {
   it('paginates projects and requires the exact production domain once', async () => {
@@ -37,5 +41,26 @@ describe('findProjectId', () => {
   it('requires atomic credential pairs', () => {
     expect(() => chooseCredentials({ PROD_TOKEN: 'token' })).toThrow('configured together')
     expect(() => chooseCredentials({ DEV_TOKEN: 'token' })).toThrow('fallback are incomplete')
+  })
+
+  it('does not select a dev project id on the production path', () => {
+    expect(selectProjectCandidate({ DEV_PROJECT_ID: 'dev-project' }, false)).toBeUndefined()
+  })
+
+  it('selects a dev project id only on the dev fallback path', () => {
+    expect(selectProjectCandidate({ DEV_PROJECT_ID: 'dev-project' }, true)).toBe('dev-project')
+  })
+
+  it('prioritizes production secret then production variable', () => {
+    expect(
+      selectProjectCandidate({
+        EXPLICIT_PROJECT_ID: 'prod-variable',
+        PROD_PROJECT_ID: 'prod-secret',
+        DEV_PROJECT_ID: 'dev'
+      }, true)
+    ).toBe('prod-secret')
+    expect(selectProjectCandidate({ EXPLICIT_PROJECT_ID: 'prod-variable', DEV_PROJECT_ID: 'dev' }, true)).toBe(
+      'prod-variable'
+    )
   })
 })

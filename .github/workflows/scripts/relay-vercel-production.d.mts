@@ -11,3 +11,7 @@ export interface VercelProjectLookup {
 
 export function chooseCredentials(env: Record<string, string | undefined>): [string, string]
 export function findProjectId(input: VercelProjectLookup): Promise<string>
+export function selectProjectCandidate(
+  env: Record<string, string | undefined>,
+  usingDevFallback: boolean
+): string | undefined
