@@ -4,8 +4,14 @@ import { join } from 'node:path'
 import process from 'node:process'
 
 const workspace = process.env.GITHUB_WORKSPACE ?? process.cwd()
-const relayDir = join(workspace, 'apps/relay-server')
-const vercelDir = join(relayDir, '.vercel')
+
+export function getVercelLayout(workspaceRoot) {
+  const relayDir = join(workspaceRoot, 'apps/relay-server')
+  const linkDir = join(workspaceRoot, '.vercel')
+  return { linkDir, outputDir: join(linkDir, 'output'), relayDir, relayLinkDir: join(relayDir, '.vercel') }
+}
+
+const { linkDir: workspaceVercelDir, outputDir, relayDir, relayLinkDir: vercelDir } = getVercelLayout(workspace)
 
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -114,7 +120,9 @@ async function main() {
   process.env.VERCEL_PROJECT_ID = projectId
   try {
     await mkdir(vercelDir, { recursive: true })
-    await writeFile(join(vercelDir, 'project.json'), JSON.stringify({ orgId, projectId }))
+    await mkdir(workspaceVercelDir, { recursive: true })
+    await writeFile(join(workspaceVercelDir, 'project.json'), JSON.stringify({ orgId, projectId }))
+    const vercelOptions = { cwd: workspace }
     await run('pnpm', [
       'dlx',
       `vercel@${process.env.VERCEL_VERSION}`,
@@ -123,8 +131,13 @@ async function main() {
       '--yes',
       '--token',
       token
-    ])
-    await run('pnpm', ['dlx', `vercel@${process.env.VERCEL_VERSION}`, 'build', '--prod', '--yes', '--token', token])
+    ], vercelOptions)
+    await run(
+      'pnpm',
+      ['dlx', `vercel@${process.env.VERCEL_VERSION}`, 'build', '--prod', '--yes', '--token', token],
+      vercelOptions
+    )
+    process.env.VERCEL_OUTPUT_DIR = outputDir
     await run('pnpm', ['prepare:vercel-output'])
     await run('pnpm', [
       'dlx',
@@ -137,10 +150,11 @@ async function main() {
       token,
       '--env',
       `ONEWORKS_RELAY_BUILD_SHA=${process.env.GITHUB_SHA}`
-    ])
+    ], vercelOptions)
     await smoke()
   } finally {
     await rm(vercelDir, { force: true, recursive: true })
+    await rm(workspaceVercelDir, { force: true, recursive: true })
   }
 }
 

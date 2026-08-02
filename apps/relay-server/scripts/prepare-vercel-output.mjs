@@ -1,10 +1,12 @@
 import { access, cp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
+import process from 'node:process'
 
 const require = createRequire(import.meta.url)
 const root = join(import.meta.dirname, '..')
-const functionRoot = join(root, '.vercel/output/functions/api/relay.func')
+const outputRoot = process.env.VERCEL_OUTPUT_DIR ?? join(root, '.vercel/output')
+const functionRoot = join(outputRoot, 'functions/api/relay.func')
 const functionNodeModules = join(functionRoot, 'node_modules')
 const functionConfigPath = join(functionRoot, '.vc-config.json')
 const runtimePackages = ['postgres', '@simplewebauthn/server']
