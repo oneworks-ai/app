@@ -786,30 +786,35 @@ export class ChromeExtensionBridge {
   }
 
   async start() {
-    await Promise.all([
-      this.#loadPairingState(),
-      this.#loadConfiguredAdvancedAccess(),
-      this.#loadWebsitePermissions()
-    ])
-    this.#server = createServer((request, response) => {
-      void this.#handleRequest(request, response)
-    })
-    await new Promise<void>((resolveStart, rejectStart) => {
-      this.#server?.once('error', rejectStart)
-      this.#server?.listen(0, '127.0.0.1', () => resolveStart())
-    })
-    const address = this.#server.address()
-    if (address == null || typeof address === 'string') throw new Error('Chrome bridge did not bind a TCP port.')
-    this.#url = `http://127.0.0.1:${address.port}`
-    await this.#writeCredential()
-    this.#credentialTimer = setInterval(() => {
-      void this.#writeCredential().catch(error =>
-        this.options.logger.warn({ error }, '[chrome-driver] failed to refresh bridge credentials')
-      )
-    }, 2_000)
-    this.#credentialTimer.unref?.()
-    this.options.logger.info({ url: this.#url }, '[chrome-driver] bridge ready')
-    return { url: this.#url }
+    try {
+      await Promise.all([
+        this.#loadPairingState(),
+        this.#loadConfiguredAdvancedAccess(),
+        this.#loadWebsitePermissions()
+      ])
+      this.#server = createServer((request, response) => {
+        void this.#handleRequest(request, response)
+      })
+      await new Promise<void>((resolveStart, rejectStart) => {
+        this.#server?.once('error', rejectStart)
+        this.#server?.listen(0, '127.0.0.1', () => resolveStart())
+      })
+      const address = this.#server.address()
+      if (address == null || typeof address === 'string') throw new Error('Chrome bridge did not bind a TCP port.')
+      this.#url = `http://127.0.0.1:${address.port}`
+      await this.#writeCredential('startup')
+      this.#credentialTimer = setInterval(() => {
+        void this.#writeCredential().catch(error =>
+          this.options.logger.warn({ error }, '[chrome-driver] failed to refresh bridge credentials')
+        )
+      }, 2_000)
+      this.#credentialTimer.unref?.()
+      this.options.logger.info({ url: this.#url }, '[chrome-driver] bridge ready')
+      return { url: this.#url }
+    } catch (error) {
+      await this.dispose()
+      throw error
+    }
   }
 
   async dispose() {
@@ -2040,16 +2045,20 @@ export class ChromeExtensionBridge {
     await chmod(this.persistentStatePath, 0o600)
   }
 
-  async #writeCredential(reason: 'pairing' | 'refresh' = 'refresh') {
+  async #writeCredential(reason: 'pairing' | 'refresh' | 'startup' = 'refresh') {
     if (this.#url == null) return
     await mkdir(dirname(this.credentialPath), { recursive: true, mode: 0o700 })
     await chmod(dirname(this.credentialPath), 0o700)
+    let currentCredential: CredentialFile | undefined
     try {
       const current = JSON.parse(await readFile(this.credentialPath, 'utf8')) as CredentialFile
+      currentCredential = current
       if (current.controlToken !== this.controlToken && processIsAlive(current.pid)) {
-        const sameProcessPairingRollover = current.pid === process.pid &&
-          current.runtimeRole === (this.options.runtimeRole ?? 'workspace') && reason === 'pairing'
+        const sameProcessSameRole = current.pid === process.pid &&
+          current.runtimeRole === (this.options.runtimeRole ?? 'workspace')
+        const sameProcessPairingRollover = sameProcessSameRole && reason === 'pairing'
         if (!sameProcessPairingRollover && Number(current.leaseUntil) > Date.now()) return
+        if (sameProcessSameRole && reason === 'refresh') return
         if (
           !sameProcessPairingRollover &&
           (this.options.runtimeRole ?? 'workspace') === 'manager' &&
@@ -2064,20 +2073,20 @@ export class ChromeExtensionBridge {
         ? Date.now() + 5_000
         : 0
     const leaseUntil = Math.max(this.#credentialClaimUntil, activeLease)
+    const credential = {
+      baseUrl: this.#url,
+      controlToken: this.controlToken,
+      ...(leaseUntil > Date.now() ? { leaseUntil } : {}),
+      pid: process.pid,
+      protocolVersion: PROTOCOL_VERSION,
+      runtimeRole: this.options.runtimeRole ?? 'workspace',
+      workspaceFolder: resolve(this.options.workspaceFolder)
+    }
+    if (currentCredential != null && JSON.stringify(currentCredential) === JSON.stringify(credential)) return
     const temporaryPath = `${this.credentialPath}.${process.pid}.${randomUUID()}.tmp`
     await writeFile(
       temporaryPath,
-      `${
-        JSON.stringify({
-          baseUrl: this.#url,
-          controlToken: this.controlToken,
-          ...(leaseUntil > Date.now() ? { leaseUntil } : {}),
-          pid: process.pid,
-          protocolVersion: PROTOCOL_VERSION,
-          runtimeRole: this.options.runtimeRole ?? 'workspace',
-          workspaceFolder: resolve(this.options.workspaceFolder)
-        })
-      }\n`,
+      `${JSON.stringify(credential)}\n`,
       { mode: 0o600 }
     )
     await rename(temporaryPath, this.credentialPath)
