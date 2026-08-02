@@ -128,7 +128,11 @@ async function main() {
   try {
     await mkdir(buildLinkDir, { recursive: true })
     await mkdir(deployLinkDir, { recursive: true })
-    await writeFile(join(deployLinkDir, 'project.json'), JSON.stringify({ orgId, projectId }))
+    const projectJson = JSON.stringify({ orgId, projectId })
+    await Promise.all([
+      writeFile(join(buildLinkDir, 'project.json'), projectJson),
+      writeFile(join(deployLinkDir, 'project.json'), projectJson)
+    ])
     await run('pnpm', [
       'dlx',
       `vercel@${process.env.VERCEL_VERSION}`,

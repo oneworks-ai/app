@@ -4,6 +4,4 @@
 - Add an independently updateable model-provider catalog target and load its active package after restart, falling back to the bundled catalog when a managed package is missing or incompatible.
 - Discover models through providers' official OpenAI-compatible `/models` APIs when supported, merge explicit local models, and use credential- and profile-scoped last-known caches only for network or service outages.
 - Import external Codex and Claude Code sessions into canonical project history while preserving source metadata and usage records.
-# Relay Server
-
 - Fix manual Vercel production promotion for projects whose `rootDirectory` is `apps/relay-server` by separating build and deploy prebuilt-output links.
