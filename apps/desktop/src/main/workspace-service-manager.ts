@@ -218,7 +218,7 @@ export const createWorkspaceServiceManager = ({
     }
 
     service.stopping = true
-    void killChildProcess(service.serverProcess)
+    void killChildProcess(service.serverProcess, { killProcessGroup: true })
       .catch(error =>
         console.error(`[oneworks-server] failed to stop ${service.displayName} after process exit`, error)
       )
@@ -253,7 +253,7 @@ export const createWorkspaceServiceManager = ({
     refreshAppMenu()
 
     service.stopPromise = (async () => {
-      await killChildProcess(service.serverProcess)
+      await killChildProcess(service.serverProcess, { killProcessGroup: true })
       if (isChildProcessRunning(service.serverProcess)) {
         service.stopping = false
         service.status = 'ready'
@@ -320,6 +320,7 @@ export const createWorkspaceServiceManager = ({
       }
       const child = spawn(serverExecutable, [serverChildPath], {
         cwd: workspaceFolder,
+        detached: process.platform !== 'win32',
         env: {
           ...packagedWorkspaceRuntimeEnv,
           DB_PATH: workspaceServiceDataPaths.dbPath,
@@ -340,9 +341,10 @@ export const createWorkspaceServiceManager = ({
           __ONEWORKS_PROJECT_SERVER_PORT__: String(port),
           __ONEWORKS_PROJECT_SERVER_ALLOW_CORS__: desktopClientOrigin == null ? 'false' : 'true',
           __ONEWORKS_PROJECT_SERVER_CORS_ORIGIN__: desktopClientOrigin ?? '',
-          __ONEWORKS_PROJECT_WEB_AUTH_ENABLED__: 'false'
+          __ONEWORKS_PROJECT_WEB_AUTH_ENABLED__: 'false',
+          __ONEWORKS_DESKTOP_SERVER_OWNER_CHANNEL__: 'ipc-v1'
         },
-        stdio: ['ignore', 'pipe', 'pipe']
+        stdio: ['ignore', 'pipe', 'pipe', 'ipc']
       })
 
       service.port = port
@@ -387,9 +389,16 @@ export const createWorkspaceServiceManager = ({
     return await resolveWorkspaceServiceStartup(service)
   }
 
+  const stopAllWorkspaceServices = async () => {
+    await Promise.all([...runtimeState.services.values()].map(async service => {
+      await stopWorkspaceService(service)
+    }))
+  }
+
   return {
     ensureWorkspaceService,
     getWorkspaceServiceDataPaths,
+    stopAllWorkspaceServices,
     stopWorkspaceService
   }
 }

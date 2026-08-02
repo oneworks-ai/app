@@ -30,6 +30,8 @@ pnpm --silent tools dev-service events <target> --limit 20 --json
 pnpm --silent tools dev-service logs <target> --limit 80 --json
 pnpm --silent tools dev-service restart <target> --json
 pnpm --silent tools dev-service stop <target> --json
+pnpm --silent tools dev-service stop <target> --owner-root <deleted-worktree-path> --json
+pnpm --silent tools dev-service events <target> --owner-root <deleted-worktree-path> --limit 20 --json
 ```
 
 旧 `dev-start` 入口只保留兼容，不再作为 agent 文档中的操作路径。查询不得触发启动；正常生命周期操作不得绕过 CLI 手工执行 `ps`、`kill`、端口探测或 target 私有命令。`stop` 无论服务 phase 如何都必须逐次取得用户对该 target 的显式授权；父会话或运维 agent 不得把“服务不健康”推定为停止或重启授权。worktree-local target 的 `restart` 可以使用下述当前任务授权租约；机器级共享的 `electron`、`electron-workspace`、`android-emulator` 仍须逐次授权。
@@ -62,11 +64,11 @@ restartAuthorization:
 
 agent 不共享聊天记录，通过三个本地事实层交接：
 
-1. **状态快照**：`.logs/dev-start-<target>.json`。包含 `schemaVersion`、`revision`、`generation`、`phase`、`operation`、URLs、顶层 PID 和 `components[]`；受管进程同时记录启动指纹，component 记录独立 PID、端口、URL、health URL 与 target 日志路径。schema v2 只有在 `phase=ready`、至少一个受管 component 且所有 PID/指纹/health 均匹配时才可复用，不能只凭端口 URL 判定。状态条件写在跨进程 mutation lock 内按 revision / generation / phase 原子校验，旧 generation 不得覆盖新状态。
-2. **操作租约**：`.logs/dev-start-<resource>.operation.lock/owner.json`。同一 target 或共享底层资源的 `ensure`、`restart`、`stop` 串行执行；`web` / `daemon` 共享 manager 资源租约，`electron` / `electron-workspace` 共享机器级单实例租约。owner 包含 operation id、actor、target、resource key、PID、进程指纹和开始时间；只读状态只把 PID 与指纹仍匹配的 owner 视为活跃。macOS / Linux 使用随 holder 进程退出自动释放的内核文件锁，平台 fallback 使用 heartbeat stale lock；holder 意外退出时所属 CLI 立即失败关闭，不能在丢锁后继续变更。
+1. **状态快照**：worktree-local target 的权威快照保存在 `.oneworks/dev-service/worktrees/<owner-hash>/dev-start-<target>.json`，并在 owner 存在时同步镜像到 `.logs/dev-start-<target>.json` 供旧工具和人工读取。快照包含 owner root、`schemaVersion`、`revision`、`generation`、`phase`、`operation`、URLs、顶层 PID 和 `components[]`；受管进程同时记录启动指纹，component 记录独立 PID、端口、URL、health URL 与 target 日志路径。schema v2 只有在 `phase=ready`、至少一个受管 component 且所有 PID/指纹/health 均匹配时才可复用，不能只凭端口 URL 判定。状态条件写在跨进程 mutation lock 内按 revision / generation / phase 原子校验，旧 generation 不得覆盖新状态。
+2. **操作租约**：worktree-local target 的租约也保存在同一机器级 owner 目录，避免 worktree 删除后失去互斥和认领信息。同一 target 或共享底层资源的 `ensure`、`restart`、`stop` 串行执行；`web` / `daemon` 共享 manager 资源租约，`electron` / `electron-workspace` 共享机器级单实例租约。owner 包含 operation id、actor、target、resource key、PID、进程指纹和开始时间；只读状态只把 PID 与指纹仍匹配的 owner 视为活跃。macOS / Linux 使用随 holder 进程退出自动释放的内核文件锁，平台 fallback 使用 heartbeat stale lock；holder 意外退出时所属 CLI 立即失败关闭，不能在丢锁后继续变更。
 3. **事件记录**：`.logs/dev-start-<target>.events.jsonl`。按行记录 operation 的 `started / completed / failed`，用于新会话理解最近发生了什么。读取时逐行容错，崩溃留下的坏尾行不会抹掉其余有效历史。actor 优先使用 `CODEX_THREAD_ID`，不会写入聊天正文。
 
-快照回答“现在是什么”，事件回答“刚才发生了什么”，租约回答“谁正在修改”。日志只用于失败证据，不是状态源；`logs <target>` 只接受 target 目录内、文件名属于该 target 且 realpath 未越界的有限尾部，并在交给 agent 前遮蔽常见 token、密码、账号、Authorization 与连接串模式；非结构化敏感正文无法仅靠模式匹配可靠识别，运维 agent 发现后必须从 handoff 省略并报告脱敏风险。状态、事件和日志默认限定在当前 worktree 的 `.logs/`；另一个 worktree 必须读取自己的状态文档。
+快照回答“现在是什么”，事件回答“刚才发生了什么”，租约回答“谁正在修改”。日志只用于失败证据，不是状态源；`logs <target>` 只接受 target 目录内、文件名属于该 target 且 realpath 未越界的有限尾部，并在交给 agent 前遮蔽常见 token、密码、账号、Authorization 与连接串模式；非结构化敏感正文无法仅靠模式匹配可靠识别，运维 agent 发现后必须从 handoff 省略并报告脱敏风险。日志和正常事件仍限定在 owner worktree 的 `.logs/`；另一个仍存在的 worktree 必须读取自己的本地日志。若 owner 目录已经不存在但登记指纹对应的进程仍存活，`status` 会在 `orphanedServices` 中标记 `orphaned: true`；取得该 target 的显式 stop 授权后，使用登记的 `state.root` 执行 `stop <target> --owner-root <path>`，CLI 只按 PID 与启动指纹精确终止并把最终事件留在机器级 owner 目录，不得手工杀 PID。
 
 `android-emulator` 与 Electron 是例外的机器级共享资源：它们的状态、租约、事件与日志统一保存在用户目录 `.oneworks/dev-service/`。Android 快照记录 owner worktree、generation、AVD、serial、PID 与进程指纹；launcher registry 记录 AVD、PID、进程指纹、`coordination` 和 `ownerRoot`。由 dev-service 调用时 registry 标记 `coordination: "dev-service"` 并写入 owner worktree；直接启动内部 launcher 只属于前台诊断，但也必须经过同一个机器级 kernel guard，新进程 registry 标记 `coordination: "uncoordinated"`、`ownerRoot: null`。直接复用已由 dev-service 协调的 emulator 时必须保留原 owner，不能覆写为 uncoordinated；直接 `--restart` 必须拒绝，由统一 CLI 在完整 operation lease 和显式授权下执行。复用和停止前分别核对 AVD command / serial / 进程身份；`electron` 与 `electron-workspace` 的全局快照记录 owner worktree 和 launch identity，并共享单实例租约。切换 AVD、Electron mode 或 workspace 前必须按显式授权走统一停止 / 重启流程。
 
@@ -86,6 +88,7 @@ agent 不共享聊天记录，通过三个本地事实层交接：
 - 同一 worktree 的生命周期 mutation 经过 worktree lifecycle lock 整体串行，保证 fetch / pull / install / submodule / build 与启动交付处于同一源码一致性边界；只读 status/events/logs 仍可并行。首次运行缺少 TS register 时，`run-tools` 在加载主协议前使用独立的 worktree bootstrap guard（macOS / Linux 为内核锁，其他平台为 owner-PID/token fallback）只在锁内二次检查并按需安装依赖，释放后才执行实际 CLI；JSON 模式抑制安装器原始 stderr，失败返回统一 error envelope。资源级租约进一步约束共享 owner：`web` / `daemon` 共享 manager owner，`electron` / `electron-workspace` 受机器级单实例互斥，`android-emulator` 受机器级全局协调。跨 worktree 的机器级 target 仍必须等待其全局资源租约。
 - `ensure` 只幂等复用健康、身份相符的服务或占用空槽启动。遇到已有 live PID、failed / stale / partially-started 状态或不同 launch identity 时必须拒绝并要求有效的 stop 单次授权或 restart 单次 / 当前任务授权租约；不能仅因加载改动或恢复异常自行替换。仅本次 ensure 新建的 generation 启动失败时允许自动回滚该 generation。
 - `stop` / `restart` 会记录 `stopping` 和最终 `stopped` / `ready` phase；停止后保留不含活动 PID 的快照，便于后续会话交接。
+- 删除 worktree 前必须先查询其登记状态；发现仍有活动服务时明确报告并取得逐 target 的 stop 授权。不得把删除目录当成停止授权，也不得静默留下无法认领的进程。
 - 后台 component 非预期退出时，当前 generation 写入 `failed`；旧 generation 不得覆盖新状态。
 - schema v1 快照不直接复用；显式 stop 只在进程 cwd 仍属于记录的 repo root 时临时采纳 fingerprint 并清理，否则失败关闭，避免 PID 复用误杀。
 - 停止 `desktop-control` 时必须先终止 bridge 记录的 Electron sessions，再关闭 HTTP server；不能留下失去 owner 的 detached Electron。

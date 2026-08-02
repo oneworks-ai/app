@@ -130,6 +130,9 @@ export const createManagerServiceManager = ({
     service.status = 'stopped'
     service.stopPromise = undefined
 
+    void killChildProcess(service.serverProcess, { killProcessGroup: true })
+      .catch(error => console.error('[oneworks-server:manager] failed to stop server process group', error))
+
     if (service.stopping || getIsQuitting()) {
       return
     }
@@ -149,7 +152,7 @@ export const createManagerServiceManager = ({
     service.stopping = true
     service.status = 'stopping'
     service.stopPromise = (async () => {
-      await killChildProcess(service.serverProcess)
+      await killChildProcess(service.serverProcess, { killProcessGroup: true })
       if (isChildProcessRunning(service.serverProcess)) {
         service.stopping = false
         service.status = 'ready'
@@ -204,8 +207,12 @@ export const createManagerServiceManager = ({
       )
       const child = spawn(serverExecutable, [serverChildPath, '--manager'], {
         cwd: launchCwd,
-        env: runtimeEnv,
-        stdio: ['ignore', 'pipe', 'pipe']
+        detached: process.platform !== 'win32',
+        env: {
+          ...runtimeEnv,
+          __ONEWORKS_DESKTOP_SERVER_OWNER_CHANNEL__: 'ipc-v1'
+        },
+        stdio: ['ignore', 'pipe', 'pipe', 'ipc']
       })
 
       service.serverProcess = child

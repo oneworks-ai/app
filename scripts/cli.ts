@@ -308,11 +308,16 @@ export const createScriptsCli = (inputDeps: Partial<ScriptsCliDeps> = {}) => {
     .description('Stop one managed development target')
     .option('--forget-stale', 'Forget only disproven, unhealthy process state without sending signals', false)
     .option('--json', 'Print the resulting shared status document', false)
-    .action(async (target: string | undefined, options: { forgetStale?: boolean; json?: boolean }) => {
+    .option('--owner-root <path>', 'Select an exact registered worktree owner, including a deleted path')
+    .action(async (
+      target: string | undefined,
+      options: { forgetStale?: boolean; json?: boolean; ownerRoot?: string }
+    ) => {
       await deps.runDevService({
         action: 'stop',
         forgetStale: options.forgetStale ?? false,
         json: options.json ?? false,
+        ...(options.ownerRoot == null ? {} : { ownerRoot: options.ownerRoot }),
         target: parseDevStartTarget(target)
       })
     })
@@ -321,16 +326,18 @@ export const createScriptsCli = (inputDeps: Partial<ScriptsCliDeps> = {}) => {
     .command('status [target]')
     .description('Read shared service state and active operation leases without starting services')
     .option('--json', 'Print the machine-readable shared status document', false)
-    .action(async (target: string | undefined, options: { json?: boolean }) => {
+    .option('--owner-root <path>', 'Select an exact registered worktree owner, including a deleted path')
+    .action(async (target: string | undefined, options: { json?: boolean; ownerRoot?: string }) => {
       await deps.runDevService({
         action: 'status',
         json: options.json ?? false,
+        ...(options.ownerRoot == null ? {} : { ownerRoot: options.ownerRoot }),
         target: target == null ? undefined : parseDevStartTarget(target)
       })
     })
 
   for (const action of ['logs', 'events'] as const) {
-    devServiceCommand
+    const command = devServiceCommand
       .command(`${action} <target>`)
       .description(action === 'logs' ? 'Read a bounded manager log tail' : 'Read bounded service operation events')
       .option(
@@ -340,14 +347,21 @@ export const createScriptsCli = (inputDeps: Partial<ScriptsCliDeps> = {}) => {
         80
       )
       .option('--json', 'Print machine-readable output', false)
-      .action(async (target: string, options: { json?: boolean; limit: number }) => {
-        await deps.runDevService({
-          action,
-          json: options.json ?? false,
-          limit: options.limit,
-          target: parseDevStartTarget(target)
-        })
+    if (action === 'events') {
+      command.option('--owner-root <path>', 'Select an exact registered worktree owner, including a deleted path')
+    }
+    command.action(async (
+      target: string,
+      options: { json?: boolean; limit: number; ownerRoot?: string }
+    ) => {
+      await deps.runDevService({
+        action,
+        json: options.json ?? false,
+        limit: options.limit,
+        ...(options.ownerRoot == null ? {} : { ownerRoot: options.ownerRoot }),
+        target: parseDevStartTarget(target)
       })
+    })
   }
 
   const adapterE2ECommand = program

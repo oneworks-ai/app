@@ -4,6 +4,9 @@ const path = require('node:path')
 const startedAt = Date.now()
 process.env.__ONEWORKS_DESKTOP_SERVER_CHILD_STARTED_AT__ = String(startedAt)
 
+const { installDesktopServerOwnerChannel } = require('./server-owner-channel.cjs')
+installDesktopServerOwnerChannel()
+
 const logServerChildStartup = (message) => {
   process.stdout.write(`[oneworks-server-child] ${message} elapsed=${Date.now() - startedAt}ms\n`)
 }

@@ -80,6 +80,56 @@ describe('scripts cli', () => {
     })
   })
 
+  it('selects an orphaned worktree service by its registered owner root', async () => {
+    const runDevService = vi.fn(async () => undefined)
+    const cli = createScriptsCli({ runDevService })
+
+    await cli.parseAsync([
+      'node',
+      'oneworks-dev',
+      'dev-service',
+      'stop',
+      'web',
+      '--owner-root',
+      '/tmp/deleted-worktree',
+      '--json'
+    ])
+
+    expect(runDevService).toHaveBeenCalledWith({
+      action: 'stop',
+      forgetStale: false,
+      json: true,
+      ownerRoot: '/tmp/deleted-worktree',
+      target: 'web'
+    })
+  })
+
+  it('reads orphan stop events from the registered owner root', async () => {
+    const runDevService = vi.fn(async () => undefined)
+    const cli = createScriptsCli({ runDevService })
+
+    await cli.parseAsync([
+      'node',
+      'oneworks-dev',
+      'dev-service',
+      'events',
+      'web',
+      '--owner-root',
+      '/tmp/deleted-worktree',
+      '--limit',
+      '12',
+      '--json'
+    ])
+
+    expect(runDevService).toHaveBeenCalledWith({
+      action: 'events',
+      json: true,
+      limit: 12,
+      ownerRoot: '/tmp/deleted-worktree',
+      target: 'web'
+    })
+  })
+
   it('dispatches adapter e2e run through the shared suite', async () => {
     const runAdapterSuite = vi.fn(async () => [])
     const cli = createScriptsCli({
