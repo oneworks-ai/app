@@ -22,7 +22,7 @@
 - `desktop-package.yml`：构建 macOS 桌面包；普通 PR 只产出几秒钟的同名 `macOS installer` required-check 兼容门禁，不使用 macOS runner，也不构建安装包。nightly 用 unsigned arm64 DMG 跑完整 package / smoke / install verify，保留 3 天用于提前暴露发布回归。`pkg/oneworks-desktop/v*` tag 或手动 dispatch 统一构建 arm64+x64 的 DMG / PKG / ZIP；带 `release_tag`、不勾 `create_release` 可生成正式身份的候选产物，之后用 `candidate_run_id` 提升同一 artifact，无需重打包。GitHub Release 成功后复用 `deploy-homepage.yml` 自动等待官网刷新。
 - `relay-ci.yml`：只在 Relay Server / Admin / config hook 相关路径变化时跑 server test、admin test 和真实 `relay-config live-smoke`。
 - `deploy-relay-dev.yml`：Cloudflare dev Relay/Admin 由 Actions 部署并 smoke；Vercel dev Relay/Admin 由 Vercel GitHub App 部署，Actions 只轮询 `dev.vc.oneworks.cloud` 做 smoke，不能恢复长期 Vercel CLI token 发布路径。
-- `deploy-relay-server.yml`：手动把已批准的精确 `origin/main` SHA 提升到 Relay production；构建 Server + Admin artifact，优先触发完整配置的外部发布目标，否则直发官方 Cloudflare Worker / Pages，并验证 build SHA、登录、未授权边界和真实 Admin 静态资产。
+- `deploy-relay-server.yml`：手动把已批准的精确 `origin/main` SHA 提升到 Relay production；构建 Server + Admin artifact，优先触发完整配置的外部发布目标，否则直发官方 Cloudflare Worker / Pages 与 Vercel 单项目 Relay/Admin，并验证 build SHA、登录、未授权边界和真实 Admin 静态资产。
 - `deploy-relay-admin.yml`：只监听 Relay Admin 前端及其 UI 依赖，构建独立 Admin 平台 artifact 并可按变量触发外部前端部署。
 - `deploy-pwa.yml`：从 app 仓库触发 `oneworks-ai/pwa` 的部署 workflow。
 - `deploy-avatar.yml`：从 app 仓库触发 `oneworks-ai/avatar` 的 GitHub Pages 部署 workflow，只监听 avatar 相关路径。
@@ -44,7 +44,9 @@ Relay production 通过 `deploy-relay-server.yml` 人工 promotion。外部发�
 - secret: `RELAY_SERVER_DEPLOY_TOKEN`
 - variables: `RELAY_SERVER_DEPLOY_REPOSITORY`、`RELAY_SERVER_DEPLOY_WORKFLOW`
 
-外部目标缺省时，使用完整成对的 `RELAY_PROD_CLOUDFLARE_API_TOKEN` / `RELAY_PROD_CLOUDFLARE_ACCOUNT_ID` 直发 Cloudflare production。迁移期间两项 production secret 都缺省时，才允许回退到完整成对的 dev Cloudflare 凭据；不能跨 production / dev 拼接 token 和 account id。production Worker / Pages / origin 可通过 `RELAY_PROD_CF_WORKER_NAME`、`RELAY_PROD_CF_PAGES_PROJECT`、`RELAY_PROD_CF_ORIGIN` 覆盖。
+外部目标缺省时，使用完整成对的 `RELAY_PROD_CLOUDFLARE_API_TOKEN` / `RELAY_PROD_CLOUDFLARE_ACCOUNT_ID` 直发 Cloudflare production；迁移期间两项 production secret 都缺省时，才允许回退到完整成对的 dev Cloudflare 凭据；不能跨 production / dev 拼接 token 和 account id。production Worker / Pages / origin 可通过 `RELAY_PROD_CF_WORKER_NAME`、`RELAY_PROD_CF_PAGES_PROJECT`、`RELAY_PROD_CF_ORIGIN` 覆盖。
+
+同一 manual production promotion 在非 external 接管路径还部署官方 Vercel 单项目 Relay/Admin。优先使用完整 `RELAY_PROD_VERCEL_TOKEN` / `RELAY_PROD_VERCEL_ORG_ID`，两项都缺省时才回退到完整的现有 dev pair；`RELAY_PROD_VERCEL_PROJECT_ID` 可显式指定，否则按精确 `vc.oneworks.cloud` 域名唯一发现项目。常规 dev 部署仍由 Vercel GitHub App 完成，不能把这条 production CLI 路径用于 dev。
 
 独立 Relay Admin 外部 artifact 发布仍由 `deploy-relay-admin.yml` 读取：
 
