@@ -20,7 +20,7 @@ Chrome Web Store 发布不使用长期 OAuth refresh token 或 service-account J
 
 官方 Vercel dev Relay/Admin 不再使用 GitHub repository secret 里的 CLI token 部署。常规路径是 Vercel GitHub App 监听 `oneworks-ai/app` 的 `main` 分支并部署 `apps/relay-server` project；GitHub Actions 只轮询 `dev.vc.oneworks.cloud` 做 smoke 验证。不要为常规 dev deploy 新增或轮换 `RELAY_DEV_VERCEL_TOKEN`、`RELAY_DEV_VERCEL_ORG_ID`、`RELAY_DEV_VERCEL_PROJECT_ID`。
 
-Relay production manual promotion 的 Vercel CLI 凭据优先使用 `RELAY_PROD_VERCEL_TOKEN` / `RELAY_PROD_VERCEL_ORG_ID`，两项必须成对配置；`RELAY_PROD_VERCEL_PROJECT_ID` 可作为可选 explicit target。迁移期间仅当 production token / org 都缺省时，workflow 才能回退使用完整 `RELAY_DEV_VERCEL_TOKEN` / `RELAY_DEV_VERCEL_ORG_ID`；不要为常规 dev GitHub App 部署恢复 token 路径。没有 explicit project ID 时，workflow 按 Vercel API 的精确 `vc.oneworks.cloud` 域名唯一发现 project，0 或多个命中直接失败。
+Relay production manual promotion 的 Vercel CLI 凭据优先使用 `RELAY_PROD_VERCEL_TOKEN` / `RELAY_PROD_VERCEL_ORG_ID`；两项必须成对配置。`RELAY_PROD_VERCEL_PROJECT_ID` 可作为 explicit target；否则按精确 `vc.oneworks.cloud` 域名唯一发现 project，0 或多个命中直接失败。仅当 production token / org 都缺省时，才回退完整 dev pair；常规 dev 仍不用 token。
 
 macOS Developer ID 签名的完整创建和验证步骤见 [macOS signing](./macos-signing.md)。
 
