@@ -826,6 +826,189 @@ describe('pluginsRouter', () => {
     await expect(commandResponse.text()).resolves.toBe('pong')
   })
 
+  it('awaits asynchronous local services and disposes them during reload', async () => {
+    const stateKey = '__oneworksAsyncLocalServiceState'
+    const state = { disposes: 0, starts: 0 }
+    ;(globalThis as unknown as Record<string, unknown>)[stateKey] = state
+    const pluginRoot = path.join(workspaceFolder, 'plugins', 'async-local-service')
+    await createPlugin(
+      pluginRoot,
+      {
+        name: 'async-local-service',
+        plugin: { server: { entry: './server.mjs', roles: ['workspace'] } }
+      },
+      `
+      const state = globalThis.${stateKey}
+      export async function activatePlugin(ctx) {
+        ctx.registerLocalService('bridge', async () => {
+          state.starts += 1
+          await Promise.resolve()
+          return {
+            async dispose() {
+              await Promise.resolve()
+              state.disposes += 1
+            }
+          }
+        })
+      }
+    `
+    )
+    mockConfig([{ id: pluginRoot, scope: 'async-local-service' }])
+
+    try {
+      const initialResponse = await fetch(`${baseUrl}/api/plugins`)
+      expect(initialResponse.status).toBe(200)
+      expect(state).toEqual({ disposes: 0, starts: 1 })
+
+      await getPluginManager().reload()
+
+      expect(state).toEqual({ disposes: 1, starts: 2 })
+    } finally {
+      delete (globalThis as unknown as Record<string, unknown>)[stateKey]
+    }
+  })
+
+  it('fails plugin activation when an asynchronous local service fails to start', async () => {
+    const pluginRoot = path.join(workspaceFolder, 'plugins', 'failed-local-service')
+    await createPlugin(
+      pluginRoot,
+      {
+        name: 'failed-local-service',
+        plugin: { server: { entry: './server.mjs', roles: ['workspace'] } }
+      },
+      `
+      export async function activatePlugin(ctx) {
+        ctx.registerLocalService('bridge', async () => {
+          await Promise.resolve()
+          throw new Error('bridge startup failed')
+        })
+      }
+    `
+    )
+    mockConfig([{ id: pluginRoot, scope: 'failed-local-service' }])
+
+    const response = await fetch(`${baseUrl}/api/plugins`)
+    const payload = await response.json() as {
+      plugins: Array<{ diagnostics: Array<{ code: string; message: string }>; enabled: boolean; scope: string }>
+    }
+
+    expect(response.status).toBe(200)
+    expect(payload.plugins.find(plugin => plugin.scope === 'failed-local-service')).toMatchObject({
+      enabled: false,
+      diagnostics: [{ code: 'plugin_activation_failed', message: 'bridge startup failed' }]
+    })
+  })
+
+  it('rejects duplicate local service IDs and disposes the first service exactly once', async () => {
+    const stateKey = '__oneworksDuplicateLocalServiceState'
+    const state = { disposes: 0 }
+    ;(globalThis as unknown as Record<string, unknown>)[stateKey] = state
+    const pluginRoot = path.join(workspaceFolder, 'plugins', 'duplicate-local-service')
+    await createPlugin(
+      pluginRoot,
+      {
+        name: 'duplicate-local-service',
+        plugin: { server: { entry: './server.mjs', roles: ['workspace'] } }
+      },
+      `
+      const state = globalThis.${stateKey}
+      export async function activatePlugin(ctx) {
+        ctx.registerLocalService('bridge', () => ({
+          dispose() {
+            state.disposes += 1
+          }
+        }))
+        ctx.registerLocalService('bridge', () => ({ dispose() {} }))
+      }
+    `
+    )
+    mockConfig([{ id: pluginRoot, scope: 'duplicate-local-service' }])
+
+    try {
+      const response = await fetch(`${baseUrl}/api/plugins`)
+      const payload = await response.json() as {
+        plugins: Array<{ diagnostics: Array<{ code: string; message: string }>; enabled: boolean; scope: string }>
+      }
+
+      expect(response.status).toBe(200)
+      expect(payload.plugins.find(plugin => plugin.scope === 'duplicate-local-service')).toMatchObject({
+        enabled: false,
+        diagnostics: [{
+          code: 'plugin_activation_failed',
+          message: 'Duplicate plugin local service "duplicate-local-service/bridge".'
+        }]
+      })
+      expect(state.disposes).toBe(1)
+    } finally {
+      delete (globalThis as unknown as Record<string, unknown>)[stateKey]
+    }
+  })
+
+  it('finishes a pending local service startup before dispose and allows a clean reload', async () => {
+    const stateKey = '__oneworksPendingLocalServiceState'
+    let releaseStart = () => {}
+    const startGate = new Promise<void>((resolve) => {
+      releaseStart = resolve
+    })
+    let markStarted = () => {}
+    const serviceStarted = new Promise<void>((resolve) => {
+      markStarted = resolve
+    })
+    const state = {
+      disposes: 0,
+      markStarted,
+      startGate,
+      starts: 0
+    }
+    ;(globalThis as unknown as Record<string, unknown>)[stateKey] = state
+    const pluginRoot = path.join(workspaceFolder, 'plugins', 'pending-local-service')
+    await createPlugin(
+      pluginRoot,
+      {
+        name: 'pending-local-service',
+        plugin: { server: { entry: './server.mjs', roles: ['workspace'] } }
+      },
+      `
+      const state = globalThis.${stateKey}
+      export async function activatePlugin(ctx) {
+        ctx.registerLocalService('bridge', async () => {
+          state.starts += 1
+          state.markStarted()
+          await state.startGate
+          return {
+            dispose() {
+              state.disposes += 1
+            }
+          }
+        })
+      }
+    `
+    )
+    mockConfig([{ id: pluginRoot, scope: 'pending-local-service' }])
+
+    try {
+      const manager = getPluginManager()
+      const loading = manager.load()
+      await serviceStarted
+      const disposing = manager.dispose()
+      releaseStart()
+      await Promise.all([loading, disposing])
+
+      expect(state.disposes).toBe(1)
+      expect(manager.snapshot().plugins).toEqual([])
+
+      await manager.load()
+
+      expect(state.starts).toBe(2)
+      expect(manager.snapshot().plugins).toEqual([
+        expect.objectContaining({ enabled: true, scope: 'pending-local-service' })
+      ])
+    } finally {
+      releaseStart()
+      delete (globalThis as unknown as Record<string, unknown>)[stateKey]
+    }
+  })
+
   it('coalesces concurrent reloads so plugin activation does not register commands twice', async () => {
     const pluginRoot = path.join(workspaceFolder, 'plugins', 'concurrent-reload')
     await createPlugin(
