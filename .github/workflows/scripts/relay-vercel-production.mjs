@@ -1,11 +1,24 @@
 import { spawn } from 'node:child_process'
-import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import process from 'node:process'
 
 const workspace = process.env.GITHUB_WORKSPACE ?? process.cwd()
-const relayDir = join(workspace, 'apps/relay-server')
-const vercelDir = join(relayDir, '.vercel')
+
+export function getVercelLayout(workspaceRoot) {
+  const relayDir = join(workspaceRoot, 'apps/relay-server')
+  const buildLinkDir = join(relayDir, '.vercel')
+  const deployLinkDir = join(workspaceRoot, '.vercel')
+  return {
+    buildLinkDir,
+    buildOutputDir: join(buildLinkDir, 'output'),
+    deployLinkDir,
+    deployOutputDir: join(deployLinkDir, 'output'),
+    relayDir
+  }
+}
+
+const { buildLinkDir, buildOutputDir, deployLinkDir, deployOutputDir, relayDir } = getVercelLayout(workspace)
 
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -113,8 +126,13 @@ async function main() {
   for (const value of [token, orgId, projectId]) console.log(`::add-mask::${value}`)
   process.env.VERCEL_PROJECT_ID = projectId
   try {
-    await mkdir(vercelDir, { recursive: true })
-    await writeFile(join(vercelDir, 'project.json'), JSON.stringify({ orgId, projectId }))
+    await mkdir(buildLinkDir, { recursive: true })
+    await mkdir(deployLinkDir, { recursive: true })
+    const projectJson = JSON.stringify({ orgId, projectId })
+    await Promise.all([
+      writeFile(join(buildLinkDir, 'project.json'), projectJson),
+      writeFile(join(deployLinkDir, 'project.json'), projectJson)
+    ])
     await run('pnpm', [
       'dlx',
       `vercel@${process.env.VERCEL_VERSION}`,
@@ -126,6 +144,8 @@ async function main() {
     ])
     await run('pnpm', ['dlx', `vercel@${process.env.VERCEL_VERSION}`, 'build', '--prod', '--yes', '--token', token])
     await run('pnpm', ['prepare:vercel-output'])
+    await rm(deployOutputDir, { force: true, recursive: true })
+    await rename(buildOutputDir, deployOutputDir)
     await run('pnpm', [
       'dlx',
       `vercel@${process.env.VERCEL_VERSION}`,
@@ -137,10 +157,11 @@ async function main() {
       token,
       '--env',
       `ONEWORKS_RELAY_BUILD_SHA=${process.env.GITHUB_SHA}`
-    ])
+    ], { cwd: workspace })
     await smoke()
   } finally {
-    await rm(vercelDir, { force: true, recursive: true })
+    await rm(buildLinkDir, { force: true, recursive: true })
+    await rm(deployLinkDir, { force: true, recursive: true })
   }
 }
 

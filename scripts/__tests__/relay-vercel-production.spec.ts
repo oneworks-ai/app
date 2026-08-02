@@ -3,8 +3,21 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   chooseCredentials,
   findProjectId,
+  getVercelLayout,
   selectProjectCandidate
 } from '../../.github/workflows/scripts/relay-vercel-production.mjs'
+
+describe('getVercelLayout', () => {
+  it('keeps the workspace link and output separate from the relay package link', () => {
+    expect(getVercelLayout('/runner/work/app/app')).toEqual({
+      buildLinkDir: '/runner/work/app/app/apps/relay-server/.vercel',
+      buildOutputDir: '/runner/work/app/app/apps/relay-server/.vercel/output',
+      deployLinkDir: '/runner/work/app/app/.vercel',
+      deployOutputDir: '/runner/work/app/app/.vercel/output',
+      relayDir: '/runner/work/app/app/apps/relay-server'
+    })
+  })
+})
 
 describe('findProjectId', () => {
   it('paginates projects and requires the exact production domain once', async () => {
