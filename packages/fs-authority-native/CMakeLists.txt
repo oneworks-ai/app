@@ -1,0 +1,17 @@
+cmake_minimum_required(VERSION 3.20)
+project(oneworks_fs_authority LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+if(NOT APPLE)
+  message(FATAL_ERROR "Unsupported filesystem-authority platform")
+endif()
+add_library(fs-authority MODULE
+  src/authority-handle.cc src/binding.cc src/common.cc src/napi-util.cc
+  src/posix-peer.cc src/posix-fd.cc)
+target_sources(fs-authority PRIVATE src/darwin.cc)
+target_link_options(fs-authority PRIVATE "-undefined" "dynamic_lookup")
+set_target_properties(fs-authority PROPERTIES PREFIX "" SUFFIX ".node")
+target_include_directories(fs-authority PRIVATE "${NODE_INCLUDE_DIR}" src)
+target_compile_definitions(fs-authority PRIVATE BUILDING_NODE_EXTENSION=1 NAPI_VERSION=8)
+target_compile_options(fs-authority PRIVATE -Wall -Wextra -Werror -Wpedantic)

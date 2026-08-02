@@ -208,6 +208,9 @@ const workspacePackageSourceIgnoreNames = new Set([
   'coverage',
   'node_modules'
 ])
+const workspacePackageSourceIgnoredPaths = new Map([
+  ['@oneworks/fs-authority-native', new Set(['build'])]
+])
 
 const readJsonFile = (filePath) => {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'))
@@ -297,7 +300,8 @@ const collectPnpmPackageRoots = (stagingDir) => {
   return packageRoots
 }
 
-const copyWorkspacePackageSource = (sourceDir, targetDir) => {
+const copyWorkspacePackageSource = (packageName, sourceDir, targetDir) => {
+  const ignoredPaths = workspacePackageSourceIgnoredPaths.get(packageName)
   for (const entry of fs.readdirSync(targetDir, { withFileTypes: true })) {
     if (entry.name === 'node_modules') {
       continue
@@ -306,7 +310,7 @@ const copyWorkspacePackageSource = (sourceDir, targetDir) => {
   }
 
   for (const entry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
-    if (workspacePackageSourceIgnoreNames.has(entry.name)) {
+    if (workspacePackageSourceIgnoreNames.has(entry.name) || ignoredPaths?.has(entry.name)) {
       continue
     }
     fs.cpSync(path.join(sourceDir, entry.name), path.join(targetDir, entry.name), {
@@ -329,7 +333,7 @@ const overlayWorkspacePackages = (stagingDir) => {
       continue
     }
 
-    copyWorkspacePackageSource(sourceDir, packageRoot)
+    copyWorkspacePackageSource(packageJson.name, sourceDir, packageRoot)
     overlaid.push(packageJson.name)
   }
 
