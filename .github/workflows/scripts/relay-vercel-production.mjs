@@ -64,20 +64,14 @@ async function resolveProjectId({ candidate }) {
 
 export function chooseCredentials(env) {
   const prod = [env.PROD_TOKEN, env.PROD_ORG_ID]
-  if (prod.filter(Boolean).length === 1) {
-    throw new Error('Vercel production token and org id must be configured together.')
-  }
-  if (prod.every(Boolean)) return prod
-  const dev = [env.DEV_TOKEN, env.DEV_ORG_ID]
-  if (!dev.every(Boolean)) throw new Error('Vercel production credential pair and migration fallback are incomplete.')
-  console.log('::notice::Using the migration fallback Vercel credential pair for this production promotion.')
-  return dev
+  if (!prod.every(Boolean)) throw new Error('Vercel production token and org id must be configured together.')
+  return prod
 }
 
-export function selectProjectCandidate(env, usingDevFallback) {
+export function selectProjectCandidate(env) {
   if (env.PROD_PROJECT_ID) return env.PROD_PROJECT_ID
   if (env.EXPLICIT_PROJECT_ID) return env.EXPLICIT_PROJECT_ID
-  return usingDevFallback ? env.DEV_PROJECT_ID : undefined
+  return undefined
 }
 
 async function smoke() {
@@ -94,6 +88,7 @@ async function smoke() {
           PATH: process.env.PATH,
           RELAY_ORIGIN: origin,
           RELAY_EXPECTED_BUILD_SHA: process.env.GITHUB_SHA,
+          RELAY_EXPECTED_TRANSPORT: 'v2-long-poll',
           RELAY_EXPECTED_VERSION: version
         }
       })
@@ -106,9 +101,8 @@ async function smoke() {
 }
 
 async function main() {
-  const usingDevFallback = !(process.env.PROD_TOKEN && process.env.PROD_ORG_ID)
   const [token, orgId] = chooseCredentials(process.env)
-  const projectCandidate = selectProjectCandidate(process.env, usingDevFallback)
+  const projectCandidate = selectProjectCandidate(process.env)
   process.env.VERCEL_TOKEN = token
   process.env.VERCEL_ORG_ID = orgId
   for (
@@ -116,9 +110,6 @@ async function main() {
       'PROD_TOKEN',
       'PROD_ORG_ID',
       'PROD_PROJECT_ID',
-      'DEV_TOKEN',
-      'DEV_ORG_ID',
-      'DEV_PROJECT_ID',
       'EXPLICIT_PROJECT_ID'
     ]
   ) delete process.env[name]

@@ -1,3 +1,5 @@
+import { createHeartbeatBody } from './heartbeat.js'
+import type { RelayHeartbeatOptions } from './heartbeat.js'
 import type {
   RelayForwardingJob,
   RelayForwardingJobPollResult,
@@ -109,11 +111,13 @@ export const pollRelaySessionForwardingJobs = async (
   auth: RelaySessionClientAuth,
   options: {
     limit?: number
+    heartbeat?: RelayHeartbeatOptions
     status?: 'active' | 'all' | RelayForwardingJob['status']
     signal?: AbortSignal
     waitMs?: number
   } = {}
 ): Promise<RelayForwardingJobPollResult> => {
+  const useBodyPoll = options.heartbeat != null
   const search = new URLSearchParams()
   if (options.status != null) search.set('status', options.status)
   if (options.limit != null) search.set('limit', String(options.limit))
@@ -122,11 +126,21 @@ export const pollRelaySessionForwardingJobs = async (
   const response = await fetch(
     createRelayUrl(
       auth,
-      `/api/relay/devices/${encodeURIComponent(auth.deviceId)}/session-jobs${query === '' ? '' : `?${query}`}`
+      `/api/relay/devices/${encodeURIComponent(auth.deviceId)}/session-jobs${
+        useBodyPoll || query === '' ? '' : `?${query}`
+      }`
     ),
     {
-      method: 'GET',
+      method: useBodyPoll ? 'POST' : 'GET',
       headers: authHeaders(auth),
+      ...(options.heartbeat == null ? {} : {
+        body: JSON.stringify({
+          heartbeat: createHeartbeatBody(options.heartbeat),
+          limit: options.limit,
+          status: options.status ?? 'queued',
+          waitMs: options.waitMs ?? 0
+        })
+      }),
       signal: options.signal
     }
   )

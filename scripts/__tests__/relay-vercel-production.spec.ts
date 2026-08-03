@@ -53,15 +53,12 @@ describe('findProjectId', () => {
 
   it('requires atomic credential pairs', () => {
     expect(() => chooseCredentials({ PROD_TOKEN: 'token' })).toThrow('configured together')
-    expect(() => chooseCredentials({ DEV_TOKEN: 'token' })).toThrow('fallback are incomplete')
+    expect(() => chooseCredentials({ DEV_TOKEN: 'token', DEV_ORG_ID: 'org' })).toThrow('configured together')
+    expect(chooseCredentials({ PROD_TOKEN: 'prod-token', PROD_ORG_ID: 'prod-org' })).toEqual(['prod-token', 'prod-org'])
   })
 
-  it('does not select a dev project id on the production path', () => {
-    expect(selectProjectCandidate({ DEV_PROJECT_ID: 'dev-project' }, false)).toBeUndefined()
-  })
-
-  it('selects a dev project id only on the dev fallback path', () => {
-    expect(selectProjectCandidate({ DEV_PROJECT_ID: 'dev-project' }, true)).toBe('dev-project')
+  it('never selects a dev project id for a production promotion', () => {
+    expect(selectProjectCandidate({ DEV_PROJECT_ID: 'dev-project' })).toBeUndefined()
   })
 
   it('prioritizes production secret then production variable', () => {
@@ -70,9 +67,9 @@ describe('findProjectId', () => {
         EXPLICIT_PROJECT_ID: 'prod-variable',
         PROD_PROJECT_ID: 'prod-secret',
         DEV_PROJECT_ID: 'dev'
-      }, true)
+      })
     ).toBe('prod-secret')
-    expect(selectProjectCandidate({ EXPLICIT_PROJECT_ID: 'prod-variable', DEV_PROJECT_ID: 'dev' }, true)).toBe(
+    expect(selectProjectCandidate({ EXPLICIT_PROJECT_ID: 'prod-variable', DEV_PROJECT_ID: 'dev' })).toBe(
       'prod-variable'
     )
   })

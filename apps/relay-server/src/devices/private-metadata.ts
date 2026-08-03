@@ -50,9 +50,13 @@ const safeEqualText = (a: string, b: string) => {
   return left.length === right.length && timingSafeEqual(left, right)
 }
 
+export const deviceTokenHashMatches = (left: string | undefined, right: string) => (
+  left != null && safeEqualText(left, right)
+)
+
 export const deviceTokenMatches = (device: RelayDevice, token: string) => {
   if (token === '') return false
-  if (device.deviceTokenHash != null && safeEqualText(device.deviceTokenHash, hashDeviceToken(token))) {
+  if (deviceTokenHashMatches(device.deviceTokenHash, hashDeviceToken(token))) {
     return true
   }
   return device.deviceToken === token

@@ -3,12 +3,17 @@ import { Buffer } from 'node:buffer'
 
 import WebSocket from 'ws'
 
+import type { RelayDeviceTransport } from '@oneworks/types/relay-device-transport'
+
 import { createHeartbeatBody, sendHeartbeat } from './heartbeat.js'
 import type { RelayHeartbeatOptions } from './heartbeat.js'
 import type { RelaySessionWorker } from './session-worker.js'
 
 export const RELAY_CONTROL_HEARTBEAT_MS = 30_000
-export const RELAY_CONTROL_SNAPSHOT_MS = 5 * 60_000
+/** Initial and changed snapshots remain immediate; this is only the unchanged safety refresh. */
+export const RELAY_CONTROL_SNAPSHOT_MS = 6 * 60 * 60_000
+/** Local snapshot diffs run independently of the control transport; unchanged data makes no request. */
+export const RELAY_CONTROL_SNAPSHOT_CHECK_MS = 30_000
 export const RELAY_CONTROL_FALLBACK_HEARTBEAT_MS = 45_000
 export const RELAY_CONTROL_FALLBACK_LONG_POLL_MS = 60_000
 export const RELAY_CONTROL_FALLBACK_POLL_RETRY_MIN_MS = 90_000
@@ -22,12 +27,6 @@ interface ControlSocket {
   readyState: number
   send: (data: string) => void
   terminate?: () => void
-}
-
-export interface RelayDeviceTransport {
-  apiBaseUrl: string
-  controlWebSocketUrl: string
-  version: 1
 }
 
 export interface RelayDeviceControlChannelOptions {
@@ -67,6 +66,7 @@ export const createRelayDeviceControlChannel = (
   let socketTimeout: ReturnType<typeof setTimeout> | undefined
   let heartbeatTimer: ReturnType<typeof setTimeout> | undefined
   let snapshotTimer: ReturnType<typeof setTimeout> | undefined
+  let snapshotCheckTimer: ReturnType<typeof setTimeout> | undefined
   let reconnectTimer: ReturnType<typeof setTimeout> | undefined
   let fallbackHeartbeatTimer: ReturnType<typeof setTimeout> | undefined
   let fallbackHeartbeatTimeout: ReturnType<typeof setTimeout> | undefined
@@ -80,6 +80,7 @@ export const createRelayDeviceControlChannel = (
   let claimAbort: AbortController | undefined
   let claimPending = false
   let snapshotAbort: AbortController | undefined
+  let snapshotCheckAbort: AbortController | undefined
   let retryBaseMs = RELAY_CONTROL_RETRY_MIN_MS
 
   const clearTimer = (timer: ReturnType<typeof setTimeout> | undefined) => {
@@ -94,17 +95,22 @@ export const createRelayDeviceControlChannel = (
   const scheduleHeartbeat = () => {
     clearTimer(heartbeatTimer)
     if (stopped || !online) return
-    heartbeatTimer = setTimeout(() => {
-      if (!online || stopped || socket == null) return
-      try {
-        socket.send(JSON.stringify({ type: 'heartbeat', payload: createHeartbeatBody(options.heartbeat) }))
-      } catch (error) {
-        warn(error, '[relay] control heartbeat failed')
-        socket.close(1011, 'heartbeat failed')
-        return
-      }
-      scheduleHeartbeat()
-    }, RELAY_CONTROL_HEARTBEAT_MS)
+    heartbeatTimer = setTimeout(
+      () => {
+        if (!online || stopped || socket == null) return
+        try {
+          socket.send(JSON.stringify({ type: 'heartbeat', payload: createHeartbeatBody(options.heartbeat) }))
+        } catch (error) {
+          warn(error, '[relay] control heartbeat failed')
+          socket.close(1011, 'heartbeat failed')
+          return
+        }
+        scheduleHeartbeat()
+      },
+      options.transport?.version === 1 && options.transport.heartbeatIntervalMs != null
+        ? options.transport.heartbeatIntervalMs
+        : RELAY_CONTROL_HEARTBEAT_MS
+    )
     unref(heartbeatTimer)
   }
 
@@ -126,6 +132,27 @@ export const createRelayDeviceControlChannel = (
     unref(snapshotTimer)
   }
 
+  const scheduleSnapshotCheck = (delayMs = RELAY_CONTROL_SNAPSHOT_CHECK_MS) => {
+    clearTimer(snapshotCheckTimer)
+    if (stopped || options.sessionWorker == null) return
+    snapshotCheckTimer = setTimeout(() => {
+      if (stopped || options.sessionWorker == null) return
+      if (snapshotCheckAbort != null) {
+        scheduleSnapshotCheck()
+        return
+      }
+      const controller = new AbortController()
+      snapshotCheckAbort = controller
+      void options.sessionWorker.refreshSnapshot({ signal: controller.signal })
+        .catch(error => warn(error, '[relay] local snapshot check failed'))
+        .finally(() => {
+          if (snapshotCheckAbort === controller) snapshotCheckAbort = undefined
+          scheduleSnapshotCheck()
+        })
+    }, delayMs)
+    unref(snapshotCheckTimer)
+  }
+
   const claimJobs = () => {
     const sessionWorker = options.sessionWorker
     if (stopped || !online || sessionWorker == null) return
@@ -144,6 +171,7 @@ export const createRelayDeviceControlChannel = (
         signal: claimAbort.signal,
         waitMs: 0
       })
+        .then(() => undefined)
         .catch(error => warn(error, '[relay] control job claim failed'))
         .finally(() => {
           claimAbort = undefined
@@ -158,13 +186,21 @@ export const createRelayDeviceControlChannel = (
 
   const scheduleFallbackHeartbeat = (delayMs: number) => {
     clearTimer(fallbackHeartbeatTimer)
-    if (stopped || online || fallbackHeartbeatInFlight != null) return
+    if (
+      stopped || online || fallbackHeartbeatInFlight != null || (
+        options.sessionWorker != null && options.transport?.version === 2 && options.transport.mode === 'long-poll'
+      )
+    ) return
     fallbackHeartbeatTimer = setTimeout(runFallbackHeartbeat, delayMs)
     unref(fallbackHeartbeatTimer)
   }
 
   function runFallbackHeartbeat() {
-    if (stopped || online || fallbackHeartbeatInFlight != null) return
+    if (
+      stopped || online || fallbackHeartbeatInFlight != null || (
+        options.sessionWorker != null && options.transport?.version === 2 && options.transport.mode === 'long-poll'
+      )
+    ) return
     const startedAt = Date.now()
     const controller = new AbortController()
     fallbackHeartbeatAbort = controller
@@ -198,19 +234,32 @@ export const createRelayDeviceControlChannel = (
     if (stopped || online || sessionWorker == null || fallbackPollInFlight != null) return
     const controller = new AbortController()
     fallbackPollAbort = controller
+    let nextDelayMs = options.transport?.version === 2 && options.transport.mode === 'long-poll'
+      ? options.transport.idleRetryMs
+      : Math.max(RELAY_CONTROL_FALLBACK_POLL_RETRY_MIN_MS, jitteredRetryMs(retryBaseMs, random))
     fallbackPollInFlight = sessionWorker
-      .runOnce({ signal: controller.signal, waitMs: RELAY_CONTROL_FALLBACK_LONG_POLL_MS })
+      .runOnce({
+        signal: controller.signal,
+        waitMs: options.transport?.version === 2 && options.transport.mode === 'long-poll'
+          ? options.transport.longPollMaxWaitMs
+          : RELAY_CONTROL_FALLBACK_LONG_POLL_MS
+      })
+      .then(({ jobCount }) => {
+        if (options.transport?.version === 2 && options.transport.mode === 'long-poll' && jobCount > 0) {
+          nextDelayMs = 0
+        }
+      })
       .catch(error => {
+        nextDelayMs = options.transport?.version === 2 && options.transport.mode === 'long-poll'
+          ? options.transport.idleRetryMs
+          : Math.max(RELAY_CONTROL_FALLBACK_POLL_RETRY_MIN_MS, jitteredRetryMs(retryBaseMs, random))
         if (!controller.signal.aborted) warn(error, '[relay] control fallback poll failed')
       })
       .finally(() => {
         if (fallbackPollAbort === controller) fallbackPollAbort = undefined
         fallbackPollInFlight = undefined
         if (!stopped && !online) {
-          scheduleFallbackPoll(Math.max(
-            RELAY_CONTROL_FALLBACK_POLL_RETRY_MIN_MS,
-            jitteredRetryMs(retryBaseMs, random)
-          ))
+          scheduleFallbackPoll(nextDelayMs)
         }
       })
   }
@@ -285,7 +334,7 @@ export const createRelayDeviceControlChannel = (
   }
 
   function openSocket() {
-    if (stopped || online || options.transport == null) return
+    if (stopped || online || options.transport == null || options.transport.version !== 1) return
     const current = webSocketFactory(options.transport.controlWebSocketUrl, {
       authorization: `Bearer ${options.heartbeat.deviceToken}`,
       'x-oneworks-relay-device-id': options.heartbeat.deviceId
@@ -325,12 +374,13 @@ export const createRelayDeviceControlChannel = (
     unref(socketTimeout)
   }
 
-  if (options.transport == null) {
-    scheduleFallbackHeartbeat(0)
+  if (options.transport == null || (options.transport.version === 2 && options.transport.mode === 'long-poll')) {
+    if (options.sessionWorker == null) scheduleFallbackHeartbeat(0)
     scheduleFallbackPoll(0)
   } else {
     openSocket()
   }
+  scheduleSnapshotCheck()
 
   return {
     stop: () => {
@@ -340,6 +390,7 @@ export const createRelayDeviceControlChannel = (
       clearTimer(socketTimeout)
       clearTimer(heartbeatTimer)
       clearTimer(snapshotTimer)
+      clearTimer(snapshotCheckTimer)
       clearTimer(reconnectTimer)
       clearTimer(fallbackHeartbeatTimer)
       clearTimer(fallbackHeartbeatTimeout)
@@ -348,6 +399,7 @@ export const createRelayDeviceControlChannel = (
       fallbackPollAbort?.abort()
       claimAbort?.abort()
       snapshotAbort?.abort()
+      snapshotCheckAbort?.abort()
       socket?.close(1000, 'relay control stopped')
       socket = undefined
       options.sessionWorker?.stop()

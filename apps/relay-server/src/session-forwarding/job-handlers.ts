@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 import { readRequestBody, sendJson } from '../http.js'
+import { applyDeviceHeartbeat } from '../routes/devices.js'
 import { recordAuditEvent } from '../security/audit.js'
 import type { RelayStoreRepository } from '../storage/repository.js'
 import type { RelayTelemetry } from '../telemetry/metrics.js'
@@ -52,6 +53,8 @@ const WORKSPACE_WS_RECEIVE_MODE = 'workspace-ws-receive'
 const WORKSPACE_WS_SEND_MODE = 'workspace-ws-send'
 const SESSION_JOB_LONG_POLL_MAX_MS = 60_000
 const SESSION_JOB_LONG_POLL_FALLBACK_MS = 1_000
+/** Body polls are used by serverless instances, where each refresh reads shared storage. */
+const SESSION_JOB_LONG_POLL_BODY_REFRESH_MS = 5_000
 const SESSION_JOB_EMPTY_NEXT_POLL_MS = 60_000
 const sessionForwardingJobEvents = new EventEmitter()
 
@@ -64,6 +67,7 @@ interface ListJobsContext {
   requestedLimit: ReturnType<typeof parseLimit>
   requestedStatus: NonNullable<ReturnType<typeof parseListStatus>> | 'active'
   waitMs: number
+  heartbeatRenewed: boolean
 }
 
 const workspaceRequestModes = new Set([
@@ -126,16 +130,31 @@ const waitForForwardingJobSignal = (
   delayMs: number
 ) =>
   new Promise<boolean>(resolve => {
-    if (req.destroyed || req.aborted) {
+    // A fully consumed POST body can mark IncomingMessage as destroyed even while its response
+    // is still open. `aborted` is the request-side cancellation signal that matters here.
+    if (req.aborted) {
       resolve(false)
       return
     }
     let settled = false
     const eventName = forwardingJobEventName(deviceId)
+    const socket = req.socket as unknown as {
+      off?: (event: 'close', listener: () => void) => void
+      once?: (event: 'close', listener: () => void) => void
+    }
+    // Fetch adapters provide a minimal socket without EventEmitter methods. In that case their
+    // request `close` signal is the only disconnect signal; real Node requests use the socket
+    // because request `close` also means a POST body was consumed successfully.
+    const closeSource: {
+      off: (event: 'close', listener: () => void) => void
+      once: (event: 'close', listener: () => void) => void
+    } = typeof socket.once === 'function' && typeof socket.off === 'function'
+      ? { off: socket.off.bind(socket), once: socket.once.bind(socket) }
+      : { off: req.off.bind(req), once: req.once.bind(req) }
     const cleanup = () => {
       sessionForwardingJobEvents.off(eventName, onAvailable)
       req.off('aborted', onClose)
-      req.off('close', onClose)
+      closeSource.off('close', onClose)
     }
     const finish = (keepWaiting: boolean) => {
       if (settled) return
@@ -149,7 +168,9 @@ const waitForForwardingJobSignal = (
     const timer = setTimeout(() => finish(true), delayMs)
     sessionForwardingJobEvents.once(eventName, onAvailable)
     req.once('aborted', onClose)
-    req.once('close', onClose)
+    // IncomingMessage `close` also fires when a POST request body has been fully consumed.
+    // Watch the underlying connection instead so body polls can continue waiting normally.
+    closeSource.once('close', onClose)
   })
 
 const normalizeWorkspaceRequestPayload = (value: unknown) => {
@@ -238,17 +259,43 @@ const createListJobsContext = (
     access,
     requestedLimit,
     requestedStatus,
-    waitMs
+    waitMs,
+    heartbeatRenewed: false
   }
 }
 
+const renewLongPollHeartbeat = async (
+  args: RelayServerArgs,
+  store: RelayStore,
+  storeRepository: RelayStoreRepository,
+  context: ListJobsContext,
+  heartbeatBody: unknown,
+  telemetry?: RelayTelemetry
+) => {
+  if (context.heartbeatRenewed || context.access.actor.kind !== 'device') return
+  if (heartbeatBody == null) return
+  if (typeof heartbeatBody !== 'object' || Array.isArray(heartbeatBody)) return
+  await applyDeviceHeartbeat({
+    args,
+    body: heartbeatBody,
+    device: context.access.device,
+    store,
+    storeRepository,
+    telemetry
+  })
+  context.heartbeatRenewed = true
+}
+
 const collectListJobsResponse = async (
+  args: RelayServerArgs,
   store: RelayStore,
   storeRepository: RelayStoreRepository,
   deviceId: string,
   context: ListJobsContext,
+  heartbeatBody?: unknown,
   telemetry?: RelayTelemetry
 ) => {
+  await renewLongPollHeartbeat(args, store, storeRepository, context, heartbeatBody, telemetry)
   let changed = false
   if (await clearPrunedForwardingJobs(store)) {
     changed = true
@@ -332,7 +379,8 @@ const runListJobsWithLatestStore = async (
   storeRepository: RelayStoreRepository,
   url: URL,
   deviceId: string,
-  telemetry?: RelayTelemetry
+  telemetry?: RelayTelemetry,
+  heartbeatBody?: unknown
 ) => {
   let result:
     | { context: ListJobsContext; jobs: ReturnType<typeof publicForwardingJob>[]; responded: false }
@@ -346,7 +394,7 @@ const runListJobsWithLatestStore = async (
     }
     result = {
       context,
-      jobs: await collectListJobsResponse(store, requestRepository, deviceId, context, telemetry),
+      jobs: await collectListJobsResponse(args, store, requestRepository, deviceId, context, heartbeatBody, telemetry),
       responded: false
     }
   }
@@ -503,12 +551,21 @@ export const handleListJobs = async (
   storeRepository: RelayStoreRepository,
   url: URL,
   deviceId: string,
-  telemetry?: RelayTelemetry
+  telemetry?: RelayTelemetry,
+  heartbeatBody?: unknown
 ) => {
   const context = createListJobsContext(req, res, args, store, url, deviceId)
   if (context == null) return
   let activeStore = store
-  let jobs = await collectListJobsResponse(activeStore, storeRepository, deviceId, context, telemetry)
+  let jobs = await collectListJobsResponse(
+    args,
+    activeStore,
+    storeRepository,
+    deviceId,
+    context,
+    heartbeatBody,
+    telemetry
+  )
   if (jobs.length === 0 && context.waitMs > 0) {
     const deadline = Date.now() + context.waitMs
     while (jobs.length === 0 && Date.now() < deadline) {
@@ -517,7 +574,15 @@ export const handleListJobs = async (
       const keepWaiting = await waitForForwardingJobSignal(req, deviceId, delayMs)
       if (!keepWaiting) return
       activeStore = await storeRepository.read()
-      jobs = await collectListJobsResponse(activeStore, storeRepository, deviceId, context, telemetry)
+      jobs = await collectListJobsResponse(
+        args,
+        activeStore,
+        storeRepository,
+        deviceId,
+        context,
+        heartbeatBody,
+        telemetry
+      )
     }
   }
   sendJson(res, 200, {
@@ -533,9 +598,19 @@ export const handleListJobsWithoutStoreLock = async (
   storeRepository: RelayStoreRepository,
   url: URL,
   deviceId: string,
-  telemetry?: RelayTelemetry
+  telemetry?: RelayTelemetry,
+  heartbeatBody?: unknown
 ) => {
-  const first = await runListJobsWithLatestStore(req, res, args, storeRepository, url, deviceId, telemetry)
+  const first = await runListJobsWithLatestStore(
+    req,
+    res,
+    args,
+    storeRepository,
+    url,
+    deviceId,
+    telemetry,
+    heartbeatBody
+  )
   if (first.responded) return
   let jobs = first.jobs
   let waitMs = first.context.waitMs
@@ -543,7 +618,13 @@ export const handleListJobsWithoutStoreLock = async (
   if (jobs.length === 0 && waitMs > 0) {
     const deadline = Date.now() + waitMs
     while (jobs.length === 0 && Date.now() < deadline) {
-      const delayMs = Math.min(SESSION_JOB_LONG_POLL_FALLBACK_MS, deadline - Date.now())
+      // Same-instance submitters wake immediately through the event emitter.  A body poll can
+      // also be waiting in a separate serverless instance, so refresh its shared repository at
+      // a bounded cadence instead of paying for one read per second.
+      const refreshMs = heartbeatBody == null
+        ? SESSION_JOB_LONG_POLL_FALLBACK_MS
+        : SESSION_JOB_LONG_POLL_BODY_REFRESH_MS
+      const delayMs = Math.min(refreshMs, deadline - Date.now())
       if (delayMs <= 0) break
       const keepWaiting = await waitForForwardingJobSignal(req, deviceId, delayMs)
       if (!keepWaiting) return

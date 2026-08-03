@@ -13,6 +13,22 @@ describe('relay device transport discovery', () => {
     expect(normalizeRelayDeviceTransport(valid)).toEqual(valid)
   })
 
+  it('accepts a bounded v2 long-poll transport without a WebSocket URL', () => {
+    expect(normalizeRelayDeviceTransport({
+      apiBaseUrl: 'https://worker.example/',
+      idleRetryMs: 250_000,
+      longPollMaxWaitMs: 50_000,
+      mode: 'long-poll',
+      version: 2
+    })).toEqual({
+      apiBaseUrl: 'https://worker.example/',
+      idleRetryMs: 250_000,
+      longPollMaxWaitMs: 50_000,
+      mode: 'long-poll',
+      version: 2
+    })
+  })
+
   it.each([
     undefined,
     { ...valid, version: 2 },
@@ -21,7 +37,35 @@ describe('relay device transport discovery', () => {
     { ...valid, controlWebSocketUrl: 'wss://other.example/api/relay/devices/control' },
     { ...valid, controlWebSocketUrl: 'wss://worker.example/api/relay/devices/control?token=secret' },
     { ...valid, apiBaseUrl: 'https://worker.example/api' },
-    { ...valid, apiBaseUrl: 'https://user:secret@worker.example/' }
+    { ...valid, apiBaseUrl: 'https://user:secret@worker.example/' },
+    {
+      apiBaseUrl: 'https://worker.example/',
+      idleRetryMs: 250_000,
+      longPollMaxWaitMs: 50_000,
+      mode: 'other',
+      version: 2
+    },
+    {
+      apiBaseUrl: 'https://user:secret@worker.example/',
+      idleRetryMs: 250_000,
+      longPollMaxWaitMs: 50_000,
+      mode: 'long-poll',
+      version: 2
+    },
+    {
+      apiBaseUrl: 'https://worker.example/',
+      idleRetryMs: 59_999,
+      longPollMaxWaitMs: 50_000,
+      mode: 'long-poll',
+      version: 2
+    },
+    {
+      apiBaseUrl: 'https://worker.example/',
+      idleRetryMs: 250_000,
+      longPollMaxWaitMs: 55_001,
+      mode: 'long-poll',
+      version: 2
+    }
   ])('rejects invalid or unsafe transports %#', value => {
     expect(normalizeRelayDeviceTransport(value)).toBeUndefined()
   })

@@ -229,6 +229,41 @@ describe('relay plugin session worker', () => {
     ])
   })
 
+  it('posts a locally detected change at 30 seconds, then only refreshes identical data after six hours', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true })))
+    vi.stubGlobal('fetch', fetchMock)
+    let title = 'Initial title'
+    const worker = createRelaySessionWorker({
+      auth: {
+        deviceId: 'device-1',
+        deviceToken: 'device-token',
+        remoteBaseUrl: 'https://relay.example'
+      },
+      adapter: { listSessions: () => [{ id: 'session-1', title }], submitMessage: () => ({}) },
+      autoStart: false
+    })
+
+    await worker.refreshSnapshot()
+    await worker.refreshSnapshot()
+    vi.setSystemTime(new Date('2026-01-01T00:00:30.000Z'))
+    title = 'Changed title'
+    await worker.refreshSnapshot()
+    vi.setSystemTime(new Date('2026-01-01T06:00:29.999Z'))
+    await worker.refreshSnapshot()
+    vi.setSystemTime(new Date('2026-01-01T06:00:30.000Z'))
+    await worker.refreshSnapshot()
+    worker.stop()
+
+    expect(fetchMock.mock.calls).toHaveLength(3)
+    expect(fetchMock.mock.calls.map(([, init]) => JSON.parse(String(init?.body)).sessions[0].title)).toEqual([
+      'Initial title',
+      'Changed title',
+      'Changed title'
+    ])
+  })
+
   it('backs off when a due snapshot fails instead of retrying immediately', async () => {
     vi.useFakeTimers()
     let snapshotCalls = 0

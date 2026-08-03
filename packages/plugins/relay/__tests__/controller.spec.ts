@@ -1091,16 +1091,8 @@ describe('relay plugin controller', () => {
     disposers.forEach(dispose => dispose())
     const requestUrls = fetchMock.mock.calls.map(([url]) => String(url))
 
-    expect(requestUrls).toContain('http://127.0.0.1:8788/api/relay/devices/heartbeat')
-    expect(requestUrls).toContain('https://relay.example/api/relay/devices/heartbeat')
-    expect(requestUrls.some(url => (
-      url.startsWith('http://127.0.0.1:8788/api/relay/devices/') &&
-      url.endsWith('/sessions/snapshot')
-    ))).toBe(true)
-    expect(requestUrls.some(url => (
-      url.startsWith('https://relay.example/api/relay/devices/') &&
-      url.endsWith('/sessions/snapshot')
-    ))).toBe(true)
+    expect(requestUrls.filter(url => url.endsWith('/devices/heartbeat'))).toHaveLength(0)
+    expect(requestUrls.filter(url => url.endsWith('/sessions/snapshot'))).toHaveLength(2)
   })
 
   it('deduplicates relay loops for different local server ids that point to the same remote url', async () => {
@@ -1145,7 +1137,7 @@ describe('relay plugin controller', () => {
       url.endsWith('/sessions/snapshot')
     )
 
-    expect(heartbeatUrls).toHaveLength(1)
+    expect(heartbeatUrls).toHaveLength(0)
     expect(snapshotUrls.length).toBeLessThanOrEqual(1)
   })
 
@@ -1234,7 +1226,7 @@ describe('relay plugin controller', () => {
       url.endsWith('/sessions/snapshot')
     )
 
-    expect(heartbeatUrls).toHaveLength(1)
+    expect(heartbeatUrls).toHaveLength(0)
     expect(snapshotUrls.length).toBeLessThanOrEqual(1)
   })
 

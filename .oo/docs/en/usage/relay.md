@@ -2,6 +2,22 @@
 
 Relay connects One Works plugin devices with cloud sessions. Most users should use the managed One Works Relay service. Private deployment is for teams that need their own domain, storage, SSO policy, or network isolation.
 
+## Device-Control Transport
+
+The three deployment shapes have independent transports: Node owns a native v1 WebSocket endpoint; the Cloudflare Durable Object entry requires a complete, valid same-origin device API and control WebSocket pair before it advertises v1 WebSocket; Vercel advertises only v2 HTTP long-poll, with a 50-second maximum hold and a 250-second idle retry. Cloudflare fails closed when its pair is incomplete or invalid. Clients do not infer platform domains or fall back across these modes. A v2 request combines heartbeat and job claim in one JSON POST; WebSocket tokens are only used at upgrade and every frame rechecks the token hash and current permissions.
+
+At the Vercel default cadence, one device is estimated at about 288 invocations, 14,400 function-seconds, and 3,168 storage reads per day (at most 11 reads per poll). This is a protocol budget, not an absolute platform quota guarantee; usage grows linearly with device count. Any deployment-specific tuning may only lower usage while preserving the v2 long-poll contract, never remove the capability to return to legacy behavior.
+
+Clients run a local snapshot diff check every 30 seconds, publish changes immediately, and make one unchanged-data safety refresh every six hours.
+
+### Platform Rollback
+
+| Target     | Roll back with                                                                             | Never roll back by                                               |
+| ---------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| Node       | Redeploying the verified immutable package / SHA for that Node target.                     | Removing transport capability or impersonating another platform. |
+| Cloudflare | Rolling that Cloudflare Worker and Pages slot back together to its verified immutable SHA. | Reusing Vercel/dev credentials, domains, or capabilities.        |
+| Vercel     | Rolling that Vercel project back to its verified immutable SHA.                            | Removing v2 capability to force legacy WebSocket.                |
+
 ## Private Deployment Configuration Checklist
 
 Before creating platform projects, OAuth clients, mail domains, or passkeys, decide these settings first:

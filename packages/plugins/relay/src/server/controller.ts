@@ -18,6 +18,9 @@ import type { OneWorksAuthAccount, OneWorksAuthServer, OneWorksAuthStore } from 
 import { WebSocket, WebSocketServer } from 'ws'
 import type { RawData } from 'ws'
 
+import { normalizeRelayDeviceTransport } from '@oneworks/types/relay-device-transport'
+import type { RelayDeviceTransport } from '@oneworks/types/relay-device-transport'
+
 import type { RelayConfigSnapshot } from '../shared/config-assignment.js'
 import { readRelayConfigSnapshotWithGlobalFallback } from '../shared/config-cache.js'
 import {
@@ -43,7 +46,6 @@ import {
 import { syncRelayConfigSnapshot } from './config-sync.js'
 import type { RelayConfigSyncResult } from './config-sync.js'
 import { createRelayDeviceControlChannel } from './device-control-channel.js'
-import type { RelayDeviceTransport } from './device-control-channel.js'
 import { createRelayLoopLeaseManager } from './loop-lease.js'
 import type { RelayLoopLease } from './loop-lease.js'
 import { normalizeOptions, resolveActiveRelayServer, resolveRelayServers } from './options.js'
@@ -240,34 +242,7 @@ interface RelayServiceInfoCacheEntry {
   value: RelayServiceInfo
 }
 
-const isLoopbackTransportHost = (hostname: string) => (
-  hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
-)
-
-export const normalizeRelayDeviceTransport = (value: unknown): RelayDeviceTransport | undefined => {
-  if (!isRecord(value) || value.version !== 1) return undefined
-  const apiBaseUrl = readOptionalText(value.apiBaseUrl)
-  const controlWebSocketUrl = readOptionalText(value.controlWebSocketUrl)
-  if (apiBaseUrl == null || controlWebSocketUrl == null) return undefined
-  try {
-    const api = new URL(apiBaseUrl)
-    const control = new URL(controlWebSocketUrl)
-    if (!['http:', 'https:'].includes(api.protocol) || !['ws:', 'wss:'].includes(control.protocol)) return undefined
-    if (api.username !== '' || api.password !== '' || control.username !== '' || control.password !== '') {
-      return undefined
-    }
-    if (api.protocol !== 'https:' && !isLoopbackTransportHost(api.hostname)) return undefined
-    if (control.protocol !== 'wss:' && !isLoopbackTransportHost(control.hostname)) return undefined
-    if (`${api.hostname}:${api.port}` !== `${control.hostname}:${control.port}`) return undefined
-    if (api.pathname !== '/' || api.search !== '' || api.hash !== '') return undefined
-    if (control.pathname !== '/api/relay/devices/control' || control.search !== '' || control.hash !== '') {
-      return undefined
-    }
-    return { apiBaseUrl: api.toString(), controlWebSocketUrl: control.toString(), version: 1 }
-  } catch {
-    return undefined
-  }
-}
+export { normalizeRelayDeviceTransport } from '@oneworks/types/relay-device-transport'
 
 interface RelayDeviceListSource {
   authToken?: string
@@ -4473,32 +4448,37 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
           }
           const shouldRunSessionWorker = options.capabilities.workspaceLauncher ||
             (options.capabilities.sessions && ctx.sessions != null)
+          const deviceEnvironment = createRelayDeviceEnvironmentInfo()
+          const managementServerProjects = [createCurrentWorkspaceProject(ctx)]
+          const heartbeat = {
+            capabilities: options.capabilities,
+            deviceInfo: deviceEnvironment,
+            deviceId: auth.deviceId,
+            deviceName: options.deviceName,
+            deviceToken: auth.deviceToken,
+            managementServerEnvironment: deviceEnvironment,
+            managementServerId: managementServer.id,
+            managementServerKind: managementServer.kind,
+            managementServerName: managementServer.name,
+            managementServerProjects,
+            pluginScope: ctx.scope,
+            apiBaseUrl: auth.apiBaseUrl,
+            remoteBaseUrl: auth.remoteBaseUrl,
+            workspaceFolder: ctx.workspaceFolder
+          }
           const sessionWorker = shouldRunSessionWorker
             ? createRelaySessionWorker({
               adapter: ctx.sessions ?? undefined,
               auth,
               autoStart: false,
               logger: ctx.logger,
+              ...(serviceInfo.deviceTransport?.version === 2 && serviceInfo.deviceTransport.mode === 'long-poll'
+                ? { pollHeartbeat: heartbeat, longPollMs: serviceInfo.deviceTransport.longPollMaxWaitMs }
+                : {}),
               serverId: activeServer.id
             })
             : undefined
           if (sessionWorker != null) sessionWorkers.set(connectionKey, sessionWorker)
-          const heartbeat = {
-            capabilities: options.capabilities,
-            deviceInfo: createRelayDeviceEnvironmentInfo(),
-            deviceId: auth.deviceId,
-            deviceName: options.deviceName,
-            deviceToken: auth.deviceToken,
-            managementServerEnvironment: createRelayDeviceEnvironmentInfo(),
-            managementServerId: managementServer.id,
-            managementServerKind: managementServer.kind,
-            managementServerName: managementServer.name,
-            managementServerProjects: [createCurrentWorkspaceProject(ctx)],
-            pluginScope: ctx.scope,
-            apiBaseUrl: auth.apiBaseUrl,
-            remoteBaseUrl: auth.remoteBaseUrl,
-            workspaceFolder: ctx.workspaceFolder
-          }
           controlChannels.set(
             connectionKey,
             createRelayDeviceControlChannel({
