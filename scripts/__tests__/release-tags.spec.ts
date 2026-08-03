@@ -102,6 +102,28 @@ describe('release tag planning', () => {
     expect(plan.tags[1]?.isNewPackage).toBe(true)
   })
 
+  it('fails VS Code release tag planning when a numeric store version is reused', () => {
+    expect(() =>
+      createReleaseTagPlanFromManifestChanges([
+        {
+          path: 'apps/vscode-extension/package.json',
+          before: {
+            name: '@oneworks/vscode-extension',
+            version: '0.1.2-rc.4'
+          },
+          after: {
+            name: '@oneworks/vscode-extension',
+            version: '0.1.2-rc.7'
+          }
+        }
+      ], {
+        base: 'base',
+        existingReleaseTags: ['pkg/oneworks-vscode-extension/v0.1.2-rc.4'],
+        head: 'head'
+      })
+    ).toThrow(/already owned/u)
+  })
+
   it('parses nul-separated git name-status output with renames', () => {
     const output = Buffer.from([
       'M',

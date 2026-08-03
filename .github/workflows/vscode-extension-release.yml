@@ -1,3 +1,4 @@
+# eslint-disable max-lines
 name: VS Code Extension Release
 
 on:
@@ -19,7 +20,7 @@ env:
   VSCODE_EXTENSION_RELEASE_TAG_PREFIX: pkg/oneworks-vscode-extension/v
 
 concurrency:
-  group: vscode-extension-release-${{ github.ref }}
+  group: vscode-extension-release-${{ inputs.release_tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -30,12 +31,15 @@ jobs:
       archive_file: oneworks-vscode-extension-v${{ steps.version.outputs.value }}.vsix
       artifact_name: oneworks-vscode-extension-v${{ steps.version.outputs.value }}
       publisher: ${{ steps.version.outputs.publisher }}
+      release_tag: ${{ steps.version.outputs.tag }}
+      source_sha: ${{ steps.version.outputs.source_sha }}
       version: ${{ steps.version.outputs.value }}
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
+        with:
+          fetch-depth: 0
+          ref: refs/tags/${{ inputs.release_tag || github.ref_name }}
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -68,9 +72,15 @@ jobs:
           esac
           TAG_VERSION="${TAG_NAME#${VSCODE_EXTENSION_RELEASE_TAG_PREFIX}}"
           PUBLISHER="${VSCODE_EXTENSION_PUBLISHER:-oneworks-ai}"
+          TAG_COMMIT=$(git rev-parse "refs/tags/${TAG_NAME}^{commit}")
+          HEAD_COMMIT=$(git rev-parse HEAD)
 
           if [ "$TAG_VERSION" != "$PACKAGE_VERSION" ]; then
             echo "Tag version ($TAG_VERSION) does not match VS Code extension version ($PACKAGE_VERSION)." >&2
+            exit 1
+          fi
+          if [ "$TAG_COMMIT" != "$HEAD_COMMIT" ]; then
+            echo "Checked out source ($HEAD_COMMIT) does not match peeled release tag commit ($TAG_COMMIT)." >&2
             exit 1
           fi
 
@@ -78,6 +88,8 @@ jobs:
           echo "file=oneworks-vscode-extension-v$PACKAGE_VERSION.vsix" >> "$GITHUB_OUTPUT"
           echo "archive=apps/vscode-extension/oneworks-vscode-extension-v$PACKAGE_VERSION.vsix" >> "$GITHUB_OUTPUT"
           echo "publisher=$PUBLISHER" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$TAG_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Typecheck extension
         run: pnpm --filter @oneworks/vscode-extension typecheck
@@ -107,6 +119,21 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: refs/tags/${{ needs.build.outputs.release_tag }}
+
+      - name: Validate immutable release source
+        env:
+          EXPECTED_SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+          RELEASE_TAG: ${{ needs.build.outputs.release_tag }}
+        run: |
+          TAG_COMMIT=$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")
+          HEAD_COMMIT=$(git rev-parse HEAD)
+          if [ "$TAG_COMMIT" != "$EXPECTED_SOURCE_SHA" ] || [ "$HEAD_COMMIT" != "$EXPECTED_SOURCE_SHA" ]; then
+            echo "Release checkout, peeled tag commit, and build source SHA must match." >&2
+            exit 1
+          fi
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -126,13 +153,83 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ${{ needs.build.outputs.artifact_name }}
-          path: dist
+          path: dist/run
+
+      - name: Persist immutable VSIX candidate
+        id: candidate
+        env:
+          ARCHIVE_FILE: ${{ needs.build.outputs.archive_file }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.build.outputs.release_tag }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          release_json="$RUNNER_TEMP/vscode-existing-release.json"
+          candidate_dir="$RUNNER_TEMP/vscode-authoritative-candidate"
+          run_archive="$GITHUB_WORKSPACE/dist/run/$ARCHIVE_FILE"
+          candidate_archive="$candidate_dir/$ARCHIVE_FILE"
+          mkdir -p "$candidate_dir"
+          test -f "$run_archive"
+
+          candidate_args=(
+            --tag "$RELEASE_TAG"
+            --archive "$ARCHIVE_FILE"
+            --version "$VERSION"
+          )
+          if gh release view "$RELEASE_TAG" --json assets,isDraft,isPrerelease,tagName > "$release_json" 2>/dev/null; then
+            candidate_args+=(--release-json "$release_json")
+          fi
+          candidate_action=$(node apps/vscode-extension/scripts/resolve-release-candidate.mjs "${candidate_args[@]}")
+
+          guard_args=("$RELEASE_TAG")
+          if [ "$candidate_action" = 'reuse' ]; then
+            guard_args+=(--recovery-evidence)
+          fi
+          node apps/vscode-extension/scripts/guard-store-version.mjs "${guard_args[@]}"
+
+          case "$candidate_action" in
+            create)
+              release_flags=(--latest=false)
+              if [[ "$VERSION" == *-* ]]; then
+                release_flags+=(--prerelease)
+              fi
+              gh release create "$RELEASE_TAG" "$run_archive" \
+                --title "VS Code Extension v$VERSION" \
+                --notes "Immutable VS Code extension candidate for v$VERSION." \
+                "${release_flags[@]}"
+              ;;
+            upload)
+              gh release upload "$RELEASE_TAG" "$run_archive"
+              ;;
+            reuse)
+              echo "Reusing persisted VSIX candidate for $RELEASE_TAG."
+              ;;
+            *)
+              echo "Unknown candidate action: $candidate_action" >&2
+              exit 1
+              ;;
+          esac
+
+          gh release download "$RELEASE_TAG" \
+            --pattern "$ARCHIVE_FILE" \
+            --dir "$candidate_dir"
+          test -f "$candidate_archive"
+          candidate_sha256=$(sha256sum "$candidate_archive" | awk '{print $1}')
+          echo "Authoritative VSIX SHA-256: $candidate_sha256"
+          echo "archive=$candidate_archive" >> "$GITHUB_OUTPUT"
+          echo "sha256=$candidate_sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Verify authoritative VSIX identity
+        env:
+          ARCHIVE_FILE: ${{ steps.candidate.outputs.archive }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: node apps/vscode-extension/scripts/verify-vsix-file.mjs "$ARCHIVE_FILE" "$VERSION"
 
       - name: Publish to VS Code Marketplace
         id: vscode_marketplace
         continue-on-error: true
         env:
-          ARCHIVE_FILE: ${{ github.workspace }}/dist/${{ needs.build.outputs.archive_file }}
+          ARCHIVE_FILE: ${{ steps.candidate.outputs.archive }}
           VSCODE_EXTENSION_PUBLISHER: ${{ vars.VSCODE_EXTENSION_PUBLISHER }}
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: |
@@ -145,7 +242,7 @@ jobs:
 
       - name: Publish to Open VSX Registry
         env:
-          ARCHIVE_FILE: ${{ github.workspace }}/dist/${{ needs.build.outputs.archive_file }}
+          ARCHIVE_FILE: ${{ steps.candidate.outputs.archive }}
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
           PUBLISHER: ${{ needs.build.outputs.publisher }}
           VERSION: ${{ needs.build.outputs.version }}
@@ -164,33 +261,6 @@ jobs:
           publish_args+=("$ARCHIVE_FILE")
 
           pnpm dlx ovsx@1.0.1 "${publish_args[@]}" -p "$OVSX_PAT"
-
-      - name: Create or update GitHub Release
-        env:
-          ARCHIVE_PATH: dist/${{ needs.build.outputs.archive_file }}
-          GH_TOKEN: ${{ github.token }}
-          INPUT_RELEASE_TAG: ${{ inputs.release_tag || '' }}
-          REF_NAME: ${{ github.ref_name }}
-          VERSION: ${{ needs.build.outputs.version }}
-        run: |
-          TAG_NAME="${INPUT_RELEASE_TAG:-$REF_NAME}"
-          release_flags=(--latest=false)
-          if [[ "$VERSION" == *-* ]]; then
-            release_flags+=(--prerelease)
-          fi
-
-          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
-            gh release upload "$TAG_NAME" "$ARCHIVE_PATH" --clobber
-            gh release edit "$TAG_NAME" \
-              --title "VS Code Extension v$VERSION" \
-              --notes "Packaged VS Code extension build for v$VERSION." \
-              "${release_flags[@]}"
-          else
-            gh release create "$TAG_NAME" "$ARCHIVE_PATH" \
-              --title "VS Code Extension v$VERSION" \
-              --notes "Packaged VS Code extension build for v$VERSION." \
-              "${release_flags[@]}"
-          fi
 
       - name: Report VS Code Marketplace publish failure
         if: steps.vscode_marketplace.outcome == 'failure'
