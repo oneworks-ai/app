@@ -1,6 +1,6 @@
 {
   "name": "@oneworks/app-runtime",
-  "version": "0.1.0-rc.4",
+  "version": "0.1.0-rc.5",
   "description": "App-facing runtime facade for One Works",
   "repository": {
     "type": "git",

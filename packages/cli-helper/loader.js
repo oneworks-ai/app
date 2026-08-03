@@ -106,8 +106,12 @@ bootstrapNodePath()
 logDesktopLoaderTiming('bootstrap node path complete')
 
 if (!process.env.__IS_LOADER_CLI__) {
+  const shouldForwardDesktopOwnerIpc = process.connected === true &&
+    process.env.__ONEWORKS_DESKTOP_SERVER_OWNER_CHANNEL__ === 'ipc-v1'
   const child = spawn(process.execPath, process.argv.slice(1), {
-    stdio: 'inherit',
+    stdio: shouldForwardDesktopOwnerIpc
+      ? ['inherit', 'inherit', 'inherit', 'ipc']
+      : 'inherit',
     env: {
       ...process.env,
       NODE_OPTIONS: [
