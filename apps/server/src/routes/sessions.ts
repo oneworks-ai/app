@@ -584,9 +584,8 @@ export function sessionsRouter(): Router {
 
   router.post('/:id/workspace/transfer-local', async (ctx) => {
     const { id } = ctx.params as { id: string }
-    ctx.body = {
-      workspace: await transferSessionWorkspaceToLocal(id)
-    }
+    await transferSessionWorkspaceToLocal(id)
+    ctx.body = { workspace: await resolveSessionWorkspaceWithDerivationEligibility(id) }
   })
 
   router.patch('/:id', (ctx) => {

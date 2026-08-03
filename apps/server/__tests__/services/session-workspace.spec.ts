@@ -96,6 +96,7 @@ describe('session workspace service', () => {
     vi.doUnmock('node:fs/promises')
     vi.doUnmock('node:process')
     vi.doUnmock('#~/services/safe-regular-file-update.js')
+    vi.doUnmock('@oneworks/utils')
     process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__ = previousWorkspaceEnv
     process.env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__ = previousPrimaryWorkspaceEnv
     db.close()
@@ -279,6 +280,97 @@ describe('session workspace service', () => {
     expect(db.getSessionWorkspace(unavailableSession.id)?.state).toBe('broken')
 
     await rm(nonGitRoot, { recursive: true, force: true })
+  })
+
+  it('rejects worktree derivation when an external runtime arrives during preflight', async () => {
+    let releasePreflight: (() => void) | undefined
+    const preflightStarted = new Promise<void>(resolve => {
+      releasePreflight = resolve
+    })
+    let notifyPreflightStarted: (() => void) | undefined
+    const preflightIsRunning = new Promise<void>(resolve => {
+      notifyPreflightStarted = resolve
+    })
+    const utils = await vi.importActual<typeof import('@oneworks/utils')>('@oneworks/utils')
+    vi.doMock('@oneworks/utils', () => ({
+      ...utils,
+      runGitCommand: vi.fn(async (args: string[]) => {
+        if (args[0] === 'status') {
+          notifyPreflightStarted?.()
+          await preflightStarted
+          return { stdout: '', stderr: '' }
+        }
+        return await utils.runGitCommand(args, workspaceRoot)
+      })
+    }))
+
+    const { createSessionManagedWorktree } = await import('#~/services/session/workspace.js')
+    const session = db.createSession('Racing external runtime', 'sess-runtime-race')
+    db.upsertSessionWorkspace({
+      sessionId: session.id,
+      kind: 'shared_workspace',
+      workspaceFolder: workspaceRoot,
+      cleanupPolicy: 'retain',
+      state: 'ready'
+    })
+
+    const creating = createSessionManagedWorktree(session.id)
+    await preflightIsRunning
+    db.updateSessionRuntimeState(session.id, { runtimeKind: 'external' })
+    releasePreflight?.()
+
+    await expect(creating).rejects.toMatchObject({
+      code: 'session_workspace_derivation_unavailable',
+      details: { reason: 'external_runtime' }
+    })
+    expect(db.getSessionWorkspace(session.id)).toMatchObject({
+      kind: 'shared_workspace',
+      workspaceFolder: workspaceRoot
+    })
+  })
+
+  it('rejects worktree derivation when an external runtime arrives after reservation', async () => {
+    let releaseHeadRef: (() => void) | undefined
+    const headRefCanResolve = new Promise<void>(resolve => {
+      releaseHeadRef = resolve
+    })
+    let notifyHeadRefStarted: (() => void) | undefined
+    const headRefIsPending = new Promise<void>(resolve => {
+      notifyHeadRefStarted = resolve
+    })
+    const addGitWorktree = vi.fn()
+    const utils = await vi.importActual<typeof import('@oneworks/utils')>('@oneworks/utils')
+    vi.doMock('@oneworks/utils', () => ({
+      ...utils,
+      addGitWorktree,
+      resolveGitCurrentBranch: vi.fn().mockResolvedValue(''),
+      resolveGitHeadRef: vi.fn(async () => {
+        notifyHeadRefStarted?.()
+        await headRefCanResolve
+        return 'HEAD'
+      })
+    }))
+
+    const { createSessionManagedWorktree } = await import('#~/services/session/workspace.js')
+    const session = db.createSession('Reserved runtime race', 'sess-reserved-runtime-race')
+    db.upsertSessionWorkspace({
+      sessionId: session.id,
+      kind: 'shared_workspace',
+      workspaceFolder: workspaceRoot,
+      cleanupPolicy: 'retain',
+      state: 'ready'
+    })
+
+    const creating = createSessionManagedWorktree(session.id)
+    await headRefIsPending
+    db.updateSessionRuntimeState(session.id, { runtimeKind: 'external' })
+    releaseHeadRef?.()
+
+    await expect(creating).rejects.toMatchObject({
+      code: 'session_workspace_derivation_unavailable',
+      details: { reason: 'external_runtime' }
+    })
+    expect(addGitWorktree).not.toHaveBeenCalled()
   })
 
   it('does not attach a worktree environment to an explicitly shared workspace', async () => {

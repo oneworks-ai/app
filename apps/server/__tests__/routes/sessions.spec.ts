@@ -26,7 +26,8 @@ import {
   createSessionManagedWorktree,
   provisionSessionWorkspace,
   resolveSessionWorkspace,
-  resolveSessionWorkspaceWithDerivationEligibility
+  resolveSessionWorkspaceWithDerivationEligibility,
+  transferSessionWorkspaceToLocal
 } from '#~/services/session/workspace.js'
 import { disposeTerminalSession } from '#~/services/terminal/index.js'
 
@@ -196,6 +197,22 @@ describe('sessionsRouter', () => {
 
     expect(killSession).not.toHaveBeenCalled()
     expect(disposeTerminalSession).not.toHaveBeenCalled()
+  })
+
+  it('returns current worktree derivation eligibility after transferring to local', async () => {
+    const handleTransferToLocal = findRouteHandler('/:id/workspace/transfer-local', 'POST')
+    const ctx = {
+      params: { id: 'session-transfer' },
+      body: undefined
+    }
+
+    await handleTransferToLocal(ctx)
+
+    expect(transferSessionWorkspaceToLocal).toHaveBeenCalledWith('session-transfer')
+    expect(resolveSessionWorkspaceWithDerivationEligibility).toHaveBeenCalledWith('session-transfer')
+    expect(ctx.body).toEqual({
+      workspace: expect.objectContaining({ worktreeDerivation: { eligible: true } })
+    })
   })
 
   it('triggers native project history import', async () => {

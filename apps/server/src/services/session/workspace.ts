@@ -48,6 +48,7 @@ interface ProvisionSessionWorkspaceOptions {
 }
 
 const DEFAULT_CLEANUP_POLICY: SessionWorkspaceCleanupPolicy = 'delete_on_session_delete'
+const sessionWorktreeDerivationReservations = new Set<string>()
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
@@ -185,6 +186,45 @@ const getWorktreeDerivationEligibility = async (
   return { eligible: true }
 }
 
+const reserveSessionWorktreeDerivation = (sessionId: string) => {
+  const workspace = getDb().getSessionWorkspace(sessionId)
+  if (workspace == null || workspace.kind === 'managed_worktree' || workspace.state !== 'ready') {
+    return { eligible: false as const, disabledReason: 'workspace_unavailable' as const }
+  }
+
+  if (getDb().getSessionRuntimeState(sessionId)?.runtimeKind === 'external') {
+    return { eligible: false as const, disabledReason: 'external_runtime' as const }
+  }
+
+  if (sessionWorktreeDerivationReservations.has(sessionId)) {
+    return { eligible: false as const, disabledReason: 'workspace_unavailable' as const }
+  }
+
+  sessionWorktreeDerivationReservations.add(sessionId)
+  return { eligible: true as const, workspace }
+}
+
+const assertSessionWorktreeDerivationReservation = (sessionId: string) => {
+  const workspace = getDb().getSessionWorkspace(sessionId)
+  const unavailable = !sessionWorktreeDerivationReservations.has(sessionId) ||
+    workspace == null ||
+    workspace.kind === 'managed_worktree' ||
+    workspace.state !== 'ready'
+  const disabledReason = getDb().getSessionRuntimeState(sessionId)?.runtimeKind === 'external'
+    ? 'external_runtime'
+    : unavailable
+    ? 'workspace_unavailable'
+    : undefined
+
+  if (disabledReason != null) {
+    throw conflict(
+      'Session workspace cannot be derived into a managed worktree',
+      { sessionId, reason: disabledReason },
+      'session_workspace_derivation_unavailable'
+    )
+  }
+}
+
 const resolveRepositoryDirectoryName = (repositoryRoot: string, fallback: string) => {
   const segments = repositoryRoot
     .split(/[\\/]+/)
@@ -275,7 +315,8 @@ const buildManagedWorkspace = async (
   workspaceFolder: string,
   worktreeEnvironment?: string,
   onProgress?: ProvisionSessionWorkspaceOptions['onProgress'],
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  beforeCreateWorktree?: () => void
 ) => {
   throwIfAborted(signal, 'Workspace provision cancelled')
   await emitProvisionProgress(onProgress, {
@@ -319,6 +360,7 @@ const buildManagedWorkspace = async (
       worktreePath
     })
     throwIfAborted(signal, 'Workspace provision cancelled')
+    beforeCreateWorktree?.()
     await addGitWorktree({
       branch: branchName,
       cwd: repositoryRoot,
@@ -525,8 +567,24 @@ export const createSessionManagedWorktree = async (sessionId: string) => {
     )
   }
 
+  const reservation = reserveSessionWorktreeDerivation(sessionId)
+  if (!reservation.eligible) {
+    throw conflict(
+      'Session workspace cannot be derived into a managed worktree',
+      { sessionId, reason: reservation.disabledReason },
+      'session_workspace_derivation_unavailable'
+    )
+  }
+
   try {
-    return await buildManagedWorkspace(sessionId, existing.workspaceFolder, existing.worktreeEnvironment)
+    return await buildManagedWorkspace(
+      sessionId,
+      reservation.workspace.workspaceFolder,
+      reservation.workspace.worktreeEnvironment,
+      undefined,
+      undefined,
+      () => assertSessionWorktreeDerivationReservation(sessionId)
+    )
   } catch (error) {
     if (!isGitMissingError(error) && !isGitNotRepositoryError(error)) {
       throw error
@@ -540,6 +598,8 @@ export const createSessionManagedWorktree = async (sessionId: string) => {
       },
       'session_workspace_not_repository'
     )
+  } finally {
+    sessionWorktreeDerivationReservations.delete(sessionId)
   }
 }
 
