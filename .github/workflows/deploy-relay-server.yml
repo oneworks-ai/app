@@ -86,6 +86,8 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Build shared types artifact
+        run: pnpm -C packages/types build
       - name: Build Relay Admin Pages artifact
         run: pnpm -C apps/relay-admin build:platform
       - name: Deploy Relay Worker to Cloudflare production

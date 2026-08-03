@@ -85,6 +85,9 @@ jobs:
         if: steps.credentials.outputs.available == 'true'
         run: pnpm install --frozen-lockfile
 
+      - name: Build shared types artifact
+        if: steps.credentials.outputs.available == 'true'
+        run: pnpm -C packages/types build
       - name: Resolve expected Relay version
         if: steps.credentials.outputs.available == 'true'
         id: relay-version

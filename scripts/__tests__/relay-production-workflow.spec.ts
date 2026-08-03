@@ -26,4 +26,19 @@ describe('relay production workflow', () => {
   it('deploys Cloudflare development when Relay transport contracts change', () => {
     expect(devWorkflow).toContain('- packages/types/**')
   })
+
+  it('builds shared types before bundling each Cloudflare Worker', () => {
+    const cloudflareDev = devWorkflow.match(/\x20{2}deploy-cloudflare-dev:\n([\s\S]+?)\n\x20{2}smoke-vercel-dev:/u)?.[1]
+    const cloudflareProduction = workflow.match(/\x20{2}deploy-cloudflare:\n([\s\S]+?)\n\x20{2}deploy-vercel:/u)?.[1]
+
+    for (const cloudflareJob of [cloudflareDev, cloudflareProduction]) {
+      const typesBuild = cloudflareJob?.indexOf('name: Build shared types artifact') ?? -1
+      const adminBuild = cloudflareJob?.indexOf('name: Build Relay Admin Pages artifact') ?? -1
+      const workerDeploy = cloudflareJob?.indexOf('Deploy Relay Worker') ?? -1
+
+      expect(typesBuild).toBeGreaterThanOrEqual(0)
+      expect(typesBuild).toBeLessThan(adminBuild)
+      expect(typesBuild).toBeLessThan(workerDeploy)
+    }
+  })
 })
