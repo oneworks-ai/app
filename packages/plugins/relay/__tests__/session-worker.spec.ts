@@ -232,7 +232,7 @@ describe('relay plugin session worker', () => {
   it('posts a locally detected change at 30 seconds, then only refreshes identical data after six hours', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true })))
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ ok: true })))
     vi.stubGlobal('fetch', fetchMock)
     let title = 'Initial title'
     const worker = createRelaySessionWorker({

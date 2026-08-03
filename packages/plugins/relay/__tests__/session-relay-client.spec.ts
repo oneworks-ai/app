@@ -19,7 +19,12 @@ describe('relay session client polling wire contract', () => {
 
     await pollRelaySessionForwardingJobs(auth, {
       heartbeat: {
-        capabilities: { sessions: true },
+        capabilities: {
+          sessions: true,
+          terminal: false,
+          workspaceFiles: false,
+          workspaceLauncher: false
+        },
         deviceId: 'device-1',
         deviceToken: 'device-secret',
         managementServerId: 'manager-1',

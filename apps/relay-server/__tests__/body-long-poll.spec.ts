@@ -48,8 +48,9 @@ describe('relay body long polling', () => {
       },
       withStore: async callback => {
         const local = await repository.read()
-        await callback(local, repository)
+        const result = await callback(local, repository)
         store = local
+        return result
       },
       write: async next => {
         store = structuredClone(next)
