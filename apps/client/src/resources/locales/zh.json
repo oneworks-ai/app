@@ -4938,15 +4938,40 @@
     },
     "about": {
       "software": "软件信息",
+      "client": "Client",
+      "server": "Server",
       "version": "版本",
       "clientVersion": "Client 版本",
       "serverVersion": "Server 版本",
       "commitHash": "构建 Commit",
       "lastRelease": "最后发布时间",
       "checkUpdate": "检查更新",
+      "copyDiagnostics": "复制诊断信息",
+      "copySuccess": "诊断信息已复制",
+      "copyFailed": "无法复制诊断信息",
+      "retry": "重试",
       "docs": "帮助文档",
       "contact": "联系我们",
       "feedback": "问题反馈",
+      "fingerprint": {
+        "version": "版本",
+        "commit": "Commit",
+        "buildTime": "构建时间",
+        "commitTimeSource": "提交时间"
+      },
+      "connection": {
+        "connected": "已连接",
+        "loading": "连接中",
+        "error": "连接失败",
+        "unavailable": "不可用",
+        "loadingDescription": "正在读取 Server 构建信息…",
+        "errorDescription": "无法读取 Server 构建信息，请检查连接后重试。",
+        "unavailableDescription": "当前 Server 未提供构建信息，请检查 Server 版本后重试。"
+      },
+      "mismatch": {
+        "version": "Client 与 Server 版本不兼容，请更新到兼容版本。",
+        "commit": "Client 与 Server 来自不同的构建 Commit。"
+      },
       "buildSource": {
         "title": "应用来源",
         "gitHash": "Git Hash",

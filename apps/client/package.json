@@ -27,7 +27,9 @@
   ],
   "scripts": {
     "icons:subset": "node ./scripts/generate-material-symbols-subset.mjs",
-    "prepublish": "vite build"
+    "prepack": "vite build",
+    "prepublish": "vite build",
+    "test:packed-preview-runtime": "node ./scripts/test-packed-preview-runtime-offline.cjs"
   },
   "dependencies": {
     "@oneworks/avatar": "workspace:*",
@@ -36,6 +38,7 @@
     "@oneworks/icon": "workspace:*",
     "@oneworks/register": "workspace:*",
     "@oneworks/route-layout": "workspace:*",
+    "@oneworks/types": "workspace:*",
     "@yume-chan/scrcpy": "2.3.0",
     "@yume-chan/scrcpy-decoder-webcodecs": "2.5.3",
     "@yume-chan/stream-extra": "2.6.1",
@@ -57,7 +60,6 @@
     "@oneworks/channel-lark": "workspace:*",
     "@oneworks/core": "workspace:*",
     "@oneworks/plugin-chrome-devtools": "workspace:*",
-    "@oneworks/types": "workspace:*",
     "@oneworks/utils": "workspace:*",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.2",

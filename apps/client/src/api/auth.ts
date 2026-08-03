@@ -1,7 +1,10 @@
+import type { AppBuildInfo } from '@oneworks/types'
+
 import { clearAuthToken } from './auth-token'
 import { fetchApiJson, fetchApiJsonOrThrow, jsonHeaders } from './base'
 
 export interface AuthStatus {
+  build?: AppBuildInfo
   enabled: boolean
   authenticated: boolean
   usernames: string[]

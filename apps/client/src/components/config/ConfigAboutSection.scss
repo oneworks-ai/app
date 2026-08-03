@@ -10,79 +10,245 @@
   justify-content: space-between;
   gap: 12px;
   padding: 16px;
-  border-radius: var(--oneworks-surface-radius, 12px);
   border: 1px solid var(--border-color);
+  border-radius: var(--oneworks-surface-radius, 12px);
   background: var(--code-bg);
 }
 
 .config-about__app {
   display: flex;
+  min-width: 0;
   align-items: center;
   gap: 12px;
 }
 
 .config-about__app-icon {
+  display: flex;
   width: 44px;
   height: 44px;
-  border-radius: var(--oneworks-group-radius, 8px);
-  display: flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  background: var(--tag-bg);
   border: 1px solid var(--border-color);
+  border-radius: var(--oneworks-group-radius, 8px);
   color: var(--primary-color);
+  background: var(--tag-bg);
 }
 
 .config-about__app-info {
   display: flex;
+  min-width: 0;
   flex-direction: column;
   gap: 4px;
 }
 
 .config-about__app-title {
+  color: var(--text-color);
   font-size: 14px;
   font-weight: 600;
-  color: var(--text-color);
 }
 
-.config-about__app-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: 12px;
+.config-about__app-date {
   color: var(--sub-text-color);
+  font-size: 12px;
 }
 
-.config-about__app-version,
-.config-about__app-server-version,
-.config-about__app-commit {
-  color: var(--text-color);
+.config-about__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
 }
 
-.config-about__app-version {
-  cursor: default;
-}
-
-.config-about__primary {
+.config-about__primary,
+.config-about__secondary {
   display: inline-flex;
+  min-height: 32px;
   align-items: center;
   justify-content: center;
-  padding: 8px 14px;
-  border-radius: var(--oneworks-control-radius, 6px);
-  background: var(--tag-bg);
-  color: var(--text-color);
-  text-decoration: none;
-  font-size: 12px;
+  gap: 6px;
+  padding: 7px 12px;
   border: 1px solid var(--border-color);
+  border-radius: var(--oneworks-group-radius, 8px);
+  color: var(--text-color);
+  background: var(--tag-bg);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  text-decoration: none;
   white-space: nowrap;
+  cursor: pointer;
+}
+
+.config-about__secondary {
+  background: transparent;
+}
+
+.config-about__secondary .material-symbols-rounded {
+  font-size: 16px;
+}
+
+.config-about__primary:hover,
+.config-about__primary:focus-visible,
+.config-about__secondary:hover,
+.config-about__secondary:focus-visible {
+  color: var(--primary-color);
+}
+
+.config-about__fingerprints {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.config-about__fingerprint {
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--oneworks-surface-radius, 12px);
+  background: var(--bg-color);
+}
+
+.config-about__fingerprint-header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-color);
+  font-size: 13px;
+}
+
+.config-about__status {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  color: var(--sub-text-color);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.config-about__status-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--placeholder-color);
+}
+
+.config-about__status--connected .config-about__status-dot {
+  background: var(--success-color, #2e9d5b);
+}
+
+.config-about__status--error .config-about__status-dot,
+.config-about__status--unavailable .config-about__status-dot {
+  background: var(--error-color, #d14343);
+}
+
+.config-about__status--loading .config-about__status-dot {
+  background: var(--primary-color);
+}
+
+.config-about__fingerprint-list {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+}
+
+.config-about__fingerprint-list > div {
+  display: grid;
+  grid-template-columns: minmax(76px, max-content) minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+}
+
+.config-about__fingerprint-list dt {
+  color: var(--sub-text-color);
+  font-size: 12px;
+}
+
+.config-about__fingerprint-list dd {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  color: var(--text-color);
+  font-size: 12px;
+}
+
+.config-about__fingerprint-list code {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-color);
+  font-family: var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-about__time-source {
+  flex: 0 0 auto;
+  color: var(--sub-text-color);
+  font-size: 10px;
+}
+
+.config-about__connection-message,
+.config-about__mismatch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--oneworks-group-radius, 8px);
+  color: var(--sub-text-color);
+  background: var(--code-bg);
+  font-size: 12px;
+}
+
+.config-about__connection-message > span:nth-child(2) {
+  min-width: 0;
+  flex: 1;
+}
+
+.config-about__connection-message .material-symbols-rounded,
+.config-about__mismatch .material-symbols-rounded {
+  flex: 0 0 auto;
+  font-size: 18px;
+}
+
+.config-about__connection-message button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 0;
+  color: var(--primary-color);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.config-about__connection-message button .material-symbols-rounded {
+  font-size: 16px;
+}
+
+.config-about__mismatch {
+  border-color: color-mix(in srgb, var(--warning-color, #c98900) 45%, var(--border-color));
+  color: var(--text-color);
+  background: color-mix(in srgb, var(--warning-color, #c98900) 10%, var(--bg-color));
+}
+
+.config-about__spin {
+  animation: config-about-spin 1s linear infinite;
 }
 
 .config-about__list {
   display: flex;
-  flex-direction: column;
-  border-radius: var(--oneworks-surface-radius, 12px);
-  border: 1px solid var(--border-color);
   overflow: hidden;
+  flex-direction: column;
+  border: 1px solid var(--border-color);
+  border-radius: var(--oneworks-surface-radius, 12px);
   background: var(--bg-color);
 }
 
@@ -91,67 +257,63 @@
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
   color: var(--text-color);
   text-decoration: none;
-  border-bottom: 1px solid var(--border-color);
+}
+
+.config-about__item-row:last-child {
+  border-bottom: 0;
 }
 
 .config-about__item-left {
   display: inline-flex;
+  min-width: 0;
   align-items: center;
   gap: 10px;
 }
 
-.config-about__item-icon {
-  font-size: 18px;
-  color: var(--sub-text-color);
-}
-
-.config-about__item-row:last-child {
-  border-bottom: none;
-}
-
+.config-about__item-icon,
 .config-about__arrow {
+  flex: 0 0 auto;
+  color: var(--sub-text-color);
   font-size: 18px;
-  color: var(--sub-text-color);
 }
 
-.config-about__build-source {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px 16px;
-  border-radius: var(--oneworks-surface-radius, 12px);
-  border: 1px solid var(--border-color);
-  background: var(--bg-color);
+@keyframes config-about-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
-.config-about__build-source-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-color);
+@media (max-width: 720px) {
+  .config-about__card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .config-about__actions {
+    flex-wrap: wrap;
+  }
+
+  .config-about__fingerprints {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
-.config-about__build-source-list {
-  display: grid;
-  gap: 8px;
-}
+@media (max-width: 420px) {
+  .config-about__actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
 
-.config-about__build-source-row {
-  display: grid;
-  grid-template-columns: minmax(88px, max-content) minmax(0, 1fr);
-  gap: 12px;
-  align-items: start;
-  font-size: 12px;
-  color: var(--sub-text-color);
-}
+  .config-about__primary,
+  .config-about__secondary {
+    width: 100%;
+  }
 
-.config-about__build-source-row code {
-  color: var(--text-color);
-  font-family: var(--font-mono);
-  white-space: normal;
-  overflow-wrap: anywhere;
+  .config-about__fingerprint-list > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 3px;
+  }
 }

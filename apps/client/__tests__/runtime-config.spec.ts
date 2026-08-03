@@ -9,6 +9,7 @@ import {
   clearStoredServerBaseUrl,
   createServerUrl,
   getConfiguredServerBaseUrl,
+  getRuntimeEnv,
   getRuntimeWorkspaceId,
   getServerBaseUrl,
   getServerHostEnv,
@@ -35,21 +36,23 @@ const getGlobalScope = () => (
       __ONEWORKS_PROJECT_SERVER_ROLE__?: string
       __ONEWORKS_PROJECT_WORKSPACE_ID__?: string
     }
+    __ONEWORKS_PROJECT_RUNTIME_ENV_JSON__?: string
   }
 )
 
 const setRuntimeServerHost = (host: string) => {
-  getGlobalScope().__ONEWORKS_PROJECT_RUNTIME_ENV__ = {
+  getGlobalScope().__ONEWORKS_PROJECT_RUNTIME_ENV_JSON__ = JSON.stringify({
     __ONEWORKS_PROJECT_SERVER_HOST__: host
-  }
+  })
 }
 
 const clearRuntimeEnv = () => {
   delete getGlobalScope().__ONEWORKS_PROJECT_RUNTIME_ENV__
+  delete getGlobalScope().__ONEWORKS_PROJECT_RUNTIME_ENV_JSON__
 }
 
 const setRuntimeEnv = (env: NonNullable<ReturnType<typeof getGlobalScope>['__ONEWORKS_PROJECT_RUNTIME_ENV__']>) => {
-  getGlobalScope().__ONEWORKS_PROJECT_RUNTIME_ENV__ = env
+  getGlobalScope().__ONEWORKS_PROJECT_RUNTIME_ENV_JSON__ = JSON.stringify(env)
 }
 
 const createStorage = (): Storage => {
@@ -116,6 +119,51 @@ describe('getServerHostEnv', () => {
   it('returns a concrete runtime host', () => {
     setRuntimeServerHost(' 192.168.31.125 ')
     expect(getServerHostEnv()).toBe('192.168.31.125')
+  })
+})
+
+describe('runtime metadata boundary', () => {
+  afterEach(() => {
+    clearRuntimeEnv()
+  })
+
+  it('prefers JSON and supports the primitive own-data Android legacy boundary', () => {
+    let accessorReads = 0
+    let trapCount = 0
+    const proxy = new Proxy({}, {
+      get: () => {
+        trapCount += 1
+        return undefined
+      },
+      getPrototypeOf: () => {
+        trapCount += 1
+        return null
+      }
+    })
+    const legacy = {}
+    Object.defineProperty(legacy, '__ONEWORKS_PROJECT_SERVER_HOST__', {
+      get: () => {
+        accessorReads += 1
+        return 'unsafe.example.com'
+      }
+    })
+    Object.defineProperty(legacy, '__ONEWORKS_PROJECT_SERVER_PORT__', {
+      value: '8787',
+      enumerable: true
+    })
+    getGlobalScope().__ONEWORKS_PROJECT_RUNTIME_ENV__ = legacy
+
+    expect(getRuntimeEnv()).toEqual({ __ONEWORKS_PROJECT_SERVER_PORT__: '8787' })
+    expect(accessorReads).toBe(0)
+    expect(trapCount).toBe(0)
+
+    getGlobalScope().__ONEWORKS_PROJECT_RUNTIME_ENV_JSON__ = JSON.stringify({
+      __ONEWORKS_PROJECT_SERVER_HOST__: 'json.example.com'
+    })
+    expect(getRuntimeEnv()).toEqual({ __ONEWORKS_PROJECT_SERVER_HOST__: 'json.example.com' })
+    getGlobalScope().__ONEWORKS_PROJECT_RUNTIME_ENV_JSON__ = proxy as unknown as string
+    expect(getRuntimeEnv()).toEqual({})
+    expect(trapCount).toBe(0)
   })
 })
 

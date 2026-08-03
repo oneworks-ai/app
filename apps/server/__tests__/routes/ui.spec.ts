@@ -149,6 +149,7 @@ describe('ui static routing', () => {
     const indexBody = await indexResponse.text()
     expect(indexResponse.status).toBe(200)
     expect(indexBody).toContain('window.__ONEWORKS_PROJECT_RUNTIME_ENV__=')
+    expect(indexBody).toContain('window.__ONEWORKS_PROJECT_RUNTIME_ENV_JSON__=')
   })
 
   it('uses cached client dist when no explicit dist path is configured', async () => {

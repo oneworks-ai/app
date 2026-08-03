@@ -1,3 +1,4 @@
+import type { AppBuildInfo } from './app-build-info'
 import type { EffortLevel } from './common'
 import type { GitBranchKind } from './git'
 import type { PluginConfig, ResolvedPluginInstanceMetadata } from './plugin'
@@ -998,6 +999,10 @@ export interface Config {
 }
 
 export interface AboutInfo {
+  build?: AppBuildInfo
+  /**
+   * Backward-compatible Server version alias. New callers should use `build`.
+   */
   version?: string
   lastReleaseAt?: string
   urls?: {
