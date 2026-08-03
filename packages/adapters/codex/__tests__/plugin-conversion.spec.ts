@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- conversion security boundaries stay covered in one end-to-end fixture */
 import { Buffer } from 'node:buffer'
 import fs from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -12,6 +13,7 @@ import { collectCodexAppMetadata } from '../src/plugins/app-metadata'
 import { collectAppMetadataFiles } from '../src/plugins/app-metadata-files'
 import { readBoundedAppManifest } from '../src/plugins/app-metadata-reader'
 import { codexPluginInstaller } from '../src/plugins/index'
+import { readBoundedRegularFileNoFollow } from '../src/runtime/bounded-regular-file-read'
 
 const tempDirs: string[] = []
 const originalProjectHomeProjectsDir = process.env.__ONEWORKS_PROJECT_HOME_PROJECTS_DIR__
@@ -53,6 +55,28 @@ describe('codex plugin conversion', () => {
     await expect(fs.readFile(outsidePath, 'utf8')).resolves.toContain('outside')
   })
 
+  it('fails closed when an opened app metadata leaf is swapped for a same-inode symlink', async () => {
+    const cwd = await createTempDir()
+    const pluginRoot = path.join(cwd, 'codex-plugin')
+    const appsDir = path.join(pluginRoot, 'apps')
+    const appPath = path.join(appsDir, 'docs.app.json')
+    const preservedPath = `${appPath}.preserved`
+    await fs.mkdir(appsDir, { recursive: true })
+    await fs.writeFile(appPath, JSON.stringify({ apps: { docs: {} } }))
+
+    const collection = await collectAppMetadataFiles(pluginRoot, ['apps'])
+    const discovered = collection.files[0]
+    expect(discovered).toBeDefined()
+
+    await expect(readBoundedAppManifest(discovered!, {
+      beforePostOpenIdentityCheck: async () => {
+        await fs.rename(appPath, preservedPath)
+        await fs.symlink(preservedPath, appPath)
+      }
+    })).rejects.toThrow(/changed|symbolic/i)
+    await expect(fs.readFile(preservedPath, 'utf8')).resolves.toContain('docs')
+  })
+
   it('fails closed when an app metadata ancestor is replaced with an outside symlink', async () => {
     const cwd = await createTempDir()
     const pluginRoot = path.join(cwd, 'codex-plugin')
@@ -71,6 +95,43 @@ describe('codex plugin conversion', () => {
 
     await expect(readBoundedAppManifest(discovered!)).rejects.toThrow(/changed/i)
     await expect(fs.readFile(path.join(outsideDir, 'docs.app.json'), 'utf8')).resolves.toContain('outside')
+  })
+
+  it('binds ancestor opens to the approved root without a discovered leaf identity', async () => {
+    const cwd = await createTempDir()
+    const pluginRoot = path.join(cwd, 'codex-plugin')
+    const appsDir = path.join(pluginRoot, 'apps')
+    const preservedAppsDir = `${appsDir}.preserved`
+    const outsideDir = path.join(cwd, 'outside-apps')
+    const appPath = path.join(appsDir, 'docs.app.json')
+    await fs.mkdir(appsDir, { recursive: true })
+    await fs.mkdir(outsideDir, { recursive: true })
+    await fs.writeFile(appPath, JSON.stringify({ apps: { inside: {} } }))
+    await fs.writeFile(
+      path.join(outsideDir, 'docs.app.json'),
+      JSON.stringify({ apps: { outside: {} } })
+    )
+
+    const content = await readBoundedRegularFileNoFollow({
+      afterDirectoryOpen: async (relativePath) => {
+        if (relativePath !== 'apps') return
+        await fs.unlink(appsDir)
+        await fs.rename(preservedAppsDir, appsDir)
+      },
+      beforeDirectoryOpen: async (relativePath) => {
+        if (relativePath !== 'apps') return
+        await fs.rename(appsDir, preservedAppsDir)
+        await fs.symlink(outsideDir, appsDir)
+      },
+      canonicalParent: await fs.realpath(pluginRoot),
+      filePath: path.join(await fs.realpath(pluginRoot), 'apps', 'docs.app.json'),
+      maxBytes: 256 * 1024
+    })
+
+    expect(content).toBeUndefined()
+    await expect(fs.readFile(appPath, 'utf8')).resolves.toContain('inside')
+    await expect(fs.readFile(path.join(outsideDir, 'docs.app.json'), 'utf8'))
+      .resolves.toContain('outside')
   })
 
   it('preserves a safe npm spec as the generated package source identity', async () => {

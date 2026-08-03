@@ -1,105 +1,13 @@
 import { useMemo } from 'react'
 
 import { createPluginI18nContext, resolvePluginContributionText } from './plugin-i18n'
-import type {
-  PluginContributionToolUseField,
-  PluginContributionToolUseFieldFormat,
-  PluginContributionToolUsePresentation
-} from './plugin-manifest'
+import type { PluginContributionToolUseField, PluginContributionToolUsePresentation } from './plugin-manifest'
 import { usePluginSlot } from './plugin-slots'
+import { normalizePluginToolUsePresentation } from './plugin-tool-use-normalization'
+import type { RuntimeToolUsePresentation } from './plugin-tool-use-normalization'
 
-export type RuntimeToolUsePresentation = PluginContributionToolUsePresentation & {
-  pluginScope: string
-}
-
-const inputModes = new Set(['auto', 'declared', 'hidden'])
-const resultModes = new Set(['auto', 'declared', 'hidden'])
-const fieldFormats = new Set(['inline', 'text', 'code', 'list', 'chips', 'records', 'json'])
-const resultFormats = new Set(['auto', 'text', 'code', 'json', 'markdown'])
-
-const isRecord = (value: unknown): value is Record<string, unknown> => (
-  value != null && typeof value === 'object' && !Array.isArray(value)
-)
-
-const asNonEmptyString = (value: unknown) => (
-  typeof value === 'string' && value.trim() !== '' ? value : undefined
-)
-
-const normalizeFields = (value: unknown) => {
-  if (!Array.isArray(value)) return undefined
-  return value.flatMap((candidate) => {
-    if (!isRecord(candidate)) return []
-    const path = asNonEmptyString(candidate.path)
-    const fieldTitle = asNonEmptyString(candidate.title)
-    if (path == null || fieldTitle == null) return []
-    const format = fieldFormats.has(String(candidate.format))
-      ? candidate.format as PluginContributionToolUseFieldFormat
-      : undefined
-    const itemRecord = isRecord(candidate.item) ? candidate.item : undefined
-    const item = itemRecord == null
-      ? undefined
-      : {
-        titlePath: asNonEmptyString(itemRecord.titlePath),
-        subtitlePath: asNonEmptyString(itemRecord.subtitlePath),
-        statusPath: asNonEmptyString(itemRecord.statusPath),
-        metaPath: asNonEmptyString(itemRecord.metaPath),
-        detailPath: asNonEmptyString(itemRecord.detailPath)
-      }
-    return [{
-      ...candidate,
-      path,
-      title: fieldTitle,
-      format,
-      item,
-      language: asNonEmptyString(candidate.language)
-    }]
-  })
-}
-
-const normalizeToolUsePresentation = (
-  contribution: PluginContributionToolUsePresentation & { pluginScope: string }
-): RuntimeToolUsePresentation | undefined => {
-  const id = asNonEmptyString(contribution.id)
-  const title = asNonEmptyString(contribution.title)
-  const pluginScope = asNonEmptyString(contribution.pluginScope)
-  const tools = Array.isArray(contribution.tools)
-    ? contribution.tools.map(asNonEmptyString).filter((value): value is string => value != null)
-    : []
-  if (id == null || title == null || pluginScope == null || tools.length === 0) return undefined
-
-  const inputRecord = isRecord(contribution.input) ? contribution.input : undefined
-  const fields = normalizeFields(inputRecord?.fields)
-  const inputMode = inputModes.has(String(inputRecord?.mode))
-    ? inputRecord?.mode as NonNullable<RuntimeToolUsePresentation['input']>['mode']
-    : undefined
-  const resultRecord = isRecord(contribution.result) ? contribution.result : undefined
-  const resultMode = resultModes.has(String(resultRecord?.mode))
-    ? resultRecord?.mode as NonNullable<RuntimeToolUsePresentation['result']>['mode']
-    : undefined
-  const resultFormat = resultFormats.has(String(resultRecord?.format))
-    ? resultRecord?.format as NonNullable<RuntimeToolUsePresentation['result']>['format']
-    : undefined
-
-  return {
-    ...contribution,
-    id,
-    title,
-    pluginScope,
-    tools,
-    icon: asNonEmptyString(contribution.icon),
-    origin: contribution.origin === 'any' ? 'any' : undefined,
-    target: asNonEmptyString(contribution.target),
-    input: inputRecord == null ? undefined : { mode: inputMode, fields },
-    result: resultRecord == null
-      ? undefined
-      : {
-        mode: resultMode,
-        format: resultFormat,
-        fields: normalizeFields(resultRecord.fields),
-        language: asNonEmptyString(resultRecord.language)
-      }
-  }
-}
+export { normalizePluginToolUsePresentation } from './plugin-tool-use-normalization'
+export type { RuntimeToolUsePresentation } from './plugin-tool-use-normalization'
 
 const getToolNameSegments = (name: string) => (
   name.includes('__') ? name.split('__').filter(Boolean) : name.split(':').filter(Boolean)
@@ -158,26 +66,44 @@ export function usePluginToolUsePresentations() {
   return useMemo(() => {
     const pluginI18n = createPluginI18nContext()
     return contributions.flatMap((contribution) => {
-      const normalized = normalizeToolUsePresentation(contribution)
+      const normalized = normalizePluginToolUsePresentation(contribution)
       if (normalized == null) return []
       const localizeFields = (fields?: PluginContributionToolUseField[]) =>
         fields?.map(field => ({
-          ...field,
-          title: resolvePluginContributionText(field, 'title', pluginI18n) ?? field.title
+          path: field.path,
+          title: resolvePluginContributionText(field, 'title', pluginI18n) ?? field.title,
+          format: field.format,
+          item: field.item,
+          language: field.language,
+          titleI18n: field.titleI18n
         }))
       return [{
-        ...normalized,
+        id: normalized.id,
+        title: resolvePluginContributionText(normalized, 'title', pluginI18n) ?? normalized.title,
+        pluginScope: normalized.pluginScope,
+        tools: normalized.tools,
+        description: normalized.description,
+        descriptionI18n: normalized.descriptionI18n,
+        icon: normalized.icon,
+        i18n: normalized.i18n,
+        origin: normalized.origin,
+        roles: normalized.roles,
+        surfaces: normalized.surfaces,
+        target: normalized.target,
+        titleI18n: normalized.titleI18n,
         input: normalized.input == null
           ? undefined
           : {
-            ...normalized.input,
+            mode: normalized.input.mode,
             fields: localizeFields(normalized.input.fields)
           },
         result: normalized.result == null
           ? undefined
           : {
-            ...normalized.result,
-            fields: localizeFields(normalized.result.fields)
+            mode: normalized.result.mode,
+            format: normalized.result.format,
+            fields: localizeFields(normalized.result.fields),
+            language: normalized.result.language
           }
       }]
     })

@@ -32,6 +32,7 @@ export interface AppManifestFile {
   device: number
   inode: number
   path: string
+  relativePath: string
   size: number
 }
 
@@ -71,6 +72,7 @@ const collectAppManifestFiles = async (
       device: targetStat.dev,
       inode: targetStat.ino,
       path: resolved,
+      relativePath: path.relative(pluginRoot, resolved),
       size: targetStat.size
     })
     return
@@ -110,6 +112,7 @@ const collectAppManifestFiles = async (
       device: fileStat.dev,
       inode: fileStat.ino,
       path: candidate,
+      relativePath: path.relative(pluginRoot, candidate),
       size: fileStat.size
     })
   }

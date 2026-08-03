@@ -1,4 +1,6 @@
+/* eslint-disable max-lines -- durable transaction crash windows share one fixture and recovery timeline */
 import { randomUUID } from 'node:crypto'
+import { renameSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -9,7 +11,10 @@ import type { ManagedPluginInstallConfig } from '@oneworks/types'
 import { resolveManagedPluginInstallIdentity } from '@oneworks/utils/managed-plugin'
 
 import { readManagedPluginInstallState, writeManagedPluginTransactionMarker } from '#~/managed-plugin-install-state.js'
-import { getManagedPluginTransactionDirectories } from '#~/managed-plugin-transaction-journal.js'
+import {
+  getManagedPluginTransactionDirectories,
+  readManagedPluginTransactionJournal
+} from '#~/managed-plugin-transaction-journal.js'
 import type { ManagedPluginRecoveryCleanupPoint } from '#~/managed-plugin-transaction-recovery.js'
 import {
   ManagedPluginTransactionCrash,
@@ -333,6 +338,147 @@ describe('managed plugin durable transaction', () => {
       'utf8'
     )).resolves.toBe('v1')
   })
+
+  it('never removes a directory swapped after quarantine establishes deletion authority', async () => {
+    const scenario = await createScenario()
+    await expect(commitScenario(scenario, { crashAfter: 'new-promoted' }))
+      .rejects.toBeInstanceOf(ManagedPluginTransactionCrash)
+    const unrelated = path.join(path.dirname(scenario.installDir), 'unrelated-after-quarantine')
+    await mkdir(unrelated)
+    await writeFile(path.join(unrelated, 'sentinel.txt'), 'unrelated')
+    let preservedQuarantine: string | undefined
+    let replacement: string | undefined
+
+    await expect(recoverManagedPluginInstallTransaction({
+      identity: scenario.identity,
+      installDir: scenario.installDir,
+      operations: {
+        afterQuarantine: (directory) => {
+          if (preservedQuarantine != null) return
+          preservedQuarantine = `${directory}.preserved`
+          replacement = directory
+          renameSync(directory, preservedQuarantine)
+          renameSync(unrelated, directory)
+        }
+      }
+    })).rejects.toThrow(/changed before mutation/i)
+
+    expect(preservedQuarantine).toBeDefined()
+    expect(replacement).toBeDefined()
+    await expect(readFile(path.join(replacement!, 'sentinel.txt'), 'utf8'))
+      .resolves.toBe('unrelated')
+    await expect(readFile(
+      path.join(preservedQuarantine!, 'native', 'sentinel.txt'),
+      'utf8'
+    )).resolves.toBe('v1')
+  })
+
+  it('keeps an ancestor replacement intact after the authorized cleanup directory is opened', async () => {
+    const scenario = await createScenario()
+    await expect(commitScenario(scenario, { crashAfter: 'new-promoted' }))
+      .rejects.toBeInstanceOf(ManagedPluginTransactionCrash)
+    const unrelated = path.join(path.dirname(scenario.installDir), 'unrelated-authority-swap')
+    await mkdir(unrelated)
+    await writeFile(path.join(unrelated, 'sentinel.txt'), 'unrelated')
+    let quarantine: string | undefined
+    let preservedAncestor: string | undefined
+
+    await expect(recoverManagedPluginInstallTransaction({
+      identity: scenario.identity,
+      installDir: scenario.installDir,
+      operations: {
+        afterAuthorizedDirectoryOpen: (relativePath) => {
+          if (relativePath !== 'native' || quarantine == null || preservedAncestor != null) return
+          const ancestor = path.join(quarantine, 'native')
+          preservedAncestor = `${ancestor}.preserved`
+          renameSync(ancestor, preservedAncestor)
+          renameSync(unrelated, ancestor)
+        },
+        afterQuarantine: (directory) => {
+          quarantine = directory
+        }
+      }
+    })).rejects.toThrow(/changed before removal/i)
+
+    expect(quarantine).toBeDefined()
+    expect(preservedAncestor).toBeDefined()
+    await expect(readFile(path.join(quarantine!, 'native', 'sentinel.txt'), 'utf8'))
+      .resolves.toBe('unrelated')
+  })
+
+  it('journals a random cleanup quarantine and resumes after an interruption', async () => {
+    const scenario = await createScenario()
+    await expect(commitScenario(scenario, { crashAfter: 'new-promoted' }))
+      .rejects.toBeInstanceOf(ManagedPluginTransactionCrash)
+    let quarantine: string | undefined
+
+    await expect(recoverManagedPluginInstallTransaction({
+      identity: scenario.identity,
+      installDir: scenario.installDir,
+      operations: {
+        afterQuarantine: (directory) => {
+          quarantine = directory
+          throw new Error('simulated post-quarantine interruption')
+        }
+      }
+    })).rejects.toThrow(/post-quarantine interruption/i)
+
+    const interruptedJournal = await readManagedPluginTransactionJournal(scenario.installDir)
+    expect(interruptedJournal?.cleanup?.name).toBe(path.basename(quarantine!))
+    await expect(stat(quarantine!)).resolves.toMatchObject({})
+
+    await recoverManagedPluginInstallTransaction({
+      identity: scenario.identity,
+      installDir: scenario.installDir
+    })
+
+    await expect(stat(quarantine!)).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(readManagedPluginTransactionJournal(scenario.installDir)).resolves.toBeUndefined()
+  })
+
+  it.each(
+    [
+      ['records cleanup authority', true],
+      ['clears cleanup authority', false]
+    ] as const
+  )(
+    'recovers when a synced stale temp remains before it %s',
+    async (_description, crashWhenCleanupIsPresent) => {
+      const scenario = await createScenario()
+      await expect(commitScenario(scenario, { crashAfter: 'new-promoted' }))
+        .rejects.toBeInstanceOf(ManagedPluginTransactionCrash)
+      let staleTemporaryPath: string | undefined
+
+      await expect(recoverManagedPluginInstallTransaction({
+        identity: scenario.identity,
+        installDir: scenario.installDir,
+        operations: {
+          journalWrite: {
+            beforeRename: ({ journal, temporaryPath }) => {
+              if ((journal.cleanup != null) !== crashWhenCleanupIsPresent) return
+              staleTemporaryPath = temporaryPath
+              throw new Error('simulated journal crash before rename')
+            }
+          }
+        }
+      })).rejects.toThrow(/simulated journal crash before rename/i)
+
+      expect(staleTemporaryPath).toBeDefined()
+      await expect(stat(staleTemporaryPath!)).resolves.toMatchObject({})
+
+      await recoverManagedPluginInstallTransaction({
+        identity: scenario.identity,
+        installDir: scenario.installDir
+      })
+
+      await expect(readFile(
+        path.join(scenario.installDir, 'native', 'sentinel.txt'),
+        'utf8'
+      )).resolves.toBe('v2')
+      await expect(readManagedPluginTransactionJournal(scenario.installDir)).resolves.toBeUndefined()
+      await expect(stat(staleTemporaryPath!)).resolves.toMatchObject({})
+    }
+  )
 
   it.each(
     [

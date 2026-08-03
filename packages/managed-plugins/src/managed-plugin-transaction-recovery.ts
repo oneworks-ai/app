@@ -1,8 +1,12 @@
+/* eslint-disable max-lines -- recovery ordering and cleanup authority share one transaction state machine */
+import { realpathSync } from 'node:fs'
 import { lstat } from 'node:fs/promises'
+import path from 'node:path'
 
 import {
   getFreshManagedPluginTransactionPath,
   isolatePromotionAndRestoreBackupSync,
+  removeQuarantinedManagedPluginDirectory,
   renameOwnedManagedPluginDirectorySync
 } from './managed-plugin-filesystem'
 import { readOwnedManagedPluginDirectoryIdentitySync } from './managed-plugin-filesystem-identity'
@@ -19,8 +23,10 @@ import {
 import {
   getManagedPluginTransactionDirectories,
   readManagedPluginTransactionJournal,
-  removeManagedPluginTransactionJournal
+  removeManagedPluginTransactionJournal,
+  writeManagedPluginTransactionJournal
 } from './managed-plugin-transaction-journal'
+import type { ManagedPluginTransactionJournalWriteOperations } from './managed-plugin-transaction-journal'
 
 const pathExists = async (target: string) =>
   lstat(target)
@@ -45,10 +51,41 @@ export type ManagedPluginRecoveryCleanupPoint =
   | 'staging-cleaned'
 
 export interface ManagedPluginRecoveryOperations {
+  afterAuthorizedDirectoryOpen?: (relativePath: string) => Promise<void> | void
+  afterQuarantine?: (directory: string) => void
   afterCleanupPoint?: (
     point: ManagedPluginRecoveryCleanupPoint
   ) => Promise<void> | void
   beforeQuarantine?: (directory: string) => Promise<void> | void
+  journalWrite?: ManagedPluginTransactionJournalWriteOperations
+}
+
+const resumeJournaledCleanup = async (
+  installDir: string,
+  journal: NonNullable<Awaited<ReturnType<typeof readManagedPluginTransactionJournal>>>,
+  operations?: ManagedPluginRecoveryOperations
+) => {
+  if (journal.cleanup == null) return journal
+  const quarantine = path.join(path.dirname(installDir), journal.cleanup.name)
+  if (await pathExists(quarantine)) {
+    const device = Number(journal.cleanup.device)
+    const inode = Number(journal.cleanup.inode)
+    if (!Number.isSafeInteger(device) || !Number.isSafeInteger(inode)) {
+      throw new TypeError('Managed plugin cleanup journal identity is unsupported.')
+    }
+    await removeQuarantinedManagedPluginDirectory({
+      afterAuthorizedDirectoryOpen: operations?.afterAuthorizedDirectoryOpen,
+      identity: {
+        device,
+        inode,
+        realPath: realpathSync(quarantine)
+      },
+      quarantine
+    })
+  }
+  const cleared = { ...journal, cleanup: undefined }
+  await writeManagedPluginTransactionJournal(installDir, cleared, operations?.journalWrite)
+  return cleared
 }
 
 const readExpectedInstall = async (params: {
@@ -111,11 +148,16 @@ export const recoverManagedPluginInstallTransaction = async (params: {
   installDir: string
   operations?: ManagedPluginRecoveryOperations
 }) => {
-  const journal = await readManagedPluginTransactionJournal(params.installDir)
-  if (journal == null) return
-  if (journal.identity !== params.identity) {
+  const storedJournal = await readManagedPluginTransactionJournal(params.installDir)
+  if (storedJournal == null) return
+  if (storedJournal.identity !== params.identity) {
     throw new Error('Managed plugin transaction journal belongs to a different plugin.')
   }
+  const journal = await resumeJournaledCleanup(
+    params.installDir,
+    storedJournal,
+    params.operations
+  )
   const { backupDir, stagingDir } = getManagedPluginTransactionDirectories(
     params.installDir,
     journal.transactionId

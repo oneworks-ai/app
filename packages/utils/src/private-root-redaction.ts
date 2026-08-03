@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- URL token protection and filesystem redaction share one scanner */
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -111,19 +112,23 @@ const findProtectedHttpUrlEnd = (
   roots: string[]
 ) => {
   let tokenEnd = start
-  let parentheses = 0
   while (tokenEnd < value.length) {
     const character = value[tokenEnd] ?? ''
     if (HTTP_URL_END_PATTERN.test(character)) break
-    if (character === '(') parentheses += 1
-    if (character === ')') {
-      if (parentheses === 0) break
-      parentheses -= 1
-    }
     tokenEnd += 1
   }
   const token = value.slice(start, tokenEnd)
+  let parenthesisDepth = 0
   for (let index = 0; index < token.length; index += 1) {
+    if (token[index] === '(') {
+      parenthesisDepth += 1
+      continue
+    }
+    if (token[index] === ')' && parenthesisDepth > 0) {
+      parenthesisDepth -= 1
+      continue
+    }
+    if (parenthesisDepth > 0) continue
     if (token[index] !== ',' && token[index] !== ';') continue
     const suffix = token.slice(index + 1)
     const suffixStart = start + index + 1

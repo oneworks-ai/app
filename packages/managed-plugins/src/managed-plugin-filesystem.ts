@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import { closeSync, fstatSync, fsyncSync, realpathSync, renameSync, rmSync } from 'node:fs'
+import { closeSync, fstatSync, fsyncSync, realpathSync, renameSync } from 'node:fs'
 import path from 'node:path'
 
+import { removeVerifiedManagedPluginDirectoryTree } from './managed-plugin-directory-removal'
 import {
   assertManagedPluginFilesystemIdentity,
   managedPluginPathDoesNotExist,
@@ -50,29 +51,20 @@ export const renameOwnedManagedPluginDirectorySync = (params: {
   }
 }
 
-export const removeOwnedManagedPluginDirectorySync = (params: {
+export const removeQuarantinedManagedPluginDirectory = async (params: {
+  afterAuthorizedDirectoryOpen?: (relativePath: string) => Promise<void> | void
+  beforeRemoval?: (directory: string) => Promise<void> | void
   identity: ManagedPluginTreeIdentity
-  installDir: string
-  source: string
-  transactionId: string
+  quarantine: string
 }) => {
-  const quarantine = getFreshManagedPluginTransactionPath(
-    params.installDir,
-    params.transactionId,
-    'cleanup'
-  )
-  renameOwnedManagedPluginDirectorySync({
-    destination: quarantine,
-    identity: params.identity,
-    source: params.source
-  })
   const quarantineIdentity = {
     ...params.identity,
-    realPath: realpathSync(quarantine)
+    realPath: realpathSync(params.quarantine)
   }
-  const parent = openVerifiedManagedPluginParent(quarantine, params.source)
+  await params.beforeRemoval?.(params.quarantine)
+  const parent = openVerifiedManagedPluginParent(params.quarantine, params.quarantine)
   const descriptor = openVerifiedManagedPluginDirectory(
-    quarantine,
+    params.quarantine,
     quarantineIdentity,
     quarantineIdentity.realPath
   )
@@ -82,12 +74,35 @@ export const removeOwnedManagedPluginDirectorySync = (params: {
       quarantineIdentity,
       'Managed plugin cleanup quarantine changed before removal.'
     )
-    rmSync(quarantine, { recursive: true })
+    await removeVerifiedManagedPluginDirectoryTree({
+      descriptor,
+      identity: quarantineIdentity,
+      operations: {
+        afterDirectoryOpen: params.afterAuthorizedDirectoryOpen
+      },
+      parentDescriptor: parent.descriptor,
+      root: params.quarantine
+    })
     fsyncSync(parent.descriptor)
   } finally {
     closeSync(descriptor)
     closeSync(parent.descriptor)
   }
+}
+
+export const removeOwnedManagedPluginDirectory = async (params: {
+  afterAuthorizedDirectoryOpen?: (relativePath: string) => Promise<void> | void
+  beforeRemoval?: (directory: string) => Promise<void> | void
+  identity: ManagedPluginTreeIdentity
+  quarantine: string
+  source: string
+}) => {
+  renameOwnedManagedPluginDirectorySync({
+    destination: params.quarantine,
+    identity: params.identity,
+    source: params.source
+  })
+  await removeQuarantinedManagedPluginDirectory(params)
 }
 
 export const isolatePromotionAndRestoreBackupSync = (params: {

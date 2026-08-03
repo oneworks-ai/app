@@ -1,12 +1,18 @@
 import { lstat } from 'node:fs/promises'
+import path from 'node:path'
 
-import { removeOwnedManagedPluginDirectorySync } from './managed-plugin-filesystem'
+import { getFreshManagedPluginTransactionPath, removeOwnedManagedPluginDirectory } from './managed-plugin-filesystem'
 import {
   assertManagedPluginInstallIdentity,
   hasManagedPluginTransactionMarker,
   readManagedPluginInstallState
 } from './managed-plugin-install-state'
-import type { ManagedPluginTransactionJournal } from './managed-plugin-transaction-journal'
+import { writeManagedPluginTransactionJournal } from './managed-plugin-transaction-journal'
+import type {
+  ManagedPluginTransactionJournal,
+  ManagedPluginTransactionJournalWriteOperations
+} from './managed-plugin-transaction-journal'
+import type { ManagedPluginTreeIdentity } from './managed-plugin-tree-identity'
 
 const pathExists = async (target: string) =>
   lstat(target)
@@ -25,7 +31,49 @@ const assertRevision = (
 }
 
 export interface ManagedPluginCleanupOperations {
+  afterAuthorizedDirectoryOpen?: (relativePath: string) => Promise<void> | void
+  afterQuarantine?: (directory: string) => Promise<void> | void
   beforeQuarantine?: (directory: string) => Promise<void> | void
+  journalWrite?: ManagedPluginTransactionJournalWriteOperations
+}
+
+const removeVerifiedManagedPluginDirectory = async (params: {
+  directory: string
+  identity: ManagedPluginTreeIdentity
+  journal: ManagedPluginTransactionJournal
+  operations?: ManagedPluginCleanupOperations
+  purpose: 'backup' | 'staging'
+}) => {
+  const quarantine = getFreshManagedPluginTransactionPath(
+    params.directory,
+    params.journal.transactionId,
+    'cleanup'
+  )
+  await writeManagedPluginTransactionJournal(
+    params.directory,
+    {
+      ...params.journal,
+      cleanup: {
+        device: String(params.identity.device),
+        inode: String(params.identity.inode),
+        name: path.basename(quarantine),
+        purpose: params.purpose
+      }
+    },
+    params.operations?.journalWrite
+  )
+  await removeOwnedManagedPluginDirectory({
+    afterAuthorizedDirectoryOpen: params.operations?.afterAuthorizedDirectoryOpen,
+    beforeRemoval: params.operations?.afterQuarantine,
+    identity: params.identity,
+    quarantine,
+    source: params.directory
+  })
+  await writeManagedPluginTransactionJournal(
+    params.directory,
+    { ...params.journal, cleanup: undefined },
+    params.operations?.journalWrite
+  )
 }
 
 export const removeVerifiedManagedPluginStaging = async (
@@ -49,11 +97,12 @@ export const removeVerifiedManagedPluginStaging = async (
     throw new Error('Managed plugin transaction staging ownership proof is missing.')
   }
   await operations?.beforeQuarantine?.(stagingDir)
-  removeOwnedManagedPluginDirectorySync({
+  await removeVerifiedManagedPluginDirectory({
+    directory: stagingDir,
     identity: state.rootIdentity,
-    installDir: stagingDir,
-    source: stagingDir,
-    transactionId: journal.transactionId
+    journal,
+    operations,
+    purpose: 'staging'
   })
 }
 
@@ -73,10 +122,11 @@ export const removeVerifiedManagedPluginBackup = async (
     throw new Error('Managed plugin transaction backup ownership proof is missing.')
   }
   await operations?.beforeQuarantine?.(backupDir)
-  removeOwnedManagedPluginDirectorySync({
+  await removeVerifiedManagedPluginDirectory({
+    directory: backupDir,
     identity: state.rootIdentity,
-    installDir: backupDir,
-    source: backupDir,
-    transactionId: journal.transactionId
+    journal,
+    operations,
+    purpose: 'backup'
   })
 }

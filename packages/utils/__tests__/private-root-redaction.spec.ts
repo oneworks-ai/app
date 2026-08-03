@@ -87,6 +87,36 @@ describe('private-root redaction', () => {
     ].join(' '))
   })
 
+  it('preserves comma and semicolon delimiters inside parenthesized URL path segments', () => {
+    const value = [
+      'https://example.test/path(one,/data/private)',
+      'https://example.test/path(two;/custom/private)',
+      'https://example.test/path(three,/data/private),/custom/private'
+    ].join(' ')
+
+    expect(redactPrivateRoots(value, ['/data', '/custom'])).toBe([
+      'https://example.test/path(one,/data/private)',
+      'https://example.test/path(two;/custom/private)',
+      'https://example.test/path(three,/data/private),[local path]'
+    ].join(' '))
+  })
+
+  it('preserves valid URLs with unmatched parentheses instead of redacting URL path segments', () => {
+    const value = [
+      'https://example.test/path)/data/private',
+      'https://example.test/path(foo/custom/private',
+      'https://example.test/path),/data/private',
+      '/custom/private'
+    ].join(' ')
+
+    expect(redactPrivateRoots(value, ['/data', '/custom'])).toBe([
+      'https://example.test/path)/data/private',
+      'https://example.test/path(foo/custom/private',
+      'https://example.test/path),[local path]',
+      '[local path]'
+    ].join(' '))
+  })
+
   it('redacts configured literal roots with delimiters without matching prefix cousins', () => {
     const roots = [
       '/custom/My Project',

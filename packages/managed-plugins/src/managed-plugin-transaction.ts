@@ -12,6 +12,7 @@ import { removeVerifiedManagedPluginStaging } from './managed-plugin-transaction
 import {
   getManagedPluginTransactionDirectories,
   getManagedPluginTransactionPaths,
+  removeManagedPluginTransactionJournal,
   syncManagedPluginTransactionParent,
   writeManagedPluginTransactionJournal
 } from './managed-plugin-transaction-journal'
@@ -183,6 +184,7 @@ export const commitManagedPluginInstall = async (params: {
           await recover()
         } else {
           await removeVerifiedManagedPluginStaging(params.stagingDir, journal)
+          await removeManagedPluginTransactionJournal(params.installDir)
           await syncManagedPluginTransactionParent(params.installDir)
         }
       }
