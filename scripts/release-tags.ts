@@ -3,6 +3,12 @@ import type { Buffer } from 'node:buffer'
 import { execFileSync } from 'node:child_process'
 import process from 'node:process'
 
+import {
+  assertVscodeStoreVersionAvailable,
+  vscodeExtensionPackageName,
+  vscodeExtensionReleaseTagPrefix
+} from '../apps/vscode-extension/scripts/release-identity.cjs'
+
 import { buildPackageReleaseTag } from './cli-package-release'
 
 export interface PackageManifestSnapshot {
@@ -63,6 +69,7 @@ export const createReleaseTagPlanFromManifestChanges = (
   changes: PackageManifestChange[],
   input: {
     base: string
+    existingReleaseTags?: readonly string[]
     head: string
   }
 ): ReleaseTagPlan => {
@@ -83,6 +90,9 @@ export const createReleaseTagPlanFromManifestChanges = (
     const tag = buildPackageReleaseTag(after.name, after.version)
     if (tags.has(tag)) {
       throw new Error(`Duplicate release tag candidate: ${tag}`)
+    }
+    if (after.name === vscodeExtensionPackageName && input.existingReleaseTags != null) {
+      assertVscodeStoreVersionAvailable(tag, input.existingReleaseTags)
     }
 
     tags.set(tag, {
@@ -182,12 +192,20 @@ const listPackageManifestPathsAtRef = (cwd: string, ref: string) => (
     .sort()
 )
 
+const listVscodeExtensionReleaseTags = (cwd: string) => (
+  runGit(['tag', '--list', `${vscodeExtensionReleaseTagPrefix}*`], { cwd })
+    .split('\n')
+    .map(tag => tag.trim())
+    .filter(Boolean)
+)
+
 export const loadReleaseTagPlan = (input: {
   base: string
   cwd?: string
   head: string
 }) => {
   const cwd = input.cwd ?? process.cwd()
+  const existingReleaseTags = listVscodeExtensionReleaseTags(cwd)
   if (!input.base || /^0+$/u.test(input.base)) {
     const changes = listPackageManifestPathsAtRef(cwd, input.head)
       .map((filePath): PackageManifestChange => ({
@@ -198,6 +216,7 @@ export const loadReleaseTagPlan = (input: {
 
     return createReleaseTagPlanFromManifestChanges(changes, {
       base: '',
+      existingReleaseTags,
       head: input.head
     })
   }
@@ -224,6 +243,7 @@ export const loadReleaseTagPlan = (input: {
 
   return createReleaseTagPlanFromManifestChanges(changes, {
     base,
+    existingReleaseTags,
     head: input.head
   })
 }

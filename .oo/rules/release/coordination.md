@@ -24,6 +24,7 @@ selected distribution surfaces
 ```
 
 - 所有 tag、artifact、registry 版本、部署和探活必须能回溯到同一个 immutable source SHA；“当前 main”“最新 tag”或任务启动时重新取最新代码都不能代替精确 SHA。
+- 对已选择的商店分发面，外部 registry 版本还必须唯一对应当前逻辑 release tag 和不可变产物；只有同一逻辑发布的恢复重跑可以使用 duplicate skip，不能用旧版本仍可下载来代替当前 source 的终态证据。
 - Cloudflare 与 Vercel 是两个独立部署 owner，只共享获批 source SHA 和 Relay 版本契约，任何一方成功都不能证明另一方完成。
 - 发布过程中 main 继续前进时，当前发布身份不随之移动。需要改变 package set、版本或 source SHA 时，由协调者明确终止旧矩阵并建立新矩阵。
 

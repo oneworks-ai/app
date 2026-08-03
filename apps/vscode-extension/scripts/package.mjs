@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import process from 'node:process'
 
 import { createReleaseStage, getVsceBinaryPath, resolveVsixPath } from './release-manifest.mjs'
+import { verifyVsixFile } from './verify-vsix.mjs'
 
 const outputPath = readArgumentValue('--out')
 const stage = await createReleaseStage()
@@ -21,6 +22,11 @@ try {
     getVsceBinaryPath(),
     packageArgs,
     stage.stageDir
+  )
+  const identity = await verifyVsixFile(packagePath, stage.sourceVersion)
+  console.log(
+    `Verified VSIX identity: logical=${identity.sourceVersion}, store=${identity.storeVersion}, ` +
+      `prerelease=${identity.prerelease}`
   )
   console.log(`Packaged VSIX at ${packagePath}`)
 } finally {
