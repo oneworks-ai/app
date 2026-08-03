@@ -76,7 +76,7 @@ const renderDropdown = async (eligible: boolean) => {
   })
 }
 
-describe('GitWorktreeDropdown', () => {
+describe('git worktree dropdown', () => {
   beforeEach(() => {
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
     container = document.createElement('div')

@@ -1,28 +1,14 @@
 import type { EffortLevel } from './common'
 import type { ChatMessageContent } from './message'
+import type { SessionWorktreeDerivationEligibility } from './session-worktree-derivation'
 
 export type SessionStatus = 'running' | 'completed' | 'failed' | 'terminated' | 'waiting_input'
-
 export type SessionPermissionMode = 'default' | 'acceptEdits' | 'plan' | 'dontAsk' | 'bypassPermissions'
 export type SessionPromptType = 'spec' | 'entity' | 'workspace'
 export type SessionMessageBranchAction = 'fork' | 'recall' | 'edit'
 export type SessionWorkspaceKind = 'managed_worktree' | 'shared_workspace' | 'external_workspace'
 export type SessionWorkspaceState = 'provisioning' | 'ready' | 'deleting' | 'deleted' | 'broken'
 export type SessionWorkspaceCleanupPolicy = 'delete_on_session_delete' | 'retain'
-export type SessionWorktreeDerivationDisabledReason =
-  | 'already_managed_worktree'
-  | 'workspace_unavailable'
-  | 'external_runtime'
-  | 'not_repository'
-  | 'git_not_installed'
-  | 'repository_unavailable'
-  | 'dirty_worktree'
-
-export interface SessionWorktreeDerivationEligibility {
-  eligible: boolean
-  disabledReason?: SessionWorktreeDerivationDisabledReason
-}
-
 export type SessionQueuedMessageMode = 'steer' | 'next'
 export type SessionCreationProgressStatus = 'running' | 'success' | 'error' | 'skipped'
 export type SessionCreationProgressPhase = 'worktree' | 'environment' | 'workspace'
@@ -38,7 +24,6 @@ export type SessionCreationProgressStep =
   | 'environment_skipped'
   | 'workspace_ready'
   | 'workspace_failed'
-
 export interface SessionCreationProgressEvent {
   phase: SessionCreationProgressPhase
   step: SessionCreationProgressStep
