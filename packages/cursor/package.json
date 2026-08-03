@@ -1,7 +1,7 @@
 {
   "name": "@oneworks/cursor",
   "type": "commonjs",
-  "version": "0.1.0-rc.5",
+  "version": "0.1.0-rc.6",
   "description": "Reusable OneWorks pointer cursor SVG renderer",
   "repository": {
     "type": "git",

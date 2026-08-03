@@ -1,6 +1,6 @@
 {
   "name": "@oneworks/definition-loader",
-  "version": "0.1.0-rc.5",
+  "version": "0.1.0-rc.6",
   "description": "Shared definition loading utilities for One Works",
   "repository": {
     "type": "git",

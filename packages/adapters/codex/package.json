@@ -1,6 +1,6 @@
 {
   "name": "@oneworks/adapter-codex",
-  "version": "0.1.0-rc.5",
+  "version": "0.1.0-rc.6",
   "description": "Codex App Server Adapter for One Works",
   "repository": {
     "type": "git",
