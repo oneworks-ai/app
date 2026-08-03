@@ -1,11 +1,23 @@
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { lstatSync, readFileSync } from 'node:fs'
+import { existsSync, lstatSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const suppliedRoot = process.argv[2]?.trim()
+const root = suppliedRoot == null || suppliedRoot === ''
+  ? resolve(dirname(fileURLToPath(import.meta.url)), '..')
+  : resolve(suppliedRoot)
+if (suppliedRoot != null && suppliedRoot !== '') {
+  const loader = lstatSync(resolve(root, 'loader.cjs'))
+  if (!loader.isFile() || loader.isSymbolicLink()) {
+    throw new Error('Packaged native authority loader is unsafe')
+  }
+  if (existsSync(resolve(root, 'build'))) {
+    throw new Error('Packaged native authority contains build intermediates')
+  }
+}
 const manifest = JSON.parse(readFileSync(resolve(root, 'prebuilds/manifest.json'), 'utf8'))
 const expected = Object.freeze({
   'darwin-arm64': 'arm64',
