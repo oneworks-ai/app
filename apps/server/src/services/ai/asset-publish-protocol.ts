@@ -41,14 +41,16 @@ const transitions: Record<'ready' | PublishStage, PublishStage[]> = {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value != null && typeof value === 'object' && !Array.isArray(value)
 
-const isWorkerError = (value: Record<string, unknown>): value is WorkerError => (
+const isWorkerError = (value: unknown): value is WorkerError => (
+  isRecord(value) &&
   value.state === 'error' &&
   typeof value.code === 'string' &&
   value.committed === false &&
   (value.privateStaging == null || value.privateStaging === 'retained')
 )
 
-const isPublishOutcome = (value: Record<string, unknown>): value is PublishOutcome => (
+const isPublishOutcome = (value: unknown): value is PublishOutcome => (
+  isRecord(value) &&
   (value.state === 'committed' || value.state === 'committed-degraded' || value.state === 'committed-indeterminate') &&
   (value.warnings == null ||
     (Array.isArray(value.warnings) && value.warnings.every(warning => typeof warning === 'string')))
