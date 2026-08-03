@@ -2,6 +2,22 @@
 
 Relay 是 One Works 插件设备和云端会话之间的中继服务。普通用户默认使用 One Works 托管服务；只有需要私有化部署、公司内网隔离或自有域名 / 存储 / SSO 策略时，才需要自己部署 Relay Server 与 Admin。
 
+## 设备控制传输
+
+三种部署形态分别使用独立传输：Node 使用原生 WebSocket；Cloudflare Durable Object entry 必须配置完整、合法且同源的设备 API 与控制 WebSocket URL pair，才发布兼容的 v1 WebSocket 能力；Vercel 只发布 v2 HTTP long-poll（最长 50 秒、空闲重试 250 秒）。Cloudflare pair 缺失或非法时 fail closed。客户端不会跨平台猜测域名或在这些模式间回退。v2 请求把 heartbeat 与 job claim 合并为一个 JSON POST；WebSocket token 只用于升级，后续每帧都按 token hash 和当前权限复核。
+
+Vercel 默认节奏按每台设备每天约 288 次调用、14,400 function-seconds 和 3,168 次存储读取估算（每次 poll 最多 11 次读取）。这是协议预算而不是平台套餐保证；设备数增加时用量按设备线性增长。部署方如需调低用量，任何调整都必须通过明确的 24 小时预算门禁，且仍保持 v2 long-poll 合约，不能移除 capability 退回旧协议。
+
+客户端每 30 秒只做本地快照 diff 检查；有变化立即发布，无变化时每 6 小时做一次安全刷新。
+
+### 平台回滚
+
+| 目标       | 回滚方式                                                               | 禁止方式                                                       |
+| ---------- | ---------------------------------------------------------------------- | -------------------------------------------------------------- |
+| Node       | 部署同一 Node 目标已验证的旧不可变包 / SHA。                           | 删除 transport capability 或把 Node 配置伪装成其他平台。       |
+| Cloudflare | 将 Worker 和 Pages 一起回滚到该 Cloudflare slot 已验证的旧不可变 SHA。 | 用 Vercel / dev 凭据、域名或 capability 代替 Cloudflare 版本。 |
+| Vercel     | 将同一 Vercel project 回滚到该 slot 已验证的旧不可变 SHA。             | 删除 v2 capability 以回到 legacy WebSocket。                   |
+
 ## 私有化部署配置清单
 
 私有化部署前，先把下面这些配置定下来，再创建平台项目、OAuth client、邮箱域名或 passkey：

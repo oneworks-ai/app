@@ -1,15 +1,13 @@
 /* eslint-disable max-lines -- the Worker entry keeps its environment mapping and Durable Object lifecycle together. */
+import { normalizeRelayDeviceTransport } from '@oneworks/types/relay-device-transport'
+
 import { parseRelayServerArgs } from '../src/config.js'
 import type { RelayConfigEnv } from '../src/config.js'
-import { deviceTokenMatches, hashDeviceToken } from '../src/devices/private-metadata.js'
-import { devicePrincipalForDevice, hasRelayPermission, relayPermissions } from '../src/permissions/index.js'
+import { applyRelayControlHeartbeatFrame, createRelayControlAttachment } from '../src/platform/control-heartbeat.js'
 import { createRelayFetchHandler } from '../src/platform/fetch-handler.js'
-import { applyDeviceHeartbeat } from '../src/routes/devices.js'
 import { createDurableObjectRelayStoreRepository } from '../src/storage/durable-object.js'
 import type { RelayDurableObjectStorage } from '../src/storage/durable-object.js'
-import type { RelayStoreRepository } from '../src/storage/repository.js'
 import { createRelayTelemetry } from '../src/telemetry/metrics.js'
-import type { RelayStore } from '../src/types.js'
 
 interface RelayWebSocket {
   close: (code?: number, reason?: string) => void
@@ -43,6 +41,7 @@ interface RelayCloudflareEnv {
   ONEWORKS_RELAY_DEVICE_METADATA_SECRET?: string
   ONEWORKS_RELAY_DEVICE_API_URL?: string
   ONEWORKS_RELAY_DEVICE_CONTROL_WS_URL?: string
+  ONEWORKS_RELAY_DEVICE_CONTROL_HEARTBEAT_SECONDS?: string
   ONEWORKS_RELAY_DEVICE_ONLINE_TTL_SECONDS?: string
   ONEWORKS_RELAY_EMAIL_CODE_TTL_SECONDS?: string
   ONEWORKS_RELAY_EMAIL_DISPOSABLE_BLOCKLIST_ENABLED?: string
@@ -82,8 +81,6 @@ const envRecord = (env: RelayCloudflareEnv): RelayConfigEnv => ({
   ONEWORKS_RELAY_AVATAR_URL: env.ONEWORKS_RELAY_AVATAR_URL,
   ONEWORKS_RELAY_BUILD_SHA: env.ONEWORKS_RELAY_BUILD_SHA,
   ONEWORKS_RELAY_DEVICE_METADATA_SECRET: env.ONEWORKS_RELAY_DEVICE_METADATA_SECRET,
-  ONEWORKS_RELAY_DEVICE_API_URL: env.ONEWORKS_RELAY_DEVICE_API_URL,
-  ONEWORKS_RELAY_DEVICE_CONTROL_WS_URL: env.ONEWORKS_RELAY_DEVICE_CONTROL_WS_URL,
   ONEWORKS_RELAY_DEVICE_ONLINE_TTL_SECONDS: env.ONEWORKS_RELAY_DEVICE_ONLINE_TTL_SECONDS,
   ONEWORKS_RELAY_EMAIL_CODE_TTL_SECONDS: env.ONEWORKS_RELAY_EMAIL_CODE_TTL_SECONDS,
   ONEWORKS_RELAY_EMAIL_DISPOSABLE_BLOCKLIST_ENABLED: env.ONEWORKS_RELAY_EMAIL_DISPOSABLE_BLOCKLIST_ENABLED,
@@ -115,14 +112,46 @@ const envRecord = (env: RelayCloudflareEnv): RelayConfigEnv => ({
   ONEWORKS_RELAY_TURNSTILE_VERIFY_URL: env.ONEWORKS_RELAY_TURNSTILE_VERIFY_URL
 })
 
-const argsFromEnv = (env: RelayCloudflareEnv) => ({
-  ...parseRelayServerArgs([], envRecord(env)),
-  dataPath: 'cloudflare-durable-object',
-  embeddedAdminUi: false,
-  host: '0.0.0.0',
-  port: 0,
-  storageDriver: 'cloudflare-do' as const
-})
+const readCloudflareHeartbeatIntervalMs = (value: string | undefined) => {
+  if (value == null || value.trim() === '') return 30_000
+  const seconds = Number(value)
+  return Number.isFinite(seconds) && Number.isSafeInteger(seconds) && seconds > 0 ? seconds * 1_000 : undefined
+}
+
+const createCloudflareDeviceTransport = (env: RelayCloudflareEnv) => {
+  const heartbeatIntervalMs = readCloudflareHeartbeatIntervalMs(env.ONEWORKS_RELAY_DEVICE_CONTROL_HEARTBEAT_SECONDS)
+  if (heartbeatIntervalMs == null) return undefined
+  return normalizeRelayDeviceTransport({
+    apiBaseUrl: env.ONEWORKS_RELAY_DEVICE_API_URL,
+    controlWebSocketUrl: env.ONEWORKS_RELAY_DEVICE_CONTROL_WS_URL,
+    heartbeatIntervalMs,
+    version: 1
+  })
+}
+
+export const createCloudflareRelayArgs = (env: RelayCloudflareEnv) => {
+  const parsed = parseRelayServerArgs([], envRecord(env))
+  const websocket = createCloudflareDeviceTransport(env)
+  if (websocket == null) {
+    throw new Error(
+      'Cloudflare Relay requires valid ONEWORKS_RELAY_DEVICE_API_URL and ONEWORKS_RELAY_DEVICE_CONTROL_WS_URL.'
+    )
+  }
+  return {
+    ...parsed,
+    // Durable Object WebSockets use a low-write cadence.  Only an absent override gets the
+    // longer window; an explicit invalid value must retain config parsing's safe fallback.
+    deviceOnlineTtlMs: env.ONEWORKS_RELAY_DEVICE_ONLINE_TTL_SECONDS == null
+      ? 900_000
+      : parsed.deviceOnlineTtlMs,
+    deviceTransport: websocket,
+    dataPath: 'cloudflare-durable-object',
+    embeddedAdminUi: false,
+    host: '0.0.0.0',
+    port: 0,
+    storageDriver: 'cloudflare-do' as const
+  }
+}
 
 export class RelayDurableObject {
   private readonly handler: (request: Request) => Promise<Response>
@@ -134,7 +163,7 @@ export class RelayDurableObject {
 
   constructor(state: RelayDurableObjectState, env: RelayCloudflareEnv, platform: RelayCloudflarePlatform = {}) {
     this.state = state
-    this.args = argsFromEnv(env)
+    this.args = createCloudflareRelayArgs(env)
     this.repository = createDurableObjectRelayStoreRepository(state.storage)
     this.platform = {
       createUpgradeResponse: platform.createUpgradeResponse ?? (client => (
@@ -175,28 +204,21 @@ export class RelayDurableObject {
       const token = request.headers.get('authorization')?.replace(/^Bearer\s+/iu, '') ?? ''
       const deviceId = request.headers.get('x-oneworks-relay-device-id')?.trim() ?? ''
       const store = await this.repository.read()
-      const device = store.devices.find(item => item.id === deviceId && deviceTokenMatches(item, token))
-      const principal = device == null ? undefined : devicePrincipalForDevice(device)
-      if (
-        device == null ||
-        principal == null ||
-        !hasRelayPermission(principal, relayPermissions.relayDevicesHeartbeat) ||
-        !hasRelayPermission(principal, relayPermissions.relayJobsRead)
-      ) {
+      const attachment = createRelayControlAttachment(store, {
+        ...(request.headers.get('cf-connecting-ip') == null
+          ? {}
+          : { connectionIp: request.headers.get('cf-connecting-ip') ?? undefined }),
+        deviceId,
+        deviceToken: token
+      })
+      if (attachment == null) {
         return new Response('Unauthorized', { status: 401 })
       }
       const pair = this.platform.createWebSocketPair()
       const client = pair[0]
       const server = pair[1]
       this.state.acceptWebSocket(server, [deviceId])
-      server.serializeAttachment({
-        version: 1,
-        deviceId,
-        deviceTokenHash: hashDeviceToken(token),
-        ...(request.headers.get('cf-connecting-ip') == null
-          ? {}
-          : { connectionIp: request.headers.get('cf-connecting-ip') })
-      })
+      server.serializeAttachment(attachment)
       return this.platform.createUpgradeResponse(client)
     }
     return await this.handler(request)
@@ -230,53 +252,21 @@ export class RelayDurableObject {
     }
     const attachmentDeviceId = attachment.deviceId
     const attachmentDeviceTokenHash = attachment.deviceTokenHash
-    let frame: unknown
-    try {
-      frame = JSON.parse(typeof message === 'string' ? message : new TextDecoder().decode(message))
-    } catch {
-      socket.close(1003, 'invalid frame')
-      return
-    }
-    if (frame == null || typeof frame !== 'object' || (frame as { type?: unknown }).type !== 'heartbeat') {
-      socket.close(1003, 'unsupported frame')
-      return
-    }
-    const applyHeartbeat = async (store: RelayStore, storeRepository: RelayStoreRepository) => {
-      const device = store.devices.find(item => (
-        item.id === attachmentDeviceId && (
-          item.deviceTokenHash === attachmentDeviceTokenHash ||
-          (item.deviceToken != null && hashDeviceToken(item.deviceToken) === attachmentDeviceTokenHash)
-        )
-      ))
-      const principal = device == null ? undefined : devicePrincipalForDevice(device)
-      if (
-        device == null ||
-        principal == null ||
-        !hasRelayPermission(principal, relayPermissions.relayDevicesHeartbeat) ||
-        !hasRelayPermission(principal, relayPermissions.relayJobsRead)
-      ) {
-        socket.close(1008, 'device token revoked')
-        return
-      }
-      if (device.deviceTokenHash == null && device.deviceToken != null) {
-        device.deviceTokenHash = attachmentDeviceTokenHash
-        delete device.deviceToken
-      }
-      await applyDeviceHeartbeat({
-        args: this.args,
-        body: (frame as { payload?: unknown }).payload ?? {},
-        connectionIp: typeof attachment.connectionIp === 'string' ? attachment.connectionIp : undefined,
-        device,
-        store,
-        storeRepository,
-        telemetry: this.telemetry
-      })
-    }
-    if (this.repository.withStore != null) {
-      await this.repository.withStore(applyHeartbeat)
-    } else {
-      await applyHeartbeat(await this.repository.read(), this.repository)
-    }
+    const result = await applyRelayControlHeartbeatFrame({
+      args: this.args,
+      attachment: {
+        version: 1,
+        deviceId: attachmentDeviceId,
+        deviceTokenHash: attachmentDeviceTokenHash,
+        ...(typeof attachment.connectionIp === 'string' ? { connectionIp: attachment.connectionIp } : {})
+      },
+      frame: message,
+      repository: this.repository,
+      telemetry: this.telemetry
+    })
+    if (result === 'frame-too-large') socket.close(1009, 'frame too large')
+    if (result === 'invalid-frame') socket.close(1003, 'invalid frame')
+    if (result === 'revoked') socket.close(1008, 'device token revoked')
   }
 
   webSocketClose(_socket: RelayWebSocket, _code: number, _reason: string, _wasClean: boolean) {}

@@ -19,6 +19,10 @@
 - Release PR 合入 `main` 后，`Release Tags` workflow 会比较合入前后的 workspace package manifest；已有包 `version` 变化、新增包带有 `name` 与 `version` 时，自动创建 `pkg/<normalized-package-name>/v<version>` tag。
 - 自动 tag 由 `Release Tags` workflow 使用内置 `GITHUB_TOKEN` 创建；不要配置个人全仓库 PAT 作为 release tag secret。`GITHUB_TOKEN` 创建的 tag 不会触发普通 tag workflow，因此 workflow 会在创建 tag 后显式 `workflow_dispatch` 对应的发布 workflow。
 
+### Relay transport release triad
+
+Relay device transport contract is runtime code shared by `@oneworks/types`, `@oneworks/relay-server`, and `@oneworks/plugin-relay`. The feature PR must not change package versions; its release PR must first, or in the same ordered publication batch, publish `@oneworks/types@0.1.0-rc.1`, then publish `@oneworks/relay-server@0.1.0-rc.2` and `@oneworks/plugin-relay@0.1.0-rc.2`. Use an explicit targeted selection containing all three packages, and run `pnpm tools publish-plan -- --packages @oneworks/types,@oneworks/relay-server,@oneworks/plugin-relay --json` to verify the selected set and that `@oneworks/types` precedes the Relay Server before publishing.
+
 ## 单包发布
 
 1. 确认自上次发布以来存在应计入发版范围的变更

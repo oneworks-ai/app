@@ -7,10 +7,26 @@ export const responseJsonBody = (res: ServerResponse) => (
   (res as ServerResponse & { [relayJsonResponseBodySymbol]?: unknown })[relayJsonResponseBodySymbol]
 )
 
-export const readRequestBody = async (req: IncomingMessage): Promise<Record<string, unknown>> => {
-  const chunks = []
+export class RelayRequestBodyTooLargeError extends Error {
+  constructor(readonly maxBytes: number) {
+    super(`Request body exceeds ${maxBytes} bytes.`)
+    this.name = 'RelayRequestBodyTooLargeError'
+  }
+}
+
+export const readRequestBody = async (
+  req: IncomingMessage,
+  options: { maxBytes?: number } = {}
+): Promise<Record<string, unknown>> => {
+  const chunks: Buffer[] = []
+  let totalBytes = 0
   for await (const chunk of req) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+    totalBytes += buffer.byteLength
+    if (options.maxBytes != null && totalBytes > options.maxBytes) {
+      throw new RelayRequestBodyTooLargeError(options.maxBytes)
+    }
+    chunks.push(buffer)
   }
   const raw = Buffer.concat(chunks).toString('utf8')
   if (raw.trim() === '') return {}

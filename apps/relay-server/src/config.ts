@@ -78,33 +78,6 @@ const readServiceAvatarUrl = (value: string | undefined) => {
   }
 }
 
-const readDeviceTransport = (env: RelayConfigEnv) => {
-  const apiBaseUrl = env.ONEWORKS_RELAY_DEVICE_API_URL?.trim()
-  const controlWebSocketUrl = env.ONEWORKS_RELAY_DEVICE_CONTROL_WS_URL?.trim()
-  if (apiBaseUrl == null || apiBaseUrl === '' || controlWebSocketUrl == null || controlWebSocketUrl === '') {
-    return undefined
-  }
-  try {
-    const api = new URL(apiBaseUrl)
-    const control = new URL(controlWebSocketUrl)
-    if (!['http:', 'https:'].includes(api.protocol) || !['ws:', 'wss:'].includes(control.protocol)) return undefined
-    if (api.username !== '' || api.password !== '' || control.username !== '' || control.password !== '') {
-      return undefined
-    }
-    const isLoopback = (hostname: string) => hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
-    if (api.protocol !== 'https:' && !isLoopback(api.hostname)) return undefined
-    if (control.protocol !== 'wss:' && !isLoopback(control.hostname)) return undefined
-    if (`${api.hostname}:${api.port}` !== `${control.hostname}:${control.port}`) return undefined
-    if (api.pathname !== '/' || api.search !== '' || api.hash !== '') return undefined
-    if (control.pathname !== '/api/relay/devices/control' || control.search !== '' || control.hash !== '') {
-      return undefined
-    }
-    return { apiBaseUrl: api.toString(), controlWebSocketUrl: control.toString(), version: 1 as const }
-  } catch {
-    return undefined
-  }
-}
-
 const readStorageDriver = (env: RelayConfigEnv) => {
   return parseRelayStorageDriver(env.ONEWORKS_RELAY_STORAGE_DRIVER)
 }
@@ -246,7 +219,6 @@ export const parseRelayServerArgs = (
     buildSha: env.ONEWORKS_RELAY_BUILD_SHA?.trim() || undefined,
     loginRedirectOrigins: readOriginList(env.ONEWORKS_RELAY_LOGIN_REDIRECT_ORIGINS),
     deviceMetadataSecret: env.ONEWORKS_RELAY_DEVICE_METADATA_SECRET || undefined,
-    deviceTransport: readDeviceTransport(env),
     publicBaseUrl: env.ONEWORKS_RELAY_PUBLIC_URL || undefined,
     sessionTtlMs: readPositiveInteger(env.ONEWORKS_RELAY_SESSION_TTL_SECONDS, DEFAULT_SESSION_TTL_MS / 1000) *
       1000,
@@ -302,8 +274,6 @@ Environment:
   ONEWORKS_RELAY_DEFAULT_LOGIN_METHOD
   ONEWORKS_RELAY_ADMIN_TOKEN
   ONEWORKS_RELAY_DEVICE_METADATA_SECRET
-  ONEWORKS_RELAY_DEVICE_API_URL
-  ONEWORKS_RELAY_DEVICE_CONTROL_WS_URL
   ONEWORKS_RELAY_ALLOW_ORIGIN
   ONEWORKS_RELAY_AVATAR_URL
   ONEWORKS_RELAY_BUILD_SHA

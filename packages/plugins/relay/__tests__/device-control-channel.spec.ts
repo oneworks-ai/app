@@ -9,6 +9,7 @@ import {
   RELAY_CONTROL_FALLBACK_POLL_RETRY_MIN_MS,
   RELAY_CONTROL_HEARTBEAT_MS,
   RELAY_CONTROL_RETRY_MIN_MS,
+  RELAY_CONTROL_SNAPSHOT_CHECK_MS,
   RELAY_CONTROL_SNAPSHOT_MS,
   createRelayDeviceControlChannel
 } from '../src/server/device-control-channel.js'
@@ -63,7 +64,7 @@ const heartbeat = {
 
 const createWorker = (): Mocked<RelaySessionWorker> => ({
   refreshSnapshot: vi.fn<RelaySessionWorker['refreshSnapshot']>(async () => {}),
-  runOnce: vi.fn<RelaySessionWorker['runOnce']>(async () => {}),
+  runOnce: vi.fn<RelaySessionWorker['runOnce']>(async () => ({ jobCount: 0 })),
   stop: vi.fn<RelaySessionWorker['stop']>()
 })
 
@@ -99,7 +100,9 @@ describe('relay device control channel', () => {
     expect(factory.mock.calls[0]?.[0]).not.toContain('super-secret-token')
     expect(fetchMock).not.toHaveBeenCalled()
     expect(socket.sent).toHaveLength(1 + (24 * 60 * 60_000) / RELAY_CONTROL_HEARTBEAT_MS)
-    expect(worker.refreshSnapshot).toHaveBeenCalledTimes(1 + (24 * 60 * 60_000) / RELAY_CONTROL_SNAPSHOT_MS)
+    expect(worker.refreshSnapshot).toHaveBeenCalledTimes(
+      1 + (24 * 60 * 60_000) / RELAY_CONTROL_SNAPSHOT_MS + (24 * 60 * 60_000) / RELAY_CONTROL_SNAPSHOT_CHECK_MS
+    )
     expect(worker.runOnce).toHaveBeenCalledTimes(1)
     expect(worker.runOnce).toHaveBeenCalledWith({
       refreshSnapshot: false,
@@ -140,6 +143,7 @@ describe('relay device control channel', () => {
       await new Promise<void>(resolve => {
         finishFirst = resolve
       })
+      return { jobCount: 0 }
     })
     const channel = createRelayDeviceControlChannel({
       heartbeat,
@@ -168,6 +172,7 @@ describe('relay device control channel', () => {
     const worker = createWorker()
     worker.runOnce.mockImplementation(async input => {
       await new Promise(resolve => setTimeout(resolve, input?.waitMs ?? 0))
+      return { jobCount: 0 }
     })
     const channel = createRelayDeviceControlChannel({
       heartbeat,
@@ -182,6 +187,120 @@ describe('relay device control channel', () => {
     expect(worker.runOnce.mock.calls.every(([input]) => (
       input?.waitMs === RELAY_CONTROL_FALLBACK_LONG_POLL_MS && input.signal instanceof AbortSignal
     ))).toBe(true)
+    channel.stop()
+  })
+
+  it('uses the v2 50s body poll plus 250s idle retry without parallel heartbeats', async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi.fn<typeof fetch>()
+    vi.stubGlobal('fetch', fetchMock)
+    const worker = createWorker()
+    worker.runOnce.mockImplementation(async input => {
+      await new Promise(resolve => setTimeout(resolve, input?.waitMs ?? 0))
+      return { jobCount: 0 }
+    })
+    const channel = createRelayDeviceControlChannel({
+      heartbeat,
+      random: () => 0.5,
+      sessionWorker: worker,
+      transport: {
+        apiBaseUrl: 'https://relay.example/',
+        idleRetryMs: 250_000,
+        longPollMaxWaitMs: 50_000,
+        mode: 'long-poll',
+        version: 2
+      }
+    })
+
+    await vi.advanceTimersByTimeAsync(50_000)
+    expect(worker.runOnce).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(250_000)
+    expect(worker.runOnce).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(24 * 60 * 60_000 - 300_000)
+
+    expect(worker.runOnce.mock.calls.every(([input]) => input?.waitMs === 50_000)).toBe(true)
+    // Poll heartbeats own presence; local snapshot checks only compare snapshots before deciding
+    // whether to write, so the channel itself starts no independent heartbeat requests.
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(worker.refreshSnapshot).toHaveBeenCalledTimes((24 * 60 * 60_000) / RELAY_CONTROL_SNAPSHOT_CHECK_MS)
+    expect(worker.runOnce.mock.calls.length).toBeLessThanOrEqual(300)
+    channel.stop()
+  })
+
+  it('immediately continues v2 polling to drain a non-empty job response', async () => {
+    vi.useFakeTimers()
+    const worker = createWorker()
+    worker.runOnce
+      .mockResolvedValueOnce({ jobCount: 1 })
+      .mockResolvedValue({ jobCount: 0 })
+    const channel = createRelayDeviceControlChannel({
+      heartbeat,
+      sessionWorker: worker,
+      transport: {
+        apiBaseUrl: 'https://relay.example/',
+        idleRetryMs: 250_000,
+        longPollMaxWaitMs: 50_000,
+        mode: 'long-poll',
+        version: 2
+      }
+    })
+
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(worker.runOnce).toHaveBeenCalledTimes(2)
+    expect(worker.runOnce.mock.calls.every(([input]) => input?.waitMs === 50_000)).toBe(true)
+
+    channel.stop()
+  })
+
+  it.each(['v1 websocket', 'v2 long poll'])(
+    'runs local snapshot checks after 30 seconds in %s mode',
+    async mode => {
+      vi.useFakeTimers()
+      const worker = createWorker()
+      const socket = new FakeSocket()
+      const channel = createRelayDeviceControlChannel({
+        heartbeat,
+        sessionWorker: worker,
+        transport: mode === 'v1 websocket'
+          ? transport
+          : {
+            apiBaseUrl: 'https://relay.example/',
+            idleRetryMs: 250_000,
+            longPollMaxWaitMs: 50_000,
+            mode: 'long-poll',
+            version: 2
+          },
+        ...(mode === 'v1 websocket' ? { webSocketFactory: () => socket as never } : {})
+      })
+
+      if (mode === 'v1 websocket') socket.open()
+      await vi.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(RELAY_CONTROL_SNAPSHOT_CHECK_MS)
+
+      expect(worker.refreshSnapshot).toHaveBeenCalled()
+      expect(worker.refreshSnapshot.mock.calls.some(([input]) => input?.force !== true)).toBe(true)
+      channel.stop()
+    }
+  )
+
+  it('honors a v1 optional 600-second heartbeat cadence while the socket stays online', async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi.fn<typeof fetch>()
+    vi.stubGlobal('fetch', fetchMock)
+    const socket = new FakeSocket()
+    const channel = createRelayDeviceControlChannel({
+      heartbeat,
+      sessionWorker: createWorker(),
+      transport: { ...transport, heartbeatIntervalMs: 600_000 },
+      webSocketFactory: () => socket as never
+    })
+
+    socket.open()
+    await vi.advanceTimersByTimeAsync(24 * 60 * 60_000)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(socket.sent).toHaveLength(1 + (24 * 60 * 60_000) / 600_000)
     channel.stop()
   })
 
@@ -245,6 +364,7 @@ describe('relay device control channel', () => {
           resolve()
         }, { once: true })
       })
+      return { jobCount: 0 }
     })
     const channel = createRelayDeviceControlChannel({
       heartbeat,

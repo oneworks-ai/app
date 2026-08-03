@@ -71,6 +71,10 @@ npx @oneworks/relay-server --host 0.0.0.0 --port 8788
 
 The plugin must not persist session content. Session request payloads and results are forwarded through the Relay protocol while durable state remains limited to device identity, connection state, and remote-issued tokens.
 
+## Device control transport
+
+The plugin consumes the transport advertised by Relay service discovery without persisting it. While a v1 WebSocket control socket is online, it uses only that socket and does not start HTTP job polling; a bounded HTTP fallback remains available after a disconnect. v2 long-poll capabilities combine the heartbeat and claim into one JSON POST, then apply the server-advertised idle retry. Servers without a capability continue using the legacy bounded heartbeat and polling fallback. Session snapshots are checked locally every 30 seconds, publish immediately on change, and receive only a six-hour unchanged-data safety refresh. The plugin never infers a platform endpoint or crosses from one advertised transport mode to another.
+
 ## Source Layout
 
 - `src/client/`: plugin UI entry.

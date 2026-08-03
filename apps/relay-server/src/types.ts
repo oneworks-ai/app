@@ -1,5 +1,9 @@
 /* eslint-disable max-lines -- Relay server public types stay in one package-local contract file. */
 
+import type { RelayDeviceTransport } from '@oneworks/types/relay-device-transport'
+
+export type { RelayDeviceTransport } from '@oneworks/types/relay-device-transport'
+
 export interface RelayServerArgs {
   allowOrigin: string
   adminToken: string
@@ -22,14 +26,6 @@ export interface RelayServerArgs {
   publicBaseUrl?: string
   sessionTtlMs?: number
   storageDriver?: RelayStorageDriver
-}
-
-/** Optional device-only transport. It is deliberately separate from publicBaseUrl:
- * browser login, OAuth and passkeys always remain on the public origin. */
-export interface RelayDeviceTransport {
-  apiBaseUrl: string
-  controlWebSocketUrl: string
-  version: 1
 }
 
 export type RelayAuthProvider = string

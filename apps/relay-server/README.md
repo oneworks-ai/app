@@ -22,6 +22,7 @@ Environment variables:
 - `ONEWORKS_RELAY_PUBLIC_URL`: public base URL used for OAuth callback URLs
 - `ONEWORKS_RELAY_DEFAULT_LOGIN_METHOD`: default `/login` method, default `password`; supported values are `password`, `passkey`, and `verification_code`. The browser remembers the last selected method when local storage is available.
 - `ONEWORKS_RELAY_DEVICE_ONLINE_TTL_SECONDS`: device online freshness window, default `60`
+- `ONEWORKS_RELAY_DEVICE_API_URL` and `ONEWORKS_RELAY_DEVICE_CONTROL_WS_URL`: required atomic, same-origin capability pair for the Cloudflare Durable Object entry. Both must identify the Worker origin and the fixed `/api/relay/devices/control` WebSocket path; incomplete or invalid configuration fails closed. With `ONEWORKS_RELAY_DEVICE_CONTROL_HEARTBEAT_SECONDS=600` and `ONEWORKS_RELAY_DEVICE_ONLINE_TTL_SECONDS=900`, the Worker provides a fifteen-minute online window. The Node entry owns its native control endpoint and does not use these variables.
 - `ONEWORKS_RELAY_LOG_LEVEL`: pino log level for relay trace logs, default `info`
 - `ONEWORKS_RELAY_RATE_LIMIT_ENABLED`: set to `0`, `false`, `no`, or `off` to disable built-in sensitive-route rate limits
 - `ONEWORKS_RELAY_RATE_LIMIT_AUTH_MAX` / `ONEWORKS_RELAY_RATE_LIMIT_AUTH_WINDOW_SECONDS`: OAuth start/callback limit, default `20` per `60` seconds
@@ -56,7 +57,15 @@ Environment variables:
 - `ONEWORKS_RELAY_SSO_PROVIDERS`: JSON object or array for multiple custom OAuth/OIDC SSO providers, including Feishu self-built app OAuth when not configured from Admin
 - `ONEWORKS_RELAY_SESSION_TTL_SECONDS`: login session lifetime
 
+## Device control transports
+
+Relay has three intentionally independent device-control modes. A Node deployment exposes a native WebSocket control endpoint. Cloudflare Durable Objects advertise the compatible v1 WebSocket capability when both device API and control WebSocket URLs are configured. Vercel advertises v2 HTTP long-poll only, with a 50-second request limit and a 250-second idle retry; it never tries to upgrade or fall back to WebSocket. The default Vercel cadence is approximately 288 invocations, 14,400 function-seconds, and 3,168 storage reads per device per day (at most 11 reads per poll); those figures are a protocol budget, not a platform quota guarantee, and grow linearly with device count.
+
+Rollback stays within the platform target: redeploy a verified immutable package / SHA for Node, roll Worker and Pages together to a verified immutable SHA for Cloudflare, or roll the same Vercel project to its verified immutable SHA. Do not remove a capability to force a legacy transport.
+
 ## Managed service and private deployment
+
+The bearer token is supplied only during a WebSocket upgrade. The server retains only its digest and rechecks the device token plus heartbeat and jobs-read permissions for every frame. Long-poll clients send heartbeat metadata in the JSON POST body once per request; query parameters must not duplicate that metadata. Set `ONEWORKS_RELAY_PUBLIC_URL` on hosted deployments; Vercel otherwise uses its platform URL, never a request `Host` header.
 
 The default deployment path is the managed OneWorks Relay service. The official website uses `oneworks.cloud` with `www.oneworks.cloud` as an alias or redirect. Official Relay/Admin service slots are `dev.cf.oneworks.cloud` and `cf.oneworks.cloud` on Cloudflare, plus `dev.vc.oneworks.cloud` and `vc.oneworks.cloud` on Vercel.
 

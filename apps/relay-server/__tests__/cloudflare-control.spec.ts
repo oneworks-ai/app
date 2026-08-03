@@ -74,7 +74,11 @@ const setup = async () => {
   const server = new Socket()
   const object = new RelayDurableObject(
     state as never,
-    { RELAY_OBJECT: {} } as never,
+    {
+      ONEWORKS_RELAY_DEVICE_API_URL: 'https://worker.example',
+      ONEWORKS_RELAY_DEVICE_CONTROL_WS_URL: 'wss://worker.example/api/relay/devices/control',
+      RELAY_OBJECT: {}
+    } as never,
     {
       createUpgradeResponse: upgraded => ({ status: 101, webSocket: upgraded }) as never,
       createWebSocketPair: () => ({ 0: client, 1: server }) as never
@@ -136,6 +140,30 @@ describe('cloudflare relay control socket', () => {
     expect(server.closed[0]).toBe(1008)
   })
 
+  it('rejects a hibernated socket after its device token rotates in durable storage', async () => {
+    const { object, server, state } = await setup()
+    await object.fetch(upgradeRequest())
+    const store = await state.storage.get<ReturnType<typeof createFixtureStore>>('relay:store')
+    store!.devices[0].deviceTokenHash = hashDeviceToken('rotated-token')
+    await state.storage.put('relay:store', store)
+
+    await object.webSocketMessage(server as never, JSON.stringify({ type: 'heartbeat' }))
+
+    expect(server.closed[0]).toBe(1008)
+  })
+
+  it('rejects a hibernated socket after the device owner loses access', async () => {
+    const { object, server, state } = await setup()
+    await object.fetch(upgradeRequest())
+    const store = await state.storage.get<ReturnType<typeof createFixtureStore>>('relay:store')
+    store!.users[0].disabledAt = '2026-01-01T00:00:00.000Z'
+    await state.storage.put('relay:store', store)
+
+    await object.webSocketMessage(server as never, JSON.stringify({ type: 'heartbeat' }))
+
+    expect(server.closed[0]).toBe(1008)
+  })
+
   it('migrates a legacy plaintext device token after hash-only socket authentication', async () => {
     const { object, server, state } = await setup()
     const store = await state.storage.get<ReturnType<typeof createFixtureStore>>('relay:store')
@@ -184,6 +212,15 @@ describe('cloudflare relay control socket', () => {
     await object.fetch(upgradeRequest())
     await object.webSocketMessage(server as never, '{')
     expect(server.closed[0]).toBe(1003)
+  })
+
+  it('closes oversized frames with the shared 1009 limit', async () => {
+    const { object, server } = await setup()
+    await object.fetch(upgradeRequest())
+
+    await object.webSocketMessage(server as never, 'x'.repeat(64 * 1024 + 1))
+
+    expect(server.closed[0]).toBe(1009)
   })
 
   it('closes safely when hibernation attachment data is missing', async () => {

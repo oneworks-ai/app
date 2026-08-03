@@ -71,6 +71,36 @@ describe('relay fetch handler', () => {
     expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function))
   })
 
+  it('quickly aborts and cleans up an active POST body long poll', async () => {
+    const { handler } = await createHandlerFixture()
+    const abortController = new AbortController()
+    const request = new Request(
+      'https://relay.example/api/relay/devices/device-1/session-jobs',
+      {
+        body: JSON.stringify({
+          heartbeat: { deviceId: 'device-1' },
+          status: 'queued',
+          waitMs: 50_000
+        }),
+        headers: authHeaders('device-token-1'),
+        method: 'POST',
+        signal: abortController.signal
+      }
+    )
+    const addEventListener = vi.spyOn(request.signal, 'addEventListener')
+    const removeEventListener = vi.spyOn(request.signal, 'removeEventListener')
+
+    const response = handler(request)
+    await vi.waitFor(() => expect(addEventListener).toHaveBeenCalledWith('abort', expect.any(Function), { once: true }))
+    abortController.abort()
+
+    await expect(settlesWithin(response, 250)).rejects.toMatchObject({
+      message: 'Request aborted.',
+      name: 'AbortError'
+    })
+    expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function))
+  })
+
   it('settles when the Fetch request was already aborted', async () => {
     const { handler } = await createHandlerFixture()
     const abortController = new AbortController()

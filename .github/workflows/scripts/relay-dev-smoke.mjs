@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- deployment smoke assertions intentionally remain in one executable script. */
 import process from 'node:process'
 
 const origin = (process.env.RELAY_ORIGIN ?? process.env.RELAY_DEV_ORIGIN ?? '').trim().replace(/\/+$/, '')
@@ -13,6 +14,8 @@ const expectedDeviceApiOrigin = (
     process.env.RELAY_PROD_CF_DEVICE_API_ORIGIN ??
     ''
 ).trim().replace(/\/+$/, '')
+const expectedTransport = (process.env.RELAY_EXPECTED_TRANSPORT ?? '').trim()
+const expectedTransportHeartbeatMs = Number(process.env.RELAY_EXPECTED_TRANSPORT_HEARTBEAT_MS ?? '')
 const expectedProviders = (
   process.env.RELAY_EXPECTED_SSO_PROVIDERS ??
     process.env.RELAY_DEV_EXPECTED_SSO_PROVIDERS ??
@@ -66,6 +69,40 @@ assertExpectedHealth(health, '/health')
 
 let directDeviceHealth
 let deviceTransport
+const needsServiceInfo = expectedDeviceApiOrigin !== '' || expectedTransport !== ''
+const serviceInfo = needsServiceInfo ? await fetchJson('/api/relay/info') : undefined
+if (expectedTransport !== '') {
+  deviceTransport = serviceInfo.deviceTransport
+  if (expectedTransport === 'v1-websocket') {
+    assert(deviceTransport?.version === 1, '/api/relay/info must advertise v1 WebSocket transport.')
+    if (Number.isFinite(expectedTransportHeartbeatMs)) {
+      assert(
+        deviceTransport.heartbeatIntervalMs === expectedTransportHeartbeatMs,
+        `/api/relay/info WebSocket heartbeat should be ${expectedTransportHeartbeatMs}ms, got ${
+          String(
+            deviceTransport.heartbeatIntervalMs ?? ''
+          )
+        }.`
+      )
+    }
+  } else if (expectedTransport === 'v2-long-poll') {
+    assert(
+      deviceTransport?.version === 2 && deviceTransport.mode === 'long-poll',
+      '/api/relay/info must advertise v2 long-poll transport.'
+    )
+    assert(
+      deviceTransport.longPollMaxWaitMs === 50_000,
+      `/api/relay/info long-poll wait should be 50000ms, got ${String(deviceTransport.longPollMaxWaitMs ?? '')}.`
+    )
+    assert(
+      deviceTransport.idleRetryMs === 250_000,
+      `/api/relay/info long-poll idle retry should be 250000ms, got ${String(deviceTransport.idleRetryMs ?? '')}.`
+    )
+  } else {
+    throw new Error(`Unsupported RELAY_EXPECTED_TRANSPORT "${expectedTransport}".`)
+  }
+}
+
 if (expectedDeviceApiOrigin !== '') {
   const deviceApiUrl = new URL(`${expectedDeviceApiOrigin}/`)
   assert(
@@ -82,8 +119,7 @@ if (expectedDeviceApiOrigin !== '') {
   directDeviceHealth = JSON.parse(directHealthText)
   assertExpectedHealth(directDeviceHealth, 'Direct device /health')
 
-  const info = await fetchJson('/api/relay/info')
-  deviceTransport = info.deviceTransport
+  deviceTransport = serviceInfo.deviceTransport
   const expectedControlUrl = new URL('/api/relay/devices/control', deviceApiUrl)
   expectedControlUrl.protocol = 'wss:'
   assert(deviceTransport?.version === 1, '/api/relay/info did not advertise deviceTransport.version=1.')

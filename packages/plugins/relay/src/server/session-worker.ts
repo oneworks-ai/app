@@ -1,4 +1,5 @@
 /* eslint-disable max-lines -- relay session worker keeps polling, forwarding, and error reporting together. */
+import type { RelayHeartbeatOptions } from './heartbeat.js'
 import { createLocalRelaySessionSnapshot, submitLocalRelaySessionMessage } from './session-adapter.js'
 import {
   pollRelaySessionForwardingJobs,
@@ -15,7 +16,8 @@ export const DEFAULT_SESSION_WORKER_INTERVAL_MS = 1_000
 export const DEFAULT_SESSION_WORKER_MAX_IDLE_INTERVAL_MS = 120_000
 export const DEFAULT_SESSION_WORKER_MAX_ERROR_INTERVAL_MS = 30_000
 export const DEFAULT_SESSION_WORKER_ERROR_LOG_INTERVAL_MS = 30_000
-export const DEFAULT_SESSION_WORKER_SNAPSHOT_REFRESH_MS = 5 * 60_000
+/** Initial and changed snapshots are immediate; unchanged data gets only a safety refresh. */
+export const DEFAULT_SESSION_WORKER_SNAPSHOT_REFRESH_MS = 6 * 60 * 60_000
 export const DEFAULT_SESSION_WORKER_LONG_POLL_MS = 10_000
 
 export interface RelaySessionWorkerOptions {
@@ -30,13 +32,17 @@ export interface RelaySessionWorkerOptions {
   maxErrorIntervalMs?: number
   maxIdleIntervalMs?: number
   longPollMs?: number
+  pollHeartbeat?: RelayHeartbeatOptions
   serverId?: string
   snapshotRefreshMs?: number
 }
 
 export interface RelaySessionWorker {
   refreshSnapshot: (options?: { force?: boolean; signal?: AbortSignal }) => Promise<void>
-  runOnce: (options?: { refreshSnapshot?: boolean; signal?: AbortSignal; waitMs?: number }) => Promise<void>
+  runOnce: (options?: { refreshSnapshot?: boolean; signal?: AbortSignal; waitMs?: number }) => Promise<{
+    jobCount: number
+    nextPollMs?: number
+  }>
   stop: () => void
 }
 
@@ -157,6 +163,7 @@ export const createRelaySessionWorker = (options: RelaySessionWorkerOptions): Re
     if (stopped) return { jobCount: 0 }
     if (input.refreshSnapshot !== false) await pushSnapshotIfNeeded({ signal: input.signal })
     const { jobs, nextPollMs } = await pollRelaySessionForwardingJobs(options.auth, {
+      ...(options.pollHeartbeat == null ? {} : { heartbeat: options.pollHeartbeat }),
       limit: 50,
       signal: input.signal,
       status: 'queued',
@@ -173,7 +180,7 @@ export const createRelaySessionWorker = (options: RelaySessionWorkerOptions): Re
     signal?: AbortSignal
     waitMs?: number
   } = {}) => {
-    await runCycle(input)
+    return await runCycle(input)
   }
 
   const warnWorkerFailure = (error: unknown) => {

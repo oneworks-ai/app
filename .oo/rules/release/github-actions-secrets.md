@@ -13,14 +13,17 @@
 - `AVATAR_DEPLOY_TOKEN`：从 `oneworks-ai/app` 触发 `oneworks-ai/avatar` 的 GitHub Pages 部署 workflow。
 - `HOMEPAGE_DEPLOY_TOKEN`：从 `oneworks-ai/app` 触发 `oneworks-ai/oneworks-ai.github.io` 的 GitHub Pages 部署 workflow。
 - `RELAY_DEV_CLOUDFLARE_API_TOKEN`、`RELAY_DEV_CLOUDFLARE_ACCOUNT_ID`：部署官方 Cloudflare dev Relay/Admin。
-- `RELAY_PROD_CLOUDFLARE_API_TOKEN`、`RELAY_PROD_CLOUDFLARE_ACCOUNT_ID`：在没有配置外部 Relay 发布仓库时，直接部署官方 Cloudflare production Relay/Admin。迁移期间可以回退复用权限覆盖 Workers Scripts / Cloudflare Pages 的 dev 凭据，但应优先维护独立 production 凭据。
+- `RELAY_PROD_CLOUDFLARE_API_TOKEN`、`RELAY_PROD_CLOUDFLARE_ACCOUNT_ID`：作为完整原子 pair 直接部署官方 Cloudflare production Relay/Admin；production workflow 不回退使用 dev 凭据。
+- `RELAY_SERVER_DEPLOY_TOKEN`：仅供 `platform=external` 将经过验证的 immutable source handoff 给外部或 Node Relay deployment；必须与 repository variables `RELAY_SERVER_DEPLOY_REPOSITORY`、`RELAY_SERVER_DEPLOY_WORKFLOW` 完整配套，三项缺一即失败。
 - `APPLE_ID`、`APPLE_ID_PASSWORD`、`APPLE_TEAM_ID`、`DESKTOP_CSC_LINK`、`DESKTOP_CSC_KEY_PASSWORD`、`DESKTOP_CSC_INSTALLER_LINK`、`DESKTOP_CSC_INSTALLER_KEY_PASSWORD`：macOS App Store 外分发签名和 notarization；未做 Apple Developer 签名时可以缺省。
 
 Chrome Web Store 发布不使用长期 OAuth refresh token 或 service-account JSON key，因此不新增 repository secret。它使用 GitHub OIDC -> Google Cloud Workload Identity Federation -> Chrome Web Store service account 的短期 token。
 
 官方 Vercel dev Relay/Admin 不再使用 GitHub repository secret 里的 CLI token 部署。常规路径是 Vercel GitHub App 监听 `oneworks-ai/app` 的 `main` 分支并部署 `apps/relay-server` project；GitHub Actions 只轮询 `dev.vc.oneworks.cloud` 做 smoke 验证。不要为常规 dev deploy 新增或轮换 `RELAY_DEV_VERCEL_TOKEN`、`RELAY_DEV_VERCEL_ORG_ID`、`RELAY_DEV_VERCEL_PROJECT_ID`。
 
-Relay production manual promotion 的 Vercel CLI 凭据优先使用 `RELAY_PROD_VERCEL_TOKEN` / `RELAY_PROD_VERCEL_ORG_ID`；两项必须成对配置。`RELAY_PROD_VERCEL_PROJECT_ID` 可作为 explicit target；否则按精确 `vc.oneworks.cloud` 域名唯一发现 project，0 或多个命中直接失败。仅当 production token / org 都缺省时，才回退完整 dev pair；常规 dev 仍不用 token。
+Relay production manual promotion 只使用 `RELAY_PROD_VERCEL_TOKEN` / `RELAY_PROD_VERCEL_ORG_ID`，两项必须成对配置。`RELAY_PROD_VERCEL_PROJECT_ID` 可作为 explicit target；否则按精确 `vc.oneworks.cloud` 域名唯一发现 project，0 或多个命中直接失败。production workflow 不读取 dev pair；常规 dev 仍不用 token。
+
+External Relay handoff 仅在 manual production dispatch 选择 `platform=external` 时读取 `RELAY_SERVER_DEPLOY_TOKEN`、`RELAY_SERVER_DEPLOY_REPOSITORY` 与 `RELAY_SERVER_DEPLOY_WORKFLOW`。前者是 secret，后两者是 repository variables；workflow 将它们当作一个原子 tuple，不允许缺省、跨平台复用或 dev fallback。它可以触发外部 / Node deployment，但不替代本地 Node package 的独立部署与回滚流程。
 
 macOS Developer ID 签名的完整创建和验证步骤见 [macOS signing](./macos-signing.md)。
 
@@ -191,10 +194,7 @@ gh workflow run deploy-pwa.yml --repo oneworks-ai/app --ref main
 
 Homepage Pages token 的配置、轮换和验证见 [homepage-github-pages.md](./homepage-github-pages.md)；Avatar Pages token 的配置、轮换和验证见 [avatar-github-pages.md](./avatar-github-pages.md)。
 
-## Relay Dev Deploy
+## Relay Deploy
 
 Relay dev deployment workflow secrets、variables 和 smoke check 维护方式见 [Relay dev deploy GitHub Actions](./relay-dev-deploy-github-actions.md)。
-
-## Relay Production Deploy
-
 Relay production 的人工 promotion、外部发布目标、Cloudflare 凭据与 smoke check 规则见 [Relay production deploy GitHub Actions](./relay-production-deploy-github-actions.md)。

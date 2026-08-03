@@ -136,28 +136,16 @@ describe('relay server config', () => {
     ).toBeUndefined()
   })
 
-  it('advertises only a versioned same-origin device transport with safe protocols', () => {
+  it('keeps device transport ownership out of generic environment parsing', () => {
     expect(
       parseRelayServerArgs([], {
         ONEWORKS_RELAY_DEVICE_API_URL: 'https://worker.example',
         ONEWORKS_RELAY_DEVICE_CONTROL_WS_URL: 'wss://worker.example/api/relay/devices/control'
       }).deviceTransport
-    ).toEqual({
-      apiBaseUrl: 'https://worker.example/',
-      controlWebSocketUrl: 'wss://worker.example/api/relay/devices/control',
-      version: 1
-    })
-    expect(
-      parseRelayServerArgs([], {
-        ONEWORKS_RELAY_DEVICE_API_URL: 'https://worker.example',
-        ONEWORKS_RELAY_DEVICE_CONTROL_WS_URL: 'wss://other.example/api/relay/devices/control'
-      }).deviceTransport
     ).toBeUndefined()
-    expect(
-      parseRelayServerArgs([], {
-        ONEWORKS_RELAY_DEVICE_API_URL: 'http://worker.example',
-        ONEWORKS_RELAY_DEVICE_CONTROL_WS_URL: 'ws://worker.example/api/relay/devices/control'
-      }).deviceTransport
-    ).toBeUndefined()
+  })
+
+  it('does not use a Vercel metadata fallback outside the Vercel entry', () => {
+    expect(parseRelayServerArgs([], { VERCEL_GIT_COMMIT_SHA: 'vercel-only' }).buildSha).toBeUndefined()
   })
 })
