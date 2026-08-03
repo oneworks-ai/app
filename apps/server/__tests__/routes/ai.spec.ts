@@ -281,7 +281,6 @@ describe('aiRouter', () => {
     'aws_access_key_id=AKIAIOSFODNN7EXAMPLE'
   ])('rejects credential-like content: %s', async (description) => {
     const createAsset = findRouteHandler('/assets', 'POST')
-
     await expect(createAsset({
       request: { body: { kind: 'rule', name: 'Sensitive Review', description } }
     })).rejects.toMatchObject({ code: 'asset_secret_rejected', status: 400 })
@@ -291,7 +290,6 @@ describe('aiRouter', () => {
 
   it('rejects raw trailing spaces instead of silently changing the asset name', async () => {
     const createAsset = findRouteHandler('/assets', 'POST')
-
     await expect(createAsset({
       request: { body: { kind: 'rule', name: 'Review ' } }
     })).rejects.toMatchObject({ code: 'invalid_asset_name', status: 400 })
@@ -303,7 +301,6 @@ describe('aiRouter', () => {
     await expect(createAsset({
       request: { body: { kind: 'rule', name: 'Manager Review' } }
     })).rejects.toMatchObject({ code: 'asset_workspace_required', status: 400 })
-
     process.env.__ONEWORKS_PROJECT_SERVER_ROLE__ = 'workspace'
     delete process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__
     await expect(createAsset({
@@ -321,7 +318,6 @@ describe('aiRouter', () => {
       status: undefined,
       body: undefined
     }
-
     await createAsset(ctx)
     expect(ctx.status).toBe(201)
     await expect(readFile(path.join(workspaceFolder, '.oo/rules/canonical-root.md'), 'utf8'))

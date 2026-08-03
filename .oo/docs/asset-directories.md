@@ -152,8 +152,6 @@ __ONEWORKS_PROJECT_ENTITIES_DIR__=knowledge/entities
 - 启动入口：CLI、server、client、hook loader、desktop、VS Code extension
 - benchmark 运行时目录
 
-其中：
-
 - `__ONEWORKS_PROJECT_BASE_DIR__` 会影响整棵项目数据资产树
 - `__ONEWORKS_PROJECT_ENTITIES_DIR__` 只影响 `entities` 的扫描与加载位置
 
@@ -161,35 +159,26 @@ __ONEWORKS_PROJECT_ENTITIES_DIR__=knowledge/entities
 
 未显式设置 `DB_PATH` 时，Server 会把会话数据库放在 `~/.oneworks/projects/<project-key>/.local/server/db.sqlite`。这样同一 Git 项目的多个 worktree 共享会话与 Agent Room 状态，而不同项目不会串数据，也不会把数据库写到工作区。
 
-当前主要用途包括：
-
 - server 会话数据库
 - adapter 多账号凭据快照
 - adapter 账号的来源、auth digest 与额度快照元数据
 - 只应保存在本机的认证状态或临时元数据
 
-例如 `codex` 当前会在：
-
 - `<project-home>/.local/server/db.sqlite`
 - `<project-home>/.local/adapters/codex/accounts/<accountKey>/auth.json`
 - `<project-home>/.local/adapters/codex/accounts/<accountKey>/meta.json`
 
-保存账号快照与账号元数据。`meta.json` 里可能包含：
-
+保存账号快照与账号元数据；`meta.json` 里可能包含：
 - 账号来源说明
 - auth 摘要
 - 最近一次 quota / rate-limit 快照
 - quota 快照更新时间
 
-如果当前目录是 Git worktree，adapter 账号目录会共享到主 worktree：
-
-- 写入和导入优先落到主 worktree 对应的 `<project-home>/.local`
+- 如果当前目录是 Git worktree，写入和导入优先落到主 worktree 对应的 `<project-home>/.local`
 - 启动或账号命令会先把旧 `.oo/.local` 复制到 project home
 - 读取只使用 project home 下的共享目录，不再兼容读取旧工作区目录
 
 ## 不受影响的内容
-
-当前不会跟随这些环境变量一起变化的内容：
 
 - `.oo.config.json` / `.oo.config.yaml` / `.oo.config.yml`
 - `.oo.dev.config.*`

@@ -185,7 +185,7 @@ describe('mounted Ant asset create flow', () => {
     }
 
     const nativeFocus = HTMLInputElement.prototype.focus
-    const focus = vi.spyOn(HTMLInputElement.prototype, 'focus').mockImplementation(function() {
+    const focus = vi.spyOn(HTMLInputElement.prototype, 'focus').mockImplementation(function(this: HTMLInputElement) {
       nativeFocus.call(this)
     })
     await act(async () => root.render(<Harness />))
