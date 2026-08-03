@@ -41,30 +41,22 @@ const transitions: Record<'ready' | PublishStage, PublishStage[]> = {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value != null && typeof value === 'object' && !Array.isArray(value)
 
+const isWorkerError = (value: Record<string, unknown>): value is WorkerError => (
+  value.state === 'error' &&
+  typeof value.code === 'string' &&
+  value.committed === false &&
+  (value.privateStaging == null || value.privateStaging === 'retained')
+)
+
+const isPublishOutcome = (value: Record<string, unknown>): value is PublishOutcome => (
+  (value.state === 'committed' || value.state === 'committed-degraded' || value.state === 'committed-indeterminate') &&
+  (value.warnings == null ||
+    (Array.isArray(value.warnings) && value.warnings.every(warning => typeof warning === 'string')))
+)
+
 export const parseWorkerResult = (value: unknown): WorkerResult | undefined => {
   if (!isRecord(value)) return
-  if (
-    value.state === 'error' &&
-    typeof value.code === 'string' &&
-    value.committed === false &&
-    (value.privateStaging == null || value.privateStaging === 'retained')
-  ) {
-    return value as WorkerError
-  }
-  if (
-    value.state !== 'committed' &&
-    value.state !== 'committed-degraded' &&
-    value.state !== 'committed-indeterminate'
-  ) {
-    return
-  }
-  if (
-    value.warnings != null &&
-    (!Array.isArray(value.warnings) || value.warnings.some(warning => typeof warning !== 'string'))
-  ) {
-    return
-  }
-  return value as PublishOutcome
+  if (isWorkerError(value) || isPublishOutcome(value)) return value
 }
 
 export class PublishProtocolFence {

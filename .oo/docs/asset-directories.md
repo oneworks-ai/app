@@ -169,6 +169,7 @@ __ONEWORKS_PROJECT_ENTITIES_DIR__=knowledge/entities
 - `<project-home>/.local/adapters/codex/accounts/<accountKey>/meta.json`
 
 保存账号快照与账号元数据；`meta.json` 里可能包含：
+
 - 账号来源说明
 - auth 摘要
 - 最近一次 quota / rate-limit 快照
