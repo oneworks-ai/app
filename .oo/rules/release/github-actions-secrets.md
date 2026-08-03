@@ -194,10 +194,7 @@ gh workflow run deploy-pwa.yml --repo oneworks-ai/app --ref main
 
 Homepage Pages token 的配置、轮换和验证见 [homepage-github-pages.md](./homepage-github-pages.md)；Avatar Pages token 的配置、轮换和验证见 [avatar-github-pages.md](./avatar-github-pages.md)。
 
-## Relay Dev Deploy
+## Relay Deploy
 
 Relay dev deployment workflow secrets、variables 和 smoke check 维护方式见 [Relay dev deploy GitHub Actions](./relay-dev-deploy-github-actions.md)。
-
-## Relay Production Deploy
-
 Relay production 的人工 promotion、外部发布目标、Cloudflare 凭据与 smoke check 规则见 [Relay production deploy GitHub Actions](./relay-production-deploy-github-actions.md)。
