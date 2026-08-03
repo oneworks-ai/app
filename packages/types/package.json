@@ -48,5 +48,8 @@
     "build": "tsc -p tsconfig.build.json && esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/index.mjs && esbuild src/index.ts --bundle --platform=node --format=cjs --outfile=dist/index.js && esbuild src/standalone-route.ts --bundle --platform=neutral --format=esm --outfile=dist/standalone-route.mjs && esbuild src/standalone-route.ts --bundle --platform=node --format=cjs --outfile=dist/standalone-route.js && esbuild src/relay-device-transport.ts --bundle --platform=neutral --format=esm --outfile=dist/relay-device-transport.mjs && esbuild src/relay-device-transport.ts --bundle --platform=node --format=cjs --outfile=dist/relay-device-transport.js",
     "prepack": "pnpm run build",
     "verify-pack": "pnpm run build && node scripts/verify-pack.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.27.2"
   }
 }

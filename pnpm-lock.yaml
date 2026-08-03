@@ -1313,7 +1313,11 @@ importers:
 
   packages/tsconfigs: {}
 
-  packages/types: {}
+  packages/types:
+    devDependencies:
+      esbuild:
+        specifier: ^0.27.2
+        version: 0.27.2
 
   packages/utils:
     dependencies:
