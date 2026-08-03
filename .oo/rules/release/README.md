@@ -11,6 +11,7 @@ description: 当任务涉及发版范围、publish-plan、changelog、tag 或正
 
 - [范围与 changelog](./scope.md)
 - [发布步骤](./process.md)
+- [多会话发布协调](./coordination.md)
 - [tag 与经验沉淀](./tags.md)
 - [GitHub Actions 凭据](./github-actions-secrets.md)
 - [Chrome Web Store 发布配置](./chrome-web-store.md)
