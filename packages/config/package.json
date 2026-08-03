@@ -1,6 +1,6 @@
 {
   "name": "@oneworks/config",
-  "version": "0.1.0-rc.0",
+  "version": "0.1.0-rc.4",
   "description": "Shared config IO for One Works",
   "repository": {
     "type": "git",
