@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
 import { getAdapterDisplay, resolveAdapterDisplayIcon } from '#~/resources/adapters.js'
+import { getImportedSessionSummary, getSessionActivityTimestamp } from '#~/utils/session-history-import'
 
 import { SessionCard } from './SessionCard'
 import { SessionContextMenu } from './SessionContextMenu'
@@ -82,9 +83,11 @@ export function SessionItem({
     }
   }, [pendingAction])
 
+  const sessionActivityTimestamp = getSessionActivityTimestamp(session)
   const timeDisplay = useMemo(() => {
-    return formatSidebarTimeDisplay(session.createdAt, i18n.resolvedLanguage ?? i18n.language)
-  }, [session.createdAt, i18n.language, i18n.resolvedLanguage])
+    return formatSidebarTimeDisplay(sessionActivityTimestamp, i18n.resolvedLanguage ?? i18n.language)
+  }, [sessionActivityTimestamp, i18n.language, i18n.resolvedLanguage])
+  const hasImportedActivityTime = getImportedSessionSummary(session)?.sourceUpdatedAt != null
 
   const archiveActionLabel = session.isArchived ? t('common.restore') : t('common.archive')
   const archiveConfirmLabel = t('common.confirmAction', { action: archiveActionLabel })
@@ -126,7 +129,7 @@ export function SessionItem({
           {displayTitle}
         </div>
         <div className='session-title-tooltip__time'>
-          {t('common.createdAt')}: {timeDisplay.full}
+          {t(hasImportedActivityTime ? 'common.lastActivityAt' : 'common.createdAt')}: {timeDisplay.full}
         </div>
         {tooltipTags.length > 0 && (
           <div className='session-title-tooltip__tags'>

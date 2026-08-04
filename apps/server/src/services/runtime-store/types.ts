@@ -63,6 +63,21 @@ export interface RuntimeEvent extends Record<string, unknown> {
   fatal?: boolean
   adapter?: string
   model?: string
+  usage?: {
+    account?: string
+    aggregationMode?: 'cumulative' | 'delta'
+    cacheCreationInputTokens?: number
+    cacheReadInputTokens?: number
+    costUsd?: number
+    id?: string
+    inputTokens: number
+    model?: string
+    modelService?: string
+    observedAt?: number
+    outputTokens: number
+    quality?: 'estimated' | 'provider_reported' | 'reported'
+    reasoningOutputTokens?: number
+  }
   operationId?: string
   roomId?: string
   roomTitle?: string

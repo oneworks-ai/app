@@ -16,13 +16,32 @@ const outputDir = path.join(desktopRoot, 'out')
 const appMetadata = resolveDesktopAppMetadata()
 const appName = appMetadata.productName
 const host = '127.0.0.1'
-const serverReadyTimeoutMs = (() => {
-  const value = Number.parseInt(process.env.ONEWORKS_DESKTOP_SMOKE_TIMEOUT_MS?.trim() || '120000', 10)
+const resolvePositiveTimeoutMs = (env, name, fallbackMs) => {
+  const rawValue = env[name]?.trim() || String(fallbackMs)
+  if (!/^[1-9]\d*$/u.test(rawValue)) {
+    throw new Error(`${name} must be a positive integer, received: ${rawValue}`)
+  }
+  const value = Number(rawValue)
   if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new Error(`ONEWORKS_DESKTOP_SMOKE_TIMEOUT_MS must be a positive integer, received: ${value}`)
+    throw new Error(`${name} must be a positive integer, received: ${rawValue}`)
   }
   return value
-})()
+}
+const serverReadyTimeoutMs = resolvePositiveTimeoutMs(
+  process.env,
+  'ONEWORKS_DESKTOP_SMOKE_TIMEOUT_MS',
+  120000
+)
+const serverRequestTimeoutMs = resolvePositiveTimeoutMs(
+  process.env,
+  'ONEWORKS_DESKTOP_SMOKE_REQUEST_TIMEOUT_MS',
+  30000
+)
+const serverCompileTimeoutMs = resolvePositiveTimeoutMs(
+  process.env,
+  'ONEWORKS_DESKTOP_SMOKE_COMPILE_TIMEOUT_MS',
+  120000
+)
 
 const createWorkspaceRuntimeEnv = (
   runtimePackageCacheVersion,
@@ -172,6 +191,60 @@ const assertPackagedBuiltinPlugins = (appDir) => {
   }
 }
 
+const packagedMainSmokeMarker = '[oneworks-desktop] packaged main smoke ready'
+
+const runPackagedMainSmoke = async (paths) => {
+  const smokeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'oneworks-desktop-main-smoke-'))
+  const userDataDir = path.join(smokeRoot, 'user-data')
+  fs.mkdirSync(userDataDir, { recursive: true })
+
+  try {
+    await new Promise((resolve, reject) => {
+      const child = spawn(paths.executablePath, [`--user-data-dir=${userDataDir}`], {
+        env: {
+          ...process.env,
+          ONEWORKS_DESKTOP_PACKAGE_MAIN_SMOKE: '1'
+        },
+        stdio: ['ignore', 'pipe', 'pipe']
+      })
+      let output = ''
+      let settled = false
+      const finish = (error) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timeout)
+        if (error == null) resolve()
+        else reject(error)
+      }
+      const timeout = setTimeout(() => {
+        child.kill('SIGKILL')
+        finish(new Error(`Packaged Electron main smoke timed out.\n${output}`))
+      }, 30000)
+
+      child.stdout.on('data', chunk => {
+        output += chunk
+      })
+      child.stderr.on('data', chunk => {
+        output += chunk
+      })
+      child.once('error', finish)
+      child.once('exit', (code, signal) => {
+        if (code !== 0 || signal != null) {
+          finish(new Error(`Packaged Electron main smoke exited with code=${code} signal=${signal}.\n${output}`))
+          return
+        }
+        if (!output.includes(packagedMainSmokeMarker)) {
+          finish(new Error(`Packaged Electron main smoke did not report readiness.\n${output}`))
+          return
+        }
+        finish()
+      })
+    })
+  } finally {
+    fs.rmSync(smokeRoot, { recursive: true, force: true })
+  }
+}
+
 const resolvePackagedPaths = () => {
   const packageDir = findPackageDir()
 
@@ -275,13 +348,14 @@ const waitForServer = ({ logPath, port, startedAt = Date.now() }) =>
     request.once('error', retry)
   })
 
-const readServerText = (port, requestPath, label) =>
+const readServerText = (port, requestPath, label, options = {}) =>
   new Promise((resolve, reject) => {
-    const request = http.get({
+    const httpGet = options.httpGet ?? http.get
+    const request = httpGet({
       hostname: host,
       path: requestPath,
       port,
-      timeout: 5000
+      timeout: options.timeoutMs ?? serverRequestTimeoutMs
     }, (response) => {
       let body = ''
       response.setEncoding('utf8')
@@ -323,6 +397,22 @@ const getCatalogDiagnostics = catalog => [
   ...(Array.isArray(catalog?.diagnostics) ? catalog.diagnostics : []),
   ...(Array.isArray(catalog?.data?.diagnostics) ? catalog.data.diagnostics : [])
 ]
+
+const readLocalPluginClientSource = (
+  port,
+  versionedEntryUrl,
+  scope,
+  options = {}
+) =>
+  readServerText(
+    port,
+    `${versionedEntryUrl}?pluginVersion=desktop-smoke`,
+    `Packaged local plugin source "${scope}"`,
+    {
+      ...options,
+      timeoutMs: options.timeoutMs ?? serverCompileTimeoutMs
+    }
+  )
 
 const assertBuiltinRuntimeActive = async (catalog, port, options = {}) => {
   const catalogDiagnostics = getCatalogDiagnostics(catalog)
@@ -415,10 +505,10 @@ const assertLocalClientSourcesCompile = async (catalog, port) => {
       )
     }
     const versionedEntryUrl = entryUrl.replace('/client-source/', '/client-source/@v/desktop-smoke/')
-    const source = await readServerText(
+    const source = await readLocalPluginClientSource(
       port,
-      `${versionedEntryUrl}?pluginVersion=desktop-smoke`,
-      `Packaged local plugin source "${scope}"`
+      versionedEntryUrl,
+      scope
     )
     if (!source.includes('activatePlugin')) {
       throw new Error(`Packaged local plugin source "${scope}" is not an executable plugin module.`)
@@ -557,6 +647,7 @@ const runPackagedServerSmoke = async ({
 const main = async () => {
   const paths = resolvePackagedPaths()
   assertPackagedBuiltinPlugins(paths.appDir)
+  await runPackagedMainSmoke(paths)
 
   const sourceResult = await runPackagedServerSmoke({
     assertCatalog: async (pluginCatalog, port) => {
@@ -605,7 +696,17 @@ const main = async () => {
   console.log(sourceResult)
 }
 
-main().catch((error) => {
-  console.error(error)
-  process.exit(1)
-})
+module.exports = {
+  readLocalPluginClientSource,
+  readServerText,
+  serverCompileTimeoutMs,
+  serverRequestTimeoutMs,
+  resolvePositiveTimeoutMs
+}
+
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error)
+    process.exit(1)
+  })
+}

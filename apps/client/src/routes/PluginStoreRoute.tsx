@@ -49,6 +49,7 @@ import type { PluginRuntimeInstance } from '#~/plugins/plugin-manifest'
 import {
   getNativePluginPresentationSearchText,
   getPluginPresentationSearchText,
+  resolveInstalledMarketplacePlugin,
   resolvePluginDisplayName,
   resolvePluginPresentationIcon
 } from '#~/plugins/plugin-presentation'
@@ -63,6 +64,19 @@ import {
 
 const PLUGIN_ROUTE_SIDEBAR_KEY = 'plugin-store'
 const EMPTY_NATIVE_PLUGINS: NativeHostPlugin[] = []
+
+interface MarketplacePluginInstallOverride {
+  enabled: boolean
+  marketplace: string
+  plugin: string
+  target: PluginMarketplaceInstallTarget
+}
+
+const createMarketplacePluginInstallOverrideKey = (
+  marketplace: string,
+  plugin: string,
+  target: PluginMarketplaceInstallTarget
+) => JSON.stringify([marketplace, plugin, target])
 
 export function PluginStoreRoute() {
   const { i18n, t } = useTranslation()
@@ -81,6 +95,9 @@ export function PluginStoreRoute() {
   const [updatingEnabledAction, setUpdatingEnabledAction] = useState<string>()
   const [updatingWatchScope, setUpdatingWatchScope] = useState<string>()
   const [installingMarketplaceTarget, setInstallingMarketplaceTarget] = useState<PluginMarketplaceInstallTarget>()
+  const [marketplacePluginInstallOverrides, setMarketplacePluginInstallOverrides] = useState<
+    Record<string, MarketplacePluginInstallOverride>
+  >({})
   const [pluginQuery, setPluginQuery] = useState('')
   const [pluginGroupMode, setPluginGroupMode] = useState<PluginGroupMode>('enabled')
   const [pluginMarketplaceQuery, setPluginMarketplaceQuery] = useState('')
@@ -119,6 +136,22 @@ export function PluginStoreRoute() {
     }
   }, [encodedScope, location.pathname, navigate, pluginLocation, scope])
 
+  useEffect(() => {
+    if (marketplaceCatalog == null) return
+    setMarketplacePluginInstallOverrides((previous) => {
+      let next: Record<string, MarketplacePluginInstallOverride> | undefined
+      for (const [key, override] of Object.entries(previous)) {
+        const plugin = marketplaceCatalog.plugins.find(item => (
+          item.marketplace === override.marketplace && item.name === override.plugin
+        ))
+        if (plugin == null || isPluginInstalledForTarget(plugin, override.target) !== override.enabled) continue
+        next ??= { ...previous }
+        delete next[key]
+      }
+      return next ?? previous
+    })
+  }, [marketplaceCatalog])
+
   const plugins = useMemo(
     () => [...snapshot.instances].sort((left, right) => left.scope.localeCompare(right.scope)),
     [snapshot.instances]
@@ -155,6 +188,13 @@ export function PluginStoreRoute() {
         ),
     [marketplaceCatalog?.plugins, marketplacePluginIdentity]
   )
+  const selectedInstalledMarketplacePlugin = useMemo(
+    () =>
+      marketplacePluginIdentity == null
+        ? undefined
+        : resolveInstalledMarketplacePlugin(plugins, marketplacePluginIdentity),
+    [marketplacePluginIdentity, plugins]
+  )
   const { data: resolvedMarketplaceVersion } = useSWR(
     selectedMarketplacePlugin?.version != null || marketplaceCatalog?.versionGeneration == null ||
       marketplacePluginIdentity == null
@@ -174,10 +214,21 @@ export function PluginStoreRoute() {
       )).versions[0]?.version
   )
   const selectedMarketplaceVersion = selectedMarketplacePlugin?.version ?? resolvedMarketplaceVersion
+  const isMarketplacePluginInstalledForTarget = useCallback((
+    plugin: PluginMarketplaceCatalogPlugin,
+    target: PluginMarketplaceInstallTarget
+  ) => {
+    const override = marketplacePluginInstallOverrides[
+      createMarketplacePluginInstallOverrideKey(plugin.marketplace, plugin.name, target)
+    ]
+    return override?.enabled ?? isPluginInstalledForTarget(plugin, target)
+  }, [marketplacePluginInstallOverrides])
   const selectedDetailItem: PluginRuntimeInstance | NativeHostPlugin | PluginMarketplaceCatalogPlugin | undefined =
-    selectedPlugin ?? selectedNativePlugin ?? selectedMarketplacePlugin
+    selectedPlugin ?? selectedNativePlugin ?? selectedInstalledMarketplacePlugin ?? selectedMarketplacePlugin
   const headerTitle = selectedPlugin != null
     ? resolvePluginDisplayName(selectedPlugin, language)
+    : selectedInstalledMarketplacePlugin != null
+    ? resolvePluginDisplayName(selectedInstalledMarketplacePlugin, language)
     : selectedNativePlugin != null
     ? selectedNativePlugin.displayName ?? selectedNativePlugin.name
     : selectedMarketplacePlugin != null
@@ -195,6 +246,8 @@ export function PluginStoreRoute() {
     : t('pluginDetail.notFound')
   const headerIcon = selectedPlugin != null
     ? resolvePluginPresentationIcon(selectedPlugin, pluginServerBaseUrl)
+    : selectedInstalledMarketplacePlugin != null
+    ? resolvePluginPresentationIcon(selectedInstalledMarketplacePlugin, pluginServerBaseUrl)
     : selectedNativePlugin?.icon != null
     ? {
       alt: selectedNativePlugin.displayName ?? selectedNativePlugin.name,
@@ -303,7 +356,7 @@ export function PluginStoreRoute() {
 
   const toggleMarketplacePlugin = useCallback(async (target: PluginMarketplaceInstallTarget) => {
     if (selectedMarketplacePlugin == null || !isMarketplacePluginInstallable(selectedMarketplacePlugin)) return
-    const enabled = !isPluginInstalledForTarget(selectedMarketplacePlugin, target)
+    const enabled = !isMarketplacePluginInstalledForTarget(selectedMarketplacePlugin, target)
     setInstallingMarketplaceTarget(target)
     try {
       await syncPluginMarketplaceSelection(
@@ -313,7 +366,23 @@ export function PluginStoreRoute() {
         target,
         { serverBaseUrl: pluginServerBaseUrl }
       )
-      await Promise.all([mutateMarketplaceCatalog(), refreshPlugins()])
+      setMarketplacePluginInstallOverrides((previous) => ({
+        ...previous,
+        [
+          createMarketplacePluginInstallOverrideKey(
+            selectedMarketplacePlugin.marketplace,
+            selectedMarketplacePlugin.name,
+            target
+          )
+        ]: {
+          enabled,
+          marketplace: selectedMarketplacePlugin.marketplace,
+          plugin: selectedMarketplacePlugin.name,
+          target
+        }
+      }))
+      void refreshPlugins().catch(() => undefined)
+      void mutateMarketplaceCatalog().catch(() => undefined)
       void message.success(t(
         enabled
           ? target === 'global'
@@ -326,7 +395,15 @@ export function PluginStoreRoute() {
     } finally {
       setInstallingMarketplaceTarget(undefined)
     }
-  }, [message, mutateMarketplaceCatalog, pluginServerBaseUrl, refreshPlugins, selectedMarketplacePlugin, t])
+  }, [
+    isMarketplacePluginInstalledForTarget,
+    message,
+    mutateMarketplaceCatalog,
+    pluginServerBaseUrl,
+    refreshPlugins,
+    selectedMarketplacePlugin,
+    t
+  ])
 
   const createPluginContextMenuItems = useCallback(
     (plugin: PluginRuntimeInstance): RouteSidebarListContextMenuItems => {
@@ -502,7 +579,7 @@ export function PluginStoreRoute() {
         { icon: 'public', target: 'global' }
       ]
       for (const { icon, target } of targets) {
-        const installed = isPluginInstalledForTarget(selectedMarketplacePlugin, target)
+        const installed = isMarketplacePluginInstalledForTarget(selectedMarketplacePlugin, target)
         items.push({
           active: installed,
           disabled: !isMarketplacePluginInstallable(selectedMarketplacePlugin) ||
@@ -529,6 +606,7 @@ export function PluginStoreRoute() {
     detailPath,
     toggleMarketplacePlugin,
     installingMarketplaceTarget,
+    isMarketplacePluginInstalledForTarget,
     navigate,
     pluginLocation.page,
     routePluginHeaderActions,
@@ -649,13 +727,14 @@ export function PluginStoreRoute() {
                   onQueryChange={setPluginMarketplaceQuery}
                 />
               )
-            : marketplacePluginIdentity != null && marketplaceCatalogLoading
+            : selectedInstalledMarketplacePlugin == null && marketplacePluginIdentity != null &&
+                marketplaceCatalogLoading
             ? (
               <div className='plugin-store-route__not-found'>
                 <Spin />
               </div>
             )
-            : selectedPlugin == null && selectedNativePlugin == null && selectedMarketplacePlugin == null
+            : selectedDetailItem == null
             ? (
               <div className='plugin-store-route__not-found'>
                 <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('pluginDetail.notFound')} />
@@ -666,6 +745,16 @@ export function PluginStoreRoute() {
               <NativePluginDetailPanel
                 plugin={selectedNativePlugin}
                 pluginServerBaseUrl={pluginServerBaseUrl}
+              />
+            )
+            : selectedInstalledMarketplacePlugin != null
+            ? (
+              <PluginDetailPanel
+                plugin={selectedInstalledMarketplacePlugin}
+                pluginServerBaseUrl={pluginServerBaseUrl}
+                snapshot={snapshot}
+                onContributionPreferencesChange={() => reloadPlugin(selectedInstalledMarketplacePlugin.scope)}
+                onOptionsChange={() => refreshPlugins()}
               />
             )
             : selectedMarketplacePlugin != null

@@ -63,6 +63,7 @@ export interface NativeHistoryImportOptions {
   threadScope?: NativeHistoryThreadScope
   previewCursor?: string
   previewLimit?: number
+  projectPaths?: string[]
   projectScope?: NativeHistoryProjectScope
   sourceDirs?: Partial<Record<NativeHistoryAdapter, string[]>>
   sourcePaths?: string[]
@@ -73,11 +74,13 @@ export interface NativeHistoryImportOptions {
 export interface NativeHistoryImportSessionResult {
   adapter: NativeHistoryAdapter
   createdAt: number
+  cwd: string
   importedEvents: number
   sessionId: string
   sourcePath: string
   title: string
   updatedAt: number
+  workspaceCwd: string
 }
 
 export interface NativeHistoryImportResult {
@@ -105,6 +108,11 @@ export interface NativeHistoryImportPreviewCandidate {
   updatedAt: number
 }
 
+export interface NativeHistoryImportPreviewProject {
+  path: string
+  sessionCount: number
+}
+
 export interface NativeHistoryImportAdapterPreview {
   adapter: NativeHistoryAdapter
   candidates: NativeHistoryImportPreviewCandidate[]
@@ -114,6 +122,7 @@ export interface NativeHistoryImportAdapterPreview {
   largestFileBytes: number
   matchedFiles: number
   nextCursor?: string
+  projects: NativeHistoryImportPreviewProject[]
   scannedFiles: number
   totalBytes: number
 }
@@ -185,6 +194,12 @@ interface CodexThreadMetadataIndex {
   byNativeSessionId: Map<string, CodexThreadMetadata>
   bySourcePath: Map<string, CodexThreadMetadata>
   pinnedThreadIds: Set<string>
+}
+
+interface NativeHistoryWorkspaceResolutionCache {
+  existingWorkspaceByCwd: Map<string, string | null>
+  gitRemoteByWorkspace: Map<string, string | null>
+  workspaceByGitOrigin: Map<string, string | null>
 }
 
 interface CodexSpawnEdge {
@@ -898,6 +913,43 @@ const resolveSourceDirs = (
   ]
 }
 
+const listNativeHistoryJsonlFiles = async (
+  sourceDirs: string[],
+  sourcePaths: string[] | undefined
+) => {
+  if (sourcePaths != null) {
+    const seenPaths = new Set<string>()
+    return sourcePaths
+      .map(filePath => path.resolve(filePath))
+      .filter((filePath) => {
+        const normalizedPath = normalizeRealPath(filePath)
+        if (seenPaths.has(normalizedPath)) {
+          return false
+        }
+        seenPaths.add(normalizedPath)
+        return true
+      })
+      .filter(filePath => filePath.endsWith('.jsonl'))
+      .filter(filePath => sourceDirs.some(sourceDir => isPathInside(sourceDir, filePath)))
+      .filter((filePath) => {
+        try {
+          return statSync(filePath).isFile()
+        } catch {
+          return false
+        }
+      })
+  }
+
+  const files: string[] = []
+  for (const sourceDir of sourceDirs) {
+    if (!existsSync(sourceDir)) {
+      continue
+    }
+    files.push(...await walkJsonlFiles(sourceDir))
+  }
+  return unique(files)
+}
+
 const resolveProjectMatchContext = (cwd: string, env: NodeJS.ProcessEnv): ProjectMatchContext => {
   const workspaceFolder = resolveProjectWorkspaceFolder(cwd, env)
   const runtimeEnv = createWorkspaceRuntimeEnv(workspaceFolder, env)
@@ -970,6 +1022,12 @@ const resolveNativeHistoryProjectScope = (
   options: NativeHistoryImportOptions
 ): NativeHistoryProjectScope => options.projectScope ?? 'current-project'
 
+const createNativeHistoryWorkspaceResolutionCache = (): NativeHistoryWorkspaceResolutionCache => ({
+  existingWorkspaceByCwd: new Map(),
+  gitRemoteByWorkspace: new Map(),
+  workspaceByGitOrigin: new Map()
+})
+
 const isConversationInProjectScope = (
   conversationCwd: string | undefined,
   projectContext: ProjectMatchContext,
@@ -986,22 +1044,112 @@ const resolveConversationWorkspaceCwd = (
   conversationCwd: string,
   fallbackCwd: string,
   env: NodeJS.ProcessEnv,
-  projectScope: NativeHistoryProjectScope
+  projectScope: NativeHistoryProjectScope,
+  codexThreadMetadata?: CodexThreadMetadata,
+  codexThreadMetadataIndex?: CodexThreadMetadataIndex,
+  resolutionCache = createNativeHistoryWorkspaceResolutionCache()
 ) => {
   if (projectScope !== 'all-projects') {
     return fallbackCwd
   }
-  const conversationEnv = createWorkspaceRuntimeEnv(conversationCwd, env)
-  return resolveProjectSharedWorkspaceFolder(conversationCwd, conversationEnv)
+
+  const resolveExistingWorkspace = (candidateCwd: string) => {
+    const normalizedCandidateCwd = normalizeRealPath(candidateCwd)
+    if (resolutionCache.existingWorkspaceByCwd.has(normalizedCandidateCwd)) {
+      return resolutionCache.existingWorkspaceByCwd.get(normalizedCandidateCwd) ?? undefined
+    }
+
+    try {
+      if (!statSync(candidateCwd).isDirectory()) {
+        resolutionCache.existingWorkspaceByCwd.set(normalizedCandidateCwd, null)
+        return undefined
+      }
+    } catch {
+      resolutionCache.existingWorkspaceByCwd.set(normalizedCandidateCwd, null)
+      return undefined
+    }
+
+    const candidateEnv = createWorkspaceRuntimeEnv(candidateCwd, env)
+    const sharedWorkspace = resolveProjectSharedWorkspaceFolder(candidateCwd, candidateEnv)
+    let workspaceCwd: string
+    try {
+      workspaceCwd = statSync(sharedWorkspace).isDirectory()
+        ? normalizeRealPath(sharedWorkspace)
+        : normalizeRealPath(candidateCwd)
+    } catch {
+      workspaceCwd = normalizeRealPath(candidateCwd)
+    }
+    resolutionCache.existingWorkspaceByCwd.set(normalizedCandidateCwd, workspaceCwd)
+    return workspaceCwd
+  }
+
+  const directWorkspace = resolveExistingWorkspace(conversationCwd)
+  if (directWorkspace != null) {
+    return directWorkspace
+  }
+
+  const normalizedGitOriginUrl = codexThreadMetadata?.gitOriginUrl == null
+    ? undefined
+    : normalizeRemoteUrl(codexThreadMetadata.gitOriginUrl)
+  if (normalizedGitOriginUrl == null || codexThreadMetadataIndex == null) {
+    return normalizeRealPath(conversationCwd)
+  }
+
+  if (resolutionCache.workspaceByGitOrigin.has(normalizedGitOriginUrl)) {
+    return resolutionCache.workspaceByGitOrigin.get(normalizedGitOriginUrl) ?? normalizeRealPath(conversationCwd)
+  }
+
+  const workspaceFrequency = new Map<string, number>()
+  for (const metadata of codexThreadMetadataIndex.byNativeSessionId.values()) {
+    if (
+      metadata.cwd == null ||
+      metadata.gitOriginUrl == null ||
+      normalizeRemoteUrl(metadata.gitOriginUrl) !== normalizedGitOriginUrl
+    ) {
+      continue
+    }
+    const workspaceCwd = resolveExistingWorkspace(metadata.cwd)
+    let workspaceGitRemote = workspaceCwd == null
+      ? undefined
+      : resolutionCache.gitRemoteByWorkspace.get(workspaceCwd) ?? undefined
+    if (workspaceCwd != null && !resolutionCache.gitRemoteByWorkspace.has(workspaceCwd)) {
+      workspaceGitRemote = resolveGitProjectIdentity(workspaceCwd)?.remoteUrl
+      resolutionCache.gitRemoteByWorkspace.set(workspaceCwd, workspaceGitRemote ?? null)
+    }
+    if (workspaceCwd != null && workspaceGitRemote === normalizedGitOriginUrl) {
+      workspaceFrequency.set(workspaceCwd, (workspaceFrequency.get(workspaceCwd) ?? 0) + 1)
+    }
+  }
+
+  const resolvedWorkspace = Array.from(workspaceFrequency.entries())
+    .sort(([leftPath, leftCount], [rightPath, rightCount]) =>
+      rightCount - leftCount ||
+      leftPath.length - rightPath.length ||
+      leftPath.localeCompare(rightPath)
+    )
+    .at(0)?.[0]
+  resolutionCache.workspaceByGitOrigin.set(normalizedGitOriginUrl, resolvedWorkspace ?? null)
+  return resolvedWorkspace ?? normalizeRealPath(conversationCwd)
 }
 
 const resolveNativeHistoryImportTarget = (
   conversationCwd: string,
   fallbackCwd: string,
   env: NodeJS.ProcessEnv,
-  projectScope: NativeHistoryProjectScope
+  projectScope: NativeHistoryProjectScope,
+  codexThreadMetadata?: CodexThreadMetadata,
+  codexThreadMetadataIndex?: CodexThreadMetadataIndex,
+  resolutionCache = createNativeHistoryWorkspaceResolutionCache()
 ) => {
-  const workspaceCwd = resolveConversationWorkspaceCwd(conversationCwd, fallbackCwd, env, projectScope)
+  const workspaceCwd = resolveConversationWorkspaceCwd(
+    conversationCwd,
+    fallbackCwd,
+    env,
+    projectScope,
+    codexThreadMetadata,
+    codexThreadMetadataIndex,
+    resolutionCache
+  )
   const runtimeEnv = createWorkspaceRuntimeEnv(workspaceCwd, env)
   return {
     runtimeRoot: resolveWorkspaceRuntimeStoreRoot(workspaceCwd, runtimeEnv),
@@ -1460,20 +1608,29 @@ const importConversation = async (
   const store = new FileRuntimeStore(params.runtimeRoot)
   const sessionId = toRuntimeSessionId(conversation)
   const title = buildTitle(conversation)
+  const existingMeta = await store.session(sessionId).readMeta()
+  const existingHistoryImport = isRecord(existingMeta?.historyImport) ? existingMeta.historyImport : undefined
+  const importedAt = typeof existingHistoryImport?.importedAt === 'number' &&
+      Number.isFinite(existingHistoryImport.importedAt)
+    ? existingHistoryImport.importedAt
+    : Date.now()
   const session = await store.createSession(
     {
       protocolVersion: DEFAULT_RUNTIME_PROTOCOL_VERSION,
       supportedProtocolRange: DEFAULT_SUPPORTED_PROTOCOL_RANGE,
       sessionId,
       title,
-      cwd: conversation.cwd,
+      cwd: params.workspaceCwd,
       adapter: conversation.adapter,
       ...(conversation.model != null ? { model: conversation.model } : {}),
       createdAt: conversation.createdAt,
       historyImport: {
         adapter: conversation.adapter,
+        importedAt,
+        nativeCwd: conversation.cwd,
         nativeSessionId: conversation.nativeSessionId,
         sourcePath: conversation.sourcePath,
+        sourceUpdatedAt: conversation.updatedAt,
         workspaceCwd: params.workspaceCwd
       }
     } satisfies RuntimeMeta
@@ -1526,7 +1683,7 @@ const importConversation = async (
     }),
     store.updateIndex(sessionId, {
       storePath: path.relative(params.runtimeRoot, session.sessionPath),
-      cwd: conversation.cwd,
+      cwd: params.workspaceCwd,
       status: 'completed',
       updatedAt: conversation.updatedAt
     })
@@ -1535,11 +1692,13 @@ const importConversation = async (
   return {
     adapter: conversation.adapter,
     createdAt: conversation.createdAt,
+    cwd: conversation.cwd,
     importedEvents,
     sessionId,
     sourcePath: conversation.sourcePath,
     title,
-    updatedAt: conversation.updatedAt
+    updatedAt: conversation.updatedAt,
+    workspaceCwd: params.workspaceCwd
   }
 }
 
@@ -1607,6 +1766,7 @@ const hasCustomImportOptions = (options: NativeHistoryImportOptions) => (
   options.homeDir != null ||
   options.maxFileSizeBytes != null ||
   options.maxFileSizeBytesByAdapter != null ||
+  options.projectPaths != null ||
   options.projectScope != null ||
   options.sourceDirs != null ||
   options.sourcePaths != null ||
@@ -1633,15 +1793,21 @@ const getImportFileSizeLimit = (
   return options.maxFileSizeBytes
 }
 
-const createSourcePathFilter = (sourcePaths: string[] | undefined) => {
-  if (sourcePaths == null) {
-    return undefined
-  }
-  return new Set(sourcePaths.map(sourcePath => normalizeRealPath(sourcePath)))
-}
+const createProjectPathFilter = (projectPaths: string[] | undefined) => (
+  projectPaths == null || projectPaths.length === 0
+    ? undefined
+    : unique(projectPaths.map(projectPath => normalizeRealPath(projectPath)))
+)
 
-const matchesSourcePathFilter = (sourcePathFilter: Set<string> | undefined, filePath: string) => (
-  sourcePathFilter == null || sourcePathFilter.has(normalizeRealPath(filePath))
+const matchesProjectPathFilter = (
+  projectPathFilter: string[] | undefined,
+  conversationCwd: string | undefined
+) => (
+  projectPathFilter == null ||
+  (
+    conversationCwd != null &&
+    projectPathFilter.some(projectPath => isPathInside(projectPath, conversationCwd))
+  )
 )
 
 const matchesNativeHistoryCandidateScope = (
@@ -1829,6 +1995,7 @@ const createAdapterPreview = (adapter: NativeHistoryAdapter): NativeHistoryImpor
   largeFiles: 0,
   largestFileBytes: 0,
   matchedFiles: 0,
+  projects: [],
   scannedFiles: 0,
   totalBytes: 0
 })
@@ -1866,7 +2033,7 @@ export async function previewNativeProjectHistory(
   const projectContext = resolveProjectMatchContext(cwd, runtimeEnv)
   const projectScope = resolveNativeHistoryProjectScope(options)
   const adapterPreviews: NativeHistoryImportAdapterPreview[] = []
-  const sourcePathFilter = createSourcePathFilter(options.sourcePaths)
+  const projectPathFilter = createProjectPathFilter(options.projectPaths)
   const previewLimit = normalizeNativeHistoryPreviewLimit(options.previewLimit)
   const previewCursor = parseNativeHistoryPreviewCursor(options.previewCursor)
   const nextCursorOffsets: Partial<Record<NativeHistoryAdapter, number>> = {}
@@ -1877,35 +2044,29 @@ export async function previewNativeProjectHistory(
     const codexThreadMetadataIndex = adapter === 'codex'
       ? await readCodexThreadMetadataIndex(homeDir)
       : undefined
+    const workspaceResolutionCache = createNativeHistoryWorkspaceResolutionCache()
     const sourceFiles: NativeHistorySourceFile[] = []
+    const files = await listNativeHistoryJsonlFiles(sourceDirs, options.sourcePaths)
+    preview.scannedFiles += files.length
 
-    for (const sourceDir of sourceDirs) {
-      if (!existsSync(sourceDir)) {
-        continue
-      }
-      const files = await walkJsonlFiles(sourceDir)
-      preview.scannedFiles += files.length
-
-      for (const filePath of files) {
-        if (!matchesSourcePathFilter(sourcePathFilter, filePath)) {
-          continue
-        }
-        try {
-          sourceFiles.push(createNativeHistorySourceFile(adapter, homeDir, filePath, codexThreadMetadataIndex))
-        } catch (error) {
-          logger.warn({
-            adapter,
-            error,
-            filePath
-          }, '[runtime-store] Failed to inspect native history file')
-        }
+    for (const filePath of files) {
+      try {
+        sourceFiles.push(createNativeHistorySourceFile(adapter, homeDir, filePath, codexThreadMetadataIndex))
+      } catch (error) {
+        logger.warn({
+          adapter,
+          error,
+          filePath
+        }, '[runtime-store] Failed to inspect native history file')
       }
     }
 
     sourceFiles.sort(compareNativeHistorySourceFiles(options.timeSort))
 
     const startOffset = previewCursor.offsets[adapter] ?? 0
-    for (let index = startOffset; index < sourceFiles.length; index += 1) {
+    const projectsByPath = new Map<string, NativeHistoryImportPreviewProject>()
+    let candidatePageFull = false
+    for (let index = 0; index < sourceFiles.length; index += 1) {
       const sourceFile = sourceFiles[index]!
       try {
         const codexThreadMetadata = sourceFile.codexThreadMetadata
@@ -1924,27 +2085,64 @@ export async function previewNativeProjectHistory(
             projectContext,
             projectScope,
             codexThreadMetadata?.gitOriginUrl
-          ) ||
-          !matchesNativeHistoryThreadScope(candidate, options.threadScope) ||
-          !matchesNativeHistoryTimeFilter(candidate, options.timeFilter) ||
-          !matchesNativeHistoryCandidateScope(candidate, options.candidateScope)
+          )
+        ) {
+          continue
+        }
+
+        const workspaceCwd = projectScope === 'all-projects'
+          ? resolveConversationWorkspaceCwd(
+            candidate.cwd,
+            cwd,
+            env,
+            projectScope,
+            codexThreadMetadata,
+            codexThreadMetadataIndex,
+            workspaceResolutionCache
+          )
+          : candidate.cwd
+        const workspaceCandidate = workspaceCwd === candidate.cwd
+          ? candidate
+          : { ...candidate, cwd: workspaceCwd }
+        const normalizedProjectPath = normalizeRealPath(workspaceCandidate.cwd)
+        const existingProject = projectsByPath.get(normalizedProjectPath)
+        projectsByPath.set(normalizedProjectPath, {
+          path: normalizedProjectPath,
+          sessionCount: (existingProject?.sessionCount ?? 0) + 1
+        })
+
+        if (
+          index < startOffset ||
+          candidatePageFull ||
+          !matchesProjectPathFilter(projectPathFilter, workspaceCandidate.cwd) ||
+          !matchesNativeHistoryThreadScope(workspaceCandidate, options.threadScope) ||
+          !matchesNativeHistoryTimeFilter(workspaceCandidate, options.timeFilter) ||
+          !matchesNativeHistoryCandidateScope(workspaceCandidate, options.candidateScope)
         ) {
           continue
         }
 
         const importTarget = projectScope === 'all-projects'
-          ? resolveNativeHistoryImportTarget(candidate.cwd, cwd, env, projectScope)
+          ? resolveNativeHistoryImportTarget(
+            candidate.cwd,
+            cwd,
+            env,
+            projectScope,
+            codexThreadMetadata,
+            codexThreadMetadataIndex,
+            workspaceResolutionCache
+          )
           : { runtimeRoot, workspaceCwd: cwd }
-        const importedSessionId = findImportedNativeHistorySessionId(importTarget.runtimeRoot, candidate)
+        const importedSessionId = findImportedNativeHistorySessionId(importTarget.runtimeRoot, workspaceCandidate)
         if (importedSessionId != null) {
           continue
         }
 
-        preview.candidates.push(candidate)
+        preview.candidates.push(workspaceCandidate)
         preview.matchedFiles += 1
-        preview.totalBytes += candidate.fileSizeBytes
-        preview.largestFileBytes = Math.max(preview.largestFileBytes, candidate.fileSizeBytes)
-        if (candidate.isLarge) {
+        preview.totalBytes += workspaceCandidate.fileSizeBytes
+        preview.largestFileBytes = Math.max(preview.largestFileBytes, workspaceCandidate.fileSizeBytes)
+        if (workspaceCandidate.isLarge) {
           preview.largeFiles += 1
         }
 
@@ -1960,7 +2158,7 @@ export async function previewNativeProjectHistory(
             })
             nextCursorOffsets[adapter] = nextOffset
           }
-          break
+          candidatePageFull = true
         }
       } catch (error) {
         logger.warn({
@@ -1972,6 +2170,8 @@ export async function previewNativeProjectHistory(
     }
 
     preview.candidates.sort(compareNativeHistoryCandidates(options.timeSort))
+    preview.projects = Array.from(projectsByPath.values())
+      .sort((left, right) => left.path.localeCompare(right.path))
     adapterPreviews.push(preview)
   }
 
@@ -2150,7 +2350,7 @@ async function importNativeProjectHistoryInternal(
   const adapters = options.adapters ?? ['codex', 'claude-code']
   const projectContext = resolveProjectMatchContext(cwd, runtimeEnv)
   const projectScope = resolveNativeHistoryProjectScope(options)
-  const sourcePathFilter = createSourcePathFilter(options.sourcePaths)
+  const projectPathFilter = createProjectPathFilter(options.projectPaths)
   const changedRuntimeRoots = new Set<string>()
   const result: NativeHistoryImportResult = {
     importedEvents: 0,
@@ -2167,75 +2367,88 @@ async function importNativeProjectHistoryInternal(
     const codexThreadMetadataIndex = adapter === 'codex'
       ? await readCodexThreadMetadataIndex(homeDir)
       : undefined
-    for (const sourceDir of sourceDirs) {
-      if (!existsSync(sourceDir)) {
-        continue
-      }
-      const files = await walkJsonlFiles(sourceDir)
-      result.scannedFiles += files.length
-      for (const filePath of files) {
-        try {
-          if (!matchesSourcePathFilter(sourcePathFilter, filePath)) {
-            continue
-          }
-          if (!isWithinImportFileSizeLimit(filePath, getImportFileSizeLimit(options, adapter))) {
-            continue
-          }
-          const pathCodexThreadMetadata = getCodexThreadMetadata(codexThreadMetadataIndex, filePath)
-          const records = await readJsonlRecords(filePath, adapter)
-          const codexThreadMetadata = adapter === 'codex'
-            ? getCodexThreadMetadataFromRecords(codexThreadMetadataIndex, filePath, records, pathCodexThreadMetadata)
-            : pathCodexThreadMetadata
-          if (!matchesNativeHistoryThreadScope(codexThreadMetadata, options.threadScope)) {
-            continue
-          }
-          const conversationCwd = codexThreadMetadata?.cwd ?? readConversationCwdFromRecords(adapter, records)
-          if (
-            !isConversationInProjectScope(
-              conversationCwd,
-              projectContext,
-              projectScope,
-              codexThreadMetadata?.gitOriginUrl
-            )
-          ) {
-            continue
-          }
-          const conversation = parseConversation(
-            adapter,
-            filePath,
-            records,
+    const workspaceResolutionCache = createNativeHistoryWorkspaceResolutionCache()
+    const files = await listNativeHistoryJsonlFiles(sourceDirs, options.sourcePaths)
+    result.scannedFiles += files.length
+    for (const filePath of files) {
+      try {
+        if (!isWithinImportFileSizeLimit(filePath, getImportFileSizeLimit(options, adapter))) {
+          continue
+        }
+        const pathCodexThreadMetadata = getCodexThreadMetadata(codexThreadMetadataIndex, filePath)
+        const records = await readJsonlRecords(filePath, adapter)
+        const codexThreadMetadata = adapter === 'codex'
+          ? getCodexThreadMetadataFromRecords(codexThreadMetadataIndex, filePath, records, pathCodexThreadMetadata)
+          : pathCodexThreadMetadata
+        if (!matchesNativeHistoryThreadScope(codexThreadMetadata, options.threadScope)) {
+          continue
+        }
+        const conversationCwd = codexThreadMetadata?.cwd ?? readConversationCwdFromRecords(adapter, records)
+        const workspaceCwd = conversationCwd == null
+          ? cwd
+          : resolveConversationWorkspaceCwd(
+            conversationCwd,
+            cwd,
+            env,
+            projectScope,
+            codexThreadMetadata,
+            codexThreadMetadataIndex,
+            workspaceResolutionCache
+          )
+        if (
+          !isConversationInProjectScope(
+            conversationCwd,
             projectContext,
             projectScope,
-            codexThreadMetadata
-          )
-          if (conversation == null || !matchesNativeHistoryTimeFilter(conversation, options.timeFilter)) {
-            continue
-          }
-          const importTarget = projectScope === 'all-projects'
-            ? resolveNativeHistoryImportTarget(conversation.cwd, cwd, env, projectScope)
-            : { runtimeRoot, workspaceCwd: cwd }
-          if (findImportedNativeHistorySessionId(importTarget.runtimeRoot, conversation) != null) {
-            continue
-          }
-          await mkdir(importTarget.runtimeRoot, { recursive: true })
-          result.matchedFiles += 1
-          const sessionResult = await importConversation(conversation, {
-            runtimeRoot: importTarget.runtimeRoot,
-            workspaceCwd: importTarget.workspaceCwd
-          })
-          result.importedEvents += sessionResult.importedEvents
-          if (sessionResult.importedEvents > 0) {
-            result.importedSessions += 1
-            changedRuntimeRoots.add(importTarget.runtimeRoot)
-          }
-          result.sessions.push(sessionResult)
-        } catch (error) {
-          logger.warn({
-            adapter,
-            error,
-            filePath
-          }, '[runtime-store] Failed to import native history file')
+            codexThreadMetadata?.gitOriginUrl
+          ) ||
+          !matchesProjectPathFilter(projectPathFilter, workspaceCwd)
+        ) {
+          continue
         }
+        const conversation = parseConversation(
+          adapter,
+          filePath,
+          records,
+          projectContext,
+          projectScope,
+          codexThreadMetadata
+        )
+        if (conversation == null || !matchesNativeHistoryTimeFilter(conversation, options.timeFilter)) {
+          continue
+        }
+        const importTarget = projectScope === 'all-projects'
+          ? resolveNativeHistoryImportTarget(
+            conversation.cwd,
+            cwd,
+            env,
+            projectScope,
+            codexThreadMetadata,
+            codexThreadMetadataIndex,
+            workspaceResolutionCache
+          )
+          : { runtimeRoot, workspaceCwd: cwd }
+        if (findImportedNativeHistorySessionId(importTarget.runtimeRoot, conversation) != null) {
+          continue
+        }
+        await mkdir(importTarget.runtimeRoot, { recursive: true })
+        result.matchedFiles += 1
+        const sessionResult = await importConversation(conversation, {
+          runtimeRoot: importTarget.runtimeRoot,
+          workspaceCwd: importTarget.workspaceCwd
+        })
+        result.importedEvents += sessionResult.importedEvents
+        if (sessionResult.importedEvents > 0) {
+          result.importedSessions += 1
+          changedRuntimeRoots.add(importTarget.runtimeRoot)
+        }
+        result.sessions.push(sessionResult)
+      } catch (error) {
+        logger.warn({
+          adapter,
+          error,
+          filePath
+        }, '[runtime-store] Failed to import native history file')
       }
     }
   }

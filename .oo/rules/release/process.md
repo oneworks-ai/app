@@ -2,6 +2,10 @@
 
 返回入口：[RELEASE.md](../RELEASE.md)
 
+## 多会话协调门禁
+
+整体发布或同时涉及多个独立分发面的发布，在准备 Release PR、创建 tag、手动 publish / dispatch 或商店提交前，必须先按[多会话发布协调](./coordination.md)建立单一协调者、不可变发布身份、分面 owner、终态回调和独立审计。单包且只有一个外部副作用面的发布可以保留单会话，但仍须遵守同一来源、幂等恢复和终态核验要求。
+
 ## 发布前最小检查
 
 - 把拟发布包列表收敛到最小范围，并能逐个说明为什么需要发版
@@ -18,6 +22,10 @@
 - Release PR 专门负责 bump 需要发布的 package manifest、整理该版本 changelog 和发布元数据。
 - Release PR 合入 `main` 后，`Release Tags` workflow 会比较合入前后的 workspace package manifest；已有包 `version` 变化、新增包带有 `name` 与 `version` 时，自动创建 `pkg/<normalized-package-name>/v<version>` tag。
 - 自动 tag 由 `Release Tags` workflow 使用内置 `GITHUB_TOKEN` 创建；不要配置个人全仓库 PAT 作为 release tag secret。`GITHUB_TOKEN` 创建的 tag 不会触发普通 tag workflow，因此 workflow 会在创建 tag 后显式 `workflow_dispatch` 对应的发布 workflow。
+
+### Relay transport release triad
+
+Relay device transport contract is runtime code shared by `@oneworks/types`, `@oneworks/relay-server`, and `@oneworks/plugin-relay`. The feature PR must not change package versions; its release PR must first, or in the same ordered publication batch, publish `@oneworks/types@0.1.0-rc.1`, then publish `@oneworks/relay-server@0.1.0-rc.2` and `@oneworks/plugin-relay@0.1.0-rc.2`. Use an explicit targeted selection containing all three packages, and run `pnpm tools publish-plan -- --packages @oneworks/types,@oneworks/relay-server,@oneworks/plugin-relay --json` to verify the selected set and that `@oneworks/types` precedes the Relay Server before publishing.
 
 ## 单包发布
 
@@ -42,15 +50,17 @@
 
 ## npm alpha 发布
 
+认证准备、首次 bootstrap 与 mixed-result 恢复先遵守 [npm Trusted Publishing 与 Open VSX 认证](./npm-trusted-publishing.md)。
+
 - 首次发布或需要 npm provenance 时，使用 `.github/workflows/npm-publish-alpha.yml` 手动触发发布。
-- workflow 默认使用 npm Trusted Publishing：GitHub OIDC `id-token: write`、`NPM_CONFIG_PROVENANCE=true`，不向 `npm publish` 注入 `NPM_TOKEN`。只有首次 bootstrap npm 上还不存在、不能使用 Trusted Publishing 的新包时，才显式勾选 `bootstrap_with_token=true`，用 `NPM_TOKEN` 作为 fallback。
+- workflow 默认使用 npm Trusted Publishing：GitHub OIDC `id-token: write`、`NPM_CONFIG_PROVENANCE=true`，不向 `npm publish` 注入 `NPM_TOKEN`。只有 npm 上还不存在的新 identity 首次 bootstrap，或经 registry / trust 对账确认的 missing-trust identities 定向恢复时，才显式勾选 `bootstrap_with_token=true`，用 `NPM_TOKEN` 作为 fallback。
 - `packages` 不能为空，除非明确勾选 `publish_all=true`。发布整组 public workspace 包时必须显式打开 `publish_all`，避免误触发把所有 public 包发布到 npm。
 - workflow 通过 `pnpm tools publish-plan -- --publish --no-git-checks --skip-existing --tag <publish_tag>` 发布 public workspace 包；`publish_tag` 默认 `alpha`。
 - 新增 public workspace 包不需要改 workflow；只要被 `pnpm-workspace.yaml` 收录、`package.json` 带 `name` / `version` 且没有 `private: true`，在 `publish_all=true` 时会自动进入全量发布计划。只想发新包时优先填写 `packages=<new-package>`，让发布计划自动补内部依赖顺序。
 - `onework`、`oneork`、`oneorks` 是 `oneworks` bootstrap 的 typo publish alias，必须从 `apps/bootstrap/package.json` 的 `oneworks.publishAliases` 自动展开，同源改名发布；不要为它们创建独立 workspace 包，不要让它们依赖 `oneworks`，也不要写额外 redirect 逻辑。发布这组包且要保证裸 `npx onework` 和 `npx oneworks` 行为一致时，必须在首次发布该版本时使用 `publish_tag=latest`，或在发布后立刻用有 2FA 权限的 npm 登录态执行 `npm dist-tag add <pkg>@<version> latest` 补齐 `oneworks` 和三个 publish alias 包。
 - `--skip-existing` 只在真实发布时跳过 npm registry 已存在的同名同版本；dry-run 仍完整打包所有候选包。新增 public 包时，旧包会跳过，新包会继续首发。
 - npm Trusted Publishing 要求 package 已存在。新增包第一次发布必须依赖 `NPM_TOKEN` 完成 bootstrap；首发成功后，必须在 npm 为该包配置 Trusted Publisher：GitHub Actions、`oneworks-ai/app`、workflow filename `npm-publish-alpha.yml`、允许 `npm publish`。后续同包版本再通过 Trusted Publishing 发布。
-- 发布流水线必须在任何 package 发布失败时退出失败；失败后先重新运行同一个 workflow，已发布的包会被 `--skip-existing` 跳过，只继续处理未发布或新增的包。
+- 发布流水线必须在任何 package 发布失败时退出失败。mixed-result 后先逐 identity 对账 version、dist-tag 与 integrity，只对缺失项执行定向 recovery；`--skip-existing` 是保护措施，不能代替对账。
 
 ## 发布中断
 
@@ -59,15 +69,29 @@
 - 已经在 registry 上出现目标版本的包，不要重复发布
 - 分别核对 npm registry、远端分支和远端 tag，缺什么补什么
 
+## macOS 桌面候选与提升
+
+- 普通 PR 保持轻量 `macOS installer` 策略检查，不占用 macOS runner。完整 package / smoke / install verify 由每日 nightly 的 unsigned arm64 DMG 提前兜底。
+- 正式发版仍构建 arm64+x64 的 DMG / PKG / ZIP。构建成功后必须生成 `oneworks-desktop-release-candidate.json`，记录 tag、源 SHA、签名状态、架构、目标和每个文件的 SHA-256；后续发布前必须重新核对清单。
+- 需要先验收候选但暂不发布时，手动触发 `desktop-package.yml`，传 `release_tag` 且保持 `create_release=false`。这会使用正式版本身份构建，但只保存 Actions artifact。
+- 提升已验证候选时，再触发同一 workflow，设置 `create_release=true`、相同 `release_tag` 和原成功构建的 `candidate_run_id`。package job 会跳过，GitHub Release 只消费并校验原候选，不重新编译或打包。
+- GitHub Release job 失败时优先 rerun failed jobs；成功的 package job 和 artifact 不需要重跑。跨 run 恢复时使用 `candidate_run_id`，不能临时拿本地产物替换。
+- Release 资产上传成功后，workflow 必须复用 `deploy-homepage.yml` 触发并等待 homepage Pages。官网失败只重试 release / homepage 阶段，不重建候选。
+- nightly 只覆盖发布打包回归，不替代正式候选的双架构、全目标、签名 / notarization 和清单验证。
+
 ## VS Code 扩展发布
 
 - VS Code Marketplace 不支持 `0.1.0-alpha.0` 这种 semver prerelease 字符串；预发布必须使用 `major.minor.patch` 三段式版本，再通过 `vsce package --pre-release` 和 `vsce publish --pre-release` 标记。
-- 本仓 `apps/vscode-extension/package.json` 可以继续跟随仓库发布节奏使用 `0.1.0-alpha.0`，但 VSIX release stage 必须把 Marketplace manifest version 映射为 `0.1.0`，同时保留 `--pre-release`。后续 alpha 版本如果需要再次发布到 Marketplace，需要 bump 到新的三段式版本，例如 `0.1.1`。
+- 本仓 `apps/vscode-extension/package.json` 可以继续使用带逻辑预发布后缀的版本，但 VSIX release stage 必须把 Marketplace manifest version 映射为同一版本的三段式数值 base，同时保留 `--pre-release`。每个纳入 Marketplace / Open VSX 的后续逻辑预发布都必须使用严格更新且唯一的数值 base；即使只改变 alpha / beta / rc 后缀，也不能复用已被另一个逻辑 release tag 占用的三段式版本。
 - VS Code 官方建议预发布版本使用奇数 minor、稳定版使用偶数 minor；因此 One Works VS Code 扩展的 `0.1.x` 应视作 alpha/pre-release channel，稳定发布从 `0.2.x` 开始。
 - VS Code Marketplace 发布依赖仓库 secret `VSCE_PAT` 和 variable `VSCODE_EXTENSION_PUBLISHER`；GitHub Release / VSIX artifact 成功不等于 Marketplace 已发布。
-- VS Code Marketplace 和 Open VSX publish 都必须带 duplicate skip 语义；release workflow 允许重跑来补齐某个分发源，不应因为另一个分发源已发布同版本而失败。
+- VS Code Marketplace 和 Open VSX publish 都必须带 duplicate skip 语义，但 duplicate skip 只用于同一逻辑 release tag、同一不可变 source 和同一 VSIX 的恢复重跑。不同逻辑 release tag 映射到相同数值版本时必须在 Release Tags 计划或直接 release workflow 中失败，不能把 registry 仍提供旧字节视作本次发布成功。
+- store-version guard 默认不会因 exact release tag 已存在而放宽碰撞或单调性检查。只有该 exact tag 的 GitHub Release 已经通过元数据校验并包含预期命名的 authoritative VSIX asset 时，恢复重跑才允许绕过这些 prior-tag 检查；guard、`reuse` 判定和随后的 create / upload / reuse 必须在同一 metadata snapshot 的同一 workflow shell step 内相邻执行。该 asset 随后必须下载、验证并复用。这不会使历史跨 tag 碰撞合法化，协调终态仍必须独立证明目标 registry 提供的是该逻辑 tag 的获批字节。
+- push 与手动 VS Code release 都必须 checkout resolved release tag，并核对 peeled tag commit、HEAD 和 build source SHA 完全一致。商店发布前先把 VSIX 作为该 tag 的 GitHub prerelease asset 持久化；同 tag 重跑必须下载并复用已有 asset，不能重新打包覆盖或 clobber，再由 Marketplace 与 Open VSX 共同消费这个 authoritative 文件。
+- VSIX 打包完成后必须核对 `extension/package.json` 的三段式数值版本和 `extension.vsixmanifest` 的 prerelease marker；两者必须同时匹配逻辑 package version，之后才能上传 artifact 或进入商店发布。
 - Open VSX Registry 是 VS Code 兼容 IDE 的通用扩展分发源，必须和 VS Code Marketplace 并行发布同一个 VSIX。Open VSX 发布依赖仓库 secret `OVSX_PAT`，并且 registry 里必须已创建和 extension publisher 一致的 namespace，例如 `oneworks-ai`；`VSCE_PAT` 不能用于 Open VSX。
 - Open VSX namespace 首次创建走 `npx ovsx create-namespace oneworks-ai -p <token>`；如需 verified owner，创建后还要在 Open VSX 里单独 claim namespace ownership。
+- `OVSX_PAT` 发布成功与 namespace verification 独立：`verified=false` / `unrelatedPublisher=true` 本身不表示发布失败。独立核对 public VSIX bytes/hash、version 与 `preRelease`；verification 走官方 namespace-claim 和 maintainer review，不要为了 metadata 重发或轮换 token。
 - `pkg/oneworks-vscode-extension/v*` 触发的 GitHub Release 对预发布版本应标记为 prerelease。
 
 ## 外部浏览器 Chrome 扩展发布

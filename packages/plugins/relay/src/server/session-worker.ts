@@ -1,4 +1,5 @@
 /* eslint-disable max-lines -- relay session worker keeps polling, forwarding, and error reporting together. */
+import type { RelayHeartbeatOptions } from './heartbeat.js'
 import { createLocalRelaySessionSnapshot, submitLocalRelaySessionMessage } from './session-adapter.js'
 import {
   pollRelaySessionForwardingJobs,
@@ -11,14 +12,17 @@ import { RELAY_WORKSPACE_HTTP_MODE, forwardLocalRelayWorkspaceHttpRequest } from
 import { forwardLocalRelayWorkspaceWebSocketJob } from './workspace-websocket-forwarder.js'
 
 export const DEFAULT_SESSION_WORKER_INTERVAL_MS = 1_000
-export const DEFAULT_SESSION_WORKER_MAX_IDLE_INTERVAL_MS = 5_000
+/** Old servers retain long-poll compatibility, but empty replies must never spin. */
+export const DEFAULT_SESSION_WORKER_MAX_IDLE_INTERVAL_MS = 120_000
 export const DEFAULT_SESSION_WORKER_MAX_ERROR_INTERVAL_MS = 30_000
 export const DEFAULT_SESSION_WORKER_ERROR_LOG_INTERVAL_MS = 30_000
-export const DEFAULT_SESSION_WORKER_SNAPSHOT_REFRESH_MS = 30_000
+/** Initial and changed snapshots are immediate; unchanged data gets only a safety refresh. */
+export const DEFAULT_SESSION_WORKER_SNAPSHOT_REFRESH_MS = 6 * 60 * 60_000
 export const DEFAULT_SESSION_WORKER_LONG_POLL_MS = 10_000
 
 export interface RelaySessionWorkerOptions {
   adapter?: RelayLocalSessionAdapter
+  autoStart?: boolean
   auth: RelaySessionClientAuth
   intervalMs?: number
   logger?: {
@@ -28,12 +32,17 @@ export interface RelaySessionWorkerOptions {
   maxErrorIntervalMs?: number
   maxIdleIntervalMs?: number
   longPollMs?: number
+  pollHeartbeat?: RelayHeartbeatOptions
   serverId?: string
   snapshotRefreshMs?: number
 }
 
 export interface RelaySessionWorker {
-  runOnce: () => Promise<void>
+  refreshSnapshot: (options?: { force?: boolean; signal?: AbortSignal }) => Promise<void>
+  runOnce: (options?: { refreshSnapshot?: boolean; signal?: AbortSignal; waitMs?: number }) => Promise<{
+    jobCount: number
+    nextPollMs?: number
+  }>
   stop: () => void
 }
 
@@ -127,16 +136,16 @@ export const createRelaySessionWorker = (options: RelaySessionWorkerOptions): Re
     void processJob(job)
   }
 
-  const pushSnapshotIfNeeded = async () => {
+  const pushSnapshotIfNeeded = async (input: { force?: boolean; signal?: AbortSignal } = {}) => {
     if (options.adapter == null) return
     const snapshot = await createLocalRelaySessionSnapshot(options.adapter, options.auth.deviceId)
     const snapshotKey = JSON.stringify({
       deviceId: snapshot.deviceId,
       sessions: snapshot.sessions
     })
-    const shouldRefresh = Date.now() - lastSnapshotPushedAt >= snapshotRefreshMs
+    const shouldRefresh = input.force === true || Date.now() - lastSnapshotPushedAt >= snapshotRefreshMs
     if (snapshotKey === lastSnapshotKey && !shouldRefresh) return
-    await pushRelaySessionSnapshot(options.auth, snapshot)
+    await pushRelaySessionSnapshot(options.auth, snapshot, { signal: input.signal })
     lastSnapshotKey = snapshotKey
     lastSnapshotPushedAt = Date.now()
   }
@@ -146,13 +155,19 @@ export const createRelaySessionWorker = (options: RelaySessionWorkerOptions): Re
     return Math.max(0, snapshotRefreshMs - (Date.now() - lastSnapshotPushedAt))
   }
 
-  const runCycle = async () => {
+  const runCycle = async (input: {
+    refreshSnapshot?: boolean
+    signal?: AbortSignal
+    waitMs?: number
+  } = {}) => {
     if (stopped) return { jobCount: 0 }
-    await pushSnapshotIfNeeded()
+    if (input.refreshSnapshot !== false) await pushSnapshotIfNeeded({ signal: input.signal })
     const { jobs, nextPollMs } = await pollRelaySessionForwardingJobs(options.auth, {
+      ...(options.pollHeartbeat == null ? {} : { heartbeat: options.pollHeartbeat }),
       limit: 50,
+      signal: input.signal,
       status: 'queued',
-      waitMs: longPollMs
+      waitMs: input.waitMs ?? longPollMs
     })
     ;[...jobs]
       .sort((left, right) => Number(isWorkspaceForwardingJob(right)) - Number(isWorkspaceForwardingJob(left)))
@@ -160,8 +175,12 @@ export const createRelaySessionWorker = (options: RelaySessionWorkerOptions): Re
     return { jobCount: jobs.length, nextPollMs }
   }
 
-  const runOnce = async () => {
-    await runCycle()
+  const runOnce = async (input: {
+    refreshSnapshot?: boolean
+    signal?: AbortSignal
+    waitMs?: number
+  } = {}) => {
+    return await runCycle(input)
   }
 
   const warnWorkerFailure = (error: unknown) => {
@@ -211,7 +230,7 @@ export const createRelaySessionWorker = (options: RelaySessionWorkerOptions): Re
         }
         nextIntervalMs = nextPollMs == null
           ? Math.min(maxIdleIntervalMs, Math.max(baseIntervalMs, nextIntervalMs * 2))
-          : Math.min(maxIdleIntervalMs, Math.max(250, Math.floor(nextPollMs)))
+          : Math.min(maxIdleIntervalMs, Math.max(60_000, Math.floor(nextPollMs)))
       })
       .catch(error => {
         warnWorkerFailure(error)
@@ -224,9 +243,10 @@ export const createRelaySessionWorker = (options: RelaySessionWorkerOptions): Re
       })
   }
 
-  schedule()
+  if (options.autoStart !== false) schedule()
 
   return {
+    refreshSnapshot: pushSnapshotIfNeeded,
     runOnce,
     stop: () => {
       stopped = true

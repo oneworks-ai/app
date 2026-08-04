@@ -20,8 +20,6 @@ const CONVENTIONAL_TYPES = [
 const CONVENTIONAL_COMMIT_RE = new RegExp(
   `^(?:${CONVENTIONAL_TYPES.join('|')})(?:\\([\\w./-]+\\))?!?: .+`
 )
-const MERGE_COMMIT_RE =
-  /^Merge (?:pull request #\d+ from .+|branch '.+'(?: into .+)?|remote-tracking branch '.+'(?: into .+)?)$/
 const REVERT_COMMIT_RE = /^Revert ".+"$/
 const EMPTY_TREE_SHA = /^0+$/
 
@@ -45,6 +43,10 @@ function getRevisionRange(base, head) {
   return `${base}..${head}`
 }
 
+function isMergeCommit(commit) {
+  return runGit(['rev-list', '--parents', '-n', '1', commit]).split(/\s+/).length > 2
+}
+
 const [base = '', head = 'HEAD'] = process.argv.slice(2)
 const revisionRange = getRevisionRange(base, head)
 const commits = runGit(['rev-list', '--reverse', revisionRange])
@@ -63,7 +65,7 @@ for (const commit of commits) {
 
   if (
     CONVENTIONAL_COMMIT_RE.test(subject) ||
-    MERGE_COMMIT_RE.test(subject) ||
+    isMergeCommit(commit) ||
     REVERT_COMMIT_RE.test(subject)
   ) {
     continue

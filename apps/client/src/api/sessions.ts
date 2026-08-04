@@ -32,6 +32,12 @@ export type NativeHistoryProjectScope = 'current-project' | 'all-projects'
 export type NativeHistoryThreadScope = 'all' | 'user' | 'subagent'
 export type NativeHistoryTimeSort = 'activity' | 'createdAt' | 'updatedAt'
 
+export const nativeHistoryAdapters: NativeHistoryAdapter[] = ['codex', 'claude-code']
+
+export const isNativeHistoryAdapter = (value: string | undefined): value is NativeHistoryAdapter => (
+  value != null && nativeHistoryAdapters.includes(value as NativeHistoryAdapter)
+)
+
 export interface NativeHistoryTimeRange {
   from?: number
   to?: number
@@ -45,11 +51,13 @@ export interface NativeHistoryTimeFilter {
 export interface NativeHistoryImportSession {
   adapter: NativeHistoryAdapter
   createdAt: number
+  cwd: string
   importedEvents: number
   sessionId: string
   sourcePath: string
   title: string
   updatedAt: number
+  workspaceCwd: string
 }
 
 export interface NativeHistoryImportResult {
@@ -77,6 +85,11 @@ export interface NativeHistoryImportPreviewCandidate {
   updatedAt: number
 }
 
+export interface NativeHistoryImportPreviewProject {
+  path: string
+  sessionCount: number
+}
+
 export interface NativeHistoryImportAdapterPreview {
   adapter: NativeHistoryAdapter
   candidates: NativeHistoryImportPreviewCandidate[]
@@ -86,6 +99,7 @@ export interface NativeHistoryImportAdapterPreview {
   largestFileBytes: number
   matchedFiles: number
   nextCursor?: string
+  projects: NativeHistoryImportPreviewProject[]
   scannedFiles: number
   totalBytes: number
 }
@@ -108,6 +122,7 @@ export async function previewNativeProjectHistory(request?: {
   candidateScope?: NativeHistoryCandidateScope
   cursor?: string
   limit?: number
+  projectPaths?: string[]
   projectScope?: NativeHistoryProjectScope
   signal?: AbortSignal
   sourcePaths?: string[]
@@ -118,7 +133,8 @@ export async function previewNativeProjectHistory(request?: {
   return fetchApiJson<NativeHistoryImportPreviewResult>('/api/sessions/native-history-import/preview', {
     method: 'POST',
     ...(request?.adapters != null || request?.candidateScope != null || request?.cursor != null ||
-        request?.limit != null || request?.projectScope != null || request?.sourcePaths != null ||
+        request?.limit != null || request?.projectPaths != null || request?.projectScope != null ||
+        request?.sourcePaths != null ||
         request?.threadScope != null || request?.timeFilter != null || request?.timeSort != null
       ? {
         headers: jsonHeaders,
@@ -127,6 +143,7 @@ export async function previewNativeProjectHistory(request?: {
           candidateScope: request.candidateScope,
           cursor: request.cursor,
           limit: request.limit,
+          projectPaths: request.projectPaths,
           projectScope: request.projectScope,
           sourcePaths: request.sourcePaths,
           threadScope: request.threadScope,
@@ -141,6 +158,7 @@ export async function previewNativeProjectHistory(request?: {
 
 export async function runNativeProjectHistoryImport(request?: {
   adapters?: NativeHistoryAdapter[]
+  projectPaths?: string[]
   projectScope?: NativeHistoryProjectScope
   signal?: AbortSignal
   sourcePaths?: string[]
@@ -150,12 +168,14 @@ export async function runNativeProjectHistoryImport(request?: {
 }): Promise<NativeHistoryImportResult> {
   return fetchApiJson<NativeHistoryImportResult>('/api/sessions/native-history-import/run', {
     method: 'POST',
-    ...(request?.adapters != null || request?.projectScope != null || request?.sourcePaths != null ||
+    ...(request?.adapters != null || request?.projectPaths != null || request?.projectScope != null ||
+        request?.sourcePaths != null ||
         request?.threadScope != null || request?.timeFilter != null || request?.timeSort != null
       ? {
         headers: jsonHeaders,
         body: JSON.stringify({
           adapters: request.adapters,
+          projectPaths: request.projectPaths,
           projectScope: request.projectScope,
           sourcePaths: request.sourcePaths,
           threadScope: request.threadScope,

@@ -32,6 +32,10 @@ const nonEmptyString = (value: unknown) => (
   typeof value === 'string' && value.trim() !== '' ? value : undefined
 )
 
+const nonNegativeNumber = (value: unknown) => (
+  typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0
+)
+
 const parseArguments = (value: unknown): unknown => {
   if (isRecord(value)) return value
   if (typeof value !== 'string' || value.trim() === '') return {}
@@ -477,11 +481,38 @@ export const handleKimiWireEvent = (
     return true
   }
 
+  if (type === 'StatusUpdate' || type === 'TokenUsage') {
+    const tokenUsage = type === 'StatusUpdate' ? asRecord(payload.token_usage) : payload
+    if (Object.keys(tokenUsage).length === 0) return true
+    const inputTokens = nonNegativeNumber(tokenUsage.input_other ?? tokenUsage.input_tokens)
+    const outputTokens = nonNegativeNumber(tokenUsage.output ?? tokenUsage.output_tokens)
+    const cacheReadInputTokens = nonNegativeNumber(
+      tokenUsage.input_cache_read ?? tokenUsage.cache_read_input_tokens
+    )
+    const cacheCreationInputTokens = nonNegativeNumber(
+      tokenUsage.input_cache_creation ?? tokenUsage.cache_creation_input_tokens
+    )
+    onEvent({
+      type: 'usage',
+      data: {
+        id: nonEmptyString(payload.message_id) ?? uuid(),
+        inputTokens,
+        outputTokens,
+        cacheReadInputTokens,
+        cacheCreationInputTokens,
+        aggregationMode: 'delta',
+        model,
+        observedAt: Date.now(),
+        quality: 'provider_reported'
+      }
+    })
+    return true
+  }
+
   if (
     type === 'TurnEnd' ||
     type === 'StepBegin' ||
     type === 'StepEnd' ||
-    type === 'TokenUsage' ||
     type === 'ToolCallPart' ||
     type === 'ApprovalResponse' ||
     type === 'SteerInput' ||

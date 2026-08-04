@@ -1,10 +1,20 @@
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { delimiter, resolve } from 'node:path'
+import { delimiter, join, resolve } from 'node:path'
 import process from 'node:process'
 
 import { afterEach, describe, expect, it } from 'vitest'
+
+const nodeRequire = createRequire(import.meta.url)
+const { resolveActiveCliPackageDir } = nodeRequire('../entry.js') as {
+  resolveActiveCliPackageDir: (
+    packageName: string,
+    packageDir: string,
+    env?: Record<string, string | undefined>
+  ) => string
+}
 
 const tempDirs: string[] = []
 
@@ -13,6 +23,93 @@ afterEach(async () => {
 })
 
 describe('cli-helper loader wrapper', () => {
+  it('forwards a required desktop owner IPC channel to the re-executed wrapper', async () => {
+    const tempDir = await mkdtemp(resolve(tmpdir(), 'ow-cli-helper-owner-ipc-'))
+    tempDirs.push(tempDir)
+
+    const entryPath = resolve(tempDir, 'entry.cjs')
+    const wrapperPath = resolve(tempDir, 'wrapper.cjs')
+    const ownerChannelPath = resolve(process.cwd(), 'apps/desktop/src/server-owner-channel.cjs')
+    const cliEntryPath = resolve(process.cwd(), 'packages/cli-helper/entry.js')
+    await writeFile(
+      entryPath,
+      "process.stdout.write('owner-connected=' + process.connected); process.exit(0)\n"
+    )
+    await writeFile(
+      wrapperPath,
+      `
+const { installDesktopServerOwnerChannel } = require(${JSON.stringify(ownerChannelPath)})
+installDesktopServerOwnerChannel()
+require(${JSON.stringify(cliEntryPath)}).runCliPackageEntrypoint({
+  packageDir: ${JSON.stringify(tempDir)},
+  sourceEntry: ${JSON.stringify(entryPath)}
+})
+      `
+    )
+
+    const child = spawn(process.execPath, [wrapperPath], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        __ONEWORKS_DESKTOP_SERVER_OWNER_CHANNEL__: 'ipc-v1'
+      },
+      stdio: ['ignore', 'pipe', 'pipe', 'ipc']
+    })
+    let stdout = ''
+    let stderr = ''
+    if (child.stdout == null || child.stderr == null) {
+      throw new Error('Loader IPC test requires piped stdout and stderr.')
+    }
+    child.stdout.on('data', chunk => {
+      stdout += chunk.toString()
+    })
+    child.stderr.on('data', chunk => {
+      stderr += chunk.toString()
+    })
+
+    const result = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolveExit, reject) => {
+      child.once('error', reject)
+      child.once('exit', (code, signal) => resolveExit({ code, signal }))
+    })
+
+    expect(result).toEqual({ code: 0, signal: null })
+    expect(stderr).toBe('')
+    expect(stdout).toContain('owner-connected=true')
+  })
+
+  it('redirects a direct package bin to its validated active module package', async () => {
+    const tempDir = await mkdtemp(resolve(tmpdir(), 'ow-cli-helper-active-package-'))
+    tempDirs.push(tempDir)
+
+    const packageName = '@oneworks/server'
+    const bundledPackageDir = join(tempDir, 'bundled-server')
+    const activePackageDir = join(tempDir, 'active-server')
+    const metadataDir = join(tempDir, '.oneworks', 'bootstrap', 'module-updates')
+    await mkdir(bundledPackageDir, { recursive: true })
+    await mkdir(activePackageDir, { recursive: true })
+    await mkdir(metadataDir, { recursive: true })
+    await writeFile(
+      join(activePackageDir, 'package.json'),
+      JSON.stringify({ name: packageName, version: '3.5.0' })
+    )
+    await writeFile(
+      join(metadataDir, 'oneworks__server.json'),
+      JSON.stringify({ packageDir: activePackageDir, packageName, version: '3.5.0' })
+    )
+
+    expect(resolveActiveCliPackageDir(packageName, bundledPackageDir, {
+      __ONEWORKS_PROJECT_REAL_HOME__: tempDir
+    })).toBe(activePackageDir)
+
+    await writeFile(
+      join(metadataDir, 'oneworks__server.json'),
+      JSON.stringify({ packageDir: activePackageDir, packageName, version: '3.6.0' })
+    )
+    expect(resolveActiveCliPackageDir(packageName, bundledPackageDir, {
+      __ONEWORKS_PROJECT_REAL_HOME__: tempDir
+    })).toBe(bundledPackageDir)
+  })
+
   it('propagates the spawned cli exit code', async () => {
     const tempDir = await mkdtemp(resolve(tmpdir(), 'ow-cli-helper-'))
     tempDirs.push(tempDir)

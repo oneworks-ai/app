@@ -5,6 +5,7 @@ import type { PluginRuntimeInstance } from '../src/plugins/plugin-manifest'
 import {
   getNativePluginPresentationSearchText,
   getPluginPresentationSearchText,
+  resolveInstalledMarketplacePlugin,
   resolvePluginDisplayName,
   resolvePluginPresentationIcon
 } from '../src/plugins/plugin-presentation'
@@ -103,5 +104,32 @@ describe('plugin presentation', () => {
       },
       state: 'enabled'
     })).toBe('Codex Docs docs codex user')
+  })
+
+  it('prefers the installed runtime identity for a marketplace detail without using a filesystem path', () => {
+    const installed = createPlugin({
+      displayName: 'Airtable',
+      scope: 'adapter:codex:market:official:airtable',
+      source: {
+        adapter: 'codex',
+        kind: 'marketplace',
+        marketplace: 'official',
+        plugin: 'airtable'
+      }
+    })
+    const unrelated = createPlugin({
+      scope: 'other',
+      source: {
+        adapter: 'codex',
+        kind: 'marketplace',
+        marketplace: 'official',
+        plugin: 'calendar'
+      }
+    })
+
+    expect(resolveInstalledMarketplacePlugin([unrelated, installed], {
+      marketplace: 'official',
+      plugin: 'airtable'
+    })).toBe(installed)
   })
 })

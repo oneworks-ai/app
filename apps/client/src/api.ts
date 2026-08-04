@@ -120,6 +120,7 @@ export {
   listSessionWorkspaceTree,
   listSessions,
   moveQueuedMessage,
+  nativeHistoryAdapters,
   openSessionWorkspaceFileInExternalOpener,
   previewNativeProjectHistory,
   readSessionWorkspaceFile,
@@ -135,11 +136,13 @@ export {
   updateSessionTitle,
   updateSessionWorkspaceFile
 } from './api/sessions'
+export { isNativeHistoryAdapter } from './api/sessions'
 export type {
   NativeHistoryAdapter,
   NativeHistoryCandidateScope,
   NativeHistoryImportAdapterPreview,
   NativeHistoryImportPreviewCandidate,
+  NativeHistoryImportPreviewProject,
   NativeHistoryImportPreviewResult,
   NativeHistoryImportResult,
   NativeHistoryImportSession,
@@ -162,6 +165,7 @@ export { installSkillHubItem, listSkillHubRegistries, searchSkillHub } from './a
 
 // 基础响应类型与会话交互类型
 export type { ApiOkResponse, ApiRemoveResponse, SessionInteraction, SessionMessagesResponse } from './api/types'
+export { getUsageReport } from './api/usage'
 export { listSpeechToTextServices, transcribeSpeechToText } from './api/voice'
 export type {
   SpeechToTextServicesResponse,

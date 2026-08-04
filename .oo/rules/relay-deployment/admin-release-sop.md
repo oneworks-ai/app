@@ -50,6 +50,11 @@ Before creating or approving a production release:
 For every production Admin origin:
 
 - `ONEWORKS_RELAY_PUBLIC_URL` points to the final user-facing origin.
+- Cloudflare deployments advertise a separate, versioned device transport through
+  `ONEWORKS_RELAY_DEVICE_API_URL` and `ONEWORKS_RELAY_DEVICE_CONTROL_WS_URL`. Both
+  point to the same Worker origin; the WebSocket URL uses the fixed
+  `/api/relay/devices/control` path. Never put device ids or bearer tokens in either URL.
+  Browser login, OAuth, passkeys, and Admin remain on `ONEWORKS_RELAY_PUBLIC_URL`.
 - `ONEWORKS_RELAY_ALLOW_ORIGIN` includes only the expected Admin origin(s); production must not use `*`.
 - `ONEWORKS_RELAY_STORAGE_DRIVER` is correct for the platform:
   - Vercel: `postgres`
@@ -141,6 +146,10 @@ Then verify browser behavior:
 - New login sessions can return to the original `redirect_uri`.
 - Browser console has no asset load failures for `admin.js`, `admin.css`, login bundle, icons, or favicon.
 - If plugin behavior changed, a Relay plugin configured with the production server can log in, register a device, heartbeat, and create a session in the intended server/device group.
+- If the Cloudflare device transport changed, verify `/api/relay/info` advertises the
+  versioned Worker transport, one device can open the authenticated control socket,
+  a submitted job wakes it immediately, and an idle connected device does not issue
+  HTTP job polls. Compare the Workers request slope before and after promotion.
 
 ## Rollback Rules
 

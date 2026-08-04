@@ -2,12 +2,13 @@
 import type { ChildProcess, SpawnSyncOptions } from 'node:child_process'
 import { spawn, spawnSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { closeSync, mkdirSync, openSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { closeSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve, sep } from 'node:path'
 import process from 'node:process'
 
-import { repoRoot, statePath } from './paths'
+import { legacyStatePath, repoRoot, statePath, worktreeRegistryDir } from './paths'
 import { processCwd, processFingerprint } from './process-identity'
+import { devStartTargets } from './types'
 import type { DevStartState, DevStartTarget } from './types'
 
 const jsonOutputEnabled = () => process.env.ONEWORKS_DEV_SERVICE_JSON === '1'
@@ -117,10 +118,15 @@ export const resolveLegacyElectronState = (
   return candidates.find(candidate => candidate.root === repoRoot) ?? candidates[0]
 }
 
-export const readState = (target: DevStartTarget) => {
-  const value = readJson(statePath(target))
+export const readState = (target: DevStartTarget, ownerRoot = repoRoot) => {
+  const value = readJson(statePath(target, ownerRoot))
   if (value != null && typeof value === 'object') return value as DevStartState
-  if (target !== 'electron' && target !== 'electron-workspace') return undefined
+  if (target !== 'electron' && target !== 'electron-workspace') {
+    const legacyValue = readJson(legacyStatePath(target, ownerRoot))
+    return legacyValue != null && typeof legacyValue === 'object'
+      ? legacyValue as DevStartState
+      : undefined
+  }
 
   // Electron state was worktree-local before it became a machine-scoped
   // single-instance resource. Discover legacy snapshots across git worktrees so
@@ -142,6 +148,40 @@ export const readState = (target: DevStartTarget) => {
     ))
   if (candidates.length === 0) return undefined
   return resolveLegacyElectronState(candidates, target)
+}
+
+export const readRegisteredWorktreeStates = (target?: DevStartTarget) => {
+  let ownerDirectories: string[]
+  try {
+    ownerDirectories = readdirSync(worktreeRegistryDir, { withFileTypes: true })
+      .filter(entry => entry.isDirectory())
+      .map(entry => join(worktreeRegistryDir, entry.name))
+  } catch {
+    return []
+  }
+
+  const targets = target == null
+    ? devStartTargets.filter(candidate => (
+      candidate !== 'electron' && candidate !== 'electron-workspace' && candidate !== 'android-emulator'
+    ))
+    : [target]
+  if (target != null && (target === 'electron' || target === 'electron-workspace' || target === 'android-emulator')) {
+    return []
+  }
+  const states = ownerDirectories.flatMap(ownerDirectory =>
+    targets.flatMap((candidateTarget) => {
+      const value = readJson(join(ownerDirectory, `dev-start-${candidateTarget}.json`))
+      if (
+        value == null ||
+        typeof value !== 'object' ||
+        (value as DevStartState).scope !== 'worktree' ||
+        (value as DevStartState).target !== candidateTarget ||
+        typeof (value as DevStartState).root !== 'string'
+      ) return []
+      return [value as DevStartState]
+    })
+  )
+  return [...new Map(states.map(state => [`${state.root}\0${state.target}`, state])).values()]
 }
 
 export const writeJsonAtomic = (path: string, value: unknown) => {

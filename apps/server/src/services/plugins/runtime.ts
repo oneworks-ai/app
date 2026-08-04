@@ -78,6 +78,7 @@ interface RuntimeRecord {
   channels: Map<string, PluginRuntimeChannelHandler>
   apis: Map<string, PluginApiRegistration>
   disposables: Array<() => unknown | Promise<unknown>>
+  localServices: Map<string, Promise<unknown>>
   clientSource?: {
     cachedBytes: number
     compiled: Map<string, Promise<CompiledPluginClientSource>>
@@ -1390,8 +1391,16 @@ export class PluginManager {
   }
 
   async dispose() {
+    const pendingLoad = this.loading
+    if (pendingLoad != null) {
+      await pendingLoad.catch(error => {
+        logger.warn({ err: error }, '[plugins] load failed before dispose')
+      })
+    }
     this.loaded = false
-    this.loading = undefined
+    if (this.loading === pendingLoad) {
+      this.loading = undefined
+    }
     const records = [...this.records.values()]
     this.records.clear()
     this.stopDiscoveryWatch()
@@ -1403,6 +1412,7 @@ export class PluginManager {
 
   private async clearRecordRuntime(record: RuntimeRecord) {
     const disposables = record.disposables.splice(0).reverse()
+    record.localServices.clear()
     record.commands.clear()
     record.channels.clear()
     record.apis.clear()
@@ -2232,6 +2242,7 @@ export class PluginManager {
         channels: new Map(),
         apis: new Map(),
         disposables: [],
+        localServices: new Map(),
         ...(runtimeClientSourceEntry == null
           ? {}
           : {
@@ -2666,6 +2677,7 @@ export class PluginManager {
 
       const ctx = this.createServerContext(record)
       await activatePlugin(ctx)
+      await Promise.all(record.localServices.values())
     } catch (error) {
       await this.clearRecordRuntime(record)
       record.instance.enabled = false
@@ -2835,11 +2847,18 @@ export class PluginManager {
       },
       registerLocalService: (serviceId, start) => {
         validateId('local service id', serviceId, scope)
-        const result = start()
-        if (isRecord(result) && typeof result.dispose === 'function') {
-          const dispose = result.dispose
-          record.disposables.push(() => dispose())
+        if (record.localServices.has(serviceId)) {
+          throw new Error(`Duplicate plugin local service "${scope}/${serviceId}".`)
         }
+        const started = Promise.resolve(start())
+        record.localServices.set(serviceId, started)
+        void started.catch(() => undefined)
+        record.disposables.push(async () => {
+          const result = await started.catch(() => undefined)
+          if (isRecord(result) && typeof result.dispose === 'function') {
+            await result.dispose()
+          }
+        })
       },
       dispose: (callback) => {
         record.disposables.push(callback)

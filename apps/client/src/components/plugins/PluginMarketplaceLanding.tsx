@@ -38,6 +38,7 @@ type MarketplaceFormat = MarketplaceConfigEntry['type']
 type MarketplaceExternalFormat = Exclude<MarketplaceFormat, 'oneworks'>
 type MarketplaceFormatFilter = MarketplaceFormat | 'all'
 type MarketplaceSortKey = 'default' | 'nameAsc' | 'nameDesc'
+type MarketplaceSourceListState = 'empty' | 'loading' | 'sources' | 'unavailable'
 
 interface PluginMarketplaceLandingProps {
   query: string
@@ -84,6 +85,18 @@ export const isPluginInstalledForTarget = (
 export const isMarketplacePluginInstallable = (item: PluginMarketplaceCatalogPlugin) => (
   item.installable !== false && item.marketplaceEnabled
 )
+
+const resolveMarketplaceSourceListState = (params: {
+  catalogError: unknown
+  catalogLoading: boolean
+  catalogResolved: boolean
+  sourceCount: number
+}): MarketplaceSourceListState => {
+  if (params.catalogError != null) return 'unavailable'
+  if (params.sourceCount > 0) return 'sources'
+  if (params.catalogLoading) return 'loading'
+  return params.catalogResolved ? 'empty' : 'unavailable'
+}
 
 const marketplaceFormatPresentation: Record<MarketplaceFormat, { iconId: string; label: string }> = {
   oneworks: { iconId: 'extension', label: 'One Works' },
@@ -354,7 +367,12 @@ export function PluginMarketplaceLanding({
   const { message } = App.useApp()
   const [sourceForm] = Form.useForm<MarketplaceSourceFormValues>()
   const { data: configRes, mutate: mutateConfig } = useSWR<ConfigResponse>('/api/config', getConfig)
-  const { data: catalogRes, isLoading: isCatalogLoading, mutate: mutateCatalog } = useSWR(
+  const {
+    data: catalogRes,
+    error: catalogError,
+    isLoading: isCatalogLoading,
+    mutate: mutateCatalog
+  } = useSWR(
     ['/api/plugins/marketplace/catalog', serverBaseUrl ?? 'current'],
     () => listPluginMarketplaceCatalog({ serverBaseUrl })
   )
@@ -396,6 +414,12 @@ export function PluginMarketplaceLanding({
     }
     return [...items.values()].sort((left, right) => left.key.localeCompare(right.key))
   }, [catalogRes?.sources, configRes, mergedMarketplaces])
+  const sourceListState = resolveMarketplaceSourceListState({
+    catalogError,
+    catalogLoading: isCatalogLoading,
+    catalogResolved: catalogRes != null,
+    sourceCount: sourceItems.length
+  })
   const marketplaceOptions = useMemo(() => [
     { label: t('pluginStore.marketplaceFilterAll'), value: ALL_MARKETPLACES },
     ...sourceItems.map(item => ({
@@ -747,7 +771,23 @@ export function PluginMarketplaceLanding({
             </Tooltip>
           </div>
           <div className='plugin-marketplace__config-source-list' role='list'>
-            {sourceItems.length === 0
+            {sourceListState === 'loading'
+              ? (
+                <div className='plugin-marketplace__source-state' role='listitem'>
+                  <span className='plugin-marketplace__source-state-status' role='status' aria-live='polite'>
+                    <Spin size='small' />
+                    {t('pluginStore.marketplaceSourcesLoading')}
+                  </span>
+                </div>
+              )
+              : sourceListState === 'unavailable'
+              ? (
+                <div className='plugin-marketplace__source-state' role='listitem'>
+                  <span role='alert'>{t('pluginStore.marketplaceSourcesUnavailable')}</span>
+                  <Button size='small' onClick={() => void mutateCatalog()}>{t('common.retry')}</Button>
+                </div>
+              )
+              : sourceListState === 'empty'
               ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('pluginStore.marketplaceSourcesEmpty')} />
               : sourceItems.map((item) => {
                 const summary = formatSourceSummary(item.entry)

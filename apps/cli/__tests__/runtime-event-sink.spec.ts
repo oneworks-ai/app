@@ -108,4 +108,51 @@ describe('runtime event sink', () => {
       })
     ])
   })
+
+  it('keeps cumulative usage and final cost on the terminal runtime event', async () => {
+    const cwd = await createTempDir()
+    const sessionId = 'sess-stop-usage'
+    const sink = await createCliRuntimeEventSink({
+      adapter: 'claude-code',
+      cwd,
+      model: 'kimi-api,kimi-k2.5',
+      sessionId,
+      title: 'Stop usage'
+    })
+
+    await sink.handleAdapterEvent({
+      type: 'stop',
+      data: {
+        id: 'claude-stop',
+        role: 'assistant',
+        content: 'done',
+        createdAt: 1_800_000_000_000,
+        model: 'kimi-k2.5',
+        usage: {
+          input_tokens: 120,
+          output_tokens: 30,
+          aggregation_mode: 'cumulative',
+          quality: 'provider_reported',
+          total_cost_usd: 0.42
+        }
+      }
+    })
+    await sink.flush()
+
+    expect(await readRuntimeEvents(cwd, sessionId)).toEqual([
+      expect.objectContaining({
+        type: 'session_completed',
+        model: 'kimi-k2.5',
+        usage: expect.objectContaining({
+          aggregationMode: 'cumulative',
+          costUsd: 0.42,
+          inputTokens: 120,
+          model: 'kimi-k2.5',
+          modelService: 'kimi-api',
+          outputTokens: 30,
+          quality: 'provider_reported'
+        })
+      })
+    ])
+  })
 })

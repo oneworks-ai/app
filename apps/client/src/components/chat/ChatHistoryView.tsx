@@ -102,6 +102,7 @@ import {
 } from './history-timeline'
 import type { ChatHistoryTimelineSelectHandler } from './history-timeline'
 import { AgentRoomChildRequestCard } from './messages/AgentRoomChildRequestCard'
+import { ImportedSessionDivider } from './messages/ImportedSessionDivider'
 import { MessageItem } from './messages/MessageItem'
 import { MessageStatusNotice } from './messages/MessageStatusNotice'
 import { SessionWorkspaceChangesCard } from './messages/SessionWorkspaceChangesCard'
@@ -1948,6 +1949,7 @@ export function ChatHistoryView({
           ref={messagesContainerRef}
         >
           <div className='chat-messages-content' ref={messagesContentRef}>
+            <ImportedSessionDivider session={session} />
             {!session?.id && isCreating && (
               <SessionCreationProgressBanner progress={creationProgress} />
             )}

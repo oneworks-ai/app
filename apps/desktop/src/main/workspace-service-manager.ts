@@ -14,6 +14,7 @@ import {
   resolveBundledRuntimeConsumerBootstrapPath,
   resolveCachedServerPackageEnv,
   resolveClientDistPath,
+  resolveClientPackageDir,
   resolveServerExecutable,
   serverChildPath
 } from './paths'
@@ -217,7 +218,7 @@ export const createWorkspaceServiceManager = ({
     }
 
     service.stopping = true
-    void killChildProcess(service.serverProcess)
+    void killChildProcess(service.serverProcess, { killProcessGroup: true })
       .catch(error =>
         console.error(`[oneworks-server] failed to stop ${service.displayName} after process exit`, error)
       )
@@ -252,7 +253,7 @@ export const createWorkspaceServiceManager = ({
     refreshAppMenu()
 
     service.stopPromise = (async () => {
-      await killChildProcess(service.serverProcess)
+      await killChildProcess(service.serverProcess, { killProcessGroup: true })
       if (isChildProcessRunning(service.serverProcess)) {
         service.stopping = false
         service.status = 'ready'
@@ -313,11 +314,13 @@ export const createWorkspaceServiceManager = ({
         ...runtimePackageCacheVersionEnv
       }
       const clientDistPath = isDev ? undefined : resolveClientDistPath(packagedWorkspaceRuntimeEnv)
+      const clientPackageDir = resolveClientPackageDir(packagedWorkspaceRuntimeEnv)
       if (!isDev && clientDistPath == null) {
         throw new Error('Client dist was not found. Run `pnpm -C apps/desktop build:client` first.')
       }
       const child = spawn(serverExecutable, [serverChildPath], {
         cwd: workspaceFolder,
+        detached: process.platform !== 'win32',
         env: {
           ...packagedWorkspaceRuntimeEnv,
           DB_PATH: workspaceServiceDataPaths.dbPath,
@@ -331,15 +334,17 @@ export const createWorkspaceServiceManager = ({
           __ONEWORKS_PROJECT_CLIENT_BASE__: CLIENT_BASE,
           __ONEWORKS_PROJECT_CLIENT_DIST_PATH__: clientDistPath ?? '',
           __ONEWORKS_PROJECT_CLIENT_MODE__: isDev ? 'none' : 'desktop',
+          __ONEWORKS_PROJECT_CLIENT_PACKAGE_DIR__: clientPackageDir ?? '',
           __ONEWORKS_PROJECT_SERVER_DATA_DIR__: workspaceServiceDataPaths.dataDir,
           __ONEWORKS_PROJECT_SERVER_HOST__: SERVER_HOST,
           __ONEWORKS_PROJECT_SERVER_LOG_DIR__: workspaceServiceDataPaths.logDir,
           __ONEWORKS_PROJECT_SERVER_PORT__: String(port),
           __ONEWORKS_PROJECT_SERVER_ALLOW_CORS__: desktopClientOrigin == null ? 'false' : 'true',
           __ONEWORKS_PROJECT_SERVER_CORS_ORIGIN__: desktopClientOrigin ?? '',
-          __ONEWORKS_PROJECT_WEB_AUTH_ENABLED__: 'false'
+          __ONEWORKS_PROJECT_WEB_AUTH_ENABLED__: 'false',
+          __ONEWORKS_DESKTOP_SERVER_OWNER_CHANNEL__: 'ipc-v1'
         },
-        stdio: ['ignore', 'pipe', 'pipe']
+        stdio: ['ignore', 'pipe', 'pipe', 'ipc']
       })
 
       service.port = port
@@ -384,9 +389,16 @@ export const createWorkspaceServiceManager = ({
     return await resolveWorkspaceServiceStartup(service)
   }
 
+  const stopAllWorkspaceServices = async () => {
+    await Promise.all([...runtimeState.services.values()].map(async service => {
+      await stopWorkspaceService(service)
+    }))
+  }
+
   return {
     ensureWorkspaceService,
     getWorkspaceServiceDataPaths,
+    stopAllWorkspaceServices,
     stopWorkspaceService
   }
 }

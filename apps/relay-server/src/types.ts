@@ -1,5 +1,9 @@
 /* eslint-disable max-lines -- Relay server public types stay in one package-local contract file. */
 
+import type { RelayDeviceTransport } from '@oneworks/types/relay-device-transport'
+
+export type { RelayDeviceTransport } from '@oneworks/types/relay-device-transport'
+
 export interface RelayServerArgs {
   allowOrigin: string
   adminToken: string
@@ -8,6 +12,7 @@ export interface RelayServerArgs {
   dataPath: string
   defaultLoginMethod?: RelayLoginMethod
   deviceMetadataSecret?: string
+  deviceTransport?: RelayDeviceTransport
   deviceOnlineTtlMs?: number
   email?: RelayEmailConfig
   emailProvider?: RelayEmailProvider

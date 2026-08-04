@@ -1,3 +1,4 @@
+import { useSetAtom } from 'jotai'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -18,6 +19,7 @@ import type {
   PendingFileComment
 } from '#~/components/chat/sender/@types/sender-composer'
 import type { ContextPickerFile, ContextReferenceRequest } from '#~/components/workspace/context-file-types'
+import { activeChatAdapterAtom } from '#~/hooks/chat/active-chat-adapter'
 import { useChatRouteDeepLinkView } from '#~/hooks/chat/use-chat-route-deep-link-view'
 import { useChatSession } from '#~/hooks/chat/use-chat-session'
 import { useSessionTimelineExperiment } from '#~/hooks/chat/use-session-timeline-experiment'
@@ -235,8 +237,12 @@ export function ChatRouteView({
     hasAvailableModels,
     modelUnavailable
   } = useChatSession({ enableTimelineView: canUseTimelineView, session })
+  const setActiveChatAdapter = useSetAtom(activeChatAdapterAtom)
   const targetMessageId = searchParams.get('messageId') ?? undefined
   const targetToolUseId = searchParams.get('toolUseId') ?? undefined
+  useEffect(() => {
+    setActiveChatAdapter(selectedAdapter)
+  }, [selectedAdapter, setActiveChatAdapter])
   useEffect(() => {
     if (!searchParams.has(CHAT_ROUTE_SENDER_FOCUS_QUERY_PARAM)) {
       return

@@ -404,6 +404,10 @@ html.dark .launcher-web-overlay.is-open .launcher-route {
   color: var(--launcher-muted-color);
 }
 
+.launcher-command-search .action-search-toolbar__actions {
+  -webkit-app-region: no-drag;
+}
+
 .launcher-command-list {
   --launcher-command-list-padding-inline: var(
     --launcher-content-padding-inline

@@ -137,79 +137,38 @@
 }
 
 .config-view__external-session-tabs {
-  flex: 1 1 auto;
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.config-view__external-session-tabs > .ant-tabs-content-holder {
-  flex: 1 1 auto;
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.config-view__external-session-tabs
-  > .ant-tabs-content-holder
-  > .ant-tabs-content {
-  display: block;
-  width: 100%;
-  max-width: 100%;
-  height: 100%;
-  min-width: 0;
-  min-height: 0;
-  transform: none !important;
-}
-
-.config-view__external-session-tabs
-  > .ant-tabs-content-holder
-  > .ant-tabs-content
-  > .ant-tabs-tabpane {
-  width: 100%;
-  max-width: 100%;
-  flex: none;
-  min-width: 0;
-  min-height: 0;
-  height: 100%;
-  overflow: hidden;
-}
-
-.config-view__external-session-tabs
-  > .ant-tabs-content-holder
-  > .ant-tabs-content
-  > .ant-tabs-tabpane-hidden {
-  display: none;
-}
-
-.config-view__external-session-tabs > .ant-tabs-nav {
   flex: 0 0 auto;
-  margin-bottom: var(--subpage-tertiary-gap);
-}
-
-.config-view__external-session-tab-label {
-  display: inline-flex;
-  align-items: center;
-  gap: calc(var(--subpage-tertiary-gap) * .6);
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
 }
 
-.config-view__external-session-tab-icon {
-  flex: 0 0 18px;
-  width: 18px;
-  height: 18px;
-  object-fit: contain;
+.config-view__external-session-tabs-panel {
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
-.config-view__external-session-tab-icon--fallback {
-  font-size: 18px;
-  line-height: 1;
+.config-view__app-settings-list
+  > .config-view__external-session-tabs
+  + .config-view__external-session-tabs-panel {
+  margin-block-start: 0;
+}
+
+.config-view__external-session-tab-pane {
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.config-view__external-session-tab-pane[hidden] {
+  display: none;
 }
 
 .config-view__external-session-tab {
@@ -259,16 +218,17 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border: var(--subpage-tertiary-border);
-  border-radius: var(--subpage-tertiary-radius);
+  border: 0;
+  border-radius: 0;
   background: var(--subpage-tertiary-bg);
   overflow: hidden;
 }
 
-.config-view__external-session-toolbar {
+.config-view__external-session-toolbar.action-search-toolbar {
   flex: 0 0 auto;
   min-width: 0;
-  padding: 0 var(--subpage-tertiary-padding);
+  padding: 0 0 var(--subpage-tertiary-padding);
+  border: 0;
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -282,7 +242,7 @@
 
 .config-view__external-session-panel {
   flex: 0 0 auto;
-  padding: var(--subpage-tertiary-padding) var(--subpage-tertiary-padding)
+  padding: 0 var(--subpage-tertiary-padding)
     calc(var(--subpage-tertiary-padding) + 2px);
   border-bottom: 1px solid var(--border-color);
 }
@@ -291,6 +251,30 @@
   display: flex;
   flex-direction: column;
   gap: calc(var(--subpage-tertiary-gap) * .8);
+  padding-top: var(--subpage-tertiary-padding);
+  padding-inline: 0;
+}
+
+.config-view__external-session-panel--settings {
+  padding-inline: 0;
+}
+
+.config-view__external-session-settings-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--subpage-tertiary-gap);
+  min-width: 0;
+}
+
+.config-view__external-session-settings-list > .config-view__field-row,
+.config-view__external-session-settings-list
+  > .config-view__field-row:is(:hover, :focus-within) {
+  padding: 0;
+  padding-top: var(--subpage-tertiary-padding);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  transition: none;
 }
 
 .config-view__external-session-filter-row {
@@ -336,6 +320,82 @@
   display: flex;
   flex-wrap: wrap;
   gap: calc(var(--subpage-tertiary-gap) * .6);
+}
+
+.config-view__external-session-project-select.oneworks-select {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+
+  .ant-select-selector {
+    height: 30px;
+    min-height: 30px;
+    border-radius: 7px;
+    background: var(--config-interactive-bg);
+  }
+
+  .ant-select-selection-overflow {
+    height: var(--oneworks-select-content-height);
+    min-height: var(--oneworks-select-content-height);
+  }
+
+  .ant-select-selection-overflow,
+  .ant-select-selection-overflow-item-rest {
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+
+.config-view__external-session-project-summary,
+.config-view__external-session-project-option {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.config-view__external-session-project-summary {
+  max-width: 100%;
+}
+
+.config-view__external-session-project-summary > .material-symbols-rounded,
+.config-view__external-session-project-option > .material-symbols-rounded {
+  flex: 0 0 16px;
+  width: 16px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.config-view__external-session-project-summary > span:last-child,
+.config-view__external-session-project-option-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-view__external-session-project-option {
+  width: 100%;
+}
+
+.config-view__external-session-project-option-current {
+  margin-inline-start: auto;
+  color: var(--sub-text-color);
+  font-size: 10px;
+}
+
+.config-view__external-session-project-option-description {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--sub-text-color);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-view__external-session-project-select-popup.oneworks-select-popup
+  .ant-select-item-option-content {
+  min-width: 0;
 }
 
 .config-view__external-session-date-range.ant-picker {
@@ -392,8 +452,21 @@
 }
 
 .config-view__external-session-candidate-group > .config-view__field-row {
+  padding-inline: 0;
   border-right: 0;
   border-left: 0;
+  background: transparent;
+}
+
+.config-view__external-session-candidate-group
+  > .config-view__field-row:is(:hover, :focus-within) {
+  background: transparent;
+}
+
+.config-view__external-session-candidate-group
+  > .config-view__field-row:is(:hover, :focus-within)
+  :is(.config-view__field-icon, .config-view__field-title) {
+  color: var(--primary-color);
 }
 
 .config-view__external-session-candidate-group
@@ -479,18 +552,32 @@
   color: var(--warning-color, #f59e0b);
 }
 
-.config-view__external-session-copy-link-button.ant-btn {
-  flex: 0 0 30px;
-  width: 30px;
-  min-width: 30px;
-  justify-content: center;
+.config-view__external-session-candidate-actions {
+  --route-container-header-icon-size: var(
+    --oneworks-compact-action-icon-size,
+    var(--app-chrome-icon-size)
+  );
+  --route-container-header-icon-button-size: var(
+    --oneworks-compact-action-size,
+    var(--app-chrome-icon-size)
+  );
+  --route-container-header-action-inline-size: var(
+    --oneworks-compact-action-size,
+    var(--app-chrome-icon-size)
+  );
+  display: inline-flex;
+  align-items: center;
+  gap: var(--oneworks-compact-action-gap, 4px);
+  height: var(
+    --oneworks-compact-action-size,
+    var(--app-chrome-icon-size)
+  );
+  min-width: 0;
 }
 
-.config-view__external-session-import-button.ant-btn {
-  flex: 0 0 70px;
-  width: 70px;
-  min-width: 70px;
-  justify-content: center;
+.config-view__external-session-candidate-actions
+  > .route-container-header__action-segment {
+  height: 100%;
 }
 
 .config-view__external-session-load-more {

@@ -6,6 +6,8 @@ export const DEFAULT_HEARTBEAT_MAX_ERROR_INTERVAL_MS = 120_000
 export const DEFAULT_HEARTBEAT_ERROR_LOG_INTERVAL_MS = 30_000
 
 export interface RelayHeartbeatOptions {
+  /** Device-only API origin advertised by Relay; public origin remains for login. */
+  apiBaseUrl?: string
   capabilities: RelayCapabilities
   deviceInfo?: RelayDeviceEnvironmentInfo
   deviceId: string
@@ -19,6 +21,7 @@ export interface RelayHeartbeatOptions {
   managementServerProjects?: RelayRemoteDeviceProjectSummary[]
   pluginScope: string
   remoteBaseUrl: string
+  signal?: AbortSignal
   workspaceFolder: string
 }
 
@@ -37,7 +40,7 @@ export interface RelayHeartbeatLoop {
   stop: () => void
 }
 
-const createHeartbeatBody = (options: RelayHeartbeatOptions) => ({
+export const createHeartbeatBody = (options: RelayHeartbeatOptions) => ({
   capabilities: options.capabilities,
   ...(options.deviceInfo == null ? {} : { deviceInfo: options.deviceInfo }),
   deviceId: options.deviceId,
@@ -60,7 +63,7 @@ const readHeartbeatError = async (response: Response) => {
 }
 
 export const sendHeartbeat = async (options: RelayHeartbeatOptions) => {
-  const remoteBaseUrl = toString(options.remoteBaseUrl)
+  const remoteBaseUrl = toString(options.apiBaseUrl ?? options.remoteBaseUrl)
   const deviceToken = toString(options.deviceToken)
   if (remoteBaseUrl === '') throw new Error('remoteBaseUrl is required for relay heartbeat.')
   if (deviceToken === '') throw new Error('deviceToken is required for relay heartbeat.')
@@ -73,7 +76,8 @@ export const sendHeartbeat = async (options: RelayHeartbeatOptions) => {
       authorization: `Bearer ${deviceToken}`,
       'content-type': 'application/json'
     },
-    body: JSON.stringify(createHeartbeatBody(options))
+    body: JSON.stringify(createHeartbeatBody(options)),
+    signal: options.signal
   })
 
   if (!response.ok) {

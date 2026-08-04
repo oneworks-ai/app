@@ -1,5 +1,45 @@
+const { readFileSync } = require('node:fs')
+const { homedir } = require('node:os')
 const { resolve } = require('node:path')
 const process = require('node:process')
+
+const sanitizePackageName = packageName => packageName.replace(/^@/, '').replace(/[\\/]/g, '__')
+
+const resolveRealHomeDir = (env) => (
+  env.__ONEWORKS_PROJECT_REAL_HOME__?.trim() ||
+  env.HOME?.trim() ||
+  env.USERPROFILE?.trim() ||
+  homedir()
+)
+
+const resolveActiveCliPackageDir = (packageName, packageDir, env = process.env) => {
+  if (typeof packageName !== 'string' || packageName.trim() === '') return packageDir
+
+  try {
+    const metadataPath = resolve(
+      resolveRealHomeDir(env),
+      '.oneworks',
+      'bootstrap',
+      'module-updates',
+      `${sanitizePackageName(packageName)}.json`
+    )
+    const metadata = JSON.parse(readFileSync(metadataPath, 'utf8'))
+    if (
+      metadata.packageName !== packageName ||
+      typeof metadata.packageDir !== 'string' ||
+      typeof metadata.version !== 'string'
+    ) {
+      return packageDir
+    }
+
+    const packageInfo = JSON.parse(readFileSync(resolve(metadata.packageDir, 'package.json'), 'utf8'))
+    return packageInfo.name === packageName && packageInfo.version === metadata.version
+      ? metadata.packageDir
+      : packageDir
+  } catch {
+    return packageDir
+  }
+}
 
 const readDesktopServerChildStartedAt = () => {
   const startedAt = Number(process.env.__ONEWORKS_DESKTOP_SERVER_CHILD_STARTED_AT__)
@@ -35,6 +75,7 @@ const runCliPackageEntrypoint = (options) => {
   logDesktopEntryTiming('entry begin')
   const {
     packageDir,
+    packageName,
     sourceEntry = './src/cli',
     distEntry = './dist/cli.js'
   } = options ?? {}
@@ -42,6 +83,8 @@ const runCliPackageEntrypoint = (options) => {
   if (!packageDir || typeof packageDir !== 'string') {
     throw new Error('packageDir is required')
   }
+
+  const activePackageDir = resolveActiveCliPackageDir(packageName, packageDir)
 
   logDesktopEntryTiming('requiring register helpers begin')
   const {
@@ -54,7 +97,7 @@ const runCliPackageEntrypoint = (options) => {
 
   const workspaceFolder = resolveProjectWorkspaceFolder(process.cwd(), process.env)
   scopeProjectWorkspaceEnv(workspaceFolder)
-  process.env.__ONEWORKS_PROJECT_PACKAGE_DIR__ = packageDir
+  process.env.__ONEWORKS_PROJECT_PACKAGE_DIR__ = activePackageDir
   process.env.__ONEWORKS_PROJECT_REAL_HOME__ = process.env.__ONEWORKS_PROJECT_REAL_HOME__ ?? process.env.HOME ?? ''
   if (readDesktopServerChildStartedAt() == null) {
     try {
@@ -80,5 +123,6 @@ const runCliPackageEntrypoint = (options) => {
 }
 
 module.exports = {
+  resolveActiveCliPackageDir,
   runCliPackageEntrypoint
 }

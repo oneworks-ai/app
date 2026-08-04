@@ -98,6 +98,13 @@ const textFromContent = (content: RuntimeEventDraft['content']) => {
   return undefined
 }
 
+const modelServiceFromSelection = (model: string | undefined) => {
+  const value = model?.trim()
+  if (value == null) return undefined
+  const comma = value.indexOf(',')
+  return comma > 0 ? value.slice(0, comma).trim() || undefined : undefined
+}
+
 const isChatMessageContent = (item: unknown): item is ChatMessageContent => {
   if (item == null || typeof item !== 'object') {
     return false
@@ -319,7 +326,38 @@ export class RuntimeEventSink {
         role: event.data.role,
         content: event.data.content,
         ...(event.data.model != null ? { model: event.data.model } : {}),
+        ...(event.data.usage == null
+          ? {}
+          : {
+            usage: {
+              inputTokens: event.data.usage.input_tokens,
+              outputTokens: event.data.usage.output_tokens,
+              cacheReadInputTokens: event.data.usage.cache_read_input_tokens,
+              cacheCreationInputTokens: event.data.usage.cache_creation_input_tokens,
+              reasoningOutputTokens: event.data.usage.reasoning_output_tokens,
+              costUsd: event.data.usage.total_cost_usd,
+              aggregationMode: event.data.usage.aggregation_mode,
+              quality: event.data.usage.quality,
+              model: event.data.model,
+              modelService: modelServiceFromSelection(this.meta?.model),
+              observedAt: event.data.createdAt
+            }
+          }),
         visibility: 'private'
+      })
+    }
+
+    if (event.type === 'usage') {
+      return this.append({
+        type: 'operation_completed',
+        operationId: `usage:${event.data.id ?? Date.now()}`,
+        status: 'completed',
+        model: event.data.model,
+        usage: {
+          ...event.data,
+          modelService: event.data.modelService ?? modelServiceFromSelection(this.meta?.model)
+        },
+        visibility: 'system'
       })
     }
 
@@ -367,10 +405,29 @@ export class RuntimeEventSink {
       if (this.sawFatalError) {
         return Promise.resolve()
       }
+      const usage = event.data?.usage
       return this.append({
         type: 'session_completed',
         status: 'completed',
         summary: event.data != null ? textFromMessage(event.data) : this.lastAssistantText,
+        ...(event.data?.model == null ? {} : { model: event.data.model }),
+        ...(usage == null
+          ? {}
+          : {
+            usage: {
+              inputTokens: usage.input_tokens,
+              outputTokens: usage.output_tokens,
+              cacheReadInputTokens: usage.cache_read_input_tokens,
+              cacheCreationInputTokens: usage.cache_creation_input_tokens,
+              reasoningOutputTokens: usage.reasoning_output_tokens,
+              costUsd: usage.total_cost_usd,
+              aggregationMode: usage.aggregation_mode,
+              quality: usage.quality,
+              model: event.data?.model,
+              modelService: modelServiceFromSelection(this.meta?.model),
+              observedAt: event.data?.createdAt
+            }
+          }),
         visibility: 'room'
       })
     }

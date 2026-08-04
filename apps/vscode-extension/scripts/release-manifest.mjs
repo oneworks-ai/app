@@ -4,10 +4,21 @@ import { dirname, resolve } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 
+import releaseIdentity from './release-identity.cjs'
+
 const here = dirname(fileURLToPath(import.meta.url))
 const appRoot = resolve(here, '..')
 const repositoryDirectory = 'apps/vscode-extension'
 const repositoryUrl = 'git+https://github.com/oneworks-ai/app.git'
+
+export const {
+  assertVscodeStoreVersionAvailable,
+  isPrereleaseVersion,
+  resolveLogicalVersionFromReleaseTag,
+  resolveMarketplaceVersion,
+  vscodeExtensionPackageName,
+  vscodeExtensionReleaseTagPrefix
+} = releaseIdentity
 
 export function getAppRoot() {
   return appRoot
@@ -119,22 +130,6 @@ export function resolveVsixPath(version, extensionName, outputPath) {
     appRoot,
     outputPath ?? `${extensionName}-v${version}.vsix`
   )
-}
-
-export function isPrereleaseVersion(version) {
-  return version.includes('-')
-}
-
-export function resolveMarketplaceVersion(version) {
-  const match = version.match(/^(\d+\.\d+\.\d+)(?:-.+)?$/u)
-
-  if (!match) {
-    throw new Error(
-      `Invalid VS Code extension version "${version}". Expected major.minor.patch or a prerelease variant.`
-    )
-  }
-
-  return match[1]
 }
 
 function validateReleaseManifest(manifest) {

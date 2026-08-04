@@ -1,8 +1,10 @@
 /* eslint-disable max-lines -- model provider resolution keeps host matching, defaults, and plan metadata together. */
 import type {
   IconRef,
+  ModelProviderCatalog,
   ModelProviderCodingPlanDefinition,
   ModelProviderCodingPlanRegion,
+  ModelProviderDefinition,
   ModelProviderIdentity,
   ModelProviderProtocolEndpoint,
   ModelServiceBillingConfig,
@@ -10,7 +12,7 @@ import type {
   ResolvedModelServiceConfig
 } from '@oneworks/types'
 
-import { MODEL_PROVIDER_DEFINITIONS } from './model-provider-registry'
+import { MODEL_PROVIDER_CATALOG, validateModelProviderCatalog } from '@oneworks/model-provider-catalog'
 
 export { MODEL_PROVIDER_DEFINITIONS } from './model-provider-registry'
 
@@ -28,64 +30,27 @@ export interface ModelServiceResolutionResult {
   issues: ModelServiceResolutionIssue[]
 }
 
-const MODEL_PROVIDER_DEFINITION_MAP = new Map(MODEL_PROVIDER_DEFINITIONS.map(provider => [provider.id, provider]))
+let activeModelProviderCatalog = MODEL_PROVIDER_CATALOG
+let modelProviderDefinitionMap = new Map<string, ModelProviderDefinition>(
+  activeModelProviderCatalog.providers.map(provider => [provider.id, provider])
+)
 
-const matchHost = (url: URL, host: string) => url.hostname.toLowerCase() === host
-const matchHostSuffix = (url: URL, suffix: string) => url.hostname.toLowerCase().endsWith(suffix)
-const matchPathPrefix = (url: URL, prefix: string) => url.pathname.replace(/\/+$/u, '').startsWith(prefix)
+export const installModelProviderCatalog = (catalog: unknown) => {
+  activeModelProviderCatalog = validateModelProviderCatalog(catalog)
+  modelProviderDefinitionMap = new Map(
+    activeModelProviderCatalog.providers.map(provider => [provider.id, provider])
+  )
+}
 
-const PROVIDER_HOST_MATCHERS: Array<{ provider: string; match: (url: URL) => boolean }> = [
-  { provider: 'openai', match: url => matchHost(url, 'api.openai.com') },
-  { provider: 'anthropic', match: url => matchHost(url, 'api.anthropic.com') },
-  { provider: 'moonshot-cn', match: url => matchHost(url, 'api.moonshot.cn') },
-  { provider: 'moonshot-intl', match: url => matchHost(url, 'api.moonshot.ai') },
-  { provider: 'kimi-code', match: url => matchHost(url, 'api.kimi.com') && matchPathPrefix(url, '/coding') },
-  { provider: 'deepseek', match: url => matchHost(url, 'api.deepseek.com') },
-  {
-    provider: 'minimax-token-plan',
-    match: url =>
-      (matchHost(url, 'api.minimax.io') || matchHost(url, 'api.minimaxi.com')) &&
-      matchPathPrefix(url, '/anthropic')
-  },
-  {
-    provider: 'minimax',
-    match: url => matchHost(url, 'api.minimax.io') || matchHost(url, 'api.minimaxi.com')
-  },
-  {
-    provider: 'qwen-coding-plan',
-    match: url =>
-      matchHost(url, 'coding.dashscope.aliyuncs.com') ||
-      matchHost(url, 'coding-intl.dashscope.aliyuncs.com')
-  },
-  {
-    provider: 'qwen',
-    match: url =>
-      matchHost(url, 'dashscope.aliyuncs.com') || matchHost(url, 'dashscope-intl.aliyuncs.com') ||
-      matchHost(url, 'dashscope-us.aliyuncs.com') || matchHostSuffix(url, '.dashscope.aliyuncs.com') ||
-      matchHostSuffix(url, '.maas.aliyuncs.com')
-  },
-  {
-    provider: 'zhipu-coding-plan',
-    match: url => matchHost(url, 'open.bigmodel.cn') && matchPathPrefix(url, '/api/coding')
-  },
-  { provider: 'zhipu', match: url => matchHost(url, 'open.bigmodel.cn') },
-  {
-    provider: 'tencent-tokenhub-coding-plan',
-    match: url => matchHost(url, 'api.lkeap.cloud.tencent.com') && matchPathPrefix(url, '/coding')
-  },
-  {
-    provider: 'volcengine-ark-coding-plan',
-    match: url => matchHost(url, 'ark.cn-beijing.volces.com') && matchPathPrefix(url, '/api/coding')
-  },
-  {
-    provider: 'baidu-qianfan-coding-plan',
-    match: url => matchHost(url, 'qianfan.baidubce.com') && url.pathname.includes('/coding')
-  },
-  { provider: 'openrouter', match: url => matchHost(url, 'openrouter.ai') },
-  { provider: 'vercel-ai-gateway', match: url => matchHost(url, 'ai-gateway.vercel.sh') },
-  { provider: 'requesty', match: url => matchHost(url, 'router.requesty.ai') },
-  { provider: 'portkey', match: url => matchHost(url, 'api.portkey.ai') }
-]
+export const resetModelProviderCatalog = () => installModelProviderCatalog(MODEL_PROVIDER_CATALOG)
+
+export const getModelProviderCatalog = (): ModelProviderCatalog => activeModelProviderCatalog
+
+const matchesCatalogHost = (hostname: string, catalogHost: string) => (
+  catalogHost.startsWith('*.')
+    ? hostname.endsWith(catalogHost.slice(1))
+    : hostname === catalogHost
+)
 
 const normalizeString = (
   value: unknown
@@ -179,17 +144,23 @@ const resolveHostProvider = (apiBaseUrl: unknown) => {
   if (normalized == null) return undefined
   try {
     const url = new URL(normalized)
-    return PROVIDER_HOST_MATCHERS.find(entry => entry.match(url))?.provider
+    const hostname = url.hostname.toLowerCase()
+    const pathname = url.pathname.replace(/\/+$/u, '')
+    return activeModelProviderCatalog.hostMatchers.find(entry => (
+      entry.hosts.some(host => matchesCatalogHost(hostname, host.toLowerCase())) &&
+      (entry.pathPrefix == null || pathname.startsWith(entry.pathPrefix)) &&
+      (entry.pathIncludes == null || pathname.includes(entry.pathIncludes))
+    ))?.provider
   } catch {
     return undefined
   }
 }
 
-export const listModelProviderDefinitions = () => [...MODEL_PROVIDER_DEFINITIONS]
+export const listModelProviderDefinitions = () => [...activeModelProviderCatalog.providers]
 
 export const getModelProviderDefinition = (provider: unknown) => {
   const providerId = normalizeString(provider)
-  return providerId != null ? MODEL_PROVIDER_DEFINITION_MAP.get(providerId) : undefined
+  return providerId != null ? modelProviderDefinitionMap.get(providerId) : undefined
 }
 
 export const resolveModelProviderIdentity = (service: ModelServiceConfig | undefined): ModelProviderIdentity => {

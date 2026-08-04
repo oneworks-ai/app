@@ -1,6 +1,6 @@
 # Homepage GitHub Pages
 
-`HOMEPAGE_DEPLOY_TOKEN` 只用于 `.github/workflows/deploy-homepage.yml`，让 app 仓库在 `.oo/docs` 内容变化时触发 homepage 仓库部署并等待下游运行结果：
+`HOMEPAGE_DEPLOY_TOKEN` 只用于 `.github/workflows/deploy-homepage.yml`，让 app 仓库在 `.oo/docs` 内容变化时触发 homepage 仓库部署并等待下游运行结果。桌面 GitHub Release 成功后也会把精确候选 SHA 传给这个可复用 workflow，让新资产自动进入下载页：
 
 ```bash
 gh workflow run deploy.yml \

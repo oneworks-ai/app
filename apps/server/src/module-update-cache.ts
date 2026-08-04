@@ -4,12 +4,16 @@ import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
 
+import { resolveActiveModulePackageDirSync } from '@oneworks/types'
+
 interface ActiveModulePackageMetadata {
   packageDir: string
   packageName: string
   updatedAt: string
   version: string
 }
+
+export { resolveActiveModulePackageDirSync }
 
 export const sanitizeModulePackageName = (packageName: string) => packageName.replace(/^@/, '').replace(/[\\/]/g, '__')
 
@@ -76,31 +80,6 @@ export const readPackageInfoSync = (packageJsonPath: string) => {
 export const readPackageInfo = async (packageJsonPath: string) => {
   try {
     return readPackageInfoFromContent(await readFile(packageJsonPath, 'utf8'))
-  } catch {
-    return undefined
-  }
-}
-
-export const resolveActiveModulePackageDirSync = (
-  packageName: string,
-  env: NodeJS.ProcessEnv = process.env
-) => {
-  try {
-    const parsed = JSON.parse(
-      readFileSync(resolveModuleUpdateMetadataPath(packageName, env), 'utf8')
-    ) as Partial<ActiveModulePackageMetadata>
-    if (
-      parsed.packageName !== packageName ||
-      typeof parsed.version !== 'string' ||
-      typeof parsed.packageDir !== 'string'
-    ) {
-      return undefined
-    }
-
-    const packageInfo = readPackageInfoSync(path.join(parsed.packageDir, 'package.json'))
-    return packageInfo?.name === packageName && packageInfo.version === parsed.version
-      ? parsed.packageDir
-      : undefined
   } catch {
     return undefined
   }

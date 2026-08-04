@@ -21,6 +21,33 @@ const waitFor = async (predicate: () => boolean, timeoutMs = 500) => {
 }
 
 describe('relay plugin session worker', () => {
+  it('supports controlled claims without starting a legacy polling timer', async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi.fn<typeof fetch>(
+      async () => new Response(JSON.stringify({ jobs: [] }), { status: 200 })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const abortController = new AbortController()
+    const worker = createRelaySessionWorker({
+      auth: {
+        apiBaseUrl: 'https://worker.example',
+        deviceId: 'device-1',
+        deviceToken: 'device-token',
+        remoteBaseUrl: 'https://relay.example'
+      },
+      autoStart: false
+    })
+
+    await vi.advanceTimersByTimeAsync(24 * 60 * 60_000)
+    expect(fetchMock).not.toHaveBeenCalled()
+    await worker.runOnce({ refreshSnapshot: false, signal: abortController.signal, waitMs: 0 })
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
+      'https://worker.example/api/relay/devices/device-1/session-jobs?status=queued&limit=50&waitMs=0'
+    )
+    expect(fetchMock.mock.calls[0]?.[1]?.signal).toBe(abortController.signal)
+    worker.stop()
+  })
+
   it('pushes snapshots, polls queued jobs, and posts job results', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
@@ -199,6 +226,41 @@ describe('relay plugin session worker', () => {
       'https://relay.example/api/relay/devices/device-1/sessions/snapshot',
       'https://relay.example/api/relay/devices/device-1/session-jobs?status=queued&limit=50&waitMs=10000',
       'https://relay.example/api/relay/devices/device-1/session-jobs?status=queued&limit=50&waitMs=10000'
+    ])
+  })
+
+  it('posts a locally detected change at 30 seconds, then only refreshes identical data after six hours', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ ok: true })))
+    vi.stubGlobal('fetch', fetchMock)
+    let title = 'Initial title'
+    const worker = createRelaySessionWorker({
+      auth: {
+        deviceId: 'device-1',
+        deviceToken: 'device-token',
+        remoteBaseUrl: 'https://relay.example'
+      },
+      adapter: { listSessions: () => [{ id: 'session-1', title }], submitMessage: () => ({}) },
+      autoStart: false
+    })
+
+    await worker.refreshSnapshot()
+    await worker.refreshSnapshot()
+    vi.setSystemTime(new Date('2026-01-01T00:00:30.000Z'))
+    title = 'Changed title'
+    await worker.refreshSnapshot()
+    vi.setSystemTime(new Date('2026-01-01T06:00:29.999Z'))
+    await worker.refreshSnapshot()
+    vi.setSystemTime(new Date('2026-01-01T06:00:30.000Z'))
+    await worker.refreshSnapshot()
+    worker.stop()
+
+    expect(fetchMock.mock.calls).toHaveLength(3)
+    expect(fetchMock.mock.calls.map(([, init]) => JSON.parse(String(init?.body)).sessions[0].title)).toEqual([
+      'Initial title',
+      'Changed title',
+      'Changed title'
     ])
   })
 

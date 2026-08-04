@@ -11,5 +11,7 @@ description: 当任务涉及发版范围、publish-plan、changelog、tag 或正
 
 - 范围与 changelog：[`release/scope.md`](./release/scope.md)
 - 发布步骤：[`release/process.md`](./release/process.md)
+- 多会话发布协调：[`release/coordination.md`](./release/coordination.md)
 - tag 与经验沉淀：[`release/tags.md`](./release/tags.md)
 - GitHub Actions 凭据：[`release/github-actions-secrets.md`](./release/github-actions-secrets.md)
+- npm Trusted Publishing 与 Open VSX 认证：[`release/npm-trusted-publishing.md`](./release/npm-trusted-publishing.md)

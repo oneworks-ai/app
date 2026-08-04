@@ -103,6 +103,7 @@
     "createScheduledTask": "创建定时任务",
     "moreActions": "更多操作",
     "createdAt": "创建时间",
+    "lastActivityAt": "最后活动时间",
     "sessionLinkCopied": "会话链接已复制到剪贴板",
     "resumeCommandCopied": "控制台指令已复制到剪贴板",
     "sessionIdCopied": "Session ID 已复制到剪贴板",
@@ -334,6 +335,7 @@
     "description": "已找到 {{count}} 个本项目的 {{adapters}} 历史会话，可以直接打开查看。",
     "manualImport": "导入项目历史",
     "importing": "正在导入历史",
+    "quickImport": "导入 {{platform}} 历史会话",
     "emptyTitle": "未找到可导入的历史",
     "emptyDescription": "没有找到属于当前项目的 Codex 或 Claude Code 历史会话。",
     "failed": "导入原生历史失败",
@@ -365,6 +367,8 @@
       "importAdapterTitle": "导入 {{platform}}",
       "importAdapter": "导入 {{platform}}",
       "importAll": "全部导入",
+      "confirmImportAllTitle": "导入 {{count}} 个 {{platform}} 历史会话？",
+      "confirmImportAllDescription": "将批量导入当前筛选结果；已导入的会话会自动跳过。",
       "previewTitle": "可导入历史",
       "previewDescription": "展示当前项目可导入的历史会话；只读取元数据与文件大小。",
       "previewLoading": "正在扫描候选文件与尺寸",
@@ -381,8 +385,11 @@
       "threadScopeUser": "用户会话",
       "threadScopeSubagent": "子任务",
       "projectScope": "项目",
+      "projectScopeAll": "全部项目",
       "projectScopeCurrent": "当前项目",
       "projectScopeGlobal": "全局",
+      "projectSelectLabel": "筛选项目",
+      "projectSelectedCount": "已选 {{count}} 个项目",
       "createdTime": "创建时间",
       "updatedTime": "修改时间",
       "timeRangeStart": "开始时间",
@@ -501,6 +508,7 @@
     },
     "kind": {
       "adapter": "适配器",
+      "catalog": "数据目录",
       "client": "客户端",
       "plugin": "插件",
       "runtime": "运行时",
@@ -508,6 +516,7 @@
     },
     "groups": {
       "adapter": "Adapters",
+      "catalog": "数据目录",
       "core": "Core",
       "plugin": "Plugins"
     },
@@ -1115,6 +1124,7 @@
     "builtin": {
       "title": "内置指令",
       "accountHint": "查看已登录账号，或登录新的账号",
+      "usageHint": "查看不同工具、模型服务、账号和工作区的 Token 用量",
       "settingsHint": "调整启动器和应用偏好",
       "aboutHint": "查看 OneWorks 版本和应用信息",
       "checkUpdateHint": "检查桌面端是否有可用更新",
@@ -1126,6 +1136,7 @@
     "menu": {
       "open": "打开 OneWorks 菜单",
       "account": "账号",
+      "usage": "用量统计",
       "settings": "设置",
       "about": "关于",
       "checkUpdate": "检查更新",
@@ -1179,6 +1190,7 @@
         "general": "通用",
         "behavior": "行为",
         "appearance": "外观",
+        "externalSessions": "外部会话",
         "icon": "图标"
       },
       "items": {
@@ -1921,6 +1933,9 @@
     "childSessionPlaceholder": "输入消息继续子会话...",
     "send": "发送",
     "thinking": "正在思考",
+    "historyImport": {
+      "dividerLabel": "于 {{time}} 迁移自 {{source}}"
+    },
     "voiceInput": {
       "tooltip": "语音输入",
       "start": "开始录音",
@@ -3271,6 +3286,8 @@
     "marketplacePluginRemoved": "插件已移除",
     "marketplaceSources": "插件源",
     "marketplaceSourcesEmpty": "还没有插件源",
+    "marketplaceSourcesLoading": "正在加载插件源",
+    "marketplaceSourcesUnavailable": "插件源暂时不可用",
     "addMarketplaceSource": "添加插件源",
     "removeMarketplaceSource": "移除插件源",
     "marketplaceSourceName": "源名称",
@@ -3434,6 +3451,82 @@
       "headerSchema": "Header Schema",
       "schema": "设置 Schema",
       "uiSchema": "设置 UI Schema"
+    }
+  },
+  "usage": {
+    "title": "用量统计",
+    "globalScope": "全部数据源",
+    "workspaceScope": "当前工作区",
+    "globalDescription": "汇总所有可用工作区与扩展数据源的 Token 用量。",
+    "workspaceDescription": "默认展示当前工作区的 Token 用量。",
+    "scope": {
+      "selectorLabel": "选择用量统计范围",
+      "global": "全局",
+      "workspaces": "工作区",
+      "current": "当前",
+      "selectedCount": "{{count}} 个工作区"
+    },
+    "searchLabel": "搜索用量筛选项",
+    "searchPlaceholder": "搜索模型服务、工具、账号或插件",
+    "searchResultsLabel": "用量筛选搜索结果",
+    "searchNoResults": "没有匹配的用量筛选项",
+    "searchClear": "清空搜索",
+    "loadFailed": "用量数据加载失败",
+    "loadFailedDescription": "当前暂时无法读取用量数据。",
+    "observationCount": "{{count}} 条用量记录",
+    "coveragePartial": "{{count}} 个数据源离线或数据不完整",
+    "range": {
+      "label": "时间范围",
+      "days30": "最近 30 天",
+      "days90": "最近 90 天",
+      "year": "最近一年"
+    },
+    "filters": {
+      "label": "用量筛选",
+      "action": "筛选",
+      "activeCount": "已筛选 {{count}} 项",
+      "all": "全部",
+      "direct": "本地直连",
+      "current": "当前查看",
+      "reset": "回到总览",
+      "workspace": "工作区",
+      "tool": "工具",
+      "modelService": "模型服务",
+      "model": "模型",
+      "account": "账号",
+      "device": "设备",
+      "authorityPlugin": "所属插件",
+      "transportPlugin": "同步插件"
+    },
+    "metrics": {
+      "label": "用量汇总",
+      "total": "Token 总量",
+      "input": "输入 Token",
+      "output": "输出 Token",
+      "cached": "缓存输入",
+      "cost": "已上报费用"
+    },
+    "activity": {
+      "title": "Token 活动",
+      "description": "过去一年每天上报的 Token 用量。",
+      "label": "过去一年的每日 Token 用量",
+      "less": "少",
+      "more": "多",
+      "legendLabel": "Token 用量强度",
+      "noUsageDayLabel": "{{date}}没有 Token 用量",
+      "dayLabel": "{{date}} · {{tokens}} Token",
+      "selectionSummary": "{{count}} 天 · {{tokens}} Token"
+    },
+    "breakdowns": {
+      "modelServices": "模型服务",
+      "accounts": "账号",
+      "tools": "工具"
+    },
+    "empty": {
+      "noSourcesTitle": "尚未连接用量数据源",
+      "noSourcesDescription": "打开支持的工具、工作区或扩展后，会自动汇总可用的 Token 记录。",
+      "title": "暂无已上报的 Token 用量",
+      "description": "支持的工具或扩展上报 Token 后，会在这里展示。"
     }
   },
   "config": {
@@ -4879,6 +4972,7 @@
       "mcp": "MCP",
       "shortcuts": "快捷键",
       "desktop": "桌面端",
+      "usage": "用量统计",
       "externalSessions": "外部会话",
       "browserHistory": "历史记录",
       "browserDownloads": "下载内容",

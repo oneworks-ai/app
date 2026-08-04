@@ -5,6 +5,7 @@ import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { installAdapterPluginWithInstaller, syncConfiguredMarketplacePlugins } from '#~/managed-plugin-install.js'
+import { ManagedPluginSourceTransportError, installManagedPluginSource } from '#~/managed-plugin-source.js'
 import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 import { getManagedPluginInstallDir } from '@oneworks/utils/managed-plugin'
 import { convertClaudePluginToOneWorks } from '../../adapters/claude-code/src/plugins/convert'
@@ -100,6 +101,40 @@ const createMarketplaceWorkspace = async (options?: {
     pluginSourceDir
   }
 }
+
+describe('installManagedPluginSource transport failures', () => {
+  it('classifies a git failure without retaining credential URLs or private paths', async () => {
+    const workspace = await mkdtemp(path.join(tmpdir(), 'ow-managed-source-transport-'))
+    const fakeBinDir = path.join(workspace, 'fake-bin')
+    const credentialUrl = 'https://user:secret@example.invalid/plugin.git'
+    const privatePath = path.join(workspace, 'private', 'credential.txt')
+    tempDirs.push(workspace)
+    await mkdir(fakeBinDir)
+    await writeFile(
+      path.join(fakeBinDir, 'git'),
+      `#!/bin/sh\nprintf '%s\\n' ${JSON.stringify(`fatal: ${credentialUrl} at ${privatePath}`)} >&2\nexit 1\n`,
+      { mode: 0o755 }
+    )
+
+    const originalPath = process.env.PATH
+    process.env.PATH = fakeBinDir
+    try {
+      const error = await installManagedPluginSource(
+        path.join(workspace, 'source'),
+        workspace,
+        { type: 'git', url: credentialUrl }
+      ).then(() => undefined, failure => failure as unknown)
+
+      expect(error).toBeInstanceOf(ManagedPluginSourceTransportError)
+      expect(error).not.toHaveProperty('cause')
+      const diagnosticText = error instanceof Error ? `${error.message}\n${error.stack ?? ''}` : String(error)
+      expect(diagnosticText).not.toContain(credentialUrl)
+      expect(diagnosticText).not.toContain(privatePath)
+    } finally {
+      process.env.PATH = originalPath
+    }
+  })
+})
 
 describe('syncConfiguredMarketplacePlugins', () => {
   const mockInstaller = {

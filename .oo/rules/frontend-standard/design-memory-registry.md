@@ -135,6 +135,11 @@
 - Revision / status / scope: 2 / ACTIVE / OneWorks project，默认主题的 Launcher 主命令列表、最近选择和设置 section tabs。command 行在 hover、focus、active 时保持透明，以前景色、焦点轮廓、左侧 indicator 与强调文字表达交互；section tab 保持透明，以强调文字、焦点轮廓与下划线表达交互。
 - Ownership / source / exceptions / enforcement: `apps/client/src/components/launcher/AGENTS.md`“视觉细节”；实现与契约位于 `apps/client/src/routes/LauncherRoute.scss`、`apps/client/__tests__/launcher-style-contract.spec.ts`；来源为用户 2026-07-23 至 2026-07-24 的明确反馈。显式主题包通过 `--oneworks-launcher-item-hover-bg` / `--oneworks-launcher-item-active-bg` 声明的交互语言及设置内容区 choice / field active 状态不受此规则约束；由 CSS contract、computed `background-color`、鼠标 hover、键盘导航和浅色 / 深色真实页面回归验证。
 
+### OW-DM-009 — Launcher 内部页面固定搜索 chrome
+
+- Revision / status / scope: 1 / ACTIVE / OneWorks project，Launcher 的设置、关于、用量和插件等内部页面。页面切换继续保留顶部搜索 chrome 及其固定行高；输入语义由各页面显式拥有，内容区不重复顶部 chrome 已表达的标题、作用域或说明。
+- Ownership / source / exceptions / enforcement: `apps/client/src/components/launcher/AGENTS.md`“体验边界”；实现与契约位于 `apps/client/src/routes/LauncherRoute.tsx`、`apps/client/__tests__/launcher-style-contract.spec.ts`；来源为用户 2026-07-30 对用量页的明确反馈。用量页明确拥有模型服务、工具、账号与所属插件搜索并留在当前页；其他页面只有在实现对应契约与回归后才能声明新的输入行为。沉浸式预览或插件通过 launcher chrome contract 明确声明的自有搜索语义可替换 placeholder / label，但不能移除固定 chrome；由 source contract、真实输入行为、窗口几何和独立视觉审阅验证。
+
 ## 待确认冲突
 
 ### OW-DM-P001 — 主题侧栏是否保留渐变
@@ -193,7 +198,3 @@ Source:
 Effective date:
 Automatic enforcement:
 ```
-
-## 已替代规范
-
-当前无。规范被替代后保留旧 ID、最后 revision、生效区间、替代它的新 ID 和用户确认来源。

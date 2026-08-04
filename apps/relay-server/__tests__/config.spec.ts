@@ -135,4 +135,17 @@ describe('relay server config', () => {
       }).avatarUrl
     ).toBeUndefined()
   })
+
+  it('keeps device transport ownership out of generic environment parsing', () => {
+    expect(
+      parseRelayServerArgs([], {
+        ONEWORKS_RELAY_DEVICE_API_URL: 'https://worker.example',
+        ONEWORKS_RELAY_DEVICE_CONTROL_WS_URL: 'wss://worker.example/api/relay/devices/control'
+      }).deviceTransport
+    ).toBeUndefined()
+  })
+
+  it('does not use a Vercel metadata fallback outside the Vercel entry', () => {
+    expect(parseRelayServerArgs([], { VERCEL_GIT_COMMIT_SHA: 'vercel-only' }).buildSha).toBeUndefined()
+  })
 })

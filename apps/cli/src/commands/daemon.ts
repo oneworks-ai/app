@@ -6,7 +6,7 @@ import { InvalidArgumentError } from 'commander'
 import type { Command } from 'commander'
 
 import { applyServerRuntimeEnv, runRuntimeEntry } from '@oneworks/server/cli-runtime'
-import { resolveActiveModulePackageDirSync } from '@oneworks/server/module-update-cache'
+import { resolveActiveModulePackageDirSync } from '@oneworks/types'
 
 const nodeRequire = createRequire(__filename)
 

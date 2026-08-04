@@ -94,6 +94,12 @@ export const classifyRateLimitedRequest = (req: IncomingMessage, url: URL): Rela
     }
   }
   const claimMatch = /^\/api\/relay\/devices\/([^/]+)\/session-jobs$/.exec(url.pathname)
+  if (requestMethod === 'POST' && claimMatch != null) {
+    return {
+      category: 'device-session-claim',
+      key: `${ip}:claim-post`
+    }
+  }
   if (requestMethod === 'GET' && claimMatch != null) {
     return {
       category: 'device-session-claim',

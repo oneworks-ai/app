@@ -17,15 +17,21 @@ on:
   push:
     tags:
       - "pkg/oneworks-desktop/v*"
+  schedule:
+    - cron: "0 18 * * *"
   workflow_dispatch:
     inputs:
+      candidate_run_id:
+        description: Successful Desktop Package run id whose verified candidate artifact should be promoted without rebuilding.
+        required: false
+        type: string
       create_release:
         default: false
         description: Create or update a GitHub Release with the generated artifacts.
         required: false
         type: boolean
       release_tag:
-        description: Release tag to use when create_release is enabled from workflow_dispatch. Must start with pkg/oneworks-desktop/v.
+        description: Release identity for a candidate build or promotion. Must start with pkg/oneworks-desktop/v.
         required: false
         type: string
       retention_days:
@@ -44,13 +50,47 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Confirm release-only packaging policy
-        run: echo "Full macOS installer builds run only for desktop release tags or explicit workflow dispatches."
+        run: echo "Full macOS installer builds run only for nightly canaries, desktop release tags, or explicit workflow dispatches."
+
+  dispatch-policy:
+    name: Desktop workflow request
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate desktop workflow request
+        env:
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          CREATE_RELEASE_REQUESTED: ${{ inputs.create_release }}
+          RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
+        shell: bash
+        run: |
+          if [[ "$CREATE_RELEASE_REQUESTED" == "true" && -z "$RELEASE_TAG_INPUT" ]]; then
+            echo "release_tag is required when create_release is enabled manually." >&2
+            exit 1
+          fi
+          if [[ -n "$CANDIDATE_RUN_ID" ]]; then
+            if [[ "$CREATE_RELEASE_REQUESTED" != "true" ]]; then
+              echo "candidate_run_id can only be used when create_release is enabled." >&2
+              exit 1
+            fi
+            if [[ ! "$CANDIDATE_RUN_ID" =~ ^[0-9]+$ ]]; then
+              echo "candidate_run_id must be a numeric GitHub Actions run id." >&2
+              exit 1
+            fi
+          fi
 
   package:
     name: macOS release installer
-    if: github.event_name != 'pull_request'
+    needs: dispatch-policy
+    if: >-
+      always() &&
+      (needs.dispatch-policy.result == 'success' || needs.dispatch-policy.result == 'skipped') &&
+      github.event_name != 'pull_request' &&
+      !(github.event_name == 'workflow_dispatch' && inputs.create_release && inputs.candidate_run_id != '')
     runs-on: macos-26
     timeout-minutes: 120
+    outputs:
+      signed: ${{ steps.desktop_build_policy.outputs.sign }}
 
     steps:
       - name: Checkout repository
@@ -76,12 +116,22 @@ jobs:
       - name: Resolve desktop release metadata
         id: desktop_release
         shell: bash
+        env:
+          CREATE_RELEASE_REQUESTED: ${{ inputs.create_release || false }}
+          DESKTOP_AUTO_UPDATE_REQUESTED: ${{ vars.DESKTOP_AUTO_UPDATE || 'true' }}
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
         run: |
+          if [[ "$EVENT_NAME" == "workflow_dispatch" && "$CREATE_RELEASE_REQUESTED" == "true" && -z "$RELEASE_TAG_INPUT" ]]; then
+            echo "release_tag is required when create_release is enabled manually." >&2
+            exit 1
+          fi
+
           tag=""
           if [[ "$GITHUB_REF" == refs/tags/${DESKTOP_RELEASE_TAG_PREFIX}* ]]; then
             tag="$GITHUB_REF_NAME"
-          elif [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.create_release }}" == "true" ]]; then
-            tag="${{ inputs.release_tag }}"
+          elif [[ "$EVENT_NAME" == "workflow_dispatch" && -n "$RELEASE_TAG_INPUT" ]]; then
+            tag="$RELEASE_TAG_INPUT"
           fi
 
           enabled=false
@@ -112,7 +162,7 @@ jobs:
 
             enabled=true
             auto_update=true
-            case "${{ vars.DESKTOP_AUTO_UPDATE || 'true' }}" in
+            case "$DESKTOP_AUTO_UPDATE_REQUESTED" in
               false|0|no|off) auto_update=false ;;
             esac
           fi
@@ -133,14 +183,20 @@ jobs:
         shell: bash
         env:
           DESKTOP_SIGN_REQUESTED: ${{ vars.DESKTOP_SIGN || 'false' }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           archs="arm64,x64"
           make_targets="dmg,zip,pkg"
           sign=false
 
-          case "$DESKTOP_SIGN_REQUESTED" in
-            true|TRUE|1|yes|YES|on|ON) sign=true ;;
-          esac
+          if [[ "$EVENT_NAME" == "schedule" ]]; then
+            archs="arm64"
+            make_targets="dmg"
+          else
+            case "$DESKTOP_SIGN_REQUESTED" in
+              true|TRUE|1|yes|YES|on|ON) sign=true ;;
+            esac
+          fi
 
           echo "archs=$archs" >> "$GITHUB_OUTPUT"
           echo "make_targets=$make_targets" >> "$GITHUB_OUTPUT"
@@ -156,17 +212,12 @@ jobs:
           DESKTOP_CSC_INSTALLER_LINK: ${{ steps.desktop_build_policy.outputs.sign == 'true' && secrets.DESKTOP_CSC_INSTALLER_LINK || '' }}
           DESKTOP_CSC_KEY_PASSWORD: ${{ steps.desktop_build_policy.outputs.sign == 'true' && secrets.DESKTOP_CSC_KEY_PASSWORD || '' }}
           DESKTOP_CSC_LINK: ${{ steps.desktop_build_policy.outputs.sign == 'true' && secrets.DESKTOP_CSC_LINK || '' }}
-          DESKTOP_RELEASE_ENABLED: ${{ steps.desktop_release.outputs.enabled }}
           DESKTOP_SIGN: ${{ steps.desktop_build_policy.outputs.sign }}
         run: |
           case "$DESKTOP_SIGN" in
             true|TRUE|1|yes|YES|on|ON) ;;
             *)
-              if [[ "$DESKTOP_RELEASE_ENABLED" == "true" ]]; then
-                echo "Desktop release artifacts must be signed and notarized. Configure signing credentials and set DESKTOP_SIGN=true." >&2
-                exit 1
-              fi
-              echo "Desktop signing is disabled."
+              echo "Desktop signing is disabled; release artifacts will be unsigned."
               exit 0
               ;;
           esac
@@ -246,6 +297,17 @@ jobs:
           ONEWORKS_DESKTOP_RELEASE_BUILD: ${{ steps.desktop_release.outputs.enabled }}
           ONEWORKS_DESKTOP_SIGN: ${{ steps.desktop_build_policy.outputs.sign }}
 
+      - name: Create release candidate manifest
+        if: steps.desktop_release.outputs.enabled == 'true'
+        run: node apps/desktop/scripts/release-candidate-manifest.cjs create apps/desktop/release
+        env:
+          ONEWORKS_DESKTOP_ARCHS: ${{ steps.desktop_build_policy.outputs.archs }}
+          ONEWORKS_DESKTOP_BUILD_GIT_HASH: ${{ github.sha }}
+          ONEWORKS_DESKTOP_BUILD_TIME: ${{ steps.desktop_build_source.outputs.time }}
+          ONEWORKS_DESKTOP_MAKE_TARGETS: ${{ steps.desktop_build_policy.outputs.make_targets }}
+          ONEWORKS_DESKTOP_RELEASE_TAG: ${{ steps.desktop_release.outputs.tag }}
+          ONEWORKS_DESKTOP_SIGN: ${{ steps.desktop_build_policy.outputs.sign }}
+
       - name: Upload installer artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -253,28 +315,49 @@ jobs:
           path: |
             apps/desktop/release/*
           if-no-files-found: error
-          retention-days: ${{ github.event_name == 'workflow_dispatch' && inputs.retention_days || 14 }}
+          retention-days: ${{ github.event_name == 'schedule' && 3 || (github.event_name == 'workflow_dispatch' && inputs.retention_days || 14) }}
 
   release:
     name: GitHub Release
-    needs: package
+    needs:
+      - dispatch-policy
+      - package
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: startsWith(github.ref, 'refs/tags/pkg/oneworks-desktop/v') || (github.event_name == 'workflow_dispatch' && inputs.create_release)
+    if: >-
+      always() &&
+      (startsWith(github.ref, 'refs/tags/pkg/oneworks-desktop/v') ||
+        (github.event_name == 'workflow_dispatch' && inputs.create_release)) &&
+      (needs.dispatch-policy.result == 'success' || needs.dispatch-policy.result == 'skipped') &&
+      (needs.package.result == 'success' ||
+        (github.event_name == 'workflow_dispatch' && inputs.candidate_run_id != ''))
     permissions:
+      actions: read
       contents: write
+    outputs:
+      source_sha: ${{ steps.candidate.outputs.source_sha }}
     steps:
+      - name: Checkout release tooling
+        uses: actions/checkout@v4
+
       - name: Download installer artifacts
         uses: actions/download-artifact@v4
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          name: oneworks-desktop-macos
           path: release-artifacts
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event_name == 'workflow_dispatch' && inputs.candidate_run_id || github.run_id }}
 
       - name: Resolve release tag
         id: release
         shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            tag="${{ inputs.release_tag }}"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            tag="$RELEASE_TAG_INPUT"
             if [ -z "$tag" ]; then
               echo "release_tag is required when create_release is enabled manually." >&2
               exit 1
@@ -311,22 +394,79 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "update_channel=$update_channel" >> "$GITHUB_OUTPUT"
 
+      - name: Verify release candidate
+        id: candidate
+        run: node apps/desktop/scripts/release-candidate-manifest.cjs verify release-artifacts
+        env:
+          ONEWORKS_DESKTOP_EXPECTED_ARCHS: arm64,x64
+          ONEWORKS_DESKTOP_EXPECTED_MAKE_TARGETS: dmg,zip,pkg
+          ONEWORKS_DESKTOP_RELEASE_TAG: ${{ steps.release.outputs.tag }}
+
+      - name: Verify release tag source
+        env:
+          SOURCE_SHA: ${{ steps.candidate.outputs.source_sha }}
+          TAG: ${{ steps.candidate.outputs.tag }}
+        shell: bash
+        run: |
+          if remote_tag_output="$(git ls-remote --exit-code origin "refs/tags/$TAG" "refs/tags/$TAG^{}")"; then
+            resolved_source_sha="$(
+              printf '%s\n' "$remote_tag_output" |
+                awk \
+                  -v direct_ref="refs/tags/$TAG" \
+                  -v peeled_ref="refs/tags/$TAG^{}" \
+                  '$2 == direct_ref { direct_sha = $1 }
+                   $2 == peeled_ref { peeled_sha = $1 }
+                   END { print (peeled_sha != "" ? peeled_sha : direct_sha) }'
+            )"
+            if [[ -z "$resolved_source_sha" ]]; then
+              echo "Release tag $TAG exists but its commit could not be resolved." >&2
+              exit 1
+            fi
+            if [[ "$resolved_source_sha" != "$SOURCE_SHA" ]]; then
+              echo "Release tag $TAG points to $resolved_source_sha, not verified candidate $SOURCE_SHA." >&2
+              exit 1
+            fi
+          else
+            lookup_status=$?
+            if [[ "$lookup_status" -ne 2 ]]; then
+              echo "Unable to query release tag $TAG (git ls-remote status $lookup_status)." >&2
+              exit 1
+            fi
+            echo "Release tag $TAG does not exist yet; GitHub Release will create it at $SOURCE_SHA."
+          fi
+
+      - name: Resolve release notes
+        id: release_notes
+        env:
+          SIGNED: ${{ steps.candidate.outputs.signed }}
+          TAG: ${{ steps.candidate.outputs.tag }}
+        shell: bash
+        run: |
+          if [[ "$SIGNED" == "true" ]]; then
+            signing_note="- Developer ID signed and Apple-notarized macOS installers"
+          else
+            signing_note="- Unsigned macOS installers; Gatekeeper may require manual approval"
+          fi
+
+          {
+            echo "notes<<EOF"
+            echo "One Works desktop release ${TAG}"
+            echo
+            echo "$signing_note"
+            echo "- Intel (x64) and Apple Silicon (arm64): .dmg, .pkg, .zip"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Create or update GitHub Release
         env:
           GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ steps.release.outputs.tag }}
-          UPDATE_CHANNEL: ${{ steps.release.outputs.update_channel }}
+          NOTES: ${{ steps.release_notes.outputs.notes }}
+          SOURCE_SHA: ${{ steps.candidate.outputs.source_sha }}
+          TAG: ${{ steps.candidate.outputs.tag }}
+          UPDATE_CHANNEL: ${{ steps.candidate.outputs.update_channel }}
         shell: bash
         run: |
-          NOTES=$(cat <<EOF
-          One Works desktop release ${TAG}
-
-          - Developer ID signed and Apple-notarized macOS installers
-          - Intel (x64) and Apple Silicon (arm64): .dmg, .pkg, .zip
-          EOF
-          )
-
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists."
             if [[ "$UPDATE_CHANNEL" == "stable" ]]; then
@@ -336,10 +476,20 @@ jobs:
             fi
           else
             if [[ "$UPDATE_CHANNEL" == "stable" ]]; then
-              gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --notes "$NOTES" --latest
+              gh release create "$TAG" --target "$SOURCE_SHA" --title "$TAG" --notes "$NOTES" --latest
             else
-              gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --notes "$NOTES" --prerelease --latest=false
+              gh release create "$TAG" --target "$SOURCE_SHA" --title "$TAG" --notes "$NOTES" --prerelease --latest=false
             fi
           fi
 
           find release-artifacts -type f -print0 | xargs -0 gh release upload "$TAG" --clobber
+
+  homepage:
+    name: Publish Homepage
+    needs: release
+    if: needs.release.result == 'success'
+    uses: ./.github/workflows/deploy-homepage.yml
+    with:
+      source_sha: ${{ needs.release.outputs.source_sha }}
+    secrets:
+      HOMEPAGE_DEPLOY_TOKEN: ${{ secrets.HOMEPAGE_DEPLOY_TOKEN }}

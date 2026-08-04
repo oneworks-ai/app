@@ -103,6 +103,10 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
 )
 
+const readTokenCount = (value: unknown) => (
+  typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0
+)
+
 const CODEX_INITIALIZE_OPERATION_ID = 'codex-app-server-initialize'
 const CODEX_RESPONSE_WAIT_OPERATION_ID = 'codex-response-wait'
 const CODEX_THREAD_OPERATION_ID = 'codex-thread'
@@ -528,6 +532,29 @@ export async function createStreamCodexSession(
           turnId: activeTurnId
         })
       }
+    } else if (method === 'thread/tokenUsage/updated') {
+      const payload = isRecord(params) ? params : {}
+      const tokenUsage = isRecord(payload.tokenUsage) ? payload.tokenUsage : {}
+      const total = isRecord(tokenUsage.total) ? tokenUsage.total : {}
+      const last = isRecord(tokenUsage.last) ? tokenUsage.last : {}
+      const counts = activeTurnId == null ? total : last
+      const totalTokenCount = readTokenCount(total.totalTokens)
+      emitEvent({
+        type: 'usage',
+        data: {
+          id: `codex:${String(payload.threadId ?? threadId ?? 'thread')}:${
+            activeTurnId == null ? `restored:${totalTokenCount}` : `${activeTurnId}:${totalTokenCount}`
+          }`,
+          inputTokens: readTokenCount(counts.inputTokens),
+          outputTokens: readTokenCount(counts.outputTokens),
+          cacheReadInputTokens: readTokenCount(counts.cachedInputTokens),
+          reasoningOutputTokens: readTokenCount(counts.reasoningOutputTokens),
+          aggregationMode: activeTurnId == null ? 'cumulative' : 'delta',
+          model,
+          observedAt: Date.now(),
+          quality: 'provider_reported'
+        }
+      })
     }
     handleIncomingNotification(method, params, rpc, emitEvent, msgAcc, cmdAcc, approvalPolicy)
   })
@@ -902,8 +929,7 @@ export async function createStreamCodexSession(
         experimentalApi,
         optOutNotificationMethods: [
           'turn/diff/updated',
-          'turn/plan/updated',
-          'thread/tokenUsage/updated'
+          'turn/plan/updated'
         ]
       }
     })

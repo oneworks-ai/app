@@ -114,6 +114,20 @@ const projectMessageToSession = (
     content: normalizeMessageContent(content),
     ...(agentRoom != null ? { agentRoom } : {}),
     ...(typeof event.model === 'string' ? { model: event.model } : {}),
+    ...(event.usage == null
+      ? {}
+      : {
+        usage: {
+          input_tokens: event.usage.inputTokens,
+          output_tokens: event.usage.outputTokens,
+          cache_read_input_tokens: event.usage.cacheReadInputTokens,
+          cache_creation_input_tokens: event.usage.cacheCreationInputTokens,
+          reasoning_output_tokens: event.usage.reasoningOutputTokens,
+          total_cost_usd: event.usage.costUsd,
+          aggregation_mode: event.usage.aggregationMode,
+          quality: event.usage.quality
+        }
+      }),
     createdAt: getEventTime(event)
   }
   const text = extractTextFromContent(event.content) ?? event.summary ?? event.publicSummary
@@ -189,6 +203,9 @@ export function projectRuntimeSessionEvent(
     event.type === 'session_failed' ||
     event.type === 'session_stopped'
   ) {
+    if (event.usage != null) {
+      projectAuditToSession(db, event, broadcast)
+    }
     const status = event.type === 'session_started'
       ? getRuntimeEventSessionStatus(event) ?? 'running'
       : getRuntimeEventSessionStatus(event)

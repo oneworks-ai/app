@@ -20,7 +20,7 @@ const future = '2999-01-01T00:00:00.000Z'
 const closeServer = async (server: Server) =>
   await new Promise<void>((resolve, reject) => {
     server.close(error => {
-      if (error == null) {
+      if (error == null || (error as NodeJS.ErrnoException).code === 'ERR_SERVER_NOT_RUNNING') {
         resolve()
       } else {
         reject(error)
@@ -128,7 +128,7 @@ export const createFixtureStore = (): RelayStore => ({
   ]
 })
 
-export const listenSessionRelay = async () => {
+export const listenSessionRelay = async (overrides: Partial<RelayServerArgs> = {}) => {
   const root = await mkdtemp(join(tmpdir(), 'oneworks-relay-sessions-test-'))
   tempDirs.push(root)
   const args: RelayServerArgs = {
@@ -136,7 +136,8 @@ export const listenSessionRelay = async () => {
     adminToken: 'admin-token',
     dataPath: join(root, 'relay.json'),
     host: '127.0.0.1',
-    port: 0
+    port: 0,
+    ...overrides
   }
   await writeRelayStore(args.dataPath, createFixtureStore())
   const server = createRelayServer(args)
@@ -145,7 +146,8 @@ export const listenSessionRelay = async () => {
   const address = server.address() as AddressInfo
   return {
     args,
-    baseUrl: `http://${args.host}:${address.port}`
+    baseUrl: `http://${args.host}:${address.port}`,
+    server
   }
 }
 

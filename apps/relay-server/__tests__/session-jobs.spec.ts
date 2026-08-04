@@ -170,6 +170,74 @@ describe('relay server session forwarding jobs', () => {
     expect(polled.body).not.toHaveProperty('nextPollMs')
   })
 
+  it('accepts a valid v2 body poll, renews once, and wakes after a concurrent persisted job submit', async () => {
+    const { args, baseUrl } = await listenSessionRelay()
+    await postSnapshot(baseUrl, 'device-1', 'device-token-1', [
+      { id: 'session-1', title: 'Own session', userId: 'user-1', workspaceFolder: '/tmp/relay-workspace' }
+    ])
+    const before = (await readRelayStore(args.dataPath)).devices[0].lastSeenAt
+    const polling = requestJson(baseUrl, '/api/relay/devices/device-1/session-jobs', {
+      method: 'POST',
+      headers: authHeaders('device-token-1'),
+      body: JSON.stringify({
+        heartbeat: { deviceId: 'device-1', deviceName: 'Body polling device' },
+        limit: 50,
+        status: 'queued',
+        waitMs: 1_000
+      })
+    })
+    await new Promise(resolve => setTimeout(resolve, 50))
+    const submitted = await requestJson(baseUrl, '/api/relay/devices/device-1/sessions/session-1/messages', {
+      method: 'POST',
+      headers: authHeaders('member-token-1'),
+      body: JSON.stringify({ message: 'body poll wake' })
+    })
+    const polled = await polling
+    const after = (await readRelayStore(args.dataPath)).devices[0].lastSeenAt
+
+    expect(submitted.response.status).toBe(202)
+    expect(polled.response.status).toBe(200)
+    expect(polled.body.jobs).toHaveLength(1)
+    expect(after).toEqual(expect.any(String))
+    expect(after).not.toBe(before)
+  })
+
+  it.each([
+    { heartbeat: { deviceId: 'other-device' }, limit: 50, status: 'queued', waitMs: 1_000 },
+    { heartbeat: { deviceId: 'device-1' }, limit: 50, status: 'active', waitMs: 1_000 },
+    { heartbeat: { deviceId: 'device-1' }, limit: 101, status: 'queued', waitMs: 1_000 },
+    { heartbeat: { deviceId: 'device-1' }, limit: 50, status: 'queued', waitMs: 999 }
+  ])('rejects invalid v2 body-poll controls before holding a request (%o)', async body => {
+    const { baseUrl } = await listenSessionRelay()
+    const response = await requestJson(baseUrl, '/api/relay/devices/device-1/session-jobs', {
+      method: 'POST',
+      headers: authHeaders('device-token-1'),
+      body: JSON.stringify(body)
+    })
+    expect(response.response.status).toBe(400)
+  })
+
+  it('rejects malformed v2 body polls and query controls immediately', async () => {
+    const { baseUrl } = await listenSessionRelay()
+    const malformed = await requestJson(baseUrl, '/api/relay/devices/device-1/session-jobs', {
+      method: 'POST',
+      headers: authHeaders('device-token-1'),
+      body: '{'
+    })
+    const query = await requestJson(baseUrl, '/api/relay/devices/device-1/session-jobs?waitMs=50000', {
+      method: 'POST',
+      headers: authHeaders('device-token-1'),
+      body: JSON.stringify({
+        heartbeat: { deviceId: 'device-1' },
+        limit: 50,
+        status: 'queued',
+        waitMs: 1_000
+      })
+    })
+    expect(malformed.response.status).toBe(400)
+    expect(query.response.status).toBe(400)
+  })
+
   it('does not hold the relay store lock while waiting for empty device job claims', async () => {
     const { baseUrl } = await listenSessionRelay()
     await postSnapshot(baseUrl, 'device-1', 'device-token-1', [
@@ -199,7 +267,7 @@ describe('relay server session forwarding jobs', () => {
     expect(polled.response.status).toBe(200)
     expect(polled.body).toMatchObject({
       jobs: [],
-      nextPollMs: 250
+      nextPollMs: 60_000
     })
   })
 })

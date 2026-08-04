@@ -9,6 +9,11 @@ import { buildPluginReadmeAssetUrl } from './api'
 import { resolvePluginLocalizedText } from './plugin-i18n'
 import type { PluginRuntimeInstance } from './plugin-manifest'
 
+export interface MarketplacePluginIdentity {
+  marketplace: string
+  plugin: string
+}
+
 const legacyOfficialPresentations: Record<string, {
   displayName: string
   displayNameI18n: Record<string, string>
@@ -47,6 +52,16 @@ export const resolvePluginDescription = (plugin: PluginRuntimeInstance, language
     fallbackLanguage: 'en'
   }) ?? plugin.description
 )
+
+export const resolveInstalledMarketplacePlugin = (
+  plugins: PluginRuntimeInstance[],
+  identity: MarketplacePluginIdentity
+) =>
+  plugins.find(plugin => (
+    plugin.source?.kind === 'marketplace' &&
+    plugin.source.marketplace === identity.marketplace &&
+    plugin.source.plugin === identity.plugin
+  ))
 
 export const resolvePluginPresentationIcon = (
   plugin: PluginRuntimeInstance,

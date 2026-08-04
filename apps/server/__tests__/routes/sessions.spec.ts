@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { getDb } from '#~/db/index.js'
 import { sessionsRouter } from '#~/routes/sessions.js'
+import { rememberLauncherWorkspaces } from '#~/services/launcher/manager.js'
 import {
   consumeNativeProjectHistoryImportPrompt,
   importNativeProjectHistoryAndReplay,
@@ -26,6 +27,10 @@ import { disposeTerminalSession } from '#~/services/terminal/index.js'
 
 vi.mock('#~/db/index.js', () => ({
   getDb: vi.fn()
+}))
+
+vi.mock('#~/services/launcher/manager.js', () => ({
+  rememberLauncherWorkspaces: vi.fn()
 }))
 
 vi.mock('#~/services/session/create.js', () => ({
@@ -159,11 +164,13 @@ describe('sessionsRouter', () => {
       sessions: [{
         adapter: 'codex',
         createdAt: 1000,
+        cwd: '/workspace/app',
         importedEvents: 2,
         sessionId: 'imported_codex_1',
         sourcePath: '/home/.codex/sessions/1.jsonl',
         title: 'Imported Codex session',
-        updatedAt: 2000
+        updatedAt: 2000,
+        workspaceCwd: '/workspace/imported-app'
       }]
     }
     vi.mocked(getDb).mockReturnValue({} as any)
@@ -177,6 +184,7 @@ describe('sessionsRouter', () => {
     await handleImport(ctx)
 
     expect(consumeNativeProjectHistoryImportPrompt).toHaveBeenCalledWith()
+    expect(rememberLauncherWorkspaces).toHaveBeenCalledWith(['/workspace/imported-app'])
     expect(ctx.body).toEqual(result)
   })
 
@@ -189,11 +197,13 @@ describe('sessionsRouter', () => {
       sessions: [{
         adapter: 'claude-code',
         createdAt: 1000,
+        cwd: '/workspace/app',
         importedEvents: 0,
         sessionId: 'imported_claude_code_1',
         sourcePath: '/home/.claude/projects/app/1.jsonl',
         title: 'Already imported Claude session',
-        updatedAt: 2000
+        updatedAt: 2000,
+        workspaceCwd: '/workspace/imported-app'
       }]
     }
     vi.mocked(getDb).mockReturnValue({} as any)
@@ -204,6 +214,7 @@ describe('sessionsRouter', () => {
       request: {
         body: {
           adapters: ['claude-code'],
+          projectPaths: ['/workspace/app', '/workspace/shared'],
           projectScope: 'all-projects',
           sourcePaths: ['/home/.claude/projects/app/1.jsonl']
         }
@@ -215,9 +226,11 @@ describe('sessionsRouter', () => {
 
     expect(importNativeProjectHistoryAndReplay).toHaveBeenCalledWith({
       adapters: ['claude-code'],
+      projectPaths: ['/workspace/app', '/workspace/shared'],
       projectScope: 'all-projects',
       sourcePaths: ['/home/.claude/projects/app/1.jsonl']
     })
+    expect(rememberLauncherWorkspaces).toHaveBeenCalledWith(['/workspace/imported-app'])
     expect(ctx.body).toEqual(result)
   })
 
@@ -265,6 +278,7 @@ describe('sessionsRouter', () => {
           candidateScope: 'unarchived',
           cursor: 'cursor-1',
           limit: 24,
+          projectPaths: ['/workspace/root', '/workspace/shared'],
           projectScope: 'current-project',
           threadScope: 'user',
           timeFilter: {
@@ -284,6 +298,7 @@ describe('sessionsRouter', () => {
       candidateScope: 'unarchived',
       previewCursor: 'cursor-1',
       previewLimit: 24,
+      projectPaths: ['/workspace/root', '/workspace/shared'],
       projectScope: 'current-project',
       threadScope: 'user',
       timeFilter: {
@@ -328,6 +343,24 @@ describe('sessionsRouter', () => {
     }
 
     await expect(handleImport(ctx)).rejects.toThrow('Invalid native history project scope')
+    expect(importNativeProjectHistoryAndReplay).not.toHaveBeenCalled()
+  })
+
+  it('rejects invalid native history project paths', async () => {
+    vi.mocked(getDb).mockReturnValue({} as any)
+
+    const handleImport = findRouteHandler('/native-history-import/run', 'POST')
+    const ctx = {
+      request: {
+        body: {
+          adapters: ['codex'],
+          projectPaths: ['/workspace/app', '']
+        }
+      },
+      body: undefined
+    }
+
+    await expect(handleImport(ctx)).rejects.toThrow('Invalid native history project path')
     expect(importNativeProjectHistoryAndReplay).not.toHaveBeenCalled()
   })
 

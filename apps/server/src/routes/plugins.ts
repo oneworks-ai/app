@@ -3,6 +3,7 @@ import { Buffer } from 'node:buffer'
 import path from 'node:path'
 
 import Router from '@koa/router'
+import { ManagedPluginSourceTransportError } from '@oneworks/managed-plugins'
 import type {
   PluginRuntimeChannelInvocation,
   PluginRuntimeChannelResponse,
@@ -234,12 +235,26 @@ export function pluginsRouter(): Router {
         'invalid_plugin_marketplace_selection_request'
       )
     }
-    const results = await setPluginMarketplaceSelection({
-      enabled: body.enabled,
-      marketplace: String(ctx.params.marketplace ?? ''),
-      plugin: String(ctx.params.plugin ?? ''),
-      target: body.target
-    })
+    let results
+    try {
+      results = await setPluginMarketplaceSelection({
+        enabled: body.enabled,
+        marketplace: String(ctx.params.marketplace ?? ''),
+        plugin: String(ctx.params.plugin ?? ''),
+        target: body.target
+      })
+    } catch (error) {
+      if (error instanceof ManagedPluginSourceTransportError) {
+        throw new HttpError(
+          503,
+          'plugin_marketplace_source_unavailable',
+          'The plugin source is temporarily unavailable. Try again.',
+          undefined,
+          { expose: true }
+        )
+      }
+      throw error
+    }
     await getPluginManager().reload()
     ctx.body = { results }
   })

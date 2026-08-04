@@ -65,8 +65,6 @@ export const ModelServiceProviderActions = ({
   const managementEnabled = service.management?.enabled !== false
   const providerCapabilities = provider?.capabilities
   const actionCapabilities = resolveProviderActionCapabilities(providerCapabilities, managementEnabled)
-  const hasAutomaticModelCatalog = (codingPlan?.defaultModels?.length ?? 0) > 0 ||
-    (provider?.defaultModels?.length ?? 0) > 0
   const secretActionLabel = providerCapabilities?.secrets === 'manual'
     ? t('config.modelServices.actions.openApiKeys')
     : t('config.modelServices.actions.createSecret')
@@ -197,7 +195,7 @@ export const ModelServiceProviderActions = ({
         onClick: () => void handleStatus()
       }]
       : []),
-    ...(!hasAutomaticModelCatalog && actionCapabilities.canQueryModels
+    ...(actionCapabilities.canQueryModels
       ? [{
         icon: 'view_list',
         key: 'models',

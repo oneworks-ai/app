@@ -195,6 +195,21 @@ export interface RuntimeEvent extends RuntimeJsonObject, RuntimeCorrelationField
   fatal?: boolean
   adapter?: string
   model?: string
+  usage?: {
+    account?: string
+    aggregationMode?: 'cumulative' | 'delta'
+    cacheCreationInputTokens?: number
+    cacheReadInputTokens?: number
+    costUsd?: number
+    id?: string
+    inputTokens: number
+    model?: string
+    modelService?: string
+    observedAt?: number
+    outputTokens: number
+    quality?: 'estimated' | 'provider_reported' | 'reported'
+    reasoningOutputTokens?: number
+  }
   artifactId?: string
   path?: string
   mimeType?: string
@@ -234,6 +249,21 @@ export interface RuntimeEventDraft
   fatal?: boolean
   adapter?: string
   model?: string
+  usage?: {
+    account?: string
+    aggregationMode?: 'cumulative' | 'delta'
+    cacheCreationInputTokens?: number
+    cacheReadInputTokens?: number
+    costUsd?: number
+    id?: string
+    inputTokens: number
+    model?: string
+    modelService?: string
+    observedAt?: number
+    outputTokens: number
+    quality?: 'estimated' | 'provider_reported' | 'reported'
+    reasoningOutputTokens?: number
+  }
   artifactId?: string
   path?: string
   mimeType?: string
@@ -269,7 +299,18 @@ export interface RuntimeMeta extends RuntimeJsonObject, RuntimeProtocolEnvelope 
   runId?: string
   runTitle?: string
   operationId?: string
+  historyImport?: RuntimeHistoryImportMetadata
   createdAt: number
+}
+
+export interface RuntimeHistoryImportMetadata extends RuntimeJsonObject {
+  adapter: string
+  importedAt: number
+  nativeCwd?: string
+  nativeSessionId?: string
+  sourcePath?: string
+  sourceUpdatedAt: number
+  workspaceCwd?: string
 }
 
 export interface RuntimeState extends RuntimeJsonObject, RuntimeCorrelationFields, RuntimeProtocolEnvelope {

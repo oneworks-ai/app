@@ -48,6 +48,7 @@ import {
   resolveQuitConfirmationSystemLocale
 } from './quit-confirmation'
 import type { QuitConfirmationLanguage } from './quit-confirmation'
+import { createDesktopQuitCoordinator } from './quit-coordinator'
 import { createDesktopRuntimeState } from './runtime-state'
 import { resolveDesktopRecordingThemeSource, setDesktopThemeSource } from './theme-source'
 import type { DesktopSettings, LaunchRequest, WindowRecord, WorkspaceSelectorWindowInput } from './types'
@@ -415,6 +416,25 @@ export const createDesktopApp = () => {
       windowManager?.loadWorkspaceSelectorWindow(windowRecord, input),
     refreshAppMenu,
     runtimeState
+  })
+  const quitCoordinator = createDesktopQuitCoordinator({
+    onShutdownError: (error) => {
+      const message = error instanceof Error ? error.message : String(error)
+      console.error('[oneworks-desktop] failed to stop local services before quit', error)
+      dialog.showErrorBox('One Works could not quit cleanly', message)
+    },
+    quit: () => app.quit(),
+    setIsQuitting: isQuitting => {
+      runtimeState.isQuitting = isQuitting
+    },
+    shutdown: async () => {
+      await serviceManager.stopAllWorkspaceServices()
+      await Promise.all([
+        browserControlBroker.stop(),
+        launcherClientServiceManager.stopLauncherClientService(runtimeState.launcherClientService),
+        managerServiceManager.stopManagerService(runtimeState.managerService)
+      ])
+    }
   })
   autoUpdateManager = createAutoUpdateManager({
     getAutoUpdateEnabled: () => runtimeState.desktopState.autoUpdate,
@@ -881,17 +901,6 @@ export const createDesktopApp = () => {
     })
   }
 
-  const stopWorkspaceServicesOnQuit = () => {
-    for (const service of runtimeState.services.values()) {
-      const child = service.serverProcess
-      if (child != null && !child.killed) {
-        child.kill('SIGTERM')
-      }
-    }
-    void launcherClientServiceManager.stopLauncherClientService(runtimeState.launcherClientService)
-    void managerServiceManager.stopManagerService(runtimeState.managerService)
-  }
-
   const bootstrap = () => {
     registerDesktopDeepLinkProtocols()
     const hasSingleInstanceLock = app.requestSingleInstanceLock({
@@ -917,14 +926,11 @@ export const createDesktopApp = () => {
       void startApp().catch(handleDesktopError)
     })
 
-    app.on('before-quit', () => {
-      runtimeState.isQuitting = true
-    })
+    app.on('before-quit', quitCoordinator.handleBeforeQuit)
 
     app.on('will-quit', () => {
       nativeTheme.off('updated', handleNativeThemeUpdated)
       contextCaptureOverlayController.dispose()
-      void browserControlBroker.stop()
       unregisterLauncherGlobalShortcut()
     })
 
@@ -933,8 +939,6 @@ export const createDesktopApp = () => {
         app.quit()
       }
     })
-
-    app.on('quit', stopWorkspaceServicesOnQuit)
   }
 
   return {

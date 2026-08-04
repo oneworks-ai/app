@@ -6,3 +6,4 @@
 - Keep local production-identity desktop builds isolated from official immutable releases so rebuilt client, server, adapter, and plugin runtimes cannot silently reuse an older cache.
 - Preserve the last valid PWA app shell when an update cannot fetch required HTML, JavaScript, or CSS assets instead of activating a partial cache.
 - Harden managed marketplace metadata handling so private install paths and unvalidated metadata fields cannot leak into plugin presentation or diagnostics.
+- Keep Marketplace source loading and per-source errors actionable, return retryable install-source failures, and show installed runtime metadata after install or refresh.

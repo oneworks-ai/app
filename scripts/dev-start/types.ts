@@ -128,6 +128,7 @@ export interface DevServiceStatus {
   eventsPath: string
   lease?: DevServiceLease
   leasePath: string
+  orphaned?: boolean
   ready: boolean
   resourceKey: string
   state?: DevStartState
@@ -137,6 +138,7 @@ export interface DevServiceStatus {
 
 export interface DevServiceStatusDocument {
   generatedAt: string
+  orphanedServices?: DevServiceStatus[]
   protocol: 'oneworks.dev-service'
   root: string
   services: DevServiceStatus[]

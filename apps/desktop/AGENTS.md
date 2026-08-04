@@ -119,13 +119,13 @@
   - `DESKTOP_AUTO_UPDATE`
     目标是继续保证手动非 release artifact 不会误进稳定更新通道。
 - 改签名逻辑时，不要破坏“默认关闭签名”的本地与 CI 行为；当前只有显式设置 `ONEWORKS_DESKTOP_SIGN=true`，或 tag / 手动构建读取到 `DESKTOP_SIGN=true` 时才进入签名流程。普通 PR 只运行轻量门禁，不进入安装包 job，也不读取签名 secrets；完整 CI 目标包含 `pkg`，开启签名时仍要求 Application 与 Installer 两套证书 secret。
-- 手动非 release artifact 按 `DESKTOP_SIGN` 决定是否签名，但 `pkg/oneworks-desktop/v*` 或手动 `create_release=true` 的正式 identity 必须强制签名和 notarization。凭据缺失时应在发布前失败，不能上传只有 ad-hoc 签名、会被 Gatekeeper 拦截的正式 release。
-- 正式 macOS 构建不仅要 notarize `.app`：生成后的 `.dmg` 与 Developer ID Installer 签名 `.pkg` 也必须提交 notarization 并 staple；安装验证同时覆盖 `codesign` / `spctl --type execute`、`pkgutil` / `spctl --type install` 和 installer staple，避免只验证 DMG 内应用却发布不可安装的 PKG。
+- 手动 artifact、`pkg/oneworks-desktop/v*` 和手动 `create_release=true` 都按 `DESKTOP_SIGN` 决定是否签名。未启用时允许上传 unsigned 安装包，但 Release notes 必须明确标记，不能描述为已签名或已公证；启用时仍必须要求完整凭据并完成签名与 notarization。
+- 启用签名的正式 macOS 构建不仅要 notarize `.app`：生成后的 `.dmg` 与 Developer ID Installer 签名 `.pkg` 也必须提交 notarization 并 staple；安装验证同时覆盖 `codesign` / `spctl --type execute`、`pkgutil` / `spctl --type install` 和 installer staple，避免只验证 DMG 内应用却发布不可安装的 PKG。
 - 改版本号传递或 artifact 命名时，保持 `pkg/oneworks-desktop/v*` tag、`artifactName` 与 `latest*.yml` 中的 URL 一致，否则自动更新会直接失效。
 - 正式包的 runtime package cache version 必须读取 Electron 最终应用版本（`app.getVersion()`），不能读取依赖包版本。打包 staging 的应用 manifest 必须先写入 `ONEWORKS_DESKTOP_VERSION`，保证 Electron runtime、原生 bundle 与 runtime cache 目录使用同一最终版本；release tag 覆盖桌面版本但内部 workspace 包尚未对齐时也不能复用上一版 server / adapter 缓存。
 - 可信 packaged cache 首次落盘可以用 immutable cache version / build fingerprint 作为完整性标识，并在 APFS 等支持的文件系统上优先 clone 文件；不要在启动关键路径重复哈希和物理复制相同 bundle 内容。built-in plugin 的版本 cache 只读链接回不可变应用包，`latest` cache 再作为版本 cache 的轻量别名；应用位置或 build fingerprint 变化时必须由 manifest 校验重建链接。
 - `pnpm deploy --legacy --prod` 会让共享 workspace 的依赖状态暂时变成 production-only；`scripts/package.cjs` 在所有架构完成或失败后都必须用 frozen lockfile 恢复 dev dependencies，之后才能运行 packaged server smoke 或其他 workspace 脚本。不要依赖调用方额外执行 `pnpm install` 来修复打包命令留下的状态。
-- packaged server smoke 会在干净 runner 上首次准备完整 runtime package cache；默认 readiness deadline 必须覆盖低速 CI 的冷缓存路径，并在超时时输出 `server.log` 尾部，不能只留下无上下文的 “did not become ready”。如需实验性收紧可设置 `ONEWORKS_DESKTOP_SMOKE_TIMEOUT_MS`，但正式 workflow 使用覆盖冷启动的默认值。
+- packaged server smoke 会在干净 runner 上首次准备完整 runtime package cache；默认 readiness deadline 必须覆盖低速 CI 的冷缓存路径，并在超时时输出 `server.log` 尾部，不能只留下无上下文的 “did not become ready”。如需实验性收紧可设置 `ONEWORKS_DESKTOP_SMOKE_TIMEOUT_MS`，但正式 workflow 使用覆盖冷启动的默认值。普通 HTTP 请求使用 `ONEWORKS_DESKTOP_SMOKE_REQUEST_TIMEOUT_MS`（默认 30 秒）；首次 Vite 编译本地插件源码使用独立的 `ONEWORKS_DESKTOP_SMOKE_COMPILE_TIMEOUT_MS`（默认 120 秒），不能通过全局放宽请求时限或跳过源码请求来规避发布 smoke。
 
 ## 已验证经验
 

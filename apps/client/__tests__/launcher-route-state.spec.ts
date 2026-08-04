@@ -39,4 +39,25 @@ describe('launcher route state', () => {
       }
     })
   })
+
+  it('keeps the global usage dashboard on its own launcher path', () => {
+    expect(readLauncherLocationState('url', '/launcher/usage', '')).toEqual({
+      mode: 'usage',
+      query: ''
+    })
+    expect(resolveLauncherUrlNavigation({
+      currentHash: '',
+      currentPathname: '/launcher',
+      currentSearch: '',
+      mode: 'usage',
+      routingMode: 'url'
+    })).toEqual({
+      replace: false,
+      to: {
+        hash: '',
+        pathname: '/launcher/usage',
+        search: ''
+      }
+    })
+  })
 })

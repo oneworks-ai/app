@@ -26,6 +26,7 @@ import type {
 import {
   readPackageInfo,
   readPackageInfoSync,
+  resolveActiveModulePackageDirSync,
   resolveAdapterPackageCacheDir,
   resolveAdapterPackageInstallDir,
   resolveBootstrapDataDir,
@@ -39,6 +40,8 @@ import { loadConfigState } from './config/index.js'
 
 const NPM_BIN = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 const DEFAULT_NPM_VIEW_TIMEOUT_MS = 45_000
+const EXACT_MODULE_VERSION_PATTERN =
+  /^\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u
 
 interface ModuleUpdateTarget {
   activation: ModuleUpdateActivation
@@ -55,6 +58,7 @@ interface TargetChannelResolution {
 }
 interface ModuleUpdateCheckOptions {
   language?: string
+  publishedVersionResolver?: (packageName: string, npmTag: string) => Promise<string>
 }
 
 interface RunBufferedCommandOptions {
@@ -66,8 +70,25 @@ interface RunBufferedCommandOptions {
 }
 
 const nodeRequire = createRequire(__filename)
+const DESKTOP_RUNTIME_VERSION_ENV_KEYS = [
+  '__ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION__',
+  'ONEWORKS_DESKTOP_DEV_RUNTIME_VERSION'
+] as const
+const RUNTIME_CACHE_VERSION_ENV_KEYS = [
+  '__ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION__',
+  'ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION',
+  ...DESKTOP_RUNTIME_VERSION_ENV_KEYS
+] as const
 
 const moduleUpdateTargets: ModuleUpdateTarget[] = [
+  {
+    activation: 'restart',
+    group: 'catalog',
+    id: 'catalog:model-providers',
+    kind: 'catalog',
+    label: 'Model provider catalog',
+    packageName: '@oneworks/model-provider-catalog'
+  },
   {
     activation: 'restart',
     group: 'core',
@@ -125,6 +146,29 @@ const moduleUpdateTargets: ModuleUpdateTarget[] = [
 ]
 
 const unique = <T>(values: T[]) => [...new Set(values)]
+
+const normalizeEnvValue = (value: string | undefined) => {
+  const normalized = value?.trim()
+  return normalized == null || normalized === '' ? undefined : normalized
+}
+
+const normalizeRuntimeCacheVersion = (value: string | undefined) => {
+  const normalized = normalizeEnvValue(value)
+  return normalized != null &&
+      /^[\w.+-]+$/u.test(normalized) &&
+      normalized !== '.' &&
+      normalized !== '..'
+    ? normalized
+    : undefined
+}
+
+const resolveFirstRuntimeCacheVersion = (keys: readonly string[]) => {
+  for (const key of keys) {
+    const value = normalizeRuntimeCacheVersion(process.env[key])
+    if (value != null) return value
+  }
+  return undefined
+}
 
 const compareVersionLike = (left: string, right: string) => (
   left.localeCompare(right, 'en', {
@@ -309,6 +353,14 @@ const parseVersionOutput = (spec: string, output: string) => {
   return unquotedOutput
 }
 
+const assertExactModuleVersion = (version: string) => {
+  const normalized = version.trim()
+  if (!EXACT_MODULE_VERSION_PATTERN.test(normalized)) {
+    throw new Error(`Invalid exact module version: ${version}`)
+  }
+  return normalized
+}
+
 const resolvePublishedPackageVersion = async (packageName: string, npmTag: string) => {
   const spec = `${packageName}@${npmTag}`
   const result = await runBufferedCommand({
@@ -320,7 +372,7 @@ const resolvePublishedPackageVersion = async (packageName: string, npmTag: strin
   if (result.code !== 0) {
     throw new Error(`Failed to resolve ${spec}:\n${result.stderr.trim()}`)
   }
-  return parseVersionOutput(spec, result.stdout)
+  return assertExactModuleVersion(parseVersionOutput(spec, result.stdout))
 }
 
 const resolveRuntimePackageJsonCandidates = (packageName: string) => {
@@ -353,14 +405,63 @@ const resolveRuntimePackageJsonCandidates = (packageName: string) => {
   return unique(candidates)
 }
 
-const readCurrentPackageVersion = (packageName: string) => {
-  for (const packageJsonPath of resolveRuntimePackageJsonCandidates(packageName)) {
+const readPackageVersion = (packageName: string, packageJsonPaths: string[]) => {
+  for (const packageJsonPath of packageJsonPaths) {
     const info = readPackageInfoSync(packageJsonPath)
     if (info?.name === packageName && info.version != null) {
       return info.version
     }
   }
   return undefined
+}
+
+type ModuleUpdateRuntimeHost = 'desktop' | 'server' | 'web'
+
+const resolveModuleUpdateRuntimeHost = (): ModuleUpdateRuntimeHost => {
+  if (resolveFirstRuntimeCacheVersion(DESKTOP_RUNTIME_VERSION_ENV_KEYS) != null) return 'desktop'
+  if (normalizeEnvValue(process.env.__ONEWORKS_PROJECT_SERVER_ENTRY_KIND__) === 'web') return 'web'
+
+  const packageDir = normalizeEnvValue(process.env.__ONEWORKS_PROJECT_PACKAGE_DIR__)
+  const packageInfo = packageDir == null
+    ? undefined
+    : readPackageInfoSync(path.join(packageDir, 'package.json'))
+  return packageInfo?.name === '@oneworks/web' ? 'web' : 'server'
+}
+
+const resolveApplicableModuleUpdateTargets = () => {
+  const coreTargetIds = {
+    desktop: new Set(['client', 'server']),
+    server: new Set(['server']),
+    web: new Set(['web'])
+  }[resolveModuleUpdateRuntimeHost()]
+  return moduleUpdateTargets.filter(target => target.group !== 'core' || coreTargetIds.has(target.id))
+}
+
+const resolveSelectedRuntimePackageDir = (packageName: string) => {
+  const cacheVersion = resolveFirstRuntimeCacheVersion(RUNTIME_CACHE_VERSION_ENV_KEYS)
+  if (cacheVersion == null) return undefined
+  return resolveGenericPackageInstallDir(resolveGenericPackageCacheDir(packageName, cacheVersion), packageName)
+}
+
+const readCurrentPackageVersion = (target: ModuleUpdateTarget) => {
+  const explicitPackageJsonPaths = [
+    target.kind === 'catalog'
+      ? resolveActiveModulePackageDirSync(target.packageName)
+      : undefined,
+    target.id === 'client'
+      ? normalizeEnvValue(process.env.__ONEWORKS_PROJECT_CLIENT_PACKAGE_DIR__)
+      : undefined,
+    normalizeEnvValue(process.env.__ONEWORKS_PROJECT_PACKAGE_DIR__),
+    target.group === 'core' && resolveModuleUpdateRuntimeHost() === 'desktop'
+      ? resolveSelectedRuntimePackageDir(target.packageName)
+      : undefined
+  ]
+    .filter((packageDir): packageDir is string => packageDir != null)
+    .map(packageDir => path.join(packageDir, 'package.json'))
+
+  const explicitVersion = readPackageVersion(target.packageName, unique(explicitPackageJsonPaths))
+  if (explicitVersion != null || target.group === 'core') return explicitVersion
+  return readPackageVersion(target.packageName, resolveRuntimePackageJsonCandidates(target.packageName))
 }
 
 const inferChannelFromVersion = (version: string | undefined): ModuleUpdateChannel | undefined => {
@@ -374,8 +475,8 @@ const inferChannelFromVersion = (version: string | undefined): ModuleUpdateChann
 }
 
 const inferDefaultModuleUpdateChannel = (): ModuleUpdateChannel => (
-  moduleUpdateTargets
-    .map(target => inferChannelFromVersion(readCurrentPackageVersion(target.packageName)))
+  resolveApplicableModuleUpdateTargets()
+    .map(target => inferChannelFromVersion(readCurrentPackageVersion(target)))
     .find((channel): channel is ModuleUpdateChannel => channel != null) ?? 'stable'
 )
 
@@ -648,10 +749,12 @@ const resolveModuleUpdateItem = async (
   options: ModuleUpdateCheckOptions = {}
 ) => {
   const npmTag = resolveNpmTag(channel)
-  const currentVersion = readCurrentPackageVersion(target.packageName)
+  const currentVersion = readCurrentPackageVersion(target)
   const cachedVersion = findCachedPackageVersion(target)
   try {
-    const latestVersion = await resolvePublishedPackageVersion(target.packageName, npmTag)
+    const latestVersion = await (
+      options.publishedVersionResolver ?? resolvePublishedPackageVersion
+    )(target.packageName, npmTag)
     const installedVersion = resolveHighestVersion([currentVersion, cachedVersion])
     const changelog = await resolveModuleUpdateChangelog(target, installedVersion, latestVersion, options)
     return buildModuleUpdateItem({
@@ -682,10 +785,12 @@ export const checkModuleUpdates = async (
 ): Promise<ModuleUpdatesResponse> => {
   const settings = await resolveModuleUpdateChannelSettings()
   const npmTag = resolveNpmTag(settings.defaultChannel)
-  const modules = await Promise.all(moduleUpdateTargets.map((target) => {
-    const { channel, configuredChannel } = resolveTargetChannel(settings, target)
-    return resolveModuleUpdateItem(target, channel, configuredChannel, options)
-  }))
+  const modules = await Promise.all(
+    resolveApplicableModuleUpdateTargets().map((target) => {
+      const { channel, configuredChannel } = resolveTargetChannel(settings, target)
+      return resolveModuleUpdateItem(target, channel, configuredChannel, options)
+    })
+  )
 
   return {
     checkedAt: new Date().toISOString(),
@@ -833,6 +938,17 @@ const installNpmPackage = async (target: ModuleUpdateTarget, version: string) =>
       throw new Error(formatInstallError(`Failed to install ${target.packageName}@${version}.`, result.stderr))
     }
 
+    const stagedPackageDir = target.kind === 'adapter'
+      ? resolveAdapterPackageInstallDir(stagingDir, target.packageName)
+      : resolveGenericPackageInstallDir(stagingDir, target.packageName)
+    const stagedInfo = await readPackageInfo(path.join(stagedPackageDir, 'package.json'))
+    if (stagedInfo?.name !== target.packageName || stagedInfo.version !== version) {
+      throw new Error(
+        `Installed package mismatch for ${target.packageName}@${version}: ` +
+          `received ${stagedInfo?.name ?? 'unknown'}@${stagedInfo?.version ?? 'unknown'}.`
+      )
+    }
+
     await mkdir(path.dirname(cacheDir), { recursive: true })
     await rm(cacheDir, { recursive: true, force: true })
     await rename(stagingDir, cacheDir)
@@ -848,26 +964,37 @@ const normalizeRequestedVersion = (version: unknown) => {
   if (typeof version !== 'string') return undefined
   const trimmed = version.trim()
   if (trimmed === '') return undefined
-  if (!/^[\w.+-]+$/.test(trimmed)) {
-    throw new Error(`Invalid module version: ${trimmed}`)
-  }
-  return trimmed
+  return assertExactModuleVersion(trimmed)
 }
 
 export const installModuleUpdate = async (
   id: string,
-  options: { language?: string; version?: unknown } = {}
+  options: ModuleUpdateCheckOptions & { version?: unknown } = {}
 ): Promise<ModuleUpdateInstallResponse> => {
   const target = getModuleUpdateTarget(id)
   if (target == null) {
     throw new Error(`Unknown module update target: ${id}`)
+  }
+  if (!resolveApplicableModuleUpdateTargets().includes(target)) {
+    throw new Error(`Module update target is not available for this runtime: ${id}`)
   }
 
   const settings = await resolveModuleUpdateChannelSettings()
   const { channel, configuredChannel } = resolveTargetChannel(settings, target)
   const npmTag = resolveNpmTag(channel)
   const version = normalizeRequestedVersion(options.version) ??
-    await resolvePublishedPackageVersion(target.packageName, npmTag)
+    assertExactModuleVersion(
+      await (options.publishedVersionResolver ?? resolvePublishedPackageVersion)(target.packageName, npmTag)
+    )
+  const installedVersion = resolveHighestVersion([
+    readCurrentPackageVersion(target),
+    findCachedPackageVersion(target)
+  ])
+  if (installedVersion != null && compareVersionPrecedence(version, installedVersion) < 0) {
+    throw new Error(
+      `Refusing to downgrade ${target.packageName} from ${installedVersion} to ${version}.`
+    )
+  }
   const installedPackage = await installNpmPackage(target, version)
   if (target.kind !== 'adapter') {
     await writeActiveModulePackage({

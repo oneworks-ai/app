@@ -169,6 +169,11 @@ export interface ModelProviderStatusDefinition {
   notes?: string
 }
 
+export interface ModelProviderAdapterSupport {
+  includeModels?: string[]
+  excludeModels?: string[]
+}
+
 export interface ModelProviderDefinition {
   id: string
   title: string
@@ -181,7 +186,21 @@ export interface ModelProviderDefinition {
   codingPlan?: ModelProviderCodingPlanDefinition
   portal?: ModelProviderPortalLinks
   capabilities?: ModelProviderCapabilities
+  adapterSupport?: Record<string, ModelProviderAdapterSupport>
   status?: ModelProviderStatusDefinition
+}
+
+export interface ModelProviderHostMatcher {
+  provider: string
+  hosts: string[]
+  pathPrefix?: string
+  pathIncludes?: string
+}
+
+export interface ModelProviderCatalog {
+  schemaVersion: 1
+  providers: readonly ModelProviderDefinition[]
+  hostMatchers: readonly ModelProviderHostMatcher[]
 }
 
 export interface ModelServiceManagementConfig {
@@ -244,7 +263,23 @@ export interface ProviderModelInfo {
   supportsReasoning?: boolean
   inputModalities?: Array<'text' | 'image' | 'audio' | 'video' | 'file'>
   outputModalities?: Array<'text' | 'image' | 'audio' | 'video'>
+  source?: ProviderModelSource
   raw?: unknown
+}
+
+export type ProviderModelSource = 'configured' | 'provider_catalog' | 'remote' | 'remote_cache'
+
+export interface ProviderModelDiscoveryWarning {
+  code: string
+  message: string
+}
+
+export interface ProviderModelDiscoveryResult {
+  models: ProviderModelInfo[]
+  source: ProviderModelSource
+  fetchedAt?: string
+  stale?: boolean
+  warning?: ProviderModelDiscoveryWarning
 }
 
 export type ProviderAccountStatus =
