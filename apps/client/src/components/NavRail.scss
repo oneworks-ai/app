@@ -215,10 +215,6 @@
   -webkit-app-region: drag;
 }
 
-.nav-rail-window-bar.is-sidebar-collapsed.has-window-controls > * {
-  transform: translateY(-1px);
-}
-
 .nav-rail-window-bar.is-sidebar-collapsed .nav-rail-chrome-button.ant-btn {
   padding: 0 !important;
   background: transparent !important;
@@ -546,29 +542,29 @@
   opacity: 0;
 }
 
-.nav-rail-create-session-indicator {
-  width: 38px;
-  height: 38px;
-  min-width: 38px;
-  margin-left: 4px;
+.nav-rail-window-bar.is-sidebar-collapsed > .nav-rail-create-session-indicator {
+  position: absolute;
+  inset-inline-start: 100%;
+  top: 50%;
+  z-index: 1;
+  width: var(--nav-rail-window-icon-size);
+  height: var(--nav-rail-window-icon-size);
+  min-width: var(--nav-rail-window-icon-size);
   color: var(--primary-color);
-  -webkit-app-region: no-drag;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 auto;
-  cursor: default;
-  transition:
-    width .3s cubic-bezier(.4, 0, .2, 1),
-    min-width .3s cubic-bezier(.4, 0, .2, 1),
-    height .3s cubic-bezier(.4, 0, .2, 1),
-    margin-left .3s cubic-bezier(.4, 0, .2, 1),
-    color .18s ease;
+  font-size: var(--nav-rail-window-icon-size);
+  line-height: 1;
+  pointer-events: none;
+  transform: translateY(-50%);
+  -webkit-app-region: no-drag;
 
   .material-symbols-rounded {
-    font-size: 19px;
+    width: 100%;
+    height: 100%;
+    font-size: inherit;
     line-height: 1;
-    transition: font-size .3s cubic-bezier(.4, 0, .2, 1);
   }
 }
 
@@ -634,20 +630,6 @@
   .nav-rail-window-action-icon.icon-asset--image {
     display: block;
     object-fit: contain;
-  }
-}
-
-.nav-rail-window-bar.is-sidebar-collapsed .nav-rail-create-session-indicator {
-  width: var(--nav-rail-window-action-size);
-  height: var(--nav-rail-window-action-size);
-  min-width: var(--nav-rail-window-action-size);
-  margin-left: 0;
-
-  .material-symbols-rounded {
-    width: var(--nav-rail-window-icon-size);
-    height: var(--nav-rail-window-icon-size);
-    font-size: var(--nav-rail-window-icon-size);
-    line-height: 1;
   }
 }
 
