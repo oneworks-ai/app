@@ -2297,6 +2297,14 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
     await this.clickPoint(point, options.settleMs)
   }
 
+  async moveToSelector(selector: string, options: DemoVideoClickOptions = {}) {
+    const point = await this.waitForPoint(() => this.findPointBySelector(selector), {
+      label: `selector "${selector}"`,
+      timeoutMs: options.timeoutMs ?? DEFAULT_ACTION_TIMEOUT_MS
+    })
+    await this.moveToPoint(point, options.settleMs)
+  }
+
   async focusSelector(selector: string, options: DemoVideoTextOptions = {}) {
     const timeoutMs = options.timeoutMs ?? DEFAULT_ACTION_TIMEOUT_MS
     const startedAt = Date.now()
@@ -2593,6 +2601,38 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
       buttons: 0,
       clickCount: 1,
       type: 'mouseReleased',
+      x: point.x,
+      y: point.y
+    })
+    await this.evaluate(setCursorExpression(point, 'idle'))
+    await this.recordFor(settleMs)
+  }
+
+  private async moveToPoint(point: Point, settleMs = DEFAULT_CLICK_SETTLE_MS) {
+    if (this.usesVideoLayerCursor()) {
+      const videoPoint = await this.resolveSystemCursorPoint(point)
+      const moveDurationMs = this.recordSystemCursorMove(videoPoint)
+      await this.recordFor(Math.max(
+        SYSTEM_CURSOR_MOVE_MIN_MS,
+        Math.round(moveDurationMs) + SYSTEM_CURSOR_MOVE_RECORD_PADDING_MS
+      ))
+      await this.client.send('Input.dispatchMouseEvent', {
+        button: 'none',
+        buttons: 0,
+        type: 'mouseMoved',
+        x: point.x,
+        y: point.y
+      })
+      await this.recordFor(settleMs)
+      return
+    }
+
+    const moveDurationMs = await this.evaluate<number>(setCursorExpression(point, 'move'))
+    await this.recordFor(Math.max(SYSTEM_CURSOR_MOVE_MIN_MS, Math.round(moveDurationMs)))
+    await this.client.send('Input.dispatchMouseEvent', {
+      button: 'none',
+      buttons: 0,
+      type: 'mouseMoved',
       x: point.x,
       y: point.y
     })

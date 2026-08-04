@@ -17,7 +17,13 @@
 
 <p align="center"><strong>一个面向 AI 工作流的工作空间。</strong></p>
 
-https://github.com/user-attachments/assets/19827adc-9376-4d16-aa6f-e81ea75a3d40
+**亮色**
+
+https://github.com/user-attachments/assets/a51d819a-b62f-4b9f-9727-a10e3e1ebbb7
+
+**暗色**
+
+https://github.com/user-attachments/assets/da7f4b1f-bae9-41df-b6ee-adc4fedd916b
 
 ## 介绍
 

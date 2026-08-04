@@ -1,7 +1,18 @@
+import process from 'node:process'
+
 import type { BrowserWindow } from 'electron'
 
 import { WINDOW_FULLSCREEN_STATE_CHANNEL } from './constants'
 import type { WindowRecord } from './types'
+
+export const shouldHideLauncherWindowOnBlur = (
+  kind: WindowRecord['kind'],
+  env: NodeJS.ProcessEnv = process.env
+) => (
+  kind === 'launcher' &&
+  env.ONEWORKS_DESKTOP_RECORDABLE_WINDOWS !== '1' &&
+  env.ONEWORKS_DESKTOP_RECORDABLE_LAUNCHER_WINDOW !== '1'
+)
 
 export const installWindowRuntimeEvents = ({
   window,
@@ -13,7 +24,7 @@ export const installWindowRuntimeEvents = ({
   const state = { isInspectingWindow: false }
 
   window.on('blur', () => {
-    if (windowRecord.kind !== 'launcher' || window.isDestroyed() || !window.isVisible()) return
+    if (!shouldHideLauncherWindowOnBlur(windowRecord.kind) || window.isDestroyed() || !window.isVisible()) return
     if (state.isInspectingWindow || window.webContents.isDevToolsOpened()) return
     window.hide()
   })
@@ -24,7 +35,12 @@ export const installWindowRuntimeEvents = ({
 
   window.webContents.on('devtools-closed', () => {
     state.isInspectingWindow = false
-    if (windowRecord.kind === 'launcher' && !window.isDestroyed() && window.isVisible() && !window.isFocused()) {
+    if (
+      shouldHideLauncherWindowOnBlur(windowRecord.kind) &&
+      !window.isDestroyed() &&
+      window.isVisible() &&
+      !window.isFocused()
+    ) {
       window.hide()
     }
   })

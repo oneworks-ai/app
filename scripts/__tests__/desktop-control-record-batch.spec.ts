@@ -7,7 +7,8 @@ import { describe, expect, it } from 'vitest'
 import {
   isMacosWindowVisibilityMetricAcceptable,
   resolveDesktopRecordingVideoBackgroundImage,
-  resolveRecordingWindowBounds
+  resolveRecordingWindowBounds,
+  selectMacosWindowOnRecordingDisplay
 } from '../desktop-control-record-batch'
 
 describe('desktop control recording display layout', () => {
@@ -50,6 +51,40 @@ describe('desktop control recording display layout', () => {
         y: -458
       }
     })
+  })
+
+  it('selects the app window on the recording display instead of a larger window elsewhere', () => {
+    const selected = selectMacosWindowOnRecordingDisplay([
+      {
+        height: 900,
+        id: 1,
+        ownerName: 'One Works',
+        ownerPid: 42,
+        title: 'Wrong display',
+        width: 1280,
+        x: 120,
+        y: 80
+      },
+      {
+        height: 560,
+        id: 2,
+        ownerName: 'One Works',
+        ownerPid: 42,
+        title: 'Launcher',
+        width: 760,
+        x: -2_060,
+        y: 228
+      }
+    ], {
+      frame: {
+        height: 2_100,
+        width: 3_360,
+        x: -3_360,
+        y: -983
+      }
+    })
+
+    expect(selected?.id).toBe(2)
   })
 
   it('uses the approved Ventura background by default for DeskPad recordings', async () => {

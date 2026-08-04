@@ -371,6 +371,33 @@ export const demoVideoScenarios = [
     }
   },
   {
+    defaultDurationMs: 32_000,
+    defaultFps: 60,
+    defaultViewport: {
+      height: 900,
+      width: 1440
+    },
+    description: '通过 launcher UI 打开 workspace，并用真实鼠标操作展示 Adapter 选择器。',
+    followCdpTargets: true,
+    id: 'launcher-open-workspace-adapter-tour',
+    requiresUrl: false,
+    title: 'Launcher UI 打开 Workspace 并展示 Adapter',
+    run: async (ctx) => {
+      await openWorkspaceThroughLauncherUi(ctx, { settleMs: 500 })
+      await ctx.recordFor(1_200)
+      await ctx.clickSelector('.sender-select-shell--adapter .adapter-select', {
+        settleMs: 240,
+        timeoutMs: 15_000
+      })
+      await ctx.recordUntilSelector('.adapter-select-popup', { timeoutMs: 15_000 })
+      await ctx.moveToSelector('.chat-route-header', {
+        settleMs: 300,
+        timeoutMs: 15_000
+      })
+      await ctx.recordFor(4_500)
+    }
+  },
+  {
     defaultDurationMs: 90_000,
     defaultFps: 60,
     defaultViewport: {
