@@ -112,6 +112,11 @@ export const buildRuntimeEnv = async ({
   const isManagerServer = serverRole === 'manager'
   const env: NodeJS.ProcessEnv = {
     ...process.env,
+    // A dev-service process executes this worktree's source. Do not let an
+    // inherited bootstrap runtime redirect default official plugins to a
+    // different worktree or a partial machine cache.
+    __ONEWORKS_PROJECT_PACKAGE_DIR__: join(repoRoot, 'apps/server'),
+    __ONEWORKS_PROJECT_CLI_PACKAGE_DIR__: join(repoRoot, 'apps/server'),
     __ONEWORKS_PROJECT_CLIENT_BASE__: base,
     __ONEWORKS_PROJECT_CLIENT_MODE__: clientMode,
     __ONEWORKS_PROJECT_SERVER_ROLE__: serverRole,

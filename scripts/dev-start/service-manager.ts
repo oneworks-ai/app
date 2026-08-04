@@ -53,6 +53,7 @@ export const startServiceChild = async ({
           ...config.extraEnv,
           ...linkedEnv
         },
+        serverRole: config.serverRole,
         serverPort: ports.serverPort
       })),
       ONEWORKS_DEV_START_STATE_FILE: statePath(target),
