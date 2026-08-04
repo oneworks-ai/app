@@ -10,25 +10,41 @@ interface PublicPluginListResponse {
   runtime?: PluginRuntimeEndpoint
 }
 
-export const parsePublicPluginListResponse = (value: unknown): PublicPluginListResponse => {
-  const state = createPublicParseState()
+const resolvePublicPluginListPayload = (
+  value: unknown,
+  state: ReturnType<typeof createPublicParseState>
+) => {
   if (!isPublicRecord(value, state)) {
     throw new TypeError('Plugin snapshot response must contain a public object wrapper.')
   }
-  const plugins = getPublicValue(value, 'plugins')
+  if (!Object.hasOwn(value, 'success')) return value
+  if (getPublicValue(value, 'success') !== true) {
+    throw new TypeError('Plugin snapshot response must contain a successful API envelope.')
+  }
+  const data = getPublicValue(value, 'data')
+  if (!isPublicRecord(data, state)) {
+    throw new TypeError('Plugin snapshot response must contain public API envelope data.')
+  }
+  return data
+}
+
+export const parsePublicPluginListResponse = (value: unknown): PublicPluginListResponse => {
+  const state = createPublicParseState()
+  const payload = resolvePublicPluginListPayload(value, state)
+  const plugins = getPublicValue(payload, 'plugins')
   if (!Array.isArray(plugins)) {
     throw new TypeError('Plugin snapshot response must contain a plugins array.')
   }
   const result: PublicPluginListResponse = { plugins }
-  if (Object.hasOwn(value, 'diagnostics')) {
-    const diagnostics = parsePublicDiagnostics(getPublicValue(value, 'diagnostics'), state)
+  if (Object.hasOwn(payload, 'diagnostics')) {
+    const diagnostics = parsePublicDiagnostics(getPublicValue(payload, 'diagnostics'), state)
     if (diagnostics == null) {
       throw new TypeError('Plugin snapshot response contains malformed diagnostics.')
     }
     result.diagnostics = diagnostics
   }
-  if (Object.hasOwn(value, 'runtime')) {
-    const runtime = parsePublicRuntimeEndpoint(getPublicValue(value, 'runtime'), state)
+  if (Object.hasOwn(payload, 'runtime')) {
+    const runtime = parsePublicRuntimeEndpoint(getPublicValue(payload, 'runtime'), state)
     if (runtime == null) {
       throw new TypeError('Plugin snapshot response contains malformed runtime metadata.')
     }

@@ -115,11 +115,94 @@ describe('public plugin API boundary', () => {
     expect(JSON.stringify(snapshot)).not.toContain('/private/')
   })
 
+  it('unwraps the API envelope and preserves the authoritative marketplace runtime identity', async () => {
+    const snapshot = await snapshotFromValue({
+      data: {
+        plugins: [{
+          enabled: true,
+          manifest: {
+            native: {
+              adapter: 'codex',
+              apps: [{
+                authentication: null,
+                capabilities: ['Read', 'Write'],
+                connectionRequirements: null,
+                id: 'asdk_app_693ca6ce2db08191bb52d66743c65184',
+                name: 'airtable',
+                permissions: null
+              }]
+            }
+          },
+          name: 'airtable',
+          pluginRoot: '/private/managed/plugins/airtable',
+          requestId: 'airtable@openai-plugins',
+          scope: 'codex-openai-plugins-airtable-52fa4877979453b87dbb90a4',
+          source: {
+            adapter: 'codex',
+            kind: 'marketplace',
+            marketplace: 'openai-plugins',
+            plugin: 'airtable',
+            root: '/private/managed/plugins/airtable'
+          },
+          version: '0.1.3'
+        }],
+        runtime: {
+          current: true,
+          id: 'workspace:w_airtable',
+          role: 'workspace',
+          serverBaseUrl: 'http://127.0.0.1:56876',
+          status: 'online'
+        }
+      },
+      success: true,
+      unknownPrivateMetadata: '/private/envelope'
+    })
+
+    expect(snapshot).toEqual({
+      diagnostics: undefined,
+      plugins: [{
+        enabled: true,
+        manifest: {
+          native: {
+            adapter: 'codex',
+            apps: [{
+              capabilities: ['Read', 'Write'],
+              id: 'asdk_app_693ca6ce2db08191bb52d66743c65184',
+              name: 'airtable'
+            }]
+          }
+        },
+        name: 'airtable',
+        requestId: 'airtable@openai-plugins',
+        scope: 'codex-openai-plugins-airtable-52fa4877979453b87dbb90a4',
+        source: {
+          adapter: 'codex',
+          kind: 'marketplace',
+          marketplace: 'openai-plugins',
+          plugin: 'airtable'
+        },
+        version: '0.1.3'
+      }],
+      runtime: {
+        current: true,
+        id: 'workspace:w_airtable',
+        role: 'workspace',
+        serverBaseUrl: 'http://127.0.0.1:56876',
+        status: 'online'
+      }
+    })
+    expect(JSON.stringify(snapshot)).not.toContain('/private/')
+  })
+
   it('fails closed for malformed plugin snapshot wrappers', async () => {
     await expect(snapshotFromValue([])).rejects.toThrow(/object wrapper/i)
     await expect(snapshotFromValue({ plugins: {} })).rejects.toThrow(/plugins array/i)
     await expect(snapshotFromValue({ diagnostics: {}, plugins: [] })).rejects.toThrow(/diagnostics/i)
     await expect(snapshotFromValue({ plugins: [], runtime: { id: 'missing-role' } })).rejects.toThrow(/runtime/i)
+    await expect(snapshotFromValue({ data: { plugins: [] }, success: false })).rejects.toThrow(
+      /successful API envelope/i
+    )
+    await expect(snapshotFromValue({ data: [], success: true })).rejects.toThrow(/envelope data/i)
   })
 
   it('preserves the declared public runtime contract through the list snapshot transport', async () => {

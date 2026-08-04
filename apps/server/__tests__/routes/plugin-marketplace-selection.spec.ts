@@ -57,6 +57,51 @@ describe('plugin marketplace selection route', () => {
     })
   })
 
+  it('reloads the selected project runtime before returning install success', async () => {
+    let releaseReload: (() => void) | undefined
+    const reloadPromise = new Promise<void>((resolve) => {
+      releaseReload = resolve
+    })
+    mocks.setPluginMarketplaceSelection.mockResolvedValue([{
+      action: 'installed',
+      marketplace: 'openai-plugins',
+      plugin: 'airtable'
+    }])
+    mocks.reload.mockReturnValue(reloadPromise)
+
+    let responseSettled = false
+    const responsePromise = fetch(`${baseUrl}/api/plugins/marketplace/plugins/openai-plugins/airtable/selection`, {
+      body: JSON.stringify({ enabled: true, target: 'project' }),
+      headers: { 'Content-Type': 'application/json' },
+      method: 'POST'
+    })
+    responsePromise.then(() => {
+      responseSettled = true
+    })
+
+    await vi.waitFor(() => expect(mocks.reload).toHaveBeenCalledOnce())
+    expect(responseSettled).toBe(false)
+    releaseReload?.()
+    const response = await responsePromise
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      success: true,
+      data: {
+        results: [{ action: 'installed', marketplace: 'openai-plugins', plugin: 'airtable' }]
+      }
+    })
+    expect(mocks.setPluginMarketplaceSelection).toHaveBeenCalledWith({
+      enabled: true,
+      marketplace: 'openai-plugins',
+      plugin: 'airtable',
+      target: 'project'
+    })
+    expect(mocks.reload).toHaveBeenCalledOnce()
+    expect(mocks.setPluginMarketplaceSelection.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.reload.mock.invocationCallOrder[0]!)
+  })
+
   it('returns an exposed retryable response when the marketplace Git source cannot be retrieved', async () => {
     const credentialUrl = 'https://user:secret@example.invalid/plugin.git'
     const privatePath = '/private/marketplace/source/credential.txt'

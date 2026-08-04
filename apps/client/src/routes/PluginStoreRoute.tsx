@@ -366,6 +366,7 @@ export function PluginStoreRoute() {
         target,
         { serverBaseUrl: pluginServerBaseUrl }
       )
+      await refreshPlugins().catch(() => undefined)
       setMarketplacePluginInstallOverrides((previous) => ({
         ...previous,
         [
@@ -381,7 +382,6 @@ export function PluginStoreRoute() {
           target
         }
       }))
-      void refreshPlugins().catch(() => undefined)
       void mutateMarketplaceCatalog().catch(() => undefined)
       void message.success(t(
         enabled
