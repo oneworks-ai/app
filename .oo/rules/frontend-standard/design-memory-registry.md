@@ -142,7 +142,8 @@
 
 ### OW-DM-010 — 宣传视频语言与明暗主题矩阵
 
-- Revision / status / scope: 2 / ACTIVE / OneWorks project，README、社交平台和发布宣传视频。先生成一个代表性原型；用户确认动画、真实窗口、鼠标节奏和构图整体正确后，再交付中文 / 英文与亮色 / 暗色的完整四变体矩阵。成片中的真实界面语言必须匹配发布入口，主题必须匹配变体，四条视频使用同一 app build、scenario、workspace、窗口几何和后期节奏。Ownership / source / enforcement: 规范正文由 [`../maintenance/demo-video.md`](../maintenance/demo-video.md)“场景维护”拥有，入口为 `launcher-open-workspace-adapter-tour`；只有用户明确指定单语言或单主题时允许缩减，并由原型确认、batch manifest、逐变体 still、媒体 metadata、光标连续性、隐私检查和 GitHub 播放器验证。
+- Revision / status / scope: 2 / ACTIVE / OneWorks project，README、社交平台和发布宣传视频。先生成一个代表性原型；用户确认动画、真实窗口、鼠标节奏和构图整体正确后，再交付中文 / 英文与亮色 / 暗色的完整四变体矩阵。成片中的真实界面语言必须匹配发布入口，主题必须匹配变体，四条视频使用同一 app build、scenario、workspace、窗口几何和后期节奏。
+- Ownership / source / exceptions / enforcement: 规范正文由 [`../maintenance/demo-video.md`](../maintenance/demo-video.md)“场景维护”拥有，真实 Adapter 展示入口为 `launcher-open-workspace-adapter-tour`；来源为用户 2026-08-05 指出英文宣传视频错误复用了中文窗口，明确要求以后同时生成两种语言与两种明暗主题，并进一步要求只在用户确认整体逻辑后批量生成。只有用户明确指定单语言或单主题时允许缩减；由原型确认记录、四变体 batch manifest、逐变体 still、媒体 metadata、光标连续性、隐私检查和 GitHub 实际播放器验证。
 
 ## 待确认冲突
 
@@ -185,12 +186,4 @@
 - Effective date: 2026-07-14
 - Automatic enforcement: `neo-workshop` 浅色 / 深色、桌面 / 窄屏 computed border / gap / padding / shadow / content inset 与交互视觉回归；Sender 通过共享样式契约测试覆盖工具栏与状态栏的高度、padding、字号、字重、行高、前景色、表面色、hover / open 状态和默认主题回退。
 
-新增例外时使用：
-
-```text
-ID / Revision / Status:
-Base rule / Exception rule / Scope:
-Applies when / Does not apply when:
-Positive example / Negative example:
-Source / Effective date / Automatic enforcement:
-```
+新增例外时必须使用作用域例外模板；字段不可省略或合并。完整模板见 [`design-memory.md`](./design-memory.md#作用域例外模板)。

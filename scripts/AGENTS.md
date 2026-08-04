@@ -89,11 +89,8 @@
   - 录 launcher / 浮层类页面素材时可传 `--page-background macos-wallpaper`，让 headless/CDP 录制使用本机 macOS 系统壁纸背景；需要固定素材时传 `--page-background-image <path>`
   - 录真实 Electron 从 launcher 点击打开项目时，不要用这个底层入口交付正式素材；使用 `desktop-control record-batch launcher-open-workspace-ui-tour --use-deskpad-display`。`demo-video record` 的 `captureSource` 选项只保留给底层诊断。
 - `pnpm tools demo-video batch <scenario> --url <url> [--out-dir <path>]`
-  - 批量生成展示素材，默认输出 `light/dark x zh/en` 四个变体；用 `--color-schemes` / `--languages` 覆盖矩阵，产物仍包含 MP4、poster 和按秒 stills manifest
-  - 仅用于纯 Web / headless CDP 页面；真实 Electron launcher 打开 workspace 的四变体素材用 `pnpm tools desktop-control record-batch ...`
-  - README、社交平台和发布宣传素材先生成代表性原型；用户确认动画、真实窗口、鼠标节奏和构图后才批量生成 zh/en × light/dark，且入口语言、主题、清洁 fixture、隔离 profile、中性 workspace、关键 still 检查和隐私规则必须匹配；个人账号、home 路径、目录列表、本机绝对路径和登录状态不得进入上传素材。
-- `pnpm tools desktop-control record-batch launcher-open-workspace-adapter-tour --workspace <path> --app <app> --use-deskpad-display`
-  - 用真实 Launcher、Workspace 和 Adapter 选择器录制 `light/dark x zh/en` 四变体；不要用模拟窗口或跨语言复用同一视频。
+  - 批量生成展示素材，默认输出 `light/dark x zh/en` 四个变体；用 `--color-schemes` / `--languages` 覆盖矩阵，产物仍包含 MP4、poster 和按秒 stills manifest。README、社交平台和发布宣传素材先生成一个代表性原型；只有用户确认动画、真实窗口、鼠标节奏和构图整体正确后，才批量生成完整 zh/en × light/dark 矩阵。
+  - 仅用于纯 Web / headless CDP 页面；真实 Electron launcher/workspace/adapter 四变体必须使用 `pnpm tools desktop-control record-batch launcher-open-workspace-adapter-tour --workspace <path> --app <app> --use-deskpad-display`；公开成片必须使用清洁 fixture / 隔离 profile / 中性 workspace，并按 `.oo/rules/maintenance/demo-video.md` 逐变体检查关键 still，个人账号、home 路径、目录列表、本机绝对路径和登录状态不得进入上传素材。
 - `pnpm tools agent-room-smoke resume [--json]`
   - 跑真实 `StartTasks -> agent room 消息 -> inactive task resume` smoke；启动临时 server / SQLite / MCP / Codex adapter，LLM 只用 mock，结束后清理临时进程
 - `pnpm tools relay-config smoke [--allow-pending] [--json]`
@@ -135,11 +132,13 @@
 
 ## publish-plan 使用备注
 
-- `publish-plan` 只负责基于显式包选择和内部依赖生成发布顺序；所有“是否该发布、怎么发布、发布后怎么收尾”的规则统一见 `.oo/rules/RELEASE.md`。
+- `publish-plan` 只负责基于显式包选择和内部依赖生成发布顺序。
+- 所有“是否该发布、怎么发布、发布后怎么收尾”的规则统一见 `.oo/rules/RELEASE.md`。
 
 ## adapter-e2e 结构
 
-- `scripts/adapter-e2e/harness.ts`：suite 生命周期
+- `scripts/adapter-e2e/harness.ts`
+  - suite 生命周期
 - `scripts/chrome-debug.ts`
   - Chrome DevTools 本地调试 helper，负责枚举目标页、连接 CDP 和执行 messenger 发送动作
 - `scripts/adapter-e2e/runners.ts`
@@ -192,7 +191,8 @@
 
 ## 维护约定
 
-- 入口层只做命令解析和调度，不写业务逻辑；测试优先直接 import TS 模块，不要绕兼容 wrapper。adapter E2E 的 case 定义、Vitest spec、mock-llm 单测、snapshot 必须放在 `scripts/__tests__/adapter-e2e/` 一处维护。
+- 入口层只做命令解析和调度，不写业务逻辑；测试优先直接 import TS 模块，不要绕兼容 wrapper。
+- adapter E2E 的 case 定义、Vitest spec、mock-llm 单测、snapshot 必须放在 `scripts/__tests__/adapter-e2e/` 一处维护。
 - adapter E2E 新增场景时，先在 `scripts/__tests__/adapter-e2e/cases.ts` 定义 case 的 `prompt/model/mockScenarios/expectations`，再用 `mock-llm/rules.ts` 组合 mock 行为。
 - 先写结构化 expectations，再看 snapshot。最低限度要覆盖输出文本、mock trace、hook 事件计数；file snapshot 负责保留完整回归上下文。
 - 当前标准场景至少保持两类：`*-read-once` 验证工具链路，`*-direct-answer` 验证无工具直答链路。
