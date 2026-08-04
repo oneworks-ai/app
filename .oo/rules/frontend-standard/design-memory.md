@@ -124,3 +124,23 @@ Experience Capture: <status>
 Persisted Rule or Pending Conflict:
 Remaining Visual Risk:
 ```
+
+## 作用域例外模板
+
+新增 scoped exception 时必须完整填写以下字段，不得省略或合并：
+
+```text
+ID:
+Revision:
+Status: SCOPED_EXCEPTION
+Base rule:
+Exception rule:
+Scope:
+Applies when:
+Does not apply when:
+Positive example:
+Negative example:
+Source:
+Effective date:
+Automatic enforcement:
+```
