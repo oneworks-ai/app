@@ -17,6 +17,8 @@
 
 <p align="center"><strong>一个面向 AI 工作流的工作空间。</strong></p>
 
+https://github.com/user-attachments/assets/19827adc-9376-4d16-aa6f-e81ea75a3d40
+
 ## 介绍
 
 One Works（万可）是一个开源 AI 工作空间，核心是可扩展的插件体系和标准化配置体系。它统一管理 agents、工具、适配器、会话和本地运行数据，覆盖桌面端、Web、VS Code 和 CLI，让你一次配置，在所有入口中使用同一套 AI 工作流。
