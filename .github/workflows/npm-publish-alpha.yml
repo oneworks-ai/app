@@ -24,7 +24,7 @@ on:
         type: string
       bootstrap_with_token:
         default: false
-        description: Use NPM_TOKEN for first-publishing packages that cannot use Trusted Publishing yet.
+        description: Use NPM_TOKEN only for a new-identity bootstrap or reconciled missing-trust recovery.
         required: false
         type: boolean
 
@@ -133,7 +133,7 @@ jobs:
           fi
 
           if [ "${BOOTSTRAP_WITH_TOKEN}" = "true" ]; then
-            echo "NPM_TOKEN is configured; npm can use it as a bootstrap fallback for newly added packages."
+            echo "NPM_TOKEN is configured for an explicitly scoped bootstrap or missing-trust recovery."
           else
             unset NODE_AUTH_TOKEN
             echo "Trusted Publishing mode: npm publish will authenticate through GitHub OIDC."
