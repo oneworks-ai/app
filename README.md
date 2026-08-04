@@ -17,7 +17,7 @@
 
 <p align="center"><strong>One workspace for AI work.</strong></p>
 
-https://github.com/user-attachments/assets/078dc326-f346-42ab-be81-a08c69b0d1d9
+https://github.com/user-attachments/assets/19827adc-9376-4d16-aa6f-e81ea75a3d40
 
 ## Introduction
 
