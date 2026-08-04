@@ -72,4 +72,14 @@ describe('launcher app icon themes', () => {
     expect(navRailSource).toContain('configRes?.sources?.merged?.desktop?.iconTheme')
     expect(navRailSource).toContain('iconThemes.includes(configuredIconTheme)')
   })
+
+  it('carries the homepage preview icon theme into the merged desktop config', () => {
+    const previewRuntimeSource = readFileSync(
+      new URL('../src/homepage-preview/mock-runtime.ts', import.meta.url),
+      'utf8'
+    )
+
+    expect(previewRuntimeSource).toContain('iconTheme: normalizeIconTheme(data.payload.iconTheme)')
+    expect(previewRuntimeSource).toContain('iconTheme: config.iconTheme')
+  })
 })
