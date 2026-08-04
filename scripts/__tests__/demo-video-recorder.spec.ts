@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import {
   buildSystemCursorClickTimingPlan,
@@ -8,12 +8,86 @@ import {
   shouldContinueSystemCaptureDuringAction
 } from '../demo-video/recorder'
 import { getDemoVideoScenario } from '../demo-video/scenarios'
+import type { DemoVideoScenarioContext } from '../demo-video/types'
 
 describe('demo video scenario target following', () => {
   it('declares workspace target following on every Launcher-to-Workspace scenario', () => {
     expect(getDemoVideoScenario('launcher-open-workspace-ui-tour').followCdpTargets).toBe(true)
+    expect(getDemoVideoScenario('launcher-open-workspace-adapter-tour').followCdpTargets).toBe(true)
     expect(getDemoVideoScenario('launcher-open-workspace-chat-smoke').followCdpTargets).toBe(true)
     expect(getDemoVideoScenario('launcher-browser-driver-agent-tour').followCdpTargets).toBe(true)
+  })
+
+  it('labels the embedded-browser scenario as In-App Browser Control', () => {
+    const scenario = getDemoVideoScenario('launcher-browser-driver-agent-tour')
+    expect(scenario.title).toBe('Electron In-App Browser Control Agent 演示')
+    expect(scenario.description).toContain('In-App Browser Control')
+  })
+
+  it('registers a real Launcher-to-Workspace Adapter tour', () => {
+    const scenario = getDemoVideoScenario('launcher-open-workspace-adapter-tour')
+    expect(scenario.title).toContain('Adapter')
+    expect(scenario.defaultFps).toBe(60)
+    expect(scenario.requiresUrl).toBe(false)
+  })
+
+  it('opens a workspace, opens Adapter, then parks the cursor before the final hold', async () => {
+    const events: string[] = []
+    const recordFor = vi.fn(async (durationMs: number) => {
+      events.push(`record:${durationMs}`)
+    })
+    const context: DemoVideoScenarioContext = {
+      durationMs: 32_000,
+      workspace: '/Users/Shared/One Works Demo',
+      url: undefined,
+      clickSelector: vi.fn(async selector => {
+        events.push(`click:${selector}`)
+      }),
+      clickText: vi.fn(async () => {}),
+      focusSelector: vi.fn(async () => {}),
+      moveToSelector: vi.fn(async selector => {
+        events.push(`move:${selector}`)
+      }),
+      navigate: vi.fn(async () => {}),
+      openDesktopWorkspace: vi.fn(async () => {}),
+      pressKey: vi.fn(async key => {
+        events.push(`key:${key}`)
+      }),
+      recordDuring: vi.fn(async (_durationMs, action) => {
+        await action()
+      }),
+      recordFor,
+      recordUntilSelector: vi.fn(async selector => {
+        events.push(`until:${selector}`)
+      }),
+      recordUntilSelectorAbsent: vi.fn(async selector => {
+        events.push(`absent:${selector}`)
+      }),
+      recordUntilText: vi.fn(async () => {}),
+      requireWorkspace: () => '/Users/Shared/One Works Demo',
+      requireUrl: () => {
+        throw new Error('URL is not used by this scenario.')
+      },
+      resolveUrl: path => path,
+      selectTextInSelector: vi.fn(async () => {}),
+      typeText: vi.fn(async text => {
+        events.push(`type:${text}`)
+      }),
+      waitForText: vi.fn(async () => {})
+    }
+
+    await getDemoVideoScenario('launcher-open-workspace-adapter-tour').run(context)
+
+    const workspaceReadyIndex = events.findIndex(event => event.startsWith('absent:.workspace-opening-overlay'))
+    const adapterClickIndex = events.indexOf('click:.sender-select-shell--adapter .adapter-select')
+    const popupIndex = events.indexOf('until:.adapter-select-popup')
+    const cursorParkIndex = events.indexOf('move:.chat-route-header')
+    const finalHoldIndex = events.lastIndexOf('record:4500')
+    expect(workspaceReadyIndex).toBeGreaterThan(-1)
+    expect(adapterClickIndex).toBeGreaterThan(workspaceReadyIndex)
+    expect(popupIndex).toBeGreaterThan(adapterClickIndex)
+    expect(cursorParkIndex).toBeGreaterThan(popupIndex)
+    expect(finalHoldIndex).toBeGreaterThan(cursorParkIndex)
   })
 })
 

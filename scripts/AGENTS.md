@@ -4,7 +4,7 @@
 
 - loader: `scripts/run-tools.mjs`；commander 入口: `scripts/cli.ts`
 
-不要再往 `package.json` 新增一串独立脚本名。新增维护命令时，优先给 `scripts/cli.ts` 增加子命令，再在文档里写 `pnpm tools ...` 的调用方式。
+不要再往 `package.json` 新增一串独立脚本名。新增维护命令时，优先给 `scripts/cli.ts` 增加子命令，再在文档里写 `pnpm tools ...` 的调用方式。依赖型质量检查是冷 worktree 的例外：`scripts/run-workspace-check.mjs` 必须在加载任何 workspace 依赖前调用共享的 `workspace-dependency-bootstrap.mjs`，让并行检查串行准备依赖、随后各自执行真实命令并透传退出码；dprint 统一使用 `pnpm dprint check` / `pnpm dprint fmt`，桌面 package preflight 使用 `pnpm -C apps/desktop test:package-preflight`，不要改回直接并行的 `pnpm exec dprint` / `pnpm exec vitest`。
 
 仓库长期开发服务也走同一个 CLI：当用户要求拉取最新代码并启动 web / daemon / Electron / PWA / homepage / docs / Relay / desktop-control / Android emulator 时，直接在仓库根目录运行 `pnpm --silent tools dev-service ensure <target> --json`。`scripts/run-tools.mjs` 会注册 TS，缺少 register 依赖时先执行 `pnpm install`；统一入口会按需校验 workspace 安装，并在操作租约内复用或启动对应服务。
 
@@ -91,6 +91,10 @@
 - `pnpm tools demo-video batch <scenario> --url <url> [--out-dir <path>]`
   - 批量生成展示素材，默认输出 `light/dark x zh/en` 四个变体；用 `--color-schemes` / `--languages` 覆盖矩阵，产物仍包含 MP4、poster 和按秒 stills manifest
   - 仅用于纯 Web / headless CDP 页面；真实 Electron launcher 打开 workspace 的四变体素材用 `pnpm tools desktop-control record-batch ...`
+  - README、社交平台和发布宣传素材先生成一个代表性原型；只有用户确认动画、真实窗口、鼠标节奏和构图整体正确后，才批量生成完整四变体矩阵。最终英文入口只使用英文界面，中文入口只使用中文界面，并分别提供亮色与暗色版本；只有用户明确指定单语言或单主题时才允许缩减。
+  - 公开成片必须使用清洁 fixture / 隔离 profile / 中性 workspace，并按 `.oo/rules/maintenance/demo-video.md` 逐变体检查关键 still；个人账号、home 路径、目录列表、本机绝对路径和登录状态不得进入上传素材。
+- `pnpm tools desktop-control record-batch launcher-open-workspace-adapter-tour --workspace <path> --app <app> --use-deskpad-display`
+  - 用真实 Launcher、真实 Workspace 和真实 Adapter 选择器批量录制 `light/dark x zh/en` 四个宣传变体；不要用模拟窗口或跨语言复用同一视频。
 - `pnpm tools agent-room-smoke resume [--json]`
   - 跑真实 `StartTasks -> agent room 消息 -> inactive task resume` smoke；启动临时 server / SQLite / MCP / Codex adapter，LLM 只用 mock，结束后清理临时进程
 - `pnpm tools relay-config smoke [--allow-pending] [--json]`
@@ -101,8 +105,8 @@
   - 切换本地 `~/.oneworks/auth.json` 的 Relay 账号调试 fixture；首次写入前会备份原文件到 `.logs/relay-auth-fixtures/original-auth.json`，后续用 `restore` 一键还原。用于快速验证左下角账号入口和账号管理页的单账号 / 单服务端多账号 / 多服务端多账号状态。
 - `pnpm tools commitmsg-check [base] [head]`
   - 校验一个 git range 里的 commit title 是否符合 Conventional Commit；GitHub 默认 merge commit 例外
-- `pnpm tools pr-change-check [base] [head] --body-file <path>`
-  - 检查 PR body 是否包含已勾选的 `Experience Review` checklist；功能新增 / bug 修复类 PR 如果改动产品代码，还会要求对应 changelog；如果改动 UI 交互面，还会要求 PR 正文包含截图
+- `pnpm tools pr-change-check [base] [head] --body-file <path>`：检查已勾选的 `Experience Review`；功能 / bug 产品改动需 changelog，UI 改动需截图。
+- `pnpm tools pr-preflight [base] [head] --body-file <path> [--json]`：创建 PR 前比较 `origin/main...HEAD`，复用 CI 规则并给出修复项；草稿用已忽略的 `.logs/pr-body.md` 保持工作区干净。`pnpm tools git-delivery check [--repository <owner/name>] [--json]`：在独立 Git operator 前检查 auto-review、`gh`、仓库写权限和 SSH；Connector 写权限不是本机交付前置条件。
 - `pnpm tools release-tags plan <base> <head> [--json]`
   - 比较两个提交之间 workspace package manifest 的版本变化，生成需要创建的 `pkg/<normalized-package-name>/v<version>` tag 候选
   - release PR 合入 `main` 后由 `.github/workflows/release-tags.yml` 调用；不会把根目录开发用 `package.json` 纳入候选

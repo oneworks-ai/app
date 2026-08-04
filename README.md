@@ -17,6 +17,14 @@
 
 <p align="center"><strong>One workspace for AI work.</strong></p>
 
+**Light**
+
+https://github.com/user-attachments/assets/8d2374a9-60c7-4462-bbd3-f3f1573b23c6
+
+**Dark**
+
+https://github.com/user-attachments/assets/01eade3c-92f7-4c07-bf01-ba4e14b07adb
+
 ## Introduction
 
 One Works is an open-source AI workspace built around extensible plugins and a standardized configuration system. It unifies agents, tools, adapters, sessions, and local runtime data across desktop, web, VS Code, and CLI, so you can configure once and use the same AI workflow everywhere.
