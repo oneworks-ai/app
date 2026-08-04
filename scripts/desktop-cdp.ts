@@ -8,6 +8,7 @@ import process from 'node:process'
 
 import { getChromeDebugTargets } from './chrome-debug'
 import { processFingerprint, terminateTrackedPid } from './dev-start/process-identity'
+import { raiseMacosWindow } from './macos-window-control'
 import { DEFAULT_DESKTOP_APP_PATH } from './release-verify'
 
 const DEFAULT_DESKTOP_CDP_ADDRESS = '127.0.0.1'
@@ -278,6 +279,15 @@ export const runDesktopCdpLaunch = async (input: DesktopCdpLaunchInput = {}) => 
   }
   child.unref()
 
+  const recordableWindowReady = input.recordableLauncherWindow === true
+    ? raiseMacosWindow({
+      context: 'recordable Electron Launcher before blur',
+      ownerPid: child.pid,
+      signal: input.signal,
+      waitMs
+    })
+    : Promise.resolve()
+
   const spawnError = new Promise<never>((_resolve, reject) => {
     child.once('error', reject)
     child.once('exit', (code, signal) => {
@@ -293,10 +303,13 @@ export const runDesktopCdpLaunch = async (input: DesktopCdpLaunchInput = {}) => 
     input.signal?.addEventListener('abort', rejectForAbort, { once: true })
   })
   try {
-    targets = await Promise.race([
-      waitForDesktopCdpTargets({ port, signal: input.signal, waitMs }),
-      spawnError,
-      aborted
+    ;[targets] = await Promise.all([
+      Promise.race([
+        waitForDesktopCdpTargets({ port, signal: input.signal, waitMs }),
+        spawnError,
+        aborted
+      ]),
+      recordableWindowReady
     ])
   } catch (error) {
     try {
