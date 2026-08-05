@@ -26,6 +26,7 @@ pnpm tools desktop-control record-batch launcher-open-workspace-ui-tour \
 任一验证失败必须 fail-fast；不要降级到主桌面、固定区域、CDP 截帧、窗口录制或“只有背景”的视频。
 窗口可见性验证必须做解码后的像素级判断，不要用 `cmp` 或 PNG 文件字节比较；`screencapture -l` 和 display crop 即使视觉一致，也可能因为 metadata、色彩配置或阴影裁切不同而字节不同。透明 / vibrancy / 毛玻璃窗口不能只用 RGB 相似度判断：窗口单独截图不包含 recording display 背景，而 display crop 会包含壁纸和模糊效果，必须同时接受结构边缘重合度这类特征指标。失败时要保留 display / window / crop probe 图和相似度 / 边缘指标，避免后续会话只能靠猜。
 计算 DeskPad / AppKit display bounds 时要注意坐标系：`NSScreen.frame` 的 y 是 bottom-origin，Electron `BrowserWindow` bounds 和 `screencapture` crop 使用 top-origin。传给 Electron 的 y 和输出 crop y 都必须做转换，否则窗口会被 macOS 夹到虚拟屏顶部，视频里看起来不居中。
+直接启动已安装的 macOS app 时，Electron 即使已经创建 BrowserWindow，也可能因 Launcher blur / Space 状态没有把窗口合成到当前 recording display。recordable window 环境必须禁用普通 Launcher 的 blur-to-dismiss；`recordableLauncherWindow` 路径还必须在启动后尽早按精确 owner pid 把进程置前，并执行 `AXRaise`、`AXMain` 和 `AXFocused`。随后用 display 像素探针再次确认该 pid 的目标 display 窗口确实出现，不能误选同 pid 在其他 display 的较大窗口，也不能仅凭 CDP target 或窗口列表宣称可录。窗口仍未出现在 display 像素探针中时必须失败，不能把只有壁纸的画面继续编码。
 
 正式 Electron 录屏禁止使用这些路径作为交付证据：
 
@@ -52,6 +53,7 @@ pnpm tools desktop-control record-batch launcher-open-workspace-ui-tour \
 - `pnpm tools demo-video record url-tour --url <page-url>`：录制一个已准备好的纯 Web 页面。
 - `pnpm tools demo-video batch url-tour --url <page-url>`：批量录制纯 Web 的 `light/dark x zh/en` 四个默认变体。
 - `pnpm tools desktop-control record-batch launcher-open-workspace-ui-tour --workspace <path> --app <app> --use-deskpad-display`：真实 Electron launcher/workspace 批量录制入口；正式验证 / 产品素材都走这条。
+- `pnpm tools desktop-control record-batch launcher-open-workspace-adapter-tour --workspace <path> --app <app> --use-deskpad-display`：真实 Electron launcher/workspace/Adapter 选择器宣传素材；默认一次生成亮色中文、亮色英文、暗色中文、暗色英文四个变体。
 - `pnpm tools desktop-control record-batch launcher-open-workspace-chat-smoke --workspace <path> --app <app> --use-deskpad-display --languages zh --color-schemes light`：录制打开 workspace、发送消息并等待回复的 smoke。
 
 常用参数：
@@ -110,6 +112,10 @@ system-display 录屏用 `screencapture -V` 时，命令启动时刻不等于输
 launcher 打开 workspace 的录制不要把右侧 `.launcher-command-item__enter` 当作主路径。搜索目标目录后点击可见命令行本身，用 `Enter` 执行打开，然后等待 `.workspace-opening-overlay` 或聊天页 ready 足够久。不要在等待太短时立刻移动到右侧 action，也不要在打开开始后补点旧 launcher 目标，否则前一次行点击的异步打开可能在光标移动中生效，视频会表现成“光标没到目标，页面已经打开”。
 
 发布纯 Web 展示素材时优先使用 `demo-video batch`。真实 Electron launcher 打开 workspace 的素材不要用 `demo-video batch url-tour --url .../ui/launcher`，必须使用 `desktop-control record-batch launcher-open-workspace-ui-tour`，这样每个 variant 都有真实 Electron pid、真实 BrowserWindow 和真实系统显示合成。
+
+README、社交平台和发布宣传视频先生成一个代表性原型。用户确认动画逻辑、真实窗口路径、鼠标节奏、构图和隐私处理整体正确后，才能批量生成完整的 `light/dark x zh/en` 四变体矩阵；确认前不要提前渲染四条成片，避免把同一个问题复制四遍。每条成片中的 Launcher、Workspace、浮层和系统可见文字都必须与该变体语言一致，不能给英文入口复用中文界面，也不能把暗色录屏当作亮色版本。英文 README 只嵌入英文亮色 / 暗色视频，中文 README 只嵌入中文亮色 / 暗色视频；只有用户明确指定单语言或单主题时才能缩减矩阵。四个变体必须来自同一 scenario、同一 app build、同一 workspace、同一窗口几何和同一后期节奏，避免宣传素材之间产生功能与构图漂移。
+
+公开素材必须使用清洁 fixture、隔离 profile 和中性 workspace。最终成片禁止出现个人账号名、账号登录状态、home 目录路径、目录列表、本机 workspace 绝对路径、邮箱、token 或其他机器身份信息；仅仅遮住一个账号角标不算完成。上传前必须对每个语言 / 主题变体逐一检查 Launcher 首屏、项目选择、Workspace 加载、目标浮层和结尾停留的关键 still，并搜索 OCR / 可见文字中的用户名、`/Users/<name>`、点目录和账号状态。真实操作中若系统项目选择器短暂暴露本机 home，公开剪辑必须跳过该段或使用清洁 fixture 重录，不能把泄露帧上传后再依赖 README 上下文解释。
 
 如果需要录 launcher 打开 workspace 的完整过渡，创建 Electron control session 时不要传 `workspace`。需要证明真实 UI 操作时使用 `launcher-open-workspace-ui-tour`，它会从 launcher 进入“打开项目”，搜索目标 workspace 绝对路径并打开；需要发送消息并等待回复时使用 `launcher-open-workspace-chat-smoke`。
 

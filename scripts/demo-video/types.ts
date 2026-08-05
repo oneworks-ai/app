@@ -123,6 +123,7 @@ export interface DemoVideoScenarioContext {
   clickSelector: (selector: string, options?: DemoVideoClickOptions) => Promise<void>
   clickText: (text: string, options?: DemoVideoClickOptions) => Promise<void>
   focusSelector: (selector: string, options?: DemoVideoTextOptions) => Promise<void>
+  moveToSelector: (selector: string, options?: DemoVideoClickOptions) => Promise<void>
   navigate: (url: string) => Promise<void>
   openDesktopWorkspace: (workspaceFolder: string) => Promise<void>
   pressKey: (key: string, options?: DemoVideoKeyOptions) => Promise<void>

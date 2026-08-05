@@ -19,6 +19,7 @@ import type {
 } from './demo-video/types'
 import type { DesktopCdpLaunchInput, DesktopCdpLaunchResult } from './desktop-cdp'
 import { runDesktopCdpLaunch } from './desktop-cdp'
+import { terminateTrackedPid } from './dev-start/process-identity'
 
 const DEFAULT_BATCH_COLOR_SCHEMES: DemoVideoColorScheme[] = ['light', 'dark']
 const DEFAULT_BATCH_LANGUAGES = ['zh', 'en']
@@ -130,7 +131,7 @@ export interface DesktopControlRecordBatchResult extends Omit<DemoVideoBatchResu
 }
 
 export interface DesktopControlRecordBatchDeps {
-  killProcess: (pid: number) => void
+  killProcess: (pid: number, fingerprint?: string) => Promise<void> | void
   launchDesktop: (input: DesktopCdpLaunchInput) => Promise<DesktopCdpLaunchResult>
   resolveRecordingDisplay: (displayName: string) => Promise<DesktopRecordingDisplayInfo | undefined>
   startDisplayBackground: (input: DesktopRecordingDisplayBackgroundInput) => Promise<DesktopRecordingDisplayBackground>
@@ -138,9 +139,13 @@ export interface DesktopControlRecordBatchDeps {
 }
 
 const defaultDeps: DesktopControlRecordBatchDeps = {
-  killProcess: (pid) => {
-    process.kill(pid)
-  },
+  killProcess: async (pid, fingerprint) =>
+    await terminateTrackedPid({
+      fingerprint,
+      label: 'demo-video Electron app',
+      pid,
+      timeoutMs: 5_000
+    }),
   launchDesktop: async input =>
     await runDesktopCdpLaunch({
       ...input,
@@ -639,6 +644,19 @@ const listMacosWindowsForOwnerPid = async (ownerPid: number) => {
   })
 }
 
+export const selectMacosWindowOnRecordingDisplay = (
+  windows: DesktopRecordingMacWindow[],
+  display: Pick<DesktopRecordingDisplayInfo, 'frame'>
+) => {
+  const displayLeft = display.frame.x
+  const displayRight = display.frame.x + display.frame.width
+  return windows.find(window => {
+    const windowLeft = window.x
+    const windowRight = window.x + window.width
+    return Math.min(windowRight, displayRight) > Math.max(windowLeft, displayLeft)
+  })
+}
+
 export const isMacosWindowVisibilityMetricAcceptable = (
   metrics: Pick<
     MacosWindowVisibilityMetrics,
@@ -897,8 +915,14 @@ const assertMacosDisplayCaptureContainsAppWindow = async (input: {
   ownerPid: number
 }) => {
   if (process.platform !== 'darwin') return
-  const windows = await listMacosWindowsForOwnerPid(input.ownerPid)
-  const window = windows[0]
+  const startedAt = Date.now()
+  let window: DesktopRecordingMacWindow | undefined
+  while (Date.now() - startedAt < 10_000) {
+    const windows = await listMacosWindowsForOwnerPid(input.ownerPid)
+    window = selectMacosWindowOnRecordingDisplay(windows, input.display)
+    if (window != null) break
+    await delay(250)
+  }
   if (window == null) {
     throw new Error(`Electron pid ${input.ownerPid} has no visible macOS window for display-capture validation.`)
   }
@@ -1186,7 +1210,7 @@ export const runDesktopControlRecordBatch = async (
           } finally {
             if (launched?.pid != null) {
               try {
-                resolvedDeps.killProcess(launched.pid)
+                await resolvedDeps.killProcess(launched.pid, launched.processFingerprint)
               } catch {
                 // The app may already have exited after the scenario.
               }
