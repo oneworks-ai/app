@@ -84,7 +84,9 @@
 
   &:hover,
   &:focus-within {
-    z-index: 20;
+    // Keep message-local actions above sibling messages without entering the
+    // route header's overlay layer (z-index: 20).
+    z-index: 10;
   }
 
   &.is-editing {
