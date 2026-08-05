@@ -4,15 +4,15 @@ import './PluginStoreRoute.scss'
 import './PluginDetailRoute.scss'
 
 import { App, Empty, Spin } from 'antd'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import useSWR from 'swr'
+import useSWR, { useSWRConfig } from 'swr'
 
 import type { RouteContainerHeaderActionItem, RouteContainerHeaderBreadcrumb } from '@oneworks/components/route-layout'
 import type { NativeHostPlugin, PluginMarketplaceCatalogPlugin, PluginMarketplaceInstallTarget } from '@oneworks/types'
 
-import { getApiErrorMessage } from '#~/api.js'
+import { ApiError, getApiErrorMessage } from '#~/api.js'
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
 import { RouteContainerHeader } from '#~/components/layout/RouteContainerHeader'
 import { RouteContainerLayout } from '#~/components/layout/RouteContainerLayout'
@@ -37,12 +37,15 @@ import {
   resolvePluginSourceGroup
 } from '#~/components/plugins/PluginStoreSidebarControls'
 import type { PluginGroupMode } from '#~/components/plugins/PluginStoreSidebarControls'
+import { PluginUninstallConfirmContent } from '#~/components/plugins/PluginUninstallConfirmContent'
 import { buildPluginListItems, createNativePluginRouteKey } from '#~/components/plugins/plugin-runtime-list-items'
 import { listNativeHostPlugins, setPluginEnabled, setPluginWatch } from '#~/plugins/api'
 import {
+  getPluginMarketplaceUninstallPlan,
   listPluginMarketplaceCatalog,
   resolvePluginMarketplaceVersions,
-  syncPluginMarketplaceSelection
+  syncPluginMarketplaceSelection,
+  uninstallPluginMarketplacePlugin
 } from '#~/plugins/marketplace-api'
 import { usePluginContext } from '#~/plugins/plugin-context'
 import type { PluginRuntimeInstance } from '#~/plugins/plugin-manifest'
@@ -63,10 +66,22 @@ import {
 const PLUGIN_ROUTE_SIDEBAR_KEY = 'plugin-store'
 const EMPTY_NATIVE_PLUGINS: NativeHostPlugin[] = []
 
+interface PluginUninstallOperation {
+  controller: AbortController
+  generation: number
+  scope: string
+}
+
+interface SuppressedPluginUninstallPlan {
+  rejectedToken: string
+  scope: string
+}
+
 export function PluginStoreRoute() {
   const { i18n, t } = useTranslation()
   const language = i18n.resolvedLanguage ?? i18n.language
-  const { message } = App.useApp()
+  const { message, modal } = App.useApp()
+  const { mutate: mutateSWR } = useSWRConfig()
   const navigate = useNavigate()
   const location = useLocation()
   const { scope = '' } = useParams()
@@ -80,6 +95,12 @@ export function PluginStoreRoute() {
   const [updatingEnabledAction, setUpdatingEnabledAction] = useState<string>()
   const [updatingWatchScope, setUpdatingWatchScope] = useState<string>()
   const [installingMarketplaceTarget, setInstallingMarketplaceTarget] = useState<PluginMarketplaceInstallTarget>()
+  const [uninstallingOperation, setUninstallingOperation] = useState<PluginUninstallOperation>()
+  const [suppressedUninstallPlan, setSuppressedUninstallPlan] = useState<SuppressedPluginUninstallPlan>()
+  const activeScopeRef = useRef(scope)
+  const uninstallGenerationRef = useRef(0)
+  const uninstallModalRef = useRef<ReturnType<typeof modal.confirm>>()
+  const uninstallOperationRef = useRef<PluginUninstallOperation>()
   const [pluginQuery, setPluginQuery] = useState('')
   const [pluginGroupMode, setPluginGroupMode] = useState<PluginGroupMode>('enabled')
   const [pluginMarketplaceQuery, setPluginMarketplaceQuery] = useState('')
@@ -133,6 +154,34 @@ export function PluginStoreRoute() {
     () => scope === '' ? undefined : plugins.find(plugin => plugin.scope === scope),
     [plugins, scope]
   )
+  const {
+    data: selectedPluginUninstallPlan,
+    mutate: mutateSelectedPluginUninstallPlan
+  } = useSWR(
+    selectedPlugin == null
+      ? null
+      : [
+        '/api/plugins/uninstall-plan',
+        pluginServerBaseUrl ?? 'current',
+        selectedPlugin.scope
+      ],
+    () =>
+      getPluginMarketplaceUninstallPlan(selectedPlugin.scope, {
+        serverBaseUrl: pluginServerBaseUrl
+      })
+  )
+  const visiblePluginUninstallPlan = suppressedUninstallPlan?.scope === selectedPlugin?.scope
+    ? undefined
+    : selectedPluginUninstallPlan
+  useEffect(() => {
+    if (
+      suppressedUninstallPlan?.scope === selectedPlugin?.scope &&
+      selectedPluginUninstallPlan?.available === true &&
+      selectedPluginUninstallPlan.token !== suppressedUninstallPlan.rejectedToken
+    ) {
+      setSuppressedUninstallPlan(undefined)
+    }
+  }, [selectedPlugin?.scope, selectedPluginUninstallPlan, suppressedUninstallPlan])
   const selectedNativePlugin = useMemo(
     () =>
       scope === ''
@@ -175,6 +224,25 @@ export function PluginStoreRoute() {
   const selectedMarketplaceVersion = selectedMarketplacePlugin?.version ?? resolvedMarketplaceVersion
   const selectedDetailItem: PluginRuntimeInstance | NativeHostPlugin | PluginMarketplaceCatalogPlugin | undefined =
     selectedPlugin ?? selectedNativePlugin ?? selectedMarketplacePlugin
+
+  useEffect(() => {
+    activeScopeRef.current = scope
+    uninstallGenerationRef.current += 1
+    uninstallOperationRef.current?.controller.abort()
+    uninstallOperationRef.current = undefined
+    setUninstallingOperation(undefined)
+    setSuppressedUninstallPlan(undefined)
+    uninstallModalRef.current?.destroy()
+    uninstallModalRef.current = undefined
+
+    return () => {
+      uninstallGenerationRef.current += 1
+      uninstallOperationRef.current?.controller.abort()
+      uninstallOperationRef.current = undefined
+      uninstallModalRef.current?.destroy()
+      uninstallModalRef.current = undefined
+    }
+  }, [scope])
   const headerTitle = selectedPlugin != null
     ? resolvePluginDisplayName(selectedPlugin, language)
     : selectedNativePlugin != null
@@ -335,6 +403,114 @@ export function PluginStoreRoute() {
     }
   }, [message, mutateMarketplaceCatalog, pluginServerBaseUrl, refreshPlugins, selectedMarketplacePlugin, t])
 
+  const confirmMarketplacePluginUninstall = useCallback(() => {
+    if (
+      selectedPlugin == null ||
+      visiblePluginUninstallPlan?.available !== true ||
+      uninstallOperationRef.current != null
+    ) {
+      return
+    }
+    const plan = visiblePluginUninstallPlan
+    const selectedScope = selectedPlugin.scope
+    const modalGeneration = uninstallGenerationRef.current
+    uninstallModalRef.current?.destroy()
+    uninstallModalRef.current = modal.confirm({
+      autoFocusButton: 'cancel',
+      cancelText: t('pluginStore.uninstall.cancel'),
+      content: <PluginUninstallConfirmContent plan={plan} />,
+      okButtonProps: { danger: true },
+      okText: t('pluginStore.uninstall.confirm'),
+      title: t('pluginStore.uninstall.title', {
+        name: resolvePluginDisplayName(selectedPlugin, language)
+      }),
+      onCancel: () => {
+        const operation = uninstallOperationRef.current
+        if (operation?.scope === selectedScope && operation.generation === modalGeneration) {
+          operation.controller.abort()
+        }
+      },
+      onOk: async () => {
+        if (uninstallOperationRef.current != null || activeScopeRef.current !== selectedScope) return
+        const operation: PluginUninstallOperation = {
+          controller: new AbortController(),
+          generation: uninstallGenerationRef.current,
+          scope: selectedScope
+        }
+        uninstallOperationRef.current = operation
+        setUninstallingOperation(operation)
+        const isCurrentOperation = () => (
+          uninstallOperationRef.current === operation &&
+          uninstallGenerationRef.current === operation.generation &&
+          activeScopeRef.current === operation.scope
+        )
+        try {
+          await uninstallPluginMarketplacePlugin(selectedScope, plan.token, {
+            serverBaseUrl: pluginServerBaseUrl,
+            signal: operation.controller.signal
+          })
+          if (operation.controller.signal.aborted || !isCurrentOperation()) return
+          const refreshResults = await Promise.allSettled([
+            refreshPlugins(),
+            listPluginMarketplaceCatalog({
+              serverBaseUrl: pluginServerBaseUrl
+            }).then(catalog =>
+              mutateSWR(
+                ['/api/plugins/marketplace/catalog', pluginServerBaseUrl ?? 'current'],
+                catalog,
+                { revalidate: false }
+              )
+            )
+          ])
+          if (operation.controller.signal.aborted || !isCurrentOperation()) return
+          if (refreshResults.some(result => result.status === 'rejected')) {
+            void message.error(t('pluginStore.uninstall.refreshFailed'))
+          } else {
+            void message.success(t('pluginStore.uninstall.success'))
+          }
+          void navigate(PLUGIN_PATHS.list)
+        } catch (error) {
+          if (operation.controller.signal.aborted || !isCurrentOperation()) return
+          if (
+            error instanceof ApiError &&
+            error.code === 'plugin_uninstall_plan_stale'
+          ) {
+            setSuppressedUninstallPlan({ rejectedToken: plan.token, scope: selectedScope })
+            await mutateSelectedPluginUninstallPlan(undefined, { revalidate: false })
+            const refreshedPlan = await mutateSelectedPluginUninstallPlan().catch(() => undefined)
+            if (operation.controller.signal.aborted || !isCurrentOperation()) return
+            if (refreshedPlan?.available === true && refreshedPlan.token !== plan.token) {
+              setSuppressedUninstallPlan(undefined)
+            }
+            uninstallModalRef.current?.destroy()
+            uninstallModalRef.current = undefined
+            void message.error(t('pluginStore.uninstall.stale'))
+            return
+          }
+          void message.error(getApiErrorMessage(error, t('pluginStore.uninstall.failed')))
+          throw error
+        } finally {
+          if (uninstallOperationRef.current === operation) {
+            uninstallOperationRef.current = undefined
+            setUninstallingOperation(undefined)
+          }
+        }
+      }
+    })
+  }, [
+    language,
+    message,
+    modal,
+    mutateSWR,
+    mutateSelectedPluginUninstallPlan,
+    navigate,
+    pluginServerBaseUrl,
+    refreshPlugins,
+    selectedPlugin,
+    visiblePluginUninstallPlan,
+    t
+  ])
+
   const createPluginContextMenuItems = useCallback(
     (plugin: PluginRuntimeInstance): RouteSidebarListContextMenuItems => {
       const isPluginEnabled = plugin.enabled !== false
@@ -492,6 +668,17 @@ export function PluginStoreRoute() {
         loading: updatingEnabledAction === `workspace:${selectedPlugin.scope}`,
         onSelect: () => void togglePluginEnabled(selectedPlugin.scope, selectedPlugin.enabled === false, 'workspace')
       })
+      if (visiblePluginUninstallPlan?.available === true) {
+        items.push({
+          danger: true,
+          disabled: uninstallingOperation != null || updatingEnabledAction != null,
+          icon: 'delete',
+          key: 'plugin-uninstall',
+          label: t('pluginStore.uninstall.action'),
+          loading: uninstallingOperation?.scope === selectedPlugin.scope,
+          onSelect: confirmMarketplacePluginUninstall
+        })
+      }
       if (selectedPlugin.watch != null) {
         items.push({
           active: selectedPlugin.watch.enabled,
@@ -550,6 +737,7 @@ export function PluginStoreRoute() {
   }, [
     isDiagnosticsPage,
     detailPath,
+    confirmMarketplacePluginUninstall,
     toggleMarketplacePlugin,
     installingMarketplaceTarget,
     navigate,
@@ -560,11 +748,13 @@ export function PluginStoreRoute() {
     selectedMarketplacePlugin,
     selectedPlugin,
     selectedPluginDiagnostics,
+    visiblePluginUninstallPlan,
     t,
     togglePluginEnabled,
     toggleWatch,
     updatingEnabledAction,
-    updatingWatchScope
+    updatingWatchScope,
+    uninstallingOperation
   ])
 
   useLayoutEffect(() => {

@@ -1,6 +1,12 @@
 import { rm } from 'node:fs/promises'
+import path from 'node:path'
+import process from 'node:process'
 
-import { assertUniqueMarketplacePluginScopes, syncConfiguredMarketplacePlugins } from '@oneworks/managed-plugins'
+import {
+  assertUniqueMarketplacePluginScopes,
+  syncConfiguredMarketplacePlugins,
+  withManagedPluginMutationLock
+} from '@oneworks/managed-plugins'
 import type { Config, MarketplaceConfig } from '@oneworks/types'
 import { mergeMarketplaceConfigs } from '@oneworks/utils'
 import { listManagedPluginInstalls } from '@oneworks/utils/managed-plugin'
@@ -12,7 +18,7 @@ import { BUILT_IN_PLUGIN_MARKETPLACES } from './built-in-marketplaces'
 
 const getMarketplaces = (config: Config | undefined): MarketplaceConfig => config?.marketplaces ?? {}
 
-export const syncPluginMarketplaceSelection = async (params: {
+const syncPluginMarketplaceSelectionUnlocked = async (params: {
   enabled: boolean
   marketplace: string
   plugin: string
@@ -83,4 +89,22 @@ export const syncPluginMarketplaceSelection = async (params: {
     plugin: params.plugin,
     action: 'removed' as const
   }))
+}
+
+export const syncPluginMarketplaceSelection = async (params: {
+  enabled: boolean
+  marketplace: string
+  plugin: string
+}) => {
+  const { workspaceFolder } = await loadConfigState()
+  return withManagedPluginMutationLock({
+    cwd: workspaceFolder,
+    env: process.env
+  }, async () => {
+    const currentState = await loadConfigState()
+    if (path.resolve(currentState.workspaceFolder) !== path.resolve(workspaceFolder)) {
+      throw new Error('Workspace changed while synchronizing plugin marketplace selection.')
+    }
+    return syncPluginMarketplaceSelectionUnlocked(params)
+  })
 }

@@ -16,6 +16,7 @@ import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 import { getManagedPluginConfigPath, getManagedPluginInstallDir } from '@oneworks/utils/managed-plugin'
 import { mergeProcessEnvWithProjectEnv } from '@oneworks/utils/project-env'
 
+import { withManagedPluginMutationLock } from './managed-plugin-mutation'
 import { installManagedPluginSource, pathExists, resolveManagedPluginSource } from './managed-plugin-source'
 export { installManagedPluginSource, pathExists, resolveManagedPluginSource } from './managed-plugin-source'
 export { syncConfiguredMarketplacePlugins } from './managed-plugin-sync'
@@ -69,7 +70,7 @@ const resolvePluginInstallEnv = (
   env: AdapterPluginAddOptions['env'] | undefined
 ): NodeJS.ProcessEnv => mergeProcessEnvWithProjectEnv(env, { workspaceFolder: cwd })
 
-export const installAdapterPluginWithInstaller = async <
+const installAdapterPluginWithInstallerUnlocked = async <
   TManifest extends AdapterPluginManifest = AdapterPluginManifest,
 >(
   installer: AdapterPluginInstaller<TManifest>,
@@ -214,6 +215,22 @@ export const installAdapterPluginWithInstaller = async <
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true })
   }
+}
+
+export const installAdapterPluginWithInstaller = async <
+  TManifest extends AdapterPluginManifest = AdapterPluginManifest,
+>(
+  installer: AdapterPluginInstaller<TManifest>,
+  options: AdapterPluginAddOptions
+): Promise<AdapterPluginAddResult> => {
+  const cwd = options.cwd ?? process.cwd()
+  const env = resolvePluginInstallEnv(cwd, options.env)
+  return withManagedPluginMutationLock({ cwd, env }, () =>
+    installAdapterPluginWithInstallerUnlocked(installer, {
+      ...options,
+      cwd,
+      env
+    }))
 }
 
 export const addAdapterPlugin = async (

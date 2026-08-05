@@ -743,6 +743,55 @@ export interface PluginRuntimeInstance {
 export type PluginMarketplaceConfigSource = 'global' | 'project' | 'user'
 export type PluginMarketplaceInstallTarget = 'global' | 'project'
 
+export type PluginMarketplaceUninstallUnavailableReason =
+  | 'ambiguous-managed-install'
+  | 'global-plugin'
+  | 'local-plugin'
+  | 'managed-install-mismatch'
+  | 'not-managed-marketplace'
+  | 'package-plugin'
+  | 'plugin-not-found'
+  | 'project-declaration-missing'
+  | 'source-conflict'
+
+export type PluginMarketplaceUninstallDeleteItem =
+  | 'managed-install'
+  | 'project-marketplace-declaration'
+  | 'project-runtime-override'
+
+export type PluginMarketplaceUninstallRetainItem =
+  | 'global-config'
+  | 'managed-plugin-data'
+  | 'shared-package-cache'
+  | 'sibling-plugins'
+  | 'user-config'
+  | 'user-data-and-accounts'
+
+export interface PluginMarketplaceUninstallIdentity {
+  adapter: ManagedPluginAdapter
+  marketplace: string
+  plugin: string
+  scope: string
+}
+
+export type PluginMarketplaceUninstallPlan =
+  | {
+    available: false
+    reason: PluginMarketplaceUninstallUnavailableReason
+  }
+  | {
+    available: true
+    deleteItems: PluginMarketplaceUninstallDeleteItem[]
+    identity: PluginMarketplaceUninstallIdentity
+    retainItems: PluginMarketplaceUninstallRetainItem[]
+    token: string
+  }
+
+export interface PluginMarketplaceUninstallResult {
+  identity: PluginMarketplaceUninstallIdentity
+  removed: true
+}
+
 export type PluginMarketplacePluginSourceType =
   | 'github'
   | 'git-subdir'
