@@ -28,6 +28,8 @@ import type {
   PluginSlotContribution,
   PluginViewRegistration
 } from './plugin-manifest'
+import { projectPluginNotificationInput } from './plugin-notification-presentation'
+import { resolvePluginDisplayName } from './plugin-presentation'
 import type { PluginRegistry } from './plugin-registry'
 import type { PluginThemeRegistration } from './plugin-theme-contract'
 
@@ -339,12 +341,14 @@ export async function activatePluginClient({
   if (!isActivationCurrent()) return
 
   const hotCallbacks = new Set<() => void | Promise<void>>()
+  const pluginI18n = createPluginI18nContext()
+  const pluginDisplayName = resolvePluginDisplayName(instance, pluginI18n.getLanguage())
   const notificationSource = {
     icon: 'extension',
     kind: 'plugin' as const,
-    name: instance.name,
+    name: pluginDisplayName,
     scope: instance.scope,
-    title: instance.displayName ?? instance.name ?? instance.scope
+    title: pluginDisplayName
   }
   const ctx: PluginClientContext = {
     api: {
@@ -369,7 +373,7 @@ export async function activatePluginClient({
       },
       reload: () => reloadPlugin(instance.scope)
     },
-    i18n: createPluginI18nContext(),
+    i18n: pluginI18n,
     launcher: {
       registerSearchProvider: provider =>
         isActivationCurrent()
@@ -381,7 +385,10 @@ export async function activatePluginClient({
       muteCurrentPlugin: () => notifications.muteSource(notificationSource),
       show: input =>
         isActivationCurrent()
-          ? notifications.show({ ...input, source: notificationSource })
+          ? notifications.show({
+            ...projectPluginNotificationInput(input),
+            source: notificationSource
+          })
           : noopNotificationHandle
     },
     extensionPoints: {

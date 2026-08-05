@@ -3,6 +3,8 @@ import './MarketplaceCard.scss'
 import { List, Tag } from 'antd'
 import type { KeyboardEvent, ReactNode } from 'react'
 
+import { projectPluginPresentationList, sanitizePluginMaterialIcon } from '#~/plugins/plugin-presentation'
+
 export interface MarketplaceCapabilityGroup {
   icon: string
   key: string
@@ -13,9 +15,11 @@ export function MarketplaceCapabilityTags({ groups }: { groups: MarketplaceCapab
   return (
     <div className='marketplace-card__capabilities'>
       {groups.flatMap(group =>
-        group.values.map(value => (
+        projectPluginPresentationList(group.values).map(value => (
           <Tag key={`${group.key}:${value}`} className='marketplace-card__capability'>
-            <span className='material-symbols-rounded marketplace-card__capability-icon'>{group.icon}</span>
+            <span className='material-symbols-rounded marketplace-card__capability-icon'>
+              {sanitizePluginMaterialIcon(group.icon) ?? 'extension'}
+            </span>
             <span>{value}</span>
           </Tag>
         ))

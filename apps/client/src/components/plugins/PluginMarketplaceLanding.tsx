@@ -3,7 +3,7 @@
 import './PluginMarketplaceLanding.scss'
 
 import { App, Button, Empty, Form, Input, Modal, Spin, Switch, Tag, Tooltip } from 'antd'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import useSWR from 'swr'
 
@@ -14,13 +14,15 @@ import type {
   PluginMarketplaceCatalogPlugin,
   PluginMarketplaceCatalogSource,
   PluginMarketplaceConfigSource,
-  PluginMarketplaceInstallTarget
+  PluginMarketplaceInstallTarget,
+  PluginMarketplaceUninstallIdentity
 } from '@oneworks/types'
 
 import { getApiErrorMessage, getConfig, updateConfig } from '#~/api.js'
 import { ActionSearchToolbar } from '#~/components/action-search-toolbar/ActionSearchToolbar'
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
 import { MarketplaceCapabilityTags, MarketplaceCard } from '#~/components/marketplace/MarketplaceCard'
+import type { MarketplaceCapabilityGroup } from '#~/components/marketplace/MarketplaceCard'
 import { MarketplaceResults } from '#~/components/marketplace/MarketplaceResults'
 import { MobileAwareSelect as Select } from '#~/components/mobile-aware-select/MobileAwareSelect'
 import {
@@ -28,7 +30,18 @@ import {
   resolvePluginMarketplaceVersions,
   syncPluginMarketplaceSelection
 } from '#~/plugins/marketplace-api'
+import {
+  projectPluginPresentationList,
+  projectPluginPresentationValue,
+  resolveMarketplacePluginDescription,
+  resolveMarketplacePluginDisplayName,
+  resolveMarketplacePluginSourceDisplay,
+  sanitizePluginIconRef,
+  sanitizePluginPresentationValue
+} from '#~/plugins/plugin-presentation'
 import { renderIconRef } from '#~/utils/model-provider-icons'
+
+import { usePluginMarketplaceUninstall } from './use-plugin-marketplace-uninstall'
 
 type MarketplaceConfigSource = PluginMarketplaceConfigSource
 type MarketplacePanel = 'config' | 'filter'
@@ -63,15 +76,15 @@ interface MarketplaceSourceFormValues {
 }
 
 const configSourceOrder: MarketplaceConfigSource[] = ['user', 'project', 'global']
+const resolveMarketplaceConfigSource = (value: MarketplaceConfigSource | undefined) => (
+  configSourceOrder.find(source => source === value) ?? 'user'
+)
 const sourceFilterOptions: MarketplaceSourceFilter[] = ['all', 'builtIn', ...configSourceOrder]
 const statusFilterOptions: MarketplaceStatusFilter[] = ['all', 'enabled', 'disabled']
 const defaultMarketplaceFormats: MarketplaceExternalFormat[] = ['claude-code', 'codex']
 const ALL_MARKETPLACES = ''
 const PLUGIN_PAGE_SIZE = 20
-const pluginInstallTargets: Array<{ icon: string; target: PluginMarketplaceInstallTarget }> = [
-  { icon: 'folder', target: 'project' },
-  { icon: 'public', target: 'global' }
-]
+const pluginInstallTargets: PluginMarketplaceInstallTarget[] = ['project', 'global']
 
 export const isPluginInstalledForTarget = (
   item: PluginMarketplaceCatalogPlugin,
@@ -92,7 +105,7 @@ const marketplaceFormatPresentation: Record<MarketplaceFormat, { iconId: string;
 }
 
 export function MarketplaceFormatIcon({ type }: { type: MarketplaceFormat }) {
-  const presentation = marketplaceFormatPresentation[type]
+  const presentation = marketplaceFormatPresentation[type] ?? marketplaceFormatPresentation.oneworks
   return (
     <Tooltip title={presentation.label}>
       <span className='plugin-marketplace__format-icon' role='img' aria-label={presentation.label}>
@@ -106,15 +119,24 @@ export function MarketplaceFormatIcon({ type }: { type: MarketplaceFormat }) {
   )
 }
 
-const renderMarketplacePluginIcon = (item: PluginMarketplaceCatalogPlugin) => (
-  item.icon == null
+const renderMarketplacePluginIcon = (item: PluginMarketplaceCatalogPlugin) => {
+  const icon = sanitizePluginIconRef(item.icon)
+  return icon == null
     ? <MarketplaceFormatIcon type={item.marketplaceType} />
     : renderIconRef({
-      icon: item.icon,
+      icon,
       imageClassName: 'plugin-marketplace__format-icon-image',
       symbolClassName: 'plugin-marketplace__format-icon-symbol'
     })
-)
+}
+
+export const buildMarketplaceCapabilityGroups = (
+  item: PluginMarketplaceCatalogPlugin
+): MarketplaceCapabilityGroup[] => [
+  { icon: 'psychology', key: 'skills', values: projectPluginPresentationList(item.skills) },
+  { icon: 'terminal', key: 'commands', values: projectPluginPresentationList(item.commands) },
+  { icon: 'groups', key: 'agents', values: projectPluginPresentationList(item.agents) }
+]
 
 export const createMarketplaceEnabledOverride = (
   type: MarketplaceConfigEntry['type'],
@@ -143,6 +165,63 @@ const getMarketplaces = (
   configRes: ConfigResponse | undefined,
   source: MarketplaceConfigSource | 'merged'
 ): MarketplaceConfig => configRes?.sources?.[source]?.plugins?.marketplaces ?? {}
+
+const resolveMarketplaceAdapter = (
+  type: MarketplaceConfigEntry['type']
+): PluginMarketplaceUninstallIdentity['adapter'] | undefined => (
+  type === 'codex' ? 'codex' : type === 'claude-code' ? 'claude' : undefined
+)
+
+export const resolveMarketplacePluginInstallIdentity = (
+  configRes: ConfigResponse | undefined,
+  item: Pick<
+    PluginMarketplaceCatalogPlugin,
+    | 'builtIn'
+    | 'configSource'
+    | 'declared'
+    | 'enabled'
+    | 'installedSources'
+    | 'marketplace'
+    | 'marketplaceEnabled'
+    | 'marketplaceType'
+    | 'name'
+  >,
+  target: PluginMarketplaceInstallTarget
+) => {
+  const hasAuthoritativeCatalogSource = item.configSource === 'project' || (
+    item.builtIn === true && item.configSource == null
+  )
+  if (
+    target !== 'project' ||
+    item.declared !== true ||
+    item.enabled !== true ||
+    item.marketplaceEnabled !== true ||
+    item.installedSources?.length !== 1 ||
+    item.installedSources[0] !== 'project' ||
+    !hasAuthoritativeCatalogSource
+  ) {
+    return undefined
+  }
+  const entry = getMarketplaces(configRes, 'project')[item.marketplace]
+  const declaration = entry?.plugins?.[item.name]
+  const adapter = entry == null ? undefined : resolveMarketplaceAdapter(entry.type)
+  if (
+    entry == null ||
+    entry.enabled === false ||
+    entry.type !== item.marketplaceType ||
+    adapter == null ||
+    declaration == null ||
+    declaration.enabled === false
+  ) {
+    return undefined
+  }
+  return {
+    adapter,
+    marketplace: item.marketplace,
+    plugin: item.name,
+    scope: declaration.scope?.trim() || item.name
+  }
+}
 
 const normalizeSourceKey = (value: string) => (
   value
@@ -274,19 +353,20 @@ export const filterAndSortMarketplacePlugins = (
   const filtered = plugins.filter((item) => {
     const matchesQuery = normalizedQuery === '' ||
       [
-        item.name,
-        item.category,
-        item.displayName,
-        item.description,
-        item.version,
-        item.marketplace,
-        item.marketplaceTitle,
-        item.sourceLabel,
-        ...(item.skills ?? []),
-        ...(item.commands ?? []),
-        ...(item.agents ?? []),
-        ...(item.searchKeywords ?? [])
-      ].filter(Boolean).join(' ').toLowerCase().includes(normalizedQuery)
+        sanitizePluginPresentationValue(item.name),
+        sanitizePluginPresentationValue(item.category),
+        resolveMarketplacePluginDisplayName(item),
+        resolveMarketplacePluginDescription(item),
+        sanitizePluginPresentationValue(item.version),
+        sanitizePluginPresentationValue(item.marketplace),
+        sanitizePluginPresentationValue(item.marketplaceTitle),
+        resolveMarketplacePluginSourceDisplay(item),
+        ...projectPluginPresentationList(item.skills),
+        ...projectPluginPresentationList(item.commands),
+        ...projectPluginPresentationList(item.agents),
+        ...projectPluginPresentationList(item.searchKeywords)
+      ].map(value => sanitizePluginPresentationValue(value)).filter(Boolean).join(' ').toLowerCase()
+        .includes(normalizedQuery)
     const itemSource = item.builtIn === true ? 'builtIn' : item.configSource ?? 'user'
     const matchesSource = filters.source === 'all' || itemSource === filters.source
     const matchesMarketplace = filters.marketplace === ALL_MARKETPLACES || item.marketplace === filters.marketplace
@@ -343,6 +423,70 @@ const formatSourceSummary = (entry: MarketplaceConfigEntry) => {
   }
 }
 
+interface MarketplacePluginTargetActionProps {
+  installed: boolean
+  isSavingPlugin: boolean
+  item: PluginMarketplaceCatalogPlugin
+  onToggle: () => void
+  refreshAfterRemoval: () => Promise<unknown>[]
+  saving: boolean
+  identity?: PluginMarketplaceUninstallIdentity
+  serverBaseUrl?: string
+  target: PluginMarketplaceInstallTarget
+}
+
+const MarketplacePluginTargetAction = ({
+  installed,
+  identity,
+  isSavingPlugin,
+  item,
+  onToggle,
+  refreshAfterRemoval,
+  saving,
+  serverBaseUrl,
+  target
+}: MarketplacePluginTargetActionProps) => {
+  const { t } = useTranslation()
+  const isManagedProjectRemoval = installed && target === 'project'
+  const uninstall = usePluginMarketplaceUninstall({
+    displayName: resolveMarketplacePluginDisplayName(item),
+    identity: isManagedProjectRemoval ? identity : undefined,
+    refreshAfterRemoval,
+    serverBaseUrl,
+    surfaceKey: `marketplace-card:${item.marketplace}:${item.name}:${target}`
+  })
+  const title = t(
+    installed
+      ? 'pluginStore.removeMarketplacePlugin'
+      : target === 'global'
+      ? 'pluginStore.installMarketplacePluginGlobal'
+      : 'pluginStore.installMarketplacePluginProject'
+  )
+
+  return (
+    <Tooltip title={title}>
+      <Button
+        type={installed ? 'default' : 'primary'}
+        className='marketplace-card__icon-button'
+        aria-label={title}
+        disabled={!isMarketplacePluginInstallable(item) || (
+          isSavingPlugin && !saving
+        ) || (isManagedProjectRemoval && !uninstall.available)}
+        loading={isManagedProjectRemoval ? uninstall.pending : saving}
+        onClick={(event) => {
+          event.stopPropagation()
+          if (isManagedProjectRemoval) {
+            uninstall.confirm()
+          } else {
+            onToggle()
+          }
+        }}
+        icon={<MaterialSymbol name={target === 'global' ? 'public' : 'folder'} />}
+      />
+    </Tooltip>
+  )
+}
+
 export function PluginMarketplaceLanding({
   onOpenPlugin,
   onPluginsChanged,
@@ -353,7 +497,10 @@ export function PluginMarketplaceLanding({
   const { t } = useTranslation()
   const { message } = App.useApp()
   const [sourceForm] = Form.useForm<MarketplaceSourceFormValues>()
-  const { data: configRes, mutate: mutateConfig } = useSWR<ConfigResponse>('/api/config', getConfig)
+  const { data: configRes, mutate: mutateConfig } = useSWR<ConfigResponse>(
+    ['/api/config', serverBaseUrl ?? 'current'],
+    () => getConfig({ serverBaseUrl })
+  )
   const { data: catalogRes, isLoading: isCatalogLoading, mutate: mutateCatalog } = useSWR(
     ['/api/plugins/marketplace/catalog', serverBaseUrl ?? 'current'],
     () => listPluginMarketplaceCatalog({ serverBaseUrl })
@@ -399,7 +546,7 @@ export function PluginMarketplaceLanding({
   const marketplaceOptions = useMemo(() => [
     { label: t('pluginStore.marketplaceFilterAll'), value: ALL_MARKETPLACES },
     ...sourceItems.map(item => ({
-      label: catalogSourcesByKey.get(item.key)?.title ?? item.key,
+      label: projectPluginPresentationValue(catalogSourcesByKey.get(item.key)?.title ?? item.key),
       value: item.key
     }))
   ], [catalogSourcesByKey, sourceItems, t])
@@ -455,6 +602,11 @@ export function PluginMarketplaceLanding({
   useEffect(() => {
     setPluginPage(current => Math.min(current, pluginPageCount))
   }, [pluginPageCount])
+  const refreshAfterUninstall = useCallback(() => [
+    mutateConfig(),
+    mutateCatalog(),
+    onPluginsChanged()
+  ], [mutateCatalog, mutateConfig, onPluginsChanged])
   const writeUserMarketplaces = async (nextMarketplaces: MarketplaceConfig, successMessage?: string) => {
     await commitMarketplaceConfigUpdate(
       () =>
@@ -527,7 +679,9 @@ export function PluginMarketplaceLanding({
       setSourceModalOpen(false)
       sourceForm.resetFields()
     } catch (error) {
-      void message.error(getApiErrorMessage(error, t('pluginStore.marketplaceSourceSaveFailed')))
+      void message.error(projectPluginPresentationValue(
+        getApiErrorMessage(error, t('pluginStore.marketplaceSourceSaveFailed'))
+      ))
     } finally {
       setSavingSourceKey(undefined)
     }
@@ -554,7 +708,9 @@ export function PluginMarketplaceLanding({
           : t('pluginStore.marketplaceSourceDisabled')
       )
     } catch (error) {
-      void message.error(getApiErrorMessage(error, t('pluginStore.marketplaceSourceSaveFailed')))
+      void message.error(projectPluginPresentationValue(
+        getApiErrorMessage(error, t('pluginStore.marketplaceSourceSaveFailed'))
+      ))
     } finally {
       setSavingSourceKey(undefined)
     }
@@ -579,7 +735,9 @@ export function PluginMarketplaceLanding({
           : 'pluginStore.marketplacePluginRemoved'
       ))
     } catch (error) {
-      void message.error(getApiErrorMessage(error, t('pluginStore.marketplacePluginSaveFailed')))
+      void message.error(projectPluginPresentationValue(
+        getApiErrorMessage(error, t('pluginStore.marketplacePluginSaveFailed'))
+      ))
     } finally {
       setSavingPluginKey(undefined)
     }
@@ -612,7 +770,9 @@ export function PluginMarketplaceLanding({
       } catch {
         // Keep the original error; the restored config will be reconciled on the next load.
       }
-      void message.error(getApiErrorMessage(error, t('pluginStore.marketplaceSourceSaveFailed')))
+      void message.error(projectPluginPresentationValue(
+        getApiErrorMessage(error, t('pluginStore.marketplaceSourceSaveFailed'))
+      ))
     } finally {
       setSavingSourceKey(undefined)
     }
@@ -753,25 +913,36 @@ export function PluginMarketplaceLanding({
                 const summary = formatSourceSummary(item.entry)
                 const catalogSource: PluginMarketplaceCatalogSource | undefined = catalogSourcesByKey.get(item.key)
                 const isUserSource = item.configSource === 'user' && item.builtIn !== true
+                const sourceName = projectPluginPresentationValue(item.key)
+                const sourceTitle = projectPluginPresentationValue(summary.title)
+                const sourceDetail = summary.detail === '' ? '' : projectPluginPresentationValue(summary.detail)
+                const sourceError = catalogSource?.error == null
+                  ? undefined
+                  : projectPluginPresentationValue(catalogSource.error)
+                const rawPluginCount = catalogSource?.pluginCount
+                const pluginCount = typeof rawPluginCount === 'number' &&
+                    Number.isSafeInteger(rawPluginCount) && rawPluginCount >= 0
+                  ? rawPluginCount
+                  : undefined
                 return (
                   <div key={item.key} className='plugin-marketplace__source-item' role='listitem'>
                     <MaterialSymbol className='plugin-marketplace__source-icon' name={summary.icon} />
                     <div className='plugin-marketplace__source-copy'>
                       <div className='plugin-marketplace__source-title-row'>
-                        <span className='plugin-marketplace__source-name'>{item.key}</span>
+                        <span className='plugin-marketplace__source-name'>{sourceName}</span>
                         <Tag>
                           {item.builtIn === true
                             ? t('pluginStore.marketplaceSourceBuiltIn')
-                            : t(`config.sources.${item.configSource ?? 'user'}`)}
+                            : t(`config.sources.${resolveMarketplaceConfigSource(item.configSource)}`)}
                         </Tag>
                         <MarketplaceFormatIcon type={item.entry.type} />
-                        {catalogSource != null && <Tag>{catalogSource.pluginCount}</Tag>}
+                        {pluginCount != null && <Tag>{pluginCount}</Tag>}
                       </div>
-                      <span className='plugin-marketplace__source-url' title={summary.title}>{summary.title}</span>
-                      {summary.detail !== '' &&
-                        <span className='plugin-marketplace__source-detail'>{summary.detail}</span>}
-                      {catalogSource?.error != null &&
-                        <span className='plugin-marketplace__source-error'>{catalogSource.error}</span>}
+                      <span className='plugin-marketplace__source-url' title={sourceTitle}>{sourceTitle}</span>
+                      {sourceDetail !== '' &&
+                        <span className='plugin-marketplace__source-detail'>{sourceDetail}</span>}
+                      {sourceError != null &&
+                        <span className='plugin-marketplace__source-error'>{sourceError}</span>}
                     </div>
                     <div className='plugin-marketplace__source-actions'>
                       <Switch
@@ -831,71 +1002,61 @@ export function PluginMarketplaceLanding({
                   const isSavingPlugin = savingPluginKey?.startsWith(`${pluginKey}:`) === true
                   const sourceKind = item.builtIn === true
                     ? t('pluginStore.marketplaceSourceBuiltIn')
-                    : t(`config.sources.${item.configSource ?? 'user'}`)
-                  const capabilityCount = (item.skills?.length ?? 0) + (item.commands?.length ?? 0) +
-                    (item.agents?.length ?? 0)
+                    : t(`config.sources.${resolveMarketplaceConfigSource(item.configSource)}`)
+                  const capabilityGroups = buildMarketplaceCapabilityGroups(item)
+                  const capabilityCount = capabilityGroups.reduce((count, group) => count + group.values.length, 0)
                   return (
                     <MarketplaceCard
                       icon={renderMarketplacePluginIcon(item)}
                       onSelect={() => onOpenPlugin(item)}
-                      title={item.displayName ?? item.name}
+                      title={resolveMarketplacePluginDisplayName(item)}
                       titleMeta={
                         <>
                           {projectInstalled && <Tag>{t('pluginStore.marketplacePluginInstalledProjectStatus')}</Tag>}
                           {globalInstalled && <Tag>{t('pluginStore.marketplacePluginInstalledGlobalStatus')}</Tag>}
-                          {displayedVersion != null && <Tag>{displayedVersion}</Tag>}
+                          {displayedVersion != null && (
+                            <Tag>{projectPluginPresentationValue(displayedVersion)}</Tag>
+                          )}
                         </>
                       }
                       subtitle={
                         <>
-                          <span>{item.marketplaceTitle ?? item.marketplace}</span>
+                          <span>{projectPluginPresentationValue(item.marketplaceTitle ?? item.marketplace)}</span>
                           <span aria-hidden='true'>·</span>
                           <span>{sourceKind}</span>
                         </>
                       }
-                      description={item.description}
+                      description={resolveMarketplacePluginDescription(item)}
                       footer={
                         <>
                           {capabilityCount > 0 && (
                             <MarketplaceCapabilityTags
-                              groups={[
-                                { key: 'skills', icon: 'psychology', values: item.skills ?? [] },
-                                { key: 'commands', icon: 'terminal', values: item.commands ?? [] },
-                                { key: 'agents', icon: 'groups', values: item.agents ?? [] }
-                              ]}
+                              groups={capabilityGroups}
                             />
                           )}
-                          <div className='plugin-marketplace__plugin-source' title={item.sourceLabel}>
-                            {item.sourceLabel}
+                          <div
+                            className='plugin-marketplace__plugin-source'
+                            title={resolveMarketplacePluginSourceDisplay(item)}
+                          >
+                            {resolveMarketplacePluginSourceDisplay(item)}
                           </div>
                         </>
                       }
-                      actions={pluginInstallTargets.map(({ icon, target }) => {
+                      actions={pluginInstallTargets.map((target) => {
                         const installed = target === 'global' ? globalInstalled : projectInstalled
-                        const title = t(
-                          installed
-                            ? 'pluginStore.removeMarketplacePlugin'
-                            : target === 'global'
-                            ? 'pluginStore.installMarketplacePluginGlobal'
-                            : 'pluginStore.installMarketplacePluginProject'
-                        )
                         return (
-                          <Tooltip key={target} title={title}>
-                            <Button
-                              type={installed ? 'default' : 'primary'}
-                              className='marketplace-card__icon-button'
-                              aria-label={title}
-                              disabled={!isMarketplacePluginInstallable(item) || (
-                                isSavingPlugin && savingPluginKey !== `${pluginKey}:${target}`
-                              )}
-                              loading={savingPluginKey === `${pluginKey}:${target}`}
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                void handleTogglePlugin(item, target)
-                              }}
-                              icon={<MaterialSymbol name={icon} />}
-                            />
-                          </Tooltip>
+                          <MarketplacePluginTargetAction
+                            installed={installed}
+                            isSavingPlugin={isSavingPlugin}
+                            item={item}
+                            key={target}
+                            onToggle={() => void handleTogglePlugin(item, target)}
+                            refreshAfterRemoval={refreshAfterUninstall}
+                            saving={savingPluginKey === `${pluginKey}:${target}`}
+                            identity={resolveMarketplacePluginInstallIdentity(configRes, item, target)}
+                            serverBaseUrl={serverBaseUrl}
+                            target={target}
+                          />
                         )
                       })}
                     />

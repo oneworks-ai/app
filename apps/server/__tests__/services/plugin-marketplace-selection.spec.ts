@@ -8,11 +8,16 @@ import {
 const mocks = vi.hoisted(() => ({
   loadConfigState: vi.fn(),
   syncPluginMarketplaceSelection: vi.fn(),
-  updateConfigFile: vi.fn()
+  updateConfigFile: vi.fn(),
+  withManagedPluginMutationLock: vi.fn()
 }))
 
 vi.mock('@oneworks/config', () => ({
   updateConfigFile: mocks.updateConfigFile
+}))
+
+vi.mock('@oneworks/managed-plugins', () => ({
+  withManagedPluginMutationLock: mocks.withManagedPluginMutationLock
 }))
 
 vi.mock('#~/services/config/index.js', () => ({
@@ -28,6 +33,9 @@ describe('plugin marketplace selection', () => {
     vi.clearAllMocks()
     mocks.updateConfigFile.mockResolvedValue({ configPath: '/config' })
     mocks.syncPluginMarketplaceSelection.mockResolvedValue([])
+    mocks.withManagedPluginMutationLock.mockImplementation(
+      (_params: unknown, callback: () => Promise<unknown>) => callback()
+    )
   })
 
   it('preserves marketplace configuration while updating one plugin declaration', () => {
@@ -152,25 +160,29 @@ describe('plugin marketplace selection', () => {
       workspaceFolder: '/workspace',
       source: 'project',
       section: 'plugins',
-      value: {
-        plugins: [{ id: 'existing-runtime-plugin' }],
-        marketplaces: {
-          'openai-plugins': {
-            type: 'codex',
-            plugins: {
-              aiera: { enabled: true },
-              actively: { enabled: true }
-            }
-          }
-        }
-      }
+      resolveValue: expect.any(Function)
     })
     expect(mocks.updateConfigFile).toHaveBeenNthCalledWith(2, {
       workspaceFolder: '/workspace',
       source: 'user',
       section: 'plugins',
-      value: { marketplaces: {} }
+      resolveValue: expect.any(Function)
     })
+    const projectResolver = mocks.updateConfigFile.mock.calls[0]?.[0]?.resolveValue
+    const userResolver = mocks.updateConfigFile.mock.calls[1]?.[0]?.resolveValue
+    expect(projectResolver?.(state.projectSource.rawConfig)).toEqual({
+      plugins: [{ id: 'existing-runtime-plugin' }],
+      marketplaces: {
+        'openai-plugins': {
+          type: 'codex',
+          plugins: {
+            aiera: { enabled: true },
+            actively: { enabled: true }
+          }
+        }
+      }
+    })
+    expect(userResolver?.(state.userSource.rawConfig)).toEqual({ marketplaces: {} })
     expect(mocks.syncPluginMarketplaceSelection).toHaveBeenCalledWith({
       enabled: true,
       marketplace: 'openai-plugins',
@@ -204,13 +216,15 @@ describe('plugin marketplace selection', () => {
       workspaceFolder: '/workspace',
       source: 'global',
       section: 'plugins',
-      value: {
-        marketplaces: {
-          team: {
-            type: 'claude-code',
-            options: { source: { source: 'github', repo: 'acme/team-plugins' } },
-            plugins: { reviewer: { enabled: true } }
-          }
+      resolveValue: expect.any(Function)
+    })
+    const globalResolver = mocks.updateConfigFile.mock.calls[0]?.[0]?.resolveValue
+    expect(globalResolver?.({})).toEqual({
+      marketplaces: {
+        team: {
+          type: 'claude-code',
+          options: { source: { source: 'github', repo: 'acme/team-plugins' } },
+          plugins: { reviewer: { enabled: true } }
         }
       }
     })

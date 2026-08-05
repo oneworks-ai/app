@@ -9,6 +9,12 @@ import type { PluginMarketplaceCatalogPlugin } from '@oneworks/types'
 import { renderIconAsset } from '#~/components/icons/IconAsset'
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
 import { MarketplaceCard } from '#~/components/marketplace/MarketplaceCard'
+import {
+  projectPluginPresentationValue,
+  resolveMarketplacePluginDescription,
+  resolveMarketplacePluginDisplayName,
+  sanitizePluginIconRef
+} from '#~/plugins/plugin-presentation'
 import { renderIconRef } from '#~/utils/model-provider-icons'
 
 import { MarketplaceFormatIcon } from './PluginMarketplaceLanding'
@@ -100,16 +106,16 @@ export function PluginHomeView({
                     {group.plugins.map(plugin => (
                       <MarketplaceCard
                         key={`${plugin.marketplace}:${plugin.name}`}
-                        icon={plugin.icon == null
+                        icon={sanitizePluginIconRef(plugin.icon) == null
                           ? <MarketplaceFormatIcon type={plugin.marketplaceType} />
                           : renderIconRef({
-                            icon: plugin.icon,
+                            icon: sanitizePluginIconRef(plugin.icon),
                             imageClassName: 'plugin-marketplace__format-icon-image',
                             symbolClassName: 'plugin-marketplace__format-icon-symbol'
                           })}
-                        title={plugin.displayName ?? plugin.name}
-                        subtitle={plugin.marketplaceTitle ?? plugin.marketplace}
-                        description={plugin.description}
+                        title={resolveMarketplacePluginDisplayName(plugin)}
+                        subtitle={projectPluginPresentationValue(plugin.marketplaceTitle ?? plugin.marketplace)}
+                        description={resolveMarketplacePluginDescription(plugin)}
                         onSelect={() => onOpenStore(plugin)}
                       />
                     ))}

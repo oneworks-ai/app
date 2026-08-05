@@ -7,12 +7,12 @@ import { App, Empty, Spin } from 'antd'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import useSWR from 'swr'
+import useSWR, { useSWRConfig } from 'swr'
 
 import type { RouteContainerHeaderActionItem, RouteContainerHeaderBreadcrumb } from '@oneworks/components/route-layout'
 import type { NativeHostPlugin, PluginMarketplaceCatalogPlugin, PluginMarketplaceInstallTarget } from '@oneworks/types'
 
-import { getApiErrorMessage } from '#~/api.js'
+import { getApiErrorMessage, getConfig } from '#~/api.js'
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
 import { RouteContainerHeader } from '#~/components/layout/RouteContainerHeader'
 import { RouteContainerLayout } from '#~/components/layout/RouteContainerLayout'
@@ -28,7 +28,8 @@ import { PluginHomeView } from '#~/components/plugins/PluginHomeView'
 import {
   PluginMarketplaceLanding,
   isMarketplacePluginInstallable,
-  isPluginInstalledForTarget
+  isPluginInstalledForTarget,
+  resolveMarketplacePluginInstallIdentity
 } from '#~/components/plugins/PluginMarketplaceLanding'
 import { PluginRuntimeListView } from '#~/components/plugins/PluginRuntimeListView'
 import {
@@ -37,7 +38,12 @@ import {
   resolvePluginSourceGroup
 } from '#~/components/plugins/PluginStoreSidebarControls'
 import type { PluginGroupMode } from '#~/components/plugins/PluginStoreSidebarControls'
-import { buildPluginListItems, createNativePluginRouteKey } from '#~/components/plugins/plugin-runtime-list-items'
+import {
+  buildPluginListItems,
+  createNativePluginRouteKey,
+  resolveNativePluginPresentationIcon
+} from '#~/components/plugins/plugin-runtime-list-items'
+import { usePluginMarketplaceUninstall } from '#~/components/plugins/use-plugin-marketplace-uninstall'
 import { listNativeHostPlugins, setPluginEnabled, setPluginWatch } from '#~/plugins/api'
 import {
   listPluginMarketplaceCatalog,
@@ -48,8 +54,13 @@ import { usePluginContext } from '#~/plugins/plugin-context'
 import type { PluginRuntimeInstance } from '#~/plugins/plugin-manifest'
 import {
   getPluginPresentationSearchText,
+  projectPluginPresentationValue,
+  resolveMarketplacePluginDisplayName,
+  resolveNativePluginDisplayName,
+  resolveNativePluginSourceDisplay,
   resolvePluginDisplayName,
-  resolvePluginPresentationIcon
+  resolvePluginPresentationIcon,
+  resolvePluginRootDisplay
 } from '#~/plugins/plugin-presentation'
 import { useRoutePluginChrome } from '#~/plugins/route-plugin-chrome'
 import { copyTextWithFeedback } from '#~/utils/copy'
@@ -67,6 +78,7 @@ export function PluginStoreRoute() {
   const { i18n, t } = useTranslation()
   const language = i18n.resolvedLanguage ?? i18n.language
   const { message } = App.useApp()
+  const { mutate: mutateSWR } = useSWRConfig()
   const navigate = useNavigate()
   const location = useLocation()
   const { scope = '' } = useParams()
@@ -101,6 +113,10 @@ export function PluginStoreRoute() {
       ? ['/api/plugins/marketplace/catalog', pluginServerBaseUrl ?? 'current']
       : null,
     () => listPluginMarketplaceCatalog({ serverBaseUrl: pluginServerBaseUrl })
+  )
+  const { data: configRes } = useSWR(
+    ['/api/config', pluginServerBaseUrl ?? 'current'],
+    () => getConfig({ serverBaseUrl: pluginServerBaseUrl })
   )
   const encodedScope = encodeURIComponent(scope)
   const isDiagnosticsPage = scope !== '' && location.pathname.endsWith(`/${encodedScope}/diagnostics`)
@@ -175,12 +191,45 @@ export function PluginStoreRoute() {
   const selectedMarketplaceVersion = selectedMarketplacePlugin?.version ?? resolvedMarketplaceVersion
   const selectedDetailItem: PluginRuntimeInstance | NativeHostPlugin | PluginMarketplaceCatalogPlugin | undefined =
     selectedPlugin ?? selectedNativePlugin ?? selectedMarketplacePlugin
+  const selectedMarketplaceUninstallIdentity = selectedMarketplacePlugin == null
+    ? undefined
+    : resolveMarketplacePluginInstallIdentity(
+      configRes,
+      selectedMarketplacePlugin,
+      'project'
+    )
+  const uninstallIdentity = selectedPlugin == null
+    ? selectedMarketplaceUninstallIdentity
+    : undefined
+  const refreshAfterUninstall = useCallback(() => [
+    refreshPlugins(),
+    listPluginMarketplaceCatalog({ serverBaseUrl: pluginServerBaseUrl }).then(catalog =>
+      mutateSWR(
+        ['/api/plugins/marketplace/catalog', pluginServerBaseUrl ?? 'current'],
+        catalog,
+        { revalidate: false }
+      )
+    )
+  ], [mutateSWR, pluginServerBaseUrl, refreshPlugins])
+  const marketplaceUninstall = usePluginMarketplaceUninstall({
+    displayName: selectedPlugin != null
+      ? resolvePluginDisplayName(selectedPlugin, language)
+      : selectedMarketplacePlugin == null
+      ? undefined
+      : resolveMarketplacePluginDisplayName(selectedMarketplacePlugin),
+    identity: uninstallIdentity,
+    onRemoved: () => void navigate(PLUGIN_PATHS.list),
+    refreshAfterRemoval: refreshAfterUninstall,
+    serverBaseUrl: pluginServerBaseUrl,
+    surfaceKey: `plugin-detail:${detailParentPage}:${scope}`
+  })
+
   const headerTitle = selectedPlugin != null
     ? resolvePluginDisplayName(selectedPlugin, language)
     : selectedNativePlugin != null
-    ? selectedNativePlugin.displayName ?? selectedNativePlugin.name
+    ? resolveNativePluginDisplayName(selectedNativePlugin)
     : selectedMarketplacePlugin != null
-    ? selectedMarketplacePlugin.name
+    ? resolveMarketplacePluginDisplayName(selectedMarketplacePlugin)
     : scope === ''
     ? t(
       pluginLocation.page === 'home'
@@ -194,12 +243,8 @@ export function PluginStoreRoute() {
     : t('pluginDetail.notFound')
   const headerIcon = selectedPlugin != null
     ? resolvePluginPresentationIcon(selectedPlugin, pluginServerBaseUrl)
-    : selectedNativePlugin?.icon != null
-    ? {
-      alt: selectedNativePlugin.displayName ?? selectedNativePlugin.name,
-      src: selectedNativePlugin.icon,
-      type: 'image' as const
-    }
+    : selectedNativePlugin != null
+    ? resolveNativePluginPresentationIcon(selectedNativePlugin)
     : selectedMarketplacePlugin != null
     ? 'extension'
     : scope === '' && pluginLocation.page === 'store'
@@ -265,12 +310,11 @@ export function PluginStoreRoute() {
     if (keyword === '') return nativePlugins
     return nativePlugins.filter(plugin =>
       [
-        plugin.displayName,
-        plugin.name,
-        plugin.adapter,
-        plugin.marketplace,
-        plugin.source.displayPath
-      ].filter(Boolean).join(' ').toLowerCase().includes(keyword)
+        resolveNativePluginDisplayName(plugin),
+        projectPluginPresentationValue(plugin.adapter),
+        projectPluginPresentationValue(plugin.marketplace),
+        resolveNativePluginSourceDisplay(plugin)
+      ].join(' ').toLowerCase().includes(keyword)
     )
   }, [nativePlugins, pluginQuery])
   const toggleWatch = useCallback(async (scope: string, enabled: boolean) => {
@@ -339,7 +383,7 @@ export function PluginStoreRoute() {
     (plugin: PluginRuntimeInstance): RouteSidebarListContextMenuItems => {
       const isPluginEnabled = plugin.enabled !== false
       const nextPluginEnabled = !isPluginEnabled
-      const pluginRoot = plugin.pluginRoot ?? plugin.rootDir
+      const pluginRoot = resolvePluginRootDisplay(plugin)
       const pluginSourceGroup = resolvePluginSourceGroup(plugin)
       const isWatchEnabled = plugin.watch?.enabled === true
       const nextWatchEnabled = !isWatchEnabled
@@ -492,6 +536,17 @@ export function PluginStoreRoute() {
         loading: updatingEnabledAction === `workspace:${selectedPlugin.scope}`,
         onSelect: () => void togglePluginEnabled(selectedPlugin.scope, selectedPlugin.enabled === false, 'workspace')
       })
+      if (marketplaceUninstall.available) {
+        items.push({
+          danger: true,
+          disabled: marketplaceUninstall.pending || updatingEnabledAction != null,
+          icon: 'delete',
+          key: 'plugin-uninstall',
+          label: t('pluginStore.uninstall.action'),
+          loading: marketplaceUninstall.pending,
+          onSelect: marketplaceUninstall.confirm
+        })
+      }
       if (selectedPlugin.watch != null) {
         items.push({
           active: selectedPlugin.watch.enabled,
@@ -526,10 +581,13 @@ export function PluginStoreRoute() {
       ]
       for (const { icon, target } of targets) {
         const installed = isPluginInstalledForTarget(selectedMarketplacePlugin, target)
+        const isManagedProjectRemoval = target === 'project' && installed
         items.push({
           active: installed,
           disabled: !isMarketplacePluginInstallable(selectedMarketplacePlugin) ||
-            installingMarketplaceTarget != null,
+            installingMarketplaceTarget != null ||
+            (isManagedProjectRemoval && !marketplaceUninstall.available),
+          danger: isManagedProjectRemoval,
           icon,
           key: `marketplace-install-${target}`,
           label: t(
@@ -541,8 +599,12 @@ export function PluginStoreRoute() {
               ? 'pluginStore.removeMarketplacePlugin'
               : 'pluginStore.installMarketplacePluginProject'
           ),
-          loading: installingMarketplaceTarget === target,
-          onSelect: () => void toggleMarketplacePlugin(target)
+          loading: isManagedProjectRemoval
+            ? marketplaceUninstall.pending
+            : installingMarketplaceTarget === target,
+          onSelect: isManagedProjectRemoval
+            ? marketplaceUninstall.confirm
+            : () => void toggleMarketplacePlugin(target)
         })
       }
     }
@@ -560,6 +622,9 @@ export function PluginStoreRoute() {
     selectedMarketplacePlugin,
     selectedPlugin,
     selectedPluginDiagnostics,
+    marketplaceUninstall.available,
+    marketplaceUninstall.confirm,
+    marketplaceUninstall.pending,
     t,
     togglePluginEnabled,
     toggleWatch,
