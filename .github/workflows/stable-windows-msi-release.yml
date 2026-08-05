@@ -1,0 +1,182 @@
+name: Stable Windows MSI Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Stable One Works CLI version to package.
+        required: true
+        type: string
+      release_tag:
+        description: Existing immutable package Release tag (pkg/oneworks/v<version>).
+        required: true
+        type: string
+      product_source_sha:
+        description: Full immutable commit SHA peeled from the package tag.
+        required: true
+        type: string
+
+permissions:
+  artifact-metadata: write
+  attestations: write
+  contents: write
+  id-token: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: stable-windows-msi-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish stable Windows MSI
+    runs-on: windows-2022
+    timeout-minutes: 45
+    permissions:
+      artifact-metadata: write
+      attestations: write
+      contents: write
+      id-token: write
+    steps:
+      - name: Require protected main dispatch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/main'
+
+      - name: Checkout protected main builder
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
+      - name: Validate immutable product identity
+        shell: bash
+        env:
+          PRODUCT_SOURCE_SHA: ${{ inputs.product_source_sha }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          [[ "$PRODUCT_SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          tag_sha="$(git rev-parse "$RELEASE_TAG^{commit}")"
+          test "$tag_sha" = "$PRODUCT_SOURCE_SHA"
+          source_version="$(git show "$PRODUCT_SOURCE_SHA:apps/bootstrap/package.json" | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version")"
+          test "$source_version" = "$VERSION"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          [[ "$GITHUB_WORKFLOW_SHA" =~ ^[a-f0-9]{40}$ ]]
+          git rev-parse "$GITHUB_WORKFLOW_SHA^{commit}" >/dev/null
+
+      - name: Check for an immutable existing MSI release
+        id: existing
+        shell: bash
+        env:
+          BUILDER_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          GH_TOKEN: ${{ github.token }}
+          PRODUCT_SOURCE_SHA: ${{ inputs.product_source_sha }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          VERSION: ${{ inputs.version }}
+        run: node ./scripts/stable-windows-release.mjs prepare-msi
+
+      - name: Setup pnpm
+        if: ${{ steps.existing.outputs.should_build == 'true' }}
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+
+      - name: Install workspace dependencies
+        if: ${{ steps.existing.outputs.should_build == 'true' }}
+        run: pnpm install --frozen-lockfile
+
+      - name: Install pinned WiX toolset
+        if: ${{ steps.existing.outputs.should_build == 'true' }}
+        shell: pwsh
+        run: |
+          $wixDir = Join-Path $env:RUNNER_TEMP 'wix-4.0.5'
+          dotnet tool install --tool-path $wixDir wix --version 4.0.5
+          $wixDir | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Build MSI and release provenance
+        id: build
+        if: ${{ steps.existing.outputs.should_build == 'true' }}
+        shell: bash
+        env:
+          BUILDER_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          PRODUCT_SOURCE_SHA: ${{ inputs.product_source_sha }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          VERSION: ${{ inputs.version }}
+          WIX_EXE: wix
+        run: node ./scripts/stable-windows-release.mjs build-msi
+
+      - name: Smoke the unpublished MSI
+        if: ${{ steps.existing.outputs.should_build == 'true' }}
+        shell: pwsh
+        env:
+          INSTALLER: ${{ steps.build.outputs.installer }}
+          PRODUCT_CODE: ${{ steps.build.outputs.product_code }}
+          VERSION: ${{ inputs.version }}
+        run: >-
+          ./scripts/stable-windows-msi-smoke.ps1
+          -Installer "$env:INSTALLER"
+          -ProductCode "$env:PRODUCT_CODE"
+          -Version "$env:VERSION"
+
+      - name: Attest MSI and release metadata
+        if: ${{ steps.existing.outputs.should_build == 'true' }}
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            ${{ steps.build.outputs.installer }}
+            ${{ steps.build.outputs.checksum }}
+            ${{ steps.build.outputs.provenance }}
+
+      - name: Upload immutable MSI release assets
+        if: ${{ steps.existing.outputs.should_build == 'true' }}
+        shell: bash
+        env:
+          CHECKSUM: ${{ steps.build.outputs.checksum }}
+          GH_TOKEN: ${{ github.token }}
+          INSTALLER: ${{ steps.build.outputs.installer }}
+          PROVENANCE: ${{ steps.build.outputs.provenance }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          VERSION: ${{ inputs.version }}
+        run: node ./scripts/stable-windows-release.mjs publish-msi
+
+      - name: Download and verify published MSI release
+        id: published
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          output="$RUNNER_TEMP/published-oneworks-msi"
+          mkdir -p "$output"
+          gh release download "$RELEASE_TAG" --dir "$output" --pattern "oneworks-windows-$VERSION.msi"
+          gh release download "$RELEASE_TAG" --dir "$output" --pattern "oneworks-windows-$VERSION.msi.sha256"
+          gh release download "$RELEASE_TAG" --dir "$output" --pattern "oneworks-windows-$VERSION.msi.provenance.json"
+          (cd "$output" && sha256sum -c "oneworks-windows-$VERSION.msi.sha256")
+          MSI="$output/oneworks-windows-$VERSION.msi"
+          gh attestation verify "$MSI" --repo "$GITHUB_REPOSITORY"
+          echo "installer=$MSI" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke the published MSI
+        shell: pwsh
+        env:
+          INSTALLER: ${{ steps.published.outputs.installer }}
+          PRODUCT_CODE: ${{ steps.build.outputs.product_code || '' }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          if (-not $env:PRODUCT_CODE) {
+            $manifestPath = "$env:RUNNER_TEMP\published-oneworks-msi\oneworks-windows-$env:VERSION.msi.provenance.json"
+            $env:PRODUCT_CODE = (Get-Content -Raw $manifestPath | ConvertFrom-Json).productCode
+          }
+          ./scripts/stable-windows-msi-smoke.ps1 -Installer "$env:INSTALLER" -ProductCode "$env:PRODUCT_CODE" -Version "$env:VERSION"
