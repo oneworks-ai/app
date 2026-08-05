@@ -104,4 +104,26 @@ describe('route header action group contract', () => {
     expect(headerStyles).not.toContain('--chat-header-workspace-action-bleed')
     expect(headerStyles).not.toMatch(/\.chat-header-workspace-opener\s*\{[^}]*box-shadow:/)
   })
+
+  it('keeps hovered chat messages below the route header overlay', () => {
+    const messageStyles = readFileSync(
+      new URL('../src/components/chat/messages/MessageItem.scss', import.meta.url),
+      'utf8'
+    )
+    const routeLayoutStyles = readFileSync(
+      new URL('../../../packages/route-layout/src/RouteContainerHeader.css', import.meta.url),
+      'utf8'
+    )
+
+    const messageHoverZIndex = Number(
+      messageStyles.match(/&:hover,\s*&:focus-within\s*\{[^}]*z-index:\s*(\d+)/)?.[1]
+    )
+    const routeHeaderZIndex = Number(
+      routeLayoutStyles.match(/\.route-container-header\s*\{[^}]*z-index:\s*(\d+)/)?.[1]
+    )
+
+    expect(Number.isFinite(messageHoverZIndex)).toBe(true)
+    expect(Number.isFinite(routeHeaderZIndex)).toBe(true)
+    expect(messageHoverZIndex).toBeLessThan(routeHeaderZIndex)
+  })
 })
