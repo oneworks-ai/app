@@ -8,7 +8,14 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$installDir = Join-Path $env:ProgramFiles 'OneWorks'
+
+function Normalize-DirectoryPath {
+  param([string]$Path)
+
+  return [System.IO.Path]::TrimEndingDirectorySeparator($Path)
+}
+
+$installDir = Normalize-DirectoryPath (Join-Path $env:ProgramFiles 'OneWorks')
 
 function Invoke-MsiExec {
   param([string[]]$Arguments)
@@ -20,7 +27,11 @@ function Invoke-MsiExec {
 }
 
 function Get-MachinePathSegments {
-  return @([Environment]::GetEnvironmentVariable('PATH', 'Machine').Split(';') | Where-Object { $_ })
+  return @(
+    [Environment]::GetEnvironmentVariable('PATH', 'Machine').Split(';') |
+      Where-Object { $_ } |
+      ForEach-Object { Normalize-DirectoryPath $_ }
+  )
 }
 
 $installed = $false

@@ -82,6 +82,18 @@ describe('stable Windows release asset', () => {
     expect(wxs).toContain('ProductSourceSha')
   })
 
+  it('normalizes machine PATH segments while checking the MSI PATH lifecycle', async () => {
+    const smoke = await readFile('scripts/stable-windows-msi-smoke.ps1', 'utf8')
+
+    expect(smoke).toContain('function Normalize-DirectoryPath')
+    expect(smoke).toContain('[System.IO.Path]::TrimEndingDirectorySeparator($Path)')
+    expect(smoke).toContain("[Environment]::GetEnvironmentVariable('PATH', 'Machine')")
+    expect(smoke).toContain('if (-not (Get-MachinePathSegments | Where-Object { $_ -ieq $installDir }))')
+    expect(smoke).toContain('Machine PATH does not contain $installDir after install.')
+    expect(smoke).toContain('if (Get-MachinePathSegments | Where-Object { $_ -ieq $installDir })')
+    expect(smoke).toContain('Machine PATH still contains $installDir after uninstall.')
+  })
+
   it('records the immutable product and builder identities in the MSI provenance', () => {
     expect(buildStableWindowsMsiProvenance({
       builderWorkflowSha: 'b'.repeat(40),
