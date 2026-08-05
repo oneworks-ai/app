@@ -191,6 +191,40 @@ const assertCommitSha = (name, value) => {
   return value
 }
 
+export const assertStableWindowsMsiReuseIntegrity = (input, gitRunner = run) => {
+  const version = assertStableWindowsMsiVersion(input.version)
+  const names = buildStableWindowsMsiAssetNames(version)
+  const productSourceSha = assertCommitSha('PRODUCT_SOURCE_SHA', input.productSourceSha)
+  const validatorWorkflowSha = assertCommitSha('VALIDATOR_WORKFLOW_SHA', input.validatorWorkflowSha)
+  const provenance = input.provenance
+  if (input.releaseTag !== names.releaseTag) throw new Error(`Unexpected MSI release tag: ${input.releaseTag}`)
+  if (provenance?.schemaVersion !== 1) throw new Error('Existing MSI provenance must use schema version 1.')
+  if (provenance?.releaseTag !== input.releaseTag) throw new Error('Existing MSI provenance differs for releaseTag.')
+  if (provenance?.version !== version) throw new Error('Existing MSI provenance differs for version.')
+  if (provenance?.productSourceSha !== productSourceSha) {
+    throw new Error('Existing MSI provenance differs for productSourceSha.')
+  }
+  if (provenance?.productCode !== buildStableWindowsMsiProductCode(version)) {
+    throw new Error('Existing MSI provenance differs for productCode.')
+  }
+  const builderWorkflowSha = assertCommitSha('Existing MSI builderWorkflowSha', provenance?.builderWorkflowSha ?? '')
+  assertStableWindowsMsiReleaseIntegrity({
+    checksum: input.checksum,
+    installerSha256: input.installerSha256,
+    provenance,
+    version
+  })
+  if (provenance.installer.name !== names.installerName) {
+    throw new Error('Existing MSI provenance differs for installer name.')
+  }
+
+  // Immutable artifacts are trusted through their checksum, product identity, attestation, and protected-main lineage.
+  gitRunner('git', ['cat-file', '-e', `${builderWorkflowSha}^{commit}`])
+  gitRunner('git', ['cat-file', '-e', `${validatorWorkflowSha}^{commit}`])
+  gitRunner('git', ['merge-base', '--is-ancestor', builderWorkflowSha, validatorWorkflowSha])
+  return { builderWorkflowSha, validatorWorkflowSha }
+}
+
 const assertLauncherPayload = (payloadDir, version) => {
   for (const command of ['oneworks', 'ow', 'owo']) {
     const launcherPath = path.join(payloadDir, `${command}.cmd`)
@@ -295,10 +329,6 @@ const buildMsi = () => {
 const prepareMsi = () => {
   const version = assertStableWindowsMsiVersion(process.env.VERSION ?? '')
   const productSourceSha = assertCommitSha('PRODUCT_SOURCE_SHA', process.env.PRODUCT_SOURCE_SHA ?? '')
-  const builderWorkflowSha = assertCommitSha(
-    'BUILDER_WORKFLOW_SHA',
-    process.env.BUILDER_WORKFLOW_SHA ?? ''
-  )
   const names = buildStableWindowsMsiAssetNames(version)
   const releaseTag = process.env.RELEASE_TAG ?? names.releaseTag
   if (releaseTag !== names.releaseTag) throw new Error(`Unexpected MSI release tag: ${releaseTag}`)
@@ -318,27 +348,17 @@ const prepareMsi = () => {
     run('gh', ['release', 'download', releaseTag, '--pattern', assetName, '--dir', existingDir])
   }
   const provenance = JSON.parse(readFileSync(path.join(existingDir, names.provenanceName), 'utf8'))
-  assertStableWindowsMsiReleaseIntegrity({
+  const { builderWorkflowSha, validatorWorkflowSha } = assertStableWindowsMsiReuseIntegrity({
     checksum: readFileSync(path.join(existingDir, names.checksumName), 'utf8'),
     installerSha256: sha256(path.join(existingDir, names.installerName)),
     provenance,
-    version
-  })
-  const expected = buildStableWindowsMsiProvenance({
-    builderWorkflowSha,
-    installerName: names.installerName,
-    installerSha256: provenance?.installer?.sha256,
-    launchers: provenance?.launchers,
     productSourceSha,
     releaseTag,
+    validatorWorkflowSha: process.env.VALIDATOR_WORKFLOW_SHA ?? '',
     version
   })
-  for (const key of ['releaseTag', 'version', 'productSourceSha', 'builderWorkflowSha', 'productCode']) {
-    if (provenance[key] !== expected[key]) throw new Error(`Existing MSI provenance differs for ${key}.`)
-  }
-  if (!/^[a-f0-9]{64}$/u.test(provenance?.installer?.sha256 ?? '')) {
-    throw new Error('Existing MSI provenance is missing installer SHA-256.')
-  }
+  writeOutput('asset_builder_workflow_sha', builderWorkflowSha)
+  writeOutput('validator_workflow_sha', validatorWorkflowSha)
   writeOutput('should_build', 'false')
 }
 
