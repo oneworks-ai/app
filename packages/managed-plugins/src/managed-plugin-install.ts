@@ -13,10 +13,19 @@ import type {
   AdapterPluginManifest
 } from '@oneworks/types'
 import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
-import { getManagedPluginConfigPath, getManagedPluginInstallDir } from '@oneworks/utils/managed-plugin'
+import {
+  getManagedPluginConfigPath,
+  getManagedPluginInstallDir,
+  resolveManagedNpmRegistryAuthority,
+  resolveManagedPluginInstallIdentity,
+  resolveManagedPluginScope
+} from '@oneworks/utils/managed-plugin'
 import { mergeProcessEnvWithProjectEnv } from '@oneworks/utils/project-env'
 
-import { installManagedPluginSource, pathExists, resolveManagedPluginSource } from './managed-plugin-source'
+import { readManagedPluginInstallState, writeManagedPluginTransactionMarker } from './managed-plugin-install-state'
+import { installManagedPluginSource, resolveManagedPluginSource } from './managed-plugin-source'
+import { captureManagedPluginInstallRevision, commitManagedPluginInstall } from './managed-plugin-transaction'
+import { getManagedPluginTransactionDirectories } from './managed-plugin-transaction-journal'
 export { installManagedPluginSource, pathExists, resolveManagedPluginSource } from './managed-plugin-source'
 export { syncConfiguredMarketplacePlugins } from './managed-plugin-sync'
 
@@ -90,7 +99,13 @@ export const installAdapterPluginWithInstaller = async <
     const source = resolvedSource?.installSource ?? await (
       installer.parseSource?.(cwd, options.source) ?? resolveManagedPluginSource(cwd, options.source)
     )
-    const managedSource = resolvedSource?.managedSource ?? source
+    const rawManagedSource = resolvedSource?.managedSource ?? source
+    const managedSource = rawManagedSource.type === 'npm' && rawManagedSource.registry != null
+      ? {
+        ...rawManagedSource,
+        registry: resolveManagedNpmRegistryAuthority(rawManagedSource.registry)
+      }
+      : rawManagedSource
     const downloadedRoot = await installManagedPluginSource(path.join(tempDir, 'plugin-source'), cwd, source)
     const pluginRoot = await installer.detectPluginRoot(downloadedRoot)
     const manifest = mergeManifest(
@@ -115,80 +130,66 @@ export const installAdapterPluginWithInstaller = async <
     const nativePluginDir = path.join(installDir, MANAGED_NATIVE_PLUGIN_DIR)
     const oneworksPluginDir = path.join(installDir, MANAGED_ONEWORKS_PLUGIN_DIR)
     const pluginDataDir = resolveManagedPluginDataDir(cwd, env, installer.adapter, pluginSlug)
-    const managedConfigPath = getManagedPluginConfigPath(installDir)
-    const installConfigExists = await pathExists(managedConfigPath)
-    const installDirExists = await pathExists(installDir)
-    const pluginDataDirExists = await pathExists(pluginDataDir)
-
-    if (installConfigExists && !options.force) {
-      throw new Error(`Plugin ${pluginName} is already installed at ${installDir}. Use --force to replace it.`)
-    }
-
-    const installParentDir = path.dirname(installDir)
-    await fs.mkdir(installParentDir, { recursive: true })
-    const stagingDir = await fs.mkdtemp(path.join(installParentDir, '.install-staging-'))
+    const identity = resolveManagedPluginInstallIdentity({
+      adapter: installer.adapter,
+      name: pluginName,
+      source: managedSource
+    })
+    const expectedRevision = await captureManagedPluginInstallRevision({
+      force: options.force === true,
+      identity,
+      installDir
+    })
+    const transactionId = randomUUID()
+    const { stagingDir } = getManagedPluginTransactionDirectories(installDir, transactionId)
+    await fs.mkdir(stagingDir)
     const stagingNativePluginDir = path.join(stagingDir, MANAGED_NATIVE_PLUGIN_DIR)
     const stagingOneworksPluginDir = path.join(stagingDir, MANAGED_ONEWORKS_PLUGIN_DIR)
     const stagingConfigPath = getManagedPluginConfigPath(stagingDir)
-    const backupDir = path.join(installParentDir, `.install-backup-${randomUUID()}`)
 
     const config = {
       version: 1 as const,
       adapter: installer.adapter,
       name: pluginName,
-      scope: options.scope?.trim() !== '' ? options.scope?.trim() : pluginName,
+      scope: resolveManagedPluginScope({
+        adapter: installer.adapter,
+        name: pluginName,
+        scope: options.scope,
+        source: managedSource
+      }),
       installedAt: new Date().toISOString(),
       source: managedSource,
       nativePluginPath: MANAGED_NATIVE_PLUGIN_DIR,
       oneworksPluginPath: MANAGED_ONEWORKS_PLUGIN_DIR
     }
 
-    try {
-      await fs.mkdir(pluginDataDir, { recursive: true })
-      await fs.cp(pluginRoot, stagingNativePluginDir, { recursive: true })
-      await fs.mkdir(stagingOneworksPluginDir, { recursive: true })
-      await installer.convertToOneWorks({
-        nativePluginRoot: stagingNativePluginDir,
-        oneworksRoot: stagingOneworksPluginDir,
-        pluginName,
-        pluginDataDir,
-        manifest
-      })
-      await fs.writeFile(stagingConfigPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8')
-    } catch (error) {
-      await fs.rm(stagingDir, { recursive: true, force: true })
-      if (!pluginDataDirExists) {
-        await fs.rm(pluginDataDir, { recursive: true, force: true })
-      }
-      throw error
-    }
+    await fs.mkdir(pluginDataDir, { recursive: true })
+    await fs.cp(pluginRoot, stagingNativePluginDir, { recursive: true })
+    await fs.mkdir(stagingOneworksPluginDir, { recursive: true })
+    await installer.convertToOneWorks({
+      nativePluginRoot: stagingNativePluginDir,
+      oneworksRoot: stagingOneworksPluginDir,
+      pluginName,
+      pluginDataDir,
+      manifest,
+      source: managedSource
+    })
+    await fs.writeFile(stagingConfigPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8')
+    await writeManagedPluginTransactionMarker(stagingDir, {
+      identity,
+      transactionId,
+      version: 1
+    })
 
-    let existingInstallMoved = false
-    try {
-      if (installDirExists) {
-        await fs.rename(installDir, backupDir)
-        existingInstallMoved = true
-      }
-      await fs.rename(stagingDir, installDir)
-    } catch (error) {
-      await fs.rm(stagingDir, { recursive: true, force: true })
-      if (existingInstallMoved && !await pathExists(installDir)) {
-        await fs.rename(backupDir, installDir)
-      }
-      if (!pluginDataDirExists) {
-        await fs.rm(pluginDataDir, { recursive: true, force: true })
-      }
-      throw error
-    }
-    if (existingInstallMoved) {
-      try {
-        await fs.rm(backupDir, { recursive: true, force: true })
-      } catch (error) {
-        process.stderr.write(
-          `Warning: installed ${pluginName}, but could not remove backup ${backupDir}: ${String(error)}\n`
-        )
-      }
-    }
+    const stagedState = await readManagedPluginInstallState(stagingDir)
+    await commitManagedPluginInstall({
+      expectedRevision,
+      identity,
+      installDir,
+      newRevision: stagedState.revision,
+      stagingDir,
+      transactionId
+    })
 
     if (options.silent !== true) {
       writeInstallSummary(

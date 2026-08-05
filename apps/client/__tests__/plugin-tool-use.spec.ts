@@ -7,7 +7,7 @@ import {
   buildPluginToolResultPresentation,
   readToolUseValue
 } from '#~/components/chat/tools/core/plugin-tool-presentation'
-import { resolvePluginToolUsePresentation } from '#~/plugins/plugin-tool-use'
+import { normalizePluginToolUsePresentation, resolvePluginToolUsePresentation } from '#~/plugins/plugin-tool-use'
 import type { RuntimeToolUsePresentation } from '#~/plugins/plugin-tool-use'
 
 const scopedTool = (scopeToken: string, tool: string) => `adapter:codex:mcp:oneworks-${scopeToken}:${tool}`
@@ -238,5 +238,114 @@ describe('plugin tool-use presentation', () => {
 
     expect(resolvePluginToolUsePresentation('click', [malformed])).toBeUndefined()
     expect(readToolUseValue({}, null as unknown as string)).toBeUndefined()
+  })
+
+  it('rebuilds runtime presentations without unvalidated root fields', () => {
+    const hostile = {
+      id: 'inspect',
+      input: {
+        fields: [{
+          item: { root: '/private/item', titlePath: 'name' },
+          path: 'input',
+          root: '/private/field',
+          title: 'Input'
+        }],
+        root: '/private/input'
+      },
+      pluginScope: 'docs/docs',
+      result: {
+        fields: [{ path: 'result', root: '/private/result-field', title: 'Result' }],
+        root: '/private/result'
+      },
+      root: '/private/plugin',
+      title: 'Inspect',
+      tools: ['inspect']
+    } as unknown as RuntimeToolUsePresentation
+
+    const normalized = normalizePluginToolUsePresentation(hostile)
+
+    expect(normalized).toMatchObject({
+      id: 'inspect',
+      input: {
+        fields: [{
+          item: { titlePath: 'name' },
+          path: 'input',
+          title: 'Input'
+        }]
+      },
+      pluginScope: 'docs/docs',
+      result: {
+        fields: [{ path: 'result', title: 'Result' }]
+      },
+      title: 'Inspect',
+      tools: ['inspect']
+    })
+    expect(JSON.stringify(normalized)).not.toContain('/private/')
+    expect(JSON.stringify(normalized)).not.toContain('root')
+  })
+
+  it('rebuilds valid nested metadata and rejects private or unknown nested fields', () => {
+    const titleI18n = { en: 'Inspect' }
+    const i18n = { en: { description: 'Read metadata', title: 'Inspect' } }
+    const roles = ['manager']
+    const surfaces = ['workspace']
+    const normalized = normalizePluginToolUsePresentation({
+      description: { en: 'Read metadata' },
+      descriptionI18n: { en: 'Read metadata' },
+      i18n,
+      id: 'inspect',
+      input: {
+        fields: [{ path: 'input', title: 'Input', titleI18n }]
+      },
+      pluginScope: 'docs/docs',
+      roles,
+      surfaces,
+      title: 'Inspect',
+      titleI18n,
+      tools: ['inspect']
+    } as RuntimeToolUsePresentation)
+
+    titleI18n.en = 'mutated'
+    i18n.en.title = 'mutated'
+    roles.push('workspace')
+    surfaces.push('launcher')
+    expect(normalized).toMatchObject({
+      i18n: { en: { description: 'Read metadata', title: 'Inspect' } },
+      input: { fields: [{ titleI18n: { en: 'Inspect' } }] },
+      roles: ['manager'],
+      surfaces: ['workspace'],
+      titleI18n: { en: 'Inspect' }
+    })
+
+    const hostile = normalizePluginToolUsePresentation({
+      description: { en: 'safe', root: '/private/description' },
+      descriptionI18n: { en: 'safe', pluginRoot: '/private/plugin' },
+      i18n: { en: { root: '/private/i18n', title: 'Inspect' } },
+      id: 'hostile',
+      input: {
+        fields: [{
+          path: 'input',
+          title: 'Input',
+          titleI18n: { en: 'Input', workspaceFolder: '/private/workspace' }
+        }]
+      },
+      pluginScope: 'docs/docs',
+      roles: ['manager', 'root'],
+      surfaces: ['workspace', 'private'],
+      title: 'Hostile',
+      titleI18n: { en: 'Hostile', sourceRoot: '/private/source' },
+      tools: ['inspect']
+    } as unknown as RuntimeToolUsePresentation)
+
+    expect(hostile).toMatchObject({
+      description: undefined,
+      descriptionI18n: undefined,
+      i18n: undefined,
+      input: { fields: [{ titleI18n: undefined }] },
+      roles: undefined,
+      surfaces: undefined,
+      titleI18n: undefined
+    })
+    expect(JSON.stringify(hostile)).not.toContain('/private/')
   })
 })

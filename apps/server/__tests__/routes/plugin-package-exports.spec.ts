@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
@@ -26,11 +26,6 @@ describe('plugin package export conventions', () => {
   let server: http.Server | undefined
   let baseUrl = ''
   let devServer: http.Server | undefined
-
-  const toHostViteFsPath = async (filePath: string, basePath = '') => {
-    const realFilePath = await realpath(filePath)
-    return `${basePath}/@fs/${encodeURI(realFilePath.split(path.sep).join('/').replace(/^\/+/, ''))}`
-  }
 
   beforeEach(async () => {
     vi.stubEnv('__ONEWORKS_PROJECT_DISABLE_DEFAULT_OFFICIAL_PLUGINS__', '1')
@@ -665,56 +660,54 @@ describe('plugin package export conventions', () => {
     expect(watchedPayload.plugins[0]?.contributions?.navItems).toBeUndefined()
   })
 
-  it('uses the host Vite base for workspace-routed local client source exports', async () => {
-    const previousBase = process.env.__ONEWORKS_PROJECT_CLIENT_BASE__
-    process.env.__ONEWORKS_PROJECT_CLIENT_BASE__ = '/ui/w/w_12345678/'
+  it('serves watched local client source through the authorized client-source boundary', async () => {
     const pluginRoot = path.join(workspaceFolder, 'plugins', 'host-vite')
-    try {
-      await mkdir(path.join(pluginRoot, 'client', 'src'), { recursive: true })
-      await mkdir(path.join(pluginRoot, 'client', 'dist'), { recursive: true })
-      await writeFile(path.join(pluginRoot, 'client', 'src', 'index.tsx'), 'export const sourcePlugin = true\n')
-      await writeFile(path.join(pluginRoot, 'client', 'dist', 'index.js'), 'export const builtPlugin = true\n')
-      await writeFile(
-        path.join(pluginRoot, 'package.json'),
-        JSON.stringify(
-          {
-            name: '@local/plugin-host-vite',
-            exports: {
-              './client': {
-                source: './client/src/index.tsx',
-                default: './client/dist/index.js'
-              },
-              './package.json': './package.json'
-            }
-          },
-          null,
-          2
-        )
-      )
-      await writeFile(path.join(pluginRoot, 'plugin.json'), JSON.stringify({ plugin: {} }, null, 2))
-      mocks.loadConfigState.mockResolvedValue({
-        workspaceFolder,
-        mergedConfig: { plugins: [{ id: pluginRoot, scope: 'host-vite', watch: true }] }
-      })
-
-      const listResponse = await fetch(`${baseUrl}/api/plugins`)
-      const listPayload = await listResponse.json() as {
-        plugins: Array<{ client?: { clientEntryUrl?: string; devClientEntryUrl?: string }; name?: string }>
-      }
-      expect(listPayload.plugins[0]).toMatchObject({
-        client: {
-          clientEntryUrl: '/api/plugins/host-vite/client/dist/index.js',
-          devClientEntryUrl: await toHostViteFsPath(path.join(pluginRoot, 'client', 'src', 'index.tsx'), '/ui')
+    await mkdir(path.join(pluginRoot, 'client', 'src'), { recursive: true })
+    await mkdir(path.join(pluginRoot, 'client', 'dist'), { recursive: true })
+    await writeFile(path.join(pluginRoot, 'client', 'src', 'index.tsx'), 'export const sourcePlugin = true\n')
+    await writeFile(path.join(pluginRoot, 'client', 'dist', 'index.js'), 'export const builtPlugin = true\n')
+    await writeFile(
+      path.join(pluginRoot, 'package.json'),
+      JSON.stringify(
+        {
+          name: '@local/plugin-host-vite',
+          exports: {
+            './client': {
+              source: './client/src/index.tsx',
+              default: './client/dist/index.js'
+            },
+            './package.json': './package.json'
+          }
         },
-        name: '@local/plugin-host-vite'
-      })
-    } finally {
-      if (previousBase == null) {
-        delete process.env.__ONEWORKS_PROJECT_CLIENT_BASE__
-      } else {
-        process.env.__ONEWORKS_PROJECT_CLIENT_BASE__ = previousBase
-      }
+        null,
+        2
+      )
+    )
+    await writeFile(path.join(pluginRoot, 'plugin.json'), JSON.stringify({ plugin: {} }, null, 2))
+    mocks.loadConfigState.mockResolvedValue({
+      workspaceFolder,
+      mergedConfig: { plugins: [{ id: pluginRoot, scope: 'host-vite', watch: true }] }
+    })
+
+    const listResponse = await fetch(`${baseUrl}/api/plugins`)
+    const listPayload = await listResponse.json() as {
+      plugins: Array<{ client?: { clientEntryUrl?: string; devClientEntryUrl?: string }; name?: string }>
     }
+    const sourceEntry = '/api/plugins/host-vite/client-source/client/src/index.tsx'
+    expect(listPayload.plugins[0]).toMatchObject({
+      client: {
+        clientEntryUrl: '/api/plugins/host-vite/client/dist/index.js',
+        devClientEntryUrl: sourceEntry
+      },
+      name: '@local/plugin-host-vite'
+    })
+    expect(JSON.stringify(listPayload)).not.toContain(pluginRoot)
+    expect(JSON.stringify(listPayload)).not.toContain('/@fs/')
+
+    const sourceResponse = await fetch(`${baseUrl}${sourceEntry}`)
+    const sourceText = await sourceResponse.text()
+    expect(sourceResponse.status, sourceText).toBe(200)
+    expect(sourceText).toContain('sourcePlugin')
   })
 
   it('compiles watched local client source for packaged desktop runtimes', async () => {
@@ -1070,7 +1063,7 @@ describe('plugin package export conventions', () => {
     expect(sourceText).not.toContain('escapedBuiltEntry')
   })
 
-  it('does not expose host Vite source entries outside allowed local roots', async () => {
+  it('uses the configured plugin root as the client-source containment boundary', async () => {
     const pluginRoot = await mkdtemp(path.join(os.tmpdir(), 'ow-plugin-host-vite-outside-'))
     try {
       await mkdir(path.join(pluginRoot, 'client', 'src'), { recursive: true })
@@ -1106,22 +1099,24 @@ describe('plugin package export conventions', () => {
       }
       expect(listPayload.plugins[0]).toMatchObject({
         client: {
-          clientEntryUrl: '/api/plugins/host-vite-outside/client/dist/index.js'
+          clientEntryUrl: '/api/plugins/host-vite-outside/client/dist/index.js',
+          devClientEntryUrl: '/api/plugins/host-vite-outside/client-source/client/src/index.tsx'
         },
         name: '@local/plugin-host-vite-outside'
       })
-      expect(listPayload.plugins[0]?.client?.devClientEntryUrl).toBeUndefined()
+      expect(JSON.stringify(listPayload)).not.toContain(pluginRoot)
+      const sourceResponse = await fetch(
+        `${baseUrl}/api/plugins/host-vite-outside/client-source/client/src/index.tsx`
+      )
+      expect(sourceResponse.status).toBe(200)
+      await expect(sourceResponse.text()).resolves.toContain('sourcePlugin')
     } finally {
       await rm(pluginRoot, { recursive: true, force: true })
     }
   })
 
-  it('uses configured host Vite allow roots for external local plugin source exports', async () => {
-    const previousAllow = process.env.__ONEWORKS_PROJECT_CLIENT_FS_ALLOW__
-    const previousBase = process.env.__ONEWORKS_PROJECT_CLIENT_BASE__
-    process.env.__ONEWORKS_PROJECT_CLIENT_BASE__ = '/ui/'
+  it('does not use client fs allow roots in public source URLs', async () => {
     const pluginRoot = await mkdtemp(path.join(os.tmpdir(), 'ow-plugin-host-vite-allowed-'))
-    process.env.__ONEWORKS_PROJECT_CLIENT_FS_ALLOW__ = JSON.stringify([pluginRoot])
     try {
       await mkdir(path.join(pluginRoot, 'client', 'src'), { recursive: true })
       await mkdir(path.join(pluginRoot, 'client', 'dist'), { recursive: true })
@@ -1157,31 +1152,19 @@ describe('plugin package export conventions', () => {
       expect(listPayload.plugins[0]).toMatchObject({
         client: {
           clientEntryUrl: '/api/plugins/host-vite-allowed/client/dist/index.js',
-          devClientEntryUrl: await toHostViteFsPath(path.join(pluginRoot, 'client', 'src', 'index.tsx'), '/ui')
+          devClientEntryUrl: '/api/plugins/host-vite-allowed/client-source/client/src/index.tsx'
         },
         name: '@local/plugin-host-vite-allowed'
       })
+      expect(JSON.stringify(listPayload)).not.toContain(pluginRoot)
+      expect(JSON.stringify(listPayload)).not.toContain('/@fs/')
     } finally {
-      if (previousAllow == null) {
-        delete process.env.__ONEWORKS_PROJECT_CLIENT_FS_ALLOW__
-      } else {
-        process.env.__ONEWORKS_PROJECT_CLIENT_FS_ALLOW__ = previousAllow
-      }
-      if (previousBase == null) {
-        delete process.env.__ONEWORKS_PROJECT_CLIENT_BASE__
-      } else {
-        process.env.__ONEWORKS_PROJECT_CLIENT_BASE__ = previousBase
-      }
       await rm(pluginRoot, { recursive: true, force: true })
     }
   })
 
-  it('uses an allowed host Vite source when external built output is missing and watch is disabled', async () => {
-    const previousAllow = process.env.__ONEWORKS_PROJECT_CLIENT_FS_ALLOW__
-    const previousBase = process.env.__ONEWORKS_PROJECT_CLIENT_BASE__
-    process.env.__ONEWORKS_PROJECT_CLIENT_BASE__ = '/ui/'
+  it('serves a missing built entry fallback through client-source when watch is disabled', async () => {
     const pluginRoot = await mkdtemp(path.join(os.tmpdir(), 'ow-plugin-host-vite-fallback-'))
-    process.env.__ONEWORKS_PROJECT_CLIENT_FS_ALLOW__ = JSON.stringify([pluginRoot])
     try {
       await mkdir(path.join(pluginRoot, 'client', 'src'), { recursive: true })
       await writeFile(
@@ -1224,29 +1207,21 @@ describe('plugin package export conventions', () => {
           diagnostics?: unknown[]
         }>
       }
-      const fallbackEntry = await toHostViteFsPath(
-        path.join(pluginRoot, 'client', 'src', 'index.tsx'),
-        '/ui'
-      )
+      const fallbackEntry = '/api/plugins/host-vite-fallback/client-source/client/src/index.tsx'
       expect(listPayload.plugins[0]).toMatchObject({
         client: {
           clientEntryUrl: fallbackEntry,
-          devClientEntryKind: 'host-vite',
+          devClientEntryKind: 'runtime-source',
           devClientEntryUrl: fallbackEntry
         },
         diagnostics: []
       })
+      expect(JSON.stringify(listPayload)).not.toContain(pluginRoot)
+      const sourceResponse = await fetch(`${baseUrl}${fallbackEntry}`)
+      const sourceText = await sourceResponse.text()
+      expect(sourceResponse.status, sourceText).toBe(200)
+      expect(sourceText).toContain('sourceFallback')
     } finally {
-      if (previousAllow == null) {
-        delete process.env.__ONEWORKS_PROJECT_CLIENT_FS_ALLOW__
-      } else {
-        process.env.__ONEWORKS_PROJECT_CLIENT_FS_ALLOW__ = previousAllow
-      }
-      if (previousBase == null) {
-        delete process.env.__ONEWORKS_PROJECT_CLIENT_BASE__
-      } else {
-        process.env.__ONEWORKS_PROJECT_CLIENT_BASE__ = previousBase
-      }
       await rm(pluginRoot, { recursive: true, force: true })
     }
   })

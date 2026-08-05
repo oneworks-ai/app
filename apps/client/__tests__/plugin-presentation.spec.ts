@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest'
 import { resolvePluginSourceGroup } from '../src/components/plugins/PluginStoreSidebarControls'
 import type { PluginRuntimeInstance } from '../src/plugins/plugin-manifest'
 import {
+  getNativePluginPresentationSearchText,
   getPluginPresentationSearchText,
+  resolveInstalledMarketplacePlugin,
   resolvePluginDisplayName,
   resolvePluginPresentationIcon
 } from '../src/plugins/plugin-presentation'
@@ -70,5 +72,64 @@ describe('plugin presentation', () => {
     })
 
     expect(getPluginPresentationSearchText(renamedLogger, 'en')).not.toContain('Logger')
+  })
+
+  it('indexes root-free public plugin metadata and ignores native display paths', () => {
+    const plugin = createPlugin({
+      name: 'Codex Docs'
+    })
+
+    const searchText = getPluginPresentationSearchText(plugin, 'en')
+
+    expect(searchText).toContain('Codex Docs')
+    expect(plugin).not.toHaveProperty('pluginRoot')
+    expect(plugin).not.toHaveProperty('rootDir')
+    expect(getNativePluginPresentationSearchText({
+      adapter: 'codex',
+      capabilities: {
+        disable: 'unsupported',
+        discover: 'available',
+        enable: 'unsupported',
+        import: 'unsupported',
+        install: 'unsupported',
+        uninstall: 'unsupported',
+        update: 'unsupported'
+      },
+      id: 'docs',
+      name: 'Codex Docs',
+      scope: 'user',
+      source: {
+        displayPath: '/Users/example/.codex/plugins/docs',
+        kind: 'installed-copy'
+      },
+      state: 'enabled'
+    })).toBe('Codex Docs docs codex user')
+  })
+
+  it('prefers the installed runtime identity for a marketplace detail without using a filesystem path', () => {
+    const installed = createPlugin({
+      displayName: 'Airtable',
+      scope: 'adapter:codex:market:official:airtable',
+      source: {
+        adapter: 'codex',
+        kind: 'marketplace',
+        marketplace: 'official',
+        plugin: 'airtable'
+      }
+    })
+    const unrelated = createPlugin({
+      scope: 'other',
+      source: {
+        adapter: 'codex',
+        kind: 'marketplace',
+        marketplace: 'official',
+        plugin: 'calendar'
+      }
+    })
+
+    expect(resolveInstalledMarketplacePlugin([unrelated, installed], {
+      marketplace: 'official',
+      plugin: 'airtable'
+    })).toBe(installed)
   })
 })

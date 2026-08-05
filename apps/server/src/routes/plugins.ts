@@ -3,6 +3,7 @@ import { Buffer } from 'node:buffer'
 import path from 'node:path'
 
 import Router from '@koa/router'
+import { ManagedPluginSourceTransportError } from '@oneworks/managed-plugins'
 import type {
   PluginRuntimeChannelInvocation,
   PluginRuntimeChannelResponse,
@@ -141,7 +142,7 @@ export function pluginsRouter(): Router {
     const manager = getPluginManager()
     await manager.load()
     ctx.body = {
-      runtime: manager.getRuntimeEndpoint()
+      runtime: manager.getPublicRuntimeEndpoint()
     }
   })
 
@@ -149,7 +150,7 @@ export function pluginsRouter(): Router {
     const manager = getPluginManager()
     await manager.load()
     ctx.body = {
-      endpoints: await manager.listRuntimeEndpoints()
+      endpoints: await manager.listPublicRuntimeEndpoints()
     }
   })
 
@@ -161,7 +162,7 @@ export function pluginsRouter(): Router {
     const id = String(ctx.params.id ?? '')
     const groups = await listNativeHostPluginAssets(id)
     if (groups == null) throw notFound('Native plugin not found.', undefined, 'native_plugin_not_found')
-    ctx.body = { groups, id }
+    ctx.body = { groups }
   })
 
   router.get('/marketplace/catalog', async (ctx) => {
@@ -234,12 +235,26 @@ export function pluginsRouter(): Router {
         'invalid_plugin_marketplace_selection_request'
       )
     }
-    const results = await setPluginMarketplaceSelection({
-      enabled: body.enabled,
-      marketplace: String(ctx.params.marketplace ?? ''),
-      plugin: String(ctx.params.plugin ?? ''),
-      target: body.target
-    })
+    let results
+    try {
+      results = await setPluginMarketplaceSelection({
+        enabled: body.enabled,
+        marketplace: String(ctx.params.marketplace ?? ''),
+        plugin: String(ctx.params.plugin ?? ''),
+        target: body.target
+      })
+    } catch (error) {
+      if (error instanceof ManagedPluginSourceTransportError) {
+        throw new HttpError(
+          503,
+          'plugin_marketplace_source_unavailable',
+          'The plugin source is temporarily unavailable. Try again.',
+          undefined,
+          { expose: true }
+        )
+      }
+      throw error
+    }
     await getPluginManager().reload()
     ctx.body = { results }
   })

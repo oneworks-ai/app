@@ -1,3 +1,5 @@
+import type { NativeHostPlugin } from '@oneworks/types'
+
 import type { IconAsset } from '#~/components/icons/IconAsset'
 
 import loggerIcon from '../../../../packages/plugins/logger/assets/icon.svg?raw'
@@ -6,6 +8,11 @@ import standardDevIcon from '../../../../packages/plugins/standard-dev/assets/ic
 import { buildPluginReadmeAssetUrl } from './api'
 import { resolvePluginLocalizedText } from './plugin-i18n'
 import type { PluginRuntimeInstance } from './plugin-manifest'
+
+export interface MarketplacePluginIdentity {
+  marketplace: string
+  plugin: string
+}
 
 const legacyOfficialPresentations: Record<string, {
   displayName: string
@@ -46,6 +53,16 @@ export const resolvePluginDescription = (plugin: PluginRuntimeInstance, language
   }) ?? plugin.description
 )
 
+export const resolveInstalledMarketplacePlugin = (
+  plugins: PluginRuntimeInstance[],
+  identity: MarketplacePluginIdentity
+) =>
+  plugins.find(plugin => (
+    plugin.source?.kind === 'marketplace' &&
+    plugin.source.marketplace === identity.marketplace &&
+    plugin.source.plugin === identity.plugin
+  ))
+
 export const resolvePluginPresentationIcon = (
   plugin: PluginRuntimeInstance,
   serverBaseUrl?: string
@@ -76,5 +93,16 @@ export const getPluginPresentationSearchText = (plugin: PluginRuntimeInstance, l
     plugin.name ?? ''
   } ${plugin.description ?? ''} ${Object.values(plugin.descriptionI18n ?? {}).join(' ')} ${plugin.scope} ${
     plugin.packageId ?? ''
-  } ${plugin.requestId ?? ''} ${plugin.pluginRoot ?? plugin.rootDir ?? ''}`
+  } ${plugin.requestId ?? ''}`
 }
+
+export const getNativePluginPresentationSearchText = (plugin: NativeHostPlugin) => (
+  [
+    plugin.displayName,
+    plugin.name,
+    plugin.id,
+    plugin.adapter,
+    plugin.marketplace,
+    plugin.scope
+  ].filter(Boolean).join(' ')
+)

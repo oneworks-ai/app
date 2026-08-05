@@ -4,7 +4,8 @@ import path from 'node:path'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { syncConfiguredMarketplacePlugins } from '#~/managed-plugin-install.js'
+import { installAdapterPluginWithInstaller, syncConfiguredMarketplacePlugins } from '#~/managed-plugin-install.js'
+import { ManagedPluginSourceTransportError, installManagedPluginSource } from '#~/managed-plugin-source.js'
 import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 import { getManagedPluginInstallDir } from '@oneworks/utils/managed-plugin'
 import { convertClaudePluginToOneWorks } from '../../adapters/claude-code/src/plugins/convert'
@@ -101,6 +102,40 @@ const createMarketplaceWorkspace = async (options?: {
   }
 }
 
+describe('installManagedPluginSource transport failures', () => {
+  it('classifies a git failure without retaining credential URLs or private paths', async () => {
+    const workspace = await mkdtemp(path.join(tmpdir(), 'ow-managed-source-transport-'))
+    const fakeBinDir = path.join(workspace, 'fake-bin')
+    const credentialUrl = 'https://user:secret@example.invalid/plugin.git'
+    const privatePath = path.join(workspace, 'private', 'credential.txt')
+    tempDirs.push(workspace)
+    await mkdir(fakeBinDir)
+    await writeFile(
+      path.join(fakeBinDir, 'git'),
+      `#!/bin/sh\nprintf '%s\\n' ${JSON.stringify(`fatal: ${credentialUrl} at ${privatePath}`)} >&2\nexit 1\n`,
+      { mode: 0o755 }
+    )
+
+    const originalPath = process.env.PATH
+    process.env.PATH = fakeBinDir
+    try {
+      const error = await installManagedPluginSource(
+        path.join(workspace, 'source'),
+        workspace,
+        { type: 'git', url: credentialUrl }
+      ).then(() => undefined, failure => failure as unknown)
+
+      expect(error).toBeInstanceOf(ManagedPluginSourceTransportError)
+      expect(error).not.toHaveProperty('cause')
+      const diagnosticText = error instanceof Error ? `${error.message}\n${error.stack ?? ''}` : String(error)
+      expect(diagnosticText).not.toContain(credentialUrl)
+      expect(diagnosticText).not.toContain(privatePath)
+    } finally {
+      process.env.PATH = originalPath
+    }
+  })
+})
+
 describe('syncConfiguredMarketplacePlugins', () => {
   const mockInstaller = {
     adapter: 'claude',
@@ -131,6 +166,20 @@ describe('syncConfiguredMarketplacePlugins', () => {
     const { workspace } = await createMarketplaceWorkspace()
     loadAdapterPluginInstallerMock.mockResolvedValue(mockInstaller)
     const installDir = getManagedPluginInstallDir(workspace, 'claude', 'team-tools--reviewer', process.env)
+    const sentinelPath = path.join(installDir, 'sentinel.txt')
+    await mkdir(installDir, { recursive: true })
+    await writeFile(sentinelPath, 'user-owned\n')
+
+    for (const force of [false, true]) {
+      await expect(installAdapterPluginWithInstaller(mockInstaller, {
+        cwd: workspace,
+        force,
+        silent: true,
+        source: 'reviewer@team-tools'
+      })).rejects.toThrow(/not a valid managed plugin install/i)
+      await expect(readFile(sentinelPath, 'utf8')).resolves.toBe('user-owned\n')
+    }
+    await rm(installDir, { recursive: true })
 
     const results = await syncConfiguredMarketplacePlugins({
       cwd: workspace,
@@ -234,5 +283,53 @@ describe('syncConfiguredMarketplacePlugins', () => {
     })).rejects.toThrow(/scope "review" is declared by both/i)
 
     expect(loadAdapterPluginInstallerMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('installAdapterPluginWithInstaller ownership', () => {
+  it('does not force-replace a different plugin with the same lossy slug', async () => {
+    const workspace = await mkdtemp(path.join(tmpdir(), 'ow-plugin-slug-collision-'))
+    tempDirs.push(workspace)
+    process.env.__ONEWORKS_PROJECT_HOME_PROJECTS_DIR__ = path.join(workspace, '.oneworks-projects')
+    const firstSource = path.join(workspace, 'first-source')
+    const secondSource = path.join(workspace, 'second-source')
+    for (
+      const [source, name, sentinel] of [
+        [firstSource, 'Foo Bar', 'first owner'],
+        [secondSource, 'foo-bar', 'colliding owner']
+      ]
+    ) {
+      await mkdir(path.join(source, '.claude-plugin'), { recursive: true })
+      await mkdir(path.join(source, 'commands'), { recursive: true })
+      await writeFile(
+        path.join(source, '.claude-plugin', 'plugin.json'),
+        JSON.stringify({ name }, null, 2)
+      )
+      await writeFile(path.join(source, 'commands', 'owner.md'), `${sentinel}\n`)
+    }
+    const installer = {
+      adapter: 'claude',
+      convertToOneWorks: convertClaudePluginToOneWorks,
+      detectPluginRoot: detectClaudePluginRoot,
+      mergeManifest: mergeClaudePluginManifest,
+      readManifest: parseClaudePluginManifest
+    }
+    await installAdapterPluginWithInstaller(installer, {
+      cwd: workspace,
+      silent: true,
+      source: firstSource
+    })
+    const installDir = getManagedPluginInstallDir(workspace, 'claude', 'foo-bar', process.env)
+
+    await expect(installAdapterPluginWithInstaller(installer, {
+      cwd: workspace,
+      force: true,
+      silent: true,
+      source: secondSource
+    })).rejects.toThrow(/different plugin/i)
+    await expect(readFile(path.join(installDir, 'oneworks', 'skills', 'owner', 'SKILL.md'), 'utf8'))
+      .resolves.toContain('first owner')
+    await expect(readFile(path.join(installDir, '.oneworks-plugin.json'), 'utf8'))
+      .resolves.toContain('"name": "Foo Bar"')
   })
 })

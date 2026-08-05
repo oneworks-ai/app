@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer'
 import { constants } from 'node:fs'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -5,8 +6,10 @@ import path from 'node:path'
 import type { ClaudePluginManifest } from '@oneworks/adapter-claude-code/plugins'
 
 export interface CodexPluginManifest extends ClaudePluginManifest {
-  apps?: string
+  apps?: string | string[]
+  displayName?: string
   interface?: {
+    capabilities?: string[]
     composerIcon?: string
     displayName?: string
     shortDescription?: string
@@ -17,6 +20,8 @@ export interface CodexPluginManifest extends ClaudePluginManifest {
     logoDark?: string
   }
 }
+
+const MAX_CODEX_PLUGIN_MANIFEST_BYTES = 1024 * 1024
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
@@ -31,12 +36,61 @@ export const pathExists = async (target: string) => {
   }
 }
 
+export const resolveCodexPathWithinPluginRoot = async (
+  pluginRoot: string,
+  entry: string,
+  description: string
+) => {
+  const resolved = path.resolve(pluginRoot, entry)
+  const relative = path.relative(pluginRoot, resolved)
+  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error(`${description} must stay within the plugin root.`)
+  }
+  if (!await pathExists(resolved)) return resolved
+
+  const [realRoot, realResolved] = await Promise.all([
+    fs.realpath(pluginRoot),
+    fs.realpath(resolved)
+  ])
+  const realRelative = path.relative(realRoot, realResolved)
+  if (realRelative === '..' || realRelative.startsWith(`..${path.sep}`) || path.isAbsolute(realRelative)) {
+    throw new Error(`${description} resolves outside the plugin root.`)
+  }
+  return resolved
+}
+
 export const parseCodexPluginManifest = async (pluginRoot: string): Promise<CodexPluginManifest | undefined> => {
-  const manifestPath = path.join(pluginRoot, '.codex-plugin', 'plugin.json')
+  const manifestPath = await resolveCodexPathWithinPluginRoot(
+    pluginRoot,
+    path.join('.codex-plugin', 'plugin.json'),
+    'Codex plugin manifest'
+  )
   if (!await pathExists(manifestPath)) return undefined
 
-  const raw = JSON.parse(await fs.readFile(manifestPath, 'utf8')) as unknown
-  return isRecord(raw) ? raw as CodexPluginManifest : undefined
+  const handle = await fs.open(manifestPath, constants.O_RDONLY | constants.O_NOFOLLOW)
+  let source: string
+  try {
+    const manifestStat = await handle.stat()
+    if (!manifestStat.isFile() || manifestStat.size > MAX_CODEX_PLUGIN_MANIFEST_BYTES) {
+      throw new Error(`Codex plugin manifest exceeds ${MAX_CODEX_PLUGIN_MANIFEST_BYTES} bytes.`)
+    }
+    const buffer = Buffer.alloc(MAX_CODEX_PLUGIN_MANIFEST_BYTES + 1)
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0)
+    if (bytesRead > MAX_CODEX_PLUGIN_MANIFEST_BYTES) {
+      throw new Error(`Codex plugin manifest exceeds ${MAX_CODEX_PLUGIN_MANIFEST_BYTES} bytes.`)
+    }
+    source = buffer.subarray(0, bytesRead).toString('utf8')
+  } finally {
+    await handle.close()
+  }
+  let raw: unknown
+  try {
+    raw = JSON.parse(source) as unknown
+  } catch {
+    throw new Error('Codex plugin manifest is not valid JSON.')
+  }
+  if (!isRecord(raw)) throw new Error('Codex plugin manifest must contain a JSON object.')
+  return raw as CodexPluginManifest
 }
 
 export const mergeCodexPluginManifest = (

@@ -1,14 +1,19 @@
 /* eslint-disable max-lines -- plugin route coverage shares one Koa fixture across scoped runtime scenarios. */
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
+import { pathToFileURL } from 'node:url'
 
 import Router from '@koa/router'
 import Koa from 'koa'
 import bodyParser from 'koa-bodyparser'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { codexPluginInstaller } from '@oneworks/adapter-codex/plugins'
+import { installAdapterPluginWithInstaller } from '@oneworks/managed-plugins'
+import { listManagedPluginInstalls, resolveManagedPluginScope } from '@oneworks/utils'
 
 import { pluginsRouter } from '#~/routes/plugins.js'
 import { getPluginManager, resetPluginManagerForTests } from '#~/services/plugins/index.js'
@@ -119,13 +124,12 @@ describe('pluginsRouter', () => {
 
     expect(response.status).toBe(200)
     expect(payload.diagnostics).toEqual([])
-    expect(payload.plugins).toEqual([
-      expect.objectContaining({
+    expect(payload.plugins.find(plugin => plugin.packageId === '@oneworks/plugin-relay'))
+      .toEqual(expect.objectContaining({
         enabled: false,
         packageId: '@oneworks/plugin-relay',
         scope: 'relay'
-      })
-    ])
+      }))
   })
 
   it('lists configured plugins and exposes client entries', async () => {
@@ -159,6 +163,111 @@ describe('pluginsRouter', () => {
         diagnostics: []
       }
     ])
+  })
+
+  it('bounds legacy native app metadata at the shared public limit with a diagnostic', async () => {
+    const pluginRoot = path.join(workspaceFolder, 'plugins', 'many-apps')
+    await createPlugin(pluginRoot, {
+      name: 'many-apps',
+      native: {
+        adapter: 'codex',
+        apps: Array.from({ length: 65 }, (_value, index) => ({ id: `app${index}` }))
+      }
+    })
+    mockConfig([{ id: pluginRoot, scope: 'many-apps' }])
+
+    const response = await fetch(`${baseUrl}/api/plugins`)
+    const payload = await response.json() as {
+      plugins: Array<{ manifest?: { native?: { apps?: unknown[]; diagnostics?: Array<{ code: string }> } } }>
+    }
+
+    expect(response.status).toBe(200)
+    expect(payload.plugins[0]?.manifest?.native?.apps).toHaveLength(64)
+    expect(payload.plugins[0]?.manifest?.native?.diagnostics).toContainEqual(
+      expect.objectContaining({ code: 'plugin_native_app_limit' })
+    )
+  })
+
+  it('derives managed marketplace identity through a real install and discovery pass', async () => {
+    vi.stubEnv('__ONEWORKS_PROJECT_WORKSPACE_FOLDER__', workspaceFolder)
+    vi.stubEnv('__ONEWORKS_PROJECT_HOME_PROJECT_DIR__', path.join(workspaceFolder, 'project-home'))
+    vi.stubEnv(
+      '__ONEWORKS_PROJECT_HOME_PROJECTS_DIR__',
+      path.join(workspaceFolder, 'project-homes')
+    )
+    const sourceRoot = path.join(workspaceFolder, 'catalog-source')
+    await mkdir(path.join(sourceRoot, '.codex-plugin'), { recursive: true })
+    await writeFile(
+      path.join(sourceRoot, '.codex-plugin', 'plugin.json'),
+      JSON.stringify({
+        name: 'attacker-controlled-directory-name',
+        version: '1.0.0'
+      })
+    )
+    const marketplaceSource = {
+      marketplace: 'Team Marketplace',
+      plugin: '@scope/Docs Plugin',
+      type: 'marketplace' as const
+    }
+    const marketplaceInstaller = {
+      ...codexPluginInstaller,
+      resolveSource: async () => ({
+        installSource: { path: sourceRoot, type: 'path' as const },
+        managedSource: marketplaceSource,
+        manifestOverrides: {
+          displayName: 'Catalog Docs',
+          name: '@scope/Docs Plugin',
+          version: '2.0.0'
+        }
+      })
+    }
+    const installResult = await installAdapterPluginWithInstaller(marketplaceInstaller, {
+      cwd: workspaceFolder,
+      silent: true,
+      source: '@scope/Docs Plugin@Team Marketplace'
+    })
+    const expectedScope = resolveManagedPluginScope({
+      adapter: 'codex',
+      name: '@scope/Docs Plugin',
+      source: marketplaceSource
+    })
+    expect(installResult.config.scope).toBe(expectedScope)
+    const installs = await listManagedPluginInstalls(workspaceFolder, { env: process.env })
+    expect(installs).toHaveLength(1)
+    expect(await realpath(installs[0]!.oneworksPluginDir))
+      .toBe(await realpath(installResult.workspacePluginDir!))
+    mockConfig([{ id: installResult.workspacePluginDir! }])
+
+    const response = await fetch(`${baseUrl}/api/plugins`)
+    const payload = await response.json() as {
+      plugins: Array<{
+        displayName?: string
+        name?: string
+        packageId?: string
+        requestId?: string
+        scope?: string
+        source?: Record<string, unknown>
+      }>
+    }
+
+    expect(response.status).toBe(200)
+    expect(payload.plugins).toEqual([
+      expect.objectContaining({
+        displayName: 'Catalog Docs',
+        name: '@scope/Docs Plugin',
+        packageId: '@scope/Docs Plugin@Team Marketplace',
+        requestId: '@scope/Docs Plugin@Team Marketplace',
+        scope: expectedScope,
+        source: {
+          adapter: 'codex',
+          kind: 'marketplace',
+          marketplace: 'Team Marketplace',
+          plugin: '@scope/Docs Plugin'
+        }
+      })
+    ])
+    expect(JSON.stringify(payload.plugins)).not.toContain(installResult.installDir)
+    expect(JSON.stringify(payload.plugins)).not.toContain(sourceRoot)
   })
 
   it('does not auto-discover global plugins when merged config disables global config', async () => {
@@ -302,8 +411,13 @@ describe('pluginsRouter', () => {
     mockConfig([{ id: pluginRoot, scope: 'runtime' }])
 
     const runtimeResponse = await fetch(`${baseUrl}/api/plugins/runtime`)
-    const runtimePayload = await runtimeResponse.json() as { runtime: { role: string } }
+    const runtimePayload = await runtimeResponse.json() as {
+      runtime: { projectHome?: string; role: string; workspaceFolder?: string }
+    }
     expect(runtimePayload.runtime.role).toBe('workspace')
+    expect(runtimePayload.runtime).not.toHaveProperty('projectHome')
+    expect(runtimePayload.runtime).not.toHaveProperty('workspaceFolder')
+    expect(JSON.stringify(runtimePayload)).not.toContain(workspaceFolder)
 
     const response = await fetch(`${baseUrl}/api/plugins/runtime/runtime/channels/echo`, {
       method: 'POST',
@@ -379,6 +493,7 @@ describe('pluginsRouter', () => {
         status: 'online'
       })
     ])
+    expect(JSON.stringify(payload)).not.toContain(workspaceFolder)
   })
 
   it('lists the current manager runtime endpoint', async () => {
@@ -1047,7 +1162,7 @@ describe('pluginsRouter', () => {
     await expect(commandResponse.json()).resolves.toBe(2)
   })
 
-  it('reports duplicate scope diagnostics clearly', async () => {
+  it('redacts duplicate scope discovery details from public diagnostics', async () => {
     const firstRoot = path.join(workspaceFolder, 'plugins', 'first')
     const secondRoot = path.join(workspaceFolder, 'plugins', 'second')
     await createPlugin(firstRoot, { name: 'first', plugin: {} })
@@ -1064,12 +1179,40 @@ describe('pluginsRouter', () => {
     expect(payload.diagnostics).toEqual([
       expect.objectContaining({
         code: 'plugin_discovery_failed',
-        message: expect.stringContaining('Conflicting plugin scope "same"')
+        message: 'Failed to discover plugins.'
       })
     ])
+    const serialized = JSON.stringify(payload)
+    expect(serialized).not.toContain(firstRoot)
+    expect(serialized).not.toContain(secondRoot)
   })
 
-  function mockConfig(plugins: Array<{ enabled?: boolean; id: string; scope?: string }>) {
+  it('redacts credential URLs and private paths from public discovery diagnostics', async () => {
+    const credentialUrl = 'https://user:secret@example.invalid/plugin.git'
+    const privatePath = '/private/marketplace/source/credential.txt'
+    mocks.loadConfigState.mockRejectedValueOnce(
+      new Error(`Failed to load ${credentialUrl} from ${privatePath}`)
+    )
+
+    const response = await fetch(`${baseUrl}/api/plugins`)
+    const payload = await response.json() as { diagnostics: Array<{ code: string; message: string }> }
+
+    expect(response.status).toBe(200)
+    expect(payload.diagnostics).toEqual([
+      {
+        code: 'plugin_discovery_failed',
+        level: 'error',
+        message: 'Failed to discover plugins.'
+      }
+    ])
+    const serialized = JSON.stringify(payload)
+    expect(serialized).not.toContain(credentialUrl)
+    expect(serialized).not.toContain(privatePath)
+  })
+
+  function mockConfig(
+    plugins: Array<{ enabled?: boolean; id: string; options?: Record<string, unknown>; scope?: string }>
+  ) {
     mocks.loadConfigState.mockResolvedValue({
       workspaceFolder,
       mergedConfig: { plugins }
@@ -1091,6 +1234,220 @@ describe('pluginsRouter', () => {
     }
     return `http://127.0.0.1:${address.port}`
   }
+})
+
+describe('pluginsRouter public serialization', () => {
+  let workspaceFolder = ''
+
+  afterEach(async () => {
+    await resetPluginManagerForTests()
+    if (workspaceFolder !== '') await rm(workspaceFolder, { recursive: true, force: true })
+    workspaceFolder = ''
+    vi.clearAllMocks()
+    vi.unstubAllEnvs()
+  })
+
+  it('serializes plugin metadata through a path-free public allowlist', async () => {
+    vi.stubEnv('__ONEWORKS_PROJECT_DISABLE_DEFAULT_OFFICIAL_PLUGINS__', '1')
+    vi.stubEnv('__ONEWORKS_PROJECT_DISABLE_GLOBAL_CONFIG__', '1')
+    workspaceFolder = await fsMkdtemp('ow-plugin-public-serialization-')
+    const pluginRoot = path.join(workspaceFolder, 'plugins', 'docs')
+    const pluginFileUrl = pathToFileURL(pluginRoot).href
+    const encodedPluginRoot = encodeURIComponent(pluginRoot)
+    const credentialUrlKeys = [
+      'clientsecretvalue',
+      'CLIENTSECRETVALUE',
+      'apiKeyValue',
+      'oauth-client_secret.valueSuffix',
+      '%2563lient%2553ecret%2556alue',
+      'api%255Fkey%255Fvalue',
+      'clientSecretValue%'
+    ]
+    await createPlugin(pluginRoot, {
+      name: 'docs-plugin',
+      description: `Loaded from ${pluginRoot}, ${pluginFileUrl}, and ${encodedPluginRoot}`,
+      native: {
+        adapter: 'codex',
+        apps: [
+          {
+            id: 'docs',
+            capabilities: ['read', 'WorkspaceConfigurationManagement', 'write'],
+            authentication: {
+              authorizationUrl:
+                'https://example.test/oauth/authorize?client_id=docs&redirect_uri=%2Foauth%2Fcallback&redirect%255Furi=%2Fencoded&code_challenge=valid&login_hint=docs',
+              callbackPath: '/oauth/callback',
+              type: 'oauth2'
+            },
+            connectionRequirements: {
+              endpoint: 'https://api.example.test/connect',
+              required: true,
+              type: 'oauth'
+            },
+            permissions: ['repository:read']
+          },
+          ...credentialUrlKeys.map((key, index) => ({
+            authentication: {
+              authorizationUrl: `https://example.test/oauth?${key}=must-not-leak`,
+              type: 'oauth2'
+            },
+            id: `credential-key-${index}`
+          })),
+          {
+            authentication: {
+              authorizationUrl: 'https://example.test/oauth?clientSecretValue=must-not-leak',
+              type: 'oauth2'
+            },
+            id: 'credential-url'
+          },
+          {
+            authentication: {
+              tokenUrl: 'https://example.test/token?oauthClientSecretValueSuffix=must-not-leak',
+              type: 'oauth2'
+            },
+            id: 'credential-url-suffix'
+          },
+          {
+            id: 'unknown-shape',
+            metadata: { label: 'must-not-flow-to-public' }
+          },
+          {
+            authentication: { type: 'Bearer must-not-leak-credential-value' },
+            id: 'secret-shaped'
+          },
+          {
+            id: `${pluginRoot}/attacker-selected-id`
+          },
+          {
+            capabilities: ['read', `path=${pluginRoot}`],
+            id: 'path-shaped-capability'
+          },
+          {
+            id: 'connector_AKIAIOSFODNN7EXAMPLE'
+          },
+          {
+            authentication: { type: 'AIzaSyD-abcdefghijklmnopqrstuvwxyz1234' },
+            id: 'credential-type'
+          },
+          {
+            authentication: { scopes: ['AIzaSyD-abcdefghijklmnopqrstuvwxyz1234'], type: 'oauth2' },
+            id: 'credential-scope'
+          },
+          {
+            id: 'opaque-permission',
+            permissions: ['abcdefghijklmnopqrstuvwx.yz0123456789abcdefghijklmnop']
+          }
+        ],
+        diagnostics: [{
+          code: 'legacy_path',
+          level: 'warning',
+          message: `Legacy metadata referenced ${pluginRoot}, ${pluginFileUrl}, and ${encodedPluginRoot}.`
+        }]
+      },
+      source: { adapter: 'codex', kind: 'directory' },
+      plugin: {
+        client: {
+          devClientEntryKind: 'host-vite',
+          devClientEntryUrl: `/@fs${pluginRoot}/client/index.ts`,
+          entry: './client/index.js'
+        },
+        contributions: {
+          navItems: [{ id: 'home', title: pluginRoot }]
+        }
+      }
+    })
+    mocks.loadConfigState.mockResolvedValue({
+      workspaceFolder,
+      mergedConfig: {
+        plugins: [{
+          id: pluginRoot,
+          options: {
+            [pluginRoot]: 'must-not-leak',
+            cacheDir: `path=${pluginRoot}`,
+            encodedRoot: encodedPluginRoot,
+            fileRoot: pluginFileUrl,
+            oauthCallback: '/oauth/callback',
+            serviceUrl: 'https://example.test/oauth/callback'
+          },
+          scope: 'docs'
+        }]
+      }
+    })
+
+    const listHandler = pluginsRouter().stack.find(layer => layer.path === '/')?.stack[0]
+    if (listHandler == null) throw new Error('Plugin list route is not registered.')
+    const context = {} as Router.RouterContext
+    await listHandler(context, async () => {})
+    const payload = context.body as { plugins: Array<Record<string, unknown>> }
+    const plugin = payload.plugins[0] as {
+      client?: { devClientEntryKind?: string; devClientEntryUrl?: string }
+      manifest?: {
+        native?: {
+          apps?: Array<{
+            authentication?: Record<string, unknown>
+            capabilities?: string[]
+            connectionRequirements?: Record<string, unknown>
+            permissions?: string[]
+          }>
+          diagnostics?: Array<{ message: string }>
+        }
+      }
+      name?: string
+      options?: Record<string, unknown>
+      requestId?: string
+      source?: Record<string, unknown>
+    }
+
+    expect(plugin).toMatchObject({
+      name: 'docs-plugin',
+      requestId: 'docs-plugin',
+      source: { adapter: 'codex', kind: 'directory' }
+    })
+    expect(plugin.manifest?.native?.apps?.[0]).toEqual({
+      authentication: {
+        authorizationUrl:
+          'https://example.test/oauth/authorize?client_id=docs&redirect_uri=%2Foauth%2Fcallback&redirect%255Furi=%2Fencoded&code_challenge=valid&login_hint=docs',
+        callbackPath: '/oauth/callback',
+        type: 'oauth2'
+      },
+      capabilities: ['read', 'WorkspaceConfigurationManagement', 'write'],
+      connectionRequirements: {
+        endpoint: 'https://api.example.test/connect',
+        required: true,
+        type: 'oauth'
+      },
+      id: 'docs',
+      permissions: ['repository:read']
+    })
+    expect(plugin.manifest?.native?.apps).toHaveLength(1)
+    expect(plugin.manifest?.native?.diagnostics?.[0]?.message).toBe(
+      'Native plugin metadata diagnostic was redacted.'
+    )
+    expect(plugin.options).toEqual({
+      cacheDir: 'path=[local path]',
+      encodedRoot: '[local path]',
+      fileRoot: '[local path]',
+      oauthCallback: '/oauth/callback',
+      serviceUrl: 'https://example.test/oauth/callback'
+    })
+    expect(plugin.client).not.toHaveProperty('devClientEntryKind')
+    expect(plugin.client).not.toHaveProperty('devClientEntryUrl')
+    expect(plugin.client).not.toHaveProperty('root')
+    expect(plugin.client).not.toHaveProperty('sourceRoot')
+    expect(plugin).not.toHaveProperty('pluginRoot')
+    expect(plugin).not.toHaveProperty('rootDir')
+    const publicDiagnostics = (plugin as {
+      diagnostics?: Array<Record<string, unknown>>
+    }).diagnostics
+    expect(publicDiagnostics?.every(diagnostic => !Object.hasOwn(diagnostic, 'pluginRoot'))).toBe(true)
+    expect(JSON.stringify(plugin)).not.toContain(pluginRoot)
+    expect(JSON.stringify(plugin)).not.toContain('must-not-leak')
+    expect(JSON.stringify(plugin)).not.toContain('must-not-flow-to-public')
+    expect(JSON.stringify(plugin)).not.toContain('AKIAIOSFODNN7EXAMPLE')
+    expect(JSON.stringify(plugin)).not.toContain('AIzaSyD-abcdefghijklmnopqrstuvwxyz1234')
+    expect(JSON.stringify(plugin)).not.toContain('abcdefghijklmnopqrstuvwx.yz0123456789abcdefghijklmnop')
+    expect(JSON.stringify(plugin)).not.toContain(workspaceFolder)
+    expect(JSON.stringify(payload)).not.toContain(workspaceFolder)
+  }, 5_000)
 })
 
 const fsMkdtemp = (prefix: string) => mkdtemp(path.join(os.tmpdir(), prefix))

@@ -16,6 +16,7 @@ export interface PluginDetailRow {
   icon: string
   id: string
   items: PluginDetailItem[]
+  readOnly?: boolean
   title: string
 }
 
@@ -58,7 +59,6 @@ type PluginOverviewLabelKey =
   | 'package'
   | 'request'
   | 'requestedVersion'
-  | 'root'
   | 'serverEntry'
   | 'version'
 
@@ -100,6 +100,10 @@ export const pluginContributionGroups: Array<{
 const detailFields = [
   'id',
   'title',
+  'authentication',
+  'capabilities',
+  'connectionRequirements',
+  'permissions',
   'targetRoute',
   'targetRoutes',
   'route',
@@ -420,7 +424,6 @@ export function PluginOverview({
         <PluginFact icon='download' label={labels.requestedVersion} value={plugin.requestedVersion} />
         <PluginFact icon='layers' label={labels.package} value={plugin.packageId} />
         <PluginFact icon='link' label={labels.request} value={plugin.requestId} />
-        <PluginFact icon='folder_open' label={labels.root} value={plugin.pluginRoot ?? plugin.rootDir} />
         <PluginFact icon='language' label={labels.clientEntry} value={plugin.clientEntryUrl ?? plugin.client?.entry} />
         <PluginFact
           icon='tune'
@@ -565,7 +568,7 @@ export function PluginRows({
                         itemDisabledText,
                         language,
                         noDescriptionText,
-                        onItemEnabledChange
+                        onItemEnabledChange: row.readOnly === true ? undefined : onItemEnabledChange
                       })
                     )}
                   </div>
@@ -580,7 +583,7 @@ export function PluginRows({
                     </span>
                     <span className='plugin-detail-route__contribution-group-label'>{row.title}</span>
                   </span>
-                  {onRowEnabledChange != null && (
+                  {onRowEnabledChange != null && row.readOnly !== true && (
                     <Tooltip title={row.disabled === true ? enableText : disableText}>
                       <span
                         className='plugin-detail-route__contribution-group-toggle'

@@ -173,6 +173,27 @@
   border-top: 1px solid var(--border-color);
 }
 
+.plugin-marketplace__source-state {
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px;
+  color: var(--sub-text-color);
+  font-size: 12px;
+
+  .ant-btn {
+    flex: 0 0 auto;
+  }
+}
+
+.plugin-marketplace__source-state-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .plugin-marketplace__source-modal-form {
   padding-top: 8px;
 

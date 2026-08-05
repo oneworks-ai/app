@@ -175,9 +175,19 @@ export function PluginDetailPanel({
       target: api.target,
       title: api.title
     }))
+    const nativeApps = plugin.manifest?.native?.apps ?? []
 
     return [
       ...slotRows,
+      ...(nativeApps.length > 0
+        ? [{
+          icon: 'apps',
+          id: 'native:apps',
+          items: nativeApps.map(app => ({ ...app, title: app.name ?? app.id })),
+          readOnly: true,
+          title: t('pluginDetail.nativeApps')
+        }]
+        : []),
       ...(extensionPoints.length > 0
         ? [{
           icon: 'extension',
@@ -217,6 +227,7 @@ export function PluginDetailPanel({
     ]
   }, [
     plugin.apis,
+    plugin.manifest?.native?.apps,
     plugin.scope,
     snapshot.extensionContributions,
     snapshot.extensionPoints,
@@ -283,7 +294,7 @@ export function PluginDetailPanel({
         })),
         ...runtimeRows.map(row => ({
           ...row,
-          disabled: disabledContributionGroupSet.has(row.id),
+          disabled: row.readOnly === true ? false : disabledContributionGroupSet.has(row.id),
           items: toDetailItems(row.id, row.items)
         }))
       ] satisfies PluginDetailRow[],
@@ -299,6 +310,7 @@ export function PluginDetailPanel({
   )
   const getAssetGroup = (kind: PluginDetailAssetKind) => assetsByKind.get(kind)
   const dataAssetGroups = [
+    { icon: 'apps', kind: 'apps' as const, title: t('pluginDetail.apps') },
     { icon: 'psychology', kind: 'skills' as const, title: t('knowledge.tabs.skills') },
     { icon: 'group_work', kind: 'entities' as const, title: t('knowledge.tabs.entities') },
     { icon: 'account_tree', kind: 'specs' as const, title: t('knowledge.tabs.flows') },
@@ -335,7 +347,6 @@ export function PluginDetailPanel({
         package: t('pluginDetail.package'),
         request: t('pluginDetail.request'),
         requestedVersion: t('pluginDetail.requestedVersion'),
-        root: t('pluginDetail.root'),
         serverEntry: t('pluginDetail.serverEntry'),
         version: t('pluginDetail.version')
       }}
@@ -377,9 +388,12 @@ export function PluginDetailPanel({
               enableText={t('pluginDetail.enableContribution')}
               enableItemText={t('pluginDetail.enableContributionItem')}
               fieldLabels={{
+                authentication: t('pluginDetail.fields.authentication'),
+                capabilities: t('pluginDetail.fields.capabilities'),
                 clientView: t('pluginDetail.fields.clientView'),
                 command: t('pluginDetail.fields.command'),
                 contributionSchema: t('pluginDetail.fields.contributionSchema'),
+                connectionRequirements: t('pluginDetail.fields.connectionRequirements'),
                 extensionPoint: t('pluginDetail.fields.extensionPoint'),
                 headerSchema: t('pluginDetail.fields.headerSchema'),
                 href: t('pluginDetail.fields.href'),
@@ -387,6 +401,7 @@ export function PluginDetailPanel({
                 inputSchema: t('pluginDetail.fields.inputSchema'),
                 mode: t('pluginDetail.fields.mode'),
                 outputSchema: t('pluginDetail.fields.outputSchema'),
+                permissions: t('pluginDetail.fields.permissions'),
                 placement: t('pluginDetail.fields.placement'),
                 proxyTarget: t('pluginDetail.fields.proxyTarget'),
                 route: t('pluginDetail.fields.route'),

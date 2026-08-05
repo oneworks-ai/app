@@ -66,6 +66,21 @@ describe('dev-start runtime env', () => {
     expect(env.__ONEWORKS_PROJECT_HOME_PROJECT_DIR__).toBe(path.join(customProjectsDir, 'manager'))
   })
 
+  it('pins default Relay config hooks to the candidate worktree over inherited bootstrap packages', async () => {
+    await stubHome()
+    vi.stubEnv('__ONEWORKS_PROJECT_PACKAGE_DIR__', '/private/bootstrap/server')
+    vi.stubEnv('__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__', '/private/bootstrap/cli')
+
+    const env = await buildRuntimeEnv({
+      clientPort: 5173,
+      serverPort: 8787,
+      serverRole: 'manager'
+    })
+    const candidateServerRoot = path.join(repoRoot, 'apps/server')
+    expect(env.__ONEWORKS_PROJECT_PACKAGE_DIR__).toBe(candidateServerRoot)
+    expect(env.__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__).toBe(candidateServerRoot)
+  })
+
   it('derives different instance ids for different worktree roots', () => {
     expect(resolveDevStartInstanceId('/tmp/oneworks-a/app'))
       .not.toBe(resolveDevStartInstanceId('/tmp/oneworks-b/app'))

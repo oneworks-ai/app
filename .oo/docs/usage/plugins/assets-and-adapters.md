@@ -104,7 +104,7 @@ MCP 资产还可以显式使用 `${ONEWORKS_REAL_HOME}`。它只适用于必须�
 - `codex`: 支持 Codex plugin format 与 marketplace catalog；可复用的 skills、commands、agents、MCP 和 hooks 会转换到统一资产层
 - 两者都支持在 `marketplaces.<name>.plugins` 里声明项目默认插件，`oneworks` 创建新会话时会自动补装或同步
 
-当前还未接入 OpenCode 原生 plugin marketplace 安装链路。Codex 插件里的 `.app.json` 仍属于 Codex app 专属能力，不会转换成 One Works 资产。
+当前还未接入 OpenCode 原生 plugin marketplace 安装链路。Codex 插件里的 `.app.json` 不会被激活为 One Works app runtime；其中经过数量、深度、字符串和总大小限制且不含凭据的展示元数据，会随插件显示 apps、capabilities、permissions、authentication 和 connection requirements。
 
 通过 `marketplaces` 安装的 Claude Code / Codex 插件会自动进入 One Works runtime plugin 发现，不需要再把生成的 `oneworks/` 目录手工写进顶层 `plugins`。直接从路径或包安装的插件仍按顶层 `plugins` 配置显式接入。
 

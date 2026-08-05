@@ -51,7 +51,6 @@ export function MarketplacePluginDetailPanel({
     packageId: plugin.marketplaceTitle ?? plugin.marketplace,
     requestId: plugin.sourceType,
     requestedVersion: plugin.marketplaceType,
-    rootDir: plugin.sourceLabel,
     scope: `${plugin.marketplace}:${plugin.name}`,
     version
   }), [
@@ -62,7 +61,6 @@ export function MarketplacePluginDetailPanel({
     plugin.displayName,
     plugin.icon,
     plugin.name,
-    plugin.sourceLabel,
     plugin.sourceType,
     version
   ])
@@ -118,7 +116,6 @@ export function MarketplacePluginDetailPanel({
         package: t('pluginStore.marketplaceSources'),
         request: t('pluginStore.marketplaceDetailSourceType'),
         requestedVersion: t('pluginStore.marketplaceSourceType'),
-        root: t('pluginStore.marketplaceDetailSource'),
         serverEntry: t('pluginDetail.serverEntry'),
         version: t('pluginDetail.version')
       }}

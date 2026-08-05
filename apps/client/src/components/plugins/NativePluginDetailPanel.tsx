@@ -68,7 +68,6 @@ export function NativePluginDetailPanel({
     packageId: plugin.marketplace,
     requestId: plugin.adapter,
     requestedVersion: plugin.source.kind,
-    rootDir: plugin.source.displayPath,
     scope: plugin.id,
     version: plugin.version
   }), [plugin])
@@ -80,7 +79,6 @@ export function NativePluginDetailPanel({
         <section className='native-plugin-detail__body'>
           <h2>{displayName}</h2>
           <p>{plugin.description ?? t('pluginStore.nativeReadOnly')}</p>
-          <p className='native-plugin-detail__source'>{plugin.source.displayPath}</p>
         </section>
       )
     },
@@ -167,7 +165,6 @@ export function NativePluginDetailPanel({
         package: t('pluginStore.marketplaceSources'),
         request: t('pluginStore.marketplaceDetailSourceType'),
         requestedVersion: t('pluginStore.marketplaceSourceType'),
-        root: t('pluginDetail.root'),
         serverEntry: t('pluginDetail.serverEntry'),
         version: t('pluginDetail.version')
       }}

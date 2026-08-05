@@ -86,12 +86,59 @@ export interface PluginOverlayConfig {
 }
 
 export interface PluginManifestAssets {
+  apps?: string
   rules?: string
   skills?: string
   specs?: string
   entities?: string
   mcp?: string
   hooks?: string
+}
+
+export interface PluginNativeAppAuthentication {
+  authorizationUrl?: string
+  callbackPath?: string
+  scopes?: string[]
+  tokenUrl?: string
+  type?: string
+}
+
+export interface PluginNativeAppConnectionRequirements {
+  callbackPath?: string
+  endpoint?: string
+  required?: boolean
+  type?: string
+}
+
+export interface PluginNativeAppMetadata {
+  authentication?: PluginNativeAppAuthentication
+  capabilities?: string[]
+  connectionRequirements?: PluginNativeAppConnectionRequirements
+  id: string
+  name?: string
+  permissions?: string[]
+}
+
+// Native metadata is rendered in bounded public plugin snapshots.
+export const MAX_PUBLIC_NATIVE_APPS = 64
+
+export interface PluginNativeMetadataDiagnostic {
+  code: string
+  level: 'error' | 'info' | 'warning'
+  message: string
+}
+
+export interface PluginNativeMetadata {
+  adapter: string
+  apps?: PluginNativeAppMetadata[]
+  diagnostics?: PluginNativeMetadataDiagnostic[]
+}
+
+export interface PluginRuntimeSource {
+  adapter?: string
+  kind: 'directory' | 'marketplace' | 'package'
+  marketplace?: string
+  plugin?: string
 }
 
 export interface PluginClientManifest {
@@ -687,6 +734,8 @@ export interface PluginManifest {
   children?: Record<string, PluginManifestChildDefinition>
   config?: PluginConfigManifest
   configHook?: string | PluginConfigHookManifest
+  native?: PluginNativeMetadata
+  source?: PluginRuntimeSource
   plugin?: {
     client?: PluginClientManifest
     server?: PluginServerManifest
@@ -694,7 +743,7 @@ export interface PluginManifest {
   }
 }
 
-export interface PluginRuntimeInstance {
+export interface PluginResolverRuntimeInstance {
   scope: string
   name?: string
   displayName?: string
@@ -706,6 +755,7 @@ export interface PluginRuntimeInstance {
   version?: string
   requestId: string
   packageId?: string
+  source?: PluginRuntimeSource
   sourceGroup?: PluginRuntimeSourceGroup
   watch?: {
     enabled: boolean
@@ -739,6 +789,81 @@ export interface PluginRuntimeInstance {
   enabled?: boolean
   manifest?: PluginManifest
 }
+
+export interface PublicPluginDiagnostic {
+  code?: string
+  level: 'error' | 'info' | 'warning'
+  message: string
+  scope?: string
+}
+
+export interface PublicPluginClientManifest {
+  clientEntryUrl?: string
+  devClientEntryKind?: 'dev-server' | 'host-vite' | 'runtime-source'
+  devClientEntryUrl?: string
+  devEntry?: string
+  devServer?: string
+  entry?: string
+}
+
+export interface PublicPluginRuntimeManifest {
+  assets?: PluginManifestAssets
+  config?: PluginConfigManifest
+  description?: string
+  descriptionI18n?: Record<string, string>
+  displayName?: string
+  displayNameI18n?: Record<string, string>
+  icon?: string
+  name?: string
+  native?: PluginNativeMetadata
+  plugin?: {
+    client?: PublicPluginClientManifest
+    contributions?: PluginContributionManifest
+    server?: PluginServerManifest
+  }
+  source?: PluginRuntimeSource
+  version?: string
+}
+
+/**
+ * Root-free wire contract returned by the public plugin API.
+ *
+ * Internal discovery fields belong on `PluginResolverRuntimeInstance`; adding a
+ * filesystem root to this interface is a public API and security-boundary change.
+ */
+export interface PublicPluginRuntimeInstance {
+  apis?: PluginRuntimeApiRegistration[]
+  client?: PublicPluginClientManifest
+  clientEntryUrl?: string
+  contributions?: PluginContributionManifest
+  description?: string
+  descriptionI18n?: Record<string, string>
+  devClientEntryKind?: 'dev-server' | 'host-vite' | 'runtime-source'
+  devClientEntryUrl?: string
+  diagnostics?: PublicPluginDiagnostic[]
+  displayName?: string
+  displayNameI18n?: Record<string, string>
+  enabled?: boolean
+  icon?: string
+  manifest?: PublicPluginRuntimeManifest
+  name?: string
+  options?: Record<string, unknown>
+  packageId?: string
+  plugin?: {
+    contributions?: PluginContributionManifest
+  }
+  requestId: string
+  requestedVersion?: string
+  scope: string
+  source?: PluginRuntimeSource
+  sourceGroup?: PluginRuntimeSourceGroup
+  version?: string
+  watch?: {
+    enabled: boolean
+  }
+}
+
+export type PluginRuntimeInstance = PublicPluginRuntimeInstance
 
 export type PluginMarketplaceConfigSource = 'global' | 'project' | 'user'
 export type PluginMarketplaceInstallTarget = 'global' | 'project'
@@ -797,7 +922,7 @@ export interface PluginMarketplaceCatalogResponse {
   versionGeneration: string
 }
 
-export type PluginDetailAssetKind = 'entities' | 'hooks' | 'mcp' | 'rules' | 'skills' | 'specs'
+export type PluginDetailAssetKind = 'apps' | 'entities' | 'hooks' | 'mcp' | 'rules' | 'skills' | 'specs'
 
 export interface PluginReadmeVariant {
   content: string

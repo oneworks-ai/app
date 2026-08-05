@@ -1,9 +1,19 @@
+/* eslint-disable max-lines -- managed source resolution keeps transport and source-type validation cohesive. */
+
 import { spawn } from 'node:child_process'
 import { constants } from 'node:fs'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
 import type { ManagedPluginSource } from '@oneworks/types'
+import { resolveManagedNpmRegistryAuthority } from '@oneworks/utils/managed-plugin'
+
+export class ManagedPluginSourceTransportError extends Error {
+  constructor() {
+    super('Unable to retrieve the plugin source.')
+    this.name = 'ManagedPluginSourceTransportError'
+  }
+}
 
 export const pathExists = async (target: string) => {
   try {
@@ -72,13 +82,17 @@ const cloneGitSource = async (
   const url = source.type === 'github'
     ? `https://github.com/${source.repo}.git`
     : toGitUrl(source.url)
-  await runProcess('git', [
-    'clone',
-    ...(source.sha == null ? ['--depth', '1'] : []),
-    ...(source.ref != null && source.sha == null ? ['--branch', source.ref] : []),
-    url,
-    checkoutDir
-  ])
+  try {
+    await runProcess('git', [
+      'clone',
+      ...(source.sha == null ? ['--depth', '1'] : []),
+      ...(source.ref != null && source.sha == null ? ['--branch', source.ref] : []),
+      url,
+      checkoutDir
+    ])
+  } catch {
+    throw new ManagedPluginSourceTransportError()
+  }
   if (source.ref != null && source.sha != null) {
     await runProcess('git', ['checkout', source.ref], { cwd: checkoutDir })
   }
@@ -111,11 +125,12 @@ export const installManagedPluginSource = async (
 ) => {
   await fs.mkdir(tempDir, { recursive: true })
   if (source.type === 'npm') {
+    const registry = resolveManagedNpmRegistryAuthority(source.registry)
     const packResult = await runProcess('npm', [
       'pack',
       source.spec,
       '--json',
-      ...(source.registry != null ? ['--registry', source.registry] : []),
+      ...(source.registry != null ? ['--registry', registry] : []),
       '--pack-destination',
       tempDir
     ])
@@ -193,8 +208,5 @@ export const resolveManagedPluginSource = async (
       ...(ref != null && ref !== '' ? { ref } : {})
     }
   }
-  return {
-    type: 'npm',
-    spec: trimmed
-  }
+  return { spec: trimmed, type: 'npm' }
 }

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -14,6 +14,25 @@ afterEach(async () => {
 })
 
 describe('plugin config resolver', () => {
+  it('prefers the candidate runtime root for default Relay over an active bootstrap package', async () => {
+    const candidateRoot = join(process.cwd(), 'packages/plugins/relay')
+    const candidateServerRoot = join(process.cwd(), 'apps/server')
+
+    vi.stubEnv('__ONEWORKS_PROJECT_PACKAGE_DIR__', candidateServerRoot)
+    vi.stubEnv('__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__', candidateServerRoot)
+    vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', join(process.cwd(), '.test-home'))
+    vi.stubEnv('__ONEWORKS_PROJECT_PLUGIN_AUTO_INSTALL__', 'false')
+
+    const [relay] = await resolveConfiguredPluginInstances({
+      autoInstallManaged: false,
+      cwd: process.cwd(),
+      plugins: [{ id: '@oneworks/plugin-relay' }],
+      preferBundledOfficialPlugins: true
+    })
+
+    expect(await realpath(relay!.rootDir)).toBe(await realpath(candidateRoot))
+  })
+
   it('falls back to legacy vibe-forge plugin package names from the workspace', async () => {
     const tempDir = await mkdtemp(join(tmpdir(), 'oneworks-plugin-resolver-legacy-'))
     tempDirs.push(tempDir)

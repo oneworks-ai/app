@@ -3,6 +3,8 @@ import { resolve } from 'node:path'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { resolveManagedPluginScope } from '@oneworks/utils'
+
 import { discoverPluginInstances } from '#~/services/plugins/discovery.js'
 
 const mocks = vi.hoisted(() => ({
@@ -12,7 +14,8 @@ const mocks = vi.hoisted(() => ({
   resolveRuntimePluginConfig: vi.fn()
 }))
 
-vi.mock('@oneworks/utils', () => ({
+vi.mock('@oneworks/utils', async importOriginal => ({
+  ...await importOriginal<typeof import('@oneworks/utils')>(),
   listManagedPluginInstalls: mocks.listManagedPluginInstalls,
   resolveGlobalOneWorksAssetsPath: () => '/home/.oneworks/global/plugins',
   resolveProjectHomePath: () => '/workspace/.oo',
@@ -182,6 +185,16 @@ describe('plugin discovery', () => {
 
   it('returns marketplace-managed plugin roots so runtime source compilation can exclude them', async () => {
     const managedPluginRoot = '/workspace/.oo/.local/plugins/codex/theme/current/oneworks'
+    const managedSource = {
+      type: 'marketplace' as const,
+      marketplace: 'project',
+      plugin: '@example/theme'
+    }
+    const expectedScope = resolveManagedPluginScope({
+      adapter: 'codex',
+      name: '@example/theme',
+      source: managedSource
+    })
     const marketplace = {
       type: 'oneworks' as const,
       plugins: { '@example/theme': { enabled: true } }
@@ -194,25 +207,86 @@ describe('plugin discovery', () => {
     })
     mocks.listManagedPluginInstalls.mockResolvedValue([{
       config: {
-        source: {
-          type: 'marketplace',
-          marketplace: 'project',
-          plugin: '@example/theme'
-        }
+        adapter: 'codex',
+        name: '@example/theme',
+        source: managedSource
       },
+      installDir: '/workspace/.oo/.local/plugins/codex/theme/current',
+      nativePluginDir: '/workspace/.oo/.local/plugins/codex/theme/current/native',
       oneworksPluginDir: managedPluginRoot
     }])
     mocks.resolveConfiguredPluginInstances.mockResolvedValue([{
       children: [],
       requestId: '@example/theme',
       rootDir: managedPluginRoot,
-      scope: 'theme',
+      scope: 'configured-theme',
       sourceType: 'directory'
     }])
 
     const result = await discoverPluginInstances()
 
     expect(result.managedPluginRoots).toEqual([managedPluginRoot])
+    expect(result.managedRuntimeIdentities.get(managedPluginRoot)).toEqual({
+      name: '@example/theme',
+      packageId: '@example/theme@project',
+      requestId: '@example/theme@project',
+      scope: expectedScope,
+      source: {
+        adapter: 'codex',
+        kind: 'marketplace',
+        marketplace: 'project',
+        plugin: '@example/theme'
+      }
+    })
     expect(result.instances[0]?.sourceGroup).toBe('project')
+  })
+
+  it('preserves a safe npm package spec as the managed public identity', async () => {
+    const managedPluginRoot = '/workspace/.oo/.local/plugins/codex/npm/current/oneworks'
+    const managedSource = {
+      spec: '@example/codex-plugin@2.3.4',
+      type: 'npm' as const
+    }
+    const expectedScope = resolveManagedPluginScope({
+      adapter: 'codex',
+      name: '@example/codex-plugin',
+      source: managedSource
+    })
+    mocks.loadConfigState.mockResolvedValue({
+      globalConfig: {},
+      mergedConfig: {},
+      workspaceFolder: '/workspace'
+    })
+    mocks.listManagedPluginInstalls.mockResolvedValue([{
+      config: {
+        adapter: 'codex',
+        name: '@example/codex-plugin',
+        source: managedSource
+      },
+      installDir: '/workspace/.oo/.local/plugins/codex/npm/current',
+      nativePluginDir: '/workspace/.oo/.local/plugins/codex/npm/current/native',
+      oneworksPluginDir: managedPluginRoot
+    }])
+    mocks.resolveConfiguredPluginInstances.mockResolvedValue([{
+      children: [],
+      requestId: managedPluginRoot,
+      rootDir: managedPluginRoot,
+      scope: 'configured-scope',
+      sourceType: 'directory'
+    }])
+
+    const result = await discoverPluginInstances()
+
+    expect(result.managedRuntimeIdentities.get(managedPluginRoot)).toEqual({
+      name: '@example/codex-plugin',
+      packageId: '@example/codex-plugin@2.3.4',
+      requestId: '@example/codex-plugin@2.3.4',
+      scope: expectedScope,
+      source: {
+        adapter: 'codex',
+        kind: 'package',
+        plugin: '@example/codex-plugin@2.3.4'
+      }
+    })
   })
 })
