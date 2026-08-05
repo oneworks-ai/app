@@ -610,8 +610,7 @@ export function NavRailWindowBar({
             ? (
               <span
                 className='nav-rail-create-session-indicator'
-                aria-label={t('common.newChat')}
-                role='img'
+                aria-hidden='true'
               >
                 <MaterialSymbol name='chat_bubble' filled />
               </span>

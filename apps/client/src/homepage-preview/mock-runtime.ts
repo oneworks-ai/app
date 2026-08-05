@@ -1,6 +1,8 @@
 /* eslint-disable max-lines -- homepage preview runtime keeps mocked sessions, rooms, assets, and transport hooks together. */
 
 import type { ChatMessage, ChatMessageContent, Session, WSEvent } from '@oneworks/core'
+import { ONEWORKS_ICON_THEMES } from '@oneworks/icon/presets'
+import type { OneWorksIconTheme } from '@oneworks/icon/types'
 import type {
   AgentRoomDetailResponse,
   AgentRoomMessage,
@@ -56,6 +58,7 @@ interface HomepagePreviewMockData {
 
 interface HomepagePreviewConfig {
   downloadUrl: string
+  iconTheme?: OneWorksIconTheme
   locale: HomepagePreviewLocale
   mockData?: HomepagePreviewMockData
   theme: HomepagePreviewTheme
@@ -289,6 +292,12 @@ const normalizeTheme = (value?: unknown): HomepagePreviewTheme => {
   return 'system'
 }
 
+const normalizeIconTheme = (value?: unknown): OneWorksIconTheme | undefined => (
+  typeof value === 'string' && ONEWORKS_ICON_THEMES.includes(value as OneWorksIconTheme)
+    ? value as OneWorksIconTheme
+    : undefined
+)
+
 const getNavigatorPlatformText = () => {
   const userAgentData = (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData
   return [
@@ -412,6 +421,7 @@ const getInitialPreviewConfig = (): HomepagePreviewConfig => {
   downloadUrlConfigured = (params.get('downloadUrl')?.trim() ?? '') !== ''
   return {
     downloadUrl: normalizeDownloadUrl(params.get('downloadUrl')),
+    iconTheme: normalizeIconTheme(params.get('iconTheme')),
     locale: normalizeLocale(params.get('locale') ?? document.documentElement.lang ?? navigator.language),
     theme: normalizeTheme(params.get('theme') ?? 'system')
   }
@@ -428,6 +438,7 @@ const mergePreviewConfig = (patch: Partial<HomepagePreviewConfig>) => {
     ...current,
     ...patch,
     downloadUrl: patch.downloadUrl ?? current.downloadUrl,
+    iconTheme: patch.iconTheme ?? current.iconTheme,
     locale: patch.locale ?? current.locale,
     theme: patch.theme ?? current.theme
   }
@@ -1733,6 +1744,13 @@ const buildConfigResponse = (): ConfigResponse => {
   const merged = {
     adapterBuiltinModels,
     adapters,
+    ...(config.iconTheme == null
+      ? {}
+      : {
+        desktop: {
+          iconTheme: config.iconTheme
+        }
+      }),
     experiments: {
       agentRoom: true,
       benchmark: false,
@@ -2771,6 +2789,7 @@ const readMessageConfig = (data: unknown): Partial<HomepagePreviewConfig> | unde
   }
 
   const config: Partial<HomepagePreviewConfig> = {
+    iconTheme: normalizeIconTheme(data.payload.iconTheme),
     locale: normalizeLocale(data.payload.locale),
     mockData: normalizeMockData(data.payload.mockData),
     theme: normalizeTheme(data.payload.theme)

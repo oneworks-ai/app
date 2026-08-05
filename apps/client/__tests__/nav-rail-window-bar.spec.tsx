@@ -1,6 +1,8 @@
+import { readFileSync } from 'node:fs'
+
 import * as React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { NavRailWindowBar } from '#~/components/NavRail'
 
@@ -22,6 +24,8 @@ const shortcutCaptures = vi.hoisted(() =>
     onPointerEnter?: () => void
   }>
 )
+
+const routeState = vi.hoisted(() => ({ pathname: '/session/test' }))
 
 vi.mock('antd', () => ({
   Button: (
@@ -50,7 +54,7 @@ vi.mock('react-i18next', () => ({
 
 vi.mock('react-router-dom', () => ({
   useLocation: () => ({
-    pathname: '/session/test'
+    pathname: routeState.pathname
   }),
   useNavigate: () => vi.fn()
 }))
@@ -108,6 +112,10 @@ const renderWindowBar = (
 }
 
 describe('nav rail window bar', () => {
+  beforeEach(() => {
+    routeState.pathname = '/session/test'
+  })
+
   it('closes the sidebar preview before opening another hover preview', () => {
     const calls: string[] = []
 
@@ -161,5 +169,38 @@ describe('nav rail window bar', () => {
 
     expect(html).toContain('aria-label="Session preview · Waiting"')
     expect(html).toContain('nav-rail-window-action-badge is-warning is-animated')
+  })
+
+  it('renders the active new-session indicator as a decorative overlay', () => {
+    routeState.pathname = '/'
+
+    const activeHtml = renderWindowBar({ onCreateSession: vi.fn() })
+
+    expect(activeHtml).toMatch(
+      /<span class="nav-rail-create-session-indicator" aria-hidden="true">/
+    )
+    expect(activeHtml).not.toContain('nav-rail-create-session-button')
+
+    routeState.pathname = '/session/test'
+
+    const inactiveHtml = renderWindowBar({ onCreateSession: vi.fn() })
+
+    expect(inactiveHtml).not.toContain('nav-rail-create-session-indicator')
+    expect(inactiveHtml).toContain('nav-rail-create-session-button')
+    expect(inactiveHtml).toContain('aria-label="common.newChat"')
+  })
+
+  it('anchors the active indicator to the shared window-bar/header boundary', () => {
+    const styles = readFileSync(
+      new URL('../src/components/NavRail.scss', import.meta.url),
+      'utf8'
+    )
+
+    expect(styles).toMatch(
+      /\.nav-rail-window-bar\.is-sidebar-collapsed\s*>\s*\.nav-rail-create-session-indicator\s*\{[^}]*position:\s*absolute;[^}]*inset-inline-start:\s*100%;[^}]*top:\s*50%;[^}]*width:\s*var\(--nav-rail-window-icon-size\);[^}]*pointer-events:\s*none;[^}]*transform:\s*translateY\(-50%\);/s
+    )
+    expect(styles).not.toMatch(
+      /\.nav-rail-window-bar\.is-sidebar-collapsed\.has-window-controls\s*>\s*\*\s*\{[^}]*transform:\s*translateY\(-1px\);/s
+    )
   })
 })
