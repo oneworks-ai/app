@@ -10,6 +10,7 @@
 
 - 把拟发布包列表收敛到最小范围，并能逐个说明为什么需要发版
 - 跑目标包相关测试，不只看仓库全量状态
+- 跑 `pnpm security:audit:production`，确认没有未豁免的 critical / high 生产依赖风险
 - 用 `pnpm tools publish-plan -- ...` 确认发布顺序和候选包
 - 用 `npm view <pkg> version` 确认 registry 当前版本
 - 用 `npm whoami` 确认 npm 登录态
@@ -55,12 +56,14 @@ Relay device transport contract is runtime code shared by `@oneworks/types`, `@o
 - 首次发布或需要 npm provenance 时，使用 `.github/workflows/npm-publish-alpha.yml` 手动触发发布。
 - workflow 默认使用 npm Trusted Publishing：GitHub OIDC `id-token: write`、`NPM_CONFIG_PROVENANCE=true`，不向 `npm publish` 注入 `NPM_TOKEN`。只有 npm 上还不存在的新 identity 首次 bootstrap，或经 registry / trust 对账确认的 missing-trust identities 定向恢复时，才显式勾选 `bootstrap_with_token=true`，用 `NPM_TOKEN` 作为 fallback。
 - `packages` 不能为空，除非明确勾选 `publish_all=true`。发布整组 public workspace 包时必须显式打开 `publish_all`，避免误触发把所有 public 包发布到 npm。
+- `publish_tag=latest` 的首次 stable 发布会强制 `publish_all=true`、`packages` 为空，并且 workflow 必须从精确的 `pkg/oneworks/v<version>` tag 运行。发生 mixed-result 后，只有 `bootstrap_with_token=true`、`publish_all=false` 且选择项解析后恰好覆盖 registry 全部缺失 identity（包含 alias closure）时才能恢复。
 - workflow 通过 `pnpm tools publish-plan -- --publish --no-git-checks --skip-existing --tag <publish_tag>` 发布 public workspace 包；`publish_tag` 默认 `alpha`。
 - 新增 public workspace 包不需要改 workflow；只要被 `pnpm-workspace.yaml` 收录、`package.json` 带 `name` / `version` 且没有 `private: true`，在 `publish_all=true` 时会自动进入全量发布计划。只想发新包时优先填写 `packages=<new-package>`，让发布计划自动补内部依赖顺序。
 - `onework`、`oneork`、`oneorks` 是 `oneworks` bootstrap 的 typo publish alias，必须从 `apps/bootstrap/package.json` 的 `oneworks.publishAliases` 自动展开，同源改名发布；不要为它们创建独立 workspace 包，不要让它们依赖 `oneworks`，也不要写额外 redirect 逻辑。发布这组包且要保证裸 `npx onework` 和 `npx oneworks` 行为一致时，必须在首次发布该版本时使用 `publish_tag=latest`，或在发布后立刻用有 2FA 权限的 npm 登录态执行 `npm dist-tag add <pkg>@<version> latest` 补齐 `oneworks` 和三个 publish alias 包。
 - `--skip-existing` 只在真实发布时跳过 npm registry 已存在的同名同版本；dry-run 仍完整打包所有候选包。新增 public 包时，旧包会跳过，新包会继续首发。
 - npm Trusted Publishing 要求 package 已存在。新增包第一次发布必须依赖 `NPM_TOKEN` 完成 bootstrap；首发成功后，必须在 npm 为该包配置 Trusted Publisher：GitHub Actions、`oneworks-ai/app`、workflow filename `npm-publish-alpha.yml`、允许 `npm publish`。后续同包版本再通过 Trusted Publishing 发布。
 - 发布流水线必须在任何 package 发布失败时退出失败。mixed-result 后先逐 identity 对账 version、dist-tag 与 integrity，只对缺失项执行定向 recovery；`--skip-existing` 是保护措施，不能代替对账。
+- stable `latest` 流程结束前会逐 identity 核对目标版本、`latest` dist-tag，并重新下载所有 tarball 计算 SHA-512 integrity 与 SHA-1 shasum；任一 identity 尚未传播或字节不一致都会保留失败状态。
 
 ## 发布中断
 
@@ -83,7 +86,7 @@ Relay device transport contract is runtime code shared by `@oneworks/types`, `@o
 
 - VS Code Marketplace 不支持 `0.1.0-alpha.0` 这种 semver prerelease 字符串；预发布必须使用 `major.minor.patch` 三段式版本，再通过 `vsce package --pre-release` 和 `vsce publish --pre-release` 标记。
 - 本仓 `apps/vscode-extension/package.json` 可以继续使用带逻辑预发布后缀的版本，但 VSIX release stage 必须把 Marketplace manifest version 映射为同一版本的三段式数值 base，同时保留 `--pre-release`。每个纳入 Marketplace / Open VSX 的后续逻辑预发布都必须使用严格更新且唯一的数值 base；即使只改变 alpha / beta / rc 后缀，也不能复用已被另一个逻辑 release tag 占用的三段式版本。
-- VS Code 官方建议预发布版本使用奇数 minor、稳定版使用偶数 minor；因此 One Works VS Code 扩展的 `0.1.x` 应视作 alpha/pre-release channel，稳定发布从 `0.2.x` 开始。
+- VS Code Marketplace / Open VSX 的数值版本不可覆盖；One Works 的 `0.1.0` 至 `0.1.3` 已被历史预发布占用，因此首个稳定扩展使用下一个未占用的 `0.1.4`。后续仍优先为预发布和稳定版分配互不重叠的数值版本。
 - VS Code Marketplace 发布依赖仓库 secret `VSCE_PAT` 和 variable `VSCODE_EXTENSION_PUBLISHER`；GitHub Release / VSIX artifact 成功不等于 Marketplace 已发布。
 - VS Code Marketplace 和 Open VSX publish 都必须带 duplicate skip 语义，但 duplicate skip 只用于同一逻辑 release tag、同一不可变 source 和同一 VSIX 的恢复重跑。不同逻辑 release tag 映射到相同数值版本时必须在 Release Tags 计划或直接 release workflow 中失败，不能把 registry 仍提供旧字节视作本次发布成功。
 - store-version guard 默认不会因 exact release tag 已存在而放宽碰撞或单调性检查。只有该 exact tag 的 GitHub Release 已经通过元数据校验并包含预期命名的 authoritative VSIX asset 时，恢复重跑才允许绕过这些 prior-tag 检查；guard、`reuse` 判定和随后的 create / upload / reuse 必须在同一 metadata snapshot 的同一 workflow shell step 内相邻执行。该 asset 随后必须下载、验证并复用。这不会使历史跨 tag 碰撞合法化，协调终态仍必须独立证明目标 registry 提供的是该逻辑 tag 的获批字节。
@@ -106,12 +109,12 @@ Relay device transport contract is runtime code shared by `@oneworks/types`, `@o
 
 ## CLI 发布后的 Homebrew tap 同步
 
-`@oneworks/cli` 正式版发布成功并能通过 `npm view @oneworks/cli@<version>` 查到后，需要同步 Homebrew tap：
+`oneworks` 正式版发布成功并能通过 `npm view oneworks@<version>` 查到后，需要同步 Homebrew tap：
 
 1. 更新 tap formula：
 
    ```bash
-   pnpm tools homebrew-tap sync-cli --version <version>
+   pnpm tools homebrew-tap sync-oneworks --version <version>
    ```
 
 2. 在 tap submodule 内格式检查、提交并推送：
@@ -138,17 +141,17 @@ Relay device transport contract is runtime code shared by `@oneworks/types`, `@o
 
 注意：
 
-- `sync-cli` 会从 npm tarball 计算真实 `sha256`，所以必须在 npm 包已经发布后执行。
+- `sync-oneworks` 会从 npm tarball 计算真实 `sha256`；tap 初次为空时会生成完整 formula，所以必须在 npm 包已经发布后执行。
 - 只发 alpha / beta 时，除非明确要让 Homebrew 跟进预发布版本，否则不要更新 stable formula。
 
 ## CLI 发布后的 Windows 安装同步
 
-`@oneworks/cli` 正式版发布成功并能通过 `npm view @oneworks/cli@<version>` 查到后，需要同步 Windows 安装资产：
+`oneworks` 正式版发布成功并能通过 `npm view oneworks@<version>` 查到后，需要同步 Windows 安装资产。`npm-publish-alpha.yml` 在 `publish_tag=latest` 且发布计划包含 `oneworks` 时，会生成并证明版本锁定的 Windows portable ZIP，并以 `pkg/oneworks/v<version>` GitHub Release asset 发布：
 
 1. 更新 Scoop manifest 和 winget manifest 模板：
 
    ```bash
-   pnpm tools windows-install sync-cli --version <version>
+   pnpm tools windows-install sync-oneworks --version <version>
    ```
 
 2. 在 Scoop bucket submodule 内检查、提交并推送：
@@ -160,13 +163,12 @@ Relay device transport contract is runtime code shared by `@oneworks/types`, `@o
    git -C infra/windows/scoop-bucket push origin main
    ```
 
-3. 如果本次发布了 Windows portable zip，用真实下载地址和 SHA256 重新同步 winget 模板：
+3. 同步命令默认读取正式 GitHub Release ZIP 并计算真实 SHA256；需要验证候选镜像时才显式覆盖地址：
 
    ```bash
-   pnpm tools windows-install sync-cli \
+   pnpm tools windows-install sync-oneworks \
      --version <version> \
-     --winget-installer-url <windows-zip-url> \
-     --winget-installer-sha256 <windows-zip-sha256>
+     --winget-installer-url <windows-zip-url>
    ```
 
 4. 把 `infra/windows/winget/` 下的 manifest 模板复制到 `microsoft/winget-pkgs` fork 中对应版本目录，执行 `winget validate` 后提交 PR。也可以使用 `wingetcreate` 生成 / 更新 manifest，但需要保证 `PackageIdentifier` 仍为 `OneWorks.OneWorks`。
@@ -179,5 +181,5 @@ Relay device transport contract is runtime code shared by `@oneworks/types`, `@o
 
 注意：
 
-- Scoop bucket 使用 npm tarball 作为下载源，`sync-cli` 会计算真实 tarball `sha256`。
+- Scoop 与 winget 共同使用 GitHub Release 中的 Windows portable ZIP；Scoop bucket 初次为空时，`sync-oneworks` 会生成完整 manifest，并计算真实 ZIP `sha256`。
 - winget 公开安装依赖 `microsoft/winget-pkgs` 接受 manifest；未接受前，用户应使用 PowerShell 一键安装脚本或 Scoop。

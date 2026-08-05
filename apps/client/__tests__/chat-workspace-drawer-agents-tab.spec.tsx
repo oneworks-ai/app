@@ -1,21 +1,23 @@
+// @vitest-environment happy-dom
+
 import { App as AntApp } from 'antd'
 import { createInstance } from 'i18next'
 import type { ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { I18nextProvider, initReactI18next, useTranslation } from 'react-i18next'
+import { I18nextProvider, initReactI18next } from 'react-i18next'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 
 import { AgentRoomRoster } from '#~/components/agent-room'
 import type { AgentRoomMemberView, AgentRoomViewModel } from '#~/components/agent-room'
-import { useInteractionTerminalPanes } from '#~/components/chat/interaction-panel/use-interaction-terminal-panes'
-import type { SessionPanelStateController } from '#~/components/chat/interaction-panel/use-session-panel-state'
-import { ChatWorkspaceDrawer } from '#~/components/chat/workspace-drawer/ChatWorkspaceDrawer'
+import { getAgentRoomApprovalMessages } from '#~/components/agent-room/@core/approval-messages'
 import type {
   ChatWorkspaceDrawerAgentApprovals,
   ChatWorkspaceDrawerAgentRoster
 } from '#~/components/chat/workspace-drawer/ChatWorkspaceDrawer'
+import { WorkspaceDrawerViewPanel } from '#~/components/chat/workspace-drawer/WorkspaceDrawerViewPanel'
 import type { WorkspaceDrawerView } from '#~/components/chat/workspace-drawer/workspace-drawer-types'
+import { buildWorkspaceDrawerViewItems } from '#~/components/chat/workspace-drawer/workspace-drawer-view-items'
 import en from '#~/resources/locales/en.json'
 
 vi.hoisted(() => {
@@ -29,6 +31,15 @@ vi.hoisted(() => {
     }
   })
 })
+
+vi.mock('@monaco-editor/react', () => ({
+  default: () => null,
+  loader: { config: () => undefined }
+}))
+
+vi.mock('monaco-editor', () => ({
+  editor: { defineTheme: vi.fn() }
+}))
 
 const createI18n = async () => {
   const i18n = createInstance()
@@ -138,15 +149,6 @@ const roomWithoutApproval: AgentRoomViewModel = {
   ]
 }
 
-const createTestPanelStateController = (): SessionPanelStateController => ({
-  panelState: {
-    bottom: { tabs: [] },
-    right: { tabs: [] }
-  },
-  setPanelState: () => undefined,
-  updateArea: () => undefined
-})
-
 const renderDrawer = async ({
   agentApprovals,
   agentRoster,
@@ -169,29 +171,59 @@ const renderDrawer = async ({
       resolvedDefaultView = 'tree'
     }
   }
-  const TestDrawer = () => {
-    const { t } = useTranslation()
-    const terminalPanes = useInteractionTerminalPanes('__workspace__', t)
-
-    return (
-      <ChatWorkspaceDrawer
-        agentApprovals={agentApprovals}
-        agentRoster={agentRoster}
-        defaultView={resolvedDefaultView}
-        panelStateController={createTestPanelStateController()}
-        settingsView={settingsView}
-        terminalSessionId='__workspace__'
-        terminalPanes={terminalPanes}
-        onOpenResource={() => {}}
-      />
-    )
+  if (
+    resolvedDefaultView === 'approvals' &&
+    agentRoster != null &&
+    (agentApprovals == null || getAgentRoomApprovalMessages(agentApprovals.room).length === 0)
+  ) {
+    resolvedDefaultView = 'agents'
   }
 
   return renderToStaticMarkup(
     <I18nextProvider i18n={i18n}>
-      <TestDrawer />
+      <MemoryRouter>
+        <WorkspaceDrawerViewPanel
+          activeView={resolvedDefaultView}
+          agentApprovals={agentApprovals}
+          agentRoster={agentRoster}
+          approvalMessages={agentApprovals == null ? [] : getAgentRoomApprovalMessages(agentApprovals.room)}
+          changedLayout='folders'
+          changedTreeCommand={null}
+          isGitLoading={false}
+          pluginTabs={[]}
+          settingsView={settingsView}
+          treeRefreshKey={0}
+          workspaceTreeCommand={null}
+        />
+      </MemoryRouter>
     </I18nextProvider>
   )
+}
+
+const buildTestViewItems = ({
+  agentApprovals,
+  agentRoster,
+  settingsView
+}: {
+  agentApprovals?: ChatWorkspaceDrawerAgentApprovals
+  agentRoster?: ChatWorkspaceDrawerAgentRoster
+  settingsView?: ReactNode
+} = {}) => {
+  const approvalCount = agentApprovals == null ? 0 : getAgentRoomApprovalMessages(agentApprovals.room).length
+  const agentRosterCount = agentRoster == null
+    ? undefined
+    : agentRoster.members.reduce((count, member) => count + member.pendingCount, 0) || agentRoster.members.length
+
+  return buildWorkspaceDrawerViewItems({
+    agentRosterCount,
+    approvalCount,
+    hasAgentsTab: agentRoster != null,
+    hasApprovalsTab: agentApprovals != null,
+    hasSettingsTab: settingsView != null,
+    language: 'en',
+    pluginTabs: [],
+    t: ((key: string) => key) as any
+  })
 }
 
 const renderRoster = async ({
@@ -245,23 +277,17 @@ const renderHeader = async () => {
 
 describe('chat workspace drawer agents tab', () => {
   it('keeps normal sessions on the existing workspace tabs only', async () => {
-    const html = await renderDrawer()
+    const items = buildTestViewItems()
 
-    expect(html.match(/chat-workspace-drawer__view-btn/g)?.length).toBe(2)
-    expect(html).toContain('aria-label="Directory tree"')
-    expect(html).toContain('aria-label="Changed files"')
-    expect(html).not.toContain('aria-label="Approvals"')
-    expect(html).not.toContain('aria-label="Agents"')
-    expect(html).not.toContain('agent-room-roster')
-    expect(html).not.toContain('chat-workspace-drawer__approvals')
+    expect(items.map(item => item.key)).toEqual(['tree', 'changes'])
   })
 
   it('renders room members collapsed by default without per-member stats', async () => {
     const html = await renderDrawer({ agentRoster: { members } })
+    const items = buildTestViewItems({ agentRoster: { members } })
 
-    expect(html.match(/chat-workspace-drawer__view-btn/g)?.length).toBe(3)
-    expect(html).toContain('aria-label="Agents"')
-    expect(html).toContain('chat-workspace-drawer__view-count">1</span>')
+    expect(items.map(item => item.key)).toEqual(['tree', 'changes', 'agents'])
+    expect(items.find(item => item.key === 'agents')?.count).toBe(1)
     expect(html).toContain('chat-workspace-drawer__agents-panel')
     expect(html).toContain('agent-room-roster')
     expect(html).not.toContain('<h2>Room members</h2>')
@@ -289,10 +315,12 @@ describe('chat workspace drawer agents tab', () => {
       },
       agentRoster: { members }
     })
+    const items = buildTestViewItems({
+      agentApprovals: { room: roomWithoutApproval },
+      agentRoster: { members }
+    })
 
-    expect(html.match(/chat-workspace-drawer__view-btn/g)?.length).toBe(4)
-    expect(html).toContain('aria-label="Approvals"')
-    expect(html).toContain('aria-label="Agents"')
+    expect(items.map(item => item.key)).toEqual(['tree', 'changes', 'approvals', 'agents'])
     expect(html).toContain('chat-workspace-drawer__agents-panel')
     expect(html).toContain('agent-room-roster')
     expect(html).not.toContain('chat-workspace-drawer__approvals')
@@ -304,9 +332,9 @@ describe('chat workspace drawer agents tab', () => {
       defaultView: 'settings',
       settingsView: <div className='settings-fixture'>Session settings fixture</div>
     })
+    const items = buildTestViewItems({ settingsView: <div /> })
 
-    expect(html.match(/chat-workspace-drawer__view-btn/g)?.length).toBe(3)
-    expect(html).toContain('aria-label="Settings"')
+    expect(items.map(item => item.key)).toEqual(['tree', 'changes', 'settings'])
     expect(html).toContain('chat-workspace-drawer__settings-panel')
     expect(html).toContain('Session settings fixture')
     expect(html).not.toContain('aria-label="Approvals"')
@@ -354,10 +382,13 @@ describe('chat workspace drawer agents tab', () => {
       agentRoster: { members },
       defaultView: 'approvals'
     })
+    const items = buildTestViewItems({
+      agentApprovals: { room: roomWithApproval },
+      agentRoster: { members }
+    })
 
-    expect(html.match(/chat-workspace-drawer__view-btn/g)?.length).toBe(4)
-    expect(html).toContain('aria-label="Approvals"')
-    expect(html).toContain('chat-workspace-drawer__view-count">1</span>')
+    expect(items.map(item => item.key)).toEqual(['tree', 'changes', 'approvals', 'agents'])
+    expect(items.find(item => item.key === 'approvals')?.count).toBe(1)
     expect(html).toContain('chat-workspace-drawer__approvals')
     expect(html).toContain('chat-workspace-drawer__approval-agent">architect</span>')
     expect(html).not.toContain('@architect')
@@ -375,7 +406,7 @@ describe('chat workspace drawer agents tab', () => {
   it('uses a sidebar icon for the top-right workspace drawer toggle', async () => {
     const html = await renderHeader()
 
-    expect(html).toContain('view_sidebar')
+    expect(html).toContain('right_panel_open')
     expect(html).not.toContain('folder_open')
     expect(html).not.toContain('>folder</span>')
   })

@@ -33,6 +33,44 @@ export const updateOneWorksFormula = (
   return nextContent
 }
 
+export const buildInitialOneWorksFormula = (input: {
+  sha256: string
+  tarballUrl: string
+}) =>
+  `class Oneworks < Formula
+  desc "AI-native workspace launcher"
+  homepage "https://oneworks.cloud"
+  url "${input.tarballUrl}"
+  sha256 "${input.sha256}"
+  license "MIT"
+
+  depends_on "node@22"
+
+  def install
+    system formula_opt_bin("node@22")/"npm", "install", *std_npm_args
+    bin.install_symlink libexec/"bin/oneworks"
+    bin.install_symlink libexec/"bin/ow"
+    bin.install_symlink libexec/"bin/owo"
+  end
+
+  test do
+    assert_match version.to_s, shell_output("#{bin}/oneworks --version")
+  end
+end
+`
+
+const readFormulaOrBuildInitial = async (
+  formulaPath: string,
+  input: { sha256: string; tarballUrl: string }
+) => {
+  try {
+    return await readFile(formulaPath, 'utf8')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    return buildInitialOneWorksFormula(input)
+  }
+}
+
 const runHomebrewTapSyncPackage = async (input: {
   version: string
   defaultFormulaPath: string
@@ -52,7 +90,10 @@ const runHomebrewTapSyncPackage = async (input: {
   const stdout = input.stdout ?? process.stdout
 
   const sha256 = await computeUrlSha256(tarballUrl)
-  const content = await readFile(resolvedFormulaPath, 'utf8')
+  const content = await readFormulaOrBuildInitial(resolvedFormulaPath, {
+    tarballUrl,
+    sha256
+  })
   const nextContent = updateOneWorksFormula(content, {
     tarballUrl,
     sha256

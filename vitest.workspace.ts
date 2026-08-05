@@ -84,6 +84,9 @@ export default defineWorkspace([
     }
   },
   {
+    define: {
+      __ONEWORKS_PROJECT_HOMEPAGE_PREVIEW__: 'false'
+    },
     resolve: {
       conditions: ['__oneworks__']
     },

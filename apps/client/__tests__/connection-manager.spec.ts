@@ -148,7 +148,7 @@ describe('connection manager', () => {
     expect(mockSockets).toHaveLength(1)
   })
 
-  it('does not reconnect after the subscriber observes a fatal session error', () => {
+  it('does not reconnect after the subscriber observes a fatal session error', async () => {
     const manager = new ConnectionManager()
     let fatalSessionError = false
 
@@ -170,6 +170,8 @@ describe('connection manager', () => {
         fatal: true
       }
     })
+    await Promise.resolve()
+    await Promise.resolve()
     mockSockets[0].close(1011, 'adapter failed')
     vi.advanceTimersByTime(1000)
 

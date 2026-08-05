@@ -412,7 +412,7 @@ describe('session interaction service', () => {
     process.env.__ONEWORKS_PROJECT_BASE_DIR__ = runtimeAiBaseDir
     process.env.__ONEWORKS_PROJECT_HOME_PROJECTS_DIR__ = path.join(runtimeAiBaseDir, 'home-projects')
     const homeRuntimeRoot = resolveProjectHomePath(process.cwd(), process.env, 'runtime')
-    await mkdir(path.join(runtimeRoot, 'sessions', 'sess-1'), { recursive: true })
+    await mkdir(path.join(homeRuntimeRoot, 'sessions', 'sess-1'), { recursive: true })
     vi.mocked(getDb).mockReturnValue({
       getChannelSessionBySessionId,
       getSession,

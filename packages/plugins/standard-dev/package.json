@@ -5,7 +5,8 @@
     "en": "Standard Development",
     "zh-Hans": "标准研发"
   },
-  "version": "0.1.0-rc.7",
+  "version": "0.1.0",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/oneworks-ai/app.git",

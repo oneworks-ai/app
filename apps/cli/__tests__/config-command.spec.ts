@@ -92,7 +92,9 @@ describe('config command', () => {
         auth: false,
         shortcuts: false,
         experiments: false,
-        diagnostics: false
+        diagnostics: false,
+        server: false,
+        voice: false
       }
     })
   })
@@ -307,10 +309,15 @@ describe('config command', () => {
       source: 'global',
       path: 'general.defaultModelService',
       section: 'general',
-      configPath: path.join(cwd, '.test-home', '.oo', 'config.json'),
+      configPath: path.join(cwd, '.test-home', '.oneworks', '.oo.config.json'),
       value: 'global-service'
     })
-    expect(JSON.parse(await fs.readFile(path.join(cwd, '.test-home', '.oo', 'config.json'), 'utf8'))).toEqual({
+    expect(JSON.parse(
+      await fs.readFile(
+        path.join(cwd, '.test-home', '.oneworks', '.oo.config.json'),
+        'utf8'
+      )
+    )).toEqual({
       defaultModelService: 'global-service'
     })
 
@@ -388,7 +395,7 @@ describe('config command', () => {
 
   it('reads and updates the global source when global application is disabled', async () => {
     const cwd = await createTempDir()
-    const globalConfigPath = path.join(cwd, '.test-home', '.oo', 'config.json')
+    const globalConfigPath = path.join(cwd, '.test-home', '.oneworks', '.oo.config.json')
     await fs.mkdir(path.dirname(globalConfigPath), { recursive: true })
     await fs.writeFile(
       globalConfigPath,

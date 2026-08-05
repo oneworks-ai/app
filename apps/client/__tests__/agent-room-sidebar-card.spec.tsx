@@ -86,7 +86,8 @@ describe('agent room sidebar card', () => {
     expect(html).not.toContain(room.lastMessage)
     expect(html).not.toContain('room-item__last-message')
     expect(html).toContain('room-pixel-avatar')
-    expect(html).toContain('room-pixel-avatar__pixel')
+    expect(html).toContain('room-pixel-avatar__image')
+    expect(html).toContain('data:image/svg+xml')
     expect(html).not.toContain('>groups</span>')
   })
 

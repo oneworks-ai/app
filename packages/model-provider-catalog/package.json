@@ -1,7 +1,8 @@
 {
   "name": "@oneworks/model-provider-catalog",
-  "version": "0.1.0-rc.7",
+  "version": "0.1.0",
   "description": "Versioned model provider metadata catalog for One Works",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/oneworks-ai/app.git",

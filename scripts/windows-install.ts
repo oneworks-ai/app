@@ -5,7 +5,6 @@ import process from 'node:process'
 
 import {
   ONEWORKS_PACKAGE_NAME,
-  buildOneWorksTarballUrl,
   buildPackageReleaseTag,
   computeUrlSha256,
   normalizeOneWorksVersion
@@ -25,6 +24,86 @@ export const buildDefaultWingetInstallerUrl = (version: string) => (
     buildPackageReleaseTag(ONEWORKS_PACKAGE_NAME, version)
   }/oneworks-windows-${normalizeOneWorksVersion(version)}.zip`
 )
+
+export const buildWindowsPortableCommand = (version: string, command: string) => {
+  const normalizedVersion = normalizeOneWorksVersion(version)
+  if (!['oneworks', 'ow', 'owo'].includes(command)) {
+    throw new Error(`Unsupported One Works Windows command: ${command}`)
+  }
+
+  return [
+    '@echo off',
+    'setlocal',
+    `npx --yes --package "oneworks@${normalizedVersion}" ${command} %*`,
+    'exit /b %errorlevel%',
+    ''
+  ].join('\r\n')
+}
+
+export const runWindowsPortablePackage = async (input: {
+  version: string
+  outDir: string
+  cwd?: string
+  stdout?: Pick<NodeJS.WriteStream, 'write'>
+}) => {
+  const cwd = input.cwd ?? process.cwd()
+  const version = normalizeOneWorksVersion(input.version)
+  const outDir = path.resolve(cwd, input.outDir)
+  const commands = ['oneworks', 'ow', 'owo'] as const
+
+  await mkdir(outDir, { recursive: true })
+  await Promise.all(commands.map(async command => {
+    await writeFile(path.join(outDir, `${command}.cmd`), buildWindowsPortableCommand(version, command))
+  }))
+
+  const readmePath = path.join(outDir, 'README.txt')
+  await writeFile(
+    readmePath,
+    [
+      `One Works ${version}`,
+      '',
+      'Requires Node.js 22 or newer with npm/npx available on PATH.',
+      'Commands: oneworks, ow, owo',
+      ''
+    ].join('\r\n')
+  )
+
+  const stdout = input.stdout ?? process.stdout
+  stdout.write(`[windows-install] packaged Windows launchers in ${path.relative(cwd, outDir)}\n`)
+
+  return {
+    commands: commands.map(command => path.join(outDir, `${command}.cmd`)),
+    outDir,
+    readmePath,
+    version
+  }
+}
+
+export const buildInitialScoopManifest = (input: {
+  installerSha256: string
+  installerUrl: string
+  version: string
+}) =>
+  `${
+    JSON.stringify(
+      {
+        version: normalizeOneWorksVersion(input.version),
+        description: 'One Works AI-native workspace launcher',
+        homepage: 'https://oneworks.cloud',
+        license: 'MIT',
+        url: input.installerUrl,
+        hash: input.installerSha256,
+        bin: ['oneworks.cmd', 'ow.cmd', 'owo.cmd'],
+        depends: 'nodejs-lts',
+        autoupdate: {
+          url:
+            'https://github.com/oneworks-ai/app/releases/download/pkg/oneworks/v$version/oneworks-windows-$version.zip'
+        }
+      },
+      null,
+      2
+    )
+  }\n`
 
 const replaceRequiredLine = (
   content: string,
@@ -48,8 +127,8 @@ const replaceRequiredLine = (
 export const updateScoopManifest = (
   content: string,
   input: {
-    sha256: string
-    tarballUrl: string
+    installerSha256: string
+    installerUrl: string
     version: string
   }
 ) => {
@@ -59,15 +138,28 @@ export const updateScoopManifest = (
   }
 
   manifest.version = normalizeOneWorksVersion(input.version)
-  manifest.url = input.tarballUrl
-  manifest.hash = input.sha256
+  manifest.url = input.installerUrl
+  manifest.hash = input.installerSha256
 
   const autoupdate = manifest.autoupdate
   if (isRecord(autoupdate)) {
-    autoupdate.url = 'https://registry.npmjs.org/oneworks/-/oneworks-$version.tgz'
+    autoupdate.url =
+      'https://github.com/oneworks-ai/app/releases/download/pkg/oneworks/v$version/oneworks-windows-$version.zip'
   }
 
   return `${JSON.stringify(manifest, null, 2)}\n`
+}
+
+const readScoopManifestOrBuildInitial = async (
+  manifestPath: string,
+  input: { installerSha256: string; installerUrl: string; version: string }
+) => {
+  try {
+    return await readFile(manifestPath, 'utf8')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    return buildInitialScoopManifest(input)
+  }
 }
 
 export const updateWingetPackageVersion = (content: string, version: string) => (
@@ -132,16 +224,19 @@ export const runWindowsInstallSyncOneWorks = async (input: {
     input.wingetLocaleManifestPath ?? DEFAULT_WINGET_LOCALE_MANIFEST_PATH
   )
   const wingetTemplatePath = path.resolve(cwd, input.wingetTemplatePath ?? DEFAULT_WINGET_TEMPLATE_PATH)
-  const tarballUrl = buildOneWorksTarballUrl(version)
   const wingetInstallerUrl = input.wingetInstallerUrl ?? buildDefaultWingetInstallerUrl(version)
   const stdout = input.stdout ?? process.stdout
-  const sha256 = await computeUrlSha256(tarballUrl)
+  const installerSha256 = input.wingetInstallerSha256 ?? await computeUrlSha256(wingetInstallerUrl)
 
-  const scoopContent = await readFile(scoopManifestPath, 'utf8')
+  const scoopContent = await readScoopManifestOrBuildInitial(scoopManifestPath, {
+    version,
+    installerUrl: wingetInstallerUrl,
+    installerSha256
+  })
   const nextScoopContent = updateScoopManifest(scoopContent, {
     version,
-    tarballUrl,
-    sha256
+    installerUrl: wingetInstallerUrl,
+    installerSha256
   })
 
   const wingetVersionContent = await readFile(wingetVersionManifestPath, 'utf8')
@@ -154,13 +249,13 @@ export const runWindowsInstallSyncOneWorks = async (input: {
   const nextWingetInstallerContent = updateWingetInstallerTemplate(wingetInstallerContent, {
     version,
     installerUrl: wingetInstallerUrl,
-    installerSha256: input.wingetInstallerSha256
+    installerSha256
   })
 
   if (input.dryRun === true) {
     stdout.write(`[windows-install] ${scoopManifestPath}\n`)
-    stdout.write(`[windows-install] npm url ${tarballUrl}\n`)
-    stdout.write(`[windows-install] npm sha256 ${sha256}\n`)
+    stdout.write(`[windows-install] installer ${wingetInstallerUrl}\n`)
+    stdout.write(`[windows-install] installer sha256 ${installerSha256}\n`)
     stdout.write(`[windows-install] winget version ${wingetVersionManifestPath}\n`)
     stdout.write(`[windows-install] winget locale ${wingetLocaleManifestPath}\n`)
     stdout.write(`[windows-install] winget template ${wingetTemplatePath}\n`)
@@ -168,8 +263,7 @@ export const runWindowsInstallSyncOneWorks = async (input: {
     stdout.write('[windows-install] dry run: files not written\n')
     return {
       scoopManifestPath,
-      tarballUrl,
-      sha256,
+      installerSha256,
       wingetInstallerUrl,
       wingetLocaleManifestPath,
       wingetTemplatePath,
@@ -191,13 +285,12 @@ export const runWindowsInstallSyncOneWorks = async (input: {
   stdout.write(`[windows-install] updated ${path.relative(cwd, wingetVersionManifestPath)}\n`)
   stdout.write(`[windows-install] updated ${path.relative(cwd, wingetLocaleManifestPath)}\n`)
   stdout.write(`[windows-install] updated ${path.relative(cwd, wingetTemplatePath)}\n`)
-  stdout.write(`[windows-install] npm url ${tarballUrl}\n`)
-  stdout.write(`[windows-install] npm sha256 ${sha256}\n`)
+  stdout.write(`[windows-install] installer ${wingetInstallerUrl}\n`)
+  stdout.write(`[windows-install] installer sha256 ${installerSha256}\n`)
 
   return {
     scoopManifestPath,
-    tarballUrl,
-    sha256,
+    installerSha256,
     wingetInstallerUrl,
     wingetLocaleManifestPath,
     wingetTemplatePath,

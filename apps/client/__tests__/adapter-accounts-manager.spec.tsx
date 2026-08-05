@@ -45,6 +45,14 @@ vi.mock('antd', () => ({
   }) => (
     <button type='button' aria-label={ariaLabel} disabled={disabled}>{icon}{children}</button>
   ),
+  Collapse: ({ className, items }: {
+    className?: string
+    items?: Array<{ key: string; label?: ReactNode }>
+  }) => (
+    <div className={className}>
+      {items?.map(item => <div key={item.key}>{item.label}</div>)}
+    </div>
+  ),
   Empty: ({ description }: { description?: ReactNode }) => <div>{description}</div>,
   Input: () => <input readOnly />,
   Popconfirm: ({

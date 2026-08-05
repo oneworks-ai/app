@@ -1,6 +1,7 @@
 {
   "name": "@oneworks/channel-lark",
-  "version": "0.1.0-rc.7",
+  "version": "0.1.0",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/oneworks-ai/app.git",
@@ -52,11 +53,11 @@
   },
   "dependencies": {
     "@larksuiteoapi/node-sdk": "latest",
-    "@modelcontextprotocol/sdk": "^1.25.3",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@oneworks/cli-helper": "workspace:*",
     "@oneworks/core": "workspace:*",
     "@oneworks/types": "workspace:*",
     "commander": "^12.1.0",
-    "zod": "^3.24.1"
+    "zod": "^3.25.76"
   }
 }

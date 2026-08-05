@@ -1,7 +1,8 @@
 {
   "name": "@oneworks/runtime-protocol",
-  "version": "0.1.0-rc.7",
+  "version": "0.1.0",
   "description": "Runtime protocol contract for One Works agent sessions",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/oneworks-ai/app.git",
@@ -34,6 +35,6 @@
     "test": "pnpm -C ../.. exec vitest run --workspace vitest.workspace.ts --project bundler packages/runtime-protocol/__tests__"
   },
   "dependencies": {
-    "zod": "^3.24.1"
+    "zod": "^3.25.76"
   }
 }

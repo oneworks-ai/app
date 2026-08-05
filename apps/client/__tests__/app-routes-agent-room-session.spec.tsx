@@ -1,4 +1,8 @@
-import { renderToStaticMarkup } from 'react-dom/server'
+// @vitest-environment happy-dom
+
+import { PassThrough } from 'node:stream'
+
+import { renderToPipeableStream } from 'react-dom/server'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -36,13 +40,32 @@ vi.mock('#~/routes/KnowledgeRoute', () => ({
   KnowledgeRoute: () => <div>knowledge-route</div>
 }))
 
+vi.mock('#~/components/layout/desktop-workspace-startup-ready', () => ({
+  useDesktopWorkspaceStartupReady: () => undefined
+}))
+
 describe('app routes agent room session route', () => {
-  it('matches /rooms/:roomId/sessions/:sessionId with the room-scoped child session route', () => {
-    const html = renderToStaticMarkup(
-      <MemoryRouter initialEntries={['/rooms/room-1/sessions/session-1']}>
-        <AppRoutes />
-      </MemoryRouter>
-    )
+  it('matches /rooms/:roomId/sessions/:sessionId with the room-scoped child session route', async () => {
+    const html = await new Promise<string>((resolve, reject) => {
+      let output = ''
+      const destination = new PassThrough()
+      destination.setEncoding('utf8')
+      destination.on('data', chunk => {
+        output += String(chunk)
+      })
+      destination.on('end', () => resolve(output))
+      destination.on('error', reject)
+
+      const stream = renderToPipeableStream(
+        <MemoryRouter initialEntries={['/rooms/room-1/sessions/session-1']}>
+          <AppRoutes />
+        </MemoryRouter>,
+        {
+          onAllReady: () => stream.pipe(destination),
+          onError: reject
+        }
+      )
+    })
 
     expect(html).toContain('agent-room-session-route')
     expect(html).not.toContain('agent-room-route')

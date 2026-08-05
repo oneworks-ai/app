@@ -61,6 +61,19 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Audit production dependencies
+        run: pnpm security:audit:production
+      - name: Validate stable release identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./apps/bootstrap/package.json').version")"
+          if [[ "$version" == *-* ]]; then
+            echo "Prerelease identity detected; stable-only validation is not required."
+            exit 0
+          fi
+          node ./scripts/stable-release-preflight.mjs --version "$version" \
+            --vscode-version "$(node -p "require('./apps/vscode-extension/package.json').version")"
       - name: Test release tag and store version guards
         run: >-
           pnpm exec vitest run --workspace vitest.workspace.ts --project node
