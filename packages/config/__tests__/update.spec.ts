@@ -7,9 +7,30 @@ import { setTimeout as delay } from 'node:timers/promises'
 
 import { describe, expect, it } from 'vitest'
 
-import { updateConfigFile } from '#~/update.js'
+import { ConfigFileRevisionConflictError, readConfigFileRevision, updateConfigFile } from '#~/update.js'
 
 describe('updateConfigFile', () => {
+  it('fails closed when the expected config revision changed before the write lock was acquired', async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'ow-config-update-revision-'))
+    const configPath = path.join(tempDir, '.oo.config.json')
+    try {
+      await writeFile(configPath, JSON.stringify({ plugins: [{ id: 'first' }] }))
+      const revision = await readConfigFileRevision(configPath)
+      await writeFile(configPath, JSON.stringify({ plugins: [{ id: 'second' }] }))
+
+      await expect(updateConfigFile({
+        expectedRevision: revision,
+        resolveValue: () => ({ plugins: [{ id: 'third' }] }),
+        source: 'project',
+        section: 'plugins',
+        workspaceFolder: tempDir
+      })).rejects.toBeInstanceOf(ConfigFileRevisionConflictError)
+      await expect(readFile(configPath, 'utf8')).resolves.toContain('second')
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it('uses the provided environment when resolving the global config path', async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), 'oneworks-config-update-env-'))
     try {

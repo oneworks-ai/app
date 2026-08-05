@@ -102,6 +102,35 @@ describe('release tag planning', () => {
     expect(plan.tags[1]?.isNewPackage).toBe(true)
   })
 
+  it('plans the new filesystem authority package at the coordinated rc release identity', () => {
+    const plan = createReleaseTagPlanFromManifestChanges([
+      {
+        path: 'packages/fs-authority-native/package.json',
+        before: null,
+        after: {
+          name: '@oneworks/fs-authority-native',
+          version: '0.1.0-rc.7'
+        }
+      }
+    ], {
+      base: 'base',
+      head: 'head'
+    })
+
+    expect(plan.tags).toEqual([
+      {
+        isNewPackage: true,
+        name: '@oneworks/fs-authority-native',
+        path: 'packages/fs-authority-native/package.json',
+        previousVersion: null,
+        private: false,
+        tag: 'pkg/oneworks-fs-authority-native/v0.1.0-rc.7',
+        version: '0.1.0-rc.7'
+      }
+    ])
+    expect(plan.tags[0]?.tag).not.toContain('beta')
+  })
+
   it('fails VS Code release tag planning when a numeric store version is reused', () => {
     expect(() =>
       createReleaseTagPlanFromManifestChanges([

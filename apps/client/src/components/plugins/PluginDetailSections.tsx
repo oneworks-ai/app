@@ -6,6 +6,12 @@ import { useTranslation } from 'react-i18next'
 
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
 import type { PluginContributionManifest, PluginRuntimeInstance } from '#~/plugins/plugin-manifest'
+import {
+  projectPluginPresentationValue,
+  resolvePluginRequestDisplay,
+  resolvePluginRootDisplay,
+  sanitizePluginPresentationData
+} from '#~/plugins/plugin-presentation'
 
 type ContributionKey = keyof PluginContributionManifest
 type ContributionStatusFilter = 'all' | 'disabled' | 'enabled'
@@ -182,7 +188,7 @@ export const getPluginContributions = (plugin: PluginRuntimeInstance): PluginCon
 }
 
 const formatDetailValue = (value: unknown): string | undefined => {
-  if (typeof value === 'string') return value
+  if (typeof value === 'string') return projectPluginPresentationValue(value)
   if (typeof value === 'number' || typeof value === 'boolean') return String(value)
   if (Array.isArray(value)) {
     const values = value
@@ -191,7 +197,7 @@ const formatDetailValue = (value: unknown): string | undefined => {
     return values.length === 0 ? undefined : values.join(', ')
   }
   if (value != null && typeof value === 'object') {
-    return JSON.stringify(value)
+    return JSON.stringify(sanitizePluginPresentationData(value))
   }
   return undefined
 }
@@ -259,8 +265,8 @@ const buildTooltipTitle = (label: string, value?: string) => `${label}: ${value 
 
 const toDetailRecord = (item: unknown, fallbackId: string): DetailRecord => (
   item != null && typeof item === 'object' && !Array.isArray(item)
-    ? item as DetailRecord
-    : { id: fallbackId, value: item }
+    ? sanitizePluginPresentationData(item) as DetailRecord
+    : { id: projectPluginPresentationValue(fallbackId), value: sanitizePluginPresentationData(item) }
 )
 
 const resolveContributionDescription = (
@@ -331,7 +337,8 @@ const renderContributionItem = ({
   onItemEnabledChange?: (itemId: string, enabled: boolean) => void
 }) => {
   const record = toDetailRecord(item.value, item.id)
-  const title = resolveI18nField(record, 'title', language) ?? resolveI18nField(record, 'id', language) ?? item.id
+  const title = resolveI18nField(record, 'title', language) ?? resolveI18nField(record, 'id', language) ??
+    projectPluginPresentationValue(item.id)
   const description = item.disabled === true
     ? itemDisabledText ?? noDescriptionText
     : resolveContributionDescription(record, language, noDescriptionText)
@@ -387,8 +394,9 @@ const renderContributionItem = ({
 }
 
 export function PluginFact({ icon, label, value }: PluginFactProps) {
-  const ariaLabel = buildTooltipTitle(label, value)
-  const displayValue = value == null || value === '' ? '-' : value
+  const safeValue = value == null || value === '' ? undefined : projectPluginPresentationValue(value)
+  const ariaLabel = buildTooltipTitle(label, safeValue)
+  const displayValue = safeValue ?? '-'
 
   return (
     <div
@@ -419,8 +427,8 @@ export function PluginOverview({
         <PluginFact icon='deployed_code' label={labels.version} value={plugin.version} />
         <PluginFact icon='download' label={labels.requestedVersion} value={plugin.requestedVersion} />
         <PluginFact icon='layers' label={labels.package} value={plugin.packageId} />
-        <PluginFact icon='link' label={labels.request} value={plugin.requestId} />
-        <PluginFact icon='folder_open' label={labels.root} value={plugin.pluginRoot ?? plugin.rootDir} />
+        <PluginFact icon='link' label={labels.request} value={resolvePluginRequestDisplay(plugin)} />
+        <PluginFact icon='folder_open' label={labels.root} value={resolvePluginRootDisplay(plugin)} />
         <PluginFact icon='language' label={labels.clientEntry} value={plugin.clientEntryUrl ?? plugin.client?.entry} />
         <PluginFact
           icon='tune'

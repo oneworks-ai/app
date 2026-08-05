@@ -47,10 +47,66 @@ jobs:
   pr-policy:
     name: macOS installer
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: macos-26
+    timeout-minutes: 60
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Confirm release-only packaging policy
-        run: echo "Full macOS installer builds run only for nightly canaries, desktop release tags, or explicit workflow dispatches."
+        run: echo "Pull requests build unsigned app bundles for authority smoke only; installers, signing, and promotion remain release-only."
+
+      - name: Run desktop package preflight
+        run: pnpm -C apps/desktop test:package-preflight
+
+      - name: Verify source native authority closure
+        run: pnpm -C packages/fs-authority-native verify:prebuilds
+
+      - name: Package unsigned macOS authority candidates
+        env:
+          ONEWORKS_DESKTOP_ARCHS: arm64,x64
+          ONEWORKS_DESKTOP_ENABLE_AUTO_UPDATE: "false"
+          ONEWORKS_DESKTOP_OFFICIAL_RELEASE_BUILD: "false"
+          ONEWORKS_DESKTOP_RELEASE_BUILD: "false"
+        run: pnpm desktop:package
+
+      - name: Verify packaged native authority closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          for arch in arm64 x64; do
+            package_dir="$(find apps/desktop/out -mindepth 1 -maxdepth 1 -type d -name "*-darwin-$arch" -print -quit)"
+            if [[ -z "$package_dir" ]]; then
+              echo "Missing packaged app directory for $arch." >&2
+              exit 1
+            fi
+            app_dir="$(find "$package_dir" -mindepth 1 -maxdepth 1 -type d -name '*.app' -print -quit)"
+            if [[ -z "$app_dir" ]]; then
+              echo "Missing packaged app bundle for $arch." >&2
+              exit 1
+            fi
+            authority_root="$app_dir/Contents/Resources/app/node_modules/.pnpm/node_modules/@oneworks/fs-authority-native"
+            node packages/fs-authority-native/scripts/verify-darwin-prebuilds.mjs "$authority_root"
+          done
+
+      - name: Smoke packaged arm64 authority server
+        env:
+          ONEWORKS_DESKTOP_SMOKE_ARCH: arm64
+        run: pnpm -C apps/desktop smoke:package
 
   dispatch-policy:
     name: Desktop workflow request

@@ -1,4 +1,4 @@
-import { App } from 'antd'
+import { App, Empty } from 'antd'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -6,6 +6,7 @@ import { PluginViewHost } from '#~/plugins/PluginHost'
 import { setPluginOptions } from '#~/plugins/api'
 import { usePluginContext } from '#~/plugins/plugin-context'
 import type { PluginContributionSettingsPage, PluginRuntimeInstance } from '#~/plugins/plugin-manifest'
+import { PRIVATE_PLUGIN_PRESENTATION_VALUE, sanitizePluginPresentationData } from '#~/plugins/plugin-presentation'
 
 import { ConfigSectionFrame } from '../config/ConfigSectionFrame'
 import { SchemaObjectEditor } from '../config/record-editors/SchemaObjectEditor'
@@ -41,11 +42,23 @@ function PluginSettingsSchemaPage({
       schema: page.schema,
       uiSchema: page.uiSchema
     }
+  const presentedConfigManifest = useMemo(
+    () => sanitizePluginPresentationData(configManifest),
+    [configManifest]
+  )
+  const presentedOptions = useMemo(
+    () => sanitizePluginPresentationData(draftOptions),
+    [draftOptions]
+  )
+  const presentationIsPrivate = useMemo(
+    () => JSON.stringify([presentedConfigManifest, presentedOptions]).includes(PRIVATE_PLUGIN_PRESENTATION_VALUE),
+    [presentedConfigManifest, presentedOptions]
+  )
   const schema = useMemo(() =>
     buildPluginConfigUiSchema(
-      configManifest,
+      presentedConfigManifest as typeof configManifest,
       i18n.resolvedLanguage ?? i18n.language
-    ), [configManifest, i18n.language, i18n.resolvedLanguage])
+    ), [i18n.language, i18n.resolvedLanguage, presentedConfigManifest])
 
   const saveControllerRef = useRef<ReturnType<typeof createPluginSettingsOptionsSaveController>>()
   if (saveControllerRef.current == null) {
@@ -83,6 +96,13 @@ function PluginSettingsSchemaPage({
   }
 
   if (schema == null) return null
+  if (presentationIsPrivate) {
+    return (
+      <ConfigSectionFrame>
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} />
+      </ConfigSectionFrame>
+    )
+  }
 
   return (
     <ConfigSectionFrame>

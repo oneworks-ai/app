@@ -1,0 +1,20 @@
+{
+  "name": "@oneworks/fs-authority-native",
+  "version": "0.1.0-rc.7",
+  "description": "Fail-closed native filesystem authority for One Works",
+  "exports": {
+    ".": { "types": "./index.d.ts", "default": "./index.cjs" },
+    "./testing": { "types": "./testing.d.ts", "default": "./testing.cjs" },
+    "./package.json": "./package.json"
+  },
+  "main": "./index.cjs",
+  "types": "./index.d.ts",
+  "files": ["*.cjs", "*.d.ts", "prebuilds/**/*.node", "prebuilds/manifest.json"],
+  "engines": { "node": ">=22.13.0" },
+  "scripts": {
+    "build:native": "node ./scripts/build.mjs --arch arm64 && node ./scripts/build.mjs --arch x64",
+    "test:native": "node --test --test-timeout=30000 ./__tests__/*.test.cjs",
+    "verify:source": "node ./scripts/verify-posix-source.mjs",
+    "verify:prebuilds": "node ./scripts/verify-darwin-prebuilds.mjs"
+  }
+}

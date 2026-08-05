@@ -3,10 +3,13 @@ import { useCallback, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { MarkdownContent } from '#~/components/MarkdownContent'
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
+import { SafePluginMarkdownContent } from '#~/components/plugins/SafePluginMarkdownContent'
+import {
+  projectPluginNotificationInput,
+  projectPluginNotificationSource
+} from '#~/plugins/plugin-notification-presentation'
 
-import { getNotificationSourceIcon, getNotificationSourceKey, getNotificationSourceTitle } from './notification-store'
 import type { UiNotification, UiNotificationAction, UiNotificationSource } from './notification-types'
 
 interface NotificationCardProps {
@@ -52,9 +55,13 @@ export function NotificationCard({
 }: NotificationCardProps) {
   const { t } = useTranslation()
   const [runningActions, setRunningActions] = useState<Set<string>>(() => new Set())
-  const sourceTitle = getNotificationSourceTitle(notification.source)
-  const sourceKey = getNotificationSourceKey(notification.source)
-  const sourceScope = notification.source.kind === 'plugin' ? notification.source.scope : undefined
+  const sourcePresentation = projectPluginNotificationSource(notification.source)
+  const sourceTitle = sourcePresentation.title
+  const sourceKey = sourcePresentation.key
+  const sourceScope = sourcePresentation.scope
+  const notificationPresentation = projectPluginNotificationInput(notification)
+  const visibleActions = notificationPresentation.actions
+  const safeLevel = notificationPresentation.level ?? 'info'
   const createdAt = formatCreatedAt(notification.createdAt, language)
   const fullCreatedAt = new Intl.DateTimeFormat(language, {
     dateStyle: 'medium',
@@ -87,9 +94,7 @@ export function NotificationCard({
 
   return (
     <article
-      className={`oneworks-notification-card oneworks-notification-card--${notification.level} ${
-        isExiting ? 'is-exiting' : ''
-      }`}
+      className={`oneworks-notification-card oneworks-notification-card--${safeLevel} ${isExiting ? 'is-exiting' : ''}`}
       data-source={sourceKey}
       style={{ '--notification-index': index } as NotificationCardStyle}
       onMouseEnter={() => onPauseAutoClose(notification.id)}
@@ -97,11 +102,11 @@ export function NotificationCard({
     >
       <div className='oneworks-notification-card__header'>
         <span className='oneworks-notification-card__level' aria-hidden='true'>
-          <MaterialSymbol name={levelIcons[notification.level]} />
+          <MaterialSymbol name={levelIcons[safeLevel]} />
         </span>
         <div className='oneworks-notification-card__meta'>
           <span className='oneworks-notification-card__source'>
-            <MaterialSymbol name={getNotificationSourceIcon(notification.source)} />
+            <MaterialSymbol name={sourcePresentation.icon} />
             <span className='oneworks-notification-card__source-title'>{sourceTitle}</span>
             {sourceScope != null && sourceScope !== sourceTitle && (
               <code>{sourceScope}</code>
@@ -117,7 +122,7 @@ export function NotificationCard({
           </Tooltip>
         </div>
         <div className='oneworks-notification-card__chrome'>
-          {notification.source.kind === 'plugin' && (
+          {sourcePresentation.kind === 'plugin' && (
             <Tooltip
               title={t('common.notifications.mutePlugin', { plugin: sourceTitle })}
               zIndex={NOTIFICATION_TOOLTIP_Z_INDEX}
@@ -145,18 +150,20 @@ export function NotificationCard({
         </div>
       </div>
       <div className='oneworks-notification-card__body'>
-        <h3>{notification.title}</h3>
-        {notification.description != null && notification.description !== '' && (
+        <h3>{notificationPresentation.title}</h3>
+        {notificationPresentation.description != null && notificationPresentation.description !== '' && (
           <div className='oneworks-notification-card__description'>
-            {notification.descriptionFormat === 'text'
-              ? <p>{notification.description}</p>
-              : <MarkdownContent content={notification.description} openLinksInNewTab />}
+            {notificationPresentation.descriptionFormat === 'text'
+              ? <p>{notificationPresentation.description}</p>
+              : (
+                <SafePluginMarkdownContent content={notificationPresentation.description} />
+              )}
           </div>
         )}
       </div>
-      {notification.actions != null && notification.actions.length > 0 && (
+      {visibleActions != null && visibleActions.length > 0 && (
         <div className='oneworks-notification-card__actions'>
-          {notification.actions.map((action) => {
+          {visibleActions.map((action) => {
             const actionKey = `${notification.id}:${action.id}`
             return (
               <Button
