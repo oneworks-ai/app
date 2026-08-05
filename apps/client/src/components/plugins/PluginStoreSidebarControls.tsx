@@ -9,11 +9,14 @@ import type {
 import type { PluginRuntimeInstance } from '#~/plugins/plugin-manifest'
 import {
   getPluginPresentationSearchText,
+  projectPluginPresentationValue,
+  resolveNativePluginDisplayName,
+  resolveNativePluginSourceDisplay,
   resolvePluginDisplayName,
   resolvePluginPresentationIcon
 } from '#~/plugins/plugin-presentation'
 
-import { createNativePluginRouteKey } from './plugin-runtime-list-items'
+import { createNativePluginRouteKey, resolveNativePluginPresentationIcon } from './plugin-runtime-list-items'
 
 export type PluginGroupMode = 'enabled' | 'source'
 type PluginSourceGroup = 'builtIn' | 'global' | 'project' | 'localDev'
@@ -47,30 +50,20 @@ const createPluginListItem = (
   searchText: getPluginPresentationSearchText(plugin, language)
 })
 
-const nativeAdapterIcons: Record<string, string> = {
-  codex: 'code',
-  'claude-code': 'psychology',
-  copilot: 'support_agent',
-  gemini: 'auto_awesome',
-  kimi: 'dark_mode',
-  opencode: 'terminal'
+const createNativePluginListItem = (plugin: NativeHostPlugin) => {
+  return {
+    contextMenuItems: undefined,
+    icon: resolveNativePluginPresentationIcon(plugin),
+    key: createNativePluginRouteKey(plugin),
+    label: resolveNativePluginDisplayName(plugin),
+    searchText: [
+      resolveNativePluginDisplayName(plugin),
+      projectPluginPresentationValue(plugin.adapter),
+      projectPluginPresentationValue(plugin.marketplace),
+      resolveNativePluginSourceDisplay(plugin)
+    ].join(' ')
+  }
 }
-
-const createNativePluginListItem = (plugin: NativeHostPlugin) => ({
-  contextMenuItems: undefined,
-  icon: plugin.icon == null
-    ? { name: nativeAdapterIcons[plugin.adapter] ?? 'extension', type: 'material' as const }
-    : { alt: plugin.displayName ?? plugin.name, src: plugin.icon, type: 'image' as const },
-  key: createNativePluginRouteKey(plugin),
-  label: plugin.displayName ?? plugin.name,
-  searchText: [
-    plugin.displayName,
-    plugin.name,
-    plugin.adapter,
-    plugin.marketplace,
-    plugin.source.displayPath
-  ].filter(Boolean).join(' ')
-})
 
 const resolveNativeSourceGroup = (plugin: NativeHostPlugin): PluginSourceGroup => {
   if (plugin.scope === 'project') return 'project'

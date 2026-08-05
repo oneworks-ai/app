@@ -1,11 +1,15 @@
-import { readFile, rm, stat } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import type { ManagedPluginSource } from '@oneworks/types'
 import type { ManagedPluginInstall } from '@oneworks/utils/managed-plugin'
 import { listManagedPluginInstalls } from '@oneworks/utils/managed-plugin'
+import { mergeProcessEnvWithProjectEnv } from '@oneworks/utils/project-env'
 
 import { addAdapterPlugin } from './managed-plugin-install'
+import { withManagedPluginMutationLock } from './managed-plugin-mutation'
+import type { ManagedPluginMutationRuntime } from './managed-plugin-mutation'
+import { removeManagedPluginInstall } from './managed-plugin-remove'
 
 const resolveMarketplacePluginAdapter = (type: string) => {
   switch (type) {
@@ -74,10 +78,11 @@ export const assertUniqueMarketplacePluginScopes = (marketplaces: MarketplaceSyn
   }
 }
 
-export const syncConfiguredMarketplacePlugins = async (params: {
+const syncConfiguredMarketplacePluginsUnlocked = async (params: {
   cwd: string
   env?: Record<string, string | null | undefined>
   marketplaces: MarketplaceSyncConfig | undefined
+  mutationRuntime?: ManagedPluginMutationRuntime
 }) => {
   const results: Array<{
     marketplace: string
@@ -134,7 +139,11 @@ export const syncConfiguredMarketplacePlugins = async (params: {
         ...(desiredScope != null ? { scope: desiredScope } : {})
       })
       if (existingInstall != null && existingInstall.installDir !== installed.installDir) {
-        await rm(existingInstall.installDir, { recursive: true, force: true })
+        await removeManagedPluginInstall({
+          cwd: params.cwd,
+          env: params.env as NodeJS.ProcessEnv,
+          install: existingInstall
+        })
       }
       results.push({
         marketplace: marketplaceName,
@@ -145,4 +154,18 @@ export const syncConfiguredMarketplacePlugins = async (params: {
   }
 
   return results
+}
+
+export const syncConfiguredMarketplacePlugins = async (params: {
+  cwd: string
+  env?: Record<string, string | null | undefined>
+  marketplaces: MarketplaceSyncConfig | undefined
+  mutationRuntime?: ManagedPluginMutationRuntime
+}) => {
+  const env = mergeProcessEnvWithProjectEnv(params.env, { workspaceFolder: params.cwd })
+  const effectiveParams = { ...params, env }
+  return withManagedPluginMutationLock(
+    { cwd: params.cwd, env, runtime: params.mutationRuntime },
+    () => syncConfiguredMarketplacePluginsUnlocked(effectiveParams)
+  )
 }

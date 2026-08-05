@@ -6,10 +6,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { discoverPluginInstances } from '#~/services/plugins/discovery.js'
 
 const mocks = vi.hoisted(() => ({
+  isManagedPluginMutationActive: vi.fn(),
   listManagedPluginInstalls: vi.fn(),
   loadConfigState: vi.fn(),
+  recoverManagedPluginRemovals: vi.fn(),
   resolveConfiguredPluginInstances: vi.fn(),
   resolveRuntimePluginConfig: vi.fn()
+}))
+
+vi.mock('@oneworks/managed-plugins', () => ({
+  isManagedPluginMutationActive: mocks.isManagedPluginMutationActive,
+  recoverManagedPluginRemovals: mocks.recoverManagedPluginRemovals
 }))
 
 vi.mock('@oneworks/utils', () => ({
@@ -32,9 +39,27 @@ vi.mock('#~/services/config/index.js', () => ({
 describe('plugin discovery', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.isManagedPluginMutationActive.mockReturnValue(false)
     mocks.listManagedPluginInstalls.mockResolvedValue([])
+    mocks.recoverManagedPluginRemovals.mockResolvedValue([])
     mocks.resolveConfiguredPluginInstances.mockResolvedValue([])
     mocks.resolveRuntimePluginConfig.mockResolvedValue([])
+  })
+
+  it('recovers interrupted removals only outside an active workspace mutation', async () => {
+    mocks.loadConfigState.mockResolvedValue({
+      globalConfig: {},
+      mergedConfig: {},
+      projectSource: { rawConfig: {} },
+      workspaceFolder: '/workspace'
+    })
+
+    await discoverPluginInstances()
+    expect(mocks.recoverManagedPluginRemovals).toHaveBeenCalledTimes(1)
+
+    mocks.isManagedPluginMutationActive.mockReturnValue(true)
+    await discoverPluginInstances()
+    expect(mocks.recoverManagedPluginRemovals).toHaveBeenCalledTimes(1)
   })
 
   it('loads Relay through the default official plugin set', async () => {

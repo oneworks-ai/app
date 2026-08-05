@@ -8,6 +8,11 @@ import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
 import { setPluginOptions } from '#~/plugins/api'
 import { usePluginContext } from '#~/plugins/plugin-context'
 import type { PluginRuntimeInstance } from '#~/plugins/plugin-manifest'
+import {
+  PRIVATE_PLUGIN_PRESENTATION_VALUE,
+  buildPluginPresentationInstanceConfig,
+  sanitizePluginPresentationData
+} from '#~/plugins/plugin-presentation'
 
 import { buildPluginConfigUiSchema } from './plugin-config-json-schema'
 
@@ -55,26 +60,17 @@ const cleanOptions = (value: Record<string, unknown>): Record<string, unknown> =
 
 const serializeOptions = (value: Record<string, unknown>) => JSON.stringify(cleanOptions(value))
 
-const buildInstanceConfig = (plugin: PluginRuntimeInstance) => ({
-  enabled: plugin.enabled !== false,
-  id: plugin.requestId,
-  options: plugin.options ?? {},
-  packageId: plugin.packageId,
-  pluginRoot: plugin.pluginRoot ?? plugin.rootDir,
-  scope: plugin.scope,
-  sourceGroup: plugin.sourceGroup,
-  watch: plugin.watch?.enabled === true
-})
-
 const buildManifestConfig = (plugin: PluginRuntimeInstance) => (
-  plugin.manifest ?? {
-    displayName: plugin.displayName,
-    name: plugin.name,
-    plugin: {
-      client: plugin.client,
-      contributions: plugin.plugin?.contributions ?? plugin.contributions
+  sanitizePluginPresentationData(
+    plugin.manifest ?? {
+      displayName: plugin.displayName,
+      name: plugin.name,
+      plugin: {
+        client: plugin.client,
+        contributions: plugin.plugin?.contributions ?? plugin.contributions
+      }
     }
-  }
+  )
 )
 
 export function PluginConfigSection({ labels, onOptionsChange, plugin }: PluginConfigSectionProps) {
@@ -83,11 +79,34 @@ export function PluginConfigSection({ labels, onOptionsChange, plugin }: PluginC
   const { pluginServerBaseUrl } = usePluginContext()
   const preferredLanguage = i18n.resolvedLanguage ?? i18n.language
   const optionsSchema = useMemo(
-    () => buildPluginConfigUiSchema(plugin.manifest?.config, preferredLanguage),
+    () =>
+      buildPluginConfigUiSchema(
+        sanitizePluginPresentationData(plugin.manifest?.config) as NonNullable<
+          PluginRuntimeInstance['manifest']
+        >['config'],
+        preferredLanguage
+      ),
     [plugin.manifest?.config, preferredLanguage]
   )
-  const initialOptions = useMemo(() => normalizeOptions(plugin.options), [plugin.options])
+  const initialPresentedOptions = useMemo(
+    () => sanitizePluginPresentationData(plugin.options ?? {}),
+    [plugin.options]
+  )
+  const initialOptions = useMemo(
+    () => normalizeOptions(initialPresentedOptions),
+    [initialPresentedOptions]
+  )
   const [draftOptions, setDraftOptions] = useState<Record<string, unknown>>(initialOptions)
+  const presentedOptions = useMemo<unknown>(
+    () => sanitizePluginPresentationData(draftOptions),
+    [draftOptions]
+  )
+  const editableOptions = isRecord(initialPresentedOptions) &&
+      isRecord(presentedOptions) &&
+      !toJson(presentedOptions).includes(PRIVATE_PLUGIN_PRESENTATION_VALUE)
+    ? presentedOptions
+    : undefined
+  const optionsContainPrivateValues = editableOptions == null
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>()
   const saveVersionRef = useRef(0)
@@ -162,13 +181,19 @@ export function PluginConfigSection({ labels, onOptionsChange, plugin }: PluginC
       icon: 'settings',
       key: 'instance',
       title: labels.instance,
-      value: buildInstanceConfig(plugin)
+      value: buildPluginPresentationInstanceConfig(plugin)
     },
     {
       icon: 'data_object',
       key: 'manifest',
       title: labels.manifest,
       value: buildManifestConfig(plugin)
+    },
+    {
+      icon: 'tune',
+      key: 'options',
+      title: labels.options,
+      value: presentedOptions
     }
   ]
   const statusLabel = saveStatus === 'saving' || saveStatus === 'pending'
@@ -187,7 +212,7 @@ export function PluginConfigSection({ labels, onOptionsChange, plugin }: PluginC
             {statusLabel}
           </span>
         )}
-        {optionsSchema == null
+        {optionsSchema == null || optionsContainPrivateValues
           ? (
             <Empty
               image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -196,14 +221,14 @@ export function PluginConfigSection({ labels, onOptionsChange, plugin }: PluginC
           )
           : (
             <SchemaObjectEditor
-              value={draftOptions}
+              value={editableOptions}
               schema={optionsSchema}
               onChange={scheduleOptionsSave}
               t={t}
             />
           )}
       </article>
-      {optionsSchema == null && (
+      {(optionsSchema == null || optionsContainPrivateValues) && (
         <div className='plugin-detail-route__config-list'>
           {blocks.map(block => (
             <article key={block.key} className='plugin-detail-route__config-block'>

@@ -6,6 +6,11 @@ import { MarkdownContent } from '#~/components/MarkdownContent'
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
 import { buildPluginReadmeAssetUrl } from '#~/plugins/api'
 import type { PluginReadme } from '#~/plugins/api'
+import {
+  projectPluginPresentationValue,
+  sanitizePluginAssetReference,
+  sanitizePluginPresentationValue
+} from '#~/plugins/plugin-presentation'
 
 import { resolvePluginReadmeAssetPath } from './plugin-readme-links'
 
@@ -60,7 +65,9 @@ export function PluginReadmeSection({
   const readmeOptions = useMemo(
     () =>
       readmes.map(item => ({
-        label: item.language == null ? item.path : `${item.language} (${item.path})`,
+        label: item.language == null
+          ? projectPluginPresentationValue(item.path)
+          : `${projectPluginPresentationValue(item.language)} (${projectPluginPresentationValue(item.path)})`,
         value: item.path
       })),
     [readmes]
@@ -72,13 +79,19 @@ export function PluginReadmeSection({
 
   const getReadmeAssetUrl = (href: string) => {
     if (selectedReadme == null) return undefined
-    const assetPath = resolvePluginReadmeAssetPath(selectedReadme.path, href)
+    const safeHref = sanitizePluginAssetReference(href)
+    const safeReadmePath = sanitizePluginAssetReference(selectedReadme.path)
+    const safeScope = sanitizePluginPresentationValue(pluginScope)
+    if (safeHref == null || safeReadmePath == null || safeScope == null) return undefined
+    const assetPath = resolvePluginReadmeAssetPath(safeReadmePath, safeHref)
     return assetPath == null
       ? undefined
-      : buildPluginReadmeAssetUrl(pluginScope, assetPath, { serverBaseUrl: pluginServerBaseUrl })
+      : buildPluginReadmeAssetUrl(safeScope, assetPath, { serverBaseUrl: pluginServerBaseUrl })
   }
   const renderImage = ({ alt, src, title: imageTitle }: { alt?: string; src: string; title?: string }) => {
-    const resolvedSrc = getReadmeAssetUrl(src) ?? src
+    const safeSource = sanitizePluginAssetReference(src)
+    if (safeSource == null) return null
+    const resolvedSrc = getReadmeAssetUrl(safeSource) ?? safeSource
     return (
       <img
         src={resolvedSrc}
@@ -91,6 +104,10 @@ export function PluginReadmeSection({
     )
   }
   const handleLinkClick = (href: string, event: MouseEvent<HTMLAnchorElement>) => {
+    if (sanitizePluginAssetReference(href) == null) {
+      event.preventDefault()
+      return
+    }
     const assetUrl = getReadmeAssetUrl(href)
     if (assetUrl == null) return
     event.preventDefault()
@@ -105,7 +122,7 @@ export function PluginReadmeSection({
             <MaterialSymbol name='article' />
             <h2>{title}</h2>
           </div>
-          {selectedReadme != null && <Tag>{selectedReadme.path}</Tag>}
+          {selectedReadme != null && <Tag>{projectPluginPresentationValue(selectedReadme.path)}</Tag>}
         </div>
       )}
       {readmeOptions.length > 1 && (
@@ -123,13 +140,13 @@ export function PluginReadmeSection({
       {loading
         ? <Skeleton active paragraph={{ rows: 5 }} title={false} />
         : error != null
-        ? <Alert type='warning' showIcon message={error} />
+        ? <Alert type='warning' showIcon message={projectPluginPresentationValue(error)} />
         : selectedReadme == null
         ? <p className='plugin-detail-route__empty'>{emptyText}</p>
         : (
           <div className='plugin-detail-route__readme-content'>
             <MarkdownContent
-              content={selectedReadme.content}
+              content={projectPluginPresentationValue(selectedReadme.content)}
               openLinksInNewTab
               renderImage={renderImage}
               onLinkClick={handleLinkClick}

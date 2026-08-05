@@ -7,6 +7,13 @@ import type { PluginDetailAssetGroup, PluginMarketplaceCatalogPlugin } from '@on
 
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
 import type { PluginRuntimeInstance } from '#~/plugins/plugin-manifest'
+import {
+  projectPluginPresentationList,
+  projectPluginPresentationValue,
+  resolveMarketplacePluginDescription,
+  resolveMarketplacePluginDisplayName,
+  resolveMarketplacePluginSourceDisplay
+} from '#~/plugins/plugin-presentation'
 
 import { PluginAssetSection } from './PluginAssetSection'
 import { PluginDetailView } from './PluginDetailView'
@@ -16,12 +23,13 @@ const MARKETPLACE_DETAIL_TAB_QUERY_PARAM = 'tab'
 const marketplaceDetailTabs = new Set(['readme', 'data-assets'])
 
 const toAssetGroup = (
-  values: string[] | undefined
+  values: unknown
 ): PluginDetailAssetGroup | undefined => {
-  if (values == null || values.length === 0) return undefined
+  const labels = projectPluginPresentationList(values)
+  if (labels.length === 0) return undefined
   return {
     kind: 'skills',
-    files: values.map(value => ({
+    files: labels.map(value => ({
       content: value,
       contentKind: 'text',
       path: value,
@@ -40,18 +48,13 @@ export function MarketplacePluginDetailPanel({
   const { i18n, t } = useTranslation()
   const [searchParams, setSearchParams] = useSearchParams()
   const overviewPlugin = useMemo<PluginRuntimeInstance>(() => ({
-    displayName: plugin.displayName,
-    description: plugin.description,
-    icon: plugin.icon?.kind === 'url'
-      ? plugin.icon.url
-      : plugin.icon?.kind === 'data'
-      ? plugin.icon.value
-      : undefined,
+    displayName: resolveMarketplacePluginDisplayName(plugin),
+    description: resolveMarketplacePluginDescription(plugin),
     name: plugin.name,
-    packageId: plugin.marketplaceTitle ?? plugin.marketplace,
-    requestId: plugin.sourceType,
-    requestedVersion: plugin.marketplaceType,
-    rootDir: plugin.sourceLabel,
+    packageId: projectPluginPresentationValue(plugin.marketplaceTitle ?? plugin.marketplace),
+    requestId: projectPluginPresentationValue(plugin.sourceType),
+    requestedVersion: projectPluginPresentationValue(plugin.marketplaceType),
+    rootDir: resolveMarketplacePluginSourceDisplay(plugin),
     scope: `${plugin.marketplace}:${plugin.name}`,
     version
   }), [
@@ -66,15 +69,17 @@ export function MarketplacePluginDetailPanel({
     plugin.sourceType,
     version
   ])
+  const sourceDisplay = resolveMarketplacePluginSourceDisplay(plugin)
+  const descriptionDisplay = resolveMarketplacePluginDescription(plugin)
   const readme = useMemo(() => ({
     content: [
-      plugin.description,
-      plugin.sourceLabel === '' ? undefined : `\`${plugin.sourceLabel.replace(/`/gu, '\\`')}\``
+      descriptionDisplay,
+      sourceDisplay === '' ? undefined : `\`${sourceDisplay.replace(/`/gu, '\\`')}\``
     ]
       .filter((value): value is string => value != null && value !== '')
       .join('\n\n'),
-    path: plugin.sourceLabel || '-'
-  }), [plugin.description, plugin.sourceLabel])
+    path: sourceDisplay || '-'
+  }), [descriptionDisplay, sourceDisplay])
   const assetGroups = useMemo(() =>
     [
       {

@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "napiVersion": 8,
+  "artifacts": {
+    "darwin-arm64": {
+      "path": "prebuilds/darwin-arm64/fs-authority.node",
+      "size": 198000,
+      "sha256": "bdbe3558214f7189ef14a6a166e49cad24312206da194b601c440cfa53847fe4"
+    },
+    "darwin-x64": {
+      "path": "prebuilds/darwin-x64/fs-authority.node",
+      "size": 169104,
+      "sha256": "b13ac3983371a694057f1f51a697d0c996e831ebaea8a1c4d37c23736ad348ed"
+    }
+  }
+}

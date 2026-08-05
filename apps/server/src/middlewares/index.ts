@@ -6,6 +6,7 @@ import { loadEnv } from '@oneworks/core'
 import type { ServerEnv } from '@oneworks/core'
 
 import { apiEnvelopeMiddleware } from './api-envelope'
+import { assetCreateBodyMiddleware } from './asset-create-body'
 import { authMiddleware } from './auth'
 import type { PublicAccessOptions } from './public-access'
 import { publicAccessMiddleware } from './public-access'
@@ -46,8 +47,9 @@ export async function initMiddlewares(
     publicPaths: options.publicPaths
   }))
   app.use(apiEnvelopeMiddleware())
+  app.use(assetCreateBodyMiddleware())
+  app.use(authMiddleware(env))
   app.use(bodyParser({
     jsonLimit: JSON_BODY_LIMIT
   }))
-  app.use(authMiddleware(env))
 }

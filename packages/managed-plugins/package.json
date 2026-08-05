@@ -35,6 +35,7 @@
   },
   "dependencies": {
     "@oneworks/config": "workspace:*",
+    "@oneworks/fs-authority-native": "workspace:*",
     "@oneworks/types": "workspace:*",
     "@oneworks/utils": "workspace:*"
   }
