@@ -48,8 +48,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          submodules: true
+      - name: Checkout demo video submodule
+        run: git submodule update --init --depth 1 -- assets/demo-video
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
