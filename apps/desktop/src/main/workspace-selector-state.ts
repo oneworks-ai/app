@@ -1,5 +1,5 @@
-import { getWorkspaceDescription, getWorkspaceDisplayName } from '../workspace-state.cjs'
 import { WORKSPACE_SELECTOR_STATE_CHANNEL } from './constants'
+import { resolveDesktopRecordingDemoWorkspacePresentation } from './recording-demo-fixture'
 import type { DesktopRuntimeState, WindowRecord, WorkspaceSelectorProject, WorkspaceSelectorState } from './types'
 
 interface WorkspaceSelectorStateControllerInput {
@@ -22,6 +22,7 @@ export const createWorkspaceSelectorStateController = ({
       })
       .map<WorkspaceSelectorProject>((service) => {
         const isCurrent = service.workspaceFolder === currentWorkspaceFolder
+        const presentation = resolveDesktopRecordingDemoWorkspacePresentation(service.workspaceFolder)
         const sourceUrl = isCurrent
           ? getWindowRecords().find(windowRecord =>
             windowRecord.kind === 'launcher' &&
@@ -29,12 +30,12 @@ export const createWorkspaceSelectorStateController = ({
           )?.launcherSourceUrl
           : undefined
         return {
-          description: service.description,
+          description: presentation.description,
           isCurrent,
-          name: service.displayName,
+          name: presentation.name,
           ...(sourceUrl == null ? {} : { sourceUrl }),
           status: service.status,
-          workspaceFolder: service.workspaceFolder
+          workspaceFolder: presentation.workspaceFolder
         }
       })
   )
@@ -44,11 +45,14 @@ export const createWorkspaceSelectorStateController = ({
     return runtimeState.desktopState.recentWorkspaces
       .filter(workspaceFolder => workspaceFolder !== currentWorkspaceFolder)
       .filter(workspaceFolder => !runningWorkspaceFolders.has(workspaceFolder))
-      .map<WorkspaceSelectorProject>(workspaceFolder => ({
-        description: getWorkspaceDescription(workspaceFolder),
-        name: getWorkspaceDisplayName(workspaceFolder),
-        workspaceFolder
-      }))
+      .map<WorkspaceSelectorProject>((workspaceFolder) => {
+        const presentation = resolveDesktopRecordingDemoWorkspacePresentation(workspaceFolder)
+        return {
+          description: presentation.description,
+          name: presentation.name,
+          workspaceFolder: presentation.workspaceFolder
+        }
+      })
   }
 
   const buildWorkspaceSelectorState = (windowRecord?: WindowRecord): WorkspaceSelectorState => ({

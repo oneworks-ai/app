@@ -8,6 +8,13 @@ import process from 'node:process'
 import { setTimeout as delay } from 'node:timers/promises'
 import { promisify } from 'node:util'
 
+import {
+  createDesktopDemoFixture,
+  getDesktopDemoFixtureEnvironment,
+  getDesktopDemoFixturePageSetupExpression,
+  getDesktopDemoFixtureWorkspace,
+  parseDesktopDemoFixtureId
+} from './demo-video/desktop-fixtures'
 import { recordDemoVideoScenario } from './demo-video/recorder'
 import { getDemoVideoScenario } from './demo-video/scenarios'
 import type {
@@ -18,7 +25,11 @@ import type {
   DemoVideoSystemCursorWindowBounds
 } from './demo-video/types'
 import type { DesktopCdpLaunchInput, DesktopCdpLaunchResult } from './desktop-cdp'
-import { runDesktopCdpLaunch } from './desktop-cdp'
+import {
+  assertDesktopRecordingDemoFixtureSupported,
+  resolveDesktopAppExecutablePath,
+  runDesktopCdpLaunch
+} from './desktop-cdp'
 import { terminateTrackedPid } from './dev-start/process-identity'
 
 const DEFAULT_BATCH_COLOR_SCHEMES: DemoVideoColorScheme[] = ['light', 'dark']
@@ -91,6 +102,7 @@ export interface DesktopControlRecordBatchOptions {
   allowUnsupportedApp?: boolean
   appPath: string
   colorSchemes?: DemoVideoColorScheme[]
+  demoFixture?: string
   durationMs?: number
   executable?: string
   ffmpegPath?: string
@@ -131,14 +143,19 @@ export interface DesktopControlRecordBatchResult extends Omit<DemoVideoBatchResu
 }
 
 export interface DesktopControlRecordBatchDeps {
+  assertDisplayCaptureContainsAppWindow: typeof assertMacosDisplayCaptureContainsAppWindow
+  ensureDisplayCaptureAvailable: typeof ensureMacosScreencaptureDisplayAvailable
   killProcess: (pid: number, fingerprint?: string) => Promise<void> | void
   launchDesktop: (input: DesktopCdpLaunchInput) => Promise<DesktopCdpLaunchResult>
+  recordScenario: typeof recordDemoVideoScenario
   resolveRecordingDisplay: (displayName: string) => Promise<DesktopRecordingDisplayInfo | undefined>
   startDisplayBackground: (input: DesktopRecordingDisplayBackgroundInput) => Promise<DesktopRecordingDisplayBackground>
   startDisplayKeepAwake: () => Promise<DesktopRecordingDisplayKeepAwake>
 }
 
 const defaultDeps: DesktopControlRecordBatchDeps = {
+  assertDisplayCaptureContainsAppWindow: async input => await assertMacosDisplayCaptureContainsAppWindow(input),
+  ensureDisplayCaptureAvailable: async display => await ensureMacosScreencaptureDisplayAvailable(display),
   killProcess: async (pid, fingerprint) =>
     await terminateTrackedPid({
       fingerprint,
@@ -154,6 +171,7 @@ const defaultDeps: DesktopControlRecordBatchDeps = {
         write: () => true
       }
     }),
+  recordScenario: recordDemoVideoScenario,
   resolveRecordingDisplay: async displayName => await resolveMacosRecordingDisplay(displayName),
   startDisplayBackground: async input => await startDesktopRecordingDisplayBackground(input),
   startDisplayKeepAwake: async () => await startMacosRecordingDisplayKeepAwake()
@@ -669,6 +687,11 @@ export const isMacosWindowVisibilityMetricAcceptable = (
     metrics.edgeFeaturePixelRatio >= 0.008 &&
     metrics.edgeOverlapRatio >= 0.4 &&
     metrics.edgeMeanDiff <= 18
+  ) ||
+  (
+    metrics.edgeFeaturePixelRatio >= 0.004 &&
+    metrics.edgeOverlapRatio >= 0.85 &&
+    metrics.edgeMeanDiff <= 4
   )
 
 export const measureMacosWindowVisibility = async (input: {
@@ -1117,16 +1140,38 @@ export const runDesktopControlRecordBatch = async (
   const outputRoot = options.outDir ?? path.join('.logs/demo-videos', 'electron', scenario.id)
   const followCdpTargets = options.followCdpTargets ?? scenario.followCdpTargets ?? false
   const preserveTargetEnvironment = options.preserveTargetEnvironment ?? true
+  const demoFixture = options.demoFixture == null
+    ? undefined
+    : createDesktopDemoFixture({
+      id: parseDesktopDemoFixtureId(options.demoFixture),
+      workspace: options.workspace ?? ''
+    })
+  const scenarioWorkspace = demoFixture == null
+    ? options.workspace
+    : getDesktopDemoFixtureWorkspace(demoFixture)
+  if (demoFixture != null) {
+    const resolvedAppPath = path.resolve(options.appPath)
+    const supportedExecutablePath = path.resolve(resolveDesktopAppExecutablePath(resolvedAppPath))
+    if (
+      options.executable != null &&
+      path.resolve(options.executable) !== supportedExecutablePath
+    ) {
+      throw new Error(
+        `Electron record-batch demo fixture requires the executable from the verified app bundle: ${supportedExecutablePath}`
+      )
+    }
+    await assertDesktopRecordingDemoFixtureSupported(resolvedAppPath)
+  }
   const recordingDisplayConfig = await resolveRecordingDisplayConfig(options, resolvedDeps)
   if (recordingDisplayConfig == null) {
     throw new Error(
       'Electron record-batch requires --use-deskpad-display or --recording-display-name so visual evidence comes from a stable system display recording.'
     )
   }
-  await ensureMacosScreencaptureDisplayAvailable(recordingDisplayConfig.display)
+  await resolvedDeps.ensureDisplayCaptureAvailable(recordingDisplayConfig.display)
   const displayKeepAwake = await resolvedDeps.startDisplayKeepAwake()
   try {
-    await ensureMacosScreencaptureDisplayAvailable(recordingDisplayConfig.display)
+    await resolvedDeps.ensureDisplayCaptureAvailable(recordingDisplayConfig.display)
     const backgroundImage = resolveDesktopRecordingVideoBackgroundImage(options)
 
     if (scenario.requiresUrl && options.workspace == null) {
@@ -1140,7 +1185,7 @@ export const runDesktopControlRecordBatch = async (
       imagePath: backgroundImage
     })
     try {
-      await ensureMacosScreencaptureDisplayAvailable(recordingDisplayConfig.display)
+      await resolvedDeps.ensureDisplayCaptureAvailable(recordingDisplayConfig.display)
       for (const colorScheme of colorSchemes) {
         for (const language of languages) {
           const variantId = `${colorScheme}-${language}`
@@ -1151,6 +1196,10 @@ export const runDesktopControlRecordBatch = async (
               appPath: options.appPath,
               env: {
                 ...recordingDisplayConfig.env,
+                ...(demoFixture == null
+                  ? {}
+                  : getDesktopDemoFixtureEnvironment(demoFixture)),
+                ONEWORKS_DESKTOP_RECORDING_LANGUAGE: language,
                 ...(colorScheme === 'system'
                   ? {}
                   : { ONEWORKS_DESKTOP_RECORDING_THEME_MODE: colorScheme })
@@ -1160,7 +1209,7 @@ export const runDesktopControlRecordBatch = async (
               waitMs: options.waitMs
             })
             if (launched.pid != null) {
-              await assertMacosDisplayCaptureContainsAppWindow({
+              await resolvedDeps.assertDisplayCaptureContainsAppWindow({
                 display: recordingDisplayConfig.display,
                 ownerPid: launched.pid
               })
@@ -1171,7 +1220,7 @@ export const runDesktopControlRecordBatch = async (
               throw new Error(`No recordable Electron page target was found for variant ${variantId}.`)
             }
 
-            const result = await recordDemoVideoScenario(scenario, {
+            const result = await resolvedDeps.recordScenario(scenario, {
               captureSource: 'system-display',
               cdpWebSocketDebuggerUrl: target.webSocketDebuggerUrl,
               colorScheme,
@@ -1185,6 +1234,9 @@ export const runDesktopControlRecordBatch = async (
               language,
               name: `${options.name ?? scenario.id}-${variantId}`,
               outDir: path.join(outputRoot, variantId),
+              pageSetupExpression: demoFixture == null
+                ? undefined
+                : getDesktopDemoFixturePageSetupExpression(demoFixture),
               preserveTargetEnvironment,
               scenarioId: scenario.id,
               systemCursorWindowBounds: recordingDisplayConfig.systemCursorWindowBounds,
@@ -1192,7 +1244,7 @@ export const runDesktopControlRecordBatch = async (
               systemDisplayId: recordingDisplayConfig.display.screencaptureDisplayId,
               url: target.url,
               width: options.width,
-              workspace: options.workspace
+              workspace: scenarioWorkspace
             })
             variants.push({
               colorScheme,

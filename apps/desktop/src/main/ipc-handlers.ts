@@ -44,10 +44,12 @@ import {
   startMobileDeviceVideoStream,
   stopMobileDeviceVideoStream
 } from './mobile-debug'
+import { readDesktopRecordingDemoFixture, resolveDesktopRecordingDemoWorkspacePath } from './recording-demo-fixture'
 import type {
   DesktopInterfaceLanguageConfig,
   DesktopSettings,
   LauncherWorkspaceResourceSearchResponse,
+  OpenWorkspaceWindowInput,
   WindowRecord,
   WorkspaceResourceTarget,
   WorkspaceSelectorState
@@ -255,7 +257,10 @@ interface IpcHandlersInput {
   openWorkspaceFileInExternalOpener: (workspaceFolder: string, path: string, opener?: string) => Promise<void>
   loadWorkspaceInWindow: (windowRecord: WindowRecord, workspaceFolder: string) => Promise<void>
   openWorkspaceUrlWindow: (sourceWindowRecord: WindowRecord, url: string) => Promise<WindowRecord>
-  openWorkspaceWindow: (workspaceFolder: string) => Promise<WindowRecord>
+  openWorkspaceWindow: (
+    workspaceFolder: string,
+    input?: OpenWorkspaceWindowInput
+  ) => Promise<WindowRecord>
   promptForNewWorkspaceFolder: (windowRecord?: WindowRecord) => Promise<string | undefined>
   promptForWorkspaceFolder: (windowRecord?: WindowRecord) => Promise<string | undefined>
   retryLauncherShortcutRegistration: () => Promise<DesktopSettings>
@@ -773,15 +778,20 @@ export const registerIpcHandlers = ({
   ipcMain.handle('desktop:open-workspace', async (event, workspaceFolder: string) => {
     const windowRecord = findWindowRecordForWebContents(event.sender)
     if (windowRecord?.kind === 'launcher') {
-      await openWorkspaceWindow(workspaceFolder)
-      if (isWindowRecordUsable(windowRecord)) {
+      const resolvedWorkspaceFolder = resolveDesktopRecordingDemoWorkspacePath(workspaceFolder)
+      const demoFixture = readDesktopRecordingDemoFixture()
+      const openedWindowRecord = await openWorkspaceWindow(resolvedWorkspaceFolder, {
+        ...(demoFixture == null ? {} : { transitionFromWindowRecord: windowRecord })
+      })
+      if (isWindowRecordUsable(openedWindowRecord) && isWindowRecordUsable(windowRecord)) {
         windowRecord.window.hide()
       }
       return
     }
 
     if (windowRecord?.kind === 'selector' && windowRecord.selectorMode === 'initial') {
-      await loadWorkspaceInWindow(windowRecord, workspaceFolder)
+      const resolvedWorkspaceFolder = resolveDesktopRecordingDemoWorkspacePath(workspaceFolder)
+      await loadWorkspaceInWindow(windowRecord, resolvedWorkspaceFolder)
       return
     }
 

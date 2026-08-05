@@ -1,9 +1,15 @@
 # Desktop App
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="../../images/desktop-chat-dark.png">
-  <img alt="Desktop app session page" src="../../images/desktop-chat-light.png">
-</picture>
+<OneWorksThemeMedia>
+  <template #light>
+    <img alt="One Works opens a workspace from the Launcher and selects an AI adapter in the light theme" class="oneworks-doc-promo-image" src="../../images/adapter-promo/posters/oneworks-adapter-promo-light-en-poster.jpg">
+  </template>
+  <template #dark>
+    <img alt="One Works opens a workspace from the Launcher and selects an AI adapter in the dark theme" class="oneworks-doc-promo-image" src="../../images/adapter-promo/posters/oneworks-adapter-promo-dark-en-poster.jpg">
+  </template>
+</OneWorksThemeMedia>
+
+This theme-aware image comes from real desktop windows. To play, pause, or seek through it, open the [high-definition demo video on the docs home page](../).
 
 ## Get an Installer
 

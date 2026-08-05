@@ -17,13 +17,11 @@
 
 <p align="center"><strong>一个面向 AI 工作流的工作空间。</strong></p>
 
-**亮色**
-
-https://github.com/user-attachments/assets/a51d819a-b62f-4b9f-9727-a10e3e1ebbb7
-
-**暗色**
-
-https://github.com/user-attachments/assets/da7f4b1f-bae9-41df-b6ee-adc4fedd916b
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./.oo/docs/images/adapter-promo/oneworks-adapter-promo-dark-zh.gif">
+  <source media="(prefers-color-scheme: light)" srcset="./.oo/docs/images/adapter-promo/oneworks-adapter-promo-light-zh.gif">
+  <img alt="One Works 打开工作空间并选择 AI 适配器" src="./.oo/docs/images/adapter-promo/oneworks-adapter-promo-light-zh.gif">
+</picture>
 
 ## 介绍
 

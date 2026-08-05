@@ -6,21 +6,9 @@
 
 ### OW-DM-001 — 相邻边界间距归属
 
-- Revision: 1
-- Status: ACTIVE
-- Rule: 相邻元素的同一条接缝只能由一层负责留白；项目默认 spacing token 为 10px，双侧内部 padding 同时保留时必须使用可见分割线。
-- Scope: OneWorks project / adjacent component and section boundaries
-- Applies when: 相邻组件、字段、section、列表行、header 或内容区共享同一条边界。
-- Does not apply when: 两个结构各自的内部 padding 由可见分割线明确隔开。
-- Positive example: parent gap、前一项底部 padding 或后一项顶部 padding 三选一，并使用项目 token。
-- Negative example: parent gap、前一项底部 padding 和后一项顶部 padding 叠加成无语义大空白。
-- Owning rule: [`styles.md`](./styles.md) 中的“相邻区块的间距归属”。
-- Token or implementation: 由具体 surface 的共享 spacing token / parent gap / 单侧 padding 拥有。
-- Source: 用户明确设计标准，已沉淀到 `styles.md`。
-- Effective date: 2026-07-11
-- Supersedes: none
-- Exceptions: 在下方“作用域例外”登记。
-- Automatic enforcement: computed box model、DOM 几何检查或模块视觉回归。
+- Revision / status / rule / scope: 1 / ACTIVE / 相邻元素的同一条接缝只能由一层负责留白；项目默认 spacing token 为 10px，双侧内部 padding 同时保留时必须使用可见分割线 / OneWorks project，adjacent component and section boundaries。
+- Applies / does not apply / examples: 相邻组件、字段、section、列表行、header 或内容区共享同一条边界时适用；两个结构各自的内部 padding 由可见分割线明确隔开时不适用。正例是 parent gap、前一项底部 padding 或后一项顶部 padding 三选一并使用项目 token；反例是三者叠加成无语义大空白。
+- Ownership / implementation / source / lifecycle / enforcement: [`styles.md`](./styles.md) 中的“相邻区块的间距归属”拥有规则，具体 surface 的共享 spacing token / parent gap / 单侧 padding 拥有实现；来源为用户明确设计标准，2026-07-11 生效，不替代旧规则，例外在下方登记；由 computed box model、DOM 几何检查或模块视觉回归执行。
 
 ### OW-DM-002 — 紧凑 chrome 尺寸语言
 
@@ -142,8 +130,15 @@
 
 ### OW-DM-010 — 宣传视频语言与明暗主题矩阵
 
-- Revision / status / scope: 2 / ACTIVE / OneWorks project，README、社交平台和发布宣传视频。先生成一个代表性原型；用户确认动画、真实窗口、鼠标节奏和构图整体正确后，再交付中文 / 英文与亮色 / 暗色的完整四变体矩阵。成片中的真实界面语言必须匹配发布入口，主题必须匹配变体，四条视频使用同一 app build、scenario、workspace、窗口几何和后期节奏。
-- Ownership / source / exceptions / enforcement: 规范正文由 [`../maintenance/demo-video.md`](../maintenance/demo-video.md)“场景维护”拥有，真实 Adapter 展示入口为 `launcher-open-workspace-adapter-tour`；来源为用户 2026-08-05 指出英文宣传视频错误复用了中文窗口，明确要求以后同时生成两种语言与两种明暗主题，并进一步要求只在用户确认整体逻辑后批量生成。只有用户明确指定单语言或单主题时允许缩减；由原型确认记录、四变体 batch manifest、逐变体 still、媒体 metadata、光标连续性、隐私检查和 GitHub 实际播放器验证。
+- Revision / status / scope: 3 / ACTIVE / OneWorks project，README、社交平台和发布宣传视频。先生成一个代表性原型；用户确认动画、真实窗口、鼠标节奏和构图整体正确后，再交付中文 / 英文与亮色 / 暗色的完整四变体矩阵。成片中的真实界面语言必须匹配发布入口，主题必须匹配变体，四条视频使用同一 app build、scenario、workspace、窗口几何和同一后期节奏。GitHub README 使用 `<picture>` 与 `prefers-color-scheme` 从同语言的亮 / 暗 GIF 中自动选择，高清 MP4 只保留在本地素材归档。
+- Ownership / source / exceptions / enforcement: 规范正文由 [`../maintenance/demo-video.md`](../maintenance/demo-video.md)“场景维护”拥有，真实 Adapter 展示入口为 `launcher-open-workspace-adapter-tour`；来源为用户 2026-08-05 指出英文宣传视频错误复用了中文窗口，明确要求以后同时生成两种语言与两种明暗主题，并进一步要求只在用户确认整体逻辑后批量生成；随后要求 GitHub 使用主题选择器展示 GIF、视频版留在本地。只有用户明确指定单语言或单主题时允许缩减；由原型确认记录、四变体 batch manifest、逐变体 still、媒体 metadata、GIF 体积与帧数、README picture source、光标连续性和隐私检查验证。
+
+### OW-DM-011 — 宣传视频 selector 镜头聚焦
+
+- Revision / status / scope: 1 / ACTIVE / OneWorks project，要求突出真实产品交互区域的宣传录屏，首个适用场景为 `launcher-open-workspace-adapter-tour`。用户要求“放大到鼠标区域”时，对已包含真实窗口与合成光标的整幅录屏像素做平滑镜头推近；只放大鼠标图标不满足要求。
+- Applies / does not apply: 适用于场景明确要求局部镜头聚焦并能通过稳定 selector 定位目标；普通产品录屏、用户没有要求聚焦、或聚焦会裁掉关键上下文时不自动启用。
+- Positive / negative example: 鼠标接近 Adapter 控件时镜头开始推近，点击前稳定，弹层完整保留并持续到结尾；反例是窗口始终维持全景，只把蓝色光标放大，或用模拟窗口 / 模拟弹层代替真实画面。
+- Ownership / source / exceptions / enforcement: 规范正文由 [`../maintenance/demo-video.md`](../maintenance/demo-video.md)“场景维护”拥有，实现在 demo-video recorder 的 selector camera focus timeline；来源为用户 2026-08-05 先要求打开 Adapter 选择器时放大鼠标区域、随后指出最终成片没有实际放大。场景可用窄作用域倍率 / offset 保证浮层不被裁切；由 scenario 调用顺序单测、camera timeline 缓动单测、四变体关键帧和独立逐帧视觉审阅执行。
 
 ## 待确认冲突
 
@@ -155,6 +150,22 @@
 - Source: 用户明确要求 Codex 主题移除渐变，2026-07-14；已由 `OW-DM-E002` 的主题范围约束承接。
 
 ## 作用域例外
+
+### OW-DM-E003 — 文档站可播放宣传视频
+
+- ID: OW-DM-E003
+- Revision: 1
+- Status: SCOPED_EXCEPTION
+- Base rule: `OW-DM-010` 的高清 MP4 母版只保留在本地素材归档，README 只提交主题自适应 GIF。
+- Exception rule: 用户明确要求文档站提供可播放演示时，`.oo/docs` 可以提交从同一批准母版生成的 web 优化 MP4；页面按 locale 和外观只选择一条视频，并保留同语言 / 主题轻量 poster 与 GIF 降级入口。
+- Scope: OneWorks project / `.oo/docs` 中文与英文文档首页、对应桌面应用页；不扩展到根 README。
+- Applies when: 演示已完成隐私与四变体视觉验收，视频经过 fast-start、体积、编解码兼容性和完整解码检查；画面只包含标准 `adapter-promo` 的品牌演示身份和映射到隔离临时目录的合成展示路径，不含真实个人或机器数据。
+- Does not apply when: README、普通产品截图、内部调试录像、尚未确认的原型或含真实账号 / 路径的录屏。
+- Positive example: 中文文档引用中文亮 / 暗 MP4，英文文档引用英文亮 / 暗 MP4；一次页面访问只加载当前语言和外观需要的视频，GIF 提供快速预览与降级。
+- Negative example: 把 1080p 母版直接塞进 README，或在文档首页同时 autoplay / preload 四个语言与主题视频。
+- Source: 用户 2026-08-05 明确要求更新文档站图片并把已确认的视频加入文档站。
+- Effective date: 2026-08-05
+- Automatic enforcement: 文档相对资产检查、媒体 metadata / fast-start / 完整解码验证、locale / theme source 审计、浏览器网络请求与亮暗主题视觉回归，并验证主题切换会暂停已隐藏的视频。
 
 ### OW-DM-E001 — 可选主题包紧凑导航间距
 

@@ -27,6 +27,7 @@ pnpm tools desktop-control record-batch launcher-open-workspace-ui-tour \
 窗口可见性验证必须做解码后的像素级判断，不要用 `cmp` 或 PNG 文件字节比较；`screencapture -l` 和 display crop 即使视觉一致，也可能因为 metadata、色彩配置或阴影裁切不同而字节不同。透明 / vibrancy / 毛玻璃窗口不能只用 RGB 相似度判断：窗口单独截图不包含 recording display 背景，而 display crop 会包含壁纸和模糊效果，必须同时接受结构边缘重合度这类特征指标。失败时要保留 display / window / crop probe 图和相似度 / 边缘指标，避免后续会话只能靠猜。
 计算 DeskPad / AppKit display bounds 时要注意坐标系：`NSScreen.frame` 的 y 是 bottom-origin，Electron `BrowserWindow` bounds 和 `screencapture` crop 使用 top-origin。传给 Electron 的 y 和输出 crop y 都必须做转换，否则窗口会被 macOS 夹到虚拟屏顶部，视频里看起来不居中。
 直接启动已安装的 macOS app 时，Electron 即使已经创建 BrowserWindow，也可能因 Launcher blur / Space 状态没有把窗口合成到当前 recording display。recordable window 环境必须禁用普通 Launcher 的 blur-to-dismiss；`recordableLauncherWindow` 路径还必须在启动后尽早按精确 owner pid 把进程置前，并执行 `AXRaise`、`AXMain` 和 `AXFocused`。随后用 display 像素探针再次确认该 pid 的目标 display 窗口确实出现，不能误选同 pid 在其他 display 的较大窗口，也不能仅凭 CDP target 或窗口列表宣称可录。窗口仍未出现在 display 像素探针中时必须失败，不能把只有壁纸的画面继续编码。
+DeskPad 虚拟显示器存在且已经授权仍不代表它位于当前可见 Space。录制前要把 DeskPad 应用的宿主窗口 Raise 到当前 macOS Space，再继续依赖显示截图与精确 Electron 窗口截图的硬匹配；窗口坐标命中但 display crop 只有壁纸时必须失败，不能通过重试或放宽阈值掩盖 Space 问题。
 
 正式 Electron 录屏禁止使用这些路径作为交付证据：
 
@@ -67,10 +68,13 @@ pnpm tools desktop-control record-batch launcher-open-workspace-ui-tour \
 - `--use-deskpad-display`：默认 recording display provider；自动查找 `DeskPad Display`，注入 launcher / workspace 窗口 bounds，并做 display capture / app window 可见性验证；找不到或验证失败必须失败。
 - `--recording-display-name <name>`：指定其他专用虚拟显示器名称；只用于替换 DeskPad 或 CI 专用 display。
 - `--video-background-image <path>`：覆盖录制 display 的真实背景窗口图片；只有用户明确要求换背景时才使用。
+- `--demo-fixture adapter-promo`：注入命名式安全演示数据；Electron 主进程直接把 Launcher 项目名称 / 描述投影成固定虚拟 Home / 项目路径，打开时再映射到 `--workspace` 指定的真实测试目录，并关闭全局与本地私有配置层。每个新 CDP page target 还会安装 fixture 数据投影，把模板标签、账号、邮箱和 Workspace 顶栏的明确项目标签替换为固定中性值；这属于录制前的显式 demo 数据准备，不是后期遮罩。workspace basename 不得在整棵 DOM 上做子串替换，以免污染普通 UI 文案或触发 MutationObserver 自激。修改 page projection 时必须用真实 DOM + `MutationObserver` 覆盖首次 settling、重复安装、异步 mutation 三条路径，并用 `oneworks` / `demo` / `app` 这类“目标包含源”或常见子串 basename 验证不会自激、膨胀或污染 `application` / `mapping` 等无关文本；只断言生成表达式包含字符串不算验证。
 - `--keep-frames`：保留原始帧 / segment 目录，便于检查页面是否遮挡、空白或错位。
 - `--json`：输出机器可读结果，适合后续脚本消费。
 
 `--capture-source`、`--system-window-capture-backend`、`--video-background-color` 不属于 `desktop-control record-batch` 的正式接口。底层 `demo-video record` 仍可保留这些诊断选项，但不要在 Electron 正式验证、发布验证或产品素材里使用。
+
+macOS Accessibility 的窗口抬升只作为 CDP 就绪后的短时 best-effort 操作；虚拟显示器上的 AX 窗口索引可能晚于真实 BrowserWindow。所有非取消类 AX raise 失败都可以降级，用户取消或 AbortSignal 必须继续抛出并执行 identity-safe cleanup。正式硬门禁是随后对目标显示器截图与精确 Electron 窗口截图做尺寸、像素和边缘特征匹配，匹配失败必须拒绝录制，不能把 AX 延迟误判为窗口缺失，也不能放过壁纸空录。透明 / 毛玻璃窗口可能 RGB 差异较大且有效边缘很稀疏；低 edge density 只能走更严格的结构分支，要求极高 edge overlap 与极小 edge mean diff，同时保留错误窗口和壁纸 crop 的反例测试并 fail closed，不能只因存在少量重合边缘就放行。
 
 输出固定包含：
 
@@ -79,6 +83,7 @@ pnpm tools desktop-control record-batch launcher-open-workspace-ui-tour \
 - `<name>-stills.json`：按秒切图 manifest，供 agent 逐秒读取关键帧。
 - `stills/second_0000.png`、`stills/second_0001.png` 等：按秒抽取的 PNG 关键帧。
 - 系统 display capture 录屏还会输出 `<name>-cursor-timeline.json` 和 `<name>-cursor-continuity.json`：前者是按帧采样后的完整合成光标轨迹，后者记录单帧位移、速度和事件起点连续性检查结果。`cursor-continuity.ok=false` 时必须 fail-fast，不能交付视频。
+- 场景记录时长不是成片完整性的证据。系统录制结束后必须用实际视频按 `fps=1` 抽出的 still 数量覆盖 `floor(recordedDurationMs / 1000)`，显式允许不足一秒的抽帧量化误差；元数据声称 36 秒但文件只有 7 秒之类的截断必须 fail-closed。
 - `frames/` / `segments/`：仅在传 `--keep-frames` 时保留。
 
 交付 Electron / workspace 录屏时，必须同时给出加载耗时分析，不能只贴视频。分析至少包含：
@@ -109,13 +114,17 @@ system-display 录屏用 `screencapture -V` 时，命令启动时刻不等于输
 
 合成光标的动作要区分移动、按下和释放：移动到目标后先完整播放按下与释放回弹，留一个很短的 visual-to-input buffer，再触发真实 `mousePressed` / `mouseReleased` 输入事件。很多控件会在 pointer down 阶段切页面，不能只延后 release；否则页面行为仍会先变化、点击动画后补。移动要使用缓入缓出的非线性轨迹，默认操作节奏宁可稍慢也不要像瞬点。优化视频时不要为了压缩总时长把 click / release 动画改成无状态 PNG 叠加。
 
+宣传场景要求“放大到鼠标操作区域”时，必须对已经包含真实系统窗口与合成光标的整幅录屏像素做镜头推近；只把鼠标图标放大不算局部镜头放大。镜头事件应在鼠标开始接近目标时启动，在真实输入触发前或目标浮层出现时达到稳定倍率，并以 selector 实际坐标作为中心，允许场景用窄作用域 offset 容纳随后出现的浮层。缩放过程必须使用平滑缓动，四个语言 / 主题变体复用同一倍率、时长和相对焦点；目标浮层必须完整留在裁切范围内。不要重绘、模拟或后期替换产品窗口与浮层。
+
 launcher 打开 workspace 的录制不要把右侧 `.launcher-command-item__enter` 当作主路径。搜索目标目录后点击可见命令行本身，用 `Enter` 执行打开，然后等待 `.workspace-opening-overlay` 或聊天页 ready 足够久。不要在等待太短时立刻移动到右侧 action，也不要在打开开始后补点旧 launcher 目标，否则前一次行点击的异步打开可能在光标移动中生效，视频会表现成“光标没到目标，页面已经打开”。
 
 发布纯 Web 展示素材时优先使用 `demo-video batch`。真实 Electron launcher 打开 workspace 的素材不要用 `demo-video batch url-tour --url .../ui/launcher`，必须使用 `desktop-control record-batch launcher-open-workspace-ui-tour`，这样每个 variant 都有真实 Electron pid、真实 BrowserWindow 和真实系统显示合成。
 
-README、社交平台和发布宣传视频先生成一个代表性原型。用户确认动画逻辑、真实窗口路径、鼠标节奏、构图和隐私处理整体正确后，才能批量生成完整的 `light/dark x zh/en` 四变体矩阵；确认前不要提前渲染四条成片，避免把同一个问题复制四遍。每条成片中的 Launcher、Workspace、浮层和系统可见文字都必须与该变体语言一致，不能给英文入口复用中文界面，也不能把暗色录屏当作亮色版本。英文 README 只嵌入英文亮色 / 暗色视频，中文 README 只嵌入中文亮色 / 暗色视频；只有用户明确指定单语言或单主题时才能缩减矩阵。四个变体必须来自同一 scenario、同一 app build、同一 workspace、同一窗口几何和同一后期节奏，避免宣传素材之间产生功能与构图漂移。
+README、社交平台和发布宣传视频先生成一个代表性原型。用户确认动画逻辑、真实窗口路径、鼠标节奏、构图和隐私处理整体正确后，才能批量生成完整的 `light/dark x zh/en` 四变体矩阵；确认前不要提前渲染四条成片，避免把同一个问题复制四遍。每条成片中的 Launcher、Workspace、浮层和系统可见文字都必须与该变体语言一致，不能给英文入口复用中文界面，也不能把暗色录屏当作亮色版本。英文 README 用 `<picture>` 的 `prefers-color-scheme` 只选择英文亮色 / 暗色 GIF，中文 README 同样只选择中文亮色 / 暗色 GIF；高清 MP4 母版留在本地发布素材归档，不提交到仓库。用户明确要求文档站提供可播放演示时，可以把同一母版转成体积受控、fast-start、无音轨的 web MP4 作为文档站窄作用域例外；每个 locale 只能引用自己的语言版本，并按外观选择亮色 / 暗色，不能让一次页面访问加载完整四变体矩阵。只有用户明确指定单语言或单主题时才能缩减矩阵。四个变体必须来自同一 scenario、同一 app build、同一 workspace、同一窗口几何和同一后期节奏，避免宣传素材之间产生功能与构图漂移。
 
-公开素材必须使用清洁 fixture、隔离 profile 和中性 workspace。最终成片禁止出现个人账号名、账号登录状态、home 目录路径、目录列表、本机 workspace 绝对路径、邮箱、token 或其他机器身份信息；仅仅遮住一个账号角标不算完成。上传前必须对每个语言 / 主题变体逐一检查 Launcher 首屏、项目选择、Workspace 加载、目标浮层和结尾停留的关键 still，并搜索 OCR / 可见文字中的用户名、`/Users/<name>`、点目录和账号状态。真实操作中若系统项目选择器短暂暴露本机 home，公开剪辑必须跳过该段或使用清洁 fixture 重录，不能把泄露帧上传后再依赖 README 上下文解释。
+公开素材必须使用清洁 fixture、隔离 profile 和中性 workspace。最终成片禁止出现真实个人账号名、账号登录状态、真实 home 目录路径、真实目录列表、本机 workspace 绝对路径、真实邮箱、token 或其他机器身份信息；仅仅遮住一个账号角标不算完成。仅允许录制入口显式生成、无法映射到个人或机器身份的品牌演示值，例如标准 `adapter-promo` fixture 的 `/Users/oneworks/Projects/oneworks-demo` 展示路径与 `demo@oneworks.ai` 演示身份；它们必须继续映射到隔离临时目录和清洁数据，不能复用真实配置。上传前必须对每个语言 / 主题变体逐一检查 Launcher 首屏、项目选择、Workspace 加载、目标浮层和结尾停留的关键 still，并搜索 OCR / 可见文字中的用户名、`/Users/<name>`、点目录和账号状态。真实操作中若系统项目选择器短暂暴露本机 home，公开剪辑必须跳过该段或使用清洁 fixture 重录，不能把泄露帧上传后再依赖 README 上下文解释。
+
+命名式 fixture 由录制入口拥有，场景只消费其安全 workspace 展示路径。`adapter-promo` 是首个标准 fixture：展示 `/Users/oneworks/Projects/oneworks-demo`，点击后由 Electron 主进程映射到 `--workspace` 的真实目录。录制语言必须在创建 BrowserWindow / preload 之前注入，不能只在 renderer ready 后改 locale，否则英文素材的 workspace startup overlay 会短暂显示中文。workspace 名称与描述必须优先在 Electron selector-state 数据源处投影，不能用全页文本替换伪装；fixture 的 page 数据投影只负责模板标签、账号、邮箱和 `.chat-header-title-project` 这个明确的 Workspace 顶栏标签，并须在初始 target 和 follow 到的每个 workspace target 上重复安装，用幂等 MutationObserver 覆盖异步渲染，不能让真实配置在首帧或重渲染时闪现。Launcher 保持可见，隐藏的真实 Workspace 先完成加载并出现 Adapter 控件；随后先隐藏 Launcher，再让已就绪的真实 Workspace 从相同 bounds 平滑扩展到固定 workspace bounds，任意帧只保留一套窗口边框、阴影和 traffic lights。Electron 主进程启动时解析 fixture 后必须从 `process.env` 删除原始 payload，避免真实映射路径继续传播给 workspace server 或其他子进程。fixture 只能经 `desktop-control record-batch --demo-fixture <name>` 显式启用；普通桌面启动、真实目录浏览和 workspace 内部路径语义不得读取这层数据。后续预置会话、Adapter 状态、消息或资源时继续扩展 fixture 准备层，不把 seed 逻辑散进 scenario 或 React Launcher。
 
 如果需要录 launcher 打开 workspace 的完整过渡，创建 Electron control session 时不要传 `workspace`。需要证明真实 UI 操作时使用 `launcher-open-workspace-ui-tour`，它会从 launcher 进入“打开项目”，搜索目标 workspace 绝对路径并打开；需要发送消息并等待回复时使用 `launcher-open-workspace-chat-smoke`。
 

@@ -2,6 +2,25 @@
 
 This documentation is the user-facing entry point for integrating One Works into your own project.
 
+## Product Demo
+
+This 21-second demo uses real desktop windows to open a workspace from the Launcher and select an AI adapter. The video follows the docs site's light or dark appearance; for a static preview, see the [theme-aware image on the Desktop App page](./usage/desktop.md).
+
+<OneWorksThemeMedia>
+  <template #light>
+    <video aria-label="One Works light theme English product demo" class="oneworks-doc-promo-video" controls muted loop playsinline preload="none" poster="../images/adapter-promo/posters/oneworks-adapter-promo-light-en-poster.jpg">
+      <source src="../videos/adapter-promo/oneworks-adapter-promo-light-en.mp4" type="video/mp4">
+      <img alt="One Works light theme English product demo GIF" loading="lazy" src="../images/adapter-promo/oneworks-adapter-promo-light-en.gif">
+    </video>
+  </template>
+  <template #dark>
+    <video aria-label="One Works dark theme English product demo" class="oneworks-doc-promo-video" controls muted loop playsinline preload="none" poster="../images/adapter-promo/posters/oneworks-adapter-promo-dark-en-poster.jpg">
+      <source src="../videos/adapter-promo/oneworks-adapter-promo-dark-en.mp4" type="video/mp4">
+      <img alt="One Works dark theme English product demo GIF" loading="lazy" src="../images/adapter-promo/oneworks-adapter-promo-dark-en.gif">
+    </video>
+  </template>
+</OneWorksThemeMedia>
+
 ## Start Here
 
 - [Install and Prepare](./usage/install.md)

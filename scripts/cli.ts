@@ -499,6 +499,7 @@ export const createScriptsCli = (inputDeps: Partial<ScriptsCliDeps> = {}) => {
     .option('--app <path>', 'Installed macOS .app path or executable path', DEFAULT_DESKTOP_APP_PATH)
     .option('--executable <path>', 'Explicit executable path; defaults to the executable inside --app')
     .option('--workspace <path>', 'Workspace folder for launcher/workspace scenarios')
+    .option('--demo-fixture <name>', 'Named safe demo data fixture, for example adapter-promo')
     .option('--out-dir <path>', 'Output root directory')
     .option('--name <name>', 'Output file basename prefix')
     .option('--ffmpeg-path <path>', 'ffmpeg executable path', 'ffmpeg')
@@ -536,6 +537,7 @@ export const createScriptsCli = (inputDeps: Partial<ScriptsCliDeps> = {}) => {
       allowUnsupportedApp?: boolean
       app: string
       colorSchemes?: DemoVideoColorScheme[]
+      demoFixture?: string
       durationMs?: number
       executable?: string
       ffmpegPath?: string
@@ -555,6 +557,7 @@ export const createScriptsCli = (inputDeps: Partial<ScriptsCliDeps> = {}) => {
         allowUnsupportedApp: options.allowUnsupportedApp ?? false,
         appPath: options.app,
         colorSchemes: options.colorSchemes,
+        demoFixture: options.demoFixture,
         durationMs: options.durationMs,
         executable: options.executable,
         ffmpegPath: options.ffmpegPath,
