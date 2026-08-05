@@ -5,3 +5,4 @@
 - Add Android and iOS to the application download platform selector, with mobile-device routing that opens the matching platform until a direct APK or IPA release asset is available.
 - Reframe the homepage narrative around cross-tool agent sessions, model services, device coordination, and plugin extensibility, with a home affordance on compact content pages.
 - Keep hovered or focused chat messages below the route header overlay so long messages cannot obscure the header controls.
+- Capture the reviewed homepage preview state in the PR evidence bundle.
