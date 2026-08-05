@@ -1,6 +1,13 @@
-import { rm } from 'node:fs/promises'
+import path from 'node:path'
+import process from 'node:process'
 
-import { assertUniqueMarketplacePluginScopes, syncConfiguredMarketplacePlugins } from '@oneworks/managed-plugins'
+import {
+  assertUniqueMarketplacePluginScopes,
+  removeManagedPluginInstall,
+  syncConfiguredMarketplacePlugins,
+  withManagedPluginMutationLock
+} from '@oneworks/managed-plugins'
+import type { ManagedPluginMutationRuntime } from '@oneworks/managed-plugins'
 import type { Config, MarketplaceConfig } from '@oneworks/types'
 import { mergeMarketplaceConfigs } from '@oneworks/utils'
 import { listManagedPluginInstalls } from '@oneworks/utils/managed-plugin'
@@ -12,11 +19,11 @@ import { BUILT_IN_PLUGIN_MARKETPLACES } from './built-in-marketplaces'
 
 const getMarketplaces = (config: Config | undefined): MarketplaceConfig => config?.marketplaces ?? {}
 
-export const syncPluginMarketplaceSelection = async (params: {
+const syncPluginMarketplaceSelectionUnlocked = async (params: {
   enabled: boolean
   marketplace: string
   plugin: string
-}) => {
+}, mutationRuntime?: ManagedPluginMutationRuntime) => {
   const { mergedConfig, workspaceFolder } = await loadConfigState()
   const effectiveMarketplaces = mergeMarketplaceConfigs(
     BUILT_IN_PLUGIN_MARKETPLACES,
@@ -49,7 +56,8 @@ export const syncPluginMarketplaceSelection = async (params: {
     }
     return syncConfiguredMarketplacePlugins({
       cwd: workspaceFolder,
-      marketplaces: { [params.marketplace]: marketplace }
+      marketplaces: { [params.marketplace]: marketplace },
+      mutationRuntime
     })
   }
 
@@ -77,10 +85,31 @@ export const syncPluginMarketplaceSelection = async (params: {
     install.config.source.marketplace === params.marketplace &&
     install.config.source.plugin === params.plugin
   ))
-  await Promise.all(matchingInstalls.map(install => rm(install.installDir, { recursive: true, force: true })))
+  for (const install of matchingInstalls) {
+    await removeManagedPluginInstall({ cwd: workspaceFolder, install })
+  }
   return matchingInstalls.map(() => ({
     marketplace: params.marketplace,
     plugin: params.plugin,
     action: 'removed' as const
   }))
+}
+
+export const syncPluginMarketplaceSelection = async (params: {
+  enabled: boolean
+  marketplace: string
+  plugin: string
+}, mutationRuntime?: ManagedPluginMutationRuntime) => {
+  const { workspaceFolder } = await loadConfigState()
+  return withManagedPluginMutationLock({
+    cwd: workspaceFolder,
+    env: process.env,
+    runtime: mutationRuntime
+  }, async () => {
+    const currentState = await loadConfigState()
+    if (path.resolve(currentState.workspaceFolder) !== path.resolve(workspaceFolder)) {
+      throw new Error('Workspace changed while synchronizing plugin marketplace selection.')
+    }
+    return syncPluginMarketplaceSelectionUnlocked(params, mutationRuntime)
+  })
 }

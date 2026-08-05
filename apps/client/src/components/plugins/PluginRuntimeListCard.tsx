@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { renderIconAsset } from '#~/components/icons/IconAsset'
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
 import { MarketplaceCard } from '#~/components/marketplace/MarketplaceCard'
+import { projectPluginPresentationValue } from '#~/plugins/plugin-presentation'
 
 import type { PluginListItem } from './plugin-runtime-list-items'
 
@@ -15,6 +16,7 @@ export function PluginRuntimeListCard({
   onOpen: (item: PluginListItem) => void
 }) {
   const { t } = useTranslation()
+  const safeSource = projectPluginPresentationValue(item.source)
 
   return (
     <MarketplaceCard
@@ -27,10 +29,10 @@ export function PluginRuntimeListCard({
         />
       }
       onSelect={() => onOpen(item)}
-      title={item.name}
+      title={projectPluginPresentationValue(item.name)}
       titleMeta={
         <>
-          {item.version != null && <Tag>{item.version}</Tag>}
+          {item.version != null && <Tag>{projectPluginPresentationValue(item.version)}</Tag>}
         </>
       }
       subtitle={
@@ -40,12 +42,16 @@ export function PluginRuntimeListCard({
             name={item.kind === 'native' ? 'deployed_code' : 'extension'}
             aria-hidden='true'
           />
-          <span>{item.kind === 'native' ? item.adapter : 'OneWorks'}</span>
+          <span>{item.kind === 'native' ? projectPluginPresentationValue(item.adapter) : 'OneWorks'}</span>
           <span>·</span>
-          <span>{t(`pluginStore.sources.${item.source}`, { defaultValue: item.source })}</span>
+          <span>
+            {t(`pluginStore.sources.${safeSource}`, {
+              defaultValue: safeSource
+            })}
+          </span>
         </>
       }
-      description={item.description}
+      description={item.description == null ? undefined : projectPluginPresentationValue(item.description)}
       footer={item.kind === 'native' && (
         <div className='plugin-runtime-list__native-note'>{t('pluginStore.nativeReadOnly')}</div>
       )}

@@ -16,6 +16,7 @@ import {
   writeDisabledPluginContributionItems
 } from '#~/plugins/plugin-contribution-preferences'
 import type { PluginRuntimeInstance } from '#~/plugins/plugin-manifest'
+import { projectPluginPresentationValue } from '#~/plugins/plugin-presentation'
 
 import { PluginAssetSection } from './PluginAssetSection'
 import { PluginConfigSection } from './PluginConfigSection'
@@ -112,7 +113,7 @@ export function PluginDetailPanel({
       const scopedItems = (items ?? []).filter(item => item.pluginScope === plugin.scope)
       if (scopedItems.length === 0) return []
       const labelKey = runtimeSlotLabelKeys[slot]
-      const slotLabel = labelKey == null ? slot : t(labelKey)
+      const slotLabel = labelKey == null ? projectPluginPresentationValue(slot) : t(labelKey)
       return [{
         icon: 'widgets',
         id: `slot:${slot}`,
@@ -291,7 +292,7 @@ export function PluginDetailPanel({
   )
   const readmeTabLabel = readmeState.readme == null
     ? t('pluginDetail.readme')
-    : `${t('pluginDetail.readme')}: ${readmeState.readme.path}`
+    : `${t('pluginDetail.readme')}: ${projectPluginPresentationValue(readmeState.readme.path)}`
   const contributionsTabLabel = `${t('pluginDetail.contributions')}: ${detailRows.length}`
   const assetsByKind = useMemo(
     () => new Map(assetsState.groups.map(group => [group.kind, group])),

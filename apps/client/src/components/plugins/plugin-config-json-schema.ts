@@ -8,6 +8,8 @@ import type {
   PluginConfigManifest
 } from '@oneworks/types'
 
+import { sanitizePluginMaterialIcon } from '#~/plugins/plugin-presentation'
+
 type JsonSchemaRecord = Record<string, unknown>
 
 const isRecord = (value: unknown): value is JsonSchemaRecord => (
@@ -179,7 +181,7 @@ const collectSchemaFields = (
   if (path.length === 0) return
 
   const fieldType = inferFieldType(schema)
-  const icon = firstString(ui.icon) ?? inferIcon(fieldType)
+  const icon = sanitizePluginMaterialIcon(firstString(ui.icon)) ?? inferIcon(fieldType)
   fields.push({
     path,
     type: fieldType,

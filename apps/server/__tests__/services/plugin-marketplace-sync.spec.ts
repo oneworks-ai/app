@@ -1,8 +1,4 @@
-import { mkdir, mkdtemp, rm, stat } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import path from 'node:path'
-
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { syncPluginMarketplaceSelection } from '#~/services/plugins/marketplace-sync.js'
 
@@ -10,13 +6,16 @@ const mocks = vi.hoisted(() => ({
   assertUniqueMarketplacePluginScopes: vi.fn(),
   listManagedPluginInstalls: vi.fn(),
   loadConfigState: vi.fn(),
+  removeManagedPluginInstall: vi.fn(),
   resolveConfiguredPluginInstances: vi.fn(),
   syncConfiguredMarketplacePlugins: vi.fn()
 }))
 
 vi.mock('@oneworks/managed-plugins', () => ({
   assertUniqueMarketplacePluginScopes: mocks.assertUniqueMarketplacePluginScopes,
-  syncConfiguredMarketplacePlugins: mocks.syncConfiguredMarketplacePlugins
+  removeManagedPluginInstall: mocks.removeManagedPluginInstall,
+  syncConfiguredMarketplacePlugins: mocks.syncConfiguredMarketplacePlugins,
+  withManagedPluginMutationLock: (_params: unknown, callback: () => Promise<unknown>) => callback()
 }))
 
 vi.mock('@oneworks/utils/managed-plugin', () => ({
@@ -31,18 +30,13 @@ vi.mock('#~/services/config/index.js', () => ({
   loadConfigState: mocks.loadConfigState
 }))
 
-const tempDirs: string[] = []
-
 describe('plugin marketplace sync', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.syncConfiguredMarketplacePlugins.mockResolvedValue([])
     mocks.listManagedPluginInstalls.mockResolvedValue([])
     mocks.resolveConfiguredPluginInstances.mockResolvedValue([])
-  })
-
-  afterEach(async () => {
-    await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
+    mocks.removeManagedPluginInstall.mockResolvedValue(undefined)
   })
 
   it('installs an enabled Codex marketplace plugin immediately', async () => {
@@ -103,7 +97,7 @@ describe('plugin marketplace sync', () => {
       plugins: [{
         id: '@oneworks/plugin-logger',
         scope: 'logs',
-        version: '0.1.0-beta.8'
+        version: '0.1.0-rc.7'
       }]
     })
 
@@ -124,17 +118,17 @@ describe('plugin marketplace sync', () => {
   })
 
   it('removes only the matching managed marketplace install', async () => {
-    const workspaceFolder = await mkdtemp(path.join(tmpdir(), 'ow-marketplace-sync-'))
-    tempDirs.push(workspaceFolder)
-    const installDir = path.join(workspaceFolder, 'managed-install')
-    await mkdir(installDir)
+    const workspaceFolder = '/workspace'
+    const installDir = '/managed/codex/openai-plugins--github/install'
     mocks.loadConfigState.mockResolvedValue({ workspaceFolder, mergedConfig: {} })
-    mocks.listManagedPluginInstalls.mockResolvedValue([{
+    const install = {
       installDir,
       config: {
+        adapter: 'codex',
         source: { type: 'marketplace', marketplace: 'openai-plugins', plugin: 'github' }
       }
-    }])
+    }
+    mocks.listManagedPluginInstalls.mockResolvedValue([install])
 
     const result = await syncPluginMarketplaceSelection({
       enabled: false,
@@ -147,7 +141,10 @@ describe('plugin marketplace sync', () => {
       plugin: 'github',
       action: 'removed'
     }])
-    await expect(stat(installDir)).rejects.toMatchObject({ code: 'ENOENT' })
+    expect(mocks.removeManagedPluginInstall).toHaveBeenCalledWith({
+      cwd: workspaceFolder,
+      install
+    })
     expect(mocks.listManagedPluginInstalls).toHaveBeenCalledWith(workspaceFolder, { adapter: 'codex' })
   })
 

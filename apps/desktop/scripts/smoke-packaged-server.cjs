@@ -1,3 +1,4 @@
+const { Buffer } = require('node:buffer')
 const { spawn } = require('node:child_process')
 const fs = require('node:fs')
 const http = require('node:http')
@@ -376,6 +377,59 @@ const readServerText = (port, requestPath, label, options = {}) =>
     request.once('error', reject)
   })
 
+const createPackagedAsset = (port, options = {}) =>
+  new Promise((resolve, reject) => {
+    const body = JSON.stringify({ kind: 'rule', name: 'Packaged Authority Smoke' })
+    const httpRequest = options.httpRequest ?? http.request
+    const request = httpRequest({
+      headers: {
+        'Content-Length': Buffer.byteLength(body),
+        'Content-Type': 'application/json'
+      },
+      hostname: host,
+      method: 'POST',
+      path: '/api/ai/assets',
+      port,
+      timeout: options.timeoutMs ?? serverRequestTimeoutMs
+    }, (response) => {
+      let responseBody = ''
+      response.setEncoding('utf8')
+      response.on('data', chunk => {
+        responseBody += chunk
+      })
+      response.on('end', () => {
+        if (response.statusCode !== 201) {
+          reject(new Error(`Packaged asset authority returned HTTP ${response.statusCode}: ${responseBody}`))
+          return
+        }
+        try {
+          resolve(JSON.parse(responseBody))
+        } catch {
+          reject(new Error(`Packaged asset authority returned invalid JSON: ${responseBody}`))
+        }
+      })
+    })
+    request.once('timeout', () => {
+      request.destroy(new Error('Packaged asset authority request timed out.'))
+    })
+    request.once('error', reject)
+    request.end(body)
+  })
+
+const assertPackagedAssetAuthority = async (port, workspaceFolder) => {
+  const response = await createPackagedAsset(port)
+  const relativePath = '.oo/rules/packaged-authority-smoke.md'
+  if (
+    response?.success !== true || response?.data?.asset?.kind !== 'rule' || response?.data?.asset?.path !== relativePath
+  ) {
+    throw new Error(`Packaged asset authority returned an unexpected asset: ${JSON.stringify(response)}`)
+  }
+  const content = fs.readFileSync(path.join(workspaceFolder, relativePath), 'utf8')
+  if (!content.includes('# Packaged Authority Smoke')) {
+    throw new Error('Packaged asset authority did not publish the expected content.')
+  }
+}
+
 const readPluginCatalog = async (port) => {
   const body = await readServerText(port, '/api/plugins', 'Packaged plugin catalog')
   try {
@@ -673,12 +727,14 @@ const main = async () => {
   )
   try {
     await runPackagedServerSmoke({
-      assertCatalog: async (pluginCatalog, port) =>
+      assertCatalog: async (pluginCatalog, port) => {
         await assertBuiltinRuntimeActive(
           pluginCatalog,
           port,
           { pluginRootParentDirs: [paths.appDir, isolatedPackageCacheRoot] }
-        ),
+        )
+        await assertPackagedAssetAuthority(port, emptyWorkspace)
+      },
       envOverrides: {
         __ONEWORKS_PROJECT_DISABLE_GLOBAL_CONFIG__: '1'
       },
@@ -697,6 +753,7 @@ const main = async () => {
 }
 
 module.exports = {
+  createPackagedAsset,
   readLocalPluginClientSource,
   readServerText,
   serverCompileTimeoutMs,

@@ -7,6 +7,7 @@ import type { ExperimentsConfig } from '@oneworks/types'
 import { useDesktopWorkspaceStartupReady } from '#~/components/layout/desktop-workspace-startup-ready'
 import { useExperimentsState } from '#~/hooks/use-experiments'
 import { PluginRoute } from '#~/plugins/PluginHost'
+import { PluginProvider } from '#~/plugins/PluginProvider'
 
 const lazyNamedRoute = <T extends Record<K, ComponentType>, K extends keyof T>(
   loader: () => Promise<T>,
@@ -34,6 +35,14 @@ const KnowledgeRoute = lazyNamedRoute(() => import('#~/routes/KnowledgeRoute'), 
 const ModuleManagementRoute = lazyNamedRoute(() => import('#~/routes/ModuleManagementRoute'), 'ModuleManagementRoute')
 const NotFoundRoute = lazyNamedRoute(() => import('#~/routes/NotFoundRoute'), 'NotFoundRoute')
 const PluginStoreRoute = lazyNamedRoute(() => import('#~/routes/PluginStoreRoute'), 'PluginStoreRoute')
+
+function WorkspacePluginStoreRoute() {
+  return (
+    <PluginProvider runtimeSource='current'>
+      <PluginStoreRoute />
+    </PluginProvider>
+  )
+}
 
 function ExperimentalRoute({
   children,
@@ -101,16 +110,16 @@ export function AppRoutes() {
           <Route path='/knowledge/*' element={<KnowledgeRoute />} />
           <Route path='/modules' element={<ModuleManagementRoute />} />
           <Route path='/config/*' element={<ConfigRoute />} />
-          <Route path='/plugins' element={<PluginStoreRoute />} />
-          <Route path='/plugins/list' element={<PluginStoreRoute />} />
-          <Route path='/plugins/store' element={<PluginStoreRoute />} />
-          <Route path='/plugins/create' element={<PluginStoreRoute />} />
-          <Route path='/plugins/list/:scope/diagnostics' element={<PluginStoreRoute />} />
-          <Route path='/plugins/list/:scope' element={<PluginStoreRoute />} />
-          <Route path='/plugins/store/:scope/diagnostics' element={<PluginStoreRoute />} />
-          <Route path='/plugins/store/:scope' element={<PluginStoreRoute />} />
-          <Route path='/plugins/:scope/diagnostics' element={<PluginStoreRoute />} />
-          <Route path='/plugins/:scope' element={<PluginStoreRoute />} />
+          <Route path='/plugins' element={<WorkspacePluginStoreRoute />} />
+          <Route path='/plugins/list' element={<WorkspacePluginStoreRoute />} />
+          <Route path='/plugins/store' element={<WorkspacePluginStoreRoute />} />
+          <Route path='/plugins/create' element={<WorkspacePluginStoreRoute />} />
+          <Route path='/plugins/list/:scope/diagnostics' element={<WorkspacePluginStoreRoute />} />
+          <Route path='/plugins/list/:scope' element={<WorkspacePluginStoreRoute />} />
+          <Route path='/plugins/store/:scope/diagnostics' element={<WorkspacePluginStoreRoute />} />
+          <Route path='/plugins/store/:scope' element={<WorkspacePluginStoreRoute />} />
+          <Route path='/plugins/:scope/diagnostics' element={<WorkspacePluginStoreRoute />} />
+          <Route path='/plugins/:scope' element={<WorkspacePluginStoreRoute />} />
           <Route path='/plugins/:scope/:routeId/*' element={<PluginRoute />} />
           <Route path='/launcher/*' element={<Navigate to='/' replace />} />
           <Route path='*' element={<NotFoundRoute />} />

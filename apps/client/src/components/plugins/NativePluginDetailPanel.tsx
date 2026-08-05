@@ -11,6 +11,12 @@ import type { NativeHostPlugin, NativeHostPluginAssetGroup, NativeHostPluginAsse
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
 import { getNativeHostPluginAssets } from '#~/plugins/api'
 import type { PluginRuntimeInstance } from '#~/plugins/plugin-manifest'
+import {
+  projectPluginPresentationValue,
+  resolveNativePluginDescription,
+  resolveNativePluginDisplayName,
+  resolveNativePluginSourceDisplay
+} from '#~/plugins/plugin-presentation'
 
 import { PluginAssetSection } from './PluginAssetSection'
 import { PluginDetailView } from './PluginDetailView'
@@ -63,12 +69,13 @@ export function NativePluginDetailPanel({
     .map(item => ({ ...item, group: assetsByKind.get(item.kind) }))
     .filter((item): item is typeof item & { group: NativeHostPluginAssetGroup } => item.group != null)
   const diagnostics = plugin.diagnostics ?? []
-  const displayName = plugin.displayName ?? plugin.name
+  const displayName = resolveNativePluginDisplayName(plugin)
+  const sourceDisplay = resolveNativePluginSourceDisplay(plugin)
   const overviewPlugin = useMemo<PluginRuntimeInstance>(() => ({
-    packageId: plugin.marketplace,
-    requestId: plugin.adapter,
-    requestedVersion: plugin.source.kind,
-    rootDir: plugin.source.displayPath,
+    packageId: projectPluginPresentationValue(plugin.marketplace),
+    requestId: projectPluginPresentationValue(plugin.adapter),
+    requestedVersion: projectPluginPresentationValue(plugin.source.kind),
+    rootDir: sourceDisplay,
     scope: plugin.id,
     version: plugin.version
   }), [plugin])
@@ -79,8 +86,8 @@ export function NativePluginDetailPanel({
       children: (
         <section className='native-plugin-detail__body'>
           <h2>{displayName}</h2>
-          <p>{plugin.description ?? t('pluginStore.nativeReadOnly')}</p>
-          <p className='native-plugin-detail__source'>{plugin.source.displayPath}</p>
+          <p>{resolveNativePluginDescription(plugin) ?? t('pluginStore.nativeReadOnly')}</p>
+          <p className='native-plugin-detail__source'>{sourceDisplay}</p>
         </section>
       )
     },
@@ -95,7 +102,7 @@ export function NativePluginDetailPanel({
               <PluginAssetSection
                 key={item.kind}
                 emptyText={t('pluginDetail.assetsEmpty')}
-                error={error instanceof Error ? error.message : undefined}
+                error={error instanceof Error ? projectPluginPresentationValue(error.message) : undefined}
                 group={item.group}
                 icon={item.icon}
                 loading={isLoading}
@@ -116,7 +123,7 @@ export function NativePluginDetailPanel({
         children: (
           <PluginAssetSection
             emptyText={t('pluginDetail.assetsEmpty')}
-            error={error instanceof Error ? error.message : undefined}
+            error={error instanceof Error ? projectPluginPresentationValue(error.message) : undefined}
             group={group}
             loading={isLoading}
             title={label}
@@ -131,14 +138,17 @@ export function NativePluginDetailPanel({
         <section className='native-plugin-detail__body'>
           {diagnostics.length === 0
             ? <p>{t('pluginDetail.diagnosticsEmpty')}</p>
-            : diagnostics.map(item => (
-              <div key={`${item.code}:${item.message}`} className={`native-plugin-detail__diagnostic is-${item.level}`}>
-                <MaterialSymbol
-                  name={item.level === 'error' ? 'error' : item.level === 'warning' ? 'warning' : 'info'}
-                />
-                <span>{item.message}</span>
-              </div>
-            ))}
+            : diagnostics.map((item) => {
+              const level = item.level === 'error' || item.level === 'warning' ? item.level : 'info'
+              return (
+                <div key={`${item.code}:${item.message}`} className={`native-plugin-detail__diagnostic is-${level}`}>
+                  <MaterialSymbol
+                    name={level === 'error' ? 'error' : level === 'warning' ? 'warning' : 'info'}
+                  />
+                  <span>{projectPluginPresentationValue(item.message)}</span>
+                </div>
+              )
+            })}
         </section>
       )
     }
