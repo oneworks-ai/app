@@ -12,10 +12,16 @@ import {
   buildStableWindowsMsiProvenance,
   buildStableWindowsMsiWxs,
   buildWindowsAssetNames,
+  resolvePnpmCommand,
   shouldBuildStableWindowsAsset
 } from '../stable-windows-release.mjs'
 
 describe('stable Windows release asset', () => {
+  it('uses the Windows pnpm command shim when spawning the payload builder', () => {
+    expect(resolvePnpmCommand('win32')).toBe('pnpm.cmd')
+    expect(resolvePnpmCommand('linux')).toBe('pnpm')
+  })
+
   it('builds only when the stable plan contains the bootstrap package', () => {
     expect(shouldBuildStableWindowsAsset('', 'true')).toBe(true)
     expect(shouldBuildStableWindowsAsset('@oneworks/core, oneworks', 'false')).toBe(true)
