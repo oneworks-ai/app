@@ -18,8 +18,43 @@ import { resetConfigCache, resolveGlobalConfigDir } from './load'
 
 export type { ConfigSource } from '@oneworks/types'
 
+export interface ConfigFileRevision {
+  ctimeNs: string
+  dev: string
+  ino: string
+  mtimeNs: string
+  size: string
+}
+
+export class ConfigFileRevisionConflictError extends Error {
+  constructor() {
+    super('Config changed before the requested write could be applied.')
+    this.name = 'ConfigFileRevisionConflictError'
+  }
+}
+
+export const readConfigFileRevision = async (filePath: string): Promise<ConfigFileRevision> => {
+  const fileStat = await stat(filePath, { bigint: true })
+  return {
+    ctimeNs: fileStat.ctimeNs.toString(),
+    dev: fileStat.dev.toString(),
+    ino: fileStat.ino.toString(),
+    mtimeNs: fileStat.mtimeNs.toString(),
+    size: fileStat.size.toString()
+  }
+}
+
+const configFileRevisionsMatch = (left: ConfigFileRevision, right: ConfigFileRevision) => (
+  left.ctimeNs === right.ctimeNs &&
+  left.dev === right.dev &&
+  left.ino === right.ino &&
+  left.mtimeNs === right.mtimeNs &&
+  left.size === right.size
+)
+
 interface UpdateConfigFileBaseOptions {
   env?: Record<string, string | null | undefined>
+  expectedRevision?: ConfigFileRevision
   workspaceFolder?: string
   source: ConfigSource
   section: string
@@ -491,6 +526,13 @@ export const updateConfigFile = async (options: UpdateConfigFileOptions) => {
   return withCanonicalConfigWriteLock(configPath, async (targetPath) => {
     const format = extname(configPath).toLowerCase()
     const hasExisting = existsSync(configPath)
+    if (options.expectedRevision != null) {
+      if (!hasExisting) throw new ConfigFileRevisionConflictError()
+      const currentRevision = await readConfigFileRevision(targetPath)
+      if (!configFileRevisionsMatch(currentRevision, options.expectedRevision)) {
+        throw new ConfigFileRevisionConflictError()
+      }
+    }
     const existingContent = hasExisting ? await readFile(targetPath, 'utf-8') : ''
     const existingConfig = hasExisting ? parseConfigContent(format, existingContent) : {}
     const value = options.resolveValue == null

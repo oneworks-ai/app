@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 
 import { getLauncherManagerServerBaseUrl } from '#~/api/launcher'
 import { useNotifications } from '#~/notifications/NotificationProvider'
-import { getRuntimeWorkspaceId, isServerManagerRole } from '#~/runtime-config'
+import { getRuntimeWorkspaceId, getServerBaseUrl, isServerManagerRole } from '#~/runtime-config'
 import { createSocket } from '#~/ws.js'
 
 import { listPluginSnapshot } from './api'
@@ -58,7 +58,7 @@ export function PluginProvider({
   const pluginServerBaseUrl = useMemo(() => {
     return resolvePluginRuntimeSource(runtimeSource) === 'manager'
       ? getLauncherManagerServerBaseUrl()
-      : undefined
+      : getServerBaseUrl()
   }, [runtimeSource])
 
   const setRuntimeSnapshot = useCallback((runtime: PluginRuntimeEndpoint | undefined) => {

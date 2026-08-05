@@ -1,8 +1,14 @@
 import { Alert, Skeleton, Tag } from 'antd'
 
-import { MarkdownContent } from '#~/components/MarkdownContent'
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
+import {
+  PRIVATE_PLUGIN_PRESENTATION_VALUE,
+  projectPluginPresentationValue,
+  sanitizePluginPresentationData
+} from '#~/plugins/plugin-presentation'
 import type { PluginDetailAssetFile } from '@oneworks/types'
+
+import { SafePluginMarkdownContent } from './SafePluginMarkdownContent'
 
 interface PluginAssetSectionProps {
   emptyText: string
@@ -29,7 +35,19 @@ export function PluginAssetSection({
   showHeading = false,
   title
 }: PluginAssetSectionProps) {
-  const files = group?.files ?? []
+  const projectedFiles = sanitizePluginPresentationData(group?.files ?? [])
+  const files = Array.isArray(projectedFiles)
+    ? projectedFiles.map((file): PluginDetailAssetFile => (
+      file != null && typeof file === 'object' && !Array.isArray(file)
+        ? file as PluginDetailAssetFile
+        : {
+          content: PRIVATE_PLUGIN_PRESENTATION_VALUE,
+          contentKind: 'text',
+          path: PRIVATE_PLUGIN_PRESENTATION_VALUE,
+          size: 0
+        }
+    ))
+    : []
 
   return (
     <section className='plugin-detail-route__section plugin-detail-route__asset-section'>
@@ -42,17 +60,17 @@ export function PluginAssetSection({
       {loading
         ? <Skeleton active paragraph={{ rows: 5 }} title={false} />
         : error != null
-        ? <Alert type='warning' showIcon message={error} />
+        ? <Alert type='warning' showIcon message={projectPluginPresentationValue(error)} />
         : files.length === 0
         ? <p className='plugin-detail-route__empty'>{emptyText}</p>
         : (
           <div className='plugin-detail-route__asset-list' aria-label={title}>
-            {files.map(file => (
-              <article key={file.path} className='plugin-detail-route__asset-file'>
+            {files.map((file, index) => (
+              <article key={`${file.path}:${index}`} className='plugin-detail-route__asset-file'>
                 <div className='plugin-detail-route__asset-file-header'>
                   <div className='plugin-detail-route__asset-file-title'>
                     <MaterialSymbol name={file.contentKind === 'markdown' ? 'article' : 'code_blocks'} />
-                    <span>{file.path}</span>
+                    <span>{projectPluginPresentationValue(file.path)}</span>
                   </div>
                   <div className='plugin-detail-route__asset-file-meta'>
                     <Tag>{file.contentKind}</Tag>
@@ -66,7 +84,7 @@ export function PluginAssetSection({
                   : file.contentKind === 'markdown'
                   ? (
                     <div className='plugin-detail-route__asset-markdown markdown-body'>
-                      <MarkdownContent content={file.content} openLinksInNewTab />
+                      <SafePluginMarkdownContent content={file.content} />
                     </div>
                   )
                   : <pre className='plugin-detail-route__asset-code'>{file.content}</pre>}

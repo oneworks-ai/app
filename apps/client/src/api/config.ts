@@ -1,11 +1,24 @@
 import type { ConfigSource } from '@oneworks/core'
 import type { ConfigResponse, ConfigSchemaResponse } from '@oneworks/types'
 
+import { createServerUrlFromBase, normalizeServerBaseUrl } from '#~/runtime-config'
+
 import { fetchApiJson, fetchApiJsonOrThrow, jsonHeaders } from './base'
 import type { ApiOkResponse } from './types'
 
-export async function getConfig(): Promise<ConfigResponse> {
-  return fetchApiJson<ConfigResponse>('/api/config')
+export interface ConfigApiSourceOptions {
+  serverBaseUrl?: string
+}
+
+const createConfigApiUrl = (path: string, serverBaseUrl?: string) => {
+  const normalizedServerBaseUrl = normalizeServerBaseUrl(serverBaseUrl)
+  return normalizedServerBaseUrl == null
+    ? path
+    : createServerUrlFromBase(normalizedServerBaseUrl, path)
+}
+
+export async function getConfig(options: ConfigApiSourceOptions = {}): Promise<ConfigResponse> {
+  return fetchApiJson<ConfigResponse>(createConfigApiUrl('/api/config', options.serverBaseUrl))
 }
 
 export async function getConfigSchema(): Promise<ConfigSchemaResponse> {

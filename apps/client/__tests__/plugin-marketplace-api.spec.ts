@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  getPluginMarketplaceUninstallPlan,
   listPluginMarketplaceCatalog,
   resolvePluginMarketplaceVersions,
-  syncPluginMarketplaceSelection
+  syncPluginMarketplaceSelection,
+  uninstallPluginMarketplacePlugin
 } from '#~/plugins/marketplace-api'
 
 vi.mock('#~/homepage-preview/runtime-loader', () => ({
@@ -25,6 +27,20 @@ describe('plugin marketplace api server targeting', () => {
       const pathname = new URL(String(input)).pathname
       if (pathname.endsWith('/versions')) return makeResponse({ versions: [] })
       if (pathname.endsWith('/selection')) return makeResponse({ results: [] })
+      if (pathname.endsWith('/uninstall-plan')) {
+        return makeResponse({ available: false, reason: 'local-plugin' })
+      }
+      if (pathname.endsWith('/uninstall')) {
+        return makeResponse({
+          identity: {
+            adapter: 'claude',
+            marketplace: 'team',
+            plugin: 'review',
+            scope: 'review'
+          },
+          removed: true
+        })
+      }
       return makeResponse({ plugins: [], sources: [] })
     })
     vi.stubGlobal('fetch', fetchMock)
@@ -59,5 +75,29 @@ describe('plugin marketplace api server targeting', () => {
     const url = String(fetchMock.mock.calls[0]?.[0])
     expect(url).not.toContain('remote.example')
     expect(new URL(url).pathname).toBe('/api/plugins/marketplace/catalog')
+  })
+
+  it('uses scope-only plan and uninstall endpoints without sending filesystem identity', async () => {
+    const controller = new AbortController()
+    const options = {
+      serverBaseUrl: 'https://remote.example/base',
+      signal: controller.signal
+    }
+    await getPluginMarketplaceUninstallPlan('review tools', options)
+    await uninstallPluginMarketplacePlugin('review tools', 'a'.repeat(64), options)
+
+    expect(fetchMock.mock.calls.map(([input]) => String(input))).toEqual([
+      'https://remote.example/base/api/plugins/review%20tools/uninstall-plan',
+      'https://remote.example/base/api/plugins/review%20tools/uninstall'
+    ])
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      signal: expect.any(AbortSignal)
+    })
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
+      body: JSON.stringify({ token: 'a'.repeat(64) }),
+      method: 'POST',
+      signal: expect.any(AbortSignal)
+    })
+    expect(fetchMock.mock.calls[1]?.[1]?.body).not.toContain('/managed/')
   })
 })

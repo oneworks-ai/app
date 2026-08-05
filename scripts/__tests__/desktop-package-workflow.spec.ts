@@ -96,11 +96,25 @@ function runReleaseTagGuard(status: number, output = '', sourceSha = 'a'.repeat(
 }
 
 describe('desktop package workflow', () => {
-  it('keeps pull requests lightweight and moves macOS packaging to nightly canaries', () => {
+  it('runs unsigned pull request closure smoke while keeping installers release-only', () => {
     expect(workflow).toContain('schedule:\n    - cron: "0 18 * * *"')
     expect(workflow).toContain('pr-policy:\n    name: macOS installer')
-    expect(workflow).toContain('runs-on: ubuntu-latest')
     expect(workflow).toContain("github.event_name != 'pull_request'")
+
+    const prJob = workflow.slice(
+      workflow.indexOf('  pr-policy:'),
+      workflow.indexOf('  dispatch-policy:')
+    )
+    expect(prJob).toContain('runs-on: macos-26')
+    expect(prJob).toContain('ONEWORKS_DESKTOP_ARCHS: arm64,x64')
+    expect(prJob).toContain(
+      'node packages/fs-authority-native/scripts/verify-darwin-prebuilds.mjs "$authority_root"'
+    )
+    expect(prJob).toContain('ONEWORKS_DESKTOP_SMOKE_ARCH: arm64')
+    expect(prJob).toContain('run: pnpm -C apps/desktop smoke:package')
+    expect(prJob).not.toContain('desktop:make')
+    expect(prJob).not.toContain('APPLE_')
+    expect(prJob).not.toContain('Upload installer artifacts')
 
     const nightlyPolicy = runWithOutput(
       extractRunScript('Resolve desktop build policy'),

@@ -10,3 +10,5 @@
 *.woff2 -text
 *.ttf -text
 *.otf -text
+packages/fs-authority-native/prebuilds/darwin-arm64/fs-authority.node -text
+packages/fs-authority-native/prebuilds/darwin-x64/fs-authority.node -text

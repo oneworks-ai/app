@@ -1,6 +1,7 @@
 import { Tag, Tooltip } from 'antd'
 
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
+import { projectPluginPresentationValue } from '#~/plugins/plugin-presentation'
 
 export interface PluginDetailDiagnostic {
   level: 'error' | 'warning' | 'info'
@@ -39,20 +40,25 @@ export function PluginDiagnostics({ diagnostics, emptyText, title }: PluginDiagn
             </p>
           </Tooltip>
         )
-        : diagnostics.map((diagnostic, index) => (
-          <div key={`${diagnostic.message}:${index}`} className='plugin-detail-route__diagnostic'>
-            <Tag
-              color={diagnostic.level === 'error'
-                ? 'error'
-                : diagnostic.level === 'warning'
-                ? 'warning'
-                : undefined}
-            >
-              {diagnostic.level}
-            </Tag>
-            <span>{diagnostic.message}</span>
-          </div>
-        ))}
+        : diagnostics.map((diagnostic, index) => {
+          const level = diagnostic.level === 'error' || diagnostic.level === 'warning'
+            ? diagnostic.level
+            : 'info'
+          return (
+            <div key={`${diagnostic.message}:${index}`} className='plugin-detail-route__diagnostic'>
+              <Tag
+                color={level === 'error'
+                  ? 'error'
+                  : level === 'warning'
+                  ? 'warning'
+                  : undefined}
+              >
+                {level}
+              </Tag>
+              <span>{projectPluginPresentationValue(diagnostic.message)}</span>
+            </div>
+          )
+        })}
     </section>
   )
 }

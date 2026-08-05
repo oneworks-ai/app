@@ -3,9 +3,14 @@ import type { NativeHostPlugin } from '@oneworks/types'
 import type { PluginRuntimeInstance } from '#~/plugins/plugin-manifest'
 import {
   getPluginPresentationSearchText,
+  projectPluginPresentationValue,
+  resolveNativePluginDescription,
+  resolveNativePluginDisplayName,
+  resolveNativePluginSourceDisplay,
   resolvePluginDescription,
   resolvePluginDisplayName,
-  resolvePluginPresentationIcon
+  resolvePluginPresentationIcon,
+  sanitizePluginAssetReference
 } from '#~/plugins/plugin-presentation'
 
 export type PluginListKind = 'native' | 'oneworks'
@@ -35,6 +40,20 @@ const nativeAdapterIcons: Record<string, string> = {
   opencode: 'terminal'
 }
 
+const resolvePluginListState = (value: string): PluginListState => (
+  value === 'disabled' || value === 'enabled' ? value : 'unknown'
+)
+
+export const resolveNativePluginPresentationIcon = (plugin: NativeHostPlugin) => {
+  const icon = sanitizePluginAssetReference(plugin.icon)
+  const adapterIcon = Object.hasOwn(nativeAdapterIcons, plugin.adapter)
+    ? nativeAdapterIcons[plugin.adapter]
+    : undefined
+  return icon == null
+    ? { name: adapterIcon ?? 'extension', type: 'material' as const }
+    : { alt: resolveNativePluginDisplayName(plugin), src: icon, type: 'image' as const }
+}
+
 export const createNativePluginRouteKey = (plugin: NativeHostPlugin) => (
   `native:${plugin.adapter}:${plugin.id}`
 )
@@ -60,29 +79,26 @@ export const buildPluginListItems = ({
     searchText: getPluginPresentationSearchText(plugin, language),
     source: plugin.sourceGroup ?? 'unknown',
     state: plugin.enabled === false ? 'disabled' : 'enabled',
-    version: plugin.version
+    version: plugin.version == null ? undefined : projectPluginPresentationValue(plugin.version)
   })),
   ...nativePlugins.map((plugin): PluginListItem => ({
-    adapter: plugin.adapter,
-    description: plugin.description,
-    icon: plugin.icon == null
-      ? { name: nativeAdapterIcons[plugin.adapter] ?? 'extension', type: 'material' }
-      : { alt: plugin.displayName ?? plugin.name, src: plugin.icon, type: 'image' },
+    adapter: projectPluginPresentationValue(plugin.adapter),
+    description: resolveNativePluginDescription(plugin),
+    icon: resolveNativePluginPresentationIcon(plugin),
     id: createNativePluginRouteKey(plugin),
     kind: 'native',
-    name: plugin.displayName ?? plugin.name,
+    name: resolveNativePluginDisplayName(plugin),
     native: plugin,
     searchText: [
-      plugin.displayName,
-      plugin.name,
-      plugin.id,
-      plugin.adapter,
-      plugin.marketplace,
-      plugin.scope,
-      plugin.source.displayPath
-    ].filter(Boolean).join(' '),
-    source: plugin.scope,
-    state: plugin.state,
-    version: plugin.version
+      resolveNativePluginDisplayName(plugin),
+      projectPluginPresentationValue(plugin.id),
+      projectPluginPresentationValue(plugin.adapter),
+      projectPluginPresentationValue(plugin.marketplace),
+      projectPluginPresentationValue(plugin.scope),
+      resolveNativePluginSourceDisplay(plugin)
+    ].join(' '),
+    source: projectPluginPresentationValue(plugin.scope),
+    state: resolvePluginListState(plugin.state),
+    version: plugin.version == null ? undefined : projectPluginPresentationValue(plugin.version)
   }))
 ]

@@ -1,6 +1,11 @@
 /* eslint-disable max-lines -- selection transaction keeps layered writes and compensation in one service. */
 
+import path from 'node:path'
+import process from 'node:process'
+
 import { updateConfigFile } from '@oneworks/config'
+import { withManagedPluginMutationLock } from '@oneworks/managed-plugins'
+import type { ManagedPluginMutationRuntime } from '@oneworks/managed-plugins'
 import type { Config, MarketplaceConfig, MarketplaceConfigEntry, PluginMarketplaceInstallTarget } from '@oneworks/types'
 import { mergeMarketplaceConfigs } from '@oneworks/utils'
 
@@ -96,12 +101,17 @@ const toPluginsSection = (config: Config | undefined, marketplaces: MarketplaceC
   marketplaces
 })
 
-export const setPluginMarketplaceSelection = async (params: {
+const setPluginMarketplaceSelectionUnlocked = async (params: {
   enabled: boolean
   marketplace: string
   plugin: string
   target: PluginMarketplaceInstallTarget
-}) => {
+}, mutationRuntime?: ManagedPluginMutationRuntime) => {
+  const syncSelection = (selection: { enabled: boolean; marketplace: string; plugin: string }) => (
+    mutationRuntime == null
+      ? syncPluginMarketplaceSelection(selection)
+      : syncPluginMarketplaceSelection(selection, mutationRuntime)
+  )
   const state = await loadConfigState()
   const effectiveMarketplaces = mergeMarketplaceConfigs(
     BUILT_IN_PLUGIN_MARKETPLACES,
@@ -123,23 +133,24 @@ export const setPluginMarketplaceSelection = async (params: {
     : state.projectSource?.rawConfig
   const writes: Array<{
     current: Config | undefined
-    next: MarketplaceConfig
+    resolveNext: (current: Config | undefined) => MarketplaceConfig
     source: 'global' | 'project' | 'user'
   }> = [{
     current: targetConfig,
-    next: updateMarketplacePluginDeclaration({
-      ...(
-        effectiveMarketplace.type === 'oneworks' ||
-          (params.target === 'global' && BUILT_IN_PLUGIN_MARKETPLACES[params.marketplace] == null)
-          ? { baseEntry: effectiveMarketplace }
-          : {}
-      ),
-      enabled: params.enabled,
-      marketplaceKey: params.marketplace,
-      marketplaceType: effectiveMarketplace.type,
-      marketplaces: getMarketplaces(targetConfig),
-      pluginName: params.plugin
-    }),
+    resolveNext: current =>
+      updateMarketplacePluginDeclaration({
+        ...(
+          effectiveMarketplace.type === 'oneworks' ||
+            (params.target === 'global' && BUILT_IN_PLUGIN_MARKETPLACES[params.marketplace] == null)
+            ? { baseEntry: effectiveMarketplace }
+            : {}
+        ),
+        enabled: params.enabled,
+        marketplaceKey: params.marketplace,
+        marketplaceType: effectiveMarketplace.type,
+        marketplaces: getMarketplaces(current),
+        pluginName: params.plugin
+      }),
     source: params.target
   }]
 
@@ -148,13 +159,14 @@ export const setPluginMarketplaceSelection = async (params: {
     if (getMarketplaces(userConfig)[params.marketplace]?.plugins?.[params.plugin] != null) {
       writes.push({
         current: userConfig,
-        next: updateMarketplacePluginDeclaration({
-          enabled: false,
-          marketplaceKey: params.marketplace,
-          marketplaceType: effectiveMarketplace.type,
-          marketplaces: getMarketplaces(userConfig),
-          pluginName: params.plugin
-        }),
+        resolveNext: current =>
+          updateMarketplacePluginDeclaration({
+            enabled: false,
+            marketplaceKey: params.marketplace,
+            marketplaceType: effectiveMarketplace.type,
+            marketplaces: getMarketplaces(current),
+            pluginName: params.plugin
+          }),
         source: 'user'
       })
     }
@@ -167,11 +179,11 @@ export const setPluginMarketplaceSelection = async (params: {
         workspaceFolder: state.workspaceFolder,
         source: write.source,
         section: 'plugins',
-        value: toPluginsSection(write.current, write.next)
+        resolveValue: current => toPluginsSection(current, write.resolveNext(current))
       })
       completed.push(write)
     }
-    return await syncPluginMarketplaceSelection({
+    return await syncSelection({
       enabled: await loadEffectiveMarketplacePluginEnabled(params.marketplace, params.plugin),
       marketplace: params.marketplace,
       plugin: params.plugin
@@ -190,7 +202,7 @@ export const setPluginMarketplaceSelection = async (params: {
       }
     }
     try {
-      await syncPluginMarketplaceSelection({
+      await syncSelection({
         enabled: wasEnabled,
         marketplace: params.marketplace,
         plugin: params.plugin
@@ -200,4 +212,24 @@ export const setPluginMarketplaceSelection = async (params: {
     }
     throw error
   }
+}
+
+export const setPluginMarketplaceSelection = async (params: {
+  enabled: boolean
+  marketplace: string
+  plugin: string
+  target: PluginMarketplaceInstallTarget
+}, mutationRuntime?: ManagedPluginMutationRuntime) => {
+  const { workspaceFolder } = await loadConfigState()
+  return withManagedPluginMutationLock({
+    cwd: workspaceFolder,
+    env: process.env,
+    runtime: mutationRuntime
+  }, async () => {
+    const currentState = await loadConfigState()
+    if (path.resolve(currentState.workspaceFolder) !== path.resolve(workspaceFolder)) {
+      throw new Error('Workspace changed while preparing plugin marketplace selection.')
+    }
+    return setPluginMarketplaceSelectionUnlocked(params, mutationRuntime)
+  })
 }

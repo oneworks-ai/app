@@ -594,6 +594,9 @@ importers:
       '@oneworks/definition-loader':
         specifier: workspace:*
         version: link:../../packages/definition-loader
+      '@oneworks/fs-authority-native':
+        specifier: workspace:*
+        version: link:../../packages/fs-authority-native
       '@oneworks/managed-plugins':
         specifier: workspace:*
         version: link:../../packages/managed-plugins
@@ -1046,6 +1049,8 @@ importers:
         specifier: ^4.0.2
         version: 4.0.2
 
+  packages/fs-authority-native: {}
+
   packages/hooks:
     dependencies:
       '@oneworks/config':
@@ -1076,6 +1081,9 @@ importers:
       '@oneworks/config':
         specifier: workspace:*
         version: link:../config
+      '@oneworks/fs-authority-native':
+        specifier: workspace:*
+        version: link:../fs-authority-native
       '@oneworks/types':
         specifier: workspace:*
         version: link:../types
