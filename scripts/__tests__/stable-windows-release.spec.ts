@@ -12,14 +12,17 @@ import {
   buildStableWindowsMsiProvenance,
   buildStableWindowsMsiWxs,
   buildWindowsAssetNames,
-  resolvePnpmCommand,
+  resolvePnpmInvocation,
   shouldBuildStableWindowsAsset
 } from '../stable-windows-release.mjs'
 
 describe('stable Windows release asset', () => {
-  it('uses the Windows pnpm command shim when spawning the payload builder', () => {
-    expect(resolvePnpmCommand('win32')).toBe('pnpm.cmd')
-    expect(resolvePnpmCommand('linux')).toBe('pnpm')
+  it('invokes the Windows pnpm command shim through cmd.exe', () => {
+    expect(resolvePnpmInvocation('win32', 'C:\\Windows\\System32\\cmd.exe')).toEqual({
+      command: 'C:\\Windows\\System32\\cmd.exe',
+      prefixArgs: ['/d', '/s', '/c', 'pnpm.cmd']
+    })
+    expect(resolvePnpmInvocation('linux')).toEqual({ command: 'pnpm', prefixArgs: [] })
   })
 
   it('builds only when the stable plan contains the bootstrap package', () => {

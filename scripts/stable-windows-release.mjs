@@ -21,7 +21,17 @@ const run = (command, args, options = {}) => {
   return result.stdout?.trim() ?? ''
 }
 
-export const resolvePnpmCommand = (platform = process.platform) => (platform === 'win32' ? 'pnpm.cmd' : 'pnpm')
+export const resolvePnpmInvocation = (
+  platform = process.platform,
+  comSpec = process.env.ComSpec ?? 'cmd.exe'
+) => (platform === 'win32'
+  ? { command: comSpec, prefixArgs: ['/d', '/s', '/c', 'pnpm.cmd'] }
+  : { command: 'pnpm', prefixArgs: [] })
+
+const runPnpm = (args, options = {}) => {
+  const { command, prefixArgs } = resolvePnpmInvocation()
+  return run(command, [...prefixArgs, ...args], options)
+}
 
 export const shouldBuildStableWindowsAsset = (packages, publishAll) => (
   publishAll === 'true' || packages.split(',').map(value => value.trim()).includes('oneworks')
@@ -236,7 +246,7 @@ const buildMsi = () => {
   const checksum = path.join(outputRoot, names.checksumName)
   const provenance = path.join(outputRoot, names.provenanceName)
   mkdirSync(buildDir, { recursive: true })
-  run(resolvePnpmCommand(), [
+  runPnpm([
     'tools',
     'windows-install',
     'package-oneworks',
@@ -367,7 +377,7 @@ const build = () => {
   const names = buildWindowsAssetNames(version)
   const archive = path.join(outputRoot, names.archiveName)
   const checksum = path.join(outputRoot, names.checksumName)
-  run(resolvePnpmCommand(), [
+  runPnpm([
     'tools',
     'windows-install',
     'package-oneworks',
