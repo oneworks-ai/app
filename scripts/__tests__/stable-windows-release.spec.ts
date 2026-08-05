@@ -83,8 +83,9 @@ describe('stable Windows release asset', () => {
     expect(wxs).toContain('ProductSourceSha')
   })
 
-  it('normalizes published installer and machine PATH segments while checking the MSI lifecycle', async () => {
+  it('normalizes published installer and validates the MSI launcher lifecycle', async () => {
     const smoke = await readFile('scripts/stable-windows-msi-smoke.ps1', 'utf8')
+    const workflow = await readFile('.github/workflows/stable-windows-msi-release.yml', 'utf8')
 
     expect(smoke).toContain('$Installer = [System.IO.Path]::GetFullPath($Installer)')
     expect(smoke).toContain('function Normalize-DirectoryPath')
@@ -94,6 +95,12 @@ describe('stable Windows release asset', () => {
     expect(smoke).toContain('Machine PATH does not contain $installDir after install.')
     expect(smoke).toContain('if (Get-MachinePathSegments | Where-Object { $_ -ieq $installDir })')
     expect(smoke).toContain('Machine PATH still contains $installDir after uninstall.')
+    expect(smoke).toContain('[string]`$ExpectedVersion')
+    expect(smoke).toContain("@('oneworks.cmd', 'ow.cmd', 'owo.cmd')")
+    expect(smoke).toContain("(Join-Path '$installDir' `$command) --version")
+    expect(smoke).toContain('`$versionOutput -cne `$ExpectedVersion')
+    expect(smoke).toContain('-ExpectedVersion $Version')
+    expect(workflow.match(/stable-windows-msi-smoke\.ps1/gu)).toHaveLength(2)
   })
 
   it('records the immutable product and builder identities in the MSI provenance', () => {
