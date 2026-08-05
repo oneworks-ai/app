@@ -39,6 +39,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+      - name: Checkout demo video submodule
+        run: git submodule update --init --depth 1 -- assets/demo-video
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -66,6 +68,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Checkout demo video submodule
+        run: git submodule update --init --depth 1 -- assets/demo-video
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -120,6 +124,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Checkout demo video submodule
+        run: git submodule update --init --depth 1 -- assets/demo-video
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
