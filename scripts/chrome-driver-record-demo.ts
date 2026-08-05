@@ -3,8 +3,8 @@ import { access, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import process from 'node:process'
 
-import { recordDemoVideoScenario } from './demo-video/recorder'
-import type { DemoVideoScenario } from './demo-video/types'
+import { recordDemoVideoScenario } from '../assets/demo-video/src/recorder'
+import type { DemoVideoScenario } from '../assets/demo-video/src/types'
 
 async function main() {
   const workspaceFolder = resolve(process.cwd())

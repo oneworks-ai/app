@@ -14,16 +14,16 @@ import {
   getDesktopDemoFixturePageSetupExpression,
   getDesktopDemoFixtureWorkspace,
   parseDesktopDemoFixtureId
-} from './demo-video/desktop-fixtures'
-import { recordDemoVideoScenario } from './demo-video/recorder'
-import { getDemoVideoScenario } from './demo-video/scenarios'
+} from '../assets/demo-video/src/desktop-fixtures'
+import { recordDemoVideoScenario } from '../assets/demo-video/src/recorder'
+import { getDemoVideoScenario } from '../assets/demo-video/src/scenarios'
 import type {
   DemoVideoBatchResult,
   DemoVideoColorScheme,
   DemoVideoCropRect,
   DemoVideoRecordResult,
   DemoVideoSystemCursorWindowBounds
-} from './demo-video/types'
+} from '../assets/demo-video/src/types'
 import type { DesktopCdpLaunchInput, DesktopCdpLaunchResult } from './desktop-cdp'
 import {
   assertDesktopRecordingDemoFixtureSupported,

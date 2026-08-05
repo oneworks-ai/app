@@ -119,6 +119,7 @@ pnpm --silent tools dev-service ensure <target> --json
 - 前端 / 后端约束：`.oo/rules/FRONTEND-STANDARD.md`、`.oo/rules/BACKEND-STANDARD.md`
 - 桌面端 / Electron 打包、发布与本地调试：`apps/desktop/AGENTS.md`、`.oo/docs/usage/desktop.md`
 - Electron agent 控制、UI 自动验证、外部 CDP bridge 或 runtime evidence 验证：先读 `scripts/AGENTS.md` 和 `scripts/desktop-control-protocol.md`，再读 `apps/desktop/AGENTS.md`；共享 bridge 使用 `pnpm --silent tools dev-service ensure desktop-control --json`，不要在场景工具里重复实现端口选择、隔离 profile、CDP target discovery 或 `events.jsonl` discovery。`pnpm tools desktop-control serve` 只用于明确的内部前台调试，不用于跨会话共享。
+- 宣传视频、录屏 scenario、安全演示数据、鼠标 / 镜头 / 后期脚本、创作档案与投放位置：先读 `assets/demo-video/AGENTS.md` 和 `assets/demo-video/docs/catalog.md`；主仓只在 `scripts/` 保留 Electron、Desktop Control 与 Chrome Driver 薄集成。
 - 仓库开发与贡献：`.oo/rules/DEVELOPMENT.md`
 - 复杂任务拆分、子线程协作、交叉审阅或经验沉淀：`.oo/rules/maintenance/task-planning.md`
 - medium 编码的全局影响、抽象和交付质量门禁：`.oo/rules/maintenance/code-delivery-quality.md`

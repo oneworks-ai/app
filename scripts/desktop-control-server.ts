@@ -4,9 +4,8 @@ import { randomUUID } from 'node:crypto'
 import http from 'node:http'
 import process from 'node:process'
 
-import { getChromeDebugTargets } from './chrome-debug'
-import { recordDemoVideoScenario } from './demo-video/recorder'
-import { getDemoVideoScenario } from './demo-video/scenarios'
+import { recordDemoVideoScenario } from '../assets/demo-video/src/recorder'
+import { getDemoVideoScenario } from '../assets/demo-video/src/scenarios'
 import type {
   DemoVideoCaptureSource,
   DemoVideoColorScheme,
@@ -14,7 +13,8 @@ import type {
   DemoVideoRecordOptions,
   DemoVideoRecordResult,
   DemoVideoSystemWindowCaptureBackend
-} from './demo-video/types'
+} from '../assets/demo-video/src/types'
+import { getChromeDebugTargets } from './chrome-debug'
 import type { DesktopCdpLaunchInput, DesktopCdpLaunchResult } from './desktop-cdp'
 import { runDesktopCdpLaunch } from './desktop-cdp'
 import { terminateTrackedPid } from './dev-start/process-identity'

@@ -5,3 +5,4 @@
 - Add a real Launcher-to-Workspace Adapter demo scenario, keep macOS Electron windows visible for display capture, and publish locale- and theme-matched README videos after prototype confirmation.
 - Make the approved Adapter promo capture deterministic with neutral demo fixtures, a real Launcher-to-Workspace transition, selector-focused camera zoom, and theme-aware README GIF previews.
 - Add locale- and theme-matched product demo videos to the documentation homepage, with lightweight real-interface posters on the desktop guide.
+- Centralize reusable video capture, post-production, safe demo fixtures, creative rationale, and display-surface history in the pinned `assets/demo-video` repository.

@@ -25,3 +25,6 @@
 [submodule "assets/github-profile"]
 	path = assets/github-profile
 	url = https://github.com/oneworks-ai/.github.git
+[submodule "assets/demo-video"]
+	path = assets/demo-video
+	url = https://github.com/oneworks-ai/demo-video.git

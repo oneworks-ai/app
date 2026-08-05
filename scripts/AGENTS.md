@@ -52,7 +52,7 @@
   - `/recordings` 只用于已有 Electron session 的临时诊断录制；正式 Electron 验证 / 产品素材必须走 `desktop-control record-batch --use-deskpad-display`
   - Electron 验证视频不允许用 CDP 截帧作为画面 fallback；正式画面来源必须是通过可见性验证的 macOS 系统 display capture
   - 协议见 `scripts/desktop-control-protocol.md`；场景验证工具应调用这个 bridge，而不是重复实现端口选择、隔离 profile、CDP target discovery、demo-video URL 拼接或 runtime evidence discovery
-- `pnpm tools desktop-control record-batch launcher-open-workspace-ui-tour --workspace <path> --app <app>`
+- `pnpm tools desktop-control record-batch launcher-open-workspace-ui-tour --workspace <path> --app <app>`（可复用录制器、scenario、fixture、后期逻辑和完整硬门禁由 `assets/demo-video` submodule 拥有；这里仅维护 One Works Electron / Desktop Control 薄集成，视频设计与投放记录见 `assets/demo-video/docs/creative/` 和 `assets/demo-video/catalog/videos.json`）
   - 真实 Electron launcher/workspace 展示素材的批量入口；每个明暗 / 中英 variant 都冷启动隔离 Electron session，用专用 recording display 做系统连续录屏源，输出裁成 app 窗口区域后再结束 app
   - 这个入口的画面来源必须是系统录屏；CDP 只能用于自动化控制和等待条件，不作为录屏输出来源。不要交付整张 DeskPad 虚拟桌面
   - 正式验证 / 产品素材必须加 `--use-deskpad-display` 跑在专用虚拟桌面上；工具会查找系统显示器列表里的 `DeskPad Display`，把 launcher 和 workspace BrowserWindow bounds 注入到该 display，并验证 display capture 里确实包含 app window；找不到或验证失败时必须失败，不要占用用户当前桌面
@@ -82,7 +82,7 @@
 - `pnpm tools message-actions verify [--quiet]`
   - 跑消息级 `编辑 / 撤回 / 分叉 / 复制原文` 的固定质量检查组合，并打印真实 Chrome 回归清单
 - `pnpm tools demo-video list [--json]`
-  - 列出能力展示录屏场景；录屏规则见 `.oo/rules/maintenance/demo-video.md`
+  - 列出能力展示录屏场景；完整规则见 `assets/demo-video/docs/recording-standards.md`，主仓接入见 `.oo/rules/maintenance/demo-video.md`
 - `pnpm tools demo-video record <scenario> --url <url> [--out-dir <path>] [--name <name>] [--keep-frames]`
   - 冷启动独立 Chrome profile 执行场景动作，按帧截图并用 `ffmpeg` 合成 MP4；默认输出到 `.logs/demo-videos/<scenario>`
   - 默认 headless；传 `--headed` 只用于调试可视浏览器。单条录制可用 `--language zh|en` 固定界面语言。
@@ -90,7 +90,7 @@
   - 录真实 Electron 从 launcher 点击打开项目时，不要用这个底层入口交付正式素材；使用 `desktop-control record-batch launcher-open-workspace-ui-tour --use-deskpad-display`。`demo-video record` 的 `captureSource` 选项只保留给底层诊断。
 - `pnpm tools demo-video batch <scenario> --url <url> [--out-dir <path>]`
   - 批量生成展示素材，默认输出 `light/dark x zh/en` 四个变体；用 `--color-schemes` / `--languages` 覆盖矩阵，产物仍包含 MP4、poster 和按秒 stills manifest。README、社交平台和发布宣传素材先生成一个代表性原型；只有用户确认动画、真实窗口、鼠标节奏和构图整体正确后，才批量生成完整 zh/en × light/dark 矩阵。
-  - 仅用于纯 Web / headless CDP 页面；真实 Electron launcher/workspace/adapter 四变体必须使用 `pnpm tools desktop-control record-batch launcher-open-workspace-adapter-tour --workspace <path> --app <app> --use-deskpad-display`；公开成片必须使用清洁 fixture / 隔离 profile / 中性 workspace，并按 `.oo/rules/maintenance/demo-video.md` 逐变体检查关键 still，个人账号、home 路径、目录列表、本机绝对路径和登录状态不得进入上传素材。
+  - 仅用于纯 Web / headless CDP 页面；真实 Electron launcher/workspace/adapter 四变体必须使用 `pnpm tools desktop-control record-batch launcher-open-workspace-adapter-tour --workspace <path> --app <app> --use-deskpad-display`；公开成片必须使用清洁 fixture / 隔离 profile / 中性 workspace，并按 `assets/demo-video/docs/recording-standards.md` 逐变体检查关键 still，个人账号、home 路径、目录列表、本机绝对路径和登录状态不得进入上传素材。
 - `pnpm tools agent-room-smoke resume [--json]`
   - 跑真实 `StartTasks -> agent room 消息 -> inactive task resume` smoke；启动临时 server / SQLite / MCP / Codex adapter，LLM 只用 mock，结束后清理临时进程
 - `pnpm tools relay-config smoke [--allow-pending] [--json]`
