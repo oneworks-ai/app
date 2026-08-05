@@ -62,6 +62,7 @@ jobs:
         env:
           PRODUCT_SOURCE_SHA: ${{ inputs.product_source_sha }}
           RELEASE_TAG: ${{ inputs.release_tag }}
+          VALIDATOR_WORKFLOW_SHA: ${{ github.workflow_sha }}
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
@@ -71,19 +72,33 @@ jobs:
           source_version="$(git show "$PRODUCT_SOURCE_SHA:apps/bootstrap/package.json" | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version")"
           test "$source_version" = "$VERSION"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          [[ "$GITHUB_WORKFLOW_SHA" =~ ^[a-f0-9]{40}$ ]]
-          git rev-parse "$GITHUB_WORKFLOW_SHA^{commit}" >/dev/null
+          [[ "$VALIDATOR_WORKFLOW_SHA" =~ ^[a-f0-9]{40}$ ]]
+          git cat-file -e "$VALIDATOR_WORKFLOW_SHA^{commit}"
+          git merge-base --is-ancestor "$VALIDATOR_WORKFLOW_SHA" "$GITHUB_SHA"
 
       - name: Check for an immutable existing MSI release
         id: existing
         shell: bash
         env:
-          BUILDER_WORKFLOW_SHA: ${{ github.workflow_sha }}
           GH_TOKEN: ${{ github.token }}
           PRODUCT_SOURCE_SHA: ${{ inputs.product_source_sha }}
           RELEASE_TAG: ${{ inputs.release_tag }}
+          VALIDATOR_WORKFLOW_SHA: ${{ github.workflow_sha }}
           VERSION: ${{ inputs.version }}
         run: node ./scripts/stable-windows-release.mjs prepare-msi
+
+      - name: Summarize existing MSI provenance validation
+        if: ${{ steps.existing.outputs.should_build == 'false' }}
+        shell: bash
+        env:
+          ASSET_BUILDER_WORKFLOW_SHA: ${{ steps.existing.outputs.asset_builder_workflow_sha }}
+          VALIDATOR_WORKFLOW_SHA: ${{ steps.existing.outputs.validator_workflow_sha }}
+        run: |
+          {
+            echo '## Existing MSI provenance verification'
+            echo "- Recorded asset builder workflow SHA: $ASSET_BUILDER_WORKFLOW_SHA"
+            echo "- Validator workflow SHA: $VALIDATOR_WORKFLOW_SHA"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Setup pnpm
         if: ${{ steps.existing.outputs.should_build == 'true' }}

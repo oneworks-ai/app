@@ -47,3 +47,23 @@ export declare function assertStableWindowsMsiReleaseIntegrity(input: {
   provenance: { installer?: { name?: string; sha256?: string } }
   version: string
 }): void
+export declare function assertStableWindowsMsiReuseIntegrity(
+  input: {
+    checksum: string
+    installerSha256: string
+    productSourceSha: string
+    provenance: {
+      builderWorkflowSha?: string
+      installer?: { name?: string; sha256?: string }
+      productCode?: string
+      productSourceSha?: string
+      releaseTag?: string
+      schemaVersion?: number
+      version?: string
+    }
+    releaseTag: string
+    validatorWorkflowSha: string
+    version: string
+  },
+  gitRunner?: (command: string, args: string[]) => string
+): { builderWorkflowSha: string; validatorWorkflowSha: string }

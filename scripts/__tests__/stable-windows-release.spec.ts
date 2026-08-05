@@ -6,6 +6,7 @@ import {
   STABLE_WINDOWS_MSI_UPGRADE_CODE,
   assertStableVersion,
   assertStableWindowsMsiReleaseIntegrity,
+  assertStableWindowsMsiReuseIntegrity,
   assertStableWindowsMsiVersion,
   buildStableWindowsMsiAssetNames,
   buildStableWindowsMsiProductCode,
@@ -96,7 +97,7 @@ describe('stable Windows release asset', () => {
   })
 
   it('records the immutable product and builder identities in the MSI provenance', () => {
-    expect(buildStableWindowsMsiProvenance({
+    const provenance = buildStableWindowsMsiProvenance({
       builderWorkflowSha: 'b'.repeat(40),
       installerName: 'oneworks-windows-0.1.0.msi',
       installerSha256: 'c'.repeat(64),
@@ -104,13 +105,16 @@ describe('stable Windows release asset', () => {
       productSourceSha: 'a'.repeat(40),
       releaseTag: 'pkg/oneworks/v0.1.0',
       version: '0.1.0'
-    })).toMatchObject({
+    })
+
+    expect(provenance).toMatchObject({
       builderWorkflowSha: 'b'.repeat(40),
       installer: { name: 'oneworks-windows-0.1.0.msi', sha256: 'c'.repeat(64) },
       productSourceSha: 'a'.repeat(40),
       releaseTag: 'pkg/oneworks/v0.1.0',
       version: '0.1.0'
     })
+    expect(provenance).not.toHaveProperty('validatorWorkflowSha')
   })
 
   it('requires the checksum and provenance to match the released MSI bytes', () => {
@@ -143,6 +147,129 @@ describe('stable Windows release asset', () => {
     ).toThrow('MSI provenance does not match')
   })
 
+  it('accepts an immutable MSI built by an ancestor of its validator', () => {
+    const builderWorkflowSha = 'a'.repeat(40)
+    const validatorWorkflowSha = 'b'.repeat(40)
+    const installerSha256 = 'c'.repeat(64)
+    const calls: string[][] = []
+    const provenance = buildStableWindowsMsiProvenance({
+      builderWorkflowSha,
+      installerName: 'oneworks-windows-0.1.0.msi',
+      installerSha256,
+      launchers: {},
+      productSourceSha: 'd'.repeat(40),
+      releaseTag: 'pkg/oneworks/v0.1.0',
+      version: '0.1.0'
+    })
+
+    expect(assertStableWindowsMsiReuseIntegrity({
+      checksum: `${installerSha256}  oneworks-windows-0.1.0.msi\n`,
+      installerSha256,
+      productSourceSha: 'd'.repeat(40),
+      provenance,
+      releaseTag: 'pkg/oneworks/v0.1.0',
+      validatorWorkflowSha,
+      version: '0.1.0'
+    }, (command, args) => {
+      expect(command).toBe('git')
+      calls.push(args)
+      return ''
+    })).toEqual({ builderWorkflowSha, validatorWorkflowSha })
+    expect(calls).toEqual([
+      ['cat-file', '-e', `${builderWorkflowSha}^{commit}`],
+      ['cat-file', '-e', `${validatorWorkflowSha}^{commit}`],
+      ['merge-base', '--is-ancestor', builderWorkflowSha, validatorWorkflowSha]
+    ])
+  })
+
+  it('fails closed when immutable MSI reuse lineage or identity is invalid', () => {
+    const builderWorkflowSha = 'a'.repeat(40)
+    const validatorWorkflowSha = 'b'.repeat(40)
+    const installerSha256 = 'c'.repeat(64)
+    const provenance = buildStableWindowsMsiProvenance({
+      builderWorkflowSha,
+      installerName: 'oneworks-windows-0.1.0.msi',
+      installerSha256,
+      launchers: {},
+      productSourceSha: 'd'.repeat(40),
+      releaseTag: 'pkg/oneworks/v0.1.0',
+      version: '0.1.0'
+    })
+    const input = {
+      checksum: `${installerSha256}  oneworks-windows-0.1.0.msi\n`,
+      installerSha256,
+      productSourceSha: 'd'.repeat(40),
+      provenance,
+      releaseTag: 'pkg/oneworks/v0.1.0',
+      validatorWorkflowSha,
+      version: '0.1.0'
+    }
+
+    expect(() => assertStableWindowsMsiReuseIntegrity({ ...input, validatorWorkflowSha: 'invalid' })).toThrow(
+      'VALIDATOR_WORKFLOW_SHA must be a full lowercase Git commit SHA'
+    )
+    expect(() =>
+      assertStableWindowsMsiReuseIntegrity({
+        ...input,
+        provenance: { ...provenance, builderWorkflowSha: '' }
+      })
+    ).toThrow('Existing MSI builderWorkflowSha must be a full lowercase Git commit SHA')
+    expect(() => assertStableWindowsMsiReuseIntegrity({ ...input, releaseTag: 'pkg/oneworks/v0.1.1' })).toThrow(
+      'Unexpected MSI release tag'
+    )
+    expect(() =>
+      assertStableWindowsMsiReuseIntegrity({
+        ...input,
+        provenance: { ...provenance, releaseTag: 'pkg/oneworks/v0.1.1' }
+      })
+    ).toThrow('Existing MSI provenance differs for releaseTag.')
+    expect(() =>
+      assertStableWindowsMsiReuseIntegrity({
+        ...input,
+        provenance: { ...provenance, releaseTag: 'pkg/oneworks/v0.1.1' },
+        releaseTag: 'pkg/oneworks/v0.1.1',
+        version: '0.1.1'
+      })
+    ).toThrow('differs for version')
+    expect(() => assertStableWindowsMsiReuseIntegrity({ ...input, provenance: { ...provenance, schemaVersion: 2 } }))
+      .toThrow('schema version 1')
+    expect(() => assertStableWindowsMsiReuseIntegrity({ ...input, productSourceSha: 'e'.repeat(40) })).toThrow(
+      'productSourceSha'
+    )
+    expect(() =>
+      assertStableWindowsMsiReuseIntegrity({
+        ...input,
+        provenance: { ...provenance, productCode: buildStableWindowsMsiProductCode('0.1.1') }
+      })
+    ).toThrow('productCode')
+    expect(() => assertStableWindowsMsiReuseIntegrity({ ...input, installerSha256: 'e'.repeat(64) })).toThrow(
+      'MSI checksum does not match'
+    )
+    expect(() =>
+      assertStableWindowsMsiReuseIntegrity({
+        ...input,
+        provenance: { ...provenance, installer: { ...provenance.installer, name: 'other.msi' } }
+      })
+    ).toThrow('MSI provenance does not match')
+    expect(() =>
+      assertStableWindowsMsiReuseIntegrity(input, () => {
+        throw new Error('missing commit')
+      })
+    ).toThrow('missing commit')
+    expect(() =>
+      assertStableWindowsMsiReuseIntegrity(input, (_command, args) => {
+        if (args[2] === `${validatorWorkflowSha}^{commit}`) throw new Error('missing validator commit')
+        return ''
+      })
+    ).toThrow('missing validator commit')
+    expect(() =>
+      assertStableWindowsMsiReuseIntegrity(input, (_command, args) => {
+        if (args[0] === 'merge-base') throw new Error('not an ancestor')
+        return ''
+      })
+    ).toThrow('not an ancestor')
+  })
+
   it('preserves mixed npm failures after producing any available stable Windows asset', async () => {
     const workflow = await readFile('.github/workflows/npm-publish-alpha.yml', 'utf8')
 
@@ -159,6 +286,16 @@ describe('stable Windows release asset', () => {
     expect(workflow).toContain('runs-on: windows-2022')
     expect(workflow).toContain('dotnet tool install --tool-path $wixDir wix --version 4.0.5')
     expect(workflow).toContain('actions/attest@v4')
+    expect(workflow).toContain('VALIDATOR_WORKFLOW_SHA: $' + '{{ github.workflow_sha }}')
+    expect(workflow).toContain('BUILDER_WORKFLOW_SHA: $' + '{{ github.workflow_sha }}')
+    expect(workflow).toContain('git merge-base --is-ancestor "$VALIDATOR_WORKFLOW_SHA" "$GITHUB_SHA"')
+    expect(workflow).toContain('if: $' + "{{ steps.existing.outputs.should_build == 'false' }}")
+    expect(workflow).toContain(
+      'ASSET_BUILDER_WORKFLOW_SHA: $' + '{{ steps.existing.outputs.asset_builder_workflow_sha }}'
+    )
+    expect(workflow).toContain('VALIDATOR_WORKFLOW_SHA: $' + '{{ steps.existing.outputs.validator_workflow_sha }}')
+    expect(workflow).toContain('Recorded asset builder workflow SHA')
+    expect(workflow).toContain('Validator workflow SHA')
     expect(workflow).toContain('stable-windows-msi-smoke.ps1')
     expect(workflow).toContain('prepare-msi')
     expect(workflow).toContain('publish-msi')
