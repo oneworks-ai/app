@@ -1754,6 +1754,32 @@
       "create": "Create Rule",
       "createHint": "Create a rule file under .oo/rules, then refresh the page.",
       "importHint": "Import rule files into .oo/rules, then refresh the page."
+    },
+    "assets": {
+      "name": "Name",
+      "nameRequired": "Enter an asset name",
+      "namePlaceholder": "review-checklist",
+      "description": "Description",
+      "descriptionPlaceholder": "Explain what this asset is for",
+      "location": "Save location",
+      "locationPending": "Enter a valid name to preview the location",
+      "locationResolving": "Resolving the save location…",
+      "locationUnavailable": "Save location is unavailable",
+      "params": "Parameters",
+      "addParam": "Add parameter",
+      "paramName": "Parameter {{index}} name",
+      "paramNameRequired": "Enter a parameter name",
+      "paramDescription": "Parameter {{index}} description",
+      "removeParam": "Remove parameter {{name}}",
+      "createFailed": "Failed to create data asset",
+      "createdRefreshFailed": "Created successfully, but the list could not refresh.",
+      "createdDegraded": "Created, but filesystem durability or private staging cleanup is degraded.",
+      "createIndeterminate": "The create result could not be confirmed. Refresh the list before trying again.",
+      "retryRefresh": "Retry refresh",
+      "refreshFailed": "Failed to refresh the list",
+      "entity": { "title": "Create Entity", "created": "Entity created" },
+      "spec": { "title": "Create Flow", "created": "Flow created" },
+      "rule": { "title": "Create Rule", "created": "Rule created" }
     }
   },
   "agentRoom": {

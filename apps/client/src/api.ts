@@ -54,6 +54,10 @@ export {
 
 // 知识库与规则说明 API
 export type {
+  AssetDestinationPreview,
+  CreatableAssetKind,
+  CreateAssetParams,
+  CreatedAsset,
   EntityDetail,
   EntitySummary,
   RuleDetail,
@@ -65,12 +69,16 @@ export type {
   WorkspaceSummary
 } from './api/knowledge'
 export {
+  AssetCreateCommitIndeterminateError,
+  createAsset,
   createSkill,
+  getAssetPreview,
   getEntityDetail,
   getRuleDetail,
   getSkillDetail,
   getSpecDetail,
   importSkillArchive,
+  isAssetCreateCommitIndeterminateError,
   listEntities,
   listRules,
   listSkills,

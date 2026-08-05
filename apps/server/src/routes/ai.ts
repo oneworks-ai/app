@@ -5,6 +5,10 @@ import Router from '@koa/router'
 import { DefinitionLoader } from '@oneworks/definition-loader'
 import type { Definition, Entity, Rule, Spec } from '@oneworks/types'
 
+import { resolveAssetCreateAuthority } from '#~/services/ai/asset-create-authority.js'
+import { markAssetPreCommitFailure } from '#~/services/ai/asset-create-error.js'
+import type { PublishOperations } from '#~/services/ai/asset-create-filesystem.js'
+import { createAssetDefinitionLoader, createProjectAsset, getProjectAssetPreview } from '#~/services/ai/asset-create.js'
 import { badRequest, internalServerError, isHttpError, notFound } from '#~/utils/http.js'
 import {
   matchesDefinitionPath,
@@ -18,10 +22,47 @@ import {
 } from './ai-presenters.js'
 import { registerAiSkillRoutes } from './ai-skill-routes.js'
 
-export function aiRouter(): Router {
+interface AiRouterOptions {
+  createAsset?: typeof createProjectAsset
+  publishOperations?: PublishOperations
+}
+
+export function aiRouter(options: AiRouterOptions = {}): Router {
   const router = new Router()
   const workspaceRoot = process.env.WORKSPACE_FOLDER || process.cwd()
   const loader = new DefinitionLoader(workspaceRoot)
+
+  router.post('/assets', async (ctx) => {
+    try {
+      const authority = await resolveAssetCreateAuthority()
+      const asset = await (options.createAsset ?? createProjectAsset)({
+        input: ctx.request.body,
+        loader: createAssetDefinitionLoader(authority.workspaceRoot),
+        publishOperations: options.publishOperations,
+        workspaceIdentity: authority.identity,
+        workspaceRoot: authority.workspaceRoot
+      })
+      ctx.status = asset.commitState === 'committed-indeterminate' ? 202 : 201
+      ctx.body = { asset }
+    } catch (err) {
+      throw markAssetPreCommitFailure(err, 'Failed to create data asset', 'ai_asset_create_failed')
+    }
+  })
+
+  router.get('/assets/preview', async (ctx) => {
+    try {
+      const authority = await resolveAssetCreateAuthority()
+      ctx.body = {
+        asset: await getProjectAssetPreview(authority.workspaceRoot, {
+          kind: ctx.query.kind,
+          name: ctx.query.name
+        }, authority.identity)
+      }
+    } catch (err) {
+      if (isHttpError(err)) throw err
+      throw internalServerError('Failed to preview data asset', { cause: err, code: 'ai_asset_preview_failed' })
+    }
+  })
 
   router.get('/specs', async (ctx) => {
     try {

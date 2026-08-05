@@ -1,14 +1,14 @@
 import './KnowledgeBaseView.scss'
 
-import { App, Form } from 'antd'
+import { Alert, App, Button, Form } from 'antd'
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 import useSWR from 'swr'
 
 import type { RouteContainerHeaderActionItem, RouteContainerHeaderBreadcrumb } from '@oneworks/components/route-layout'
 
-import { createSkill, getApiErrorMessage } from '#~/api.js'
-import type { EntitySummary, RuleSummary, SkillSummary, SpecSummary } from '#~/api.js'
+import { createAsset, createSkill, getApiErrorMessage, isAssetCreateCommitIndeterminateError } from '#~/api.js'
+import type { CreatableAssetKind, EntitySummary, RuleSummary, SkillSummary, SpecSummary } from '#~/api.js'
 import { RouteContainerHeader } from '#~/components/layout/RouteContainerHeader'
 import { RouteContainerLayout } from '#~/components/layout/RouteContainerLayout'
 import { useRouteSidebar } from '#~/components/layout/route-sidebar-context'
@@ -16,6 +16,8 @@ import type { RouteSidebarListItem } from '#~/components/layout/route-sidebar-co
 import { useRouteContainerSidebarOpener } from '#~/components/layout/use-route-container-sidebar-opener'
 import { useQueryParams } from '#~/hooks/useQueryParams.js'
 import { useRoutePluginChrome } from '#~/plugins/route-plugin-chrome'
+import { CreateAssetModal } from './components/CreateAssetModal.js'
+import type { CreateAssetFormValues } from './components/CreateAssetModal.js'
 import { CreateSkillModal } from './components/CreateSkillModal.js'
 import type { CreateSkillFormValues } from './components/CreateSkillModal.js'
 import { EntitiesTab } from './components/EntitiesTab.js'
@@ -24,6 +26,7 @@ import { KnowledgeContentControls } from './components/KnowledgeContentControls.
 import { RulesTab } from './components/RulesTab.js'
 import { SkillRegistrySettingsView } from './components/SkillRegistrySettingsView.js'
 import { SkillsTab } from './components/SkillsTab.js'
+import { createAssetTransaction, executeAssetCreate } from './components/asset-create-transaction.js'
 import {
   ALL_REGISTRIES,
   ALL_SKILL_SOURCES,
@@ -139,8 +142,18 @@ export function KnowledgeBaseView({
   const [ruleQuery, setRuleQuery] = React.useState('')
   const [createSkillOpen, setCreateSkillOpen] = React.useState(false)
   const [savingSkill, setSavingSkill] = React.useState(false)
+  const [createAssetKind, setCreateAssetKind] = React.useState<CreatableAssetKind>('entity')
+  const [createAssetOpen, setCreateAssetOpen] = React.useState(false)
+  const [savingAssetGeneration, setSavingAssetGeneration] = React.useState<number | undefined>()
+  const [assetRefreshFailure, setAssetRefreshFailure] = React.useState<{
+    kind: CreatableAssetKind
+    reason: 'created' | 'indeterminate'
+  }>()
   const [contentHeaderActions, setContentHeaderActions] = React.useState<RouteContainerHeaderActionItem[]>([])
   const [createSkillForm] = Form.useForm<CreateSkillFormValues>()
+  const [createAssetForm] = Form.useForm<CreateAssetFormValues>()
+  const assetTransactionRef = React.useRef(createAssetTransaction())
+  const savingAsset = savingAssetGeneration != null
 
   const { values, update } = useQueryParams<KnowledgeQueryParams>({
     keys: KNOWLEDGE_QUERY_KEYS,
@@ -241,17 +254,39 @@ export function KnowledgeBaseView({
     void message.success(t('knowledge.actions.refreshed'))
   }, [message, mutateEntities, mutateRules, mutateSkills, mutateSpecs, t])
 
+  const refreshAssetList = React.useCallback(async (kind: CreatableAssetKind) => {
+    if (kind === 'entity') return mutateEntities()
+    if (kind === 'spec') return mutateSpecs()
+    return mutateRules()
+  }, [mutateEntities, mutateRules, mutateSpecs])
+
+  const closeAssetModal = React.useCallback(() => {
+    if (assetTransactionRef.current.isPending()) return
+    assetTransactionRef.current.invalidate()
+    setCreateAssetOpen(false)
+    createAssetForm.resetFields()
+  }, [createAssetForm])
+
+  const openAssetModal = React.useCallback((kind: CreatableAssetKind) => {
+    if (assetTransactionRef.current.isPending()) return
+    assetTransactionRef.current.activate()
+    setSavingAssetGeneration(undefined)
+    createAssetForm.resetFields()
+    setCreateAssetKind(kind)
+    setCreateAssetOpen(true)
+  }, [createAssetForm])
+
   const handleCreateSpec = React.useCallback(() => {
-    message.info(t('knowledge.flows.createHint'))
-  }, [message, t])
+    openAssetModal('spec')
+  }, [openAssetModal])
 
   const handleImportSpec = React.useCallback(() => {
     message.info(t('knowledge.flows.importHint'))
   }, [message, t])
 
   const handleCreateEntity = React.useCallback(() => {
-    message.info(t('knowledge.entities.createHint'))
-  }, [message, t])
+    openAssetModal('entity')
+  }, [openAssetModal])
 
   const handleImportEntity = React.useCallback(() => {
     message.info(t('knowledge.entities.importHint'))
@@ -283,12 +318,77 @@ export function KnowledgeBaseView({
   }
 
   const handleCreateRule = React.useCallback(() => {
-    message.info(t('knowledge.rules.createHint'))
-  }, [message, t])
+    openAssetModal('rule')
+  }, [openAssetModal])
 
   const handleImportRule = React.useCallback(() => {
     message.info(t('knowledge.rules.importHint'))
   }, [message, t])
+
+  const handleSaveAsset = React.useCallback(async () => {
+    const kind = createAssetKind
+    const execution = await executeAssetCreate({
+      transaction: assetTransactionRef.current,
+      validate: () => createAssetForm.validateFields(),
+      post: async (values) => {
+        const response = await createAsset({
+          kind,
+          name: values.name,
+          description: values.description,
+          ...(kind === 'spec'
+            ? {
+              params: (values.params ?? []).map(param => ({
+                name: param.name ?? '',
+                ...(param.description == null ? {} : { description: param.description })
+              }))
+            }
+            : {})
+        })
+        if (response.asset.commitState === 'committed-degraded') {
+          void message.warning(t('knowledge.assets.createdDegraded'))
+        }
+        return response.asset.commitState ?? 'committed'
+      },
+      refresh: () => refreshAssetList(kind),
+      isIndeterminateFailure: isAssetCreateCommitIndeterminateError,
+      onClaim: setSavingAssetGeneration,
+      closeCommitted: () => {
+        setCreateAssetOpen(false)
+        createAssetForm.resetFields()
+      },
+      onCreateFailure: error => {
+        void message.error(getApiErrorMessage(error, t('knowledge.assets.createFailed')))
+      },
+      onIndeterminate: () => {
+        void message.warning(t('knowledge.assets.createIndeterminate'))
+      },
+      onRefreshFailure: (_error, indeterminate) => {
+        setAssetRefreshFailure({ kind, reason: indeterminate ? 'indeterminate' : 'created' })
+        if (!indeterminate) void message.warning(t('knowledge.assets.createdRefreshFailed'))
+      },
+      onSettled: generation => {
+        setSavingAssetGeneration(current => current === generation ? undefined : current)
+      }
+    })
+    if (execution.state === 'created') {
+      void message.success(t(`knowledge.assets.${kind}.created`))
+    }
+  }, [createAssetForm, createAssetKind, message, refreshAssetList, t])
+
+  const retryAssetRefresh = React.useCallback(async () => {
+    if (assetRefreshFailure == null) return
+    try {
+      await refreshAssetList(assetRefreshFailure.kind)
+      setAssetRefreshFailure(undefined)
+      void message.success(t('knowledge.actions.refreshed'))
+    } catch (error) {
+      void message.error(getApiErrorMessage(error, t('knowledge.assets.refreshFailed')))
+    }
+  }, [assetRefreshFailure, message, refreshAssetList, t])
+
+  React.useEffect(() => () => {
+    assetTransactionRef.current.invalidate()
+  }, [])
 
   const getContentControls = (onCreate: () => void) =>
     isCompactView
@@ -614,7 +714,32 @@ export function KnowledgeBaseView({
         />
       }
     >
+      {assetRefreshFailure != null && (
+        <Alert
+          className='knowledge-base-view__asset-refresh-alert'
+          message={t(
+            assetRefreshFailure.reason === 'created'
+              ? 'knowledge.assets.createdRefreshFailed'
+              : 'knowledge.assets.createIndeterminate'
+          )}
+          type='warning'
+          showIcon
+          action={
+            <Button type='link' onClick={() => void retryAssetRefresh()}>
+              {t('knowledge.assets.retryRefresh')}
+            </Button>
+          }
+        />
+      )}
       {activeSection?.content}
+      <CreateAssetModal
+        form={createAssetForm}
+        kind={createAssetKind}
+        open={createAssetOpen}
+        saving={savingAsset}
+        onSave={() => void handleSaveAsset()}
+        onClose={closeAssetModal}
+      />
       <CreateSkillModal
         open={createSkillOpen}
         saving={savingSkill}

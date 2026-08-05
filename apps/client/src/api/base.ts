@@ -313,16 +313,16 @@ const runFetch = async (url: string, init?: ApiRequestInit) => {
   }
 }
 
-const fetchAndUnwrapApiResponse = async <T>(
+const fetchAndUnwrapApiResponseWithStatus = async <T>(
   url: string,
   init?: ApiRequestInit,
   errorLabel?: string
-): Promise<T> => {
+): Promise<{ data: T; status: number }> => {
   const isConditionalGet = getRequestMethod(init) === 'GET'
   const res = await runFetch(url, createConditionalRequestInit(url, init))
   const cached = isConditionalGet ? apiEtagCache.get(url) : undefined
   if (res.status === 304 && cached != null) {
-    return cached.data as T
+    return { data: cached.data as T, status: res.status }
   }
 
   const data = await unwrapApiResponse<T>(res, errorLabel)
@@ -330,12 +330,26 @@ const fetchAndUnwrapApiResponse = async <T>(
   if (isConditionalGet && etag != null && etag.trim() !== '') {
     apiEtagCache.set(url, { data, etag })
   }
-  return data
+  return { data, status: res.status }
 }
+
+const fetchAndUnwrapApiResponse = async <T>(
+  url: string,
+  init?: ApiRequestInit,
+  errorLabel?: string
+): Promise<T> => (await fetchAndUnwrapApiResponseWithStatus<T>(url, init, errorLabel)).data
 
 export async function fetchApiJson<T>(pathOrUrl: string | URL, init?: ApiRequestInit): Promise<T> {
   const url = typeof pathOrUrl === 'string' ? buildApiUrl(pathOrUrl) : pathOrUrl.toString()
   return fetchAndUnwrapApiResponse<T>(url, init)
+}
+
+export async function fetchApiJsonWithStatus<T>(
+  pathOrUrl: string | URL,
+  init?: ApiRequestInit
+): Promise<{ data: T; status: number }> {
+  const url = typeof pathOrUrl === 'string' ? buildApiUrl(pathOrUrl) : pathOrUrl.toString()
+  return fetchAndUnwrapApiResponseWithStatus<T>(url, init)
 }
 
 export async function fetchApiJsonOrThrow<T>(

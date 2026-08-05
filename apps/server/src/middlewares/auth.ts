@@ -2,6 +2,7 @@ import type Koa from 'koa'
 
 import type { ServerEnv } from '@oneworks/core'
 
+import { ASSET_PRE_COMMIT_DETAILS, markAssetPreCommitFailure } from '#~/services/ai/asset-create-error.js'
 import {
   AUTH_COOKIE_NAME,
   getBearerTokenFromHeader,
@@ -16,14 +17,35 @@ const PUBLIC_API_PATHS = new Set([
   '/api/auth/logout'
 ])
 
-export const authMiddleware = (env: ServerEnv): Koa.Middleware => {
+interface AuthMiddlewareOperations {
+  resolveConfig?: typeof resolveWebAuthConfig
+  verifyToken?: typeof verifySessionToken
+}
+
+export const authMiddleware = (
+  env: ServerEnv,
+  operations: AuthMiddlewareOperations = {}
+): Koa.Middleware => {
   return async (ctx, next) => {
     if (!ctx.path.startsWith('/api') || PUBLIC_API_PATHS.has(ctx.path)) {
       await next()
       return
     }
 
-    const config = await resolveWebAuthConfig(env)
+    const isAssetCreate = ctx.method === 'POST' && ctx.path === '/api/ai/assets'
+    let config
+    try {
+      config = await (operations.resolveConfig ?? resolveWebAuthConfig)(env)
+    } catch (error) {
+      if (isAssetCreate) {
+        throw markAssetPreCommitFailure(
+          error,
+          'Failed to load asset authentication config',
+          'asset_auth_config_failed'
+        )
+      }
+      throw error
+    }
     if (!config.enabled) {
       await next()
       return
@@ -34,9 +56,24 @@ export const authMiddleware = (env: ServerEnv): Koa.Middleware => {
       : undefined
     const token = getBearerTokenFromHeader(ctx.get('Authorization')) ?? ctx.cookies.get(AUTH_COOKIE_NAME) ??
       queryAuthToken
-    const authenticated = await verifySessionToken(env, token)
+    let authenticated
+    try {
+      authenticated = await (operations.verifyToken ?? verifySessionToken)(env, token)
+    } catch (error) {
+      if (isAssetCreate) {
+        throw markAssetPreCommitFailure(
+          error,
+          'Failed to verify asset authentication',
+          'asset_auth_verification_failed'
+        )
+      }
+      throw error
+    }
     if (!authenticated) {
-      throw unauthorized('Login required', undefined, 'auth_required')
+      const details = isAssetCreate
+        ? ASSET_PRE_COMMIT_DETAILS
+        : undefined
+      throw unauthorized('Login required', details, 'auth_required')
     }
 
     await next()

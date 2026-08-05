@@ -130,6 +130,18 @@ __ONEWORKS_PROJECT_ENTITIES_DIR__=knowledge/entities
 
 ## 影响范围
 
+### 从知识库新建资产
+
+知识库可以新建项目内实体、流程和规则。输入名称与可选描述；流程还可声明具名参数。表单会预览生成后的项目相对文件名，文件只会写入当前受信 workspace 内的已配置项目资产目录；服务端完成发布后会自动刷新对应列表。若刷新失败，重试刷新不会再次创建文件。
+
+读取仍支持上文所述的绝对资产目录；为保证创建过程的目录权限与原子发布边界，知识库“新建”不写入 workspace 之外的绝对目录。若配置后的目标位于 workspace 外，预览和创建都会拒绝，需改用 workspace 内目录或由项目维护者在外部目录中手工维护资产。
+
+新建模板与既有资产使用同一套发现约定：`entities/<name>.md`、`specs/<name>.md`、`rules/<name>.md`。名称会转换为共享的 canonical slug；本地或 plugin 中存在语义冲突的定义时会被拒绝。
+
+发布一旦可能对工作区可见，服务端不会再通过路径名删除或恢复该目标。若后续持久化、身份确认或响应传输失败，结果会标记为“已提交但降级”或“提交状态待确认”；知识库会关闭本次提交并刷新列表进行协调，不会自动重复创建请求。只有服务端明确返回尚未提交时，才可安全地再次提交。
+
+在原生身份绑定清理能力不可用时，服务端会保留仅由本次 generation 拥有的私有暂存文件并报告降级，而不会冒险按路径删除可能已被替换的文件。项目维护者可根据服务端告警检查这些 `.asset-create-*.tmp` 残留；它们不会被资产 loader 当作定义加载。
+
 这些环境变量会影响项目数据资产的主要消费链路：
 
 - workspace assets：`rules`、`skills`、`specs`、`entities`、`mcp`
@@ -140,8 +152,6 @@ __ONEWORKS_PROJECT_ENTITIES_DIR__=knowledge/entities
 - 启动入口：CLI、server、client、hook loader、desktop、VS Code extension
 - benchmark 运行时目录
 
-其中：
-
 - `__ONEWORKS_PROJECT_BASE_DIR__` 会影响整棵项目数据资产树
 - `__ONEWORKS_PROJECT_ENTITIES_DIR__` 只影响 `entities` 的扫描与加载位置
 
@@ -149,35 +159,27 @@ __ONEWORKS_PROJECT_ENTITIES_DIR__=knowledge/entities
 
 未显式设置 `DB_PATH` 时，Server 会把会话数据库放在 `~/.oneworks/projects/<project-key>/.local/server/db.sqlite`。这样同一 Git 项目的多个 worktree 共享会话与 Agent Room 状态，而不同项目不会串数据，也不会把数据库写到工作区。
 
-当前主要用途包括：
-
 - server 会话数据库
 - adapter 多账号凭据快照
 - adapter 账号的来源、auth digest 与额度快照元数据
 - 只应保存在本机的认证状态或临时元数据
 
-例如 `codex` 当前会在：
-
 - `<project-home>/.local/server/db.sqlite`
 - `<project-home>/.local/adapters/codex/accounts/<accountKey>/auth.json`
 - `<project-home>/.local/adapters/codex/accounts/<accountKey>/meta.json`
 
-保存账号快照与账号元数据。`meta.json` 里可能包含：
+保存账号快照与账号元数据；`meta.json` 里可能包含：
 
 - 账号来源说明
 - auth 摘要
 - 最近一次 quota / rate-limit 快照
 - quota 快照更新时间
 
-如果当前目录是 Git worktree，adapter 账号目录会共享到主 worktree：
-
-- 写入和导入优先落到主 worktree 对应的 `<project-home>/.local`
+- 如果当前目录是 Git worktree，写入和导入优先落到主 worktree 对应的 `<project-home>/.local`
 - 启动或账号命令会先把旧 `.oo/.local` 复制到 project home
 - 读取只使用 project home 下的共享目录，不再兼容读取旧工作区目录
 
 ## 不受影响的内容
-
-当前不会跟随这些环境变量一起变化的内容：
 
 - `.oo.config.json` / `.oo.config.yaml` / `.oo.config.yml`
 - `.oo.dev.config.*`
