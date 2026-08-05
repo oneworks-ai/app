@@ -40,13 +40,13 @@ describe('vscode extension release identity', () => {
     })
   })
 
-  it('accepts a stable 0.2.0 release identity', () => {
-    expect(assertVscodeStoreVersionAvailable(tag('0.2.0'), [
+  it('accepts the first unused stable 0.1.4 release identity', () => {
+    expect(assertVscodeStoreVersionAvailable(tag('0.1.4'), [
       tag('0.1.3-rc.7')
     ])).toMatchObject({
-      logicalVersion: '0.2.0',
+      logicalVersion: '0.1.4',
       prerelease: false,
-      storeVersion: '0.2.0'
+      storeVersion: '0.1.4'
     })
   })
 

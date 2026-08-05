@@ -1,8 +1,9 @@
 {
   "name": "oneworks-dev",
-  "version": "0.1.0-rc.7",
+  "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@11.7.0",
+  "license": "MIT",
   "scripts": {
     "desktop:dev": "pnpm tools dev-service ensure electron",
     "desktop:dev:workspace": "pnpm tools dev-service ensure electron-workspace",
@@ -19,6 +20,8 @@
     "desktop:package": "pnpm -C apps/desktop package",
     "desktop:package:icon": "pnpm -C apps/desktop package:icon",
     "dprint": "node ./scripts/run-workspace-check.mjs --require-bin dprint -- pnpm exec dprint",
+    "security:audit:production": "node ./scripts/release-security-audit.mjs",
+    "release:preflight:stable": "node ./scripts/stable-release-preflight.mjs --version 0.1.0 --vscode-version 0.1.4",
     "start": "pnpm tools dev-service ensure web",
     "tools": "node ./scripts/run-tools.mjs",
     "test:e2e:adapters": "pnpm tools adapter-e2e test",

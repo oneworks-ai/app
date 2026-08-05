@@ -5,7 +5,8 @@
     "en": "Chrome DevTools",
     "zh-Hans": "Chrome 开发者工具"
   },
-  "version": "0.1.0-rc.7",
+  "version": "0.1.0",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/oneworks-ai/app.git",

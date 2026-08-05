@@ -30,7 +30,7 @@ For static GitHub Pages demos, pin the npm CDN version instead of using `latest`
 
 ```html
 <script type="module">
-  import { mountOneWorksIconLoader } from 'https://esm.sh/@oneworks/icon@0.1.0-alpha.0/loader'
+  import { mountOneWorksIconLoader } from 'https://esm.sh/@oneworks/icon@0.1.0/loader'
 
   mountOneWorksIconLoader(document.querySelector('#icon'), {
     theme: 'industrial',

@@ -8,7 +8,7 @@ import {
   normalizeOneWorksCliVersion,
   normalizeOneWorksVersion
 } from '../cli-package-release'
-import { updateOneWorksFormula } from '../homebrew-tap'
+import { buildInitialOneWorksFormula, updateOneWorksFormula } from '../homebrew-tap'
 
 describe('homebrew tap tooling', () => {
   it('builds the npm tarball url for the oneworks package', () => {
@@ -51,6 +51,18 @@ describe('homebrew tap tooling', () => {
       tarballUrl: 'https://registry.npmjs.org/oneworks/-/oneworks-1.2.3.tgz',
       sha256: 'a'.repeat(64)
     })).toContain('url "https://registry.npmjs.org/oneworks/-/oneworks-1.2.3.tgz"')
+  })
+
+  it('builds the first formula when the tap has no release metadata yet', () => {
+    const formula = buildInitialOneWorksFormula({
+      tarballUrl: 'https://registry.npmjs.org/oneworks/-/oneworks-0.1.0.tgz',
+      sha256: 'a'.repeat(64)
+    })
+
+    expect(formula).toContain('class Oneworks < Formula')
+    expect(formula).toContain('depends_on "node@22"')
+    expect(formula).toContain('bin.install_symlink libexec/"bin/oneworks"')
+    expect(formula).toContain('license "MIT"')
   })
 
   it('allows an already-synced formula', () => {

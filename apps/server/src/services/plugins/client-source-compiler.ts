@@ -87,6 +87,7 @@ export const compilePluginClientSource = async ({
       cssCodeSplit: false,
       emptyOutDir: false,
       lib: {
+        cssFileName: 'style',
         entry: source.entryPath,
         fileName: () => 'index.js',
         formats: ['es']

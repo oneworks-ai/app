@@ -20,12 +20,16 @@ export function getWorkspaceFolder() {
 }
 
 export function buildConfigJsonVariables(
-  workspaceFolder = getWorkspaceFolder()
+  workspaceFolder = getWorkspaceFolder(),
+  env: NodeJS.ProcessEnv = processEnv
 ): Record<string, string | null | undefined> {
-  return buildWorkspaceConfigJsonVariables(workspaceFolder, processEnv)
+  return buildWorkspaceConfigJsonVariables(workspaceFolder, env)
 }
 
-export async function loadConfigState(workspaceFolder = getWorkspaceFolder()) {
+export async function loadConfigState(
+  workspaceFolder = getWorkspaceFolder(),
+  env: NodeJS.ProcessEnv = processEnv
+) {
   const {
     effectiveProjectConfig,
     globalConfig,
@@ -37,8 +41,8 @@ export async function loadConfigState(workspaceFolder = getWorkspaceFolder()) {
     userSource
   } = await loadWorkspaceConfigState({
     cwd: workspaceFolder,
-    env: processEnv,
-    jsonVariables: buildConfigJsonVariables(workspaceFolder)
+    env,
+    jsonVariables: buildConfigJsonVariables(workspaceFolder, env)
   })
   return {
     workspaceFolder,

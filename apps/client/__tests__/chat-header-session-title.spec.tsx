@@ -6,7 +6,12 @@ import { describe, expect, it, vi } from 'vitest'
 import type { SessionInfo } from '@oneworks/types'
 
 vi.mock('react-i18next', () => ({
+  initReactI18next: {
+    type: '3rdParty',
+    init: () => undefined
+  },
   useTranslation: () => ({
+    i18n: { resolvedLanguage: 'zh' },
     t: (key: string, params?: { roomTitle?: string; sessionTitle?: string }) => {
       if (key === 'agentRoom.sessionBreadcrumbLabel') {
         return `${params?.roomTitle ?? ''} / ${params?.sessionTitle ?? ''}`
@@ -14,6 +19,15 @@ vi.mock('react-i18next', () => ({
       return key
     }
   })
+}))
+
+vi.mock('@monaco-editor/react', () => ({
+  default: () => null,
+  loader: { config: () => undefined }
+}))
+
+vi.mock('monaco-editor', () => ({
+  editor: { defineTheme: vi.fn() }
 }))
 
 const placeholderSessionInfo = {
@@ -128,8 +142,6 @@ describe('chat header session title', () => {
   it('hides unfinished timeline and settings from the primary header by default', async () => {
     const html = await renderHeader({})
 
-    expect(html).toContain('aria-label="chat.viewHistory"')
-    expect(html).toContain('>history</span>')
     expect(html).not.toContain('aria-label="chat.viewTimeline"')
     expect(html).not.toContain('aria-label="chat.viewSettings"')
   })

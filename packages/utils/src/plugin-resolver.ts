@@ -1,7 +1,7 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { readFile, readdir } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { basename, dirname, extname, isAbsolute, resolve } from 'node:path'
+import { basename, dirname, extname, isAbsolute, relative, resolve } from 'node:path'
 import process from 'node:process'
 
 import { load as loadYaml } from 'js-yaml'
@@ -454,13 +454,25 @@ const resolveOptionalPackageEntryPath = (
   specifier: string,
   rootDir?: string
 ) => {
-  const pluginRequires = [
-    ...(rootDir != null ? [createWorkspaceRequire(rootDir)] : []),
-    ...createPluginRequires(cwd)
-  ]
+  const pluginRequires = rootDir == null
+    ? createPluginRequires(cwd)
+    : [createWorkspaceRequire(rootDir)]
   for (const pluginRequire of pluginRequires) {
     try {
-      return pluginRequire.resolve(specifier)
+      const entryPath = pluginRequire.resolve(specifier)
+      if (rootDir != null) {
+        const realRootDir = realpathSync(rootDir)
+        const realEntryPath = realpathSync(entryPath)
+        const relativeEntryPath = relative(realRootDir, realEntryPath)
+        if (
+          relativeEntryPath === '..' ||
+          relativeEntryPath.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) ||
+          isAbsolute(relativeEntryPath)
+        ) {
+          continue
+        }
+      }
+      return entryPath
     } catch (error) {
       if (isMissingPackageEntryError(error)) continue
       throw error

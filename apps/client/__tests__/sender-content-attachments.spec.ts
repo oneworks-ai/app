@@ -16,7 +16,10 @@ describe('sender content attachments helpers', () => {
           name: 'index.ts',
           size: undefined
         }
-      ]
+      ],
+      pendingAnnotations: [],
+      pendingFileComments: [],
+      pendingTextSelections: []
     })
   })
 

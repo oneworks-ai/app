@@ -39,11 +39,14 @@ const addRelativeTargets = (
   }
 }
 
-const collectBaseConfigTargets = (workspaceFolder: string) => {
-  const resolvedWorkspaceFolder = resolveProjectWorkspaceFolder(workspaceFolder, process.env)
-  const configCwd = resolveProjectConfigDir(workspaceFolder, process.env) ?? resolvedWorkspaceFolder
-  const primaryWorkspaceFolder = resolvePrimaryWorkspaceFolder(resolvedWorkspaceFolder, process.env)
-  const globalConfigDir = resolveGlobalConfigDir(process.env)
+const collectBaseConfigTargets = (
+  workspaceFolder: string,
+  env: NodeJS.ProcessEnv = process.env
+) => {
+  const resolvedWorkspaceFolder = resolveProjectWorkspaceFolder(workspaceFolder, env)
+  const configCwd = resolveProjectConfigDir(workspaceFolder, env) ?? resolvedWorkspaceFolder
+  const primaryWorkspaceFolder = resolvePrimaryWorkspaceFolder(resolvedWorkspaceFolder, env)
+  const globalConfigDir = resolveGlobalConfigDir(env)
   const targets = new Set<string>()
 
   if (globalConfigDir != null) {
@@ -80,8 +83,11 @@ export const buildDirectoryTargetPlan = (targets: Iterable<string>) => {
   return plan
 }
 
-export const buildBaseConfigWatchPlan = (workspaceFolder: string) => (
-  buildDirectoryTargetPlan(collectBaseConfigTargets(workspaceFolder))
+export const buildBaseConfigWatchPlan = (
+  workspaceFolder: string,
+  env: NodeJS.ProcessEnv = process.env
+) => (
+  buildDirectoryTargetPlan(collectBaseConfigTargets(workspaceFolder, env))
 )
 
 export const buildConfigWatchPlan = (
@@ -90,9 +96,10 @@ export const buildConfigWatchPlan = (
     globalSource?: ConfigWatchSourceState
     projectSource?: ConfigWatchSourceState
     userSource?: ConfigWatchSourceState
-  }
+  },
+  env: NodeJS.ProcessEnv = process.env
 ) => {
-  const targets = collectBaseConfigTargets(workspaceFolder)
+  const targets = collectBaseConfigTargets(workspaceFolder, env)
 
   for (
     const target of [

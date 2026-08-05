@@ -5,7 +5,8 @@
     "en": "CLI Skills",
     "zh-Hans": "CLI 技能"
   },
-  "version": "0.1.0-rc.7",
+  "version": "0.1.0",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/oneworks-ai/app.git",

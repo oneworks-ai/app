@@ -1224,8 +1224,7 @@ describe('scripts cli', () => {
   it('dispatches Windows install metadata sync', async () => {
     const runWindowsInstallSyncOneWorks = vi.fn(async () => ({
       scoopManifestPath: '/repo/infra/windows/scoop-bucket/bucket/oneworks.json',
-      sha256: '0'.repeat(64),
-      tarballUrl: 'https://registry.npmjs.org/oneworks/-/oneworks-1.2.3.tgz',
+      installerSha256: '0'.repeat(64),
       wingetInstallerUrl: 'https://example.com/oneworks-windows-1.2.3.zip',
       wingetLocaleManifestPath: '/repo/infra/windows/winget/OneWorks.OneWorks.locale.en-US.yaml',
       wingetTemplatePath: '/repo/infra/windows/winget/OneWorks.OneWorks.installer.template.yaml',
@@ -1266,6 +1265,32 @@ describe('scripts cli', () => {
       wingetLocaleManifestPath: 'infra/windows/winget/OneWorks.OneWorks.locale.en-US.yaml',
       wingetVersionManifestPath: 'infra/windows/winget/OneWorks.OneWorks.yaml',
       wingetTemplatePath: 'infra/windows/winget/OneWorks.OneWorks.installer.template.yaml'
+    })
+  })
+
+  it('dispatches Windows portable package creation', async () => {
+    const runWindowsPortablePackage = vi.fn(async () => ({
+      commands: ['/repo/dist/oneworks.cmd', '/repo/dist/ow.cmd', '/repo/dist/owo.cmd'],
+      outDir: '/repo/dist',
+      readmePath: '/repo/dist/README.txt',
+      version: '1.2.3'
+    }))
+    const cli = createScriptsCli({ runWindowsPortablePackage })
+
+    await cli.parseAsync([
+      'node',
+      'oneworks-dev',
+      'windows-install',
+      'package-oneworks',
+      '--version',
+      '1.2.3',
+      '--out-dir',
+      'dist/windows'
+    ])
+
+    expect(runWindowsPortablePackage).toHaveBeenCalledWith({
+      version: '1.2.3',
+      outDir: 'dist/windows'
     })
   })
 })

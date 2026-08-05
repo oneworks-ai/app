@@ -5,6 +5,7 @@ import path from 'node:path'
 import { Command } from 'commander'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { DEFAULT_SUPPORTED_PROTOCOL_RANGE } from '@oneworks/runtime-protocol'
 import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 
 import { registerAgentCommand } from '#~/commands/agent.js'
@@ -136,7 +137,7 @@ describe('agent runtime CLI commands', () => {
     const status = await readRuntimeStatus(cwd, 'sess-dev')
     expect(status.state).toEqual(expect.objectContaining({
       protocolVersion: expect.stringMatching(/^\d+\.\d+\.\d+/),
-      supportedProtocolRange: expect.stringMatching(/^\^\d+\.0\.0$/),
+      supportedProtocolRange: DEFAULT_SUPPORTED_PROTOCOL_RANGE,
       sessionId: 'sess-dev',
       status: 'starting',
       title: 'Developer',
@@ -146,7 +147,7 @@ describe('agent runtime CLI commands', () => {
     expect(await readRuntimeCommands(cwd, 'sess-dev')).toEqual([
       expect.objectContaining({
         protocolVersion: expect.stringMatching(/^\d+\.\d+\.\d+/),
-        supportedProtocolRange: expect.stringMatching(/^\^\d+\.0\.0$/),
+        supportedProtocolRange: DEFAULT_SUPPORTED_PROTOCOL_RANGE,
         sessionId: 'sess-dev',
         type: 'start',
         priority: 20,
@@ -393,7 +394,7 @@ describe('agent runtime CLI commands', () => {
       expect.objectContaining({
         id: expect.stringMatching(/^cmd_send_message_/),
         protocolVersion: expect.stringMatching(/^\d+\.\d+\.\d+/),
-        supportedProtocolRange: expect.stringMatching(/^\^\d+\.0\.0$/),
+        supportedProtocolRange: DEFAULT_SUPPORTED_PROTOCOL_RANGE,
         ts: 200,
         sessionId: 'sess-qa',
         type: 'send_message',

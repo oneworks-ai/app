@@ -1,4 +1,5 @@
 import { Buffer } from 'node:buffer'
+import { EventEmitter } from 'node:events'
 import type { Server } from 'node:http'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -92,7 +93,7 @@ describe('setupWebSocket', () => {
     })
 
     const { setupWebSocket } = await import('#~/websocket/server.js')
-    setupWebSocket({} as Server, {
+    setupWebSocket(new EventEmitter() as Server, {
       __ONEWORKS_PROJECT_SERVER_WS_PATH__: '/ws'
     } as any)
   })

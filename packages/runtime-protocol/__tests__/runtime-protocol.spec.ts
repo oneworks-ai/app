@@ -15,15 +15,22 @@ import {
 describe('runtime protocol versioning', () => {
   it('uses the package version as the current protocol version', async () => {
     const packageJson = await import('../package.json')
-    const [major] = packageJson.default.version.split('.')
 
     expect(getCurrentProtocolVersion()).toBe(packageJson.default.version)
-    expect(DEFAULT_SUPPORTED_PROTOCOL_RANGE).toBe(`^${major}.0.0`)
+    expect(DEFAULT_SUPPORTED_PROTOCOL_RANGE).toBe('^0.1.0')
+    expect(isProtocolCompatible(getCurrentProtocolVersion())).toBe(true)
   })
 
   it('accepts compatible patch and minor versions within the same major', () => {
     expect(isProtocolCompatible('1.0.1', '^1.0.0')).toBe(true)
     expect(isProtocolCompatible('1.2.0', '^1.0.0')).toBe(true)
+    expect(isProtocolCompatible('0.1.0-rc.7', '^0.1.0')).toBe(true)
+    expect(isProtocolCompatible('0.1.9', '^0.1.0')).toBe(true)
+  })
+
+  it('keeps zero-major caret ranges inside the same minor line', () => {
+    expect(isProtocolCompatible('0.2.0', '^0.1.0')).toBe(false)
+    expect(isProtocolCompatible('0.0.8', '^0.0.7')).toBe(false)
   })
 
   it('rejects incompatible major versions and invalid versions', () => {

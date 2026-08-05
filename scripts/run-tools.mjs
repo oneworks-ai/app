@@ -60,6 +60,7 @@ const printBootstrapError = (message) => {
 const ensureDemoVideoSubmodule = () => {
   const commandPath = path.join(repoRoot, 'assets/demo-video/src/commands.ts')
   if (existsSync(commandPath)) return
+  if (!existsSync(path.join(repoRoot, '.gitmodules'))) return
 
   const result = spawnSync(
     'git',

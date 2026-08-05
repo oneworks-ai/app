@@ -2,15 +2,18 @@
 import type { Buffer } from 'node:buffer'
 import { existsSync, statSync, watch } from 'node:fs'
 import { resolve } from 'node:path'
+import process from 'node:process'
 
 import { resetConfigCache } from '@oneworks/config'
 
 import { getPluginManager } from '#~/services/plugins/index.js'
+import { createWorkspaceRuntimeEnv } from '#~/services/runtime-store/workspace-env.js'
 import { notifyConfigUpdated } from '#~/services/session/runtime.js'
 import { logger } from '#~/utils/logger.js'
 
 import { getWorkspaceFolder, loadConfigState } from './index.js'
 import { buildBaseConfigWatchPlan, buildConfigWatchPlan } from './watch-plan.js'
+
 const CONFIG_REFRESH_DEBOUNCE_MS = 120
 
 interface DirectoryWatchEntry {
@@ -132,8 +135,9 @@ const refreshConfigWatchRuntime = async (
 
   try {
     resetConfigCache()
-    const state = await loadConfigState(runtime.workspaceFolder)
-    const plan = buildConfigWatchPlan(runtime.workspaceFolder, state)
+    const env = createWorkspaceRuntimeEnv(runtime.workspaceFolder, process.env)
+    const state = await loadConfigState(runtime.workspaceFolder, env)
+    const plan = buildConfigWatchPlan(runtime.workspaceFolder, state, env)
     syncDirectoryWatches(runtime, plan)
 
     if (options.broadcast) {
@@ -151,7 +155,13 @@ const refreshConfigWatchRuntime = async (
     }
   } catch (error) {
     resetConfigCache()
-    syncDirectoryWatches(runtime, buildBaseConfigWatchPlan(runtime.workspaceFolder))
+    syncDirectoryWatches(
+      runtime,
+      buildBaseConfigWatchPlan(
+        runtime.workspaceFolder,
+        createWorkspaceRuntimeEnv(runtime.workspaceFolder, process.env)
+      )
+    )
     logger.warn({
       workspaceFolder: runtime.workspaceFolder,
       error: error instanceof Error ? error.message : String(error)

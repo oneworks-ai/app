@@ -18,7 +18,14 @@ describe('interaction panel session tabs', () => {
       false
     ) ?? []
 
-    expect(items.map(item => item?.key)).toEqual(['resource', 'terminal', 'session', 'iframe'])
+    expect(items.map(item => item?.key)).toEqual([
+      'resource',
+      'terminal',
+      'session',
+      'iframe',
+      'page-debugger',
+      'mobile-debug'
+    ])
     const sessionItem = items.find(item => item?.key === 'session')
     const sessionLabel = sessionItem != null && 'label' in sessionItem ? sessionItem.label : null
     expect(renderToStaticMarkup(<>{sessionLabel}</>)).toContain('New session')
@@ -37,7 +44,13 @@ describe('interaction panel session tabs', () => {
       { canCreateSessionTab: false }
     ) ?? []
 
-    expect(items.map(item => item?.key)).toEqual(['resource', 'terminal', 'iframe'])
+    expect(items.map(item => item?.key)).toEqual([
+      'resource',
+      'terminal',
+      'iframe',
+      'page-debugger',
+      'mobile-debug'
+    ])
     expect(items.some(item => item?.key === 'session')).toBe(false)
   })
 

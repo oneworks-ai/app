@@ -979,7 +979,7 @@ describe('config schema form', () => {
       />
     )
 
-    expect(html).toContain('config.options.modelProviders.qwen-coding-plan')
+    expect(html).toContain('Alibaba Coding Plan')
     expect(html).toContain('data-node-key="access"')
     expect(html).toContain('data-node-key="plan"')
     expect(html).not.toContain('https://coding.dashscope.aliyuncs.com/apps/anthropic')

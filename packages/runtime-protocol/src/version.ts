@@ -37,7 +37,19 @@ if (currentParsedProtocolVersion == null) {
   throw new Error(`Invalid package runtime protocol version: ${currentProtocolVersion}`)
 }
 
-export const DEFAULT_SUPPORTED_PROTOCOL_RANGE = `^${currentParsedProtocolVersion.major}.0.0`
+const buildDefaultSupportedProtocolRange = (version: ParsedProtocolVersion) => {
+  if (version.major > 0) {
+    return `^${version.major}.0.0`
+  }
+  if (version.minor > 0) {
+    return `^0.${version.minor}.0`
+  }
+  return `^0.0.${version.patch}`
+}
+
+export const DEFAULT_SUPPORTED_PROTOCOL_RANGE = buildDefaultSupportedProtocolRange(
+  currentParsedProtocolVersion
+)
 
 export const isValidProtocolVersion = (version: string) => parseProtocolVersion(version) != null
 
