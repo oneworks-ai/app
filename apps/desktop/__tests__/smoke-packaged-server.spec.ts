@@ -6,12 +6,23 @@ import { describe, expect, it } from 'vitest'
 
 const requireModule = createRequire(import.meta.url)
 const {
+  createPackagedAsset,
   readLocalPluginClientSource,
   readServerText,
   serverCompileTimeoutMs,
   serverRequestTimeoutMs,
   resolvePositiveTimeoutMs
 } = requireModule('../scripts/smoke-packaged-server.cjs') as {
+  createPackagedAsset: (
+    port: number,
+    options?: {
+      httpRequest?: typeof import('node:http').request
+      timeoutMs?: number
+    }
+  ) => Promise<{
+    data: { asset: { kind: string; path: string } }
+    success: boolean
+  }>
   readLocalPluginClientSource: (
     port: number,
     versionedEntryUrl: string,
@@ -158,5 +169,61 @@ describe('packaged server smoke timeouts', () => {
     ).resolves.toBe('compiled-source')
     expect(serverRequestTimeoutMs).toBe(30000)
     expect(capturedOptions?.timeout).toBe(serverRequestTimeoutMs)
+  })
+
+  it('posts a rule through the packaged filesystem authority route', async () => {
+    let capturedBody = ''
+    let capturedOptions: RequestOptions | undefined
+    const httpRequest = ((
+      options: RequestOptions,
+      onResponse: (response: IncomingMessage) => void
+    ) => {
+      capturedOptions = options
+      const request = new EventEmitter()
+      const response = new EventEmitter()
+      Object.assign(request, {
+        destroy: (error?: Error) => {
+          if (error != null) request.emit('error', error)
+          return request
+        },
+        end: (body: string) => {
+          capturedBody = body
+          queueMicrotask(() => {
+            onResponse(response as unknown as IncomingMessage)
+            response.emit(
+              'data',
+              JSON.stringify({
+                data: {
+                  asset: { kind: 'rule', path: '.oo/rules/packaged-authority-smoke.md' }
+                },
+                success: true
+              })
+            )
+            response.emit('end')
+          })
+        }
+      })
+      Object.assign(response, {
+        setEncoding: () => response,
+        statusCode: 201
+      })
+      return request as unknown as ClientRequest
+    }) as typeof import('node:http').request
+
+    await expect(createPackagedAsset(43110, { httpRequest })).resolves.toEqual({
+      data: {
+        asset: { kind: 'rule', path: '.oo/rules/packaged-authority-smoke.md' }
+      },
+      success: true
+    })
+    expect(capturedOptions).toMatchObject({
+      method: 'POST',
+      path: '/api/ai/assets',
+      timeout: serverRequestTimeoutMs
+    })
+    expect(JSON.parse(capturedBody)).toEqual({
+      kind: 'rule',
+      name: 'Packaged Authority Smoke'
+    })
   })
 })
