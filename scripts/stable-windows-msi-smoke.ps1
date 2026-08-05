@@ -50,14 +50,23 @@ try {
   }
 
   $verifyScript = Join-Path $env:RUNNER_TEMP 'verify-oneworks-msi.ps1'
-  @"
+@"
+param(
+  [Parameter(Mandatory = `$true)]
+  [string]`$ExpectedVersion
+)
+
+`$ErrorActionPreference = 'Stop'
 `$env:PATH = [Environment]::GetEnvironmentVariable('PATH', 'Machine') + ';' + `$env:PATH
-& '$installDir\oneworks.cmd' --version
-if (`$LASTEXITCODE -ne 0) { exit `$LASTEXITCODE }
+foreach (`$command in @('oneworks.cmd', 'ow.cmd', 'owo.cmd')) {
+  `$versionOutput = (& (Join-Path '$installDir' `$command) --version | Out-String).Trim()
+  if (`$LASTEXITCODE -ne 0) { throw "`$command --version failed with exit code `$LASTEXITCODE." }
+  if (`$versionOutput -cne `$ExpectedVersion) { throw "`$command reported `$versionOutput; expected `$ExpectedVersion." }
+}
 "@ | Set-Content -Path $verifyScript -NoNewline
-  $versionOutput = & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $verifyScript
-  if ($LASTEXITCODE -ne 0 -or $versionOutput -notmatch [regex]::Escape($Version)) {
-    throw "Installed oneworks.cmd did not report $Version. Output: $versionOutput"
+  & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $verifyScript -ExpectedVersion $Version
+  if ($LASTEXITCODE -ne 0) {
+    throw "Installed launchers did not report $Version."
   }
 }
 finally {
