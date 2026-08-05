@@ -163,6 +163,22 @@
 
 ## 作用域例外
 
+### OW-DM-E003 — 文档站可播放宣传视频
+
+- ID: OW-DM-E003
+- Revision: 1
+- Status: SCOPED_EXCEPTION
+- Base rule: `OW-DM-010` 的高清 MP4 母版只保留在本地素材归档，README 只提交主题自适应 GIF。
+- Exception rule: 用户明确要求文档站提供可播放演示时，`.oo/docs` 可以提交从同一批准母版生成的 web 优化 MP4；页面按 locale 和外观只选择一条视频，并保留同语言 / 主题轻量 poster 与 GIF 降级入口。
+- Scope: OneWorks project / `.oo/docs` 中文与英文文档首页、对应桌面应用页；不扩展到根 README。
+- Applies when: 演示已完成隐私与四变体视觉验收，视频经过 fast-start、体积、编解码兼容性和完整解码检查；画面只包含标准 `adapter-promo` 的品牌演示身份和映射到隔离临时目录的合成展示路径，不含真实个人或机器数据。
+- Does not apply when: README、普通产品截图、内部调试录像、尚未确认的原型或含真实账号 / 路径的录屏。
+- Positive example: 中文文档引用中文亮 / 暗 MP4，英文文档引用英文亮 / 暗 MP4；一次页面访问只加载当前语言和外观需要的视频，GIF 提供快速预览与降级。
+- Negative example: 把 1080p 母版直接塞进 README，或在文档首页同时 autoplay / preload 四个语言与主题视频。
+- Source: 用户 2026-08-05 明确要求更新文档站图片并把已确认的视频加入文档站。
+- Effective date: 2026-08-05
+- Automatic enforcement: 文档相对资产检查、媒体 metadata / fast-start / 完整解码验证、locale / theme source 审计、浏览器网络请求与亮暗主题视觉回归，并验证主题切换会暂停已隐藏的视频。
+
 ### OW-DM-E001 — 可选主题包紧凑导航间距
 
 - Revision: 1

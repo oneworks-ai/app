@@ -2,6 +2,25 @@
 
 这份目录是面向用户的 One Works 使用文档入口；如果你要把 One Works 接入自己的项目，从这里开始。
 
+## 产品演示
+
+下面的 21 秒演示使用真实桌面窗口，展示从 Launcher 打开工作空间并选择 AI 适配器的完整流程。视频会跟随文档站的亮暗外观选择对应主题；需要静态预览时，也可以查看[桌面应用页的主题自适应图片](./usage/desktop.md)。
+
+<OneWorksThemeMedia>
+  <template #light>
+    <video aria-label="One Works 亮色中文产品演示" class="oneworks-doc-promo-video" controls muted loop playsinline preload="none" poster="./images/adapter-promo/posters/oneworks-adapter-promo-light-zh-poster.jpg">
+      <source src="./videos/adapter-promo/oneworks-adapter-promo-light-zh.mp4" type="video/mp4">
+      <img alt="One Works 亮色中文产品演示 GIF" loading="lazy" src="./images/adapter-promo/oneworks-adapter-promo-light-zh.gif">
+    </video>
+  </template>
+  <template #dark>
+    <video aria-label="One Works 暗色中文产品演示" class="oneworks-doc-promo-video" controls muted loop playsinline preload="none" poster="./images/adapter-promo/posters/oneworks-adapter-promo-dark-zh-poster.jpg">
+      <source src="./videos/adapter-promo/oneworks-adapter-promo-dark-zh.mp4" type="video/mp4">
+      <img alt="One Works 暗色中文产品演示 GIF" loading="lazy" src="./images/adapter-promo/oneworks-adapter-promo-dark-zh.gif">
+    </video>
+  </template>
+</OneWorksThemeMedia>
+
 ## 先看这些
 
 - [安装与准备](./usage/install.md)

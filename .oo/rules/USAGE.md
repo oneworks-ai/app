@@ -16,6 +16,7 @@ description: 处理 README、面向用户文档、接入方式、安装运行说
 - 中文 root locale 放在 `.oo/docs/index.md` 与 `.oo/docs/usage/`。
 - 英文 locale 放在 `.oo/docs/en/index.md` 与 `.oo/docs/en/usage/`。
 - 跨语言共用图片优先放在 `.oo/docs/images/`，带语言差异的截图或标注放在对应 locale 页面附近。
+- 用户明确批准文档站承载演示视频时，母版继续留在本地发布素材归档；仓库只提交从同一母版生成的 web 优化 MP4，并同时提供同语言、同主题的轻量 poster 与 GIF 降级入口。页面不得一次加载完整语言 / 主题矩阵，只加载当前 locale 与外观需要的单条视频；手动切换外观时必须暂停已经隐藏的视频，不能让它在后台继续解码或循环。
 - 页面之间使用能被 VitePress shell 消费的相对链接；不要引用旧 homepage docs app 目录作为内容源路径。
 
 ## README 约定

@@ -1,9 +1,15 @@
 # 桌面应用
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="../images/desktop-chat-dark.png">
-  <img alt="桌面应用会话页" src="../images/desktop-chat-light.png">
-</picture>
+<OneWorksThemeMedia>
+  <template #light>
+    <img alt="One Works 从 Launcher 打开工作空间并选择 AI 适配器的亮色界面" class="oneworks-doc-promo-image" src="../images/adapter-promo/posters/oneworks-adapter-promo-light-zh-poster.jpg">
+  </template>
+  <template #dark>
+    <img alt="One Works 从 Launcher 打开工作空间并选择 AI 适配器的暗色界面" class="oneworks-doc-promo-image" src="../images/adapter-promo/posters/oneworks-adapter-promo-dark-zh-poster.jpg">
+  </template>
+</OneWorksThemeMedia>
+
+这张主题自适应图片来自真实桌面窗口。需要播放、暂停或拖动进度时，可以查看[文档首页的高清演示视频](../)。
 
 ## 获取安装包
 
