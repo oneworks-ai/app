@@ -8,6 +8,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$Installer = [System.IO.Path]::GetFullPath($Installer)
 
 function Normalize-DirectoryPath {
   param([string]$Path)
