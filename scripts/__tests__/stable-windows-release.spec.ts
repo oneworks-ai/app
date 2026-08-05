@@ -82,9 +82,10 @@ describe('stable Windows release asset', () => {
     expect(wxs).toContain('ProductSourceSha')
   })
 
-  it('normalizes machine PATH segments while checking the MSI PATH lifecycle', async () => {
+  it('normalizes published installer and machine PATH segments while checking the MSI lifecycle', async () => {
     const smoke = await readFile('scripts/stable-windows-msi-smoke.ps1', 'utf8')
 
+    expect(smoke).toContain('$Installer = [System.IO.Path]::GetFullPath($Installer)')
     expect(smoke).toContain('function Normalize-DirectoryPath')
     expect(smoke).toContain('[System.IO.Path]::TrimEndingDirectorySeparator($Path)')
     expect(smoke).toContain("[Environment]::GetEnvironmentVariable('PATH', 'Machine')")
