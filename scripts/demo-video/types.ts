@@ -36,6 +36,7 @@ export interface DemoVideoRecordOptions {
   outDir?: string
   pageBackground?: DemoVideoPageBackground
   pageBackgroundImage?: string
+  pageSetupExpression?: string
   preserveTargetEnvironment?: boolean
   scenarioId: string
   showActionCursor?: boolean
@@ -123,6 +124,7 @@ export interface DemoVideoScenarioContext {
   clickSelector: (selector: string, options?: DemoVideoClickOptions) => Promise<void>
   clickText: (text: string, options?: DemoVideoClickOptions) => Promise<void>
   focusSelector: (selector: string, options?: DemoVideoTextOptions) => Promise<void>
+  focusCameraOnSelector: (selector: string, options?: DemoVideoCameraFocusOptions) => Promise<void>
   moveToSelector: (selector: string, options?: DemoVideoClickOptions) => Promise<void>
   navigate: (url: string) => Promise<void>
   openDesktopWorkspace: (workspaceFolder: string) => Promise<void>
@@ -147,6 +149,13 @@ export interface DemoVideoTextOptions {
 
 export interface DemoVideoClickOptions extends DemoVideoTextOptions {
   settleMs?: number
+}
+
+export interface DemoVideoCameraFocusOptions extends DemoVideoTextOptions {
+  durationMs?: number
+  offsetX?: number
+  offsetY?: number
+  scale?: number
 }
 
 export interface DemoVideoKeyOptions {

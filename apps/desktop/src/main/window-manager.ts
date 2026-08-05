@@ -16,6 +16,8 @@ import { createBrowserWindowFactory } from './browser-window-factory'
 import { WORKSPACE_RESOURCE_REQUEST_CHANNEL } from './constants'
 import type { LauncherClientServiceManager } from './launcher-client-service'
 import type { ManagerServiceManager } from './manager-service-manager'
+import { resolveDesktopRecordingDemoWorkspaceDisplayPath } from './recording-demo-fixture'
+import { runRecordingDemoWorkspaceTransition } from './recording-demo-window-transition'
 import type {
   DesktopRuntimeState,
   LauncherWorkspacePluginSearchResponse,
@@ -49,6 +51,27 @@ const launcherShowAnimation = {
   distance: 16,
   duration: 180,
   frameMs: 16
+}
+const recordingDemoWorkspaceReadySelector = '.sender-select-shell--adapter .adapter-select'
+const recordingDemoWorkspaceReadyTimeoutMs = 30_000
+
+const buildDemoAwareWorkspaceWindowTitle = (workspaceFolder: string) => (
+  buildWorkspaceWindowTitle(resolveDesktopRecordingDemoWorkspaceDisplayPath(workspaceFolder))
+)
+
+const waitForRecordingDemoWorkspaceSurface = async (window: BrowserWindow) => {
+  const deadline = Date.now() + recordingDemoWorkspaceReadyTimeoutMs
+  while (!window.isDestroyed()) {
+    const ready = await window.webContents.executeJavaScript(
+      `document.querySelector(${JSON.stringify(recordingDemoWorkspaceReadySelector)}) != null`
+    ).catch(() => false)
+    if (ready === true) return
+    if (Date.now() >= deadline) {
+      throw new Error('Timed out waiting for the recording demo workspace surface.')
+    }
+    await new Promise(resolve => setTimeout(resolve, 80))
+  }
+  throw new Error('The recording demo workspace window closed before it became ready.')
 }
 const launcherStartupShellHtml = `<!doctype html>
 <html>
@@ -594,7 +617,7 @@ export const createWindowManager = ({
 
       windowRecord.workspaceFolder = normalizedWorkspaceFolder
       windowRecord.currentServerUrl = clientUrl
-      windowRecord.window.setTitle(buildWorkspaceWindowTitle(normalizedWorkspaceFolder))
+      windowRecord.window.setTitle(buildDemoAwareWorkspaceWindowTitle(normalizedWorkspaceFolder))
       const workspaceUrl = ensureTrailingSlash(clientUrl)
       try {
         setWorkspaceLoadingWindowBackground(windowRecord.window)
@@ -636,7 +659,7 @@ export const createWindowManager = ({
 
     windowRecord.workspaceFolder = normalizedWorkspaceFolder
     windowRecord.workspaceServerUrl = workspaceService.serverUrl
-    windowRecord.window.setTitle(buildWorkspaceWindowTitle(normalizedWorkspaceFolder))
+    windowRecord.window.setTitle(buildDemoAwareWorkspaceWindowTitle(normalizedWorkspaceFolder))
     if (wasLauncherWindow && getWindowRecords().every(candidate => candidate.kind !== 'launcher')) {
       void stopUnusedSourceWorkspaceService(
         previousLauncherSourceWorkspaceFolder,
@@ -662,8 +685,25 @@ export const createWindowManager = ({
     const targetWindowRecord = input.targetWindowRecord ??
       findReusableStartupWindowRecord() ??
       createWindowRecord({ kind: 'workspace', showOnReady: false })
-
-    await loadWorkspaceInWindow(targetWindowRecord, normalizedWorkspaceFolder)
+    const transitionSource = input.transitionFromWindowRecord
+    if (
+      transitionSource != null &&
+      transitionSource !== targetWindowRecord &&
+      isWindowRecordUsable(transitionSource)
+    ) {
+      const targetBounds = targetWindowRecord.window.getBounds()
+      setWorkspaceLoadingWindowBackground(targetWindowRecord.window)
+      const loadPromise = loadWorkspaceInWindow(targetWindowRecord, normalizedWorkspaceFolder)
+        .then(() => waitForRecordingDemoWorkspaceSurface(targetWindowRecord.window))
+      await runRecordingDemoWorkspaceTransition({
+        loadPromise,
+        sourceWindow: transitionSource.window,
+        targetBounds,
+        targetWindow: targetWindowRecord.window
+      })
+    } else {
+      await loadWorkspaceInWindow(targetWindowRecord, normalizedWorkspaceFolder)
+    }
     return targetWindowRecord
   }
 
@@ -691,7 +731,7 @@ export const createWindowManager = ({
     windowRecord.currentServerUrl = clientUrl
     windowRecord.workspaceServerUrl = service.serverUrl
     rememberWorkspaceFolder(normalizedWorkspaceFolder)
-    windowRecord.window.setTitle(buildWorkspaceWindowTitle(normalizedWorkspaceFolder))
+    windowRecord.window.setTitle(buildDemoAwareWorkspaceWindowTitle(normalizedWorkspaceFolder))
     setWorkspaceLoadingWindowBackground(windowRecord.window)
     await windowRecord.window.loadURL(targetUrl)
     focusWindowRecord(windowRecord)
@@ -718,7 +758,7 @@ export const createWindowManager = ({
     windowRecord.workspaceFolder = normalizedWorkspaceFolder
     windowRecord.currentServerUrl = service.serverUrl
     rememberWorkspaceFolder(normalizedWorkspaceFolder)
-    windowRecord.window.setTitle(buildWorkspaceWindowTitle(normalizedWorkspaceFolder))
+    windowRecord.window.setTitle(buildDemoAwareWorkspaceWindowTitle(normalizedWorkspaceFolder))
     setWorkspaceLoadingWindowBackground(windowRecord.window)
     await windowRecord.window.loadURL(targetUrl)
     focusWindowRecord(windowRecord)
@@ -1036,7 +1076,7 @@ export const createWindowManager = ({
       sourceWindowRecord.currentServerUrl = clientUrl
       sourceWindowRecord.workspaceServerUrl = service.serverUrl
       rememberWorkspaceFolder(normalizedWorkspaceFolder)
-      sourceWindowRecord.window.setTitle(buildWorkspaceWindowTitle(normalizedWorkspaceFolder))
+      sourceWindowRecord.window.setTitle(buildDemoAwareWorkspaceWindowTitle(normalizedWorkspaceFolder))
       sourceWindowRecord.window.webContents.send(WORKSPACE_RESOURCE_REQUEST_CHANNEL, target)
       focusWindowRecord(sourceWindowRecord)
       return sourceWindowRecord
@@ -1049,7 +1089,7 @@ export const createWindowManager = ({
     windowRecord.currentServerUrl = clientUrl
     windowRecord.workspaceServerUrl = service.serverUrl
     rememberWorkspaceFolder(normalizedWorkspaceFolder)
-    windowRecord.window.setTitle(buildWorkspaceWindowTitle(normalizedWorkspaceFolder))
+    windowRecord.window.setTitle(buildDemoAwareWorkspaceWindowTitle(normalizedWorkspaceFolder))
     setWorkspaceLoadingWindowBackground(windowRecord.window)
     await windowRecord.window.loadURL(targetUrl).catch((error: unknown) => {
       if (isLoadUrlAbortError(error)) {

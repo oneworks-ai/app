@@ -5,6 +5,7 @@ import { homedir } from 'node:os'
 import path from 'node:path'
 
 import { normalizeWorkspaceFolder } from '../workspace-state.cjs'
+import { listDesktopRecordingDemoFixtureDirectories } from './recording-demo-fixture'
 
 interface GitCommandError extends Error {
   code?: number | string | null
@@ -131,6 +132,9 @@ const resolveCloneDestinationDirectory = (rawDirectory?: unknown) => {
 export const listCloneDestinationDirectories = async (
   rawDirectory?: unknown
 ): Promise<CloneDestinationDirectoryList> => {
+  const fixtureDirectories = listDesktopRecordingDemoFixtureDirectories(rawDirectory)
+  if (fixtureDirectories != null) return fixtureDirectories
+
   const currentDirectory = resolveCloneDestinationDirectory(rawDirectory)
   const rootDirectory = path.parse(currentDirectory).root
   const parentCandidate = path.dirname(currentDirectory)

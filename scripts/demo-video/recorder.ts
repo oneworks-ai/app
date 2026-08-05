@@ -10,6 +10,7 @@ import process from 'node:process'
 import { deflateSync } from 'node:zlib'
 
 import type {
+  DemoVideoCameraFocusOptions,
   DemoVideoCaptureSource,
   DemoVideoClickOptions,
   DemoVideoColorScheme,
@@ -114,6 +115,22 @@ interface SystemCursorTimeline {
   initialPoint: Point
 }
 
+export interface SystemCameraFocusEvent {
+  durationMs: number
+  from: Point
+  fromScale: number
+  startMs: number
+  to: Point
+  toScale: number
+}
+
+export interface SystemCameraFocusTimeline {
+  enabled: boolean
+  events: SystemCameraFocusEvent[]
+  initialPoint: Point
+  initialScale: number
+}
+
 interface SystemCursorFrameSample extends Point {
   action: CursorAction
   frameIndex: number
@@ -145,6 +162,15 @@ interface SystemCursorContinuityReport {
     maxSpeedWarningPxPerSecond: number
   }
 }
+
+export const mapSystemDisplayPointToVideo = (input: {
+  crop: DemoVideoCropRect
+  point: Point
+  windowBounds: DemoVideoCropRect
+}): Point => ({
+  x: input.windowBounds.x - input.crop.x + input.point.x,
+  y: input.windowBounds.y - input.crop.y + input.point.y
+})
 
 interface ModifierKeyDefinition extends KeyDefinition {
   modifierBit: number
@@ -1920,6 +1946,9 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
   private systemWindowId: number | undefined
   private readonly systemVideoSegments: SystemVideoSegment[] = []
   private readonly systemCursorEvents: SystemCursorEvent[] = []
+  private readonly systemCameraFocusEvents: SystemCameraFocusEvent[] = []
+  private systemCameraFocusPoint: Point | undefined
+  private systemCameraFocusScale = 1
   private systemCursorInitialPoint: Point | undefined
   private systemCursorTimelineMs: number | undefined
   private activeSystemSegment:
@@ -1944,6 +1973,7 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
       height: number
       language?: string
       pageBackgroundDataUrl?: string
+      pageSetupExpression?: string
       preserveTargetEnvironment: boolean
       segmentsDir: string
       showActionCursor: boolean
@@ -1993,6 +2023,21 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
     }
   }
 
+  getSystemCameraFocusTimeline(): SystemCameraFocusTimeline | undefined {
+    if (this.systemCameraFocusEvents.length === 0) return undefined
+    const width = this.input.systemDisplayCrop?.width ?? this.input.width
+    const height = this.input.systemDisplayCrop?.height ?? this.input.height
+    return {
+      enabled: true,
+      events: this.systemCameraFocusEvents,
+      initialPoint: {
+        x: width / 2,
+        y: height / 2
+      },
+      initialScale: 1
+    }
+  }
+
   close() {
     this.client.close()
   }
@@ -2011,6 +2056,16 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
   async initialize() {
     await this.client.send('Page.enable')
     await this.client.send('Runtime.enable')
+    if (this.input.pageSetupExpression != null) {
+      try {
+        await this.client.send('Page.addScriptToEvaluateOnNewDocument', {
+          source: this.input.pageSetupExpression
+        })
+      } catch {
+        // Older Electron targets may not expose every CDP page helper.
+      }
+      await this.evaluate(this.input.pageSetupExpression)
+    }
     if (this.input.language != null) {
       const languageBootstrapExpression = buildLanguageBootstrapExpression(this.input.language)
       try {
@@ -2297,6 +2352,39 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
     await this.clickPoint(point, options.settleMs)
   }
 
+  async focusCameraOnSelector(selector: string, options: DemoVideoCameraFocusOptions = {}) {
+    if (this.input.captureSource !== 'system-display') {
+      throw new Error('Camera focus requires a system-display recording source.')
+    }
+    const point = await this.waitForPoint(() => this.findPointBySelector(selector), {
+      label: `selector "${selector}"`,
+      timeoutMs: options.timeoutMs ?? DEFAULT_ACTION_TIMEOUT_MS
+    })
+    const resolvedPoint = await this.resolveSystemCursorPoint(point)
+    const width = this.input.systemDisplayCrop?.width ?? this.input.width
+    const height = this.input.systemDisplayCrop?.height ?? this.input.height
+    const from = this.systemCameraFocusPoint ?? {
+      x: width / 2,
+      y: height / 2
+    }
+    const fromScale = this.systemCameraFocusScale
+    const to = {
+      x: resolvedPoint.x + (options.offsetX ?? 0),
+      y: resolvedPoint.y + (options.offsetY ?? 0)
+    }
+    const toScale = clamp(options.scale ?? 1.55, 1, 2.5)
+    this.systemCameraFocusEvents.push({
+      durationMs: Math.max(1, options.durationMs ?? 1_300),
+      from,
+      fromScale,
+      startMs: Math.max(this.getSystemTimelineMs(), this.getLastSystemCameraFocusEventEndMs()),
+      to,
+      toScale
+    })
+    this.systemCameraFocusPoint = to
+    this.systemCameraFocusScale = toScale
+  }
+
   async moveToSelector(selector: string, options: DemoVideoClickOptions = {}) {
     const point = await this.waitForPoint(() => this.findPointBySelector(selector), {
       label: `selector "${selector}"`,
@@ -2446,6 +2534,12 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
     return lastEvent.startMs + lastEvent.durationMs
   }
 
+  private getLastSystemCameraFocusEventEndMs() {
+    const lastEvent = this.systemCameraFocusEvents.at(-1)
+    if (lastEvent == null) return 0
+    return lastEvent.startMs + lastEvent.durationMs
+  }
+
   private async sleepAndAdvanceSystemCursorTimeline(durationMs: number) {
     const startedAtMs = this.systemCursorTimelineMs ?? this.getSystemTimelineMs()
     await sleep(durationMs)
@@ -2474,10 +2568,11 @@ class DemoVideoRecorder implements DemoVideoScenarioContext {
       : windowBounds.workspace ?? windowBounds.launcher
     if (bounds == null) return point
 
-    return {
-      x: bounds.x - crop.x + point.x,
-      y: bounds.y - crop.y + point.y
-    }
+    return mapSystemDisplayPointToVideo({
+      crop,
+      point,
+      windowBounds: bounds
+    })
   }
 
   private recordSystemCursorEvent(
@@ -3399,6 +3494,39 @@ const smootherStep = (value: number) => {
   return progress * progress * progress * (progress * (progress * 6 - 15) + 10)
 }
 
+export const sampleSystemCameraFocusTimeline = (
+  timeline: SystemCameraFocusTimeline,
+  timestampMs: number,
+  index = 0,
+  pointBefore = timeline.initialPoint,
+  scaleBefore = timeline.initialScale
+): Point & { scale: number } => {
+  const event = timeline.events[index]
+  if (event == null || timestampMs < event.startMs) {
+    return {
+      scale: scaleBefore,
+      ...pointBefore
+    }
+  }
+  if (timestampMs <= event.startMs + event.durationMs) {
+    const progress = smootherStep(
+      (timestampMs - event.startMs) / Math.max(1, event.durationMs)
+    )
+    return {
+      scale: event.fromScale + (event.toScale - event.fromScale) * progress,
+      x: event.from.x + (event.to.x - event.from.x) * progress,
+      y: event.from.y + (event.to.y - event.from.y) * progress
+    }
+  }
+  return sampleSystemCameraFocusTimeline(
+    timeline,
+    timestampMs,
+    index + 1,
+    event.to,
+    event.toScale
+  )
+}
+
 const sampleClickScale = (value: number) => {
   const progress = clamp(value / SYSTEM_CURSOR_CLICK_DURATION_MS, 0, 1)
   return 1 - (1 - SYSTEM_CURSOR_PRESS_SCALE) * progress ** 0.72
@@ -3730,6 +3858,53 @@ const buildCursorMoveAxisExpression = (
   })*${micro}`
 }
 
+const buildCameraFocusValueExpression = (
+  value: 'scale' | 'x' | 'y',
+  timeline: SystemCameraFocusTimeline,
+  index = 0,
+  pointBefore = timeline.initialPoint,
+  scaleBefore = timeline.initialScale
+): string => {
+  const event = timeline.events[index]
+  const before = value === 'scale' ? scaleBefore : pointBefore[value]
+  if (event == null) return ffmpegNumber(before)
+
+  const start = event.startMs / 1_000
+  const duration = Math.max(0.001, event.durationMs / 1_000)
+  const end = start + duration
+  const to = value === 'scale' ? event.toScale : event.to[value]
+  const progress = `min(max((t-${ffmpegNumber(start)})/${ffmpegNumber(duration)},0),1)`
+  const eased = `(${progress}*${progress}*${progress}*(${progress}*(${progress}*6-15)+10))`
+  const during = `(${ffmpegNumber(before)}+(${ffmpegNumber(to - before)})*${eased})`
+  const after = buildCameraFocusValueExpression(
+    value,
+    timeline,
+    index + 1,
+    event.to,
+    event.toScale
+  )
+  return `if(lt(t,${ffmpegNumber(start)}),${ffmpegNumber(before)},if(lte(t,${ffmpegNumber(end)}),${during},${after}))`
+}
+
+export const buildSystemCameraFocusVideoFilter = (input: {
+  frameSize: DemoVideoViewport
+  timeline: SystemCameraFocusTimeline
+}) => {
+  const scale = buildCameraFocusValueExpression('scale', input.timeline)
+  const x = buildCameraFocusValueExpression('x', input.timeline)
+  const y = buildCameraFocusValueExpression('y', input.timeline)
+  const cropX = `min(max(((${x})*(${scale}))-${ffmpegNumber(input.frameSize.width / 2)},0),iw-${input.frameSize.width})`
+  const cropY = `min(max(((${y})*(${scale}))-${
+    ffmpegNumber(input.frameSize.height / 2)
+  },0),ih-${input.frameSize.height})`
+  return [
+    `scale=w='trunc(iw*(${scale})/2)*2':h='trunc(ih*(${scale})/2)*2':eval=frame`,
+    `crop=${input.frameSize.width}:${input.frameSize.height}:x='${cropX}':y='${cropY}'`,
+    'setsar=1',
+    'format=yuv420p'
+  ].join(',')
+}
+
 const overlaySystemCursorVideo = async (input: {
   ffmpegPath: string
   fps: number
@@ -3789,6 +3964,53 @@ const overlaySystemCursorVideo = async (input: {
   }
 }
 
+const applySystemCameraFocusVideo = async (input: {
+  ffmpegPath: string
+  frameSize: DemoVideoViewport
+  outputPath: string
+  timeline: SystemCameraFocusTimeline
+  videoPath: string
+}) => {
+  const result = await runCommand({
+    args: [
+      '-y',
+      '-i',
+      input.videoPath,
+      '-vf',
+      buildSystemCameraFocusVideoFilter({
+        frameSize: input.frameSize,
+        timeline: input.timeline
+      }),
+      '-map',
+      '0:v:0',
+      '-map',
+      '0:a?',
+      '-c:v',
+      'libx264',
+      '-pix_fmt',
+      'yuv420p',
+      '-movflags',
+      '+faststart',
+      '-c:a',
+      'copy',
+      input.outputPath
+    ],
+    command: input.ffmpegPath,
+    cwd: process.cwd(),
+    timeoutMs: 120_000
+  })
+  if (result.code !== 0) {
+    throw new Error(
+      [
+        `ffmpeg failed to apply system camera focus with exit code ${result.code}.`,
+        result.timedOut ? 'timedOut=true' : undefined,
+        result.stdout.trim() === '' ? undefined : `stdout:\n${result.stdout}`,
+        result.stderr.trim() === '' ? undefined : `stderr:\n${result.stderr}`
+      ].filter(Boolean).join('\n')
+    )
+  }
+}
+
 const writeRoundedWindowCornerMask = async (input: {
   ffmpegPath: string
   maskPath: string
@@ -3824,7 +4046,28 @@ const writeRoundedWindowCornerMask = async (input: {
   }
 }
 
+export const resolveSystemCameraFocusVideoPlan = (input: {
+  cameraFocusEnabled: boolean
+  cursorOverlayEnabled: boolean
+  segmentsDir: string
+  videoPath: string
+}) => {
+  const needsIntermediateBase = input.cameraFocusEnabled || input.cursorOverlayEnabled
+  const baseVideoPath = needsIntermediateBase
+    ? path.join(input.segmentsDir, 'system-recording-base.mp4')
+    : input.videoPath
+  const cursorOutputPath = input.cameraFocusEnabled
+    ? path.join(input.segmentsDir, 'system-recording-with-cursor.mp4')
+    : input.videoPath
+  return {
+    baseVideoPath,
+    cameraInputPath: input.cursorOverlayEnabled ? cursorOutputPath : baseVideoPath,
+    cursorOutputPath
+  }
+}
+
 const encodeSystemWindowVideo = async (input: {
+  cameraFocusTimeline?: SystemCameraFocusTimeline
   cursorTimeline?: SystemCursorTimeline
   durationMs: number
   ffmpegPath: string
@@ -3989,9 +4232,15 @@ const encodeSystemWindowVideo = async (input: {
     normalizedSegmentPaths.push(normalizedPath)
   }
 
-  const baseVideoPath = input.cursorTimeline?.enabled === true
-    ? path.join(input.segmentsDir, 'system-recording-base.mp4')
-    : input.videoPath
+  const needsCameraFocus = input.cameraFocusTimeline?.enabled === true
+  const needsCursorOverlay = input.cursorTimeline?.enabled === true
+  const videoPlan = resolveSystemCameraFocusVideoPlan({
+    cameraFocusEnabled: needsCameraFocus,
+    cursorOverlayEnabled: needsCursorOverlay,
+    segmentsDir: input.segmentsDir,
+    videoPath: input.videoPath
+  })
+  const { baseVideoPath } = videoPlan
   if (normalizedSegmentPaths.length === 1) {
     await copyFile(normalizedSegmentPaths[0]!, baseVideoPath)
   } else {
@@ -4040,10 +4289,19 @@ const encodeSystemWindowVideo = async (input: {
     await overlaySystemCursorVideo({
       ffmpegPath: input.ffmpegPath,
       fps: input.fps,
-      outputPath: input.videoPath,
+      outputPath: videoPlan.cursorOutputPath,
       segmentsDir: input.segmentsDir,
       timeline: input.cursorTimeline,
       videoPath: baseVideoPath
+    })
+  }
+  if (input.cameraFocusTimeline?.enabled === true) {
+    await applySystemCameraFocusVideo({
+      ffmpegPath: input.ffmpegPath,
+      frameSize,
+      outputPath: input.videoPath,
+      timeline: input.cameraFocusTimeline,
+      videoPath: videoPlan.cameraInputPath
     })
   }
 }
@@ -4165,6 +4423,18 @@ const writeSecondStillFramesFromVideo = async (input: {
   return manifest
 }
 
+export const assertRecordedVideoCoverage = (input: {
+  recordedDurationMs: number
+  stillCount: number
+}) => {
+  const expectedMinimumStillCount = Math.max(1, Math.floor(input.recordedDurationMs / 1_000))
+  if (input.stillCount >= expectedMinimumStillCount) return
+
+  throw new Error(
+    `Recorded video is incomplete: expected at least ${expectedMinimumStillCount} one-second stills for ${input.recordedDurationMs}ms, but extracted ${input.stillCount}.`
+  )
+}
+
 export const recordDemoVideoScenario = async (
   scenario: DemoVideoScenario,
   options: DemoVideoRecordOptions
@@ -4255,6 +4525,7 @@ export const recordDemoVideoScenario = async (
       height,
       language,
       pageBackgroundDataUrl,
+      pageSetupExpression: options.pageSetupExpression,
       preserveTargetEnvironment,
       segmentsDir: outputPaths.segmentsDir,
       showActionCursor,
@@ -4278,6 +4549,7 @@ export const recordDemoVideoScenario = async (
     if (frameCount <= 0) throw new Error(`Scenario "${scenario.id}" did not capture any frames.`)
 
     const recordedDurationMs = recorder.getRecordedDurationMs()
+    const systemCameraFocusTimeline = recorder.getSystemCameraFocusTimeline()
     const systemCursorTimeline = recorder.getSystemCursorTimeline()
     const cursorContinuity = await writeSystemCursorArtifacts({
       continuityPath: outputPaths.cursorContinuityPath,
@@ -4290,6 +4562,7 @@ export const recordDemoVideoScenario = async (
     let stills: Awaited<ReturnType<typeof writeSecondStillFrames>>
     if (isSystemCaptureSource(captureSource) && !systemFrameCapture) {
       await encodeSystemWindowVideo({
+        cameraFocusTimeline: systemCameraFocusTimeline,
         cursorTimeline: systemCursorTimeline,
         durationMs: recordedDurationMs,
         ffmpegPath,
@@ -4350,6 +4623,12 @@ export const recordDemoVideoScenario = async (
         frameSize,
         framesDir: outputPaths.framesDir,
         videoPath: outputPaths.videoPath
+      })
+    }
+    if (isSystemCaptureSource(captureSource)) {
+      assertRecordedVideoCoverage({
+        recordedDurationMs,
+        stillCount: stills.length
       })
     }
     if (options.keepFrames !== true) {

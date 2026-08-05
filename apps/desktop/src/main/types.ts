@@ -169,6 +169,7 @@ export interface CreateWindowRecordInput {
 }
 
 export interface OpenWorkspaceWindowInput {
+  transitionFromWindowRecord?: WindowRecord
   targetWindowRecord?: WindowRecord
 }
 

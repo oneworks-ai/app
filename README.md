@@ -17,13 +17,11 @@
 
 <p align="center"><strong>One workspace for AI work.</strong></p>
 
-**Light**
-
-https://github.com/user-attachments/assets/8d2374a9-60c7-4462-bbd3-f3f1573b23c6
-
-**Dark**
-
-https://github.com/user-attachments/assets/01eade3c-92f7-4c07-bf01-ba4e14b07adb
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./.oo/docs/images/adapter-promo/oneworks-adapter-promo-dark-en.gif">
+  <source media="(prefers-color-scheme: light)" srcset="./.oo/docs/images/adapter-promo/oneworks-adapter-promo-light-en.gif">
+  <img alt="One Works opens a workspace and selects an AI adapter" src="./.oo/docs/images/adapter-promo/oneworks-adapter-promo-light-en.gif">
+</picture>
 
 ## Introduction
 

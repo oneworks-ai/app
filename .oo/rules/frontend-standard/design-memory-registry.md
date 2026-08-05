@@ -142,8 +142,15 @@
 
 ### OW-DM-010 — 宣传视频语言与明暗主题矩阵
 
-- Revision / status / scope: 2 / ACTIVE / OneWorks project，README、社交平台和发布宣传视频。先生成一个代表性原型；用户确认动画、真实窗口、鼠标节奏和构图整体正确后，再交付中文 / 英文与亮色 / 暗色的完整四变体矩阵。成片中的真实界面语言必须匹配发布入口，主题必须匹配变体，四条视频使用同一 app build、scenario、workspace、窗口几何和后期节奏。
-- Ownership / source / exceptions / enforcement: 规范正文由 [`../maintenance/demo-video.md`](../maintenance/demo-video.md)“场景维护”拥有，真实 Adapter 展示入口为 `launcher-open-workspace-adapter-tour`；来源为用户 2026-08-05 指出英文宣传视频错误复用了中文窗口，明确要求以后同时生成两种语言与两种明暗主题，并进一步要求只在用户确认整体逻辑后批量生成。只有用户明确指定单语言或单主题时允许缩减；由原型确认记录、四变体 batch manifest、逐变体 still、媒体 metadata、光标连续性、隐私检查和 GitHub 实际播放器验证。
+- Revision / status / scope: 3 / ACTIVE / OneWorks project，README、社交平台和发布宣传视频。先生成一个代表性原型；用户确认动画、真实窗口、鼠标节奏和构图整体正确后，再交付中文 / 英文与亮色 / 暗色的完整四变体矩阵。成片中的真实界面语言必须匹配发布入口，主题必须匹配变体，四条视频使用同一 app build、scenario、workspace、窗口几何和同一后期节奏。GitHub README 使用 `<picture>` 与 `prefers-color-scheme` 从同语言的亮 / 暗 GIF 中自动选择，高清 MP4 只保留在本地素材归档。
+- Ownership / source / exceptions / enforcement: 规范正文由 [`../maintenance/demo-video.md`](../maintenance/demo-video.md)“场景维护”拥有，真实 Adapter 展示入口为 `launcher-open-workspace-adapter-tour`；来源为用户 2026-08-05 指出英文宣传视频错误复用了中文窗口，明确要求以后同时生成两种语言与两种明暗主题，并进一步要求只在用户确认整体逻辑后批量生成；随后要求 GitHub 使用主题选择器展示 GIF、视频版留在本地。只有用户明确指定单语言或单主题时允许缩减；由原型确认记录、四变体 batch manifest、逐变体 still、媒体 metadata、GIF 体积与帧数、README picture source、光标连续性和隐私检查验证。
+
+### OW-DM-011 — 宣传视频 selector 镜头聚焦
+
+- Revision / status / scope: 1 / ACTIVE / OneWorks project，要求突出真实产品交互区域的宣传录屏，首个适用场景为 `launcher-open-workspace-adapter-tour`。用户要求“放大到鼠标区域”时，对已包含真实窗口与合成光标的整幅录屏像素做平滑镜头推近；只放大鼠标图标不满足要求。
+- Applies / does not apply: 适用于场景明确要求局部镜头聚焦并能通过稳定 selector 定位目标；普通产品录屏、用户没有要求聚焦、或聚焦会裁掉关键上下文时不自动启用。
+- Positive / negative example: 鼠标接近 Adapter 控件时镜头开始推近，点击前稳定，弹层完整保留并持续到结尾；反例是窗口始终维持全景，只把蓝色光标放大，或用模拟窗口 / 模拟弹层代替真实画面。
+- Ownership / source / exceptions / enforcement: 规范正文由 [`../maintenance/demo-video.md`](../maintenance/demo-video.md)“场景维护”拥有，实现在 demo-video recorder 的 selector camera focus timeline；来源为用户 2026-08-05 先要求打开 Adapter 选择器时放大鼠标区域、随后指出最终成片没有实际放大。场景可用窄作用域倍率 / offset 保证浮层不被裁切；由 scenario 调用顺序单测、camera timeline 缓动单测、四变体关键帧和独立逐帧视觉审阅执行。
 
 ## 待确认冲突
 

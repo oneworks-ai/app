@@ -66,6 +66,41 @@ export interface DesktopCdpLaunchResult {
   userDataDir: string
 }
 
+const abortError = () => new Error('Desktop CDP launch was aborted.')
+
+export const completeDesktopCdpLaunchReadiness = async <T>(input: {
+  cleanup: () => Promise<void>
+  readiness: Promise<T>
+  raiseAfterReady?: () => Promise<void>
+}) => {
+  try {
+    const result = await input.readiness
+    await input.raiseAfterReady?.()
+    return result
+  } catch (error) {
+    try {
+      await input.cleanup()
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], 'Electron launch and identity-safe cleanup both failed.')
+    }
+    throw error
+  }
+}
+
+export const attemptDesktopCdpWindowRaise = async (
+  raise: () => Promise<void>,
+  signal?: AbortSignal
+) => {
+  try {
+    await raise()
+    if (signal?.aborted === true) throw abortError()
+    return true
+  } catch {
+    if (signal?.aborted === true) throw abortError()
+    return false
+  }
+}
+
 const shellQuote = (value: string) => (
   /^[\w./:@=-]+$/u.test(value)
     ? value
@@ -85,8 +120,6 @@ const buildAgentCommandHint = (input: {
     commandLine: [command, ...input.args].map(shellQuote).join(' ')
   }
 }
-
-const abortError = () => new Error('Desktop CDP launch was aborted.')
 
 const sleep = async (ms: number, signal?: AbortSignal) => {
   await new Promise<void>((resolve, reject) => {
@@ -136,6 +169,8 @@ const resolveDesktopAppMainBundlePath = (appPath: string) => {
   return path.join(appPath, 'Contents', 'Resources', 'app', 'dist', 'main', 'index.js')
 }
 
+const DESKTOP_RECORDING_DEMO_FIXTURE_HOOK = 'ONEWORKS_DESKTOP_RECORDING_DEMO_FIXTURE'
+
 export const inspectDesktopExternalCdpSupport = async (appPath: string) => {
   const mainBundlePath = resolveDesktopAppMainBundlePath(appPath)
   if (mainBundlePath == null) {
@@ -164,6 +199,46 @@ export const inspectDesktopExternalCdpSupport = async (appPath: string) => {
       reason: error instanceof Error ? error.message : String(error)
     }
   }
+}
+
+export const inspectDesktopRecordingDemoFixtureSupport = async (appPath: string) => {
+  const mainBundlePath = resolveDesktopAppMainBundlePath(appPath)
+  if (mainBundlePath == null) {
+    return {
+      appPath,
+      mainBundlePath,
+      reason: 'mac-app-bundle-required',
+      supported: false
+    }
+  }
+
+  try {
+    const content = await readFile(mainBundlePath, 'utf8')
+    const supported = content.includes(DESKTOP_RECORDING_DEMO_FIXTURE_HOOK)
+    return {
+      appPath,
+      mainBundlePath,
+      reason: supported ? 'recording-demo-fixture-hook-found' : 'recording-demo-fixture-hook-missing',
+      supported
+    }
+  } catch (error) {
+    return {
+      appPath,
+      mainBundlePath,
+      reason: error instanceof Error ? error.message : String(error),
+      supported: false
+    }
+  }
+}
+
+export const assertDesktopRecordingDemoFixtureSupported = async (appPath: string) => {
+  const support = await inspectDesktopRecordingDemoFixtureSupport(appPath)
+  if (support.supported) return support
+  throw new DesktopCdpUnsupportedAppError(
+    `Desktop app does not include the recording demo fixture hook (${support.reason}): ${
+      support.mainBundlePath ?? appPath
+    }. Rebuild One Works before recording with --demo-fixture.`
+  )
 }
 
 const assertDesktopExternalCdpSupported = async (appPath: string) => {
@@ -271,22 +346,14 @@ export const runDesktopCdpLaunch = async (input: DesktopCdpLaunchInput = {}) => 
     child.once('error', reject)
     child.once('spawn', resolve)
   })
-  if (child.pid == null) throw new Error('Electron launch did not receive a process id.')
-  const fingerprint = processFingerprint(child.pid)
+  const childPid = child.pid
+  if (childPid == null) throw new Error('Electron launch did not receive a process id.')
+  const fingerprint = processFingerprint(childPid)
   if (fingerprint == null) {
     child.kill('SIGTERM')
-    throw new Error(`Could not fingerprint launched Electron pid=${child.pid}.`)
+    throw new Error(`Could not fingerprint launched Electron pid=${childPid}.`)
   }
   child.unref()
-
-  const recordableWindowReady = input.recordableLauncherWindow === true
-    ? raiseMacosWindow({
-      context: 'recordable Electron Launcher before blur',
-      ownerPid: child.pid,
-      signal: input.signal,
-      waitMs
-    })
-    : Promise.resolve()
 
   const spawnError = new Promise<never>((_resolve, reject) => {
     child.once('error', reject)
@@ -303,26 +370,35 @@ export const runDesktopCdpLaunch = async (input: DesktopCdpLaunchInput = {}) => 
     input.signal?.addEventListener('abort', rejectForAbort, { once: true })
   })
   try {
-    ;[targets] = await Promise.all([
-      Promise.race([
+    targets = await completeDesktopCdpLaunchReadiness({
+      cleanup: async () => {
+        await terminateTrackedPid({
+          fingerprint,
+          label: 'desktop CDP launch',
+          pid: childPid,
+          timeoutMs: input.signal?.aborted ? 1_000 : 3_000
+        })
+      },
+      readiness: Promise.race([
         waitForDesktopCdpTargets({ port, signal: input.signal, waitMs }),
         spawnError,
         aborted
       ]),
-      recordableWindowReady
-    ])
-  } catch (error) {
-    try {
-      await terminateTrackedPid({
-        fingerprint,
-        label: 'desktop CDP launch',
-        pid: child.pid,
-        timeoutMs: input.signal?.aborted ? 1_000 : 3_000
-      })
-    } catch (cleanupError) {
-      throw new AggregateError([error, cleanupError], 'Electron launch and identity-safe cleanup both failed.')
-    }
-    throw error
+      ...(input.recordableLauncherWindow === true
+        ? {
+          raiseAfterReady: async () => {
+            await attemptDesktopCdpWindowRaise(async () => {
+              await raiseMacosWindow({
+                context: 'recordable Electron Launcher after CDP readiness',
+                ownerPid: childPid,
+                signal: input.signal,
+                waitMs: Math.min(waitMs, 5_000)
+              })
+            }, input.signal)
+          }
+        }
+        : {})
+    })
   } finally {
     input.signal?.removeEventListener('abort', rejectForAbort)
   }
@@ -362,7 +438,7 @@ export const runDesktopCdpLaunch = async (input: DesktopCdpLaunchInput = {}) => 
     ],
     ok: true,
     phase: 'ready',
-    pid: child.pid,
+    pid: childPid,
     port,
     processFingerprint: fingerprint,
     targetCount: targets.length,

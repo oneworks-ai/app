@@ -385,6 +385,13 @@ export const demoVideoScenarios = [
     run: async (ctx) => {
       await openWorkspaceThroughLauncherUi(ctx, { settleMs: 500 })
       await ctx.recordFor(1_200)
+      await ctx.focusCameraOnSelector('.sender-select-shell--adapter .adapter-select', {
+        durationMs: 1_300,
+        offsetX: 70,
+        offsetY: 55,
+        scale: 1.55,
+        timeoutMs: 15_000
+      })
       await ctx.clickSelector('.sender-select-shell--adapter .adapter-select', {
         settleMs: 240,
         timeoutMs: 15_000

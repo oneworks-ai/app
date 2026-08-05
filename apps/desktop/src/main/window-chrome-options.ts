@@ -76,6 +76,11 @@ export const getWindowChromeOptions = (input: {
 }
 
 export const getSystemLocaleArgument = () => {
-  const systemLocale = app.getPreferredSystemLanguages()[0] ?? app.getLocale()
+  const recordingLanguage = process.env.ONEWORKS_DESKTOP_RECORDING_LANGUAGE?.trim().toLowerCase()
+  const systemLocale = recordingLanguage === 'zh'
+    ? 'zh-CN'
+    : recordingLanguage === 'en'
+    ? 'en-US'
+    : app.getPreferredSystemLanguages()[0] ?? app.getLocale()
   return `--oneworks-system-locale=${encodeURIComponent(systemLocale)}`
 }
