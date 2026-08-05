@@ -259,8 +259,8 @@ describe('workspace asset prompt builders', () => {
       }
     ])
 
-    expect(prompt).toContain('`dyai run --input-format stream-json --output-format stream-json`')
-    expect(prompt).toContain("cat <<'JSONL' | dyai run --input-format stream-json --output-format stream-json")
+    expect(prompt).toContain('`dyai --input-format stream-json --output-format stream-json`')
+    expect(prompt).toContain("cat <<'JSONL' | dyai --input-format stream-json --output-format stream-json")
     expect(prompt).not.toContain('`oneworks --input-format stream-json --output-format stream-json`')
   })
 

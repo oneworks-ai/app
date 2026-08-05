@@ -25,7 +25,8 @@ describe('ensureClaudeNativeHooksInstalled', () => {
     const ctx = {
       cwd: workspace,
       env: {
-        HOME: mockHome
+        HOME: mockHome,
+        __ONEWORKS_PROJECT_HOME_PROJECT_DIR__: join(workspace, '.oo')
       },
       logger: {
         info: vi.fn(),
@@ -97,7 +98,8 @@ describe('ensureClaudeNativeHooksInstalled', () => {
     const ctx = {
       cwd: workspace,
       env: {
-        HOME: mockHome
+        HOME: mockHome,
+        __ONEWORKS_PROJECT_HOME_PROJECT_DIR__: join(workspace, '.oo')
       },
       logger: {
         info: vi.fn(),

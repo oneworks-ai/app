@@ -1,8 +1,9 @@
 {
   "name": "@oneworks/icon",
   "type": "module",
-  "version": "0.1.0-rc.7",
+  "version": "0.1.0",
   "description": "OneWorks icon geometry, canvas renderer, SVG renderer, and browser loader",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/oneworks-ai/app.git",

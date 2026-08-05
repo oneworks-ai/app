@@ -16,6 +16,7 @@ description: 当任务涉及发版范围、publish-plan、changelog、tag 或正
 - [GitHub Actions 凭据](./github-actions-secrets.md)
 - [npm Trusted Publishing 与 Open VSX 认证](./npm-trusted-publishing.md)
 - [Chrome Web Store 发布配置](./chrome-web-store.md)
+- [生产依赖安全门禁](./security-audit.md)
 
 ## 总则
 

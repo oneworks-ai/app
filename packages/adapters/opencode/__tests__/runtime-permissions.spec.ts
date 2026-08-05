@@ -187,7 +187,7 @@ describe('openCode permission and tool helpers', () => {
         read: 'allow',
         bash: 'deny',
         webfetch: 'ask',
-        'mcp__ChromeDevtools__*': 'allow'
+        'mcp__chromedevtools__*': 'allow'
       }
     })
   })

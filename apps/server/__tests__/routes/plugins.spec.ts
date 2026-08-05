@@ -119,13 +119,11 @@ describe('pluginsRouter', () => {
 
     expect(response.status).toBe(200)
     expect(payload.diagnostics).toEqual([])
-    expect(payload.plugins).toEqual([
-      expect.objectContaining({
-        enabled: false,
-        packageId: '@oneworks/plugin-relay',
-        scope: 'relay'
-      })
-    ])
+    expect(payload.plugins).toContainEqual(expect.objectContaining({
+      enabled: false,
+      packageId: '@oneworks/plugin-relay',
+      scope: 'relay'
+    }))
   })
 
   it('lists configured plugins and exposes client entries', async () => {

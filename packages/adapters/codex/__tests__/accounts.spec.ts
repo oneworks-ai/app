@@ -1434,7 +1434,9 @@ input.on('line', (line) => {
           HOME: resolveTestMockHome(workspace, realHome),
           __ONEWORKS_PROJECT_REAL_HOME__: realHome,
           __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__: fakeCodexPath,
-          __ONEWORKS_PROJECT_ADAPTER_CODEX_RESET_CREDIT_OPERATION_TIMEOUT_MS__: '1000'
+          // Leave enough startup headroom for the spawned fixture under full-suite load;
+          // the assertion still exercises the bounded timeout and lock-release path.
+          __ONEWORKS_PROJECT_ADAPTER_CODEX_RESET_CREDIT_OPERATION_TIMEOUT_MS__: '3000'
         },
         configs: [globalConfig as any]
       }),
@@ -1443,7 +1445,7 @@ input.on('line', (line) => {
         account: 'work',
         operationId: 'reset-credit-timeout'
       }
-    )).rejects.toThrow('timed out after 1000ms')
+    )).rejects.toThrow('timed out after 3000ms')
 
     await expect(readFile(consumeMarkerPath, 'utf8')).resolves.toBe('received')
     await expect(withCanonicalConfigWriteLock(

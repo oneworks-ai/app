@@ -152,9 +152,9 @@ describe('plugin marketplace catalog', () => {
       displayName: 'Logger',
       marketplaceType: 'oneworks',
       name: '@oneworks/plugin-logger',
-      sourceLabel: '@oneworks/plugin-logger@0.1.0-beta.8',
+      sourceLabel: '@oneworks/plugin-logger@0.1.0',
       sourceType: 'npm',
-      version: '0.1.0-beta.8'
+      version: '0.1.0'
     }))
     expect(official).toContainEqual(expect.objectContaining({
       category: 'themes',

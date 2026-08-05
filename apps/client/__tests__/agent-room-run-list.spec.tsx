@@ -1,11 +1,11 @@
 import { isValidElement } from 'react'
 import type { ReactElement, ReactNode } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { AgentRoomRunView } from '#~/components/agent-room'
 import { AgentRoomRunList, toAgentRoomRunSessionCard } from '#~/components/agent-room/@components/AgentRoomRunList'
 import { SessionCard } from '#~/components/sidebar/SessionCard'
-import type { SessionCardProps } from '#~/components/sidebar/SessionCard'
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -30,8 +30,9 @@ vi.mock('react-i18next', () => ({
 interface TestElementProps {
   children?: ReactNode
   className?: string
-  'data-session-card-source'?: string
+  dataSessionCardSource?: string
   onClick?: () => void
+  title?: ReactNode
   'aria-label'?: string
 }
 
@@ -85,26 +86,21 @@ describe('agent room run list', () => {
     const element = AgentRoomRunList({ runs: [run], onOpenRun })
     const elements = collectElements(element)
     const sessionCardElement = elements.find(element => element.type === SessionCard)
-    const renderedSessionCard = sessionCardElement == null
-      ? undefined
-      : SessionCard(getProps(sessionCardElement) as SessionCardProps)
-    const sessionCardElements = renderedSessionCard == null ? [] : collectElements(renderedSessionCard)
-    const sessionCard = sessionCardElements.find(element =>
-      element.type === 'article' &&
-      hasClass(element, 'session-item') &&
-      getProps(element)['data-session-card-source'] === 'agent-room-run'
-    )
-    const titleButton = sessionCardElements.find(element =>
+    const sessionCardProps = sessionCardElement == null ? undefined : getProps(sessionCardElement)
+    const titleElements = collectElements(sessionCardProps?.title)
+    const titleButton = titleElements.find(element =>
       element.type === 'button' && hasClass(element, 'agent-room-run-list__title-button')
     )
+    const html = renderToStaticMarkup(element)
 
     expect(sessionCardElement).toBeDefined()
-    expect(sessionCard).toBeDefined()
-    expect(sessionCardElements.some(element => hasClass(element, 'session-item-content'))).toBe(true)
-    expect(sessionCardElements.some(element => hasClass(element, 'session-title-text'))).toBe(true)
+    expect(sessionCardProps?.className).toContain('session-item')
+    expect(sessionCardProps?.dataSessionCardSource).toBe('agent-room-run')
+    expect(html).toContain('session-item-content')
+    expect(html).toContain('session-title-text')
     expect(titleButton).toBeDefined()
     expect(getProps(titleButton!)['aria-label']).toBe('Open run: schema-plan')
-    expect(sessionCardElements.some(element => hasClass(element, 'agent-room-run-list__action'))).toBe(false)
+    expect(html).not.toContain('agent-room-run-list__action')
 
     getProps(titleButton!).onClick?.()
 
@@ -116,16 +112,13 @@ describe('agent room run list', () => {
     const element = AgentRoomRunList({ runs: [run] })
     const elements = collectElements(element)
     const sessionCardElement = elements.find(element => element.type === SessionCard)
-    const renderedSessionCard = sessionCardElement == null
-      ? undefined
-      : SessionCard(getProps(sessionCardElement) as SessionCardProps)
-    const sessionCardElements = renderedSessionCard == null ? [] : collectElements(renderedSessionCard)
-    const titleText = sessionCardElements.find(element =>
-      element.type === 'span' && hasClass(element, 'session-title-text')
-    )
+    const sessionCardProps = sessionCardElement == null ? undefined : getProps(sessionCardElement)
+    const titleElements = collectElements(sessionCardProps?.title)
+    const titleText = titleElements.find(element => element.type === 'span' && hasClass(element, 'session-title-text'))
+    const html = renderToStaticMarkup(element)
 
     expect(titleText).toBeDefined()
-    expect(sessionCardElements.some(element => hasClass(element, 'agent-room-run-list__title-button'))).toBe(false)
-    expect(sessionCardElements.some(element => hasClass(element, 'agent-room-run-list__action'))).toBe(false)
+    expect(html).not.toContain('agent-room-run-list__title-button')
+    expect(html).not.toContain('agent-room-run-list__action')
   })
 })

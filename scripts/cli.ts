@@ -65,7 +65,7 @@ import {
   runReleaseVerifyBeta
 } from './release-verify'
 import { runRuntimeEvidenceList, runRuntimeEvidenceWait } from './runtime-evidence'
-import { runWindowsInstallSyncOneWorks } from './windows-install'
+import { runWindowsInstallSyncOneWorks, runWindowsPortablePackage } from './windows-install'
 
 const runVitestAdapterE2E = async (input: {
   selection: string | undefined
@@ -133,6 +133,7 @@ interface ScriptsCliDeps {
   runMessageActionsVerify: typeof runMessageActionsVerify
   runHomebrewTapSyncOneWorks: typeof runHomebrewTapSyncOneWorks
   runWindowsInstallSyncOneWorks: typeof runWindowsInstallSyncOneWorks
+  runWindowsPortablePackage: typeof runWindowsPortablePackage
   runPublishPlan: (args: string[]) => Promise<unknown>
   runAgentRoomResumeSmoke: typeof runAgentRoomResumeSmoke
   runRelayConfigLiveSmoke: typeof runRelayConfigLiveSmoke
@@ -186,6 +187,7 @@ const defaultDeps: ScriptsCliDeps = {
   runMessageActionsVerify,
   runHomebrewTapSyncOneWorks,
   runWindowsInstallSyncOneWorks,
+  runWindowsPortablePackage,
   runPublishPlan: async (args) => {
     const { runPublishPlanCli } = await import('./publish-plan-core.mjs')
     return runPublishPlanCli(args)
@@ -1532,6 +1534,18 @@ export const createScriptsCli = (inputDeps: Partial<ScriptsCliDeps> = {}) => {
   const windowsInstallCommand = program
     .command('windows-install')
     .description('Maintain Windows install metadata')
+
+  windowsInstallCommand
+    .command('package-oneworks')
+    .requiredOption('--version <version>', 'Published oneworks version to package')
+    .requiredOption('--out-dir <path>', 'Output directory for portable launcher files')
+    .description('Create the version-pinned Windows portable launcher payload')
+    .action(async (options: { outDir: string; version: string }) => {
+      await deps.runWindowsPortablePackage({
+        version: options.version,
+        outDir: options.outDir
+      })
+    })
 
   windowsInstallCommand
     .command('sync-oneworks')

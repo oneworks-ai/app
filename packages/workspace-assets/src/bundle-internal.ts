@@ -53,6 +53,8 @@ const resolveBundleEnv = (env: ProjectEnv | undefined): NodeJS.ProcessEnv => {
   return mergeProcessEnvWithProjectEnv(env)
 }
 
+const sortDocumentPaths = (paths: string[]) => [...paths].sort()
+
 type DocumentAsset<TDefinition> = Extract<WorkspaceAsset, { kind: DocumentAssetKind }> & {
   payload: {
     definition: TDefinition & { path: string }
@@ -577,12 +579,12 @@ const scanWorkspaceDocuments = async (cwd: string, env: NodeJS.ProcessEnv) => {
   ])
 
   return {
-    rulePaths,
-    skillPaths: Array.from(new Set([...directSkillPaths, ...lockedSkillPaths])),
-    specPaths,
-    entityDocPaths,
-    entityJsonPaths,
-    mcpPaths
+    rulePaths: sortDocumentPaths(rulePaths),
+    skillPaths: sortDocumentPaths(Array.from(new Set([...directSkillPaths, ...lockedSkillPaths]))),
+    specPaths: sortDocumentPaths(specPaths),
+    entityDocPaths: sortDocumentPaths(entityDocPaths),
+    entityJsonPaths: sortDocumentPaths(entityJsonPaths),
+    mcpPaths: sortDocumentPaths(mcpPaths)
   }
 }
 
@@ -596,7 +598,7 @@ const scanHomeSkillDocuments = async (configs: [Config?, Config?], env: NodeJS.P
     ))
   )
 
-  return scans.flatMap(paths => [...paths].sort((left, right) => left.localeCompare(right)))
+  return scans.flatMap(sortDocumentPaths)
 }
 
 const scanInstanceDocuments = async (instance: ResolvedPluginInstance) => {
@@ -621,12 +623,12 @@ const scanInstanceDocuments = async (instance: ResolvedPluginInstance) => {
   ])
 
   return {
-    rulePaths,
-    skillPaths,
-    specPaths,
-    entityDocPaths,
-    entityJsonPaths,
-    mcpPaths
+    rulePaths: sortDocumentPaths(rulePaths),
+    skillPaths: sortDocumentPaths(skillPaths),
+    specPaths: sortDocumentPaths(specPaths),
+    entityDocPaths: sortDocumentPaths(entityDocPaths),
+    entityJsonPaths: sortDocumentPaths(entityJsonPaths),
+    mcpPaths: sortDocumentPaths(mcpPaths)
   }
 }
 

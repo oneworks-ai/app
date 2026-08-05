@@ -238,10 +238,10 @@ Examples:
   npx oneworks web --port 8787
   npx oneworks server --host 0.0.0.0 --allow-cors
   npx oneworks runtime check cli
-  npx oneworks runtime check cli@0.1.0-alpha.0
+  npx oneworks runtime check cli@0.1.0
   npx oneworks runtime install server
-  npx oneworks runtime install server --version 0.1.0-alpha.0
-  npx oneworks runtime install server --version 0.1.0-alpha.0 --cache-version dev-local
+  npx oneworks runtime install server --version 0.1.0
+  npx oneworks runtime install server --version 0.1.0 --cache-version dev-local
   npx oneworks app
   npx oneworks app cache
   npx oneworks app --no-cache

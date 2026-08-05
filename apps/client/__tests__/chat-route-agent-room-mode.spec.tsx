@@ -7,6 +7,7 @@ import { ChatRoute } from '#~/routes/ChatRoute'
 
 const mocks = vi.hoisted(() => ({
   chatRouteView: vi.fn((_props?: unknown) => null),
+  getAgentRoomByHostSession: vi.fn(),
   getConfig: vi.fn(),
   getSession: vi.fn(),
   listAgentRooms: vi.fn(),
@@ -16,6 +17,18 @@ const mocks = vi.hoisted(() => ({
   search: '',
   useSWR: vi.fn()
 }))
+
+vi.hoisted(() => {
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: {
+      getItem: () => null,
+      setItem: () => undefined,
+      removeItem: () => undefined,
+      clear: () => undefined
+    }
+  })
+})
 
 vi.mock('react', async (importActual) => {
   const actual = await importActual<typeof import('react')>()
@@ -40,23 +53,48 @@ vi.mock('jotai', async (importActual) => {
 })
 
 vi.mock('react-i18next', () => ({
+  initReactI18next: {
+    type: '3rdParty',
+    init: () => undefined
+  },
   useTranslation: () => ({
+    i18n: { language: 'en', resolvedLanguage: 'en' },
     t: (key: string) => key
   })
 }))
 
 vi.mock('react-router-dom', () => ({
+  useLocation: () => ({
+    pathname: mocks.params.sessionId == null ? '/' : `/session/${mocks.params.sessionId}`,
+    search: mocks.search === '' ? '' : `?${mocks.search}`
+  }),
+  useNavigationType: () => 'POP',
   useNavigate: () => mocks.navigate,
   useParams: () => mocks.params,
   useSearchParams: () => [new URLSearchParams(mocks.search)]
 }))
 
 vi.mock('#~/api', () => ({
+  getAgentRoomByHostSession: mocks.getAgentRoomByHostSession,
+  getApiErrorMessage: (_error: unknown, fallback: string) => fallback,
   getConfig: mocks.getConfig,
   getSession: mocks.getSession,
   getSessionCacheKey: (id: string) => `/api/sessions/${encodeURIComponent(id)}`,
   listAgentRooms: mocks.listAgentRooms,
   listSessions: mocks.listSessions
+}))
+
+vi.mock('#~/components/layout/desktop-workspace-startup-ready', () => ({
+  useDesktopWorkspaceStartupReady: () => undefined
+}))
+
+vi.mock('#~/hooks/use-browser-history-navigation-state', () => ({
+  useBrowserHistoryNavigationState: () => ({
+    canGoBack: false,
+    canGoForward: false,
+    goBack: () => undefined,
+    goForward: () => undefined
+  })
 }))
 
 vi.mock('../src/routes/ChatRouteView', () => ({
@@ -166,6 +204,14 @@ const setupSWR = ({
       }
     }
 
+    if (key.startsWith('/api/agent-rooms/by-host-session/')) {
+      const hostSessionId = decodeURIComponent(key.slice('/api/agent-rooms/by-host-session/'.length))
+      return {
+        data: { room: rooms.find(room => room.hostSessionId === hostSessionId) },
+        isLoading: false
+      }
+    }
+
     return { data: undefined, isLoading: false }
   })
 }
@@ -173,6 +219,7 @@ const setupSWR = ({
 describe('chat route agent room mode', () => {
   beforeEach(() => {
     mocks.chatRouteView.mockClear()
+    mocks.getAgentRoomByHostSession.mockReset()
     mocks.getConfig.mockReset()
     mocks.getSession.mockReset()
     mocks.listAgentRooms.mockReset()

@@ -18,17 +18,36 @@ const mocks = vi.hoisted(() => ({
   useSWR: vi.fn()
 }))
 
+vi.hoisted(() => {
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: {
+      getItem: () => null,
+      setItem: () => undefined,
+      removeItem: () => undefined,
+      clear: () => undefined
+    }
+  })
+})
+
 vi.mock('swr', () => ({
   default: mocks.useSWR
 }))
 
 vi.mock('react-i18next', () => ({
+  initReactI18next: {
+    type: '3rdParty',
+    init: () => undefined
+  },
   useTranslation: () => ({
+    i18n: { language: 'en', resolvedLanguage: 'en' },
     t: (key: string) => key
   })
 }))
 
 vi.mock('react-router-dom', () => ({
+  useLocation: () => ({ pathname: `/rooms/${mocks.params.roomId ?? ''}/sessions/${mocks.params.sessionId ?? ''}` }),
+  useNavigationType: () => 'POP',
   useNavigate: () => mocks.navigate,
   useParams: () => mocks.params,
   useSearchParams: () => [new URLSearchParams(mocks.search)]
@@ -36,8 +55,13 @@ vi.mock('react-router-dom', () => ({
 
 vi.mock('#~/api', () => ({
   getAgentRoom: mocks.getAgentRoom,
+  getApiErrorMessage: (_error: unknown, fallback: string) => fallback,
   getSessionCacheKey: (id: string) => `/api/sessions/${encodeURIComponent(id)}`,
   getSession: mocks.getSession
+}))
+
+vi.mock('#~/components/layout/desktop-workspace-startup-ready', () => ({
+  useDesktopWorkspaceStartupReady: () => undefined
 }))
 
 vi.mock('../src/routes/ChatRouteView', () => ({

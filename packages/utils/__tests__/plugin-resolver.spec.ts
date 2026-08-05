@@ -173,6 +173,36 @@ describe('plugin resolver', () => {
     expect(instance?.manifest?.version).toBe('0.1.0-beta.7')
   })
 
+  it('does not borrow a runtime manifest when the resolved workspace package has no entry', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'oneworks-plugin-shadow-'))
+    tempDirs.push(tempDir)
+    const workspace = join(tempDir, 'workspace')
+    const runtimePackageDir = join(tempDir, 'runtime')
+    const packageName = '@oneworks/plugin-demo'
+    const workspacePluginRoot = join(workspace, 'node_modules/@oneworks/plugin-demo')
+    const runtimePluginRoot = join(runtimePackageDir, 'node_modules/@oneworks/plugin-demo')
+
+    await mkdir(workspacePluginRoot, { recursive: true })
+    await writeFile(
+      join(workspacePluginRoot, 'package.json'),
+      JSON.stringify({ name: packageName, version: '1.0.0' }, null, 2)
+    )
+    await writeLoggerPluginPackage(runtimePluginRoot, '2.0.0', packageName)
+    vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', join(tempDir, 'home'))
+    vi.stubEnv('__ONEWORKS_PROJECT_PACKAGE_DIR__', runtimePackageDir)
+
+    const [instance] = await resolveConfiguredPluginInstances({
+      cwd: workspace,
+      plugins: [{ id: packageName }]
+    })
+
+    expect(instance).toMatchObject({
+      packageId: packageName,
+      rootDir: workspacePluginRoot
+    })
+    expect(instance?.manifest).toBeUndefined()
+  })
+
   it('resolves default OneWorks plugins from the global package cache when workspace and runtime omit them', async () => {
     const tempDir = await mkdtemp(join(tmpdir(), 'oneworks-plugin-resolver-'))
     tempDirs.push(tempDir)

@@ -1,8 +1,9 @@
 {
   "name": "@oneworks/route-layout",
   "type": "module",
-  "version": "0.1.0-rc.7",
+  "version": "0.1.0",
   "description": "Shared route container layout primitives for OneWorks React surfaces",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/oneworks-ai/app.git",

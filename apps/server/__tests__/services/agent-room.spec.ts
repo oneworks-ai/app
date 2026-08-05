@@ -810,7 +810,7 @@ describe('agent room service', () => {
     process.env.__ONEWORKS_PROJECT_BASE_DIR__ = runtimeAiBaseDir
     process.env.__ONEWORKS_PROJECT_HOME_PROJECTS_DIR__ = path.join(runtimeAiBaseDir, 'home-projects')
     const homeRuntimeRoot = resolveProjectHomePath(process.cwd(), process.env, 'runtime')
-    await mkdir(path.join(runtimeRoot, 'sessions', 'session-schema-plan'), { recursive: true })
+    await mkdir(path.join(homeRuntimeRoot, 'sessions', 'session-schema-plan'), { recursive: true })
 
     const room = service.createRoom({ id: 'room-1', title: 'Build room' })
     db.createSession('Schema plan', 'session-schema-plan', 'completed', 'host-session')

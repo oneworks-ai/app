@@ -264,10 +264,10 @@ describe('session service', () => {
   it('queues stop commands into external runtime sessions', async () => {
     const runtimeAiBaseDir = await mkdtemp(path.join(os.tmpdir(), 'ow-session-runtime-stop-'))
     tempRuntimeRoot = runtimeAiBaseDir
-    const runtimeRoot = path.join(runtimeAiBaseDir, 'runtime')
     process.env.__ONEWORKS_PROJECT_BASE_DIR__ = runtimeAiBaseDir
     process.env.__ONEWORKS_PROJECT_HOME_PROJECTS_DIR__ = path.join(runtimeAiBaseDir, 'home-projects')
-    await mkdir(path.join(runtimeRoot, 'sessions', 'sess-1'), { recursive: true })
+    const migratedRuntimeRoot = resolveSessionRuntimeStoreRoot('/workspace/root')
+    await mkdir(path.join(migratedRuntimeRoot, 'sessions', 'sess-1'), { recursive: true })
     currentSession = {
       ...currentSession,
       status: 'running'
@@ -278,7 +278,6 @@ describe('session service', () => {
     })
 
     const result = await requestSessionTermination('sess-1')
-    const migratedRuntimeRoot = resolveSessionRuntimeStoreRoot('/workspace/root')
     const command = JSON.parse(
       await readFile(path.join(migratedRuntimeRoot, 'sessions', 'sess-1', 'commands.jsonl'), 'utf8')
     ) as {
@@ -302,10 +301,10 @@ describe('session service', () => {
   it('queues user messages into external runtime sessions', async () => {
     const runtimeAiBaseDir = await mkdtemp(path.join(os.tmpdir(), 'ow-session-runtime-'))
     tempRuntimeRoot = runtimeAiBaseDir
-    const runtimeRoot = path.join(runtimeAiBaseDir, 'runtime')
     process.env.__ONEWORKS_PROJECT_BASE_DIR__ = runtimeAiBaseDir
     process.env.__ONEWORKS_PROJECT_HOME_PROJECTS_DIR__ = path.join(runtimeAiBaseDir, 'home-projects')
-    await mkdir(path.join(runtimeRoot, 'sessions', 'sess-1'), { recursive: true })
+    const migratedRuntimeRoot = resolveSessionRuntimeStoreRoot('/workspace/root')
+    await mkdir(path.join(migratedRuntimeRoot, 'sessions', 'sess-1'), { recursive: true })
     getSessionRuntimeState.mockReturnValue({
       runtimeKind: 'external',
       historySeedPending: false
@@ -313,7 +312,6 @@ describe('session service', () => {
 
     await processUserMessage('sess-1', 'wake up')
 
-    const migratedRuntimeRoot = resolveSessionRuntimeStoreRoot('/workspace/root')
     const command = JSON.parse(
       await readFile(path.join(migratedRuntimeRoot, 'sessions', 'sess-1', 'commands.jsonl'), 'utf8')
     ) as {
@@ -366,10 +364,10 @@ describe('session service', () => {
   it('queues external runtime messages with the latest permission mode', async () => {
     const runtimeAiBaseDir = await mkdtemp(path.join(os.tmpdir(), 'ow-session-runtime-permission-'))
     tempRuntimeRoot = runtimeAiBaseDir
-    const runtimeRoot = path.join(runtimeAiBaseDir, 'runtime')
     process.env.__ONEWORKS_PROJECT_BASE_DIR__ = runtimeAiBaseDir
     process.env.__ONEWORKS_PROJECT_HOME_PROJECTS_DIR__ = path.join(runtimeAiBaseDir, 'home-projects')
-    await mkdir(path.join(runtimeRoot, 'sessions', 'sess-1'), { recursive: true })
+    const migratedRuntimeRoot = resolveSessionRuntimeStoreRoot('/workspace/root')
+    await mkdir(path.join(migratedRuntimeRoot, 'sessions', 'sess-1'), { recursive: true })
     currentSession = {
       ...currentSession,
       permissionMode: 'bypassPermissions'
@@ -381,7 +379,6 @@ describe('session service', () => {
 
     await processUserMessage('sess-1', 'wake up')
 
-    const migratedRuntimeRoot = resolveSessionRuntimeStoreRoot('/workspace/root')
     const command = JSON.parse(
       await readFile(path.join(migratedRuntimeRoot, 'sessions', 'sess-1', 'commands.jsonl'), 'utf8')
     ) as Record<string, unknown>
@@ -397,10 +394,10 @@ describe('session service', () => {
   it('queues external runtime messages with a per-message model override', async () => {
     const runtimeAiBaseDir = await mkdtemp(path.join(os.tmpdir(), 'ow-session-runtime-model-'))
     tempRuntimeRoot = runtimeAiBaseDir
-    const runtimeRoot = path.join(runtimeAiBaseDir, 'runtime')
     process.env.__ONEWORKS_PROJECT_BASE_DIR__ = runtimeAiBaseDir
     process.env.__ONEWORKS_PROJECT_HOME_PROJECTS_DIR__ = path.join(runtimeAiBaseDir, 'home-projects')
-    await mkdir(path.join(runtimeRoot, 'sessions', 'sess-1'), { recursive: true })
+    const migratedRuntimeRoot = resolveSessionRuntimeStoreRoot('/workspace/root')
+    await mkdir(path.join(migratedRuntimeRoot, 'sessions', 'sess-1'), { recursive: true })
     getSessionRuntimeState.mockReturnValue({
       runtimeKind: 'external',
       historySeedPending: false
@@ -412,7 +409,6 @@ describe('session service', () => {
       model: 'gpt-5.5'
     })
 
-    const migratedRuntimeRoot = resolveSessionRuntimeStoreRoot('/workspace/root')
     const command = JSON.parse(
       await readFile(path.join(migratedRuntimeRoot, 'sessions', 'sess-1', 'commands.jsonl'), 'utf8')
     ) as Record<string, unknown>

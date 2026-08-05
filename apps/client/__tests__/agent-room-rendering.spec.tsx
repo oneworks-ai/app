@@ -632,12 +632,14 @@ describe('agent room transcript rendering', () => {
     expectContains(assignmentMessage, [
       'agent-room-bubble__avatar--pixel',
       'class="room-pixel-avatar agent-room-bubble__avatar-pixel"',
-      'style="--room-pixel-avatar-accent:'
+      'class="room-pixel-avatar__image"',
+      'src="data:image/svg+xml'
     ])
     expectContains(reviewerMessage, [
       'agent-room-bubble__avatar--pixel',
       'class="room-pixel-avatar agent-room-bubble__avatar-pixel"',
-      'style="--room-pixel-avatar-accent:'
+      'class="room-pixel-avatar__image"',
+      'src="data:image/svg+xml'
     ])
   })
 

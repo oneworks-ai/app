@@ -1,5 +1,4 @@
-name: npm Alpha Publish
-
+name: npm Publish
 on:
   workflow_dispatch:
     inputs:
@@ -27,35 +26,29 @@ on:
         description: Use NPM_TOKEN only for a new-identity bootstrap or reconciled missing-trust recovery.
         required: false
         type: boolean
-
 permissions:
-  contents: read
+  attestations: write
+  contents: write
   id-token: write
-
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-
 concurrency:
-  group: npm-alpha-publish-${{ github.ref }}
+  group: npm-publish-${{ github.ref }}
   cancel-in-progress: false
-
 jobs:
   publish:
-    name: npm alpha publish
+    name: npm publish
     runs-on: ubuntu-latest
     timeout-minutes: 120
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Checkout demo video submodule
         run: git submodule update --init --depth 1 -- assets/demo-video
-
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 11.7.0
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -67,13 +60,27 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Audit production dependencies
+        run: pnpm security:audit:production
+      - name: Validate stable release identity
+        if: ${{ inputs.publish_tag == 'latest' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./apps/bootstrap/package.json').version")"
+          vscode_version="$(node -p "require('./apps/vscode-extension/package.json').version")"
+          node ./scripts/stable-release-preflight.mjs \
+            --version "$version" \
+            --vscode-version "$vscode_version"
 
       - name: Validate publish inputs
         env:
           BOOTSTRAP_WITH_TOKEN: ${{ inputs.bootstrap_with_token }}
+          DRY_RUN: ${{ inputs.dry_run }}
           NODE_AUTH_TOKEN: ${{ inputs.bootstrap_with_token && secrets.NPM_TOKEN || '' }}
           PACKAGES: ${{ inputs.packages }}
           PUBLISH_ALL: ${{ inputs.publish_all }}
+          PUBLISH_TAG: ${{ inputs.publish_tag }}
         shell: bash
         run: |
           set -euo pipefail
@@ -87,6 +94,9 @@ jobs:
           if [ "${BOOTSTRAP_WITH_TOKEN}" = "true" ] && [ -z "${NODE_AUTH_TOKEN:-}" ]; then
             echo "bootstrap_with_token=true requires the NPM_TOKEN secret." >&2
             exit 1
+          fi
+          if [ "${PUBLISH_TAG}" = "latest" ]; then
+            node ./scripts/stable-npm-release.mjs validate-selection
           fi
 
       - name: Configure npm token authentication
@@ -115,7 +125,9 @@ jobs:
 
           npm whoami --registry https://registry.npmjs.org
 
-      - name: Publish alpha packages
+      - name: Publish packages
+        id: npm_publish
+        continue-on-error: true
         env:
           BOOTSTRAP_WITH_TOKEN: ${{ inputs.bootstrap_with_token }}
           DRY_RUN: ${{ inputs.dry_run }}
@@ -151,3 +163,37 @@ jobs:
           fi
 
           pnpm tools publish-plan -- "${args[@]}"
+
+      - name: Build stable Windows portable asset
+        id: windows_asset
+        if: ${{ always() && !inputs.dry_run && inputs.publish_tag == 'latest' && steps.npm_publish.outcome != 'skipped' }}
+        env:
+          PACKAGES: ${{ inputs.packages }}
+          PUBLISH_ALL: ${{ inputs.publish_all }}
+        shell: bash
+        run: node ./scripts/stable-windows-release.mjs build
+
+      - name: Attest stable Windows portable asset
+        if: ${{ steps.windows_asset.outputs.should_publish == 'true' }}
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: ${{ steps.windows_asset.outputs.archive }}
+
+      - name: Publish stable Windows portable asset
+        if: ${{ steps.windows_asset.outputs.should_publish == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARCHIVE: ${{ steps.windows_asset.outputs.archive }}
+          CHECKSUM: ${{ steps.windows_asset.outputs.checksum }}
+          RELEASE_TAG: ${{ steps.windows_asset.outputs.tag }}
+          VERSION: ${{ steps.windows_asset.outputs.version }}
+        shell: bash
+        run: node ./scripts/stable-windows-release.mjs publish
+
+      - name: Reconcile stable npm registry
+        if: ${{ always() && !inputs.dry_run && inputs.publish_tag == 'latest' && steps.npm_publish.outcome != 'skipped' }}
+        run: node ./scripts/stable-npm-release.mjs verify-registry
+
+      - name: Preserve npm publish failure
+        if: ${{ always() && steps.npm_publish.outcome == 'failure' }}
+        run: echo "One or more npm identities failed to publish; preserve the failed workflow for targeted recovery." >&2; exit 1

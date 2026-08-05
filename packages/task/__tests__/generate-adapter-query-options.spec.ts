@@ -59,6 +59,7 @@ describe('generateAdapterQueryOptions', () => {
       undefined,
       workspace,
       {
+        adapter: 'custom',
         skills: {
           include: ['research']
         }
@@ -76,6 +77,7 @@ describe('generateAdapterQueryOptions', () => {
       undefined,
       workspace,
       {
+        adapter: 'custom',
         skills: {
           include: ['research']
         }
@@ -142,6 +144,7 @@ describe('generateAdapterQueryOptions', () => {
       undefined,
       workspace,
       {
+        adapter: 'custom',
         skills: {
           include: ['research']
         }
@@ -177,6 +180,7 @@ describe('generateAdapterQueryOptions', () => {
       undefined,
       workspace,
       {
+        adapter: 'custom',
         skills: {
           exclude: ['review']
         }
@@ -266,7 +270,8 @@ describe('generateAdapterQueryOptions', () => {
     const [, resolvedConfig] = await generateAdapterQueryOptions(
       'entity',
       'api-developer',
-      workspace
+      workspace,
+      { adapter: 'custom' }
     )
 
     expect(resolvedConfig.systemPrompt).toContain('The following skill modules are loaded for the project')
@@ -308,7 +313,8 @@ describe('generateAdapterQueryOptions', () => {
     const [, resolvedConfig] = await generateAdapterQueryOptions(
       'entity',
       'api-developer',
-      workspace
+      workspace,
+      { adapter: 'custom' }
     )
 
     expect(resolvedConfig.systemPrompt).toContain('The following skill modules are loaded for the project')
@@ -346,6 +352,7 @@ describe('generateAdapterQueryOptions', () => {
       undefined,
       workspace,
       {
+        adapter: 'custom',
         plugins: [
           {
             id: '@oneworks/plugin-cli-skills'

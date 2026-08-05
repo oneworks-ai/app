@@ -117,9 +117,9 @@ describe('skills command', () => {
     const cwd = await realpath(await mkdtemp(path.join(os.tmpdir(), 'ow-skills-command-')))
     tempDirs.push(cwd)
     process.chdir(cwd)
-    await mkdir(path.join(testHome, '.oo'), { recursive: true })
+    await mkdir(path.join(testHome, '.oneworks'), { recursive: true })
     await writeFile(
-      path.join(testHome, '.oo', 'config.json'),
+      path.join(testHome, '.oneworks', '.oo.config.json'),
       JSON.stringify(
         {
           skills: ['global-existing']
@@ -158,7 +158,12 @@ describe('skills command', () => {
         rename: 'internal-review'
       }
     ])
-    const globalConfig = JSON.parse(await readFile(path.join(testHome, '.oo', 'config.json'), 'utf8'))
+    const globalConfig = JSON.parse(
+      await readFile(
+        path.join(testHome, '.oneworks', '.oo.config.json'),
+        'utf8'
+      )
+    )
     expect(globalConfig.skills).toEqual(['global-existing'])
   })
 
@@ -166,9 +171,9 @@ describe('skills command', () => {
     const cwd = await realpath(await mkdtemp(path.join(os.tmpdir(), 'ow-skills-command-')))
     tempDirs.push(cwd)
     process.chdir(cwd)
-    await mkdir(path.join(testHome, '.oo'), { recursive: true })
+    await mkdir(path.join(testHome, '.oneworks'), { recursive: true })
     await writeFile(
-      path.join(testHome, '.oo', 'config.json'),
+      path.join(testHome, '.oneworks', '.oo.config.json'),
       JSON.stringify(
         {
           skills: ['global-existing']
@@ -201,7 +206,12 @@ describe('skills command', () => {
       'global'
     ], { from: 'user' })
 
-    const globalConfig = JSON.parse(await readFile(path.join(testHome, '.oo', 'config.json'), 'utf8'))
+    const globalConfig = JSON.parse(
+      await readFile(
+        path.join(testHome, '.oneworks', '.oo.config.json'),
+        'utf8'
+      )
+    )
     expect(globalConfig.skills).toEqual([
       'global-existing',
       {

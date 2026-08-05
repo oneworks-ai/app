@@ -26,6 +26,16 @@ vi.mock('node:child_process', () => ({
 const spawnMock = vi.mocked(spawn)
 const execFileMock = vi.mocked(execFile)
 
+const readSpawnedOpenCodeConfig = async () => {
+  const childEnv = (spawnMock.mock.calls[0]?.[2] as { env?: Record<string, string> }).env ?? {}
+  if (childEnv.OPENCODE_CONFIG_DIR != null) {
+    return JSON.parse(
+      await readFile(join(childEnv.OPENCODE_CONFIG_DIR, 'opencode.json'), 'utf8')
+    ) as Record<string, unknown>
+  }
+  return JSON.parse(childEnv.OPENCODE_CONFIG_CONTENT ?? '{}') as Record<string, unknown>
+}
+
 describe('createOpenCodeSession runtime config', () => {
   registerRuntimeTestHooks()
 
@@ -86,11 +96,7 @@ describe('createOpenCodeSession runtime config', () => {
 
     await flushAsyncWork()
 
-    const spawnOptions = spawnMock.mock.calls[0]?.[2] as { env?: Record<string, string> }
-    const configDir = spawnOptions.env?.OPENCODE_CONFIG_DIR
-    const inlineConfig = JSON.parse(
-      configDir ? await readFile(join(configDir, 'opencode.json'), 'utf8') : '{}'
-    ) as {
+    const inlineConfig = await readSpawnedOpenCodeConfig() as {
       mcp?: Record<string, unknown>
     }
 
@@ -263,10 +269,7 @@ describe('createOpenCodeSession runtime config', () => {
 
     await flushAsyncWork()
 
-    const configDir = (spawnMock.mock.calls[0]?.[2] as { env?: Record<string, string> }).env?.OPENCODE_CONFIG_DIR
-    const sessionConfig = JSON.parse(
-      configDir ? await readFile(join(configDir, 'opencode.json'), 'utf8') : '{}'
-    ) as {
+    const sessionConfig = await readSpawnedOpenCodeConfig() as {
       provider?: {
         openai?: {
           models?: {
@@ -323,10 +326,7 @@ describe('createOpenCodeSession runtime config', () => {
 
     await flushAsyncWork()
 
-    const configDir = (spawnMock.mock.calls[0]?.[2] as { env?: Record<string, string> }).env?.OPENCODE_CONFIG_DIR
-    const sessionConfig = JSON.parse(
-      configDir ? await readFile(join(configDir, 'opencode.json'), 'utf8') : '{}'
-    ) as {
+    const sessionConfig = await readSpawnedOpenCodeConfig() as {
       provider?: {
         openai?: {
           models?: {
