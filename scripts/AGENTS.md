@@ -89,8 +89,8 @@
   - 录 launcher / 浮层类页面素材时可传 `--page-background macos-wallpaper`，让 headless/CDP 录制使用本机 macOS 系统壁纸背景；需要固定素材时传 `--page-background-image <path>`
   - 录真实 Electron 从 launcher 点击打开项目时，不要用这个底层入口交付正式素材；使用 `desktop-control record-batch launcher-open-workspace-ui-tour --use-deskpad-display`。`demo-video record` 的 `captureSource` 选项只保留给底层诊断。
 - `pnpm tools demo-video batch <scenario> --url <url> [--out-dir <path>]`
-  - 批量生成展示素材，默认输出 `light/dark x zh/en` 四个变体；用 `--color-schemes` / `--languages` 覆盖矩阵，产物仍包含 MP4、poster 和按秒 stills manifest
-  - 仅用于纯 Web / headless CDP 页面；真实 Electron launcher 打开 workspace 的四变体素材用 `pnpm tools desktop-control record-batch ...`
+  - 批量生成展示素材，默认输出 `light/dark x zh/en` 四个变体；用 `--color-schemes` / `--languages` 覆盖矩阵，产物仍包含 MP4、poster 和按秒 stills manifest。README、社交平台和发布宣传素材先生成一个代表性原型；只有用户确认动画、真实窗口、鼠标节奏和构图整体正确后，才批量生成完整 zh/en × light/dark 矩阵。
+  - 仅用于纯 Web / headless CDP 页面；真实 Electron launcher/workspace/adapter 四变体必须使用 `pnpm tools desktop-control record-batch launcher-open-workspace-adapter-tour --workspace <path> --app <app> --use-deskpad-display`；公开成片必须使用清洁 fixture / 隔离 profile / 中性 workspace，并按 `.oo/rules/maintenance/demo-video.md` 逐变体检查关键 still，个人账号、home 路径、目录列表、本机绝对路径和登录状态不得进入上传素材。
 - `pnpm tools agent-room-smoke resume [--json]`
   - 跑真实 `StartTasks -> agent room 消息 -> inactive task resume` smoke；启动临时 server / SQLite / MCP / Codex adapter，LLM 只用 mock，结束后清理临时进程
 - `pnpm tools relay-config smoke [--allow-pending] [--json]`
