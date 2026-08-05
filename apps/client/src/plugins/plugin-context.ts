@@ -5,11 +5,15 @@ import type { PluginRegistry } from './plugin-registry'
 
 type PluginRegistrySnapshot = ReturnType<PluginRegistry['getSnapshot']>
 
+export interface PluginRefreshOptions {
+  isCurrent?: () => boolean
+}
+
 export interface PluginContextValue {
   pluginSnapshotStatus: 'error' | 'loading' | 'ready'
   pluginServerBaseUrl?: string
   ready: boolean
-  refreshPlugins: () => Promise<void>
+  refreshPlugins: (options?: PluginRefreshOptions) => Promise<void>
   registry: PluginRegistry
   reloadPlugin: (scope: string) => Promise<void>
   runtimeEndpoint?: PluginRuntimeEndpoint

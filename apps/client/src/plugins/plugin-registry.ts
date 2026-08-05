@@ -58,6 +58,17 @@ interface PendingPluginApiCall {
   timer?: ReturnType<typeof setTimeout>
 }
 type RegistryListener = () => void
+const pluginScopeRegistrationOwnerBrand: unique symbol = Symbol('plugin-scope-registration-owner')
+
+export interface PluginScopeRegistrationOwner {
+  readonly [pluginScopeRegistrationOwnerBrand]: true
+  readonly scope: string
+}
+
+interface PluginOwnedDisposable {
+  disposable: PluginDisposable
+  owner?: PluginScopeRegistrationOwner
+}
 
 interface PluginRegistryRemoteOptions {
   serverBaseUrl?: string
@@ -167,9 +178,10 @@ const readContributionSurfaces = (availability: unknown) => (
 )
 
 export class PluginRegistry {
+  private activeScopeRegistrationOwners = new WeakSet<PluginScopeRegistrationOwner>()
   private commands = new Map<string, { handler: PluginCommandHandler; scope: string }>()
   private diagnostics: PluginDiagnostic[] = []
-  private disposablesByScope = new Map<string, PluginDisposable[]>()
+  private disposablesByScope = new Map<string, PluginOwnedDisposable[]>()
   private extensionContributions = new Map<string, Map<string, ExtensionContributionRecord>>()
   private extensionPointListeners = new Map<string, Map<string, ExtensionPointListenerRecord>>()
   private extensionPoints = new Map<string, ExtensionPointRecord>()
@@ -247,10 +259,16 @@ export class PluginRegistry {
   }
 
   disposeScope(scope: string) {
-    this.disposablesByScope.get(scope)?.forEach((disposable) => {
-      disposable.dispose()
-    })
+    const ownedDisposables = this.disposablesByScope.get(scope) ?? []
     this.disposablesByScope.delete(scope)
+    ownedDisposables.forEach(({ owner }) => {
+      if (owner != null) this.activeScopeRegistrationOwners.delete(owner)
+    })
+    ownedDisposables.forEach(({ disposable }) => {
+      try {
+        disposable.dispose()
+      } catch {}
+    })
     this.diagnostics = this.diagnostics.filter(diagnostic => this.getDiagnosticScope(diagnostic) !== scope)
     this.commands = new Map([...this.commands].filter(([, value]) => value.scope !== scope))
     this.extensionPoints = new Map([...this.extensionPoints].filter(([, value]) => value.pluginScope !== scope))
@@ -275,30 +293,70 @@ export class PluginRegistry {
     this.emit()
   }
 
-  addDisposable(scope: string, cleanup: PluginCleanup) {
-    const disposable = toDisposable(cleanup)
-    if (disposable == null) return
+  addDisposable(
+    scope: string,
+    cleanup: PluginDisposable | (() => void),
+    owner?: PluginScopeRegistrationOwner
+  ): PluginDisposable
+  addDisposable(
+    scope: string,
+    cleanup: PluginCleanup,
+    owner?: PluginScopeRegistrationOwner
+  ): PluginDisposable | null
+  addDisposable(
+    scope: string,
+    cleanup: PluginCleanup,
+    owner?: PluginScopeRegistrationOwner
+  ): PluginDisposable | null {
+    const rawDisposable = toDisposable(cleanup)
+    if (rawDisposable == null) return null
+    let consumed = false
+    const disposable: PluginDisposable = {
+      dispose: () => {
+        if (consumed) return
+        consumed = true
+        try {
+          rawDisposable.dispose()
+        } catch {}
+      }
+    }
+    if (!this.isScopeRegistrationOwnerActive(scope, owner)) {
+      disposable.dispose()
+      return disposable
+    }
     const disposables = this.disposablesByScope.get(scope) ?? []
-    disposables.push(disposable)
+    disposables.push(owner == null ? { disposable } : { disposable, owner })
     this.disposablesByScope.set(scope, disposables)
+    return disposable
   }
 
   createScopeRegistrationCheckpoint(scope: string) {
-    return this.disposablesByScope.get(scope)?.length ?? 0
+    const owner: PluginScopeRegistrationOwner = Object.freeze({
+      [pluginScopeRegistrationOwnerBrand]: true,
+      scope
+    })
+    this.activeScopeRegistrationOwners.add(owner)
+    return owner
   }
 
-  rollbackScopeRegistrations(scope: string, checkpoint: number) {
-    const disposables = this.disposablesByScope.get(scope) ?? []
-    const retained = disposables.slice(0, checkpoint)
-    for (const disposable of disposables.slice(checkpoint).reverse()) {
-      try {
-        disposable.dispose()
-      } catch {}
-    }
+  rollbackScopeRegistrations(scope: string, owner: PluginScopeRegistrationOwner) {
+    if (owner.scope !== scope || !this.activeScopeRegistrationOwners.delete(owner)) return
+    const current = this.disposablesByScope.get(scope) ?? []
+    const retained: PluginOwnedDisposable[] = []
+    const owned: PluginOwnedDisposable[] = []
+    current.forEach((entry) => {
+      if (entry.owner === owner) owned.push(entry)
+      else retained.push(entry)
+    })
     if (retained.length === 0) {
       this.disposablesByScope.delete(scope)
     } else {
       this.disposablesByScope.set(scope, retained)
+    }
+    for (const { disposable } of owned.reverse()) {
+      try {
+        disposable.dispose()
+      } catch {}
     }
     this.emit()
   }
@@ -313,7 +371,13 @@ export class PluginRegistry {
     this.diagnostics.push(...diagnostics)
   }
 
-  registerCommand(scope: string, commandId: string, handler: PluginCommandHandler) {
+  registerCommand(
+    scope: string,
+    commandId: string,
+    handler: PluginCommandHandler,
+    owner?: PluginScopeRegistrationOwner
+  ) {
+    if (!this.isScopeRegistrationOwnerActive(scope, owner)) return { dispose: () => {} }
     if (!this.validateIdentifier(scope, commandId, 'command')) return { dispose: () => {} }
     const key = this.scopedKey(scope, commandId)
     if (this.commands.has(key)) {
@@ -321,8 +385,11 @@ export class PluginRegistry {
       return { dispose: () => {} }
     }
     this.commands.set(key, { handler, scope })
-    const disposable = { dispose: () => this.commands.delete(key) }
-    this.addDisposable(scope, disposable)
+    const disposable = this.addDisposable(
+      scope,
+      { dispose: () => this.commands.delete(key) },
+      owner
+    )
     this.emit()
     return disposable
   }
@@ -363,7 +430,12 @@ export class PluginRegistry {
     return body
   }
 
-  registerPluginApi(scope: string, api: PluginClientApiRegistration) {
+  registerPluginApi(
+    scope: string,
+    api: PluginClientApiRegistration,
+    owner?: PluginScopeRegistrationOwner
+  ) {
+    if (!this.isScopeRegistrationOwnerActive(scope, owner)) return { dispose: () => {} }
     if (!this.validateIdentifier(scope, api.id, 'plugin API')) return { dispose: () => {} }
     if (typeof api.handler !== 'function') {
       this.addDiagnostic({
@@ -379,13 +451,16 @@ export class PluginRegistry {
       return { dispose: () => {} }
     }
     this.pluginApis.set(key, { ...api, pluginScope: scope })
-    const disposable = {
-      dispose: () => {
-        this.pluginApis.delete(key)
-        this.emit()
-      }
-    }
-    this.addDisposable(scope, disposable)
+    const disposable = this.addDisposable(
+      scope,
+      {
+        dispose: () => {
+          this.pluginApis.delete(key)
+          this.emit()
+        }
+      },
+      owner
+    )
     this.drainPendingPluginApiCalls(key)
     this.emit()
     return disposable
@@ -408,7 +483,13 @@ export class PluginRegistry {
     return await this.waitForPluginApi(callerScope, api.key, input, options)
   }
 
-  registerSlot<T extends SlotContribution>(scope: string, slot: PluginSlot, contribution: T) {
+  registerSlot<T extends SlotContribution>(
+    scope: string,
+    slot: PluginSlot,
+    contribution: T,
+    owner?: PluginScopeRegistrationOwner
+  ) {
+    if (!this.isScopeRegistrationOwnerActive(scope, owner)) return { dispose: () => {} }
     const preparedContribution = this.prepareRuntimeContribution(scope, contribution)
     if (preparedContribution == null) return { dispose: () => {} }
     if (!this.validateIdentifier(scope, contribution.id, `slot ${slot}`)) return { dispose: () => {} }
@@ -420,13 +501,21 @@ export class PluginRegistry {
     }
     values.set(key, { ...preparedContribution, pluginScope: scope })
     this.slots.set(slot, values)
-    const disposable = { dispose: () => values.delete(key) }
-    this.addDisposable(scope, disposable)
+    const disposable = this.addDisposable(
+      scope,
+      { dispose: () => values.delete(key) },
+      owner
+    )
     this.emit()
     return disposable
   }
 
-  registerTheme(scope: string, theme: PluginThemeRegistration) {
+  registerTheme(
+    scope: string,
+    theme: PluginThemeRegistration,
+    owner?: PluginScopeRegistrationOwner
+  ) {
+    if (!this.isScopeRegistrationOwnerActive(scope, owner)) return { dispose: () => {} }
     if (!this.validateIdentifier(scope, theme.id, 'theme')) return { dispose: () => {} }
     if (theme.id === 'default') {
       this.addDiagnostic({
@@ -442,13 +531,21 @@ export class PluginRegistry {
     }
 
     this.themes.set(theme.id, { ...theme, pluginScope: scope })
-    const disposable = { dispose: () => this.themes.delete(theme.id) }
-    this.addDisposable(scope, disposable)
+    const disposable = this.addDisposable(
+      scope,
+      { dispose: () => this.themes.delete(theme.id) },
+      owner
+    )
     this.emit()
     return disposable
   }
 
-  registerRoute(scope: string, route: PluginRouteRegistration) {
+  registerRoute(
+    scope: string,
+    route: PluginRouteRegistration,
+    owner?: PluginScopeRegistrationOwner
+  ) {
+    if (!this.isScopeRegistrationOwnerActive(scope, owner)) return { dispose: () => {} }
     const preparedRoute = this.prepareRuntimeContribution(scope, route)
     if (preparedRoute == null) return { dispose: () => {} }
     if (!this.validateIdentifier(scope, route.id, 'route')) return { dispose: () => {} }
@@ -458,13 +555,21 @@ export class PluginRegistry {
       return { dispose: () => {} }
     }
     this.routes.set(key, { ...preparedRoute, scope })
-    const disposable = { dispose: () => this.routes.delete(key) }
-    this.addDisposable(scope, disposable)
+    const disposable = this.addDisposable(
+      scope,
+      { dispose: () => this.routes.delete(key) },
+      owner
+    )
     this.emit()
     return disposable
   }
 
-  registerView(scope: string, view: PluginViewRegistration) {
+  registerView(
+    scope: string,
+    view: PluginViewRegistration,
+    owner?: PluginScopeRegistrationOwner
+  ) {
+    if (!this.isScopeRegistrationOwnerActive(scope, owner)) return { dispose: () => {} }
     if (!this.validateIdentifier(scope, view.id, 'view')) return { dispose: () => {} }
     const key = this.scopedKey(scope, view.id)
     if (this.views.has(key)) {
@@ -472,13 +577,21 @@ export class PluginRegistry {
       return { dispose: () => {} }
     }
     this.views.set(key, { ...view, scope })
-    const disposable = { dispose: () => this.views.delete(key) }
-    this.addDisposable(scope, disposable)
+    const disposable = this.addDisposable(
+      scope,
+      { dispose: () => this.views.delete(key) },
+      owner
+    )
     this.emit()
     return disposable
   }
 
-  registerLauncherSearchProvider(scope: string, provider: PluginLauncherSearchProvider) {
+  registerLauncherSearchProvider(
+    scope: string,
+    provider: PluginLauncherSearchProvider,
+    owner?: PluginScopeRegistrationOwner
+  ) {
+    if (!this.isScopeRegistrationOwnerActive(scope, owner)) return { dispose: () => {} }
     const preparedProvider = this.prepareRuntimeContribution(scope, provider)
     if (preparedProvider == null) return { dispose: () => {} }
     if (!this.validateIdentifier(scope, provider.id, 'launcher search provider')) return { dispose: () => {} }
@@ -488,13 +601,21 @@ export class PluginRegistry {
       return { dispose: () => {} }
     }
     this.launcherProviders.set(key, { ...preparedProvider, scope })
-    const disposable = { dispose: () => this.launcherProviders.delete(key) }
-    this.addDisposable(scope, disposable)
+    const disposable = this.addDisposable(
+      scope,
+      { dispose: () => this.launcherProviders.delete(key) },
+      owner
+    )
     this.emit()
     return disposable
   }
 
-  registerExtensionPoint(scope: string, point: PluginExtensionPointRegistration) {
+  registerExtensionPoint(
+    scope: string,
+    point: PluginExtensionPointRegistration,
+    owner?: PluginScopeRegistrationOwner
+  ) {
+    if (!this.isScopeRegistrationOwnerActive(scope, owner)) return { dispose: () => {} }
     const preparedPoint = this.prepareRuntimeContribution(scope, point)
     if (preparedPoint == null) return { dispose: () => {} }
     if (!this.validateIdentifier(scope, point.id, 'extension point')) return { dispose: () => {} }
@@ -504,14 +625,17 @@ export class PluginRegistry {
       return { dispose: () => {} }
     }
     this.extensionPoints.set(key, { ...preparedPoint, pluginScope: scope })
-    const disposable = {
-      dispose: () => {
-        this.extensionPoints.delete(key)
-        this.deactivateExtensionPointListeners(key)
-        this.emit()
-      }
-    }
-    this.addDisposable(scope, disposable)
+    const disposable = this.addDisposable(
+      scope,
+      {
+        dispose: () => {
+          this.extensionPoints.delete(key)
+          this.deactivateExtensionPointListeners(key)
+          this.emit()
+        }
+      },
+      owner
+    )
     this.activateExtensionPointListeners(key)
     this.emit()
     return disposable
@@ -520,8 +644,10 @@ export class PluginRegistry {
   onExtensionPointAvailable(
     scope: string,
     target: string,
-    handler: ExtensionPointAvailableHandler
+    handler: ExtensionPointAvailableHandler,
+    owner?: PluginScopeRegistrationOwner
   ) {
+    if (!this.isScopeRegistrationOwnerActive(scope, owner)) return { dispose: () => {} }
     const extensionPoint = this.normalizeExtensionPointTarget(scope, target)
     if (extensionPoint == null) return { dispose: () => {} }
 
@@ -538,17 +664,20 @@ export class PluginRegistry {
     values.set(id, listener)
     this.extensionPointListeners.set(extensionPoint.key, values)
 
-    const disposable = {
-      dispose: () => {
-        const currentValues = this.extensionPointListeners.get(extensionPoint.key)
-        currentValues?.delete(id)
-        if (currentValues?.size === 0) {
-          this.extensionPointListeners.delete(extensionPoint.key)
+    const disposable = this.addDisposable(
+      scope,
+      {
+        dispose: () => {
+          const currentValues = this.extensionPointListeners.get(extensionPoint.key)
+          currentValues?.delete(id)
+          if (currentValues?.size === 0) {
+            this.extensionPointListeners.delete(extensionPoint.key)
+          }
+          this.disposeExtensionPointListener(listener)
         }
-        this.disposeExtensionPointListener(listener)
-      }
-    }
-    this.addDisposable(scope, disposable)
+      },
+      owner
+    )
     this.runExtensionPointListenerIfAvailable(listener)
     return disposable
   }
@@ -556,8 +685,10 @@ export class PluginRegistry {
   contributeExtensionPoint(
     scope: string,
     target: string,
-    contribution: PluginExtensionContributionRegistration
+    contribution: PluginExtensionContributionRegistration,
+    owner?: PluginScopeRegistrationOwner
   ) {
+    if (!this.isScopeRegistrationOwnerActive(scope, owner)) return { dispose: () => {} }
     const preparedContribution = this.prepareRuntimeContribution(scope, contribution)
     if (preparedContribution == null) return { dispose: () => {} }
     const extensionPoint = this.normalizeExtensionPointTarget(scope, target)
@@ -582,8 +713,11 @@ export class PluginRegistry {
     }
     values.set(key, { ...preparedContribution, extensionPoint: extensionPoint.key, pluginScope: scope })
     this.extensionContributions.set(extensionPoint.key, values)
-    const disposable = { dispose: () => values.delete(key) }
-    this.addDisposable(scope, disposable)
+    const disposable = this.addDisposable(
+      scope,
+      { dispose: () => values.delete(key) },
+      owner
+    )
     this.emit()
     return disposable
   }
@@ -605,6 +739,16 @@ export class PluginRegistry {
 
   findView(scope: string, viewId: string) {
     return this.views.get(this.scopedKey(scope, viewId))
+  }
+
+  isScopeRegistrationOwnerActive(
+    scope: string,
+    owner: PluginScopeRegistrationOwner | undefined
+  ) {
+    return owner == null || (
+      owner.scope === scope &&
+      this.activeScopeRegistrationOwners.has(owner)
+    )
   }
 
   private prepareRuntimeContribution<T extends object>(scope: string, contribution: T): T | undefined {
