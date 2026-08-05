@@ -6,21 +6,9 @@
 
 ### OW-DM-001 — 相邻边界间距归属
 
-- Revision: 1
-- Status: ACTIVE
-- Rule: 相邻元素的同一条接缝只能由一层负责留白；项目默认 spacing token 为 10px，双侧内部 padding 同时保留时必须使用可见分割线。
-- Scope: OneWorks project / adjacent component and section boundaries
-- Applies when: 相邻组件、字段、section、列表行、header 或内容区共享同一条边界。
-- Does not apply when: 两个结构各自的内部 padding 由可见分割线明确隔开。
-- Positive example: parent gap、前一项底部 padding 或后一项顶部 padding 三选一，并使用项目 token。
-- Negative example: parent gap、前一项底部 padding 和后一项顶部 padding 叠加成无语义大空白。
-- Owning rule: [`styles.md`](./styles.md) 中的“相邻区块的间距归属”。
-- Token or implementation: 由具体 surface 的共享 spacing token / parent gap / 单侧 padding 拥有。
-- Source: 用户明确设计标准，已沉淀到 `styles.md`。
-- Effective date: 2026-07-11
-- Supersedes: none
-- Exceptions: 在下方“作用域例外”登记。
-- Automatic enforcement: computed box model、DOM 几何检查或模块视觉回归。
+- Revision / status / rule / scope: 1 / ACTIVE / 相邻元素的同一条接缝只能由一层负责留白；项目默认 spacing token 为 10px，双侧内部 padding 同时保留时必须使用可见分割线 / OneWorks project，adjacent component and section boundaries。
+- Applies / does not apply / examples: 相邻组件、字段、section、列表行、header 或内容区共享同一条边界时适用；两个结构各自的内部 padding 由可见分割线明确隔开时不适用。正例是 parent gap、前一项底部 padding 或后一项顶部 padding 三选一并使用项目 token；反例是三者叠加成无语义大空白。
+- Ownership / implementation / source / lifecycle / enforcement: [`styles.md`](./styles.md) 中的“相邻区块的间距归属”拥有规则，具体 surface 的共享 spacing token / parent gap / 单侧 padding 拥有实现；来源为用户明确设计标准，2026-07-11 生效，不替代旧规则，例外在下方登记；由 computed box model、DOM 几何检查或模块视觉回归执行。
 
 ### OW-DM-002 — 紧凑 chrome 尺寸语言
 
