@@ -73,6 +73,7 @@ export interface AdapterPluginInstaller<
     pluginName: string
     pluginDataDir: string
     manifest: TManifest | undefined
+    source: ManagedPluginSource
   }) => Promise<void>
   formatInstallSummary?: (params: {
     pluginName: string

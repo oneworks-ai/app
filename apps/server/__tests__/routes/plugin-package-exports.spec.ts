@@ -665,7 +665,7 @@ describe('plugin package export conventions', () => {
     expect(watchedPayload.plugins[0]?.contributions?.navItems).toBeUndefined()
   })
 
-  it('uses the host Vite base for workspace-routed local client source exports', async () => {
+  it('uses the bounded source route for workspace-routed local client source exports', async () => {
     const previousBase = process.env.__ONEWORKS_PROJECT_CLIENT_BASE__
     process.env.__ONEWORKS_PROJECT_CLIENT_BASE__ = '/ui/w/w_12345678/'
     const pluginRoot = path.join(workspaceFolder, 'plugins', 'host-vite')
@@ -704,7 +704,7 @@ describe('plugin package export conventions', () => {
       expect(listPayload.plugins[0]).toMatchObject({
         client: {
           clientEntryUrl: '/api/plugins/host-vite/client/dist/index.js',
-          devClientEntryUrl: await toHostViteFsPath(path.join(pluginRoot, 'client', 'src', 'index.tsx'), '/ui')
+          devClientEntryUrl: '/api/plugins/host-vite/client-source/client/src/index.tsx'
         },
         name: '@local/plugin-host-vite'
       })
@@ -1116,7 +1116,7 @@ describe('plugin package export conventions', () => {
     }
   })
 
-  it('uses configured host Vite allow roots for external local plugin source exports', async () => {
+  it('uses configured allow roots for bounded external local plugin source exports', async () => {
     const previousAllow = process.env.__ONEWORKS_PROJECT_CLIENT_FS_ALLOW__
     const previousBase = process.env.__ONEWORKS_PROJECT_CLIENT_BASE__
     process.env.__ONEWORKS_PROJECT_CLIENT_BASE__ = '/ui/'
@@ -1157,7 +1157,7 @@ describe('plugin package export conventions', () => {
       expect(listPayload.plugins[0]).toMatchObject({
         client: {
           clientEntryUrl: '/api/plugins/host-vite-allowed/client/dist/index.js',
-          devClientEntryUrl: await toHostViteFsPath(path.join(pluginRoot, 'client', 'src', 'index.tsx'), '/ui')
+          devClientEntryUrl: '/api/plugins/host-vite-allowed/client-source/client/src/index.tsx'
         },
         name: '@local/plugin-host-vite-allowed'
       })
@@ -1176,7 +1176,7 @@ describe('plugin package export conventions', () => {
     }
   })
 
-  it('uses an allowed host Vite source when external built output is missing and watch is disabled', async () => {
+  it('uses an allowed bounded source when external built output is missing and watch is disabled', async () => {
     const previousAllow = process.env.__ONEWORKS_PROJECT_CLIENT_FS_ALLOW__
     const previousBase = process.env.__ONEWORKS_PROJECT_CLIENT_BASE__
     process.env.__ONEWORKS_PROJECT_CLIENT_BASE__ = '/ui/'
@@ -1224,14 +1224,11 @@ describe('plugin package export conventions', () => {
           diagnostics?: unknown[]
         }>
       }
-      const fallbackEntry = await toHostViteFsPath(
-        path.join(pluginRoot, 'client', 'src', 'index.tsx'),
-        '/ui'
-      )
+      const fallbackEntry = '/api/plugins/host-vite-fallback/client-source/client/src/index.tsx'
       expect(listPayload.plugins[0]).toMatchObject({
         client: {
           clientEntryUrl: fallbackEntry,
-          devClientEntryKind: 'host-vite',
+          devClientEntryKind: 'runtime-source',
           devClientEntryUrl: fallbackEntry
         },
         diagnostics: []

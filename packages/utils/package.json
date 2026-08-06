@@ -83,6 +83,15 @@
         "require": "./dist/document-path.js"
       }
     },
+    "./filesystem-authority": {
+      "__oneworks__": {
+        "default": "./src/filesystem-authority.ts"
+      },
+      "default": {
+        "import": "./dist/filesystem-authority.mjs",
+        "require": "./dist/filesystem-authority.js"
+      }
+    },
     "./install-lock": {
       "__oneworks__": {
         "default": "./src/install-lock.ts"

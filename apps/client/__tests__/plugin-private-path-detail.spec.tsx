@@ -10,13 +10,13 @@ describe('plugin private path detail presentation', () => {
   it('renders safe runtime identity without exposing API-shaped installation paths', () => {
     const privateSentinel = 'detail-private-sentinel'
     const privatePath = ['', 'private', privateSentinel, 'managed', 'oneworks'].join('/')
-    const plugin: PluginRuntimeInstance = {
+    const plugin = {
       enabled: true,
       name: privatePath,
       pluginRoot: privatePath,
       requestId: privatePath,
       scope: 'airtable-runtime'
-    }
+    } as unknown as PluginRuntimeInstance
     const markup = renderToStaticMarkup(
       <PluginOverview
         labels={{

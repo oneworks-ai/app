@@ -25,12 +25,14 @@ import {
   sanitizePluginPresentationValue
 } from '../src/plugins/plugin-presentation'
 
-const createPlugin = (overrides: Partial<PluginRuntimeInstance> = {}): PluginRuntimeInstance => ({
+const createPlugin = (
+  overrides: Partial<PluginRuntimeInstance> & { pluginRoot?: string; rootDir?: string } = {}
+): PluginRuntimeInstance => ({
   scope: 'logger',
   requestId: 'logger',
   enabled: true,
   ...overrides
-})
+} as PluginRuntimeInstance)
 
 describe('plugin presentation', () => {
   it('resolves localized names and indexes every declared translation', () => {
