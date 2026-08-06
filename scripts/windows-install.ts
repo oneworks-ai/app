@@ -3,12 +3,15 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
 
-import {
-  ONEWORKS_PACKAGE_NAME,
-  buildPackageReleaseTag,
-  computeUrlSha256,
-  normalizeOneWorksVersion
-} from './cli-package-release'
+import { computeUrlSha256, normalizeOneWorksVersion } from './cli-package-release'
+import installerIdentity from './windows-installer-identity.cjs'
+
+const {
+  assertWingetInstallerTemplate,
+  buildCanonicalScoopInstallerUrl,
+  buildCanonicalWingetInstallerUrl,
+  buildStableWindowsMsiProductCode
+} = installerIdentity
 
 const DEFAULT_SCOOP_MANIFEST_PATH = 'infra/windows/scoop-bucket/bucket/oneworks.json'
 const DEFAULT_WINGET_VERSION_MANIFEST_PATH = 'infra/windows/winget/OneWorks.OneWorks.yaml'
@@ -19,11 +22,8 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value != null && !Array.isArray(value)
 )
 
-export const buildDefaultWingetInstallerUrl = (version: string) => (
-  `https://github.com/oneworks-ai/app/releases/download/${
-    buildPackageReleaseTag(ONEWORKS_PACKAGE_NAME, version)
-  }/oneworks-windows-${normalizeOneWorksVersion(version)}.zip`
-)
+export const buildDefaultScoopInstallerUrl = buildCanonicalScoopInstallerUrl
+export const buildDefaultWingetInstallerUrl = buildCanonicalWingetInstallerUrl
 
 export const buildWindowsPortableCommand = (version: string, command: string) => {
   const normalizedVersion = normalizeOneWorksVersion(version)
@@ -174,7 +174,7 @@ export const updateWingetPackageVersion = (content: string, version: string) => 
 export const updateWingetInstallerTemplate = (
   content: string,
   input: {
-    installerSha256?: string
+    installerSha256: string
     installerUrl: string
     version: string
   }
@@ -188,14 +188,19 @@ export const updateWingetInstallerTemplate = (
     indent => `${indent}InstallerUrl: ${input.installerUrl}`,
     'InstallerUrl'
   )
-  if (input.installerSha256 != null) {
-    nextContent = replaceRequiredLine(
-      nextContent,
-      /^(\s*)InstallerSha256: .+$/m,
-      indent => `${indent}InstallerSha256: ${input.installerSha256}`,
-      'InstallerSha256'
-    )
-  }
+  nextContent = replaceRequiredLine(
+    nextContent,
+    /^(\s*)InstallerSha256: .+$/m,
+    indent => `${indent}InstallerSha256: ${input.installerSha256}`,
+    'InstallerSha256'
+  )
+  nextContent = replaceRequiredLine(
+    nextContent,
+    /^(\s*)ProductCode: .+$/m,
+    indent => `${indent}ProductCode: '${buildStableWindowsMsiProductCode(version)}'`,
+    'ProductCode'
+  )
+  assertWingetInstallerTemplate(nextContent, { installerSha256: input.installerSha256, version })
 
   return nextContent
 }
@@ -205,9 +210,10 @@ export const runWindowsInstallSyncOneWorks = async (input: {
   dryRun?: boolean
   cwd?: string
   scoopManifestPath?: string
+  computeUrlSha256?: (url: string) => Promise<string>
   stdout?: Pick<NodeJS.WriteStream, 'write'>
-  wingetInstallerSha256?: string
-  wingetInstallerUrl?: string
+  wingetInstallerSha256: string
+  wingetInstallerUrl: string
   wingetLocaleManifestPath?: string
   wingetTemplatePath?: string
   wingetVersionManifestPath?: string
@@ -224,19 +230,38 @@ export const runWindowsInstallSyncOneWorks = async (input: {
     input.wingetLocaleManifestPath ?? DEFAULT_WINGET_LOCALE_MANIFEST_PATH
   )
   const wingetTemplatePath = path.resolve(cwd, input.wingetTemplatePath ?? DEFAULT_WINGET_TEMPLATE_PATH)
-  const wingetInstallerUrl = input.wingetInstallerUrl ?? buildDefaultWingetInstallerUrl(version)
+  const scoopInstallerUrl = buildDefaultScoopInstallerUrl(version)
+  const wingetInstallerUrl = input.wingetInstallerUrl
+  const wingetInstallerSha256 = input.wingetInstallerSha256
+  if (wingetInstallerUrl !== buildDefaultWingetInstallerUrl(version)) {
+    throw new Error('Winget installer URL must be the canonical MSI URL for the release version.')
+  }
+  if (!/^[a-f0-9]{64}$/u.test(wingetInstallerSha256)) {
+    throw new Error('Winget installer SHA-256 must be lowercase hexadecimal.')
+  }
   const stdout = input.stdout ?? process.stdout
-  const installerSha256 = input.wingetInstallerSha256 ?? await computeUrlSha256(wingetInstallerUrl)
+  const downloader = input.computeUrlSha256 ?? computeUrlSha256
+  const scoopInstallerSha256 = await downloader(scoopInstallerUrl)
+  const downloadedWingetSha256 = await downloader(wingetInstallerUrl)
+  if (!/^[a-f0-9]{64}$/u.test(scoopInstallerSha256)) {
+    throw new Error('Scoop installer SHA-256 must be lowercase hexadecimal.')
+  }
+  if (!/^[a-f0-9]{64}$/u.test(downloadedWingetSha256)) {
+    throw new Error('Downloaded Winget installer SHA-256 must be lowercase hexadecimal.')
+  }
+  if (downloadedWingetSha256 !== wingetInstallerSha256) {
+    throw new Error('Winget installer SHA-256 does not match downloaded MSI bytes.')
+  }
 
   const scoopContent = await readScoopManifestOrBuildInitial(scoopManifestPath, {
     version,
-    installerUrl: wingetInstallerUrl,
-    installerSha256
+    installerUrl: scoopInstallerUrl,
+    installerSha256: scoopInstallerSha256
   })
   const nextScoopContent = updateScoopManifest(scoopContent, {
     version,
-    installerUrl: wingetInstallerUrl,
-    installerSha256
+    installerUrl: scoopInstallerUrl,
+    installerSha256: scoopInstallerSha256
   })
 
   const wingetVersionContent = await readFile(wingetVersionManifestPath, 'utf8')
@@ -249,21 +274,24 @@ export const runWindowsInstallSyncOneWorks = async (input: {
   const nextWingetInstallerContent = updateWingetInstallerTemplate(wingetInstallerContent, {
     version,
     installerUrl: wingetInstallerUrl,
-    installerSha256
+    installerSha256: wingetInstallerSha256
   })
 
   if (input.dryRun === true) {
     stdout.write(`[windows-install] ${scoopManifestPath}\n`)
-    stdout.write(`[windows-install] installer ${wingetInstallerUrl}\n`)
-    stdout.write(`[windows-install] installer sha256 ${installerSha256}\n`)
+    stdout.write(`[windows-install] scoop installer ${scoopInstallerUrl}\n`)
+    stdout.write(`[windows-install] scoop installer sha256 ${scoopInstallerSha256}\n`)
     stdout.write(`[windows-install] winget version ${wingetVersionManifestPath}\n`)
     stdout.write(`[windows-install] winget locale ${wingetLocaleManifestPath}\n`)
     stdout.write(`[windows-install] winget template ${wingetTemplatePath}\n`)
     stdout.write(`[windows-install] winget installer ${wingetInstallerUrl}\n`)
+    stdout.write(`[windows-install] winget installer sha256 ${wingetInstallerSha256}\n`)
     stdout.write('[windows-install] dry run: files not written\n')
     return {
       scoopManifestPath,
-      installerSha256,
+      scoopInstallerSha256,
+      scoopInstallerUrl,
+      wingetInstallerSha256,
       wingetInstallerUrl,
       wingetLocaleManifestPath,
       wingetTemplatePath,
@@ -285,12 +313,16 @@ export const runWindowsInstallSyncOneWorks = async (input: {
   stdout.write(`[windows-install] updated ${path.relative(cwd, wingetVersionManifestPath)}\n`)
   stdout.write(`[windows-install] updated ${path.relative(cwd, wingetLocaleManifestPath)}\n`)
   stdout.write(`[windows-install] updated ${path.relative(cwd, wingetTemplatePath)}\n`)
-  stdout.write(`[windows-install] installer ${wingetInstallerUrl}\n`)
-  stdout.write(`[windows-install] installer sha256 ${installerSha256}\n`)
+  stdout.write(`[windows-install] scoop installer ${scoopInstallerUrl}\n`)
+  stdout.write(`[windows-install] scoop installer sha256 ${scoopInstallerSha256}\n`)
+  stdout.write(`[windows-install] winget installer ${wingetInstallerUrl}\n`)
+  stdout.write(`[windows-install] winget installer sha256 ${wingetInstallerSha256}\n`)
 
   return {
     scoopManifestPath,
-    installerSha256,
+    scoopInstallerSha256,
+    scoopInstallerUrl,
+    wingetInstallerSha256,
     wingetInstallerUrl,
     wingetLocaleManifestPath,
     wingetTemplatePath,

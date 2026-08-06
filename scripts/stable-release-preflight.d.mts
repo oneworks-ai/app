@@ -14,6 +14,7 @@ export declare function evaluateStablePackageGraph(
   input: StableReleaseInput,
   packages: StablePackageIdentity[]
 ): string[]
+export declare function validateStableWingetInstallerTemplate(content: string, version: string): string[]
 export declare function runStableReleasePreflight(argv?: string[]): Promise<{
   ok: boolean
   packageCount: number

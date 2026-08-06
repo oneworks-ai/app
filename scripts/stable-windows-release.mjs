@@ -1,5 +1,4 @@
 /* eslint-disable max-lines -- stable Windows release coordinates portable and MSI immutable release assets. */
-import { Buffer } from 'node:buffer'
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
@@ -7,6 +6,8 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
+
+import installerIdentity from './windows-installer-identity.cjs'
 
 const run = (command, args, options = {}) => {
   const result = spawnSync(command, args, {
@@ -52,34 +53,7 @@ export const buildWindowsAssetNames = version => ({
 
 export const STABLE_WINDOWS_MSI_UPGRADE_CODE = '{79C27ECA-08D1-48C7-8094-E38CF4D62F43}'
 
-const MSI_VERSION_LIMITS = [255, 255, 65535]
-const PRODUCT_CODE_NAMESPACE = Buffer.from('6ba7b8119dad11d180b400c04fd430c8', 'hex')
-
-export const assertStableWindowsMsiVersion = version => {
-  const stableVersion = assertStableVersion(version)
-  const segments = stableVersion.split('.').map(Number)
-  if (segments.some((segment, index) => segment > MSI_VERSION_LIMITS[index])) {
-    throw new Error(`Windows MSI version is outside Windows Installer limits: ${version}`)
-  }
-  return stableVersion
-}
-
-const formatGuid = bytes => {
-  const hex = bytes.toString('hex').toUpperCase()
-  return `{${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}}`
-}
-
-export const buildStableWindowsMsiProductCode = version => {
-  const stableVersion = assertStableWindowsMsiVersion(version)
-  const digest = createHash('sha1')
-    .update(PRODUCT_CODE_NAMESPACE)
-    .update(`OneWorks.OneWorks:${stableVersion}`)
-    .digest()
-    .subarray(0, 16)
-  digest[6] = (digest[6] & 0x0F) | 0x50
-  digest[8] = (digest[8] & 0x3F) | 0x80
-  return formatGuid(digest)
-}
+export const { assertStableWindowsMsiVersion, buildStableWindowsMsiProductCode } = installerIdentity
 
 export const buildStableWindowsMsiAssetNames = version => {
   const stableVersion = assertStableWindowsMsiVersion(version)

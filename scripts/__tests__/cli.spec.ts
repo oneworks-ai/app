@@ -1224,8 +1224,10 @@ describe('scripts cli', () => {
   it('dispatches Windows install metadata sync', async () => {
     const runWindowsInstallSyncOneWorks = vi.fn(async () => ({
       scoopManifestPath: '/repo/infra/windows/scoop-bucket/bucket/oneworks.json',
-      installerSha256: '0'.repeat(64),
-      wingetInstallerUrl: 'https://example.com/oneworks-windows-1.2.3.zip',
+      scoopInstallerSha256: '0'.repeat(64),
+      scoopInstallerUrl: 'https://example.com/oneworks-windows-1.2.3.zip',
+      wingetInstallerSha256: '1'.repeat(64),
+      wingetInstallerUrl: 'https://example.com/oneworks-windows-1.2.3.msi',
       wingetLocaleManifestPath: '/repo/infra/windows/winget/OneWorks.OneWorks.locale.en-US.yaml',
       wingetTemplatePath: '/repo/infra/windows/winget/OneWorks.OneWorks.installer.template.yaml',
       wingetVersionManifestPath: '/repo/infra/windows/winget/OneWorks.OneWorks.yaml',
@@ -1252,7 +1254,9 @@ describe('scripts cli', () => {
       '--version',
       '1.2.3',
       '--winget-installer-url',
-      'https://example.com/oneworks-windows-1.2.3.zip',
+      'https://github.com/oneworks-ai/app/releases/download/pkg/oneworks/v1.2.3/oneworks-windows-1.2.3.msi',
+      '--winget-installer-sha256',
+      'a'.repeat(64),
       '--dry-run'
     ])
 
@@ -1260,8 +1264,9 @@ describe('scripts cli', () => {
       version: '1.2.3',
       dryRun: true,
       scoopManifestPath: 'infra/windows/scoop-bucket/bucket/oneworks.json',
-      wingetInstallerUrl: 'https://example.com/oneworks-windows-1.2.3.zip',
-      wingetInstallerSha256: undefined,
+      wingetInstallerUrl:
+        'https://github.com/oneworks-ai/app/releases/download/pkg/oneworks/v1.2.3/oneworks-windows-1.2.3.msi',
+      wingetInstallerSha256: 'a'.repeat(64),
       wingetLocaleManifestPath: 'infra/windows/winget/OneWorks.OneWorks.locale.en-US.yaml',
       wingetVersionManifestPath: 'infra/windows/winget/OneWorks.OneWorks.yaml',
       wingetTemplatePath: 'infra/windows/winget/OneWorks.OneWorks.installer.template.yaml'

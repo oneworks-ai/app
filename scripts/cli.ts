@@ -1566,16 +1566,16 @@ export const createScriptsCli = (inputDeps: Partial<ScriptsCliDeps> = {}) => {
       'Winget installer manifest template path',
       'infra/windows/winget/OneWorks.OneWorks.installer.template.yaml'
     )
-    .option('--winget-installer-url <url>', 'Windows portable zip URL for winget template')
-    .option('--winget-installer-sha256 <sha256>', 'Windows portable zip SHA256 for winget template')
+    .requiredOption('--winget-installer-url <url>', 'Canonical Windows MSI URL for winget template')
+    .requiredOption('--winget-installer-sha256 <sha256>', 'Verified Windows MSI SHA256 for winget template')
     .option('--dry-run', 'Calculate the update without writing files', false)
     .description('Update Scoop and winget Windows install metadata for the oneworks package')
     .action(async (options: {
       dryRun?: boolean
       scoopManifest: string
       version: string
-      wingetInstallerSha256?: string
-      wingetInstallerUrl?: string
+      wingetInstallerSha256: string
+      wingetInstallerUrl: string
       wingetLocaleManifest: string
       wingetTemplate: string
       wingetVersionManifest: string
