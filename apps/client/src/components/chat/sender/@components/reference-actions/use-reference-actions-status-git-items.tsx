@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import useSWR from 'swr'
 
-import type { GitBranchSummary, SessionWorkspace } from '@oneworks/types'
+import type { GitBranchSummary, SessionWorkspace, SessionWorkspaceDerivationEligibility } from '@oneworks/types'
 
 import { listWorktreeEnvironments } from '#~/api'
 import { toDisplayEnvironmentName, toEnvironmentReference } from '#~/components/config/worktree-environment-panel-model'
@@ -18,6 +18,10 @@ import type { GitBranchDisplayMode } from '../../../git-controls/git-branch-tree
 import { formatGitWorktreePathLabel } from '../../../git-controls/git-branch-utils'
 import { useChatDraftGitControls } from '../../../git-controls/use-chat-draft-git-controls'
 import { useChatGitControls } from '../../../git-controls/use-chat-git-controls'
+import {
+  getWorkspaceCreateActionState,
+  getWorkspaceTransferActionState
+} from '../../../git-controls/workspace-action-state'
 import type { SenderStatusBarGitControlsInMore } from '../../@types/sender-props'
 
 export interface ReferenceActionsStatusGitItems {
@@ -70,6 +74,11 @@ const getWorkspaceStateLabel = (state: SessionWorkspace['state'], t: (key: strin
       return t('chat.sessionWorkspaceStateReady')
   }
 }
+
+const getWorkspaceDerivationRecoveryLabel = (
+  reason: SessionWorkspaceDerivationEligibility['reason'],
+  t: (key: string) => string
+) => reason == null ? undefined : t(`chat.sessionWorkspaceDerivation${reason}`)
 
 const joinSummary = (parts: Array<string | null | undefined>) =>
   parts.filter(part => part != null && part.trim() !== '').join(' · ')
@@ -302,23 +311,23 @@ export function useReferenceActionsSessionStatusGitItems({
   }]
 
   if (git.workspace?.kind === 'managed_worktree') {
+    const transfer = getWorkspaceTransferActionState(git.workspace, git.isBusy)
     workspaceChildren.push({
       key: 'status-git-workspace-transfer',
       label: t('chat.sessionWorkspaceMenuTransferToLocal'),
+      description: getWorkspaceDerivationRecoveryLabel(transfer.description, t),
       icon: 'drive_export',
-      disabled: git.isBusy,
+      disabled: transfer.disabled,
       onSelect: git.handleTransferWorkspaceToLocal
     })
-  } else if (
-    git.repoState?.available === true &&
-    git.workspace != null &&
-    (git.workspace.worktreePath == null || git.workspace.worktreePath.trim() === '')
-  ) {
+  } else if (git.workspace != null) {
+    const create = getWorkspaceCreateActionState(git.workspace, git.isBusy)
     workspaceChildren.push({
       key: 'status-git-workspace-create',
       label: t('chat.sessionWorkspaceMenuCreateWorktree'),
+      description: getWorkspaceDerivationRecoveryLabel(create.description, t),
       icon: 'add',
-      disabled: git.isBusy,
+      disabled: create.disabled,
       onSelect: git.handleCreateManagedWorktree
     })
   }

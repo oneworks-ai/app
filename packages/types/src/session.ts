@@ -1,14 +1,22 @@
 import type { EffortLevel } from './common'
 import type { ChatMessageContent } from './message'
-
 export type SessionStatus = 'running' | 'completed' | 'failed' | 'terminated' | 'waiting_input'
-
 export type SessionPermissionMode = 'default' | 'acceptEdits' | 'plan' | 'dontAsk' | 'bypassPermissions'
 export type SessionPromptType = 'spec' | 'entity' | 'workspace'
 export type SessionMessageBranchAction = 'fork' | 'recall' | 'edit'
 export type SessionWorkspaceKind = 'managed_worktree' | 'shared_workspace' | 'external_workspace'
 export type SessionWorkspaceState = 'provisioning' | 'ready' | 'deleting' | 'deleted' | 'broken'
 export type SessionWorkspaceCleanupPolicy = 'delete_on_session_delete' | 'retain'
+export type SessionWorkspaceDerivationReason =
+  | 'not_git'
+  | 'dirty'
+  | 'already_managed'
+  | 'external_runtime'
+  | 'workspace_unavailable'
+export interface SessionWorkspaceDerivationEligibility {
+  eligible: boolean
+  reason?: SessionWorkspaceDerivationReason
+}
 export type SessionQueuedMessageMode = 'steer' | 'next'
 export type SessionCreationProgressStatus = 'running' | 'success' | 'error' | 'skipped'
 export type SessionCreationProgressPhase = 'worktree' | 'environment' | 'workspace'
@@ -24,7 +32,6 @@ export type SessionCreationProgressStep =
   | 'environment_skipped'
   | 'workspace_ready'
   | 'workspace_failed'
-
 export interface SessionCreationProgressEvent {
   phase: SessionCreationProgressPhase
   step: SessionCreationProgressStep
@@ -37,7 +44,6 @@ export interface SessionCreationProgressEvent {
   stream?: 'stdout' | 'stderr'
   output?: string
 }
-
 export interface SessionQueuedMessage {
   id: string
   sessionId: string
@@ -47,12 +53,10 @@ export interface SessionQueuedMessage {
   updatedAt: number
   order: number
 }
-
 export interface SessionMessageQueueState {
   steer: SessionQueuedMessage[]
   next: SessionQueuedMessage[]
 }
-
 export type SessionPanelArea = 'bottom' | 'right'
 export type SessionPanelWorkspaceDrawerView =
   | 'agents'
@@ -61,7 +65,6 @@ export type SessionPanelWorkspaceDrawerView =
   | 'settings'
   | 'tree'
   | `plugin:${string}:${string}`
-
 export interface SessionPanelWebViewportState {
   devicePixelRatio?: number
   deviceType?: 'desktop' | 'mobile'
@@ -70,7 +73,6 @@ export interface SessionPanelWebViewportState {
   width?: number
   zoom?: 'auto' | number
 }
-
 export type SessionPanelTab =
   | {
     browserControlRequestId?: string
@@ -136,18 +138,15 @@ export type SessionPanelTab =
     stateVersion?: number
     title: string
   }
-
 export interface SessionPanelAreaState {
   activeTabId?: string
   layout?: Record<string, unknown>
   tabs: SessionPanelTab[]
 }
-
 export interface SessionPanelState {
   bottom: SessionPanelAreaState
   right: SessionPanelAreaState
 }
-
 export interface SessionHistoryImport {
   adapter: string
   importedAt: number
@@ -197,4 +196,5 @@ export interface SessionWorkspace {
   createdAt: number
   updatedAt: number
   deletedAt?: number
+  derivation?: SessionWorkspaceDerivationEligibility
 }

@@ -10,6 +10,7 @@ import { GitOperationsDropdown } from './GitOperationsDropdown'
 import { GitPushModal } from './GitPushModal'
 import { GitWorktreeDropdown } from './GitWorktreeDropdown'
 import { useChatGitControls } from './use-chat-git-controls'
+import { getSessionWorkspaceMenuActions } from './workspace-action-state'
 
 export function ChatGitControls({
   compact = false,
@@ -29,6 +30,10 @@ export function ChatGitControls({
     return null
   }
 
+  const workspaceActions = git.workspace == null
+    ? undefined
+    : getSessionWorkspaceMenuActions(git.workspace, git.isBusy)
+
   return (
     <>
       <div className={`chat-header-git ${compact ? 'chat-header-git--compact' : ''}`.trim()}>
@@ -42,11 +47,8 @@ export function ChatGitControls({
           mode={{
             type: 'session',
             isBusy: git.isBusy,
-            canCreateManagedWorktree: git.repoState?.available === true &&
-              git.workspace != null &&
-              git.workspace.kind !== 'managed_worktree' &&
-              (git.workspace.worktreePath == null || git.workspace.worktreePath.trim() === ''),
-            canTransferToLocal: git.workspace?.kind === 'managed_worktree',
+            createAction: workspaceActions?.create,
+            transferAction: workspaceActions?.transfer,
             onCreateManagedWorktree: git.handleCreateManagedWorktree,
             onTransferToLocal: git.handleTransferWorkspaceToLocal
           }}

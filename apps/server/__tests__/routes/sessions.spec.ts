@@ -22,7 +22,12 @@ import {
   updateAndNotifySession
 } from '#~/services/session/index.js'
 import { notifySessionUpdated } from '#~/services/session/runtime.js'
-import { provisionSessionWorkspace, resolveSessionWorkspace } from '#~/services/session/workspace.js'
+import {
+  createSessionManagedWorktree,
+  deleteSessionWorkspace,
+  provisionSessionWorkspace,
+  resolveSessionWorkspace
+} from '#~/services/session/workspace.js'
 import { disposeTerminalSession } from '#~/services/terminal/index.js'
 
 vi.mock('#~/db/index.js', () => ({
@@ -747,6 +752,7 @@ describe('sessionsRouter', () => {
     const db = {
       deleteChannelSessionBySessionId: vi.fn(),
       deleteSession: vi.fn(() => true),
+      deleteSessionWorkspace: vi.fn(),
       getSessionWorkspace: vi.fn(() => ({
         sessionId: 'session-delete',
         workspaceFolder: '/workspace/root'
@@ -769,12 +775,84 @@ describe('sessionsRouter', () => {
       cwd: '/workspace/root',
       sessionId: 'session-delete'
     })
+    expect(db.deleteSessionWorkspace).toHaveBeenCalledWith('session-delete')
     expect(db.deleteSession).toHaveBeenCalledWith('session-delete')
     expect(notifySessionUpdated).toHaveBeenCalledWith('session-delete', {
       id: 'session-delete',
       isDeleted: true
     })
     expect(ctx.body).toEqual({ ok: true, removed: true })
+  })
+
+  it('keeps the session and its broken workspace record when terminal cleanup fails', async () => {
+    const db = {
+      deleteChannelSessionBySessionId: vi.fn(),
+      deleteSession: vi.fn(),
+      deleteSessionWorkspace: vi.fn(),
+      getSessionWorkspace: vi.fn(() => ({
+        sessionId: 'session-delete-failed',
+        workspaceFolder: '/workspace/root'
+      }))
+    }
+    const cleanupError = new Error('worktree cleanup failed')
+    vi.mocked(getDb).mockReturnValue(db as any)
+    vi.mocked(deleteSessionWorkspace).mockRejectedValueOnce(cleanupError)
+
+    const handleDeleteSession = findRouteHandler('/:id', 'DELETE')
+    await expect(handleDeleteSession({
+      params: { id: 'session-delete-failed' },
+      query: { force: 'true' }
+    })).rejects.toBe(cleanupError)
+
+    expect(db.deleteSessionWorkspace).not.toHaveBeenCalled()
+    expect(db.deleteSession).not.toHaveBeenCalled()
+  })
+
+  it('does not remove a session while its workspace deletion remains in progress', async () => {
+    const db = {
+      deleteChannelSessionBySessionId: vi.fn(),
+      deleteSession: vi.fn(),
+      deleteSessionWorkspace: vi.fn(),
+      getSessionWorkspace: vi.fn(() => ({
+        sessionId: 'session-delete-in-progress',
+        state: 'deleting',
+        workspaceFolder: '/workspace/root'
+      }))
+    }
+    vi.mocked(getDb).mockReturnValue(db as any)
+
+    const handleDeleteSession = findRouteHandler('/:id', 'DELETE')
+    const ctx = {
+      params: { id: 'session-delete-in-progress' },
+      query: { force: 'true' },
+      body: undefined
+    }
+    await handleDeleteSession(ctx)
+
+    expect(deleteSessionWorkspace).toHaveBeenCalledWith('session-delete-in-progress', {
+      force: true,
+      resumeDeleting: true
+    })
+    expect(db.deleteSessionWorkspace).not.toHaveBeenCalled()
+    expect(db.deleteSession).not.toHaveBeenCalled()
+    expect(ctx.body).toEqual({ ok: true, removed: false })
+  })
+
+  it('does not terminate a session when worktree derivation preflight rejects the request', async () => {
+    vi.mocked(createSessionManagedWorktree).mockRejectedValueOnce(Object.assign(
+      new Error('Session workspace cannot create a managed worktree'),
+      { code: 'session_workspace_derivation_unavailable', details: { reason: 'external_runtime' } }
+    ))
+    vi.mocked(getDb).mockReturnValue({} as any)
+
+    const handleCreateWorktree = findRouteHandler('/:id/workspace/create-worktree', 'POST')
+    await expect(handleCreateWorktree({ params: { id: 'session-guard' }, body: undefined })).rejects.toMatchObject({
+      code: 'session_workspace_derivation_unavailable',
+      details: { reason: 'external_runtime' }
+    })
+
+    expect(killSession).not.toHaveBeenCalled()
+    expect(disposeTerminalSession).not.toHaveBeenCalled()
   })
 
   it('preserves the fixed prompt target when forking a session', async () => {
@@ -916,4 +994,32 @@ describe('sessionsRouter', () => {
     })
     expect(ctx.body).toEqual({ session: branchSession })
   })
+})
+
+it('preserves an in-progress workspace record when a fork rolls back', async () => {
+  const originalSession = { id: 'session-root', title: 'Root' }
+  const newSession = { id: 'session-fork', title: 'Root (Fork)' }
+  const db = {
+    copyMessages: vi.fn(),
+    createSession: vi.fn(() => newSession),
+    deleteSession: vi.fn(),
+    deleteSessionWorkspace: vi.fn(),
+    getMessages: vi.fn(() => []),
+    getSession: vi.fn((id: string) => id === originalSession.id ? originalSession : newSession),
+    getSessionWorkspace: vi.fn(() => ({ state: 'deleting' })),
+    updateSession: vi.fn()
+  }
+  const provisionError = new Error('workspace provision failed')
+  vi.mocked(getDb).mockReturnValue(db as any)
+  vi.mocked(provisionSessionWorkspace).mockRejectedValueOnce(provisionError)
+
+  const handleFork = findRouteHandler('/:id/fork', 'POST')
+  await expect(handleFork({
+    params: { id: originalSession.id },
+    request: { body: {} }
+  })).rejects.toBe(provisionError)
+
+  expect(deleteSessionWorkspace).toHaveBeenCalledWith(newSession.id, { force: true })
+  expect(db.deleteSessionWorkspace).not.toHaveBeenCalled()
+  expect(db.deleteSession).not.toHaveBeenCalled()
 })
