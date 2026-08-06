@@ -10,6 +10,7 @@
 - Normalize new-session composer edge spacing to the shared 10px inset across compact and medium desktop windows while keeping the wide 800px layout centered.
 - Show Codex quota usage and reset credits in both the composer and account details, keep all available reset cards visible after refresh, and require confirmation before consuming a card.
 - Refine Codex quota interactions with compact reset-card rows, consistent icon actions, stable quota indicators, and a focused usage modal for the active account.
+- Explain unavailable session-worktree actions with localized recovery guidance, so you can resolve Git, workspace, or runtime limitations before trying again.
 
 ![New-session composer with consistent edge spacing](./compact-composer-padding.jpg)
 
