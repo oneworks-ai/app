@@ -2784,6 +2784,15 @@
     "sessionWorkspaceMenuLaunchInWorktree": "Start in worktree mode",
     "sessionWorkspaceMenuTransferToLocal": "Transfer to local",
     "sessionWorkspaceMenuCreateWorktree": "Create worktree",
+    "sessionWorkspaceDerivationDisabled": {
+      "already_managed_worktree": "This session already uses a managed worktree.",
+      "workspace_unavailable": "Wait for the session workspace to become ready.",
+      "external_runtime": "External-runtime sessions cannot change worktrees.",
+      "not_repository": "Open a session in a Git repository to create a worktree.",
+      "git_not_installed": "Install Git on the server running this workspace.",
+      "repository_unavailable": "The server cannot inspect this workspace's repository.",
+      "dirty_worktree": "Commit, stash, or discard local changes before creating a worktree."
+    },
     "sessionWorkspaceDraftCreateWorktreeEnabled": "New sessions get an isolated managed worktree.",
     "sessionWorkspaceDraftCreateWorktreeDisabled": "New sessions reuse the shared workspace directly.",
     "sessionWorkspaceDraftCreateBranchLabel": "New branch: {{branch}}",

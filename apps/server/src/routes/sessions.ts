@@ -68,6 +68,7 @@ import {
   provisionSessionWorkspace,
   resolveSessionWorkspace,
   resolveSessionWorkspaceFolder,
+  resolveSessionWorkspaceWithDerivationEligibility,
   transferSessionWorkspaceToLocal
 } from '#~/services/session/workspace.js'
 import { disposeTerminalSession } from '#~/services/terminal/index.js'
@@ -515,7 +516,7 @@ export function sessionsRouter(): Router {
   router.get('/:id/workspace', async (ctx) => {
     const { id } = ctx.params as { id: string }
     ctx.body = {
-      workspace: await resolveSessionWorkspace(id)
+      workspace: await resolveSessionWorkspaceWithDerivationEligibility(id)
     }
   })
 
@@ -575,17 +576,16 @@ export function sessionsRouter(): Router {
 
   router.post('/:id/workspace/create-worktree', async (ctx) => {
     const { id } = ctx.params as { id: string }
-    const workspace = await createSessionManagedWorktree(id)
+    await createSessionManagedWorktree(id)
     killSession(id, { recordWorkspaceChanges: false })
     disposeTerminalSession(id)
-    ctx.body = { workspace }
+    ctx.body = { workspace: await resolveSessionWorkspaceWithDerivationEligibility(id) }
   })
 
   router.post('/:id/workspace/transfer-local', async (ctx) => {
     const { id } = ctx.params as { id: string }
-    ctx.body = {
-      workspace: await transferSessionWorkspaceToLocal(id)
-    }
+    await transferSessionWorkspaceToLocal(id)
+    ctx.body = { workspace: await resolveSessionWorkspaceWithDerivationEligibility(id) }
   })
 
   router.patch('/:id', (ctx) => {

@@ -22,7 +22,13 @@ import {
   updateAndNotifySession
 } from '#~/services/session/index.js'
 import { notifySessionUpdated } from '#~/services/session/runtime.js'
-import { provisionSessionWorkspace, resolveSessionWorkspace } from '#~/services/session/workspace.js'
+import {
+  createSessionManagedWorktree,
+  provisionSessionWorkspace,
+  resolveSessionWorkspace,
+  resolveSessionWorkspaceWithDerivationEligibility,
+  transferSessionWorkspaceToLocal
+} from '#~/services/session/workspace.js'
 import { disposeTerminalSession } from '#~/services/terminal/index.js'
 
 vi.mock('#~/db/index.js', () => ({
@@ -92,10 +98,11 @@ vi.mock('#~/services/session/runtime.js', () => ({
 }))
 
 vi.mock('#~/services/session/workspace.js', () => ({
-  createSessionManagedWorktree: vi.fn(),
+  createSessionManagedWorktree: vi.fn().mockResolvedValue(undefined),
   deleteSessionWorkspace: vi.fn(),
   provisionSessionWorkspace: vi.fn(),
   resolveSessionWorkspace: vi.fn(),
+  resolveSessionWorkspaceWithDerivationEligibility: vi.fn(),
   resolveSessionWorkspaceFolder: vi.fn(),
   transferSessionWorkspaceToLocal: vi.fn()
 }))
@@ -131,6 +138,11 @@ describe('sessionsRouter', () => {
       sessionId: 'session-branch',
       workspaceFolder: '/workspace/root'
     } as any)
+    vi.mocked(resolveSessionWorkspaceWithDerivationEligibility).mockResolvedValue({
+      sessionId: 'session-branch',
+      workspaceFolder: '/workspace/root',
+      worktreeDerivation: { eligible: true }
+    } as any)
   })
 
   it('returns a single session by id', () => {
@@ -153,6 +165,54 @@ describe('sessionsRouter', () => {
 
     expect(db.getSession).toHaveBeenCalledWith(session.id)
     expect(ctx.body).toEqual({ session })
+  })
+
+  it('returns worktree derivation eligibility with the session workspace', async () => {
+    const handleGetWorkspace = findRouteHandler('/:id/workspace', 'GET')
+    const ctx = {
+      params: { id: 'session-derivation' },
+      body: undefined
+    }
+
+    await handleGetWorkspace(ctx)
+
+    expect(resolveSessionWorkspaceWithDerivationEligibility).toHaveBeenCalledWith('session-derivation')
+    expect(ctx.body).toEqual({
+      workspace: expect.objectContaining({ worktreeDerivation: { eligible: true } })
+    })
+  })
+
+  it('does not terminate an already-managed session when worktree derivation is rejected', async () => {
+    const error = Object.assign(new Error('already managed'), {
+      code: 'session_workspace_derivation_unavailable'
+    })
+    vi.mocked(createSessionManagedWorktree).mockRejectedValueOnce(error)
+    const handleCreateWorktree = findRouteHandler('/:id/workspace/create-worktree', 'POST')
+    const ctx = {
+      params: { id: 'session-managed' },
+      body: undefined
+    }
+
+    await expect(handleCreateWorktree(ctx)).rejects.toBe(error)
+
+    expect(killSession).not.toHaveBeenCalled()
+    expect(disposeTerminalSession).not.toHaveBeenCalled()
+  })
+
+  it('returns current worktree derivation eligibility after transferring to local', async () => {
+    const handleTransferToLocal = findRouteHandler('/:id/workspace/transfer-local', 'POST')
+    const ctx = {
+      params: { id: 'session-transfer' },
+      body: undefined
+    }
+
+    await handleTransferToLocal(ctx)
+
+    expect(transferSessionWorkspaceToLocal).toHaveBeenCalledWith('session-transfer')
+    expect(resolveSessionWorkspaceWithDerivationEligibility).toHaveBeenCalledWith('session-transfer')
+    expect(ctx.body).toEqual({
+      workspace: expect.objectContaining({ worktreeDerivation: { eligible: true } })
+    })
   })
 
   it('triggers native project history import', async () => {

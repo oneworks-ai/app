@@ -1,8 +1,8 @@
 import type { EffortLevel } from './common'
 import type { ChatMessageContent } from './message'
+import type { SessionWorktreeDerivationEligibility } from './session-worktree-derivation'
 
 export type SessionStatus = 'running' | 'completed' | 'failed' | 'terminated' | 'waiting_input'
-
 export type SessionPermissionMode = 'default' | 'acceptEdits' | 'plan' | 'dontAsk' | 'bypassPermissions'
 export type SessionPromptType = 'spec' | 'entity' | 'workspace'
 export type SessionMessageBranchAction = 'fork' | 'recall' | 'edit'
@@ -24,7 +24,6 @@ export type SessionCreationProgressStep =
   | 'environment_skipped'
   | 'workspace_ready'
   | 'workspace_failed'
-
 export interface SessionCreationProgressEvent {
   phase: SessionCreationProgressPhase
   step: SessionCreationProgressStep
@@ -197,4 +196,5 @@ export interface SessionWorkspace {
   createdAt: number
   updatedAt: number
   deletedAt?: number
+  worktreeDerivation?: SessionWorktreeDerivationEligibility
 }
