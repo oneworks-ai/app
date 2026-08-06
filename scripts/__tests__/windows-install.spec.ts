@@ -184,6 +184,55 @@ describe('windows install tooling', () => {
     }
   })
 
+  it('rejects duplicate identity keys and accepts optional dependencies', () => {
+    const version = '1.2.3'
+    const validTemplate = buildWingetTemplate(version)
+    const withOptionalDependency = validTemplate.replace(
+      '    - PackageIdentifier: OpenJS.NodeJS.LTS',
+      '    - PackageIdentifier: OpenJS.NodeJS.LTS\n    - PackageIdentifier: Example.Optional'
+    )
+    expect(() => assertWingetInstallerTemplate(withOptionalDependency, { version })).not.toThrow()
+
+    for (
+      const [key, wrongValue] of [
+        ['PackageIdentifier', 'Example.Wrong'],
+        ['PackageVersion', '9.9.9'],
+        ['InstallerType', 'zip'],
+        ['MinimumOSVersion', '10.0.0.0'],
+        ['ManifestType', 'defaultLocale'],
+        ['ManifestVersion', '1.10.0'],
+        ['InstallerSha256', 'b'.repeat(64)],
+        ['Scope', 'user'],
+        ['InstallerUrl', 'https://example.invalid/oneworks.msi'],
+        ['ProductCode', "'{00000000-0000-0000-0000-000000000000}'"]
+      ]
+    ) {
+      expect(() => assertWingetInstallerTemplate(`${validTemplate}${key}: ${wrongValue}\n`, { version })).toThrow()
+    }
+    expect(() => assertWingetInstallerTemplate(`${validTemplate}  - Architecture: arm64\n`, { version })).toThrow()
+  })
+
+  it('requires exactly the supported Winget command set', () => {
+    const version = '1.2.3'
+    const validTemplate = buildWingetTemplate(version)
+    for (
+      const replacement of [
+        '  - oneworks\n  - ow',
+        '  - oneworks\n  - ow\n  - owo\n  - extra',
+        '  - oneworks\n  - ow\n  - ow',
+        '    - oneworks\n  - ow\n  - owo'
+      ]
+    ) {
+      expect(() =>
+        assertWingetInstallerTemplate(
+          validTemplate.replace('  - oneworks\n  - ow\n  - owo', replacement),
+          { version }
+        )
+      ).toThrow()
+    }
+    expect(() => assertWingetInstallerTemplate(`${validTemplate}Commands:\n`, { version })).toThrow()
+  })
+
   it('keeps Scoop ZIP verification and Winget MSI verification independent during sync', async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), 'oneworks-windows-sync-'))
     const version = '1.2.3'
