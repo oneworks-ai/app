@@ -338,8 +338,11 @@ export async function branchSessionFromMessage(options: {
       createWorktree: false
     })
   } catch (error) {
-    await deleteSessionWorkspace(branchSession.id, { force: true }).catch(() => undefined)
-    db.deleteSession(branchSession.id)
+    await deleteSessionWorkspace(branchSession.id, { force: true })
+    if (db.getSessionWorkspace(branchSession.id)?.state !== 'deleting') {
+      db.deleteSessionWorkspace(branchSession.id)
+      db.deleteSession(branchSession.id)
+    }
     throw error
   }
 

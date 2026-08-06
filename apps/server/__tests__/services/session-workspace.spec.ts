@@ -926,6 +926,93 @@ describe('session workspace service', () => {
       cleanupPolicy: 'retain',
       state: 'ready'
     })
+    expect(transferredWorkspace.derivation).toEqual({
+      eligible: false,
+      reason: 'external_runtime'
+    })
+  })
+
+  it('publishes canonical derivation reasons and preserves unavailable workspace rows', async () => {
+    const { createSessionManagedWorktree, resolveSessionWorkspace } = await import('#~/services/session/workspace.js')
+    db.createSession('Shared', 'sess-eligibility')
+    db.createSession('External', 'sess-external')
+    db.createSession('Broken', 'sess-broken')
+
+    db.upsertSessionWorkspace({
+      sessionId: 'sess-eligibility',
+      kind: 'shared_workspace',
+      workspaceFolder: workspaceRoot,
+      cleanupPolicy: 'retain',
+      state: 'ready'
+    })
+    await writeFile(path.join(workspaceRoot, 'dirty.txt'), 'dirty\n', 'utf8')
+    await expect(resolveSessionWorkspace('sess-eligibility')).resolves.toMatchObject({
+      derivation: { eligible: false, reason: 'dirty' }
+    })
+
+    db.upsertSessionWorkspace({
+      sessionId: 'sess-external',
+      kind: 'external_workspace',
+      workspaceFolder: workspaceRoot,
+      cleanupPolicy: 'retain',
+      state: 'ready'
+    })
+    await expect(createSessionManagedWorktree('sess-external')).rejects.toMatchObject({
+      code: 'session_workspace_derivation_unavailable',
+      details: { reason: 'external_runtime' }
+    })
+
+    db.upsertSessionWorkspace({
+      sessionId: 'sess-broken',
+      kind: 'managed_worktree',
+      workspaceFolder: workspaceRoot,
+      worktreePath: workspaceRoot,
+      cleanupPolicy: 'delete_on_session_delete',
+      state: 'broken',
+      lastError: `cleanup failed at ${workspaceRoot}`
+    })
+    await expect(resolveSessionWorkspace('sess-broken')).resolves.toMatchObject({
+      state: 'broken',
+      derivation: { eligible: false, reason: 'workspace_unavailable' }
+    })
+    await expect(resolveSessionWorkspace('sess-broken')).resolves.not.toHaveProperty('lastError')
+    expect(db.getSessionWorkspace('sess-broken')).toMatchObject({ state: 'broken' })
+  })
+
+  it('covers each remaining derivation reason without exposing a workspace path', async () => {
+    const { createSessionManagedWorktree, resolveSessionWorkspace } = await import('#~/services/session/workspace.js')
+    const nonGitWorkspace = await mkdtemp(path.join(os.tmpdir(), 'ow-session-workspace-not-git-'))
+    for (
+      const [sessionId, kind, state, folder] of [
+        ['sess-not-git', 'shared_workspace', 'ready', nonGitWorkspace],
+        ['sess-managed', 'managed_worktree', 'ready', workspaceRoot],
+        ['sess-deleting', 'shared_workspace', 'deleting', workspaceRoot]
+      ] as const
+    ) {
+      db.createSession(sessionId, sessionId)
+      db.upsertSessionWorkspace({
+        sessionId,
+        kind,
+        workspaceFolder: folder,
+        cleanupPolicy: kind === 'managed_worktree' ? 'delete_on_session_delete' : 'retain',
+        state
+      })
+    }
+    await expect(resolveSessionWorkspace('sess-not-git')).resolves.toMatchObject({
+      derivation: { eligible: false, reason: 'not_git' }
+    })
+    await expect(resolveSessionWorkspace('sess-managed')).resolves.toMatchObject({
+      derivation: { eligible: false, reason: 'already_managed' }
+    })
+    await expect(resolveSessionWorkspace('sess-deleting')).resolves.toMatchObject({
+      state: 'deleting',
+      derivation: { eligible: false, reason: 'workspace_unavailable' }
+    })
+    await expect(createSessionManagedWorktree('sess-not-git')).rejects.toMatchObject({
+      code: 'session_workspace_derivation_unavailable',
+      details: { reason: 'not_git' }
+    })
+    await rm(nonGitWorkspace, { recursive: true, force: true })
   })
 
   it('refuses to delete a dirty managed worktree unless forced', async () => {
@@ -935,8 +1022,121 @@ describe('session workspace service', () => {
 
     await writeFile(path.join(workspace.workspaceFolder, 'dirty.txt'), 'dirty\n', 'utf8')
 
-    await expect(deleteSessionWorkspace('sess-dirty')).rejects.toMatchObject({
-      code: 'session_worktree_not_clean'
+    await expect(deleteSessionWorkspace('sess-dirty')).rejects.toSatisfy((error: unknown) => (
+      typeof error === 'object' && error != null &&
+      (error as { code?: unknown }).code === 'session_worktree_not_clean' &&
+      JSON.stringify((error as { details?: unknown }).details) === JSON.stringify({ sessionId: 'sess-dirty' })
+    ))
+  })
+
+  it('keeps a completed deletion row available to later workspace polling', async () => {
+    const { deleteSessionWorkspace, provisionSessionWorkspace, resolveSessionWorkspace } = await import(
+      '#~/services/session/workspace.js'
+    )
+    db.createSession('Deleted', 'sess-deleted')
+    await provisionSessionWorkspace('sess-deleted')
+    await expect(deleteSessionWorkspace('sess-deleted', { force: true })).resolves.toBe(true)
+    await expect(resolveSessionWorkspace('sess-deleted')).resolves.toMatchObject({
+      state: 'deleted',
+      derivation: { eligible: false, reason: 'workspace_unavailable' }
+    })
+    expect(db.getSessionWorkspace('sess-deleted')?.deletedAt).toEqual(expect.any(Number))
+  })
+
+  it.each(['deleting', 'deleted'] as const)('does not repeat cleanup for a %s workspace row', async (state) => {
+    const { deleteSessionWorkspace } = await import('#~/services/session/workspace.js')
+    const sessionId = `sess-delete-${state}`
+    const missingWorktree = path.join(workspaceRoot, `missing-${state}`)
+    db.createSession(state, sessionId)
+    db.upsertSessionWorkspace({
+      sessionId,
+      kind: 'managed_worktree',
+      workspaceFolder: missingWorktree,
+      worktreePath: missingWorktree,
+      cleanupPolicy: 'delete_on_session_delete',
+      state
+    })
+
+    await expect(deleteSessionWorkspace(sessionId)).resolves.toBe(true)
+    expect(db.getSessionWorkspace(sessionId)).toMatchObject({ state })
+  })
+
+  it('resumes a deleting workspace only when terminal deletion explicitly requests it', async () => {
+    const { deleteSessionWorkspace, provisionSessionWorkspace } = await import('#~/services/session/workspace.js')
+    db.createSession('Resume deletion', 'sess-resume-deleting')
+    await provisionSessionWorkspace('sess-resume-deleting')
+    db.updateSessionWorkspace('sess-resume-deleting', { state: 'deleting' })
+
+    await expect(deleteSessionWorkspace('sess-resume-deleting', {
+      force: true,
+      resumeDeleting: true
+    })).resolves.toBe(true)
+    expect(db.getSessionWorkspace('sess-resume-deleting')).toMatchObject({ state: 'deleted' })
+  })
+
+  it('removes an orphaned workspace record instead of resolving it for a deleted session', async () => {
+    const { resolveSessionWorkspace } = await import('#~/services/session/workspace.js')
+    db.upsertSessionWorkspace({
+      sessionId: 'sess-orphaned',
+      kind: 'shared_workspace',
+      workspaceFolder: workspaceRoot,
+      cleanupPolicy: 'retain',
+      state: 'ready'
+    })
+
+    await expect(resolveSessionWorkspace('sess-orphaned')).rejects.toMatchObject({ code: 'session_not_found' })
+    expect(db.getSessionWorkspace('sess-orphaned')).toBeUndefined()
+  })
+
+  it.each(['deleting', 'broken', 'deleted'] as const)(
+    'does not transfer a %s managed workspace',
+    async (state) => {
+      const { resolveSessionWorkspace, transferSessionWorkspaceToLocal } = await import(
+        '#~/services/session/workspace.js'
+      )
+      const sessionId = `sess-transfer-${state}`
+      db.createSession(state, sessionId)
+      db.upsertSessionWorkspace({
+        sessionId,
+        kind: 'managed_worktree',
+        workspaceFolder: workspaceRoot,
+        worktreePath: workspaceRoot,
+        cleanupPolicy: 'delete_on_session_delete',
+        state
+      })
+      await expect(transferSessionWorkspaceToLocal(sessionId)).rejects.toMatchObject({
+        code: 'session_workspace_transfer_unavailable',
+        details: { reason: 'workspace_unavailable' }
+      })
+      await expect(resolveSessionWorkspace(sessionId)).resolves.toMatchObject({ kind: 'managed_worktree', state })
+    }
+  )
+
+  it('uses the canonical reason when a repository disappears after preflight', async () => {
+    const actualUtils = await vi.importActual<typeof import('@oneworks/utils')>('@oneworks/utils')
+    let repositoryChecks = 0
+    vi.doMock('@oneworks/utils', () => ({
+      ...actualUtils,
+      resolveGitRepositoryRoot: async () => {
+        repositoryChecks += 1
+        if (repositoryChecks > 1) {
+          throw Object.assign(new Error('not a git repository'), { code: 128, stderr: 'fatal: not a git repository' })
+        }
+        return workspaceRoot
+      }
+    }))
+    const { createSessionManagedWorktree } = await import('#~/services/session/workspace.js')
+    db.createSession('Race', 'sess-race')
+    db.upsertSessionWorkspace({
+      sessionId: 'sess-race',
+      kind: 'shared_workspace',
+      workspaceFolder: workspaceRoot,
+      cleanupPolicy: 'retain',
+      state: 'ready'
+    })
+    await expect(createSessionManagedWorktree('sess-race')).rejects.toMatchObject({
+      code: 'session_workspace_derivation_unavailable',
+      details: { reason: 'not_git' }
     })
   })
 })

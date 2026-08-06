@@ -13,6 +13,7 @@ import {
   SenderMobileSelectDrawer
 } from '../sender/@components/mobile-select-drawer/SenderMobileSelectDrawer'
 import { formatGitWorktreePathLabel } from './git-branch-utils'
+import type { WorkspaceActionState } from './workspace-action-state'
 
 interface DraftWorktreeMenuMode {
   type: 'draft'
@@ -24,8 +25,8 @@ interface DraftWorktreeMenuMode {
 interface SessionWorktreeMenuMode {
   type: 'session'
   isBusy: boolean
-  canCreateManagedWorktree: boolean
-  canTransferToLocal: boolean
+  createAction?: WorkspaceActionState
+  transferAction?: WorkspaceActionState
   onCreateManagedWorktree: () => void
   onTransferToLocal: () => void
 }
@@ -241,31 +242,45 @@ export function GitWorktreeDropdown({
         </OverlayActionRow>
       )}
 
-      {mode.type === 'session' && mode.canTransferToLocal && (
+      {mode.type === 'session' && mode.transferAction != null && (
         <OverlayAction
           className='chat-header-git__menu-row'
-          disabled={mode.isBusy}
+          disabled={mode.transferAction.disabled}
           onClick={mode.onTransferToLocal}
         >
           <span className='chat-header-git__menu-row-main'>
             <span className='chat-header-git__row-icon material-symbols-rounded'>drive_export</span>
-            <span className='chat-header-git__menu-row-title'>
-              {t('chat.sessionWorkspaceMenuTransferToLocal')}
+            <span className='chat-header-git__row-copy'>
+              <span className='chat-header-git__row-title'>
+                {t('chat.sessionWorkspaceMenuTransferToLocal')}
+              </span>
+              {mode.transferAction.description != null && (
+                <span className='chat-header-git__row-subtitle'>
+                  {t(`chat.sessionWorkspaceDerivation${mode.transferAction.description}`)}
+                </span>
+              )}
             </span>
           </span>
         </OverlayAction>
       )}
 
-      {mode.type === 'session' && mode.canCreateManagedWorktree && (
+      {mode.type === 'session' && mode.createAction != null && (
         <OverlayAction
           className='chat-header-git__menu-row'
-          disabled={mode.isBusy}
+          disabled={mode.createAction.disabled}
           onClick={mode.onCreateManagedWorktree}
         >
           <span className='chat-header-git__menu-row-main'>
             <span className='chat-header-git__row-icon material-symbols-rounded'>add</span>
-            <span className='chat-header-git__menu-row-title'>
-              {t('chat.sessionWorkspaceMenuCreateWorktree')}
+            <span className='chat-header-git__row-copy'>
+              <span className='chat-header-git__row-title'>
+                {t('chat.sessionWorkspaceMenuCreateWorktree')}
+              </span>
+              {mode.createAction.description != null && (
+                <span className='chat-header-git__row-subtitle'>
+                  {t(`chat.sessionWorkspaceDerivation${mode.createAction.description}`)}
+                </span>
+              )}
             </span>
           </span>
         </OverlayAction>

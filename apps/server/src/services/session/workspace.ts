@@ -6,7 +6,7 @@ import { env as processEnv } from 'node:process'
 
 import type { WSEvent } from '@oneworks/core'
 import { resolvePrimaryWorkspaceFolder } from '@oneworks/register/dotenv'
-import type { SessionCreationProgressEvent, SessionInfo } from '@oneworks/types'
+import type { SessionCreationProgressEvent, SessionInfo, SessionWorkspaceDerivationEligibility } from '@oneworks/types'
 import {
   PROJECT_WORKSPACE_FOLDER_ENV,
   addGitWorktree,
@@ -43,6 +43,7 @@ interface ProvisionSessionWorkspaceOptions {
 }
 
 const DEFAULT_CLEANUP_POLICY: SessionWorkspaceCleanupPolicy = 'delete_on_session_delete'
+const activeSessionWorkspaceDeletes = new Map<string, Promise<boolean>>()
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
@@ -195,6 +196,51 @@ const persistSessionWorkspace = (row: Omit<SessionWorkspaceRow, 'createdAt' | 'u
     throw new Error(`Failed to persist session workspace for ${row.sessionId}`)
   }
   return created
+}
+
+const getWorkspaceDerivationEligibility = async (
+  workspace: SessionWorkspaceRow
+): Promise<SessionWorkspaceDerivationEligibility> => {
+  if (workspace.state !== 'ready') {
+    return { eligible: false, reason: 'workspace_unavailable' }
+  }
+  if (workspace.kind === 'managed_worktree') {
+    return { eligible: false, reason: 'already_managed' }
+  }
+  if (workspace.kind === 'external_workspace') {
+    return { eligible: false, reason: 'external_runtime' }
+  }
+
+  try {
+    await resolveGitRepositoryRoot(workspace.workspaceFolder)
+    const { stdout } = await runGitCommand(['status', '--short'], workspace.workspaceFolder)
+    return stdout === '' ? { eligible: true } : { eligible: false, reason: 'dirty' }
+  } catch (error) {
+    if (isGitMissingError(error) || isGitNotRepositoryError(error)) {
+      return { eligible: false, reason: 'not_git' }
+    }
+    return { eligible: false, reason: 'workspace_unavailable' }
+  }
+}
+
+const decorateSessionWorkspace = async (workspace: SessionWorkspaceRow) => {
+  const { lastError: _lastError, ...safeWorkspace } = workspace
+  return {
+    ...safeWorkspace,
+    derivation: await getWorkspaceDerivationEligibility(workspace)
+  }
+}
+
+const requireManagedWorktreeDerivation = async (sessionId: string) => {
+  const workspace = await resolveSessionWorkspace(sessionId)
+  if (workspace.derivation?.eligible === true) {
+    return workspace
+  }
+  throw conflict(
+    'Session workspace cannot create a managed worktree',
+    { reason: workspace.derivation?.reason ?? 'workspace_unavailable' },
+    'session_workspace_derivation_unavailable'
+  )
 }
 
 const persistSharedWorkspace = async (
@@ -383,8 +429,8 @@ export const provisionSessionWorkspace = async (
   throwIfAborted(options.signal, 'Workspace provision cancelled')
 
   const existing = getDb().getSessionWorkspace(sessionId)
-  if (existing != null && existing.state === 'ready') {
-    return existing
+  if (existing != null) {
+    return await decorateSessionWorkspace(existing)
   }
 
   const sourceWorkspaceFolder = await resolveManagedWorkspaceSource(sessionId, options)
@@ -393,21 +439,25 @@ export const provisionSessionWorkspace = async (
 
   if (options.createWorktree === false) {
     throwIfAborted(options.signal, 'Workspace provision cancelled')
-    return await persistSharedWorkspace(
-      sessionId,
-      sourceWorkspaceFolder,
-      'shared_workspace',
-      'retain'
+    return await decorateSessionWorkspace(
+      await persistSharedWorkspace(
+        sessionId,
+        sourceWorkspaceFolder,
+        'shared_workspace',
+        'retain'
+      )
     )
   }
 
   try {
-    return await buildManagedWorkspace(
-      sessionId,
-      sourceWorkspaceFolder,
-      worktreeEnvironment,
-      options.onProgress,
-      options.signal
+    return await decorateSessionWorkspace(
+      await buildManagedWorkspace(
+        sessionId,
+        sourceWorkspaceFolder,
+        worktreeEnvironment,
+        options.onProgress,
+        options.signal
+      )
     )
   } catch (error) {
     if (
@@ -418,12 +468,14 @@ export const provisionSessionWorkspace = async (
     }
 
     throwIfAborted(options.signal, 'Workspace provision cancelled')
-    return await persistSharedWorkspace(
-      sessionId,
-      sourceWorkspaceFolder,
-      'shared_workspace',
-      'retain',
-      worktreeEnvironment
+    return await decorateSessionWorkspace(
+      await persistSharedWorkspace(
+        sessionId,
+        sourceWorkspaceFolder,
+        'shared_workspace',
+        'retain',
+        worktreeEnvironment
+      )
     )
   }
 }
@@ -440,12 +492,17 @@ const recoverLegacySessionWorkspace = async (sessionId: string) => {
 }
 
 export const resolveSessionWorkspace = async (sessionId: string) => {
-  const existing = getDb().getSessionWorkspace(sessionId)
-  if (existing != null && existing.state === 'ready') {
-    return existing
+  const db = getDb()
+  const existing = db.getSessionWorkspace(sessionId)
+  if (existing != null) {
+    if (db.getSession(sessionId) == null) {
+      db.deleteSessionWorkspace(sessionId)
+      throw notFound('Session not found', { sessionId }, 'session_not_found')
+    }
+    return await decorateSessionWorkspace(existing)
   }
 
-  return await recoverLegacySessionWorkspace(sessionId)
+  return await decorateSessionWorkspace(await recoverLegacySessionWorkspace(sessionId))
 }
 
 export const resolveSessionWorkspaceFolder = async (sessionId: string) => {
@@ -456,25 +513,33 @@ export const resolveSessionWorkspaceFolder = async (sessionId: string) => {
 export const createSessionManagedWorktree = async (sessionId: string) => {
   getSessionOrThrow(sessionId)
 
-  const existing = await resolveSessionWorkspace(sessionId)
-  if (existing.kind === 'managed_worktree') {
-    return existing
-  }
+  await requireManagedWorktreeDerivation(sessionId)
 
   try {
-    return await buildManagedWorkspace(sessionId, existing.workspaceFolder, existing.worktreeEnvironment)
+    const current = await requireManagedWorktreeDerivation(sessionId)
+    return await decorateSessionWorkspace(
+      await buildManagedWorkspace(
+        sessionId,
+        current.workspaceFolder,
+        current.worktreeEnvironment
+      )
+    )
   } catch (error) {
-    if (!isGitMissingError(error) && !isGitNotRepositoryError(error)) {
+    if (error instanceof Error && 'code' in error && error.code === 'session_workspace_derivation_unavailable') {
       throw error
+    }
+    if (!isGitMissingError(error) && !isGitNotRepositoryError(error)) {
+      throw conflict(
+        'Session workspace cannot create a managed worktree',
+        { reason: 'workspace_unavailable' },
+        'session_workspace_derivation_unavailable'
+      )
     }
 
     throw conflict(
-      'Session workspace is not a git repository',
-      {
-        sessionId,
-        workspaceFolder: existing.workspaceFolder
-      },
-      'session_workspace_not_repository'
+      'Session workspace cannot create a managed worktree',
+      { reason: 'not_git' },
+      'session_workspace_derivation_unavailable'
     )
   }
 }
@@ -486,6 +551,13 @@ export const transferSessionWorkspaceToLocal = async (sessionId: string) => {
       'Session workspace is not a managed worktree',
       { sessionId },
       'session_workspace_not_managed_worktree'
+    )
+  }
+  if (existing.state !== 'ready') {
+    throw conflict(
+      'Session workspace cannot be transferred while unavailable',
+      { reason: 'workspace_unavailable' },
+      'session_workspace_transfer_unavailable'
     )
   }
 
@@ -501,19 +573,24 @@ export const transferSessionWorkspaceToLocal = async (sessionId: string) => {
     throw new Error(`Failed to transfer session workspace for ${sessionId}`)
   }
 
-  return updated
+  return await decorateSessionWorkspace(updated)
 }
 
-export const deleteSessionWorkspace = async (
+const deleteSessionWorkspaceRecord = async (
   sessionId: string,
   options: {
     force?: boolean
+    resumeDeleting?: boolean
   } = {}
 ) => {
   const workspace = getDb().getSessionWorkspace(sessionId)
   if (workspace == null) {
     return false
   }
+  if (workspace.state === 'deleted') {
+    return true
+  }
+  if (workspace.state === 'deleting' && options.resumeDeleting !== true) return true
 
   if (workspace.kind !== 'managed_worktree' || workspace.worktreePath == null || workspace.worktreePath.trim() === '') {
     getDb().deleteSessionWorkspace(sessionId)
@@ -525,10 +602,7 @@ export const deleteSessionWorkspace = async (
     if (stdout !== '') {
       throw conflict(
         'Session worktree has uncommitted changes',
-        {
-          sessionId,
-          worktreePath: workspace.worktreePath
-        },
+        { sessionId },
         'session_worktree_not_clean'
       )
     }
@@ -563,6 +637,31 @@ export const deleteSessionWorkspace = async (
     throw error
   }
 
-  getDb().deleteSessionWorkspace(sessionId)
+  getDb().updateSessionWorkspace(sessionId, {
+    state: 'deleted',
+    deletedAt: Date.now(),
+    lastError: null
+  })
   return true
+}
+
+export const deleteSessionWorkspace = async (
+  sessionId: string,
+  options: {
+    force?: boolean
+    resumeDeleting?: boolean
+  } = {}
+) => {
+  const activeDelete = activeSessionWorkspaceDeletes.get(sessionId)
+  if (activeDelete != null) {
+    return await activeDelete
+  }
+
+  const task = deleteSessionWorkspaceRecord(sessionId, options)
+  activeSessionWorkspaceDeletes.set(sessionId, task)
+  try {
+    return await task
+  } finally {
+    activeSessionWorkspaceDeletes.delete(sessionId)
+  }
 }
