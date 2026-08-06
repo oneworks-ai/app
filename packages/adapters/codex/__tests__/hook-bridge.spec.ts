@@ -32,6 +32,22 @@ describe('codex native hook bridge helpers', () => {
     })
   })
 
+  it('uses the shared thread binding for One Works session metadata', () => {
+    const result = mapCodexHookInputToOneWorks({
+      cwd: '/tmp/project',
+      sessionId: 'codex-thread-id',
+      hookEventName: 'SessionStart'
+    }, {
+      runtime: 'server',
+      sessionId: 'oneworks-session-id'
+    })
+
+    expect(result).toMatchObject({
+      runtime: 'server',
+      sessionId: 'oneworks-session-id'
+    })
+  })
+
   it('maps blocked One Works output back into Codex pre-tool decision fields', () => {
     const result = mapOneWorksHookOutputToCodex('PreToolUse', {
       continue: false,

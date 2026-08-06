@@ -2,6 +2,7 @@ import type { AdapterCtx, AdapterQueryOptions } from '@oneworks/types'
 import { createStartupProfiler } from '@oneworks/utils'
 
 import { createDirectCodexSession } from './direct'
+import { releaseCodexProxyMeta } from './proxy'
 import { resolveSessionBase } from './session-common'
 import { createStreamCodexSession } from './stream'
 import { createCodexTranscriptHookWatcher } from './transcript-hooks'
@@ -20,6 +21,12 @@ export const createCodexSession = async (ctx: AdapterCtx, options: AdapterQueryO
   })
   const sessionBaseStartedAt = startupProfiler.now()
   const base = await resolveSessionBase(ctx, options)
+  let didReleaseProxyRoutes = false
+  const releaseProxyRoutes = () => {
+    if (didReleaseProxyRoutes) return
+    didReleaseProxyRoutes = true
+    for (const routeId of base.proxyRouteTokens) releaseCodexProxyMeta(routeId)
+  }
   startupProfiler.mark('codex.session.resolveSessionBase', sessionBaseStartedAt)
   let transcriptHookWatcher: ReturnType<typeof createCodexTranscriptHookWatcher> | undefined
   let didStopTranscriptHookWatcher = false
@@ -31,16 +38,17 @@ export const createCodexSession = async (ctx: AdapterCtx, options: AdapterQueryO
   const wrappedOnEvent: typeof options.onEvent = (event) => {
     if (event.type === 'exit') {
       stopTranscriptHookWatcher()
+      releaseProxyRoutes()
     }
     options.onEvent(event)
   }
-  transcriptHookWatcher = base.spawnEnv.__ONEWORKS_CODEX_HOOKS_ACTIVE__ === '1'
+  transcriptHookWatcher = options.mode === 'direct' && base.spawnEnv.__ONEWORKS_CODEX_HOOKS_ACTIVE__ === '1'
     ? createCodexTranscriptHookWatcher({
       cwd: ctx.cwd,
       env: ctx.env,
       homeDir: base.spawnEnv.HOME,
       logger: ctx.logger,
-      onEvent: options.mode === 'direct' ? wrappedOnEvent : undefined,
+      onEvent: wrappedOnEvent,
       runtime: options.runtime,
       sessionId: options.sessionId
     })
@@ -84,10 +92,12 @@ export const createCodexSession = async (ctx: AdapterCtx, options: AdapterQueryO
       kill: () => {
         stopTranscriptHookWatcher()
         session.kill()
+        releaseProxyRoutes()
       }
     }
   } catch (error) {
     stopTranscriptHookWatcher()
+    releaseProxyRoutes()
     throw error
   }
 }

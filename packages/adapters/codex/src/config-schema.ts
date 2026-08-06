@@ -55,7 +55,22 @@ export const codexAdapterConfigSchema = z.object({
   configOverrides: z.record(z.string(), jsonValueSchema).optional()
     .describe('Raw Codex config overrides encoded as dotted keys'),
   maxOutputTokens: z.number().int().positive().optional().describe('Maximum output tokens per turn'),
-  features: z.record(z.string(), z.boolean()).optional().describe('Codex feature flag overrides')
+  features: z.record(z.string(), z.boolean()).optional().describe('Codex feature flag overrides'),
+  appServer: z.object({
+    idleTimeoutMs: z.number().int().nonnegative().optional()
+      .describe('How long an unused shared Codex app-server stays alive')
+  }).optional().describe('Shared Codex app-server lifecycle'),
+  network: z.object({
+    httpProxy: z.string().trim().min(1).optional().describe('HTTP proxy URL'),
+    httpsProxy: z.string().trim().min(1).optional().describe('HTTPS proxy URL'),
+    allProxy: z.string().trim().min(1).optional().describe('Fallback HTTP(S) proxy URL'),
+    noProxy: z.union([
+      z.string(),
+      z.array(z.string().trim().min(1))
+    ]).optional().describe('Hosts that bypass the configured proxy'),
+    caCertificate: z.string().trim().min(1).optional()
+      .describe('PEM CA bundle used by Codex and routed upstream requests')
+  }).optional().describe('Codex adapter network and TLS settings')
 })
 
 export type CodexAdapterConfig = z.infer<typeof codexAdapterConfigSchema>
@@ -69,6 +84,15 @@ export const adapterConfigContribution = defineAdapterConfigContribution({
   schema: codexAdapterConfigSchema,
   configEntry: {
     extraCommonKeys: ['effort'] as const,
-    deepMergeKeys: ['cli', 'accounts', 'sandboxPolicy', 'clientInfo', 'configOverrides', 'features'] as const
+    deepMergeKeys: [
+      'cli',
+      'accounts',
+      'sandboxPolicy',
+      'clientInfo',
+      'configOverrides',
+      'features',
+      'appServer',
+      'network'
+    ] as const
   }
 })

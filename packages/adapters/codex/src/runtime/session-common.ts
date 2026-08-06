@@ -9,6 +9,7 @@ import { NATIVE_HOOK_BRIDGE_ADAPTER_ENV, resolveMockHome } from '@oneworks/hooks
 import type { AdapterCtx, AdapterQueryOptions, Config, ModelServiceConfig } from '@oneworks/types'
 import { createStartupProfiler, mergeProcessEnvWithProjectEnv, resolveModelServiceConfig } from '@oneworks/utils'
 import { createLogger } from '@oneworks/utils/create-logger'
+import { parse as parseToml } from 'smol-toml'
 
 import { resolveCodexBinaryPath } from '#~/paths.js'
 import { CodexRpcError } from '#~/protocol/rpc.js'
@@ -20,8 +21,17 @@ import {
   mergeCodexConfigOverrides,
   resolveCodexAdapterConfig
 } from './config'
+import type { CodexNetworkConfig } from './network'
+import { applyCodexNetworkEnv, materializeCodexCaCertificate, resolveCodexNetworkConfig } from './network'
 import { buildMcpServerPermissionSubjectKeys, resolveManagedPermissionDecision } from './permissions'
-import { CODEX_PROXY_META_HEADER_NAME, encodeCodexProxyMeta, ensureCodexProxyServer } from './proxy'
+import {
+  CODEX_PROXY_META_HEADER_NAME,
+  activateCodexProxyMetaRoute,
+  createCodexProxyMetaRoute,
+  ensureCodexProxyServer,
+  fingerprintCodexProxyMeta
+} from './proxy'
+import type { CodexProxyMeta, CodexProxyMetaRoute } from './proxy'
 
 export type CodexApprovalPolicy = 'never' | 'unlessTrusted' | 'onRequest'
 export type CodexOutboundApprovalPolicy = 'never' | 'untrusted' | 'on-request'
@@ -380,6 +390,43 @@ const MCP_INHERITED_ENV_KEYS = [
   '__ONEWORKS_DISABLE_MOCK_HOME_BRIDGE'
 ] as const
 
+const CODEX_THREAD_ENV_KEYS = new Set([
+  '__ONEWORKS_PROJECT_ADAPTER__',
+  '__ONEWORKS_PROJECT_BASE_DIR_RESOLVE_CWD__',
+  '__ONEWORKS_PROJECT_CONFIG_DIR_RESOLVE_CWD__',
+  '__ONEWORKS_PROJECT_CTX_ID__',
+  '__ONEWORKS_PROJECT_LAUNCH_CWD__',
+  '__ONEWORKS_PROJECT_LOG_PREFIX__',
+  '__ONEWORKS_PROJECT_MODEL__',
+  '__ONEWORKS_PROJECT_PERMISSION_MODE__',
+  '__ONEWORKS_PROJECT_RUN_TYPE__',
+  '__ONEWORKS_PROJECT_SERVER_HOST__',
+  '__ONEWORKS_PROJECT_SERVER_PORT__',
+  '__ONEWORKS_PROJECT_SESSION_ID__',
+  '__ONEWORKS_PROJECT_WORKSPACE_FOLDER_RESOLVE_CWD__'
+])
+
+const isCodexThreadEnvKey = (key: string) => (
+  CODEX_THREAD_ENV_KEYS.has(key) ||
+  key.startsWith('__ONEWORKS_AGENT_ROOM_') ||
+  key.startsWith('__ONEWORKS_PROJECT_CHANNEL_') ||
+  key.startsWith('__ONEWORKS_RUNTIME_PROTOCOL_')
+)
+
+const splitCodexAppServerEnv = (env: NodeJS.ProcessEnv) => {
+  const appServerEnv = { ...env }
+  const threadEnv: Record<string, string> = {}
+
+  for (const [key, value] of Object.entries(env)) {
+    if (!isCodexThreadEnvKey(key)) continue
+    delete appServerEnv[key]
+    if (value != null) threadEnv[key] = value
+  }
+  for (const key of ['INIT_CWD', 'OLDPWD', 'PWD']) delete appServerEnv[key]
+
+  return { appServerEnv, threadEnv }
+}
+
 const pickInheritedMcpEnv = (env: Record<string, string | null | undefined>) => (
   Object.fromEntries(
     MCP_INHERITED_ENV_KEYS
@@ -387,12 +434,6 @@ const pickInheritedMcpEnv = (env: Record<string, string | null | undefined>) => 
       .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1] !== '')
   )
 )
-
-const pickSoleCachedThreadId = (cachedThreads: Record<string, string> | undefined) => {
-  const cachedThreadIds = Object.values(cachedThreads ?? {})
-    .filter((value): value is string => typeof value === 'string' && value.trim() !== '')
-  return cachedThreadIds.length === 1 ? cachedThreadIds[0] : undefined
-}
 
 /**
  * Derive the `-c key=value` overrides and API-key env injections needed to map
@@ -406,6 +447,7 @@ function buildCodexConfigOverrides(params: {
   rawModel: string | undefined
   modelServices: Record<string, ModelServiceConfig>
   proxyBaseUrl?: string
+  proxyNetwork?: CodexNetworkConfig
   proxyLogContext?: {
     cwd: string
     ctxId: string
@@ -427,7 +469,9 @@ function buildCodexConfigOverrides(params: {
   args: string[]
   fingerprintArgs: string[]
   nativeProviderConfigOverrides: string[]
+  proxyRoutes: CodexProxyMetaRoute[]
   resolvedModel: string | undefined
+  resolvedModelProvider: string | undefined
   resolvedMaxOutputTokens: number | null | undefined
 } {
   const {
@@ -435,12 +479,14 @@ function buildCodexConfigOverrides(params: {
     rawModel,
     modelServices,
     proxyBaseUrl,
+    proxyNetwork,
     proxyLogContext,
     proxyDiagnostics
   } = params
   const args: string[] = []
   const fingerprintArgs: string[] = []
   const nativeProviderConfigOverrides: string[] = []
+  const proxyRoutes: CodexProxyMetaRoute[] = []
   const normalizedRawModel = rawModel?.trim()
   const pushArgs = (value: string) => {
     args.push('-c', value)
@@ -456,6 +502,7 @@ function buildCodexConfigOverrides(params: {
   pushBoth(`developer_instructions=${toToml(mergeDeveloperInstructions(systemPrompt))}`)
 
   let resolvedModel: string | undefined
+  let resolvedModelProvider: string | undefined
   let resolvedMaxOutputTokens: number | null | undefined
 
   if (normalizedRawModel?.toLowerCase() === 'default') {
@@ -493,6 +540,7 @@ function buildCodexConfigOverrides(params: {
         } = codexExtra
         const wireApi = resolveCodexWireApi(serviceKey, configuredWireApi)
         const providerId = readOptionalString(configuredProviderId) ?? serviceKey
+        resolvedModelProvider = providerId
         const prefix = `model_providers.${toTomlDottedKeySegment(providerId)}`
         const normalizedBaseUrl = normalizeProviderBaseUrl(apiBaseUrl, wireApi)
         const normalizedHeaders = normalizeStringRecord(headers)
@@ -564,9 +612,17 @@ function buildCodexConfigOverrides(params: {
         } else if (shouldProxyProvider) {
           pushBoth(`model_provider=${toToml(providerId)}`)
           pushBoth(`${prefix}.name=${toToml(title ?? serviceKey)}`)
-          const proxyMeta = encodeCodexProxyMeta({
+          const routedHeaders = { ...normalizedHeaders }
+          if (
+            apiKey != null &&
+            !Object.keys(routedHeaders).some(key => key.toLowerCase() === 'authorization')
+          ) {
+            routedHeaders.Authorization = `Bearer ${apiKey}`
+          }
+          const proxyMetaValue: CodexProxyMeta = {
             upstreamBaseUrl: normalizedBaseUrl,
-            ...(Object.keys(normalizedHeaders).length > 0 ? { headers: normalizedHeaders } : {}),
+            ...(proxyNetwork != null ? { network: proxyNetwork } : {}),
+            ...(Object.keys(routedHeaders).length > 0 ? { headers: routedHeaders } : {}),
             ...(Object.keys(normalizedQueryParams).length > 0 ? { queryParams: normalizedQueryParams } : {}),
             ...(normalizedMaxOutputTokens != null ? { maxOutputTokens: normalizedMaxOutputTokens } : {}),
             ...(proxyLogContext != null ? { logContext: proxyLogContext } : {}),
@@ -576,10 +632,14 @@ function buildCodexConfigOverrides(params: {
               resolvedModel: modelId || undefined,
               wireApi: wireApi ?? 'responses'
             }
-          })
-          const fingerprintProxyMeta = encodeCodexProxyMeta({
+          }
+          const proxyRoute = createCodexProxyMetaRoute(proxyMetaValue)
+          const proxyMeta = proxyRoute.routeId
+          proxyRoutes.push(proxyRoute)
+          const fingerprintProxyMeta = fingerprintCodexProxyMeta({
             upstreamBaseUrl: normalizedBaseUrl,
-            ...(Object.keys(normalizedHeaders).length > 0 ? { headers: normalizedHeaders } : {}),
+            ...(proxyNetwork != null ? { network: proxyNetwork } : {}),
+            ...(Object.keys(routedHeaders).length > 0 ? { headers: routedHeaders } : {}),
             ...(Object.keys(normalizedQueryParams).length > 0 ? { queryParams: normalizedQueryParams } : {}),
             ...(normalizedMaxOutputTokens != null ? { maxOutputTokens: normalizedMaxOutputTokens } : {}),
             diagnostics: {
@@ -596,7 +656,7 @@ function buildCodexConfigOverrides(params: {
           pushFingerprintArgs(
             `${prefix}.http_headers=${toTomlInlineTable({ [CODEX_PROXY_META_HEADER_NAME]: fingerprintProxyMeta })}`
           )
-          if (apiKey) pushBoth(`${prefix}.experimental_bearer_token=${toToml(apiKey)}`)
+          if (apiKey) pushBoth(`${prefix}.experimental_bearer_token=${toToml('oneworks-local-proxy')}`)
           if (wireApi) pushBoth(`${prefix}.wire_api=${toToml(wireApi)}`)
           if (normalizedTimeoutMs != null) {
             pushBoth(`${prefix}.stream_idle_timeout_ms=${normalizedTimeoutMs}`)
@@ -632,7 +692,15 @@ function buildCodexConfigOverrides(params: {
     pushFingerprintArgs(`oneworks_native_provider_fingerprint=${toToml(digest)}`)
   }
 
-  return { args, fingerprintArgs, nativeProviderConfigOverrides, resolvedModel, resolvedMaxOutputTokens }
+  return {
+    args,
+    fingerprintArgs,
+    nativeProviderConfigOverrides,
+    proxyRoutes,
+    resolvedModel,
+    resolvedModelProvider,
+    resolvedMaxOutputTokens
+  }
 }
 
 /**
@@ -714,6 +782,33 @@ function buildMcpConfigArgs(
   return args
 }
 
+const mergeCodexThreadConfigRecord = (
+  target: Record<string, unknown>,
+  source: Record<string, unknown>
+) => {
+  for (const [key, value] of Object.entries(source)) {
+    const current = target[key]
+    target[key] = isPlainObject(current) && isPlainObject(value)
+      ? mergeCodexThreadConfigRecord({ ...current }, value)
+      : value
+  }
+  return target
+}
+
+/** Convert existing `-c key=value` arguments into app-server thread config. */
+export const buildCodexThreadConfig = (args: string[]) => {
+  const config: Record<string, unknown> = {}
+  for (let index = 0; index < args.length; index += 1) {
+    if (args[index] !== '-c') continue
+    const override = args[index + 1]
+    if (override == null) continue
+    index += 1
+    const parsed = parseToml(override)
+    mergeCodexThreadConfigRecord(config, parsed as Record<string, unknown>)
+  }
+  return config
+}
+
 const withManagedMcpServerApprovalModes = (
   servers: Record<string, unknown>,
   permissions: Config['permissions'] | undefined
@@ -770,19 +865,26 @@ export interface CodexSessionBase {
   cwd: string
   binaryPath: string
   spawnEnv: NodeJS.ProcessEnv
+  threadEnv: Record<string, string>
+  proxyRouteTokens: string[]
   resolvedAccount: string | undefined
   useYolo: boolean
   approvalPolicy: CodexApprovalPolicy
   sandboxPolicy: CodexSandboxPolicy
   features: Record<string, boolean>
   configOverrideArgs: string[]
+  threadConfig: Record<string, unknown>
   resolvedModel: string | undefined
+  resolvedModelProvider: string | undefined
   resolvedMaxOutputTokens: number | null | undefined
   effectiveEffort: AdapterQueryOptions['effort']
   turnEffort?: CodexReasoningEffort
   serviceTier: 'priority' | null | undefined
   threadCacheKey: string
   cachedThreadId: string | undefined
+  appServerPoolKey: string | undefined
+  appServerIdleTimeoutMs: number
+  networkConfig: CodexNetworkConfig
 }
 
 export const getErrorSummary = (err: unknown) => (
@@ -907,7 +1009,9 @@ export async function resolveSessionBase(
   const {
     sandboxPolicy: configSandboxPolicy,
     features: configFeatures,
-    configOverrides: configOverridesValue
+    configOverrides: configOverridesValue,
+    appServer: appServerConfig,
+    network: networkConfigValue
   } = nativeConfig
   const configuredEffort = commonConfig.effort as AdapterQueryOptions['effort'] | undefined
 
@@ -920,6 +1024,11 @@ export async function resolveSessionBase(
     env
   )
   const features: Record<string, boolean> = { ...(configFeatures ?? {}) }
+  const effectiveEnv = buildSpawnEnv(ctx)
+  let networkConfig = resolveCodexNetworkConfig({
+    config: networkConfigValue,
+    env: effectiveEnv as Record<string, string | undefined>
+  })
 
   const mergedModelServices: Record<string, ModelServiceConfig> = mergedConfig.modelServices ?? {}
 
@@ -984,13 +1093,16 @@ export async function resolveSessionBase(
     args: configOverrideArgs,
     fingerprintArgs: configFingerprintArgs,
     nativeProviderConfigOverrides,
+    proxyRoutes,
     resolvedModel,
+    resolvedModelProvider,
     resolvedMaxOutputTokens
   } = buildCodexConfigOverrides({
     systemPrompt: options.systemPrompt,
     rawModel: effectiveRawModel,
     modelServices: mergedModelServices,
     proxyBaseUrl,
+    proxyNetwork: networkConfig,
     proxyLogContext: proxyBaseUrl != null
       ? {
         cwd,
@@ -1064,27 +1176,70 @@ export async function resolveSessionBase(
   configFingerprintArgs.push(...mcpConfigArgs)
 
   const binaryPath = resolveCodexBinaryPath(env, cwd)
-  const spawnEnv = buildSpawnEnv(ctx)
+  const { appServerEnv: spawnEnv, threadEnv: threadProcessEnv } = options.mode === 'direct'
+    ? { appServerEnv: effectiveEnv, threadEnv: {} }
+    : splitCodexAppServerEnv(effectiveEnv)
   spawnEnv.__ONEWORKS_DISABLE_MOCK_HOME_BRIDGE = '1'
+  const nativeHooksAvailable = env.__ONEWORKS_PROJECT_CODEX_NATIVE_HOOKS_AVAILABLE__ === '1'
+  if (nativeHooksAvailable) features.hooks = true
+  const appServerIdleTimeoutMs = options.runtime === 'cli'
+    ? 0
+    : appServerConfig?.idleTimeoutMs ?? 300_000
+  const appServerProfileKey = options.mode === 'direct'
+    ? undefined
+    : createHash('sha256')
+      .update(JSON.stringify({
+        binaryPath,
+        clientInfo: nativeConfig.clientInfo ?? null,
+        experimentalApi: nativeConfig.experimentalApi ?? false,
+        extraOptions: options.extraOptions ?? [],
+        features,
+        idleTimeoutMs: appServerIdleTimeoutMs,
+        networkConfig,
+        processEnv: Object.fromEntries(Object.entries(spawnEnv).sort(([left], [right]) => left.localeCompare(right)))
+      }))
+      .digest('hex')
   const sessionHomeStartedAt = startupProfiler.now()
   const runtimeHome = await prepareCodexSessionHome({
     ctx,
     sessionId: options.sessionId,
     account: options.account,
-    nativeProviderConfigOverrides
+    nativeProviderConfigOverrides: options.mode === 'direct'
+      ? nativeProviderConfigOverrides
+      : undefined,
+    appServerProfileKey
   })
   startupProfiler.mark('codex.session.prepareSessionHome', sessionHomeStartedAt)
+  networkConfig = await materializeCodexCaCertificate(networkConfig, runtimeHome.homeDir)
+  applyCodexNetworkEnv(spawnEnv, networkConfig)
   spawnEnv.HOME = runtimeHome.homeDir
+  if (options.mode !== 'direct') spawnEnv.PWD = runtimeHome.homeDir
   spawnEnv.CODEX_HOME = resolve(runtimeHome.homeDir, '.codex')
   await mkdir(resolve(spawnEnv.HOME ?? process.env.HOME!, '.codex'), { recursive: true })
 
-  if (env.__ONEWORKS_PROJECT_CODEX_NATIVE_HOOKS_AVAILABLE__ === '1') {
-    features.hooks = true
+  if (nativeHooksAvailable) {
     spawnEnv.__ONEWORKS_CODEX_HOOKS_ACTIVE__ = '1'
     spawnEnv[NATIVE_HOOK_BRIDGE_ADAPTER_ENV] = 'codex'
-    spawnEnv.__ONEWORKS_CODEX_HOOK_RUNTIME__ = options.runtime
-    spawnEnv.__ONEWORKS_CODEX_TASK_SESSION_ID__ = options.sessionId
+    if (options.mode === 'direct') {
+      spawnEnv.__ONEWORKS_CODEX_HOOK_RUNTIME__ = options.runtime
+      spawnEnv.__ONEWORKS_CODEX_TASK_SESSION_ID__ = options.sessionId
+    } else {
+      spawnEnv.__ONEWORKS_CODEX_THREAD_SESSION_MAP__ = resolve(
+        runtimeHome.homeDir,
+        '.codex',
+        'oneworks-thread-sessions.json'
+      )
+    }
   }
+  const appServerPoolKey = appServerProfileKey == null
+    ? undefined
+    : createHash('sha256')
+      .update(JSON.stringify({
+        homeDir: runtimeHome.homeDir,
+        nativeHooksAvailable,
+        profile: appServerProfileKey
+      }))
+      .digest('hex')
 
   const threadCacheKeyStartedAt = startupProfiler.now()
   const threadCacheKey = await buildThreadCacheKey({
@@ -1104,13 +1259,21 @@ export async function resolveSessionBase(
     const cachedThreads = await cache.get('adapter.codex.threads')
     startupProfiler.mark('codex.session.resumeCacheGet', resumeCacheStartedAt)
     cachedThreadId = cachedThreads?.[threadCacheKey]
-    if (cachedThreadId == null) {
-      cachedThreadId = pickSoleCachedThreadId(cachedThreads)
-      if (cachedThreadId != null) {
-        logger.warn('[codex session] using sole cached thread after cache key miss', {
-          sessionId: options.sessionId,
-          threadCacheKey
-        })
+  }
+
+  const threadConfig = buildCodexThreadConfig([
+    ...configOverrideArgs,
+    ...nativeProviderConfigOverrides.flatMap(override => ['-c', override])
+  ])
+  if (options.mode !== 'direct' && Object.keys(threadProcessEnv).length > 0) {
+    const currentPolicy = isPlainObject(threadConfig.shell_environment_policy)
+      ? threadConfig.shell_environment_policy
+      : {}
+    threadConfig.shell_environment_policy = {
+      ...currentPolicy,
+      set: {
+        ...(isPlainObject(currentPolicy.set) ? currentPolicy.set : {}),
+        ...threadProcessEnv
       }
     }
   }
@@ -1120,18 +1283,25 @@ export async function resolveSessionBase(
     cwd,
     binaryPath,
     spawnEnv,
+    threadEnv: threadProcessEnv,
+    proxyRouteTokens: proxyRoutes.map(activateCodexProxyMetaRoute),
     resolvedAccount: runtimeHome.accountKey,
     useYolo,
     approvalPolicy,
     sandboxPolicy,
     features,
     configOverrideArgs,
+    threadConfig,
     resolvedModel,
+    resolvedModelProvider,
     resolvedMaxOutputTokens,
     effectiveEffort,
     turnEffort: nativeReasoningEffort == null ? requestedReasoningEffort : undefined,
     serviceTier: options.fastMode == null ? undefined : options.fastMode ? 'priority' : null,
     threadCacheKey,
-    cachedThreadId
+    cachedThreadId,
+    appServerPoolKey,
+    appServerIdleTimeoutMs,
+    networkConfig
   }
 }

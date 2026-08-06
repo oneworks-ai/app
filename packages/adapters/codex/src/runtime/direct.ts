@@ -75,7 +75,14 @@ export function createDirectCodexSession(base: CodexSessionBase, options: Adapte
     args.push(description)
   }
 
-  logger.info('[codex session] spawning CLI (direct mode)', { binaryPath, args, cwd })
+  logger.info('[codex session] spawning CLI (direct mode)', {
+    argCount: args.length,
+    binaryPath,
+    cwd,
+    hasPrompt: description != null,
+    isResume,
+    model: resolvedModel
+  })
 
   const proc = spawn(String(binaryPath), args, { env: spawnEnv, cwd, stdio: 'inherit' })
   let didEmitExit = false

@@ -9,6 +9,7 @@ import type { AdapterOutputEvent } from '@oneworks/types'
 import { resolveManagedNpmCliPaths } from '@oneworks/utils/managed-npm-cli'
 
 import { CODEX_CLI_PACKAGE, CODEX_CLI_VERSION, resolveCodexBinaryPath } from '#~/paths.js'
+import { resetCodexAppServerPoolForTests } from '#~/runtime/app-server-pool.js'
 import { createCodexSession } from '#~/runtime/session.js'
 
 // ─── Availability check ───────────────────────────────────────────────────────
@@ -86,6 +87,7 @@ describe.skipIf(!codexAvailable)('codex app-server integration', () => {
   })
 
   afterEach(async () => {
+    resetCodexAppServerPoolForTests()
     await rm(tmpDir, { recursive: true, force: true })
   })
 
@@ -122,7 +124,10 @@ describe.skipIf(!codexAvailable)('codex app-server integration', () => {
 
   it('completes the initialize handshake and receives a thread id', async () => {
     const events: AdapterOutputEvent[] = []
-    const ctx = makeCtx()
+    const ctx = makeCtx({
+      __ONEWORKS_PROJECT_SESSION_ID__: 'real-init-session',
+      __ONEWORKS_PROJECT_RUN_TYPE__: 'server'
+    })
 
     const session = await createCodexSession(ctx, {
       type: 'create',
@@ -142,6 +147,66 @@ describe.skipIf(!codexAvailable)('codex app-server integration', () => {
     expect(cachedThreadIds.length).toBeGreaterThan(0)
     expect(typeof cachedThreadIds[0]).toBe('string')
   }, 15_000)
+
+  it('creates provider-specific threads on one real app-server process', async () => {
+    const cwdA = join(tmpDir, 'workspace-a')
+    const cwdB = join(tmpDir, 'workspace-b')
+    await Promise.all([mkdir(cwdA), mkdir(cwdB)])
+    const configs = [{
+      modelServices: {
+        providerA: {
+          apiBaseUrl: 'https://provider-a.example.test/v1',
+          apiKey: 'provider-a-key'
+        },
+        providerB: {
+          apiBaseUrl: 'https://provider-b.example.test/v1',
+          apiKey: 'provider-b-key'
+        }
+      }
+    }, undefined]
+    const ctxA = makeCtx({
+      __ONEWORKS_PROJECT_SESSION_ID__: 'real-shared-session-a',
+      __ONEWORKS_PROJECT_RUN_TYPE__: 'server',
+      __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: tmpDir
+    })
+    ctxA.ctxId = 'real-ctx-a'
+    ctxA.cwd = cwdA
+    ctxA.configs = configs
+    const ctxB = makeCtx({
+      __ONEWORKS_PROJECT_SESSION_ID__: 'real-shared-session-b',
+      __ONEWORKS_PROJECT_RUN_TYPE__: 'server',
+      __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: tmpDir
+    })
+    ctxB.ctxId = 'real-ctx-b'
+    ctxB.cwd = cwdB
+    ctxB.configs = configs
+
+    const sessionA = await createCodexSession(ctxA, {
+      type: 'create',
+      runtime: 'server',
+      sessionId: 'real-shared-provider-a',
+      model: 'providerA,gpt-5.4',
+      onEvent: () => {}
+    })
+    const sessionB = await createCodexSession(ctxB, {
+      type: 'create',
+      runtime: 'server',
+      sessionId: 'real-shared-provider-b',
+      model: 'providerB,gpt-5.4',
+      onEvent: () => {}
+    })
+
+    expect(sessionA.pid).toBeDefined()
+    expect(sessionB.pid).toBe(sessionA.pid)
+    const threadIds = [
+      ...getCachedThreadIds(await ctxA.cache.get('adapter.codex.threads')),
+      ...getCachedThreadIds(await ctxB.cache.get('adapter.codex.threads'))
+    ]
+    expect(new Set(threadIds).size).toBe(2)
+
+    sessionA.kill()
+    sessionB.kill()
+  }, 30_000)
 
   it('sends a turn and receives agent message and stop events', async () => {
     const events: AdapterOutputEvent[] = []
