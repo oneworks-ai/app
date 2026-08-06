@@ -1,4 +1,14 @@
-import { createApiUrl, fetchApiJson } from './base'
+import type { MutationCommitState } from '@oneworks/types'
+
+import {
+  AssetCreateCommitIndeterminateError,
+  isAssetCreatePendingResponse,
+  normalizeAssetCreateFailure,
+  pollAssetCreateOperation
+} from './asset-create-commit'
+import { createApiUrl, fetchApiJson, fetchApiJsonWithStatus } from './base'
+
+export { AssetCreateCommitIndeterminateError, isAssetCreateCommitIndeterminateError } from './asset-create-commit'
 
 export interface SpecSummary {
   id: string
@@ -68,6 +78,24 @@ export interface RuleDetail extends RuleSummary {
   body: string
 }
 
+export type CreatableAssetKind = 'entity' | 'spec' | 'rule'
+
+export interface CreateAssetParams {
+  description?: string
+  kind: CreatableAssetKind
+  name: string
+  params?: Array<{ name: string; description?: string }>
+}
+
+export interface AssetDestinationPreview {
+  kind: CreatableAssetKind
+  path: string
+}
+
+export interface CreatedAsset extends AssetDestinationPreview {
+  commitState?: MutationCommitState
+  warnings?: string[]
+}
 export interface SkillDetail extends SkillSummary {
   body: string
 }
@@ -119,6 +147,32 @@ export async function listWorkspaces(): Promise<{ workspaces: WorkspaceSummary[]
 
 export async function listRules(): Promise<{ rules: RuleSummary[] }> {
   return fetchApiJson<{ rules: RuleSummary[] }>('/api/ai/rules')
+}
+
+export async function createAsset(params: CreateAssetParams): Promise<{ asset: CreatedAsset }> {
+  try {
+    const accepted = await fetchApiJsonWithStatus<unknown>('/api/ai/assets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
+    })
+    if (!isAssetCreatePendingResponse(accepted.data, accepted.status)) {
+      throw new AssetCreateCommitIndeterminateError(new Error('Invalid asset create response'))
+    }
+    return await pollAssetCreateOperation(accepted.data.operation.id, path => fetchApiJsonWithStatus<unknown>(path))
+  } catch (error) {
+    throw normalizeAssetCreateFailure(error)
+  }
+}
+
+export async function getAssetPreview(
+  kind: CreatableAssetKind,
+  name: string
+): Promise<{ asset: AssetDestinationPreview }> {
+  const url = createApiUrl('/api/ai/assets/preview')
+  url.searchParams.set('kind', kind)
+  url.searchParams.set('name', name)
+  return fetchApiJson<{ asset: AssetDestinationPreview }>(url)
 }
 
 export async function getSpecDetail(path: string): Promise<{ spec: SpecDetail }> {

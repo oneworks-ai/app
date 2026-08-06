@@ -47,6 +47,15 @@
         "require": "./dist/ai-path.js"
       }
     },
+    "./asset-slug": {
+      "__oneworks__": {
+        "default": "./src/asset-slug.ts"
+      },
+      "default": {
+        "import": "./dist/asset-slug.mjs",
+        "require": "./dist/asset-slug.js"
+      }
+    },
     "./auth-store": {
       "__oneworks__": {
         "default": "./src/auth-store.ts"

@@ -1,4 +1,6 @@
-/* eslint-disable regexp/no-super-linear-backtracking, regexp/prefer-character-class, regexp/prefer-w, no-control-regex -- bounded asset input validation needs explicit secret and forbidden-character patterns. */
+/* eslint-disable regexp/no-super-linear-backtracking, regexp/prefer-character-class, regexp/prefer-w -- bounded asset input validation needs explicit secret patterns. */
+import { toCanonicalAssetSlug } from '@oneworks/utils/asset-slug'
+
 import { badRequest } from '#~/utils/http.js'
 
 export type CreatableAssetKind = 'entity' | 'spec' | 'rule'
@@ -24,26 +26,6 @@ const isPlainRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value) &&
   Object.getPrototypeOf(value) === Object.prototype
 )
-const slug = (value: string) => {
-  if (/[. ]$/u.test(value)) return undefined
-  const normalized = value.normalize('NFKC').trim()
-  if (normalized === '' || /[<>:"/\\|?*\u0000-\u001F]/u.test(normalized) || /[. ]$/u.test(normalized)) return undefined
-  const stem = normalized.split('.')[0]?.toUpperCase()
-  if (
-    stem != null && new Set([
-      'CON',
-      'PRN',
-      'AUX',
-      'NUL',
-      ...Array.from({ length: 9 }, (_, index) => `COM${index + 1}`),
-      ...Array.from({ length: 9 }, (_, index) => `LPT${index + 1}`)
-    ]).has(stem)
-  ) return undefined
-  const output = [...normalized.toLocaleLowerCase('und')].map(character =>
-    /^[\p{L}\p{N}\p{M}_-]+$/u.test(character) ? character : '-'
-  ).join('').replace(/-+/gu, '-').replace(/^-|-$/gu, '')
-  return output === '' || output.length > 200 ? undefined : output
-}
 const readString = (value: unknown, field: string, maxLength: number, required = false) => {
   if (value == null && !required) return ''
   if (typeof value !== 'string') throw badRequest(`Invalid ${field}`, undefined, 'invalid_asset_input')
@@ -66,7 +48,7 @@ export const validateCreateAssetInput = (input: unknown): ValidatedCreateAssetIn
     throw badRequest('Unsupported asset kind', undefined, 'invalid_asset_kind')
   }
   if (typeof input.name !== 'string') throw badRequest('Invalid asset name', undefined, 'invalid_asset_input')
-  const canonical = slug(input.name)
+  const canonical = toCanonicalAssetSlug(input.name)
   if (canonical == null) throw badRequest('Invalid asset name', undefined, 'invalid_asset_name')
   const name = readString(input.name, 'asset name', 120, true)
   if (input.kind !== 'spec' && input.params != null) {

@@ -5,6 +5,7 @@ import { resolveEntityIdentifier, resolveSpecIdentifier } from '@oneworks/defini
 import type { DefinitionLoader } from '@oneworks/definition-loader'
 import type { Definition, Entity, Rule, Spec } from '@oneworks/types'
 import { resolveProjectOoBaseDir, resolveProjectOoEntitiesDir } from '@oneworks/utils'
+import { toCanonicalAssetSlug } from '@oneworks/utils/asset-slug'
 
 import { badRequest, conflict } from '#~/utils/http.js'
 import { isInsideWorkspace } from './asset-create-destination.js'
@@ -17,9 +18,6 @@ export const getAssetTargetDirectory = (workspaceRoot: string, kind: CreatableAs
     ? resolveProjectOoEntitiesDir(workspaceRoot, env)
     : resolve(baseDir, kind === 'spec' ? 'specs' : 'rules')
 }
-const canonical = (value: string | undefined) =>
-  value?.normalize('NFKC').trim().toLocaleLowerCase('und').replace(/[^\p{L}\p{N}\p{M}_-]+/gu, '-').replace(/-+/gu, '-')
-    .replace(/^-|-$/gu, '')
 const getDefinitionNames = (definition: Definition<Entity | Rule | Spec>, kind: CreatableAssetKind) => {
   const identifier = kind === 'entity'
     ? resolveEntityIdentifier(definition.path, definition.attributes.name)
@@ -31,9 +29,16 @@ const getDefinitionNames = (definition: Definition<Entity | Rule | Spec>, kind: 
     : kind === 'spec'
     ? resolveSpecIdentifier(definition.path)
     : basename(definition.path).replace(/\.md$/iu, '')
-  return [definition.attributes.name, definition.resolvedName, identifier, rawIdentifier].flatMap(name =>
-    name == null ? [] : [name, name.split('/').at(-1) ?? name]
-  ).map(canonical).filter((value): value is string => value != null && value !== '')
+  return [definition.attributes.name, definition.resolvedName, identifier, rawIdentifier].flatMap(name => {
+    if (name == null) return []
+    const segments = name.split('/')
+    const scoped = segments.map(segment => toCanonicalAssetSlug(segment))
+    return [
+      toCanonicalAssetSlug(name),
+      toCanonicalAssetSlug(segments.at(-1) ?? name),
+      scoped.every((value): value is string => value != null) ? scoped.join('-') : undefined
+    ]
+  }).filter((value): value is string => value != null)
 }
 const loadDefinitions = (loader: DefinitionLoader, kind: CreatableAssetKind) =>
   kind === 'entity'

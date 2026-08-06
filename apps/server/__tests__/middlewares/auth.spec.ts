@@ -11,7 +11,8 @@ vi.mock('#~/services/auth/index.js', () => ({
   verifySessionToken
 }))
 
-const createCtx = (path = '/api/sessions', authorization = '') => ({
+const createCtx = (path = '/api/sessions', authorization = '', method = 'GET') => ({
+  method,
   path,
   get: vi.fn((name: string) => name === 'Authorization' ? authorization : ''),
   cookies: {
@@ -68,5 +69,56 @@ describe('authMiddleware', () => {
 
     expect(verifySessionToken).toHaveBeenCalledWith(expect.anything(), 'bearer-token')
     expect(next).toHaveBeenCalledOnce()
+  })
+
+  it('marks asset auth config and verification faults as explicit pre-commit failures', async () => {
+    const { authMiddleware } = await import('#~/middlewares/auth.js')
+    const configFault = new Error('config unavailable')
+    await expect(
+      authMiddleware({} as any, {
+        resolveConfig: async () => {
+          throw configFault
+        }
+      })(createCtx('/api/ai/assets', '', 'POST') as any, vi.fn())
+    ).rejects.toMatchObject({
+      code: 'asset_auth_config_failed',
+      details: { committed: false },
+      status: 500
+    })
+
+    await expect(
+      authMiddleware({} as any, {
+        resolveConfig: async () => ({ enabled: true } as any),
+        verifyToken: async () => {
+          throw new Error('token unavailable')
+        }
+      })(createCtx('/api/ai/assets', '', 'POST') as any, vi.fn())
+    ).rejects.toMatchObject({
+      code: 'asset_auth_verification_failed',
+      details: { committed: false },
+      status: 500
+    })
+  })
+
+  it('preserves non-asset config and token faults by identity', async () => {
+    const { authMiddleware } = await import('#~/middlewares/auth.js')
+    const configFault = new Error('config unavailable')
+    await expect(
+      authMiddleware({} as any, {
+        resolveConfig: async () => {
+          throw configFault
+        }
+      })(createCtx() as any, vi.fn())
+    ).rejects.toBe(configFault)
+
+    const tokenFault = new Error('token unavailable')
+    await expect(
+      authMiddleware({} as any, {
+        resolveConfig: async () => ({ enabled: true } as any),
+        verifyToken: async () => {
+          throw tokenFault
+        }
+      })(createCtx() as any, vi.fn())
+    ).rejects.toBe(tokenFault)
   })
 })

@@ -158,6 +158,7 @@ export default defineConfig({
       sourceAlias('@oneworks/utils/model-selection', '../../packages/utils/src/model-selection.ts'),
       sourceAlias('@oneworks/utils/log-level', '../../packages/utils/src/log-level.ts'),
       sourceAlias('@oneworks/utils/pinyin-search', '../../packages/utils/src/pinyin-search.ts'),
+      sourceAlias('@oneworks/utils/asset-slug', '../../packages/utils/src/asset-slug.ts'),
       sourceAlias('@oneworks/channel-lark', '../../packages/channels/lark/src/index.ts'),
       sourceAlias('@oneworks/core', '../../packages/core/src/index.ts'),
       sourceAlias('@oneworks/types/standalone-route', '../../packages/types/src/standalone-route.ts'),

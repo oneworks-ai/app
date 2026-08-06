@@ -12,6 +12,7 @@ export function KnowledgeContentControls({ onCreate }: KnowledgeContentControlsP
     <div className='knowledge-base-view__content-controls'>
       <Tooltip title={t('knowledge.actions.new')}>
         <Button
+          aria-label={t('knowledge.actions.new')}
           className='knowledge-base-view__icon-button'
           type='primary'
           onClick={onCreate}

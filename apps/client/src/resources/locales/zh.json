@@ -1755,6 +1755,42 @@
       "create": "新建规则",
       "createHint": "请在 .oo/rules 中创建规则文件，保存后刷新页面。",
       "importHint": "请将规则文件导入至 .oo/rules，保存后刷新页面。"
+    },
+    "assets": {
+      "name": "名称",
+      "nameRequired": "请输入资产名称",
+      "namePlaceholder": "review-checklist",
+      "description": "描述",
+      "descriptionPlaceholder": "说明此资产的用途",
+      "location": "保存位置",
+      "locationPending": "请输入有效名称以预览保存位置",
+      "locationResolving": "正在解析保存位置…",
+      "locationUnavailable": "无法获取保存位置",
+      "params": "参数",
+      "addParam": "添加参数",
+      "paramName": "参数 {{index}} 名称",
+      "paramNameRequired": "请输入参数名称",
+      "paramDescription": "参数 {{index}} 描述",
+      "removeParam": "删除参数 {{name}}",
+      "createFailed": "新建数据资产失败",
+      "nameExists": "已存在同名数据资产。",
+      "createdRefreshFailed": "已成功创建，但列表刷新失败。",
+      "createdDegraded": "已创建，但文件系统持久性或私有暂存清理处于降级状态。",
+      "createIndeterminate": "无法确认创建结果。再次尝试创建前，请先刷新列表。",
+      "retryRefresh": "重试刷新",
+      "refreshFailed": "刷新列表失败",
+      "entity": {
+        "title": "新建实体",
+        "created": "实体已创建"
+      },
+      "spec": {
+        "title": "新建流程",
+        "created": "流程已创建"
+      },
+      "rule": {
+        "title": "新建规则",
+        "created": "规则已创建"
+      }
     }
   },
   "agentRoom": {
