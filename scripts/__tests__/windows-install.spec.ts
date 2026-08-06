@@ -210,6 +210,15 @@ describe('windows install tooling', () => {
       expect(() => assertWingetInstallerTemplate(`${validTemplate}${key}: ${wrongValue}\n`, { version })).toThrow()
     }
     expect(() => assertWingetInstallerTemplate(`${validTemplate}  - Architecture: arm64\n`, { version })).toThrow()
+    expect(() => assertWingetInstallerTemplate(`${validTemplate}Platform:\n  - Windows.Desktop\n`, { version }))
+      .toThrow()
+    expect(() => assertWingetInstallerTemplate(`${validTemplate}Installers:\n`, { version })).toThrow()
+    expect(() =>
+      assertWingetInstallerTemplate(
+        validTemplate.replace('  - Windows.Desktop', '  - Windows.Desktop\n  - Windows.Universal'),
+        { version }
+      )
+    ).toThrow()
   })
 
   it('requires exactly the supported Winget command set', () => {

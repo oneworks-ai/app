@@ -75,6 +75,26 @@ const assertArchitectureSingleton = lines => {
   }
 }
 
+const assertPlatform = lines => {
+  const platformIndexes = lines.flatMap((line, index) => line === 'Platform:' ? [index] : [])
+  if (platformIndexes.length !== 1) {
+    throw new Error('Winget installer template must contain exactly one Platform block.')
+  }
+  const platformLines = []
+  for (let index = platformIndexes[0] + 1; index < lines.length && !/^[^ ]/u.test(lines[index]); index += 1) {
+    if (lines[index] !== '') platformLines.push(lines[index])
+  }
+  if (platformLines.length !== 1 || platformLines[0] !== '  - Windows.Desktop') {
+    throw new Error('Winget Platform must contain only Windows.Desktop.')
+  }
+}
+
+const assertInstallersHeader = lines => {
+  if (lines.filter(line => line === 'Installers:').length !== 1) {
+    throw new Error('Winget installer template must contain exactly one Installers header.')
+  }
+}
+
 const assertCommands = lines => {
   const commandIndexes = lines.flatMap((line, index) => line === 'Commands:' ? [index] : [])
   if (commandIndexes.length !== 1) throw new Error('Winget installer template must contain exactly one Commands block.')
@@ -106,6 +126,8 @@ const assertWingetInstallerTemplate = (content, input) => {
   assertTopLevelSingleton(lines, 'MinimumOSVersion', 'MinimumOSVersion: 10.0.17763.0')
   assertTopLevelSingleton(lines, 'ManifestType', 'ManifestType: installer')
   assertTopLevelSingleton(lines, 'ManifestVersion', 'ManifestVersion: 1.12.0')
+  assertPlatform(lines)
+  assertInstallersHeader(lines)
   assertArchitectureSingleton(lines)
   assertInstallerSingleton(lines, 'Scope', '    Scope: machine')
   assertInstallerSingleton(lines, 'InstallerUrl', `    InstallerUrl: ${installerUrl}`)
@@ -117,12 +139,6 @@ const assertWingetInstallerTemplate = (content, input) => {
     throw new Error('Winget installer template SHA-256 differs from the verified MSI.')
   }
   assertInstallerSingleton(lines, 'ProductCode', `    ProductCode: '${productCode}'`)
-  if (!normalizedContent.includes('Platform:\n  - Windows.Desktop')) {
-    throw new Error('Winget installer template is missing Windows.Desktop platform.')
-  }
-  if (!normalizedContent.includes('Installers:\n  - Architecture: x64')) {
-    throw new Error('Winget installer template is missing a sole x64 installer.')
-  }
   assertCommands(lines)
   if (!normalizedContent.includes('    - PackageIdentifier: OpenJS.NodeJS.LTS')) {
     throw new Error('Winget installer template is missing Node LTS dependency.')
