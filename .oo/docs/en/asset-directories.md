@@ -116,6 +116,16 @@ This resolves the AI base directory to `./.oo` and the entities directory to `./
 
 ## What Changes
 
+### Create from the Knowledge Base
+
+The Knowledge Base can create project-owned entities, flows, and rules. Enter a name and optional description; flows can also declare named parameters. The form previews the generated project-relative file name, creates only in configured project asset directories that remain inside the current trusted workspace, and refreshes the affected list after publication. Retrying a failed refresh never creates a second file.
+
+Reading still supports the absolute asset directories described above. To preserve the creation authority and atomic-publication boundary, Knowledge Base creation does not write to an absolute directory outside the workspace. Preview and create reject such a destination; use a workspace-contained directory or have a project maintainer manage the external asset manually.
+
+Created templates use the same discovery conventions as existing assets: `entities/<name>.md`, `specs/<name>.md`, and `rules/<name>.md`. Names use one shared canonical slug, and conflicting local or plugin definitions are rejected.
+
+The server publishes through the native filesystem authority using a retained workspace directory handle and a generation fence. A create request first returns a pending operation; publication starts only after that submission connection closes normally without an HTTP parse error, and the Knowledge Base then polls the operation without sending another create request. Once the target may be visible, later durability, identity, or response failures are committed-degraded or committed-indeterminate; the server never deletes, restores, or overwrites the visible target by path. The Knowledge Base closes that submission and refreshes to reconcile status. A deliberate retry is safe only when the server explicitly returns `committed: false`.
+
 These variables affect the main project asset consumers:
 
 - workspace assets: `rules`, `skills`, `specs`, `entities`, `mcp`
