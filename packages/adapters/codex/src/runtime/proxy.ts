@@ -1,7 +1,9 @@
 import { Buffer } from 'node:buffer'
+import { createHash, randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { isIP } from 'node:net'
 import { homedir } from 'node:os'
 import { resolve } from 'node:path'
 import process from 'node:process'
@@ -9,8 +11,13 @@ import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { ReadableStream as NodeReadableStream } from 'node:stream/web'
 
+import type { Dispatcher } from 'undici'
+import { Agent, ProxyAgent } from 'undici'
+
 import { createLogger } from '@oneworks/utils/create-logger'
 import type { Logger } from '@oneworks/utils/create-logger'
+
+import type { CodexNetworkConfig } from './network'
 
 export const CODEX_PROXY_META_HEADER_NAME = 'X-OneWorks-Proxy-Meta'
 type CodexProxyLogger = Logger
@@ -39,11 +46,17 @@ export interface CodexProxyDiagnostics {
 
 export interface CodexProxyMeta {
   upstreamBaseUrl: string
+  network?: CodexNetworkConfig
   queryParams?: Record<string, string>
   headers?: Record<string, string>
   maxOutputTokens?: number
   logContext?: CodexProxyLogContext
   diagnostics?: CodexProxyDiagnostics
+}
+
+export interface CodexProxyMetaRoute {
+  meta: CodexProxyMeta
+  routeId: string
 }
 
 const REQUEST_HEADERS_TO_DROP = new Set([
@@ -74,7 +87,11 @@ const RESPONSE_HEADERS_TO_DROP = new Set([
 let proxyServerPromise: Promise<{ baseUrl: string }> | undefined
 let proxyServerLogger: CodexProxyLogger | undefined
 const requestLoggerCache = new Map<string, CodexProxyLogger>()
+const dispatcherCache = new Map<string, Promise<Dispatcher | undefined>>()
+const proxyMetaRegistry = new Map<string, CodexProxyMeta>()
 let proxyRequestCounter = 0
+const MAX_PROXY_DISPATCHERS = 32
+const MAX_REQUEST_LOGGERS = 256
 
 const REDACTED_VALUE = '[REDACTED]'
 const SENSITIVE_LOG_KEY_PATTERNS = [
@@ -92,12 +109,36 @@ const SENSITIVE_LOG_KEY_PATTERNS = [
   /signature$/i
 ]
 
-export const encodeCodexProxyMeta = (meta: CodexProxyMeta) =>
-  Buffer.from(JSON.stringify(meta), 'utf8').toString('base64url')
+export const createCodexProxyMetaRoute = (meta: CodexProxyMeta): CodexProxyMetaRoute => ({
+  meta,
+  routeId: `owpm_${randomUUID()}`
+})
+
+export const activateCodexProxyMetaRoute = (route: CodexProxyMetaRoute) => {
+  proxyMetaRegistry.set(route.routeId, route.meta)
+  return route.routeId
+}
+
+export const encodeCodexProxyMeta = (meta: CodexProxyMeta) => (
+  activateCodexProxyMetaRoute(createCodexProxyMetaRoute(meta))
+)
+
+export const fingerprintCodexProxyMeta = (meta: CodexProxyMeta) => (
+  `sha256:${createHash('sha256').update(JSON.stringify(meta)).digest('hex')}`
+)
+
+export const releaseCodexProxyMeta = (routeId: string) => {
+  proxyMetaRegistry.delete(routeId)
+}
+
+export const resolveCodexProxyMetaForTests = (routeId: string) => proxyMetaRegistry.get(routeId)
+
+export const getCodexProxyMetaRegistrySizeForTests = () => proxyMetaRegistry.size
 
 const decodeCodexProxyMeta = (rawValue: string): CodexProxyMeta => {
-  const decoded = Buffer.from(rawValue, 'base64url').toString('utf8')
-  return JSON.parse(decoded) as CodexProxyMeta
+  const meta = proxyMetaRegistry.get(rawValue)
+  if (meta == null) throw new Error('Unknown Codex proxy route')
+  return meta
 }
 
 const readRequestBody = async (req: IncomingMessage) => {
@@ -520,7 +561,14 @@ const summarizeProxyMeta = (proxyMeta: CodexProxyMeta) => ({
   upstreamBaseUrl: sanitizeUrlForLog(proxyMeta.upstreamBaseUrl),
   queryParamKeys: Object.keys(proxyMeta.queryParams ?? {}),
   headerKeys: Object.keys(proxyMeta.headers ?? {}),
-  hasMaxOutputTokens: typeof proxyMeta.maxOutputTokens === 'number'
+  hasMaxOutputTokens: typeof proxyMeta.maxOutputTokens === 'number',
+  network: {
+    hasHttpProxy: proxyMeta.network?.httpProxy != null,
+    hasHttpsProxy: proxyMeta.network?.httpsProxy != null,
+    hasAllProxy: proxyMeta.network?.allProxy != null,
+    hasNoProxy: proxyMeta.network?.noProxy != null,
+    hasCaCertificate: proxyMeta.network?.caCertificate != null
+  }
 })
 
 const summarizeRequest = (req: IncomingMessage) => ({
@@ -704,8 +752,109 @@ const summarizeProxyMetaForLog = (proxyMeta: CodexProxyMeta) => ({
   headers: sanitizeStringRecordForLog(proxyMeta.headers ?? {}),
   maxOutputTokens: proxyMeta.maxOutputTokens,
   diagnostics: sanitizeForLog(proxyMeta.diagnostics),
-  logContext: proxyMeta.logContext
+  logContext: proxyMeta.logContext,
+  network: summarizeProxyMeta(proxyMeta).network
 })
+
+export const matchesNoProxy = (url: URL, noProxy: string | undefined) => {
+  const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  const port = url.port || (url.protocol === 'https:' ? '443' : '80')
+  return (noProxy?.split(/[\s,]+/u) ?? []).some((rawEntry) => {
+    const trimmed = rawEntry.trim().toLowerCase()
+    if (trimmed === '') return false
+    if (trimmed === '*') return true
+    const bracketEnd = trimmed.startsWith('[') ? trimmed.indexOf(']') : -1
+    const separatorIndex = bracketEnd === -1 ? trimmed.lastIndexOf(':') : -1
+    const hasSinglePortSeparator = separatorIndex > -1 && trimmed.indexOf(':') === separatorIndex
+    const entryHost = (bracketEnd > -1
+      ? trimmed.slice(1, bracketEnd)
+      : hasSinglePortSeparator
+      ? trimmed.slice(0, separatorIndex)
+      : trimmed)
+      .replace(/^\*\./, '.')
+    const entryPort = bracketEnd > -1
+      ? (trimmed[bracketEnd + 1] === ':' ? trimmed.slice(bracketEnd + 2) : undefined)
+      : hasSinglePortSeparator
+      ? trimmed.slice(separatorIndex + 1)
+      : undefined
+    if (entryPort != null && entryPort !== port) return false
+    if (isIP(entryHost) !== 0) return hostname === entryHost
+    if (entryHost.startsWith('.')) {
+      const suffix = entryHost.slice(1)
+      return hostname === suffix || hostname.endsWith(`.${suffix}`)
+    }
+    return hostname === entryHost || hostname.endsWith(`.${entryHost}`)
+  })
+}
+
+const readCaCertificate = async (value: string | undefined) => {
+  if (value == null) return undefined
+  return value.includes('-----BEGIN CERTIFICATE-----') ? value : readFile(value, 'utf8')
+}
+
+const createUpstreamDispatcher = async (
+  upstreamUrl: URL,
+  network: CodexNetworkConfig | undefined
+): Promise<Dispatcher | undefined> => {
+  if (network == null) return undefined
+  const ca = await readCaCertificate(network.caCertificate)
+  const proxyUrl = matchesNoProxy(upstreamUrl, network.noProxy)
+    ? undefined
+    : upstreamUrl.protocol === 'https:'
+    ? network.httpsProxy ?? network.httpProxy ?? network.allProxy
+    : network.httpProxy ?? network.allProxy
+  if (proxyUrl == null) {
+    return ca == null ? undefined : new Agent({ connect: { ca } })
+  }
+  const parsedProxyUrl = new URL(proxyUrl)
+  if (parsedProxyUrl.protocol !== 'http:' && parsedProxyUrl.protocol !== 'https:') {
+    throw new Error(`Unsupported routed proxy protocol: ${parsedProxyUrl.protocol}`)
+  }
+  return new ProxyAgent({
+    uri: proxyUrl,
+    ...(ca == null
+      ? {}
+      : {
+        proxyTls: { ca },
+        requestTls: { ca }
+      })
+  })
+}
+
+const resolveUpstreamDispatcher = (
+  upstreamUrl: URL,
+  network: CodexNetworkConfig | undefined
+) => {
+  const key = createHash('sha256').update(JSON.stringify({
+    origin: upstreamUrl.origin,
+    network: network ?? null
+  })).digest('hex')
+  let dispatcher = dispatcherCache.get(key)
+  if (dispatcher != null) {
+    dispatcherCache.delete(key)
+    dispatcherCache.set(key, dispatcher)
+    return dispatcher
+  }
+
+  dispatcher = createUpstreamDispatcher(upstreamUrl, network)
+  dispatcherCache.set(key, dispatcher)
+  void dispatcher.catch(() => {
+    if (dispatcherCache.get(key) === dispatcher) dispatcherCache.delete(key)
+  })
+  while (dispatcherCache.size > MAX_PROXY_DISPATCHERS) {
+    const oldest = dispatcherCache.entries().next().value as
+      | [string, Promise<Dispatcher | undefined>]
+      | undefined
+    if (oldest == null) break
+    dispatcherCache.delete(oldest[0])
+    void oldest[1]
+      .then(retiredDispatcher => retiredDispatcher?.close())
+      .catch(() => undefined)
+  }
+  return dispatcher
+}
+
+export const getCodexProxyDispatcherCountForTests = () => dispatcherCache.size
 
 const getErrorCause = (err: unknown) => (
   err instanceof Error && 'cause' in err ? err.cause : undefined
@@ -715,7 +864,11 @@ const getRequestLogger = (logContext: CodexProxyLogContext | undefined) => {
   if (logContext == null) return undefined
   const cacheKey = `${logContext.cwd}\n${logContext.ctxId}\n${logContext.sessionId}`
   const cached = requestLoggerCache.get(cacheKey)
-  if (cached != null) return cached
+  if (cached != null) {
+    requestLoggerCache.delete(cacheKey)
+    requestLoggerCache.set(cacheKey, cached)
+    return cached
+  }
   const logger = createLogger(
     logContext.cwd,
     `${logContext.ctxId}/${logContext.sessionId}/adapter-codex`,
@@ -725,6 +878,11 @@ const getRequestLogger = (logContext: CodexProxyLogContext | undefined) => {
     logContext.env as NodeJS.ProcessEnv | undefined
   )
   requestLoggerCache.set(cacheKey, logger)
+  while (requestLoggerCache.size > MAX_REQUEST_LOGGERS) {
+    const oldestKey = requestLoggerCache.keys().next().value as string | undefined
+    if (oldestKey == null) break
+    requestLoggerCache.delete(oldestKey)
+  }
   return logger
 }
 
@@ -859,12 +1017,14 @@ const handleProxyRequest = async (
   res.once('close', abortOnResponseClosed)
 
   try {
+    const dispatcher = await resolveUpstreamDispatcher(upstreamUrl, proxyMeta.network)
     const upstreamResponse = await fetch(upstreamUrl, {
       method: req.method ?? 'POST',
       headers: upstreamHeaders,
       body: toFetchBody(upstreamBody),
-      signal: abortController.signal
-    })
+      signal: abortController.signal,
+      ...(dispatcher == null ? {} : { dispatcher })
+    } as RequestInit & { dispatcher?: Dispatcher })
     const responseContentType = normalizeContentType(upstreamResponse.headers.get('content-type') ?? undefined)
     const shouldCaptureResponseBody = upstreamResponse.status >= 400 && responseContentType !== 'text/event-stream'
     const responseBodyForLogPromise = shouldCaptureResponseBody
@@ -943,9 +1103,11 @@ const handleProxyRequest = async (
       res.end()
       return
     }
+    const cause = getErrorCause(err)
     requestLogger?.error('[codex proxy] upstream request failed', {
-      err,
-      cause: getErrorCause(err),
+      errorName: err instanceof Error ? err.name : 'Error',
+      errorMessage: 'Failed to reach upstream model service',
+      causeName: cause instanceof Error ? cause.name : undefined,
       requestId,
       ...summarizeRequest(req),
       ...summarizeProxyMeta(proxyMeta),
@@ -954,7 +1116,7 @@ const handleProxyRequest = async (
     writeJsonError(
       res,
       502,
-      err instanceof Error ? err.message : String(err)
+      'Failed to reach upstream model service'
     )
   } finally {
     req.off('aborted', abortOnRequestAborted)
@@ -1004,4 +1166,11 @@ export const ensureCodexProxyServer = async (logger?: CodexProxyLogger) => {
   }
 
   return proxyServerPromise
+}
+
+export const resetCodexProxyDispatchersForTests = async () => {
+  const dispatchers = await Promise.all([...dispatcherCache.values()].map(value => value.catch(() => undefined)))
+  dispatcherCache.clear()
+  proxyMetaRegistry.clear()
+  await Promise.all(dispatchers.map(dispatcher => dispatcher?.close()))
 }

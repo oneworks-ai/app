@@ -779,6 +779,9 @@ importers:
       smol-toml:
         specifier: ^1.7.0
         version: 1.7.0
+      undici:
+        specifier: ^7.25.0
+        version: 7.25.0
       zod:
         specifier: ^3.25.76
         version: 3.25.76

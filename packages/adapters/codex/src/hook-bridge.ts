@@ -4,6 +4,9 @@ import type { HookInput, HookOutput, HookOutputs } from '@oneworks/hooks'
 import { executeHookInput, readHookInput } from '@oneworks/hooks'
 import type { AdapterQueryOptions } from '@oneworks/types'
 
+import type { CodexThreadSessionBinding } from './runtime/thread-session-map'
+import { resolveCodexThreadSession } from './runtime/thread-session-map'
+
 type NativeCodexHookEventName = 'PreToolUse' | 'PostToolUse' | 'SessionStart' | 'UserPromptSubmit' | 'Stop'
 
 interface NativeCodexHookInputBase {
@@ -94,13 +97,16 @@ export const supportsHookEvent = (eventName: keyof HookOutputs) => (
   eventName === 'Stop'
 )
 
-export const mapCodexHookInputToOneWorks = (input: NativeCodexHookInput): HookInput => {
+export const mapCodexHookInputToOneWorks = (
+  input: NativeCodexHookInput,
+  binding?: CodexThreadSessionBinding
+): HookInput => {
   const base = {
     cwd: input.cwd,
-    sessionId: taskSessionId || input.sessionId,
+    sessionId: binding?.sessionId || taskSessionId || input.sessionId,
     transcriptPath: input.transcriptPath,
     adapter: 'codex',
-    runtime,
+    runtime: binding?.runtime ?? runtime,
     hookSource: 'native' as const,
     canBlock: true
   }
@@ -231,8 +237,16 @@ export const mapOneWorksHookOutputToCodex = (
 export const runCodexHookBridge = async () => {
   try {
     const input = await readHookInput() as NativeCodexHookInput
-    const hookInput = mapCodexHookInputToOneWorks(input)
-    const result = await executeHookInput(hookInput)
+    const binding = await resolveCodexThreadSession(
+      process.env.__ONEWORKS_CODEX_THREAD_SESSION_MAP__?.trim(),
+      input.sessionId,
+      input.cwd
+    )
+    const hookInput = mapCodexHookInputToOneWorks(input, binding)
+    const result = await executeHookInput(hookInput, {
+      ...process.env,
+      ...binding?.env
+    })
     process.stdout.write(`${JSON.stringify(mapOneWorksHookOutputToCodex(input.hookEventName, result))}\n`)
   } catch (error) {
     process.stdout.write(`${

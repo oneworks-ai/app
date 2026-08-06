@@ -3,6 +3,7 @@ import { Buffer } from 'node:buffer'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import type { IncomingMessage, Server } from 'node:http'
+import { connect } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
@@ -11,7 +12,13 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 
-import { CODEX_PROXY_META_HEADER_NAME, encodeCodexProxyMeta, ensureCodexProxyServer } from '#~/runtime/proxy.js'
+import {
+  CODEX_PROXY_META_HEADER_NAME,
+  encodeCodexProxyMeta,
+  ensureCodexProxyServer,
+  getCodexProxyDispatcherCountForTests,
+  resetCodexProxyDispatchersForTests
+} from '#~/runtime/proxy.js'
 
 const upstreamServers: Server[] = []
 const tempDirs: string[] = []
@@ -34,6 +41,7 @@ const readRequestBody = async (req: IncomingMessage) => {
 }
 
 afterEach(async () => {
+  await resetCodexProxyDispatchersForTests()
   await Promise.all(upstreamServers.splice(0).map(closeServer))
   await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
 })
@@ -127,6 +135,97 @@ describe('codex proxy', () => {
     expect(capturedRequest?.headers.authorization).toBe('Bearer test-key')
     expect(capturedRequest?.headers['x-tenant']).toBe('tenant-1')
     expect(capturedRequest?.headers['x-oneworks-proxy-meta']).toBeUndefined()
+  })
+
+  it('uses the adapter HTTP proxy for routed upstream requests', async () => {
+    let proxyConnectCount = 0
+    const upstream = createServer(async (req, res) => {
+      await readRequestBody(req)
+      res.writeHead(200, { 'Content-Type': 'application/json', Connection: 'close' })
+      res.end(JSON.stringify({ proxied: true }))
+    })
+    upstreamServers.push(upstream)
+    await new Promise<void>((resolve, reject) => {
+      upstream.once('error', reject)
+      upstream.listen(0, '127.0.0.1', () => resolve())
+    })
+    const upstreamAddress = upstream.address()
+    if (upstreamAddress == null || typeof upstreamAddress === 'string') throw new Error('Missing upstream address')
+
+    const networkProxy = createServer()
+    networkProxy.on('connect', (req, downstream, head) => {
+      proxyConnectCount += 1
+      const target = new URL(`http://${req.url ?? ''}`)
+      const upstreamSocket = connect(Number(target.port), target.hostname, () => {
+        downstream.write('HTTP/1.1 200 Connection Established\r\n\r\n')
+        if (head.length > 0) upstreamSocket.write(head)
+        upstreamSocket.pipe(downstream)
+        downstream.pipe(upstreamSocket)
+      })
+    })
+    upstreamServers.push(networkProxy)
+    await new Promise<void>((resolve, reject) => {
+      networkProxy.once('error', reject)
+      networkProxy.listen(0, '127.0.0.1', () => resolve())
+    })
+    const networkProxyAddress = networkProxy.address()
+    if (networkProxyAddress == null || typeof networkProxyAddress === 'string') {
+      throw new Error('Missing network proxy address')
+    }
+
+    const localProxy = await ensureCodexProxyServer()
+    const response = await fetch(`${localProxy.baseUrl}/responses`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        [CODEX_PROXY_META_HEADER_NAME]: encodeCodexProxyMeta({
+          upstreamBaseUrl: `http://127.0.0.1:${upstreamAddress.port}`,
+          network: {
+            httpProxy: `http://127.0.0.1:${networkProxyAddress.port}`,
+            noProxy: 'example.invalid'
+          }
+        })
+      },
+      body: JSON.stringify({ model: 'gpt-5.4', input: 'ping' })
+    })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ proxied: true })
+    expect(proxyConnectCount).toBe(1)
+  })
+
+  it('bounds cached upstream dispatchers across rotating network profiles', async () => {
+    const upstream = createServer(async (req, res) => {
+      await readRequestBody(req)
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true }))
+    })
+    upstreamServers.push(upstream)
+    await new Promise<void>((resolve, reject) => {
+      upstream.once('error', reject)
+      upstream.listen(0, '127.0.0.1', () => resolve())
+    })
+    const upstreamAddress = upstream.address()
+    if (upstreamAddress == null || typeof upstreamAddress === 'string') throw new Error('Missing upstream address')
+    const localProxy = await ensureCodexProxyServer()
+
+    const responses = await Promise.all(Array.from({ length: 40 }, async (_, index) => fetch(
+      `${localProxy.baseUrl}/responses`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          [CODEX_PROXY_META_HEADER_NAME]: encodeCodexProxyMeta({
+            upstreamBaseUrl: `http://127.0.0.1:${upstreamAddress.port}`,
+            network: { noProxy: `profile-${index}.example.test` }
+          })
+        },
+        body: JSON.stringify({ model: 'gpt-5.4', input: 'ping' })
+      }
+    )))
+
+    expect(responses.every(response => response.status === 200)).toBe(true)
+    expect(getCodexProxyDispatcherCountForTests()).toBeLessThanOrEqual(32)
   })
 
   it('replays JSON request bodies across upstream 308 redirects', async () => {

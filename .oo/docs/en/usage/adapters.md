@@ -46,6 +46,19 @@ Native CLI installation and version pinning are covered in [Adapter CLI Installa
 - Codex and Gemini use adapter-owned local proxy behavior.
 - Some adapters write provider configuration to native config files or session-level state.
 
+Codex stream sessions reuse an app-server within the same project, account, binary/startup,
+and effective network profile. Model provider, MCP, working directory, and permission settings
+are sent per thread, so switching providers alone does not restart the process. An unused
+app-server remains available for five minutes by default; configure
+`adapters.codex.appServer.idleTimeoutMs` to change that interval.
+
+Adapter-specific network settings are available under `adapters.codex.network`:
+`httpProxy`, `httpsProxy`, `allProxy`, `noProxy`, and `caCertificate`. They apply to both
+the native Codex process and One Works' routed provider requests without changing the
+whole One Works server environment. Loopback hosts are always bypassed so Codex can reach
+the adapter-owned local routing proxy. `caCertificate` accepts either a PEM bundle path or
+inline PEM; inline content is materialized as a private file before the native process starts.
+
 If no routed model is selected, the adapter continues to use its native model and binary defaults.
 
 The bottom of **Settings → Model Services** contains a dedicated import row. Its

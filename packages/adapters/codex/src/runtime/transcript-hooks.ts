@@ -24,6 +24,7 @@ interface CodexTranscriptSessionMeta {
 }
 
 interface TranscriptFileState {
+  attachmentOffset: number
   byteOffset: number
   remainder: string
   sessionMeta?: CodexTranscriptSessionMeta & { eligible: boolean }
@@ -36,6 +37,7 @@ interface PendingTranscriptToolCall {
 }
 
 interface CodexTranscriptHookWatcherParams {
+  codexThreadId?: string
   cwd: string
   env: AdapterCtx['env']
   homeDir?: string
@@ -47,6 +49,7 @@ interface CodexTranscriptHookWatcherParams {
 }
 
 export interface CodexTranscriptHookWatcher {
+  setCodexThreadId(threadId: string): void
   start(): void
   stop(): void
 }
@@ -370,10 +373,29 @@ class CodexTranscriptHookWatcherImpl implements CodexTranscriptHookWatcher {
   private scanChain: Promise<void> = Promise.resolve()
   private timer: NodeJS.Timeout | undefined
   private stopped = false
+  private codexThreadId: string | undefined
 
   constructor(private readonly params: CodexTranscriptHookWatcherParams) {
     const homeDir = params.homeDir ?? params.env.HOME ?? process.env.HOME
     this.sessionsDir = resolve(homeDir ?? '/', '.codex', 'sessions')
+    this.codexThreadId = params.codexThreadId
+  }
+
+  setCodexThreadId(threadId: string) {
+    if (this.codexThreadId === threadId) return
+    this.codexThreadId = threadId
+    this.scanChain = this.scanChain.then(async () => {
+      for (const state of this.states.values()) {
+        if (state.sessionMeta != null) {
+          state.sessionMeta.eligible = this.isEligibleSessionMeta(state.sessionMeta)
+        }
+        if (state.attachmentOffset === 0 || state.sessionMeta?.eligible === true) {
+          state.byteOffset = Math.min(state.byteOffset, state.attachmentOffset)
+          state.remainder = ''
+        }
+      }
+      await this.scanForChanges()
+    })
   }
 
   start() {
@@ -418,11 +440,51 @@ class CodexTranscriptHookWatcherImpl implements CodexTranscriptHookWatcher {
       walkJsonlFiles(this.sessionsDir, (filePath) => {
         if (this.states.has(filePath)) return
         const size = statSync(filePath).size
-        this.states.set(filePath, { byteOffset: size, remainder: '' })
+        const sessionMeta = this.readInitialSessionMeta(filePath)
+        this.states.set(filePath, {
+          attachmentOffset: size,
+          byteOffset: size,
+          remainder: '',
+          ...(sessionMeta == null
+            ? {}
+            : {
+              sessionMeta: {
+                ...sessionMeta,
+                eligible: this.isEligibleSessionMeta(sessionMeta)
+              }
+            })
+        })
       })
     } catch {
       // sessions dir may not exist until codex writes the first transcript
     }
+  }
+
+  private readInitialSessionMeta(filePath: string) {
+    let fd: number | undefined
+    try {
+      fd = openSync(filePath, 'r')
+      const buffer = Buffer.alloc(Math.min(statSync(filePath).size, 64 * 1024))
+      readSync(fd, buffer, 0, buffer.length, 0)
+      const firstLine = buffer.toString('utf8').split('\n', 1)[0]?.trim()
+      const event = firstLine == null || firstLine === '' ? undefined : parseTranscriptLine(firstLine)
+      return event?.type === 'session_meta' && isRecord(event.payload)
+        ? event.payload as CodexTranscriptSessionMeta
+        : undefined
+    } catch {
+      return undefined
+    } finally {
+      if (fd != null) closeSync(fd)
+    }
+  }
+
+  private isEligibleSessionMeta(sessionMeta: CodexTranscriptSessionMeta) {
+    const sessionTimestamp = Date.parse(sessionMeta.timestamp ?? '')
+    return (this.codexThreadId == null || sessionMeta.id === this.codexThreadId) &&
+      sessionMeta.cwd === this.params.cwd &&
+      (this.codexThreadId != null ||
+        !Number.isFinite(sessionTimestamp) ||
+        sessionTimestamp >= this.startedAt - SESSION_TIME_SKEW_MS)
   }
 
   private async scanForChanges(options: { includeStopped?: boolean } = {}) {
@@ -436,7 +498,7 @@ class CodexTranscriptHookWatcherImpl implements CodexTranscriptHookWatcher {
         const current = this.states.get(filePath)
 
         if (current == null) {
-          this.states.set(filePath, { byteOffset: 0, remainder: '' })
+          this.states.set(filePath, { attachmentOffset: 0, byteOffset: 0, remainder: '' })
           pendingProcesses.push(this.processFile(filePath))
           return
         }
@@ -458,7 +520,7 @@ class CodexTranscriptHookWatcherImpl implements CodexTranscriptHookWatcher {
   }
 
   private async processFile(filePath: string) {
-    const state = this.states.get(filePath) ?? { byteOffset: 0, remainder: '' }
+    const state = this.states.get(filePath) ?? { attachmentOffset: 0, byteOffset: 0, remainder: '' }
     this.states.set(filePath, state)
 
     let fd: number | undefined
@@ -503,11 +565,13 @@ class CodexTranscriptHookWatcherImpl implements CodexTranscriptHookWatcher {
 
     if (event.type === 'session_meta') {
       const sessionMeta = payload as CodexTranscriptSessionMeta
-      const sessionTimestamp = Date.parse(sessionMeta.timestamp ?? event.timestamp ?? '')
-      state.sessionMeta = {
+      const normalizedSessionMeta = {
         ...sessionMeta,
-        eligible: sessionMeta.cwd === this.params.cwd &&
-          (!Number.isFinite(sessionTimestamp) || sessionTimestamp >= this.startedAt - SESSION_TIME_SKEW_MS)
+        timestamp: sessionMeta.timestamp ?? event.timestamp
+      }
+      state.sessionMeta = {
+        ...normalizedSessionMeta,
+        eligible: this.isEligibleSessionMeta(normalizedSessionMeta)
       }
       return
     }

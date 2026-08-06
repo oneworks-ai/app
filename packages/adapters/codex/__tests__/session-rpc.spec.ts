@@ -1,11 +1,15 @@
-import { Buffer } from 'node:buffer'
 import { PassThrough } from 'node:stream'
 
 import { spawn } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { CODEX_PROXY_META_HEADER_NAME } from '#~/runtime/proxy.js'
+import {
+  CODEX_PROXY_META_HEADER_NAME,
+  getCodexProxyMetaRegistrySizeForTests,
+  resolveCodexProxyMetaForTests
+} from '#~/runtime/proxy.js'
+import { resetCodexAppServerPoolForTests } from '#~/runtime/app-server-pool.js'
 import { createCodexSession } from '#~/runtime/session.js'
 import { NATIVE_HOOK_BRIDGE_ADAPTER_ENV, callHook } from '@oneworks/hooks'
 import type { AdapterOutputEvent } from '@oneworks/types'
@@ -29,6 +33,7 @@ vi.mock('node:child_process', async (importOriginal) => {
 
 const spawnMock = vi.mocked(spawn)
 const callHookMock = vi.mocked(callHook)
+let latestReceivedLines: any[] = []
 
 function makeMockLogger() {
   return {
@@ -40,13 +45,15 @@ function makeMockLogger() {
 }
 
 function makeCtx(overrides: {
+  ctxId?: string
+  cwd?: string
   env?: Record<string, string>
   configs?: [unknown?, unknown?]
 } = {}) {
   const cacheStore = new Map<string, unknown>()
   return {
-    ctxId: 'test-ctx',
-    cwd: '/tmp',
+    ctxId: overrides.ctxId ?? 'test-ctx',
+    cwd: overrides.cwd ?? '/tmp',
     env: overrides.env ?? {},
     cache: {
       set: async (key: string, value: unknown) => {
@@ -69,6 +76,7 @@ function makeProc(options: {
   const stdin = new PassThrough()
   const stdout = new PassThrough()
   const receivedLines: any[] = []
+  latestReceivedLines = receivedLines
   let turnCount = 0
   let threadStartCount = 0
   let exitHandler: ((code: number | null) => void) | undefined
@@ -148,7 +156,39 @@ function respondToInteraction(
 }
 
 function getConfigOverrides(spawnArgs: string[]) {
-  return spawnArgs.filter((_, index) => spawnArgs[index - 1] === '-c')
+  const processOverrides = spawnArgs.filter((_, index) => spawnArgs[index - 1] === '-c')
+  if (processOverrides.length > 0) return processOverrides
+  const threadConfig = latestReceivedLines.find(line => line.method === 'thread/start')?.params?.config
+  return flattenThreadConfig(threadConfig)
+}
+
+const toTomlTestValue = (value: unknown): string => {
+  if (typeof value === 'string') return JSON.stringify(value)
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (Array.isArray(value)) return `[${value.map(toTomlTestValue).join(',')}]`
+  if (value != null && typeof value === 'object') {
+    const entries = Object.entries(value).map(([key, item]) => {
+      const encodedKey = /^[\w-]+$/.test(key) ? key : JSON.stringify(key)
+      return `${encodedKey} = ${toTomlTestValue(item)}`
+    })
+    return `{${entries.join(', ')}}`
+  }
+  return String(value)
+}
+
+const flattenThreadConfig = (
+  value: unknown,
+  prefix = ''
+): string[] => {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) return []
+  const inlineKeys = new Set(['env', 'env_http_headers', 'http_headers', 'query_params'])
+  return Object.entries(value).flatMap(([key, item]) => {
+    const path = prefix === '' ? key : `${prefix}.${key}`
+    if (item != null && typeof item === 'object' && !Array.isArray(item) && !inlineKeys.has(key)) {
+      return flattenThreadConfig(item, path)
+    }
+    return [`${path}=${toTomlTestValue(item)}`]
+  })
 }
 
 function getConfigOverride(overrides: string[], prefix: string) {
@@ -166,7 +206,9 @@ function decodeProxyMeta(overrides: string[], serviceKey: string) {
     throw new Error(`Missing ${CODEX_PROXY_META_HEADER_NAME} header for ${serviceKey}`)
   }
 
-  return JSON.parse(Buffer.from(encodedMeta, 'base64url').toString('utf8')) as Record<string, unknown>
+  const meta = resolveCodexProxyMetaForTests(encodedMeta)
+  if (meta == null) throw new Error(`Unknown proxy route ${encodedMeta}`)
+  return meta as unknown as Record<string, unknown>
 }
 
 describe('createCodexSession RPC approval policy mapping', () => {
@@ -177,6 +219,7 @@ describe('createCodexSession RPC approval policy mapping', () => {
   })
 
   afterEach(() => {
+    resetCodexAppServerPoolForTests()
     delete process.env.HOME
   })
 
@@ -449,7 +492,7 @@ describe('createCodexSession RPC approval policy mapping', () => {
 
     const startRequest = receivedLines.find(line => line.method === 'thread/start')
     expect(startRequest?.params.approvalPolicy).toBe('never')
-    expect(startRequest?.params.sandboxPolicy).toEqual({ type: 'workspaceWrite' })
+    expect(startRequest?.params.sandbox).toBe('workspace-write')
 
     const initialTurnRequest = receivedLines.find(line => line.method === 'turn/start')
     expect(initialTurnRequest?.params.approvalPolicy).toBe('never')
@@ -485,7 +528,7 @@ describe('createCodexSession RPC approval policy mapping', () => {
     )
 
     const startRequest = receivedLines.find(line => line.method === 'thread/start')
-    expect(startRequest?.params.sandboxPolicy).toEqual({ type: 'workspaceWrite', networkAccess: true })
+    expect(startRequest?.params.sandbox).toBe('workspace-write')
 
     const initialTurnRequest = receivedLines.find(line => line.method === 'turn/start')
     expect(initialTurnRequest?.params.sandboxPolicy).toEqual({ type: 'workspaceWrite', networkAccess: true })
@@ -521,11 +564,7 @@ describe('createCodexSession RPC approval policy mapping', () => {
     )
 
     const startRequest = receivedLines.find(line => line.method === 'thread/start')
-    expect(startRequest?.params.sandboxPolicy).toEqual({
-      type: 'workspaceWrite',
-      networkAccess: true,
-      writableRoots: ['/tmp/oneworks channel-memory']
-    })
+    expect(startRequest?.params.sandbox).toBe('workspace-write')
 
     const initialTurnRequest = receivedLines.find(line => line.method === 'turn/start')
     expect(initialTurnRequest?.params.sandboxPolicy).toEqual({
@@ -1057,7 +1096,7 @@ describe('createCodexSession RPC approval policy mapping', () => {
     session.kill()
   })
 
-  it('uses --yolo and danger-full-access when permission mode is bypassPermissions', async () => {
+  it('uses thread-scoped danger-full-access when permission mode is bypassPermissions', async () => {
     process.env.HOME = '/tmp'
     const { proc, receivedLines } = makeProc()
     spawnMock.mockReturnValue(proc)
@@ -1072,12 +1111,12 @@ describe('createCodexSession RPC approval policy mapping', () => {
     } as any)
 
     const spawnArgs = spawnMock.mock.calls[0]?.[1] as string[]
-    expect(spawnArgs[0]).toBe('--yolo')
-    expect(spawnArgs[1]).toBe('app-server')
+    expect(spawnArgs[0]).toBe('app-server')
+    expect(spawnArgs).not.toContain('--yolo')
 
     const startRequest = receivedLines.find(line => line.method === 'thread/start')
     expect(startRequest?.params.approvalPolicy).toBe('never')
-    expect(startRequest?.params.sandboxPolicy).toEqual({ type: 'dangerFullAccess' })
+    expect(startRequest?.params.sandbox).toBe('danger-full-access')
 
     const initialTurnRequest = receivedLines.find(line => line.method === 'turn/start')
     expect(initialTurnRequest?.params.approvalPolicy).toBe('never')
@@ -1260,7 +1299,9 @@ describe('createCodexSession RPC approval policy mapping', () => {
       makeCtx({
         env: {
           __ONEWORKS_PROJECT_CODEX_NATIVE_HOOKS_AVAILABLE__: '1',
-          __ONEWORKS_PROJECT_CLI_PACKAGE_DIR__: '/tmp/oneworks-cli'
+          __ONEWORKS_PROJECT_CLI_PACKAGE_DIR__: '/tmp/oneworks-cli',
+          __ONEWORKS_PROJECT_SERVER_HOST__: 'server-a.internal',
+          __ONEWORKS_PROJECT_SERVER_PORT__: '8787'
         }
       }),
       {
@@ -1278,8 +1319,21 @@ describe('createCodexSession RPC approval policy mapping', () => {
     expect(spawnArgs).toEqual(expect.arrayContaining(['--enable', 'hooks']))
     expect(spawnOptions.env?.__ONEWORKS_CODEX_HOOKS_ACTIVE__).toBe('1')
     expect(spawnOptions.env?.[NATIVE_HOOK_BRIDGE_ADAPTER_ENV]).toBe('codex')
-    expect(spawnOptions.env?.__ONEWORKS_CODEX_HOOK_RUNTIME__).toBe('server')
-    expect(spawnOptions.env?.__ONEWORKS_CODEX_TASK_SESSION_ID__).toBe('session-native-hooks')
+    expect(spawnOptions.env?.__ONEWORKS_CODEX_HOOK_RUNTIME__).toBeUndefined()
+    expect(spawnOptions.env?.__ONEWORKS_CODEX_TASK_SESSION_ID__).toBeUndefined()
+    const threadSessionMapPath = spawnOptions.env?.__ONEWORKS_CODEX_THREAD_SESSION_MAP__
+    expect(threadSessionMapPath).toBe(
+      join(spawnOptions.env!.HOME, '.codex', 'oneworks-thread-sessions.json')
+    )
+    if (threadSessionMapPath == null) throw new Error('Missing Codex thread/session map')
+    const bindings = JSON.parse(await readFile(threadSessionMapPath, 'utf8')) as Record<
+      string,
+      { env?: Record<string, string> }
+    >
+    expect(Object.values(bindings)[0]?.env).toMatchObject({
+      __ONEWORKS_PROJECT_SERVER_HOST__: 'server-a.internal',
+      __ONEWORKS_PROJECT_SERVER_PORT__: '8787'
+    })
 
     session.kill()
   })
@@ -1510,7 +1564,7 @@ describe('createCodexSession RPC approval policy mapping', () => {
 
     expect(overrides).toContain('model_provider="azure"')
     expect(overrides).toContain('model_providers.azure.name="Azure"')
-    expect(overrides).toContain('model_providers.azure.experimental_bearer_token="test-key"')
+    expect(overrides).toContain('model_providers.azure.experimental_bearer_token="oneworks-local-proxy"')
     expect(overrides).toContain('model_providers.azure.wire_api="responses"')
     expect(overrides).toContain('model_providers.azure.stream_idle_timeout_ms=600000')
     expect(getConfigOverride(overrides, 'model_providers.azure.base_url=')).toMatch(
@@ -1538,6 +1592,63 @@ describe('createCodexSession RPC approval policy mapping', () => {
         requestedEffort: 'high',
         effectiveEffort: 'high',
         wireApi: 'responses'
+      }
+    })
+
+    session.kill()
+  })
+
+  it('applies adapter network settings to app-server and routed provider requests', async () => {
+    process.env.HOME = '/tmp'
+    const { proc } = makeProc()
+    spawnMock.mockReturnValue(proc)
+
+    const session = await createCodexSession(
+      makeCtx({
+        configs: [{
+          adapters: {
+            codex: {
+              network: {
+                httpProxy: 'http://proxy-user:proxy-password@proxy.example.test:8080',
+                httpsProxy: 'http://secure-proxy.example.test:8443',
+                noProxy: ['internal.example.test'],
+                caCertificate: '/tmp/codex-ca.pem'
+              }
+            }
+          },
+          modelServices: {
+            azure: {
+              apiBaseUrl: 'https://azure.example.test/openai',
+              apiKey: 'test-key'
+            }
+          }
+        }, undefined]
+      }),
+      {
+        type: 'create',
+        runtime: 'server',
+        sessionId: 'session-network-config',
+        model: 'azure,gpt-5.4',
+        description: 'Reply with pong.',
+        onEvent: () => {}
+      } as any
+    )
+
+    const spawnOptions = spawnMock.mock.calls[0]?.[2] as { env?: Record<string, string> }
+    expect(spawnOptions.env).toMatchObject({
+      HTTP_PROXY: 'http://proxy-user:proxy-password@proxy.example.test:8080',
+      HTTPS_PROXY: 'http://secure-proxy.example.test:8443',
+      NO_PROXY: 'internal.example.test,127.0.0.1,localhost,::1',
+      CODEX_CA_CERTIFICATE: '/tmp/codex-ca.pem',
+      SSL_CERT_FILE: '/tmp/codex-ca.pem'
+    })
+    const overrides = getConfigOverrides(spawnMock.mock.calls[0]?.[1] as string[])
+    expect(decodeProxyMeta(overrides, 'azure')).toMatchObject({
+      network: {
+        httpProxy: 'http://proxy-user:proxy-password@proxy.example.test:8080',
+        httpsProxy: 'http://secure-proxy.example.test:8443',
+        noProxy: 'internal.example.test,127.0.0.1,localhost,::1',
+        caCertificate: '/tmp/codex-ca.pem'
       }
     })
 
@@ -1600,22 +1711,23 @@ describe('createCodexSession RPC approval policy mapping', () => {
     const sessionConfig = await readFile(join(spawnOptions.env!.HOME, '.codex', 'config.toml'), 'utf8')
 
     expect(spawnOptions.env?.CODEX_HOME).toBe(join(spawnOptions.env!.HOME, '.codex'))
-    expect(sessionConfig).toContain('model_provider="azure"')
-    expect(sessionConfig).toContain('model_providers.azure.name="Azure"')
-    expect(sessionConfig).toContain('model_providers.azure.base_url="https://example.openai.azure.com/openai"')
-    expect(sessionConfig).toContain('model_providers.azure.env_key="AZURE_OPENAI_API_KEY"')
-    expect(sessionConfig).toContain('model_providers.azure.env_key_instructions="Set the Azure key"')
-    expect(sessionConfig).toContain('model_providers.azure.wire_api="responses"')
-    expect(sessionConfig).toContain('model_providers.azure.request_max_retries=0')
-    expect(sessionConfig).toContain('model_providers.azure.stream_max_retries=10')
-    expect(sessionConfig).toContain('model_providers.azure.supports_websockets=false')
-    expect(sessionConfig).toContain('model_providers.azure.websocket_connect_timeout_ms=0')
-    expect(sessionConfig).toContain('model_providers.azure.stream_idle_timeout_ms=0')
+    expect(sessionConfig).not.toContain('model_provider=')
+    expect(overrides).toContain('model_provider="azure"')
+    expect(overrides).toContain('model_providers.azure.name="Azure"')
+    expect(overrides).toContain('model_providers.azure.base_url="https://example.openai.azure.com/openai"')
+    expect(overrides).toContain('model_providers.azure.env_key="AZURE_OPENAI_API_KEY"')
+    expect(overrides).toContain('model_providers.azure.env_key_instructions="Set the Azure key"')
+    expect(overrides).toContain('model_providers.azure.wire_api="responses"')
+    expect(overrides).toContain('model_providers.azure.request_max_retries=0')
+    expect(overrides).toContain('model_providers.azure.stream_max_retries=10')
+    expect(overrides).toContain('model_providers.azure.supports_websockets=false')
+    expect(overrides).toContain('model_providers.azure.websocket_connect_timeout_ms=0')
+    expect(overrides).toContain('model_providers.azure.stream_idle_timeout_ms=0')
     expect(overrides.some(override => override.includes('experimental_bearer_token'))).toBe(false)
     expect(overrides.some(override => override.includes(CODEX_PROXY_META_HEADER_NAME))).toBe(false)
-    expect(sessionConfig).toContain('http_headers={"X.Provider.Id" = "tenant-1"}')
-    expect(sessionConfig).toContain('env_http_headers={X-Project = "AZURE_PROJECT"}')
-    expect(sessionConfig).toContain('query_params={"filters[tag]" = "2025-04-01-preview"}')
+    expect(overrides).toContain('model_providers.azure.http_headers={"X.Provider.Id" = "tenant-1"}')
+    expect(overrides).toContain('model_providers.azure.env_http_headers={X-Project = "AZURE_PROJECT"}')
+    expect(overrides).toContain('model_providers.azure.query_params={"filters[tag]" = "2025-04-01-preview"}')
 
     session.kill()
   })
@@ -1662,10 +1774,10 @@ describe('createCodexSession RPC approval policy mapping', () => {
     const spawnOptions = spawnMock.mock.calls[0]?.[2] as { env?: Record<string, string> }
     const sessionConfig = await readFile(join(spawnOptions.env!.HOME, '.codex', 'config.toml'), 'utf8')
 
-    expect(sessionConfig).toContain('model_provider="openai"')
-    expect(sessionConfig).toContain('openai_base_url="https://us.api.openai.com/v1"')
-    expect(sessionConfig).not.toContain('model_providers.openai.')
-    expect(overrides.some(override => override.includes('us.api.openai.com'))).toBe(false)
+    expect(sessionConfig).not.toContain('model_provider=')
+    expect(overrides).toContain('model_provider="openai"')
+    expect(overrides).toContain('openai_base_url="https://us.api.openai.com/v1"')
+    expect(overrides.some(override => override.startsWith('model_providers.openai.'))).toBe(false)
     expect(receivedLines.find(line => line.method === 'thread/start')?.params.model).toBeUndefined()
 
     session.kill()
@@ -1712,9 +1824,9 @@ describe('createCodexSession RPC approval policy mapping', () => {
     const spawnOptions = spawnMock.mock.calls[0]?.[2] as { env?: Record<string, string> }
     const sessionConfig = await readFile(join(spawnOptions.env!.HOME, '.codex', 'config.toml'), 'utf8')
 
-    expect(sessionConfig).toContain('model_provider="ollama"')
-    expect(sessionConfig).not.toContain('model_providers.ollama.')
-    expect(overrides.some(override => override.includes('ollama'))).toBe(false)
+    expect(sessionConfig).not.toContain('model_provider=')
+    expect(overrides).toContain('model_provider="ollama"')
+    expect(overrides.some(override => override.startsWith('model_providers.ollama.'))).toBe(false)
     expect(receivedLines.find(line => line.method === 'thread/start')?.params.model).toBeUndefined()
 
     session.kill()
@@ -1761,10 +1873,12 @@ describe('createCodexSession RPC approval policy mapping', () => {
     const spawnOptions = spawnMock.mock.calls[0]?.[2] as { env?: Record<string, string> }
     const sessionConfig = await readFile(join(spawnOptions.env!.HOME, '.codex', 'config.toml'), 'utf8')
 
-    expect(sessionConfig).toContain('model_provider="amazon-bedrock"')
-    expect(sessionConfig).toContain('model_providers.amazon-bedrock.aws.region="us-east-1"')
-    expect(sessionConfig).toContain('model_providers.amazon-bedrock.aws.profile="developer"')
-    expect(sessionConfig).not.toContain('model_providers.amazon-bedrock.name')
+    const overrides = getConfigOverrides(spawnArgs)
+    expect(sessionConfig).not.toContain('model_provider=')
+    expect(overrides).toContain('model_provider="amazon-bedrock"')
+    expect(overrides).toContain('model_providers.amazon-bedrock.aws.region="us-east-1"')
+    expect(overrides).toContain('model_providers.amazon-bedrock.aws.profile="developer"')
+    expect(overrides).not.toContain('model_providers.amazon-bedrock.name="Bedrock"')
     expect(spawnArgs.some(arg => arg.includes('amazon-bedrock'))).toBe(false)
 
     session.kill()
@@ -1813,10 +1927,12 @@ describe('createCodexSession RPC approval policy mapping', () => {
     const spawnOptions = spawnMock.mock.calls[0]?.[2] as { env?: Record<string, string> }
     const sessionConfig = await readFile(join(spawnOptions.env!.HOME, '.codex', 'config.toml'), 'utf8')
 
-    expect(sessionConfig).toContain('model_providers.command-proxy.http_headers={Authorization = "secret-header"}')
-    expect(sessionConfig).toContain('model_providers.command-proxy.auth.command="/usr/local/bin/fetch-token"')
-    expect(sessionConfig).toContain('model_providers.command-proxy.auth.args=["--audience","codex"]')
-    expect(sessionConfig).toContain('model_providers.command-proxy.auth.refresh_interval_ms=0')
+    const overrides = getConfigOverrides(spawnArgs)
+    expect(sessionConfig).not.toContain('model_provider=')
+    expect(overrides).toContain('model_providers.command-proxy.http_headers={Authorization = "secret-header"}')
+    expect(overrides).toContain('model_providers.command-proxy.auth.command="/usr/local/bin/fetch-token"')
+    expect(overrides).toContain('model_providers.command-proxy.auth.args=["--audience","codex"]')
+    expect(overrides).toContain('model_providers.command-proxy.auth.refresh_interval_ms=0')
     expect(spawnArgs.some(arg => arg.includes('secret-header') || arg.includes('fetch-token'))).toBe(false)
 
     session.kill()
@@ -1889,7 +2005,7 @@ describe('createCodexSession RPC approval policy mapping', () => {
     const proxyMeta = decodeProxyMeta(overrides, 'kimi')
 
     expect(overrides).toContain('model_provider="kimi"')
-    expect(overrides).toContain('model_providers.kimi.experimental_bearer_token="test-key"')
+    expect(overrides).toContain('model_providers.kimi.experimental_bearer_token="oneworks-local-proxy"')
     expect(getConfigOverride(overrides, 'model_providers.kimi.base_url=')).toMatch(
       /^model_providers\.kimi\.base_url="http:\/\/127\.0\.0\.1:\d+"$/
     )
@@ -1922,11 +2038,11 @@ describe('createCodexSession RPC approval policy mapping', () => {
         }
       }, undefined]
     })
-    const firstProc = makeProc({ threadStartIds: ['thr_proxy_original'] })
-    const secondProc = makeProc({ resumedThreadId: 'thr_proxy_original' })
-    spawnMock
-      .mockReturnValueOnce(firstProc.proc)
-      .mockReturnValueOnce(secondProc.proc)
+    const firstProc = makeProc({
+      threadStartIds: ['thr_proxy_original'],
+      resumedThreadId: 'thr_proxy_original'
+    })
+    spawnMock.mockReturnValue(firstProc.proc)
 
     const firstSession = await createCodexSession(ctx, {
       type: 'create',
@@ -1949,15 +2065,173 @@ describe('createCodexSession RPC approval policy mapping', () => {
     await waitForWrites()
     secondSession.kill()
 
-    const resumeRequest = secondProc.receivedLines.find(line => line.method === 'thread/resume')
+    const resumeRequest = firstProc.receivedLines.find(line => line.method === 'thread/resume')
     expect(resumeRequest?.params.threadId).toBe('thr_proxy_original')
-    expect(secondProc.receivedLines.some(line => line.method === 'thread/start')).toBe(false)
+    expect(spawnMock).toHaveBeenCalledTimes(1)
 
     const cachedThreads = await ctx.cache.get('adapter.codex.threads')
     expect(Object.values(cachedThreads ?? {})).toEqual(['thr_proxy_original'])
   })
 
-  it('resumes the sole cached thread when non-semantic cache key drift misses the exact key', async () => {
+  it('shares one app-server across providers while isolating thread events and lifecycle', async () => {
+    process.env.HOME = '/tmp'
+    const configs: [unknown, undefined] = [{
+      modelServices: {
+        azure: {
+          apiBaseUrl: 'https://azure.example.test/openai',
+          apiKey: 'azure-key'
+        },
+        kimi: {
+          apiBaseUrl: 'https://kimi.example.test/v1',
+          apiKey: 'kimi-key'
+        }
+      }
+    }, undefined]
+    const azureCtx = makeCtx({
+      ctxId: 'ctx-azure',
+      cwd: '/tmp/project/workspace-a',
+      configs,
+      env: {
+        __ONEWORKS_PROJECT_CHANNEL_CONTEXT_PATH__: '/tmp/context-azure.json',
+        __ONEWORKS_PROJECT_SERVER_HOST__: 'azure-server.internal',
+        __ONEWORKS_PROJECT_SERVER_PORT__: '8787',
+        __ONEWORKS_PROJECT_SESSION_ID__: 'ow-azure',
+        __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: '/tmp/project',
+        __ONEWORKS_PROJECT_RUN_TYPE__: 'server',
+        __ONEWORKS_PROJECT_LOG_PREFIX__: 'azure-log'
+      }
+    })
+    const kimiCtx = makeCtx({
+      ctxId: 'ctx-kimi',
+      cwd: '/tmp/project/workspace-b',
+      configs,
+      env: {
+        __ONEWORKS_PROJECT_CHANNEL_CONTEXT_PATH__: '/tmp/context-kimi.json',
+        __ONEWORKS_PROJECT_SERVER_HOST__: 'kimi-server.internal',
+        __ONEWORKS_PROJECT_SERVER_PORT__: '9797',
+        __ONEWORKS_PROJECT_SESSION_ID__: 'ow-kimi',
+        __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: '/tmp/project',
+        __ONEWORKS_PROJECT_RUN_TYPE__: 'cli',
+        __ONEWORKS_PROJECT_LOG_PREFIX__: 'kimi-log'
+      }
+    })
+    const { proc, receivedLines } = makeProc({ threadStartIds: ['thr_azure', 'thr_kimi'] })
+    spawnMock.mockReturnValue(proc)
+    const azureEvents: AdapterOutputEvent[] = []
+    const kimiEvents: AdapterOutputEvent[] = []
+
+    const azureSession = await createCodexSession(azureCtx, {
+      type: 'create',
+      runtime: 'server',
+      sessionId: 'session-shared-azure',
+      model: 'azure,gpt-5.4',
+      description: 'azure turn',
+      onEvent: (event: AdapterOutputEvent) => azureEvents.push(event)
+    } as any)
+    const kimiSession = await createCodexSession(kimiCtx, {
+      type: 'create',
+      runtime: 'server',
+      sessionId: 'session-shared-kimi',
+      model: 'kimi,kimi-k2',
+      description: 'kimi turn',
+      onEvent: (event: AdapterOutputEvent) => kimiEvents.push(event)
+    } as any)
+
+    expect(spawnMock).toHaveBeenCalledTimes(1)
+    const starts = receivedLines.filter(line => line.method === 'thread/start')
+    expect(starts).toHaveLength(2)
+    expect(starts[0]?.params).toMatchObject({
+      cwd: '/tmp/project/workspace-a',
+      model: 'gpt-5.4',
+      modelProvider: 'azure',
+      config: {
+        model_provider: 'azure',
+        shell_environment_policy: {
+          set: {
+            __ONEWORKS_PROJECT_CHANNEL_CONTEXT_PATH__: '/tmp/context-azure.json',
+            __ONEWORKS_PROJECT_SERVER_HOST__: 'azure-server.internal',
+            __ONEWORKS_PROJECT_SERVER_PORT__: '8787',
+            __ONEWORKS_PROJECT_SESSION_ID__: 'ow-azure',
+            __ONEWORKS_PROJECT_RUN_TYPE__: 'server',
+            __ONEWORKS_PROJECT_LOG_PREFIX__: 'azure-log'
+          }
+        }
+      }
+    })
+    expect(starts[1]?.params).toMatchObject({
+      cwd: '/tmp/project/workspace-b',
+      model: 'kimi-k2',
+      modelProvider: 'kimi',
+      config: {
+        model_provider: 'kimi',
+        shell_environment_policy: {
+          set: {
+            __ONEWORKS_PROJECT_CHANNEL_CONTEXT_PATH__: '/tmp/context-kimi.json',
+            __ONEWORKS_PROJECT_SERVER_HOST__: 'kimi-server.internal',
+            __ONEWORKS_PROJECT_SERVER_PORT__: '9797',
+            __ONEWORKS_PROJECT_SESSION_ID__: 'ow-kimi',
+            __ONEWORKS_PROJECT_RUN_TYPE__: 'cli',
+            __ONEWORKS_PROJECT_LOG_PREFIX__: 'kimi-log'
+          }
+        }
+      }
+    })
+
+    proc.stdout.push(`${JSON.stringify({
+      id: 91,
+      method: 'item/commandExecution/requestApproval',
+      params: {
+        threadId: 'thr_kimi',
+        command: 'pwd'
+      }
+    })}\n`)
+    await waitForWrites()
+    expect(azureEvents.some(event => event.type === 'interaction_request')).toBe(false)
+    expect(kimiEvents.some(event => event.type === 'interaction_request')).toBe(true)
+
+    azureSession.kill()
+    expect(proc.kill).not.toHaveBeenCalled()
+    kimiSession.emit({
+      type: 'message',
+      content: [{ type: 'text', text: 'continue kimi' }]
+    } as any)
+    await waitForWrites()
+    expect(receivedLines.filter(line => line.method === 'turn/start')).toHaveLength(3)
+    expect(proc.kill).not.toHaveBeenCalled()
+
+    kimiSession.kill()
+  })
+
+  it('does not share an app-server across different idle retention policies', async () => {
+    process.env.HOME = '/tmp'
+    const firstProc = makeProc({ threadStartIds: ['thr_short_idle'] }).proc
+    const secondProc = makeProc({ threadStartIds: ['thr_long_idle'] }).proc
+    spawnMock.mockReturnValueOnce(firstProc).mockReturnValueOnce(secondProc)
+    const makeIdleConfig = (idleTimeoutMs: number): [unknown, undefined] => [{
+      adapters: { codex: { appServer: { idleTimeoutMs } } }
+    }, undefined]
+
+    const firstSession = await createCodexSession(makeCtx({ configs: makeIdleConfig(10) }), {
+      type: 'create',
+      runtime: 'server',
+      sessionId: 'session-short-idle',
+      description: 'short idle',
+      onEvent: () => {}
+    } as any)
+    const secondSession = await createCodexSession(makeCtx({ configs: makeIdleConfig(60_000) }), {
+      type: 'create',
+      runtime: 'server',
+      sessionId: 'session-long-idle',
+      description: 'long idle',
+      onEvent: () => {}
+    } as any)
+
+    expect(spawnMock).toHaveBeenCalledTimes(2)
+    firstSession.kill()
+    secondSession.kill()
+  })
+
+  it('does not resume the sole cached thread when the exact configuration key misses', async () => {
     process.env.HOME = '/tmp'
     const ctx = makeCtx()
     await ctx.cache.set('adapter.codex.threads', {
@@ -1976,9 +2250,8 @@ describe('createCodexSession RPC approval policy mapping', () => {
     await waitForWrites()
     session.kill()
 
-    const resumeRequest = receivedLines.find(line => line.method === 'thread/resume')
-    expect(resumeRequest?.params.threadId).toBe('thr_existing')
-    expect(receivedLines.some(line => line.method === 'thread/start')).toBe(false)
+    expect(receivedLines.some(line => line.method === 'thread/resume')).toBe(false)
+    expect(receivedLines.some(line => line.method === 'thread/start')).toBe(true)
   })
 
   it('passes maxOutputTokens from adapter config to turn/start', async () => {
@@ -2061,20 +2334,30 @@ describe('createCodexSession RPC approval policy mapping', () => {
     process.env.HOME = '/tmp'
     const { proc } = makeProc()
     spawnMock.mockReturnValue(proc)
-
-    const session = await createCodexSession(
-      makeCtx({
-        configs: [{
-          modelServices: {
-            azure: {
-              title: 'Azure',
-              apiBaseUrl: 'https://example.openai.azure.com/openai',
-              apiKey: 'test-key',
-              maxOutputTokens: 8192
+    const inlineCa = '-----BEGIN CERTIFICATE-----\nZGlyZWN0LXNlY3JldC1jYQ==\n-----END CERTIFICATE-----\n'
+    const ctx = makeCtx({
+      configs: [{
+        adapters: {
+          codex: {
+            network: {
+              httpProxy: 'http://proxy-user:proxy-password@proxy.example.test:8080',
+              caCertificate: inlineCa
             }
           }
-        }, undefined]
-      }),
+        },
+        modelServices: {
+          azure: {
+            title: 'Azure',
+            apiBaseUrl: 'https://example.openai.azure.com/openai',
+            apiKey: 'direct-provider-secret',
+            maxOutputTokens: 8192
+          }
+        }
+      }, undefined]
+    })
+
+    const session = await createCodexSession(
+      ctx,
       {
         type: 'create',
         mode: 'direct',
@@ -2097,12 +2380,50 @@ describe('createCodexSession RPC approval policy mapping', () => {
     expect(overrides.some(override => override.startsWith('model_providers.azure.max_output_tokens='))).toBe(false)
     expect(proxyMeta).toMatchObject({
       upstreamBaseUrl: 'https://example.openai.azure.com/openai',
-      maxOutputTokens: 8192
+      maxOutputTokens: 8192,
+      headers: { Authorization: 'Bearer direct-provider-secret' },
+      network: {
+        httpProxy: 'http://proxy-user:proxy-password@proxy.example.test:8080',
+        caCertificate: inlineCa.trim()
+      }
     })
+    const serializedArgs = JSON.stringify(spawnArgs)
+    const serializedLogs = JSON.stringify(ctx.logger.info.mock.calls)
+    for (const secret of ['proxy-user', 'proxy-password', 'direct-provider-secret', inlineCa]) {
+      expect(serializedArgs).not.toContain(secret)
+      expect(serializedLogs).not.toContain(secret)
+    }
+    expect(serializedArgs).toContain('owpm_')
     expect(spawnArgs).toContain('--model')
     expect(spawnArgs).toContain('gpt-5.4')
 
     session.kill()
+  })
+
+  it('does not retain private proxy metadata when session preparation fails', async () => {
+    process.env.HOME = '/tmp'
+    const registrySize = getCodexProxyMetaRegistrySizeForTests()
+
+    await expect(createCodexSession(makeCtx({
+      configs: [{
+        modelServices: {
+          azure: {
+            apiBaseUrl: 'https://example.openai.azure.com/openai',
+            apiKey: 'failed-session-secret'
+          }
+        }
+      }, undefined]
+    }), {
+      account: 'missing-account',
+      type: 'create',
+      runtime: 'server',
+      sessionId: 'session-failed-proxy-route',
+      model: 'azure,gpt-5.4',
+      description: 'Reply with pong.',
+      onEvent: () => {}
+    } as any)).rejects.toThrow('is not available')
+
+    expect(getCodexProxyMetaRegistrySizeForTests()).toBe(registrySize)
   })
 
   it('recreates the thread when resume hits invalid_encrypted_content', async () => {
@@ -2128,6 +2449,7 @@ describe('createCodexSession RPC approval policy mapping', () => {
       onEvent: () => {}
     } as any)
     firstSession.kill()
+    resetCodexAppServerPoolForTests()
 
     const secondSession = await createCodexSession(ctx, {
       type: 'resume',

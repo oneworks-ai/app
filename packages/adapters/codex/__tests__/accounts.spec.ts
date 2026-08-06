@@ -500,6 +500,39 @@ describe('prepareCodexSessionHome', () => {
       .toMatchObject({ code: 'ENOENT' })
   })
 
+  it('shares an app-server home across session contexts and preserves every trusted cwd', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-app-server-home-'))
+    const firstCwd = join(workspace, 'workspace-a')
+    const secondCwd = join(workspace, 'workspace-b')
+    const realHome = join(workspace, 'missing-real-home')
+    const mockHome = resolveTestMockHome(workspace, realHome)
+    tempDirs.push(workspace)
+    await Promise.all([mkdir(firstCwd), mkdir(secondCwd)])
+    const commonEnv = {
+      HOME: mockHome,
+      __ONEWORKS_PROJECT_REAL_HOME__: realHome,
+      __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: workspace
+    }
+
+    const [first, second] = await Promise.all([
+      prepareCodexSessionHome({
+        ctx: { cwd: firstCwd, env: commonEnv, ctxId: 'session-a', configs: [] },
+        sessionId: 'session-a',
+        appServerProfileKey: 'shared-profile'
+      }),
+      prepareCodexSessionHome({
+        ctx: { cwd: secondCwd, env: commonEnv, ctxId: 'session-b', configs: [] },
+        sessionId: 'session-b',
+        appServerProfileKey: 'shared-profile'
+      })
+    ])
+
+    expect(first.homeDir).toBe(second.homeDir)
+    const config = await readFile(join(first.homeDir, '.codex', 'config.toml'), 'utf8')
+    expect(config).toContain(`[projects.${JSON.stringify(firstCwd)}]`)
+    expect(config).toContain(`[projects.${JSON.stringify(secondCwd)}]`)
+  })
+
   it('trusts Codex native hooks through the isolated session home path', async () => {
     const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-session-hooks-'))
     const realHome = join(workspace, 'missing-real-home')

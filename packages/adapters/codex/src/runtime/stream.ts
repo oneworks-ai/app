@@ -1,5 +1,3 @@
-import { spawn } from 'node:child_process'
-
 import { callHook } from '@oneworks/hooks'
 import type {
   AdapterCtx,
@@ -27,7 +25,6 @@ import {
   formatTurnErrorMessage,
   handleIncomingNotification
 } from '#~/protocol/incoming.js'
-import { CodexRpcClient } from '#~/protocol/rpc.js'
 import type {
   CodexInputItem,
   CodexThread,
@@ -43,6 +40,7 @@ import type {
 } from '#~/types.js'
 
 import { resolveCodexAdapterConfig } from './config'
+import { acquireCodexAppServer } from './app-server-pool'
 import { resolveManagedPermissionDecisionForCtx } from './permissions'
 import {
   buildFeatureArgs,
@@ -53,6 +51,13 @@ import {
   toAdapterErrorData,
   toCodexOutboundApprovalPolicy
 } from './session-common'
+import { createCodexTranscriptHookWatcher } from './transcript-hooks'
+import {
+  registerCodexThreadSession,
+  registerPendingCodexThreadSession,
+  unregisterCodexThreadSession,
+  unregisterPendingCodexThreadSession
+} from './thread-session-map'
 
 const buildPermissionInteractionOptions = () => [
   { label: '同意本次', value: 'allow_once', description: '仅继续这次被拦截的操作。' },
@@ -186,6 +191,13 @@ const readOptionalString = (value: unknown) => (
     : undefined
 )
 
+const toCodexThreadSandbox = (policy: CodexSessionBase['sandboxPolicy']) => {
+  if (policy.type === 'dangerFullAccess') return 'danger-full-access'
+  if (policy.type === 'workspaceWrite') return 'workspace-write'
+  if (policy.type === 'readOnly') return 'read-only'
+  return undefined
+}
+
 export const callCodexObservationalPreCompactHook = async (params: {
   cwd: string
   env: AdapterCtx['env']
@@ -297,17 +309,20 @@ export async function createStreamCodexSession(
     cwd,
     binaryPath,
     spawnEnv,
-    useYolo,
+    threadEnv,
     approvalPolicy,
     sandboxPolicy,
     features,
-    configOverrideArgs,
+    threadConfig,
     resolvedModel,
+    resolvedModelProvider,
     resolvedMaxOutputTokens,
     turnEffort,
     serviceTier,
     threadCacheKey,
-    cachedThreadId
+    cachedThreadId,
+    appServerPoolKey,
+    appServerIdleTimeoutMs
   } = base
   const { cache } = ctx
   const { native: nativeConfig } = resolveCodexAdapterConfig(ctx)
@@ -316,7 +331,7 @@ export async function createStreamCodexSession(
   const rpcApprovalPolicy = toCodexOutboundApprovalPolicy(approvalPolicy)
   const startupProfiler = createStartupProfiler({
     config: ctx.configState?.mergedConfig,
-    cwd,
+    cwd: spawnEnv.HOME ?? cwd,
     ctxId: ctx.ctxId,
     env: ctx.env,
     sessionId
@@ -338,32 +353,29 @@ export async function createStreamCodexSession(
     version: rawClientInfo.version ?? '0.1.0'
   }
 
-  logger.info('[codex session] spawning app-server (stream mode)', { binaryPath, cwd })
-
   const nativeSpawnStartedAt = startupProfiler.now()
-  const proc = spawn(
-    String(binaryPath),
-    [
-      ...(useYolo ? ['--yolo'] : []),
-      'app-server',
-      ...configOverrideArgs,
+  if (appServerPoolKey == null) {
+    throw new Error('Codex stream mode requires an app-server pool profile.')
+  }
+  const appServer = await acquireCodexAppServer({
+    args: [
       ...buildFeatureArgs(features),
       ...(extraOptions ?? [])
     ],
-    { env: spawnEnv, cwd, stdio: ['pipe', 'pipe', 'inherit'] }
-  )
-  startupProfiler.mark('codex.native.spawn', nativeSpawnStartedAt, {
-    binaryPath: String(binaryPath)
+    binaryPath,
+    clientInfo,
+    cwd: spawnEnv.HOME ?? cwd,
+    env: spawnEnv,
+    experimentalApi,
+    idleTimeoutMs: appServerIdleTimeoutMs,
+    logger,
+    profileKey: appServerPoolKey
   })
-  if (typeof proc.once === 'function') {
-    proc.once('spawn', () => {
-      startupProfiler.mark('codex.native.spawnEvent', nativeSpawnStartedAt, {
-        pid: proc.pid
-      })
-    })
-  }
-
-  const rpc = new CodexRpcClient(proc, logger)
+  startupProfiler.mark('codex.native.spawn', nativeSpawnStartedAt, {
+    binaryPath: String(binaryPath),
+    pid: appServer.pid
+  })
+  const rpc = appServer.rpc
   const msgAcc = new AgentMessageAccumulator()
   const cmdAcc = new CommandOutputAccumulator()
   let threadId: string | undefined
@@ -371,6 +383,8 @@ export async function createStreamCodexSession(
   let usedCachedThread = false
   let didEmitExit = false
   let didEmitFatalError = false
+  let transcriptHookWatcher: ReturnType<typeof createCodexTranscriptHookWatcher> | undefined
+  const threadSessionMapPath = spawnEnv.__ONEWORKS_CODEX_THREAD_SESSION_MAP__
   const activeOperationIds = new Set<string>()
   const activeOperationTimers = new Map<string, Array<ReturnType<typeof setTimeout>>>()
   const pendingApprovals = new Map<string, {
@@ -466,6 +480,30 @@ export async function createStreamCodexSession(
     }
   }
 
+  const releaseActiveResources = () => {
+    for (const pending of pendingApprovals.values()) {
+      rpc.respond(
+        pending.rpcId,
+        pending.kind === 'mcp-elicitation' ? { action: 'cancel' } : { decision: 'decline' }
+      )
+    }
+    pendingApprovals.clear()
+    if (threadId != null && activeTurnId != null) {
+      rpc.request('turn/interrupt', {
+        threadId,
+        turnId: activeTurnId
+      }).catch((error) => {
+        logger.debug('[codex session] turn/interrupt during release failed', {
+          error: getErrorMessage(error),
+          sessionId,
+          threadId
+        })
+      })
+    }
+    void detachThread()
+    appServer.release()
+  }
+
   const emitFailureAndExit = (err: unknown) => {
     if (didEmitExit) return
     didEmitExit = true
@@ -475,9 +513,8 @@ export async function createStreamCodexSession(
     if (!didEmitFatalError) {
       emitEvent({ type: 'error', data: toAdapterErrorData(err) })
     }
-    rpc.destroy(stderr)
     emitEvent({ type: 'exit', data: { exitCode: 1, stderr } })
-    proc.kill()
+    releaseActiveResources()
   }
 
   const readThreadCache = async () => (await cache.get('adapter.codex.threads')) ?? {}
@@ -495,7 +532,7 @@ export async function createStreamCodexSession(
     await cache.set('adapter.codex.threads', rest)
   }
 
-  rpc.onNotification((method, params) => {
+  const handleNotification = (method: string, params: Record<string, unknown>) => {
     if (method === 'turn/started') {
       activeTurnId = (params as { turn?: { id?: string } }).turn?.id
     } else if (method === 'turn/completed') {
@@ -557,9 +594,9 @@ export async function createStreamCodexSession(
       })
     }
     handleIncomingNotification(method, params, rpc, emitEvent, msgAcc, cmdAcc, approvalPolicy)
-  })
+  }
 
-  rpc.onRequest((id, method, params) => {
+  const handleRequest = (id: number, method: string, params: Record<string, unknown>) => {
     if (method === 'item/commandExecution/requestApproval') {
       if (approvalPolicy === 'never') {
         rpc.respond(id, { decision: 'accept' })
@@ -722,9 +759,9 @@ export async function createStreamCodexSession(
       activeTurnId,
       params
     })
-  })
+  }
 
-  proc.on('exit', (code) => {
+  appServer.onExit((code) => {
     if (didEmitExit) return
     didEmitExit = true
     finishAllActiveOperations(
@@ -741,8 +778,79 @@ export async function createStreamCodexSession(
         }
       })
     }
-    rpc.destroy('process exited')
+    transcriptHookWatcher?.stop()
+    transcriptHookWatcher = undefined
+    if (threadId != null && threadSessionMapPath != null) {
+      void unregisterCodexThreadSession(threadSessionMapPath, threadId, sessionId)
+    }
     emitEvent({ type: 'exit', data: { exitCode: code ?? undefined } })
+  })
+
+  const detachThread = async () => {
+    const detachedThreadId = threadId
+    if (detachedThreadId == null) return
+    threadId = undefined
+    transcriptHookWatcher?.stop()
+    transcriptHookWatcher = undefined
+    appServer.unregisterThread(detachedThreadId)
+    rpc.request('thread/unsubscribe', { threadId: detachedThreadId }).catch((error) => {
+      logger.debug('[codex session] thread/unsubscribe failed', {
+        error: getErrorMessage(error),
+        sessionId,
+        threadId: detachedThreadId
+      })
+    })
+    if (threadSessionMapPath != null) {
+      await unregisterCodexThreadSession(threadSessionMapPath, detachedThreadId, sessionId)
+    }
+  }
+
+  const ensureTranscriptHookWatcher = () => {
+    if (spawnEnv.__ONEWORKS_CODEX_HOOKS_ACTIVE__ !== '1' || transcriptHookWatcher != null) return
+    transcriptHookWatcher = createCodexTranscriptHookWatcher({
+      codexThreadId: '__oneworks_pending_thread__',
+      cwd,
+      env: ctx.env,
+      homeDir: spawnEnv.HOME,
+      logger,
+      runtime: options.runtime,
+      sessionId
+    })
+    transcriptHookWatcher.start()
+  }
+
+  const attachThread = async (nextThreadId: string) => {
+    appServer.registerThread(nextThreadId, {
+      onNotification: handleNotification,
+      onRequest: handleRequest
+    })
+    if (threadSessionMapPath != null) {
+      await registerCodexThreadSession(threadSessionMapPath, nextThreadId, {
+        env: threadEnv,
+        runtime: options.runtime,
+        sessionId
+      })
+    }
+    ensureTranscriptHookWatcher()
+    transcriptHookWatcher?.setCodexThreadId(nextThreadId)
+  }
+
+  const withPendingThreadBinding = <T>(task: () => Promise<T>) => appServer.runThreadSetup(async () => {
+    ensureTranscriptHookWatcher()
+    if (threadSessionMapPath != null) {
+      await registerPendingCodexThreadSession(threadSessionMapPath, cwd, {
+        env: threadEnv,
+        runtime: options.runtime,
+        sessionId
+      })
+    }
+    try {
+      return await task()
+    } finally {
+      if (threadSessionMapPath != null) {
+        await unregisterPendingCodexThreadSession(threadSessionMapPath, cwd, sessionId)
+      }
+    }
   })
 
   const startNewThread = async () => {
@@ -753,13 +861,22 @@ export async function createStreamCodexSession(
       message: '正在创建 Codex 会话线程…'
     })
     const threadStartStartedAt = startupProfiler.now()
-    const startResult = await rpc.request<{ thread: CodexThread }>('thread/start', {
-      cwd,
-      approvalPolicy: rpcApprovalPolicy,
-      sandboxPolicy,
-      serviceName: CANONICAL_ONEWORKS_MCP_SERVER_NAME,
-      ...(model ? { model } : {}),
-      ...(serviceTier !== undefined ? { serviceTier } : {})
+    const startResult = await withPendingThreadBinding(async () => {
+      const result = await rpc.request<{ thread: CodexThread }>('thread/start', {
+        cwd,
+        approvalPolicy: rpcApprovalPolicy,
+        ...(toCodexThreadSandbox(sandboxPolicy) != null
+          ? { sandbox: toCodexThreadSandbox(sandboxPolicy) }
+          : {}),
+        config: threadConfig,
+        serviceName: CANONICAL_ONEWORKS_MCP_SERVER_NAME,
+        ...(model ? { model } : {}),
+        ...(resolvedModelProvider ? { modelProvider: resolvedModelProvider } : {}),
+        ...(serviceTier !== undefined ? { serviceTier } : {})
+      })
+      threadId = result.thread.id
+      await attachThread(threadId)
+      return result
     })
     startupProfiler.mark('codex.native.threadStart', threadStartStartedAt)
     threadId = startResult.thread.id
@@ -785,6 +902,7 @@ export async function createStreamCodexSession(
       error: getErrorMessage(err)
     })
     await deleteCachedThread()
+    await detachThread()
     await startNewThread()
   }
 
@@ -796,10 +914,22 @@ export async function createStreamCodexSession(
       message: '正在恢复 Codex 会话线程…'
     })
     const threadResumeStartedAt = startupProfiler.now()
-    const resumeResult = await rpc.request<{ thread: CodexThread }>('thread/resume', {
-      threadId: nextThreadId,
-      ...(model ? { model } : {}),
-      ...(serviceTier !== undefined ? { serviceTier } : {})
+    const resumeResult = await withPendingThreadBinding(async () => {
+      const result = await rpc.request<{ thread: CodexThread }>('thread/resume', {
+        threadId: nextThreadId,
+        cwd,
+        approvalPolicy: rpcApprovalPolicy,
+        ...(toCodexThreadSandbox(sandboxPolicy) != null
+          ? { sandbox: toCodexThreadSandbox(sandboxPolicy) }
+          : {}),
+        config: threadConfig,
+        ...(model ? { model } : {}),
+        ...(resolvedModelProvider ? { modelProvider: resolvedModelProvider } : {}),
+        ...(serviceTier !== undefined ? { serviceTier } : {})
+      })
+      threadId = result.thread.id
+      await attachThread(threadId)
+      return result
     })
     startupProfiler.mark('codex.native.threadResume', threadResumeStartedAt)
     threadId = resumeResult.thread.id
@@ -917,30 +1047,20 @@ export async function createStreamCodexSession(
   }
 
   try {
-    const initializeStartedAt = startupProfiler.now()
     startOperation({
       operationId: CODEX_INITIALIZE_OPERATION_ID,
       title: 'Initializing Codex app-server',
       message: '正在初始化 Codex app-server…'
     })
-    const initResult = await rpc.request<{ userAgent?: string }>('initialize', {
-      clientInfo,
-      capabilities: {
-        experimentalApi,
-        optOutNotificationMethods: [
-          'turn/diff/updated',
-          'turn/plan/updated'
-        ]
-      }
-    })
-    startupProfiler.mark('codex.native.initialize', initializeStartedAt)
     finishOperation(
       'operation_completed',
       CODEX_INITIALIZE_OPERATION_ID,
       'Codex app-server is initialized.'
     )
-    logger.info('[codex session] initialized', { userAgent: initResult?.userAgent })
-    rpc.notify('initialized', {})
+    logger.info('[codex session] shared app-server is ready', {
+      pid: appServer.pid,
+      userAgent: appServer.userAgent
+    })
 
     if (sessionType === 'resume' && cachedThreadId != null) {
       try {
@@ -1000,7 +1120,11 @@ export async function createStreamCodexSession(
 
       case 'stop': {
         finishAllActiveOperations('operation_completed', 'Codex session stopped.')
-        proc.kill()
+        if (!didEmitExit) {
+          didEmitExit = true
+          releaseActiveResources()
+          emitEvent({ type: 'exit', data: { exitCode: 0 } })
+        }
         break
       }
 
@@ -1012,9 +1136,12 @@ export async function createStreamCodexSession(
 
   return {
     kill: () => {
-      rpc.destroy('killed by caller')
       finishAllActiveOperations('operation_completed', 'Codex session stopped.')
-      proc.kill()
+      if (!didEmitExit) {
+        didEmitExit = true
+        releaseActiveResources()
+        emitEvent({ type: 'exit', data: { exitCode: 0 } })
+      }
     },
     emit,
     respondInteraction: (interactionId: string, data: string | string[]) => {
@@ -1033,6 +1160,6 @@ export async function createStreamCodexSession(
           })
       )
     },
-    pid: proc.pid
+    pid: appServer.pid
   }
 }
