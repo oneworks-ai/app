@@ -1018,13 +1018,16 @@ const handleProxyRequest = async (
 
   try {
     const dispatcher = await resolveUpstreamDispatcher(upstreamUrl, proxyMeta.network)
-    const upstreamResponse = await fetch(upstreamUrl, {
-      method: req.method ?? 'POST',
-      headers: upstreamHeaders,
-      body: toFetchBody(upstreamBody),
-      signal: abortController.signal,
-      ...(dispatcher == null ? {} : { dispatcher })
-    } as RequestInit & { dispatcher?: Dispatcher })
+    const upstreamResponse = await fetch(
+      upstreamUrl,
+      {
+        method: req.method ?? 'POST',
+        headers: upstreamHeaders,
+        body: toFetchBody(upstreamBody),
+        signal: abortController.signal,
+        ...(dispatcher == null ? {} : { dispatcher })
+      } as RequestInit & { dispatcher?: Dispatcher }
+    )
     const responseContentType = normalizeContentType(upstreamResponse.headers.get('content-type') ?? undefined)
     const shouldCaptureResponseBody = upstreamResponse.status >= 400 && responseContentType !== 'text/event-stream'
     const responseBodyForLogPromise = shouldCaptureResponseBody

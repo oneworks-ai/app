@@ -34,12 +34,14 @@ const normalizeNoProxy = (value: string | string[] | undefined) => (
 )
 
 const mergeNoProxy = (...values: Array<string | undefined>) => (
-  [...new Set(
-    values
-      .flatMap(value => value?.split(',') ?? [])
-      .map(value => value.trim())
-      .filter(Boolean)
-  )].join(',') || undefined
+  [
+    ...new Set(
+      values
+        .flatMap(value => value?.split(',') ?? [])
+        .map(value => value.trim())
+        .filter(Boolean)
+    )
+  ].join(',') || undefined
 )
 
 export const resolveCodexNetworkConfig = (params: {

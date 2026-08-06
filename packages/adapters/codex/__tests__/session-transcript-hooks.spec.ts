@@ -4,8 +4,8 @@ import { spawn } from 'node:child_process'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { createCodexSession } from '#~/runtime/session.js'
 import { resetCodexAppServerPoolForTests } from '#~/runtime/app-server-pool.js'
+import { createCodexSession } from '#~/runtime/session.js'
 import { createCodexTranscriptHookWatcher } from '#~/runtime/transcript-hooks.js'
 
 vi.mock('node:child_process', () => ({

@@ -59,20 +59,22 @@ export const registerCodexThreadSession = (
   path: string,
   threadId: string,
   binding: CodexThreadSessionBinding
-) => updateThreadSessionMap(path, current => ({
-  ...current,
-  [threadId]: binding
-}))
+) =>
+  updateThreadSessionMap(path, current => ({
+    ...current,
+    [threadId]: binding
+  }))
 
 export const unregisterCodexThreadSession = (
   path: string,
   threadId: string,
   sessionId: string
-) => updateThreadSessionMap(path, current => {
-  if (current[threadId]?.sessionId !== sessionId) return current
-  const { [threadId]: _removed, ...rest } = current
-  return rest
-})
+) =>
+  updateThreadSessionMap(path, current => {
+    if (current[threadId]?.sessionId !== sessionId) return current
+    const { [threadId]: _removed, ...rest } = current
+    return rest
+  })
 
 export const registerPendingCodexThreadSession = (
   path: string,

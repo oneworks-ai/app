@@ -713,15 +713,20 @@ describe('createCodexTranscriptHookWatcher', () => {
   it('retargets an existing shared-home transcript without replaying old events', async () => {
     const timestamp = createTimestamp()
     const transcriptPath = join(sessionsDir, 'rollout-shared-thread.jsonl')
-    await writeFile(transcriptPath, `${JSON.stringify({
-      timestamp,
-      type: 'session_meta',
-      payload: {
-        id: 'codex-shared-thread',
-        timestamp,
-        cwd: '/tmp/project'
-      }
-    })}\n`)
+    await writeFile(
+      transcriptPath,
+      `${
+        JSON.stringify({
+          timestamp,
+          type: 'session_meta',
+          payload: {
+            id: 'codex-shared-thread',
+            timestamp,
+            cwd: '/tmp/project'
+          }
+        })
+      }\n`
+    )
     const watcher = createCodexTranscriptHookWatcher({
       codexThreadId: '__pending__',
       cwd: '/tmp/project',
@@ -735,15 +740,20 @@ describe('createCodexTranscriptHookWatcher', () => {
     watcher.start()
     watcher.setCodexThreadId('codex-shared-thread')
 
-    await appendFile(transcriptPath, `${JSON.stringify({
-      timestamp: createTimestamp(),
-      type: 'response_item',
-      payload: {
-        type: 'file_change',
-        status: 'completed',
-        changes: [{ kind: 'add', path: '/tmp/project/new.txt' }]
-      }
-    })}\n`)
+    await appendFile(
+      transcriptPath,
+      `${
+        JSON.stringify({
+          timestamp: createTimestamp(),
+          type: 'response_item',
+          payload: {
+            type: 'file_change',
+            status: 'completed',
+            changes: [{ kind: 'add', path: '/tmp/project/new.txt' }]
+          }
+        })
+      }\n`
+    )
     await waitFor(60)
     watcher.stop()
 
@@ -774,27 +784,30 @@ describe('createCodexTranscriptHookWatcher', () => {
     })
     watcher.start()
 
-    await writeFile(transcriptPath, [
-      JSON.stringify({
-        timestamp,
-        type: 'session_meta',
-        payload: {
-          id: 'codex-pending-thread',
+    await writeFile(
+      transcriptPath,
+      [
+        JSON.stringify({
           timestamp,
-          cwd: '/tmp/project'
-        }
-      }),
-      JSON.stringify({
-        timestamp,
-        type: 'response_item',
-        payload: {
-          type: 'file_change',
-          status: 'completed',
-          changes: [{ kind: 'add', path: '/tmp/project/pending.txt' }]
-        }
-      }),
-      ''
-    ].join('\n'))
+          type: 'session_meta',
+          payload: {
+            id: 'codex-pending-thread',
+            timestamp,
+            cwd: '/tmp/project'
+          }
+        }),
+        JSON.stringify({
+          timestamp,
+          type: 'response_item',
+          payload: {
+            type: 'file_change',
+            status: 'completed',
+            changes: [{ kind: 'add', path: '/tmp/project/pending.txt' }]
+          }
+        }),
+        ''
+      ].join('\n')
+    )
     await waitFor(40)
     expect(callHookMock).not.toHaveBeenCalled()
 

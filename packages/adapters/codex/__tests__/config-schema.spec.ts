@@ -20,8 +20,10 @@ describe('codex adapter config schema', () => {
   })
 
   it('rejects a negative app-server idle timeout', () => {
-    expect(() => codexAdapterConfigSchema.parse({
-      appServer: { idleTimeoutMs: -1 }
-    })).toThrow()
+    expect(() =>
+      codexAdapterConfigSchema.parse({
+        appServer: { idleTimeoutMs: -1 }
+      })
+    ).toThrow()
   })
 })

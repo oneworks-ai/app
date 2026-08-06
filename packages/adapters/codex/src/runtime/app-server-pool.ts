@@ -61,7 +61,7 @@ const readThreadId = (params: Record<string, unknown>) => {
   if (typeof params.threadId === 'string' && params.threadId !== '') return params.threadId
   const thread = params.thread
   return thread != null && typeof thread === 'object' && !Array.isArray(thread) &&
-    typeof (thread as { id?: unknown }).id === 'string'
+      typeof (thread as { id?: unknown }).id === 'string'
     ? (thread as { id: string }).id
     : undefined
 }

@@ -4,10 +4,7 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
-import {
-  applyCodexNetworkEnv,
-  materializeCodexCaCertificate
-} from '#~/runtime/network.js'
+import { applyCodexNetworkEnv, materializeCodexCaCertificate } from '#~/runtime/network.js'
 import { matchesNoProxy } from '#~/runtime/proxy.js'
 
 const tempDirs: string[] = []

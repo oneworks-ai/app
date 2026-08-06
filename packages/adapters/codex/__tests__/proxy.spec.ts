@@ -209,20 +209,21 @@ describe('codex proxy', () => {
     if (upstreamAddress == null || typeof upstreamAddress === 'string') throw new Error('Missing upstream address')
     const localProxy = await ensureCodexProxyServer()
 
-    const responses = await Promise.all(Array.from({ length: 40 }, async (_, index) => fetch(
-      `${localProxy.baseUrl}/responses`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          [CODEX_PROXY_META_HEADER_NAME]: encodeCodexProxyMeta({
-            upstreamBaseUrl: `http://127.0.0.1:${upstreamAddress.port}`,
-            network: { noProxy: `profile-${index}.example.test` }
-          })
-        },
-        body: JSON.stringify({ model: 'gpt-5.4', input: 'ping' })
-      }
-    )))
+    const responses = await Promise.all(Array.from({ length: 40 }, async (_, index) =>
+      fetch(
+        `${localProxy.baseUrl}/responses`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            [CODEX_PROXY_META_HEADER_NAME]: encodeCodexProxyMeta({
+              upstreamBaseUrl: `http://127.0.0.1:${upstreamAddress.port}`,
+              network: { noProxy: `profile-${index}.example.test` }
+            })
+          },
+          body: JSON.stringify({ model: 'gpt-5.4', input: 'ping' })
+        }
+      )))
 
     expect(responses.every(response => response.status === 200)).toBe(true)
     expect(getCodexProxyDispatcherCountForTests()).toBeLessThanOrEqual(32)

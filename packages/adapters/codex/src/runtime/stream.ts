@@ -39,8 +39,8 @@ import type {
   McpServerElicitationResponse
 } from '#~/types.js'
 
-import { resolveCodexAdapterConfig } from './config'
 import { acquireCodexAppServer } from './app-server-pool'
+import { resolveCodexAdapterConfig } from './config'
 import { resolveManagedPermissionDecisionForCtx } from './permissions'
 import {
   buildFeatureArgs,
@@ -51,13 +51,13 @@ import {
   toAdapterErrorData,
   toCodexOutboundApprovalPolicy
 } from './session-common'
-import { createCodexTranscriptHookWatcher } from './transcript-hooks'
 import {
   registerCodexThreadSession,
   registerPendingCodexThreadSession,
   unregisterCodexThreadSession,
   unregisterPendingCodexThreadSession
 } from './thread-session-map'
+import { createCodexTranscriptHookWatcher } from './transcript-hooks'
 
 const buildPermissionInteractionOptions = () => [
   { label: '同意本次', value: 'allow_once', description: '仅继续这次被拦截的操作。' },
@@ -835,23 +835,24 @@ export async function createStreamCodexSession(
     transcriptHookWatcher?.setCodexThreadId(nextThreadId)
   }
 
-  const withPendingThreadBinding = <T>(task: () => Promise<T>) => appServer.runThreadSetup(async () => {
-    ensureTranscriptHookWatcher()
-    if (threadSessionMapPath != null) {
-      await registerPendingCodexThreadSession(threadSessionMapPath, cwd, {
-        env: threadEnv,
-        runtime: options.runtime,
-        sessionId
-      })
-    }
-    try {
-      return await task()
-    } finally {
+  const withPendingThreadBinding = <T>(task: () => Promise<T>) =>
+    appServer.runThreadSetup(async () => {
+      ensureTranscriptHookWatcher()
       if (threadSessionMapPath != null) {
-        await unregisterPendingCodexThreadSession(threadSessionMapPath, cwd, sessionId)
+        await registerPendingCodexThreadSession(threadSessionMapPath, cwd, {
+          env: threadEnv,
+          runtime: options.runtime,
+          sessionId
+        })
       }
-    }
-  })
+      try {
+        return await task()
+      } finally {
+        if (threadSessionMapPath != null) {
+          await unregisterPendingCodexThreadSession(threadSessionMapPath, cwd, sessionId)
+        }
+      }
+    })
 
   const startNewThread = async () => {
     logger.info('[codex session] starting new thread', { cwd, sessionId })

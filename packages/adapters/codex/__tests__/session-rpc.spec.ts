@@ -4,12 +4,12 @@ import { spawn } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
+import { resetCodexAppServerPoolForTests } from '#~/runtime/app-server-pool.js'
 import {
   CODEX_PROXY_META_HEADER_NAME,
   getCodexProxyMetaRegistrySizeForTests,
   resolveCodexProxyMetaForTests
 } from '#~/runtime/proxy.js'
-import { resetCodexAppServerPoolForTests } from '#~/runtime/app-server-pool.js'
 import { createCodexSession } from '#~/runtime/session.js'
 import { NATIVE_HOOK_BRIDGE_ADAPTER_ENV, callHook } from '@oneworks/hooks'
 import type { AdapterOutputEvent } from '@oneworks/types'
@@ -2177,14 +2177,16 @@ describe('createCodexSession RPC approval policy mapping', () => {
       }
     })
 
-    proc.stdout.push(`${JSON.stringify({
-      id: 91,
-      method: 'item/commandExecution/requestApproval',
-      params: {
-        threadId: 'thr_kimi',
-        command: 'pwd'
-      }
-    })}\n`)
+    proc.stdout.push(`${
+      JSON.stringify({
+        id: 91,
+        method: 'item/commandExecution/requestApproval',
+        params: {
+          threadId: 'thr_kimi',
+          command: 'pwd'
+        }
+      })
+    }\n`)
     await waitForWrites()
     expect(azureEvents.some(event => event.type === 'interaction_request')).toBe(false)
     expect(kimiEvents.some(event => event.type === 'interaction_request')).toBe(true)
@@ -2404,24 +2406,27 @@ describe('createCodexSession RPC approval policy mapping', () => {
     process.env.HOME = '/tmp'
     const registrySize = getCodexProxyMetaRegistrySizeForTests()
 
-    await expect(createCodexSession(makeCtx({
-      configs: [{
-        modelServices: {
-          azure: {
-            apiBaseUrl: 'https://example.openai.azure.com/openai',
-            apiKey: 'failed-session-secret'
+    await expect(createCodexSession(
+      makeCtx({
+        configs: [{
+          modelServices: {
+            azure: {
+              apiBaseUrl: 'https://example.openai.azure.com/openai',
+              apiKey: 'failed-session-secret'
+            }
           }
-        }
-      }, undefined]
-    }), {
-      account: 'missing-account',
-      type: 'create',
-      runtime: 'server',
-      sessionId: 'session-failed-proxy-route',
-      model: 'azure,gpt-5.4',
-      description: 'Reply with pong.',
-      onEvent: () => {}
-    } as any)).rejects.toThrow('is not available')
+        }, undefined]
+      }),
+      {
+        account: 'missing-account',
+        type: 'create',
+        runtime: 'server',
+        sessionId: 'session-failed-proxy-route',
+        model: 'azure,gpt-5.4',
+        description: 'Reply with pong.',
+        onEvent: () => {}
+      } as any
+    )).rejects.toThrow('is not available')
 
     expect(getCodexProxyMetaRegistrySizeForTests()).toBe(registrySize)
   })

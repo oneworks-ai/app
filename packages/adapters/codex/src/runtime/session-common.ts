@@ -21,13 +21,9 @@ import {
   mergeCodexConfigOverrides,
   resolveCodexAdapterConfig
 } from './config'
-import { buildMcpServerPermissionSubjectKeys, resolveManagedPermissionDecision } from './permissions'
 import type { CodexNetworkConfig } from './network'
-import {
-  applyCodexNetworkEnv,
-  materializeCodexCaCertificate,
-  resolveCodexNetworkConfig
-} from './network'
+import { applyCodexNetworkEnv, materializeCodexCaCertificate, resolveCodexNetworkConfig } from './network'
+import { buildMcpServerPermissionSubjectKeys, resolveManagedPermissionDecision } from './permissions'
 import {
   CODEX_PROXY_META_HEADER_NAME,
   activateCodexProxyMetaRoute,
