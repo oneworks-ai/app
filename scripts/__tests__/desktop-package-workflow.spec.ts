@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- one workflow contract is intentionally exercised end to end. */
 import { spawnSync } from 'node:child_process'
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -25,9 +26,17 @@ function extractRunScript(stepName: string) {
   expect(stepStart).toBeGreaterThanOrEqual(0)
 
   const nextStep = workflow.indexOf('\n      - name:', stepStart + stepMarker.length)
+  const nextJobOffset = workflow
+    .slice(stepStart + stepMarker.length)
+    .search(/\n {2}[\w-]+:\n/iu)
+  const nextJob = nextJobOffset === -1
+    ? -1
+    : stepStart + stepMarker.length + nextJobOffset
+  const boundaries = [nextStep, nextJob].filter(boundary => boundary !== -1)
+  const stepEnd = boundaries.length === 0 ? workflow.length : Math.min(...boundaries)
   const step = workflow.slice(
     stepStart,
-    nextStep === -1 ? workflow.length : nextStep
+    stepEnd
   )
   const runMarker = '\n        run: |\n'
   const runStart = step.indexOf(runMarker)
@@ -88,6 +97,52 @@ function runReleaseTagGuard(status: number, output = '', sourceSha = 'a'.repeat(
         PATH: `${commandDir}:${process.env.PATH}`,
         SOURCE_SHA: sourceSha,
         TAG: 'pkg/oneworks-desktop/v0.1.0-beta.11'
+      }
+    )
+  } finally {
+    rmSync(commandDir, { force: true, recursive: true })
+  }
+}
+
+function runProductSourceGuard({
+  builderSourceSha = 'c'.repeat(40),
+  eventName = 'workflow_dispatch',
+  output,
+  productSourceSha = 'a'.repeat(40),
+  status = 0,
+  workflowRef = 'refs/heads/main',
+  workflowSha = 'c'.repeat(40)
+}: {
+  builderSourceSha?: string
+  eventName?: string
+  output: string
+  productSourceSha?: string
+  status?: number
+  workflowRef?: string
+  workflowSha?: string
+}) {
+  const commandDir = mkdtempSync(path.join(tmpdir(), 'oneworks-desktop-product-source-bin-'))
+  const gitPath = path.join(commandDir, 'git')
+  writeFileSync(
+    gitPath,
+    `#!/usr/bin/env bash\nprintf '%s' "$FAKE_GIT_OUTPUT"\nexit "$FAKE_GIT_STATUS"\n`
+  )
+  chmodSync(gitPath, 0o755)
+
+  try {
+    return runBash(
+      extractRunScript('Validate requested product source'),
+      {
+        BUILDER_SOURCE_SHA: builderSourceSha,
+        DESKTOP_RELEASE_TAG_PREFIX: 'pkg/oneworks-desktop/v',
+        EVENT_NAME: eventName,
+        FAKE_GIT_OUTPUT: output,
+        FAKE_GIT_STATUS: String(status),
+        PATH: `${commandDir}:${process.env.PATH}`,
+        PRODUCT_SOURCE_SHA: productSourceSha,
+        RELEASE_TAG_INPUT: 'pkg/oneworks-desktop/v0.1.0',
+        WORKFLOW_REF: workflowRef,
+        WORKFLOW_SHA: workflowSha
       }
     )
   } finally {
@@ -186,6 +241,10 @@ describe('desktop package workflow', () => {
       'candidate_run_id must be a numeric GitHub Actions run id.'
     )
     expect(workflow).toContain('candidate_run_id:')
+    expect(workflow).toContain('builder_source_sha:')
+    expect(workflow).toContain('product_source_sha:')
+    expect(workflow).toContain('replace_existing_release:')
+    expect(workflow).toContain('product_source_sha cannot be combined with candidate_run_id.')
     expect(workflow).toContain("inputs.candidate_run_id != ''")
     expect(workflow).toContain(
       `run-id: \${{ github.event_name == 'workflow_dispatch' && inputs.candidate_run_id || github.run_id }}`
@@ -199,6 +258,70 @@ describe('desktop package workflow', () => {
     )
     expect(workflow).toContain(
       'Release tag $TAG points to $resolved_source_sha, not verified candidate $SOURCE_SHA.'
+    )
+  })
+
+  it('requires explicit product and builder identities for existing release replacement', () => {
+    const script = extractRunScript('Validate desktop workflow request')
+    const baseEnv = {
+      BUILDER_SOURCE_SHA: 'b'.repeat(40),
+      CANDIDATE_RUN_ID: '',
+      CREATE_RELEASE_REQUESTED: 'true',
+      PRODUCT_SOURCE_SHA: 'a'.repeat(40),
+      RELEASE_TAG_INPUT: 'pkg/oneworks-desktop/v0.1.0',
+      REPLACE_EXISTING_RELEASE: 'true'
+    }
+
+    const validReplacement = runBash(script, baseEnv)
+    expect(validReplacement.status, validReplacement.stderr).toBe(0)
+    const missingBuilder = runBash(script, { ...baseEnv, BUILDER_SOURCE_SHA: '' })
+    expect(missingBuilder.status).toBe(1)
+    expect(missingBuilder.stderr).toContain('builder_source_sha must be a full')
+    const missingProduct = runBash(script, {
+      ...baseEnv,
+      BUILDER_SOURCE_SHA: '',
+      PRODUCT_SOURCE_SHA: ''
+    })
+    expect(missingProduct.status).toBe(1)
+    expect(missingProduct.stderr).toContain('requires create_release=true and product_source_sha')
+  })
+
+  it('rebuilds only an immutable product source matching the peeled release tag', () => {
+    const tag = 'pkg/oneworks-desktop/v0.1.0'
+    const sourceSha = 'a'.repeat(40)
+    const matched = runProductSourceGuard({
+      output: `${'b'.repeat(40)}\trefs/tags/${tag}\n${sourceSha}\trefs/tags/${tag}^{}\n`,
+      productSourceSha: sourceSha
+    })
+    const mismatched = runProductSourceGuard({
+      output: `${'b'.repeat(40)}\trefs/tags/${tag}\n`
+    })
+    const wrongEvent = runProductSourceGuard({
+      eventName: 'push',
+      output: ''
+    })
+    const wrongBuilder = runProductSourceGuard({
+      builderSourceSha: 'd'.repeat(40),
+      output: `${'b'.repeat(40)}\trefs/tags/${tag}\n${sourceSha}\trefs/tags/${tag}^{}\n`
+    })
+    const wrongRef = runProductSourceGuard({
+      output: `${'b'.repeat(40)}\trefs/tags/${tag}\n${sourceSha}\trefs/tags/${tag}^{}\n`,
+      workflowRef: 'refs/heads/codex/unsafe-builder'
+    })
+
+    expect(matched.status, matched.stderr).toBe(0)
+    expect(mismatched.status).toBe(1)
+    expect(mismatched.stderr).toContain('not requested product source')
+    expect(wrongEvent.status).toBe(1)
+    expect(wrongEvent.stderr).toContain('only supported for manual workflow dispatch')
+    expect(wrongBuilder.status).toBe(1)
+    expect(wrongBuilder.stderr).toContain('does not match workflow commit')
+    expect(wrongRef.status).toBe(1)
+    expect(wrongRef.stderr).toContain('protected refs/heads/main')
+    expect(workflow).toContain('path: product-source')
+    expect(workflow).toContain('ref: $' + '{{ inputs.product_source_sha }}')
+    expect(workflow).toContain(
+      'working-directory: $' + '{{ steps.desktop_workspace.outputs.workspace_dir }}'
     )
   })
 
@@ -279,14 +402,46 @@ describe('desktop package workflow', () => {
     const verifyIndex = workflow.indexOf(
       '      - name: Verify macOS install artifact'
     )
+    const verifyArtifactsIndex = workflow.indexOf(
+      '      - name: Verify every unsigned macOS artifact seal'
+    )
     const uploadIndex = workflow.indexOf(
       '      - name: Upload installer artifacts'
     )
-
+    const sealIndex = workflow.indexOf(
+      '      - name: Seal immutable unsigned product app bundles'
+    )
+    const verifyQuarantineIndex = workflow.indexOf(
+      '      - name: Verify unsigned installed app quarantine boundary'
+    )
     expect(validationIndex).toBeLessThan(packageIndex)
+    expect(packageIndex).toBeLessThan(sealIndex)
+    expect(sealIndex).toBeLessThan(buildIndex)
     expect(packageIndex).toBeLessThan(buildIndex)
+    expect(buildIndex).toBeLessThan(verifyArtifactsIndex)
+    expect(verifyArtifactsIndex).toBeLessThan(verifyIndex)
     expect(buildIndex).toBeLessThan(verifyIndex)
+    expect(verifyIndex).toBeLessThan(verifyQuarantineIndex)
     expect(verifyIndex).toBeLessThan(uploadIndex)
+    expect(workflow).toContain(
+      'run: node apps/desktop/scripts/mac-adhoc-seal.cjs verify-quarantine-installed'
+    )
+    expect(workflow).not.toContain('/Applications/One Works.app')
+    expect(workflow).toContain(
+      'Unsigned desktop release candidates must contain a complete ad-hoc bundle seal.'
+    )
+    expect(workflow).toContain('Retain existing release backup')
+    expect(workflow).toContain('retention-days: 90')
+    expect(workflow).toContain('Replacement failed; restoring archived Release assets.')
+    expect(workflow).toContain('verify_remote_directory release-artifacts')
+    const releaseScriptSyntax = spawnSync('bash', ['--noprofile', '--norc', '-n'], {
+      encoding: 'utf8',
+      input: extractRunScript('Create or update GitHub Release')
+    })
+    expect(releaseScriptSyntax.status, releaseScriptSyntax.stderr).toBe(0)
+    expect(workflow.indexOf('verify_remote_directory release-artifacts')).toBeLessThan(
+      workflow.indexOf('gh release edit "$TAG" --latest --notes "$NOTES"')
+    )
   })
 
   it.each(credentials)(
@@ -324,17 +479,28 @@ describe('desktop package workflow', () => {
   it.each([
     [
       'false',
+      'true',
+      '- Unsigned macOS installers with a complete ad-hoc bundle seal; Gatekeeper still requires manual approval'
+    ],
+    [
+      'false',
+      'false',
       '- Unsigned macOS installers; Gatekeeper may require manual approval'
     ],
     [
       'true',
+      'false',
       '- Developer ID signed and Apple-notarized macOS installers'
     ]
-  ])('writes accurate release notes when signed=%s', (signed, expectedNote) => {
+  ])('writes accurate release notes when signed=%s and adHocSealed=%s', (signed, adHocSealed, expectedNote) => {
     const result = runWithOutput(
       extractRunScript('Resolve release notes'),
       {
+        AD_HOC_SEALED: adHocSealed,
+        BUILDER_SHA: 'b'.repeat(40),
+        REPLACE_EXISTING_RELEASE: 'false',
         SIGNED: signed,
+        SOURCE_SHA: 'a'.repeat(40),
         TAG: 'pkg/oneworks-desktop/v0.1.0-beta.10'
       }
     )
@@ -344,5 +510,24 @@ describe('desktop package workflow', () => {
     expect(result.output).toContain(
       '- Intel (x64) and Apple Silicon (arm64): .dmg, .pkg, .zip'
     )
+    expect(result.output).toContain(`- Product source: ${'a'.repeat(40)}`)
+    expect(result.output).toContain(`- Release builder: ${'b'.repeat(40)}`)
+  })
+
+  it('warns that same-version desktop asset replacements require a re-download', () => {
+    const result = runWithOutput(
+      extractRunScript('Resolve release notes'),
+      {
+        AD_HOC_SEALED: 'true',
+        BUILDER_SHA: 'b'.repeat(40),
+        REPLACE_EXISTING_RELEASE: 'true',
+        SIGNED: 'false',
+        SOURCE_SHA: 'a'.repeat(40),
+        TAG: 'pkg/oneworks-desktop/v0.2.0'
+      }
+    )
+    expect(result.status, result.stderr).toBe(0)
+    expect(result.output).toContain('Existing 0.2.0 users must re-download')
+    expect(result.output).toContain('same-version assets do not auto-update')
   })
 })

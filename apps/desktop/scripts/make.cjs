@@ -6,6 +6,7 @@ const path = require('node:path')
 
 const { resolveDesktopAppMetadata } = require('./desktop-app-metadata.cjs')
 const { resolveTargetArchs, toBuilderArchArg } = require('./desktop-archs.cjs')
+const { sealAdHocAppBundle } = require('./mac-adhoc-seal.cjs')
 const {
   assertPrepackagedDarwinIcon,
   darwinBuilderIconConfigArgs,
@@ -155,7 +156,7 @@ const resolvePrepackagedPath = (targetArch) => {
   return packageDir
 }
 
-const buildElectronBuilderArgs = ({ appVersion, publishMode, targetArch, updateChannel }) => {
+const buildElectronBuilderArgs = ({ appVersion, prepackagedPath, publishMode, targetArch, updateChannel }) => {
   const builderCliPath = require.resolve('electron-builder/cli.js')
   const builderChannel = updateChannel === 'stable' ? 'latest' : updateChannel
   return [
@@ -177,7 +178,7 @@ const buildElectronBuilderArgs = ({ appVersion, publishMode, targetArch, updateC
     ...(updateChannel === 'stable' ? [] : ['--config.publish.releaseType=prerelease']),
     ...macIconConfigArgs(),
     '--prepackaged',
-    resolvePrepackagedPath(targetArch),
+    prepackagedPath,
     ...buildTargetArgs({
       envTargets: process.env.ONEWORKS_DESKTOP_MAKE_TARGETS,
       platform: process.platform,
@@ -223,8 +224,13 @@ const runElectronBuilder = () => {
   }
 
   for (const targetArch of targetArchs) {
+    const prepackagedPath = resolvePrepackagedPath(targetArch)
+    if (process.platform === 'darwin' && !isTruthy(process.env.ONEWORKS_DESKTOP_SIGN)) {
+      sealAdHocAppBundle({ appPath: prepackagedPath })
+    }
     const args = buildElectronBuilderArgs({
       appVersion,
+      prepackagedPath,
       publishMode,
       targetArch,
       updateChannel

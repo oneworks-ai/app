@@ -119,7 +119,7 @@
   - `DESKTOP_AUTO_UPDATE`
     目标是继续保证手动非 release artifact 不会误进稳定更新通道。
 - 改签名逻辑时，不要破坏“默认关闭签名”的本地与 CI 行为；当前只有显式设置 `ONEWORKS_DESKTOP_SIGN=true`，或 tag / 手动构建读取到 `DESKTOP_SIGN=true` 时才进入签名流程。普通 PR 只运行轻量门禁，不进入安装包 job，也不读取签名 secrets；完整 CI 目标包含 `pkg`，开启签名时仍要求 Application 与 Installer 两套证书 secret。
-- 手动 artifact、`pkg/oneworks-desktop/v*` 和手动 `create_release=true` 都按 `DESKTOP_SIGN` 决定是否签名。未启用时允许上传 unsigned 安装包，但 Release notes 必须明确标记，不能描述为已签名或已公证；启用时仍必须要求完整凭据并完成签名与 notarization。
+- 手动 artifact、`pkg/oneworks-desktop/v*` 和手动 `create_release=true` 都按 `DESKTOP_SIGN` 决定是否签名。未启用时仍必须先把 app 内 workspace 绝对 symlink 重写为可移植的 bundle 内相对链接、拒绝断链，再完整 ad-hoc seal prepackaged app，并逐一解包验证 arm64 / x64 的 DMG、PKG、ZIP；候选 manifest 记录 `adHocSealed`、product source SHA 与 builder SHA。Release notes 必须明确它仍是 unsigned，不能描述为 Developer ID 已签名或已公证；启用时仍必须要求完整凭据并完成签名与 notarization。
 - 启用签名的正式 macOS 构建不仅要 notarize `.app`：生成后的 `.dmg` 与 Developer ID Installer 签名 `.pkg` 也必须提交 notarization 并 staple；安装验证同时覆盖 `codesign` / `spctl --type execute`、`pkgutil` / `spctl --type install` 和 installer staple，避免只验证 DMG 内应用却发布不可安装的 PKG。
 - 改版本号传递或 artifact 命名时，保持 `pkg/oneworks-desktop/v*` tag、`artifactName` 与 `latest*.yml` 中的 URL 一致，否则自动更新会直接失效。
 - 正式包的 runtime package cache version 必须读取 Electron 最终应用版本（`app.getVersion()`），不能读取依赖包版本。打包 staging 的应用 manifest 必须先写入 `ONEWORKS_DESKTOP_VERSION`，保证 Electron runtime、原生 bundle 与 runtime cache 目录使用同一最终版本；release tag 覆盖桌面版本但内部 workspace 包尚未对齐时也不能复用上一版 server / adapter 缓存。

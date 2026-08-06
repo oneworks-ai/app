@@ -102,8 +102,10 @@ const assertExpectedSet = (actual, expectedCsv, allowedValues, name) => {
 }
 
 const createCandidateManifest = ({
+  adHocSealed,
   architectures,
   artifactDirectory,
+  builderSha,
   createdAt,
   signed,
   sourceSha,
@@ -113,6 +115,12 @@ const createCandidateManifest = ({
   const release = resolveReleaseIdentity(tag)
   if (!SOURCE_SHA_PATTERN.test(sourceSha)) {
     throw new Error('Desktop release candidate source SHA must be a 40-character Git commit SHA.')
+  }
+  if (!SOURCE_SHA_PATTERN.test(builderSha)) {
+    throw new Error('Desktop release candidate builder SHA must be a 40-character Git commit SHA.')
+  }
+  if (typeof adHocSealed !== 'boolean' || adHocSealed === signed) {
+    throw new Error('Desktop release candidates must be either Developer ID signed or ad-hoc sealed.')
   }
   if (Number.isNaN(Date.parse(createdAt))) {
     throw new TypeError('Desktop release candidate createdAt must be an ISO timestamp.')
@@ -133,11 +141,13 @@ const createCandidateManifest = ({
   })
 
   const manifest = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     ...release,
     sourceSha: sourceSha.toLowerCase(),
+    builderSha: builderSha.toLowerCase(),
     createdAt,
     signed,
+    adHocSealed,
     architectures: declaredArchitectures,
     targets: declaredTargets,
     artifacts
@@ -156,7 +166,7 @@ const readCandidateManifest = artifactDirectory => {
     throw new Error(`Desktop release candidate manifest was not found at ${manifestPath}.`)
   }
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
-  if (manifest?.schemaVersion !== 1) {
+  if (manifest?.schemaVersion !== 1 && manifest?.schemaVersion !== 2) {
     throw new Error(`Unsupported desktop release candidate schema: ${manifest?.schemaVersion}.`)
   }
   return manifest
@@ -181,6 +191,14 @@ const verifyCandidateManifest = ({
   }
   if (typeof manifest.signed !== 'boolean') {
     throw new TypeError('Desktop release candidate manifest contains an invalid signed value.')
+  }
+  if (manifest.schemaVersion === 2) {
+    if (!SOURCE_SHA_PATTERN.test(manifest.builderSha)) {
+      throw new Error('Desktop release candidate manifest contains an invalid builder SHA.')
+    }
+    if (typeof manifest.adHocSealed !== 'boolean' || manifest.adHocSealed === manifest.signed) {
+      throw new Error('Desktop release candidate manifest has an invalid signing mode.')
+    }
   }
   if (!Array.isArray(manifest.artifacts) || manifest.artifacts.length === 0) {
     throw new Error('Desktop release candidate manifest contains no artifact records.')
@@ -216,6 +234,8 @@ const writeOutputs = (outputPath, manifest) => {
     `${
       [
         `signed=${manifest.signed}`,
+        `ad_hoc_sealed=${manifest.adHocSealed === true}`,
+        `builder_sha=${manifest.builderSha ?? manifest.sourceSha}`,
         `source_sha=${manifest.sourceSha}`,
         `tag=${manifest.tag}`,
         `update_channel=${manifest.updateChannel}`,
@@ -231,8 +251,10 @@ const runCli = () => {
   const artifactDirectory = path.resolve(requestedDirectory ?? 'apps/desktop/release')
   if (command === 'create') {
     const manifest = createCandidateManifest({
+      adHocSealed: /^(1|true|yes|on)$/i.test(process.env.ONEWORKS_DESKTOP_AD_HOC_SEALED ?? ''),
       architectures: process.env.ONEWORKS_DESKTOP_ARCHS,
       artifactDirectory,
+      builderSha: process.env.ONEWORKS_DESKTOP_BUILDER_GIT_HASH ?? '',
       createdAt: process.env.ONEWORKS_DESKTOP_BUILD_TIME,
       signed: /^(1|true|yes|on)$/i.test(process.env.ONEWORKS_DESKTOP_SIGN ?? ''),
       sourceSha: process.env.ONEWORKS_DESKTOP_BUILD_GIT_HASH ?? '',

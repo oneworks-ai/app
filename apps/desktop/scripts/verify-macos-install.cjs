@@ -12,6 +12,7 @@ const {
 } = require('./desktop-app-metadata.cjs')
 const { normalizeArch } = require('./desktop-archs.cjs')
 const { DESKTOP_BUILD_SOURCE_FILE } = require('./desktop-build-source.cjs')
+const { verifyAdHocAppBundle } = require('./mac-adhoc-seal.cjs')
 
 const desktopRoot = path.resolve(__dirname, '..')
 const workspaceRoot = path.resolve(desktopRoot, '../..')
@@ -94,7 +95,10 @@ const assertInstalledAppMetadata = (appPath) => {
 }
 
 const assertInstalledAppSignature = ({ appPath, dmgPath, targetArch }) => {
-  if (!isTruthy(process.env.ONEWORKS_DESKTOP_SIGN)) return
+  if (!isTruthy(process.env.ONEWORKS_DESKTOP_SIGN)) {
+    verifyAdHocAppBundle({ appPath })
+    return
+  }
   const pkgPath = findPkgArtifact(targetArch)
   run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', appPath], { stdio: 'inherit' })
   run('codesign', ['--verify', '--verbose=2', dmgPath], { stdio: 'inherit' })

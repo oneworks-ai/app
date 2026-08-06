@@ -13,8 +13,10 @@ const {
 } = require('../scripts/release-candidate-manifest.cjs') as typeof import('../scripts/release-candidate-manifest.cjs')
 
 const candidateInput = (artifactDirectory: string) => ({
+  adHocSealed: true,
   architectures: 'arm64,x64',
   artifactDirectory,
+  builderSha: 'b'.repeat(40),
   createdAt: '2026-07-30T00:00:00Z',
   signed: false,
   sourceSha: 'a'.repeat(40),
@@ -53,7 +55,9 @@ describe('desktop release candidate manifest', () => {
     })
 
     expect(created).toMatchObject({
+      adHocSealed: true,
       architectures: ['arm64', 'x64'],
+      builderSha: 'b'.repeat(40),
       signed: false,
       sourceSha: 'a'.repeat(40),
       targets: ['dmg', 'zip', 'pkg'],
@@ -94,6 +98,24 @@ describe('desktop release candidate manifest', () => {
         expectedTag: 'pkg/oneworks-desktop/v0.1.0-beta.12'
       })
     ).toThrow('tag mismatch')
+  })
+
+  it('rejects candidates without exactly one complete signing mode', async () => {
+    const artifactDirectory = await mkdtemp(path.join(tmpdir(), 'oneworks-desktop-candidate-'))
+    await seedCandidateArtifacts(artifactDirectory)
+
+    expect(() =>
+      createCandidateManifest({
+        ...candidateInput(artifactDirectory),
+        adHocSealed: false
+      })
+    ).toThrow('either Developer ID signed or ad-hoc sealed')
+    expect(() =>
+      createCandidateManifest({
+        ...candidateInput(artifactDirectory),
+        signed: true
+      })
+    ).toThrow('either Developer ID signed or ad-hoc sealed')
   })
 
   it('rejects a candidate when any requested installer is missing', async () => {
