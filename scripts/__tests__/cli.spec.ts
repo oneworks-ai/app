@@ -1224,7 +1224,9 @@ describe('scripts cli', () => {
   it('dispatches Windows install metadata sync', async () => {
     const runWindowsInstallSyncOneWorks = vi.fn(async () => ({
       scoopManifestPath: '/repo/infra/windows/scoop-bucket/bucket/oneworks.json',
-      installerSha256: '0'.repeat(64),
+      scoopInstallerSha256: '0'.repeat(64),
+      scoopInstallerUrl: 'https://example.com/oneworks-windows-1.2.3.zip',
+      wingetInstallerSha256: '1'.repeat(64),
       wingetInstallerUrl: 'https://example.com/oneworks-windows-1.2.3.msi',
       wingetLocaleManifestPath: '/repo/infra/windows/winget/OneWorks.OneWorks.locale.en-US.yaml',
       wingetTemplatePath: '/repo/infra/windows/winget/OneWorks.OneWorks.installer.template.yaml',

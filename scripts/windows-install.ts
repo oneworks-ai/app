@@ -4,12 +4,14 @@ import path from 'node:path'
 import process from 'node:process'
 
 import { computeUrlSha256, normalizeOneWorksVersion } from './cli-package-release'
-import { buildStableWindowsMsiProductCode } from './stable-windows-release.mjs'
-import {
+import installerIdentity from './windows-installer-identity.cjs'
+
+const {
   assertWingetInstallerTemplate,
   buildCanonicalScoopInstallerUrl,
-  buildCanonicalWingetInstallerUrl
-} from './windows-installer-identity.mjs'
+  buildCanonicalWingetInstallerUrl,
+  buildStableWindowsMsiProductCode
+} = installerIdentity
 
 const DEFAULT_SCOOP_MANIFEST_PATH = 'infra/windows/scoop-bucket/bucket/oneworks.json'
 const DEFAULT_WINGET_VERSION_MANIFEST_PATH = 'infra/windows/winget/OneWorks.OneWorks.yaml'

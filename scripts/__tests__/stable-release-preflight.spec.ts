@@ -5,8 +5,9 @@ import {
   runStableReleasePreflight,
   validateStableWingetInstallerTemplate
 } from '../stable-release-preflight.mjs'
-import { buildStableWindowsMsiProductCode } from '../stable-windows-release.mjs'
-import { buildCanonicalWingetInstallerUrl } from '../windows-installer-identity.mjs'
+import installerIdentity from '../windows-installer-identity.cjs'
+
+const { buildCanonicalWingetInstallerUrl, buildStableWindowsMsiProductCode } = installerIdentity
 
 const buildWingetTemplate = (version: string, installerSha256 = 'a'.repeat(64)) =>
   [

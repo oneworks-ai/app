@@ -4,7 +4,6 @@ import path from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
-import { buildStableWindowsMsiProductCode } from '../stable-windows-release.mjs'
 import {
   buildDefaultScoopInstallerUrl,
   buildDefaultWingetInstallerUrl,
@@ -16,7 +15,9 @@ import {
   updateWingetInstallerTemplate,
   updateWingetPackageVersion
 } from '../windows-install'
-import { assertWingetInstallerTemplate } from '../windows-installer-identity.mjs'
+import installerIdentity from '../windows-installer-identity.cjs'
+
+const { assertWingetInstallerTemplate, buildStableWindowsMsiProductCode } = installerIdentity
 
 const buildWingetTemplate = (version: string, installerSha256 = 'a'.repeat(64)) =>
   [

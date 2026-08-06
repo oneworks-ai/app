@@ -4,7 +4,9 @@ import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 
 import { loadWorkspacePackages } from './publish-plan-core.mjs'
-import { assertWingetInstallerTemplate } from './windows-installer-identity.mjs'
+import installerIdentity from './windows-installer-identity.cjs'
+
+const { assertWingetInstallerTemplate } = installerIdentity
 
 const STABLE_VERSION_PATTERN = /^\d+\.\d+\.\d+$/u
 const VSCODE_PACKAGE_NAME = '@oneworks/vscode-extension'
