@@ -4,6 +4,7 @@ import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 
 import { loadWorkspacePackages } from './publish-plan-core.mjs'
+import { assertWingetInstallerTemplate } from './windows-installer-identity.mjs'
 
 const STABLE_VERSION_PATTERN = /^\d+\.\d+\.\d+$/u
 const VSCODE_PACKAGE_NAME = '@oneworks/vscode-extension'
@@ -64,6 +65,15 @@ const assertFileContains = async (filePath, expected, errors) => {
   if (!content.includes(expected)) errors.push(`${filePath} is missing ${expected}`)
 }
 
+export const validateStableWingetInstallerTemplate = (content, version) => {
+  try {
+    assertWingetInstallerTemplate(content, { version })
+    return []
+  } catch (error) {
+    return [error.message]
+  }
+}
+
 export const runStableReleasePreflight = async (argv = process.argv.slice(2)) => {
   const input = parseArgs(argv)
   const repoRoot = process.cwd()
@@ -110,11 +120,8 @@ export const runStableReleasePreflight = async (argv = process.argv.slice(2)) =>
       errors
     )
   }
-  await assertFileContains(
-    path.join(repoRoot, 'infra/windows/winget/OneWorks.OneWorks.installer.template.yaml'),
-    `/pkg/oneworks/v${input.version}/oneworks-windows-${input.version}.zip`,
-    errors
-  )
+  const installerTemplate = path.join(repoRoot, 'infra/windows/winget/OneWorks.OneWorks.installer.template.yaml')
+  errors.push(...validateStableWingetInstallerTemplate(await readFile(installerTemplate, 'utf8'), input.version))
 
   const result = {
     ok: errors.length === 0,
