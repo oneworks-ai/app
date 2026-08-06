@@ -301,6 +301,11 @@ describe('account quota Ant Design interactions', () => {
     await click(quotaTrigger)
     expect(document.querySelector('.ant-modal.account-quota-modal')).not.toBeNull()
 
+    const resetCredits = document.querySelector<HTMLDetailsElement>('.account-quota-modal__credits')
+    expect(resetCredits?.open).toBe(false)
+    await click(resetCredits?.querySelector('summary') ?? null)
+    expect(resetCredits?.open).toBe(true)
+
     await click(document.querySelector('button[aria-label="Use reset credit"]'))
     await flushInteraction()
     expect(document.querySelector('.ant-popconfirm')).not.toBeNull()

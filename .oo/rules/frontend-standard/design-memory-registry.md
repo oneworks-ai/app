@@ -6,8 +6,8 @@
 
 ### OW-DM-001 — 相邻边界间距归属
 
-- Revision / status / rule / scope: 1 / ACTIVE / 相邻元素的同一条接缝只能由一层负责留白；项目默认 spacing token 为 10px，双侧内部 padding 同时保留时必须使用可见分割线 / OneWorks project，adjacent component and section boundaries。
-- Applies / does not apply / examples: 相邻组件、字段、section、列表行、header 或内容区共享同一条边界时适用；两个结构各自的内部 padding 由可见分割线明确隔开时不适用。正例是 parent gap、前一项底部 padding 或后一项顶部 padding 三选一并使用项目 token；反例是三者叠加成无语义大空白。
+- Revision / status / rule / scope: 3 / ACTIVE / 相邻元素的同一条接缝只能由一层负责留白；项目默认 spacing token 为 10px，双侧内部 padding 同时保留时必须使用可见分割线 / OneWorks project，adjacent component and section boundaries。
+- Applies / does not apply / examples: 相邻组件、字段、section、列表行、header 或内容区共享同一条边界时适用；两个结构各自的内部 padding 由可见分割线明确隔开时不适用。正例是 parent gap、前一项底部 padding 或后一项顶部 padding 三选一并使用项目 token；共享额度面板把常驻限额与可折叠重置卡收进同一卡片，用单条分割线保留两侧等距 padding；账号详情的 profile、tabs 和 tab panel 只由 `--subpage-tertiary-gap` 形成标准 `10px` 接缝；共享 `NativeTabs` 不通过相邻 panel 选择器自动注入 `margin-block-start`。反例是三者叠加成无语义大空白，或把同一额度内容拆成两张卡再用 gap 拼接。
 - Ownership / implementation / source / lifecycle / enforcement: [`styles.md`](./styles.md) 中的“相邻区块的间距归属”拥有规则，具体 surface 的共享 spacing token / parent gap / 单侧 padding 拥有实现；来源为用户明确设计标准，2026-07-11 生效，不替代旧规则，例外在下方登记；由 computed box model、DOM 几何检查或模块视觉回归执行。
 
 ### OW-DM-002 — 紧凑 chrome 尺寸语言
@@ -139,6 +139,18 @@
 - Applies / does not apply: 适用于场景明确要求局部镜头聚焦并能通过稳定 selector 定位目标；普通产品录屏、用户没有要求聚焦、或聚焦会裁掉关键上下文时不自动启用。
 - Positive / negative example: 鼠标接近 Adapter 控件时镜头开始推近，点击前稳定，弹层完整保留并持续到结尾；反例是窗口始终维持全景，只把蓝色光标放大，或用模拟窗口 / 模拟弹层代替真实画面。
 - Ownership / source / exceptions / enforcement: 规范正文由 [`../maintenance/demo-video.md`](../maintenance/demo-video.md)“场景维护”拥有，实现在 demo-video recorder 的 selector camera focus timeline；来源为用户 2026-08-05 先要求打开 Adapter 选择器时放大鼠标区域、随后指出最终成片没有实际放大。场景可用窄作用域倍率 / offset 保证浮层不被裁切；由 scenario 调用顺序单测、camera timeline 缓动单测、四变体关键帧和独立逐帧视觉审阅执行。
+
+### OW-DM-012 — 额度重置卡默认折叠
+
+- Revision / status / scope: 1 / ACTIVE / OneWorks project，所有复用 `AccountQuotaPanel` 的账号额度 surface。额度重置卡标题与可用次数始终可见，卡片或空态正文默认折叠，通过同一原生 disclosure 在原位展开。
+- Applies / does not apply / examples: 适用于账号详情、聊天额度弹窗及后续复用共享面板的入口；不影响上方使用限额窗口的常驻展示。正例是默认只显示“额度重置卡 / 可用次数”与展开箭头，点击或键盘操作后出现现有卡片；反例是每个消费页面各自维护展开状态、默认平铺空态，或折叠后留下正文高度。
+- Ownership / source / exceptions / enforcement: 规则由 `apps/client/src/components/account-quota/AGENTS.md` 与 `AccountQuotaPanel.tsx` 拥有；来源为用户 2026-08-07 明确要求额度重置卡可折叠且默认折叠。暂无例外；由 `<details>/<summary>` DOM 契约、共享组件交互测试、账号详情与聊天弹窗的深浅主题及响应式视觉回归执行。
+
+### OW-DM-013 — 账号额度区域不因认证状态消失
+
+- Revision / status / scope: 1 / ACTIVE / OneWorks project，已存在账号记录且明确支持额度查询的共享额度 surface；首个适用范围为 Codex 账号详情。
+- Rule / examples: 认证缺失或失效时仍保留完整额度卡片，继续展示最后一次额度或空结构，并在使用限额区域内给出本地化的重新登录提示；反例是以 `quota != null` 或登录状态为条件卸载整张卡片，让用户失去问题上下文与重新登录入口。
+- Ownership / source / exceptions / enforcement: 规则由 `apps/client/src/components/account-quota/AGENTS.md`、`AccountQuotaPanel.tsx` 与消费方拥有；来源为用户 2026-08-07 明确要求无论登录状态是否丢失都展示额度区域，并在区域内提示。账号记录本身已被删除时不适用；由 missing / error 且无 quota 的组件回归、配置详情与聊天弹窗真实页面视觉审阅执行。
 
 ## 待确认冲突
 

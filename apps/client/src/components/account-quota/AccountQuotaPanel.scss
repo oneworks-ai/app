@@ -1,0 +1,256 @@
+.account-quota-modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.account-quota-modal__freshness {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 8px 6px 10px;
+  border: 1px solid
+    color-mix(in srgb, var(--warning-color, #faad14) 42%, transparent);
+  border-radius: 8px;
+  color: var(--sub-text-color, #6b7280);
+  background: color-mix(in srgb, var(--warning-color, #faad14) 9%, transparent);
+  font-size: 12px;
+}
+
+.account-quota-modal__freshness.is-error {
+  color: var(--warning-color, #ad6800);
+}
+
+.account-quota-modal__freshness .oneworks-inline-action-button {
+  flex: 0 0 auto;
+}
+
+.account-quota-modal__state {
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.account-quota-modal__panel {
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: color-mix(
+    in srgb,
+    var(--card-bg, var(--bg-color, #fff)) 92%,
+    var(--text-color, #111827)
+  );
+}
+
+.account-quota-modal__summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--subpage-tertiary-gap, 10px);
+  padding: var(--subpage-tertiary-padding, 10px);
+}
+
+.account-quota-modal__section-title {
+  color: var(--text-color);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.account-quota-modal__heading-copy,
+.account-quota-modal__window-copy {
+  --account-quota-icon-slot-size: 18px;
+
+  min-width: 0;
+  display: grid;
+  grid-template-columns: var(--account-quota-icon-slot-size) minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+}
+
+.account-quota-modal__heading-icon,
+.account-quota-modal__window-icon,
+.account-quota-modal__credits-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--account-quota-icon-slot-size, 18px);
+  height: var(--account-quota-icon-slot-size, 18px);
+  font-size: var(--account-quota-icon-slot-size, 18px);
+  line-height: 1;
+}
+
+.account-quota-modal__heading-icon {
+  color: var(--primary-color);
+}
+
+.account-quota-modal__window-icon {
+  align-self: start;
+  margin-top: 1px;
+  color: var(--sub-text-color, #6b7280);
+}
+
+.account-quota-modal__window {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.account-quota-modal__window-copy-content,
+.account-quota-modal__credit-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.account-quota-modal__window-copy-content > span,
+.account-quota-modal__credit-meta,
+.account-quota-modal__empty {
+  color: var(--sub-text-color, #6b7280);
+  font-size: 12px;
+}
+
+.account-quota-modal__credit-meta {
+  width: fit-content;
+  font-variant-numeric: tabular-nums;
+  line-height: 20px;
+}
+
+.account-quota-modal__credit-meta:focus-visible {
+  border-radius: 2px;
+  outline: 1px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+.account-quota-modal__window-value {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  color: var(--sub-text-color, #6b7280);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.account-quota-modal__credits-heading,
+.account-quota-modal__credit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.account-quota-modal__credits-heading {
+  width: 100%;
+  padding: var(--subpage-tertiary-padding, 10px);
+  border-radius: 6px;
+  color: inherit;
+  cursor: pointer;
+  list-style: none;
+}
+
+.account-quota-modal__credits {
+  border-top: 1px solid var(--border-color);
+}
+
+.account-quota-modal__credits-heading::-webkit-details-marker {
+  display: none;
+}
+
+.account-quota-modal__credits-heading:focus-visible {
+  outline: 1px solid var(--primary-color);
+  outline-offset: 4px;
+}
+
+.account-quota-modal__credits-chevron {
+  flex: 0 0 auto;
+  color: var(--sub-text-color, #6b7280);
+  transition: transform 160ms ease, color 160ms ease;
+}
+
+.account-quota-modal__credits-heading:hover
+  .account-quota-modal__credits-chevron,
+.account-quota-modal__credits-heading:focus-visible
+  .account-quota-modal__credits-chevron {
+  color: var(--primary-color);
+}
+
+.account-quota-modal__credits[open] .account-quota-modal__credits-chevron {
+  transform: rotate(90deg);
+}
+
+.account-quota-modal__credits-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--subpage-tertiary-gap, 10px);
+  padding: 0 var(--subpage-tertiary-padding, 10px)
+    var(--subpage-tertiary-padding, 10px);
+}
+
+.account-quota-modal__available {
+  padding: 3px 9px;
+  border-radius: 999px;
+  color: var(--success-color, #52c41a);
+  background: color-mix(
+    in srgb,
+    var(--success-color, #52c41a) 16%,
+    transparent
+  );
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.account-quota-modal__credit {
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+}
+
+.account-quota-modal__credit-title {
+  font-weight: 650;
+}
+
+.account-quota-modal__credit-action-wrap {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  flex: 0 0 20px;
+}
+
+.account-quota-modal__credit-action.oneworks-inline-action-button.ant-btn {
+  justify-content: center;
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 5px !important;
+}
+
+.account-quota-modal__time-tooltip {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.account-quota-modal__time-tooltip-row {
+  display: grid;
+  grid-template-columns: max-content max-content;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.account-quota-modal__time-tooltip-label {
+  font-weight: 600;
+}
+
+.account-quota-modal__time-tooltip-value {
+  color: var(--oneworks-overlay-muted, var(--sub-text-color, #9ca3af));
+}
+
+@media (max-width: 560px) {
+  .account-quota-modal__window {
+    grid-template-columns: 1fr auto;
+  }
+}

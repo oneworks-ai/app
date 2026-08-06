@@ -39,13 +39,7 @@
 
 .native-tabs-panel,
 [data-native-tabs-panel='true'] {
-  --native-tabs-panel-gap: 10px;
   min-width: 0;
-}
-
-.native-tabs + .native-tabs-panel,
-.native-tabs + [data-native-tabs-panel='true'] {
-  margin-block-start: var(--native-tabs-panel-gap);
 }
 
 .native-tabs__tab {

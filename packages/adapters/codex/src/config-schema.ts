@@ -2,19 +2,24 @@ import { z } from 'zod'
 
 import {
   adapterAccountConfigCommonSchema,
+  adapterConfigCommonSchema,
   adapterNativeCliConfigSchema,
+  buildConfigUiObjectSchema,
   defineAdapterConfigContribution,
   effortLevelSchema,
   jsonValueSchema
 } from '@oneworks/core/config-schema'
 
 const codexAdapterAccountSchema = adapterAccountConfigCommonSchema.extend({
-  authFile: z.string().optional().describe('Path to the Codex auth.json file for this account'),
+  authFile: z.string().optional().describe(
+    'Optional explicit path to a Codex auth.json file. Leave empty to use the credentials stored for this account.'
+  ),
   auth: z.object({
     type: z.literal('codex-auth-json').optional().describe('Encoded credential payload type'),
     encoding: z.literal('base64').describe('Credential payload encoding'),
     token: z.string().describe('Base64 encoded Codex auth.json payload')
   }).optional().describe('Inline Codex auth.json payload stored in the global OneWorks config'),
+  displayName: z.string().optional().describe('Cached Codex account display name'),
   email: z.string().optional().describe('Cached Codex account email'),
   avatarUrl: z.string().optional().describe('Custom Codex account avatar URL'),
   planType: z.string().optional().describe('Cached Codex plan type'),
@@ -62,11 +67,32 @@ export type CodexAdapterConfig = z.infer<typeof codexAdapterConfigSchema>
 export type CodexCommonAdapterConfigKey = 'effort'
 export type CodexNativeAdapterConfig = CodexAdapterConfig
 
+const codexAdapterUiSchema = buildConfigUiObjectSchema(
+  adapterConfigCommonSchema.merge(codexAdapterConfigSchema)
+)
+const codexAccountUiSchema = buildConfigUiObjectSchema(codexAdapterAccountSchema)
+const editableCodexAccountFields = new Set(['title', 'description', 'authFile'])
+
 export const adapterConfigContribution = defineAdapterConfigContribution({
   adapterKey: 'codex',
   title: 'Codex',
   description: 'Codex adapter configuration',
   schema: codexAdapterConfigSchema,
+  uiSchema: {
+    ...codexAdapterUiSchema,
+    recordFields: {
+      ...codexAdapterUiSchema.recordFields,
+      accounts: {
+        ...codexAdapterUiSchema.recordFields?.accounts,
+        itemSchema: {
+          ...codexAccountUiSchema,
+          fields: codexAccountUiSchema.fields.filter(field => (
+            field.path.length === 1 && editableCodexAccountFields.has(field.path[0] ?? '')
+          ))
+        }
+      }
+    }
+  },
   configEntry: {
     extraCommonKeys: ['effort'] as const,
     deepMergeKeys: ['cli', 'accounts', 'sandboxPolicy', 'clientInfo', 'configOverrides', 'features'] as const

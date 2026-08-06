@@ -129,6 +129,7 @@ export function adaptersRouter(): Router {
 
     if (
       action !== 'add' &&
+      action !== 'reauthenticate' &&
       action !== 'refresh' &&
       action !== 'remove' &&
       action !== 'consume-reset-credit'

@@ -92,11 +92,20 @@ vi.mock('#~/api', () => ({
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
+    i18n: {
+      language: 'zh',
+      resolvedLanguage: 'zh'
+    },
     t: (key: string, options?: Record<string, unknown>) => {
       if (key === 'chat.accountQuota') return '账号额度'
       if (key === 'chat.accountQuotaWindow') {
         return `${String(options?.window)} 额度：已使用 ${String(options?.value)}`
       }
+      if (key === 'chat.accountQuotaModal.windowDuration.days') return `${String(options?.count)} 天`
+      if (key === 'chat.accountQuotaModal.windowDuration.hours') return `${String(options?.count)} 小时`
+      if (key === 'chat.accountQuotaModal.windowDuration.minutes') return `${String(options?.count)} 分钟`
+      if (key === 'chat.accountQuotaModal.windowUsage') return `${String(options?.window)}用量`
+      if (key === 'chat.accountQuotaModal.resetsAt') return `${String(options?.date)} 重置`
       return key
     }
   })
@@ -233,7 +242,13 @@ describe('account quota indicators', () => {
         account='work'
         quota={{
           metrics: [
-            { id: 'primary-usage', label: '5h used', value: '48%' }
+            {
+              id: 'primary-usage',
+              label: '5h used',
+              value: '48%',
+              description: 'Resets 2026-07-10 16:14'
+            },
+            { id: 'codex-spark-primary-usage', label: 'Codex Spark · 7d used', value: '0%' }
           ],
           rateLimitResetCredits: {
             availableCount: 2,
@@ -244,6 +259,15 @@ describe('account quota indicators', () => {
     )
 
     expect(html).toContain('chat.accountQuotaModal.available')
+    expect(html).toContain('query_stats')
+    expect(html).toContain('schedule')
+    expect(html).toContain('bolt')
+    expect(html).toContain('5 小时用量')
+    expect(html).toContain('重置')
+    expect(html).not.toContain('Resets')
+    expect(html).toContain('<div class="account-quota-modal__panel"><section')
+    expect(html).toContain('<details class="account-quota-modal__credits"><summary')
+    expect(html).not.toContain('<details class="account-quota-modal__credits" open=""')
     expect(html).not.toContain('config.accounts.resetCredits.noCredits')
     expect(html.match(/config\.accounts\.resetCredits\.fullResetTitle/g)).toHaveLength(2)
     expect(html.match(/config\.accounts\.resetCredits\.summaryDescription/g)).toHaveLength(2)

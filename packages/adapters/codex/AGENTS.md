@@ -47,7 +47,7 @@ Primary implementation entrypoints for Codex hooks:
   - normalizes the imported Codex config before using that HOME with the CLI, so unsupported values from a user's real config do not break One Works sessions.
   - queries Codex account info and rate-limit/quota snapshots through `codex app-server`
   - reads the ChatGPT profile avatar after account refresh, persists only trusted-host HTTPS image URLs, and keeps an explicitly configured `avatarUrl` authoritative
-  - exposes standard adapter account management actions: add via `codex login`, detail lookup, refresh, and remove from global config
+  - exposes standard adapter account management actions: add and reauthenticate via `codex login`, detail lookup, refresh, and remove from global config
 - `src/paths.ts`
   - resolves the official `@openai/codex` JavaScript launcher to its platform package's native executable, because packaged Electron users may not have a standalone `node` binary on `PATH`
 - `src/models.ts`
@@ -209,13 +209,14 @@ session 级 HOME 仍然完全隔离：如果账号只来自 global config，adap
 现在还支持两类额外入口：
 
 - `ow accounts add codex [accountName]`
-  - 在隔离 HOME 下执行 `codex login`
+  - 在隔离 `HOME` / `CODEX_HOME` 下强制使用 file credential store 执行 `codex login`
   - 登录完成后读取生成的 `auth.json`
   - 把 `auth.json` base64 写入 global `~/.oneworks/.oo.config.json` 的 `adapters.codex.accounts.<key>.auth.token`
 - Web 配置页 `Adapters -> Codex -> Accounts`
   - adapter 详情页会先展示 `defaultAccount` 选择，再展示 `账号` 入口
   - 账号根页可直接触发 `Connect account`
   - 三级详情页可查看来源、rate-limit / quota 摘要，并编辑 `title / description / authFile`
+  - 三级详情页的“重新登录”动作保留当前 account key 原值，再次执行隔离的 `codex login` 并原位替换凭据；不要重新 slugify 现有 key
   - `description` 在前端按 multiline 字段编辑
   - `authFile` 留空时默认使用 global config 里的 inline auth
 

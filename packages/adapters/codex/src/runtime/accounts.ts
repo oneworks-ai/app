@@ -38,7 +38,7 @@ import { createLogger } from '@oneworks/utils/create-logger'
 
 import { resolveCodexBinaryPath } from '#~/paths.js'
 import { CodexRpcClient } from '#~/protocol/rpc.js'
-import { fetchCodexProfileAvatarFromFile } from '#~/runtime/account-profile.js'
+import { fetchCodexProfileFromFile } from '#~/runtime/account-profile.js'
 import { ensureCodexConfigCliCompatibility } from '#~/runtime/config.js'
 import { ensureCodexNativeHookTrustState } from '#~/runtime/native-hooks.js'
 
@@ -47,6 +47,7 @@ interface CodexConfiguredAccount {
   description?: string
   authFile?: string
   auth?: CodexInlineAuthConfig
+  displayName?: string
   email?: string
   avatarUrl?: string
   planType?: string
@@ -70,7 +71,14 @@ interface CodexInlineAuthConfig {
   value?: string
 }
 
+interface CodexGlobalAccountCredentialRevision {
+  authFile?: string
+  authFileDigest?: string
+  inlineAuthDigest?: string
+}
+
 interface CodexAccountIdentity {
+  displayName?: string
   email?: string
   planType?: string
   accountType?: string
@@ -141,6 +149,12 @@ const CODEX_ACCOUNT_LIST_ACTIONS: AdapterAccountActionDescriptor[] = [
 ]
 
 const CODEX_ACCOUNT_DETAIL_ACTIONS: AdapterAccountActionDescriptor[] = [
+  {
+    key: 'reauthenticate',
+    label: 'Sign in again',
+    description: 'Run `codex login` again and replace the stored credentials for this account.',
+    scope: 'account'
+  },
   {
     key: 'refresh',
     label: 'Refresh quota',
@@ -500,6 +514,7 @@ const normalizeCodexIdentity = (
   }
 
   const normalized: CodexAccountIdentity = {
+    displayName: normalizeNonEmptyString(identity.displayName),
     email: normalizeNonEmptyString(identity.email),
     planType: normalizeNonEmptyString(identity.planType),
     accountType: normalizeNonEmptyString(identity.accountType),
@@ -609,6 +624,9 @@ const readCodexAuthIdentityFromContent = (authContent: string): CodexAccountProb
 
     return mergeCodexAccountProbes({
       accountType,
+      displayName: typeof idTokenPayload?.name === 'string'
+        ? idTokenPayload.name
+        : undefined,
       email: typeof idTokenPayload?.email === 'string' ? idTokenPayload.email : undefined,
       planType: typeof authClaims?.chatgpt_plan_type === 'string'
         ? authClaims.chatgpt_plan_type
@@ -720,6 +738,7 @@ const isSameCodexAccountIdentity = (
 const buildProbeFromMetadata = (metadata: CodexStoredAccountMetadata | undefined): CodexAccountProbe | undefined => {
   return mergeCodexAccountProbes(
     metadata == null ? undefined : {
+      displayName: metadata.displayName,
       email: metadata.email,
       planType: metadata.planType,
       accountType: metadata.accountType,
@@ -1169,22 +1188,88 @@ const updateCodexGlobalAdapterConfig = async (
   updater: (
     codexConfig: Record<string, unknown>,
     accounts: Record<string, unknown>
-  ) => Record<string, unknown>
+  ) => Promise<Record<string, unknown>> | Record<string, unknown>
 ) => {
   await updateConfigFile({
     env: ctx.env,
     workspaceFolder: ctx.cwd,
     source: 'global',
     section: 'adapters',
-    resolveValue: (currentConfig) => {
+    resolveValue: async (currentConfig) => {
       const adapters = isRecord(currentConfig.adapters) ? { ...currentConfig.adapters } : {}
       const codexConfig = isRecord(adapters.codex) ? { ...adapters.codex } : {}
       const accounts = isRecord(codexConfig.accounts) ? { ...codexConfig.accounts } : {}
-      adapters.codex = updater(codexConfig, accounts)
+      adapters.codex = await updater(codexConfig, accounts)
       return adapters
     }
   })
 }
+
+const readCodexGlobalConfiguredAccount = async (targetPath: string, accountKey: string) => {
+  try {
+    const config = JSON.parse(await readFile(targetPath, 'utf8')) as unknown
+    const adapters = isRecord(config) && isRecord(config.adapters) ? config.adapters : undefined
+    const codexConfig = isRecord(adapters?.codex) ? adapters.codex : undefined
+    const accounts = isRecord(codexConfig?.accounts) ? codexConfig.accounts : undefined
+    return isRecord(accounts?.[accountKey])
+      ? accounts[accountKey] as CodexConfiguredAccount
+      : undefined
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return undefined
+    }
+    throw error
+  }
+}
+
+const buildCodexGlobalAccountCredentialRevision = async (
+  ctx: Pick<AdapterCtx, 'cwd'>,
+  configuredAccount: CodexConfiguredAccount
+): Promise<CodexGlobalAccountCredentialRevision> => {
+  const authFile = normalizeNonEmptyString(configuredAccount.authFile)
+  const authFilePath = resolveConfiguredAuthFilePath(ctx, authFile)
+  const authFileContent = authFilePath == null
+    ? undefined
+    : await readFile(authFilePath, 'utf8').catch(() => undefined)
+  const inlineAuthContent = decodeCodexInlineAuthContent(configuredAccount.auth)
+
+  return {
+    authFile,
+    authFileDigest: authFileContent == null
+      ? undefined
+      : createHash('sha256').update(authFileContent).digest('hex'),
+    inlineAuthDigest: inlineAuthContent == null
+      ? undefined
+      : createHash('sha256').update(inlineAuthContent).digest('hex')
+  }
+}
+
+const codexGlobalAccountCredentialRevisionsMatch = (
+  left: CodexGlobalAccountCredentialRevision,
+  right: CodexGlobalAccountCredentialRevision
+) => (
+  left.authFile === right.authFile &&
+  left.authFileDigest === right.authFileDigest &&
+  left.inlineAuthDigest === right.inlineAuthDigest
+)
+
+const readCodexGlobalAccountCredentialRevision = async (
+  ctx: Pick<AdapterCtx, 'cwd' | 'env'>,
+  accountKey: string
+) =>
+  withCanonicalConfigWriteLock(
+    resolveCodexGlobalConfigPath(ctx),
+    async (targetPath) => {
+      const configuredAccount = await readCodexGlobalConfiguredAccount(targetPath, accountKey)
+      if (configuredAccount == null) {
+        throw new Error(
+          `Codex account "${accountKey}" changed or was removed before sign-in started. Refresh and try again.`
+        )
+      }
+
+      return buildCodexGlobalAccountCredentialRevision(ctx, configuredAccount)
+    }
+  )
 
 const assertCodexGlobalCredentialIsCurrent = async (params: {
   descriptor: CodexAccountDescriptor
@@ -1229,6 +1314,7 @@ const buildMetadataFromConfiguredAccount = (
     : createHash('sha256').update(authContent).digest('hex')
   const authIdentity = authContent == null ? undefined : readCodexAuthIdentityFromContent(authContent)
   const configuredProbe = buildProbeFromMetadata({
+    displayName: configuredAccount.displayName,
     email: configuredAccount.email,
     planType: configuredAccount.planType,
     accountType: configuredAccount.accountType,
@@ -1244,6 +1330,7 @@ const buildMetadataFromConfiguredAccount = (
     title: normalizeNonEmptyString(configuredAccount.title),
     description: normalizeNonEmptyString(configuredAccount.description),
     avatarUrl: normalizeNonEmptyString(configuredAccount.avatarUrl),
+    displayName: probe?.displayName,
     email: probe?.email,
     planType: probe?.planType,
     accountType: probe?.accountType,
@@ -1275,6 +1362,7 @@ const buildCodexGlobalAccountConfig = (params: {
   }),
   description: params.metadata.description ?? params.existing?.description,
   avatarUrl: params.metadata.avatarUrl ?? params.existing?.avatarUrl,
+  displayName: params.metadata.displayName,
   email: params.metadata.email,
   planType: params.metadata.planType,
   accountType: params.metadata.accountType,
@@ -1297,12 +1385,29 @@ const upsertCodexGlobalAccountConfig = async (
     key: string
     authContent: string
     metadata: CodexStoredAccountMetadata
+    expectedCredentialRevision?: CodexGlobalAccountCredentialRevision
   }
 ) => {
-  await updateCodexGlobalAdapterConfig(ctx, (codexConfig, accounts) => {
+  await updateCodexGlobalAdapterConfig(ctx, async (codexConfig, accounts) => {
     const existing = isRecord(accounts[params.key])
       ? accounts[params.key] as CodexConfiguredAccount
       : undefined
+    if (params.expectedCredentialRevision != null) {
+      const currentCredentialRevision = existing == null
+        ? undefined
+        : await buildCodexGlobalAccountCredentialRevision(ctx, existing)
+      if (
+        currentCredentialRevision == null ||
+        !codexGlobalAccountCredentialRevisionsMatch(
+          currentCredentialRevision,
+          params.expectedCredentialRevision
+        )
+      ) {
+        throw new Error(
+          `Codex account "${params.key}" changed while sign-in was in progress. Refresh and try again.`
+        )
+      }
+    }
     accounts[params.key] = buildCodexGlobalAccountConfig({
       key: params.key,
       authContent: params.authContent,
@@ -1382,6 +1487,7 @@ const updateCodexGlobalAccountMetadata = async (
     }
 
     const existingProbe = buildProbeFromMetadata({
+      displayName: existing.displayName,
       email: existing.email,
       planType: existing.planType,
       accountType: existing.accountType,
@@ -1407,6 +1513,7 @@ const updateCodexGlobalAccountMetadata = async (
       ...params.descriptor.metadata,
       quota: cloneQuotaInfo(persistedProbe.quota),
       resetCreditDetailsCapturedAt: parseFiniteNumber(params.probe.resetCreditDetailsCapturedAt),
+      ...(persistedProbe.displayName != null ? { displayName: persistedProbe.displayName } : {}),
       ...(persistedProbe.email != null ? { email: persistedProbe.email } : {}),
       ...(persistedProbe.planType != null ? { planType: persistedProbe.planType } : {}),
       ...(persistedProbe.accountType != null ? { accountType: persistedProbe.accountType } : {}),
@@ -1705,7 +1812,7 @@ const probeCodexAccount = async (params: {
       })
     let accountResult: unknown
     let rateLimitsResult: unknown
-    let avatarUrl: string | undefined
+    let profile: Awaited<ReturnType<typeof fetchCodexProfileFromFile>>
     if (consumeResetCredit == null) {
       accountResult = await rpc.request('account/read', {
         ...(refresh === true ? { refreshToken: true } : {})
@@ -1714,10 +1821,10 @@ const probeCodexAccount = async (params: {
         rpc.request('account/rateLimits/read'),
         fetchProfile === false
           ? Promise.resolve(undefined)
-          : fetchCodexProfileAvatarFromFile(authFilePath)
+          : fetchCodexProfileFromFile(authFilePath)
       ])
       rateLimitsResult = snapshotResult[0]
-      avatarUrl = snapshotResult[1]
+      profile = snapshotResult[1]
     } else {
       try {
         accountResult = await rpc.request('account/read', {
@@ -1738,7 +1845,7 @@ const probeCodexAccount = async (params: {
       }
 
       if (fetchProfile !== false) {
-        avatarUrl = await fetchCodexProfileAvatarFromFile(authFilePath)
+        profile = await fetchCodexProfileFromFile(authFilePath)
       }
     }
 
@@ -1906,9 +2013,10 @@ const probeCodexAccount = async (params: {
     return {
       ...authIdentity,
       accountType: accountType ?? authIdentity?.accountType,
+      displayName: profile?.displayName ?? authIdentity?.displayName,
       email: email ?? authIdentity?.email,
       planType: planType ?? authIdentity?.planType,
-      avatarUrl,
+      avatarUrl: profile?.avatarUrl,
       resetCreditOutcome: parseResetCreditOutcome(consumeResult),
       quota: summary === '' &&
           metrics.length === 0 &&
@@ -2111,6 +2219,7 @@ const buildRealHomeAccountDescriptor = async (
       probe: authIdentity
     }),
     description: 'Read from ~/.codex/auth.json',
+    displayName: authIdentity?.displayName,
     email: authIdentity?.email,
     planType: authIdentity?.planType,
     accountType: authIdentity?.accountType,
@@ -2333,6 +2442,7 @@ const writeProbeMetadata = async (params: {
     ...descriptor.metadata,
     quota: cloneQuotaInfo(mergedProbe.quota),
     resetCreditDetailsCapturedAt: parseFiniteNumber(probe.resetCreditDetailsCapturedAt),
+    ...(mergedProbe.displayName != null ? { displayName: mergedProbe.displayName } : {}),
     ...(mergedProbe.email != null ? { email: mergedProbe.email } : {}),
     ...(mergedProbe.planType != null ? { planType: mergedProbe.planType } : {}),
     ...(mergedProbe.accountType != null ? { accountType: mergedProbe.accountType } : {}),
@@ -2416,7 +2526,8 @@ const getCodexAccountProbeUnlocked = async (params: {
     homeDir: authSource.homeDir,
     authFilePath: authSource.authFilePath,
     refresh,
-    fetchProfile: normalizeNonEmptyString(descriptor.metadata?.avatarUrl) == null,
+    fetchProfile: normalizeNonEmptyString(descriptor.metadata?.avatarUrl) == null ||
+      normalizeNonEmptyString(descriptor.metadata?.displayName) == null,
     logKey: `${scope}-${descriptor.key}`
   })
   const probe = await mergeProbeWithCachedQuotaUnlocked({
@@ -2624,6 +2735,7 @@ const buildCodexAccountDetail = (params: {
     avatarUrl: normalizeNonEmptyString(configuredAccount?.avatarUrl) ??
       normalizeNonEmptyString(descriptor.metadata?.avatarUrl) ??
       normalizeNonEmptyString(probe?.avatarUrl),
+    displayName: normalizeNonEmptyString(mergedProbe?.displayName),
     email: normalizeNonEmptyString(mergedProbe?.email),
     planType: normalizeNonEmptyString(mergedProbe?.planType),
     accountType: normalizeNonEmptyString(mergedProbe?.accountType),
@@ -2665,11 +2777,13 @@ const runCodexLogin = async (params: {
   const spawnEnv = buildSpawnEnv(ctx)
   const loginKey = `login-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
   const homeDir = resolveCodexProbeHomeDir(ctx, loginKey)
-  const authFilePath = join(homeDir, '.codex', 'auth.json')
+  const codexHomeDir = join(homeDir, '.codex')
+  const authFilePath = join(codexHomeDir, 'auth.json')
 
   throwIfAborted(signal)
   spawnEnv.HOME = homeDir
-  await mkdir(join(homeDir, '.codex'), { recursive: true })
+  spawnEnv.CODEX_HOME = codexHomeDir
+  await mkdir(codexHomeDir, { recursive: true })
   onProgress?.({
     stream: 'status',
     message: 'Starting isolated `codex login` flow.'
@@ -2680,7 +2794,11 @@ const runCodexLogin = async (params: {
 
   try {
     await new Promise<void>((resolvePromise, rejectPromise) => {
-      const proc = spawn(String(binaryPath), ['login'], {
+      const proc = spawn(String(binaryPath), [
+        'login',
+        '-c',
+        'cli_auth_credentials_store="file"'
+      ], {
         cwd: ctx.cwd,
         env: spawnEnv,
         stdio: ['ignore', 'pipe', 'pipe']
@@ -3008,6 +3126,8 @@ export const getCodexAccounts = async (
         title: descriptor.title ?? descriptor.key,
         description: descriptor.description,
         avatarUrl: normalizeNonEmptyString(descriptor.metadata?.avatarUrl),
+        displayName: normalizeNonEmptyString(descriptor.identity?.displayName) ??
+          normalizeNonEmptyString(descriptor.metadata?.displayName),
         email: normalizeNonEmptyString(descriptor.identity?.email) ??
           normalizeNonEmptyString(descriptor.metadata?.email),
         status: descriptor.status,
@@ -3034,6 +3154,7 @@ export const getCodexAccounts = async (
         title: detail.title,
         description: detail.description,
         avatarUrl: detail.avatarUrl,
+        displayName: detail.displayName,
         email: detail.email,
         status: detail.status,
         isDefault: detail.isDefault,
@@ -3051,6 +3172,7 @@ export const getCodexAccounts = async (
         title: detail.title,
         description: detail.description,
         avatarUrl: detail.avatarUrl,
+        displayName: detail.displayName,
         email: detail.email,
         status: detail.status,
         isDefault: detail.isDefault
@@ -3275,6 +3397,15 @@ export const manageCodexAccount = async (
   }
 
   const normalizedRequestedKey = normalizeNonEmptyString(options.account)
+  if (options.action === 'reauthenticate' && normalizedRequestedKey == null) {
+    throw new Error('Codex reauthentication requires an account key.')
+  }
+  const reauthenticationTarget = options.action === 'reauthenticate' && normalizedRequestedKey != null
+    ? await resolveExistingCodexAccount(ctx, normalizedRequestedKey)
+    : undefined
+  const reauthenticationCredentialRevision = reauthenticationTarget == null
+    ? undefined
+    : await readCodexGlobalAccountCredentialRevision(ctx, reauthenticationTarget.descriptor.key)
   const loginResult = await runCodexLogin({
     ctx,
     onProgress: options.onProgress,
@@ -3296,15 +3427,17 @@ export const manageCodexAccount = async (
         logKey: `login-${normalizedRequestedKey ?? 'new'}`
       }).catch(() => undefined)
     )
-    const existingConfiguredAccount = await findConfiguredAccountByIdentity(ctx, {
-      authDigest,
-      probe
-    })
-    const accountKey = normalizedRequestedKey != null && slugifyAccountKey(normalizedRequestedKey) !== ''
-      ? slugifyAccountKey(normalizedRequestedKey)
-      : existingConfiguredAccount?.key != null
-      ? existingConfiguredAccount.key
-      : buildImportedAccountKey({ authDigest, probe })
+    const existingConfiguredAccount = reauthenticationTarget?.descriptor ??
+      await findConfiguredAccountByIdentity(ctx, {
+        authDigest,
+        probe
+      })
+    const accountKey = reauthenticationTarget?.descriptor.key ??
+      (normalizedRequestedKey != null && slugifyAccountKey(normalizedRequestedKey) !== ''
+        ? slugifyAccountKey(normalizedRequestedKey)
+        : existingConfiguredAccount?.key != null
+        ? existingConfiguredAccount.key
+        : buildImportedAccountKey({ authDigest, probe }))
     const metadata: CodexStoredAccountMetadata = {
       title: resolveCodexAccountTitle({
         key: accountKey,
@@ -3312,6 +3445,7 @@ export const manageCodexAccount = async (
         probe
       }),
       description: 'Logged in via `codex login`.',
+      displayName: probe?.displayName,
       email: probe?.email,
       planType: probe?.planType,
       accountType: probe?.accountType,
@@ -3332,7 +3466,8 @@ export const manageCodexAccount = async (
       await upsertCodexGlobalAccountConfig(ctx, {
         key: accountKey,
         authContent,
-        metadata
+        metadata,
+        expectedCredentialRevision: reauthenticationCredentialRevision
       })
       await clearCodexAccountQuotaCacheUnlocked(ctx, accountKey)
     })
@@ -3353,7 +3488,9 @@ export const manageCodexAccount = async (
     return {
       accountKey,
       account: detail,
-      message: `Connected Codex account "${detail.title}".`
+      message: options.action === 'reauthenticate'
+        ? `Reauthenticated Codex account "${detail.title}".`
+        : `Connected Codex account "${detail.title}".`
     }
   } finally {
     await rm(loginResult.homeDir, { recursive: true, force: true }).catch(() => {})
