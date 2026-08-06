@@ -25,9 +25,22 @@ on:
         description: Successful Desktop Package run id whose verified candidate artifact should be promoted without rebuilding.
         required: false
         type: string
+      builder_source_sha:
+        description: Reviewed protected-main workflow tooling commit. Required with product_source_sha and exact-release replacement.
+        required: false
+        type: string
       create_release:
         default: false
         description: Create or update a GitHub Release with the generated artifacts.
+        required: false
+        type: boolean
+      product_source_sha:
+        description: Optional immutable product commit to rebuild with the reviewed workflow tooling. Must equal the peeled release tag.
+        required: false
+        type: string
+      replace_existing_release:
+        default: false
+        description: Explicitly authorize a recoverable in-place replacement of an existing release asset set.
         required: false
         type: boolean
       release_tag:
@@ -115,9 +128,12 @@ jobs:
     steps:
       - name: Validate desktop workflow request
         env:
+          BUILDER_SOURCE_SHA: ${{ inputs.builder_source_sha }}
           CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
           CREATE_RELEASE_REQUESTED: ${{ inputs.create_release }}
+          PRODUCT_SOURCE_SHA: ${{ inputs.product_source_sha }}
           RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
+          REPLACE_EXISTING_RELEASE: ${{ inputs.replace_existing_release }}
         shell: bash
         run: |
           if [[ "$CREATE_RELEASE_REQUESTED" == "true" && -z "$RELEASE_TAG_INPUT" ]]; then
@@ -131,6 +147,33 @@ jobs:
             fi
             if [[ ! "$CANDIDATE_RUN_ID" =~ ^[0-9]+$ ]]; then
               echo "candidate_run_id must be a numeric GitHub Actions run id." >&2
+              exit 1
+            fi
+          fi
+          if [[ -n "$PRODUCT_SOURCE_SHA" ]]; then
+            if [[ ! "$PRODUCT_SOURCE_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+              echo "product_source_sha must be a full 40-character Git commit SHA." >&2
+              exit 1
+            fi
+            if [[ -z "$RELEASE_TAG_INPUT" ]]; then
+              echo "release_tag is required when product_source_sha is provided." >&2
+              exit 1
+            fi
+            if [[ -n "$CANDIDATE_RUN_ID" ]]; then
+              echo "product_source_sha cannot be combined with candidate_run_id." >&2
+              exit 1
+            fi
+            if [[ ! "$BUILDER_SOURCE_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+              echo "builder_source_sha must be a full 40-character Git commit SHA when product_source_sha is provided." >&2
+              exit 1
+            fi
+          elif [[ -n "$BUILDER_SOURCE_SHA" ]]; then
+            echo "builder_source_sha is only supported with product_source_sha." >&2
+            exit 1
+          fi
+          if [[ "$REPLACE_EXISTING_RELEASE" == "true" ]]; then
+            if [[ "$CREATE_RELEASE_REQUESTED" != "true" || -z "$PRODUCT_SOURCE_SHA" ]]; then
+              echo "replace_existing_release requires create_release=true and product_source_sha." >&2
               exit 1
             fi
           fi
@@ -149,8 +192,76 @@ jobs:
       signed: ${{ steps.desktop_build_policy.outputs.sign }}
 
     steps:
-      - name: Checkout repository
+      - name: Checkout release tooling
         uses: actions/checkout@v4
+
+      - name: Validate requested product source
+        env:
+          BUILDER_SOURCE_SHA: ${{ inputs.builder_source_sha }}
+          EVENT_NAME: ${{ github.event_name }}
+          PRODUCT_SOURCE_SHA: ${{ inputs.product_source_sha }}
+          RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
+          WORKFLOW_REF: ${{ github.ref }}
+          WORKFLOW_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          if [[ -z "$PRODUCT_SOURCE_SHA" ]]; then
+            exit 0
+          fi
+          if [[ "$EVENT_NAME" != "workflow_dispatch" ]]; then
+            echo "product_source_sha is only supported for manual workflow dispatch." >&2
+            exit 1
+          fi
+          if [[ "$WORKFLOW_REF" != "refs/heads/main" ]]; then
+            echo "Immutable product rebuilds must use the protected refs/heads/main workflow." >&2
+            exit 1
+          fi
+          if [[ "$BUILDER_SOURCE_SHA" != "$WORKFLOW_SHA" ]]; then
+            echo "Reviewed builder $BUILDER_SOURCE_SHA does not match workflow commit $WORKFLOW_SHA." >&2
+            exit 1
+          fi
+          if [[ "$RELEASE_TAG_INPUT" != ${DESKTOP_RELEASE_TAG_PREFIX}* ]]; then
+            echo "A desktop release_tag is required for an immutable product source rebuild." >&2
+            exit 1
+          fi
+
+          remote_tag_output="$(git ls-remote --exit-code origin "refs/tags/$RELEASE_TAG_INPUT" "refs/tags/$RELEASE_TAG_INPUT^{}")"
+          resolved_source_sha="$(
+            printf '%s\n' "$remote_tag_output" |
+              awk \
+                -v direct_ref="refs/tags/$RELEASE_TAG_INPUT" \
+                -v peeled_ref="refs/tags/$RELEASE_TAG_INPUT^{}" \
+                '$2 == direct_ref { direct_sha = $1 }
+                 $2 == peeled_ref { peeled_sha = $1 }
+                 END { print (peeled_sha != "" ? peeled_sha : direct_sha) }'
+          )"
+          if [[ "$resolved_source_sha" != "$PRODUCT_SOURCE_SHA" ]]; then
+            echo "Release tag $RELEASE_TAG_INPUT points to $resolved_source_sha, not requested product source $PRODUCT_SOURCE_SHA." >&2
+            exit 1
+          fi
+
+      - name: Checkout immutable product source
+        if: github.event_name == 'workflow_dispatch' && inputs.product_source_sha != ''
+        uses: actions/checkout@v4
+        with:
+          path: product-source
+          ref: ${{ inputs.product_source_sha }}
+
+      - name: Resolve desktop workspace
+        id: desktop_workspace
+        env:
+          PRODUCT_SOURCE_SHA: ${{ inputs.product_source_sha }}
+        shell: bash
+        run: |
+          workspace_dir="."
+          source_sha="$GITHUB_SHA"
+          if [[ -n "$PRODUCT_SOURCE_SHA" ]]; then
+            workspace_dir="product-source"
+            source_sha="$PRODUCT_SOURCE_SHA"
+          fi
+          echo "builder_sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
+          echo "workspace_dir=$workspace_dir" >> "$GITHUB_OUTPUT"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -164,9 +275,11 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
+        working-directory: ${{ steps.desktop_workspace.outputs.workspace_dir }}
         run: pnpm install --frozen-lockfile
 
       - name: Run desktop package preflight
+        working-directory: ${{ steps.desktop_workspace.outputs.workspace_dir }}
         run: pnpm -C apps/desktop test:package-preflight
 
       - name: Resolve desktop release metadata
@@ -299,11 +412,12 @@ jobs:
           fi
 
       - name: Package desktop app
+        working-directory: ${{ steps.desktop_workspace.outputs.workspace_dir }}
         run: pnpm desktop:package
         env:
           ONEWORKS_DESKTOP_ARCHS: ${{ steps.desktop_build_policy.outputs.archs }}
           ONEWORKS_DESKTOP_BUILD_GIT_BRANCH: ${{ github.head_ref || github.ref_name }}
-          ONEWORKS_DESKTOP_BUILD_GIT_HASH: ${{ github.sha }}
+          ONEWORKS_DESKTOP_BUILD_GIT_HASH: ${{ steps.desktop_workspace.outputs.source_sha }}
           ONEWORKS_DESKTOP_BUILD_TIME: ${{ steps.desktop_build_source.outputs.time }}
           ONEWORKS_DESKTOP_ENABLE_AUTO_UPDATE: ${{ steps.desktop_release.outputs.auto_update }}
           ONEWORKS_DESKTOP_OFFICIAL_RELEASE_BUILD: ${{ steps.desktop_release.outputs.enabled }}
@@ -311,7 +425,13 @@ jobs:
           ONEWORKS_DESKTOP_UPDATE_CHANNEL: ${{ steps.desktop_release.outputs.update_channel }}
           ONEWORKS_DESKTOP_VERSION: ${{ steps.desktop_release.outputs.version }}
 
+      - name: Seal immutable unsigned product app bundles
+        if: inputs.product_source_sha != '' && steps.desktop_build_policy.outputs.sign != 'true'
+        working-directory: ${{ steps.desktop_workspace.outputs.workspace_dir }}
+        run: node "$GITHUB_WORKSPACE/apps/desktop/scripts/mac-adhoc-seal.cjs" seal-output apps/desktop/out
+
       - name: Smoke test packaged server
+        working-directory: ${{ steps.desktop_workspace.outputs.workspace_dir }}
         run: pnpm -C apps/desktop smoke:package
         env:
           ONEWORKS_DESKTOP_SMOKE_ARCH: ${{ runner.os == 'macOS' && 'arm64' || '' }}
@@ -319,9 +439,11 @@ jobs:
           ONEWORKS_DESKTOP_RELEASE_BUILD: ${{ steps.desktop_release.outputs.enabled }}
 
       - name: Restore desktop build dependencies
+        working-directory: ${{ steps.desktop_workspace.outputs.workspace_dir }}
         run: pnpm install --frozen-lockfile --prod=false
 
       - name: Build desktop artifacts
+        working-directory: ${{ steps.desktop_workspace.outputs.workspace_dir }}
         run: pnpm -C apps/desktop make:from-package
         env:
           APPLE_ID: ${{ steps.desktop_build_policy.outputs.sign == 'true' && secrets.APPLE_ID || '' }}
@@ -342,23 +464,45 @@ jobs:
           ONEWORKS_DESKTOP_VERSION: ${{ steps.desktop_release.outputs.version }}
           ONEWORKS_DESKTOP_SIGN: ${{ steps.desktop_build_policy.outputs.sign }}
 
+      - name: Verify every unsigned macOS artifact seal
+        if: steps.desktop_build_policy.outputs.sign != 'true'
+        working-directory: ${{ steps.desktop_workspace.outputs.workspace_dir }}
+        run: node "$GITHUB_WORKSPACE/apps/desktop/scripts/verify-macos-adhoc-artifacts.cjs" apps/desktop/release
+        env:
+          ONEWORKS_DESKTOP_ARCHS: ${{ steps.desktop_build_policy.outputs.archs }}
+          ONEWORKS_DESKTOP_MAKE_TARGETS: ${{ steps.desktop_build_policy.outputs.make_targets }}
+          ONEWORKS_DESKTOP_OFFICIAL_RELEASE_BUILD: ${{ steps.desktop_release.outputs.enabled }}
+          ONEWORKS_DESKTOP_RELEASE_BUILD: ${{ steps.desktop_release.outputs.enabled }}
+          ONEWORKS_DESKTOP_VERSION: ${{ steps.desktop_release.outputs.version }}
+
       - name: Verify macOS install artifact
+        working-directory: ${{ steps.desktop_workspace.outputs.workspace_dir }}
         run: pnpm -C apps/desktop verify:macos-install
         env:
           ONEWORKS_DESKTOP_BUILD_GIT_BRANCH: ${{ github.head_ref || github.ref_name }}
-          ONEWORKS_DESKTOP_BUILD_GIT_HASH: ${{ github.sha }}
+          ONEWORKS_DESKTOP_BUILD_GIT_HASH: ${{ steps.desktop_workspace.outputs.source_sha }}
           ONEWORKS_DESKTOP_BUILD_TIME: ${{ steps.desktop_build_source.outputs.time }}
           ONEWORKS_DESKTOP_INSTALL_ARCH: arm64
           ONEWORKS_DESKTOP_OFFICIAL_RELEASE_BUILD: ${{ steps.desktop_release.outputs.enabled }}
           ONEWORKS_DESKTOP_RELEASE_BUILD: ${{ steps.desktop_release.outputs.enabled }}
           ONEWORKS_DESKTOP_SIGN: ${{ steps.desktop_build_policy.outputs.sign }}
 
+      - name: Verify unsigned installed app quarantine boundary
+        if: steps.desktop_build_policy.outputs.sign != 'true'
+        run: node apps/desktop/scripts/mac-adhoc-seal.cjs verify-quarantine-installed
+        env:
+          ONEWORKS_DESKTOP_OFFICIAL_RELEASE_BUILD: ${{ steps.desktop_release.outputs.enabled }}
+          ONEWORKS_DESKTOP_RELEASE_BUILD: ${{ steps.desktop_release.outputs.enabled }}
+
       - name: Create release candidate manifest
         if: steps.desktop_release.outputs.enabled == 'true'
-        run: node apps/desktop/scripts/release-candidate-manifest.cjs create apps/desktop/release
+        working-directory: ${{ steps.desktop_workspace.outputs.workspace_dir }}
+        run: node "$GITHUB_WORKSPACE/apps/desktop/scripts/release-candidate-manifest.cjs" create apps/desktop/release
         env:
+          ONEWORKS_DESKTOP_AD_HOC_SEALED: ${{ steps.desktop_build_policy.outputs.sign != 'true' }}
           ONEWORKS_DESKTOP_ARCHS: ${{ steps.desktop_build_policy.outputs.archs }}
-          ONEWORKS_DESKTOP_BUILD_GIT_HASH: ${{ github.sha }}
+          ONEWORKS_DESKTOP_BUILDER_GIT_HASH: ${{ steps.desktop_workspace.outputs.builder_sha }}
+          ONEWORKS_DESKTOP_BUILD_GIT_HASH: ${{ steps.desktop_workspace.outputs.source_sha }}
           ONEWORKS_DESKTOP_BUILD_TIME: ${{ steps.desktop_build_source.outputs.time }}
           ONEWORKS_DESKTOP_MAKE_TARGETS: ${{ steps.desktop_build_policy.outputs.make_targets }}
           ONEWORKS_DESKTOP_RELEASE_TAG: ${{ steps.desktop_release.outputs.tag }}
@@ -369,7 +513,7 @@ jobs:
         with:
           name: oneworks-desktop-macos
           path: |
-            apps/desktop/release/*
+            ${{ steps.desktop_workspace.outputs.workspace_dir }}/apps/desktop/release/*
           if-no-files-found: error
           retention-days: ${{ github.event_name == 'schedule' && 3 || (github.event_name == 'workflow_dispatch' && inputs.retention_days || 14) }}
 
@@ -458,6 +602,34 @@ jobs:
           ONEWORKS_DESKTOP_EXPECTED_MAKE_TARGETS: dmg,zip,pkg
           ONEWORKS_DESKTOP_RELEASE_TAG: ${{ steps.release.outputs.tag }}
 
+      - name: Enforce complete unsigned bundle sealing
+        env:
+          AD_HOC_SEALED: ${{ steps.candidate.outputs.ad_hoc_sealed }}
+          BUILDER_SHA: ${{ steps.candidate.outputs.builder_sha }}
+          EXPECTED_BUILDER_SHA: ${{ inputs.builder_source_sha }}
+          EXPECTED_PRODUCT_SHA: ${{ inputs.product_source_sha }}
+          REPLACE_EXISTING_RELEASE: ${{ inputs.replace_existing_release }}
+          SIGNED: ${{ steps.candidate.outputs.signed }}
+          SOURCE_SHA: ${{ steps.candidate.outputs.source_sha }}
+          WORKFLOW_REF: ${{ github.ref }}
+          WORKFLOW_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          if [[ "$SIGNED" != "true" && "$AD_HOC_SEALED" != "true" ]]; then
+            echo "Unsigned desktop release candidates must contain a complete ad-hoc bundle seal." >&2
+            exit 1
+          fi
+          if [[ "$REPLACE_EXISTING_RELEASE" == "true" ]]; then
+            if [[ "$WORKFLOW_REF" != "refs/heads/main" || "$WORKFLOW_SHA" != "$EXPECTED_BUILDER_SHA" ]]; then
+              echo "Existing release replacement must run from the exact reviewed protected-main builder." >&2
+              exit 1
+            fi
+            if [[ "$BUILDER_SHA" != "$EXPECTED_BUILDER_SHA" || "$SOURCE_SHA" != "$EXPECTED_PRODUCT_SHA" ]]; then
+              echo "Release candidate product or builder identity does not match the replacement request." >&2
+              exit 1
+            fi
+          fi
+
       - name: Verify release tag source
         env:
           SOURCE_SHA: ${{ steps.candidate.outputs.source_sha }}
@@ -491,18 +663,80 @@ jobs:
             echo "Release tag $TAG does not exist yet; GitHub Release will create it at $SOURCE_SHA."
           fi
 
+      - name: Resolve existing release state
+        id: release_state
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPLACE_EXISTING_RELEASE: ${{ inputs.replace_existing_release }}
+          TAG: ${{ steps.candidate.outputs.tag }}
+        shell: bash
+        run: |
+          existing=false
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            existing=true
+            if [[ "$REPLACE_EXISTING_RELEASE" != "true" ]]; then
+              echo "Release $TAG already exists; set replace_existing_release=true for an explicit recoverable replacement." >&2
+              exit 1
+            fi
+          elif [[ "$REPLACE_EXISTING_RELEASE" == "true" ]]; then
+            echo "replace_existing_release was requested, but Release $TAG does not exist." >&2
+            exit 1
+          fi
+          echo "existing=$existing" >> "$GITHUB_OUTPUT"
+
+      - name: Archive existing release assets
+        if: steps.release_state.outputs.existing == 'true'
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.candidate.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir release-backup
+          gh release download "$TAG" --dir release-backup
+          find release-artifacts -maxdepth 1 -type f -exec basename {} \; | LC_ALL=C sort > candidate-assets.txt
+          find release-backup -maxdepth 1 -type f -exec basename {} \; | LC_ALL=C sort > existing-assets.txt
+          if ! diff -u existing-assets.txt candidate-assets.txt; then
+            echo "Replacement candidate and existing Release asset name sets differ." >&2
+            exit 1
+          fi
+          (
+            cd release-backup
+            sha256sum * | LC_ALL=C sort
+          ) > release-backup-sha256.txt
+
+      - name: Retain existing release backup
+        if: steps.release_state.outputs.existing == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: oneworks-desktop-existing-release-backup
+          path: |
+            release-backup/*
+            release-backup-sha256.txt
+          if-no-files-found: error
+          retention-days: 90
+
       - name: Resolve release notes
         id: release_notes
         env:
+          AD_HOC_SEALED: ${{ steps.candidate.outputs.ad_hoc_sealed }}
+          BUILDER_SHA: ${{ steps.candidate.outputs.builder_sha }}
+          REPLACE_EXISTING_RELEASE: ${{ inputs.replace_existing_release }}
           SIGNED: ${{ steps.candidate.outputs.signed }}
+          SOURCE_SHA: ${{ steps.candidate.outputs.source_sha }}
           TAG: ${{ steps.candidate.outputs.tag }}
         shell: bash
         run: |
           if [[ "$SIGNED" == "true" ]]; then
             signing_note="- Developer ID signed and Apple-notarized macOS installers"
+          elif [[ "$AD_HOC_SEALED" == "true" ]]; then
+            signing_note="- Unsigned macOS installers with a complete ad-hoc bundle seal; Gatekeeper still requires manual approval"
           else
             signing_note="- Unsigned macOS installers; Gatekeeper may require manual approval"
           fi
+          release_version="${TAG#pkg/oneworks-desktop/v}"
 
           {
             echo "notes<<EOF"
@@ -510,11 +744,17 @@ jobs:
             echo
             echo "$signing_note"
             echo "- Intel (x64) and Apple Silicon (arm64): .dmg, .pkg, .zip"
+            echo "- Product source: $SOURCE_SHA"
+            echo "- Release builder: $BUILDER_SHA"
+            if [[ "$REPLACE_EXISTING_RELEASE" == "true" ]]; then
+              echo "- Existing $release_version users must re-download the installer because same-version assets do not auto-update"
+            fi
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
       - name: Create or update GitHub Release
         env:
+          EXISTING_RELEASE: ${{ steps.release_state.outputs.existing }}
           GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NOTES: ${{ steps.release_notes.outputs.notes }}
@@ -523,22 +763,96 @@ jobs:
           UPDATE_CHANNEL: ${{ steps.candidate.outputs.update_channel }}
         shell: bash
         run: |
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists."
-            if [[ "$UPDATE_CHANNEL" == "stable" ]]; then
-              gh release edit "$TAG" --latest --notes "$NOTES"
-            else
-              gh release edit "$TAG" --prerelease --notes "$NOTES"
+          set -euo pipefail
+
+          verify_remote_directory() {
+            local directory="$1"
+            local expected_count=0
+            declare -A remote_digest=()
+            declare -A remote_size=()
+            while IFS=$'\t' read -r name size digest; do
+              [[ -n "$name" ]] || continue
+              remote_digest["$name"]="$digest"
+              remote_size["$name"]="$size"
+            done < <(
+              gh release view "$TAG" --json assets \
+                --jq '.assets[] | [.name, (.size | tostring), (.digest // "")] | @tsv'
+            )
+
+            while IFS= read -r -d '' file; do
+              expected_count=$((expected_count + 1))
+              local local_sha
+              local local_size
+              local name
+              local_sha="$(sha256sum "$file" | awk '{ print $1 }')"
+              local_size="$(stat -c %s "$file")"
+              name="$(basename "$file")"
+              if [[ "${remote_size[$name]:-}" != "$local_size" ]]; then
+                echo "Remote size mismatch for $name." >&2
+                return 1
+              fi
+              if [[ "${remote_digest[$name]:-}" != "sha256:$local_sha" ]]; then
+                echo "Remote SHA-256 mismatch for $name." >&2
+                return 1
+              fi
+            done < <(find "$directory" -maxdepth 1 -type f -print0)
+
+            if [[ "$expected_count" -ne "${#remote_size[@]}" ]]; then
+              echo "Remote Release asset count does not match $directory." >&2
+              return 1
             fi
+          }
+
+          upload_directory() {
+            local directory="$1"
+            local files=()
+            mapfile -d '' files < <(find "$directory" -maxdepth 1 -type f -print0)
+            if [[ "${#files[@]}" -eq 0 ]]; then
+              echo "No files found in $directory." >&2
+              return 1
+            fi
+            gh release upload "$TAG" "${files[@]}" --clobber
+          }
+
+          restore_existing_release() {
+            local failure_status=$?
+            trap - ERR
+            echo "Replacement failed; restoring archived Release assets." >&2
+            upload_directory release-backup
+            verify_remote_directory release-backup
+            exit "$failure_status"
+          }
+
+          delete_incomplete_new_release() {
+            local failure_status=$?
+            trap - ERR
+            echo "Publication failed; deleting incomplete new Release without moving the tag." >&2
+            gh release delete "$TAG" --yes
+            exit "$failure_status"
+          }
+
+          if [[ "$EXISTING_RELEASE" == "true" ]]; then
+            trap restore_existing_release ERR
           else
             if [[ "$UPDATE_CHANNEL" == "stable" ]]; then
-              gh release create "$TAG" --target "$SOURCE_SHA" --title "$TAG" --notes "$NOTES" --latest
+              gh release create "$TAG" --target "$SOURCE_SHA" --title "$TAG" \
+                --notes "Publication verification in progress." --latest
             else
-              gh release create "$TAG" --target "$SOURCE_SHA" --title "$TAG" --notes "$NOTES" --prerelease --latest=false
+              gh release create "$TAG" --target "$SOURCE_SHA" --title "$TAG" \
+                --notes "Publication verification in progress." --prerelease --latest=false
             fi
+            trap delete_incomplete_new_release ERR
           fi
 
-          find release-artifacts -type f -print0 | xargs -0 gh release upload "$TAG" --clobber
+          upload_directory release-artifacts
+          verify_remote_directory release-artifacts
+
+          if [[ "$UPDATE_CHANNEL" == "stable" ]]; then
+            gh release edit "$TAG" --latest --notes "$NOTES"
+          else
+            gh release edit "$TAG" --prerelease --notes "$NOTES"
+          fi
+          trap - ERR
 
   homepage:
     name: Publish Homepage

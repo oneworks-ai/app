@@ -16,8 +16,12 @@ App Store 外分发不走 Mac App Store 证书，使用 Apple Developer Program 
 桌面 workflow 在 PR 上只运行不构建产物的轻量兼容门禁；每日 nightly 使用 unsigned
 arm64 DMG 跑 package / smoke / install verify，不读取签名 secret。真正的双架构安装包
 只由 `pkg/oneworks-desktop/v*` tag 或手动 dispatch 触发。手动 artifact 按仓库 variable
-决定是否签名；tag 和手动 release 同样遵循 `DESKTOP_SIGN`。未启用时允许发布未签名
-安装包，GitHub Release 会明确标记为 unsigned；启用时要求完整签名与 notarization。
+决定是否签名；tag 和手动 release 同样遵循 `DESKTOP_SIGN`。未启用时仍不具备 Apple
+信任，但必须对 prepackaged `.app` 做完整 ad-hoc resource sealing，并让六个 arm64 / x64
+DMG、PKG、ZIP 逐一通过 `codesign --verify --deep --strict`；不允许发布只有 linker signature
+的半签名 bundle。sealing 前还必须把 workspace 绝对 symlink 重写到 app 内已打包的相对目标，并
+拒绝任何绝对或断裂 symlink；否则换一台机器后会被 Gatekeeper 判为损坏。GitHub Release
+会明确标记为 unsigned；启用时要求完整签名与 notarization。
 所有 secret 配好后，还必须设置仓库 variable：
 
 ```bash
@@ -26,7 +30,25 @@ gh variable set DESKTOP_SIGN --repo oneworks-ai/app --body true
 
 当前 `desktop-package.yml` 的 tag / 手动构建会同时生成 `.dmg`、`.zip` 和 `.pkg`；因此开启 `DESKTOP_SIGN=true` 时，Application 和 Installer 两套证书都必须存在。缺任何一个，workflow 会在 `Validate desktop signing credentials` 失败，不允许继续生成半加签产物。普通 PR 只运行轻量门禁，不进入安装包 job，也不会读取签名 secrets。
 
-手动 `create_release=true` 或 `pkg/oneworks-desktop/v*` tag 构建没有启用签名时会继续生成并发布 unsigned 安装包。macOS Gatekeeper 可能要求用户手动批准；下载页和 Release notes 不得把这类产物描述为已签名或已公证。
+手动 `create_release=true` 或 `pkg/oneworks-desktop/v*` tag 构建没有启用签名时会继续生成并发布 unsigned 安装包。候选 manifest 必须记录 `adHocSealed=true`，并区分不可变 product source SHA 与用于重建的 builder SHA。macOS Gatekeeper 仍可能要求用户手动批准；下载页和 Release notes 不得把这类产物描述为 Developer ID 已签名或已公证。
+
+已发布 tag 的同版本紧急修复只允许在用户明确授权覆盖资产后使用 `product_source_sha`：输入必须是完整 SHA，且必须精确等于 release tag peeled commit。workflow 从该提交构建产品代码、用当前受审 workflow 工具完成 sealing，并在候选里同时记录 product / builder SHA；tag 不得移动。覆盖前必须在本地归档旧 Release 全部资产与摘要，候选六个安装包和 quarantine 边界全部通过后才能提升。
+
+同版本覆盖还必须显式传入 protected `main` 的 reviewed builder SHA，并开启
+`replace_existing_release`。workflow 会再次校验运行 ref / SHA，下载并保留旧资产 90 天，
+要求旧新资产名称集合完全一致；上传失败会恢复旧资产，上传成功后逐个核对远端大小和
+SHA-256，最后才更新 Release notes：
+
+```bash
+gh workflow run desktop-package.yml \
+  --repo oneworks-ai/app \
+  --ref main \
+  -f create_release=true \
+  -f replace_existing_release=true \
+  -f release_tag=pkg/oneworks-desktop/v0.1.0 \
+  -f product_source_sha=<peeled-product-tag-sha> \
+  -f builder_source_sha=<reviewed-origin-main-sha>
+```
 
 ## 创建证书
 

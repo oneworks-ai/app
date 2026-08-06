@@ -14,6 +14,7 @@ const {
   resolveDesktopPackageVersion,
   stampDesktopPackageVersion
 } = require('./desktop-package-version.cjs')
+const { normalizeAppBundleSymlinks } = require('./mac-adhoc-seal.cjs')
 const { normalizeMacIconFormat, resolveDarwinPackagerIconPath } = require('./mac-icon-support.cjs')
 
 const desktopRoot = path.resolve(__dirname, '..')
@@ -595,6 +596,9 @@ const packageDesktopArch = async (targetArch, { buildSourceResources }) => {
     for (const appPath of appPaths) {
       const packagedAppRoot = resolvePackagedAppRoot(appPath)
       rewriteStagingSymlinks(packagedAppRoot, packagedAppRoot, stagingDir)
+      if (process.platform === 'darwin') {
+        normalizeAppBundleSymlinks(path.resolve(packagedAppRoot, '../../..'))
+      }
       console.log(`[desktop] packaged ${appPath}`)
     }
   } finally {
