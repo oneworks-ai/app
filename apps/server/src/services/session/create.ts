@@ -230,8 +230,11 @@ export async function createSessionWithInitialMessage(options: {
     return session
   } catch (err) {
     if (session != null) {
-      await deleteSessionWorkspace(session.id, { force: true }).catch(() => undefined)
-      db.deleteSession(session.id)
+      await deleteSessionWorkspace(session.id, { force: true })
+      if (db.getSessionWorkspace(session.id)?.state !== 'deleting') {
+        db.deleteSessionWorkspace(session.id)
+        db.deleteSession(session.id)
+      }
     }
     throw err
   } finally {

@@ -986,10 +986,17 @@ export function sessionsRouter(): Router {
     })
 
     await deleteSessionWorkspace(id, {
-      force: force === 'true'
+      force: force === 'true',
+      resumeDeleting: true
     })
 
+    if (db.getSessionWorkspace(id)?.state === 'deleting') {
+      ctx.body = { ok: true, removed: false }
+      return
+    }
+
     db.deleteChannelSessionBySessionId(id)
+    db.deleteSessionWorkspace(id)
     const removed = db.deleteSession(id)
     if (removed) {
       notifySessionUpdated(id, { id, isDeleted: true })
@@ -1191,8 +1198,11 @@ export function sessionsRouter(): Router {
         start: false
       })
     } catch (error) {
-      await deleteSessionWorkspace(newSession.id, { force: true }).catch(() => undefined)
-      db.deleteSession(newSession.id)
+      await deleteSessionWorkspace(newSession.id, { force: true })
+      if (db.getSessionWorkspace(newSession.id)?.state !== 'deleting') {
+        db.deleteSessionWorkspace(newSession.id)
+        db.deleteSession(newSession.id)
+      }
       throw error
     }
 
