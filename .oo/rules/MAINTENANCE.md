@@ -20,6 +20,7 @@ pnpm --silent tools dev-service ensure <target> --json
 ## 上下文预算
 
 - `alwaysApply: true` 的规则正文会直接进入默认会话 prompt，只能写稳定硬约束和阅读路由；目标是控制在一屏内，避免把调试手册、命令大全或历史经验塞进默认上下文。
+- 用户要求周期性监控外部状态时，必须让隔离的 scheduled task 执行轮询；只有发生有意义的状态变化、需要操作、失败或终态时才向父会话发送一条简报，普通“无变化”轮询必须静默结束且不得追加父会话上下文。去重、只读范围、退避与终态清理见 [`maintenance/task-planning.md`](./maintenance/task-planning.md#监控与协作)。
 - 一级 `.oo/rules/*.md` 会进入规则目录。非 `alwaysApply` 规则通常只进摘要和路径，但仍会增加规则清单噪声；领域细节优先放进同名子目录，例如 `release/README.md`、`adapter-design/README.md`。
 - 新增或扩写规则时，先判断内容是否需要默认加载。默认加载只保留“必须马上知道”的约束；任务相关细节用链接渐进式披露。
 - 扩大 `.oo/rules` 内容后，至少跑一次体积审计，避免下次会话再次膨胀：
