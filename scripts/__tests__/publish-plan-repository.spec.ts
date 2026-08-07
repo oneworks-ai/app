@@ -139,6 +139,10 @@ describe('publish-plan repository metadata', () => {
       '--dry-run'
     ], fixture.runtime)
 
+    if (result.kind !== 'plan') {
+      throw new Error('expected a publish plan result')
+    }
+
     expect(result.publishResult?.failures).toEqual([])
     expect(fixture.runCommand).toHaveBeenCalledTimes(1)
     expect(fixture.runCommand).toHaveBeenCalledWith(
@@ -186,6 +190,10 @@ describe('publish-plan repository metadata', () => {
       '--publish',
       '--dry-run'
     ], fixture.runtime)
+
+    if (result.kind !== 'plan') {
+      throw new Error('expected a publish plan result')
+    }
 
     expect(result.plan.items.map(item => item.name)).toEqual(['@oneworks/valid'])
     expect(fixture.runCommand).toHaveBeenCalledTimes(1)
