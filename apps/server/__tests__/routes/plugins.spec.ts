@@ -15,7 +15,7 @@ import { pluginsRouter } from '#~/routes/plugins.js'
 import { getPluginManager, resetPluginManagerForTests } from '#~/services/plugins/index.js'
 
 const mocks = vi.hoisted(() => ({
-  listLauncherWorkspaceRuntimeEndpoints: vi.fn(async () => []),
+  listLauncherWorkspaceRuntimeEndpoints: vi.fn<() => Promise<unknown[]>>(async () => []),
   loadConfigState: vi.fn()
 }))
 
@@ -411,14 +411,25 @@ describe('pluginsRouter', () => {
 
   it('omits malformed private runtime endpoint metadata from manager responses', async () => {
     vi.stubEnv('__ONEWORKS_PROJECT_SERVER_ROLE__', 'manager')
-    mocks.listLauncherWorkspaceRuntimeEndpoints.mockResolvedValueOnce([{
-      id: 'workspace:private-metadata',
-      role: 'workspace',
-      serverBaseUrl: 'file:///private/other',
-      startedAt: workspaceFolder,
-      status: 'offline',
-      workspaceFolder
-    }])
+    const rawLauncherEndpoints: unknown[] = [
+      {
+        accessToken: 'credential-sentinel',
+        id: 'workspace:private-metadata',
+        role: 'workspace',
+        serverBaseUrl: 'https://credential-sentinel:credential-sentinel@127.0.0.1:8787',
+        startedAt: workspaceFolder,
+        status: 'offline',
+        workspaceFolder
+      },
+      {
+        id: 'workspace:safe-metadata',
+        role: 'workspace',
+        serverBaseUrl: 'http://127.0.0.1:8787',
+        startedAt: '2026-07-30T00:00:00.000Z',
+        status: 'online'
+      }
+    ]
+    mocks.listLauncherWorkspaceRuntimeEndpoints.mockResolvedValueOnce(rawLauncherEndpoints)
     mockConfig([])
 
     const response = await fetch(`${baseUrl}/api/plugins/runtime/endpoints`)
@@ -432,7 +443,14 @@ describe('pluginsRouter', () => {
       status: 'offline'
     })
     expect(JSON.stringify(payload)).not.toContain(workspaceFolder)
-    expect(JSON.stringify(payload)).not.toContain('file:///private/other')
+    expect(JSON.stringify(payload)).not.toContain('credential-sentinel')
+    expect(payload.endpoints).toContainEqual({
+      id: 'workspace:safe-metadata',
+      role: 'workspace',
+      serverBaseUrl: 'http://127.0.0.1:8787',
+      startedAt: '2026-07-30T00:00:00.000Z',
+      status: 'online'
+    })
   })
 
   it('serves client assets and rejects traversal', async () => {
