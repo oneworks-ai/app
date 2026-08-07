@@ -11,6 +11,7 @@ import { pathToFileURL } from 'node:url'
 
 import { updateConfigFile } from '@oneworks/config'
 import { withManagedPluginMutationLock } from '@oneworks/managed-plugins'
+import { MAX_PUBLIC_NATIVE_APPS } from '@oneworks/types'
 import type {
   PluginConfig,
   PluginContributionAvailability,
@@ -19,13 +20,28 @@ import type {
   PluginDetailAssetGroup,
   PluginDetailAssetKind,
   PluginInstanceConfig,
+  PluginNativeMetadata,
   PluginReadmeVariant,
   PluginRuntimeApiRegistration,
   PluginRuntimeChannelInvocation,
   PluginRuntimeChannelResponse,
   PluginRuntimeEndpoint,
-  PluginServerRuntimeRole
+  PluginRuntimeSource,
+  PluginServerRuntimeRole,
+  PublicPluginDiagnostic,
+  PublicPluginRuntimeEndpoint,
+  PublicPluginRuntimeInstance,
+  PublicPluginRuntimeManifest
 } from '@oneworks/types'
+import {
+  containsPrivateRoot,
+  isCredentialLikeNativeAppKey,
+  isCredentialLikeNativeAppValue,
+  isCredentialShapedNativeAppValue,
+  isSafeNativeAppDeclarativeValue,
+  isSafePublicPluginIdentity,
+  redactPrivateRoots
+} from '@oneworks/utils'
 import { resolveGlobalOneWorksDir, resolveProjectOoPath } from '@oneworks/utils/ai-path'
 import type { ResolvedPluginInstance } from '@oneworks/utils/plugin-resolver'
 
@@ -36,6 +52,7 @@ import { logger } from '#~/utils/logger.js'
 import { compilePluginClientSource } from './client-source-compiler.js'
 import type { CompiledPluginClientSource } from './client-source-compiler.js'
 import { discoverPluginInstances } from './discovery.js'
+import type { ManagedPluginRuntimeIdentity } from './managed-plugin-runtime-identity.js'
 import { loadPluginRuntimeManifest, resolvePluginClientAssetRoot, resolvePluginServerEntryPath } from './manifest.js'
 import { isLoopbackProxyTarget, proxyToLoopbackTarget } from './proxy.js'
 import { createPluginSessionAdapter } from './session-adapter.js'
@@ -81,9 +98,9 @@ interface DiscoveryWatcher {
 }
 
 export interface PluginManagerSnapshot {
-  plugins: PluginRuntimeInstance[]
-  diagnostics: PluginDiagnostic[]
-  runtime: PluginRuntimeEndpoint
+  plugins: PublicPluginRuntimeInstance[]
+  diagnostics: PublicPluginDiagnostic[]
+  runtime: PublicPluginRuntimeEndpoint
 }
 
 export interface PluginReadme extends PluginReadmeVariant {}
@@ -123,6 +140,31 @@ const MAX_PLUGIN_CLIENT_SOURCE_COMPILE_QUEUE = 64
 const MAX_PLUGIN_README_BYTES = 1024 * 1024
 const MAX_PLUGIN_DETAIL_ASSET_BYTES = 256 * 1024
 const MAX_PLUGIN_DETAIL_ASSET_FILES = 200
+const DANGEROUS_PUBLIC_METADATA_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
+const PUBLIC_NATIVE_METADATA_KEYS = new Set(['adapter', 'apps', 'diagnostics'])
+const PUBLIC_NATIVE_APP_KEYS = new Set([
+  'authentication',
+  'capabilities',
+  'connectionRequirements',
+  'id',
+  'name',
+  'permissions'
+])
+const PUBLIC_NATIVE_AUTHENTICATION_KEYS = new Set([
+  'authorizationUrl',
+  'callbackPath',
+  'scopes',
+  'tokenUrl',
+  'type'
+])
+const PUBLIC_NATIVE_CONNECTION_KEYS = new Set([
+  'callbackPath',
+  'endpoint',
+  'required',
+  'type'
+])
+const PUBLIC_NATIVE_DIAGNOSTIC_KEYS = new Set(['code', 'level', 'message'])
+const MAX_PUBLIC_NATIVE_DIAGNOSTICS = 64
 const README_FILE_NAMES = ['README.md', 'README.MD', 'Readme.md', 'readme.md', 'README.markdown', 'readme.markdown']
 const README_BASE_FILE_PRIORITY = new Map(README_FILE_NAMES.map((fileName, index) => [fileName, index]))
 const README_VARIANT_PATTERN = /^readme(?:\.([\w-]+))?\.(?:md|markdown)$/i
@@ -130,6 +172,7 @@ const IGNORED_WATCH_PATH_PARTS = new Set(['.git', 'node_modules'])
 const DISCOVERY_WATCH_FILE_NAMES = new Set(['package.json', 'plugin.json', 'plugin.yaml', 'plugin.yml'])
 const VITE_CONFIG_BUNDLE_TEMP_PATTERN = /(?:^|[\\/])vite\.config\.[^\\/]+\.timestamp-\d+-[\da-f]+\.mjs$/i
 const DETAIL_ASSET_GROUPS = [
+  { kind: 'apps', defaultPath: 'apps' },
   { kind: 'skills', defaultPath: 'skills' },
   { kind: 'entities', defaultPath: 'entities' },
   { kind: 'specs', defaultPath: 'specs' },
@@ -515,9 +558,11 @@ const getHostViteDevClientAllowedRoots = () => [
   ...parseHostViteExtraAllowedRoots()
 ]
 
-const usesRuntimeClientSourceCompiler = () => {
+const usesRuntimeClientSourceCompiler = () => true
+
+const requiresHostViteAllowRootForRuntimeClientSource = () => {
   const clientMode = process.env.__ONEWORKS_PROJECT_CLIENT_MODE__?.trim()
-  return (
+  return !(
     clientMode === 'desktop' ||
     clientMode === 'independent' ||
     clientMode === 'standalone' ||
@@ -536,7 +581,8 @@ const resolveRuntimeClientSourceEntry = async (
   raw: ResolvedPluginInstance,
   watchEnabled: boolean,
   managedSource: boolean,
-  needsClientEntryFallback: boolean
+  needsClientEntryFallback: boolean,
+  allowedRoots: string[]
 ): Promise<RuntimeClientSourceEntry | undefined> => {
   if (
     !usesRuntimeClientSourceCompiler() ||
@@ -557,16 +603,21 @@ const resolveRuntimeClientSourceEntry = async (
   const absoluteSourceRoot = configuredSourceRoot == null
     ? path.dirname(absoluteEntry)
     : path.resolve(pluginRoot, configuredSourceRoot)
-  const [realPluginRoot, realEntry, realSourceRoot] = await Promise.all([
+  const [realPluginRoot, realEntry, realSourceRoot, realAllowedRoots] = await Promise.all([
     realpath(pluginRoot).catch(() => path.resolve(pluginRoot)),
     realpath(absoluteEntry),
-    realpath(absoluteSourceRoot).catch(() => undefined)
+    realpath(absoluteSourceRoot).catch(() => undefined),
+    Promise.all(allowedRoots.map(root => realpath(root).catch(() => path.resolve(root))))
   ])
   if (
     realSourceRoot == null ||
     !isPathInside(realPluginRoot, realEntry) ||
     !isPathInside(realPluginRoot, realSourceRoot) ||
-    !isPathInside(realSourceRoot, realEntry)
+    !isPathInside(realSourceRoot, realEntry) ||
+    (
+      requiresHostViteAllowRootForRuntimeClientSource() &&
+      !realAllowedRoots.some(root => isPathInside(root, realEntry))
+    )
   ) {
     return undefined
   }
@@ -719,11 +770,620 @@ const readRequestBody = async (request: NodeJS.ReadableStream) => {
   return Buffer.concat(chunks)
 }
 
-const serializePlugin = (record: RuntimeRecord): PluginRuntimeInstance => ({
-  ...record.instance,
-  apis: [...record.apis.values()].map(api => serializeApiRegistration(record.instance.scope, api)),
-  diagnostics: [...record.instance.diagnostics]
-})
+const isAbsoluteFilesystemPath = (value: string) => (
+  path.isAbsolute(value) || /^(?:file:\/\/\/|[a-z]:[\\/]|\\\\)/iu.test(value)
+)
+
+const containsFilesystemPathLike = (value: string) => (
+  isAbsoluteFilesystemPath(value) ||
+  /(?:^|[\s=("'`[,;])(?:file:\/\/\/|[a-z]:[\\/]|\\\\|\/(?!\/))/iu.test(value)
+)
+
+const sanitizePublicString = (value: string, privatePaths: string[] = []) => redactPrivateRoots(value, privatePaths)
+
+const sanitizePublicScope = (value: string | undefined, privatePaths: string[]) => {
+  if (value == null || containsFilesystemPathLike(value) || containsPrivateRoot(value, privatePaths)) return undefined
+  return sanitizePublicString(value, privatePaths)
+}
+
+const normalizePublicRelativePath = (value: unknown) => {
+  if (typeof value !== 'string' || value.trim() === '') return undefined
+  const normalized = value.trim().replaceAll('\\', '/')
+  if (
+    normalized.includes('\0') ||
+    isAbsoluteFilesystemPath(normalized) ||
+    normalized.split('/').includes('..')
+  ) return undefined
+  return normalized
+}
+
+const sanitizePublicMetadataValue = (
+  value: unknown,
+  depth = 0,
+  privatePaths: string[] = []
+): unknown => {
+  if (depth > 8) return undefined
+  if (typeof value === 'string') return sanitizePublicString(value, privatePaths)
+  if (value == null || typeof value === 'boolean' || typeof value === 'number') return value
+  if (Array.isArray(value)) {
+    return value.slice(0, 256).flatMap((item) => {
+      const sanitized = sanitizePublicMetadataValue(item, depth + 1, privatePaths)
+      return sanitized === undefined ? [] : [sanitized]
+    })
+  }
+  if (!isRecord(value)) return undefined
+  const entries = Object.entries(value).slice(0, 256).flatMap(([key, item]) => {
+    const sanitizedKey = sanitizePublicString(key, privatePaths)
+    if (sanitizedKey !== key) return []
+    const sanitized = sanitizePublicMetadataValue(item, depth + 1, privatePaths)
+    return sanitized === undefined ? [] : [[key, sanitized]]
+  })
+  return Object.fromEntries(entries)
+}
+
+const sanitizePublicObject = <T>(value: T, privatePaths: string[] = []): T | undefined => (
+  sanitizePublicMetadataValue(value, 0, privatePaths) as T | undefined
+)
+
+const normalizePublicIdentityPart = (value: unknown) => {
+  if (typeof value !== 'string') return undefined
+  const normalized = value.trim()
+  if (
+    normalized === '' ||
+    Buffer.byteLength(normalized, 'utf8') > 512 ||
+    !isSafePublicPluginIdentity(normalized) ||
+    containsFilesystemPathLike(normalized) ||
+    /^(?:file|https?|git(?:\+[^:]+)?|ssh):/iu.test(normalized) ||
+    normalized.split(/[\\/]/u).includes('..')
+  ) return undefined
+  return normalized
+}
+
+const toPublicRuntimeSource = (
+  source: PluginRuntimeSource | undefined,
+  privatePaths: string[] = []
+): PluginRuntimeSource | undefined => {
+  if (
+    !isRecord(source) ||
+    (source.kind !== 'directory' && source.kind !== 'marketplace' && source.kind !== 'package')
+  ) return undefined
+  const adapter = normalizePublicIdentityPart(source.adapter)
+  const marketplace = normalizePublicIdentityPart(source.marketplace)
+  const plugin = normalizePublicIdentityPart(source.plugin)
+  if (
+    [adapter, marketplace, plugin].some(value => value != null && containsPrivateRoot(value, privatePaths))
+  ) return undefined
+  if (source.kind === 'marketplace' && (marketplace == null || plugin == null)) return undefined
+  return {
+    kind: source.kind,
+    ...(adapter == null ? {} : { adapter }),
+    ...(marketplace == null ? {} : { marketplace }),
+    ...(plugin == null ? {} : { plugin })
+  }
+}
+
+const serializeRuntimeEndpoint = (
+  endpoint: PluginRuntimeEndpoint
+): PublicPluginRuntimeEndpoint => {
+  const privatePaths = [endpoint.projectHome, endpoint.workspaceFolder]
+    .filter((value): value is string => typeof value === 'string')
+  const redactKnownPaths = (value: string) => sanitizePublicString(value, privatePaths)
+  const serverBaseUrl = (() => {
+    if (
+      typeof endpoint.serverBaseUrl !== 'string' ||
+      endpoint.serverBaseUrl.length > 2_048 ||
+      containsPrivateRoot(endpoint.serverBaseUrl, privatePaths)
+    ) return undefined
+    try {
+      const url = new URL(endpoint.serverBaseUrl)
+      if (
+        (url.protocol !== 'http:' && url.protocol !== 'https:') ||
+        url.username !== '' ||
+        url.password !== '' ||
+        (url.pathname !== '' && url.pathname !== '/') ||
+        url.search !== '' ||
+        url.hash !== ''
+      ) return undefined
+      return url.origin
+    } catch {
+      return undefined
+    }
+  })()
+  const startedAt = (() => {
+    if (
+      typeof endpoint.startedAt !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(endpoint.startedAt) ||
+      containsPrivateRoot(endpoint.startedAt, privatePaths)
+    ) return undefined
+    const date = new Date(endpoint.startedAt)
+    return Number.isNaN(date.valueOf()) || date.toISOString() !== endpoint.startedAt
+      ? undefined
+      : endpoint.startedAt
+  })()
+  return {
+    id: redactKnownPaths(endpoint.id),
+    role: endpoint.role,
+    ...(endpoint.current == null ? {} : { current: endpoint.current }),
+    ...(serverBaseUrl == null ? {} : { serverBaseUrl }),
+    ...(startedAt == null ? {} : { startedAt }),
+    ...(endpoint.status == null ? {} : { status: endpoint.status }),
+    ...(endpoint.workspaceId == null ? {} : { workspaceId: redactKnownPaths(endpoint.workspaceId) })
+  }
+}
+
+const sanitizeDiagnosticMessage = (message: string, paths: string[]) => {
+  const sanitized = sanitizePublicString(message, paths)
+  return containsFilesystemPathLike(sanitized)
+    ? 'Plugin diagnostic details were redacted.'
+    : sanitized
+}
+
+const sanitizePluginErrorMessage = (error: unknown, paths: string[]) => {
+  const sanitized = sanitizePublicString(toErrorMessage(error), paths)
+  return containsFilesystemPathLike(sanitized)
+    ? 'Plugin runtime error details were redacted.'
+    : sanitized
+}
+
+const boundPublicNativeDiagnostics = <T extends { code: string }>(diagnostics: T[]) => {
+  const isSecurityOrLimit = (diagnostic: T) => /invalid|limit|malformed|redacted|secret|unsafe/iu.test(diagnostic.code)
+  return [
+    ...diagnostics.filter(isSecurityOrLimit),
+    ...diagnostics.filter(diagnostic => !isSecurityOrLimit(diagnostic))
+  ].slice(0, MAX_PUBLIC_NATIVE_DIAGNOSTICS)
+}
+
+const normalizePublicNativeLabel = (value: unknown, maxBytes: number) => {
+  if (typeof value !== 'string') return undefined
+  const normalized = value.trim()
+  if (
+    normalized === '' ||
+    Buffer.byteLength(normalized, 'utf8') > maxBytes ||
+    containsFilesystemPathLike(normalized) ||
+    isCredentialShapedNativeAppValue(normalized)
+  ) return undefined
+  return normalized
+}
+
+const toPublicNativeStringList = (
+  value: unknown,
+  privatePaths: string[],
+  field: Parameters<typeof isSafeNativeAppDeclarativeValue>[1]
+) => {
+  if (!Array.isArray(value) || value.length > 128) return undefined
+  const entries = value.map((item) => {
+    const normalized = normalizePublicNativeLabel(item, 256)
+    return normalized == null ||
+        !isSafeNativeAppDeclarativeValue(normalized, field) ||
+        containsPrivateRoot(normalized, privatePaths)
+      ? undefined
+      : normalized
+  })
+  return entries.some(entry => entry == null) ? undefined : entries as string[]
+}
+
+const toPublicNativeUrl = (value: unknown) => {
+  if (
+    typeof value !== 'string' ||
+    Buffer.byteLength(value, 'utf8') > 2048 ||
+    isCredentialShapedNativeAppValue(value)
+  ) return undefined
+  try {
+    const url = new URL(value)
+    if (
+      (url.protocol !== 'http:' && url.protocol !== 'https:') ||
+      url.username !== '' ||
+      url.password !== ''
+    ) return undefined
+    for (const [key, entry] of url.searchParams.entries()) {
+      if (
+        isCredentialLikeNativeAppKey(key) ||
+        isCredentialShapedNativeAppValue(entry)
+      ) return undefined
+    }
+    return value
+  } catch {
+    return undefined
+  }
+}
+
+const toPublicNativeRoute = (value: unknown) => {
+  if (
+    typeof value !== 'string' ||
+    Buffer.byteLength(value, 'utf8') > 2048 ||
+    !value.startsWith('/') ||
+    value.startsWith('//') ||
+    value.includes('\\') ||
+    value.includes('\0') ||
+    isCredentialShapedNativeAppValue(value)
+  ) return undefined
+  try {
+    const decoded = decodeURIComponent(value)
+    return decoded.split(/[/?#]/u).some(part => part === '.' || part === '..')
+      ? undefined
+      : value
+  } catch {
+    return undefined
+  }
+}
+
+const isStrictPublicRecord = (
+  value: unknown,
+  allowedKeys: Set<string>
+): value is Record<string, unknown> => {
+  if (!isRecord(value)) return false
+  const prototype = Object.getPrototypeOf(value)
+  return (
+    (prototype === Object.prototype || prototype === null) &&
+    Object.keys(value).every(key =>
+      !DANGEROUS_PUBLIC_METADATA_KEYS.has(key) &&
+      !isCredentialLikeNativeAppKey(key) &&
+      allowedKeys.has(key)
+    )
+  )
+}
+
+const toPublicNativeAuthentication = (value: unknown, privatePaths: string[]) => {
+  if (!isStrictPublicRecord(value, PUBLIC_NATIVE_AUTHENTICATION_KEYS)) return undefined
+  const authorizationUrl = Object.hasOwn(value, 'authorizationUrl')
+    ? toPublicNativeUrl(value.authorizationUrl)
+    : undefined
+  const callbackPath = Object.hasOwn(value, 'callbackPath')
+    ? toPublicNativeRoute(value.callbackPath)
+    : undefined
+  const scopes = Object.hasOwn(value, 'scopes')
+    ? toPublicNativeStringList(value.scopes, privatePaths, 'scope')
+    : undefined
+  const tokenUrl = Object.hasOwn(value, 'tokenUrl')
+    ? toPublicNativeUrl(value.tokenUrl)
+    : undefined
+  const type = Object.hasOwn(value, 'type')
+    ? normalizePublicNativeLabel(value.type, 32)
+    : undefined
+  if (
+    (Object.hasOwn(value, 'authorizationUrl') && authorizationUrl == null) ||
+    (Object.hasOwn(value, 'callbackPath') && callbackPath == null) ||
+    (Object.hasOwn(value, 'scopes') && scopes == null) ||
+    (Object.hasOwn(value, 'tokenUrl') && tokenUrl == null) ||
+    (Object.hasOwn(value, 'type') && (
+      type == null ||
+      !isSafeNativeAppDeclarativeValue(type, 'authenticationType')
+    ))
+  ) return undefined
+  return {
+    ...(authorizationUrl == null ? {} : { authorizationUrl }),
+    ...(callbackPath == null ? {} : { callbackPath }),
+    ...(scopes == null ? {} : { scopes }),
+    ...(tokenUrl == null ? {} : { tokenUrl }),
+    ...(type == null ? {} : { type })
+  }
+}
+
+const toPublicNativeConnectionRequirements = (value: unknown) => {
+  if (!isStrictPublicRecord(value, PUBLIC_NATIVE_CONNECTION_KEYS)) return undefined
+  const callbackPath = Object.hasOwn(value, 'callbackPath')
+    ? toPublicNativeRoute(value.callbackPath)
+    : undefined
+  const endpoint = Object.hasOwn(value, 'endpoint')
+    ? toPublicNativeUrl(value.endpoint)
+    : undefined
+  const type = Object.hasOwn(value, 'type')
+    ? normalizePublicNativeLabel(value.type, 32)
+    : undefined
+  if (
+    (Object.hasOwn(value, 'callbackPath') && callbackPath == null) ||
+    (Object.hasOwn(value, 'endpoint') && endpoint == null) ||
+    (Object.hasOwn(value, 'required') && typeof value.required !== 'boolean') ||
+    (Object.hasOwn(value, 'type') && (
+      type == null ||
+      !isSafeNativeAppDeclarativeValue(type, 'connectionType')
+    ))
+  ) return undefined
+  return {
+    ...(callbackPath == null ? {} : { callbackPath }),
+    ...(endpoint == null ? {} : { endpoint }),
+    ...(typeof value.required !== 'boolean' ? {} : { required: value.required }),
+    ...(type == null ? {} : { type })
+  }
+}
+
+const toPublicNativeMetadata = (
+  record: RuntimeRecord,
+  runtimePrivatePaths: string[] = []
+): PluginNativeMetadata | undefined => {
+  const native = record.manifest.native
+  const privatePaths = [
+    ...runtimePrivatePaths,
+    record.instance.pluginRoot,
+    record.raw.requestId
+  ]
+  if (
+    !isStrictPublicRecord(native, PUBLIC_NATIVE_METADATA_KEYS) ||
+    !Object.hasOwn(native, 'adapter')
+  ) return undefined
+  const adapter = normalizePublicIdentityPart(native.adapter)
+  if (adapter == null) return undefined
+  const nativeAppLimitExceeded = Array.isArray(native.apps) && native.apps.length > MAX_PUBLIC_NATIVE_APPS
+  const apps = Array.isArray(native.apps)
+    ? native.apps.slice(0, MAX_PUBLIC_NATIVE_APPS).flatMap((app) => {
+      if (
+        !isStrictPublicRecord(app, PUBLIC_NATIVE_APP_KEYS) ||
+        !Object.hasOwn(app, 'id')
+      ) return []
+      const id = normalizePublicNativeLabel(app.id, 128)
+      if (
+        id == null ||
+        containsPrivateRoot(id, privatePaths) ||
+        !isSafeNativeAppDeclarativeValue(id, 'appId')
+      ) return []
+      const name = Object.hasOwn(app, 'name')
+        ? normalizePublicNativeLabel(app.name, 64)
+        : undefined
+      const authentication = Object.hasOwn(app, 'authentication')
+        ? toPublicNativeAuthentication(app.authentication, privatePaths)
+        : undefined
+      const capabilities = Object.hasOwn(app, 'capabilities')
+        ? toPublicNativeStringList(app.capabilities, privatePaths, 'capability')
+        : undefined
+      const connectionRequirements = Object.hasOwn(app, 'connectionRequirements')
+        ? toPublicNativeConnectionRequirements(app.connectionRequirements)
+        : undefined
+      const permissions = Object.hasOwn(app, 'permissions')
+        ? toPublicNativeStringList(app.permissions, privatePaths, 'permission')
+        : undefined
+      if (
+        (Object.hasOwn(app, 'name') && (
+          name == null ||
+          containsPrivateRoot(name, privatePaths) ||
+          !isSafeNativeAppDeclarativeValue(name, 'appName')
+        )) ||
+        (Object.hasOwn(app, 'authentication') && authentication == null) ||
+        (Object.hasOwn(app, 'capabilities') && capabilities == null) ||
+        (Object.hasOwn(app, 'connectionRequirements') && connectionRequirements == null) ||
+        (Object.hasOwn(app, 'permissions') && permissions == null)
+      ) return []
+      return [{
+        id,
+        ...(name == null ? {} : { name }),
+        ...(authentication == null ? {} : { authentication }),
+        ...(capabilities == null ? {} : { capabilities }),
+        ...(connectionRequirements == null ? {} : { connectionRequirements }),
+        ...(permissions == null ? {} : { permissions })
+      }]
+    })
+    : []
+  const diagnostics = Array.isArray(native.diagnostics)
+    ? native.diagnostics.flatMap((diagnostic) => {
+      if (
+        !isStrictPublicRecord(diagnostic, PUBLIC_NATIVE_DIAGNOSTIC_KEYS) ||
+        !Object.hasOwn(diagnostic, 'code') ||
+        !Object.hasOwn(diagnostic, 'level') ||
+        !Object.hasOwn(diagnostic, 'message') ||
+        typeof diagnostic.code !== 'string' ||
+        typeof diagnostic.message !== 'string' ||
+        (
+          diagnostic.level !== 'error' &&
+          diagnostic.level !== 'info' &&
+          diagnostic.level !== 'warning'
+        )
+      ) return []
+      if (isCredentialLikeNativeAppValue(diagnostic.code)) return []
+      return [{
+        code: sanitizePublicString(diagnostic.code, privatePaths),
+        level: diagnostic.level,
+        message: isCredentialLikeNativeAppValue(diagnostic.message)
+          ? 'Native plugin metadata diagnostic was redacted.'
+          : sanitizeDiagnosticMessage(diagnostic.message, privatePaths)
+      }]
+    })
+    : []
+  const appLimitDiagnostic = nativeAppLimitExceeded
+    ? {
+      code: 'plugin_native_app_limit',
+      level: 'warning',
+      message: `Only the first ${MAX_PUBLIC_NATIVE_APPS} native app declarations were exposed.`
+    } as const
+    : undefined
+  if (appLimitDiagnostic != null) diagnostics.push(appLimitDiagnostic)
+  const boundedDiagnostics = boundPublicNativeDiagnostics(diagnostics)
+  if (
+    appLimitDiagnostic != null &&
+    !boundedDiagnostics.some(diagnostic => diagnostic.code === appLimitDiagnostic.code)
+  ) {
+    boundedDiagnostics[boundedDiagnostics.length - 1] = appLimitDiagnostic
+  }
+  return {
+    adapter,
+    ...(apps.length === 0 ? {} : { apps }),
+    ...(boundedDiagnostics.length === 0 ? {} : { diagnostics: boundedDiagnostics })
+  }
+}
+
+const toPublicClientManifest = (
+  client: RuntimeRecord['instance']['client'],
+  privatePaths: string[] = []
+) => {
+  if (client == null) return undefined
+  const entry = normalizePublicRelativePath(client.entry)
+  const devEntry = normalizePublicRelativePath(client.devEntry)
+  const devServer = typeof client.devServer === 'string' &&
+      sanitizePublicString(client.devServer, privatePaths) === client.devServer
+    ? client.devServer
+    : undefined
+  const clientEntryUrl = typeof client.clientEntryUrl === 'string' &&
+      !client.clientEntryUrl.includes('/@fs/') &&
+      sanitizePublicString(client.clientEntryUrl, privatePaths) === client.clientEntryUrl
+    ? client.clientEntryUrl
+    : undefined
+  const devClientEntryUrl = typeof client.devClientEntryUrl === 'string' &&
+      !client.devClientEntryUrl.includes('/@fs/') &&
+      sanitizePublicString(client.devClientEntryUrl, privatePaths) === client.devClientEntryUrl
+    ? client.devClientEntryUrl
+    : undefined
+  const devClientEntryKind = devClientEntryUrl != null && (
+      client.devClientEntryKind === 'dev-server' ||
+      client.devClientEntryKind === 'host-vite' ||
+      client.devClientEntryKind === 'runtime-source'
+    )
+    ? client.devClientEntryKind
+    : undefined
+  return {
+    ...(entry == null ? {} : { entry }),
+    ...(devEntry == null ? {} : { devEntry }),
+    ...(devServer == null ? {} : { devServer }),
+    ...(clientEntryUrl == null ? {} : { clientEntryUrl }),
+    ...(devClientEntryUrl == null ? {} : { devClientEntryUrl }),
+    ...(devClientEntryKind == null ? {} : { devClientEntryKind })
+  }
+}
+
+const toPublicManifestAssets = (
+  assets: PluginRuntimeManifest['assets']
+): PluginRuntimeManifest['assets'] => {
+  if (!isRecord(assets)) return undefined
+  const entries = ([
+    'apps',
+    'entities',
+    'hooks',
+    'mcp',
+    'rules',
+    'skills',
+    'specs'
+  ] as const).flatMap((key) => {
+    const normalized = normalizePublicRelativePath(assets[key])
+    return normalized == null ? [] : [[key, normalized] as const]
+  })
+  return Object.fromEntries(entries)
+}
+
+const toPublicManifest = (
+  record: RuntimeRecord,
+  runtimePrivatePaths: string[] = []
+): PublicPluginRuntimeManifest => {
+  const { manifest } = record
+  const privatePaths = [
+    ...runtimePrivatePaths,
+    record.instance.pluginRoot,
+    record.raw.requestId
+  ]
+  const client = toPublicClientManifest(record.instance.client, privatePaths)
+  const serverEntry = normalizePublicRelativePath(manifest.plugin?.server?.entry)
+  const native = toPublicNativeMetadata(record, runtimePrivatePaths)
+  const source = toPublicRuntimeSource(record.instance.source, privatePaths)
+  const config = isRecord(manifest.config)
+    ? sanitizePublicObject(manifest.config, privatePaths)
+    : undefined
+  const contributions = isRecord(manifest.plugin?.contributions)
+    ? sanitizePublicObject(manifest.plugin.contributions, privatePaths)
+    : undefined
+  const assets = toPublicManifestAssets(manifest.assets)
+  const icon = normalizePublicRelativePath(manifest.icon)
+  return {
+    ...(assets == null ? {} : { assets }),
+    name: sanitizePublicString(record.instance.name, privatePaths),
+    ...(typeof manifest.displayName !== 'string'
+      ? {}
+      : { displayName: sanitizePublicString(manifest.displayName, privatePaths) }),
+    ...(!isRecord(manifest.displayNameI18n)
+      ? {}
+      : { displayNameI18n: sanitizePublicObject(manifest.displayNameI18n, privatePaths) }),
+    ...(typeof manifest.description !== 'string'
+      ? {}
+      : { description: sanitizePublicString(manifest.description, privatePaths) }),
+    ...(!isRecord(manifest.descriptionI18n)
+      ? {}
+      : { descriptionI18n: sanitizePublicObject(manifest.descriptionI18n, privatePaths) }),
+    ...(icon == null ? {} : { icon }),
+    ...(typeof manifest.version !== 'string'
+      ? {}
+      : { version: sanitizePublicString(manifest.version, privatePaths) }),
+    ...(config == null ? {} : { config }),
+    ...(native == null ? {} : { native }),
+    ...(source == null ? {} : { source }),
+    ...(manifest.plugin == null
+      ? {}
+      : {
+        plugin: {
+          ...(client == null ? {} : { client }),
+          ...(manifest.plugin.server == null
+            ? {}
+            : {
+              server: {
+                ...(serverEntry == null ? {} : { entry: serverEntry }),
+                roles: [...manifest.plugin.server.roles]
+              }
+            }),
+          ...(contributions == null ? {} : { contributions })
+        }
+      })
+  }
+}
+
+const serializePlugin = (
+  record: RuntimeRecord,
+  runtimePrivatePaths: string[] = []
+): PublicPluginRuntimeInstance => {
+  const privatePaths = [
+    ...runtimePrivatePaths,
+    record.instance.pluginRoot,
+    record.raw.requestId
+  ]
+  const source = toPublicRuntimeSource(record.instance.source, privatePaths)
+  const client = toPublicClientManifest(record.instance.client, privatePaths)
+  const contributions = isRecord(record.instance.contributions)
+    ? sanitizePublicObject(record.instance.contributions, privatePaths)
+    : undefined
+  const options = isRecord(record.instance.options)
+    ? sanitizePublicObject(record.instance.options, privatePaths)
+    : undefined
+  const icon = normalizePublicRelativePath(record.instance.icon)
+  return {
+    scope: sanitizePublicString(record.instance.scope, privatePaths),
+    name: sanitizePublicString(record.instance.name, privatePaths),
+    ...(typeof record.instance.displayName !== 'string'
+      ? {}
+      : { displayName: sanitizePublicString(record.instance.displayName, privatePaths) }),
+    ...(!isRecord(record.instance.displayNameI18n)
+      ? {}
+      : { displayNameI18n: sanitizePublicObject(record.instance.displayNameI18n, privatePaths) }),
+    ...(typeof record.instance.description !== 'string'
+      ? {}
+      : { description: sanitizePublicString(record.instance.description, privatePaths) }),
+    ...(!isRecord(record.instance.descriptionI18n)
+      ? {}
+      : { descriptionI18n: sanitizePublicObject(record.instance.descriptionI18n, privatePaths) }),
+    ...(icon == null ? {} : { icon }),
+    ...(typeof record.instance.requestedVersion !== 'string'
+      ? {}
+      : { requestedVersion: sanitizePublicString(record.instance.requestedVersion, privatePaths) }),
+    ...(typeof record.instance.version !== 'string'
+      ? {}
+      : { version: sanitizePublicString(record.instance.version, privatePaths) }),
+    requestId: sanitizePublicString(record.instance.requestId, privatePaths),
+    ...(typeof record.instance.packageId !== 'string'
+      ? {}
+      : { packageId: sanitizePublicString(record.instance.packageId, privatePaths) }),
+    ...(source == null ? {} : { source }),
+    ...(record.instance.sourceGroup == null ? {} : { sourceGroup: record.instance.sourceGroup }),
+    ...(record.instance.watch == null ? {} : { watch: { enabled: record.instance.watch.enabled } }),
+    ...(options == null ? {} : { options }),
+    manifest: toPublicManifest(record, runtimePrivatePaths),
+    ...(client == null ? {} : { client }),
+    ...(contributions == null ? {} : { contributions }),
+    apis: [...record.apis.values()].map(api => (
+      sanitizePublicObject(serializeApiRegistration(record.instance.scope, api), privatePaths)!
+    )),
+    diagnostics: record.instance.diagnostics.map(diagnostic => ({
+      code: sanitizePublicString(diagnostic.code, privatePaths),
+      level: diagnostic.level,
+      message: sanitizeDiagnosticMessage(diagnostic.message, privatePaths),
+      ...(sanitizePublicScope(diagnostic.scope, privatePaths) == null
+        ? {}
+        : { scope: sanitizePublicScope(diagnostic.scope, privatePaths) })
+    })),
+    enabled: record.instance.enabled
+  }
+}
 
 const shouldIgnoreWatchPath = (relativePath: string) => {
   if (relativePath === '') return false
@@ -754,10 +1414,24 @@ export class PluginManager {
   private discoveryWatchTimer?: NodeJS.Timeout
   private enabledOverrides = new Map<string, boolean>()
   private managedPluginRoots: string[] = []
+  private privateRoots = new Set<string>()
   private watchOverrides = new Map<string, boolean>()
   private watchSubscribers = new Map<PluginWatchSubscriber, string | undefined>()
   private workspaceFolder = ''
   private projectHome = ''
+
+  private rememberPrivateRoots(values: Array<string | null | undefined>) {
+    for (const value of values) {
+      if (typeof value === 'string' && value.trim() !== '' && isAbsoluteFilesystemPath(value.trim())) {
+        this.privateRoots.add(value.trim())
+      }
+    }
+  }
+
+  private getPrivateRoots(extra: Array<string | null | undefined> = []) {
+    this.rememberPrivateRoots(extra)
+    return [...this.privateRoots]
+  }
 
   private async runClientSourceCompile<T>(compile: () => Promise<T>) {
     if (this.clientSourceCompileActive >= MAX_PLUGIN_CLIENT_SOURCE_COMPILE_CONCURRENCY) {
@@ -834,10 +1508,22 @@ export class PluginManager {
   }
 
   snapshot(): PluginManagerSnapshot {
+    const records = [...this.records.values()]
+    const privatePaths = this.getPrivateRoots(records.flatMap(record => [
+      record.instance.pluginRoot,
+      record.raw.requestId
+    ]))
     return {
-      plugins: [...this.records.values()].map(serializePlugin),
-      diagnostics: [...this.diagnostics],
-      runtime: this.getRuntimeEndpoint()
+      plugins: records.map(record => serializePlugin(record, privatePaths)),
+      diagnostics: this.diagnostics.map(diagnostic => ({
+        code: sanitizePublicString(diagnostic.code, privatePaths),
+        level: diagnostic.level,
+        message: sanitizeDiagnosticMessage(diagnostic.message, privatePaths),
+        ...(sanitizePublicScope(diagnostic.scope, privatePaths) == null
+          ? {}
+          : { scope: sanitizePublicScope(diagnostic.scope, privatePaths) })
+      })),
+      runtime: this.getPublicRuntimeEndpoint()
     }
   }
 
@@ -865,6 +1551,10 @@ export class PluginManager {
     }
   }
 
+  getPublicRuntimeEndpoint(): PublicPluginRuntimeEndpoint {
+    return serializeRuntimeEndpoint(this.getRuntimeEndpoint())
+  }
+
   async listRuntimeEndpoints(): Promise<PluginRuntimeEndpoint[]> {
     const current = this.getRuntimeEndpoint()
     if (current.role !== 'manager') {
@@ -883,6 +1573,10 @@ export class PluginManager {
     }
 
     return [...endpoints.values()]
+  }
+
+  async listPublicRuntimeEndpoints(): Promise<PublicPluginRuntimeEndpoint[]> {
+    return (await this.listRuntimeEndpoints()).map(serializeRuntimeEndpoint)
   }
 
   getRecord(scope: string) {
@@ -1436,15 +2130,16 @@ export class PluginManager {
   private async loadInternal() {
     this.diagnostics = []
     this.records.clear()
+    this.privateRoots.clear()
 
     let discovered: Awaited<ReturnType<typeof discoverPluginInstances>>
     try {
       discovered = await discoverPluginInstances()
-    } catch (error) {
+    } catch {
       this.diagnostics.push({
         level: 'error',
         code: 'plugin_discovery_failed',
-        message: `Failed to discover plugins: ${toErrorMessage(error)}`
+        message: 'Failed to discover plugins.'
       })
       this.loaded = true
       return
@@ -1453,9 +2148,17 @@ export class PluginManager {
     this.workspaceFolder = discovered.workspaceFolder
     this.projectHome = discovered.projectHome
     this.managedPluginRoots = discovered.managedPluginRoots
+    this.rememberPrivateRoots([
+      this.workspaceFolder,
+      this.projectHome,
+      ...discovered.privateRoots
+    ])
 
     for (const raw of discovered.instances) {
-      await this.addInstance(raw)
+      await this.addInstance(
+        raw,
+        discovered.managedRuntimeIdentities.get(path.resolve(raw.rootDir))
+      )
     }
 
     for (const record of this.records.values()) {
@@ -1470,9 +2173,13 @@ export class PluginManager {
     this.loaded = true
   }
 
-  private async addInstance(raw: ResolvedPluginInstance) {
-    const scope = deriveScope(raw)
+  private async addInstance(
+    raw: ResolvedPluginInstance,
+    managedIdentity?: ManagedPluginRuntimeIdentity
+  ) {
+    const scope = managedIdentity?.scope ?? deriveScope(raw)
     const pluginRoot = raw.rootDir
+    this.rememberPrivateRoots([pluginRoot, raw.requestId])
     const diagnostics: PluginDiagnostic[] = []
 
     try {
@@ -1481,16 +2188,74 @@ export class PluginManager {
         throw new Error(`Plugin scope "${scope}" conflicts with a built-in route key.`)
       }
       if (this.records.has(scope)) {
-        throw new Error(
-          `Duplicate plugin scope "${scope}" for "${pluginRoot}" and "${this.records.get(scope)?.instance.pluginRoot}".`
-        )
+        throw new Error(`Duplicate plugin scope "${scope}".`)
       }
 
       const enabled = this.isPluginEnabled(scope, raw)
       const watchEnabled = enabled && this.isWatchEnabled(scope, raw)
       const manifest = await loadPluginRuntimeManifest(this.workspaceFolder, { ...raw, watch: watchEnabled }) ?? {}
+      const nativeDiagnostics = isRecord(manifest.native) && Array.isArray(manifest.native.diagnostics)
+        ? manifest.native.diagnostics
+        : []
+      diagnostics.push(
+        ...boundPublicNativeDiagnostics(nativeDiagnostics.flatMap((diagnostic) => {
+          if (
+            !isStrictPublicRecord(diagnostic, PUBLIC_NATIVE_DIAGNOSTIC_KEYS) ||
+            !Object.hasOwn(diagnostic, 'code') ||
+            !Object.hasOwn(diagnostic, 'level') ||
+            !Object.hasOwn(diagnostic, 'message') ||
+            typeof diagnostic.code !== 'string' ||
+            typeof diagnostic.message !== 'string' ||
+            (
+              diagnostic.level !== 'error' &&
+              diagnostic.level !== 'info' &&
+              diagnostic.level !== 'warning'
+            )
+          ) return []
+          if (isCredentialLikeNativeAppValue(diagnostic.code)) return []
+          return [{
+            code: diagnostic.code,
+            level: diagnostic.level,
+            message: isCredentialLikeNativeAppValue(diagnostic.message)
+              ? 'Native plugin metadata diagnostic was redacted.'
+              : diagnostic.message,
+            scope
+          }]
+        }))
+      )
       this.validateServerManifest(scope, pluginRoot, manifest)
-      const name = manifest.name ?? raw.packageId ?? raw.requestId
+      const normalizedManifestName = normalizePublicIdentityPart(manifest.name)
+      const manifestName = normalizedManifestName != null &&
+          !containsPrivateRoot(normalizedManifestName, [
+            this.workspaceFolder,
+            this.projectHome,
+            pluginRoot,
+            raw.requestId
+          ])
+        ? normalizedManifestName
+        : undefined
+      const name = managedIdentity?.name ??
+        manifestName ??
+        normalizePublicIdentityPart(raw.packageId) ??
+        scope
+      const runtimeSource = managedIdentity?.source ?? manifest.source ?? (
+        raw.packageId == null
+          ? { kind: 'directory' as const }
+          : { kind: 'package' as const, plugin: raw.packageId }
+      )
+      const normalizedRequestId = normalizePublicIdentityPart(raw.requestId)
+      const publicRequestId = managedIdentity?.requestId ?? (
+        normalizedRequestId == null ||
+          containsPrivateRoot(raw.requestId, [
+            this.workspaceFolder,
+            this.projectHome,
+            pluginRoot
+          ])
+          ? name
+          : normalizedRequestId
+      )
+      const publicPackageId = managedIdentity?.packageId ??
+        normalizePublicIdentityPart(raw.packageId)
       const clientEntry = resolveClientEntryUrlPath(manifest)
       const devClientEntry = resolveClientEntryUrlPath(
         manifest,
@@ -1509,7 +2274,11 @@ export class PluginManager {
         raw,
         watchEnabled,
         this.managedPluginRoots.some(root => isPathInside(root, pluginRoot)),
-        needsClientEntryFallback
+        needsClientEntryFallback,
+        [
+          this.workspaceFolder,
+          ...getHostViteDevClientAllowedRoots()
+        ]
       )
       const hostViteDevClientEntryUrl = runtimeClientSourceEntry == null &&
           !usesRuntimeClientSourceCompiler()
@@ -1598,8 +2367,9 @@ export class PluginManager {
           icon: manifest.icon,
           requestedVersion: raw.requestedVersion,
           version: manifest.version,
-          requestId: raw.requestId,
-          packageId: raw.packageId,
+          requestId: publicRequestId,
+          packageId: publicPackageId,
+          source: runtimeSource,
           sourceGroup: raw.sourceGroup ?? 'project',
           watch: {
             enabled: watchEnabled
@@ -1619,7 +2389,7 @@ export class PluginManager {
       const diagnostic = {
         level: 'error' as const,
         code: 'plugin_register_failed',
-        message: toErrorMessage(error),
+        message: sanitizePluginErrorMessage(error, this.getPrivateRoots([pluginRoot, raw.requestId])),
         scope,
         pluginRoot
       }

@@ -1,5 +1,5 @@
 /* eslint-disable max-lines -- provider coordinates plugin activation, relay-aware sources, and watch lifecycle. */
-import type { PluginRuntimeEndpoint } from '@oneworks/types'
+import type { PublicPluginRuntimeEndpoint as PluginRuntimeEndpoint } from '@oneworks/types'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 

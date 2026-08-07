@@ -129,7 +129,7 @@ describe('plugin public-envelope presentation boundary', () => {
       requestedVersion: privatePath,
       scope: 'safe-runtime',
       version: privatePath
-    } satisfies PluginRuntimeInstance
+    } as unknown as PluginRuntimeInstance
     const nativePlugin = {
       adapter: privatePath,
       capabilities: {

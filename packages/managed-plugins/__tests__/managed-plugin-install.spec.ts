@@ -190,6 +190,23 @@ describe('syncConfiguredMarketplacePlugins', () => {
     await expect(stat(path.join(workspace, '.oo/plugins/reviewer'))).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
+  it('skips a second sync when the marketplace plugin uses its canonical default scope', async () => {
+    const { workspace } = await createMarketplaceWorkspace()
+    loadAdapterPluginInstallerMock.mockResolvedValue(mockInstaller)
+    const marketplaces = {
+      'team-tools': {
+        type: 'claude-code',
+        syncOnRun: false,
+        plugins: { reviewer: {} }
+      }
+    }
+
+    await expect(syncConfiguredMarketplacePlugins({ cwd: workspace, marketplaces }))
+      .resolves.toEqual([{ action: 'installed', marketplace: 'team-tools', plugin: 'reviewer' }])
+    await expect(syncConfiguredMarketplacePlugins({ cwd: workspace, marketplaces }))
+      .resolves.toEqual([{ action: 'skipped', marketplace: 'team-tools', plugin: 'reviewer' }])
+  })
+
   it('reuses the live sync lease for nested install under inherited workspace authority', async () => {
     const { workspace } = await createMarketplaceWorkspace()
     const authority = await mkdtemp(path.join(tmpdir(), 'ow-marketplace-authority-'))
