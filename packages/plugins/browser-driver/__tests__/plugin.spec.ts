@@ -16,6 +16,7 @@ const manifest = require('../plugin.json') as {
   displayName: string
   displayNameI18n: { en: string; 'zh-Hans': string }
 }
+const packageManifest = require('../package.json') as { version: string }
 const createWorkflowController = require('../bin/browser-driver-workflows.cjs') as (
   callOperation: (op: string, args: Record<string, unknown>) => Promise<Record<string, unknown>>
 ) => {
@@ -30,6 +31,7 @@ const driver = require('../bin/browser-driver.cjs') as {
   getQueuedPageCount: () => number
   tools: Array<{ name: string; inputSchema: Record<string, unknown> }>
   readBridgeCredentials: () => { bridgeToken?: string; bridgeUrl?: string }
+  serverInfo: { name: string; version: string }
 }
 
 const readJson = async (path: string) => JSON.parse(await readFile(new URL(`../${path}`, import.meta.url), 'utf8'))
@@ -46,6 +48,13 @@ afterEach(async () => {
 })
 
 describe('browser-driver plugin contract', () => {
+  it('reports the package version in its MCP server identity', () => {
+    expect(driver.serverInfo).toEqual({
+      name: 'oneworks-browser-driver',
+      version: packageManifest.version
+    })
+  })
+
   it('distinguishes in-app control from external browser control across user-facing surfaces', async () => {
     expect(manifest.displayName).toBe('In-App Browser Control')
     expect(manifest.displayNameI18n).toEqual({

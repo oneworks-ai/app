@@ -7,13 +7,14 @@ const { tmpdir } = require('node:os')
 const { join } = require('node:path')
 const process = require('node:process')
 
+const packageManifest = require('../package.json')
 const createAgentLifecycle = require('./browser-driver-agent-lifecycle.cjs')
 const { contentResult, operationFromTool, tools } = require('./browser-driver-contract.cjs')
 const readBridgeCredentials = require('./browser-driver-credentials.cjs')
 const createStdioServer = require('./browser-driver-stdio.cjs')
 const createWorkflowController = require('./browser-driver-workflows.cjs')
 
-const serverInfo = { name: 'oneworks-browser-driver', version: '0.1.0' }
+const serverInfo = { name: 'oneworks-browser-driver', version: packageManifest.version }
 const sessionId = process.env.__ONEWORKS_PROJECT_SESSION_ID__ ??
   process.env.__ONEWORKS_CODEX_TASK_SESSION_ID__ ??
   process.env.__ONEWORKS_CLAUDE_TASK_SESSION_ID__ ??
@@ -235,6 +236,7 @@ module.exports = {
   getWorkflowSteps,
   handleRequest: stdioServer.handleRequest,
   readBridgeCredentials,
+  serverInfo,
   shutdown,
   tools
 }

@@ -81,7 +81,7 @@ Chrome Web Store 不使用长期 repository secret；WIF、service account、env
 
 - GitHub variable: `VSCODE_EXTENSION_PUBLISHER=oneworks-ai`
 - Marketplace extension id: `oneworks-ai.oneworks-vscode-extension`
-- Workflow tag: `pkg/oneworks-vscode-extension/v*`
+- Workflow input: 精确 annotated stable tag `pkg/oneworks-vscode-extension/v<stable>`；预发布版本只走 CI，不使用发布凭据。
 
 创建 token：
 
@@ -101,7 +101,7 @@ Chrome Web Store 不使用长期 repository secret；WIF、service account、env
 gh workflow run vscode-extension-release.yml \
   --repo oneworks-ai/app \
   --ref main \
-  -f release_tag=pkg/oneworks-vscode-extension/v0.1.0-alpha.0
+  -f release_tag=pkg/oneworks-vscode-extension/v1.0.0
 ```
 
 发布后核对 Marketplace 元数据：
@@ -115,6 +115,7 @@ pnpm --filter @oneworks/vscode-extension exec vsce show \
 
 - Organization 只选 `Yi-Jie` 的 PAT 会导致 VS Marketplace 发布失败：`TF400813` not authorized。
 - 必须使用创建 / 管理 `oneworks-ai` publisher 的同一个 Microsoft account 生成 PAT。
+- workflow 在持久化 GitHub Release candidate 前要求 `VSCODE_EXTENSION_PUBLISHER`、`VSCE_PAT` 和 `OVSX_PAT` 同时存在；任一缺失都会失败，不会跳过商店后报告成功。
 - workflow 已给 `vsce publish` 加 `--skip-duplicate`，允许重跑 release 来补齐其他分发源。
 - Azure DevOps 页面提示 Global PAT 会在 2026-12-01 后废弃；之后需要按微软新发布凭据方案迁移。
 

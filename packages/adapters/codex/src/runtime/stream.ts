@@ -16,6 +16,7 @@ import {
   resolveTrustedOneworksCliPermissionSubjectFromCommand,
   sanitizeMcpPermissionKeySegment
 } from '@oneworks/utils'
+import packageJson from '../../package.json'
 import type { CodexSessionBase } from './session-common'
 
 import { formatCodexCommandForDisplay } from '#~/command-display.js'
@@ -116,6 +117,14 @@ const CODEX_INITIALIZE_OPERATION_ID = 'codex-app-server-initialize'
 const CODEX_RESPONSE_WAIT_OPERATION_ID = 'codex-response-wait'
 const CODEX_THREAD_OPERATION_ID = 'codex-thread'
 const CODEX_TURN_START_OPERATION_ID = 'codex-turn-start'
+
+export const resolveCodexAppServerClientInfo = (
+  clientInfo: { name?: string; title?: string; version?: string } = {}
+) => ({
+  name: clientInfo.name ?? CANONICAL_ONEWORKS_MCP_SERVER_NAME,
+  title: clientInfo.title ?? 'One Works',
+  version: clientInfo.version ?? packageJson.version
+})
 
 const isAssistantTextMessageEvent = (event: AdapterOutputEvent) => {
   if (event.type !== 'message' || event.data.role !== 'assistant') return false
@@ -347,11 +356,7 @@ export async function createStreamCodexSession(
     : resolvedMaxOutputTokens === null
     ? undefined
     : adapterMaxOutputTokens
-  const clientInfo = {
-    name: rawClientInfo.name ?? CANONICAL_ONEWORKS_MCP_SERVER_NAME,
-    title: rawClientInfo.title ?? 'One Works',
-    version: rawClientInfo.version ?? '0.1.0'
-  }
+  const clientInfo = resolveCodexAppServerClientInfo(rawClientInfo)
 
   const nativeSpawnStartedAt = startupProfiler.now()
   if (appServerPoolKey == null) {

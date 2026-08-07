@@ -5,7 +5,7 @@
     "en": "Chrome DevTools",
     "zh-Hans": "Chrome 开发者工具"
   },
-  "version": "0.1.0",
+  "version": "1.0.0-rc.0",
   "license": "MIT",
   "repository": {
     "type": "git",

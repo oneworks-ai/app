@@ -19,6 +19,7 @@ const driver = require('../bin/chrome-driver.cjs') as {
   enqueueResources: <T>(targets: string[], task: () => Promise<T>) => Promise<T>
   enqueueWorkflow: <T>(target: string, task: () => Promise<T>) => Promise<T>
   riskFor: (module: string, action: string, args?: Record<string, unknown>) => number
+  serverInfo: { name: string; version: string }
   targetKey: (module: string, args: Record<string, unknown>) => string
 }
 const { EXECUTION_TARGET_GUARD_CAPABILITY, minimumRiskFor } = await import('../server/src/bridge.js')
@@ -40,6 +41,10 @@ describe('external browser MCP contract', () => {
       'zh-Hans': '浏览器控制'
     })
     expect(manifest.icon).toBe('./assets/icon.svg')
+    expect(driver.serverInfo).toEqual({
+      name: 'oneworks-chrome-driver',
+      version: packageManifest.version
+    })
     expect(await readFile(new URL('../skills/external-browser-driver/SKILL.md', import.meta.url), 'utf8'))
       .toContain('# Browser Control')
     expect(manifest.version).toBe(packageManifest.version)

@@ -40,20 +40,22 @@ Package a local VSIX:
 pnpm -C apps/vscode-extension package
 ```
 
-Publish from an existing VSIX to VS Code Marketplace:
+Only stable source versions may be published. Prerelease source versions are packaged by CI for verification but do not receive a package tag, GitHub Release, Marketplace publication, or Open VSX publication.
+
+Publish a stable existing VSIX to VS Code Marketplace:
 
 ```bash
 VSCODE_EXTENSION_PUBLISHER=your-publisher-id VSCE_PAT=your-token \
-pnpm -C apps/vscode-extension publish:vsix -- --packagePath ./oneworks-vscode-extension-v0.1.0.vsix
+pnpm -C apps/vscode-extension publish:vsix -- --packagePath ./oneworks-vscode-extension-v1.0.0.vsix
 ```
 
 Publish the same VSIX to Open VSX Registry for VS Code-compatible IDEs:
 
 ```bash
 OVSX_PAT=your-token \
-pnpm dlx ovsx@1.0.1 publish --skip-duplicate ./oneworks-vscode-extension-v0.1.0.vsix -p "$OVSX_PAT"
+pnpm dlx ovsx@1.0.1 publish --skip-duplicate ./oneworks-vscode-extension-v1.0.0.vsix -p "$OVSX_PAT"
 ```
 
 Open VSX requires a namespace that matches the extension publisher, such as `oneworks-ai`.
 
-CI builds and uploads a VSIX artifact on VS Code extension changes. Tags that match `pkg/oneworks-vscode-extension/v*` package the same VSIX, optionally publish it to VS Code Marketplace when `VSCODE_EXTENSION_PUBLISHER` and `VSCE_PAT` are configured, optionally publish it to Open VSX when `OVSX_PAT` is configured, and attach it to a GitHub Release.
+CI builds and uploads a temporary VSIX artifact on VS Code extension changes. Stable publication is manual-only from the exact annotated `pkg/oneworks-vscode-extension/v<stable>` tag and requires the publisher variable plus both store credentials. The workflow persists one authoritative VSIX in a GitHub Release, then publishes those identical bytes to VS Code Marketplace and Open VSX.

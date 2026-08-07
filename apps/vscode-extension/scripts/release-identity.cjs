@@ -29,6 +29,27 @@ function resolveLogicalVersionFromReleaseTag(tag) {
   return logicalVersion
 }
 
+function assertStableVscodeVersion(version) {
+  resolveMarketplaceVersion(version)
+  if (isPrereleaseVersion(version)) {
+    throw new Error(
+      `VS Code extension publication requires a stable semver source version; received ${version}.`
+    )
+  }
+  return version
+}
+
+function assertStableVscodeReleaseTag(tag) {
+  const logicalVersion = resolveLogicalVersionFromReleaseTag(tag)
+  assertStableVscodeVersion(logicalVersion)
+  return {
+    logicalVersion,
+    prerelease: false,
+    storeVersion: resolveMarketplaceVersion(logicalVersion),
+    tag
+  }
+}
+
 function assertVscodeStoreVersionAvailable(candidateTag, existingTags, options = {}) {
   const logicalVersion = resolveLogicalVersionFromReleaseTag(candidateTag)
   const storeVersion = resolveMarketplaceVersion(logicalVersion)
@@ -63,22 +84,20 @@ function assertVscodeStoreVersionAvailable(candidateTag, existingTags, options =
     )
   }
 
-  if (isPrereleaseVersion(logicalVersion)) {
-    const newestPriorRelease = priorReleases.reduce((newest, release) => (
-      newest == null || compareNumericVersions(release.storeVersion, newest.storeVersion) > 0
-        ? release
-        : newest
-    ), null)
+  const newestPriorRelease = priorReleases.reduce((newest, release) => (
+    newest == null || compareNumericVersions(release.storeVersion, newest.storeVersion) > 0
+      ? release
+      : newest
+  ), null)
 
-    if (
-      newestPriorRelease != null &&
-      compareNumericVersions(storeVersion, newestPriorRelease.storeVersion) <= 0
-    ) {
-      throw new Error(
-        `VS Code store version ${storeVersion} for ${candidateTag} must be newer than ` +
-          `${newestPriorRelease.storeVersion} from ${newestPriorRelease.tag}.`
-      )
-    }
+  if (
+    newestPriorRelease != null &&
+    compareNumericVersions(storeVersion, newestPriorRelease.storeVersion) <= 0
+  ) {
+    throw new Error(
+      `VS Code store version ${storeVersion} for ${candidateTag} must be newer than ` +
+        `${newestPriorRelease.storeVersion} from ${newestPriorRelease.tag}.`
+    )
   }
 
   return identity
@@ -130,6 +149,8 @@ function compareNumericVersions(left, right) {
 }
 
 exports.assertVscodeStoreVersionAvailable = assertVscodeStoreVersionAvailable
+exports.assertStableVscodeReleaseTag = assertStableVscodeReleaseTag
+exports.assertStableVscodeVersion = assertStableVscodeVersion
 exports.isPrereleaseVersion = isPrereleaseVersion
 exports.resolveLogicalVersionFromReleaseTag = resolveLogicalVersionFromReleaseTag
 exports.resolveMarketplaceVersion = resolveMarketplaceVersion

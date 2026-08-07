@@ -1,6 +1,6 @@
 {
   "name": "@oneworks/app-runtime",
-  "version": "0.1.0",
+  "version": "1.0.0-rc.0",
   "description": "App-facing runtime facade for One Works",
   "license": "MIT",
   "repository": {

@@ -140,6 +140,7 @@ const evidence = require('../bin/evidence-mcp.cjs') as {
     verifiedStateText: string[]
     videoPath: string
   }
+  serverInfo: { name: string; version: string }
 }
 
 const readJson = async (name: string) =>
@@ -996,6 +997,10 @@ describe('cua-driver plugin contract', () => {
       'zh-Hans': '电脑控制 - CUA'
     })
     expect(manifest.version).toBe(packageJson.version)
+    expect(evidence.serverInfo).toEqual({
+      name: 'oneworks-cua-evidence',
+      version: packageJson.version
+    })
     expect(dependencies['@oneworks/cursor']).toBe('workspace:*')
     expect(assets.skills).toBe('skills')
     expect(assets.mcp).toBe('mcp')

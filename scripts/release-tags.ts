@@ -5,6 +5,7 @@ import process from 'node:process'
 
 import {
   assertVscodeStoreVersionAvailable,
+  isPrereleaseVersion,
   vscodeExtensionPackageName,
   vscodeExtensionReleaseTagPrefix
 } from '../apps/vscode-extension/scripts/release-identity.cjs'
@@ -86,6 +87,7 @@ export const createReleaseTagPlanFromManifestChanges = (
       before.name !== after.name ||
       before.version !== after.version
     if (!hasReleaseIdentityChange) continue
+    if (after.name === vscodeExtensionPackageName && isPrereleaseVersion(after.version)) continue
 
     const tag = buildPackageReleaseTag(after.name, after.version)
     if (tags.has(tag)) {

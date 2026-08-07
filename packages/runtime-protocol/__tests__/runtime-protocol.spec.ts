@@ -17,7 +17,7 @@ describe('runtime protocol versioning', () => {
     const packageJson = await import('../package.json')
 
     expect(getCurrentProtocolVersion()).toBe(packageJson.default.version)
-    expect(DEFAULT_SUPPORTED_PROTOCOL_RANGE).toBe('^0.1.0')
+    expect(DEFAULT_SUPPORTED_PROTOCOL_RANGE).toBe('^1.0.0')
     expect(isProtocolCompatible(getCurrentProtocolVersion())).toBe(true)
   })
 

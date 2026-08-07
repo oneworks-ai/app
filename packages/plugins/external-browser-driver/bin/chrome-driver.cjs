@@ -9,11 +9,12 @@ const process = require('node:process')
 
 const createStdioServer = require('@oneworks/plugin-browser-driver/runtime/stdio')
 const createWorkflowController = require('@oneworks/plugin-browser-driver/runtime/workflows')
+const packageManifest = require('../package.json')
 const { operationFromTool, tools } = require('./chrome-driver-contract.cjs')
 const readBridgeCredentials = require('./chrome-driver-credentials.cjs')
 const { workflowOperationNames } = require('./chrome-driver-workflow-schema.cjs')
 
-const serverInfo = { name: 'oneworks-chrome-driver', version: '0.1.0' }
+const serverInfo = { name: 'oneworks-chrome-driver', version: packageManifest.version }
 const sessionId = process.env.__ONEWORKS_PROJECT_SESSION_ID__ ?? `process-${process.pid}`
 const artifactDirectory = join(tmpdir(), 'oneworks-chrome-driver', sessionId, String(process.pid))
 const artifactTtlMs = 30 * 60_000
@@ -292,5 +293,14 @@ async function callTool(name, args) {
 }
 
 const server = createStdioServer({ callTool, serverInfo, tools })
-module.exports = { callOperation, callTool, enqueueResources, enqueueWorkflow, operationResources, riskFor, targetKey }
+module.exports = {
+  callOperation,
+  callTool,
+  enqueueResources,
+  enqueueWorkflow,
+  operationResources,
+  riskFor,
+  serverInfo,
+  targetKey
+}
 if (require.main === module) server.start()

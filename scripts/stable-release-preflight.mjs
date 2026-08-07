@@ -9,18 +9,16 @@ import installerIdentity from './windows-installer-identity.cjs'
 const { assertWingetInstallerTemplate } = installerIdentity
 
 const STABLE_VERSION_PATTERN = /^\d+\.\d+\.\d+$/u
-const VSCODE_PACKAGE_NAME = '@oneworks/vscode-extension'
 
 const parseArgs = argv => {
   const result = {}
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index]
     if (value === '--version') result.version = argv[++index]
-    else if (value === '--vscode-version') result.vscodeVersion = argv[++index]
     else throw new Error(`Unknown stable release preflight argument: ${value}`)
   }
-  if (!result.version || !result.vscodeVersion) {
-    throw new Error('Stable release preflight requires --version and --vscode-version.')
+  if (!result.version) {
+    throw new Error('Stable release preflight requires --version.')
   }
   return result
 }
@@ -30,14 +28,9 @@ export const evaluateStablePackageGraph = (input, packages) => {
   if (!STABLE_VERSION_PATTERN.test(input.version)) {
     errors.push(`Coordinated version is not stable semver: ${input.version}`)
   }
-  if (!STABLE_VERSION_PATTERN.test(input.vscodeVersion)) {
-    errors.push(`VS Code version is not stable semver: ${input.vscodeVersion}`)
-  }
-
   for (const pkg of packages) {
-    const expectedVersion = pkg.name === VSCODE_PACKAGE_NAME ? input.vscodeVersion : input.version
-    if (pkg.version !== expectedVersion) {
-      errors.push(`${pkg.name} has version ${pkg.version}; expected ${expectedVersion}`)
+    if (pkg.version !== input.version) {
+      errors.push(`${pkg.name} has version ${pkg.version}; expected ${input.version}`)
     }
     if (pkg.license !== 'MIT') {
       errors.push(`${pkg.name} must declare license MIT`)
@@ -105,8 +98,8 @@ export const runStableReleasePreflight = async (argv = process.argv.slice(2)) =>
     errors
   )
   await assertFileContains(
-    path.join(repoRoot, 'changelog', input.vscodeVersion, 'vscode-extension.md'),
-    `# @oneworks/vscode-extension ${input.vscodeVersion}`,
+    path.join(repoRoot, 'changelog', input.version, 'vscode-extension.md'),
+    `# @oneworks/vscode-extension ${input.version}`,
     errors
   )
   for (
@@ -129,7 +122,6 @@ export const runStableReleasePreflight = async (argv = process.argv.slice(2)) =>
     ok: errors.length === 0,
     packageCount: packages.length,
     version: input.version,
-    vscodeVersion: input.vscodeVersion,
     errors
   }
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`)

@@ -84,18 +84,18 @@ Relay device transport contract is runtime code shared by `@oneworks/types`, `@o
 
 ## VS Code 扩展发布
 
-- VS Code Marketplace 不支持 `0.1.0-alpha.0` 这种 semver prerelease 字符串；预发布必须使用 `major.minor.patch` 三段式版本，再通过 `vsce package --pre-release` 和 `vsce publish --pre-release` 标记。
-- 本仓 `apps/vscode-extension/package.json` 可以继续使用带逻辑预发布后缀的版本，但 VSIX release stage 必须把 Marketplace manifest version 映射为同一版本的三段式数值 base，同时保留 `--pre-release`。每个纳入 Marketplace / Open VSX 的后续逻辑预发布都必须使用严格更新且唯一的数值 base；即使只改变 alpha / beta / rc 后缀，也不能复用已被另一个逻辑 release tag 占用的三段式版本。
-- VS Code Marketplace / Open VSX 的数值版本不可覆盖；One Works 的 `0.1.0` 至 `0.1.3` 已被历史预发布占用，因此首个稳定扩展使用下一个未占用的 `0.1.4`。后续仍优先为预发布和稳定版分配互不重叠的数值版本。
+- `apps/vscode-extension/package.json` 的 alpha / beta / rc 版本只参加普通 `vscode-extension-ci.yml` typecheck、build 和 VSIX package 验证。Release Tags 必须过滤这些预发布身份；不得创建 `pkg/oneworks-vscode-extension/v<prerelease>`、GitHub VSIX Release，或发布到 Marketplace / Open VSX。
+- 只有三段式 stable semver source version 可以获得 `pkg/oneworks-vscode-extension/v<stable>` 并发布。`vscode-extension-release.yml` 只能人工 `workflow_dispatch`，输入必须是精确 annotated stable package tag；tag version、package version、peeled tag commit、checkout HEAD 与 build source SHA 必须一致。
+- VS Code Marketplace / Open VSX 的数值版本不可覆盖。One Works 的 `0.1.0` 至 `0.1.3` 已被历史预发布占用，`0.1.4` 是已有首个稳定扩展；新的 prerelease source 不再消耗商店数值版本。
 - VS Code Marketplace 发布依赖仓库 secret `VSCE_PAT` 和 variable `VSCODE_EXTENSION_PUBLISHER`；GitHub Release / VSIX artifact 成功不等于 Marketplace 已发布。
-- VS Code Marketplace 和 Open VSX publish 都必须带 duplicate skip 语义，但 duplicate skip 只用于同一逻辑 release tag、同一不可变 source 和同一 VSIX 的恢复重跑。不同逻辑 release tag 映射到相同数值版本时必须在 Release Tags 计划或直接 release workflow 中失败，不能把 registry 仍提供旧字节视作本次发布成功。
+- 手动稳定发布在创建 GitHub Release 前必须确认 `VSCODE_EXTENSION_PUBLISHER`、`VSCE_PAT` 和 `OVSX_PAT` 都已配置；不能把缺失商店凭据降级成跳过后成功。
+- VS Code Marketplace 和 Open VSX publish 都必须带 duplicate skip 语义，但 duplicate skip 只用于同一稳定 release tag、同一不可变 source 和同一 VSIX 的恢复重跑。不同 release tag 映射到相同数值版本时必须失败，不能把 registry 仍提供旧字节视作本次发布成功。
 - store-version guard 默认不会因 exact release tag 已存在而放宽碰撞或单调性检查。只有该 exact tag 的 GitHub Release 已经通过元数据校验并包含预期命名的 authoritative VSIX asset 时，恢复重跑才允许绕过这些 prior-tag 检查；guard、`reuse` 判定和随后的 create / upload / reuse 必须在同一 metadata snapshot 的同一 workflow shell step 内相邻执行。该 asset 随后必须下载、验证并复用。这不会使历史跨 tag 碰撞合法化，协调终态仍必须独立证明目标 registry 提供的是该逻辑 tag 的获批字节。
-- push 与手动 VS Code release 都必须 checkout resolved release tag，并核对 peeled tag commit、HEAD 和 build source SHA 完全一致。商店发布前先把 VSIX 作为该 tag 的 GitHub prerelease asset 持久化；同 tag 重跑必须下载并复用已有 asset，不能重新打包覆盖或 clobber，再由 Marketplace 与 Open VSX 共同消费这个 authoritative 文件。
-- VSIX 打包完成后必须核对 `extension/package.json` 的三段式数值版本和 `extension.vsixmanifest` 的 prerelease marker；两者必须同时匹配逻辑 package version，之后才能上传 artifact 或进入商店发布。
+- 手动稳定 release 必须 checkout resolved release tag，并核对 peeled tag commit、HEAD 和 build source SHA 完全一致。商店发布前先把 VSIX 作为该 tag 的 GitHub Release asset 持久化；同 tag 重跑必须下载并复用已有 asset，不能重新打包覆盖或 clobber，再由 Marketplace 与 Open VSX 共同消费这个 authoritative 文件。
+- VSIX 打包完成后必须核对 `extension/package.json` 的三段式稳定版本且不存在 prerelease marker，之后才能上传 artifact 或进入商店发布。
 - Open VSX Registry 是 VS Code 兼容 IDE 的通用扩展分发源，必须和 VS Code Marketplace 并行发布同一个 VSIX。Open VSX 发布依赖仓库 secret `OVSX_PAT`，并且 registry 里必须已创建和 extension publisher 一致的 namespace，例如 `oneworks-ai`；`VSCE_PAT` 不能用于 Open VSX。
 - Open VSX namespace 首次创建走 `npx ovsx create-namespace oneworks-ai -p <token>`；如需 verified owner，创建后还要在 Open VSX 里单独 claim namespace ownership。
 - `OVSX_PAT` 发布成功与 namespace verification 独立：`verified=false` / `unrelatedPublisher=true` 本身不表示发布失败。独立核对 public VSIX bytes/hash、version 与 `preRelease`；verification 走官方 namespace-claim 和 maintainer review，不要为了 metadata 重发或轮换 token。
-- `pkg/oneworks-vscode-extension/v*` 触发的 GitHub Release 对预发布版本应标记为 prerelease。
 
 ## 外部浏览器 Chrome 扩展发布
 
