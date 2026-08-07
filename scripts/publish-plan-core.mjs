@@ -13,6 +13,8 @@ export const dependencyFields = [
 
 export const bumpKinds = new Set(['major', 'minor', 'patch'])
 
+export const canonicalRepositoryUrl = 'https://github.com/oneworks-ai/app.git'
+
 export const defaultOptions = {
   packages: [],
   publish: false,
@@ -677,6 +679,51 @@ export function createPublishPlan(packages, options) {
   }
 }
 
+export function validatePublishRepositoryMetadata(plan, packages, repoRoot) {
+  const failures = []
+  const validatedSources = new Set()
+
+  for (const item of plan.items) {
+    const sourceName = item.publishAliasFor ?? item.name
+    if (validatedSources.has(sourceName)) {
+      continue
+    }
+    validatedSources.add(sourceName)
+
+    const pkg = packages.get(sourceName)
+    if (!pkg || pkg.private) {
+      continue
+    }
+
+    const repository = pkg.json.repository
+    const expectedDirectory = path
+      .relative(repoRoot, pkg.dir)
+      .split(path.sep)
+      .join('/')
+    const issues = []
+
+    if (repository?.type !== 'git') {
+      issues.push('repository.type 必须为 git')
+    }
+    if (repository?.url !== canonicalRepositoryUrl) {
+      issues.push(`repository.url 必须为 ${canonicalRepositoryUrl}`)
+    }
+    if (repository?.directory !== expectedDirectory) {
+      issues.push(`repository.directory 必须为 ${expectedDirectory}`)
+    }
+
+    if (issues.length > 0) {
+      failures.push(`${sourceName}: ${issues.join('; ')}`)
+    }
+  }
+
+  if (failures.length > 0) {
+    throw new Error(
+      `发布源包 repository 元数据无效:\n${failures.map(failure => `- ${failure}`).join('\n')}`
+    )
+  }
+}
+
 export function formatPlan(plan, repoRoot, options) {
   const publishArgs = buildPublishArgs(options)
   const mode = options.publish
@@ -946,6 +993,10 @@ export async function runPublishPlanCli(
 
   const packages = await loadWorkspacePackages(repoRoot, fsOps)
   const plan = createPublishPlan(packages, options)
+
+  if (options.publish || options.bump) {
+    validatePublishRepositoryMetadata(plan, packages, repoRoot)
+  }
 
   if (options.json) {
     stdout.write(
