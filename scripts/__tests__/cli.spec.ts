@@ -885,6 +885,31 @@ describe('scripts cli', () => {
     })
   })
 
+  it('dispatches documentation media verification', async () => {
+    const runDocsMediaVerify = vi.fn(async () => {})
+    const cli = createScriptsCli({
+      runDocsMediaVerify
+    })
+
+    await cli.parseAsync([
+      'node',
+      'oneworks-dev',
+      'docs-media',
+      'verify',
+      '--ffmpeg-path',
+      '/opt/homebrew/bin/ffmpeg',
+      '--ffprobe-path',
+      '/opt/homebrew/bin/ffprobe',
+      '--json'
+    ])
+
+    expect(runDocsMediaVerify).toHaveBeenCalledWith({
+      ffmpegPath: '/opt/homebrew/bin/ffmpeg',
+      ffprobePath: '/opt/homebrew/bin/ffprobe',
+      json: true
+    })
+  })
+
   it('dispatches demo video recording options', async () => {
     const runDemoVideoRecord = vi.fn(async () => ({
       colorScheme: 'dark' as const,

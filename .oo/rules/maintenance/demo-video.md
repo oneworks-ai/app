@@ -27,3 +27,5 @@ pnpm tools desktop-control record-batch launcher-open-workspace-adapter-tour \
 ```
 
 修改 submodule 中的视频逻辑时，先在独立仓库通过 `pnpm check`，再更新主仓 submodule 指针并跑主仓 lint、typecheck、相关 Desktop Control / CLI 测试。全高清母版不提交；公开 GIF、poster 与文档 Web MP4 留在 `.oo/docs/`，其来源和全部展示位置必须登记到 submodule 的 `catalog/videos.json`。
+
+公开文档 MP4 必须由 `.gitattributes` 的 `*.mp4 -text` 保持二进制字节，并在提交后运行 `pnpm tools docs-media verify`。验证必须包含 Git 属性、fast-start、固定 Web metadata 和 ffmpeg 完整解码；`ffprobe` 能读出时长并不证明 H.264 payload 完整。

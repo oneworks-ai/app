@@ -43,6 +43,7 @@ import {
   runDevServiceCommand as runDevServiceCommandEntry,
   runDevStart as runDevStartCommand
 } from './dev-start'
+import { runDocsMediaVerify } from './docs-media'
 import { runGitDeliveryCheck } from './git-delivery-check'
 import { runHomebrewTapSyncOneWorks } from './homebrew-tap'
 import { runMessageActionsVerify } from './message-actions'
@@ -130,6 +131,7 @@ interface ScriptsCliDeps {
   runDemoVideoBatch: typeof runDemoVideoBatch
   runDemoVideoList: typeof runDemoVideoList
   runDemoVideoRecord: typeof runDemoVideoRecord
+  runDocsMediaVerify: typeof runDocsMediaVerify
   runMessageActionsVerify: typeof runMessageActionsVerify
   runHomebrewTapSyncOneWorks: typeof runHomebrewTapSyncOneWorks
   runWindowsInstallSyncOneWorks: typeof runWindowsInstallSyncOneWorks
@@ -184,6 +186,7 @@ const defaultDeps: ScriptsCliDeps = {
   runDemoVideoBatch,
   runDemoVideoList,
   runDemoVideoRecord,
+  runDocsMediaVerify,
   runMessageActionsVerify,
   runHomebrewTapSyncOneWorks,
   runWindowsInstallSyncOneWorks,
@@ -1000,6 +1003,28 @@ export const createScriptsCli = (inputDeps: Partial<ScriptsCliDeps> = {}) => {
         waitForTextTimeoutMs: options.waitForTextTimeoutMs,
         workspace: options.workspace,
         width: options.width
+      })
+    })
+
+  const docsMediaCommand = program
+    .command('docs-media')
+    .description('Verify documentation media assets')
+
+  docsMediaCommand
+    .command('verify')
+    .description('Verify MP4 binary attributes, metadata, fast-start layout, and complete decode')
+    .option('--ffmpeg-path <path>', 'ffmpeg executable path', 'ffmpeg')
+    .option('--ffprobe-path <path>', 'ffprobe executable path', 'ffprobe')
+    .option('--json', 'Print machine-readable results', false)
+    .action(async (options: {
+      ffmpegPath: string
+      ffprobePath: string
+      json?: boolean
+    }) => {
+      await deps.runDocsMediaVerify({
+        ffmpegPath: options.ffmpegPath,
+        ffprobePath: options.ffprobePath,
+        json: options.json ?? false
       })
     })
 
