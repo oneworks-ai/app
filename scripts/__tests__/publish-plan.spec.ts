@@ -4,6 +4,7 @@ import {
   applyVersionBump,
   buildPublishArgs,
   bumpVersion,
+  canonicalRepositoryUrl,
   createPublishPlan,
   executePublishPlan,
   isPackageVersionPublished,
@@ -452,9 +453,15 @@ describe('publish-plan', () => {
     const output: string[] = []
     const files = new Map<string, string>([
       ['/repo/pnpm-workspace.yaml', 'packages:\n  - packages/*\n'],
-      ['/repo/packages/cli/package.json', JSON.stringify({ name: '@oneworks/cli', version: '1.0.0' })]
+      [
+        '/repo/packages/cli/package.json',
+        JSON.stringify({
+          name: '@oneworks/cli',
+          version: '1.0.0',
+          repository: { type: 'git', url: canonicalRepositoryUrl, directory: 'packages/cli' }
+        })
+      ]
     ])
-
     await expect(runPublishPlanCli(['--publish', '--no-confirm-retry'], {
       repoRoot: '/repo',
       stdout: {
@@ -481,7 +488,6 @@ describe('publish-plan', () => {
       runCommand: vi.fn(() => ({ status: 1, stdout: '' })),
       retryPrompt: vi.fn(async () => false)
     })).rejects.toThrow('1 个包发布失败')
-
     expect(output.join('')).toContain('发布失败的包:')
     expect(output.join('')).toContain('@oneworks/cli')
   })

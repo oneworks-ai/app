@@ -6,6 +6,7 @@ import path from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
+import { canonicalRepositoryUrl } from '../publish-plan-core.mjs'
 import {
   createReleaseTagPlanFromManifestChanges,
   formatReleaseTagPlan,
@@ -208,12 +209,26 @@ describe('release tag planning', () => {
       ...readPackageManifestPaths('packages/plugins')
     ]
 
-    expect(manifestPaths).toHaveLength(62)
+    const manifests = manifestPaths.map(manifestPath => ({
+      manifestPath,
+      manifest: JSON.parse(readFileSync(manifestPath, 'utf8'))
+    }))
+
+    expect(manifests).toHaveLength(62)
     expect(
-      manifestPaths.map((manifestPath) => {
-        const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
-        return `${manifest.name}@${manifest.version}`
-      }).filter(identity => !identity.endsWith('@1.0.0-rc.0'))
+      manifests
+        .map(({ manifest }) => `${manifest.name}@${manifest.version}`)
+        .filter(identity => !identity.endsWith('@1.0.0-rc.0'))
+    ).toEqual([])
+    expect(
+      manifests
+        .filter(({ manifestPath, manifest }) => manifestPath !== 'package.json' && !manifest.private)
+        .filter(({ manifestPath, manifest }) =>
+          manifest.repository?.type !== 'git' ||
+          manifest.repository?.url !== canonicalRepositoryUrl ||
+          manifest.repository?.directory !== path.dirname(manifestPath)
+        )
+        .map(({ manifestPath }) => manifestPath)
     ).toEqual([])
 
     const androidGradle = readFileSync('apps/android/app/build.gradle.kts', 'utf8')
