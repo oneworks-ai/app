@@ -478,14 +478,17 @@ const assertPackagedAssetAuthority = async (port, workspaceFolder) => {
   }
 }
 
-const readPluginCatalog = async (port) => {
-  const body = await readServerText(port, '/api/plugins', 'Packaged plugin catalog')
+const parsePluginCatalog = body => {
   try {
     return JSON.parse(body)
   } catch {
-    throw new Error(`Packaged plugin catalog returned invalid JSON: ${body}`)
+    throw new Error('Packaged plugin catalog returned invalid JSON.')
   }
 }
+
+const readPluginCatalog = async (port) => (
+  parsePluginCatalog(await readServerText(port, '/api/plugins', 'Packaged plugin catalog'))
+)
 
 const getCatalogPlugins = catalog => (
   Array.isArray(catalog?.data?.plugins)
@@ -499,6 +502,131 @@ const getCatalogDiagnostics = catalog => [
   ...(Array.isArray(catalog?.diagnostics) ? catalog.diagnostics : []),
   ...(Array.isArray(catalog?.data?.diagnostics) ? catalog.data.diagnostics : [])
 ]
+
+const privatePluginMetadataKeys = new Set([
+  'projecthome',
+  'pluginroot',
+  'root',
+  'rootdir',
+  'sourceroot',
+  'workspacefolder'
+])
+const credentialPluginMetadataKeys = new Set([
+  'accesstoken',
+  'apikey',
+  'authorizationheader',
+  'bearertoken',
+  'clientsecret',
+  'credential',
+  'credentials',
+  'oauthtoken',
+  'password',
+  'privatekey',
+  'refreshtoken',
+  'secret',
+  'token'
+])
+const credentialPluginMetadataValuePattern =
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----|\bBearer\s+\S+|AIza[\w-]{20,}|A(KIA|SIA)[0-9A-Z]{16}|(github_pat|ghp|gho|ghs|glpat|sk|xox[aboprs])[-\w]{12,}\b|\beyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]{8,}\b|(api[_-]?key|client[_-]?secret|password|token)\s*[:=]\s*\S+/iu
+
+const decodePublicMetadataKey = key => {
+  let decodedKey = key
+  for (let depth = 0; depth < 8; depth += 1) {
+    if (!decodedKey.includes('%')) return decodedKey
+    try {
+      const nextKey = decodeURIComponent(decodedKey)
+      if (nextKey === decodedKey) return undefined
+      decodedKey = nextKey
+    } catch {
+      return undefined
+    }
+  }
+  return decodedKey.includes('%') ? undefined : decodedKey
+}
+
+const normalizePublicMetadataKey = key => {
+  const decodedKey = decodePublicMetadataKey(key)
+  if (decodedKey == null) return undefined
+  return decodedKey.normalize('NFKC').replace(/[^a-z0-9]/giu, '').toLowerCase()
+}
+
+const isPrivatePluginMetadataKey = key => {
+  const normalizedKey = normalizePublicMetadataKey(key)
+  if (normalizedKey == null) return true
+  return (
+    privatePluginMetadataKeys.has(normalizedKey) ||
+    credentialPluginMetadataKeys.has(normalizedKey)
+  )
+}
+
+const isDeclaredCliCommandItem = (value, pathParts) => {
+  if (
+    value == null ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    typeof value.command !== 'string' ||
+    typeof value.id !== 'string'
+  ) return false
+  const pluginPath = pathParts[0] === 'plugins' && /^\d+$/u.test(pathParts[1] ?? '')
+    ? pathParts.slice(2)
+    : pathParts[0] === 'data' && pathParts[1] === 'plugins' && /^\d+$/u.test(pathParts[2] ?? '')
+    ? pathParts.slice(3)
+    : undefined
+  if (pluginPath == null) return false
+  const declaredPaths = [
+    ['contributions', 'cliCommands'],
+    ['manifest', 'plugin', 'contributions', 'cliCommands'],
+    ['plugin', 'contributions', 'cliCommands']
+  ]
+  return declaredPaths.some(declaredPath => (
+    pluginPath.length === declaredPath.length + 1 &&
+    declaredPath.every((part, index) => pluginPath[index] === part) &&
+    /^\d+$/u.test(pluginPath.at(-1) ?? '')
+  ))
+}
+
+const containsPrivateMetadataPath = (value, privatePaths = []) => {
+  let decodedValue = value
+  for (let depth = 0; depth <= 8; depth += 1) {
+    if (privatePaths.some(privatePath => privatePath !== '' && decodedValue.includes(privatePath))) return true
+    if (!decodedValue.includes('%')) return false
+    try {
+      const nextValue = decodeURIComponent(decodedValue)
+      if (nextValue === decodedValue) return false
+      decodedValue = nextValue
+    } catch {
+      return false
+    }
+  }
+  return false
+}
+
+const assertPublicPluginMetadata = (value, options = {}, seen = new WeakSet(), pathParts = []) => {
+  if (value == null || typeof value !== 'object') return
+  if (seen.has(value)) return
+  seen.add(value)
+
+  for (const [key, entryValue] of Object.entries(value)) {
+    const normalizedKey = normalizePublicMetadataKey(key)
+    const allowsCliRoot = key === 'root' &&
+      normalizedKey === 'root' &&
+      typeof entryValue === 'boolean' &&
+      isDeclaredCliCommandItem(value, pathParts)
+    if (!allowsCliRoot && isPrivatePluginMetadataKey(key)) {
+      throw new Error('Packaged plugin catalog exposed private metadata.')
+    }
+    if (
+      typeof entryValue === 'string' &&
+      containsPrivateMetadataPath(entryValue, options.privatePaths)
+    ) {
+      throw new Error('Packaged plugin catalog exposed a private local path.')
+    }
+    if (typeof entryValue === 'string' && credentialPluginMetadataValuePattern.test(entryValue)) {
+      throw new Error('Packaged plugin catalog exposed private metadata.')
+    }
+    assertPublicPluginMetadata(entryValue, options, seen, [...pathParts, key])
+  }
+}
 
 const readLocalPluginClientSource = (
   port,
@@ -517,9 +645,10 @@ const readLocalPluginClientSource = (
   )
 
 const assertBuiltinRuntimeActive = async (catalog, port, options = {}) => {
+  assertPublicPluginMetadata(catalog, options)
   const catalogDiagnostics = getCatalogDiagnostics(catalog)
   if (catalogDiagnostics.length > 0) {
-    throw new Error(`Packaged plugin catalog reported diagnostics: ${JSON.stringify(catalogDiagnostics)}`)
+    throw new Error(`Packaged plugin catalog reported ${catalogDiagnostics.length} diagnostics.`)
   }
 
   const plugins = getCatalogPlugins(catalog)
@@ -537,30 +666,11 @@ const assertBuiltinRuntimeActive = async (catalog, port, options = {}) => {
     if (plugin.enabled !== true) {
       throw new Error(`Packaged default plugin ${packageId} is present but not enabled.`)
     }
-    if (Array.isArray(plugin.diagnostics) && plugin.diagnostics.length > 0) {
-      throw new Error(
-        `Packaged default plugin ${packageId} reported diagnostics: ${JSON.stringify(plugin.diagnostics)}`
-      )
+    if (typeof plugin.requestId !== 'string' || typeof plugin.scope !== 'string') {
+      throw new TypeError(`Packaged default plugin ${packageId} did not expose its public runtime identity.`)
     }
-    if (Array.isArray(options.pluginRootParentDirs)) {
-      if (typeof plugin.pluginRoot !== 'string') {
-        throw new TypeError(`Packaged default plugin ${packageId} did not expose its resolved root.`)
-      }
-      const pluginRoot = fs.realpathSync(plugin.pluginRoot)
-      const isPackagedPluginRoot = options.pluginRootParentDirs.some((parentDir) => {
-        const pluginRootParentDir = fs.realpathSync(parentDir)
-        const relativePluginRoot = path.relative(pluginRootParentDir, pluginRoot)
-        return (
-          relativePluginRoot !== '..' &&
-          !relativePluginRoot.startsWith(`..${path.sep}`) &&
-          !path.isAbsolute(relativePluginRoot)
-        )
-      })
-      if (!isPackagedPluginRoot) {
-        throw new Error(
-          `Packaged default plugin ${packageId} was not loaded from a packaged built-in root: ${pluginRoot}`
-        )
-      }
+    if (Array.isArray(plugin.diagnostics) && plugin.diagnostics.length > 0) {
+      throw new Error(`Packaged default plugin ${packageId} reported diagnostics.`)
     }
     requiredPlugins.push(plugin)
   }
@@ -569,8 +679,7 @@ const assertBuiltinRuntimeActive = async (catalog, port, options = {}) => {
     if (plugin.client == null) continue
     const packageId = plugin.packageId ?? plugin.name ?? plugin.scope
     if (plugin.client.clientEntryUrl == null) {
-      const details = JSON.stringify(plugin)
-      throw new Error(`Packaged built-in plugin ${packageId} did not expose its client production entry: ${details}`)
+      throw new Error(`Packaged built-in plugin ${packageId} did not expose its client production entry.`)
     }
     const entryUrl = new URL(plugin.client.clientEntryUrl, `http://${host}:${port}`)
     await readServerText(
@@ -602,9 +711,7 @@ const assertLocalClientSourcesCompile = async (catalog, port) => {
       typeof entryUrl !== 'string' ||
       !entryUrl.startsWith(`/api/plugins/${scope}/client-source/`)
     ) {
-      throw new Error(
-        `Packaged local plugin "${scope}" did not expose its compiled source entry: ${JSON.stringify(plugin)}`
-      )
+      throw new Error(`Packaged local plugin "${scope}" did not expose its compiled source entry.`)
     }
     const versionedEntryUrl = entryUrl.replace('/client-source/', '/client-source/@v/desktop-smoke/')
     const source = await readLocalPluginClientSource(
@@ -753,7 +860,7 @@ const main = async () => {
 
   const sourceResult = await runPackagedServerSmoke({
     assertCatalog: async (pluginCatalog, port) => {
-      await assertBuiltinRuntimeActive(pluginCatalog, port)
+      await assertBuiltinRuntimeActive(pluginCatalog, port, { privatePaths: [workspaceRoot] })
       await assertLocalClientSourcesCompile(pluginCatalog, port)
     },
     paths,
@@ -779,7 +886,9 @@ const main = async () => {
         await assertBuiltinRuntimeActive(
           pluginCatalog,
           port,
-          { pluginRootParentDirs: [paths.appDir, isolatedPackageCacheRoot] }
+          {
+            privatePaths: [paths.appDir, emptyWorkspace, isolatedHome, isolatedPackageCacheRoot]
+          }
         )
         await assertPackagedAssetAuthority(port, emptyWorkspace)
       },
@@ -801,7 +910,11 @@ const main = async () => {
 }
 
 module.exports = {
+  assertBuiltinRuntimeActive,
+  assertLocalClientSourcesCompile,
+  assertPublicPluginMetadata,
   createPackagedAsset,
+  parsePluginCatalog,
   readLocalPluginClientSource,
   readServerText,
   serverCompileTimeoutMs,
