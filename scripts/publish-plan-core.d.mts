@@ -101,6 +101,7 @@ export type PublishPlanExecuteOptions = Pick<
 
 export declare const dependencyFields: readonly string[]
 export declare const bumpKinds: Set<PublishPlanBumpKind>
+export declare const canonicalRepositoryUrl: string
 export declare const defaultOptions: PublishPlanOptions
 export declare const helpText: string
 
@@ -138,6 +139,11 @@ export declare function createPublishPlan(
   packages: Map<string, PublishPlanPackage>,
   options: PublishPlanOptions
 ): PublishPlan
+export declare function validatePublishRepositoryMetadata(
+  plan: PublishPlan,
+  packages: Map<string, PublishPlanPackage>,
+  repoRoot: string
+): void
 export declare function formatPlan(plan: PublishPlan, repoRoot: string, options: PublishPlanOptions): string
 export declare function serializePlan(
   plan: PublishPlan,
@@ -187,6 +193,47 @@ export declare function executePublishPlan(
     skipped?: boolean
   }>
 }>
+
+export interface PublishPlanCliHelpResult {
+  kind: 'help'
+  options: PublishPlanOptions
+}
+
+export interface PublishPlanCliPlanResult {
+  kind: 'plan'
+  options: PublishPlanOptions
+  plan: PublishPlan
+  updates: Array<{ name: string; version: string }>
+  publishResult: {
+    failures: Array<{ name: string; status: number }>
+    attempts: Array<{
+      name: string
+      status: number
+      attempts: number
+      success: boolean
+      skipped?: boolean
+    }>
+  } | null
+}
+
+export type PublishPlanCliResult = PublishPlanCliHelpResult | PublishPlanCliPlanResult
+
+export declare function runPublishPlanCli(
+  argv: ['--help'] | ['-h'],
+  runtime?: {
+    repoRoot?: string
+    stdout?: { write(value: string): void }
+    fsOps?: {
+      readText(filePath: string): Promise<string>
+      readdir(dirPath: string): Promise<string[]>
+      stat(filePath: string): Promise<{ isDirectory(): boolean }>
+      writeText(filePath: string, content: string): Promise<void>
+    }
+    runCommand?: PublishPlanRunCommand
+    retryPrompt?: typeof promptRetry
+  }
+): Promise<PublishPlanCliHelpResult>
+
 export declare function runPublishPlanCli(
   argv?: string[],
   runtime?: {
@@ -201,4 +248,4 @@ export declare function runPublishPlanCli(
     runCommand?: PublishPlanRunCommand
     retryPrompt?: typeof promptRetry
   }
-): Promise<unknown>
+): Promise<PublishPlanCliResult>
