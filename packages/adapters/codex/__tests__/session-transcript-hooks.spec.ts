@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { resetCodexAppServerPoolForTests } from '#~/runtime/app-server-pool.js'
 import { createCodexSession } from '#~/runtime/session.js'
 import { createCodexTranscriptHookWatcher } from '#~/runtime/transcript-hooks.js'
 
@@ -97,12 +98,14 @@ describe('createCodexSession transcript hook integration', () => {
     process.env.HOME = '/tmp'
     spawnMock.mockReturnValue(makeProc())
     createCodexTranscriptHookWatcherMock.mockReturnValue({
+      setCodexThreadId: vi.fn(),
       start: vi.fn(),
       stop: vi.fn()
     })
   })
 
   afterEach(() => {
+    resetCodexAppServerPoolForTests()
     delete process.env.HOME
   })
 

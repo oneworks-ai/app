@@ -364,11 +364,11 @@ const readServerText = (port, requestPath, label, options = {}) =>
         body += chunk
       })
       response.on('end', () => {
-        if (response.statusCode !== 200) {
+        if (response.statusCode !== 200 && !options.allow202) {
           reject(new Error(`${label} returned HTTP ${response.statusCode}: ${body}`))
           return
         }
-        resolve(body)
+        resolve(options.returnStatus ? { status: response.statusCode, body } : body)
       })
     })
     request.once('timeout', () => {
@@ -398,12 +398,14 @@ const createPackagedAsset = (port, options = {}) =>
         responseBody += chunk
       })
       response.on('end', () => {
-        if (response.statusCode !== 201) {
+        if (response.statusCode !== 201 && response.statusCode !== 202) {
           reject(new Error(`Packaged asset authority returned HTTP ${response.statusCode}: ${responseBody}`))
           return
         }
         try {
-          resolve(JSON.parse(responseBody))
+          const parsed = JSON.parse(responseBody)
+          Object.defineProperty(parsed, '__status', { value: response.statusCode })
+          resolve(parsed)
         } catch {
           reject(new Error(`Packaged asset authority returned invalid JSON: ${responseBody}`))
         }
@@ -417,7 +419,53 @@ const createPackagedAsset = (port, options = {}) =>
   })
 
 const assertPackagedAssetAuthority = async (port, workspaceFolder) => {
-  const response = await createPackagedAsset(port)
+  const initial = await createPackagedAsset(port)
+  let response = initial
+  if (initial.__status === 202) {
+    const operationId = initial?.success === true && initial?.data?.operation?.state === 'pending'
+      ? initial.data.operation.id
+      : undefined
+    if (typeof operationId !== 'string' || operationId.length === 0) {
+      throw new Error(`Packaged asset authority returned an invalid pending operation: ${JSON.stringify(initial)}`)
+    }
+    const deadline = Date.now() + serverRequestTimeoutMs
+    let delayMs = 25
+    while (Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, delayMs))
+      const statusResponse = await readServerText(
+        port,
+        `/api/ai/assets/operations/${encodeURIComponent(operationId)}?poll=desktop-smoke`,
+        'Packaged asset operation status',
+        { allow202: true, returnStatus: true }
+      )
+      const statusBody = statusResponse.body
+      let status
+      try {
+        status = JSON.parse(statusBody)
+      } catch {
+        throw new Error(`Packaged asset operation returned invalid JSON: ${statusBody}`)
+      }
+      const returnedOperationId = status?.success === true && status?.data?.operation?.id
+      if (
+        statusResponse.status === 202 && returnedOperationId === operationId &&
+        status?.data?.operation?.state === 'pending'
+      ) {
+        delayMs = Math.min(delayMs * 2, 250)
+        continue
+      }
+      if (
+        statusResponse.status === 200 && status?.success === true && status?.data?.asset?.kind === 'rule' &&
+        status?.data?.asset?.path === '.oo/rules/packaged-authority-smoke.md'
+      ) {
+        response = status
+        break
+      }
+      throw new Error(`Packaged asset operation returned a non-confirmed outcome: ${JSON.stringify(status)}`)
+    }
+    if (response === initial) {
+      throw new Error(`Packaged asset operation did not reach a confirmed state within ${serverRequestTimeoutMs}ms`)
+    }
+  }
   const relativePath = '.oo/rules/packaged-authority-smoke.md'
   if (
     response?.success !== true || response?.data?.asset?.kind !== 'rule' || response?.data?.asset?.path !== relativePath

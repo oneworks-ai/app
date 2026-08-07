@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createServer } from 'node:http'
 import { createConnection } from 'node:net'
 import WebSocket from 'ws'
 
+import { visibleDevicePrivateMetadata } from '../src/devices/private-metadata.js'
 import { attachRelayNodeControl } from '../src/platform/node-control.js'
 import type { RelayStoreRepository } from '../src/storage/repository.js'
 import { readRelayStore, writeRelayStore } from '../src/store.js'
@@ -37,17 +38,64 @@ const waitForMessage = async (socket: WebSocket) =>
     socket.once('error', reject)
   })
 
+const waitForPong = async (socket: WebSocket) =>
+  await new Promise<void>((resolve, reject) => {
+    let timeout: ReturnType<typeof setTimeout> | undefined
+    const settle = (error?: Error) => {
+      if (timeout != null) clearTimeout(timeout)
+      socket.off('pong', onPong)
+      socket.off('error', onError)
+      socket.off('close', onClose)
+      if (error == null) resolve()
+      else reject(error)
+    }
+    const onPong = () => settle()
+    const onError = (error: Error) => settle(error)
+    const onClose = () => settle(new Error('Control socket closed before the pong barrier.'))
+    socket.once('pong', onPong)
+    socket.once('error', onError)
+    socket.once('close', onClose)
+    timeout = setTimeout(() => settle(new Error('Timed out waiting for the control socket pong barrier.')), 2_000)
+    try {
+      socket.ping()
+    } catch (error) {
+      settle(error instanceof Error ? error : new Error('Failed to send the control socket ping.'))
+    }
+  })
+
 const waitForUpgradeRejection = async (socket: WebSocket) =>
   await new Promise<Error>(resolve => {
     socket.once('error', resolve)
   })
 
-const waitFor = async (predicate: () => boolean) => {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    if (predicate()) return
-    await new Promise(resolve => setTimeout(resolve, 5))
+const waitForStoreState = async (
+  dataPath: string,
+  predicate: (store: Awaited<ReturnType<typeof readRelayStore>>) => boolean
+) =>
+  await vi.waitFor(async () => {
+    expect(predicate(await readRelayStore(dataPath))).toBe(true)
+  }, { interval: 10, timeout: 2_000 })
+
+const createDeferred = () => {
+  let resolve: () => void = () => {}
+  const promise = new Promise<void>(deferredResolve => {
+    resolve = deferredResolve
+  })
+  return { promise, resolve }
+}
+
+const waitForSignal = async (promise: Promise<void>, label: string) => {
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  try {
+    await Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new Error(`Timed out waiting for ${label}.`)), 2_000)
+      })
+    ])
+  } finally {
+    if (timeout != null) clearTimeout(timeout)
   }
-  throw new Error('Timed out waiting for control socket state.')
 }
 
 const sendRawUpgrade = async (baseUrl: string, request: string) => {
@@ -163,9 +211,12 @@ describe('node relay control socket', () => {
       headers: { authorization: 'Bearer device-token-1', 'x-oneworks-relay-device-id': 'device-1' }
     })
     await waitForOpen(authenticated)
+    await waitForPong(authenticated)
+    const previousLastSeenAt = (await readRelayStore(args.dataPath)).devices[0].lastSeenAt
     authenticated.send(JSON.stringify({ type: 'heartbeat', payload: { deviceName: 'Node control' } }))
-    await new Promise(resolve => setTimeout(resolve, 20))
-    expect((await readRelayStore(args.dataPath)).devices[0].lastSeenAt).toEqual(expect.any(String))
+    await waitForStoreState(args.dataPath, store => (
+      store.devices[0].lastSeenAt !== previousLastSeenAt
+    ))
 
     const store = await readRelayStore(args.dataPath)
     store.devices[0].deviceTokenHash = 'sha256:rotated'
@@ -200,10 +251,10 @@ describe('node relay control socket', () => {
 
   it('bounds a slow heartbeat repository to the in-flight frame and the latest pending frame', async () => {
     const store = createFixtureStore()
-    let unblockFirstHeartbeat: () => void = () => {}
-    const firstHeartbeat = new Promise<void>(resolve => {
-      unblockFirstHeartbeat = resolve
-    })
+    const firstHeartbeatStarted = createDeferred()
+    const unblockFirstHeartbeat = createDeferred()
+    const secondHeartbeatStarted = createDeferred()
+    const secondHeartbeatCompleted = createDeferred()
     let heartbeatTransactions = 0
     const repository: RelayStoreRepository = {
       driver: 'json',
@@ -211,8 +262,15 @@ describe('node relay control socket', () => {
       read: async () => store,
       withStore: async callback => {
         heartbeatTransactions += 1
-        if (heartbeatTransactions === 1) await firstHeartbeat
-        return await callback(store, repository)
+        const transaction = heartbeatTransactions
+        if (transaction === 1) {
+          firstHeartbeatStarted.resolve()
+          await unblockFirstHeartbeat.promise
+        }
+        if (transaction === 2) secondHeartbeatStarted.resolve()
+        const result = await callback(store, repository)
+        if (transaction === 2) secondHeartbeatCompleted.resolve()
+        return result
       },
       write: async () => {}
     }
@@ -235,13 +293,17 @@ describe('node relay control socket', () => {
       for (let index = 0; index < 128; index += 1) {
         socket.send(JSON.stringify({ type: 'heartbeat', payload: { deviceName: `Burst ${index}` } }))
       }
-      await waitFor(() => heartbeatTransactions === 1)
-      unblockFirstHeartbeat()
-      await waitFor(() => heartbeatTransactions === 2)
-      await new Promise(resolve => setTimeout(resolve, 20))
+      await waitForSignal(firstHeartbeatStarted.promise, 'the first heartbeat transaction')
+      await waitForPong(socket)
+      unblockFirstHeartbeat.resolve()
+      await waitForSignal(secondHeartbeatStarted.promise, 'the pending heartbeat transaction')
+      await waitForSignal(secondHeartbeatCompleted.promise, 'the pending heartbeat completion')
+      await new Promise<void>(resolve => setImmediate(resolve))
 
       expect(heartbeatTransactions).toBe(2)
+      expect(visibleDevicePrivateMetadata(args, store.devices[0]).name).toBe('Burst 127')
     } finally {
+      unblockFirstHeartbeat.resolve()
       socket.terminate()
       await new Promise<void>((resolve, reject) => server.close(error => error == null ? resolve() : reject(error)))
     }

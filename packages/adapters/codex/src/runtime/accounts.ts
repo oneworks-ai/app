@@ -227,6 +227,11 @@ const resolveCodexSessionHomeDir = (ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'ctxId
   resolveProjectOoPath(ctx.cwd, ctx.env, 'caches', ctx.ctxId, sessionId, 'adapter-codex-home')
 )
 
+const resolveCodexAppServerHomeDir = (
+  ctx: Pick<AdapterCtx, 'cwd' | 'env'>,
+  profileKey: string
+) => resolveProjectOoPath(ctx.cwd, ctx.env, 'caches', 'adapter-codex-app-server', profileKey)
+
 const resolveCodexProbeHomeDir = (
   ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'ctxId'>,
   suffix: string
@@ -2955,10 +2960,30 @@ const buildCodexSessionConfigContent = (params: {
   ].join('\n')
 }
 
+const upsertCodexTrustedProject = (content: string, cwd: string) => {
+  const normalizedContent = content.replaceAll('\r\n', '\n').trimEnd()
+  const header = `[projects.${JSON.stringify(resolve(cwd))}]`
+  const lines = normalizedContent.split('\n')
+  const headerIndex = lines.findIndex(line => line.trim() === header)
+  if (headerIndex === -1) {
+    return `${normalizedContent}\n\n${header}\ntrust_level = "trusted"\n`
+  }
+
+  const nextHeaderIndex = lines.findIndex((line, index) => index > headerIndex && line.trim().startsWith('['))
+  const sectionEnd = nextHeaderIndex === -1 ? lines.length : nextHeaderIndex
+  const trustIndex = lines.findIndex((line, index) => (
+    index > headerIndex && index < sectionEnd && /^trust_level\s*=/u.test(line.trim())
+  ))
+  if (trustIndex === -1) lines.splice(headerIndex + 1, 0, 'trust_level = "trusted"')
+  else lines[trustIndex] = 'trust_level = "trusted"'
+  return `${lines.join('\n').trimEnd()}\n`
+}
+
 const writeCodexSessionConfigFile = async (params: {
+  configPath: string
   ctx: Pick<AdapterCtx, 'cwd' | 'env'>
-  homeDir: string
   nativeProviderConfigOverrides?: string[]
+  preserveExisting: boolean
 }) => {
   const mockHome = resolveMockHome(params.ctx.cwd, params.ctx.env)
   const sharedConfigPath = join(mockHome, '.codex', 'config.toml')
@@ -2969,20 +2994,29 @@ const writeCodexSessionConfigFile = async (params: {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
   }
 
-  const configPath = join(params.homeDir, '.codex', 'config.toml')
-  await mkdir(dirname(configPath), { recursive: true })
-  await rm(configPath, { force: true })
-  await writeFile(
-    configPath,
-    buildCodexSessionConfigContent({
+  let existingConfigContent: string | undefined
+  if (params.preserveExisting) {
+    try {
+      existingConfigContent = await readFile(params.configPath, 'utf8')
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    }
+  }
+  const nextContent = existingConfigContent == null
+    ? buildCodexSessionConfigContent({
       cwd: params.ctx.cwd,
       nativeProviderConfigOverrides: params.nativeProviderConfigOverrides,
       sharedConfigContent
-    }),
+    })
+    : upsertCodexTrustedProject(existingConfigContent, params.ctx.cwd)
+
+  await mkdir(dirname(params.configPath), { recursive: true })
+  await rm(params.configPath, { force: true })
+  await writeFile(
+    params.configPath,
+    nextContent,
     { encoding: 'utf8', mode: 0o600 }
   )
-
-  return configPath
 }
 
 const syncSharedCodexSessionHomeFiles = async (
@@ -3024,6 +3058,7 @@ export const prepareCodexSessionHome = async (params: {
   sessionId: string
   account?: string
   nativeProviderConfigOverrides?: string[]
+  appServerProfileKey?: string
 }) => {
   const { ctx, sessionId } = params
   const startupProfiler = createStartupProfiler({
@@ -3047,7 +3082,22 @@ export const prepareCodexSessionHome = async (params: {
     throw new Error(`Codex account "${requestedAccount}" is not available.`)
   }
 
-  const homeDir = resolveCodexSessionHomeDir(ctx, sessionId)
+  const accountIdentity = selectedAccount?.metadata?.authDigest ??
+    (selectedAccount?.authContent == null
+      ? selectedAccount?.authFilePath ?? selectedAccount?.key ?? selectedAccountKey ?? 'default'
+      : createHash('sha256').update(selectedAccount.authContent).digest('hex'))
+  const homeDir = params.appServerProfileKey == null
+    ? resolveCodexSessionHomeDir(ctx, sessionId)
+    : resolveCodexAppServerHomeDir(
+      ctx,
+      createHash('sha256')
+        .update(JSON.stringify({
+          account: accountIdentity,
+          profile: params.appServerProfileKey
+        }))
+        .digest('hex')
+        .slice(0, 24)
+    )
   const mockHome = resolveMockHome(ctx.cwd, ctx.env)
   const bridgeStartedAt = startupProfiler.now()
   bridgeRealHomeToMockHome({
@@ -3077,16 +3127,20 @@ export const prepareCodexSessionHome = async (params: {
   await syncSharedCodexSessionHomeFiles(ctx, homeDir, sessionId)
   startupProfiler.mark('codex.accounts.syncSharedSessionHomeFiles', sharedFilesStartedAt)
   const sessionConfigStartedAt = startupProfiler.now()
-  const sessionConfigPath = await writeCodexSessionConfigFile({
-    ctx,
-    homeDir,
-    nativeProviderConfigOverrides: params.nativeProviderConfigOverrides
+  const sessionConfigPath = join(homeDir, '.codex', 'config.toml')
+  await withCanonicalConfigWriteLock(sessionConfigPath, async (targetPath) => {
+    await writeCodexSessionConfigFile({
+      configPath: targetPath,
+      ctx,
+      nativeProviderConfigOverrides: params.nativeProviderConfigOverrides,
+      preserveExisting: params.appServerProfileKey != null
+    })
+    await ensureCodexNativeHookTrustState({
+      configPath: targetPath,
+      hooksPath: join(homeDir, '.codex', 'hooks.json')
+    })
+    await ensureCodexConfigCliCompatibility(targetPath)
   })
-  await ensureCodexNativeHookTrustState({
-    configPath: sessionConfigPath,
-    hooksPath: join(homeDir, '.codex', 'hooks.json')
-  })
-  await ensureCodexConfigCliCompatibility(sessionConfigPath)
   startupProfiler.mark('codex.accounts.writeSessionConfig', sessionConfigStartedAt)
   const authStartedAt = startupProfiler.now()
   const sessionAuthPath = join(homeDir, '.codex', 'auth.json')

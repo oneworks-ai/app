@@ -42,7 +42,7 @@ Primary implementation entrypoints for Codex hooks:
   - reads Codex accounts from `adapters.codex.accounts`; `codex login` writes base64 encoded `auth.json` into global `~/.oneworks/.oo.config.json`
   - treats the current `~/.codex/auth.json` as a read-only fallback account source and does not migrate it into project-local storage
   - when a global inline account and `~/.codex/auth.json` have the same stable account identity, keeps the configured key / metadata but uses the real-home file as the local runtime credential; this avoids replaying an already-rotated inline refresh token without silently writing real-home auth back to One Works config
-  - prepares per-session HOME roots under `<project-home>/caches/<ctxId>/<sessionId>/adapter-codex-home`
+  - prepares per-session HOME roots for direct mode and project/account/startup-profile HOME roots for shared app-server mode
   - does not bridge the whole shared `.codex` tree into a session HOME; only auth, config, hooks, skills, and sessions are intentionally linked so global plugin caches and app state cannot slow `codex app-server` startup
   - normalizes the imported Codex config before using that HOME with the CLI, so unsupported values from a user's real config do not break One Works sessions.
   - queries Codex account info and rate-limit/quota snapshots through `codex app-server`
@@ -79,7 +79,13 @@ Primary implementation entrypoints for Codex hooks:
 - `src/runtime/usage-history-files.ts` / `src/runtime/usage-history-parser.ts`
   - keep filesystem discovery separate from the privacy-bounded JSONL parser
 - `src/runtime/session-common.ts`
-  - enables `hooks`, injects runtime config, model/provider settings, and session env
+  - enables `hooks`, resolves adapter network settings, and projects model/provider/MCP/session settings into thread config
+- `src/runtime/app-server-pool.ts`
+  - owns project/account/startup-profile app-server reuse, one-time initialization, thread event routing, and idle shutdown
+- `src/runtime/network.ts`
+  - resolves adapter-level HTTP proxy, bypass, and CA settings and applies the effective Codex process environment
+- `src/runtime/thread-session-map.ts`
+  - maps shared Codex thread IDs back to One Works task IDs/runtime metadata for native hooks
 - `src/hook-bridge.ts`
   - translates Codex native payloads into One Works hook input/output
 - `src/runtime/stream.ts`
@@ -183,6 +189,15 @@ export default defineConfig({
       features: {
         shell_snapshot: true,
         unified_exec: false
+      },
+      appServer: {
+        idleTimeoutMs: 300000
+      },
+      network: {
+        httpProxy: 'http://127.0.0.1:7890',
+        httpsProxy: 'http://127.0.0.1:7890',
+        noProxy: ['internal.example.com'],
+        caCertificate: '/absolute/path/to/company-ca.pem'
       }
     }
   }
@@ -204,7 +219,7 @@ Codex 多账号切换走 adapter 通用 `account` 能力：
 如果本机存在 `~/.codex/auth.json`，adapter 会把它作为只读 fallback account 展示和使用；这条 fallback 不会写入 One Works config。要让 Codex 登录态通过 Relay 同步到其他设备，必须通过 `ow accounts add codex [accountName]` 或 Web 登录入口把它保存到 global config。
 如果 global config 里已经有同一 stable identity 的 inline account，本机运行时会保留它的 key、标题和默认账号语义，但优先软链当前 `~/.codex/auth.json`；这样 Codex 或 ChatGPT 轮换 refresh token 后不会继续重放旧 inline token，同时也不会把真实 home 的新凭据自动写回 global config。
 
-session 级 HOME 仍然完全隔离：如果账号只来自 global config，adapter 会把 base64 auth materialize 成当前 session 的 `.codex/auth.json`；如果账号来自 `authFile`、real home fallback，或命中了上面的同身份本机凭据覆盖，则会 symlink 到对应文件。
+direct mode 的 HOME 按 session 隔离；stream mode 则按 project、账号与启动 / 网络 profile 隔离并复用 app-server HOME。model provider、MCP、cwd、权限与 session 环境都下沉到 thread，不构成独立 app-server。账号只来自 global config 时，adapter 会把 base64 auth materialize 到隔离 HOME 的 `.codex/auth.json`；账号来自 `authFile`、real home fallback，或命中同身份本机凭据覆盖时，会 symlink 到对应文件。
 
 现在还支持两类额外入口：
 
@@ -310,7 +325,7 @@ Notable flags:
 
 ### `configOverrides`
 
-Raw Codex `-c key=value` overrides forwarded to every Codex spawn.
+Raw Codex config overrides. Stream mode sends them through `thread/start.config` / `thread/resume.config`; direct mode keeps forwarding equivalent `-c key=value` arguments.
 
 The adapter also mirrors `check_for_update_on_startup` into the managed mock-home
 `config.toml`, defaulting it to `false` so managed Codex sessions do not surface
@@ -327,6 +342,13 @@ trust_level = "trusted"
 
 so Codex does not stop on first-run workspace trust prompts inside the isolated
 mock home.
+
+### `appServer` / `network`
+
+- `appServer.idleTimeoutMs` controls how long a shared, unused stream app-server remains alive; the default is 300000 ms.
+- `network.httpProxy`, `httpsProxy`, `allProxy`, and `noProxy` override the corresponding process environment for this adapter only. Loopback hosts are always added to `NO_PROXY` so Codex can reach the adapter-owned local routing proxy.
+- `network.caCertificate` accepts a PEM bundle path or inline PEM. Inline content is materialized under the profile HOME with mode `0600`; native Codex receives the resulting path through both `CODEX_CA_CERTIFICATE` and `SSL_CERT_FILE`.
+- Different project, account, binary/startup options, effective process environment, or network profile creates a different app-server pool entry. Model providers and MCP selections remain thread-scoped.
 
 ### Native model provider import
 

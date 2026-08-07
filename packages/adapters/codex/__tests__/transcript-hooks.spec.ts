@@ -709,4 +709,121 @@ describe('createCodexTranscriptHookWatcher', () => {
 
     expect(callHookMock).not.toHaveBeenCalled()
   })
+
+  it('retargets an existing shared-home transcript without replaying old events', async () => {
+    const timestamp = createTimestamp()
+    const transcriptPath = join(sessionsDir, 'rollout-shared-thread.jsonl')
+    await writeFile(
+      transcriptPath,
+      `${
+        JSON.stringify({
+          timestamp,
+          type: 'session_meta',
+          payload: {
+            id: 'codex-shared-thread',
+            timestamp,
+            cwd: '/tmp/project'
+          }
+        })
+      }\n`
+    )
+    const watcher = createCodexTranscriptHookWatcher({
+      codexThreadId: '__pending__',
+      cwd: '/tmp/project',
+      env: {},
+      homeDir,
+      logger: createLogger() as any,
+      runtime: 'server',
+      sessionId: 'ow-session',
+      pollIntervalMs: 10
+    })
+    watcher.start()
+    watcher.setCodexThreadId('codex-shared-thread')
+
+    await appendFile(
+      transcriptPath,
+      `${
+        JSON.stringify({
+          timestamp: createTimestamp(),
+          type: 'response_item',
+          payload: {
+            type: 'file_change',
+            status: 'completed',
+            changes: [{ kind: 'add', path: '/tmp/project/new.txt' }]
+          }
+        })
+      }\n`
+    )
+    await waitFor(60)
+    watcher.stop()
+
+    expect(callHookMock).toHaveBeenCalledTimes(2)
+    expect(callHookMock).toHaveBeenNthCalledWith(
+      1,
+      'PreToolUse',
+      expect.objectContaining({
+        sessionId: 'ow-session',
+        toolName: 'adapter:codex:FileChange'
+      }),
+      {}
+    )
+  })
+
+  it('replays matching transcript events scanned while the thread id is pending', async () => {
+    const timestamp = createTimestamp()
+    const transcriptPath = join(sessionsDir, 'rollout-pending-thread.jsonl')
+    const watcher = createCodexTranscriptHookWatcher({
+      codexThreadId: '__pending__',
+      cwd: '/tmp/project',
+      env: {},
+      homeDir,
+      logger: createLogger() as any,
+      runtime: 'server',
+      sessionId: 'ow-session',
+      pollIntervalMs: 10
+    })
+    watcher.start()
+
+    await writeFile(
+      transcriptPath,
+      [
+        JSON.stringify({
+          timestamp,
+          type: 'session_meta',
+          payload: {
+            id: 'codex-pending-thread',
+            timestamp,
+            cwd: '/tmp/project'
+          }
+        }),
+        JSON.stringify({
+          timestamp,
+          type: 'response_item',
+          payload: {
+            type: 'file_change',
+            status: 'completed',
+            changes: [{ kind: 'add', path: '/tmp/project/pending.txt' }]
+          }
+        }),
+        ''
+      ].join('\n')
+    )
+    await waitFor(40)
+    expect(callHookMock).not.toHaveBeenCalled()
+
+    watcher.setCodexThreadId('codex-pending-thread')
+    await waitFor(60)
+    watcher.stop()
+
+    expect(callHookMock).toHaveBeenCalledTimes(2)
+    expect(callHookMock).toHaveBeenNthCalledWith(
+      1,
+      'PreToolUse',
+      expect.objectContaining({
+        sessionId: 'ow-session',
+        toolName: 'adapter:codex:FileChange'
+      }),
+      {}
+    )
+  })
 })

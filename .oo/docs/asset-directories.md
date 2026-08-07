@@ -130,6 +130,12 @@ __ONEWORKS_PROJECT_ENTITIES_DIR__=knowledge/entities
 
 ## 影响范围
 
+### 从知识库新建资产
+
+知识库可以新建项目内实体、流程和规则。输入名称与可选描述；流程还可声明具名参数。表单会预览生成后的项目相对文件名，文件只会写入当前受信 workspace 内的已配置项目资产目录；服务端完成发布后会自动刷新对应列表。若刷新失败，重试刷新不会再次创建文件。读取仍支持上文所述的绝对资产目录；为保证创建过程的目录权限与原子发布边界，知识库“新建”不写入 workspace 之外的绝对目录。若配置后的目标位于 workspace 外，预览和创建都会拒绝，需改用 workspace 内目录或由项目维护者在外部目录中手工维护资产。
+
+新建模板与既有资产使用同一套发现约定：`entities/<name>.md`、`specs/<name>.md`、`rules/<name>.md`。名称会转换为共享的 canonical slug；本地或 plugin 中存在语义冲突的定义时会被拒绝。发布由服务端原生文件系统 authority 以 workspace 目录句柄和 generation fence 执行。创建请求会先返回待处理 operation；服务端只在该提交连接正常关闭且未出现 HTTP 解析错误后开始发布，知识库随后只轮询 operation 状态，不会再次发送创建请求。目标一旦可能可见，后续持久化、身份确认或响应传输失败只会返回“已提交但降级”或“提交状态待确认”，不会再按路径删除、恢复或覆盖可见目标。知识库会关闭本次提交并刷新列表进行协调；只有服务端明确返回 `committed: false` 时，才可安全地再次提交。
+
 这些环境变量会影响项目数据资产的主要消费链路：
 
 - workspace assets：`rules`、`skills`、`specs`、`entities`、`mcp`
@@ -190,7 +196,5 @@ __ONEWORKS_PROJECT_ENTITIES_DIR__=knowledge/entities
 
 ## 使用建议
 
-- 如果只是想把 `.oo` 改成别的名字，优先只配 `__ONEWORKS_PROJECT_BASE_DIR__`
-- 如果只是想把 `entities` 改名，优先只配 `__ONEWORKS_PROJECT_ENTITIES_DIR__`
-- 如果同时配置两者，实体目录会基于新的 AI 基目录继续拼接
-- 修改 `.env` 后需要重启相关进程；只刷新前端页面不会让已有子进程重新加载目录配置
+- 只改 `.oo` 名称时配置 `__ONEWORKS_PROJECT_BASE_DIR__`；只改 `entities` 名称时配置 `__ONEWORKS_PROJECT_ENTITIES_DIR__`。
+- 同时配置两者时，实体目录基于新的 AI 基目录拼接；修改 `.env` 后需重启相关进程，单纯刷新前端不会重新加载目录配置。

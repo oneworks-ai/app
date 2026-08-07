@@ -9,6 +9,7 @@ import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 import { migrateProjectHomeSegments } from '@oneworks/utils/project-home-migration'
 import type { ProjectHomeMigratedSegment } from '@oneworks/utils/project-home-migration'
 
+import { installAssetCreateConnectionGuard } from '#~/services/ai/asset-create-operation.js'
 import { loadConfigState } from '#~/services/config/index.js'
 import { acquireConfigWatchRuntime } from '#~/services/config/watch.js'
 import { initializeModelProviderCatalog } from '#~/services/model-providers/catalog-loader.js'
@@ -204,6 +205,7 @@ export async function createServerRuntime(logStartup?: StartupLog): Promise<Serv
   const server = http.createServer((req, res) => {
     void handler(req, res)
   })
+  installAssetCreateConnectionGuard(server)
   logStartup?.('koa and http server created')
   logStartup?.('config load begin')
   const { globalConfig, projectSource, userConfig, mergedConfig } = await loadConfigState()
