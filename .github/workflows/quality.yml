@@ -36,6 +36,8 @@ jobs:
             command: pnpm dprint check
           - name: typecheck
             command: pnpm typecheck
+          - name: docs-media
+            command: pnpm tools docs-media verify
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -55,6 +57,12 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Install FFmpeg
+        if: matrix.name == 'docs-media'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes ffmpeg
 
       - name: Run ${{ matrix.name }}
         run: ${{ matrix.command }}

@@ -5,6 +5,7 @@
 *.icns -text
 *.ico -text
 *.gif -text
+*.mp4 -text
 *.webp -text
 *.woff -text
 *.woff2 -text
