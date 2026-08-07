@@ -168,7 +168,7 @@ export interface AdapterAccountQuotaInfo {
 }
 
 export interface AdapterAccountActionDescriptor {
-  key: 'add' | 'refresh' | 'remove'
+  key: 'add' | 'reauthenticate' | 'refresh' | 'remove'
   label: string
   description?: string
   scope?: 'adapter' | 'account'
@@ -184,6 +184,7 @@ export interface AdapterAccountInfo {
   key: string
   title: string
   description?: string
+  displayName?: string
   email?: string
   avatarUrl?: string
   status?: 'ready' | 'missing' | 'error'
@@ -231,7 +232,7 @@ export interface AdapterManageAccountProgressEvent {
 }
 
 export interface AdapterManageAccountOptions {
-  action: 'add' | 'refresh' | 'remove' | 'consume-reset-credit'
+  action: 'add' | 'reauthenticate' | 'refresh' | 'remove' | 'consume-reset-credit'
   operationId?: string
   model?: string
   account?: string

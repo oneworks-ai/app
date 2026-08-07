@@ -22,6 +22,11 @@ interface CodexProfileFetchOptions {
   timeoutMs?: number
 }
 
+export interface CodexAccountProfile {
+  avatarUrl?: string
+  displayName?: string
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
 )
@@ -76,7 +81,20 @@ const normalizeTrustedAvatarUrl = (value: unknown) => {
   }
 }
 
-const fetchCodexProfileAvatar = async (params: {
+const readProfileDisplayName = (profile: Record<string, unknown>) => {
+  const directName = normalizeString(profile.name) ?? normalizeString(profile.display_name)
+  if (directName != null) {
+    return directName
+  }
+
+  const composedName = [
+    normalizeString(profile.first_name),
+    normalizeString(profile.last_name)
+  ].filter((part): part is string => part != null).join(' ')
+  return composedName === '' ? undefined : composedName
+}
+
+const fetchCodexProfile = async (params: {
   endpoint: string
   accessToken: string
   accountId?: string
@@ -103,7 +121,15 @@ const fetchCodexProfileAvatar = async (params: {
 
     const payload = await response.json() as unknown
     const profile = isRecord(payload) && isRecord(payload.profile) ? payload.profile : undefined
-    return normalizeTrustedAvatarUrl(profile?.profile_picture_url)
+    if (profile == null) {
+      return undefined
+    }
+
+    const result: CodexAccountProfile = {
+      avatarUrl: normalizeTrustedAvatarUrl(profile.profile_picture_url),
+      displayName: readProfileDisplayName(profile)
+    }
+    return Object.values(result).some(value => value != null) ? result : undefined
   } catch {
     return undefined
   } finally {
@@ -111,7 +137,7 @@ const fetchCodexProfileAvatar = async (params: {
   }
 }
 
-export const fetchCodexProfileAvatarFromContent = async (
+export const fetchCodexProfileFromContent = async (
   authContent: string,
   options: CodexProfileFetchOptions = {}
 ) => {
@@ -127,29 +153,46 @@ export const fetchCodexProfileAvatarFromContent = async (
     ? options.timeoutMs
     : CODEX_PROFILE_TIMEOUT_MS
 
+  let mergedProfile: CodexAccountProfile | undefined
   for (const endpoint of CODEX_PROFILE_ENDPOINTS) {
-    const avatarUrl = await fetchCodexProfileAvatar({
+    const profile = await fetchCodexProfile({
       endpoint,
       accessToken: auth.accessToken,
       accountId: auth.accountId,
       fetchImpl,
       timeoutMs
     })
-    if (avatarUrl != null) {
-      return avatarUrl
+    if (profile != null) {
+      mergedProfile = {
+        avatarUrl: mergedProfile?.avatarUrl ?? profile.avatarUrl,
+        displayName: mergedProfile?.displayName ?? profile.displayName
+      }
+      if (mergedProfile.avatarUrl != null && mergedProfile.displayName != null) {
+        return mergedProfile
+      }
     }
   }
 
-  return undefined
+  return mergedProfile
 }
 
-export const fetchCodexProfileAvatarFromFile = async (
+export const fetchCodexProfileFromFile = async (
   authFilePath: string,
   options: CodexProfileFetchOptions = {}
 ) => {
   try {
-    return await fetchCodexProfileAvatarFromContent(await readFile(authFilePath, 'utf8'), options)
+    return await fetchCodexProfileFromContent(await readFile(authFilePath, 'utf8'), options)
   } catch {
     return undefined
   }
 }
+
+export const fetchCodexProfileAvatarFromContent = async (
+  authContent: string,
+  options: CodexProfileFetchOptions = {}
+) => (await fetchCodexProfileFromContent(authContent, options))?.avatarUrl
+
+export const fetchCodexProfileAvatarFromFile = async (
+  authFilePath: string,
+  options: CodexProfileFetchOptions = {}
+) => (await fetchCodexProfileFromFile(authFilePath, options))?.avatarUrl

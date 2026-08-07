@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- account manager tests cover quota reuse and account action flows together. */
 import type { ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -5,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AdapterAccountRateLimitResetCredits } from '@oneworks/types'
 
 const testState = vi.hoisted(() => ({
+  accountStatus: 'ready' as 'ready' | 'missing' | 'error',
+  buttonOnClicks: new Map<string, () => Promise<void> | void>(),
   detailFetcher: undefined as undefined | (() => Promise<unknown>),
   createAdapterAccountOperationId: vi.fn(),
   getAdapterAccountDetail: vi.fn(),
@@ -17,8 +20,47 @@ const testState = vi.hoisted(() => ({
   mutateCache: vi.fn(),
   popconfirmOnConfirms: [] as Array<() => Promise<void> | void>,
   resetCredits: undefined as AdapterAccountRateLimitResetCredits | undefined,
+  showQuota: true,
   tooltipTitles: [] as ReactNode[],
   tooltipTriggers: [] as Array<string | string[] | undefined>
+}))
+
+const translateQuota = vi.hoisted(() => {
+  return (
+    key: string,
+    options?: Record<string, unknown> & { defaultValue?: string }
+  ) => {
+    const messages: Record<string, string> = {
+      'chat.accountQuotaModal.available': `${String(options?.count ?? 0)} 张可用`,
+      'chat.accountQuotaModal.loginRequired': '登录状态已失效，请重新登录后刷新使用限额和重置卡状态。',
+      'chat.accountQuotaModal.resetsAt': `${String(options?.date)} 重置`,
+      'chat.accountQuotaModal.weekly': '使用限额',
+      'chat.accountQuotaModal.windowDuration.days': `${String(options?.count)} 天`,
+      'chat.accountQuotaModal.windowDuration.hours': `${String(options?.count)} 小时`,
+      'chat.accountQuotaModal.windowDuration.minutes': `${String(options?.count)} 分钟`,
+      'chat.accountQuotaModal.windowUsage': `${String(options?.window)}用量`,
+      'config.accounts.resetCredits.fullResetTitle': '完整额度重置',
+      'config.accounts.resetCredits.fields.expiresAt': '到期时间',
+      'config.accounts.resetCredits.fields.grantedAt': '获得时间',
+      'config.accounts.resetCredits.noCredits': '暂无可用额度重置卡',
+      'config.accounts.resetCredits.remaining.daysHours': '剩余 1 天 2 小时',
+      'config.accounts.resetCredits.summaryDescription': '用于重置符合条件的 Codex 额度窗口。',
+      'config.accounts.resetCredits.title': '额度重置卡',
+      'config.accounts.resetCredits.unavailable': '这张额度重置卡当前不可用',
+      'config.accounts.resetCredits.use': '使用重置卡'
+    }
+    return messages[key] ?? options?.defaultValue ?? key
+  }
+})
+
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    i18n: {
+      language: 'zh',
+      resolvedLanguage: 'zh'
+    },
+    t: translateQuota
+  })
 }))
 
 vi.mock('antd', () => ({
@@ -36,15 +78,18 @@ vi.mock('antd', () => ({
     'aria-label': ariaLabel,
     children,
     disabled,
-    icon
+    icon,
+    onClick
   }: {
     'aria-label'?: string
     children?: ReactNode
     disabled?: boolean
     icon?: ReactNode
-  }) => (
-    <button type='button' aria-label={ariaLabel} disabled={disabled}>{icon}{children}</button>
-  ),
+    onClick?: () => Promise<void> | void
+  }) => {
+    if (ariaLabel != null && onClick != null) testState.buttonOnClicks.set(ariaLabel, onClick)
+    return <button type='button' aria-label={ariaLabel} disabled={disabled}>{icon}{children}</button>
+  },
   Collapse: ({ className, items }: {
     className?: string
     items?: Array<{ key: string; label?: ReactNode }>
@@ -92,8 +137,10 @@ vi.mock('swr', () => ({
           account: {
             key: 'work',
             title: 'yijie4188@gmail.com · Personal',
-            status: 'ready',
+            displayName: 'Example User',
+            status: testState.accountStatus,
             email: 'yijie4188@gmail.com',
+            avatarUrl: 'https://chatgpt.com/avatar.jpg',
             accountType: 'chatgpt',
             planType: 'pro',
             source: {
@@ -101,37 +148,40 @@ vi.mock('swr', () => ({
               description: 'Read from ~/.codex/auth.json'
             },
             description: 'Read from ~/.codex/auth.json',
-            quota: {
-              summary: 'Pro · 5h 48% · 7d 8%',
-              metrics: [
-                {
-                  id: 'plan',
-                  label: 'Plan',
-                  value: 'Pro',
-                  primary: true
-                },
-                {
-                  id: 'primary-usage',
-                  label: '5h used',
-                  value: '48%',
-                  description: 'Resets 2026-07-10 16:14'
-                },
-                {
-                  id: 'secondary-usage',
-                  label: '7d used',
-                  value: '8%',
-                  description: 'Resets 2026-07-17 05:42'
-                },
-                {
-                  id: 'codex-bengalfox-primary-usage',
-                  label: 'GPT-5.3-Codex-Spark · 7d used',
-                  value: '0%',
-                  description: 'Resets 2026-07-17 08:30'
-                }
-              ],
-              rateLimitResetCredits: testState.resetCredits
-            },
+            quota: testState.showQuota
+              ? {
+                summary: 'Pro · 5h 48% · 7d 8%',
+                metrics: [
+                  {
+                    id: 'plan',
+                    label: 'Plan',
+                    value: 'Pro',
+                    primary: true
+                  },
+                  {
+                    id: 'primary-usage',
+                    label: '5h used',
+                    value: '48%',
+                    description: 'Resets 2026-07-10 16:14'
+                  },
+                  {
+                    id: 'secondary-usage',
+                    label: '7d used',
+                    value: '8%',
+                    description: 'Resets 2026-07-17 05:42'
+                  },
+                  {
+                    id: 'codex-bengalfox-primary-usage',
+                    label: 'GPT-5.3-Codex-Spark · 7d used',
+                    value: '0%',
+                    description: 'Resets 2026-07-17 08:30'
+                  }
+                ],
+                rateLimitResetCredits: testState.resetCredits
+              }
+              : undefined,
             actions: [
+              { key: 'reauthenticate', label: 'Sign in again' },
               {
                 key: 'refresh',
                 label: 'Refresh quota',
@@ -168,11 +218,34 @@ vi.mock('#~/api', () => ({
 }))
 
 vi.mock('#~/components/config/record-editors/SchemaObjectEditor', () => ({
-  SchemaObjectEditor: () => <div data-testid='account-editor' />
+  SchemaObjectEditor: ({
+    resolveFieldDescription,
+    schema
+  }: {
+    resolveFieldDescription: (
+      field: { description?: string; path: string[] },
+      fallback: string
+    ) => string
+    schema: { fields: Array<{ description?: string; path: string[] }> }
+  }) => (
+    <div data-testid='account-editor'>
+      {schema.fields.map(field => (
+        <span key={field.path.join('.')}>
+          {resolveFieldDescription(field, field.description ?? '')}
+        </span>
+      ))}
+    </div>
+  )
+}))
+
+vi.mock('#~/components/usage/UsagePanel', () => ({
+  UsagePanel: () => <div data-testid='account-usage' />
 }))
 
 const translations: Record<string, string> = {
+  'config.accounts.actions.reauthenticate.label': '重新登录',
   'config.accounts.actions.refresh.label': '刷新额度',
+  'config.accounts.codexAuthFileDescription': '可选填 Codex auth.json 文件路径；留空时使用该账号已存储的登录凭据。',
   'config.accounts.facts.description': '说明',
   'config.accounts.facts.email': '邮箱',
   'config.accounts.facts.key': '账号 Key',
@@ -195,17 +268,43 @@ const translations: Record<string, string> = {
   'config.accounts.resetCredits.title': '额度重置卡',
   'config.accounts.resetCredits.unavailable': '这张额度重置卡当前不可用',
   'config.accounts.resetCredits.use': '使用重置卡',
-  'config.accounts.status.ready': '可用'
+  'config.accounts.settingsTitle': '账号配置',
+  'config.accounts.status.ready': '可用',
+  'usage.title': '用量统计'
 }
 
 const t = (key: string, options?: Record<string, unknown> & { defaultValue?: string }) => (
   translations[key] ?? options?.defaultValue ?? key
 )
 
+const renderAccountManager = async () => {
+  const { AdapterAccountsManager } = await import('#~/components/config/AdapterAccountsManager')
+  return renderToStaticMarkup(
+    <AdapterAccountsManager
+      adapterKey='codex'
+      value={{ accounts: { work: {} } }}
+      accountsData={{ accounts: [], actions: [] }}
+      accountItemSchema={{
+        fields: [
+          { path: ['title'], type: 'string' },
+          { path: ['description'], type: 'string' },
+          { path: ['authFile'], type: 'string' }
+        ]
+      }}
+      nestedPath={['accounts', 'work']}
+      onChange={vi.fn()}
+      onOpenNestedPath={vi.fn()}
+      t={t}
+    />
+  )
+}
+
 describe('adapter accounts manager', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-07-30T00:00:00Z'))
+    testState.accountStatus = 'ready'
+    testState.buttonOnClicks.clear()
     testState.detailFetcher = undefined
     testState.createAdapterAccountOperationId.mockReset()
     testState.createAdapterAccountOperationId.mockReturnValue('operation-id')
@@ -243,6 +342,7 @@ describe('adapter accounts manager', () => {
         }
       ]
     }
+    testState.showQuota = true
   })
 
   afterEach(() => {
@@ -250,44 +350,40 @@ describe('adapter accounts manager', () => {
   })
 
   it('loads and displays the selected account quota', async () => {
-    const { AdapterAccountsManager } = await import('#~/components/config/AdapterAccountsManager')
-    const html = renderToStaticMarkup(
-      <AdapterAccountsManager
-        adapterKey='codex'
-        value={{ accounts: { work: {} } }}
-        accountsData={{ accounts: [], actions: [] }}
-        nestedPath={['accounts', 'work']}
-        onChange={vi.fn()}
-        onOpenNestedPath={vi.fn()}
-        t={t}
-      />
-    )
-
+    const html = await renderAccountManager()
+    expect(html).toContain('adapter-account-manager__hero-profile')
+    expect(html).toContain('adapter-account-manager__hero-avatar-image')
+    expect(html).toContain('src="https://chatgpt.com/avatar.jpg"')
+    expect(html).toContain('adapter-account-manager__hero-title" title="Example User">Example User')
+    expect(html).toContain('adapter-account-manager__hero-email">yijie4188@gmail.com')
+    expect(html).toContain('adapter-account-manager__hero-plan">Pro')
     expect(html).toContain('额度')
-    expect(html).toContain('5h used')
+    expect(html).toContain('5 小时用量')
     expect(html).toContain('48%')
-    expect(html).toContain('7d used')
+    expect(html).toContain('7 天用量')
     expect(html).toContain('8%')
-    expect(html).toContain('GPT-5.3-Codex-Spark · 7d used')
+    expect(html).toContain('GPT-5.3-Codex-Spark · 7 天用量')
+    expect(html).toContain('query_stats')
+    expect(html).toContain('schedule')
+    expect(html).toContain('bolt')
+    expect(html).toContain('重置')
+    expect(html).not.toContain('Resets')
     expect(html).toContain('额度重置卡')
     expect(html).toContain('2 张可用')
     expect(html.match(/完整额度重置/g)).toHaveLength(2)
-    expect(html).toContain('config-view__field-list--grouped')
-    expect(html).toContain('config-view__field-row')
-    expect(html.match(/adapter-account-manager__reset-credit-control/g)).toHaveLength(2)
-    expect(html.match(/adapter-account-manager__reset-credit-remaining/g)).toHaveLength(2)
+    expect(html.match(/class="account-quota-modal__credit"/g)).toHaveLength(2)
+    expect(html.match(/account-quota-modal__credit-meta/g)).toHaveLength(2)
     expect(html).toContain('剩余')
-    expect(html).not.toContain('adapter-account-manager__reset-credit-details')
     expect(html).not.toContain('>获得时间</span>')
     expect(html).not.toContain('>到期时间</span>')
     expect(html.match(/aria-label="使用重置卡"/g)).toHaveLength(2)
-    const firstControlIndex = html.indexOf('adapter-account-manager__reset-credit-control')
+    const firstControlIndex = html.indexOf('class="account-quota-modal__credit"')
     const firstRemainingIndex = html.indexOf(
-      'adapter-account-manager__reset-credit-remaining',
+      'account-quota-modal__credit-meta',
       firstControlIndex
     )
     const firstActionIndex = html.indexOf(
-      'adapter-account-manager__reset-credit-action-wrap',
+      'account-quota-modal__credit-action-wrap',
       firstControlIndex
     )
     expect(firstRemainingIndex).toBeGreaterThan(firstControlIndex)
@@ -296,7 +392,7 @@ describe('adapter accounts manager', () => {
       .filter((title): title is ReactNode => title != null && title !== false)
       .map(title => renderToStaticMarkup(<>{title}</>))
       .join('')
-    expect(tooltipHtml).toContain('adapter-account-manager__reset-credit-tooltip-row')
+    expect(tooltipHtml).toContain('account-quota-modal__time-tooltip-row')
     expect(tooltipHtml).toContain('>获得时间</span>')
     expect(tooltipHtml).toContain('>到期时间</span>')
     expect(testState.tooltipTriggers).toContainEqual(['hover', 'focus'])
@@ -305,19 +401,63 @@ describe('adapter accounts manager', () => {
     expect(html).not.toContain('可用 · Codex 额度')
     expect(html).not.toContain('adapter-account-manager__reset-credit-status')
     expect(html).not.toContain('adapter-account-manager__reset-credit-icon')
-    expect(html).toContain('adapter-account-manager__metadata')
+    expect(html).not.toContain('adapter-account-manager__metadata')
     expect(html).not.toContain('账号 Key')
     expect(html).not.toContain('类型')
     expect(html).not.toContain('adapter-account-manager__metadata-label">邮箱')
     expect(html).not.toContain('adapter-account-manager__metadata-label">套餐')
     expect(html).not.toContain('adapter-account-manager__metadata-label">说明')
-    expect(html.match(/Read from ~\/\.codex\/auth\.json/g)).toHaveLength(1)
-    expect(html).toContain('adapter-account-manager__metric-value">Pro')
+    expect(html).not.toContain('Read from ~/.codex/auth.json')
+    expect(html).not.toContain('adapter-account-manager__metric-label">Plan')
     expect(html).toContain('aria-label="刷新额度"')
+    expect(html).toContain('aria-label="重新登录"')
+    expect(html).toContain('role="tablist"')
+    expect(html).toContain('>用量统计</span>')
+    expect(html).toContain('>账号配置</span>')
+    expect(html).toContain('aria-selected="true"')
+    expect(html).not.toContain('data-testid="account-editor"')
 
     testState.getAdapterAccountDetail.mockResolvedValue({ account: { key: 'work' } })
     await expect(testState.detailFetcher?.()).resolves.toEqual({ account: { key: 'work' } })
     expect(testState.getAdapterAccountDetail).toHaveBeenCalledWith('codex', 'work', { refresh: true })
+  })
+
+  it('describes the empty Codex auth file as using the stored account credential', async () => {
+    const { AccountEditor } = await import('#~/components/config/AdapterAccountsManager')
+    const html = renderToStaticMarkup(
+      <AccountEditor
+        adapterKey='codex'
+        accountKey='work'
+        accountItemSchema={{
+          fields: [{
+            path: ['authFile'],
+            type: 'string',
+            description: 'Schema fallback'
+          }]
+        }}
+        value={{ accounts: { work: {} } }}
+        onChange={vi.fn()}
+        t={t}
+      />
+    )
+
+    expect(html).toContain('留空时使用该账号已存储的登录凭据')
+    expect(html).not.toContain('.oneworks/projects')
+    expect(html).not.toContain('Schema fallback')
+  })
+
+  it('keeps the quota panel visible and explains when sign-in is missing', async () => {
+    testState.accountStatus = 'missing'
+    testState.resetCredits = undefined
+    testState.showQuota = false
+
+    const html = await renderAccountManager()
+
+    expect(html).toContain('adapter-account-manager__profile-quota')
+    expect(html).toContain('account-quota-modal__panel')
+    expect(html).toContain('使用限额')
+    expect(html).toContain('额度重置卡')
+    expect(html).toContain('登录状态已失效，请重新登录后刷新使用限额和重置卡状态。')
   })
 
   it('renders one fallback row per available reset credit while details recover', async () => {
@@ -325,18 +465,7 @@ describe('adapter accounts manager', () => {
       availableCount: 2,
       canConsume: true
     }
-    const { AdapterAccountsManager } = await import('#~/components/config/AdapterAccountsManager')
-    const html = renderToStaticMarkup(
-      <AdapterAccountsManager
-        adapterKey='codex'
-        value={{ accounts: { work: {} } }}
-        accountsData={{ accounts: [], actions: [] }}
-        nestedPath={['accounts', 'work']}
-        onChange={vi.fn()}
-        onOpenNestedPath={vi.fn()}
-        t={t}
-      />
-    )
+    const html = await renderAccountManager()
 
     expect(html).toContain('2 张可用')
     expect(html.match(/完整额度重置/g)).toHaveLength(2)
@@ -357,18 +486,7 @@ describe('adapter accounts manager', () => {
         }
       ]
     }
-    const { AdapterAccountsManager } = await import('#~/components/config/AdapterAccountsManager')
-    const html = renderToStaticMarkup(
-      <AdapterAccountsManager
-        adapterKey='codex'
-        value={{ accounts: { work: {} } }}
-        accountsData={{ accounts: [], actions: [] }}
-        nestedPath={['accounts', 'work']}
-        onChange={vi.fn()}
-        onOpenNestedPath={vi.fn()}
-        t={t}
-      />
-    )
+    const html = await renderAccountManager()
 
     expect(html).toContain('Redeemed credit')
     expect(html.match(/完整额度重置/g)).toHaveLength(1)
@@ -382,22 +500,41 @@ describe('adapter accounts manager', () => {
       availableCount: 0,
       canConsume: true
     }
-    const { AdapterAccountsManager } = await import('#~/components/config/AdapterAccountsManager')
-    const html = renderToStaticMarkup(
-      <AdapterAccountsManager
-        adapterKey='codex'
-        value={{ accounts: { work: {} } }}
-        accountsData={{ accounts: [], actions: [] }}
-        nestedPath={['accounts', 'work']}
-        onChange={vi.fn()}
-        onOpenNestedPath={vi.fn()}
-        t={t}
-      />
-    )
+    const html = await renderAccountManager()
 
-    expect(html).toContain('config.accounts.resetCredits.noCredits')
-    expect(html).not.toContain('config.accounts.resetCredits.summaryDescription')
+    expect(html).toContain('暂无可用额度重置卡')
+    expect(html).not.toContain('用于重置符合条件的 Codex 额度窗口。')
     expect(html).not.toContain('aria-label="使用重置卡"')
+  })
+
+  it('keeps the completed reauthentication result when the account list refresh fails', async () => {
+    const events: string[] = []
+    const account = { key: 'work', title: 'Work', status: 'ready' as const }
+    testState.manageAdapterAccount.mockResolvedValue({
+      accountKey: 'work',
+      account,
+      message: 'Signed in again.'
+    })
+    testState.mutate.mockImplementation(async () => {
+      events.push('detail')
+    })
+    testState.mutateCache.mockImplementation(async () => {
+      events.push('list')
+      throw new Error('list refresh failed')
+    })
+    await renderAccountManager()
+
+    await testState.buttonOnClicks.get('重新登录')?.()
+
+    expect(testState.manageAdapterAccount).toHaveBeenCalledWith('codex', {
+      action: 'reauthenticate',
+      account: 'work',
+      refresh: false
+    })
+    expect(testState.mutate).toHaveBeenCalledWith({ account }, { revalidate: false })
+    expect(events).toEqual(['detail', 'list'])
+    expect(testState.messageSuccess).toHaveBeenCalledWith('Signed in again.')
+    expect(testState.messageError).not.toHaveBeenCalled()
   })
 
   it('reports a definite consume outcome even when the post-action refresh fails', async () => {
@@ -421,18 +558,7 @@ describe('adapter accounts manager', () => {
       }
     })
     testState.mutate.mockRejectedValueOnce(new Error('refresh failed'))
-    const { AdapterAccountsManager } = await import('#~/components/config/AdapterAccountsManager')
-    renderToStaticMarkup(
-      <AdapterAccountsManager
-        adapterKey='codex'
-        value={{ accounts: { work: {} } }}
-        accountsData={{ accounts: [], actions: [] }}
-        nestedPath={['accounts', 'work']}
-        onChange={vi.fn()}
-        onOpenNestedPath={vi.fn()}
-        t={t}
-      />
-    )
+    await renderAccountManager()
 
     await testState.popconfirmOnConfirms[0]?.()
 
@@ -472,18 +598,7 @@ describe('adapter accounts manager', () => {
       }
     })
     testState.mutate.mockRejectedValueOnce(new Error('refresh failed'))
-    const { AdapterAccountsManager } = await import('#~/components/config/AdapterAccountsManager')
-    renderToStaticMarkup(
-      <AdapterAccountsManager
-        adapterKey='codex'
-        value={{ accounts: { work: {} } }}
-        accountsData={{ accounts: [], actions: [] }}
-        nestedPath={['accounts', 'work']}
-        onChange={vi.fn()}
-        onOpenNestedPath={vi.fn()}
-        t={t}
-      />
-    )
+    await renderAccountManager()
 
     await testState.popconfirmOnConfirms[0]?.()
 

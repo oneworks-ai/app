@@ -2162,6 +2162,14 @@
     "accountQuotaModal": {
       "title": "使用量",
       "weekly": "使用限额",
+      "windowUsage": "{{window}}用量",
+      "windowDuration": {
+        "days": "{{count}} 天",
+        "hours": "{{count}} 小时",
+        "minutes": "{{count}} 分钟"
+      },
+      "resetsAt": "{{date}} 重置",
+      "loginRequired": "登录状态已失效，请重新登录后刷新使用限额和重置卡状态。",
       "available": "可用 {{count}} 次",
       "expires": "将于 {{date}} 到期",
       "daysHours": "剩余 {{days}} 天 {{hours}} 小时",
@@ -3755,6 +3763,7 @@
         }
       },
       "settingsTitle": "账号配置",
+      "detailTabs": "账号详情",
       "settingsDescription": "这里编辑的是适配器配置里的账号字段；如果适配器支持，会覆盖 workspace 保存的登录快照。",
       "adapterKeyHint": "适配器：{{adapter}}",
       "searchPlaceholder": "搜索账号",
@@ -3783,6 +3792,10 @@
           "label": "接入账号",
           "description": "触发适配器的登录接入动作，并把凭据保存到当前工作区。"
         },
+        "reauthenticate": {
+          "label": "重新登录",
+          "description": "重新打开登录流程，并替换这个账号已保存的登录凭据。"
+        },
         "refresh": {
           "label": "刷新额度",
           "description": "重新拉取这个账号的套餐和额度信息。"
@@ -3794,16 +3807,19 @@
       },
       "actionSuccess": {
         "add": "账号接入成功",
+        "reauthenticate": "账号已重新登录",
         "refresh": "额度已刷新",
         "remove": "账号快照已删除"
       },
       "actionFailed": {
         "add": "账号接入失败",
+        "reauthenticate": "重新登录失败",
         "refresh": "刷新额度失败",
         "remove": "删除账号快照失败",
         "consumeResetCredit": "使用重置卡失败"
       },
-      "authFileDefaultLookup": "留空时默认读取 {{path}}。"
+      "authFileDefaultLookup": "留空时默认读取 {{path}}。",
+      "codexAuthFileDescription": "可选填 Codex auth.json 文件路径；留空时使用该账号已存储的登录凭据。"
     },
     "modelServices": {
       "identity": {

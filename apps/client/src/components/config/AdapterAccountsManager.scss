@@ -18,7 +18,16 @@
 }
 
 .adapter-account-manager__detail-body {
-  gap: 8px;
+  gap: var(--subpage-tertiary-gap, 10px);
+}
+
+.adapter-account-manager__profile-summary {
+  display: grid;
+  grid-template-columns: minmax(190px, .72fr) minmax(0, 2fr);
+  align-items: stretch;
+  gap: var(--subpage-tertiary-gap, 10px);
+  min-width: 0;
+  padding-block: 8px 4px;
 }
 
 .adapter-account-manager__header,
@@ -137,8 +146,15 @@
 
 .adapter-account-manager__hero {
   display: flex;
+  align-items: center;
+  justify-content: center;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--subpage-tertiary-gap, 10px);
+  padding: 16px 12px 12px;
+}
+
+.adapter-account-manager__profile-quota {
+  min-width: 0;
 }
 
 .adapter-account-manager__item:hover,
@@ -170,8 +186,7 @@
   font-size: 18px;
 }
 
-.adapter-account-manager__overview-body,
-.adapter-account-manager__hero-body {
+.adapter-account-manager__overview-body {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
@@ -216,31 +231,114 @@
   color: var(--text-color-secondary);
 }
 
-.adapter-account-manager__hero-title-row {
+.adapter-account-manager__hero-profile {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.adapter-account-manager__hero-title {
-  flex: 1 1 auto;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
   min-width: 0;
 }
 
-.adapter-account-manager__hero-meta {
-  display: flex;
+.adapter-account-manager__hero-avatar {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 72px;
   align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  flex: 0 0 auto;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  margin-bottom: 2px;
+  border: 1px solid
+    color-mix(in srgb, var(--primary-color) 22%, var(--border-color));
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--primary-color) 14%, var(--bg-elevated));
+  color: var(--primary-color);
+  box-shadow: 0 0 0 4px
+    color-mix(in srgb, var(--primary-color) 5%, transparent);
 }
 
-.adapter-account-manager__hero-badges {
+.adapter-account-manager__hero-avatar-fallback {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  line-height: 1;
+}
+
+.adapter-account-manager__hero-avatar-image {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
+.adapter-account-manager__hero-status {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--bg-color);
+  border-radius: 50%;
+  background: var(--bg-color);
+}
+
+.adapter-account-manager__hero-status .material-symbols-rounded {
+  font-size: 16px;
+}
+
+.adapter-account-manager__hero-title {
+  display: block;
+  max-width: min(480px, 100%);
+  overflow: hidden;
+  font-size: 18px;
+  line-height: 1.35;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adapter-account-manager__hero-identity {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-color-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.adapter-account-manager__hero-email {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adapter-account-manager__hero-separator {
+  color: color-mix(in srgb, var(--text-color-secondary) 54%, transparent);
+}
+
+.adapter-account-manager__hero-plan {
+  padding: 1px 7px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 84%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-color) 2%, transparent);
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.adapter-account-manager__hero > .adapter-account-manager__actions {
+  justify-content: center;
+  gap: 6px;
 }
 
 .adapter-account-manager__list {
@@ -498,27 +596,25 @@
   border-radius: 5px !important;
 }
 
-.adapter-account-manager__usage.ant-collapse {
-  border-block: 1px solid
-    color-mix(in srgb, var(--border-color) 78%, transparent);
-  border-radius: 0;
+.adapter-account-manager__detail-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--subpage-tertiary-gap, 10px);
+  min-width: 0;
 }
 
-.adapter-account-manager__usage.ant-collapse
-  > .ant-collapse-item
-  > .ant-collapse-header {
-  padding: 13px 2px;
+.adapter-account-manager__tabs.native-tabs {
+  --native-tabs-gap: 24px;
+  --native-tabs-icon-size: 17px;
+  --native-tabs-tab-padding-block-end: 10px;
 }
 
-.adapter-account-manager__usage.ant-collapse
-  > .ant-collapse-item
-  > .ant-collapse-content
-  > .ant-collapse-content-box {
-  padding: 4px 0 2px;
+.adapter-account-manager__tab-panel {
+  min-width: 0;
 }
 
 .adapter-account-manager__editor {
-  padding-top: 4px;
+  padding-top: 0;
 }
 
 .adapter-account-manager__editor .config-view__record-fields {
@@ -629,16 +725,30 @@
 
 @media (max-width: 720px) {
   .adapter-account-manager__header,
-  .adapter-account-manager__detail-header,
-  .adapter-account-manager__hero {
+  .adapter-account-manager__detail-header {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .adapter-account-manager__hero-title-row,
-  .adapter-account-manager__hero-meta {
-    align-items: flex-start;
-    flex-direction: column;
+  .adapter-account-manager__hero {
+    padding-inline: 4px;
+  }
+
+  .adapter-account-manager__profile-summary {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--subpage-tertiary-gap, 10px);
+  }
+
+  .adapter-account-manager__profile-quota {
+    padding-top: 0;
+  }
+
+  .adapter-account-manager__hero-identity {
+    flex-wrap: wrap;
+  }
+
+  .adapter-account-manager__hero-email {
+    max-width: 100%;
   }
 
   .adapter-account-manager__item {
@@ -658,7 +768,7 @@
   }
 
   .adapter-account-manager__actions {
-    justify-content: flex-start;
+    justify-content: center;
   }
 
   .adapter-account-manager__editor

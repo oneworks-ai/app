@@ -2142,9 +2142,10 @@ input.on('line', (line) => {
     expect(persistedUsage?.value).toBe('20%')
   })
 
-  it('stores Codex login auth in the global OneWorks config', async () => {
+  it('reauthenticates a Codex account in place in the global OneWorks config', async () => {
     const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-login-global-'))
     const realHome = join(workspace, 'real-home')
+    const ambientCodexHome = join(workspace, 'ambient-codex-home')
     const fakeCodexPath = join(workspace, 'fake-codex.mjs')
     const authContent = '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_login"}}\n'
     tempDirs.push(workspace)
@@ -2156,8 +2157,9 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 if (process.argv[2] === 'login') {
-  mkdirSync(join(process.env.HOME, '.codex'), { recursive: true })
-  writeFileSync(join(process.env.HOME, '.codex', 'auth.json'), ${JSON.stringify(authContent)})
+  if (!process.argv.includes('cli_auth_credentials_store="file"')) process.exit(2)
+  mkdirSync(process.env.CODEX_HOME, { recursive: true })
+  writeFileSync(join(process.env.CODEX_HOME, 'auth.json'), ${JSON.stringify(authContent)})
   process.exit(0)
 }
 
@@ -2166,30 +2168,44 @@ process.exit(1)
     )
     await chmod(fakeCodexPath, 0o755)
     await mkdir(join(realHome, '.oneworks'), { recursive: true })
+    const existingConfig = {
+      adapters: {
+        codex: {
+          accounts: {
+            Work_Account: {
+              title: 'Old Work',
+              authFile: '/tmp/old-codex-auth.json'
+            }
+          }
+        }
+      }
+    }
     await writeFile(
       join(realHome, '.oneworks', '.oo.config.json'),
-      '{"adapters":{"codex":{"accounts":{"work":{"title":"Old Work","authFile":"/tmp/old-codex-auth.json"}}}}}'
+      JSON.stringify(existingConfig)
     )
 
     const ctx = createTestCtx(workspace, {
       env: {
+        CODEX_HOME: ambientCodexHome,
         HOME: resolveTestMockHome(workspace, realHome),
         __ONEWORKS_PROJECT_REAL_HOME__: realHome,
         __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__: fakeCodexPath
-      }
+      },
+      configs: [existingConfig as any]
     })
 
     const result = await manageCodexAccount(ctx, {
-      action: 'add',
-      account: 'work'
+      action: 'reauthenticate',
+      account: 'Work_Account'
     })
 
     const globalConfig = JSON.parse(
       await readFile(join(realHome, '.oneworks', '.oo.config.json'), 'utf8')
     ) as any
-    const storedAccount = globalConfig.adapters.codex.accounts.work
+    const storedAccount = globalConfig.adapters.codex.accounts.Work_Account
 
-    expect(result.accountKey).toBe('work')
+    expect(result.accountKey).toBe('Work_Account')
     expect(result.artifacts).toBeUndefined()
     expect(storedAccount.source).toBe('codex-login')
     expect(storedAccount.auth).toMatchObject({
@@ -2198,5 +2214,136 @@ process.exit(1)
     })
     expect(storedAccount.authFile).toBeUndefined()
     expect(Buffer.from(storedAccount.auth.token, 'base64').toString('utf8')).toBe(authContent)
+    expect(globalConfig.adapters.codex.accounts['work-account']).toBeUndefined()
+    await expect(stat(join(ambientCodexHome, 'auth.json'))).rejects.toMatchObject({ code: 'ENOENT' })
+    expect(result.message).toContain('Reauthenticated Codex account')
+  })
+
+  it('does not recreate an account deleted while reauthentication is in progress', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-reauth-delete-race-'))
+    const realHome = join(workspace, 'real-home')
+    const fakeCodexPath = join(workspace, 'fake-codex.mjs')
+    const globalConfigPath = join(realHome, '.oneworks', '.oo.config.json')
+    const oldAuthContent = '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_old"}}\n'
+    const loginAuthContent = '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_login"}}\n'
+    const existingConfig = {
+      adapters: {
+        codex: {
+          accounts: {
+            work: {
+              auth: {
+                type: 'codex-auth-json',
+                encoding: 'base64',
+                token: Buffer.from(oldAuthContent, 'utf8').toString('base64')
+              }
+            }
+          }
+        }
+      }
+    }
+    tempDirs.push(workspace)
+
+    await mkdir(join(realHome, '.oneworks'), { recursive: true })
+    await writeFile(globalConfigPath, JSON.stringify(existingConfig))
+    await writeFile(
+      fakeCodexPath,
+      `#!/usr/bin/env node
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+if (process.argv[2] === 'login') {
+  mkdirSync(process.env.CODEX_HOME, { recursive: true })
+  writeFileSync(join(process.env.CODEX_HOME, 'auth.json'), ${JSON.stringify(loginAuthContent)})
+  const config = JSON.parse(readFileSync(${JSON.stringify(globalConfigPath)}, 'utf8'))
+  delete config.adapters.codex.accounts.work
+  writeFileSync(${JSON.stringify(globalConfigPath)}, JSON.stringify(config))
+  process.exit(0)
+}
+
+process.exit(1)
+`
+    )
+    await chmod(fakeCodexPath, 0o755)
+
+    await expect(manageCodexAccount(
+      createTestCtx(workspace, {
+        env: {
+          HOME: resolveTestMockHome(workspace, realHome),
+          __ONEWORKS_PROJECT_REAL_HOME__: realHome,
+          __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__: fakeCodexPath
+        },
+        configs: [existingConfig as any]
+      }),
+      { action: 'reauthenticate', account: 'work' }
+    )).rejects.toThrow('changed while sign-in was in progress')
+
+    const persistedConfig = JSON.parse(await readFile(globalConfigPath, 'utf8')) as any
+    expect(persistedConfig.adapters.codex.accounts.work).toBeUndefined()
+  })
+
+  it('does not overwrite a newer credential when an older reauthentication finishes later', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-reauth-superseded-'))
+    const realHome = join(workspace, 'real-home')
+    const fakeCodexPath = join(workspace, 'fake-codex.mjs')
+    const globalConfigPath = join(realHome, '.oneworks', '.oo.config.json')
+    const oldAuthContent = '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_old"}}\n'
+    const loginAuthContent = '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_login"}}\n'
+    const newerAuthContent = '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_newer"}}\n'
+    const existingConfig = {
+      adapters: {
+        codex: {
+          accounts: {
+            work: {
+              auth: {
+                type: 'codex-auth-json',
+                encoding: 'base64',
+                token: Buffer.from(oldAuthContent, 'utf8').toString('base64')
+              }
+            }
+          }
+        }
+      }
+    }
+    tempDirs.push(workspace)
+
+    await mkdir(join(realHome, '.oneworks'), { recursive: true })
+    await writeFile(globalConfigPath, JSON.stringify(existingConfig))
+    await writeFile(
+      fakeCodexPath,
+      `#!/usr/bin/env node
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+if (process.argv[2] === 'login') {
+  mkdirSync(process.env.CODEX_HOME, { recursive: true })
+  writeFileSync(join(process.env.CODEX_HOME, 'auth.json'), ${JSON.stringify(loginAuthContent)})
+  const config = JSON.parse(readFileSync(${JSON.stringify(globalConfigPath)}, 'utf8'))
+  config.adapters.codex.accounts.work.auth.token = Buffer
+    .from(${JSON.stringify(newerAuthContent)}, 'utf8')
+    .toString('base64')
+  writeFileSync(${JSON.stringify(globalConfigPath)}, JSON.stringify(config))
+  process.exit(0)
+}
+
+process.exit(1)
+`
+    )
+    await chmod(fakeCodexPath, 0o755)
+
+    await expect(manageCodexAccount(
+      createTestCtx(workspace, {
+        env: {
+          HOME: resolveTestMockHome(workspace, realHome),
+          __ONEWORKS_PROJECT_REAL_HOME__: realHome,
+          __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__: fakeCodexPath
+        },
+        configs: [existingConfig as any]
+      }),
+      { action: 'reauthenticate', account: 'work' }
+    )).rejects.toThrow('changed while sign-in was in progress')
+
+    const persistedConfig = JSON.parse(await readFile(globalConfigPath, 'utf8')) as any
+    const persistedAuth = persistedConfig.adapters.codex.accounts.work.auth
+    expect(Buffer.from(persistedAuth.token, 'base64').toString('utf8')).toBe(newerAuthContent)
   })
 })

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { fetchCodexProfileAvatarFromContent } from '#~/runtime/account-profile.js'
+import { fetchCodexProfileAvatarFromContent, fetchCodexProfileFromContent } from '#~/runtime/account-profile.js'
 
 const createAuthContent = () =>
   JSON.stringify({
@@ -18,6 +18,22 @@ const createJsonResponse = (payload: unknown, status = 200) =>
   })
 
 describe('fetchCodexProfileAvatarFromContent', () => {
+  it('reads the display name and avatar from the Codex profile', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(createJsonResponse({
+      profile: {
+        name: 'Example User',
+        profile_picture_url: 'https://chatgpt.com/backend-api/avatar/image'
+      }
+    }))
+
+    await expect(fetchCodexProfileFromContent(createAuthContent(), {
+      fetchImpl: fetchImpl as typeof fetch
+    })).resolves.toEqual({
+      avatarUrl: 'https://chatgpt.com/backend-api/avatar/image',
+      displayName: 'Example User'
+    })
+  })
+
   it('reads a trusted profile avatar with the Codex account credentials', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(createJsonResponse({
       profile: {
@@ -29,7 +45,7 @@ describe('fetchCodexProfileAvatarFromContent', () => {
       fetchImpl: fetchImpl as typeof fetch
     })).resolves.toBe('https://chatgpt.com/backend-api/estuary/public_content/avatar/image')
 
-    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
     const [endpoint, init] = fetchImpl.mock.calls[0] as [string, RequestInit]
     const headers = new Headers(init.headers)
     expect(endpoint).toBe('https://chatgpt.com/backend-api/wham/profiles/me')
@@ -51,6 +67,42 @@ describe('fetchCodexProfileAvatarFromContent', () => {
     })).resolves.toBe('https://images.openai.com/avatar.png')
     expect(fetchImpl).toHaveBeenCalledTimes(2)
     expect(fetchImpl.mock.calls[1]?.[0]).toBe('https://chatgpt.com/backend-api/api/codex/profiles/me')
+  })
+
+  it('merges a name from the first profile route with an avatar from the fallback route', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(createJsonResponse({ profile: { name: 'Example User' } }))
+      .mockResolvedValueOnce(createJsonResponse({
+        profile: {
+          profile_picture_url: 'https://images.openai.com/avatar.png'
+        }
+      }))
+
+    await expect(fetchCodexProfileFromContent(createAuthContent(), {
+      fetchImpl: fetchImpl as typeof fetch
+    })).resolves.toEqual({
+      avatarUrl: 'https://images.openai.com/avatar.png',
+      displayName: 'Example User'
+    })
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+  })
+
+  it('merges an avatar from the first profile route with a name from the fallback route', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(createJsonResponse({
+        profile: {
+          profile_picture_url: 'https://images.openai.com/avatar.png'
+        }
+      }))
+      .mockResolvedValueOnce(createJsonResponse({ profile: { name: 'Example User' } }))
+
+    await expect(fetchCodexProfileFromContent(createAuthContent(), {
+      fetchImpl: fetchImpl as typeof fetch
+    })).resolves.toEqual({
+      avatarUrl: 'https://images.openai.com/avatar.png',
+      displayName: 'Example User'
+    })
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
   })
 
   it('rejects avatar URLs outside trusted OpenAI hosts', async () => {

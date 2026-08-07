@@ -47,6 +47,7 @@ Worktree Environment 的 Project / User source switch 属于 route header；列�
 - `AdapterAccountsManager.tsx` 的账号详情额度统一走 `use-adapter-account-quota-detail.ts`；该 hook 发起一次 `refresh: true` 的 SWR 请求，并通过 TTL 在再次进入时复用已有 cache，不存在“先请求快照、再后台刷新”的双请求。不要在 manager 内再维护一套 quota TTL 或请求状态。
 - 配置详情渲染服务端返回的全部 quota metrics，只通过 `src/components/account-quota/QuotaUsageRing.tsx` 共享百分比解析；聊天状态栏才用 `src/utils/account-quota.ts` 从 metrics 中识别 5h / 7d 窗口。不要让配置详情错误地只保留两个窗口，也不要各自实现百分比解析。
 - 修改账号额度时同时读 `../chat/AGENTS.md` 的“账号额度和头像”，并验证配置详情、聊天状态栏和账号下拉三个 surface；只验证配置页不足以覆盖 popup 宽度和账号切换后的 quota 对应关系。
+- 账号详情的 profile、tabs 与 tab panel 使用 `--subpage-tertiary-gap` 维护标准 `10px` 接缝；tabs 容器和 tab panel 不再通过额外 `padding-top` 叠加间距。
 
 ## 模型服务配置建模经验
 

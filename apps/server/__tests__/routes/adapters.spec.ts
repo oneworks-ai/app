@@ -153,6 +153,73 @@ describe('adapter routes', () => {
     ).resolves.toBe('{"token":"demo"}\n')
   })
 
+  it('forwards account reauthentication to the adapter', async () => {
+    const manageAccount = vi.fn().mockResolvedValue({
+      accountKey: 'work',
+      account: {
+        key: 'work',
+        title: 'Work',
+        status: 'ready'
+      }
+    })
+    mocks.loadAdapter.mockResolvedValue({ manageAccount })
+
+    const response = await fetch(`${baseUrl}/api/adapters/codex/accounts/actions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'reauthenticate',
+        account: 'work'
+      })
+    })
+
+    expect(response.status).toBe(200)
+    expect(manageAccount).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        action: 'reauthenticate',
+        account: 'work'
+      })
+    )
+  })
+
+  it('keeps the reauthentication request pending until the adapter finishes', async () => {
+    let completeManageAccount: (() => void) | undefined
+    let manageSignal: AbortSignal | undefined
+    const manageAccount = vi.fn().mockImplementation(async (
+      _adapterCtx: AdapterCtx,
+      options: { signal?: AbortSignal }
+    ) =>
+      await new Promise(resolve => {
+        manageSignal = options.signal
+        completeManageAccount = () =>
+          resolve({
+            accountKey: 'work',
+            account: { key: 'work', title: 'Work', status: 'ready' }
+          })
+      })
+    )
+    mocks.loadAdapter.mockResolvedValue({ manageAccount })
+
+    let responseSettled = false
+    const responsePromise = fetch(`${baseUrl}/api/adapters/codex/accounts/actions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'reauthenticate', account: 'work' })
+    }).then((response) => {
+      responseSettled = true
+      return response
+    })
+
+    await vi.waitFor(() => expect(manageAccount).toHaveBeenCalledOnce())
+    expect(responseSettled).toBe(false)
+    expect(manageSignal?.aborted).toBe(false)
+
+    completeManageAccount?.()
+    const response = await responsePromise
+    expect(response.status).toBe(200)
+  })
+
   it('returns adapter account detail through the dedicated detail route', async () => {
     mocks.loadAdapter.mockResolvedValue({
       getAccountDetail: vi.fn().mockResolvedValue({

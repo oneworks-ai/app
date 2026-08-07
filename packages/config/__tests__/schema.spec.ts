@@ -553,6 +553,8 @@ describe('config schema bundle', () => {
       const adapters = (bundle.jsonSchema.properties as Record<string, unknown>).adapters as Record<string, unknown>
       const adapterProperties = adapters.properties as Record<string, unknown>
       const codexSchema = adapterProperties.codex as Record<string, unknown>
+      const codexAccountFields = bundle.uiSchema.sections.adapters.recordMap.schemas.codex
+        ?.recordFields?.accounts?.itemSchema?.fields.map(field => field.path.join('.')) ?? []
       const channels = (bundle.uiSchema.sections.channels.recordMap.schemas.lark?.fields ?? [])
         .map(field => field.path.join('.'))
 
@@ -566,6 +568,7 @@ describe('config schema bundle', () => {
       })
       expect(channels).toContain('appId')
       expect(channels).toContain('appSecret')
+      expect(codexAccountFields).toEqual(['title', 'description', 'authFile'])
     } finally {
       await rm(tempDir, { recursive: true, force: true })
     }

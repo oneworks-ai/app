@@ -119,6 +119,8 @@ describe('native tabs', () => {
 
     expect(nativeTabsStyles).toContain('--native-tabs-tab-padding-block-end')
     expect(nativeTabsStyles).not.toContain('--subpage-tertiary-padding')
+    expect(nativeTabsStyles).not.toMatch(/\.native-tabs\s*\+\s*\.native-tabs-panel/)
+    expect(nativeTabsStyles).not.toMatch(/\.native-tabs\s*\+\s*\[data-native-tabs-panel/)
     expect(launcherSource).toContain('<NativeTabs')
     expect(externalSessionsSource).toContain('<NativeTabs')
     expect(externalSessionsSource).not.toContain('<Tabs')

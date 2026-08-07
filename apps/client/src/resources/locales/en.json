@@ -2161,6 +2161,14 @@
     "accountQuotaModal": {
       "title": "Usage",
       "weekly": "Usage limits",
+      "windowUsage": "{{window}} used",
+      "windowDuration": {
+        "days": "{{count}}d",
+        "hours": "{{count}}h",
+        "minutes": "{{count}}m"
+      },
+      "resetsAt": "Resets {{date}}",
+      "loginRequired": "Sign in again to refresh usage limits and reset-credit availability.",
       "available": "{{count}} available",
       "expires": "Expires {{date}}",
       "daysHours": "{{days}}d {{hours}}h remaining",
@@ -3758,6 +3766,7 @@
         }
       },
       "settingsTitle": "Account settings",
+      "detailTabs": "Account details",
       "settingsDescription": "These fields edit the adapter config entry for this account. When supported, they override the stored workspace snapshot.",
       "adapterKeyHint": "Adapter: {{adapter}}",
       "searchPlaceholder": "Search accounts",
@@ -3786,6 +3795,10 @@
           "label": "Connect account",
           "description": "Run the adapter login action and save its credentials into this workspace."
         },
+        "reauthenticate": {
+          "label": "Sign in again",
+          "description": "Open the login flow again and replace the stored credentials for this account."
+        },
         "refresh": {
           "label": "Refresh quota",
           "description": "Fetch the latest plan and quota info for this account."
@@ -3797,16 +3810,19 @@
       },
       "actionSuccess": {
         "add": "Account connected",
+        "reauthenticate": "Account signed in again",
         "refresh": "Quota refreshed",
         "remove": "Account snapshot removed"
       },
       "actionFailed": {
         "add": "Failed to connect account",
+        "reauthenticate": "Failed to sign in again",
         "refresh": "Failed to refresh quota",
         "remove": "Failed to remove account snapshot",
         "consumeResetCredit": "Failed to use reset credit"
       },
-      "authFileDefaultLookup": "Leave empty to use {{path}}."
+      "authFileDefaultLookup": "Leave empty to use {{path}}.",
+      "codexAuthFileDescription": "Optionally select a Codex auth.json file. Leave empty to use the credentials stored for this account."
     },
     "modelServices": {
       "identity": {
