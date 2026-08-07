@@ -5,12 +5,15 @@ import { basename, dirname, relative, resolve, sep } from 'node:path'
 import type { DefinitionLoader } from '@oneworks/definition-loader'
 import { FilesystemAuthorityError, openFilesystemAuthority } from '@oneworks/fs-authority-native'
 import type { FilesystemAuthority } from '@oneworks/fs-authority-native'
+import type { MutationCommitState } from '@oneworks/types'
 
 import { badRequest, conflict, internalServerError } from '#~/utils/http.js'
 import type { FileIdentity } from './asset-create-destination.js'
 import { inspectSafeDestination, isInsideWorkspace } from './asset-create-destination.js'
+import { ASSET_PRE_COMMIT_DETAILS, markAssetPreCommitFailure } from './asset-create-error.js'
 import { safelyPublishFile } from './asset-create-filesystem.js'
 import { renderCreatedAsset, validateCreateAssetInput } from './asset-create-input.js'
+import type { CreatableAssetKind } from './asset-create-input.js'
 import {
   assertAssetSemanticAvailability,
   getAssetPublication,
@@ -18,6 +21,12 @@ import {
 } from './asset-create-semantics.js'
 
 export type OpenAssetFilesystemAuthority = (workspaceRoot: string) => Promise<FilesystemAuthority>
+export interface CreatedProjectAsset {
+  commitState?: MutationCommitState
+  kind: CreatableAssetKind
+  path: string
+  warnings?: readonly string[]
+}
 const claimReleaseTimeoutMs = 5_000
 const releaseClaim = async (authority: FilesystemAuthority, generation: number) => {
   let timeout: ReturnType<typeof setTimeout> | undefined
@@ -40,7 +49,7 @@ const assertWorkspaceCurrent = async (workspaceRoot: string, expected?: FileIden
     current.isSymbolicLink() || !current.isDirectory() || current.dev !== expected.dev || current.ino !== expected.ino
   ) throw badRequest('Workspace authority changed', undefined, 'asset_workspace_changed')
 }
-export const createProjectAsset = async (
+const createProjectAssetOwned = async (
   params: {
     input: unknown
     loader: DefinitionLoader
@@ -58,19 +67,24 @@ export const createProjectAsset = async (
   } catch (cause) {
     throw internalServerError('Filesystem authority unavailable', {
       cause,
-      code: 'asset_filesystem_authority_unavailable'
+      code: 'asset_filesystem_authority_unavailable',
+      details: ASSET_PRE_COMMIT_DETAILS
     })
   }
   let generation: number | undefined
   let publishAttempted = false
-  let result: { kind: string; path: string; commitState?: string; warnings?: readonly string[] } | undefined
+  let result: CreatedProjectAsset | undefined
   let failure: unknown
   try {
     try {
       generation = await authority.claim(input.kind, input.slug)
     } catch (error) {
       if (error instanceof FilesystemAuthorityError && error.code === 'asset_create_in_progress') {
-        throw conflict('Data asset creation is already in progress', { name: input.slug }, error.code)
+        throw conflict(
+          'Data asset creation is already in progress',
+          { ...ASSET_PRE_COMMIT_DETAILS, name: input.slug },
+          error.code
+        )
       }
       throw error
     }
@@ -93,10 +107,21 @@ export const createProjectAsset = async (
   } catch (error) {
     failure = error instanceof Error && 'status' in error
       ? error
-      : internalServerError('Failed to create data asset', { cause: error, code: 'asset_create_failed' })
+      : publishAttempted
+      ? internalServerError('Asset publication status is indeterminate', {
+        cause: error,
+        code: 'asset_publish_indeterminate',
+        details: { committed: 'indeterminate' }
+      })
+      : markAssetPreCommitFailure(error)
   }
   const releaseIndeterminate = generation != null && !publishAttempted && !(await releaseClaim(authority, generation))
-  authority.close()
+  let closeFailed = false
+  try {
+    authority.close()
+  } catch {
+    closeFailed = true
+  }
   if (releaseIndeterminate) {
     throw internalServerError('Asset claim cleanup status is indeterminate', {
       code: 'asset_claim_indeterminate',
@@ -105,9 +130,33 @@ export const createProjectAsset = async (
   }
   if (failure != null) throw failure
   if (result == null) {
-    throw internalServerError('Asset creation did not produce a result', { code: 'asset_create_failed' })
+    throw internalServerError('Asset publication status is indeterminate', {
+      code: 'asset_publish_indeterminate',
+      details: { committed: 'indeterminate' }
+    })
+  }
+  if (closeFailed) {
+    const warnings = new Set(result.warnings ?? [])
+    warnings.add('asset_authority_close_failed')
+    const commitState: MutationCommitState = result.commitState === 'committed-indeterminate'
+      ? 'committed-indeterminate'
+      : 'committed-degraded'
+    return {
+      ...result,
+      commitState,
+      warnings: [...warnings]
+    }
   }
   return result
+}
+export const createProjectAsset = async (
+  params: Parameters<typeof createProjectAssetOwned>[0]
+): Promise<CreatedProjectAsset> => {
+  try {
+    return await createProjectAssetOwned(params)
+  } catch (error) {
+    throw markAssetPreCommitFailure(error)
+  }
 }
 export const getProjectAssetPreview = async (
   workspaceRoot: string,
