@@ -364,11 +364,11 @@ const readServerText = (port, requestPath, label, options = {}) =>
         body += chunk
       })
       response.on('end', () => {
-        if (response.statusCode !== 200) {
+        if (response.statusCode !== 200 && !options.allow202) {
           reject(new Error(`${label} returned HTTP ${response.statusCode}: ${body}`))
           return
         }
-        resolve(body)
+        resolve(options.returnStatus ? { status: response.statusCode, body } : body)
       })
     })
     request.once('timeout', () => {
@@ -432,22 +432,31 @@ const assertPackagedAssetAuthority = async (port, workspaceFolder) => {
     let delayMs = 25
     while (Date.now() < deadline) {
       await new Promise(resolve => setTimeout(resolve, delayMs))
-      const statusBody = await readServerText(
+      const statusResponse = await readServerText(
         port,
         `/api/ai/assets/operations/${encodeURIComponent(operationId)}?poll=desktop-smoke`,
-        'Packaged asset operation status'
+        'Packaged asset operation status',
+        { allow202: true, returnStatus: true }
       )
+      const statusBody = statusResponse.body
       let status
       try {
         status = JSON.parse(statusBody)
       } catch {
         throw new Error(`Packaged asset operation returned invalid JSON: ${statusBody}`)
       }
-      if (status?.success === true && status?.data?.operation?.state === 'pending') {
+      const returnedOperationId = status?.success === true && status?.data?.operation?.id
+      if (
+        statusResponse.status === 202 && returnedOperationId === operationId &&
+        status?.data?.operation?.state === 'pending'
+      ) {
         delayMs = Math.min(delayMs * 2, 250)
         continue
       }
-      if (status?.success === true && status?.data?.asset?.kind === 'rule') {
+      if (
+        statusResponse.status === 200 && status?.success === true && status?.data?.asset?.kind === 'rule' &&
+        status?.data?.asset?.path === '.oo/rules/packaged-authority-smoke.md'
+      ) {
         response = status
         break
       }
