@@ -2,9 +2,10 @@
 const process = require('node:process')
 const readline = require('node:readline')
 
+const packageManifest = require('../package.json')
 const { finalizeRecording, renderScreenshotVideo } = require('./evidence-runtime.cjs')
 
-const serverInfo = { name: 'oneworks-cua-evidence', version: '0.1.0' }
+const serverInfo = { name: 'oneworks-cua-evidence', version: packageManifest.version }
 function isRecord(value) {
   return value != null && typeof value === 'object' && !Array.isArray(value)
 }
@@ -118,7 +119,8 @@ function startServer() {
 module.exports = {
   finalizeRecording,
   handleRequest,
-  renderScreenshotVideo
+  renderScreenshotVideo,
+  serverInfo
 }
 
 if (require.main === module) startServer()

@@ -17,6 +17,8 @@ export type PersistedVsixCandidateAction = 'create' | 'reuse' | 'upload'
 export const vscodeExtensionPackageName: '@oneworks/vscode-extension'
 export const vscodeExtensionReleaseTagPrefix: 'pkg/oneworks-vscode-extension/v'
 
+export function assertStableVscodeReleaseTag(tag: string): VscodeStoreVersionIdentity
+export function assertStableVscodeVersion(version: string): string
 export function assertVscodeStoreVersionAvailable(
   candidateTag: string,
   existingTags: readonly string[],

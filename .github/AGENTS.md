@@ -16,10 +16,10 @@
 
 - `quality.yml`：所有 `main` push / PR / 手动触发都会跑 lint、format、typecheck、commit message 检查；PR 正文 `edited` 时只运行同 workflow 内的 `pr-change-policy`，避免重跑全量 Quality 且保持 required-check 身份不变。
 - `pr-experience-review.yml`：PR 创建、编辑或同步时通过 Pull Requests API upsert 经验复盘提醒 review summary；硬门禁仍由 `quality.yml` 的 `pr-change-policy` 调用 `pnpm tools pr-change-check` 执行。
-- `release-tags.yml`：按 package version / scripts 相关路径触发，创建 `pkg/*/v*` release tags，并按 tag 显式调度对应发布 workflow。
+- `release-tags.yml`：按 package version / scripts 相关路径触发，创建 `pkg/*/v*` release tags，并按 tag 显式调度对应自动发布 workflow；VS Code prerelease 不建 tag，stable tag 只创建不自动 dispatch。
 - `npm-publish-alpha.yml`：手动发布 npm alpha 包；默认走 Trusted Publishing，只有新 identity bootstrap 或经对账确认的 missing-trust 定向恢复才允许显式使用 `NPM_TOKEN`。
-- `vscode-extension-ci.yml`：按 VS Code 扩展相关路径触发，构建并上传 VSIX artifact，不发布商店。
-- `vscode-extension-release.yml`：通过 release tag 或手动输入 tag 发布 VS Code Marketplace、Open VSX 和 GitHub Release。
+- `vscode-extension-ci.yml`：按 VS Code 扩展相关路径触发，构建并上传临时 VSIX artifact；alpha / beta / rc 只走这条 CI，不创建公开 release 或发布商店。
+- `vscode-extension-release.yml`：只接受人工输入的精确 annotated stable tag，把同一个 authoritative VSIX 发布到 VS Code Marketplace、Open VSX 和 GitHub Release。
 - `desktop-package.yml`：构建 macOS 桌面包；普通 PR 只产出几秒钟的同名 `macOS installer` required-check 兼容门禁，不使用 macOS runner，也不构建安装包。nightly 用 unsigned arm64 DMG 跑完整 package / smoke / install verify，保留 3 天用于提前暴露发布回归。`pkg/oneworks-desktop/v*` tag 或手动 dispatch 统一构建 arm64+x64 的 DMG / PKG / ZIP；带 `release_tag`、不勾 `create_release` 可生成正式身份的候选产物，之后用 `candidate_run_id` 提升同一 artifact，无需重打包。GitHub Release 成功后复用 `deploy-homepage.yml` 自动等待官网刷新。
 - `relay-ci.yml`：只在 Relay Server / Admin / config hook 相关路径变化时跑 server test、admin test 和真实 `relay-config live-smoke`。
 - `deploy-relay-dev.yml`：Cloudflare dev Relay/Admin 由 Actions 部署并 smoke；Vercel dev Relay/Admin 由 Vercel GitHub App 部署，Actions 只轮询 `dev.vc.oneworks.cloud` 做 smoke，不能恢复长期 Vercel CLI token 发布路径。

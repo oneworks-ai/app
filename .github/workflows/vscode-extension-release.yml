@@ -2,9 +2,6 @@
 name: VS Code Extension Release
 
 on:
-  push:
-    tags:
-      - "pkg/oneworks-vscode-extension/v*"
   workflow_dispatch:
     inputs:
       release_tag:
@@ -20,7 +17,7 @@ env:
   VSCODE_EXTENSION_RELEASE_TAG_PREFIX: pkg/oneworks-vscode-extension/v
 
 concurrency:
-  group: vscode-extension-release-${{ inputs.release_tag || github.ref_name }}
+  group: vscode-extension-release-${{ inputs.release_tag }}
   cancel-in-progress: false
 
 jobs:
@@ -39,7 +36,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: refs/tags/${{ inputs.release_tag || github.ref_name }}
+          ref: refs/tags/${{ inputs.release_tag }}
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -57,11 +54,11 @@ jobs:
       - name: Validate release version
         id: version
         env:
-          INPUT_RELEASE_TAG: ${{ inputs.release_tag || '' }}
-          REF_NAME: ${{ github.ref_name }}
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
           VSCODE_EXTENSION_PUBLISHER: ${{ vars.VSCODE_EXTENSION_PUBLISHER }}
         run: |
-          TAG_NAME="${INPUT_RELEASE_TAG:-$REF_NAME}"
+          set -euo pipefail
+          TAG_NAME="$INPUT_RELEASE_TAG"
           PACKAGE_VERSION=$(node -p "JSON.parse(require('fs').readFileSync('apps/vscode-extension/package.json', 'utf8')).version")
           case "$TAG_NAME" in
             ${VSCODE_EXTENSION_RELEASE_TAG_PREFIX}*) ;;
@@ -72,9 +69,15 @@ jobs:
           esac
           TAG_VERSION="${TAG_NAME#${VSCODE_EXTENSION_RELEASE_TAG_PREFIX}}"
           PUBLISHER="${VSCODE_EXTENSION_PUBLISHER:-oneworks-ai}"
+          node -e "require('./apps/vscode-extension/scripts/release-identity.cjs').assertStableVscodeReleaseTag(process.argv[1])" "$TAG_NAME"
+          TAG_OBJECT_TYPE=$(git cat-file -t "refs/tags/$TAG_NAME")
           TAG_COMMIT=$(git rev-parse "refs/tags/${TAG_NAME}^{commit}")
           HEAD_COMMIT=$(git rev-parse HEAD)
 
+          if [ "$TAG_OBJECT_TYPE" != "tag" ]; then
+            echo "VS Code extension publication requires an annotated release tag; $TAG_NAME is $TAG_OBJECT_TYPE." >&2
+            exit 1
+          fi
           if [ "$TAG_VERSION" != "$PACKAGE_VERSION" ]; then
             echo "Tag version ($TAG_VERSION) does not match VS Code extension version ($PACKAGE_VERSION)." >&2
             exit 1
@@ -155,6 +158,26 @@ jobs:
           name: ${{ needs.build.outputs.artifact_name }}
           path: dist/run
 
+      - name: Validate publication credentials
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          VSCODE_EXTENSION_PUBLISHER: ${{ vars.VSCODE_EXTENSION_PUBLISHER }}
+        run: |
+          set -euo pipefail
+          if [ -z "$VSCODE_EXTENSION_PUBLISHER" ]; then
+            echo "VSCODE_EXTENSION_PUBLISHER is required for stable VS Code publication." >&2
+            exit 1
+          fi
+          if [ -z "$VSCE_PAT" ]; then
+            echo "VSCE_PAT is required for stable VS Code publication." >&2
+            exit 1
+          fi
+          if [ -z "$OVSX_PAT" ]; then
+            echo "OVSX_PAT is required for stable VS Code publication." >&2
+            exit 1
+          fi
+
       - name: Persist immutable VSIX candidate
         id: candidate
         env:
@@ -190,9 +213,6 @@ jobs:
           case "$candidate_action" in
             create)
               release_flags=(--latest=false)
-              if [[ "$VERSION" == *-* ]]; then
-                release_flags+=(--prerelease)
-              fi
               gh release create "$RELEASE_TAG" "$run_archive" \
                 --title "VS Code Extension v$VERSION" \
                 --notes "Immutable VS Code extension candidate for v$VERSION." \
@@ -233,11 +253,6 @@ jobs:
           VSCODE_EXTENSION_PUBLISHER: ${{ vars.VSCODE_EXTENSION_PUBLISHER }}
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: |
-          if [ -z "$VSCODE_EXTENSION_PUBLISHER" ] || [ -z "$VSCE_PAT" ]; then
-            echo "Skipping VS Code Marketplace publish because VSCODE_EXTENSION_PUBLISHER or VSCE_PAT is not configured."
-            exit 0
-          fi
-
           pnpm --filter @oneworks/vscode-extension publish:vsix -- --packagePath "$ARCHIVE_FILE"
 
       - name: Publish to Open VSX Registry
@@ -247,17 +262,9 @@ jobs:
           PUBLISHER: ${{ needs.build.outputs.publisher }}
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          if [ -z "$OVSX_PAT" ]; then
-            echo "Skipping Open VSX publish because OVSX_PAT is not configured."
-            exit 0
-          fi
-
           pnpm dlx ovsx@1.0.1 verify-pat "$PUBLISHER" -p "$OVSX_PAT"
 
           publish_args=(publish --skip-duplicate)
-          if [[ "$VERSION" == *-* ]]; then
-            publish_args+=(--pre-release)
-          fi
           publish_args+=("$ARCHIVE_FILE")
 
           pnpm dlx ovsx@1.0.1 "${publish_args[@]}" -p "$OVSX_PAT"

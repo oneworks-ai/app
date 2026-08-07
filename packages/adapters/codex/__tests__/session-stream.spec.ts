@@ -4,8 +4,21 @@ import { formatCodexCommandForDisplay } from '#~/command-display.js'
 import {
   buildCodexApprovalResponse,
   buildCodexMcpElicitationResponse,
+  resolveCodexAppServerClientInfo,
   resolveCodexApprovalDecision
 } from '#~/runtime/stream.js'
+import packageJson from '../package.json'
+
+describe('codex app-server client identity', () => {
+  it('defaults to the adapter package version while preserving explicit overrides', () => {
+    expect(resolveCodexAppServerClientInfo()).toEqual({
+      name: 'OneWorks',
+      title: 'One Works',
+      version: packageJson.version
+    })
+    expect(resolveCodexAppServerClientInfo({ version: 'custom-client' }).version).toBe('custom-client')
+  })
+})
 
 describe('codex stream approval decision mapping', () => {
   it('maps file-change cancel responses to decline', () => {

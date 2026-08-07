@@ -68,10 +68,8 @@ jobs:
         run: |
           set -euo pipefail
           version="$(node -p "require('./apps/bootstrap/package.json').version")"
-          vscode_version="$(node -p "require('./apps/vscode-extension/package.json').version")"
           node ./scripts/stable-release-preflight.mjs \
-            --version "$version" \
-            --vscode-version "$vscode_version"
+            --version "$version"
 
       - name: Validate publish inputs
         env:

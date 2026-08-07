@@ -349,7 +349,7 @@ describe('launcher routes', () => {
     expect(serverIdentity.implementationId).not.toBe(firstIdentity.implementationId)
   })
 
-  itWithGit('reuses runtime hash changes within the same workspace server compatibility version', async () => {
+  itWithGit('reuses runtime hash changes within the same 1.x workspace server family', async () => {
     const fixture = await createGitRuntimeFixture()
     const statusServer = await startWorkspaceStatusServer()
     try {
@@ -363,6 +363,7 @@ describe('launcher routes', () => {
         ...firstIdentity,
         pid: process.pid,
         protocolVersion: 1,
+        runtimeCompatibilityVersion: '1.9.0',
         serverBaseUrl: statusServer.serverBaseUrl,
         startedAt: new Date().toISOString(),
         workspaceFolder: fixture.workspaceFolder
@@ -377,7 +378,7 @@ describe('launcher routes', () => {
     }
   })
 
-  itWithGit('rejects runtime hash changes across workspace server compatibility versions', async () => {
+  itWithGit('rejects a stored workspace server from the 0.1 compatibility family', async () => {
     const fixture = await createGitRuntimeFixture()
     const statusServer = await startWorkspaceStatusServer()
     try {
@@ -387,7 +388,7 @@ describe('launcher routes', () => {
         implementationId: 'git-runtime:other',
         pid: process.pid,
         protocolVersion: 1,
-        runtimeCompatibilityVersion: '0.2.0',
+        runtimeCompatibilityVersion: '0.1.0',
         serverBaseUrl: statusServer.serverBaseUrl,
         startedAt: new Date().toISOString(),
         workspaceFolder: fixture.workspaceFolder

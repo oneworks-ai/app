@@ -10,6 +10,17 @@ plugins {
 val generatedAssetsDir = layout.buildDirectory.dir("generated/assets/oneworks")
 val repositoryRoot = rootProject.layout.projectDirectory.asFile.parentFile.parentFile
 val runtimePackageCacheVersionPattern = Regex("^[0-9A-Za-z._+-]+$")
+val androidPackageJson = rootProject.layout.projectDirectory.file("package.json")
+
+fun readPackageVersion(packageFile: File): String? {
+    if (!packageFile.isFile) return null
+    val parsed = JsonSlurper().parse(packageFile) as? Map<*, *> ?: return null
+    return (parsed["version"] as? String)?.trim()?.takeIf { it.isNotEmpty() }
+}
+
+val androidPackageVersion = requireNotNull(readPackageVersion(androidPackageJson.asFile)) {
+    "apps/android/package.json must declare a non-empty version"
+}
 
 fun sha256Text(value: String): String =
     MessageDigest.getInstance("SHA-256")
@@ -74,19 +85,12 @@ val syncServerDist by tasks.registering(Sync::class) {
 }
 val generateRuntimePackageCacheMetadata by tasks.registering {
     val outputFile = generatedAssetsDir.map { it.file("runtime/package-cache.json") }
-    val androidPackageJson = rootProject.layout.projectDirectory.file("package.json")
     val clientPackageJson = rootProject.layout.projectDirectory.file("../client/package.json")
     val serverPackageJson = rootProject.layout.projectDirectory.file("../server/package.json")
 
     inputs.property("runtimePackageCacheVersion", runtimePackageCacheVersionProvider)
     inputs.files(androidPackageJson, clientPackageJson, serverPackageJson)
     outputs.file(outputFile)
-
-    fun readPackageVersion(packageFile: File): String? {
-        if (!packageFile.isFile) return null
-        val parsed = JsonSlurper().parse(packageFile) as? Map<*, *> ?: return null
-        return (parsed["version"] as? String)?.trim()?.takeIf { it.isNotEmpty() }
-    }
 
     doLast {
         val cacheVersion = normalizeRuntimePackageCacheVersion(runtimePackageCacheVersionProvider.orNull)
@@ -129,7 +133,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = androidPackageVersion
     }
 
     compileOptions {

@@ -5,6 +5,8 @@ import process from 'node:process'
 import { describe, expect, it } from 'vitest'
 
 import {
+  assertStableVscodeReleaseTag,
+  assertStableVscodeVersion,
   assertVscodeStoreVersionAvailable,
   resolveMarketplaceVersion,
   resolvePersistedVsixCandidateAction
@@ -14,6 +16,18 @@ import { assertVsixReleaseIdentity } from '../../apps/vscode-extension/scripts/v
 const tag = (version: string) => `pkg/oneworks-vscode-extension/v${version}`
 
 describe('vscode extension release identity', () => {
+  it('allows only stable source versions and release tags to publish', () => {
+    expect(assertStableVscodeVersion('1.0.0')).toBe('1.0.0')
+    expect(assertStableVscodeReleaseTag(tag('1.0.0'))).toEqual({
+      logicalVersion: '1.0.0',
+      prerelease: false,
+      storeVersion: '1.0.0',
+      tag: tag('1.0.0')
+    })
+    expect(() => assertStableVscodeVersion('1.0.0-rc.0')).toThrow(/stable semver/u)
+    expect(() => assertStableVscodeReleaseTag(tag('1.0.0-rc.0'))).toThrow(/stable semver/u)
+  })
+
   it('maps prerelease and stable logical versions to stable numeric identities', () => {
     expect(resolveMarketplaceVersion('0.1.3-rc.7')).toBe('0.1.3')
     expect(resolveMarketplaceVersion('0.2.0')).toBe('0.2.0')
@@ -47,6 +61,28 @@ describe('vscode extension release identity', () => {
       logicalVersion: '0.1.4',
       prerelease: false,
       storeVersion: '0.1.4'
+    })
+  })
+
+  it('rejects a stable candidate older than the newest prior store version', () => {
+    expect(() =>
+      assertVscodeStoreVersionAvailable(tag('1.0.0'), [
+        tag('1.1.0'),
+        tag('2.0.0')
+      ])
+    ).toThrow(/must be newer than 2\.0\.0/u)
+  })
+
+  it('preserves exact stable-tag recovery with persisted-candidate evidence', () => {
+    expect(assertVscodeStoreVersionAvailable(tag('1.0.0'), [
+      tag('1.0.0'),
+      tag('2.0.0')
+    ], {
+      recoveryEvidence: true
+    })).toMatchObject({
+      logicalVersion: '1.0.0',
+      prerelease: false,
+      storeVersion: '1.0.0'
     })
   })
 
@@ -138,9 +174,9 @@ describe('vscode extension release identity', () => {
 
   it('creates, uploads, or reuses the persisted GitHub Release candidate', () => {
     const input = {
-      archiveFile: 'oneworks-vscode-extension-v0.1.3-rc.7.vsix',
-      logicalVersion: '0.1.3-rc.7',
-      tag: tag('0.1.3-rc.7')
+      archiveFile: 'oneworks-vscode-extension-v1.0.0.vsix',
+      logicalVersion: '1.0.0',
+      tag: tag('1.0.0')
     }
 
     expect(resolvePersistedVsixCandidateAction({
@@ -152,7 +188,7 @@ describe('vscode extension release identity', () => {
       release: {
         assets: [],
         isDraft: false,
-        isPrerelease: true,
+        isPrerelease: false,
         tagName: input.tag
       }
     })).toBe('upload')
@@ -161,7 +197,7 @@ describe('vscode extension release identity', () => {
       release: {
         assets: [{ name: input.archiveFile }],
         isDraft: false,
-        isPrerelease: true,
+        isPrerelease: false,
         tagName: input.tag
       }
     })).toBe('reuse')
@@ -196,21 +232,32 @@ describe('vscode extension release identity', () => {
     )
 
     expect(directReleaseWorkflow).toContain(
-      `group: vscode-extension-release-${dollar}{{ inputs.release_tag || github.ref_name }}`
+      `group: vscode-extension-release-${dollar}{{ inputs.release_tag }}`
     )
     expect(directReleaseWorkflow).toContain(
-      `ref: refs/tags/${dollar}{{ inputs.release_tag || github.ref_name }}`
+      `ref: refs/tags/${dollar}{{ inputs.release_tag }}`
     )
     expect(directReleaseWorkflow).toContain(
       `ref: refs/tags/${dollar}{{ needs.build.outputs.release_tag }}`
     )
     expect(directReleaseWorkflow).toContain(`git rev-parse "refs/tags/${dollar}{TAG_NAME}^{commit}"`)
     expect(directReleaseWorkflow).toContain(`git rev-parse "refs/tags/${dollar}{RELEASE_TAG}^{commit}"`)
+    expect(directReleaseWorkflow).toContain(`git cat-file -t "refs/tags/${dollar}TAG_NAME"`)
+    expect(directReleaseWorkflow).toContain('assertStableVscodeReleaseTag(process.argv[1])')
+    const triggerSection = directReleaseWorkflow.slice(
+      directReleaseWorkflow.indexOf('on:'),
+      directReleaseWorkflow.indexOf('permissions:')
+    )
+    expect(triggerSection).toContain('workflow_dispatch:')
+    expect(triggerSection).not.toContain('push:')
     const candidateIndex = directReleaseWorkflow.indexOf('name: Persist immutable VSIX candidate')
+    const credentialsIndex = directReleaseWorkflow.indexOf('name: Validate publication credentials')
     const verifyIndex = directReleaseWorkflow.indexOf('name: Verify authoritative VSIX identity')
     const marketplaceIndex = directReleaseWorkflow.indexOf('name: Publish to VS Code Marketplace')
     const openVsxIndex = directReleaseWorkflow.indexOf('name: Publish to Open VSX Registry')
     expect(candidateIndex).toBeGreaterThan(0)
+    expect(credentialsIndex).toBeGreaterThan(0)
+    expect(candidateIndex).toBeGreaterThan(credentialsIndex)
     expect(verifyIndex).toBeGreaterThan(candidateIndex)
     expect(marketplaceIndex).toBeGreaterThan(verifyIndex)
     expect(openVsxIndex).toBeGreaterThan(marketplaceIndex)
@@ -243,9 +290,14 @@ describe('vscode extension release identity', () => {
     expect(candidateStep.indexOf('gh release upload')).toBeGreaterThan(persistenceCaseIndex)
     expect(candidateStep.indexOf('gh release download')).toBeGreaterThan(persistenceCaseIndex)
     expect(candidateStep).not.toContain('--clobber')
+    expect(candidateStep).not.toContain('--prerelease')
     expect(directReleaseWorkflow.match(/ARCHIVE_FILE: \$\{\{ steps\.candidate\.outputs\.archive \}\}/gu))
       .toHaveLength(3)
     expect(releaseTagsWorkflow).toContain('scripts/__tests__/release-tags.spec.ts')
     expect(releaseTagsWorkflow).toContain('scripts/__tests__/vscode-extension-release.spec.ts')
+    expect(releaseTagsWorkflow.match(/- \.github\/workflows\/vscode-extension-release\.yml/gu)).toHaveLength(2)
+    expect(releaseTagsWorkflow).not.toContain('gh workflow run vscode-extension-release.yml')
+    expect(directReleaseWorkflow).not.toContain('Skipping VS Code Marketplace publish')
+    expect(directReleaseWorkflow).not.toContain('Skipping Open VSX publish')
   })
 })

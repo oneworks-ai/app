@@ -19,7 +19,8 @@
 - 当仓库是单提交快照、force push 后旧 base 不可达，或 workflow 手动触发时没有可比较 base，`Release Tags` 会按当前 ref 生成 initial tag plan：把 `apps/**/package.json` 与 `packages/**/package.json` 中带 `name` / `version` 的 workspace package 当作新包创建初始 tag。
 - 已存在的 tag 会跳过，不重复创建。
 - force push `main` 不会移动已存在的远端 tag；如果目标是让公开仓库只暴露最新快照，必须单独删除或重建 release tags 和 GitHub Releases。
-- 自动 tag 使用内置 `GITHUB_TOKEN` 创建，不需要个人全仓库 PAT。因为 `GITHUB_TOKEN` 创建的 tag 不会触发普通 tag workflow，`Release Tags` workflow 会在创建 tag 后显式 `workflow_dispatch` 桌面或 VS Code 等对应发布 workflow。
+- 自动 tag 使用内置 `GITHUB_TOKEN` 创建，不需要个人全仓库 PAT。因为 `GITHUB_TOKEN` 创建的 tag 不会触发普通 tag workflow，`Release Tags` workflow 会按发布面显式调度 Desktop 与 Chrome 等自动化；VS Code stable tag 只创建不自动 dispatch，等待人工发布。
+- VS Code alpha / beta / rc manifest version 不进入 tag plan；只有 stable semver source version 才创建 `pkg/oneworks-vscode-extension/v<stable>`。
 
 ## 发布后经验沉淀
 

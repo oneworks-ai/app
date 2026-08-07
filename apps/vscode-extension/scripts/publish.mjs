@@ -3,12 +3,15 @@ import { resolve } from 'node:path'
 import process from 'node:process'
 
 import {
+  assertStableVscodeVersion,
   createReleaseStage,
   getAppRoot,
   getVsceBinaryPath,
-  isPrereleaseVersion,
   readSourceManifest
 } from './release-manifest.mjs'
+
+const sourceManifest = await readSourceManifest()
+assertStableVscodeVersion(sourceManifest.version)
 
 if (!process.env.VSCE_PAT?.trim()) {
   throw new Error('Missing VSCE_PAT. Set a Visual Studio Marketplace token before publishing.')
@@ -18,12 +21,7 @@ const packagePath = readArgumentValue('--packagePath')
 
 if (packagePath) {
   const resolvedPath = resolve(getAppRoot(), packagePath)
-  const sourceManifest = await readSourceManifest()
   const publishArgs = ['publish', '--packagePath', resolvedPath, '--skip-duplicate', '--skip-license']
-
-  if (isPrereleaseVersion(sourceManifest.version)) {
-    publishArgs.push('--pre-release')
-  }
 
   await runCommand(
     getVsceBinaryPath(),
@@ -34,10 +32,6 @@ if (packagePath) {
 } else {
   const stage = await createReleaseStage()
   const publishArgs = ['publish', '--no-dependencies', '--skip-duplicate', '--skip-license']
-
-  if (stage.prerelease) {
-    publishArgs.push('--pre-release')
-  }
 
   try {
     await runCommand(

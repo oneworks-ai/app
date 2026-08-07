@@ -1,6 +1,6 @@
 import { Buffer } from 'node:buffer'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -131,26 +131,95 @@ describe('release tag planning', () => {
     expect(plan.tags[0]?.tag).not.toContain('beta')
   })
 
-  it('fails VS Code release tag planning when a numeric store version is reused', () => {
+  it('excludes VS Code prereleases while preserving normal npm, Desktop, and Chrome tags', () => {
+    const plan = createReleaseTagPlanFromManifestChanges([
+      packageVersionChange('apps/vscode-extension/package.json', '@oneworks/vscode-extension'),
+      packageVersionChange('packages/core/package.json', '@oneworks/core'),
+      packageVersionChange('apps/desktop/package.json', '@oneworks/desktop', true),
+      packageVersionChange(
+        'packages/plugins/external-browser-driver/package.json',
+        '@oneworks/plugin-external-browser-driver'
+      )
+    ], {
+      base: 'base',
+      existingReleaseTags: [],
+      head: 'head'
+    })
+
+    expect(plan.tags.map(candidate => candidate.tag)).toEqual([
+      'pkg/oneworks-core/v1.0.0-rc.0',
+      'pkg/oneworks-desktop/v1.0.0-rc.0',
+      'pkg/oneworks-plugin-external-browser-driver/v1.0.0-rc.0'
+    ])
+  })
+
+  it('creates a stable VS Code tag and retains its store collision guard', () => {
+    const stablePlan = createReleaseTagPlanFromManifestChanges([
+      {
+        path: 'apps/vscode-extension/package.json',
+        before: { name: '@oneworks/vscode-extension', version: '1.0.0-rc.0' },
+        after: { name: '@oneworks/vscode-extension', private: true, version: '1.0.0' }
+      }
+    ], {
+      base: 'base',
+      existingReleaseTags: [],
+      head: 'head'
+    })
+    expect(stablePlan.tags.map(candidate => candidate.tag)).toEqual([
+      'pkg/oneworks-vscode-extension/v1.0.0'
+    ])
+
     expect(() =>
       createReleaseTagPlanFromManifestChanges([
         {
           path: 'apps/vscode-extension/package.json',
-          before: {
-            name: '@oneworks/vscode-extension',
-            version: '0.1.2-rc.4'
-          },
-          after: {
-            name: '@oneworks/vscode-extension',
-            version: '0.1.2-rc.7'
-          }
+          before: { name: '@oneworks/vscode-extension', version: '1.0.0-rc.0' },
+          after: { name: '@oneworks/vscode-extension', private: true, version: '1.0.0' }
         }
       ], {
         base: 'base',
-        existingReleaseTags: ['pkg/oneworks-vscode-extension/v0.1.2-rc.4'],
+        existingReleaseTags: ['pkg/oneworks-vscode-extension/v1.0.0-rc.9'],
         head: 'head'
       })
     ).toThrow(/already owned/u)
+
+    expect(() =>
+      createReleaseTagPlanFromManifestChanges([
+        {
+          path: 'apps/vscode-extension/package.json',
+          before: { name: '@oneworks/vscode-extension', version: '0.9.0' },
+          after: { name: '@oneworks/vscode-extension', private: true, version: '1.0.0' }
+        }
+      ], {
+        base: 'base',
+        existingReleaseTags: ['pkg/oneworks-vscode-extension/v2.0.0'],
+        head: 'head'
+      })
+    ).toThrow(/must be newer/u)
+  })
+
+  it('coordinates the root and all 61 workspace manifests on 1.0.0-rc.0', () => {
+    const manifestPaths = [
+      'package.json',
+      ...readPackageManifestPaths('apps'),
+      ...readPackageManifestPaths('packages'),
+      ...readPackageManifestPaths('packages/adapters'),
+      ...readPackageManifestPaths('packages/channels'),
+      ...readPackageManifestPaths('packages/plugins')
+    ]
+
+    expect(manifestPaths).toHaveLength(62)
+    expect(
+      manifestPaths.map((manifestPath) => {
+        const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+        return `${manifest.name}@${manifest.version}`
+      }).filter(identity => !identity.endsWith('@1.0.0-rc.0'))
+    ).toEqual([])
+
+    const androidGradle = readFileSync('apps/android/app/build.gradle.kts', 'utf8')
+    expect(androidGradle).toContain('versionName = androidPackageVersion')
+    expect(androidGradle).toContain('readPackageVersion(androidPackageJson.asFile)')
+    expect(androidGradle).not.toMatch(/versionName\s*=\s*"0\.1\.0"/u)
   })
 
   it('parses nul-separated git name-status output with renames', () => {
@@ -195,6 +264,7 @@ describe('release tag planning', () => {
     runGit(['init'])
     mkdirSync(path.join(repoRoot, 'packages/core'), { recursive: true })
     mkdirSync(path.join(repoRoot, 'apps/desktop'), { recursive: true })
+    mkdirSync(path.join(repoRoot, 'apps/vscode-extension'), { recursive: true })
     writeFileSync(
       path.join(repoRoot, 'packages/core/package.json'),
       `${
@@ -211,6 +281,16 @@ describe('release tag planning', () => {
           name: '@oneworks/desktop',
           private: true,
           version: '0.1.0-alpha.0'
+        })
+      }\n`
+    )
+    writeFileSync(
+      path.join(repoRoot, 'apps/vscode-extension/package.json'),
+      `${
+        JSON.stringify({
+          name: '@oneworks/vscode-extension',
+          private: true,
+          version: '1.0.0-rc.0'
         })
       }\n`
     )
@@ -231,3 +311,16 @@ describe('release tag planning', () => {
     expect(plan.tags.every(tag => tag.isNewPackage)).toBe(true)
   })
 })
+
+const packageVersionChange = (path: string, name: string, privatePackage = false) => ({
+  path,
+  before: { name, private: privatePackage, version: '0.1.0' },
+  after: { name, private: privatePackage, version: '1.0.0-rc.0' }
+})
+
+const readPackageManifestPaths = (parent: string) =>
+  readdirSync(parent, { withFileTypes: true })
+    .filter(entry => entry.isDirectory())
+    .map(entry => path.join(parent, entry.name, 'package.json'))
+    .filter(existsSync)
+    .sort()

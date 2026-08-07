@@ -12,6 +12,8 @@ const repositoryDirectory = 'apps/vscode-extension'
 const repositoryUrl = 'git+https://github.com/oneworks-ai/app.git'
 
 export const {
+  assertStableVscodeReleaseTag,
+  assertStableVscodeVersion,
   assertVscodeStoreVersionAvailable,
   isPrereleaseVersion,
   resolveLogicalVersionFromReleaseTag,

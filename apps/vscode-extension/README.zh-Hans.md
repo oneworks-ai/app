@@ -40,20 +40,22 @@ pnpm add -D oneworks
 pnpm -C apps/vscode-extension package
 ```
 
-从已有 VSIX 发布到 VS Code Marketplace：
+只有 stable source version 可以发布。预发布 source version 只由 CI 打包验证，不创建 package tag、GitHub Release，也不发布到 Marketplace 或 Open VSX。
+
+从已有 stable VSIX 发布到 VS Code Marketplace：
 
 ```bash
 VSCODE_EXTENSION_PUBLISHER=your-publisher-id VSCE_PAT=your-token \
-pnpm -C apps/vscode-extension publish:vsix -- --packagePath ./oneworks-vscode-extension-v0.1.0.vsix
+pnpm -C apps/vscode-extension publish:vsix -- --packagePath ./oneworks-vscode-extension-v1.0.0.vsix
 ```
 
 把同一个 VSIX 发布到 Open VSX Registry，供 VS Code 兼容 IDE 使用：
 
 ```bash
 OVSX_PAT=your-token \
-pnpm dlx ovsx@1.0.1 publish --skip-duplicate ./oneworks-vscode-extension-v0.1.0.vsix -p "$OVSX_PAT"
+pnpm dlx ovsx@1.0.1 publish --skip-duplicate ./oneworks-vscode-extension-v1.0.0.vsix -p "$OVSX_PAT"
 ```
 
 Open VSX 需要提前创建和 extension publisher 一致的 namespace，例如 `oneworks-ai`。
 
-CI 会在 VS Code extension 变更时构建并上传 VSIX artifact。匹配 `pkg/oneworks-vscode-extension/v*` 的 tag 会打包同一个 VSIX；配置 `VSCODE_EXTENSION_PUBLISHER` 和 `VSCE_PAT` 后可发布到 VS Code Marketplace；配置 `OVSX_PAT` 后可发布到 Open VSX；最后附加到 GitHub Release。
+CI 会在 VS Code extension 变更时构建并上传临时 VSIX artifact。stable 发布只能从精确的 annotated `pkg/oneworks-vscode-extension/v<stable>` tag 人工触发，并要求 publisher variable 与两家商店凭据齐全。workflow 会先把唯一 authoritative VSIX 持久化到 GitHub Release，再把完全相同的字节发布到 VS Code Marketplace 与 Open VSX。

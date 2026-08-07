@@ -1,6 +1,5 @@
 export interface StableReleaseInput {
   version: string
-  vscodeVersion: string
 }
 
 export interface StablePackageIdentity {
@@ -19,6 +18,5 @@ export declare function runStableReleasePreflight(argv?: string[]): Promise<{
   ok: boolean
   packageCount: number
   version: string
-  vscodeVersion: string
   errors: string[]
 }>

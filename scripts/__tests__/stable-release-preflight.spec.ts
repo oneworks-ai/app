@@ -1,3 +1,7 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import process from 'node:process'
+
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -36,46 +40,55 @@ const buildWingetTemplate = (version: string, installerSha256 = 'a'.repeat(64)) 
   ].join('\n')
 
 describe('stable release preflight', () => {
-  const input = { version: '0.1.0', vscodeVersion: '0.1.4' }
+  const input = { version: '1.0.0' }
 
-  it('accepts a coordinated stable graph with the VS Code store exception', () => {
+  it('accepts one coordinated stable graph including VS Code', () => {
     expect(evaluateStablePackageGraph(input, [
-      { name: 'oneworks-dev', version: '0.1.0', license: 'MIT' },
-      { name: '@oneworks/core', version: '0.1.0', license: 'MIT' },
-      { name: '@oneworks/vscode-extension', version: '0.1.4', license: 'MIT' },
+      { name: 'oneworks-dev', version: '1.0.0', license: 'MIT' },
+      { name: '@oneworks/core', version: '1.0.0', license: 'MIT' },
+      { name: '@oneworks/vscode-extension', version: '1.0.0', license: 'MIT' },
       {
         name: '@oneworks/plugin-demo',
-        version: '0.1.0',
+        version: '1.0.0',
         license: 'MIT',
-        pluginVersion: '0.1.0'
+        pluginVersion: '1.0.0'
       }
     ])).toEqual([])
   })
 
+  it('uses one coordinated version input in every stable workflow caller', async () => {
+    const repositoryRoot = process.cwd()
+    const workflowPaths = [
+      '.github/workflows/npm-publish-alpha.yml',
+      '.github/workflows/release-tags.yml'
+    ]
+
+    for (const workflowPath of workflowPaths) {
+      const workflow = readFileSync(join(repositoryRoot, workflowPath), 'utf8')
+      expect(workflow).toContain('--version "$version"')
+      expect(workflow).not.toContain('--vscode-version')
+    }
+    await expect(
+      runStableReleasePreflight(['--version', '1.0.0', '--vscode-version', '1.0.0'])
+    ).rejects.toThrow(/Unknown stable release preflight argument/u)
+  })
+
   it('rejects prerelease, license, and plugin identity drift', () => {
     const errors = evaluateStablePackageGraph(input, [
-      { name: '@oneworks/core', version: '0.1.0-rc.7', license: undefined },
+      { name: '@oneworks/core', version: '1.0.0-rc.0', license: undefined },
       {
         name: '@oneworks/plugin-demo',
-        version: '0.1.0',
+        version: '1.0.0',
         license: 'MIT',
-        pluginVersion: '0.1.0-rc.7'
+        pluginVersion: '1.0.0-rc.0'
       }
     ])
 
     expect(errors).toEqual([
-      '@oneworks/core has version 0.1.0-rc.7; expected 0.1.0',
+      '@oneworks/core has version 1.0.0-rc.0; expected 1.0.0',
       '@oneworks/core must declare license MIT',
-      '@oneworks/plugin-demo plugin.json version 0.1.0-rc.7 does not match 0.1.0'
+      '@oneworks/plugin-demo plugin.json version 1.0.0-rc.0 does not match 1.0.0'
     ])
-  })
-
-  it('accepts the current repository Winget MSI identity', async () => {
-    await expect(runStableReleasePreflight(['--version', '0.1.0', '--vscode-version', '0.1.4'])).resolves.toMatchObject(
-      {
-        ok: true
-      }
-    )
   })
 
   it('validates future stable MSI template shapes without a checksum map', () => {

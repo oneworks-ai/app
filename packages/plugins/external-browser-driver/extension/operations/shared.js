@@ -1,5 +1,6 @@
 export const PROTOCOL_VERSION = 1
-export const EXTENSION_VERSION = '0.1.0'
+const extensionManifest = globalThis.chrome?.runtime?.getManifest?.()
+export const EXTENSION_VERSION = extensionManifest?.version_name ?? extensionManifest?.version ?? 'dev'
 
 export const error = (code, message, extras = {}) => Object.assign(new Error(message), { code, ...extras })
 

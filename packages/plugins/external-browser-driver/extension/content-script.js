@@ -2,6 +2,8 @@
   if (globalThis.__oneWorksChromeBridgeInstalled) return
   globalThis.__oneWorksChromeBridgeInstalled = true
   const nonce = crypto.randomUUID()
+  const extensionManifest = chrome.runtime.getManifest()
+  const extensionVersion = extensionManifest.version_name ?? extensionManifest.version
   let negotiated = false
 
   const postHello = () =>
@@ -10,7 +12,7 @@
       nonce,
       protocol_version: 1,
       extension_id: chrome.runtime.id,
-      extension_version: chrome.runtime.getManifest().version
+      extension_version: extensionVersion
     }, location.origin)
 
   window.addEventListener('message', event => {
