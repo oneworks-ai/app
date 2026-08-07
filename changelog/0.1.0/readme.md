@@ -9,5 +9,6 @@
 - Harden packaged runtime ownership, cache isolation, plugin loading, release identity checks, production dependency auditing, and deterministic release recovery.
 - Secure plugin uninstall and presentation, with fail-closed macOS managed-tree and filesystem authority enforcement.
 - Create entities, flows, and rules directly from Data Assets with safe save-location previews; when transport completion is uncertain, preserve an indeterminate result instead of retrying creation.
+- Expose stable Codex marketplace metadata while keeping credentials, private paths, and internal runtime fields out of public plugin responses.
 
 Compatibility note: the first macOS desktop stable release remains unsigned, but its application bundles now contain only portable internal symlinks, are completely ad-hoc resource sealed, and have every arm64/x64 DMG, PKG, and ZIP strictly verified. Checksums are published and verified. macOS Gatekeeper may still require explicit user approval until Apple Developer ID signing and notarization credentials are configured.

@@ -66,21 +66,24 @@ describe('native host plugin asset identity', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.loadConfigState.mockResolvedValue({ mergedConfig: {}, workspaceFolder: '/workspace' })
-    mocks.listAssets.mockImplementation(async (root: string) => [{ kind: 'skills', title: root, items: [] }])
+    mocks.listAssets.mockImplementation(async () => [{
+      files: [{ contentKind: 'text', path: 'skills/review/SKILL.md', size: 4 }],
+      kind: 'skills'
+    }])
   })
 
   it('reads only the root owned by the selected opaque id', async () => {
     const { listNativeHostPluginAssets } = await import('#~/services/plugins/native-host.js')
 
     await expect(listNativeHostPluginAssets('user-id')).resolves.toEqual([
-      { kind: 'skills', title: '/root/user', items: [] }
+      { files: [{ contentKind: 'text', path: 'skills/review/SKILL.md', size: 4 }], kind: 'skills' }
     ])
     expect(mocks.listAssets).toHaveBeenCalledOnce()
     expect(mocks.listAssets).toHaveBeenCalledWith('/root/user')
 
     mocks.listAssets.mockClear()
     await expect(listNativeHostPluginAssets('project-id')).resolves.toEqual([
-      { kind: 'skills', title: '/root/project', items: [] }
+      { files: [{ contentKind: 'text', path: 'skills/review/SKILL.md', size: 4 }], kind: 'skills' }
     ])
     expect(mocks.listAssets).toHaveBeenCalledOnce()
     expect(mocks.listAssets).toHaveBeenCalledWith('/root/project')
@@ -92,5 +95,40 @@ describe('native host plugin asset identity', () => {
     await expect(listNativeHostPluginAssets('rootless-id')).resolves.toEqual([])
     await expect(listNativeHostPluginAssets('stale-id')).resolves.toBeUndefined()
     expect(mocks.listAssets).not.toHaveBeenCalled()
+  })
+
+  it('returns fresh native plugin objects without installation roots', async () => {
+    const { listNativeHostPlugins } = await import('#~/services/plugins/native-host.js')
+
+    const result = await listNativeHostPlugins()
+    const plugin = result.plugins.find(item => item.id === 'user-id')
+
+    expect(plugin?.source).toEqual({ kind: 'installed-copy' })
+    expect(plugin?.source).not.toHaveProperty('displayPath')
+    expect(plugin?.source).not.toHaveProperty('internalRoot')
+    expect(JSON.stringify(result)).not.toContain('/root/user')
+    expect(JSON.stringify(result)).not.toContain('/workspace')
+  })
+
+  it('omits raw Codex app metadata content at the native public asset boundary', async () => {
+    mocks.listAssets.mockResolvedValue([{
+      files: [{
+        content: '{"client_secret":"must-not-leak","path":"/root/user"}',
+        contentKind: 'text',
+        path: 'apps/docs.app.json',
+        size: 52
+      }],
+      kind: 'apps'
+    }])
+    const { listNativeHostPluginAssets } = await import('#~/services/plugins/native-host.js')
+
+    const result = await listNativeHostPluginAssets('user-id')
+
+    expect(result).toEqual([{
+      files: [{ contentKind: 'text', path: 'apps/docs.app.json', size: 52 }],
+      kind: 'apps'
+    }])
+    expect(JSON.stringify(result)).not.toContain('must-not-leak')
+    expect(JSON.stringify(result)).not.toContain('/root/user')
   })
 })

@@ -74,6 +74,24 @@ interface LauncherWorkspaceInstanceState extends LauncherWorkspaceInstanceIdenti
   workspaceFolder: string
 }
 
+const isLauncherWorkspaceInstanceState = (value: unknown): value is LauncherWorkspaceInstanceState => {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) return false
+  const state = value as Record<string, unknown>
+  return (
+    typeof state.implementationId === 'string' &&
+    typeof state.launchConfigHash === 'string' &&
+    typeof state.packageDir === 'string' &&
+    typeof state.runtimeCompatibilityVersion === 'string' &&
+    typeof state.protocolVersion === 'number' && Number.isInteger(state.protocolVersion) &&
+    typeof state.startedAt === 'string' &&
+    typeof state.workspaceFolder === 'string' &&
+    (state.pid == null || (typeof state.pid === 'number' && Number.isInteger(state.pid))) &&
+    (state.repoRoot == null || typeof state.repoRoot === 'string') &&
+    (state.serverBaseUrl == null || typeof state.serverBaseUrl === 'string') &&
+    (state.sourceVersionId == null || typeof state.sourceVersionId === 'string')
+  )
+}
+
 const services = new Map<string, LauncherWorkspaceService>()
 let workspaceServiceCleanupRegistered = false
 
@@ -694,8 +712,7 @@ const readWorkspaceInstanceState = async (workspaceFolder: string) => {
   try {
     const raw = await readFile(getWorkspaceInstanceStatePath(workspaceFolder), 'utf8')
     const value = JSON.parse(raw) as unknown
-    if (value == null || typeof value !== 'object' || Array.isArray(value)) return undefined
-    return value as LauncherWorkspaceInstanceState
+    return isLauncherWorkspaceInstanceState(value) ? value : undefined
   } catch {
     return undefined
   }

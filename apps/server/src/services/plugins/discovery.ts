@@ -15,6 +15,9 @@ import type { ResolvedPluginInstance } from '@oneworks/utils/plugin-resolver'
 
 import { buildConfigJsonVariables, loadConfigState } from '#~/services/config/index.js'
 
+import { toManagedPluginRuntimeIdentity } from './managed-plugin-runtime-identity'
+import type { ManagedPluginRuntimeIdentity } from './managed-plugin-runtime-identity'
+
 const pluginConfigKey = (plugin: { id: string; scope?: string }) => `${plugin.id}\0${plugin.scope ?? ''}`
 const bundledOfficialPluginPackageIds = new Set([
   '@oneworks/plugin-browser-driver',
@@ -145,7 +148,15 @@ export const discoverPluginInstances = async () => {
     { config: globalSource?.resolvedConfig?.marketplaces, sourceGroup: 'global' as const }
   ]
   const managedSourceGroups = new Map<string, PluginRuntimeSourceGroup>()
+  const managedRuntimeIdentities = new Map<string, ManagedPluginRuntimeIdentity>()
+  const privateRoots = new Set<string>()
   for (const install of await listManagedPluginInstalls(workspaceFolder, { env: process.env })) {
+    const installRoot = path.resolve(install.oneworksPluginDir)
+    if (typeof install.installDir === 'string') privateRoots.add(path.resolve(install.installDir))
+    if (typeof install.nativePluginDir === 'string') privateRoots.add(path.resolve(install.nativePluginDir))
+    privateRoots.add(installRoot)
+    const runtimeIdentity = toManagedPluginRuntimeIdentity(install.config)
+    if (runtimeIdentity != null) managedRuntimeIdentities.set(installRoot, runtimeIdentity)
     if (install.config.source.type !== 'marketplace') continue
     const sourceGroup = getMarketplacePluginSourceGroup(
       install.config.source.marketplace,
@@ -153,13 +164,16 @@ export const discoverPluginInstances = async () => {
       marketplaceSources
     )
     if (sourceGroup != null) {
-      managedSourceGroups.set(path.resolve(install.oneworksPluginDir), sourceGroup)
+      managedSourceGroups.set(installRoot, sourceGroup)
     }
   }
 
   const localDevRoot = resolveProjectOoPath(workspaceFolder, process.env, 'plugins.dev')
   const globalPluginsRoot = resolveGlobalOneWorksAssetsPath(process.env, 'plugins')
+  privateRoots.add(localDevRoot)
+  privateRoots.add(globalPluginsRoot)
   for (const instance of instances) {
+    privateRoots.add(path.resolve(instance.rootDir))
     const sourceGroup = isPathInside(localDevRoot, instance.rootDir)
       ? 'localDev'
       : managedSourceGroups.get(path.resolve(instance.rootDir)) ??
@@ -179,6 +193,8 @@ export const discoverPluginInstances = async () => {
     projectHome: resolveProjectHomePath(workspaceFolder, process.env),
     jsonVariables: buildConfigJsonVariables(workspaceFolder),
     managedPluginRoots: [...managedSourceGroups.keys()],
+    managedRuntimeIdentities,
+    privateRoots: [...privateRoots],
     instances
   }
 }

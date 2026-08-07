@@ -40,9 +40,9 @@ import type {
   PluginLocalizedText,
   PluginManifest,
   PluginRuntimeChannelInvocation,
-  PluginRuntimeEndpoint,
   PluginRuntimeInstance,
-  PluginServerRuntimeRole
+  PluginServerRuntimeRole,
+  PublicPluginRuntimeEndpoint
 } from '@oneworks/types'
 
 import type { IconAsset } from '#~/components/icons/IconAsset'
@@ -50,6 +50,7 @@ import type { IconAsset } from '#~/components/icons/IconAsset'
 import type { PluginI18nContext } from './plugin-i18n'
 
 export type PluginPlacement = 'bottom' | 'right'
+export type PluginRuntimeEndpoint = PublicPluginRuntimeEndpoint
 
 export interface PluginDiagnostic {
   code?: string
@@ -99,9 +100,9 @@ export type {
   PluginLocalizedText,
   PluginManifest,
   PluginRuntimeChannelInvocation,
-  PluginRuntimeEndpoint,
   PluginRuntimeInstance,
-  PluginServerRuntimeRole
+  PluginServerRuntimeRole,
+  PublicPluginRuntimeEndpoint
 }
 
 export type PluginSlot =

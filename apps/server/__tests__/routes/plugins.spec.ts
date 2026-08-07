@@ -4,6 +4,7 @@ import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
+import { pathToFileURL } from 'node:url'
 
 import Router from '@koa/router'
 import Koa from 'koa'
@@ -14,12 +15,17 @@ import { pluginsRouter } from '#~/routes/plugins.js'
 import { getPluginManager, resetPluginManagerForTests } from '#~/services/plugins/index.js'
 
 const mocks = vi.hoisted(() => ({
+  listLauncherWorkspaceRuntimeEndpoints: vi.fn(async () => []),
   loadConfigState: vi.fn()
 }))
 
 vi.mock('#~/services/config/index.js', () => ({
   buildConfigJsonVariables: vi.fn(() => ({})),
   loadConfigState: mocks.loadConfigState
+}))
+
+vi.mock('#~/services/launcher/manager.js', () => ({
+  listLauncherWorkspaceRuntimeEndpoints: mocks.listLauncherWorkspaceRuntimeEndpoints
 }))
 
 const createPlugin = async (
@@ -300,8 +306,13 @@ describe('pluginsRouter', () => {
     mockConfig([{ id: pluginRoot, scope: 'runtime' }])
 
     const runtimeResponse = await fetch(`${baseUrl}/api/plugins/runtime`)
-    const runtimePayload = await runtimeResponse.json() as { runtime: { role: string } }
+    const runtimePayload = await runtimeResponse.json() as {
+      runtime: { projectHome?: string; role: string; workspaceFolder?: string }
+    }
     expect(runtimePayload.runtime.role).toBe('workspace')
+    expect(runtimePayload.runtime).not.toHaveProperty('projectHome')
+    expect(runtimePayload.runtime).not.toHaveProperty('workspaceFolder')
+    expect(JSON.stringify(runtimePayload)).not.toContain(workspaceFolder)
 
     const response = await fetch(`${baseUrl}/api/plugins/runtime/runtime/channels/echo`, {
       method: 'POST',
@@ -396,6 +407,32 @@ describe('pluginsRouter', () => {
         status: 'online'
       })
     ]))
+  })
+
+  it('omits malformed private runtime endpoint metadata from manager responses', async () => {
+    vi.stubEnv('__ONEWORKS_PROJECT_SERVER_ROLE__', 'manager')
+    mocks.listLauncherWorkspaceRuntimeEndpoints.mockResolvedValueOnce([{
+      id: 'workspace:private-metadata',
+      role: 'workspace',
+      serverBaseUrl: 'file:///private/other',
+      startedAt: workspaceFolder,
+      status: 'offline',
+      workspaceFolder
+    }])
+    mockConfig([])
+
+    const response = await fetch(`${baseUrl}/api/plugins/runtime/endpoints`)
+    const payload = await response.json() as { endpoints: Array<Record<string, unknown>> }
+    const endpoint = payload.endpoints.find(item => item.id === 'workspace:private-metadata')
+
+    expect(response.status).toBe(200)
+    expect(endpoint).toEqual({
+      id: 'workspace:private-metadata',
+      role: 'workspace',
+      status: 'offline'
+    })
+    expect(JSON.stringify(payload)).not.toContain(workspaceFolder)
+    expect(JSON.stringify(payload)).not.toContain('file:///private/other')
   })
 
   it('serves client assets and rejects traversal', async () => {
@@ -1062,10 +1099,233 @@ describe('pluginsRouter', () => {
     expect(payload.diagnostics).toEqual([
       expect.objectContaining({
         code: 'plugin_discovery_failed',
-        message: expect.stringContaining('Conflicting plugin scope "same"')
+        message: 'Failed to discover plugins.'
       })
     ])
   })
+
+  it('serializes plugin metadata through a path-free public allowlist', async () => {
+    vi.stubEnv('__ONEWORKS_PROJECT_DISABLE_DEFAULT_OFFICIAL_PLUGINS__', '1')
+    vi.stubEnv('__ONEWORKS_PROJECT_DISABLE_GLOBAL_CONFIG__', '1')
+    workspaceFolder = await fsMkdtemp('ow-plugin-public-serialization-')
+    const pluginRoot = path.join(workspaceFolder, 'plugins', 'docs')
+    const pluginFileUrl = pathToFileURL(pluginRoot).href
+    const encodedPluginRoot = encodeURIComponent(pluginRoot)
+    const credentialUrlKeys = [
+      'clientsecretvalue',
+      'CLIENTSECRETVALUE',
+      'apiKeyValue',
+      'oauth-client_secret.valueSuffix',
+      '%2563lient%2553ecret%2556alue',
+      'api%255Fkey%255Fvalue',
+      'clientSecretValue%'
+    ]
+    const encodedAuthorizationValue = ['sk', '%252D', 'abcdefghijklmnop'].join('')
+    const encodedCallbackValue = ['api', '%255F', 'key', '%253D', 'abcdefghijklmnop'].join('')
+    const encodedTokenValue = ['ghp', '%252D', 'abcdefghijklmnop'].join('')
+    await createPlugin(pluginRoot, {
+      name: 'docs-plugin',
+      description: `Loaded from ${pluginRoot}, ${pluginFileUrl}, and ${encodedPluginRoot}`,
+      native: {
+        adapter: 'codex',
+        apps: [
+          {
+            id: 'docs',
+            capabilities: ['read', 'WorkspaceConfigurationManagement', 'write'],
+            authentication: {
+              authorizationUrl:
+                'https://example.test/oauth/authorize?client_id=docs&redirect_uri=%2Foauth%2Fcallback&redirect%255Furi=%2Fencoded&code_challenge=valid&login_hint=docs',
+              callbackPath: '/oauth/callback',
+              type: 'oauth2'
+            },
+            connectionRequirements: {
+              endpoint: 'https://api.example.test/connect',
+              required: true,
+              type: 'oauth'
+            },
+            permissions: ['repository:read']
+          },
+          ...credentialUrlKeys.map((key, index) => ({
+            authentication: {
+              authorizationUrl: `https://example.test/oauth?${key}=must-not-leak`,
+              type: 'oauth2'
+            },
+            id: `credential-key-${index}`
+          })),
+          {
+            authentication: {
+              authorizationUrl: 'https://example.test/oauth?clientSecretValue=must-not-leak',
+              type: 'oauth2'
+            },
+            id: 'credential-url'
+          },
+          {
+            authentication: {
+              tokenUrl: 'https://example.test/token?oauthClientSecretValueSuffix=must-not-leak',
+              type: 'oauth2'
+            },
+            id: 'credential-url-suffix'
+          },
+          {
+            authentication: {
+              authorizationUrl: `https://example.test/oauth?state=${encodedAuthorizationValue}`,
+              type: 'oauth2'
+            },
+            id: 'encoded-authorization'
+          },
+          {
+            authentication: {
+              callbackPath: `/oauth/callback?state=${encodedCallbackValue}`,
+              type: 'oauth2'
+            },
+            id: 'encoded-callback'
+          },
+          {
+            authentication: {
+              tokenUrl: `https://example.test/token?state=${encodedTokenValue}`,
+              type: 'oauth2'
+            },
+            id: 'encoded-token'
+          },
+          {
+            id: 'unknown-shape',
+            metadata: { label: 'must-not-flow-to-public' }
+          },
+          {
+            authentication: { type: 'Bearer must-not-leak-credential-value' },
+            id: 'secret-shaped'
+          },
+          {
+            id: `${pluginRoot}/attacker-selected-id`
+          },
+          {
+            capabilities: ['read', `path=${pluginRoot}`],
+            id: 'path-shaped-capability'
+          },
+          {
+            id: 'connector_AKIAIOSFODNN7EXAMPLE'
+          },
+          {
+            authentication: { type: 'AIzaSyD-abcdefghijklmnopqrstuvwxyz1234' },
+            id: 'credential-type'
+          },
+          {
+            authentication: { scopes: ['AIzaSyD-abcdefghijklmnopqrstuvwxyz1234'], type: 'oauth2' },
+            id: 'credential-scope'
+          },
+          {
+            id: 'opaque-permission',
+            permissions: ['abcdefghijklmnopqrstuvwx.yz0123456789abcdefghijklmnop']
+          }
+        ],
+        diagnostics: [{
+          code: 'legacy_path',
+          level: 'warning',
+          message: `Legacy metadata referenced ${pluginRoot}, ${pluginFileUrl}, and ${encodedPluginRoot}.`
+        }]
+      },
+      source: { adapter: 'codex', kind: 'directory' },
+      plugin: {
+        client: {
+          devClientEntryKind: 'host-vite',
+          devClientEntryUrl: `/@fs${pluginRoot}/client/index.ts`,
+          entry: './client/index.js'
+        },
+        contributions: {
+          navItems: [{ id: 'home', title: pluginRoot }]
+        }
+      }
+    })
+    mocks.loadConfigState.mockResolvedValue({
+      workspaceFolder,
+      mergedConfig: {
+        plugins: [{
+          id: pluginRoot,
+          options: {
+            [pluginRoot]: 'must-not-leak',
+            cacheDir: `path=${pluginRoot}`,
+            encodedRoot: encodedPluginRoot,
+            fileRoot: pluginFileUrl,
+            oauthCallback: '/oauth/callback',
+            serviceUrl: 'https://example.test/oauth/callback'
+          },
+          scope: 'docs'
+        }]
+      }
+    })
+
+    const response = await fetch(`${baseUrl}/api/plugins`)
+    const payload = await response.json() as { plugins: Array<Record<string, unknown>> }
+    const plugin = payload.plugins[0] as {
+      client?: { devClientEntryKind?: string; devClientEntryUrl?: string }
+      manifest?: {
+        native?: {
+          apps?: Array<{
+            authentication?: Record<string, unknown>
+            capabilities?: string[]
+            connectionRequirements?: Record<string, unknown>
+            permissions?: string[]
+          }>
+          diagnostics?: Array<{ message: string }>
+        }
+      }
+      name?: string
+      options?: Record<string, unknown>
+      requestId?: string
+      source?: Record<string, unknown>
+    }
+
+    expect(plugin).toMatchObject({
+      name: 'docs-plugin',
+      requestId: 'docs-plugin',
+      source: { adapter: 'codex', kind: 'directory' }
+    })
+    expect(plugin.manifest?.native?.apps?.[0]).toEqual({
+      authentication: {
+        authorizationUrl:
+          'https://example.test/oauth/authorize?client_id=docs&redirect_uri=%2Foauth%2Fcallback&redirect%255Furi=%2Fencoded&code_challenge=valid&login_hint=docs',
+        callbackPath: '/oauth/callback',
+        type: 'oauth2'
+      },
+      capabilities: ['read', 'WorkspaceConfigurationManagement', 'write'],
+      connectionRequirements: {
+        endpoint: 'https://api.example.test/connect',
+        required: true,
+        type: 'oauth'
+      },
+      id: 'docs',
+      permissions: ['repository:read']
+    })
+    expect(plugin.manifest?.native?.apps).toHaveLength(1)
+    expect(plugin.manifest?.native?.diagnostics?.[0]?.message).toBe(
+      'Native plugin metadata diagnostic was redacted.'
+    )
+    expect(plugin.options).toEqual({
+      cacheDir: 'path=[local path]',
+      encodedRoot: '[local path]',
+      fileRoot: '[local path]',
+      oauthCallback: '/oauth/callback',
+      serviceUrl: 'https://example.test/oauth/callback'
+    })
+    expect(plugin.client).not.toHaveProperty('devClientEntryKind')
+    expect(plugin.client).not.toHaveProperty('devClientEntryUrl')
+    expect(plugin.client).not.toHaveProperty('root')
+    expect(plugin.client).not.toHaveProperty('sourceRoot')
+    expect(plugin).not.toHaveProperty('pluginRoot')
+    expect(plugin).not.toHaveProperty('rootDir')
+    const publicDiagnostics = (plugin as {
+      diagnostics?: Array<Record<string, unknown>>
+    }).diagnostics
+    expect(publicDiagnostics?.every(diagnostic => !Object.hasOwn(diagnostic, 'pluginRoot'))).toBe(true)
+    expect(JSON.stringify(plugin)).not.toContain(pluginRoot)
+    expect(JSON.stringify(plugin)).not.toContain('must-not-leak')
+    expect(JSON.stringify(plugin)).not.toContain('must-not-flow-to-public')
+    expect(JSON.stringify(plugin)).not.toContain('AKIAIOSFODNN7EXAMPLE')
+    expect(JSON.stringify(plugin)).not.toContain('AIzaSyD-abcdefghijklmnopqrstuvwxyz1234')
+    expect(JSON.stringify(plugin)).not.toContain('abcdefghijklmnopqrstuvwx.yz0123456789abcdefghijklmnop')
+    expect(JSON.stringify(plugin)).not.toContain(workspaceFolder)
+    expect(JSON.stringify(payload)).not.toContain(workspaceFolder)
+  }, 5_000)
 
   function mockConfig(plugins: Array<{ enabled?: boolean; id: string; scope?: string }>) {
     mocks.loadConfigState.mockResolvedValue({
