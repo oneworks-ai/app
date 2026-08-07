@@ -12,21 +12,9 @@
 
 ### OW-DM-002 — 紧凑 chrome 尺寸语言
 
-- Revision: 1
-- Status: ACTIVE
-- Rule: Route header actions、panel tab chrome、内嵌网页 toolbar 和窗口控制条使用共享 chrome token；当前 header / toolbar block 与 inline padding 为 10px。
-- Scope: OneWorks project / compact chrome
-- Applies when: route header actions、panel tab chrome、内嵌网页 toolbar 或窗口控制条使用紧凑 chrome 语言。
-- Does not apply when: surface 有已登记的 scoped exception，或不属于紧凑 chrome。
-- Positive example: toolbar 直接消费共享 chrome padding 和 icon token，状态变化不改变几何。
-- Negative example: 单个 toolbar 在 media query 内硬编码 6px padding，造成同一产品 chrome 密度不一致。
-- Owning rule: [`styles.md`](./styles.md) 中的“紧凑 chrome 工具栏”。
-- Token or implementation: `packages/route-layout/src/design-tokens.css`
-- Source: 项目现有统一视觉标准。
-- Effective date: 2026-07-11
-- Supersedes: none
-- Exceptions: 在下方“作用域例外”登记。
-- Automatic enforcement: token consumer 检查、computed padding 和目标 surface 截图。
+- Revision / status / rule / scope: 1 / ACTIVE / Route header actions、panel tab chrome、内嵌网页 toolbar 和窗口控制条使用共享 chrome token；当前 header / toolbar block 与 inline padding 为 10px。 / OneWorks project / compact chrome
+- Applies / does not apply / examples: route header actions、panel tab chrome、内嵌网页 toolbar 或窗口控制条使用紧凑 chrome 语言时适用；surface 有已登记的 scoped exception，或不属于紧凑 chrome 时不适用。正例是 toolbar 直接消费共享 chrome padding 和 icon token，状态变化不改变几何；反例是单个 toolbar 在 media query 内硬编码 6px padding，造成同一产品 chrome 密度不一致。
+- Ownership / implementation / source / lifecycle / enforcement: Owning rule: [`styles.md`](./styles.md) 中的“紧凑 chrome 工具栏”；Token or implementation: `packages/route-layout/src/design-tokens.css`；Source: 项目现有统一视觉标准；Effective date: 2026-07-11；Supersedes: none；Exceptions: 在下方“作用域例外”登记；Automatic enforcement: token consumer 检查、computed padding 和目标 surface 截图。
 
 ### OW-DM-003 — 主会话时间线容器阈值与持续可见
 
