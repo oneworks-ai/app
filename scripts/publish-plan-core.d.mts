@@ -235,7 +235,7 @@ export declare function runPublishPlanCli(
 ): Promise<PublishPlanCliHelpResult>
 
 export declare function runPublishPlanCli(
-  argv?: string[],
+  argv: [string, ...string[]],
   runtime?: {
     repoRoot?: string
     stdout?: { write(value: string): void }
@@ -249,3 +249,19 @@ export declare function runPublishPlanCli(
     retryPrompt?: typeof promptRetry
   }
 ): Promise<PublishPlanCliPlanResult>
+
+export declare function runPublishPlanCli(
+  argv?: string[],
+  runtime?: {
+    repoRoot?: string
+    stdout?: { write(value: string): void }
+    fsOps?: {
+      readText(filePath: string): Promise<string>
+      readdir(dirPath: string): Promise<string[]>
+      stat(filePath: string): Promise<{ isDirectory(): boolean }>
+      writeText(filePath: string, content: string): Promise<void>
+    }
+    runCommand?: PublishPlanRunCommand
+    retryPrompt?: typeof promptRetry
+  }
+): Promise<PublishPlanCliResult>
