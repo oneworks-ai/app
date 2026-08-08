@@ -351,6 +351,7 @@ describe('chat model selector helpers', () => {
       'copilot',
       'kimi',
       'opencode',
+      'pi',
       'local-custom'
     ])
   })

@@ -1,5 +1,5 @@
 /* eslint-disable max-lines -- managed CLI resolver tests cover several source fallback combinations. */
-import { access, chmod, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
+import { access, chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -187,6 +187,61 @@ chmod +x "$tool"
       })
 
       expect(binaryPath.endsWith('/node_modules/.bin/tool')).toBe(true)
+    } finally {
+      await rm(workspace, { recursive: true, force: true })
+    }
+  })
+
+  it('can disable lifecycle scripts for managed CLI installs', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-managed-npm-cli-'))
+    const npmPath = join(workspace, 'npm')
+    const recordPath = join(workspace, 'install-args.txt')
+    await writeFile(
+      npmPath,
+      `#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo "10.0.0"
+  exit 0
+fi
+
+printf '%s\\n' "$@" > "$ONEWORKS_MANAGED_TEST_RECORD"
+prefix=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--prefix" ]; then
+    shift
+    prefix="$1"
+  fi
+  shift
+done
+
+mkdir -p "$prefix/node_modules/.bin"
+tool="$prefix/node_modules/.bin/tool"
+{
+  printf '%s\\n' '#!/bin/sh'
+  printf '%s\\n' 'echo "tool 1.0.0"'
+} > "$tool"
+chmod +x "$tool"
+`
+    )
+    await chmod(npmPath, 0o755)
+
+    try {
+      await ensureManagedNpmCli({
+        adapterKey: 'script_safe_tool',
+        binaryName: 'tool',
+        cwd: workspace,
+        defaultPackageName: '@example/tool',
+        defaultVersion: '1.0.0',
+        env: {
+          HOME: workspace,
+          ONEWORKS_MANAGED_TEST_RECORD: recordPath,
+          __ONEWORKS_PROJECT_ADAPTER_SCRIPT_SAFE_TOOL_NPM_PATH__: npmPath
+        },
+        ignoreInstallScripts: true,
+        logger: { info: () => undefined }
+      })
+
+      expect((await readFile(recordPath, 'utf8')).trim().split('\n')).toContain('--ignore-scripts')
     } finally {
       await rm(workspace, { recursive: true, force: true })
     }

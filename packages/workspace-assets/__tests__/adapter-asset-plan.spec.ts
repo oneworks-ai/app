@@ -579,4 +579,49 @@ describe('buildAdapterAssetPlan', () => {
       })
     ]))
   })
+
+  it('projects selected skills into Pi while explicitly skipping MCP and OpenCode assets', async () => {
+    const workspace = await createWorkspace()
+
+    await installPluginPackage(workspace, '@oneworks/plugin-demo', {
+      'package.json': JSON.stringify({ name: '@oneworks/plugin-demo', version: '1.0.0' }, null, 2),
+      'opencode/commands/review.md': '# review\n'
+    })
+    await writeDocument(
+      join(workspace, '.oo/skills/research/SKILL.md'),
+      '---\ndescription: Research evidence\n---\nRead primary sources.'
+    )
+
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      configs: [{
+        plugins: [{ id: 'demo', scope: 'demo' }],
+        mcpServers: { docs: { command: 'npx', args: ['docs-server'] } }
+      }, undefined],
+      useDefaultOneworksMcpServer: false
+    })
+    const researchSkillId = bundle.skills.find(asset => asset.name === 'research')?.id
+    const docsMcpId = bundle.mcpServers.docs?.id
+    const commandId = bundle.opencodeOverlayAssets.find(asset => asset.kind === 'command')?.id
+
+    const plan = await buildAdapterAssetPlan({
+      adapter: 'pi',
+      bundle,
+      options: { skills: { include: ['research'] } }
+    })
+
+    expect(plan.mcpServers).toEqual({})
+    expect(plan.overlays).toEqual([
+      expect.objectContaining({
+        assetId: researchSkillId,
+        kind: 'skill',
+        targetPath: 'skills/research'
+      })
+    ])
+    expect(plan.diagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({ adapter: 'pi', assetId: researchSkillId, status: 'native' }),
+      expect.objectContaining({ adapter: 'pi', assetId: docsMcpId, status: 'skipped' }),
+      expect.objectContaining({ adapter: 'pi', assetId: commandId, status: 'skipped' })
+    ]))
+  })
 })

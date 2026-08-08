@@ -63,7 +63,7 @@ worktree 场景下，旧项目共享 CLI cache 会通过 [`packages/utils/src/pr
 
 - `ow adapter prepare` 只准备配置里 `prepareOnInstall: true` 的 CLI
 - `ow adapter prepare --all` 准备所有已安装 adapter 暴露的 CLI target
-- `ow adapter prepare codex claude-code copilot gemini kimi opencode` 按 adapter 名显式准备；`claude-code.routerCli` / `ccr` 可单独准备 Claude Code Router
+- `ow adapter prepare codex claude-code copilot gemini kimi opencode pi` 按 adapter 名显式准备；`claude-code.routerCli` / `ccr` 可单独准备 Claude Code Router
 - `@oneworks/cli` 的 `postinstall` 只在项目根 `.oo.config.json` 或 `infra/.oo.config.json` 里发现 `adapters.<name>.cli.prepareOnInstall: true` / `routerCli.prepareOnInstall: true` 时触发同一套 prepare 逻辑
 - postinstall 默认不在 `CI=true` 时执行；可以用 `ONEWORKS_POSTINSTALL_PREPARE=1` 显式允许，或用 `ONEWORKS_SKIP_ADAPTER_PREPARE=1` / `ONEWORKS_SKIP_POSTINSTALL=1` 跳过
 - postinstall 失败默认只告警，不阻断依赖安装；需要严格失败时设置 `ONEWORKS_POSTINSTALL_STRICT=1`

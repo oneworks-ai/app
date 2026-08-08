@@ -47,6 +47,12 @@ const TOOL_CASES: Record<AdapterE2ETarget, {
     output: 'E2E_OPENCODE',
     toolName: 'read',
     title: 'OpenCode hook smoke'
+  },
+  pi: {
+    prompt: 'Use the read tool exactly once on README.md, then reply with exactly E2E_PI and nothing else.',
+    output: 'E2E_PI',
+    toolName: 'read',
+    title: 'Pi hook smoke'
   }
 }
 
@@ -69,6 +75,11 @@ const NO_TOOL_CASES: Record<AdapterE2ETarget, {
     prompt: 'Do not use any tool. Reply with exactly E2E_OPENCODE_DIRECT and nothing else.',
     output: 'E2E_OPENCODE_DIRECT',
     title: 'OpenCode direct answer smoke'
+  },
+  pi: {
+    prompt: 'Do not use any tool. Reply with exactly E2E_PI_DIRECT and nothing else.',
+    output: 'E2E_PI_DIRECT',
+    title: 'Pi direct answer smoke'
   }
 }
 
@@ -444,9 +455,11 @@ export const ADAPTER_E2E_CASES: AdapterE2ECase[] = [
   codexTranscriptFileChangeCase(),
   toolCase('claude-code', 'claude-read-once'),
   toolCase('opencode', 'opencode-read-once'),
+  toolCase('pi', 'pi-read-once'),
   directAnswerCase('codex', 'codex-direct-answer'),
   directAnswerCase('claude-code', 'claude-direct-answer'),
-  directAnswerCase('opencode', 'opencode-direct-answer')
+  directAnswerCase('opencode', 'opencode-direct-answer'),
+  directAnswerCase('pi', 'pi-direct-answer')
 ]
 
 const buildAdapterArgs = (
@@ -492,14 +505,31 @@ const buildAdapterArgs = (
     ]
   }
 
+  if (adapter === 'opencode') {
+    return [
+      cliPath,
+      '--adapter',
+      'opencode',
+      '--model',
+      model,
+      '--print',
+      '--no-inject-default-system-prompt',
+      '--session-id',
+      sessionId,
+      ...appendPromptArgs(prompt, extraArgs)
+    ]
+  }
+
   return [
     cliPath,
     '--adapter',
-    'opencode',
+    'pi',
     '--model',
     model,
     '--print',
     '--no-inject-default-system-prompt',
+    '--permission-mode',
+    'bypassPermissions',
     '--session-id',
     sessionId,
     ...appendPromptArgs(prompt, extraArgs)

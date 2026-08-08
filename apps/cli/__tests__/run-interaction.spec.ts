@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { PassThrough } from 'node:stream'
 
@@ -25,7 +25,7 @@ import {
   extractPermissionErrorContext,
   rememberPermissionToolUses
 } from '#~/commands/run/permission-recovery.js'
-import { applyCliPermissionDecision } from '#~/commands/run/permission-state.js'
+import { applyCliPermissionDecision, readCliSessionPermissionState } from '#~/commands/run/permission-state.js'
 
 describe('run command interaction handling', () => {
   it('formats permission interaction prompts for text output', () => {
@@ -207,19 +207,19 @@ describe('run command interaction handling', () => {
     expect(isTerminalPermissionDecision('allow_once')).toBe(false)
   })
 
-  it('writes onceAllow decisions into the claude permission mirror', async () => {
+  it.each(['claude-code', 'pi'])('writes onceAllow decisions into the %s permission mirror', async (adapter) => {
     const workspace = await mkdtemp(join(tmpdir(), 'ow-cli-permission-'))
 
     await applyCliPermissionDecision({
       cwd: workspace,
       sessionId: 'session-1',
-      adapter: 'claude-code',
-      subjectKeys: ['adapter:claude-code:Write'],
+      adapter,
+      subjectKeys: [`adapter:${adapter}:Write`],
       action: 'allow_once'
     })
 
     const persisted = JSON.parse(
-      await readFile(resolvePermissionMirrorPath(workspace, 'claude-code', 'session-1'), 'utf8')
+      await readFile(resolvePermissionMirrorPath(workspace, adapter, 'session-1'), 'utf8')
     ) as {
       permissionState?: { onceAllow?: string[] }
     }
@@ -227,69 +227,145 @@ describe('run command interaction handling', () => {
     expect(persisted.permissionState?.onceAllow ?? []).toEqual(['Write'])
   })
 
-  it('writes project permission decisions without copying global permissions', async () => {
-    const workspace = await mkdtemp(join(tmpdir(), 'ow-cli-permission-'))
-    const home = await mkdtemp(join(tmpdir(), 'ow-cli-permission-home-'))
-    const previousRealHome = process.env.__ONEWORKS_PROJECT_REAL_HOME__
-
-    try {
-      process.env.__ONEWORKS_PROJECT_REAL_HOME__ = home
-      resetConfigCache()
-      await mkdir(join(home, '.oo'), { recursive: true })
-      await writeFile(
-        join(home, '.oo', 'config.json'),
-        JSON.stringify({
-          permissions: {
-            allow: ['GlobalOnly']
-          }
-        })
-      )
-      await writeFile(
-        join(workspace, '.oo.config.json'),
-        JSON.stringify({
-          permissions: {
-            allow: ['ProjectOnly'],
-            deny: ['Write'],
-            ask: ['Edit']
-          }
-        })
-      )
-
-      await applyCliPermissionDecision({
-        cwd: workspace,
+  it.each([
+    [
+      'another adapter',
+      JSON.stringify({
+        adapter: 'codex',
         sessionId: 'session-1',
-        adapter: 'claude-code',
-        subjectKeys: ['Write'],
-        action: 'allow_project'
+        permissionState: { allow: [], deny: ['Write'], onceAllow: [], onceDeny: [] }
       })
+    ],
+    [
+      'another session',
+      JSON.stringify({
+        adapter: 'pi',
+        sessionId: 'other-session',
+        permissionState: { allow: [], deny: ['Write'], onceAllow: [], onceDeny: [] }
+      })
+    ],
+    ['corrupt JSON', '{not-json']
+  ])('fails closed for a Pi permission mirror from %s', async (_label, content) => {
+    const readMirror = vi.fn().mockResolvedValue(content)
 
-      const projectConfig = JSON.parse(await readFile(join(workspace, '.oo.config.json'), 'utf8')) as {
-        permissions?: {
-          allow?: string[]
-          ask?: string[]
-          deny?: string[]
-        }
-      }
-      expect(projectConfig.permissions).toEqual({
-        allow: ['ProjectOnly', 'Write'],
-        deny: [],
-        ask: ['Edit']
-      })
-      const globalConfig = JSON.parse(await readFile(join(home, '.oo', 'config.json'), 'utf8')) as {
-        permissions?: {
-          allow?: string[]
-        }
-      }
-      expect(globalConfig.permissions?.allow).toEqual(['GlobalOnly'])
-    } finally {
-      if (previousRealHome == null) {
-        delete process.env.__ONEWORKS_PROJECT_REAL_HOME__
-      } else {
-        process.env.__ONEWORKS_PROJECT_REAL_HOME__ = previousRealHome
-      }
-      resetConfigCache()
-      await rm(workspace, { recursive: true, force: true })
-      await rm(home, { recursive: true, force: true })
-    }
+    await expect(readCliSessionPermissionState('/workspace', 'pi', 'session-1', readMirror)).rejects.toThrow()
+    await expect(applyCliPermissionDecision({
+      cwd: '/workspace',
+      sessionId: 'session-1',
+      adapter: 'pi',
+      subjectKeys: ['Write'],
+      action: 'allow_once',
+      readMirror
+    })).rejects.toThrow()
   })
+
+  it('fails closed when a Pi permission mirror read is denied', async () => {
+    const error = Object.assign(new Error('permission denied'), { code: 'EACCES' })
+    const readMirror = vi.fn().mockRejectedValue(error)
+
+    await expect(readCliSessionPermissionState('/workspace', 'pi', 'session-1', readMirror)).rejects.toThrow(
+      'permission denied'
+    )
+    await expect(applyCliPermissionDecision({
+      cwd: '/workspace',
+      sessionId: 'session-1',
+      adapter: 'pi',
+      subjectKeys: ['Write'],
+      action: 'allow_once',
+      readMirror
+    })).rejects.toThrow('permission denied')
+  })
+
+  it.each(['allow_project', 'deny_project'] as const)(
+    'does not mutate project config before rejecting a corrupt Pi mirror for %s',
+    async (action) => {
+      const workspace = await mkdtemp(join(tmpdir(), 'ow-cli-permission-corrupt-'))
+      const mirrorPath = resolvePermissionMirrorPath(workspace, 'pi', 'session-1')
+      try {
+        await mkdir(dirname(mirrorPath), { recursive: true })
+        await writeFile(mirrorPath, '{not-json')
+
+        await expect(applyCliPermissionDecision({
+          cwd: workspace,
+          sessionId: 'session-1',
+          adapter: 'pi',
+          subjectKeys: ['Write'],
+          action
+        })).rejects.toThrow()
+        await expect(readFile(join(workspace, '.oo.config.json'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+        await expect(readFile(mirrorPath, 'utf8')).resolves.toBe('{not-json')
+      } finally {
+        await rm(workspace, { recursive: true, force: true })
+      }
+    }
+  )
+
+  it.each(['claude-code', 'pi'])(
+    'writes %s project permission decisions without copying global permissions',
+    async (adapter) => {
+      const workspace = await mkdtemp(join(tmpdir(), 'ow-cli-permission-'))
+      const home = await mkdtemp(join(tmpdir(), 'ow-cli-permission-home-'))
+      const previousRealHome = process.env.__ONEWORKS_PROJECT_REAL_HOME__
+
+      try {
+        process.env.__ONEWORKS_PROJECT_REAL_HOME__ = home
+        resetConfigCache()
+        await mkdir(join(home, '.oo'), { recursive: true })
+        await writeFile(
+          join(home, '.oo', 'config.json'),
+          JSON.stringify({
+            permissions: {
+              allow: ['GlobalOnly']
+            }
+          })
+        )
+        await writeFile(
+          join(workspace, '.oo.config.json'),
+          JSON.stringify({
+            permissions: {
+              allow: ['ProjectOnly'],
+              deny: ['Write'],
+              ask: ['Edit']
+            }
+          })
+        )
+
+        await applyCliPermissionDecision({
+          cwd: workspace,
+          sessionId: 'session-1',
+          adapter,
+          subjectKeys: ['Write'],
+          action: 'allow_project'
+        })
+
+        const projectConfig = JSON.parse(await readFile(join(workspace, '.oo.config.json'), 'utf8')) as {
+          permissions?: {
+            allow?: string[]
+            ask?: string[]
+            deny?: string[]
+          }
+        }
+        expect(projectConfig.permissions).toEqual({
+          allow: ['ProjectOnly', 'Write'],
+          deny: [],
+          ask: ['Edit']
+        })
+        const globalConfig = JSON.parse(await readFile(join(home, '.oo', 'config.json'), 'utf8')) as {
+          permissions?: {
+            allow?: string[]
+          }
+        }
+        expect(globalConfig.permissions?.allow).toEqual(['GlobalOnly'])
+      } finally {
+        if (previousRealHome == null) {
+          delete process.env.__ONEWORKS_PROJECT_REAL_HOME__
+        } else {
+          process.env.__ONEWORKS_PROJECT_REAL_HOME__ = previousRealHome
+        }
+        resetConfigCache()
+        await rm(workspace, { recursive: true, force: true })
+        await rm(home, { recursive: true, force: true })
+      }
+    }
+  )
 })

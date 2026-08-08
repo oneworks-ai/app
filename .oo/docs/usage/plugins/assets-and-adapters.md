@@ -85,11 +85,12 @@ MCP 资产还可以显式使用 `${ONEWORKS_REAL_HOME}`。它只适用于必须�
 
 ## Adapter 兼容范围
 
-三种 adapter 都支持统一插件资产层：
+以下 adapter 消费统一插件资产层，但原生映射能力不同：
 
 - `claude-code`: 支持 prompt 资产、MCP、hooks
 - `codex`: 支持 prompt 资产、MCP、hooks
 - `opencode`: 支持 prompt 资产、MCP、hooks
+- `pi`: 支持 prompt、skills 和标准化 hooks；当前没有稳定的原生 MCP 映射，MCP 与 OpenCode 专属 overlay 会明确报告为跳过
 
 只有 `opencode` 额外支持 native plugin overlay：
 

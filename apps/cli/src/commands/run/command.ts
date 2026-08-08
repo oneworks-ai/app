@@ -732,6 +732,29 @@ Notes:
             throw new TypeError('The current session does not support submit_input events.')
           }
 
+          const interaction = pendingInteraction?.id === interactionId ? pendingInteraction : undefined
+          const permissionContext = interaction?.payload.permissionContext
+          const decision = interaction?.payload.kind === 'permission'
+            ? resolvePermissionInteractionDecision(params.data)
+            : undefined
+          const subjectKey = permissionContext?.subjectKey?.trim()
+          if (
+            decision != null &&
+            decision !== PERMISSION_DECISION_CANCEL &&
+            decision !== 'allow_once' &&
+            decision !== 'deny_once' &&
+            subjectKey != null &&
+            subjectKey !== ''
+          ) {
+            await applyCliPermissionDecision({
+              cwd: resolvedTaskCwd,
+              sessionId,
+              adapter: permissionContext?.adapter ?? record.resume.resolvedAdapter ?? record.resume.taskOptions.adapter,
+              subjectKeys: [subjectKey],
+              action: decision
+            })
+          }
+
           await respondInteraction(interactionId, params.data)
 
           if (pendingInteraction?.id === interactionId) {

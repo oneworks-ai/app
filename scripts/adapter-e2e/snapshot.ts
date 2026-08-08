@@ -160,7 +160,7 @@ const inferToolNameFromHeader = (
     return normalized.slice(adapter.length + 1).trim() || undefined
   }
 
-  const knownAdapterPrefix = ['codex', 'claude-code', 'opencode']
+  const knownAdapterPrefix = ['codex', 'claude-code', 'opencode', 'pi']
     .find(prefix => normalized.startsWith(`${prefix} `))
   if (knownAdapterPrefix != null) {
     return normalized.slice(knownAdapterPrefix.length + 1).trim() || undefined
@@ -169,8 +169,36 @@ const inferToolNameFromHeader = (
   return normalized
 }
 
+const terminalHookOrder = new Map([
+  ['TaskStop', 0],
+  ['Stop', 1],
+  ['SessionEnd', 2]
+])
+
+const stabilizeTerminalHookOrder = <T extends { event?: unknown }>(entries: T[]) => {
+  const stabilized: T[] = []
+  let index = 0
+  while (index < entries.length) {
+    if (!terminalHookOrder.has(String(entries[index]?.event))) {
+      stabilized.push(entries[index] as T)
+      index += 1
+      continue
+    }
+
+    let end = index + 1
+    while (end < entries.length && terminalHookOrder.has(String(entries[end]?.event))) end += 1
+    stabilized.push(
+      ...entries.slice(index, end).sort((left, right) => (
+        (terminalHookOrder.get(String(left.event)) ?? 0) - (terminalHookOrder.get(String(right.event)) ?? 0)
+      ))
+    )
+    index = end
+  }
+  return stabilized
+}
+
 const summarizeLog = (content: string) => {
-  return parseHookLogEntries(content).map((entry) => {
+  const entries = parseHookLogEntries(content).map((entry) => {
     const adapter = pickNestedString(entry.payload, [['adapter']])
     const toolName = pickNestedString(entry.payload, [
       ['toolName'],
@@ -212,6 +240,7 @@ const summarizeLog = (content: string) => {
       ])
     })
   })
+  return stabilizeTerminalHookOrder(entries)
 }
 
 const summarizeStdout = (stdout: string) => {

@@ -5,7 +5,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getDb } from '#~/db/index.js'
 import { resolveSessionRuntimeStoreRoot } from '#~/services/runtime-store/session-control.js'
 import { buildChatMarkdownSystemPrompt } from '#~/services/session/chat-markdown-prompt.js'
-import { processUserMessage, resetSessionServiceState, startAdapterSession } from '#~/services/session/index.js'
+import {
+  killSession,
+  processUserMessage,
+  resetSessionServiceState,
+  startAdapterSession
+} from '#~/services/session/index.js'
 import {
   adapterSessionStore,
   createSessionConnectionState,
@@ -23,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   requestInteraction: vi.fn(),
   canRequestInteraction: vi.fn(),
   waitForInteractionDeliveryPath: vi.fn(),
+  resolvePendingInteractionAsCancelled: vi.fn(),
   resolveSessionWorkspace: vi.fn(),
   resolveSessionWorkspaceFolder: vi.fn(),
   provisionSessionWorkspace: vi.fn(),
@@ -34,7 +40,8 @@ const mocks = vi.hoisted(() => ({
   chmod: vi.fn(),
   mkdir: vi.fn(),
   readFile: vi.fn(),
-  writeFile: vi.fn()
+  writeFile: vi.fn(),
+  writePrivatePermissionMirror: vi.fn()
 }))
 
 vi.mock('#~/db/index.js', () => ({
@@ -64,10 +71,19 @@ vi.mock('@oneworks/config', async () => {
   }
 })
 
+vi.mock('@oneworks/utils', async () => {
+  const actual = await vi.importActual<typeof import('@oneworks/utils')>('@oneworks/utils')
+  return {
+    ...actual,
+    writePrivatePermissionMirror: mocks.writePrivatePermissionMirror
+  }
+})
+
 vi.mock('#~/services/session/interaction.js', () => ({
   requestInteraction: mocks.requestInteraction,
   canRequestInteraction: mocks.canRequestInteraction,
-  waitForInteractionDeliveryPath: mocks.waitForInteractionDeliveryPath
+  waitForInteractionDeliveryPath: mocks.waitForInteractionDeliveryPath,
+  resolvePendingInteractionAsCancelled: mocks.resolvePendingInteractionAsCancelled
 }))
 
 vi.mock('#~/services/session/workspace.js', () => ({
@@ -193,6 +209,7 @@ describe('startAdapterSession', () => {
     mocks.requestInteraction.mockReset()
     mocks.canRequestInteraction.mockReturnValue(false)
     mocks.waitForInteractionDeliveryPath.mockResolvedValue(false)
+    mocks.resolvePendingInteractionAsCancelled.mockReturnValue(false)
     mocks.resolveSessionWorkspace.mockResolvedValue({
       workspaceFolder: process.cwd()
     })
@@ -206,6 +223,7 @@ describe('startAdapterSession', () => {
     mocks.mkdir.mockResolvedValue(undefined)
     mocks.readFile.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }))
     mocks.writeFile.mockResolvedValue(undefined)
+    mocks.writePrivatePermissionMirror.mockResolvedValue(undefined)
   })
 
   it('reuses the cached runtime when adapter config is unchanged', async () => {
@@ -282,7 +300,7 @@ describe('startAdapterSession', () => {
   it('does not fail adapter startup when permission mirror sync fails', async () => {
     const emit = vi.fn()
     const kill = vi.fn()
-    mocks.writeFile.mockRejectedValueOnce(new Error('readonly filesystem'))
+    mocks.writePrivatePermissionMirror.mockRejectedValueOnce(new Error('readonly filesystem'))
     mocks.run.mockResolvedValueOnce({
       session: {
         emit,
@@ -1413,6 +1431,166 @@ describe('startAdapterSession', () => {
         })
       })
     )
+  })
+
+  it('does not persist a live Pi allow_once response for the next tool call', async () => {
+    const respondInteraction = vi.fn()
+    let onEvent: ((event: any) => void) | undefined
+
+    mocks.canRequestInteraction.mockReturnValue(true)
+    mocks.requestInteraction.mockResolvedValueOnce('allow_once')
+    mocks.run.mockImplementationOnce(async (_options: unknown, adapterOptions: any) => {
+      onEvent = adapterOptions.onEvent
+      return {
+        session: {
+          emit: vi.fn(),
+          kill: vi.fn(),
+          respondInteraction
+        }
+      }
+    })
+
+    await startAdapterSession('sess-1', {
+      model: 'default',
+      adapter: 'pi',
+      permissionMode: 'default'
+    })
+    updateSessionRuntimeState.mockClear()
+
+    onEvent?.({
+      type: 'interaction_request',
+      data: {
+        id: 'pi-approval-1',
+        payload: {
+          sessionId: 'sess-1',
+          kind: 'permission',
+          question: '允许 Pi 写入文件？',
+          options: [{ label: '同意本次', value: 'allow_once' }],
+          permissionContext: {
+            adapter: 'pi',
+            deniedTools: ['Write'],
+            subjectKey: 'Write',
+            subjectLabel: 'Write',
+            scope: 'tool',
+            projectConfigPath: '.oo.config.json'
+          }
+        }
+      }
+    })
+
+    await vi.waitFor(() => {
+      expect(respondInteraction).toHaveBeenCalledWith('pi-approval-1', 'allow_once')
+    })
+    expect(updateSessionRuntimeState).not.toHaveBeenCalledWith(
+      'sess-1',
+      expect.objectContaining({
+        permissionState: expect.objectContaining({ onceAllow: ['Write'] })
+      })
+    )
+  })
+
+  it('forwards a generic Pi extension interaction answer without treating it as a permission', async () => {
+    const respondInteraction = vi.fn()
+    let onEvent: ((event: any) => void) | undefined
+
+    mocks.canRequestInteraction.mockReturnValue(true)
+    mocks.requestInteraction.mockResolvedValueOnce('blue')
+    mocks.run.mockImplementationOnce(async (_options: unknown, adapterOptions: any) => {
+      onEvent = adapterOptions.onEvent
+      return {
+        session: {
+          emit: vi.fn(),
+          kill: vi.fn(),
+          respondInteraction
+        }
+      }
+    })
+
+    await startAdapterSession('sess-1', {
+      model: 'default',
+      adapter: 'pi',
+      permissionMode: 'default'
+    })
+    onEvent?.({
+      type: 'interaction_request',
+      data: {
+        id: 'pi-question-1',
+        payload: {
+          sessionId: 'sess-1',
+          question: 'Choose a color',
+          options: [{ label: 'Blue', value: 'blue' }]
+        }
+      }
+    })
+
+    await vi.waitFor(() => {
+      expect(respondInteraction).toHaveBeenCalledWith('pi-question-1', 'blue')
+    })
+    expect(updateSession).not.toHaveBeenCalledWith('sess-1', expect.objectContaining({ status: 'failed' }))
+  })
+
+  it('cleans up after adapter exit during a generic interaction and drops a late answer', async () => {
+    const respondInteraction = vi.fn()
+    let onEvent: ((event: any) => void) | undefined
+    let resolveAnswer: (answer: string) => void = () => undefined
+    mocks.canRequestInteraction.mockReturnValue(true)
+    mocks.requestInteraction.mockImplementationOnce(() =>
+      new Promise<string>(resolve => {
+        resolveAnswer = resolve
+      })
+    )
+    mocks.run.mockImplementationOnce(async (_options: unknown, adapterOptions: any) => {
+      onEvent = adapterOptions.onEvent
+      return { session: { emit: vi.fn(), kill: vi.fn(), respondInteraction } }
+    })
+
+    await startAdapterSession('sess-1', { model: 'default', adapter: 'pi', permissionMode: 'default' })
+    onEvent?.({
+      type: 'interaction_request',
+      data: { id: 'pi-question-exit', payload: { sessionId: 'sess-1', question: 'Name?' } }
+    })
+    await vi.waitFor(() => expect(mocks.requestInteraction).toHaveBeenCalledOnce())
+
+    onEvent?.({ type: 'exit', data: { exitCode: 1, stderr: 'Pi exited' } })
+    expect(adapterSessionStore.has('sess-1')).toBe(false)
+    expect(currentSession.status).toBe('failed')
+
+    resolveAnswer('Ada')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(respondInteraction).not.toHaveBeenCalled()
+  })
+
+  it('terminates a runtime during a generic interaction and drops a late answer', async () => {
+    const respondInteraction = vi.fn()
+    const kill = vi.fn()
+    let onEvent: ((event: any) => void) | undefined
+    let resolveAnswer: (answer: string) => void = () => undefined
+    mocks.canRequestInteraction.mockReturnValue(true)
+    mocks.requestInteraction.mockImplementationOnce(() =>
+      new Promise<string>(resolve => {
+        resolveAnswer = resolve
+      })
+    )
+    mocks.run.mockImplementationOnce(async (_options: unknown, adapterOptions: any) => {
+      onEvent = adapterOptions.onEvent
+      return { session: { emit: vi.fn(), kill, respondInteraction } }
+    })
+
+    await startAdapterSession('sess-1', { model: 'default', adapter: 'pi', permissionMode: 'default' })
+    onEvent?.({
+      type: 'interaction_request',
+      data: { id: 'pi-question-stop', payload: { sessionId: 'sess-1', question: 'Name?' } }
+    })
+    await vi.waitFor(() => expect(mocks.requestInteraction).toHaveBeenCalledOnce())
+
+    killSession('sess-1')
+    expect(kill).toHaveBeenCalledOnce()
+    expect(adapterSessionStore.has('sess-1')).toBe(false)
+    expect(currentSession.status).toBe('terminated')
+
+    resolveAnswer('Ada')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(respondInteraction).not.toHaveBeenCalled()
   })
 
   it('auto-responds to codex native approvals when the session already remembers the tool', async () => {

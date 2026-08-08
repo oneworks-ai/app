@@ -136,6 +136,7 @@ dependencies:
 - Codex：`<project-home>/.mock/.agents/skills` 和 `<project-home>/.mock/.codex/skills`
 - Gemini：`<project-home>/.mock/.agents/skills`
 - OpenCode：session 级 `OPENCODE_CONFIG_DIR/skills`
+- Pi：关闭自动发现后，把已选 skill 的绝对目录作为显式 `--skill` 参数传入
 
 ## 常见问题
 

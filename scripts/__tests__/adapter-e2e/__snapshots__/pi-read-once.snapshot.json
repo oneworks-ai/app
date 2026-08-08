@@ -1,0 +1,125 @@
+{
+  "caseId": "pi-read-once",
+  "adapter": "pi",
+  "transport": "wrapper",
+  "exitCode": 0,
+  "stdout": "E2E_PI",
+  "stderr": "",
+  "mockTrace": [
+    {
+      "path": "/responses",
+      "model": "pi-read-once",
+      "request": "Use the read tool exactly once on README.md, then reply with exactly E2E_PI and nothing else.",
+      "inputTypes": [
+        "system",
+        "user"
+      ],
+      "selectedTool": {
+        "name": "read",
+        "args": {
+          "filePath": "<repo>/README.md",
+          "limit": 2000,
+          "offset": 1,
+          "path": "<repo>/README.md"
+        }
+      },
+      "response": {
+        "kind": "tool",
+        "tool": {
+          "name": "read",
+          "args": {
+            "filePath": "<repo>/README.md",
+            "limit": 2000,
+            "offset": 1,
+            "path": "<repo>/README.md"
+          }
+        }
+      }
+    },
+    {
+      "path": "/responses",
+      "model": "pi-read-once",
+      "request": "Use the read tool exactly once on README.md, then reply with exactly E2E_PI and nothing else.",
+      "inputTypes": [
+        "system",
+        "user",
+        "function_call",
+        "function_call_output"
+      ],
+      "selectedTool": {
+        "name": "read",
+        "args": {
+          "filePath": "<repo>/README.md",
+          "limit": 2000,
+          "offset": 1,
+          "path": "<repo>/README.md"
+        }
+      },
+      "response": {
+        "kind": "message",
+        "text": "E2E_PI"
+      }
+    }
+  ],
+  "log": {
+    "path": "<project-home>/logs/<ctxId>/<uuid>.log.md",
+    "entries": [
+      {
+        "event": "GenerateSystemPrompt"
+      },
+      {
+        "event": "TaskStart",
+        "adapter": "pi"
+      },
+      {
+        "event": "SessionStart",
+        "adapter": "pi",
+        "hookSource": "bridge",
+        "canBlock": true
+      },
+      {
+        "event": "UserPromptSubmit",
+        "adapter": "pi",
+        "hookSource": "bridge",
+        "canBlock": true,
+        "prompt": "Use the read tool exactly once on README.md, then reply with exactly E2E_PI and nothing else."
+      },
+      {
+        "event": "PreToolUse",
+        "header": "pi read",
+        "toolName": "read"
+      },
+      {
+        "event": "PostToolUse",
+        "adapter": "pi",
+        "hookSource": "bridge",
+        "header": "read",
+        "toolName": "read"
+      },
+      {
+        "event": "TaskStop",
+        "adapter": "pi",
+        "redacted": true
+      },
+      {
+        "event": "Stop",
+        "adapter": "pi",
+        "hookSource": "bridge",
+        "canBlock": false
+      },
+      {
+        "event": "SessionEnd",
+        "adapter": "pi",
+        "hookSource": "bridge",
+        "canBlock": false
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "label": "pi generated model config",
+      "path": "<project-home>/caches/<ctxId>/<uuid>/adapter-pi/agent/models.json",
+      "content": "{\n  \"providers\": {\n    \"oneworks-hook-smoke-mock-5de841d2\": {\n      \"baseUrl\": \"http://127.0.0.1:<port>\",\n      \"api\": \"openai-responses\",\n      \"apiKey\": \"$ONEWORKS_PI_ONEWORKS_HOOK_SMOKE_MOCK_5DE841D2_API_KEY\",\n      \"authHeader\": false,\n      \"models\": [\n        {\n          \"id\": \"pi-read-once\",\n          \"name\": \"pi-read-once\",\n          \"reasoning\": false,\n          \"input\": [\n            \"text\"\n          ],\n          \"contextWindow\": 128000,\n          \"maxTokens\": 16384\n        }\n      ]\n    }\n  }\n}"
+    }
+  ]
+}

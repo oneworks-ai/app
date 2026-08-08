@@ -9,7 +9,7 @@ export const getSenderRuntimeState = (
   const isBusy = isThinking || props.submitLoading === true
   const supportsEffort = props.forceEffortControl === true ||
     props.selectedAdapter === 'codex' || props.selectedAdapter === 'claude-code' ||
-    props.selectedAdapter === 'copilot' || props.selectedAdapter === 'opencode'
+    props.selectedAdapter === 'copilot' || props.selectedAdapter === 'opencode' || props.selectedAdapter === 'pi'
 
   return { isInlineEdit, isMac, isThinking, isBusy, supportsEffort }
 }

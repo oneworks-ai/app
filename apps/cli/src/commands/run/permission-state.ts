@@ -1,5 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
+import { readFile } from 'node:fs/promises'
 import process from 'node:process'
 
 import { buildConfigJsonVariables, buildConfigSections, loadConfigState, updateConfigFile } from '@oneworks/config'
@@ -9,7 +8,10 @@ import {
   migrateProjectHomeSegment,
   normalizePermissionToolName,
   normalizeSessionPermissionState,
-  resolvePermissionMirrorPath
+  parseStrictPermissionMirror,
+  resolvePermissionMirrorPath,
+  withPrivatePermissionMirrorLock,
+  writePrivatePermissionMirror
 } from '@oneworks/utils'
 import type { SessionPermissionState } from '@oneworks/utils'
 
@@ -73,15 +75,24 @@ const loadTaskConfigState = async (cwd: string) =>
     jsonVariables: buildConfigJsonVariables(cwd, process.env)
   })
 
-const readSessionPermissionState = async (cwd: string, adapter: string | undefined, sessionId: string) => {
-  if (adapter !== 'claude-code' && adapter !== 'opencode') return createEmptySessionPermissionState()
+export const readCliSessionPermissionState = async (
+  cwd: string,
+  adapter: string | undefined,
+  sessionId: string,
+  readMirror: typeof readFile = readFile
+) => {
+  if (adapter !== 'claude-code' && adapter !== 'opencode' && adapter !== 'pi') {
+    return createEmptySessionPermissionState()
+  }
   await migrateProjectHomeSegment(cwd, process.env, '.mock').catch(() => undefined)
 
   try {
-    const raw = await readFile(resolvePermissionMirrorPath(cwd, adapter, sessionId), 'utf8')
+    const raw = await readMirror(resolvePermissionMirrorPath(cwd, adapter, sessionId), 'utf8')
+    if (adapter === 'pi') return parseStrictPermissionMirror(raw, { adapter, sessionId })
     const parsed = JSON.parse(raw) as { permissionState?: SessionPermissionState }
     return normalizeSessionPermissionState(parsed.permissionState)
-  } catch {
+  } catch (error) {
+    if (adapter === 'pi' && (error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
     return createEmptySessionPermissionState()
   }
 }
@@ -123,14 +134,19 @@ const syncPermissionStateMirror = async (params: {
   adapter?: string
   sessionId: string
   permissionState: SessionPermissionState
-}) => {
-  if (params.adapter !== 'claude-code' && params.adapter !== 'opencode') return
+}, withinMirrorLock = false): Promise<void> => {
+  if (params.adapter !== 'claude-code' && params.adapter !== 'opencode' && params.adapter !== 'pi') return
   await migrateProjectHomeSegment(params.cwd, process.env, '.mock').catch(() => undefined)
 
   const mirrorPath = resolvePermissionMirrorPath(params.cwd, params.adapter, params.sessionId)
+  if (params.adapter === 'pi' && !withinMirrorLock) {
+    await withPrivatePermissionMirrorLock(mirrorPath, async (): Promise<void> => {
+      await syncPermissionStateMirror(params, true)
+    })
+    return
+  }
   const projectPermissions = await buildMergedProjectPermissions(params.cwd)
-  await mkdir(dirname(mirrorPath), { recursive: true })
-  await writeFile(
+  await writePrivatePermissionMirror(
     mirrorPath,
     `${
       JSON.stringify(
@@ -144,8 +160,7 @@ const syncPermissionStateMirror = async (params: {
         null,
         2
       )
-    }\n`,
-    'utf8'
+    }\n`
   )
 }
 
@@ -155,23 +170,30 @@ export const applyCliPermissionDecision = async (params: {
   adapter?: string
   subjectKeys: string[]
   action: PermissionInteractionDecision
+  readMirror?: typeof readFile
 }) => {
   const subjectKeys = normalizeKeys(params.subjectKeys)
   if (subjectKeys.length === 0) return createEmptySessionPermissionState()
+  const apply = async (withinMirrorLock: boolean) => {
+    const currentState = await readCliSessionPermissionState(
+      params.cwd,
+      params.adapter,
+      params.sessionId,
+      params.readMirror
+    )
+    if (params.action === 'allow_project') await updateProjectPermissionLists(params.cwd, subjectKeys, 'allow')
+    if (params.action === 'deny_project') await updateProjectPermissionLists(params.cwd, subjectKeys, 'deny')
 
-  if (params.action === 'allow_project') await updateProjectPermissionLists(params.cwd, subjectKeys, 'allow')
-  if (params.action === 'deny_project') await updateProjectPermissionLists(params.cwd, subjectKeys, 'deny')
-
-  const nextState = mutateSessionPermissionState(
-    await readSessionPermissionState(params.cwd, params.adapter, params.sessionId),
-    subjectKeys,
-    params.action
-  )
-  await syncPermissionStateMirror({
-    cwd: params.cwd,
-    adapter: params.adapter,
-    sessionId: params.sessionId,
-    permissionState: nextState
-  })
-  return nextState
+    const nextState = mutateSessionPermissionState(currentState, subjectKeys, params.action)
+    await syncPermissionStateMirror({
+      cwd: params.cwd,
+      adapter: params.adapter,
+      sessionId: params.sessionId,
+      permissionState: nextState
+    }, withinMirrorLock)
+    return nextState
+  }
+  if (params.adapter !== 'pi') return await apply(false)
+  const mirrorPath = resolvePermissionMirrorPath(params.cwd, 'pi', params.sessionId)
+  return await withPrivatePermissionMirrorLock(mirrorPath, async () => await apply(true))
 }

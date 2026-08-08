@@ -358,7 +358,26 @@ const resolveChannelPermissionDecision = async (params: {
   }
 }
 
-export const resolvePermissionDecision = async (params: {
+const sessionPermissionTails = new Map<string, Promise<void>>()
+
+const withSessionPermissionQueue = async <Result>(sessionId: string, task: () => Promise<Result>) => {
+  const previous = sessionPermissionTails.get(sessionId) ?? Promise.resolve()
+  let release: () => void = () => undefined
+  const current = new Promise<void>(resolve => {
+    release = resolve
+  })
+  const tail = previous.then(() => current)
+  sessionPermissionTails.set(sessionId, tail)
+  await previous
+  try {
+    return await task()
+  } finally {
+    release()
+    if (sessionPermissionTails.get(sessionId) === tail) sessionPermissionTails.delete(sessionId)
+  }
+}
+
+const resolvePermissionDecisionInternal = async (params: {
   sessionId: string
   subject: PermissionToolSubject | undefined
   lookupKeys?: string[]
@@ -383,6 +402,24 @@ export const resolvePermissionDecision = async (params: {
   }
 
   const sessionState = getSessionPermissionState(sessionId)
+  const matchedOnceDenyKeys = keyCandidates.filter(key => sessionState.onceDeny.includes(key))
+  if (matchedOnceDenyKeys.length > 0) {
+    await updateSessionPermissionState(sessionId, {
+      ...sessionState,
+      onceDeny: sessionState.onceDeny.filter(item => !matchedOnceDenyKeys.includes(item))
+    }, true)
+    return { result: 'deny', source: 'onceDeny', subject }
+  }
+
+  const matchedOnceAllowKeys = keyCandidates.filter(key => sessionState.onceAllow.includes(key))
+  if (matchedOnceAllowKeys.length > 0) {
+    await updateSessionPermissionState(sessionId, {
+      ...sessionState,
+      onceAllow: sessionState.onceAllow.filter(item => !matchedOnceAllowKeys.includes(item))
+    }, true)
+    return { result: 'allow', source: 'onceAllow', subject }
+  }
+
   if (keyCandidates.some(key => sessionState.deny.includes(key))) {
     return { result: 'deny', source: 'sessionDeny', subject }
   }
@@ -416,6 +453,14 @@ export const resolvePermissionDecision = async (params: {
 
   return { result: 'inherit', source: 'none', subject }
 }
+
+export const resolvePermissionDecision = async (params: {
+  sessionId: string
+  subject: PermissionToolSubject | undefined
+  lookupKeys?: string[]
+}): Promise<PermissionResolution> => (
+  withSessionPermissionQueue(params.sessionId, () => resolvePermissionDecisionInternal(params))
+)
 
 const mutateSessionPermissionState = (
   state: SessionPermissionState,

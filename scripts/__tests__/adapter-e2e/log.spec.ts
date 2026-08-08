@@ -128,4 +128,29 @@ describe('adapter e2e hook log parsing', () => {
       prompt: 'Use the Read tool exactly once on README.md, then reply with exactly E2E_CODEX and nothing else.'
     })
   })
+
+  it('stabilizes concurrently emitted terminal hook entries', () => {
+    const result = createResult()
+    result.logContent = [
+      fixtureLog,
+      '# [3/27/2026, 2:37:34 PM] __I__ [Stop] [plugin.logger]',
+      '```json',
+      '{"adapter":"pi"}',
+      '```',
+      '# [3/27/2026, 2:37:34 PM] __I__ [SessionEnd] [plugin.logger]',
+      '```json',
+      '{"adapter":"pi"}',
+      '```',
+      '# [3/27/2026, 2:37:34 PM] __I__ [TaskStop] [plugin.logger]',
+      '```json',
+      '{"adapter":"pi"}',
+      '```'
+    ].join('\n')
+
+    expect(createAdapterE2ESnapshot(result).log.entries.slice(-3).map(entry => entry.event)).toEqual([
+      'TaskStop',
+      'Stop',
+      'SessionEnd'
+    ])
+  })
 })

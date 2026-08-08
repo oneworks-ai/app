@@ -28,7 +28,7 @@ export function registerAdapterCommand(program: Command) {
 Examples:
   oneworks adapter prepare
   oneworks adapter prepare --all
-  oneworks adapter prepare codex claude-code gemini
+  oneworks adapter prepare codex claude-code gemini pi
   oneworks adapter prepare claude-code.routerCli
 `
     )

@@ -9,7 +9,8 @@ const KNOWN_PREPARE_ADAPTERS = [
   'gemini',
   'copilot',
   'opencode',
-  'kimi'
+  'kimi',
+  'pi'
 ]
 
 const SPECIAL_TARGET_ALIASES: Record<string, { adapter: string; target: string }> = {

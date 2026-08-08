@@ -170,6 +170,7 @@ export const runWrappedAdapter = async (
     logContent: content,
     managedArtifacts: await collectManagedArtifacts({
       adapter: testCase.adapter,
+      ctxId,
       sessionId
     }),
     stdout: result.stdout,
@@ -239,6 +240,7 @@ export const runOpenCodeUpstream = async (input: {
     logContent: content,
     managedArtifacts: await collectManagedArtifacts({
       adapter: 'opencode',
+      ctxId: input.ctxId,
       sessionId: input.sessionId
     }),
     stdout: result.stdout,
@@ -286,6 +288,7 @@ export const runOpenCode = async (
       logContent: content,
       managedArtifacts: await collectManagedArtifacts({
         adapter: 'opencode',
+        ctxId,
         sessionId
       }),
       stdout: wrapperResult.stdout,
