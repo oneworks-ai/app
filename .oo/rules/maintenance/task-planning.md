@@ -110,12 +110,18 @@ Safe to archive: yes / no
 
 ## 权限预检与审批恢复
 
+- 配置文件、任务 prompt、delegation 文本或“Full Access”标签只能说明预期权限，不能证明当前任务已经捕获对应 permission profile。任何 permission-sensitive external / network / install / Git 操作前，当前执行任务必须先运行一条与目标、transport 和动作类别匹配的非变更 capability probe；只记录非敏感结论，不把配置文本或旧任务成功当作替代证据。
+- 同一 host 的官方 `gh` credential 由任务复用，不为新 worktree / task 重做认证。GitHub API 的权威双信号是 `gh api user` 与 `gh api repos/<owner>/<repo>`：前者确认实际身份，后者确认目标仓库可达性和权限；`gh auth status` 只能作为辅助诊断，不能单独触发用户确认或 credential 变更。不得在任务内运行 `gh auth login`、`logout` 或 `refresh`，也不得仅因 status 文本要求用户登录。
+- Git transport 与 GitHub API 分开探测。交付前读取实际 remote，并让目标执行任务用 SSH 对精确目标 ref 做 `git push --dry-run` 或等价非变更协商；只有 API 双信号和 SSH probe 都通过，才说明该任务具备继续执行已授权操作的有效 capability。
+- 新任务一旦进入 `waitingOnApproval`，或无法使用 source task 已验证可用的 host localhost proxy，必须保持零变更，向主任务回调 `BLOCKED`、证据和 `Safe to archive`。协调器核验后归档并从已验证 Full Access source task 重建；不得把 approval / login 路由给用户，也不得在受限任务里试做相邻修复。
+- 对用户已明确授权、能够安全共享 checkout 的非 Git release / read-only / install 工作，可以从已通过 capability probe 的 Full Access source task 创建 same-directory fork；prompt 必须声明“你就是执行者，不得继续委派”，并保持原授权的目标、动作和停止条件。Git commit、push、PR 创建 / 更新和 merge 继续遵守独立 Git operator 边界；无法建立有效 operator capability 时报告 capability gap，主线程不得接管 Git 写操作。
+- 项目 ask / approval 列表只对精确命令类别和目的生效；例如 `kill`、`chmod` 的已有条目不能证明或授权不相关的 external、install、Git 或 credential 操作。
 - Git / PR 独立任务的 prompt 必须包含精确的仓库、PR / 分支、允许的写操作、merge 方式、是否删除远端分支和本轮用户授权；只写“处理 PR”或“合入”不足以让审批者判断边界。
 - 流程或 skill 要求“获得明确批准后再修复”时，先从当前任务历史解析已有授权；批准约束的是操作范围，不要求必须在诊断结果之后重复发生。用户已明确要求为当前变更创建 PR 并 merge 时，该授权覆盖为同一 PR 补齐 changelog、真实截图、Experience Review、PR body 和其他不扩大产品改动范围的合并门禁材料，以及对应的 commit、push 和 PR 更新。应告知门禁失败与处理内容，但不要让用户重复授权。只有修复会扩大产品代码范围、改变 merge 方式或分支清理范围、需要 rebase / rewrite / force push，或引入新的外部 / 破坏性操作时，才重新确认。
-- 创建 Git operator 前先用 `gh auth status --active --hostname <host>` 核验官方 CLI 身份，再运行 `pnpm tools git-delivery check --repository <owner/name> --json`，并读取仓库实际 remote URL。只有项目 auto-review、本机 `gh`、仓库写权限和实际 Git transport 都 ready 时才开始 commit / push / PR；不要等到收尾阶段才发现授权链断裂。
-- 本项目通过 `.codex/config.toml` 保持 `on-request` 审批并把 eligible prompt 交给 auto-review。该项目层配置有意作用于可信项目内所有新加载任务，不只作用于独立 worker，并可能覆盖用户层较严格的 reviewer / approval 默认值（managed requirements 与显式启动覆盖仍有更高优先级）；它只替换审批者，不扩大 sandbox、网络或 GitHub 权限。
+- 创建 Git operator 前先完成官方 `gh` API 双信号、读取仓库实际 remote、运行目标 SSH push dry-run，再运行 `pnpm tools git-delivery check --repository <owner/name> --json`。只有本机官方 `gh`、repo-specific 权限、实际 Git transport 和项目 auto-review 的非变更 probe 都 ready 时才开始 commit / push / PR；不要等到收尾阶段才发现授权链断裂。
+- 本项目通过 `.codex/config.toml` 保持 `on-request` 审批并把 eligible prompt 交给 auto-review。该项目层配置有意作用于可信项目内所有新加载任务，不只作用于独立 worker，并可能覆盖用户层较严格的 reviewer / approval 默认值（managed requirements 与显式启动覆盖仍有更高优先级）；它只替换审批者，不扩大 sandbox、网络或 GitHub 权限，也不能替代当前任务的 capability probe。
 - 新项目配置与规则只对重新加载后的任务生效。Git 写操作必须交给通过项目线程能力新建、会重新加载 `.codex/config.toml` 的干净独立 Git operator；不要把继承父任务有效 `AskForApproval=Never` 的 collaboration child 当作交付 operator。真实验收让新 operator 执行一条已明确授权的远端写操作，并确认没有停在人工 `waitingOnApproval`；旧线程成功不能证明新配置已加载。
-- 如果 worker 进入 `waitingOnApproval`，先检查任务是否加载了可信项目层、`approval_policy` / `approvals_reviewer` 的有效值、命中规则和授权上下文；修复后创建至多一个干净验证任务。不要连续 fork 带有长协调历史的主任务：这种 fork 可能把自己误判成协调器并继续创建 worker。需要共享同一 worktree 时，prompt 必须明确“你就是执行者，不得再委派”。权限传递仍失败时记录 capability gap，不能让主线程接管远端 Git 写操作，也不能要求用户重复已经明确给出的授权。
+- 如果 worker 进入 `waitingOnApproval`，不要在该 worker 内修改项目层、`approval_policy`、`approvals_reviewer` 或授权上下文。按零变更规则回调并归档后，协调器从已验证 source task 创建至多一个干净验证任务。不要连续 fork 带有长协调历史的主任务；需要共享同一 worktree 时，prompt 必须明确“你就是执行者，不得再委派”。权限传递仍失败时记录 capability gap，不能让主线程接管远端 Git 写操作，也不能要求用户重复已经明确给出的授权。
 - GitHub Connector 返回 `Resource not accessible by integration` 只说明非标准集成不可用，不能成为修复、安装或改用 connector / 网页 UI 的理由。回到本机官方 `gh` 完成身份与仓库权限核验；`gh` 未 ready 时停止交付，不能绕开此门禁。
 - 不要用永久 `allow` 放行 `gh pr merge`、`git push` 或 `gh api`。prefix 只能约束命令前缀，后续 URL / flags 仍可能改变目标；需要零人工停顿时由 auto-review 根据精确用户授权逐次判断，而不是取消边界。
 
@@ -123,10 +129,9 @@ Safe to archive: yes / no
 
 - GitHub API 身份、repository 元数据 / 状态、PR、Actions、release 状态和 credential 相关交付操作只使用本机官方 `gh` CLI。禁止用 Codex、Claude 或 GitHub 插件、隐藏 connector 身份、复制 token、环境变量注入 token 或其他集成绕过；源码的 clone / fetch / push 由 `git` 统一通过 SSH transport 执行。
 - `gh` API 身份与 Git transport 是两条独立链路。GitHub API 操作仍需要 browser / device OAuth；SSH 只承载 clone / fetch / push，不会替代、恢复或延长 `gh` OAuth credential，也不改变 `gh` API 身份。
-- Git transport 以 SSH 为标准协议：本机官方 `gh` 的 Git 协议偏好必须为 `ssh`，repository remote 应使用 SSH URL。交付预检同时核对 `gh config get git_protocol --host <host>`、实际 remote URL 和 SSH 连通性；发现非 SSH 配置时按标准入口纠正，不保留 HTTPS 作为首选或备用 credential 路径。
-- 每次 GitHub API / PR 写入前运行 `gh auth status --active --hostname <host>`，且不得使用会显示 token 的参数。若 OAuth 无效、身份不匹配或权限不足，立即停止 GitHub API / PR 写入并回报；不得尝试备用插件、隐藏凭据或其他认证路径。
-- `gh auth status` 明确返回 invalid / unauthenticated 后，只通过标准 `gh auth login --hostname <host> --web` 交互式 browser / device OAuth 流程恢复一次；不得粘贴、创建或轮换 PAT，不得用 `--with-token`、credential 导出或其他持久化路径恢复。认证后重新运行 status 与交付预检，并复用这份机器级 host 登录，不为每个 worktree / task 重复认证。
-- SSH 默认先连接 GitHub 的 22 端口；若正常连通性检查确认 22 端口不可达，则验证 `ssh -T -p 443 git@ssh.github.com`，随后无需请求用户 / owner 批准，直接按 [GitHub 官方 SSH-over-443 文档](https://docs.github.com/en/authentication/troubleshooting-ssh/using-ssh-over-the-https-port)配置该 host 并继续使用 SSH。此回退只改变 Git transport，不改变或绕过 `gh` API OAuth。
+- Git transport 以 SSH 为标准协议：本机官方 `gh` 的 Git 协议偏好必须为 `ssh`，repository remote 应使用 SSH URL。交付预检同时核对实际 remote URL，并通过精确 `git push --dry-run` 证明当前任务能到达 SSH remote；配置文本和普通连通性检查都不能代替这次 capability probe。
+- 每次 GitHub API / PR 写入前运行 `gh api user` 和 repo-specific API。若任一调用实际返回身份不匹配、仓库不可达或权限不足，立即停止 GitHub API / PR 写入并回报；不得尝试备用插件、隐藏凭据、登录 / 登出 / 刷新 credential 或其他认证路径，也不得把辅助 `gh auth status` 文本单独升级成用户阻塞。
+- SSH 22 端口不可达时，可以复用 host 已配置的 GitHub 官方 SSH-over-443 路径；若新任务无法复用 host localhost proxy 或既有 SSH transport，按零变更规则回调并由协调器归档 / 重建。不得在受限 worker 内临时修改 host 网络、SSH 或 credential 配置。
 - 状态报告和规则沉淀只记录协议、门禁与非敏感结论，不包含 token、账号细节、绝对个人路径或某台机器 / 网络的一次性事故时间线。
 
 ### Git operator 的可信授权传递
@@ -150,7 +155,7 @@ Git / PR 写操作需要同时满足“任务范围精确”和“用户授权�
 2. 创建前核验 `create_thread`、`fork_thread`、`send_message_to_thread`、`wait_threads` 和归档工具的当前 schema，确认项目 / worktree 选择、状态锚点以及 model / reasoning 能力；不要用旧记忆猜参数。
 3. 创建后同步登记 thread / worktree、约十分钟 heartbeat、deadline 和 cleanup cutoff，并要求 operator 在阶段边界回调主任务。无论使用哪种入口，都要明确“你就是执行者，不得再委派”；任务输入用于收窄 capability，不得自行扩大来源用户授权。
 4. 第一次写入前完成只读 preflight：确认目标 worktree、已审阅的 diff、当前分支 / ref、远端同步、已有或重复 PR、base branch、适用 PR policy、Draft / merge 授权、merge 方式和分支清理范围。前置条件未满足时停在只读阶段；不要先创建 PR 再补查这些边界。
-5. 新 operator 执行 `git push --dry-run` 或等价的无写入远端协商。只有这条受限命令通过 Codex 审批并真实到达 Git 远端，才能证明该命令的可信授权链路有效；它不授权后续 `commit`、真实 `push`、PR 创建 / 更新或 merge。每一项 Git / PR 写操作仍须在精确 scope 下逐次通过 auto-review。
+5. 新 operator 先执行官方 `gh` API 双信号，再执行 `git push --dry-run` 或等价的无写入远端协商。只有这些受限命令通过 Codex 审批并真实到达对应 API / SSH remote，才能证明该任务的可信授权链路有效；它们不授权后续 `commit`、真实 `push`、PR 创建 / 更新或 merge。任一 probe 进入 `waitingOnApproval` 或无法使用 host proxy 时保持零变更并回调，由协调器归档 / 重建；每一项 Git / PR 写操作仍须在精确 scope 下逐次通过 auto-review。
 6. preflight 和授权链路均通过后，operator 才按授权依次 commit、push、创建或复用 PR；required checks 和审批在 PR 上继续等待、核验。主线程保留是否满足 merge 条件的判断，operator 只执行已明确授权的 merge 方式和清理范围。
 7. 用 `wait_threads` 获取紧凑进度；终态证据核验后删除 heartbeat，立即 `set_thread_archived` 并确认归档成功，不要把执行日志重新灌入主线程。
 8. 如果授权只存在于当前 active turn，且状态可以交给独立 project worktree，使用带精确 delegation 的 `create_thread`；如果必须走 same-directory fork，则等该用户回合进入 completed history 后再创建。两条路径都无法形成可信 capability 时，记录并修复能力缺口，不让用户复述授权，也不回退主线程执行。
@@ -160,7 +165,7 @@ Git / PR 写操作需要同时满足“任务范围精确”和“用户授权�
 ### 区分 Codex 审批与 GitHub 授权
 
 - 命令尚未启动就返回 `Rejected(...)`：Codex / sandbox 审批问题，检查独立任务类型、可信用户历史和项目 auto-review。
-- `git push` 已完成远端协商后返回 OAuth scope 错误：GitHub 凭据问题，不是 subagent 权限问题。提交包含 `.github/workflows/**` 时，使用 OAuth token 的 operator 要先通过 `gh auth status` 确认具有 `workflow` scope；缺少时先恢复 GitHub 授权，再重试同一个 operator。
+- 官方 `gh api` 已到达 GitHub 后返回 scope / repository permission 错误：这是当前 credential capability gap，不是 subagent prompt 权限问题。停止对应 API / PR 写入并回调，由协调器从已验证 source task 重建或报告缺口；不得在 worker 内 login、refresh 或修改 credential。Git push 的 SSH authority 仍由独立 dry-run 证明，不能用 API scope 文本代替。
 - GitHub Connector 返回 `Resource not accessible by integration`：这是被禁止用于交付的备用集成状态，不据此安装、修复或切换插件；GitHub 身份和权限只回到本机 `gh` 核验，Codex shell 审批仍单独处理。
 
 ## 集成与验证
@@ -169,12 +174,26 @@ Git / PR 写操作需要同时满足“任务范围精确”和“用户授权�
 - 合入顺序固定：基础结构、独立功能、依赖功能、统一清理、文档和收口验证。
 - 每个子 PR 合入前检查契约：数据模型、API、权限、UI 状态、i18n、文档、测试。
 - 非机械代码修改必须独立检查局部正确性与全局 / 抽象影响；低风险窄改可由一个独立 reviewer 同时覆盖，中高风险或跨模块修改拆成两个关注面。审阅必须直接读取 diff 和相关调用方，不以实现者自报结论代替。
-- 验证按风险选择：窄改跑局部测试；跨模块或用户流程跑类型检查、相关单测、浏览器回归和 CI 状态检查。
+- 验证按下方“按变更风险选择验证”分层；窄改只跑能证明对应风险的局部门禁，跨模块或用户流程再跑类型检查、相关单测、浏览器回归和完整 CI。
 - 合入后如果发现提交信息、CI 或文档边界问题，优先 follow-up PR；需要 rewrite / force push 时必须有明确授权。
 - `pr` 不等于“创建 PR 即完成”。创建 PR 前从 `.github/pull_request_template.md` 准备已忽略的 `.logs/pr-body.md`，并运行 `pnpm tools pr-preflight origin/main HEAD --body-file .logs/pr-body.md`；通过后再创建、复用或收口 PR。逐项检查适用的 PR policy、CI、changelog、真实 UI 截图、Experience Review、Draft / merge 授权、重复 PR、工作区是否干净、远端是否同步和正文隐私。PR 正文不得包含用户名、本机绝对路径、worktree ID、临时路径、会话 ID 或任何秘密。
 - UI 截图先用 `pnpm --silent tools dev-service status <target> --json` 或 `ensure` 核验服务属于目标 worktree / 分支，再用 DOM 证据和可见截图共同证明目标变化；不能因端口已存在就相信它对应本任务。
 - 测试、失败和完成的独立任务按约定归档；测试 PR 未获明确授权不得 merge。收口时删除 heartbeat，并清理为测试创建且不再需要的远端分支。
 - 最终收口回复要列清：落地文件、采纳的审阅建议、未采纳建议及原因、验证结果、剩余风险、follow-up 和已归档线程。不要把长过程日志塞进最终回复。
+
+## 按变更风险选择验证
+
+本地验证只覆盖当前 diff 的真实风险，不能因为远端 required context 名称固定，就在纯文档任务中重复其完整产品命令。先用 `scripts/pr-validation-scope.cjs` 对精确 base / head 分类，再按下列层级执行；命中多个文档层级时取并集，出现任一非文档路径时 fail closed 到完整产品门禁。
+
+| 变更形态                                                                       | 本地最低门禁                                                                                                                                                                            |
+| ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 普通内部 Markdown、AGENTS 或 `.oo/rules`                                       | 对 changed paths 做格式检查；`git diff --check`；`scripts/docs-only-validation.mjs` 的 scope、changed-line privacy、链接 / anchor 检查；PR body / scope / duplicate / privacy preflight |
+| policy、workflow、permission 或 release-rule 文档                              | 上述普通内部文档门禁，加一份独立、只读的规则冲突与隐私审阅；reviewer 必须直接读取 exact diff，并在 PASS 后才进入 Git / PR 写入                                                          |
+| 面向用户的 public README（包括根 README / `README.zh-Hans.md`）或 `.oo/docs`   | 对应文档门禁，加相关 public docs build 和 media verify；只运行该文档站 / 媒体路径实际需要的依赖与命令                                                                                   |
+| `changelog/` 或 release docs                                                   | 对应文档门禁，加 `scripts/docs-only-validation.mjs --release-preflight` 与现有 release-doc preflight                                                                                    |
+| source、workflow、config、lockfile、manifest、script、test 或任何 mixed change | 完整 product lint / typecheck / test / build / package 等适用门禁，并叠加命中的 policy、public 或 release 文档门禁                                                                      |
+
+纯内部文档不本地重复无关的全量 ESLint、全量 typecheck、macOS packaging 或产品 build。PR 上仍保留稳定 required context 名称，但 docs-only context 的 body 应只执行 classifier、格式、文档 scope / privacy / link / anchor 和适用的 policy / public / release 门禁；验收 hosted canary 时必须查看 step-level evidence，确认 heavy install、full lint / typecheck、package 和 product build step 实际 skipped，而不是只看 check conclusion。
 
 ## 经验沉淀流程
 
