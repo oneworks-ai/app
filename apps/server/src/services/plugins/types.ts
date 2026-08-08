@@ -7,17 +7,19 @@ import type {
   PluginContributionAvailability,
   PluginContributionManifest as SharedPluginContributionManifest,
   PluginLocalizedText,
+  PluginNativeMetadata,
   PluginRuntimeApiRegistration,
   PluginRuntimeChannelInvocation,
   PluginRuntimeChannelRequest,
   PluginRuntimeEndpoint,
+  PluginRuntimeSource,
   PluginRuntimeSourceGroup,
   PluginServerRuntimeRole
 } from '@oneworks/types'
 
 export const PLUGIN_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/
 
-export type PluginDiagnosticLevel = 'error' | 'warning'
+export type PluginDiagnosticLevel = 'error' | 'info' | 'warning'
 
 export interface PluginDiagnostic {
   level: PluginDiagnosticLevel
@@ -54,6 +56,7 @@ export interface PluginContributionManifest extends SharedPluginContributionMani
 
 export interface PluginRuntimeManifest {
   assets?: {
+    apps?: string
     entities?: string
     hooks?: string
     mcp?: string
@@ -69,6 +72,8 @@ export interface PluginRuntimeManifest {
   icon?: string
   version?: string
   config?: PluginConfigManifest
+  native?: PluginNativeMetadata
+  source?: PluginRuntimeSource
   plugin?: {
     client?: PluginClientManifest
     server?: PluginServerManifest
@@ -88,6 +93,7 @@ export interface PluginRuntimeInstance {
   version?: string
   requestId: string
   packageId?: string
+  source?: PluginRuntimeSource
   sourceGroup?: PluginRuntimeSourceGroup
   watch?: {
     enabled: boolean

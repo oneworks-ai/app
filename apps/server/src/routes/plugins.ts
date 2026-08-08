@@ -146,7 +146,7 @@ export function pluginsRouter(): Router {
     const manager = getPluginManager()
     await manager.load()
     ctx.body = {
-      runtime: manager.getRuntimeEndpoint()
+      runtime: manager.getPublicRuntimeEndpoint()
     }
   })
 
@@ -154,7 +154,7 @@ export function pluginsRouter(): Router {
     const manager = getPluginManager()
     await manager.load()
     ctx.body = {
-      endpoints: await manager.listRuntimeEndpoints()
+      endpoints: await manager.listPublicRuntimeEndpoints()
     }
   })
 
@@ -166,7 +166,7 @@ export function pluginsRouter(): Router {
     const id = String(ctx.params.id ?? '')
     const groups = await listNativeHostPluginAssets(id)
     if (groups == null) throw notFound('Native plugin not found.', undefined, 'native_plugin_not_found')
-    ctx.body = { groups, id }
+    ctx.body = { groups }
   })
 
   router.get('/marketplace/catalog', async (ctx) => {
