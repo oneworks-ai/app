@@ -121,12 +121,12 @@ Safe to archive: yes / no
 
 ### GitHub CLI 单一授权入口
 
-- GitHub 身份、repository 元数据 / 状态、PR、Actions、release 状态和 credential 相关交付操作只使用本机官方 `gh` CLI。禁止用 Codex、Claude 或 GitHub 插件、隐藏 connector 身份、复制 token、环境变量注入 token 或其他集成绕过；源码的 fetch / push 仍由 `git` 按已配置 transport 执行。
-- `gh` API 身份与 Git transport 是两条独立链路。选择 HTTPS 或 SSH 只改变 clone / fetch / push 的传输方式，不会替代、恢复或延长 `gh` OAuth credential；`gh auth login --git-protocol` 还会修改该 host 的 Git 协议偏好，不能把它当成无副作用的续期命令。
-- 每次远端写入前运行 `gh auth status --active --hostname <host>`，且不得使用会显示 token 的参数；同时读取实际 remote URL 并验证对应 HTTPS credential 或 SSH 握手。任一链路无效、身份不匹配或权限不足时立即停止交付，不执行 commit / push / PR / merge 等后续写入并回报，也不能尝试备用插件或隐藏凭据来源。
-- `gh auth status` 明确返回 invalid / unauthenticated 后，只允许请求用户通过 `gh auth login --hostname <host> --web` 完成一次交互式浏览器 / device 授权；不得粘贴、创建或轮换 PAT，不得用 `--with-token`、credential 导出或其他持久化路径恢复。认证后复用这份 host 级登录，并重新运行 status 与交付预检。
-- host 级 `gh` 登录由同一台机器上的任务复用；不要为每个 worktree / task 重复登录。只有先核实当前 credential 已无效，才请求一次新的交互式授权，避免无意义的 OAuth token churn 和旧 credential 撤销。
-- Git remote 默认保持现状；HTTPS 可可靠使用时优先保留 HTTPS。若仓库已明确选择 SSH 且代理、VPN 或防火墙阻断 22 端口，可先只读运行 `ssh -T -p 443 git@ssh.github.com` 验证 GitHub 的 SSH-over-443 端点；只有用户 / owner 批准修改 host 配置后，才按 [GitHub 官方 SSH-over-443 文档](https://docs.github.com/en/authentication/troubleshooting-ssh/using-ssh-over-the-https-port)中的配置处理。不得静默切换既有 remote 或修改 SSH 配置。
+- GitHub API 身份、repository 元数据 / 状态、PR、Actions、release 状态和 credential 相关交付操作只使用本机官方 `gh` CLI。禁止用 Codex、Claude 或 GitHub 插件、隐藏 connector 身份、复制 token、环境变量注入 token 或其他集成绕过；源码的 clone / fetch / push 由 `git` 统一通过 SSH transport 执行。
+- `gh` API 身份与 Git transport 是两条独立链路。GitHub API 操作仍需要 browser / device OAuth；SSH 只承载 clone / fetch / push，不会替代、恢复或延长 `gh` OAuth credential，也不改变 `gh` API 身份。
+- Git transport 以 SSH 为标准协议：本机官方 `gh` 的 Git 协议偏好必须为 `ssh`，repository remote 应使用 SSH URL。交付预检同时核对 `gh config get git_protocol --host <host>`、实际 remote URL 和 SSH 连通性；发现非 SSH 配置时按标准入口纠正，不保留 HTTPS 作为首选或备用 credential 路径。
+- 每次 GitHub API / PR 写入前运行 `gh auth status --active --hostname <host>`，且不得使用会显示 token 的参数。若 OAuth 无效、身份不匹配或权限不足，立即停止 GitHub API / PR 写入并回报；不得尝试备用插件、隐藏凭据或其他认证路径。
+- `gh auth status` 明确返回 invalid / unauthenticated 后，只通过标准 `gh auth login --hostname <host> --web` 交互式 browser / device OAuth 流程恢复一次；不得粘贴、创建或轮换 PAT，不得用 `--with-token`、credential 导出或其他持久化路径恢复。认证后重新运行 status 与交付预检，并复用这份机器级 host 登录，不为每个 worktree / task 重复认证。
+- SSH 默认先连接 GitHub 的 22 端口；若正常连通性检查确认 22 端口不可达，则验证 `ssh -T -p 443 git@ssh.github.com`，随后无需请求用户 / owner 批准，直接按 [GitHub 官方 SSH-over-443 文档](https://docs.github.com/en/authentication/troubleshooting-ssh/using-ssh-over-the-https-port)配置该 host 并继续使用 SSH。此回退只改变 Git transport，不改变或绕过 `gh` API OAuth。
 - 状态报告和规则沉淀只记录协议、门禁与非敏感结论，不包含 token、账号细节、绝对个人路径或某台机器 / 网络的一次性事故时间线。
 
 ### Git operator 的可信授权传递

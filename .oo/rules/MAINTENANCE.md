@@ -34,7 +34,7 @@ find .oo/rules -maxdepth 1 -type f -name '*.md' -print0 | xargs -0 wc -c -l
 
 - medium reasoning 只负责边界明确后的日常实现，不等于可以省略全局设计和最终审阅。非机械代码修改在写入前必须产出 Change Brief、影响地图和抽象决策；实现者不得自审自批。
 - 交付前按风险完成独立的局部正确性、全局 / 抽象审阅和自动化门禁；公共契约、状态所有权、权限、安全、数据、复杂并发或不可逆操作必须升级设计或最终审阅。执行清单见 [`maintenance/code-delivery-quality.md`](./maintenance/code-delivery-quality.md)。
-- GitHub 身份、仓库状态、PR、Actions、release 状态和 credential 交付只认本机官方 `gh` CLI，不通过 Codex / Claude / GitHub 插件、connector、复制 token 或其他集成绕过。Git fetch / push 仍按仓库实际 HTTPS / SSH transport 执行，两者与 `gh` OAuth 身份分开验证；`gh auth status` 无效时停止远端写入，详见 [`maintenance/task-planning.md`](./maintenance/task-planning.md#github-cli-单一授权入口)。
+- GitHub API 身份 / 状态、PR、Actions、release 和 credential 交付只认本机官方 `gh` CLI，不通过 Codex / Claude / GitHub 插件、connector、复制 token 或其他集成绕过。Git clone / fetch / push 统一以 SSH 为标准 transport，`gh` 的 Git 协议偏好和仓库 remote 都应为 SSH；22 端口不可达时无需用户批准，验证后自动按 GitHub 官方方案改走 SSH-over-443。SSH transport 与 `gh` browser / device OAuth 相互独立；OAuth 无效时停止 GitHub API / PR 写入并按标准交互流程恢复一次，详见 [`maintenance/task-planning.md`](./maintenance/task-planning.md#github-cli-单一授权入口)。
 
 ## 常见入口
 
