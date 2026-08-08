@@ -25,6 +25,13 @@ const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === 'object' && value != null
 }
 
+export const getInboundAccessChannelId = (inbound: ChannelInboundEvent) => {
+  const raw = inbound.raw
+  if (!isRecord(raw)) return inbound.channelId
+  const accessChannelId = raw.accessChannelId
+  return typeof accessChannelId === 'string' && accessChannelId !== '' ? accessChannelId : inbound.channelId
+}
+
 const isChatMessageContent = (value: unknown): value is ChatMessageContent => {
   if (!isRecord(value)) return false
   const type = value.type

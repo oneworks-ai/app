@@ -3,6 +3,7 @@ import type { ChannelBaseConfig, ChannelInboundEvent } from '@oneworks/core/chan
 import { logger } from '#~/utils/logger.js'
 
 import type { ChannelMiddleware } from './@types'
+import { getInboundAccessChannelId } from './@utils'
 import { splitCommand } from './commands/utils'
 
 interface ChannelAccessCheckOptions {
@@ -40,7 +41,7 @@ export const checkChannelAccess = (
 
   // Stopped groups block everyone, including admins; admins can only send /start to resume.
   if (inbound.sessionType === 'group') {
-    const channelId = inbound.channelId
+    const channelId = getInboundAccessChannelId(inbound)
     if (access.blockedGroups && access.blockedGroups.includes(channelId)) {
       return isAdmin(inbound, config) && isStartCommand(options.commandText, config)
     }
@@ -55,7 +56,7 @@ export const checkChannelAccess = (
 
   // Group-level whitelist (only applies to group messages)
   if (inbound.sessionType === 'group') {
-    const channelId = inbound.channelId
+    const channelId = getInboundAccessChannelId(inbound)
     if (access.allowedGroups && access.allowedGroups.length > 0 && !access.allowedGroups.includes(channelId)) {
       return false
     }
