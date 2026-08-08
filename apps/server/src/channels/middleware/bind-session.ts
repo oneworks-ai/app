@@ -76,6 +76,7 @@ export const bindChannelSession = (input: {
     channelKey,
     channelId,
     sessionType,
+    senderId,
     replyReceiveId,
     replyReceiveIdType
   })

@@ -1,6 +1,6 @@
 /* eslint-disable max-lines -- workspace API contracts stay colocated for shared exports. */
 import type { Config, MessageWorkspaceFileOpener } from './config'
-import type { Definition, DefinitionSource, Entity, Filter, Rule, Skill, Spec } from './definition'
+import type { ChannelLink, Definition, DefinitionSource, Entity, Filter, Rule, Skill, Spec } from './definition'
 import type { PluginConfig, ResolvedPluginInstanceMetadata } from './plugin'
 import type { SessionStatus } from './session'
 
@@ -9,6 +9,7 @@ export type WorkspaceAssetKind =
   | 'spec'
   | 'entity'
   | 'skill'
+  | 'channelLink'
   | 'workspace'
   | 'mcpServer'
   | 'hookPlugin'
@@ -88,6 +89,7 @@ export type WorkspaceAsset =
   | WorkspaceAssetBase<'spec', WorkspaceDocumentPayload<Definition<Spec>>>
   | WorkspaceAssetBase<'entity', WorkspaceDocumentPayload<Definition<Entity>>>
   | WorkspaceAssetBase<'skill', WorkspaceDocumentPayload<Definition<Skill>>>
+  | WorkspaceAssetBase<'channelLink', WorkspaceDocumentPayload<Definition<ChannelLink>>>
   | WorkspaceAssetBase<'workspace', WorkspaceDefinitionPayload>
   | WorkspaceAssetBase<'mcpServer', WorkspaceMcpPayload>
   | WorkspaceAssetBase<'hookPlugin', WorkspaceHookPluginPayload>
@@ -106,6 +108,7 @@ export interface WorkspaceAssetBundle {
   specs: Array<Extract<WorkspaceAsset, { kind: 'spec' }>>
   entities: Array<Extract<WorkspaceAsset, { kind: 'entity' }>>
   skills: Array<Extract<WorkspaceAsset, { kind: 'skill' }>>
+  channelLinks: Array<Extract<WorkspaceAsset, { kind: 'channelLink' }>>
   workspaces: Array<Extract<WorkspaceAsset, { kind: 'workspace' }>>
   mcpServers: Record<string, Extract<WorkspaceAsset, { kind: 'mcpServer' }>>
   hookPlugins: Array<Extract<WorkspaceAsset, { kind: 'hookPlugin' }>>

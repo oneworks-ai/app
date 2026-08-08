@@ -72,6 +72,7 @@ const createAssets = (): WorkspaceAssetBundle => ({
   specs: [],
   entities: [],
   skills: [],
+  channelLinks: [],
   workspaces: [],
   mcpServers: {},
   hookPlugins: [],

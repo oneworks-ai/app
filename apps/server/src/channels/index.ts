@@ -2,8 +2,11 @@
 import type { ConfigSource, WSEvent } from '@oneworks/core'
 import type { ChannelBaseConfig, ChannelInboundEvent, ChannelSessionMcpServer } from '@oneworks/core/channel'
 
+import { loadChannelLinks } from '#~/services/channel-links/index.js'
 import { logger } from '#~/utils/logger.js'
 
+import { invokeChannelCommandForState, listInvokableChannelCommandTools } from './command-invocation'
+import type { ChannelCommandInvocationInput } from './command-invocation'
 import { applyChannelServerDefaults } from './defaults'
 import type { InitChannelsOptions } from './defaults'
 import { handleInboundEvent, handleSessionEvent } from './handlers'
@@ -40,11 +43,21 @@ const getChannelLogContext = (key: string, type: string, configSource: ConfigSou
 
 const getErrorMessage = (error: unknown) => error instanceof Error ? error.message : String(error)
 
+const loadChannelLinksForRuntime = async () => {
+  try {
+    return await loadChannelLinks()
+  } catch (error) {
+    logger.warn({ error: getErrorMessage(error) }, '[channels] failed to load channel links')
+    return []
+  }
+}
+
 export const initChannels = async (
   configs: ReadonlyArray<ChannelConfigSourceEntry>,
   options: InitChannelsOptions = {}
 ): Promise<ChannelManager> => {
   const channels = collectChannelEntries(configs)
+  const channelLinks = await loadChannelLinksForRuntime()
   const states = new Map<string, ChannelRuntimeState>()
   for (const [key, entry] of channels.entries()) {
     const value = entry.value
@@ -66,18 +79,32 @@ export const initChannels = async (
     }
 
     const logContext = getChannelLogContext(key, type, entry.source)
+    const matchedChannelLinks = channelLinks.filter(link => link.channelKey === key)
     let connection: ChannelRuntimeState['connection']
     try {
       const mod = loadChannelModule(type)
       if (rawConfig.enabled === false) {
-        states.set(key, { key, type, status: 'disabled', configSource: entry.source })
+        states.set(key, {
+          key,
+          type,
+          status: 'disabled',
+          configSource: entry.source,
+          channelLinks: matchedChannelLinks
+        })
         logger.info(logContext, '[channels] channel disabled by config')
         continue
       }
       const parsed = mod.definition.configSchema.safeParse(rawConfig)
       if (parsed.success === false) {
         const error = parsed.error?.message ?? 'Invalid channel config'
-        states.set(key, { key, type, status: 'error', error, configSource: entry.source })
+        states.set(key, {
+          key,
+          type,
+          status: 'error',
+          error,
+          configSource: entry.source,
+          channelLinks: matchedChannelLinks
+        })
         logger.error({ ...logContext, error }, '[channels] channel config validation failed')
         continue
       }
@@ -89,7 +116,8 @@ export const initChannels = async (
         status: 'connected',
         connection,
         config: connectionConfig as ChannelBaseConfig,
-        configSource: entry.source
+        configSource: entry.source,
+        channelLinks: matchedChannelLinks
       }
       await connection.startReceiving?.({
         channelKey: key,
@@ -98,7 +126,15 @@ export const initChannels = async (
             await enqueueChannelInboundEvent(
               key,
               event,
-              async () => await handleInboundEvent(key, event, connection, state.config, state.configSource)
+              async () =>
+                await handleInboundEvent(
+                  key,
+                  event,
+                  connection,
+                  state.config,
+                  state.configSource,
+                  state.channelLinks
+                )
             )
         }
       })
@@ -128,7 +164,8 @@ export const initChannels = async (
         type,
         status: 'error',
         error,
-        configSource: entry.source
+        configSource: entry.source,
+        channelLinks: matchedChannelLinks
       })
       logger.error({ ...logContext, error }, '[channels] channel initialization failed')
     }
@@ -225,4 +262,99 @@ export const sendChannelMessage = async (input: {
   }
 
   return await sendManualChannelMessage(channelManager.states, input)
+}
+
+interface ChannelDebugOutboundConnection {
+  clearDebugOutboundMessages?: () => Promise<void> | void
+  getDebugOutboundMessages?: () => unknown[]
+}
+
+const getDebugOutboundConnection = (input: { channelKey: string }) => {
+  if (channelManager == null) {
+    return {
+      ok: false as const,
+      statusCode: 503,
+      message: 'channel manager 还没有初始化。'
+    }
+  }
+
+  const state = channelManager.states.get(input.channelKey)
+  if (state == null) {
+    return {
+      ok: false as const,
+      statusCode: 404,
+      message: `Channel ${input.channelKey} was not found.`
+    }
+  }
+
+  if (state.status !== 'connected' || state.connection == null) {
+    return {
+      ok: false as const,
+      statusCode: 409,
+      message: `Channel ${input.channelKey} is not connected.`
+    }
+  }
+
+  const connection = state.connection as ChannelDebugOutboundConnection
+  if (typeof connection.getDebugOutboundMessages !== 'function') {
+    return {
+      ok: false as const,
+      statusCode: 404,
+      message: `Channel ${input.channelKey} does not expose debug outbound messages.`
+    }
+  }
+
+  return {
+    connection,
+    ok: true as const
+  }
+}
+
+export const listChannelDebugOutboundMessages = (input: { channelKey: string }) => {
+  const resolved = getDebugOutboundConnection(input)
+  if (!resolved.ok) return resolved
+  return {
+    ok: true as const,
+    messages: resolved.connection.getDebugOutboundMessages?.() ?? []
+  }
+}
+
+export const clearChannelDebugOutboundMessages = async (input: { channelKey: string }) => {
+  const resolved = getDebugOutboundConnection(input)
+  if (!resolved.ok) return resolved
+  await resolved.connection.clearDebugOutboundMessages?.()
+  return {
+    ok: true as const
+  }
+}
+
+export const listChannelCommandToolsForRuntime = () => listInvokableChannelCommandTools()
+
+export const invokeChannelCommand = async (input: ChannelCommandInvocationInput & { channelKey: string }) => {
+  if (channelManager == null) {
+    return {
+      ok: false as const,
+      statusCode: 503,
+      message: 'channel manager 还没有初始化。'
+    }
+  }
+
+  const state = channelManager.states.get(input.channelKey)
+  if (state == null) {
+    return {
+      ok: false as const,
+      statusCode: 404,
+      message: `Channel ${input.channelKey} was not found.`
+    }
+  }
+
+  if (state.status !== 'connected') {
+    return {
+      ok: false as const,
+      statusCode: 409,
+      message: `Channel ${input.channelKey} is not connected.`
+    }
+  }
+
+  return await invokeChannelCommandForState(state, input)
 }

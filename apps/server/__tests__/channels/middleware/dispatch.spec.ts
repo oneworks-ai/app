@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- Dispatch lifecycle coverage shares one channel context and runtime fixture. */
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -10,9 +11,14 @@ import type { ChannelContext } from '#~/channels/middleware/@types/index.js'
 import { syncChannelSessionBinding } from '#~/channels/middleware/bind-session.js'
 import { dispatchMiddleware } from '#~/channels/middleware/dispatch/index.js'
 import { createT, defineMessages } from '#~/channels/middleware/i18n.js'
+import { getDb } from '#~/db/index.js'
 import { resolveChannelMemoryRoot } from '#~/services/session/channel-context.js'
 import { createSessionWithInitialMessage } from '#~/services/session/create.js'
 import { processUserMessage, writeChannelMessageContext } from '#~/services/session/index.js'
+
+vi.mock('#~/db/index.js', () => ({
+  getDb: vi.fn()
+}))
 
 vi.mock('#~/services/session/create.js', () => ({
   createSessionWithInitialMessage: vi.fn()
@@ -73,6 +79,54 @@ const makeCtx = (overrides: Partial<ChannelContext> = {}): ChannelContext => ({
 
 const tempDirs: string[] = []
 const originalServerDataDir = process.env.__ONEWORKS_PROJECT_SERVER_DATA_DIR__
+const createChannelChildSessionRun = vi.fn()
+const finishChannelChildSessionRun = vi.fn()
+const ensureChannelConversationState = vi.fn()
+const appendChannelConversationTurn = vi.fn()
+const listResolvedChannelPendingIntents = vi.fn()
+const updateChannelPendingIntent = vi.fn()
+
+const makeNextMessageResumeIntent = (overrides: Record<string, unknown> = {}) => ({
+  authorizationRequestId: 'auth-1',
+  channelId: 'ch1',
+  channelKey: 'lark:default',
+  channelLinkName: 'wan-ke-chat',
+  channelType: 'lark',
+  conversationStateId: 'conversation-1',
+  createdByChildRunId: 'blocked-child-run-1',
+  delivery: 'public_hint',
+  deliveryMessageId: 'om_1',
+  entity: 'owo-demo',
+  expiresAt: null,
+  id: 'pending-auth-1',
+  kind: 'need_approval',
+  metadata: {
+    resume: {
+      authorizationRequestId: 'auth-1',
+      authorizationStatus: 'granted',
+      capability: 'Write',
+      createdByChildRunId: 'blocked-child-run-1',
+      mode: 'next_message',
+      readyAt: 123,
+      resolvedByAccountId: 'admin1',
+      sessionId: 'resume-sess',
+      status: 'ready',
+      threadKey: 'direct:lark_default:ch1'
+    }
+  },
+  ownerAccountId: 'user1',
+  ownerUserId: null,
+  payload: {
+    authorizationRequestId: 'auth-1',
+    capability: 'Write'
+  },
+  requiredAction: 'grant_authorization',
+  resolvedAt: 123,
+  sessionType: 'direct',
+  status: 'resolved',
+  threadKey: 'direct:lark_default:ch1',
+  ...overrides
+})
 
 const useTempServerDataDir = async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'ow-dispatch-emoji-'))
@@ -107,6 +161,26 @@ const registerMoodEmojis = async () => {
 beforeEach(async () => {
   vi.clearAllMocks()
   await useTempServerDataDir()
+  createChannelChildSessionRun.mockReturnValue({
+    id: 'child-run-1'
+  })
+  ensureChannelConversationState.mockReturnValue({
+    id: 'conversation-1',
+    threadKey: 'direct:lark_default:ch1'
+  })
+  appendChannelConversationTurn.mockReturnValue({
+    id: 'turn-1'
+  })
+  listResolvedChannelPendingIntents.mockReturnValue([])
+  updateChannelPendingIntent.mockReturnValue(undefined)
+  vi.mocked(getDb).mockReturnValue({
+    appendChannelConversationTurn,
+    createChannelChildSessionRun,
+    ensureChannelConversationState,
+    finishChannelChildSessionRun,
+    listResolvedChannelPendingIntents,
+    updateChannelPendingIntent
+  } as any)
   vi.mocked(createSessionWithInitialMessage).mockResolvedValue({ id: 'new-sess' } as any)
 })
 
@@ -133,8 +207,74 @@ describe('dispatchMiddleware', () => {
       expect(args.initialContent).toBeUndefined()
       expect(args.shouldStart).toBe(true)
       expect(args.channelContext).toEqual(expect.objectContaining({
+        actorAccountId: 'user1',
         channelId: 'ch1',
         channelKey: 'lark:default',
+        childRunId: 'child-run-1',
+        conversationStateId: 'conversation-1',
+        threadKey: 'direct:lark_default:ch1',
+        senderId: 'user1'
+      }))
+      expect(createChannelChildSessionRun).toHaveBeenCalledWith(expect.objectContaining({
+        actorAccountId: 'user1',
+        channelId: 'ch1',
+        channelKey: 'lark:default',
+        conversationStateId: 'conversation-1',
+        dispatchMode: 'create_session',
+        messageId: 'm1',
+        metadata: expect.objectContaining({
+          contentKind: 'text',
+          hasRuntimeContent: false,
+          threadReason: 'direct_entity'
+        }),
+        senderId: 'user1',
+        threadKey: 'direct:lark_default:ch1',
+        triggerType: 'message'
+      }))
+      expect(finishChannelChildSessionRun).toHaveBeenCalledWith('child-run-1', {
+        sessionId: 'new-sess',
+        status: 'dispatched'
+      })
+      expect(appendChannelConversationTurn).toHaveBeenCalledWith(expect.objectContaining({
+        actorAccountId: 'user1',
+        childRunId: 'child-run-1',
+        conversationStateId: 'conversation-1',
+        messageId: 'm1',
+        role: 'inbound',
+        summary: 'hello world',
+        text: 'hello world',
+        threadKey: 'direct:lark_default:ch1'
+      }))
+    })
+
+    it('captures the resolved actor in the channel runtime context', async () => {
+      const ctx = makeCtx({
+        actor: {
+          account: {
+            accountId: 'ou_1',
+            accountKey: 'lark:ou_1',
+            avatarUrl: null,
+            channelType: 'lark',
+            createdAt: 1,
+            displayName: null,
+            metadata: null,
+            updatedAt: 1
+          },
+          user: {
+            createdAt: 1,
+            displayName: '一介',
+            id: 'user-yijie',
+            updatedAt: 1
+          }
+        } as any
+      })
+
+      await dispatchMiddleware(ctx, vi.fn().mockResolvedValue(undefined))
+
+      const args = vi.mocked(createSessionWithInitialMessage).mock.calls[0][0]
+      expect(args.channelContext).toEqual(expect.objectContaining({
+        actorAccountId: 'ou_1',
+        actorUserId: 'user-yijie',
         senderId: 'user1'
       }))
     })
@@ -161,6 +301,29 @@ describe('dispatchMiddleware', () => {
 
       const args = vi.mocked(createSessionWithInitialMessage).mock.calls[0][0]
       expect(args.permissionMode).toBe('dontAsk')
+    })
+
+    it('uses a matched channel link entity as the new session prompt target', async () => {
+      const ctx = makeCtx({
+        channelLink: {
+          channelKey: 'lark:default',
+          entity: 'owo-demo',
+          external: { type: 'chat', chatId: 'ch1' },
+          name: 'wan-ke-chat',
+          path: '/workspace/.oo/channels/wan-ke-chat/channel.json',
+          definition: {} as never
+        }
+      })
+
+      await dispatchMiddleware(ctx, vi.fn().mockResolvedValue(undefined))
+
+      const args = vi.mocked(createSessionWithInitialMessage).mock.calls[0][0]
+      expect(args.promptType).toBe('entity')
+      expect(args.promptName).toBe('owo-demo')
+      expect(args.channelContext).toEqual(expect.objectContaining({
+        channelLinkName: 'wan-ke-chat',
+        entity: 'owo-demo'
+      }))
     })
 
     it('uses contentItems when present instead of text', async () => {
@@ -310,7 +473,123 @@ describe('dispatchMiddleware', () => {
           senderId: 'user1'
         })
       })
+      expect(createChannelChildSessionRun).toHaveBeenCalledWith(expect.objectContaining({
+        conversationStateId: 'conversation-1',
+        dispatchMode: 'continue_session',
+        sessionId: 'existing-sess',
+        threadKey: 'direct:lark_default:ch1'
+      }))
+      expect(finishChannelChildSessionRun).toHaveBeenCalledWith('child-run-1', {
+        sessionId: 'existing-sess',
+        status: 'dispatched'
+      })
       expect(createSessionWithInitialMessage).not.toHaveBeenCalled()
+    })
+
+    it('injects next-message resume context into the current child run', async () => {
+      listResolvedChannelPendingIntents.mockReturnValue([
+        makeNextMessageResumeIntent({
+          metadata: {
+            resume: {
+              authorizationRequestId: 'auth-1',
+              authorizationStatus: 'granted',
+              capability: 'Write',
+              mode: 'next_message',
+              sessionId: 'existing-sess',
+              status: 'ready',
+              threadKey: 'direct:lark_default:ch1'
+            }
+          }
+        })
+      ])
+      const ctx = makeCtx({ sessionId: 'existing-sess' })
+
+      await dispatchMiddleware(ctx, vi.fn().mockResolvedValue(undefined))
+
+      expect(listResolvedChannelPendingIntents).toHaveBeenCalledWith({
+        channelType: 'lark',
+        conversationStateId: 'conversation-1',
+        ownerAccountId: 'user1',
+        threadKey: 'direct:lark_default:ch1'
+      })
+      expect(createChannelChildSessionRun).toHaveBeenCalledWith(expect.objectContaining({
+        metadata: expect.objectContaining({
+          hasRuntimeContent: true,
+          nextMessageResumeIntentIds: ['pending-auth-1']
+        }),
+        sessionId: 'existing-sess',
+        triggerType: 'message'
+      }))
+      expect(processUserMessage).toHaveBeenCalledWith('existing-sess', 'hello world', {
+        channelContext: expect.objectContaining({
+          childRunId: 'child-run-1',
+          conversationStateId: 'conversation-1',
+          threadKey: 'direct:lark_default:ch1'
+        }),
+        runtimeContent: expect.stringContaining('<channel-next-message-resume>')
+      })
+      expect(processUserMessage).toHaveBeenCalledWith(
+        'existing-sess',
+        'hello world',
+        expect.objectContaining({
+          runtimeContent: expect.stringContaining('authorizationRequestId: auth-1')
+        })
+      )
+      expect(updateChannelPendingIntent).toHaveBeenNthCalledWith(1, 'pending-auth-1', {
+        metadata: expect.objectContaining({
+          resume: expect.objectContaining({
+            dispatchReason: 'next_message',
+            resumeChildRunId: 'child-run-1',
+            status: 'dispatching'
+          })
+        })
+      })
+      expect(updateChannelPendingIntent).toHaveBeenLastCalledWith('pending-auth-1', {
+        metadata: expect.objectContaining({
+          resume: expect.objectContaining({
+            dispatchReason: 'next_message',
+            resumeChildRunId: 'child-run-1',
+            sessionId: 'existing-sess',
+            status: 'dispatched'
+          })
+        })
+      })
+    })
+
+    it('restores the pending resume session when the channel has no active binding', async () => {
+      listResolvedChannelPendingIntents.mockReturnValue([
+        makeNextMessageResumeIntent()
+      ])
+      const ctx = makeCtx()
+
+      await dispatchMiddleware(ctx, vi.fn().mockResolvedValue(undefined))
+
+      expect(ctx.sessionId).toBe('resume-sess')
+      expect(createSessionWithInitialMessage).not.toHaveBeenCalled()
+      expect(processUserMessage).toHaveBeenCalledWith(
+        'resume-sess',
+        'hello world',
+        expect.objectContaining({
+          runtimeContent: expect.stringContaining('<channel-next-message-resume>')
+        })
+      )
+      expect(createChannelChildSessionRun).toHaveBeenCalledWith(expect.objectContaining({
+        dispatchMode: 'continue_session',
+        sessionId: 'resume-sess'
+      }))
+    })
+
+    it('marks the child run failed when dispatching to an existing session fails', async () => {
+      vi.mocked(processUserMessage).mockRejectedValueOnce(new Error('runtime offline'))
+      const ctx = makeCtx({ sessionId: 'existing-sess' })
+
+      await expect(dispatchMiddleware(ctx, vi.fn().mockResolvedValue(undefined))).rejects.toThrow('runtime offline')
+
+      expect(finishChannelChildSessionRun).toHaveBeenCalledWith('child-run-1', {
+        error: 'runtime offline',
+        sessionId: 'existing-sess',
+        status: 'failed'
+      })
     })
 
     it('forwards contentItems when present', async () => {
