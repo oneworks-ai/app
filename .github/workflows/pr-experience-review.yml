@@ -46,6 +46,12 @@ jobs:
           - Decide whether this PR produced reusable project experience.
           - If experience should be captured, run `$post-task-experience-review`.
           - Merge only after the independent reviewer reports PASS.
+          - For workflow, permission, or release-rule documentation changes, also add this checked section to the PR body after an independent read-only conflict review:
+
+          ```md
+          ## Policy Conflict Review
+          - [x] Independent read-only reviewer checked workflow, permission, and release-rule conflicts and reported PASS
+          ```
           EOF
           )"
 

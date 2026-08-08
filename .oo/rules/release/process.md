@@ -74,7 +74,7 @@ Relay device transport contract is runtime code shared by `@oneworks/types`, `@o
 
 ## macOS 桌面候选与提升
 
-- 普通 PR 的 macOS installer 现在使用 macos-26 runner，构建 unsigned arm64+x64 候选、验证 native closure 并执行 arm64 smoke；nightly 仍只覆盖发布打包回归，不能替代正式候选。
+- 触达产品源码、workflow、配置、manifest、lockfile、脚本、测试或混合范围的普通 PR，其 macOS installer 使用 macos-26 runner，构建 unsigned arm64+x64 候选、验证 native closure 并执行 arm64 smoke；纯文档 PR 只完成同名 required context 的范围确认，不重复打包。nightly 仍只覆盖发布打包回归，不能替代正式候选。
 - 正式发版仍构建 arm64+x64 的 DMG / PKG / ZIP。构建成功后必须生成 `oneworks-desktop-release-candidate.json`，记录 tag、源 SHA、签名状态、架构、目标和每个文件的 SHA-256；后续发布前必须重新核对清单。
 - 需要先验收候选但暂不发布时，手动触发 `desktop-package.yml`，传 `release_tag` 且保持 `create_release=false`。这会使用正式版本身份构建，但只保存 Actions artifact。
 - 提升已验证候选时，再触发同一 workflow，设置 `create_release=true`、相同 `release_tag` 和原成功构建的 `candidate_run_id`。package job 会跳过，GitHub Release 只消费并校验原候选，不重新编译或打包。
