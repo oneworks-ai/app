@@ -5,7 +5,7 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { writeActiveModulePackage } from '#~/module-update-cache.js'
-import { checkModuleUpdates, installModuleUpdate } from '#~/services/module-updates.js'
+import { checkModuleUpdates, installModuleUpdate, isModuleUpdateTargetId } from '#~/services/module-updates.js'
 
 const mocks = vi.hoisted(() => ({
   loadConfigState: vi.fn()
@@ -67,6 +67,26 @@ afterEach(async () => {
 })
 
 describe('module update runtime scoping', () => {
+  it('recognizes every applicable checked module as an exact install target', async () => {
+    const realHome = await createTempDir()
+    const serverPackageDir = await writePackage(
+      path.join(realHome, 'runtime', 'server'),
+      '@oneworks/server',
+      '0.1.0-beta.10'
+    )
+    vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', realHome)
+    vi.stubEnv('__ONEWORKS_PROJECT_PACKAGE_DIR__', serverPackageDir)
+    vi.stubEnv('__ONEWORKS_PROJECT_SERVER_ENTRY_KIND__', 'server')
+
+    const response = await checkModuleUpdates({ publishedVersionResolver: async () => '0.1.0-beta.11' })
+
+    expect(response.modules.length).toBeGreaterThan(0)
+    expect(response.modules.every(module => isModuleUpdateTargetId(module.id))).toBe(true)
+    expect(isModuleUpdateTargetId('adapter:not-registered')).toBe(false)
+    expect(isModuleUpdateTargetId('plugin:not-registered')).toBe(false)
+    expect(isModuleUpdateTargetId('catalog:not-registered')).toBe(false)
+  })
+
   it('exposes the model provider catalog as an independently updateable global module', async () => {
     const realHome = await createTempDir()
     const serverPackageDir = await writePackage(

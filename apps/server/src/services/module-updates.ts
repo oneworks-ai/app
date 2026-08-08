@@ -145,6 +145,14 @@ const moduleUpdateTargets: ModuleUpdateTarget[] = [
   }))
 ]
 
+const moduleUpdateTargetsById = new Map(
+  moduleUpdateTargets.map(target => [target.id, target] as const)
+)
+
+const getModuleUpdateTarget = (id: string) => moduleUpdateTargetsById.get(id)
+
+export const isModuleUpdateTargetId = (id: string) => getModuleUpdateTarget(id) != null
+
 const unique = <T>(values: T[]) => [...new Set(values)]
 
 const normalizeEnvValue = (value: string | undefined) => {
@@ -800,10 +808,6 @@ export const checkModuleUpdates = async (
     npmTag
   }
 }
-
-const getModuleUpdateTarget = (id: string) => (
-  moduleUpdateTargets.find(target => target.id === id)
-)
 
 const getValidModuleUpdateChannelKeys = () =>
   new Set(

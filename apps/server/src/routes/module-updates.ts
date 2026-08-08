@@ -8,19 +8,18 @@ import type { ModuleUpdateChannel, ModuleUpdateSettingsPatch } from '@oneworks/t
 import {
   checkModuleUpdates,
   installModuleUpdate,
+  isModuleUpdateTargetId,
   resolveModuleUpdateChangelogAsset,
   updateModuleUpdateSettings
 } from '#~/services/module-updates.js'
 import { badRequest, internalServerError, isHttpError, notFound } from '#~/utils/http.js'
-
-const MODULE_UPDATE_ID_PATTERN = /^(?:web|client|server|adapter:[\w.-]+|plugin:[\w.-]+)$/
 
 const assertModuleUpdateId = (id: string | undefined) => {
   const normalized = id?.trim()
   if (normalized == null || normalized === '') {
     throw badRequest('Module id is required', { id }, 'module_update_id_required')
   }
-  if (!MODULE_UPDATE_ID_PATTERN.test(normalized)) {
+  if (!isModuleUpdateTargetId(normalized)) {
     throw badRequest('Invalid module id', { id }, 'module_update_id_invalid')
   }
   return normalized
