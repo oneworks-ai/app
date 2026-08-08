@@ -34,7 +34,9 @@ find .oo/rules -maxdepth 1 -type f -name '*.md' -print0 | xargs -0 wc -c -l
 
 - medium reasoning 只负责边界明确后的日常实现，不等于可以省略全局设计和最终审阅。非机械代码修改在写入前必须产出 Change Brief、影响地图和抽象决策；实现者不得自审自批。
 - 交付前按风险完成独立的局部正确性、全局 / 抽象审阅和自动化门禁；公共契约、状态所有权、权限、安全、数据、复杂并发或不可逆操作必须升级设计或最终审阅。执行清单见 [`maintenance/code-delivery-quality.md`](./maintenance/code-delivery-quality.md)。
-- GitHub API 身份 / 状态、PR、Actions、release 和 credential 交付只认本机官方 `gh` CLI，不通过 Codex / Claude / GitHub 插件、connector、复制 token 或其他集成绕过。Git clone / fetch / push 统一以 SSH 为标准 transport，`gh` 的 Git 协议偏好和仓库 remote 都应为 SSH；22 端口不可达时无需用户批准，验证后自动按 GitHub 官方方案改走 SSH-over-443。SSH transport 与 `gh` browser / device OAuth 相互独立；OAuth 无效时停止 GitHub API / PR 写入并按标准交互流程恢复一次，详见 [`maintenance/task-planning.md`](./maintenance/task-planning.md#github-cli-单一授权入口)。
+- 本地验证按变更形态分层：普通内部 Markdown / 规则只跑格式、diff、链接 / anchor、changed-line privacy、scope 和 PR preflight；policy / workflow / permission / release rule 文档追加独立只读冲突审阅；公开 README / `.oo/docs` 与 changelog / release docs 分别追加对应 docs build / media 或 release-doc preflight。任何 source、workflow、config、lockfile、manifest、script、test 或 mixed change 回退完整产品门禁；纯文档不得重复无关的全量 lint、typecheck 或 macOS packaging。详见 [`maintenance/task-planning.md`](./maintenance/task-planning.md#按变更风险选择验证)。
+- 配置或 prompt 中声明的权限不是当前任务已捕获有效权限的证明。权限敏感的 external / network / install / Git 操作前先做窄范围、非变更 capability probe；GitHub API 身份与仓库权限只认本机官方 `gh api user` 加 repo-specific API，Git transport 另用 SSH dry-run 验证。新任务进入 `waitingOnApproval` 或无法复用 host localhost proxy 时保持零变更并回调，由协调器归档 / 重建；Git 写操作仍由独立 operator 承担。完整边界见 [`maintenance/task-planning.md`](./maintenance/task-planning.md#权限预检与审批恢复)。
+- GitHub API 身份 / 状态、PR、Actions、release 和 credential 交付只认本机官方 `gh` CLI，不通过 Codex / Claude / GitHub 插件、connector、复制 token 或其他集成绕过。Git clone / fetch / push 统一使用 SSH；同一 host 复用已有 credential 与 SSH / proxy transport，不在任务内 login、logout、refresh 或临时改 host 配置。API 双信号或 SSH probe 失败时停止对应写入并回报 capability gap，详见 [`maintenance/task-planning.md`](./maintenance/task-planning.md#github-cli-单一授权入口)。
 
 ## 常见入口
 
