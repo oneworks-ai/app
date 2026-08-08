@@ -1,6 +1,6 @@
 {
   "name": "@oneworks/fs-authority-native",
-  "version": "1.0.0-rc.0",
+  "version": "1.0.0-rc.1",
   "description": "Fail-closed native filesystem authority for One Works",
   "license": "MIT",
   "repository": {
