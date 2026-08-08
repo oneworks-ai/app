@@ -54,6 +54,22 @@ import { createOneWorksIconDataUri } from '#~/utils/oneworks-icon'
 import { getShortcutDisplayTokens, isShortcutMatch } from '#~/utils/shortcutUtils'
 import { resolveWorkspaceFileOpenerSelectModels } from '#~/utils/workspace-file-openers'
 import { rememberWorkspaceConnection } from '#~/workspace-connection-state'
+import {
+  areLauncherDirectoryPathsEquivalent,
+  buildLauncherDirectoryBreadcrumbs,
+  isLauncherAbsoluteDirectoryPath,
+  parseLauncherDirectoryPathList,
+  readLauncherDirectoryRouteState,
+  rememberLauncherDirectoryPath,
+  resolveLauncherDirectoryCommandSemantics,
+  resolveLauncherDirectoryPathInput,
+  resolveLauncherDirectoryRouteReplacement
+} from './launcher-directory-semantics'
+import type {
+  LauncherDirectoryBrowserMode,
+  LauncherDirectoryCommandActionLabel,
+  LauncherDirectoryCommandOperation
+} from './launcher-directory-semantics'
 import { normalizePluginLauncherSearchResults } from './launcher-plugin-search'
 import type {
   LauncherRelayDeviceProject,
@@ -88,14 +104,12 @@ const LAUNCHER_RECENT_SELECTION_DISPLAY_LIMIT = 3
 const LAUNCHER_RECENT_SELECTIONS_STORAGE_KEY = 'oneworks_launcher_recent_selections'
 const LAUNCHER_QUERY_SEARCH_PARAM = 'q'
 const LAUNCHER_VIEW_SEARCH_PARAM = 'view'
-const LAUNCHER_DIRECTORY_PATH_SEARCH_PARAM = 'path'
 const CLONE_DESTINATION_FAVORITE_LIMIT = 24
 const CLONE_DESTINATION_RECENT_LIMIT = 12
 const CLONE_DESTINATION_FAVORITES_STORAGE_KEY = 'oneworks_launcher_clone_destination_favorites'
 const CLONE_DESTINATION_RECENTS_STORAGE_KEY = 'oneworks_launcher_clone_destination_directories'
 const cloneRepositoryMessageKey = 'launcher-clone-repository'
 
-type LauncherDirectoryBrowserMode = 'clone' | 'create-workspace' | 'open-workspace'
 type ServerLauncherAvailability = 'available' | 'checking' | 'unavailable'
 
 const getCloneRepositoryUrlCandidate = (value: string) => {
@@ -124,12 +138,6 @@ interface LauncherPluginRouteState {
   scope: string
 }
 
-interface LauncherDirectoryRouteState {
-  directory?: string
-  mode: LauncherDirectoryBrowserMode
-  targetId: string
-}
-
 const safeDecodeLauncherPathSegment = (value: string | undefined) => {
   if (value == null || value === '') return undefined
   try {
@@ -148,55 +156,6 @@ const readLauncherPluginRouteState = (pathname: string): LauncherPluginRouteStat
   if (scope == null || routeId == null) return undefined
 
   return { routeId, scope }
-}
-
-const encodeLauncherPathSegment = (value: string) => encodeURIComponent(value)
-
-const readLauncherDirectoryPathFromSearch = (search: string) => {
-  const directory = new URLSearchParams(search).get(LAUNCHER_DIRECTORY_PATH_SEARCH_PARAM)
-  return directory == null || directory.trim() === '' ? undefined : directory
-}
-
-const readLauncherDirectoryRouteState = (
-  pathname: string,
-  search: string
-): LauncherDirectoryRouteState | undefined => {
-  const segments = pathname.split('/').filter(Boolean)
-  if (segments[0] !== 'launcher' || segments[1] !== 'browse') return undefined
-
-  const mode = safeDecodeLauncherPathSegment(segments[2]) as LauncherDirectoryBrowserMode | undefined
-  if (mode !== 'clone' && mode !== 'create-workspace' && mode !== 'open-workspace') return undefined
-
-  const directory = safeDecodeLauncherPathSegment(segments.slice(4).join('/')) ??
-    readLauncherDirectoryPathFromSearch(search)
-
-  return {
-    ...(directory == null ? {} : { directory }),
-    mode,
-    targetId: safeDecodeLauncherPathSegment(segments[3]) ?? 'local'
-  }
-}
-
-const buildLauncherDirectoryRoutePath = (
-  mode: LauncherDirectoryBrowserMode,
-  targetId: string,
-  directory?: string
-) => {
-  const routePath = `/launcher/browse/${encodeLauncherPathSegment(mode)}/${encodeLauncherPathSegment(targetId)}`
-  const normalizedDirectory = directory?.trim()
-  return normalizedDirectory == null || normalizedDirectory === ''
-    ? routePath
-    : `${routePath}/${encodeLauncherPathSegment(normalizedDirectory)}`
-}
-
-const buildLauncherDirectoryRouteSearch = (search: string) => {
-  const searchParams = new URLSearchParams(search)
-  searchParams.delete(LAUNCHER_VIEW_SEARCH_PARAM)
-  searchParams.delete(LAUNCHER_QUERY_SEARCH_PARAM)
-  searchParams.delete(LAUNCHER_DIRECTORY_PATH_SEARCH_PARAM)
-
-  const nextSearch = searchParams.toString()
-  return nextSearch === '' ? '' : `?${nextSearch}`
 }
 
 interface LauncherPluginSearchProvider extends PluginLauncherSearchProvider {
@@ -343,17 +302,7 @@ const normalizeCloneDestinationDirectoryList = (value: unknown): DesktopCloneDes
 const getStoredCloneDestinationDirectoryList = (storageKey: string) => {
   try {
     const parsed = JSON.parse(localStorage.getItem(storageKey) ?? '[]') as unknown
-    if (!Array.isArray(parsed)) return []
-
-    const seenDirectories = new Set<string>()
-    return parsed.flatMap((value) => {
-      if (typeof value !== 'string') return []
-      const normalizedDirectory = value.trim()
-      if (normalizedDirectory === '' || seenDirectories.has(normalizedDirectory)) return []
-
-      seenDirectories.add(normalizedDirectory)
-      return [normalizedDirectory]
-    })
+    return parseLauncherDirectoryPathList(parsed)
   } catch {
     return []
   }
@@ -424,25 +373,10 @@ const persistCloneDestinationFavoriteDirectories = (directories: string[]) => {
   } catch {}
 }
 
-const rememberCloneDestinationDirectory = (directories: string[], directory: string) => {
-  const normalizedDirectory = directory.trim()
-  if (normalizedDirectory === '') return directories
-
-  return [
-    normalizedDirectory,
-    ...directories.filter(candidate => candidate !== normalizedDirectory)
-  ].slice(0, CLONE_DESTINATION_RECENT_LIMIT)
-}
-
 const getDirectoryDisplayName = (directory: string) => {
   const normalizedDirectory = directory.replace(/[\\/]+$/u, '')
   const name = normalizedDirectory.split(/[\\/]/u).filter(Boolean).at(-1)
   return name == null || name === '' ? directory : name
-}
-
-const isLikelyAbsoluteDirectoryPath = (directory: string) => {
-  const trimmedDirectory = directory.trim()
-  return trimmedDirectory.startsWith('/') || /^[a-z]:[\\/]/iu.test(trimmedDirectory)
 }
 
 const normalizeDirectoryPathKey = (directory: string) => {
@@ -455,57 +389,11 @@ const normalizeDirectoryPathKey = (directory: string) => {
 
 const isDirectoryPathInSameParent = (directory: string, parentDirectory: string) => {
   const normalizedDirectory = directory.trim().replace(/[\\/]+$/u, '')
-  const parentBreadcrumb = buildDirectoryBreadcrumbs(normalizedDirectory).at(-2)
+  const parentBreadcrumb = buildLauncherDirectoryBreadcrumbs(normalizedDirectory).at(-2)
   return parentBreadcrumb != null &&
     normalizeDirectoryPathKey(parentBreadcrumb.path) === normalizeDirectoryPathKey(parentDirectory)
 }
 
-const buildDirectoryBreadcrumbs = (directory: string) => {
-  const trimmedDirectory = directory.trim()
-  if (trimmedDirectory === '') return []
-
-  const separator = trimmedDirectory.includes('\\') ? '\\' : '/'
-  const windowsDriveMatch = /^([a-z]:)/iu.exec(trimmedDirectory)
-  if (windowsDriveMatch != null) {
-    const drivePrefix = windowsDriveMatch[1]
-    const rootPath = `${drivePrefix}${separator}`
-    const segments = trimmedDirectory
-      .slice(drivePrefix.length)
-      .replace(/^[\\/]+/u, '')
-      .split(/[\\/]+/u)
-      .filter(Boolean)
-    return segments.reduce<Array<{ label: string; path: string }>>((breadcrumbs, segment) => {
-      const previousPath = breadcrumbs.at(-1)?.path ?? rootPath
-      breadcrumbs.push({
-        label: segment,
-        path: previousPath.endsWith(separator) ? `${previousPath}${segment}` : `${previousPath}${separator}${segment}`
-      })
-      return breadcrumbs
-    }, [{ label: rootPath, path: rootPath }])
-  }
-
-  if (trimmedDirectory.startsWith('/')) {
-    const segments = trimmedDirectory.replace(/\/+$/u, '').slice(1).split('/').filter(Boolean)
-    return segments.reduce<Array<{ label: string; path: string }>>((breadcrumbs, segment) => {
-      const previousPath = breadcrumbs.at(-1)?.path ?? '/'
-      breadcrumbs.push({
-        label: segment,
-        path: previousPath === '/' ? `/${segment}` : `${previousPath}/${segment}`
-      })
-      return breadcrumbs
-    }, [{ label: '/', path: '/' }])
-  }
-
-  const segments = trimmedDirectory.replace(/[\\/]+$/u, '').split(/[\\/]+/u).filter(Boolean)
-  return segments.reduce<Array<{ label: string; path: string }>>((breadcrumbs, segment) => {
-    const previousPath = breadcrumbs.at(-1)?.path
-    breadcrumbs.push({
-      label: segment,
-      path: previousPath == null ? segment : `${previousPath}${separator}${segment}`
-    })
-    return breadcrumbs
-  }, [])
-}
 interface LauncherFileSearchItem {
   directory: string
   name: string
@@ -538,7 +426,8 @@ const launcherIconThemes = new Set<LauncherDesktopIconSettings['iconTheme']>(ONE
 
 interface LauncherCommand {
   action: () => Promise<void> | void
-  actionLabel?: 'back' | 'clone' | 'create' | 'open'
+  actionIcon?: string
+  actionLabel?: LauncherDirectoryCommandActionLabel | 'open'
   avatarInitials?: string
   avatarUrl?: string
   automationPath?: string
@@ -555,8 +444,21 @@ interface LauncherCommand {
   removeLabel?: string
   recentSelectionId?: string
   secondaryAction?: () => Promise<void> | void
+  secondaryActionIcon?: string
+  secondaryActionLabel?: LauncherDirectoryCommandActionLabel
   subtitle?: string
   title: string
+}
+
+const getLauncherCommandActionLabelKey = (
+  actionLabel: LauncherCommand['actionLabel'] = 'open'
+) => {
+  if (actionLabel === 'back') return 'launcher.footerHints.back'
+  if (actionLabel === 'clone') return 'launcher.footerHints.clone'
+  if (actionLabel === 'create') return 'launcher.footerHints.create'
+  if (actionLabel === 'enter-directory') return 'launcher.footerHints.enterDirectory'
+  if (actionLabel === 'open-as-project') return 'launcher.footerHints.openAsProject'
+  return 'launcher.footerHints.open'
 }
 
 interface LauncherCommandSection {
@@ -1350,19 +1252,20 @@ export function LauncherRoute({
     if (routingMode === 'embedded') return
     if (!isDirectoryBrowserMode || directoryBrowserMode == null || launcherPluginRouteState != null) return
 
-    const nextPathname = buildLauncherDirectoryRoutePath(
-      directoryBrowserMode,
-      directoryBrowserTargetId,
-      cloneDestinationDirectory
-    )
-    const nextSearch = buildLauncherDirectoryRouteSearch(location.search)
-    if (nextPathname === location.pathname && nextSearch === location.search) return
+    const replacement = resolveLauncherDirectoryRouteReplacement({
+      directory: cloneDestinationDirectory,
+      mode: directoryBrowserMode,
+      pathname: location.pathname,
+      search: location.search,
+      targetId: directoryBrowserTargetId
+    })
+    if (replacement == null) return
 
     void navigate({
       hash: location.hash,
-      pathname: nextPathname,
-      search: nextSearch
-    }, { replace: true })
+      pathname: replacement.pathname,
+      search: replacement.search
+    }, { replace: replacement.replace })
   }, [
     cloneDestinationDirectory,
     directoryBrowserMode,
@@ -1639,32 +1542,32 @@ export function LauncherRoute({
   }, [message, t])
 
   const openWorkspace = useCallback(async (workspaceFolder: string, workspaceName?: string) => {
-    const normalizedWorkspaceFolder = workspaceFolder.trim()
-    if (normalizedWorkspaceFolder === '') {
+    const resolvedWorkspaceFolder = resolveLauncherDirectoryPathInput(workspaceFolder)
+    if (resolvedWorkspaceFolder == null) {
       void message.error(t('launcher.openWorkspaceFailed'))
       focusSearchInput()
       return
     }
 
     setOpeningWorkspace({
-      name: workspaceName?.trim() || getDirectoryDisplayName(normalizedWorkspaceFolder),
-      path: normalizedWorkspaceFolder
+      name: workspaceName?.trim() || getDirectoryDisplayName(resolvedWorkspaceFolder),
+      path: resolvedWorkspaceFolder
     })
 
     const clearOpeningWorkspace = () => {
-      setOpeningWorkspace(current => current?.path === normalizedWorkspaceFolder ? undefined : current)
+      setOpeningWorkspace(current => current?.path === resolvedWorkspaceFolder ? undefined : current)
     }
 
     try {
       if (desktopApi?.openWorkspace != null) {
-        await desktopApi.openWorkspace(normalizedWorkspaceFolder)
+        await desktopApi.openWorkspace(resolvedWorkspaceFolder)
         onClose?.()
         window.setTimeout(clearOpeningWorkspace, 320)
         return
       }
 
       if (canUseServerLauncher) {
-        const result = await openLauncherWorkspace(normalizedWorkspaceFolder)
+        const result = await openLauncherWorkspace(resolvedWorkspaceFolder)
         const workspaceClientBase = buildWorkspaceClientBase(result.workspaceId)
         rememberWorkspaceConnection(result, 'local', {
           managerServerBaseUrl: getLauncherManagerServerBaseUrl()
@@ -2051,7 +1954,11 @@ export function LauncherRoute({
     }
 
     setRecentCloneDestinationDirectories((prev) => {
-      const next = rememberCloneDestinationDirectory(prev, normalizedDestinationDirectory)
+      const next = rememberLauncherDirectoryPath(
+        prev,
+        normalizedDestinationDirectory,
+        CLONE_DESTINATION_RECENT_LIMIT
+      )
       persistCloneDestinationDirectories(next)
       return next
     })
@@ -2202,7 +2109,11 @@ export function LauncherRoute({
       }
 
       setRecentCloneDestinationDirectories((prev) => {
-        const next = rememberCloneDestinationDirectory(prev, normalizedParentDirectory)
+        const next = rememberLauncherDirectoryPath(
+          prev,
+          normalizedParentDirectory,
+          CLONE_DESTINATION_RECENT_LIMIT
+        )
         persistCloneDestinationDirectories(next)
         return next
       })
@@ -2225,8 +2136,8 @@ export function LauncherRoute({
   ])
 
   const handleOpenWorkspaceDirectory = useCallback(async (directory: string | undefined) => {
-    const normalizedDirectory = directory?.trim()
-    if (normalizedDirectory == null || normalizedDirectory === '') {
+    const resolvedDirectory = resolveLauncherDirectoryPathInput(directory)
+    if (resolvedDirectory == null) {
       void message.error(t('launcher.openWorkspaceFailed'))
       focusSearchInput()
       return
@@ -2236,21 +2147,25 @@ export function LauncherRoute({
       await openRemoteWorkspaceTarget({
         deviceId: activeDirectoryBrowserTarget.deviceId,
         deviceName: activeDirectoryBrowserTarget.deviceName,
-        name: getDirectoryDisplayName(normalizedDirectory),
+        name: getDirectoryDisplayName(resolvedDirectory),
         serverId: activeDirectoryBrowserTarget.serverId,
         serverName: activeDirectoryBrowserTarget.serverName,
-        workspaceFolder: normalizedDirectory
+        workspaceFolder: resolvedDirectory
       })
       return
     }
 
     setRecentCloneDestinationDirectories((prev) => {
-      const next = rememberCloneDestinationDirectory(prev, normalizedDirectory)
+      const next = rememberLauncherDirectoryPath(
+        prev,
+        resolvedDirectory,
+        CLONE_DESTINATION_RECENT_LIMIT
+      )
       persistCloneDestinationDirectories(next)
       return next
     })
 
-    await openWorkspace(normalizedDirectory)
+    await openWorkspace(resolvedDirectory)
   }, [activeDirectoryBrowserTarget, focusSearchInput, message, openRemoteWorkspaceTarget, openWorkspace, t])
 
   const openCurrentWorkspaceResource = useCallback(async (target: DesktopWorkspaceResourceTarget) => {
@@ -2994,52 +2909,65 @@ export function LauncherRoute({
         if (leftIndex !== rightIndex) return leftIndex - rightIndex
         return left.name.localeCompare(right.name, undefined, { numeric: true })
       }
+      const directoryMode: LauncherDirectoryBrowserMode = isCloneRepositoryMode
+        ? 'clone'
+        : isCreateWorkspaceDirectoryMode
+        ? 'create-workspace'
+        : 'open-workspace'
       const toDestinationCommand = ({
-        actionLabel = isCloneRepositoryMode ? 'clone' : isCreateWorkspaceDirectoryMode ? 'create' : 'open',
         icon = 'folder',
+        isBackAction = false,
         name,
         path,
         showFavoriteAction = true,
         showSecondaryAction = true
       }: DesktopCloneDestinationDirectory & {
-        actionLabel?: LauncherCommand['actionLabel']
         icon?: string
+        isBackAction?: boolean
         showFavoriteAction?: boolean
         showSecondaryAction?: boolean
       }): LauncherCommand => {
-        const isBackAction = actionLabel === 'back'
         const hasFavoriteAction = useDirectoryMemory && showFavoriteAction && !isBackAction
-        const hasSecondaryAction = showSecondaryAction && !isBackAction
         const isFavorite = favoriteDirectoryKeys.has(normalizeDirectoryPathKey(path))
-        const action = isBackAction
-          ? () => openCloneDestinationDirectory(path)
-          : isCloneRepositoryMode
-          ? () => void handleCloneRepository(path)
-          : isCreateWorkspaceDirectoryMode
-          ? () => void handleCreateWorkspaceInDirectory(path)
-          : () => void handleOpenWorkspaceDirectory(path)
-        const actionMenuLabel = isBackAction
-          ? t('launcher.footerHints.back')
-          : actionLabel === 'clone'
-          ? t('launcher.footerHints.clone')
-          : actionLabel === 'create'
-          ? t('launcher.footerHints.create')
-          : t('launcher.footerHints.open')
+        const semantics = resolveLauncherDirectoryCommandSemantics({
+          isBackAction,
+          mode: directoryMode,
+          showSecondaryAction
+        })
+        const resolveAction = (operation: LauncherDirectoryCommandOperation) => {
+          if (operation === 'clone') return () => void handleCloneRepository(path)
+          if (operation === 'create-workspace') return () => void handleCreateWorkspaceInDirectory(path)
+          if (operation === 'open-workspace') return () => void handleOpenWorkspaceDirectory(path)
+          return () => openCloneDestinationDirectory(path)
+        }
+        const action = resolveAction(semantics.primary.operation)
+        const secondaryAction = semantics.secondary == null
+          ? undefined
+          : resolveAction(semantics.secondary.operation)
+        const actionMenuLabel = t(getLauncherCommandActionLabelKey(semantics.primary.label))
         const contextMenuItems: NonNullable<MenuProps['items']> = [
           {
-            icon: <span className='material-symbols-rounded launcher-command-menu__icon'>keyboard_return</span>,
+            icon: (
+              <span className='material-symbols-rounded launcher-command-menu__icon'>
+                {semantics.primary.icon}
+              </span>
+            ),
             key: 'primary-action',
             label: actionMenuLabel,
             onClick: action
           },
-          ...(hasSecondaryAction
-            ? [{
-              icon: <span className='material-symbols-rounded launcher-command-menu__icon'>chevron_right</span>,
-              key: 'enter-directory',
-              label: t('launcher.footerHints.openDirectory'),
-              onClick: () => openCloneDestinationDirectory(path)
-            }]
-            : []),
+          ...(semantics.secondary == null
+            ? []
+            : [{
+              icon: (
+                <span className='material-symbols-rounded launcher-command-menu__icon'>
+                  {semantics.secondary.icon}
+                </span>
+              ),
+              key: semantics.secondary.operation,
+              label: t(getLauncherCommandActionLabelKey(semantics.secondary.label)),
+              onClick: secondaryAction
+            }]),
           ...(useDirectoryMemory
             ? [{
               icon: <span className='material-symbols-rounded launcher-command-menu__icon'>folder_open</span>,
@@ -3093,7 +3021,8 @@ export function LauncherRoute({
         ]
         return {
           action,
-          actionLabel,
+          actionIcon: semantics.primary.icon,
+          actionLabel: semantics.primary.label,
           contextMenuItems,
           favoriteAction: hasFavoriteAction ? () => toggleCloneDestinationFavoriteDirectory(path) : undefined,
           favoriteLabel: !hasFavoriteAction
@@ -3106,7 +3035,9 @@ export function LauncherRoute({
           automationPath: path,
           isFavorite,
           keywords: [name, path],
-          secondaryAction: hasSecondaryAction ? () => openCloneDestinationDirectory(path) : undefined,
+          secondaryAction,
+          secondaryActionIcon: semantics.secondary?.icon,
+          secondaryActionLabel: semantics.secondary?.label,
           subtitle: path,
           title: name
         }
@@ -3117,11 +3048,12 @@ export function LauncherRoute({
           ? []
           : [{ name: '..', path: cloneDestinationList.parentDirectory }])
       ]
-      const directQueryDirectory = query.trim()
+      const directQueryDirectory = resolveLauncherDirectoryPathInput(query)
       const directQueryDirectories: DesktopCloneDestinationDirectory[] = (
           isOpenWorkspaceDirectoryMode &&
-          isLikelyAbsoluteDirectoryPath(directQueryDirectory) &&
-          normalizeDirectoryPathKey(directQueryDirectory) !== normalizeDirectoryPathKey(currentDirectory)
+          directQueryDirectory != null &&
+          isLauncherAbsoluteDirectoryPath(directQueryDirectory) &&
+          !areLauncherDirectoryPathsEquivalent(directQueryDirectory, currentDirectory)
         )
         ? [{
           name: getDirectoryDisplayName(directQueryDirectory),
@@ -3170,23 +3102,16 @@ export function LauncherRoute({
           toDestinationCommand({
             ...directory,
             icon: 'folder_open',
-            showFavoriteAction: false,
-            showSecondaryAction: false
+            showFavoriteAction: false
           })
         ),
         ...fixedDirectories.map(directory =>
           toDestinationCommand({
             ...directory,
-            actionLabel: directory.name === '..'
-              ? 'back'
-              : isCloneRepositoryMode
-              ? 'clone'
-              : isCreateWorkspaceDirectoryMode
-              ? 'create'
-              : 'open',
             icon: directory.name === '..' ? 'drive_folder_upload' : 'radio_button_checked',
+            isBackAction: directory.name === '..',
             showFavoriteAction: false,
-            showSecondaryAction: false
+            showSecondaryAction: directory.name === '.' && isOpenWorkspaceDirectoryMode
           })
         ),
         ...favoriteDirectories.map(directory =>
@@ -3629,7 +3554,7 @@ export function LauncherRoute({
     launcherViewMode === 'preview'
   const directoryBreadcrumbs = useMemo(() => (
     isDirectoryBrowserMode
-      ? buildDirectoryBreadcrumbs(cloneDestinationList.currentDirectory)
+      ? buildLauncherDirectoryBreadcrumbs(cloneDestinationList.currentDirectory)
       : []
   ), [cloneDestinationList.currentDirectory, isDirectoryBrowserMode])
 
@@ -3689,6 +3614,12 @@ export function LauncherRoute({
     runCommand(command)
   }, [runCommand])
 
+  const handleCommandRowClick = useCallback((command: LauncherCommand) => {
+    setActiveCommandId(command.id)
+    if (isOpenWorkspaceDirectoryMode) return
+    runCommand(command)
+  }, [isOpenWorkspaceDirectoryMode, runCommand])
+
   const runSecondaryCommandAndSelect = useCallback((command?: LauncherCommand) => {
     if (command?.secondaryAction == null) return
     setActiveCommandId(command.id)
@@ -3698,11 +3629,8 @@ export function LauncherRoute({
     })
   }, [message, t])
 
-  const getCommandActionLabel = useCallback((command: LauncherCommand) => {
-    if (command.actionLabel === 'back') return t('launcher.footerHints.back')
-    if (command.actionLabel === 'clone') return t('launcher.footerHints.clone')
-    if (command.actionLabel === 'create') return t('launcher.footerHints.create')
-    return t('launcher.footerHints.open')
+  const getCommandActionLabel = useCallback((actionLabel: LauncherCommand['actionLabel']) => {
+    return t(getLauncherCommandActionLabelKey(actionLabel))
   }, [t])
 
   const hideLauncherWindow = useCallback(() => {
@@ -4265,17 +4193,15 @@ export function LauncherRoute({
           ? {
             key: 'primary-action',
             keys: 'Enter',
-            label: activeCommand.actionLabel === 'back'
-              ? t('launcher.footerHints.back')
-              : activeCommand.actionLabel === 'clone'
-              ? t('launcher.footerHints.clone')
-              : activeCommand.actionLabel === 'create'
-              ? t('launcher.footerHints.create')
-              : t('launcher.footerHints.open')
+            label: getCommandActionLabel(activeCommand.actionLabel)
           }
           : undefined,
         activeCommand?.secondaryAction != null
-          ? { key: 'secondary-action', keys: '→', label: t('launcher.footerHints.openDirectory') }
+          ? {
+            key: 'secondary-action',
+            keys: '→',
+            label: getCommandActionLabel(activeCommand.secondaryActionLabel)
+          }
           : undefined,
         { key: 'escape-back', keys: 'Esc', label: t('launcher.footerHints.back') }
       ].filter((hint): hint is { key: string; keys: string; label: string } => hint != null)
@@ -4613,8 +4539,8 @@ export function LauncherRoute({
               )}
               <div className='launcher-command-section__items'>
                 {section.commands.map(command => {
-                  const commandActionLabel = getCommandActionLabel(command)
-                  const commandSecondaryActionLabel = t('launcher.footerHints.openDirectory')
+                  const commandActionLabel = getCommandActionLabel(command.actionLabel)
+                  const commandSecondaryActionLabel = getCommandActionLabel(command.secondaryActionLabel)
                   const commandItem = (
                     <div
                       className={`launcher-command-item ${command.id === activeCommandId ? 'is-active' : ''}`}
@@ -4632,7 +4558,7 @@ export function LauncherRoute({
                         }
                       }}
                       onClick={() => {
-                        runCommandAndSelect(command)
+                        handleCommandRowClick(command)
                       }}
                     >
                       {command.avatarUrl != null || command.avatarInitials != null
@@ -4747,7 +4673,9 @@ export function LauncherRoute({
                             runCommandAndSelect(command)
                           }}
                         >
-                          <span className='material-symbols-rounded'>keyboard_return</span>
+                          <span className='material-symbols-rounded'>
+                            {command.actionIcon ?? 'keyboard_return'}
+                          </span>
                         </button>
                       </Tooltip>
                       {command.secondaryAction != null && (
@@ -4772,7 +4700,9 @@ export function LauncherRoute({
                               runSecondaryCommandAndSelect(command)
                             }}
                           >
-                            <span className='material-symbols-rounded'>chevron_right</span>
+                            <span className='material-symbols-rounded'>
+                              {command.secondaryActionIcon ?? 'chevron_right'}
+                            </span>
                           </button>
                         </Tooltip>
                       )}

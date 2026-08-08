@@ -54,6 +54,9 @@ describe('launcher plugin boundary', () => {
 
   it('keeps host-owned directory browser pages on explicit launcher routes', async () => {
     const source = await readRepoFile('apps/client/src/routes/LauncherRoute.tsx')
+    const directorySemantics = await readRepoFile(
+      'apps/client/src/routes/launcher-directory-semantics.ts'
+    )
     const routeState = await readRepoFile('apps/client/src/routes/launcher-route-state.ts')
     const routeGuide = await readRepoFile('apps/client/src/routes/AGENTS.md')
 
@@ -61,9 +64,11 @@ describe('launcher plugin boundary', () => {
     expect(source).toContain('readLauncherViewModeFromLocation')
     expect(routeGuide).toContain('/launcher/settings')
     expect(routeGuide).toContain('/launcher/about')
-    expect(source).toContain("segments[1] !== 'browse'")
-    expect(source).toContain('buildLauncherDirectoryRoutePath')
-    expect(source).toContain('LAUNCHER_DIRECTORY_PATH_SEARCH_PARAM')
+    expect(source).toContain('readLauncherDirectoryRouteState')
+    expect(source).toContain('resolveLauncherDirectoryRouteReplacement')
+    expect(directorySemantics).toContain("segments[1] !== 'browse'")
+    expect(directorySemantics).toContain('buildLauncherDirectoryRoutePath')
+    expect(directorySemantics).toContain('LAUNCHER_DIRECTORY_PATH_SEARCH_PARAM')
     expect(routeGuide).toContain('/launcher/browse/:mode/:targetId/:path')
   })
 

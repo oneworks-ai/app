@@ -1288,6 +1288,8 @@
       "edit": "Edit",
       "create": "Create",
       "clone": "Clone",
+      "enterDirectory": "Enter folder",
+      "openAsProject": "Open as project",
       "openDirectory": "Open folder",
       "context": "Menu",
       "contextKey": "Right click",
