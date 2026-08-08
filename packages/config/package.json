@@ -38,6 +38,15 @@
         "require": "./dist/schema.js"
       }
     },
+    "./write-lock": {
+      "__oneworks__": {
+        "default": "./src/write-lock.ts"
+      },
+      "default": {
+        "import": "./dist/write-lock.mjs",
+        "require": "./dist/write-lock.js"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

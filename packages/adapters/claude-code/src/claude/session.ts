@@ -7,6 +7,7 @@ import { uuid } from '@oneworks/utils/uuid'
 import { mapAdapterContentToClaudeContent } from '../protocol/content'
 import { handleIncomingEvent } from '../protocol/incoming'
 import type { ClaudeCodeErrorResultEvent, ClaudeCodeIncomingEvent, ClaudeCodeUserEvent } from '../protocol/types'
+import { acquireClaudeAccountSessionLease } from './accounts'
 import { prepareClaudeExecution } from './prepare'
 
 const isMissingConversationError = (errors: string[] | undefined, sessionId: string) => (
@@ -50,7 +51,20 @@ const stripAnsiSequences = (value: string) => {
 export const createClaudeSession = async (ctx: AdapterCtx, options: AdapterQueryOptions) => {
   const { logger } = ctx
   const { onEvent, description, mode = 'stream', extraOptions } = options
-  let { cliPath, args, env, cwd, sessionId, effort, executionType } = await prepareClaudeExecution(ctx, options)
+  let { cliPath, args, env, cwd, sessionId, effort, executionType, accountKey } = await prepareClaudeExecution(
+    ctx,
+    options
+  )
+  const releaseAccountLease = await acquireClaudeAccountSessionLease(ctx, accountKey)
+  let accountLeaseReleased = false
+  const releaseAccountLeaseOnce = async () => {
+    if (accountLeaseReleased) return
+    accountLeaseReleased = true
+    await releaseAccountLease()
+  }
+  const releaseAccountLeaseDetached = () => {
+    void releaseAccountLeaseOnce().catch(error => logger.warn('Failed to release Claude account session lease:', error))
+  }
   let didEmitFatalError = false
 
   const emitEvent = (event: Parameters<typeof onEvent>[0]) => {
@@ -190,6 +204,9 @@ export const createClaudeSession = async (ctx: AdapterCtx, options: AdapterQuery
       proc = nextProc
       stdoutBuffer = ''
       stderrBuffer = []
+      let processFinalized = false
+      let processSpawned = false
+      let spawnError: Error | undefined
 
       nextProc.stdout.on('data', (buf) => {
         const rawStr = String(buf)
@@ -231,7 +248,7 @@ export const createClaudeSession = async (ctx: AdapterCtx, options: AdapterQuery
               ) {
                 void markResumeReady()
               }
-              handleIncomingEvent(parsed, emitEvent, effort)
+              handleIncomingEvent(parsed, emitEvent, effort, accountKey)
             } catch (err) {
               console.error('Failed to parse JSON:', trimmed, err)
             }
@@ -244,28 +261,13 @@ export const createClaudeSession = async (ctx: AdapterCtx, options: AdapterQuery
         stderrBuffer.push(rawStr)
       })
 
-      nextProc.on('error', (err) => {
-        const message = err instanceof Error ? err.message : String(err)
-        if (!didEmitFatalError) {
-          emitEvent({
-            type: 'error',
-            data: {
-              message,
-              details: err,
-              fatal: true
-            }
-          })
-        }
-        emitExit({
-          exitCode: 1,
-          stderr: message
-        })
-      })
-
-      nextProc.on('exit', (code) => {
-        if (pendingResumeCreateFallback) {
+      const finalizeProcess = (code: number | null, error?: Error) => {
+        if (processFinalized) return
+        processFinalized = true
+        if (pendingResumeCreateFallback && error == null) {
           pendingResumeCreateFallback = false
           void restartWithCreateFallback().catch((error) => {
+            releaseAccountLeaseDetached()
             const message = error instanceof Error ? error.message : String(error)
             if (!didEmitFatalError) {
               emitEvent({
@@ -285,25 +287,43 @@ export const createClaudeSession = async (ctx: AdapterCtx, options: AdapterQuery
           return
         }
 
+        releaseAccountLeaseDetached()
         const stderr = stderrBuffer.join('')
-        if ((code ?? 0) !== 0 && !didEmitFatalError) {
+        const message = error?.message ?? (stderr !== '' ? stderr : `Process exited with code ${code ?? 1}`)
+        if ((error != null || (code ?? 0) !== 0) && !didEmitFatalError) {
           emitEvent({
             type: 'error',
             data: {
-              message: stderr !== '' ? stderr : `Process exited with code ${code ?? 1}`,
-              details: stderr !== '' ? { stderr } : { exitCode: code ?? 1 },
+              message,
+              details: error ?? (stderr !== '' ? { stderr } : { exitCode: code ?? 1 }),
               fatal: true
             }
           })
         }
         emitExit({
-          exitCode: code ?? undefined,
-          stderr
+          exitCode: error == null ? code ?? undefined : 1,
+          stderr: error?.message ?? stderr
         })
+      }
+
+      nextProc.on('spawn', () => {
+        processSpawned = true
+      })
+      nextProc.on('error', (err) => {
+        spawnError = err instanceof Error ? err : new Error(String(err))
+        if (!processSpawned) finalizeProcess(1, spawnError)
+      })
+      nextProc.on('close', (code) => {
+        finalizeProcess(code, spawnError)
       })
     }
 
-    startProcess()
+    try {
+      startProcess()
+    } catch (error) {
+      await releaseAccountLeaseOnce()
+      throw error
+    }
 
     const emit = (event: AdapterEvent) => {
       if (event.type === 'message' && (allowMissingConversationFallback || pendingResumeCreateFallback)) {
@@ -343,11 +363,17 @@ export const createClaudeSession = async (ctx: AdapterCtx, options: AdapterQuery
     extraOptions,
     mode
   })
-  const proc = spawn(cliPath, args, {
-    env: { ...env, FORCE_COLOR: '1' },
-    cwd,
-    stdio: 'inherit'
-  })
+  let proc
+  try {
+    proc = spawn(cliPath, args, {
+      env: { ...env, FORCE_COLOR: '1' },
+      cwd,
+      stdio: 'inherit'
+    })
+  } catch (error) {
+    await releaseAccountLeaseOnce()
+    throw error
+  }
 
   let didEmitExit = false
   const emitExit = (data: { exitCode?: number; stderr?: string }) => {
@@ -359,38 +385,39 @@ export const createClaudeSession = async (ctx: AdapterCtx, options: AdapterQuery
     })
   }
 
-  proc.on('error', (err) => {
-    const message = err instanceof Error ? err.message : String(err)
-    if (!didEmitFatalError) {
+  let processFinalized = false
+  let processSpawned = false
+  let spawnError: Error | undefined
+  const finalizeProcess = (code: number | null, error?: Error) => {
+    if (processFinalized) return
+    processFinalized = true
+    releaseAccountLeaseDetached()
+    const message = error?.message ?? `Process exited with code ${code ?? 1}`
+    if ((error != null || (code ?? 0) !== 0) && !didEmitFatalError) {
       emitEvent({
         type: 'error',
         data: {
           message,
-          details: err,
+          details: error ?? { exitCode: code ?? 1 },
           fatal: true
         }
       })
     }
     emitExit({
-      exitCode: 1,
-      stderr: message
+      exitCode: error == null ? code ?? undefined : 1,
+      ...(error == null ? {} : { stderr: message })
     })
-  })
+  }
 
-  proc.on('exit', (code) => {
-    if ((code ?? 0) !== 0 && !didEmitFatalError) {
-      emitEvent({
-        type: 'error',
-        data: {
-          message: `Process exited with code ${code ?? 1}`,
-          details: { exitCode: code ?? 1 },
-          fatal: true
-        }
-      })
-    }
-    emitExit({
-      exitCode: code ?? undefined
-    })
+  proc.on('spawn', () => {
+    processSpawned = true
+  })
+  proc.on('error', (err) => {
+    spawnError = err instanceof Error ? err : new Error(String(err))
+    if (!processSpawned) finalizeProcess(1, spawnError)
+  })
+  proc.on('close', (code) => {
+    finalizeProcess(code, spawnError)
   })
 
   return {

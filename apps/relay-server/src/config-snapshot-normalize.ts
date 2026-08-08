@@ -1,4 +1,6 @@
 /* eslint-disable max-lines -- Relay config normalization keeps safe fields, sanitization, and project rules together. */
+import { normalizeCredentialRevision } from '@oneworks/types/credential-revision'
+
 import { RELAY_CONFIG_SAFE_FIELDS } from './config-safe-fields.js'
 import type {
   RelayConfigAssignment,
@@ -92,33 +94,75 @@ const normalizeNumber = (value: unknown) => (
   typeof value === 'number' && Number.isFinite(value) ? value : undefined
 )
 
-const normalizeCodexInlineAuth = (value: unknown): Record<string, unknown> | undefined => {
+const normalizeCredentialEnvelope = (
+  value: unknown,
+  adapterKey: string,
+  field: 'auth' | 'state'
+): Record<string, unknown> | undefined => {
   if (!isRecord(value)) return undefined
-  const type = normalizeText(value.type)
-  const encoding = normalizeText(value.encoding)
-  const token = normalizeText(value.token)
-  if (
-    token == null ||
-    (type != null && type !== 'codex-auth-json') ||
-    encoding !== 'base64'
-  ) {
-    return undefined
+  const explicitStorage = normalizeText(value.storage)
+  const storage = explicitStorage ?? 'inline'
+  const type = normalizeText(value.type) ?? (
+    adapterKey === 'codex' && field === 'auth' ? 'codex-auth-json' : undefined
+  )
+  const version = Number.isInteger(value.version) && (value.version as number) > 0
+    ? value.version as number
+    : undefined
+  const portability = value.portability === 'portable' || value.portability === 'device-bound'
+    ? value.portability
+    : undefined
+  if (storage === 'inline') {
+    if (portability === 'device-bound') return undefined
+    const encoding = normalizeText(value.encoding)
+    const token = normalizeText(value.token)
+    if (type == null || token == null || encoding !== 'base64') return undefined
+    return {
+      ...(explicitStorage == null ? {} : { storage }),
+      ...(type == null ? {} : { type }),
+      ...(version == null ? {} : { version }),
+      ...(portability == null ? {} : { portability }),
+      encoding,
+      token
+    }
   }
+  if (field === 'state') return undefined
+  if (storage === 'secret') {
+    if (portability === 'device-bound') return undefined
+    const ref = normalizeText(value.ref)
+    if (type == null || ref == null) return undefined
+    return {
+      storage,
+      type,
+      ...(version == null ? {} : { version }),
+      ...(portability == null ? {} : { portability }),
+      ref
+    }
+  }
+  if (storage !== 'device' || type == null || portability !== 'device-bound') return undefined
+  const binding = normalizeText(value.binding)
   return {
-    ...(type == null ? {} : { type }),
-    encoding,
-    token
+    storage,
+    type,
+    ...(version == null ? {} : { version }),
+    portability,
+    ...(binding == null ? {} : { binding })
   }
 }
 
-const normalizeCodexAccount = (value: unknown): Record<string, unknown> | undefined => {
+const normalizeAdapterAccount = (
+  value: unknown,
+  adapterKey: string
+): Record<string, unknown> | undefined => {
   if (!isRecord(value)) return undefined
-  const auth = normalizeCodexInlineAuth(value.auth)
+  const auth = normalizeCredentialEnvelope(value.auth, adapterKey, 'auth')
+  const state = normalizeCredentialEnvelope(value.state, adapterKey, 'state')
   const quota = sanitizeRelayConfigValue(value.quota)
   const account: Record<string, unknown> = {
     ...(normalizeText(value.title) == null ? {} : { title: normalizeText(value.title) }),
     ...(normalizeText(value.description) == null ? {} : { description: normalizeText(value.description) }),
+    ...(normalizeText(value.displayName) == null ? {} : { displayName: normalizeText(value.displayName) }),
     ...(normalizeText(value.email) == null ? {} : { email: normalizeText(value.email) }),
+    ...(normalizeText(value.avatarUrl) == null ? {} : { avatarUrl: normalizeText(value.avatarUrl) }),
     ...(normalizeText(value.planType) == null ? {} : { planType: normalizeText(value.planType) }),
     ...(normalizeText(value.accountType) == null ? {} : { accountType: normalizeText(value.accountType) }),
     ...(normalizeText(value.accountId) == null ? {} : { accountId: normalizeText(value.accountId) }),
@@ -133,50 +177,118 @@ const normalizeCodexAccount = (value: unknown): Record<string, unknown> | undefi
     ...(normalizeNumber(value.createdAt) == null ? {} : { createdAt: normalizeNumber(value.createdAt) }),
     ...(normalizeNumber(value.updatedAt) == null ? {} : { updatedAt: normalizeNumber(value.updatedAt) }),
     ...(normalizeText(value.authDigest) == null ? {} : { authDigest: normalizeText(value.authDigest) }),
+    ...(normalizeText(value.generation) == null ? {} : { generation: normalizeText(value.generation) }),
+    ...(normalizeCredentialRevision(value.credentialRevision) == null
+      ? {}
+      : { credentialRevision: normalizeCredentialRevision(value.credentialRevision) }),
+    ...(normalizeNumber(value.credentialUpdatedAt) == null
+      ? {}
+      : { credentialUpdatedAt: normalizeNumber(value.credentialUpdatedAt) }),
     ...(isRecord(quota) || Array.isArray(quota) ? { quota } : {}),
-    ...(auth == null ? {} : { auth })
+    ...(auth == null ? {} : { auth }),
+    ...(state == null ? {} : { state })
   }
   return Object.keys(account).length > 0 ? account : undefined
 }
 
-const normalizeCodexAccounts = (value: unknown): Record<string, unknown> | undefined => {
+const normalizeAdapterAccounts = (
+  value: unknown,
+  adapterKey: string
+): Record<string, unknown> | undefined => {
   if (!isRecord(value)) return undefined
   const accounts = Object.fromEntries(
     Object.entries(value)
-      .map(([key, account]) => [normalizeText(key), normalizeCodexAccount(account)] as const)
+      .map(([key, account]) => [normalizeText(key), normalizeAdapterAccount(account, adapterKey)] as const)
       .filter((entry): entry is [string, Record<string, unknown>] => entry[0] != null && entry[1] != null)
   )
   return Object.keys(accounts).length > 0 ? accounts : undefined
 }
 
-const normalizeCodexAdapter = (value: unknown): Record<string, unknown> | undefined => {
+const normalizeDeletedGenerations = (value: unknown) => {
+  const candidates = Array.isArray(value) ? value : [value]
+  return [
+    ...new Set(candidates.flatMap(generation => {
+      const normalized = normalizeText(generation)
+      return normalized == null ? [] : [normalized]
+    }))
+  ]
+}
+
+const normalizeAccountTombstones = (value: unknown): Record<string, string[]> | undefined => {
   if (!isRecord(value)) return undefined
-  const defaultAccount = normalizeText(value.defaultAccount)
-  const accounts = normalizeCodexAccounts(value.accounts)
+  const tombstones = Object.fromEntries(
+    Object.entries(value)
+      .flatMap(([key, generations]) => {
+        const normalizedKey = normalizeText(key)
+        const normalizedGenerations = normalizeDeletedGenerations(generations)
+        return normalizedKey == null || normalizedGenerations.length === 0
+          ? []
+          : [[normalizedKey, normalizedGenerations] as const]
+      })
+  )
+  return Object.keys(tombstones).length > 0 ? tombstones : undefined
+}
+
+const normalizeAccountAdapter = (
+  value: unknown,
+  adapterKey: string,
+  options?: { allowDanglingDefaultAccount?: boolean }
+): Record<string, unknown> | undefined => {
+  if (!isRecord(value)) return undefined
+  let defaultAccount = normalizeText(value.defaultAccount)
+  const accounts = { ...(normalizeAdapterAccounts(value.accounts, adapterKey) ?? {}) }
+  const accountTombstones = { ...(normalizeAccountTombstones(value.accountTombstones) ?? {}) }
+  for (const [key, deletedGenerations] of Object.entries(accountTombstones)) {
+    const account = isRecord(accounts[key]) ? accounts[key] : undefined
+    const generation = normalizeText(account?.generation) ?? `legacy:${key}`
+    if (deletedGenerations.includes(generation)) delete accounts[key]
+  }
+  if (
+    options?.allowDanglingDefaultAccount !== true &&
+    defaultAccount != null &&
+    accounts[defaultAccount] == null
+  ) {
+    defaultAccount = undefined
+  }
   const adapter = {
     ...(defaultAccount == null ? {} : { defaultAccount }),
-    ...(accounts == null ? {} : { accounts })
+    ...(Object.keys(accounts).length === 0 ? {} : { accounts }),
+    ...(Object.keys(accountTombstones).length === 0 ? {} : { accountTombstones })
   }
   return Object.keys(adapter).length > 0 ? adapter : undefined
 }
 
-// Keep this explicit allowlist in sync with packages/plugins/relay/src/shared/config-assignment-patch.ts.
-// Generic token sanitization must not strip Codex auth-json payloads that are intentionally base64 encoded.
-const normalizeAdapters = (value: unknown): Record<string, unknown> | undefined => {
+// Keep this account-envelope allowlist in sync with the Relay plugin normalizer.
+// Generic token sanitization must not strip adapter-owned portable account payloads.
+const normalizeAdapters = (
+  value: unknown,
+  options?: { allowDanglingDefaultAccount?: boolean }
+): Record<string, unknown> | undefined => {
   if (!isRecord(value)) return undefined
-  const codex = normalizeCodexAdapter(value.codex)
-  return codex == null ? undefined : { codex }
+  const adapters = Object.fromEntries(
+    Object.entries(value)
+      .map(([key, adapter]) => {
+        const adapterKey = normalizeText(key)
+        return [
+          adapterKey,
+          adapterKey == null ? undefined : normalizeAccountAdapter(adapter, adapterKey, options)
+        ] as const
+      })
+      .filter((entry): entry is [string, Record<string, unknown>] => entry[0] != null && entry[1] != null)
+  )
+  return Object.keys(adapters).length > 0 ? adapters : undefined
 }
 
 export const filterRelayConfigPatch = (
   patch: RelayConfigPatch | undefined,
-  allowedFields?: RelayConfigSafeField[]
+  allowedFields?: RelayConfigSafeField[],
+  options?: { allowDanglingDefaultAccount?: boolean }
 ): RelayConfigPatch | undefined => {
   if (!isRecord(patch)) return undefined
 
   const allowed = new Set(allowedFields ?? RELAY_CONFIG_SAFE_FIELDS)
   const filtered: RelayConfigPatch = {}
-  const adapters = normalizeAdapters(patch.adapters)
+  const adapters = normalizeAdapters(patch.adapters, options)
   if (allowed.has('adapters') && adapters != null) {
     filtered.adapters = adapters
   }

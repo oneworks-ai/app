@@ -9,6 +9,7 @@ import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 import { getManagedPluginInstallDir } from '@oneworks/utils/managed-plugin'
 
 import { ensureClaudeCodeRouterReady } from '../src/ccr/daemon'
+import { resolveClaudeRuntimeAccount } from '../src/claude/accounts'
 import { prepareClaudeExecution } from '../src/claude/prepare'
 
 vi.mock('../src/ccr/paths', () => ({
@@ -25,6 +26,11 @@ vi.mock('@oneworks/utils/managed-npm-cli', () => ({
 
 vi.mock('../src/ccr/daemon', () => ({
   ensureClaudeCodeRouterReady: vi.fn()
+}))
+
+vi.mock('../src/claude/accounts', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../src/claude/accounts')>(),
+  resolveClaudeRuntimeAccount: vi.fn(async () => ({}))
 }))
 
 describe('prepareClaudeExecution', () => {
@@ -87,12 +93,130 @@ describe('prepareClaudeExecution', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(resolveClaudeRuntimeAccount).mockResolvedValue({})
     settingsSnapshot = undefined
     if (originalProjectHomeProjectsDir == null) {
       delete process.env.__ONEWORKS_PROJECT_HOME_PROJECTS_DIR__
     } else {
       process.env.__ONEWORKS_PROJECT_HOME_PROJECTS_DIR__ = originalProjectHomeProjectsDir
     }
+  })
+
+  it('injects the selected managed account config directory into the Claude process', async () => {
+    vi.mocked(resolveClaudeRuntimeAccount).mockResolvedValue({
+      accountKey: 'work',
+      configDir: '/private/account-config'
+    })
+
+    const prepared = await prepareClaudeExecution({
+      ctxId: 'ctx-account',
+      cwd: '/repo',
+      env: {
+        ANTHROPIC_API_KEY: 'must-not-win',
+        ANTHROPIC_AUTH_TOKEN: 'must-not-win',
+        ANTHROPIC_BASE_URL: 'https://must-not-win.example',
+        ANTHROPIC_CUSTOM_HEADERS: 'x-must-not-win: true',
+        CLAUDE_CODE_OAUTH_REFRESH_TOKEN: 'must-not-win',
+        CLAUDE_CODE_OAUTH_SCOPES: 'must-not-win',
+        CLAUDE_CODE_OAUTH_TOKEN: 'must-not-win',
+        CLAUDE_CODE_USE_BEDROCK: '1'
+      },
+      cache: {
+        set: vi.fn(async (key: string, value: unknown) => {
+          if (key === 'adapter.claude-code.settings') settingsSnapshot = value as Record<string, any>
+          return { cachePath: `/tmp/${key}.json` }
+        }) as any,
+        get: vi.fn(async () => undefined) as any
+      },
+      logger: {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn()
+      } as any,
+      configs: [{}, {
+        env: {
+          ANTHROPIC_API_KEY: 'settings-must-not-win',
+          CLAUDE_CODE_USE_VERTEX: '1'
+        },
+        adapters: {
+          'claude-code': {
+            settingsContent: {
+              apiKeyHelper: '/must/not/run',
+              env: {
+                ANTHROPIC_AUTH_TOKEN: 'raw-settings-must-not-win',
+                ANTHROPIC_BASE_URL: 'https://raw-settings-must-not-win.example',
+                ANTHROPIC_CUSTOM_HEADERS: 'x-raw-settings-must-not-win: true',
+                CLAUDE_CODE_OAUTH_REFRESH_TOKEN: 'raw-settings-must-not-win',
+                CLAUDE_CODE_OAUTH_SCOPES: 'raw-settings-must-not-win',
+                CLAUDE_CODE_OAUTH_TOKEN: 'raw-settings-must-not-win'
+              }
+            }
+          }
+        }
+      }]
+    }, {
+      type: 'create',
+      runtime: 'server',
+      sessionId: 'sess-account',
+      account: 'work',
+      onEvent: vi.fn()
+    })
+
+    expect(resolveClaudeRuntimeAccount).toHaveBeenCalledWith(expect.objectContaining({
+      requestedAccount: 'work'
+    }))
+    expect(prepared.accountKey).toBe('work')
+    expect(prepared.env.CLAUDE_CONFIG_DIR).toBe('/private/account-config')
+    expect(prepared.env.ANTHROPIC_API_KEY).toBeUndefined()
+    expect(prepared.env.ANTHROPIC_AUTH_TOKEN).toBeUndefined()
+    expect(prepared.env.ANTHROPIC_BASE_URL).toBeUndefined()
+    expect(prepared.env.ANTHROPIC_CUSTOM_HEADERS).toBeUndefined()
+    expect(prepared.env.CLAUDE_CODE_OAUTH_REFRESH_TOKEN).toBeUndefined()
+    expect(prepared.env.CLAUDE_CODE_OAUTH_SCOPES).toBeUndefined()
+    expect(prepared.env.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined()
+    expect(prepared.env.CLAUDE_CODE_USE_BEDROCK).toBeUndefined()
+    expect(settingsSnapshot?.env.ANTHROPIC_API_KEY).toBeUndefined()
+    expect(settingsSnapshot?.env.ANTHROPIC_AUTH_TOKEN).toBeUndefined()
+    expect(settingsSnapshot?.env.ANTHROPIC_BASE_URL).toBeUndefined()
+    expect(settingsSnapshot?.env.ANTHROPIC_CUSTOM_HEADERS).toBeUndefined()
+    expect(settingsSnapshot?.env.CLAUDE_CODE_OAUTH_REFRESH_TOKEN).toBeUndefined()
+    expect(settingsSnapshot?.env.CLAUDE_CODE_OAUTH_SCOPES).toBeUndefined()
+    expect(settingsSnapshot?.env.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined()
+    expect(settingsSnapshot?.env.CLAUDE_CODE_USE_VERTEX).toBeUndefined()
+    expect(settingsSnapshot?.apiKeyHelper).toBeUndefined()
+  })
+
+  it('rejects router models when a managed Claude account is selected', async () => {
+    vi.mocked(resolveClaudeRuntimeAccount).mockResolvedValue({
+      accountKey: 'work',
+      configDir: '/private/account-config'
+    })
+
+    await expect(prepareClaudeExecution({
+      ctxId: 'ctx-router-account',
+      cwd: '/repo',
+      env: {},
+      cache: {
+        set: vi.fn(async () => ({ cachePath: '/tmp/settings.json' })) as any,
+        get: vi.fn(async () => undefined) as any
+      },
+      logger: {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn()
+      } as any,
+      configs: [{}, {}]
+    }, {
+      type: 'create',
+      runtime: 'server',
+      sessionId: 'sess-router-account',
+      account: 'work',
+      model: 'kimi,kimi-k2.5',
+      onEvent: vi.fn()
+    })).rejects.toThrow(/cannot be combined with Claude Code Router/i)
+    expect(ensureClaudeCodeRouterReady).not.toHaveBeenCalled()
   })
 
   it('disables the native AskUserQuestion tool for server runtime sessions', async () => {

@@ -12,5 +12,6 @@ description: 当任务涉及 adapter runtime、mock home、原生资产自动适
 - 设计总览：[`adapter-design/overview.md`](./adapter-design/overview.md)
 - 原生资产适配：[`adapter-design/native-assets.md`](./adapter-design/native-assets.md)
 - 运行时配置：[`adapter-design/runtime-config.md`](./adapter-design/runtime-config.md)
+- 账户与凭证：[`adapter-design/accounts.md`](./adapter-design/accounts.md)
 - 真实 CLI 验证：[`adapter-design/verification.md`](./adapter-design/verification.md)
 - Adapter 错误调试经验：[`adapter-design/debugging.md`](./adapter-design/debugging.md)

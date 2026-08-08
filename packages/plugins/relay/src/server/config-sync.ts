@@ -1,9 +1,10 @@
 /* eslint-disable max-lines -- Relay config sync coordinates snapshots, global config, and document sync in one loop. */
-import { createHash } from 'node:crypto'
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { createHash, randomUUID } from 'node:crypto'
+import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import process from 'node:process'
 
+import { withCanonicalConfigWriteLock } from '@oneworks/config/write-lock'
 import { DEFAULT_GLOBAL_OO_CONFIG_FILE, resolveGlobalOneWorksDir } from '@oneworks/utils/ai-path'
 
 import { filterRelayConfigPatch, mergeRelayConfigPatches } from '../shared/config-assignment-patch.js'
@@ -56,7 +57,6 @@ interface RelayPersonalGlobalConfigSyncStatus {
 interface LocalPersonalGlobalConfigPatch {
   configPath: string
   configPatch?: RelayConfigPatch
-  updatedAt?: string
 }
 
 const PERSONAL_GLOBAL_CONFIG_FIELDS: RelayConfigSafeField[] = ['adapters']
@@ -86,18 +86,26 @@ const hashLocalPersonalConfigPatch = (patch: RelayConfigPatch | undefined) => (
 )
 
 const hasPublishablePersonalGlobalConfig = (patch: RelayConfigPatch | undefined) => {
-  const codex = isRecord(patch?.adapters) && isRecord(patch.adapters.codex)
-    ? patch.adapters.codex
-    : undefined
-  const accounts = isRecord(codex?.accounts) ? codex.accounts : undefined
-  if (accounts == null) return false
-
-  return Object.values(accounts).some(account => {
-    if (!isRecord(account) || !isRecord(account.auth)) return false
-    const auth = account.auth
-    return toString(auth.encoding) === 'base64' &&
-      toString(auth.token) !== '' &&
-      (toString(auth.type) === '' || toString(auth.type) === 'codex-auth-json')
+  if (!isRecord(patch?.adapters)) return false
+  return Object.values(patch.adapters).some((adapter) => {
+    if (!isRecord(adapter)) return false
+    if (isRecord(adapter.accountTombstones) && Object.keys(adapter.accountTombstones).length > 0) return true
+    if (!isRecord(adapter.accounts)) return false
+    return Object.values(adapter.accounts).some((account) => {
+      if (!isRecord(account)) return false
+      if (
+        isRecord(account.state) && toString(account.state.encoding) === 'base64' && toString(account.state.token) !== ''
+      ) {
+        return true
+      }
+      if (!isRecord(account.auth)) return false
+      const storage = toString(account.auth.storage) || 'inline'
+      if (storage === 'inline') {
+        return toString(account.auth.encoding) === 'base64' && toString(account.auth.token) !== ''
+      }
+      if (storage === 'secret') return toString(account.auth.ref) !== ''
+      return storage === 'device' && toString(account.auth.type) !== ''
+    })
   })
 }
 
@@ -128,8 +136,9 @@ const readJsonFile = async (path: string): Promise<Record<string, unknown>> => {
   try {
     const value = JSON.parse(await readFile(path, 'utf8'))
     return isRecord(value) ? value : {}
-  } catch {
-    return {}
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {}
+    throw error
   }
 }
 
@@ -137,11 +146,9 @@ const readLocalPersonalGlobalConfigPatch = async (): Promise<LocalPersonalGlobal
   const configPath = resolveGlobalConfigPath()
   const config = await readJsonFile(configPath)
   const configPatch = filterRelayConfigPatch(config as RelayConfigPatch, PERSONAL_GLOBAL_CONFIG_FIELDS)
-  const fileStat = await stat(configPath).catch(() => undefined)
   return {
     configPath,
-    ...(configPatch == null ? {} : { configPatch }),
-    ...(fileStat == null ? {} : { updatedAt: fileStat.mtime.toISOString() })
+    ...(configPatch == null ? {} : { configPatch })
   }
 }
 
@@ -149,12 +156,22 @@ const writeLocalPersonalGlobalConfigPatch = async (
   configPath: string,
   configPatch: RelayConfigPatch
 ) => {
-  const config = await readJsonFile(configPath)
-  const merged = mergeRelayConfigPatches(config as RelayConfigPatch, configPatch) ?? configPatch
-  await mkdir(dirname(configPath), { recursive: true })
-  await writeFile(configPath, `${JSON.stringify({ ...config, ...merged }, null, 2)}\n`, {
-    encoding: 'utf8',
-    mode: 0o600
+  await withCanonicalConfigWriteLock(configPath, async (targetPath) => {
+    const config = await readJsonFile(targetPath)
+    const merged = mergeRelayConfigPatches(config as RelayConfigPatch, configPatch) ?? configPatch
+    const tempPath = `${targetPath}.${process.pid}.${randomUUID()}.tmp`
+    await mkdir(dirname(targetPath), { recursive: true })
+    try {
+      await writeFile(tempPath, `${JSON.stringify({ ...config, ...merged }, null, 2)}\n`, {
+        encoding: 'utf8',
+        flag: 'wx',
+        mode: 0o600
+      })
+      await rename(tempPath, targetPath)
+      await chmod(targetPath, 0o600)
+    } finally {
+      await rm(tempPath, { force: true }).catch(() => undefined)
+    }
   })
 }
 
@@ -181,16 +198,7 @@ const readPersonalConfigPayload = (body: Record<string, unknown>): RelayPersonal
   }
 }
 
-const localPatchIsNewer = (
-  localUpdatedAt: string | undefined,
-  remoteUpdatedAt: string | undefined
-) => {
-  if (localUpdatedAt == null) return false
-  if (remoteUpdatedAt == null) return true
-  return Date.parse(localUpdatedAt) > Date.parse(remoteUpdatedAt) + 1000
-}
-
-const syncRelayPersonalGlobalConfig = async (params: {
+export const syncRelayPersonalGlobalConfig = async (params: {
   deviceToken: string
   server: ResolvedRelayServer
 }): Promise<RelayPersonalGlobalConfigSyncStatus> => {
@@ -207,77 +215,63 @@ const syncRelayPersonalGlobalConfig = async (params: {
   }
 
   const remote = readPersonalConfigPayload(body)
-  const remotePatch = remote?.configPatch
-  const localHash = hashLocalPersonalConfigPatch(local.configPatch)
-  const remoteHash = hashLocalPersonalConfigPatch(remotePatch)
+  if (remote?.configPatch == null && local.configPatch == null) {
+    return { appliedRemote: false, lastError: null, pushedLocal: false }
+  }
 
-  if (remotePatch == null && local.configPatch == null) {
-    return { appliedRemote: false, lastError: null, pushedLocal: false }
-  }
-  if (remotePatch == null && local.configPatch != null && hasPublishablePersonalGlobalConfig(local.configPatch)) {
+  let canonical = remote
+  let pushedLocal = false
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const mergedPatch = mergeRelayConfigPatches(canonical?.configPatch, local.configPatch, {
+      credentialTieWinner: 'left'
+    }) ?? local.configPatch ?? canonical?.configPatch
+    const mergedHash = hashLocalPersonalConfigPatch(mergedPatch)
+    const canonicalPatchHash = hashLocalPersonalConfigPatch(canonical?.configPatch)
+    if (
+      mergedPatch == null ||
+      mergedHash === canonicalPatchHash ||
+      !hasPublishablePersonalGlobalConfig(mergedPatch)
+    ) {
+      break
+    }
+
     const updated = await putRelayPersonalGlobalConfig({
-      configPatch: local.configPatch,
+      baseHash: canonical?.hash,
+      configPatch: mergedPatch,
       deviceToken: params.deviceToken,
       server: params.server
     })
-    return {
-      appliedRemote: false,
-      hash: updated.hash,
-      lastError: null,
-      pushedLocal: true,
-      updatedAt: updated.updatedAt
+    if (!updated.conflict) {
+      if (updated.snapshot?.configPatch == null) {
+        throw new Error('Relay personal config update did not return a canonical snapshot.')
+      }
+      canonical = updated.snapshot
+      pushedLocal = true
+      break
     }
-  }
-  if (remotePatch == null) {
-    return { appliedRemote: false, lastError: null, pushedLocal: false }
-  }
-  if (remotePatch != null && local.configPatch == null) {
-    await writeLocalPersonalGlobalConfigPatch(local.configPath, remotePatch)
-    return {
-      appliedRemote: true,
-      hash: remote?.hash,
-      lastError: null,
-      pushedLocal: false,
-      updatedAt: remote?.updatedAt
+    if (attempt === 1) {
+      throw new Error('Relay personal config changed again while retrying the update.')
     }
-  }
-  if (localHash === remoteHash) {
-    return {
-      appliedRemote: false,
-      hash: remote?.hash,
-      lastError: null,
-      pushedLocal: false,
-      updatedAt: remote?.updatedAt
+    if (updated.snapshot == null) {
+      throw new Error('Relay personal config conflict did not return the canonical snapshot.')
     }
+    canonical = updated.snapshot
   }
-  if (
-    localPatchIsNewer(local.updatedAt, remote?.updatedAt) &&
-    local.configPatch != null &&
-    hasPublishablePersonalGlobalConfig(local.configPatch)
-  ) {
-    const updated = await putRelayPersonalGlobalConfig({
-      baseHash: remote?.hash,
-      configPatch: local.configPatch,
-      deviceToken: params.deviceToken,
-      server: params.server
-    })
-    return {
-      appliedRemote: false,
-      hash: updated.hash,
-      lastError: null,
-      pushedLocal: true,
-      updatedAt: updated.updatedAt
-    }
-  }
-  if (remotePatch != null) {
-    await writeLocalPersonalGlobalConfigPatch(local.configPath, remotePatch)
+
+  const canonicalPatch = canonical?.configPatch
+  const appliedRemote = canonicalPatch != null && (
+    pushedLocal ||
+    hashLocalPersonalConfigPatch(local.configPatch) !== hashLocalPersonalConfigPatch(canonicalPatch)
+  )
+  if (canonicalPatch != null && appliedRemote) {
+    await writeLocalPersonalGlobalConfigPatch(local.configPath, canonicalPatch)
   }
   return {
-    appliedRemote: remotePatch != null,
-    hash: remote?.hash,
+    appliedRemote,
+    hash: canonical?.hash,
     lastError: null,
-    pushedLocal: false,
-    updatedAt: remote?.updatedAt
+    pushedLocal,
+    updatedAt: canonical?.updatedAt
   }
 }
 
@@ -286,7 +280,10 @@ const putRelayPersonalGlobalConfig = async (params: {
   configPatch: RelayConfigPatch
   deviceToken: string
   server: ResolvedRelayServer
-}): Promise<RelayPersonalConfigSnapshotPayload> => {
+}): Promise<{
+  conflict: boolean
+  snapshot?: RelayPersonalConfigSnapshotPayload
+}> => {
   const response = await fetch(new URL('/api/relay/config/global', params.server.remoteBaseUrl), {
     body: JSON.stringify({
       allowedFields: PERSONAL_GLOBAL_CONFIG_FIELDS,
@@ -301,10 +298,19 @@ const putRelayPersonalGlobalConfig = async (params: {
     method: 'PUT'
   })
   const body = await readResponseJson(response)
+  if (response.status === 409) {
+    return {
+      conflict: true,
+      snapshot: readPersonalConfigPayload(body)
+    }
+  }
   if (!response.ok) {
     throw new Error(toString(body.error) || `Relay personal config update failed with ${response.status}.`)
   }
-  return readPersonalConfigPayload(body) ?? {}
+  return {
+    conflict: false,
+    snapshot: readPersonalConfigPayload(body)
+  }
 }
 
 export const syncRelayConfigSnapshot = async (params: {

@@ -47,28 +47,16 @@
 
 适配器可以实现统一的账号目录、账号详情和账号管理动作。
 
-当前约定的 project home 私有目录是：
+账号生命周期是统一协议，但凭证持久化由适配器决定。当前内置适配器的主要行为是：
+
+- Codex 和 Claude Code 的受管账号写入 global `~/.oneworks/.oo.config.json`，从而跨项目复用，并可由个人 Relay 配置同步账号快照。
+- 其他返回 artifact 的适配器仍可使用 project home 私有目录：
 
 ```text
 <project-home>/.local/adapters/<adapter>/accounts/<accountKey>/
 ```
 
-常见文件包括：
-
-- `auth.json`
-  - 适配器对应账号的凭据快照
-- `meta.json`
-  - 账号来源、账号摘要、额度快照等本地元数据
-
-这些文件属于当前项目的本地私有数据，不应该提交到 Git。
-
-在 Git worktree 场景下，账号快照会共享到主 worktree：
-
-- 新增账号、登录导入和 artifact 落盘优先写入主 worktree 对应的 `<project-home>/.local/adapters/<adapter>/accounts/`
-- 读取时也优先读 project home 下的共享目录
-- 如果共享目录里没有对应账号，才回退读取当前 worktree 下的旧目录
-
-这样可以避免每新建一个 worktree 都重复登录，同时兼容历史上已经写在各个 worktree 里的本地账号快照。
+所有本地账号文件和全局凭证快照都属于私有数据，不应该提交到 Git。base64 payload 是编码而不是加密；设备原生凭证会标记为 device-bound，新设备仍需通过官方客户端登录。
 
 ## Web 配置页里的账号管理
 
@@ -77,7 +65,7 @@
 - 根页会展示账号列表、默认账号摘要和搜索框
 - 可以直接触发适配器提供的 `接入账号` 动作
 - 可以在列表里把某个账号设为默认账号
-- 可以删除当前 workspace 保存的账号快照
+- 可以删除 One Works 保存的账号记录；只有 portable 且平台能够隔离该账号凭证时，适配器才会同时执行官方 logout
 - 点进单个账号后，可以查看来源、额度摘要和账号配置字段
 
 账号详情页里的可编辑字段来自适配器自己的 `accounts.<key>` schema。\
@@ -87,10 +75,7 @@
 - `description`
 - `authFile`
 
-其中：
-
-- `description` 会用多行输入框编辑
-- `authFile` 留空时，会优先读取主 worktree 对应的 `<project-home>/.local/adapters/codex/accounts/<accountKey>/auth.json`
+其中 `description` 会用多行输入框编辑；`authFile` 用于显式引用现有 Codex `auth.json`。通过账号管理入口新增的 Codex 凭证会直接保存到 global config，不依赖 project home artifact。
 
 ## CLI 管理账号
 
@@ -106,12 +91,13 @@ npx oneworks accounts remove <adapter> <accountName>
 
 - `add`
   - 调用适配器暴露的接入能力
-  - 如果适配器返回 `auth.json` / `meta.json` 这类 artifact，上层会自动落到 workspace 私有目录
+  - Codex / Claude Code 会运行各自官方 CLI 登录并写入 global 账号快照；其他 adapter 返回的 artifact 仍由上层落到 workspace 私有目录
 - `show`
   - 读取适配器账号详情
   - 当前 CLI 会强制刷新一次账号详情和额度摘要
 - `remove`
-  - 删除当前 workspace 下保存的账号快照
+  - 调用适配器的删除流程；portable 且平台隔离的凭证可以同时走官方 logout
+  - macOS Keychain 等 device-bound 凭证只删除 One Works 的账号记录和 binding，不会登出设备上的原生登录
 
 ## Codex 示例
 
@@ -134,7 +120,7 @@ adapters:
 
 - “设置 → 模型服务”列表底部有独立导入行：左侧可搜索选择声明了模型服务导入能力的 adapter package，右侧点击“导入”；每个 adapter 自己声明支持 Global、Project 或 User 中的哪些来源
 - 空项目没有 `adapters` 配置时，运行时默认使用 `codex`，不会为了启动会话主动写入 `.oo.config.json`
-- 如果本机存在 `~/.codex/auth.json`，Codex 适配器会把当前登录态导入到 project home 私有目录
+- 如果本机存在 `~/.codex/auth.json`，Codex 适配器会把它作为只读 fallback 账号展示和使用，不会自动复制或删除
 - Codex stream 会按 project、账号和启动 / 网络 profile 复用 app-server；model provider、MCP、cwd 和权限配置按 thread 下发，不会仅因切换 provider 重启进程。空闲进程默认保留 5 分钟，可通过 `appServer.idleTimeoutMs` 调整
 - direct mode 仍使用 session 隔离 HOME；stream mode 使用上述 app-server profile 隔离 HOME，并在其中挂载所选账号的 `auth.json`
 - `network.httpProxy` / `httpsProxy` / `allProxy` / `noProxy` 与 `caCertificate` 只作用于 Codex adapter；配置同时覆盖原生 Codex 进程和 One Works 的 provider 转发请求。本地转发地址始终加入 `NO_PROXY`；`caCertificate` 可传 PEM 文件路径或内联 PEM，内联内容会先落到权限为 `0600` 的 profile 私有文件
@@ -146,6 +132,25 @@ adapters:
 - Web 模型选择器优先复用 Codex 本地模型目录：`CODEX_HOME` / `~/.codex/config.toml` 里的 `model_catalog_json`，其次是 `models_cache.json`；没有可读目录时才回退内置模型列表
 - Web 配置页默认展示缓存后的额度快照；当前 Codex quota 快照默认缓存 5 分钟
 - CLI `oneworks accounts show codex <account>` 会主动刷新一次最新额度信息
+
+## Claude Code 示例
+
+Claude Code 使用同一套账号入口：
+
+```bash
+npx oneworks accounts add claude-code work
+npx oneworks accounts show claude-code work
+npx oneworks accounts remove claude-code work
+```
+
+行为说明：
+
+- 登录和状态只调用官方 `claude auth login --claudeai` 与 `claude auth status --json`；只有 portable 且平台隔离的凭证删除才会调用官方 `claude auth logout`。
+- 每个账号使用独立、稳定的 `CLAUDE_CONFIG_DIR`，会话通过所选账号目录隔离。
+- macOS 的 Claude 凭证通常保存在 Keychain；Linux / Windows 可能使用 `.credentials.json`。前者按 device-bound 处理，新设备需要重新登录；后者可以保存 portable 快照。
+- 删除 macOS 或其他 device-bound 账号时，One Works 只删除自己的账号记录和 binding，设备上的原生 Claude 登录仍然保留。用户若显式运行 `claude auth logout`，应将其理解为影响该机器原生登录的机器级操作。
+- `.claude.json` 不是完整凭证。One Works 只保存账号身份和 `cachedUsageUtilization` 等 allowlist 状态，不复制 machine ID、项目列表或 workspace trust。
+- 额度展示来自本地 cached usage，不是实时远端查询。
 
 ## Copilot 示例
 
@@ -188,13 +193,3 @@ adapters:
 - `mode` 会直接映射 `--mode`，并优先于 `autopilot` / plan permission；需要 autopilot 时推荐配置 `mode: autopilot` 或 `autopilot: true` 二选一
 
 当前不实现 Copilot 多账号 API；需要登录、切换或排查账号时，使用官方 CLI 的 `/login`、`/logout`、`/user` 流程。
-
-## 什么时候更新文档
-
-如果你修改了下面这些行为，记得同步更新本文以及 CLI / Web 使用文档：
-
-- 适配器配置页的分组和入口位置
-- `defaultAccount` / `accounts` 的配置语义
-- 账号目录结构
-- CLI 子命令行为
-- quota / rate-limit 的刷新和缓存策略

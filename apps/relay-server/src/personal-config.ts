@@ -1,6 +1,8 @@
 /* eslint-disable max-lines -- personal config sync keeps request normalization and persisted config state together. */
 import { createHash } from 'node:crypto'
 
+import { compareCredentialRevisions } from '@oneworks/types/credential-revision'
+
 import { filterRelayConfigPatch, normalizeRelayConfigSafeFields } from './config-snapshot-normalize.js'
 import type {
   RelayConfigPatch,
@@ -36,27 +38,147 @@ const mergeRecord = (
   right: Record<string, unknown> | undefined
 ) => ({ ...(left ?? {}), ...(right ?? {}) })
 
-const mergeCodexAdapters = (
-  left: Record<string, unknown> | undefined,
-  right: Record<string, unknown> | undefined
-) => {
-  const leftCodex = isRecord(left?.codex) ? left.codex : undefined
-  const rightCodex = isRecord(right?.codex) ? right.codex : undefined
-  const leftAccounts = isRecord(leftCodex?.accounts) ? leftCodex.accounts : undefined
-  const rightAccounts = isRecord(rightCodex?.accounts) ? rightCodex.accounts : undefined
+const normalizeAccountTombstones = (value: unknown): Record<string, string[]> => {
+  if (!isRecord(value)) return {}
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([key, rawGenerations]) => {
+      const normalizedKey = normalizeText(key)
+      const candidates = Array.isArray(rawGenerations) ? rawGenerations : [rawGenerations]
+      const generations = [
+        ...new Set(candidates.flatMap((generation) => {
+          const normalized = normalizeText(generation)
+          return normalized == null ? [] : [normalized]
+        }))
+      ]
+      return normalizedKey == null || generations.length === 0
+        ? []
+        : [[normalizedKey, generations] as const]
+    })
+  )
+}
 
-  if (leftCodex == null && rightCodex == null) return mergeRecord(left, right)
-  return {
-    ...mergeRecord(left, right),
-    codex: {
-      ...(leftCodex ?? {}),
-      ...(rightCodex ?? {}),
-      ...(leftAccounts == null && rightAccounts == null
-        ? {}
-        : { accounts: { ...(leftAccounts ?? {}), ...(rightAccounts ?? {}) } })
+const mergeAccountTombstones = (
+  left: Record<string, string[]>,
+  right: Record<string, string[]>
+) =>
+  Object.fromEntries(
+    [...new Set([...Object.keys(left), ...Object.keys(right)])].map(key => [
+      key,
+      [...new Set([...(left[key] ?? []), ...(right[key] ?? [])])]
+    ])
+  )
+
+const accountSurvivesTombstone = (
+  accountKey: string,
+  account: Record<string, unknown> | undefined,
+  deletedGenerations: string[] | undefined
+) => {
+  const generation = normalizeText(account?.generation) ?? `legacy:${accountKey}`
+  return account != null && deletedGenerations?.includes(generation) !== true
+}
+
+const mergeAccountRecords = (
+  left: Record<string, unknown>,
+  right: Record<string, unknown>
+) => {
+  const leftGeneration = normalizeText(left.generation)
+  const rightGeneration = normalizeText(right.generation)
+  if (leftGeneration !== rightGeneration) {
+    if (leftGeneration == null) return { ...right }
+    if (rightGeneration == null) return { ...left }
+    return leftGeneration.localeCompare(rightGeneration) > 0 ? { ...left } : { ...right }
+  }
+  const leftUpdatedAt = typeof left.updatedAt === 'number' && Number.isFinite(left.updatedAt) ? left.updatedAt : -1
+  const rightUpdatedAt = typeof right.updatedAt === 'number' && Number.isFinite(right.updatedAt) ? right.updatedAt : -1
+  const metadataWinner = leftUpdatedAt > rightUpdatedAt ? left : right
+  const metadataLoser = metadataWinner === left ? right : left
+  const merged: Record<string, unknown> = { ...metadataLoser, ...metadataWinner }
+
+  const credentialComparison = compareCredentialRevisions(left.credentialRevision, right.credentialRevision)
+  const leftAuth = isRecord(left.auth) ? left.auth : undefined
+  const rightAuth = isRecord(right.auth) ? right.auth : undefined
+  let credentialWinner = credentialComparison >= 0 ? left : right
+  if (credentialComparison === 0) {
+    const leftStorage = normalizeText(leftAuth?.storage) ?? (leftAuth == null ? undefined : 'inline')
+    const rightStorage = normalizeText(rightAuth?.storage) ?? (rightAuth == null ? undefined : 'inline')
+    if (leftAuth == null && rightAuth != null) credentialWinner = right
+    else if (leftAuth != null && rightAuth == null) credentialWinner = left
+    else if (leftStorage === 'device' && (rightStorage === 'inline' || rightStorage === 'secret')) {
+      credentialWinner = right
+    } else if ((leftStorage === 'inline' || leftStorage === 'secret') && rightStorage === 'device') {
+      credentialWinner = left
     }
   }
+  const credentialAuth = isRecord(credentialWinner.auth) ? credentialWinner.auth : undefined
+  if (credentialAuth == null) delete merged.auth
+  else merged.auth = credentialAuth
+  for (const key of ['credentialRevision', 'credentialUpdatedAt'] as const) {
+    if (credentialWinner[key] == null) delete merged[key]
+    else merged[key] = credentialWinner[key]
+  }
+  return merged
 }
+
+const mergeAccountAdapters = (
+  left: Record<string, unknown> | undefined,
+  right: Record<string, unknown> | undefined
+) =>
+  Object.fromEntries(
+    [...new Set([...Object.keys(left ?? {}), ...Object.keys(right ?? {})])].map((adapterKey) => {
+      const leftAdapter = isRecord(left?.[adapterKey]) ? left[adapterKey] : undefined
+      const rightAdapter = isRecord(right?.[adapterKey]) ? right[adapterKey] : undefined
+      const leftAccounts = isRecord(leftAdapter?.accounts) ? leftAdapter.accounts : undefined
+      const rightAccounts = isRecord(rightAdapter?.accounts) ? rightAdapter.accounts : undefined
+      const leftTombstones = normalizeAccountTombstones(leftAdapter?.accountTombstones)
+      const rightTombstones = normalizeAccountTombstones(rightAdapter?.accountTombstones)
+      const accountTombstones = mergeAccountTombstones(leftTombstones, rightTombstones)
+      const accountKeys = [
+        ...new Set([
+          ...Object.keys(leftAccounts ?? {}),
+          ...Object.keys(rightAccounts ?? {}),
+          ...Object.keys(accountTombstones)
+        ])
+      ]
+      const accountEntries = accountKeys.flatMap((accountKey) => {
+        const leftAccount = isRecord(leftAccounts?.[accountKey]) ? leftAccounts[accountKey] : undefined
+        const rightAccount = isRecord(rightAccounts?.[accountKey]) ? rightAccounts[accountKey] : undefined
+        const deletedGenerations = accountTombstones[accountKey]
+        const activeLeft = accountSurvivesTombstone(accountKey, leftAccount, deletedGenerations)
+          ? leftAccount
+          : undefined
+        const activeRight = accountSurvivesTombstone(accountKey, rightAccount, deletedGenerations)
+          ? rightAccount
+          : undefined
+        const account = activeLeft == null
+          ? activeRight
+          : activeRight == null
+          ? activeLeft
+          : mergeAccountRecords(activeLeft, activeRight)
+        if (account == null) return []
+        return [[accountKey, account] as const]
+      })
+      const accounts = Object.fromEntries(accountEntries)
+      const requestedDefault = normalizeText(rightAdapter?.defaultAccount) ??
+        normalizeText(leftAdapter?.defaultAccount)
+      const defaultAccount = requestedDefault != null && accounts[requestedDefault] != null
+        ? requestedDefault
+        : undefined
+      const mergedAdapter: Record<string, unknown> = {
+        ...(leftAdapter ?? {}),
+        ...(rightAdapter ?? {}),
+        ...(
+          accountKeys.length === 0 && Object.keys(accountTombstones).length === 0
+            ? {}
+            : { accounts }
+        )
+      }
+      if (defaultAccount == null) delete mergedAdapter.defaultAccount
+      else mergedAdapter.defaultAccount = defaultAccount
+      if (Object.keys(accountTombstones).length === 0) delete mergedAdapter.accountTombstones
+      else mergedAdapter.accountTombstones = accountTombstones
+      return [adapterKey, mergedAdapter]
+    })
+  )
 
 export const mergeRelayPersonalConfigPatches = (
   left: RelayConfigPatch | undefined,
@@ -67,7 +189,7 @@ export const mergeRelayPersonalConfigPatches = (
 
   const merged: RelayConfigPatch = { ...left, ...right }
   if (left.adapters != null || right.adapters != null) {
-    merged.adapters = mergeCodexAdapters(
+    merged.adapters = mergeAccountAdapters(
       isRecord(left.adapters) ? left.adapters : undefined,
       isRecord(right.adapters) ? right.adapters : undefined
     )

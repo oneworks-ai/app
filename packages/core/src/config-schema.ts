@@ -2,6 +2,7 @@
 import { z } from 'zod'
 
 import type { ConfigUiField, ConfigUiFieldType, ConfigUiObjectSchema, ConfigUiRecordFieldSchema } from '@oneworks/types'
+import { normalizeCredentialRevision } from '@oneworks/types/credential-revision'
 
 import { channelBaseSchema } from './channel'
 
@@ -54,9 +55,61 @@ export const jsonValueSchema: z.ZodType<unknown> = z.lazy(() =>
 export const effortLevelSchema = z.enum(['low', 'medium', 'high', 'xhigh', 'max', 'ultra'])
 export const languageCodeSchema = z.enum(['zh', 'en'])
 
+export const adapterAccountCredentialConfigSchema = z.union([
+  z.object({
+    storage: z.literal('inline').optional().describe('Inline credential storage'),
+    type: z.string().min(1).describe('Adapter-owned credential format'),
+    version: z.number().int().positive().optional().describe('Credential format version'),
+    portability: z.literal('portable').optional().describe('Cross-device portability'),
+    encoding: z.literal('base64').describe('Credential payload encoding'),
+    token: z.string().min(1).describe('Encoded credential payload')
+  }),
+  z.object({
+    storage: z.literal('secret').describe('External secret storage'),
+    type: z.string().min(1).describe('Adapter-owned credential format'),
+    version: z.number().int().positive().optional().describe('Credential format version'),
+    portability: z.literal('portable').optional().describe('Cross-device portability'),
+    ref: z.string().min(1).describe('Credential secret reference')
+  }),
+  z.object({
+    storage: z.literal('device').describe('Device credential binding'),
+    type: z.string().min(1).describe('Adapter-owned credential binding format'),
+    version: z.number().int().positive().optional().describe('Credential binding version'),
+    portability: z.literal('device-bound').describe('Device-bound portability'),
+    binding: z.string().min(1).optional().describe('Opaque device credential binding identifier')
+  })
+])
+
+export const adapterAccountStateConfigSchema = z.object({
+  storage: z.literal('inline').optional().describe('Inline account state storage'),
+  type: z.string().min(1).describe('Adapter-owned account state format'),
+  version: z.number().int().positive().optional().describe('Account state format version'),
+  portability: z.literal('portable').optional().describe('Cross-device portability'),
+  encoding: z.literal('base64').describe('Account state payload encoding'),
+  token: z.string().min(1).describe('Encoded account state payload')
+})
+
 export const adapterAccountConfigCommonSchema = z.object({
   title: z.string().optional().describe('Display title'),
-  description: z.string().optional().describe('Display description')
+  description: z.string().optional().describe('Display description'),
+  auth: adapterAccountCredentialConfigSchema.optional().describe('Adapter account credential envelope'),
+  state: adapterAccountStateConfigSchema.optional().describe('Portable non-credential account state envelope'),
+  generation: z.string().min(1).optional().describe('Account generation changed only by explicit recreation'),
+  credentialRevision: z.string()
+    .transform((value, context) => {
+      const revision = normalizeCredentialRevision(value)
+      if (revision == null) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Credential revision must use a non-negative safe counter and UUID.'
+        })
+        return z.NEVER
+      }
+      return revision
+    })
+    .optional()
+    .describe('One Works credential-only causal revision in counter:uuid format'),
+  credentialUpdatedAt: z.number().nonnegative().optional().describe('Credential update timestamp')
 })
 
 export const adapterConfigCommonSchema = z.object({
@@ -67,7 +120,12 @@ export const adapterConfigCommonSchema = z.object({
   excludeModels: z.array(z.string()).optional().describe('Blocked model IDs for this adapter'),
   defaultAccount: z.string().optional().describe('Default account override for this adapter'),
   accounts: z.record(z.string(), adapterAccountConfigCommonSchema).optional()
-    .describe('Adapter account display metadata')
+    .describe('Adapter account display metadata'),
+  accountTombstones: z.record(
+    z.string(),
+    z.union([z.string().min(1), z.array(z.string().min(1)).min(1)])
+  ).optional()
+    .describe('Deleted account generations used by cross-device synchronization')
 })
 
 export const adapterNativeCliConfigSchema = z.object({

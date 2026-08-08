@@ -42,6 +42,7 @@ Primary implementation entrypoints for Codex hooks:
   - reads Codex accounts from `adapters.codex.accounts`; `codex login` writes base64 encoded `auth.json` into global `~/.oneworks/.oo.config.json`
   - treats the current `~/.codex/auth.json` as a read-only fallback account source and does not migrate it into project-local storage
   - when a global inline account and `~/.codex/auth.json` have the same stable account identity, keeps the configured key / metadata but uses the real-home file as the local runtime credential; this avoids replaying an already-rotated inline refresh token without silently writing real-home auth back to One Works config
+  - materializes inline session and probe auth through the shared atomic writer; both temporary and final private auth files are forced to `0600`
   - prepares per-session HOME roots for direct mode and project/account/startup-profile HOME roots for shared app-server mode
   - does not bridge the whole shared `.codex` tree into a session HOME; only auth, config, hooks, skills, and sessions are intentionally linked so global plugin caches and app state cannot slow `codex app-server` startup
   - normalizes the imported Codex config before using that HOME with the CLI, so unsupported values from a user's real config do not break One Works sessions.
@@ -210,7 +211,7 @@ Codex 多账号切换走 adapter 通用 `account` 能力：
 
 - `defaultAccount`：没有显式选择账号时使用的账号 key
 - `accounts.<key>.title` / `description`：前端显示信息
-- `accounts.<key>.auth`：Codex 登录态，形如 `{ type: 'codex-auth-json', encoding: 'base64', token: '<base64>' }`
+- `accounts.<key>.auth`：Codex 登录态，使用通用 portable inline envelope，形如 `{ storage: 'inline', type: 'codex-auth-json', version: 1, portability: 'portable', encoding: 'base64', token: '<base64>' }`；读取端继续兼容省略新增字段的旧快照
 - `accounts.<key>.authFile`：可选，高级显式来源；指定某个账号的 `auth.json` 路径时会优先使用这个文件
 - `accounts.<key>` 里的 `email / planType / quota / authDigest / updatedAt` 是账号详情和 quota 的缓存元信息
 - `ow accounts add codex [accountName]` 和 Web 侧新增账号都写入 global `~/.oneworks/.oo.config.json`，不要写回 project-local account snapshot

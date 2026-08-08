@@ -16,6 +16,7 @@
 - `src/claude/*.ts`
   - Claude CLI 会话生命周期
   - `prepare.ts` 组装执行参数与 settings，`session.ts` 负责 spawn/stream，`init.ts` 负责 adapter 初始化与 mock-home skills 同步
+  - `accounts.ts` 通过官方 `claude auth` 子命令管理账号，并以稳定 `CLAUDE_CONFIG_DIR` 隔离会话；`cli.ts` 统一解析受管 CLI
 - `src/plugins/*.ts`
   - Claude native plugin 的格式适配层：marketplace 解析、manifest/root 检测与 Claude -> One Works 资产转换
   - `index.ts` 只导出给 CLI core 使用的标准 installer hooks，不承载通用安装编排
@@ -55,6 +56,16 @@
 - Claude adapter 负责 native settings 写入、运行参数装配和 Claude 协议翻译
 - CLI hook bridge 只负责把入口分发到 adapter / hooks runtime
 - hooks runtime 负责插件执行与日志，task runtime 负责 native/bridge 去重
+
+## 账户维护入口
+
+- `src/claude/accounts.ts`：通用账户 API 的 Claude codec、官方 auth status、portable/device-bound 凭证和 cached usage
+- `src/claude/prepare.ts`：解析 `options.account`，物化所选账号并注入 `CLAUDE_CONFIG_DIR`
+- `.oo/rules/adapter-design/accounts.md`：共享账户协议、Relay 同步和多设备边界
+
+macOS Claude 凭证属于 Keychain 设备状态；Linux / Windows 可能使用 `.credentials.json`。`.claude.json` 只保存经过 allowlist 的账号状态和 cached usage，不是完整凭证。不要通过隐藏 PTY 驱动常驻 Claude TUI，也不要依赖私有 Keychain service 名称导出凭证。
+macOS 上所有 Claude 登录态都按机器级共享资源处理，不按同步 envelope 的 storage 推断可被 `CLAUDE_CONFIG_DIR` 隔离：来自 Linux / Windows 的 inline snapshot 必须经过当前机器的官方登录并建立 device binding 后才可用；登录成功后转为 device envelope 并清除旧 portable snapshot，不能把预物化的旧 `.credentials.json` 与新 native 身份组合。相关 auth、mutation 和会话统一走机器级 lock / lease，同一时间只允许一个 managed binding 显示为可用。删除 macOS managed 账号或任何 device-bound 账号只删除 One Works 记录和对应 binding，不调用无法限定到单账号的官方 logout；已启动的登录失败后也不能用 logout 冒充回滚，而应清除 binding 并要求重新认证。
+账户删除必须同时写通用 `accountTombstones`，只有显式新增同名账户产生不同 `generation` 后才能清除墓碑；普通 refresh 不得改变 generation。凭证冲突使用只在官方登录 / 重新认证时更新的 `credentialRevision`，不能使用配置文件 mtime 或普通 metadata `updatedAt`。
 
 ## 维护经验
 

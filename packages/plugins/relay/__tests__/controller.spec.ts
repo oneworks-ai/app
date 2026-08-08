@@ -1,6 +1,6 @@
 /* eslint-disable max-lines -- relay controller coverage keeps account, config, and document sync scenarios together. */
 import { Buffer } from 'node:buffer'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -614,6 +614,122 @@ describe('relay plugin controller', () => {
     expect(requestBody).not.toHaveProperty('configPatch.appearance')
   })
 
+  it('merges newer local adapter accounts with the existing remote snapshot before publishing', async () => {
+    const remoteToken = Buffer.from('remote-codex').toString('base64')
+    const stateToken = Buffer.from('{"oauthAccount":{"displayName":"Ada"}}').toString('base64')
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      const body = url.endsWith('/api/relay/config/global') && method === 'PUT'
+        ? {
+          personalConfigSnapshot: {
+            allowedFields: ['adapters'],
+            configPatch: JSON.parse(String(init?.body)).configPatch,
+            hash: 'sha256:merged',
+            updatedAt: new Date().toISOString(),
+            userId: 'owner',
+            version: 'merged'
+          }
+        }
+        : url.endsWith('/api/relay/config/global')
+        ? {
+          personalConfigSnapshot: {
+            allowedFields: ['adapters'],
+            configPatch: {
+              adapters: {
+                codex: {
+                  accounts: {
+                    work: {
+                      auth: { encoding: 'base64', token: remoteToken, type: 'codex-auth-json' }
+                    }
+                  }
+                }
+              }
+            },
+            hash: 'sha256:remote',
+            updatedAt: '2020-01-01T00:00:00.000Z',
+            userId: 'owner',
+            version: 'remote'
+          }
+        }
+        : url.endsWith('/api/relay/config-snapshot')
+        ? createRelayConfigSnapshotFixture()
+        : url.endsWith('/api/relay/devices')
+        ? { devices: [] }
+        : {
+          deviceToken: 'remote-device-token',
+          user: {
+            email: 'owner@local.test',
+            id: 'owner',
+            name: 'Owner Local',
+            provider: 'local',
+            role: 'owner'
+          }
+        }
+      return new Response(JSON.stringify(body), {
+        headers: { 'content-type': 'application/json' },
+        status: 200
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { commands, homeDir } = await createPluginHarness({
+      deviceName: 'Office Mac',
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false,
+      servers: [{ id: 'prod', pairingToken: 'pair-token', baseUrl: 'https://relay.example/' }]
+    })
+    await mkdir(join(homeDir, '.oneworks'), { recursive: true })
+    await writeFile(
+      join(homeDir, '.oneworks/.oo.config.json'),
+      JSON.stringify(
+        {
+          adapters: {
+            'claude-code': {
+              accounts: {
+                personal: {
+                  auth: {
+                    binding: 'device',
+                    portability: 'device-bound',
+                    storage: 'device',
+                    type: 'claude-native-credential-store'
+                  },
+                  state: {
+                    encoding: 'base64',
+                    portability: 'portable',
+                    token: stateToken,
+                    type: 'claude-account-state-json'
+                  }
+                }
+              }
+            }
+          }
+        },
+        null,
+        2
+      )
+    )
+
+    await commands.get('connect')?.()
+    const putCall = fetchMock.mock.calls.find(([url, init]) =>
+      String(url) === 'https://relay.example/api/relay/config/global' && init?.method === 'PUT'
+    )
+    const requestBody = JSON.parse(String(putCall?.[1]?.body)) as Record<string, unknown>
+    const localConfig = JSON.parse(
+      await readFile(join(homeDir, '.oneworks/.oo.config.json'), 'utf8')
+    ) as Record<string, unknown>
+
+    expect(requestBody).toHaveProperty('configPatch.adapters.codex.accounts.work.auth.token', remoteToken)
+    expect(requestBody).toHaveProperty(
+      'configPatch.adapters.claude-code.accounts.personal.state.token',
+      stateToken
+    )
+    expect(localConfig).toHaveProperty('adapters.codex.accounts.work.auth.token', remoteToken)
+    expect(localConfig).toHaveProperty('adapters.claude-code.accounts.personal.state.token', stateToken)
+    if (process.platform !== 'win32') {
+      expect((await stat(join(homeDir, '.oneworks/.oo.config.json'))).mode & 0o777).toBe(0o600)
+    }
+  })
+
   it('does not overwrite relay personal global config with a local config that has no auth snapshot', async () => {
     const remoteToken = Buffer.from(JSON.stringify({ refresh_token: 'remote-codex-refresh-token' })).toString('base64')
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -717,12 +833,17 @@ describe('relay plugin controller', () => {
     const putCall = fetchMock.mock.calls.find(([url, init]) =>
       String(url) === 'https://relay.example/api/relay/config/global' && init?.method === 'PUT'
     )
+    const putBody = JSON.parse(String(putCall?.[1]?.body)) as Record<string, unknown>
     const config = JSON.parse(
       await readFile(join(homeDir, '.oneworks/.oo.config.json'), 'utf8')
     ) as Record<string, unknown>
 
     expect(status.connection.state).toBe('registered')
-    expect(putCall).toBeUndefined()
+    expect(putBody).toHaveProperty(
+      'configPatch.adapters.codex.accounts.default.auth.token',
+      remoteToken
+    )
+    expect(putBody).not.toHaveProperty('configPatch.adapters.codex.accounts.local.auth')
     expect(config).toMatchObject({
       adapters: {
         codex: {
