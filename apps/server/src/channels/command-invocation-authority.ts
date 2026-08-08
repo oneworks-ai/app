@@ -1,85 +1,65 @@
 import { getDb } from '#~/db/index.js'
+import { verifyChannelCommandInvocationToken } from '#~/services/channel-commands/invocation-token.js'
 
 import { trimNonEmpty } from './command-invocation-input'
 import type { ChannelCommandInvocationContext, ChannelCommandInvocationInput } from './command-invocation-types'
 import type { ChannelRuntimeState } from './types'
 
-const definedEntries = <T extends Record<string, unknown>>(value: T): Partial<T> =>
-  Object.fromEntries(Object.entries(value).filter(([, item]) => item != null)) as Partial<T>
-
-const protectedCommandContextFields = ['channelType', 'channelId', 'sessionType', 'senderId'] as const
+const forbidden = (message: string) => ({ ok: false as const, statusCode: 403 as const, message })
 
 export const resolveAuthoritativeCommandInput = (
   state: ChannelRuntimeState,
   input: ChannelCommandInvocationInput
 ):
-  | { ok: true; input: ChannelCommandInvocationInput }
+  | { ok: true; input: ChannelCommandInvocationInput & { context: ChannelCommandInvocationContext } }
   | { ok: false; statusCode: 403; message: string } =>
 {
-  const providedContext = input.context ?? {}
-  const sessionId = trimNonEmpty(input.sessionId) ?? trimNonEmpty(providedContext.sessionId)
-  if (sessionId == null) return { ok: true, input }
+  const token = trimNonEmpty(input.invocationToken)
+  if (token == null) return forbidden('Channel command invocation requires a child-run token.')
+
+  const payload = verifyChannelCommandInvocationToken(token, { channelKey: state.key })
+  if (payload == null) return forbidden('Channel command invocation token is invalid or expired.')
 
   const db = getDb()
-  const snapshot = db.getSessionRuntimeState(sessionId)?.channelActorSnapshot
-  const binding = db.getChannelSessionBySessionId(sessionId)
-  const authoritativeContext: ChannelCommandInvocationContext = definedEntries(
-    {
-      actorAccountId: snapshot?.actorAccountId ?? snapshot?.senderId ?? binding?.senderId,
-      actorUserId: snapshot?.actorUserId,
-      channelId: snapshot?.channelId ?? binding?.channelId,
-      channelKey: snapshot?.channelKey ?? binding?.channelKey,
-      channelLinkName: snapshot?.channelLinkName,
-      channelType: snapshot?.channelType ?? binding?.channelType,
-      entity: snapshot?.entity,
-      messageId: snapshot?.messageId,
-      replyReceiveId: snapshot?.replyReceiveId ?? binding?.replyReceiveId,
-      replyReceiveIdType: snapshot?.replyReceiveIdType ?? binding?.replyReceiveIdType,
-      senderId: snapshot?.senderId ?? snapshot?.actorAccountId ?? binding?.senderId,
-      sessionId,
-      sessionType: snapshot?.sessionType ?? binding?.sessionType,
-      threadKey: snapshot?.threadKey
-    } satisfies ChannelCommandInvocationContext
-  )
-
-  if (authoritativeContext.channelKey != null && authoritativeContext.channelKey !== state.key) {
-    return {
-      ok: false,
-      statusCode: 403,
-      message: `Channel command session ${sessionId} belongs to ${authoritativeContext.channelKey}, not ${state.key}.`
-    }
-  }
-
-  if (authoritativeContext.channelType != null && authoritativeContext.channelType !== state.type) {
-    return {
-      ok: false,
-      statusCode: 403,
-      message: `Channel command session ${sessionId} belongs to ${authoritativeContext.channelType}, not ${state.type}.`
-    }
-  }
-
-  const conflicts = protectedCommandContextFields.filter((field) => {
-    const provided = trimNonEmpty(providedContext[field])
-    const authoritative = trimNonEmpty(authoritativeContext[field])
-    return provided != null && authoritative != null && provided !== authoritative
-  })
-  if (conflicts.length > 0) {
-    return {
-      ok: false,
-      statusCode: 403,
-      message: `Channel command context conflicts with session actor snapshot: ${conflicts.join(', ')}.`
-    }
+  const childRun = db.getChannelChildSessionRun(payload.childRunId)
+  const snapshot = db.getSessionRuntimeState(payload.sessionId)?.channelActorSnapshot
+  const binding = db.getChannelSessionBySessionId(payload.sessionId)
+  if (
+    childRun == null || childRun.status === 'failed' ||
+    childRun.channelKey !== state.key || childRun.channelType !== state.type ||
+    snapshot?.childRunId !== childRun.id || snapshot.sessionId !== payload.sessionId ||
+    snapshot.channelKey !== childRun.channelKey || snapshot.channelType !== childRun.channelType ||
+    snapshot.channelId !== childRun.channelId || snapshot.sessionType !== childRun.sessionType ||
+    binding == null || binding.channelKey !== childRun.channelKey || binding.channelType !== childRun.channelType ||
+    binding.channelId !== childRun.channelId || binding.sessionType !== childRun.sessionType ||
+    binding.threadId !== snapshot.threadId
+  ) {
+    return forbidden('Channel command child-run authority is unavailable or inconsistent.')
   }
 
   return {
     ok: true,
     input: {
-      ...input,
+      input: input.input,
+      invocationToken: token,
+      toolName: input.toolName,
       context: {
-        ...providedContext,
-        ...authoritativeContext
-      },
-      sessionId
+        actorAccountId: childRun.actorAccountId ?? childRun.senderId ?? undefined,
+        actorUserId: childRun.actorUserId ?? undefined,
+        channelId: childRun.channelId,
+        channelKey: childRun.channelKey,
+        channelLinkName: childRun.channelLinkName ?? undefined,
+        channelType: childRun.channelType,
+        entity: childRun.entity ?? undefined,
+        messageId: childRun.messageId ?? undefined,
+        replyReceiveId: snapshot.replyReceiveId ?? binding.replyReceiveId,
+        replyReceiveIdType: snapshot.replyReceiveIdType ?? binding.replyReceiveIdType,
+        senderId: childRun.senderId ?? childRun.actorAccountId ?? undefined,
+        sessionId: payload.sessionId,
+        sessionType: childRun.sessionType,
+        threadId: snapshot.threadId,
+        threadKey: childRun.threadKey ?? undefined
+      }
     }
   }
 }

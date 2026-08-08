@@ -46,7 +46,7 @@ export const ensureChannelAuthorizationRequestForInteraction = (input: EnsureCha
   const requesterAccountId = resolveRequesterAccountId(input.binding)
   const requesterUser = requesterAccountId == null
     ? undefined
-    : db.resolveCanonicalUserByChannelAccount(input.binding.channelType, requesterAccountId)
+    : db.resolveCanonicalUserByChannelAccount(input.binding.channelKey, requesterAccountId)
   const permissionContext = input.event.payload.permissionContext
   const capability = resolveCapability(input.event)
   const approval = resolveChannelApproval({
@@ -80,6 +80,8 @@ export const ensureChannelAuthorizationRequestForInteraction = (input: EnsureCha
     message: input.event.payload.question,
     metadata: {
       adapter: permissionContext?.adapter,
+      allowedApproverRefs: [requesterAccountId, requesterUser?.id]
+        .filter((value): value is string => value != null),
       approval: summarizeApprovalDecision(approval),
       channelId: input.binding.channelId,
       channelKey: input.binding.channelKey,

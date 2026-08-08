@@ -1,15 +1,12 @@
+import { getDb } from '#~/db/index.js'
+import { canTransferChannelPermissionState } from '#~/services/session/channel-permission-transfer.js'
 import { createSessionWithInitialMessage } from '#~/services/session/create.js'
-import { processUserMessage, writeChannelMessageContext } from '#~/services/session/index.js'
+import { writeChannelMessageContext } from '#~/services/session/index.js'
 
 import type { ChannelMiddleware } from '../@types'
 import { stripSpeakerPrefix } from '../@utils'
 import { syncChannelSessionBinding } from '../bind-session'
-import {
-  appendInboundConversationTurn,
-  createStartedChannelChildRun,
-  finishStartedChannelChildRun,
-  markStartedChannelChildRunDispatching
-} from './child-run'
+import { appendInboundConversationTurn, createStartedChannelChildRun, finishStartedChannelChildRun } from './child-run'
 import {
   buildChannelMessageContext,
   buildChannelTags,
@@ -36,6 +33,16 @@ export const dispatchMiddleware: ChannelMiddleware = async (ctx, next) => {
     ? baseRuntimeContent
     : appendRuntimeText(baseRuntimeContent, dispatchContent, nextMessageResumes.runtimeText)
   const dispatchMode = ctx.sessionId == null ? 'create_session' : 'continue_session'
+  const parentSessionId = ctx.sessionId
+  const transferParentPermission = parentSessionId != null && canTransferChannelPermissionState(
+    getDb().getSessionRuntimeState(parentSessionId)?.channelActorSnapshot,
+    {
+      actorAccountId: ctx.actor?.account.accountId,
+      actorUserId: ctx.actor?.user?.id,
+      channelKey: ctx.channelKey,
+      senderId: ctx.inbound.senderId
+    }
+  )
   const childRun = createStartedChannelChildRun(ctx, {
     conversationStateId: conversationState.id,
     contentKind: hasContent ? 'rich' : 'text',
@@ -54,37 +61,40 @@ export const dispatchMiddleware: ChannelMiddleware = async (ctx, next) => {
   })
 
   try {
-    markStartedChannelChildRunDispatching(childRun, nextMessageResumes.items)
-    if (!ctx.sessionId) {
-      const systemPrompt = await buildSessionSystemPrompt(inbound, config, connection)
-      const session = await createSessionWithInitialMessage({
-        title: stripSpeakerPrefix(inbound.text ?? '').split('\n')[0],
-        initialMessage: hasContent ? undefined : inbound.text,
-        initialContent: hasContent ? ctx.contentItems : undefined,
-        initialRuntimeContent: runtimeContent,
-        shouldStart: true,
-        adapter: ctx.channelAdapter,
-        effort: ctx.channelEffort,
-        model: multimodalModel,
-        permissionMode: ctx.channelPermissionMode,
-        promptType: ctx.channelLink == null ? undefined : 'entity',
-        promptName: ctx.channelLink?.entity,
-        tags: buildChannelTags(inbound),
-        systemPrompt,
-        channelContext,
-        beforeStart: async (sessionId) => {
-          syncChannelSessionBinding({ channelKey: ctx.channelKey, inbound, sessionId })
-          await writeChannelMessageContext(sessionId, channelContext)
+    const systemPrompt = await buildSessionSystemPrompt(inbound, config, connection)
+    const session = await createSessionWithInitialMessage({
+      title: stripSpeakerPrefix(inbound.text ?? '').split('\n')[0],
+      initialMessage: hasContent ? undefined : inbound.text,
+      initialContent: hasContent ? ctx.contentItems : undefined,
+      initialRuntimeContent: runtimeContent,
+      parentSessionId,
+      shouldStart: true,
+      adapter: ctx.channelAdapter,
+      effort: ctx.channelEffort,
+      model: multimodalModel,
+      permissionMode: ctx.channelPermissionMode,
+      promptType: ctx.channelLink == null ? undefined : 'entity',
+      promptName: ctx.channelLink?.entity,
+      tags: buildChannelTags(inbound),
+      systemPrompt,
+      channelContext,
+      beforeStart: async (sessionId) => {
+        if (parentSessionId != null && transferParentPermission) {
+          getDb().transferSessionPermissionState(parentSessionId, sessionId)
         }
-      })
-      ctx.sessionId = session.id
-    } else {
-      await processUserMessage(ctx.sessionId, dispatchContent, {
-        channelContext,
-        ...(runtimeContent == null ? {} : { runtimeContent }),
-        ...(multimodalModel == null ? {} : { model: multimodalModel })
-      })
-    }
+        syncChannelSessionBinding({ channelKey: ctx.channelKey, inbound, sessionId })
+        await writeChannelMessageContext(sessionId, channelContext)
+      },
+      ...(parentSessionId == null
+        ? {}
+        : {
+          workspace: {
+            createWorktree: false,
+            sourceSessionId: parentSessionId
+          }
+        })
+    })
+    ctx.sessionId = session.id
 
     finishStartedChannelChildRun(childRun, {
       intents: nextMessageResumes.items,

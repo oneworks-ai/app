@@ -198,6 +198,14 @@ export class SqliteDb {
     return this.sessions.updateRuntimeState(id, updates)
   }
 
+  consumeSessionPermissionOnce(id: string, keys: string[]) {
+    return this.sessions.consumePermissionOnce(id, keys)
+  }
+
+  transferSessionPermissionState(parentId: string, childId: string) {
+    return this.sessions.transferPermissionState(parentId, childId)
+  }
+
   updateSessionStarred(id: string, isStarred: boolean) {
     return this.sessions.setStarred(id, isStarred)
   }
@@ -301,12 +309,18 @@ export class SqliteDb {
     return this.sessionQueue.reorder(sessionId, mode, ids)
   }
 
-  getChannelSession(channelType: string, sessionType: string, channelId: string) {
-    return this.channelSessions.get(channelType, sessionType, channelId)
+  getChannelSession(
+    channelKey: string,
+    channelType: string,
+    sessionType: string,
+    channelId: string,
+    threadId?: string
+  ) {
+    return this.channelSessions.get(channelKey, channelType, sessionType, channelId, threadId)
   }
 
-  getChannelPreference(channelType: string, sessionType: string, channelId: string) {
-    return this.channelSessions.getPreference(channelType, sessionType, channelId)
+  getChannelPreference(channelKey: string, channelType: string, sessionType: string, channelId: string) {
+    return this.channelSessions.getPreference(channelKey, channelType, sessionType, channelId)
   }
 
   getChannelSessionBySessionId(sessionId: string) {
@@ -325,12 +339,22 @@ export class SqliteDb {
     return this.channelSessions.removeBySessionId(sessionId)
   }
 
-  deleteChannelSession(channelType: string, sessionType: string, channelId: string) {
-    return this.channelSessions.remove(channelType, sessionType, channelId)
+  deleteChannelSession(
+    channelKey: string,
+    channelType: string,
+    sessionType: string,
+    channelId: string,
+    threadId?: string
+  ) {
+    return this.channelSessions.remove(channelKey, channelType, sessionType, channelId, threadId)
   }
 
   rememberChannelMessage(messageKey: string, seenAt = Date.now()) {
     return this.channelMessages.rememberSeen(messageKey, seenAt)
+  }
+
+  forgetChannelMessage(messageKey: string) {
+    return this.channelMessages.removeSeen(messageKey)
   }
 
   deleteChannelMessagesSeenBefore(cutoff: number) {
@@ -389,6 +413,18 @@ export class SqliteDb {
     return this.channelConversations.updatePendingIntent(id, updates)
   }
 
+  claimChannelPendingIntentResume(
+    input: Parameters<typeof this.channelConversations.claimPendingIntentResume>[0]
+  ) {
+    return this.channelConversations.claimPendingIntentResume(input)
+  }
+
+  finishChannelPendingIntentResumeClaim(
+    input: Parameters<typeof this.channelConversations.finishPendingIntentResumeClaim>[0]
+  ) {
+    return this.channelConversations.finishPendingIntentResumeClaim(input)
+  }
+
   listOpenChannelPendingIntents(filter?: Parameters<typeof this.channelConversations.listOpenPendingIntents>[0]) {
     return this.channelConversations.listOpenPendingIntents(filter)
   }
@@ -435,8 +471,8 @@ export class SqliteDb {
     return this.channelIdentities.upsertAccount(row)
   }
 
-  getChannelAccount(channelType: string, accountId: string) {
-    return this.channelIdentities.getAccount(channelType, accountId)
+  getChannelAccount(issuerKey: string, accountId: string) {
+    return this.channelIdentities.getAccount(issuerKey, accountId)
   }
 
   ensureCanonicalUser(row?: Parameters<typeof this.channelIdentities.ensureCanonicalUser>[0]) {
@@ -463,12 +499,12 @@ export class SqliteDb {
     return this.channelIdentities.consumeIdentityLinkCode(row)
   }
 
-  getChannelIdentityLink(channelType: string, accountId: string) {
-    return this.channelIdentities.getIdentityLink(channelType, accountId)
+  getChannelIdentityLink(issuerKey: string, accountId: string) {
+    return this.channelIdentities.getIdentityLink(issuerKey, accountId)
   }
 
-  resolveCanonicalUserByChannelAccount(channelType: string, accountId: string) {
-    return this.channelIdentities.resolveUserByAccount(channelType, accountId)
+  resolveCanonicalUserByChannelAccount(issuerKey: string, accountId: string) {
+    return this.channelIdentities.resolveUserByAccount(issuerKey, accountId)
   }
 
   listChannelAccountsForUser(userId: string) {
@@ -479,12 +515,30 @@ export class SqliteDb {
     return this.channelIdentities.upsertCredential(row)
   }
 
-  getChannelUserCredential(userId: string, channelType: string, credentialKey: string) {
-    return this.channelIdentities.getCredential(userId, channelType, credentialKey)
+  getChannelUserCredential(issuerKey: string, userId: string, credentialKey: string) {
+    return this.channelIdentities.getCredential(issuerKey, userId, credentialKey)
   }
 
-  listChannelUserCredentials(userId: string, channelType?: string) {
-    return this.channelIdentities.listCredentialsForUser(userId, channelType)
+  listChannelUserCredentials(issuerKey: string, userId: string) {
+    return this.channelIdentities.listCredentialsForUser(issuerKey, userId)
+  }
+
+  reserveChannelWebhookNonce(input: Parameters<typeof this.channelPolicies.reserveWebhookNonce>[0]) {
+    return this.channelPolicies.reserveWebhookNonce(input)
+  }
+
+  commitChannelWebhookNonce(input: Parameters<typeof this.channelPolicies.commitWebhookNonce>[0]) {
+    return this.channelPolicies.commitWebhookNonce(input)
+  }
+
+  releaseChannelWebhookNonce(input: Parameters<typeof this.channelPolicies.releaseWebhookNonce>[0]) {
+    return this.channelPolicies.releaseWebhookNonce(input)
+  }
+
+  migrateLegacyChannelIdentityNamespace(
+    input: Parameters<typeof this.channelIdentities.migrateLegacyNamespace>[0]
+  ) {
+    return this.channelIdentities.migrateLegacyNamespace(input)
   }
 
   createChannelAuthorizationRequest(row: Parameters<typeof this.channelIdentities.createAuthorizationRequest>[0]) {
@@ -502,6 +556,12 @@ export class SqliteDb {
     return this.channelIdentities.updateAuthorizationRequest(id, updates)
   }
 
+  resolveChannelAuthorizationRequest(
+    input: Parameters<typeof this.channelIdentities.resolveAuthorizationRequest>[0]
+  ) {
+    return this.channelIdentities.resolveAuthorizationRequest(input)
+  }
+
   listPendingChannelAuthorizationRequestsForUser(userId: string, channelType?: string) {
     return this.channelIdentities.listPendingAuthorizationRequestsForUser(userId, channelType)
   }
@@ -512,6 +572,10 @@ export class SqliteDb {
 
   consumeChannelReplyThrottle(row: Parameters<typeof this.channelPolicies.consumeReplyThrottle>[0]) {
     return this.channelPolicies.consumeReplyThrottle(row)
+  }
+
+  releaseChannelReplyThrottle(row: Parameters<typeof this.channelPolicies.releaseReplyThrottle>[0]) {
+    return this.channelPolicies.releaseReplyThrottle(row)
   }
 
   getChannelReplyThrottle(throttleKey: string) {

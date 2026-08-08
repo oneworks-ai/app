@@ -6,6 +6,7 @@ export interface ChannelSessionRow {
   channelType: string
   sessionType: string
   channelId: string
+  threadId?: string
   channelKey: string
   senderId?: string
   replyReceiveId?: string
@@ -29,38 +30,49 @@ export interface ChannelPreferenceRow {
 
 export function createChannelSessionsRepo(db: SqliteDatabase) {
   const get = (
+    channelKey: string,
     channelType: string,
     sessionType: string,
-    channelId: string
+    channelId: string,
+    threadId?: string
   ): ChannelSessionRow | undefined => {
     const stmt = db.prepare(`
-      SELECT channelType, sessionType, channelId, channelKey, senderId, replyReceiveId, replyReceiveIdType, sessionId, createdAt, updatedAt
-      FROM channel_sessions
-      WHERE channelType = ? AND sessionType = ? AND channelId = ?
+      SELECT channelType, sessionType, channelId, NULLIF(threadId, '') AS threadId,
+             channelKey, senderId, replyReceiveId, replyReceiveIdType, sessionId, createdAt, updatedAt
+      FROM channel_sessions_v3
+      WHERE channelKey = ? AND channelType = ? AND sessionType = ? AND channelId = ? AND threadId = ?
     `)
-    return stmt.get<ChannelSessionRow>(channelType, sessionType, channelId)
+    return stmt.get<ChannelSessionRow>(channelKey, channelType, sessionType, channelId, threadId ?? '')
   }
 
   const getBySessionId = (sessionId: string): ChannelSessionRow | undefined => {
     const stmt = db.prepare(`
-      SELECT channelType, sessionType, channelId, channelKey, senderId, replyReceiveId, replyReceiveIdType, sessionId, createdAt, updatedAt
-      FROM channel_sessions
+      SELECT channelType, sessionType, channelId, NULLIF(threadId, '') AS threadId,
+             channelKey, senderId, replyReceiveId, replyReceiveIdType, sessionId, createdAt, updatedAt
+      FROM channel_session_deliveries
+      WHERE sessionId = ?
+      LIMIT 1
+    `)
+    return stmt.get<ChannelSessionRow>(sessionId) ?? db.prepare(`
+      SELECT channelType, sessionType, channelId, NULLIF(threadId, '') AS threadId,
+             channelKey, senderId, replyReceiveId, replyReceiveIdType, sessionId, createdAt, updatedAt
+      FROM channel_sessions_v3
       WHERE sessionId = ?
       ORDER BY updatedAt DESC
       LIMIT 1
-    `)
-    return stmt.get<ChannelSessionRow>(sessionId)
+    `).get<ChannelSessionRow>(sessionId)
   }
 
-  const upsert = (row: Omit<ChannelSessionRow, 'createdAt' | 'updatedAt'>) => {
+  const upsert = db.transaction((row: Omit<ChannelSessionRow, 'createdAt' | 'updatedAt'>) => {
     const now = Date.now()
     const stmt = db.prepare(`
-      INSERT INTO channel_sessions (
-        channelType, sessionType, channelId, channelKey, senderId, replyReceiveId, replyReceiveIdType, sessionId, createdAt, updatedAt
+      INSERT INTO channel_sessions_v3 (
+        channelType, sessionType, channelId, threadId, channelKey, senderId,
+        replyReceiveId, replyReceiveIdType, sessionId, createdAt, updatedAt
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(channelType, sessionType, channelId) DO UPDATE SET
-        channelKey = excluded.channelKey,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(channelKey, sessionType, channelId, threadId) DO UPDATE SET
+        channelType = excluded.channelType,
         senderId = excluded.senderId,
         replyReceiveId = excluded.replyReceiveId,
         replyReceiveIdType = excluded.replyReceiveIdType,
@@ -71,6 +83,7 @@ export function createChannelSessionsRepo(db: SqliteDatabase) {
       row.channelType,
       row.sessionType,
       row.channelId,
+      row.threadId ?? '',
       row.channelKey,
       row.senderId ?? null,
       row.replyReceiveId ?? null,
@@ -79,46 +92,77 @@ export function createChannelSessionsRepo(db: SqliteDatabase) {
       now,
       now
     )
-  }
+    db.prepare(`
+      INSERT INTO channel_session_deliveries (
+        sessionId, channelType, sessionType, channelId, threadId, channelKey, senderId,
+        replyReceiveId, replyReceiveIdType, createdAt, updatedAt
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(sessionId) DO NOTHING
+    `).run(
+      row.sessionId,
+      row.channelType,
+      row.sessionType,
+      row.channelId,
+      row.threadId ?? '',
+      row.channelKey,
+      row.senderId ?? null,
+      row.replyReceiveId ?? null,
+      row.replyReceiveIdType ?? null,
+      now,
+      now
+    )
+  })
 
   const removeBySessionId = (sessionId: string) => {
-    const stmt = db.prepare(`
-      DELETE FROM channel_sessions
+    const removedBindings = db.prepare(`
+      DELETE FROM channel_sessions_v3
       WHERE sessionId = ?
-    `)
-    return stmt.run(sessionId).changes
+    `).run(sessionId).changes
+    const removedDeliveries = db.prepare(`
+      DELETE FROM channel_session_deliveries
+      WHERE sessionId = ?
+    `).run(sessionId).changes
+    return removedBindings + removedDeliveries
   }
 
-  const remove = (channelType: string, sessionType: string, channelId: string) => {
+  const remove = (
+    channelKey: string,
+    channelType: string,
+    sessionType: string,
+    channelId: string,
+    threadId?: string
+  ) => {
     const stmt = db.prepare(`
-      DELETE FROM channel_sessions
-      WHERE channelType = ? AND sessionType = ? AND channelId = ?
+      DELETE FROM channel_sessions_v3
+      WHERE channelKey = ? AND channelType = ? AND sessionType = ? AND channelId = ? AND threadId = ?
     `)
-    return stmt.run(channelType, sessionType, channelId).changes
+    return stmt.run(channelKey, channelType, sessionType, channelId, threadId ?? '').changes
   }
 
   const getPreference = (
+    channelKey: string,
     channelType: string,
     sessionType: string,
     channelId: string
   ): ChannelPreferenceRow | undefined => {
     const stmt = db.prepare(`
       SELECT channelType, sessionType, channelId, channelKey, adapter, permissionMode, effort, createdAt, updatedAt
-      FROM channel_preferences
-      WHERE channelType = ? AND sessionType = ? AND channelId = ?
+      FROM channel_preferences_v2
+      WHERE channelKey = ? AND channelType = ? AND sessionType = ? AND channelId = ?
     `)
-    return stmt.get<ChannelPreferenceRow>(channelType, sessionType, channelId)
+    return stmt.get<ChannelPreferenceRow>(channelKey, channelType, sessionType, channelId)
   }
 
   const upsertPreference = (row: Omit<ChannelPreferenceRow, 'createdAt' | 'updatedAt'>) => {
     const now = Date.now()
     const stmt = db.prepare(`
-      INSERT INTO channel_preferences (
+      INSERT INTO channel_preferences_v2 (
         channelType, sessionType, channelId, channelKey, adapter, permissionMode, effort, createdAt, updatedAt
       )
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(channelType, sessionType, channelId) DO UPDATE SET
-        channelKey = excluded.channelKey,
+      ON CONFLICT(channelKey, sessionType, channelId) DO UPDATE SET
+        channelType = excluded.channelType,
         adapter = excluded.adapter,
         permissionMode = excluded.permissionMode,
         effort = excluded.effort,

@@ -13,6 +13,7 @@ const STATE_SELECT_FIELDS = `
 
 function makeStateId(input: {
   channelType: string
+  channelKey: string
   channelId: string
   entity?: string | null
   threadKey: string
@@ -20,6 +21,7 @@ function makeStateId(input: {
   const hash = createHash('sha256')
     .update(JSON.stringify({
       channelId: input.channelId,
+      channelKey: input.channelKey,
       channelType: input.channelType,
       entity: input.entity ?? null,
       threadKey: input.threadKey
@@ -41,6 +43,7 @@ export function createConversationStatesRepo(db: SqliteDatabase) {
 
   const getStateByThread = (input: {
     channelType: string
+    channelKey: string
     channelId: string
     entity?: string | null
     threadKey: string
@@ -48,11 +51,12 @@ export function createConversationStatesRepo(db: SqliteDatabase) {
     const stmt = db.prepare(`
       SELECT ${STATE_SELECT_FIELDS}
       FROM channel_conversation_states
-      WHERE channelType = ? AND channelId = ? AND entity IS ? AND threadKey = ?
+      WHERE channelType = ? AND channelKey = ? AND channelId = ? AND entity IS ? AND threadKey = ?
       LIMIT 1
     `)
     return mapStateRow(stmt.get<ChannelConversationStateDbRow>(
       input.channelType,
+      input.channelKey,
       input.channelId,
       input.entity ?? null,
       input.threadKey

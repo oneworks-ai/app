@@ -69,9 +69,8 @@ export function channelSendRouter(): Router {
     const result = await invokeChannelCommand({
       channelKey: ctx.params.channelKey,
       toolName,
-      context: isRecord(body.context) ? body.context : undefined,
       input: body.input,
-      sessionId: trimNonEmpty(body.sessionId)
+      invocationToken: trimNonEmpty(body.invocationToken)
     })
 
     if (!result.ok) {

@@ -31,11 +31,23 @@ export const resolveChannelAuthorizationRequest = async (input: {
   if (request == null) return undefined
 
   const resolvedAt = input.resolvedAt ?? Date.now()
-  const updatedRequest = db.updateChannelAuthorizationRequest(input.id, {
+  const updatedRequest = db.resolveChannelAuthorizationRequest({
+    id: input.id,
+    resolvedAt,
     status: input.status,
-    ...(input.message === undefined ? {} : { message: input.message }),
-    resolvedAt
-  }) ?? request
+    ...(input.message === undefined ? {} : { message: input.message })
+  })
+  const effectiveRequest = updatedRequest ?? (request.status === input.status ? request : undefined)
+  if (effectiveRequest == null) {
+    return {
+      interactionHandled: false,
+      pendingIntentIds: [],
+      request,
+      resolved: false
+    }
+  }
+
+  const effectiveResolvedAt = effectiveRequest.resolvedAt ?? resolvedAt
 
   const interactionHandled = input.interactionResponse == null
     ? false
@@ -54,7 +66,7 @@ export const resolveChannelAuthorizationRequest = async (input: {
           intent,
           interactionResponse: input.interactionResponse,
           request,
-          resolvedAt,
+          resolvedAt: effectiveResolvedAt,
           resolvedByAccountId: input.resolvedByAccountId,
           resolvedByUserId: input.resolvedByUserId,
           status: input.status
@@ -62,7 +74,7 @@ export const resolveChannelAuthorizationRequest = async (input: {
         resolvedByAccountId: input.resolvedByAccountId,
         resolvedByUserId: input.resolvedByUserId
       },
-      resolvedAt,
+      resolvedAt: effectiveResolvedAt,
       status: 'resolved'
     })
   }
@@ -70,6 +82,8 @@ export const resolveChannelAuthorizationRequest = async (input: {
   return {
     interactionHandled,
     pendingIntentIds: pendingIntents.map(intent => intent.id),
-    request: updatedRequest
+    request: effectiveRequest,
+    resolved: true,
+    retried: updatedRequest == null
   }
 }

@@ -15,11 +15,11 @@ export const oneworksChannelConfigSchema = channelBaseSchema.extend({
     .string()
     .min(1)
     .optional()
-    .describe('Simulation webhook secret, passed as query secret or x-oneworks-channel-secret.'),
+    .describe('Secret used to verify signed OneWorks webhook requests.'),
   allowInsecureWebhooks: z
     .boolean()
     .optional()
-    .describe('Allow secretless webhook simulation only from a loopback Host. Defaults to false.')
+    .describe('Allow unsigned synthetic simulation only from a loopback socket. Defaults to false.')
 })
 
 export const oneworksToolCallSummarySchema = z.object({

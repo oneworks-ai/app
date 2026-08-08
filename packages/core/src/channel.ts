@@ -186,6 +186,28 @@ export interface ChannelLogger {
 }
 
 export interface ChannelConnectionOptions {
+  channelKey?: string
+  webhookNonceStore?: {
+    reserve: (input: {
+      channelKey: string
+      channelType: string
+      expiresAt: number
+      nonce: string
+      reservationExpiresAt: number
+      reservationId: string
+    }) => boolean | Promise<boolean>
+    commit: (input: {
+      channelKey: string
+      expiresAt: number
+      nonce: string
+      reservationId: string
+    }) => void | Promise<void>
+    release: (input: {
+      channelKey: string
+      nonce: string
+      reservationId: string
+    }) => void | Promise<void>
+  }
   logger?: ChannelLogger
 }
 
@@ -195,6 +217,7 @@ export interface ChannelWebhookRequest {
   query: Record<string, string | string[] | undefined>
   body: unknown
   rawBody?: string | Uint8Array
+  remoteAddress?: string
 }
 
 export interface ChannelWebhookResponse {
@@ -210,6 +233,7 @@ export interface ChannelInboundEvent {
   senderId?: string
   messageId?: string
   text?: string
+  threadId?: string
   replyTo?: {
     receiveId: string
     receiveIdType: string

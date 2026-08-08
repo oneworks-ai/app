@@ -230,6 +230,7 @@ describe('availabilityGateMiddleware', () => {
     const ctx = makeCtx({
       actor: {
         account: {
+          issuerKey: 'lark:default',
           channelType: 'lark',
           accountId: 'ou_1',
           accountKey: 'lark:ou_1',

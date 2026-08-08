@@ -17,8 +17,17 @@ export function createChannelMessagesRepo(db: SqliteDatabase) {
     return stmt.run(cutoff).changes
   }
 
+  const removeSeen = (messageKey: string) => {
+    const stmt = db.prepare(`
+      DELETE FROM channel_seen_messages
+      WHERE messageKey = ?
+    `)
+    return stmt.run(messageKey).changes
+  }
+
   return {
     rememberSeen,
+    removeSeen,
     removeSeenBefore
   }
 }

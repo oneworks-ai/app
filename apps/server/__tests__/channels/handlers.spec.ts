@@ -6,12 +6,14 @@ import { consumePendingUnack, deleteBinding, setBinding, setPendingUnack } from 
 import {
   ensureChannelAuthorizationRequestForInteraction,
   markChannelAuthorizationRequestDelivered,
-  shouldDeliverChannelAuthorizationRequest
+  releaseChannelAuthorizationRequestDelivery,
+  reserveChannelAuthorizationRequestDelivery
 } from '#~/services/channel-authorizations/index.js'
 
 vi.mock('#~/db/index.js', () => ({
   getDb: vi.fn(() => ({
     getSession: vi.fn(),
+    getSessionRuntimeState: vi.fn(),
     updateSessionArchivedWithChildren: vi.fn(() => []),
     deleteChannelSessionBySessionId: vi.fn(),
     upsertChannelPreference: vi.fn(),
@@ -28,7 +30,8 @@ vi.mock('#~/services/session/index.js', () => ({
 vi.mock('#~/services/channel-authorizations/index.js', () => ({
   ensureChannelAuthorizationRequestForInteraction: vi.fn(),
   markChannelAuthorizationRequestDelivered: vi.fn(),
-  shouldDeliverChannelAuthorizationRequest: vi.fn(() => true)
+  releaseChannelAuthorizationRequestDelivery: vi.fn(),
+  reserveChannelAuthorizationRequestDelivery: vi.fn(() => ({ reservedAt: 1_000 }))
 }))
 
 vi.mock('#~/services/session/runtime.js', async () => {
@@ -157,7 +160,7 @@ const expectActionUrl = async (
 describe('channel handlers', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(shouldDeliverChannelAuthorizationRequest).mockReturnValue(true)
+    vi.mocked(reserveChannelAuthorizationRequestDelivery).mockReturnValue({ reservedAt: 1_000 })
     vi.stubEnv('__ONEWORKS_PROJECT_SERVER_ACTION_SECRET__', 'test-secret')
     deleteBinding('sess-1')
     consumePendingUnack('sess-1')
@@ -268,7 +271,7 @@ describe('channel handlers', () => {
       deliveryMessageId: 'om_permission',
       windowMs: 5_000
     })
-    expect(shouldDeliverChannelAuthorizationRequest).toHaveBeenCalledWith({
+    expect(reserveChannelAuthorizationRequestDelivery).toHaveBeenCalledWith({
       id: 'channel-interaction:sess-1:interaction-permission',
       windowMs: 5_000
     })
@@ -297,7 +300,7 @@ describe('channel handlers', () => {
     vi.mocked(ensureChannelAuthorizationRequestForInteraction).mockReturnValue({
       id: 'channel-interaction:sess-1:interaction-permission'
     } as any)
-    vi.mocked(shouldDeliverChannelAuthorizationRequest).mockReturnValue(false)
+    vi.mocked(reserveChannelAuthorizationRequestDelivery).mockReturnValue(undefined)
     bindTestSession({ senderId: 'user1' })
 
     const delivered = await handleSessionEvent(
@@ -318,12 +321,34 @@ describe('channel handlers', () => {
     )
 
     expect(delivered).toBe(true)
-    expect(shouldDeliverChannelAuthorizationRequest).toHaveBeenCalledWith({
+    expect(reserveChannelAuthorizationRequestDelivery).toHaveBeenCalledWith({
       id: 'channel-interaction:sess-1:interaction-permission',
       windowMs: undefined
     })
     expect(sendMessage).not.toHaveBeenCalled()
     expect(pushFollowUps).not.toHaveBeenCalled()
+    expect(markChannelAuthorizationRequestDelivered).not.toHaveBeenCalled()
+  })
+
+  it('releases an authorization delivery reservation when sending fails', async () => {
+    const sendMessage = vi.fn().mockRejectedValue(new Error('offline'))
+    vi.mocked(ensureChannelAuthorizationRequestForInteraction).mockReturnValue({ id: 'auth-1' } as any)
+    bindTestSession({ senderId: 'user1' })
+
+    await expect(handleSessionEvent(
+      makeRuntimeState({ sendMessage }),
+      'sess-1',
+      makeInteractionRequestEvent({
+        kind: 'permission',
+        options: [{ label: '同意本次', value: 'allow_once' }],
+        question: '需要授权'
+      })
+    )).rejects.toThrow('offline')
+
+    expect(releaseChannelAuthorizationRequestDelivery).toHaveBeenCalledWith({
+      id: 'auth-1',
+      reservedAt: 1_000
+    })
     expect(markChannelAuthorizationRequestDelivered).not.toHaveBeenCalled()
   })
 

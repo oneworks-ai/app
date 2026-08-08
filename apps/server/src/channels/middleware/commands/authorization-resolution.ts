@@ -1,4 +1,5 @@
 import { getDb } from '#~/db/index.js'
+import type { ChannelAuthorizationRequestRow } from '#~/db/index.js'
 import { resolveChannelAuthorizationRequest } from '#~/services/channel-authorizations/index.js'
 import { resumeReadyChannelIntents } from '#~/services/channel-resume/index.js'
 
@@ -7,6 +8,43 @@ import { resolveRequesterAccountId, resolveRequesterUserId } from './authorizati
 import { command, optionalArg, requiredArg } from './command-system'
 
 const AUTH_RESUME_LIMIT = 20
+
+const readStringMetadata = (request: ChannelAuthorizationRequestRow, key: string) => {
+  const value = request.metadata?.[key]
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
+}
+
+const readStringArrayMetadata = (request: ChannelAuthorizationRequestRow, key: string) => {
+  const value = request.metadata?.[key]
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.trim() !== '')
+    : []
+}
+
+const canResolveRequest = (
+  ctx: ChannelContext,
+  request: ChannelAuthorizationRequestRow,
+  targetStatus: 'denied' | 'granted'
+) => {
+  const retryingSameResolution = request.status === targetStatus
+  if (
+    !retryingSameResolution &&
+    (request.status !== 'pending' || (request.expiresAt != null && request.expiresAt <= Date.now()))
+  ) return false
+  if (request.channelType !== ctx.inbound.channelType) return false
+  if (readStringMetadata(request, 'channelKey') !== ctx.channelKey) return false
+  if (readStringMetadata(request, 'channelId') !== ctx.inbound.channelId) return false
+
+  const actorRefs = [resolveRequesterAccountId(ctx), resolveRequesterUserId(ctx)]
+    .filter((value): value is string => value != null && value !== '')
+  const allowedApproverRefs = new Set(readStringArrayMetadata(request, 'allowedApproverRefs'))
+  return actorRefs.some(ref => allowedApproverRefs.has(ref))
+}
+
+const getResolvableRequest = (ctx: ChannelContext, id: string, targetStatus: 'denied' | 'granted') => {
+  const request = getDb().getChannelAuthorizationRequest(id)
+  return request != null && canResolveRequest(ctx, request, targetStatus) ? request : undefined
+}
 
 const resumeResolvedAuthorization = async (authorizationRequestId: string) => {
   await resumeReadyChannelIntents({
@@ -28,12 +66,12 @@ export const createGrantAuthorizationCommand = () =>
     .adminOnly()
     .argument(requiredArg('id'))
     .action(async ({ ctx, args: [id] }) => {
-      if (getDb().getChannelAuthorizationRequest(id) == null) {
-        await ctx.reply(ctx.t('auth.notFound', { id }))
+      if (getResolvableRequest(ctx, id, 'granted') == null) {
+        await ctx.reply(ctx.t('auth.notResolvable', { id }))
         return
       }
 
-      await resolveChannelAuthorizationRequest({
+      const resolution = await resolveChannelAuthorizationRequest({
         id,
         interactionResponse: 'allow_once',
         resolvedByAccountId: resolveRequesterAccountId(ctx),
@@ -41,6 +79,10 @@ export const createGrantAuthorizationCommand = () =>
         status: 'granted',
         resolvedAt: Date.now()
       })
+      if (resolution?.resolved !== true) {
+        await ctx.reply(ctx.t('auth.notResolvable', { id }))
+        return
+      }
       await resumeResolvedAuthorization(id)
       await ctx.reply(ctx.t('auth.resolved', {
         id,
@@ -55,13 +97,13 @@ export const createDenyAuthorizationCommand = () =>
     .argument(requiredArg('id'))
     .argument(optionalArg('reason'))
     .action(async ({ ctx, args: [id, reason] }) => {
-      const request = getDb().getChannelAuthorizationRequest(id)
+      const request = getResolvableRequest(ctx, id, 'denied')
       if (request == null) {
-        await ctx.reply(ctx.t('auth.notFound', { id }))
+        await ctx.reply(ctx.t('auth.notResolvable', { id }))
         return
       }
 
-      await resolveChannelAuthorizationRequest({
+      const resolution = await resolveChannelAuthorizationRequest({
         id,
         interactionResponse: 'deny_once',
         status: 'denied',
@@ -70,6 +112,10 @@ export const createDenyAuthorizationCommand = () =>
         resolvedByUserId: resolveRequesterUserId(ctx),
         resolvedAt: Date.now()
       })
+      if (resolution?.resolved !== true) {
+        await ctx.reply(ctx.t('auth.notResolvable', { id }))
+        return
+      }
       await resumeResolvedAuthorization(id)
       await ctx.reply(ctx.t('auth.resolved', {
         id,
@@ -83,7 +129,13 @@ export const createResumeAuthorizationCommand = () =>
     .adminOnly()
     .argument(requiredArg('id'))
     .action(async ({ ctx, args: [id] }) => {
-      if (getDb().getChannelAuthorizationRequest(id) == null) {
+      const request = getDb().getChannelAuthorizationRequest(id)
+      if (
+        request == null ||
+        request.channelType !== ctx.inbound.channelType ||
+        readStringMetadata(request, 'channelKey') !== ctx.channelKey ||
+        readStringMetadata(request, 'channelId') !== ctx.inbound.channelId
+      ) {
         await ctx.reply(ctx.t('auth.notFound', { id }))
         return
       }

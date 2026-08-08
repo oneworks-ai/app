@@ -2,7 +2,7 @@ import type { SchemaModule } from '../schema'
 
 export const channelPoliciesSchemaModule: SchemaModule = {
   name: 'channel-policies',
-  apply({ exec }) {
+  apply({ ensureColumn, exec }) {
     exec(`
       CREATE TABLE IF NOT EXISTS channel_reply_throttles (
         throttleKey TEXT NOT NULL PRIMARY KEY,
@@ -42,6 +42,22 @@ export const channelPoliciesSchemaModule: SchemaModule = {
 
       CREATE INDEX IF NOT EXISTS idx_channel_offhour_backlog_channel
         ON channel_offhour_backlog(channelType, channelId, processedAt, createdAt);
+
+      CREATE TABLE IF NOT EXISTS channel_webhook_nonces (
+        channelKey TEXT NOT NULL,
+        nonce TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'consumed',
+        reservationId TEXT,
+        reservationExpiresAt INTEGER,
+        expiresAt INTEGER NOT NULL,
+        PRIMARY KEY (channelKey, nonce)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_channel_webhook_nonces_expiry
+        ON channel_webhook_nonces(expiresAt);
     `)
+    ensureColumn('channel_webhook_nonces', 'status', "TEXT NOT NULL DEFAULT 'consumed'")
+    ensureColumn('channel_webhook_nonces', 'reservationId', 'TEXT')
+    ensureColumn('channel_webhook_nonces', 'reservationExpiresAt', 'INTEGER')
   }
 }

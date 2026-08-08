@@ -6,6 +6,8 @@ import {
   buildChannelInteractionAuthorizationRequestId,
   ensureChannelAuthorizationRequestForInteraction,
   markChannelAuthorizationRequestDelivered,
+  releaseChannelAuthorizationRequestDelivery,
+  reserveChannelAuthorizationRequestDelivery,
   resolveChannelAuthorizationRequest,
   shouldDeliverChannelAuthorizationRequest
 } from '#~/services/channel-authorizations/index.js'
@@ -25,6 +27,8 @@ const getChannelAuthorizationRequest = vi.fn()
 const getChannelReplyThrottle = vi.fn()
 const getSessionRuntimeState = vi.fn()
 const listOpenChannelPendingIntents = vi.fn()
+const releaseChannelReplyThrottle = vi.fn()
+const resolveChannelAuthorizationRequestRecord = vi.fn()
 const resolveCanonicalUserByChannelAccount = vi.fn()
 const updateChannelAuthorizationRequest = vi.fn()
 const updateChannelPendingIntent = vi.fn()
@@ -117,6 +121,11 @@ describe('channel authorization service', () => {
       ...getChannelAuthorizationRequest(),
       ...updates
     }))
+    resolveChannelAuthorizationRequestRecord.mockImplementation(input => ({
+      ...getChannelAuthorizationRequest(),
+      resolvedAt: input.resolvedAt,
+      status: input.status
+    }))
     updateChannelPendingIntent.mockImplementation((_id, updates) => ({
       id: 'pending-auth-1',
       ...updates
@@ -131,6 +140,8 @@ describe('channel authorization service', () => {
       getChannelReplyThrottle,
       getSessionRuntimeState,
       listOpenChannelPendingIntents,
+      releaseChannelReplyThrottle,
+      resolveChannelAuthorizationRequest: resolveChannelAuthorizationRequestRecord,
       resolveCanonicalUserByChannelAccount,
       updateChannelAuthorizationRequest,
       updateChannelPendingIntent,
@@ -154,7 +165,7 @@ describe('channel authorization service', () => {
       sessionId: 'sess-1'
     })
 
-    expect(resolveCanonicalUserByChannelAccount).toHaveBeenCalledWith('lark', 'ou_1')
+    expect(resolveCanonicalUserByChannelAccount).toHaveBeenCalledWith('lark-main', 'ou_1')
     expect(createChannelAuthorizationRequest).toHaveBeenCalledWith({
       id: 'channel-interaction:sess-1:interaction-1',
       channelType: 'lark',
@@ -336,9 +347,10 @@ describe('channel authorization service', () => {
       status: 'granted'
     })
 
-    expect(updateChannelAuthorizationRequest).toHaveBeenCalledWith('auth-1', {
-      status: 'granted',
-      resolvedAt: 123
+    expect(resolveChannelAuthorizationRequestRecord).toHaveBeenCalledWith({
+      id: 'auth-1',
+      resolvedAt: 123,
+      status: 'granted'
     })
     expect(listOpenChannelPendingIntents).toHaveBeenCalledWith({
       authorizationRequestId: 'auth-1'
@@ -424,6 +436,45 @@ describe('channel authorization service', () => {
     })
   })
 
+  it('repairs open pending intents when the authorization is already in the requested terminal state', async () => {
+    getChannelAuthorizationRequest.mockReturnValue({
+      id: 'auth-1',
+      channelType: 'lark',
+      channelLinkName: 'wan-ke-chat',
+      requesterUserId: 'user-yijie',
+      requesterAccountId: 'ou_1',
+      credentialKey: null,
+      capability: 'Write',
+      status: 'granted',
+      message: 'Allow Write?',
+      metadata: { sessionId: 'sess-1' },
+      createdAt: 1,
+      updatedAt: 123,
+      expiresAt: null,
+      resolvedAt: 123
+    })
+    resolveChannelAuthorizationRequestRecord.mockReturnValue(undefined)
+
+    const result = await resolveChannelAuthorizationRequest({
+      id: 'auth-1',
+      resolvedAt: 999,
+      status: 'granted'
+    })
+
+    expect(updateChannelPendingIntent).toHaveBeenCalledWith(
+      'pending-auth-1',
+      expect.objectContaining({
+        resolvedAt: 123,
+        status: 'resolved'
+      })
+    )
+    expect(result).toEqual(expect.objectContaining({
+      pendingIntentIds: ['pending-auth-1'],
+      resolved: true,
+      retried: true
+    }))
+  })
+
   it('marks related pending intents as delivered', () => {
     getChannelAuthorizationRequest.mockReturnValue({
       id: 'auth-1',
@@ -485,6 +536,30 @@ describe('channel authorization service', () => {
         deliveredAt: expect.any(Number)
       })
     })
+    expect(consumeChannelReplyThrottle).not.toHaveBeenCalled()
+  })
+
+  it('atomically reserves authorization delivery and can release failed sends', () => {
+    getChannelAuthorizationRequest.mockReturnValue({
+      channelLinkName: 'wan-ke-chat',
+      channelType: 'lark',
+      credentialSubjectUserId: 'user-yijie',
+      id: 'auth-1',
+      metadata: null,
+      requesterAccountId: 'ou_1',
+      requesterUserId: 'user-yijie'
+    })
+    listOpenChannelPendingIntents.mockReturnValue([{
+      channelId: 'oc_1',
+      channelLinkName: 'wan-ke-chat',
+      ownerAccountId: 'ou_1',
+      ownerUserId: 'user-yijie'
+    }])
+
+    expect(reserveChannelAuthorizationRequestDelivery({
+      id: 'auth-1',
+      now: 1_000
+    })).toEqual({ reservedAt: 1_000 })
     expect(consumeChannelReplyThrottle).toHaveBeenCalledWith(expect.objectContaining({
       throttleKey: 'authorization-request-delivery\u0000auth-1',
       policyType: 'authorization_request_delivery',
@@ -494,6 +569,11 @@ describe('channel authorization service', () => {
       actorUserId: 'user-yijie',
       windowMs: 20 * 60 * 1000
     }))
+    releaseChannelAuthorizationRequestDelivery({ id: 'auth-1', reservedAt: 1_000 })
+    expect(releaseChannelReplyThrottle).toHaveBeenCalledWith({
+      lastSentAt: 1_000,
+      throttleKey: 'authorization-request-delivery\u0000auth-1'
+    })
   })
 
   it('uses reply throttle state to suppress repeated delivery', () => {

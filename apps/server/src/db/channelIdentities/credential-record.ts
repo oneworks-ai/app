@@ -4,6 +4,7 @@ import type { JsonRecord } from './json'
 export type ChannelCredentialStatus = 'active' | 'needs_auth' | 'expired' | 'revoked'
 
 export interface ChannelUserCredentialDbRow {
+  issuerKey: string
   userId: string
   channelType: string
   credentialKey: string
@@ -17,6 +18,7 @@ export interface ChannelUserCredentialDbRow {
 }
 
 export interface ChannelUserCredentialRow {
+  issuerKey: string
   userId: string
   channelType: string
   credentialKey: string
@@ -30,6 +32,7 @@ export interface ChannelUserCredentialRow {
 }
 
 export interface ChannelUserCredentialInput {
+  issuerKey: string
   userId: string
   channelType: string
   credentialKey: string
@@ -45,6 +48,7 @@ export function mapCredentialRow(
 ): ChannelUserCredentialRow | undefined {
   if (row == null) return undefined
   return {
+    issuerKey: row.issuerKey,
     userId: row.userId,
     channelType: row.channelType,
     credentialKey: row.credentialKey,

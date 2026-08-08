@@ -163,6 +163,49 @@ describe('sqliteDb', () => {
     }))
   })
 
+  it('consumes a one-shot session permission exactly once', () => {
+    db.createSession('Permission child', 'session-permission', 'running', undefined, {
+      permissionState: {
+        allow: [],
+        deny: [],
+        onceAllow: ['Write'],
+        onceDeny: []
+      }
+    })
+
+    expect(db.consumeSessionPermissionOnce('session-permission', ['Write'])).toEqual(expect.objectContaining({
+      decision: 'allow',
+      key: 'Write'
+    }))
+    expect(db.consumeSessionPermissionOnce('session-permission', ['Write'])).toBeUndefined()
+  })
+
+  it('moves one-shot permissions to exactly one child session', () => {
+    db.createSession('Permission parent', 'permission-parent', 'running', undefined, {
+      permissionState: {
+        allow: ['Read'],
+        deny: [],
+        onceAllow: ['Write'],
+        onceDeny: []
+      }
+    })
+    db.createSession('Permission child A', 'permission-child-a', 'running', 'permission-parent')
+    db.createSession('Permission child B', 'permission-child-b', 'running', 'permission-parent')
+
+    expect(db.transferSessionPermissionState('permission-parent', 'permission-child-a')).toEqual({
+      allow: ['Read'],
+      deny: [],
+      onceAllow: ['Write'],
+      onceDeny: []
+    })
+    expect(db.transferSessionPermissionState('permission-parent', 'permission-child-b')).toEqual({
+      allow: ['Read'],
+      deny: [],
+      onceAllow: [],
+      onceDeny: []
+    })
+  })
+
   it('persists channel child session run audit records', () => {
     const run = db.createChannelChildSessionRun({
       id: 'child-run-1',
@@ -281,6 +324,29 @@ describe('sqliteDb', () => {
     expect(db.listRecentChannelConversationTurns(state.id)).toEqual([
       expect.objectContaining({ id: turn.id })
     ])
+  })
+
+  it('isolates conversation state for the same external chat across channel issuers', () => {
+    const first = db.ensureChannelConversationState({
+      channelId: 'oc_shared',
+      channelKey: 'lark-app-a',
+      channelType: 'lark',
+      entity: 'owo-demo',
+      sessionType: 'group',
+      threadKey: 'group:owo-demo:actor:user-yijie'
+    })
+    const second = db.ensureChannelConversationState({
+      channelId: 'oc_shared',
+      channelKey: 'lark-app-b',
+      channelType: 'lark',
+      entity: 'owo-demo',
+      sessionType: 'group',
+      threadKey: 'group:owo-demo:actor:user-yijie'
+    })
+
+    expect(first.id).not.toBe(second.id)
+    expect(first.channelKey).toBe('lark-app-a')
+    expect(second.channelKey).toBe('lark-app-b')
   })
 
   it('maintains channel pending intents under conversation state', () => {
@@ -451,6 +517,9 @@ describe('sqliteDb', () => {
     expect(db.rememberChannelMessage('wechat:group:room:msg-1')).toBe(false)
     expect(db.rememberChannelMessage('wechat:group:room:msg-2')).toBe(true)
 
+    expect(db.forgetChannelMessage('wechat:group:room:msg-2')).toBe(1)
+    expect(db.rememberChannelMessage('wechat:group:room:msg-2')).toBe(true)
+
     expect(db.deleteChannelMessagesSeenBefore(Date.now() + 1)).toBe(2)
     expect(db.rememberChannelMessage('wechat:group:room:msg-1')).toBe(true)
   })
@@ -507,7 +576,7 @@ describe('sqliteDb', () => {
     expect(db.getSession('sibling')).toEqual(expect.objectContaining({ isArchived: false }))
   })
 
-  it('returns the latest channel session mapping for a session id', () => {
+  it('keeps the first delivery binding immutable for a session id', () => {
     db.createSession('Mapped session', 'session-mapped')
 
     vi.setSystemTime(new Date('2026-03-18T00:00:00.000Z'))
@@ -534,16 +603,43 @@ describe('sqliteDb', () => {
       replyReceiveIdType: 'message'
     })
 
-    expect(db.getChannelSession('lark', 'thread', 'channel-1')).toEqual(expect.objectContaining({
+    expect(db.getChannelSession('key-1', 'lark', 'thread', 'channel-1')).toEqual(expect.objectContaining({
       channelKey: 'key-1',
       sessionId: 'session-mapped'
     }))
     expect(db.getChannelSessionBySessionId('session-mapped')).toEqual(expect.objectContaining({
-      channelId: 'channel-2',
-      channelKey: 'key-2',
-      senderId: 'sender-2',
-      updatedAt: Date.now()
+      channelId: 'channel-1',
+      channelKey: 'key-1',
+      senderId: 'sender-1',
+      updatedAt: new Date('2026-03-18T00:00:00.000Z').getTime()
     }))
+  })
+
+  it('isolates session bindings for threads in the same group', () => {
+    db.createSession('First thread', 'session-thread-1')
+    db.createSession('Second thread', 'session-thread-2')
+    db.upsertChannelSession({
+      channelType: 'lark',
+      sessionType: 'group',
+      channelId: 'group-1',
+      threadId: 'thread-1',
+      channelKey: 'lark-main',
+      sessionId: 'session-thread-1'
+    })
+    db.upsertChannelSession({
+      channelType: 'lark',
+      sessionType: 'group',
+      channelId: 'group-1',
+      threadId: 'thread-2',
+      channelKey: 'lark-main',
+      sessionId: 'session-thread-2'
+    })
+
+    expect(db.getChannelSession('lark-main', 'lark', 'group', 'group-1', 'thread-1')?.sessionId)
+      .toBe('session-thread-1')
+    expect(db.getChannelSession('lark-main', 'lark', 'group', 'group-1', 'thread-2')?.sessionId)
+      .toBe('session-thread-2')
+    expect(db.getChannelSession('lark-main', 'lark', 'group', 'group-1')).toBeUndefined()
   })
 
   it('persists channel adapter preferences independently of the current session binding', () => {
@@ -557,7 +653,7 @@ describe('sqliteDb', () => {
       effort: 'high'
     })
 
-    expect(db.getChannelPreference('lark', 'direct', 'channel-1')).toEqual(expect.objectContaining({
+    expect(db.getChannelPreference('key-1', 'lark', 'direct', 'channel-1')).toEqual(expect.objectContaining({
       channelKey: 'key-1',
       adapter: 'codex',
       permissionMode: 'bypassPermissions',
@@ -629,6 +725,7 @@ describe('sqliteDb', () => {
     })
 
     db.upsertChannelAccount({
+      issuerKey: 'lark-main',
       channelType: 'lark',
       accountId: 'ou_lark_yijie',
       accountKey: 'lark:open_id:ou_lark_yijie',
@@ -636,30 +733,34 @@ describe('sqliteDb', () => {
       metadata: { tenant: 'oneworks' }
     })
     db.upsertChannelAccount({
+      issuerKey: 'wechat-main',
       channelType: 'wechat',
       accountId: 'wx_yijie',
       displayName: '一介'
     })
     db.linkChannelAccountToUser({
+      issuerKey: 'lark-main',
       channelType: 'lark',
       accountId: 'ou_lark_yijie',
       userId: 'user-yijie',
       source: 'manual'
     })
     db.linkChannelAccountToUser({
+      issuerKey: 'wechat-main',
       channelType: 'wechat',
       accountId: 'wx_yijie',
       userId: 'user-yijie',
       source: 'claim'
     })
 
-    expect(db.resolveCanonicalUserByChannelAccount('lark', 'ou_lark_yijie')).toEqual(expect.objectContaining({
+    expect(db.resolveCanonicalUserByChannelAccount('lark-main', 'ou_lark_yijie')).toEqual(expect.objectContaining({
       id: 'user-yijie',
       displayName: '一介'
     }))
     expect(db.listChannelAccountsForUser('user-yijie')).toEqual([
       expect.objectContaining({
         channelType: 'lark',
+        issuerKey: 'lark-main',
         accountId: 'ou_lark_yijie',
         accountKey: 'lark:open_id:ou_lark_yijie',
         displayName: '一介[字节]',
@@ -667,11 +768,39 @@ describe('sqliteDb', () => {
       }),
       expect.objectContaining({
         channelType: 'wechat',
+        issuerKey: 'wechat-main',
         accountId: 'wx_yijie',
-        accountKey: 'wechat:wx_yijie',
+        accountKey: 'wechat-main:wx_yijie',
         displayName: '一介'
       })
     ])
+  })
+
+  it('isolates identical platform account ids across channel issuers', () => {
+    db.ensureCanonicalUser({ id: 'user-a' })
+    db.ensureCanonicalUser({ id: 'user-b' })
+    for (const issuerKey of ['lark-app-a', 'lark-app-b']) {
+      db.upsertChannelAccount({
+        accountId: 'ou_shared',
+        channelType: 'lark',
+        issuerKey
+      })
+    }
+    db.linkChannelAccountToUser({
+      accountId: 'ou_shared',
+      channelType: 'lark',
+      issuerKey: 'lark-app-a',
+      userId: 'user-a'
+    })
+    db.linkChannelAccountToUser({
+      accountId: 'ou_shared',
+      channelType: 'lark',
+      issuerKey: 'lark-app-b',
+      userId: 'user-b'
+    })
+
+    expect(db.resolveCanonicalUserByChannelAccount('lark-app-a', 'ou_shared')?.id).toBe('user-a')
+    expect(db.resolveCanonicalUserByChannelAccount('lark-app-b', 'ou_shared')?.id).toBe('user-b')
   })
 
   it('links another channel account through a short-lived identity code', () => {
@@ -680,14 +809,17 @@ describe('sqliteDb', () => {
       displayName: '一介'
     })
     db.upsertChannelAccount({
+      issuerKey: 'lark-team',
       channelType: 'lark',
       accountId: 'ou_lark_yijie'
     })
     db.upsertChannelAccount({
+      issuerKey: 'telegram-main',
       channelType: 'telegram',
       accountId: 'tg_yijie'
     })
     db.linkChannelAccountToUser({
+      issuerKey: 'lark-team',
       channelType: 'lark',
       accountId: 'ou_lark_yijie',
       userId: 'user-yijie',
@@ -698,6 +830,7 @@ describe('sqliteDb', () => {
       code: 'ABCD1234',
       userId: 'user-yijie',
       sourceChannelType: 'lark',
+      sourceIssuerKey: 'lark-team',
       sourceAccountId: 'ou_lark_yijie',
       expiresAt: Date.now() + 600_000,
       metadata: { channelKey: 'lark:team' }
@@ -715,6 +848,7 @@ describe('sqliteDb', () => {
     const result = db.consumeChannelIdentityLinkCode({
       code: 'ABCD1234',
       targetChannelType: 'telegram',
+      targetIssuerKey: 'telegram-main',
       targetAccountId: 'tg_yijie'
     })
 
@@ -722,6 +856,7 @@ describe('sqliteDb', () => {
       status: 'consumed',
       link: expect.objectContaining({
         channelType: 'telegram',
+        issuerKey: 'telegram-main',
         accountId: 'tg_yijie',
         userId: 'user-yijie',
         source: 'link_code',
@@ -730,10 +865,11 @@ describe('sqliteDb', () => {
       code: expect.objectContaining({
         status: 'consumed',
         consumedChannelType: 'telegram',
+        consumedIssuerKey: 'telegram-main',
         consumedAccountId: 'tg_yijie'
       })
     }))
-    expect(db.resolveCanonicalUserByChannelAccount('telegram', 'tg_yijie')).toEqual(expect.objectContaining({
+    expect(db.resolveCanonicalUserByChannelAccount('telegram-main', 'tg_yijie')).toEqual(expect.objectContaining({
       id: 'user-yijie'
     }))
   })
@@ -741,9 +877,10 @@ describe('sqliteDb', () => {
   it('does not consume expired or conflicting identity link codes', () => {
     db.ensureCanonicalUser({ id: 'user-a' })
     db.ensureCanonicalUser({ id: 'user-b' })
-    db.upsertChannelAccount({ channelType: 'lark', accountId: 'ou_a' })
-    db.upsertChannelAccount({ channelType: 'wechat', accountId: 'wx_b' })
+    db.upsertChannelAccount({ issuerKey: 'lark-main', channelType: 'lark', accountId: 'ou_a' })
+    db.upsertChannelAccount({ issuerKey: 'wechat-main', channelType: 'wechat', accountId: 'wx_b' })
     db.linkChannelAccountToUser({
+      issuerKey: 'wechat-main',
       channelType: 'wechat',
       accountId: 'wx_b',
       userId: 'user-b',
@@ -754,12 +891,14 @@ describe('sqliteDb', () => {
       code: 'EXPIRED',
       userId: 'user-a',
       sourceChannelType: 'lark',
+      sourceIssuerKey: 'lark-main',
       sourceAccountId: 'ou_a',
       expiresAt: Date.now() - 1
     })
     expect(db.consumeChannelIdentityLinkCode({
       code: 'EXPIRED',
       targetChannelType: 'wechat',
+      targetIssuerKey: 'wechat-main',
       targetAccountId: 'wx_new'
     })).toEqual(expect.objectContaining({
       status: 'expired',
@@ -770,12 +909,14 @@ describe('sqliteDb', () => {
       code: 'CONFLICT',
       userId: 'user-a',
       sourceChannelType: 'lark',
+      sourceIssuerKey: 'lark-main',
       sourceAccountId: 'ou_a',
       expiresAt: Date.now() + 600_000
     })
     expect(db.consumeChannelIdentityLinkCode({
       code: 'CONFLICT',
       targetChannelType: 'wechat',
+      targetIssuerKey: 'wechat-main',
       targetAccountId: 'wx_b'
     })).toEqual(expect.objectContaining({
       existingLink: expect.objectContaining({ userId: 'user-b' }),
@@ -793,6 +934,7 @@ describe('sqliteDb', () => {
     })
 
     db.upsertChannelUserCredential({
+      issuerKey: 'lark-main',
       userId: 'user-operator',
       channelType: 'lark',
       credentialKey: 'lark-cli:user-operator',
@@ -802,8 +944,9 @@ describe('sqliteDb', () => {
       metadata: { credentialRef: 'keychain://oneworks/lark/user-operator' }
     })
 
-    expect(db.getChannelUserCredential('user-operator', 'lark', 'lark-cli:user-operator')).toEqual(
+    expect(db.getChannelUserCredential('lark-main', 'user-operator', 'lark-cli:user-operator')).toEqual(
       expect.objectContaining({
+        issuerKey: 'lark-main',
         userId: 'user-operator',
         channelType: 'lark',
         credentialKey: 'lark-cli:user-operator',
@@ -814,6 +957,7 @@ describe('sqliteDb', () => {
     )
 
     db.upsertChannelUserCredential({
+      issuerKey: 'lark-main',
       userId: 'user-operator',
       channelType: 'lark',
       credentialKey: 'lark-cli:user-operator',
@@ -823,14 +967,119 @@ describe('sqliteDb', () => {
       expiresAt: Date.now() + 3600_000
     })
 
-    expect(db.listChannelUserCredentials('user-operator', 'lark')).toEqual([
+    db.upsertChannelUserCredential({
+      issuerKey: 'lark-support',
+      userId: 'user-operator',
+      channelType: 'lark',
+      credentialKey: 'lark-cli:user-operator',
+      status: 'revoked'
+    })
+
+    expect(db.listChannelUserCredentials('lark-main', 'user-operator')).toEqual([
       expect.objectContaining({
+        issuerKey: 'lark-main',
         credentialKey: 'lark-cli:user-operator',
         status: 'active',
         scopes: ['im:message:send_as_user', 'contact:user.base:readonly'],
         expiresAt: Date.now() + 3600_000
       })
     ])
+    expect(db.getChannelUserCredential('lark-support', 'user-operator', 'lark-cli:user-operator')).toEqual(
+      expect.objectContaining({
+        issuerKey: 'lark-support',
+        status: 'revoked'
+      })
+    )
+  })
+
+  it('migrates a legacy identity namespace into one explicit issuer', () => {
+    const now = Date.now()
+    db.ensureCanonicalUser({ id: 'user-legacy', displayName: 'Legacy User' })
+    sqlite.prepare(`
+      INSERT INTO channel_accounts (
+        channelType, accountId, accountKey, displayName, avatarUrl, metadataJson, createdAt, updatedAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run('lark', 'ou_legacy', 'lark:ou_legacy', 'Legacy User', null, null, now, now)
+    sqlite.prepare(`
+      INSERT INTO channel_identity_links (
+        channelType, accountId, userId, status, source, createdAt, updatedAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run('lark', 'ou_legacy', 'user-legacy', 'verified', 'legacy', now, now)
+    sqlite.prepare(`
+      INSERT INTO channel_user_credentials (
+        userId, channelType, credentialKey, label, status, scopesJson, expiresAt, metadataJson, createdAt, updatedAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run('user-legacy', 'lark', 'legacy-token', 'Legacy token', 'active', '["im:read"]', null, null, now, now)
+
+    expect(db.migrateLegacyChannelIdentityNamespace({
+      channelType: 'lark',
+      issuerKey: 'lark-main'
+    })).toEqual({
+      accounts: 1,
+      credentials: 1,
+      identityLinks: 1,
+      linkCodes: 0
+    })
+    expect(db.getChannelAccount('lark-main', 'ou_legacy')).toEqual(expect.objectContaining({
+      issuerKey: 'lark-main',
+      displayName: 'Legacy User'
+    }))
+    expect(db.resolveCanonicalUserByChannelAccount('lark-main', 'ou_legacy')).toEqual(expect.objectContaining({
+      id: 'user-legacy'
+    }))
+    expect(db.getChannelUserCredential('lark-main', 'user-legacy', 'legacy-token')).toEqual(
+      expect.objectContaining({ issuerKey: 'lark-main', scopes: ['im:read'] })
+    )
+  })
+
+  it('atomically reserves, commits, releases, and reclaims webhook nonces', () => {
+    expect(db.reserveChannelWebhookNonce({
+      channelKey: 'oneworks-main',
+      expiresAt: Date.now() + 60_000,
+      nonce: 'nonce-1',
+      reservationExpiresAt: Date.now() + 10_000,
+      reservationId: 'reservation-1'
+    })).toBe(true)
+    expect(db.reserveChannelWebhookNonce({
+      channelKey: 'oneworks-main',
+      expiresAt: Date.now() + 60_000,
+      nonce: 'nonce-1',
+      reservationExpiresAt: Date.now() + 20_000,
+      reservationId: 'reservation-2'
+    })).toBe(false)
+    expect(db.releaseChannelWebhookNonce({
+      channelKey: 'oneworks-main',
+      nonce: 'nonce-1',
+      reservationId: 'wrong-reservation'
+    })).toBe(false)
+
+    vi.advanceTimersByTime(10_001)
+    expect(db.reserveChannelWebhookNonce({
+      channelKey: 'oneworks-main',
+      expiresAt: Date.now() + 60_000,
+      nonce: 'nonce-1',
+      reservationExpiresAt: Date.now() + 10_000,
+      reservationId: 'reservation-2'
+    })).toBe(true)
+    expect(db.releaseChannelWebhookNonce({
+      channelKey: 'oneworks-main',
+      nonce: 'nonce-1',
+      reservationId: 'reservation-1'
+    })).toBe(false)
+    expect(db.commitChannelWebhookNonce({
+      channelKey: 'oneworks-main',
+      expiresAt: Date.now() + 60_000,
+      nonce: 'nonce-1',
+      reservationId: 'reservation-2'
+    })).toBe(true)
+
+    expect(db.reserveChannelWebhookNonce({
+      channelKey: 'oneworks-main',
+      expiresAt: Date.now() + 60_000,
+      nonce: 'nonce-1',
+      reservationExpiresAt: Date.now() + 10_000,
+      reservationId: 'reservation-3'
+    })).toBe(false)
   })
 
   it('records channel authorization requests until they are resolved', () => {
@@ -877,10 +1126,16 @@ describe('sqliteDb', () => {
       expect.objectContaining({ id: 'auth-1' })
     ])
 
-    db.updateChannelAuthorizationRequest('auth-1', {
+    expect(db.resolveChannelAuthorizationRequest({
+      id: 'auth-1',
       status: 'granted',
       resolvedAt: Date.now()
-    })
+    })).toEqual(expect.objectContaining({ status: 'granted' }))
+    expect(db.resolveChannelAuthorizationRequest({
+      id: 'auth-1',
+      status: 'denied',
+      resolvedAt: Date.now() + 1
+    })).toBeUndefined()
 
     expect(db.getChannelAuthorizationRequest('auth-1')).toEqual(expect.objectContaining({
       status: 'granted',

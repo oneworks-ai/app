@@ -112,6 +112,7 @@ describe('resolveChannelApproval', () => {
       createdAt: 1,
       credentialKey: 'lark-user',
       expiresAt: Date.now() + 60_000,
+      issuerKey: 'lark-main',
       label: null,
       metadata: null,
       scopes: ['im:chat:read', 'im:chat.members:write_only'],
@@ -124,6 +125,7 @@ describe('resolveChannelApproval', () => {
       actorAccountId: 'ou_1',
       actorUserId: 'user-1',
       capability: 'im.chat.member.add',
+      channelKey: 'lark-main',
       channelType: 'lark',
       credential: {
         credentialKey: 'lark-user',
@@ -131,11 +133,28 @@ describe('resolveChannelApproval', () => {
       }
     })
 
-    expect(getChannelUserCredential).toHaveBeenCalledWith('user-1', 'lark', 'lark-user')
+    expect(getChannelUserCredential).toHaveBeenCalledWith('lark-main', 'user-1', 'lark-user')
     expect(decision).toMatchObject({
       credentialKey: 'lark-user',
       reasonCode: 'credential-active',
       status: 'allow'
+    })
+  })
+
+  it('fails closed when a credential requirement has no issuer key', () => {
+    const decision = resolveChannelApproval({
+      actorAccountId: 'ou_1',
+      actorUserId: 'user-1',
+      capability: 'im.chat.member.add',
+      channelType: 'lark',
+      credential: { credentialKey: 'lark-user' }
+    })
+
+    expect(getChannelUserCredential).not.toHaveBeenCalled()
+    expect(decision).toMatchObject({
+      credentialKey: 'lark-user',
+      reasonCode: 'credential-issuer-unresolved',
+      status: 'ask_trigger_user'
     })
   })
 

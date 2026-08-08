@@ -9,6 +9,10 @@ const resolveBinding = vi.fn()
 const sendToolCallJsonFile = vi.fn()
 const connectionHandleWebhook = vi.fn()
 const loadChannelLinks = vi.fn()
+const migrateLegacyChannelIdentityNamespace = vi.fn()
+const commitChannelWebhookNonce = vi.fn()
+const releaseChannelWebhookNonce = vi.fn()
+const reserveChannelWebhookNonce = vi.fn()
 const logger = {
   info: vi.fn(),
   warn: vi.fn(),
@@ -36,6 +40,15 @@ vi.mock('#~/services/channel-links/index.js', () => ({
   loadChannelLinks
 }))
 
+vi.mock('#~/db/index.js', () => ({
+  getDb: () => ({
+    commitChannelWebhookNonce,
+    migrateLegacyChannelIdentityNamespace,
+    releaseChannelWebhookNonce,
+    reserveChannelWebhookNonce
+  })
+}))
+
 vi.mock('#~/utils/logger.js', () => ({
   logger
 }))
@@ -47,6 +60,13 @@ describe('initChannels', () => {
     handleInboundEvent.mockResolvedValue(undefined)
     handleSessionEvent.mockResolvedValue(false)
     loadChannelLinks.mockResolvedValue([])
+    reserveChannelWebhookNonce.mockReturnValue(true)
+    migrateLegacyChannelIdentityNamespace.mockReturnValue({
+      accounts: 0,
+      credentials: 0,
+      identityLinks: 0,
+      linkCodes: 0
+    })
   })
 
   it('logs connected channels after startReceiving succeeds', async () => {
@@ -79,6 +99,10 @@ describe('initChannels', () => {
     }])
 
     expect(startReceiving).toHaveBeenCalledOnce()
+    expect(migrateLegacyChannelIdentityNamespace).toHaveBeenCalledWith({
+      channelType: 'lark',
+      issuerKey: 'miniapp-gear'
+    })
     expect(startReceiving).toHaveBeenCalledWith({
       channelKey: 'miniapp-gear',
       handlers: {
@@ -107,6 +131,41 @@ describe('initChannels', () => {
         authorizationCommand: expect.stringMatching(/^\/authorize-admin [a-f0-9]{24}$/u)
       }),
       '[channel] 管理员尚未初始化，请将授权指令发送到频道完成管理员授权'
+    )
+  })
+
+  it('does not migrate a legacy channel type shared by multiple issuers', async () => {
+    loadChannelModule.mockReturnValue({
+      definition: {
+        configSchema: z.object({
+          type: z.literal('lark'),
+          appId: z.string()
+        })
+      },
+      create: vi.fn().mockResolvedValue({
+        startReceiving: vi.fn(),
+        close: vi.fn()
+      })
+    })
+
+    const { initChannels } = await import('#~/channels/index.js')
+    await initChannels([{
+      source: 'project',
+      config: {
+        channels: {
+          'lark-main': { type: 'lark', appId: 'cli_main' },
+          'lark-support': { type: 'lark', appId: 'cli_support' }
+        }
+      }
+    }])
+
+    expect(migrateLegacyChannelIdentityNamespace).not.toHaveBeenCalled()
+    expect(logger.warn).toHaveBeenCalledWith(
+      {
+        channelType: 'lark',
+        issuerKeys: ['lark-main', 'lark-support']
+      },
+      '[channels] skipped ambiguous legacy identity namespace migration'
     )
   })
 
@@ -417,7 +476,15 @@ describe('initChannels', () => {
         token: 'token',
         serverBaseUrl: 'https://bot.example.com'
       },
-      { logger }
+      {
+        channelKey: 'erjie',
+        logger,
+        webhookNonceStore: {
+          commit: expect.any(Function),
+          release: expect.any(Function),
+          reserve: expect.any(Function)
+        }
+      }
     )
   })
 
@@ -482,6 +549,7 @@ describe('initChannels', () => {
   it('routes OneWorks native webhooks through receiving handlers with channel links', async () => {
     const { channelDefinition } = await import('../../../../packages/channels/oneworks/src/index.js')
     const { createChannelConnection } = await import('../../../../packages/channels/oneworks/src/connection.js')
+    const signature = await import('../../../../packages/channels/oneworks/src/webhook-signature.js')
     const channelLink = {
       channelKey: 'oneworks-main',
       entity: 'owo-demo',
@@ -511,18 +579,32 @@ describe('initChannels', () => {
       }
     }])
 
+    const body = {
+      messageId: 'msg-native-1',
+      roomId: 'wan-ke-native',
+      senderId: 'user-yijie',
+      text: '@OWO hi'
+    }
+    const rawBody = JSON.stringify(body)
+    const nonce = 'nonce-native-1'
+    const timestamp = String(Date.now())
     const result = await handleChannelWebhook({
       channelType: 'oneworks',
       channelKey: 'oneworks-main',
       method: 'POST',
-      headers: {},
-      query: { secret: 'secret' },
-      body: {
-        messageId: 'msg-native-1',
-        roomId: 'wan-ke-native',
-        senderId: 'user-yijie',
-        text: '@OWO hi'
-      }
+      headers: {
+        [signature.ONEWORKS_WEBHOOK_NONCE_HEADER]: nonce,
+        [signature.ONEWORKS_WEBHOOK_SIGNATURE_HEADER]: signature.buildOneWorksWebhookSignature({
+          body: rawBody,
+          nonce,
+          secret: 'secret',
+          timestamp
+        }),
+        [signature.ONEWORKS_WEBHOOK_TIMESTAMP_HEADER]: timestamp
+      },
+      query: {},
+      body,
+      rawBody
     })
 
     expect(result).toEqual({

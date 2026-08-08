@@ -8,12 +8,14 @@ export interface ChannelIdentityLinkCodeDbRow {
   code: string
   userId: string
   sourceChannelType: string
+  sourceIssuerKey: string
   sourceAccountId: string
   status: ChannelIdentityLinkCodeStatus
   createdAt: number
   expiresAt: number
   consumedAt: number | null
   consumedChannelType: string | null
+  consumedIssuerKey: string | null
   consumedAccountId: string | null
   metadataJson: string | null
 }
@@ -22,12 +24,14 @@ export interface ChannelIdentityLinkCodeRow {
   code: string
   userId: string
   sourceChannelType: string
+  sourceIssuerKey: string
   sourceAccountId: string
   status: ChannelIdentityLinkCodeStatus
   createdAt: number
   expiresAt: number
   consumedAt: number | null
   consumedChannelType: string | null
+  consumedIssuerKey: string | null
   consumedAccountId: string | null
   metadata: JsonRecord | null
 }
@@ -51,6 +55,7 @@ export interface IdentityLinkCodeInput {
   code?: string | null
   userId: string
   sourceChannelType: string
+  sourceIssuerKey: string
   sourceAccountId: string
   expiresAt: number
   metadata?: JsonRecord | null
@@ -60,12 +65,14 @@ export interface IdentityLinkCodeConsumeInput {
   code: string
   targetAccountId: string
   targetChannelType: string
+  targetIssuerKey: string
 }
 
 export interface IdentityLinkCodeUpdates {
   consumedAccountId?: string | null
   consumedAt?: number | null
   consumedChannelType?: string | null
+  consumedIssuerKey?: string | null
   status: ChannelIdentityLinkCodeStatus
 }
 
@@ -77,12 +84,14 @@ export function mapIdentityLinkCodeRow(
     code: row.code,
     userId: row.userId,
     sourceChannelType: row.sourceChannelType,
+    sourceIssuerKey: row.sourceIssuerKey,
     sourceAccountId: row.sourceAccountId,
     status: row.status,
     createdAt: row.createdAt,
     expiresAt: row.expiresAt,
     consumedAt: row.consumedAt,
     consumedChannelType: row.consumedChannelType,
+    consumedIssuerKey: row.consumedIssuerKey,
     consumedAccountId: row.consumedAccountId,
     metadata: parseJsonRecord(row.metadataJson)
   }

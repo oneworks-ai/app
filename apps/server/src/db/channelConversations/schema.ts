@@ -26,11 +26,8 @@ export const channelConversationsSchemaModule: SchemaModule = {
         metadataJson TEXT
       );
 
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_channel_conversation_states_thread
-        ON channel_conversation_states(channelType, channelId, entity, threadKey);
-
       CREATE INDEX IF NOT EXISTS idx_channel_conversation_states_updated
-        ON channel_conversation_states(channelType, channelId, updatedAt);
+        ON channel_conversation_states(channelType, channelKey, channelId, updatedAt);
 
       CREATE TABLE IF NOT EXISTS channel_conversation_turns (
         id TEXT PRIMARY KEY,
@@ -96,6 +93,12 @@ export const channelConversationsSchemaModule: SchemaModule = {
 
       CREATE INDEX IF NOT EXISTS idx_channel_pending_intents_authorization
         ON channel_pending_intents(authorizationRequestId);
+    `)
+
+    exec(`
+      DROP INDEX IF EXISTS idx_channel_conversation_states_thread;
+      CREATE UNIQUE INDEX idx_channel_conversation_states_thread
+        ON channel_conversation_states(channelType, channelKey, channelId, entity, threadKey);
     `)
 
     ensureColumn('channel_conversation_states', 'pendingIntentIdsJson', 'TEXT')

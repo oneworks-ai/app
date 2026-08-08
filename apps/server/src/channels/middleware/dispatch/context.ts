@@ -47,18 +47,17 @@ export const buildChannelMessageContext = (
   replyReceiveIdType: ctx.inbound.replyTo?.receiveIdType,
   senderId: ctx.inbound.senderId,
   sessionType: ctx.inbound.sessionType,
+  threadId: ctx.inbound.threadId,
   threadKey: runtime.threadKey
 })
 
 export const resolveChannelThread = (ctx: Parameters<ChannelMiddleware>[0]) => {
   const entitySegment = toThreadSegment(ctx.channelLink?.entity ?? ctx.channelKey, 'default')
-  const replyId = ctx.inbound.replyTo?.receiveId
-  if (replyId != null && replyId.trim() !== '') {
+  const threadId = ctx.inbound.threadId
+  if (threadId != null && threadId.trim() !== '') {
     return {
       reason: 'platform_reply',
-      threadKey: `reply:${toThreadSegment(ctx.inbound.replyTo?.receiveIdType, 'message')}:${
-        toThreadSegment(replyId, 'unknown')
-      }`
+      threadKey: `reply:thread:${toThreadSegment(threadId, 'unknown')}`
     }
   }
   if (ctx.inbound.sessionType === 'direct') {

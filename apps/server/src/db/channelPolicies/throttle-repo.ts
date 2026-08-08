@@ -63,9 +63,21 @@ export function createReplyThrottlesRepo(db: SqliteDatabase) {
     return true
   })
 
+  const releaseReplyThrottle = db.transaction((input: {
+    lastSentAt: number
+    throttleKey: string
+  }) => {
+    const result = db.prepare(`
+      DELETE FROM channel_reply_throttles
+      WHERE throttleKey = ? AND lastSentAt = ?
+    `).run(input.throttleKey, input.lastSentAt)
+    return result.changes === 1
+  })
+
   return {
     consumeReplyThrottle,
     getReplyThrottle,
-    pruneReplyThrottles
+    pruneReplyThrottles,
+    releaseReplyThrottle
   }
 }

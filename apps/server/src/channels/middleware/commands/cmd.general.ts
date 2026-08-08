@@ -405,7 +405,7 @@ export const buildWhoamiLines = (ctx: ChannelContext) => {
   }
 
   if (ctx.actor?.user != null) {
-    const credentials = getDb().listChannelUserCredentials(ctx.actor.user.id, ctx.inbound.channelType)
+    const credentials = getDb().listChannelUserCredentials(ctx.channelKey, ctx.actor.user.id)
     lines.push(ctx.t('whoami.canonicalUser', { id: ctx.actor.user.id }))
     lines.push(ctx.t('whoami.credentials', {
       count: credentials.length,

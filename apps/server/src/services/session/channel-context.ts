@@ -1,11 +1,12 @@
 import { existsSync } from 'node:fs'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { cwd as processCwd, env as processEnv } from 'node:process'
 
 import { resolveProjectHomePath } from '@oneworks/utils'
 
 import { getDb } from '#~/db/index.js'
+import { createChannelCommandInvocationToken } from '#~/services/channel-commands/invocation-token.js'
 
 export { buildChannelRuntimeSystemPrompt } from './channel-runtime-prompt.js'
 
@@ -25,6 +26,7 @@ export interface ChannelRuntimeContext {
   senderId?: string
   sessionId?: string
   sessionType?: string
+  threadId?: string
   threadKey?: string
 }
 
@@ -57,6 +59,7 @@ export const normalizeChannelRuntimeContext = (value: unknown): ChannelRuntimeCo
     senderId: trimNonEmpty(value.senderId),
     sessionId: trimNonEmpty(value.sessionId),
     sessionType: trimNonEmpty(value.sessionType),
+    threadId: trimNonEmpty(value.threadId),
     threadKey: trimNonEmpty(value.threadKey)
   }
 
@@ -112,6 +115,7 @@ export const createChannelRuntimeEnv = (input: {
     __ONEWORKS_PROJECT_CHANNEL_SESSION_TYPE__: context?.sessionType ?? '',
     __ONEWORKS_PROJECT_CHANNEL_ID__: context?.channelId ?? '',
     __ONEWORKS_PROJECT_CHANNEL_SENDER_ID__: senderId ?? '',
+    __ONEWORKS_PROJECT_CHANNEL_THREAD_ID__: context?.threadId ?? '',
     __ONEWORKS_PROJECT_CHANNEL_THREAD_KEY__: context?.threadKey ?? '',
     __ONEWORKS_PROJECT_CHANNEL_CONVERSATION_STATE_ID__: context?.conversationStateId ?? '',
     __ONEWORKS_PROJECT_CHANNEL_CHILD_RUN_ID__: context?.childRunId ?? ''
@@ -148,6 +152,13 @@ export const writeChannelMessageContext = async (
       : undefined
   )
   const capturedAt = Date.now()
+  const invocationToken = context.channelKey != null && context.childRunId != null
+    ? createChannelCommandInvocationToken({
+      channelKey: context.channelKey,
+      childRunId: context.childRunId,
+      sessionId
+    })
+    : undefined
   const content = JSON.stringify(
     {
       actorAccountId,
@@ -159,19 +170,22 @@ export const writeChannelMessageContext = async (
       childRunId: context.childRunId,
       conversationStateId: context.conversationStateId,
       entity: context.entity,
+      invocationToken,
       messageId: context.messageId,
       replyReceiveId: context.replyReceiveId,
       replyReceiveIdType: context.replyReceiveIdType,
       senderId: context.senderId,
       sessionId,
       sessionType: context.sessionType,
+      threadId: context.threadId,
       threadKey: context.threadKey,
       updatedAt: capturedAt
     },
     null,
     2
   )
-  await writeFile(filePath, `${content}\n`, 'utf8')
+  await writeFile(filePath, `${content}\n`, { encoding: 'utf8', mode: 0o600 })
+  await chmod(filePath, 0o600)
   getDb().updateSessionRuntimeState(sessionId, {
     channelActorSnapshot: {
       ...context,

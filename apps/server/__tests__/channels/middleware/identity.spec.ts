@@ -56,6 +56,7 @@ describe('identityMiddleware', () => {
 
   it('upserts the sender channel account and resolves a verified canonical user', async () => {
     const account = {
+      issuerKey: 'lark-main',
       channelType: 'lark',
       accountId: 'ou_1',
       accountKey: 'lark:ou_1',
@@ -66,6 +67,7 @@ describe('identityMiddleware', () => {
       updatedAt: 1
     }
     const identityLink = {
+      issuerKey: 'lark-main',
       channelType: 'lark',
       accountId: 'ou_1',
       userId: 'user-yijie',
@@ -91,6 +93,7 @@ describe('identityMiddleware', () => {
     await identityMiddleware(ctx, next)
 
     expect(getDb().upsertChannelAccount).toHaveBeenCalledWith({
+      issuerKey: 'lark-main',
       channelType: 'lark',
       accountId: 'ou_1'
     })

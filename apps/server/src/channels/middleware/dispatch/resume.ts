@@ -1,5 +1,6 @@
 import {
   buildChannelResumeRuntimeContent,
+  claimNextMessageChannelResumeIntents,
   listNextMessageChannelResumeIntents
 } from '#~/services/channel-resume/index.js'
 import type { ChannelResumeIntent } from '#~/services/channel-resume/index.js'
@@ -14,6 +15,7 @@ const listNextMessageResumeIntentsForActor = (
   const actorUserId = ctx.actor?.user?.id
   if (actorUserId != null && actorUserId.trim() !== '') {
     filters.push({
+      channelKey: ctx.channelKey,
       channelType: ctx.inbound.channelType,
       conversationStateId: input.conversationStateId,
       ownerUserId: actorUserId,
@@ -24,6 +26,7 @@ const listNextMessageResumeIntentsForActor = (
   const actorAccountId = ctx.actor?.account.accountId ?? ctx.inbound.senderId
   if (actorAccountId != null && actorAccountId.trim() !== '') {
     filters.push({
+      channelKey: ctx.channelKey,
       channelType: ctx.inbound.channelType,
       conversationStateId: input.conversationStateId,
       ownerAccountId: actorAccountId,
@@ -42,11 +45,10 @@ const listNextMessageResumeIntentsForActor = (
 }
 
 const selectNextMessageResumesForSession = (
-  items: ChannelResumeIntent[],
-  sessionId: string | undefined
+  items: ChannelResumeIntent[]
 ) => {
-  const targetSessionId = sessionId ?? items[0]?.resume.sessionId
-  if (targetSessionId == null) return { items: [], sessionId }
+  const targetSessionId = items[0]?.resume.sessionId
+  if (targetSessionId == null) return { items: [], sessionId: undefined }
   return {
     items: items.filter(item => item.resume.sessionId === targetSessionId),
     sessionId: targetSessionId
@@ -68,12 +70,13 @@ export const prepareNextMessageResumes = (
   input: { conversationStateId: string; threadKey: string }
 ) => {
   const candidates = listNextMessageResumeIntentsForActor(ctx, input)
-  const selected = selectNextMessageResumesForSession(candidates, ctx.sessionId)
-  if (ctx.sessionId == null && selected.items.length > 0) {
+  const selected = selectNextMessageResumesForSession(candidates)
+  const items = claimNextMessageChannelResumeIntents({ intents: selected.items })
+  if (items.length > 0) {
     ctx.sessionId = selected.sessionId
   }
   return {
-    items: selected.items,
-    runtimeText: buildNextMessageResumeRuntimeText(selected.items)
+    items,
+    runtimeText: buildNextMessageResumeRuntimeText(items)
   }
 }

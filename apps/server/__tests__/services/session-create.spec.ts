@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { getDb } from '#~/db/index.js'
-import { createSessionWithInitialMessage } from '#~/services/session/create.js'
+import { createSessionWithInitialMessage, discardIncompleteSessionCreation } from '#~/services/session/create.js'
 import {
   cancelSessionCreation,
   resetSessionCreationCancellationState
@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   checkoutSessionGitBranch: vi.fn(),
   createSessionGitBranch: vi.fn(),
   createServerRuntimeSession: vi.fn(),
+  deleteRuntimeSessionStores: vi.fn(),
   broadcastSessionEvent: vi.fn(),
   notifySessionUpdated: vi.fn(),
   deleteSessionWorkspace: vi.fn(),
@@ -42,6 +43,10 @@ vi.mock('#~/services/runtime-store/session-control.js', () => ({
   }
 }))
 
+vi.mock('#~/services/runtime-store/session-delete.js', () => ({
+  deleteRuntimeSessionStores: mocks.deleteRuntimeSessionStores
+}))
+
 vi.mock('#~/services/session/runtime.js', () => ({
   broadcastSessionEvent: mocks.broadcastSessionEvent,
   notifySessionUpdated: mocks.notifySessionUpdated
@@ -58,9 +63,11 @@ describe('createSessionWithInitialMessage', () => {
   const updateSession = vi.fn()
   const updateSessionRuntimeState = vi.fn()
   const getSession = vi.fn()
+  const getSessionWorkspace = vi.fn()
   const saveMessage = vi.fn()
   const updateSessionTags = vi.fn()
   const deleteSession = vi.fn()
+  const deleteSessionWorkspace = vi.fn()
   const createAgentRoom = vi.fn()
   const ensureAgentRoomForHostSession = vi.fn()
 
@@ -83,9 +90,11 @@ describe('createSessionWithInitialMessage', () => {
       updateSession,
       updateSessionRuntimeState,
       getSession,
+      getSessionWorkspace,
       saveMessage,
       updateSessionTags,
       deleteSession,
+      deleteSessionWorkspace,
       createAgentRoom,
       ensureAgentRoomForHostSession
     } as any)
@@ -357,5 +366,15 @@ describe('createSessionWithInitialMessage', () => {
 
     expect(createAgentRoom).not.toHaveBeenCalled()
     expect(ensureAgentRoomForHostSession).not.toHaveBeenCalled()
+  })
+
+  it('discards incomplete runtime and database state before deterministic retry', async () => {
+    await discardIncompleteSessionCreation('resume-session-1')
+
+    expect(mocks.deleteRuntimeSessionStores).toHaveBeenCalledWith({
+      cwd: '/workspace/root',
+      sessionId: 'resume-session-1'
+    })
+    expect(deleteSession).toHaveBeenCalledWith('resume-session-1')
   })
 })

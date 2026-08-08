@@ -4,23 +4,26 @@ import type { ChannelUserCredentialDbRow, ChannelUserCredentialInput } from './c
 import { stringifyJson } from './json'
 
 export function createCredentialsRepo(db: SqliteDatabase) {
-  const getCredential = (userId: string, channelType: string, credentialKey: string) => {
+  const getCredential = (issuerKey: string, userId: string, credentialKey: string) => {
     const stmt = db.prepare(`
-      SELECT userId, channelType, credentialKey, label, status, scopesJson, expiresAt, metadataJson, createdAt, updatedAt
-      FROM channel_user_credentials
-      WHERE userId = ? AND channelType = ? AND credentialKey = ?
+      SELECT issuerKey, userId, channelType, credentialKey, label, status, scopesJson, expiresAt, metadataJson,
+             createdAt, updatedAt
+      FROM channel_user_credentials_v2
+      WHERE issuerKey = ? AND userId = ? AND credentialKey = ?
     `)
-    return mapCredentialRow(stmt.get<ChannelUserCredentialDbRow>(userId, channelType, credentialKey))
+    return mapCredentialRow(stmt.get<ChannelUserCredentialDbRow>(issuerKey, userId, credentialKey))
   }
 
   const upsertCredential = (row: ChannelUserCredentialInput) => {
     const now = Date.now()
     const stmt = db.prepare(`
-      INSERT INTO channel_user_credentials (
-        userId, channelType, credentialKey, label, status, scopesJson, expiresAt, metadataJson, createdAt, updatedAt
+      INSERT INTO channel_user_credentials_v2 (
+        issuerKey, userId, channelType, credentialKey, label, status, scopesJson, expiresAt, metadataJson, createdAt,
+        updatedAt
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(userId, channelType, credentialKey) DO UPDATE SET
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(issuerKey, userId, credentialKey) DO UPDATE SET
+        channelType = excluded.channelType,
         label = excluded.label,
         status = excluded.status,
         scopesJson = excluded.scopesJson,
@@ -29,6 +32,7 @@ export function createCredentialsRepo(db: SqliteDatabase) {
         updatedAt = excluded.updatedAt
     `)
     stmt.run(
+      row.issuerKey,
       row.userId,
       row.channelType,
       row.credentialKey,
@@ -40,18 +44,18 @@ export function createCredentialsRepo(db: SqliteDatabase) {
       now,
       now
     )
-    return getCredential(row.userId, row.channelType, row.credentialKey)
+    return getCredential(row.issuerKey, row.userId, row.credentialKey)
   }
 
-  const listCredentialsForUser = (userId: string, channelType?: string) => {
-    const params = channelType == null ? [userId] : [userId, channelType]
+  const listCredentialsForUser = (issuerKey: string, userId: string) => {
     const stmt = db.prepare(`
-      SELECT userId, channelType, credentialKey, label, status, scopesJson, expiresAt, metadataJson, createdAt, updatedAt
-      FROM channel_user_credentials
-      WHERE userId = ?${channelType == null ? '' : ' AND channelType = ?'}
-      ORDER BY channelType ASC, credentialKey ASC
+      SELECT issuerKey, userId, channelType, credentialKey, label, status, scopesJson, expiresAt, metadataJson,
+             createdAt, updatedAt
+      FROM channel_user_credentials_v2
+      WHERE issuerKey = ? AND userId = ?
+      ORDER BY credentialKey ASC
     `)
-    return stmt.all<ChannelUserCredentialDbRow>(...params).map(row => mapCredentialRow(row)!)
+    return stmt.all<ChannelUserCredentialDbRow>(issuerKey, userId).map(row => mapCredentialRow(row)!)
   }
 
   return {

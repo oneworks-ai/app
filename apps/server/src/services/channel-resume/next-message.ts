@@ -1,25 +1,40 @@
+import { randomUUID } from 'node:crypto'
+
 import { getDb } from '#~/db/index.js'
 
 import { withUpdatedResume } from './payload.js'
 import type { ChannelResumeIntent } from './types.js'
 
-export const markChannelResumeIntentsDispatchingForChildRun = (input: {
-  childRunId: string
-  dispatchReason: 'next_message'
+export const claimNextMessageChannelResumeIntents = (input: {
   intents: ChannelResumeIntent[]
   now?: number
 }) => {
   const now = input.now ?? Date.now()
+  const claimed: ChannelResumeIntent[] = []
   for (const item of input.intents) {
-    getDb().updateChannelPendingIntent(item.intent.id, {
+    const claimId = randomUUID()
+    const resume = {
+      ...item.resume,
+      claimId,
+      claimedAt: now,
+      dispatchReason: 'next_message' as const,
+      leaseExpiresAt: now + 5 * 60 * 1000,
+      status: 'dispatching' as const
+    }
+    const intent = getDb().claimChannelPendingIntentResume({
+      id: item.intent.id,
       metadata: withUpdatedResume(item.intent, item.resume, {
         claimedAt: now,
-        dispatchReason: input.dispatchReason,
-        resumeChildRunId: input.childRunId,
+        claimId,
+        dispatchReason: 'next_message',
+        leaseExpiresAt: resume.leaseExpiresAt,
         status: 'dispatching'
-      })
+      }),
+      now
     })
+    if (intent != null) claimed.push({ intent, resume })
   }
+  return claimed
 }
 
 export const finishChannelResumeIntentsForChildRun = (input: {
@@ -33,7 +48,10 @@ export const finishChannelResumeIntentsForChildRun = (input: {
 }) => {
   const now = input.now ?? Date.now()
   for (const item of input.intents) {
-    getDb().updateChannelPendingIntent(item.intent.id, {
+    if (item.resume.claimId == null) continue
+    getDb().finishChannelPendingIntentResumeClaim({
+      claimId: item.resume.claimId,
+      id: item.intent.id,
       metadata: withUpdatedResume(item.intent, item.resume, {
         ...(input.status === 'dispatched' ? { dispatchedAt: now } : { failedAt: now }),
         dispatchReason: input.dispatchReason,
@@ -41,7 +59,8 @@ export const finishChannelResumeIntentsForChildRun = (input: {
         resumeChildRunId: input.childRunId,
         ...(input.sessionId == null ? {} : { sessionId: input.sessionId }),
         status: input.status
-      })
+      }),
+      now
     })
   }
 }

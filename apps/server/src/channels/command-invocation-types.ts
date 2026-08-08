@@ -12,12 +12,14 @@ export interface ChannelCommandInvocationContext {
   senderId?: string
   sessionId?: string
   sessionType?: string
+  threadId?: string
   threadKey?: string
 }
 
 export interface ChannelCommandInvocationInput {
+  /** Server-derived only. Caller-provided values are discarded by the authority resolver. */
   context?: ChannelCommandInvocationContext
   input?: unknown
-  sessionId?: string
+  invocationToken?: string
   toolName: string
 }

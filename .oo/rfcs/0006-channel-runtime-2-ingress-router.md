@@ -5,7 +5,7 @@ status: draft
 authors:
   - Codex
 created: 2026-06-16
-updated: 2026-06-17
+updated: 2026-08-09
 targetVersion: vNext
 ---
 
@@ -75,7 +75,7 @@ platform event
 Router 输出结构化结果：
 
 ```ts
-type IngressRouterDecision = {
+interface IngressRouterDecision {
   decision: 'ignore' | 'observe' | 'create_child' | 'defer'
   reason: string
   confidence: number

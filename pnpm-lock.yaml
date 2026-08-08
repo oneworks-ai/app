@@ -158,6 +158,9 @@ importers:
       '@oneworks/app-runtime':
         specifier: workspace:*
         version: link:../../packages/app-runtime
+      '@oneworks/channel-oneworks':
+        specifier: workspace:*
+        version: link:../../packages/channels/oneworks
       '@oneworks/cli-helper':
         specifier: workspace:*
         version: link:../../packages/cli-helper

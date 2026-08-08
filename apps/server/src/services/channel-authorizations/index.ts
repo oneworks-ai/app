@@ -1,4 +1,9 @@
-export { markChannelAuthorizationRequestDelivered, shouldDeliverChannelAuthorizationRequest } from './delivery.js'
+export {
+  markChannelAuthorizationRequestDelivered,
+  releaseChannelAuthorizationRequestDelivery,
+  reserveChannelAuthorizationRequestDelivery,
+  shouldDeliverChannelAuthorizationRequest
+} from './delivery.js'
 export {
   buildChannelInteractionAuthorizationRequestId,
   ensureChannelAuthorizationRequestForInteraction

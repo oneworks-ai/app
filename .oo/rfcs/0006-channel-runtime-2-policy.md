@@ -123,7 +123,7 @@ muted_permanent
 - 重复 @ 不创建 child session。
 - 白名单用户可直接触发执行。
 
-当前实现先落了确定性 availability gate：当 ChannelLink 配置了 `availability.workHours`，且当前时间不在工作时间内，普通群聊消息会被截断；私聊或显式 mention 会回复 `offHours.replyText`，并按 `offHours.replyThrottleMs` 通过 `channel_reply_throttles` 做 DB 级节流；`availability.bypassSenders`、`availability.bypassUsers` 和频道管理员会绕过。`bypassUsers` 当前兼容平台 sender ID 和已解析的 canonical user ID；canonical user 来自 `identityMiddleware` 对 `channel_identity_links` 的 verified 绑定解析。被下班 gate 截断的消息会写入 `channel_offhour_backlog`，后续还缺上班后的 digest / backlog process。
+当前实现先落了确定性 availability gate：当 ChannelLink 配置了 `availability.workHours`，且当前时间不在工作时间内，普通群聊消息会被截断；私聊或显式 mention 会回复 `offHours.replyText`，并按 `offHours.replyThrottleMs` 通过 `channel_reply_throttles` 做 DB 级节流；`availability.bypassSenders`、`availability.bypassUsers` 和频道管理员会绕过。`bypassUsers` 当前兼容平台 sender ID 和已解析的 canonical user ID；canonical user 来自 `identityMiddleware` 对当前 issuer 下 `channel_identity_links_v2` 的 verified 绑定解析。被下班 gate 截断的消息会写入 `channel_offhour_backlog`，后续还缺上班后的 digest / backlog process。
 
 ## Backlog Processing
 

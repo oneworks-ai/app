@@ -25,6 +25,7 @@ export interface ChannelSessionBindingInfo {
   channelType: string
   sessionType: string
   channelId: string
+  threadId?: string
   channelKey: string
 }
 

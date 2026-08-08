@@ -418,7 +418,8 @@ const formatSearchBinding = (
   if (
     binding.channelType === ctx.inbound.channelType &&
     binding.sessionType === ctx.inbound.sessionType &&
-    binding.channelId === ctx.inbound.channelId
+    binding.channelId === ctx.inbound.channelId &&
+    binding.threadId === ctx.inbound.threadId
   ) {
     return ctx.t('session.search.binding.current')
   }

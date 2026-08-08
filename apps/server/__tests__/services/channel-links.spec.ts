@@ -33,6 +33,10 @@ describe('channel link service', () => {
   it('loads directory channel links and resolves an inbound group event', async () => {
     const workspace = await createWorkspace()
     await writeDocument(
+      join(workspace, '.oo/entities/owo-demo/README.md'),
+      '---\nname: owo-demo\n---\n\nYou are the demo entity.\n'
+    )
+    await writeDocument(
       join(workspace, '.oo/channels/wan-ke-chat/channel.json'),
       JSON.stringify(
         {
@@ -83,6 +87,51 @@ describe('channel link service', () => {
       name: 'wan-ke-chat'
     }))
     expect(result?.duplicates).toEqual([])
+  })
+
+  it('rejects missing entities, unsupported address types, and duplicate bindings', async () => {
+    const workspace = await createWorkspace()
+    await writeDocument(
+      join(workspace, '.oo/channels/missing-entity/channel.json'),
+      JSON.stringify({
+        channel: 'lark-main',
+        entity: 'missing',
+        external: { type: 'chat', chatId: 'oc_1' }
+      })
+    )
+    await expect(loadChannelLinks(workspace)).rejects.toThrow('references missing entity missing')
+
+    await writeDocument(
+      join(workspace, '.oo/entities/missing/README.md'),
+      '---\nname: missing\n---\n'
+    )
+    await writeDocument(
+      join(workspace, '.oo/channels/missing-entity/channel.json'),
+      JSON.stringify({
+        channel: 'lark-main',
+        entity: 'missing',
+        external: { type: 'mystery', id: 'oc_1' }
+      })
+    )
+    await expect(loadChannelLinks(workspace)).rejects.toThrow('unsupported external.type')
+
+    await writeDocument(
+      join(workspace, '.oo/channels/missing-entity/channel.json'),
+      JSON.stringify({
+        channel: 'lark-main',
+        entity: 'missing',
+        external: { type: 'chat', chatId: 'oc_1' }
+      })
+    )
+    await writeDocument(
+      join(workspace, '.oo/channels/duplicate/channel.json'),
+      JSON.stringify({
+        channel: 'lark-main',
+        entity: 'missing',
+        external: { type: 'group', groupId: 'oc_1' }
+      })
+    )
+    await expect(loadChannelLinks(workspace)).rejects.toThrow('bind the same external address')
   })
 
   it('matches direct links by sender id or channel id', () => {
@@ -193,11 +242,33 @@ describe('channel link service', () => {
         raw: {}
       }
     })).toBe(true)
+    expect(matchesChannelLinkInbound(threadLink, {
+      channelKey: 'oneworks-main',
+      inbound: {
+        channelType: 'oneworks',
+        sessionType: 'group',
+        channelId: 'wan-ke-native',
+        senderId: 'user-yijie',
+        threadId: 'thread-1',
+        raw: {}
+      }
+    })).toBe(true)
+    expect(matchesChannelLinkInbound(threadLink, {
+      channelKey: 'oneworks-main',
+      inbound: {
+        channelType: 'oneworks',
+        sessionType: 'group',
+        channelId: 'thread-1',
+        senderId: 'user-yijie',
+        raw: {}
+      }
+    })).toBe(false)
     expect(matchesChannelLinkBinding(threadLink, {
       channelKey: 'oneworks-main',
-      channelId: 'thread-1',
+      channelId: 'wan-ke-native',
       senderId: 'user-yijie',
-      sessionType: 'direct'
+      sessionType: 'group',
+      threadId: 'thread-1'
     })).toBe(true)
   })
 

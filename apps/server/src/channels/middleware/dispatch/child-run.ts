@@ -1,10 +1,7 @@
 import type { ChatMessageContent } from '@oneworks/core'
 
 import { getDb } from '#~/db/index.js'
-import {
-  finishChannelResumeIntentsForChildRun,
-  markChannelResumeIntentsDispatchingForChildRun
-} from '#~/services/channel-resume/index.js'
+import { finishChannelResumeIntentsForChildRun } from '#~/services/channel-resume/index.js'
 import type { ChannelResumeIntent } from '#~/services/channel-resume/index.js'
 
 import type { ChannelMiddleware } from '../@types'
@@ -57,18 +54,6 @@ export const createStartedChannelChildRun = (
   })
 
 type StartedChildRun = ReturnType<typeof createStartedChannelChildRun>
-
-export const markStartedChannelChildRunDispatching = (
-  childRun: StartedChildRun,
-  intents: ChannelResumeIntent[]
-) => {
-  if (childRun == null || intents.length === 0) return
-  markChannelResumeIntentsDispatchingForChildRun({
-    childRunId: childRun.id,
-    dispatchReason: 'next_message',
-    intents
-  })
-}
 
 export const finishStartedChannelChildRun = (
   childRun: StartedChildRun,

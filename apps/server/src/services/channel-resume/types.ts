@@ -4,8 +4,11 @@ export interface ChannelResumePayload {
   authorizationRequestId: string
   authorizationStatus?: string
   capability?: string
+  claimId?: string
+  claimedAt?: number
   createdByChildRunId?: string
   interactionResponse?: string
+  leaseExpiresAt?: number
   mode?: 'immediate' | 'manual' | 'next_message'
   notBefore?: number
   readyAt?: number

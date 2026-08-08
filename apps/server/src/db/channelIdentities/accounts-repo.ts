@@ -13,24 +13,25 @@ import type {
 import { stringifyJson } from './json'
 
 export function createChannelAccountsRepo(db: SqliteDatabase) {
-  const getAccount = (channelType: string, accountId: string) => {
+  const getAccount = (issuerKey: string, accountId: string) => {
     const stmt = db.prepare(`
-      SELECT channelType, accountId, accountKey, displayName, avatarUrl, metadataJson, createdAt, updatedAt
-      FROM channel_accounts
-      WHERE channelType = ? AND accountId = ?
+      SELECT issuerKey, channelType, accountId, accountKey, displayName, avatarUrl, metadataJson, createdAt, updatedAt
+      FROM channel_accounts_v2
+      WHERE issuerKey = ? AND accountId = ?
     `)
-    return mapAccountRow(stmt.get<ChannelAccountDbRow>(channelType, accountId))
+    return mapAccountRow(stmt.get<ChannelAccountDbRow>(issuerKey, accountId))
   }
 
   const upsertAccount = (row: ChannelAccountInput) => {
     const now = Date.now()
-    const accountKey = row.accountKey?.trim() || `${row.channelType}:${row.accountId}`
+    const accountKey = row.accountKey?.trim() || `${row.issuerKey}:${row.accountId}`
     const stmt = db.prepare(`
-      INSERT INTO channel_accounts (
-        channelType, accountId, accountKey, displayName, avatarUrl, metadataJson, createdAt, updatedAt
+      INSERT INTO channel_accounts_v2 (
+        issuerKey, channelType, accountId, accountKey, displayName, avatarUrl, metadataJson, createdAt, updatedAt
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(channelType, accountId) DO UPDATE SET
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(issuerKey, accountId) DO UPDATE SET
+        channelType = excluded.channelType,
         accountKey = excluded.accountKey,
         displayName = excluded.displayName,
         avatarUrl = excluded.avatarUrl,
@@ -38,6 +39,7 @@ export function createChannelAccountsRepo(db: SqliteDatabase) {
         updatedAt = excluded.updatedAt
     `)
     stmt.run(
+      row.issuerKey,
       row.channelType,
       row.accountId,
       accountKey,
@@ -47,7 +49,7 @@ export function createChannelAccountsRepo(db: SqliteDatabase) {
       now,
       now
     )
-    return getAccount(row.channelType, row.accountId)
+    return getAccount(row.issuerKey, row.accountId)
   }
 
   const getCanonicalUser = (id: string) => {
@@ -73,29 +75,31 @@ export function createChannelAccountsRepo(db: SqliteDatabase) {
     return getCanonicalUser(id)
   }
 
-  const getIdentityLink = (channelType: string, accountId: string) => {
+  const getIdentityLink = (issuerKey: string, accountId: string) => {
     const stmt = db.prepare(`
-      SELECT channelType, accountId, userId, status, source, createdAt, updatedAt
-      FROM channel_identity_links
-      WHERE channelType = ? AND accountId = ?
+      SELECT issuerKey, channelType, accountId, userId, status, source, createdAt, updatedAt
+      FROM channel_identity_links_v2
+      WHERE issuerKey = ? AND accountId = ?
     `)
-    return stmt.get<ChannelIdentityLinkRow>(channelType, accountId)
+    return stmt.get<ChannelIdentityLinkRow>(issuerKey, accountId)
   }
 
   const linkAccountToUser = (row: ChannelIdentityLinkInput) => {
     const now = Date.now()
     const stmt = db.prepare(`
-      INSERT INTO channel_identity_links (
-        channelType, accountId, userId, status, source, createdAt, updatedAt
+      INSERT INTO channel_identity_links_v2 (
+        issuerKey, channelType, accountId, userId, status, source, createdAt, updatedAt
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(channelType, accountId) DO UPDATE SET
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(issuerKey, accountId) DO UPDATE SET
+        channelType = excluded.channelType,
         userId = excluded.userId,
         status = excluded.status,
         source = excluded.source,
         updatedAt = excluded.updatedAt
     `)
     stmt.run(
+      row.issuerKey,
       row.channelType,
       row.accountId,
       row.userId,
@@ -104,29 +108,29 @@ export function createChannelAccountsRepo(db: SqliteDatabase) {
       now,
       now
     )
-    return getIdentityLink(row.channelType, row.accountId)
+    return getIdentityLink(row.issuerKey, row.accountId)
   }
 
-  const resolveUserByAccount = (channelType: string, accountId: string) => {
+  const resolveUserByAccount = (issuerKey: string, accountId: string) => {
     const stmt = db.prepare(`
       SELECT users.id, users.displayName, users.createdAt, users.updatedAt
       FROM canonical_users users
-      INNER JOIN channel_identity_links links ON links.userId = users.id
-      WHERE links.channelType = ? AND links.accountId = ? AND links.status = 'verified'
+      INNER JOIN channel_identity_links_v2 links ON links.userId = users.id
+      WHERE links.issuerKey = ? AND links.accountId = ? AND links.status = 'verified'
       LIMIT 1
     `)
-    return stmt.get<CanonicalUserRow>(channelType, accountId)
+    return stmt.get<CanonicalUserRow>(issuerKey, accountId)
   }
 
   const listAccountsForUser = (userId: string) => {
     const stmt = db.prepare(`
-      SELECT accounts.channelType, accounts.accountId, accounts.accountKey, accounts.displayName,
+      SELECT accounts.issuerKey, accounts.channelType, accounts.accountId, accounts.accountKey, accounts.displayName,
              accounts.avatarUrl, accounts.metadataJson, accounts.createdAt, accounts.updatedAt
-      FROM channel_accounts accounts
-      INNER JOIN channel_identity_links links
-        ON links.channelType = accounts.channelType AND links.accountId = accounts.accountId
+      FROM channel_accounts_v2 accounts
+      INNER JOIN channel_identity_links_v2 links
+        ON links.issuerKey = accounts.issuerKey AND links.accountId = accounts.accountId
       WHERE links.userId = ?
-      ORDER BY accounts.channelType ASC, accounts.accountId ASC
+      ORDER BY accounts.issuerKey ASC, accounts.accountId ASC
     `)
     return stmt.all<ChannelAccountDbRow>(userId).map(row => mapAccountRow(row)!)
   }

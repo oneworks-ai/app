@@ -70,6 +70,7 @@ const listPendingChannelAuthorizationRequestsForAccount = vi.fn()
 const listPendingChannelAuthorizationRequestsForUser = vi.fn()
 const linkChannelAccountToUser = vi.fn()
 const resolveCanonicalUserByChannelAccount = vi.fn()
+const resolveChannelAuthorizationRequestRecord = vi.fn()
 const resolveSessionWorkspace = vi.fn()
 const updateSession = vi.fn()
 const updateChannelAuthorizationRequest = vi.fn()
@@ -319,6 +320,7 @@ beforeEach(() => {
     }
   ])
   upsertChannelAccount.mockImplementation((row: any) => ({
+    issuerKey: row.issuerKey,
     channelType: row.channelType,
     accountId: row.accountId,
     accountKey: row.accountKey ?? `${row.channelType}:${row.accountId}`,
@@ -335,6 +337,7 @@ beforeEach(() => {
     updatedAt: 1
   })
   linkChannelAccountToUser.mockReturnValue({
+    issuerKey: 'lark:default',
     channelType: 'lark',
     accountId: 'user1',
     userId: 'user-new',
@@ -347,17 +350,20 @@ beforeEach(() => {
     code: row.code ?? 'ABCD1234',
     userId: row.userId,
     sourceChannelType: row.sourceChannelType,
+    sourceIssuerKey: row.sourceIssuerKey,
     sourceAccountId: row.sourceAccountId,
     status: 'active',
     createdAt: 1,
     expiresAt: row.expiresAt,
     consumedAt: null,
     consumedChannelType: null,
+    consumedIssuerKey: null,
     consumedAccountId: null,
     metadata: row.metadata ?? null
   }))
   consumeChannelIdentityLinkCode.mockReturnValue({
     link: {
+      issuerKey: 'lark:default',
       channelType: 'lark',
       accountId: 'user1',
       userId: 'user-existing',
@@ -382,6 +388,9 @@ beforeEach(() => {
     status: 'pending',
     message: '拉群',
     metadata: {
+      allowedApproverRefs: ['admin1', 'user-yijie'],
+      channelId: 'ch1',
+      channelKey: 'lark:default',
       interactionId: 'interaction-1',
       sessionId: 'sess-abc'
     },
@@ -409,6 +418,9 @@ beforeEach(() => {
     status: 'pending',
     message: '拉群',
     metadata: {
+      allowedApproverRefs: ['admin1', 'user-yijie'],
+      channelId: 'ch1',
+      channelKey: 'lark:default',
       interactionId: 'interaction-1',
       sessionId: 'sess-abc'
     },
@@ -420,6 +432,11 @@ beforeEach(() => {
   listPendingChannelAuthorizationRequestsForAccount.mockReturnValue([
     getChannelAuthorizationRequest()
   ])
+  resolveChannelAuthorizationRequestRecord.mockImplementation(input => ({
+    ...getChannelAuthorizationRequest(),
+    resolvedAt: input.resolvedAt,
+    status: input.status
+  }))
   listPendingChannelAuthorizationRequestsForUser.mockReturnValue([
     getChannelAuthorizationRequest()
   ])
@@ -481,6 +498,7 @@ beforeEach(() => {
     listPendingChannelAuthorizationRequestsForAccount,
     listPendingChannelAuthorizationRequestsForUser,
     resolveCanonicalUserByChannelAccount,
+    resolveChannelAuthorizationRequest: resolveChannelAuthorizationRequestRecord,
     updateChannelAuthorizationRequest,
     updateChannelPendingIntent,
     upsertChannelAccount,
@@ -524,6 +542,7 @@ describe('command audit runs', () => {
     const ctx = makeCtx({
       actor: {
         account: {
+          issuerKey: 'lark:default',
           channelType: 'lark',
           accountId: 'ou_1',
           accountKey: 'lark:ou_1',
@@ -556,7 +575,7 @@ describe('command audit runs', () => {
 
     expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining('统一用户：user-yijie'))
     expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining('可执行凭证：0 个'))
-    expect(listChannelUserCredentials).toHaveBeenCalledWith('user-yijie', 'lark')
+    expect(listChannelUserCredentials).toHaveBeenCalledWith('lark:default', 'user-yijie')
     expect(createChannelCommandRun).toHaveBeenCalledWith(expect.objectContaining({
       actorAccountId: 'ou_1',
       actorUserId: 'user-yijie',
@@ -788,9 +807,10 @@ describe('channel command tool invocation', () => {
       status: 'success',
       usage: '/auth grant <id>'
     })
-    expect(updateChannelAuthorizationRequest).toHaveBeenCalledWith('auth-1', {
-      status: 'granted',
-      resolvedAt: expect.any(Number)
+    expect(resolveChannelAuthorizationRequestRecord).toHaveBeenCalledWith({
+      id: 'auth-1',
+      resolvedAt: expect.any(Number),
+      status: 'granted'
     })
     expect(createChannelCommandRun).toHaveBeenCalledWith(expect.objectContaining({
       commandName: 'grant',
@@ -865,6 +885,7 @@ describe('channel command tool invocation', () => {
     vi.mocked(listReadyChannelResumeIntents).mockReturnValueOnce([
       {
         intent: {
+          channelKey: 'lark:default',
           id: 'pending-auth-1',
           ownerAccountId: 'admin1',
           ownerUserId: 'user-admin',
@@ -897,6 +918,7 @@ describe('channel command tool invocation', () => {
       usage: '/auth list [scope:pending|resumable]'
     })
     expect(listReadyChannelResumeIntents).toHaveBeenCalledWith({
+      channelKey: 'lark:default',
       channelType: 'lark'
     }, { includeDeferred: true })
     expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining('可恢复授权任务'))
@@ -965,6 +987,7 @@ describe('channel command tool invocation', () => {
 
 describe('/identity command', () => {
   const actorAccount = {
+    issuerKey: 'lark:default',
     channelType: 'lark',
     accountId: 'ou_1',
     accountKey: 'lark:open_id:ou_1',
@@ -1005,6 +1028,7 @@ describe('/identity command', () => {
     expect(createChannelIdentityLinkCode).toHaveBeenCalledWith(expect.objectContaining({
       userId: 'user-yijie',
       sourceChannelType: 'lark',
+      sourceIssuerKey: 'lark:default',
       sourceAccountId: 'ou_1',
       metadata: expect.objectContaining({
         channelKey: 'lark:default',
@@ -1043,6 +1067,7 @@ describe('/identity command', () => {
 
     expect(ensureCanonicalUser).toHaveBeenCalledWith({ displayName: '一介[字节]' })
     expect(linkChannelAccountToUser).toHaveBeenCalledWith({
+      issuerKey: 'lark:default',
       channelType: 'lark',
       accountId: 'ou_1',
       userId: 'user-new',
@@ -1068,6 +1093,7 @@ describe('/identity command', () => {
 
     expect(consumeChannelIdentityLinkCode).toHaveBeenCalledWith({
       code: 'ABCD1234',
+      targetIssuerKey: 'lark:default',
       targetChannelType: 'lark',
       targetAccountId: 'ou_1'
     })
@@ -1077,6 +1103,7 @@ describe('/identity command', () => {
   it('does not overwrite a conflicting identity link', async () => {
     consumeChannelIdentityLinkCode.mockReturnValueOnce({
       existingLink: {
+        issuerKey: 'lark:default',
         channelType: 'lark',
         accountId: 'ou_1',
         userId: 'user-other',
@@ -1105,6 +1132,7 @@ describe('/identity command', () => {
     listChannelAccountsForUser.mockReturnValueOnce([
       actorAccount,
       {
+        issuerKey: 'telegram-main',
         channelType: 'telegram',
         accountId: 'tg_1',
         accountKey: 'telegram:tg_1',
@@ -1133,7 +1161,7 @@ describe('/identity command', () => {
 
     expect(listChannelAccountsForUser).toHaveBeenCalledWith('user-yijie')
     expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining('统一用户 user-yijie 已绑定 2 个频道账号'))
-    expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining('- telegram:tg_1 | telegram:tg_1'))
+    expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining('- telegram/telegram-main:tg_1 | telegram:tg_1'))
   })
 })
 
@@ -1954,6 +1982,7 @@ describe('/auth command', () => {
       commandText: '/auth request im.chat.member.add 拉群',
       actor: {
         account: {
+          issuerKey: 'lark:default',
           channelType: 'lark',
           accountId: 'ou_1',
           accountKey: 'lark:ou_1',
@@ -2004,6 +2033,7 @@ describe('/auth command', () => {
       commandText: '/auth list',
       actor: {
         account: {
+          issuerKey: 'lark:default',
           channelType: 'lark',
           accountId: 'ou_1',
           accountKey: 'lark:ou_1',
@@ -2037,6 +2067,7 @@ describe('/auth command', () => {
       commandText: '/auth list',
       actor: {
         account: {
+          issuerKey: 'lark:default',
           channelType: 'lark',
           accountId: 'ou_1',
           accountKey: 'lark:ou_1',
@@ -2061,6 +2092,7 @@ describe('/auth command', () => {
         ? [
           {
             intent: {
+              channelKey: 'lark:default',
               id: 'pending-auth-1',
               ownerAccountId: 'ou_1',
               ownerUserId: 'user-yijie',
@@ -2084,6 +2116,7 @@ describe('/auth command', () => {
       commandText: '/auth list resumable',
       actor: {
         account: {
+          issuerKey: 'lark:default',
           channelType: 'lark',
           accountId: 'ou_1',
           accountKey: 'lark:ou_1',
@@ -2105,10 +2138,12 @@ describe('/auth command', () => {
     await channelCommandMiddleware(ctx, vi.fn())
 
     expect(listReadyChannelResumeIntents).toHaveBeenCalledWith({
+      channelKey: 'lark:default',
       channelType: 'lark',
       ownerUserId: 'user-yijie'
     }, { includeDeferred: true })
     expect(listReadyChannelResumeIntents).toHaveBeenCalledWith({
+      channelKey: 'lark:default',
       channelType: 'lark',
       ownerAccountId: 'ou_1'
     }, { includeDeferred: true })
@@ -2123,6 +2158,7 @@ describe('/auth command', () => {
     vi.mocked(listReadyChannelResumeIntents).mockReturnValueOnce([
       {
         intent: {
+          channelKey: 'lark:default',
           id: 'pending-auth-1',
           ownerAccountId: 'ou_1',
           ownerUserId: 'user-yijie',
@@ -2149,6 +2185,7 @@ describe('/auth command', () => {
     await channelCommandMiddleware(ctx, vi.fn())
 
     expect(listReadyChannelResumeIntents).toHaveBeenCalledWith({
+      channelKey: 'lark:default',
       channelType: 'lark'
     }, { includeDeferred: true })
     expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining('auth-1 | manual | Write'))
@@ -2176,9 +2213,10 @@ describe('/auth command', () => {
 
     await channelCommandMiddleware(ctx, vi.fn())
 
-    expect(updateChannelAuthorizationRequest).toHaveBeenCalledWith('auth-1', {
-      status: 'granted',
-      resolvedAt: expect.any(Number)
+    expect(resolveChannelAuthorizationRequestRecord).toHaveBeenCalledWith({
+      id: 'auth-1',
+      resolvedAt: expect.any(Number),
+      status: 'granted'
     })
     expect(listOpenChannelPendingIntents).toHaveBeenCalledWith({
       authorizationRequestId: 'auth-1'
@@ -2201,6 +2239,31 @@ describe('/auth command', () => {
     expect(ctx.reply).toHaveBeenCalledWith('授权请求 auth-1 已标记为 已批准。')
   })
 
+  it('/auth grant repairs open intents after the same authorization was already granted', async () => {
+    getChannelAuthorizationRequest.mockReturnValue({
+      ...getChannelAuthorizationRequest(),
+      status: 'granted',
+      resolvedAt: 123
+    })
+    resolveChannelAuthorizationRequestRecord.mockReturnValue(undefined)
+    const ctx = makeCtx({
+      commandText: '/auth grant auth-1',
+      config: { type: 'lark', access: { admins: ['admin1'] } } as any,
+      inbound: makeInbound({ senderId: 'admin1' }) as any
+    })
+
+    await channelCommandMiddleware(ctx, vi.fn())
+
+    expect(updateChannelPendingIntent).toHaveBeenCalledWith(
+      'pending-auth-1',
+      expect.objectContaining({
+        resolvedAt: 123,
+        status: 'resolved'
+      })
+    )
+    expect(ctx.reply).toHaveBeenCalledWith('授权请求 auth-1 已标记为 已批准。')
+  })
+
   it('/auth deny resolves a pending authorization request for admins', async () => {
     const ctx = makeCtx({
       commandText: '/auth deny auth-1 不行',
@@ -2210,10 +2273,11 @@ describe('/auth command', () => {
 
     await channelCommandMiddleware(ctx, vi.fn())
 
-    expect(updateChannelAuthorizationRequest).toHaveBeenCalledWith('auth-1', {
-      status: 'denied',
+    expect(resolveChannelAuthorizationRequestRecord).toHaveBeenCalledWith({
+      id: 'auth-1',
       message: '不行',
-      resolvedAt: expect.any(Number)
+      resolvedAt: expect.any(Number),
+      status: 'denied'
     })
     expect(updateChannelPendingIntent).toHaveBeenCalledWith('pending-auth-1', {
       metadata: expect.objectContaining({

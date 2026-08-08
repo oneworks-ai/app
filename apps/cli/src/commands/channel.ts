@@ -1,10 +1,17 @@
 /* eslint-disable max-lines -- Channel send CLI parsing and request dispatch stay colocated. */
 import { Buffer } from 'node:buffer'
+import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import process from 'node:process'
 
 import type { Command } from 'commander'
 
+import {
+  ONEWORKS_WEBHOOK_NONCE_HEADER,
+  ONEWORKS_WEBHOOK_SIGNATURE_HEADER,
+  ONEWORKS_WEBHOOK_TIMESTAMP_HEADER,
+  buildOneWorksWebhookSignature
+} from '@oneworks/channel-oneworks/webhook-signature'
 import { MAX_CHANNEL_TEXT_MESSAGE_LENGTH, countChannelTextMessageCharacters } from '@oneworks/core/channel'
 import type { ChannelTextMention } from '@oneworks/core/channel'
 import {
@@ -72,7 +79,6 @@ interface ParsedToolCommand {
   channelKey?: string
   input?: string
   server?: string
-  sessionId?: string
   toolName?: string
 }
 
@@ -194,7 +200,6 @@ const toolCommandOptionValueNames = new Set([
   '--input',
   '--json',
   '--server',
-  '--session-id',
   '--tool'
 ])
 
@@ -343,8 +348,6 @@ const parseToolCommandArgs = (argv: string[]): ParsedToolCommand => {
         options.input = value
       } else if (arg === '--server') {
         options.server = value
-      } else if (arg === '--session-id') {
-        options.sessionId = value
       } else if (arg === '--tool') {
         options.toolName = value
       }
@@ -801,17 +804,12 @@ const buildNativeSimulationPayload = (
 
 const buildNativeSimulationWebhookUrl = (input: {
   channelKey: string
-  secret?: string
   serverBaseUrl: string
 }) => {
   const url = new URL(
     `/channels/oneworks/${encodeURIComponent(input.channelKey)}/webhook`,
     `${input.serverBaseUrl}/`
   )
-  const secret = trimNonEmpty(input.secret)
-  if (secret != null) {
-    url.searchParams.set('secret', secret)
-  }
   return url.toString()
 }
 
@@ -827,17 +825,34 @@ const runSimulateCommand = async (
   const channelKey = resolveNativeSimulationChannelKey({ channelKey: parsed.channelKey, nativeContext })
   const message = await parseMessage(parsed.contentParts, { lineBreakToken: parsed.lineBreakToken })
   const payload = buildNativeSimulationPayload(message, parsed, nativeContext)
+  const body = JSON.stringify(payload)
+  const secret = trimNonEmpty(parsed.secret)
+  const timestamp = String(Date.now())
+  const nonce = randomUUID()
   const fetchImpl = options.fetch ?? globalThis.fetch
   const response = await fetchImpl(
     buildNativeSimulationWebhookUrl({
       channelKey,
-      secret: parsed.secret,
       serverBaseUrl: resolveServerBaseUrl({ env, server: parsed.server })
     }),
     {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(payload)
+      headers: {
+        'content-type': 'application/json',
+        ...(secret == null
+          ? {}
+          : {
+            [ONEWORKS_WEBHOOK_NONCE_HEADER]: nonce,
+            [ONEWORKS_WEBHOOK_SIGNATURE_HEADER]: buildOneWorksWebhookSignature({
+              body,
+              nonce,
+              secret,
+              timestamp
+            }),
+            [ONEWORKS_WEBHOOK_TIMESTAMP_HEADER]: timestamp
+          })
+      },
+      body
     }
   )
   const data = await normalizeApiResponse(response)
@@ -984,6 +999,10 @@ const runToolCommand = async (
   if (toolName == null) {
     throw new Error('Channel command invoke requires a tool name.')
   }
+  const invocationToken = trimNonEmpty(context.invocationToken)
+  if (invocationToken == null) {
+    throw new Error('Channel command invoke must run from an active channel child session.')
+  }
 
   const response = await fetchImpl(
     `${serverBaseUrl}/api/channels/${encodeURIComponent(channelKey)}/commands/invoke`,
@@ -991,10 +1010,8 @@ const runToolCommand = async (
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        context,
-        cwd,
         input: await parseToolInput(parsed.input),
-        ...(trimNonEmpty(parsed.sessionId) == null ? {} : { sessionId: trimNonEmpty(parsed.sessionId) }),
+        invocationToken,
         toolName
       })
     }

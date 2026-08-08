@@ -40,6 +40,7 @@ const shouldReplyOffHours = (ctx: ChannelContext) => (
 const buildThrottleKey = (ctx: ChannelContext) =>
   [
     'off-hours',
+    ctx.channelKey,
     ctx.channelLink?.name ?? ctx.channelKey,
     ctx.inbound.channelType,
     ctx.inbound.sessionType,

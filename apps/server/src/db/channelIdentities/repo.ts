@@ -3,6 +3,7 @@ import { createChannelAccountsRepo } from './accounts-repo'
 import { createAuthorizationRequestsRepo } from './authorization-requests-repo'
 import { createCredentialsRepo } from './credentials-repo'
 import { createIdentityLinkCodesRepo } from './link-codes-repo'
+import { createLegacyChannelIdentityMigration } from './migration'
 
 export type {
   CanonicalUserRow,
@@ -25,6 +26,7 @@ export function createChannelIdentitiesRepo(db: SqliteDatabase) {
   const linkCodes = createIdentityLinkCodesRepo(db, accounts)
   const credentials = createCredentialsRepo(db)
   const authorizationRequests = createAuthorizationRequestsRepo(db)
+  const migrateLegacyNamespace = createLegacyChannelIdentityMigration(db)
 
   return {
     consumeIdentityLinkCode: linkCodes.consumeIdentityLinkCode,
@@ -42,6 +44,8 @@ export function createChannelIdentitiesRepo(db: SqliteDatabase) {
     listCredentialsForUser: credentials.listCredentialsForUser,
     listPendingAuthorizationRequestsForAccount: authorizationRequests.listPendingAuthorizationRequestsForAccount,
     listPendingAuthorizationRequestsForUser: authorizationRequests.listPendingAuthorizationRequestsForUser,
+    migrateLegacyNamespace,
+    resolveAuthorizationRequest: authorizationRequests.resolveAuthorizationRequest,
     resolveUserByAccount: accounts.resolveUserByAccount,
     updateAuthorizationRequest: authorizationRequests.updateAuthorizationRequest,
     upsertAccount: accounts.upsertAccount,

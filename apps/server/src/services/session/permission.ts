@@ -301,7 +301,7 @@ const resolveChannelPermissionDecision = async (params: {
   const actorUserId = params.channelContext.actorUserId
   const actorUser = actorUserId != null || actorAccountId == null
     ? undefined
-    : db.resolveCanonicalUserByChannelAccount(params.channelContext.channelType, actorAccountId)
+    : db.resolveCanonicalUserByChannelAccount(params.channelContext.channelKey, actorAccountId)
   const channelAdmins = await resolveChannelAdmins(params.sessionId, params.channelContext.channelKey)
   const capability = params.keyCandidates[0] ?? params.subject.key
   const decision = resolveChannelApproval({
@@ -372,26 +372,17 @@ export const resolvePermissionDecision = async (params: {
     subject.key,
     ...(params.lookupKeys ?? [])
   ])
+  const onceDecision = getDb().consumeSessionPermissionOnce(sessionId, keyCandidates)
+  if (onceDecision != null) {
+    await syncPermissionStateMirrorBestEffort(sessionId)
+    return {
+      result: onceDecision.decision,
+      source: onceDecision.decision === 'allow' ? 'onceAllow' : 'onceDeny',
+      subject
+    }
+  }
+
   const sessionState = getSessionPermissionState(sessionId)
-
-  const matchedOnceDenyKeys = keyCandidates.filter(key => sessionState.onceDeny.includes(key))
-  if (matchedOnceDenyKeys.length > 0) {
-    await updateSessionPermissionState(sessionId, {
-      ...sessionState,
-      onceDeny: sessionState.onceDeny.filter(item => !matchedOnceDenyKeys.includes(item))
-    })
-    return { result: 'deny', source: 'onceDeny', subject }
-  }
-
-  const matchedOnceAllowKeys = keyCandidates.filter(key => sessionState.onceAllow.includes(key))
-  if (matchedOnceAllowKeys.length > 0) {
-    await updateSessionPermissionState(sessionId, {
-      ...sessionState,
-      onceAllow: sessionState.onceAllow.filter(item => !matchedOnceAllowKeys.includes(item))
-    })
-    return { result: 'allow', source: 'onceAllow', subject }
-  }
-
   if (keyCandidates.some(key => sessionState.deny.includes(key))) {
     return { result: 'deny', source: 'sessionDeny', subject }
   }

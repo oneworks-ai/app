@@ -7,12 +7,13 @@ export const identityMiddleware: ChannelMiddleware = async (ctx, next) => {
   if (senderId != null && senderId !== '') {
     const db = getDb()
     const account = db.upsertChannelAccount({
+      issuerKey: ctx.channelKey,
       channelType: ctx.inbound.channelType,
       accountId: senderId
     })
-    const identityLink = db.getChannelIdentityLink(ctx.inbound.channelType, senderId)
+    const identityLink = db.getChannelIdentityLink(ctx.channelKey, senderId)
     const user = identityLink?.status === 'verified'
-      ? db.resolveCanonicalUserByChannelAccount(ctx.inbound.channelType, senderId)
+      ? db.resolveCanonicalUserByChannelAccount(ctx.channelKey, senderId)
       : undefined
 
     if (account != null) {

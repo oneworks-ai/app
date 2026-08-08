@@ -27,6 +27,7 @@ export interface SessionChannelActorSnapshot {
   senderId?: string
   sessionId?: string
   sessionType?: string
+  threadId?: string
   threadKey?: string
 }
 
@@ -337,6 +338,48 @@ export function createSessionsRepo(db: SqliteDatabase) {
     stmt.run(...statement.params)
   }
 
+  const consumePermissionOnce = db.transaction((id: string, keys: string[]) => {
+    const row = db.prepare('SELECT permissionState FROM sessions WHERE id = ?')
+      .get<Pick<SessionRow, 'permissionState'>>(id)
+    if (row == null) return undefined
+    const state = parsePermissionState(row.permissionState)
+    const denyKey = keys.find(key => state.onceDeny.includes(key))
+    const allowKey = denyKey == null ? keys.find(key => state.onceAllow.includes(key)) : undefined
+    const key = denyKey ?? allowKey
+    if (key == null) return undefined
+
+    const decision = denyKey == null ? 'allow' as const : 'deny' as const
+    const nextState = normalizeSessionPermissionState({
+      ...state,
+      onceAllow: decision === 'allow' ? state.onceAllow.filter(item => item !== key) : state.onceAllow,
+      onceDeny: decision === 'deny' ? state.onceDeny.filter(item => item !== key) : state.onceDeny
+    })
+    db.prepare('UPDATE sessions SET permissionState = ? WHERE id = ?')
+      .run(JSON.stringify(nextState), id)
+    return { decision, key, state: nextState }
+  })
+
+  const transferPermissionState = db.transaction((parentId: string, childId: string) => {
+    const select = db.prepare('SELECT permissionState FROM sessions WHERE id = ?')
+    const parentRow = select.get<Pick<SessionRow, 'permissionState'>>(parentId)
+    const childRow = select.get<Pick<SessionRow, 'permissionState'>>(childId)
+    if (parentRow == null || childRow == null) return undefined
+
+    const parentState = parsePermissionState(parentRow.permissionState)
+    const childState = normalizeSessionPermissionState({
+      ...parsePermissionState(childRow.permissionState),
+      allow: parentState.allow,
+      deny: parentState.deny,
+      onceAllow: parentState.onceAllow,
+      onceDeny: parentState.onceDeny
+    })
+    db.prepare('UPDATE sessions SET permissionState = ? WHERE id = ?')
+      .run(JSON.stringify(childState), childId)
+    db.prepare('UPDATE sessions SET permissionState = ? WHERE id = ?')
+      .run(JSON.stringify({ ...parentState, onceAllow: [], onceDeny: [] }), parentId)
+    return childState
+  })
+
   const setStarred = (id: string, isStarred: boolean) => {
     update(id, { isStarred })
   }
@@ -464,6 +507,7 @@ export function createSessionsRepo(db: SqliteDatabase) {
 
   return {
     archiveTree,
+    consumePermissionOnce,
     create,
     get,
     getRuntimeState,
@@ -473,6 +517,7 @@ export function createSessionsRepo(db: SqliteDatabase) {
     setLastMessages,
     setStarred,
     setTitle,
+    transferPermissionState,
     update,
     updateRuntimeState
   }

@@ -24,6 +24,7 @@ const writeContext = async (cwd: string) => {
           channelId: 'group-1',
           channelKey: 'erjie',
           channelType: 'wechat',
+          invocationToken: 'signed-child-run-token',
           replyReceiveId: 'group-1',
           replyReceiveIdType: 'chat_id',
           senderId: 'wxid-user',
@@ -474,20 +475,10 @@ describe('oneworks channel command', () => {
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({
-          context: {
-            channelId: 'group-1',
-            channelKey: 'erjie',
-            channelType: 'wechat',
-            replyReceiveId: 'group-1',
-            replyReceiveIdType: 'chat_id',
-            senderId: 'wxid-user',
-            sessionId: 'sess-1',
-            sessionType: 'group'
-          },
-          cwd,
           input: {
             id: 'auth-1'
           },
+          invocationToken: 'signed-child-run-token',
           toolName: 'channel.auth.grant'
         })
       })
@@ -528,9 +519,14 @@ describe('oneworks channel command', () => {
     expect(output).toContain('Simulated OneWorks channel event through oneworks-main.')
     expect(output).toContain('messageId: sim-1')
     expect(fetch).toHaveBeenCalledWith(
-      'http://127.0.0.1:9876/channels/oneworks/oneworks-main/webhook?secret=dev-secret',
+      'http://127.0.0.1:9876/channels/oneworks/oneworks-main/webhook',
       expect.objectContaining({
-        method: 'POST'
+        method: 'POST',
+        headers: expect.objectContaining({
+          'x-oneworks-channel-nonce': expect.any(String),
+          'x-oneworks-channel-signature': expect.stringMatching(/^sha256=/u),
+          'x-oneworks-channel-timestamp': expect.any(String)
+        })
       })
     )
     expect(JSON.parse(fetch.mock.calls[0]?.[1]?.body)).toEqual({

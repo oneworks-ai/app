@@ -38,26 +38,28 @@ export const listOwnPendingRequests = (ctx: ChannelContext) => {
   const userId = resolveRequesterUserId(ctx)
   if (userId != null && userId !== '') {
     return db.listPendingChannelAuthorizationRequestsForUser(userId, ctx.inbound.channelType)
+      .filter(request => request.metadata?.channelKey === ctx.channelKey)
   }
 
   const accountId = resolveRequesterAccountId(ctx)
   return accountId == null || accountId === ''
     ? []
     : db.listPendingChannelAuthorizationRequestsForAccount(accountId, ctx.inbound.channelType)
+      .filter(request => request.metadata?.channelKey === ctx.channelKey)
 }
 
 const buildOwnerResumeFilters = (ctx: ChannelContext) => {
-  if (isAdmin(ctx)) return [{ channelType: ctx.inbound.channelType }]
+  if (isAdmin(ctx)) return [{ channelKey: ctx.channelKey, channelType: ctx.inbound.channelType }]
 
   const filters: Parameters<typeof listReadyChannelResumeIntents>[0][] = []
   const userId = resolveRequesterUserId(ctx)
   if (userId != null && userId !== '') {
-    filters.push({ channelType: ctx.inbound.channelType, ownerUserId: userId })
+    filters.push({ channelKey: ctx.channelKey, channelType: ctx.inbound.channelType, ownerUserId: userId })
   }
 
   const accountId = resolveRequesterAccountId(ctx)
   if (accountId != null && accountId !== '') {
-    filters.push({ channelType: ctx.inbound.channelType, ownerAccountId: accountId })
+    filters.push({ channelKey: ctx.channelKey, channelType: ctx.inbound.channelType, ownerAccountId: accountId })
   }
   return filters
 }
@@ -66,6 +68,7 @@ export const listResumableAuthorizationIntents = (ctx: ChannelContext) => {
   const seen = new Set<string>()
   return buildOwnerResumeFilters(ctx)
     .flatMap(filter => listReadyChannelResumeIntents(filter, { includeDeferred: true }))
+    .filter(item => item.intent.channelKey === ctx.channelKey)
     .filter(item => {
       if (seen.has(item.intent.id)) return false
       seen.add(item.intent.id)

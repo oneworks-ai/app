@@ -4,6 +4,7 @@ import type { JsonRecord } from './json'
 export type ChannelIdentityLinkStatus = 'pending' | 'verified' | 'revoked'
 
 export interface ChannelAccountDbRow {
+  issuerKey: string
   channelType: string
   accountId: string
   accountKey: string
@@ -15,6 +16,7 @@ export interface ChannelAccountDbRow {
 }
 
 export interface ChannelAccountRow {
+  issuerKey: string
   channelType: string
   accountId: string
   accountKey: string
@@ -33,6 +35,7 @@ export interface CanonicalUserRow {
 }
 
 export interface ChannelIdentityLinkRow {
+  issuerKey: string
   channelType: string
   accountId: string
   userId: string
@@ -43,6 +46,7 @@ export interface ChannelIdentityLinkRow {
 }
 
 export interface ChannelAccountInput {
+  issuerKey: string
   channelType: string
   accountId: string
   accountKey?: string | null
@@ -57,6 +61,7 @@ export interface CanonicalUserInput {
 }
 
 export interface ChannelIdentityLinkInput {
+  issuerKey: string
   channelType: string
   accountId: string
   userId: string
@@ -67,6 +72,7 @@ export interface ChannelIdentityLinkInput {
 export function mapAccountRow(row: ChannelAccountDbRow | undefined): ChannelAccountRow | undefined {
   if (row == null) return undefined
   return {
+    issuerKey: row.issuerKey,
     channelType: row.channelType,
     accountId: row.accountId,
     accountKey: row.accountKey,

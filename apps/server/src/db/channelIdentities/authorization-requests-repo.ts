@@ -83,6 +83,24 @@ export function createAuthorizationRequestsRepo(db: SqliteDatabase) {
     return getAuthorizationRequest(id)
   }
 
+  const resolveAuthorizationRequest = db.transaction((input: {
+    id: string
+    message?: string | null
+    now?: number
+    resolvedAt: number
+    status: 'denied' | 'granted'
+  }) => {
+    const now = input.now ?? Date.now()
+    const result = db.prepare(`
+      UPDATE channel_authorization_requests
+      SET status = ?, message = COALESCE(?, message), resolvedAt = ?, updatedAt = ?
+      WHERE id = ?
+        AND status = 'pending'
+        AND (expiresAt IS NULL OR expiresAt > ?)
+    `).run(input.status, input.message ?? null, input.resolvedAt, now, input.id, now)
+    return result.changes === 1 ? getAuthorizationRequest(input.id) : undefined
+  })
+
   const listPendingAuthorizationRequestsForUser = (userId: string, channelType?: string) => {
     const stmt = db.prepare(`
       SELECT ${AUTHORIZATION_REQUEST_SELECT}
@@ -113,6 +131,7 @@ export function createAuthorizationRequestsRepo(db: SqliteDatabase) {
     getAuthorizationRequest,
     listPendingAuthorizationRequestsForAccount,
     listPendingAuthorizationRequestsForUser,
+    resolveAuthorizationRequest,
     updateAuthorizationRequest
   }
 }

@@ -124,7 +124,47 @@ export function createPendingIntentWriters(
     return readers.getPendingIntent(id)
   }
 
+  const claimPendingIntentResume = db.transaction((input: {
+    id: string
+    metadata: Record<string, unknown>
+    now?: number
+  }) => {
+    const result = db.prepare(`
+      UPDATE channel_pending_intents
+      SET metadataJson = ?, updatedAt = ?
+      WHERE id = ?
+        AND status = 'resolved'
+        AND (
+          json_extract(metadataJson, '$.resume.status') = 'ready'
+          OR (
+            json_extract(metadataJson, '$.resume.status') = 'dispatching'
+            AND json_extract(metadataJson, '$.resume.leaseExpiresAt') <= ?
+          )
+        )
+    `).run(stringifyJson(input.metadata), input.now ?? Date.now(), input.id, input.now ?? Date.now())
+    return result.changes === 1 ? readers.getPendingIntent(input.id) : undefined
+  })
+
+  const finishPendingIntentResumeClaim = db.transaction((input: {
+    claimId: string
+    id: string
+    metadata: Record<string, unknown>
+    now?: number
+  }) => {
+    const result = db.prepare(`
+      UPDATE channel_pending_intents
+      SET metadataJson = ?, updatedAt = ?
+      WHERE id = ?
+        AND status = 'resolved'
+        AND json_extract(metadataJson, '$.resume.status') = 'dispatching'
+        AND json_extract(metadataJson, '$.resume.claimId') = ?
+    `).run(stringifyJson(input.metadata), input.now ?? Date.now(), input.id, input.claimId)
+    return result.changes === 1 ? readers.getPendingIntent(input.id) : undefined
+  })
+
   return {
+    claimPendingIntentResume,
+    finishPendingIntentResumeClaim,
     updatePendingIntent,
     upsertPendingIntent
   }

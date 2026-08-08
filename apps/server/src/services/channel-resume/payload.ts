@@ -34,8 +34,11 @@ export const normalizeChannelResumePayload = (value: unknown): ChannelResumePayl
     authorizationRequestId,
     authorizationStatus: trimNonEmpty(value.authorizationStatus),
     capability: trimNonEmpty(value.capability),
+    claimId: trimNonEmpty(value.claimId),
+    claimedAt: readNumber(value.claimedAt),
     createdByChildRunId: trimNonEmpty(value.createdByChildRunId),
     interactionResponse: trimNonEmpty(value.interactionResponse),
+    leaseExpiresAt: readNumber(value.leaseExpiresAt),
     mode: value.mode === 'manual' || value.mode === 'next_message' || value.mode === 'immediate'
       ? value.mode
       : undefined,

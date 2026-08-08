@@ -5,7 +5,7 @@ status: draft
 authors:
   - Codex
 created: 2026-06-16
-updated: 2026-06-17
+updated: 2026-08-09
 targetVersion: vNext
 ---
 
@@ -63,7 +63,7 @@ ChannelSession 下新增 ConversationState，用来保存“下一次执行需�
 核心字段：
 
 ```ts
-type ConversationState = {
+interface ConversationState {
   id: string
   entityId: string
   entityChannelId: string
@@ -117,7 +117,7 @@ Pending intent 必须按用户绑定，而不是只挂在频道上。比如某�
 字段建议：
 
 ```ts
-type PendingIntent = {
+interface PendingIntent {
   id: string
   entityId: string
   entityChannelId: string
@@ -156,7 +156,7 @@ Router 或 ChildSession 需要上下文时解析 threadKey：
 创建 ChildSession 前，Runtime 组装 ContinuitySnapshot：
 
 ```ts
-type ContinuitySnapshot = {
+interface ContinuitySnapshot {
   conversationStateId: string
   threadKey: string
   topic?: string
@@ -233,19 +233,19 @@ Memory writeback 可以异步，但 conversation patch 应该跟 child run 一�
 
 `/auth grant|deny` 已统一通过 channel-authorizations 服务处理授权请求结果：更新 `channel_authorization_requests`，关闭关联 open pending intents，并在请求由 interaction mirror 生成时把 `allow_once` / `deny_once` 回填给原 session interaction。关闭 intent 时会写入 `metadata.resume`，包含 authorization request id、授权状态、capability、原 child run、session id、threadKey 和 resolvedBy；如果原 interaction 已经续接成功，resume 状态为 `skipped`，否则为 `ready`。
 
-`services/channel-resume` 已提供最小恢复消费器：可以列出 resolved intent 中 `metadata.resume.status=ready` 的项，claim 后创建 `channel_child_session_runs(triggerType=system_resume)`，把内部恢复提示通过 `processUserMessage` 投递回原 session，并将 resume 状态更新为 `dispatched`、`failed` 或 `skipped`。这让“授权结果回来后继续哪个 thread/session”不再只是文档约定，而是有可测试的服务边界。
+`services/channel-resume` 已提供最小恢复消费器：可以列出 resolved intent 中 `metadata.resume.status=ready` 的项，claim 后以原 session 为 parent 创建新的 `channel_child_session_runs(triggerType=system_resume)` 和 fresh ChildSession，再将 resume 状态更新为 `dispatched`、`failed` 或 `skipped`。恢复产物使用 intent 派生的稳定 ID，过期 lease 被重新领取时会复用同一 run、session 和 conversation turn，避免重复创建。
 
 interaction 请求送达到频道后，channel handler 会按当前 channel session 类型把 pending intent 标记为 `delivery=dm` 或 `delivery=public_hint`，并记录平台返回的 `deliveryMessageId`。送达成功还会写入 `channel_reply_throttles(policyType=authorization_request_delivery)`，按 channel link 的 `authorization.deliveryThrottleMs` 节流；未配置时默认 20 分钟内同一个 authorization request 不重复发送。这为后续“只提醒一次”“撤回/更新提示”“点击后恢复原 thread”提供锚点。
 
 `/auth grant|deny` 命令层已经 best-effort 调用 `channel-resume`，会尝试消费同一 authorizationRequestId 的 ready resume intent；typed command invocation 走同一执行链路，因此 agent 调用 `channel.auth.grant` / `channel.auth.deny` 也会触发同样的恢复尝试。server 启动时也会在非 manager 角色初始化 lightweight channel resume scheduler，周期性扫描 ready resume intent，避免只依赖当前授权命令调用栈。
 
-`authorization.resume.mode=next_message` 已接入 dispatch：同一 owner、同一 thread 的下一条入站消息会加载对应 ready resume intent，把 `<channel-authorization-resume>` 作为本轮消息的 runtime context 注入同一个 child run，并将 intent 标记为 `dispatched`；其他人的普通消息不会消耗该 pending intent。如果当前 channel 没有活动绑定，但 pending intent 记录了原 `sessionId`，dispatch 会优先回到该 session，而不是新建会话。
+`authorization.resume.mode=next_message` 已接入 dispatch：同一 owner、同一 thread 的下一条入站消息会原子 claim 对应 ready resume intent，把 `<channel-authorization-resume>` 作为本轮 fresh ChildSession 的 runtime context，并将 intent 标记为 `dispatched`；其他人的普通消息不会消耗该 pending intent。pending intent 的原 `sessionId` 只作为 parent、workspace 和权限状态来源，不会重新作为本轮执行会话。
 
 `authorization.resume.mode=manual` 已接入 channel command：管理员或具备对应权限的 agent 可以调用 `/auth resume <authorizationRequestId>`，或通过 typed command `channel.auth.resume` 显式消费该授权请求下的 deferred ready resume intent。这个入口会使用发送者权限审计，不会自动提升为 bot、CLI 或桌面登录用户。
 
 可恢复任务的发现走同一套 sender-scoped 命令：`/auth list resumable` 或 typed command `channel.auth.list` with `{ "scope": "resumable" }` 会列出 `metadata.resume.status=ready` 的 resolved pending intent。普通用户只看到自己 owner user/account 下的任务；管理员可以看到当前 channel type 下所有可恢复任务。
 
-尚未落地的部分是平台送达策略和更细的 router 策略：系统还需要根据平台能力选择私信、ephemeral、公开提示或外部授权页；授权结果回来后，最小恢复器已经能消费 `metadata.resume` 并投递原 session，命令入口、后台 scheduler、显式 manual resume 和下一条 owner 消息都能触发对应恢复策略，但还需要 router 决定更复杂的延迟、摘要或跨 thread 归并场景。
+尚未落地的部分是平台送达策略和更细的 router 策略：系统还需要根据平台能力选择私信、ephemeral、公开提示或外部授权页；授权结果回来后，最小恢复器已经能消费 `metadata.resume` 并创建 fresh ChildSession，命令入口、后台 scheduler、显式 manual resume 和下一条 owner 消息都能触发对应恢复策略，但还需要 router 决定更复杂的延迟、摘要或跨 thread 归并场景。
 
 ## Memory Loading
 

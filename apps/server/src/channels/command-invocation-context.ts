@@ -17,9 +17,15 @@ export const createOfflineCommandContext = (
   replies: string[]
 ): ChannelContext => {
   const db = getDb()
-  const binding = db.getChannelSession(inbound.channelType, inbound.sessionType, inbound.channelId)
-  const preference = db.getChannelPreference(inbound.channelType, inbound.sessionType, inbound.channelId)
-  const sessionId = trimNonEmpty(input.sessionId) ?? trimNonEmpty(input.context?.sessionId) ?? binding?.sessionId
+  const binding = db.getChannelSession(
+    state.key,
+    inbound.channelType,
+    inbound.sessionType,
+    inbound.channelId,
+    inbound.threadId
+  )
+  const preference = db.getChannelPreference(state.key, inbound.channelType, inbound.sessionType, inbound.channelId)
+  const sessionId = trimNonEmpty(input.context?.sessionId) ?? binding?.sessionId
   let ctx: ChannelContext
   const getContext = () => ctx
 
@@ -30,7 +36,7 @@ export const createOfflineCommandContext = (
     connection: undefined,
     config: state.config,
     channelLink: resolveChannelLinkForCommand(state, inbound),
-    actor: resolveActor(inbound, trimNonEmpty(input.context?.actorUserId)),
+    actor: resolveActor(inbound, state.key, trimNonEmpty(input.context?.actorUserId)),
     sessionId,
     channelAdapter: preference?.adapter,
     channelPermissionMode: preference?.permissionMode,

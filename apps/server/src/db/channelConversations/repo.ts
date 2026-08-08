@@ -21,6 +21,7 @@ export function createChannelConversationsRepo(db: SqliteDatabase) {
 
   return {
     appendTurn: turns.appendTurn,
+    claimPendingIntentResume: pendingIntentWriters.claimPendingIntentResume,
     ensureState: states.ensureState,
     getPendingIntent: pendingIntentReaders.getPendingIntent,
     getState: states.getState,
@@ -29,6 +30,7 @@ export function createChannelConversationsRepo(db: SqliteDatabase) {
     listOpenPendingIntents: pendingIntentReaders.listOpenPendingIntents,
     listRecentTurns: turns.listRecentTurns,
     listResolvedPendingIntents: pendingIntentReaders.listResolvedPendingIntents,
+    finishPendingIntentResumeClaim: pendingIntentWriters.finishPendingIntentResumeClaim,
     updatePendingIntent: pendingIntentWriters.updatePendingIntent,
     upsertPendingIntent: pendingIntentWriters.upsertPendingIntent
   }

@@ -270,6 +270,7 @@ const toChannelInboundEvent = async (
     channelId: message.chat_id,
     senderId,
     messageId: message.message_id,
+    threadId: message.thread_id ?? message.root_id ?? message.parent_id,
     text: displayText,
     replyTo: {
       receiveId: message.chat_id,

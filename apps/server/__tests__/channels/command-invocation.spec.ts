@@ -1,8 +1,10 @@
+/* eslint-disable max-lines -- command authority integration cases share one mocked channel-runtime fixture. */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { invokeChannelCommandForState } from '#~/channels/command-invocation.js'
 import type { ChannelRuntimeState } from '#~/channels/types.js'
 import { getDb } from '#~/db/index.js'
+import { createChannelCommandInvocationToken } from '#~/services/channel-commands/invocation-token.js'
 import { listReadyChannelResumeIntents, resumeReadyChannelIntents } from '#~/services/channel-resume/index.js'
 import { handleInteractionResponse } from '#~/services/session/interaction.js'
 
@@ -40,6 +42,7 @@ vi.mock('#~/services/session/workspace.js', () => ({
 const createChannelCommandRun = vi.fn()
 const finishChannelCommandRun = vi.fn()
 const getChannelAuthorizationRequest = vi.fn()
+const getChannelChildSessionRun = vi.fn()
 const getChannelIdentityLink = vi.fn()
 const getChannelPreference = vi.fn()
 const getChannelSession = vi.fn()
@@ -53,6 +56,7 @@ const listOpenChannelPendingIntents = vi.fn()
 const listPendingChannelAuthorizationRequestsForAccount = vi.fn()
 const listPendingChannelAuthorizationRequestsForUser = vi.fn()
 const resolveCanonicalUserByChannelAccount = vi.fn()
+const resolveChannelAuthorizationRequestRecord = vi.fn()
 const updateChannelAuthorizationRequest = vi.fn()
 const updateChannelPendingIntent = vi.fn()
 const upsertChannelAccount = vi.fn()
@@ -84,18 +88,58 @@ const makeState = (): ChannelRuntimeState => ({
   ]
 })
 
+const makeInvocationToken = () =>
+  createChannelCommandInvocationToken({
+    channelKey: 'lark-main',
+    childRunId: 'child-run-1',
+    sessionId: 'sess-1'
+  })
+
+const makeChildRun = (overrides: Record<string, unknown> = {}) => ({
+  actorAccountId: 'admin1',
+  actorUserId: 'user-admin',
+  channelId: 'oc_1',
+  channelKey: 'lark-main',
+  channelLinkName: 'wan-ke-chat',
+  channelType: 'lark',
+  entity: 'owo-demo',
+  id: 'child-run-1',
+  messageId: 'om_1',
+  senderId: 'admin1',
+  sessionType: 'group',
+  status: 'started',
+  threadKey: 'group:owo-demo:actor:user-admin',
+  ...overrides
+})
+
+const makeActorSnapshot = (overrides: Record<string, unknown> = {}) => ({
+  actorAccountId: 'admin1',
+  actorUserId: 'user-admin',
+  channelId: 'oc_1',
+  channelKey: 'lark-main',
+  channelLinkName: 'wan-ke-chat',
+  channelType: 'lark',
+  childRunId: 'child-run-1',
+  entity: 'owo-demo',
+  messageId: 'om_1',
+  senderId: 'admin1',
+  sessionId: 'sess-1',
+  sessionType: 'group',
+  ...overrides
+})
+
 beforeEach(() => {
   vi.clearAllMocks()
-  upsertChannelAccount.mockReturnValue({
-    accountId: 'admin1',
-    accountKey: 'lark:admin1',
+  upsertChannelAccount.mockImplementation(input => ({
+    accountId: input.accountId,
+    accountKey: `${input.channelType}:${input.accountId}`,
     avatarUrl: null,
     channelType: 'lark',
     createdAt: 1,
     displayName: null,
     metadata: null,
     updatedAt: 1
-  })
+  }))
   getChannelIdentityLink.mockReturnValue({
     accountId: 'admin1',
     channelType: 'lark',
@@ -113,7 +157,17 @@ beforeEach(() => {
   })
   getChannelSession.mockReturnValue({ sessionId: 'sess-1' })
   getChannelPreference.mockReturnValue(undefined)
-  getChannelSessionBySessionId.mockReturnValue(undefined)
+  getChannelChildSessionRun.mockReturnValue(makeChildRun())
+  getChannelSessionBySessionId.mockReturnValue({
+    channelId: 'oc_1',
+    channelKey: 'lark-main',
+    channelType: 'lark',
+    replyReceiveId: 'oc_1',
+    replyReceiveIdType: 'chat_id',
+    senderId: 'admin1',
+    sessionId: 'sess-1',
+    sessionType: 'group'
+  })
   getCanonicalUser.mockImplementation((id: string) =>
     id === 'user-admin'
       ? {
@@ -125,7 +179,9 @@ beforeEach(() => {
       : undefined
   )
   getSession.mockReturnValue(undefined)
-  getSessionRuntimeState.mockReturnValue(undefined)
+  getSessionRuntimeState.mockReturnValue({
+    channelActorSnapshot: makeActorSnapshot()
+  })
   getSessions.mockReturnValue([])
   listChannelUserCredentials.mockReturnValue([])
   createChannelCommandRun.mockReturnValue({ id: 'cmd-run-1', status: 'started' })
@@ -140,6 +196,9 @@ beforeEach(() => {
     id: 'auth-1',
     message: '拉群',
     metadata: {
+      allowedApproverRefs: ['admin1', 'user-admin'],
+      channelId: 'oc_1',
+      channelKey: 'lark-main',
       interactionId: 'interaction-1',
       sessionId: 'sess-1'
     },
@@ -151,6 +210,11 @@ beforeEach(() => {
   })
   listPendingChannelAuthorizationRequestsForAccount.mockReturnValue([])
   listPendingChannelAuthorizationRequestsForUser.mockReturnValue([])
+  resolveChannelAuthorizationRequestRecord.mockImplementation(input => ({
+    ...getChannelAuthorizationRequest(),
+    resolvedAt: input.resolvedAt,
+    status: input.status
+  }))
   vi.mocked(listReadyChannelResumeIntents).mockReturnValue([])
   listOpenChannelPendingIntents.mockReturnValue([
     {
@@ -166,6 +230,7 @@ beforeEach(() => {
     deleteChannelSessionBySessionId: vi.fn(),
     finishChannelCommandRun,
     getChannelAuthorizationRequest,
+    getChannelChildSessionRun,
     getChannelIdentityLink,
     getChannelPreference,
     getChannelSession,
@@ -179,6 +244,7 @@ beforeEach(() => {
     listPendingChannelAuthorizationRequestsForAccount,
     listPendingChannelAuthorizationRequestsForUser,
     resolveCanonicalUserByChannelAccount,
+    resolveChannelAuthorizationRequest: resolveChannelAuthorizationRequestRecord,
     updateChannelAuthorizationRequest,
     updateChannelPendingIntent,
     updateSession: vi.fn(),
@@ -192,16 +258,10 @@ beforeEach(() => {
 describe('invokeChannelCommandForState', () => {
   it('invokes channel command tools with the current sender as actor', async () => {
     const result = await invokeChannelCommandForState(makeState(), {
-      context: {
-        channelId: 'oc_1',
-        messageId: 'om_1',
-        senderId: 'admin1',
-        sessionId: 'sess-1',
-        sessionType: 'group'
-      },
       input: {
         id: 'auth-1'
       },
+      invocationToken: makeInvocationToken(),
       toolName: 'channel.auth.grant'
     })
 
@@ -216,9 +276,11 @@ describe('invokeChannelCommandForState', () => {
     })
     expect(upsertChannelAccount).toHaveBeenCalledWith({
       accountId: 'admin1',
-      channelType: 'lark'
+      channelType: 'lark',
+      issuerKey: 'lark-main'
     })
-    expect(updateChannelAuthorizationRequest).toHaveBeenCalledWith('auth-1', {
+    expect(resolveChannelAuthorizationRequestRecord).toHaveBeenCalledWith({
+      id: 'auth-1',
       resolvedAt: expect.any(Number),
       status: 'granted'
     })
@@ -266,16 +328,10 @@ describe('invokeChannelCommandForState', () => {
     ])
 
     const result = await invokeChannelCommandForState(makeState(), {
-      context: {
-        channelId: 'oc_1',
-        messageId: 'om_1',
-        senderId: 'admin1',
-        sessionId: 'sess-1',
-        sessionType: 'group'
-      },
       input: {
         id: 'auth-1'
       },
+      invocationToken: makeInvocationToken(),
       toolName: 'channel.auth.resume'
     })
 
@@ -314,27 +370,16 @@ describe('invokeChannelCommandForState', () => {
   })
 
   it('uses the session actor snapshot when invoking command tools from a channel session', async () => {
+    getChannelChildSessionRun.mockReturnValueOnce(makeChildRun({ messageId: 'om_snapshot' }))
     getSessionRuntimeState.mockReturnValueOnce({
-      channelActorSnapshot: {
-        actorAccountId: 'admin1',
-        actorUserId: 'user-admin',
-        channelId: 'oc_1',
-        channelKey: 'lark-main',
-        channelLinkName: 'wan-ke-chat',
-        channelType: 'lark',
-        entity: 'owo-demo',
-        messageId: 'om_snapshot',
-        senderId: 'admin1',
-        sessionId: 'sess-1',
-        sessionType: 'group'
-      }
+      channelActorSnapshot: makeActorSnapshot({ messageId: 'om_snapshot' })
     })
 
     const result = await invokeChannelCommandForState(makeState(), {
       input: {
         id: 'auth-1'
       },
-      sessionId: 'sess-1',
+      invocationToken: makeInvocationToken(),
       toolName: 'channel.auth.grant'
     })
 
@@ -362,20 +407,9 @@ describe('invokeChannelCommandForState', () => {
   })
 
   it('invokes whoami against the authoritative session actor snapshot', async () => {
+    getChannelChildSessionRun.mockReturnValueOnce(makeChildRun({ messageId: 'om_snapshot' }))
     getSessionRuntimeState.mockReturnValueOnce({
-      channelActorSnapshot: {
-        actorAccountId: 'admin1',
-        actorUserId: 'user-admin',
-        channelId: 'oc_1',
-        channelKey: 'lark-main',
-        channelLinkName: 'wan-ke-chat',
-        channelType: 'lark',
-        entity: 'owo-demo',
-        messageId: 'om_snapshot',
-        senderId: 'admin1',
-        sessionId: 'sess-1',
-        sessionType: 'group'
-      }
+      channelActorSnapshot: makeActorSnapshot({ messageId: 'om_snapshot' })
     })
     listChannelUserCredentials.mockReturnValueOnce([
       {
@@ -383,7 +417,7 @@ describe('invokeChannelCommandForState', () => {
         createdAt: 1,
         credentialKey: 'lark-user',
         expiresAt: null,
-        id: 'cred-1',
+        issuerKey: 'lark-main',
         metadata: null,
         scopes: ['im:message'],
         status: 'active',
@@ -393,7 +427,7 @@ describe('invokeChannelCommandForState', () => {
     ])
 
     const result = await invokeChannelCommandForState(makeState(), {
-      sessionId: 'sess-1',
+      invocationToken: makeInvocationToken(),
       toolName: 'channel.whoami'
     })
 
@@ -407,7 +441,7 @@ describe('invokeChannelCommandForState', () => {
     expect(result.ok === true ? result.replies[0] : '').toContain('发送者：admin1')
     expect(result.ok === true ? result.replies[0] : '').toContain('统一用户：user-admin')
     expect(result.ok === true ? result.replies[0] : '').toContain('可执行凭证：1 个')
-    expect(listChannelUserCredentials).toHaveBeenCalledWith('user-admin', 'lark')
+    expect(listChannelUserCredentials).toHaveBeenCalledWith('lark-main', 'user-admin')
     expect(createChannelCommandRun).toHaveBeenCalledWith(expect.objectContaining({
       actorAccountId: 'admin1',
       actorUserId: 'user-admin',
@@ -418,23 +452,41 @@ describe('invokeChannelCommandForState', () => {
     }))
   })
 
-  it('rejects command tool context that conflicts with the session actor snapshot', async () => {
-    getSessionRuntimeState.mockReturnValueOnce({
-      channelActorSnapshot: {
-        actorAccountId: 'user1',
-        actorUserId: 'user-regular',
-        channelId: 'oc_1',
-        channelKey: 'lark-main',
-        channelType: 'lark',
-        messageId: 'om_snapshot',
-        senderId: 'user1',
-        sessionId: 'sess-1',
-        sessionType: 'group'
-      }
+  it('rejects a tampered child-run token before creating a command run', async () => {
+    const result = await invokeChannelCommandForState(makeState(), {
+      input: {
+        id: 'auth-1'
+      },
+      invocationToken: `${makeInvocationToken()}-tampered`,
+      toolName: 'channel.auth.grant'
     })
 
+    expect(result).toMatchObject({
+      ok: false,
+      statusCode: 403,
+      message: expect.stringContaining('invalid or expired')
+    })
+    expect(createChannelCommandRun).not.toHaveBeenCalled()
+    expect(updateChannelAuthorizationRequest).not.toHaveBeenCalled()
+  })
+
+  it('does not let non-admin senders perform admin command tools', async () => {
+    getChannelChildSessionRun.mockReturnValueOnce(makeChildRun({
+      actorAccountId: 'user1',
+      actorUserId: 'user-regular',
+      senderId: 'user1'
+    }))
+    getSessionRuntimeState.mockReturnValueOnce({
+      channelActorSnapshot: makeActorSnapshot({
+        actorAccountId: 'user1',
+        actorUserId: 'user-regular',
+        senderId: 'user1'
+      })
+    })
     const result = await invokeChannelCommandForState(makeState(), {
       context: {
+        actorAccountId: 'admin1',
+        actorUserId: 'user-admin',
         channelId: 'oc_1',
         senderId: 'admin1',
         sessionId: 'sess-1',
@@ -443,28 +495,7 @@ describe('invokeChannelCommandForState', () => {
       input: {
         id: 'auth-1'
       },
-      toolName: 'channel.auth.grant'
-    })
-
-    expect(result).toMatchObject({
-      ok: false,
-      statusCode: 403,
-      message: expect.stringContaining('senderId')
-    })
-    expect(createChannelCommandRun).not.toHaveBeenCalled()
-    expect(updateChannelAuthorizationRequest).not.toHaveBeenCalled()
-  })
-
-  it('does not let non-admin senders perform admin command tools', async () => {
-    const result = await invokeChannelCommandForState(makeState(), {
-      context: {
-        channelId: 'oc_1',
-        senderId: 'user1',
-        sessionType: 'group'
-      },
-      input: {
-        id: 'auth-1'
-      },
+      invocationToken: makeInvocationToken(),
       toolName: 'channel.auth.grant'
     })
 

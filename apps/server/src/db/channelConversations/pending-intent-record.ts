@@ -98,6 +98,7 @@ export interface PendingIntentUpdates {
 
 export interface PendingIntentFilter {
   authorizationRequestId?: string
+  channelKey?: string
   channelType?: string
   conversationStateId?: string
   ownerAccountId?: string

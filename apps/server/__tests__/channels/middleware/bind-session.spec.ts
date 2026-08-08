@@ -90,6 +90,7 @@ describe('bindSessionMiddleware', () => {
       sessionType: 'direct',
       channelId: 'ch1',
       channelKey: 'lark:default',
+      threadId: undefined,
       senderId: 'user1',
       replyReceiveId: 'recv1',
       replyReceiveIdType: 'chat_id',
@@ -104,6 +105,7 @@ describe('bindSessionMiddleware', () => {
       channelType: 'lark',
       channelKey: 'lark:default',
       channelId: 'ch1',
+      threadId: undefined,
       senderId: 'user1',
       sessionType: 'direct',
       replyReceiveId: 'recv1',
@@ -125,7 +127,32 @@ describe('bindSessionMiddleware', () => {
     expect(next).toHaveBeenCalledOnce()
   })
 
-  it('clears the previous in-memory binding when the channel switches sessions', () => {
+  it('binds a thread independently from the surrounding group', async () => {
+    const ctx = makeCtx({
+      inbound: {
+        ...makeCtx().inbound,
+        channelId: 'group-1',
+        sessionType: 'group',
+        threadId: 'thread-1'
+      } as any
+    })
+
+    await bindSessionMiddleware(ctx, vi.fn().mockResolvedValue(undefined))
+
+    expect(getChannelSession).toHaveBeenCalledWith(
+      'lark:default',
+      'lark',
+      'group',
+      'group-1',
+      'thread-1'
+    )
+    expect(upsertChannelSession).toHaveBeenCalledWith(expect.objectContaining({
+      channelId: 'group-1',
+      threadId: 'thread-1'
+    }))
+  })
+
+  it('keeps the previous child delivery binding when the channel switches sessions', () => {
     getChannelSession.mockReturnValue({ sessionId: 'sess-old' })
 
     bindChannelSession({
@@ -138,7 +165,7 @@ describe('bindSessionMiddleware', () => {
       sessionId: 'sess-new'
     })
 
-    expect(deleteBinding).toHaveBeenCalledWith('sess-old')
+    expect(deleteBinding).not.toHaveBeenCalled()
   })
 
   it('transfers an existing session binding from another channel before rebinding', () => {
@@ -160,6 +187,26 @@ describe('bindSessionMiddleware', () => {
       sessionId: 'sess-abc'
     })
 
-    expect(deleteChannelSession).toHaveBeenCalledWith('lark', 'group', 'group-1')
+    expect(deleteChannelSession).toHaveBeenCalledWith('lark:ops', 'lark', 'group', 'group-1', undefined)
+  })
+
+  it('transfers a session between issuers that share the same external channel', () => {
+    getChannelSessionBySessionId.mockReturnValue({
+      channelType: 'lark',
+      sessionType: 'direct',
+      channelId: 'ch1',
+      channelKey: 'lark:ops',
+      sessionId: 'sess-abc'
+    })
+
+    bindChannelSession({
+      channelType: 'lark',
+      sessionType: 'direct',
+      channelId: 'ch1',
+      channelKey: 'lark:default',
+      sessionId: 'sess-abc'
+    })
+
+    expect(deleteChannelSession).toHaveBeenCalledWith('lark:ops', 'lark', 'direct', 'ch1', undefined)
   })
 })

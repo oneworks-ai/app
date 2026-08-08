@@ -73,7 +73,7 @@ AND credential scope covers the requested resource/action
 当前落地状态：
 
 - `identityMiddleware` 已把入站 sender 解析成 `ctx.actor.account`，如果已有 verified 绑定则同时提供 `ctx.actor.user`。
-- `channel_user_credentials` 已能记录用户在某 channel 下的 credential 元信息和 `needs_auth / active / expired / revoked` 状态。
+- `channel_user_credentials_v2` 已能按 issuer 记录用户在某 channel app 下的 credential 元信息和 `needs_auth / active / expired / revoked` 状态。
 - `channel_authorization_requests` 已能记录 pending 授权请求及 resolved 状态，用于后续把“需要某人授权”从 child session 中持久化出来。表内刻意区分 `requesterUserId/requesterAccountId` 和 `credentialSubjectUserId`：前者表示谁触发了这次请求，后者表示谁的可执行凭证需要补齐；两者相同时是本人授权，两者不同时 resolver 返回 `ask_resource_owner`，pending intent owner 也指向 credential subject。
 - `/auth request|list|grant|deny` 已能通过 channel command fast path 创建、查询、批准和拒绝 `channel_authorization_requests`；普通查询按发送者 actor 限定，grant / deny 目前只允许频道管理员。
 - channel session 中发出的 `interaction_request(kind=permission)` 已会镜像为稳定 id 的 `channel_authorization_requests`，并写入 `metadata.approval`，把当前 sender/canonical user、capability、resolver status 和 reasonCode 固化下来。如果请求 metadata 中带有 `sessionId + interactionId`，`/auth grant` 会 best-effort 回复原 interaction 为 `allow_once`，`/auth deny` 会 best-effort 回复为 `deny_once`，让运行中的任务可以继续或失败。

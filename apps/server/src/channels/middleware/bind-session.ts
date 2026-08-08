@@ -2,30 +2,37 @@ import type { ChannelInboundEvent } from '@oneworks/core/channel'
 
 import { getDb } from '#~/db/index.js'
 
-import { deleteBinding, setBinding, setPendingUnack } from '../state'
+import { setBinding, setPendingUnack } from '../state'
 import type { ChannelMiddleware } from './@types'
 
 const isSameChannel = (
   row: {
+    channelKey: string
     channelType: string
     sessionType: string
     channelId: string
+    threadId?: string
   },
   input: {
+    channelKey: string
     channelType: string
     sessionType: string
     channelId: string
+    threadId?: string
   }
 ) => (
+  row.channelKey === input.channelKey &&
   row.channelType === input.channelType &&
   row.sessionType === input.sessionType &&
-  row.channelId === input.channelId
+  row.channelId === input.channelId &&
+  row.threadId === input.threadId
 )
 
 export const bindChannelSession = (input: {
   channelType: string
   sessionType: string
   channelId: string
+  threadId?: string
   channelKey: string
   senderId?: string
   replyReceiveId?: string
@@ -37,6 +44,7 @@ export const bindChannelSession = (input: {
     channelType,
     sessionType,
     channelId,
+    threadId,
     channelKey,
     senderId,
     replyReceiveId,
@@ -45,18 +53,23 @@ export const bindChannelSession = (input: {
     sessionId
   } = input
   const db = getDb()
-  const previousChannelBinding = db.getChannelSession(channelType, sessionType, channelId)
+  const previousChannelBinding = db.getChannelSession(channelKey, channelType, sessionType, channelId, threadId)
   const transferredBinding = db.getChannelSessionBySessionId(sessionId)
 
-  if (previousChannelBinding?.sessionId != null && previousChannelBinding.sessionId !== sessionId) {
-    deleteBinding(previousChannelBinding.sessionId)
-  }
-
-  if (transferredBinding != null && !isSameChannel(transferredBinding, { channelType, sessionType, channelId })) {
+  const transferChangesDelivery = transferredBinding != null && !isSameChannel(transferredBinding, {
+    channelKey,
+    channelType,
+    sessionType,
+    channelId,
+    threadId
+  })
+  if (transferChangesDelivery) {
     db.deleteChannelSession(
+      transferredBinding.channelKey,
       transferredBinding.channelType,
       transferredBinding.sessionType,
-      transferredBinding.channelId
+      transferredBinding.channelId,
+      transferredBinding.threadId
     )
   }
 
@@ -65,6 +78,7 @@ export const bindChannelSession = (input: {
     channelType,
     sessionType,
     channelId,
+    threadId,
     channelKey,
     senderId,
     replyReceiveId,
@@ -75,6 +89,7 @@ export const bindChannelSession = (input: {
     channelType,
     channelKey,
     channelId,
+    threadId,
     sessionType,
     senderId,
     replyReceiveId,
@@ -86,10 +101,9 @@ export const bindChannelSession = (input: {
     previousSessionId: previousChannelBinding?.sessionId !== sessionId
       ? previousChannelBinding?.sessionId
       : undefined,
-    transferredFrom:
-      transferredBinding != null && !isSameChannel(transferredBinding, { channelType, sessionType, channelId })
-        ? transferredBinding
-        : undefined
+    transferredFrom: transferChangesDelivery
+      ? transferredBinding
+      : undefined
   }
 }
 
@@ -103,6 +117,7 @@ export const syncChannelSessionBinding = (input: {
     channelType: inbound.channelType,
     sessionType: inbound.sessionType,
     channelId: inbound.channelId,
+    threadId: inbound.threadId,
     channelKey,
     senderId: inbound.senderId,
     replyReceiveId: inbound.replyTo?.receiveId,

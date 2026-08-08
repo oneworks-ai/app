@@ -10,6 +10,7 @@ import {
   createServerRuntimeSession,
   summarizeRuntimeSessionContent
 } from '#~/services/runtime-store/session-control.js'
+import { deleteRuntimeSessionStores } from '#~/services/runtime-store/session-delete.js'
 import type { ChannelRuntimeContext } from '#~/services/session/channel-context.js'
 import {
   registerSessionCreationCancellation,
@@ -57,6 +58,16 @@ const resolveCreateSessionWorktreeDefault = async (
     .catch(() => ({ mergedConfig: {} as { conversation?: { createSessionWorktree?: boolean } } }))
 
   return mergedConfig.conversation?.createSessionWorktree ?? false
+}
+
+export const discardIncompleteSessionCreation = async (sessionId: string) => {
+  const db = getDb()
+  const workspace = await resolveSessionWorkspace(sessionId).catch(() => undefined)
+  await deleteRuntimeSessionStores({
+    ...(workspace == null ? {} : { cwd: workspace.workspaceFolder }),
+    sessionId
+  })
+  db.deleteSession(sessionId)
 }
 
 export async function createSessionWithInitialMessage(options: {

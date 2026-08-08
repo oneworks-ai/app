@@ -13,15 +13,15 @@ import type {
 } from './link-code-record'
 
 interface ChannelAccountLinksRepo {
-  getIdentityLink(channelType: string, accountId: string): ChannelIdentityLinkRow | undefined
+  getIdentityLink(issuerKey: string, accountId: string): ChannelIdentityLinkRow | undefined
   linkAccountToUser(row: ChannelIdentityLinkInput): ChannelIdentityLinkRow | undefined
 }
 
 export function createIdentityLinkCodesRepo(db: SqliteDatabase, accounts: ChannelAccountLinksRepo) {
   const getIdentityLinkCode = (code: string) => {
     const stmt = db.prepare(`
-      SELECT code, userId, sourceChannelType, sourceAccountId, status, createdAt, expiresAt,
-             consumedAt, consumedChannelType, consumedAccountId, metadataJson
+      SELECT code, userId, sourceChannelType, sourceIssuerKey, sourceAccountId, status, createdAt, expiresAt,
+             consumedAt, consumedChannelType, consumedIssuerKey, consumedAccountId, metadataJson
       FROM channel_identity_link_codes
       WHERE code = ?
     `)
@@ -33,19 +33,21 @@ export function createIdentityLinkCodesRepo(db: SqliteDatabase, accounts: Channe
     const code = row.code?.trim() || randomUUID().replaceAll('-', '').slice(0, 12)
     const stmt = db.prepare(`
       INSERT INTO channel_identity_link_codes (
-        code, userId, sourceChannelType, sourceAccountId, status, createdAt, expiresAt,
-        consumedAt, consumedChannelType, consumedAccountId, metadataJson
+        code, userId, sourceChannelType, sourceIssuerKey, sourceAccountId, status, createdAt, expiresAt,
+        consumedAt, consumedChannelType, consumedIssuerKey, consumedAccountId, metadataJson
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     stmt.run(
       code,
       row.userId,
       row.sourceChannelType,
+      row.sourceIssuerKey,
       row.sourceAccountId,
       'active',
       now,
       row.expiresAt,
+      null,
       null,
       null,
       null,
@@ -57,13 +59,14 @@ export function createIdentityLinkCodesRepo(db: SqliteDatabase, accounts: Channe
   const markIdentityLinkCode = (code: string, updates: IdentityLinkCodeUpdates) => {
     const stmt = db.prepare(`
       UPDATE channel_identity_link_codes
-      SET status = ?, consumedAt = ?, consumedChannelType = ?, consumedAccountId = ?
+      SET status = ?, consumedAt = ?, consumedChannelType = ?, consumedIssuerKey = ?, consumedAccountId = ?
       WHERE code = ?
     `)
     stmt.run(
       updates.status,
       updates.consumedAt ?? null,
       updates.consumedChannelType ?? null,
+      updates.consumedIssuerKey ?? null,
       updates.consumedAccountId ?? null,
       code
     )
@@ -87,7 +90,7 @@ export function createIdentityLinkCodesRepo(db: SqliteDatabase, accounts: Channe
       return { code: expired, status: 'expired' }
     }
 
-    const existingLink = accounts.getIdentityLink(input.targetChannelType, input.targetAccountId)
+    const existingLink = accounts.getIdentityLink(input.targetIssuerKey, input.targetAccountId)
     if (existingLink?.status === 'verified') {
       return existingLink.userId === code.userId
         ? { code, existingLink, status: 'already_linked' }
@@ -96,6 +99,7 @@ export function createIdentityLinkCodesRepo(db: SqliteDatabase, accounts: Channe
 
     const link = accounts.linkAccountToUser({
       channelType: input.targetChannelType,
+      issuerKey: input.targetIssuerKey,
       accountId: input.targetAccountId,
       userId: code.userId,
       source: 'link_code',
@@ -105,6 +109,7 @@ export function createIdentityLinkCodesRepo(db: SqliteDatabase, accounts: Channe
       consumedAccountId: input.targetAccountId,
       consumedAt: Date.now(),
       consumedChannelType: input.targetChannelType,
+      consumedIssuerKey: input.targetIssuerKey,
       status: 'consumed'
     })
     return {

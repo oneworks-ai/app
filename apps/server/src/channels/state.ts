@@ -34,6 +34,7 @@ export const resolveBinding = (sessionId: string) => {
     channelType: row.channelType,
     channelKey: row.channelKey,
     channelId: row.channelId,
+    threadId: row.threadId,
     sessionType: row.sessionType,
     senderId: row.senderId,
     replyReceiveId: row.replyReceiveId,
@@ -133,4 +134,9 @@ export const isDuplicateMessage = (key: string) => {
     getDb().deleteChannelMessagesSeenBefore(now - seenMessageTtlMs)
   }
   return !isNewMessage
+}
+
+export const releaseMessageDeduplication = (key: string) => {
+  seenMessageIds.delete(key)
+  return getDb().forgetChannelMessage(key)
 }

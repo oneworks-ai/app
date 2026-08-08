@@ -113,6 +113,15 @@ export const ensureAuthorizationRequest = (
     metadata: {
       actorAccountId: requesterAccountId,
       actorUserId: trimNonEmpty(input.actorUserId),
+      allowedApproverRefs: [
+        ...new Set(
+          [
+            ...(input.channelAdmins ?? []),
+            credentialSubjectUserId,
+            requesterUserId
+          ].map(trimNonEmpty).filter((value): value is string => value != null)
+        )
+      ],
       channelId: trimNonEmpty(input.channelId),
       channelKey: trimNonEmpty(input.channelKey),
       childRunId: trimNonEmpty(input.childRunId),

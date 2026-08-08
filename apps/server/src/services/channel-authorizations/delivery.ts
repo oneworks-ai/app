@@ -16,33 +16,10 @@ export const markChannelAuthorizationRequestDelivered = (input: {
   windowMs?: number
 }) => {
   const db = getDb()
-  const request = db.getChannelAuthorizationRequest(input.id)
   const pendingIntents = db.listOpenChannelPendingIntents({
     authorizationRequestId: input.id
   })
   const deliveredAt = input.now ?? Date.now()
-  const firstIntent = pendingIntents[0]
-
-  if (request != null) {
-    db.consumeChannelReplyThrottle({
-      throttleKey: buildAuthorizationDeliveryThrottleKey(input.id),
-      policyType: 'authorization_request_delivery',
-      channelType: request.channelType,
-      channelId: firstIntent?.channelId ??
-        readStringMetadata(request.metadata, 'channelId') ??
-        input.id,
-      channelLinkName: firstIntent?.channelLinkName ?? request.channelLinkName,
-      actorUserId: firstIntent?.ownerUserId ?? request.credentialSubjectUserId ?? request.requesterUserId,
-      actorAccountId: firstIntent?.ownerAccountId ?? request.requesterAccountId,
-      metadata: {
-        authorizationRequestId: input.id,
-        delivery: input.delivery,
-        deliveryMessageId: trimNonEmpty(input.deliveryMessageId)
-      },
-      now: deliveredAt,
-      windowMs: input.windowMs ?? AUTHORIZATION_DELIVERY_THROTTLE_MS
-    })
-  }
 
   for (const intent of pendingIntents) {
     db.updateChannelPendingIntent(intent.id, {
@@ -57,6 +34,47 @@ export const markChannelAuthorizationRequestDelivered = (input: {
 
   return pendingIntents.map(intent => intent.id)
 }
+
+export const reserveChannelAuthorizationRequestDelivery = (input: {
+  id: string
+  now?: number
+  windowMs?: number
+}) => {
+  const db = getDb()
+  const request = db.getChannelAuthorizationRequest(input.id)
+  if (request == null) return undefined
+  const firstIntent = db.listOpenChannelPendingIntents({
+    authorizationRequestId: input.id
+  })[0]
+  const reservedAt = input.now ?? Date.now()
+  const reserved = db.consumeChannelReplyThrottle({
+    throttleKey: buildAuthorizationDeliveryThrottleKey(input.id),
+    policyType: 'authorization_request_delivery',
+    channelType: request.channelType,
+    channelId: firstIntent?.channelId ??
+      readStringMetadata(request.metadata, 'channelId') ??
+      input.id,
+    channelLinkName: firstIntent?.channelLinkName ?? request.channelLinkName,
+    actorUserId: firstIntent?.ownerUserId ?? request.credentialSubjectUserId ?? request.requesterUserId,
+    actorAccountId: firstIntent?.ownerAccountId ?? request.requesterAccountId,
+    metadata: {
+      authorizationRequestId: input.id,
+      reservation: true
+    },
+    now: reservedAt,
+    windowMs: input.windowMs ?? AUTHORIZATION_DELIVERY_THROTTLE_MS
+  })
+  return reserved ? { reservedAt } : undefined
+}
+
+export const releaseChannelAuthorizationRequestDelivery = (input: {
+  id: string
+  reservedAt: number
+}) =>
+  getDb().releaseChannelReplyThrottle({
+    lastSentAt: input.reservedAt,
+    throttleKey: buildAuthorizationDeliveryThrottleKey(input.id)
+  })
 
 export const shouldDeliverChannelAuthorizationRequest = (input: {
   id: string

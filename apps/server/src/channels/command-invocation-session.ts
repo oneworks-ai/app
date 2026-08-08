@@ -46,6 +46,7 @@ const toBindingInfo = (binding: NonNullable<ReturnType<ReturnType<typeof getDb>[
   channelType: binding.channelType,
   sessionType: binding.sessionType,
   channelId: binding.channelId,
+  threadId: binding.threadId,
   channelKey: binding.channelKey
 })
 
@@ -74,6 +75,7 @@ export const createOfflineSessionOperations = (
       channelType: inbound.channelType,
       sessionType: inbound.sessionType,
       channelId: inbound.channelId,
+      threadId: inbound.threadId,
       channelKey,
       senderId: inbound.senderId,
       replyReceiveId: inbound.replyTo?.receiveId,
@@ -93,9 +95,21 @@ export const createOfflineSessionOperations = (
   },
   unbindSession: () => {
     const ctx = getContext()
-    const current = getDb().getChannelSession(inbound.channelType, inbound.sessionType, inbound.channelId)
+    const current = getDb().getChannelSession(
+      channelKey,
+      inbound.channelType,
+      inbound.sessionType,
+      inbound.channelId,
+      inbound.threadId
+    )
     const sessionId = current?.sessionId ?? ctx.sessionId
-    getDb().deleteChannelSession(inbound.channelType, inbound.sessionType, inbound.channelId)
+    getDb().deleteChannelSession(
+      channelKey,
+      inbound.channelType,
+      inbound.sessionType,
+      inbound.channelId,
+      inbound.threadId
+    )
     if (sessionId != null) deleteBinding(sessionId)
     ctx.sessionId = undefined
     return { sessionId }

@@ -19,6 +19,22 @@ export const channelIdentitiesSchemaModule: SchemaModule = {
       CREATE UNIQUE INDEX IF NOT EXISTS idx_channel_accounts_accountKey
         ON channel_accounts(channelType, accountKey);
 
+      CREATE TABLE IF NOT EXISTS channel_accounts_v2 (
+        issuerKey TEXT NOT NULL,
+        channelType TEXT NOT NULL,
+        accountId TEXT NOT NULL,
+        accountKey TEXT NOT NULL,
+        displayName TEXT,
+        avatarUrl TEXT,
+        metadataJson TEXT,
+        createdAt INTEGER NOT NULL,
+        updatedAt INTEGER NOT NULL,
+        PRIMARY KEY (issuerKey, accountId)
+      );
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_channel_accounts_v2_accountKey
+        ON channel_accounts_v2(issuerKey, accountKey);
+
       CREATE TABLE IF NOT EXISTS canonical_users (
         id TEXT PRIMARY KEY,
         displayName TEXT,
@@ -39,6 +55,21 @@ export const channelIdentitiesSchemaModule: SchemaModule = {
 
       CREATE INDEX IF NOT EXISTS idx_channel_identity_links_userId
         ON channel_identity_links(userId);
+
+      CREATE TABLE IF NOT EXISTS channel_identity_links_v2 (
+        issuerKey TEXT NOT NULL,
+        channelType TEXT NOT NULL,
+        accountId TEXT NOT NULL,
+        userId TEXT NOT NULL,
+        status TEXT NOT NULL,
+        source TEXT,
+        createdAt INTEGER NOT NULL,
+        updatedAt INTEGER NOT NULL,
+        PRIMARY KEY (issuerKey, accountId)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_channel_identity_links_v2_userId
+        ON channel_identity_links_v2(userId);
 
       CREATE TABLE IF NOT EXISTS channel_identity_link_codes (
         code TEXT PRIMARY KEY,
@@ -77,6 +108,24 @@ export const channelIdentitiesSchemaModule: SchemaModule = {
       CREATE INDEX IF NOT EXISTS idx_channel_user_credentials_channelType
         ON channel_user_credentials(channelType);
 
+      CREATE TABLE IF NOT EXISTS channel_user_credentials_v2 (
+        issuerKey TEXT NOT NULL,
+        userId TEXT NOT NULL,
+        channelType TEXT NOT NULL,
+        credentialKey TEXT NOT NULL,
+        label TEXT,
+        status TEXT NOT NULL,
+        scopesJson TEXT,
+        expiresAt INTEGER,
+        metadataJson TEXT,
+        createdAt INTEGER NOT NULL,
+        updatedAt INTEGER NOT NULL,
+        PRIMARY KEY (issuerKey, userId, credentialKey)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_channel_user_credentials_v2_user
+        ON channel_user_credentials_v2(issuerKey, userId);
+
       CREATE TABLE IF NOT EXISTS channel_authorization_requests (
         id TEXT PRIMARY KEY,
         channelType TEXT NOT NULL,
@@ -102,5 +151,12 @@ export const channelIdentitiesSchemaModule: SchemaModule = {
         ON channel_authorization_requests(channelType, credentialSubjectUserId, status);
     `)
     ensureColumn('channel_authorization_requests', 'credentialSubjectUserId', 'TEXT')
+    ensureColumn('channel_identity_link_codes', 'sourceIssuerKey', 'TEXT')
+    ensureColumn('channel_identity_link_codes', 'consumedIssuerKey', 'TEXT')
+    exec(`
+      UPDATE channel_identity_link_codes
+      SET sourceIssuerKey = sourceChannelType
+      WHERE sourceIssuerKey IS NULL;
+    `)
   }
 }

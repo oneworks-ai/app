@@ -13,13 +13,14 @@ const resolveCurrentAccount = (ctx: ChannelContext): ChannelAccountRow | undefin
   const senderId = ctx.inbound.senderId?.trim()
   if (senderId == null || senderId === '') return undefined
   return getDb().upsertChannelAccount({
+    issuerKey: ctx.channelKey,
     channelType: ctx.inbound.channelType,
     accountId: senderId
   })
 }
 
 const resolveCurrentUser = (ctx: ChannelContext, account: ChannelAccountRow): CanonicalUserRow | undefined =>
-  ctx.actor?.user ?? getDb().resolveCanonicalUserByChannelAccount(account.channelType, account.accountId)
+  ctx.actor?.user ?? getDb().resolveCanonicalUserByChannelAccount(account.issuerKey, account.accountId)
 
 const ensureCurrentUser = (ctx: ChannelContext, account: ChannelAccountRow) => {
   const existing = resolveCurrentUser(ctx, account)
@@ -30,6 +31,7 @@ const ensureCurrentUser = (ctx: ChannelContext, account: ChannelAccountRow) => {
   })
   if (user != null) {
     getDb().linkChannelAccountToUser({
+      issuerKey: account.issuerKey,
       channelType: account.channelType,
       accountId: account.accountId,
       userId: user.id,
@@ -44,7 +46,7 @@ const formatAccountLine = (account: ChannelAccountRow) => {
   const label = account.displayName == null || account.displayName.trim() === ''
     ? ''
     : ` | ${account.displayName.trim()}`
-  return `- ${account.channelType}:${account.accountId} | ${account.accountKey}${label}`
+  return `- ${account.channelType}/${account.issuerKey}:${account.accountId} | ${account.accountKey}${label}`
 }
 
 const createLinkCode = async (ctx: ChannelContext, account: ChannelAccountRow) => {
@@ -57,6 +59,7 @@ const createLinkCode = async (ctx: ChannelContext, account: ChannelAccountRow) =
   const code = getDb().createChannelIdentityLinkCode({
     userId: user.id,
     sourceChannelType: account.channelType,
+    sourceIssuerKey: account.issuerKey,
     sourceAccountId: account.accountId,
     expiresAt: Date.now() + LINK_CODE_TTL_MS,
     metadata: {
@@ -85,6 +88,7 @@ const consumeLinkCode = async (ctx: ChannelContext, account: ChannelAccountRow, 
   const result = getDb().consumeChannelIdentityLinkCode({
     code,
     targetChannelType: account.channelType,
+    targetIssuerKey: account.issuerKey,
     targetAccountId: account.accountId
   })
 

@@ -2,6 +2,7 @@
 import type { ConfigSource, WSEvent } from '@oneworks/core'
 import type { ChannelBaseConfig, ChannelInboundEvent, ChannelSessionMcpServer } from '@oneworks/core/channel'
 
+import { getDb } from '#~/db/index.js'
 import { loadChannelLinks } from '#~/services/channel-links/index.js'
 import { logger } from '#~/utils/logger.js'
 
@@ -33,6 +34,38 @@ const collectChannelEntries = (configs: ReadonlyArray<ChannelConfigSourceEntry>)
   return entries
 }
 
+const migrateUnambiguousLegacyIdentityNamespaces = (
+  channels: ReadonlyMap<string, { source: ConfigSource; value: unknown }>
+) => {
+  const issuerKeysByType = new Map<string, Set<string>>()
+  for (const [key, entry] of channels) {
+    if (entry.value == null || typeof entry.value !== 'object') continue
+    const type = (entry.value as Record<string, unknown>).type
+    if (typeof type !== 'string' || type.trim() === '') continue
+    const issuerKeys = issuerKeysByType.get(type) ?? new Set<string>()
+    issuerKeys.add(key)
+    issuerKeysByType.set(type, issuerKeys)
+  }
+
+  for (const [channelType, issuerKeys] of issuerKeysByType) {
+    if (issuerKeys.size !== 1) {
+      logger.warn(
+        { channelType, issuerKeys: [...issuerKeys] },
+        '[channels] skipped ambiguous legacy identity namespace migration'
+      )
+      continue
+    }
+    const issuerKey = [...issuerKeys][0]!
+    const result = getDb().migrateLegacyChannelIdentityNamespace({ channelType, issuerKey })
+    if (Object.values(result).some(count => count > 0)) {
+      logger.info(
+        { channelType, issuerKey, ...result },
+        '[channels] migrated legacy identity namespace'
+      )
+    }
+  }
+}
+
 let channelManager: ChannelManager | null = null
 
 const getChannelLogContext = (key: string, type: string, configSource: ConfigSource) => ({
@@ -44,12 +77,7 @@ const getChannelLogContext = (key: string, type: string, configSource: ConfigSou
 const getErrorMessage = (error: unknown) => error instanceof Error ? error.message : String(error)
 
 const loadChannelLinksForRuntime = async () => {
-  try {
-    return await loadChannelLinks()
-  } catch (error) {
-    logger.warn({ error: getErrorMessage(error) }, '[channels] failed to load channel links')
-    return []
-  }
+  return await loadChannelLinks()
 }
 
 export const initChannels = async (
@@ -57,6 +85,7 @@ export const initChannels = async (
   options: InitChannelsOptions = {}
 ): Promise<ChannelManager> => {
   const channels = collectChannelEntries(configs)
+  migrateUnambiguousLegacyIdentityNamespaces(channels)
   const channelLinks = await loadChannelLinksForRuntime()
   const states = new Map<string, ChannelRuntimeState>()
   for (const [key, entry] of channels.entries()) {
@@ -109,7 +138,19 @@ export const initChannels = async (
         continue
       }
       const connectionConfig = parsed.success ? parsed.data : rawConfig
-      connection = await mod.create(connectionConfig, { logger })
+      connection = await mod.create(connectionConfig, {
+        channelKey: key,
+        logger,
+        webhookNonceStore: {
+          commit: input => {
+            getDb().commitChannelWebhookNonce(input)
+          },
+          release: input => {
+            getDb().releaseChannelWebhookNonce(input)
+          },
+          reserve: input => getDb().reserveChannelWebhookNonce(input)
+        }
+      })
       const state: ChannelRuntimeState = {
         key,
         type,

@@ -41,11 +41,11 @@ Lark 的 `open_id` 是 app-scoped，所以必须把 app/bot 维度写进 account
 当前服务端已经落了第一层持久化与入站解析骨架：
 
 - `apps/server/src/db/channelIdentities/schema.ts`
-  - `channel_accounts`：保存平台账号元信息，主键是 `channelType + accountId`，`accountKey` 用来承载租户/app/bot 维度后的稳定账号引用。
+  - `channel_accounts_v2`：保存平台账号元信息，主键是 `issuerKey(channelKey) + accountId`，`accountKey` 用来承载租户/app/bot 维度后的稳定账号引用。
   - `canonical_users`：保存 OneWorks 认知里的统一用户。
-  - `channel_identity_links`：把平台账号绑定到 canonical user，当前状态先支持 `pending / verified / revoked`。
+  - `channel_identity_links_v2`：在明确 issuer namespace 下把平台账号绑定到 canonical user，当前状态先支持 `pending / verified / revoked`。
   - `channel_identity_link_codes`：保存短期跨账号绑定码，用于证明两个 channel account 由同一人控制后绑定到同一个 canonical user。
-  - `channel_user_credentials`：保存某用户在某 channel 下的 credential 元信息和状态，不保存 token 本体。
+  - `channel_user_credentials_v2`：按 `issuerKey + userId + credentialKey` 保存 credential 元信息和状态，不保存 token 本体。
   - `channel_authorization_requests`：保存用户级授权请求的 pending / granted / denied / expired 生命周期。
 - `apps/server/src/channels/middleware/identity.ts`
   - 每条带 `senderId` 的 inbound message 会先 upsert 平台账号。
@@ -119,7 +119,7 @@ service_only  只能使用 app/bot/service principal 能力
 
 在不支持多账号登录的阶段，大部分账号只能处于 `linked` 或 `service_only`。它们仍然可以参与记忆归属、软屏蔽、上下班策略、router 规则和审计，但不能作为 executable actor 去调用用户级 API。需要用户级 API 时，ApprovalPolicyResolver 应创建授权 pending intent，而不是把动作落到当前登录用户或机器人账号上。
 
-当前实现用 `channel_user_credentials.status` 表达 credential 层状态：
+当前实现用 `channel_user_credentials_v2.status` 表达 credential 层状态：
 
 ```text
 needs_auth

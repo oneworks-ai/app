@@ -21,6 +21,7 @@ export const getErrorMessage = (error: unknown) => error instanceof Error ? erro
 
 export const resolveActor = (
   inbound: ChannelInboundEvent,
+  issuerKey: string,
   actorUserId?: string
 ): ChannelContext['actor'] => {
   const senderId = inbound.senderId?.trim()
@@ -28,14 +29,15 @@ export const resolveActor = (
 
   const db = getDb()
   const account = db.upsertChannelAccount({
+    issuerKey,
     channelType: inbound.channelType,
     accountId: senderId
   })
-  const identityLink = db.getChannelIdentityLink(inbound.channelType, senderId)
+  const identityLink = db.getChannelIdentityLink(issuerKey, senderId)
   const user = actorUserId != null
     ? db.getCanonicalUser(actorUserId)
     : identityLink?.status === 'verified'
-    ? db.resolveCanonicalUserByChannelAccount(inbound.channelType, senderId)
+    ? db.resolveCanonicalUserByChannelAccount(issuerKey, senderId)
     : undefined
 
   if (account == null) return undefined
@@ -65,6 +67,7 @@ export const resolveInboundForCommand = (
       raw: { source: 'channel_command_tool' },
       ...(senderId == null ? {} : { senderId }),
       sessionType,
+      ...(trimNonEmpty(context.threadId) == null ? {} : { threadId: trimNonEmpty(context.threadId) }),
       ...(replyReceiveId == null
         ? {}
         : {
@@ -80,10 +83,13 @@ export const resolveInboundForCommand = (
 export const resolveChannelLinkForCommand = (
   state: ChannelRuntimeState,
   inbound: ChannelInboundEvent
-): ResolvedChannelLink | undefined =>
-  resolveChannelLinkBinding(state.channelLinks ?? [], {
+): ResolvedChannelLink | undefined => {
+  const match = resolveChannelLinkBinding(state.channelLinks ?? [], {
     channelId: inbound.channelId,
     channelKey: state.key,
     senderId: inbound.senderId,
-    sessionType: inbound.sessionType
-  })?.link
+    sessionType: inbound.sessionType,
+    threadId: inbound.threadId
+  })
+  return match == null || match.duplicates.length > 0 ? undefined : match.link
+}

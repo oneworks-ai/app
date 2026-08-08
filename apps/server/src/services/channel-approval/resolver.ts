@@ -50,8 +50,18 @@ const resolveCredentialDecision = (
     })
   }
 
-  const credential = getDb().getChannelUserCredential(subjectUserId, input.channelType, credentialKey)
   const askStatus = resolveCredentialAskStatus(input, subjectUserId)
+  const issuerKey = trimNonEmpty(input.channelKey)
+  if (issuerKey == null) {
+    const reasonCode = 'credential-issuer-unresolved'
+    return makeDecision(input, askStatus, reasonCode, {
+      authorizationRequest: ensureAuthorizationRequest(input, reasonCode, subjectUserId),
+      credentialKey,
+      credentialSubjectUserId: subjectUserId
+    })
+  }
+
+  const credential = getDb().getChannelUserCredential(issuerKey, subjectUserId, credentialKey)
   if (credential == null) {
     const reasonCode = 'credential-missing'
     return makeDecision(input, askStatus, reasonCode, {

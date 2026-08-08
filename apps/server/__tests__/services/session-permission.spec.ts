@@ -57,6 +57,7 @@ describe('session permission service', () => {
     permissions: { allow: string[]; deny: string[]; ask: string[] }
   }
   const updateSessionRuntimeState = vi.fn()
+  const consumeSessionPermissionOnce = vi.fn()
   const getChannelSessionBySessionId = vi.fn()
   const getChannelAuthorizationRequest = vi.fn()
   const createChannelAuthorizationRequest = vi.fn()
@@ -84,6 +85,24 @@ describe('session permission service', () => {
         }
       }
     )
+    consumeSessionPermissionOnce.mockImplementation((_sessionId: string, keys: string[]) => {
+      const denyKey = keys.find(key => runtimeState.onceDeny.includes(key))
+      const allowKey = denyKey == null ? keys.find(key => runtimeState.onceAllow.includes(key)) : undefined
+      const key = denyKey ?? allowKey
+      if (key == null) return undefined
+
+      const decision = denyKey == null ? 'allow' as const : 'deny' as const
+      runtimeState = {
+        ...runtimeState,
+        onceAllow: decision === 'allow'
+          ? runtimeState.onceAllow.filter(item => item !== key)
+          : runtimeState.onceAllow,
+        onceDeny: decision === 'deny'
+          ? runtimeState.onceDeny.filter(item => item !== key)
+          : runtimeState.onceDeny
+      }
+      return { decision, key, state: runtimeState }
+    })
     getChannelSessionBySessionId.mockReturnValue(undefined)
     getChannelAuthorizationRequest.mockReturnValue(undefined)
     createChannelAuthorizationRequest.mockImplementation(row => ({
@@ -98,6 +117,7 @@ describe('session permission service', () => {
     resolveCanonicalUserByChannelAccount.mockReturnValue(undefined)
 
     mocks.getDb.mockReturnValue({
+      consumeSessionPermissionOnce,
       createChannelAuthorizationRequest,
       getChannelAuthorizationRequest,
       getChannelUserCredential,

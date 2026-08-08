@@ -5,7 +5,7 @@ status: draft
 authors:
   - Codex
 created: 2026-06-16
-updated: 2026-06-17
+updated: 2026-08-09
 targetVersion: vNext
 ---
 
@@ -22,7 +22,7 @@ Channel command 不应作为绕过 agent/runtime 的旁路命令系统。它们�
 命令工具是普通 tool 的一个受限子集：
 
 ```ts
-type ChannelCommandTool = {
+interface ChannelCommandTool {
   name: string
   namespace: 'channel'
   action: string
@@ -58,7 +58,7 @@ channel.memory.forget
 每次 command tool 调用必须携带 ActorContext：
 
 ```ts
-type ActorContext = {
+interface ActorContext {
   actorUserId: string
   actorAccountId: string
   channelLinkId: string
@@ -149,7 +149,7 @@ Agent 可以从自然语言里提取目标，但 tool runtime 必须重新校验
 Command tool 返回结构化结果：
 
 ```ts
-type ChannelCommandResult = {
+interface ChannelCommandResult {
   status: 'ok' | 'degraded' | 'pending_approval' | 'denied' | 'failed'
   publicSummary?: string
   privateSummary?: string
@@ -180,8 +180,8 @@ Fast path 只是省掉模型理解，不是绕过 runtime。
 - 现有 channel command middleware 仍保留 slash fast path；同时 `CommandSpec` 树已能生成 `channel.*` sender-scoped typed tool registry。
 - 解析成功的 slash fast path 会写入 `channel_command_runs`，记录 actor、channel、channel link、command path、raw args、permission、status 和错误；成功、管理员拒绝和执行失败都会完成 run 状态。
 - `invokeChannelCommandTool()` 已可按 tool name + JSON input 调用同一条 command runner，typed invocation 和 slash fast path 共享权限拦截、action 和 `channel_command_runs` 审计；typed invocation 的 run source 默认为 `natural_language`。
-- 服务端新增 `/api/channels/:channelKey/commands` 和 `/api/channels/:channelKey/commands/invoke`，可在没有外部平台连接 reply 能力的情况下，用当前 channel runtime state 离线调用 typed command tool。
-- CLI 新增 `oneworks channel command list` 和 `oneworks channel command invoke <toolName> [jsonInput]`，供 ChildSession / agent 从注入的 channel context 中调用；它会传递当前 channel id、sender id、session id 和 reply target，但不会使用当前桌面/CLI 登录态冒充发送者。
+- 服务端新增 `/api/channels/:channelKey/commands` 和 `/api/channels/:channelKey/commands/invoke`。typed invoke 只接受服务端签发给当前 child run 的短期 HMAC token、tool name 和 input，不接受调用方自报 actor、session 或 reply target。
+- CLI 新增 `oneworks channel command list` 和 `oneworks channel command invoke <toolName> [jsonInput]`，供 ChildSession / agent 使用。CLI 从当前消息上下文文件读取 invocation token；服务端再用 token 关联 child run、session actor snapshot 和不可变 delivery binding，重建 sender-scoped authority。
 - `buildChannelRuntimeSystemPrompt()` 和 `oneworks-channel` skill 已提示 agent：管理频道内部状态使用 `oneworks channel command`，command output 只进入 shell / Chat History；需要群里可见时再用 `oneworks channel send` 发摘要。
 - 新增 `/auth request <capability> [message]`：按发送者 `ctx.actor.user` / `ctx.actor.account` 创建 `channel_authorization_requests`。
 - 新增 `/auth list`：普通用户查看自己的 pending 授权请求；未绑定 canonical user 时按平台账号查询。
@@ -198,7 +198,7 @@ Fast path 只是省掉模型理解，不是绕过 runtime。
 
 如果 typed command 只修改当前 entity/channel 的配置，例如 `/auth list`、`/whoami`、`/access`，可以按 actor identity 和频道管理员规则执行。如果它需要用户个人账号能力，例如读取某人的私有云文档、代某人审批、代某人加人进群，则必须先检查 credential state；没有凭证时生成 authorization intent，并优先私信、ephemeral 或授权页请求本人授权。不能退化成使用当前登录用户、bot app 或企业管理员账号代替发送者执行。
 
-因此当前 CLI 注入方案的边界是：CLI 是“把当前消息上下文交给服务端”的 transport，不是登录态本身。服务端只能相信 channel runtime 写入的 sender/channel context，并按 channel 配置、identity link 和 authorization request 判定；如果将来支持多账号 OAuth，也应只是补齐 `actor credential`，不能改变 `actor identity` 的来源。
+因此当前 CLI 注入方案的边界是：CLI 是携带一次 child-run capability token 的 transport，不是登录态本身。服务端只相信签名 token 指向的持久化 actor snapshot、child run 和 delivery binding，并按 channel 配置、identity link 和 authorization request 判定；如果将来支持多账号 OAuth，也应只是补齐 `actor credential`，不能改变 `actor identity` 的来源。
 
 ## Observability
 

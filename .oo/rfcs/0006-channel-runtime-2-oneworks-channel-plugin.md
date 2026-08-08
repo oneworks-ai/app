@@ -110,7 +110,7 @@ room/direct/thread message
 执行规则：
 
 - channel command tool 和 child session 的权限按消息发送者 actor 裁决。
-- 用户级 API 必须检查 `channel_user_credentials` 是否 active 且 scope 覆盖。
+- 用户级 API 必须在当前 `channelKey` issuer 下检查 `channel_user_credentials_v2` 是否 active 且 scope 覆盖。
 - 没有 credential 时只能发起 authorization request、降级或拒绝，不能借用桌面登录态、CLI profile、bot app secret 或当前房间 owner 的权限。
 - `/whoami` 应展示 channel account、canonical user、identity link 和 credential 数量，用于排查“认得这个人”和“能代表他执行”是否混淆。
 

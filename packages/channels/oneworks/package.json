@@ -1,6 +1,6 @@
 {
   "name": "@oneworks/channel-oneworks",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0-rc.2",
   "repository": {
     "type": "git",
     "url": "https://github.com/oneworks-ai/app.git",
@@ -34,6 +34,15 @@
       "default": {
         "import": "./dist/connection.mjs",
         "require": "./dist/connection.js"
+      }
+    },
+    "./webhook-signature": {
+      "__oneworks__": {
+        "default": "./src/webhook-signature.ts"
+      },
+      "default": {
+        "import": "./dist/webhook-signature.mjs",
+        "require": "./dist/webhook-signature.js"
       }
     },
     "./package.json": "./package.json"

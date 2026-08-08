@@ -7,7 +7,7 @@ const isAutoResumeReady = (
   resume: ChannelResumePayload,
   now = Date.now()
 ) => (
-  resume.status === 'ready' &&
+  (resume.status === 'ready' || (resume.status === 'dispatching' && (resume.leaseExpiresAt ?? Infinity) <= now)) &&
   (resume.mode == null || resume.mode === 'immediate') &&
   (resume.notBefore == null || resume.notBefore <= now)
 )
@@ -16,7 +16,7 @@ const isNextMessageResumeReady = (
   resume: ChannelResumePayload,
   now = Date.now()
 ) => (
-  resume.status === 'ready' &&
+  (resume.status === 'ready' || (resume.status === 'dispatching' && (resume.leaseExpiresAt ?? Infinity) <= now)) &&
   resume.mode === 'next_message' &&
   (resume.notBefore == null || resume.notBefore <= now)
 )
@@ -31,7 +31,11 @@ export const listReadyChannelResumeIntents = (
   getDb().listResolvedChannelPendingIntents(filter)
     .map(intent => {
       const resume = readResumePayload(intent)
-      if (resume?.status !== 'ready') return undefined
+      if (
+        resume == null ||
+        (resume.status !== 'ready' &&
+          !(resume.status === 'dispatching' && (resume.leaseExpiresAt ?? Infinity) <= (options.now ?? Date.now())))
+      ) return undefined
       if (options.includeDeferred !== true && !isAutoResumeReady(resume, options.now)) return undefined
       return { intent, resume }
     })

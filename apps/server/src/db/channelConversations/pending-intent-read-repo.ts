@@ -11,6 +11,10 @@ function appendFilter(clauses: string[], params: string[], filter: PendingIntent
     clauses.push('channelType = ?')
     params.push(filter.channelType)
   }
+  if (filter.channelKey != null) {
+    clauses.push('channelKey = ?')
+    params.push(filter.channelKey)
+  }
   if (filter.conversationStateId != null) {
     clauses.push('conversationStateId = ?')
     params.push(filter.conversationStateId)
