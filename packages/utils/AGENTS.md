@@ -13,7 +13,8 @@
   - 对象 key 转换 helper
 - `src/document-path.ts`
   - workspace 共享的路径规范化 helper
-- `src/adapter-account.ts` / `src/adapter-account-revision.ts`
+- `src/adapter-account.ts` / `src/adapter-account-*.ts`
+  - `adapter-account.ts` 只显式导出拆分前已有的公共账户 API 与 revision 兼容 API；private 模块的 layout 常量和 helper 不经 package facade 暴露。portable key/path 在 `path-validation` / `paths`，目录与 metadata 身份检查在 `fs` / `root` / `metadata`，generation 发布在 `storage` / `publication`，写删编排在 `artifacts`
   - adapter 账户 artifact 的账户级加锁、不可变 generation + 原子 current pointer 发布 / 安全删除，以及 credential revision 兼容 API；已解析的旧 generation 保留到显式 remove，避免发布窗口让无锁 reader 失效。未发布的完整 orphan generation 也保留到显式 remove，目前不做可能破坏旧 reader 的自动 GC
   - artifact 写删必须以 canonical project home 为锚逐段拒绝 ancestor symlink / 非目录，并在锁前后和发布 / 删除前复核目录 identity
   - artifact 路径和 adapter/account 单段必须使用这里的统一校验；凭证 revision 的有效域与比较由 `@oneworks/types` 拥有

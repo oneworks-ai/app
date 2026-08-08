@@ -1,25 +1,13 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 import { authContextHasPermission, resolveAuthContext } from '../auth/permissions.js'
-import { filterRelayConfigPatch, normalizeRelayConfigSafeFields } from '../config-snapshot-normalize.js'
 import { deviceTokenMatches } from '../devices/private-metadata.js'
 import { getBearerToken, readRequestBody, sendJson } from '../http.js'
 import { devicePrincipalForDevice, hasRelayPermission, relayPermissions } from '../permissions/index.js'
-import {
-  mergeRelayPersonalConfigPatches,
-  normalizeRelayPersonalDocumentSnapshot,
-  upsertRelayPersonalConfigSnapshot
-} from '../personal-config.js'
+import { upsertRelayPersonalConfigSnapshot } from '../personal-config.js'
 import type { RelayStoreRepository } from '../storage/repository.js'
-import type {
-  RelayConfigPatch,
-  RelayDevice,
-  RelayPersonalConfigSnapshot,
-  RelayServerArgs,
-  RelayStore,
-  RelayUser
-} from '../types.js'
-import { isRecord } from '../utils.js'
+import type { RelayDevice, RelayServerArgs, RelayStore, RelayUser } from '../types.js'
+import { preparePersonalConfigWrite, serializePersonalConfigSnapshot } from './personal-config-write.js'
 
 const findDeviceByToken = (store: RelayStore, token: string) => (
   token === '' ? undefined : store.devices.find(device => deviceTokenMatches(device, token))
@@ -79,54 +67,6 @@ const resolvePersonalConfigAuth = (
   return accountResult
 }
 
-const serializePersonalConfigSnapshot = (snapshot: RelayPersonalConfigSnapshot | undefined) => (
-  snapshot == null
-    ? null
-    : {
-      allowedFields: snapshot.allowedFields,
-      ...(snapshot.configPatch == null ? {} : { configPatch: snapshot.configPatch }),
-      ...(snapshot.documents == null ? {} : { documents: snapshot.documents }),
-      hash: snapshot.hash,
-      sourceDeviceId: snapshot.sourceDeviceId,
-      updatedAt: snapshot.updatedAt,
-      userId: snapshot.userId,
-      version: snapshot.version
-    }
-)
-
-const pickPatchPayload = (body: Record<string, unknown>) => {
-  if (isRecord(body.configPatch)) return body.configPatch
-  if (isRecord(body.config)) return body.config
-  if (isRecord(body.patch)) return body.patch
-  return undefined
-}
-
-const pickDocumentsPayload = (body: Record<string, unknown>) => {
-  if (isRecord(body.documents)) return body.documents
-  if (isRecord(body.documentSnapshot)) return body.documentSnapshot
-  return undefined
-}
-
-const findInvalidRequestedDefaultAccount = (
-  partialPatch: RelayConfigPatch | undefined,
-  mergedPatch: RelayConfigPatch | undefined
-) => {
-  if (!isRecord(partialPatch?.adapters)) return undefined
-  for (const [adapterKey, adapter] of Object.entries(partialPatch.adapters)) {
-    if (!isRecord(adapter) || typeof adapter.defaultAccount !== 'string') continue
-    const requestedDefault = adapter.defaultAccount.trim()
-    if (requestedDefault === '') continue
-    const mergedAdapter = isRecord(mergedPatch?.adapters?.[adapterKey])
-      ? mergedPatch.adapters[adapterKey]
-      : undefined
-    const mergedAccounts = isRecord(mergedAdapter?.accounts) ? mergedAdapter.accounts : undefined
-    if (mergedAdapter?.defaultAccount !== requestedDefault || mergedAccounts?.[requestedDefault] == null) {
-      return `${adapterKey}.${requestedDefault}`
-    }
-  }
-  return undefined
-}
-
 export const handleRelayPersonalConfigRoute = async (
   req: IncomingMessage,
   res: ServerResponse,
@@ -167,58 +107,14 @@ export const handleRelayPersonalConfigRoute = async (
     return true
   }
 
-  const allowedFields = normalizeRelayConfigSafeFields(body.allowedFields)
-  const rawConfigPatch = pickPatchPayload(body)
-  const rawDocuments = pickDocumentsPayload(body)
-  const partialConfigPatch = rawConfigPatch == null
-    ? undefined
-    : filterRelayConfigPatch(rawConfigPatch, allowedFields, {
-      allowDanglingDefaultAccount: true
-    })
-  const mergedAllowedFields = normalizeRelayConfigSafeFields([
-    ...(existing?.allowedFields ?? []),
-    ...allowedFields
-  ])
-  const mergedConfigPatch = rawConfigPatch == null
-    ? existing?.configPatch
-    : mergeRelayPersonalConfigPatches(existing?.configPatch ?? {}, partialConfigPatch)
-  const configPatch = rawConfigPatch == null
-    ? existing?.configPatch
-    : filterRelayConfigPatch(mergedConfigPatch, mergedAllowedFields)
-  const documents = rawDocuments == null
-    ? existing?.documents
-    : normalizeRelayPersonalDocumentSnapshot(rawDocuments)
-
-  if (rawConfigPatch == null && rawDocuments == null) {
-    sendJson(res, 400, { error: 'A safe config patch or encrypted document snapshot is required.' }, args.allowOrigin)
-    return true
-  }
-  if (rawConfigPatch != null && partialConfigPatch == null) {
-    sendJson(res, 400, { error: 'A safe config patch is required.' }, args.allowOrigin)
-    return true
-  }
-  const invalidRequestedDefault = findInvalidRequestedDefaultAccount(partialConfigPatch, configPatch)
-  if (invalidRequestedDefault != null) {
-    sendJson(res, 400, {
-      error: `Default adapter account "${invalidRequestedDefault}" is missing or deleted.`
-    }, args.allowOrigin)
-    return true
-  }
-  if (rawDocuments != null && documents == null) {
-    sendJson(res, 400, { error: 'A valid encrypted document snapshot is required.' }, args.allowOrigin)
-    return true
-  }
-  if (configPatch == null && documents == null) {
-    sendJson(res, 400, { error: 'A safe config patch or encrypted document snapshot is required.' }, args.allowOrigin)
+  const prepared = preparePersonalConfigWrite(body, existing)
+  if ('error' in prepared) {
+    sendJson(res, 400, { error: prepared.error }, args.allowOrigin)
     return true
   }
 
   const snapshot = upsertRelayPersonalConfigSnapshot(store, {
-    allowedFields: rawConfigPatch == null && existing != null
-      ? existing.allowedFields
-      : mergedAllowedFields,
-    configPatch,
-    documents,
+    ...prepared.value,
     sourceDeviceId: auth.device?.id,
     userId: auth.user.id
   })

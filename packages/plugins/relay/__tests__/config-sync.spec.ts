@@ -48,7 +48,7 @@ afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
 })
 
-describe('Relay personal config causal sync', () => {
+describe('relay personal config causal sync', () => {
   it('publishes higher credential revisions and tombstones even when the local clock is slow', async () => {
     const remoteToken = Buffer.from('remote').toString('base64')
     const localToken = Buffer.from('local').toString('base64')

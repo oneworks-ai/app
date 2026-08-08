@@ -12,6 +12,7 @@
 - `src/routes/admin-sso-providers.ts`：B 端托管 SSO provider 管理 API。
 - `src/routes/teams.ts`、`src/routes/team-*.ts`、`src/routes/config-secrets.ts`、`src/teams.ts`、`src/config-secrets.ts`：团队、成员、租户团队策略、配置 secret 加密存储 / 轮换 / 撤销 API 与团队配置消费权限 helper；`/api/relay/teams` 面向用户自助团队流程，`/api/admin/teams` 和 `/api/admin/team-policy` 只给站点管理员。
 - `src/routes/project-rule-documents.ts` / `src/project-rule-documents.ts`：项目规则 assignment 自有文档快照的当前用户与管理员 API、权限边界和持久化归一化；它不是账号 / 团队文档索引，也不负责读取正文或判断本地 Git 项目是否命中规则。
+- `src/routes/personal-config.ts` / `src/routes/personal-config-write.ts`：个人 global config route 认证、并发响应与安全 partial-write 归一化；PUT 的 partial merge / strict validation 留在 write helper，route 不复制该协议。
 - `src/routes/admin-openapi.ts`：Relay 机器可读 OpenAPI 3.1 文档；平台管理员 API 挂载在 `/api/admin/openapi.json`，个人用户 API 挂载在 `/api/profile/openapi.json`，不要写入真实 token 或部署 secret。Admin 前端只读取这两份文档，不在 `apps/relay-admin` 复制 paths / schema。
 - `src/routes/profile.ts`：当前登录用户自己的 profile 安全 API，包括系统访问令牌、OpenAPI 调用审计查询、密码修改和 passkey 绑定；不要在这里实现他人用户管理动作。
 - `src/devices/private-metadata.ts`：设备私有元数据加密、解密和 device token hash 工具。

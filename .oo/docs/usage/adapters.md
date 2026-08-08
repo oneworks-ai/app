@@ -193,13 +193,3 @@ adapters:
 - `mode` 会直接映射 `--mode`，并优先于 `autopilot` / plan permission；需要 autopilot 时推荐配置 `mode: autopilot` 或 `autopilot: true` 二选一
 
 当前不实现 Copilot 多账号 API；需要登录、切换或排查账号时，使用官方 CLI 的 `/login`、`/logout`、`/user` 流程。
-
-## 什么时候更新文档
-
-如果你修改了下面这些行为，记得同步更新本文以及 CLI / Web 使用文档：
-
-- 适配器配置页的分组和入口位置
-- `defaultAccount` / `accounts` 的配置语义
-- 账号目录结构
-- CLI 子命令行为
-- quota / rate-limit 的刷新和缓存策略
