@@ -1,6 +1,8 @@
 import { spawn } from 'node:child_process'
 import process from 'node:process'
 
+import { sanitizeInheritedNodeRuntimeEnv } from '@oneworks/utils/process-env'
+
 import { ensureDesktopInstall } from './desktop-install'
 import type { DesktopInstallMode } from './desktop-mode'
 import { readDesktopPreference, resolveInstallMode } from './desktop-mode'
@@ -27,7 +29,7 @@ export const launchDesktopApp = async (options: LaunchDesktopAppOptions) => {
     cwd: workspaceFolder,
     detached: true,
     env: {
-      ...process.env,
+      ...sanitizeInheritedNodeRuntimeEnv(process.env),
       ONEWORKS_DESKTOP_WORKSPACE: workspaceFolder,
       __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: workspaceFolder
     },
@@ -40,5 +42,6 @@ export const launchDesktopApp = async (options: LaunchDesktopAppOptions) => {
 export const __TEST_ONLY__ = {
   readDesktopPreference,
   resolveInstallMode,
+  sanitizeInheritedNodeRuntimeEnv,
   selectDesktopAsset
 }

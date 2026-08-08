@@ -192,7 +192,7 @@ const assertPackagedBuiltinPlugins = (appDir) => {
   }
 }
 
-const packagedMainSmokeMarker = '[oneworks-desktop] packaged main smoke ready'
+const packagedMainSmokeMarker = '[oneworks-desktop] packaged manager smoke ready'
 
 const runPackagedMainSmoke = async (paths) => {
   const smokeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'oneworks-desktop-main-smoke-'))
@@ -204,7 +204,11 @@ const runPackagedMainSmoke = async (paths) => {
       const child = spawn(paths.executablePath, [`--user-data-dir=${userDataDir}`], {
         env: {
           ...process.env,
-          ONEWORKS_DESKTOP_PACKAGE_MAIN_SMOKE: '1'
+          ONEWORKS_TEST_DESKTOP_PACKAGE_MAIN_SMOKE: '1',
+          __IS_LOADER_CLI__: 'true',
+          __IS_ONEWORKS_HOOK_LOADER__: 'true',
+          __ONEWORKS_CLI_HELPER_LOADER_ACTIVE__: 'true',
+          __ONEWORKS_HOOK_LOADER_ACTIVE__: 'true'
         },
         stdio: ['ignore', 'pipe', 'pipe']
       })
@@ -220,7 +224,7 @@ const runPackagedMainSmoke = async (paths) => {
       const timeout = setTimeout(() => {
         child.kill('SIGKILL')
         finish(new Error(`Packaged Electron main smoke timed out.\n${output}`))
-      }, 30000)
+      }, serverReadyTimeoutMs)
 
       child.stdout.on('data', chunk => {
         output += chunk

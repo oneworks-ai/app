@@ -298,6 +298,12 @@ describe('desktop runtime consumer bootstrap path', () => {
       clientOrigin,
       env: {
         ...process.env,
+        NODE_OPTIONS: '--require=/tmp/foreign-preload.cjs',
+        NODE_PATH: '/tmp/foreign-node-modules',
+        __IS_LOADER_CLI__: 'true',
+        __IS_ONEWORKS_HOOK_LOADER__: 'true',
+        __ONEWORKS_CLI_HELPER_LOADER_ACTIVE__: 'true',
+        __ONEWORKS_HOOK_LOADER_ACTIVE__: 'true',
         __ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__: workspaceFolder,
         __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: workspaceFolder,
         __ONEWORKS_PROJECT_WORKSPACE_FOLDER_RESOLVE_CWD__: workspaceFolder
@@ -321,6 +327,13 @@ describe('desktop runtime consumer bootstrap path', () => {
     expect(runtimeEnv.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__).toBeUndefined()
     expect(runtimeEnv.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__).toBeUndefined()
     expect(runtimeEnv.__ONEWORKS_PROJECT_WORKSPACE_FOLDER_RESOLVE_CWD__).toBeUndefined()
+    expect(runtimeEnv.NODE_OPTIONS).not.toContain('/tmp/foreign-preload.cjs')
+    expect(runtimeEnv.NODE_OPTIONS).toContain('--conditions=__oneworks__')
+    expect(runtimeEnv.NODE_PATH).toBeUndefined()
+    expect(runtimeEnv.__IS_LOADER_CLI__).toBeUndefined()
+    expect(runtimeEnv.__IS_ONEWORKS_HOOK_LOADER__).toBeUndefined()
+    expect(runtimeEnv.__ONEWORKS_CLI_HELPER_LOADER_ACTIVE__).toBe('true')
+    expect(runtimeEnv.__ONEWORKS_HOOK_LOADER_ACTIVE__).toBeUndefined()
   })
 
   it('passes cached server package dirs to workspace server children only in packaged mode', async () => {

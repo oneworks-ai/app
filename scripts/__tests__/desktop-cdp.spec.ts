@@ -8,10 +8,21 @@ import {
   attemptDesktopCdpWindowRaise,
   completeDesktopCdpLaunchReadiness,
   inspectDesktopExternalCdpSupport,
-  inspectDesktopRecordingDemoFixtureSupport
+  inspectDesktopRecordingDemoFixtureSupport,
+  sanitizeInheritedNodeRuntimeEnv
 } from '../desktop-cdp'
 
 describe('desktop CDP launch safety', () => {
+  it('removes parent loader state before launching an independent desktop app', () => {
+    expect(sanitizeInheritedNodeRuntimeEnv({
+      NODE_OPTIONS: '--require=/tmp/foreign-preload.cjs',
+      NODE_PATH: '/tmp/foreign-node-modules',
+      __IS_LOADER_CLI__: 'true',
+      __ONEWORKS_CLI_HELPER_LOADER_ACTIVE__: 'true',
+      PATH: '/usr/bin'
+    })).toEqual({ PATH: '/usr/bin' })
+  })
+
   it('treats Accessibility window raise as best effort for capture-validated launches', async () => {
     await expect(attemptDesktopCdpWindowRaise(async () => {
       throw new Error('AX index is not ready')

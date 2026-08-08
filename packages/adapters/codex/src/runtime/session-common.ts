@@ -7,7 +7,12 @@ import process from 'node:process'
 import { resolveConfigState } from '@oneworks/config'
 import { NATIVE_HOOK_BRIDGE_ADAPTER_ENV, resolveMockHome } from '@oneworks/hooks'
 import type { AdapterCtx, AdapterQueryOptions, Config, ModelServiceConfig } from '@oneworks/types'
-import { createStartupProfiler, mergeProcessEnvWithProjectEnv, resolveModelServiceConfig } from '@oneworks/utils'
+import {
+  createStartupProfiler,
+  mergeProcessEnvWithProjectEnv,
+  resolveModelServiceConfig,
+  sanitizeOneWorksLoaderEnv
+} from '@oneworks/utils'
 import { createLogger } from '@oneworks/utils/create-logger'
 import { parse as parseToml } from 'smol-toml'
 
@@ -59,8 +64,9 @@ function mapSingleContentToCodexInput(
 }
 
 function buildSpawnEnv(ctx: Pick<AdapterCtx, 'cwd' | 'env'>): NodeJS.ProcessEnv {
-  const env = mergeProcessEnvWithProjectEnv(ctx.env, { workspaceFolder: ctx.cwd })
-  delete env.__IS_LOADER_CLI__
+  const env = sanitizeOneWorksLoaderEnv(
+    mergeProcessEnvWithProjectEnv(ctx.env, { workspaceFolder: ctx.cwd })
+  )
   delete env.NODE_OPTIONS
   return env
 }

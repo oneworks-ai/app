@@ -11,6 +11,7 @@
     "../../apps/cli/__tests__/**/*",
     "../../apps/relay-server/__tests__/**/*",
     "../../apps/server/__tests__/**/*",
+    "../../apps/vscode-extension/__tests__/**/*",
     "../../scripts/__tests__/**/*"
   ]
 }

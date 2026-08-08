@@ -6,6 +6,7 @@ import process from 'node:process'
 import { resolvePrimaryWorkspaceFolder, resolveProjectHomePath } from '@oneworks/register/dotenv'
 
 import { getWorkspaceDescription, getWorkspaceDisplayName } from '../workspace-state.cjs'
+import { sanitizeDesktopChildProcessEnv } from './child-process-env'
 import { resolvePackagedCliPathEnv } from './cli-path-env'
 import { CLIENT_BASE, SERVER_HOST } from './constants'
 import {
@@ -65,7 +66,7 @@ const createWorkspaceRuntimeEnv = (workspaceFolder: string): NodeJS.ProcessEnv =
     process.env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__?.trim() != null &&
     process.env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__?.trim() !== ''
   const env: NodeJS.ProcessEnv = {
-    ...process.env,
+    ...sanitizeDesktopChildProcessEnv(process.env),
     __ONEWORKS_PROJECT_LAUNCH_CWD__: normalizedWorkspaceFolder,
     __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: normalizedWorkspaceFolder,
     __ONEWORKS_PROJECT_WORKSPACE_FOLDER_RESOLVE_CWD__: normalizedWorkspaceFolder
@@ -136,20 +137,19 @@ const quoteNodeOptionValue = (value: string) => (
 
 export const resolveDirectSourceLoaderEnv = (
   executable: string
-): Pick<NodeJS.ProcessEnv, 'NODE_OPTIONS' | '__IS_LOADER_CLI__'> | {} => {
+): Pick<NodeJS.ProcessEnv, 'NODE_OPTIONS' | '__ONEWORKS_CLI_HELPER_LOADER_ACTIVE__'> | {} => {
   if (!isDev) return {}
   if (executable !== 'node' && path.basename(executable) !== 'node') return {}
 
   const registerPreloadPath = path.join(repoRoot, 'packages/register/preload.js')
   const nodeOptions = [
     '--conditions=__oneworks__',
-    `--require=${quoteNodeOptionValue(registerPreloadPath)}`,
-    process.env.NODE_OPTIONS ?? ''
+    `--require=${quoteNodeOptionValue(registerPreloadPath)}`
   ].filter(value => value.trim() !== '').join(' ').trim()
 
   return {
     NODE_OPTIONS: nodeOptions,
-    __IS_LOADER_CLI__: 'true'
+    __ONEWORKS_CLI_HELPER_LOADER_ACTIVE__: 'true'
   }
 }
 

@@ -44,5 +44,6 @@ find .oo/rules -maxdepth 1 -type f -name '*.md' -print0 | xargs -0 wc -c -l
 - 历史任务分布与六模型微基准报告：[`maintenance/model-routing-analysis.md`](./maintenance/model-routing-analysis.md)
 - 任务规划、委派与经验沉淀：[`maintenance/task-planning.md`](./maintenance/task-planning.md)
 - 开发服务跨会话状态、租约、事件与运维子会话：[`maintenance/dev-service-coordination.md`](./maintenance/dev-service-coordination.md)
+- 跨进程环境变量命名、继承清洗与污染回归：[`maintenance/process-environment.md`](./maintenance/process-environment.md)
 - 能力展示录屏工具：[`maintenance/demo-video.md`](./maintenance/demo-video.md)
 - 桌面打包 runtime cache：[`maintenance/desktop-packaged-runtime-cache.md`](./maintenance/desktop-packaged-runtime-cache.md)

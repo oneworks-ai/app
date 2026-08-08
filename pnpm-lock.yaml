@@ -146,6 +146,9 @@ importers:
       '@oneworks/cli-helper':
         specifier: workspace:*
         version: link:../../packages/cli-helper
+      '@oneworks/utils':
+        specifier: workspace:*
+        version: link:../../packages/utils
       commander:
         specifier: ^12.1.0
         version: 12.1.0

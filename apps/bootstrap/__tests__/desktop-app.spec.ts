@@ -39,6 +39,20 @@ describe('desktop asset selection', () => {
   })
 })
 
+describe('desktop launch environment', () => {
+  it('does not forward host Node loader state to the desktop app', () => {
+    expect(__TEST_ONLY__.sanitizeInheritedNodeRuntimeEnv({
+      HOME: '/tmp/home',
+      NODE_OPTIONS: '--require=/tmp/foreign-preload.cjs',
+      NODE_PATH: '/tmp/foreign-node-modules',
+      __IS_LOADER_CLI__: 'true',
+      __ONEWORKS_CLI_HELPER_LOADER_ACTIVE__: 'true'
+    })).toEqual({
+      HOME: '/tmp/home'
+    })
+  })
+})
+
 describe('desktop install mode resolution', () => {
   const originalRealHome = process.env.__ONEWORKS_PROJECT_REAL_HOME__
   const originalStdinIsTTY = process.stdin.isTTY

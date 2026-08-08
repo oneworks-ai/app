@@ -7,5 +7,6 @@
 - Show explicit eligibility, deletion, and recovery states for session worktree actions across Git, workspace, and runtime limitations.
 - Strengthen unsigned macOS desktop candidates with complete ad-hoc resource sealing and stricter arm64/x64 DMG, PKG, and ZIP verification.
 - Restore all locale and theme variants of the adapter documentation videos with complete decode verification.
+- Prevent Desktop and other standalone runtimes from inheriting host loader markers or Node preload state that could leave the packaged app on a white screen.
 
 Compatibility notes: `POST /api/ai/assets` now returns HTTP 202 with an operation that clients poll to completion; worktree creation eligibility is enforced explicitly; and runtime packages must be rolled out on the coordinated `1.0.0-rc.0` identity for exact-version compatibility.

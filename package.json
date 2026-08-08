@@ -20,6 +20,7 @@
     "desktop:package": "pnpm -C apps/desktop package",
     "desktop:package:icon": "pnpm -C apps/desktop package:icon",
     "dprint": "node ./scripts/run-workspace-check.mjs --require-bin dprint -- pnpm exec dprint",
+    "env-contract:check": "node ./scripts/check-env-contract.mjs",
     "security:audit:production": "node ./scripts/release-security-audit.mjs",
     "release:preflight:stable": "node ./scripts/stable-release-preflight.mjs --version 1.0.0",
     "start": "pnpm tools dev-service ensure web",

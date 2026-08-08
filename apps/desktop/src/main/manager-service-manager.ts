@@ -6,6 +6,7 @@ import { app } from 'electron'
 
 import { resolveProjectHomePath } from '@oneworks/register/dotenv'
 
+import { sanitizeDesktopChildProcessEnv } from './child-process-env'
 import { resolvePackagedCliPathEnv } from './cli-path-env'
 import { CLIENT_BASE, MANAGER_READY_TIMEOUT_MS, SERVER_HOST } from './constants'
 import {
@@ -50,7 +51,7 @@ const createManagerBaseEnv = (
   launchCwd: string
 ): NodeJS.ProcessEnv => {
   const nextEnv: NodeJS.ProcessEnv = {
-    ...env,
+    ...sanitizeDesktopChildProcessEnv(env),
     __ONEWORKS_PROJECT_HOME_PROJECT_DIR__: 'manager',
     __ONEWORKS_PROJECT_LAUNCH_CWD__: launchCwd,
     __ONEWORKS_PROJECT_REAL_HOME__: env.__ONEWORKS_PROJECT_REAL_HOME__ ?? env.HOME ?? app.getPath('home'),

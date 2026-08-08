@@ -84,6 +84,7 @@ pnpm exec eslint .
 pnpm dprint check
 pnpm dprint fmt
 pnpm typecheck
+pnpm env-contract:check
 pnpm tools message-actions verify
 pnpm tools commitmsg-check <base> <head>
 pnpm -C apps/cli test

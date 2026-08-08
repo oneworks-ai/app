@@ -6,10 +6,14 @@ import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
 
+import { sanitizeInheritedNodeRuntimeEnv } from '@oneworks/utils/process-env'
+
 import { getChromeDebugTargets } from './chrome-debug'
 import { processFingerprint, terminateTrackedPid } from './dev-start/process-identity'
 import { raiseMacosWindow } from './macos-window-control'
 import { DEFAULT_DESKTOP_APP_PATH } from './release-verify'
+
+export { sanitizeInheritedNodeRuntimeEnv } from '@oneworks/utils/process-env'
 
 const DEFAULT_DESKTOP_CDP_ADDRESS = '127.0.0.1'
 const DEFAULT_DESKTOP_CDP_WAIT_MS = 30_000
@@ -327,7 +331,7 @@ export const runDesktopCdpLaunch = async (input: DesktopCdpLaunchInput = {}) => 
   ], {
     detached: true,
     env: {
-      ...process.env,
+      ...sanitizeInheritedNodeRuntimeEnv(process.env),
       ONEWORKS_DESKTOP_CDP_PORT: String(port),
       ONEWORKS_DESKTOP_CDP_ADDRESS: address,
       ONEWORKS_DESKTOP_USER_DATA_DIR: userDataDir,
