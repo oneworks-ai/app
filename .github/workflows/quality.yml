@@ -34,6 +34,8 @@ jobs:
             command: pnpm exec eslint .
           - name: format-check
             command: pnpm dprint check
+          - name: env-contract
+            command: pnpm env-contract:check
           - name: typecheck
             command: pnpm typecheck
           - name: docs-media

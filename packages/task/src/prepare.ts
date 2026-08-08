@@ -12,7 +12,8 @@ import {
   createStartupProfiler,
   mergeProcessEnvWithProjectEnv,
   migrateProjectHomeSegments,
-  nowStartupMs
+  nowStartupMs,
+  sanitizeOneWorksLoaderEnv
 } from '@oneworks/utils'
 import { getCacheWithLegacyFallback, setCache } from '@oneworks/utils/cache'
 import { createLogger } from '@oneworks/utils/create-logger'
@@ -35,10 +36,9 @@ export const prepare = async (
     ctxId = process.env.__ONEWORKS_PROJECT_CTX_ID__ ?? sessionId,
     env: envFromOptions
   } = options
-  const {
-    __IS_LOADER_CLI__: _0,
-    ...prevEnv
-  } = mergeProcessEnvWithProjectEnv(envFromOptions, { workspaceFolder: cwd })
+  const prevEnv = sanitizeOneWorksLoaderEnv(
+    mergeProcessEnvWithProjectEnv(envFromOptions, { workspaceFolder: cwd })
+  )
   const env: Record<string, string | null | undefined> = {
     ...prevEnv,
     __ONEWORKS_PROJECT_CTX_ID__: ctxId,

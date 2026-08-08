@@ -79,6 +79,7 @@ describe('managed hook runtime', () => {
       },
       {
         ...env,
+        __IS_ONEWORKS_HOOK_LOADER__: 'true',
         __ONEWORKS_PROJECT_CTX_ID__: 'ctx-managed-hook',
         __ONEWORKS_PROJECT_SERVER_HOST__: '127.0.0.1',
         __ONEWORKS_PROJECT_SERVER_PORT__: '1'

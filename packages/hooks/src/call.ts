@@ -49,7 +49,7 @@ const resolveManagedHookProcess = () => {
     env: {
       // call-hook.js normally forks again to enter source runtime. The internal
       // callHook path already controls the Node flags, so skip that wrapper hop.
-      __IS_ONEWORKS_HOOK_LOADER__: 'true'
+      __ONEWORKS_HOOK_LOADER_ACTIVE__: 'true'
     }
   }
 }

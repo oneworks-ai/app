@@ -30,6 +30,7 @@
   "dependencies": {
     "@clack/prompts": "^0.11.0",
     "@oneworks/cli-helper": "workspace:*",
+    "@oneworks/utils": "workspace:*",
     "commander": "^12.1.0"
   }
 }

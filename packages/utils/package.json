@@ -155,6 +155,15 @@
         "require": "./dist/plugin-resolver.js"
       }
     },
+    "./process-env": {
+      "__oneworks__": {
+        "default": "./src/process-env.ts"
+      },
+      "default": {
+        "import": "./dist/process-env.mjs",
+        "require": "./dist/process-env.js"
+      }
+    },
     "./pinyin-search": {
       "__oneworks__": {
         "default": "./src/pinyin-search.ts"

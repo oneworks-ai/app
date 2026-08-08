@@ -7,6 +7,8 @@ const path = require('node:path')
 const { performance } = require('node:perf_hooks')
 const process = require('node:process')
 
+const HOOK_LOADER_ACTIVE_ENV = '__ONEWORKS_HOOK_LOADER_ACTIVE__'
+
 process.env.__ONEWORKS_HOOK_CHILD_SCRIPT_ENTRY_EPOCH_MS__ = String(Date.now())
 
 const setProfileDuration = (name, startedAt) => {
@@ -102,7 +104,7 @@ const distEntrypoint = path.resolve(__dirname, './dist/entry.js')
 const shouldLoadSourceEntrypoint = existsSync(sourceEntrypoint)
 setProfileDuration('RESOLVE_ENTRYPOINT', resolveEntrypointStartedAt)
 
-if (shouldLoadSourceEntrypoint && !process.env.__IS_ONEWORKS_HOOK_LOADER__) {
+if (shouldLoadSourceEntrypoint && process.env[HOOK_LOADER_ACTIVE_ENV] !== 'true') {
   const child = spawn(
     process.execPath,
     [
@@ -115,7 +117,7 @@ if (shouldLoadSourceEntrypoint && !process.env.__IS_ONEWORKS_HOOK_LOADER__) {
       stdio: 'inherit',
       env: {
         ...process.env,
-        __IS_ONEWORKS_HOOK_LOADER__: 'true'
+        [HOOK_LOADER_ACTIVE_ENV]: 'true'
       }
     }
   )

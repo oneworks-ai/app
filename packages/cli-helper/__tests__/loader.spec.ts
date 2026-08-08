@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- loader process-boundary regressions share expensive fixture setup. */
 import { spawn, spawnSync } from 'node:child_process'
 import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
@@ -134,6 +135,35 @@ require(${JSON.stringify(cliEntryPath)}).runCliPackageEntrypoint({
 
     expect(result.status).toBe(7)
     expect(result.signal).toBeNull()
+  })
+
+  it('installs its own TypeScript loader when the parent leaks a legacy loader marker', async () => {
+    const tempDir = await mkdtemp(resolve(tmpdir(), 'ow-cli-helper-polluted-'))
+    tempDirs.push(tempDir)
+
+    const entryPath = resolve(tempDir, 'entry.ts')
+    await writeFile(entryPath, "const result: string = 'loader-ready'; process.stdout.write(result)\n")
+
+    const result = spawnSync(
+      process.execPath,
+      [resolve(process.cwd(), 'packages/cli-helper/loader.js')],
+      {
+        cwd: process.cwd(),
+        env: {
+          ...process.env,
+          __IS_LOADER_CLI__: 'true',
+          __ONEWORKS_CLI_HELPER_LOADER_ACTIVE__: undefined,
+          __ONEWORKS_PROJECT_PACKAGE_DIR__: tempDir,
+          __ONEWORKS_PROJECT_CLI_BIN_SOURCE_ENTRY__: entryPath
+        },
+        encoding: 'utf8'
+      }
+    )
+
+    expect(result.status).toBe(0)
+    expect(result.signal).toBeNull()
+    expect(result.stderr).toBe('')
+    expect(result.stdout).toBe('loader-ready')
   })
 
   it('bootstraps cli package environment before delegating to the loader', async () => {

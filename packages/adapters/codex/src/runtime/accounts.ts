@@ -31,6 +31,7 @@ import {
   normalizeNonEmptyString,
   resolveGlobalOneWorksDir,
   resolveProjectOoPath,
+  sanitizeOneWorksLoaderEnv,
   syncSymlinkTarget,
   unlinkMockHomeBridgePaths
 } from '@oneworks/utils'
@@ -213,8 +214,9 @@ const throwIfAborted = (signal: AbortSignal | undefined) => {
 }
 
 const buildSpawnEnv = (ctx: Pick<AdapterCtx, 'cwd' | 'env'>): NodeJS.ProcessEnv => {
-  const env = mergeProcessEnvWithProjectEnv(ctx.env, { workspaceFolder: ctx.cwd })
-  delete env.__IS_LOADER_CLI__
+  const env = sanitizeOneWorksLoaderEnv(
+    mergeProcessEnvWithProjectEnv(ctx.env, { workspaceFolder: ctx.cwd })
+  )
   delete env.NODE_OPTIONS
   return env
 }

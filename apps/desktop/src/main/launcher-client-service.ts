@@ -5,6 +5,7 @@ import process from 'node:process'
 
 import { app } from 'electron'
 
+import { sanitizeDesktopChildProcessEnv } from './child-process-env'
 import { CLIENT_BASE, SERVER_HOST } from './constants'
 import { startPackagedLauncherStaticServer } from './launcher-static-server'
 import { clientCliPath, isDev, resolveClientDevExecutable, resolveClientDistPath } from './paths'
@@ -110,7 +111,7 @@ export const createLauncherClientServiceManager = ({
     const child = spawn(clientExecutable, [clientCliPath], {
       cwd: app.getPath('userData'),
       env: {
-        ...process.env,
+        ...sanitizeDesktopChildProcessEnv(process.env),
         __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: '',
         __ONEWORKS_PROJECT_CLIENT_BASE__: CLIENT_BASE,
         __ONEWORKS_PROJECT_CLIENT_DEV_SERVER__: 'true',

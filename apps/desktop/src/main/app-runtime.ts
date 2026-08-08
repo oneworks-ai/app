@@ -417,6 +417,27 @@ export const createDesktopApp = () => {
     refreshAppMenu,
     runtimeState
   })
+  const runPackagedManagerSmoke = async () => {
+    try {
+      const [launcherClientService, managerService] = await Promise.all([
+        launcherClientServiceManager.ensureLauncherClientService(),
+        managerServiceManager.ensureManagerService()
+      ])
+      if (launcherClientService.clientUrl == null || managerService.serverUrl == null) {
+        throw new Error('The packaged desktop services did not publish their ready URLs.')
+      }
+      return {
+        clientUrl: launcherClientService.clientUrl,
+        managerUrl: managerService.serverUrl
+      }
+    } finally {
+      runtimeState.isQuitting = true
+      await Promise.all([
+        launcherClientServiceManager.stopLauncherClientService(runtimeState.launcherClientService),
+        managerServiceManager.stopManagerService(runtimeState.managerService)
+      ])
+    }
+  }
   const quitCoordinator = createDesktopQuitCoordinator({
     onShutdownError: (error) => {
       const message = error instanceof Error ? error.message : String(error)
@@ -944,6 +965,7 @@ export const createDesktopApp = () => {
   return {
     bootstrap,
     initialWorkspaceFolder,
+    runPackagedManagerSmoke,
     runtimeState
   }
 }

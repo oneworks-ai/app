@@ -7,6 +7,7 @@ import * as vscode from 'vscode'
 import { CLIENT_BASE, SERVER_HOST } from './constants'
 import { createProcessPath } from './path-search'
 import { createMissingBootstrapCommandMessage, resolveBootstrapCommand } from './server-command'
+import { createServerRuntimeEnv } from './server-env'
 import { assertServerUiReady, getAvailablePort, isRunning, stopChild, waitForServerStartup } from './server-process'
 import { normalizeOptionalString } from './utils'
 
@@ -91,13 +92,7 @@ export class ServerManager {
       workspaceFolder.uri.fsPath
     ]
 
-    const env = { ...process.env }
-    delete env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__
-    delete env.__ONEWORKS_PROJECT_HOME_PROJECT_DIR__
-    env.__ONEWORKS_PROJECT_LAUNCH_CWD__ = workspaceFolder.uri.fsPath
-    env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__ = workspaceFolder.uri.fsPath
-    env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER_RESOLVE_CWD__ = workspaceFolder.uri.fsPath
-    env.__ONEWORKS_PROJECT_WEB_AUTH_ENABLED__ = 'false'
+    const env = createServerRuntimeEnv(workspaceFolder.uri.fsPath, process.env)
 
     const child = spawn(bootstrapCommand.command, args, {
       cwd: workspaceFolder.uri.fsPath,
