@@ -1,3 +1,4 @@
+# eslint-disable max-lines -- Quality keeps protected required contexts and tiered PR validation in one workflow.
 name: Quality Checks
 
 on:
@@ -22,10 +23,79 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
-  quality:
-    name: ${{ matrix.name }}
+  classify-changes:
+    name: validation-scope
     if: github.event_name != 'pull_request' || github.event.action != 'edited'
     runs-on: ubuntu-latest
+    outputs:
+      docs_changed: ${{ steps.scope.outputs.docs_changed }}
+      docs_only: ${{ steps.scope.outputs.docs_only }}
+      full: ${{ steps.scope.outputs.full }}
+      policy_docs: ${{ steps.scope.outputs.policy_docs }}
+      public_docs: ${{ steps.scope.outputs.public_docs }}
+      release_docs: ${{ steps.scope.outputs.release_docs }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Classify validation scope
+        id: scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        shell: bash
+        run: |
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            node scripts/pr-validation-scope.cjs \
+              --base "$BASE_SHA" \
+              --head "$HEAD_SHA" \
+              --github-output "$GITHUB_OUTPUT" \
+              --json
+          else
+            node scripts/pr-validation-scope.cjs \
+              --force-full \
+              --github-output "$GITHUB_OUTPUT" \
+              --json
+          fi
+
+      - name: Validate classifier output contract
+        env:
+          DOCS_CHANGED: ${{ steps.scope.outputs.docs_changed }}
+          DOCS_ONLY: ${{ steps.scope.outputs.docs_only }}
+          FULL: ${{ steps.scope.outputs.full }}
+          POLICY_DOCS: ${{ steps.scope.outputs.policy_docs }}
+          PUBLIC_DOCS: ${{ steps.scope.outputs.public_docs }}
+          RELEASE_DOCS: ${{ steps.scope.outputs.release_docs }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for output in "$DOCS_CHANGED" "$DOCS_ONLY" "$FULL" "$POLICY_DOCS" "$PUBLIC_DOCS" "$RELEASE_DOCS"; do
+            [[ "$output" == "true" || "$output" == "false" ]] || {
+              echo "Classifier emitted an incomplete or non-boolean output contract." >&2
+              exit 1
+            }
+          done
+          [[ "$DOCS_ONLY" != "$FULL" ]] || {
+            echo "Exactly one of docs_only and full must be true." >&2
+            exit 1
+          }
+          [[ "$DOCS_ONLY" != "true" || "$DOCS_CHANGED" == "true" ]] || {
+            echo "A docs-only scope must report docs_changed=true." >&2
+            exit 1
+          }
+
+  quality:
+    name: ${{ matrix.name }}
+    needs: classify-changes
+    if: >-
+      always() &&
+      (github.event_name != 'pull_request' || github.event.action != 'edited')
+    runs-on: ubuntu-latest
+    env:
+      FULL_VALIDATION: ${{ needs.classify-changes.result != 'success' || needs.classify-changes.outputs.docs_only != 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -43,31 +113,144 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Checkout demo video submodule
+        if: >-
+          env.FULL_VALIDATION == 'true' ||
+          (matrix.name == 'docs-media' && needs.classify-changes.outputs.public_docs == 'true')
         run: git submodule update --init --depth 1 -- assets/demo-video
 
       - name: Setup pnpm
+        if: >-
+          env.FULL_VALIDATION == 'true' ||
+          (matrix.name == 'docs-media' && needs.classify-changes.outputs.public_docs == 'true')
         uses: pnpm/action-setup@v4
         with:
           version: 11.7.0
 
       - name: Setup Node.js
+        if: >-
+          env.FULL_VALIDATION == 'true' ||
+          (matrix.name == 'docs-media' && needs.classify-changes.outputs.public_docs == 'true')
         uses: actions/setup-node@v4
         with:
           node-version-file: .node-version
           cache: pnpm
 
       - name: Install dependencies
+        if: >-
+          env.FULL_VALIDATION == 'true' ||
+          (matrix.name == 'docs-media' && needs.classify-changes.outputs.public_docs == 'true')
         run: pnpm install --frozen-lockfile
 
       - name: Install FFmpeg
-        if: matrix.name == 'docs-media'
+        if: >-
+          matrix.name == 'docs-media' &&
+          (env.FULL_VALIDATION == 'true' ||
+          needs.classify-changes.outputs.public_docs == 'true')
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends --yes ffmpeg
 
       - name: Run ${{ matrix.name }}
+        if: env.FULL_VALIDATION == 'true'
         run: ${{ matrix.command }}
+
+      - name: Validate changed documentation scope, privacy, links, anchors, and diff
+        if: needs.classify-changes.outputs.docs_changed == 'true' && matrix.name == 'lint'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/docs-only-validation.mjs --base "$BASE_SHA" --head "$HEAD_SHA" --allow-mixed
+
+      - name: Check docs-only formatting
+        if: needs.classify-changes.outputs.docs_only == 'true' && matrix.name == 'format-check'
+        uses: dprint/check@v2.3
+        with:
+          dprint-version: 0.50.2
+
+      - name: Confirm docs-only typecheck scope
+        if: needs.classify-changes.outputs.docs_only == 'true' && matrix.name == 'typecheck'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: >-
+          node scripts/pr-validation-scope.cjs
+          --base "$BASE_SHA"
+          --head "$HEAD_SHA"
+          --assert-docs-only
+
+      - name: Confirm docs-only full-gate exclusions
+        if: >-
+          needs.classify-changes.outputs.docs_only == 'true' &&
+          (matrix.name == 'env-contract' ||
+          (matrix.name == 'docs-media' && needs.classify-changes.outputs.public_docs != 'true'))
+        run: echo "${{ matrix.name }} is not applicable to this exact docs-only scope."
+
+      - name: Verify public documentation media
+        if: >-
+          needs.classify-changes.outputs.docs_only == 'true' &&
+          needs.classify-changes.outputs.public_docs == 'true' &&
+          matrix.name == 'docs-media'
+        run: ${{ matrix.command }}
+
+  public-docs:
+    name: public-docs-build
+    needs: classify-changes
+    if: >-
+      needs.classify-changes.outputs.public_docs == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Checkout Homepage docs shell
+        run: git submodule update --init --depth 1 -- assets/homepage
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: assets/homepage/pnpm-lock.yaml
+
+      - name: Install docs dependencies
+        run: pnpm -C assets/homepage install --frozen-lockfile
+
+      - name: Build public documentation
+        env:
+          ONEWORKS_DOCS_SOURCE_DIR: ${{ github.workspace }}/.oo/docs
+        run: pnpm -C assets/homepage build:docs
+
+  release-docs:
+    name: release-docs-preflight
+    needs: classify-changes
+    if: >-
+      needs.classify-changes.outputs.release_docs == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate release documentation
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: >-
+          node scripts/docs-only-validation.mjs
+          --base "$BASE_SHA"
+          --head "$HEAD_SHA"
+          --allow-mixed
+          --release-preflight
 
   commit-message:
     name: commit-message
@@ -78,22 +261,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Checkout demo video submodule
-        run: git submodule update --init --depth 1 -- assets/demo-video
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 11.7.0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: .node-version
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
 
       - name: Resolve commit range
         id: range
@@ -123,7 +290,7 @@ jobs:
           echo "head=$head" >> "$GITHUB_OUTPUT"
 
       - name: Check commit messages
-        run: pnpm tools commitmsg-check "${{ steps.range.outputs.base }}" "${{ steps.range.outputs.head }}"
+        run: node scripts/check-commit-messages.mjs "${{ steps.range.outputs.base }}" "${{ steps.range.outputs.head }}"
 
   pr-change-policy:
     name: pr-change-policy

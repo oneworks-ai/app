@@ -14,13 +14,13 @@
 
 ## Workflow 地图
 
-- `quality.yml`：所有 `main` push / PR / 手动触发都会跑 lint、format、typecheck、commit message 检查；PR 正文 `edited` 时只运行同 workflow 内的 `pr-change-policy`，避免重跑全量 Quality 且保持 required-check 身份不变。
+- `quality.yml`：所有 `main` push / PR / 手动触发都保持 `lint`、`format-check`、`typecheck`、`commit-message`、`pr-change-policy` 的稳定 check 身份。PR 先统一调用 `scripts/pr-validation-scope.cjs`：纯 Markdown / 内部规则只跑格式、diff、scope / privacy、链接 / anchor 和 PR policy；公开 README / `.oo/docs` 追加 docs build / media；changelog / release rule docs 追加 release docs preflight；任何 source、workflow、config、lockfile、manifest、script、test 或 mixed change 都回退全量 Quality，并叠加其命中的文档门禁。PR 正文 `edited` 时只运行同 workflow 内的 `pr-change-policy`，避免重跑其余检查。
 - `pr-experience-review.yml`：PR 创建、编辑或同步时通过 Pull Requests API upsert 经验复盘提醒 review summary；硬门禁仍由 `quality.yml` 的 `pr-change-policy` 调用 `pnpm tools pr-change-check` 执行。
 - `release-tags.yml`：按 package version / scripts 相关路径触发，创建 `pkg/*/v*` release tags，并按 tag 显式调度对应自动发布 workflow；VS Code prerelease 不建 tag，stable tag 只创建不自动 dispatch。
 - `npm-publish-alpha.yml`：手动发布 npm alpha 包；默认走 Trusted Publishing，只有新 identity bootstrap 或经对账确认的 missing-trust 定向恢复才允许显式使用 `NPM_TOKEN`。
 - `vscode-extension-ci.yml`：按 VS Code 扩展相关路径触发，构建并上传临时 VSIX artifact；alpha / beta / rc 只走这条 CI，不创建公开 release 或发布商店。
 - `vscode-extension-release.yml`：只接受人工输入的精确 annotated stable tag，把同一个 authoritative VSIX 发布到 VS Code Marketplace、Open VSX 和 GitHub Release。
-- `desktop-package.yml`：构建 macOS 桌面包；普通 PR 只产出几秒钟的同名 `macOS installer` required-check 兼容门禁，不使用 macOS runner，也不构建安装包。nightly 用 unsigned arm64 DMG 跑完整 package / smoke / install verify，保留 3 天用于提前暴露发布回归。`pkg/oneworks-desktop/v*` tag 或手动 dispatch 统一构建 arm64+x64 的 DMG / PKG / ZIP；带 `release_tag`、不勾 `create_release` 可生成正式身份的候选产物，之后用 `candidate_run_id` 提升同一 artifact，无需重打包。GitHub Release 成功后复用 `deploy-homepage.yml` 自动等待官网刷新。
+- `desktop-package.yml`：构建 macOS 桌面包；纯文档 PR 在 `macOS installer` required context 内复用同一 classifier 走轻量成功路径，不执行依赖安装或 package。任何非文档 / mixed PR 继续构建 arm64+x64 unsigned app bundle 并跑 authority smoke。nightly 用 unsigned arm64 DMG 跑完整 package / smoke / install verify，保留 3 天用于提前暴露发布回归。`pkg/oneworks-desktop/v*` tag 或手动 dispatch 统一构建 arm64+x64 的 DMG / PKG / ZIP；带 `release_tag`、不勾 `create_release` 可生成正式身份的候选产物，之后用 `candidate_run_id` 提升同一 artifact，无需重打包。GitHub Release 成功后复用 `deploy-homepage.yml` 自动等待官网刷新。
 - `relay-ci.yml`：只在 Relay Server / Admin / config hook 相关路径变化时跑 server test、admin test 和真实 `relay-config live-smoke`。
 - `deploy-relay-dev.yml`：Cloudflare dev Relay/Admin 由 Actions 部署并 smoke；Vercel dev Relay/Admin 由 Vercel GitHub App 部署，Actions 只轮询 `dev.vc.oneworks.cloud` 做 smoke，不能恢复长期 Vercel CLI token 发布路径。
 - `deploy-relay-server.yml`：手动把已批准的精确 `origin/main` SHA 提升到 Relay production；构建 Server + Admin artifact，优先触发完整配置的外部发布目标，否则直发官方 Cloudflare Worker / Pages 与 Vercel 单项目 Relay/Admin，并验证 build SHA、登录、未授权边界和真实 Admin 静态资产。
@@ -84,6 +84,7 @@ Relay production 通过 `deploy-relay-server.yml` 人工 promotion。外部发�
 - 不把 token 明文写入仓库、issue、日志或文档。
 - 新增 workflow 时统一设置 `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true`。
 - 修改 `.github/workflows/*.yml` 后至少跑 `pnpm exec eslint .github/workflows`；可用 `actionlint` 时一并检查。`dprint` 只检查同批 Markdown 等已配置格式的文件，不要把 “No files found” 当作 YAML 已通过。
+- PR workflow 不得用顶层 `paths` / `paths-ignore` 过滤 required check；`quality.yml` 与 `desktop-package.yml` 必须始终创建稳定 required context，再在 job 内根据 `scripts/pr-validation-scope.cjs` 选择轻量或全量步骤。classifier 规则只能在该脚本维护，workflow 不复制 path list。
 - 需要验证 GitHub 侧真实结果时，用 `gh run list` / `gh run view` 看远端 workflow，不只看本地脚本。
 - 调整 homepage docs 跨仓部署时，还要确认 `oneworks-ai/oneworks-ai.github.io` 的 `Deploy Pages` workflow 真实通过，并验证 `https://oneworks.cloud/docs/`。
 - `.github/AGENTS.md` 必须保持精简；详细过程、踩坑和轮换步骤继续拆到 `.oo/rules/release/`。

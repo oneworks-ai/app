@@ -11,6 +11,13 @@ const experienceReviewBody = [
   '- [x] reviewer PASS 后才进入 merge'
 ].join('\n')
 
+const policyConflictReviewBody = [
+  experienceReviewBody,
+  '',
+  '## Policy Conflict Review',
+  '- [x] Independent read-only reviewer checked workflow, permission, and release-rule conflicts and reported PASS'
+].join('\n')
+
 describe('pr-change-check', () => {
   it('does not require changelog for documentation content source changes', () => {
     const result = evaluatePrChangePolicy({
@@ -21,6 +28,39 @@ describe('pr-change-check', () => {
 
     expect(result.violations).toEqual([])
     expect(result.requiresChangelog).toBe(false)
+  })
+
+  it('requires an independent conflict review for permission and release-rule docs', () => {
+    const missingReview = evaluatePrChangePolicy({
+      changedFiles: ['.oo/rules/maintenance/task-planning.md'],
+      commitSubjects: ['docs: clarify Git operator permissions'],
+      prBody: experienceReviewBody
+    })
+
+    expect(missingReview.requiresPolicyConflictReview).toBe(true)
+    expect(missingReview.violations).toContain(
+      'Workflow, permission, and release-rule documentation changes require a completed ## Policy Conflict Review checklist recording an independent read-only reviewer PASS.'
+    )
+
+    const reviewed = evaluatePrChangePolicy({
+      changedFiles: ['.oo/rules/release/process.md'],
+      commitSubjects: ['docs: clarify release approval'],
+      prBody: policyConflictReviewBody
+    })
+
+    expect(reviewed.hasPolicyConflictReview).toBe(true)
+    expect(reviewed.violations).toEqual([])
+  })
+
+  it('does not require policy conflict evidence for ordinary module guidance', () => {
+    const result = evaluatePrChangePolicy({
+      changedFiles: ['apps/client/AGENTS.md'],
+      commitSubjects: ['docs: clarify client ownership'],
+      prBody: experienceReviewBody
+    })
+
+    expect(result.requiresPolicyConflictReview).toBe(false)
+    expect(result.violations).toEqual([])
   })
 
   it('does not require changelog for homepage docs shell changes', () => {
@@ -58,6 +98,59 @@ describe('pr-change-check', () => {
     })
 
     expect(result.violations).toEqual([])
+  })
+
+  it('does not count a deleted changelog entry as present', () => {
+    const result = evaluatePrChangePolicy({
+      changedPathEntries: [
+        { paths: ['apps/server/src/index.ts'], status: 'M' },
+        { paths: ['changelog/1.2.3/server.md'], status: 'D' }
+      ],
+      changedFiles: ['apps/server/src/index.ts', 'changelog/1.2.3/server.md'],
+      commitSubjects: ['fix: remove obsolete runtime behavior'],
+      prBody: experienceReviewBody
+    })
+
+    expect(result.hasChangelog).toBe(false)
+    expect(result.violations).toContain(
+      'Feature/fix PRs that change product code must update changelog/<version>/<package>.md or readme.md.'
+    )
+  })
+
+  it('counts only the live destination of a changelog rename', () => {
+    const movedOut = evaluatePrChangePolicy({
+      changedPathEntries: [
+        { paths: ['apps/server/src/index.ts'], status: 'M' },
+        { paths: ['changelog/1.2.3/server.md', 'docs/server-history.md'], status: 'R100' }
+      ],
+      changedFiles: [
+        'apps/server/src/index.ts',
+        'changelog/1.2.3/server.md',
+        'docs/server-history.md'
+      ],
+      commitSubjects: ['feat: update server behavior'],
+      prBody: experienceReviewBody
+    })
+    expect(movedOut.hasChangelog).toBe(false)
+
+    const renamedInPlace = evaluatePrChangePolicy({
+      changedPathEntries: [
+        { paths: ['apps/server/src/index.ts'], status: 'M' },
+        {
+          paths: ['changelog/1.2.3/server.md', 'changelog/1.2.3/readme.md'],
+          status: 'R100'
+        }
+      ],
+      changedFiles: [
+        'apps/server/src/index.ts',
+        'changelog/1.2.3/server.md',
+        'changelog/1.2.3/readme.md'
+      ],
+      commitSubjects: ['feat: update server behavior'],
+      prBody: experienceReviewBody
+    })
+    expect(renamedInPlace.hasChangelog).toBe(true)
+    expect(renamedInPlace.violations).toEqual([])
   })
 
   it('requires screenshots for UI feature changes', () => {
@@ -176,8 +269,17 @@ describe('pr-change-check', () => {
     expect(qualityWorkflow).toContain('      - edited')
     expect(qualityWorkflow).toContain('  pr-change-policy:')
     expect(qualityWorkflow).toContain('    name: pr-change-policy')
-    expect(qualityWorkflow.match(/github\.event\.action != 'edited'/gu)).toHaveLength(2)
+    expect(qualityWorkflow.match(/github\.event\.action != 'edited'/gu)).toHaveLength(3)
     expect(qualityWorkflow).toContain('PR_BODY: $' + '{{ github.event.pull_request.body }}')
     expect(qualityWorkflow).not.toContain('gh pr view')
+  })
+
+  it('gets policy paths from the authoritative rename- and deletion-aware classifier', () => {
+    const policyCheck = readFileSync('scripts/pr-change-check.ts', 'utf8')
+
+    expect(policyCheck).toContain('getChangedFilesFromEntries')
+    expect(policyCheck).toContain('getChangedPathEntries')
+    expect(policyCheck).toContain('changedPathEntries,')
+    expect(policyCheck).not.toContain('--diff-filter=ACMRT')
   })
 })

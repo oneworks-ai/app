@@ -1,6 +1,10 @@
+import { classifyChangedPaths, getPresentChangedFiles, isDocumentationPath } from './pr-validation-scope.cjs'
+import type { ChangedPathEntry } from './pr-validation-scope.cjs'
+
 const productChangeTypes = new Set(['feat', 'fix'])
 
 export interface PrChangePolicyInput {
+  changedPathEntries?: ChangedPathEntry[]
   changedFiles: string[]
   commitSubjects: string[]
   prBody?: string
@@ -9,8 +13,10 @@ export interface PrChangePolicyInput {
 export interface PrChangePolicyResult {
   hasChangelog: boolean
   hasExperienceReview: boolean
+  hasPolicyConflictReview: boolean
   hasScreenshot: boolean
   requiresChangelog: boolean
+  requiresPolicyConflictReview: boolean
   requiresScreenshot: boolean
   violations: string[]
 }
@@ -28,19 +34,6 @@ const isFeatureOrFixPr = (commitSubjects: string[]) => (
 
 const isChangelogFile = (filePath: string) => (
   /^changelog\/[^/]+\/[^/]+\.md$/u.test(filePath) && !filePath.endsWith('/AGENTS.md')
-)
-
-const isDocsPath = (filePath: string) => (
-  filePath === 'AGENTS.md' ||
-  filePath.endsWith('/AGENTS.md') ||
-  filePath.startsWith('.oo/docs/') ||
-  // `.oo/docs` is the content source; this path remains the homepage docs VitePress shell.
-  filePath.startsWith('assets/homepage/apps/docs/') ||
-  filePath.startsWith('.oo/rules/') ||
-  filePath.startsWith('docs/') ||
-  filePath.startsWith('changelog/') ||
-  /(?:^|\/)readme\.md$/iu.test(filePath) ||
-  filePath.endsWith('.md')
 )
 
 const isToolingPath = (filePath: string) => (
@@ -62,11 +55,11 @@ const isTestPath = (filePath: string) => (
 )
 
 const isProductPath = (filePath: string) => (
-  !isDocsPath(filePath) && !isToolingPath(filePath) && !isTestPath(filePath)
+  !isDocumentationPath(filePath) && !isToolingPath(filePath) && !isTestPath(filePath)
 )
 
 const isUiSurfacePath = (filePath: string) => (
-  !isDocsPath(filePath) && (
+  !isDocumentationPath(filePath) && (
     /^apps\/client\/src\/(?:components|routes|resources|styles|assets)\//u.test(filePath) ||
     /^apps\/client\/src\/.*\.(?:css|scss|tsx|jsx)$/u.test(filePath) ||
     /^apps\/desktop\/src\/.*\.(?:css|scss|tsx|jsx)$/u.test(filePath)
@@ -101,12 +94,34 @@ export const hasExperienceReviewChecklist = (body: string | undefined) => {
     hasCheckedItem(section, /reviewer\s+PASS/u)
 }
 
+export const hasPolicyConflictReviewChecklist = (body: string | undefined) => {
+  if (body == null || body.trim() === '') return false
+  const sectionMatch = /^##\s+Policy Conflict Review\s*$/imu.exec(body)
+  if (sectionMatch == null) return false
+
+  const sectionStart = sectionMatch.index + sectionMatch[0].length
+  const nextSectionOffset = body.slice(sectionStart).search(/^##\s+/mu)
+  const sectionEnd = nextSectionOffset < 0 ? undefined : sectionStart + nextSectionOffset
+  const section = body.slice(sectionStart, sectionEnd)
+
+  return hasCheckedItem(
+    section,
+    /independent read-only reviewer.*(?:conflict|workflow|permission|release).*PASS/iu
+  )
+}
+
 export const evaluatePrChangePolicy = (input: PrChangePolicyInput): PrChangePolicyResult => {
+  const validationScope = classifyChangedPaths(input.changedFiles)
   const isProductFeatureOrFix = isFeatureOrFixPr(input.commitSubjects) && input.changedFiles.some(isProductPath)
   const requiresChangelog = isProductFeatureOrFix
+  const requiresPolicyConflictReview = validationScope.policyDocs
   const requiresScreenshot = isProductFeatureOrFix && input.changedFiles.some(isUiSurfacePath)
-  const hasChangelog = input.changedFiles.some(isChangelogFile)
+  const presentChangedFiles = input.changedPathEntries == null
+    ? input.changedFiles
+    : getPresentChangedFiles(input.changedPathEntries)
+  const hasChangelog = presentChangedFiles.some(isChangelogFile)
   const hasExperienceReview = hasExperienceReviewChecklist(input.prBody)
+  const hasPolicyConflictReview = hasPolicyConflictReviewChecklist(input.prBody)
   const hasScreenshot = hasScreenshotEvidence(input.prBody)
   const violations: string[] = []
 
@@ -126,11 +141,19 @@ export const evaluatePrChangePolicy = (input: PrChangePolicyInput): PrChangePoli
     )
   }
 
+  if (requiresPolicyConflictReview && !hasPolicyConflictReview) {
+    violations.push(
+      'Workflow, permission, and release-rule documentation changes require a completed ## Policy Conflict Review checklist recording an independent read-only reviewer PASS.'
+    )
+  }
+
   return {
     hasChangelog,
     hasExperienceReview,
+    hasPolicyConflictReview,
     hasScreenshot,
     requiresChangelog,
+    requiresPolicyConflictReview,
     requiresScreenshot,
     violations
   }

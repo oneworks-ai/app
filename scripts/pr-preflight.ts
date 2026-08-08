@@ -33,6 +33,9 @@ export const runPrPreflight = async (input: RunPrPreflightInput) => {
     console.log('[pr-preflight] ok')
     console.log(`- changelog: ${output.requiresChangelog ? 'required and present' : 'not required'}`)
     console.log(`- screenshot: ${output.requiresScreenshot ? 'required and present' : 'not required'}`)
+    console.log(
+      `- policy conflict review: ${output.requiresPolicyConflictReview ? 'required and present' : 'not required'}`
+    )
     console.log('- experience review: complete')
   } else {
     console.error('[pr-preflight] failed')
