@@ -12,8 +12,52 @@ import type {
 import { automationSchemaModule } from './automation/schema'
 import { createChannelActionTokensRepo } from './channelActionTokens/repo'
 import { channelActionTokensSchemaModule } from './channelActionTokens/schema'
+import { createChannelChildRunsRepo } from './channelChildRuns/repo'
+import type {
+  ChannelChildSessionRunDispatchMode,
+  ChannelChildSessionRunRow,
+  ChannelChildSessionRunStatus,
+  ChannelChildSessionRunTriggerType
+} from './channelChildRuns/repo'
+import { channelChildRunsSchemaModule } from './channelChildRuns/schema'
+import { createChannelCommandsRepo } from './channelCommands/repo'
+import type {
+  ChannelCommandRunPermission,
+  ChannelCommandRunRow,
+  ChannelCommandRunSource,
+  ChannelCommandRunStatus
+} from './channelCommands/repo'
+import { channelCommandsSchemaModule } from './channelCommands/schema'
+import { createChannelConversationsRepo } from './channelConversations/repo'
+import type {
+  ChannelConversationStateRow,
+  ChannelConversationTurnRole,
+  ChannelConversationTurnRow,
+  ChannelPendingIntentDelivery,
+  ChannelPendingIntentKind,
+  ChannelPendingIntentRow,
+  ChannelPendingIntentStatus
+} from './channelConversations/repo'
+import { channelConversationsSchemaModule } from './channelConversations/schema'
+import { createChannelIdentitiesRepo } from './channelIdentities/repo'
+import type {
+  CanonicalUserRow,
+  ChannelAccountRow,
+  ChannelAuthorizationRequestRow,
+  ChannelCredentialStatus,
+  ChannelIdentityLinkCodeConsumeResult,
+  ChannelIdentityLinkCodeRow,
+  ChannelIdentityLinkCodeStatus,
+  ChannelIdentityLinkRow,
+  ChannelIdentityLinkStatus,
+  ChannelUserCredentialRow
+} from './channelIdentities/repo'
+import { channelIdentitiesSchemaModule } from './channelIdentities/schema'
 import { createChannelMessagesRepo } from './channelMessages/repo'
 import { channelMessagesSchemaModule } from './channelMessages/schema'
+import { createChannelPoliciesRepo } from './channelPolicies/repo'
+import type { ChannelOffhourBacklogRow, ChannelPolicyType, ChannelReplyThrottleRow } from './channelPolicies/repo'
+import { channelPoliciesSchemaModule } from './channelPolicies/schema'
 import { channelSessionsSchemaModule } from './channelSessions/schema'
 
 import { createChannelSessionsRepo } from './channelSessions/repo'
@@ -25,7 +69,7 @@ import { sessionWorkspacesSchemaModule } from './sessionWorkspaces/schema'
 import { createMessagesRepo } from './sessions/messages.repo'
 import { createSessionQueueRepo } from './sessions/queue.repo'
 import { createSessionsRepo } from './sessions/repo'
-import type { SessionRuntimeState } from './sessions/repo'
+import type { SessionChannelActorSnapshot, SessionRuntimeState } from './sessions/repo'
 import { sessionsSchemaModule } from './sessions/schema'
 import { createTagsRepo } from './sessions/tags.repo'
 import type { SqliteDatabase } from './sqlite'
@@ -38,10 +82,32 @@ const dbSchemaModules = [
   channelSessionsSchemaModule,
   channelMessagesSchemaModule,
   channelActionTokensSchemaModule,
+  channelConversationsSchemaModule,
+  channelChildRunsSchemaModule,
+  channelCommandsSchemaModule,
+  channelIdentitiesSchemaModule,
+  channelPoliciesSchemaModule,
   agentRoomsSchemaModule,
   automationSchemaModule,
   usageSchemaModule
 ] as const
+
+export type { SessionChannelActorSnapshot, SessionRuntimeState }
+export type {
+  ChannelChildSessionRunDispatchMode,
+  ChannelChildSessionRunRow,
+  ChannelChildSessionRunStatus,
+  ChannelChildSessionRunTriggerType
+}
+export type {
+  ChannelConversationStateRow,
+  ChannelConversationTurnRole,
+  ChannelConversationTurnRow,
+  ChannelPendingIntentDelivery,
+  ChannelPendingIntentKind,
+  ChannelPendingIntentRow,
+  ChannelPendingIntentStatus
+}
 
 export interface SqliteDbOptions {
   db?: SqliteDatabase
@@ -56,6 +122,11 @@ export class SqliteDb {
   private channelSessions: ReturnType<typeof createChannelSessionsRepo>
   private channelMessages: ReturnType<typeof createChannelMessagesRepo>
   private channelActionTokens: ReturnType<typeof createChannelActionTokensRepo>
+  private channelConversations: ReturnType<typeof createChannelConversationsRepo>
+  private channelChildRuns: ReturnType<typeof createChannelChildRunsRepo>
+  private channelCommands: ReturnType<typeof createChannelCommandsRepo>
+  private channelIdentities: ReturnType<typeof createChannelIdentitiesRepo>
+  private channelPolicies: ReturnType<typeof createChannelPoliciesRepo>
   private agentRooms: ReturnType<typeof createAgentRoomsRepo>
   private tags: ReturnType<typeof createTagsRepo>
   private automation: ReturnType<typeof createAutomationRepo>
@@ -71,6 +142,11 @@ export class SqliteDb {
     this.channelSessions = createChannelSessionsRepo(this.db)
     this.channelMessages = createChannelMessagesRepo(this.db)
     this.channelActionTokens = createChannelActionTokensRepo(this.db)
+    this.channelConversations = createChannelConversationsRepo(this.db)
+    this.channelChildRuns = createChannelChildRunsRepo(this.db)
+    this.channelCommands = createChannelCommandsRepo(this.db)
+    this.channelIdentities = createChannelIdentitiesRepo(this.db)
+    this.channelPolicies = createChannelPoliciesRepo(this.db)
     this.agentRooms = createAgentRoomsRepo(this.db)
     this.tags = createTagsRepo(this.db)
     this.automation = createAutomationRepo(this.db)
@@ -120,6 +196,14 @@ export class SqliteDb {
 
   updateSessionRuntimeState(id: string, updates: Partial<SessionRuntimeState>) {
     return this.sessions.updateRuntimeState(id, updates)
+  }
+
+  consumeSessionPermissionOnce(id: string, keys: string[]) {
+    return this.sessions.consumePermissionOnce(id, keys)
+  }
+
+  transferSessionPermissionState(parentId: string, childId: string) {
+    return this.sessions.transferPermissionState(parentId, childId)
   }
 
   updateSessionStarred(id: string, isStarred: boolean) {
@@ -225,12 +309,18 @@ export class SqliteDb {
     return this.sessionQueue.reorder(sessionId, mode, ids)
   }
 
-  getChannelSession(channelType: string, sessionType: string, channelId: string) {
-    return this.channelSessions.get(channelType, sessionType, channelId)
+  getChannelSession(
+    channelKey: string,
+    channelType: string,
+    sessionType: string,
+    channelId: string,
+    threadId?: string
+  ) {
+    return this.channelSessions.get(channelKey, channelType, sessionType, channelId, threadId)
   }
 
-  getChannelPreference(channelType: string, sessionType: string, channelId: string) {
-    return this.channelSessions.getPreference(channelType, sessionType, channelId)
+  getChannelPreference(channelKey: string, channelType: string, sessionType: string, channelId: string) {
+    return this.channelSessions.getPreference(channelKey, channelType, sessionType, channelId)
   }
 
   getChannelSessionBySessionId(sessionId: string) {
@@ -249,12 +339,22 @@ export class SqliteDb {
     return this.channelSessions.removeBySessionId(sessionId)
   }
 
-  deleteChannelSession(channelType: string, sessionType: string, channelId: string) {
-    return this.channelSessions.remove(channelType, sessionType, channelId)
+  deleteChannelSession(
+    channelKey: string,
+    channelType: string,
+    sessionType: string,
+    channelId: string,
+    threadId?: string
+  ) {
+    return this.channelSessions.remove(channelKey, channelType, sessionType, channelId, threadId)
   }
 
   rememberChannelMessage(messageKey: string, seenAt = Date.now()) {
     return this.channelMessages.rememberSeen(messageKey, seenAt)
+  }
+
+  forgetChannelMessage(messageKey: string) {
+    return this.channelMessages.removeSeen(messageKey)
   }
 
   deleteChannelMessagesSeenBefore(cutoff: number) {
@@ -272,6 +372,234 @@ export class SqliteDb {
 
   clearChannelActionTokenNonces() {
     this.channelActionTokens.clear()
+  }
+
+  ensureChannelConversationState(row: Parameters<typeof this.channelConversations.ensureState>[0]) {
+    return this.channelConversations.ensureState(row)
+  }
+
+  getChannelConversationState(id: string) {
+    return this.channelConversations.getState(id)
+  }
+
+  getChannelConversationStateByThread(row: Parameters<typeof this.channelConversations.getStateByThread>[0]) {
+    return this.channelConversations.getStateByThread(row)
+  }
+
+  appendChannelConversationTurn(row: Parameters<typeof this.channelConversations.appendTurn>[0]) {
+    return this.channelConversations.appendTurn(row)
+  }
+
+  getChannelConversationTurn(id: string) {
+    return this.channelConversations.getTurn(id)
+  }
+
+  listRecentChannelConversationTurns(conversationStateId: string, limit?: number) {
+    return this.channelConversations.listRecentTurns(conversationStateId, limit)
+  }
+
+  upsertChannelPendingIntent(row: Parameters<typeof this.channelConversations.upsertPendingIntent>[0]) {
+    return this.channelConversations.upsertPendingIntent(row)
+  }
+
+  getChannelPendingIntent(id: string) {
+    return this.channelConversations.getPendingIntent(id)
+  }
+
+  updateChannelPendingIntent(
+    id: string,
+    updates: Parameters<typeof this.channelConversations.updatePendingIntent>[1]
+  ) {
+    return this.channelConversations.updatePendingIntent(id, updates)
+  }
+
+  claimChannelPendingIntentResume(
+    input: Parameters<typeof this.channelConversations.claimPendingIntentResume>[0]
+  ) {
+    return this.channelConversations.claimPendingIntentResume(input)
+  }
+
+  finishChannelPendingIntentResumeClaim(
+    input: Parameters<typeof this.channelConversations.finishPendingIntentResumeClaim>[0]
+  ) {
+    return this.channelConversations.finishPendingIntentResumeClaim(input)
+  }
+
+  listOpenChannelPendingIntents(filter?: Parameters<typeof this.channelConversations.listOpenPendingIntents>[0]) {
+    return this.channelConversations.listOpenPendingIntents(filter)
+  }
+
+  listResolvedChannelPendingIntents(
+    filter?: Parameters<typeof this.channelConversations.listResolvedPendingIntents>[0]
+  ) {
+    return this.channelConversations.listResolvedPendingIntents(filter)
+  }
+
+  createChannelChildSessionRun(row: Parameters<typeof this.channelChildRuns.create>[0]) {
+    return this.channelChildRuns.create(row)
+  }
+
+  finishChannelChildSessionRun(id: string, updates: Parameters<typeof this.channelChildRuns.finish>[1]) {
+    return this.channelChildRuns.finish(id, updates)
+  }
+
+  getChannelChildSessionRun(id: string) {
+    return this.channelChildRuns.get(id)
+  }
+
+  listRecentChannelChildSessionRuns(limit = 50) {
+    return this.channelChildRuns.listRecent(limit)
+  }
+
+  createChannelCommandRun(row: Parameters<typeof this.channelCommands.create>[0]) {
+    return this.channelCommands.create(row)
+  }
+
+  finishChannelCommandRun(id: string, updates: Parameters<typeof this.channelCommands.finish>[1]) {
+    return this.channelCommands.finish(id, updates)
+  }
+
+  getChannelCommandRun(id: string) {
+    return this.channelCommands.get(id)
+  }
+
+  listRecentChannelCommandRuns(limit = 50) {
+    return this.channelCommands.listRecent(limit)
+  }
+
+  upsertChannelAccount(row: Parameters<typeof this.channelIdentities.upsertAccount>[0]) {
+    return this.channelIdentities.upsertAccount(row)
+  }
+
+  getChannelAccount(issuerKey: string, accountId: string) {
+    return this.channelIdentities.getAccount(issuerKey, accountId)
+  }
+
+  ensureCanonicalUser(row?: Parameters<typeof this.channelIdentities.ensureCanonicalUser>[0]) {
+    return this.channelIdentities.ensureCanonicalUser(row)
+  }
+
+  getCanonicalUser(id: string) {
+    return this.channelIdentities.getCanonicalUser(id)
+  }
+
+  linkChannelAccountToUser(row: Parameters<typeof this.channelIdentities.linkAccountToUser>[0]) {
+    return this.channelIdentities.linkAccountToUser(row)
+  }
+
+  createChannelIdentityLinkCode(row: Parameters<typeof this.channelIdentities.createIdentityLinkCode>[0]) {
+    return this.channelIdentities.createIdentityLinkCode(row)
+  }
+
+  getChannelIdentityLinkCode(code: string) {
+    return this.channelIdentities.getIdentityLinkCode(code)
+  }
+
+  consumeChannelIdentityLinkCode(row: Parameters<typeof this.channelIdentities.consumeIdentityLinkCode>[0]) {
+    return this.channelIdentities.consumeIdentityLinkCode(row)
+  }
+
+  getChannelIdentityLink(issuerKey: string, accountId: string) {
+    return this.channelIdentities.getIdentityLink(issuerKey, accountId)
+  }
+
+  resolveCanonicalUserByChannelAccount(issuerKey: string, accountId: string) {
+    return this.channelIdentities.resolveUserByAccount(issuerKey, accountId)
+  }
+
+  listChannelAccountsForUser(userId: string) {
+    return this.channelIdentities.listAccountsForUser(userId)
+  }
+
+  upsertChannelUserCredential(row: Parameters<typeof this.channelIdentities.upsertCredential>[0]) {
+    return this.channelIdentities.upsertCredential(row)
+  }
+
+  getChannelUserCredential(issuerKey: string, userId: string, credentialKey: string) {
+    return this.channelIdentities.getCredential(issuerKey, userId, credentialKey)
+  }
+
+  listChannelUserCredentials(issuerKey: string, userId: string) {
+    return this.channelIdentities.listCredentialsForUser(issuerKey, userId)
+  }
+
+  reserveChannelWebhookNonce(input: Parameters<typeof this.channelPolicies.reserveWebhookNonce>[0]) {
+    return this.channelPolicies.reserveWebhookNonce(input)
+  }
+
+  commitChannelWebhookNonce(input: Parameters<typeof this.channelPolicies.commitWebhookNonce>[0]) {
+    return this.channelPolicies.commitWebhookNonce(input)
+  }
+
+  releaseChannelWebhookNonce(input: Parameters<typeof this.channelPolicies.releaseWebhookNonce>[0]) {
+    return this.channelPolicies.releaseWebhookNonce(input)
+  }
+
+  migrateLegacyChannelIdentityNamespace(
+    input: Parameters<typeof this.channelIdentities.migrateLegacyNamespace>[0]
+  ) {
+    return this.channelIdentities.migrateLegacyNamespace(input)
+  }
+
+  createChannelAuthorizationRequest(row: Parameters<typeof this.channelIdentities.createAuthorizationRequest>[0]) {
+    return this.channelIdentities.createAuthorizationRequest(row)
+  }
+
+  getChannelAuthorizationRequest(id: string) {
+    return this.channelIdentities.getAuthorizationRequest(id)
+  }
+
+  updateChannelAuthorizationRequest(
+    id: string,
+    updates: Parameters<typeof this.channelIdentities.updateAuthorizationRequest>[1]
+  ) {
+    return this.channelIdentities.updateAuthorizationRequest(id, updates)
+  }
+
+  resolveChannelAuthorizationRequest(
+    input: Parameters<typeof this.channelIdentities.resolveAuthorizationRequest>[0]
+  ) {
+    return this.channelIdentities.resolveAuthorizationRequest(input)
+  }
+
+  listPendingChannelAuthorizationRequestsForUser(userId: string, channelType?: string) {
+    return this.channelIdentities.listPendingAuthorizationRequestsForUser(userId, channelType)
+  }
+
+  listPendingChannelAuthorizationRequestsForAccount(accountId: string, channelType?: string) {
+    return this.channelIdentities.listPendingAuthorizationRequestsForAccount(accountId, channelType)
+  }
+
+  consumeChannelReplyThrottle(row: Parameters<typeof this.channelPolicies.consumeReplyThrottle>[0]) {
+    return this.channelPolicies.consumeReplyThrottle(row)
+  }
+
+  releaseChannelReplyThrottle(row: Parameters<typeof this.channelPolicies.releaseReplyThrottle>[0]) {
+    return this.channelPolicies.releaseReplyThrottle(row)
+  }
+
+  getChannelReplyThrottle(throttleKey: string) {
+    return this.channelPolicies.getReplyThrottle(throttleKey)
+  }
+
+  pruneChannelReplyThrottles(now = Date.now()) {
+    return this.channelPolicies.pruneReplyThrottles(now)
+  }
+
+  appendChannelOffhourBacklog(row: Parameters<typeof this.channelPolicies.appendOffhourBacklog>[0]) {
+    return this.channelPolicies.appendOffhourBacklog(row)
+  }
+
+  getChannelOffhourBacklogItem(id: string) {
+    return this.channelPolicies.getOffhourBacklogItem(id)
+  }
+
+  listPendingChannelOffhourBacklog(filter?: Parameters<typeof this.channelPolicies.listPendingOffhourBacklog>[0]) {
+    return this.channelPolicies.listPendingOffhourBacklog(filter)
+  }
+
+  markChannelOffhourBacklogProcessed(ids: string[], processedAt = Date.now()) {
+    return this.channelPolicies.markOffhourBacklogProcessed(ids, processedAt)
   }
 
   listAgentRooms(filter: Parameters<typeof this.agentRooms.list>[0] = 'active') {
@@ -459,4 +787,18 @@ export type {
   AutomationTask,
   AutomationTrigger
 }
+export type { ChannelCommandRunPermission, ChannelCommandRunRow, ChannelCommandRunSource, ChannelCommandRunStatus }
+export type {
+  CanonicalUserRow,
+  ChannelAccountRow,
+  ChannelAuthorizationRequestRow,
+  ChannelCredentialStatus,
+  ChannelIdentityLinkCodeConsumeResult,
+  ChannelIdentityLinkCodeRow,
+  ChannelIdentityLinkCodeStatus,
+  ChannelIdentityLinkRow,
+  ChannelIdentityLinkStatus,
+  ChannelUserCredentialRow
+}
+export type { ChannelOffhourBacklogRow, ChannelPolicyType, ChannelReplyThrottleRow }
 export type { SessionWorkspaceRow }

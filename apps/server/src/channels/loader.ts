@@ -81,6 +81,12 @@ const isMissingModuleForSpecifier = (error: unknown, specifier: string) => {
   return error.code === 'MODULE_NOT_FOUND' && error.message.includes(specifier)
 }
 
+const isModuleNotFound = (error: unknown) => (
+  error instanceof Error &&
+  'code' in error &&
+  (error.code === 'MODULE_NOT_FOUND' || error.code === 'ERR_MODULE_NOT_FOUND')
+)
+
 const requireWithWorkspaceFallback = <T>(specifier: string, workspaceRequire: NodeJS.Require): T => {
   try {
     return workspaceRequire(specifier) as T
@@ -160,6 +166,89 @@ const loadChannelModuleByPackageName = (
   return { create, definition, resolveSessionMcpServers }
 }
 
+const findLocalFirstPartyChannelPackageRoot = (packageName: string) => {
+  if (!packageName.startsWith('@oneworks/channel-')) {
+    return undefined
+  }
+
+  const workspaceChannelsRoot = resolve(getWorkspaceFolder(), 'packages/channels')
+  if (!existsSync(workspaceChannelsRoot)) {
+    return undefined
+  }
+
+  try {
+    for (const entry of readdirSync(workspaceChannelsRoot, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue
+      const packageRoot = resolve(workspaceChannelsRoot, entry.name)
+      const packageJsonPath = resolve(packageRoot, 'package.json')
+      if (!existsSync(packageJsonPath)) continue
+      const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as { name?: string }
+      if (packageJson.name === packageName) {
+        return packageRoot
+      }
+    }
+  } catch {}
+
+  return undefined
+}
+
+const loadLocalSourceChannelModule = (
+  packageName: string,
+  packageRoot: string
+): LoadedChannel => {
+  const packageRequire = createRequire(resolve(packageRoot, 'package.json'))
+  const sourceIndexPath = resolve(packageRoot, 'src/index.ts')
+  const sourceConnectionPath = resolve(packageRoot, 'src/connection.ts')
+  const sourceMcpPath = resolve(packageRoot, 'src/mcp/index.ts')
+
+  if (!existsSync(sourceIndexPath) || !existsSync(sourceConnectionPath)) {
+    throw new TypeError(`${packageName} local source must contain src/index.ts and src/connection.ts`)
+  }
+
+  const mainMod = packageRequire(sourceIndexPath) as {
+    channelDefinition?: ChannelDescriptor
+  }
+  const definition = mainMod.channelDefinition
+  if (definition == null) {
+    throw new TypeError(`${sourceIndexPath} must export channelDefinition`)
+  }
+
+  const connMod = packageRequire(sourceConnectionPath) as {
+    createChannelConnection?: ChannelCreateFn
+  }
+  const create = connMod.createChannelConnection
+  if (typeof create !== 'function') {
+    throw new TypeError(`${sourceConnectionPath} must export createChannelConnection`)
+  }
+
+  let resolveSessionMcpServers: ResolveChannelSessionMcpServersFn | undefined
+  if (existsSync(sourceMcpPath)) {
+    const mcpMod = packageRequire(sourceMcpPath) as {
+      resolveChannelSessionMcpServers?: ResolveChannelSessionMcpServersFn
+    }
+    if (typeof mcpMod.resolveChannelSessionMcpServers === 'function') {
+      resolveSessionMcpServers = mcpMod.resolveChannelSessionMcpServers
+    }
+  }
+
+  return { create, definition, resolveSessionMcpServers }
+}
+
+const loadFirstPartyChannelModule = (
+  packageName: string,
+  workspaceRequire: NodeJS.Require
+) => {
+  try {
+    return loadChannelModuleByPackageName(packageName, workspaceRequire)
+  } catch (error) {
+    const packageRoot = findLocalFirstPartyChannelPackageRoot(packageName)
+    if (packageRoot == null || !isModuleNotFound(error)) {
+      throw error
+    }
+    return loadLocalSourceChannelModule(packageName, packageRoot)
+  }
+}
+
 export interface LoadedChannel {
   create: ChannelCreateFn
   definition: ChannelDescriptor
@@ -190,7 +279,9 @@ export const loadChannelModule = (type: string): LoadedChannel => {
     : `@oneworks/channel-${type}`
 
   try {
-    return loadChannelModuleByPackageName(packageName, workspaceRequire)
+    return packageName.startsWith('@oneworks/channel-')
+      ? loadFirstPartyChannelModule(packageName, workspaceRequire)
+      : loadChannelModuleByPackageName(packageName, workspaceRequire)
   } catch (error) {
     if (type.startsWith('@') || !isMissingModuleForSpecifier(error, packageName)) {
       throw error

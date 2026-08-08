@@ -158,6 +158,9 @@ importers:
       '@oneworks/app-runtime':
         specifier: workspace:*
         version: link:../../packages/app-runtime
+      '@oneworks/channel-oneworks':
+        specifier: workspace:*
+        version: link:../../packages/channels/oneworks
       '@oneworks/cli-helper':
         specifier: workspace:*
         version: link:../../packages/cli-helper
@@ -580,6 +583,9 @@ importers:
       '@oneworks/channel-lark':
         specifier: workspace:*
         version: link:../../packages/channels/lark
+      '@oneworks/channel-oneworks':
+        specifier: workspace:*
+        version: link:../../packages/channels/oneworks
       '@oneworks/channel-wechat':
         specifier: workspace:*
         version: link:../../packages/channels/wechat
@@ -936,6 +942,15 @@ importers:
         version: 12.1.0
       zod:
         specifier: ^3.25.76
+        version: 3.25.76
+
+  packages/channels/oneworks:
+    dependencies:
+      '@oneworks/core':
+        specifier: workspace:*
+        version: link:../../core
+      zod:
+        specifier: ^3.24.1
         version: 3.25.76
 
   packages/channels/qq-channel:

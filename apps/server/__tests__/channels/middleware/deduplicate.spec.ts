@@ -3,10 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ChannelContext } from '#~/channels/middleware/@types/index.js'
 import { deduplicateMiddleware } from '#~/channels/middleware/deduplicate.js'
 import { createT, defineMessages } from '#~/channels/middleware/i18n.js'
-import { isDuplicateMessage } from '#~/channels/state.js'
+import { isDuplicateMessage, releaseMessageDeduplication } from '#~/channels/state.js'
 
 vi.mock('#~/channels/state.js', () => ({
-  isDuplicateMessage: vi.fn()
+  isDuplicateMessage: vi.fn(),
+  releaseMessageDeduplication: vi.fn()
 }))
 
 const makeCtx = (messageId = 'msg1'): ChannelContext => ({
@@ -50,7 +51,7 @@ describe('deduplicateMiddleware', () => {
 
     await deduplicateMiddleware(makeCtx(), next)
 
-    expect(isDuplicateMessage).toHaveBeenCalledWith('lark:direct:ch1:msg1')
+    expect(isDuplicateMessage).toHaveBeenCalledWith('lark:default:lark:direct:ch1:msg1')
     expect(next).toHaveBeenCalledOnce()
   })
 
@@ -63,13 +64,22 @@ describe('deduplicateMiddleware', () => {
     expect(next).not.toHaveBeenCalled()
   })
 
-  it('builds the dedup key from channelType, sessionType, channelId, messageId', async () => {
+  it('builds the dedup key from issuer, channelType, sessionType, channelId, and messageId', async () => {
     vi.mocked(isDuplicateMessage).mockReturnValue(false)
     const ctx = makeCtx()
     ctx.inbound = { channelType: 'wecom', channelId: 'grp99', sessionType: 'group', messageId: 'xyz' } as any
 
     await deduplicateMiddleware(ctx, vi.fn())
 
-    expect(isDuplicateMessage).toHaveBeenCalledWith('wecom:group:grp99:xyz')
+    expect(isDuplicateMessage).toHaveBeenCalledWith('lark:default:wecom:group:grp99:xyz')
+  })
+
+  it('releases the message claim when downstream processing fails', async () => {
+    vi.mocked(isDuplicateMessage).mockReturnValue(false)
+    const error = new Error('dispatch failed')
+
+    await expect(deduplicateMiddleware(makeCtx(), vi.fn().mockRejectedValue(error))).rejects.toThrow(error)
+
+    expect(releaseMessageDeduplication).toHaveBeenCalledWith('lark:default:lark:direct:ch1:msg1')
   })
 })

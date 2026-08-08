@@ -8,7 +8,15 @@ import {
   loadConfig,
   resolveDefaultOneworksMcpServerConfig
 } from '@oneworks/config'
-import type { Config, Definition, Entity, PluginConfig, WorkspaceAsset, WorkspaceAssetKind } from '@oneworks/types'
+import type {
+  ChannelLink,
+  Config,
+  Definition,
+  Entity,
+  PluginConfig,
+  WorkspaceAsset,
+  WorkspaceAssetKind
+} from '@oneworks/types'
 import {
   mergeMarketplaceConfigs,
   mergeProcessEnvWithProjectEnv,
@@ -422,7 +430,7 @@ const parseEntityIndexJson = async (path: string): Promise<Definition<Entity>> =
   }
 }
 
-const parseStructuredMcpFile = async (path: string) => {
+const parseStructuredFile = async (path: string) => {
   const raw = await readFile(path, 'utf8')
   const extension = extname(path).toLowerCase()
   return extension === '.yaml' || extension === '.yml'
@@ -432,9 +440,39 @@ const parseStructuredMcpFile = async (path: string) => {
 
 const parseOptionalStructuredMcpFile = async (path: string) => {
   try {
-    return await parseStructuredMcpFile(path)
+    return await parseStructuredFile(path)
   } catch (error) {
     warnInvalidWorkspaceAsset('mcpServer', path, error)
+    return undefined
+  }
+}
+
+const parseOptionalChannelLinkFile = async (path: string): Promise<Definition<ChannelLink> | undefined> => {
+  try {
+    const parsed = await parseStructuredFile(path)
+    if (!isRecord(parsed)) {
+      throw new Error('Channel link definition must be an object')
+    }
+    if (typeof parsed.channel !== 'string' || parsed.channel.trim() === '') {
+      throw new Error('Channel link definition must include a non-empty channel')
+    }
+    if (typeof parsed.entity !== 'string' || parsed.entity.trim() === '') {
+      throw new Error('Channel link definition must include a non-empty entity')
+    }
+    if (!isRecord(parsed.external)) {
+      throw new Error('Channel link definition must include an external object')
+    }
+    if (typeof parsed.external.type !== 'string' || parsed.external.type.trim() === '') {
+      throw new Error('Channel link definition external.type must be non-empty')
+    }
+
+    return {
+      path,
+      body: '',
+      attributes: parsed as unknown as ChannelLink
+    }
+  } catch (error) {
+    warnInvalidWorkspaceAsset('channelLink', path, error)
     return undefined
   }
 }
@@ -510,6 +548,23 @@ const createMcpAsset = (params: {
   } satisfies Extract<WorkspaceAsset, { kind: 'mcpServer' }>
 }
 
+const createChannelLinkAsset = (params: {
+  cwd: string
+  name: string
+  definition: Definition<ChannelLink>
+  sourcePath: string
+}): Extract<WorkspaceAsset, { kind: 'channelLink' }> => ({
+  id: `channelLink:workspace:workspace:${params.name}:${resolveRelativePath(params.cwd, params.sourcePath)}`,
+  kind: 'channelLink' as const,
+  name: params.name,
+  displayName: params.name,
+  origin: 'workspace' as const,
+  sourcePath: params.sourcePath,
+  payload: {
+    definition: params.definition
+  }
+})
+
 const createHookPluginAsset = (
   instance: ResolvedPluginInstance
 ) => ({
@@ -567,7 +622,8 @@ const scanWorkspaceDocuments = async (cwd: string, env: NodeJS.ProcessEnv) => {
     specPaths,
     entityDocPaths,
     entityJsonPaths,
-    mcpPaths
+    mcpPaths,
+    channelLinkPaths
   ] = await Promise.all([
     fg(['rules/*.md'], { cwd: aiBaseDir, absolute: true }),
     fg(['skills/*/SKILL.md'], { cwd: aiBaseDir, absolute: true }),
@@ -575,7 +631,11 @@ const scanWorkspaceDocuments = async (cwd: string, env: NodeJS.ProcessEnv) => {
     fg(['specs/*.md', 'specs/*/index.md'], { cwd: aiBaseDir, absolute: true }),
     fg(['*.md', '*/README.md'], { cwd: entitiesDir, absolute: true }),
     fg(['*/index.json'], { cwd: entitiesDir, absolute: true }),
-    fg(['mcp/*.json', 'mcp/*.yaml', 'mcp/*.yml'], { cwd: aiBaseDir, absolute: true })
+    fg(['mcp/*.json', 'mcp/*.yaml', 'mcp/*.yml'], { cwd: aiBaseDir, absolute: true }),
+    fg(['channels/*/channel.json', 'channels/*/channel.yaml', 'channels/*/channel.yml'], {
+      cwd: aiBaseDir,
+      absolute: true
+    })
   ])
 
   return {
@@ -584,7 +644,8 @@ const scanWorkspaceDocuments = async (cwd: string, env: NodeJS.ProcessEnv) => {
     specPaths: sortDocumentPaths(specPaths),
     entityDocPaths: sortDocumentPaths(entityDocPaths),
     entityJsonPaths: sortDocumentPaths(entityJsonPaths),
-    mcpPaths: sortDocumentPaths(mcpPaths)
+    mcpPaths: sortDocumentPaths(mcpPaths),
+    channelLinkPaths: sortDocumentPaths(channelLinkPaths)
   }
 }
 
@@ -759,6 +820,21 @@ const assertNoMcpConflicts = (
   }
 }
 
+const assertNoChannelLinkConflicts = (
+  assets: Array<Extract<WorkspaceAsset, { kind: 'channelLink' }>>
+) => {
+  const seen = new Map<string, WorkspaceAsset>()
+  for (const asset of assets) {
+    const existing = seen.get(asset.displayName)
+    if (existing != null) {
+      throw new Error(
+        `Duplicate channel link ${asset.displayName} from ${existing.sourcePath} and ${asset.sourcePath}`
+      )
+    }
+    seen.set(asset.displayName, asset)
+  }
+}
+
 export async function collectWorkspaceAssets(params: {
   cwd: string
   configs?: [Config?, Config?]
@@ -774,6 +850,7 @@ export async function collectWorkspaceAssets(params: {
   configs: [Config?, Config?]
   defaultExcludeMcpServers: string[]
   defaultIncludeMcpServers: string[]
+  channelLinks: Array<Extract<WorkspaceAsset, { kind: 'channelLink' }>>
   entities: Array<Extract<WorkspaceAsset, { kind: 'entity' }>>
   hookPlugins: Extract<WorkspaceAsset, { kind: 'hookPlugin' }>[]
   mcpServers: Record<string, Extract<WorkspaceAsset, { kind: 'mcpServer' }>>
@@ -887,6 +964,25 @@ export async function collectWorkspaceAssets(params: {
   await pushDocumentAssets('spec', localScan.specPaths, 'workspace')
   await pushDocumentAssets('entity', localScan.entityDocPaths, 'workspace', undefined, parseEntityMarkdownDocument)
   await pushDocumentAssets('entity', localScan.entityJsonPaths, 'workspace', undefined, parseEntityIndexJson)
+
+  const channelLinks = (
+    await Promise.all(localScan.channelLinkPaths.map(async (path) => {
+      const definition = await parseOptionalChannelLinkFile(path)
+      if (definition == null) return undefined
+      const configuredName = definition.attributes.name?.trim()
+      const name = configuredName != null && configuredName !== ''
+        ? configuredName
+        : basename(dirname(path))
+
+      return createChannelLinkAsset({
+        cwd: params.cwd,
+        name,
+        definition,
+        sourcePath: path
+      })
+    }))
+  ).filter((asset): asset is Extract<WorkspaceAsset, { kind: 'channelLink' }> => asset != null)
+  assets.push(...channelLinks)
 
   for (let index = 0; index < flattenedPluginInstances.length; index++) {
     const instance = flattenedPluginInstances[index]
@@ -1038,6 +1134,7 @@ export async function collectWorkspaceAssets(params: {
 
   assertNoDocumentConflicts([...rules, ...specs, ...entities])
   assertNoMcpConflicts(Array.from(mcpAssets.values()))
+  assertNoChannelLinkConflicts(channelLinks)
 
   return {
     assets,
@@ -1050,6 +1147,7 @@ export async function collectWorkspaceAssets(params: {
       ...(config?.defaultIncludeMcpServers ?? []),
       ...(userConfig?.defaultIncludeMcpServers ?? [])
     ],
+    channelLinks,
     entities,
     hookPlugins,
     mcpServers: Object.fromEntries(Array.from(mcpAssets.values()).map(asset => [asset.displayName, asset])),

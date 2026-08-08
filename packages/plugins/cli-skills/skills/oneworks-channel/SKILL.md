@@ -40,6 +40,46 @@ When text contains Markdown backticks, `$`, parentheses, or other shell-sensitiv
 
 For image/file payloads, pass an object with `type` and `src`. WeChat image sends require an HTTP(S) image URL because WechatApi `/message/postImage` expects `imgUrl`.
 
+## Native Channel Debug
+
+For OneWorks native channel simulations, inspect the in-memory outbound messages with:
+
+```bash
+oneworks channel oneworks-main debug outbound
+oneworks channel oneworks-main debug outbound --limit 5
+oneworks channel oneworks-main debug outbound --clear
+```
+
+Use this only for the first-party `oneworks` channel or another channel that explicitly exposes a debug outbox. It is a local observation surface for outbound delivery, not a normal way to reply to chat users and not a persistent transcript.
+
+## Channel Command Tools
+
+Use channel command tools for channel-internal state such as session binding, authorization requests, admin/access lists, adapter/model/permission mode, and silence/start/stop controls. Do not send slash commands into the chat to manage these states.
+
+```bash
+oneworks channel command list
+oneworks channel command invoke channel.whoami
+oneworks channel command invoke channel.auth.list
+oneworks channel command invoke channel.auth.list '{ "scope": "resumable" }'
+oneworks channel command invoke channel.auth.grant '{ "id": "auth-1" }'
+oneworks channel command invoke channel.auth.resume '{ "id": "auth-1" }'
+oneworks channel command invoke channel.identity.link
+oneworks channel command invoke channel.identity.link '{ "code": "ABCD1234" }'
+oneworks channel command invoke channel.identity.accounts
+```
+
+These commands run with the current message sender as the actor. They do not inherit the bot account, owner account, desktop login, or CLI login identity. If a command returns permission denied, do not retry as another identity; ask the sender or a channel admin to approve or run the command.
+
+When permission ownership is unclear, inspect identity first with slash `/whoami` in the channel or typed `channel.whoami` from the command CLI. The result includes the channel account, canonical user, identity-link state, and credential count. A resolved canonical user means the system knows who the sender is; it does not mean OneWorks can execute that user's platform/API permissions.
+
+For cross-channel identity binding, use `/identity link` or `channel.identity.link` with no code on the source account to generate a short-lived code. Then run `/identity link <code>` or `channel.identity.link` with `{ "code": "..." }` from the target account. This links identity and memory ownership only; it does not transfer credentials or permissions.
+
+`oneworks channel command invoke ...` returns JSON/tool output to the shell and Chat History. It does not automatically send a visible message to the external channel. If the channel should see the result, send a short summary separately with `oneworks channel send`.
+
+Use `channel.auth.resume` when an authorization request has already been granted/denied but was configured with manual resume, or when a resolved pending task should be resumed explicitly instead of waiting for automatic or next-message continuation.
+
+Before resuming, use `channel.auth.list` with `scope=resumable` to find authorization request ids that still have ready resume work. Regular users only see their own resumable tasks; channel admins can see all resumable tasks for the current channel type.
+
 ## Emoji Registry
 
 Platform custom emoji should be treated as reusable emoji knowledge and sendable references, not as one-off WeChat-only payloads. In channel sessions, check the registry before sending a custom emoji:

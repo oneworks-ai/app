@@ -10,6 +10,7 @@ import { migrateProjectHomeSegments } from '@oneworks/utils/project-home-migrati
 import type { ProjectHomeMigratedSegment } from '@oneworks/utils/project-home-migration'
 
 import { installAssetCreateConnectionGuard } from '#~/services/ai/asset-create-operation.js'
+import { startChannelResumeScheduler } from '#~/services/channel-resume/index.js'
 import { loadConfigState } from '#~/services/config/index.js'
 import { acquireConfigWatchRuntime } from '#~/services/config/watch.js'
 import { initializeModelProviderCatalog } from '#~/services/model-providers/catalog-loader.js'
@@ -235,6 +236,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
   let runtimeStoreWatcher: ReturnType<typeof startRuntimeStoreWatcher> | undefined
   let runtimeStoreWatcherTimer: ReturnType<typeof setTimeout> | undefined
   let pluginRuntimePreloadTimer: ReturnType<typeof setTimeout> | undefined
+  let channelResumeScheduler: ReturnType<typeof startChannelResumeScheduler> | undefined
 
   const scheduleRuntimeStoreWatcher = () => {
     logStartup(`runtime store watcher start scheduled delay=${RUNTIME_STORE_WATCHER_DELAY_MS}ms`)
@@ -339,8 +341,12 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
     })
     if (shouldStartRuntimeStoreWatcher) {
       scheduleRuntimeStoreWatcher()
+      logStartup('channel resume scheduler start begin')
+      channelResumeScheduler = startChannelResumeScheduler()
+      logStartup('channel resume scheduler start complete')
     } else {
       logStartup('runtime store watcher skipped for manager role')
+      logStartup('channel resume scheduler skipped for manager role')
     }
     schedulePluginRuntimePreload()
     scheduleProjectHomeSegmentMigration(logStartup)
@@ -355,6 +361,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
         pluginRuntimePreloadTimer = undefined
       }
       runtimeStoreWatcher?.stop()
+      channelResumeScheduler?.stop()
       configWatch.release()
       void getPluginManager().dispose()
     })
@@ -370,6 +377,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
       pluginRuntimePreloadTimer = undefined
     }
     runtimeStoreWatcher?.stop()
+    channelResumeScheduler?.stop()
     configWatch.release()
     throw error
   }

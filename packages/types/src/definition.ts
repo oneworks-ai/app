@@ -89,6 +89,61 @@ export interface Entity {
   plugins?: PluginOverlayConfig
 }
 
+export interface ChannelLinkIngress {
+  ambientRouting?: boolean
+  createOnCommand?: boolean
+  createOnMention?: boolean
+  mentionPatterns?: string[]
+  routerPrompt?: string
+}
+
+export interface ChannelLinkWorkHour {
+  days?: number[]
+  start: string
+  end: string
+}
+
+export interface ChannelLinkOffHours {
+  mode?: 'buffer' | 'drop'
+  replyText?: string
+  replyThrottleMs?: number
+}
+
+export interface ChannelLinkAvailability {
+  enabled?: boolean
+  timezone?: string
+  workHours?: ChannelLinkWorkHour[]
+  offHours?: ChannelLinkOffHours
+  bypassSenders?: string[]
+  bypassUsers?: string[]
+}
+
+export interface ChannelLinkAuthorization {
+  deliveryThrottleMs?: number
+  resume?: {
+    delayMs?: number
+    mode?: 'immediate' | 'manual' | 'next_message'
+  }
+}
+
+export interface ChannelLink {
+  name?: string
+  description?: string
+  channel: string
+  entity: string
+  external: {
+    type: string
+    [key: string]: unknown
+  }
+  memoryScope?: string
+  access?: Record<string, unknown>
+  ingress?: ChannelLinkIngress
+  authorization?: ChannelLinkAuthorization
+  availability?: ChannelLinkAvailability
+  moderation?: Record<string, unknown>
+  routing?: Record<string, unknown>
+}
+
 export interface Skill {
   name?: string
   description?: string

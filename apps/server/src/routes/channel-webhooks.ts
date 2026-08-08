@@ -33,7 +33,8 @@ const handleWebhookRoute: Router.Middleware = async (ctx) => {
     headers: toHeaderRecord(ctx.headers),
     query: toQueryRecord(ctx.query),
     body: ctx.method === 'GET' ? undefined : ctx.request.body,
-    rawBody: getRequestRawBody(ctx)
+    rawBody: getRequestRawBody(ctx),
+    remoteAddress: ctx.req.socket.remoteAddress
   })
 
   ctx.status = result.statusCode ?? 200

@@ -42,12 +42,12 @@ describe('buildChannelContextPrompt', () => {
   it('omits admin line when admins list is empty', () => {
     const config: any = { access: { admins: [] } }
     const result = buildChannelContextPrompt(makeInbound() as any, config)
-    expect(result).not.toContain('管理员')
+    expect(result).not.toContain('以下用户 ID 是本频道的管理员')
   })
 
   it('omits admin line when access is undefined', () => {
     const result = buildChannelContextPrompt(makeInbound() as any, {} as any)
-    expect(result).not.toContain('管理员')
+    expect(result).not.toContain('以下用户 ID 是本频道的管理员')
   })
 
   it('returns undefined when config is undefined but platform line is still present', () => {
@@ -113,6 +113,26 @@ describe('buildChannelContextPrompt', () => {
 
     expect(result).toContain('这些 CLI 已经作为 channel session 的环境能力注入')
     expect(result).toContain('不要为了确认是否存在而先执行 `which oneworks`')
+  })
+
+  it('tells channel agents to use sender-scoped command tools for channel state', () => {
+    const result = buildChannelContextPrompt(
+      makeInbound({
+        channelType: 'lark',
+        channelId: 'oc_1',
+        sessionType: 'group',
+        senderId: 'ou_user'
+      }) as any,
+      { title: '二介' } as any
+    )!
+
+    expect(result).toContain('频道命令工具')
+    expect(result).toContain('oneworks channel command list')
+    expect(result).toContain('oneworks channel command invoke channel.auth.list')
+    expect(result).toContain('oneworks channel command invoke channel.auth.grant')
+    expect(result).toContain('按当前消息发送者的身份和频道管理员配置执行')
+    expect(result).toContain('不能改成机器人、老板或当前 CLI 登录账号')
+    expect(result).toContain('不会自动发到外部频道')
   })
 
   it('tells channel agents to actively read and write memory when context is unfamiliar', () => {

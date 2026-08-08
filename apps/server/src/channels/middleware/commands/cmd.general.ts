@@ -1,3 +1,5 @@
+import { getDb } from '#~/db/index.js'
+
 import type { ChannelContext } from '../@types'
 import type { LanguageCode } from '../i18n'
 import { defineMessages } from '../i18n'
@@ -21,7 +23,13 @@ defineMessages('zh', {
   'whoami.role': ({ role }) => `身份：${role}`,
   'whoami.sessionType': ({ type }) => `会话类型：${type}`,
   'whoami.channelId': ({ id }) => `频道 ID：${id}`,
-  'whoami.bound': ({ bound }) => `当前已绑定会话：${bound}`
+  'whoami.bound': ({ bound }) => `当前已绑定会话：${bound}`,
+  'whoami.account': ({ id }) => `频道账号：${id}`,
+  'whoami.accountKey': ({ key }) => `账号引用：${key}`,
+  'whoami.identityLink': ({ status }) => `身份绑定：${status}`,
+  'whoami.canonicalUser': ({ id }) => `统一用户：${id}`,
+  'whoami.credentials': ({ count, statuses }) => `可执行凭证：${count} 个${statuses ? `（${statuses}）` : ''}`,
+  'whoami.credentialNote': '提示：身份绑定只说明“这是谁”，不代表系统已经拥有该用户的平台登录态。'
 })
 
 defineMessages('en', {
@@ -40,7 +48,13 @@ defineMessages('en', {
   'whoami.role': ({ role }) => `Role: ${role}`,
   'whoami.sessionType': ({ type }) => `Session type: ${type}`,
   'whoami.channelId': ({ id }) => `Channel ID: ${id}`,
-  'whoami.bound': ({ bound }) => `Session bound: ${bound}`
+  'whoami.bound': ({ bound }) => `Session bound: ${bound}`,
+  'whoami.account': ({ id }) => `Channel account: ${id}`,
+  'whoami.accountKey': ({ key }) => `Account ref: ${key}`,
+  'whoami.identityLink': ({ status }) => `Identity link: ${status}`,
+  'whoami.canonicalUser': ({ id }) => `Canonical user: ${id}`,
+  'whoami.credentials': ({ count, statuses }) => `Executable credentials: ${count}${statuses ? ` (${statuses})` : ''}`,
+  'whoami.credentialNote': 'Note: identity binding says who this is; it does not mean One Works owns that user login.'
 })
 
 // ── Help formatting ─────────────────────────────────────────────────────────
@@ -362,6 +376,48 @@ const formatSearchHelp = <TContext>(
 const canUseFollowUps = (ctx: ChannelContext) =>
   ctx.inbound.channelType === 'lark' && ctx.inbound.sessionType === 'direct'
 
+const summarizeCredentialStatuses = (statuses: readonly string[]) => {
+  const counts = new Map<string, number>()
+  for (const status of statuses) {
+    counts.set(status, (counts.get(status) ?? 0) + 1)
+  }
+  return [...counts.entries()].map(([status, count]) => `${status}=${count}`).join(', ')
+}
+
+export const buildWhoamiLines = (ctx: ChannelContext) => {
+  const lines = [
+    ctx.t('whoami.sender', { id: ctx.inbound.senderId ?? '?' }),
+    ctx.t('whoami.role', { role: isAdmin(ctx) ? ctx.t('label.admin') : ctx.t('label.user') }),
+    ctx.t('whoami.sessionType', {
+      type: ctx.inbound.sessionType === 'group' ? ctx.t('label.group') : ctx.t('label.direct')
+    }),
+    ctx.t('whoami.channelId', { id: ctx.inbound.channelId }),
+    ctx.t('whoami.bound', { bound: ctx.sessionId ? ctx.t('label.yes') : ctx.t('label.no') })
+  ]
+
+  if (ctx.actor?.account != null) {
+    lines.push(ctx.t('whoami.account', { id: ctx.actor.account.accountId }))
+    lines.push(ctx.t('whoami.accountKey', { key: ctx.actor.account.accountKey }))
+  }
+
+  if (ctx.actor?.identityLink != null) {
+    lines.push(ctx.t('whoami.identityLink', { status: ctx.actor.identityLink.status }))
+  }
+
+  if (ctx.actor?.user != null) {
+    const credentials = getDb().listChannelUserCredentials(ctx.channelKey, ctx.actor.user.id)
+    lines.push(ctx.t('whoami.canonicalUser', { id: ctx.actor.user.id }))
+    lines.push(ctx.t('whoami.credentials', {
+      count: credentials.length,
+      statuses: summarizeCredentialStatuses(credentials.map(credential => credential.status))
+    }))
+  } else {
+    lines.push(ctx.t('whoami.credentialNote'))
+  }
+
+  return lines
+}
+
 // ── Commands ────────────────────────────────────────────────────────────────
 
 export const generalCommands = (
@@ -404,15 +460,7 @@ export const generalCommands = (
   command<ChannelContext>('whoami')
     .description('cmd.whoami.description')
     .action(async ({ ctx }) => {
-      await ctx.reply([
-        ctx.t('whoami.sender', { id: ctx.inbound.senderId ?? '?' }),
-        ctx.t('whoami.role', { role: isAdmin(ctx) ? ctx.t('label.admin') : ctx.t('label.user') }),
-        ctx.t('whoami.sessionType', {
-          type: ctx.inbound.sessionType === 'group' ? ctx.t('label.group') : ctx.t('label.direct')
-        }),
-        ctx.t('whoami.channelId', { id: ctx.inbound.channelId }),
-        ctx.t('whoami.bound', { bound: ctx.sessionId ? ctx.t('label.yes') : ctx.t('label.no') })
-      ].join('\n'))
+      await ctx.reply(buildWhoamiLines(ctx).join('\n'))
     }),
 
   command<ChannelContext>('lang')

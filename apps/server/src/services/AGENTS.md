@@ -3,6 +3,10 @@
 - config/：配置子域服务目录，统一负责 workspace 变量、配置读取与合并
 - automation/：automation 子域服务目录，负责规则执行与触发器调度
 - session/：会话子域服务目录，统一负责生命周期、交互、通知与运行态管理
+- channel-links/：频道链接定义解析，负责把 `.oo/channels/<link>/channel.*` 映射为入站 channel event 可用的实体绑定
+- channel-approval/：频道权限裁决服务，区分 actor identity 与 actor credential，并为缺失 credential 生成授权请求
+- channel-authorizations/：频道授权请求服务，把 channel 权限交互镜像到可查询和可处理的授权状态
+- channel-resume/：频道恢复服务，消费 resolved pending intent 的 `metadata.resume` 并把恢复提示投递回原 session，包含后台 scheduler
 - agent-room/：Agent Room 领域服务目录，负责 room/member/run/message 聚合、用户消息投递、leader/child 公开消息投影
 - runtime-store/：统一 CLI runtime protocol 持久化与投影目录，负责把 runtime events 投影到 session 和 Agent Room
 - voice/：标准语音能力服务目录，负责 speech-to-text 服务解析、凭证模板展开、外部转写调用和响应归一化
@@ -20,4 +24,4 @@
 
 分层约定：services 统一承载跨入口复用的业务编排、运行态状态和配置装载；routes/websocket/channels 不直接维护会话缓存，不直接拼装 loadConfig 的 jsonVariables。
 
-理解路径建议：按任务读最近子目录的 `AGENTS.md`。普通会话任务先读 `session/AGENTS.md`；Agent Room 任务先读 `agent-room/AGENTS.md` 和 `runtime-store/AGENTS.md`；配置任务先读 `config/AGENTS.md`；语音转文字任务先读 `voice/AGENTS.md`；automation 任务先读 `automation/AGENTS.md`。
+理解路径建议：按任务读最近子目录的 `AGENTS.md`。普通会话任务先读 `session/AGENTS.md`；ChannelLink / 频道实体绑定任务先读 `channel-links/`；频道权限裁决任务先读 `channel-approval/`；频道授权请求镜像任务先读 `channel-authorizations/`；授权 resolved 后继续原任务读 `channel-resume/`；Agent Room 任务先读 `agent-room/AGENTS.md` 和 `runtime-store/AGENTS.md`；配置任务先读 `config/AGENTS.md`；语音转文字任务先读 `voice/AGENTS.md`；automation 任务先读 `automation/AGENTS.md`。

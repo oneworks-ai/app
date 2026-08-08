@@ -3,10 +3,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { handleSessionEvent } from '#~/channels/handlers.js'
 import { buildChannelSessionStopEvent } from '#~/channels/session-delivery.js'
 import { consumePendingUnack, deleteBinding, setBinding, setPendingUnack } from '#~/channels/state.js'
+import {
+  ensureChannelAuthorizationRequestForInteraction,
+  markChannelAuthorizationRequestDelivered,
+  releaseChannelAuthorizationRequestDelivery,
+  reserveChannelAuthorizationRequestDelivery
+} from '#~/services/channel-authorizations/index.js'
 
 vi.mock('#~/db/index.js', () => ({
   getDb: vi.fn(() => ({
     getSession: vi.fn(),
+    getSessionRuntimeState: vi.fn(),
     updateSessionArchivedWithChildren: vi.fn(() => []),
     deleteChannelSessionBySessionId: vi.fn(),
     upsertChannelPreference: vi.fn(),
@@ -18,6 +25,13 @@ vi.mock('#~/services/session/index.js', () => ({
   killSession: vi.fn(),
   processUserMessage: vi.fn(),
   startAdapterSession: vi.fn()
+}))
+
+vi.mock('#~/services/channel-authorizations/index.js', () => ({
+  ensureChannelAuthorizationRequestForInteraction: vi.fn(),
+  markChannelAuthorizationRequestDelivered: vi.fn(),
+  releaseChannelAuthorizationRequestDelivery: vi.fn(),
+  reserveChannelAuthorizationRequestDelivery: vi.fn(() => ({ reservedAt: 1_000 }))
 }))
 
 vi.mock('#~/services/session/runtime.js', async () => {
@@ -56,6 +70,7 @@ const bindTestSession = (overrides: Record<string, unknown> = {}) => {
 
 const makeRuntimeState = (
   input: {
+    channelLinks?: unknown[]
     channelType?: string
     sendMessage?: ReturnType<typeof vi.fn>
     updateMessage?: ReturnType<typeof vi.fn>
@@ -76,7 +91,8 @@ const makeRuntimeState = (
         sendMessage: input.sendMessage ?? vi.fn().mockResolvedValue({ messageId: 'om_default' }),
         updateMessage: input.updateMessage,
         pushFollowUps: input.pushFollowUps ?? vi.fn().mockResolvedValue(undefined)
-      }
+      },
+      channelLinks: input.channelLinks
     } as any]
   ])
 
@@ -143,6 +159,8 @@ const expectActionUrl = async (
 
 describe('channel handlers', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(reserveChannelAuthorizationRequestDelivery).mockReturnValue({ reservedAt: 1_000 })
     vi.stubEnv('__ONEWORKS_PROJECT_SERVER_ACTION_SECRET__', 'test-secret')
     deleteBinding('sess-1')
     consumePendingUnack('sess-1')
@@ -189,36 +207,74 @@ describe('channel handlers', () => {
         { content: '面条' }
       ]
     })
+    expect(markChannelAuthorizationRequestDelivered).not.toHaveBeenCalled()
   })
 
   it('formats permission interactions with context and quick actions', async () => {
     const sendMessage = vi.fn().mockResolvedValue({ messageId: 'om_permission' })
     const pushFollowUps = vi.fn().mockResolvedValue(undefined)
-    bindTestSession()
+    vi.mocked(ensureChannelAuthorizationRequestForInteraction).mockReturnValue({
+      id: 'channel-interaction:sess-1:interaction-permission'
+    } as any)
+    bindTestSession({ senderId: 'user1' })
+    const channelLink = {
+      authorization: {
+        deliveryThrottleMs: 5_000
+      },
+      channelKey: 'test',
+      entity: 'owo-demo',
+      external: {
+        type: 'direct',
+        senderId: 'user1'
+      },
+      name: 'wan-ke-dm',
+      path: '/workspace/.oo/channels/wan-ke-dm/channel.json',
+      definition: {} as never
+    }
+    const event = makeInteractionRequestEvent({
+      kind: 'permission',
+      question: '当前任务需要额外权限才能继续。是否授权后继续？',
+      options: [
+        { label: '继续并切换到 dontAsk', value: 'dontAsk', description: '尽量直接执行，不再额外询问。' },
+        { label: '取消', value: 'cancel', description: '保持当前权限模式。' }
+      ],
+      permissionContext: {
+        currentMode: 'default',
+        suggestedMode: 'dontAsk',
+        reasons: ['Write requires approval'],
+        subjectKey: 'Write',
+        subjectLabel: 'Write',
+        scope: 'tool',
+        projectConfigPath: '.oo.config.json'
+      }
+    }, 'interaction-permission')
 
     const delivered = await handleSessionEvent(
-      makeRuntimeState({ sendMessage, pushFollowUps }),
+      makeRuntimeState({ channelLinks: [channelLink], sendMessage, pushFollowUps }),
       'sess-1',
-      makeInteractionRequestEvent({
-        kind: 'permission',
-        question: '当前任务需要额外权限才能继续。是否授权后继续？',
-        options: [
-          { label: '继续并切换到 dontAsk', value: 'dontAsk', description: '尽量直接执行，不再额外询问。' },
-          { label: '取消', value: 'cancel', description: '保持当前权限模式。' }
-        ],
-        permissionContext: {
-          currentMode: 'default',
-          suggestedMode: 'dontAsk',
-          reasons: ['Write requires approval'],
-          subjectKey: 'Write',
-          subjectLabel: 'Write',
-          scope: 'tool',
-          projectConfigPath: '.oo.config.json'
-        }
-      }, 'interaction-permission')
+      event
     )
 
     expect(delivered).toBe(true)
+    expect(ensureChannelAuthorizationRequestForInteraction).toHaveBeenCalledWith({
+      binding: expect.objectContaining({
+        channelKey: 'test',
+        senderId: 'user1'
+      }),
+      event,
+      link: channelLink,
+      sessionId: 'sess-1'
+    })
+    expect(markChannelAuthorizationRequestDelivered).toHaveBeenCalledWith({
+      id: 'channel-interaction:sess-1:interaction-permission',
+      delivery: 'dm',
+      deliveryMessageId: 'om_permission',
+      windowMs: 5_000
+    })
+    expect(reserveChannelAuthorizationRequestDelivery).toHaveBeenCalledWith({
+      id: 'channel-interaction:sess-1:interaction-permission',
+      windowMs: 5_000
+    })
     expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
       receiveId: 'chat_1',
       receiveIdType: 'chat_id',
@@ -236,6 +292,64 @@ describe('channel handlers', () => {
         { content: 'cancel' }
       ]
     })
+  })
+
+  it('suppresses repeated permission interaction delivery inside the authorization throttle window', async () => {
+    const sendMessage = vi.fn().mockResolvedValue({ messageId: 'om_permission' })
+    const pushFollowUps = vi.fn().mockResolvedValue(undefined)
+    vi.mocked(ensureChannelAuthorizationRequestForInteraction).mockReturnValue({
+      id: 'channel-interaction:sess-1:interaction-permission'
+    } as any)
+    vi.mocked(reserveChannelAuthorizationRequestDelivery).mockReturnValue(undefined)
+    bindTestSession({ senderId: 'user1' })
+
+    const delivered = await handleSessionEvent(
+      makeRuntimeState({ sendMessage, pushFollowUps }),
+      'sess-1',
+      makeInteractionRequestEvent({
+        kind: 'permission',
+        question: '当前任务需要额外权限才能继续。',
+        options: [
+          { label: '同意本次', value: 'allow_once' }
+        ],
+        permissionContext: {
+          subjectKey: 'Write',
+          subjectLabel: 'Write',
+          scope: 'tool'
+        }
+      }, 'interaction-permission')
+    )
+
+    expect(delivered).toBe(true)
+    expect(reserveChannelAuthorizationRequestDelivery).toHaveBeenCalledWith({
+      id: 'channel-interaction:sess-1:interaction-permission',
+      windowMs: undefined
+    })
+    expect(sendMessage).not.toHaveBeenCalled()
+    expect(pushFollowUps).not.toHaveBeenCalled()
+    expect(markChannelAuthorizationRequestDelivered).not.toHaveBeenCalled()
+  })
+
+  it('releases an authorization delivery reservation when sending fails', async () => {
+    const sendMessage = vi.fn().mockRejectedValue(new Error('offline'))
+    vi.mocked(ensureChannelAuthorizationRequestForInteraction).mockReturnValue({ id: 'auth-1' } as any)
+    bindTestSession({ senderId: 'user1' })
+
+    await expect(handleSessionEvent(
+      makeRuntimeState({ sendMessage }),
+      'sess-1',
+      makeInteractionRequestEvent({
+        kind: 'permission',
+        options: [{ label: '同意本次', value: 'allow_once' }],
+        question: '需要授权'
+      })
+    )).rejects.toThrow('offline')
+
+    expect(releaseChannelAuthorizationRequestDelivery).toHaveBeenCalledWith({
+      id: 'auth-1',
+      reservedAt: 1_000
+    })
+    expect(markChannelAuthorizationRequestDelivered).not.toHaveBeenCalled()
   })
 
   it('delivers fatal session errors to the bound channel', async () => {

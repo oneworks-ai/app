@@ -31,6 +31,7 @@ const mocks = vi.hoisted(() => ({
   clearSessionWorkspaceChangeTracking: vi.fn(),
   watchRuntimeStoreRoot: vi.fn(),
   appendFile: vi.fn(),
+  chmod: vi.fn(),
   mkdir: vi.fn(),
   readFile: vi.fn(),
   writeFile: vi.fn()
@@ -91,6 +92,7 @@ vi.mock('#~/services/session/notification.js', () => ({
 
 vi.mock('node:fs/promises', () => ({
   appendFile: mocks.appendFile,
+  chmod: mocks.chmod,
   mkdir: mocks.mkdir,
   readFile: mocks.readFile,
   writeFile: mocks.writeFile
@@ -123,6 +125,7 @@ describe('startAdapterSession', () => {
   const getSessionRuntimeState = vi.fn()
   const getChannelSessionBySessionId = vi.fn()
   const getAgentRoomByHostSessionId = vi.fn()
+  const consumeSessionPermissionOnce = vi.fn()
   const updateSessionRuntimeState = vi.fn()
 
   beforeEach(() => {
@@ -165,6 +168,7 @@ describe('startAdapterSession', () => {
       getSessionRuntimeState,
       getChannelSessionBySessionId,
       getAgentRoomByHostSessionId,
+      consumeSessionPermissionOnce,
       createSession,
       updateSession,
       updateSessionRuntimeState
@@ -579,8 +583,9 @@ describe('startAdapterSession', () => {
     expect(mocks.writeFile).toHaveBeenCalledWith(
       expect.stringContaining('runtime-context'),
       expect.stringContaining('"senderId": "wxid-fresh"'),
-      'utf8'
+      { encoding: 'utf8', mode: 0o600 }
     )
+    expect(mocks.chmod).toHaveBeenCalledWith(expect.stringContaining('runtime-context'), 0o600)
   })
 
   it('masks stale room env when no room exists for the host session', async () => {

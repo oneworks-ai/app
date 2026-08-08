@@ -38,6 +38,7 @@
   },
   "dependencies": {
     "@oneworks/app-runtime": "workspace:*",
+    "@oneworks/channel-oneworks": "workspace:*",
     "@oneworks/cli-helper": "workspace:*",
     "@oneworks/config": "workspace:*",
     "@oneworks/core": "workspace:*",

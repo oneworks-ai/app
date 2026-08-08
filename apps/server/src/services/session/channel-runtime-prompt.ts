@@ -10,6 +10,9 @@ export const buildChannelRuntimeSystemPrompt = (context: ChannelRuntimeContext |
   const values = context as Record<string, unknown> | undefined
   const channelType = trimNonEmpty(values?.channelType) ?? trimNonEmpty(values?.__ONEWORKS_PROJECT_CHANNEL_TYPE__)
   const channelKey = trimNonEmpty(values?.channelKey) ?? trimNonEmpty(values?.__ONEWORKS_PROJECT_CHANNEL_KEY__)
+  const channelLinkName = trimNonEmpty(values?.channelLinkName) ??
+    trimNonEmpty(values?.__ONEWORKS_PROJECT_CHANNEL_LINK__)
+  const entity = trimNonEmpty(values?.entity) ?? trimNonEmpty(values?.__ONEWORKS_PROJECT_CHANNEL_ENTITY__)
   const channelId = trimNonEmpty(values?.channelId) ?? trimNonEmpty(values?.__ONEWORKS_PROJECT_CHANNEL_ID__)
   const sessionType = trimNonEmpty(values?.sessionType) ??
     trimNonEmpty(values?.__ONEWORKS_PROJECT_CHANNEL_SESSION_TYPE__)
@@ -20,6 +23,9 @@ export const buildChannelRuntimeSystemPrompt = (context: ChannelRuntimeContext |
   const isWechatDirect = channelType === 'wechat' && sessionType === 'direct'
   const channelLabel = channelKey == null ? channelType : `${channelType}:${channelKey}`
   const targetLabel = isGroup ? '群聊' : '私聊'
+  const channelLinkLine = channelLinkName == null
+    ? undefined
+    : `当前频道链接：${channelLinkName}${entity == null ? '' : `，绑定实体：${entity}`}。`
   const wechatDirectRule =
     '- 微信私聊可能仍有兼容性的首条/stop 自动回传策略；如果你已经通过 `oneworks channel` 发送过外部回复，Chat History 的后续 assistant/stop 文本只写简短内部状态，不要复述完整回复。'
   const wechatMentionRules = channelType === 'wechat'
@@ -38,6 +44,7 @@ export const buildChannelRuntimeSystemPrompt = (context: ChannelRuntimeContext |
   return [
     '<system-prompt>',
     `当前会话来自 ${channelLabel} channel ${targetLabel}环境。shell 中可以使用 \`oneworks mem\` 读写持久记忆，使用 \`oneworks channel\` 主动发送频道消息；这些都是 CLI 命令，不是聊天平台里的斜杠命令。`,
+    ...(channelLinkLine == null ? [] : [channelLinkLine]),
     '这些 CLI 已经作为 channel session 的环境能力注入，默认直接按下面示例调用；不要为了确认是否存在而先执行 `which oneworks`、`oneworks --help`、`oneworks mem --help`、`oneworks channel --help` 之类的探测命令。只有命令实际失败、参数不确定且下方示例不足，或用户明确要求时，才查询帮助。',
     '',
     'Chat History 与对外沟通：',
@@ -82,6 +89,13 @@ export const buildChannelRuntimeSystemPrompt = (context: ChannelRuntimeContext |
     '- `oneworks mem patch -s user "..."`：记录当前发送者相关记忆；群聊里 sender id 会按当前消息动态解析。',
     '- `oneworks mem patch -s session "..."`：记录仅属于当前 OneWorks session 的工作记忆。',
     '- `oneworks mem list` / `oneworks mem get -p ./reference/topic.md`：发现和读取特定主题文件。',
+    '',
+    '频道命令工具：',
+    '- 当你需要查询或调整频道内部状态（会话绑定、授权请求、管理员/access、adapter/model/permissionMode、静默/恢复等）时，不要在群里发送斜杠命令；使用 `oneworks channel command` 这个 agent CLI。',
+    '- 查看可用 typed tools：`oneworks channel command list`。',
+    '- 调用工具：`oneworks channel command invoke channel.auth.list` 或 `oneworks channel command invoke channel.auth.grant \'{ "id": "auth-1" }\'`。',
+    '- command tool 按当前消息发送者的身份和频道管理员配置执行，不能改成机器人、老板或当前 CLI 登录账号；如果返回权限不足，不要换身份重试。',
+    '- command tool 的输出只回到 Chat History / shell，不会自动发到外部频道。需要让群里看到结果时，再用 `oneworks channel send "..."` 发送简短可见摘要。',
     '',
     '频道回复规则：',
     ...(isGroup

@@ -101,8 +101,33 @@ describe('resolveSessionMiddleware', () => {
 
     await resolveSessionMiddleware(ctx, vi.fn())
 
-    expect(getChannelSession).toHaveBeenCalledWith('lark', 'direct', 'ch1')
-    expect(getChannelPreference).toHaveBeenCalledWith('lark', 'direct', 'ch1')
+    expect(getChannelSession).toHaveBeenCalledWith('lark:default', 'lark', 'direct', 'ch1', undefined)
+    expect(getChannelPreference).toHaveBeenCalledWith('lark:default', 'lark', 'direct', 'ch1')
+  })
+
+  it('uses threadId when resolving a group thread binding', async () => {
+    const getChannelSession = vi.fn().mockReturnValue(null)
+    vi.mocked(getDb).mockReturnValue({
+      getChannelSession,
+      getChannelPreference: vi.fn().mockReturnValue(null)
+    } as any)
+    const ctx = makeCtx()
+    ctx.inbound = {
+      ...ctx.inbound,
+      channelId: 'group-1',
+      sessionType: 'group',
+      threadId: 'thread-1'
+    } as any
+
+    await resolveSessionMiddleware(ctx, vi.fn())
+
+    expect(getChannelSession).toHaveBeenCalledWith(
+      'lark:default',
+      'lark',
+      'group',
+      'group-1',
+      'thread-1'
+    )
   })
 
   it('loads the pending channel adapter preference', async () => {
