@@ -7,7 +7,7 @@
     "zh-Hans": "电脑控制 - CUA"
   },
   "icon": "./assets/icon.svg",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0-rc.2",
   "assets": {
     "skills": "skills",
     "mcp": "mcp"

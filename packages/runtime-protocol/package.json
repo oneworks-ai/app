@@ -1,6 +1,6 @@
 {
   "name": "@oneworks/runtime-protocol",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0-rc.2",
   "description": "Runtime protocol contract for One Works agent sessions",
   "license": "MIT",
   "repository": {
