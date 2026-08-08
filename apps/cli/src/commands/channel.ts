@@ -59,6 +59,44 @@ interface ParsedEmojiCommand {
   tags?: string[]
 }
 
+interface ParsedDebugCommand {
+  action: 'outbound'
+  channelKey?: string
+  clear?: boolean
+  limit?: number
+  server?: string
+}
+
+interface ParsedToolCommand {
+  action: 'invoke' | 'list'
+  channelKey?: string
+  input?: string
+  server?: string
+  sessionId?: string
+  toolName?: string
+}
+
+interface ParsedSimulateCommand {
+  channelId?: string
+  channelKey?: string
+  contentParts: string[]
+  lineBreakToken?: string
+  messageId?: string
+  roomId?: string
+  secret?: string
+  senderId?: string
+  server?: string
+  sessionType?: 'direct' | 'group'
+  threadId?: string
+}
+
+interface NativeSimulationContext {
+  channelId?: string
+  channelKey?: string
+  senderId?: string
+  sessionType?: 'direct' | 'group'
+}
+
 const CHANNEL_CONTEXT_PATH_ENV = '__ONEWORKS_PROJECT_CHANNEL_CONTEXT_PATH__'
 const CHANNEL_KEY_ENV = '__ONEWORKS_PROJECT_CHANNEL_KEY__'
 const CHANNEL_ID_ENV = '__ONEWORKS_PROJECT_CHANNEL_ID__'
@@ -142,7 +180,186 @@ const emojiOptionValueNames = new Set([
 ])
 const emojiBooleanOptions = new Set(['--recent', '--sendable'])
 
+const debugOptionValueNames = new Set([
+  '--channel',
+  '--channel-key',
+  '--limit',
+  '--server'
+])
+const debugBooleanOptions = new Set(['--clear'])
+
+const toolCommandOptionValueNames = new Set([
+  '--channel',
+  '--channel-key',
+  '--input',
+  '--json',
+  '--server',
+  '--session-id',
+  '--tool'
+])
+
+const simulateOptionValueNames = new Set([
+  '--channel',
+  '--channel-id',
+  '--channel-key',
+  '--line-break-token',
+  '--message-id',
+  '--newline-token',
+  '--room',
+  '--room-id',
+  '--secret',
+  '--sender',
+  '--sender-id',
+  '--server',
+  '--session-type',
+  '--thread',
+  '--thread-id'
+])
+const simulateBooleanOptions = new Set(['--br'])
+
 const isEmojiCommand = (argv: string[]) => argv[0] === 'emoji' || argv[1] === 'emoji'
+
+const isDebugCommand = (argv: string[]) => argv[0] === 'debug' || argv[1] === 'debug'
+
+const isToolCommand = (argv: string[]) => argv[0] === 'command' || argv[1] === 'command'
+
+const isSimulateCommand = (argv: string[]) => argv[0] === 'simulate' || argv[1] === 'simulate'
+
+const parseDebugArgs = (argv: string[]): ParsedDebugCommand => {
+  const channelKey = argv[0] === 'debug' ? undefined : argv[0]
+  const args = argv[0] === 'debug' ? argv.slice(1) : argv.slice(2)
+  const action = args[0]
+  if (action !== 'outbound') {
+    throw new Error('Usage: oneworks channel [channelKey] debug outbound [--clear]')
+  }
+
+  const options: ParsedDebugCommand = { action, channelKey }
+  for (let index = 1; index < args.length; index += 1) {
+    const arg = args[index]
+    if (debugBooleanOptions.has(arg)) {
+      if (arg === '--clear') {
+        options.clear = true
+      }
+      continue
+    }
+    if (debugOptionValueNames.has(arg)) {
+      const value = args[index + 1]
+      if (value == null) {
+        throw new Error(`Missing value for ${arg}.`)
+      }
+      if (arg === '--channel' || arg === '--channel-key') {
+        options.channelKey = value
+      } else if (arg === '--limit') {
+        const limit = Number.parseInt(value, 10)
+        if (!Number.isSafeInteger(limit) || limit < 1) throw new Error('--limit must be a positive integer.')
+        options.limit = limit
+      } else if (arg === '--server') {
+        options.server = value
+      }
+      index += 1
+      continue
+    }
+    throw new Error(`Unknown channel debug option: ${arg}`)
+  }
+
+  return options
+}
+
+const parseSimulateArgs = (argv: string[]): ParsedSimulateCommand => {
+  const channelKey = argv[0] === 'simulate' ? undefined : argv[0]
+  const args = argv[0] === 'simulate' ? argv.slice(1) : argv.slice(2)
+  const positionals: string[] = []
+  const options: ParsedSimulateCommand = { channelKey, contentParts: [] }
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index]
+    if (simulateBooleanOptions.has(arg)) {
+      if (arg === '--br') {
+        options.lineBreakToken = DEFAULT_LINE_BREAK_TOKEN
+      }
+      continue
+    }
+    if (simulateOptionValueNames.has(arg)) {
+      const value = args[index + 1]
+      if (value == null) {
+        throw new Error(`Missing value for ${arg}.`)
+      }
+      if (arg === '--channel' || arg === '--channel-key') {
+        options.channelKey = value
+      } else if (arg === '--channel-id') {
+        options.channelId = value
+      } else if (arg === '--line-break-token' || arg === '--newline-token') {
+        options.lineBreakToken = value
+      } else if (arg === '--message-id') {
+        options.messageId = value
+      } else if (arg === '--room' || arg === '--room-id') {
+        options.roomId = value
+      } else if (arg === '--secret') {
+        options.secret = value
+      } else if (arg === '--sender' || arg === '--sender-id') {
+        options.senderId = value
+      } else if (arg === '--server') {
+        options.server = value
+      } else if (arg === '--session-type') {
+        if (value !== 'direct' && value !== 'group') {
+          throw new Error('--session-type must be "direct" or "group".')
+        }
+        options.sessionType = value
+      } else if (arg === '--thread' || arg === '--thread-id') {
+        options.threadId = value
+      }
+      index += 1
+      continue
+    }
+    positionals.push(arg)
+  }
+
+  return {
+    ...options,
+    contentParts: positionals
+  }
+}
+
+const parseToolCommandArgs = (argv: string[]): ParsedToolCommand => {
+  const channelKey = argv[0] === 'command' ? undefined : argv[0]
+  const args = argv[0] === 'command' ? argv.slice(1) : argv.slice(2)
+  const action = args[0]
+  if (action !== 'list' && action !== 'invoke') {
+    throw new Error('Usage: oneworks channel [channelKey] command <list|invoke> [toolName] [jsonInput]')
+  }
+
+  const positionals: string[] = []
+  const options: ParsedToolCommand = { action, channelKey }
+  for (let index = 1; index < args.length; index += 1) {
+    const arg = args[index]
+    if (toolCommandOptionValueNames.has(arg)) {
+      const value = args[index + 1]
+      if (value == null) {
+        throw new Error(`Missing value for ${arg}.`)
+      }
+      if (arg === '--channel' || arg === '--channel-key') {
+        options.channelKey = value
+      } else if (arg === '--input' || arg === '--json') {
+        options.input = value
+      } else if (arg === '--server') {
+        options.server = value
+      } else if (arg === '--session-id') {
+        options.sessionId = value
+      } else if (arg === '--tool') {
+        options.toolName = value
+      }
+      index += 1
+      continue
+    }
+    positionals.push(arg)
+  }
+
+  return {
+    ...options,
+    input: options.input ?? positionals.slice(1).join(' '),
+    toolName: options.toolName ?? positionals[0]
+  }
+}
 
 const parseEmojiArgs = (argv: string[]): ParsedEmojiCommand => {
   const channelKey = argv[0] === 'emoji' ? undefined : argv[0]
@@ -344,6 +561,34 @@ const normalizeParsedMessage = (message: unknown, lineBreakToken?: string): unkn
   return next
 }
 
+const toNativeSimulationSessionType = (value: unknown): NativeSimulationContext['sessionType'] => (
+  value === 'direct' || value === 'group' ? value : undefined
+)
+
+const resolveNativeSimulationContext = (context: Record<string, unknown>): NativeSimulationContext => {
+  if (trimNonEmpty(context.channelType) !== 'oneworks') return {}
+
+  return {
+    channelId: trimNonEmpty(context.channelId),
+    channelKey: trimNonEmpty(context.channelKey),
+    senderId: trimNonEmpty(context.senderId),
+    sessionType: toNativeSimulationSessionType(context.sessionType)
+  }
+}
+
+const resolveNativeSimulationChannelKey = (input: {
+  channelKey?: string
+  nativeContext: NativeSimulationContext
+}) => {
+  const channelKey = trimNonEmpty(input.channelKey) ?? input.nativeContext.channelKey
+  if (channelKey == null) {
+    throw new Error(
+      'Missing OneWorks native channel key. Pass --channel or run from a OneWorks native channel context.'
+    )
+  }
+  return channelKey
+}
+
 const parseMessage = async (contentParts: string[], options: { lineBreakToken?: string } = {}) => {
   const raw = (contentParts.join(' ') || await readStdin()).trim()
   if (raw === '') {
@@ -393,6 +638,9 @@ const normalizeApiResponse = async (response: Response) => {
     if (isRecord(parsed) && isRecord(parsed.error) && typeof parsed.error.message === 'string') {
       throw new Error(parsed.error.message)
     }
+    if (isRecord(parsed) && typeof parsed.error === 'string') {
+      throw new Error(parsed.error)
+    }
     if (isRecord(parsed) && typeof parsed.message === 'string') {
       throw new Error(parsed.message)
     }
@@ -403,6 +651,60 @@ const normalizeApiResponse = async (response: Response) => {
     return isRecord(parsed.data) ? parsed.data : {}
   }
   return isRecord(parsed) ? parsed : {}
+}
+
+const parseToolInput = async (rawInput: string | undefined) => {
+  const raw = rawInput?.trim() ?? ''
+  if (raw === '') return {}
+
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    if (!isRecord(parsed)) {
+      throw new Error('Channel command input JSON must be an object.')
+    }
+    return parsed
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Channel command input JSON must be an object.') {
+      throw error
+    }
+    const loose = parseLooseObject(raw)
+    if (loose != null) return loose
+    throw new Error('Channel command input must be a JSON object.')
+  }
+}
+
+const runDebugCommand = async (
+  argv: string[],
+  options: ChannelCommandOptions
+): Promise<string> => {
+  const env = options.env ?? process.env
+  const context = readContext(env)
+  const parsed = parseDebugArgs(argv)
+  const channelKey = resolveCommandChannelKey({ channelKey: parsed.channelKey, context, env })
+  const fetchImpl = options.fetch ?? globalThis.fetch
+  const serverBaseUrl = resolveServerBaseUrl({ env, server: parsed.server })
+  const url = `${serverBaseUrl}/api/channels/${encodeURIComponent(channelKey)}/debug/outbound`
+
+  if (parsed.clear === true) {
+    const response = await fetchImpl(url, { method: 'DELETE' })
+    await normalizeApiResponse(response)
+    return `Cleared debug outbound messages for channel ${channelKey}.`
+  }
+
+  const response = await fetchImpl(url)
+  const data = await normalizeApiResponse(response)
+  if (parsed.limit == null || !isRecord(data) || !Array.isArray(data.messages)) {
+    return JSON.stringify(data, null, 2)
+  }
+
+  return JSON.stringify(
+    {
+      ...data,
+      messages: data.messages.slice(-parsed.limit)
+    },
+    null,
+    2
+  )
 }
 
 const resolveTextMessageContent = (message: unknown) => {
@@ -426,6 +728,129 @@ const assertTextMessageLength = (message: unknown) => {
         'Shorten the visible reply or send an emoji/file instead.'
     )
   }
+}
+
+const applyOptionalString = (
+  target: Record<string, unknown>,
+  key: string,
+  value: string | undefined
+) => {
+  const normalized = trimNonEmpty(value)
+  if (normalized != null) {
+    target[key] = normalized
+  }
+}
+
+const buildNativeSimulationPayload = (
+  message: unknown,
+  parsed: ParsedSimulateCommand,
+  nativeContext: NativeSimulationContext = {}
+) => {
+  const payload: Record<string, unknown> = typeof message === 'string'
+    ? { text: message }
+    : isRecord(message)
+    ? { ...message }
+    : (() => {
+      throw new Error('OneWorks channel simulation payload must be text or a JSON object.')
+    })()
+
+  applyOptionalString(payload, 'channelId', parsed.channelId)
+  applyOptionalString(payload, 'messageId', parsed.messageId)
+  applyOptionalString(payload, 'roomId', parsed.roomId)
+  applyOptionalString(payload, 'senderId', parsed.senderId)
+  applyOptionalString(payload, 'sessionType', parsed.sessionType)
+  applyOptionalString(payload, 'threadId', parsed.threadId)
+
+  if (trimNonEmpty(payload.senderId) == null) {
+    applyOptionalString(payload, 'senderId', nativeContext.senderId)
+  }
+  if (
+    trimNonEmpty(payload.channelId) == null &&
+    trimNonEmpty(payload.roomId) == null &&
+    trimNonEmpty(payload.threadId) == null &&
+    nativeContext.sessionType === 'group'
+  ) {
+    applyOptionalString(payload, 'roomId', nativeContext.channelId)
+  }
+  if (
+    trimNonEmpty(payload.channelId) == null &&
+    trimNonEmpty(payload.roomId) == null &&
+    trimNonEmpty(payload.threadId) == null &&
+    nativeContext.sessionType === 'direct'
+  ) {
+    applyOptionalString(payload, 'channelId', nativeContext.channelId)
+  }
+  if (trimNonEmpty(payload.sessionType) == null) {
+    applyOptionalString(payload, 'sessionType', nativeContext.sessionType)
+  }
+
+  if (trimNonEmpty(payload.senderId) == null) {
+    throw new Error('OneWorks channel simulation requires senderId. Pass --sender or include senderId in the payload.')
+  }
+  if (
+    payload.sessionType === 'group' &&
+    trimNonEmpty(payload.channelId) == null &&
+    trimNonEmpty(payload.roomId) == null &&
+    trimNonEmpty(payload.threadId) == null
+  ) {
+    throw new Error('OneWorks group simulation requires --room, --channel-id, --thread, or a matching payload field.')
+  }
+
+  return payload
+}
+
+const buildNativeSimulationWebhookUrl = (input: {
+  channelKey: string
+  secret?: string
+  serverBaseUrl: string
+}) => {
+  const url = new URL(
+    `/channels/oneworks/${encodeURIComponent(input.channelKey)}/webhook`,
+    `${input.serverBaseUrl}/`
+  )
+  const secret = trimNonEmpty(input.secret)
+  if (secret != null) {
+    url.searchParams.set('secret', secret)
+  }
+  return url.toString()
+}
+
+const runSimulateCommand = async (
+  argv: string[],
+  options: ChannelCommandOptions
+): Promise<string> => {
+  const env = options.env ?? process.env
+  const cwd = options.cwd ?? process.cwd()
+  const context = readContext(env)
+  const parsed = parseSimulateArgs(argv)
+  const nativeContext = resolveNativeSimulationContext(context)
+  const channelKey = resolveNativeSimulationChannelKey({ channelKey: parsed.channelKey, nativeContext })
+  const message = await parseMessage(parsed.contentParts, { lineBreakToken: parsed.lineBreakToken })
+  const payload = buildNativeSimulationPayload(message, parsed, nativeContext)
+  const fetchImpl = options.fetch ?? globalThis.fetch
+  const response = await fetchImpl(
+    buildNativeSimulationWebhookUrl({
+      channelKey,
+      secret: parsed.secret,
+      serverBaseUrl: resolveServerBaseUrl({ env, server: parsed.server })
+    }),
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload)
+    }
+  )
+  const data = await normalizeApiResponse(response)
+  const messageId = typeof data.messageId === 'string' ? data.messageId : undefined
+  const channelId = typeof data.channelId === 'string' ? data.channelId : undefined
+  const sessionType = typeof data.sessionType === 'string' ? data.sessionType : undefined
+
+  return [
+    `Simulated OneWorks channel event through ${channelKey}.`,
+    channelId == null ? undefined : `channelId: ${channelId}`,
+    messageId == null ? undefined : `messageId: ${messageId}`,
+    sessionType == null ? undefined : `sessionType: ${sessionType}`
+  ].filter(Boolean).join('\n')
 }
 
 const resolveEmojiRegistryContext = (input: {
@@ -510,10 +935,89 @@ const runEmojiCommand = async (
   ], options)
 }
 
+const resolveCommandChannelKey = (input: {
+  channelKey?: string
+  context: Record<string, unknown>
+  env: NodeJS.ProcessEnv
+}) => {
+  const channelKey = trimNonEmpty(input.channelKey) ??
+    trimNonEmpty(input.context.channelKey) ??
+    trimNonEmpty(input.env[CHANNEL_KEY_ENV])
+  if (channelKey == null) {
+    throw new Error('Missing channel key. Pass a channel key or run from a channel session context.')
+  }
+  return channelKey
+}
+
+const formatToolList = (data: Record<string, unknown>) => {
+  const tools = Array.isArray(data.tools)
+    ? data.tools.filter((item): item is Record<string, unknown> => isRecord(item))
+    : []
+  if (tools.length === 0) return 'No channel command tools are available.'
+
+  return tools.map((tool) => {
+    const name = typeof tool.name === 'string' ? tool.name : 'channel.unknown'
+    const usage = typeof tool.slashUsage === 'string' ? tool.slashUsage : ''
+    const permission = typeof tool.permission === 'string' ? tool.permission : 'unknown'
+    return `${name} [${permission}]${usage === '' ? '' : ` - ${usage}`}`
+  }).join('\n')
+}
+
+const runToolCommand = async (
+  argv: string[],
+  options: ChannelCommandOptions
+): Promise<string> => {
+  const env = options.env ?? process.env
+  const cwd = options.cwd ?? process.cwd()
+  const context = readContext(env)
+  const parsed = parseToolCommandArgs(argv)
+  const channelKey = resolveCommandChannelKey({ channelKey: parsed.channelKey, context, env })
+  const fetchImpl = options.fetch ?? globalThis.fetch
+  const serverBaseUrl = resolveServerBaseUrl({ env, server: parsed.server })
+
+  if (parsed.action === 'list') {
+    const response = await fetchImpl(`${serverBaseUrl}/api/channels/${encodeURIComponent(channelKey)}/commands`)
+    return formatToolList(await normalizeApiResponse(response))
+  }
+
+  const toolName = trimNonEmpty(parsed.toolName)
+  if (toolName == null) {
+    throw new Error('Channel command invoke requires a tool name.')
+  }
+
+  const response = await fetchImpl(
+    `${serverBaseUrl}/api/channels/${encodeURIComponent(channelKey)}/commands/invoke`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        context,
+        cwd,
+        input: await parseToolInput(parsed.input),
+        ...(trimNonEmpty(parsed.sessionId) == null ? {} : { sessionId: trimNonEmpty(parsed.sessionId) }),
+        toolName
+      })
+    }
+  )
+  return JSON.stringify(await normalizeApiResponse(response), null, 2)
+}
+
 export const runChannelCommand = async (
   argv: string[],
   options: ChannelCommandOptions = {}
 ): Promise<string> => {
+  if (isSimulateCommand(argv)) {
+    return await runSimulateCommand(argv, options)
+  }
+
+  if (isDebugCommand(argv)) {
+    return await runDebugCommand(argv, options)
+  }
+
+  if (isToolCommand(argv)) {
+    return await runToolCommand(argv, options)
+  }
+
   if (isEmojiCommand(argv)) {
     return await runEmojiCommand(argv, options)
   }
@@ -577,7 +1081,7 @@ export const registerChannelSubcommands = (command: Command) => {
     .allowUnknownOption()
     .allowExcessArguments()
     .argument('[args...]')
-    .description('Send messages through OneWorks channels from agent sessions')
+    .description('Send, simulate, and manage OneWorks channels')
     .action(async (args: string[]) => {
       printResult(await runChannelCommand(args))
     })
@@ -589,6 +1093,6 @@ export const registerChannelCommand = (program: Command) => {
   registerChannelSubcommands(
     program
       .command('channel')
-      .description('Send messages through OneWorks channels from agent sessions')
+      .description('Send, simulate, and manage OneWorks channels')
   )
 }

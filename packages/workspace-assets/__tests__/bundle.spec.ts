@@ -196,6 +196,51 @@ describe('resolveWorkspaceAssetBundle', () => {
     }
   })
 
+  it('loads directory channel links as workspace assets', async () => {
+    const workspace = await createWorkspace()
+
+    await writeDocument(
+      join(workspace, '.oo/channels/wan-ke-chat/channel.json'),
+      JSON.stringify(
+        {
+          channel: 'lark',
+          entity: 'OWO【演示】',
+          external: {
+            type: 'chat',
+            chatId: 'oc_mock'
+          },
+          ingress: {
+            ambientRouting: false
+          }
+        },
+        null,
+        2
+      )
+    )
+
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      configs: [undefined, undefined],
+      useDefaultOneworksMcpServer: false
+    })
+
+    expect(bundle.channelLinks.map(asset => asset.displayName)).toEqual(['wan-ke-chat'])
+    expect(bundle.channelLinks[0]).toEqual(expect.objectContaining({
+      kind: 'channelLink',
+      name: 'wan-ke-chat',
+      origin: 'workspace',
+      sourcePath: join(workspace, '.oo/channels/wan-ke-chat/channel.json')
+    }))
+    expect(bundle.channelLinks[0]?.payload.definition.attributes).toEqual(expect.objectContaining({
+      channel: 'lark',
+      entity: 'OWO【演示】',
+      external: {
+        type: 'chat',
+        chatId: 'oc_mock'
+      }
+    }))
+  })
+
   it('loads local and dev rule files as workspace rules', async () => {
     const workspace = await createWorkspace()
 

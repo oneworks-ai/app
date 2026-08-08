@@ -10,7 +10,28 @@ import { normalizeSessionPanelState, parseSessionPanelState } from './panel-stat
 
 export type SessionRuntimeKind = 'interactive' | 'external'
 
+export interface SessionChannelActorSnapshot {
+  actorAccountId?: string
+  actorUserId?: string
+  capturedAt?: number
+  channelId?: string
+  channelKey?: string
+  channelLinkName?: string
+  channelType?: string
+  childRunId?: string
+  conversationStateId?: string
+  entity?: string
+  messageId?: string
+  replyReceiveId?: string
+  replyReceiveIdType?: string
+  senderId?: string
+  sessionId?: string
+  sessionType?: string
+  threadKey?: string
+}
+
 export interface SessionRuntimeState {
+  channelActorSnapshot?: SessionChannelActorSnapshot
   runtimeKind: SessionRuntimeKind
   historySeed?: string
   historySeedPending: boolean
@@ -29,6 +50,7 @@ interface SessionRow {
   lastMessage: string | null
   lastUserMessage: string | null
   runtimeKind: string | null
+  channelActorSnapshot: string | null
   historySeed: string | null
   historySeedPending: number | null
   permissionState: string | null
@@ -66,6 +88,7 @@ type SessionCreateOptions =
   >
 type SessionRuntimeUpdate = Partial<{
   runtimeKind: SessionRuntimeKind
+  channelActorSnapshot: SessionChannelActorSnapshot | null
   historySeed: string | null
   historySeedPending: boolean
   permissionState: SessionPermissionState
@@ -118,6 +141,13 @@ const sessionUpdateFields = [
 
 const sessionRuntimeUpdateFields = [
   { key: 'runtimeKind' },
+  {
+    key: 'channelActorSnapshot',
+    toParam: value => {
+      const snapshot = normalizeChannelActorSnapshot(value)
+      return snapshot == null ? null : JSON.stringify(snapshot)
+    }
+  },
   { key: 'historySeed', toParam: value => value ?? null },
   { key: 'historySeedPending', toParam: value => value ? 1 : 0 },
   { key: 'permissionState', toParam: value => JSON.stringify(normalizeSessionPermissionState(value)) }
@@ -162,6 +192,54 @@ const parseHistoryImport = (value: string | null): SessionHistoryImport | undefi
   }
 }
 
+const trimNonEmpty = (value: unknown) => {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed === '' ? undefined : trimmed
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  typeof value === 'object' && value != null && !Array.isArray(value)
+)
+
+const normalizeChannelActorSnapshot = (value: unknown): SessionChannelActorSnapshot | undefined => {
+  if (!isRecord(value)) return undefined
+  const capturedAt = typeof value.capturedAt === 'number' && Number.isFinite(value.capturedAt)
+    ? value.capturedAt
+    : undefined
+  const snapshot: SessionChannelActorSnapshot = {
+    actorAccountId: trimNonEmpty(value.actorAccountId),
+    actorUserId: trimNonEmpty(value.actorUserId),
+    capturedAt,
+    channelId: trimNonEmpty(value.channelId),
+    channelKey: trimNonEmpty(value.channelKey),
+    channelLinkName: trimNonEmpty(value.channelLinkName),
+    channelType: trimNonEmpty(value.channelType),
+    childRunId: trimNonEmpty(value.childRunId),
+    conversationStateId: trimNonEmpty(value.conversationStateId),
+    entity: trimNonEmpty(value.entity),
+    messageId: trimNonEmpty(value.messageId),
+    replyReceiveId: trimNonEmpty(value.replyReceiveId),
+    replyReceiveIdType: trimNonEmpty(value.replyReceiveIdType),
+    senderId: trimNonEmpty(value.senderId),
+    sessionId: trimNonEmpty(value.sessionId),
+    sessionType: trimNonEmpty(value.sessionType),
+    threadKey: trimNonEmpty(value.threadKey)
+  }
+
+  return Object.values(snapshot).some(item => item != null) ? snapshot : undefined
+}
+
+const parseChannelActorSnapshot = (value: string | null) => {
+  if (value == null || value.trim() === '') return undefined
+
+  try {
+    return normalizeChannelActorSnapshot(JSON.parse(value))
+  } catch {
+    return undefined
+  }
+}
+
 function mapSessionRow(row: SessionRow): Session {
   const panelState = parseSessionPanelState(row.panelState)
   const historyImport = parseHistoryImport(row.historyImport)
@@ -196,9 +274,14 @@ function mapSessionRow(row: SessionRow): Session {
 }
 
 function mapSessionRuntimeState(
-  row: Pick<SessionRow, 'runtimeKind' | 'historySeed' | 'historySeedPending' | 'permissionState'>
+  row: Pick<
+    SessionRow,
+    'runtimeKind' | 'channelActorSnapshot' | 'historySeed' | 'historySeedPending' | 'permissionState'
+  >
 ): SessionRuntimeState {
+  const channelActorSnapshot = parseChannelActorSnapshot(row.channelActorSnapshot)
   return {
+    ...(channelActorSnapshot == null ? {} : { channelActorSnapshot }),
     runtimeKind: row.runtimeKind === 'external' ? 'external' : 'interactive',
     historySeed: row.historySeed ?? undefined,
     historySeedPending: row.historySeedPending === 1,
@@ -303,6 +386,10 @@ export function createSessionsRepo(db: SqliteDatabase) {
       historyImport: options.historyImport
     }
     const runtimeKind = options.runtimeKind ?? (parentSessionId != null ? 'external' : 'interactive')
+    const normalizedChannelActorSnapshot = normalizeChannelActorSnapshot(options.channelActorSnapshot)
+    const channelActorSnapshot = normalizedChannelActorSnapshot == null
+      ? null
+      : JSON.stringify(normalizedChannelActorSnapshot)
     const historySeed = options.historySeed ?? null
     const historySeedPending = options.historySeedPending === true ? 1 : 0
     const permissionState = JSON.stringify(normalizeSessionPermissionState(options.permissionState))
@@ -317,13 +404,14 @@ export function createSessionsRepo(db: SqliteDatabase) {
         messageBranchAction,
         title,
         runtimeKind,
+        channelActorSnapshot,
         historySeed,
         historySeedPending,
         permissionState,
         historyImport,
         createdAt,
         status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     stmt.run(
       session.id,
@@ -335,6 +423,7 @@ export function createSessionsRepo(db: SqliteDatabase) {
       session.messageBranchAction ?? null,
       session.title ?? null,
       runtimeKind,
+      channelActorSnapshot,
       historySeed,
       historySeedPending,
       permissionState,
@@ -361,9 +450,14 @@ export function createSessionsRepo(db: SqliteDatabase) {
 
   const getRuntimeState = (id: string): SessionRuntimeState | undefined => {
     const stmt = db.prepare(
-      'SELECT runtimeKind, historySeed, historySeedPending, permissionState FROM sessions WHERE id = ?'
+      'SELECT runtimeKind, channelActorSnapshot, historySeed, historySeedPending, permissionState FROM sessions WHERE id = ?'
     )
-    const row = stmt.get<Pick<SessionRow, 'runtimeKind' | 'historySeed' | 'historySeedPending' | 'permissionState'>>(id)
+    const row = stmt.get<
+      Pick<
+        SessionRow,
+        'runtimeKind' | 'channelActorSnapshot' | 'historySeed' | 'historySeedPending' | 'permissionState'
+      >
+    >(id)
     if (row == null) return undefined
     return mapSessionRuntimeState(row)
   }

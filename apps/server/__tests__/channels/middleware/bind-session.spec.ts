@@ -104,6 +104,7 @@ describe('bindSessionMiddleware', () => {
       channelType: 'lark',
       channelKey: 'lark:default',
       channelId: 'ch1',
+      senderId: 'user1',
       sessionType: 'direct',
       replyReceiveId: 'recv1',
       replyReceiveIdType: 'chat_id'

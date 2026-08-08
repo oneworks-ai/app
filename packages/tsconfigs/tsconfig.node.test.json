@@ -12,6 +12,7 @@
     "../../apps/relay-server/__tests__/**/*",
     "../../apps/server/__tests__/**/*",
     "../../apps/vscode-extension/__tests__/**/*",
+    "../../packages/channels/oneworks/__tests__/**/*",
     "../../scripts/__tests__/**/*"
   ]
 }

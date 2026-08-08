@@ -16,6 +16,7 @@ export const sessionsSchemaModule: SchemaModule = {
         lastMessage TEXT,
         lastUserMessage TEXT,
         runtimeKind TEXT NOT NULL DEFAULT 'interactive',
+        channelActorSnapshot TEXT,
         historySeed TEXT,
         historySeedPending INTEGER NOT NULL DEFAULT 0,
         permissionState TEXT,
@@ -84,6 +85,7 @@ export const sessionsSchemaModule: SchemaModule = {
     ensureColumn('sessions', 'lastMessage', 'TEXT')
     ensureColumn('sessions', 'lastUserMessage', 'TEXT')
     ensureColumn('sessions', 'runtimeKind', 'TEXT')
+    ensureColumn('sessions', 'channelActorSnapshot', 'TEXT')
     ensureColumn('sessions', 'historySeed', 'TEXT')
     ensureColumn('sessions', 'historySeedPending', 'INTEGER DEFAULT 0')
     ensureColumn('sessions', 'permissionState', 'TEXT')

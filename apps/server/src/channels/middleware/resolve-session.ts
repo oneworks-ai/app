@@ -17,6 +17,7 @@ export const resolveSessionMiddleware: ChannelMiddleware = async (ctx, next) => 
       channelKey: result.channelKey,
       channelId: result.channelId,
       sessionType: result.sessionType,
+      senderId: result.senderId,
       replyReceiveId: result.replyReceiveId,
       replyReceiveIdType: result.replyReceiveIdType
     })

@@ -62,6 +62,7 @@ export function interactRouter() {
     })
 
     ctx.body = {
+      approval: result.approval,
       result: result.result,
       source: result.source,
       subject

@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- Channel CLI lifecycle coverage shares one command harness and filesystem fixture. */
 import fs from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -25,7 +26,30 @@ const writeContext = async (cwd: string) => {
           channelType: 'wechat',
           replyReceiveId: 'group-1',
           replyReceiveIdType: 'chat_id',
+          senderId: 'wxid-user',
           sessionId: 'sess-1',
+          sessionType: 'group'
+        },
+        null,
+        2
+      )
+    }\n`
+  )
+}
+
+const writeNativeContext = async (cwd: string) => {
+  await fs.writeFile(
+    path.join(cwd, 'channel-context.json'),
+    `${
+      JSON.stringify(
+        {
+          channelId: 'wan-ke-native',
+          channelKey: 'oneworks-main',
+          channelType: 'oneworks',
+          replyReceiveId: 'wan-ke-native',
+          replyReceiveIdType: 'room',
+          senderId: 'user-yijie',
+          sessionId: 'sess-native',
           sessionType: 'group'
         },
         null,
@@ -397,6 +421,283 @@ describe('oneworks channel command', () => {
       receiveIdType: 'chat_id',
       sessionId: 'sess-1'
     })
+  })
+
+  it('lists channel command tools for the current channel context', async () => {
+    const cwd = await createTempDir()
+    await writeContext(cwd)
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        tools: [
+          {
+            name: 'channel.auth.list',
+            permission: 'everyone',
+            slashUsage: '/auth list [scope]'
+          }
+        ]
+      }))
+    )
+
+    await expect(runChannelCommand(['command', 'list'], {
+      cwd,
+      env: createEnv(cwd),
+      fetch
+    })).resolves.toContain('channel.auth.list [everyone] - /auth list [scope]')
+
+    expect(fetch).toHaveBeenCalledWith('http://127.0.0.1:9876/api/channels/erjie/commands')
+  })
+
+  it('invokes channel command tools with the channel sender context', async () => {
+    const cwd = await createTempDir()
+    await writeContext(cwd)
+    const env = createEnv(cwd)
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        replies: ['授权请求 auth-1 已标记为 已批准。'],
+        result: {
+          status: 'success'
+        }
+      }))
+    )
+
+    const output = await runChannelCommand([
+      'command',
+      'invoke',
+      'channel.auth.grant',
+      '{ "id": "auth-1" }'
+    ], { cwd, env, fetch })
+
+    expect(output).toContain('授权请求 auth-1 已标记为 已批准。')
+    expect(output).toContain('"status": "success"')
+    expect(fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:9876/api/channels/erjie/commands/invoke',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          context: {
+            channelId: 'group-1',
+            channelKey: 'erjie',
+            channelType: 'wechat',
+            replyReceiveId: 'group-1',
+            replyReceiveIdType: 'chat_id',
+            senderId: 'wxid-user',
+            sessionId: 'sess-1',
+            sessionType: 'group'
+          },
+          cwd,
+          input: {
+            id: 'auth-1'
+          },
+          toolName: 'channel.auth.grant'
+        })
+      })
+    )
+  })
+
+  it('posts OneWorks native simulation events to the channel webhook', async () => {
+    const cwd = await createTempDir()
+    await writeContext(cwd)
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        channelId: 'wan-ke-native',
+        messageId: 'sim-1',
+        ok: true,
+        sessionType: 'group'
+      }))
+    )
+
+    const output = await runChannelCommand([
+      'oneworks-main',
+      'simulate',
+      '--room',
+      'wan-ke-native',
+      '--sender',
+      'user-yijie',
+      '--message-id',
+      'sim-1',
+      '--secret',
+      'dev-secret',
+      '@OWO',
+      'hi'
+    ], {
+      cwd,
+      env: createEnv(cwd),
+      fetch
+    })
+
+    expect(output).toContain('Simulated OneWorks channel event through oneworks-main.')
+    expect(output).toContain('messageId: sim-1')
+    expect(fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:9876/channels/oneworks/oneworks-main/webhook?secret=dev-secret',
+      expect.objectContaining({
+        method: 'POST'
+      })
+    )
+    expect(JSON.parse(fetch.mock.calls[0]?.[1]?.body)).toEqual({
+      messageId: 'sim-1',
+      roomId: 'wan-ke-native',
+      senderId: 'user-yijie',
+      text: '@OWO hi'
+    })
+  })
+
+  it('accepts structured OneWorks simulation payloads', async () => {
+    const cwd = await createTempDir()
+    await writeContext(cwd)
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        channelId: 'room-1',
+        ok: true,
+        sessionType: 'group'
+      }))
+    )
+
+    await runChannelCommand([
+      'simulate',
+      '--channel',
+      'oneworks-main',
+      '{ "roomId": "room-1", "senderId": "user-a", "text": "@OWO hi" }'
+    ], {
+      cwd,
+      env: createEnv(cwd),
+      fetch
+    })
+
+    expect(fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:9876/channels/oneworks/oneworks-main/webhook',
+      expect.objectContaining({
+        body: JSON.stringify({
+          roomId: 'room-1',
+          senderId: 'user-a',
+          text: '@OWO hi'
+        })
+      })
+    )
+  })
+
+  it('uses OneWorks native channel context defaults for simulation', async () => {
+    const cwd = await createTempDir()
+    await writeNativeContext(cwd)
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        channelId: 'wan-ke-native',
+        ok: true,
+        sessionType: 'group'
+      }))
+    )
+
+    await runChannelCommand(['simulate', '@OWO', 'hi'], {
+      cwd,
+      env: createEnv(cwd),
+      fetch
+    })
+
+    expect(fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:9876/channels/oneworks/oneworks-main/webhook',
+      expect.objectContaining({
+        method: 'POST'
+      })
+    )
+    expect(JSON.parse(fetch.mock.calls[0]?.[1]?.body)).toEqual({
+      roomId: 'wan-ke-native',
+      senderId: 'user-yijie',
+      sessionType: 'group',
+      text: '@OWO hi'
+    })
+  })
+
+  it('does not infer OneWorks simulation channel keys from non-native context', async () => {
+    const cwd = await createTempDir()
+    await writeContext(cwd)
+    const fetch = vi.fn()
+
+    await expect(runChannelCommand(['simulate', '--sender', 'user-a', '@OWO hi'], {
+      cwd,
+      env: createEnv(cwd),
+      fetch
+    })).rejects.toThrow('Missing OneWorks native channel key')
+
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('reads OneWorks native debug outbound messages', async () => {
+    const cwd = await createTempDir()
+    await writeNativeContext(cwd)
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        messages: [
+          {
+            messageId: 'oneworks-out-1',
+            receiveId: 'wan-ke-native',
+            receiveIdType: 'room',
+            text: 'first'
+          },
+          {
+            messageId: 'oneworks-out-2',
+            receiveId: 'wan-ke-native',
+            receiveIdType: 'room',
+            text: 'second'
+          }
+        ]
+      }))
+    )
+
+    const output = await runChannelCommand(['debug', 'outbound', '--limit', '1'], {
+      cwd,
+      env: createEnv(cwd),
+      fetch
+    })
+
+    expect(fetch).toHaveBeenCalledWith('http://127.0.0.1:9876/api/channels/oneworks-main/debug/outbound')
+    expect(JSON.parse(output)).toEqual({
+      messages: [
+        {
+          messageId: 'oneworks-out-2',
+          receiveId: 'wan-ke-native',
+          receiveIdType: 'room',
+          text: 'second'
+        }
+      ]
+    })
+  })
+
+  it('clears OneWorks native debug outbound messages', async () => {
+    const cwd = await createTempDir()
+    await writeNativeContext(cwd)
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }))
+    )
+
+    await expect(runChannelCommand(['debug', 'outbound', '--clear'], {
+      cwd,
+      env: createEnv(cwd),
+      fetch
+    })).resolves.toContain('Cleared debug outbound messages for channel oneworks-main.')
+
+    expect(fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:9876/api/channels/oneworks-main/debug/outbound',
+      { method: 'DELETE' }
+    )
+  })
+
+  it('requires a sender for OneWorks native simulation', async () => {
+    const cwd = await createTempDir()
+    await writeContext(cwd)
+    const fetch = vi.fn()
+
+    await expect(runChannelCommand([
+      'oneworks-main',
+      'simulate',
+      '--room',
+      'wan-ke-native',
+      '@OWO hi'
+    ], {
+      cwd,
+      env: createEnv(cwd),
+      fetch
+    })).rejects.toThrow('requires senderId')
+
+    expect(fetch).not.toHaveBeenCalled()
   })
 
   it('surfaces server errors', async () => {

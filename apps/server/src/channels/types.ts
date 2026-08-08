@@ -1,6 +1,8 @@
 import type { ConfigSource, WSEvent } from '@oneworks/core'
 import type { ChannelBaseConfig, ChannelConnection } from '@oneworks/core/channel'
 
+import type { ResolvedChannelLink } from '#~/services/channel-links/index.js'
+
 import type { ChannelTextMessage } from './middleware/@types'
 
 export interface ChannelRuntimeState {
@@ -10,6 +12,7 @@ export interface ChannelRuntimeState {
   connection?: ChannelConnection<ChannelTextMessage>
   config?: ChannelBaseConfig
   configSource?: ConfigSource
+  channelLinks?: ResolvedChannelLink[]
   error?: string
 }
 
@@ -18,6 +21,7 @@ export interface ChannelSessionBinding {
   channelKey: string
   channelId: string
   sessionType: string
+  senderId?: string
   replyReceiveId?: string
   replyReceiveIdType?: string
 }
