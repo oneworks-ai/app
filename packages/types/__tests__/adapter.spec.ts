@@ -353,7 +353,8 @@ describe('adapter package helpers', () => {
     tempDirs.push(tempDir)
 
     const homeDir = join(tempDir, 'home')
-    const serverPackageDir = join(tempDir, 'server-package')
+    const workspaceDir = join(tempDir, 'workspace')
+    const serverPackageDir = join(workspaceDir, 'apps', 'server')
     const adapterPackageName = '@acme/cached-adapter'
     const cacheDir = join(
       homeDir,
@@ -364,6 +365,7 @@ describe('adapter package helpers', () => {
       '1.0.0'
     )
     await mkdir(serverPackageDir, { recursive: true })
+    await writeFile(join(workspaceDir, 'pnpm-workspace.yaml'), 'packages:\n  - apps/*\n')
     await writeFile(join(serverPackageDir, 'package.json'), JSON.stringify({ name: '@oneworks/server' }, null, 2))
     await writeAdapterPackage(cacheDir, 'cached-adapter', adapterPackageName)
 
@@ -523,12 +525,64 @@ describe('adapter package helpers', () => {
     })).toBeUndefined()
   })
 
-  it('prefers the user-home adapter package cache over the default runtime package dir', async () => {
+  it.each([
+    ['@acme/workspace-priority-adapter', 'workspace-adapter', 'cached-adapter'],
+    ['@example/second-workspace-adapter', 'second-workspace-adapter', 'second-cached-adapter']
+  ])('prefers %s from the development workspace over a stale adapter cache', async (
+    adapterPackageName,
+    workspaceAdapterId,
+    cachedAdapterId
+  ) => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'ow-adapter-workspace-priority-'))
+    tempDirs.push(tempDir)
+
+    const workspaceDir = join(tempDir, 'workspace')
+    const serverPackageDir = join(workspaceDir, 'apps', 'server')
+    const homeDir = join(tempDir, 'home')
+    const cacheDir = join(
+      homeDir,
+      '.oneworks',
+      'bootstrap',
+      'adapter-packages',
+      sanitizePackageName(adapterPackageName),
+      '1.0.0'
+    )
+    await mkdir(serverPackageDir, { recursive: true })
+    await writeFile(join(workspaceDir, 'pnpm-workspace.yaml'), 'packages:\n  - apps/*\n')
+    await writeAdapterPackage(serverPackageDir, workspaceAdapterId, adapterPackageName, {
+      models: [`${workspaceAdapterId}-model`]
+    })
+    await writeAdapterPackage(cacheDir, cachedAdapterId, adapterPackageName, {
+      models: [`${cachedAdapterId}-model`]
+    })
+
+    vi.stubEnv('__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__', serverPackageDir)
+    vi.stubEnv('__ONEWORKS_PROJECT_PACKAGE_DIR__', serverPackageDir)
+    vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', homeDir)
+
+    await expect(loadAdapter(adapterPackageName)).resolves.toMatchObject({
+      id: workspaceAdapterId
+    })
+    expect(loadAdapterBuiltinModels(adapterPackageName)?.map(model => model.value)).toEqual([
+      `${workspaceAdapterId}-model`
+    ])
+  })
+
+  it('keeps the user-home adapter cache ahead of an installed runtime package dir', async () => {
     const tempDir = await mkdtemp(join(tmpdir(), 'ow-adapter-cache-priority-'))
     tempDirs.push(tempDir)
 
     const homeDir = join(tempDir, 'home')
-    const serverPackageDir = join(tempDir, 'server-package')
+    const consumerWorkspaceDir = join(tempDir, 'consumer-workspace')
+    const serverPackageDir = join(
+      consumerWorkspaceDir,
+      'node_modules',
+      '.pnpm',
+      '@oneworks+server@1.0.0',
+      'node_modules',
+      '@oneworks',
+      'server'
+    )
     const adapterPackageName = '@acme/cache-priority-adapter'
     const cacheDir = join(
       homeDir,
@@ -538,6 +592,8 @@ describe('adapter package helpers', () => {
       sanitizePackageName(adapterPackageName),
       '1.0.0'
     )
+    await mkdir(consumerWorkspaceDir, { recursive: true })
+    await writeFile(join(consumerWorkspaceDir, 'pnpm-workspace.yaml'), 'packages:\n  - apps/*\n')
     await writeAdapterPackage(serverPackageDir, 'runtime-adapter', adapterPackageName, {
       models: ['runtime-model']
     })
