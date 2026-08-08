@@ -4,6 +4,7 @@ import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
+import { pathToFileURL } from 'node:url'
 
 import Router from '@koa/router'
 import Koa from 'koa'
@@ -14,12 +15,17 @@ import { pluginsRouter } from '#~/routes/plugins.js'
 import { getPluginManager, resetPluginManagerForTests } from '#~/services/plugins/index.js'
 
 const mocks = vi.hoisted(() => ({
+  listLauncherWorkspaceRuntimeEndpoints: vi.fn<() => Promise<unknown[]>>(async () => []),
   loadConfigState: vi.fn()
 }))
 
 vi.mock('#~/services/config/index.js', () => ({
   buildConfigJsonVariables: vi.fn(() => ({})),
   loadConfigState: mocks.loadConfigState
+}))
+
+vi.mock('#~/services/launcher/manager.js', () => ({
+  listLauncherWorkspaceRuntimeEndpoints: mocks.listLauncherWorkspaceRuntimeEndpoints
 }))
 
 const createPlugin = async (
@@ -300,8 +306,13 @@ describe('pluginsRouter', () => {
     mockConfig([{ id: pluginRoot, scope: 'runtime' }])
 
     const runtimeResponse = await fetch(`${baseUrl}/api/plugins/runtime`)
-    const runtimePayload = await runtimeResponse.json() as { runtime: { role: string } }
+    const runtimePayload = await runtimeResponse.json() as {
+      runtime: { projectHome?: string; role: string; workspaceFolder?: string }
+    }
     expect(runtimePayload.runtime.role).toBe('workspace')
+    expect(runtimePayload.runtime).not.toHaveProperty('projectHome')
+    expect(runtimePayload.runtime).not.toHaveProperty('workspaceFolder')
+    expect(JSON.stringify(runtimePayload)).not.toContain(workspaceFolder)
 
     const response = await fetch(`${baseUrl}/api/plugins/runtime/runtime/channels/echo`, {
       method: 'POST',
@@ -396,6 +407,50 @@ describe('pluginsRouter', () => {
         status: 'online'
       })
     ]))
+  })
+
+  it('omits malformed private runtime endpoint metadata from manager responses', async () => {
+    vi.stubEnv('__ONEWORKS_PROJECT_SERVER_ROLE__', 'manager')
+    const rawLauncherEndpoints: unknown[] = [
+      {
+        accessToken: 'credential-sentinel',
+        id: 'workspace:private-metadata',
+        role: 'workspace',
+        serverBaseUrl: 'https://credential-sentinel:credential-sentinel@127.0.0.1:8787',
+        startedAt: workspaceFolder,
+        status: 'offline',
+        workspaceFolder
+      },
+      {
+        id: 'workspace:safe-metadata',
+        role: 'workspace',
+        serverBaseUrl: 'http://127.0.0.1:8787',
+        startedAt: '2026-07-30T00:00:00.000Z',
+        status: 'online'
+      }
+    ]
+    mocks.listLauncherWorkspaceRuntimeEndpoints.mockResolvedValueOnce(rawLauncherEndpoints)
+    mockConfig([])
+
+    const response = await fetch(`${baseUrl}/api/plugins/runtime/endpoints`)
+    const payload = await response.json() as { endpoints: Array<Record<string, unknown>> }
+    const endpoint = payload.endpoints.find(item => item.id === 'workspace:private-metadata')
+
+    expect(response.status).toBe(200)
+    expect(endpoint).toEqual({
+      id: 'workspace:private-metadata',
+      role: 'workspace',
+      status: 'offline'
+    })
+    expect(JSON.stringify(payload)).not.toContain(workspaceFolder)
+    expect(JSON.stringify(payload)).not.toContain('credential-sentinel')
+    expect(payload.endpoints).toContainEqual({
+      id: 'workspace:safe-metadata',
+      role: 'workspace',
+      serverBaseUrl: 'http://127.0.0.1:8787',
+      startedAt: '2026-07-30T00:00:00.000Z',
+      status: 'online'
+    })
   })
 
   it('serves client assets and rejects traversal', async () => {
@@ -519,6 +574,8 @@ describe('pluginsRouter', () => {
           title: 'Local API',
           description: 'Echoes request metadata for plugin API tests.',
           inputSchema: {
+            $defs: { Query: { type: 'string' } },
+            $ref: '#/$defs/Query',
             type: 'object',
             properties: {
               query: { type: 'string' }
@@ -546,6 +603,22 @@ describe('pluginsRouter', () => {
             headers: { 'content-type': 'application/json' },
             body: { method: request.method, path: request.path, body: request.body.toString('utf8') }
           })
+        })
+        ctx.registerApi('unsafe-description', {
+          description: '#/Users/private/api-description',
+          headerSchema: { type: 'object' },
+          handler: async () => ({ status: 204 }),
+          inputSchema: { type: 'object' },
+          outputSchema: { type: 'object' },
+          title: 'Unsafe description'
+        })
+        ctx.registerApi('unsafe-schema', {
+          description: 'Unsafe schema metadata',
+          headerSchema: { type: 'object' },
+          handler: async () => ({ status: 204 }),
+          inputSchema: { default: '#/Users/private/schema-default', type: 'string' },
+          outputSchema: { type: 'object' },
+          title: 'Unsafe schema'
         })
       }
     `
@@ -597,6 +670,8 @@ describe('pluginsRouter', () => {
         },
         id: 'local',
         inputSchema: {
+          $defs: { Query: { type: 'string' } },
+          $ref: '#/$defs/Query',
           type: 'object',
           properties: {
             query: { type: 'string' }
@@ -1062,10 +1137,457 @@ describe('pluginsRouter', () => {
     expect(payload.diagnostics).toEqual([
       expect.objectContaining({
         code: 'plugin_discovery_failed',
-        message: expect.stringContaining('Conflicting plugin scope "same"')
+        message: 'Failed to discover plugins.'
       })
     ])
   })
+
+  it('serializes plugin metadata through a path-free public allowlist', async () => {
+    vi.stubEnv('__ONEWORKS_PROJECT_DISABLE_DEFAULT_OFFICIAL_PLUGINS__', '1')
+    vi.stubEnv('__ONEWORKS_PROJECT_DISABLE_GLOBAL_CONFIG__', '1')
+    workspaceFolder = await fsMkdtemp('ow-plugin-public-serialization-')
+    const pluginRoot = path.join(workspaceFolder, 'plugins', 'docs')
+    const unsafePluginRoot = path.join(workspaceFolder, 'plugins', 'unsafe-contribution')
+    const unsafeRootRoutePluginRoot = path.join(workspaceFolder, 'plugins', 'unsafe-root-route')
+    const unsafeRouteMetadataPluginRoot = path.join(workspaceFolder, 'plugins', 'unsafe-route-metadata')
+    const unsafeSchemeRoutePluginRoot = path.join(workspaceFolder, 'plugins', 'unsafe-scheme-route')
+    const unsafeSchemeHrefPluginRoot = path.join(workspaceFolder, 'plugins', 'unsafe-scheme-href')
+    const unsafeOpaqueContributionPluginRoot = path.join(
+      workspaceFolder,
+      'plugins',
+      'unsafe-opaque-contribution'
+    )
+    const pluginFileUrl = pathToFileURL(pluginRoot).href
+    const encodedPluginRoot = encodeURIComponent(pluginRoot)
+    const credentialUrlKeys = [
+      'clientsecretvalue',
+      'CLIENTSECRETVALUE',
+      'apiKeyValue',
+      'oauth-client_secret.valueSuffix',
+      '%2563lient%2553ecret%2556alue',
+      'api%255Fkey%255Fvalue',
+      'clientSecretValue%'
+    ]
+    const encodedAuthorizationValue = ['sk', '%252D', 'abcdefghijklmnop'].join('')
+    const encodedCallbackValue = ['api', '%255F', 'key', '%253D', 'abcdefghijklmnop'].join('')
+    const encodedTokenValue = ['ghp', '%252D', 'abcdefghijklmnop'].join('')
+    await createPlugin(pluginRoot, {
+      name: 'docs-plugin',
+      description: '/private/unrelated',
+      displayName: 'https://alice:s3cret@example.test/path',
+      native: {
+        adapter: 'codex',
+        apps: [
+          {
+            id: 'docs',
+            capabilities: ['read', 'WorkspaceConfigurationManagement', 'write'],
+            authentication: {
+              authorizationUrl:
+                'https://example.test/oauth/authorize?client_id=docs&redirect_uri=%2Foauth%2Fcallback&redirect_url=https%3A%2F%2Fapp.example.test%2Fauth%2Fcallback&code_challenge=valid&login_hint=docs',
+              callbackPath: '/oauth/callback',
+              type: 'oauth2'
+            },
+            connectionRequirements: {
+              endpoint: 'https://api.example.test/connect',
+              required: true,
+              type: 'oauth'
+            },
+            permissions: ['repository:read']
+          },
+          {
+            authentication: {
+              authorizationUrl: `https://example.test/oauth?${encodedPluginRoot}=value`,
+              type: 'oauth2'
+            },
+            id: 'filesystem-query-key'
+          },
+          {
+            authentication: {
+              tokenUrl: `https://example.test/token?next=${encodedPluginRoot}`,
+              type: 'oauth2'
+            },
+            id: 'filesystem-query-value'
+          },
+          {
+            connectionRequirements: {
+              endpoint: `https://example.test/connect#${encodedPluginRoot}`,
+              type: 'oauth'
+            },
+            id: 'filesystem-fragment'
+          },
+          {
+            authentication: {
+              authorizationUrl: 'https://example.test/oauth?redirect_uri=%2FUsers%2Funrelated%2Foauth%2Fcallback',
+              type: 'oauth2'
+            },
+            id: 'filesystem-redirect-route'
+          },
+          {
+            authentication: {
+              callbackPath: `/oauth/callback?next=${encodedPluginRoot}`,
+              type: 'oauth2'
+            },
+            id: 'filesystem-callback'
+          },
+          ...credentialUrlKeys.map((key, index) => ({
+            authentication: {
+              authorizationUrl: `https://example.test/oauth?${key}=must-not-leak`,
+              type: 'oauth2'
+            },
+            id: `credential-key-${index}`
+          })),
+          {
+            authentication: {
+              authorizationUrl: 'https://example.test/oauth?clientSecretValue=must-not-leak',
+              type: 'oauth2'
+            },
+            id: 'credential-url'
+          },
+          {
+            authentication: {
+              tokenUrl: 'https://example.test/token?oauthClientSecretValueSuffix=must-not-leak',
+              type: 'oauth2'
+            },
+            id: 'credential-url-suffix'
+          },
+          {
+            authentication: {
+              authorizationUrl: `https://example.test/oauth?state=${encodedAuthorizationValue}`,
+              type: 'oauth2'
+            },
+            id: 'encoded-authorization'
+          },
+          {
+            authentication: {
+              callbackPath: `/oauth/callback?state=${encodedCallbackValue}`,
+              type: 'oauth2'
+            },
+            id: 'encoded-callback'
+          },
+          {
+            authentication: {
+              tokenUrl: `https://example.test/token?state=${encodedTokenValue}`,
+              type: 'oauth2'
+            },
+            id: 'encoded-token'
+          },
+          {
+            authentication: {
+              authorizationUrl: 'ht\ntps://example.test/oauth',
+              type: 'oauth2'
+            },
+            id: 'control-authorization'
+          },
+          {
+            authentication: {
+              tokenUrl: 'https://example.test/to%250Aken',
+              type: 'oauth2'
+            },
+            id: 'control-token'
+          },
+          {
+            connectionRequirements: {
+              endpoint: 'https://example.test/con\tnect',
+              type: 'oauth'
+            },
+            id: 'control-endpoint'
+          },
+          {
+            authentication: {
+              authorizationUrl: 'https://example.test/oauth%252525250Aauthorize',
+              type: 'oauth2'
+            },
+            id: 'deep-control-authorization'
+          },
+          {
+            authentication: {
+              tokenUrl: 'https://example.test/to%252525250Aken',
+              type: 'oauth2'
+            },
+            id: 'deep-control-token'
+          },
+          {
+            connectionRequirements: {
+              endpoint: 'https://example.test/con%252525250Anect',
+              type: 'oauth'
+            },
+            id: 'deep-control-endpoint'
+          },
+          {
+            id: 'unknown-shape',
+            metadata: { label: 'must-not-flow-to-public' }
+          },
+          {
+            authentication: { type: 'Bearer must-not-leak-credential-value' },
+            id: 'secret-shaped'
+          },
+          {
+            id: `${pluginRoot}/attacker-selected-id`
+          },
+          {
+            capabilities: ['read', `path=${pluginRoot}`],
+            id: 'path-shaped-capability'
+          },
+          {
+            id: 'connector_AKIAIOSFODNN7EXAMPLE'
+          },
+          {
+            authentication: { type: 'AIzaSyD-abcdefghijklmnopqrstuvwxyz1234' },
+            id: 'credential-type'
+          },
+          {
+            authentication: { scopes: ['AIzaSyD-abcdefghijklmnopqrstuvwxyz1234'], type: 'oauth2' },
+            id: 'credential-scope'
+          },
+          {
+            id: 'opaque-permission',
+            permissions: ['abcdefghijklmnopqrstuvwx.yz0123456789abcdefghijklmnop']
+          }
+        ],
+        diagnostics: [{
+          code: 'legacy_path',
+          level: 'warning',
+          message: `Legacy metadata referenced ${pluginRoot}, ${pluginFileUrl}, and ${encodedPluginRoot}.`
+        }, {
+          code: 'encoded_credential',
+          level: 'warning',
+          message: 'sk%252Dabcdefghijklmnop'
+        }]
+      },
+      source: { adapter: 'codex', kind: 'directory' },
+      plugin: {
+        client: {
+          devClientEntryKind: 'host-vite',
+          devClientEntryUrl: `/@fs${pluginRoot}/client/index.ts`,
+          entry: './client/index.js'
+        },
+        contributions: {
+          chatHeaderMoreMenu: [{
+            href: 'https://docs.example.test/plugins',
+            id: 'docs-link',
+            title: 'Docs link'
+          }],
+          extensionContributions: [{
+            customMetadata: { mode: 'safe' },
+            id: 'consumer',
+            target: 'owner/point',
+            title: 'Consumer'
+          }],
+          navItems: [{ id: 'home', route: '/plugins/docs', title: 'Docs' }]
+        }
+      }
+    })
+    await createPlugin(unsafePluginRoot, {
+      name: 'unsafe-contribution-plugin',
+      plugin: {
+        contributions: {
+          navItems: [{
+            href: '/private/wrong-kind',
+            id: 'unsafe',
+            route: '/plugins/unsafe',
+            title: 'Unsafe'
+          }]
+        }
+      }
+    })
+    await createPlugin(unsafeRootRoutePluginRoot, {
+      name: 'unsafe-root-route-plugin',
+      plugin: { contributions: { href: '/private/top-level' } }
+    })
+    await createPlugin(unsafeRouteMetadataPluginRoot, {
+      name: 'unsafe-route-metadata-plugin',
+      plugin: {
+        contributions: {
+          navItems: [{
+            id: 'unsafe-route-metadata',
+            route: `/plugins/unsafe?next=${encodedPluginRoot}`,
+            title: 'Unsafe'
+          }]
+        }
+      }
+    })
+    await createPlugin(unsafeSchemeRoutePluginRoot, {
+      name: 'unsafe-scheme-route-plugin',
+      plugin: {
+        contributions: {
+          navItems: [{ id: 'unsafe-scheme-route', route: ' javascript:alert(1)', title: 'Unsafe' }]
+        }
+      }
+    })
+    await createPlugin(unsafeSchemeHrefPluginRoot, {
+      name: 'unsafe-scheme-href-plugin',
+      plugin: {
+        contributions: {
+          sessionGroups: [{
+            actions: [{ href: 'da\tta:text/html,unsafe', id: 'unsafe-scheme-href', title: 'Unsafe' }],
+            id: 'unsafe-scheme-href',
+            title: 'Unsafe'
+          }]
+        }
+      }
+    })
+    await createPlugin(unsafeOpaqueContributionPluginRoot, {
+      name: 'unsafe-opaque-contribution-plugin',
+      plugin: {
+        contributions: {
+          routes: [{
+            id: 'opaque',
+            title: 'Opaque',
+            unknownPrivateMetadata: 'internal-correlation-id'
+          }]
+        }
+      }
+    })
+    mocks.loadConfigState.mockResolvedValue({
+      workspaceFolder,
+      mergedConfig: {
+        plugins: [
+          {
+            id: pluginRoot,
+            options: {
+              [pluginRoot]: 'must-not-leak',
+              constructor: { safe: true },
+              credentialLabel: 'sk%252Dabcdefghijklmnop',
+              encodedPath: '%2Fprivate%2Funrelated',
+              label: '/private/unrelated',
+              pluginRoot: '/private/unrelated',
+              serviceUrl: 'https://example.test/oauth/callback'
+            },
+            scope: 'docs'
+          },
+          { id: unsafePluginRoot, scope: 'unsafe-contribution' },
+          {
+            id: unsafeRootRoutePluginRoot,
+            scope: 'unsafe-root-route'
+          },
+          { id: unsafeRouteMetadataPluginRoot, scope: 'unsafe-route-metadata' },
+          { id: unsafeSchemeRoutePluginRoot, scope: 'unsafe-scheme-route' },
+          { id: unsafeSchemeHrefPluginRoot, scope: 'unsafe-scheme-href' },
+          { id: unsafeOpaqueContributionPluginRoot, scope: 'unsafe-opaque-contribution' }
+        ]
+      }
+    })
+
+    const response = await fetch(`${baseUrl}/api/plugins`)
+    const payload = await response.json() as { plugins: Array<Record<string, unknown>> }
+    const plugin = payload.plugins.find(entry => entry.name === 'docs-plugin') as {
+      client?: { devClientEntryKind?: string; devClientEntryUrl?: string }
+      manifest?: {
+        native?: {
+          apps?: Array<{
+            authentication?: Record<string, unknown>
+            capabilities?: string[]
+            connectionRequirements?: Record<string, unknown>
+            permissions?: string[]
+          }>
+          diagnostics?: Array<{ message: string }>
+        }
+      }
+      name?: string
+      options?: Record<string, unknown>
+      requestId?: string
+      source?: Record<string, unknown>
+      contributions?: Record<string, unknown>
+    }
+    const unsafePlugin = payload.plugins.find(
+      entry => entry.name === 'unsafe-contribution-plugin'
+    ) as { contributions?: Record<string, unknown> }
+    const unsafeRootRoutePlugin = payload.plugins.find(
+      entry => entry.name === 'unsafe-root-route-plugin'
+    ) as { contributions?: Record<string, unknown> }
+    const unsafeRouteMetadataPlugin = payload.plugins.find(
+      entry => entry.name === 'unsafe-route-metadata-plugin'
+    ) as { contributions?: Record<string, unknown> }
+    const unsafeSchemeRoutePlugin = payload.plugins.find(
+      entry => entry.name === 'unsafe-scheme-route-plugin'
+    ) as { contributions?: Record<string, unknown> }
+    const unsafeSchemeHrefPlugin = payload.plugins.find(
+      entry => entry.name === 'unsafe-scheme-href-plugin'
+    ) as { contributions?: Record<string, unknown> }
+    const unsafeOpaqueContributionPlugin = payload.plugins.find(
+      entry => entry.name === 'unsafe-opaque-contribution-plugin'
+    ) as {
+      contributions?: Record<string, unknown>
+      manifest?: { plugin?: { contributions?: Record<string, unknown> } }
+    }
+
+    expect(plugin).toMatchObject({
+      description: '[redacted]',
+      displayName: '[redacted]',
+      name: 'docs-plugin',
+      requestId: 'docs-plugin',
+      source: { adapter: 'codex', kind: 'directory' }
+    })
+    expect(plugin.manifest?.native?.apps?.[0]).toEqual({
+      authentication: {
+        authorizationUrl:
+          'https://example.test/oauth/authorize?client_id=docs&redirect_uri=%2Foauth%2Fcallback&redirect_url=https%3A%2F%2Fapp.example.test%2Fauth%2Fcallback&code_challenge=valid&login_hint=docs',
+        callbackPath: '/oauth/callback',
+        type: 'oauth2'
+      },
+      capabilities: ['read', 'WorkspaceConfigurationManagement', 'write'],
+      connectionRequirements: {
+        endpoint: 'https://api.example.test/connect',
+        required: true,
+        type: 'oauth'
+      },
+      id: 'docs',
+      permissions: ['repository:read']
+    })
+    expect(plugin.manifest?.native?.apps).toHaveLength(1)
+    expect(plugin.manifest?.native?.diagnostics?.[0]?.message).toBe(
+      'Native plugin metadata diagnostic was redacted.'
+    )
+    expect(plugin.options).toBeUndefined()
+    expect(unsafePlugin.contributions).toBeUndefined()
+    expect(unsafeRootRoutePlugin.contributions).toBeUndefined()
+    expect(unsafeRouteMetadataPlugin.contributions).toBeUndefined()
+    expect(unsafeSchemeRoutePlugin.contributions).toBeUndefined()
+    expect(unsafeSchemeHrefPlugin.contributions).toBeUndefined()
+    expect(unsafeOpaqueContributionPlugin.contributions).toBeUndefined()
+    expect(unsafeOpaqueContributionPlugin.manifest?.plugin?.contributions).toBeUndefined()
+    expect(plugin.contributions).toEqual({
+      chatHeaderMoreMenu: [{
+        href: 'https://docs.example.test/plugins',
+        id: 'docs-link',
+        title: 'Docs link'
+      }],
+      extensionContributions: [{
+        customMetadata: { mode: 'safe' },
+        id: 'consumer',
+        target: 'owner/point',
+        title: 'Consumer'
+      }],
+      navItems: [{ id: 'home', route: '/plugins/docs', title: 'Docs' }]
+    })
+    expect(plugin.client).not.toHaveProperty('devClientEntryKind')
+    expect(plugin.client).not.toHaveProperty('devClientEntryUrl')
+    expect(plugin.client).not.toHaveProperty('root')
+    expect(plugin.client).not.toHaveProperty('sourceRoot')
+    expect(plugin).not.toHaveProperty('pluginRoot')
+    expect(plugin).not.toHaveProperty('rootDir')
+    const publicDiagnostics = (plugin as {
+      diagnostics?: Array<Record<string, unknown>>
+    }).diagnostics
+    expect(publicDiagnostics?.every(diagnostic => !Object.hasOwn(diagnostic, 'pluginRoot'))).toBe(true)
+    expect(publicDiagnostics).toEqual(expect.arrayContaining([expect.objectContaining({
+      code: 'encoded_credential',
+      message: 'Native plugin metadata diagnostic was redacted.'
+    })]))
+    expect(JSON.stringify(plugin)).not.toContain(pluginRoot)
+    expect(JSON.stringify(plugin)).not.toContain('must-not-leak')
+    expect(JSON.stringify(plugin)).not.toContain('must-not-flow-to-public')
+    expect(JSON.stringify(payload)).not.toContain('internal-correlation-id')
+    expect(JSON.stringify(plugin)).not.toContain('AKIAIOSFODNN7EXAMPLE')
+    expect(JSON.stringify(plugin)).not.toContain('AIzaSyD-abcdefghijklmnopqrstuvwxyz1234')
+    expect(JSON.stringify(plugin)).not.toContain('abcdefghijklmnopqrstuvwx.yz0123456789abcdefghijklmnop')
+    expect(JSON.stringify(plugin)).not.toContain('sk%252D')
+    expect(JSON.stringify(plugin)).not.toContain('/private/unrelated')
+    expect(JSON.stringify(plugin)).not.toContain('s3cret')
+    expect(JSON.stringify(plugin)).not.toContain('%2Fprivate')
+    expect(JSON.stringify(plugin)).not.toContain(workspaceFolder)
+    expect(JSON.stringify(payload)).not.toContain(workspaceFolder)
+  }, 5_000)
 
   function mockConfig(plugins: Array<{ enabled?: boolean; id: string; scope?: string }>) {
     mocks.loadConfigState.mockResolvedValue({

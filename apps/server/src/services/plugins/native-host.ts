@@ -8,9 +8,12 @@ import type {
   NativeHostSkill,
   NativeHostSkillDiscoveryResult
 } from '@oneworks/types'
-import { listNativeHostPluginAssetsWithin } from '@oneworks/utils'
+import { resolveProjectHomePath } from '@oneworks/utils'
 
 import { loadConfigState } from '#~/services/config/index.js'
+
+import { listSafeNativeHostPluginAssets } from './native-host-assets'
+import { toPublicNativeHostDiagnostic, toPublicNativeHostPlugin } from './native-host-public'
 
 const NATIVE_PLUGIN_ADAPTERS = [
   'codex',
@@ -43,22 +46,20 @@ const discoverAdapterNativePlugins = async (params: {
         adapter: diagnostic.adapter ?? manager.adapter
       }))
     }
-  } catch (error) {
+  } catch {
     return {
       plugins: [],
       diagnostics: [{
         adapter: params.adapter,
         code: 'native_plugin_discovery_failed',
         level: 'warning',
-        message: `Failed to discover ${params.adapter} Home plugins: ${
-          error instanceof Error ? error.message : String(error)
-        }`
+        message: `Failed to discover ${params.adapter} Home plugins.`
       }]
     }
   }
 }
 
-const discoverNativeHostPlugins = async (): Promise<NativeHostPluginDiscoveryResult> => {
+const discoverNativeHostPlugins = async () => {
   const { mergedConfig, workspaceFolder } = await loadConfigState()
   const results = await Promise.all(
     NATIVE_PLUGIN_ADAPTERS.map(adapter =>
@@ -71,6 +72,16 @@ const discoverNativeHostPlugins = async (): Promise<NativeHostPluginDiscoveryRes
   )
   return {
     diagnostics: results.flatMap(result => result.diagnostics),
+    privateRoots: [
+      workspaceFolder,
+      resolveProjectHomePath(workspaceFolder, process.env),
+      ...results.flatMap(result =>
+        result.plugins.flatMap(plugin => [
+          plugin.source.displayPath,
+          plugin.source.internalRoot
+        ])
+      )
+    ],
     plugins: results
       .flatMap(result => result.plugins)
       .sort((left: NativeHostPlugin, right: NativeHostPlugin) => (
@@ -101,15 +112,13 @@ const discoverAdapterNativeSkills = async (params: {
       })),
       skills: result.skills
     }
-  } catch (error) {
+  } catch {
     return {
       diagnostics: [{
         adapter: params.adapter,
         code: 'native_skill_discovery_failed',
         level: 'warning',
-        message: `Failed to discover ${params.adapter} skills: ${
-          error instanceof Error ? error.message : String(error)
-        }`
+        message: `Failed to discover ${params.adapter} skills.`
       }],
       skills: []
     }
@@ -139,19 +148,17 @@ export const listNativeHostSkills = async (): Promise<NativeHostSkillDiscoveryRe
   }
 }
 
-const toPublicNativeHostPlugin = (plugin: NativeHostPlugin): NativeHostPlugin => ({
-  ...plugin,
-  source: {
-    displayPath: plugin.source.displayPath,
-    kind: plugin.source.kind
-  }
-})
-
 export const listNativeHostPlugins = async (): Promise<NativeHostPluginDiscoveryResult> => {
   const result = await discoverNativeHostPlugins()
+  const privateRoots = result.privateRoots.filter((value): value is string => value != null)
   return {
-    ...result,
-    plugins: result.plugins.map(toPublicNativeHostPlugin)
+    diagnostics: result.diagnostics.slice(0, 64).map(diagnostic =>
+      toPublicNativeHostDiagnostic(diagnostic, privateRoots)
+    ),
+    plugins: result.plugins.flatMap((plugin) => {
+      const publicPlugin = toPublicNativeHostPlugin(plugin, privateRoots)
+      return publicPlugin == null ? [] : [publicPlugin]
+    })
   }
 }
 
@@ -162,7 +169,5 @@ export const listNativeHostPluginAssets = async (
   const selected = plugins.find(plugin => plugin.id === id)
   if (selected == null) return undefined
 
-  const root = selected.source.internalRoot
-  if (root == null || root === '') return []
-  return listNativeHostPluginAssetsWithin(root)
+  return listSafeNativeHostPluginAssets(selected)
 }

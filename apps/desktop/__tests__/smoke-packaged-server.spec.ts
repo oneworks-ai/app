@@ -5,14 +5,26 @@ import { createRequire } from 'node:module'
 import { describe, expect, it } from 'vitest'
 
 const requireModule = createRequire(import.meta.url)
+const { BUILTIN_PLUGIN_PACKAGES } = requireModule('../src/builtin-adapter-cache.cjs') as {
+  BUILTIN_PLUGIN_PACKAGES: string[]
+}
 const {
+  assertBuiltinRuntimeActive,
+  assertLocalClientSourcesCompile,
   createPackagedAsset,
+  parsePluginCatalog,
   readLocalPluginClientSource,
   readServerText,
   serverCompileTimeoutMs,
   serverRequestTimeoutMs,
   resolvePositiveTimeoutMs
 } = requireModule('../scripts/smoke-packaged-server.cjs') as {
+  assertBuiltinRuntimeActive: (
+    catalog: unknown,
+    port: number,
+    options?: { privatePaths?: string[] }
+  ) => Promise<void>
+  assertLocalClientSourcesCompile: (catalog: unknown, port: number) => Promise<void>
   createPackagedAsset: (
     port: number,
     options?: {
@@ -23,6 +35,7 @@ const {
     data: { asset: { kind: string; path: string } }
     success: boolean
   }>
+  parsePluginCatalog: (body: string) => unknown
   readLocalPluginClientSource: (
     port: number,
     versionedEntryUrl: string,
@@ -50,7 +63,137 @@ const {
   ) => number
 }
 
+const createRootFreeBuiltinCatalog = () => ({
+  plugins: BUILTIN_PLUGIN_PACKAGES.map(packageId => ({
+    ...(packageId === '@oneworks/plugin-relay'
+      ? {
+        contributions: {
+          cliCommands: [{ command: 'relay login', id: 'relay-login', root: true }]
+        },
+        manifest: {
+          native: { apps: [{ authentication: { tokenUrl: 'https://example.test/token' }, id: 'relay' }] }
+        }
+      }
+      : {}),
+    enabled: true,
+    packageId,
+    requestId: packageId,
+    scope: packageId
+  }))
+})
+
 describe('packaged server smoke timeouts', () => {
+  it('accepts active built-in runtimes without resolved roots', async () => {
+    await expect(
+      assertBuiltinRuntimeActive(createRootFreeBuiltinCatalog(), 43110, {
+        privatePaths: ['/private/packaged-runtime']
+      })
+    ).resolves.toBeUndefined()
+  })
+
+  it.each(['contributions', 'plugin.contributions', 'manifest.plugin.contributions'])(
+    'accepts a boolean CLI root at declared %s',
+    async placement => {
+      const catalog = createRootFreeBuiltinCatalog()
+      const relay = catalog.plugins.find(plugin => plugin.packageId === '@oneworks/plugin-relay') as Record<
+        string,
+        unknown
+      >
+      delete relay.contributions
+      const contributions = {
+        cliCommands: [{ command: 'relay login', id: 'relay-login', root: true }]
+      }
+      if (placement === 'contributions') relay.contributions = contributions
+      if (placement === 'plugin.contributions') relay.plugin = { contributions }
+      if (placement === 'manifest.plugin.contributions') relay.manifest = { plugin: { contributions } }
+
+      await expect(assertBuiltinRuntimeActive(catalog, 43110)).resolves.toBeUndefined()
+    }
+  )
+
+  it.each([
+    ['root metadata', { pluginRoot: '/private/packaged-runtime/browser-driver' }],
+    ['workspace metadata', { runtime: { workspaceFolder: '/private/workspace' } }],
+    ['credential metadata', { authentication: { accessToken: 'credential-sentinel' } }],
+    [
+      'alternate credential metadata',
+      {
+        authentication: {
+          authorizationHeader: 'credential-sentinel',
+          bearerToken: 'credential-sentinel',
+          oauthToken: 'credential-sentinel',
+          privateKey: 'credential-sentinel',
+          secret: 'credential-sentinel',
+          token: 'credential-sentinel'
+        }
+      }
+    ],
+    ['encoded credential metadata', { authentication: { 'a%25252563cess_token': 'credential-sentinel' } }],
+    ['private path value', { description: 'Loaded from /private/packaged-runtime/browser-driver' }],
+    ['encoded private path value', { description: 'Loaded from %252Fprivate%252Fpackaged-runtime/browser-driver' }],
+    [
+      'non-boolean CLI root',
+      { contributions: { cliCommands: [{ command: 'relay login', id: 'relay-login', root: '/private/root' }] } }
+    ],
+    [
+      'undeclared nested CLI root',
+      {
+        evil: {
+          plugins: [{
+            contributions: { cliCommands: [{ command: 'relay login', id: 'relay-login', root: true }] }
+          }]
+        }
+      }
+    ]
+  ])('rejects active built-in runtimes with leaked %s', async (_label, leakedMetadata) => {
+    const catalog = createRootFreeBuiltinCatalog()
+    Object.assign(catalog.plugins[0], leakedMetadata)
+
+    await expect(
+      assertBuiltinRuntimeActive(catalog, 43110, {
+        privatePaths: ['/private/packaged-runtime']
+      })
+    ).rejects.toThrow(/^Packaged plugin catalog exposed (a )?private/u)
+  })
+
+  it('does not include private metadata in smoke failure messages', async () => {
+    const catalog = createRootFreeBuiltinCatalog()
+    Object.assign(catalog.plugins[0], {
+      authentication: { accessToken: 'credential-value-sentinel' }
+    })
+
+    const error = await assertBuiltinRuntimeActive(catalog, 43110).catch(value => value as Error)
+    expect(error.message).toBe('Packaged plugin catalog exposed private metadata.')
+    expect(error.message).not.toContain('credential-value-sentinel')
+
+    const valueCatalog = createRootFreeBuiltinCatalog()
+    Object.assign(valueCatalog.plugins[0], {
+      description: 'Bearer credential-value-sentinel'
+    })
+    const valueError = await assertBuiltinRuntimeActive(valueCatalog, 43110).catch(value => value as Error)
+    expect(valueError.message).toBe('Packaged plugin catalog exposed private metadata.')
+    expect(valueError.message).not.toContain('credential-value-sentinel')
+
+    const invalidJsonError = (() => {
+      try {
+        parsePluginCatalog('{"accessToken":"credential-value-sentinel"')
+      } catch (value) {
+        return value as Error
+      }
+    })()
+    expect(invalidJsonError?.message).toBe('Packaged plugin catalog returned invalid JSON.')
+    expect(invalidJsonError?.message).not.toContain('credential-value-sentinel')
+
+    const localSourceError = await assertLocalClientSourcesCompile({
+      plugins: [{ description: '/private/path/credential-value-sentinel', scope: 'china-red-theme' }]
+    }, 43110).catch(value => value as Error)
+    expect(localSourceError.message).toBe(
+      'Packaged local plugin "china-red-theme" did not expose its compiled source entry.'
+    )
+    expect(localSourceError.message).not.toContain('/private/path')
+    expect(localSourceError.message).not.toContain('credential-value-sentinel')
+  })
+
   it('uses the request timeout fallback for cold plugin compilation', () => {
     expect(
       resolvePositiveTimeoutMs(

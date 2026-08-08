@@ -4,9 +4,13 @@ import path from 'node:path'
 
 import type { ClaudePluginManifest } from '@oneworks/adapter-claude-code/plugins'
 
+import { readBoundedRegularFileNoFollow } from '../runtime/bounded-regular-file-read'
+
 export interface CodexPluginManifest extends ClaudePluginManifest {
-  apps?: string
+  apps?: string | string[]
+  displayName?: string
   interface?: {
+    capabilities?: string[]
     composerIcon?: string
     displayName?: string
     shortDescription?: string
@@ -17,6 +21,8 @@ export interface CodexPluginManifest extends ClaudePluginManifest {
     logoDark?: string
   }
 }
+
+const MAX_CODEX_PLUGIN_MANIFEST_BYTES = 1024 * 1024
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
@@ -31,12 +37,55 @@ export const pathExists = async (target: string) => {
   }
 }
 
-export const parseCodexPluginManifest = async (pluginRoot: string): Promise<CodexPluginManifest | undefined> => {
-  const manifestPath = path.join(pluginRoot, '.codex-plugin', 'plugin.json')
-  if (!await pathExists(manifestPath)) return undefined
+export const resolveCodexPathWithinPluginRoot = async (
+  pluginRoot: string,
+  entry: string,
+  description: string
+) => {
+  const resolved = path.resolve(pluginRoot, entry)
+  const relative = path.relative(pluginRoot, resolved)
+  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error(`${description} must stay within the plugin root.`)
+  }
+  if (!await pathExists(resolved)) return resolved
 
-  const raw = JSON.parse(await fs.readFile(manifestPath, 'utf8')) as unknown
-  return isRecord(raw) ? raw as CodexPluginManifest : undefined
+  const [realRoot, realResolved] = await Promise.all([
+    fs.realpath(pluginRoot),
+    fs.realpath(resolved)
+  ])
+  const realRelative = path.relative(realRoot, realResolved)
+  if (realRelative === '..' || realRelative.startsWith(`..${path.sep}`) || path.isAbsolute(realRelative)) {
+    throw new Error(`${description} resolves outside the plugin root.`)
+  }
+  return resolved
+}
+
+export const parseCodexPluginManifest = async (
+  pluginRoot: string,
+  operations?: {
+    afterDirectoryOpen?: (relativePath: string) => Promise<void> | void
+    beforeDirectoryOpen?: (relativePath: string) => Promise<void> | void
+    beforePostOpenIdentityCheck?: () => Promise<void> | void
+  }
+): Promise<CodexPluginManifest | undefined> => {
+  const canonicalRoot = await fs.realpath(pluginRoot)
+  const manifestPath = path.join(canonicalRoot, '.codex-plugin', 'plugin.json')
+  if (!await pathExists(manifestPath)) return undefined
+  const source = await readBoundedRegularFileNoFollow({
+    ...operations,
+    canonicalParent: canonicalRoot,
+    filePath: manifestPath,
+    maxBytes: MAX_CODEX_PLUGIN_MANIFEST_BYTES
+  })
+  if (source == null) throw new Error('Codex plugin manifest could not be read safely.')
+  let raw: unknown
+  try {
+    raw = JSON.parse(source) as unknown
+  } catch {
+    throw new Error('Codex plugin manifest is not valid JSON.')
+  }
+  if (!isRecord(raw)) throw new Error('Codex plugin manifest must contain a JSON object.')
+  return raw as CodexPluginManifest
 }
 
 export const mergeCodexPluginManifest = (

@@ -66,12 +66,38 @@ interface LauncherWorkspaceInstanceIdentity {
   sourceVersionId?: string
 }
 
-interface LauncherWorkspaceInstanceState extends LauncherWorkspaceInstanceIdentity {
+type LauncherWorkspacePersistedIdentity =
+  & Omit<
+    LauncherWorkspaceInstanceIdentity,
+    'runtimeCompatibilityVersion'
+  >
+  & { runtimeCompatibilityVersion?: string }
+
+interface LauncherWorkspaceInstanceState extends LauncherWorkspacePersistedIdentity {
   pid?: number
   protocolVersion: number
+  runtimeCompatibilityVersion?: string
   serverBaseUrl?: string
   startedAt: string
   workspaceFolder: string
+}
+
+const isLauncherWorkspaceInstanceState = (value: unknown): value is LauncherWorkspaceInstanceState => {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) return false
+  const state = value as Record<string, unknown>
+  return (
+    typeof state.implementationId === 'string' &&
+    typeof state.launchConfigHash === 'string' &&
+    typeof state.packageDir === 'string' &&
+    (state.runtimeCompatibilityVersion == null || typeof state.runtimeCompatibilityVersion === 'string') &&
+    typeof state.protocolVersion === 'number' && Number.isInteger(state.protocolVersion) &&
+    typeof state.startedAt === 'string' &&
+    typeof state.workspaceFolder === 'string' &&
+    (state.pid == null || (typeof state.pid === 'number' && Number.isInteger(state.pid))) &&
+    (state.repoRoot == null || typeof state.repoRoot === 'string') &&
+    (state.serverBaseUrl == null || typeof state.serverBaseUrl === 'string') &&
+    (state.sourceVersionId == null || typeof state.sourceVersionId === 'string')
+  )
 }
 
 const services = new Map<string, LauncherWorkspaceService>()
@@ -694,8 +720,7 @@ const readWorkspaceInstanceState = async (workspaceFolder: string) => {
   try {
     const raw = await readFile(getWorkspaceInstanceStatePath(workspaceFolder), 'utf8')
     const value = JSON.parse(raw) as unknown
-    if (value == null || typeof value !== 'object' || Array.isArray(value)) return undefined
-    return value as LauncherWorkspaceInstanceState
+    return isLauncherWorkspaceInstanceState(value) ? value : undefined
   } catch {
     return undefined
   }
@@ -827,7 +852,7 @@ const readSemverCompatibilityFamily = (version: string | undefined) => {
 }
 
 const isWorkspaceRuntimeCompatibilityVersionCompatible = (
-  state: LauncherWorkspaceInstanceIdentity,
+  state: LauncherWorkspacePersistedIdentity,
   identity: LauncherWorkspaceInstanceIdentity
 ) => {
   if (state.packageDir !== identity.packageDir) return false
@@ -838,7 +863,7 @@ const isWorkspaceRuntimeCompatibilityVersionCompatible = (
 }
 
 const isLegacyGitRuntimeImplementationCompatible = (
-  state: LauncherWorkspaceInstanceIdentity,
+  state: LauncherWorkspacePersistedIdentity,
   identity: LauncherWorkspaceInstanceIdentity
 ) => {
   if (!identity.implementationId.startsWith('git-runtime:')) return false
@@ -856,7 +881,7 @@ const isLegacyGitRuntimeImplementationCompatible = (
 }
 
 const isWorkspaceImplementationCompatible = (
-  state: LauncherWorkspaceInstanceIdentity,
+  state: LauncherWorkspacePersistedIdentity,
   identity: LauncherWorkspaceInstanceIdentity
 ) => (
   state.implementationId === identity.implementationId ||
@@ -866,7 +891,7 @@ const isWorkspaceImplementationCompatible = (
 
 const resolveWorkspaceVersionConflictReason = (
   workspaceFolder: string,
-  state: LauncherWorkspaceInstanceIdentity & { workspaceFolder: string },
+  state: LauncherWorkspacePersistedIdentity & { workspaceFolder: string },
   identity: LauncherWorkspaceInstanceIdentity
 ): LauncherWorkspaceVersionConflictDetails['reason'] => {
   if (state.workspaceFolder !== workspaceFolder) return 'workspace'
@@ -876,7 +901,7 @@ const resolveWorkspaceVersionConflictReason = (
 
 const assertCompatibleWorkspaceInstance = (
   workspaceFolder: string,
-  state: LauncherWorkspaceInstanceIdentity & {
+  state: LauncherWorkspacePersistedIdentity & {
     pid?: number
     serverBaseUrl?: string
     startedAt?: string

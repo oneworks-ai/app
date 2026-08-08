@@ -83,9 +83,7 @@ export const resolvePluginRequestDisplay = (plugin: PluginRuntimeInstance) => (
   firstSafePluginPresentationValue(plugin.requestId, plugin.packageId, plugin.name, plugin.scope) ?? 'plugin'
 )
 
-export const resolvePluginRootDisplay = (plugin: PluginRuntimeInstance) => (
-  firstSafePluginPresentationValue(plugin.pluginRoot, plugin.rootDir)
-)
+export const resolvePluginRootDisplay = (_plugin: PluginRuntimeInstance): undefined => undefined
 
 export const resolveNativePluginDisplayName = (plugin: NativeHostPlugin) => (
   firstSafePluginPresentationValue(
