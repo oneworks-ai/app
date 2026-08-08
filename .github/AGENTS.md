@@ -26,7 +26,7 @@
 - `deploy-relay-server.yml`：手动把已批准的精确 `origin/main` SHA 提升到 Relay production；构建 Server + Admin artifact，优先触发完整配置的外部发布目标，否则直发官方 Cloudflare Worker / Pages 与 Vercel 单项目 Relay/Admin，并验证 build SHA、登录、未授权边界和真实 Admin 静态资产。
 - `deploy-relay-admin.yml`：只监听 Relay Admin 前端及其 UI 依赖，构建独立 Admin 平台 artifact 并可按变量触发外部前端部署。
 - `deploy-pwa.yml`：从 app 仓库触发 `oneworks-ai/pwa` 的部署 workflow。
-- `deploy-avatar.yml`：从 app 仓库触发 `oneworks-ai/avatar` 的 GitHub Pages 部署 workflow，只监听 avatar 相关路径。
+- `deploy-avatar.yml`：从 app 仓库触发 `oneworks-ai/avatar` 的 GitHub Pages 部署 workflow，只监听 avatar 相关路径；目标仓库独立安装构建，不应依赖 app 根 workspace install。
 - `deploy-homepage.yml`：从 app 仓库触发 `oneworks-ai/oneworks-ai.github.io` 的 GitHub Pages 部署 workflow，只监听 `.oo/docs` 和自身 workflow。
 
 ## 当前 Secrets / Variables

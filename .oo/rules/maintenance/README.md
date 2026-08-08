@@ -131,7 +131,7 @@ target、状态查询、操作租约和 handoff 见 [开发服务跨会话协作
 - Avatar 的运行时来源是本仓库 `packages/avatar`，client 通过 `@oneworks/avatar` 使用同一套 SVG rect 渲染器。
 - 本仓库的 `.github/workflows/deploy-avatar.yml` 只在 `assets/avatar/**`、`packages/avatar/**` 或 workflow 自身变化时触发，避免其它 package / client 改动误触发 avatar Pages 更新。
 - 本仓库需要配置 Actions secret `AVATAR_DEPLOY_TOKEN`，用于跨仓库触发 `oneworks-ai/avatar` 的 `deploy-avatar.yml` workflow。推荐使用只授予 `oneworks-ai/avatar` Actions 写权限的 fine-grained token。
-- Avatar 仓库部署时会 checkout 本仓库 `main` 的指定 commit，并初始化 submodules；构建命令是 `ONEWORKS_AVATAR_BASE=/avatar/ pnpm -C assets/avatar build`，最终发布 `assets/avatar/dist/` 到 GitHub Pages。
+- `assets/avatar` 不属于本仓库根 `pnpm-workspace.yaml`。Avatar 仓库部署时 checkout 本仓库指定 commit 到 `app-source`，用自己的工具链独立安装，并通过 `ONEWORKS_APP_SOURCE_DIR=app-source` alias 读取 `packages/avatar` 源码与 `packages/route-layout` CSS；不要让下游部署依赖本仓库根 `pnpm install --frozen-lockfile`。
 
 ### 8. Homepage 文档站部署维护
 
