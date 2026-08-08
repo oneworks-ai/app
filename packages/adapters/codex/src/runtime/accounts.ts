@@ -2,12 +2,12 @@
 import { Buffer } from 'node:buffer'
 import { spawn } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
-import { access, lstat, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
+import { access, chmod, lstat, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
 
-import { updateConfigFile, withCanonicalConfigWriteLock } from '@oneworks/config'
+import { updateGlobalAdapterAccounts, withCanonicalConfigWriteLock } from '@oneworks/config'
 import { resolveMockHome } from '@oneworks/hooks'
 import { bridgeRealHomeToMockHome } from '@oneworks/register/mock-home-bridge'
 import type {
@@ -24,10 +24,16 @@ import type {
 } from '@oneworks/types'
 import {
   DEFAULT_GLOBAL_OO_CONFIG_FILE,
+  addAdapterAccountTombstone,
+  createAdapterAccountGeneration,
+  createAdapterCredentialRevision,
   createStartupProfiler,
+  filterActiveAdapterAccounts,
   getAdapterConfiguredDefaultAccount,
+  isAdapterAccountGenerationDeleted,
   mergeAdapterConfigs,
   mergeProcessEnvWithProjectEnv,
+  normalizeAdapterAccountTombstones,
   normalizeNonEmptyString,
   resolveGlobalOneWorksDir,
   resolveProjectOoPath,
@@ -63,13 +69,21 @@ interface CodexConfiguredAccount {
   createdAt?: number
   updatedAt?: number
   authDigest?: string
+  generation?: string
+  credentialRevision?: string
+  credentialUpdatedAt?: number
 }
 
 interface CodexInlineAuthConfig {
+  storage?: string
   type?: string
+  version?: number
+  portability?: string
   encoding?: string
   token?: string
   value?: string
+  ref?: string
+  binding?: string
 }
 
 interface CodexGlobalAccountCredentialRevision {
@@ -1146,8 +1160,14 @@ const writeTextFileAtomically = async (filePath: string, content: string) => {
   await mkdir(dirname(filePath), { recursive: true })
   const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`
   try {
-    await writeFile(tempPath, content, 'utf8')
+    await writeFile(tempPath, content, {
+      encoding: 'utf8',
+      flag: 'wx',
+      mode: 0o600
+    })
+    await chmod(tempPath, 0o600)
     await rename(tempPath, filePath)
+    await chmod(filePath, 0o600)
   } catch (error) {
     await rm(tempPath, { force: true }).catch(() => {})
     throw error
@@ -1166,7 +1186,10 @@ const resolveConfiguredAuthFilePath = (ctx: Pick<AdapterCtx, 'cwd'>, authFile: s
 }
 
 const encodeCodexInlineAuthContent = (authContent: string): CodexInlineAuthConfig => ({
+  storage: 'inline',
   type: CODEX_INLINE_AUTH_TYPE,
+  version: 1,
+  portability: 'portable',
   encoding: CODEX_INLINE_AUTH_ENCODING,
   token: Buffer.from(authContent, 'utf8').toString('base64')
 })
@@ -1197,18 +1220,11 @@ const updateCodexGlobalAdapterConfig = async (
     accounts: Record<string, unknown>
   ) => Promise<Record<string, unknown>> | Record<string, unknown>
 ) => {
-  await updateConfigFile({
+  await updateGlobalAdapterAccounts({
+    adapter: 'codex',
+    cwd: ctx.cwd,
     env: ctx.env,
-    workspaceFolder: ctx.cwd,
-    source: 'global',
-    section: 'adapters',
-    resolveValue: async (currentConfig) => {
-      const adapters = isRecord(currentConfig.adapters) ? { ...currentConfig.adapters } : {}
-      const codexConfig = isRecord(adapters.codex) ? { ...adapters.codex } : {}
-      const accounts = isRecord(codexConfig.accounts) ? { ...codexConfig.accounts } : {}
-      adapters.codex = await updater(codexConfig, accounts)
-      return adapters
-    }
+    update: updater
   })
 }
 
@@ -1359,6 +1375,8 @@ const buildCodexGlobalAccountConfig = (params: {
   authContent: string
   metadata: CodexStoredAccountMetadata
   existing?: CodexConfiguredAccount
+  accountCreated?: boolean
+  credentialChanged?: boolean
 }): CodexConfiguredAccount => ({
   ...params.existing,
   authFile: undefined,
@@ -1383,6 +1401,15 @@ const buildCodexGlobalAccountConfig = (params: {
   createdAt: params.metadata.createdAt,
   updatedAt: params.metadata.updatedAt,
   authDigest: params.metadata.authDigest,
+  generation: params.existing?.generation ?? (
+    params.accountCreated === true ? createAdapterAccountGeneration() : undefined
+  ),
+  credentialRevision: params.credentialChanged === true
+    ? createAdapterCredentialRevision(params.existing?.credentialRevision)
+    : params.existing?.credentialRevision,
+  credentialUpdatedAt: params.credentialChanged === true
+    ? Date.now()
+    : params.existing?.credentialUpdatedAt,
   auth: encodeCodexInlineAuthContent(params.authContent)
 })
 
@@ -1396,6 +1423,7 @@ const upsertCodexGlobalAccountConfig = async (
   }
 ) => {
   await updateCodexGlobalAdapterConfig(ctx, async (codexConfig, accounts) => {
+    const accountTombstones = normalizeAdapterAccountTombstones(codexConfig.accountTombstones)
     const existing = isRecord(accounts[params.key])
       ? accounts[params.key] as CodexConfiguredAccount
       : undefined
@@ -1415,7 +1443,7 @@ const upsertCodexGlobalAccountConfig = async (
         )
       }
     }
-    accounts[params.key] = buildCodexGlobalAccountConfig({
+    const nextAccount = buildCodexGlobalAccountConfig({
       key: params.key,
       authContent: params.authContent,
       metadata: {
@@ -1423,13 +1451,20 @@ const upsertCodexGlobalAccountConfig = async (
         createdAt: params.metadata.createdAt ?? existing?.createdAt ?? Date.now(),
         updatedAt: params.metadata.updatedAt ?? Date.now()
       },
-      existing
+      existing,
+      accountCreated: existing == null,
+      credentialChanged: true
     })
+    if (isAdapterAccountGenerationDeleted(accountTombstones, params.key, nextAccount.generation)) {
+      throw new Error(`Codex account "${params.key}" was deleted while sign-in was in progress.`)
+    }
+    accounts[params.key] = nextAccount
 
     return {
       ...codexConfig,
       defaultAccount: normalizeNonEmptyString(codexConfig.defaultAccount) ?? params.key,
-      accounts
+      accounts,
+      ...(Object.keys(accountTombstones).length === 0 ? { accountTombstones: undefined } : { accountTombstones })
     }
   })
 }
@@ -1439,10 +1474,17 @@ const removeCodexGlobalAccountConfig = async (
   accountKey: string
 ) => {
   await updateCodexGlobalAdapterConfig(ctx, (codexConfig, accounts) => {
+    const current = isRecord(accounts[accountKey]) ? accounts[accountKey] : undefined
     delete accounts[accountKey]
+    const accountTombstones = addAdapterAccountTombstone(
+      normalizeAdapterAccountTombstones(codexConfig.accountTombstones),
+      accountKey,
+      normalizeNonEmptyString(current?.generation) ?? `legacy:${accountKey}`
+    )
     const nextCodexConfig: Record<string, unknown> = {
       ...codexConfig,
-      accounts
+      accounts,
+      accountTombstones
     }
 
     if (normalizeNonEmptyString(codexConfig.defaultAccount) === accountKey) {
@@ -1561,6 +1603,17 @@ const updateCodexGlobalAccountMetadata = async (
         existing
       })
 
+    const accountTombstones = normalizeAdapterAccountTombstones(codexConfig.accountTombstones)
+    if (
+      isAdapterAccountGenerationDeleted(
+        accountTombstones,
+        params.descriptor.key,
+        existing.generation
+      )
+    ) {
+      return codexConfig
+    }
+
     params.descriptor.metadata = nextMetadata
     params.descriptor.identity = normalizeCodexIdentity({
       ...params.descriptor.identity,
@@ -1574,7 +1627,8 @@ const updateCodexGlobalAccountMetadata = async (
 
     return {
       ...codexConfig,
-      accounts
+      accounts,
+      ...(Object.keys(accountTombstones).length === 0 ? { accountTombstones: undefined } : { accountTombstones })
     }
   })
 }
@@ -1719,16 +1773,18 @@ const resolveCodexAdapterConfig = (ctx: Pick<AdapterCtx, 'configs'>) => {
   ) as Record<string, unknown> | undefined
 
   const rawConfig = isRecord(mergedAdapters?.codex) ? mergedAdapters?.codex : {}
-  const accounts = isRecord(rawConfig.accounts)
+  const rawAccounts: Record<string, CodexConfiguredAccount> = isRecord(rawConfig.accounts)
     ? Object.fromEntries(
       Object.entries(rawConfig.accounts)
         .filter((entry): entry is [string, CodexConfiguredAccount] => isRecord(entry[1]))
     )
     : {}
+  const accountTombstones = normalizeAdapterAccountTombstones(rawConfig.accountTombstones)
 
   return {
     defaultAccount: getAdapterConfiguredDefaultAccount(rawConfig),
-    accounts
+    accounts: filterActiveAdapterAccounts(rawAccounts, accountTombstones),
+    accountTombstones
   }
 }
 
@@ -2273,6 +2329,14 @@ const collectConfiguredAccountDescriptors = async (
       authFileFingerprint?.identity
     )
     const hasInlineAuth = authContent != null
+    const authStorage = isRecord(configuredAccount.auth)
+      ? normalizeNonEmptyString(configuredAccount.auth.storage) ?? 'inline'
+      : undefined
+    const unavailableCredentialDescription = authStorage === 'secret'
+      ? 'Credential secret is not available on this device.'
+      : authStorage === 'device'
+      ? 'Credential is bound to another device; sign in again on this device.'
+      : undefined
     const sourceKind = hasConfiguredAuthFile
       ? 'configured-auth-file'
       : hasInlineAuth
@@ -2286,7 +2350,9 @@ const collectConfiguredAccountDescriptors = async (
         title: configuredAccount.title ?? metadata.title,
         probe: mergedIdentity
       }),
-      description: normalizeNonEmptyString(configuredAccount.description) ?? metadata.description,
+      description: unavailableCredentialDescription ??
+        normalizeNonEmptyString(configuredAccount.description) ??
+        metadata.description,
       authFilePath: hasConfiguredAuthFile ? configuredAuthFilePath : undefined,
       authContent: hasConfiguredAuthFile ? undefined : authContent,
       sourceKind,

@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import {
   adapterAccountConfigCommonSchema,
+  adapterAccountCredentialConfigSchema,
   adapterConfigCommonSchema,
   adapterNativeCliConfigSchema,
   buildConfigUiObjectSchema,
@@ -10,15 +11,22 @@ import {
   jsonValueSchema
 } from '@oneworks/core/config-schema'
 
+const codexInlineAuthSchema = z.object({
+  storage: z.literal('inline').optional().describe('Inline credential storage'),
+  type: z.literal('codex-auth-json').optional().describe('Encoded credential payload type'),
+  version: z.literal(1).optional().describe('Credential format version'),
+  portability: z.literal('portable').optional().describe('Cross-device portability'),
+  encoding: z.literal('base64').describe('Credential payload encoding'),
+  token: z.string().describe('Base64 encoded Codex auth.json payload')
+})
+
 const codexAdapterAccountSchema = adapterAccountConfigCommonSchema.extend({
   authFile: z.string().optional().describe(
     'Optional explicit path to a Codex auth.json file. Leave empty to use the credentials stored for this account.'
   ),
-  auth: z.object({
-    type: z.literal('codex-auth-json').optional().describe('Encoded credential payload type'),
-    encoding: z.literal('base64').describe('Credential payload encoding'),
-    token: z.string().describe('Base64 encoded Codex auth.json payload')
-  }).optional().describe('Inline Codex auth.json payload stored in the global OneWorks config'),
+  auth: z.union([codexInlineAuthSchema, adapterAccountCredentialConfigSchema]).optional().describe(
+    'Codex credential envelope; unresolved secret/device bindings are shown as missing on this device'
+  ),
   displayName: z.string().optional().describe('Cached Codex account display name'),
   email: z.string().optional().describe('Cached Codex account email'),
   avatarUrl: z.string().optional().describe('Custom Codex account avatar URL'),
@@ -41,6 +49,11 @@ export const codexAdapterConfigSchema = z.object({
   cli: adapterNativeCliConfigSchema.optional().describe('Managed Codex CLI runtime'),
   defaultAccount: z.string().optional().describe('Default Codex account key'),
   accounts: z.record(z.string(), codexAdapterAccountSchema).optional().describe('Available Codex accounts'),
+  accountTombstones: z.record(
+    z.string(),
+    z.union([z.string().min(1), z.array(z.string().min(1)).min(1)])
+  ).optional()
+    .describe('Deleted Codex account generations used by cross-device synchronization'),
   sandboxPolicy: z.object({
     type: z.enum(['readOnly', 'workspaceWrite', 'dangerFullAccess', 'externalSandbox'])
       .describe('Sandbox policy type'),
@@ -113,6 +126,7 @@ export const adapterConfigContribution = defineAdapterConfigContribution({
     deepMergeKeys: [
       'cli',
       'accounts',
+      'accountTombstones',
       'sandboxPolicy',
       'clientInfo',
       'configOverrides',

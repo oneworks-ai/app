@@ -38,9 +38,9 @@ Useful commands:
 - `oneworks users [-s cf|vercel|<url>]`: list local Relay account logins
 - `oneworks users enable [user]` / `oneworks users disable [user]`: enable or disable a Relay account
 - `oneworks logout [user]`: remove a locally saved Relay login
-- `oneworks accounts add <adapter> [accountName]`: run the adapter-native login flow and save the returned credentials snapshot under the project home
+- `oneworks accounts add <adapter> [accountName]`: run the adapter-native login flow; Codex and Claude Code save global account snapshots, while artifact-based adapters use the project home
 - `oneworks accounts show <adapter> <accountName>`: show account details and the latest quota summary
-- `oneworks accounts remove <adapter> <accountName>`: remove an adapter account snapshot from the current workspace
+- `oneworks accounts remove <adapter> <accountName>`: remove One Works' adapter account record; official logout runs only for portable, platform-isolated credentials, while a device-bound native login remains on the device
 
 Commands default to the project root workspace. If `__ONEWORKS_PROJECT_WORKSPACE_FOLDER__` is set, that directory is used directly. Otherwise the entry points probe upward from the current directory for `.oo`, `.oo.config.*`, `pnpm-workspace.yaml`, or a Git root. Set `__ONEWORKS_PROJECT_CONFIG_DIR__` when config files live outside the resolved workspace root.
 

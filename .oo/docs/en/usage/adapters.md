@@ -17,24 +17,27 @@ The adapter selector in the chat input shows the native adapters built into the 
 
 ## Multiple Accounts
 
-Adapters that expose account capabilities can keep account snapshots under the project home:
+Adapters share one account lifecycle contract, while each adapter owns credential persistence. Managed Codex and Claude Code accounts are stored in the global `~/.oneworks/.oo.config.json` so they can be reused across projects. Adapters that return account artifacts may still use the project home:
 
 ```text
 <project-home>/.local/adapters/<adapter>/accounts/<accountKey>/
 ```
 
-For Codex:
+For Codex and Claude Code:
 
 ```bash
 oneworks accounts add codex
 oneworks accounts add codex work
 oneworks accounts show codex work
 oneworks accounts remove codex work
+oneworks accounts add claude-code work
+oneworks accounts show claude-code work
+oneworks accounts remove claude-code work
 ```
 
-The account key is inferred from login metadata when possible. Account details may include origin information, authentication digest, and quota or rate-limit snapshots.
+Both adapters invoke official CLI login and status flows. Removal may invoke official logout only for portable credentials on a platform where the managed account is isolated. Claude Code gives each managed account a stable, isolated `CLAUDE_CONFIG_DIR`; macOS Keychain credentials remain device-bound, while an official `.credentials.json` can be stored as a portable snapshot. Removing a macOS or other device-bound account deletes only One Works' record and binding: the native login remains on that device. An explicit `claude auth logout` is a machine-level operation that affects the device's native login. Claude quota information comes only from the local `cachedUsageUtilization` snapshot.
 
-Account data is local runtime data. Do not commit it to the workspace.
+Account data is private. Do not commit it to the workspace. A base64 payload is encoded, not encrypted; a device-bound account must be authenticated again on a new device. `.claude.json` is state and cached identity/usage, not a complete credential.
 
 ## Adapter CLI and Model Routing
 

@@ -1240,6 +1240,9 @@ importers:
       '@oneworks/components':
         specifier: workspace:*
         version: link:../../components
+      '@oneworks/config':
+        specifier: workspace:*
+        version: link:../../config
       '@oneworks/types':
         specifier: workspace:*
         version: link:../../types

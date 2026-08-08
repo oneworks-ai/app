@@ -39,6 +39,16 @@
         "require": "./dist/relay-device-transport.js"
       }
     },
+    "./credential-revision": {
+      "__oneworks__": {
+        "default": "./src/credential-revision.ts"
+      },
+      "types": "./dist/credential-revision.d.ts",
+      "default": {
+        "import": "./dist/credential-revision.mjs",
+        "require": "./dist/credential-revision.js"
+      }
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -46,7 +56,7 @@
     "package.json"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/index.mjs && esbuild src/index.ts --bundle --platform=node --format=cjs --outfile=dist/index.js && esbuild src/standalone-route.ts --bundle --platform=neutral --format=esm --outfile=dist/standalone-route.mjs && esbuild src/standalone-route.ts --bundle --platform=node --format=cjs --outfile=dist/standalone-route.js && esbuild src/relay-device-transport.ts --bundle --platform=neutral --format=esm --outfile=dist/relay-device-transport.mjs && esbuild src/relay-device-transport.ts --bundle --platform=node --format=cjs --outfile=dist/relay-device-transport.js",
+    "build": "tsc -p tsconfig.build.json && esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/index.mjs && esbuild src/index.ts --bundle --platform=node --format=cjs --outfile=dist/index.js && esbuild src/standalone-route.ts --bundle --platform=neutral --format=esm --outfile=dist/standalone-route.mjs && esbuild src/standalone-route.ts --bundle --platform=node --format=cjs --outfile=dist/standalone-route.js && esbuild src/relay-device-transport.ts --bundle --platform=neutral --format=esm --outfile=dist/relay-device-transport.mjs && esbuild src/relay-device-transport.ts --bundle --platform=node --format=cjs --outfile=dist/relay-device-transport.js && esbuild src/credential-revision.ts --bundle --platform=neutral --format=esm --outfile=dist/credential-revision.mjs && esbuild src/credential-revision.ts --bundle --platform=node --format=cjs --outfile=dist/credential-revision.js",
     "prepack": "pnpm run build",
     "verify-pack": "pnpm run build && node scripts/verify-pack.mjs"
   },

@@ -170,6 +170,9 @@ describe('prepareCodexSessionHome', () => {
     expect(result.authFilePath).toBe(sessionAuthPath)
     expect(await readFile(sessionAuthPath, 'utf8')).toBe(authContent)
     expect((await lstat(sessionAuthPath)).isSymbolicLink()).toBe(false)
+    if (process.platform !== 'win32') {
+      expect((await stat(sessionAuthPath)).mode & 0o777).toBe(0o600)
+    }
   })
 
   it('uses a matching real-home credential without changing the configured account key', async () => {
@@ -1893,6 +1896,22 @@ input.on('line', (line) => {
       { account: 'work', refresh: true }
     )
     expect(refreshed.account.quota?.rateLimitResetCredits?.credits).toHaveLength(2)
+    if (process.platform !== 'win32') {
+      const probeAuthPath = resolveProjectHomePath(
+        workspace,
+        {
+          HOME: resolveTestMockHome(workspace, realHome),
+          __ONEWORKS_PROJECT_REAL_HOME__: realHome,
+          __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__: fakeCodexPath
+        },
+        'caches',
+        'ctx',
+        'adapter-codex-accounts',
+        'detail-work',
+        'auth-source.json'
+      )
+      expect((await stat(probeAuthPath)).mode & 0o777).toBe(0o600)
+    }
 
     const persistedConfig = JSON.parse(await readFile(globalConfigPath, 'utf8')) as any
     const persistedAccount = persistedConfig.adapters.codex.accounts.work
@@ -2044,6 +2063,9 @@ input.on('line', (line) => {
     })
 
     expect(sharedCache.get('adapter.codex.account-quotas')).toEqual({})
+    const removedConfig = JSON.parse(await readFile(globalConfigPath, 'utf8'))
+    expect(removedConfig.adapters.codex.accounts).toEqual({})
+    expect(removedConfig.adapters.codex.accountTombstones.work).toEqual([expect.any(String)])
   })
 
   it('serializes concurrent quota probes through cache and global metadata persistence', async () => {

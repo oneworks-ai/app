@@ -101,7 +101,8 @@ const normalizePermissionDenials = (items: unknown[]) => {
 export const handleIncomingEvent = (
   data: ClaudeCodeIncomingEvent,
   onEvent: AdapterQueryOptions['onEvent'],
-  effort?: AdapterQueryOptions['effort']
+  effort?: AdapterQueryOptions['effort'],
+  account?: string
 ) => {
   const emitResultError = (params: {
     message: string
@@ -126,6 +127,8 @@ export const handleIncomingEvent = (
         data: {
           uuid: data.uuid,
           model: data.model,
+          adapter: 'claude-code',
+          account,
           effort,
           version: data.claude_code_version,
           tools: (data.tools) as string[],

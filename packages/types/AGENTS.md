@@ -7,6 +7,8 @@
 
 - `src/config.ts`
   - `Config`、adapter 配置、MCP 配置与 UI 配置返回契约
+- `src/credential-revision.ts`
+  - adapter 凭证 Lamport revision 的 parse / normalize / validate / compare 稳定契约；counter 只接受非负 safe integer，UUID 统一为小写
 - `src/plugin.ts`
   - 插件实例配置、manifest、config schema / config hook 入口和运行时 metadata 契约
 - `src/workspace.ts`

@@ -5,7 +5,7 @@ status: implemented
 authors:
   - Codex
 created: 2026-06-30
-updated: 2026-07-01
+updated: 2026-08-08
 targetVersion: vNext
 ---
 
@@ -15,7 +15,7 @@ targetVersion: vNext
 
 Relay 账号登录后，用户期望同一个人的设备共享一份 One Works 全局配置，例如 Codex 登录态、默认账号和相关账号元信息。这个能力不应该按 Relay server、Relay 账号或设备拆成多份配置；只要用户启用了自动同步，就应该存在一份个人 canonical global config。
 
-第一版落地范围只同步 `adapters` 根字段，重点覆盖 `adapters.codex.accounts`。Codex `auth.json` 内容以 base64 形式写入 `~/.oneworks/.oo.config.json`，避免直接明文铺在配置里；Relay 本身负责同步通道的账号与传输安全。
+当前落地范围通过显式 allowlist 同步个人配置安全字段，其中 adapter 账户使用通用 credential / state envelope、generation tombstone 和 credential revision 协议。base64 只是兼容编码而不是加密；portable inline 凭证可以随个人配置同步，device-bound 凭证只能同步不含秘密的 device card。
 
 ## 目标
 
@@ -23,7 +23,7 @@ Relay 账号登录后，用户期望同一个人的设备共享一份 One Works 
 - 多个 Relay server / 多个账号只是同步通道，不产生多份个人配置。
 - 当前设备可以把本机 global `.oo.config.json` 中的安全字段发布到 Relay。
 - 其他已登录设备可以从 Relay 拉取同一份配置，并写入本机 global `.oo.config.json`。
-- 服务端使用 snapshot hash 做乐观并发控制；出现差异时保留冲突信息，后续由 UI 让用户选择保留本机或远端。
+- 服务端使用 snapshot hash 做乐观并发控制；adapter 账户按 generation / tombstone / credential revision 自动做因果合并，其他字段仍按安全字段和请求顺序处理。
 - 个人同步与 Relay 团队共享配置保持概念分离。
 
 ## 非目标
@@ -32,7 +32,7 @@ Relay 账号登录后，用户期望同一个人的设备共享一份 One Works 
 - 不同步 Relay 自己的 bootstrap 配置、服务器列表、device token 或 project-local 配置。
 - 不在第一版实现团队配置合并 UI。
 - 不把 Codex 旧 project-local auth snapshot 自动迁移到 global config。
-- 不自动合并用户在不同设备上同时编辑出的冲突。
+- 不为任意配置字段实现通用 CRDT；当前自动合并只覆盖协议明确规定的 adapter 账户生命周期和凭证版本。
 
 ## 个人配置模型
 
@@ -50,7 +50,7 @@ interface RelayPersonalConfigSnapshot {
 }
 ```
 
-`hash` 基于 `userId`、`allowedFields` 和稳定序列化后的 `configPatch` 计算。客户端更新时携带 `baseHash`；如果服务端已有不同 hash，则返回 `409`，除非客户端显式 `force: true`。
+`hash` 基于 `userId`、`allowedFields` 和稳定序列化后的 `configPatch` 计算。客户端更新时携带 `baseHash`；如果服务端已有不同 hash，则返回 `409`，除非客户端显式 `force: true`。为兼容只提交部分 adapter 的旧客户端，服务端会先把安全 patch 与 canonical snapshot 合并，并保留 retained data 对应的 `allowedFields`，不能把一次 partial PUT 当成完整替换。
 
 ## API
 
@@ -68,9 +68,11 @@ Relay 插件连接成功后先同步个人全局配置，再同步团队 / assig
 1. 从本机 global `.oo.config.json` 读取 raw config。
 2. 只提取 `adapters` 安全字段。
 3. GET Relay 个人快照。
-4. 如果本机有配置且本机内容比远端更新，PUT 到 Relay。
-5. 如果远端有配置，写入本机 global `.oo.config.json`，保留其他根字段。
-6. 再继续拉取 `/api/relay/config-snapshot`，用于团队 profile / assignment overlay。
+4. 始终以远端 canonical patch 为左侧、本机 patch 为右侧执行 causal merge；缺少 causal revision 的旧凭证在 tie 时以远端 canonical 为权威。文件 mtime、snapshot `updatedAt` 和设备时钟不参与胜负判断。
+5. 只有 merged patch 的稳定内容 hash 与远端 patch 不同，且 merge 结果含有允许发布的 portable credential 或 tombstone 时，才用远端 snapshot hash 作为 `baseHash` PUT 到 Relay；`baseHash` 只用于并发控制，不是内容版本。
+6. 第一次 PUT 返回 `409` 时，读取响应中的最新 canonical snapshot，以它为新的左侧重新执行同一 causal merge，并最多重试一次；第二次冲突有界失败，不再循环。成功后以服务端返回的 canonical response 写回本机。
+7. 如果远端有配置，按同一账户协议合入本机 global `.oo.config.json`，保留其他根字段；此时远端凭证是 legacy tie 的权威。
+8. 再继续拉取 `/api/relay/config-snapshot`，用于团队 profile / assignment overlay。
 
 本机写入目标固定是 global One Works config，不写 project-local 配置。同步不会覆盖 `plugins.relay` 这类 bootstrap 配置，避免用户还没连上 Relay 时就依赖 Relay 来拿 Relay 配置。
 
@@ -99,6 +101,12 @@ Codex 登录态通过 adapter 账号系统写入：
 ```
 
 账号展示名优先由账号自身 `title` 决定；如果没有 title，则 UI 可以回退到 email，再回退到 account key。不要为了让同步可用而给用户自动写入一个泛化的 `title: "Codex"`。
+
+Codex 与 Claude 等 adapter 共用以下账户合并约束：
+
+- `generation` 只在显式新增 / 同名重建时变化；删除把 generation 追加到 `accountTombstones[accountKey]` 集合，旧墓碑不能因重建而清除。
+- `credentialRevision` 由 One Works 按 `counter:uuid` 生成，只在同一 generation 内比较；不同 generation 必须选择完整账户记录，不能把一个世代的 metadata 与另一个世代的 token 混合。
+- 同步只接受 `portable` inline / secret ref；`device-bound` payload 必须降为 `storage: device` 卡片，不得上传内联秘密。
 
 ## 团队共享配置
 

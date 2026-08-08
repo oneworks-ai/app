@@ -6,9 +6,57 @@ import type { VoiceConfig } from './voice'
 
 export interface AdapterMap {}
 
+export type AdapterAccountCredentialPortability = 'device-bound' | 'portable'
+
+export interface AdapterAccountInlineCredentialConfig {
+  storage?: 'inline'
+  type: string
+  version?: number
+  portability?: 'portable'
+  encoding: 'base64'
+  token: string
+}
+
+export interface AdapterAccountSecretCredentialConfig {
+  storage: 'secret'
+  type: string
+  version?: number
+  portability?: 'portable'
+  ref: string
+}
+
+export interface AdapterAccountDeviceCredentialConfig {
+  storage: 'device'
+  type: string
+  version?: number
+  portability: 'device-bound'
+  binding?: string
+}
+
+export type AdapterAccountCredentialConfig =
+  | AdapterAccountInlineCredentialConfig
+  | AdapterAccountSecretCredentialConfig
+  | AdapterAccountDeviceCredentialConfig
+
+export interface AdapterAccountStateConfig {
+  storage?: 'inline'
+  type: string
+  version?: number
+  portability?: 'portable'
+  encoding: 'base64'
+  token: string
+}
+
 export interface AdapterAccountConfigCommon {
   title?: string
   description?: string
+  auth?: AdapterAccountCredentialConfig
+  state?: AdapterAccountStateConfig
+  /** Changes only when a deleted account key is explicitly created again. */
+  generation?: string
+  /** One Works Lamport revision (`counter:uuid`) that changes only when credentials change. */
+  credentialRevision?: string
+  credentialUpdatedAt?: number
 }
 
 export interface AdapterConfigCommon {
@@ -24,6 +72,11 @@ export interface AdapterConfigCommon {
   excludeModels?: string[]
   defaultAccount?: string
   accounts?: Record<string, AdapterAccountConfigCommon>
+  /**
+   * Deleted account generations retained so stale devices cannot restore old credentials.
+   * A string is accepted for backward compatibility; writers emit a generation list.
+   */
+  accountTombstones?: Record<string, string | string[]>
 }
 
 export type AdapterConfigEntry<T> = T & AdapterConfigCommon

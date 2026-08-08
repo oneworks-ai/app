@@ -12,6 +12,7 @@
 - `src/routes/admin-sso-providers.ts`：B 端托管 SSO provider 管理 API。
 - `src/routes/teams.ts`、`src/routes/team-*.ts`、`src/routes/config-secrets.ts`、`src/teams.ts`、`src/config-secrets.ts`：团队、成员、租户团队策略、配置 secret 加密存储 / 轮换 / 撤销 API 与团队配置消费权限 helper；`/api/relay/teams` 面向用户自助团队流程，`/api/admin/teams` 和 `/api/admin/team-policy` 只给站点管理员。
 - `src/routes/project-rule-documents.ts` / `src/project-rule-documents.ts`：项目规则 assignment 自有文档快照的当前用户与管理员 API、权限边界和持久化归一化；它不是账号 / 团队文档索引，也不负责读取正文或判断本地 Git 项目是否命中规则。
+- `src/routes/personal-config.ts` / `src/routes/personal-config-write.ts`：个人 global config route 认证、并发响应与安全 partial-write 归一化；PUT 的 partial merge / strict validation 留在 write helper，route 不复制该协议。
 - `src/routes/admin-openapi.ts`：Relay 机器可读 OpenAPI 3.1 文档；平台管理员 API 挂载在 `/api/admin/openapi.json`，个人用户 API 挂载在 `/api/profile/openapi.json`，不要写入真实 token 或部署 secret。Admin 前端只读取这两份文档，不在 `apps/relay-admin` 复制 paths / schema。
 - `src/routes/profile.ts`：当前登录用户自己的 profile 安全 API，包括系统访问令牌、OpenAPI 调用审计查询、密码修改和 passkey 绑定；不要在这里实现他人用户管理动作。
 - `src/devices/private-metadata.ts`：设备私有元数据加密、解密和 device token hash 工具。
@@ -19,6 +20,8 @@
 - `src/email/`：验证码 / 邀请 / 登录邮件的 provider 抽象、Turnstile 校验、域名 evaluator 和发送风控；Admin UI 黑白名单管理留给 `apps/relay-admin` 后续任务，不要在这里写界面。
 - `src/session-forwarding/`：会话快照、job、payload / result 转发仓库和访问控制；JSON / SQLite 本地模式使用内存 payload 仓库，云端模式必须由存储 driver 提供可跨请求恢复的 payload 仓库。
 - `src/storage/`：store repository、SSO provider 归一化、JSON / SQLite / Postgres / Cloudflare Durable Object driver 与内容边界。
+  - SQLite `withStore` 按规范化 data path 串行，并在同一连接的 `BEGIN IMMEDIATE` 内完成 canonical read、scoped repository write 与 commit / rollback；需要 read-modify-write 的调用方不能退回分离的顶层 read/write。
+  - SQLite `:memory:` 由每个 repository 独占并在其生命周期内复用同一连接；同 repository 的 read/write/withStore 可见同一状态，不同 repository 必须隔离。文件路径仍按单次操作开关连接，避免常驻连接泄漏。
 - `src/platform/fetch-handler.ts`：把 Fetch `Request` 适配到现有 Node-style route handler；Cloudflare Worker 入口使用它，不要在 Worker 中重复实现 route。
 - `api/relay.ts`：Vercel Node Function 入口，使用 Postgres driver；Vercel 单项目部署时 `/admin` 由构建脚本复制出的静态 Admin 资源承载，不走这个函数。
 - `cloudflare/worker.ts`：Cloudflare Worker + Durable Object 入口，使用 `cloudflare-do` driver，禁用内嵌 `/admin` 静态页。
@@ -48,6 +51,7 @@
 - 登录 token 的最终 redirect 只允许与 `ONEWORKS_RELAY_ALLOW_ORIGIN` 同源的 Web URL、本地开发时的 loopback URL，或精确的 `oneworks://relay/auth` / `one-works://relay/auth` 回调形状；OAuth 中间回跳只额外允许当前 Relay origin 的 `/login/complete`，不得按“任意 HTTPS / 任意自定义协议”放行。
 - Passkey 注册默认必须先校验邮箱验证码；新用户是否还需要邀请码由 `ONEWORKS_RELAY_REGISTRATION_MODE` 决定。`invite_required` 是默认值，`email_verified` 允许邮箱验证后自注册，`admin_created_only` 禁止新账号自注册但允许已有用户绑定 passkey。`ONEWORKS_RELAY_PASSKEY_EMAIL_VERIFICATION_REQUIRED=off` 只允许新 passkey 自注册跳过邮箱确认，已有用户新增 passkey 仍必须验证邮箱。不要把这些策略硬编码到前端。
 - `ONEWORKS_RELAY_STORAGE_DRIVER=sqlite` 是单机 Node 生产推荐路径，`ONEWORKS_RELAY_DATA_PATH` 指向 SQLite 文件；不要把 SQLite 实现扩散到 routes 或 session-forwarding。
+- `/api/relay/config/global` 的 partial adapter patch 可以只切换到 canonical 中已存在的 `defaultAccount`；route 必须先按 `allowedFields` 做 partial normalize，再与 canonical 合并并 strict normalize，missing / tombstoned default 返回 400。
 - `ONEWORKS_RELAY_STORAGE_DRIVER=postgres` 是 Vercel / serverless Node 路径，连接串来自 `ONEWORKS_RELAY_POSTGRES_URL`、`DATABASE_URL` 或 `--data`；日志和 repository location 必须脱敏连接串密码。
 - `cloudflare-do` 只允许由 `cloudflare/worker.ts` 通过 Durable Object repository 创建，不要从 Node CLI 直接实例化。
 - Vercel serverless 入口是单项目形态：`apps/relay-server` 的 `build:vercel` 会内置 Admin 静态页到 `/admin`；Cloudflare 仍使用 `apps/relay-admin` Pages + `apps/relay-server` Worker 两个部署面。
