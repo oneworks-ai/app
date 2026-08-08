@@ -21,6 +21,7 @@ pnpm --silent tools dev-service ensure <target> --json
 
 - `alwaysApply: true` 的规则正文会直接进入默认会话 prompt，只能写稳定硬约束和阅读路由；目标是控制在一屏内，避免把调试手册、命令大全或历史经验塞进默认上下文。
 - 用户要求周期性监控外部状态时，必须让隔离的 scheduled task 执行轮询；只有发生有意义的状态变化、需要操作、失败或终态时才向父会话发送一条简报，普通“无变化”轮询必须静默结束且不得追加父会话上下文。每次隔离运行（包括普通“无变化”运行）结束前都必须归档自身的执行 thread，绝不归档父会话；命中终态时还必须先删除 monitor 自身。去重、只读范围、退避与终态清理见 [`maintenance/task-planning.md`](./maintenance/task-planning.md#监控与协作)。
+- worker、owner 和 monitor 回调是协调器的内部信号，不自动变成用户通知。普通启动、进度、健康 / 无变化和清理事件应静默核验并收口；只有需要用户输入 / 批准、出现需关注的失败 / 风险 / 身份不匹配 / 实质计划变化、完成用户可见里程碑、用户主动问状态或已有最终综合结果时才对外更新，并合并同一结果的多条回调。heartbeat 删除和任务归档始终独立执行，详见 [`maintenance/task-planning.md`](./maintenance/task-planning.md#协调回调与用户通知边界)。
 - 一级 `.oo/rules/*.md` 会进入规则目录。非 `alwaysApply` 规则通常只进摘要和路径，但仍会增加规则清单噪声；领域细节优先放进同名子目录，例如 `release/README.md`、`adapter-design/README.md`。
 - 新增或扩写规则时，先判断内容是否需要默认加载。默认加载只保留“必须马上知道”的约束；任务相关细节用链接渐进式披露。
 - 扩大 `.oo/rules` 内容后，至少跑一次体积审计，避免下次会话再次膨胀：
@@ -33,6 +34,7 @@ find .oo/rules -maxdepth 1 -type f -name '*.md' -print0 | xargs -0 wc -c -l
 
 - medium reasoning 只负责边界明确后的日常实现，不等于可以省略全局设计和最终审阅。非机械代码修改在写入前必须产出 Change Brief、影响地图和抽象决策；实现者不得自审自批。
 - 交付前按风险完成独立的局部正确性、全局 / 抽象审阅和自动化门禁；公共契约、状态所有权、权限、安全、数据、复杂并发或不可逆操作必须升级设计或最终审阅。执行清单见 [`maintenance/code-delivery-quality.md`](./maintenance/code-delivery-quality.md)。
+- GitHub 身份、仓库状态、PR、Actions、release 状态和 credential 交付只认本机官方 `gh` CLI，不通过 Codex / Claude / GitHub 插件、connector、复制 token 或其他集成绕过。Git fetch / push 仍按仓库实际 HTTPS / SSH transport 执行，两者与 `gh` OAuth 身份分开验证；`gh auth status` 无效时停止远端写入，详见 [`maintenance/task-planning.md`](./maintenance/task-planning.md#github-cli-单一授权入口)。
 
 ## 常见入口
 
