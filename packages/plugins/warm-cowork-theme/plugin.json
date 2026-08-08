@@ -9,6 +9,6 @@
     "zh-Hans": "象牙白网格、宽松卡片、珊瑚色操作与蓝色进度语义组成的协作工作台主题。"
   },
   "icon": "./assets/icon.svg",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0-rc.2",
   "plugin": { "contributions": { "roles": ["manager", "workspace"], "surfaces": ["launcher", "workspace"] } }
 }

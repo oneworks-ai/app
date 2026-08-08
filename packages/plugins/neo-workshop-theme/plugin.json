@@ -9,6 +9,6 @@
     "zh-Hans": "奶油色表面、黑色结构边框、硬阴影、黄色高亮与俏皮粉色操作组成的新粗野主义主题。"
   },
   "icon": "./assets/icon.svg",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0-rc.2",
   "plugin": { "contributions": { "roles": ["manager", "workspace"], "surfaces": ["launcher", "workspace"] } }
 }
