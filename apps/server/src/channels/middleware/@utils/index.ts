@@ -1,5 +1,5 @@
 import type { ChatMessageContent } from '@oneworks/core'
-import type { ChannelInboundEvent } from '@oneworks/core/channel'
+import type { ChannelBaseConfig, ChannelInboundEvent } from '@oneworks/core/channel'
 
 export const stripSpeakerPrefix = (text: string) => {
   const lines = text.split('\n')
@@ -19,6 +19,51 @@ export const stripLeadingAtTags = (text: string) => {
     if (endIndex < 0) return result
     result = trimmed.slice(endIndex + '</at>'.length)
   }
+}
+
+export const resolveChannelCommandPrefix = (config: Pick<ChannelBaseConfig, 'commandPrefix'> | undefined) => {
+  const prefix = config?.commandPrefix?.trim()
+  return prefix == null || prefix === '' ? '/' : prefix
+}
+
+export const isChannelCommandText = (
+  commandText: string,
+  config: Pick<ChannelBaseConfig, 'commandPrefix'> | undefined
+) => commandText.trimStart().startsWith(resolveChannelCommandPrefix(config))
+
+export const stripLeadingSpeakerPrefix = (text: string | undefined) => stripSpeakerPrefix(text ?? '').trimStart()
+
+export const hasLeadingAtTagMention = (text: string | undefined) => (
+  /^<at\b[^>]*>.*?<\/at>/u.test(stripLeadingSpeakerPrefix(text))
+)
+
+export const matchesMentionPattern = (
+  text: string | undefined,
+  patterns: readonly string[] | undefined
+) => {
+  if (!Array.isArray(patterns) || patterns.length === 0) return false
+
+  const strippedText = stripLeadingSpeakerPrefix(text)
+  return patterns.some((pattern) => {
+    const trimmed = pattern.trim()
+    return trimmed !== '' && strippedText.includes(trimmed)
+  })
+}
+
+export const hasExplicitChannelIntent = (input: {
+  commandText: string
+  config: Pick<ChannelBaseConfig, 'commandPrefix'> | undefined
+  createOnCommand?: boolean
+  createOnMention?: boolean
+  mentionPatterns?: readonly string[]
+  text?: string
+}) => {
+  if (input.createOnCommand !== false && isChannelCommandText(input.commandText, input.config)) {
+    return true
+  }
+
+  return input.createOnMention !== false &&
+    (hasLeadingAtTagMention(input.text) || matchesMentionPattern(input.text, input.mentionPatterns))
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {

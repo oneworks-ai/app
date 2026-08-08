@@ -2,6 +2,11 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { agentRoomsSchemaModule } from '../../src/db/agentRooms/schema'
 import { automationSchemaModule } from '../../src/db/automation/schema'
+import { channelChildRunsSchemaModule } from '../../src/db/channelChildRuns/schema'
+import { channelCommandsSchemaModule } from '../../src/db/channelCommands/schema'
+import { channelConversationsSchemaModule } from '../../src/db/channelConversations/schema'
+import { channelIdentitiesSchemaModule } from '../../src/db/channelIdentities/schema'
+import { channelPoliciesSchemaModule } from '../../src/db/channelPolicies/schema'
 import { channelSessionsSchemaModule } from '../../src/db/channelSessions/schema'
 import { initSchema } from '../../src/db/schema'
 import type { SchemaModule } from '../../src/db/schema'
@@ -87,6 +92,11 @@ describe('db schema modules', () => {
     initSchema(sqlite, [
       sessionsSchemaModule,
       channelSessionsSchemaModule,
+      channelConversationsSchemaModule,
+      channelChildRunsSchemaModule,
+      channelCommandsSchemaModule,
+      channelIdentitiesSchemaModule,
+      channelPoliciesSchemaModule,
       automationSchemaModule,
       agentRoomsSchemaModule
     ])
@@ -94,6 +104,23 @@ describe('db schema modules', () => {
     const sessionColumns = sqlite.prepare('PRAGMA table_info(sessions)').all<{ name: string }>()
     const channelColumns = sqlite.prepare('PRAGMA table_info(channel_sessions)').all<{ name: string }>()
     const channelPreferenceColumns = sqlite.prepare('PRAGMA table_info(channel_preferences)').all<{ name: string }>()
+    const conversationStateColumns = sqlite.prepare('PRAGMA table_info(channel_conversation_states)').all<
+      { name: string }
+    >()
+    const conversationTurnColumns = sqlite.prepare('PRAGMA table_info(channel_conversation_turns)').all<
+      { name: string }
+    >()
+    const pendingIntentColumns = sqlite.prepare('PRAGMA table_info(channel_pending_intents)').all<{ name: string }>()
+    const childRunColumns = sqlite.prepare('PRAGMA table_info(channel_child_session_runs)').all<{ name: string }>()
+    const commandRunColumns = sqlite.prepare('PRAGMA table_info(channel_command_runs)').all<{ name: string }>()
+    const channelAccountColumns = sqlite.prepare('PRAGMA table_info(channel_accounts)').all<{ name: string }>()
+    const identityLinkColumns = sqlite.prepare('PRAGMA table_info(channel_identity_links)').all<{ name: string }>()
+    const credentialColumns = sqlite.prepare('PRAGMA table_info(channel_user_credentials)').all<{ name: string }>()
+    const authorizationColumns = sqlite.prepare('PRAGMA table_info(channel_authorization_requests)').all<
+      { name: string }
+    >()
+    const replyThrottleColumns = sqlite.prepare('PRAGMA table_info(channel_reply_throttles)').all<{ name: string }>()
+    const offhourBacklogColumns = sqlite.prepare('PRAGMA table_info(channel_offhour_backlog)').all<{ name: string }>()
     const automationRuleColumns = sqlite.prepare('PRAGMA table_info(automation_rules)').all<{ name: string }>()
     const automationTaskColumns = sqlite.prepare('PRAGMA table_info(automation_tasks)').all<{ name: string }>()
     const automationRunColumns = sqlite.prepare('PRAGMA table_info(automation_runs)').all<{ name: string }>()
@@ -109,6 +136,7 @@ describe('db schema modules', () => {
       'lastMessage',
       'lastUserMessage',
       'runtimeKind',
+      'channelActorSnapshot',
       'historySeed',
       'historySeedPending',
       'isStarred',
@@ -135,6 +163,170 @@ describe('db schema modules', () => {
       'permissionMode',
       'createdAt',
       'updatedAt'
+    ]))
+    expect(conversationStateColumns.map(column => column.name)).toEqual(expect.arrayContaining([
+      'id',
+      'channelType',
+      'channelKey',
+      'channelId',
+      'sessionType',
+      'channelLinkName',
+      'entity',
+      'threadKey',
+      'activeParticipantsJson',
+      'recentTurnIdsJson',
+      'pendingIntentIdsJson',
+      'lastChildRunId',
+      'lastMessageId',
+      'updatedAt'
+    ]))
+    expect(conversationTurnColumns.map(column => column.name)).toEqual(expect.arrayContaining([
+      'id',
+      'conversationStateId',
+      'threadKey',
+      'channelType',
+      'channelKey',
+      'channelId',
+      'sessionType',
+      'childRunId',
+      'actorUserId',
+      'actorAccountId',
+      'senderId',
+      'messageId',
+      'role',
+      'text',
+      'summary',
+      'createdAt',
+      'metadataJson'
+    ]))
+    expect(pendingIntentColumns.map(column => column.name)).toEqual(expect.arrayContaining([
+      'id',
+      'conversationStateId',
+      'threadKey',
+      'channelType',
+      'channelKey',
+      'channelId',
+      'sessionType',
+      'channelLinkName',
+      'entity',
+      'ownerUserId',
+      'ownerAccountId',
+      'approverUserIdsJson',
+      'createdByChildRunId',
+      'authorizationRequestId',
+      'kind',
+      'status',
+      'requiredAction',
+      'delivery',
+      'payloadJson',
+      'createdAt',
+      'updatedAt',
+      'expiresAt',
+      'resolvedAt',
+      'metadataJson'
+    ]))
+    expect(childRunColumns.map(column => column.name)).toEqual(expect.arrayContaining([
+      'id',
+      'channelType',
+      'channelKey',
+      'channelId',
+      'sessionType',
+      'channelLinkName',
+      'entity',
+      'actorUserId',
+      'actorAccountId',
+      'senderId',
+      'messageId',
+      'sessionId',
+      'conversationStateId',
+      'threadKey',
+      'triggerType',
+      'dispatchMode',
+      'status',
+      'startedAt',
+      'completedAt',
+      'error',
+      'metadataJson'
+    ]))
+    expect(commandRunColumns.map(column => column.name)).toEqual(expect.arrayContaining([
+      'id',
+      'channelType',
+      'channelKey',
+      'channelId',
+      'sessionType',
+      'channelLinkName',
+      'entity',
+      'actorUserId',
+      'actorAccountId',
+      'senderId',
+      'messageId',
+      'source',
+      'commandName',
+      'commandPathJson',
+      'rawArgsJson',
+      'permission',
+      'status',
+      'startedAt',
+      'completedAt',
+      'error',
+      'metadataJson'
+    ]))
+    expect(channelAccountColumns.map(column => column.name)).toEqual(expect.arrayContaining([
+      'channelType',
+      'accountId',
+      'accountKey',
+      'displayName',
+      'metadataJson'
+    ]))
+    expect(identityLinkColumns.map(column => column.name)).toEqual(expect.arrayContaining([
+      'channelType',
+      'accountId',
+      'userId',
+      'status',
+      'source'
+    ]))
+    expect(credentialColumns.map(column => column.name)).toEqual(expect.arrayContaining([
+      'userId',
+      'channelType',
+      'credentialKey',
+      'status',
+      'scopesJson'
+    ]))
+    expect(authorizationColumns.map(column => column.name)).toEqual(expect.arrayContaining([
+      'id',
+      'channelType',
+      'channelLinkName',
+      'requesterUserId',
+      'requesterAccountId',
+      'credentialSubjectUserId',
+      'credentialKey',
+      'capability',
+      'status',
+      'resolvedAt'
+    ]))
+    expect(replyThrottleColumns.map(column => column.name)).toEqual(expect.arrayContaining([
+      'throttleKey',
+      'policyType',
+      'channelType',
+      'channelId',
+      'channelLinkName',
+      'lastSentAt',
+      'expiresAt'
+    ]))
+    expect(offhourBacklogColumns.map(column => column.name)).toEqual(expect.arrayContaining([
+      'id',
+      'channelType',
+      'channelKey',
+      'channelId',
+      'sessionType',
+      'channelLinkName',
+      'entity',
+      'senderId',
+      'actorUserId',
+      'messageId',
+      'text',
+      'createdAt',
+      'processedAt'
     ]))
     expect(automationRuleColumns.map(column => column.name)).toEqual(expect.arrayContaining([
       'description',

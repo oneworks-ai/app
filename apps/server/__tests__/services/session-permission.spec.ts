@@ -51,14 +51,24 @@ vi.mock('#~/utils/logger.js', () => ({
 
 describe('session permission service', () => {
   let runtimeState: ReturnType<typeof createEmptySessionPermissionState>
-  let projectConfig: { permissions: { allow: string[]; deny: string[]; ask: string[] } }
+  let channelActorSnapshot: Record<string, unknown> | undefined
+  let projectConfig: {
+    channels?: Record<string, unknown>
+    permissions: { allow: string[]; deny: string[]; ask: string[] }
+  }
   const updateSessionRuntimeState = vi.fn()
   const getChannelSessionBySessionId = vi.fn()
+  const getChannelAuthorizationRequest = vi.fn()
+  const createChannelAuthorizationRequest = vi.fn()
+  const getChannelUserCredential = vi.fn()
+  const upsertChannelPendingIntent = vi.fn()
+  const resolveCanonicalUserByChannelAccount = vi.fn()
 
   beforeEach(() => {
     vi.clearAllMocks()
 
     runtimeState = createEmptySessionPermissionState()
+    channelActorSnapshot = undefined
     projectConfig = {
       permissions: {
         allow: [],
@@ -75,9 +85,25 @@ describe('session permission service', () => {
       }
     )
     getChannelSessionBySessionId.mockReturnValue(undefined)
+    getChannelAuthorizationRequest.mockReturnValue(undefined)
+    createChannelAuthorizationRequest.mockImplementation(row => ({
+      ...row,
+      createdAt: 1,
+      resolvedAt: null,
+      status: row.status ?? 'pending',
+      updatedAt: 1
+    }))
+    getChannelUserCredential.mockReturnValue(undefined)
+    upsertChannelPendingIntent.mockReturnValue({ id: 'pending-auth-1' })
+    resolveCanonicalUserByChannelAccount.mockReturnValue(undefined)
 
     mocks.getDb.mockReturnValue({
+      createChannelAuthorizationRequest,
+      getChannelAuthorizationRequest,
+      getChannelUserCredential,
+      upsertChannelPendingIntent,
       getSessionRuntimeState: vi.fn(() => ({
+        ...(channelActorSnapshot == null ? {} : { channelActorSnapshot }),
         runtimeKind: 'interactive',
         historySeedPending: false,
         permissionState: runtimeState
@@ -87,7 +113,8 @@ describe('session permission service', () => {
         id: 'sess-1',
         adapter: 'claude-code'
       })),
-      getChannelSessionBySessionId
+      getChannelSessionBySessionId,
+      resolveCanonicalUserByChannelAccount
     })
 
     mocks.resolveSessionWorkspaceFolder.mockResolvedValue('/workspace')
@@ -357,6 +384,177 @@ describe('session permission service', () => {
     }))
   })
 
+  it('does not let project allow auto-authorize non-built-in tools for channel sessions', async () => {
+    projectConfig.permissions.allow = ['Bash']
+    projectConfig.channels = {
+      lark: {
+        access: {
+          admins: ['admin_1']
+        }
+      }
+    }
+    getChannelSessionBySessionId.mockReturnValue({
+      channelType: 'lark',
+      sessionType: 'group',
+      channelId: 'oc_1',
+      channelKey: 'lark',
+      senderId: 'ou_1',
+      sessionId: 'sess-1'
+    })
+    resolveCanonicalUserByChannelAccount.mockReturnValue({
+      createdAt: 1,
+      displayName: 'One',
+      id: 'user-1',
+      updatedAt: 1
+    })
+
+    const result = await resolvePermissionDecision({
+      sessionId: 'sess-1',
+      subject: {
+        key: 'Bash',
+        label: 'Bash',
+        scope: 'tool'
+      }
+    })
+
+    expect(result).toEqual(expect.objectContaining({
+      approval: expect.objectContaining({
+        actorAccountId: 'ou_1',
+        actorUserId: 'user-1',
+        capability: 'Bash',
+        reasonCode: 'channel-session-permission-required',
+        status: 'ask_trigger_user'
+      }),
+      result: 'ask',
+      source: 'channelApprovalAsk'
+    }))
+    expect(createChannelAuthorizationRequest).toHaveBeenCalledWith(expect.objectContaining({
+      capability: 'Bash',
+      channelType: 'lark',
+      requesterAccountId: 'ou_1',
+      requesterUserId: 'user-1',
+      metadata: expect.objectContaining({
+        channelId: 'oc_1',
+        channelKey: 'lark',
+        ignoredLocalAllowSource: 'projectAllow',
+        reasonCode: 'channel-session-permission-required',
+        sessionId: 'sess-1',
+        sessionType: 'group',
+        subjectKey: 'Bash'
+      })
+    }))
+  })
+
+  it('uses the channel actor snapshot before the mutable channel binding sender', async () => {
+    projectConfig.permissions.allow = ['Bash']
+    channelActorSnapshot = {
+      actorAccountId: 'ou_original',
+      actorUserId: 'user-original',
+      channelId: 'oc_1',
+      channelKey: 'lark',
+      channelType: 'lark',
+      messageId: 'om_original',
+      senderId: 'ou_original',
+      sessionId: 'sess-1',
+      sessionType: 'group'
+    }
+    getChannelSessionBySessionId.mockReturnValue({
+      channelType: 'lark',
+      sessionType: 'group',
+      channelId: 'oc_1',
+      channelKey: 'lark',
+      senderId: 'ou_latest',
+      sessionId: 'sess-1'
+    })
+
+    const result = await resolvePermissionDecision({
+      sessionId: 'sess-1',
+      subject: {
+        key: 'Bash',
+        label: 'Bash',
+        scope: 'tool'
+      }
+    })
+
+    expect(result).toEqual(expect.objectContaining({
+      approval: expect.objectContaining({
+        actorAccountId: 'ou_original',
+        actorUserId: 'user-original',
+        capability: 'Bash',
+        status: 'ask_trigger_user'
+      }),
+      result: 'ask',
+      source: 'channelApprovalAsk'
+    }))
+    expect(resolveCanonicalUserByChannelAccount).not.toHaveBeenCalled()
+    expect(createChannelAuthorizationRequest).toHaveBeenCalledWith(expect.objectContaining({
+      requesterAccountId: 'ou_original',
+      requesterUserId: 'user-original',
+      metadata: expect.objectContaining({
+        messageId: 'om_original',
+        subjectKey: 'Bash'
+      })
+    }))
+  })
+
+  it('creates a pending authorization intent from channel actor snapshot continuity metadata', async () => {
+    projectConfig.permissions.allow = ['Bash']
+    channelActorSnapshot = {
+      actorAccountId: 'ou_original',
+      actorUserId: 'user-original',
+      channelId: 'oc_1',
+      channelKey: 'lark',
+      channelLinkName: 'wan-ke-chat',
+      channelType: 'lark',
+      childRunId: 'child-run-1',
+      conversationStateId: 'conversation-1',
+      entity: 'owo-demo',
+      messageId: 'om_original',
+      senderId: 'ou_original',
+      sessionId: 'sess-1',
+      sessionType: 'group',
+      threadKey: 'group:owo-demo:actor:user-original'
+    }
+
+    const result = await resolvePermissionDecision({
+      sessionId: 'sess-1',
+      subject: {
+        key: 'Bash',
+        label: 'Bash',
+        scope: 'tool'
+      }
+    })
+
+    expect(result).toEqual(expect.objectContaining({
+      result: 'ask',
+      source: 'channelApprovalAsk'
+    }))
+    const authRequest = createChannelAuthorizationRequest.mock.calls.at(-1)?.[0]
+    expect(authRequest).toEqual(expect.objectContaining({
+      requesterAccountId: 'ou_original',
+      requesterUserId: 'user-original',
+      metadata: expect.objectContaining({
+        childRunId: 'child-run-1',
+        conversationStateId: 'conversation-1',
+        entity: 'owo-demo',
+        threadKey: 'group:owo-demo:actor:user-original'
+      })
+    }))
+    expect(upsertChannelPendingIntent).toHaveBeenCalledWith(expect.objectContaining({
+      authorizationRequestId: authRequest.id,
+      channelLinkName: 'wan-ke-chat',
+      conversationStateId: 'conversation-1',
+      createdByChildRunId: 'child-run-1',
+      entity: 'owo-demo',
+      kind: 'need_approval',
+      ownerAccountId: 'ou_original',
+      ownerUserId: 'user-original',
+      requiredAction: 'grant_authorization',
+      status: 'open',
+      threadKey: 'group:owo-demo:actor:user-original'
+    }))
+  })
+
   it('resolves oneworks mem commands as a narrow Bash permission subject', async () => {
     projectConfig.permissions.allow = ['bash-oneworks-mem']
     const toolInput = {
@@ -446,6 +644,7 @@ describe('session permission service', () => {
     }
     mocks.getDb.mockReturnValue({
       getSessionRuntimeState: vi.fn(() => ({
+        ...(channelActorSnapshot == null ? {} : { channelActorSnapshot }),
         runtimeKind: 'interactive',
         historySeedPending: false,
         permissionState: runtimeState

@@ -50,6 +50,7 @@
     "@oneworks/adapter-codex": "workspace:*",
     "@oneworks/app-runtime": "workspace:*",
     "@oneworks/channel-lark": "workspace:*",
+    "@oneworks/channel-oneworks": "workspace:*",
     "@oneworks/channel-wechat": "workspace:*",
     "@oneworks/cli-helper": "workspace:*",
     "@oneworks/config": "workspace:*",

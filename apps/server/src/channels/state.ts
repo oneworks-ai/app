@@ -35,6 +35,7 @@ export const resolveBinding = (sessionId: string) => {
     channelKey: row.channelKey,
     channelId: row.channelId,
     sessionType: row.sessionType,
+    senderId: row.senderId,
     replyReceiveId: row.replyReceiveId,
     replyReceiveIdType: row.replyReceiveIdType
   }

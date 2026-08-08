@@ -25,6 +25,7 @@ export async function resolveWorkspaceAssetBundle(params: {
     specs: collected.specs,
     entities: collected.entities,
     skills: collected.skills,
+    channelLinks: collected.channelLinks,
     workspaces: collected.workspaces,
     mcpServers: collected.mcpServers,
     hookPlugins: collected.hookPlugins,

@@ -16,6 +16,7 @@
 - 用户没有明确给会话名：直接看 [浏览器自动化](./debugging/browser-automation.md) 里的“会话选择不要写死”。
 - `AskUserQuestion` 没有把题目发到 Lark：先看 [AskUserQuestion 链路](./debugging/ask-user-question.md)，再用 [证据采集](./debugging/evidence.md) 对日志和 DB。
 - 用户已经回复，但模型没有继续执行：先看 [证据采集](./debugging/evidence.md) 的日志判断，再回到 [AskUserQuestion 链路](./debugging/ask-user-question.md) 查桥接层。
+- 配置开放平台机器人、头像、外部群、权限、事件订阅或发布审核：先看 [经验与坑位](./debugging/lessons.md) 的“万可机器人矩阵接入复盘”和开放平台相关条目。
 - 想沉淀一套以后还能复用的排查方法：最后看 [经验与坑位](./debugging/lessons.md)。
 
 ## 总体原则

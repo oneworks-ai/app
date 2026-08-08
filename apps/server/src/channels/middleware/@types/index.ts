@@ -16,6 +16,9 @@ import type {
 } from '@oneworks/core/channel'
 import type { AdapterAccountDetail } from '@oneworks/types'
 
+import type { CanonicalUserRow, ChannelAccountRow, ChannelIdentityLinkRow } from '#~/db/index.js'
+import type { ResolvedChannelLink } from '#~/services/channel-links/index.js'
+
 import type { LanguageCode, MessageArgs, MessageCatalog } from '../i18n'
 
 export interface ChannelSessionBindingInfo {
@@ -64,12 +67,22 @@ export interface ChannelToolCallSummary {
   items: ChannelToolCallSummaryItem[]
 }
 
+export interface ChannelActorContext {
+  account: ChannelAccountRow
+  identityLink?: ChannelIdentityLinkRow
+  user?: CanonicalUserRow
+}
+
 export interface ChannelContext {
   channelKey: string
   configSource?: ConfigSource
   inbound: ChannelInboundEvent
   connection: ChannelConnection<ChannelTextMessage> | undefined
   config: ChannelBaseConfig | undefined
+  /** Directory-defined channel link matched from .oo/channels, if one exists */
+  channelLink?: ResolvedChannelLink
+  /** Sender resolved through channel identity tables, when the inbound event has a sender id */
+  actor?: ChannelActorContext
   /** Resolved from DB before running the middleware chain */
   sessionId: string | undefined
   /** Channel-level preferred adapter used when the next session is created */

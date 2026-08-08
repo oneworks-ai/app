@@ -5,7 +5,8 @@
 ```
 channels/
   index.ts            初始化所有频道连接，对外暴露 ChannelManager
-  handlers.ts         handleInboundEvent（ctx 组装 + 管道执行）、handleSessionEvent（出站回复）
+  handlers.ts         handleInboundEvent（ctx 组装 + ChannelLink 匹配 + 管道执行）、handleSessionEvent（出站回复）
+  command-invocation.ts  typed channel command 的稳定入口；`command-invocation-*` 私有文件负责 actor snapshot、ctx 与 session 操作还原
   types.ts            频道层共享类型（re-export 自 middleware/@types）
   state.ts            内存绑定状态（dedup / binding / pendingUnack）
   loader.ts           动态加载频道连接模块
@@ -16,17 +17,25 @@ channels/
       index.ts            stripSpeakerPrefix / stripLeadingAtTags / getInboundContentItems
     index.ts            管道组装（compose），导出 pipeline
     deduplicate.ts      按 messageId 做内存与 SQLite 持久去重
+    i18n.ts             初始化 channel 提示语言与消息字典
     parse-content.ts    解析富文本内容 + 剥离 @-tag 和发言者前缀
+    identity.ts         解析 sender 对应的平台账号与 canonical user
     emoji-registry.ts   自动记录入站平台自定义表情的可复用 id
     access-control.ts   检查 allowPrivateChat / allowGroupChat / 黑白名单
     resolve-session.ts  从 DB 查询当前 channel 绑定的 sessionId
+    availability-gate.ts  ChannelLink availability gate，按 workHours / offHours / throttle / backlog 决定是否继续
+    ingress-gate.ts     ChannelLink ingress 确定性 gate，按 ambientRouting / mention / command 决定是否继续
     group-message-debounce.ts  群聊普通消息防抖合并，slash command 不延迟
     ack.ts              向 channel 发送「处理中」确认
     admin-gate.ts       无 session 时限制非 admin 用户创建新会话
-    commands.ts         channelCommandMiddleware（/help /reset 等指令）
+    commands/           指令定义、typed tool 转换与统一授权 / 审计；细节见 `commands/AGENTS.md`
     bind-session.ts     持久化 channel↔session 绑定 + 内存 binding
     dispatch/           创建新 session 或向已有 session 转发消息
-      index.ts            dispatchMiddleware 实现
+      index.ts            dispatchMiddleware 编排入口
+      context.ts          thread、conversation 与 message context
+      runtime-content.ts  群聊提醒、emoji hint 与 multimodal model
+      resume.ts           next-message resume intent 选择
+      child-run.ts        child run 与 conversation turn 审计
       prompt/             会话启动时 systemPrompt 组装
         agent-rules.ts      读取 `.oo/rules/AGENTS.channel.<type>.md` 规则文件
         context.ts          生成频道上下文（平台名、bot 名称、admin 列表）
@@ -48,14 +57,20 @@ channels/
 
 ## 中间件管道执行顺序
 
+入站事件进入中间件前，`handlers.ts` 会先根据 `ChannelRuntimeState.channelLinks` 匹配 `.oo/channels/<link>/channel.*`，并把匹配结果放入 `ctx.channelLink`。这个步骤只解析“当前外部频道绑定哪个实体”，不做策略、审批或会话创建。
+
 ```
 deduplicateMiddleware      → 重复消息截断
+i18nMiddleware             → 初始化提示语言
 parseContentMiddleware     → 空消息截断，解析 contentItems，计算 commandText
+identityMiddleware         → 记录 sender 平台账号并解析 canonical user
 accessControlMiddleware    → 权限不符截断（admins 豁免所有控制）
 emojiRegistryMiddleware    → 自动记录入站平台自定义表情引用
 resolveSessionMiddleware   → 填充 ctx.sessionId
 channelCommandMiddleware   → 识别到指令处理并截断，否则 next()
 interactionResponseMiddleware → 处理待确认/权限问题的频道回复
+availabilityGateMiddleware → ChannelLink 下班时段固定话术 / 节流 / 截断
+ingressGateMiddleware      → ChannelLink 关闭 ambientRouting 时，拦截普通群聊消息
 groupMessageDebounceMiddleware → 群聊普通消息按配置短暂合并
 ackMiddleware              → 发送处理中状态
 adminGateMiddleware        → 无 session 且非 admin 截断并提示
@@ -95,6 +110,12 @@ bindSessionMiddleware      → 持久化 channel↔session 绑定
 WeChat / WechatApi 的 package 级配置、TokenId 获取入口、平台文档链接和公网暴露说明维护在 `packages/channels/wechat/README.md`；代码维护边界见 `packages/channels/wechat/AGENTS.md`。
 
 服务端侧只保持通用约定：webhook route 固定为 `/channels/:channelType/:channelKey/webhook`，公网 host 默认放行 `/channels/*/*/webhook`，不要求用户把该路径写进 `server.publicPaths`。是否暴露某个具体 channel 由对应 channel 配置控制，例如 `enableWebhook: false`。
+
+## OneWorks Native Channel
+
+OneWorks 内置 channel type 是 `oneworks`，实现位于 `packages/channels/oneworks/`。它提供本地 / 产品内 native channel 的最小平台实现：webhook simulation payload 会被规范化为 `ChannelInboundEvent`，再进入当前 server 的完整中间件管道。维护该包前先读 `packages/channels/oneworks/AGENTS.md`。
+
+服务端侧仍只通过 `loadChannelModule('oneworks')` 加载包，不在 `channels/` 目录写死 native channel 业务逻辑。
 
 ## Companion MCP 约定
 
@@ -142,24 +163,7 @@ export const resolveChannelSessionMcpServers =
 
 ## ChannelConnection 接口扩展
 
-`@oneworks/core/channel` 的 `ChannelConnection<TMessage>` 支持可选方法：
-
-```typescript
-import type { ChannelInboundEvent } from '@oneworks/core/channel'
-
-interface ChannelConnectionExtensions {
-  handleWebhook?: (
-    request: ChannelWebhookRequest
-  ) => Promise<ChannelWebhookResponse>
-  updateMessage?: (
-    messageId: string,
-    message: TMessage
-  ) => Promise<ChannelSendResult | undefined>
-  generateSystemPrompt?: (
-    inbound: ChannelInboundEvent
-  ) => Promise<string | undefined>
-}
-```
+`@oneworks/core/channel` 的 `ChannelConnection<TMessage>` 支持 `handleWebhook`、`updateMessage`、`generateSystemPrompt` 可选方法；签名以该 package 的公开类型为准。
 
 频道实现可在此方法中调用平台 API（如获取 bot profile），结果自动注入 systemPrompt。
 
@@ -172,6 +176,10 @@ interface ChannelConnectionExtensions {
 
 - `channels/index.ts` 仅负责初始化与对外导出，不新增业务逻辑
 - `handlers.ts` 只保留出站事件处理（`handleSessionEvent`），入站逻辑全部在管道中
+- `command-invocation.ts` 只用于 agent / CLI / HTTP 侧的 typed channel command 调用；它必须从真实 channel runtime state 和当前消息上下文还原发送者身份，不要手动提升为管理员或复用当前 CLI 登录态
+- `identity.ts` 只解析入站 sender 的平台账号与已绑定 canonical user，不自动创建 canonical user
+- `availability-gate.ts` 只处理确定性上下班窗口、固定话术、DB 节流与 off-hours backlog 写入；`bypassUsers` 可填 sender ID 或已绑定 canonical user ID；digest 和更复杂策略状态后续放到独立服务
+- `ingress-gate.ts` 只做确定性 gate；模型 router、pending intent、审批和策略状态不要塞进这里
 - HTTP webhook 入口只做 route 参数整理与 channel manager 分发；平台 payload 解析和 secret 校验放在对应 channel package 的 `handleWebhook`
 - `state.ts` 只管理内存状态，不写 DB
 - `loader.ts` 只负责动态加载频道连接模块

@@ -10,8 +10,8 @@ import {
   resolveSpecIdentifier
 } from '@oneworks/definition-core'
 import type {
+  ChannelLink,
   Definition,
-  DefinitionSource,
   Entity,
   Rule,
   RuleReference,
@@ -19,38 +19,13 @@ import type {
   Spec,
   WorkspaceDefinitionPayload
 } from '@oneworks/types'
-import { resolveWorkspaceAssetBundle, resolveWorkspaceAssetSource } from '@oneworks/workspace-assets'
+import { resolveWorkspaceAssetBundle } from '@oneworks/workspace-assets'
 
 import fg from 'fast-glob'
 
 import { loadLocalDocuments, resolveRulePattern, resolveUniqueDefinition } from './definition-utils'
-
-interface WorkspaceDefinitionAsset<TDefinition extends { name?: string }> {
-  payload: {
-    definition: Definition<TDefinition>
-  }
-  displayName: string
-  instancePath?: string
-  origin: 'workspace' | 'plugin'
-  resolvedBy?: string
-}
-
-const resolveDefinitionSource = (
-  asset: Pick<WorkspaceDefinitionAsset<{ name?: string }>, 'origin' | 'resolvedBy'>
-): DefinitionSource => {
-  return resolveWorkspaceAssetSource(asset)
-}
-
-const toResolvedDefinitions = <TDefinition extends { name?: string }>(
-  assets: WorkspaceDefinitionAsset<TDefinition>[]
-): Definition<TDefinition>[] => (
-  assets.map(asset => ({
-    ...asset.payload.definition,
-    resolvedName: asset.displayName,
-    resolvedInstancePath: asset.instancePath,
-    resolvedSource: resolveDefinitionSource(asset)
-  }))
-)
+import { resolveChannelLinkIdentifier, toResolvedDefinitions } from './workspace-definitions'
+import type { WorkspaceDefinitionAsset } from './workspace-definitions'
 
 export class DefinitionLoader {
   private readonly cwd: string
@@ -183,6 +158,18 @@ export class DefinitionLoader {
 
   async loadDefaultEntities(): Promise<Definition<Entity>[]> {
     return this.loadWorkspaceDefinitions(bundle => bundle.entities)
+  }
+
+  async loadChannelLink(name: string): Promise<Definition<ChannelLink> | undefined> {
+    return this.loadNamedWorkspaceDefinition(
+      name,
+      bundle => bundle.channelLinks,
+      resolveChannelLinkIdentifier
+    )
+  }
+
+  async loadDefaultChannelLinks(): Promise<Definition<ChannelLink>[]> {
+    return this.loadWorkspaceDefinitions(bundle => bundle.channelLinks)
   }
 
   async loadWorkspaces(): Promise<WorkspaceDefinitionPayload[]> {
