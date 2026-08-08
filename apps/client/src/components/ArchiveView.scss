@@ -204,13 +204,17 @@
   transition: opacity .2s ease, max-width .24s ease;
 }
 
-.archive-view__item-row:hover .archive-view__item-actions {
+.archive-view__item-row:hover .archive-view__item-actions,
+.archive-view__item-row:focus-within .archive-view__item-actions,
+.archive-view__item--confirming .archive-view__item-actions {
   max-width: 72px;
   opacity: 1;
   pointer-events: auto;
 }
 
-.archive-view__item-row:hover .archive-view__item-time {
+.archive-view__item-row:hover .archive-view__item-time,
+.archive-view__item-row:focus-within .archive-view__item-time,
+.archive-view__item--confirming .archive-view__item-time {
   opacity: 0;
   max-width: 0;
   margin-left: 0;
