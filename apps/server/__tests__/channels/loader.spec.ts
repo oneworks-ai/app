@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -143,6 +143,61 @@ describe('loadChannelModule', () => {
       const loaded = loadChannelModule('external-channel')
 
       expect(loaded.definition.type).toBe('external-channel')
+      expect(loaded.create).toBe(createChannelConnection)
+      expect(loaded.resolveSessionMcpServers).toBeUndefined()
+    } finally {
+      process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__ = previousWorkspaceFolder
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('falls back to first-party local channel source when package dist is missing', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'oneworks channel-loader-'))
+    const packageRoot = join(tempDir, 'packages/channels/oneworks')
+    const sourceIndexPath = join(packageRoot, 'src/index.ts')
+    const sourceConnectionPath = join(packageRoot, 'src/connection.ts')
+    const createChannelConnection = vi.fn()
+    const previousWorkspaceFolder = process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__
+    process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__ = tempDir
+
+    try {
+      await mkdir(join(packageRoot, 'src'), { recursive: true })
+      await writeFile(
+        join(packageRoot, 'package.json'),
+        JSON.stringify({ name: '@oneworks/channel-oneworks' }, null, 2)
+      )
+      await writeFile(sourceIndexPath, '')
+      await writeFile(sourceConnectionPath, '')
+
+      requireMock.mockImplementation((specifier: string) => {
+        if (specifier === '@oneworks/channel-oneworks') {
+          const error = new Error(`Cannot find module '${specifier}'`) as Error & { code?: string }
+          error.code = 'MODULE_NOT_FOUND'
+          throw error
+        }
+
+        if (specifier === sourceIndexPath) {
+          return {
+            channelDefinition: {
+              type: 'oneworks',
+              configSchema: z.object({
+                type: z.literal('oneworks')
+              })
+            }
+          }
+        }
+
+        if (specifier === sourceConnectionPath) {
+          return { createChannelConnection }
+        }
+
+        throw new Error(`Unexpected specifier: ${specifier}`)
+      })
+
+      const { loadChannelModule } = await import('#~/channels/loader.js')
+      const loaded = loadChannelModule('oneworks')
+
+      expect(loaded.definition.type).toBe('oneworks')
       expect(loaded.create).toBe(createChannelConnection)
       expect(loaded.resolveSessionMcpServers).toBeUndefined()
     } finally {

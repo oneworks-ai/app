@@ -96,7 +96,8 @@ describe('channel webhook routes', () => {
       },
       rawBody: JSON.stringify({
         TypeName: 'AddMsg'
-      })
+      }),
+      remoteAddress: expect.any(String)
     })
   })
 
@@ -125,7 +126,8 @@ describe('channel webhook routes', () => {
         echostr: 'hello'
       },
       body: undefined,
-      rawBody: undefined
+      rawBody: undefined,
+      remoteAddress: expect.any(String)
     })
   })
 })

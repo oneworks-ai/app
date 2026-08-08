@@ -75,6 +75,69 @@ oneworks channel erjie send "oneworks 主命令也支持同样能力"
 - WeChat 私聊保留兼容性的首条/stop 自动回传策略；agent 提示词会优先要求通过 `oneworks channel` 主动发送外部回复，并把 Chat History / stop 文本控制为内部简短总结，避免重复打扰用户。
 - 频道发送命令有独立权限键 `bash-oneworks channel-send`；channel runtime 会默认允许这个内置窄权限，无需写入项目配置。它只放行 `oneworks channel ... send`、`oneworks channel emoji ...` 及对应 `oneworks channel ...` 窄命令，不放开整个 Bash。
 
+## Agent 侧频道命令工具
+
+运行中的 channel agent 需要查询或调整频道内部状态时，不应往群里发送 `/auth`、`/session`、`/access` 这类斜杠命令，而应使用 sender-scoped 的 typed command CLI：
+
+```bash
+oneworks channel command list
+oneworks channel command invoke channel.whoami
+oneworks channel command invoke channel.auth.list
+oneworks channel command invoke channel.auth.list '{ "scope": "resumable" }'
+oneworks channel command invoke channel.auth.grant '{ "id": "auth-1" }'
+oneworks channel command invoke channel.auth.resume '{ "id": "auth-1" }'
+oneworks channel command invoke channel.identity.link
+oneworks channel command invoke channel.identity.link '{ "code": "ABCD1234" }'
+oneworks channel command invoke channel.identity.accounts
+```
+
+- `oneworks channel command list` 会列出当前版本可调用的 `channel.*` typed tools、slash usage 和权限等级。
+- `oneworks channel command invoke <toolName> [jsonInput]` 会携带当前 child run 的短期签名 token；server 由 token 关联的持久化 actor snapshot 和不可变 delivery binding 重建执行上下文，并按当前消息发送者、频道管理员配置、identity link 和授权请求状态执行。CLI 不能自报或切换成机器人、老板、企业管理员或当前登录用户。
+- 输出只回到 shell / Chat History，不会自动发到外部频道。需要让群里看到结果时，再用 `oneworks channel send "..."` 发一条简短摘要。
+- 当前 One Works 不支持多账号登录闭环，因此 `actor identity` 和 `actor credential` 是分开的：发送者身份可用于权限判断、审计和授权归属；需要代表该用户调用个人 API 时，仍必须先走授权请求，不能借用当前桌面登录态、CLI app 或 bot app secret。
+- 从 channel session 内调用 typed command 时，server 只接受当前消息上下文文件中的 invocation token、tool name 和 input；调用方提供的 sender、channel、session 或 reply target 不参与授权。token 过期、跨 channel 使用或无法与 child run / session snapshot / delivery binding 一致时，命令会被拒绝。
+- 排查权限归属时，先用 slash `/whoami` 或 typed `channel.whoami` 查看 sender、channel account、canonical user、identity link 和 credential 数量。看到 canonical user 只说明身份已绑定；credential 为 0 或非 active 时，仍不能代表该用户执行个人 API。
+- 跨频道账号绑定使用 `/identity link`：先在已控制的账号生成短期 code，再在另一个账号执行 `/identity link <code>`。该流程只证明两个 channel account 属于同一个 canonical user，不会复制 credential，也不会让新账号继承旧账号的 API 登录态。
+- 授权请求里 `requesterUserId/requesterAccountId` 表示触发消息的人，`credentialSubjectUserId` 表示真正需要补齐凭证的人。两者不一致时，pending intent 会交给 credential subject，避免把资源 owner 授权误记成触发者授权。
+- `channel.auth.list` 默认只列当前发送者待处理授权请求；传 `{ "scope": "resumable" }` 时列出可恢复的 resolved pending intent。普通用户只能看到自己名下的任务；管理员可以看到当前频道类型下全部可恢复任务，再用 `channel.auth.resume` 继续。
+
+当前没有多账号登录闭环时，推荐按 `single-login runner mode` 理解权限：
+
+- 当前桌面登录态 / CLI profile 只是本地运行器权限，可以启动 session、读写项目和调度 runtime。
+- bot app secret 是 service principal，可以收发机器人消息和执行 app 级能力。
+- 频道发送者是 actor identity，用于权限裁决、审计、记忆和授权归属。
+- 只有用户显式授权后的 credential principal 才能代表该用户执行个人 API。
+
+如果工具需要用户级 credential，而当前 actor 或资源 owner 没有 active credential，应创建授权请求、降级或拒绝；不要借用当前桌面用户、CLI app、机器人应用或房间 owner 的权限。
+
+## 频道链接配置
+
+`.oo.config.json` 里的 `channels` 只声明平台连接和凭证；具体某个群/私聊入口绑定哪个实体，放在 `.oo/channels/<link>/channel.json`：
+
+```json
+{
+  "channel": "lark:team",
+  "entity": "owo-demo",
+  "external": {
+    "type": "chat",
+    "chatId": "oc_xxx"
+  },
+  "authorization": {
+    "deliveryThrottleMs": 1200000,
+    "resume": {
+      "mode": "immediate",
+      "delayMs": 0
+    }
+  }
+}
+```
+
+- 一个 channel link 只绑定一个实体。
+- `authorization.deliveryThrottleMs` 控制同一个授权请求重复送达的节流窗口，单位毫秒；默认 `1200000`，也就是 20 分钟。
+- `authorization.resume.mode` 控制授权处理后的续接方式：`immediate` 会在 grant / deny 后自动创建 `system_resume` child run；`manual` 只记录 resolved pending intent，等待管理员或 agent 通过 `channel.auth.resume` 显式恢复；`next_message` 等待同一 owner、同一 thread 的下一条相关消息，并把恢复上下文注入那一轮 child run。`authorization.resume.delayMs` 可给 `immediate` 增加最小延迟。
+- 权限请求送达后会记录 `delivery` 和平台返回的 `deliveryMessageId`，后续 grant / deny 会同步关闭关联的 pending intent。
+- 当前单账号兼容阶段，自动续接会以原 session 为 parent 和 workspace 来源创建新的 ChildSession，不会向旧 runtime 追加消息；这不等于获得外部发送者的个人登录态。需要用户级 API 时仍必须检查 `credentialSubjectUserId` 对应凭证是否存在，否则继续走授权、降级或拒绝。
+
 ## Channel 过程控制指令
 
 以下指令都需要频道管理员权限。
@@ -107,52 +170,6 @@ oneworks channel erjie send "oneworks 主命令也支持同样能力"
 
 `multimodalModel` 可选；配置后，频道消息里包含图片附件时会用该模型创建或恢复会话。适合默认模型偏向低延迟文本、但不稳定支持视觉输入的场景；未配置时继续使用项目默认模型。
 
-## WeChat 频道
+## 平台接入
 
-WeChat 频道基于 WechatApi 回调接入，公网入口固定为：
-
-```text
-<server public endpoint>/channels/wechat/<channelKey>/webhook?secret=<webhookSecret>
-```
-
-最小配置示例：
-
-```json
-{
-  "server": {
-    "public": {
-      "schema": "https",
-      "domain": "bot.example.com",
-      "port": 443
-    }
-  },
-  "channels": {
-    "wechat": {
-      "type": "wechat",
-      "token": "VideosApi-token",
-      "appId": "wx_xxx",
-      "webhookSecret": "replace-with-a-random-secret",
-      "multimodalModel": "gpt-5.5",
-      "autoReconnectOnStart": true,
-      "access": {
-        "admins": ["wxid_admin"]
-      }
-    }
-  }
-}
-```
-
-- WechatApi 文档入口是 https://post.wechatapi.net/a2；管理后台 / TokenId 获取入口是 https://newmanager.wechatapi.net。平台接入页说明：开通 API 权限后，在访问控制里填写消息回调地址并复制 TokenId；本频道的 `token` 就填这个 TokenId。
-- 相关平台文档：消息回调和 API 规范见 https://post.wechatapi.net/doc-4217385；本频道发送回复使用的文本接口是 https://post.wechatapi.net/message/posttext。
-- `server.public.schema` / `domain` / `port` 会拼成 WechatApi 能访问到的公网 server 地址；临时验证可以用 tunnel，长期运行应使用稳定反向代理或 Cloudflare Tunnel。单个 channel 如需覆盖，可继续配置 channel 级 `serverBaseUrl`。
-- 公网 Host 下 server 默认放行 `/channels/*/*/webhook`，不需要在 `publicPaths` 或 channel 配置里重复声明；其他额外公网 path 可以通过 `server.publicPaths` 配置。
-- 是否真正暴露某个 channel webhook 由对应 channel 配置控制，例如 `enableWebhook: false`。
-- `webhookSecret` 必填；server 会校验 query `secret`，也兼容 `x-oneworks-channel-secret` / `x-wechatapi-secret` header。
-- `enableWebhook: false` 可关闭该 channel 的 HTTP webhook；关闭后即使 public path guard 放行了 `/channels/*/*/webhook`，对应 channel 仍返回 404。
-- 入站文本 `MsgType: 1` 会作为文本进入 agent；图片 `MsgType: 3` 会优先使用回调里的图片数据或调用 WechatApi `/message/downloadImage` 生成图片 `contentItems`，同时保留预览 data URL 和本地临时文件路径；GIF 表情 `MsgType: 47` 会抽取第一帧、中间帧、最后一帧三张 PNG，并作为图片附件一起发送给 agent；语音、视频、分享/文件会先转成结构化文本摘要。
-- 当频道配置了 `multimodalModel` 时，包含图片附件的入站消息会使用该模型，避免文本优先模型收到图片后无法识别内容；普通文本消息仍按默认模型或会话模型执行。
-- `appId` 建议显式配置；如果缺省，server 会使用最近一次有效回调里的 `Appid`，但重启后已有会话可能无法主动回复。
-- 只要能从 `server.public` 或 channel 级 `serverBaseUrl` 生成回调地址，频道启动时默认会在后台调用 WechatApi `/login/setCallback` 自动写入回调地址；`callbackToken` 未配置时复用 `token`。如需关闭，显式设置 `"autoRegisterCallback": false`。
-- 如果 WechatApi 账号在线但重启后不再推送真实用户消息，可配置 `"autoReconnectOnStart": true`；频道启动时会先对配置的 `appId` 调用 `/login/reconnection`，再重新注册 callback。
-- 如果 `access.admins` 缺失或为空，频道启动时 server 会在日志里打印 `/authorize-admin <token>` 授权指令。该指令不会通过微信自动下发；未授权用户只会收到“管理员尚未初始化，请联系服务维护者获取授权指令。”。维护者从启动日志中取出指令后，通过可信渠道交给目标用户，由对方在同一个 channel 发送该指令完成首次管理员授权。服务重启会生成新的内存 token。
-- package 级维护与配置细节见 `packages/channels/wechat/README.md`。
+Lark、OneWorks Native 与 WeChat 的配置示例和接入经验见 [Channel 平台接入](./channel-platforms.md)。

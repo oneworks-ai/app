@@ -35,6 +35,7 @@ This 21-second demo uses real desktop windows to open a workspace from the Launc
 - [PWA and Standalone Deployment](./usage/pwa.md)
 - [Relay Hosting, Login, and Identity Model](./usage/relay.md)
 - [Channel Session Binding](./usage/channels.md)
+- [Channel Platform Integrations](./usage/channel-platforms.md)
 - [CLI and Examples](./usage/cli.md)
 - [Examples Directory](./usage/examples.md)
 - [Skills and Dependencies](./usage/skills.md)

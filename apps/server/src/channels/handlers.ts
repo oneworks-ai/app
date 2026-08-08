@@ -4,6 +4,14 @@ import type { ChannelBaseConfig, ChannelConnection, ChannelInboundEvent } from '
 
 import { getDb } from '#~/db/index.js'
 import { createServerAdapterAccountContext, isMissingAdapterPackageError } from '#~/services/adapter-accounts.js'
+import {
+  ensureChannelAuthorizationRequestForInteraction,
+  markChannelAuthorizationRequestDelivered,
+  releaseChannelAuthorizationRequestDelivery,
+  reserveChannelAuthorizationRequestDelivery
+} from '#~/services/channel-authorizations/index.js'
+import { resolveChannelLinkBinding, resolveInboundChannelLink } from '#~/services/channel-links/index.js'
+import type { ResolvedChannelLink } from '#~/services/channel-links/index.js'
 import { extractTextFromMessage } from '#~/services/session/events.js'
 import { killSession, startAdapterSession } from '#~/services/session/index.js'
 import { notifySessionUpdated } from '#~/services/session/runtime.js'
@@ -112,14 +120,30 @@ export const handleInboundEvent = async (
   inbound: ChannelInboundEvent,
   connection: ChannelConnection<ChannelTextMessage> | undefined,
   config?: ChannelBaseConfig,
-  configSource?: ConfigSource
+  configSource?: ConfigSource,
+  channelLinks: readonly ResolvedChannelLink[] = []
 ) => {
+  const channelLinkMatch = resolveInboundChannelLink(channelLinks, { channelKey, inbound })
+  if (channelLinkMatch != null && channelLinkMatch.duplicates.length > 0) {
+    logger.error({
+      channelId: inbound.channelId,
+      channelKey,
+      channelLink: channelLinkMatch.link.name,
+      duplicateChannelLinks: channelLinkMatch.duplicates.map(link => link.name),
+      channelType: inbound.channelType,
+      messageId: inbound.messageId,
+      sessionType: inbound.sessionType
+    }, '[channel] rejected inbound message because multiple channel links matched')
+    return
+  }
+
   const ctx: ChannelContext = {
     channelKey,
     configSource,
     inbound,
     connection,
     config,
+    channelLink: channelLinkMatch?.link,
     sessionId: undefined,
     channelAdapter: undefined,
     channelPermissionMode: undefined,
@@ -194,6 +218,7 @@ export const handleInboundEvent = async (
               channelType: binding.channelType,
               sessionType: binding.sessionType,
               channelId: binding.channelId,
+              threadId: binding.threadId,
               channelKey: binding.channelKey
             }
         }
@@ -209,6 +234,7 @@ export const handleInboundEvent = async (
         channelType: inbound.channelType,
         sessionType: inbound.sessionType,
         channelId: inbound.channelId,
+        threadId: inbound.threadId,
         channelKey,
         senderId: inbound.senderId,
         replyReceiveId: inbound.replyTo?.receiveId,
@@ -229,14 +255,27 @@ export const handleInboundEvent = async (
             channelType: bindingResult.transferredFrom.channelType,
             sessionType: bindingResult.transferredFrom.sessionType,
             channelId: bindingResult.transferredFrom.channelId,
+            threadId: bindingResult.transferredFrom.threadId,
             channelKey: bindingResult.transferredFrom.channelKey
           }
       }
     },
     unbindSession: () => {
-      const currentBinding = getDb().getChannelSession(inbound.channelType, inbound.sessionType, inbound.channelId)
+      const currentBinding = getDb().getChannelSession(
+        channelKey,
+        inbound.channelType,
+        inbound.sessionType,
+        inbound.channelId,
+        inbound.threadId
+      )
       const sessionId = currentBinding?.sessionId ?? ctx.sessionId
-      getDb().deleteChannelSession(inbound.channelType, inbound.sessionType, inbound.channelId)
+      getDb().deleteChannelSession(
+        channelKey,
+        inbound.channelType,
+        inbound.sessionType,
+        inbound.channelId,
+        inbound.threadId
+      )
       if (sessionId) {
         deleteBinding(sessionId)
       }
@@ -378,6 +417,26 @@ export const handleSessionEvent = async (
     return false
   }
   const connection = state.connection
+  const actorSnapshot = getDb().getSessionRuntimeState(sessionId)?.channelActorSnapshot
+  const channelLinkMatch = resolveChannelLinkBinding(state.channelLinks ?? [], {
+    channelId: binding.channelId,
+    channelKey: binding.channelKey,
+    senderId: binding.senderId,
+    sessionType: binding.sessionType,
+    threadId: actorSnapshot?.threadId
+  })
+  if (channelLinkMatch != null && channelLinkMatch.duplicates.length > 0) {
+    serverLogger.error({
+      sessionId,
+      channelId: binding.channelId,
+      channelKey: binding.channelKey,
+      channelLink: channelLinkMatch.link.name,
+      duplicateChannelLinks: channelLinkMatch.duplicates.map(link => link.name),
+      channelType: binding.channelType,
+      sessionType: binding.sessionType
+    }, '[channel] rejected session event because multiple channel links matched')
+    return false
+  }
   const receiveId = binding.replyReceiveId ?? binding.channelId
   const receiveIdType = binding.replyReceiveIdType ?? 'chat_id'
   const deliveryBaseContext = {
@@ -575,11 +634,56 @@ export const handleSessionEvent = async (
   }
 
   if (event.type === 'interaction_request') {
+    const authorizationRequest = event.payload.kind === 'permission'
+      ? ensureChannelAuthorizationRequestForInteraction({
+        binding,
+        event,
+        link: channelLinkMatch?.link,
+        sessionId
+      })
+      : undefined
+
     const language = state.config?.language ?? 'zh'
     const options = event.payload.options ?? []
     const hasDescriptions = options.some(option => (option.description?.trim() ?? '') !== '')
     const text = buildInteractionText(language, event.payload)
-    const result = await deliverMessage({ receiveId, receiveIdType, text })
+    const authorizationDeliveryThrottleMs = channelLinkMatch?.link.authorization?.deliveryThrottleMs
+    const deliveryReservation = authorizationRequest?.id == null
+      ? undefined
+      : reserveChannelAuthorizationRequestDelivery({
+        id: authorizationRequest.id,
+        windowMs: authorizationDeliveryThrottleMs
+      })
+    if (authorizationRequest?.id != null && deliveryReservation == null) {
+      serverLogger.info({
+        sessionId,
+        interactionId: event.id,
+        authorizationRequestId: authorizationRequest.id,
+        receiveId
+      }, '[channel] Suppressed repeated authorization request delivery inside throttle window')
+      return true
+    }
+
+    let result
+    try {
+      result = await deliverMessage({ receiveId, receiveIdType, text })
+    } catch (error) {
+      if (authorizationRequest?.id != null && deliveryReservation != null) {
+        releaseChannelAuthorizationRequestDelivery({
+          id: authorizationRequest.id,
+          reservedAt: deliveryReservation.reservedAt
+        })
+      }
+      throw error
+    }
+    if (authorizationRequest?.id != null) {
+      markChannelAuthorizationRequestDelivered({
+        id: authorizationRequest.id,
+        delivery: binding.sessionType === 'direct' ? 'dm' : 'public_hint',
+        deliveryMessageId: result?.messageId,
+        windowMs: authorizationDeliveryThrottleMs
+      })
+    }
     let followUpsPushed = false
 
     if (

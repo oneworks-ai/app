@@ -5,6 +5,8 @@ import { dirname } from 'node:path'
 import process from 'node:process'
 
 import { getDb } from '#~/db/index.js'
+import { resolveChannelApproval } from '#~/services/channel-approval/index.js'
+import type { ChannelApprovalDecision } from '#~/services/channel-approval/index.js'
 import { loadConfigState } from '#~/services/config/index.js'
 import { createWorkspaceRuntimeEnv } from '#~/services/runtime-store/workspace-env.js'
 import { resolveSessionWorkspaceFolder } from '#~/services/session/workspace.js'
@@ -33,6 +35,7 @@ import type { PermissionToolSubject, SessionPermissionState } from '@oneworks/ut
 export type PermissionStoredDecision = 'allow' | 'deny' | 'ask' | 'inherit'
 
 export interface PermissionResolution {
+  approval?: ChannelPermissionApprovalSummary
   result: PermissionStoredDecision
   source:
     | 'onceAllow'
@@ -43,6 +46,9 @@ export interface PermissionResolution {
     | 'projectDeny'
     | 'projectAsk'
     | 'channelDefaultAllow'
+    | 'channelApprovalAllow'
+    | 'channelApprovalAsk'
+    | 'channelApprovalDeny'
     | 'none'
   subject?: PermissionToolSubject
 }
@@ -51,6 +57,34 @@ interface ProjectPermissionLists {
   allow: string[]
   deny: string[]
   ask: string[]
+}
+
+interface ChannelPermissionApprovalSummary {
+  actorAccountId?: string
+  actorUserId?: string
+  authorizationRequestId?: string
+  capability: string
+  credentialKey?: string
+  credentialSubjectUserId?: string
+  missingScopes?: string[]
+  reasonCode: string
+  status: ChannelApprovalDecision['status']
+}
+
+interface ChannelPermissionRuntimeContext {
+  actorAccountId?: string
+  actorUserId?: string
+  channelId: string
+  channelKey: string
+  channelLinkName?: string
+  channelType: string
+  childRunId?: string
+  conversationStateId?: string
+  entity?: string
+  messageId?: string
+  senderId?: string
+  sessionType: string
+  threadKey?: string
 }
 
 const PERMISSION_PROJECT_CONFIG_PATH = '.oo.config.json'
@@ -172,10 +206,157 @@ const resolveProjectDecision = (keys: string[], lists: ProjectPermissionLists): 
   return { result: 'inherit', source: 'none' }
 }
 
-const hasChannelSessionBuiltInPermission = (sessionId: string, keyCandidates: string[]) => (
-  keyCandidates.some(key => CHANNEL_SESSION_BUILTIN_PERMISSION_KEY_SET.has(key)) &&
-  getDb().getChannelSessionBySessionId(sessionId) != null
+const hasChannelSessionBuiltInPermission = (
+  channelContext: ChannelPermissionRuntimeContext | undefined,
+  keyCandidates: string[]
+) => (
+  channelContext != null &&
+  keyCandidates.some(key => CHANNEL_SESSION_BUILTIN_PERMISSION_KEY_SET.has(key))
 )
+
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  typeof value === 'object' && value != null && !Array.isArray(value)
+)
+
+const resolveChannelAdmins = async (sessionId: string, channelKey: string) => {
+  const workspaceFolder = await resolveSessionWorkspaceFolder(sessionId)
+  const { mergedConfig } = await loadConfigState(workspaceFolder)
+  const channelConfig = mergedConfig.channels?.[channelKey]
+  const access = isRecord(channelConfig) && isRecord(channelConfig.access)
+    ? channelConfig.access
+    : undefined
+  const admins = access?.admins
+  return Array.isArray(admins)
+    ? admins.filter((admin): admin is string => typeof admin === 'string' && admin.trim() !== '')
+    : []
+}
+
+const summarizeChannelApprovalDecision = (
+  decision: ChannelApprovalDecision
+): ChannelPermissionApprovalSummary => ({
+  actorAccountId: decision.actorAccountId,
+  actorUserId: decision.actorUserId,
+  authorizationRequestId: decision.authorizationRequest?.id,
+  capability: decision.capability,
+  credentialKey: decision.credentialKey,
+  credentialSubjectUserId: decision.credentialSubjectUserId,
+  missingScopes: decision.missingScopes,
+  reasonCode: decision.reasonCode,
+  status: decision.status
+})
+
+const resolveChannelPermissionRuntimeContext = (sessionId: string): ChannelPermissionRuntimeContext | undefined => {
+  const db = getDb()
+  const snapshot = db.getSessionRuntimeState(sessionId)?.channelActorSnapshot
+  const binding = db.getChannelSessionBySessionId(sessionId)
+  const channelType = snapshot?.channelType ?? binding?.channelType
+  const channelKey = snapshot?.channelKey ?? binding?.channelKey
+  const channelId = snapshot?.channelId ?? binding?.channelId
+  const sessionType = snapshot?.sessionType ?? binding?.sessionType
+  if (channelType == null || channelKey == null || channelId == null || sessionType == null) {
+    return undefined
+  }
+
+  const actorAccountId = snapshot?.actorAccountId ?? snapshot?.senderId ?? binding?.senderId ?? (
+    sessionType === 'direct'
+      ? channelId
+      : undefined
+  )
+
+  return {
+    actorAccountId,
+    actorUserId: snapshot?.actorUserId,
+    channelId,
+    channelKey,
+    channelLinkName: snapshot?.channelLinkName,
+    channelType,
+    childRunId: snapshot?.childRunId,
+    conversationStateId: snapshot?.conversationStateId,
+    entity: snapshot?.entity,
+    messageId: snapshot?.messageId,
+    senderId: snapshot?.senderId ?? binding?.senderId,
+    sessionType,
+    threadKey: snapshot?.threadKey
+  }
+}
+
+const resolveChannelPermissionDecision = async (params: {
+  channelContext: ChannelPermissionRuntimeContext
+  ignoredLocalAllowSource?: PermissionResolution['source']
+  keyCandidates: string[]
+  sessionId: string
+  subject: PermissionToolSubject
+}): Promise<PermissionResolution> => {
+  const db = getDb()
+
+  if (hasChannelSessionBuiltInPermission(params.channelContext, params.keyCandidates)) {
+    return {
+      result: 'allow',
+      source: 'channelDefaultAllow',
+      subject: params.subject
+    }
+  }
+
+  const actorAccountId = params.channelContext.actorAccountId
+  const actorUserId = params.channelContext.actorUserId
+  const actorUser = actorUserId != null || actorAccountId == null
+    ? undefined
+    : db.resolveCanonicalUserByChannelAccount(params.channelContext.channelKey, actorAccountId)
+  const channelAdmins = await resolveChannelAdmins(params.sessionId, params.channelContext.channelKey)
+  const capability = params.keyCandidates[0] ?? params.subject.key
+  const decision = resolveChannelApproval({
+    actorAccountId,
+    actorUserId: actorUserId ?? actorUser?.id,
+    capability,
+    channelAdmins,
+    channelId: params.channelContext.channelId,
+    channelKey: params.channelContext.channelKey,
+    channelLinkName: params.channelContext.channelLinkName,
+    channelType: params.channelContext.channelType,
+    childRunId: params.channelContext.childRunId,
+    conversationStateId: params.channelContext.conversationStateId,
+    createAuthorizationRequest: true,
+    defaultDecision: {
+      reasonCode: 'channel-session-permission-required',
+      status: 'ask_trigger_user'
+    },
+    entity: params.channelContext.entity,
+    metadata: {
+      ignoredLocalAllowSource: params.ignoredLocalAllowSource,
+      lookupKeys: params.keyCandidates,
+      messageId: params.channelContext.messageId,
+      subjectKey: params.subject.key
+    },
+    senderId: actorAccountId,
+    sessionId: params.sessionId,
+    sessionType: params.channelContext.sessionType,
+    source: 'system',
+    threadKey: params.channelContext.threadKey
+  })
+
+  if (decision.status === 'allow') {
+    return {
+      approval: summarizeChannelApprovalDecision(decision),
+      result: 'allow',
+      source: 'channelApprovalAllow',
+      subject: params.subject
+    }
+  }
+  if (decision.status === 'deny') {
+    return {
+      approval: summarizeChannelApprovalDecision(decision),
+      result: 'deny',
+      source: 'channelApprovalDeny',
+      subject: params.subject
+    }
+  }
+  return {
+    approval: summarizeChannelApprovalDecision(decision),
+    result: 'ask',
+    source: 'channelApprovalAsk',
+    subject: params.subject
+  }
+}
 
 export const resolvePermissionDecision = async (params: {
   sessionId: string
@@ -191,47 +372,46 @@ export const resolvePermissionDecision = async (params: {
     subject.key,
     ...(params.lookupKeys ?? [])
   ])
+  const onceDecision = getDb().consumeSessionPermissionOnce(sessionId, keyCandidates)
+  if (onceDecision != null) {
+    await syncPermissionStateMirrorBestEffort(sessionId)
+    return {
+      result: onceDecision.decision,
+      source: onceDecision.decision === 'allow' ? 'onceAllow' : 'onceDeny',
+      subject
+    }
+  }
+
   const sessionState = getSessionPermissionState(sessionId)
-
-  const matchedOnceDenyKeys = keyCandidates.filter(key => sessionState.onceDeny.includes(key))
-  if (matchedOnceDenyKeys.length > 0) {
-    await updateSessionPermissionState(sessionId, {
-      ...sessionState,
-      onceDeny: sessionState.onceDeny.filter(item => !matchedOnceDenyKeys.includes(item))
-    })
-    return { result: 'deny', source: 'onceDeny', subject }
-  }
-
-  const matchedOnceAllowKeys = keyCandidates.filter(key => sessionState.onceAllow.includes(key))
-  if (matchedOnceAllowKeys.length > 0) {
-    await updateSessionPermissionState(sessionId, {
-      ...sessionState,
-      onceAllow: sessionState.onceAllow.filter(item => !matchedOnceAllowKeys.includes(item))
-    })
-    return { result: 'allow', source: 'onceAllow', subject }
-  }
-
   if (keyCandidates.some(key => sessionState.deny.includes(key))) {
     return { result: 'deny', source: 'sessionDeny', subject }
   }
-  if (keyCandidates.some(key => sessionState.allow.includes(key))) {
+  const sessionAllowed = keyCandidates.some(key => sessionState.allow.includes(key))
+  const channelContext = resolveChannelPermissionRuntimeContext(sessionId)
+  if (sessionAllowed && channelContext == null) {
     return { result: 'allow', source: 'sessionAllow', subject }
   }
 
   const projectDecision = resolveProjectDecision(keyCandidates, await resolveProjectPermissionLists(sessionId))
-  if (projectDecision.result !== 'inherit') {
+  if (projectDecision.result !== 'inherit' && (channelContext == null || projectDecision.result !== 'allow')) {
     return {
       ...projectDecision,
       subject
     }
   }
 
-  if (hasChannelSessionBuiltInPermission(sessionId, keyCandidates)) {
-    return {
-      result: 'allow',
-      source: 'channelDefaultAllow',
+  if (channelContext != null) {
+    return await resolveChannelPermissionDecision({
+      channelContext,
+      ignoredLocalAllowSource: sessionAllowed
+        ? 'sessionAllow'
+        : projectDecision.result === 'allow'
+        ? 'projectAllow'
+        : undefined,
+      keyCandidates,
+      sessionId,
       subject
-    }
+    })
   }
 
   return { result: 'inherit', source: 'none', subject }

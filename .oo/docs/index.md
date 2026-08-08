@@ -35,6 +35,7 @@
 - [PWA 与独立部署](./usage/pwa.md)
 - [Relay 托管、登录与身份模型](./usage/relay.md)
 - [Channel 会话绑定](./usage/channels.md)
+- [Channel 平台接入](./usage/channel-platforms.md)
 - [CLI 与示例](./usage/cli.md)
 - [示例目录](./usage/examples.md)
 - [Skills 与依赖](./usage/skills.md)

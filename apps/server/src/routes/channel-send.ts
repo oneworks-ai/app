@@ -1,6 +1,12 @@
 import Router from '@koa/router'
 
-import { sendChannelMessage } from '#~/channels/index.js'
+import {
+  clearChannelDebugOutboundMessages,
+  invokeChannelCommand,
+  listChannelCommandToolsForRuntime,
+  listChannelDebugOutboundMessages,
+  sendChannelMessage
+} from '#~/channels/index.js'
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
@@ -14,6 +20,74 @@ const trimNonEmpty = (value: unknown) => {
 
 export function channelSendRouter(): Router {
   const router = new Router()
+
+  router.get('/:channelKey/commands', async (ctx) => {
+    ctx.body = {
+      tools: listChannelCommandToolsForRuntime()
+    }
+  })
+
+  router.get('/:channelKey/debug/outbound', async (ctx) => {
+    const result = listChannelDebugOutboundMessages({
+      channelKey: ctx.params.channelKey
+    })
+
+    if (!result.ok) {
+      ctx.status = result.statusCode
+      ctx.body = { message: result.message }
+      return
+    }
+
+    ctx.body = {
+      messages: result.messages
+    }
+  })
+
+  router.delete('/:channelKey/debug/outbound', async (ctx) => {
+    const result = await clearChannelDebugOutboundMessages({
+      channelKey: ctx.params.channelKey
+    })
+
+    if (!result.ok) {
+      ctx.status = result.statusCode
+      ctx.body = { message: result.message }
+      return
+    }
+
+    ctx.body = { ok: true }
+  })
+
+  router.post('/:channelKey/commands/invoke', async (ctx) => {
+    const body = isRecord(ctx.request.body) ? ctx.request.body : {}
+    const toolName = trimNonEmpty(body.toolName)
+    if (toolName == null) {
+      ctx.status = 400
+      ctx.body = { message: 'Missing toolName.' }
+      return
+    }
+
+    const result = await invokeChannelCommand({
+      channelKey: ctx.params.channelKey,
+      toolName,
+      input: body.input,
+      invocationToken: trimNonEmpty(body.invocationToken)
+    })
+
+    if (!result.ok) {
+      ctx.status = result.statusCode
+      ctx.body = {
+        message: result.message,
+        replies: result.replies,
+        result: result.result
+      }
+      return
+    }
+
+    ctx.body = {
+      replies: result.replies,
+      result: result.result
+    }
+  })
 
   router.post('/:channelKey/send', async (ctx) => {
     const body = isRecord(ctx.request.body) ? ctx.request.body : {}

@@ -4,6 +4,11 @@
 - schema.ts：schema 初始化编排器，只负责执行注入的 schema 模块与提供迁移 helper
 - sessions/：session 领域目录，包含 schema、sessions repo、messages repo 与 tags repo
 - channelSessions/：channel session 领域目录，包含 schema 与 repo
+- channelConversations/：channel conversation state / recent turns 的连续对话状态
+- channelChildRuns/：channel inbound 到 runtime session 的 child run 审计记录
+- channelCommands/：channel command fast path / typed command run 审计记录
+- channelIdentities/：channel 账号、canonical user、账号绑定、短期身份绑定码、credential 元信息与授权请求状态
+- channelPolicies/：channel 策略运行态，包含固定回复节流与 off-hours backlog
 - automation/：automation 领域目录，包含 schema 与 repo
 - agentRooms/：Agent Room 领域目录，包含 room/member/run/message 的 schema 与 repo；改 room 持久化前先读 `agentRooms/AGENTS.md`
 - usage/：Token 用量 ledger，负责 observation schema、历史消息回填、累计 / 增量去重与 workspace 级聚合；改 observation identity、资源归因或 report 契约前先读 `../../../../.oo/rules/maintenance/token-usage-analytics.md`

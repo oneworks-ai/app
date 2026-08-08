@@ -157,4 +157,39 @@ describe('definitionLoader', () => {
       join(workspace, '.oo/entities/reviewer/README.md')
     ])
   })
+
+  it('loads channel links from project channel directories', async () => {
+    const workspace = await createWorkspace()
+    const loader = new DefinitionLoader(workspace)
+
+    await writeDocument(
+      join(workspace, '.oo/channels/wan-ke-chat/channel.json'),
+      JSON.stringify(
+        {
+          channel: 'lark',
+          entity: 'OWO【演示】',
+          external: {
+            type: 'chat',
+            chatId: 'oc_mock'
+          }
+        },
+        null,
+        2
+      )
+    )
+
+    const allChannelLinks = await loader.loadDefaultChannelLinks()
+    const channelLink = await loader.loadChannelLink('wan-ke-chat')
+
+    expect(allChannelLinks.map(link => link.resolvedName)).toEqual(['wan-ke-chat'])
+    expect(channelLink?.path).toBe(join(workspace, '.oo/channels/wan-ke-chat/channel.json'))
+    expect(channelLink?.attributes).toEqual(expect.objectContaining({
+      channel: 'lark',
+      entity: 'OWO【演示】',
+      external: {
+        type: 'chat',
+        chatId: 'oc_mock'
+      }
+    }))
+  })
 })

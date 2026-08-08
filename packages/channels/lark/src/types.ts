@@ -63,6 +63,9 @@ export interface LarkMessagePayload {
     content?: string
     message_id?: string
     mentions?: LarkMention[]
+    parent_id?: string
+    root_id?: string
+    thread_id?: string
   }
   sender?: {
     sender_id?: {
