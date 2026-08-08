@@ -1,8 +1,8 @@
 import { mkdir, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
+import { dirname, resolve } from 'node:path'
 
 import { resolveConfigState } from '@oneworks/config'
-import { NATIVE_HOOK_BRIDGE_ADAPTER_ENV } from '@oneworks/hooks'
+import { NATIVE_HOOK_BRIDGE_ADAPTER_ENV, readJsonFileOrDefault, resolveMockHome } from '@oneworks/hooks'
 import type { AdapterCtx, AdapterQueryOptions, Config } from '@oneworks/types'
 import {
   resolveModelServiceConfig,
@@ -10,17 +10,11 @@ import {
   resolveModelServicePlanProtocolBaseUrl,
   resolveProjectOoPath
 } from '@oneworks/utils'
-import { ensureManagedNpmCli } from '@oneworks/utils/managed-npm-cli'
 
 import { ensureClaudeCodeRouterReady } from '../ccr/daemon'
-import {
-  CLAUDE_CODE_CLI_COMPATIBILITY_RANGE,
-  CLAUDE_CODE_CLI_PACKAGE,
-  CLAUDE_CODE_CLI_VERSION,
-  resolveClaudeCliPath,
-  resolveClaudeCodeSystemBinaryPaths
-} from '../ccr/paths'
 import { resolveClaudeCodeAdapterConfig } from '../runtime-config'
+import { resolveClaudeRuntimeAccount, scrubClaudeAuthEnvironment } from './accounts'
+import { ensureClaudeCliPath } from './cli'
 import { stageClaudePluginDirs } from './plugins'
 
 interface ClaudeExecutionSettings {
@@ -47,6 +41,7 @@ interface PreparedClaudeExecution {
   sessionId: string
   effort?: AdapterQueryOptions['effort']
   executionType: 'create' | 'resume'
+  accountKey?: string
 }
 
 const resolveCCRRequestLogContextPath = (
@@ -97,6 +92,13 @@ const deepMerge = (
     merged[key] = value
   }
   return merged
+}
+
+const scrubManagedClaudeSettings = (settings: ClaudeExecutionSettings): ClaudeExecutionSettings => {
+  const scrubbed = { ...settings }
+  delete scrubbed.apiKeyHelper
+  scrubbed.env = scrubClaudeAuthEnvironment(settings.env ?? {})
+  return scrubbed
 }
 
 const normalizeEffort = (value: unknown): AdapterQueryOptions['effort'] => (
@@ -405,6 +407,10 @@ export const prepareClaudeExecution = async (
     configs: ctx.configs
   })
   const { common: commonConfig, native: nativeConfig } = resolveClaudeCodeAdapterConfig(ctx)
+  const runtimeAccount = await resolveClaudeRuntimeAccount({
+    ctx,
+    requestedAccount: options.account
+  })
   const assetPlan = options.assetPlan
   const nativeHooksAvailable = env.__ONEWORKS_PROJECT_CLAUDE_NATIVE_HOOKS_AVAILABLE__ === '1'
   const {
@@ -426,6 +432,10 @@ export const prepareClaudeExecution = async (
       : 'resume'
     : 'create'
   const requestedEffort = effort ?? commonConfig.effort
+  const managedSettings = await readJsonFileOrDefault<Record<string, unknown>>(
+    resolve(resolveMockHome(cwd, env), '.claude', 'settings.json'),
+    {}
+  )
   const settingsContent = isPlainObject(nativeConfig.settingsContent)
     ? nativeConfig.settingsContent
     : {}
@@ -474,9 +484,14 @@ export const prepareClaudeExecution = async (
       effortLevel: requestedEffort
     }
   }
-  settings = deepMerge(settings, settingsContent) as ClaudeExecutionSettings
+  settings = deepMerge(deepMerge(settings, managedSettings), settingsContent) as ClaudeExecutionSettings
   const officialAnthropicService = resolveOfficialAnthropicModelService(model, mergedConfig.modelServices)
   const useCCR = officialAnthropicService == null && typeof model === 'string' && model.includes(',')
+  if (useCCR && runtimeAccount.configDir != null) {
+    throw new Error(
+      'Managed Claude accounts cannot be combined with Claude Code Router models because router credentials override the selected account.'
+    )
+  }
   if (useCCR) {
     const router = await ensureClaudeCodeRouterReady(ctx)
     settings.env = {
@@ -493,12 +508,13 @@ export const prepareClaudeExecution = async (
       sessionId
     })
   }
-  if (officialAnthropicService != null) {
+  if (officialAnthropicService != null && runtimeAccount.configDir == null) {
     settings.env = {
       ...settings.env,
       ...buildOfficialAnthropicEnv(officialAnthropicService, settings.env)
     }
   }
+  if (runtimeAccount.configDir != null) settings = scrubManagedClaudeSettings(settings)
   const { mcpServers, ...unresolvedSettings } = settings
   unresolvedSettings.permissions.allow = [
     ...(unresolvedSettings.permissions.allow ?? []),
@@ -547,7 +563,8 @@ export const prepareClaudeExecution = async (
     cwd,
     ctxId: ctx.ctxId,
     env: ctx.env,
-    sessionId
+    sessionId,
+    skills: ctx.assets?.skills
   })
 
   const args: string[] = [
@@ -592,7 +609,7 @@ export const prepareClaudeExecution = async (
     )
   }
 
-  const executionEnv: Record<string, string | null | undefined> = {
+  const inheritedExecutionEnv: Record<string, string | null | undefined> = {
     ...env,
     ...(
       requestedEffort === 'max' &&
@@ -602,6 +619,7 @@ export const prepareClaudeExecution = async (
         : {}
     ),
     ...nativeEnv,
+    ...(runtimeAccount.configDir == null ? {} : { CLAUDE_CONFIG_DIR: runtimeAccount.configDir }),
     ...(nativeHooksAvailable
       ? {
         __ONEWORKS_CLAUDE_HOOKS_ACTIVE__: '1',
@@ -611,22 +629,15 @@ export const prepareClaudeExecution = async (
       }
       : {})
   }
+  const executionEnv = runtimeAccount.configDir == null
+    ? inheritedExecutionEnv
+    : scrubClaudeAuthEnvironment(inheritedExecutionEnv)
 
-  const cliPath = await ensureManagedNpmCli({
-    adapterKey: 'claude_code',
-    binaryName: 'claude',
-    bundledPath: resolveClaudeCliPath(cwd, executionEnv, nativeConfig.cli),
-    config: nativeConfig.cli,
-    cwd,
-    defaultPackageName: CLAUDE_CODE_CLI_PACKAGE,
-    defaultVersion: CLAUDE_CODE_CLI_VERSION,
+  const cliPath = await ensureClaudeCliPath({
+    ctx,
     env: executionEnv,
-    logger: ctx.logger,
-    preferSystem: nativeConfig.cli?.source == null,
-    systemBinaryPaths: await resolveClaudeCodeSystemBinaryPaths(executionEnv),
-    versionRange: CLAUDE_CODE_CLI_COMPATIBILITY_RANGE
+    cliConfig: nativeConfig.cli
   })
-  ctx.env.__ONEWORKS_PROJECT_ADAPTER_CLAUDE_CODE_CLI_PATH__ = cliPath
 
   return {
     cliPath,
@@ -635,6 +646,7 @@ export const prepareClaudeExecution = async (
     cwd,
     sessionId,
     effort: nativeEnvEffort ?? settingsContentEffort ?? requestedEffort,
-    executionType
+    executionType,
+    accountKey: runtimeAccount.accountKey
   }
 }

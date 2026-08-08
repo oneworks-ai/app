@@ -8,9 +8,14 @@ import type { AdapterOutputEvent } from '@oneworks/types'
 
 import { createClaudeSession } from '../src/claude/session'
 
-const mocks = vi.hoisted(() => ({
-  prepareClaudeExecution: vi.fn()
-}))
+const mocks = vi.hoisted(() => {
+  const releaseAccountSessionLease = vi.fn(async () => {})
+  return {
+    acquireClaudeAccountSessionLease: vi.fn(async () => releaseAccountSessionLease),
+    prepareClaudeExecution: vi.fn(),
+    releaseAccountSessionLease
+  }
+})
 
 vi.mock('node:child_process', () => ({
   spawn: vi.fn()
@@ -18,6 +23,10 @@ vi.mock('node:child_process', () => ({
 
 vi.mock('../src/claude/prepare', () => ({
   prepareClaudeExecution: mocks.prepareClaudeExecution
+}))
+
+vi.mock('../src/claude/accounts', () => ({
+  acquireClaudeAccountSessionLease: mocks.acquireClaudeAccountSessionLease
 }))
 
 const spawnMock = vi.mocked(spawn)
@@ -47,6 +56,7 @@ function makeProc(options: {
   exitCode?: number
   error?: Error
   autoExit?: boolean
+  emitSpawn?: boolean
 } = {}) {
   const stdout = new PassThrough()
   const stderr = new PassThrough()
@@ -75,6 +85,7 @@ function makeProc(options: {
   } as any
 
   queueMicrotask(() => {
+    if (options.emitSpawn ?? options.error == null) handlers.get('spawn')?.()
     for (const line of options.stdout ?? []) {
       stdout.write(line)
     }
@@ -83,10 +94,12 @@ function makeProc(options: {
     }
     if (options.error) {
       handlers.get('error')?.(options.error)
+      handlers.get('close')?.(null)
       return
     }
     if (options.autoExit !== false) {
       handlers.get('exit')?.(options.exitCode ?? 0)
+      handlers.get('close')?.(options.exitCode ?? 0)
     }
   })
 
@@ -129,6 +142,8 @@ describe('claude-code session error events', () => {
 
     await new Promise(resolve => setTimeout(resolve, 10))
 
+    expect(mocks.releaseAccountSessionLease).toHaveBeenCalledOnce()
+
     expect(events).toEqual([
       {
         type: 'error',
@@ -143,6 +158,41 @@ describe('claude-code session error events', () => {
         data: {
           exitCode: 1,
           stderr: 'stream failed'
+        }
+      }
+    ])
+  })
+
+  it('releases the account lease once when spawn fails with error followed by close', async () => {
+    const spawnError = Object.assign(new Error('spawn claude ENOENT'), { code: 'ENOENT' })
+    spawnMock.mockImplementation(() => makeProc({ error: spawnError }))
+
+    const events: AdapterOutputEvent[] = []
+    await createClaudeSession(makeCtx(), {
+      type: 'create',
+      runtime: 'server',
+      mode: 'stream',
+      sessionId: 'sess-1',
+      onEvent: (event: AdapterOutputEvent) => events.push(event)
+    } as any)
+
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    expect(mocks.releaseAccountSessionLease).toHaveBeenCalledOnce()
+    expect(events).toEqual([
+      {
+        type: 'error',
+        data: {
+          message: 'spawn claude ENOENT',
+          details: spawnError,
+          fatal: true
+        }
+      },
+      {
+        type: 'exit',
+        data: {
+          exitCode: 1,
+          stderr: 'spawn claude ENOENT'
         }
       }
     ])
@@ -234,10 +284,10 @@ describe('claude-code session error events', () => {
     } as any)
 
     await new Promise(resolve => setTimeout(resolve, 10))
-    const exitHandler = firstProc.on.mock.calls.find(
-      (call: [string, (...args: unknown[]) => void]) => call[0] === 'exit'
+    const closeHandler = firstProc.on.mock.calls.find(
+      (call: [string, (...args: unknown[]) => void]) => call[0] === 'close'
     )?.[1]
-    exitHandler?.(1)
+    closeHandler?.(1)
 
     for (let attempt = 0; attempt < 20 && spawnMock.mock.calls.length < 2; attempt += 1) {
       await new Promise(resolve => setTimeout(resolve, 10))

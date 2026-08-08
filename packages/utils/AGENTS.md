@@ -13,6 +13,12 @@
   - 对象 key 转换 helper
 - `src/document-path.ts`
   - workspace 共享的路径规范化 helper
+- `src/adapter-account.ts` / `src/adapter-account-revision.ts`
+  - adapter 账户 artifact 的账户级加锁、不可变 generation + 原子 current pointer 发布 / 安全删除，以及 credential revision 兼容 API；已解析的旧 generation 保留到显式 remove，避免发布窗口让无锁 reader 失效。未发布的完整 orphan generation 也保留到显式 remove，目前不做可能破坏旧 reader 的自动 GC
+  - artifact 写删必须以 canonical project home 为锚逐段拒绝 ancestor symlink / 非目录，并在锁前后和发布 / 删除前复核目录 identity
+  - artifact 路径和 adapter/account 单段必须使用这里的统一校验；凭证 revision 的有效域与比较由 `@oneworks/types` 拥有
+  - 新 adapter/account state 与 lock 路径使用原始 UTF-8 key 的完整 SHA-256 `v1-` 编码，并以 0600 metadata 逐字核验原始 key；不能 lowercase 合并用户键，`Work/work` 与 NFC/NFD 必须保持独立。legacy raw path 只在 realpath basename 与请求 key 逐字一致时读删
+  - `.oneworks-account-store` / `.oneworks-account-locks` 内部 namespace 对 adapter/account 键保留；保留名按 NFKC + locale-independent lowercase 判定，不能依赖宿主文件系统是否区分大小写
 - `src/model-selection.ts`
   - model service、defaultModel、adapter/model 兼容性处理
 - `src/plugin-resolver.ts`

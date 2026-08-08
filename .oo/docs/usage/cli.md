@@ -40,9 +40,9 @@
 - `oneworks users [-s cf|vercel|<url>]`：列出本机保存的 Relay 登录账号
 - `oneworks users enable [user]` / `oneworks users disable [user]`：启用或停用某个 Relay 账号
 - `oneworks logout [user]`：删除本机保存的 Relay 登录态
-- `oneworks accounts add <adapter> [accountName]`：触发 adapter 原生登录流程，并把返回的凭据快照保存到 `<project-home>/.local/adapters/<adapter>/accounts/<key>/`
+- `oneworks accounts add <adapter> [accountName]`：触发 adapter 原生登录流程；Codex / Claude Code 保存 global 账号快照，返回 artifact 的其他 adapter 使用 project home 私有目录
 - `oneworks accounts show <adapter> <accountName>`：查看某个 adapter 账号的详情和最新额度摘要（CLI 当前会强制刷新）
-- `oneworks accounts remove <adapter> <accountName>`：删除某个 adapter 账号在当前 workspace 下保存的凭据快照
+- `oneworks accounts remove <adapter> <accountName>`：删除 One Works 的 adapter 账号记录；只有 portable 且平台隔离的凭证才会同时执行官方 logout，device-bound 原生登录保留在设备上
 
 这些命令默认以项目根目录作为 workspace。
 

@@ -12,6 +12,7 @@ description: 当任务涉及 adapter runtime、mock home、原生资产自动适
 - [设计总览](./overview.md)
 - [原生资产适配](./native-assets.md)
 - [运行时配置](./runtime-config.md)
+- [账户与凭证](./accounts.md)
 - [真实 CLI 验证](./verification.md)
 - [Adapter 错误调试经验](./debugging.md)
 
