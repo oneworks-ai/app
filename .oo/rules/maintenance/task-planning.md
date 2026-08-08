@@ -71,6 +71,14 @@
 - 线程因 rate limit、工具失败或中断卡住时，主线程应读取已有 diff / PR 接手，或另开小范围新线程继续；不要无限等待原线程。
 - 完成的审阅线程提取结论后归档；完成的实现线程先由主线程 review diff，再决定是否合并。
 
+## 协调回调与用户通知边界
+
+- worker、owner 和 monitor 的回调首先是协调器的内部信号，不是自动发送给用户的通知。协调器应消费这些信号来继续任务、核验证据、删除 heartbeat 和归档任务。
+- 普通启动、进度、健康 / 无变化与清理事件默认静默处理。多个回调若共同描述同一阶段或结果，应合并成一个结论，不能按回调逐条向用户播报。
+- 只有需要用户输入 / 决定 / 批准、失败 / 风险 / 身份不匹配 / 实质计划变化需要关注、用户可见里程碑完成、用户明确询问状态或可以交付最终综合结果时，才发送用户可见更新。
+- 是否发送用户消息不影响收口义务。terminal 证据核验、heartbeat 删除和任务归档仍按既定流程执行；静默事件不能成为跳过清理的理由。
+- 持久化规则和用户可见摘要只保留可复用的最小证据，不写任务 ID、账号信息、secret、个人路径或按时间排列的过程日志。
+
 ## 终态回调与归档
 
 独立任务的完成状态、消息通知和归档是三件不同的事：worker 进入 `idle`、发送最终回复或把结果回调给主线程，都不会自动把线程移出任务列表。除上方明确要求自归档的隔离 scheduled monitor 执行 thread 外，归档由创建它的主线程负责；该特例只允许执行 thread 归档自身，绝不归档父会话。
@@ -104,12 +112,22 @@ Safe to archive: yes / no
 
 - Git / PR 独立任务的 prompt 必须包含精确的仓库、PR / 分支、允许的写操作、merge 方式、是否删除远端分支和本轮用户授权；只写“处理 PR”或“合入”不足以让审批者判断边界。
 - 流程或 skill 要求“获得明确批准后再修复”时，先从当前任务历史解析已有授权；批准约束的是操作范围，不要求必须在诊断结果之后重复发生。用户已明确要求为当前变更创建 PR 并 merge 时，该授权覆盖为同一 PR 补齐 changelog、真实截图、Experience Review、PR body 和其他不扩大产品改动范围的合并门禁材料，以及对应的 commit、push 和 PR 更新。应告知门禁失败与处理内容，但不要让用户重复授权。只有修复会扩大产品代码范围、改变 merge 方式或分支清理范围、需要 rebase / rewrite / force push，或引入新的外部 / 破坏性操作时，才重新确认。
-- 创建 Git operator 前先运行 `pnpm tools git-delivery check --repository <owner/name> --json`。只有项目 auto-review、本机 `gh`、仓库写权限和 remote 认证都 ready 时才开始 commit / push / PR；不要等到收尾阶段才发现授权链断裂。
+- 创建 Git operator 前先用 `gh auth status --active --hostname <host>` 核验官方 CLI 身份，再运行 `pnpm tools git-delivery check --repository <owner/name> --json`，并读取仓库实际 remote URL。只有项目 auto-review、本机 `gh`、仓库写权限和实际 Git transport 都 ready 时才开始 commit / push / PR；不要等到收尾阶段才发现授权链断裂。
 - 本项目通过 `.codex/config.toml` 保持 `on-request` 审批并把 eligible prompt 交给 auto-review。该项目层配置有意作用于可信项目内所有新加载任务，不只作用于独立 worker，并可能覆盖用户层较严格的 reviewer / approval 默认值（managed requirements 与显式启动覆盖仍有更高优先级）；它只替换审批者，不扩大 sandbox、网络或 GitHub 权限。
 - 新项目配置与规则只对重新加载后的任务生效。Git 写操作必须交给通过项目线程能力新建、会重新加载 `.codex/config.toml` 的干净独立 Git operator；不要把继承父任务有效 `AskForApproval=Never` 的 collaboration child 当作交付 operator。真实验收让新 operator 执行一条已明确授权的远端写操作，并确认没有停在人工 `waitingOnApproval`；旧线程成功不能证明新配置已加载。
 - 如果 worker 进入 `waitingOnApproval`，先检查任务是否加载了可信项目层、`approval_policy` / `approvals_reviewer` 的有效值、命中规则和授权上下文；修复后创建至多一个干净验证任务。不要连续 fork 带有长协调历史的主任务：这种 fork 可能把自己误判成协调器并继续创建 worker。需要共享同一 worktree 时，prompt 必须明确“你就是执行者，不得再委派”。权限传递仍失败时记录 capability gap，不能让主线程接管远端 Git 写操作，也不能要求用户重复已经明确给出的授权。
-- GitHub Connector 返回 `Resource not accessible by integration` 表示外部 GitHub App / 集成授权不足，可能来自安装仓库范围、App permission 或组织策略，与本地 shell approval 是两个权限层。只有补齐对应组织 / 仓库授权并复测 connector 写操作后，才能声称 Connector 已修复；`git-delivery check` 已确认本机 `gh` ready 时立即切到 `gh`，不要反复尝试 Connector 或网页 UI。远端写入仍经过上述逐次审批。
+- GitHub Connector 返回 `Resource not accessible by integration` 只说明非标准集成不可用，不能成为修复、安装或改用 connector / 网页 UI 的理由。回到本机官方 `gh` 完成身份与仓库权限核验；`gh` 未 ready 时停止交付，不能绕开此门禁。
 - 不要用永久 `allow` 放行 `gh pr merge`、`git push` 或 `gh api`。prefix 只能约束命令前缀，后续 URL / flags 仍可能改变目标；需要零人工停顿时由 auto-review 根据精确用户授权逐次判断，而不是取消边界。
+
+### GitHub CLI 单一授权入口
+
+- GitHub 身份、repository 元数据 / 状态、PR、Actions、release 状态和 credential 相关交付操作只使用本机官方 `gh` CLI。禁止用 Codex、Claude 或 GitHub 插件、隐藏 connector 身份、复制 token、环境变量注入 token 或其他集成绕过；源码的 fetch / push 仍由 `git` 按已配置 transport 执行。
+- `gh` API 身份与 Git transport 是两条独立链路。选择 HTTPS 或 SSH 只改变 clone / fetch / push 的传输方式，不会替代、恢复或延长 `gh` OAuth credential；`gh auth login --git-protocol` 还会修改该 host 的 Git 协议偏好，不能把它当成无副作用的续期命令。
+- 每次远端写入前运行 `gh auth status --active --hostname <host>`，且不得使用会显示 token 的参数；同时读取实际 remote URL 并验证对应 HTTPS credential 或 SSH 握手。任一链路无效、身份不匹配或权限不足时立即停止交付，不执行 commit / push / PR / merge 等后续写入并回报，也不能尝试备用插件或隐藏凭据来源。
+- `gh auth status` 明确返回 invalid / unauthenticated 后，只允许请求用户通过 `gh auth login --hostname <host> --web` 完成一次交互式浏览器 / device 授权；不得粘贴、创建或轮换 PAT，不得用 `--with-token`、credential 导出或其他持久化路径恢复。认证后复用这份 host 级登录，并重新运行 status 与交付预检。
+- host 级 `gh` 登录由同一台机器上的任务复用；不要为每个 worktree / task 重复登录。只有先核实当前 credential 已无效，才请求一次新的交互式授权，避免无意义的 OAuth token churn 和旧 credential 撤销。
+- Git remote 默认保持现状；HTTPS 可可靠使用时优先保留 HTTPS。若仓库已明确选择 SSH 且代理、VPN 或防火墙阻断 22 端口，可先只读运行 `ssh -T -p 443 git@ssh.github.com` 验证 GitHub 的 SSH-over-443 端点；只有用户 / owner 批准修改 host 配置后，才按 [GitHub 官方 SSH-over-443 文档](https://docs.github.com/en/authentication/troubleshooting-ssh/using-ssh-over-the-https-port)中的配置处理。不得静默切换既有 remote 或修改 SSH 配置。
+- 状态报告和规则沉淀只记录协议、门禁与非敏感结论，不包含 token、账号细节、绝对个人路径或某台机器 / 网络的一次性事故时间线。
 
 ### Git operator 的可信授权传递
 
@@ -143,7 +161,7 @@ Git / PR 写操作需要同时满足“任务范围精确”和“用户授权�
 
 - 命令尚未启动就返回 `Rejected(...)`：Codex / sandbox 审批问题，检查独立任务类型、可信用户历史和项目 auto-review。
 - `git push` 已完成远端协商后返回 OAuth scope 错误：GitHub 凭据问题，不是 subagent 权限问题。提交包含 `.github/workflows/**` 时，使用 OAuth token 的 operator 要先通过 `gh auth status` 确认具有 `workflow` scope；缺少时先恢复 GitHub 授权，再重试同一个 operator。
-- GitHub Connector 返回 `Resource not accessible by integration`：GitHub App 安装范围或 permission 问题，与本机 `gh` token 和 Codex shell 审批分别处理。
+- GitHub Connector 返回 `Resource not accessible by integration`：这是被禁止用于交付的备用集成状态，不据此安装、修复或切换插件；GitHub 身份和权限只回到本机 `gh` 核验，Codex shell 审批仍单独处理。
 
 ## 集成与验证
 
