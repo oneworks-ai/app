@@ -1,7 +1,7 @@
 /* eslint-disable max-lines -- adapter package loading keeps package resolution helpers colocated. */
 import { existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import process from 'node:process'
 
 import type { Adapter } from './adapter'
@@ -65,6 +65,21 @@ const defaultAdapterRequire = createWorkspaceRequire(process.cwd())
 const normalizeRuntimePackageDir = (value: string | undefined) => {
   const trimmed = value?.trim()
   return trimmed != null && trimmed !== '' ? trimmed : undefined
+}
+
+const isPnpmWorkspacePackageDir = (packageDir: string) => {
+  const resolvedPackageDir = resolve(packageDir)
+  if (resolvedPackageDir.split(sep).includes('node_modules')) return false
+
+  let currentDir = resolvedPackageDir
+
+  while (true) {
+    if (existsSync(join(currentDir, 'pnpm-workspace.yaml'))) return true
+
+    const parentDir = dirname(currentDir)
+    if (parentDir === currentDir) return false
+    currentDir = parentDir
+  }
 }
 
 const unique = <T>(values: T[]) => [...new Set(values)]
@@ -339,11 +354,16 @@ const createAdapterRequires = (packageName: string) => {
   const explicitCliPackageDir = cliPackageDir != null && cliPackageDir !== packageDir
     ? cliPackageDir
     : undefined
+  const workspacePackageDir = packageDir != null && isPnpmWorkspacePackageDir(packageDir)
+    ? packageDir
+    : undefined
+  const installedRuntimePackageDir = workspacePackageDir == null ? packageDir : undefined
 
   return unique([
     explicitCliPackageDir,
+    workspacePackageDir,
     resolveExistingAdapterPackageCacheDir(packageName),
-    packageDir,
+    installedRuntimePackageDir,
     process.cwd()
   ].filter((value): value is string => value != null)).map(createWorkspaceRequire)
 }
