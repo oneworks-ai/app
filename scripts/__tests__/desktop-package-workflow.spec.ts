@@ -6,6 +6,7 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const workflow = readFileSync('.github/workflows/desktop-package.yml', 'utf8')
+const macosSigningRule = readFileSync('.oo/rules/release/macos-signing.md', 'utf8')
 const homepageWorkflow = readFileSync(
   '.github/workflows/deploy-homepage.yml',
   'utf8'
@@ -170,6 +171,8 @@ describe('desktop package workflow', () => {
     expect(prJob).not.toContain('desktop:make')
     expect(prJob).not.toContain('APPLE_')
     expect(prJob).not.toContain('Upload installer artifacts')
+    expect(macosSigningRule).toContain('纯文档 PR 只运行轻量门禁')
+    expect(macosSigningRule).toContain('其他普通 PR 只构建 unsigned app bundle')
 
     const nightlyPolicy = runWithOutput(
       extractRunScript('Resolve desktop build policy'),

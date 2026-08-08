@@ -65,31 +65,67 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Classify validation scope
+        id: validation_scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: >-
+          node scripts/pr-validation-scope.cjs
+          --base "$BASE_SHA"
+          --head "$HEAD_SHA"
+          --github-output "$GITHUB_OUTPUT"
+          --json
+
+      - name: Validate classifier output contract
+        env:
+          DOCS_ONLY: ${{ steps.validation_scope.outputs.docs_only }}
+          FULL: ${{ steps.validation_scope.outputs.full }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$DOCS_ONLY" == "true" || "$DOCS_ONLY" == "false" ]]
+          [[ "$FULL" == "true" || "$FULL" == "false" ]]
+          [[ "$DOCS_ONLY" != "$FULL" ]]
+
+      - name: Confirm docs-only installer exclusion
+        if: steps.validation_scope.outputs.docs_only == 'true'
+        run: echo "No Desktop source, workflow, configuration, manifest, lockfile, script, or test path changed; installer packaging is not applicable."
 
       - name: Setup pnpm
+        if: steps.validation_scope.outputs.docs_only != 'true'
         uses: pnpm/action-setup@v4
         with:
           version: 11.7.0
 
       - name: Setup Node.js
+        if: steps.validation_scope.outputs.docs_only != 'true'
         uses: actions/setup-node@v4
         with:
           node-version-file: .node-version
           cache: pnpm
 
       - name: Install dependencies
+        if: steps.validation_scope.outputs.docs_only != 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Confirm release-only packaging policy
-        run: echo "Pull requests build unsigned app bundles for authority smoke only; installers, signing, and promotion remain release-only."
+        if: steps.validation_scope.outputs.docs_only != 'true'
+        run: echo "Full-scope pull requests build unsigned app bundles for authority smoke only; installers, signing, and promotion remain release-only."
 
       - name: Run desktop package preflight
+        if: steps.validation_scope.outputs.docs_only != 'true'
         run: pnpm -C apps/desktop test:package-preflight
 
       - name: Verify source native authority closure
+        if: steps.validation_scope.outputs.docs_only != 'true'
         run: pnpm -C packages/fs-authority-native verify:prebuilds
 
       - name: Package unsigned macOS authority candidates
+        if: steps.validation_scope.outputs.docs_only != 'true'
         env:
           ONEWORKS_DESKTOP_ARCHS: arm64,x64
           ONEWORKS_DESKTOP_ENABLE_AUTO_UPDATE: "false"
@@ -98,6 +134,7 @@ jobs:
         run: pnpm desktop:package
 
       - name: Verify packaged native authority closure
+        if: steps.validation_scope.outputs.docs_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -117,6 +154,7 @@ jobs:
           done
 
       - name: Smoke packaged arm64 authority server
+        if: steps.validation_scope.outputs.docs_only != 'true'
         env:
           ONEWORKS_DESKTOP_SMOKE_ARCH: arm64
         run: pnpm -C apps/desktop smoke:package

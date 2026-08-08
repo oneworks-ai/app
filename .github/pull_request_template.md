@@ -23,3 +23,9 @@ Not applicable
 - [ ] 已判断是否需要沉淀经验
 - [ ] 如需要，已运行 `$post-task-experience-review`
 - [ ] reviewer PASS 后才进入 merge
+
+## Policy Conflict Review
+
+<!-- Required only for workflow, permission, or release-rule documentation changes. -->
+
+- [ ] Independent read-only reviewer checked workflow, permission, and release-rule conflicts and reported PASS

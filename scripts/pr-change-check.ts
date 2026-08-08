@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import process from 'node:process'
 
 import { evaluatePrChangePolicy } from './pr-change-policy'
+import { getChangedFilesFromEntries, getChangedPathEntries } from './pr-validation-scope.cjs'
 
 export interface RunPrChangeCheckInput {
   base?: string
@@ -11,7 +12,11 @@ export interface RunPrChangeCheckInput {
   head?: string
 }
 
-export { evaluatePrChangePolicy, hasExperienceReviewChecklist } from './pr-change-policy'
+export {
+  evaluatePrChangePolicy,
+  hasExperienceReviewChecklist,
+  hasPolicyConflictReviewChecklist
+} from './pr-change-policy'
 export type { PrChangePolicyInput, PrChangePolicyResult } from './pr-change-policy'
 
 const runGit = (args: string[]) => (
@@ -35,15 +40,6 @@ const readPrBody = (input: RunPrChangeCheckInput) => {
   return input.body
 }
 
-const getChangedFiles = (base: string | undefined, head: string) => {
-  if (base == null) return splitLines(runGit(['diff', '--name-only', '--diff-filter=ACMRT', head]))
-  try {
-    return splitLines(runGit(['diff', '--name-only', '--diff-filter=ACMRT', `${base}...${head}`]))
-  } catch {
-    return splitLines(runGit(['diff', '--name-only', '--diff-filter=ACMRT', `${base}..${head}`]))
-  }
-}
-
 const getCommitSubjects = (base: string | undefined, head: string) => (
   splitLines(runGit(['log', '--format=%s', base == null ? head : `${base}..${head}`]))
 )
@@ -56,9 +52,11 @@ export const inspectPrChange = (
 ) => {
   const head = normalizeRef(input.head) ?? 'HEAD'
   const base = normalizeRef(input.base) ?? defaultBase
-  const changedFiles = getChangedFiles(base, head)
+  const changedPathEntries = getChangedPathEntries({ base, head })
+  const changedFiles = getChangedFilesFromEntries(changedPathEntries)
   const commitSubjects = getCommitSubjects(base, head)
   const result = evaluatePrChangePolicy({
+    changedPathEntries,
     changedFiles,
     commitSubjects,
     prBody: readPrBody(input)
@@ -66,6 +64,7 @@ export const inspectPrChange = (
 
   return {
     base,
+    changedPathEntries,
     changedFiles,
     commitSubjects,
     head,
