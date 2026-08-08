@@ -6,6 +6,8 @@
 
 本地 dev 安装包 runtime cache、安装后仍像旧代码、`Switch Project` 兜底页和 packaged client/server cacheVersion 排查见 `../../.oo/rules/maintenance/desktop-packaged-runtime-cache.md`。
 
+正式 macOS Release 的候选、下载摘要、安装 smoke、完整 Home / userData 隔离与零写入证据见 `../../.oo/rules/release/macos-signing.md#官方安装-smoke-的用户数据隔离`。
+
 ## 先看哪里
 
 - `src/main/index.ts`
@@ -141,7 +143,7 @@
 - `node-pty`、`node-notifier` 这类平台相关依赖会直接影响包体大小和运行稳定性；改 native 依赖或目标架构时，要连同 `scripts/package.cjs` 里的裁剪逻辑一起验证。
 - `ELECTRON_RUN_AS_NODE`、`__ONEWORKS_PROJECT_CLIENT_DIST_PATH__`、`__ONEWORKS_PROJECT_WORKSPACE_FOLDER__` 这些环境变量缺任何一个，都容易让 packaged server 启不来或连不上正确的前端资源。
 - macOS 崩溃报告中的 `Electron` 进程可能来自旧 worktree 或其他会话。先用报告里的 PID、启动时间和本机 `ps` 结果对齐来源；如果弹窗来自非当前会话，优先关闭报告窗口，不要点“重新打开”去复活旧实例。
-- 在 macOS 上做可恢复的正式 release 安装验证时，旧应用备份只保留到新下载的官方产物通过身份、版本、架构、strict seal 与 quarantine 边界检查，并完成不修改用户数据的隔离启动和正常退出。全部通过后，立即把 `/Applications` 下的临时备份和 release 安装归档移到废纸篓或删除，避免 Spotlight 继续暴露过期的主应用或其中嵌套的 Electron Helper；不要删除当前生效的应用或任何用户数据。Spotlight 中的 Electron Helper 条目可能只是 `.app` 内嵌套的 helper bundle，不代表存在另一份独立安装。
+- 在 macOS 上做可恢复的正式 release 安装验证时，必须按[官方安装 smoke 的用户数据隔离](../../.oo/rules/release/macos-signing.md#官方安装-smoke-的用户数据隔离)完成全部 real / config / project / package-cache / userData / Home 输入隔离和 pre / post 零写入 fingerprint。旧应用备份只保留到新下载的官方产物通过身份、版本、架构、strict seal 与 quarantine 边界检查，并完成隔离启动和正常退出；全部通过后立即把 `/Applications` 下的临时备份和 release 安装归档移到可恢复的废纸篓，避免 Spotlight 继续暴露过期主应用或其中嵌套的 Electron Helper。只有安全卸载后的 mount point、空目录和隔离 profile 临时文件可以直接移除；不要永久删除当前应用、用户数据或唯一发布证据。Spotlight 中的 Electron Helper 条目可能只是 `.app` 内嵌套的 helper bundle，不代表另一份独立安装。
 
 ## 后续回归点
 

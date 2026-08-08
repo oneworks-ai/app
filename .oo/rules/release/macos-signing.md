@@ -127,3 +127,10 @@ gh workflow run desktop-package.yml \
   -f release_tag=pkg/oneworks-desktop/v0.1.0-beta.11 \
   -f candidate_run_id=<successful-desktop-package-run-id>
 ```
+
+## 官方安装 smoke 的用户数据隔离
+
+- 从正式 Release 下载并安装后的启动 smoke 必须显式提供隔离的 Electron `userData`、real / global-config home、project home、package / runtime cache home 和所有会继承的 `HOME` 类输入；`__ONEWORKS_PROJECT_REAL_HOME__` 是强制输入，必须指向本次验证的临时隔离 project home，不能因其他目录已隔离而省略。
+- 启动前对真实用户 surface 做可复核 fingerprint，至少覆盖路径集合、文件类型、大小、mtime 与现有文件内容摘要；正常退出并确认没有残留进程后重复采集，要求新增、删除、内容变化和目录 / 文件 mtime 变化均为零。只有隔离 profile / 临时 home 内的写入可以计入 smoke 自身。
+- 任一隔离输入缺失、指向真实目录或 pre / post fingerprint 出现变化，都应把本次启动判为 validation-runbook defect，而不是产物通过。立即停止继续操作，记录能够证明的已知变化；不得隐藏偏差，也不得猜测原内容后覆盖或用破坏性回滚处理用户数据。修正全部隔离输入后，从干净的临时 profile 重新执行 smoke，并证明没有新增真实用户写入。
+- 安装验证工具应对上述输入 fail closed，并自动生成 pre / post fingerprint 证据；在工具尚未具备该能力时，执行者仍需显式完成同等检查，不能用人工观察到窗口打开代替零写入证明。

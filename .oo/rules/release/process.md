@@ -6,6 +6,8 @@
 
 整体发布或同时涉及多个独立分发面的发布，在准备 Release PR、创建 tag、手动 publish / dispatch 或商店提交前，必须先按[多会话发布协调](./coordination.md)建立单一协调者、不可变发布身份、分面 owner、终态回调和独立审计。单包且只有一个外部副作用面的发布可以保留单会话，但仍须遵守同一来源、幂等恢复和终态核验要求。
 
+发布 owner / reviewer / Git operator 的实际权限探测、官方 `gh` 入口与失败重建遵守[权限预检与审批恢复](../maintenance/task-planning.md#权限预检与审批恢复)；发布规则本身的文档改动按[变更风险分级验证](../maintenance/task-planning.md#按变更风险选择验证)，不要在这里复制另一套授权或 CI 规则。
+
 ## 发布前最小检查
 
 - 把拟发布包列表收敛到最小范围，并能逐个说明为什么需要发版
@@ -71,6 +73,24 @@ Relay device transport contract is runtime code shared by `@oneworks/types`, `@o
 - 先逐包检查 registry 当前版本
 - 已经在 registry 上出现目标版本的包，不要重复发布
 - 分别核对 npm registry、远端分支和远端 tag，缺什么补什么
+
+## 发布证据层级与大文件获取
+
+- 不可变发布证据的最小单位是绑定在一起的版本化页面快照、精确 package tag peeled source、具体 workflow run / attempt、候选 manifest、Release asset 名称 / 大小 / byte digest 与 provenance；版本化 URL 或 GitHub Release 容器本身不能脱离这份快照单独作证。同版本资产仅能按已授权恢复流程替换：先保留旧资产和摘要审计链，再生成新的完整证据快照，并明确旧 byte snapshot 已被后继快照取代，不能静默把 URL 下的新字节冒充原证据。
+- 首页、未版本化下载入口、PWA / Avatar 当前入口以及其他随 `main` 自动部署的 live alias 是可变视图，可能被后续合入覆盖。它们可以证明当前线上状态，但不能单独否定已经通过版本化 URL、Release 和 digest 证明的旧版本发布。
+- 大型 Release asset 下载必须使用有界重试和可恢复下载；单条长连接持续失败时，改用确定性的 range / segmented download，逐段校验 `Content-Range`（或等价范围证据）和精确长度，按顺序组装后再核对最终文件大小与权威 SHA-256。最终摘要通过前不得解压、挂载或安装。
+- 本机代理、DNS、TLS 或长连接失败属于取证通道问题，不是远端候选失败。先恢复 / 替换只读取证方式；不能因此重复 dispatch、重建 candidate、覆盖 Release 或再次提交商店。
+
+## 发布终态收口
+
+workflow 显示 success 还不等于整个发布完成。协调者在最终报告前必须逐项收口：
+
+1. 由独立 reviewer 按冻结 source 对 tag、registry、Release / asset、部署、商店与明确排除面做跨表面审计，并核对 provenance / digest 与版本身份。
+2. 对所有可能的重复 run、额外 tag、并发 deployment 和恢复动作完成归因，确认没有因为重试产生第二份外部副作用。
+3. 核验并归档已经终止的 owner / reviewer / operator task，删除各自 heartbeat；不得归档用户主任务或仍在运行的外部审核 monitor。
+4. 安装验证成功后，把旧应用备份和 release 下载 / 安装归档移到可恢复的废纸篓；只在安全卸载后直接移除可重新生成的 mount point、空目录和隔离 profile 临时文件。不永久删除当前应用、用户数据或唯一的发布证据。
+5. 对发布窗口邮件做保守分类：加版本专用 label，只归档例行成功通知，把 pending review、warning、failure 和 action-required 留在 Inbox；不回复、转发或删除邮件。
+6. 向用户提交一份合并报告，覆盖不可变来源、各发布面、外部 mutation、验证、偏差、剩余外部审核和生命周期清理，避免让分面回调代替最终结论。
 
 ## macOS 桌面候选与提升
 
