@@ -212,7 +212,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 11.7.0
+          package_json_file: assets/homepage/package.json
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -222,17 +222,12 @@ jobs:
           cache-dependency-path: assets/homepage/pnpm-lock.yaml
 
       - name: Install docs dependencies
-        run: >-
-          corepack "$(node -p "require('./assets/homepage/package.json').packageManager")"
-          -C assets/homepage install --frozen-lockfile
+        run: pnpm -C assets/homepage install --frozen-lockfile
 
       - name: Build public documentation
         env:
           ONEWORKS_DOCS_SOURCE_DIR: ${{ github.workspace }}/.oo/docs
-        run: |
-          docs_package_manager="$(node -p "require('./assets/homepage/package.json').packageManager")"
-          corepack "$docs_package_manager" -C assets/homepage/apps/docs prepare-content
-          corepack "$docs_package_manager" -C assets/homepage/apps/docs exec vitepress build
+        run: pnpm -C assets/homepage build:docs
 
   release-docs:
     name: release-docs-preflight
