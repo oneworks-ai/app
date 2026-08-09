@@ -10,6 +10,7 @@
 - Keep channel connections and runtime-store consumption on the same workspace server in Web launcher mode, preventing duplicate manager connections and channel sessions that remain stuck without an executor.
 - Reject ChannelLink sets that reuse one channel key across different entities while allowing one entity to bind multiple external chats.
 - Localize chat archive and restore success feedback in English and Chinese.
+- Add localized, keyboard-accessible single-confirm deletion for archived conversations, while synchronizing mounted archive caches after successful deletes.
 - Add privacy-safe diagnostics across Web, PWA, Electron, CLI, Relay, and Codex-compatible OTLP ingestion.
 - Add configurable personal and team Model Service usage reporting without collecting prompts, responses, credentials, or source content.
 - Add a unified Admin data dashboard for observed DAU, WAU, MAU, startup health, JavaScript exception fingerprints, and Model Service usage.
