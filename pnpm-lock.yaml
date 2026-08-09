@@ -540,6 +540,9 @@ importers:
       '@oneworks/cli-helper':
         specifier: workspace:*
         version: link:../../packages/cli-helper
+      '@oneworks/icon':
+        specifier: workspace:*
+        version: link:../../packages/icon
       '@oneworks/relay-admin':
         specifier: workspace:*
         version: link:../relay-admin

@@ -1,3 +1,4 @@
+export * from './brand-profile.js'
 export * from './canvas.js'
 export * from './core.js'
 export * from './loader.js'

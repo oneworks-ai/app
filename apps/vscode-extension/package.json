@@ -12,6 +12,7 @@
   "main": "./dist/extension.js",
   "files": [
     "README.md",
+    "assets",
     "dist",
     "package.json",
     "resources"

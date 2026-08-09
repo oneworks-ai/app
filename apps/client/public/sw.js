@@ -70,10 +70,10 @@ const isStaticAssetRequest = url => (
   url.pathname.includes('/assets/') ||
   url.pathname.endsWith('/apple-touch-icon.png') ||
   url.pathname.endsWith('/favicon.svg') ||
-  url.pathname.endsWith('/favicon-metal-dark.png') ||
-  url.pathname.endsWith('/favicon-metal-dark.svg') ||
-  url.pathname.endsWith('/favicon-metal-light.png') ||
-  url.pathname.endsWith('/favicon-metal-light.svg') ||
+  url.pathname.endsWith('/favicon-linear-dark.png') ||
+  url.pathname.endsWith('/favicon-linear-dark.svg') ||
+  url.pathname.endsWith('/favicon-linear-light.png') ||
+  url.pathname.endsWith('/favicon-linear-light.svg') ||
   url.pathname.endsWith('/manifest.webmanifest') ||
   url.pathname.endsWith('/pwa-icon-192.png') ||
   url.pathname.endsWith('/pwa-icon-512.png')

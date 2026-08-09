@@ -2,6 +2,12 @@
 
 en-US | [zh-Hans](./README.zh-Hans.md)
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/vscode-marketplace-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="./assets/vscode-marketplace-light.png">
+  <img alt="One Works in your editor" src="./assets/vscode-marketplace-light.png">
+</picture>
+
 This package is a thin VS Code shell for the existing One Works Web UI.
 
 ## Local Use

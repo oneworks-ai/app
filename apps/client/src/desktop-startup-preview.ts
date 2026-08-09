@@ -20,7 +20,7 @@ const buildStartupIconOptions = (): OneWorksIconLoaderOptions => ({
   random: false,
   seed: startupIconSeed,
   shadow: false,
-  theme: 'metal'
+  theme: 'linear'
 })
 
 const mountStartupPreviewIcon = () => {

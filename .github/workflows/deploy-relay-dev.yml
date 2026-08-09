@@ -117,7 +117,7 @@ jobs:
             --name "$worker_name" \
             --var "ONEWORKS_RELAY_PUBLIC_URL:${public_origin}" \
             --var "ONEWORKS_RELAY_ALLOW_ORIGIN:${public_origin}" \
-            --var "ONEWORKS_RELAY_AVATAR_URL:${public_origin}/admin/assets/favicon-light.svg" \
+            --var "ONEWORKS_RELAY_AVATAR_URL:${public_origin}/admin/assets/favicon-cloudflare-light.svg" \
             --var "ONEWORKS_RELAY_DEVICE_API_URL:${device_api_origin}" \
             --var "ONEWORKS_RELAY_DEVICE_CONTROL_WS_URL:${device_api_origin/https:/wss:}/api/relay/devices/control" \
             --var "ONEWORKS_RELAY_DEVICE_CONTROL_HEARTBEAT_SECONDS:600" \

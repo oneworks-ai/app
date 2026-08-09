@@ -4,16 +4,20 @@ import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import process from 'node:process'
 
+import { resolveOneWorksRelayBrandProfile } from '@oneworks/icon/brand-profile'
+
 import type { RelayServerArgs } from '../types.js'
 
-const html = `<!doctype html>
+const renderHtml = (args: RelayServerArgs) => {
+  const profile = resolveOneWorksRelayBrandProfile(args.publicBaseUrl)
+  return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" type="image/svg+xml" href="/admin/assets/favicon-dark.svg">
-  <link rel="icon" type="image/svg+xml" href="/admin/assets/favicon-light.svg" media="(prefers-color-scheme: light)">
-  <link rel="icon" type="image/svg+xml" href="/admin/assets/favicon-dark.svg" media="(prefers-color-scheme: dark)">
+  <link rel="icon" type="image/svg+xml" href="/admin/assets/favicon-${profile}-dark.svg">
+  <link rel="icon" type="image/svg+xml" href="/admin/assets/favicon-${profile}-light.svg" media="(prefers-color-scheme: light)">
+  <link rel="icon" type="image/svg+xml" href="/admin/assets/favicon-${profile}-dark.svg" media="(prefers-color-scheme: dark)">
   <title>OneWorks Relay Admin</title>
   <link rel="stylesheet" href="/admin/assets/admin.css">
 </head>
@@ -22,6 +26,7 @@ const html = `<!doctype html>
   <script type="module" src="/admin/assets/admin.js"></script>
 </body>
 </html>`
+}
 
 const resolveAssetContentType = (filename: string) => {
   if (filename === 'admin.css') return 'text/css; charset=utf-8'
@@ -54,7 +59,7 @@ export const handleAdminPage = (_req: IncomingMessage, res: ServerResponse, args
     'content-type': 'text/html; charset=utf-8',
     'access-control-allow-origin': args.allowOrigin
   })
-  res.end(html)
+  res.end(renderHtml(args))
 }
 
 export const handleAdminAsset = async (

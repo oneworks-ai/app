@@ -1,10 +1,27 @@
 import { describe, expect, it } from 'vitest'
 
+import {
+  resolveOneWorksRelayBrandProfile,
+  resolveOneWorksRelayBrandTheme
+} from '../src/brand-profile.js'
 import { createMobiusCore, createSeededRandom, normalizeSeed } from '../src/core.js'
-import { ONEWORKS_ICON_THEMES, normalizeIconTheme } from '../src/presets.js'
+import { DEFAULT_ICON_THEME, ONEWORKS_ICON_THEMES, normalizeIconTheme } from '../src/presets.js'
 import { createMobiusSvg } from '../src/svg.js'
 
 describe('@oneworks/icon core', () => {
+  it('uses the Linear brand profile as the product default', () => {
+    expect(DEFAULT_ICON_THEME).toBe('linear')
+    expect(normalizeIconTheme('unknown')).toBe('linear')
+  })
+
+  it('resolves Relay deployment themes from the shared brand profile', () => {
+    expect(resolveOneWorksRelayBrandProfile('https://vc.oneworks.cloud')).toBe('vercel')
+    expect(resolveOneWorksRelayBrandProfile('preview.vercel.app')).toBe('vercel')
+    expect(resolveOneWorksRelayBrandProfile('https://cf.oneworks.cloud')).toBe('cloudflare')
+    expect(resolveOneWorksRelayBrandTheme('https://vc.oneworks.cloud')).toBe('matrix')
+    expect(resolveOneWorksRelayBrandTheme(undefined)).toBe('industrial')
+  })
+
   it('normalizes externally supplied seeds', () => {
     expect(normalizeSeed(' one works! 2026 ')).toBe('oneworks2026')
     expect(normalizeSeed('')).toBeNull()

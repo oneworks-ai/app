@@ -1,27 +1,27 @@
 {
   "fill": {
-    "solid": "srgb:0.0667,0.0863,0.0824,1"
+    "solid": "srgb:0.0314,0.0392,0.051,1"
   },
   "fill-specializations": [
     {
       "appearance": "light",
       "idiom": "macOS",
       "value": {
-        "solid": "srgb:0.0667,0.0863,0.0824,1"
+        "solid": "srgb:0.0314,0.0392,0.051,1"
       }
     },
     {
       "appearance": "dark",
       "idiom": "macOS",
       "value": {
-        "solid": "srgb:0.0667,0.0863,0.0824,1"
+        "solid": "srgb:0.0314,0.0392,0.051,1"
       }
     },
     {
       "appearance": "tinted",
       "idiom": "macOS",
       "value": {
-        "solid": "srgb:0.0667,0.0863,0.0824,1"
+        "solid": "srgb:0.0314,0.0392,0.051,1"
       }
     }
   ],

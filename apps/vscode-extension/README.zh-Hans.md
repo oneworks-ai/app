@@ -2,6 +2,12 @@
 
 [en-US](./README.md) | zh-Hans
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/vscode-marketplace-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="./assets/vscode-marketplace-light.png">
+  <img alt="在 VS Code 中使用 One Works" src="./assets/vscode-marketplace-light.png">
+</picture>
+
 这个包是 One Works Web UI 的轻量 VS Code 外壳。
 
 ## 本地使用

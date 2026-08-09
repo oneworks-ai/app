@@ -69,7 +69,7 @@ const kimiOption = {
   tooltipLines: [],
   serviceKey: 'kimi-code',
   serviceTitle: 'Kimi Code',
-  serviceIcon: { kind: 'builtin', id: 'moonshot' },
+  serviceIcon: { kind: 'builtin', id: 'kimi' },
   modelIcon: undefined,
   searchText: 'Kimi Code kimi-for-coding',
   canToggleRecommendation: false,
@@ -164,7 +164,7 @@ describe('model select control trigger icon', () => {
     const html = renderToStaticMarkup(<ModelSelectControl {...createProps()} />)
 
     expect(html).toContain('model-select-trigger-label')
-    expect(html).toContain('data-icon-id="moonshot"')
+    expect(html).toContain('data-icon-id="kimi"')
     expect(html).toContain('kimi-for-coding')
     expect(html).not.toContain('model_training')
     expect(capturedSelectProps?.controlTrigger).toMatchObject({
@@ -192,7 +192,7 @@ describe('model select control trigger icon', () => {
     const html = renderToStaticMarkup(<ModelSelectControl {...createProps()} />)
 
     expect(html).toContain('sender-responsive-select-button--model')
-    expect(html).toContain('data-icon-id="moonshot"')
+    expect(html).toContain('data-icon-id="kimi"')
     expect(html).toContain('kimi-for-coding')
     expect(html).not.toContain('model_training')
   })

@@ -1,405 +1,497 @@
-'use strict'
+"use strict";
 var OneWorksIconLoader = (() => {
-  var D = Object.defineProperty
-  var ot = Object.getOwnPropertyDescriptor
-  var rt = Object.getOwnPropertyNames
-  var it = Object.prototype.hasOwnProperty
-  var nt = (e, t, o) => t in e ? D(e, t, { enumerable: !0, configurable: !0, writable: !0, value: o }) : e[t] = o
-  var at = (e, t) => {
-      for (var o in t) D(e, o, { get: t[o], enumerable: !0 })
-    },
-    st = (e, t, o, r) => {
-      if (t && typeof t == 'object' || typeof t == 'function') {
-        for (let i of rt(t)) {
-          !it.call(e, i) && i !== o &&
-            D(e, i, { get: () => t[i], enumerable: !(r = ot(t, i)) || r.enumerable })
-        }
-      }
-      return e
+  var __defProp = Object.defineProperty;
+  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+  var __getOwnPropNames = Object.getOwnPropertyNames;
+  var __hasOwnProp = Object.prototype.hasOwnProperty;
+  var __export = (target, all) => {
+    for (var name in all)
+      __defProp(target, name, { get: all[name], enumerable: true });
+  };
+  var __copyProps = (to, from, except, desc) => {
+    if (from && typeof from === "object" || typeof from === "function") {
+      for (let key of __getOwnPropNames(from))
+        if (!__hasOwnProp.call(to, key) && key !== except)
+          __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
     }
-  var lt = e => st(D({}, '__esModule', { value: !0 }), e)
-  var m = (e, t, o) => nt(e, typeof t != 'symbol' ? t + '' : t, o)
-  var oo = {}
-  at(oo, { mountOneWorksIconLoader: () => eo })
-  var ve = [0, 0, 1]
-  var _ = (e, t, o, r, i) => ({
-      amp: e.signedRandomRange(t, o),
-      phase: e.randomRange(0, Math.PI * 2),
-      timeFreq: e.randomChoice(i),
-      uFreq: e.randomChoice(r)
-    }),
-    H = e => ({
-      shape: {
-        depthScale: e.signedRandomRange(.08, .22),
-        diagonal: e.signedRandomRange(.04, .12),
-        lobeBalance: e.signedRandomRange(.08, .2),
-        phaseDrift: e.signedRandomRange(.03, .09),
-        waist: e.signedRandomRange(.08, .2),
-        xScale: e.signedRandomRange(.08, .18),
-        yScale: e.signedRandomRange(.1, .22)
+    return to;
+  };
+  var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+  // packages/icon/src/loader.ts
+  var loader_exports = {};
+  __export(loader_exports, {
+    mountOneWorksIconLoader: () => mountOneWorksIconLoader
+  });
+
+  // packages/icon/src/core-constants.ts
+  var VIEW = 1024;
+  var MOTION_LOOP_SECONDS = 10.24;
+  var MOBIUS_A = 2.75;
+  var MOBIUS_B = 1.35;
+  var MOBIUS_Z = 0.76;
+  var MOBIUS_W = 0.46;
+  var MOBIUS_U_SEGMENTS = 118;
+  var MOBIUS_V_SEGMENTS = 12;
+  var MOBIUS_PARAM_PHASE = 0;
+  var MOBIUS_UP = [0, 0, 1];
+
+  // packages/icon/src/core-motion.ts
+  var makeMotionWave = (random, minAmp, maxAmp, uFreqs, timeFreqs) => ({
+    amp: random.signedRandomRange(minAmp, maxAmp),
+    phase: random.randomRange(0, Math.PI * 2),
+    timeFreq: random.randomChoice(timeFreqs),
+    uFreq: random.randomChoice(uFreqs)
+  });
+  var createMotionCycle = (random) => ({
+    shape: {
+      depthScale: random.signedRandomRange(0.08, 0.22),
+      diagonal: random.signedRandomRange(0.04, 0.12),
+      lobeBalance: random.signedRandomRange(0.08, 0.2),
+      phaseDrift: random.signedRandomRange(0.03, 0.09),
+      waist: random.signedRandomRange(0.08, 0.2),
+      xScale: random.signedRandomRange(0.08, 0.18),
+      yScale: random.signedRandomRange(0.1, 0.22)
+    },
+    twist: [
+      makeMotionWave(random, 0.1, 0.18, [1, 2, 3], [1, 2]),
+      makeMotionWave(random, 0.04, 0.09, [2, 3, 4], [2, 3])
+    ],
+    warpX: [
+      makeMotionWave(random, 0.02, 0.05, [1, 2], [1, 2]),
+      makeMotionWave(random, 0.01, 0.025, [3, 4], [2, 3])
+    ],
+    warpY: [
+      makeMotionWave(random, 0.018, 0.04, [1, 2], [1, 2]),
+      makeMotionWave(random, 0.01, 0.02, [3, 4], [2, 3])
+    ],
+    warpZ: [
+      makeMotionWave(random, 0.055, 0.12, [1, 2, 3], [1, 2]),
+      makeMotionWave(random, 0.025, 0.055, [2, 3, 4], [2, 3])
+    ],
+    width: [
+      makeMotionWave(random, 0.035, 0.06, [2, 3, 4], [1, 2]),
+      makeMotionWave(random, 0.015, 0.03, [3, 4, 5], [2, 3])
+    ]
+  });
+  var createMotionStatePhase = (time, motionAmount, motionOffset, loopSeconds = MOTION_LOOP_SECONDS) => {
+    const localTime = time + motionOffset;
+    const cycleIndex = Math.floor(localTime / loopSeconds);
+    const phase = (localTime % loopSeconds + loopSeconds) % loopSeconds / loopSeconds;
+    const envelope = Math.sin(Math.PI * phase) ** 2;
+    return { cycleIndex, envelope: envelope * motionAmount, phase };
+  };
+
+  // packages/icon/src/core-random.ts
+  var normalizeSeed = (value) => {
+    const seed = String(value ?? "").trim().replace(/[^\w-]/g, "").slice(0, 64);
+    return seed || null;
+  };
+  var createSessionSeed = () => {
+    const values = new Uint32Array(2);
+    if (globalThis.crypto?.getRandomValues) {
+      globalThis.crypto.getRandomValues(values);
+    } else {
+      values[0] = Math.floor(Math.random() * 4294967295);
+      values[1] = Date.now() >>> 0;
+    }
+    return normalizeSeed(`${values[0].toString(36)}${values[1].toString(36)}`) ?? "oneworks";
+  };
+  var hashSeed = (seed) => {
+    let hash = 2166136261;
+    for (let index = 0; index < seed.length; index += 1) {
+      hash ^= seed.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0;
+  };
+  var createSeededRandom = (seed) => {
+    let state = hashSeed(seed) || 2654435769;
+    return () => {
+      state += 1831565813;
+      let value = state;
+      value = Math.imul(value ^ value >>> 15, value | 1);
+      value ^= value + Math.imul(value ^ value >>> 7, value | 61);
+      return ((value ^ value >>> 14) >>> 0) / 4294967296;
+    };
+  };
+
+  // packages/icon/src/core-surface.ts
+  var motionWaveValue = (waves, u, phase) => {
+    const t = Math.PI * 2 * phase;
+    return waves.reduce((sum, wave) => sum + wave.amp * Math.sin(wave.uFreq * u + wave.timeFreq * t + wave.phase), 0);
+  };
+  var center = (u, motionState) => {
+    const { shape } = motionState.cycle;
+    const envelope = motionState.envelope || 0;
+    const phase = Math.PI * 2 * (motionState.phase || 0);
+    const shiftedU = u + envelope * shape.phaseDrift * Math.sin(phase);
+    const sinU = Math.sin(shiftedU);
+    const cosU = Math.cos(shiftedU);
+    const lobeSide = Math.tanh(1.8 * sinU);
+    const waist = 1 - envelope * shape.waist * Math.cos(2 * shiftedU) ** 2;
+    const lobeScale = 1 + envelope * shape.lobeBalance * lobeSide;
+    const xScale = 1 + envelope * shape.xScale;
+    const yScale = 1 + envelope * shape.yScale * Math.sin(phase + 0.8);
+    const zScale = 1 + envelope * shape.depthScale * Math.cos(phase + 0.35);
+    const diagonal = envelope * shape.diagonal;
+    return [
+      MOBIUS_A * xScale * lobeScale * waist * sinU + diagonal * Math.sin(3 * shiftedU + phase),
+      MOBIUS_B * yScale * Math.sin(2 * shiftedU) * (1 - 0.16 * envelope * lobeSide),
+      MOBIUS_Z * zScale * cosU + envelope * 0.08 * Math.sin(3 * shiftedU - phase)
+    ];
+  };
+  var dcenter = (u, motionState) => {
+    const epsilon = 1e-3;
+    const before = center(u - epsilon, motionState);
+    const after = center(u + epsilon, motionState);
+    return [
+      (after[0] - before[0]) / (2 * epsilon),
+      (after[1] - before[1]) / (2 * epsilon),
+      (after[2] - before[2]) / (2 * epsilon)
+    ];
+  };
+  var add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+  var mul = (a, scale) => [a[0] * scale, a[1] * scale, a[2] * scale];
+  var cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  var norm = (vector) => {
+    const length = Math.hypot(vector[0], vector[1], vector[2]) || 1;
+    return [vector[0] / length, vector[1] / length, vector[2] / length];
+  };
+  var buildPoints = (motionAmount, motionState) => {
+    const rows = [];
+    const surfaceRoll = motionAmount ? Math.PI * 2 * motionState.phase * motionAmount : 0;
+    for (let i = 0; i < MOBIUS_U_SEGMENTS; i += 1) {
+      const u = MOBIUS_PARAM_PHASE + 2 * Math.PI * i / MOBIUS_U_SEGMENTS;
+      const c = center(u, motionState);
+      const tangent = norm(dcenter(u, motionState));
+      let normal = cross(MOBIUS_UP, tangent);
+      normal = normal[0] ** 2 + normal[1] ** 2 + normal[2] ** 2 < 1e-6 ? [1, 0, 0] : norm(normal);
+      const binormal = norm(cross(tangent, normal));
+      const twist = motionState.envelope * motionWaveValue(motionState.cycle.twist, u, motionState.phase);
+      const widthPulse = 1 + motionState.envelope * motionWaveValue(motionState.cycle.width, u, motionState.phase) + motionState.envelope * motionState.cycle.shape.waist * 0.28 * Math.sin(2 * u + Math.PI * 2 * motionState.phase);
+      const phi = u / 2 + Math.PI * 0.1 + twist + surfaceRoll;
+      const widthVector = add(mul(normal, Math.cos(phi)), mul(binormal, Math.sin(phi)));
+      const centerWarp = [
+        motionState.envelope * motionWaveValue(motionState.cycle.warpX, u, motionState.phase),
+        motionState.envelope * motionWaveValue(motionState.cycle.warpY, u, motionState.phase),
+        motionState.envelope * motionWaveValue(motionState.cycle.warpZ, u, motionState.phase)
+      ];
+      const animatedCenter = add(c, centerWarp);
+      const row = [];
+      for (let j = 0; j <= MOBIUS_V_SEGMENTS; j += 1) {
+        const v = -MOBIUS_W + 2 * MOBIUS_W * j / MOBIUS_V_SEGMENTS;
+        const p = add(animatedCenter, mul(widthVector, v * widthPulse));
+        row.push({ u, v, x: p[0], y: p[1], z: p[2] });
+      }
+      rows.push(row);
+    }
+    return rows;
+  };
+  var createProjection = (points) => {
+    const flat = points.flat();
+    const minX = Math.min(...flat.map((point) => point.x));
+    const maxX = Math.max(...flat.map((point) => point.x));
+    const minY = Math.min(...flat.map((point) => point.y));
+    const maxY = Math.max(...flat.map((point) => point.y));
+    const scale = Math.min(820 / (maxX - minX), 610 / (maxY - minY));
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    return (point) => ({
+      u: point.u,
+      v: point.v,
+      x: 512 + (point.x - centerX) * scale,
+      y: 512 - ((point.y - centerY) * scale + point.z * scale * 0.045),
+      z: point.z
+    });
+  };
+  var buildMesh = (motionAmount, motionState, project) => {
+    const points = buildPoints(motionAmount, motionState);
+    const mesh = [];
+    for (let i = 0; i < MOBIUS_U_SEGMENTS; i += 1) {
+      const nextI = (i + 1) % MOBIUS_U_SEGMENTS;
+      const isClosingBand = nextI === 0;
+      for (let j = 0; j < MOBIUS_V_SEGMENTS; j += 1) {
+        const quad = buildQuad(points, project, i, j, nextI, isClosingBand);
+        if (!quad) continue;
+        const depth = quad.reduce((sum, point) => sum + point.z, 0) / 4;
+        const u = MOBIUS_PARAM_PHASE + 2 * Math.PI * (i + 0.5) / MOBIUS_U_SEGMENTS;
+        const v = -MOBIUS_W + 2 * MOBIUS_W * (j + 0.5) / MOBIUS_V_SEGMENTS;
+        mesh.push({
+          depth,
+          outlinePoints: quad,
+          points: expandedQuad(quad, 0.82),
+          sortDepth: depth + 0.11 * Math.cos(u),
+          u,
+          v
+        });
+      }
+    }
+    return mesh.sort((a, b) => a.sortDepth - b.sortDepth || a.u - b.u || a.v - b.v);
+  };
+  var buildQuad = (points, project, i, j, nextI, isClosingBand) => {
+    const nextJ = isClosingBand ? MOBIUS_V_SEGMENTS - j : j;
+    const nextJ1 = isClosingBand ? MOBIUS_V_SEGMENTS - j - 1 : j + 1;
+    const row = points[i];
+    const nextRow = points[nextI];
+    const currentPoint = row?.[j];
+    const nextPoint = nextRow?.[nextJ];
+    const nextPoint1 = nextRow?.[nextJ1];
+    const currentPoint1 = row?.[j + 1];
+    return currentPoint && nextPoint && nextPoint1 && currentPoint1 ? [project(currentPoint), project(nextPoint), project(nextPoint1), project(currentPoint1)] : null;
+  };
+  var expandedQuad = (quad, amount) => {
+    const centerX = quad.reduce((sum, point) => sum + point.x, 0) / quad.length;
+    const centerY = quad.reduce((sum, point) => sum + point.y, 0) / quad.length;
+    return quad.map((point) => {
+      const dx = point.x - centerX;
+      const dy = point.y - centerY;
+      const length = Math.hypot(dx, dy) || 1;
+      return { ...point, x: point.x + amount * dx / length, y: point.y + amount * dy / length };
+    });
+  };
+
+  // packages/icon/src/core-color.ts
+  var themeFill = (theme, mode, depth, u, v, time) => {
+    const over = 0.5 + 0.5 * (depth / (MOBIUS_Z + MOBIUS_W));
+    const twistLight = 0.5 + 0.5 * Math.cos(u - 0.55);
+    const rim = Math.abs(v) / MOBIUS_W;
+    const pulse = 0.5 + 0.5 * Math.cos(u + time * 0.68);
+    if (theme === "industrial") {
+      const emphasis2 = clamp(0.74 * over + 0.14 * twistLight + 0.08 * rim + 0.04 * pulse);
+      const palette = mode === "light" ? [[255, 230, 202], [255, 146, 58], [229, 58, 18], [82, 21, 9]] : [[20, 9, 6], [108, 22, 12], [226, 63, 18], [255, 145, 35]];
+      if (emphasis2 < 0.44) return rgb(mixColor(palette[0], palette[1], emphasis2 / 0.44));
+      if (emphasis2 < 0.78) return rgb(mixColor(palette[1], palette[2], (emphasis2 - 0.44) / 0.34));
+      return rgb(mixColor(palette[2], palette[3], (emphasis2 - 0.78) / 0.22));
+    }
+    if (theme === "matrix") {
+      const emphasis2 = clamp(0.76 * over + 0.12 * twistLight + 0.08 * rim + 0.04 * pulse);
+      const palette = mode === "light" ? [[212, 255, 226], [38, 226, 112], [0, 146, 70], [0, 72, 40]] : [[2, 18, 10], [0, 86, 44], [0, 214, 96], [168, 255, 198]];
+      if (emphasis2 < 0.36) return rgb(mixColor(palette[0], palette[1], emphasis2 / 0.36));
+      if (emphasis2 < 0.78) return rgb(mixColor(palette[1], palette[2], (emphasis2 - 0.36) / 0.42));
+      return rgb(mixColor(palette[2], palette[3], (emphasis2 - 0.78) / 0.22));
+    }
+    if (theme === "metal") {
+      const edgeReflection = rim ** 1.6;
+      const longReflection = 0.5 + 0.5 * Math.cos(u * 2.1 - 0.72);
+      const hardHighlight = Math.max(0, Math.cos(u * 3.2 + v * 2.4 - 1.1)) ** 10;
+      const hairline = 0.025 * Math.sin(u * 54 + v * 18);
+      const emphasis2 = clamp(
+        0.62 * over + 0.14 * twistLight + 0.12 * edgeReflection + 0.08 * longReflection + 0.13 * hardHighlight + hairline
+      );
+      const palette = mode === "light" ? [[34, 39, 42], [79, 88, 90], [159, 165, 162], [250, 248, 236], [72, 78, 79]] : [[8, 10, 11], [42, 47, 49], [139, 148, 147], [248, 247, 238], [82, 89, 91]];
+      if (emphasis2 < 0.34) return rgb(mixColor(palette[0], palette[1], emphasis2 / 0.34));
+      if (emphasis2 < 0.62) return rgb(mixColor(palette[1], palette[2], (emphasis2 - 0.34) / 0.28));
+      if (emphasis2 < 0.82) return rgb(mixColor(palette[2], palette[3], (emphasis2 - 0.62) / 0.2));
+      return rgb(mixColor(palette[3], palette[4], (emphasis2 - 0.82) / 0.18));
+    }
+    if (theme === "linear") {
+      return mode === "light" ? "rgb(20,29,36)" : "rgb(226,235,242)";
+    }
+    const emphasis = clamp(0.82 * over + 0.1 * twistLight + 0.08 * rim);
+    const shade = mode === "dark" ? Math.max(18, Math.min(242, Math.round(14 + 226 * emphasis))) : Math.max(18, Math.min(246, Math.round(248 - 226 * emphasis)));
+    return `rgb(${shade},${shade},${shade})`;
+  };
+  var themeSolidBackgroundFill = (theme, mode) => {
+    if (theme === "industrial") return mode === "light" ? "#FFF1E8" : "#180804";
+    if (theme === "matrix") return mode === "light" ? "#E9FFF1" : "#001B0D";
+    if (theme === "metal") return mode === "light" ? "#F2F4F0" : "#111615";
+    if (theme === "linear") return mode === "light" ? "#F8FAFC" : "#080A0D";
+    return mode === "light" ? "#F3F5F2" : "#111514";
+  };
+  var themeLinearBorder = (mode) => mode === "light" ? "rgba(248,250,252,0.9)" : "rgba(8,10,13,0.9)";
+  var clamp = (value, min = 0, max = 1) => Math.max(min, Math.min(max, value));
+  var mixChannel = (start, end, amount) => Math.round(start + (end - start) * clamp(amount));
+  var mixColor = (start, end, amount) => [
+    mixChannel(start[0], end[0], amount),
+    mixChannel(start[1], end[1], amount),
+    mixChannel(start[2], end[2], amount)
+  ];
+  var rgb = (color) => `rgb(${color[0]},${color[1]},${color[2]})`;
+  var rgba = (color, alpha) => `rgba(${color[0]},${color[1]},${color[2]},${alpha})`;
+
+  // packages/icon/src/core.ts
+  var createMobiusCore = (seed = createSessionSeed()) => {
+    let currentSeed = normalizeSeed(seed) ?? createSessionSeed();
+    let random = createSeededRandom(currentSeed);
+    let randomTools = createRandomTools(random);
+    let baseMotionCycle = createMotionCycle(randomTools);
+    const resetSeed = (nextSeed = createSessionSeed()) => {
+      currentSeed = normalizeSeed(nextSeed) ?? createSessionSeed();
+      random = createSeededRandom(currentSeed);
+      randomTools = createRandomTools(random);
+      baseMotionCycle = createMotionCycle(randomTools);
+      return currentSeed;
+    };
+    const getMotionState = (time, motionAmount, source) => {
+      const cycle = source?.motionCycle ?? baseMotionCycle;
+      if (motionAmount === 0) {
+        return { cycle, envelope: 0, phase: 0 };
+      }
+      const phaseState = createMotionStatePhase(time, motionAmount, source?.motionOffset ?? 0, source?.motionLoopSeconds);
+      if (source && source.motionCycleIndex < 0) {
+        source.motionCycleIndex = phaseState.cycleIndex;
+      }
+      return { cycle, envelope: phaseState.envelope, phase: phaseState.phase };
+    };
+    const createCoreMotionCycle = () => createMotionCycle(randomTools);
+    const staticMotionState = { cycle: baseMotionCycle, envelope: 0, phase: 0 };
+    const project = createProjection(buildPoints(0, staticMotionState));
+    const buildMesh2 = (time, motionAmount, motionState = getMotionState(time, motionAmount)) => buildMesh(motionAmount, motionState, project);
+    const createMotionSource = () => ({
+      motionCycle: createCoreMotionCycle(),
+      motionCycleIndex: -1,
+      motionLoopSeconds: MOTION_LOOP_SECONDS,
+      motionOffset: randomTools.randomRange(0, MOTION_LOOP_SECONDS)
+    });
+    const resetMotionSource = (source) => {
+      source.motionCycleIndex = -1;
+      source.motionCycle = createCoreMotionCycle();
+      source.motionOffset = randomTools.randomRange(0, MOTION_LOOP_SECONDS);
+      source.motionLoopSeconds = MOTION_LOOP_SECONDS;
+    };
+    return {
+      get seed() {
+        return currentSeed;
       },
-      twist: [_(e, .1, .18, [1, 2, 3], [1, 2]), _(e, .04, .09, [2, 3, 4], [2, 3])],
-      warpX: [_(e, .02, .05, [1, 2], [1, 2]), _(e, .01, .025, [3, 4], [2, 3])],
-      warpY: [_(e, .018, .04, [1, 2], [1, 2]), _(e, .01, .02, [3, 4], [2, 3])],
-      warpZ: [_(e, .055, .12, [1, 2, 3], [1, 2]), _(e, .025, .055, [2, 3, 4], [2, 3])],
-      width: [_(e, .035, .06, [2, 3, 4], [1, 2]), _(e, .015, .03, [3, 4, 5], [2, 3])]
-    }),
-    be = (e, t, o, r = 10.24) => {
-      let i = e + o, n = Math.floor(i / r), a = (i % r + r) % r / r, s = Math.sin(Math.PI * a) ** 2
-      return { cycleIndex: n, envelope: s * t, phase: a }
+      buildMesh: buildMesh2,
+      createMotionCycle: createCoreMotionCycle,
+      createMotionSource,
+      getMotionState,
+      random: () => random(),
+      randomRange: (min, max) => randomTools.randomRange(min, max),
+      resetMotionSource,
+      resetSeed,
+      staticMesh: buildMesh2(0, 0)
+    };
+  };
+  var createRandomTools = (random) => {
+    const randomRange = (min, max) => min + random() * (max - min);
+    const randomChoice = (values) => values[Math.floor(random() * values.length)] ?? values[0] ?? 0;
+    const signedRandomRange = (min, max) => randomRange(min, max) * (random() < 0.5 ? -1 : 1);
+    return { random, randomChoice, randomRange, signedRandomRange };
+  };
+
+  // packages/icon/src/canvas-atmosphere.ts
+  var resetRain = (core, renderer) => {
+    const fontSize = renderer.width < 210 ? 11 : 13;
+    const count = Math.ceil(renderer.width / fontSize) + 1;
+    renderer.rainFontSize = fontSize;
+    renderer.rainColumns = Array.from({ length: count }, (_, index) => ({
+      seed: core.randomRange(0, renderer.height + fontSize * 18),
+      speed: core.randomRange(22, 58),
+      length: Math.round(core.randomRange(7, 15)),
+      alpha: core.randomRange(0.2, 0.72),
+      x: index * fontSize + fontSize / 2
+    }));
+  };
+  var resetHeatmap = (core, renderer) => {
+    const cellSize = renderer.width < 170 ? 12 : 15;
+    const cols = Math.ceil(renderer.width / cellSize);
+    const rows = Math.ceil(renderer.height / cellSize);
+    renderer.heatCellSize = cellSize;
+    renderer.heatCols = cols;
+    renderer.heatRows = rows;
+    renderer.nextHeatUpdate = 0;
+    renderer.heatCells = Array.from({ length: cols * rows }, (_, index) => createHeatCell(core, cols, rows, index));
+  };
+  var drawAtmosphere = (core, renderer, time) => {
+    if (renderer.backgroundStyle !== "textured") return;
+    if (renderer.theme === "matrix") {
+      drawMatrixRain(renderer, time);
+      return;
     }
-  var I = e => String(e ?? '').trim().replace(/[^\w-]/g, '').slice(0, 64) || null,
-    R = () => {
-      let e = new Uint32Array(2)
-      return globalThis.crypto?.getRandomValues
-        ? globalThis.crypto.getRandomValues(e)
-        : (e[0] = Math.floor(Math.random() * 4294967295), e[1] = Date.now() >>> 0),
-        I(`${e[0].toString(36)}${e[1].toString(36)}`) ?? 'oneworks'
-    },
-    Se = e => {
-      let t = 2166136261
-      for (let o = 0; o < e.length; o += 1) t ^= e.charCodeAt(o), t = Math.imul(t, 16777619)
-      return t >>> 0
-    },
-    q = e => {
-      let t = Se(e) || 2654435769
-      return () => {
-        t += 1831565813
-        let o = t
-        return o = Math.imul(o ^ o >>> 15, o | 1),
-          o ^= o + Math.imul(o ^ o >>> 7, o | 61),
-          ((o ^ o >>> 14) >>> 0) / 4294967296
-      }
+    if (renderer.theme === "industrial") drawIndustrialHeatmap(core, renderer, time);
+  };
+  var createHeatCell = (core, cols, rows, index) => {
+    const col = index % cols;
+    const row = Math.floor(index / cols);
+    const x = (col + 0.5) / cols;
+    const y = (row + 0.5) / rows;
+    const value = clamp(heatSeedValue(x, y) + core.randomRange(-0.18, 0.18));
+    return { speed: core.randomRange(0.035, 0.085), target: value, value };
+  };
+  var heatSeedValue = (x, y) => {
+    const leftHot = Math.exp(-((x - 0.34) ** 2 / 0.035 + (y - 0.52) ** 2 / 0.055));
+    const rightHot = Math.exp(-((x - 0.66) ** 2 / 0.032 + (y - 0.42) ** 2 / 0.05));
+    const lowerWarm = Math.exp(-((x - 0.54) ** 2 / 0.06 + (y - 0.68) ** 2 / 0.04));
+    const diagonal = Math.max(0, 1 - Math.abs(y - (0.82 - x * 0.62)) * 3.8);
+    return clamp(0.08 + leftHot * 0.46 + rightHot * 0.42 + lowerWarm * 0.22 + diagonal * 0.16);
+  };
+  var drawMatrixRain = (renderer, time) => {
+    const { ctx, height, mode, rainColumns, rainFontSize, width } = renderer;
+    const isLight = mode === "light";
+    const glow = ctx.createRadialGradient(width * 0.54, height * 0.47, 0, width * 0.54, height * 0.47, width * 0.52);
+    glow.addColorStop(0, isLight ? "rgba(0,180,84,0.09)" : "rgba(0,255,118,0.12)");
+    glow.addColorStop(0.55, isLight ? "rgba(0,180,84,0.035)" : "rgba(0,255,118,0.045)");
+    glow.addColorStop(1, "rgba(0,255,118,0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, width, height);
+    ctx.save();
+    ctx.font = `${rainFontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    for (const column of rainColumns) {
+      drawRainColumn(renderer, column.x, column.length, column.seed, column.speed, column.alpha, time);
     }
-  var P = (e, t, o) => {
-      let r = Math.PI * 2 * o
-      return e.reduce((i, n) => i + n.amp * Math.sin(n.uFreq * t + n.timeFreq * r + n.phase), 0)
-    },
-    K = (e, t) => {
-      let { shape: o } = t.cycle,
-        r = t.envelope || 0,
-        i = Math.PI * 2 * (t.phase || 0),
-        n = e + r * o.phaseDrift * Math.sin(i),
-        a = Math.sin(n),
-        s = Math.cos(n),
-        c = Math.tanh(1.8 * a),
-        l = 1 - r * o.waist * Math.cos(2 * n) ** 2,
-        d = 1 + r * o.lobeBalance * c,
-        p = 1 + r * o.xScale,
-        h = 1 + r * o.yScale * Math.sin(i + .8),
-        u = 1 + r * o.depthScale * Math.cos(i + .35),
-        g = r * o.diagonal
-      return [
-        2.75 * p * d * l * a + g * Math.sin(3 * n + i),
-        1.35 * h * Math.sin(2 * n) * (1 - .16 * r * c),
-        .76 * u * s + r * .08 * Math.sin(3 * n - i)
-      ]
-    },
-    ut = (e, t) => {
-      let r = K(e - .001, t), i = K(e + .001, t)
-      return [(i[0] - r[0]) / (2 * .001), (i[1] - r[1]) / (2 * .001), (i[2] - r[2]) / (2 * .001)]
-    },
-    Q = (e, t) => [e[0] + t[0], e[1] + t[1], e[2] + t[2]],
-    Z = (e, t) => [e[0] * t, e[1] * t, e[2] * t],
-    _e = (e, t) => [e[1] * t[2] - e[2] * t[1], e[2] * t[0] - e[0] * t[2], e[0] * t[1] - e[1] * t[0]],
-    J = e => {
-      let t = Math.hypot(e[0], e[1], e[2]) || 1
-      return [e[0] / t, e[1] / t, e[2] / t]
-    },
-    te = (e, t) => {
-      let o = [], r = e ? Math.PI * 2 * t.phase * e : 0
-      for (let i = 0; i < 118; i += 1) {
-        let n = 0 + 2 * Math.PI * i / 118, a = K(n, t), s = J(ut(n, t)), c = _e(ve, s)
-        c = c[0] ** 2 + c[1] ** 2 + c[2] ** 2 < 1e-6 ? [1, 0, 0] : J(c)
-        let l = J(_e(s, c)),
-          d = t.envelope * P(t.cycle.twist, n, t.phase),
-          p = 1 + t.envelope * P(t.cycle.width, n, t.phase) +
-            t.envelope * t.cycle.shape.waist * .28 * Math.sin(2 * n + Math.PI * 2 * t.phase),
-          h = n / 2 + Math.PI * .1 + d + r,
-          u = Q(Z(c, Math.cos(h)), Z(l, Math.sin(h))),
-          g = [
-            t.envelope * P(t.cycle.warpX, n, t.phase),
-            t.envelope * P(t.cycle.warpY, n, t.phase),
-            t.envelope * P(t.cycle.warpZ, n, t.phase)
-          ],
-          v = Q(a, g),
-          f = []
-        for (let x = 0; x <= 12; x += 1) {
-          let C = -.46 + 2 * .46 * x / 12, U = Q(v, Z(u, C * p))
-          f.push({ u: n, v: C, x: U[0], y: U[1], z: U[2] })
-        }
-        o.push(f)
-      }
-      return o
-    },
-    ye = e => {
-      let t = e.flat(),
-        o = Math.min(...t.map(l => l.x)),
-        r = Math.max(...t.map(l => l.x)),
-        i = Math.min(...t.map(l => l.y)),
-        n = Math.max(...t.map(l => l.y)),
-        a = Math.min(820 / (r - o), 610 / (n - i)),
-        s = (o + r) / 2,
-        c = (i + n) / 2
-      return l => ({ u: l.u, v: l.v, x: 512 + (l.x - s) * a, y: 512 - ((l.y - c) * a + l.z * a * .045), z: l.z })
-    },
-    Re = (e, t, o) => {
-      let r = te(e, t), i = []
-      for (let n = 0; n < 118; n += 1) {
-        let a = (n + 1) % 118, s = a === 0
-        for (let c = 0; c < 12; c += 1) {
-          let l = mt(r, o, n, c, a, s)
-          if (!l) continue
-          let d = l.reduce((u, g) => u + g.z, 0) / 4,
-            p = 0 + 2 * Math.PI * (n + .5) / 118,
-            h = -.46 + 2 * .46 * (c + .5) / 12
-          i.push({ depth: d, points: ht(l, .82), sortDepth: d + .11 * Math.cos(p), u: p, v: h })
-        }
-      }
-      return i.sort((n, a) => n.sortDepth - a.sortDepth || n.u - a.u || n.v - a.v)
-    },
-    mt = (e, t, o, r, i, n) => {
-      let a = n ? 12 - r : r,
-        s = n ? 12 - r - 1 : r + 1,
-        c = e[o],
-        l = e[i],
-        d = c?.[r],
-        p = l?.[a],
-        h = l?.[s],
-        u = c?.[r + 1]
-      return d && p && h && u ? [t(d), t(p), t(h), t(u)] : null
-    },
-    ht = (e, t) => {
-      let o = e.reduce((i, n) => i + n.x, 0) / e.length, r = e.reduce((i, n) => i + n.y, 0) / e.length
-      return e.map(i => {
-        let n = i.x - o, a = i.y - r, s = Math.hypot(n, a) || 1
-        return { ...i, x: i.x + t * n / s, y: i.y + t * a / s }
-      })
+    ctx.restore();
+  };
+  var drawRainColumn = (renderer, x, length, seed, speed, alphaSeed, time) => {
+    const { ctx, height, mode, rainFontSize } = renderer;
+    const loopHeight = height + length * rainFontSize;
+    const head = (time * 1e-3 * speed + seed) % loopHeight - length * rainFontSize;
+    for (let i = 0; i < length; i += 1) {
+      const y = head - i * rainFontSize;
+      if (y < -rainFontSize || y > height + rainFontSize) continue;
+      const fade = 1 - i / length;
+      const glyphSeed = Math.sin(x * 12.9898 + i * 78.233 + Math.floor(time * 6e-3) * 18.97);
+      const color = mode === "light" ? i === 0 ? [0, 116, 58] : [0, 148, 72] : i === 0 ? [215, 255, 226] : [116, 255, 168];
+      const alpha = alphaSeed * fade * (i === 0 ? 0.74 : 0.42) * (mode === "light" ? 0.52 : 1);
+      ctx.fillStyle = rgba(color, alpha);
+      ctx.fillText(glyphSeed > 0 ? "1" : "0", x, y);
     }
-  var we = (e, t, o, r, i, n) => {
-      let a = .5 + .5 * (o / (.76 + .46)),
-        s = .5 + .5 * Math.cos(r - .55),
-        c = Math.abs(i) / .46,
-        l = .5 + .5 * Math.cos(r + n * .68)
-      if (e === 'industrial') {
-        let h = y(.74 * a + .14 * s + .08 * c + .04 * l),
-          u = t === 'light'
-            ? [[255, 230, 202], [255, 146, 58], [229, 58, 18], [82, 21, 9]]
-            : [[20, 9, 6], [108, 22, 12], [226, 63, 18], [255, 145, 35]]
-        return h < .44
-          ? M(S(u[0], u[1], h / .44))
-          : h < .78
-          ? M(S(u[1], u[2], (h - .44) / .34))
-          : M(S(u[2], u[3], (h - .78) / .22))
-      }
-      if (e === 'matrix') {
-        let h = y(.76 * a + .12 * s + .08 * c + .04 * l),
-          u = t === 'light'
-            ? [[212, 255, 226], [38, 226, 112], [0, 146, 70], [0, 72, 40]]
-            : [[2, 18, 10], [0, 86, 44], [0, 214, 96], [168, 255, 198]]
-        return h < .36
-          ? M(S(u[0], u[1], h / .36))
-          : h < .78
-          ? M(S(u[1], u[2], (h - .36) / .42))
-          : M(S(u[2], u[3], (h - .78) / .22))
-      }
-      if (e === 'metal') {
-        let h = c ** 1.6,
-          u = .5 + .5 * Math.cos(r * 2.1 - .72),
-          g = Math.max(0, Math.cos(r * 3.2 + i * 2.4 - 1.1)) ** 10,
-          v = .025 * Math.sin(r * 54 + i * 18),
-          f = y(.62 * a + .14 * s + .12 * h + .08 * u + .13 * g + v),
-          x = t === 'light'
-            ? [[34, 39, 42], [79, 88, 90], [159, 165, 162], [250, 248, 236], [72, 78, 79]]
-            : [[8, 10, 11], [42, 47, 49], [139, 148, 147], [248, 247, 238], [82, 89, 91]]
-        return f < .34
-          ? M(S(x[0], x[1], f / .34))
-          : f < .62
-          ? M(S(x[1], x[2], (f - .34) / .28))
-          : f < .82
-          ? M(S(x[2], x[3], (f - .62) / .2))
-          : M(S(x[3], x[4], (f - .82) / .18))
-      }
-      let d = y(.82 * a + .1 * s + .08 * c),
-        p = t === 'dark'
-          ? Math.max(18, Math.min(242, Math.round(14 + 226 * d)))
-          : Math.max(18, Math.min(246, Math.round(248 - 226 * d)))
-      return `rgb(${p},${p},${p})`
-    },
-    Ce = (e, t) =>
-      e === 'industrial'
-        ? t === 'light' ? '#FFF1E8' : '#180804'
-        : e === 'matrix'
-        ? t === 'light' ? '#E9FFF1' : '#001B0D'
-        : e === 'metal'
-        ? t === 'light' ? '#F2F4F0' : '#111615'
-        : t === 'light'
-        ? '#F3F5F2'
-        : '#111514',
-    y = (e, t = 0, o = 1) => Math.max(t, Math.min(o, e)),
-    oe = (e, t, o) => Math.round(e + (t - e) * y(o)),
-    S = (e, t, o) => [oe(e[0], t[0], o), oe(e[1], t[1], o), oe(e[2], t[2], o)],
-    M = e => `rgb(${e[0]},${e[1]},${e[2]})`,
-    re = (e, t) => `rgba(${e[0]},${e[1]},${e[2]},${t})`
-  var Ee = (e = R()) => {
-      let t = I(e) ?? R(),
-        o = q(t),
-        r = Fe(o),
-        i = H(r),
-        n = (u = R()) => (t = I(u) ?? R(), o = q(t), r = Fe(o), i = H(r), t),
-        a = (u, g, v) => {
-          let f = v?.motionCycle ?? i
-          if (g === 0) return { cycle: f, envelope: 0, phase: 0 }
-          let x = be(u, g, v?.motionOffset ?? 0, v?.motionLoopSeconds)
-          return v && v.motionCycleIndex < 0 && (v.motionCycleIndex = x.cycleIndex),
-            { cycle: f, envelope: x.envelope, phase: x.phase }
-        },
-        s = () => H(r),
-        l = ye(te(0, { cycle: i, envelope: 0, phase: 0 })),
-        d = (u, g, v = a(u, g)) => Re(g, v, l)
-      return {
-        get seed() {
-          return t
-        },
-        buildMesh: d,
-        createMotionCycle: s,
-        createMotionSource: () => ({
-          motionCycle: s(),
-          motionCycleIndex: -1,
-          motionLoopSeconds: 10.24,
-          motionOffset: r.randomRange(0, 10.24)
-        }),
-        getMotionState: a,
-        random: () => o(),
-        randomRange: (u, g) => r.randomRange(u, g),
-        resetMotionSource: u => {
-          u.motionCycleIndex = -1,
-            u.motionCycle = s(),
-            u.motionOffset = r.randomRange(0, 10.24),
-            u.motionLoopSeconds = 10.24
-        },
-        resetSeed: n,
-        staticMesh: d(0, 0)
-      }
-    },
-    Fe = e => {
-      let t = (i, n) => i + e() * (n - i)
-      return {
-        random: e,
-        randomChoice: i => i[Math.floor(e() * i.length)] ?? i[0] ?? 0,
-        randomRange: t,
-        signedRandomRange: (i, n) => t(i, n) * (e() < .5 ? -1 : 1)
+  };
+  var drawIndustrialHeatmap = (core, renderer, time) => {
+    if (renderer.heatCells.length === 0) return;
+    updateHeatmap(core, renderer, time);
+    const { ctx, heatCellSize, heatCols, heatRows, mode } = renderer;
+    const gap = Math.max(1, Math.round(heatCellSize * 0.14));
+    const size = heatCellSize - gap;
+    ctx.save();
+    ctx.globalCompositeOperation = "source-over";
+    for (let row = 0; row < heatRows; row += 1) {
+      for (let col = 0; col < heatCols; col += 1) {
+        const cell = renderer.heatCells[row * heatCols + col];
+        if (!cell) continue;
+        if (!renderer.isStatic) cell.value += (cell.target - cell.value) * cell.speed;
+        const value = clamp(cell.value);
+        ctx.fillStyle = rgba(heatColor(mode, value), mode === "light" ? 0.22 + value * 0.48 : 0.18 + value * 0.64);
+        ctx.fillRect(col * heatCellSize + gap / 2, row * heatCellSize + gap / 2, size, size);
       }
     }
-  var Ie = (e, t) => {
-      let o = t.width < 210 ? 11 : 13, r = Math.ceil(t.width / o) + 1
-      t.rainFontSize = o,
-        t.rainColumns = Array.from(
-          { length: r },
-          (i, n) => ({
-            seed: e.randomRange(0, t.height + o * 18),
-            speed: e.randomRange(22, 58),
-            length: Math.round(e.randomRange(7, 15)),
-            alpha: e.randomRange(.2, .72),
-            x: n * o + o / 2
-          })
-        )
-    },
-    Be = (e, t) => {
-      let o = t.width < 170 ? 12 : 15, r = Math.ceil(t.width / o), i = Math.ceil(t.height / o)
-      t.heatCellSize = o,
-        t.heatCols = r,
-        t.heatRows = i,
-        t.nextHeatUpdate = 0,
-        t.heatCells = Array.from({ length: r * i }, (n, a) => pt(e, r, i, a))
-    },
-    Ue = (e, t, o) => {
-      if (t.backgroundStyle === 'textured') {
-        if (t.theme === 'matrix') {
-          gt(t, o)
-          return
-        }
-        t.theme === 'industrial' && vt(e, t, o)
-      }
-    },
-    pt = (e, t, o, r) => {
-      let i = r % t,
-        n = Math.floor(r / t),
-        a = (i + .5) / t,
-        s = (n + .5) / o,
-        c = y(ft(a, s) + e.randomRange(-.18, .18))
-      return { speed: e.randomRange(.035, .085), target: c, value: c }
-    },
-    ft = (e, t) => {
-      let o = Math.exp(-((e - .34) ** 2 / .035 + (t - .52) ** 2 / .055)),
-        r = Math.exp(-((e - .66) ** 2 / .032 + (t - .42) ** 2 / .05)),
-        i = Math.exp(-((e - .54) ** 2 / .06 + (t - .68) ** 2 / .04)),
-        n = Math.max(0, 1 - Math.abs(t - (.82 - e * .62)) * 3.8)
-      return y(.08 + o * .46 + r * .42 + i * .22 + n * .16)
-    },
-    gt = (e, t) => {
-      let { ctx: o, height: r, mode: i, rainColumns: n, rainFontSize: a, width: s } = e,
-        c = i === 'light',
-        l = o.createRadialGradient(s * .54, r * .47, 0, s * .54, r * .47, s * .52)
-      l.addColorStop(0, c ? 'rgba(0,180,84,0.09)' : 'rgba(0,255,118,0.12)'),
-        l.addColorStop(.55, c ? 'rgba(0,180,84,0.035)' : 'rgba(0,255,118,0.045)'),
-        l.addColorStop(1, 'rgba(0,255,118,0)'),
-        o.fillStyle = l,
-        o.fillRect(0, 0, s, r),
-        o.save(),
-        o.font = `${a}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`,
-        o.textAlign = 'center',
-        o.textBaseline = 'middle'
-      for (let d of n) xt(e, d.x, d.length, d.seed, d.speed, d.alpha, t)
-      o.restore()
-    },
-    xt = (e, t, o, r, i, n, a) => {
-      let { ctx: s, height: c, mode: l, rainFontSize: d } = e, p = c + o * d, h = (a * .001 * i + r) % p - o * d
-      for (let u = 0; u < o; u += 1) {
-        let g = h - u * d
-        if (g < -d || g > c + d) continue
-        let v = 1 - u / o,
-          f = Math.sin(t * 12.9898 + u * 78.233 + Math.floor(a * .006) * 18.97),
-          x = l === 'light' ? u === 0 ? [0, 116, 58] : [0, 148, 72] : u === 0 ? [215, 255, 226] : [116, 255, 168],
-          C = n * v * (u === 0 ? .74 : .42) * (l === 'light' ? .52 : 1)
-        s.fillStyle = re(x, C), s.fillText(f > 0 ? '1' : '0', t, g)
-      }
-    },
-    vt = (e, t, o) => {
-      if (t.heatCells.length === 0) return
-      bt(e, t, o)
-      let { ctx: r, heatCellSize: i, heatCols: n, heatRows: a, mode: s } = t,
-        c = Math.max(1, Math.round(i * .14)),
-        l = i - c
-      r.save(), r.globalCompositeOperation = 'source-over'
-      for (let d = 0; d < a; d += 1) {
-        for (let p = 0; p < n; p += 1) {
-          let h = t.heatCells[d * n + p]
-          if (!h) continue
-          t.isStatic || (h.value += (h.target - h.value) * h.speed)
-          let u = y(h.value)
-          r.fillStyle = re(St(s, u), s === 'light' ? .22 + u * .48 : .18 + u * .64),
-            r.fillRect(p * i + c / 2, d * i + c / 2, l, l)
-        }
-      }
-      r.restore()
-    },
-    bt = (e, t, o) => {
-      if (!(t.isStatic || o < t.nextHeatUpdate)) {
-        t.nextHeatUpdate = o + e.randomRange(90, 170)
-        for (let r of t.heatCells) {
-          e.random() >= .28 || (r.target = y(r.target + e.randomRange(-.42, .42)), r.speed = e.randomRange(.045, .12))
-        }
-      }
-    },
-    St = (e, t) => {
-      let o = e === 'light' ? [255, 239, 221] : [31, 12, 7],
-        r = e === 'light' ? [255, 156, 55] : [124, 24, 12],
-        i = e === 'light' ? [223, 54, 16] : [255, 98, 24],
-        n = e === 'light' ? [96, 24, 10] : [255, 178, 56]
-      return t < .42 ? S(o, r, t / .42) : t < .76 ? S(r, i, (t - .42) / .34) : S(i, n, (t - .76) / .24)
+    ctx.restore();
+  };
+  var updateHeatmap = (core, renderer, time) => {
+    if (renderer.isStatic || time < renderer.nextHeatUpdate) return;
+    renderer.nextHeatUpdate = time + core.randomRange(90, 170);
+    for (const cell of renderer.heatCells) {
+      if (core.random() >= 0.28) continue;
+      cell.target = clamp(cell.target + core.randomRange(-0.42, 0.42));
+      cell.speed = core.randomRange(0.045, 0.12);
     }
-  var Pe = `#version 300 es
+  };
+  var heatColor = (mode, value) => {
+    const cool = mode === "light" ? [255, 239, 221] : [31, 12, 7];
+    const warm = mode === "light" ? [255, 156, 55] : [124, 24, 12];
+    const hot = mode === "light" ? [223, 54, 16] : [255, 98, 24];
+    const peak = mode === "light" ? [96, 24, 10] : [255, 178, 56];
+    if (value < 0.42) return mixColor(cool, warm, value / 0.42);
+    if (value < 0.76) return mixColor(warm, hot, (value - 0.42) / 0.34);
+    return mixColor(hot, peak, (value - 0.76) / 0.24);
+  };
+
+  // ../../../../../../private/tmp/oneworks-brand-bundle-87485/node_modules/@paper-design/shaders/dist/vertex-shader.js
+  var vertexShaderSource = `#version 300 es
 precision mediump float;
 
 layout(location = 0) in vec4 a_position;
@@ -549,340 +641,443 @@ void main() {
 
   v_imageUV += .5;
   v_imageUV.y = 1. - v_imageUV.y;
-}`
-  var Ve = 1920 * 1080 * 4,
-    T = class {
-      constructor(t, o, r, i, n = 0, a = 0, s = 2, c = Ve, l = []) {
-        m(this, 'parentElement')
-        m(this, 'canvasElement')
-        m(this, 'gl')
-        m(this, 'program', null)
-        m(this, 'uniformLocations', {})
-        m(this, 'fragmentShader')
-        m(this, 'rafId', null)
-        m(this, 'lastRenderTime', 0)
-        m(this, 'currentFrame', 0)
-        m(this, 'speed', 0)
-        m(this, 'currentSpeed', 0)
-        m(this, 'providedUniforms')
-        m(this, 'mipmaps', [])
-        m(this, 'hasBeenDisposed', !1)
-        m(this, 'resolutionChanged', !0)
-        m(this, 'textures', new Map())
-        m(this, 'minPixelRatio')
-        m(this, 'maxPixelCount')
-        m(this, 'isSafari', yt())
-        m(this, 'uniformCache', {})
-        m(this, 'textureUnitMap', new Map())
-        m(this, 'ownerDocument')
-        m(this, 'initProgram', () => {
-          let t = _t(this.gl, Pe, this.fragmentShader)
-          t && (this.program = t)
-        })
-        m(this, 'setupPositionAttribute', () => {
-          let t = this.gl.getAttribLocation(this.program, 'a_position'), o = this.gl.createBuffer()
-          this.gl.bindBuffer(this.gl.ARRAY_BUFFER, o)
-          let r = [-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]
-          this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(r), this.gl.STATIC_DRAW),
-            this.gl.enableVertexAttribArray(t),
-            this.gl.vertexAttribPointer(t, 2, this.gl.FLOAT, !1, 0, 0)
-        })
-        m(this, 'setupUniforms', () => {
-          let t = {
-            u_time: this.gl.getUniformLocation(this.program, 'u_time'),
-            u_pixelRatio: this.gl.getUniformLocation(this.program, 'u_pixelRatio'),
-            u_resolution: this.gl.getUniformLocation(this.program, 'u_resolution')
-          }
-          Object.entries(this.providedUniforms).forEach(([o, r]) => {
-            if (t[o] = this.gl.getUniformLocation(this.program, o), r instanceof HTMLImageElement) {
-              let i = `${o}AspectRatio`
-              t[i] = this.gl.getUniformLocation(this.program, i)
-            }
-          }), this.uniformLocations = t
-        })
-        m(this, 'renderScale', 1)
-        m(this, 'parentWidth', 0)
-        m(this, 'parentHeight', 0)
-        m(this, 'parentDevicePixelWidth', 0)
-        m(this, 'parentDevicePixelHeight', 0)
-        m(this, 'devicePixelsSupported', !1)
-        m(this, 'resizeObserver', null)
-        m(this, 'setupResizeObserver', () => {
-          this.resizeObserver = new ResizeObserver(([t]) => {
-            if (t?.borderBoxSize[0]) {
-              let o = t.devicePixelContentBoxSize?.[0]
-              o !== void 0 &&
-              (this.devicePixelsSupported = !0,
-                this.parentDevicePixelWidth = o.inlineSize,
-                this.parentDevicePixelHeight = o.blockSize),
-                this.parentWidth = t.borderBoxSize[0].inlineSize,
-                this.parentHeight = t.borderBoxSize[0].blockSize
-            }
-            this.handleResize()
-          }), this.resizeObserver.observe(this.parentElement)
-        })
-        m(this, 'handleVisualViewportChange', () => {
-          this.resizeObserver?.disconnect(), this.setupResizeObserver()
-        })
-        m(this, 'handleResize', () => {
-          let t = 0, o = 0, r = Math.max(1, window.devicePixelRatio), i = visualViewport?.scale ?? 1
-          if (this.devicePixelsSupported) {
-            let d = Math.max(1, this.minPixelRatio / r)
-            t = this.parentDevicePixelWidth * d * i, o = this.parentDevicePixelHeight * d * i
-          } else {
-            let d = Math.max(r, this.minPixelRatio) * i
-            if (this.isSafari) {
-              let p = Rt(this.ownerDocument)
-              d *= Math.max(1, p)
-            }
-            t = Math.round(this.parentWidth) * d, o = Math.round(this.parentHeight) * d
-          }
-          let n = Math.sqrt(this.maxPixelCount) / Math.sqrt(t * o),
-            a = Math.min(1, n),
-            s = Math.round(t * a),
-            c = Math.round(o * a),
-            l = s / Math.round(this.parentWidth)
-          ;(this.canvasElement.width !== s || this.canvasElement.height !== c || this.renderScale !== l) &&
-            (this.renderScale = l,
-              this.canvasElement.width = s,
-              this.canvasElement.height = c,
-              this.resolutionChanged = !0,
-              this.gl.viewport(0, 0, this.gl.canvas.width, this.gl.canvas.height),
-              this.render(performance.now()))
-        })
-        m(this, 'render', t => {
-          if (this.hasBeenDisposed) return
-          if (this.program === null) {
-            console.warn('Tried to render before program or gl was initialized')
-            return
-          }
-          let o = t - this.lastRenderTime
-          this.lastRenderTime = t,
-            this.currentSpeed !== 0 && (this.currentFrame += o * this.currentSpeed),
-            this.gl.clear(this.gl.COLOR_BUFFER_BIT),
-            this.gl.useProgram(this.program),
-            this.gl.uniform1f(this.uniformLocations.u_time, this.currentFrame * .001),
-            this.resolutionChanged &&
-            (this.gl.uniform2f(this.uniformLocations.u_resolution, this.gl.canvas.width, this.gl.canvas.height),
-              this.gl.uniform1f(this.uniformLocations.u_pixelRatio, this.renderScale),
-              this.resolutionChanged = !1),
-            this.gl.drawArrays(this.gl.TRIANGLES, 0, 6),
-            this.currentSpeed !== 0 ? this.requestRender() : this.rafId = null
-        })
-        m(this, 'requestRender', () => {
-          this.rafId !== null && cancelAnimationFrame(this.rafId), this.rafId = requestAnimationFrame(this.render)
-        })
-        m(this, 'setTextureUniform', (t, o) => {
-          if (!o.complete || o.naturalWidth === 0) {
-            throw new Error(`Paper Shaders: image for uniform ${t} must be fully loaded`)
-          }
-          let r = this.textures.get(t)
-          r && this.gl.deleteTexture(r),
-            this.textureUnitMap.has(t) || this.textureUnitMap.set(t, this.textureUnitMap.size)
-          let i = this.textureUnitMap.get(t)
-          this.gl.activeTexture(this.gl.TEXTURE0 + i)
-          let n = this.gl.createTexture()
-          this.gl.bindTexture(this.gl.TEXTURE_2D, n),
-            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE),
-            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE),
-            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR),
-            this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR),
-            this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, o),
-            this.mipmaps.includes(t) &&
-            (this.gl.generateMipmap(this.gl.TEXTURE_2D),
-              this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR_MIPMAP_LINEAR))
-          let a = this.gl.getError()
-          if (a !== this.gl.NO_ERROR || n === null) {
-            console.error('Paper Shaders: WebGL error when uploading texture:', a)
-            return
-          }
-          this.textures.set(t, n)
-          let s = this.uniformLocations[t]
-          if (s) {
-            this.gl.uniform1i(s, i)
-            let c = `${t}AspectRatio`, l = this.uniformLocations[c]
-            if (l) {
-              let d = o.naturalWidth / o.naturalHeight
-              this.gl.uniform1f(l, d)
-            }
-          }
-        })
-        m(
-          this,
-          'areUniformValuesEqual',
-          (t, o) =>
-            t === o
-              ? !0
-              : Array.isArray(t) && Array.isArray(o) && t.length === o.length
-              ? t.every((r, i) => this.areUniformValuesEqual(r, o[i]))
-              : !1
-        )
-        m(this, 'setUniformValues', t => {
-          this.gl.useProgram(this.program),
-            Object.entries(t).forEach(([o, r]) => {
-              let i = r
-              if (
-                r instanceof HTMLImageElement && (i = `${r.src.slice(0, 200)}|${r.naturalWidth}x${r.naturalHeight}`),
-                  this.areUniformValuesEqual(this.uniformCache[o], i)
-              ) return
-              this.uniformCache[o] = i
-              let n = this.uniformLocations[o]
-              if (!n) {
-                console.warn(`Uniform location for ${o} not found`)
-                return
-              }
-              if (r instanceof HTMLImageElement) this.setTextureUniform(o, r)
-              else if (Array.isArray(r)) {
-                let a = null, s = null
-                if (r[0] !== void 0 && Array.isArray(r[0])) {
-                  let c = r[0].length
-                  if (r.every(l => l.length === c)) a = r.flat(), s = c
-                  else {
-                    console.warn(`All child arrays must be the same length for ${o}`)
-                    return
-                  }
-                } else a = r, s = a.length
-                switch (s) {
-                  case 2:
-                    this.gl.uniform2fv(n, a)
-                    break
-                  case 3:
-                    this.gl.uniform3fv(n, a)
-                    break
-                  case 4:
-                    this.gl.uniform4fv(n, a)
-                    break
-                  case 9:
-                    this.gl.uniformMatrix3fv(n, !1, a)
-                    break
-                  case 16:
-                    this.gl.uniformMatrix4fv(n, !1, a)
-                    break
-                  default:
-                    console.warn(`Unsupported uniform array length: ${s}`)
-                }
-              } else {typeof r == 'number'
-                  ? this.gl.uniform1f(n, r)
-                  : typeof r == 'boolean'
-                  ? this.gl.uniform1i(n, r ? 1 : 0)
-                  : console.warn(`Unsupported uniform type for ${o}: ${typeof r}`)}
-            })
-        })
-        m(this, 'getCurrentFrame', () => this.currentFrame)
-        m(this, 'setFrame', t => {
-          this.currentFrame = t, this.lastRenderTime = performance.now(), this.render(performance.now())
-        })
-        m(this, 'setSpeed', (t = 1) => {
-          this.speed = t, this.setCurrentSpeed(this.ownerDocument.hidden ? 0 : t)
-        })
-        m(this, 'setCurrentSpeed', t => {
-          this.currentSpeed = t,
-            this.rafId === null && t !== 0 &&
-            (this.lastRenderTime = performance.now(), this.rafId = requestAnimationFrame(this.render)),
-            this.rafId !== null && t === 0 && (cancelAnimationFrame(this.rafId), this.rafId = null)
-        })
-        m(this, 'setMaxPixelCount', (t = Ve) => {
-          this.maxPixelCount = t, this.handleResize()
-        })
-        m(this, 'setMinPixelRatio', (t = 2) => {
-          this.minPixelRatio = t, this.handleResize()
-        })
-        m(this, 'setUniforms', t => {
-          this.setUniformValues(t),
-            this.providedUniforms = { ...this.providedUniforms, ...t },
-            this.render(performance.now())
-        })
-        m(this, 'handleDocumentVisibilityChange', () => {
-          this.setCurrentSpeed(this.ownerDocument.hidden ? 0 : this.speed)
-        })
-        m(this, 'dispose', () => {
-          this.hasBeenDisposed = !0,
-            this.rafId !== null && (cancelAnimationFrame(this.rafId), this.rafId = null),
-            this.gl && this.program && (this.textures.forEach(t => {
-              this.gl.deleteTexture(t)
-            }),
-              this.textures.clear(),
-              this.gl.deleteProgram(this.program),
-              this.program = null,
-              this.gl.bindBuffer(this.gl.ARRAY_BUFFER, null),
-              this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, null),
-              this.gl.bindRenderbuffer(this.gl.RENDERBUFFER, null),
-              this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, null),
-              this.gl.getError()),
-            this.resizeObserver && (this.resizeObserver.disconnect(), this.resizeObserver = null),
-            visualViewport?.removeEventListener('resize', this.handleVisualViewportChange),
-            this.ownerDocument.removeEventListener('visibilitychange', this.handleDocumentVisibilityChange),
-            this.uniformLocations = {},
-            this.canvasElement.remove(),
-            delete this.parentElement.paperShaderMount
-        })
-        if (t?.nodeType === 1) this.parentElement = t
-        else throw new Error('Paper Shaders: parent element must be an HTMLElement')
-        if (this.ownerDocument = t.ownerDocument, !this.ownerDocument.querySelector('style[data-paper-shader]')) {
-          let h = this.ownerDocument.createElement('style')
-          h.innerHTML = Mt, h.setAttribute('data-paper-shader', ''), this.ownerDocument.head.prepend(h)
-        }
-        let d = this.ownerDocument.createElement('canvas')
-        this.canvasElement = d,
-          this.parentElement.prepend(d),
-          this.fragmentShader = o,
-          this.providedUniforms = r,
-          this.mipmaps = l,
-          this.currentFrame = a,
-          this.minPixelRatio = s,
-          this.maxPixelCount = c
-        let p = d.getContext('webgl2', i)
-        if (!p) throw new Error('Paper Shaders: WebGL is not supported in this browser')
-        this.gl = p,
-          this.initProgram(),
-          this.setupPositionAttribute(),
-          this.setupUniforms(),
-          this.setUniformValues(this.providedUniforms),
-          this.setupResizeObserver(),
-          visualViewport?.addEventListener('resize', this.handleVisualViewportChange),
-          this.setSpeed(n),
-          this.parentElement.setAttribute('data-paper-shader', ''),
-          this.parentElement.paperShaderMount = this,
-          this.ownerDocument.addEventListener('visibilitychange', this.handleDocumentVisibilityChange)
+}`;
+
+  // ../../../../../../private/tmp/oneworks-brand-bundle-87485/node_modules/@paper-design/shaders/dist/shader-mount.js
+  var DEFAULT_MAX_PIXEL_COUNT = 1920 * 1080 * 4;
+  var ShaderMount = class {
+    parentElement;
+    canvasElement;
+    gl;
+    program = null;
+    uniformLocations = {};
+    /** The fragment shader that we are using */
+    fragmentShader;
+    /** Stores the RAF for the render loop */
+    rafId = null;
+    /** Time of the last rendered frame */
+    lastRenderTime = 0;
+    /** Total time that we have played any animation, passed as a uniform to the shader for time-based VFX */
+    currentFrame = 0;
+    /** The speed that we progress through animation time (multiplies by delta time every update). Allows negatives to play in reverse. If set to 0, rAF will stop entirely so static shaders have no recurring performance costs */
+    speed = 0;
+    /** Actual speed used that accounts for document visibility (we pause the shader if the tab is hidden) */
+    currentSpeed = 0;
+    /** Uniforms that are provided by the user for the specific shader being mounted (not including uniforms that this Mount adds, like time and resolution) */
+    providedUniforms;
+    /** Names of the uniforms that should have mipmaps generated for them */
+    mipmaps = [];
+    /** Just a sanity check to make sure frames don't run after we're disposed */
+    hasBeenDisposed = false;
+    /** If the resolution of the canvas has changed since the last render */
+    resolutionChanged = true;
+    /** Store textures that are provided by the user */
+    textures = /* @__PURE__ */ new Map();
+    minPixelRatio;
+    maxPixelCount;
+    isSafari = isSafari();
+    uniformCache = {};
+    textureUnitMap = /* @__PURE__ */ new Map();
+    ownerDocument;
+    constructor(parentElement, fragmentShader, uniforms, webGlContextAttributes, speed = 0, frame = 0, minPixelRatio = 2, maxPixelCount = DEFAULT_MAX_PIXEL_COUNT, mipmaps = []) {
+      if (parentElement?.nodeType === 1) {
+        this.parentElement = parentElement;
+      } else {
+        throw new Error("Paper Shaders: parent element must be an HTMLElement");
       }
+      this.ownerDocument = parentElement.ownerDocument;
+      if (!this.ownerDocument.querySelector("style[data-paper-shader]")) {
+        const styleElement = this.ownerDocument.createElement("style");
+        styleElement.innerHTML = defaultStyle;
+        styleElement.setAttribute("data-paper-shader", "");
+        this.ownerDocument.head.prepend(styleElement);
+      }
+      const canvasElement = this.ownerDocument.createElement("canvas");
+      this.canvasElement = canvasElement;
+      this.parentElement.prepend(canvasElement);
+      this.fragmentShader = fragmentShader;
+      this.providedUniforms = uniforms;
+      this.mipmaps = mipmaps;
+      this.currentFrame = frame;
+      this.minPixelRatio = minPixelRatio;
+      this.maxPixelCount = maxPixelCount;
+      const gl = canvasElement.getContext("webgl2", webGlContextAttributes);
+      if (!gl) {
+        throw new Error("Paper Shaders: WebGL is not supported in this browser");
+      }
+      this.gl = gl;
+      this.initProgram();
+      this.setupPositionAttribute();
+      this.setupUniforms();
+      this.setUniformValues(this.providedUniforms);
+      this.setupResizeObserver();
+      visualViewport?.addEventListener("resize", this.handleVisualViewportChange);
+      this.setSpeed(speed);
+      this.parentElement.setAttribute("data-paper-shader", "");
+      this.parentElement.paperShaderMount = this;
+      this.ownerDocument.addEventListener("visibilitychange", this.handleDocumentVisibilityChange);
     }
-  function Te(e, t, o) {
-    let r = e.createShader(t)
-    return r
-      ? (e.shaderSource(r, o),
-        e.compileShader(r),
-        e.getShaderParameter(r, e.COMPILE_STATUS)
-          ? r
-          : (console.error('An error occurred compiling the shaders: ' + e.getShaderInfoLog(r)),
-            e.deleteShader(r),
-            null))
-      : null
+    initProgram = () => {
+      const program = createProgram(this.gl, vertexShaderSource, this.fragmentShader);
+      if (!program) return;
+      this.program = program;
+    };
+    setupPositionAttribute = () => {
+      const positionAttributeLocation = this.gl.getAttribLocation(this.program, "a_position");
+      const positionBuffer = this.gl.createBuffer();
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, positionBuffer);
+      const positions = [-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1];
+      this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(positions), this.gl.STATIC_DRAW);
+      this.gl.enableVertexAttribArray(positionAttributeLocation);
+      this.gl.vertexAttribPointer(positionAttributeLocation, 2, this.gl.FLOAT, false, 0, 0);
+    };
+    setupUniforms = () => {
+      const uniformLocations = {
+        u_time: this.gl.getUniformLocation(this.program, "u_time"),
+        u_pixelRatio: this.gl.getUniformLocation(this.program, "u_pixelRatio"),
+        u_resolution: this.gl.getUniformLocation(this.program, "u_resolution")
+      };
+      Object.entries(this.providedUniforms).forEach(([key, value]) => {
+        uniformLocations[key] = this.gl.getUniformLocation(this.program, key);
+        if (value instanceof HTMLImageElement) {
+          const aspectRatioUniformName = `${key}AspectRatio`;
+          uniformLocations[aspectRatioUniformName] = this.gl.getUniformLocation(this.program, aspectRatioUniformName);
+        }
+      });
+      this.uniformLocations = uniformLocations;
+    };
+    /**
+     * The scale that we should render at.
+     * - Used to target 2x rendering even on 1x screens for better antialiasing
+     * - Prevents the virtual resolution from going beyond the maximum resolution
+     * - Accounts for the page zoom level so we render in physical device pixels rather than CSS pixels
+     */
+    renderScale = 1;
+    parentWidth = 0;
+    parentHeight = 0;
+    parentDevicePixelWidth = 0;
+    parentDevicePixelHeight = 0;
+    devicePixelsSupported = false;
+    resizeObserver = null;
+    setupResizeObserver = () => {
+      this.resizeObserver = new ResizeObserver(([entry]) => {
+        if (entry?.borderBoxSize[0]) {
+          const physicalPixelSize = entry.devicePixelContentBoxSize?.[0];
+          if (physicalPixelSize !== void 0) {
+            this.devicePixelsSupported = true;
+            this.parentDevicePixelWidth = physicalPixelSize.inlineSize;
+            this.parentDevicePixelHeight = physicalPixelSize.blockSize;
+          }
+          this.parentWidth = entry.borderBoxSize[0].inlineSize;
+          this.parentHeight = entry.borderBoxSize[0].blockSize;
+        }
+        this.handleResize();
+      });
+      this.resizeObserver.observe(this.parentElement);
+    };
+    // Visual viewport resize handler, mainly used to react to browser zoom changes.
+    // Resize observer by itself does not react to pinch zoom, and although it usually
+    // reacts to classic browser zoom, it's not guaranteed in edge cases.
+    // Since timing between visual viewport changes and resize observer is complex
+    // and because we'd like to know the device pixel sizes of elements, we just restart
+    // the observer to get a guaranteed fresh callback regardless if it would have triggered or not.
+    handleVisualViewportChange = () => {
+      this.resizeObserver?.disconnect();
+      this.setupResizeObserver();
+    };
+    /** Resize handler for when the container div changes size or the max pixel count changes and we want to resize our canvas to match */
+    handleResize = () => {
+      let targetPixelWidth = 0;
+      let targetPixelHeight = 0;
+      const dpr = Math.max(1, window.devicePixelRatio);
+      const pinchZoom = visualViewport?.scale ?? 1;
+      if (this.devicePixelsSupported) {
+        const scaleToMeetMinPixelRatio = Math.max(1, this.minPixelRatio / dpr);
+        targetPixelWidth = this.parentDevicePixelWidth * scaleToMeetMinPixelRatio * pinchZoom;
+        targetPixelHeight = this.parentDevicePixelHeight * scaleToMeetMinPixelRatio * pinchZoom;
+      } else {
+        let targetRenderScale = Math.max(dpr, this.minPixelRatio) * pinchZoom;
+        if (this.isSafari) {
+          const zoomLevel = bestGuessBrowserZoom(this.ownerDocument);
+          targetRenderScale *= Math.max(1, zoomLevel);
+        }
+        targetPixelWidth = Math.round(this.parentWidth) * targetRenderScale;
+        targetPixelHeight = Math.round(this.parentHeight) * targetRenderScale;
+      }
+      const maxPixelCountHeadroom = Math.sqrt(this.maxPixelCount) / Math.sqrt(targetPixelWidth * targetPixelHeight);
+      const scaleToMeetMaxPixelCount = Math.min(1, maxPixelCountHeadroom);
+      const newWidth = Math.round(targetPixelWidth * scaleToMeetMaxPixelCount);
+      const newHeight = Math.round(targetPixelHeight * scaleToMeetMaxPixelCount);
+      const newRenderScale = newWidth / Math.round(this.parentWidth);
+      if (this.canvasElement.width !== newWidth || this.canvasElement.height !== newHeight || this.renderScale !== newRenderScale) {
+        this.renderScale = newRenderScale;
+        this.canvasElement.width = newWidth;
+        this.canvasElement.height = newHeight;
+        this.resolutionChanged = true;
+        this.gl.viewport(0, 0, this.gl.canvas.width, this.gl.canvas.height);
+        this.render(performance.now());
+      }
+    };
+    render = (currentTime) => {
+      if (this.hasBeenDisposed) return;
+      if (this.program === null) {
+        console.warn("Tried to render before program or gl was initialized");
+        return;
+      }
+      const dt = currentTime - this.lastRenderTime;
+      this.lastRenderTime = currentTime;
+      if (this.currentSpeed !== 0) {
+        this.currentFrame += dt * this.currentSpeed;
+      }
+      this.gl.clear(this.gl.COLOR_BUFFER_BIT);
+      this.gl.useProgram(this.program);
+      this.gl.uniform1f(this.uniformLocations.u_time, this.currentFrame * 1e-3);
+      if (this.resolutionChanged) {
+        this.gl.uniform2f(this.uniformLocations.u_resolution, this.gl.canvas.width, this.gl.canvas.height);
+        this.gl.uniform1f(this.uniformLocations.u_pixelRatio, this.renderScale);
+        this.resolutionChanged = false;
+      }
+      this.gl.drawArrays(this.gl.TRIANGLES, 0, 6);
+      if (this.currentSpeed !== 0) {
+        this.requestRender();
+      } else {
+        this.rafId = null;
+      }
+    };
+    requestRender = () => {
+      if (this.rafId !== null) {
+        cancelAnimationFrame(this.rafId);
+      }
+      this.rafId = requestAnimationFrame(this.render);
+    };
+    /** Creates a texture from an image and sets it into a uniform value */
+    setTextureUniform = (uniformName, image) => {
+      if (!image.complete || image.naturalWidth === 0) {
+        throw new Error(`Paper Shaders: image for uniform ${uniformName} must be fully loaded`);
+      }
+      const existingTexture = this.textures.get(uniformName);
+      if (existingTexture) {
+        this.gl.deleteTexture(existingTexture);
+      }
+      if (!this.textureUnitMap.has(uniformName)) {
+        this.textureUnitMap.set(uniformName, this.textureUnitMap.size);
+      }
+      const textureUnit = this.textureUnitMap.get(uniformName);
+      this.gl.activeTexture(this.gl.TEXTURE0 + textureUnit);
+      const texture = this.gl.createTexture();
+      this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
+      this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
+      this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
+      this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR);
+      this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR);
+      this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, image);
+      if (this.mipmaps.includes(uniformName)) {
+        this.gl.generateMipmap(this.gl.TEXTURE_2D);
+        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR_MIPMAP_LINEAR);
+      }
+      const error = this.gl.getError();
+      if (error !== this.gl.NO_ERROR || texture === null) {
+        console.error("Paper Shaders: WebGL error when uploading texture:", error);
+        return;
+      }
+      this.textures.set(uniformName, texture);
+      const location = this.uniformLocations[uniformName];
+      if (location) {
+        this.gl.uniform1i(location, textureUnit);
+        const aspectRatioUniformName = `${uniformName}AspectRatio`;
+        const aspectRatioLocation = this.uniformLocations[aspectRatioUniformName];
+        if (aspectRatioLocation) {
+          const aspectRatio = image.naturalWidth / image.naturalHeight;
+          this.gl.uniform1f(aspectRatioLocation, aspectRatio);
+        }
+      }
+    };
+    /** Utility: recursive equality test for all the uniforms */
+    areUniformValuesEqual = (a, b) => {
+      if (a === b) return true;
+      if (Array.isArray(a) && Array.isArray(b) && a.length === b.length) {
+        return a.every((val, i) => this.areUniformValuesEqual(val, b[i]));
+      }
+      return false;
+    };
+    /** Sets the provided uniform values into the WebGL program, can be a partial list of uniforms that have changed */
+    setUniformValues = (updatedUniforms) => {
+      this.gl.useProgram(this.program);
+      Object.entries(updatedUniforms).forEach(([key, value]) => {
+        let cacheValue = value;
+        if (value instanceof HTMLImageElement) {
+          cacheValue = `${value.src.slice(0, 200)}|${value.naturalWidth}x${value.naturalHeight}`;
+        }
+        if (this.areUniformValuesEqual(this.uniformCache[key], cacheValue)) return;
+        this.uniformCache[key] = cacheValue;
+        const location = this.uniformLocations[key];
+        if (!location) {
+          console.warn(`Uniform location for ${key} not found`);
+          return;
+        }
+        if (value instanceof HTMLImageElement) {
+          this.setTextureUniform(key, value);
+        } else if (Array.isArray(value)) {
+          let flatArray = null;
+          let valueLength = null;
+          if (value[0] !== void 0 && Array.isArray(value[0])) {
+            const firstChildLength = value[0].length;
+            if (value.every((arr) => arr.length === firstChildLength)) {
+              flatArray = value.flat();
+              valueLength = firstChildLength;
+            } else {
+              console.warn(`All child arrays must be the same length for ${key}`);
+              return;
+            }
+          } else {
+            flatArray = value;
+            valueLength = flatArray.length;
+          }
+          switch (valueLength) {
+            case 2:
+              this.gl.uniform2fv(location, flatArray);
+              break;
+            case 3:
+              this.gl.uniform3fv(location, flatArray);
+              break;
+            case 4:
+              this.gl.uniform4fv(location, flatArray);
+              break;
+            case 9:
+              this.gl.uniformMatrix3fv(location, false, flatArray);
+              break;
+            case 16:
+              this.gl.uniformMatrix4fv(location, false, flatArray);
+              break;
+            default:
+              console.warn(`Unsupported uniform array length: ${valueLength}`);
+          }
+        } else if (typeof value === "number") {
+          this.gl.uniform1f(location, value);
+        } else if (typeof value === "boolean") {
+          this.gl.uniform1i(location, value ? 1 : 0);
+        } else {
+          console.warn(`Unsupported uniform type for ${key}: ${typeof value}`);
+        }
+      });
+    };
+    /** Gets the current total animation time from 0ms */
+    getCurrentFrame = () => {
+      return this.currentFrame;
+    };
+    /** Set a frame to get a deterministic result, frames are literally just milliseconds from zero since the animation started */
+    setFrame = (newFrame) => {
+      this.currentFrame = newFrame;
+      this.lastRenderTime = performance.now();
+      this.render(performance.now());
+    };
+    /** Set an animation speed (or 0 to stop animation) */
+    setSpeed = (newSpeed = 1) => {
+      this.speed = newSpeed;
+      this.setCurrentSpeed(this.ownerDocument.hidden ? 0 : newSpeed);
+    };
+    setCurrentSpeed = (newSpeed) => {
+      this.currentSpeed = newSpeed;
+      if (this.rafId === null && newSpeed !== 0) {
+        this.lastRenderTime = performance.now();
+        this.rafId = requestAnimationFrame(this.render);
+      }
+      if (this.rafId !== null && newSpeed === 0) {
+        cancelAnimationFrame(this.rafId);
+        this.rafId = null;
+      }
+    };
+    /** Set the maximum pixel count for the shader, this will limit the number of pixels that will be rendered */
+    setMaxPixelCount = (newMaxPixelCount = DEFAULT_MAX_PIXEL_COUNT) => {
+      this.maxPixelCount = newMaxPixelCount;
+      this.handleResize();
+    };
+    /** Set the minimum pixel ratio for the shader */
+    setMinPixelRatio = (newMinPixelRatio = 2) => {
+      this.minPixelRatio = newMinPixelRatio;
+      this.handleResize();
+    };
+    /** Update the uniforms that are provided by the outside shader, can be a partial set with only the uniforms that have changed */
+    setUniforms = (newUniforms) => {
+      this.setUniformValues(newUniforms);
+      this.providedUniforms = { ...this.providedUniforms, ...newUniforms };
+      this.render(performance.now());
+    };
+    handleDocumentVisibilityChange = () => {
+      this.setCurrentSpeed(this.ownerDocument.hidden ? 0 : this.speed);
+    };
+    /** Dispose of the shader mount, cleaning up all of the WebGL resources */
+    dispose = () => {
+      this.hasBeenDisposed = true;
+      if (this.rafId !== null) {
+        cancelAnimationFrame(this.rafId);
+        this.rafId = null;
+      }
+      if (this.gl && this.program) {
+        this.textures.forEach((texture) => {
+          this.gl.deleteTexture(texture);
+        });
+        this.textures.clear();
+        this.gl.deleteProgram(this.program);
+        this.program = null;
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, null);
+        this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, null);
+        this.gl.bindRenderbuffer(this.gl.RENDERBUFFER, null);
+        this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, null);
+        this.gl.getError();
+      }
+      if (this.resizeObserver) {
+        this.resizeObserver.disconnect();
+        this.resizeObserver = null;
+      }
+      visualViewport?.removeEventListener("resize", this.handleVisualViewportChange);
+      this.ownerDocument.removeEventListener("visibilitychange", this.handleDocumentVisibilityChange);
+      this.uniformLocations = {};
+      this.canvasElement.remove();
+      delete this.parentElement.paperShaderMount;
+    };
+  };
+  function createShader(gl, type, source) {
+    const shader = gl.createShader(type);
+    if (!shader) return null;
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      console.error("An error occurred compiling the shaders: " + gl.getShaderInfoLog(shader));
+      gl.deleteShader(shader);
+      return null;
+    }
+    return shader;
   }
-  function _t(e, t, o) {
-    let r = e.getShaderPrecisionFormat(e.FRAGMENT_SHADER, e.MEDIUM_FLOAT), i = r ? r.precision : null
-    i && i < 23 &&
-      (t = t.replace(/precision\s+(lowp|mediump)\s+float;/g, 'precision highp float;'),
-        o = o.replace(/precision\s+(lowp|mediump)\s+float/g, 'precision highp float').replace(
-          /\b(uniform|varying|attribute)\s+(lowp|mediump)\s+(\w+)/g,
-          '$1 highp $3'
-        ))
-    let n = Te(e, e.VERTEX_SHADER, t), a = Te(e, e.FRAGMENT_SHADER, o)
-    if (!n || !a) return null
-    let s = e.createProgram()
-    return s
-      ? (e.attachShader(s, n),
-        e.attachShader(s, a),
-        e.linkProgram(s),
-        e.getProgramParameter(s, e.LINK_STATUS)
-          ? (e.detachShader(s, n), e.detachShader(s, a), e.deleteShader(n), e.deleteShader(a), s)
-          : (console.error('Unable to initialize the shader program: ' + e.getProgramInfoLog(s)),
-            e.deleteProgram(s),
-            e.deleteShader(n),
-            e.deleteShader(a),
-            null))
-      : null
+  function createProgram(gl, vertexShaderSource2, fragmentShaderSource) {
+    const format = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.MEDIUM_FLOAT);
+    const precision = format ? format.precision : null;
+    if (precision && precision < 23) {
+      vertexShaderSource2 = vertexShaderSource2.replace(/precision\s+(lowp|mediump)\s+float;/g, "precision highp float;");
+      fragmentShaderSource = fragmentShaderSource.replace(/precision\s+(lowp|mediump)\s+float/g, "precision highp float").replace(/\b(uniform|varying|attribute)\s+(lowp|mediump)\s+(\w+)/g, "$1 highp $3");
+    }
+    const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource2);
+    const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+    if (!vertexShader || !fragmentShader) return null;
+    const program = gl.createProgram();
+    if (!program) return null;
+    gl.attachShader(program, vertexShader);
+    gl.attachShader(program, fragmentShader);
+    gl.linkProgram(program);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      console.error("Unable to initialize the shader program: " + gl.getProgramInfoLog(program));
+      gl.deleteProgram(program);
+      gl.deleteShader(vertexShader);
+      gl.deleteShader(fragmentShader);
+      return null;
+    }
+    gl.detachShader(program, vertexShader);
+    gl.detachShader(program, fragmentShader);
+    gl.deleteShader(vertexShader);
+    gl.deleteShader(fragmentShader);
+    return program;
   }
-  var Mt = `@layer paper-shaders {
+  var defaultStyle = `@layer paper-shaders {
   :where([data-paper-shader]) {
     isolation: isolate;
     position: relative;
@@ -899,34 +1094,54 @@ void main() {
       corner-shape: inherit;
     }
   }
-}`
-  function yt() {
-    let e = navigator.userAgent.toLowerCase()
-    return e.includes('safari') && !e.includes('chrome') && !e.includes('android')
+}`;
+  function isSafari() {
+    const ua = navigator.userAgent.toLowerCase();
+    return ua.includes("safari") && !ua.includes("chrome") && !ua.includes("android");
   }
-  function Rt(e) {
-    let t = visualViewport?.scale ?? 1,
-      o = visualViewport?.width ?? window.innerWidth,
-      r = window.innerWidth - e.documentElement.clientWidth,
-      i = t * o + r,
-      n = outerWidth / i,
-      a = Math.round(100 * n)
-    return a % 5 === 0 ? a / 100 : a === 33 ? 1 / 3 : a === 67 ? 2 / 3 : a === 133 ? 4 / 3 : n
+  function bestGuessBrowserZoom(doc) {
+    const viewportScale = visualViewport?.scale ?? 1;
+    const viewportWidth = visualViewport?.width ?? window.innerWidth;
+    const scrollbarWidth = window.innerWidth - doc.documentElement.clientWidth;
+    const innerWidth = viewportScale * viewportWidth + scrollbarWidth;
+    const ratio = outerWidth / innerWidth;
+    const zoomPercentageRounded = Math.round(100 * ratio);
+    if (zoomPercentageRounded % 5 === 0) {
+      return zoomPercentageRounded / 100;
+    }
+    if (zoomPercentageRounded === 33) {
+      return 1 / 3;
+    }
+    if (zoomPercentageRounded === 67) {
+      return 2 / 3;
+    }
+    if (zoomPercentageRounded === 133) {
+      return 4 / 3;
+    }
+    return ratio;
   }
-  var z = { none: 0, contain: 1, cover: 2 }
-  var ze = `
+
+  // ../../../../../../private/tmp/oneworks-brand-bundle-87485/node_modules/@paper-design/shaders/dist/shader-sizing.js
+  var ShaderFitOptions = {
+    none: 0,
+    contain: 1,
+    cover: 2
+  };
+
+  // ../../../../../../private/tmp/oneworks-brand-bundle-87485/node_modules/@paper-design/shaders/dist/shader-utils.js
+  var declarePI = `
 #define TWO_PI 6.28318530718
 #define PI 3.14159265358979323846
-`,
-    Oe = `
+`;
+  var rotation2 = `
 vec2 rotate(vec2 uv, float th) {
   return mat2(cos(th), sin(th), -sin(th), cos(th)) * uv;
 }
-`
-  var Le = `
+`;
+  var colorBandingFix = `
   color += 1. / 256. * (fract(sin(dot(.014 * gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453123) - .5);
-`,
-    Ae = `
+`;
+  var simplexNoise = `
 vec3 permute(vec3 x) { return mod(((x * 34.0) + 1.0) * x, 289.0); }
 float snoise(vec2 v) {
   const vec4 C = vec4(0.211324865405187, 0.366025403784439,
@@ -954,8 +1169,10 @@ float snoise(vec2 v) {
   g.yz = a0.yz * x12.xz + h.yz * x12.yw;
   return 130.0 * dot(m, g);
 }
-`
-  var ie = `#version 300 es
+`;
+
+  // ../../../../../../private/tmp/oneworks-brand-bundle-87485/node_modules/@paper-design/shaders/dist/shaders/liquid-metal.js
+  var liquidMetalFragmentShader = `#version 300 es
 precision mediump float;
 
 uniform sampler2D u_image;
@@ -985,9 +1202,9 @@ in vec2 v_imageUV;
 
 out vec4 fragColor;
 
-${ze}
-${Oe}
-${Ae}
+${declarePI}
+${rotation2}
+${simplexNoise}
 
 float getColorChanges(float c1, float c2, float stripe_p, vec3 w, float blur, float bump, float tint) {
 
@@ -1272,524 +1489,820 @@ void main() {
   color = color + bgColor * (1. - opacity);
   opacity = opacity + u_colorBack.a * (1. - opacity);
 
-  ${Le}
+  ${colorBandingFix}
 
   fragColor = vec4(color, opacity);
 }
-`
-  var O = { none: 0, circle: 1, daisy: 2, diamond: 3, metaballs: 4 }
-  function L(e) {
-    if (Array.isArray(e)) return e.length === 4 ? e : e.length === 3 ? [...e, 1] : ne
-    if (typeof e != 'string') return ne
-    let t, o, r, i = 1
-    if (e.startsWith('#')) [t, o, r, i] = wt(e)
-    else if (e.startsWith('rgb')) [t, o, r, i] = Ct(e)
-    else if (e.startsWith('hsl')) [t, o, r, i] = Et(Ft(e))
-    else return console.error('Unsupported color format', e), ne
-    return [N(t, 0, 1), N(o, 0, 1), N(r, 0, 1), N(i, 0, 1)]
-  }
-  function wt(e) {
-    e = e.replace(/^#/, ''),
-      e.length === 3 && (e = e.split('').map(n => n + n).join('')),
-      e.length === 6 && (e = e + 'ff')
-    let t = parseInt(e.slice(0, 2), 16) / 255,
-      o = parseInt(e.slice(2, 4), 16) / 255,
-      r = parseInt(e.slice(4, 6), 16) / 255,
-      i = parseInt(e.slice(6, 8), 16) / 255
-    return [t, o, r, i]
-  }
-  function Ct(e) {
-    let t = e.match(/^rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([0-9.]+))?\s*\)$/i)
-    return t
-      ? [
-        parseInt(t[1] ?? '0') / 255,
-        parseInt(t[2] ?? '0') / 255,
-        parseInt(t[3] ?? '0') / 255,
-        t[4] === void 0 ? 1 : parseFloat(t[4])
-      ]
-      : [0, 0, 0, 1]
-  }
-  function Ft(e) {
-    let t = e.match(/^hsla?\s*\(\s*(\d+)\s*,\s*(\d+)%\s*,\s*(\d+)%\s*(?:,\s*([0-9.]+))?\s*\)$/i)
-    return t
-      ? [parseInt(t[1] ?? '0'), parseInt(t[2] ?? '0'), parseInt(t[3] ?? '0'), t[4] === void 0 ? 1 : parseFloat(t[4])]
-      : [0, 0, 0, 1]
-  }
-  function Et(e) {
-    let [t, o, r, i] = e, n = t / 360, a = o / 100, s = r / 100, c, l, d
-    if (o === 0) c = l = d = s
-    else {
-      let p = (
-          g,
-          v,
-          f
-        ) => (f < 0 && (f += 1),
-          f > 1 && (f -= 1),
-          f < .16666666666666666
-            ? g + (v - g) * 6 * f
-            : f < .5
-            ? v
-            : f < .6666666666666666
-            ? g + (v - g) * (.6666666666666666 - f) * 6
-            : g),
-        h = s < .5 ? s * (1 + a) : s + a - s * a,
-        u = 2 * s - h
-      c = p(u, h, n + 1 / 3), l = p(u, h, n), d = p(u, h, n - 1 / 3)
+`;
+  var LiquidMetalShapes = {
+    none: 0,
+    circle: 1,
+    daisy: 2,
+    diamond: 3,
+    metaballs: 4
+  };
+
+  // ../../../../../../private/tmp/oneworks-brand-bundle-87485/node_modules/@paper-design/shaders/dist/get-shader-color-from-string.js
+  function getShaderColorFromString(colorString) {
+    if (Array.isArray(colorString)) {
+      if (colorString.length === 4) return colorString;
+      if (colorString.length === 3) return [...colorString, 1];
+      return fallbackColor;
     }
-    return [c, l, d, i]
+    if (typeof colorString !== "string") {
+      return fallbackColor;
+    }
+    let r, g, b, a = 1;
+    if (colorString.startsWith("#")) {
+      [r, g, b, a] = hexToRgba(colorString);
+    } else if (colorString.startsWith("rgb")) {
+      [r, g, b, a] = parseRgba(colorString);
+    } else if (colorString.startsWith("hsl")) {
+      [r, g, b, a] = hslaToRgba(parseHsla(colorString));
+    } else {
+      console.error("Unsupported color format", colorString);
+      return fallbackColor;
+    }
+    return [clamp2(r, 0, 1), clamp2(g, 0, 1), clamp2(b, 0, 1), clamp2(a, 0, 1)];
   }
-  var N = (e, t, o) => Math.min(Math.max(e, t), o), ne = [0, 0, 0, 1]
-  var ke = (e, t, o, r, i) => {
-    let n = t.mount.canvasElement.width / t.width
-    e.ctx.drawImage(t.mount.canvasElement, o * n, o * n, r * n, i * n, 0, 0, r, i)
+  function hexToRgba(hex) {
+    hex = hex.replace(/^#/, "");
+    if (hex.length === 3) {
+      hex = hex.split("").map((char) => char + char).join("");
+    }
+    if (hex.length === 6) {
+      hex = hex + "ff";
+    }
+    const r = parseInt(hex.slice(0, 2), 16) / 255;
+    const g = parseInt(hex.slice(2, 4), 16) / 255;
+    const b = parseInt(hex.slice(4, 6), 16) / 255;
+    const a = parseInt(hex.slice(6, 8), 16) / 255;
+    return [r, g, b, a];
   }
-  var He = 2048 * 2048,
-    It = .24,
-    Bt = 320,
-    ae = {
-      u_angle: 138,
-      u_colorTint: L('#ffffff'),
-      u_contour: .68,
-      u_distortion: 1,
-      u_fit: z.contain,
-      u_imageAspectRatio: 1,
-      u_isImage: !1,
-      u_offsetX: 0,
-      u_offsetY: 0,
-      u_originX: .5,
-      u_originY: .5,
-      u_repetition: 2.36,
-      u_rotation: 45,
-      u_scale: 1.42,
-      u_shape: O.diamond,
-      u_shiftBlue: .3,
-      u_shiftRed: 0,
-      u_softness: 1,
-      u_worldHeight: 0,
-      u_worldWidth: 0
-    },
-    De = null,
-    Ne = (e, t) => {
-      let o = Ot(e)
-      if (!o) return !1
-      zt(e), Lt(e, o)
-      let r = e.isStatic ? 0 : (t + (e.motionOffset || 0) * 1e3) * It
-      return o.mount.setFrame(r),
-        e.isFullscreen ? (At(e, o), !0) : (e.ctx.drawImage(o.mount.canvasElement, 0, 0, e.width, e.height), !0)
-    },
-    Ut = e => L(e === 'light' ? '#868986' : '#101112'),
-    Pt = e => L(e === 'light' ? '#d4d2c5' : '#d8d7ca'),
-    Vt = () => {
-      let e = document.createElement('div')
-      return e.setAttribute('aria-hidden', 'true'),
-        Object.assign(e.style, {
-          height: '1px',
-          left: '-10000px',
-          opacity: '0',
-          overflow: 'hidden',
-          pointerEvents: 'none',
-          position: 'fixed',
-          top: '0',
-          width: '1px'
-        }),
-        document.body.appendChild(e),
-        e
-    },
-    Tt = () => document.body ? (De ?? (De = Vt()), De) : null,
-    We = e => {
-      let t = !!e.isFullscreen
-      return {
-        ...ae,
-        u_colorBack: Ut(e.mode),
-        u_colorTint: Pt(e.mode),
-        u_fit: t ? z.cover : z.contain,
-        u_rotation: t ? 0 : ae.u_rotation,
-        u_scale: t ? 1 : ae.u_scale,
-        u_shape: t ? O.none : O.diamond
-      }
-    },
-    Ge = e => {
-      let t = Math.max(1, Math.round(e.width)), o = Math.max(1, Math.round(e.height)), r = e.isFullscreen ? Bt : 0
-      return { bleed: r, height: o, renderHeight: o + r * 2, renderWidth: t + r * 2, width: t }
-    },
-    zt = e => {
-      let t = e.paperMetalShader
-      if (!t) return
-      let { renderWidth: o, renderHeight: r } = Ge(e), i = Math.min(He, Math.max(1, Math.round(o * r * e.dpr ** 2)))
-      t.width === o && t.height === r && t.dpr === e.dpr && t.pixelCount === i ||
-        (t.width = o,
-          t.height = r,
-          t.dpr = e.dpr,
-          t.pixelCount = i,
-          t.host.style.width = `${o}px`,
-          t.host.style.height = `${r}px`,
-          t.mount.setMinPixelRatio(Math.max(1, e.dpr)),
-          t.mount.setMaxPixelCount(i),
-          t.mount.parentWidth = o,
-          t.mount.parentHeight = r,
-          t.mount.devicePixelsSupported = !1,
-          t.mount.handleResize())
-    },
-    Ot = e => {
-      if (e.paperMetalFailed) return null
-      if (e.paperMetalShader) return e.paperMetalShader
-      let t = Tt()
-      if (!t) return null
-      let o = document.createElement('div')
-      o.style.width = '1px', o.style.height = '1px', o.style.borderRadius = 'inherit', t.appendChild(o)
-      try {
-        let r = new T(
-          o,
-          ie,
-          We(e),
-          { alpha: !0, antialias: !0, depth: !1, premultipliedAlpha: !0, preserveDrawingBuffer: !0, stencil: !1 },
-          0,
-          0,
-          Math.max(1, e.dpr),
-          He
-        )
-        e.paperMetalShader = {
-          dpr: 0,
-          fullscreen: !!e.isFullscreen,
-          height: 0,
-          host: o,
-          mode: e.mode,
-          mount: r,
-          pixelCount: 0,
-          width: 0
-        }
-      } catch (r) {
-        return o.remove(),
-          e.paperMetalFailed = !0,
-          console.warn('Paper Liquid Metal shader unavailable; using canvas fallback.', r),
-          null
-      }
-      return e.paperMetalShader
-    },
-    Lt = (e, t) => {
-      let o = !!e.isFullscreen
-      t.mode === e.mode && t.fullscreen === o || (t.mode = e.mode, t.fullscreen = o, t.mount.setUniforms(We(e)))
-    },
-    At = (e, t) => {
-      let { bleed: o, height: r, width: i } = Ge(e)
-      ke(e, t, o, i, r)
+  function parseRgba(rgba2) {
+    const match = rgba2.match(/^rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([0-9.]+))?\s*\)$/i);
+    if (!match) return [0, 0, 0, 1];
+    return [
+      parseInt(match[1] ?? "0") / 255,
+      parseInt(match[2] ?? "0") / 255,
+      parseInt(match[3] ?? "0") / 255,
+      match[4] === void 0 ? 1 : parseFloat(match[4])
+    ];
+  }
+  function parseHsla(hsla) {
+    const match = hsla.match(/^hsla?\s*\(\s*(\d+)\s*,\s*(\d+)%\s*,\s*(\d+)%\s*(?:,\s*([0-9.]+))?\s*\)$/i);
+    if (!match) return [0, 0, 0, 1];
+    return [
+      parseInt(match[1] ?? "0"),
+      parseInt(match[2] ?? "0"),
+      parseInt(match[3] ?? "0"),
+      match[4] === void 0 ? 1 : parseFloat(match[4])
+    ];
+  }
+  function hslaToRgba(hsla) {
+    const [h, s, l, a] = hsla;
+    const hDecimal = h / 360;
+    const sDecimal = s / 100;
+    const lDecimal = l / 100;
+    let r, g, b;
+    if (s === 0) {
+      r = g = b = lDecimal;
+    } else {
+      const hue2rgb = (p2, q2, t) => {
+        if (t < 0) t += 1;
+        if (t > 1) t -= 1;
+        if (t < 1 / 6) return p2 + (q2 - p2) * 6 * t;
+        if (t < 1 / 2) return q2;
+        if (t < 2 / 3) return p2 + (q2 - p2) * (2 / 3 - t) * 6;
+        return p2;
+      };
+      const q = lDecimal < 0.5 ? lDecimal * (1 + sDecimal) : lDecimal + sDecimal - lDecimal * sDecimal;
+      const p = 2 * lDecimal - q;
+      r = hue2rgb(p, q, hDecimal + 1 / 3);
+      g = hue2rgb(p, q, hDecimal);
+      b = hue2rgb(p, q, hDecimal - 1 / 3);
     }
-  var $e = (e, t) => {
-      let { ctx: o, height: r, mode: i, theme: n, width: a } = e
-      if (e.backgroundStyle !== 'transparent') {
-        if (e.backgroundStyle === 'solid') {
-          o.fillStyle = Ce(n, i), o.fillRect(0, 0, a, r)
-          return
-        }
-        if (n === 'industrial') {
-          let s = o.createLinearGradient(0, 0, a, r)
-          i === 'light'
-            ? (s.addColorStop(0, '#fff8f2'), s.addColorStop(.56, '#fff1e7'), s.addColorStop(1, '#ffe2cf'))
-            : (s.addColorStop(0, '#160b07'), s.addColorStop(.56, '#090706'), s.addColorStop(1, '#1b0d08')),
-            o.fillStyle = s,
-            o.fillRect(0, 0, a, r)
-          return
-        }
-        if (n === 'matrix') {
-          o.fillStyle = i === 'light' ? '#f7fff9' : '#000000', o.fillRect(0, 0, a, r)
-          return
-        }
-        if (n === 'metal') {
-          kt(e, t)
-          return
-        }
-        o.fillStyle = i === 'light' ? '#ffffff' : '#050505', o.fillRect(0, 0, a, r)
-      }
-    },
-    kt = (e, t) => {
-      if (Ne(e, t)) return
-      let { ctx: o, height: r, mode: i, width: n } = e, a = o.createLinearGradient(0, 0, 0, r)
-      i === 'light'
-        ? (a.addColorStop(0, '#dcddd8'),
-          a.addColorStop(.36, '#8e9792'),
-          a.addColorStop(.68, '#ecece6'),
-          a.addColorStop(1, '#7f8985'))
-        : (a.addColorStop(0, '#050607'),
-          a.addColorStop(.38, '#343a39'),
-          a.addColorStop(.68, '#0d0f10'),
-          a.addColorStop(1, '#626b68')),
-        o.fillStyle = a,
-        o.fillRect(0, 0, n, r)
+    return [r, g, b, a];
+  }
+  var clamp2 = (n, min, max) => Math.min(Math.max(n, min), max);
+  var fallbackColor = [0, 0, 0, 1];
+
+  // packages/icon/src/canvas-paper-metal-draw.ts
+  var drawPaperMetalImage = (renderer, shader, bleed, width, height) => {
+    const renderScale = shader.mount.canvasElement.width / shader.width;
+    renderer.ctx.drawImage(
+      shader.mount.canvasElement,
+      bleed * renderScale,
+      bleed * renderScale,
+      width * renderScale,
+      height * renderScale,
+      0,
+      0,
+      width,
+      height
+    );
+  };
+
+  // packages/icon/src/canvas-paper-metal.ts
+  var MAX_PIXEL_COUNT = 2048 * 2048;
+  var SPEED = 0.24;
+  var FULLSCREEN_BLEED = 320;
+  var COMMON_UNIFORMS = {
+    u_angle: 138,
+    u_colorTint: getShaderColorFromString("#ffffff"),
+    u_contour: 0.68,
+    u_distortion: 1,
+    u_fit: ShaderFitOptions.contain,
+    u_imageAspectRatio: 1,
+    u_isImage: false,
+    u_offsetX: 0,
+    u_offsetY: 0,
+    u_originX: 0.5,
+    u_originY: 0.5,
+    u_repetition: 2.36,
+    u_rotation: 45,
+    u_scale: 1.42,
+    u_shape: LiquidMetalShapes.diamond,
+    u_shiftBlue: 0.3,
+    u_shiftRed: 0,
+    u_softness: 1,
+    u_worldHeight: 0,
+    u_worldWidth: 0
+  };
+  var paperMetalHost = null;
+  var drawPaperMetalBackground = (renderer, time) => {
+    const shader = ensurePaperMetalShader(renderer);
+    if (!shader) return false;
+    syncPaperMetalSize(renderer);
+    syncPaperMetalUniforms(renderer, shader);
+    const frame = renderer.isStatic ? 0 : (time + (renderer.motionOffset || 0) * 1e3) * SPEED;
+    shader.mount.setFrame(frame);
+    if (renderer.isFullscreen) {
+      drawFullscreenShader(renderer, shader);
+      return true;
     }
-  var je = (e, t, o) => {
-      let { ctx: r, height: i, mode: n, theme: a, width: s } = e,
-        c = Math.min(s, i) / 1024,
-        l = (s - 1024 * c) / 2,
-        d = (i - 1024 * c) / 2
-      r.save(), r.translate(l, d), r.scale(c, c), r.lineJoin = 'round', r.lineWidth = .9 / c
-      for (let p of o) Dt(e, p, t)
-      r.restore()
-    },
-    Dt = (e, t, o) => {
-      let r = t.points[0]
-      if (!r) return
-      let i = we(e.theme, e.mode, t.depth, t.u, t.v, o * .001)
-      e.ctx.fillStyle = i, e.ctx.strokeStyle = i, e.ctx.beginPath(), e.ctx.moveTo(r.x, r.y)
-      for (let n = 1; n < t.points.length; n += 1) {
-        let a = t.points[n]
-        a && e.ctx.lineTo(a.x, a.y)
-      }
-      e.ctx.closePath(), e.ctx.fill(), e.ctx.stroke()
+    renderer.ctx.drawImage(shader.mount.canvasElement, 0, 0, renderer.width, renderer.height);
+    return true;
+  };
+  var metalColorBack = (mode) => getShaderColorFromString(mode === "light" ? "#868986" : "#101112");
+  var metalColorTint = (mode) => getShaderColorFromString(mode === "light" ? "#d4d2c5" : "#d8d7ca");
+  var createPaperMetalHost = () => {
+    const host = document.createElement("div");
+    host.setAttribute("aria-hidden", "true");
+    Object.assign(host.style, {
+      height: "1px",
+      left: "-10000px",
+      opacity: "0",
+      overflow: "hidden",
+      pointerEvents: "none",
+      position: "fixed",
+      top: "0",
+      width: "1px"
+    });
+    document.body.appendChild(host);
+    return host;
+  };
+  var ensurePaperMetalHost = () => {
+    if (!document.body) return null;
+    paperMetalHost ??= createPaperMetalHost();
+    return paperMetalHost;
+  };
+  var createPaperMetalUniforms = (renderer) => {
+    const isFullscreen = Boolean(renderer.isFullscreen);
+    return {
+      ...COMMON_UNIFORMS,
+      u_colorBack: metalColorBack(renderer.mode),
+      u_colorTint: metalColorTint(renderer.mode),
+      u_fit: isFullscreen ? ShaderFitOptions.cover : ShaderFitOptions.contain,
+      u_rotation: isFullscreen ? 0 : COMMON_UNIFORMS.u_rotation,
+      u_scale: isFullscreen ? 1 : COMMON_UNIFORMS.u_scale,
+      u_shape: isFullscreen ? LiquidMetalShapes.none : LiquidMetalShapes.diamond
+    };
+  };
+  var paperMetalRenderSize = (renderer) => {
+    const width = Math.max(1, Math.round(renderer.width));
+    const height = Math.max(1, Math.round(renderer.height));
+    const bleed = renderer.isFullscreen ? FULLSCREEN_BLEED : 0;
+    return { bleed, height, renderHeight: height + bleed * 2, renderWidth: width + bleed * 2, width };
+  };
+  var syncPaperMetalSize = (renderer) => {
+    const shader = renderer.paperMetalShader;
+    if (!shader) return;
+    const { renderWidth, renderHeight } = paperMetalRenderSize(renderer);
+    const pixelCount = Math.min(MAX_PIXEL_COUNT, Math.max(1, Math.round(renderWidth * renderHeight * renderer.dpr ** 2)));
+    if (shader.width === renderWidth && shader.height === renderHeight && shader.dpr === renderer.dpr && shader.pixelCount === pixelCount) {
+      return;
     }
-  var Ht = ['metal', 'industrial', 'matrix'],
-    Nt = ['light', 'dark'],
-    Wt = ['system', 'light', 'dark'],
-    Gt = [{ theme: 'industrial', primaryColor: '#E23F12' }, { theme: 'metal', primaryColor: '#3F7E8F' }, {
-      theme: 'matrix',
-      primaryColor: '#00B454'
-    }],
-    $t = 'metal',
-    le = 'dark',
-    jt = 'system'
-  var Qo = Gt[0].primaryColor
-  var ce = (e, t) => e.includes(t),
-    W = e => ce(Ht, e) ? e : $t,
-    G = e => ce(Nt, e) ? e : le,
-    Xe = e => ce(Wt, e) ? e : jt
-  var Xt = e => {
-      let t = e.getContext('2d')
-      if (!t) throw new Error('Unable to create a 2D canvas context for the OneWorks icon renderer.')
-      return t
-    },
-    Yt = e => e === 'none' || e === 'transparent' ? 'transparent' : e === 'solid' ? 'solid' : 'textured',
-    qt = ({ backgroundStyle: e, datasetBackground: t, noBackground: o }) =>
-      e ?? (o != null ? o ? 'transparent' : 'textured' : Yt(t)),
-    Ye = (e, t, o = {}) => {
-      let r = o.theme ?? W(t.dataset.theme),
-        i = o.mode ?? G(t.dataset.mode),
-        n = o.static ?? t.dataset.static === 'true',
-        a = qt({
-          backgroundStyle: o.backgroundStyle,
-          datasetBackground: t.dataset.background,
-          noBackground: o.noBackground
-        }),
-        s = a === 'transparent'
-      return {
-        ...e.createMotionSource(),
-        backgroundStyle: a,
-        baseBackgroundStyle: a,
-        baseNoBackground: s,
-        baseStatic: n,
-        canvas: t,
-        ctx: Xt(t),
-        dpr: 1,
-        heatCellSize: 14,
-        heatCells: [],
-        heatCols: 0,
-        heatRows: 0,
+    shader.width = renderWidth;
+    shader.height = renderHeight;
+    shader.dpr = renderer.dpr;
+    shader.pixelCount = pixelCount;
+    shader.host.style.width = `${renderWidth}px`;
+    shader.host.style.height = `${renderHeight}px`;
+    shader.mount.setMinPixelRatio(Math.max(1, renderer.dpr));
+    shader.mount.setMaxPixelCount(pixelCount);
+    shader.mount.parentWidth = renderWidth;
+    shader.mount.parentHeight = renderHeight;
+    shader.mount.devicePixelsSupported = false;
+    shader.mount.handleResize();
+  };
+  var ensurePaperMetalShader = (renderer) => {
+    if (renderer.paperMetalFailed) return null;
+    if (renderer.paperMetalShader) return renderer.paperMetalShader;
+    const host = ensurePaperMetalHost();
+    if (!host) return null;
+    const shaderHost = document.createElement("div");
+    shaderHost.style.width = "1px";
+    shaderHost.style.height = "1px";
+    shaderHost.style.borderRadius = "inherit";
+    host.appendChild(shaderHost);
+    try {
+      const mount = new ShaderMount(
+        shaderHost,
+        liquidMetalFragmentShader,
+        createPaperMetalUniforms(renderer),
+        {
+          alpha: true,
+          antialias: true,
+          depth: false,
+          premultipliedAlpha: true,
+          preserveDrawingBuffer: true,
+          stencil: false
+        },
+        0,
+        0,
+        Math.max(1, renderer.dpr),
+        MAX_PIXEL_COUNT
+      );
+      renderer.paperMetalShader = {
+        dpr: 0,
+        fullscreen: Boolean(renderer.isFullscreen),
         height: 0,
-        isFullscreen: o.fullscreen ?? !1,
-        isStatic: n,
-        mode: i,
-        nextHeatUpdate: 0,
-        noBackground: s,
-        noShadow: o.shadow === !1,
-        rainColumns: [],
-        rainFontSize: 13,
-        root: t.closest('.mobiusLoader'),
-        theme: r,
+        host: shaderHost,
+        mode: renderer.mode,
+        mount,
+        pixelCount: 0,
         width: 0
+      };
+    } catch (error) {
+      shaderHost.remove();
+      renderer.paperMetalFailed = true;
+      console.warn("Paper Liquid Metal shader unavailable; using canvas fallback.", error);
+      return null;
+    }
+    return renderer.paperMetalShader;
+  };
+  var syncPaperMetalUniforms = (renderer, shader) => {
+    const isFullscreen = Boolean(renderer.isFullscreen);
+    if (shader.mode === renderer.mode && shader.fullscreen === isFullscreen) return;
+    shader.mode = renderer.mode;
+    shader.fullscreen = isFullscreen;
+    shader.mount.setUniforms(createPaperMetalUniforms(renderer));
+  };
+  var drawFullscreenShader = (renderer, shader) => {
+    const { bleed, height, width } = paperMetalRenderSize(renderer);
+    drawPaperMetalImage(renderer, shader, bleed, width, height);
+  };
+
+  // packages/icon/src/canvas-background.ts
+  var drawCanvasBackground = (renderer, time) => {
+    const { ctx, height, mode, theme, width } = renderer;
+    if (renderer.backgroundStyle === "transparent") return;
+    if (renderer.backgroundStyle === "solid") {
+      ctx.fillStyle = themeSolidBackgroundFill(theme, mode);
+      ctx.fillRect(0, 0, width, height);
+      return;
+    }
+    if (theme === "industrial") {
+      const base = ctx.createLinearGradient(0, 0, width, height);
+      if (mode === "light") {
+        base.addColorStop(0, "#fff8f2");
+        base.addColorStop(0.56, "#fff1e7");
+        base.addColorStop(1, "#ffe2cf");
+      } else {
+        base.addColorStop(0, "#160b07");
+        base.addColorStop(0.56, "#090706");
+        base.addColorStop(1, "#1b0d08");
       }
+      ctx.fillStyle = base;
+      ctx.fillRect(0, 0, width, height);
+      return;
     }
-  var qe = e => {
-      e.paperMetalShader?.mount.dispose(), e.paperMetalShader?.host.remove(), e.paperMetalShader = void 0
-    },
-    de = (e, t) => {
-      e.resetMotionSource(t), $(e, t)
-    },
-    $ = (e, t) => {
-      t.theme === 'matrix' && t.width > 0 && Ie(e, t), t.theme === 'industrial' && t.width > 0 && Be(e, t)
-    },
-    ue = (e, t) => {
-      let o = t.canvas.getBoundingClientRect(),
-        r = Math.max(1, Math.round(o.width)),
-        i = Math.max(1, Math.round(o.height)),
-        n = r * i,
-        a = n > 62e4 ? 1 : n > 26e4 ? 1.5 : 2,
-        s = Math.min(window.devicePixelRatio || 1, a)
-      r === t.width && i === t.height && s === t.dpr && t.canvas.width === Math.round(r * s) ||
-        (t.width = r,
-          t.height = i,
-          t.dpr = s,
-          t.canvas.width = Math.round(r * s),
-          t.canvas.height = Math.round(i * s),
-          t.ctx.setTransform(s, 0, 0, s, 0, 0),
-          $(e, t))
-    },
-    Qe = (e, t, o, r) => {
-      ue(e, t), Qt(e, t, o, r)
-    },
-    Qt = (e, t, o, r) => {
-      let { ctx: i, height: n, width: a } = t
-      i.setTransform(t.dpr, 0, 0, t.dpr, 0, 0), i.clearRect(0, 0, a, n), $e(t, o), Ue(e, t, o), je(t, o, r)
+    if (theme === "matrix") {
+      ctx.fillStyle = mode === "light" ? "#f7fff9" : "#000000";
+      ctx.fillRect(0, 0, width, height);
+      return;
     }
-  var Ze = e => window.requestAnimationFrame?.(e) ?? window.setTimeout(() => e(performance.now()), 16),
-    Je = e => {
-      window.cancelAnimationFrame ? window.cancelAnimationFrame(e) : window.clearTimeout(e)
-    },
-    Zt = e => e === !1 || e === 'transparent' ? 'transparent' : e === 'solid' ? 'solid' : 'textured',
-    me = e => e === 'transparent' ? 'none' : e === 'solid' ? 'solid' : 'tile',
-    he = e => {
-      let t = Zt(e.background)
+    if (theme === "linear") {
+      ctx.fillStyle = mode === "light" ? "#F8FAFC" : "#080A0D";
+      ctx.fillRect(0, 0, width, height);
+      return;
+    }
+    if (theme === "metal") {
+      drawMetalBackground(renderer, time);
+      return;
+    }
+    ctx.fillStyle = mode === "light" ? "#ffffff" : "#050505";
+    ctx.fillRect(0, 0, width, height);
+  };
+  var drawMetalBackground = (renderer, time) => {
+    if (drawPaperMetalBackground(renderer, time)) return;
+    const { ctx, height, mode, width } = renderer;
+    const base = ctx.createLinearGradient(0, 0, 0, height);
+    if (mode === "light") {
+      base.addColorStop(0, "#dcddd8");
+      base.addColorStop(0.36, "#8e9792");
+      base.addColorStop(0.68, "#ecece6");
+      base.addColorStop(1, "#7f8985");
+    } else {
+      base.addColorStop(0, "#050607");
+      base.addColorStop(0.38, "#343a39");
+      base.addColorStop(0.68, "#0d0f10");
+      base.addColorStop(1, "#626b68");
+    }
+    ctx.fillStyle = base;
+    ctx.fillRect(0, 0, width, height);
+  };
+
+  // packages/icon/src/linear-ribbon.ts
+  var getVIndex = (quad) => {
+    const vStep = MOBIUS_W * 2 / MOBIUS_V_SEGMENTS;
+    return Math.round((quad.v + MOBIUS_W) / vStep - 0.5);
+  };
+  var interpolatePoint = (start, end, amount) => ({
+    ...start,
+    x: start.x + (end.x - start.x) * amount,
+    y: start.y + (end.y - start.y) * amount,
+    z: start.z + (end.z - start.z) * amount
+  });
+  var getLinearRibbonBorderQuad = (quad) => {
+    const [lowerStart, lowerEnd, upperEnd, upperStart] = quad.outlinePoints ?? quad.points;
+    const vIndex = getVIndex(quad);
+    if (lowerStart == null || lowerEnd == null || upperEnd == null || upperStart == null) return null;
+    if (vIndex === 0) {
+      return [
+        lowerStart,
+        lowerEnd,
+        interpolatePoint(lowerEnd, upperEnd, 0.42),
+        interpolatePoint(lowerStart, upperStart, 0.42)
+      ];
+    }
+    if (vIndex === MOBIUS_V_SEGMENTS - 1) {
+      return [
+        upperStart,
+        upperEnd,
+        interpolatePoint(upperEnd, lowerEnd, 0.42),
+        interpolatePoint(upperStart, lowerStart, 0.42)
+      ];
+    }
+    return null;
+  };
+  var overlapLinearRibbonBorderQuad = (points, amount) => {
+    const [outerStart, outerEnd, innerEnd, innerStart] = points;
+    if (outerStart == null || outerEnd == null || innerEnd == null || innerStart == null) return points;
+    const extend = (start, end, direction) => {
+      const dx = end.x - start.x;
+      const dy = end.y - start.y;
+      const length = Math.hypot(dx, dy) || 1;
       return {
-        appearance: Xe(e.appearance),
-        autoStart: e.autoStart ?? !0,
-        background: t !== 'transparent',
-        backgroundStyle: t,
-        canvasClassName: e.canvasClassName ?? 'oneworks-icon-loader__canvas',
-        className: e.className ?? 'oneworks-icon-loader',
-        fullscreen: e.fullscreen ?? !1,
-        mode: e.mode == null ? void 0 : G(e.mode),
-        motion: e.motion ?? !0,
-        random: e.random ?? e.seed == null,
-        respectReducedMotion: e.respectReducedMotion ?? !0,
-        seed: I(e.seed),
-        shadow: e.shadow ?? !0,
-        size: e.size,
-        theme: W(e.theme)
-      }
-    },
-    pe = e => typeof window > 'u' || !window.matchMedia ? null : window.matchMedia(e),
-    j = (e, t) =>
-      e.mode ? e.mode : e.appearance === 'light' || e.appearance === 'dark' ? e.appearance : t?.matches ? 'dark' : le,
-    X = (e, t) => e.motion && (!e.respectReducedMotion || !t?.matches),
-    fe = (e, t) => {
-      if (t == null) return
-      let o = typeof t == 'number' ? `${t}px` : t
-      e.style.width = o, e.style.height = o
-    },
-    Y = (e, t, o, r, i, n) => {
-      let a = r.theme !== i.theme, s = r.mode !== n
-      r.theme = i.theme,
-        r.mode = n,
-        r.isStatic = !i.motion,
-        r.backgroundStyle = i.backgroundStyle,
-        r.noBackground = i.backgroundStyle === 'transparent',
-        r.noShadow = !i.shadow,
-        r.isFullscreen = i.fullscreen,
-        o.dataset.theme = i.theme,
-        o.dataset.mode = n,
-        o.dataset.background = me(i.backgroundStyle),
-        o.dataset.static = String(!i.motion),
-        Jt(t, r),
-        (a || s) && r.width > 0 && $(e, r)
-    },
-    Jt = (e, t) => {
-      e.classList.remove(
-        'metal',
-        'industrial',
-        'matrix',
-        'mode-light',
-        'mode-dark',
-        'no-bg',
-        'no-shadow',
-        'fullscreen'
-      ),
-        e.classList.add(t.theme, `mode-${t.mode}`),
-        e.classList.toggle('no-bg', t.noBackground),
-        e.classList.toggle('no-shadow', t.noShadow),
-        e.classList.toggle('fullscreen', t.isFullscreen)
+        ...start,
+        x: start.x + direction * (dx / length) * amount,
+        y: start.y + direction * (dy / length) * amount
+      };
+    };
+    return [
+      extend(outerStart, outerEnd, -1),
+      extend(outerEnd, outerStart, -1),
+      extend(innerEnd, innerStart, -1),
+      extend(innerStart, innerEnd, -1)
+    ];
+  };
+
+  // packages/icon/src/canvas-surface.ts
+  var drawSurface = (renderer, time, mesh) => {
+    const { ctx, height, width } = renderer;
+    const scale = Math.min(width, height) / VIEW;
+    const offsetX = (width - VIEW * scale) / 2;
+    const offsetY = (height - VIEW * scale) / 2;
+    ctx.save();
+    ctx.translate(offsetX, offsetY);
+    ctx.scale(scale, scale);
+    ctx.lineJoin = "round";
+    ctx.lineWidth = 0.9 / scale;
+    for (const quad of mesh) {
+      drawQuad(renderer, quad, time, scale);
+      if (renderer.theme === "linear") drawLinearRibbonBorder(renderer, quad, scale);
     }
-  var Kt = 1e3 / 24,
-    eo = (e, t = {}) => {
-      let o = he(t),
-        r = pe('(prefers-reduced-motion: reduce)'),
-        i = pe('(prefers-color-scheme: dark)'),
-        n = o.random ? R() : o.seed ?? R(),
-        a = Ee(n),
-        s = document.createElement('canvas'),
-        c = j(o, i)
-      s.className = o.canvasClassName,
-        s.dataset.theme = o.theme,
-        s.dataset.mode = c,
-        s.dataset.background = me(o.backgroundStyle),
-        s.dataset.static = String(!o.motion),
-        e.classList.add(o.className, 'mobiusLoader'),
-        fe(e, o.size),
-        e.appendChild(s)
-      let l = Ye(a, s, to(o, c))
-      Y(a, e, s, l, o, c)
-      let d = !1,
-        p = null,
-        h = -1 / 0,
-        u = b => {
-          let w = X(o, r), k = b * .001
-          l.isStatic = !w
-          let xe = l.isStatic ? 0 : 1, tt = l.isStatic ? a.staticMesh : a.buildMesh(k, xe, a.getMotionState(k, xe, l))
-          Qe(a, l, l.isStatic ? 0 : b, tt)
-        },
-        g = () => {
-          d || p != null || (p = Ze(v))
-        },
-        v = b => {
-          p = null, (b - h >= Kt || h < 0) && (h = b, u(b)), X(o, r) && g()
-        },
-        f = (b = performance.now()) => {
-          h = b, u(b), X(o, r) && g()
-        },
-        x = () => {
-          p != null && (Je(p), p = null)
-        },
-        C = () => {
-          d || f()
-        },
-        U = b => {
-          if (d) return
-          let w = o
-          o = he({ ...o, background: o.backgroundStyle, ...b }),
-            et(w, o, b),
-            fe(e, o.size),
-            Y(a, e, s, l, o, j(o, i)),
-            f()
-        },
-        ge = () => {
-          d || (ue(a, l), f())
-        },
-        A = () => {
-          d || (Y(a, e, s, l, o, j(o, i)), f())
-        }
-      window.addEventListener('resize', ge), r?.addEventListener?.('change', A), i?.addEventListener?.('change', A)
-      let Ke = () => {
-          d ||
-            (d = !0,
-              x(),
-              window.removeEventListener('resize', ge),
-              r?.removeEventListener?.('change', A),
-              i?.removeEventListener?.('change', A),
-              qe(l),
-              s.remove())
-        },
-        et = (b, w, k) => {
-          k.random === !0 && !b.random
-            ? (a.resetSeed(R()), de(a, l))
-            : w.seed && w.seed !== a.seed && w.random === !1 && (a.resetSeed(w.seed), de(a, l))
-        }
-      return o.autoStart && C(), {
-        get seed() {
-          return a.seed
-        },
-        canvas: s,
-        core: a,
-        dispose: Ke,
-        redraw: f,
-        renderer: l,
-        start: C,
-        stop: x,
-        update: U
-      }
+    ctx.restore();
+  };
+  var drawQuad = (renderer, quad, time, scale) => {
+    const points = renderer.theme === "linear" ? quad.outlinePoints ?? quad.points : quad.points;
+    const first = points[0];
+    if (!first) return;
+    const fill = themeFill(renderer.theme, renderer.mode, quad.depth, quad.u, quad.v, time * 1e-3);
+    renderer.ctx.fillStyle = fill;
+    renderer.ctx.strokeStyle = fill;
+    renderer.ctx.lineWidth = (renderer.theme === "linear" ? 0.4 : 0.9) / scale;
+    renderer.ctx.beginPath();
+    renderer.ctx.moveTo(first.x, first.y);
+    for (let i = 1; i < points.length; i += 1) {
+      const point = points[i];
+      if (point) renderer.ctx.lineTo(point.x, point.y);
+    }
+    renderer.ctx.closePath();
+    renderer.ctx.fill();
+    renderer.ctx.stroke();
+  };
+  var drawLinearRibbonBorder = (renderer, quad, scale) => {
+    const borderQuad = getLinearRibbonBorderQuad(quad);
+    if (borderQuad == null) return;
+    const { ctx } = renderer;
+    const [first, ...rest] = overlapLinearRibbonBorderQuad(borderQuad, 0.6 / scale);
+    if (first == null) return;
+    ctx.fillStyle = themeLinearBorder(renderer.mode);
+    ctx.beginPath();
+    ctx.moveTo(first.x, first.y);
+    for (const point of rest) ctx.lineTo(point.x, point.y);
+    ctx.closePath();
+    ctx.fill();
+  };
+
+  // packages/icon/brand-profile.json
+  var brand_profile_default = {
+    schemaVersion: 1,
+    defaultTheme: "linear",
+    defaultAppearance: "system",
+    defaultMode: "dark",
+    surfaceRecipes: {
+      content: "transparent",
+      application: "solid",
+      social: "composition"
     },
-    to = (e, t) => ({
-      backgroundStyle: e.backgroundStyle,
-      fullscreen: e.fullscreen,
-      mode: t,
-      shadow: e.shadow,
-      static: !e.motion,
-      theme: e.theme
-    })
-  return lt(oo)
-})()
+    relayProfiles: {
+      cloudflare: "industrial",
+      vercel: "matrix"
+    }
+  };
+
+  // packages/icon/src/brand-profile.ts
+  var ONEWORKS_BRAND_PROFILE = brand_profile_default;
+  var DEFAULT_BRAND_THEME = ONEWORKS_BRAND_PROFILE.defaultTheme;
+  var DEFAULT_BRAND_APPEARANCE = ONEWORKS_BRAND_PROFILE.defaultAppearance;
+  var DEFAULT_BRAND_MODE = ONEWORKS_BRAND_PROFILE.defaultMode;
+  var ONEWORKS_RELAY_BRAND_THEMES = ONEWORKS_BRAND_PROFILE.relayProfiles;
+
+  // packages/icon/src/presets.ts
+  var ONEWORKS_ICON_THEMES = [
+    "linear",
+    "industrial",
+    "metal",
+    "matrix"
+  ];
+  var ONEWORKS_ICON_MODES = ["light", "dark"];
+  var ONEWORKS_ICON_APPEARANCES = [
+    "system",
+    "light",
+    "dark"
+  ];
+  var ONEWORKS_THEME_COLOR_PRESETS = [
+    {
+      theme: "industrial",
+      primaryColor: "#E23F12"
+    },
+    {
+      theme: "metal",
+      primaryColor: "#3F7E8F"
+    },
+    {
+      theme: "matrix",
+      primaryColor: "#00B454"
+    },
+    {
+      theme: "linear",
+      primaryColor: "#7C8A96"
+    }
+  ];
+  var DEFAULT_ICON_THEME = DEFAULT_BRAND_THEME;
+  var DEFAULT_ICON_MODE = DEFAULT_BRAND_MODE;
+  var DEFAULT_ICON_APPEARANCE = DEFAULT_BRAND_APPEARANCE;
+  var DEFAULT_THEME_PRIMARY_COLOR = ONEWORKS_THEME_COLOR_PRESETS.find((preset) => preset.theme === DEFAULT_ICON_THEME)?.primaryColor ?? ONEWORKS_THEME_COLOR_PRESETS[0].primaryColor;
+  var isStringIn = (values, value) => values.includes(value);
+  var normalizeIconTheme = (value) => isStringIn(ONEWORKS_ICON_THEMES, value) ? value : DEFAULT_ICON_THEME;
+  var normalizeIconMode = (value) => isStringIn(ONEWORKS_ICON_MODES, value) ? value : DEFAULT_ICON_MODE;
+  var normalizeIconAppearance = (value) => isStringIn(ONEWORKS_ICON_APPEARANCES, value) ? value : DEFAULT_ICON_APPEARANCE;
+
+  // packages/icon/src/canvas.ts
+  var getCanvasContext = (canvas) => {
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Unable to create a 2D canvas context for the OneWorks icon renderer.");
+    return ctx;
+  };
+  var normalizeBackgroundStyle = (value) => {
+    if (value === "none" || value === "transparent") return "transparent";
+    if (value === "solid") return "solid";
+    return "textured";
+  };
+  var resolveBackgroundStyle = ({
+    backgroundStyle,
+    datasetBackground,
+    noBackground
+  }) => {
+    if (backgroundStyle != null) return backgroundStyle;
+    if (noBackground != null) return noBackground ? "transparent" : "textured";
+    return normalizeBackgroundStyle(datasetBackground);
+  };
+  var createCanvasRenderer = (core, canvas, options = {}) => {
+    const theme = options.theme ?? normalizeIconTheme(canvas.dataset.theme);
+    const mode = options.mode ?? normalizeIconMode(canvas.dataset.mode);
+    const baseStatic = options.static ?? canvas.dataset.static === "true";
+    const baseBackgroundStyle = resolveBackgroundStyle({
+      backgroundStyle: options.backgroundStyle,
+      datasetBackground: canvas.dataset.background,
+      noBackground: options.noBackground
+    });
+    const baseNoBackground = baseBackgroundStyle === "transparent";
+    return {
+      ...core.createMotionSource(),
+      backgroundStyle: baseBackgroundStyle,
+      baseBackgroundStyle,
+      baseNoBackground,
+      baseStatic,
+      canvas,
+      ctx: getCanvasContext(canvas),
+      dpr: 1,
+      heatCellSize: 14,
+      heatCells: [],
+      heatCols: 0,
+      heatRows: 0,
+      height: 0,
+      isFullscreen: options.fullscreen ?? false,
+      isStatic: baseStatic,
+      mode,
+      nextHeatUpdate: 0,
+      noBackground: baseNoBackground,
+      noShadow: options.shadow === false,
+      rainColumns: [],
+      rainFontSize: 13,
+      root: canvas.closest(".mobiusLoader"),
+      theme,
+      width: 0
+    };
+  };
+  var disposeRenderer = (renderer) => {
+    renderer.paperMetalShader?.mount.dispose();
+    renderer.paperMetalShader?.host.remove();
+    renderer.paperMetalShader = void 0;
+  };
+  var resetRendererRandom = (core, renderer) => {
+    core.resetMotionSource(renderer);
+    resetRendererAtmosphere(core, renderer);
+  };
+  var resetRendererAtmosphere = (core, renderer) => {
+    if (renderer.theme === "matrix" && renderer.width > 0) resetRain(core, renderer);
+    if (renderer.theme === "industrial" && renderer.width > 0) resetHeatmap(core, renderer);
+  };
+  var resizeRenderer = (core, renderer) => {
+    const rect = renderer.canvas.getBoundingClientRect();
+    const width = Math.max(1, Math.round(rect.width));
+    const height = Math.max(1, Math.round(rect.height));
+    const pixelArea = width * height;
+    const maxDpr = pixelArea > 62e4 ? 1 : pixelArea > 26e4 ? 1.5 : 2;
+    const dpr = Math.min(window.devicePixelRatio || 1, maxDpr);
+    if (width === renderer.width && height === renderer.height && dpr === renderer.dpr && renderer.canvas.width === Math.round(width * dpr)) {
+      return;
+    }
+    renderer.width = width;
+    renderer.height = height;
+    renderer.dpr = dpr;
+    renderer.canvas.width = Math.round(width * dpr);
+    renderer.canvas.height = Math.round(height * dpr);
+    renderer.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    resetRendererAtmosphere(core, renderer);
+  };
+  var drawRenderer = (core, renderer, time, mesh) => {
+    resizeRenderer(core, renderer);
+    drawRendererFrame(core, renderer, time, mesh);
+  };
+  var drawRendererFrame = (core, renderer, time, mesh) => {
+    const { ctx, height, width } = renderer;
+    ctx.setTransform(renderer.dpr, 0, 0, renderer.dpr, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+    drawCanvasBackground(renderer, time);
+    drawAtmosphere(core, renderer, time);
+    drawSurface(renderer, time, mesh);
+  };
+
+  // packages/icon/src/loader-utils.ts
+  var scheduleFrame = (callback) => window.requestAnimationFrame?.(callback) ?? window.setTimeout(() => callback(performance.now()), 16);
+  var cancelFrame = (handle) => {
+    if (window.cancelAnimationFrame) {
+      window.cancelAnimationFrame(handle);
+    } else {
+      window.clearTimeout(handle);
+    }
+  };
+  var normalizeBackgroundStyle2 = (value) => {
+    if (value === false || value === "transparent") return "transparent";
+    if (value === "solid") return "solid";
+    return "textured";
+  };
+  var toDatasetBackground = (backgroundStyle) => {
+    if (backgroundStyle === "transparent") return "none";
+    if (backgroundStyle === "solid") return "solid";
+    return "tile";
+  };
+  var normalizeLoaderOptions = (options) => {
+    const backgroundStyle = normalizeBackgroundStyle2(options.background);
+    return {
+      appearance: normalizeIconAppearance(options.appearance),
+      autoStart: options.autoStart ?? true,
+      background: backgroundStyle !== "transparent",
+      backgroundStyle,
+      canvasClassName: options.canvasClassName ?? "oneworks-icon-loader__canvas",
+      className: options.className ?? "oneworks-icon-loader",
+      fullscreen: options.fullscreen ?? false,
+      mode: options.mode == null ? void 0 : normalizeIconMode(options.mode),
+      motion: options.motion ?? true,
+      random: options.random ?? options.seed == null,
+      respectReducedMotion: options.respectReducedMotion ?? true,
+      seed: normalizeSeed(options.seed),
+      shadow: options.shadow ?? true,
+      size: options.size,
+      theme: normalizeIconTheme(options.theme)
+    };
+  };
+  var createMediaQuery = (query) => typeof window === "undefined" || !window.matchMedia ? null : window.matchMedia(query);
+  var resolveMode = (options, prefersDark) => {
+    if (options.mode) return options.mode;
+    if (options.appearance === "light" || options.appearance === "dark") return options.appearance;
+    return prefersDark?.matches ? "dark" : DEFAULT_ICON_MODE;
+  };
+  var shouldAnimate = (options, prefersReducedMotion) => options.motion && (!options.respectReducedMotion || !prefersReducedMotion?.matches);
+  var applySize = (host, size) => {
+    if (size == null) return;
+    const value = typeof size === "number" ? `${size}px` : size;
+    host.style.width = value;
+    host.style.height = value;
+  };
+  var syncRendererOptions = (core, host, canvas, renderer, options, mode) => {
+    const themeChanged = renderer.theme !== options.theme;
+    const modeChanged = renderer.mode !== mode;
+    renderer.theme = options.theme;
+    renderer.mode = mode;
+    renderer.isStatic = !options.motion;
+    renderer.backgroundStyle = options.backgroundStyle;
+    renderer.noBackground = options.backgroundStyle === "transparent";
+    renderer.noShadow = !options.shadow;
+    renderer.isFullscreen = options.fullscreen;
+    canvas.dataset.theme = options.theme;
+    canvas.dataset.mode = mode;
+    canvas.dataset.background = toDatasetBackground(options.backgroundStyle);
+    canvas.dataset.static = String(!options.motion);
+    syncClasses(host, renderer);
+    if ((themeChanged || modeChanged) && renderer.width > 0) {
+      resetRendererAtmosphere(core, renderer);
+    }
+  };
+  var syncClasses = (host, renderer) => {
+    host.classList.remove(
+      "metal",
+      "industrial",
+      "matrix",
+      "linear",
+      "mode-light",
+      "mode-dark",
+      "no-bg",
+      "no-shadow",
+      "fullscreen"
+    );
+    host.classList.add(renderer.theme, `mode-${renderer.mode}`);
+    host.classList.toggle("no-bg", renderer.noBackground);
+    host.classList.toggle("no-shadow", renderer.noShadow);
+    host.classList.toggle("fullscreen", renderer.isFullscreen);
+  };
+
+  // packages/icon/src/loader.ts
+  var TARGET_FRAME_MS = 1e3 / 24;
+  var mountOneWorksIconLoader = (host, initialOptions = {}) => {
+    let options = normalizeLoaderOptions(initialOptions);
+    const prefersReducedMotion = createMediaQuery("(prefers-reduced-motion: reduce)");
+    const prefersDark = createMediaQuery("(prefers-color-scheme: dark)");
+    const seed = options.random ? createSessionSeed() : options.seed ?? createSessionSeed();
+    const core = createMobiusCore(seed);
+    const canvas = document.createElement("canvas");
+    const mode = resolveMode(options, prefersDark);
+    canvas.className = options.canvasClassName;
+    canvas.dataset.theme = options.theme;
+    canvas.dataset.mode = mode;
+    canvas.dataset.background = toDatasetBackground(options.backgroundStyle);
+    canvas.dataset.static = String(!options.motion);
+    host.classList.add(options.className, "mobiusLoader");
+    applySize(host, options.size);
+    host.appendChild(canvas);
+    const renderer = createCanvasRenderer(core, canvas, createRendererOptions(options, mode));
+    syncRendererOptions(core, host, canvas, renderer, options, mode);
+    let disposed = false;
+    let frameHandle = null;
+    let lastDrawTime = -Infinity;
+    const drawAll = (time) => {
+      const animationEnabled = shouldAnimate(options, prefersReducedMotion);
+      const seconds = time * 1e-3;
+      renderer.isStatic = !animationEnabled;
+      const motionAmount = renderer.isStatic ? 0 : 1;
+      const mesh = renderer.isStatic ? core.staticMesh : core.buildMesh(seconds, motionAmount, core.getMotionState(seconds, motionAmount, renderer));
+      drawRenderer(core, renderer, renderer.isStatic ? 0 : time, mesh);
+    };
+    const requestFrame = () => {
+      if (disposed || frameHandle != null) return;
+      frameHandle = scheduleFrame(drawFrame);
+    };
+    const drawFrame = (time) => {
+      frameHandle = null;
+      if (time - lastDrawTime >= TARGET_FRAME_MS || lastDrawTime < 0) {
+        lastDrawTime = time;
+        drawAll(time);
+      }
+      if (shouldAnimate(options, prefersReducedMotion)) requestFrame();
+    };
+    const redraw = (time = performance.now()) => {
+      lastDrawTime = time;
+      drawAll(time);
+      if (shouldAnimate(options, prefersReducedMotion)) requestFrame();
+    };
+    const stop = () => {
+      if (frameHandle == null) return;
+      cancelFrame(frameHandle);
+      frameHandle = null;
+    };
+    const start = () => {
+      if (!disposed) redraw();
+    };
+    const update = (nextOptions) => {
+      if (disposed) return;
+      const previous = options;
+      options = normalizeLoaderOptions({ ...options, background: options.backgroundStyle, ...nextOptions });
+      resetSeedIfNeeded(previous, options, nextOptions);
+      applySize(host, options.size);
+      syncRendererOptions(core, host, canvas, renderer, options, resolveMode(options, prefersDark));
+      redraw();
+    };
+    const handleResize = () => {
+      if (disposed) return;
+      resizeRenderer(core, renderer);
+      redraw();
+    };
+    const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(handleResize);
+    resizeObserver?.observe(host);
+    const handleMediaChange = () => {
+      if (disposed) return;
+      syncRendererOptions(core, host, canvas, renderer, options, resolveMode(options, prefersDark));
+      redraw();
+    };
+    window.addEventListener("resize", handleResize);
+    prefersReducedMotion?.addEventListener?.("change", handleMediaChange);
+    prefersDark?.addEventListener?.("change", handleMediaChange);
+    const dispose = () => {
+      if (disposed) return;
+      disposed = true;
+      stop();
+      window.removeEventListener("resize", handleResize);
+      resizeObserver?.disconnect();
+      prefersReducedMotion?.removeEventListener?.("change", handleMediaChange);
+      prefersDark?.removeEventListener?.("change", handleMediaChange);
+      disposeRenderer(renderer);
+      canvas.remove();
+    };
+    const resetSeedIfNeeded = (previous, current, nextOptions) => {
+      if (nextOptions.random === true && !previous.random) {
+        core.resetSeed(createSessionSeed());
+        resetRendererRandom(core, renderer);
+      } else if (current.seed && current.seed !== core.seed && current.random === false) {
+        core.resetSeed(current.seed);
+        resetRendererRandom(core, renderer);
+      }
+    };
+    if (options.autoStart) start();
+    return {
+      get seed() {
+        return core.seed;
+      },
+      canvas,
+      core,
+      dispose,
+      redraw,
+      renderer,
+      start,
+      stop,
+      update
+    };
+  };
+  var createRendererOptions = (options, mode) => ({
+    backgroundStyle: options.backgroundStyle,
+    fullscreen: options.fullscreen,
+    mode,
+    shadow: options.shadow,
+    static: !options.motion,
+    theme: options.theme
+  });
+  return __toCommonJS(loader_exports);
+})();

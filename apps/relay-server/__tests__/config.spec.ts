@@ -66,7 +66,7 @@ describe('relay server config', () => {
 
     expect(args.email).toMatchObject({
       from: 'Relay <relay@example.com>',
-      logoUrl: 'https://oneworks.cloud/pwa/pwa-icon-192.png',
+      logoUrl: 'https://cf.oneworks.cloud/admin/assets/favicon-cloudflare-light.svg',
       provider: 'resend',
       resendApiKey: 'test-key',
       risk: {
@@ -86,13 +86,18 @@ describe('relay server config', () => {
   })
 
   it('parses transactional email logo URL overrides', () => {
-    expect(parseRelayServerArgs([], {}).email?.logoUrl).toBe('https://oneworks.cloud/pwa/pwa-icon-192.png')
+    expect(parseRelayServerArgs([], {}).email?.logoUrl).toBe(
+      'https://cf.oneworks.cloud/admin/assets/favicon-cloudflare-light.svg'
+    )
     expect(
       parseRelayServerArgs([], {
         ONEWORKS_RELAY_EMAIL_LOGO_URL: 'https://cdn.example.com/relay-logo.png'
       }).email?.logoUrl
     ).toBe('https://cdn.example.com/relay-logo.png')
     expect(parseRelayServerArgs([], { ONEWORKS_RELAY_EMAIL_LOGO_URL: 'off' }).email?.logoUrl).toBeUndefined()
+    expect(
+      parseRelayServerArgs([], { ONEWORKS_RELAY_PUBLIC_URL: 'https://vc.oneworks.cloud' }).email?.logoUrl
+    ).toBe('https://vc.oneworks.cloud/admin/assets/favicon-vercel-light.svg')
   })
 
   it('parses login method and passkey email verification environment settings', () => {
@@ -134,6 +139,11 @@ describe('relay server config', () => {
         ONEWORKS_RELAY_AVATAR_URL: 'file:///tmp/relay.png'
       }).avatarUrl
     ).toBeUndefined()
+    expect(
+      parseRelayServerArgs([], {
+        ONEWORKS_RELAY_PUBLIC_URL: 'https://vc.oneworks.cloud'
+      }).avatarUrl
+    ).toBe('https://vc.oneworks.cloud/admin/assets/favicon-vercel-light.svg')
   })
 
   it('keeps device transport ownership out of generic environment parsing', () => {

@@ -19,7 +19,7 @@ export const iconBackgrounds = [
   'textured'
 ] as const satisfies readonly DesktopIconBackground[]
 
-const defaultIconTheme = 'metal' satisfies DesktopIconTheme
+const defaultIconTheme = 'linear' satisfies DesktopIconTheme
 const defaultIconAppearance = 'system' satisfies DesktopIconAppearance
 const defaultIconBackground = 'solid' satisfies DesktopIconBackground
 const defaultIconSync = true satisfies DesktopIconSync
