@@ -7,6 +7,7 @@ import { program } from 'commander'
 import { getCliDescription, getCliVersion } from '#~/utils.js'
 
 import { normalizeCliArgs } from './cli-argv'
+import { createCliDiagnostics } from './cli-diagnostics'
 import { registerAccountsCommand } from './commands/accounts'
 import { registerAdapterCommand } from './commands/adapter'
 import { registerAgentCommand } from './commands/agent'
@@ -68,18 +69,29 @@ registerKillCommand(program)
 registerMemoryCommand(program)
 
 const main = async () => {
-  const pluginCliCommands = await loadPluginCliCommandContributions().catch(error => {
-    const message = error instanceof Error ? error.message : String(error)
-    if (process.env.__ONEWORKS_CLI_DEBUG__ === 'true') {
-      console.error(`[plugin-cli] Failed to load plugin CLI commands: ${message}`)
-    }
-    return []
-  })
-  registerPluginCliCommands(program, pluginCliCommands)
-  await program.parseAsync(
-    normalizeCliArgs(process.argv.slice(2), getPluginCliCommandRoots(pluginCliCommands)),
-    { from: 'user' }
-  )
+  const rawArguments = process.argv.slice(2)
+  const diagnostics = createCliDiagnostics(rawArguments)
+  try {
+    const pluginCliCommands = await loadPluginCliCommandContributions().catch(error => {
+      const message = error instanceof Error ? error.message : String(error)
+      if (process.env.__ONEWORKS_CLI_DEBUG__ === 'true') {
+        console.error(`[plugin-cli] Failed to load plugin CLI commands: ${message}`)
+      }
+      return []
+    })
+    diagnostics.stage('plugins.loaded')
+    registerPluginCliCommands(program, pluginCliCommands)
+    await program.parseAsync(
+      normalizeCliArgs(rawArguments, getPluginCliCommandRoots(pluginCliCommands)),
+      { from: 'user' }
+    )
+    diagnostics.succeed()
+  } catch (error) {
+    diagnostics.fail(error)
+    throw error
+  } finally {
+    await diagnostics.flush()
+  }
 }
 
 void main().catch(error => {

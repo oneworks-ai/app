@@ -71,6 +71,10 @@ export const fetchRelayAdminTeams = async (token: string) =>
   await requestJson<RelayAdminTeamsResponse>(token, '/api/admin/teams')
     .then(body => ({ ...body, teams: body.teams.map(normalizeTeam) }))
 
+export const fetchRelayUserTeams = async (token: string) =>
+  await requestJson<RelayAdminTeamsResponse>(token, '/api/relay/teams')
+    .then(body => ({ ...body, teams: body.teams.map(normalizeTeam) }))
+
 export const fetchRelayAdminMessages = async (token: string, options?: { view?: 'sent' }) => {
   const searchParams = new URLSearchParams()
   if (options?.view != null) searchParams.set('view', options.view)
@@ -97,6 +101,16 @@ export const updateRelayAdminTeam = async (token: string, team: RelayAdminTeam, 
   await requestJson<{ team: RelayAdminTeam }>(
     token,
     `/api/admin/teams/${encodeURIComponent(team.id)}`,
+    {
+      body: JSON.stringify(input),
+      method: 'PATCH'
+    }
+  ).then(body => ({ team: normalizeTeam(body.team) }))
+
+export const updateRelayUserTeam = async (token: string, teamId: string, input: UpdateTeamInput) =>
+  await requestJson<{ team: RelayAdminTeam }>(
+    token,
+    `/api/relay/teams/${encodeURIComponent(teamId)}`,
     {
       body: JSON.stringify(input),
       method: 'PATCH'

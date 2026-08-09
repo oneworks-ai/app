@@ -42,6 +42,7 @@ import { StatusBadge } from '../../shared/ui/StatusBadge'
 import type { AdminSessionAccount } from '../auth/adminSessionStorage'
 import { DeviceTable } from '../devices/DeviceTable'
 import type { RelayAdminTeam } from '../teams/teamTypes'
+import { ProfileModelUsage } from './ProfileModelUsage'
 import {
   changeRelayProfilePassword,
   createRelayProfileAccessToken,
@@ -127,7 +128,16 @@ const methodTone = (method: string) => {
   return 'default'
 }
 
-const profileTabKeys = ['account', 'documents', 'teams', 'devices', 'security', 'tokens', 'audit'] as const
+const profileTabKeys = [
+  'account',
+  'documents',
+  'diagnostics',
+  'teams',
+  'devices',
+  'security',
+  'tokens',
+  'audit'
+] as const
 type ProfileTabKey = typeof profileTabKeys[number]
 type DeviceStatusFilter = RelayAdminDeviceStatus | 'all'
 
@@ -1590,6 +1600,15 @@ export const ProfilePage = ({
                     items={personalDocumentDescriptionItems}
                     size='small'
                   />
+                </section>
+              )
+            },
+            {
+              key: 'diagnostics',
+              label: profileTabLabel('monitor_heart', '数据与诊断'),
+              children: (
+                <section className='relay-profile-tab-panel'>
+                  <ProfileModelUsage token={activeToken} />
                 </section>
               )
             },

@@ -25,8 +25,14 @@
   --subpage-tertiary-radius: var(--oneworks-group-radius, 8px);
   --subpage-tertiary-border: 1px solid var(--border-color, #d8dee4);
   --subpage-tertiary-bg: var(--bg-color, #fff);
-  --subpage-tertiary-hover-bg: var(--sidebar-hover-bg, #e5e5e5);
-  --subpage-tertiary-hover-border: var(--sidebar-hover-bg, #e5e5e5);
+  --subpage-tertiary-hover-bg: var(
+    --sidebar-hover-bg,
+    var(--tag-hover-bg, #e5e5e5)
+  );
+  --subpage-tertiary-hover-border: var(
+    --sidebar-hover-bg,
+    var(--border-color, #d8dee4)
+  );
 
   display: flex;
   flex-direction: column;

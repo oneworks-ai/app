@@ -34,6 +34,7 @@
 - [Token 用量统计](./usage/token-usage.md)
 - [PWA 与独立部署](./usage/pwa.md)
 - [Relay 托管、登录与身份模型](./usage/relay.md)
+- [诊断、遥测与支持包](./usage/diagnostics.md)
 - [Channel 会话绑定](./usage/channels.md)
 - [Channel 平台接入](./usage/channel-platforms.md)
 - [CLI 与示例](./usage/cli.md)

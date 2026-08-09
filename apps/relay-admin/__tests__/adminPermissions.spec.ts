@@ -13,8 +13,10 @@ describe('relay admin frontend permissions', () => {
     expect(canAccessRelayAdminSection('viewer', 'openapi')).toBe(true)
     expect(canAccessRelayAdminSection('member', 'devices')).toBe(true)
     expect(canAccessRelayAdminSection('member', 'openapi')).toBe(true)
-    expect(canAccessRelayAdminSection('member', 'teams')).toBe(false)
+    expect(canAccessRelayAdminSection('member', 'teams')).toBe(true)
     expect(canAccessRelayAdminSection('member', 'users')).toBe(false)
+    expect(canAccessRelayAdminSection('member', 'data-dashboard')).toBe(false)
+    expect(canAccessRelayAdminSection('admin', 'data-dashboard')).toBe(true)
     expect(canAccessRelayAdminSection('admin', 'teams')).toBe(true)
     expect(canAccessRelayAdminSection('admin', 'users')).toBe(true)
     expect(canAccessRelayAdminSection('owner', 'sso')).toBe(true)
@@ -26,7 +28,10 @@ describe('relay admin frontend permissions', () => {
       'fetch',
       vi.fn(async (path: string) => {
         requests.push(path)
-        return new Response(JSON.stringify({ devices: [] }), {
+        const body = path === '/api/relay/teams'
+          ? { policy: { teamsEnabled: true }, teams: [{ id: 'team-1', name: 'My team' }] }
+          : { devices: [] }
+        return new Response(JSON.stringify(body), {
           headers: { 'content-type': 'application/json' },
           status: 200
         })
@@ -38,9 +43,10 @@ describe('relay admin frontend permissions', () => {
       devices: [],
       invites: [],
       ssoProviders: [],
-      teams: [],
+      teamPolicy: { teamsEnabled: true },
+      teams: [{ accessGroups: [], id: 'team-1', name: 'My team', membership: null }],
       users: []
     })
-    expect(requests).toEqual(['/api/relay/devices'])
+    expect(requests).toEqual(['/api/relay/devices', '/api/relay/teams'])
   })
 })

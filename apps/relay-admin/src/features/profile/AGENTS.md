@@ -5,13 +5,15 @@
 ## 入口
 
 - `ProfilePage.tsx`：从左下角账号菜单进入的当前账号资料页。
-- `profileApi.ts`：当前账号安全设置与 OpenAPI 调用审计 API client，调用 `/api/profile/*`；系统访问令牌明文只在生成响应后短暂展示一次。
+- `profileApi.ts`：当前账号安全设置、模型用量偏好与 OpenAPI 调用审计 API client，调用 `/api/profile/*`；系统访问令牌明文只在生成响应后短暂展示一次。
+- `ProfileModelUsage.tsx`：落在“数据与诊断”控制面内，只负责“模型服务统计”这个类别的个人跨设备汇总和开关；团队策略与成员偏好必须进入具体团队详情，不在个人页平铺。
 
 ## 约定
 
 - 不在 profile 页暴露角色修改、禁用账号、重置他人密码等后台管理动作。
-- profile 页主体使用 tabs 组织当前账号能力：账号信息、团队、同步文档、设备管理、账号安全、令牌管理、调用审计。tab label 必须按 Admin 风格使用图标 + 文案；不要在 tab 内容里重复放解释型标题 / 描述 / 计数块，tab label 和实际表格 / 操作已经提供上下文。
-- profile 页 tabs 使用 `/admin/profile/:tab` 表达当前视图，tab key 固定为 `account`、`teams`、`documents`、`devices`、`security`、`tokens`、`audit`；可筛选列表的搜索、状态和时间范围应写入当前 tab 的 query，便于刷新、复制链接和前进后退恢复。
+- profile 页主体使用 tabs 组织当前账号能力：账号信息、同步文档、数据与诊断、团队、设备管理、账号安全、令牌管理、调用审计。“数据与诊断”是统一控制面，诊断、性能、功能使用和模型服务统计在内部按类别独立管理，不得用单一埋点类别命名整个 tab。tab label 必须按 Admin 风格使用图标 + 文案；不要在 tab 内容里重复放解释型标题 / 描述 / 计数块，tab label 和实际表格 / 操作已经提供上下文。
+- profile 页 tabs 使用 `/admin/profile/:tab` 表达当前视图，tab key 固定为 `account`、`documents`、`diagnostics`、`teams`、`devices`、`security`、`tokens`、`audit`；当前功能尚未发布，不保留开发期 `usage` 路径。可筛选列表的搜索、状态和时间范围应写入当前 tab 的 query，便于刷新、复制链接和前进后退恢复。
+- 个人模型用量上报默认开启且本人可关闭；个人页只控制用户自己的 Model Service。团队默认统一上报，团队策略和成员可选开关归具体团队详情。个人与团队空间必须分开统计，不做双写。
 - 令牌管理和调用审计都是标准数据列表：搜索在 toolbar 左侧，刷新 / 生成 / 展示列是列表级 action；状态、时间范围等过滤必须放到对应 table header 的图标浮层里。令牌表默认过滤 active；时间列可排序并支持时间范围，状态 / Preview / 操作列不排序。
 - 系统访问令牌、密码修改和 passkey 绑定都属于当前登录用户自己的安全操作；后端必须要求登录 session，不能让系统访问令牌继续生成或撤销其他访问令牌。
 - 调用审计展示当前用户通过系统访问令牌访问 OpenAPI 的记录，数据来自 `/api/profile/openapi-audit`；页面仍按统一列表标准放搜索、筛选、列配置和底部分页。

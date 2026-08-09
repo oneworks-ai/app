@@ -181,6 +181,51 @@ describe('config schema bundle', () => {
     }
   })
 
+  it('validates the app-side model usage reporting preference', async () => {
+    const parsed = await validateConfigSection('diagnostics', {
+      reporting: {
+        enabled: false,
+        updatedAt: '2026-08-09T09:00:00.000Z'
+      },
+      modelUsageReporting: {
+        enabled: false,
+        teams: {
+          'team-1': {
+            enabled: true,
+            mode: 'required',
+            name: 'Platform Team',
+            slug: 'platform-team',
+            teamId: 'team-1',
+            userCanControl: false
+          }
+        },
+        updatedAt: '2026-08-09T10:00:00.000Z'
+      }
+    })
+
+    expect(parsed.success).toBe(true)
+    if (parsed.success) {
+      expect(parsed.data.reporting).toEqual({
+        enabled: false,
+        updatedAt: '2026-08-09T09:00:00.000Z'
+      })
+      expect(parsed.data.modelUsageReporting).toEqual({
+        enabled: false,
+        teams: {
+          'team-1': {
+            enabled: true,
+            mode: 'required',
+            name: 'Platform Team',
+            slug: 'platform-team',
+            teamId: 'team-1',
+            userCanControl: false
+          }
+        },
+        updatedAt: '2026-08-09T10:00:00.000Z'
+      })
+    }
+  })
+
   it('validates server public endpoint and extra public path settings', async () => {
     const bundle = composeBaseConfigSchemaBundle()
     const server = (bundle.jsonSchema.properties as Record<string, unknown>).server as Record<string, unknown>

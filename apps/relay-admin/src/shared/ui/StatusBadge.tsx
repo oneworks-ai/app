@@ -1,7 +1,9 @@
 import './StatusBadge.css'
 
+export type StatusBadgeTone = 'danger' | 'muted' | 'success' | 'warning'
+
 export interface StatusBadgeProps {
-  tone: 'danger' | 'muted' | 'success' | 'warning'
+  tone: StatusBadgeTone
   children: string
 }
 

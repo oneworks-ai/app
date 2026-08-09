@@ -225,6 +225,7 @@ contextBridge.exposeInMainWorld('oneworksDesktop', {
   getCurrentWindowPresentationState: () => ipcRenderer.invoke('desktop:get-current-window-presentation-state'),
   listBrowserHistory: (input?: unknown) => ipcRenderer.invoke('desktop:list-browser-history', input),
   recordBrowserHistory: (input: unknown) => ipcRenderer.invoke('desktop:record-browser-history', input),
+  reportJavaScriptError: (report: unknown) => ipcRenderer.invoke('desktop:report-javascript-error', report),
   registerInteractionPanelWebviewScope: (input: unknown) =>
     ipcRenderer.invoke('desktop:register-interaction-panel-webview-scope', input),
   listBrowserDownloads: (input?: unknown) => ipcRenderer.invoke('desktop:list-browser-downloads', input),

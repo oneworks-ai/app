@@ -8,6 +8,7 @@ import { classifyRateLimitedRequest } from './rate-limit-classifier.js'
 export type RelayRateLimitCategory =
   | 'admin-mutation'
   | 'auth'
+  | 'diagnostics-ingest'
   | 'device-registration'
   | 'device-session-claim'
 
@@ -35,6 +36,7 @@ interface RelayRateLimitBucket {
 const DEFAULT_LIMITS: Record<RelayRateLimitCategory, { max: number; windowSeconds: number }> = {
   'admin-mutation': { max: 60, windowSeconds: 60 },
   auth: { max: 20, windowSeconds: 60 },
+  'diagnostics-ingest': { max: 240, windowSeconds: 60 },
   'device-registration': { max: 20, windowSeconds: 60 },
   'device-session-claim': { max: 120, windowSeconds: 60 }
 }
@@ -42,6 +44,7 @@ const DEFAULT_LIMITS: Record<RelayRateLimitCategory, { max: number; windowSecond
 const ENV_PREFIX: Record<RelayRateLimitCategory, string> = {
   'admin-mutation': 'ONEWORKS_RELAY_RATE_LIMIT_ADMIN_MUTATION',
   auth: 'ONEWORKS_RELAY_RATE_LIMIT_AUTH',
+  'diagnostics-ingest': 'ONEWORKS_RELAY_RATE_LIMIT_DIAGNOSTICS_INGEST',
   'device-registration': 'ONEWORKS_RELAY_RATE_LIMIT_DEVICE_REGISTER',
   'device-session-claim': 'ONEWORKS_RELAY_RATE_LIMIT_DEVICE_CLAIM'
 }

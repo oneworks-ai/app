@@ -31,7 +31,7 @@ export const useAdminRouteHeaderBreadcrumb = (
     return decodeRouteSegment(match?.[1])
   }, [normalizedPathname])
   const userDetailId = useMemo(() => {
-    const match = /^\/users\/([^/]+)$/.exec(normalizedPathname)
+    const match = /^\/users\/([^/]+)(?:\/(?:access|devices|diagnostics|teams))?$/.exec(normalizedPathname)
     return decodeRouteSegment(match?.[1])
   }, [normalizedPathname])
   const isAccessGroupCreateRoute = normalizedPathname === '/access-groups/new'
@@ -69,7 +69,7 @@ export const useAdminRouteHeaderBreadcrumb = (
   }, [normalizedPathname])
   const teamDetailId = useMemo(() => {
     if (isTeamSettingsRoute) return undefined
-    const match = /^\/teams\/([^/]+)(?:\/(?:audit|groups|members|profiles|secrets)(?:\/[^/]+)?)?$/.exec(
+    const match = /^\/teams\/([^/]+)(?:\/(?:audit|documents|groups|members|profiles|secrets|usage)(?:\/[^/]+)?)?$/.exec(
       normalizedPathname
     )
     return decodeRouteSegment(match?.[1])

@@ -18,6 +18,8 @@ Vercel 默认节奏按每台设备每天约 288 次调用、14,400 function-seco
 | Cloudflare | 将 Worker 和 Pages 一起回滚到该 Cloudflare slot 已验证的旧不可变 SHA。 | 用 Vercel / dev 凭据、域名或 capability 代替 Cloudflare 版本。 |
 | Vercel     | 将同一 Vercel project 回滚到该 slot 已验证的旧不可变 SHA。             | 删除 v2 capability 以回到 legacy WebSocket。                   |
 
+Relay 也可以接收 One Works 与 Codex 的标准 OTLP/HTTP JSON 诊断事件，并在 Admin 中提供全局问题分析和用户时间线。接入方式、隐私字段、保留策略与安全支持包见[诊断、遥测与支持包](./diagnostics.md)。诊断查询属于平台管理员 OpenAPI，诊断导出属于当前用户 OpenAPI。
+
 ## 私有化部署配置清单
 
 私有化部署前，先把下面这些配置定下来，再创建平台项目、OAuth client、邮箱域名或 passkey：
@@ -63,7 +65,7 @@ Relay Admin 提供两份隔离的机器可读 OpenAPI 文档：
 <relay-origin>/api/profile/openapi.json
 ```
 
-`/api/admin/openapi.json` 只描述平台管理员 API，包括用户、用户组、邀请码、SSO、团队策略、团队、团队成员组、消息、配置 profile / secret 和运维指标。`/api/profile/openapi.json` 只描述当前用户自己的个人 API，包括个人安全、当前用户团队自助流程、团队成员组、个人全局配置同步和托管配置读取 / 管理。也可以在 Admin 的 `/admin/openapi` 页面直接查看、下载或打开这两份 JSON。受保护接口使用 `Authorization: Bearer <token>`；token 可以是部署级 Admin token、登录 session token，或用户在 `/admin/profile` 个人页面生成的 API 访问令牌。密码、Passkey 和访问令牌管理仍必须使用正常登录 session；删除当前账号接口也允许当前用户 API 访问令牌调用。
+`/api/admin/openapi.json` 只描述平台管理员 API，包括用户、用户组、邀请码、SSO、团队策略、团队、Model Service 平台与团队用量、消息、配置 profile / secret 和运维指标。`/api/profile/openapi.json` 只描述当前用户自己的个人 API，包括个人安全、当前用户团队自助流程、团队成员组、团队 Model Service 用量、个人全局配置同步和托管配置读取 / 管理。平台用量接口是 `/api/admin/model-usage`；团队用量接口是 `/api/admin/teams/:teamId/model-usage` 和 `/api/relay/teams/:teamId/model-usage`，分别按平台管理员和团队成员组权限授权。也可以在 Admin 的 `/admin/openapi` 页面直接查看、下载或打开这两份 JSON。受保护接口使用 `Authorization: Bearer <token>`；token 可以是部署级 Admin token、登录 session token，或用户在 `/admin/profile` 个人页面生成的 API 访问令牌。密码、Passkey 和访问令牌管理仍必须使用正常登录 session；删除当前账号接口也允许当前用户 API 访问令牌调用。
 
 API 访问令牌属于当前登录用户，分为 `user`、`team`、`platform` 三种作用域：用户级令牌只操作当前账号数据；团队级令牌绑定一个团队，并按团队成员组授权；平台级令牌按平台用户组授权。`permissionGroupMode=all` 表示跟随账号当前拥有的全部用户组，`custom` 表示只授予指定用户组。服务端只保存令牌 hash 和 preview，完整令牌只在生成时显示一次；遗失后需要撤销并重新生成。API 访问令牌不能继续生成或撤销其他 API 访问令牌，这类安全操作必须使用正常登录 session。
 

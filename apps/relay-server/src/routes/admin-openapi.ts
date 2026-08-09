@@ -14,6 +14,11 @@ const nullableString = {
   oneOf: [{ type: 'string' }, { type: 'null' }]
 }
 
+const diagnosticCountMap = {
+  type: 'object',
+  additionalProperties: { type: 'integer', minimum: 0 }
+}
+
 const jsonResponse = (description: string, schema: JsonObject) => ({
   content: {
     'application/json': {
@@ -513,6 +518,352 @@ const buildAllComponents = (bearerFormat: string) => ({
         traces: { type: 'object', additionalProperties: true }
       }
     },
+    RelayDiagnosticEvent: {
+      type: 'object',
+      required: [
+        'id',
+        'userId',
+        'source',
+        'serviceName',
+        'eventName',
+        'category',
+        'severity',
+        'occurredAt',
+        'receivedAt'
+      ],
+      properties: {
+        architecture: nullableString,
+        id: { type: 'string' },
+        userId: { type: 'string' },
+        deviceId: nullableString,
+        environment: nullableString,
+        source: { type: 'string', enum: ['oneworks', 'codex', 'other'] },
+        serviceName: { type: 'string' },
+        serviceVersion: nullableString,
+        platform: nullableString,
+        releaseChannel: nullableString,
+        surface: nullableString,
+        eventName: { type: 'string' },
+        category: {
+          type: 'string',
+          enum: ['startup', 'error', 'command', 'agent', 'network', 'tool', 'auth', 'other']
+        },
+        severity: { type: 'string' },
+        outcome: nullableString,
+        success: { oneOf: [{ type: 'boolean' }, { type: 'null' }] },
+        durationMs: { oneOf: [{ type: 'number', minimum: 0 }, { type: 'null' }] },
+        errorCode: nullableString,
+        errorFingerprint: nullableString,
+        failureDomain: nullableString,
+        stage: nullableString,
+        operationName: nullableString,
+        operationId: nullableString,
+        sessionId: nullableString,
+        traceId: nullableString,
+        occurredAt: { type: 'string', format: 'date-time' },
+        receivedAt: { type: 'string', format: 'date-time' }
+      }
+    },
+    RelayDiagnosticSummary: {
+      type: 'object',
+      additionalProperties: false,
+      required: [
+        'total',
+        'affectedUsers',
+        'errorEvents',
+        'byOutcome',
+        'bySource',
+        'byFailure',
+        'byFingerprint',
+        'byVersion',
+        'byPlatform',
+        'startup'
+      ],
+      properties: {
+        affectedUsers: { type: 'integer', minimum: 0 },
+        byFailure: diagnosticCountMap,
+        byFingerprint: diagnosticCountMap,
+        byOutcome: diagnosticCountMap,
+        byPlatform: diagnosticCountMap,
+        bySource: diagnosticCountMap,
+        byVersion: diagnosticCountMap,
+        errorEvents: { type: 'integer', minimum: 0 },
+        startup: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['attempts'],
+          properties: {
+            attempts: { type: 'integer', minimum: 0 },
+            p50DurationMs: { oneOf: [{ type: 'number', minimum: 0 }, { type: 'null' }] },
+            p95DurationMs: { oneOf: [{ type: 'number', minimum: 0 }, { type: 'null' }] },
+            successRate: { oneOf: [{ type: 'number', minimum: 0, maximum: 1 }, { type: 'null' }] }
+          }
+        },
+        total: { type: 'integer', minimum: 0 }
+      }
+    },
+    RelayDiagnosticSeriesPoint: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['activeUsers', 'date', 'errorEvents', 'startupAttempts', 'totalEvents'],
+      properties: {
+        activeUsers: { type: 'integer', minimum: 0 },
+        date: { type: 'string', format: 'date' },
+        errorEvents: { type: 'integer', minimum: 0 },
+        startupAttempts: { type: 'integer', minimum: 0 },
+        startupSuccessRate: { oneOf: [{ type: 'number', minimum: 0, maximum: 1 }, { type: 'null' }] },
+        totalEvents: { type: 'integer', minimum: 0 }
+      }
+    },
+    RelayDiagnosticUser: {
+      type: 'object',
+      required: ['id', 'email', 'name'],
+      properties: {
+        id: { type: 'string' },
+        email: { type: 'string', format: 'email' },
+        name: { type: 'string' }
+      }
+    },
+    RelayModelUsageAggregate: {
+      type: 'object',
+      required: [
+        'activeUsers',
+        'cacheCreationInputTokens',
+        'cachedInputTokens',
+        'inputTokens',
+        'outputTokens',
+        'requests',
+        'totalTokens'
+      ],
+      properties: {
+        activeUsers: { type: 'integer', minimum: 0 },
+        cacheCreationInputTokens: { type: 'integer', minimum: 0 },
+        cacheRate: { type: 'number', minimum: 0 },
+        cachedInputTokens: { type: 'integer', minimum: 0 },
+        inputTokens: { type: 'integer', minimum: 0 },
+        outputTokens: { type: 'integer', minimum: 0 },
+        p95DurationMs: { type: 'number', minimum: 0 },
+        requests: { type: 'integer', minimum: 0 },
+        totalTokens: { type: 'integer', minimum: 0 }
+      }
+    },
+    RelayModelUsageEvent: {
+      type: 'object',
+      additionalProperties: false,
+      required: [
+        'id',
+        'userId',
+        'scope',
+        'source',
+        'serviceName',
+        'modelService',
+        'model',
+        'inputTokens',
+        'outputTokens',
+        'cachedInputTokens',
+        'cacheCreationInputTokens',
+        'requestCount',
+        'success',
+        'occurredAt',
+        'receivedAt'
+      ],
+      properties: {
+        adapter: { type: 'string' },
+        cacheCreationInputTokens: { type: 'integer', minimum: 0 },
+        cachedInputTokens: { type: 'integer', minimum: 0 },
+        deviceId: { type: 'string' },
+        durationMs: { type: 'number', minimum: 0 },
+        id: { type: 'string' },
+        inputTokens: { type: 'integer', minimum: 0 },
+        model: { type: 'string' },
+        modelService: { type: 'string' },
+        occurredAt: { type: 'string', format: 'date-time' },
+        outputTokens: { type: 'integer', minimum: 0 },
+        receivedAt: { type: 'string', format: 'date-time' },
+        requestCount: { type: 'integer', minimum: 1 },
+        serviceName: { type: 'string' },
+        serviceVersion: { type: 'string' },
+        sessionId: { type: 'string' },
+        scope: { type: 'string', enum: ['personal', 'team'] },
+        source: { type: 'string', enum: ['oneworks', 'codex', 'other'] },
+        success: { type: 'boolean' },
+        teamId: { type: 'string' },
+        userId: { type: 'string' }
+      }
+    },
+    RelayModelUsageSummary: {
+      allOf: [
+        { $ref: '#/components/schemas/RelayModelUsageAggregate' },
+        {
+          type: 'object',
+          required: ['byAdapter', 'byModel', 'byModelService', 'bySource', 'byTeam', 'byUser'],
+          properties: {
+            byAdapter: {
+              type: 'object',
+              additionalProperties: { $ref: '#/components/schemas/RelayModelUsageAggregate' }
+            },
+            byModel: {
+              type: 'object',
+              additionalProperties: { $ref: '#/components/schemas/RelayModelUsageAggregate' }
+            },
+            byModelService: {
+              type: 'object',
+              additionalProperties: { $ref: '#/components/schemas/RelayModelUsageAggregate' }
+            },
+            bySource: {
+              type: 'object',
+              additionalProperties: { $ref: '#/components/schemas/RelayModelUsageAggregate' }
+            },
+            byTeam: {
+              type: 'object',
+              additionalProperties: { $ref: '#/components/schemas/RelayModelUsageAggregate' }
+            },
+            byUser: {
+              type: 'object',
+              additionalProperties: { $ref: '#/components/schemas/RelayModelUsageAggregate' }
+            }
+          }
+        }
+      ]
+    },
+    RelayModelUsageResponse: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['events', 'retention', 'series', 'summary', 'teams', 'users'],
+      properties: {
+        events: {
+          type: 'array',
+          items: { $ref: '#/components/schemas/RelayModelUsageEvent' }
+        },
+        nextCursor: { type: 'string' },
+        retention: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['days', 'maxEvents'],
+          properties: {
+            days: { type: 'integer', minimum: 1 },
+            maxEvents: { type: 'integer', minimum: 1 }
+          }
+        },
+        series: {
+          type: 'array',
+          items: {
+            allOf: [
+              { $ref: '#/components/schemas/RelayModelUsageAggregate' },
+              {
+                type: 'object',
+                required: ['date'],
+                properties: { date: { type: 'string', format: 'date' } }
+              }
+            ]
+          }
+        },
+        summary: { $ref: '#/components/schemas/RelayModelUsageSummary' },
+        teams: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['id', 'name', 'slug'],
+            properties: {
+              id: { type: 'string' },
+              name: { type: 'string' },
+              slug: { type: 'string' }
+            }
+          }
+        },
+        users: {
+          type: 'array',
+          items: { $ref: '#/components/schemas/RelayDiagnosticUser' }
+        }
+      }
+    },
+    RelayProfileModelUsageSettings: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['personal', 'teams'],
+      properties: {
+        personal: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['defaultEnabled', 'enabled'],
+          properties: {
+            defaultEnabled: { type: 'boolean' },
+            enabled: { type: 'boolean' }
+          }
+        },
+        teams: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            required: [
+              'enabled',
+              'mode',
+              'name',
+              'preferenceEnabled',
+              'role',
+              'slug',
+              'teamId',
+              'userCanControl'
+            ],
+            properties: {
+              enabled: { type: 'boolean' },
+              mode: { type: 'string', enum: ['required', 'optional'] },
+              name: { type: 'string' },
+              preferenceEnabled: { type: 'boolean' },
+              role: { type: 'string', enum: ['owner', 'admin', 'editor', 'member', 'viewer'] },
+              slug: { type: 'string' },
+              teamId: { type: 'string' },
+              userCanControl: { type: 'boolean' }
+            }
+          }
+        }
+      }
+    },
+    RelayProfileDataReportingSettings: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['diagnosticReporting', 'modelUsageReporting'],
+      properties: {
+        diagnosticReporting: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['defaultEnabled', 'enabled'],
+          properties: {
+            defaultEnabled: { type: 'boolean' },
+            enabled: { type: 'boolean' },
+            updatedAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        modelUsageReporting: { $ref: '#/components/schemas/RelayProfileModelUsageSettings' }
+      }
+    },
+    RelayProfileDataReportingSettingsPatch: {
+      oneOf: [
+        {
+          type: 'object',
+          additionalProperties: false,
+          required: ['diagnosticEnabled'],
+          properties: { diagnosticEnabled: { type: 'boolean' } }
+        },
+        {
+          type: 'object',
+          additionalProperties: false,
+          required: ['personalEnabled'],
+          properties: { personalEnabled: { type: 'boolean' } }
+        },
+        {
+          type: 'object',
+          additionalProperties: false,
+          required: ['teamEnabled', 'teamId'],
+          properties: {
+            teamEnabled: { type: 'boolean' },
+            teamId: { type: 'string' }
+          }
+        }
+      ]
+    },
     RelayAccessGroup: {
       type: 'object',
       required: [
@@ -628,6 +979,7 @@ const buildAllComponents = (bearerFormat: string) => ({
         name: { type: 'string' },
         description: nullableString,
         avatarUrl: nullableString,
+        modelUsageReportingMode: { type: 'string', enum: ['required', 'optional'] },
         proxyModeEnabled: { type: 'boolean' },
         archivedAt: nullableString,
         createdAt: { type: 'string', format: 'date-time' },
@@ -641,6 +993,7 @@ const buildAllComponents = (bearerFormat: string) => ({
         avatarUrl: { type: 'string' },
         description: { type: 'string' },
         name: { type: 'string' },
+        modelUsageReportingMode: { type: 'string', enum: ['required', 'optional'] },
         proxyModeEnabled: { type: 'boolean' },
         slug: { type: 'string' }
       }
@@ -1121,6 +1474,64 @@ const buildCommonPaths = () => ({
 })
 
 const buildProfilePaths = () => ({
+  '/api/profile/model-usage': {
+    get: bearerOperation({
+      operationId: 'listRelayProfileModelUsage',
+      summary: 'Analyze the current user personal Model Service usage across devices',
+      description: 'Returns content-free personal request and token aggregates. Team-scoped events are excluded.',
+      tags: ['Profile model usage'],
+      parameters: [
+        ...['modelService', 'model', 'adapter', 'source', 'from', 'to', 'q', 'cursor'].map(name => ({
+          in: 'query',
+          name,
+          required: false,
+          schema: { type: 'string' }
+        })),
+        {
+          in: 'query',
+          name: 'limit',
+          required: false,
+          schema: { type: 'integer', minimum: 1, maximum: 200 }
+        }
+      ],
+      responses: {
+        200: jsonResponse('Personal Model Service usage event page and aggregate summary.', {
+          $ref: '#/components/schemas/RelayModelUsageResponse'
+        }),
+        401: errorResponse('A Relay login session or API access token is required.')
+      }
+    })
+  },
+  '/api/profile/data-reporting-settings': {
+    get: bearerOperation({
+      operationId: 'getRelayProfileDataReportingSettings',
+      summary: 'Read effective personal data reporting settings',
+      tags: ['Profile data reporting'],
+      responses: {
+        200: jsonResponse('Current effective reporting settings.', {
+          $ref: '#/components/schemas/RelayProfileDataReportingSettings'
+        }),
+        401: errorResponse('A Relay login session or API access token is required.')
+      }
+    }),
+    patch: bearerOperation({
+      operationId: 'updateRelayProfileDataReportingSettings',
+      summary: 'Update a personal reporting preference',
+      description:
+        'System diagnostics and personal Model Service statistics default to enabled. A team member preference can only be changed when that team policy is optional.',
+      tags: ['Profile data reporting'],
+      requestBody: requestBody({ $ref: '#/components/schemas/RelayProfileDataReportingSettingsPatch' }),
+      responses: {
+        200: jsonResponse('Updated effective reporting settings.', {
+          $ref: '#/components/schemas/RelayProfileDataReportingSettings'
+        }),
+        400: errorResponse('The reporting setting is invalid.'),
+        401: errorResponse('A Relay login session or API access token is required.'),
+        403: errorResponse('The team reporting policy is controlled by the team.'),
+        404: errorResponse('The team membership was not found.')
+      }
+    })
+  },
   '/api/profile/security': {
     get: bearerOperation({
       operationId: 'getRelayProfileSecurity',
@@ -1505,6 +1916,37 @@ const teamManagementPaths = (prefix: '/api/admin' | '/api/relay', scope: 'Admin'
                 items: { $ref: '#/components/schemas/RelayAuditEvent' }
               }
             }
+          }),
+          ...adminAuthResponses,
+          404: errorResponse('The team was not found.')
+        }
+      })
+    },
+    [`${prefix}/teams/{teamId}/model-usage`]: {
+      get: bearerOperation({
+        operationId: `listRelay${scope}TeamModelUsage`,
+        summary: 'Analyze privacy-safe Model Service usage for a Relay team',
+        description:
+          'Returns content-free request and token aggregates from OneWorks and standard Codex OTLP events. This is operational usage telemetry, not a provider billing statement.',
+        tags: [teamTag],
+        parameters: [
+          teamId,
+          ...['userId', 'modelService', 'model', 'adapter', 'source', 'from', 'to', 'q', 'cursor'].map(name => ({
+            in: 'query',
+            name,
+            required: false,
+            schema: { type: 'string' }
+          })),
+          {
+            in: 'query',
+            name: 'limit',
+            required: false,
+            schema: { type: 'integer', minimum: 1, maximum: 200 }
+          }
+        ],
+        responses: {
+          200: jsonResponse('Team Model Service usage event page and aggregate summary.', {
+            $ref: '#/components/schemas/RelayModelUsageResponse'
           }),
           ...adminAuthResponses,
           404: errorResponse('The team was not found.')
@@ -2102,6 +2544,27 @@ const teamManagementPaths = (prefix: '/api/admin' | '/api/relay', scope: 'Admin'
 }
 
 const buildRelayUserPaths = () => ({
+  '/api/relay/diagnostics/v1/logs': {
+    post: bearerOperation({
+      operationId: 'exportRelayDiagnosticLogs',
+      summary: 'Export privacy-safe diagnostic logs using OTLP/HTTP JSON',
+      description:
+        'Accepts the standard OTLP ExportLogsServiceRequest JSON shape. Relay discards raw log bodies and retains only a bounded diagnostic fact model.',
+      tags: ['User diagnostics'],
+      requestBody: requestBody({
+        type: 'object',
+        additionalProperties: true,
+        description: 'OTLP/HTTP JSON ExportLogsServiceRequest.'
+      }),
+      responses: {
+        200: jsonResponse('OTLP logs accepted.', { type: 'object', additionalProperties: true }),
+        400: errorResponse('The OTLP JSON does not contain log records.'),
+        401: errorResponse('An authenticated user or paired device is required.'),
+        413: errorResponse('The request exceeds the configured body or record limit.'),
+        415: errorResponse('Only OTLP/HTTP JSON is supported.')
+      }
+    })
+  },
   '/api/relay/config/global': {
     get: bearerOperation({
       operationId: 'getRelayPersonalGlobalConfig',
@@ -2170,6 +2633,86 @@ const buildRelayUserPaths = () => ({
 
 const buildAdminPaths = () => ({
   ...teamManagementPaths('/api/admin', 'Admin'),
+  '/api/admin/model-usage': {
+    get: bearerOperation({
+      operationId: 'listRelayAdminModelUsage',
+      summary: 'Analyze privacy-safe Model Service usage across Relay teams',
+      description:
+        'Returns cross-team content-free request and token aggregates from OneWorks and standard Codex OTLP events. This is operational usage telemetry, not a provider billing statement.',
+      tags: ['Admin model usage'],
+      parameters: [
+        ...[
+          'teamId',
+          'userId',
+          'modelService',
+          'model',
+          'adapter',
+          'source',
+          'from',
+          'to',
+          'q',
+          'cursor'
+        ].map(name => ({
+          in: 'query',
+          name,
+          required: false,
+          schema: { type: 'string' }
+        })),
+        { in: 'query', name: 'limit', required: false, schema: { type: 'integer', minimum: 1, maximum: 200 } }
+      ],
+      responses: {
+        200: jsonResponse('Platform Model Service usage event page and aggregate summary.', {
+          $ref: '#/components/schemas/RelayModelUsageResponse'
+        }),
+        ...adminAuthResponses
+      }
+    })
+  },
+  '/api/admin/diagnostics': {
+    get: bearerOperation({
+      operationId: 'listRelayAdminDiagnostics',
+      summary: 'Analyze privacy-safe user diagnostic timelines',
+      tags: ['Admin diagnostics'],
+      parameters: [
+        ...[
+          'userId',
+          'source',
+          'outcome',
+          'category',
+          'serviceVersion',
+          'platform',
+          'from',
+          'to',
+          'q',
+          'cursor'
+        ].map(name => ({
+          in: 'query',
+          name,
+          required: false,
+          schema: { type: 'string' }
+        })),
+        { in: 'query', name: 'limit', required: false, schema: { type: 'integer', minimum: 1, maximum: 200 } }
+      ],
+      responses: {
+        200: jsonResponse('Diagnostic event page and aggregate summary.', {
+          type: 'object',
+          required: ['events', 'summary', 'users', 'retention', 'series'],
+          properties: {
+            events: { type: 'array', items: { $ref: '#/components/schemas/RelayDiagnosticEvent' } },
+            series: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/RelayDiagnosticSeriesPoint' }
+            },
+            summary: { $ref: '#/components/schemas/RelayDiagnosticSummary' },
+            users: { type: 'array', items: { $ref: '#/components/schemas/RelayDiagnosticUser' } },
+            nextCursor: nullableString,
+            retention: { type: 'object', additionalProperties: true }
+          }
+        }),
+        ...adminAuthResponses
+      }
+    })
+  },
   '/api/admin/access-groups': {
     get: bearerOperation({
       operationId: 'listRelayAdminAccessGroups',
@@ -2644,6 +3187,14 @@ const adminSchemas = [
   'RelayConfigSecret',
   'RelayConfigSecretInput',
   'RelayConfigSecretRotate',
+  'RelayDiagnosticEvent',
+  'RelayDiagnosticSeriesPoint',
+  'RelayDiagnosticSummary',
+  'RelayDiagnosticUser',
+  'RelayModelUsageAggregate',
+  'RelayModelUsageEvent',
+  'RelayModelUsageResponse',
+  'RelayModelUsageSummary',
   'RelayEncryptedPayload',
   'RelayMessage',
   'RelayMessageInput',
@@ -2682,6 +3233,7 @@ const profileSchemas = [
   'RelayConfigSecretInput',
   'RelayConfigSecretRotate',
   'RelayConfigSnapshot',
+  'RelayDiagnosticUser',
   'RelayEncryptedPayload',
   'RelayPersonalConfigSnapshot',
   'RelayPersonalConfigSnapshotResponse',
@@ -2696,9 +3248,16 @@ const profileSchemas = [
   'RelayProfileAccessTokenCreateResponse',
   'RelayProfileAccessTokenUpdate',
   'RelayOpenApiAuditEvent',
+  'RelayModelUsageAggregate',
+  'RelayModelUsageEvent',
+  'RelayModelUsageResponse',
+  'RelayModelUsageSummary',
   'RelayProfilePasswordChange',
   'RelayProfilePasskeyOptions',
   'RelayProfilePasskeyVerify',
+  'RelayProfileModelUsageSettings',
+  'RelayProfileDataReportingSettings',
+  'RelayProfileDataReportingSettingsPatch',
   'RelayProfileSecuritySummary',
   'RelayTeam',
   'RelayTeamDocumentSnapshot',
@@ -2730,6 +3289,8 @@ export const buildRelayAdminOpenApiDocument = (baseUrl: string) =>
     tags: [
       ...commonTags,
       { name: 'Admin access groups', description: 'Platform user group capability and quota management.' },
+      { name: 'Admin diagnostics', description: 'Privacy-safe user issue and performance analysis.' },
+      { name: 'Admin model usage', description: 'Privacy-safe cross-team Model Service usage analysis.' },
       { name: 'Admin team policy', description: 'Tenant team and managed configuration policy.' },
       { name: 'Admin teams', description: 'Platform team, member, invitation, and audit management.' },
       { name: 'Admin configuration', description: 'Platform managed configuration profiles and secrets.' },
@@ -2761,7 +3322,10 @@ export const buildRelayProfileOpenApiDocument = (baseUrl: string) =>
     schemaNames: profileSchemas,
     tags: [
       ...commonTags,
+      { name: 'User diagnostics', description: 'Standard OTLP/HTTP JSON diagnostic export.' },
       { name: 'Profile security', description: 'Current-account security and API access token operations.' },
+      { name: 'Profile data reporting', description: 'Current-account diagnostic and usage reporting preferences.' },
+      { name: 'Profile model usage', description: 'Personal consent and cross-device Model Service usage.' },
       { name: 'User team policy', description: 'Current-user team and managed configuration policy.' },
       { name: 'User teams', description: 'Current-user team, member, invitation, and audit operations.' },
       {

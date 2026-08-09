@@ -1,6 +1,8 @@
 /* eslint-disable max-lines -- relay scoped API tests cover account, login, config refresh, and team config sharing routes. */
 import { Buffer } from 'node:buffer'
 import { createHash } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 
 import { ONEWORKS_AUTH_STORE_VERSION, writeOneWorksAuthStore } from '@oneworks/utils/auth-store'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -441,6 +443,114 @@ describe('relay plugin scoped API', () => {
       expect.objectContaining({ name: 'Codex UI Test Token' })
     ])
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('proxies model usage preferences through Relay and applies the returned policy locally', async () => {
+    const patches: Record<string, unknown>[] = []
+    const settings = {
+      personal: { defaultEnabled: true, enabled: false, updatedAt: '2026-08-09T12:30:00.000Z' },
+      teams: [
+        {
+          enabled: true,
+          mode: 'required',
+          name: 'Required Team',
+          role: 'member',
+          slug: 'required-team',
+          teamId: 'team-required',
+          updatedAt: '2026-08-09T12:30:00.000Z',
+          userCanControl: false
+        },
+        {
+          enabled: false,
+          mode: 'optional',
+          name: 'Optional Team',
+          role: 'member',
+          slug: 'optional-team',
+          teamId: 'team-optional',
+          updatedAt: '2026-08-09T12:30:00.000Z',
+          userCanControl: true
+        }
+      ]
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(String(input))
+        const json = (body: unknown) =>
+          new Response(JSON.stringify(body), {
+            headers: { 'content-type': 'application/json' },
+            status: 200
+          })
+        if (url.pathname === '/api/auth/me') {
+          return json({
+            session: { expiresAt: '2999-01-01T00:00:00.000Z' },
+            user: {
+              email: 'owner@local.test',
+              id: 'owner',
+              name: 'Owner Local',
+              provider: 'local',
+              role: 'owner'
+            }
+          })
+        }
+        if (url.pathname === '/api/profile/data-reporting-settings') {
+          if (init?.method === 'PATCH') patches.push(JSON.parse(String(init.body)))
+          return json({
+            diagnosticReporting: { defaultEnabled: true, enabled: true },
+            modelUsageReporting: settings
+          })
+        }
+        if (url.pathname === '/api/relay/devices') return json({ devices: [] })
+        if (url.pathname === '/api/profile/openapi-audit') return json({ events: [] })
+        if (url.pathname === '/api/admin/messages') return json({ invitations: [], messages: [] })
+        if (url.pathname === '/api/relay/teams') return json({ teams: [] })
+        return json({})
+      })
+    )
+    const { apis, homeDir } = await createPluginHarness({
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false
+    })
+    await writeOneWorksAuthStore({
+      accounts: [{
+        accountKey: 'local:owner',
+        email: 'owner@local.test',
+        enabled: true,
+        loginId: 'owner',
+        name: 'Owner Local',
+        role: 'owner',
+        serverId: 'local',
+        serverUrl: 'http://127.0.0.1:48890',
+        sessionExpiresAt: '2999-01-01T00:00:00.000Z',
+        sessionToken: 'user-session-token',
+        userId: 'owner'
+      }],
+      servers: {
+        local: { id: 'local', name: 'Local Relay', url: 'http://127.0.0.1:48890' }
+      },
+      version: ONEWORKS_AUTH_STORE_VERSION
+    })
+
+    const response = await apis.get('relay')?.handler?.({
+      body: Buffer.from(JSON.stringify({ accountKey: 'local:owner', personalEnabled: false })),
+      method: 'POST',
+      path: 'profile/data-reporting'
+    }) as {
+      body?: { dataReporting?: { modelUsageReporting?: typeof settings } }
+      status?: number
+    }
+    const localConfig = JSON.parse(await readFile(join(homeDir, '.oneworks', '.oo.config.json'), 'utf8'))
+
+    expect(response.status).toBe(200)
+    expect(patches).toEqual([{ personalEnabled: false }])
+    expect(response.body?.dataReporting?.modelUsageReporting).toMatchObject(settings)
+    expect(localConfig.diagnostics.modelUsageReporting).toMatchObject({
+      enabled: false,
+      teams: {
+        'team-optional': { enabled: false, userCanControl: true },
+        'team-required': { enabled: true, userCanControl: false }
+      }
+    })
   })
 
   it('previews relay team config share drafts without echoing plaintext secrets', async () => {

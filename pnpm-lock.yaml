@@ -170,6 +170,9 @@ importers:
       '@oneworks/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@oneworks/diagnostics':
+        specifier: workspace:*
+        version: link:../../packages/diagnostics
       '@oneworks/hooks':
         specifier: workspace:*
         version: link:../../packages/hooks
@@ -225,6 +228,9 @@ importers:
       '@oneworks/cursor':
         specifier: workspace:*
         version: link:../../packages/cursor
+      '@oneworks/diagnostics':
+        specifier: workspace:*
+        version: link:../../packages/diagnostics
       '@oneworks/icon':
         specifier: workspace:*
         version: link:../../packages/icon
@@ -415,6 +421,9 @@ importers:
       '@oneworks/cursor':
         specifier: workspace:*
         version: link:../../packages/cursor
+      '@oneworks/diagnostics':
+        specifier: workspace:*
+        version: link:../../packages/diagnostics
       '@oneworks/icon':
         specifier: workspace:*
         version: link:../../packages/icon
@@ -604,6 +613,9 @@ importers:
       '@oneworks/definition-loader':
         specifier: workspace:*
         version: link:../../packages/definition-loader
+      '@oneworks/diagnostics':
+        specifier: workspace:*
+        version: link:../../packages/diagnostics
       '@oneworks/fs-authority-native':
         specifier: workspace:*
         version: link:../../packages/fs-authority-native
@@ -1076,6 +1088,8 @@ importers:
       front-matter:
         specifier: ^4.0.2
         version: 4.0.2
+
+  packages/diagnostics: {}
 
   packages/fs-authority-native: {}
 

@@ -19,11 +19,13 @@ import { TeamDetailTabActionsContext } from './TeamDetailTabActions'
 import type { TeamDetailTabKey } from './TeamDetailTabActions'
 import { TeamDocuments } from './TeamDocuments'
 import { TeamMembers } from './TeamMembers'
+import { TeamModelUsage } from './TeamModelUsage'
 import type { RelayAdminTeam, RelayAdminTeamMemberRole, RelayAdminTeamPolicy } from './teamTypes'
 
 export interface TeamDetailPageProps {
   disabled: boolean
   loading: boolean
+  platformAdmin: boolean
   policy?: RelayAdminTeamPolicy
   teams: RelayAdminTeam[]
   token: string
@@ -31,7 +33,7 @@ export interface TeamDetailPageProps {
 
 const isTeamDetailTabKey = (value: string): value is TeamDetailTabKey =>
   value === 'members' || value === 'groups' || value === 'profiles' || value === 'secrets' ||
-  value === 'documents' || value === 'audit'
+  value === 'documents' || value === 'audit' || value === 'usage'
 
 const formatTimestamp = (value: string | null | undefined) => {
   if (value == null || value === '') return '-'
@@ -76,6 +78,7 @@ const teamTabLabel = (iconName: AdminIconName, label: string) => (
 export const TeamDetailPage = ({
   disabled,
   loading,
+  platformAdmin,
   policy,
   teams,
   token
@@ -86,7 +89,9 @@ export const TeamDetailPage = ({
   const [teamAccessGroups, setTeamAccessGroups] = useState(team?.accessGroups ?? [])
   const configDisabled = disabled || policy?.teamsEnabled === false
   const normalizedTabKey = tabKey ?? ''
-  const activeTabKey: TeamDetailTabKey = isTeamDetailTabKey(normalizedTabKey) ? normalizedTabKey : 'members'
+  const activeTabKey: TeamDetailTabKey = platformAdmin && isTeamDetailTabKey(normalizedTabKey)
+    ? normalizedTabKey
+    : 'usage'
   const [tabActions, setTabActions] = useState<Partial<Record<TeamDetailTabKey, ReactNode>>>({})
   const registerTabActions = useCallback((key: TeamDetailTabKey, actions: ReactNode | undefined) => {
     setTabActions(current => current[key] === actions ? current : { ...current, [key]: actions })
@@ -106,8 +111,13 @@ export const TeamDetailPage = ({
 
   useEffect(() => {
     if (teamId == null || tabKey == null || isTeamDetailTabKey(tabKey)) return
-    void navigate(`/teams/${encodeURIComponent(teamId)}/members`, { replace: true })
-  }, [navigate, tabKey, teamId])
+    void navigate(`/teams/${encodeURIComponent(teamId)}/${platformAdmin ? 'members' : 'usage'}`, { replace: true })
+  }, [navigate, platformAdmin, tabKey, teamId])
+
+  useEffect(() => {
+    if (platformAdmin || teamId == null || tabKey === 'usage') return
+    void navigate(`/teams/${encodeURIComponent(teamId)}/usage`, { replace: true })
+  }, [navigate, platformAdmin, tabKey, teamId])
 
   if (teamWithAccessGroups == null) {
     return (
@@ -182,6 +192,18 @@ export const TeamDetailPage = ({
             activeKey={activeTabKey}
             className='relay-team-panel__tabs'
             items={[
+              {
+                children: (
+                  <TeamModelUsage
+                    apiScope={platformAdmin ? 'admin' : 'relay'}
+                    disabled={configDisabled}
+                    team={teamWithAccessGroups}
+                    token={token}
+                  />
+                ),
+                key: 'usage',
+                label: teamTabLabel('hub', '模型用量')
+              },
               {
                 children: (
                   <TeamMembers
@@ -260,7 +282,7 @@ export const TeamDetailPage = ({
                 key: 'audit',
                 label: teamTabLabel('fact_check', '操作审计')
               }
-            ]}
+            ].filter(item => platformAdmin || item.key === 'usage')}
             tabBarExtraContent={tabActions[activeTabKey] == null
               ? null
               : <div className='relay-team-panel__tab-actions'>{tabActions[activeTabKey]}</div>}

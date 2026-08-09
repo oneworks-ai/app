@@ -29,6 +29,11 @@ Environment variables:
 - `ONEWORKS_RELAY_RATE_LIMIT_DEVICE_REGISTER_MAX` / `ONEWORKS_RELAY_RATE_LIMIT_DEVICE_REGISTER_WINDOW_SECONDS`: device registration and invite redeem limit, default `20` per `60` seconds
 - `ONEWORKS_RELAY_RATE_LIMIT_ADMIN_MUTATION_MAX` / `ONEWORKS_RELAY_RATE_LIMIT_ADMIN_MUTATION_WINDOW_SECONDS`: admin mutating API limit, default `60` per `60` seconds
 - `ONEWORKS_RELAY_RATE_LIMIT_DEVICE_CLAIM_MAX` / `ONEWORKS_RELAY_RATE_LIMIT_DEVICE_CLAIM_WINDOW_SECONDS`: device session-job claim limit, default `120` per `60` seconds
+- `ONEWORKS_RELAY_DIAGNOSTICS_RETENTION_DAYS`: privacy-safe diagnostic fact retention, default `30` days
+- `ONEWORKS_RELAY_DIAGNOSTICS_MAX_EVENTS`: maximum retained diagnostic events, default `10000`
+- `ONEWORKS_RELAY_MODEL_USAGE_RETENTION_DAYS`: content-free personal and team Model Service usage retention, default `90` days
+- `ONEWORKS_RELAY_MODEL_USAGE_MAX_EVENTS`: maximum retained team Model Service usage events, default `100000`
+- `ONEWORKS_RELAY_RATE_LIMIT_DIAGNOSTICS_INGEST_MAX` / `ONEWORKS_RELAY_RATE_LIMIT_DIAGNOSTICS_INGEST_WINDOW_SECONDS`: OTLP diagnostic ingestion limit, default `240` batches per `60` seconds
 - `ONEWORKS_RELAY_EMAIL_PROVIDER`: transactional email provider, `disabled` by default; set `resend` to enable Resend-backed verification code delivery
 - `ONEWORKS_RELAY_EMAIL_FROM`: sender address for transactional email, required when `ONEWORKS_RELAY_EMAIL_PROVIDER=resend`
 - `ONEWORKS_RELAY_EMAIL_LOGO_URL`: HTTPS PNG/JPEG logo used in transactional HTML emails. Defaults to `https://oneworks.cloud/pwa/pwa-icon-192.png`; set `off` or `none` to disable the image.
@@ -62,6 +67,42 @@ Environment variables:
 Relay has three intentionally independent device-control modes. A Node deployment exposes a native WebSocket control endpoint. Cloudflare Durable Objects advertise the compatible v1 WebSocket capability when both device API and control WebSocket URLs are configured. Vercel advertises v2 HTTP long-poll only, with a 50-second request limit and a 250-second idle retry; it never tries to upgrade or fall back to WebSocket. The default Vercel cadence is approximately 288 invocations, 14,400 function-seconds, and 3,168 storage reads per device per day (at most 11 reads per poll); those figures are a protocol budget, not a platform quota guarantee, and grow linearly with device count.
 
 Rollback stays within the platform target: redeploy a verified immutable package / SHA for Node, roll Worker and Pages together to a verified immutable SHA for Cloudflare, or roll the same Vercel project to its verified immutable SHA. Do not remove a capability to force a legacy transport.
+
+## Diagnostics and OTLP/HTTP JSON
+
+Relay accepts standard OTLP/HTTP JSON log exports at:
+
+```text
+POST /api/relay/diagnostics/v1/logs
+Authorization: Bearer <user-access-token-or-device-token>
+X-OneWorks-Team-Id: <team-id-or-slug>
+Content-Type: application/json
+```
+
+The endpoint requires an authenticated user or paired device, accepts at most 1 MiB / 512 log records per request, and intentionally does not support OTLP protobuf or gRPC. Relay ignores client-supplied user identity and persists only a narrow allowlist: source service/version, event and operation names, stage, outcome, duration, stable error code/domain, severity, platform surface, and pseudonymous correlation ids. Raw log bodies, prompts, configuration, paths, credentials, stacks, and tool input/output are discarded before storage.
+
+Platform owners/admins can query `/api/admin/diagnostics` or use the Admin `/diagnostics` page and `/users/:userId/diagnostics` timeline. The admin query is documented by `/api/admin/openapi.json`; ingestion is documented by `/api/profile/openapi.json`.
+
+The same authenticated export can carry content-free Model Service usage. Without `X-OneWorks-Team-Id`, usage goes to the authenticated user's personal scope; an explicit header or team-scoped token binds usage to that team after membership validation. Personal system diagnostics and Model Service reporting default on and are user-controlled through `/api/profile/data-reporting-settings`. Team reporting defaults to `required`; platform administrators may change each team independently to `optional`, after which each member defaults on but may opt out for that team. Personal usage is available at `/api/profile/model-usage`; platform and team views remain available through `/api/admin/model-usage` and `/api/{admin|relay}/teams/<teamId>/model-usage`. Relay maps One Works `oneworks.model.usage` events and Codex `codex.sse_event` / `response.completed` counters while discarding raw log bodies, prompts, responses, tool I/O, paths, and configuration. These values are operational telemetry, not provider billing records.
+
+For One Works Desktop/CLI:
+
+```bash
+export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT="https://relay.example.com/api/relay/diagnostics/v1/logs"
+export OTEL_EXPORTER_OTLP_LOGS_PROTOCOL="http/json"
+export OTEL_EXPORTER_OTLP_LOGS_HEADERS="authorization=Bearer%20<user-access-token>,x-oneworks-team-id=<team-id>"
+```
+
+For Codex, place this in user-level `~/.codex/config.toml` and keep prompt logging disabled:
+
+```toml
+[otel]
+environment = "prod"
+log_user_prompt = false
+exporter = { otlp-http = { endpoint = "https://relay.example.com/api/relay/diagnostics/v1/logs", protocol = "json", headers = { "authorization" = "Bearer owrt_REPLACE_WITH_ACCESS_TOKEN", "x-oneworks-team-id" = "TEAM_ID" } } }
+```
+
+Replace the example token directly; Codex currently sends OTLP header values literally rather than expanding `${ENV_VAR}`.
 
 ## Managed service and private deployment
 
@@ -178,6 +219,8 @@ Personal user APIs are documented separately from platform admin APIs:
 Profile security endpoints:
 
 - `GET /api/profile/security`: list current-account security state, including system access token metadata, password state, passkey count, and disabled placeholders for features that are not yet available.
+- `GET /api/profile/model-usage`: read content-free personal Model Service usage across the current account's devices.
+- `GET|PATCH /api/profile/data-reporting-settings`: read or update system diagnostics, personal Model Service statistics, and optional team-member reporting preferences.
 - `POST /api/profile/access-tokens`: create a system access token for the current account. The full token is returned only in this response.
 - `DELETE /api/profile/access-tokens/<id>`: revoke one current-account system access token.
 - `DELETE /api/profile/account`: delete the current account and invalidate related sessions, API access tokens, passkeys, devices, team memberships, user-targeted assignments, and profile audit entries. A normal login session or current-user API access token can call this endpoint.

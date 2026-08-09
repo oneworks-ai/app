@@ -2,7 +2,7 @@
 
 import './TeamPanel.css'
 
-import { Alert, Avatar, Button, Empty, Form, Input, Switch, Upload } from 'antd'
+import { Alert, Avatar, Button, Empty, Form, Input, Select, Switch, Upload } from 'antd'
 import type { UploadProps } from 'antd'
 import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
@@ -22,6 +22,7 @@ export interface TeamDetailSettingsPageProps {
 interface TeamSettingsFormValues {
   avatarUrl?: string
   description?: string
+  modelUsageReportingMode: 'optional' | 'required'
   name: string
   proxyModeEnabled: boolean
   slug?: string
@@ -35,6 +36,7 @@ const avatarDataUrlPattern = /^data:image\/(?:png|jpeg|webp|gif);base64,/iu
 const valuesFromTeam = (team: RelayAdminTeam | undefined): TeamSettingsFormValues => ({
   avatarUrl: team?.avatarUrl ?? '',
   description: team?.description ?? '',
+  modelUsageReportingMode: team?.modelUsageReportingMode ?? 'required',
   name: team?.name ?? '',
   proxyModeEnabled: team?.proxyModeEnabled ?? false,
   slug: team?.slug ?? ''
@@ -42,6 +44,7 @@ const valuesFromTeam = (team: RelayAdminTeam | undefined): TeamSettingsFormValue
 const teamSettingsFormFieldNames: Array<keyof TeamSettingsFormValues> = [
   'avatarUrl',
   'description',
+  'modelUsageReportingMode',
   'name',
   'proxyModeEnabled',
   'slug'
@@ -96,6 +99,7 @@ export const TeamDetailSettingsPage = ({
   const [form] = Form.useForm<TeamSettingsFormValues>()
   const [avatarUploadError, setAvatarUploadError] = useState<string | undefined>()
   const watchedAvatarUrl = Form.useWatch('avatarUrl', form)
+  const watchedModelUsageReportingMode = Form.useWatch('modelUsageReportingMode', form)
   const watchedName = Form.useWatch('name', form)
   const avatarPreview = cleanText(watchedAvatarUrl) === '' ? undefined : cleanText(watchedAvatarUrl)
   const resetFormToTeam = useCallback(() => {
@@ -141,6 +145,7 @@ export const TeamDetailSettingsPage = ({
       avatarUrl: cleanText(values.avatarUrl),
       description: cleanText(values.description),
       name,
+      modelUsageReportingMode: values.modelUsageReportingMode,
       proxyModeEnabled: values.proxyModeEnabled,
       slug: cleanText(values.slug)
     })
@@ -240,6 +245,24 @@ export const TeamDetailSettingsPage = ({
             </label>
             <Form.Item className='relay-team-panel__settings-control-item' name='description'>
               <Input.TextArea autoSize={{ minRows: 4 }} disabled={disabled} id='description' />
+            </Form.Item>
+          </div>
+          <div className='relay-team-panel__settings-row'>
+            <span className='relay-team-panel__settings-label'>模型用量上报</span>
+            <Form.Item
+              className='relay-team-panel__settings-control-item'
+              extra={watchedModelUsageReportingMode === 'required'
+                ? '默认由团队统一开启，成员不可关闭。'
+                : '成员可以选择关闭；切换为可选后，成员默认仍会开启。'}
+              name='modelUsageReportingMode'
+            >
+              <Select
+                disabled={disabled}
+                options={[
+                  { label: '团队统一上报（成员不可关闭）', value: 'required' },
+                  { label: '成员可选上报（默认开启）', value: 'optional' }
+                ]}
+              />
             </Form.Item>
           </div>
           <div className='relay-team-panel__settings-row'>

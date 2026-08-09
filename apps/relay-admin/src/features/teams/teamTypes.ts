@@ -3,6 +3,7 @@ import type { RelayAdminAccessGroup, RelayAdminEffectiveAccess } from '../../sha
 
 export type RelayAdminTeamMemberRole = 'admin' | 'editor' | 'member' | 'owner' | 'viewer'
 export type RelayAdminTeamInvitationStatus = 'accepted' | 'declined' | 'pending' | 'revoked'
+export type RelayAdminTeamModelUsageReportingMode = 'optional' | 'required'
 export type RelayAdminConfigAssignmentMode = 'default' | 'override'
 export type RelayAdminConfigProfileStatus = 'disabled' | 'draft' | 'published'
 export type RelayAdminMessageAudienceScope = 'all' | 'team' | 'users'
@@ -51,8 +52,12 @@ export interface RelayAdminTeam {
     configEnabled: boolean
     defaultForPublishing: boolean
     groupIds: string[]
+    modelUsageReportingEffective?: boolean
+    modelUsageReportingEnabled?: boolean
+    modelUsageReportingUserCanControl?: boolean
     role: RelayAdminTeamMemberRole
   } | null
+  modelUsageReportingMode?: RelayAdminTeamModelUsageReportingMode
   name: string
   proxyModeEnabled: boolean
   slug: string
@@ -254,6 +259,7 @@ export interface UpdateTeamInput {
   avatarUrl?: string
   description?: string
   name?: string
+  modelUsageReportingMode?: RelayAdminTeamModelUsageReportingMode
   proxyModeEnabled?: boolean
   slug?: string
 }

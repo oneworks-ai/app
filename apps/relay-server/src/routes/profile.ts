@@ -20,9 +20,16 @@ import {
 import { PasswordValidationError, hashPassword, verifyPassword } from '../auth/passwords.js'
 import { resolveAuthContext } from '../auth/permissions.js'
 import { readRequestBody, sendJson } from '../http.js'
+import {
+  personalModelUsageReportingEnabled,
+  teamMemberCanControlModelUsageReporting,
+  teamMemberModelUsageReportingEnabled,
+  teamModelUsageReportingMode
+} from '../model-usage/preferences.js'
 import type { RelayStoreRepository } from '../storage/repository.js'
 import type { RelayAccessTokenScope, RelayOpenApiAuditEvent, RelayServerArgs, RelayStore, RelayUser } from '../types.js'
 import { now } from '../utils.js'
+import { handleProfileModelUsage } from './team-model-usage.js'
 
 const cleanString = (value: unknown) => typeof value === 'string' ? value.trim() : ''
 
@@ -208,6 +215,120 @@ const sendSecuritySummary = (
   }, args.allowOrigin)
 }
 
+const serializeDataReportingSettings = (store: RelayStore, user: RelayUser) => ({
+  diagnosticReporting: {
+    defaultEnabled: true,
+    enabled: user.diagnosticReportingEnabled !== false,
+    updatedAt: user.diagnosticReportingUpdatedAt ?? user.updatedAt
+  },
+  modelUsageReporting: {
+    personal: {
+      defaultEnabled: true,
+      enabled: personalModelUsageReportingEnabled(user),
+      updatedAt: user.modelUsageReportingUpdatedAt ?? user.updatedAt
+    },
+    teams: store.teamMembers
+      .filter(member => member.userId === user.id)
+      .flatMap(member => {
+        const team = store.teams.find(item => item.id === member.teamId && item.archivedAt == null)
+        if (team == null) return []
+        return [{
+          enabled: teamMemberModelUsageReportingEnabled(team, member),
+          mode: teamModelUsageReportingMode(team),
+          name: team.name,
+          preferenceEnabled: member.modelUsageReportingEnabled !== false,
+          role: member.role,
+          slug: team.slug,
+          teamId: team.id,
+          updatedAt: member.updatedAt ?? team.updatedAt ?? team.createdAt,
+          userCanControl: teamMemberCanControlModelUsageReporting(team)
+        }]
+      })
+  }
+})
+
+const sendDataReportingSettings = (
+  req: IncomingMessage,
+  res: ServerResponse,
+  args: RelayServerArgs,
+  store: RelayStore
+) => {
+  const profile = requireProfileUser(req, res, args, store)
+  if (profile == null) return
+  sendJson(res, 200, serializeDataReportingSettings(store, profile.user), args.allowOrigin)
+}
+
+const updateDataReportingSettings = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+  args: RelayServerArgs,
+  store: RelayStore,
+  storeRepository: RelayStoreRepository
+) => {
+  const profile = requireProfileUser(req, res, args, store)
+  if (profile == null) return
+  const body = await readRequestBody(req)
+  let changed = false
+  const hasDiagnosticSetting = Object.prototype.hasOwnProperty.call(body, 'diagnosticEnabled')
+  const hasPersonalSetting = Object.prototype.hasOwnProperty.call(body, 'personalEnabled')
+  const teamId = cleanString(body.teamId)
+  const hasTeamSetting = teamId !== '' || Object.prototype.hasOwnProperty.call(body, 'teamEnabled')
+
+  if ([hasDiagnosticSetting, hasPersonalSetting, hasTeamSetting].filter(Boolean).length !== 1) {
+    sendJson(res, 400, { error: 'Update exactly one data reporting preference per request.' }, args.allowOrigin)
+    return
+  }
+
+  if (hasDiagnosticSetting) {
+    if (typeof body.diagnosticEnabled !== 'boolean') {
+      sendJson(res, 400, { error: 'System diagnostic reporting state must be a boolean.' }, args.allowOrigin)
+      return
+    }
+    profile.user.diagnosticReportingEnabled = body.diagnosticEnabled
+    profile.user.diagnosticReportingUpdatedAt = now()
+    profile.user.updatedAt = profile.user.diagnosticReportingUpdatedAt
+    changed = true
+  }
+
+  if (hasPersonalSetting) {
+    if (typeof body.personalEnabled !== 'boolean') {
+      sendJson(res, 400, { error: 'Personal model usage reporting state must be a boolean.' }, args.allowOrigin)
+      return
+    }
+    profile.user.modelUsageReportingEnabled = body.personalEnabled
+    profile.user.modelUsageReportingUpdatedAt = now()
+    profile.user.updatedAt = profile.user.modelUsageReportingUpdatedAt
+    changed = true
+  }
+
+  if (hasTeamSetting) {
+    if (teamId === '' || typeof body.teamEnabled !== 'boolean') {
+      sendJson(res, 400, { error: 'Team id and boolean reporting state are required.' }, args.allowOrigin)
+      return
+    }
+    const team = store.teams.find(item => item.id === teamId && item.archivedAt == null)
+    const member = store.teamMembers.find(item => item.teamId === teamId && item.userId === profile.user.id)
+    if (team == null || member == null) {
+      sendJson(res, 404, { error: 'Team membership not found.' }, args.allowOrigin)
+      return
+    }
+    if (!teamMemberCanControlModelUsageReporting(team)) {
+      sendJson(res, 403, { error: 'Team reporting is required and controlled by the team.' }, args.allowOrigin)
+      return
+    }
+    member.modelUsageReportingEnabled = body.teamEnabled
+    member.updatedAt = now()
+    changed = true
+  }
+
+  if (!changed) {
+    sendJson(res, 400, { error: 'No data reporting setting provided.' }, args.allowOrigin)
+    return
+  }
+  await storeRepository.write(store)
+  sendJson(res, 200, serializeDataReportingSettings(store, profile.user), args.allowOrigin)
+}
+
 const deleteUserFromMessageAudience = (message: NonNullable<RelayStore['messages']>[number], userId: string) => {
   if (message.audience.scope !== 'users') return message
   const userIds = (message.audience.userIds ?? []).filter(item => item !== userId)
@@ -242,6 +363,7 @@ const deleteProfileAccount = async (
   store.devices = store.devices.filter(device => device.userId !== userId)
   store.deviceSessions = store.deviceSessions.filter(session => session.userId !== userId)
   store.forwardingJobs = store.forwardingJobs.filter(job => job.userId !== userId)
+  store.modelUsageEvents = (store.modelUsageEvents ?? []).filter(event => event.userId !== userId)
   store.teamMembers = store.teamMembers.filter(member => member.userId !== userId)
   store.teamInvitations = (store.teamInvitations ?? []).filter(invitation =>
     invitation.userId !== userId && invitation.createdByUserId !== userId
@@ -484,6 +606,19 @@ export const handleProfileRoute = async (
 
   if (req.method === 'GET' && url.pathname === '/api/profile/security') {
     sendSecuritySummary(req, res, args, store)
+    return true
+  }
+  if (req.method === 'GET' && url.pathname === '/api/profile/model-usage') {
+    const profile = requireProfileUser(req, res, args, store)
+    if (profile != null) handleProfileModelUsage(res, args, store, profile.user.id, url)
+    return true
+  }
+  if (req.method === 'GET' && url.pathname === '/api/profile/data-reporting-settings') {
+    sendDataReportingSettings(req, res, args, store)
+    return true
+  }
+  if (req.method === 'PATCH' && url.pathname === '/api/profile/data-reporting-settings') {
+    await updateDataReportingSettings(req, res, args, store, storeRepository)
     return true
   }
   if (req.method === 'GET' && url.pathname === '/api/profile/openapi-audit') {

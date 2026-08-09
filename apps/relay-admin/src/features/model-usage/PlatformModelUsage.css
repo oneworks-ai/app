@@ -1,0 +1,22 @@
+.relay-platform-usage {
+  padding: var(--relay-admin-padding)
+    var(--route-container-header-padding-inline);
+}
+
+.relay-platform-usage--embedded {
+  padding: 0 0 var(--relay-admin-padding);
+}
+
+.relay-platform-usage .relay-team-usage__toolbar-main {
+  min-width: 0;
+}
+
+.relay-platform-usage .relay-team-usage__toolbar-main .ant-select {
+  min-width: 118px;
+}
+
+@media (max-width: 1320px) {
+  .relay-platform-usage .relay-team-usage__toolbar-main {
+    flex-wrap: wrap;
+  }
+}

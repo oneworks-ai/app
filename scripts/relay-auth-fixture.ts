@@ -65,7 +65,7 @@ const createAccount = (input: {
   role: input.role,
   serverId: input.server.id,
   serverUrl: input.server.url,
-  sessionExpiresAt: '2026-07-21T15:17:59.211Z',
+  sessionExpiresAt: '2999-01-01T00:00:00.000Z',
   sessionToken: `relay-fixture:${input.server.id}:${input.userId}`,
   userId: input.userId,
   ...(input.avatarUrl == null ? {} : { avatarUrl: input.avatarUrl })

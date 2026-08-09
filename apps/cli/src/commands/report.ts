@@ -1,12 +1,14 @@
 import { spawn } from 'node:child_process'
 import fs from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
 
-import { mergeProcessEnvWithProjectEnv, resolveProjectHomePath, resolveProjectOoBaseDirName } from '@oneworks/utils'
+import { writeDiagnosticSupportBundle } from '@oneworks/diagnostics/node'
+import { mergeProcessEnvWithProjectEnv, resolveProjectHomePath } from '@oneworks/utils'
 import type { Command } from 'commander'
 
-import { collectReportTargets } from './report-targets'
+import { getCliVersion } from '../utils'
 
 export { collectReportTargets } from './report-targets'
 
@@ -197,30 +199,43 @@ export interface RunReportCommandOptions {
 export async function runReportCommand(options: RunReportCommandOptions = {}) {
   const cwd = options.cwd ?? process.cwd()
   const env = mergeProcessEnvWithProjectEnv(undefined, { workspaceFolder: cwd })
-  const sources = await collectReportTargets(cwd, env)
-
-  if (sources.length === 0) {
-    console.log(
-      `No reportable files found under ${resolveProjectOoBaseDirName(env)} assets or ${
-        resolveProjectHomePath(cwd, env)
-      } runtime data.`
-    )
-    return null
+  const archivePath = resolveReportArchivePath(cwd, options.filename)
+  const stagingDirectory = await fs.mkdtemp(path.join(tmpdir(), 'oneworks-support-'))
+  const bundlePath = path.join(stagingDirectory, 'support-bundle.json')
+  const diagnosticSources = [
+    {
+      directory: resolveProjectHomePath(cwd, env, 'diagnostics', 'cli'),
+      label: 'cli'
+    },
+    {
+      directory: resolveProjectHomePath(cwd, env, 'diagnostics', 'server-javascript'),
+      label: 'client-javascript'
+    }
+  ]
+  try {
+    await writeDiagnosticSupportBundle({
+      architecture: process.arch,
+      destinationPath: bundlePath,
+      platform: process.platform,
+      productName: 'One Works CLI',
+      productVersion: getCliVersion(),
+      sources: diagnosticSources
+    })
+    assertArchivePath(archivePath, [stagingDirectory])
+    await createTarArchive(cwd, env, archivePath, [bundlePath])
+  } finally {
+    await fs.rm(stagingDirectory, { force: true, recursive: true })
   }
 
-  const archivePath = resolveReportArchivePath(cwd, options.filename)
-  assertArchivePath(archivePath, sources)
-  await createTarArchive(cwd, env, archivePath, sources)
+  console.log(`Privacy-safe diagnostic support bundle created: ${archivePath}`)
 
-  console.log(`Report archive created: ${archivePath}`)
-
-  return { archivePath, sources }
+  return { archivePath, sources: diagnosticSources.map(source => source.directory) }
 }
 
 export function registerReportCommand(program: Command) {
   program
     .command('report [filename]')
-    .description('Package project-home logs, caches and selected mock data into a compressed archive')
+    .description('Create a privacy-safe diagnostic support bundle without prompts, credentials or raw logs')
     .action(async (filename?: string) => {
       try {
         await runReportCommand({ filename })

@@ -726,6 +726,7 @@ interface Window {
     getWindowFullscreenState?: () => Promise<boolean>
     getWorkspaceConnection?: () => Promise<DesktopWorkspaceConnection | undefined>
     getWorkspaceSelectorState?: () => Promise<DesktopWorkspaceSelectorState>
+    reportJavaScriptError?: (report: import('@oneworks/diagnostics').JavaScriptErrorReport) => Promise<void>
     hideDesktopContextCaptureOverlay?: () => Promise<void>
     hideLauncherWindow?: () => Promise<void>
     importAuthenticatorBackup?: () => Promise<DesktopAuthenticatorImportResult>

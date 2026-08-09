@@ -2,6 +2,7 @@ import type { RelayAdminRole } from './adminTypes'
 
 export type RelayAdminSectionAccessId =
   | 'access-groups'
+  | 'data-dashboard'
   | 'devices'
   | 'invites'
   | 'message-pushes'
@@ -38,5 +39,6 @@ export const canAccessRelayAdminSection = (
 ) => (
   sectionId === 'devices' ||
   sectionId === 'openapi' ||
+  sectionId === 'teams' ||
   (sectionId !== 'message-pushes' && canManageRelayAdmin(role))
 )

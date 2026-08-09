@@ -344,6 +344,18 @@ ${adminListSurfaceCss}
 .oneworks-relay__profile-fact { min-width: 0; display: grid; gap: 2px; }
 .oneworks-relay__profile-fact-label { color: var(--placeholder-color, var(--ant-color-text-secondary, #57606a)); font: 650 10px/1.2 ui-sans-serif, system-ui, sans-serif; text-transform: uppercase; }
 .oneworks-relay__profile-fact-value { min-width: 0; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); font: 600 12px/1.35 ui-sans-serif, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oneworks-relay__usage-settings { min-width: 0; display: grid; gap: var(--subpage-tertiary-gap, 8px); margin-block-start: var(--subpage-section-gap, 10px); border-block-start: 1px solid var(--sub-border-color, var(--ant-color-border-secondary, #d8dee4)); }
+.oneworks-relay__profile-tab-panel > .oneworks-relay__usage-settings,
+.oneworks-relay__team-detail-panel > .oneworks-relay__usage-settings { margin-block-start: 0; border-block-start: 0; }
+.oneworks-relay__usage-settings > .oneworks-relay__team-section-head { padding-block-start: var(--subpage-section-gap, 10px); }
+.oneworks-relay__usage-error { min-width: 0; margin: 0; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--danger-color, #dc2626) 28%, transparent); border-radius: var(--subpage-tertiary-radius, 8px); background: color-mix(in srgb, var(--danger-color, #dc2626) 6%, transparent); color: var(--danger-color, #dc2626); font: 600 11px/1.4 ui-sans-serif, system-ui, sans-serif; }
+.oneworks-relay__usage-setting-list { min-width: 0; display: grid; gap: var(--subpage-tertiary-gap, 8px); }
+.oneworks-relay__usage-setting-list .config-view__field-control { flex-basis: min(280px, 40%); }
+.oneworks-relay__usage-setting-value { color: var(--sub-text-color, var(--ant-color-text, #1f2328)); font: 700 12px/1.35 ui-sans-serif, system-ui, sans-serif; white-space: nowrap; }
+.oneworks-relay__usage-managed-state { min-width: max-content; display: inline-flex; align-items: center; gap: 4px; color: var(--sub-text-color, var(--ant-color-text, #1f2328)); }
+.oneworks-relay__usage-managed-state .oneworks-relay__icon { color: var(--success-color, #16a34a); }
+.oneworks-relay__usage-managed-state strong { font: 700 12px/1.35 ui-sans-serif, system-ui, sans-serif; white-space: nowrap; }
+.oneworks-relay__usage-control-unavailable { color: var(--danger-color, #dc2626); font: 600 11px/1.4 ui-sans-serif, system-ui, sans-serif; }
 .oneworks-relay__personal-docs { position: relative; min-width: 0; min-height: min(520px, calc(100dvh - 240px)); display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 0; overflow: hidden; padding-block-start: 0; background: transparent; }
 .oneworks-relay__personal-docs-list-pane { min-width: 0; min-height: 0; height: 100%; display: flex; align-self: stretch; background: transparent; }
 .oneworks-relay__personal-docs-list { min-width: 0; min-height: 92px; height: 100%; display: flex; }

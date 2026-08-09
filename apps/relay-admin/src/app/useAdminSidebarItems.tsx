@@ -8,6 +8,7 @@ import { AdminNavIcon } from './AdminNavIcon'
 
 export type AdminSectionId =
   | 'access-groups'
+  | 'data-dashboard'
   | 'devices'
   | 'users'
   | 'invites'
@@ -31,6 +32,12 @@ export const adminSections = [
     id: 'devices',
     label: '设备',
     path: '/devices'
+  },
+  {
+    icon: <AdminNavIcon name='data-dashboard' />,
+    id: 'data-dashboard',
+    label: '数据看板',
+    path: '/data-dashboard'
   },
   {
     icon: <AdminNavIcon name='users' />,

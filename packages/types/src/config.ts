@@ -927,7 +927,30 @@ export interface StartupProfileDiagnosticsConfig {
   thresholdMs?: number
 }
 
+export interface DiagnosticReportingConfig {
+  enabled?: boolean
+  updatedAt?: string
+}
+
+export interface ModelUsageReportingTeamConfig {
+  enabled?: boolean
+  mode?: 'required' | 'optional'
+  name?: string
+  slug?: string
+  teamId?: string
+  updatedAt?: string
+  userCanControl?: boolean
+}
+
+export interface ModelUsageReportingConfig {
+  enabled?: boolean
+  teams?: Record<string, ModelUsageReportingTeamConfig>
+  updatedAt?: string
+}
+
 export interface DiagnosticsConfig {
+  reporting?: boolean | DiagnosticReportingConfig
+  modelUsageReporting?: boolean | ModelUsageReportingConfig
   startupProfile?: boolean | StartupProfileDiagnosticsConfig
 }
 

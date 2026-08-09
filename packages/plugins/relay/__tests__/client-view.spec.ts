@@ -1,11 +1,17 @@
+/* eslint-disable max-lines -- Relay client behavior scenarios stay in one host integration fixture. */
 import { readFile } from 'node:fs/promises'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { activatePlugin } from '../src/client/index.js'
-import { RelayHomeView, renderAvatar } from '../src/client/react-view.js'
+import { RelayHomeView, modelUsageTeamSetting, renderAvatar } from '../src/client/react-view.js'
 import { relayClientCss } from '../src/client/styles.js'
-import type { PluginClientContext, PluginReactHost, PluginViewRegistration } from '../src/client/types.js'
+import type {
+  PluginClientContext,
+  PluginReactHost,
+  PluginViewRegistration,
+  RelayProfileModelUsageSettings
+} from '../src/client/types.js'
 
 const createReactHost = (): PluginReactHost & { createElement: ReturnType<typeof vi.fn> } => ({
   Fragment: Symbol.for('test.fragment'),
@@ -411,6 +417,59 @@ describe('relay plugin client view styles', () => {
     expect(relayClientCss).toContain(
       '.oneworks-relay__surface { width: 100%; min-width: 0; display: grid; align-content: start;'
     )
+  })
+})
+
+describe('relay data and diagnostics controls', () => {
+  it('resolves one downloaded team policy for that team detail instead of flattening teams into the profile', () => {
+    const settings = {
+      personal: { defaultEnabled: true, enabled: true },
+      teams: [
+        {
+          enabled: true,
+          mode: 'required',
+          name: 'Required Team',
+          role: 'member',
+          slug: 'required',
+          teamId: 'required',
+          userCanControl: false
+        },
+        {
+          enabled: false,
+          mode: 'optional',
+          name: 'Optional Team',
+          role: 'member',
+          slug: 'optional',
+          teamId: 'optional',
+          userCanControl: true
+        }
+      ]
+    } satisfies RelayProfileModelUsageSettings
+
+    expect(modelUsageTeamSetting(settings, 'required')).toMatchObject({
+      mode: 'required',
+      name: 'Required Team'
+    })
+    expect(modelUsageTeamSetting(settings, 'optional')).toMatchObject({
+      mode: 'optional',
+      name: 'Optional Team',
+      userCanControl: true
+    })
+    expect(modelUsageTeamSetting(settings, 'missing')).toBeUndefined()
+  })
+
+  it('keeps model service statistics scoped inside independent data and diagnostics tabs', async () => {
+    const source = await readFile(new URL('../src/client/react-view.ts', import.meta.url), 'utf8')
+
+    expect(source).toContain("{ icon: 'monitor_heart', key: 'diagnostics', label: '数据与诊断' }")
+    expect(source).toContain('react.createElement(PersonalDataAndDiagnosticsPanel')
+    expect(source).toContain('react.createElement(TeamDataAndDiagnosticsPanel')
+    expect(source).toContain('view?.ui?.SettingRow')
+    expect(source).toContain('view?.ui?.Switch')
+    expect(source).not.toContain("segments[2] === 'usage'")
+    expect(source).not.toContain("segments[4] === 'usage'")
+    expect(source).not.toContain("className: 'oneworks-relay__usage-switch'")
+    expect(source).not.toContain('...optionalTeams.map')
   })
 })
 

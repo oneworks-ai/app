@@ -11,6 +11,8 @@
 
 This theme-aware image comes from real desktop windows. To play, pause, or seek through it, open the [high-definition demo video on the docs home page](../).
 
+Desktop records privacy-safe facts for launch start, major stages, user-ready, stable, timeout, degraded, and failed states. Use `Help -> Export Diagnostic Support Bundle...` when support asks for a bundle; prompts, credentials, project paths, raw logs, and stacks are excluded. See [Diagnostics, Telemetry, and Support Bundles](./diagnostics.md) for standard OTel export and Admin analysis.
+
 ## Get an Installer
 
 If you do not want to start from source, install the desktop app directly:

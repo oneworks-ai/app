@@ -1,0 +1,249 @@
+.relay-team-usage {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--relay-admin-padding);
+  min-height: 0;
+  overflow: auto;
+  width: 100%;
+}
+
+.relay-team-usage__policy.ant-card .ant-card-body {
+  display: grid;
+  gap: var(--relay-admin-padding);
+  padding: var(--relay-admin-padding);
+}
+
+.relay-team-usage__policy-row {
+  align-items: center;
+  display: grid;
+  gap: var(--relay-admin-padding);
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.relay-team-usage__policy-row + .relay-team-usage__policy-row {
+  border-top: 1px solid var(--border-color);
+  padding-top: var(--relay-admin-padding);
+}
+
+.relay-team-usage__policy-row > span:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.relay-team-usage__policy-row small {
+  color: var(--sub-text-color);
+}
+
+.relay-team-usage__toolbar {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.relay-team-usage__toolbar-main,
+.relay-team-usage__toolbar-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.relay-team-usage__search {
+  width: min(340px, 34vw);
+}
+
+.relay-team-usage__summary {
+  display: grid;
+  gap: var(--relay-admin-padding);
+  grid-template-columns: repeat(6, minmax(118px, 1fr));
+}
+
+.relay-team-usage__metric.ant-card .ant-card-body {
+  display: grid;
+  gap: 3px;
+  padding: var(--relay-admin-padding);
+}
+
+.relay-team-usage__metric-label,
+.relay-team-usage__metric-hint,
+.relay-team-usage__legend,
+.relay-team-usage__retention {
+  color: var(--sub-text-color);
+  font-size: 11px;
+}
+
+.relay-team-usage__metric-value {
+  color: var(--text-color);
+  font-size: 21px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+}
+
+.relay-team-usage__analysis-grid {
+  display: grid;
+  gap: var(--relay-admin-padding);
+  grid-template-columns: minmax(0, 1.5fr) minmax(270px, 1fr);
+}
+
+.relay-team-usage__analysis-card.ant-card .ant-card-body {
+  padding: var(--relay-admin-padding);
+}
+
+.relay-team-usage__card-title {
+  align-items: baseline;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.relay-team-usage__card-title strong {
+  color: var(--text-color);
+  font-size: 13px;
+}
+
+.relay-team-usage__trend {
+  align-items: end;
+  display: grid;
+  gap: 6px;
+  grid-auto-columns: minmax(20px, 1fr);
+  grid-auto-flow: column;
+  height: 144px;
+}
+
+.relay-team-usage__trend-item {
+  align-items: center;
+  display: grid;
+  gap: 5px;
+  grid-template-rows: 1fr auto;
+  height: 100%;
+  min-width: 0;
+}
+
+.relay-team-usage__trend-bar-wrap {
+  align-items: end;
+  display: flex;
+  height: 100%;
+}
+
+.relay-team-usage__trend-bar {
+  background: linear-gradient(
+    180deg,
+    var(--primary-color),
+    color-mix(in srgb, var(--primary-color) 45%, transparent)
+  );
+  border-radius: 5px 5px 2px 2px;
+  min-height: 3px;
+  width: 100%;
+}
+
+.relay-team-usage__trend-label {
+  color: var(--sub-text-color);
+  font-size: 9px;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relay-team-usage__breakdown {
+  display: grid;
+  gap: 11px;
+}
+
+.relay-team-usage__breakdown-row {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  gap: 5px;
+  padding: 0;
+  text-align: left;
+  width: 100%;
+}
+
+.relay-team-usage__breakdown-row:hover strong {
+  color: var(--primary-color);
+}
+
+.relay-team-usage__breakdown-label {
+  align-items: center;
+  display: flex;
+  font-size: 12px;
+  justify-content: space-between;
+}
+
+.relay-team-usage__breakdown-label span:last-child {
+  color: var(--sub-text-color);
+  font-variant-numeric: tabular-nums;
+}
+
+.relay-team-usage__breakdown-track {
+  background: color-mix(in srgb, var(--border-color) 55%, transparent);
+  border-radius: 999px;
+  height: 6px;
+  overflow: hidden;
+}
+
+.relay-team-usage__breakdown-fill {
+  background: var(--primary-color);
+  border-radius: inherit;
+  height: 100%;
+}
+
+.relay-team-usage__table-card.ant-card .ant-card-body {
+  padding: 0;
+}
+
+.relay-team-usage__member,
+.relay-team-usage__service {
+  display: grid;
+  gap: 2px;
+}
+
+.relay-team-usage__member span,
+.relay-team-usage__service span {
+  color: var(--sub-text-color);
+  font-size: 11px;
+}
+
+.relay-team-usage__token-pair {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.relay-team-usage__footer {
+  align-items: center;
+  border-top: 1px solid
+    color-mix(in srgb, var(--border-color) 70%, transparent);
+  display: flex;
+  justify-content: space-between;
+  padding: var(--relay-admin-padding);
+}
+
+@media (max-width: 1180px) {
+  .relay-team-usage__summary {
+    grid-template-columns: repeat(3, minmax(130px, 1fr));
+  }
+
+  .relay-team-usage__analysis-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .relay-team-usage__summary {
+    grid-template-columns: repeat(2, minmax(120px, 1fr));
+  }
+
+  .relay-team-usage__toolbar,
+  .relay-team-usage__toolbar-main {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .relay-team-usage__search {
+    width: 100%;
+  }
+}

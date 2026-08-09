@@ -774,7 +774,37 @@ export const startupProfileDiagnosticsConfigSchema = z.object({
   thresholdMs: z.number().nonnegative().optional().describe('Only record startup marks at or above this duration')
 })
 
+export const diagnosticReportingConfigSchema = z.object({
+  enabled: z.boolean().optional().describe('Send privacy-safe system diagnostics through OTLP'),
+  updatedAt: z.string().datetime().optional().describe('Last user reporting preference update time')
+})
+
+export const modelUsageReportingTeamConfigSchema = z.object({
+  enabled: z.boolean().optional().describe('Effective reporting state for this team'),
+  mode: z.enum(['required', 'optional']).optional().describe('Team reporting policy'),
+  name: z.string().trim().min(1).optional().describe('Team display name'),
+  slug: z.string().trim().min(1).optional().describe('Team slug used by OTLP scope headers'),
+  teamId: z.string().trim().min(1).optional().describe('Relay team identifier'),
+  updatedAt: z.string().datetime().optional().describe('Last team preference or policy update time'),
+  userCanControl: z.boolean().optional().describe('Whether this member can change the team preference')
+})
+
+export const modelUsageReportingConfigSchema = z.object({
+  enabled: z.boolean().optional().describe('Send content-free Model Service token usage through OTLP'),
+  teams: z.record(z.string(), modelUsageReportingTeamConfigSchema).optional()
+    .describe('Effective per-team Model Service usage reporting preferences'),
+  updatedAt: z.string().datetime().optional().describe('Last user preference update time')
+})
+
 export const diagnosticsConfigSchema = z.object({
+  reporting: z.union([
+    z.boolean(),
+    diagnosticReportingConfigSchema
+  ]).optional().describe('System diagnostic reporting preference; enabled by default'),
+  modelUsageReporting: z.union([
+    z.boolean(),
+    modelUsageReportingConfigSchema
+  ]).optional().describe('Model Service usage reporting preference; enabled by default'),
   startupProfile: z.union([
     z.boolean(),
     startupProfileDiagnosticsConfigSchema

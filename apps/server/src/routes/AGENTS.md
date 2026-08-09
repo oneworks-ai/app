@@ -8,6 +8,7 @@
 - `sessions.ts`：session detail、message queue、branch、message 操作等 session API。
 - `agent-rooms.ts`：Agent Room HTTP API。
 - `config.ts`：配置读取与写回 API。
+- `diagnostics.ts`：接收浏览器归一化后的无内容 JavaScript 异常事实；持久化与 OTLP 门控在 `../services/javascript-diagnostics.ts`。
 - `automation.ts`：automation API。
 - `module-updates.ts`：运行时模块版本检测与缓存安装 API；业务逻辑放在 `../services/module-updates.ts`。
 - `web-debug.ts`：跨入口浏览器调试 API；只返回 server 管理的调试 runtime 信息，业务逻辑放在 `../services/web-debug/`。

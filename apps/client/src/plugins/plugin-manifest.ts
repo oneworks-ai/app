@@ -553,10 +553,20 @@ export interface PluginHostSegmentedComponentProps {
   value?: string
 }
 
+export interface PluginHostSettingRowComponentProps {
+  children: ReactNode
+  description?: ReactNode
+  icon?: string
+  layout?: 'inline' | 'stacked'
+  title: ReactNode
+}
+
 export interface PluginHostSwitchComponentProps {
+  ariaLabel?: string
   checked?: boolean
   checkedLabel?: string
   disabled?: boolean
+  loading?: boolean
   onChange?: (checked: boolean) => void
   size?: 'default' | 'small'
   uncheckedLabel?: string
@@ -651,6 +661,7 @@ export interface PluginHostComponentPropsById {
   searchInput: PluginHostSearchInputComponentProps
   select: PluginHostSelectComponentProps
   segmented: PluginHostSegmentedComponentProps
+  settingRow: PluginHostSettingRowComponentProps
   sender: PluginHostSenderComponentProps
   switch: PluginHostSwitchComponentProps
 }
@@ -687,6 +698,7 @@ export interface PluginHostComponentReactApi {
   SettingsRow: ComponentType<PluginHostSettingsRowComponentProps>
   SettingsSection: ComponentType<PluginHostSettingsSectionComponentProps>
   Segmented: ComponentType<PluginHostSegmentedComponentProps>
+  SettingRow: ComponentType<PluginHostSettingRowComponentProps>
   Sender: ComponentType<PluginHostSenderComponentProps>
   Switch: ComponentType<PluginHostSwitchComponentProps>
 }

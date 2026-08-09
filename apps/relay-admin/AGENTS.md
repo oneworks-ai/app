@@ -12,6 +12,9 @@
 - `src/platform/`、`api/`、`functions/`：独立 Vercel / Cloudflare Pages 静态部署的同源代理入口；只转发 `/health`、`/api/*`、`/login` 和 `/login/complete` 到真实 Relay Server，不在 Admin 里重新实现 Relay API。Vercel 推荐部署形态优先看 `apps/relay-server` 的单项目 `/admin` 构建。
 - `src/features/openapi/`：`/admin/openapi` 的 API 文档页，只读取 Relay Server 的 `/api/profile/openapi.json` 与 `/api/admin/openapi.json`，不要在前端复制 OpenAPI 契约。
 - `src/features/users/`：用户列表、用户表单、用户 API 和表单解析。
+- `src/features/data-dashboard/`：平台 owner/admin 的统一数据看板入口；`/data-dashboard/overview` 汇总观测活跃、稳定性与团队 Model Service 指标，稳定维度与 Model Service 维度分别使用 `/data-dashboard/stability`、`/data-dashboard/model-service`。这里负责跨维度编排，不复制领域 API。
+- `src/features/diagnostics/`：统一数据看板中的稳定性维度与用户诊断时间线，只消费 Relay 归一化后的隐私安全事实。
+- `src/features/model-usage/`：统一数据看板中的平台级 Model Service 维度、团队排行与跨团队钻取，只面向平台 owner/admin；团队内用量继续归 `src/features/teams/`。
 - `src/features/invites/`：邀请码列表、邀请码表单、邀请码 API 和表单解析。
 - `src/features/sso/`：SSO provider 列表、创建、编辑、启用 / 禁用、secret 轮换和 API。
 - `src/shared/`：跨 feature 复用的 API request、类型、角色常量、表单工具和基础 UI；基础 action button、data card、status badge 等先看 `src/shared/ui/AGENTS.md`。

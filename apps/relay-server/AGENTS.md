@@ -29,6 +29,8 @@
 - `scripts/prepare-vercel-build.mjs`：`build:vercel` 的最后一步，把 `apps/relay-admin/dist/admin` 复制到 `apps/relay-server/public/admin`，让同一个 Vercel project 同时提供 `/admin` 和 Relay API。
 - `scripts/prepare-vercel-output.mjs`：本地 `vercel build --prebuilt` 后处理，把 pnpm workspace 下的 Postgres 与 WebAuthn runtime package 依赖闭包拷进 `.vercel/output/functions/api/relay.func/node_modules/`；本地 CLI prebuilt 部署前必须跑。
 - `src/telemetry/`：Relay trace 日志。
+- `src/diagnostics/`、`src/routes/diagnostics.ts`：标准 OTLP/HTTP JSON 接收、严格隐私投影、保留策略和 Admin 诊断查询。身份只来自已认证用户 / 配对设备，不能信任客户端 `userId`。
+- `src/model-usage/`、`src/routes/team-model-usage.ts`：内容无关的团队 Model Service 用量去重、保留、过滤和聚合。用量通过诊断入口接收，但授权与分析按团队边界执行；平台 owner/admin 或具有 `relay.teamModelUsage.read` 的团队成员才能读取。
 - `README.md`：面向自部署用户的命令、环境变量、Admin API、生产部署和日志说明。
 - `.oo/rules/RELAY-DEPLOYMENT.md`：Relay 托管服务、私有化部署、Vercel / Cloudflare 域名、官方 OneWorks 域名 / 邮件拓扑和账号边界；处理部署请求时先读。正式版 Admin / Relay 发布继续读 `.oo/rules/relay-deployment/admin-release-sop.md`。SSO provider 对接经验拆在 `.oo/rules/relay-deployment/sso-*.md`，先读 common，再按 GitHub / Google / OIDC 读取对应文件。
 
@@ -38,6 +40,7 @@
 - `src/routes/admin-ui.ts` 只负责 HTML shell 和静态资源读取；不要把 React 代码、样式或业务状态内联回 relay-server。
 - Relay store 不保存会话正文或结果正文，只保存 trace/status/size/timestamp/errorCode 等元数据；新增存储 driver 必须复用 `content-boundary.ts` 的过滤。
 - 项目规则文档绑定 config assignment，使用 `/api/relay/config-assignments/:assignmentId/documents` 或管理员同构路径同步。Relay Server 业务路由保存并透传客户端生成的密文格式 payload 以及同步、范围和审计元数据，不解析或索引文档正文；部署运营方能够复现当前命名空间派生密钥，因此文档不得承诺运营方无法解密。本地目录、Git 命中判断、路径安全和提示词注入由 Relay 插件负责，不能下沉到 server 或宿主应用。
+- Relay diagnostic store 同样不保存 OTLP log body，只保存白名单诊断事实与匿名关联 ID；新增 Codex/OneWorks 映射时先更新 `src/diagnostics/AGENTS.md` 的边界和隐私测试。
 - Relay device 的 alias / name / capabilities / workspaceFolder / pluginScope 是用户私有元数据。新写入必须加密存储，device token 只存 hash；admin 用户管理只返回 `deviceCount` / `maxDevices` 这类聚合字段，不返回其他用户设备详情。`alias` 是 OneWorks / Relay 内的展示名，不参与设备身份判断；真实机器名继续放在 `name`，用于兜底显示和排查。
 - `/api/relay/devices` 是当前 session 用户自己的设备列表。不要因为 owner/admin 有管理权限就把其他用户设备详情从这个接口返回。
 - 系统访问令牌属于当前登录用户，落库只存 hash 和 preview；生成接口只返回一次明文。权限按令牌所属用户的 role/capability 解析，不要给系统访问令牌绕过当前用户保护，例如禁止修改自己的 role。

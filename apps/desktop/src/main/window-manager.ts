@@ -4,6 +4,7 @@ import process from 'node:process'
 import { BrowserWindow } from 'electron'
 import type { WebContents } from 'electron'
 
+import type { DiagnosticFailureDomain } from '@oneworks/diagnostics'
 import {
   isStandaloneDeviceRoutePath,
   normalizeStandaloneRoutePath as normalizeKnownStandaloneRoutePath
@@ -277,6 +278,17 @@ interface WindowManagerInput {
   ensureManagerService: ManagerServiceManager['ensureManagerService']
   ensureWorkspaceService: WorkspaceServiceManager['ensureWorkspaceService']
   forgetWorkspaceFolder: (workspaceFolder: string) => void
+  onStartupDegraded?: (
+    error: unknown,
+    input: {
+      code: string
+      domain: DiagnosticFailureDomain
+      retryable?: boolean
+    }
+  ) => void
+  onStartupStage?: (name: string) => void
+  onStartupWindowReady?: () => void
+  onRendererGone?: (details: { reason: string }) => void
   refreshAppMenu: () => void
   rememberWorkspaceFolder: (workspaceFolder: string) => void
   runtimeState: DesktopRuntimeState
@@ -288,6 +300,10 @@ export const createWindowManager = ({
   ensureManagerService,
   ensureWorkspaceService,
   forgetWorkspaceFolder,
+  onStartupDegraded,
+  onStartupStage,
+  onStartupWindowReady,
+  onRendererGone,
   refreshAppMenu,
   rememberWorkspaceFolder,
   runtimeState,
@@ -439,6 +455,7 @@ export const createWindowManager = ({
   const createWindowRecord = createBrowserWindowFactory({
     broadcastWorkspaceSelectorState: selectorStateController.broadcastWorkspaceSelectorState,
     getWindowRecords,
+    onRendererGone,
     refreshAppMenu,
     runtimeState,
     stopWorkspaceService
@@ -530,6 +547,7 @@ export const createWindowManager = ({
       if (managerService.serverUrl == null) {
         throw new Error('The local One Works manager server did not publish a URL.')
       }
+      onStartupStage?.('client.ready')
     } catch (error) {
       if (!isWindowRecordUsable(windowRecord)) {
         return
@@ -540,6 +558,11 @@ export const createWindowManager = ({
         return
       }
       console.error('[oneworks-desktop] failed to load launcher runtimes', error)
+      onStartupDegraded?.(error, {
+        code: 'launcher.client_startup_failed',
+        domain: 'client',
+        retryable: true
+      })
       if (shouldShow && !windowRecord.window.isVisible()) {
         showLauncherWindowRecord(windowRecord)
       }
@@ -552,6 +575,7 @@ export const createWindowManager = ({
       logDesktopTiming(`launcher loadURL begin url=${launcherUrl} elapsed=${elapsedMs(startedAt)}`)
       await windowRecord.window.loadURL(launcherUrl)
       logDesktopTiming(`launcher loadURL complete elapsed=${elapsedMs(startedAt)}`)
+      onStartupStage?.('renderer.loaded')
       if (shouldShow && !shellShown) {
         showLauncherWindowRecord(windowRecord)
       } else if (windowRecord.window.isVisible()) {
@@ -572,6 +596,11 @@ export const createWindowManager = ({
         windowRecord.window.close()
         return
       }
+      onStartupDegraded?.(error, {
+        code: 'launcher.renderer_load_failed',
+        domain: 'renderer',
+        retryable: true
+      })
       await showWindowLoadFailureScreen(windowRecord, {
         errorDescription: getErrorMessage(error),
         targetUrl: launcherUrl
@@ -606,6 +635,15 @@ export const createWindowManager = ({
 
     let clientUrl: string
     let workspaceService: Awaited<ReturnType<typeof ensureWorkspaceService>>
+    let startupFailure: {
+      code: string
+      domain: DiagnosticFailureDomain
+      retryable: boolean
+    } = {
+      code: 'workspace.client_startup_failed',
+      domain: 'client',
+      retryable: true
+    }
     try {
       rememberWorkspaceFolder(normalizedWorkspaceFolder)
       logDesktopTiming(`workspace waiting for shared client elapsed=${elapsedMs(startedAt)}`)
@@ -614,6 +652,7 @@ export const createWindowManager = ({
       if (!isWindowRecordUsable(windowRecord)) {
         return
       }
+      onStartupStage?.('client.ready')
 
       windowRecord.workspaceFolder = normalizedWorkspaceFolder
       windowRecord.currentServerUrl = clientUrl
@@ -624,11 +663,17 @@ export const createWindowManager = ({
         logDesktopTiming(`workspace loadURL begin url=${workspaceUrl} elapsed=${elapsedMs(startedAt)}`)
         await windowRecord.window.loadURL(workspaceUrl)
         logDesktopTiming(`workspace loadURL complete elapsed=${elapsedMs(startedAt)}`)
+        onStartupStage?.('renderer.loaded')
         focusWindowRecord(windowRecord)
       } catch (error) {
         if (!isWindowRecordUsable(windowRecord)) {
           return
         }
+        onStartupDegraded?.(error, {
+          code: 'workspace.renderer_load_failed',
+          domain: 'renderer',
+          retryable: true
+        })
         await showWindowLoadFailureScreen(windowRecord, {
           errorDescription: getErrorMessage(error),
           targetUrl: workspaceUrl
@@ -638,6 +683,11 @@ export const createWindowManager = ({
       }
 
       logDesktopTiming(`workspace waiting for server elapsed=${elapsedMs(startedAt)}`)
+      startupFailure = {
+        code: 'workspace.server_startup_failed',
+        domain: 'server',
+        retryable: true
+      }
       workspaceService = await ensureWorkspaceService(normalizedWorkspaceFolder)
       if (workspaceService.serverUrl == null) {
         throw new Error('The local One Works server did not publish a URL.')
@@ -646,10 +696,12 @@ export const createWindowManager = ({
       if (!isWindowRecordUsable(windowRecord)) {
         return
       }
+      onStartupStage?.('server.ready')
     } catch (error) {
       if (!isWindowRecordUsable(windowRecord)) {
         return
       }
+      onStartupDegraded?.(error, startupFailure)
       await loadWorkspaceSelectorWindow(windowRecord, {
         errorMessage: getErrorMessage(error),
         mode: previousSelectorMode === 'initial' ? 'initial' : 'dialog'
@@ -794,12 +846,9 @@ export const createWindowManager = ({
   }
 
   const markWorkspaceStartupWindowReady = (windowRecord: WindowRecord) => {
-    if (
-      !isWindowRecordUsable(windowRecord) ||
-      (windowRecord.kind !== 'workspace' && windowRecord.kind !== 'standalone')
-    ) {
-      return
-    }
+    if (!isWindowRecordUsable(windowRecord)) return
+    onStartupWindowReady?.()
+    if (windowRecord.kind !== 'workspace' && windowRecord.kind !== 'standalone') return
 
     const startupElapsed = windowRecord.workspaceStartupStartedAt == null
       ? 'unknown'

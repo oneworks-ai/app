@@ -16,6 +16,7 @@ import { channelActionsRouter } from './channel-actions'
 import { channelSendRouter } from './channel-send'
 import { channelWebhooksRouter } from './channel-webhooks'
 import { configRouter } from './config'
+import { diagnosticsRouter } from './diagnostics'
 import { eventsRouter } from './events'
 import { gitRouter } from './git'
 import { interactRouter } from './interact'
@@ -76,6 +77,7 @@ export const mountRoutes = async (
     { prefix: '/api/channels', router: channelSendRouter() },
     { prefix: '/api/automation', router: automationRouter() },
     { prefix: '/api/config', router: configRouter() },
+    { prefix: '/api/diagnostics', router: diagnosticsRouter() },
     { prefix: '/api/events', router: eventsRouter() },
     { prefix: '/api/usage', router: usageRouter() },
     { prefix: '/api/voice', router: voiceRouter() },

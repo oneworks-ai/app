@@ -12,6 +12,7 @@ flowchart LR
   CLI --> RuntimeProtocol["packages/runtime-protocol"]
   CLI --> Hooks["packages/hooks"]
   CLI --> Core["packages/core"]
+  CLI --> Diagnostics["packages/diagnostics"]
 
   Server["apps/server"] --> AppRuntime
   Server --> RuntimeStore
@@ -23,6 +24,8 @@ flowchart LR
   Server --> Utils["packages/utils"]
 
   Client["apps/client"] --> Core
+
+  Desktop["apps/desktop"] --> Diagnostics
 
   AppRuntime --> Task["packages/task"]
   AppRuntime --> MCP["packages/mcp"]
@@ -67,6 +70,7 @@ flowchart LR
 - `hooks`、`mcp`、`benchmark` 共享 `config` / `utils` / `types`，避免各自复制协议。
 - `definition-core` 是 definition 领域共享语义层；Server 可直接消费。
 - `definition-loader` 负责 definition 文档加载，`workspace-assets` 负责 workspace asset 投影与 prompt 组装。
+- `diagnostics` 只定义可跨产品面复用的事实与本地持久化；Desktop、Server、Relay 和 Admin 作为消费者，不在该包中耦合具体观测厂商或后台权限模型。
 
 ## 扩展实现
 

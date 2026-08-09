@@ -12,8 +12,13 @@ import {
 } from './server/config-source-preferences.js'
 import { createRelayDeviceStore } from './server/store.js'
 import { normalizeRelayGitRepositoryIdentity } from './shared/config-assignment-project.js'
-import { RELAY_CONFIG_SAFE_FIELDS, resolveRelayConfigPatchForProject } from './shared/config-assignment.js'
-import type { RelayConfigPatch, RelayConfigSnapshot } from './shared/config-assignment.js'
+import {
+  RELAY_CONFIG_SAFE_FIELDS,
+  filterRelayConfigPatch,
+  normalizeRelayTeamConfigSafeFields,
+  resolveRelayConfigPatchForProject
+} from './shared/config-assignment.js'
+import type { RelayConfigAssignment, RelayConfigPatch, RelayConfigSnapshot } from './shared/config-assignment.js'
 import { createRelayConfigSnapshotStore, readRelayConfigSnapshotWithGlobalFallback } from './shared/config-cache.js'
 import { decryptRelayConfigSnapshotSecretEnvelope } from './shared/config-secrets.js'
 import {
@@ -143,6 +148,83 @@ const toConfig = (
 const cloneConfigPatch = (patch: RelayConfigPatch | undefined): RelayConfigPatch | undefined => {
   if (patch == null) return undefined
   return JSON.parse(JSON.stringify(patch)) as RelayConfigPatch
+}
+
+interface RelayModelServiceOwner {
+  teamId: string
+  teamName?: string
+}
+
+const indexSnapshotAssignments = (snapshot: RelayConfigSnapshot) => {
+  const assignments = new Map<string, RelayConfigAssignment>()
+  const visit = (assignment: RelayConfigAssignment) => {
+    if (assignment.id !== '') assignments.set(assignment.id, assignment)
+    for (const rule of assignment.rules ?? []) {
+      if (typeof rule !== 'string') visit(rule)
+    }
+  }
+  for (const assignment of snapshot.assignments ?? []) visit(assignment)
+  for (const rule of snapshot.rules ?? []) visit(rule)
+  return assignments
+}
+
+const relayModelServiceOwners = (
+  snapshot: RelayConfigSnapshot,
+  matchedAssignmentIds: string[]
+) => {
+  const assignments = indexSnapshotAssignments(snapshot)
+  const owners = new Map<string, RelayModelServiceOwner>()
+  for (const assignmentId of matchedAssignmentIds) {
+    const assignment = assignments.get(assignmentId)
+    if (assignment == null) continue
+    const filtered = filterRelayConfigPatch(
+      assignment.configPatch,
+      normalizeRelayTeamConfigSafeFields(assignment.allowedFields)
+    )
+    if (!isRecord(filtered?.modelServices)) continue
+    for (const serviceKey of Object.keys(filtered.modelServices)) {
+      const teamId = readText(assignment.provenance?.teamId) ?? readText(snapshot.team?.id)
+      if (teamId == null) {
+        owners.delete(serviceKey)
+        continue
+      }
+      owners.set(serviceKey, {
+        teamId,
+        ...(readText(assignment.provenance?.teamName) == null && readText(snapshot.team?.name) == null
+          ? {}
+          : { teamName: readText(assignment.provenance?.teamName) ?? readText(snapshot.team?.name) })
+      })
+    }
+  }
+  return owners
+}
+
+const annotateRelayModelServiceOwnership = (
+  patch: RelayConfigPatch | undefined,
+  snapshot: RelayConfigSnapshot,
+  matchedAssignmentIds: string[]
+) => {
+  if (patch == null || !isRecord(patch.modelServices)) return patch
+  const owners = relayModelServiceOwners(snapshot, matchedAssignmentIds)
+  if (owners.size === 0) return patch
+  for (const [serviceKey, owner] of owners) {
+    const service = patch.modelServices[serviceKey]
+    if (!isRecord(service)) continue
+    const extra = isRecord(service.extra) ? service.extra : {}
+    const oneworks = isRecord(extra.oneworks) ? extra.oneworks : {}
+    patch.modelServices[serviceKey] = {
+      ...service,
+      extra: {
+        ...extra,
+        oneworks: {
+          ...oneworks,
+          relayTeamId: owner.teamId,
+          ...(owner.teamName == null ? {} : { relayTeamName: owner.teamName })
+        }
+      }
+    }
+  }
+  return patch
 }
 
 const secretRefPath = (ref: string) =>
@@ -287,10 +369,14 @@ export const resolveConfig = async (context: RelayPluginConfigHookContext) => {
     readRelayConfigSourcePreferencesForSnapshot(store, snapshot)
   )
   const resolved = resolveRelayConfigPatchForProject(effectiveSnapshot, await resolveProjectContext(context))
-  const patch = await applySnapshotSecrets(
-    projectHome,
+  const patch = annotateRelayModelServiceOwnership(
+    await applySnapshotSecrets(
+      projectHome,
+      effectiveSnapshot,
+      resolved.patch,
+      resolved.matchedAssignmentIds
+    ),
     effectiveSnapshot,
-    resolved.patch,
     resolved.matchedAssignmentIds
   )
   const documentPrompt = await matchedProjectRuleDocumentPrompt(

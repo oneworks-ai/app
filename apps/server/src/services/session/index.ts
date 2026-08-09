@@ -21,6 +21,7 @@ import type {
   AdapterOutputEvent,
   AdapterQueryOptions,
   AskUserQuestionParams,
+  Config,
   PermissionInteractionDecision,
   SessionInfo,
   SessionPromptType,
@@ -32,6 +33,7 @@ import { handleChannelSessionEvent, resolveChannelSessionMcpServers } from '#~/c
 import { buildChannelSessionStopEvent } from '#~/channels/session-delivery.js'
 import { getDb } from '#~/db/index.js'
 import { loadConfigState } from '#~/services/config/index.js'
+import { recordSessionModelUsage } from '#~/services/model-usage.js'
 import { resolveRuntimeProtocolCliCommand } from '#~/services/runtime-cli-command.js'
 import { discoverRuntimeSessionStores, migrateRuntimeRoots } from '#~/services/runtime-store/discovery.js'
 import {
@@ -887,9 +889,13 @@ export async function startAdapterSession(
         ]
           .filter(Boolean)
           .join('\n\n')
-      const { mergedConfig } = await loadConfigState(adapterCwd)
-        .catch(() => ({ mergedConfig: {} as { modelLanguage?: string } }))
-      const { modelLanguage } = mergedConfig
+      const { globalSource, mergedConfig } = await loadConfigState(adapterCwd)
+        .catch(() => ({
+          globalSource: undefined,
+          mergedConfig: {} as Pick<Config, 'modelLanguage' | 'modelServices'>
+        }))
+      const { modelLanguage, modelServices } = mergedConfig
+      const modelUsageDiagnostics = globalSource?.resolvedConfig?.diagnostics
       const languagePrompt = modelLanguage == null
         ? undefined
         : (modelLanguage === 'en' ? 'Please respond in English.' : '请使用中文进行对话。')
@@ -1067,6 +1073,14 @@ export async function startAdapterSession(
                 applyEvent({
                   type: 'message',
                   message: event.data
+                })
+                recordSessionModelUsage({
+                  adapter: resolvedAdapter,
+                  diagnostics: modelUsageDiagnostics,
+                  fallbackModel: resolvedModel,
+                  message: event.data,
+                  modelServices,
+                  sessionId
                 })
                 if (
                   (event.data as any).role === 'assistant' &&
