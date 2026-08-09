@@ -49,11 +49,22 @@ Native CLI installation and version pinning are covered in [Adapter CLI Installa
 - Codex and Gemini use adapter-owned local proxy behavior.
 - Some adapters write provider configuration to native config files or session-level state.
 
-Codex stream sessions reuse an app-server within the same project, account, binary/startup,
-and effective network profile. Model provider, MCP, working directory, and permission settings
-are sent per thread, so switching providers alone does not restart the process. An unused
-app-server remains available for five minutes by default; configure
-`adapters.codex.appServer.idleTimeoutMs` to change that interval.
+Workspaces launched by a Launcher or daemon manager reuse a manager-owned Codex app-server
+across workspaces when the account, binary/startup, and effective process/network profile match.
+Model provider, MCP, working directory, permissions, One Works workspace/session runtime
+metadata, and selected skills are sent per thread, so switching workspaces or providers alone
+does not restart the process. Other process-level environment differences form distinct profiles.
+After the manager is ready, it warms at most three default/configured account profiles in the
+background without delaying Launcher startup. An unused app-server remains available for five
+minutes by default; configure `adapters.codex.appServer.idleTimeoutMs` to change that interval.
+
+One Works managed hooks return through the manager and execute only in the workspace that owns
+the Codex lease. The callback capability is injected into thread config instead of the shared
+app-server process environment. After registration, ownership is checked by lease, thread ID, and
+working directory; the brief thread-creation window allows only a pending setup in that same lease
+to bind by working directory. Native `<workspace>/.codex/hooks.json` files are still discovered by
+Codex from the thread working directory. Direct mode remains session-isolated, and standalone
+stream mode without a manager keeps the project-local fallback pool.
 
 Adapter-specific network settings are available under `adapters.codex.network`:
 `httpProxy`, `httpsProxy`, `allProxy`, `noProxy`, and `caCertificate`. They apply to both

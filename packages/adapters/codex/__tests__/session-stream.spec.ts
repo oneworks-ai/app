@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { formatCodexCommandForDisplay } from '#~/command-display.js'
 import {
   buildCodexApprovalResponse,
   buildCodexMcpElicitationResponse,
+  releaseCodexAppServerAfterCleanup,
   resolveCodexAppServerClientInfo,
   resolveCodexApprovalDecision
 } from '#~/runtime/stream.js'
@@ -53,6 +54,74 @@ describe('codex stream approval decision mapping', () => {
 
   it('maps denied MCP approvals to decline actions', () => {
     expect(buildCodexMcpElicitationResponse('deny_once')).toEqual({ action: 'decline' })
+  })
+})
+
+describe('codex app-server session cleanup', () => {
+  it('waits for delayed teardown work before releasing the lease', async () => {
+    let finishUnregister!: () => void
+    let finishResponse!: () => void
+    let finishUnsubscribe!: () => void
+    const events: string[] = []
+    const unregister = new Promise<void>((resolve) => {
+      finishUnregister = () => {
+        events.push('unregister:done')
+        resolve()
+      }
+    })
+    const response = new Promise<void>((resolve) => {
+      finishResponse = () => {
+        events.push('response:done')
+        resolve()
+      }
+    })
+    const unsubscribe = new Promise<void>((resolve) => {
+      finishUnsubscribe = () => {
+        events.push('unsubscribe:done')
+        resolve()
+      }
+    })
+    const detach = unregister.then(async () => {
+      events.push('unsubscribe:start')
+      await unsubscribe
+    })
+    const release = () => events.push('release')
+
+    const cleanup = releaseCodexAppServerAfterCleanup(
+      { release },
+      [detach, response],
+      1_000
+    )
+
+    await Promise.resolve()
+    expect(events).toEqual([])
+    finishUnregister()
+    await Promise.resolve()
+    expect(events).toEqual(['unregister:done', 'unsubscribe:start'])
+    finishResponse()
+    await Promise.resolve()
+    expect(events).not.toContain('release')
+    finishUnsubscribe()
+    await cleanup
+
+    expect(events).toEqual([
+      'unregister:done',
+      'unsubscribe:start',
+      'response:done',
+      'unsubscribe:done',
+      'release'
+    ])
+  })
+
+  it('releases after teardown rejects without leaking the rejection', async () => {
+    const release = vi.fn()
+
+    await expect(releaseCodexAppServerAfterCleanup(
+      { release },
+      [Promise.reject(new Error('unregister failed'))],
+      1_000
+    )).resolves.toBeUndefined()
+    expect(release).toHaveBeenCalledOnce()
   })
 })
 

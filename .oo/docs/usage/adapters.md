@@ -121,8 +121,9 @@ adapters:
 - “设置 → 模型服务”列表底部有独立导入行：左侧可搜索选择声明了模型服务导入能力的 adapter package，右侧点击“导入”；每个 adapter 自己声明支持 Global、Project 或 User 中的哪些来源
 - 空项目没有 `adapters` 配置时，运行时默认使用 `codex`，不会为了启动会话主动写入 `.oo.config.json`
 - 如果本机存在 `~/.codex/auth.json`，Codex 适配器会把它作为只读 fallback 账号展示和使用，不会自动复制或删除
-- Codex stream 会按 project、账号和启动 / 网络 profile 复用 app-server；model provider、MCP、cwd 和权限配置按 thread 下发，不会仅因切换 provider 重启进程。空闲进程默认保留 5 分钟，可通过 `appServer.idleTimeoutMs` 调整
-- direct mode 仍使用 session 隔离 HOME；stream mode 使用上述 app-server profile 隔离 HOME，并在其中挂载所选账号的 `auth.json`
+- 由 Launcher / daemon manager 启动的 workspace 会在账号、启动参数和有效进程 / 网络 profile 一致时跨 workspace 复用同一个 manager-owned Codex app-server；model provider、MCP、cwd、权限、One Works workspace / session 运行时元数据和 selected skills 按 thread 下发，不会仅因切换 workspace 或 provider 重启进程。其他进程级环境差异会形成不同 profile。manager ready 后会纯后台预热最多 3 个默认 / 已配置账号，不阻塞 Launcher 启动；空闲进程默认保留 5 分钟，可通过 `appServer.idleTimeoutMs` 调整
+- One Works managed hook 会由共享 app-server 回调 manager，再只转发到 owning workspace lease 执行；回调能力按 lease 下发到 thread config，不进入共享 app-server 的进程环境。workspace 自带的 `.codex/hooks.json` 仍由 Codex 按 thread cwd 发现。thread 注册后以 lease + thread ID + cwd 校验归属；创建 thread 的短暂窗口只允许同一 lease 内的 pending setup 以 cwd 绑定，不会跨 workspace 猜测 owner
+- direct mode 仍使用 session 隔离 HOME；没有 manager 的 standalone stream 保留 project-local fallback pool。manager-owned stream 使用机器共享的 app-server profile HOME 并挂载所选账号 `auth.json`，但不会把 workspace skills / hooks 软链进共享 HOME
 - `network.httpProxy` / `httpsProxy` / `allProxy` / `noProxy` 与 `caCertificate` 只作用于 Codex adapter；配置同时覆盖原生 Codex 进程和 One Works 的 provider 转发请求。本地转发地址始终加入 `NO_PROXY`；`caCertificate` 可传 PEM 文件路径或内联 PEM，内联内容会先落到权限为 `0600` 的 profile 私有文件
 - 在该导入行选择 `Codex config.toml`：当前来源为 Global 时，会把用户级 `CODEX_HOME/config.toml` 或 `~/.codex/config.toml` 中缺失的 provider 导入 global `modelServices`；只有点击“导入”时才执行
 - 当前来源为 Project 时，同一选项会把可信 workspace `.codex/config.toml` 中的 provider 导入 project `.oo.config.*`；Codex 原生会忽略 project 层的 provider/auth 字段，但 One Works 会按 `global < project < user` 使用导入结果。未信任的 project 层不导入，也不会把 global/user provider 展开复制进 project 文件

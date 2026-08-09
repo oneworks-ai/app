@@ -4,16 +4,23 @@ import { spawn } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { resetCodexAppServerPoolForTests } from '#~/runtime/app-server-pool.js'
+import { createLocalCodexAppServerPool, resetCodexAppServerPoolForTests } from '#~/runtime/app-server-pool.js'
 import {
   CODEX_PROXY_META_HEADER_NAME,
   getCodexProxyMetaRegistrySizeForTests,
   resolveCodexProxyMetaForTests
 } from '#~/runtime/proxy.js'
 import { createCodexSession } from '#~/runtime/session.js'
+import { applyCodexAppServerHookEnv } from '#~/runtime/stream.js'
 import { NATIVE_HOOK_BRIDGE_ADAPTER_ENV, callHook } from '@oneworks/hooks'
+import { RuntimeBroker } from '@oneworks/runtime-broker'
 import type { AdapterOutputEvent } from '@oneworks/types'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import {
+  CODEX_APP_SERVER_RUNTIME_DRIVER_ID,
+  createCodexAppServerRuntimeBrokerDriver
+} from '#~/runtime-broker-driver.js'
 
 vi.mock('@oneworks/hooks', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@oneworks/hooks')>()
@@ -34,6 +41,29 @@ vi.mock('node:child_process', async (importOriginal) => {
 const spawnMock = vi.mocked(spawn)
 const callHookMock = vi.mocked(callHook)
 let latestReceivedLines: any[] = []
+
+describe('manager-owned Codex hook environment', () => {
+  it('merges lease-scoped callback credentials into thread configuration', () => {
+    const threadConfig: Record<string, unknown> = {
+      shell_environment_policy: { set: { EXISTING: 'value' } }
+    }
+
+    applyCodexAppServerHookEnv(threadConfig, {
+      __ONEWORKS_RUNTIME_BROKER_CALLBACK_TOKEN__: 'lease-token',
+      __ONEWORKS_RUNTIME_BROKER_CALLBACK_URL__: 'http://127.0.0.1/broker'
+    })
+
+    expect(threadConfig).toEqual({
+      shell_environment_policy: {
+        set: {
+          EXISTING: 'value',
+          __ONEWORKS_RUNTIME_BROKER_CALLBACK_TOKEN__: 'lease-token',
+          __ONEWORKS_RUNTIME_BROKER_CALLBACK_URL__: 'http://127.0.0.1/broker'
+        }
+      }
+    })
+  })
+})
 
 function makeMockLogger() {
   return {
@@ -68,6 +98,7 @@ function makeCtx(overrides: {
 }
 
 function makeProc(options: {
+  hangInitialize?: boolean
   resumeError?: { code: number; message: string }
   turnStartErrors?: Record<number, { code: number; message: string }>
   threadStartIds?: string[]
@@ -92,7 +123,7 @@ function makeProc(options: {
 
       if (typeof message.id !== 'number') continue
 
-      if (message.method === 'initialize') {
+      if (message.method === 'initialize' && options.hangInitialize !== true) {
         stdout.push(`${JSON.stringify({ id: message.id, result: { userAgent: 'codex/1.0' } })}\n`)
       } else if (message.method === 'thread/start') {
         threadStartCount += 1
@@ -258,6 +289,123 @@ describe('createCodexSession RPC approval policy mapping', () => {
     expect(events.some((event: AdapterOutputEvent) => event.type === 'exit')).toBe(true)
   })
 
+  it('keeps manager driver pool generations isolated during restart disposal', async () => {
+    const firstProcess = makeProc()
+    const secondProcess = makeProc()
+    spawnMock
+      .mockReturnValueOnce(firstProcess.proc)
+      .mockReturnValueOnce(secondProcess.proc)
+    const firstPool = createLocalCodexAppServerPool()
+    const secondPool = createLocalCodexAppServerPool()
+    const params = {
+      args: [],
+      binaryPath: '/usr/bin/codex',
+      clientInfo: {},
+      cwd: '/tmp',
+      env: {},
+      experimentalApi: false,
+      idleTimeoutMs: 300_000,
+      logger: makeMockLogger(),
+      profileKey: 'profile-a'
+    } as any
+    const firstLease = await firstPool.acquire(params)
+    const secondLease = await secondPool.acquire(params)
+
+    firstPool.dispose()
+
+    expect(firstProcess.proc.kill).toHaveBeenCalledOnce()
+    expect(secondProcess.proc.kill).not.toHaveBeenCalled()
+    await expect(secondLease.rpc.request('turn/interrupt', { threadId: 'thread-b' })).resolves.toEqual({})
+    firstLease.release()
+    secondLease.release()
+    secondPool.dispose()
+  })
+
+  it('kills an aborted app-server initialization and permits a later profile retry', async () => {
+    const hungProcess = makeProc({ hangInitialize: true })
+    const retryProcess = makeProc()
+    spawnMock
+      .mockReturnValueOnce(hungProcess.proc)
+      .mockReturnValueOnce(retryProcess.proc)
+    const pool = createLocalCodexAppServerPool()
+    const controller = new AbortController()
+    const params = {
+      args: [],
+      binaryPath: '/usr/bin/codex',
+      clientInfo: {},
+      cwd: '/tmp',
+      env: {},
+      experimentalApi: false,
+      idleTimeoutMs: 300_000,
+      logger: makeMockLogger(),
+      profileKey: 'profile-a'
+    } as any
+    const acquiring = pool.acquire({ ...params, signal: controller.signal })
+    await vi.waitFor(() =>
+      expect(hungProcess.receivedLines).toContainEqual(
+        expect.objectContaining({ method: 'initialize' })
+      )
+    )
+
+    controller.abort(new Error('broker acquire timed out'))
+
+    await expect(acquiring).rejects.toThrow('broker acquire timed out')
+    expect(hungProcess.proc.kill).toHaveBeenCalledOnce()
+    const retryLease = await pool.acquire(params)
+    expect(retryLease.userAgent).toBe('codex/1.0')
+    expect(spawnMock).toHaveBeenCalledTimes(2)
+    retryLease.release()
+    pool.dispose()
+  })
+
+  it('reuses one manager-owned app-server for matching cross-workspace profiles', async () => {
+    const sharedProcess = makeProc()
+    const isolatedProcess = makeProc()
+    spawnMock
+      .mockReturnValueOnce(sharedProcess.proc)
+      .mockReturnValueOnce(isolatedProcess.proc)
+    const broker = new RuntimeBroker({ pollTimeoutMs: 1 })
+    broker.registerDriver(createCodexAppServerRuntimeBrokerDriver({
+      getCallbackConnection: () => undefined,
+      logger: makeMockLogger() as any
+    }))
+    const payload = {
+      args: [],
+      binaryPath: '/usr/bin/codex',
+      clientInfo: {},
+      cwd: '/tmp/shared-profile-home',
+      env: {},
+      experimentalApi: false,
+      idleTimeoutMs: 300_000
+    }
+    const workspaceA = await broker.acquire('workspace:a', {
+      driverId: CODEX_APP_SERVER_RUNTIME_DRIVER_ID,
+      payload,
+      profileKey: 'profile-shared'
+    })
+    const workspaceB = await broker.acquire('workspace:b', {
+      driverId: CODEX_APP_SERVER_RUNTIME_DRIVER_ID,
+      payload,
+      profileKey: 'profile-shared'
+    })
+    const workspaceC = await broker.acquire('workspace:c', {
+      driverId: CODEX_APP_SERVER_RUNTIME_DRIVER_ID,
+      payload: { ...payload, cwd: '/tmp/isolated-profile-home' },
+      profileKey: 'profile-isolated'
+    })
+
+    expect(spawnMock).toHaveBeenCalledTimes(2)
+    expect(workspaceA.metadata).toMatchObject({ pid: 1234 })
+    expect(workspaceB.metadata).toMatchObject({ pid: 1234 })
+    await broker.release('workspace:a', workspaceA.leaseId)
+    expect(sharedProcess.proc.kill).not.toHaveBeenCalled()
+    await broker.release('workspace:b', workspaceB.leaseId)
+    await broker.release('workspace:c', workspaceC.leaseId)
+    await broker.dispose()
+    expect(sharedProcess.proc.kill).toHaveBeenCalledOnce()
+    expect(isolatedProcess.proc.kill).toHaveBeenCalledOnce()
+  })
+
   it('emits user-visible operation events while starting Codex stream turns', async () => {
     process.env.HOME = '/tmp'
     const { proc } = makeProc()
@@ -326,6 +474,42 @@ describe('createCodexSession RPC approval policy mapping', () => {
     expect(developerInstructions).toContain('Do not run Bash or other tools merely because')
     expect(developerInstructions).toContain('Project-specific rule.')
 
+    session.kill()
+  })
+
+  it('passes selected workspace skill roots through thread-scoped Codex config', async () => {
+    process.env.HOME = '/tmp'
+    const { proc, receivedLines } = makeProc()
+    spawnMock.mockReturnValue(proc)
+
+    const session = await createCodexSession(makeCtx(), {
+      type: 'create',
+      runtime: 'server',
+      sessionId: 'session-workspace-skills',
+      description: 'Use the selected skill.',
+      assetPlan: {
+        adapter: 'codex',
+        diagnostics: [],
+        mcpServers: {},
+        overlays: [{
+          assetId: 'skill:workspace/research',
+          kind: 'skill',
+          sourcePath: '/tmp/workspace-a/.oo/skills/research',
+          targetPath: 'skills/research'
+        }]
+      },
+      onEvent: () => {}
+    } as any)
+
+    const startRequest = receivedLines.find(line => line.method === 'thread/start')
+    expect(startRequest?.params.config).toMatchObject({
+      skills: {
+        config: [{
+          enabled: true,
+          path: '/tmp/workspace-a/.oo/skills/research'
+        }]
+      }
+    })
     session.kill()
   })
 
@@ -1388,6 +1572,7 @@ describe('createCodexSession RPC approval policy mapping', () => {
           __ONEWORKS_PROJECT_CLI_PACKAGE_DIR__: '/tmp/project/infra/node_modules/@oneworks/cli',
           __ONEWORKS_PROJECT_REAL_HOME__: '/tmp/real-home',
           __ONEWORKS_PROJECT_DOTENV_FILES__: '.env,.env.dev',
+          __ONEWORKS_PROJECT_NODE_PATH__: '/usr/local/bin/node',
           __ONEWORKS_PROJECT_SESSION_ID__: 'ow-session',
           __ONEWORKS_PROJECT_CTX_ID__: 'ow-ctx',
           __ONEWORKS_PROJECT_RUN_TYPE__: 'server',
@@ -1446,6 +1631,7 @@ describe('createCodexSession RPC approval policy mapping', () => {
     expect(mcpEnvOverride).toContain('__ONEWORKS_PROJECT_REAL_HOME__ = "/tmp/real-home"')
     expect(mcpEnvOverride).toContain('__ONEWORKS_DISABLE_MOCK_HOME_BRIDGE = "1"')
     expect(mcpEnvOverride).toContain('__ONEWORKS_PROJECT_DOTENV_FILES__ = ".env,.env.dev"')
+    expect(mcpEnvOverride).toContain('__ONEWORKS_PROJECT_NODE_PATH__ = "/usr/local/bin/node"')
     expect(mcpEnvOverride).toContain('EXPLICIT_ENV = "1"')
     expect(mcpEnvOverride).not.toContain('IGNORED_ENV')
 

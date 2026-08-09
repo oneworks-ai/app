@@ -20,10 +20,21 @@ export class CodexRpcError extends Error {
 interface PendingReq {
   resolve: (result: unknown) => void
   reject: (err: Error) => void
+  timer?: ReturnType<typeof setTimeout>
 }
 
 type NotificationHandler = (method: string, params: Record<string, unknown>) => void
 type RequestHandler = (id: number, method: string, params: Record<string, unknown>) => void
+
+export interface CodexRpcTransport {
+  request<T = unknown>(
+    method: string,
+    params?: Record<string, unknown>,
+    options?: { timeoutMs?: number }
+  ): Promise<T>
+  notify(method: string, params?: Record<string, unknown>): void
+  respond(id: number, result: unknown): void
+}
 
 /**
  * Minimal JSON-RPC 2.0 client over a Node.js ChildProcess stdio transport.
@@ -80,6 +91,7 @@ export class CodexRpcClient {
             return
           }
           this.pending.delete(response.id)
+          if (pending.timer != null) clearTimeout(pending.timer)
           if (response.error) {
             pending.reject(
               new CodexRpcError(
@@ -101,19 +113,33 @@ export class CodexRpcClient {
   /**
    * Send a JSON-RPC request and wait for the response.
    */
-  request<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T> {
+  request<T = unknown>(
+    method: string,
+    params?: Record<string, unknown>,
+    options: { timeoutMs?: number } = {}
+  ): Promise<T> {
     const id = ++this.idCounter
     const msg: CodexRequest = { method, id, ...(params != null ? { params } : {}) }
     return new Promise<T>((resolve, reject) => {
-      this.pending.set(id, {
+      const pending: PendingReq = {
         resolve: resolve as (v: unknown) => void,
         reject
-      })
+      }
+      if (options.timeoutMs != null) {
+        pending.timer = setTimeout(() => {
+          if (this.pending.get(id) !== pending) return
+          this.pending.delete(id)
+          reject(new Error(`Codex RPC request "${method}" timed out after ${options.timeoutMs}ms.`))
+        }, Math.max(1, options.timeoutMs))
+        pending.timer.unref?.()
+      }
+      this.pending.set(id, pending)
       const line = `${JSON.stringify(msg)}\n`
       this.logger.debug('[codex rpc] send:', { line: line.trim() })
       this.proc.stdin!.write(line, (err) => {
         if (err) {
           this.pending.delete(id)
+          if (pending.timer != null) clearTimeout(pending.timer)
           reject(err)
         }
       })
@@ -159,6 +185,7 @@ export class CodexRpcClient {
     this.rl.close()
     const err = new Error(reason)
     for (const pending of this.pending.values()) {
+      if (pending.timer != null) clearTimeout(pending.timer)
       pending.reject(err)
     }
     this.pending.clear()

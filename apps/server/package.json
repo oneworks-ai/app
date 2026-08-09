@@ -62,6 +62,7 @@
     "@oneworks/model-provider-catalog": "workspace:*",
     "@oneworks/register": "workspace:*",
     "@oneworks/runtime-protocol": "workspace:*",
+    "@oneworks/runtime-broker": "workspace:*",
     "@oneworks/runtime-store": "workspace:*",
     "@oneworks/types": "workspace:*",
     "@oneworks/utils": "workspace:*",

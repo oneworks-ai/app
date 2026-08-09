@@ -1,5 +1,6 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
+import { randomUUID } from 'node:crypto'
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { basename, dirname, join, resolve } from 'node:path'
 import process from 'node:process'
 
 import { resolveProjectMockHome } from '@oneworks/utils'
@@ -89,6 +90,18 @@ export const readJsonFileOrDefault = async <T>(filePath: string, fallback: T): P
 export const writeJsonFile = async (filePath: string, value: unknown) => {
   await mkdir(dirname(filePath), { recursive: true })
   await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+}
+
+export const writeJsonFileAtomically = async (filePath: string, value: unknown) => {
+  const directory = dirname(filePath)
+  const temporaryPath = join(directory, `.${basename(filePath)}.${randomUUID()}.tmp`)
+  await mkdir(directory, { recursive: true })
+  try {
+    await writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+    await rename(temporaryPath, filePath)
+  } finally {
+    await rm(temporaryPath, { force: true })
+  }
 }
 
 export const mergeManagedHookGroups = (params: {

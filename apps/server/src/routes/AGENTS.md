@@ -17,6 +17,7 @@
 - `static-client.ts`：Web client 静态挂载与 runtime env 注入；manager role 下不要注入 workspace folder，默认入口由 client 导向 `/launcher`。
 - `workspace.ts`：workspace server 自身的文件 / Git / 面板状态 / 活动状态 API；跨 session 生命周期的忙闲判断仍调用 `../services/session/`。
 - `workspace-media-response.ts`：`workspace/resource` 与 `sessions/:id/workspace/resource` 共用的媒体 HTTP 响应层，统一处理 GET / HEAD、单段 Range、206 / 416、长度、inline 与安全响应头；路径授权和 MIME 分类在 `../services/workspace/media.ts`。
+- `runtime-broker.ts`：manager-owned runtime broker 的通用 HTTP 协议、凭据校验和 loopback peer 边界；`runtime-broker-transport.ts` 为它提供与公开 server bind host 解耦的独立 loopback listener。
 
 聊天本地媒体必须复用上述 resource 链路。普通 workspace route 只允许当前 workspace；只有 session-scoped route 可以额外读取产品认可的 `/tmp/oneworks-cua` artifact 根。不要新增接收任意绝对路径的文件代理，也不要绕过 canonical path、symlink 和 regular-file 检查。
 

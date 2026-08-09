@@ -20,6 +20,7 @@ import packageJson from '../../package.json'
 import type { CodexSessionBase } from './session-common'
 
 import { formatCodexCommandForDisplay } from '#~/command-display.js'
+import { executeCodexHookInput } from '#~/hook-bridge.js'
 import {
   AgentMessageAccumulator,
   CommandOutputAccumulator,
@@ -41,6 +42,7 @@ import type {
 } from '#~/types.js'
 
 import { acquireCodexAppServer } from './app-server-pool'
+import type { CodexAppServerLease } from './app-server-pool'
 import { resolveCodexAdapterConfig } from './config'
 import { resolveManagedPermissionDecisionForCtx } from './permissions'
 import {
@@ -108,6 +110,23 @@ const buildCodexPermissionInteraction = (params: {
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
 )
+
+export const applyCodexAppServerHookEnv = (
+  threadConfig: Record<string, unknown>,
+  hookEnv: Record<string, string> | undefined
+) => {
+  if (hookEnv == null) return
+  const currentPolicy = isRecord(threadConfig.shell_environment_policy)
+    ? threadConfig.shell_environment_policy
+    : {}
+  threadConfig.shell_environment_policy = {
+    ...currentPolicy,
+    set: {
+      ...(isRecord(currentPolicy.set) ? currentPolicy.set : {}),
+      ...hookEnv
+    }
+  }
+}
 
 const readTokenCount = (value: unknown) => (
   typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0
@@ -304,6 +323,26 @@ export const buildCodexMcpElicitationResponse = (
   return { action: 'cancel' }
 }
 
+export const releaseCodexAppServerAfterCleanup = async (
+  appServer: Pick<CodexAppServerLease, 'release'>,
+  cleanup: Promise<unknown>[],
+  timeoutMs = 5_000
+) => {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    await Promise.race([
+      Promise.allSettled(cleanup),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, Math.max(0, timeoutMs))
+        timer.unref?.()
+      })
+    ])
+  } finally {
+    if (timer != null) clearTimeout(timer)
+    appServer.release()
+  }
+}
+
 /**
  * Spawn `codex app-server` and drive it over JSON-RPC 2.0 (JSONL),
  * forwarding events to `onEvent`.
@@ -376,11 +415,19 @@ export async function createStreamCodexSession(
     logger,
     profileKey: appServerPoolKey
   })
+  applyCodexAppServerHookEnv(threadConfig, appServer.hookEnv)
   startupProfiler.mark('codex.native.spawn', nativeSpawnStartedAt, {
     binaryPath: String(binaryPath),
     pid: appServer.pid
   })
   const rpc = appServer.rpc
+  appServer.setHookHandler?.(input =>
+    executeCodexHookInput(input, {
+      env: threadEnv,
+      runtime: options.runtime,
+      sessionId
+    }, ctx.env)
+  )
   const msgAcc = new AgentMessageAccumulator()
   const cmdAcc = new CommandOutputAccumulator()
   let threadId: string | undefined
@@ -485,28 +532,70 @@ export async function createStreamCodexSession(
     }
   }
 
+  let releaseActiveResourcesPromise: Promise<void> | undefined
   const releaseActiveResources = () => {
-    for (const pending of pendingApprovals.values()) {
-      rpc.respond(
-        pending.rpcId,
-        pending.kind === 'mcp-elicitation' ? { action: 'cancel' } : { decision: 'decline' }
-      )
-    }
-    pendingApprovals.clear()
-    if (threadId != null && activeTurnId != null) {
-      rpc.request('turn/interrupt', {
-        threadId,
-        turnId: activeTurnId
-      }).catch((error) => {
-        logger.debug('[codex session] turn/interrupt during release failed', {
-          error: getErrorMessage(error),
-          sessionId,
-          threadId
+    if (releaseActiveResourcesPromise != null) return releaseActiveResourcesPromise
+    releaseActiveResourcesPromise = (async () => {
+      const cleanup: Promise<unknown>[] = []
+      const approvalResponses: Array<{ id: number; result: unknown }> = []
+      for (const pending of pendingApprovals.values()) {
+        approvalResponses.push({
+          id: pending.rpcId,
+          result: pending.kind === 'mcp-elicitation' ? { action: 'cancel' } : { decision: 'decline' }
         })
+      }
+      pendingApprovals.clear()
+      const closingThreadId = threadId
+      if (appServer.closeSession != null && closingThreadId != null) {
+        cleanup.push(
+          appServer.closeSession({
+            responses: approvalResponses,
+            threadId: closingThreadId,
+            ...(activeTurnId == null ? {} : { turnId: activeTurnId })
+          }).catch((error) => {
+            logger.debug('[codex session] manager-side close during release failed', {
+              error: getErrorMessage(error),
+              sessionId,
+              threadId: closingThreadId
+            })
+          })
+        )
+      } else {
+        for (const response of approvalResponses) rpc.respond(response.id, response.result)
+      }
+      if (appServer.closeSession == null && threadId != null && activeTurnId != null) {
+        const interruptThreadId = threadId
+        cleanup.push(
+          rpc.request('turn/interrupt', {
+            threadId: interruptThreadId,
+            turnId: activeTurnId
+          }).catch((error) => {
+            logger.debug('[codex session] turn/interrupt during release failed', {
+              error: getErrorMessage(error),
+              sessionId,
+              threadId: interruptThreadId
+            })
+          })
+        )
+      }
+      cleanup.push(
+        detachThread({ remote: appServer.closeSession == null }).catch((error) => {
+          logger.debug('[codex session] thread detach during release failed', {
+            error: getErrorMessage(error),
+            sessionId
+          })
+        })
+      )
+      if (appServer.drain != null) cleanup.push(appServer.drain())
+
+      await releaseCodexAppServerAfterCleanup(appServer, cleanup)
+    })().catch((error) => {
+      logger.debug('[codex session] release cleanup failed', {
+        error: getErrorMessage(error),
+        sessionId
       })
-    }
-    void detachThread()
-    appServer.release()
+    })
+    return releaseActiveResourcesPromise
   }
 
   const emitFailureAndExit = (err: unknown) => {
@@ -519,7 +608,7 @@ export async function createStreamCodexSession(
       emitEvent({ type: 'error', data: toAdapterErrorData(err) })
     }
     emitEvent({ type: 'exit', data: { exitCode: 1, stderr } })
-    releaseActiveResources()
+    void releaseActiveResources()
   }
 
   const readThreadCache = async () => (await cache.get('adapter.codex.threads')) ?? {}
@@ -783,28 +872,26 @@ export async function createStreamCodexSession(
         }
       })
     }
-    transcriptHookWatcher?.stop()
-    transcriptHookWatcher = undefined
-    if (threadId != null && threadSessionMapPath != null) {
-      void unregisterCodexThreadSession(threadSessionMapPath, threadId, sessionId)
-    }
+    void releaseActiveResources()
     emitEvent({ type: 'exit', data: { exitCode: code ?? undefined } })
   })
 
-  const detachThread = async () => {
+  const detachThread = async (options: { remote?: boolean } = {}) => {
     const detachedThreadId = threadId
     if (detachedThreadId == null) return
     threadId = undefined
     transcriptHookWatcher?.stop()
     transcriptHookWatcher = undefined
-    appServer.unregisterThread(detachedThreadId)
-    rpc.request('thread/unsubscribe', { threadId: detachedThreadId }).catch((error) => {
-      logger.debug('[codex session] thread/unsubscribe failed', {
-        error: getErrorMessage(error),
-        sessionId,
-        threadId: detachedThreadId
+    if (options.remote !== false) {
+      await appServer.unregisterThread(detachedThreadId)
+      await rpc.request('thread/unsubscribe', { threadId: detachedThreadId }).catch((error) => {
+        logger.debug('[codex session] thread/unsubscribe failed', {
+          error: getErrorMessage(error),
+          sessionId,
+          threadId: detachedThreadId
+        })
       })
-    })
+    }
     if (threadSessionMapPath != null) {
       await unregisterCodexThreadSession(threadSessionMapPath, detachedThreadId, sessionId)
     }
@@ -825,7 +912,7 @@ export async function createStreamCodexSession(
   }
 
   const attachThread = async (nextThreadId: string) => {
-    appServer.registerThread(nextThreadId, {
+    await appServer.registerThread(nextThreadId, cwd, {
       onNotification: handleNotification,
       onRequest: handleRequest
     })
@@ -840,7 +927,7 @@ export async function createStreamCodexSession(
     transcriptHookWatcher?.setCodexThreadId(nextThreadId)
   }
 
-  const withPendingThreadBinding = <T>(task: () => Promise<T>) =>
+  const withPendingThreadBinding = <T>(task: () => Promise<T>, pendingThreadId?: string) =>
     appServer.runThreadSetup(async () => {
       ensureTranscriptHookWatcher()
       if (threadSessionMapPath != null) {
@@ -857,6 +944,9 @@ export async function createStreamCodexSession(
           await unregisterPendingCodexThreadSession(threadSessionMapPath, cwd, sessionId)
         }
       }
+    }, {
+      cwd,
+      ...(pendingThreadId == null ? {} : { threadId: pendingThreadId })
     })
 
   const startNewThread = async () => {
@@ -936,7 +1026,7 @@ export async function createStreamCodexSession(
       threadId = result.thread.id
       await attachThread(threadId)
       return result
-    })
+    }, nextThreadId)
     startupProfiler.mark('codex.native.threadResume', threadResumeStartedAt)
     threadId = resumeResult.thread.id
     usedCachedThread = true
@@ -1128,7 +1218,7 @@ export async function createStreamCodexSession(
         finishAllActiveOperations('operation_completed', 'Codex session stopped.')
         if (!didEmitExit) {
           didEmitExit = true
-          releaseActiveResources()
+          void releaseActiveResources()
           emitEvent({ type: 'exit', data: { exitCode: 0 } })
         }
         break
@@ -1145,7 +1235,7 @@ export async function createStreamCodexSession(
       finishAllActiveOperations('operation_completed', 'Codex session stopped.')
       if (!didEmitExit) {
         didEmitExit = true
-        releaseActiveResources()
+        void releaseActiveResources()
         emitEvent({ type: 'exit', data: { exitCode: 0 } })
       }
     },

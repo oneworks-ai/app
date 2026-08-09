@@ -9,6 +9,8 @@ import { adapterConfigContribution } from '#~/config-schema.js'
 import type { CodexAdapterConfig, CodexCommonAdapterConfigKey } from '#~/config-schema.js'
 import type { CodexSandboxPolicy } from '#~/types.js'
 
+import { writeCodexPrivateFileAtomically } from './atomic-file'
+
 const MANAGED_ROOT_BLOCK_START = '# BEGIN ONE WORKS MANAGED CODEX ROOT CONFIG'
 const MANAGED_ROOT_BLOCK_END = '# END ONE WORKS MANAGED CODEX ROOT CONFIG'
 const MANAGED_PROJECT_BLOCK_START = '# BEGIN ONE WORKS MANAGED CODEX PROJECT CONFIG'
@@ -394,7 +396,7 @@ export const ensureCodexConfigCliCompatibility = async (configPath: string) => {
   const compatibleContent = normalizeCodexConfigCliCompatibility(currentContent)
   if (compatibleContent === currentContent) return
 
-  await writeFile(configPath, compatibleContent, 'utf8')
+  await writeCodexPrivateFileAtomically(configPath, compatibleContent)
 }
 
 const getTomlRootAssignmentKeys = (content: string) => {

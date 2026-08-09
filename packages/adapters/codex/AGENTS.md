@@ -43,7 +43,7 @@ Primary implementation entrypoints for Codex hooks:
   - treats the current `~/.codex/auth.json` as a read-only fallback account source and does not migrate it into project-local storage
   - when a global inline account and `~/.codex/auth.json` have the same stable account identity, keeps the configured key / metadata but uses the real-home file as the local runtime credential; this avoids replaying an already-rotated inline refresh token without silently writing real-home auth back to One Works config
   - materializes inline session and probe auth through the shared atomic writer; both temporary and final private auth files are forced to `0600`
-  - prepares per-session HOME roots for direct mode and project/account/startup-profile HOME roots for shared app-server mode
+  - prepares per-session HOME roots for direct mode, project-local fallback HOME roots without a manager, and machine-shared account/startup-profile HOME roots for manager-owned app-server mode
   - does not bridge the whole shared `.codex` tree into a session HOME; only auth, config, hooks, skills, and sessions are intentionally linked so global plugin caches and app state cannot slow `codex app-server` startup
   - normalizes the imported Codex config before using that HOME with the CLI, so unsupported values from a user's real config do not break One Works sessions.
   - queries Codex account info and rate-limit/quota snapshots through `codex app-server`
@@ -80,17 +80,24 @@ Primary implementation entrypoints for Codex hooks:
 - `src/runtime/usage-history-files.ts` / `src/runtime/usage-history-parser.ts`
   - keep filesystem discovery separate from the privacy-bounded JSONL parser
 - `src/runtime/session-common.ts`
-  - enables `hooks`, resolves adapter network settings, and projects model/provider/MCP/session settings into thread config
+  - enables `hooks`, resolves adapter network settings, and projects model/provider/MCP/session settings plus selected workspace skill paths into thread config; manager-owned mode must move every workspace runtime `__ONEWORKS_PROJECT_*` variable except the broker connection itself out of the shared process environment and into `shell_environment_policy.set`
 - `src/runtime/app-server-pool.ts`
-  - owns project/account/startup-profile app-server reuse, one-time initialization, thread event routing, and idle shutdown
+  - owns standalone project-local or manager account/startup-profile app-server reuse, one-time initialization, thread event routing, idle shutdown, and the workspace-side remote transport adapter; remote fire-and-forget notifications/responses are tracked so session teardown can drain them before releasing the broker lease
+- `src/runtime-broker-driver.ts`
+  - is the Codex-specific driver for the generic `@oneworks/runtime-broker`; it owns JSON-RPC operations, lease-scoped thread ownership, serialized setup bindings, deduplicated app-server callbacks, and manager-side local pool acquisition
+  - never exposes an unrestricted JSON-RPC tunnel to a workspace lease: thread creation/resume requires that lease's setup claim, turn and unsubscribe operations require a registered owned thread, inbound response IDs are lease-scoped, and global list/read/notify operations fail closed
+  - keeps the managed hook budget ordered end to end: the workspace request stops before the callback client's overall deadline, and both stop before the 720-second native hook command timeout so an accepted-but-lost result can retry
+  - collapses remote session teardown into one idempotent manager-side `session.close` invoke; workspace transport retries use a short deadline, while manager-side approval responses, interrupt, unregister and unsubscribe are issued before the lease is released
+- `src/runtime/app-server-warmup.ts`
+  - builds at most three default/configured account profiles for non-blocking manager warmup without creating threads
 - `src/runtime/network.ts`
   - resolves adapter-level HTTP proxy, bypass, and CA settings and applies the effective Codex process environment
 - `src/runtime/thread-session-map.ts`
-  - maps shared Codex thread IDs back to One Works task IDs/runtime metadata for native hooks
+  - maps local-fallback Codex thread IDs back to One Works task IDs/runtime metadata for native hooks; manager-owned sessions use broker ownership instead
 - `src/hook-bridge.ts`
-  - translates Codex native payloads into One Works hook input/output
+  - translates Codex native payloads into One Works hook input/output; a manager-owned app-server sends the native callback through the generic broker, which requests execution from the owning workspace lease
 - `src/runtime/stream.ts`
-  - maps app-server `item/started -> contextCompaction` into observational `PreCompact`
+  - maps app-server `item/started -> contextCompaction` into observational `PreCompact`; explicit stop/kill and app-server `onExit` both use the same bounded teardown that unregisters and unsubscribes the thread, drains pending remote responses, and releases the app-server lease
 - `src/runtime/transcript-hooks.ts`
   - bridges transcript JSONL tool observations for non-Bash events
 - `packages/hooks/call-hook.js`
@@ -144,7 +151,9 @@ Codex maintenance notes:
 - session HOME preparation may copy user Codex config, but runtime-facing config must remain compatible with the Codex CLI version One Works starts; normalize or comment unsupported scalar values rather than letting the session fail at config parse time
 - Codex 官方文档里的用户级 skills 入口仍是 `<project-home>/.mock/.agents/skills`
 - 但当前真实 runtime 会在 `<project-home>/.mock/.codex/skills/.system` 下维护系统技能，所以 workspace skills 也要镜像进 `<project-home>/.mock/.codex/skills/<name>`
-- Codex 2026-03-27 official hooks docs say `~/.codex/hooks.json` and `<repo>/.codex/hooks.json` are both loaded, so project-level managed hooks must be deduped before writing mock-home hooks
+- manager-owned stream 不把 workspace skill 或 hook 目录链接进共享 HOME；selected skills 通过 `thread/start.config.skills.config` 下发。One Works managed hook 使用稳定 user-level bridge，但回调 URL/token 只通过当前 lease 的 `thread/start.config.shell_environment_policy.set` 下发，不进入共享 app-server 环境；broker 再按 lease + thread ID + cwd 回到 workspace。原生 `<workspace>/.codex/hooks.json` 仍由 Codex 按 cwd 发现
+- shared profile HOME 的 `config.toml` 与 `hooks.json` 初始化必须在同一 canonical config lock 内完成，并用同目录原子替换；锁只序列化 writer，不能保护正在读取配置的活跃 app-server
+- Codex 2026-03-27 official hooks docs say `~/.codex/hooks.json` and `<repo>/.codex/hooks.json` are both loaded, so local fallback 写 mock-home hooks 时要避开 project-level managed groups；manager shared HOME 与历史 project managed group 同时出现时，driver 还要按原始 hook payload 去重
 - `SessionEnd` is still framework-owned and should not be reintroduced in Codex-native config
 - when native hooks are active, bridge duplicates must stay disabled in `packages/task/src/run.ts`
 - Codex native `PreToolUse` / `PostToolUse` should be treated as Bash-first until official coverage expands; transcript JSONL can supplement non-Bash analytics, but it cannot block or rewrite the live session
@@ -220,7 +229,7 @@ Codex 多账号切换走 adapter 通用 `account` 能力：
 如果本机存在 `~/.codex/auth.json`，adapter 会把它作为只读 fallback account 展示和使用；这条 fallback 不会写入 One Works config。要让 Codex 登录态通过 Relay 同步到其他设备，必须通过 `ow accounts add codex [accountName]` 或 Web 登录入口把它保存到 global config。
 如果 global config 里已经有同一 stable identity 的 inline account，本机运行时会保留它的 key、标题和默认账号语义，但优先软链当前 `~/.codex/auth.json`；这样 Codex 或 ChatGPT 轮换 refresh token 后不会继续重放旧 inline token，同时也不会把真实 home 的新凭据自动写回 global config。
 
-direct mode 的 HOME 按 session 隔离；stream mode 则按 project、账号与启动 / 网络 profile 隔离并复用 app-server HOME。model provider、MCP、cwd、权限与 session 环境都下沉到 thread，不构成独立 app-server。账号只来自 global config 时，adapter 会把 base64 auth materialize 到隔离 HOME 的 `.codex/auth.json`；账号来自 `authFile`、real home fallback，或命中同身份本机凭据覆盖时，会 symlink 到对应文件。
+direct mode 的 HOME 按 session 隔离；standalone stream fallback 按 project、账号与启动 / 进程 / 网络 profile 隔离并复用 app-server HOME；manager-owned stream 则在账号、binary / startup 与有效进程 / 网络 profile 相同时跨 workspace 复用机器共享 HOME 和 app-server。model provider、MCP、cwd、权限、One Works workspace / session 运行时元数据与 selected skills 都下沉到 thread，不构成独立 app-server；其他进程级环境仍参与 profile。账号只来自 global config 时，adapter 会把 base64 auth materialize 到隔离 HOME 的 `.codex/auth.json`；账号来自 `authFile`、real home fallback，或命中同身份本机凭据覆盖时，会 symlink 到对应文件。
 
 现在还支持两类额外入口：
 
@@ -349,7 +358,7 @@ mock home.
 - `appServer.idleTimeoutMs` controls how long a shared, unused stream app-server remains alive; the default is 300000 ms.
 - `network.httpProxy`, `httpsProxy`, `allProxy`, and `noProxy` override the corresponding process environment for this adapter only. Loopback hosts are always added to `NO_PROXY` so Codex can reach the adapter-owned local routing proxy.
 - `network.caCertificate` accepts a PEM bundle path or inline PEM. Inline content is materialized under the profile HOME with mode `0600`; native Codex receives the resulting path through both `CODEX_CA_CERTIFICATE` and `SSL_CERT_FILE`.
-- Different project, account, binary/startup options, effective process environment, or network profile creates a different app-server pool entry. Model providers and MCP selections remain thread-scoped.
+- In standalone stream fallback, a different project or account/startup/process/network profile creates a different app-server pool entry. In manager-owned mode, project identity is intentionally excluded: matching account, binary/startup, and effective process/network profiles reuse one app-server across workspaces. Model providers, MCP, cwd, permissions, One Works workspace/session runtime metadata, and selected skills remain thread-scoped; other process-level environment remains profile-scoped.
 
 ### Native model provider import
 

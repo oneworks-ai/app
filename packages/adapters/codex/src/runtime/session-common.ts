@@ -386,6 +386,7 @@ const MCP_INHERITED_ENV_KEYS = [
   '__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__',
   '__ONEWORKS_PROJECT_REAL_HOME__',
   '__ONEWORKS_PROJECT_DOTENV_FILES__',
+  '__ONEWORKS_PROJECT_NODE_PATH__',
   '__ONEWORKS_PROJECT_SESSION_ID__',
   '__ONEWORKS_PROJECT_CTX_ID__',
   '__ONEWORKS_PROJECT_RUN_TYPE__',
@@ -419,16 +420,28 @@ const isCodexThreadEnvKey = (key: string) => (
   key.startsWith('__ONEWORKS_RUNTIME_PROTOCOL_')
 )
 
-const splitCodexAppServerEnv = (env: NodeJS.ProcessEnv) => {
+const isRuntimeBrokerConnectionEnvKey = (key: string) => (
+  key === '__ONEWORKS_PROJECT_RUNTIME_BROKER_URL__' ||
+  key === '__ONEWORKS_PROJECT_RUNTIME_BROKER_TOKEN__'
+)
+
+export const splitCodexAppServerEnv = (env: NodeJS.ProcessEnv, sharedAppServer: boolean) => {
   const appServerEnv = { ...env }
   const threadEnv: Record<string, string> = {}
 
   for (const [key, value] of Object.entries(env)) {
-    if (!isCodexThreadEnvKey(key)) continue
+    const isWorkspaceRuntimeKey = sharedAppServer &&
+      key.startsWith('__ONEWORKS_PROJECT_') &&
+      !isRuntimeBrokerConnectionEnvKey(key)
+    if (!isCodexThreadEnvKey(key) && !isWorkspaceRuntimeKey) continue
     delete appServerEnv[key]
     if (value != null) threadEnv[key] = value
   }
   for (const key of ['INIT_CWD', 'OLDPWD', 'PWD']) delete appServerEnv[key]
+  if (sharedAppServer) {
+    delete appServerEnv.HOME
+    delete appServerEnv.USERPROFILE
+  }
 
   return { appServerEnv, threadEnv }
 }
@@ -1182,11 +1195,14 @@ export async function resolveSessionBase(
   configFingerprintArgs.push(...mcpConfigArgs)
 
   const binaryPath = resolveCodexBinaryPath(env, cwd)
+  const sharedAppServer = options.mode !== 'direct' &&
+    readOptionalString(effectiveEnv.__ONEWORKS_PROJECT_RUNTIME_BROKER_URL__) != null &&
+    readOptionalString(effectiveEnv.__ONEWORKS_PROJECT_RUNTIME_BROKER_TOKEN__) != null
   const { appServerEnv: spawnEnv, threadEnv: threadProcessEnv } = options.mode === 'direct'
     ? { appServerEnv: effectiveEnv, threadEnv: {} }
-    : splitCodexAppServerEnv(effectiveEnv)
+    : splitCodexAppServerEnv(effectiveEnv, sharedAppServer)
   spawnEnv.__ONEWORKS_DISABLE_MOCK_HOME_BRIDGE = '1'
-  const nativeHooksAvailable = env.__ONEWORKS_PROJECT_CODEX_NATIVE_HOOKS_AVAILABLE__ === '1'
+  const nativeHooksAvailable = sharedAppServer || env.__ONEWORKS_PROJECT_CODEX_NATIVE_HOOKS_AVAILABLE__ === '1'
   if (nativeHooksAvailable) features.hooks = true
   const appServerIdleTimeoutMs = options.runtime === 'cli'
     ? 0
@@ -1202,7 +1218,14 @@ export async function resolveSessionBase(
         features,
         idleTimeoutMs: appServerIdleTimeoutMs,
         networkConfig,
-        processEnv: Object.fromEntries(Object.entries(spawnEnv).sort(([left], [right]) => left.localeCompare(right)))
+        processEnv: Object.fromEntries(
+          Object.entries(spawnEnv)
+            .filter(([key]) => (
+              key !== '__ONEWORKS_PROJECT_RUNTIME_BROKER_URL__' &&
+              key !== '__ONEWORKS_PROJECT_RUNTIME_BROKER_TOKEN__'
+            ))
+            .sort(([left], [right]) => left.localeCompare(right))
+        )
       }))
       .digest('hex')
   const sessionHomeStartedAt = startupProfiler.now()
@@ -1213,12 +1236,15 @@ export async function resolveSessionBase(
     nativeProviderConfigOverrides: options.mode === 'direct'
       ? nativeProviderConfigOverrides
       : undefined,
-    appServerProfileKey
+    appServerProfileKey,
+    nativeHooksAvailable,
+    sharedAppServerHome: sharedAppServer
   })
   startupProfiler.mark('codex.session.prepareSessionHome', sessionHomeStartedAt)
   networkConfig = await materializeCodexCaCertificate(networkConfig, runtimeHome.homeDir)
   applyCodexNetworkEnv(spawnEnv, networkConfig)
   spawnEnv.HOME = runtimeHome.homeDir
+  spawnEnv.USERPROFILE = runtimeHome.homeDir
   if (options.mode !== 'direct') spawnEnv.PWD = runtimeHome.homeDir
   spawnEnv.CODEX_HOME = resolve(runtimeHome.homeDir, '.codex')
   await mkdir(resolve(spawnEnv.HOME ?? process.env.HOME!, '.codex'), { recursive: true })
@@ -1229,7 +1255,7 @@ export async function resolveSessionBase(
     if (options.mode === 'direct') {
       spawnEnv.__ONEWORKS_CODEX_HOOK_RUNTIME__ = options.runtime
       spawnEnv.__ONEWORKS_CODEX_TASK_SESSION_ID__ = options.sessionId
-    } else {
+    } else if (!sharedAppServer) {
       spawnEnv.__ONEWORKS_CODEX_THREAD_SESSION_MAP__ = resolve(
         runtimeHome.homeDir,
         '.codex',
@@ -1271,6 +1297,16 @@ export async function resolveSessionBase(
     ...configOverrideArgs,
     ...nativeProviderConfigOverrides.flatMap(override => ['-c', override])
   ])
+  const selectedSkillPaths = options.assetPlan?.overlays
+    ?.filter(overlay => overlay.kind === 'skill')
+    .map(overlay => overlay.sourcePath) ?? []
+  if (selectedSkillPaths.length > 0) {
+    const currentSkills = isPlainObject(threadConfig.skills) ? threadConfig.skills : {}
+    threadConfig.skills = {
+      ...currentSkills,
+      config: selectedSkillPaths.map(path => ({ enabled: true, path }))
+    }
+  }
   if (options.mode !== 'direct' && Object.keys(threadProcessEnv).length > 0) {
     const currentPolicy = isPlainObject(threadConfig.shell_environment_policy)
       ? threadConfig.shell_environment_policy

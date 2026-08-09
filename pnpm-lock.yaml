@@ -616,6 +616,9 @@ importers:
       '@oneworks/register':
         specifier: workspace:*
         version: link:../../packages/register
+      '@oneworks/runtime-broker':
+        specifier: workspace:*
+        version: link:../../packages/runtime-broker
       '@oneworks/runtime-protocol':
         specifier: workspace:*
         version: link:../../packages/runtime-protocol
@@ -779,6 +782,9 @@ importers:
       '@oneworks/register':
         specifier: workspace:*
         version: link:../../register
+      '@oneworks/runtime-broker':
+        specifier: workspace:*
+        version: link:../../runtime-broker
       '@oneworks/types':
         specifier: workspace:*
         version: link:../../types
@@ -1298,6 +1304,8 @@ importers:
       react-dom:
         specifier: ^18.3.1
         version: 18.3.1(react@18.3.1)
+
+  packages/runtime-broker: {}
 
   packages/runtime-protocol:
     dependencies:
