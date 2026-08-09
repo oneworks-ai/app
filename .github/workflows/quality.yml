@@ -229,9 +229,10 @@ jobs:
       - name: Build public documentation
         env:
           ONEWORKS_DOCS_SOURCE_DIR: ${{ github.workspace }}/.oo/docs
-        run: >-
-          corepack "$(node -p "require('./assets/homepage/package.json').packageManager")"
-          -C assets/homepage --filter @oneworks/docs build
+        run: |
+          docs_package_manager="$(node -p "require('./assets/homepage/package.json').packageManager")"
+          corepack "$docs_package_manager" -C assets/homepage/apps/docs prepare-content
+          corepack "$docs_package_manager" -C assets/homepage/apps/docs exec vitepress build
 
   release-docs:
     name: release-docs-preflight
