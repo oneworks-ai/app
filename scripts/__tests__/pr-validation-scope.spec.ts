@@ -309,6 +309,8 @@ describe('required context completion contract', () => {
     expect(publicDocsJob).not.toContain('version: 11.7.0')
     expect(publicDocsJob).not.toContain('version: 10.33.0')
     expect(publicDocsJob).toContain('package_json_file: assets/homepage/package.json')
+    expect(publicDocsJob).not.toContain('cache: pnpm')
+    expect(publicDocsJob).not.toContain('cache-dependency-path:')
     expect(releaseDocsJob).not.toContain('outputs.docs_only')
     expect(releaseDocsJob).toContain('--allow-mixed')
   })
