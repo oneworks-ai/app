@@ -10,7 +10,8 @@
 - [Android 模拟器启动排查耗时](#android-模拟器启动排查耗时)
 - [Android 设备调试页改错 worktree 或 CI 收口失败](#android-设备调试页改错-worktree-或-ci-收口失败)
 - [PR 截图证据断链或来源不真实](#pr-截图证据断链或来源不真实)
-- [移动端 WebView / 工作区 tabs 反复返工](#移动端-webview--工作区-tabs-反复返工)
+- [Actions 事件或队列异常导致 required context 缺失](#actions-事件或队列异常导致-required-context-缺失)
+- [移动端 WebView / 工作区 tabs 反复返工](#移动端-webview-工作区-tabs-反复返工)
 - [Electron WebView 右键元素评论坐标偏移](#electron-webview-右键元素评论坐标偏移)
 
 ## Subagent 启动 Web 服务超过 1 分钟
@@ -123,6 +124,24 @@ pnpm --silent tools dev-service ensure android-emulator --json
 原因：
 
 UI PR 的 `pr-change-policy` 只检查 PR body 是否有截图证据，不会判断图片是否真实可见或是否来自当前实现。把图片链接写到会被删除的 PR 分支上，会在 merge 后变成断图；复用旧图但不说明来源，会误导 reviewer 对 UI 实际状态的判断。
+
+## Actions 事件或队列异常导致 required context 缺失
+
+症状关键词：`Actions queued`、`job 没启动`、`required context pending`、`pull_request event 缺失`、`workflow_dispatch 已绿`、`旧 head 已绿`、`baseline flake`、`rerun failed jobs`。
+
+标准处理：
+
+- 先固定 PR number、最新 head SHA、base SHA、GitHub 当前评估的 SHA / ref、触发事件和缺失的 required context，再用官方 `gh` CLI 查看这份当前 PR revision 的 runs / checks。`pull_request` workflow 可能评估 synthetic test-merge commit；以 GitHub PR 状态框要求通过的当前 commit 为准，不能只查 head SHA。多个仓库同时出现排队、事件未入队或 runner 异常时，先查 GitHub 官方状态页和 Actions incident，再判断本仓 workflow；不要先用空提交、改 workflow 或扩大产品 diff 试图“唤醒”队列。
+- `workflow_dispatch`、`push`、另一 PR、旧 head / base / evaluated SHA 上的成功只能用于诊断，不能替代当前 PR revision 由正确 `pull_request` event 产生的 required contexts。平台恢复后只使用 GitHub 支持、仍绑定原 PR event 身份的恢复路径，让当前 revision 产生正确 context；不要伪造同名状态或把非 PR run 当作合并证据。
+- 首次失败若有证据表明与当前 diff 无关且可能是 baseline / flake，最多执行一次 GitHub 支持的 rerun，并保存 exact run、PR revision 与失败 step 的非敏感证据。一次 rerun 仍重复失败时停止重试，不能靠连续 rerun 碰绿；随后在当前 live main 的 clean checkout 复现相同命令 / context 并分类根因。
+- 平台 incident / runner 故障等待官方恢复或升级处理；只在失败不带 feature diff 也能稳定复现、且已定位仓库内最小 baseline 根因并获得对应修复授权时，才建立独立、最小 baseline fix PR；feature-specific failure 返回原 feature owner。baseline fix 全绿并合入后，feature 必须从新的 live main 在 clean worktree 重新组装、重新 freeze 和独立审阅；不要在陈旧 feature 分支 rebase、force push 或手工合并冲突。
+- 官方 incident、队列异常和 baseline fix 都不降低 feature 的 changelog、真实截图、Experience Review、source freeze 或 exact-scope 审阅要求。故障证据进入协调摘要即可，不把 incident 时间线、账号或临时运行路径沉淀进规则。
+
+完成条件：
+
+- 当前 PR revision 由正确 PR event 产生全部 required contexts，且结论可追溯到 PR number、最新 head / base 和 GitHub 当前要求通过的 evaluated SHA / ref。
+- 若拆出 baseline fix，它已独立全绿合入；feature 已在新 main 上重新组装并取得新的 freeze / review PASS。
+- 与本任务有关的 source、reviewer、Git operator 和 monitor 已按 [终态回调与归档](./task-planning.md#终态回调与归档) 完成回调、heartbeat 删除、归档，并从本任务 thread 清单 / pending 任务矩阵收口。
 
 ## Android 设备调试页改错 worktree 或 CI 收口失败
 

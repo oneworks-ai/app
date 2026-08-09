@@ -93,6 +93,8 @@
 6. 从本任务 pending 矩阵中移除该线程，记录其终态和已提取证据。只有本任务创建的独立 worker、reviewer、协调器和 Git / PR operator 进入本流程；不要扫描后归档用户主会话、其他任务的线程或用户仍需继续对话的会话。
 7. 主线程最终回复前再检查一次本任务 thread 清单。只要存在已经终止但未归档的独立线程，主任务就不能声称“完全完成”；应立即补做归档，或如实报告清理阻塞。
 
+多角色链路还要按依赖顺序收口：source / fork 在冻结产物已被下游核验、live-main 组装被接受且不再需要返工后才能归档；reviewer 的 PASS / findings 被主线程核验后归档；Git operator 的 commit、PR、CI 或 merge 终态已核验后归档。每个角色先发送终态回调，再由创建任务的主协调者删除对应 heartbeat、完成归档并从本任务 thread 清单 / pending 任务矩阵移除；最后确认本任务创建的已终止 fork、source、reviewer、operator 均不再残留。不要为了清空任务矩阵提前归档仍被下游读取、等待 required checks、可能接回重组或尚未回调的任务。
+
 推荐的最终回调最小格式：
 
 ```text
@@ -129,6 +131,7 @@ Safe to archive: yes / no
 
 - GitHub API 身份、repository 元数据 / 状态、PR、Actions、release 状态和 credential 相关交付操作只使用本机官方 `gh` CLI。禁止用 Codex、Claude 或 GitHub 插件、隐藏 connector 身份、复制 token、环境变量注入 token 或其他集成绕过；源码的 clone / fetch / push 由 `git` 统一通过 SSH transport 执行。
 - `gh` API 身份与 Git transport 是两条独立链路。GitHub API 操作仍需要 browser / device OAuth；SSH 只承载 clone / fetch / push，不会替代、恢复或延长 `gh` OAuth credential，也不改变 `gh` API 身份。
+- 用户指定 GitHub 写入身份时，operator 必须使用该身份；用户明确要求通过 `gh` CLI 操作时，先运行 `gh auth status` 做本机 CLI 诊断，再以 `gh api user` 和 repo-specific API 作为实际身份与权限的权威信号。不得把 GitHub App、connector 或网页集成绑定的身份当成用户指定的 CLI 身份，也不得把具体账号、credential 输出或机器路径写入规则、PR body、changelog 或回调。
 - Git transport 以 SSH 为标准协议：本机官方 `gh` 的 Git 协议偏好必须为 `ssh`，repository remote 应使用 SSH URL。交付预检同时核对实际 remote URL，并通过精确 `git push --dry-run` 证明当前任务能到达 SSH remote；配置文本和普通连通性检查都不能代替这次 capability probe。
 - 每次 GitHub API / PR 写入前运行 `gh api user` 和 repo-specific API。若任一调用实际返回身份不匹配、仓库不可达或权限不足，立即停止 GitHub API / PR 写入并回报；不得尝试备用插件、隐藏凭据、登录 / 登出 / 刷新 credential 或其他认证路径，也不得把辅助 `gh auth status` 文本单独升级成用户阻塞。
 - SSH 22 端口不可达时，可以复用 host 已配置的 GitHub 官方 SSH-over-443 路径；若新任务无法复用 host localhost proxy 或既有 SSH transport，按零变更规则回调并由协调器归档 / 重建。不得在受限 worker 内临时修改 host 网络、SSH 或 credential 配置。
@@ -180,6 +183,24 @@ Git / PR 写操作需要同时满足“任务范围精确”和“用户授权�
 - UI 截图先用 `pnpm --silent tools dev-service status <target> --json` 或 `ensure` 核验服务属于目标 worktree / 分支，再用 DOM 证据和可见截图共同证明目标变化；不能因端口已存在就相信它对应本任务。
 - 测试、失败和完成的独立任务按约定归档；测试 PR 未获明确授权不得 merge。收口时删除 heartbeat，并清理为测试创建且不再需要的远端分支。
 - 最终收口回复要列清：落地文件、采纳的审阅建议、未采纳建议及原因、验证结果、剩余风险、follow-up 和已归档线程。不要把长过程日志塞进最终回复。
+
+### 高变动 main 上的 source freeze 与 Git 交付
+
+当多个 PR 串行落在持续前进的 `main`，实现、审阅和 Git 写入必须围绕同一份不可变 source 身份协作，不能让 operator 在陈旧 worktree 上临场解决差异：
+
+1. **冻结 source**：source owner 先 `git fetch --prune origin` 或用等价权威方式刷新远端，从实时 `origin/main` 建立初始 clean worktree；只产生目标 tracked changes 后，记录 base SHA、冻结 diff 和精确 manifest。manifest 逐 path 记录变更状态 / 删除 tombstone、Git object type、mode 与 clean filter 后的 blob / tree OID；这里的 canonical bytes 指将进入 repository 的 Git blob bytes，不是未经 clean filter 的 worktree 文件。base、path state、mode 和 object OID 共同定义本轮可交付范围，未跟踪文件、生成物和 policy addendum 不能隐式混入。
+2. **审阅冻结内容**：独立 reviewer 直接读取冻结 diff、相关调用方和 manifest，分别报告局部正确性、全局 / 抽象影响与 exact scope 是否 PASS。审阅结论必须绑定完整冻结身份；source path state、mode 或 canonical bytes / object OID 变化后，旧 PASS 失效。
+3. **分层审阅 policy addendum**：产品 source 与 changelog、截图资产、PR body、CI / policy 补充材料分开列 scope。repository addendum 使用相同的 path state、mode 与 object OID manifest；PR body 和外部稳定截图证据绑定经审阅的 digest 或不可变标识。先确认产品 source 与已审版本完全一致，再单独审阅 addendum 的真实性、隐私、链接稳定性和 policy 合规性；addendum 若触碰产品 source，必须重新 freeze 并重新审阅，不能借“补门禁”扩大已批准实现。
+4. **operator 复核 live main**：Git operator 先刷新远端，从实时 `origin/main` 建立初始 clean worktree。只有 live main 仍等于冻结 base，或协调器已在新 base 上完成下述重组并取得新 PASS 时，才按 manifest 组装；组装后、commit 前不要求 worktree clean，而是确认没有 manifest 外路径，并比较 assembled index 的 exact path state、mode 和 object OID。commit 后、push / PR 写入前再次刷新并确认 live main 未移动、worktree clean、commit tree 与已审 source / addendum manifests 一致；写入 PR 后还要回读远端 head、PR body 和外部证据标识，确认与已审身份相同。
+5. **main 移动就重新组装**：如果 live main 已前进，从新的 live main 创建全新 clean worktree，重新应用精确 scope、验证新 base 上的行为并生成新的 freeze / review 身份。交付 operator 不执行 rebase、force push，也不手工解决冲突；同路径变化或冲突返回 source owner 与 reviewer 重新判断，避免把未经审阅的冲突产物送入 PR。
+
+创建 PR 前把门禁材料当作实现交付的一部分准备完毕，而不是等 required checks 失败后再补：
+
+- 产品功能 / 修复按发布范围准备正确 changelog；UI 变化准备从目标 head 的真实可运行界面取得、可长期渲染、无敏感信息的发布级截图。临时本地路径、将被删除的 head ref、旧图或未披露的示意图不能作为真实证据。
+- PR body 从 `.github/pull_request_template.md` 生成；`## Experience Review` 标题和三项 checklist 必须逐字保留并按事实勾选，规范正文见 [`pr-experience-review.md`](./pr-experience-review.md)。不要改写标题层级或关键短语；需要沉淀经验时，必须等对应独立 reviewer PASS 后才能勾选 reviewer 条目。
+- 在 Git operator 接手前完成适用的 changelog、截图、Experience Review、Policy Conflict Review、CI scope 和隐私检查；operator 只发布已审阅的 source freeze 与明确列出的 addendum，不负责临场补产品内容。
+
+PR-event required contexts 的故障恢复按 [Actions 事件或队列异常导致 required context 缺失](./common-issues.md#actions-事件或队列异常导致-required-context-缺失) 处理；手动 dispatch 或旧 PR revision 的成功不能替代当前 PR-event 门禁证据。
 
 ## 按变更风险选择验证
 
