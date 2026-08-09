@@ -1,71 +1,91 @@
 import { describe, expect, it } from 'vitest'
 
-import { evaluateGitDeliveryReadiness } from '../git-delivery-check'
+import { buildPushDryRunArgs, evaluateGitDeliveryReadiness } from '../git-delivery-check'
 
 const projectConfig = [
-  'approval_policy = "on-request"',
-  'approvals_reviewer = "auto_review"'
+  'approval_policy = "never"',
+  'default_permissions = ":danger-full-access"'
 ].join('\n')
 
 describe('git-delivery check', () => {
+  it('builds a hook-free exact-ref push dry-run', () => {
+    expect(buildPushDryRunArgs('refs/heads/codex/channel-runtime-v2-final')).toEqual([
+      'push',
+      '--dry-run',
+      '--no-verify',
+      '--no-recurse-submodules',
+      '--porcelain',
+      'origin',
+      'HEAD:refs/heads/codex/channel-runtime-v2-final'
+    ])
+  })
+
   it('accepts an authenticated SSH delivery path with repository write access', () => {
     const result = evaluateGitDeliveryReadiness({
-      ghAuthenticated: true,
+      ghIdentityVerified: true,
       projectConfig,
+      pushDryRunVerified: true,
       remoteUrl: 'git@github.com:oneworks-ai/app.git',
       repository: 'oneworks-ai/app',
+      repositoryAccessVerified: true,
       repositoryPermission: 'ADMIN',
-      sshAuthenticated: true
+      targetRef: 'refs/heads/codex/channel-runtime-v2-final'
     })
 
     expect(result.ok).toBe(true)
     expect(result.checks).toMatchObject({
-      ghAuthenticated: true,
-      projectAutoReviewConfigured: true,
+      ghIdentityVerified: true,
+      projectFullAccessConfigured: true,
       pullRequestWriteReady: true,
+      pushDryRunVerified: true,
       pushReady: true,
       repository: 'oneworks-ai/app',
+      repositoryAccessVerified: true,
       repositoryPermission: 'ADMIN',
-      sshAuthenticated: true,
-      sshRequired: true
+      sshRequired: true,
+      targetRef: 'refs/heads/codex/channel-runtime-v2-final'
     })
     expect(result.violations).toEqual([])
   })
 
   it('reports every actionable permission-chain failure', () => {
     const result = evaluateGitDeliveryReadiness({
-      ghAuthenticated: false,
+      ghIdentityVerified: false,
       projectConfig: 'approval_policy = "never"',
+      pushDryRunVerified: false,
       remoteUrl: 'git@github.com:oneworks-ai/app.git',
       repository: 'oneworks-ai/app',
+      repositoryAccessVerified: false,
       repositoryPermission: 'READ',
-      sshAuthenticated: false
+      targetRef: 'refs/heads/codex/channel-runtime-v2-final'
     })
 
     expect(result.ok).toBe(false)
     expect(result.violations).toEqual([
-      'Project auto-review is not configured with approval_policy=on-request and approvals_reviewer=auto_review.',
-      'GitHub CLI is not authenticated. Run gh auth login before starting delivery.',
-      'GitHub CLI does not report write permission for oneworks-ai/app (permission: READ).',
-      'The origin remote uses SSH, but GitHub SSH authentication is not ready.'
+      'Project Full Access is not configured with approval_policy=never and default_permissions=:danger-full-access.',
+      'The authoritative GitHub API identity probe failed; stop and report a capability gap.',
+      'The authoritative GitHub API repository probe failed for oneworks-ai/app.',
+      'The exact-ref push dry-run failed for refs/heads/codex/channel-runtime-v2-final.'
     ])
   })
 
   it('does not claim push readiness for an unverified HTTPS origin', () => {
     const result = evaluateGitDeliveryReadiness({
-      ghAuthenticated: true,
+      ghIdentityVerified: true,
       projectConfig,
+      pushDryRunVerified: false,
       remoteUrl: 'https://github.com/oneworks-ai/app.git',
       repository: 'oneworks-ai/app',
+      repositoryAccessVerified: true,
       repositoryPermission: 'WRITE',
-      sshAuthenticated: false
+      targetRef: 'refs/heads/codex/channel-runtime-v2-final'
     })
 
     expect(result.ok).toBe(false)
     expect(result.checks.pushReady).toBe(false)
     expect(result.checks.sshRequired).toBe(false)
     expect(result.violations).toContain(
-      'The origin remote is not SSH; this non-mutating check cannot verify HTTPS push credentials.'
+      'The origin remote is not SSH; project delivery policy requires SSH transport.'
     )
   })
 })

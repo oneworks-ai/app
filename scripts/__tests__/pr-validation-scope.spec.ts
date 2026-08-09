@@ -305,6 +305,8 @@ describe('required context completion contract', () => {
       qualityWorkflow.indexOf('  commit-message:')
     )
     expect(publicDocsJob).not.toContain('outputs.docs_only')
+    expect(publicDocsJob).toContain('version: 11.7.0')
+    expect(publicDocsJob).not.toContain('version: 10.33.0')
     expect(releaseDocsJob).not.toContain('outputs.docs_only')
     expect(releaseDocsJob).toContain('--allow-mixed')
   })

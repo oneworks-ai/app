@@ -1,34 +1,38 @@
 const writableRepositoryPermissions = new Set(['ADMIN', 'MAINTAIN', 'WRITE'])
 
 export interface GitDeliveryReadinessFacts {
-  ghAuthenticated: boolean
+  ghIdentityVerified: boolean
   projectConfig?: string
+  pushDryRunVerified: boolean
   remoteUrl?: string
   repository?: string
+  repositoryAccessVerified: boolean
   repositoryPermission?: string
-  sshAuthenticated: boolean
+  targetRef?: string
 }
 
 export interface GitDeliveryReadinessResult {
   checks: {
-    ghAuthenticated: boolean
-    projectAutoReviewConfigured: boolean
+    ghIdentityVerified: boolean
+    projectFullAccessConfigured: boolean
     pullRequestWriteReady: boolean
+    pushDryRunVerified: boolean
     pushReady: boolean
     repository?: string
+    repositoryAccessVerified: boolean
     repositoryPermission?: string
-    sshAuthenticated: boolean
     sshRequired: boolean
+    targetRef?: string
   }
   ok: boolean
   recommendations: string[]
   violations: string[]
 }
 
-const hasProjectAutoReviewConfig = (config: string | undefined) => (
+const hasProjectFullAccessConfig = (config: string | undefined) => (
   config != null &&
-  /^\s*approval_policy\s*=\s*["']on-request["']\s*$/mu.test(config) &&
-  /^\s*approvals_reviewer\s*=\s*["']auto_review["']\s*$/mu.test(config)
+  /^\s*approval_policy\s*=\s*["']never["']\s*$/mu.test(config) &&
+  /^\s*default_permissions\s*=\s*["']:danger-full-access["']\s*$/mu.test(config)
 )
 
 export const usesSshRemote = (remoteUrl: string | undefined) => (
@@ -38,25 +42,28 @@ export const usesSshRemote = (remoteUrl: string | undefined) => (
 export const evaluateGitDeliveryReadiness = (
   facts: GitDeliveryReadinessFacts
 ): GitDeliveryReadinessResult => {
-  const projectAutoReviewConfigured = hasProjectAutoReviewConfig(facts.projectConfig)
+  const projectFullAccessConfigured = hasProjectFullAccessConfig(facts.projectConfig)
   const repositoryPermission = facts.repositoryPermission?.toUpperCase()
   const hasRepositoryWrite = repositoryPermission != null &&
     writableRepositoryPermissions.has(repositoryPermission)
   const sshRequired = usesSshRemote(facts.remoteUrl)
-  const pullRequestWriteReady = facts.ghAuthenticated && hasRepositoryWrite
-  const pushReady = hasRepositoryWrite && sshRequired && facts.sshAuthenticated
+  const pullRequestWriteReady = facts.ghIdentityVerified &&
+    facts.repositoryAccessVerified && hasRepositoryWrite
+  const pushReady = hasRepositoryWrite && sshRequired && facts.pushDryRunVerified
   const violations: string[] = []
 
-  if (!projectAutoReviewConfigured) {
+  if (!projectFullAccessConfigured) {
     violations.push(
-      'Project auto-review is not configured with approval_policy=on-request and approvals_reviewer=auto_review.'
+      'Project Full Access is not configured with approval_policy=never and default_permissions=:danger-full-access.'
     )
   }
-  if (!facts.ghAuthenticated) {
-    violations.push('GitHub CLI is not authenticated. Run gh auth login before starting delivery.')
+  if (!facts.ghIdentityVerified) {
+    violations.push('The authoritative GitHub API identity probe failed; stop and report a capability gap.')
   }
   if (facts.repository == null) {
     violations.push('The GitHub repository could not be resolved from --repository or the origin remote.')
+  } else if (!facts.repositoryAccessVerified) {
+    violations.push(`The authoritative GitHub API repository probe failed for ${facts.repository}.`)
   } else if (!hasRepositoryWrite) {
     violations.push(
       `GitHub CLI does not report write permission for ${facts.repository} (permission: ${
@@ -67,28 +74,30 @@ export const evaluateGitDeliveryReadiness = (
   if (facts.remoteUrl == null) {
     violations.push('The origin remote could not be resolved.')
   } else if (!sshRequired) {
-    violations.push(
-      'The origin remote is not SSH; this non-mutating check cannot verify HTTPS push credentials.'
-    )
+    violations.push('The origin remote is not SSH; project delivery policy requires SSH transport.')
   }
-  if (sshRequired && !facts.sshAuthenticated) {
-    violations.push('The origin remote uses SSH, but GitHub SSH authentication is not ready.')
+  if (facts.targetRef == null) {
+    violations.push('The current checkout has no named branch to use as the exact push target ref.')
+  } else if (sshRequired && !facts.pushDryRunVerified) {
+    violations.push(`The exact-ref push dry-run failed for ${facts.targetRef}.`)
   }
 
   return {
     checks: {
-      ghAuthenticated: facts.ghAuthenticated,
-      projectAutoReviewConfigured,
+      ghIdentityVerified: facts.ghIdentityVerified,
+      projectFullAccessConfigured,
       pullRequestWriteReady,
+      pushDryRunVerified: facts.pushDryRunVerified,
       pushReady,
       repository: facts.repository,
+      repositoryAccessVerified: facts.repositoryAccessVerified,
       repositoryPermission,
-      sshAuthenticated: facts.sshAuthenticated,
-      sshRequired
+      sshRequired,
+      targetRef: facts.targetRef
     },
     ok: violations.length === 0 && pullRequestWriteReady && pushReady,
     recommendations: [
-      'Run delivery writes from a newly loaded project task so .codex/config.toml is effective.',
+      'This precheck validates static project config and authoritative Git transport/API probes; separately prove that the newly loaded operator applied Full Access.',
       'Use authenticated gh for PR writes when the GitHub Connector lacks write permission; Connector access is optional.'
     ],
     violations

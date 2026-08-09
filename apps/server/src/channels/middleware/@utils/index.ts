@@ -55,15 +55,20 @@ export const hasExplicitChannelIntent = (input: {
   config: Pick<ChannelBaseConfig, 'commandPrefix'> | undefined
   createOnCommand?: boolean
   createOnMention?: boolean
+  mentionedBot?: boolean
   mentionPatterns?: readonly string[]
   text?: string
 }) => {
+  if (input.mentionedBot === false) return false
+
   if (input.createOnCommand !== false && isChannelCommandText(input.commandText, input.config)) {
     return true
   }
 
-  return input.createOnMention !== false &&
-    (hasLeadingAtTagMention(input.text) || matchesMentionPattern(input.text, input.mentionPatterns))
+  if (input.createOnMention === false) return false
+  if (input.mentionedBot === true) return true
+
+  return hasLeadingAtTagMention(input.text) || matchesMentionPattern(input.text, input.mentionPatterns)
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
