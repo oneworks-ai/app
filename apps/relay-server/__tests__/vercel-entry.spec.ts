@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -9,6 +12,17 @@ import {
 } from '../api/relay.js'
 
 describe('vercel Relay entry', () => {
+  it('builds runtime workspace exports before tracing the Vercel function', () => {
+    const packageJson = JSON.parse(
+      readFileSync(path.join(process.cwd(), 'apps/relay-server/package.json'), 'utf8')
+    ) as { scripts?: Record<string, string> }
+    const buildScript = packageJson.scripts?.['build:vercel'] ?? ''
+    const typesBuild = 'pnpm -C ../../packages/types build'
+
+    expect(buildScript).toContain(typesBuild)
+    expect(buildScript.indexOf(typesBuild)).toBeLessThan(buildScript.indexOf('pnpm build'))
+  })
+
   it('keeps a long-poll device online across its 300-second poll cycle', () => {
     const args = createVercelRelayArgs({
       ONEWORKS_RELAY_PUBLIC_URL: 'https://relay.example'
