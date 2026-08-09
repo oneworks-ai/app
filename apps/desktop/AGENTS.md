@@ -15,6 +15,9 @@
   - 桌面 app bootstrap 委托到 `src/main/`
 - `src/main/`
   - `app-runtime.ts`：单实例锁、应用生命周期和各模块装配
+  - `startup-diagnostics.ts`：桌面冷启动阶段、可交互 / 稳定终态与本地诊断 Journal；事件契约来自 `@oneworks/diagnostics`
+  - `javascript-diagnostics.ts`：Electron 主进程、renderer crash 与客户端受限 IPC 的 JavaScript 异常 Journal / OTLP 门控；只接收归一化后的错误码、类型和不可逆指纹
+  - `support-bundle.ts`：从桌面诊断 Journal 生成隐私安全支持包，由 Help 菜单触发
   - `browser-window-factory.ts`：统一 BrowserWindow 创建、titlebar 风格、`window.open` 管控和窗口关闭清理
   - `window-manager.ts`：BrowserWindow 记录、项目选择页 / launcher / workspace 窗口切换
   - `launcher-client-service.ts`：桌面共享 client dev server / packaged static server 生命周期
@@ -62,6 +65,8 @@
 ## 当前边界
 
 - Electron main 进程不重复实现 server 业务逻辑；桌面端 server 仍通过 `src/server-child.cjs` 复用 server workspace package。
+- 桌面启动诊断写入 Electron `userData/diagnostics/startup`：只记录稳定事件名、阶段、耗时、终态和分类错误，不写 workspace 路径、URL、原始错误消息、stack、配置或凭据。启动成功必须经过 renderer 可交互并持续稳定一段时间；上次进程未完成的启动会在下次启动标记为 `abandoned`。
+- 设置标准 `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` / `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=http/json` 时，桌面诊断会异步导出；发送失败不能阻断启动。Help 菜单支持导出同一事实模型的支持包，关联 ID 必须脱敏且不得补入 raw logs。
 - 本地 dev 安装包启动 workspace 时，安装包内 cli/server/client 是 runtime cache 的来源：`src/main/workspace-service-manager.ts` 和 `src/server-child.cjs` 会通过 `src/builtin-adapter-cache.cjs` 按 `desktop-build-source.json` 里的 dev cacheVersion 刷新 `~/.oneworks/bootstrap/npm/oneworks__cli/<cacheVersion>`、`oneworks__server/<cacheVersion>` 与 `oneworks__client/<cacheVersion>`；manifest 快路径还必须匹配每次打包唯一的 `runtimePackageBuildFingerprint` 及当前 platform/arch。排查“安装包还是旧代码”时必须核对这个 cache 里的真实文件，不要只看 `/Applications/.../Resources/app`。
 - `pnpm desktop:dev` 默认打开不绑定 workspace 的空项目启动页；`pnpm desktop:dev:workspace` 才以当前仓库作为 workspace 启动。两者都转发到统一 `dev-service ensure` 生命周期，由 Electron 启动共享 Vite client，并为每个 workspace 启动独立本机 server；前端改动应走共享 client 的 HMR，不需要重复构建静态 dist。`electron` 与 `electron-workspace` 受单实例约束，切换前必须先获得用户对当前 target 的显式停止授权。
 - 多 worktree / 多 AI 会话可能同时运行桌面开发态实例；排查崩溃或端口占用时，不要因为看到其他 worktree 的 Electron、`apps/desktop/src/server-child.cjs` 或 `apps/client/cli.cjs` 进程就直接清理。先列出 PID、启动时间、worktree 路径和命令来源，只有确认属于当前终端会话、明确是当前崩溃实例残留，或用户同意后才停止。
@@ -95,6 +100,7 @@
   - `electron.vite.config.ts`
   - `src/server-child.cjs`
   - `scripts/smoke-packaged-server.cjs`
+- 改桌面启动阶段、首屏就绪条件或启动失败兜底时，至少同时检查 `src/main/startup-diagnostics.ts`、`src/main/app-runtime.ts`、`src/main/window-manager.ts` 和 `apps/client/src/components/layout/desktop-workspace-startup-ready.ts`；不要把后台预加载失败误算成用户可见的启动失败。
 - 改窗口创建、标题栏、`window.open`、多窗口或右键新窗口时，至少同时检查：
   - `src/main/browser-window-factory.ts`
   - `src/main/window-manager.ts`

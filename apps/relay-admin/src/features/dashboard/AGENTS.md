@@ -5,6 +5,7 @@
 ## 入口
 
 - `AdminDashboard.tsx`：根据 React Router section 渲染当前页面，默认只显示当前管理域，不把所有表格和表单堆在一个页面。
+- 平台分析只装配 `features/data-dashboard/DataDashboardPage.tsx` 这一处 section；稳定性和 Model Service 是它的 URL tabs，不再各占一个侧栏 section。
 - `useRelayAdminDashboard.ts`：管理登录 session 校验、角色权限状态、loading/error、snapshot 刷新和 feature 操作编排。
 - `adminSnapshot.ts`：聚合 devices / users / invites / sso 四个 feature 的查询结果。
 - `AdminStatusBar.tsx`：展示加载、错误和非 admin 用户状态；登录缺失由 dashboard hook 直接重定向到 `/login`。

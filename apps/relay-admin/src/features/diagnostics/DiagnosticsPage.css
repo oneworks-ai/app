@@ -1,0 +1,125 @@
+.relay-diagnostics {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--relay-admin-padding);
+  min-height: 0;
+  overflow: auto;
+  padding: var(--relay-admin-padding)
+    var(--route-container-header-padding-inline);
+}
+
+.relay-diagnostics--embedded {
+  padding: 0 0 var(--relay-admin-padding);
+}
+
+.relay-diagnostics__summary {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(6, minmax(130px, 1fr));
+}
+
+.relay-diagnostics__metric.ant-card .ant-card-body {
+  display: grid;
+  gap: 4px;
+  padding: var(--relay-admin-padding);
+}
+
+.relay-diagnostics__metric-label {
+  color: var(--sub-text-color);
+  font-size: 12px;
+}
+
+.relay-diagnostics__metric-value {
+  color: var(--text-color);
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.relay-diagnostics__metric-hint {
+  color: var(--sub-text-color);
+  font-size: 11px;
+}
+
+.relay-diagnostics__toolbar {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.relay-diagnostics__toolbar > .ant-input-affix-wrapper {
+  max-width: 420px;
+}
+
+.relay-diagnostics__batch {
+  align-items: center;
+  background: color-mix(in srgb, var(--primary-color) 8%, var(--bg-color));
+  border: 1px solid
+    color-mix(in srgb, var(--primary-color) 22%, var(--border-color));
+  border-radius: 6px;
+  display: flex;
+  justify-content: space-between;
+  padding: var(--relay-admin-padding);
+}
+
+.relay-diagnostics__time-filter {
+  display: grid;
+  gap: 8px;
+  width: 250px;
+}
+
+.relay-diagnostics__time-filter label {
+  color: var(--sub-text-color);
+  display: grid;
+  font-size: 12px;
+  gap: 4px;
+}
+
+.relay-diagnostics__table-card.ant-card .ant-card-body {
+  padding: 0;
+}
+
+.relay-diagnostics__event,
+.relay-diagnostics__source {
+  display: grid;
+  gap: 2px;
+}
+
+.relay-diagnostics__event span,
+.relay-diagnostics__source span {
+  color: var(--sub-text-color);
+  font-size: 11px;
+}
+
+.relay-diagnostics__failure {
+  color: var(--error-color, #d4380d);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.relay-diagnostics__footer {
+  align-items: center;
+  border-top: 1px solid
+    color-mix(in srgb, var(--border-color) 70%, transparent);
+  display: flex;
+  justify-content: space-between;
+  padding: var(--relay-admin-padding);
+}
+
+.relay-diagnostics__retention {
+  color: var(--sub-text-color);
+  font-size: 12px;
+}
+
+@media (max-width: 1100px) {
+  .relay-diagnostics__summary {
+    grid-template-columns: repeat(2, minmax(140px, 1fr));
+  }
+
+  .relay-diagnostics__toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

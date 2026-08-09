@@ -5,6 +5,7 @@ import { defineConfig } from 'electron-vite'
 const iconSourceDir = resolve(__dirname, '../../packages/icon/src')
 const configSourceDir = resolve(__dirname, '../../packages/config/src')
 const coreSourceDir = resolve(__dirname, '../../packages/core/src')
+const diagnosticsSourceDir = resolve(__dirname, '../../packages/diagnostics/src')
 const typesSourceDir = resolve(__dirname, '../../packages/types/src')
 const utilsSourceDir = resolve(__dirname, '../../packages/utils/src')
 const configSourceAliases = [
@@ -14,6 +15,10 @@ const configSourceAliases = [
 const coreSourceAliases = [
   { find: /^@oneworks\/core\/(.+)$/, replacement: `${coreSourceDir}/$1.ts` },
   { find: /^@oneworks\/core$/, replacement: resolve(coreSourceDir, 'index.ts') }
+]
+const diagnosticsSourceAliases = [
+  { find: /^@oneworks\/diagnostics\/(.+)$/, replacement: `${diagnosticsSourceDir}/$1.ts` },
+  { find: /^@oneworks\/diagnostics$/, replacement: resolve(diagnosticsSourceDir, 'index.ts') }
 ]
 const iconSourceAliases = [
   { find: /^@oneworks\/icon\/(.+)$/, replacement: `${iconSourceDir}/$1.ts` },
@@ -31,6 +36,7 @@ const utilsSourceAliases = [
 const workspaceSourceAliases = [
   ...configSourceAliases,
   ...coreSourceAliases,
+  ...diagnosticsSourceAliases,
   ...iconSourceAliases,
   ...typesSourceAliases,
   ...utilsSourceAliases
@@ -43,6 +49,7 @@ export default defineConfig({
         exclude: [
           '@oneworks/config',
           '@oneworks/core',
+          '@oneworks/diagnostics',
           '@oneworks/icon',
           '@oneworks/types',
           '@oneworks/utils',
@@ -67,6 +74,7 @@ export default defineConfig({
       noExternal: [
         '@oneworks/config',
         '@oneworks/core',
+        '@oneworks/diagnostics',
         '@oneworks/icon',
         '@oneworks/types',
         '@oneworks/utils',

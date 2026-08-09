@@ -21,6 +21,7 @@ import {
 import { handleConfigSecretsRoute, handleTeamConfigSecretsRoute } from './routes/config-secrets.js'
 import { handleRelayConfigSnapshot } from './routes/config-snapshot.js'
 import { handleDeviceHeartbeat, handleDeviceList, handleDeviceRegister, handleDeviceUpdate } from './routes/devices.js'
+import { handleRelayDiagnosticsRoute } from './routes/diagnostics.js'
 import { handleEmailCodeLoginRoute } from './routes/email-code-login.js'
 import { handleEmailVerificationSendRoute } from './routes/email-verification.js'
 import { handleInviteLoginRoute } from './routes/invite-login.js'
@@ -34,6 +35,7 @@ import { handleProjectRuleDocumentsRoute } from './routes/project-rule-documents
 import { handleRelaySessionsRoute } from './routes/sessions.js'
 import { handleTeamDocumentsRoute } from './routes/team-documents.js'
 import { handleAdminMessagesRoute, handleTeamInvitationActionsRoute } from './routes/team-invitations.js'
+import { handleAdminModelUsageRoute } from './routes/team-model-usage.js'
 import { handleRelayTeamPolicyRoute } from './routes/team-policy.js'
 import { handleTeamsRoute } from './routes/teams.js'
 import { handleAdminSecurityTokens } from './security/admin-route.js'
@@ -168,6 +170,12 @@ const handleRelayRequestWithStore = async (
       return
     }
     if (await handleRelayPersonalConfigRoute(req, res, args, store, storeRepository, url)) {
+      return
+    }
+    if (await handleRelayDiagnosticsRoute(req, res, args, store, storeRepository, url)) {
+      return
+    }
+    if (handleAdminModelUsageRoute(req, res, args, store, url)) {
       return
     }
     if (await handleRelayTeamPolicyRoute(req, res, args, store, storeRepository, url)) {

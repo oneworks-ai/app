@@ -55,6 +55,8 @@ CLI、Server route、配置页和自动写回逻辑都不能基于 `effectivePro
 
 界面语言属于 app 级个人偏好。launcher 菜单、launcher 设置页和主配置页如果提供语言切换，都必须写入 global `general.interfaceLanguage`，不要只调用前端 i18n 临时切换当前页面状态。重置语言时应 unset global source 中的 `interfaceLanguage`，让默认语言或其它 source 语义自然生效。
 
+Model Service 用量上报属于 app 级运行时隐私偏好，固定写入 global `diagnostics.modelUsageReporting`。运行时必须直接读取 global source，即使某个项目关闭了 global config，也不能因此把用户已经关闭的上报重新开启。产品控制面统一命名为“数据与诊断”，模型服务统计只是其中一个独立类别：个人入口属于可选 Relay 插件的账号“数据与诊断”标签页；团队入口属于具体团队详情的“数据与诊断”标签页，仅当 Relay Server 返回至少一个可配置类别时展示。Relay 配置 hook 必须给团队下发的 Model Service 保留来源团队标记；用户自己的 Model Service 只读个人开关，团队服务只读对应团队策略。实际事件构造、scope header 选择与 OTLP 发送门控必须留在本机应用运行时。
+
 ## 配置页语义
 
 `/api/config` 返回：

@@ -48,6 +48,7 @@ import type {
   RelayPersonalDocumentEntry,
   RelayPersonalDocumentSyncKind,
   RelayProfileAccessToken,
+  RelayProfileModelUsageSettings,
   RelayProfileStatus,
   RelayProfileTab,
   RelayProfileTeam,
@@ -235,6 +236,7 @@ type RelayProjectRuleDetailTab = 'documents' | 'overview' | 'rules' | 'settings'
 
 const profileTabs: Array<{ icon: string; key: RelayProfileTab; label: string }> = [
   { icon: 'badge', key: 'account', label: '资料' },
+  { icon: 'monitor_heart', key: 'diagnostics', label: '数据与诊断' },
   { icon: 'groups', key: 'teams', label: '团队' },
   { icon: 'sync', key: 'documents', label: '文档' },
   { icon: 'devices', key: 'devices', label: '设备' },
@@ -244,6 +246,7 @@ const profileTabs: Array<{ icon: string; key: RelayProfileTab; label: string }> 
 
 const teamDetailTabs: Array<{ icon: string; key: RelayProfileTeamDetailTab; label: string }> = [
   { icon: 'groups', key: 'overview', label: '概览' },
+  { icon: 'monitor_heart', key: 'diagnostics', label: '数据与诊断' },
   { icon: 'folder_open', key: 'projects', label: '项目' },
   { icon: 'rule_settings', key: 'configs', label: '配置' },
   { icon: 'sync', key: 'documents', label: '文档' }
@@ -1092,6 +1095,7 @@ const renderSelect = (
   react: PluginReactHost,
   view: PluginViewContext | undefined,
   props: {
+    ariaLabel?: string
     disabled?: boolean
     mode?: 'multiple'
     onChange: (value: string | string[]) => void
@@ -1103,6 +1107,7 @@ const renderSelect = (
   const Select = view?.ui?.Select
   if (Select != null) {
     return react.createElement(Select, {
+      ariaLabel: props.ariaLabel,
       disabled: props.disabled,
       mode: props.mode,
       onChange: props.onChange,
@@ -1116,6 +1121,7 @@ const renderSelect = (
     'select',
     {
       className: 'oneworks-relay__input',
+      'aria-label': props.ariaLabel,
       disabled: props.disabled,
       multiple: props.mode === 'multiple',
       onInput: (event: Event) => {
@@ -1216,10 +1222,11 @@ const ProfileTabs = (props: {
   activeTab: RelayProfileTab
   ctx: PluginClientContext
   onChanged: () => void
+  profile: RelayProfileStatus | null
   react: PluginReactHost
   view?: PluginViewContext
 }) => {
-  const { account, accountKey, activeTab, ctx, onChanged, react, view } = props
+  const { account, accountKey, activeTab, ctx, onChanged, profile, react, view } = props
   const NativeTabs = view?.ui?.NativeTabs
   if (NativeTabs == null) {
     return react.createElement('div', { className: 'oneworks-relay__empty' }, '标准标签组件不可用')
@@ -1232,14 +1239,64 @@ const ProfileTabs = (props: {
       : undefined,
     ariaLabel: '账号详情',
     className: 'oneworks-relay__profile-tabs',
-    items: profileTabs.map((tab): PluginHostNativeTabItem => ({
-      icon: tab.icon,
-      key: tab.key,
-      label: tab.label
-    })),
+    items: profileTabs
+      .filter(tab => tab.key !== 'diagnostics' || profile?.dataReporting != null)
+      .map((tab): PluginHostNativeTabItem => ({
+        icon: tab.icon,
+        key: tab.key,
+        label: tab.label
+      })),
     onChange: (nextTab: RelayProfileTab) =>
       navigateTo(ctx.scope, routePath(ctx.scope, { accountKey, page: 'profile', tab: nextTab }))
   })
+}
+
+export const modelUsageTeamSetting = (
+  settings: RelayProfileModelUsageSettings | undefined,
+  teamId: string | null | undefined
+) => settings?.teams.find(team => team.teamId === cleanText(teamId))
+
+const renderUsageSwitch = (
+  react: PluginReactHost,
+  view: PluginViewContext | undefined,
+  input: {
+    checked: boolean
+    label: string
+    onChange: (checked: boolean) => void
+    saving: boolean
+  }
+) => {
+  const Switch = view?.ui?.Switch
+  return Switch == null
+    ? react.createElement('span', { className: 'oneworks-relay__usage-control-unavailable' }, '标准开关不可用')
+    : react.createElement(Switch, {
+      ariaLabel: input.label,
+      checked: input.checked,
+      disabled: input.saving,
+      loading: input.saving,
+      onChange: input.onChange,
+      size: 'small'
+    })
+}
+
+const renderUsageSettingRow = (
+  react: PluginReactHost,
+  view: PluginViewContext | undefined,
+  input: {
+    control: PluginReactNode
+    description: string
+    icon: string
+    title: string
+  }
+) => {
+  const SettingRow = view?.ui?.SettingRow
+  return SettingRow == null
+    ? react.createElement('div', { className: 'oneworks-relay__empty' }, '标准设置行不可用')
+    : react.createElement(SettingRow, {
+      description: input.description,
+      icon: input.icon,
+      title: input.title
+    }, input.control)
 }
 
 const AccountInfoPanel = (
@@ -1266,6 +1323,139 @@ const AccountInfoPanel = (
       renderFact(react, '账号 ID', cleanText(user?.id) ?? cleanText(account?.userId) ?? '-'),
       renderFact(react, '本地登录时间', formatDateTime(account?.updatedAt)),
       renderFact(react, '会话过期时间', formatDateTime(account?.sessionExpiresAt))
+    )
+  )
+}
+
+const PersonalDataAndDiagnosticsPanel = (props: {
+  accountKey: string
+  ctx: PluginClientContext
+  onChanged: () => void
+  profile: RelayProfileStatus | null
+  react: PluginReactHost
+  view?: PluginViewContext
+}) => {
+  const { accountKey, ctx, onChanged, profile, react, view } = props
+  const settings = profile?.dataReporting
+  const [savingKey, setSavingKey] = react.useState<'diagnostic' | 'model' | null>(null)
+  const [saveError, setSaveError] = react.useState<string | null>(null)
+  if (settings == null) {
+    return renderTeamStatePanel(react, view, 'error', '数据与诊断设置不可用', '当前 Relay 服务未提供可配置的数据类别。')
+  }
+  const updatePreference = (key: 'diagnostic' | 'model', enabled: boolean) => {
+    setSavingKey(key)
+    setSaveError(null)
+    void requestJson<RelayProfileStatus>(ctx, 'profile/data-reporting', {
+      accountKey,
+      ...(key === 'diagnostic' ? { diagnosticEnabled: enabled } : { personalEnabled: enabled })
+    }).then(onChanged).catch(error => {
+      setSaveError(toErrorMessage(error))
+    }).finally(() => {
+      setSavingKey(null)
+    })
+  }
+  return react.createElement(
+    'section',
+    { 'aria-label': '个人数据与诊断', className: 'oneworks-relay__usage-settings' },
+    saveError == null
+      ? null
+      : react.createElement('p', { className: 'oneworks-relay__usage-error', role: 'alert' }, saveError),
+    react.createElement(
+      'div',
+      { className: 'oneworks-relay__usage-setting-list' },
+      renderUsageSettingRow(react, view, {
+        control: renderUsageSwitch(react, view, {
+          checked: settings.diagnosticReporting.enabled,
+          label: '共享系统诊断数据',
+          onChange: enabled => updatePreference('diagnostic', enabled),
+          saving: savingKey === 'diagnostic'
+        }),
+        description: '用于分析启动成功率、启动耗时和错误阶段；不包含提示词、回复、代码、路径或凭据。',
+        icon: 'monitor_heart',
+        title: '系统诊断数据'
+      }),
+      renderUsageSettingRow(react, view, {
+        control: renderUsageSwitch(react, view, {
+          checked: settings.modelUsageReporting.personal.enabled,
+          label: '共享个人模型服务统计',
+          onChange: enabled => updatePreference('model', enabled),
+          saving: savingKey === 'model'
+        }),
+        description: '记录模型、结果、耗时和 token 计数，不记录提示词、回复或工具内容；设置会同步到登录设备。',
+        icon: 'query_stats',
+        title: '模型服务统计'
+      })
+    )
+  )
+}
+
+const TeamDataAndDiagnosticsPanel = (props: {
+  accountKey: string
+  ctx: PluginClientContext
+  onChanged: () => void
+  profile: RelayProfileStatus | null
+  react: PluginReactHost
+  team: RelayProfileTeam
+  view?: PluginViewContext
+}) => {
+  const { accountKey, ctx, onChanged, profile, react, team, view } = props
+  const setting = modelUsageTeamSetting(profile?.dataReporting?.modelUsageReporting, team.id)
+  const [saving, setSaving] = react.useState(false)
+  const [saveError, setSaveError] = react.useState<string | null>(null)
+  if (setting == null) {
+    return renderTeamStatePanel(
+      react,
+      view,
+      'error',
+      '团队数据与诊断不可用',
+      '当前 Relay 服务未下发这个团队的数据策略。'
+    )
+  }
+  const updateMemberPreference = (teamEnabled: boolean) => {
+    setSaving(true)
+    setSaveError(null)
+    void requestJson<RelayProfileStatus>(ctx, 'profile/data-reporting', {
+      accountKey,
+      teamEnabled,
+      teamId: setting.teamId
+    }).then(onChanged).catch(error => {
+      setSaveError(toErrorMessage(error))
+    }).finally(() => {
+      setSaving(false)
+    })
+  }
+  return react.createElement(
+    'section',
+    {
+      'aria-label': `${setting.name}数据与诊断`,
+      className: 'oneworks-relay__usage-settings'
+    },
+    saveError == null
+      ? null
+      : react.createElement('p', { className: 'oneworks-relay__usage-error', role: 'alert' }, saveError),
+    react.createElement(
+      'div',
+      { className: 'oneworks-relay__usage-setting-list' },
+      renderUsageSettingRow(react, view, {
+        control: setting.userCanControl
+          ? renderUsageSwitch(react, view, {
+            checked: setting.enabled,
+            label: `共享${setting.name}模型服务统计`,
+            onChange: updateMemberPreference,
+            saving
+          })
+          : react.createElement(
+            'span',
+            { className: 'oneworks-relay__usage-managed-state' },
+            renderIcon(react, view, 'check_circle', { size: 16 }),
+            react.createElement('strong', null, '由团队开启')
+          ),
+        description: setting.userCanControl
+          ? '只控制我使用这个团队下发的 Model Service 时产生的新统计；不影响个人服务或其他团队。'
+          : '团队管理员已设为统一上报，客户端不可更改；不影响你的个人 Model Service。',
+        icon: 'query_stats',
+        title: '模型服务统计'
+      })
     )
   )
 }
@@ -5473,6 +5663,16 @@ const TeamDetailView = (props: {
       team,
       view
     })
+    : tab === 'diagnostics'
+    ? react.createElement(TeamDataAndDiagnosticsPanel, {
+      accountKey,
+      ctx,
+      onChanged,
+      profile,
+      react,
+      team,
+      view
+    })
     : renderTeamOverviewPanel(react, view, configDistribution, team)
   const NativeTabs = view?.ui?.NativeTabs
   const tabs = routeDetailActive
@@ -5486,11 +5686,18 @@ const TeamDetailView = (props: {
         : undefined,
       ariaLabel: '团队详情',
       className: 'oneworks-relay__profile-tabs oneworks-relay__team-detail-tabs',
-      items: teamDetailTabs.map((item): PluginHostNativeTabItem => ({
-        icon: item.icon,
-        key: item.key,
-        label: item.label
-      })),
+      items: teamDetailTabs
+        .filter(item =>
+          item.key !== 'diagnostics' || modelUsageTeamSetting(
+              profile?.dataReporting?.modelUsageReporting,
+              teamId
+            ) != null
+        )
+        .map((item): PluginHostNativeTabItem => ({
+          icon: item.icon,
+          key: item.key,
+          label: item.label
+        })),
       onChange: (nextTab: RelayProfileTeamDetailTab) =>
         navigateTo(
           ctx.scope,
@@ -7565,6 +7772,8 @@ const ProfilePage = (props: {
   const account = getProfileAccount(profile, status, accountKey)
   const panel = tab === 'teams'
     ? react.createElement(TeamsPanel, { accountKey, ctx, profile, react, view })
+    : tab === 'diagnostics'
+    ? react.createElement(PersonalDataAndDiagnosticsPanel, { accountKey, ctx, onChanged, profile, react, view })
     : tab === 'documents'
     ? react.createElement(DocumentSyncPanel, { account, accountKey, ctx, onChanged, react, status, view })
     : tab === 'devices'
@@ -7593,7 +7802,16 @@ const ProfilePage = (props: {
             ].filter(Boolean).join(' ')
           },
           launcherSurface ? null : react.createElement(ProfileHeader, { account, accountKey, profile, react }),
-          react.createElement(ProfileTabs, { account, accountKey, activeTab: tab, ctx, onChanged, react, view }),
+          react.createElement(ProfileTabs, {
+            account,
+            accountKey,
+            activeTab: tab,
+            ctx,
+            onChanged,
+            profile,
+            react,
+            view
+          }),
           react.createElement(
             'div',
             {

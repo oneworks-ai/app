@@ -37,9 +37,11 @@ describe('relay permission matrix', () => {
 
     expect(hasRelayPermission(owner, relayPermissions.adminUsersWrite)).toBe(true)
     expect(hasRelayPermission(member, relayPermissions.relaySessionsSubmit)).toBe(true)
+    expect(hasRelayPermission(member, relayPermissions.relayDiagnosticsWrite)).toBe(true)
     expect(hasRelayPermission(member, relayPermissions.adminUsersRead)).toBe(false)
     expect(hasRelayPermission(viewer, relayPermissions.relaySessionsRead)).toBe(true)
     expect(hasRelayPermission(viewer, relayPermissions.relaySessionsSubmit)).toBe(false)
+    expect(hasRelayPermission(viewer, relayPermissions.relayDiagnosticsWrite)).toBe(true)
   })
 
   it('denies unknown roles and unknown permissions', () => {

@@ -28,6 +28,7 @@ Useful commands:
 - `oneworks list --view default|full`: show common columns or full context, PID, and helper command columns
 - `oneworks list --running`: show only running CLI sessions
 - `oneworks clear`: clear local logs and caches
+- `oneworks report [filename]`: create a privacy-safe diagnostic support bundle containing structured facts and summaries, never prompts, credentials, configuration, project paths, or raw logs
 - `oneworks stop <sessionId>`: gracefully stop a running CLI session
 - `oneworks kill <sessionId>`: force terminate a running CLI session
 - `oneworks config list [path]`: show config section state or a subtree
@@ -43,6 +44,8 @@ Useful commands:
 - `oneworks accounts remove <adapter> <accountName>`: remove One Works' adapter account record; official logout runs only for portable, platform-isolated credentials, while a device-bound native login remains on the device
 
 Commands default to the project root workspace. If `__ONEWORKS_PROJECT_WORKSPACE_FOLDER__` is set, that directory is used directly. Otherwise the entry points probe upward from the current directory for `.oo`, `.oo.config.*`, `pnpm-workspace.yaml`, or a Git root. Set `__ONEWORKS_PROJECT_CONFIG_DIR__` when config files live outside the resolved workspace root.
+
+Each CLI command records start, plugin-loading stage, terminal state, and duration; standard OTel environment variables can export these facts to Relay. See [Diagnostics, Telemetry, and Support Bundles](./diagnostics.md) for setup and bundle boundaries.
 
 ## Built-in Skills
 

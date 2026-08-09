@@ -140,6 +140,8 @@ export interface PluginViewContext {
     NativeTabs?: unknown
     SearchInput?: unknown
     Select?: unknown
+    SettingRow?: unknown
+    Switch?: unknown
   }
 }
 
@@ -680,6 +682,7 @@ export interface RelayProfileTeam {
   description?: string | null
   id?: string
   memberCount?: number
+  modelUsageReportingMode?: 'optional' | 'required'
   membership?: {
     configEnabled?: boolean
     defaultForPublishing?: boolean
@@ -702,6 +705,7 @@ export interface RelayProfileStatus {
   invitations?: RelayProfileTeamInvitation[]
   message?: string
   messages?: RelayProfileMessage[]
+  dataReporting?: RelayProfileDataReportingSettings
   ok?: boolean
   result?: {
     accessToken?: string
@@ -717,8 +721,37 @@ export interface RelayProfileStatus {
   user?: RelayProfileCurrentUser
 }
 
-export type RelayProfileTab = 'account' | 'devices' | 'documents' | 'security' | 'teams' | 'tokens'
-export type RelayProfileTeamDetailTab = 'configs' | 'documents' | 'overview' | 'projects'
+export interface RelayProfileModelUsageTeamSetting {
+  enabled: boolean
+  mode: 'optional' | 'required'
+  name: string
+  role: string
+  slug: string
+  teamId: string
+  updatedAt?: string
+  userCanControl: boolean
+}
+
+export interface RelayProfileModelUsageSettings {
+  personal: {
+    defaultEnabled: true
+    enabled: boolean
+    updatedAt?: string
+  }
+  teams: RelayProfileModelUsageTeamSetting[]
+}
+
+export interface RelayProfileDataReportingSettings {
+  diagnosticReporting: {
+    defaultEnabled: true
+    enabled: boolean
+    updatedAt?: string
+  }
+  modelUsageReporting: RelayProfileModelUsageSettings
+}
+
+export type RelayProfileTab = 'account' | 'devices' | 'diagnostics' | 'documents' | 'security' | 'teams' | 'tokens'
+export type RelayProfileTeamDetailTab = 'configs' | 'diagnostics' | 'documents' | 'overview' | 'projects'
 export type RelayProfilePage = 'accounts' | 'login' | 'messages' | 'profile' | 'servers'
 
 export interface RelayProfileViewState {

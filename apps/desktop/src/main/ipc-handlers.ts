@@ -263,6 +263,7 @@ interface IpcHandlersInput {
   ) => Promise<WindowRecord>
   promptForNewWorkspaceFolder: (windowRecord?: WindowRecord) => Promise<string | undefined>
   promptForWorkspaceFolder: (windowRecord?: WindowRecord) => Promise<string | undefined>
+  reportJavaScriptError: (report: unknown) => Promise<unknown>
   retryLauncherShortcutRegistration: () => Promise<DesktopSettings>
   resetGlobalInterfaceLanguageConfig: () => Promise<DesktopInterfaceLanguageConfig>
   searchCurrentWorkspaceResources: (
@@ -305,6 +306,7 @@ export const registerIpcHandlers = ({
   openWorkspaceWindow,
   promptForNewWorkspaceFolder,
   promptForWorkspaceFolder,
+  reportJavaScriptError,
   retryLauncherShortcutRegistration,
   resetGlobalInterfaceLanguageConfig,
   searchCurrentWorkspaceResources,
@@ -333,6 +335,7 @@ export const registerIpcHandlers = ({
   ipcMain.handle('desktop:get-browser-data-sync-state', () => getBrowserDataSyncState())
   ipcMain.handle('desktop:list-browser-history', (_event, input: unknown) => listBrowserHistory(input))
   ipcMain.handle('desktop:record-browser-history', (_event, input: unknown) => recordBrowserHistory(input))
+  ipcMain.handle('desktop:report-javascript-error', (_event, report: unknown) => reportJavaScriptError(report))
   ipcMain.handle(
     'desktop:register-interaction-panel-webview-scope',
     async (event, input: unknown) => {

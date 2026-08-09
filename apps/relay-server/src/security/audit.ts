@@ -180,6 +180,12 @@ export const classifyAuditTarget = (req: IncomingMessage, url: URL, store: Relay
       resource: 'config-snapshot'
     }
   }
+  if (req.method === 'PATCH' && url.pathname === '/api/profile/data-reporting-settings') {
+    return {
+      action: 'profile.data_reporting_settings.update',
+      resource: 'profile:data-reporting'
+    }
+  }
   const teamConfigSecretsMatch = /^\/api\/(admin|relay)\/teams\/([^/]+)\/config-secrets$/.exec(url.pathname)
   if (req.method === 'POST' && teamConfigSecretsMatch != null) {
     return {
@@ -282,6 +288,10 @@ const openApiPermissionForRequest = (req: IncomingMessage, url: URL) => {
   const requestMethod = req.method ?? 'GET'
   const path = url.pathname
   if (path === '/api/profile/security' && requestMethod === 'GET') return 'profile.security.read'
+  if (path === '/api/profile/model-usage' && requestMethod === 'GET') return 'profile.modelUsage.read'
+  if (path === '/api/profile/data-reporting-settings') {
+    return requestMethod === 'GET' ? 'profile.dataReportingSettings.read' : 'profile.dataReportingSettings.write'
+  }
   if (path === '/api/profile/openapi-audit' && requestMethod === 'GET') return 'profile.openApiAudit.read'
   if (path === '/api/profile/access-tokens' && requestMethod === 'POST') return 'profile.accessTokens.create'
   if (/^\/api\/profile\/access-tokens\/[^/]+$/.test(path) && requestMethod === 'PATCH') {
@@ -293,10 +303,16 @@ const openApiPermissionForRequest = (req: IncomingMessage, url: URL) => {
   if (path === '/api/profile/password' && requestMethod === 'POST') return 'profile.password.write'
   if (/^\/api\/profile\/passkeys\/register\//.test(path) && requestMethod === 'POST') return 'profile.passkeys.write'
   if (path === '/api/relay/config-snapshot' && requestMethod === 'GET') return relayPermissions.relayConfigSnapshotRead
+  if (path === '/api/relay/diagnostics/v1/logs' && requestMethod === 'POST') {
+    return relayPermissions.relayDiagnosticsWrite
+  }
   if (path === '/api/relay/team-policy') {
     return requestMethod === 'GET' ? relayPermissions.relayTeamsRead : relayPermissions.relayTeamsWrite
   }
   if (/^\/api\/relay\/teams(?:\/|$)/.test(path)) {
+    if (path.endsWith('/model-usage') && requestMethod === 'GET') {
+      return relayPermissions.relayTeamModelUsageRead
+    }
     if (path.includes('/members')) {
       return ['DELETE', 'PATCH', 'POST'].includes(requestMethod)
         ? relayPermissions.relayTeamMembersWrite
@@ -325,6 +341,15 @@ const openApiPermissionForRequest = (req: IncomingMessage, url: URL) => {
     return ['DELETE', 'PATCH', 'POST'].includes(requestMethod)
       ? relayPermissions.adminSsoWrite
       : relayPermissions.adminSsoRead
+  }
+  if (path === '/api/admin/diagnostics' && requestMethod === 'GET') {
+    return relayPermissions.adminDiagnosticsRead
+  }
+  if (path === '/api/admin/model-usage' && requestMethod === 'GET') {
+    return relayPermissions.adminModelUsageRead
+  }
+  if (/^\/api\/admin\/teams\/[^/]+\/model-usage$/.test(path) && requestMethod === 'GET') {
+    return relayPermissions.adminModelUsageRead
   }
   if (path.startsWith('/api/admin/')) {
     return ['DELETE', 'PATCH', 'POST'].includes(requestMethod)

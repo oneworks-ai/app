@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- Relay config projection scenarios share one filesystem fixture. */
 import { Buffer } from 'node:buffer'
 import { execFileSync } from 'node:child_process'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
@@ -357,6 +358,12 @@ describe('relay config hook', () => {
         },
         team: {
           apiBaseUrl: 'https://team.example.com/v1',
+          extra: {
+            oneworks: {
+              relayTeamId: 'team-1',
+              relayTeamName: 'Team One'
+            }
+          },
           models: ['team-model']
         }
       },

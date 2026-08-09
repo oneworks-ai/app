@@ -29,6 +29,7 @@ import { buildLauncherWindowTitle, buildWorkspaceSelectorWindowTitle } from './w
 interface BrowserWindowFactoryInput {
   broadcastWorkspaceSelectorState: () => void
   getWindowRecords: () => WindowRecord[]
+  onRendererGone?: (details: { reason: string }) => void
   refreshAppMenu: () => void
   runtimeState: DesktopRuntimeState
   stopWorkspaceService: (service: WorkspaceService) => Promise<void>
@@ -85,6 +86,7 @@ const prepareRecordableWindowForSystemCapture = (window: BrowserWindow) => {
 export const createBrowserWindowFactory = ({
   broadcastWorkspaceSelectorState,
   getWindowRecords,
+  onRendererGone,
   refreshAppMenu,
   runtimeState,
   stopWorkspaceService
@@ -200,6 +202,10 @@ export const createBrowserWindowFactory = ({
 
     installWebviewSecurityHandlers(window)
     installWindowLoadFailureHandlers(windowRecord)
+
+    window.webContents.on('render-process-gone', (_event, details) => {
+      onRendererGone?.({ reason: details.reason })
+    })
 
     window.webContents.on('will-navigate', (event, url) => {
       if (windowRecord.currentServerUrl != null && url.startsWith(windowRecord.currentServerUrl)) {

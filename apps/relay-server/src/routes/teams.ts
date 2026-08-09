@@ -15,6 +15,7 @@ import {
 import { archiveTeam, createTeam, restoreTeam, updateTeam } from './team-actions.js'
 import { createTeamInvitation, listTeamInvitations } from './team-invitations.js'
 import { createMember, deleteMember, listMembers, updateMember } from './team-members.js'
+import { handleTeamModelUsage } from './team-model-usage.js'
 import {
   authUserId,
   canReadTeam,
@@ -130,6 +131,10 @@ export const handleTeamsRoute = async (
       return true
     }
     listTeamAuditEvents(res, args, store, team.id)
+    return true
+  }
+  if (segments.length === 2 && segments[1] === 'model-usage' && req.method === 'GET') {
+    handleTeamModelUsage(res, args, store, auth, team, url)
     return true
   }
   if (segments.length === 2 && segments[1] === 'access-groups') {

@@ -73,6 +73,9 @@ export const handleRelayApi = async (request: PluginProxyRequest, controller: Re
   if (request.method === 'POST' && route === 'profile/password') {
     return await controllerJson(async () => await controller.changeProfilePassword(readBody(request)), 401)
   }
+  if (request.method === 'POST' && route === 'profile/data-reporting') {
+    return await controllerJson(async () => await controller.updateProfileDataReporting(readBody(request)), 401)
+  }
   if (request.method === 'POST' && route === 'profile/access-tokens') {
     return await controllerJson(async () => await controller.createProfileAccessToken(readBody(request)), 401)
   }

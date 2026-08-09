@@ -10,7 +10,7 @@ import { fetchRelayAdminDevices } from '../devices/devicesApi'
 import { fetchRelayAdminInvites } from '../invites/invitesApi'
 import { fetchRelayAdminSsoProviders } from '../sso/ssoProvidersApi'
 import type { RelayAdminTeam, RelayAdminTeamPolicy } from '../teams/teamTypes'
-import { fetchRelayAdminTeams } from '../teams/teamsApi'
+import { fetchRelayAdminTeams, fetchRelayUserTeams } from '../teams/teamsApi'
 import { fetchRelayAdminUsers } from '../users/usersApi'
 
 export interface RelayAdminSnapshot {
@@ -34,12 +34,14 @@ export const fetchRelayAdminSnapshot = async (
   const devicesBody = await fetchRelayAdminDevices(token)
 
   if (!options.includeAdminResources) {
+    const teamsBody = await fetchRelayUserTeams(token)
     return {
       devices: devicesBody.devices,
       accessGroups: [],
       invites: [],
       ssoProviders: [],
-      teams: [],
+      teamPolicy: teamsBody.policy,
+      teams: teamsBody.teams,
       users: []
     }
   }

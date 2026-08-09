@@ -679,14 +679,29 @@ function PluginHostSegmented(props: PluginHostSegmentedComponentProps) {
 function PluginHostSwitch(props: PluginHostComponentPropsById['switch']) {
   return (
     <Switch
+      aria-label={props.ariaLabel}
       checked={props.checked}
       checkedChildren={props.checkedLabel}
       className='plugin-host-control plugin-host-control-switch'
       disabled={props.disabled}
+      loading={props.loading}
       onChange={props.onChange}
       size={props.size}
       unCheckedChildren={props.uncheckedLabel}
     />
+  )
+}
+
+function PluginHostSettingRow(props: PluginHostComponentPropsById['settingRow']) {
+  return (
+    <FieldRow
+      description={props.description}
+      icon={props.icon}
+      layout={props.layout}
+      title={props.title}
+    >
+      {props.children}
+    </FieldRow>
   )
 }
 
@@ -1244,6 +1259,7 @@ export const createPluginHostComponentReactApi = (
   SettingsRow: PluginHostSettingsRow,
   SettingsSection: PluginHostSettingsSection,
   Segmented: PluginHostSegmented,
+  SettingRow: PluginHostSettingRow,
   Sender: PluginSenderHost,
   Switch: PluginHostSwitch
 })
@@ -1380,6 +1396,17 @@ export const renderPluginHostComponent = (
     return (
       <PluginHostSegmented
         {...((props as PluginHostComponentPropsById['segmented'] | undefined) ?? { options: [] })}
+      />
+    )
+  }
+
+  if (component === 'settingRow') {
+    return (
+      <PluginHostSettingRow
+        {...((props as PluginHostComponentPropsById['settingRow'] | undefined) ?? {
+          children: null,
+          title: ''
+        })}
       />
     )
   }

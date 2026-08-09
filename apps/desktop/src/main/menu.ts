@@ -25,6 +25,7 @@ interface AppMenuManagerInput {
     mode?: WorkspaceSelectorMode
     parentWindow?: WindowRecord
   }) => Promise<WindowRecord>
+  exportDiagnosticSupportBundle: () => Promise<void>
   findWindowRecord: (window: BrowserWindow | null) => WindowRecord | undefined
   getQuitConfirmationLanguage: () => QuitConfirmationLanguage
   handleDesktopError: (error: unknown) => void
@@ -39,6 +40,7 @@ export const createAppMenuManager = ({
   checkForUpdates,
   createLauncherWindow,
   createWorkspaceSelectorWindow,
+  exportDiagnosticSupportBundle,
   findWindowRecord,
   getQuitConfirmationLanguage,
   handleDesktopError,
@@ -75,6 +77,10 @@ export const createAppMenuManager = ({
 
   const installRuntimeUpdates = () => {
     void installCliRuntimeUpdates().catch(handleDesktopError)
+  }
+
+  const exportSupportBundle = () => {
+    void exportDiagnosticSupportBundle().catch(handleDesktopError)
   }
 
   const reloadWindow = (window?: BrowserWindow) => {
@@ -394,6 +400,11 @@ export const createAppMenuManager = ({
           {
             click: installRuntimeUpdates,
             label: 'Install CLI Runtime Update...'
+          },
+          { type: 'separator' },
+          {
+            click: exportSupportBundle,
+            label: 'Export Diagnostic Support Bundle...'
           }
         ]
       }

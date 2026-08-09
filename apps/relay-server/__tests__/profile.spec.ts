@@ -50,6 +50,7 @@ const internalRuntimePathPrefixes = [
 const currentUserRelayPathPrefixes = [
   '/api/relay/config/',
   '/api/relay/config-',
+  '/api/relay/diagnostics/',
   '/api/relay/team-policy',
   '/api/relay/teams'
 ]
@@ -227,9 +228,11 @@ describe('relay profile security routes', () => {
       '/api/admin/config-secrets/{secretId}',
       '/api/admin/config-secrets/{secretId}/revoke',
       '/api/admin/config-secrets/{secretId}/rotate',
+      '/api/admin/diagnostics',
       '/api/admin/invites',
       '/api/admin/invites/{code}',
       '/api/admin/messages',
+      '/api/admin/model-usage',
       '/api/admin/openapi.json',
       '/api/admin/security/tokens/revoke',
       '/api/admin/security/tokens/rotate',
@@ -250,6 +253,7 @@ describe('relay profile security routes', () => {
       '/api/admin/teams/{teamId}/invitations',
       '/api/admin/teams/{teamId}/members',
       '/api/admin/teams/{teamId}/members/{memberId}',
+      '/api/admin/teams/{teamId}/model-usage',
       '/api/admin/teams/{teamId}/restore',
       '/api/admin/users',
       '/api/admin/users/{userId}',
@@ -267,6 +271,8 @@ describe('relay profile security routes', () => {
       '/api/profile/access-tokens',
       '/api/profile/access-tokens/{tokenId}',
       '/api/profile/account',
+      '/api/profile/data-reporting-settings',
+      '/api/profile/model-usage',
       '/api/profile/openapi-audit',
       '/api/profile/openapi.json',
       '/api/profile/passkeys/register/options',
@@ -284,6 +290,7 @@ describe('relay profile security routes', () => {
       '/api/relay/config-secrets/{secretId}/rotate',
       '/api/relay/config-snapshot',
       '/api/relay/config/global',
+      '/api/relay/diagnostics/v1/logs',
       '/api/relay/info',
       '/api/relay/team-policy',
       '/api/relay/teams',
@@ -298,6 +305,7 @@ describe('relay profile security routes', () => {
       '/api/relay/teams/{teamId}/invitations',
       '/api/relay/teams/{teamId}/members',
       '/api/relay/teams/{teamId}/members/{memberId}',
+      '/api/relay/teams/{teamId}/model-usage',
       '/api/relay/teams/{teamId}/restore',
       '/health'
     ])

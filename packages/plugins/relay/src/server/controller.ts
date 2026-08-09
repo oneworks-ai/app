@@ -43,7 +43,7 @@ import {
   serializeRelayConfigSourcePreferences,
   updateRelayConfigSourcePreference
 } from './config-source-preferences.js'
-import { syncRelayConfigSnapshot } from './config-sync.js'
+import { applyRelayDataReportingSettings, syncRelayConfigSnapshot } from './config-sync.js'
 import type { RelayConfigSyncResult } from './config-sync.js'
 import { createRelayDeviceControlChannel } from './device-control-channel.js'
 import { createRelayLoopLeaseManager } from './loop-lease.js'
@@ -81,11 +81,14 @@ import type {
   RelayProfileAccessToken,
   RelayProfileAccessTokenScope,
   RelayProfileCurrentUser,
+  RelayProfileDataReportingSettings,
   RelayProfileMessage,
   RelayProfileMessageAudienceScope,
   RelayProfileMessageKind,
   RelayProfileMessageLoginMetadata,
   RelayProfileMessageUser,
+  RelayProfileModelUsageSettings,
+  RelayProfileModelUsageTeamSetting,
   RelayProfileOpenApiAuditEvent,
   RelayProfileSecuritySummary,
   RelayProfileSessionSummary,
@@ -146,6 +149,7 @@ export interface RelayController {
   createProfileAccessToken: (payload?: unknown) => Promise<unknown>
   updateProfileAccessToken: (payload?: unknown) => Promise<unknown>
   updateProfileDeviceAlias: (payload?: unknown) => Promise<unknown>
+  updateProfileDataReporting: (payload?: unknown) => Promise<unknown>
   revokeProfileAccessToken: (payload?: unknown) => Promise<unknown>
   deleteProfileAccount: (payload?: unknown) => Promise<unknown>
   setUserEnabled: (payload: unknown, enabled: boolean) => Promise<unknown>
@@ -1046,11 +1050,68 @@ const normalizeProfileTeam = (value: unknown): RelayProfileTeam | undefined => {
     description: readNullableText(value.description),
     id,
     memberCount: readNumber(value.memberCount, 0),
+    modelUsageReportingMode: value.modelUsageReportingMode === 'optional' ? 'optional' : 'required',
     membership,
     name: toString(value.name) || toString(value.slug) || id,
     role: membership?.role ?? (toString(value.role) || undefined),
     slug: toString(value.slug) || id,
     updatedAt: readNullableText(value.updatedAt)
+  }
+}
+
+const normalizeProfileModelUsageTeamSetting = (
+  value: unknown
+): RelayProfileModelUsageTeamSetting | undefined => {
+  if (!isRecord(value)) return undefined
+  const teamId = toString(value.teamId)
+  if (teamId === '') return undefined
+  const mode = value.mode === 'optional' ? 'optional' : 'required'
+  const userCanControl = mode === 'optional' && value.userCanControl === true
+  const updatedAt = readOptionalText(value.updatedAt)
+  return {
+    enabled: userCanControl ? readBoolean(value.enabled, true) : true,
+    mode,
+    name: toString(value.name) || toString(value.slug) || teamId,
+    role: toString(value.role) || 'member',
+    slug: toString(value.slug) || teamId,
+    teamId,
+    ...(updatedAt == null ? {} : { updatedAt }),
+    userCanControl
+  }
+}
+
+const normalizeProfileModelUsageSettings = (value: unknown): RelayProfileModelUsageSettings | undefined => {
+  if (!isRecord(value) || !isRecord(value.personal) || typeof value.personal.enabled !== 'boolean') {
+    return undefined
+  }
+  const personalUpdatedAt = readOptionalText(value.personal.updatedAt)
+  return {
+    personal: {
+      defaultEnabled: true,
+      enabled: value.personal.enabled,
+      ...(personalUpdatedAt == null ? {} : { updatedAt: personalUpdatedAt })
+    },
+    teams: Array.isArray(value.teams)
+      ? value.teams
+        .map(normalizeProfileModelUsageTeamSetting)
+        .filter((team): team is RelayProfileModelUsageTeamSetting => team != null)
+      : []
+  }
+}
+
+const normalizeProfileDataReportingSettings = (value: unknown): RelayProfileDataReportingSettings | undefined => {
+  if (!isRecord(value) || !isRecord(value.diagnosticReporting)) return undefined
+  if (typeof value.diagnosticReporting.enabled !== 'boolean') return undefined
+  const modelUsageReporting = normalizeProfileModelUsageSettings(value.modelUsageReporting)
+  if (modelUsageReporting == null) return undefined
+  const diagnosticUpdatedAt = readOptionalText(value.diagnosticReporting.updatedAt)
+  return {
+    diagnosticReporting: {
+      defaultEnabled: true,
+      enabled: value.diagnosticReporting.enabled,
+      ...(diagnosticUpdatedAt == null ? {} : { updatedAt: diagnosticUpdatedAt })
+    },
+    modelUsageReporting
   }
 }
 
@@ -3761,6 +3822,22 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
         workspaceFolder: ctx.workspaceFolder
       }],
       invitations: [],
+      dataReporting: {
+        diagnosticReporting: { defaultEnabled: true, enabled: true, updatedAt: now },
+        modelUsageReporting: {
+          personal: { defaultEnabled: true, enabled: true, updatedAt: now },
+          teams: [{
+            enabled: true,
+            mode: account.role === 'member' ? 'optional' : 'required',
+            name: teamName,
+            role: account.role ?? 'member',
+            slug: teamSlug,
+            teamId,
+            updatedAt: now,
+            userCanControl: account.role === 'member'
+          }]
+        }
+      },
       messages: [{
         audience: {
           scope: 'users',
@@ -3794,6 +3871,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
         description: 'Local Relay account fixture team.',
         id: teamId,
         memberCount: store.accounts.filter(item => item.serverId === account.serverId).length,
+        modelUsageReportingMode: account.role === 'member' ? 'optional' : 'required',
         membership: {
           configEnabled: true,
           defaultForPublishing: account.role === 'owner',
@@ -3879,13 +3957,15 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
     }
     const session = normalizeProfileSession(meBody.session)
     const updated = await updateProfileAuthAccount(selection.store, selection.account, user, session)
-    const [securityResult, devicesResult, auditResult, messagesResult, teamsResult] = await Promise.allSettled([
-      fetchRelayProfileJson(updated.account, '/api/profile/security'),
-      fetchRelayProfileJson(updated.account, '/api/relay/devices'),
-      fetchRelayProfileJson(updated.account, profileAuditPath(payload)),
-      fetchRelayProfileJson(updated.account, '/api/admin/messages'),
-      fetchRelayProfileJson(updated.account, '/api/relay/teams')
-    ])
+    const [securityResult, devicesResult, auditResult, messagesResult, teamsResult, dataReportingResult] = await Promise
+      .allSettled([
+        fetchRelayProfileJson(updated.account, '/api/profile/security'),
+        fetchRelayProfileJson(updated.account, '/api/relay/devices'),
+        fetchRelayProfileJson(updated.account, profileAuditPath(payload)),
+        fetchRelayProfileJson(updated.account, '/api/admin/messages'),
+        fetchRelayProfileJson(updated.account, '/api/relay/teams'),
+        fetchRelayProfileJson(updated.account, '/api/profile/data-reporting-settings')
+      ])
     const errors: NonNullable<RelayProfileStatus['errors']> = {}
     if (securityResult.status === 'rejected') {
       errors.security = securityResult.reason instanceof Error
@@ -3912,6 +3992,9 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
     const auditBody = auditResult.status === 'fulfilled' ? auditResult.value : {}
     const messagesBody = messagesResult.status === 'fulfilled' ? messagesResult.value : {}
     const teamsBody = teamsResult.status === 'fulfilled' ? teamsResult.value : {}
+    const dataReporting = dataReportingResult.status === 'fulfilled'
+      ? normalizeProfileDataReportingSettings(dataReportingResult.value)
+      : undefined
     const profileStatus: RelayProfileStatus = {
       ok: true,
       account: publicAuthAccount(updated.account),
@@ -3939,6 +4022,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
           .map(normalizeProfileMessage)
           .filter((message): message is RelayProfileMessage => message != null)
         : [],
+      ...(dataReporting == null ? {} : { dataReporting }),
       security: securityResult.status === 'fulfilled'
         ? normalizeProfileSecuritySummary(securityResult.value, user)
         : emptyProfileSecuritySummary(user),
@@ -3982,6 +4066,35 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
       action,
       result
     }
+  }
+
+  const updateProfileDataReporting = async (payload?: unknown) => {
+    const body = isRecord(payload) ? payload : {}
+    const hasDiagnostic = typeof body.diagnosticEnabled === 'boolean'
+    const hasPersonal = typeof body.personalEnabled === 'boolean'
+    const teamId = toString(body.teamId).trim()
+    const hasTeam = teamId !== '' && typeof body.teamEnabled === 'boolean'
+    if ([hasDiagnostic, hasPersonal, hasTeam].filter(Boolean).length !== 1) {
+      throw new Error('Update exactly one personal data reporting preference.')
+    }
+    return await profileActionWithRefresh(
+      payload,
+      'profile.data_reporting',
+      async account => {
+        const result = await fetchRelayProfileJson(account, '/api/profile/data-reporting-settings', {
+          body: JSON.stringify(
+            hasDiagnostic
+              ? { diagnosticEnabled: body.diagnosticEnabled }
+              : hasPersonal
+              ? { personalEnabled: body.personalEnabled }
+              : { teamEnabled: body.teamEnabled, teamId }
+          ),
+          method: 'PATCH'
+        })
+        await applyRelayDataReportingSettings(result)
+        return result
+      }
+    )
   }
 
   const changeProfilePassword = async (payload?: unknown) => {
@@ -4966,6 +5079,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
     updateConfigShareAssignment,
     updateProfileAccessToken,
     updateProfileDeviceAlias,
+    updateProfileDataReporting,
     search: payload => [{
       id: 'status',
       title: 'Account status',

@@ -29,6 +29,7 @@ import linkSvg from '@material-symbols/svg-400/rounded/link.svg?raw'
 import loginSvg from '@material-symbols/svg-400/rounded/login.svg?raw'
 import logoutSvg from '@material-symbols/svg-400/rounded/logout.svg?raw'
 import menuBookSvg from '@material-symbols/svg-400/rounded/menu_book.svg?raw'
+import monitorHeartSvg from '@material-symbols/svg-400/rounded/monitor_heart.svg?raw'
 import moreHorizSvg from '@material-symbols/svg-400/rounded/more_horiz.svg?raw'
 import notificationsSvg from '@material-symbols/svg-400/rounded/notifications.svg?raw'
 import personSvg from '@material-symbols/svg-400/rounded/person.svg?raw'
@@ -71,6 +72,7 @@ export type AdminIconName =
   | 'login'
   | 'logout'
   | 'menu_book'
+  | 'monitor_heart'
   | 'more_horiz'
   | 'notifications'
   | 'person'
@@ -113,6 +115,7 @@ const adminIconSvgByName: Record<AdminIconName, string> = {
   login: loginSvg,
   logout: logoutSvg,
   menu_book: menuBookSvg,
+  monitor_heart: monitorHeartSvg,
   more_horiz: moreHorizSvg,
   notifications: notificationsSvg,
   person: personSvg,

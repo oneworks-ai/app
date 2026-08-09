@@ -168,6 +168,13 @@ export const updateTeam = async (
     }
     team.proxyModeEnabled = body.proxyModeEnabled
   }
+  if (Object.prototype.hasOwnProperty.call(body, 'modelUsageReportingMode')) {
+    if (body.modelUsageReportingMode !== 'required' && body.modelUsageReportingMode !== 'optional') {
+      sendJson(res, 400, { error: 'Model usage reporting mode must be required or optional.' }, args.allowOrigin)
+      return
+    }
+    team.modelUsageReportingMode = body.modelUsageReportingMode
+  }
   team.updatedAt = now()
   await storeRepository.write(store)
   sendJson(res, 200, { team: serializeTeam(team, store, authUserId(auth)) }, args.allowOrigin)

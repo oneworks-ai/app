@@ -194,6 +194,7 @@ export const defaultRelayTeamAccessGroups = (): RelayAccessGroup[] => [
         relayPermissions.relayTeamConfigProfilesWrite,
         relayPermissions.relayTeamConfigSecretsRead,
         relayPermissions.relayTeamConfigSecretsWrite,
+        relayPermissions.relayTeamModelUsageRead,
         relayPermissions.relayMessagesWrite
       ]
     },
@@ -225,6 +226,7 @@ export const defaultRelayTeamAccessGroups = (): RelayAccessGroup[] => [
         relayPermissions.relayTeamConfigProfilesWrite,
         relayPermissions.relayTeamConfigSecretsRead,
         relayPermissions.relayTeamConfigSecretsWrite,
+        relayPermissions.relayTeamModelUsageRead,
         relayPermissions.relayMessagesWrite
       ]
     },

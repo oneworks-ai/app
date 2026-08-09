@@ -7,7 +7,7 @@
 - `AdminApp.tsx`：挂载 `features/dashboard/AdminDashboard` 的 route 页面，并通过 `@oneworks/route-layout` 的 `HostAppShell` 提供共享 content surface 与 route shell；只做 route、header actions 和 shell 接线。
 - `AdminThemeProvider.tsx`：管理端主题入口，负责读取 / 保存主题偏好，同步 `html.dark`，并把同一套主题状态传给 AntD `ConfigProvider`。
 - `AdminNavRail.tsx`：Relay Admin 的业务侧栏 adapter。这里把管理端路由、底部账号菜单、主题 / 语言偏好等业务输入喂给共享 `HostNavRail` 插槽；不要在共享包里引入 admin API 或插件注册逻辑，也不要在这里复制一套 sidebar DOM。
-- `useAdminSidebarItems.tsx`：把 React Router location 映射为侧栏 item 和当前 route section，不监听 hash；设备入口应保持在认证管理入口之前，API 文档入口面向所有登录用户，平台管理区块继续按角色过滤。
+- `useAdminSidebarItems.tsx`：把 React Router location 映射为侧栏 item 和当前 route section，不监听 hash；设备入口应保持在认证管理入口之前，跨域分析只保留一个平台管理员可见的“数据看板”入口，API 文档入口面向所有登录用户，平台管理区块继续按角色过滤。
 - `AdminApp.css`：管理端 app shell、菜单 adapter、AntD 全局 surface 适配和页面级布局；不要在这里维护独立色板。
 - `vite.config.ts` 在 dev server 里把 `/api/*` 和 `/login` 代理给 relay-server，登录 / API 语义不要在 app shell 里硬编码端口。
 

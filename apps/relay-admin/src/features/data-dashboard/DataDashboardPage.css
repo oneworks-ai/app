@@ -1,0 +1,185 @@
+.relay-data-dashboard {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  padding: var(--relay-admin-padding)
+    var(--route-container-header-padding-inline) 0;
+}
+
+.relay-data-dashboard__tabs > .ant-tabs-content-holder {
+  overflow: hidden;
+}
+
+.relay-data-dashboard__overview-spinner,
+.relay-data-dashboard__overview-spinner > .ant-spin-container {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.relay-data-dashboard__overview {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--relay-admin-padding);
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  padding-bottom: var(--relay-admin-padding);
+}
+
+.relay-data-dashboard__overview-actions {
+  align-items: center;
+  display: flex;
+  justify-content: flex-end;
+  min-height: 24px;
+}
+
+.relay-data-dashboard__overview-actions > span {
+  color: var(--sub-text-color);
+  font-size: 11px;
+  margin-right: 8px;
+}
+
+.relay-data-dashboard__metrics {
+  display: grid;
+  gap: var(--relay-admin-padding);
+  grid-template-columns: repeat(6, minmax(118px, 1fr));
+}
+
+.relay-data-dashboard__metric.ant-card .ant-card-body {
+  display: grid;
+  gap: 3px;
+  padding: var(--relay-admin-padding);
+}
+
+.relay-data-dashboard__metric span,
+.relay-data-dashboard__metric small,
+.relay-data-dashboard__card-title small,
+.relay-data-dashboard__dimension-values small,
+.relay-data-dashboard__coverage-note {
+  color: var(--sub-text-color);
+  font-size: 11px;
+}
+
+.relay-data-dashboard__metric strong {
+  color: var(--text-color);
+  font-size: 21px;
+  font-variant-numeric: tabular-nums;
+}
+
+.relay-data-dashboard__trend-card.ant-card .ant-card-body,
+.relay-data-dashboard__dimension-card.ant-card .ant-card-body {
+  padding: var(--relay-admin-padding);
+}
+
+.relay-data-dashboard__card-title,
+.relay-data-dashboard__card-title > span {
+  align-items: center;
+  display: flex;
+}
+
+.relay-data-dashboard__card-title {
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.relay-data-dashboard__card-title > span {
+  gap: 6px;
+}
+
+.relay-data-dashboard__card-title .relay-admin-icon {
+  color: var(--primary-color);
+  height: 16px;
+  width: 16px;
+}
+
+.relay-data-dashboard__trend {
+  align-items: end;
+  display: grid;
+  gap: 6px;
+  grid-auto-columns: minmax(22px, 1fr);
+  grid-auto-flow: column;
+  height: 150px;
+  min-width: max-content;
+  overflow-x: auto;
+}
+
+.relay-data-dashboard__trend-item {
+  align-items: center;
+  display: grid;
+  gap: 4px;
+  grid-template-rows: auto 1fr auto;
+  height: 100%;
+  min-width: 22px;
+  text-align: center;
+}
+
+.relay-data-dashboard__trend-item > span,
+.relay-data-dashboard__trend-item > small {
+  color: var(--sub-text-color);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.relay-data-dashboard__trend-item > div {
+  align-items: end;
+  display: flex;
+  height: 100%;
+}
+
+.relay-data-dashboard__trend-item i {
+  background: linear-gradient(
+    180deg,
+    var(--primary-color),
+    color-mix(in srgb, var(--primary-color) 42%, transparent)
+  );
+  border-radius: 5px 5px 2px 2px;
+  display: block;
+  min-height: 4px;
+  width: 100%;
+}
+
+.relay-data-dashboard__dimensions {
+  display: grid;
+  gap: var(--relay-admin-padding);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.relay-data-dashboard__card-title .ant-btn-link {
+  height: auto;
+  padding: 0;
+}
+
+.relay-data-dashboard__dimension-values {
+  display: grid;
+  gap: var(--relay-admin-padding);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.relay-data-dashboard__dimension-values > span {
+  display: grid;
+  gap: 2px;
+}
+
+.relay-data-dashboard__dimension-values strong {
+  color: var(--text-color);
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.relay-data-dashboard__coverage-note {
+  margin: 0;
+}
+
+@media (max-width: 1100px) {
+  .relay-data-dashboard__metrics {
+    grid-template-columns: repeat(2, minmax(140px, 1fr));
+  }
+
+  .relay-data-dashboard__dimensions {
+    grid-template-columns: 1fr;
+  }
+}

@@ -34,6 +34,8 @@ config、cache、definition、workspace asset 共享 contract 位于 `@oneworks/
 
 优先入口：
 
+- `cli-diagnostics.ts`：记录 CLI 命令 lifecycle、插件加载阶段与终态，并按标准 OTel 环境变量可选导出；不得记录 argv、提示词或任意命令 payload。
+- `commands/report.ts`：只打包 `@oneworks/diagnostics` 生成的隐私安全支持包，不得退回归档 raw logs、cache 或 mock home。
 - `commands/run.ts`
 - `commands/agent.ts`
 - `commands/agent/*`

@@ -4,7 +4,7 @@ import './UserDetailPage.css'
 import { Avatar, Empty, Input, InputNumber, Tabs } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 
 import type {
   RelayAdminAccessGroup,
@@ -17,6 +17,7 @@ import { AdminIcon } from '../../shared/ui/AdminIcon'
 import { StatusBadge } from '../../shared/ui/StatusBadge'
 import { accessGroupName } from '../access-groups/accessGroupModel'
 import { DeviceTable } from '../devices/DeviceTable'
+import { DiagnosticsPage } from '../diagnostics/DiagnosticsPage'
 import type { RelayAdminTeam } from '../teams/teamTypes'
 import { UserAccessPanel } from './UserAccessPanel'
 import { UserTeamsPanel } from './UserTeamsPanel'
@@ -81,7 +82,8 @@ export const UserDetailPage = ({
   onSetAccessGroups,
   users
 }: UserDetailPageProps) => {
-  const { userId } = useParams()
+  const navigate = useNavigate()
+  const { userId, userTab } = useParams()
   const user = users.find(item => item.id === userId)
   const [loginIdValue, setLoginIdValue] = useState('')
   const boundInvites = useMemo(
@@ -207,8 +209,16 @@ export const UserDetailPage = ({
         </dl>
 
         <Tabs
+          activeKey={userTab === 'access' || userTab === 'devices' || userTab === 'diagnostics' || userTab === 'teams'
+            ? userTab
+            : 'teams'}
           className='relay-user-detail__tabs'
           items={[
+            {
+              children: <DiagnosticsPage embedded token={token} userId={user.id} />,
+              key: 'diagnostics',
+              label: '诊断时间线'
+            },
             {
               children: (
                 <UserTeamsPanel
@@ -256,6 +266,7 @@ export const UserDetailPage = ({
               label: '设备'
             }
           ]}
+          onChange={key => navigate(`/users/${encodeURIComponent(user.id)}/${key}`)}
         />
       </div>
     </section>

@@ -87,6 +87,12 @@ export const classifyRateLimitedRequest = (req: IncomingMessage, url: URL): Rela
       key: `${ip}:register:${tokenHash}`
     }
   }
+  if (requestMethod === 'POST' && url.pathname === '/api/relay/diagnostics/v1/logs') {
+    return {
+      category: 'diagnostics-ingest',
+      key: `${ip}:diagnostics:${tokenHash}`
+    }
+  }
   if (['DELETE', 'PATCH', 'POST'].includes(requestMethod) && /^\/api\/admin\//.test(url.pathname)) {
     return {
       category: 'admin-mutation',

@@ -429,3 +429,58 @@
     flex-direction: column-reverse;
   }
 }
+
+.relay-profile-usage {
+  display: grid;
+  gap: 16px;
+}
+
+.relay-profile-usage__setting-row,
+.relay-profile-usage__team-row {
+  align-items: center;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.relay-profile-usage__team-row {
+  border-bottom: 1px solid var(--relay-admin-border-subtle);
+  grid-template-columns: minmax(0, 1fr) minmax(170px, auto) auto;
+  padding: 12px 0;
+}
+
+.relay-profile-usage__team-row:last-child {
+  border-bottom: 0;
+}
+
+.relay-profile-usage__setting-row span,
+.relay-profile-usage__team-main {
+  display: grid;
+  gap: 4px;
+}
+
+.relay-profile-usage small {
+  color: var(--relay-admin-text-secondary);
+}
+
+.relay-profile-usage__metrics {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.relay-profile-usage__metrics .ant-card-body {
+  display: grid;
+  gap: 6px;
+}
+
+.relay-profile-usage__metrics strong {
+  font-size: 22px;
+}
+
+@media (max-width: 800px) {
+  .relay-profile-usage__team-row,
+  .relay-profile-usage__metrics {
+    grid-template-columns: 1fr;
+  }
+}

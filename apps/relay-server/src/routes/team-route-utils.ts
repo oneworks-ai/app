@@ -8,6 +8,11 @@ import { defaultTeamAccessGroupIds, resolveTeamMemberAccess, teamAccessGroupsFor
 import { authContextHasPermission } from '../auth/permissions.js'
 import type { RelayAuthContext } from '../auth/permissions.js'
 import { sendJson } from '../http.js'
+import {
+  teamMemberCanControlModelUsageReporting,
+  teamMemberModelUsageReportingEnabled,
+  teamModelUsageReportingMode
+} from '../model-usage/preferences.js'
 import { relayPermissions } from '../permissions/index.js'
 import { canManageRelayTeamMembers, canUpdateRelayTeam, findRelayTeamMember, teamMemberCount } from '../teams.js'
 import type {
@@ -214,6 +219,7 @@ export const serializeTeam = (
     description: team.description ?? null,
     avatarUrl: team.avatarUrl ?? null,
     accessGroups: serializeTeamAccessGroups(store, team),
+    modelUsageReportingMode: teamModelUsageReportingMode(team),
     proxyModeEnabled: team.proxyModeEnabled === true,
     archivedAt: team.archivedAt ?? null,
     memberCount: teamMemberCount(store, team.id),
@@ -223,6 +229,9 @@ export const serializeTeam = (
         configEnabled: membership.configEnabled !== false,
         defaultForPublishing: membership.defaultForPublishing === true,
         groupIds: membership.groupIds ?? defaultTeamAccessGroupIds(membership.role),
+        modelUsageReportingEnabled: membership.modelUsageReportingEnabled !== false,
+        modelUsageReportingEffective: teamMemberModelUsageReportingEnabled(team, membership),
+        modelUsageReportingUserCanControl: teamMemberCanControlModelUsageReporting(team),
         role: membership.role
       },
     createdByUserId: team.createdByUserId,

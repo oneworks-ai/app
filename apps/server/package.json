@@ -55,6 +55,7 @@
     "@oneworks/cli-helper": "workspace:*",
     "@oneworks/config": "workspace:*",
     "@oneworks/core": "workspace:*",
+    "@oneworks/diagnostics": "workspace:*",
     "@oneworks/definition-core": "workspace:*",
     "@oneworks/definition-loader": "workspace:*",
     "@oneworks/fs-authority-native": "workspace:*",

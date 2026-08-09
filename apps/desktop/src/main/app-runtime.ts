@@ -1,8 +1,11 @@
 /* eslint-disable max-lines -- app runtime wires lifecycle hooks and main-process modules in one place. */
+import { join } from 'node:path'
 import process from 'node:process'
 
 import { BrowserWindow, app, dialog, globalShortcut, nativeTheme, shell } from 'electron'
 
+import { createJavaScriptErrorReport } from '@oneworks/diagnostics'
+import type { JavaScriptErrorSource } from '@oneworks/diagnostics'
 import { standaloneDevicesRoutePath } from '@oneworks/types'
 
 import {
@@ -36,6 +39,7 @@ import {
   updateGlobalInterfaceLanguageConfig as updateGlobalInterfaceLanguageConfigFile
 } from './interface-language-config'
 import { registerIpcHandlers } from './ipc-handlers'
+import { createDesktopJavaScriptDiagnostics } from './javascript-diagnostics'
 import { createLauncherClientServiceManager } from './launcher-client-service'
 import { toElectronAccelerator } from './launcher-shortcut'
 import { createManagerServiceManager } from './manager-service-manager'
@@ -50,6 +54,9 @@ import {
 import type { QuitConfirmationLanguage } from './quit-confirmation'
 import { createDesktopQuitCoordinator } from './quit-coordinator'
 import { createDesktopRuntimeState } from './runtime-state'
+import { createDesktopStartupDiagnostics, readDesktopDiagnosticReportingEnabled } from './startup-diagnostics'
+import type { DesktopStartupDiagnostics } from './startup-diagnostics'
+import { formatDesktopSupportBundleFileName, writeDesktopSupportBundle } from './support-bundle'
 import { resolveDesktopRecordingThemeSource, setDesktopThemeSource } from './theme-source'
 import type { DesktopSettings, LaunchRequest, WindowRecord, WorkspaceSelectorWindowInput } from './types'
 import { DEFAULT_DESKTOP_AUTO_UPDATE, isDesktopUpdateChannel, resolveDefaultDesktopUpdateChannel } from './update-types'
@@ -87,6 +94,8 @@ export const createDesktopApp = () => {
   let menuManager: ReturnType<typeof createAppMenuManager>
   let windowManager: WindowManager
   let autoUpdateManager: ReturnType<typeof createAutoUpdateManager>
+  let startupDiagnostics: DesktopStartupDiagnostics | undefined
+  let javascriptDiagnostics: ReturnType<typeof createDesktopJavaScriptDiagnostics> | undefined
   const contextCaptureOverlayController = createDesktopContextCaptureOverlayController()
   const browserControlBroker = createBrowserControlBroker({
     getWorkspaceHostWebContents: workspaceFolder => (
@@ -251,6 +260,32 @@ export const createDesktopApp = () => {
     dialog.showErrorBox('One Works failed to open the workspace', message)
   }
 
+  const reportDesktopJavaScriptError = (
+    error: unknown,
+    source: JavaScriptErrorSource,
+    input: { fingerprintMaterial?: string; type?: string } = {}
+  ) => {
+    const report = createJavaScriptErrorReport(error, {
+      ...input,
+      serviceVersion: app.getVersion(),
+      source,
+      surface: 'desktop'
+    })
+    void javascriptDiagnostics?.record(report).catch((recordError) => {
+      const name = recordError instanceof Error ? recordError.name : 'UnknownError'
+      console.warn(`[oneworks-desktop] failed to record JavaScript diagnostic (${name})`)
+    })
+  }
+
+  const handleUncaughtExceptionMonitor = (error: Error, origin: string) => {
+    reportDesktopJavaScriptError(
+      error,
+      origin === 'unhandledRejection'
+        ? 'electron.main_unhandled_rejection'
+        : 'electron.main_uncaught_exception'
+    )
+  }
+
   const loadQuitConfirmationLanguage = async () => {
     try {
       const languageConfig = await readGlobalInterfaceLanguageConfig()
@@ -401,6 +436,43 @@ export const createDesktopApp = () => {
     getIsQuitting: () => runtimeState.isQuitting,
     runtimeState
   })
+
+  const exportDiagnosticSupportBundle = async () => {
+    const focusedWindow = BrowserWindow.getFocusedWindow()
+    const defaultPath = join(app.getPath('downloads'), formatDesktopSupportBundleFileName())
+    const result = focusedWindow == null
+      ? await dialog.showSaveDialog({
+        defaultPath,
+        filters: [{ extensions: ['json'], name: 'JSON diagnostic bundle' }],
+        title: 'Export Diagnostic Support Bundle'
+      })
+      : await dialog.showSaveDialog(focusedWindow, {
+        defaultPath,
+        filters: [{ extensions: ['json'], name: 'JSON diagnostic bundle' }],
+        title: 'Export Diagnostic Support Bundle'
+      })
+    if (result.canceled || result.filePath == null) return
+
+    await writeDesktopSupportBundle({
+      architecture: process.arch,
+      destinationPath: result.filePath,
+      platform: process.platform,
+      productName: app.name,
+      productVersion: app.getVersion(),
+      userDataDirectory: app.getPath('userData')
+    })
+    const messageBoxOptions = {
+      message: 'Diagnostic support bundle exported.',
+      detail:
+        'The bundle contains pseudonymized diagnostic facts and excludes prompts, credentials, paths, and raw logs.',
+      type: 'info' as const
+    }
+    if (focusedWindow == null) {
+      await dialog.showMessageBox(messageBoxOptions)
+    } else {
+      await dialog.showMessageBox(focusedWindow, messageBoxOptions)
+    }
+  }
   const launcherClientServiceManager = createLauncherClientServiceManager({
     getIsQuitting: () => runtimeState.isQuitting,
     onClientOriginAvailable: publishDesktopClientOrigin,
@@ -468,6 +540,14 @@ export const createDesktopApp = () => {
     ensureManagerService: managerServiceManager.ensureManagerService,
     ensureWorkspaceService: serviceManager.ensureWorkspaceService,
     forgetWorkspaceFolder,
+    onStartupDegraded: (error, input) => startupDiagnostics?.degrade(error, input),
+    onStartupStage: name => startupDiagnostics?.stage(name),
+    onStartupWindowReady: () => startupDiagnostics?.ready(),
+    onRendererGone: details =>
+      reportDesktopJavaScriptError(undefined, 'electron.renderer_gone', {
+        fingerprintMaterial: details.reason,
+        type: 'RendererProcessGone'
+      }),
     refreshAppMenu,
     rememberWorkspaceFolder,
     runtimeState,
@@ -516,6 +596,7 @@ export const createDesktopApp = () => {
     checkForUpdates: autoUpdateManager.checkForUpdates,
     createLauncherWindow: windowManager.createLauncherWindow,
     createWorkspaceSelectorWindow: windowManager.createWorkspaceSelectorWindow,
+    exportDiagnosticSupportBundle,
     findWindowRecord: windowManager.findWindowRecord,
     getQuitConfirmationLanguage,
     handleDesktopError,
@@ -636,6 +717,11 @@ export const createDesktopApp = () => {
       openWorkspaceWindow: windowManager.openWorkspaceWindow,
       promptForNewWorkspaceFolder: windowManager.promptForNewWorkspaceFolder,
       promptForWorkspaceFolder: windowManager.promptForWorkspaceFolder,
+      reportJavaScriptError: report =>
+        javascriptDiagnostics?.record(report) ?? Promise.resolve({
+          recordedLocally: false,
+          reported: false
+        }),
       checkForUpdates: autoUpdateManager.checkForUpdates,
       retryLauncherShortcutRegistration,
       resetGlobalInterfaceLanguageConfig,
@@ -858,11 +944,13 @@ export const createDesktopApp = () => {
     logDesktopStartup('startup begin')
     await browserControlBroker.start()
     await loadDesktopStateIntoMemory()
+    startupDiagnostics?.stage('desktop.state.ready')
     logDesktopStartup(`startup desktop state ready elapsed=${elapsedMs(startedAt)}`)
     applyDesktopIcon()
     registerDesktopIpcHandlers()
     installBrowserActivityDownloadTracking()
     registerLauncherGlobalShortcut()
+    startupDiagnostics?.stage('shell.registered')
     logDesktopStartup(`startup shell services registered elapsed=${elapsedMs(startedAt)}`)
     const quitConfirmationLanguagePromise = loadQuitConfirmationLanguage()
       .then(() => {
@@ -910,8 +998,10 @@ export const createDesktopApp = () => {
     }
     await projectDesktopUpdateSettingsPromise
     await quitConfirmationLanguagePromise
+    startupDiagnostics?.stage('settings.ready')
     autoUpdateManager.start()
     await flushPendingLaunchRequests()
+    startupDiagnostics?.stage('launch.requests.ready')
     preloadLauncherWindow()
 
     app.on('activate', () => {
@@ -934,6 +1024,34 @@ export const createDesktopApp = () => {
       return
     }
 
+    try {
+      startupDiagnostics = createDesktopStartupDiagnostics({
+        architecture: process.arch,
+        directory: join(app.getPath('userData'), 'diagnostics', 'startup'),
+        environment: app.isPackaged ? 'production' : 'development',
+        otlpExporter: readDesktopDiagnosticReportingEnabled() ? undefined : false,
+        platform: process.platform,
+        serviceVersion: app.getVersion()
+      })
+      startupDiagnostics.stage('electron.instance.owner')
+    } catch (error) {
+      console.warn('[oneworks-desktop] failed to initialize startup diagnostics', error)
+    }
+
+    try {
+      javascriptDiagnostics = createDesktopJavaScriptDiagnostics({
+        architecture: process.arch,
+        directory: join(app.getPath('userData'), 'diagnostics', 'javascript'),
+        environment: app.isPackaged ? 'production' : 'development',
+        getReportingEnabled: readDesktopDiagnosticReportingEnabled,
+        platform: process.platform,
+        serviceVersion: app.getVersion()
+      })
+      process.on('uncaughtExceptionMonitor', handleUncaughtExceptionMonitor)
+    } catch (error) {
+      console.warn('[oneworks-desktop] failed to initialize JavaScript diagnostics', error)
+    }
+
     if (initialDeepLinkRequest != null) {
       runtimeState.pendingLaunchRequests.push(normalizeLaunchRequest(initialDeepLinkRequest))
     } else if (initialStandaloneLaunchRequest != null) {
@@ -944,12 +1062,29 @@ export const createDesktopApp = () => {
     nativeTheme.on('updated', handleNativeThemeUpdated)
 
     app.whenReady().then(() => {
-      void startApp().catch(handleDesktopError)
+      startupDiagnostics?.stage('electron.ready')
+      void startApp().catch((error) => {
+        startupDiagnostics?.fail(error, {
+          code: 'desktop.startup_failed',
+          domain: 'process',
+          retryable: true
+        })
+        handleDesktopError(error)
+      })
     })
 
     app.on('before-quit', quitCoordinator.handleBeforeQuit)
 
     app.on('will-quit', () => {
+      startupDiagnostics?.cancel()
+      void startupDiagnostics?.flush().catch((error) => {
+        console.warn('[oneworks-desktop] failed to flush startup diagnostics', error)
+      })
+      process.off('uncaughtExceptionMonitor', handleUncaughtExceptionMonitor)
+      void javascriptDiagnostics?.flush().catch((error) => {
+        const name = error instanceof Error ? error.name : 'UnknownError'
+        console.warn(`[oneworks-desktop] failed to flush JavaScript diagnostics (${name})`)
+      })
       nativeTheme.off('updated', handleNativeThemeUpdated)
       contextCaptureOverlayController.dispose()
       unregisterLauncherGlobalShortcut()

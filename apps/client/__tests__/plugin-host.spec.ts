@@ -469,6 +469,8 @@ describe('client plugin host registry', () => {
     expect(typeof launcherUi.InteractionList).toBe('function')
     expect(typeof launcherUi.SettingsRow).toBe('function')
     expect(typeof launcherUi.SettingsSection).toBe('function')
+    expect(typeof launcherUi.SettingRow).toBe('function')
+    expect(typeof launcherUi.Switch).toBe('function')
     const renderInteractionList = launcherUi.InteractionList as unknown as (
       props: { emptyText: null; items: [] }
     ) => unknown
@@ -478,6 +480,13 @@ describe('client plugin host registry', () => {
     })
     expect(isValidElement(reactNode)).toBe(true)
     expect((reactNode as { props?: { surface?: string } }).props?.surface).toBe('launcher')
+    const settingRow = renderPluginHostComponent('settingRow', {
+      children: 'control',
+      description: 'description',
+      icon: 'query_stats',
+      title: 'setting'
+    })
+    expect(isValidElement(settingRow)).toBe(true)
   }, 20_000)
 
   it('merges route-owned chrome overrides with plugin-provided route chrome', () => {

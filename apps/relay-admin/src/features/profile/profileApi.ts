@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- profile security and reporting preferences share one API boundary. */
 import type { PublicKeyCredentialCreationOptionsJSON } from '@simplewebauthn/browser'
 
 import { requestJson } from '../../shared/api/requestJson'
@@ -103,8 +104,45 @@ export interface RelayPersonalConfigSnapshotResponse {
   personalConfigSnapshot: RelayPersonalConfigSnapshotSummary | null
 }
 
+export interface RelayProfileModelUsageSettings {
+  personal: {
+    defaultEnabled: boolean
+    enabled: boolean
+  }
+  teams: Array<{
+    enabled: boolean
+    mode: 'optional' | 'required'
+    name: string
+    preferenceEnabled: boolean
+    role: 'admin' | 'editor' | 'member' | 'owner' | 'viewer'
+    slug: string
+    teamId: string
+    userCanControl: boolean
+  }>
+}
+
+export interface RelayProfileDataReportingSettings {
+  diagnosticReporting: {
+    defaultEnabled: boolean
+    enabled: boolean
+  }
+  modelUsageReporting: RelayProfileModelUsageSettings
+}
+
 export const fetchRelayProfileSecurity = async (token: string) =>
   await requestJson<RelayProfileSecuritySummary>(token, '/api/profile/security')
+
+export const fetchRelayProfileDataReportingSettings = async (token: string) =>
+  await requestJson<RelayProfileDataReportingSettings>(token, '/api/profile/data-reporting-settings')
+
+export const updateRelayProfileDataReportingSettings = async (
+  token: string,
+  input: { diagnosticEnabled: boolean } | { personalEnabled: boolean } | { teamEnabled: boolean; teamId: string }
+) =>
+  await requestJson<RelayProfileDataReportingSettings>(token, '/api/profile/data-reporting-settings', {
+    body: JSON.stringify(input),
+    method: 'PATCH'
+  })
 
 export const fetchRelayPersonalGlobalConfig = async (token: string) =>
   await requestJson<RelayPersonalConfigSnapshotResponse>(token, '/api/relay/config/global')

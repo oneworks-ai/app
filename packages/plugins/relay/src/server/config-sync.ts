@@ -1,6 +1,6 @@
 /* eslint-disable max-lines -- Relay config sync coordinates snapshots, global config, and document sync in one loop. */
 import { createHash, randomUUID } from 'node:crypto'
-import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import process from 'node:process'
 
@@ -32,8 +32,10 @@ export interface RelayConfigSyncResult {
   lastError: string | null
   lastSyncedAt: string | null
   personalDocuments?: RelayPersonalDocumentSyncStatus
+  personalDiagnosticReporting?: RelayPersonalDiagnosticReportingSyncStatus
   personalGlobalConfig?: RelayPersonalGlobalConfigSyncStatus
   projectRuleDocuments?: Record<string, RelayPersonalDocumentSyncStatus>
+  personalModelUsageReporting?: RelayPersonalModelUsageReportingSyncStatus
   snapshot?: RelayConfigSnapshot
   snapshotPath: string
 }
@@ -54,9 +56,44 @@ interface RelayPersonalGlobalConfigSyncStatus {
   updatedAt?: string
 }
 
+interface RelayPersonalModelUsageReportingSyncStatus {
+  appliedRemote: boolean
+  enabled: boolean
+  lastError: string | null
+  pushedLocal: boolean
+  teams?: Record<string, ModelUsageReportingTeamPreference>
+  updatedAt?: string
+}
+
+interface RelayPersonalDiagnosticReportingSyncStatus {
+  appliedRemote: boolean
+  enabled: boolean
+  lastError: string | null
+  pushedLocal: boolean
+  updatedAt?: string
+}
+
 interface LocalPersonalGlobalConfigPatch {
   configPath: string
   configPatch?: RelayConfigPatch
+}
+
+interface ModelUsageReportingPreference {
+  enabled: boolean
+  explicit: boolean
+  updatedAt?: string
+}
+
+type DiagnosticReportingPreference = ModelUsageReportingPreference
+
+interface ModelUsageReportingTeamPreference {
+  enabled: boolean
+  mode: 'required' | 'optional'
+  name: string
+  slug: string
+  teamId: string
+  updatedAt?: string
+  userCanControl: boolean
 }
 
 const PERSONAL_GLOBAL_CONFIG_FIELDS: RelayConfigSafeField[] = ['adapters']
@@ -132,6 +169,12 @@ const resolveGlobalConfigPath = () =>
     DEFAULT_GLOBAL_OO_CONFIG_FILE
   )
 
+const normalizeIsoDate = (value: unknown) => {
+  if (typeof value !== 'string' || value.trim() === '') return undefined
+  const timestamp = Date.parse(value)
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : undefined
+}
+
 const readJsonFile = async (path: string): Promise<Record<string, unknown>> => {
   try {
     const value = JSON.parse(await readFile(path, 'utf8'))
@@ -139,6 +182,527 @@ const readJsonFile = async (path: string): Promise<Record<string, unknown>> => {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {}
     throw error
+  }
+}
+
+const readLocalModelUsageReportingPreference = async (): Promise<{
+  configPath: string
+  preference: ModelUsageReportingPreference
+}> => {
+  const configPath = resolveGlobalConfigPath()
+  const config = await readJsonFile(configPath)
+  const diagnostics = isRecord(config.diagnostics) ? config.diagnostics : {}
+  const rawPreference = diagnostics.modelUsageReporting
+  const fileStat = await stat(configPath).catch(() => undefined)
+  if (typeof rawPreference === 'boolean') {
+    return {
+      configPath,
+      preference: {
+        enabled: rawPreference,
+        explicit: true,
+        updatedAt: fileStat?.mtime.toISOString()
+      }
+    }
+  }
+  if (isRecord(rawPreference) && typeof rawPreference.enabled === 'boolean') {
+    return {
+      configPath,
+      preference: {
+        enabled: rawPreference.enabled,
+        explicit: true,
+        updatedAt: normalizeIsoDate(rawPreference.updatedAt) ?? fileStat?.mtime.toISOString()
+      }
+    }
+  }
+  return {
+    configPath,
+    preference: { enabled: true, explicit: false }
+  }
+}
+
+const readLocalDiagnosticReportingPreference = async (): Promise<{
+  configPath: string
+  preference: DiagnosticReportingPreference
+}> => {
+  const configPath = resolveGlobalConfigPath()
+  const config = await readJsonFile(configPath)
+  const diagnostics = isRecord(config.diagnostics) ? config.diagnostics : {}
+  const rawPreference = diagnostics.reporting
+  const fileStat = await stat(configPath).catch(() => undefined)
+  if (typeof rawPreference === 'boolean') {
+    return {
+      configPath,
+      preference: { enabled: rawPreference, explicit: true, updatedAt: fileStat?.mtime.toISOString() }
+    }
+  }
+  if (isRecord(rawPreference) && typeof rawPreference.enabled === 'boolean') {
+    return {
+      configPath,
+      preference: {
+        enabled: rawPreference.enabled,
+        explicit: true,
+        updatedAt: normalizeIsoDate(rawPreference.updatedAt) ?? fileStat?.mtime.toISOString()
+      }
+    }
+  }
+  return { configPath, preference: { enabled: true, explicit: false } }
+}
+
+const writeLocalDiagnosticReportingPreference = async (
+  configPath: string,
+  preference: Pick<DiagnosticReportingPreference, 'enabled' | 'updatedAt'>
+) => {
+  const config = await readJsonFile(configPath)
+  const diagnostics = isRecord(config.diagnostics) ? config.diagnostics : {}
+  const rawPreference = isRecord(diagnostics.reporting) ? diagnostics.reporting : {}
+  await mkdir(dirname(configPath), { recursive: true })
+  await writeFile(
+    configPath,
+    `${
+      JSON.stringify(
+        {
+          ...config,
+          diagnostics: {
+            ...diagnostics,
+            reporting: {
+              ...rawPreference,
+              enabled: preference.enabled,
+              ...(preference.updatedAt == null ? {} : { updatedAt: preference.updatedAt })
+            }
+          }
+        },
+        null,
+        2
+      )
+    }\n`,
+    { encoding: 'utf8', mode: 0o600 }
+  )
+}
+
+const writeLocalModelUsageReportingPreference = async (
+  configPath: string,
+  preference: Pick<ModelUsageReportingPreference, 'enabled' | 'updatedAt'>
+) => {
+  const config = await readJsonFile(configPath)
+  const diagnostics = isRecord(config.diagnostics) ? config.diagnostics : {}
+  const rawPreference = isRecord(diagnostics.modelUsageReporting) ? diagnostics.modelUsageReporting : {}
+  await mkdir(dirname(configPath), { recursive: true })
+  await writeFile(
+    configPath,
+    `${
+      JSON.stringify(
+        {
+          ...config,
+          diagnostics: {
+            ...diagnostics,
+            modelUsageReporting: {
+              ...rawPreference,
+              enabled: preference.enabled,
+              ...(preference.updatedAt == null ? {} : { updatedAt: preference.updatedAt })
+            }
+          }
+        },
+        null,
+        2
+      )
+    }\n`,
+    {
+      encoding: 'utf8',
+      mode: 0o600
+    }
+  )
+}
+
+const readLocalModelUsageReportingTeams = async () => {
+  const configPath = resolveGlobalConfigPath()
+  const config = await readJsonFile(configPath)
+  const diagnostics = isRecord(config.diagnostics) ? config.diagnostics : {}
+  const preference = isRecord(diagnostics.modelUsageReporting) ? diagnostics.modelUsageReporting : {}
+  const teams = isRecord(preference.teams) ? preference.teams : {}
+  return { configPath, preference, teams }
+}
+
+const writeLocalModelUsageReportingTeams = async (
+  configPath: string,
+  teams: Record<string, ModelUsageReportingTeamPreference>
+) => {
+  const config = await readJsonFile(configPath)
+  const diagnostics = isRecord(config.diagnostics) ? config.diagnostics : {}
+  const preference = isRecord(diagnostics.modelUsageReporting) ? diagnostics.modelUsageReporting : {}
+  await mkdir(dirname(configPath), { recursive: true })
+  await writeFile(
+    configPath,
+    `${
+      JSON.stringify(
+        {
+          ...config,
+          diagnostics: {
+            ...diagnostics,
+            modelUsageReporting: {
+              ...preference,
+              teams
+            }
+          }
+        },
+        null,
+        2
+      )
+    }\n`,
+    {
+      encoding: 'utf8',
+      mode: 0o600
+    }
+  )
+}
+
+const normalizeRemoteTeamPreference = (value: unknown): ModelUsageReportingTeamPreference | undefined => {
+  if (!isRecord(value)) return undefined
+  const teamId = toString(value.teamId)
+  if (teamId === '') return undefined
+  const userCanControl = value.userCanControl === true && value.mode === 'optional'
+  return {
+    enabled: userCanControl ? value.enabled !== false : true,
+    mode: value.mode === 'optional' ? 'optional' : 'required',
+    name: toString(value.name) || teamId,
+    slug: toString(value.slug) || teamId,
+    teamId,
+    updatedAt: normalizeIsoDate(value.updatedAt),
+    userCanControl
+  }
+}
+
+export const applyRelayModelUsageReportingSettings = async (value: unknown) => {
+  if (!isRecord(value) || !isRecord(value.personal) || typeof value.personal.enabled !== 'boolean') {
+    throw new Error('Relay model usage settings payload is invalid.')
+  }
+  const personalUpdatedAt = normalizeIsoDate(value.personal.updatedAt) ?? new Date().toISOString()
+  const { configPath } = await readLocalModelUsageReportingPreference()
+  await writeLocalModelUsageReportingPreference(configPath, {
+    enabled: value.personal.enabled,
+    updatedAt: personalUpdatedAt
+  })
+  if (!Array.isArray(value.teams)) return
+  const teams = Object.fromEntries(
+    value.teams
+      .map(normalizeRemoteTeamPreference)
+      .filter((team): team is ModelUsageReportingTeamPreference => team != null)
+      .map(team => [team.teamId, team])
+  )
+  await writeLocalModelUsageReportingTeams(configPath, teams)
+}
+
+export const applyRelayDataReportingSettings = async (value: unknown) => {
+  if (!isRecord(value) || !isRecord(value.diagnosticReporting) || !isRecord(value.modelUsageReporting)) {
+    throw new TypeError('Relay data reporting settings payload is invalid.')
+  }
+  if (typeof value.diagnosticReporting.enabled !== 'boolean') {
+    throw new TypeError('Relay diagnostic reporting settings payload is invalid.')
+  }
+  const { configPath } = await readLocalDiagnosticReportingPreference()
+  await writeLocalDiagnosticReportingPreference(configPath, {
+    enabled: value.diagnosticReporting.enabled,
+    updatedAt: normalizeIsoDate(value.diagnosticReporting.updatedAt) ?? new Date().toISOString()
+  })
+  await applyRelayModelUsageReportingSettings(value.modelUsageReporting)
+}
+
+const readRemoteModelUsageReportingTeams = async (params: {
+  deviceToken: string
+  server: ResolvedRelayServer
+}) => {
+  const response = await fetch(new URL('/api/profile/data-reporting-settings', params.server.remoteBaseUrl), {
+    headers: {
+      accept: 'application/json',
+      authorization: `Bearer ${params.deviceToken}`
+    }
+  })
+  const body = await readResponseJson(response)
+  if (!response.ok) {
+    throw new Error(toString(body.error) || `Relay team usage preference sync failed with ${response.status}.`)
+  }
+  const modelUsageReporting = isRecord(body.modelUsageReporting) ? body.modelUsageReporting : {}
+  return (Array.isArray(modelUsageReporting.teams) ? modelUsageReporting.teams : [])
+    .map(normalizeRemoteTeamPreference)
+    .filter((team): team is ModelUsageReportingTeamPreference => team != null)
+}
+
+const updateRemoteTeamModelUsageReportingPreference = async (params: {
+  deviceToken: string
+  enabled: boolean
+  server: ResolvedRelayServer
+  teamId: string
+}) => {
+  const response = await fetch(new URL('/api/profile/data-reporting-settings', params.server.remoteBaseUrl), {
+    body: JSON.stringify({ teamEnabled: params.enabled, teamId: params.teamId }),
+    headers: {
+      accept: 'application/json',
+      authorization: `Bearer ${params.deviceToken}`,
+      'content-type': 'application/json'
+    },
+    method: 'PATCH'
+  })
+  const body = await readResponseJson(response)
+  if (!response.ok) {
+    throw new Error(toString(body.error) || `Relay team usage preference update failed with ${response.status}.`)
+  }
+  const modelUsageReporting = isRecord(body.modelUsageReporting) ? body.modelUsageReporting : {}
+  return (Array.isArray(modelUsageReporting.teams) ? modelUsageReporting.teams : [])
+    .map(normalizeRemoteTeamPreference)
+    .find(team => team?.teamId === params.teamId)
+}
+
+const syncRelayTeamModelUsageReporting = async (params: {
+  deviceToken: string
+  server: ResolvedRelayServer
+}) => {
+  const [local, remoteTeams] = await Promise.all([
+    readLocalModelUsageReportingTeams(),
+    readRemoteModelUsageReportingTeams(params)
+  ])
+  const nextTeams: Record<string, ModelUsageReportingTeamPreference> = {}
+  let pushedLocal = false
+  for (const remoteTeam of remoteTeams) {
+    const rawLocalTeam = local.teams[remoteTeam.teamId]
+    const localTeam: Record<string, unknown> | undefined = isRecord(rawLocalTeam)
+      ? rawLocalTeam
+      : undefined
+    const localEnabled = typeof localTeam?.enabled === 'boolean' ? localTeam.enabled : undefined
+    const localUpdatedAt = Date.parse(normalizeIsoDate(localTeam?.updatedAt) ?? '')
+    const remoteUpdatedAt = Date.parse(remoteTeam.updatedAt ?? '')
+    if (
+      remoteTeam.userCanControl &&
+      localEnabled != null &&
+      localEnabled !== remoteTeam.enabled &&
+      Number.isFinite(localUpdatedAt) &&
+      (!Number.isFinite(remoteUpdatedAt) || localUpdatedAt > remoteUpdatedAt)
+    ) {
+      const updated = await updateRemoteTeamModelUsageReportingPreference({
+        deviceToken: params.deviceToken,
+        enabled: localEnabled,
+        server: params.server,
+        teamId: remoteTeam.teamId
+      })
+      nextTeams[remoteTeam.teamId] = updated ?? { ...remoteTeam, enabled: localEnabled }
+      pushedLocal = true
+    } else {
+      nextTeams[remoteTeam.teamId] = remoteTeam
+    }
+  }
+  if (stableJsonStringify(local.teams) !== stableJsonStringify(nextTeams)) {
+    await writeLocalModelUsageReportingTeams(local.configPath, nextTeams)
+  }
+  return { pushedLocal, teams: nextTeams }
+}
+
+const readRemoteModelUsageReportingPreference = async (params: {
+  deviceToken: string
+  server: ResolvedRelayServer
+}): Promise<ModelUsageReportingPreference> => {
+  const response = await fetch(new URL('/api/profile/data-reporting-settings', params.server.remoteBaseUrl), {
+    headers: {
+      accept: 'application/json',
+      authorization: `Bearer ${params.deviceToken}`
+    }
+  })
+  const body = await readResponseJson(response)
+  if (!response.ok) {
+    throw new Error(toString(body.error) || `Relay model usage preference sync failed with ${response.status}.`)
+  }
+  const modelUsageReporting = isRecord(body.modelUsageReporting) ? body.modelUsageReporting : {}
+  const personal = isRecord(modelUsageReporting.personal) ? modelUsageReporting.personal : {}
+  return {
+    enabled: personal.enabled !== false,
+    explicit: true,
+    updatedAt: normalizeIsoDate(personal.updatedAt)
+  }
+}
+
+const updateRemoteModelUsageReportingPreference = async (params: {
+  deviceToken: string
+  enabled: boolean
+  server: ResolvedRelayServer
+}) => {
+  const response = await fetch(new URL('/api/profile/data-reporting-settings', params.server.remoteBaseUrl), {
+    body: JSON.stringify({ personalEnabled: params.enabled }),
+    headers: {
+      accept: 'application/json',
+      authorization: `Bearer ${params.deviceToken}`,
+      'content-type': 'application/json'
+    },
+    method: 'PATCH'
+  })
+  const body = await readResponseJson(response)
+  if (!response.ok) {
+    throw new Error(toString(body.error) || `Relay model usage preference update failed with ${response.status}.`)
+  }
+  const modelUsageReporting = isRecord(body.modelUsageReporting) ? body.modelUsageReporting : {}
+  const personal = isRecord(modelUsageReporting.personal) ? modelUsageReporting.personal : {}
+  return {
+    enabled: personal.enabled !== false,
+    updatedAt: normalizeIsoDate(personal.updatedAt)
+  }
+}
+
+const syncRelayPersonalModelUsageReporting = async (params: {
+  deviceToken: string
+  server: ResolvedRelayServer
+}): Promise<RelayPersonalModelUsageReportingSyncStatus> => {
+  const [local, remote] = await Promise.all([
+    readLocalModelUsageReportingPreference(),
+    readRemoteModelUsageReportingPreference(params)
+  ])
+  if (!local.preference.explicit) {
+    if (!remote.enabled) {
+      await writeLocalModelUsageReportingPreference(local.configPath, remote)
+    }
+    return {
+      appliedRemote: !remote.enabled,
+      enabled: remote.enabled,
+      lastError: null,
+      pushedLocal: false,
+      updatedAt: remote.updatedAt
+    }
+  }
+  if (local.preference.enabled === remote.enabled) {
+    return {
+      appliedRemote: false,
+      enabled: remote.enabled,
+      lastError: null,
+      pushedLocal: false,
+      updatedAt: remote.updatedAt ?? local.preference.updatedAt
+    }
+  }
+
+  const localUpdatedAt = Date.parse(local.preference.updatedAt ?? '')
+  const remoteUpdatedAt = Date.parse(remote.updatedAt ?? '')
+  if (Number.isFinite(localUpdatedAt) && (!Number.isFinite(remoteUpdatedAt) || localUpdatedAt > remoteUpdatedAt)) {
+    const updated = await updateRemoteModelUsageReportingPreference({
+      deviceToken: params.deviceToken,
+      enabled: local.preference.enabled,
+      server: params.server
+    })
+    await writeLocalModelUsageReportingPreference(local.configPath, updated)
+    return {
+      appliedRemote: false,
+      enabled: updated.enabled,
+      lastError: null,
+      pushedLocal: true,
+      updatedAt: updated.updatedAt
+    }
+  }
+
+  await writeLocalModelUsageReportingPreference(local.configPath, remote)
+  return {
+    appliedRemote: true,
+    enabled: remote.enabled,
+    lastError: null,
+    pushedLocal: false,
+    updatedAt: remote.updatedAt
+  }
+}
+
+const readRemoteDiagnosticReportingPreference = async (params: {
+  deviceToken: string
+  server: ResolvedRelayServer
+}): Promise<DiagnosticReportingPreference> => {
+  const response = await fetch(new URL('/api/profile/data-reporting-settings', params.server.remoteBaseUrl), {
+    headers: {
+      accept: 'application/json',
+      authorization: `Bearer ${params.deviceToken}`
+    }
+  })
+  const body = await readResponseJson(response)
+  if (!response.ok) {
+    throw new Error(
+      toString(body.error) || `Relay diagnostic reporting preference sync failed with ${response.status}.`
+    )
+  }
+  const diagnostic = isRecord(body.diagnosticReporting) ? body.diagnosticReporting : {}
+  return {
+    enabled: diagnostic.enabled !== false,
+    explicit: true,
+    updatedAt: normalizeIsoDate(diagnostic.updatedAt)
+  }
+}
+
+const updateRemoteDiagnosticReportingPreference = async (params: {
+  deviceToken: string
+  enabled: boolean
+  server: ResolvedRelayServer
+}) => {
+  const response = await fetch(new URL('/api/profile/data-reporting-settings', params.server.remoteBaseUrl), {
+    body: JSON.stringify({ diagnosticEnabled: params.enabled }),
+    headers: {
+      accept: 'application/json',
+      authorization: `Bearer ${params.deviceToken}`,
+      'content-type': 'application/json'
+    },
+    method: 'PATCH'
+  })
+  const body = await readResponseJson(response)
+  if (!response.ok) {
+    throw new Error(
+      toString(body.error) || `Relay diagnostic reporting preference update failed with ${response.status}.`
+    )
+  }
+  const diagnostic = isRecord(body.diagnosticReporting) ? body.diagnosticReporting : {}
+  return {
+    enabled: diagnostic.enabled !== false,
+    updatedAt: normalizeIsoDate(diagnostic.updatedAt)
+  }
+}
+
+const syncRelayPersonalDiagnosticReporting = async (params: {
+  deviceToken: string
+  server: ResolvedRelayServer
+}): Promise<RelayPersonalDiagnosticReportingSyncStatus> => {
+  const [local, remote] = await Promise.all([
+    readLocalDiagnosticReportingPreference(),
+    readRemoteDiagnosticReportingPreference(params)
+  ])
+  if (!local.preference.explicit) {
+    await writeLocalDiagnosticReportingPreference(local.configPath, remote)
+    return {
+      appliedRemote: true,
+      enabled: remote.enabled,
+      lastError: null,
+      pushedLocal: false,
+      updatedAt: remote.updatedAt
+    }
+  }
+  if (local.preference.enabled === remote.enabled) {
+    return {
+      appliedRemote: false,
+      enabled: remote.enabled,
+      lastError: null,
+      pushedLocal: false,
+      updatedAt: remote.updatedAt ?? local.preference.updatedAt
+    }
+  }
+  const localUpdatedAt = Date.parse(local.preference.updatedAt ?? '')
+  const remoteUpdatedAt = Date.parse(remote.updatedAt ?? '')
+  if (Number.isFinite(localUpdatedAt) && (!Number.isFinite(remoteUpdatedAt) || localUpdatedAt > remoteUpdatedAt)) {
+    const updated = await updateRemoteDiagnosticReportingPreference({
+      deviceToken: params.deviceToken,
+      enabled: local.preference.enabled,
+      server: params.server
+    })
+    await writeLocalDiagnosticReportingPreference(local.configPath, updated)
+    return {
+      appliedRemote: false,
+      enabled: updated.enabled,
+      lastError: null,
+      pushedLocal: true,
+      updatedAt: updated.updatedAt
+    }
+  }
+  await writeLocalDiagnosticReportingPreference(local.configPath, remote)
+  return {
+    appliedRemote: true,
+    enabled: remote.enabled,
+    lastError: null,
+    pushedLocal: false,
+    updatedAt: remote.updatedAt
   }
 }
 
@@ -328,6 +892,8 @@ export const syncRelayConfigSnapshot = async (params: {
     }
 
     let personalGlobalConfig: RelayPersonalGlobalConfigSyncStatus | undefined
+    let personalDiagnosticReporting: RelayPersonalDiagnosticReportingSyncStatus | undefined
+    let personalModelUsageReporting: RelayPersonalModelUsageReportingSyncStatus | undefined
     let personalDocuments: RelayPersonalDocumentSyncStatus | undefined
     try {
       personalGlobalConfig = await syncRelayPersonalGlobalConfig({
@@ -342,6 +908,51 @@ export const syncRelayConfigSnapshot = async (params: {
       )
       personalGlobalConfig = {
         appliedRemote: false,
+        lastError: message,
+        pushedLocal: false
+      }
+    }
+    try {
+      personalDiagnosticReporting = await syncRelayPersonalDiagnosticReporting({
+        deviceToken,
+        server: params.server
+      })
+    } catch (error) {
+      const message = resolveSyncErrorMessage(error)
+      params.ctx.logger.warn(
+        { err: error, scope: params.ctx.scope, serverId: params.server.id },
+        '[relay] personal diagnostic reporting preference sync failed'
+      )
+      personalDiagnosticReporting = {
+        appliedRemote: false,
+        enabled: true,
+        lastError: message,
+        pushedLocal: false
+      }
+    }
+    try {
+      const personalPreference = await syncRelayPersonalModelUsageReporting({
+        deviceToken,
+        server: params.server
+      })
+      const teamPreferences = await syncRelayTeamModelUsageReporting({
+        deviceToken,
+        server: params.server
+      })
+      personalModelUsageReporting = {
+        ...personalPreference,
+        pushedLocal: personalPreference.pushedLocal || teamPreferences.pushedLocal,
+        teams: teamPreferences.teams
+      }
+    } catch (error) {
+      const message = resolveSyncErrorMessage(error)
+      params.ctx.logger.warn(
+        { err: error, scope: params.ctx.scope, serverId: params.server.id },
+        '[relay] personal model usage preference sync failed'
+      )
+      personalModelUsageReporting = {
+        appliedRemote: false,
+        enabled: true,
         lastError: message,
         pushedLocal: false
       }
@@ -426,8 +1037,10 @@ export const syncRelayConfigSnapshot = async (params: {
       lastError: null,
       lastSyncedAt: snapshot.lastSyncedAt ?? now,
       personalDocuments,
+      personalDiagnosticReporting,
       personalGlobalConfig,
       projectRuleDocuments,
+      personalModelUsageReporting,
       snapshot,
       snapshotPath: snapshotPaths.globalSnapshotPath
     }

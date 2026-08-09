@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-
+import { readFile } from 'node:fs/promises'
 import type { CSSProperties } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
@@ -17,6 +17,13 @@ import {
 } from '../src'
 
 describe('route layout primitives', () => {
+  it('uses theme-aware tertiary hover fallbacks', async () => {
+    const css = await readFile(new URL('../src/RouteContainerLayout.css', import.meta.url), 'utf8')
+
+    expect(css).toContain('var(--tag-hover-bg, #e5e5e5)')
+    expect(css).toContain('var(--border-color, #d8dee4)')
+  })
+
   it('passes location context to function slots', () => {
     const html = renderToStaticMarkup(
       <RouteContainerLayout

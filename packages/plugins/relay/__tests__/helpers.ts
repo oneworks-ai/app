@@ -311,6 +311,14 @@ export const stubRelayFetch = (
           role: 'owner'
         }
       }
+      : url.endsWith('/api/profile/data-reporting-settings')
+      ? {
+        diagnosticReporting: { defaultEnabled: true, enabled: true },
+        modelUsageReporting: {
+          personal: { defaultEnabled: true, enabled: true },
+          teams: []
+        }
+      }
       : url.endsWith('/api/relay/devices')
       ? {
         devices: [{

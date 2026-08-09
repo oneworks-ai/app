@@ -15,6 +15,10 @@ import { SWRConfig } from 'swr'
 import { ApiError, fetchApiJson } from '#~/api/base.js'
 import { getLauncherManagerServerBaseUrl } from '#~/api/launcher.js'
 import { AppErrorBoundary } from '#~/components/error-state'
+import {
+  installGlobalJavaScriptErrorReporting,
+  reportClientJavaScriptError
+} from '#~/diagnostics/javascript-error-reporting'
 import { installHomepagePreviewRuntimeIfEnabled } from '#~/homepage-preview/runtime-loader'
 import { setupPwa } from '#~/pwa.js'
 import {
@@ -39,6 +43,8 @@ import {
 } from './workspace-connection-state'
 
 const gitRefLabel = import.meta.env.__ONEWORKS_PROJECT_GIT_REF_LABEL__ ?? ''
+
+installGlobalJavaScriptErrorReporting()
 
 const appTitle = import.meta.env.DEV && gitRefLabel !== ''
   ? `One Works Web [${gitRefLabel}]`
@@ -183,4 +189,7 @@ const startApp = async () => {
   renderApp()
 }
 
-void startApp()
+void startApp().catch((error) => {
+  reportClientJavaScriptError(error, 'client.bootstrap')
+  console.error('[client] bootstrap failed', error)
+})

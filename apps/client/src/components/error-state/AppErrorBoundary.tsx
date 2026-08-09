@@ -2,6 +2,7 @@ import type { ErrorInfo, ReactNode } from 'react'
 import { Component } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { reportClientJavaScriptError } from '#~/diagnostics/javascript-error-reporting'
 import { FullscreenErrorState } from './AppErrorState'
 
 interface AppErrorBoundaryLabels {
@@ -42,6 +43,9 @@ class AppErrorBoundaryInner extends Component<AppErrorBoundaryInnerProps, AppErr
 
   override componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('[app-error-boundary] render failed', error, errorInfo)
+    reportClientJavaScriptError(error, 'client.react_render', {
+      fingerprintMaterial: errorInfo.componentStack ?? undefined
+    })
     this.setState({ error, errorInfo })
   }
 

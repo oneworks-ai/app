@@ -28,7 +28,11 @@ import { AdminDashboard } from '../features/dashboard/AdminDashboard'
 import type { AdminDashboardCreateSectionId } from '../features/dashboard/AdminDashboard'
 import { useRelayAdminDashboard } from '../features/dashboard/useRelayAdminDashboard'
 import { UserPasswordModal } from '../features/users/UserPasswordModal'
-import { canAccessRelayAdminSection, canManageRelayMessages } from '../shared/model/adminPermissions'
+import {
+  canAccessRelayAdminSection,
+  canManageRelayAdmin,
+  canManageRelayMessages
+} from '../shared/model/adminPermissions'
 import type { CreateAccessGroupInput, RelayAdminAccessGroup, RelayAdminUser } from '../shared/model/adminTypes'
 import { AdminIcon } from '../shared/ui/AdminIcon'
 import { AdminNavRail } from './AdminNavRail'
@@ -59,12 +63,12 @@ const getCreateSectionIdFromPath = (pathname: string): AdminDashboardCreateSecti
 }
 
 const getUserDetailIdFromPath = (pathname: string) => {
-  const match = /^\/users\/([^/]+)$/.exec(pathname)
+  const match = /^\/users\/([^/]+)(?:\/(?:access|devices|diagnostics|teams))?$/.exec(pathname)
   return match == null ? undefined : decodeURIComponent(match[1])
 }
 
 const getTeamDetailIdFromPath = (pathname: string) => {
-  const match = /^\/teams\/([^/]+)(?:\/(?:audit|documents|groups|members|profiles|secrets)(?:\/[^/]+)?)?$/.exec(
+  const match = /^\/teams\/([^/]+)(?:\/(?:audit|documents|groups|members|profiles|secrets|usage)(?:\/[^/]+)?)?$/.exec(
     pathname
   )
   return match == null ? undefined : decodeURIComponent(match[1])
@@ -99,7 +103,7 @@ const getTeamAccessGroupRouteFromPath = (pathname: string) => {
 const TeamDetailDefaultRoute = () => {
   const { teamId } = useParams()
   if (teamId == null) return <Navigate to='/teams' replace />
-  return <Navigate to={`/teams/${encodeURIComponent(teamId)}/members`} replace />
+  return <Navigate to={`/teams/${encodeURIComponent(teamId)}/usage`} replace />
 }
 
 const readAdminSidebarWidth = () => {
@@ -118,6 +122,7 @@ export const AdminApp = () => {
   const location = useLocation()
   const navigate = useNavigate()
   const canSendMessages = canManageRelayMessages(dashboard.currentUser?.role, dashboard.teams)
+  const canManagePlatformAdmin = canManageRelayAdmin(dashboard.currentUser?.role)
   const { activeSection, activeSectionId, sidebarItems } = useAdminSectionNavigation(dashboard.currentUser?.role, {
     canManageMessages: canSendMessages
   })
@@ -212,7 +217,15 @@ export const AdminApp = () => {
     : activeSection.icon
   const isCreateActionActive = activeCreateSectionId != null && createSectionId === activeCreateSectionId
   const canRenderSection = useCallback((
-    sectionId: 'access-groups' | 'devices' | 'invites' | 'openapi' | 'sso' | 'teams' | 'users'
+    sectionId:
+      | 'access-groups'
+      | 'data-dashboard'
+      | 'devices'
+      | 'invites'
+      | 'openapi'
+      | 'sso'
+      | 'teams'
+      | 'users'
   ) => (
     dashboard.authStatus === 'checking' ||
     canAccessRelayAdminSection(dashboard.currentUser?.role, sectionId)
@@ -338,7 +351,7 @@ export const AdminApp = () => {
       })
     }
 
-    if (activeTeamDetail != null) {
+    if (activeTeamDetail != null && canManagePlatformAdmin) {
       items.push({
         disabled: !dashboard.canLoad || dashboard.loading,
         icon: <AdminIcon name='admin_panel_settings' />,
@@ -385,7 +398,7 @@ export const AdminApp = () => {
       })
     }
 
-    if (activeCreateSectionId != null) {
+    if (activeCreateSectionId != null && canManagePlatformAdmin) {
       const createSectionLabel = createSectionLabels[activeCreateSectionId]
 
       items.push({
@@ -404,7 +417,7 @@ export const AdminApp = () => {
       })
     }
 
-    if (isTeamListRoute) {
+    if (isTeamListRoute && canManagePlatformAdmin) {
       items.push({
         disabled: !dashboard.canLoad || dashboard.loading,
         icon: <AdminIcon name='admin_panel_settings' />,
@@ -476,6 +489,7 @@ export const AdminApp = () => {
     dashboard.token,
     dashboard.updateAccessGroup,
     dashboard.updateTeamAccessGroup,
+    canManagePlatformAdmin,
     canSendMessages,
     isMessageDetailRoute,
     isMessagePushCreateRoute,
@@ -596,6 +610,18 @@ export const AdminApp = () => {
                 element={<AdminDashboard dashboard={dashboard} sectionId='device-detail' />}
               />
               <Route
+                path='data-dashboard'
+                element={canRenderSection('data-dashboard')
+                  ? <Navigate to='/data-dashboard/overview' replace />
+                  : <Navigate to='/devices' replace />}
+              />
+              <Route
+                path='data-dashboard/:dashboardTab'
+                element={canRenderSection('data-dashboard')
+                  ? <AdminDashboard dashboard={dashboard} sectionId='data-dashboard' />
+                  : <Navigate to='/devices' replace />}
+              />
+              <Route
                 path='users'
                 element={canRenderSection('users')
                   ? (
@@ -610,6 +636,12 @@ export const AdminApp = () => {
               />
               <Route
                 path='users/:userId'
+                element={canRenderSection('users')
+                  ? <AdminDashboard dashboard={dashboard} sectionId='user-detail' />
+                  : <Navigate to='/devices' replace />}
+              />
+              <Route
+                path='users/:userId/:userTab'
                 element={canRenderSection('users')
                   ? <AdminDashboard dashboard={dashboard} sectionId='user-detail' />
                   : <Navigate to='/devices' replace />}
@@ -775,13 +807,13 @@ export const AdminApp = () => {
               />
               <Route
                 path='teams/settings'
-                element={canRenderSection('teams')
+                element={canRenderSection('teams') && canManagePlatformAdmin
                   ? <AdminDashboard dashboard={dashboard} sectionId='team-settings' />
                   : <Navigate to='/devices' replace />}
               />
               <Route
                 path='teams/:teamId/settings'
-                element={canRenderSection('teams')
+                element={canRenderSection('teams') && canManagePlatformAdmin
                   ? (
                     <AdminDashboard
                       dashboard={dashboard}
@@ -793,7 +825,7 @@ export const AdminApp = () => {
               />
               <Route
                 path='teams/:teamId/groups/new'
-                element={canRenderSection('teams')
+                element={canRenderSection('teams') && canManagePlatformAdmin
                   ? (
                     <AdminDashboard
                       accessGroupEditorMode='create'
@@ -805,7 +837,7 @@ export const AdminApp = () => {
               />
               <Route
                 path='teams/:teamId/groups/:groupId'
-                element={canRenderSection('teams')
+                element={canRenderSection('teams') && canManagePlatformAdmin
                   ? (
                     <AdminDashboard
                       accessGroupEditorMode='edit'

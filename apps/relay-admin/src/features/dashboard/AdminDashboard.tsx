@@ -1,7 +1,9 @@
 /* eslint-disable max-lines -- dashboard owns route-section composition for the admin workbench. */
 
+import { canManageRelayAdmin } from '../../shared/model/adminPermissions'
 import { AccessGroupEditorPage } from '../access-groups/AccessGroupEditorPage'
 import { AccessGroupPanel } from '../access-groups/AccessGroupPanel'
+import { DataDashboardPage } from '../data-dashboard/DataDashboardPage'
 import { DeviceDetailPage } from '../devices/DeviceDetailPage'
 import { DevicePanel } from '../devices/DevicePanel'
 import { InvitePanel } from '../invites/InvitePanel'
@@ -25,6 +27,7 @@ export type AdminDashboardSectionId =
   | 'access-group-editor'
   | 'device-detail'
   | 'devices'
+  | 'data-dashboard'
   | 'profile'
   | 'user-detail'
   | 'users'
@@ -66,6 +69,7 @@ export const AdminDashboard = ({
   onCreateSectionChange
 }: AdminDashboardProps) => {
   const disabled = dashboard.loading || !dashboard.canLoad
+  const platformAdmin = canManageRelayAdmin(dashboard.currentUser?.role)
   const platformAccessGroups = dashboard.accessGroups.filter(group => group.scope === 'platform')
   const statusBar = (
     <AdminStatusBar
@@ -90,6 +94,9 @@ export const AdminDashboard = ({
         <DevicePanel
           devices={dashboard.devices}
         />
+      )}
+      {sectionId === 'data-dashboard' && (
+        <DataDashboardPage token={dashboard.token} />
       )}
       {sectionId === 'access-groups' && (
         <AccessGroupPanel
@@ -201,7 +208,7 @@ export const AdminDashboard = ({
       )}
       {sectionId === 'teams' && (
         <TeamPanel
-          disabled={disabled}
+          disabled={disabled || !platformAdmin}
           isCreateOpen={createSectionId === 'teams'}
           teams={dashboard.teams}
           onCreateOpenChange={open => onCreateSectionChange?.(open ? 'teams' : undefined)}
@@ -220,6 +227,7 @@ export const AdminDashboard = ({
         <TeamDetailPage
           disabled={disabled}
           loading={dashboard.loading || dashboard.authStatus === 'checking'}
+          platformAdmin={platformAdmin}
           policy={dashboard.teamPolicy}
           teams={dashboard.teams}
           token={dashboard.token}

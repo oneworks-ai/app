@@ -294,6 +294,7 @@ export interface RelayProfileTeam {
   description: string | null
   id: string
   memberCount: number
+  modelUsageReportingMode: 'optional' | 'required'
   membership: {
     configEnabled: boolean
     defaultForPublishing: boolean
@@ -311,6 +312,35 @@ export interface RelayProfileSessionSummary {
   lastSeenAt?: string
 }
 
+export interface RelayProfileModelUsageTeamSetting {
+  enabled: boolean
+  mode: 'optional' | 'required'
+  name: string
+  role: string
+  slug: string
+  teamId: string
+  updatedAt?: string
+  userCanControl: boolean
+}
+
+export interface RelayProfileModelUsageSettings {
+  personal: {
+    defaultEnabled: true
+    enabled: boolean
+    updatedAt?: string
+  }
+  teams: RelayProfileModelUsageTeamSetting[]
+}
+
+export interface RelayProfileDataReportingSettings {
+  diagnosticReporting: {
+    defaultEnabled: true
+    enabled: boolean
+    updatedAt?: string
+  }
+  modelUsageReporting: RelayProfileModelUsageSettings
+}
+
 export interface RelayProfileStatus {
   account: RelayPublicAuthAccount
   accounts: RelayPublicAuthAccount[]
@@ -319,6 +349,7 @@ export interface RelayProfileStatus {
   errors?: Partial<Record<'audit' | 'devices' | 'messages' | 'profile' | 'security' | 'teams', string>>
   invitations: RelayProfileTeamInvitation[]
   messages: RelayProfileMessage[]
+  dataReporting?: RelayProfileDataReportingSettings
   ok: true
   security: RelayProfileSecuritySummary
   session?: RelayProfileSessionSummary

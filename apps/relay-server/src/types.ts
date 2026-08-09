@@ -45,6 +45,8 @@ export type RelaySsoProviderType = 'oauth2' | 'oidc'
 export type RelayTeamInvitationStatus = 'accepted' | 'declined' | 'pending' | 'revoked'
 export type RelayStorageDriver = 'cloudflare-do' | 'json' | 'postgres' | 'sqlite'
 export type RelayTeamRole = 'owner' | 'admin' | 'editor' | 'member' | 'viewer'
+export type RelayTeamModelUsageReportingMode = 'optional' | 'required'
+export type RelayModelUsageScope = 'personal' | 'team'
 export type RelayTurnstileMode = 'auto' | 'off' | 'required'
 export type RelayAccessGroupScope = 'platform' | 'team'
 export type RelayAccessTokenScope = 'platform' | 'team' | 'user'
@@ -164,6 +166,10 @@ export interface RelayUser {
   disabledAt?: string
   groupIds?: string[]
   maxDevices?: number
+  diagnosticReportingEnabled?: boolean
+  diagnosticReportingUpdatedAt?: string
+  modelUsageReportingEnabled?: boolean
+  modelUsageReportingUpdatedAt?: string
   passwordHash?: string
   provider?: RelayAuthProvider
   providerUserId?: string
@@ -180,6 +186,7 @@ export interface RelayTeam {
   description?: string
   accessGroups?: RelayAccessGroup[]
   avatarUrl?: string
+  modelUsageReportingMode?: RelayTeamModelUsageReportingMode
   proxyModeEnabled?: boolean
   createdByUserId: string
   archivedAt?: string
@@ -195,6 +202,7 @@ export interface RelayTeamMember {
   groupIds?: string[]
   configEnabled?: boolean
   defaultForPublishing?: boolean
+  modelUsageReportingEnabled?: boolean
   createdByUserId: string
   createdAt: string
   updatedAt?: string
@@ -714,6 +722,77 @@ export interface RelayForwardingJob {
   completedAt?: string
 }
 
+export type RelayDiagnosticCategory =
+  | 'agent'
+  | 'auth'
+  | 'command'
+  | 'error'
+  | 'network'
+  | 'other'
+  | 'startup'
+  | 'tool'
+
+export type RelayDiagnosticSource = 'codex' | 'oneworks' | 'other'
+
+/**
+ * Privacy-safe diagnostic fact stored by Relay. Raw OTLP bodies, prompts,
+ * configuration, paths, tool inputs/outputs, and stack traces never enter this model.
+ */
+export interface RelayDiagnosticEvent {
+  architecture?: string
+  category: RelayDiagnosticCategory
+  deviceId?: string
+  durationMs?: number
+  errorCode?: string
+  errorFingerprint?: string
+  environment?: string
+  eventName: string
+  failureDomain?: string
+  id: string
+  operationId?: string
+  operationName?: string
+  outcome?: string
+  platform?: string
+  occurredAt: string
+  receivedAt: string
+  releaseChannel?: string
+  serviceName: string
+  serviceVersion?: string
+  sessionId?: string
+  severity: string
+  source: RelayDiagnosticSource
+  stage?: string
+  success?: boolean
+  surface?: string
+  traceId?: string
+  userId: string
+}
+
+/** Content-free, authenticated Model Service consumption fact. */
+export interface RelayModelUsageEvent {
+  adapter?: string
+  cacheCreationInputTokens: number
+  cachedInputTokens: number
+  deviceId?: string
+  durationMs?: number
+  id: string
+  inputTokens: number
+  model: string
+  modelService: string
+  occurredAt: string
+  outputTokens: number
+  receivedAt: string
+  requestCount: number
+  serviceName: string
+  serviceVersion?: string
+  sessionId?: string
+  scope: RelayModelUsageScope
+  source: RelayDiagnosticSource
+  success: boolean
+  teamId?: string
+  userId: string
+}
+
 export interface RelayStore {
   createdAt: string
   accessGroups: RelayAccessGroup[]
@@ -742,6 +821,8 @@ export interface RelayStore {
   devices: RelayDevice[]
   deviceSessions: RelayDeviceSession[]
   forwardingJobs: RelayForwardingJob[]
+  diagnosticEvents?: RelayDiagnosticEvent[]
+  modelUsageEvents?: RelayModelUsageEvent[]
   oauthStates: RelayOAuthState[]
   accessTokens: RelayAccessToken[]
   sessions: RelaySession[]

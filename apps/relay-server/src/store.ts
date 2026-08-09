@@ -16,6 +16,8 @@ import {
 } from './config-profiles.js'
 import { normalizeRelayConfigAssignment } from './config-snapshot.js'
 import { hashDeviceToken } from './devices/private-metadata.js'
+import { normalizeRelayDiagnosticEvents } from './diagnostics/store.js'
+import { normalizeRelayModelUsageEvents } from './model-usage/store.js'
 import { normalizeRelayPersonalConfigSnapshot } from './personal-config.js'
 import { normalizeRelayProjectRuleDocumentSnapshot } from './project-rule-documents.js'
 import { sanitizeRelayStorageValue } from './storage/content-boundary.js'
@@ -95,6 +97,8 @@ const defaultStore = (): RelayStore => ({
   devices: [],
   deviceSessions: [],
   forwardingJobs: [],
+  diagnosticEvents: [],
+  modelUsageEvents: [],
   oauthStates: [],
   accessTokens: [],
   sessions: []
@@ -111,6 +115,18 @@ const normalizeUser = (value: Record<string, unknown>): RelayUser => ({
     : undefined,
   groupIds: normalizeStringArray(value.groupIds) ?? defaultPlatformAccessGroupIds(value.role),
   maxDevices: Number.isFinite(Number(value.maxDevices)) ? Math.max(0, Math.trunc(Number(value.maxDevices))) : undefined,
+  ...(typeof value.diagnosticReportingEnabled === 'boolean'
+    ? { diagnosticReportingEnabled: value.diagnosticReportingEnabled }
+    : {}),
+  ...(typeof value.diagnosticReportingUpdatedAt === 'string' && value.diagnosticReportingUpdatedAt.trim() !== ''
+    ? { diagnosticReportingUpdatedAt: value.diagnosticReportingUpdatedAt }
+    : {}),
+  ...(typeof value.modelUsageReportingEnabled === 'boolean'
+    ? { modelUsageReportingEnabled: value.modelUsageReportingEnabled }
+    : {}),
+  ...(typeof value.modelUsageReportingUpdatedAt === 'string' && value.modelUsageReportingUpdatedAt.trim() !== ''
+    ? { modelUsageReportingUpdatedAt: value.modelUsageReportingUpdatedAt }
+    : {}),
   passwordHash: typeof value.passwordHash === 'string' && value.passwordHash.trim() !== ''
     ? value.passwordHash.trim()
     : undefined,
@@ -247,6 +263,7 @@ const normalizeTeam = (value: Record<string, unknown>): RelayTeam | undefined =>
       : undefined,
     avatarUrl: normalizeAvatarSource(value.avatarUrl),
     accessGroups: normalizeRelayTeamAccessGroups(value.accessGroups),
+    modelUsageReportingMode: value.modelUsageReportingMode === 'optional' ? 'optional' : 'required',
     ...(typeof value.proxyModeEnabled === 'boolean' ? { proxyModeEnabled: value.proxyModeEnabled } : {}),
     createdByUserId: typeof value.createdByUserId === 'string' && value.createdByUserId.trim() !== ''
       ? value.createdByUserId.trim()
@@ -272,6 +289,9 @@ const normalizeTeamMember = (value: Record<string, unknown>): RelayTeamMember | 
       defaultTeamAccessGroupIds(normalizeTeamRole(value.role, 'member')),
     ...(typeof value.configEnabled === 'boolean' ? { configEnabled: value.configEnabled } : {}),
     ...(typeof value.defaultForPublishing === 'boolean' ? { defaultForPublishing: value.defaultForPublishing } : {}),
+    ...(typeof value.modelUsageReportingEnabled === 'boolean'
+      ? { modelUsageReportingEnabled: value.modelUsageReportingEnabled }
+      : {}),
     createdByUserId: typeof value.createdByUserId === 'string' && value.createdByUserId.trim() !== ''
       ? value.createdByUserId.trim()
       : userId,
@@ -990,6 +1010,8 @@ export const normalizeRelayStore = (value: unknown): RelayStore => {
         value != null
       )
       : [],
+    diagnosticEvents: normalizeRelayDiagnosticEvents(store.diagnosticEvents),
+    modelUsageEvents: normalizeRelayModelUsageEvents(store.modelUsageEvents),
     oauthStates: Array.isArray(store.oauthStates)
       ? store.oauthStates.filter(isRecord).map(normalizeOAuthState).filter((value): value is RelayOAuthState =>
         value != null

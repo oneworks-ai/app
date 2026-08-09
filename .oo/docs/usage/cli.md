@@ -30,6 +30,7 @@
 - `oneworks list --view default|full`：展示常用列或上下文、PID 与辅助命令列
 - `oneworks list --running`：只看当前仍在运行的 CLI 会话
 - `oneworks clear`：清理本地日志与缓存
+- `oneworks report [filename]`：生成隐私安全诊断支持包；只包含结构化诊断事实与摘要，不包含提示词、凭据、配置、项目路径或原始日志
 - `oneworks stop <sessionId>`：优雅停止正在运行的 CLI 会话
 - `oneworks kill <sessionId>`：强制终止正在运行的 CLI 会话
 - `oneworks config list [path]`：查看配置 section 状态，或读取某个配置子树
@@ -44,7 +45,7 @@
 - `oneworks accounts show <adapter> <accountName>`：查看某个 adapter 账号的详情和最新额度摘要（CLI 当前会强制刷新）
 - `oneworks accounts remove <adapter> <accountName>`：删除 One Works 的 adapter 账号记录；只有 portable 且平台隔离的凭证才会同时执行官方 logout，device-bound 原生登录保留在设备上
 
-这些命令默认以项目根目录作为 workspace。
+这些命令默认以项目根目录作为 workspace。每次 CLI 命令会记录开始、插件加载阶段、终态和耗时；可通过标准 OTel 环境变量发送到 Relay。完整配置和支持包边界见[诊断、遥测与支持包](./diagnostics.md)。
 
 - 如果显式设置了 `__ONEWORKS_PROJECT_WORKSPACE_FOLDER__`，会直接使用该目录。
 - 如果没有设置，`oneworks` / `oneworks-mcp` / `oneworks-call-hook` / `oneworks-web` / `oneworks-server` / `oneworks-client` 会从当前目录向上探测 `.oo`、`.oo.config.*`、`pnpm-workspace.yaml` 或 Git 根目录，因此可以在项目任意子目录下启动。
@@ -195,6 +196,4 @@ oneworks users disable --account oneworks-cloudflare:user-1
 oneworks logout -s cf alice
 ```
 
-`login`、`logout`、`users` 是官方 Relay 能力提供的顶层命令。`-s, --server` 默认是 `cf`，也支持 `cloudflare`、`vercel` / `vc`、服务 id，或 `https://relay.example.com` 这样的完整 URL。登录凭据保存在本机 `~/.oneworks/auth.json`。
-
-如果某个 server 下只有一个账号，`users enable`、`users disable`、`logout` 可以不传用户；如果有多个匹配账号，交互终端会让你选择。脚本或 AI 工具应使用 `--json` 获取结构化输出，并用 `--account serverId:userId` 精确指定账号，避免不同 server 上同名用户被误操作。`--input <json>` 和 `--stdin` 可以把 JSON payload 合并到命令请求里。
+`login`、`logout`、`users` 是官方 Relay 能力提供的顶层命令。`-s, --server` 默认是 `cf`，也支持 `cloudflare`、`vercel` / `vc`、服务 id，或 `https://relay.example.com` 这样的完整 URL。登录凭据保存在本机 `~/.oneworks/auth.json`。如果某个 server 下只有一个账号，`users enable`、`users disable`、`logout` 可以不传用户；如果有多个匹配账号，交互终端会让你选择。脚本或 AI 工具应使用 `--json` 获取结构化输出，并用 `--account serverId:userId` 精确指定账号，避免不同 server 上同名用户被误操作。`--input <json>` 和 `--stdin` 可以把 JSON payload 合并到命令请求里。

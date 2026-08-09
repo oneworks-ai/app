@@ -42,6 +42,7 @@
     "@oneworks/cli-helper": "workspace:*",
     "@oneworks/config": "workspace:*",
     "@oneworks/core": "workspace:*",
+    "@oneworks/diagnostics": "workspace:*",
     "@oneworks/hooks": "workspace:*",
     "@oneworks/managed-plugins": "workspace:*",
     "@oneworks/plugin-cli-skills": "workspace:*",

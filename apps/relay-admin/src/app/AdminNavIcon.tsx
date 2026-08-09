@@ -3,6 +3,7 @@ import type { AdminIconName } from '../shared/ui/AdminIcon'
 
 export type AdminNavIconName =
   | 'access-groups'
+  | 'data-dashboard'
   | 'devices'
   | 'users'
   | 'invites'
@@ -13,6 +14,7 @@ export type AdminNavIconName =
 
 const iconByName: Record<AdminNavIconName, AdminIconName> = {
   'access-groups': 'badge',
+  'data-dashboard': 'view_week',
   devices: 'hub',
   invites: 'key',
   'message-pushes': 'notifications',

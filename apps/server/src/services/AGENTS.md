@@ -18,6 +18,8 @@
 - worktree-environment-import.ts：枚举 adapter 的可选环境导入 capability，完整校验 discovery 结果、按目标 source 规范化 `.local` 展示后缀并整批去重，再按 Project / User additions-only 写入；响应与日志不得包含脚本正文
 - worktree-environments.ts：adapter 导入走独占目录 claim 与 no-follow 文件写入，必须拒绝 `.oo`、环境根目录或 `.gitignore` 的符号链接；平台生命周期脚本存在时覆盖 base 脚本，不得双重执行
 - skill-hub/：技能市场领域服务，负责内置/用户配置 registry 按 source 跨层合并、Registry 管理列表、远端 skills CLI 搜索，以及安装后的配置写回；`enabled: false` 必须同时阻止搜索和安装
+- model-usage.ts：内容无关的 Model Service 用量计量桥；只在 session 边界观察 assistant usage 并通过标准 OTLP 输出，adapter 不重复计量；发送前读取 global `diagnostics.modelUsageReporting`，并从 Model Service 的 Relay 来源标记区分个人/具体团队。个人服务不得被团队策略限制，团队服务只应用来源团队策略；关闭时不得构造事件或初始化对应 scope exporter
+- javascript-diagnostics.ts：把 Web / PWA 的无内容 JavaScript 异常事实写入本地有界日志，并按 global `diagnostics.reporting` 门控 OTLP 上报
 - module-updates.ts：运行时模块版本检测与 bootstrap cache 安装编排，供普通 web、bootstrap web 和桌面 workspace 共同使用
   - Core 模块必须按当前宿主筛选：集成 Web 只管理 web shell，独立 server 只管理 server，桌面端只管理实际加载的 client/server。
   - 桌面 runtime cache 的目录 key 可能是 `dev-*`，当前版本必须读取被启动链路选中的 package `package.json`，不能把目录名或其他历史 semver cache 当成当前版本；安装入口必须拒绝降级。
