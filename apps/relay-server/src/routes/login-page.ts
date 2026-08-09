@@ -1,10 +1,7 @@
 /* eslint-disable max-lines -- login page renderer keeps the local HTML shell and scripts together. */
 import type { IncomingMessage } from 'node:http'
 
-import {
-  ONEWORKS_RELAY_BRAND_THEMES,
-  resolveOneWorksRelayBrandTheme
-} from '@oneworks/icon/brand-profile'
+import { ONEWORKS_RELAY_BRAND_THEMES, resolveOneWorksRelayBrandTheme } from '@oneworks/icon/brand-profile'
 import type { OneWorksIconTheme } from '@oneworks/icon/types'
 
 import { isRelayEmailProviderConfigured } from '../email/provider.js'
@@ -168,11 +165,13 @@ ${renderFaviconLinks(resolvedAssets)}
     <title>${escapeHtml(t.documentTitle)}</title>
     <style>${renderRelayLoginStyle()}</style>
   </head>
-  <body>${renderBackdrop()}${body}${renderScriptTags(
-  oneWorksIconLoaderScript,
-  iconLoaderScript(brandTheme),
-  script
-)}</body>
+  <body>${renderBackdrop()}${body}${
+    renderScriptTags(
+      oneWorksIconLoaderScript,
+      iconLoaderScript(brandTheme),
+      script
+    )
+  }</body>
 </html>`
 }
 

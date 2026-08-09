@@ -1,8 +1,4 @@
-import {
-  DEFAULT_BRAND_APPEARANCE,
-  DEFAULT_BRAND_MODE,
-  DEFAULT_BRAND_THEME
-} from './brand-profile.js'
+import { DEFAULT_BRAND_APPEARANCE, DEFAULT_BRAND_MODE, DEFAULT_BRAND_THEME } from './brand-profile.js'
 import type { OneWorksIconAppearance, OneWorksIconMode, OneWorksIconTheme } from './types.js'
 
 export const ONEWORKS_ICON_THEMES = [

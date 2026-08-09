@@ -1,5 +1,6 @@
 import { copyFile, mkdir, readdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import process from 'node:process'
 
 const appDir = new URL('..', import.meta.url)
 const distDir = new URL('../dist/', import.meta.url)

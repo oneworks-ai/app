@@ -3,6 +3,9 @@ import { readFileSync } from 'node:fs'
 import process from 'node:process'
 
 const SOURCE_EXTENSION_PATTERN = /\.(?:cjs|cts|js|jsx|mjs|mts|ts|tsx)$/u
+const GENERATED_SOURCE_PATH_PATTERNS = [
+  /^apps\/relay-server\/src\/routes\/assets\/.*\.bundle\.js$/u
+]
 const PRIVATE_TOKEN_PATTERN = /__[A-Z][A-Z0-9_]*__/gu
 const ALLOWED_NON_ENV_PRIVATE_TOKENS = new Set([
   '__D__',
@@ -45,7 +48,11 @@ const sourceFiles = execFileSync(
   { encoding: 'utf8' }
 )
   .split('\0')
-  .filter(filePath => filePath !== '' && SOURCE_EXTENSION_PATTERN.test(filePath))
+  .filter(filePath => (
+    filePath !== '' &&
+    SOURCE_EXTENSION_PATTERN.test(filePath) &&
+    !GENERATED_SOURCE_PATH_PATTERNS.some(pattern => pattern.test(filePath))
+  ))
 
 const violations = []
 for (const filePath of sourceFiles) {

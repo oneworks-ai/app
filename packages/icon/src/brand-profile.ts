@@ -1,10 +1,6 @@
 import profile from '../brand-profile.json' with { type: 'json' }
 
-import type {
-  OneWorksIconAppearance,
-  OneWorksIconMode,
-  OneWorksIconTheme
-} from './types.js'
+import type { OneWorksIconAppearance, OneWorksIconMode, OneWorksIconTheme } from './types.js'
 
 export type OneWorksBrandSurfaceRecipe = 'composition' | 'solid' | 'transparent'
 export type OneWorksRelayBrandProfile = 'cloudflare' | 'vercel'

@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  resolveOneWorksRelayBrandProfile,
-  resolveOneWorksRelayBrandTheme
-} from '../src/brand-profile.js'
+import { resolveOneWorksRelayBrandProfile, resolveOneWorksRelayBrandTheme } from '../src/brand-profile.js'
 import { createMobiusCore, createSeededRandom, normalizeSeed } from '../src/core.js'
 import { DEFAULT_ICON_THEME, ONEWORKS_ICON_THEMES, normalizeIconTheme } from '../src/presets.js'
 import { createMobiusSvg } from '../src/svg.js'
