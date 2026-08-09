@@ -1,4 +1,3 @@
-/* eslint-disable node/prefer-global/process -- deterministic repository asset synchronization. */
 const { createHash } = require('node:crypto')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -33,16 +32,31 @@ const copies = [
   [defaultIcon('solid', 'light', 'png'), 'apps/client/public/apple-touch-icon.png'],
   [defaultIcon('solid', 'light', 'png'), 'apps/client/public/pwa-icon-192.png'],
   [defaultIcon('solid', 'light', 'png'), 'apps/client/public/pwa-icon-512.png'],
-  [defaultIcon('transparent', 'light', 'svg'), 'assets/homepage/apps/homepage/src/assets/brand/favicon-linear-light-transparent.svg'],
-  [defaultIcon('transparent', 'dark', 'svg'), 'assets/homepage/apps/homepage/src/assets/brand/favicon-linear-dark-transparent.svg'],
-  [defaultIcon('transparent', 'light', 'png'), 'assets/homepage/apps/homepage/src/assets/brand/favicon-linear-light-transparent.png'],
-  [defaultIcon('transparent', 'dark', 'png'), 'assets/homepage/apps/homepage/src/assets/brand/favicon-linear-dark-transparent.png'],
+  [
+    defaultIcon('transparent', 'light', 'svg'),
+    'assets/homepage/apps/homepage/src/assets/brand/favicon-linear-light-transparent.svg'
+  ],
+  [
+    defaultIcon('transparent', 'dark', 'svg'),
+    'assets/homepage/apps/homepage/src/assets/brand/favicon-linear-dark-transparent.svg'
+  ],
+  [
+    defaultIcon('transparent', 'light', 'png'),
+    'assets/homepage/apps/homepage/src/assets/brand/favicon-linear-light-transparent.png'
+  ],
+  [
+    defaultIcon('transparent', 'dark', 'png'),
+    'assets/homepage/apps/homepage/src/assets/brand/favicon-linear-dark-transparent.png'
+  ],
   [defaultIcon('solid', 'light', 'png'), 'assets/homepage/apps/homepage/src/assets/brand/apple-touch-icon.png'],
   [defaultIcon('solid', 'light', 'png'), 'assets/homepage/apps/homepage/src/assets/brand/app-icon-512.png'],
   [defaultIcon('solid', 'dark', 'png'), 'assets/homepage/apps/homepage/src/assets/brand/app-icon-dark-512.png'],
   ['assets/brand/distribution/npm-readme-header-light.png', 'apps/bootstrap/assets/npm-readme-header-light.png'],
   ['assets/brand/distribution/npm-readme-header-dark.png', 'apps/bootstrap/assets/npm-readme-header-dark.png'],
-  ['assets/brand/distribution/vscode-marketplace-light.png', 'apps/vscode-extension/assets/vscode-marketplace-light.png'],
+  [
+    'assets/brand/distribution/vscode-marketplace-light.png',
+    'apps/vscode-extension/assets/vscode-marketplace-light.png'
+  ],
   ['assets/brand/distribution/vscode-marketplace-dark.png', 'apps/vscode-extension/assets/vscode-marketplace-dark.png'],
   ['assets/brand/distribution/github-org-readme-light.png', 'assets/github-profile/profile/brand-header-light.png'],
   ['assets/brand/distribution/github-org-readme-dark.png', 'assets/github-profile/profile/brand-header-dark.png'],
@@ -60,10 +74,22 @@ const copies = [
   ],
   [defaultIcon('transparent', 'light', 'svg'), 'assets/icon/favicon-linear-light.svg'],
   [defaultIcon('transparent', 'dark', 'svg'), 'assets/icon/favicon-linear-dark.svg'],
-  [`apps/desktop/build/icons/${canonicalBrandProfile.relayProfiles.cloudflare}/transparent/light.svg`, 'apps/relay-admin/public/favicon-cloudflare-light.svg'],
-  [`apps/desktop/build/icons/${canonicalBrandProfile.relayProfiles.cloudflare}/transparent/dark.svg`, 'apps/relay-admin/public/favicon-cloudflare-dark.svg'],
-  [`apps/desktop/build/icons/${canonicalBrandProfile.relayProfiles.vercel}/transparent/light.svg`, 'apps/relay-admin/public/favicon-vercel-light.svg'],
-  [`apps/desktop/build/icons/${canonicalBrandProfile.relayProfiles.vercel}/transparent/dark.svg`, 'apps/relay-admin/public/favicon-vercel-dark.svg'],
+  [
+    `apps/desktop/build/icons/${canonicalBrandProfile.relayProfiles.cloudflare}/transparent/light.svg`,
+    'apps/relay-admin/public/favicon-cloudflare-light.svg'
+  ],
+  [
+    `apps/desktop/build/icons/${canonicalBrandProfile.relayProfiles.cloudflare}/transparent/dark.svg`,
+    'apps/relay-admin/public/favicon-cloudflare-dark.svg'
+  ],
+  [
+    `apps/desktop/build/icons/${canonicalBrandProfile.relayProfiles.vercel}/transparent/light.svg`,
+    'apps/relay-admin/public/favicon-vercel-light.svg'
+  ],
+  [
+    `apps/desktop/build/icons/${canonicalBrandProfile.relayProfiles.vercel}/transparent/dark.svg`,
+    'apps/relay-admin/public/favicon-vercel-dark.svg'
+  ],
   [
     defaultIcon('transparent', 'light', 'png'),
     'apps/android/app/src/main/res/drawable-nodpi/ic_launcher_foreground.png'
@@ -86,7 +112,15 @@ const demoVideoIconTarget = path.join(root, 'assets/demo-video/assets/adapter-pr
 if (fs.existsSync(demoVideoIconSource)) {
   const { spawnSync } = require('node:child_process')
   const result = spawnSync('sips', [
-    '-s', 'format', 'png', '-z', '512', '512', demoVideoIconSource, '--out', demoVideoIconTarget
+    '-s',
+    'format',
+    'png',
+    '-z',
+    '512',
+    '512',
+    demoVideoIconSource,
+    '--out',
+    demoVideoIconTarget
   ], { stdio: 'ignore' })
   if (result.status !== 0) throw new Error('Unable to render the demo-video One Works icon with sips.')
 }
@@ -122,8 +156,20 @@ const chromeStoreTileTarget = path.join(
 const chromeStoreSource = path.join(distributionDir, 'chrome-web-store-light.png')
 const { spawnSync } = require('node:child_process')
 const chromeStoreResult = spawnSync('sips', [
-  '-s', 'format', 'png', '-z', '220', '440', '-p', '280', '440', '--padColor', 'f7f9fb',
-  chromeStoreSource, '--out', chromeStoreTileTarget
+  '-s',
+  'format',
+  'png',
+  '-z',
+  '220',
+  '440',
+  '-p',
+  '280',
+  '440',
+  '--padColor',
+  'f7f9fb',
+  chromeStoreSource,
+  '--out',
+  chromeStoreTileTarget
 ], { stdio: 'ignore' })
 if (chromeStoreResult.status !== 0) throw new Error('Unable to render the Chrome Web Store promo tile with sips.')
 
@@ -131,12 +177,14 @@ const manifestPath = path.join(root, 'assets', 'brand', 'brand-assets.manifest.j
 const distributionFiles = fs.readdirSync(distributionDir, { withFileTypes: true })
   .filter(entry => entry.isFile())
   .map(entry => path.posix.join('assets/brand/distribution', entry.name))
-const files = [...new Set([
-  ...copies.map(([, target]) => target),
-  'assets/demo-video/assets/adapter-promo/icons/oneworks.png',
-  'packages/plugins/external-browser-driver/store-assets/small-promo-tile.png',
-  ...distributionFiles
-])].filter(file => fs.existsSync(path.join(root, file))).sort()
+const files = [
+  ...new Set([
+    ...copies.map(([, target]) => target),
+    'assets/demo-video/assets/adapter-promo/icons/oneworks.png',
+    'packages/plugins/external-browser-driver/store-assets/small-promo-tile.png',
+    ...distributionFiles
+  ])
+].filter(file => fs.existsSync(path.join(root, file))).sort()
 const manifest = {
   schemaVersion: 1,
   defaultTheme,

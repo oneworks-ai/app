@@ -4,5 +4,6 @@
     android:width="90dp"
     android:height="90dp"
     android:gravity="center"
-    android:drawable="@drawable/ic_launcher_foreground" />
+    android:drawable="@drawable/ic_launcher_foreground"
+  />
 </layer-list>

@@ -1,14 +1,30 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en" data-theme="light">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>One Works distribution artwork</title>
-  <script>document.documentElement.dataset.theme = new URLSearchParams(location.search).get('theme') === 'dark' ? 'dark' : 'light'</script>
-  <style>
-    * { box-sizing: border-box; }
-    html, body { margin: 0; background: #101317; font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    body { width: 1292px; zoom: .5; }
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>One Works distribution artwork</title>
+    <script>
+    document.documentElement.dataset.theme =
+      new URLSearchParams(location.search).get('theme') === 'dark'
+        ? 'dark'
+        : 'light'
+    </script>
+    <style>
+    * {
+      box-sizing: border-box;
+    }
+    html, body {
+      margin: 0;
+      background: #101317;
+      font-family:
+        Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+        sans-serif;
+    }
+    body {
+      width: 1292px;
+      zoom: .5;
+    }
     .card {
       --bg: #f7f9fb;
       --ink: #111820;
@@ -25,11 +41,15 @@
       isolation: isolate;
       color: var(--ink);
       background:
-        radial-gradient(circle at var(--well-x, 68%) var(--well-y, 50%), var(--halo) 0, transparent 25%),
-        linear-gradient(135deg, rgba(255,255,255,.7), transparent 42%),
+        radial-gradient(
+          circle at var(--well-x, 68%) var(--well-y, 50%),
+          var(--halo) 0,
+          transparent 25%
+        ),
+        linear-gradient(135deg, rgba(255, 255, 255, .7), transparent 42%),
         var(--bg);
     }
-    html[data-theme="dark"] .card {
+    html[data-theme='dark'] .card {
       --bg: #080a0d;
       --ink: #e2ebf2;
       --muted: #94a5b5;
@@ -39,124 +59,479 @@
       --star-bright: #ffffff;
       --star-well: #1c9bc7;
       background:
-        radial-gradient(circle at var(--well-x, 68%) var(--well-y, 50%), var(--halo) 0, transparent 27%),
-        linear-gradient(135deg, rgba(39,49,58,.3), transparent 42%),
+        radial-gradient(
+          circle at var(--well-x, 68%) var(--well-y, 50%),
+          var(--halo) 0,
+          transparent 27%
+        ),
+        linear-gradient(135deg, rgba(39, 49, 58, .3), transparent 42%),
         var(--bg);
     }
-    .card + .card { margin-top: 16px; }
-    .stars, .field, .links { position: absolute; inset: 0; width: 100%; height: 100%; }
-    .stars { z-index: -4; opacity: .28; }
-    html[data-theme="dark"] .stars { opacity: .78; }
-    .stars .well { fill: var(--star-well); filter: blur(14px); opacity: .11; }
-    html[data-theme="dark"] .stars .well { opacity: .18; }
-    .stars .dot { fill: var(--star); }
-    .stars .faint { opacity: .3; }
-    .stars .medium { opacity: .55; }
-    .stars .bright { color: #3f5965; fill: currentColor; opacity: .88; }
-    .stars .bright.tone-cool { color: #365d70; }
-    .stars .bright.tone-warm { color: #6a5548; }
-    html[data-theme="dark"] .stars .bright { color: #f4fbff; }
-    html[data-theme="dark"] .stars .bright.tone-cool { color: #cfeaff; }
-    html[data-theme="dark"] .stars .bright.tone-warm { color: #ffe8cf; }
-    .stars .particle-halo { fill: #60747e; filter: blur(4px); opacity: .045; }
-    .stars .particle-halo.tone-cool { fill: #6b9aaf; }
-    .stars .particle-halo.tone-warm { fill: #a18470; }
-    html[data-theme="dark"] .stars .particle-halo { fill: #f4fbff; opacity: .065; }
-    html[data-theme="dark"] .stars .particle-halo.tone-cool { fill: #cfeaff; }
-    html[data-theme="dark"] .stars .particle-halo.tone-warm { fill: #ffe8cf; }
-    .stars .particle-satellite { fill: var(--star-bright); opacity: .46; }
-    .stars .diffraction { color: var(--star-bright); filter: drop-shadow(0 0 2px var(--star)); opacity: .76; }
-    .stars .diffraction-halo { fill: currentColor; opacity: .08; }
-    .stars .diffraction-primary, .stars .diffraction-secondary, .stars .diffraction-core { fill: currentColor; }
-    .stars .diffraction-primary { opacity: .68; }
-    .stars .diffraction-secondary { opacity: .38; }
-    .stars .diffraction-companion { fill: currentColor; opacity: .34; }
-    .stars .comet { color: var(--star-bright); opacity: .34; }
-    html[data-theme="dark"] .stars .comet { opacity: .7; }
-    .stars .comet-stop { stop-color: currentColor; }
-    .stars .comet-stop.tail { stop-opacity: .025; }
-    .stars .comet-stop.mid { stop-opacity: .22; }
-    .stars .comet-stop.head { stop-opacity: .92; }
-    .stars .comet-tail.outer { filter: blur(2.3px); opacity: .52; }
-    .stars .comet-tail.inner { filter: blur(.6px); opacity: .88; }
-    .stars .comet-head { fill: currentColor; filter: drop-shadow(0 0 1.5px currentColor); }
-    .stars .comet-halo { fill: currentColor; filter: blur(1.2px); opacity: .11; }
-    .stars .comet-particle { fill: currentColor; filter: drop-shadow(0 0 1px currentColor); }
-    .field { z-index: -3; }
-    .field path { fill: none; stroke: var(--grid); stroke-width: 1.4; vector-effect: non-scaling-stroke; }
-    .links { z-index: -1; overflow: visible; }
-    .links .orbit { fill: none; stroke-width: 2.1; stroke-linecap: butt; stroke-dasharray: 12 23; opacity: .65; }
-    .links .pull { fill: none; stroke: var(--ink); stroke-width: 1.25; opacity: .16; }
-    .links .cyan { stroke: #27aee4; }
-    .links .violet { stroke: #8d72e8; }
-    .links .amber { stroke: #e79a35; }
-    .copy { position: absolute; z-index: 4; }
-    .eyebrow { margin: 0 0 15px; color: #5c7b91; font-size: 20px; font-weight: 760; letter-spacing: .14em; text-transform: uppercase; }
-    html[data-theme="dark"] .eyebrow { color: #7eb7d6; }
-    h1 { margin: 0; max-width: 600px; font-size: 58px; line-height: .99; letter-spacing: -.052em; font-weight: 780; }
-    p { margin: 20px 0 0; max-width: 530px; color: var(--muted); font-size: 23px; line-height: 1.42; letter-spacing: -.018em; }
-    .meta { display: flex; gap: 10px; margin-top: 26px; color: var(--muted); font: 650 16px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; }
-    .meta span { padding: 9px 12px; border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent); background: color-mix(in srgb, var(--bg) 82%, transparent); }
-    .hub { position: absolute; z-index: 3; display: grid; place-items: center; filter: drop-shadow(0 22px 26px rgba(0,0,0,.18)); }
-    .hub::before { content: ""; position: absolute; width: 69%; height: 69%; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, #49b9ed 23%, transparent), transparent 68%); filter: blur(10px); }
-    .hub img { position: relative; width: 100%; height: 100%; object-fit: contain; }
-    .node { position: absolute; z-index: 2; width: var(--node, 42px); height: var(--node, 42px); display: grid; place-items: center; filter: drop-shadow(0 7px 9px rgba(0,0,0,.22)); }
-    .node img { max-width: 100%; max-height: 100%; object-fit: contain; }
-    .node.small { --node: 34px; }
-    .provider { opacity: .92; }
-    .channel { --node: 36px; }
-    .platform-mark { position: absolute; z-index: 0; right: -42px; bottom: -78px; width: 390px; height: 390px; opacity: .24; filter: blur(.25px) drop-shadow(-18px 22px 28px rgba(0,0,0,.28)); transform: rotate(-9deg); }
-    .platform-mark img, .platform-mark svg { width: 100%; height: 100%; object-fit: contain; }
-    html[data-theme="dark"] .platform-mark { opacity: .31; }
-    .org { --width: 1292px; --well-x: 50%; --well-y: 45%; }
-    .org .copy { left: 50%; bottom: 48px; width: 720px; text-align: center; transform: translateX(-50%); }
-    .org h1 { max-width: none; font-size: 56px; }
-    .org p { max-width: none; margin-top: 10px; font-size: 20px; }
-    .org .hub { left: 506px; top: 116px; width: 280px; height: 230px; }
-    .org .links .orbit { opacity: .84; stroke-dasharray: 40 40; stroke-width: 4; }
-    .social, .platform { --width: 1280px; }
-    .social { --well-x: 69%; --well-y: 50%; }
-    .social .copy { left: 76px; top: 172px; width: 500px; }
-    .social .hub { left: 735px; top: 204px; width: 280px; height: 230px; }
-    .home .copy { top: 155px; }
-    .platform { --well-x: 14%; --well-y: 50%; }
-    .platform .copy { left: 400px; top: 168px; width: 610px; }
-    .platform h1 { font-size: 54px; }
-    .platform .hub { left: 48px; top: 214px; width: 260px; height: 212px; }
-    .vscode .platform-mark { color: #1f9cf0; }
-    .npm .platform-mark { width: 430px; right: -64px; bottom: -88px; }
-    .platform .node { opacity: .78; }
-  </style>
-</head>
-<body>
-  <main id="artboards"></main>
-  <script>
+    .card + .card {
+      margin-top: 16px;
+    }
+    .stars, .field, .links {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+    .stars {
+      z-index: -4;
+      opacity: .28;
+    }
+    html[data-theme='dark'] .stars {
+      opacity: .78;
+    }
+    .stars .well {
+      fill: var(--star-well);
+      filter: blur(14px);
+      opacity: .11;
+    }
+    html[data-theme='dark'] .stars .well {
+      opacity: .18;
+    }
+    .stars .dot {
+      fill: var(--star);
+    }
+    .stars .faint {
+      opacity: .3;
+    }
+    .stars .medium {
+      opacity: .55;
+    }
+    .stars .bright {
+      color: #3f5965;
+      fill: currentColor;
+      opacity: .88;
+    }
+    .stars .bright.tone-cool {
+      color: #365d70;
+    }
+    .stars .bright.tone-warm {
+      color: #6a5548;
+    }
+    html[data-theme='dark'] .stars .bright {
+      color: #f4fbff;
+    }
+    html[data-theme='dark'] .stars .bright.tone-cool {
+      color: #cfeaff;
+    }
+    html[data-theme='dark'] .stars .bright.tone-warm {
+      color: #ffe8cf;
+    }
+    .stars .particle-halo {
+      fill: #60747e;
+      filter: blur(4px);
+      opacity: .045;
+    }
+    .stars .particle-halo.tone-cool {
+      fill: #6b9aaf;
+    }
+    .stars .particle-halo.tone-warm {
+      fill: #a18470;
+    }
+    html[data-theme='dark'] .stars .particle-halo {
+      fill: #f4fbff;
+      opacity: .065;
+    }
+    html[data-theme='dark'] .stars .particle-halo.tone-cool {
+      fill: #cfeaff;
+    }
+    html[data-theme='dark'] .stars .particle-halo.tone-warm {
+      fill: #ffe8cf;
+    }
+    .stars .particle-satellite {
+      fill: var(--star-bright);
+      opacity: .46;
+    }
+    .stars .diffraction {
+      color: var(--star-bright);
+      filter: drop-shadow(0 0 2px var(--star));
+      opacity: .76;
+    }
+    .stars .diffraction-halo {
+      fill: currentColor;
+      opacity: .08;
+    }
+    .stars .diffraction-primary,
+    .stars .diffraction-secondary,
+    .stars .diffraction-core {
+      fill: currentColor;
+    }
+    .stars .diffraction-primary {
+      opacity: .68;
+    }
+    .stars .diffraction-secondary {
+      opacity: .38;
+    }
+    .stars .diffraction-companion {
+      fill: currentColor;
+      opacity: .34;
+    }
+    .stars .comet {
+      color: var(--star-bright);
+      opacity: .34;
+    }
+    html[data-theme='dark'] .stars .comet {
+      opacity: .7;
+    }
+    .stars .comet-stop {
+      stop-color: currentColor;
+    }
+    .stars .comet-stop.tail {
+      stop-opacity: .025;
+    }
+    .stars .comet-stop.mid {
+      stop-opacity: .22;
+    }
+    .stars .comet-stop.head {
+      stop-opacity: .92;
+    }
+    .stars .comet-tail.outer {
+      filter: blur(2.3px);
+      opacity: .52;
+    }
+    .stars .comet-tail.inner {
+      filter: blur(.6px);
+      opacity: .88;
+    }
+    .stars .comet-head {
+      fill: currentColor;
+      filter: drop-shadow(0 0 1.5px currentColor);
+    }
+    .stars .comet-halo {
+      fill: currentColor;
+      filter: blur(1.2px);
+      opacity: .11;
+    }
+    .stars .comet-particle {
+      fill: currentColor;
+      filter: drop-shadow(0 0 1px currentColor);
+    }
+    .field {
+      z-index: -3;
+    }
+    .field path {
+      fill: none;
+      stroke: var(--grid);
+      stroke-width: 1.4;
+      vector-effect: non-scaling-stroke;
+    }
+    .links {
+      z-index: -1;
+      overflow: visible;
+    }
+    .links .orbit {
+      fill: none;
+      stroke-width: 2.1;
+      stroke-linecap: butt;
+      stroke-dasharray: 12 23;
+      opacity: .65;
+    }
+    .links .pull {
+      fill: none;
+      stroke: var(--ink);
+      stroke-width: 1.25;
+      opacity: .16;
+    }
+    .links .cyan {
+      stroke: #27aee4;
+    }
+    .links .violet {
+      stroke: #8d72e8;
+    }
+    .links .amber {
+      stroke: #e79a35;
+    }
+    .copy {
+      position: absolute;
+      z-index: 4;
+    }
+    .eyebrow {
+      margin: 0 0 15px;
+      color: #5c7b91;
+      font-size: 20px;
+      font-weight: 760;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+    html[data-theme='dark'] .eyebrow {
+      color: #7eb7d6;
+    }
+    h1 {
+      margin: 0;
+      max-width: 600px;
+      font-size: 58px;
+      line-height: .99;
+      letter-spacing: -.052em;
+      font-weight: 780;
+    }
+    p {
+      margin: 20px 0 0;
+      max-width: 530px;
+      color: var(--muted);
+      font-size: 23px;
+      line-height: 1.42;
+      letter-spacing: -.018em;
+    }
+    .meta {
+      display: flex;
+      gap: 10px;
+      margin-top: 26px;
+      color: var(--muted);
+      font: 650 16px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .meta span {
+      padding: 9px 12px;
+      border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+      background: color-mix(in srgb, var(--bg) 82%, transparent);
+    }
+    .hub {
+      position: absolute;
+      z-index: 3;
+      display: grid;
+      place-items: center;
+      filter: drop-shadow(0 22px 26px rgba(0, 0, 0, .18));
+    }
+    .hub::before {
+      content: '';
+      position: absolute;
+      width: 69%;
+      height: 69%;
+      border-radius: 50%;
+      background: radial-gradient(
+        circle,
+        color-mix(in srgb, #49b9ed 23%, transparent),
+        transparent 68%
+      );
+      filter: blur(10px);
+    }
+    .hub img {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    .node {
+      position: absolute;
+      z-index: 2;
+      width: var(--node, 42px);
+      height: var(--node, 42px);
+      display: grid;
+      place-items: center;
+      filter: drop-shadow(0 7px 9px rgba(0, 0, 0, .22));
+    }
+    .node img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+    .node.small {
+      --node: 34px;
+    }
+    .provider {
+      opacity: .92;
+    }
+    .channel {
+      --node: 36px;
+    }
+    .platform-mark {
+      position: absolute;
+      z-index: 0;
+      right: -42px;
+      bottom: -78px;
+      width: 390px;
+      height: 390px;
+      opacity: .24;
+      filter: blur(.25px) drop-shadow(-18px 22px 28px rgba(0, 0, 0, .28));
+      transform: rotate(-9deg);
+    }
+    .platform-mark img, .platform-mark svg {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    html[data-theme='dark'] .platform-mark {
+      opacity: .31;
+    }
+    .org {
+      --width: 1292px;
+      --well-x: 50%;
+      --well-y: 45%;
+    }
+    .org .copy {
+      left: 50%;
+      bottom: 48px;
+      width: 720px;
+      text-align: center;
+      transform: translateX(-50%);
+    }
+    .org h1 {
+      max-width: none;
+      font-size: 56px;
+    }
+    .org p {
+      max-width: none;
+      margin-top: 10px;
+      font-size: 20px;
+    }
+    .org .hub {
+      left: 506px;
+      top: 116px;
+      width: 280px;
+      height: 230px;
+    }
+    .org .links .orbit {
+      opacity: .84;
+      stroke-dasharray: 40 40;
+      stroke-width: 4;
+    }
+    .social, .platform {
+      --width: 1280px;
+    }
+    .social {
+      --well-x: 69%;
+      --well-y: 50%;
+    }
+    .social .copy {
+      left: 76px;
+      top: 172px;
+      width: 500px;
+    }
+    .social .hub {
+      left: 735px;
+      top: 204px;
+      width: 280px;
+      height: 230px;
+    }
+    .home .copy {
+      top: 155px;
+    }
+    .platform {
+      --well-x: 14%;
+      --well-y: 50%;
+    }
+    .platform .copy {
+      left: 400px;
+      top: 168px;
+      width: 610px;
+    }
+    .platform h1 {
+      font-size: 54px;
+    }
+    .platform .hub {
+      left: 48px;
+      top: 214px;
+      width: 260px;
+      height: 212px;
+    }
+    .vscode .platform-mark {
+      color: #1f9cf0;
+    }
+    .npm .platform-mark {
+      width: 430px;
+      right: -64px;
+      bottom: -88px;
+    }
+    .platform .node {
+      opacity: .78;
+    }
+    </style>
+  </head>
+  <body>
+    <main id="artboards"></main>
+    <script>
     const ASSETS = {
-      owLight: '{{OW_LIGHT}}', owDark: '{{OW_DARK}}',
-      claude: '{{CLAUDE}}', codexLight: '{{CODEX_LIGHT}}', codexDark: '{{CODEX_DARK}}',
-      copilot: '{{COPILOT}}', gemini: '{{GEMINI}}', kimi: '{{KIMI}}', opencode: '{{OPENCODE}}',
-      openai: '{{OPENAI}}', deepseek: '{{DEEPSEEK}}', moonshot: '{{MOONSHOT}}',
-      minimax: '{{MINIMAX}}', qwen: '{{QWEN}}', zhipu: '{{ZHIPU}}',
-      telegram: '{{TELEGRAM}}', lark: '{{LARK}}', wechat: '{{WECHAT}}',
-      wecom: '{{WECOM}}', qq: '{{QQ}}', imessage: '{{IMESSAGE}}',
-      chrome: '{{CHROME}}', npm: '{{NPM}}'
+      owLight: '{{OW_LIGHT}}',
+      owDark: '{{OW_DARK}}',
+      claude: '{{CLAUDE}}',
+      codexLight: '{{CODEX_LIGHT}}',
+      codexDark: '{{CODEX_DARK}}',
+      copilot: '{{COPILOT}}',
+      gemini: '{{GEMINI}}',
+      kimi: '{{KIMI}}',
+      opencode: '{{OPENCODE}}',
+      openai: '{{OPENAI}}',
+      deepseek: '{{DEEPSEEK}}',
+      moonshot: '{{MOONSHOT}}',
+      minimax: '{{MINIMAX}}',
+      qwen: '{{QWEN}}',
+      zhipu: '{{ZHIPU}}',
+      telegram: '{{TELEGRAM}}',
+      lark: '{{LARK}}',
+      wechat: '{{WECHAT}}',
+      wecom: '{{WECOM}}',
+      qq: '{{QQ}}',
+      imessage: '{{IMESSAGE}}',
+      chrome: '{{CHROME}}',
+      npm: '{{NPM}}'
     }
     const isDark = document.documentElement.dataset.theme === 'dark'
     const ow = isDark ? ASSETS.owDark : ASSETS.owLight
     const codex = isDark ? ASSETS.codexDark : ASSETS.codexLight
-    const runtimeIcons = [ASSETS.claude, codex, ASSETS.copilot, ASSETS.gemini, ASSETS.kimi, ASSETS.opencode]
-    const providerIcons = [ASSETS.openai, ASSETS.deepseek, ASSETS.moonshot, ASSETS.minimax, ASSETS.qwen, ASSETS.zhipu]
-    const channelIcons = [ASSETS.telegram, ASSETS.lark, ASSETS.wechat, ASSETS.wecom, ASSETS.qq, ASSETS.imessage]
-    const positions = [
-      [61,16],[73,14],[82,25],[84,46],[77,70],[63,76],
-      [53,63],[52,37],[62,29],[73,31],[76,50],[66,62]
+    const runtimeIcons = [
+      ASSETS.claude,
+      codex,
+      ASSETS.copilot,
+      ASSETS.gemini,
+      ASSETS.kimi,
+      ASSETS.opencode
     ]
-    const socialChannelPositions = [[34,8],[52,5],[75,5],[96,22],[96,80],[60,92]]
-    const homeChannelPositions = [[45,8],[62,4],[82,5],[96,44],[94,88],[70,94]]
-    const compactPositions = [[6,16],[19,13],[25,29],[24,65],[11,75],[4,55]]
+    const providerIcons = [
+      ASSETS.openai,
+      ASSETS.deepseek,
+      ASSETS.moonshot,
+      ASSETS.minimax,
+      ASSETS.qwen,
+      ASSETS.zhipu
+    ]
+    const channelIcons = [
+      ASSETS.telegram,
+      ASSETS.lark,
+      ASSETS.wechat,
+      ASSETS.wecom,
+      ASSETS.qq,
+      ASSETS.imessage
+    ]
+    const positions = [
+      [61, 16],
+      [73, 14],
+      [82, 25],
+      [84, 46],
+      [77, 70],
+      [63, 76],
+      [53, 63],
+      [52, 37],
+      [62, 29],
+      [73, 31],
+      [76, 50],
+      [66, 62]
+    ]
+    const socialChannelPositions = [[34, 8], [52, 5], [75, 5], [96, 22], [
+      96,
+      80
+    ], [60, 92]]
+    const homeChannelPositions = [[45, 8], [62, 4], [82, 5], [96, 44], [
+      94,
+      88
+    ], [70, 94]]
+    const compactPositions = [[6, 16], [19, 13], [25, 29], [24, 65], [
+      11,
+      75
+    ], [4, 55]]
     const sharedCardCurvature = 1.18
 
-    function orbitPosition(cx, cy, rx, ry, rotation, phase, width = 1292, height = 640) {
+    function orbitPosition(
+      cx,
+      cy,
+      rx,
+      ry,
+      rotation,
+      phase,
+      width = 1292,
+      height = 640
+    ) {
       const angle = rotation * Math.PI / 180
       const theta = phase * Math.PI / 180
       const localX = rx * Math.cos(theta)
@@ -167,146 +542,550 @@
     }
 
     const orgGroups = [
-      { icons: runtimeIcons.slice(0, 5), kind: 'runtime', phases: [12,84,156,228,300], rotation: -17, rx: 265, ry: 122 },
-      { icons: providerIcons.slice(0, 5), kind: 'provider', phases: [36,108,180,252,324], rotation: 11, rx: 340, ry: 177 },
-      { icons: channelIcons, kind: 'channel', phases: [10,70,130,190,250,310], rotation: -5, rx: 410, ry: 220 }
+      {
+        icons: runtimeIcons.slice(0, 5),
+        kind: 'runtime',
+        phases: [12, 84, 156, 228, 300],
+        rotation: -17,
+        rx: 265,
+        ry: 122
+      },
+      {
+        icons: providerIcons.slice(0, 5),
+        kind: 'provider',
+        phases: [36, 108, 180, 252, 324],
+        rotation: 11,
+        rx: 340,
+        ry: 177
+      },
+      {
+        icons: channelIcons,
+        kind: 'channel',
+        phases: [10, 70, 130, 190, 250, 310],
+        rotation: -5,
+        rx: 410,
+        ry: 220
+      }
     ]
-    const orgNodes = orgGroups.flatMap(group => group.phases.map((phase, index) => ({
-      kind: group.kind,
-      point: orbitPosition(646, 286, group.rx, group.ry, group.rotation, phase),
-      src: group.icons[index]
-    })))
+    const orgNodes = orgGroups.flatMap(group =>
+      group.phases.map((phase, index) => ({
+        kind: group.kind,
+        point: orbitPosition(
+          646,
+          286,
+          group.rx,
+          group.ry,
+          group.rotation,
+          phase
+        ),
+        src: group.icons[index]
+      }))
+    )
     const orgPositions = orgNodes.map(node => node.point)
 
-    function gravityGrid(cx, cy, width = 1280, height = 640, xStep = 100, yStep = 72, curvature = 1) {
+    function gravityGrid(
+      cx,
+      cy,
+      width = 1280,
+      height = 640,
+      xStep = 100,
+      yStep = 72,
+      curvature = 1
+    ) {
       const paths = []
       for (let x = -80; x <= width + 80; x += xStep) {
         const pull = Math.max(0, 1 - Math.abs(x - cx) / 520)
-        paths.push(`<path d="M${x} -50 C ${x + (cx-x)*pull*.08*curvature} ${cy-190}, ${x + (cx-x)*pull*.32*curvature} ${cy-90}, ${x + (cx-x)*pull*.42*curvature} ${cy} S ${x + (cx-x)*pull*.08*curvature} ${cy+190}, ${x} ${height+50}"/>`)
+        paths.push(
+          `<path d="M${x} -50 C ${x + (cx - x) * pull * .08 * curvature} ${
+            cy - 190
+          }, ${x + (cx - x) * pull * .32 * curvature} ${cy - 90}, ${
+            x + (cx - x) * pull * .42 * curvature
+          } ${cy} S ${x + (cx - x) * pull * .08 * curvature} ${
+            cy + 190
+          }, ${x} ${height + 50}"/>`
+        )
       }
       for (let y = -40; y <= height + 40; y += yStep) {
         const pull = Math.max(0, 1 - Math.abs(y - cy) / 300)
-        paths.push(`<path d="M-80 ${y} C ${cx-270} ${y + (cy-y)*pull*.08*curvature}, ${cx-130} ${y + (cy-y)*pull*.45*curvature}, ${cx} ${y + (cy-y)*pull*.58*curvature} S ${cx+270} ${y + (cy-y)*pull*.08*curvature}, ${width+80} ${y}"/>`)
+        paths.push(
+          `<path d="M-80 ${y} C ${cx - 270} ${
+            y + (cy - y) * pull * .08 * curvature
+          }, ${cx - 130} ${y + (cy - y) * pull * .45 * curvature}, ${cx} ${
+            y + (cy - y) * pull * .58 * curvature
+          } S ${cx + 270} ${y + (cy - y) * pull * .08 * curvature}, ${
+            width + 80
+          } ${y}"/>`
+        )
       }
-      return `<svg class="field" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true">${paths.join('')}</svg>`
+      return `<svg class="field" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true">${
+        paths.join('')
+      }</svg>`
     }
 
-    function starField(name, cx, cy, width = 1280, height = 640, curvature = 1, count = 74) {
-      const seed = [...name].reduce((value, character) => value + character.charCodeAt(0), 0)
+    function starField(
+      name,
+      cx,
+      cy,
+      width = 1280,
+      height = 640,
+      curvature = 1,
+      count = 74
+    ) {
+      const seed = [...name].reduce(
+        (value, character) => value + character.charCodeAt(0),
+        0
+      )
       const fraction = value => value - Math.floor(value)
       const stars = []
       const cometSpecs = {
-        org: [[20,8,1,13,.36],[86,33,1,14,.68],[73,6,-1,13,.84],[31,41,-1,11,1.55]], social: [[89,8,-1,13],[17,8,1,14],[22,41,-1,14]], home: [[35,12,1,14],[91,8,-1,13],[43,25,1,14]],
-        vscode: [[77,8,-1,14],[53,43,1,14]], chrome: [[82,9,-1,14],[52,43,1,14]], npm: [[74,7,-1,14],[55,43,1,14]]
+        org: [[20, 8, 1, 13, .36], [86, 33, 1, 14, .68], [
+          73,
+          6,
+          -1,
+          13,
+          .84
+        ], [31, 41, -1, 11, 1.55]],
+        social: [[89, 8, -1, 13], [17, 8, 1, 14], [22, 41, -1, 14]],
+        home: [[35, 12, 1, 14], [91, 8, -1, 13], [43, 25, 1, 14]],
+        vscode: [[77, 8, -1, 14], [53, 43, 1, 14]],
+        chrome: [[82, 9, -1, 14], [52, 43, 1, 14]],
+        npm: [[74, 7, -1, 14], [55, 43, 1, 14]]
       }
       const cometDefs = []
-      const comets = (cometSpecs[name] ?? []).map(([headXP,headYP,orbitDirection,baseArcLengthP,lengthTier=1], index) => {
-        const cometVariation=salt=>fraction(Math.sin((seed+index*41+salt*17)*12.9898)*43758.5453),arcLengthP=baseArcLengthP*lengthTier*(.76+cometVariation(1)*.58),curveScale=.72+cometVariation(2)*.76,radialLift=.018+cometVariation(3)*.082
-        const headX=headXP/100*width, headY=headYP/50*height, unit=width/100, radius=Math.hypot(headX-cx,headY-cy)||1,headAngle=Math.atan2(headY-cy,headX-cx),arcSpan=Math.min(.62,Math.max(.1,arcLengthP*unit/radius*curveScale))
-        const orbitPoint=progress=>{const remainingArc=1-progress,angle=headAngle-orbitDirection*arcSpan*remainingArc,localRadius=radius*(1+radialLift*remainingArc**2);return[cx+Math.cos(angle)*localRadius,cy+Math.sin(angle)*localRadius]}
-        const [tailX,tailY]=orbitPoint(0),control1=orbitPoint(.34),tangentX=orbitDirection*-Math.sin(headAngle),tangentY=orbitDirection*Math.cos(headAngle),tangentHandle=arcLengthP*unit*.28,control2=[headX-tangentX*tangentHandle,headY-tangentY*tangentHandle]
-        const radialNormal=([x,y])=>{const dx=x-cx,dy=y-cy,distance=Math.hypot(dx,dy)||1;return[dx/distance,dy/distance]}
-        const tailNormal=radialNormal([tailX,tailY]),control1Normal=radialNormal(control1),control2Normal=radialNormal(control2),headNormal=radialNormal([headX,headY])
-        const tailOuterWidth=(1.15+cometVariation(4)*1.5)*Math.sqrt(lengthTier)*unit,tailInnerWidth=tailOuterWidth*(.22+cometVariation(5)*.13),headOuterWidth=.075*unit,headInnerWidth=.032*unit,gradientId=`ow-comet-${name}-${index}`,particleCount=7+Math.floor(cometVariation(6)*7)
-        const cometPath=(tailWidth,headWidth)=>`M${(tailX+tailNormal[0]*tailWidth).toFixed(1)} ${(tailY+tailNormal[1]*tailWidth).toFixed(1)} C${(control1[0]+control1Normal[0]*tailWidth*.72).toFixed(1)} ${(control1[1]+control1Normal[1]*tailWidth*.72).toFixed(1)} ${(control2[0]+control2Normal[0]*headWidth*2.2).toFixed(1)} ${(control2[1]+control2Normal[1]*headWidth*2.2).toFixed(1)} ${(headX+headNormal[0]*headWidth).toFixed(1)} ${(headY+headNormal[1]*headWidth).toFixed(1)} Q${headX} ${headY} ${(headX-headNormal[0]*headWidth).toFixed(1)} ${(headY-headNormal[1]*headWidth).toFixed(1)} C${(control2[0]-control2Normal[0]*headWidth*2.2).toFixed(1)} ${(control2[1]-control2Normal[1]*headWidth*2.2).toFixed(1)} ${(control1[0]-control1Normal[0]*tailWidth*.72).toFixed(1)} ${(control1[1]-control1Normal[1]*tailWidth*.72).toFixed(1)} ${(tailX-tailNormal[0]*tailWidth).toFixed(1)} ${(tailY-tailNormal[1]*tailWidth).toFixed(1)} Z`
-        const particles=Array.from({length:particleCount},(_,particleIndex)=>{const progress=particleIndex/(particleCount-1),longitudinalJitter=(((particleIndex*13+seed+index)%7)-3)*.004,t=.035+progress*.82+longitudinalJitter,u=1-t,pointX=u**3*tailX+3*u**2*t*control1[0]+3*u*t**2*control2[0]+t**3*headX,pointY=u**3*tailY+3*u**2*t*control1[1]+3*u*t**2*control2[1]+t**3*headY,scatterRatio=(((particleIndex*7+seed+index*3)%11)-5)/5,scatter=scatterRatio*(tailOuterWidth*(1-t)*.72+.025*unit),particleNormal=radialNormal([pointX,pointY]),radius=(.014+((particleIndex*3+seed)%4)*.004+t*.012)*unit,opacity=.06+t*.25;return `<circle class="comet-particle" cx="${(pointX+particleNormal[0]*scatter).toFixed(1)}" cy="${(pointY+particleNormal[1]*scatter).toFixed(1)}" r="${radius.toFixed(2)}" opacity="${opacity.toFixed(2)}"/>`}).join('')
-        cometDefs.push(`<linearGradient id="${gradientId}" gradientUnits="userSpaceOnUse" x1="${tailX}" y1="${tailY}" x2="${headX}" y2="${headY}"><stop class="comet-stop tail" offset="0"/><stop class="comet-stop mid" offset=".58"/><stop class="comet-stop head" offset="1"/></linearGradient>`)
-        return `<g class="comet" data-gravity-center-x="${cx}" data-gravity-center-y="${cy}" data-head-x="${headX}" data-head-y="${headY}" data-control-x="${control2[0].toFixed(2)}" data-control-y="${control2[1].toFixed(2)}" data-tail-x="${tailX.toFixed(2)}" data-tail-y="${tailY.toFixed(2)}" data-length-tier="${lengthTier}" data-arc-length="${arcLengthP.toFixed(3)}" data-curve-scale="${curveScale.toFixed(3)}" data-tail-width="${(tailOuterWidth/unit).toFixed(3)}"><path class="comet-tail outer" fill="url(#${gradientId})" d="${cometPath(tailOuterWidth,headOuterWidth)}"/><path class="comet-tail inner" fill="url(#${gradientId})" d="${cometPath(tailInnerWidth,headInnerWidth)}"/>${particles}<circle class="comet-halo" cx="${headX}" cy="${headY}" r="${(.16*unit).toFixed(2)}"/><circle class="comet-head" cx="${headX}" cy="${headY}" r="${(.075*unit).toFixed(2)}"/></g>`
-      })
+      const comets = (cometSpecs[name] ?? []).map(
+        (
+          [headXP, headYP, orbitDirection, baseArcLengthP, lengthTier = 1],
+          index
+        ) => {
+          const cometVariation = salt =>
+              fraction(
+                Math.sin((seed + index * 41 + salt * 17) * 12.9898) *
+                  43758.5453
+              ),
+            arcLengthP = baseArcLengthP * lengthTier *
+              (.76 + cometVariation(1) * .58),
+            curveScale = .72 + cometVariation(2) * .76,
+            radialLift = .018 + cometVariation(3) * .082
+          const headX = headXP / 100 * width,
+            headY = headYP / 50 * height,
+            unit = width / 100,
+            radius = Math.hypot(headX - cx, headY - cy) || 1,
+            headAngle = Math.atan2(headY - cy, headX - cx),
+            arcSpan = Math.min(
+              .62,
+              Math.max(.1, arcLengthP * unit / radius * curveScale)
+            )
+          const orbitPoint = progress => {
+            const remainingArc = 1 - progress,
+              angle = headAngle - orbitDirection * arcSpan * remainingArc,
+              localRadius = radius * (1 + radialLift * remainingArc ** 2)
+            return [
+              cx + Math.cos(angle) * localRadius,
+              cy + Math.sin(angle) * localRadius
+            ]
+          }
+          const [tailX, tailY] = orbitPoint(0),
+            control1 = orbitPoint(.34),
+            tangentX = orbitDirection * -Math.sin(headAngle),
+            tangentY = orbitDirection * Math.cos(headAngle),
+            tangentHandle = arcLengthP * unit * .28,
+            control2 = [
+              headX - tangentX * tangentHandle,
+              headY - tangentY * tangentHandle
+            ]
+          const radialNormal = ([x, y]) => {
+            const dx = x - cx,
+              dy = y - cy,
+              distance = Math.hypot(dx, dy) || 1
+            return [dx / distance, dy / distance]
+          }
+          const tailNormal = radialNormal([tailX, tailY]),
+            control1Normal = radialNormal(control1),
+            control2Normal = radialNormal(control2),
+            headNormal = radialNormal([headX, headY])
+          const tailOuterWidth = (1.15 + cometVariation(4) * 1.5) *
+              Math.sqrt(lengthTier) * unit,
+            tailInnerWidth = tailOuterWidth *
+              (.22 + cometVariation(5) * .13),
+            headOuterWidth = .075 * unit,
+            headInnerWidth = .032 * unit,
+            gradientId = `ow-comet-${name}-${index}`,
+            particleCount = 7 + Math.floor(cometVariation(6) * 7)
+          const cometPath = (tailWidth, headWidth) =>
+            `M${(tailX + tailNormal[0] * tailWidth).toFixed(1)} ${
+              (tailY + tailNormal[1] * tailWidth).toFixed(1)
+            } C${
+              (control1[0] + control1Normal[0] * tailWidth * .72).toFixed(1)
+            } ${
+              (control1[1] + control1Normal[1] * tailWidth * .72).toFixed(1)
+            } ${
+              (control2[0] + control2Normal[0] * headWidth * 2.2).toFixed(1)
+            } ${
+              (control2[1] + control2Normal[1] * headWidth * 2.2).toFixed(1)
+            } ${(headX + headNormal[0] * headWidth).toFixed(1)} ${
+              (headY + headNormal[1] * headWidth).toFixed(1)
+            } Q${headX} ${headY} ${
+              (headX - headNormal[0] * headWidth).toFixed(1)
+            } ${(headY - headNormal[1] * headWidth).toFixed(1)} C${
+              (control2[0] - control2Normal[0] * headWidth * 2.2).toFixed(1)
+            } ${
+              (control2[1] - control2Normal[1] * headWidth * 2.2).toFixed(1)
+            } ${
+              (control1[0] - control1Normal[0] * tailWidth * .72).toFixed(1)
+            } ${
+              (control1[1] - control1Normal[1] * tailWidth * .72).toFixed(1)
+            } ${(tailX - tailNormal[0] * tailWidth).toFixed(1)} ${
+              (tailY - tailNormal[1] * tailWidth).toFixed(1)
+            } Z`
+          const particles = Array.from(
+            { length: particleCount },
+            (_, particleIndex) => {
+              const progress = particleIndex / (particleCount - 1),
+                longitudinalJitter =
+                  (((particleIndex * 13 + seed + index) % 7) - 3) * .004,
+                t = .035 + progress * .82 + longitudinalJitter,
+                u = 1 - t,
+                pointX = u ** 3 * tailX + 3 * u ** 2 * t * control1[0] +
+                  3 * u * t ** 2 * control2[0] + t ** 3 * headX,
+                pointY = u ** 3 * tailY + 3 * u ** 2 * t * control1[1] +
+                  3 * u * t ** 2 * control2[1] + t ** 3 * headY,
+                scatterRatio =
+                  (((particleIndex * 7 + seed + index * 3) % 11) - 5) / 5,
+                scatter = scatterRatio *
+                  (tailOuterWidth * (1 - t) * .72 + .025 * unit),
+                particleNormal = radialNormal([pointX, pointY]),
+                radius = (.014 + ((particleIndex * 3 + seed) % 4) * .004 +
+                  t * .012) * unit,
+                opacity = .06 + t * .25
+              return `<circle class="comet-particle" cx="${
+                (pointX + particleNormal[0] * scatter).toFixed(1)
+              }" cy="${
+                (pointY + particleNormal[1] * scatter).toFixed(1)
+              }" r="${radius.toFixed(2)}" opacity="${opacity.toFixed(2)}"/>`
+            }
+          ).join('')
+          cometDefs.push(
+            `<linearGradient id="${gradientId}" gradientUnits="userSpaceOnUse" x1="${tailX}" y1="${tailY}" x2="${headX}" y2="${headY}"><stop class="comet-stop tail" offset="0"/><stop class="comet-stop mid" offset=".58"/><stop class="comet-stop head" offset="1"/></linearGradient>`
+          )
+          return `<g class="comet" data-gravity-center-x="${cx}" data-gravity-center-y="${cy}" data-head-x="${headX}" data-head-y="${headY}" data-control-x="${
+            control2[0].toFixed(2)
+          }" data-control-y="${control2[1].toFixed(2)}" data-tail-x="${
+            tailX.toFixed(2)
+          }" data-tail-y="${
+            tailY.toFixed(2)
+          }" data-length-tier="${lengthTier}" data-arc-length="${
+            arcLengthP.toFixed(3)
+          }" data-curve-scale="${curveScale.toFixed(3)}" data-tail-width="${
+            (tailOuterWidth / unit).toFixed(3)
+          }"><path class="comet-tail outer" fill="url(#${gradientId})" d="${
+            cometPath(tailOuterWidth, headOuterWidth)
+          }"/><path class="comet-tail inner" fill="url(#${gradientId})" d="${
+            cometPath(tailInnerWidth, headInnerWidth)
+          }"/>${particles}<circle class="comet-halo" cx="${headX}" cy="${headY}" r="${
+            (.16 * unit).toFixed(2)
+          }"/><circle class="comet-head" cx="${headX}" cy="${headY}" r="${
+            (.075 * unit).toFixed(2)
+          }"/></g>`
+        }
+      )
       for (let index = 0; index < count; index += 1) {
-        const sourceX = -36 + fraction(Math.sin((index + 1) * 12.9898 + seed) * 43758.5453) * (width + 72)
-        const sourceY = -24 + fraction(Math.sin((index + 1) * 78.233 + seed * .73) * 23421.631) * (height + 48)
-        if (Math.hypot((sourceX-cx)/width*100, (sourceY-cy)/height*50) < 9.4) continue
+        const sourceX = -36 +
+          fraction(Math.sin((index + 1) * 12.9898 + seed) * 43758.5453) *
+            (width + 72)
+        const sourceY = -24 +
+          fraction(
+              Math.sin((index + 1) * 78.233 + seed * .73) * 23421.631
+            ) * (height + 48)
+        if (
+          Math.hypot(
+            (sourceX - cx) / width * 100,
+            (sourceY - cy) / height * 50
+          ) < 9.4
+        ) continue
         const dx = sourceX - cx
         const dy = sourceY - cy
-        const influence = Math.exp(-((dx/width*100) ** 2 + (dy/height*50) ** 2) / (2 * 18 * 18))
+        const influence = Math.exp(
+          -((dx / width * 100) ** 2 + (dy / height * 50) ** 2) /
+            (2 * 18 * 18)
+        )
         const scale = 1 - curvature * .48 * influence
         const x = cx + dx * scale
         const y = cy + dy * scale
-        if (Math.hypot((x-cx)/width*100, (y-cy)/height*50) < 9.4) continue
+        if (
+          Math.hypot((x - cx) / width * 100, (y - cy) / height * 50) < 9.4
+        ) continue
         if (index % 17 === 0) {
-          const xp=x/width*100,yp=y/height*50
-          if(xp<1.5||xp>98.5||yp<1.7||yp>48.3)continue
-          if(name==='social'&&Math.hypot(xp-83,yp-11)<4.4)continue
+          const xp = x / width * 100, yp = y / height * 50
+          if (xp < 1.5 || xp > 98.5 || yp < 1.7 || yp > 48.3) continue
+          if (name === 'social' && Math.hypot(xp - 83, yp - 11) < 4.4) {
+            continue
+          }
           const angle = -8 + seed % 7
-          stars.push(`<g class="diffraction" transform="rotate(${angle} ${x.toFixed(1)} ${y.toFixed(1)})"><circle class="diffraction-halo" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5.9"/><path class="diffraction-primary" d="M${x.toFixed(1)} ${(y-11).toFixed(1)} L${(x+.32).toFixed(1)} ${y.toFixed(1)} L${x.toFixed(1)} ${(y+11).toFixed(1)} L${(x-.32).toFixed(1)} ${y.toFixed(1)} Z"/><path class="diffraction-secondary" d="M${(x-4.4).toFixed(1)} ${y.toFixed(1)} L${x.toFixed(1)} ${(y+.28).toFixed(1)} L${(x+4.4).toFixed(1)} ${y.toFixed(1)} L${x.toFixed(1)} ${(y-.28).toFixed(1)} Z"/><circle class="diffraction-core" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="1.2"/><circle class="diffraction-companion" cx="${(x+6).toFixed(1)}" cy="${(y-2.7).toFixed(1)}" r=".45"/></g>`)
+          stars.push(
+            `<g class="diffraction" transform="rotate(${angle} ${
+              x.toFixed(1)
+            } ${y.toFixed(1)})"><circle class="diffraction-halo" cx="${
+              x.toFixed(1)
+            }" cy="${
+              y.toFixed(1)
+            }" r="5.9"/><path class="diffraction-primary" d="M${
+              x.toFixed(1)
+            } ${(y - 11).toFixed(1)} L${(x + .32).toFixed(1)} ${
+              y.toFixed(1)
+            } L${x.toFixed(1)} ${(y + 11).toFixed(1)} L${
+              (x - .32).toFixed(1)
+            } ${y.toFixed(1)} Z"/><path class="diffraction-secondary" d="M${
+              (x - 4.4).toFixed(1)
+            } ${y.toFixed(1)} L${x.toFixed(1)} ${(y + .28).toFixed(1)} L${
+              (x + 4.4).toFixed(1)
+            } ${y.toFixed(1)} L${x.toFixed(1)} ${
+              (y - .28).toFixed(1)
+            } Z"/><circle class="diffraction-core" cx="${
+              x.toFixed(1)
+            }" cy="${
+              y.toFixed(1)
+            }" r="1.2"/><circle class="diffraction-companion" cx="${
+              (x + 6).toFixed(1)
+            }" cy="${(y - 2.7).toFixed(1)}" r=".45"/></g>`
+          )
           continue
         }
-        const tier = index % 11 === 0 ? 'bright' : index % 4 === 0 ? 'medium' : 'faint'
-        const radius = tier === 'bright' ? 2.2 : tier === 'medium' ? 1.45 : .9
-        const tone=['neutral','cool','warm'][(seed+index*7)%3],toneClass=tier==='bright'?` tone-${tone}`:''
-        const halo=tier==='bright'&&index%33===0?`<circle class="particle-halo tone-${tone}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(radius*2.4).toFixed(2)}"/>`:''
-        const satellites=index%13===0?`<circle class="particle-satellite" cx="${(x+3.45).toFixed(1)}" cy="${(y-1.4).toFixed(1)}" r=".45"/><circle class="particle-satellite" cx="${(x-2.3).toFixed(1)}" cy="${(y+2.4).toFixed(1)}" r=".28"/>`:''
-        stars.push(`${halo}<circle class="dot ${tier}${toneClass}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${radius}"/>${satellites}`)
+        const tier = index % 11 === 0
+          ? 'bright'
+          : index % 4 === 0
+          ? 'medium'
+          : 'faint'
+        const radius = tier === 'bright'
+          ? 2.2
+          : tier === 'medium'
+          ? 1.45
+          : .9
+        const tone = ['neutral', 'cool', 'warm'][(seed + index * 7) % 3],
+          toneClass = tier === 'bright' ? ` tone-${tone}` : ''
+        const halo = tier === 'bright' && index % 33 === 0
+          ? `<circle class="particle-halo tone-${tone}" cx="${
+            x.toFixed(1)
+          }" cy="${y.toFixed(1)}" r="${(radius * 2.4).toFixed(2)}"/>`
+          : ''
+        const satellites = index % 13 === 0
+          ? `<circle class="particle-satellite" cx="${
+            (x + 3.45).toFixed(1)
+          }" cy="${
+            (y - 1.4).toFixed(1)
+          }" r=".45"/><circle class="particle-satellite" cx="${
+            (x - 2.3).toFixed(1)
+          }" cy="${(y + 2.4).toFixed(1)}" r=".28"/>`
+          : ''
+        stars.push(
+          `${halo}<circle class="dot ${tier}${toneClass}" cx="${
+            x.toFixed(1)
+          }" cy="${y.toFixed(1)}" r="${radius}"/>${satellites}`
+        )
       }
-      return `<svg class="stars" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true"><defs>${cometDefs.join('')}</defs><ellipse class="well" cx="${cx}" cy="${cy}" rx="${width*.16}" ry="${height*.21}"/>${comets.join('')}${stars.join('')}</svg>`
+      return `<svg class="stars" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true"><defs>${
+        cometDefs.join('')
+      }</defs><ellipse class="well" cx="${cx}" cy="${cy}" rx="${
+        width * .16
+      }" ry="${height * .21}"/>${comets.join('')}${stars.join('')}</svg>`
     }
 
-    function solarLinks(cx, cy, width = 1280, height = 640, points = positions, curvature = 1) {
-      const colors = ['cyan','violet','amber']
+    function solarLinks(
+      cx,
+      cy,
+      width = 1280,
+      height = 640,
+      points = positions,
+      curvature = 1
+    ) {
+      const colors = ['cyan', 'violet', 'amber']
       const orbits = [
         `<ellipse class="orbit cyan" cx="${cx}" cy="${cy}" rx="265" ry="122" transform="rotate(-17 ${cx} ${cy})"/>`,
         `<ellipse class="orbit violet" cx="${cx}" cy="${cy}" rx="340" ry="177" transform="rotate(11 ${cx} ${cy})"/>`,
         `<ellipse class="orbit amber" cx="${cx}" cy="${cy}" rx="410" ry="220" transform="rotate(-5 ${cx} ${cy})"/>`
       ]
-      const pulls = points.map(([xp,yp], i) => {
-        const x = width*xp/100, y = height*yp/100
-        const bendX = cx + (x-cx)*(.54/curvature) + (i%2 ? 25 : -22)*curvature
-        const bendY = cy + (y-cy)*(.42/curvature) + (i%3-1)*18*curvature
+      const pulls = points.map(([xp, yp], i) => {
+        const x = width * xp / 100, y = height * yp / 100
+        const bendX = cx + (x - cx) * (.54 / curvature) +
+          (i % 2 ? 25 : -22) * curvature
+        const bendY = cy + (y - cy) * (.42 / curvature) +
+          (i % 3 - 1) * 18 * curvature
         return `<path class="pull" d="M${cx} ${cy} Q ${bendX} ${bendY}, ${x} ${y}"/>`
       })
-      return `<svg class="links" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true">${orbits.join('')}${pulls.join('')}</svg>`
+      return `<svg class="links" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true">${
+        orbits.join('')
+      }${pulls.join('')}</svg>`
     }
 
     function iconNodes(points = positions, limit = 12, compact = false) {
-      return [...runtimeIcons, ...providerIcons].slice(0, limit).map((src, i) => {
-        const [x,y] = points[i]
-        const provider = i >= runtimeIcons.length ? ' provider small' : compact ? ' small' : ''
-        return `<span class="node${provider}" style="left:calc(${x}% - 21px);top:calc(${y}% - 21px)"><img src="${src}" alt=""></span>`
-      }).join('')
+      return [...runtimeIcons, ...providerIcons].slice(0, limit).map(
+        (src, i) => {
+          const [x, y] = points[i]
+          const provider = i >= runtimeIcons.length
+            ? ' provider small'
+            : compact
+            ? ' small'
+            : ''
+          return `<span class="node${provider}" style="left:calc(${x}% - 21px);top:calc(${y}% - 21px)"><img src="${src}" alt=""></span>`
+        }
+      ).join('')
     }
 
     function channelIconNodes(points) {
       return channelIcons.map((src, i) => {
-        const [x,y] = points[i]
+        const [x, y] = points[i]
         return `<span class="node channel" style="left:calc(${x}% - 18px);top:calc(${y}% - 18px)"><img src="${src}" alt=""></span>`
       }).join('')
     }
 
     function orgIconNodes() {
-      return orgNodes.map(({ kind, point: [x,y], src }) => {
-        const className = kind === 'provider' ? ' provider small' : kind === 'channel' ? ' channel' : ''
+      return orgNodes.map(({ kind, point: [x, y], src }) => {
+        const className = kind === 'provider'
+          ? ' provider small'
+          : kind === 'channel'
+          ? ' channel'
+          : ''
         return `<span class="node${className}" style="left:calc(${x}% - 21px);top:calc(${y}% - 21px)"><img src="${src}" alt=""></span>`
       }).join('')
     }
 
-    const hub = (extra = '') => `<div class="hub ${extra}"><img src="${ow}" alt=""></div>`
-    const meta = labels => `<div class="meta">${labels.map(x=>`<span>${x}</span>`).join('')}</div>`
-    const vscodeMark = `<div class="platform-mark" aria-hidden="true"><svg viewBox="0 0 100 100"><path d="M72 8 34 42 14 27 5 37l19 17L5 71l9 10 20-15 38 34 23-10V18L72 8Zm0 24v44L47 54 72 32Z" fill="currentColor"/></svg></div>`
+    const hub = (extra = '') =>
+      `<div class="hub ${extra}"><img src="${ow}" alt=""></div>`
+    const meta = labels =>
+      `<div class="meta">${
+        labels.map(x => `<span>${x}</span>`).join('')
+      }</div>`
+    const vscodeMark =
+      `<div class="platform-mark" aria-hidden="true"><svg viewBox="0 0 100 100"><path d="M72 8 34 42 14 27 5 37l19 17L5 71l9 10 20-15 38 34 23-10V18L72 8Zm0 24v44L47 54 72 32Z" fill="currentColor"/></svg></div>`
 
     const cards = [
-      { name:'github-org-readme', cls:'org', width:1292, cx:646, cy:286, html:`
-        ${starField('org',646,286,1292,640,.7,94)}${gravityGrid(646,286,1292,640,72,52)}${solarLinks(646,286,1292,640,orgPositions)}${orgIconNodes()}${hub()}
-        <div class="copy"><h1>Every AI. Every channel. One workspace.</h1><p>Adapters, model services, and channels—connected around One Works.</p></div>` },
-      { name:'github-social-preview', cls:'social', width:1280, cx:875, cy:320, html:`
-        ${starField('social',875,320,1280,640,sharedCardCurvature,76)}${gravityGrid(875,320,1280,640,100,72,sharedCardCurvature)}${solarLinks(875,320,1280,640,[...positions,...socialChannelPositions],sharedCardCurvature)}${iconNodes()}${channelIconNodes(socialChannelPositions)}${hub()}
-        <div class="copy"><div class="eyebrow">One Works</div><h1>Connect every AI in one workspace.</h1><p>Adapters, model services, and channels orbit one local-first workspace.</p></div>` },
-      { name:'homepage-open-graph', cls:'social home', width:1200, height:600, cx:820, cy:300, html:`
-        ${starField('home',820,320,1200,600,sharedCardCurvature,76)}${gravityGrid(820,320,1200,600,100,72,sharedCardCurvature)}${solarLinks(820,320,1200,600,[...positions,...homeChannelPositions],sharedCardCurvature)}${iconNodes()}${channelIconNodes(homeChannelPositions)}${hub()}
-        <div class="copy"><div class="eyebrow">oneworks.ai</div><h1>Build with every AI in one workspace.</h1><p>Adapters · Model services · Channels</p></div>` },
-      { name:'vscode-marketplace', cls:'platform vscode', width:1280, cx:180, cy:320, html:`
-        ${starField('vscode',180,320,1280,640,sharedCardCurvature,62)}${gravityGrid(180,320,1280,640,100,72,sharedCardCurvature)}${solarLinks(180,320,1280,640,compactPositions,sharedCardCurvature)}${iconNodes(compactPositions,6,true)}${hub()}${vscodeMark}
-        <div class="copy"><div class="eyebrow">One Works for VS Code</div><h1>One Works in your editor.</h1><p>Open the full workspace in VS Code's right sidebar.</p>${meta(['Activity Bar','Workspace'])}</div>` },
-      { name:'chrome-web-store', cls:'platform chrome', width:1280, cx:180, cy:320, html:`
-        ${starField('chrome',180,320,1280,640,sharedCardCurvature,62)}${gravityGrid(180,320,1280,640,100,72,sharedCardCurvature)}${solarLinks(180,320,1280,640,compactPositions,sharedCardCurvature)}${iconNodes(compactPositions,6,true)}${hub()}<div class="platform-mark"><img src="${ASSETS.chrome}" alt=""></div>
-        <div class="copy"><div class="eyebrow">One Works Browser Control</div><h1>Control your browser.</h1><p>Pair Chrome with One Works and grant capabilities explicitly.</p>${meta(['Chrome','Local bridge'])}</div>` },
-      { name:'npm-readme-header', cls:'platform npm', width:1280, cx:180, cy:320, html:`
-        ${starField('npm',180,320,1280,640,sharedCardCurvature,62)}${gravityGrid(180,320,1280,640,100,72,sharedCardCurvature)}${solarLinks(180,320,1280,640,compactPositions,sharedCardCurvature)}${iconNodes(compactPositions,6,true)}${hub()}<div class="platform-mark"><img src="${ASSETS.npm}" alt=""></div>
-        <div class="copy"><div class="eyebrow">One Works CLI</div><h1>Start a complete AI workspace.</h1><p>One command. Every supported runtime. One workspace.</p>${meta(['npx oneworks'])}</div>` }
+      {
+        name: 'github-org-readme',
+        cls: 'org',
+        width: 1292,
+        cx: 646,
+        cy: 286,
+        html: `
+        ${starField('org', 646, 286, 1292, 640, .7, 94)}${
+          gravityGrid(646, 286, 1292, 640, 72, 52)
+        }${
+          solarLinks(646, 286, 1292, 640, orgPositions)
+        }${orgIconNodes()}${hub()}
+        <div class="copy"><h1>Every AI. Every channel. One workspace.</h1><p>Adapters, model services, and channels—connected around One Works.</p></div>`
+      },
+      {
+        name: 'github-social-preview',
+        cls: 'social',
+        width: 1280,
+        cx: 875,
+        cy: 320,
+        html: `
+        ${
+          starField('social', 875, 320, 1280, 640, sharedCardCurvature, 76)
+        }${gravityGrid(875, 320, 1280, 640, 100, 72, sharedCardCurvature)}${
+          solarLinks(875, 320, 1280, 640, [
+            ...positions,
+            ...socialChannelPositions
+          ], sharedCardCurvature)
+        }${iconNodes()}${channelIconNodes(socialChannelPositions)}${hub()}
+        <div class="copy"><div class="eyebrow">One Works</div><h1>Connect every AI in one workspace.</h1><p>Adapters, model services, and channels orbit one local-first workspace.</p></div>`
+      },
+      {
+        name: 'homepage-open-graph',
+        cls: 'social home',
+        width: 1200,
+        height: 600,
+        cx: 820,
+        cy: 300,
+        html: `
+        ${starField('home', 820, 320, 1200, 600, sharedCardCurvature, 76)}${
+          gravityGrid(820, 320, 1200, 600, 100, 72, sharedCardCurvature)
+        }${
+          solarLinks(820, 320, 1200, 600, [
+            ...positions,
+            ...homeChannelPositions
+          ], sharedCardCurvature)
+        }${iconNodes()}${channelIconNodes(homeChannelPositions)}${hub()}
+        <div class="copy"><div class="eyebrow">oneworks.ai</div><h1>Build with every AI in one workspace.</h1><p>Adapters · Model services · Channels</p></div>`
+      },
+      {
+        name: 'vscode-marketplace',
+        cls: 'platform vscode',
+        width: 1280,
+        cx: 180,
+        cy: 320,
+        html: `
+        ${
+          starField('vscode', 180, 320, 1280, 640, sharedCardCurvature, 62)
+        }${gravityGrid(180, 320, 1280, 640, 100, 72, sharedCardCurvature)}${
+          solarLinks(
+            180,
+            320,
+            1280,
+            640,
+            compactPositions,
+            sharedCardCurvature
+          )
+        }${iconNodes(compactPositions, 6, true)}${hub()}${vscodeMark}
+        <div class="copy"><div class="eyebrow">One Works for VS Code</div><h1>One Works in your editor.</h1><p>Open the full workspace in VS Code's right sidebar.</p>${
+          meta(['Activity Bar', 'Workspace'])
+        }</div>`
+      },
+      {
+        name: 'chrome-web-store',
+        cls: 'platform chrome',
+        width: 1280,
+        cx: 180,
+        cy: 320,
+        html: `
+        ${
+          starField('chrome', 180, 320, 1280, 640, sharedCardCurvature, 62)
+        }${gravityGrid(180, 320, 1280, 640, 100, 72, sharedCardCurvature)}${
+          solarLinks(
+            180,
+            320,
+            1280,
+            640,
+            compactPositions,
+            sharedCardCurvature
+          )
+        }${
+          iconNodes(compactPositions, 6, true)
+        }${hub()}<div class="platform-mark"><img src="${ASSETS.chrome}" alt=""></div>
+        <div class="copy"><div class="eyebrow">One Works Browser Control</div><h1>Control your browser.</h1><p>Pair Chrome with One Works and grant capabilities explicitly.</p>${
+          meta(['Chrome', 'Local bridge'])
+        }</div>`
+      },
+      {
+        name: 'npm-readme-header',
+        cls: 'platform npm',
+        width: 1280,
+        cx: 180,
+        cy: 320,
+        html: `
+        ${starField('npm', 180, 320, 1280, 640, sharedCardCurvature, 62)}${
+          gravityGrid(180, 320, 1280, 640, 100, 72, sharedCardCurvature)
+        }${
+          solarLinks(
+            180,
+            320,
+            1280,
+            640,
+            compactPositions,
+            sharedCardCurvature
+          )
+        }${
+          iconNodes(compactPositions, 6, true)
+        }${hub()}<div class="platform-mark"><img src="${ASSETS.npm}" alt=""></div>
+        <div class="copy"><div class="eyebrow">One Works CLI</div><h1>Start a complete AI workspace.</h1><p>One command. Every supported runtime. One workspace.</p>${
+          meta(['npx oneworks'])
+        }</div>`
+      }
     ]
     document.querySelector('#artboards').innerHTML = cards.map(card =>
-      `<section class="card ${card.cls}" data-name="${card.name}" style="--width:${card.width}px;--height:${card.height ?? 640}px">${card.html}</section>`
+      `<section class="card ${card.cls}" data-name="${card.name}" style="--width:${card.width}px;--height:${
+        card.height ?? 640
+      }px">${card.html}</section>`
     ).join('')
-  </script>
-</body>
+    </script>
+  </body>
 </html>

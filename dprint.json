@@ -31,7 +31,17 @@
     "**/*-lock.json",
     "apps/desktop/build/icon.svg",
     "apps/desktop/build/icons/**/*.svg",
-    "apps/client/public/favicon*.svg"
+    "apps/client/public/favicon*.svg",
+    "apps/relay-server/src/routes/assets/*.bundle.js",
+    "apps/relay-admin/public/favicon*.svg",
+    "apps/vscode-extension/resources/*.svg",
+    "assets/demo-video/**",
+    "assets/github-profile/**",
+    "assets/homepage/**",
+    "assets/icon/**",
+    "assets/pwa/**",
+    "assets/brand/**/*.svg",
+    "packages/plugins/external-browser-driver/assets/*.svg"
   ],
   "plugins": [
     "https://plugins.dprint.dev/typescript-0.95.11.wasm",
