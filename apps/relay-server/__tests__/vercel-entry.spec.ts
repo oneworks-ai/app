@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import path from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
@@ -13,7 +14,7 @@ import {
 describe('vercel Relay entry', () => {
   it('builds runtime workspace exports before tracing the Vercel function', () => {
     const packageJson = JSON.parse(
-      readFileSync(new URL('../package.json', import.meta.url), 'utf8')
+      readFileSync(path.join(process.cwd(), 'apps/relay-server/package.json'), 'utf8')
     ) as { scripts?: Record<string, string> }
     const buildScript = packageJson.scripts?.['build:vercel'] ?? ''
     const typesBuild = 'pnpm -C ../../packages/types build'
