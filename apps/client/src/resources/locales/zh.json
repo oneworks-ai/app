@@ -1289,6 +1289,8 @@
       "edit": "编辑",
       "create": "创建",
       "clone": "克隆",
+      "enterDirectory": "进入文件夹",
+      "openAsProject": "将此文件夹作为项目打开",
       "openDirectory": "打开目录",
       "context": "菜单",
       "contextKey": "右键",
