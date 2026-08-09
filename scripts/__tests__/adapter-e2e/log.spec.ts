@@ -129,7 +129,7 @@ describe('adapter e2e hook log parsing', () => {
     })
   })
 
-  it('stabilizes concurrently emitted terminal hook entries', () => {
+  it('preserves terminal hook entries in their observed order', () => {
     const result = createResult()
     result.logContent = [
       fixtureLog,
@@ -148,9 +148,9 @@ describe('adapter e2e hook log parsing', () => {
     ].join('\n')
 
     expect(createAdapterE2ESnapshot(result).log.entries.slice(-3).map(entry => entry.event)).toEqual([
-      'TaskStop',
       'Stop',
-      'SessionEnd'
+      'SessionEnd',
+      'TaskStop'
     ])
   })
 })

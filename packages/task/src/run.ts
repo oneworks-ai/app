@@ -422,12 +422,7 @@ export const run = async (
     model: resolvedModel,
     disabledEvents: nativeBridgeDisabledEvents
   })
-  let taskStopQueue = Promise.resolve()
   const wrappedOnEvent = (event: AdapterOutputEvent) => {
-    if (event.type !== 'operation') {
-      hookBridge.handleOutput(event)
-    }
-
     if (event.type === 'init') {
       originalOnEvent({
         ...event,
@@ -444,13 +439,8 @@ export const run = async (
 
     if (event.type === 'exit') {
       const { data } = event
-
-      taskStopQueue = taskStopQueue
-        .catch((e) => {
-          logger.error('[Hook] TaskStop queue failed', e)
-        })
-        .then(async () => {
-          await hookBridge.flush()
+      hookBridge.enqueueAfterPendingHooks(async () => {
+        try {
           await callHook('TaskStop', {
             adapter: adapterType,
             cwd: runtimeCtx.cwd,
@@ -462,10 +452,14 @@ export const run = async (
             exitCode: data.exitCode,
             stderr: data.stderr
           }, runtimeCtx.env)
-        })
-        .catch((e) => {
+        } catch (e) {
           logger.error('[Hook] TaskStop failed', e)
-        })
+        }
+      })
+    }
+
+    if (event.type !== 'operation') {
+      hookBridge.handleOutput(event)
     }
     originalOnEvent(event)
   }
@@ -514,7 +508,6 @@ export const run = async (
       flushHooks: async () => {
         await flushBridgeHooks?.()
         await hookBridge.flush()
-        await taskStopQueue
       }
     },
     ctx: runtimeCtx,

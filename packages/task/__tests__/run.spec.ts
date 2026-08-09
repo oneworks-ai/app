@@ -121,6 +121,7 @@ describe('task run adapter init', () => {
       start: vi.fn().mockResolvedValue(undefined),
       prepareInitialPrompt: vi.fn(async (prompt?: string) => prompt),
       wrapSession: vi.fn((session: unknown) => session),
+      enqueueAfterPendingHooks: vi.fn(),
       handleOutput: vi.fn(),
       flush: vi.fn().mockResolvedValue(undefined)
     })
@@ -1240,16 +1241,33 @@ describe('task run adapter init', () => {
     expect(loadAdapterMock).toHaveBeenCalledWith('codex')
   })
 
-  it('waits for a pending bridged PostToolUse before starting TaskStop', async () => {
+  it('enqueues TaskStop after pending output hooks and before passing exit to the bridge', async () => {
     const ctx = createCtx()
     const postToolUseFinished = Promise.withResolvers<void>()
-    let pendingOutputHook = Promise.resolve()
-    const flush = vi.fn(() => pendingOutputHook)
+    const lifecycle: string[] = []
+    const scheduled: string[] = []
+    let outputQueue: Promise<unknown> = Promise.resolve()
+    const enqueueAfterPendingHooks = vi.fn((runHook: () => Promise<unknown>) => {
+      scheduled.push('TaskStop')
+      outputQueue = outputQueue.catch(() => undefined).then(runHook)
+    })
     const handleOutput = vi.fn((event: { type: string; data?: { toolCall?: { output?: unknown } } }) => {
       if (event.type === 'message' && event.data?.toolCall?.output != null) {
-        // This is the same completed legacy tool-call shape that the hook bridge projects as PostToolUse.
-        pendingOutputHook = postToolUseFinished.promise
+        outputQueue = outputQueue.then(async () => {
+          lifecycle.push('PostToolUse:start')
+          await postToolUseFinished.promise
+          lifecycle.push('PostToolUse:end')
+        })
       }
+      if (event.type === 'exit') {
+        scheduled.push('SessionEnd')
+        outputQueue = outputQueue.catch(() => undefined).then(() => {
+          lifecycle.push('SessionEnd')
+        })
+      }
+    })
+    const flush = vi.fn(async () => {
+      await outputQueue
     })
     let emitEvent: ((event: unknown) => void) | undefined
 
@@ -1257,12 +1275,17 @@ describe('task run adapter init', () => {
       start: vi.fn().mockResolvedValue(undefined),
       prepareInitialPrompt: vi.fn(async (prompt?: string) => prompt),
       wrapSession: vi.fn((session: unknown) => session),
+      enqueueAfterPendingHooks,
       handleOutput,
       flush
     })
     queryMock.mockImplementation(async (_ctx, options) => {
       emitEvent = options.onEvent
       return { kill: vi.fn(), emit: vi.fn() }
+    })
+    callHookMock.mockImplementation(async (eventName) => {
+      if (eventName === 'TaskStop') lifecycle.push('TaskStop')
+      return { continue: true }
     })
     prepareMock.mockResolvedValue([ctx])
 
@@ -1290,16 +1313,77 @@ describe('task run adapter init', () => {
     })
     emitEvent?.({ type: 'exit', data: { exitCode: 0 } })
 
-    await vi.waitFor(() => expect(flush).toHaveBeenCalled())
+    await vi.waitFor(() => expect(lifecycle).toContain('PostToolUse:start'))
     expect(handleOutput).toHaveBeenCalledWith(expect.objectContaining({
       type: 'message',
       data: expect.objectContaining({ toolCall: expect.objectContaining({ output: 'done' }) })
     }))
+    expect(scheduled).toEqual(['TaskStop', 'SessionEnd'])
     expect(callHookMock.mock.calls.some(([eventName]) => eventName === 'TaskStop')).toBe(false)
 
     postToolUseFinished.resolve()
     await result.session.flushHooks()
 
-    expect(callHookMock.mock.calls.some(([eventName]) => eventName === 'TaskStop')).toBe(true)
+    expect(lifecycle).toEqual([
+      'PostToolUse:start',
+      'PostToolUse:end',
+      'TaskStop',
+      'SessionEnd'
+    ])
+  })
+
+  it('logs a rejected TaskStop and still lets the bridge finish SessionEnd', async () => {
+    const ctx = createCtx()
+    const lifecycle: string[] = []
+    const taskStopError = new Error('TaskStop rejected')
+    let outputQueue: Promise<unknown> = Promise.resolve()
+    let emitEvent: ((event: unknown) => void) | undefined
+
+    createAdapterHookBridgeMock.mockReturnValue({
+      start: vi.fn().mockResolvedValue(undefined),
+      prepareInitialPrompt: vi.fn(async (prompt?: string) => prompt),
+      wrapSession: vi.fn((session: unknown) => session),
+      enqueueAfterPendingHooks: vi.fn((runHook: () => Promise<unknown>) => {
+        outputQueue = outputQueue.catch(() => undefined).then(runHook)
+      }),
+      handleOutput: vi.fn((event: { type: string }) => {
+        if (event.type !== 'exit') return
+        outputQueue = outputQueue.catch(() => undefined).then(() => {
+          lifecycle.push('SessionEnd')
+        })
+      }),
+      flush: vi.fn(async () => {
+        await outputQueue
+      })
+    })
+    queryMock.mockImplementation(async (_ctx, options) => {
+      emitEvent = options.onEvent
+      return { kill: vi.fn(), emit: vi.fn() }
+    })
+    callHookMock.mockImplementation(async (eventName) => {
+      if (eventName === 'TaskStop') {
+        lifecycle.push('TaskStop')
+        throw taskStopError
+      }
+      return { continue: true }
+    })
+    prepareMock.mockResolvedValue([ctx])
+
+    const result = await run({
+      adapter: 'codex',
+      cwd: ctx.cwd,
+      env: {}
+    }, {
+      type: 'create',
+      runtime: 'cli',
+      sessionId: 'session-task-stop-error',
+      onEvent: vi.fn()
+    })
+
+    emitEvent?.({ type: 'exit', data: { exitCode: 1, stderr: 'failed' } })
+    await result.session.flushHooks()
+
+    expect(lifecycle).toEqual(['TaskStop', 'SessionEnd'])
+    expect(ctx.logger.error).toHaveBeenCalledWith('[Hook] TaskStop failed', taskStopError)
   })
 })

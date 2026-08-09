@@ -169,34 +169,6 @@ const inferToolNameFromHeader = (
   return normalized
 }
 
-const terminalHookOrder = new Map([
-  ['TaskStop', 0],
-  ['Stop', 1],
-  ['SessionEnd', 2]
-])
-
-const stabilizeTerminalHookOrder = <T extends { event?: unknown }>(entries: T[]) => {
-  const stabilized: T[] = []
-  let index = 0
-  while (index < entries.length) {
-    if (!terminalHookOrder.has(String(entries[index]?.event))) {
-      stabilized.push(entries[index] as T)
-      index += 1
-      continue
-    }
-
-    let end = index + 1
-    while (end < entries.length && terminalHookOrder.has(String(entries[end]?.event))) end += 1
-    stabilized.push(
-      ...entries.slice(index, end).sort((left, right) => (
-        (terminalHookOrder.get(String(left.event)) ?? 0) - (terminalHookOrder.get(String(right.event)) ?? 0)
-      ))
-    )
-    index = end
-  }
-  return stabilized
-}
-
 const summarizeLog = (content: string) => {
   const entries = parseHookLogEntries(content).map((entry) => {
     const adapter = pickNestedString(entry.payload, [['adapter']])
@@ -240,7 +212,7 @@ const summarizeLog = (content: string) => {
       ])
     })
   })
-  return stabilizeTerminalHookOrder(entries)
+  return entries
 }
 
 const summarizeStdout = (stdout: string) => {

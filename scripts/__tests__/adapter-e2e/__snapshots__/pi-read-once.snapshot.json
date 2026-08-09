@@ -97,15 +97,15 @@
         "toolName": "read"
       },
       {
-        "event": "TaskStop",
-        "adapter": "pi",
-        "redacted": true
-      },
-      {
         "event": "Stop",
         "adapter": "pi",
         "hookSource": "bridge",
         "canBlock": false
+      },
+      {
+        "event": "TaskStop",
+        "adapter": "pi",
+        "redacted": true
       },
       {
         "event": "SessionEnd",

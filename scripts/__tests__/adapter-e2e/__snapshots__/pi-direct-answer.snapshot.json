@@ -53,15 +53,15 @@
         "prompt": "Do not use any tool. Reply with exactly E2E_PI_DIRECT and nothing else."
       },
       {
-        "event": "TaskStop",
-        "adapter": "pi",
-        "redacted": true
-      },
-      {
         "event": "Stop",
         "adapter": "pi",
         "hookSource": "bridge",
         "canBlock": false
+      },
+      {
+        "event": "TaskStop",
+        "adapter": "pi",
+        "redacted": true
       },
       {
         "event": "SessionEnd",
