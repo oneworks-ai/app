@@ -297,7 +297,7 @@ export function ChatHeader({
     if (sessionId == null || sessionId === '') return
     try {
       await updateSession(sessionId, { isArchived: !isArchived })
-      void message.success(isArchived ? t('common.restored') : t('common.archived'))
+      void message.success(isArchived ? t('common.restoreSuccess') : t('common.archived'))
     } catch (err) {
       void message.error(getApiErrorMessage(err, t('common.operationFailed')))
     }
