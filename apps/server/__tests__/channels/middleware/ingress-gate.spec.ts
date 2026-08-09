@@ -115,6 +115,20 @@ describe('ingressGateMiddleware', () => {
     expect(next).toHaveBeenCalledOnce()
   })
 
+  it('blocks group slash commands when structured metadata targets another bot', async () => {
+    const next = vi.fn().mockResolvedValue(undefined)
+
+    await ingressGateMiddleware(
+      makeCtx({
+        inbound: { ...makeCtx().inbound, mentionedBot: false, text: '/status' } as any,
+        commandText: '/status'
+      }),
+      next
+    )
+
+    expect(next).not.toHaveBeenCalled()
+  })
+
   it('allows messages that explicitly mention the bot with a leading at tag', async () => {
     const next = vi.fn().mockResolvedValue(undefined)
 
@@ -125,6 +139,63 @@ describe('ingressGateMiddleware', () => {
           text: '[ou_1]:\n<at type="lark" user_id="ou_bot">OWO</at> 帮我看看'
         } as any,
         commandText: '帮我看看'
+      }),
+      next
+    )
+
+    expect(next).toHaveBeenCalledOnce()
+  })
+
+  it('blocks leading at tags that structured metadata identifies as another bot', async () => {
+    const next = vi.fn().mockResolvedValue(undefined)
+
+    await ingressGateMiddleware(
+      makeCtx({
+        inbound: {
+          ...makeCtx().inbound,
+          mentionedBot: false,
+          text: '[ou_1]:\n<at type="lark" user_id="ou_other">Other</at> 帮我看看'
+        } as any,
+        commandText: '帮我看看'
+      }),
+      next
+    )
+
+    expect(next).not.toHaveBeenCalled()
+  })
+
+  it('blocks structured mentions of another bot even when ambient routing is enabled', async () => {
+    const next = vi.fn().mockResolvedValue(undefined)
+
+    await ingressGateMiddleware(
+      makeCtx({
+        channelLink: {
+          ...makeCtx().channelLink!,
+          ingress: { ambientRouting: true }
+        },
+        inbound: {
+          ...makeCtx().inbound,
+          mentionedBot: false,
+          text: '<at type="lark" user_id="ou_other">Other</at> 帮我看看'
+        } as any
+      }),
+      next
+    )
+
+    expect(next).not.toHaveBeenCalled()
+  })
+
+  it('allows a structured mention of the current bot without relying on rendered text', async () => {
+    const next = vi.fn().mockResolvedValue(undefined)
+
+    await ingressGateMiddleware(
+      makeCtx({
+        inbound: {
+          ...makeCtx().inbound,
+          mentionedBot: true,
+          text: '平台未渲染 at 标签'
+        } as any,
+        commandText: '平台未渲染 at 标签'
       }),
       next
     )

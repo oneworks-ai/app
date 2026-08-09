@@ -39,6 +39,8 @@ export interface ServerRuntime {
   config: Awaited<ReturnType<typeof loadConfigState>>['mergedConfig']
 }
 
+export const shouldOwnWorkspaceRuntime = (role: string | undefined) => role !== 'manager'
+
 type StartupLog = (message: string) => void
 
 const BACKGROUND_PROJECT_HOME_MIGRATION_SEGMENTS = [
@@ -228,7 +230,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
   logStartup('create runtime returned')
   const { app, env, server, configs, config } = runtime
   const entryKind = resolveEntryKind(options)
-  const shouldStartRuntimeStoreWatcher = env.__ONEWORKS_PROJECT_SERVER_ROLE__ !== 'manager'
+  const ownsWorkspaceRuntime = shouldOwnWorkspaceRuntime(env.__ONEWORKS_PROJECT_SERVER_ROLE__)
   logStartup(`entry kind resolved kind=${entryKind}`)
   logStartup('config watch acquire begin')
   const configWatch = await acquireConfigWatchRuntime()
@@ -303,9 +305,13 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
     logStartup('routes mount complete')
     setupWebSocket(server, env)
     logStartup('websocket setup complete')
-    logStartup('channels init begin')
-    await initChannels(configs, { serverBaseUrl: serverPublicBaseUrl })
-    logStartup('channels init complete')
+    if (ownsWorkspaceRuntime) {
+      logStartup('channels init begin')
+      await initChannels(configs, { serverBaseUrl: serverPublicBaseUrl })
+      logStartup('channels init complete')
+    } else {
+      logStartup('channels init skipped for manager role')
+    }
     const {
       __ONEWORKS_PROJECT_SERVER_HOST__: serverHost,
       __ONEWORKS_PROJECT_SERVER_PORT__: serverPort,
@@ -339,7 +345,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
         resolve()
       })
     })
-    if (shouldStartRuntimeStoreWatcher) {
+    if (ownsWorkspaceRuntime) {
       scheduleRuntimeStoreWatcher()
       logStartup('channel resume scheduler start begin')
       channelResumeScheduler = startChannelResumeScheduler()

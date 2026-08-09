@@ -23,6 +23,8 @@ server 运行时通过 `__ONEWORKS_PROJECT_SERVER_ROLE__` 区分两类角色：
 - `manager`：不绑定用户 workspace，面向 launcher / daemon 控制面；project home 使用固定 `manager` key，默认 Web UI 进入 `/launcher`。
 - `workspace`：绑定单个 workspace，继续承载 session、config、git、files、plugins、runtime store 等项目内能力。
 
+`manager` 不初始化 workspace channel，也不消费 workspace runtime store。频道连接、runtime watcher 与 resume scheduler 必须由同一个 `workspace` server 持有，避免 manager 抢先去重入站消息后把会话留在无人消费的 runtime 目录。
+
 新增 launcher 控制面能力优先落到 manager role 的 route / service；不要把 workspace server 改成可随请求动态切目录，也不要把这类 Node 逻辑继续沉到 Electron main。每个 workspace 的长期运行态仍由独立 workspace server 维护。
 
 分层约定：routes/websocket/channels 只能做协议适配与参数整理；会话状态、配置装载、广播通知、交互等待队列等跨入口共享能力统一放在 services。

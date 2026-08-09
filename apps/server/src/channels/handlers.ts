@@ -123,6 +123,10 @@ export const handleInboundEvent = async (
   configSource?: ConfigSource,
   channelLinks: readonly ResolvedChannelLink[] = []
 ) => {
+  if (inbound.sessionType === 'group' && inbound.mentionedBot === false) {
+    return
+  }
+
   const channelLinkMatch = resolveInboundChannelLink(channelLinks, { channelKey, inbound })
   if (channelLinkMatch != null && channelLinkMatch.duplicates.length > 0) {
     logger.error({

@@ -11,6 +11,7 @@ import type {
 import { defineCreateChannelConnection } from '@oneworks/core/channel'
 
 import type {
+  LarkBotInfoResponse,
   LarkChannelConfig,
   LarkChannelMessage,
   LarkMessagePayload,
@@ -209,10 +210,26 @@ const toStandardSessionType = (chatType: string) => {
   return 'group'
 }
 
+const resolveCurrentBotOpenId = async (client: Client) => {
+  const result = ensureLarkSuccess(
+    'Lark bot identity resolution failed',
+    await client.request<LarkBotInfoResponse>({
+      url: '/open-apis/bot/v3/info',
+      method: 'GET'
+    })
+  )
+  const openId = result.bot?.open_id
+  if (openId == null || openId === '') {
+    throw new Error('Lark bot identity resolution failed: missing bot open_id')
+  }
+  return openId
+}
+
 const toChannelInboundEvent = async (
   payload: LarkMessagePayload,
   client: Client,
   options?: {
+    currentBotOpenId?: string
     tenantTokenProvider?: () => Promise<string | undefined>
   }
 ): Promise<ChannelInboundEvent | null> => {
@@ -263,11 +280,16 @@ const toChannelInboundEvent = async (
   const rawText = parsed.rawText
   const formattedText = parsed.formattedText
   const displayText = senderId ? `[${senderId}]:\n${formattedText ?? ''}` : formattedText
+  const groupMentions = message.chat_type === 'group' ? message.mentions : undefined
+  const mentionedBot = groupMentions == null || groupMentions.length === 0
+    ? undefined
+    : groupMentions.some(mention => mention.id?.open_id === options?.currentBotOpenId)
 
   return {
     channelType: 'lark',
     sessionType: toStandardSessionType(message.chat_type),
     channelId: message.chat_id,
+    mentionedBot,
     senderId,
     messageId: message.message_id,
     threadId: message.thread_id ?? message.root_id ?? message.parent_id,
@@ -327,10 +349,12 @@ export const createChannelConnection = defineCreateChannelConnection(async (
       await pushLarkFollowUps(messageId, followUps, tenantTokenProvider, config.domain)
     },
     startReceiving: async ({ handlers }) => {
+      const currentBotOpenId = await resolveCurrentBotOpenId(client)
       const dispatcher = new EventDispatcher({})
       dispatcher.register({
         'im.message.receive_v1': async (payload: unknown) => {
           const inbound = await toChannelInboundEvent(payload as LarkMessagePayload, client, {
+            currentBotOpenId,
             tenantTokenProvider
           })
           if (inbound == null) return

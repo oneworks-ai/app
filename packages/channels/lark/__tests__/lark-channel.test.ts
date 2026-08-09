@@ -599,8 +599,12 @@ describe('larkChannelDefinition.connect', () => {
       }
     }
     const EventDispatcher = vi.fn().mockImplementation(() => new MockDispatcher())
+    const request = vi.fn().mockResolvedValue({
+      code: 0,
+      bot: { open_id: 'ou_bot' }
+    })
     vi.doMock('@larksuiteoapi/node-sdk', () => ({
-      Client: vi.fn(),
+      Client: vi.fn().mockImplementation(() => ({ request })),
       Domain: { Feishu: 'Feishu' },
       WSClient,
       EventDispatcher,
@@ -642,6 +646,10 @@ describe('larkChannelDefinition.connect', () => {
     expect(wsStart).toHaveBeenCalledWith({
       eventDispatcher: dispatcher
     })
+    expect(request).toHaveBeenCalledWith({
+      url: '/open-apis/bot/v3/info',
+      method: 'GET'
+    })
     expect(handler).toHaveBeenCalledWith(expect.objectContaining({
       channelType: 'lark',
       sessionType: 'direct',
@@ -652,7 +660,7 @@ describe('larkChannelDefinition.connect', () => {
     }))
   })
 
-  it('formats mentions and strips url backticks', async () => {
+  it('formats mentions and identifies whether they target the current bot', async () => {
     vi.resetModules()
     const wsStart = vi.fn()
     const WSClient = vi.fn().mockImplementation(() => ({
@@ -666,8 +674,12 @@ describe('larkChannelDefinition.connect', () => {
       }
     }
     const EventDispatcher = vi.fn().mockImplementation(() => new MockDispatcher())
+    const request = vi.fn().mockResolvedValue({
+      code: 0,
+      bot: { open_id: 'ou_1' }
+    })
     vi.doMock('@larksuiteoapi/node-sdk', () => ({
-      Client: vi.fn(),
+      Client: vi.fn().mockImplementation(() => ({ request })),
       Domain: { Feishu: 'Feishu' },
       WSClient,
       EventDispatcher,
@@ -722,8 +734,54 @@ describe('larkChannelDefinition.connect', () => {
 
     expect(wsStart).toHaveBeenCalled()
     expect(handler).toHaveBeenCalledWith(expect.objectContaining({
+      mentionedBot: true,
       text:
         '[ou_sender]:\n<at type="lark" user_id="ou_1">二介</at> /reset <at type="lark" user_id="ou_2">奉自利</at> hi https://example.com/wiki/abc'
+    }))
+
+    handler.mockClear()
+    await dispatcher?.handlers['im.message.receive_v1']?.({
+      event_type: 'im.message.receive_v1',
+      message: {
+        chat_id: 'oc_xxx',
+        chat_type: 'group',
+        content: JSON.stringify({ text: '@_user_2 只找别人' }),
+        mentions: [{
+          id: { open_id: 'ou_2' },
+          key: '@_user_2',
+          name: '其他机器人'
+        }],
+        message_id: 'om_other'
+      },
+      sender: {
+        sender_id: {
+          open_id: 'ou_sender'
+        }
+      }
+    })
+
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({
+      mentionedBot: false
+    }))
+
+    handler.mockClear()
+    await dispatcher?.handlers['im.message.receive_v1']?.({
+      event_type: 'im.message.receive_v1',
+      message: {
+        chat_id: 'oc_xxx',
+        chat_type: 'group',
+        content: JSON.stringify({ text: '没有结构化 mention' }),
+        message_id: 'om_ambient'
+      },
+      sender: {
+        sender_id: {
+          open_id: 'ou_sender'
+        }
+      }
+    })
+
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({
+      mentionedBot: undefined
     }))
   })
 
@@ -731,6 +789,10 @@ describe('larkChannelDefinition.connect', () => {
     vi.resetModules()
     const create = vi.fn().mockResolvedValue({ code: 1001, msg: 'bad' })
     const Client = vi.fn().mockImplementation(() => ({
+      request: vi.fn().mockResolvedValue({
+        code: 0,
+        bot: { open_id: 'ou_1' }
+      }),
       im: {
         message: {
           create
@@ -781,6 +843,10 @@ describe('larkChannelDefinition.connect', () => {
       writeFile: vi.fn()
     })
     const Client = vi.fn().mockImplementation(() => ({
+      request: vi.fn().mockResolvedValue({
+        code: 0,
+        bot: { open_id: 'ou_1' }
+      }),
       im: {
         v1: {
           image: {

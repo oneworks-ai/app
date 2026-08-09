@@ -32,6 +32,7 @@ const shouldReplyOffHours = (ctx: ChannelContext) => (
     config: ctx.config,
     createOnCommand: false,
     createOnMention: ctx.channelLink?.ingress?.createOnMention,
+    mentionedBot: ctx.inbound.mentionedBot,
     mentionPatterns: ctx.channelLink?.ingress?.mentionPatterns,
     text: ctx.inbound.text
   })
@@ -46,6 +47,15 @@ const buildThrottleKey = (ctx: ChannelContext) =>
     ctx.inbound.sessionType,
     ctx.inbound.channelId
   ].join('\0')
+
+const isTargetedChannelCommand = (ctx: ChannelContext) =>
+  hasExplicitChannelIntent({
+    commandText: ctx.commandText,
+    config: ctx.config,
+    createOnMention: false,
+    mentionedBot: ctx.inbound.mentionedBot,
+    text: ctx.inbound.text
+  })
 
 const shouldSendThrottledReply = (ctx: ChannelContext, now: number) => {
   const throttleMs = ctx.channelLink?.availability?.offHours?.replyThrottleMs ??
@@ -85,6 +95,10 @@ const rememberOffhourBacklog = (ctx: ChannelContext, now: number) => {
 }
 
 export const availabilityGateMiddleware: ChannelMiddleware = async (ctx, next) => {
+  if (ctx.inbound.sessionType === 'group' && ctx.inbound.mentionedBot === false) {
+    return
+  }
+
   const availability = ctx.channelLink?.availability
   if (
     ctx.channelLink == null ||
@@ -92,7 +106,7 @@ export const availabilityGateMiddleware: ChannelMiddleware = async (ctx, next) =
     availability.enabled === false ||
     isBypassSender(ctx) ||
     isWithinAvailabilityWorkHours(availability) ||
-    isChannelCommandText(ctx.commandText, ctx.config)
+    (isChannelCommandText(ctx.commandText, ctx.config) && isTargetedChannelCommand(ctx))
   ) {
     await next()
     return

@@ -230,6 +230,8 @@ export interface ChannelInboundEvent {
   channelType: string
   sessionType: string
   channelId: string
+  /** Whether a structured platform mention targets the current bot. */
+  mentionedBot?: boolean
   senderId?: string
   messageId?: string
   text?: string

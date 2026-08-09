@@ -51,22 +51,51 @@ const readProjectConfig = (root: string) => {
   }
 }
 
-const readRepositoryPermission = (
+export const buildPushDryRunArgs = (targetRef: string) => [
+  'push',
+  '--dry-run',
+  '--no-verify',
+  '--no-recurse-submodules',
+  '--porcelain',
+  'origin',
+  `HEAD:${targetRef}`
+]
+
+const readRepositoryAccess = (
   cwd: string,
   repository: string | undefined,
-  ghAuthenticated: boolean
+  ghIdentityVerified: boolean
 ) => {
-  if (!ghAuthenticated || repository == null) return undefined
-  const result = runCommand('gh', ['repo', 'view', repository, '--json', 'viewerPermission'], cwd)
-  if (result.status !== 0) return undefined
+  if (!ghIdentityVerified || repository == null) {
+    return { permission: undefined, verified: false }
+  }
+  const result = runCommand('gh', ['api', `repos/${repository}`], cwd)
+  if (result.status !== 0) return { permission: undefined, verified: false }
 
   try {
     const parsed = JSON.parse(result.output) as {
-      viewerPermission?: string
+      permissions?: {
+        admin?: boolean
+        maintain?: boolean
+        pull?: boolean
+        push?: boolean
+        triage?: boolean
+      }
     }
-    return parsed.viewerPermission
+    const permission = parsed.permissions?.admin
+      ? 'ADMIN'
+      : parsed.permissions?.maintain
+      ? 'MAINTAIN'
+      : parsed.permissions?.push
+      ? 'WRITE'
+      : parsed.permissions?.triage
+      ? 'TRIAGE'
+      : parsed.permissions?.pull
+      ? 'READ'
+      : undefined
+    return { permission, verified: true }
   } catch {
-    return undefined
+    return { permission: undefined, verified: false }
   }
 }
 
@@ -79,25 +108,29 @@ export const inspectGitDeliveryReadiness = (
   const remoteResult = runCommand('git', ['remote', 'get-url', 'origin'], root)
   const remoteUrl = remoteResult.status === 0 ? remoteResult.output : undefined
   const repository = input.repository ?? resolveRepositoryFromRemote(remoteUrl)
-  const ghAuthResult = runCommand('gh', ['auth', 'status'], root)
-  const ghAuthenticated = ghAuthResult.status === 0
-  const sshResult = usesSshRemote(remoteUrl)
+  const ghIdentityResult = runCommand('gh', ['api', 'user', '--jq', '.login'], root)
+  const ghIdentityVerified = ghIdentityResult.status === 0 && ghIdentityResult.output.length > 0
+  const repositoryAccess = readRepositoryAccess(root, repository, ghIdentityVerified)
+  const branchResult = runCommand('git', ['branch', '--show-current'], root)
+  const branch = branchResult.status === 0 ? branchResult.output.trim() : ''
+  const targetRef = branch.length > 0 ? `refs/heads/${branch}` : undefined
+  const pushDryRunResult = usesSshRemote(remoteUrl) && targetRef != null
     ? runCommand(
-      'ssh',
-      ['-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', 'git@github.com'],
+      'git',
+      buildPushDryRunArgs(targetRef),
       root
     )
     : undefined
-  const sshAuthenticated = sshResult != null &&
-    /successfully authenticated/iu.test(sshResult.output)
 
   return evaluateGitDeliveryReadiness({
-    ghAuthenticated,
+    ghIdentityVerified,
     projectConfig: readProjectConfig(root),
+    pushDryRunVerified: pushDryRunResult?.status === 0,
     remoteUrl,
     repository,
-    repositoryPermission: readRepositoryPermission(root, repository, ghAuthenticated),
-    sshAuthenticated
+    repositoryAccessVerified: repositoryAccess.verified,
+    repositoryPermission: repositoryAccess.permission,
+    targetRef
   })
 }
 
@@ -109,18 +142,14 @@ export const runGitDeliveryCheck = async (input: RunGitDeliveryCheckInput = {}) 
   } else {
     console.log(result.ok ? '[git-delivery check] ok' : '[git-delivery check] failed')
     console.log(
-      `- project auto-review: ${result.checks.projectAutoReviewConfigured ? 'configured' : 'not configured'}`
+      `- project Full Access: ${result.checks.projectFullAccessConfigured ? 'configured' : 'not configured'}`
     )
-    console.log(`- gh authentication: ${result.checks.ghAuthenticated ? 'ready' : 'not ready'}`)
+    console.log(`- GitHub API identity: ${result.checks.ghIdentityVerified ? 'verified' : 'not verified'}`)
     console.log(
       `- repository permission: ${result.checks.repositoryPermission ?? 'unknown'}`
     )
     console.log(
-      `- SSH authentication: ${
-        result.checks.sshRequired
-          ? (result.checks.sshAuthenticated ? 'ready' : 'not ready')
-          : 'not required'
-      }`
+      `- exact-ref push dry-run: ${result.checks.pushDryRunVerified ? 'verified' : 'not verified'}`
     )
     for (const violation of result.violations) {
       console.error(`- ${violation}`)

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { handleSessionEvent } from '#~/channels/handlers.js'
+import { handleInboundEvent, handleSessionEvent } from '#~/channels/handlers.js'
 import { buildChannelSessionStopEvent } from '#~/channels/session-delivery.js'
 import { consumePendingUnack, deleteBinding, setBinding, setPendingUnack } from '#~/channels/state.js'
 import {
@@ -12,12 +12,26 @@ import {
 
 vi.mock('#~/db/index.js', () => ({
   getDb: vi.fn(() => ({
+    createChannelCommandRun: vi.fn(() => ({ id: 'cmd-run-1' })),
+    deleteChannelMessagesSeenBefore: vi.fn(),
+    finishChannelCommandRun: vi.fn(),
+    getChannelIdentityLink: vi.fn(),
+    getChannelPreference: vi.fn(),
+    getChannelSession: vi.fn(),
     getSession: vi.fn(),
     getSessionRuntimeState: vi.fn(),
+    rememberChannelMessage: vi.fn(() => true),
+    resolveCanonicalUserByChannelAccount: vi.fn(),
     updateSessionArchivedWithChildren: vi.fn(() => []),
     deleteChannelSessionBySessionId: vi.fn(),
     upsertChannelPreference: vi.fn(),
-    updateSession: vi.fn()
+    updateSession: vi.fn(),
+    upsertChannelAccount: vi.fn(input => ({
+      ...input,
+      accountKey: `${input.channelType}:${input.accountId}`,
+      createdAt: 1,
+      updatedAt: 1
+    }))
   }))
 }))
 
@@ -96,6 +110,16 @@ const makeRuntimeState = (
     } as any]
   ])
 
+const makeGroupChannelLink = (ingress: Record<string, unknown>) => ({
+  channelKey: 'test',
+  definition: {} as never,
+  entity: 'owo-demo',
+  external: { type: 'chat', chatId: 'chat_1' },
+  ingress,
+  name: 'wan-ke-chat',
+  path: '/workspace/.oo/channels/wan-ke-chat/channel.json'
+})
+
 const makeInteractionRequestEvent = (
   payload: Record<string, unknown>,
   id = 'interaction-1'
@@ -171,6 +195,125 @@ describe('channel handlers', () => {
     consumePendingUnack('sess-1')
     vi.unstubAllEnvs()
     vi.resetModules()
+  })
+
+  it('drops group messages that structurally mention another bot before pipeline side effects', async () => {
+    const ack = vi.fn().mockResolvedValue(undefined)
+    const unack = vi.fn().mockResolvedValue(undefined)
+    const sendMessage = vi.fn().mockResolvedValue({ messageId: 'om_unexpected' })
+
+    await handleInboundEvent(
+      'test',
+      {
+        channelType: 'lark',
+        sessionType: 'group',
+        channelId: 'chat_1',
+        messageId: 'om_other_bot',
+        senderId: 'user_1',
+        text: '/help',
+        mentionedBot: false,
+        ack,
+        unack,
+        raw: {}
+      },
+      { sendMessage } as any,
+      {
+        type: 'lark',
+        access: { admins: ['admin_1'] }
+      }
+    )
+
+    expect(ack).not.toHaveBeenCalled()
+    expect(unack).not.toHaveBeenCalled()
+    expect(sendMessage).not.toHaveBeenCalled()
+  })
+
+  it('does not execute a bare group command when command intent is disabled', async () => {
+    const ack = vi.fn().mockResolvedValue(undefined)
+    const unack = vi.fn().mockResolvedValue(undefined)
+    const sendMessage = vi.fn().mockResolvedValue({ messageId: 'om_unexpected' })
+
+    await handleInboundEvent(
+      'test',
+      {
+        channelType: 'lark',
+        sessionType: 'group',
+        channelId: 'chat_1',
+        messageId: 'om_bare_disabled',
+        senderId: 'admin_1',
+        text: '/help',
+        ack,
+        unack,
+        raw: {}
+      },
+      { sendMessage } as any,
+      { type: 'lark', access: { admins: ['admin_1'] } },
+      'project',
+      [makeGroupChannelLink({ ambientRouting: false, createOnCommand: false })] as any
+    )
+
+    expect(ack).not.toHaveBeenCalled()
+    expect(unack).not.toHaveBeenCalled()
+    expect(sendMessage).not.toHaveBeenCalled()
+  })
+
+  it('executes a group command when command intent is enabled', async () => {
+    const ack = vi.fn().mockResolvedValue(undefined)
+    const unack = vi.fn().mockResolvedValue(undefined)
+    const sendMessage = vi.fn().mockResolvedValue({ messageId: 'om_help' })
+
+    await handleInboundEvent(
+      'test',
+      {
+        channelType: 'lark',
+        sessionType: 'group',
+        channelId: 'chat_1',
+        messageId: 'om_bare_enabled',
+        senderId: 'admin_1',
+        text: '/help',
+        ack,
+        unack,
+        raw: {}
+      },
+      { sendMessage } as any,
+      { type: 'lark', access: { admins: ['admin_1'] } },
+      'project',
+      [makeGroupChannelLink({ ambientRouting: false, createOnCommand: true })] as any
+    )
+
+    expect(ack).toHaveBeenCalledOnce()
+    expect(unack).toHaveBeenCalledOnce()
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining('/help') }))
+  })
+
+  it('executes a mentioned group command even when bare command intent is disabled', async () => {
+    const ack = vi.fn().mockResolvedValue(undefined)
+    const unack = vi.fn().mockResolvedValue(undefined)
+    const sendMessage = vi.fn().mockResolvedValue({ messageId: 'om_help' })
+
+    await handleInboundEvent(
+      'test',
+      {
+        channelType: 'lark',
+        sessionType: 'group',
+        channelId: 'chat_1',
+        messageId: 'om_mentioned_enabled',
+        senderId: 'admin_1',
+        text: '/help',
+        mentionedBot: true,
+        ack,
+        unack,
+        raw: {}
+      },
+      { sendMessage } as any,
+      { type: 'lark', access: { admins: ['admin_1'] } },
+      'project',
+      [makeGroupChannelLink({ ambientRouting: false, createOnCommand: false })] as any
+    )
+
+    expect(ack).toHaveBeenCalledOnce()
+    expect(unack).toHaveBeenCalledOnce()
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining('/help') }))
   })
 
   it('delivers interaction requests to the bound channel and attaches quick actions', async () => {

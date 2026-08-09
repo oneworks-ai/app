@@ -11,6 +11,7 @@ const shouldAllowByExplicitIntent = (ctx: ChannelContext) => {
     config: ctx.config,
     createOnCommand: ingress?.createOnCommand,
     createOnMention: ingress?.createOnMention,
+    mentionedBot: ctx.inbound.mentionedBot,
     mentionPatterns: ingress?.mentionPatterns,
     text: ctx.inbound.text
   })
@@ -21,7 +22,7 @@ export const ingressGateMiddleware: ChannelMiddleware = async (ctx, next) => {
   if (
     ctx.channelLink == null ||
     ctx.inbound.sessionType !== 'group' ||
-    ingress?.ambientRouting !== false ||
+    (ctx.inbound.mentionedBot !== false && ingress?.ambientRouting !== false) ||
     shouldAllowByExplicitIntent(ctx)
   ) {
     await next()
