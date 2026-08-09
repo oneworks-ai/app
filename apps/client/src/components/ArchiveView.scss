@@ -114,9 +114,12 @@
   transition: border-color .2s ease, background-color .2s ease;
 }
 
-.archive-view__item-row:hover {
-  border-color: var(--sidebar-hover-bg, #e5e5e5);
-  background: var(--sidebar-hover-bg, #e5e5e5);
+.archive-view__item-row:hover,
+.archive-view__item-row:focus-within,
+.archive-view__item--confirming .archive-view__item-row {
+  border-color: color-mix(in srgb, var(--border-color) 72%, var(--text-color));
+  background: color-mix(in srgb, var(--bg-color) 88%, var(--text-color));
+  color: var(--text-color);
 }
 
 .archive-view__item-select {
@@ -204,13 +207,17 @@
   transition: opacity .2s ease, max-width .24s ease;
 }
 
-.archive-view__item-row:hover .archive-view__item-actions {
+.archive-view__item-row:hover .archive-view__item-actions,
+.archive-view__item-row:focus-within .archive-view__item-actions,
+.archive-view__item--confirming .archive-view__item-actions {
   max-width: 72px;
   opacity: 1;
   pointer-events: auto;
 }
 
-.archive-view__item-row:hover .archive-view__item-time {
+.archive-view__item-row:hover .archive-view__item-time,
+.archive-view__item-row:focus-within .archive-view__item-time,
+.archive-view__item--confirming .archive-view__item-time {
   opacity: 0;
   max-width: 0;
   margin-left: 0;

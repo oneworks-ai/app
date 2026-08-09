@@ -1,9 +1,9 @@
 import './ArchiveView.scss'
 
 import type { Session } from '@oneworks/core'
-import { App, Button, Checkbox, Empty, Input, List, Popconfirm, Space, Tag, Tooltip } from 'antd'
+import { App, Button, Checkbox, Empty, Input, List, Popconfirm, Tag, Tooltip } from 'antd'
 import dayjs from 'dayjs'
-import React, { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import useSWR from 'swr'
 
@@ -13,6 +13,16 @@ import { useRouteContainerSidebarOpener } from '#~/components/layout/use-route-c
 import { useRoutePluginChrome } from '#~/plugins/route-plugin-chrome'
 
 import { deleteSession, getApiErrorMessage, listSessions, updateSession } from '../api'
+import { ArchiveToolbarActions } from './archive-view/@components/ArchiveToolbarActions'
+import { useArchiveDeleteConfirmation } from './archive-view/@hooks/use-archive-delete-confirmation'
+import {
+  createArchiveKeyboardAction,
+  filterArchivedSessions,
+  getArchiveSelection,
+  getArchiveSessionClassName,
+  getArchiveSessionDetails,
+  toggleArchiveSelection
+} from './archive-view/@utils/archive-view-utils'
 
 export function ArchiveView() {
   const { t } = useTranslation()
@@ -27,20 +37,18 @@ export function ArchiveView() {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [isBatchMode, setIsBatchMode] = useState(false)
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set())
+  const pendingDeleteIdsRef = useRef<Set<string>>(new Set())
   const { headerActions: routePluginHeaderActions } = useRoutePluginChrome('archive')
 
-  const filteredSessions = useMemo(() => {
-    if (searchQuery.trim() === '') return sessions
-    const query = searchQuery.toLowerCase()
-    return sessions.filter((s: Session): boolean => {
-      const title = s.title ?? ''
-      const lastMsg = s.lastMessage ?? ''
-      const lastUserMsg = s.lastUserMessage ?? ''
-      const tags = (s.tags ?? []).join(' ')
-      const searchStr = `${title} ${s.id} ${lastMsg} ${lastUserMsg} ${tags}`.toLowerCase()
-      return searchStr.includes(query)
-    })
-  }, [sessions, searchQuery])
+  const filteredSessions = useMemo(
+    () => filterArchivedSessions(sessions, searchQuery),
+    [sessions, searchQuery]
+  )
+  const { deleteConfirmSessionId, setDeleteConfirmSessionId } = useArchiveDeleteConfirmation(
+    isBatchMode,
+    filteredSessions
+  )
 
   const handleRestore = async (id: string) => {
     try {
@@ -52,33 +60,70 @@ export function ArchiveView() {
     }
   }
 
-  const handleDelete = async (id: string) => {
+  const deleteArchivedSessions = async (
+    ids: string[],
+    feedback: { error: string; success: string }
+  ) => {
+    const uniqueIds = Array.from(new Set(ids))
+    if (
+      uniqueIds.length === 0 ||
+      uniqueIds.some(id => pendingDeleteIdsRef.current.has(id))
+    ) {
+      return
+    }
+
+    uniqueIds.forEach(id => pendingDeleteIdsRef.current.add(id))
+    setPendingDeleteIds(new Set(pendingDeleteIdsRef.current))
+
     try {
-      await deleteSession(id)
-      void message.success(t('common.deleteSuccess', 'Deleted successfully'))
-      void mutate()
-    } catch (err) {
-      void message.error(getApiErrorMessage(err, t('common.deleteFailed', 'Failed to delete')))
+      const results = await Promise.allSettled(uniqueIds.map(async id => deleteSession(id)))
+      const deletedIds = uniqueIds.filter((_, index) => results[index]?.status === 'fulfilled')
+      const failedIds = uniqueIds.filter((_, index) => results[index]?.status === 'rejected')
+
+      if (deletedIds.length > 0) {
+        const deletedIdSet = new Set(deletedIds)
+        try {
+          await mutate(
+            current =>
+              current == null
+                ? current
+                : { ...current, sessions: current.sessions.filter(session => !deletedIdSet.has(session.id)) },
+            { revalidate: false }
+          )
+        } catch {
+          // The server mutation already succeeded; revalidation below remains the cache recovery path.
+        }
+        void mutate()
+      }
+
+      if (failedIds.length === 0) {
+        void message.success(feedback.success)
+      } else {
+        const firstFailure = results.find(result => result.status === 'rejected')
+        const error = firstFailure?.status === 'rejected' ? firstFailure.reason : undefined
+        void message.error(getApiErrorMessage(error, feedback.error))
+      }
+
+      return { deletedIds, failedIds }
+    } finally {
+      uniqueIds.forEach(id => pendingDeleteIdsRef.current.delete(id))
+      setPendingDeleteIds(new Set(pendingDeleteIdsRef.current))
     }
   }
 
-  const handleToggleSelect = (id: string) => {
-    const next = new Set(selectedIds)
-    if (next.has(id)) {
-      next.delete(id)
-    } else {
-      next.add(id)
+  const handleDelete = async (id: string) => {
+    const result = await deleteArchivedSessions([id], {
+      error: t('common.deleteFailed', 'Failed to delete'),
+      success: t('common.deleteSuccess', 'Deleted successfully')
+    })
+    if (result?.failedIds.length === 0) {
+      setDeleteConfirmSessionId(current => current === id ? undefined : current)
     }
-    setSelectedIds(next)
   }
 
-  const handleSelectAll = (selected: boolean) => {
-    if (selected) {
-      setSelectedIds(new Set(filteredSessions.map(s => s.id)))
-    } else {
-      setSelectedIds(new Set())
-    }
-  }
+  const handleToggleSelect = (id: string) => setSelectedIds(toggleArchiveSelection(selectedIds, id))
+
+  const handleSelectAll = (selected: boolean) => setSelectedIds(getArchiveSelection(selected, filteredSessions))
 
   const handleBatchRestore = async () => {
     try {
@@ -93,18 +138,22 @@ export function ArchiveView() {
   }
 
   const handleBatchDelete = async () => {
-    try {
-      await Promise.all(Array.from(selectedIds).map(async (id) => deleteSession(id)))
-      void message.success(t('common.batchDeleteSuccess', 'Batch deleted successfully'))
+    const result = await deleteArchivedSessions(Array.from(selectedIds), {
+      error: t('common.batchDeleteFailed', 'Failed to delete some sessions'),
+      success: t('common.batchDeleteSuccess', 'Batch deleted successfully')
+    })
+    if (result == null) return
+
+    if (result.failedIds.length === 0) {
       setSelectedIds(new Set())
       setIsBatchMode(false)
-      void mutate()
-    } catch (err) {
-      void message.error(getApiErrorMessage(err, t('common.batchDeleteFailed', 'Failed to delete some sessions')))
+    } else {
+      setSelectedIds(new Set(result.failedIds))
     }
   }
 
   const isAllSelected = filteredSessions.length > 0 && selectedIds.size === filteredSessions.length
+  const hasPendingDelete = pendingDeleteIds.size > 0
   return (
     <RouteContainerLayout
       className={`archive-view ${isCompactView ? 'archive-view--compact' : ''}`}
@@ -124,7 +173,9 @@ export function ArchiveView() {
           <div className='archive-view__select-all'>
             <Tooltip title={isAllSelected ? t('common.deselectAll') : t('common.selectAll')}>
               <Checkbox
+                aria-label={isAllSelected ? t('common.deselectAll') : t('common.selectAll')}
                 checked={isAllSelected}
+                disabled={hasPendingDelete}
                 indeterminate={selectedIds.size > 0 && selectedIds.size < filteredSessions.length}
                 onChange={(e) => handleSelectAll(e.target.checked)}
               />
@@ -139,79 +190,20 @@ export function ArchiveView() {
           allowClear
           className='archive-view__search-input'
         />
-        <Space size={6} className='archive-view__toolbar-actions'>
-          {isBatchMode
-            ? (
-              <>
-                <span className='archive-view__batch-info'>
-                  {t('common.selectedCount', { count: selectedIds.size })}
-                </span>
-                <Tooltip title={t('common.cancel')}>
-                  <Button
-                    icon={
-                      <span className='material-symbols-rounded archive-view__action-icon'>
-                        close
-                      </span>
-                    }
-                    onClick={() => {
-                      setIsBatchMode(false)
-                      setSelectedIds(new Set())
-                    }}
-                    className='archive-view__icon-button'
-                  />
-                </Tooltip>
-                <Tooltip title={t('common.batchRestore')}>
-                  <Button
-                    type='primary'
-                    icon={
-                      <span className='material-symbols-rounded archive-view__action-icon'>
-                        unarchive
-                      </span>
-                    }
-                    onClick={() => {
-                      void handleBatchRestore()
-                    }}
-                    disabled={selectedIds.size === 0}
-                    className='archive-view__icon-button'
-                  />
-                </Tooltip>
-                <Popconfirm
-                  title={t('common.deleteConfirm', { count: selectedIds.size })}
-                  onConfirm={() => {
-                    void handleBatchDelete()
-                  }}
-                  disabled={selectedIds.size === 0}
-                >
-                  <Tooltip title={t('common.batchDelete')}>
-                    <Button
-                      danger
-                      icon={
-                        <span className='material-symbols-rounded archive-view__action-icon'>
-                          delete_sweep
-                        </span>
-                      }
-                      disabled={selectedIds.size === 0}
-                      className='archive-view__icon-button'
-                    />
-                  </Tooltip>
-                </Popconfirm>
-              </>
-            )
-            : (
-              <Tooltip title={t('common.batchMode')}>
-                <Button
-                  icon={
-                    <span className='material-symbols-rounded archive-view__action-icon'>
-                      checklist
-                    </span>
-                  }
-                  onClick={() => setIsBatchMode(true)}
-                  disabled={sessions.length === 0}
-                  className='archive-view__icon-button'
-                />
-              </Tooltip>
-            )}
-        </Space>
+        <ArchiveToolbarActions
+          hasPendingDelete={hasPendingDelete}
+          isBatchMode={isBatchMode}
+          onBatchDelete={() => void handleBatchDelete()}
+          onBatchRestore={() => void handleBatchRestore()}
+          onCancelBatch={() => {
+            setIsBatchMode(false)
+            setSelectedIds(new Set())
+          }}
+          onEnterBatch={() => setIsBatchMode(true)}
+          selectedCount={selectedIds.size}
+          sessionCount={sessions.length}
+          t={t}
+        />
       </div>
       <div className='archive-view__list'>
         {filteredSessions.length === 0
@@ -226,29 +218,29 @@ export function ArchiveView() {
               itemLayout='horizontal'
               dataSource={filteredSessions}
               renderItem={(session) => {
-                const displayTitle = (session.title != null && session.title !== '')
-                  ? session.title
-                  : (session.lastMessage != null && session.lastMessage !== '')
-                  ? session.lastMessage
-                  : t('common.newChat')
-                const sessionTags = session.tags ?? []
-                const visibleTags = isCompactView ? sessionTags.slice(0, 1) : sessionTags
-                const hiddenTagCount = Math.max(sessionTags.length - visibleTags.length, 0)
+                const { displayTitle, hiddenTagCount, visibleTags } = getArchiveSessionDetails(
+                  session,
+                  isCompactView,
+                  t
+                )
 
                 return (
                   <List.Item
-                    className={[
-                      'archive-view__item',
-                      selectedIds.has(session.id) ? 'archive-view__item--selected' : '',
-                      isBatchMode ? 'archive-view__item--batch' : ''
-                    ].filter(Boolean).join(' ')}
-                    onClick={() => isBatchMode && handleToggleSelect(session.id)}
+                    className={getArchiveSessionClassName(
+                      session.id,
+                      selectedIds,
+                      isBatchMode,
+                      deleteConfirmSessionId
+                    )}
+                    onClick={() => isBatchMode && !hasPendingDelete && handleToggleSelect(session.id)}
                   >
                     <div className='archive-view__item-row'>
                       {isBatchMode && (
                         <div className='archive-view__item-select'>
                           <Checkbox
+                            aria-label={`${t('common.select')} ${displayTitle}`}
                             checked={selectedIds.has(session.id)}
+                            disabled={hasPendingDelete}
                             onChange={() => handleToggleSelect(session.id)}
                             onClick={(e) => e.stopPropagation()}
                           />
@@ -275,7 +267,6 @@ export function ArchiveView() {
                           </span>
                         </div>
                       </div>
-
                       {!isBatchMode && (
                         <div className='archive-view__item-actions'>
                           <Tooltip title={t('common.restore')}>
@@ -286,18 +277,38 @@ export function ArchiveView() {
                               icon={
                                 <span className='material-symbols-rounded archive-view__action-icon'>unarchive</span>
                               }
+                              aria-label={t('common.restore')}
+                              disabled={hasPendingDelete}
                               onClick={(e) => {
                                 e.stopPropagation()
                                 void handleRestore(session.id)
                               }}
+                              onKeyDown={createArchiveKeyboardAction(hasPendingDelete, event => {
+                                event.stopPropagation()
+                                void handleRestore(session.id)
+                              })}
                             />
                           </Tooltip>
                           <Popconfirm
                             title={t('common.deleteSessionConfirm')}
+                            open={deleteConfirmSessionId === session.id}
+                            onOpenChange={(open) => {
+                              if (open && pendingDeleteIdsRef.current.size === 0) {
+                                setDeleteConfirmSessionId(session.id)
+                              } else if (!open && !pendingDeleteIdsRef.current.has(session.id)) {
+                                setDeleteConfirmSessionId(current => current === session.id ? undefined : current)
+                              }
+                            }}
+                            onCancel={() => {
+                              if (!pendingDeleteIdsRef.current.has(session.id)) {
+                                setDeleteConfirmSessionId(current => current === session.id ? undefined : current)
+                              }
+                            }}
                             onConfirm={(e) => {
                               e?.stopPropagation()
                               void handleDelete(session.id)
                             }}
+                            okButtonProps={{ loading: pendingDeleteIds.has(session.id) }}
                           >
                             <Button
                               type='text'
@@ -305,7 +316,13 @@ export function ArchiveView() {
                               danger
                               className='archive-view__item-action-button'
                               icon={<span className='material-symbols-rounded archive-view__action-icon'>delete</span>}
-                              onClick={(e) => e.stopPropagation()}
+                              aria-label={t('common.delete')}
+                              disabled={hasPendingDelete}
+                              loading={pendingDeleteIds.has(session.id)}
+                              onKeyDown={createArchiveKeyboardAction(
+                                hasPendingDelete,
+                                () => setDeleteConfirmSessionId(session.id)
+                              )}
                             />
                           </Popconfirm>
                         </div>
