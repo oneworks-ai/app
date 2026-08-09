@@ -231,7 +231,7 @@ jobs:
           ONEWORKS_DOCS_SOURCE_DIR: ${{ github.workspace }}/.oo/docs
         run: >-
           corepack "$(node -p "require('./assets/homepage/package.json').packageManager")"
-          -C assets/homepage build:docs
+          -C assets/homepage --filter @oneworks/docs build
 
   release-docs:
     name: release-docs-preflight

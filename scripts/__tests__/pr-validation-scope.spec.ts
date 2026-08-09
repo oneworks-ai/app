@@ -293,7 +293,7 @@ describe('required context completion contract', () => {
   it('adds only the relevant public and release documentation gates', () => {
     expect(qualityWorkflow).toContain('name: public-docs-build')
     expect(qualityWorkflow).toContain("require('./assets/homepage/package.json').packageManager")
-    expect(qualityWorkflow).toContain('-C assets/homepage build:docs')
+    expect(qualityWorkflow).toContain('-C assets/homepage --filter @oneworks/docs build')
     expect(qualityWorkflow).toContain('name: release-docs-preflight')
     expect(qualityWorkflow).toContain('--release-preflight')
 
