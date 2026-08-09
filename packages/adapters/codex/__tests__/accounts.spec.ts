@@ -536,6 +536,56 @@ describe('prepareCodexSessionHome', () => {
     expect(config).toContain(`[projects.${JSON.stringify(secondCwd)}]`)
   })
 
+  it('uses a machine-shared app-server home without linking workspace skills or hooks', async () => {
+    const fixture = await mkdtemp(join(tmpdir(), 'ow-codex-global-app-server-home-'))
+    const firstCwd = join(fixture, 'workspace-a')
+    const secondCwd = join(fixture, 'workspace-b')
+    const realHome = join(fixture, 'real-home')
+    tempDirs.push(fixture)
+    await Promise.all([mkdir(firstCwd), mkdir(secondCwd), mkdir(realHome)])
+    const createCtx = (cwd: string) => ({
+      cwd,
+      env: {
+        HOME: resolveTestMockHome(cwd, realHome),
+        __ONEWORKS_PROJECT_REAL_HOME__: realHome
+      },
+      ctxId: cwd.endsWith('a') ? 'ctx-a' : 'ctx-b',
+      configs: [] as AdapterCtx['configs']
+    })
+
+    const [first, second] = await Promise.all([
+      prepareCodexSessionHome({
+        ctx: createCtx(firstCwd),
+        sessionId: 'session-a',
+        appServerProfileKey: 'shared-profile',
+        nativeHooksAvailable: true,
+        sharedAppServerHome: true
+      }),
+      prepareCodexSessionHome({
+        ctx: createCtx(secondCwd),
+        sessionId: 'session-b',
+        appServerProfileKey: 'shared-profile',
+        nativeHooksAvailable: true,
+        sharedAppServerHome: true
+      })
+    ])
+
+    expect(first.homeDir).toBe(second.homeDir)
+    await expect(lstat(join(first.homeDir, '.agents', 'skills'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(lstat(join(first.homeDir, '.codex', 'skills'))).rejects.toMatchObject({ code: 'ENOENT' })
+    const hooks = JSON.parse(await readFile(join(first.homeDir, '.codex', 'hooks.json'), 'utf8')) as {
+      hooks: Record<string, Array<{ hooks?: Array<{ command?: string }> }>>
+    }
+    const managedCommands = Object.values(hooks.hooks).flatMap(groups =>
+      groups.flatMap(group => group.hooks?.map(hook => hook.command) ?? [])
+    ).filter(command => command?.includes('call-hook.js'))
+    expect(managedCommands).toHaveLength(Object.keys(hooks.hooks).length)
+    expect(managedCommands.every(command => !command?.includes('HOME='))).toBe(true)
+    const config = await readFile(join(first.homeDir, '.codex', 'config.toml'), 'utf8')
+    expect(config).toContain(`[projects.${JSON.stringify(firstCwd)}]`)
+    expect(config).toContain(`[projects.${JSON.stringify(secondCwd)}]`)
+  })
+
   it('trusts Codex native hooks through the isolated session home path', async () => {
     const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-session-hooks-'))
     const realHome = join(workspace, 'missing-real-home')

@@ -606,7 +606,14 @@
           "command": "npx"
         }
       },
-      "overlays": [],
+      "overlays": [
+        {
+          "assetId": "skill:workspace:workspace:research:<workspace>/.oo/skills/research/SKILL.md",
+          "kind": "skill",
+          "sourcePath": "<workspace>/.oo/skills/research",
+          "targetPath": "skills/research"
+        }
+      ],
       "diagnostics": [
         {
           "assetId": "agent:plugin:1:demo/release-helper:<workspace>/node_modules/@oneworks/plugin-demo/opencode/agents/release-helper.md",

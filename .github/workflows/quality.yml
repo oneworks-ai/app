@@ -212,14 +212,12 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 11.7.0
+          package_json_file: assets/homepage/package.json
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version-file: .node-version
-          cache: pnpm
-          cache-dependency-path: assets/homepage/pnpm-lock.yaml
 
       - name: Install docs dependencies
         run: pnpm -C assets/homepage install --frozen-lockfile

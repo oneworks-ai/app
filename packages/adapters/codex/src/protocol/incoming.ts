@@ -18,7 +18,7 @@ import type {
   ThreadNameUpdatedParams,
   TurnCompletedParams
 } from '#~/types.js'
-import type { CodexRpcClient } from './rpc'
+import type { CodexRpcTransport } from './rpc'
 
 const formatOptionalTurnErrorPart = (value: unknown) => {
   if (value == null) return undefined
@@ -122,7 +122,7 @@ export class CommandOutputAccumulator {
 export const handleIncomingNotification = (
   method: string,
   params: Record<string, unknown>,
-  _rpc: CodexRpcClient,
+  _rpc: CodexRpcTransport,
   onEvent: AdapterQueryOptions['onEvent'],
   msgAcc: AgentMessageAccumulator,
   cmdAcc: CommandOutputAccumulator,

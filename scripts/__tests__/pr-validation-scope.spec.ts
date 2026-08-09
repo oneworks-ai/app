@@ -292,6 +292,7 @@ describe('required context completion contract', () => {
 
   it('adds only the relevant public and release documentation gates', () => {
     expect(qualityWorkflow).toContain('name: public-docs-build')
+    expect(qualityWorkflow).toContain('package_json_file: assets/homepage/package.json')
     expect(qualityWorkflow).toContain('pnpm -C assets/homepage build:docs')
     expect(qualityWorkflow).toContain('name: release-docs-preflight')
     expect(qualityWorkflow).toContain('--release-preflight')
@@ -305,8 +306,11 @@ describe('required context completion contract', () => {
       qualityWorkflow.indexOf('  commit-message:')
     )
     expect(publicDocsJob).not.toContain('outputs.docs_only')
-    expect(publicDocsJob).toContain('version: 11.7.0')
+    expect(publicDocsJob).not.toContain('version: 11.7.0')
     expect(publicDocsJob).not.toContain('version: 10.33.0')
+    expect(publicDocsJob).toContain('package_json_file: assets/homepage/package.json')
+    expect(publicDocsJob).not.toContain('cache: pnpm')
+    expect(publicDocsJob).not.toContain('cache-dependency-path:')
     expect(releaseDocsJob).not.toContain('outputs.docs_only')
     expect(releaseDocsJob).toContain('--allow-mixed')
   })

@@ -110,6 +110,15 @@
         "require": "./dist/hook-bridge.js"
       }
     },
+    "./runtime-broker-driver": {
+      "__oneworks__": {
+        "default": "./src/runtime-broker-driver.ts"
+      },
+      "default": {
+        "import": "./dist/runtime-broker-driver.mjs",
+        "require": "./dist/runtime-broker-driver.js"
+      }
+    },
     "./plugins": {
       "__oneworks__": {
         "default": "./src/plugins/index.ts"
@@ -136,6 +145,7 @@
     "@oneworks/core": "workspace:*",
     "@oneworks/hooks": "workspace:*",
     "@oneworks/register": "workspace:*",
+    "@oneworks/runtime-broker": "workspace:*",
     "@oneworks/types": "workspace:*",
     "@oneworks/utils": "workspace:*",
     "smol-toml": "^1.7.0",

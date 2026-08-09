@@ -24,6 +24,7 @@ import { mobileDebugRouter } from './mobile-debug'
 import { modelProvidersRouter, modelServicesRouter } from './model-providers'
 import { moduleUpdatesRouter } from './module-updates'
 import { pluginsRouter } from './plugins'
+import { runtimeBrokerRouter } from './runtime-broker'
 import { sessionsRouter } from './sessions'
 import { skillHubRouter } from './skill-hub'
 import {
@@ -65,6 +66,7 @@ export const mountRoutes = async (
     { prefix: '/api/model-services', router: modelServicesRouter() },
     { prefix: '/api/mobile-debug', router: mobileDebugRouter() },
     { prefix: '/api/plugins', router: pluginsRouter() },
+    { prefix: '/api/internal/runtime-broker', router: runtimeBrokerRouter(env) },
     { prefix: '/api/auth', router: authRouter(env) },
     { prefix: '/api/ai', router: aiRouter() },
     { prefix: '/api/benchmark', router: benchmarkRouter() },

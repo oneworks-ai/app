@@ -15,6 +15,12 @@ import { loadConfigState } from '#~/services/config/index.js'
 import { acquireConfigWatchRuntime } from '#~/services/config/watch.js'
 import { initializeModelProviderCatalog } from '#~/services/model-providers/catalog-loader.js'
 import { getPluginManager } from '#~/services/plugins/index.js'
+import {
+  disposeRuntimeBrokerDrivers,
+  initializeRuntimeBrokerDrivers,
+  scheduleRuntimeBrokerWarmup
+} from '#~/services/runtime-broker/drivers/index.js'
+import { configureRuntimeBrokerTransport, disposeRuntimeBroker } from '#~/services/runtime-broker/index.js'
 import { autoImportNativeProjectHistoryAndReplay } from '#~/services/runtime-store/history-import.js'
 import { startRuntimeStoreWatcher } from '#~/services/runtime-store/watcher.js'
 import { installWebDebugChii } from '#~/services/web-debug/chii.js'
@@ -24,6 +30,8 @@ import type { ChannelConfigSourceEntry } from './channels'
 import { initMiddlewares } from './middlewares'
 import { isDefaultServerDataDir, migrateDefaultServerDataDir } from './project-home-data-migration'
 import { mountRoutes } from './routes'
+import { startRuntimeBrokerLoopbackTransport } from './routes/runtime-broker-transport'
+import type { RuntimeBrokerLoopbackTransport } from './routes/runtime-broker-transport'
 import { logger } from './utils/logger'
 import { setupWebSocket } from './websocket'
 
@@ -239,6 +247,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
   let runtimeStoreWatcherTimer: ReturnType<typeof setTimeout> | undefined
   let pluginRuntimePreloadTimer: ReturnType<typeof setTimeout> | undefined
   let channelResumeScheduler: ReturnType<typeof startChannelResumeScheduler> | undefined
+  let runtimeBrokerTransport: RuntimeBrokerLoopbackTransport | undefined
 
   const scheduleRuntimeStoreWatcher = () => {
     logStartup(`runtime store watcher start scheduled delay=${RUNTIME_STORE_WATCHER_DELAY_MS}ms`)
@@ -296,6 +305,9 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
       publicPaths: config.server?.publicPaths
     })
     logStartup('middlewares init complete')
+    if (env.__ONEWORKS_PROJECT_SERVER_ROLE__ === 'manager') {
+      await initializeRuntimeBrokerDrivers()
+    }
     const serverPublicBaseUrl = resolveServerPublicBaseUrl(config)
     logStartup('routes mount begin')
     const { onListen: mountRoutesOnListen } = await mountRoutes(app, env, {
@@ -311,6 +323,10 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
       logStartup('channels init complete')
     } else {
       logStartup('channels init skipped for manager role')
+    }
+    if (env.__ONEWORKS_PROJECT_SERVER_ROLE__ === 'manager') {
+      runtimeBrokerTransport = await startRuntimeBrokerLoopbackTransport(env)
+      configureRuntimeBrokerTransport(runtimeBrokerTransport.baseUrl)
     }
     const {
       __ONEWORKS_PROJECT_SERVER_HOST__: serverHost,
@@ -355,6 +371,9 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
       logStartup('channel resume scheduler skipped for manager role')
     }
     schedulePluginRuntimePreload()
+    if (env.__ONEWORKS_PROJECT_SERVER_ROLE__ === 'manager') {
+      scheduleRuntimeBrokerWarmup()
+    }
     scheduleProjectHomeSegmentMigration(logStartup)
 
     server.once('close', () => {
@@ -370,6 +389,14 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
       channelResumeScheduler?.stop()
       configWatch.release()
       void getPluginManager().dispose()
+      if (env.__ONEWORKS_PROJECT_SERVER_ROLE__ === 'manager') {
+        void runtimeBrokerTransport?.close().catch(error => {
+          logger.warn({ error }, '[runtime-broker] Failed to close loopback transport')
+        })
+        runtimeBrokerTransport = undefined
+        disposeRuntimeBrokerDrivers()
+        void disposeRuntimeBroker()
+      }
     })
 
     return runtime
@@ -385,6 +412,12 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
     runtimeStoreWatcher?.stop()
     channelResumeScheduler?.stop()
     configWatch.release()
+    if (env.__ONEWORKS_PROJECT_SERVER_ROLE__ === 'manager') {
+      await runtimeBrokerTransport?.close()
+      runtimeBrokerTransport = undefined
+      disposeRuntimeBrokerDrivers()
+      await disposeRuntimeBroker()
+    }
     throw error
   }
 }

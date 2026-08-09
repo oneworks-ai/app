@@ -1,10 +1,10 @@
 /* eslint-disable max-lines -- codex account runtime intentionally centralizes the account management flow. */
 import { Buffer } from 'node:buffer'
 import { spawn } from 'node:child_process'
-import { createHash, randomUUID } from 'node:crypto'
-import { access, chmod, lstat, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { access, lstat, mkdir, readFile, readdir, rm } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
 
 import { updateGlobalAdapterAccounts, withCanonicalConfigWriteLock } from '@oneworks/config'
@@ -46,8 +46,9 @@ import { createLogger } from '@oneworks/utils/create-logger'
 import { resolveCodexBinaryPath } from '#~/paths.js'
 import { CodexRpcClient } from '#~/protocol/rpc.js'
 import { fetchCodexProfileFromFile } from '#~/runtime/account-profile.js'
+import { writeCodexPrivateFileAtomically } from '#~/runtime/atomic-file.js'
 import { ensureCodexConfigCliCompatibility } from '#~/runtime/config.js'
-import { ensureCodexNativeHookTrustState } from '#~/runtime/native-hooks.js'
+import { ensureCodexNativeHookTrustState, ensureCodexSharedNativeHooksInstalled } from '#~/runtime/native-hooks.js'
 
 interface CodexConfiguredAccount {
   title?: string
@@ -245,8 +246,12 @@ const resolveCodexSessionHomeDir = (ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'ctxId
 
 const resolveCodexAppServerHomeDir = (
   ctx: Pick<AdapterCtx, 'cwd' | 'env'>,
-  profileKey: string
-) => resolveProjectOoPath(ctx.cwd, ctx.env, 'caches', 'adapter-codex-app-server', profileKey)
+  profileKey: string,
+  shared: boolean
+) =>
+  shared
+    ? resolve(resolveGlobalOneWorksDir(ctx.env), 'caches', 'adapter-codex-app-server', profileKey)
+    : resolveProjectOoPath(ctx.cwd, ctx.env, 'caches', 'adapter-codex-app-server', profileKey)
 
 const resolveCodexProbeHomeDir = (
   ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'ctxId'>,
@@ -1156,24 +1161,6 @@ const clearCodexAccountQuotaCacheUnlocked = async (
 
 type CodexAccountFileCtx = Pick<AdapterCtx, 'cwd' | 'env'> & Partial<Pick<AdapterCtx, 'ctxId' | 'logger'>>
 
-const writeTextFileAtomically = async (filePath: string, content: string) => {
-  await mkdir(dirname(filePath), { recursive: true })
-  const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`
-  try {
-    await writeFile(tempPath, content, {
-      encoding: 'utf8',
-      flag: 'wx',
-      mode: 0o600
-    })
-    await chmod(tempPath, 0o600)
-    await rename(tempPath, filePath)
-    await chmod(filePath, 0o600)
-  } catch (error) {
-    await rm(tempPath, { force: true }).catch(() => {})
-    throw error
-  }
-}
-
 const resolveConfiguredAuthFilePath = (ctx: Pick<AdapterCtx, 'cwd'>, authFile: string | undefined) => {
   const normalized = normalizeNonEmptyString(authFile)
   if (normalized == null) {
@@ -1651,7 +1638,7 @@ const writeDescriptorAuthSourceFile = async (params: {
 
   const homeDir = resolveCodexProbeHomeDir(params.ctx, `${params.scope}-${params.descriptor.key}`)
   const authFilePath = join(homeDir, 'auth-source.json')
-  await writeTextFileAtomically(authFilePath, params.descriptor.authContent)
+  await writeCodexPrivateFileAtomically(authFilePath, params.descriptor.authContent)
 
   return { homeDir, authFilePath }
 }
@@ -2732,6 +2719,20 @@ const collectCodexAccountDescriptors = async (
   }
 }
 
+export const listCodexAppServerWarmupAccountKeys = async (
+  ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'ctxId' | 'configs'>,
+  limit = 3
+) => {
+  const catalog = await collectCodexAccountDescriptors(ctx)
+  const orderedKeys = [
+    catalog.defaultAccount,
+    ...catalog.accounts
+      .filter(hasCodexAccountAuth)
+      .map(account => account.key)
+  ].filter((key): key is string => typeof key === 'string' && key.trim() !== '')
+  return [...new Set(orderedKeys)].slice(0, Math.max(0, limit))
+}
+
 const resolveCodexAccountSource = (params: {
   descriptor: CodexAccountDescriptor
   configuredAccount?: CodexConfiguredAccount
@@ -3052,9 +3053,13 @@ const writeCodexSessionConfigFile = async (params: {
   ctx: Pick<AdapterCtx, 'cwd' | 'env'>
   nativeProviderConfigOverrides?: string[]
   preserveExisting: boolean
+  sharedAppServerHome?: boolean
 }) => {
   const mockHome = resolveMockHome(params.ctx.cwd, params.ctx.env)
-  const sharedConfigPath = join(mockHome, '.codex', 'config.toml')
+  const configSourceHome = params.sharedAppServerHome
+    ? params.ctx.env.__ONEWORKS_PROJECT_REAL_HOME__?.trim() || homedir()
+    : mockHome
+  const sharedConfigPath = join(configSourceHome, '.codex', 'config.toml')
   let sharedConfigContent: string | undefined
   try {
     sharedConfigContent = await readFile(sharedConfigPath, 'utf8')
@@ -3078,22 +3083,19 @@ const writeCodexSessionConfigFile = async (params: {
     })
     : upsertCodexTrustedProject(existingConfigContent, params.ctx.cwd)
 
-  await mkdir(dirname(params.configPath), { recursive: true })
-  await rm(params.configPath, { force: true })
-  await writeFile(
-    params.configPath,
-    nextContent,
-    { encoding: 'utf8', mode: 0o600 }
-  )
+  await writeCodexPrivateFileAtomically(params.configPath, nextContent)
 }
 
 const syncSharedCodexSessionHomeFiles = async (
   ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'ctxId'>,
   homeDir: string,
-  sessionId: string
+  sessionId: string,
+  sharedAppServerHome: boolean
 ) => {
-  const mockHome = resolveMockHome(ctx.cwd, ctx.env)
   await mkdir(join(homeDir, '.codex', 'sessions'), { recursive: true })
+  if (sharedAppServerHome) return
+
+  const mockHome = resolveMockHome(ctx.cwd, ctx.env)
 
   const sharedMappings: Array<{ sourcePath: string; targetPath: string; type: 'dir' | 'file' }> = [
     {
@@ -3127,6 +3129,8 @@ export const prepareCodexSessionHome = async (params: {
   account?: string
   nativeProviderConfigOverrides?: string[]
   appServerProfileKey?: string
+  nativeHooksAvailable?: boolean
+  sharedAppServerHome?: boolean
 }) => {
   const { ctx, sessionId } = params
   const startupProfiler = createStartupProfiler({
@@ -3164,12 +3168,16 @@ export const prepareCodexSessionHome = async (params: {
           profile: params.appServerProfileKey
         }))
         .digest('hex')
-        .slice(0, 24)
+        .slice(0, 24),
+      params.sharedAppServerHome === true
     )
   const mockHome = resolveMockHome(ctx.cwd, ctx.env)
+  const bridgeSourceHome = params.sharedAppServerHome
+    ? ctx.env.__ONEWORKS_PROJECT_REAL_HOME__?.trim() || homedir()
+    : mockHome
   const bridgeStartedAt = startupProfiler.now()
   bridgeRealHomeToMockHome({
-    realHome: mockHome,
+    realHome: bridgeSourceHome,
     mockHome: homeDir,
     excludeEntries: [...CODEX_SESSION_HOME_BRIDGE_EXCLUDED_ENTRIES]
   })
@@ -3192,7 +3200,7 @@ export const prepareCodexSessionHome = async (params: {
   startupProfiler.mark('codex.accounts.unlinkRuntimeStateBridgePaths', unlinkRuntimeStateStartedAt)
   await mkdir(join(homeDir, '.codex'), { recursive: true })
   const sharedFilesStartedAt = startupProfiler.now()
-  await syncSharedCodexSessionHomeFiles(ctx, homeDir, sessionId)
+  await syncSharedCodexSessionHomeFiles(ctx, homeDir, sessionId, params.sharedAppServerHome === true)
   startupProfiler.mark('codex.accounts.syncSharedSessionHomeFiles', sharedFilesStartedAt)
   const sessionConfigStartedAt = startupProfiler.now()
   const sessionConfigPath = join(homeDir, '.codex', 'config.toml')
@@ -3201,19 +3209,28 @@ export const prepareCodexSessionHome = async (params: {
       configPath: targetPath,
       ctx,
       nativeProviderConfigOverrides: params.nativeProviderConfigOverrides,
-      preserveExisting: params.appServerProfileKey != null
+      preserveExisting: params.appServerProfileKey != null,
+      sharedAppServerHome: params.sharedAppServerHome
     })
-    await ensureCodexNativeHookTrustState({
-      configPath: targetPath,
-      hooksPath: join(homeDir, '.codex', 'hooks.json')
-    })
+    if (params.sharedAppServerHome === true) {
+      await ensureCodexSharedNativeHooksInstalled({
+        configPath: targetPath,
+        enabled: params.nativeHooksAvailable === true,
+        homeDir
+      })
+    } else {
+      await ensureCodexNativeHookTrustState({
+        configPath: targetPath,
+        hooksPath: join(homeDir, '.codex', 'hooks.json')
+      })
+    }
     await ensureCodexConfigCliCompatibility(targetPath)
   })
   startupProfiler.mark('codex.accounts.writeSessionConfig', sessionConfigStartedAt)
   const authStartedAt = startupProfiler.now()
   const sessionAuthPath = join(homeDir, '.codex', 'auth.json')
   if (selectedAccount?.authContent != null && selectedAccount.authFilePath == null) {
-    await writeTextFileAtomically(sessionAuthPath, selectedAccount.authContent)
+    await writeCodexPrivateFileAtomically(sessionAuthPath, selectedAccount.authContent)
   } else {
     await syncSymlinkTarget({
       sourcePath: selectedAccount?.authFilePath ?? join(homeDir, MISSING_AUTH_SENTINEL_FILE),

@@ -11,6 +11,7 @@ server 侧的 task / benchmark app-facing 入口位于 `@oneworks/app-runtime`�
 - services/session/：会话子域服务，统一承载生命周期、交互、通知与运行态管理
 - services/agent-room/：Agent Room 领域服务，负责 room/member/run/message 聚合、用户消息投递和 host session 公开投影
 - services/runtime-store/：统一 CLI runtime protocol 的事件读取、session 投影、Agent Room 投影和 runtime store watcher
+- services/runtime-broker/：manager-owned 共享资源入口；`index.ts` 只维护 workspace owner / callback 凭据和通用 driver 注册，`drivers/` 是 built-in driver composition 与各自后台 warmup；通用 lease / 双向消息核心位于 `@oneworks/runtime-broker`。内部 HTTP transport 由 `routes/runtime-broker-transport.ts` 独立监听 loopback，与 manager 的公开 bind / display host 解耦
 - services/automation/：automation 子域服务，集中放置规则执行与调度逻辑
 - channels/：频道接入层，处理外部 IM/机器人平台消息管道
 - db/：持久化层，封装 SQLite 连接、按领域拆分的 schema 模块与 repo
@@ -26,6 +27,8 @@ server 运行时通过 `__ONEWORKS_PROJECT_SERVER_ROLE__` 区分两类角色：
 `manager` 不初始化 workspace channel，也不消费 workspace runtime store。频道连接、runtime watcher 与 resume scheduler 必须由同一个 `workspace` server 持有，避免 manager 抢先去重入站消息后把会话留在无人消费的 runtime 目录。
 
 新增 launcher 控制面能力优先落到 manager role 的 route / service；不要把 workspace server 改成可随请求动态切目录，也不要把这类 Node 逻辑继续沉到 Electron main。每个 workspace 的长期运行态仍由独立 workspace server 维护。
+
+机器级共享的 adapter / plugin 子进程是例外：生命周期放在 manager 的 runtime broker driver，workspace 只持有 owner-bound lease。HTTP transport 使用独立的 loopback listener，不能从公开 server 的 `--host` / bind 地址反推内部 URL；route 只接受原始 loopback socket，并保持通用 `driver/profile/lease/operation/event/request/callback` 语义。adapter 或 plugin 字段只能出现在 driver 内，不能渗入 broker contract。manager 签发的 workspace token 不能调用 callback；resource callback token 必须绑定 broker generation + driver + profile，需要 owner 路由的 driver 还要绑定 lease。callback transport 使用稳定 callback ID、硬 deadline、结果 ACK、按 principal 分区的有界 admission，以及 ACK 丢失时的 retention / lease 回收实现幂等返回；broker generation 切换后旧 callback token 必须立即失效。
 
 分层约定：routes/websocket/channels 只能做协议适配与参数整理；会话状态、配置装载、广播通知、交互等待队列等跨入口共享能力统一放在 services。
 

@@ -109,6 +109,13 @@ describe('buildAdapterAssetPlan', () => {
     })
 
     expect(plan.mcpServers).toHaveProperty('docs')
+    expect(plan.overlays).toEqual([
+      expect.objectContaining({
+        assetId: researchSkillId,
+        kind: 'skill',
+        targetPath: 'skills/research'
+      })
+    ])
     expect(plan.diagnostics).toEqual(expect.arrayContaining([
       expect.objectContaining({
         assetId: researchSkillId,

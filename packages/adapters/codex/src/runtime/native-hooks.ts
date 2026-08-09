@@ -1,8 +1,9 @@
 /* eslint-disable max-lines */
 
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
+import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
+import process from 'node:process'
 
 import {
   buildNodeScriptCommand,
@@ -12,11 +13,14 @@ import {
   readJsonFileOrDefault,
   resolveManagedHookScriptPath,
   shellQuote,
-  writeJsonFile
+  writeJsonFile,
+  writeJsonFileAtomically
 } from '@oneworks/hooks'
 import type { NativeHookMatcherGroup } from '@oneworks/hooks'
 import type { AdapterCtx } from '@oneworks/types'
 import { unlinkMockHomeBridgePaths } from '@oneworks/utils'
+
+import { writeCodexPrivateFileAtomically } from './atomic-file'
 
 export const CODEX_NATIVE_HOOK_EVENTS = [
   'SessionStart',
@@ -277,8 +281,7 @@ export const ensureCodexNativeHookTrustState = async (params: {
   })
   if (nextContent === currentContent) return
 
-  await mkdir(dirname(params.configPath), { recursive: true })
-  await writeFile(params.configPath, nextContent, 'utf8')
+  await writeCodexPrivateFileAtomically(params.configPath, nextContent)
 }
 
 const createManagedGroup = (
@@ -291,7 +294,7 @@ const createManagedGroup = (
   hooks: [{
     type: 'command',
     command,
-    timeout: 600,
+    timeout: 720,
     statusMessage: `running oneworks ${eventName} hook`
   }]
 })
@@ -359,4 +362,30 @@ export const ensureCodexNativeHooksInstalled = async (
     env.__ONEWORKS_PROJECT_CODEX_NATIVE_HOOKS_AVAILABLE__ = '0'
     return false
   }
+}
+
+export const ensureCodexSharedNativeHooksInstalled = async (params: {
+  configPath: string
+  enabled: boolean
+  homeDir: string
+}) => {
+  const hooksPath = resolve(params.homeDir, '.codex', 'hooks.json')
+  const existing = await readJsonFileOrDefault<unknown>(hooksPath, {})
+  const command = buildNodeScriptCommand({
+    nodePath: process.execPath,
+    scriptPath: MANAGED_COMMAND_PATH
+  })
+  const merged = mergeManagedHookGroups({
+    existing,
+    eventNames: CODEX_NATIVE_HOOK_EVENTS,
+    enabled: params.enabled,
+    isManagedGroup,
+    createGroup: (eventName: string) => createManagedGroup(command, eventName as CodexNativeHookEvent)
+  })
+  await writeJsonFileAtomically(hooksPath, merged)
+  await ensureCodexNativeHookTrustState({
+    configPath: params.configPath,
+    hooksPath,
+    hooksConfig: merged
+  })
 }

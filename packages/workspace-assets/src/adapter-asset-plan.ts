@@ -149,7 +149,7 @@ export async function buildAdapterAssetPlan(params: {
         targetPath: asset.payload.targetSubpath
       }))
     ]
-    : params.adapter === 'copilot'
+    : params.adapter === 'codex' || params.adapter === 'copilot'
     ? selectedSkillOverlays
     : params.adapter === 'kimi'
     ? selectedSkillAssets.map((asset): AdapterOverlayEntry => ({

@@ -3,9 +3,17 @@
 import type { ChildProcess } from 'node:child_process'
 import { spawn } from 'node:child_process'
 
+import { RuntimeBrokerHttpClient, RuntimeBrokerRemoteError } from '@oneworks/runtime-broker'
 import type { Logger } from '@oneworks/utils/create-logger'
 
-import { CodexRpcClient } from '#~/protocol/rpc.js'
+import type { NativeCodexHookInput } from '#~/hook-bridge.js'
+import { CodexRpcClient, CodexRpcError } from '#~/protocol/rpc.js'
+import type { CodexRpcTransport } from '#~/protocol/rpc.js'
+import {
+  CODEX_APP_SERVER_RUNTIME_DRIVER_ID,
+  RUNTIME_BROKER_CALLBACK_TOKEN_ENV,
+  RUNTIME_BROKER_CALLBACK_URL_ENV
+} from '#~/runtime-broker-contract.js'
 
 type NotificationHandler = (method: string, params: Record<string, unknown>) => void
 type RequestHandler = (id: number, method: string, params: Record<string, unknown>) => void
@@ -15,6 +23,12 @@ interface ThreadHandlers {
   owner: symbol
   onNotification: NotificationHandler
   onRequest: RequestHandler
+}
+
+export interface CodexAppServerCloseSessionParams {
+  responses: Array<{ id: number; result: unknown }>
+  threadId: string
+  turnId?: string
 }
 
 interface PoolEntry {
@@ -40,22 +54,29 @@ export interface AcquireCodexAppServerParams {
   idleTimeoutMs: number
   logger: Logger
   profileKey: string
+  signal?: AbortSignal
 }
 
 export interface CodexAppServerLease {
+  closeSession?(params: CodexAppServerCloseSessionParams): Promise<void>
+  drain?(): Promise<void>
+  hookEnv?: Record<string, string>
   pid: number | undefined
-  rpc: CodexRpcClient
+  rpc: CodexRpcTransport
   registerThread(
     threadId: string,
+    cwd: string,
     handlers: Omit<ThreadHandlers, 'owner'>
-  ): void
-  unregisterThread(threadId: string): void
+  ): Promise<void>
+  unregisterThread(threadId: string): Promise<void>
   onExit(handler: ExitHandler): void
   release(): void
-  runThreadSetup<T>(task: () => Promise<T>): Promise<T>
+  runThreadSetup<T>(task: () => Promise<T>, options?: { cwd?: string; threadId?: string }): Promise<T>
+  setHookHandler?(handler: (input: NativeCodexHookInput) => Promise<Record<string, unknown>>): void
 }
 
-const pool = new Map<string, PoolEntry>()
+type CodexAppServerPool = Map<string, PoolEntry>
+const standalonePool: CodexAppServerPool = new Map()
 
 const readThreadId = (params: Record<string, unknown>) => {
   if (typeof params.threadId === 'string' && params.threadId !== '') return params.threadId
@@ -91,7 +112,7 @@ const resolveThreadHandlers = (
   return entry.threads.size === 1 ? entry.threads.values().next().value : undefined
 }
 
-const closeEntry = (entry: PoolEntry, reason: string) => {
+const closeEntry = (pool: CodexAppServerPool, entry: PoolEntry, reason: string) => {
   if (entry.exited) return
   entry.exited = true
   if (entry.idleTimer != null) clearTimeout(entry.idleTimer)
@@ -101,6 +122,7 @@ const closeEntry = (entry: PoolEntry, reason: string) => {
 }
 
 const createPoolEntry = (
+  pool: CodexAppServerPool,
   key: string,
   params: AcquireCodexAppServerParams
 ): PoolEntry => {
@@ -195,20 +217,21 @@ const createPoolEntry = (
     rpc.notify('initialized', {})
     return result
   }).catch((error) => {
-    closeEntry(entry, 'Codex app-server initialization failed')
+    closeEntry(pool, entry, 'Codex app-server initialization failed')
     throw error
   })
 
   return entry
 }
 
-export const acquireCodexAppServer = async (
+const acquireCodexAppServerFromPool = async (
+  pool: CodexAppServerPool,
   params: AcquireCodexAppServerParams
 ): Promise<CodexAppServerLease & { userAgent?: string }> => {
   const key = params.profileKey
   let entry = pool.get(key)
   if (entry == null || entry.exited) {
-    entry = createPoolEntry(key, params)
+    entry = createPoolEntry(pool, key, params)
     pool.set(key, entry)
   }
   if (entry.idleTimer != null) {
@@ -219,20 +242,35 @@ export const acquireCodexAppServer = async (
   const owner = Symbol('codex-app-server-lease')
   entry.leases.add(owner)
   let released = false
+  let removeAbortListener: () => void = () => undefined
   try {
-    const initResult = await entry.initPromise
+    const initializationAborted = new Promise<never>((_resolve, reject) => {
+      if (params.signal == null) return
+      const onAbort = () =>
+        reject(
+          params.signal?.reason instanceof Error
+            ? params.signal.reason
+            : new Error('Codex app-server acquisition was aborted.')
+        )
+      if (params.signal.aborted) onAbort()
+      else {
+        params.signal.addEventListener('abort', onAbort, { once: true })
+        removeAbortListener = () => params.signal?.removeEventListener('abort', onAbort)
+      }
+    })
+    const initResult = await Promise.race([entry.initPromise, initializationAborted])
     return {
       pid: entry.proc.pid,
       rpc: entry.rpc,
       userAgent: initResult.userAgent,
-      registerThread: (threadId, handlers) => {
+      registerThread: async (threadId, _cwd, handlers) => {
         const existing = entry?.threads.get(threadId)
         if (existing != null && existing.owner !== owner) {
           throw new Error(`Codex thread ${threadId} is already attached to another active session.`)
         }
         entry?.threads.set(threadId, { owner, ...handlers })
       },
-      unregisterThread: (threadId) => {
+      unregisterThread: async (threadId) => {
         if (entry?.threads.get(threadId)?.owner === owner) entry.threads.delete(threadId)
       },
       onExit: (handler) => {
@@ -265,7 +303,7 @@ export const acquireCodexAppServer = async (
         const idleTimeoutMs = Math.max(0, params.idleTimeoutMs)
         entry.idleTimer = setTimeout(() => {
           if (entry != null && entry.leases.size === 0) {
-            closeEntry(entry, 'Codex app-server idle timeout')
+            closeEntry(pool, entry, 'Codex app-server idle timeout')
           }
         }, idleTimeoutMs)
         entry.idleTimer.unref?.()
@@ -273,11 +311,240 @@ export const acquireCodexAppServer = async (
     }
   } catch (error) {
     entry.leases.delete(owner)
+    if (params.signal?.aborted === true && entry.leases.size === 0 && !entry.exited) {
+      closeEntry(pool, entry, 'Codex app-server acquisition aborted')
+    }
     throw error
+  } finally {
+    removeAbortListener()
   }
 }
 
-export const resetCodexAppServerPoolForTests = () => {
-  for (const entry of [...pool.values()]) closeEntry(entry, 'Codex app-server pool reset')
-  pool.clear()
+export const acquireLocalCodexAppServer = async (params: AcquireCodexAppServerParams) =>
+  await acquireCodexAppServerFromPool(standalonePool, params)
+
+export const createLocalCodexAppServerPool = () => {
+  const pool: CodexAppServerPool = new Map()
+  return {
+    acquire: async (params: AcquireCodexAppServerParams) => await acquireCodexAppServerFromPool(pool, params),
+    dispose: () => {
+      for (const entry of [...pool.values()]) closeEntry(pool, entry, 'Codex app-server pool disposed')
+      pool.clear()
+    }
+  }
 }
+
+const readBrokerConnection = (env: NodeJS.ProcessEnv) => {
+  const url = env.__ONEWORKS_PROJECT_RUNTIME_BROKER_URL__?.trim()
+  const token = env.__ONEWORKS_PROJECT_RUNTIME_BROKER_TOKEN__?.trim()
+  if (url == null && token == null) return undefined
+  if (url == null || url === '' || token == null || token === '') {
+    throw new Error('Runtime broker connection is incomplete; both URL and token are required.')
+  }
+  return { url, token }
+}
+
+const acquireRemoteCodexAppServer = async (
+  params: AcquireCodexAppServerParams,
+  connection: { token: string; url: string }
+): Promise<CodexAppServerLease & { userAgent?: string }> => {
+  const client = new RuntimeBrokerHttpClient({
+    ...connection,
+    onError: error => params.logger.warn('[codex runtime broker] transport failed', { error })
+  })
+  const lease = await client.acquire({
+    driverId: CODEX_APP_SERVER_RUNTIME_DRIVER_ID,
+    profileKey: params.profileKey,
+    payload: {
+      args: params.args,
+      binaryPath: params.binaryPath,
+      clientInfo: params.clientInfo,
+      cwd: params.cwd,
+      env: params.env,
+      experimentalApi: params.experimentalApi,
+      idleTimeoutMs: params.idleTimeoutMs
+    }
+  })
+  const metadata = lease.metadata != null && typeof lease.metadata === 'object' && !Array.isArray(lease.metadata)
+    ? lease.metadata as { hookConnection?: unknown; pid?: unknown; userAgent?: unknown }
+    : {}
+  const hookConnection = metadata.hookConnection != null &&
+      typeof metadata.hookConnection === 'object' &&
+      !Array.isArray(metadata.hookConnection)
+    ? metadata.hookConnection as { token?: unknown; url?: unknown }
+    : undefined
+  const hookEnv = typeof hookConnection?.url === 'string' && typeof hookConnection.token === 'string'
+    ? {
+      [RUNTIME_BROKER_CALLBACK_TOKEN_ENV]: hookConnection.token,
+      [RUNTIME_BROKER_CALLBACK_URL_ENV]: hookConnection.url
+    }
+    : undefined
+  const threadHandlers = new Map<string, Omit<ThreadHandlers, 'owner'>>()
+  const exitHandlers = new Set<ExitHandler>()
+  const outstandingInvocations = new Set<Promise<void>>()
+  const pendingResponsePayloads = new Map<number, unknown>()
+  let closing = false
+  let hookHandler: ((input: NativeCodexHookInput) => Promise<Record<string, unknown>>) | undefined
+
+  const trackInvocation = (
+    invocation: Promise<unknown>,
+    onFailure: (error: unknown) => void
+  ) => {
+    const tracked = invocation
+      .then(() => undefined)
+      .catch(onFailure)
+      .finally(() => outstandingInvocations.delete(tracked))
+    outstandingInvocations.add(tracked)
+  }
+
+  lease.onEvent('codex.rpc.notification', (rawPayload) => {
+    const payload = rawPayload as { method?: unknown; params?: unknown }
+    if (typeof payload?.method !== 'string' || payload.params == null || typeof payload.params !== 'object') return
+    const rpcParams = payload.params as Record<string, unknown>
+    const threadId = readThreadId(rpcParams)
+    const handlers = threadId == null
+      ? threadHandlers.size === 1 ? threadHandlers.values().next().value : undefined
+      : threadHandlers.get(threadId)
+    handlers?.onNotification(payload.method, rpcParams)
+  })
+  lease.onEvent('codex.rpc.request', (rawPayload) => {
+    const payload = rawPayload as { id?: unknown; method?: unknown; params?: unknown }
+    if (
+      typeof payload?.id !== 'number' || typeof payload.method !== 'string' ||
+      payload.params == null || typeof payload.params !== 'object'
+    ) return
+    const rpcParams = payload.params as Record<string, unknown>
+    const threadId = readThreadId(rpcParams)
+    const handlers = threadId == null
+      ? threadHandlers.size === 1 ? threadHandlers.values().next().value : undefined
+      : threadHandlers.get(threadId)
+    handlers?.onRequest(payload.id, payload.method, rpcParams)
+  })
+  lease.onEvent('codex.exit', (rawPayload) => {
+    const code = (rawPayload as { code?: unknown })?.code
+    for (const handler of exitHandlers) handler(typeof code === 'number' ? code : null)
+  })
+  lease.onRequest('codex.hook', async rawInput => (
+    hookHandler == null
+      ? { continue: true }
+      : await hookHandler(rawInput as NativeCodexHookInput)
+  ))
+
+  const rpc: CodexRpcTransport = {
+    request: async <T = unknown>(method: string, rpcParams?: Record<string, unknown>) => {
+      try {
+        return await lease.invoke<T>('rpc.request', { method, params: rpcParams })
+      } catch (error) {
+        if (error instanceof RuntimeBrokerRemoteError && error.code === 'codex_rpc_error') {
+          const details = error.details != null && typeof error.details === 'object'
+            ? error.details as { code?: unknown; data?: unknown }
+            : {}
+          throw new CodexRpcError(
+            typeof details.code === 'number' ? details.code : -1,
+            error.message,
+            details.data
+          )
+        }
+        throw error
+      }
+    },
+    notify: (method, rpcParams) => {
+      trackInvocation(lease.invoke('rpc.notify', { method, params: rpcParams }), error => {
+        params.logger.warn('[codex runtime broker] notification failed', { error, method })
+      })
+    },
+    respond: (id, result) => {
+      pendingResponsePayloads.set(id, result)
+      const tracked = lease.invoke('rpc.respond', { id, result })
+        .then(() => {
+          pendingResponsePayloads.delete(id)
+        })
+        .catch((error) => {
+          params.logger.warn('[codex runtime broker] response failed', { error, id })
+        })
+        .finally(() => outstandingInvocations.delete(tracked))
+      outstandingInvocations.add(tracked)
+    }
+  }
+
+  return {
+    closeSession: async (closeParams) => {
+      closing = true
+      threadHandlers.delete(closeParams.threadId)
+      const responses = new Map(pendingResponsePayloads)
+      for (const response of closeParams.responses) responses.set(response.id, response.result)
+      await lease.invoke('session.close', {
+        responses: [...responses].map(([id, result]) => ({ id, result })),
+        threadId: closeParams.threadId,
+        turnId: closeParams.turnId
+      }, { requestTimeoutMs: 1_000 })
+      pendingResponsePayloads.clear()
+    },
+    drain: async () => {
+      if (closing) return
+      while (outstandingInvocations.size > 0) {
+        await Promise.allSettled([...outstandingInvocations])
+      }
+    },
+    hookEnv,
+    pid: typeof metadata.pid === 'number' ? metadata.pid : undefined,
+    rpc,
+    userAgent: typeof metadata.userAgent === 'string' ? metadata.userAgent : undefined,
+    registerThread: async (threadId, cwd, handlers) => {
+      threadHandlers.set(threadId, handlers)
+      try {
+        await lease.invoke('thread.register', { cwd, threadId })
+      } catch (error) {
+        threadHandlers.delete(threadId)
+        throw error
+      }
+    },
+    unregisterThread: async (threadId) => {
+      threadHandlers.delete(threadId)
+      await lease.invoke('thread.unregister', { threadId })
+    },
+    onExit: handler => exitHandlers.add(handler),
+    runThreadSetup: async <T>(
+      task: () => Promise<T>,
+      options: { cwd?: string; threadId?: string } = {}
+    ) => {
+      const result = await lease.invoke<{ setupId: string }>('setup.begin', {
+        cwd: options.cwd ?? params.cwd,
+        ...(options.threadId == null ? {} : { threadId: options.threadId })
+      })
+      try {
+        return await task()
+      } finally {
+        await lease.invoke('setup.end', { setupId: result.setupId })
+      }
+    },
+    setHookHandler: handler => {
+      hookHandler = handler
+    },
+    release: () => {
+      closing = true
+      threadHandlers.clear()
+      exitHandlers.clear()
+      pendingResponsePayloads.clear()
+      lease.release()
+    }
+  }
+}
+
+export const acquireCodexAppServer = async (
+  params: AcquireCodexAppServerParams
+): Promise<CodexAppServerLease & { userAgent?: string }> => {
+  const connection = readBrokerConnection(params.env)
+  return connection == null
+    ? await acquireLocalCodexAppServer(params)
+    : await acquireRemoteCodexAppServer(params, connection)
+}
+
+export const disposeLocalCodexAppServerPool = () => {
+  for (const entry of [...standalonePool.values()]) {
+    closeEntry(standalonePool, entry, 'Codex app-server pool reset')
+  }
+  standalonePool.clear()
+}
+
+export const resetCodexAppServerPoolForTests = disposeLocalCodexAppServerPool

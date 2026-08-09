@@ -25,6 +25,7 @@ import type {
 import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 
 import { applyServerRuntimeEnv } from '#~/cli-runtime.js'
+import { getRuntimeBrokerWorkspaceConnection } from '#~/services/runtime-broker/index.js'
 import { createWorkspaceRuntimeEnv } from '#~/services/runtime-store/workspace-env.js'
 import { badRequest, conflict, internalServerError, isHttpError, notFound } from '#~/utils/http.js'
 import { logger } from '#~/utils/logger.js'
@@ -1076,6 +1077,11 @@ export const createWorkspaceServerEnv = (
   env.__ONEWORKS_PROJECT_CLIENT_BASE__ = createLauncherWorkspaceClientBase(workspaceId)
   env.__ONEWORKS_PROJECT_WORKSPACE_ID__ = workspaceId
   env.__ONEWORKS_PROJECT_WEB_AUTH_ENABLED__ = 'false'
+  const runtimeBroker = getRuntimeBrokerWorkspaceConnection(workspaceId)
+  if (runtimeBroker != null) {
+    env.__ONEWORKS_PROJECT_RUNTIME_BROKER_URL__ = runtimeBroker.url
+    env.__ONEWORKS_PROJECT_RUNTIME_BROKER_TOKEN__ = runtimeBroker.token
+  }
   if (clientCorsOrigins.length > 0) {
     env.__ONEWORKS_PROJECT_SERVER_CORS_ORIGIN__ = clientCorsOrigins.join(',')
   }

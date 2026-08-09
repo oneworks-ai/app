@@ -2,7 +2,14 @@ import process from 'node:process'
 
 import type { HookInput, HookOutput, HookOutputs } from '@oneworks/hooks'
 import { executeHookInput, readHookInput } from '@oneworks/hooks'
+import { invokeRuntimeBrokerCallback } from '@oneworks/runtime-broker'
 import type { AdapterQueryOptions } from '@oneworks/types'
+
+import {
+  CODEX_APP_SERVER_RUNTIME_DRIVER_ID,
+  RUNTIME_BROKER_CALLBACK_TOKEN_ENV,
+  RUNTIME_BROKER_CALLBACK_URL_ENV
+} from './runtime-broker-contract'
 
 import type { CodexThreadSessionBinding } from './runtime/thread-session-map'
 import { resolveCodexThreadSession } from './runtime/thread-session-map'
@@ -234,20 +241,40 @@ export const mapOneWorksHookOutputToCodex = (
   }
 }
 
+export const executeCodexHookInput = async (
+  input: NativeCodexHookInput,
+  binding: CodexThreadSessionBinding | undefined,
+  env: Record<string, string | null | undefined> = process.env
+) => {
+  const hookInput = mapCodexHookInputToOneWorks(input, binding)
+  const result = await executeHookInput(hookInput, {
+    ...env,
+    ...binding?.env
+  })
+  return mapOneWorksHookOutputToCodex(input.hookEventName, result)
+}
+
 export const runCodexHookBridge = async () => {
   try {
     const input = await readHookInput() as NativeCodexHookInput
+    const callbackUrl = process.env[RUNTIME_BROKER_CALLBACK_URL_ENV]?.trim()
+    const callbackToken = process.env[RUNTIME_BROKER_CALLBACK_TOKEN_ENV]?.trim()
+    if (callbackUrl != null && callbackUrl !== '' && callbackToken != null && callbackToken !== '') {
+      const result = await invokeRuntimeBrokerCallback<Record<string, unknown>>(
+        { url: callbackUrl, token: callbackToken },
+        CODEX_APP_SERVER_RUNTIME_DRIVER_ID,
+        input
+      )
+      process.stdout.write(`${JSON.stringify(result)}\n`)
+      return
+    }
     const binding = await resolveCodexThreadSession(
       process.env.__ONEWORKS_CODEX_THREAD_SESSION_MAP__?.trim(),
       input.sessionId,
       input.cwd
     )
-    const hookInput = mapCodexHookInputToOneWorks(input, binding)
-    const result = await executeHookInput(hookInput, {
-      ...process.env,
-      ...binding?.env
-    })
-    process.stdout.write(`${JSON.stringify(mapOneWorksHookOutputToCodex(input.hookEventName, result))}\n`)
+    const result = await executeCodexHookInput(input, binding)
+    process.stdout.write(`${JSON.stringify(result)}\n`)
   } catch (error) {
     process.stdout.write(`${
       JSON.stringify({

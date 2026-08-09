@@ -5,7 +5,12 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { CodexRpcError } from '#~/protocol/rpc.js'
-import { buildThreadCacheKey, isStaleCachedThreadError, mapContentToCodexInput } from '#~/runtime/session-common.js'
+import {
+  buildThreadCacheKey,
+  isStaleCachedThreadError,
+  mapContentToCodexInput,
+  splitCodexAppServerEnv
+} from '#~/runtime/session-common.js'
 
 const makeBaseParams = (authPath: string) => ({
   cwd: '/tmp/workspace',
@@ -188,6 +193,58 @@ describe('mapContentToCodexInput', () => {
     ])).toEqual([
       { type: 'localImage', path: '/tmp/wechat-image.png' }
     ])
+  })
+})
+
+describe('splitCodexAppServerEnv', () => {
+  it('keeps broker transport settings process-scoped and projects the full workspace contract to the thread', () => {
+    const workspaceEnv = {
+      HOME: '/tmp/workspace-home',
+      HTTPS_PROXY: 'http://proxy.internal',
+      __ONEWORKS_PROJECT_RUNTIME_BROKER_URL__: 'http://127.0.0.1/runtime-broker',
+      __ONEWORKS_PROJECT_RUNTIME_BROKER_TOKEN__: 'owner-token',
+      __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: '/tmp/workspace',
+      __ONEWORKS_PROJECT_CONFIG_DIR__: '/tmp/workspace/.oneworks',
+      __ONEWORKS_PROJECT_BASE_DIR__: '.iac/ai',
+      __ONEWORKS_PROJECT_ENTITIES_DIR__: 'entities',
+      __ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__: '/tmp/workspace',
+      __ONEWORKS_PROJECT_PACKAGE_DIR__: '/opt/oneworks',
+      __ONEWORKS_PROJECT_CLI_PACKAGE_DIR__: '/opt/oneworks/cli',
+      __ONEWORKS_PROJECT_REAL_HOME__: '/Users/example',
+      __ONEWORKS_PROJECT_DOTENV_FILES__: '.env,.env.local',
+      __ONEWORKS_PROJECT_NODE_PATH__: '/usr/local/bin/node',
+      __ONEWORKS_PROJECT_SESSION_ID__: 'session-a'
+    }
+
+    const { appServerEnv, threadEnv } = splitCodexAppServerEnv(workspaceEnv, true)
+
+    expect(appServerEnv).toMatchObject({
+      HTTPS_PROXY: 'http://proxy.internal',
+      __ONEWORKS_PROJECT_RUNTIME_BROKER_URL__: 'http://127.0.0.1/runtime-broker',
+      __ONEWORKS_PROJECT_RUNTIME_BROKER_TOKEN__: 'owner-token'
+    })
+    expect(appServerEnv.HOME).toBeUndefined()
+    expect(
+      Object.keys(appServerEnv).filter(key => (
+        key.startsWith('__ONEWORKS_PROJECT_') &&
+        !key.startsWith('__ONEWORKS_PROJECT_RUNTIME_BROKER_')
+      ))
+    ).toEqual([])
+    expect(threadEnv).toEqual(expect.objectContaining({
+      __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: '/tmp/workspace',
+      __ONEWORKS_PROJECT_CONFIG_DIR__: '/tmp/workspace/.oneworks',
+      __ONEWORKS_PROJECT_BASE_DIR__: '.iac/ai',
+      __ONEWORKS_PROJECT_ENTITIES_DIR__: 'entities',
+      __ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__: '/tmp/workspace',
+      __ONEWORKS_PROJECT_PACKAGE_DIR__: '/opt/oneworks',
+      __ONEWORKS_PROJECT_CLI_PACKAGE_DIR__: '/opt/oneworks/cli',
+      __ONEWORKS_PROJECT_REAL_HOME__: '/Users/example',
+      __ONEWORKS_PROJECT_DOTENV_FILES__: '.env,.env.local',
+      __ONEWORKS_PROJECT_NODE_PATH__: '/usr/local/bin/node',
+      __ONEWORKS_PROJECT_SESSION_ID__: 'session-a'
+    }))
+    expect(threadEnv).not.toHaveProperty('__ONEWORKS_PROJECT_RUNTIME_BROKER_URL__')
+    expect(threadEnv).not.toHaveProperty('__ONEWORKS_PROJECT_RUNTIME_BROKER_TOKEN__')
   })
 })
 
