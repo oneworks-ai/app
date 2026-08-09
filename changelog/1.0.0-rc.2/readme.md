@@ -9,3 +9,4 @@
 - Make Lark role bots in multi-bot chats respond only when the structured mention targets that exact bot, including fail-closed handling for commands addressed to another bot.
 - Keep channel connections and runtime-store consumption on the same workspace server in Web launcher mode, preventing duplicate manager connections and channel sessions that remain stuck without an executor.
 - Reject ChannelLink sets that reuse one channel key across different entities while allowing one entity to bind multiple external chats.
+- Localize chat archive and restore success feedback in English and Chinese.
