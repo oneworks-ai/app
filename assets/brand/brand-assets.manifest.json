@@ -1,0 +1,223 @@
+{
+  "schemaVersion": 1,
+  "defaultTheme": "linear",
+  "source": "apps/desktop/build/icons/linear",
+  "files": [
+    {
+      "path": "apps/android/app/src/main/res/drawable-night-nodpi/ic_launcher_foreground.png",
+      "sha256": "470c40e026e48c000e56bc091e3cd19308cec1328ae0d2869bd0017f5a1c7e26"
+    },
+    {
+      "path": "apps/android/app/src/main/res/drawable-nodpi/ic_launcher_foreground.png",
+      "sha256": "3b831579d05070887a630e896ba7b1dfef8b5dcf8ad75ef02520486c474ccf07"
+    },
+    {
+      "path": "apps/bootstrap/assets/npm-readme-header-dark.png",
+      "sha256": "b66bf122d90528ff9500728065115b861256e000c1cb51bd3dee51f8e9666f95"
+    },
+    {
+      "path": "apps/bootstrap/assets/npm-readme-header-light.png",
+      "sha256": "0c0c979261347ac6a4b6d19e5c591ebc3c83a205ff387b4bebd9e81763887039"
+    },
+    {
+      "path": "apps/client/public/apple-touch-icon.png",
+      "sha256": "b70ac185f6dc7eebebce8d5aab691e600f60620a3cbb57dbb51a98e1442433f0"
+    },
+    {
+      "path": "apps/client/public/favicon-linear-dark.png",
+      "sha256": "2290c5430a1e1655d96bac5d77dfae357caf60b83458329ca892d1beb59b9484"
+    },
+    {
+      "path": "apps/client/public/favicon-linear-dark.svg",
+      "sha256": "1ae590b43e9cbfa369958240357eb79f222ae18d838a957defc36b8b43394545"
+    },
+    {
+      "path": "apps/client/public/favicon-linear-light.png",
+      "sha256": "f0edbe3fa0b6289951e1b103a8d2716e61d96de298bb1d5f2d472577a78439c3"
+    },
+    {
+      "path": "apps/client/public/favicon-linear-light.svg",
+      "sha256": "6b09a3facc7440060748bd229cf69a1d00636d2e1051a12299e297928a2d1a78"
+    },
+    {
+      "path": "apps/client/public/favicon.svg",
+      "sha256": "6b09a3facc7440060748bd229cf69a1d00636d2e1051a12299e297928a2d1a78"
+    },
+    {
+      "path": "apps/client/public/pwa-icon-192.png",
+      "sha256": "a2df891280f3a0e241295d6bf6f4fae297f7da0c300ab268ceb10f76527c27c1"
+    },
+    {
+      "path": "apps/client/public/pwa-icon-512.png",
+      "sha256": "bc92605d9a8c84e17cf41123055b5cae15768c783a072c7de50133033a434b4e"
+    },
+    {
+      "path": "apps/relay-admin/public/favicon-cloudflare-dark.svg",
+      "sha256": "794f4d0f3284565ac4197de685e7537bdb11ed6350bb25383f711ff6b3f07c8e"
+    },
+    {
+      "path": "apps/relay-admin/public/favicon-cloudflare-light.svg",
+      "sha256": "d6a55f947ead28bb02eb483fbd5842c5f4d4ff11cb467a3db7716c1c5c279060"
+    },
+    {
+      "path": "apps/relay-admin/public/favicon-vercel-dark.svg",
+      "sha256": "43166589dc532c89305d5fa867c64f9d8d7881ae19c361129f6df20b5951b4c5"
+    },
+    {
+      "path": "apps/relay-admin/public/favicon-vercel-light.svg",
+      "sha256": "fac0ec4129d319354daafd6a84bab6ab549f528115d2e9ae8cf24fada2f571fe"
+    },
+    {
+      "path": "apps/vscode-extension/assets/vscode-marketplace-dark.png",
+      "sha256": "70635abe5594486653351a041e33304c078d42431abe9db47c8db5fd3c020694"
+    },
+    {
+      "path": "apps/vscode-extension/assets/vscode-marketplace-light.png",
+      "sha256": "f5cf64736617f527efd3f312aee311ee29c6892ef287050bd8199f6dfd4daac7"
+    },
+    {
+      "path": "assets/brand/distribution/chrome-web-store-dark.png",
+      "sha256": "a9dc72ec042e6f460ccc0f1ec21d135a2719ee7648694a300fe6212f41849066"
+    },
+    {
+      "path": "assets/brand/distribution/chrome-web-store-light.png",
+      "sha256": "a55e48e37b8d7b863be3132860236ff5992eb2fa0def0d0bb869014e546350e6"
+    },
+    {
+      "path": "assets/brand/distribution/chrome-web-store.README.md",
+      "sha256": "1e05169d6c0a12b2a855e4bb82eef2b45eefc72ad7e83044db717baba7073fdb"
+    },
+    {
+      "path": "assets/brand/distribution/github-org-readme-dark.png",
+      "sha256": "91254c086176fde2461e4c2953be9faf18febe67856ff7eb262a28ae1df34097"
+    },
+    {
+      "path": "assets/brand/distribution/github-org-readme-light.png",
+      "sha256": "cc0195114abf20550f8ade90a5e2b83b12406c704285a6cb1dd48a8b400cb812"
+    },
+    {
+      "path": "assets/brand/distribution/github-social-preview-dark.png",
+      "sha256": "ddbe6b875d942d0fe2893abb93164da93b9173b70d0843234f1e0f3d2811f00b"
+    },
+    {
+      "path": "assets/brand/distribution/github-social-preview-light.png",
+      "sha256": "4dba409748a8a68e9afc8b716ea7b971fdce5ce5c3654b46ddca87bbf5867a6d"
+    },
+    {
+      "path": "assets/brand/distribution/github-social-preview.README.md",
+      "sha256": "c91de656b3cbff8bb2269c65f21ca5ae92e73dcfa47c9e4bbfc6dfcb1564eb00"
+    },
+    {
+      "path": "assets/brand/distribution/homepage-open-graph-dark.png",
+      "sha256": "653282d26e51047264dbc5c6f50b1874ccc5fff14a0379a1f99a3f5a78dcb4c9"
+    },
+    {
+      "path": "assets/brand/distribution/homepage-open-graph-light.png",
+      "sha256": "89dde8faf81ea41509bc2508ee517938d3bf89192a1998975634f7b669a8e956"
+    },
+    {
+      "path": "assets/brand/distribution/npm-readme-header-dark.png",
+      "sha256": "b66bf122d90528ff9500728065115b861256e000c1cb51bd3dee51f8e9666f95"
+    },
+    {
+      "path": "assets/brand/distribution/npm-readme-header-light.png",
+      "sha256": "0c0c979261347ac6a4b6d19e5c591ebc3c83a205ff387b4bebd9e81763887039"
+    },
+    {
+      "path": "assets/brand/distribution/vscode-marketplace-dark.png",
+      "sha256": "70635abe5594486653351a041e33304c078d42431abe9db47c8db5fd3c020694"
+    },
+    {
+      "path": "assets/brand/distribution/vscode-marketplace-light.png",
+      "sha256": "f5cf64736617f527efd3f312aee311ee29c6892ef287050bd8199f6dfd4daac7"
+    },
+    {
+      "path": "assets/brand/distribution/vscode-marketplace.README.md",
+      "sha256": "2da9e0a210fbfc1861ec33c2a24e39494e9cd8c7153c3e988df75658a7de5378"
+    },
+    {
+      "path": "assets/demo-video/assets/adapter-promo/icons/oneworks.png",
+      "sha256": "44595a228d5283acdf4f56717e828014f42647026c8925d155dc3bba30a8854a"
+    },
+    {
+      "path": "assets/demo-video/assets/adapter-promo/sources/oneworks.svg",
+      "sha256": "c8c00da1ff106fe8b7e5d1b2b8f0dcef39be8c22cc28a63a73e5f9462e344816"
+    },
+    {
+      "path": "assets/github-profile/profile/brand-header-dark.png",
+      "sha256": "91254c086176fde2461e4c2953be9faf18febe67856ff7eb262a28ae1df34097"
+    },
+    {
+      "path": "assets/github-profile/profile/brand-header-light.png",
+      "sha256": "cc0195114abf20550f8ade90a5e2b83b12406c704285a6cb1dd48a8b400cb812"
+    },
+    {
+      "path": "assets/homepage/apps/homepage/src/assets/brand/app-icon-512.png",
+      "sha256": "bc92605d9a8c84e17cf41123055b5cae15768c783a072c7de50133033a434b4e"
+    },
+    {
+      "path": "assets/homepage/apps/homepage/src/assets/brand/app-icon-dark-512.png",
+      "sha256": "92f5bef75f9ded6694311328ae7c1bdd05b79db0396c5b4033de01277188dc9f"
+    },
+    {
+      "path": "assets/homepage/apps/homepage/src/assets/brand/apple-touch-icon.png",
+      "sha256": "b70ac185f6dc7eebebce8d5aab691e600f60620a3cbb57dbb51a98e1442433f0"
+    },
+    {
+      "path": "assets/homepage/apps/homepage/src/assets/brand/favicon-linear-dark-transparent.png",
+      "sha256": "2290c5430a1e1655d96bac5d77dfae357caf60b83458329ca892d1beb59b9484"
+    },
+    {
+      "path": "assets/homepage/apps/homepage/src/assets/brand/favicon-linear-dark-transparent.svg",
+      "sha256": "1ae590b43e9cbfa369958240357eb79f222ae18d838a957defc36b8b43394545"
+    },
+    {
+      "path": "assets/homepage/apps/homepage/src/assets/brand/favicon-linear-light-transparent.png",
+      "sha256": "f0edbe3fa0b6289951e1b103a8d2716e61d96de298bb1d5f2d472577a78439c3"
+    },
+    {
+      "path": "assets/homepage/apps/homepage/src/assets/brand/favicon-linear-light-transparent.svg",
+      "sha256": "6b09a3facc7440060748bd229cf69a1d00636d2e1051a12299e297928a2d1a78"
+    },
+    {
+      "path": "assets/homepage/apps/homepage/src/assets/social/social-card.png",
+      "sha256": "89dde8faf81ea41509bc2508ee517938d3bf89192a1998975634f7b669a8e956"
+    },
+    {
+      "path": "assets/homepage/packages/icon/brand-profile.json",
+      "sha256": "9dd4cbc34c11ecfbf76c6a7376e6cde29100682aa2dc627865296b6b660fc707"
+    },
+    {
+      "path": "assets/icon/brand-profile.json",
+      "sha256": "9dd4cbc34c11ecfbf76c6a7376e6cde29100682aa2dc627865296b6b660fc707"
+    },
+    {
+      "path": "assets/icon/favicon-linear-dark.svg",
+      "sha256": "1ae590b43e9cbfa369958240357eb79f222ae18d838a957defc36b8b43394545"
+    },
+    {
+      "path": "assets/icon/favicon-linear-light.svg",
+      "sha256": "6b09a3facc7440060748bd229cf69a1d00636d2e1051a12299e297928a2d1a78"
+    },
+    {
+      "path": "assets/pwa/assets/favicon-linear-dark.svg",
+      "sha256": "1ae590b43e9cbfa369958240357eb79f222ae18d838a957defc36b8b43394545"
+    },
+    {
+      "path": "assets/pwa/assets/favicon-linear-light.svg",
+      "sha256": "6b09a3facc7440060748bd229cf69a1d00636d2e1051a12299e297928a2d1a78"
+    },
+    {
+      "path": "packages/plugins/external-browser-driver/assets/chrome-web-store-dark.png",
+      "sha256": "a9dc72ec042e6f460ccc0f1ec21d135a2719ee7648694a300fe6212f41849066"
+    },
+    {
+      "path": "packages/plugins/external-browser-driver/assets/chrome-web-store-light.png",
+      "sha256": "a55e48e37b8d7b863be3132860236ff5992eb2fa0def0d0bb869014e546350e6"
+    },
+    {
+      "path": "packages/plugins/external-browser-driver/store-assets/small-promo-tile.png",
+      "sha256": "ef8d8105c0e9501d9840fc17838480032ac7fe81201833d0a33e569e3f9db133"
+    }
+  ]
+}

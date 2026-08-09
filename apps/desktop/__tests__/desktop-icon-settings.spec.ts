@@ -29,7 +29,7 @@ describe('desktop icon settings', () => {
       iconAppearance: 'system',
       iconBackground: 'solid',
       syncAppIcon: true,
-      iconTheme: 'metal'
+      iconTheme: 'linear'
     })
 
     expect(
@@ -58,7 +58,7 @@ describe('desktop icon settings', () => {
         iconAppearance: 'light',
         iconBackground: 'transparent',
         syncAppIcon: false,
-        iconTheme: 'metal'
+        iconTheme: 'linear'
       })
     expect(normalizeDesktopIconSettingsPatch(null)).toEqual({})
   })
@@ -91,6 +91,7 @@ describe('desktop icon settings', () => {
     expect(
       JSON.parse(readFileSync(new URL('../build/icons/manifest.json', import.meta.url), 'utf8'))
     ).toMatchObject({
+      defaultTheme: 'linear',
       themes: expect.arrayContaining(['linear'])
     })
   })

@@ -17,7 +17,7 @@ Environment variables:
 - `ONEWORKS_RELAY_ADMIN_TOKEN`: admin and initial pairing token
 - `ONEWORKS_RELAY_DEVICE_METADATA_SECRET`: optional encryption secret for user-private device metadata; production should set a long random value
 - `ONEWORKS_RELAY_ALLOW_ORIGIN`: CORS allow origin, default `*`
-- `ONEWORKS_RELAY_AVATAR_URL`: optional HTTP/HTTPS image URL advertised through public service discovery and shown by Relay clients for this server instance
+- `ONEWORKS_RELAY_AVATAR_URL`: optional HTTP/HTTPS image URL advertised through public service discovery and shown by Relay clients for this server instance; when omitted and `ONEWORKS_RELAY_PUBLIC_URL` is set, it uses the matching Cloudflare Industrial or Vercel Matrix brand asset
 - `ONEWORKS_RELAY_LOGIN_REDIRECT_ORIGINS`: comma- or space-separated additional trusted Client origins for login callbacks. Origins are matched exactly, including the port; configure only origins controlled by the OneWorks Client.
 - `ONEWORKS_RELAY_PUBLIC_URL`: public base URL used for OAuth callback URLs
 - `ONEWORKS_RELAY_DEFAULT_LOGIN_METHOD`: default `/login` method, default `password`; supported values are `password`, `passkey`, and `verification_code`. The browser remembers the last selected method when local storage is available.
@@ -36,7 +36,7 @@ Environment variables:
 - `ONEWORKS_RELAY_RATE_LIMIT_DIAGNOSTICS_INGEST_MAX` / `ONEWORKS_RELAY_RATE_LIMIT_DIAGNOSTICS_INGEST_WINDOW_SECONDS`: OTLP diagnostic ingestion limit, default `240` batches per `60` seconds
 - `ONEWORKS_RELAY_EMAIL_PROVIDER`: transactional email provider, `disabled` by default; set `resend` to enable Resend-backed verification code delivery
 - `ONEWORKS_RELAY_EMAIL_FROM`: sender address for transactional email, required when `ONEWORKS_RELAY_EMAIL_PROVIDER=resend`
-- `ONEWORKS_RELAY_EMAIL_LOGO_URL`: HTTPS PNG/JPEG logo used in transactional HTML emails. Defaults to `https://oneworks.cloud/pwa/pwa-icon-192.png`; set `off` or `none` to disable the image.
+- `ONEWORKS_RELAY_EMAIL_LOGO_URL`: HTTPS logo used in transactional HTML emails. By default it follows `ONEWORKS_RELAY_PUBLIC_URL` and uses the matching Cloudflare Industrial or Vercel Matrix asset; set `off` or `none` to disable the image.
 - `ONEWORKS_RELAY_RESEND_API_KEY`: Resend API key, required when `ONEWORKS_RELAY_EMAIL_PROVIDER=resend`
 - `ONEWORKS_RELAY_EMAIL_TURNSTILE_MODE`: `auto`, `required`, or `off`; `auto` requires Turnstile when Resend is enabled or `NODE_ENV=production`
 - `ONEWORKS_RELAY_TURNSTILE_SECRET_KEY`: Cloudflare Turnstile secret key for email send challenges

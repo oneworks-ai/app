@@ -42,7 +42,7 @@ const resetLab = () => {
 
 titleInput.addEventListener('input', () => {
   refreshCreateButton()
-  if (useDynamicFavicon) favicon.href = `./favicon-metal-dark.svg?title=${encodeURIComponent(titleInput.value)}`
+  if (useDynamicFavicon) favicon.href = `./favicon-linear-dark.svg?title=${encodeURIComponent(titleInput.value)}`
 })
 confirmInput.addEventListener('change', refreshCreateButton)
 

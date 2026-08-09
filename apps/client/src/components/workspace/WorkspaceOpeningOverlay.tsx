@@ -56,7 +56,7 @@ export function WorkspaceOpeningOverlay({
         random: false,
         seed: workspaceOpeningIconSeed,
         shadow: false,
-        theme: 'metal'
+        theme: 'linear'
       })
       setFallbackIconVisible(false)
     } catch (error) {
@@ -106,13 +106,13 @@ export function WorkspaceOpeningOverlay({
         >
           <img
             className='workspace-opening-overlay__icon-fallback workspace-opening-overlay__icon-fallback--light'
-            src='/favicon-metal-light.svg'
+            src='/favicon-linear-light.svg'
             alt=''
             draggable={false}
           />
           <img
             className='workspace-opening-overlay__icon-fallback workspace-opening-overlay__icon-fallback--dark'
-            src='/favicon-metal-dark.svg'
+            src='/favicon-linear-dark.svg'
             alt=''
             draggable={false}
           />

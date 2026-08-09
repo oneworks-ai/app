@@ -19,7 +19,8 @@ const iconAssetRoot = path.join(workspaceRoot, 'assets', 'icon')
 const sourceIconsDir = path.join(iconAssetRoot, 'dist', 'icons')
 const buildDir = path.join(desktopRoot, 'build')
 const outputIconsDir = path.join(buildDir, 'icons')
-const defaultTheme = 'metal'
+const brandProfile = JSON.parse(fs.readFileSync(path.join(iconAssetRoot, 'brand-profile.json'), 'utf8'))
+const defaultTheme = brandProfile.defaultTheme
 const fallbackMode = 'dark'
 const themes = ['industrial', 'metal', 'matrix', 'linear']
 const modes = ['light', 'dark']
@@ -369,15 +370,49 @@ const syncRootAliases = () => {
   })
 }
 
+const syncRootAliasesFromCommittedTheme = () => {
+  const themeDir = path.join(outputIconsDir, defaultTheme)
+  const defaultPng = fs.readFileSync(path.join(themeDir, `${fallbackMode}.png`))
+  const defaultPngs = writeFilledPngsFromImage(readPng(path.join(themeDir, `${fallbackMode}.png`)), {
+    pngSizes,
+    sourceContentRatio: 1,
+    sourceIconSize
+  })
+  const defaultMacOsPngs = writeFilledPngsFromImage(
+    readPng(path.join(themeDir, 'macos', `${fallbackMode}.png`)),
+    { pngSizes, sourceContentRatio: 1, sourceIconSize }
+  )
+  const defaultBackgroundColor = srgbColor(solidBackgrounds[defaultTheme][fallbackMode])
+
+  fs.writeFileSync(path.join(buildDir, 'icon.icns'), createIcns(defaultMacOsPngs, icnsSizes))
+  fs.writeFileSync(path.join(buildDir, 'icon.ico'), createIco(defaultPngs, icoSizes))
+  fs.writeFileSync(path.join(buildDir, 'icon.png'), defaultPng)
+  fs.copyFileSync(path.join(themeDir, `${fallbackMode}.svg`), path.join(buildDir, 'icon.svg'))
+  writeIconComposerPackage(path.join(buildDir, 'icon.icon'), {
+    darkBackgroundColor: defaultBackgroundColor,
+    darkPng: defaultPng,
+    lightBackgroundColor: defaultBackgroundColor,
+    lightPng: defaultPng
+  })
+}
+
 const main = () => {
   assertFile(
     path.join(iconAssetRoot, 'package.json'),
     'Icon asset submodule is missing. Run `git submodule update --init assets/icon`'
   )
-  assertFile(
-    path.join(sourceIconsDir, 'manifest.json'),
-    'Generated icon assets are missing from the icon submodule'
-  )
+  if (!fs.existsSync(path.join(sourceIconsDir, 'manifest.json'))) {
+    assertFile(
+      path.join(outputIconsDir, defaultTheme, `${fallbackMode}.png`),
+      `Generated icon assets are missing and committed ${defaultTheme} assets are unavailable`
+    )
+    syncRootAliasesFromCommittedTheme()
+    const manifestPath = path.join(outputIconsDir, 'manifest.json')
+    const manifest = readJson(manifestPath)
+    writeJson(manifestPath, { ...manifest, defaultTheme })
+    console.log(`[desktop] synced root icon aliases from committed ${defaultTheme} assets`)
+    return
+  }
 
   const rootManifest = readJson(path.join(sourceIconsDir, 'manifest.json'))
   removeIfExists(outputIconsDir)

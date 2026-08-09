@@ -25,6 +25,13 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./brand-profile": {
+      "__oneworks__": {
+        "default": "./src/brand-profile.ts"
+      },
+      "types": "./dist/brand-profile.d.ts",
+      "default": "./dist/brand-profile.js"
+    },
     "./canvas": {
       "__oneworks__": {
         "default": "./src/canvas.ts"

@@ -1,4 +1,6 @@
-export const iconLoaderScript = () => `
+import type { OneWorksIconTheme } from '@oneworks/icon/types'
+
+export const iconLoaderScript = (theme: OneWorksIconTheme) => `
 (() => {
   const loader = window.OneWorksIconLoader
   if (!loader || typeof loader.mountOneWorksIconLoader !== 'function') return
@@ -17,7 +19,7 @@ export const iconLoaderScript = () => `
         random: false,
         seed: 'relay-login-background',
         shadow: false,
-        theme: 'metal'
+        theme: '${theme}'
       })
       background.classList.add('is-loader-ready')
     } catch {

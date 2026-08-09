@@ -3,6 +3,8 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
 
+import { resolveOneWorksRelayBrandProfile } from '@oneworks/icon/brand-profile'
+
 import { readCustomSsoClients } from './config-sso.js'
 import { parseRelayStorageDriver } from './storage/drivers.js'
 import type {
@@ -23,7 +25,6 @@ export const DEFAULT_DATA_PATH = join(homedir(), '.oneworks', 'relay-server', 'd
 const DEFAULT_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000
 const DEFAULT_DEVICE_ONLINE_TTL_MS = 60 * 1000
 const DEFAULT_EMAIL_CODE_TTL_MS = 10 * 60 * 1000
-const DEFAULT_EMAIL_LOGO_URL = 'https://oneworks.cloud/pwa/pwa-icon-192.png'
 const DEFAULT_EMAIL_RESEND_COOLDOWN_MS = 60 * 1000
 const DEFAULT_PASSKEY_TIMEOUT_MS = 60 * 1000
 
@@ -61,8 +62,28 @@ const readOriginList = (value: string | undefined) => (
     })
 )
 
-const readEmailLogoUrl = (value: string | undefined) => {
-  if (value == null) return DEFAULT_EMAIL_LOGO_URL
+const relayAssetUrl = (
+  publicBaseUrl: string | undefined,
+  filename: string
+) => {
+  if (publicBaseUrl == null || publicBaseUrl.trim() === '') return undefined
+  try {
+    return new URL(`/admin/assets/${filename}`, publicBaseUrl).toString()
+  } catch {
+    return undefined
+  }
+}
+
+const relayBrandAssetName = (
+  publicBaseUrl: string | undefined,
+  mode: 'dark' | 'light'
+) => `favicon-${resolveOneWorksRelayBrandProfile(publicBaseUrl)}-${mode}.svg`
+
+const readEmailLogoUrl = (value: string | undefined, publicBaseUrl: string | undefined) => {
+  if (value == null) {
+    return relayAssetUrl(publicBaseUrl, relayBrandAssetName(publicBaseUrl, 'light')) ??
+      'https://cf.oneworks.cloud/admin/assets/favicon-cloudflare-light.svg'
+  }
   const logoUrl = value.trim()
   if (logoUrl === '') return undefined
   return new Set(['0', 'false', 'no', 'none', 'off']).has(logoUrl.toLowerCase()) ? undefined : logoUrl
@@ -153,7 +174,7 @@ const readEmailWindow = (
 
 const readEmailConfig = (env: RelayConfigEnv): RelayEmailConfig => ({
   from: env.ONEWORKS_RELAY_EMAIL_FROM,
-  logoUrl: readEmailLogoUrl(env.ONEWORKS_RELAY_EMAIL_LOGO_URL),
+  logoUrl: readEmailLogoUrl(env.ONEWORKS_RELAY_EMAIL_LOGO_URL, env.ONEWORKS_RELAY_PUBLIC_URL),
   provider: readEmailProvider(env.ONEWORKS_RELAY_EMAIL_PROVIDER),
   resendApiKey: env.ONEWORKS_RELAY_RESEND_API_KEY,
   risk: {
@@ -215,7 +236,10 @@ export const parseRelayServerArgs = (
     defaultLoginMethod: readLoginMethod(env.ONEWORKS_RELAY_DEFAULT_LOGIN_METHOD),
     adminToken: env.ONEWORKS_RELAY_ADMIN_TOKEN || '',
     allowOrigin: env.ONEWORKS_RELAY_ALLOW_ORIGIN || '*',
-    avatarUrl: readServiceAvatarUrl(env.ONEWORKS_RELAY_AVATAR_URL),
+    avatarUrl: readServiceAvatarUrl(env.ONEWORKS_RELAY_AVATAR_URL) ?? relayAssetUrl(
+      env.ONEWORKS_RELAY_PUBLIC_URL,
+      relayBrandAssetName(env.ONEWORKS_RELAY_PUBLIC_URL, 'light')
+    ),
     buildSha: env.ONEWORKS_RELAY_BUILD_SHA?.trim() || undefined,
     loginRedirectOrigins: readOriginList(env.ONEWORKS_RELAY_LOGIN_REDIRECT_ORIGINS),
     deviceMetadataSecret: env.ONEWORKS_RELAY_DEVICE_METADATA_SECRET || undefined,

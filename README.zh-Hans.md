@@ -1,5 +1,9 @@
 <p align="center">
-  <img alt="One Works 万可图标" src="./apps/desktop/build/icons/metal/transparent/light.png" width="220">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./apps/desktop/build/icons/linear/transparent/dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="./apps/desktop/build/icons/linear/transparent/light.png">
+    <img alt="One Works 万可图标" src="./apps/desktop/build/icons/linear/transparent/light.png" width="220">
+  </picture>
 </p>
 
 <p align="center">

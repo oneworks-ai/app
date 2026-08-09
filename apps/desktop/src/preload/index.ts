@@ -141,7 +141,7 @@ const buildWorkspaceStartupIconOptions = () => ({
   random: false,
   seed: WORKSPACE_STARTUP_ICON_SEED,
   shadow: false,
-  theme: 'metal' as const
+  theme: 'linear' as const
 })
 
 const mountWorkspaceStartupIcon = () => {

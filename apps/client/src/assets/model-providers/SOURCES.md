@@ -6,8 +6,9 @@ These assets are local copies of provider logos or favicons from official provid
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `openai.svg`        | OpenAI icon from Simple Icons: `https://cdn.jsdelivr.net/npm/simple-icons@v14/icons/openai.svg`                                                         |
 | `anthropic.png`     | Anthropic homepage apple touch icon: `https://cdn.prod.website-files.com/67ce28cfec624e2b733f8a52/67d31dd7aa394792257596c5_webclip.png`                 |
-| `moonshot.svg`      | Kimi official Branding Guide, K-only light SVG: `https://moonshotai.github.io/Branding-Guide/scenarios/04-k-only/k-only-light.svg`                      |
-| `moonshot-dark.svg` | Kimi official Branding Guide, K-only dark SVG: `https://moonshotai.github.io/Branding-Guide/scenarios/04-k-only/k-only-dark.svg`                        |
+| `moonshot.ico`      | Moonshot AI official homepage favicon: `https://statics.moonshot.cn/moonshot-ai/favicon.ico`                                                           |
+| `kimi.svg`          | Kimi official Branding Guide, K-only light SVG: `https://moonshotai.github.io/Branding-Guide/scenarios/04-k-only/k-only-light.svg`                      |
+| `kimi-dark.svg`     | Kimi official Branding Guide, K-only dark SVG: `https://moonshotai.github.io/Branding-Guide/scenarios/04-k-only/k-only-dark.svg`                        |
 | `deepseek.svg`      | DeepSeek platform favicon: `https://fe-static.deepseek.com/platform/favicon.svg`                                                                        |
 | `minimax.png`       | MiniMax docs favicon: `https://platform.minimaxi.com/docs/_mintlify/favicons/minimax-zh/DMz0Zpj7JInghPSs/_generated/favicon/android-chrome-192x192.png` |
 | `qwen.svg`          | Alibaba Bailian console icon: `https://gw.alicdn.com/imgextra/i4/O1CN01vVn7g32134zNZEeAR_!!6000000006928-55-tps-24-24.svg`                              |
