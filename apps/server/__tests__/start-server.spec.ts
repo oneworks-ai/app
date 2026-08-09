@@ -9,12 +9,96 @@ import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 
 import { migrateDefaultServerDataDir } from '../src/project-home-data-migration.js'
 
+const startServerMocks = vi.hoisted(() => {
+  const runtimeStoreWatcher = {
+    scanAndReplay: vi.fn(async () => undefined),
+    stop: vi.fn()
+  }
+  const channelResumeScheduler = { stop: vi.fn() }
+  const pluginManager = {
+    dispose: vi.fn(async () => undefined),
+    load: vi.fn(async () => undefined)
+  }
+  return {
+    acquireConfigWatchRuntime: vi.fn(async () => ({ release: vi.fn() })),
+    autoImportNativeProjectHistoryAndReplay: vi.fn(async () => ({
+      importedEvents: 0,
+      importedSessions: 0,
+      matchedFiles: 0,
+      scannedFiles: 0
+    })),
+    channelResumeScheduler,
+    getPluginManager: vi.fn(() => pluginManager),
+    handleChannelSessionEvent: vi.fn(),
+    initChannels: vi.fn(async () => undefined),
+    initMiddlewares: vi.fn(async () => undefined),
+    installAssetCreateConnectionGuard: vi.fn(),
+    installWebDebugChii: vi.fn(),
+    mountRoutes: vi.fn(async () => ({ onListen: vi.fn() })),
+    pluginManager,
+    runtimeStoreWatcher,
+    setupWebSocket: vi.fn(),
+    startChannelResumeScheduler: vi.fn(() => channelResumeScheduler),
+    startRuntimeStoreWatcher: vi.fn(() => runtimeStoreWatcher)
+  }
+})
+
+vi.mock('../src/channels/index.js', () => ({
+  handleChannelSessionEvent: startServerMocks.handleChannelSessionEvent,
+  initChannels: startServerMocks.initChannels
+}))
+
+vi.mock('#~/services/ai/asset-create-operation.js', () => ({
+  installAssetCreateConnectionGuard: startServerMocks.installAssetCreateConnectionGuard
+}))
+
+vi.mock('#~/services/channel-resume/index.js', () => ({
+  startChannelResumeScheduler: startServerMocks.startChannelResumeScheduler
+}))
+
 vi.mock('#~/services/config/index.js', () => ({
   loadConfigState: vi.fn(async () => ({
-    projectConfig: {},
+    globalConfig: undefined,
+    projectSource: undefined,
     userConfig: {},
     mergedConfig: {}
   }))
+}))
+
+vi.mock('#~/services/config/watch.js', () => ({
+  acquireConfigWatchRuntime: startServerMocks.acquireConfigWatchRuntime
+}))
+
+vi.mock('#~/services/model-providers/catalog-loader.js', () => ({
+  initializeModelProviderCatalog: vi.fn(async () => undefined)
+}))
+
+vi.mock('#~/services/plugins/index.js', () => ({
+  getPluginManager: startServerMocks.getPluginManager
+}))
+
+vi.mock('#~/services/runtime-store/history-import.js', () => ({
+  autoImportNativeProjectHistoryAndReplay: startServerMocks.autoImportNativeProjectHistoryAndReplay
+}))
+
+vi.mock('#~/services/runtime-store/watcher.js', () => ({
+  startRuntimeStoreWatcher: startServerMocks.startRuntimeStoreWatcher
+}))
+
+vi.mock('#~/services/web-debug/chii.js', () => ({
+  installWebDebugChii: startServerMocks.installWebDebugChii
+}))
+
+vi.mock('../src/middlewares/index.js', () => ({
+  initMiddlewares: startServerMocks.initMiddlewares
+}))
+
+vi.mock('../src/routes/index.js', () => ({
+  mountRoutes: startServerMocks.mountRoutes
+}))
+
+vi.mock('../src/websocket/index.js', () => ({
+  setupWebSocket: startServerMocks.setupWebSocket
 }))
 
 const tempDirs: string[] = []
@@ -22,9 +106,28 @@ const originalCwd = process.cwd()
 
 afterEach(async () => {
   process.chdir(originalCwd)
+  vi.useRealTimers()
+  vi.clearAllMocks()
   vi.unstubAllEnvs()
   await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { force: true, recursive: true })))
 })
+
+const startRuntimeForRole = async (role: 'manager' | 'workspace') => {
+  vi.useFakeTimers()
+  vi.stubEnv('__ONEWORKS_PROJECT_SERVER_HOST__', '127.0.0.1')
+  vi.stubEnv('__ONEWORKS_PROJECT_SERVER_PORT__', '0')
+  vi.stubEnv('__ONEWORKS_PROJECT_SERVER_ROLE__', role)
+
+  const { startServer } = await import('../src/start-server.js')
+  const runtime = await startServer()
+  return {
+    close: () =>
+      new Promise<void>((resolve, reject) => {
+        runtime.server.close(error => error == null ? resolve() : reject(error))
+      }),
+    runtime
+  }
+}
 
 describe('createServerRuntime', () => {
   it('migrates legacy default data when the configured data dir is the project-home default', async () => {
@@ -79,5 +182,40 @@ describe('createServerRuntime', () => {
     await expect(migrateDefaultServerDataDir(worktree, env)).resolves.toBe(dataDir)
     await expect(readFile(resolve(dataDir, 'web-auth-password'), 'utf8')).resolves.toBe('primary-password\n')
     await expect(readFile(resolve(dataDir, 'state.json'), 'utf8')).resolves.toBe('{"primary":true}\n')
+  })
+})
+
+describe('shouldOwnWorkspaceRuntime', () => {
+  it('keeps channels and runtime consumers on workspace servers', async () => {
+    const { shouldOwnWorkspaceRuntime } = await import('../src/start-server.js')
+
+    expect(shouldOwnWorkspaceRuntime('manager')).toBe(false)
+    expect(shouldOwnWorkspaceRuntime('workspace')).toBe(true)
+    expect(shouldOwnWorkspaceRuntime(undefined)).toBe(true)
+  })
+})
+
+describe('startServer workspace runtime ownership', () => {
+  it('does not start workspace channel or runtime owners in manager mode', async () => {
+    const { close } = await startRuntimeForRole('manager')
+
+    expect(startServerMocks.initChannels).not.toHaveBeenCalled()
+    expect(startServerMocks.startChannelResumeScheduler).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(500)
+    expect(startServerMocks.startRuntimeStoreWatcher).not.toHaveBeenCalled()
+
+    await close()
+  })
+
+  it('starts channels, the resume scheduler, and the runtime watcher in workspace mode', async () => {
+    const { close } = await startRuntimeForRole('workspace')
+
+    expect(startServerMocks.initChannels).toHaveBeenCalledOnce()
+    expect(startServerMocks.startChannelResumeScheduler).toHaveBeenCalledOnce()
+    expect(startServerMocks.startRuntimeStoreWatcher).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(500)
+    expect(startServerMocks.startRuntimeStoreWatcher).toHaveBeenCalledOnce()
+
+    await close()
   })
 })

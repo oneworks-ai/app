@@ -535,6 +535,54 @@ describe('non-command input', () => {
     expect(ctx.reply).not.toHaveBeenCalled()
     expect(createChannelCommandRun).not.toHaveBeenCalled()
   })
+
+  it('defers bare group commands when the channel link disables command intent', async () => {
+    const next = vi.fn().mockResolvedValue(undefined)
+    const ctx = makeCtx({
+      channelLink: {
+        channelKey: 'lark:default',
+        definition: {} as never,
+        entity: 'owo-demo',
+        external: { type: 'chat', chatId: 'ch1' },
+        ingress: { ambientRouting: false, createOnCommand: false },
+        name: 'wan-ke-chat',
+        path: '/workspace/.oo/channels/wan-ke-chat/channel.json'
+      },
+      commandText: '/help',
+      inbound: makeInbound({ sessionType: 'group', text: '/help' }) as any
+    })
+
+    await channelCommandMiddleware(ctx, next)
+
+    expect(next).toHaveBeenCalledOnce()
+    expect(ctx.inbound.ack).not.toHaveBeenCalled()
+    expect(ctx.reply).not.toHaveBeenCalled()
+    expect(createChannelCommandRun).not.toHaveBeenCalled()
+  })
+
+  it('handles group commands that structurally mention the current bot', async () => {
+    const next = vi.fn().mockResolvedValue(undefined)
+    const ctx = makeCtx({
+      channelLink: {
+        channelKey: 'lark:default',
+        definition: {} as never,
+        entity: 'owo-demo',
+        external: { type: 'chat', chatId: 'ch1' },
+        ingress: { ambientRouting: false, createOnCommand: false },
+        name: 'wan-ke-chat',
+        path: '/workspace/.oo/channels/wan-ke-chat/channel.json'
+      },
+      commandText: '/help',
+      inbound: makeInbound({ mentionedBot: true, sessionType: 'group', text: '/help' }) as any
+    })
+
+    await channelCommandMiddleware(ctx, next)
+
+    expect(next).not.toHaveBeenCalled()
+    expect(ctx.inbound.ack).toHaveBeenCalledOnce()
+    expect(ctx.reply).toHaveBeenCalled()
+    expect(createChannelCommandRun).toHaveBeenCalledOnce()
+  })
 })
 
 describe('command audit runs', () => {

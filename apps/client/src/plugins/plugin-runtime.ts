@@ -2,7 +2,7 @@
 import type {
   PluginRuntimeChannelInvocation,
   PluginRuntimeChannelResponse,
-  PluginRuntimeEndpoint
+  PublicPluginRuntimeEndpoint as PluginRuntimeEndpoint
 } from '@oneworks/types'
 import { Fragment, createElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 

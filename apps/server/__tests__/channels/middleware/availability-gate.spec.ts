@@ -277,4 +277,23 @@ describe('availabilityGateMiddleware', () => {
     expect(ctx.reply).not.toHaveBeenCalled()
     expect(appendChannelOffhourBacklog).not.toHaveBeenCalled()
   })
+
+  it("does not let another bot's slash command bypass off-hours handling", async () => {
+    setAvailabilityNowProviderForTests(() => new Date('2026-06-15T13:30:00.000Z'))
+    const next = vi.fn().mockResolvedValue(undefined)
+    const ctx = makeCtx({
+      inbound: {
+        ...makeCtx().inbound,
+        mentionedBot: false,
+        text: '<at type="lark" user_id="ou_other">Other</at> /availability status'
+      } as any,
+      commandText: '/availability status'
+    })
+
+    await availabilityGateMiddleware(ctx, next)
+
+    expect(next).not.toHaveBeenCalled()
+    expect(ctx.reply).not.toHaveBeenCalled()
+    expect(appendChannelOffhourBacklog).not.toHaveBeenCalled()
+  })
 })

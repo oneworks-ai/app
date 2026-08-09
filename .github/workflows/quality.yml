@@ -212,7 +212,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10.33.0
+          version: 11.7.0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -222,12 +222,16 @@ jobs:
           cache-dependency-path: assets/homepage/pnpm-lock.yaml
 
       - name: Install docs dependencies
-        run: pnpm -C assets/homepage install --frozen-lockfile
+        run: >-
+          corepack "$(node -p "require('./assets/homepage/package.json').packageManager")"
+          -C assets/homepage install --frozen-lockfile
 
       - name: Build public documentation
         env:
           ONEWORKS_DOCS_SOURCE_DIR: ${{ github.workspace }}/.oo/docs
-        run: pnpm -C assets/homepage build:docs
+        run: >-
+          corepack "$(node -p "require('./assets/homepage/package.json').packageManager")"
+          -C assets/homepage build:docs
 
   release-docs:
     name: release-docs-preflight

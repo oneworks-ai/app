@@ -1,9 +1,16 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { basename, dirname, join, resolve } from 'node:path'
 import process from 'node:process'
 
 import { resolveProjectMockHome } from '@oneworks/utils'
+
+const require = createRequire(
+  typeof __filename === 'string'
+    ? __filename
+    : resolve(process.env.__ONEWORKS_PROJECT_PACKAGE_DIR__ ?? process.cwd(), 'package.json')
+)
 
 export interface NativeHookHandlerConfig {
   type: 'command'

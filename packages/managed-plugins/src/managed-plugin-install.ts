@@ -12,6 +12,7 @@ import type {
   AdapterPluginInstaller,
   AdapterPluginManifest
 } from '@oneworks/types'
+import { resolveManagedPluginScope } from '@oneworks/utils'
 import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 import { getManagedPluginConfigPath, getManagedPluginInstallDir } from '@oneworks/utils/managed-plugin'
 import { mergeProcessEnvWithProjectEnv } from '@oneworks/utils/project-env'
@@ -137,7 +138,12 @@ const installAdapterPluginWithInstallerUnlocked = async <
       version: 1 as const,
       adapter: installer.adapter,
       name: pluginName,
-      scope: options.scope?.trim() !== '' ? options.scope?.trim() : pluginName,
+      scope: resolveManagedPluginScope({
+        adapter: installer.adapter,
+        name: pluginName,
+        scope: options.scope,
+        source: managedSource
+      }),
       installedAt: new Date().toISOString(),
       source: managedSource,
       nativePluginPath: MANAGED_NATIVE_PLUGIN_DIR,
@@ -153,7 +159,8 @@ const installAdapterPluginWithInstallerUnlocked = async <
         oneworksRoot: stagingOneworksPluginDir,
         pluginName,
         pluginDataDir,
-        manifest
+        manifest,
+        source: managedSource
       })
       await fs.writeFile(stagingConfigPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8')
     } catch (error) {

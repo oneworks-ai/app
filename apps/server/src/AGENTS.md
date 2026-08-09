@@ -24,6 +24,8 @@ server 运行时通过 `__ONEWORKS_PROJECT_SERVER_ROLE__` 区分两类角色：
 - `manager`：不绑定用户 workspace，面向 launcher / daemon 控制面；project home 使用固定 `manager` key，默认 Web UI 进入 `/launcher`。
 - `workspace`：绑定单个 workspace，继续承载 session、config、git、files、plugins、runtime store 等项目内能力。
 
+`manager` 不初始化 workspace channel，也不消费 workspace runtime store。频道连接、runtime watcher 与 resume scheduler 必须由同一个 `workspace` server 持有，避免 manager 抢先去重入站消息后把会话留在无人消费的 runtime 目录。
+
 新增 launcher 控制面能力优先落到 manager role 的 route / service；不要把 workspace server 改成可随请求动态切目录，也不要把这类 Node 逻辑继续沉到 Electron main。每个 workspace 的长期运行态仍由独立 workspace server 维护。
 
 机器级共享的 adapter / plugin 子进程是例外：生命周期放在 manager 的 runtime broker driver，workspace 只持有 owner-bound lease。HTTP transport 使用独立的 loopback listener，不能从公开 server 的 `--host` / bind 地址反推内部 URL；route 只接受原始 loopback socket，并保持通用 `driver/profile/lease/operation/event/request/callback` 语义。adapter 或 plugin 字段只能出现在 driver 内，不能渗入 broker contract。manager 签发的 workspace token 不能调用 callback；resource callback token 必须绑定 broker generation + driver + profile，需要 owner 路由的 driver 还要绑定 lease。callback transport 使用稳定 callback ID、硬 deadline、结果 ACK、按 principal 分区的有界 admission，以及 ACK 丢失时的 retention / lease 回收实现幂等返回；broker generation 切换后旧 callback token 必须立即失效。

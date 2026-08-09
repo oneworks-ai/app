@@ -76,6 +76,14 @@ export interface LarkMessagePayload {
   }
 }
 
+export interface LarkBotInfoResponse {
+  code?: number
+  msg?: string
+  bot?: {
+    open_id?: string
+  }
+}
+
 export interface LarkMessageCallbackPayload {
   schema?: string
   header?: {

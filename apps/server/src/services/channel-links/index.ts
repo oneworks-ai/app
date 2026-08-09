@@ -74,10 +74,19 @@ export const loadChannelLinks = async (
   ))
   const links = definitions.map(toResolvedChannelLink)
   const bindingKeys = new Map<string, ResolvedChannelLink>()
+  const linksByChannelKey = new Map<string, ResolvedChannelLink>()
   for (const link of links) {
     if (!entityNames.has(link.entity)) {
       throw new Error(`Channel link ${link.path} references missing entity ${link.entity}.`)
     }
+    const existingChannelLink = linksByChannelKey.get(link.channelKey)
+    if (existingChannelLink != null && existingChannelLink.entity !== link.entity) {
+      throw new Error(
+        `Channel links ${existingChannelLink.path} and ${link.path} reuse channel key ` +
+          `${link.channelKey} across entities ${existingChannelLink.entity} and ${link.entity}.`
+      )
+    }
+    linksByChannelKey.set(link.channelKey, link)
     const bindingKey = `${link.channelKey}\0${link.address!.kind}\0${link.address!.id}`
     const existing = bindingKeys.get(bindingKey)
     if (existing != null) {

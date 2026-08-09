@@ -4,26 +4,20 @@ import type {
   PluginDetailAssetGroup,
   PluginDetailAssetKind,
   PluginReadmeVariant,
-  PluginRuntimeEndpoint
+  PublicPluginDiagnostic,
+  PublicPluginRuntimeEndpoint
 } from '@oneworks/types'
 
-import { buildApiUrl, fetchApiJson } from '#~/api/base'
+import { buildApiUrl, fetchApiJson, fetchApiResponse } from '#~/api/base'
 import { createServerUrlFromBase, normalizeServerBaseUrl } from '#~/runtime-config'
 
 import type { PluginRuntimeInstance } from './plugin-manifest'
-
-interface PluginListResponse {
-  diagnostics?: unknown[]
-  plugins?: PluginRuntimeInstance[]
-  runtime?: PluginRuntimeEndpoint
-}
+import { parsePublicPluginRuntimeInstance } from './plugin-public-api'
+import { parsePublicPluginListResponse, parsePublicPluginRuntimeEndpointsResponse } from './plugin-public-api-envelope'
+import { parsePublicPluginResponse } from './plugin-public-json'
 
 export interface PluginApiSourceOptions {
   serverBaseUrl?: string
-}
-
-interface PluginRuntimeEndpointsResponse {
-  endpoints?: PluginRuntimeEndpoint[]
 }
 
 export interface PluginReadme extends PluginReadmeVariant {}
@@ -31,9 +25,9 @@ export type { PluginDetailAssetGroup, PluginDetailAssetKind }
 export type { NativeHostPluginAssetGroup }
 
 export interface PluginSnapshot {
-  diagnostics?: unknown[]
+  diagnostics?: PublicPluginDiagnostic[]
   plugins: PluginRuntimeInstance[]
-  runtime?: PluginRuntimeEndpoint
+  runtime?: PublicPluginRuntimeEndpoint
 }
 
 export const listNativeHostPlugins = async (
@@ -71,18 +65,6 @@ const encodePluginAssetPath = (assetPath: string) =>
     .map(encodeURIComponent)
     .join('/')
 
-const normalizePluginInstance = (instance: PluginRuntimeInstance): PluginRuntimeInstance => ({
-  ...instance,
-  clientEntryUrl: instance.clientEntryUrl ?? instance.client?.clientEntryUrl,
-  devClientEntryUrl: instance.devClientEntryUrl ?? instance.client?.devClientEntryUrl,
-  devClientEntryKind: instance.devClientEntryKind ?? instance.client?.devClientEntryKind,
-  plugin: instance.plugin ?? (
-    instance.contributions == null
-      ? undefined
-      : { contributions: instance.contributions }
-  )
-})
-
 export const createPluginApiUrl = (path: string, serverBaseUrl?: string) => {
   const normalizedServerBaseUrl = normalizeServerBaseUrl(serverBaseUrl)
   return normalizedServerBaseUrl == null
@@ -96,21 +78,28 @@ export const listPlugins = async (options: PluginApiSourceOptions = {}) => {
 }
 
 export const listPluginRuntimeEndpoints = async (options: PluginApiSourceOptions = {}) => {
-  const response = await fetchApiJson<PluginRuntimeEndpointsResponse>(
-    createPluginApiUrl('/api/plugins/runtime/endpoints', options.serverBaseUrl)
+  const response = await parsePublicPluginResponse(
+    await fetchApiResponse(
+      createPluginApiUrl('/api/plugins/runtime/endpoints', options.serverBaseUrl)
+    )
   )
-  return response.endpoints ?? []
+  return parsePublicPluginRuntimeEndpointsResponse(response).endpoints
 }
 
 export const listPluginSnapshot = async (options: PluginApiSourceOptions = {}): Promise<PluginSnapshot> => {
-  const response = await fetchApiJson<PluginListResponse | PluginRuntimeInstance[]>(
-    createPluginApiUrl('/api/plugins', options.serverBaseUrl)
+  const response = await parsePublicPluginResponse(
+    await fetchApiResponse(
+      createPluginApiUrl('/api/plugins', options.serverBaseUrl)
+    )
   )
-  const plugins = Array.isArray(response) ? response : response.plugins ?? []
+  const responseRecord = parsePublicPluginListResponse(response)
   return {
-    diagnostics: Array.isArray(response) ? undefined : response.diagnostics,
-    plugins: plugins.map(normalizePluginInstance),
-    runtime: Array.isArray(response) ? undefined : response.runtime
+    diagnostics: responseRecord.diagnostics,
+    plugins: responseRecord.plugins.flatMap(value => {
+      const plugin = parsePublicPluginRuntimeInstance(value)
+      return plugin == null ? [] : [plugin]
+    }),
+    runtime: responseRecord.runtime
   }
 }
 

@@ -1,6 +1,7 @@
 import type { ChannelCommandRunSource } from '#~/db/index.js'
 
 import type { ChannelContext, ChannelMiddleware } from '../@types'
+import { hasExplicitChannelIntent } from '../@utils'
 import type { CommandParseSuccess } from './command-system'
 import { parseCommandString } from './command-system'
 import { ensureSharedMessagesRegistered } from './messages'
@@ -30,6 +31,21 @@ const handleCommand = async (ctx: ChannelContext) => {
 
   await executeParsedCommand(ctx, parsed, { source: 'slash' })
   return true
+}
+
+const canHandleGroupCommand = (ctx: ChannelContext) => {
+  if (ctx.inbound.sessionType !== 'group' || ctx.channelLink == null) return true
+
+  const ingress = ctx.channelLink.ingress
+  return hasExplicitChannelIntent({
+    commandText: ctx.commandText,
+    config: ctx.config,
+    createOnCommand: ingress?.createOnCommand,
+    createOnMention: ingress?.createOnMention,
+    mentionedBot: ctx.inbound.mentionedBot,
+    mentionPatterns: ingress?.mentionPatterns,
+    text: ctx.inbound.text
+  })
 }
 
 export const invokeChannelCommandTool = async (
@@ -70,6 +86,10 @@ export const channelCommandMiddleware: ChannelMiddleware = async (ctx, next) => 
   const prefix = getPrefix(ctx)
   const command = splitCommand(ctx.commandText)[0] ?? ''
   if (command === '' || !command.startsWith(prefix)) {
+    await next()
+    return
+  }
+  if (!canHandleGroupCommand(ctx)) {
     await next()
     return
   }

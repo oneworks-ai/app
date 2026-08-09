@@ -2,6 +2,7 @@ import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import type { ManagedPluginSource } from '@oneworks/types'
+import { resolveManagedPluginScope } from '@oneworks/utils'
 import type { ManagedPluginInstall } from '@oneworks/utils/managed-plugin'
 import { listManagedPluginInstalls } from '@oneworks/utils/managed-plugin'
 import { mergeProcessEnvWithProjectEnv } from '@oneworks/utils/project-env'
@@ -113,11 +114,21 @@ const syncConfiguredMarketplacePluginsUnlocked = async (params: {
         matchesMarketplaceSource(install.config.source, marketplaceName, pluginName)
       ))
       const desiredScope = plugin.scope?.trim() !== '' ? plugin.scope?.trim() : undefined
+      const canonicalScope = resolveManagedPluginScope({
+        adapter,
+        name: pluginName,
+        scope: desiredScope,
+        source: { marketplace: marketplaceName, plugin: pluginName, type: 'marketplace' }
+      })
+      const existingScope = existingInstall?.config.scope ?? existingInstall?.config.name
+      const scopeMatches = existingScope === canonicalScope || (
+        desiredScope == null && existingScope === pluginName
+      )
       const shouldMigratePluginData = existingInstall == null ? false : await hasLegacyPluginDataTarget(existingInstall)
       const shouldUpdate = existingInstall != null && (
         marketplace.syncOnRun === true ||
         shouldMigratePluginData ||
-        (desiredScope ?? pluginName) !== (existingInstall.config.scope ?? existingInstall.config.name) ||
+        !scopeMatches ||
         !matchesMarketplaceSource(existingInstall.config.source, marketplaceName, pluginName)
       )
 

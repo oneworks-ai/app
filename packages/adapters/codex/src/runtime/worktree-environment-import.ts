@@ -81,7 +81,7 @@ export const discoverCodexWorktreeEnvironments: AdapterWorktreeEnvironmentImport
   const candidates: AdapterWorktreeEnvironmentImportCandidate[] = []
 
   for (const entry of selectedEntries) {
-    const filePath = join(environmentDirectory, entry.name)
+    const filePath = join(canonicalEnvironmentDirectory, entry.name)
     try {
       if (!entry.isFile() || entry.isSymbolicLink()) {
         skippedEnvironmentCount += 1

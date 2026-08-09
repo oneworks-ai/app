@@ -39,21 +39,32 @@
 - 用户对问题的回复必须在 channel 层优先被消费成 `interaction_response`；否则模型会把选项文本当作新的普通输入，链路会偏。
 - 快捷气泡更适合单选；多选或长会话复验时，直接回复文本通常更稳。
 
-## 万可机器人矩阵接入复盘
+## 多角色机器人矩阵接入复盘
 
-- 固定身份分工：`owo-cli` 是本仓当前 OneWorks 专用 `lark-cli` profile，负责群管理、通讯录解析、用户身份消息和验收查询；`OWO【演示】` 这类 channel bot app 只负责 OneWorks channel 的监听和回复。不要把当前 active profile、CLI app、channel bot app 混成一个概念。
-- `owo-cli` 的 user token 如果显示 `needs_refresh`，先跑 `lark-cli auth status --profile owo-cli --json`。这次状态虽然过期，但有 `offline_access` 且 refresh token 未过期，执行一次 `lark-cli im +chat-list --profile owo-cli --as user ...` 就自动刷新成 `valid`，无需重新扫码。
-- 建外部群前先定矩阵，再批量拉成员，减少返工；涉及创建群、拉外部成员、发送代表用户的消息或修改开放平台线上配置前，先列出群名、机器人、外部成员和用途，等用户确认后再执行。本次万可示例矩阵是：`万可脑爆`、`万可测试`、`万可监控`、`万可增长`、`万可闲聊`、`万可发布`；群名保持短前缀风格，不用长副标题。
+- 固定身份分工：`owo-cli` 是本仓当前 OneWorks 专用 `lark-cli` profile，负责群管理、通讯录解析、用户身份消息和验收查询；各 channel bot app 只负责 OneWorks channel 的监听和回复。不要把当前 active profile、CLI app、channel bot app 混成一个概念。
+- `owo-cli` 的 user token 如果显示 `needs_refresh`，先跑 `lark-cli auth status --profile owo-cli --json`。当 profile 具备 `offline_access` 且 refresh token 仍有效时，可执行一次只读用户 API 让 CLI 尝试自动刷新；刷新失败再重新登录，不要直接假定必须扫码或一定能静默恢复。
+- 建外部群前先定矩阵，再批量拉成员，减少返工；涉及创建群、拉外部成员、发送代表用户的消息或修改开放平台线上配置前，先列出群名、机器人、外部成员和用途，等用户确认后再执行。群名宜采用稳定、简短的项目前缀和场景名，不用容易失真的长副标题。
 - 创建后立刻确认群是外部群（列表或群详情里应显示外部标签，也可用 API 字段确认 external）。如果错建成内部群，不要继续补机器人和 channel 配置，直接解散并按外部群重新创建，避免成员、权限和体验链路继续返工。
-- 群角色要按场景收敛，不要为了“完整团队”把所有机器人塞进每个群。闲聊群只放产品、运营和演示服务；测试群放前端、后端、测试、项目；监控群放运维、后端、前端、数分；增长群放运营、数分、产品；发布群放项目、前端、后端、测试、运维。
-- 外部体验人是否进群要按演示目标决定。万可这轮按用户要求把 `一介[字节]` 拉进所有演示群，但这是项目策略，不是 Lark channel 的技术要求。
+- 群角色要按场景收敛，不要为了“完整团队”把所有机器人塞进每个群。例如需求讨论只需要产品与设计，测试协作再加入研发与测试，发布协作才需要项目、研发、测试和运维；最终成员以用户确认的矩阵为准。
+- “机器人已在群里”不等于“角色已接入 OneWorks”。如果每个角色都要独立回复，每个 bot app 都要有独立的 channel key 和 appId/secret；同一角色进入多个群时复用同一个实体，为每个 `bot app × chat` 建一个 ChannelLink。不要让一个 channel key 指向多个实体，也不要用单个演示 bot 的多群链接冒充完整机器人矩阵。
+- 同一实体挂到多个群目前只保证复用实体定义和角色提示词，不代表已经实现跨群学习记忆。只有 MemoryResolver 的读取、筛选、写回和实体维度隔离都落地并完成验证后，才能把它描述为跨群记忆。
+- 多机器人同群时不能仅凭渲染后的 `<at>` 文本判断意图。Lark 连接启动时应通过 `/open-apis/bot/v3/info` 获取当前 bot `open_id`，把结构化匹配结果传给入口门禁；`@` 其他机器人必须关闭失败。没有结构化 `@` 的 slash command 当前仍遵循 ChannelLink 的 `createOnCommand` 规则；外部多机器人群若不希望一条裸命令触发多个 bot，应关闭该入口，或先实现并启用“群命令必须 `@` 当前 bot”的显式策略。
+- 需要批量找企业自建应用的 App ID 时，给专用 `owo-cli` app 增加 `admin:app.info:readonly`、发布生效，再调用 `GET /open-apis/application/v6/applications` 按应用名称核对 App ID、线上版本和状态。该管理员读取权限只放在 CLI 操作用 app，不必复制给每个角色 bot。
+- 外部体验者是否进群要按演示目标和用户确认的成员矩阵决定；这是项目策略，不是 Lark channel 的技术要求，也不应固化真实姓名到通用接入文档。
 - CLI 创建/拉群能完成大部分成员管理，但开放平台应用名称、头像、外部群可用范围、权限和发布审核仍经常需要页面确认。页面操作时进入具体自建应用详情，不要误点 `open.feishu.cn/page/launcher` 的智能体应用创建流。
 - 头像策略要先生成真实图片文件再上传。`https://oneworks.cloud/avatar/?...` 是预览页面；开放平台头像 API 上传需要 `application:application:patch`，缺 scope 会报 permission violation。角色 bot 的名称、表情脸型、颜色和头像文件应登记成表，保证名字和头像一致。头像、名称、外部群开关改完都要发布/免审/审核后才算线上生效。
 - Chrome/开放平台页面是 SPA，直达详情页或授权页时可能短暂黑屏或空 DOM。至少等标题、URL、主内容和 accessibility tree 稳定后再判断；不要因为第一次截图黑就认定用户也打不开。
 - 浏览器操作优先使用用户点名的工具：用户明确 `@chrome` 时先用 Codex Chrome 插件和已有登录窗口，不要默认切到 Computer Use、CLI 或 `osascript`。Chrome 插件如果断连，先按插件排障流程重连；仍失败时及时说明阻塞并请求用户接手或授权替代路径。
 - 开放平台发布流程的稳定页面路径是：进入具体自建应用详情 -> `创建版本` -> 填更新说明 -> 确认移动端/桌面端默认能力是“机器人” -> 确认外部群开关 -> `保存` -> 弹窗 `确认发布`。保存后不要只看 URL，最终以版本详情页的 `已发布`、版本号、更新说明、外部群状态和 `审核结果 通过` 为准。
-- Chrome 插件操作开放平台时，Playwright role click 可能能定位但不触发飞书后台按钮；这时优先用 `dom_cua.get_visible_dom()` 解析 `<button node_id=...>保存</button>` / `<button node_id=...>确认发布</button>`，再用 `dom_cua.click({ node_id })`。这次 OWO 发布就是通过 DOM node 点击完成的。
+- Chrome 插件操作开放平台时，Playwright role click 可能能定位但不触发飞书后台按钮；这时优先用 `dom_cua.get_visible_dom()` 解析 `<button node_id=...>保存</button>` / `<button node_id=...>确认发布</button>`，再用 `dom_cua.click({ node_id })`。把这种方式作为页面行为异常时的通用 fallback，并继续用发布状态核验结果。
 - 上传头像时如果浏览器 / 系统文件选择器无法完成选择或“打开”按钮灰掉，马上告诉用户需要他在文件选择器里选中目标文件；用户选完后，agent 继续负责页面内保存、创建版本和确认发布。
 - Web 飞书消息页可能能读到 accessibility tree，但点击/输入不一定落到 canvas/富文本编辑器。优先用 Codex Chrome / Browser / Computer Use 操作网页版；只有网页版富文本输入确实无法稳定操作时，说明阻塞并请求使用飞书桌面端作为 fallback。发送代表用户的群消息属于对外通信，发送前要说明内容并等待确认。
-- 修改 `.oo.dev.config.json` channel appId/secret 后，正在运行的 server 不一定自动重连 Lark WS。闭环检查顺序是：确认对应 channel key，确认 `appId` 属于演示服务 bot 且 `secret` 来自同一 app，确认 `allowedGroups` 是目标外部群，重启 `pnpm tools dev-start web` 管理的服务或确认日志里出现新的 `[channels] channel connected`，再做入站消息验证。
-- 验证顺序：先用 channel bot app token 向目标群发消息，验证凭证和 `im:message`；再用 `owo-cli --as user` 或飞书客户端发普通群消息，验证 `im.message.receive_v1`、`allowedGroups`、session 调度和回复。机器人自发消息通常不能代表真实入站闭环；真正闭环要看到用户消息触发入站事件、进入允许群、生成 session dispatch，并由 OWO 回到群里。
+- 修改 `.oo.dev.config.json` channel appId/secret 后，正在运行的 server 不一定自动重连 Lark WS。闭环检查顺序是：确认对应 channel key，确认 `appId` 属于演示服务 bot 且 `secret` 来自同一 app，确认 `allowedGroups` 是目标外部群，经授权后用 `pnpm --silent tools dev-service restart web --json` 重启当前 worktree 的服务或确认日志里出现新的 `[channels] channel connected`，再做入站消息验证。
+- Web launcher 的 `manager` server 只能负责控制面，不能初始化 workspace channel。频道长连接、runtime store watcher 和 resume scheduler 必须由同一个 workspace server 持有；否则 manager 可能先写入全局去重记录和 session，真正消费 runtime 的 workspace 收不到事件，会话就会长期停在 `running`。
+- 同一个 bot app 不能同时被旧 worktree、旧 manager 或遗留 workspace server 持有长连接。飞书可能把事件分配给任意连接，表现为同一条 `@` 偶发命中新旧配置。排查时先从错误回复对应的 server 日志反查 workspace，再通过 `dev-service status <target> --json` 找到所有者；不要只重启当前 worktree 就认为旧连接已经退出。
+- 自动创建的 channel session 也必须有可执行的默认 adapter / model。若项目只声明了带 `${ENV_VAR}` 的离线 mock model service，又没有设置 `defaultModel`，模型选择可能落到测试模型并在代理层报 `upstreamBaseUrl must be a valid URL`。真实验收前应在私有配置中明确设置可用的 `defaultAdapter` / `defaultModel`，并同时检查 session 的 model、entity、终态和群内可见回复。
+- 验证顺序：先用 channel bot app token 向目标群发消息，验证凭证和 `im:message`；再用 `owo-cli --as user` 或飞书客户端让真实用户明确 `@` 目标机器人，验证 `im.message.receive_v1`、结构化 mention、`allowedGroups`、session 调度和回复。机器人自发消息通常不能代表真实入站闭环；真正闭环要看到用户 `@` 消息触发入站事件、只命中目标 bot、进入允许群、生成 session dispatch，并由该角色机器人回到群里。
+- `lark-cli auth status --profile <bot> --json` 的 bot `ready` 只说明本地存在 App ID/secret，不会主动向飞书校验 secret。仍要执行一次只读或发送 API；返回 `20002 invalid_client` 时，从可信的项目私有配置重新同步同一个 app 的 secret，并用 `--app-secret-stdin`，不要把 secret 放进 argv、日志或文档。
+- Channel bot 与 `owo-cli` 看到的同一个用户 `open_id` 不同。若角色 bot 不申请成员读取权限，应从该 bot 实际收到的已知用户消息中记录 sender `open_id`，核对身份后再写入对应 channel 的 `access.admins`。不要把 CLI app 的 open_id 直接复制过去，也不要把矩阵里的 `includeBoss` 当作权限配置。
+- 外部群写操作要区分错误：`232033` 表示执行成员管理的 app 没有外部群管理能力；`230027` 常见于用户 token 虽有发送 scope，但 app 版本或租户策略不允许代表用户向外部群发消息；`99991672` 表示目标 bot app 根本没有申请对应 API scope。三者都需要在正确自建应用里补配置并发布，重复扫码或换身份不能替代。
+- `lark-cli` 较旧时可能没有新的应用自管理命令或输出行为。看到 `_notice.update` 后用 `lark-cli update` 同步升级 CLI 和官方 skills；升级完成后重启 AI Agent 才能让新 skills 在新会话中生效。

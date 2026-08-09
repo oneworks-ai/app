@@ -134,6 +134,49 @@ describe('channel link service', () => {
     await expect(loadChannelLinks(workspace)).rejects.toThrow('bind the same external address')
   })
 
+  it('allows one entity across chats but rejects one channel key across entities', async () => {
+    const workspace = await createWorkspace()
+    await writeDocument(
+      join(workspace, '.oo/entities/product/README.md'),
+      '---\nname: product\n---\n'
+    )
+    await writeDocument(
+      join(workspace, '.oo/entities/engineering/README.md'),
+      '---\nname: engineering\n---\n'
+    )
+    await writeDocument(
+      join(workspace, '.oo/channels/product-one/channel.json'),
+      JSON.stringify({
+        channel: 'lark-product',
+        entity: 'product',
+        external: { type: 'chat', chatId: 'oc_1' }
+      })
+    )
+    await writeDocument(
+      join(workspace, '.oo/channels/product-two/channel.json'),
+      JSON.stringify({
+        channel: 'lark-product',
+        entity: 'product',
+        external: { type: 'chat', chatId: 'oc_2' }
+      })
+    )
+
+    await expect(loadChannelLinks(workspace)).resolves.toHaveLength(2)
+
+    await writeDocument(
+      join(workspace, '.oo/channels/engineering/channel.json'),
+      JSON.stringify({
+        channel: 'lark-product',
+        entity: 'engineering',
+        external: { type: 'chat', chatId: 'oc_3' }
+      })
+    )
+
+    await expect(loadChannelLinks(workspace)).rejects.toThrow(
+      /reuse channel key lark-product across entities/
+    )
+  })
+
   it('matches direct links by sender id or channel id', () => {
     const link = {
       channelKey: 'wechat-main',
