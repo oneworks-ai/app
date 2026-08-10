@@ -60,7 +60,12 @@ describe('relay admin data dashboard', () => {
     )
     vi.stubGlobal('fetch', fetchMock)
 
-    await fetchRelayDataDashboardOverview('admin-token', new Date('2026-08-10T12:00:00.000Z'))
+    const overview = await fetchRelayDataDashboardOverview(
+      'admin-token',
+      new Date('2026-08-10T12:00:00.000Z')
+    )
+
+    expect(overview.observedAt).toBe('2026-08-10T12:00:00.000Z')
 
     expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
       '/api/admin/diagnostics?from=2026-08-10T00%3A00%3A00.000Z&limit=1',

@@ -7,6 +7,7 @@ export interface RelayDataDashboardOverview {
   daily: RelayAdminDiagnosticsResponse
   monthly: RelayAdminDiagnosticsResponse
   modelUsage: RelayAdminModelUsageResponse
+  observedAt: string
   weekly: RelayAdminDiagnosticsResponse
 }
 
@@ -31,5 +32,5 @@ export const fetchRelayDataDashboardOverview = async (
     fetchRelayAdminDiagnostics(token, { from: monthlyFrom, limit: 1 }),
     fetchRelayAdminModelUsage(token, { from: monthlyFrom, limit: 1 })
   ])
-  return { daily, modelUsage, monthly, weekly }
+  return { daily, modelUsage, monthly, observedAt: now.toISOString(), weekly }
 }
