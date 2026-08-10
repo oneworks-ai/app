@@ -7,7 +7,7 @@ import { App, Empty, Spin } from 'antd'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import useSWR, { useSWRConfig } from 'swr'
+import useSWR from 'swr'
 
 import type { RouteContainerHeaderActionItem, RouteContainerHeaderBreadcrumb } from '@oneworks/components/route-layout'
 import type { NativeHostPlugin, PluginMarketplaceCatalogPlugin, PluginMarketplaceInstallTarget } from '@oneworks/types'
@@ -19,6 +19,7 @@ import { RouteContainerLayout } from '#~/components/layout/RouteContainerLayout'
 import { useRouteSidebar } from '#~/components/layout/route-sidebar-context'
 import type { RouteSidebarListContextMenuItems, RouteSidebarListItem } from '#~/components/layout/route-sidebar-context'
 import { useRouteContainerSidebarOpener } from '#~/components/layout/use-route-container-sidebar-opener'
+import { useMarketplacePluginSelection } from '#~/components/plugins/@hooks/use-marketplace-plugin-selection'
 import { MarketplacePluginDetailPanel } from '#~/components/plugins/MarketplacePluginDetailPanel'
 import { NativePluginDetailPanel } from '#~/components/plugins/NativePluginDetailPanel'
 import { PluginCreateLanding } from '#~/components/plugins/PluginCreateLanding'
@@ -28,9 +29,9 @@ import { PluginHomeView } from '#~/components/plugins/PluginHomeView'
 import {
   PluginMarketplaceLanding,
   isMarketplacePluginInstallable,
-  isPluginInstalledForTarget,
   resolveMarketplacePluginInstallIdentity
 } from '#~/components/plugins/PluginMarketplaceLanding'
+import { PluginMarketplaceUninstallStatus } from '#~/components/plugins/PluginMarketplaceUninstallStatus'
 import { PluginRuntimeListView } from '#~/components/plugins/PluginRuntimeListView'
 import {
   PluginGroupModeControls,
@@ -45,11 +46,9 @@ import {
 } from '#~/components/plugins/plugin-runtime-list-items'
 import { usePluginMarketplaceUninstall } from '#~/components/plugins/use-plugin-marketplace-uninstall'
 import { listNativeHostPlugins, setPluginEnabled, setPluginWatch } from '#~/plugins/api'
-import {
-  listPluginMarketplaceCatalog,
-  resolvePluginMarketplaceVersions,
-  syncPluginMarketplaceSelection
-} from '#~/plugins/marketplace-api'
+import { listPluginMarketplaceCatalog, resolvePluginMarketplaceVersions } from '#~/plugins/marketplace-api'
+import { applyMarketplaceCacheRefresh, resolveMarketplaceServerKey } from '#~/plugins/marketplace-mutation-authority'
+import type { MarketplaceConvergenceAuthority } from '#~/plugins/marketplace-mutation-authority'
 import { usePluginContext } from '#~/plugins/plugin-context'
 import type { PluginRuntimeInstance } from '#~/plugins/plugin-manifest'
 import {
@@ -78,7 +77,6 @@ export function PluginStoreRoute() {
   const { i18n, t } = useTranslation()
   const language = i18n.resolvedLanguage ?? i18n.language
   const { message } = App.useApp()
-  const { mutate: mutateSWR } = useSWRConfig()
   const navigate = useNavigate()
   const location = useLocation()
   const { scope = '' } = useParams()
@@ -91,7 +89,6 @@ export function PluginStoreRoute() {
   } = useRoutePluginChrome('plugins')
   const [updatingEnabledAction, setUpdatingEnabledAction] = useState<string>()
   const [updatingWatchScope, setUpdatingWatchScope] = useState<string>()
-  const [installingMarketplaceTarget, setInstallingMarketplaceTarget] = useState<PluginMarketplaceInstallTarget>()
   const [pluginQuery, setPluginQuery] = useState('')
   const [pluginGroupMode, setPluginGroupMode] = useState<PluginGroupMode>('enabled')
   const [pluginMarketplaceQuery, setPluginMarketplaceQuery] = useState('')
@@ -114,10 +111,36 @@ export function PluginStoreRoute() {
       : null,
     () => listPluginMarketplaceCatalog({ serverBaseUrl: pluginServerBaseUrl })
   )
-  const { data: configRes } = useSWR(
+  const { data: configRes, mutate: mutateConfig } = useSWR(
     ['/api/config', pluginServerBaseUrl ?? 'current'],
     () => getConfig({ serverBaseUrl: pluginServerBaseUrl })
   )
+  const marketplaceSelection = useMarketplacePluginSelection({
+    catalog: marketplaceCatalog,
+    contextKey: JSON.stringify([pluginServerBaseUrl ?? 'current', pluginLocation.page, scope]),
+    loadCatalog: () => listPluginMarketplaceCatalog({ serverBaseUrl: pluginServerBaseUrl }),
+    mutateCatalog: mutateMarketplaceCatalog,
+    onError: error =>
+      void message.error(projectPluginPresentationValue(
+        getApiErrorMessage(error, t('pluginStore.marketplacePluginSaveFailed'))
+      )),
+    onSuccess: ({ enabled, target }) =>
+      void message.success(t(
+        enabled
+          ? target === 'global'
+            ? 'pluginStore.marketplacePluginInstalledGlobal'
+            : 'pluginStore.marketplacePluginInstalledProject'
+          : 'pluginStore.marketplacePluginRemoved'
+      )),
+    refreshAfterSuccess: authority =>
+      applyMarketplaceCacheRefresh({
+        authority: authority.config,
+        load: () => getConfig({ serverBaseUrl: pluginServerBaseUrl }),
+        mutate: mutateConfig
+      }),
+    refreshPlugins,
+    serverBaseUrl: pluginServerBaseUrl
+  })
   const encodedScope = encodeURIComponent(scope)
   const isDiagnosticsPage = scope !== '' && location.pathname.endsWith(`/${encodedScope}/diagnostics`)
   const detailParentPage = location.pathname.startsWith('/plugins/store/') ? 'store' : 'list'
@@ -196,21 +219,27 @@ export function PluginStoreRoute() {
     : resolveMarketplacePluginInstallIdentity(
       configRes,
       selectedMarketplacePlugin,
-      'project'
+      'project',
+      plugins
     )
   const uninstallIdentity = selectedPlugin == null
     ? selectedMarketplaceUninstallIdentity
     : undefined
-  const refreshAfterUninstall = useCallback(() => [
-    refreshPlugins(),
-    listPluginMarketplaceCatalog({ serverBaseUrl: pluginServerBaseUrl }).then(catalog =>
-      mutateSWR(
-        ['/api/plugins/marketplace/catalog', pluginServerBaseUrl ?? 'current'],
-        catalog,
-        { revalidate: false }
-      )
-    )
-  ], [mutateSWR, pluginServerBaseUrl, refreshPlugins])
+  const refreshAfterUninstall = useCallback((authority: MarketplaceConvergenceAuthority) => ({
+    catalog: applyMarketplaceCacheRefresh({
+      authority: authority.catalog,
+      load: () => listPluginMarketplaceCatalog({ serverBaseUrl: pluginServerBaseUrl }),
+      mutate: mutateMarketplaceCatalog
+    }),
+    config: applyMarketplaceCacheRefresh({
+      authority: authority.config,
+      load: () => getConfig({ serverBaseUrl: pluginServerBaseUrl }),
+      mutate: mutateConfig
+    }),
+    runtime: refreshPlugins({ isCurrent: authority.runtime.isCurrent }).then(result => ({
+      applied: result.applied && authority.runtime.isCurrent()
+    }))
+  }), [mutateConfig, mutateMarketplaceCatalog, pluginServerBaseUrl, refreshPlugins])
   const marketplaceUninstall = usePluginMarketplaceUninstall({
     displayName: selectedPlugin != null
       ? resolvePluginDisplayName(selectedPlugin, language)
@@ -221,7 +250,7 @@ export function PluginStoreRoute() {
     onRemoved: () => void navigate(PLUGIN_PATHS.list),
     refreshAfterRemoval: refreshAfterUninstall,
     serverBaseUrl: pluginServerBaseUrl,
-    surfaceKey: `plugin-detail:${detailParentPage}:${scope}`
+    surfaceKey: `plugin-detail:${resolveMarketplaceServerKey(pluginServerBaseUrl)}:${detailParentPage}:${scope}`
   })
 
   const headerTitle = selectedPlugin != null
@@ -351,33 +380,6 @@ export function PluginStoreRoute() {
         setUpdatingEnabledAction(undefined)
       })
   }, [message, pluginServerBaseUrl, refreshPlugins, t])
-
-  const toggleMarketplacePlugin = useCallback(async (target: PluginMarketplaceInstallTarget) => {
-    if (selectedMarketplacePlugin == null || !isMarketplacePluginInstallable(selectedMarketplacePlugin)) return
-    const enabled = !isPluginInstalledForTarget(selectedMarketplacePlugin, target)
-    setInstallingMarketplaceTarget(target)
-    try {
-      await syncPluginMarketplaceSelection(
-        selectedMarketplacePlugin.marketplace,
-        selectedMarketplacePlugin.name,
-        enabled,
-        target,
-        { serverBaseUrl: pluginServerBaseUrl }
-      )
-      await Promise.all([mutateMarketplaceCatalog(), refreshPlugins()])
-      void message.success(t(
-        enabled
-          ? target === 'global'
-            ? 'pluginStore.marketplacePluginInstalledGlobal'
-            : 'pluginStore.marketplacePluginInstalledProject'
-          : 'pluginStore.marketplacePluginRemoved'
-      ))
-    } catch (error) {
-      void message.error(getApiErrorMessage(error, t('pluginStore.marketplacePluginSaveFailed')))
-    } finally {
-      setInstallingMarketplaceTarget(undefined)
-    }
-  }, [message, mutateMarketplaceCatalog, pluginServerBaseUrl, refreshPlugins, selectedMarketplacePlugin, t])
 
   const createPluginContextMenuItems = useCallback(
     (plugin: PluginRuntimeInstance): RouteSidebarListContextMenuItems => {
@@ -580,13 +582,16 @@ export function PluginStoreRoute() {
         { icon: 'public', target: 'global' }
       ]
       for (const { icon, target } of targets) {
-        const installed = isPluginInstalledForTarget(selectedMarketplacePlugin, target)
-        const isManagedProjectRemoval = target === 'project' && installed
+        const selectionState = marketplaceSelection.getState(selectedMarketplacePlugin, target)
+        const { installed, pending } = selectionState
+        const isManagedProjectRemoval = target === 'project' && (installed || marketplaceUninstall.pending)
         items.push({
-          active: installed,
+          active: isManagedProjectRemoval || installed,
           disabled: !isMarketplacePluginInstallable(selectedMarketplacePlugin) ||
-            installingMarketplaceTarget != null ||
-            (isManagedProjectRemoval && !marketplaceUninstall.available),
+            pending ||
+            (isManagedProjectRemoval && (
+              marketplaceUninstall.pending || !marketplaceUninstall.available
+            )),
           danger: isManagedProjectRemoval,
           icon,
           key: `marketplace-install-${target}`,
@@ -595,16 +600,16 @@ export function PluginStoreRoute() {
               ? installed
                 ? 'pluginStore.removeMarketplacePlugin'
                 : 'pluginStore.installMarketplacePluginGlobal'
-              : installed
+              : isManagedProjectRemoval
               ? 'pluginStore.removeMarketplacePlugin'
               : 'pluginStore.installMarketplacePluginProject'
           ),
           loading: isManagedProjectRemoval
             ? marketplaceUninstall.pending
-            : installingMarketplaceTarget === target,
+            : pending,
           onSelect: isManagedProjectRemoval
             ? marketplaceUninstall.confirm
-            : () => void toggleMarketplacePlugin(target)
+            : () => void marketplaceSelection.toggle(selectedMarketplacePlugin, target)
         })
       }
     }
@@ -612,8 +617,7 @@ export function PluginStoreRoute() {
   }, [
     isDiagnosticsPage,
     detailPath,
-    toggleMarketplacePlugin,
-    installingMarketplaceTarget,
+    marketplaceSelection,
     navigate,
     pluginLocation.page,
     routePluginHeaderActions,
@@ -690,6 +694,7 @@ export function PluginStoreRoute() {
             selectedDetailItem != null && !isDiagnosticsPage ? ' is-plugin-detail' : ''
           }`}
         >
+          <PluginMarketplaceUninstallStatus active={marketplaceUninstall.indeterminate} />
           {scope === ''
             ? pluginLocation.page === 'home'
               ? (
@@ -724,6 +729,8 @@ export function PluginStoreRoute() {
               : (
                 <PluginMarketplaceLanding
                   query={pluginMarketplaceQuery}
+                  marketplaceSelection={marketplaceSelection}
+                  runtimeInstances={plugins}
                   serverBaseUrl={pluginServerBaseUrl}
                   onOpenPlugin={plugin =>
                     void navigate(
@@ -777,7 +784,9 @@ export function PluginStoreRoute() {
                 pluginServerBaseUrl={pluginServerBaseUrl}
                 snapshot={snapshot}
                 onContributionPreferencesChange={() => reloadPlugin(selectedPlugin!.scope)}
-                onOptionsChange={() => refreshPlugins()}
+                onOptionsChange={async () => {
+                  await refreshPlugins()
+                }}
               />
             )}
         </div>

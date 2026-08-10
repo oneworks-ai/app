@@ -10,6 +10,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PluginRuntimeInstance } from '@oneworks/types'
 
 import { ApiError } from '#~/api/base'
+import {
+  claimMarketplaceConvergenceAuthority,
+  claimMarketplaceSelectionIntentAuthority,
+  listMarketplaceSelectionAuthorities,
+  publishMarketplaceSelectionAuthority,
+  resolveMarketplaceServerKey,
+  settleMarketplaceConvergence
+} from '#~/plugins/marketplace-mutation-authority'
 import { PluginStoreRoute } from '#~/routes/PluginStoreRoute'
 import { createMarketplacePluginRouteKey } from '#~/routes/plugin-routes'
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -22,7 +30,7 @@ const testState = vi.hoisted(() => ({
   config: { sources: {} } as Record<string, unknown>,
   currentScope: 'review',
   destroyModal: vi.fn(),
-  globalMutate: vi.fn(),
+  getConfig: vi.fn(),
   getPlan: vi.fn(),
   instances: [{
     enabled: true,
@@ -34,7 +42,10 @@ const testState = vi.hoisted(() => ({
   }] as PluginRuntimeInstance[],
   listCatalog: vi.fn(),
   messageError: vi.fn(),
+  messageInfo: vi.fn(),
   messageSuccess: vi.fn(),
+  mutateCatalog: vi.fn(),
+  mutateConfig: vi.fn(),
   navigate: vi.fn(),
   plan: {
     available: true,
@@ -68,7 +79,8 @@ const testState = vi.hoisted(() => ({
   },
   refreshPlugins: vi.fn(),
   reloadPlugin: vi.fn(),
-  routeParent: 'list' as 'list' | 'store',
+  routeParent: 'list' as 'legacy' | 'list' | 'store',
+  serverBaseUrl: 'https://workspace.example',
   setRouteSidebar: vi.fn(),
   syncSelection: vi.fn(),
   uninstall: vi.fn()
@@ -82,6 +94,7 @@ vi.mock('antd', async (importOriginal) => {
       useApp: () => ({
         message: {
           error: testState.messageError,
+          info: testState.messageInfo,
           success: testState.messageSuccess
         },
         modal: {
@@ -106,6 +119,10 @@ vi.mock('react-i18next', async (importOriginal) => ({
       if (key === 'pluginStore.uninstall.title') {
         return `${key}:${String(values?.name)}`
       }
+      if (key === 'pluginStore.uninstall.indeterminate') {
+        return 'Plugin removal status is still syncing with the server. ' +
+          'The action will remain unavailable until the authoritative state is confirmed.'
+      }
       return key
     }
   })
@@ -113,7 +130,9 @@ vi.mock('react-i18next', async (importOriginal) => ({
 
 vi.mock('react-router-dom', () => ({
   useLocation: () => ({
-    pathname: `/plugins/${testState.routeParent}/${encodeURIComponent(testState.currentScope)}`,
+    pathname: testState.routeParent === 'legacy'
+      ? `/plugins/${encodeURIComponent(testState.currentScope)}`
+      : `/plugins/${testState.routeParent}/${encodeURIComponent(testState.currentScope)}`,
     search: ''
   }),
   useNavigate: () => testState.navigate,
@@ -130,11 +149,17 @@ vi.mock('swr', () => ({
       ? { plugins: [] }
       : undefined,
     isLoading: false,
-    mutate: vi.fn()
-  }),
-  useSWRConfig: () => ({
-    mutate: testState.globalMutate
+    mutate: Array.isArray(key) && key[0] === '/api/plugins/marketplace/catalog'
+      ? testState.mutateCatalog
+      : Array.isArray(key) && key[0] === '/api/config'
+      ? testState.mutateConfig
+      : vi.fn()
   })
+}))
+
+vi.mock('#~/api.js', async (importOriginal) => ({
+  ...await importOriginal<typeof import('#~/api.js')>(),
+  getConfig: testState.getConfig
 }))
 
 vi.mock('#~/components/icons/MaterialSymbol', () => ({
@@ -243,7 +268,7 @@ vi.mock('#~/plugins/marketplace-api', () => ({
 
 vi.mock('#~/plugins/plugin-context', () => ({
   usePluginContext: () => ({
-    pluginServerBaseUrl: 'https://workspace.example',
+    pluginServerBaseUrl: testState.serverBaseUrl,
     refreshPlugins: testState.refreshPlugins,
     reloadPlugin: testState.reloadPlugin,
     snapshot: {
@@ -287,6 +312,9 @@ const getConfirmCallback = (name: 'onCancel' | 'onOk') => {
   return callback as () => Promise<void> | void
 }
 
+const indeterminateCopy = 'Plugin removal status is still syncing with the server. ' +
+  'The action will remain unavailable until the authoritative state is confirmed.'
+
 describe('plugin store route marketplace uninstall detail action', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -323,6 +351,7 @@ describe('plugin store route marketplace uninstall detail action', () => {
       }
     }
     testState.routeParent = 'store'
+    testState.serverBaseUrl = 'https://workspace.example'
     testState.instances = []
     testState.plan = {
       available: true,
@@ -360,9 +389,12 @@ describe('plugin store route marketplace uninstall detail action', () => {
       removed: true
     })
     testState.getPlan.mockImplementation(() => Promise.resolve(testState.plan))
-    testState.refreshPlugins.mockResolvedValue(undefined)
+    testState.refreshPlugins.mockResolvedValue({ applied: true })
     testState.listCatalog.mockResolvedValue({ plugins: [], sources: [] })
-    testState.globalMutate.mockResolvedValue(undefined)
+    testState.getConfig.mockImplementation(async () => testState.config)
+    testState.mutateCatalog.mockResolvedValue(undefined)
+    testState.mutateConfig.mockResolvedValue(undefined)
+    testState.syncSelection.mockResolvedValue(undefined)
     container = document.createElement('div')
     document.body.append(container)
     root = createRoot(container)
@@ -625,6 +657,88 @@ describe('plugin store route marketplace uninstall detail action', () => {
     expect(testState.navigate).toHaveBeenCalledWith('/plugins/list')
   })
 
+  it('uses the authoritative managed runtime scope after a catalog detail reload', async () => {
+    const marketplace = 'claude-plugins-official'
+    const plugin = 'agent-sdk-dev'
+    const scope = 'claude-claude-plugins-official-agent-sd-57d7f45af4cc574479565430'
+    testState.routeParent = 'store'
+    testState.currentScope = createMarketplacePluginRouteKey(marketplace, plugin)
+    testState.catalog = {
+      plugins: [{
+        builtIn: true,
+        configSource: 'project',
+        declared: true,
+        enabled: true,
+        installable: true,
+        installedSources: ['project'],
+        marketplace,
+        marketplaceEnabled: true,
+        marketplaceType: 'claude-code',
+        name: plugin,
+        sourceLabel: './plugins/agent-sdk-dev',
+        sourceType: 'directory'
+      }],
+      sources: []
+    }
+    testState.config = {
+      sources: {
+        project: {
+          plugins: {
+            marketplaces: {
+              [marketplace]: {
+                enabled: true,
+                plugins: { [plugin]: { enabled: true } },
+                type: 'claude-code'
+              }
+            }
+          }
+        }
+      }
+    }
+    testState.instances = [{
+      enabled: true,
+      name: plugin,
+      packageId: `${plugin}@${marketplace}`,
+      requestId: `${plugin}@${marketplace}`,
+      scope,
+      source: {
+        adapter: 'claude',
+        kind: 'marketplace',
+        marketplace,
+        plugin
+      },
+      sourceGroup: 'project',
+      watch: { enabled: false }
+    }]
+    testState.plan = {
+      ...testState.plan,
+      identity: {
+        adapter: 'claude',
+        marketplace,
+        plugin,
+        scope
+      },
+      token: 'e'.repeat(64)
+    }
+    await renderRoute()
+
+    await clickUninstall()
+    await act(async () => {
+      await getConfirmCallback('onOk')()
+    })
+
+    expect(testState.getPlan).toHaveBeenCalledWith(
+      scope,
+      expect.objectContaining({ serverBaseUrl: 'https://workspace.example' })
+    )
+    expect(testState.uninstall).toHaveBeenCalledWith(
+      scope,
+      'e'.repeat(64),
+      expect.objectContaining({ serverBaseUrl: 'https://workspace.example' })
+    )
+    expect(testState.navigate).toHaveBeenCalledWith('/plugins/list')
+  })
+
   it('deduplicates confirm while pending, then refreshes runtime and catalog before navigating', async () => {
     let resolveUninstall: (() => void) | undefined
     testState.uninstall.mockReturnValue(
@@ -656,21 +770,75 @@ describe('plugin store route marketplace uninstall detail action', () => {
     expect(testState.listCatalog).toHaveBeenCalledWith({
       serverBaseUrl: 'https://workspace.example'
     })
-    expect(testState.globalMutate).toHaveBeenCalledTimes(1)
+    expect(testState.mutateCatalog).toHaveBeenCalledTimes(1)
+    expect(testState.mutateConfig).toHaveBeenCalledTimes(1)
     expect(testState.navigate).toHaveBeenCalledWith('/plugins/list')
     expect(testState.messageSuccess).toHaveBeenCalledWith('pluginStore.uninstall.success')
     const navigateOrder = testState.navigate.mock.invocationCallOrder.at(-1) ?? 0
     expect(testState.refreshPlugins.mock.invocationCallOrder[0]).toBeLessThan(navigateOrder)
     expect(testState.listCatalog.mock.invocationCallOrder[0]).toBeLessThan(navigateOrder)
-    expect(testState.globalMutate.mock.invocationCallOrder[0]).toBeLessThan(navigateOrder)
+    expect(testState.mutateCatalog.mock.invocationCallOrder[0]).toBeLessThan(navigateOrder)
+    expect(testState.mutateConfig.mock.invocationCallOrder[0]).toBeLessThan(navigateOrder)
+  })
+
+  it('rebinds one pending detail uninstall across same-identity store and list surfaces', async () => {
+    let requestSignal: AbortSignal | undefined
+    let resolveUninstall: (() => void) | undefined
+    testState.uninstall.mockImplementationOnce((
+      _scope: string,
+      _token: string,
+      options: { signal?: AbortSignal }
+    ) => {
+      requestSignal = options.signal
+      return new Promise((resolve) => {
+        resolveUninstall = () =>
+          resolve({
+            identity: testState.plan.identity,
+            removed: true
+          })
+      })
+    })
+    await renderRoute()
+    await clickUninstall()
+    let pending: Promise<void> | undefined
+    await act(async () => {
+      pending = Promise.resolve(getConfirmCallback('onOk')())
+      await vi.waitFor(() => expect(testState.uninstall).toHaveBeenCalledTimes(1))
+    })
+
+    testState.routeParent = 'legacy'
+    await renderRoute()
+    const removalAction = container.querySelector<HTMLButtonElement>(
+      '[data-action-key="marketplace-install-project"]'
+    )
+    if (removalAction == null) throw new Error('Expected rebound marketplace removal action')
+    expect(requestSignal?.aborted).toBe(false)
+    expect(removalAction.disabled).toBe(true)
+    await act(async () => {
+      removalAction.click()
+    })
+    expect(testState.confirm).toHaveBeenCalledTimes(1)
+    expect(testState.getPlan).toHaveBeenCalledTimes(1)
+    expect(testState.uninstall).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      resolveUninstall?.()
+      await pending
+    })
+    expect(testState.refreshPlugins).toHaveBeenCalledTimes(1)
+    expect(testState.listCatalog).toHaveBeenCalledTimes(1)
+    expect(testState.getConfig).toHaveBeenCalledTimes(1)
+    expect(testState.messageSuccess).not.toHaveBeenCalled()
+    expect(testState.messageError).not.toHaveBeenCalled()
+    expect(testState.navigate).not.toHaveBeenCalledWith('/plugins/list')
   })
 
   it('completes feedback and navigation when authoritative refresh removes its marketplace identity', async () => {
     let resolveCatalog: (() => void) | undefined
     let resolveRefresh: (() => void) | undefined
     testState.refreshPlugins.mockReturnValue(
-      new Promise<void>((resolve) => {
-        resolveRefresh = resolve
+      new Promise((resolve) => {
+        resolveRefresh = () => resolve({ applied: true })
       })
     )
     testState.listCatalog.mockReturnValue(
@@ -702,6 +870,84 @@ describe('plugin store route marketplace uninstall detail action', () => {
     expect(testState.navigate).toHaveBeenCalledWith('/plugins/list')
   })
 
+  it('keeps committed detail removal disabled and suppresses stale results after a newer install intent', async () => {
+    let resolveCatalog: (() => void) | undefined
+    let resolveConfig: (() => void) | undefined
+    let resolveRuntime: (() => void) | undefined
+    testState.listCatalog.mockReturnValue(
+      new Promise((resolve) => {
+        resolveCatalog = () => resolve(testState.catalog)
+      })
+    )
+    testState.getConfig.mockReturnValue(
+      new Promise((resolve) => {
+        resolveConfig = () => resolve(testState.config)
+      })
+    )
+    testState.refreshPlugins.mockReturnValue(
+      new Promise((resolve) => {
+        resolveRuntime = () => resolve({ applied: true })
+      })
+    )
+    await renderRoute()
+    await clickUninstall()
+    let pending: Promise<void> | undefined
+    await act(async () => {
+      pending = Promise.resolve(getConfirmCallback('onOk')())
+      for (let index = 0; index < 8; index += 1) await Promise.resolve()
+    })
+    expect(testState.uninstall).toHaveBeenCalledTimes(1)
+    expect(testState.refreshPlugins).toHaveBeenCalledTimes(1)
+
+    testState.catalog = {
+      ...testState.catalog,
+      plugins: testState.catalog.plugins.map(item => ({ ...item, installedSources: [] }))
+    }
+    await renderRoute()
+    const removalAction = container.querySelector<HTMLButtonElement>(
+      '[data-action-key="marketplace-install-project"]'
+    )
+    expect(removalAction?.textContent).toBe('pluginStore.removeMarketplacePlugin')
+    expect(removalAction?.disabled).toBe(true)
+    removalAction?.click()
+    expect(testState.syncSelection).not.toHaveBeenCalled()
+
+    const serverKey = resolveMarketplaceServerKey(testState.serverBaseUrl)
+    const newerIntent = claimMarketplaceSelectionIntentAuthority(serverKey, {
+      marketplace: 'team',
+      plugin: 'reviewer',
+      target: 'project'
+    })
+    const newerSelection = publishMarketplaceSelectionAuthority(serverKey, {
+      enabled: true,
+      marketplace: 'team',
+      plugin: 'reviewer',
+      target: 'project'
+    }, 'confirmed')
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(newerIntent.isCurrent()).toBe(true)
+    expect(newerSelection.isCurrent()).toBe(true)
+
+    await act(async () => {
+      resolveCatalog?.()
+      resolveConfig?.()
+      resolveRuntime?.()
+      await pending
+    })
+    expect(testState.mutateCatalog).not.toHaveBeenCalled()
+    expect(testState.mutateConfig).not.toHaveBeenCalled()
+    expect(testState.messageSuccess).not.toHaveBeenCalled()
+    expect(testState.messageError).not.toHaveBeenCalled()
+    expect(testState.navigate).not.toHaveBeenCalled()
+    const runtimeAuthority = testState.refreshPlugins.mock.calls[0]?.[0] as { isCurrent?: () => boolean } | undefined
+    expect(runtimeAuthority?.isCurrent?.()).toBe(false)
+    expect(listMarketplaceSelectionAuthorities(serverKey)).toEqual([newerSelection])
+    newerIntent.release()
+  })
+
   it('keeps a failed request retryable and succeeds on the next confirm', async () => {
     testState.uninstall
       .mockRejectedValueOnce(new Error('request failed'))
@@ -730,6 +976,318 @@ describe('plugin store route marketplace uninstall detail action', () => {
     })
     expect(testState.uninstall).toHaveBeenCalledTimes(2)
     expect(testState.navigate).toHaveBeenCalledWith('/plugins/list')
+  })
+
+  it('reconciles a committed detail removal after a request timeout loses the response', async () => {
+    testState.uninstall.mockImplementationOnce(async () => {
+      testState.config = { sources: { project: { plugins: { marketplaces: {} } } } }
+      testState.catalog = { plugins: [], sources: [] }
+      throw new ApiError(408, {
+        code: 'request_timeout',
+        message: 'Request timed out.'
+      })
+    })
+    await renderRoute()
+    await clickUninstall()
+
+    await act(async () => {
+      await getConfirmCallback('onOk')()
+    })
+
+    expect(testState.uninstall).toHaveBeenCalledTimes(1)
+    expect(testState.getConfig).toHaveBeenCalledTimes(1)
+    expect(testState.listCatalog).toHaveBeenCalledTimes(1)
+    expect(testState.refreshPlugins).toHaveBeenCalledTimes(1)
+    expect(testState.mutateConfig).toHaveBeenCalledTimes(1)
+    expect(testState.mutateCatalog).toHaveBeenCalledTimes(1)
+    expect(testState.messageSuccess).toHaveBeenCalledWith('pluginStore.uninstall.success')
+    expect(testState.messageError).not.toHaveBeenCalled()
+    expect(testState.navigate).toHaveBeenCalledWith('/plugins/list')
+  })
+
+  it('keeps split detail roots indeterminate across a same-server scope handoff', async () => {
+    vi.useFakeTimers()
+    try {
+      const installedCatalog = testState.catalog
+      const removedConfig = { sources: { project: { plugins: { marketplaces: {} } } } }
+      const removedCatalog = {
+        ...testState.catalog,
+        plugins: testState.catalog.plugins.map(item => ({ ...item, installedSources: [] }))
+      }
+      testState.uninstall.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      testState.getConfig
+        .mockResolvedValueOnce(removedConfig)
+        .mockResolvedValueOnce(removedConfig)
+      testState.listCatalog
+        .mockResolvedValueOnce(installedCatalog)
+        .mockResolvedValueOnce(removedCatalog)
+      await renderRoute()
+      await clickUninstall()
+      let pending: Promise<void> | undefined
+      await act(async () => {
+        pending = Promise.resolve(getConfirmCallback('onOk')())
+        for (let index = 0; index < 8; index += 1) await Promise.resolve()
+      })
+
+      expect(testState.messageInfo).toHaveBeenCalledWith(indeterminateCopy)
+      expect(testState.messageSuccess).not.toHaveBeenCalled()
+      expect(testState.messageError).not.toHaveBeenCalled()
+      expect(testState.navigate).not.toHaveBeenCalled()
+      expect(
+        container.querySelector<HTMLButtonElement>(
+          '[data-action-key="marketplace-install-project"]'
+        )?.disabled
+      ).toBe(true)
+      const status = container.querySelector<HTMLElement>('[role="status"]')
+      expect(status?.textContent).toBe(indeterminateCopy)
+      expect(status?.getAttribute('aria-live')).toBe('polite')
+      expect(status?.getAttribute('aria-atomic')).toBe('true')
+
+      testState.currentScope = createMarketplacePluginRouteKey('team', 'other')
+      await renderRoute()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(250)
+        await pending
+      })
+      expect(testState.getConfig).toHaveBeenCalledTimes(2)
+      expect(testState.listCatalog).toHaveBeenCalledTimes(2)
+      expect(testState.mutateConfig).toHaveBeenCalledTimes(2)
+      expect(testState.mutateCatalog).toHaveBeenCalledTimes(2)
+      expect(testState.messageSuccess).not.toHaveBeenCalled()
+      expect(testState.messageError).not.toHaveBeenCalled()
+      expect(testState.navigate).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('rebinds response-loss ownership across same-identity store and list surfaces', async () => {
+    vi.useFakeTimers()
+    try {
+      const installedCatalog = testState.catalog
+      const removedConfig = { sources: { project: { plugins: { marketplaces: {} } } } }
+      const removedCatalog = {
+        ...testState.catalog,
+        plugins: testState.catalog.plugins.map(item => ({ ...item, installedSources: [] }))
+      }
+      testState.uninstall.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      testState.getConfig
+        .mockResolvedValueOnce(removedConfig)
+        .mockResolvedValueOnce(removedConfig)
+      testState.listCatalog
+        .mockResolvedValueOnce(installedCatalog)
+        .mockResolvedValueOnce(removedCatalog)
+      await renderRoute()
+      await clickUninstall()
+      let pending: Promise<void> | undefined
+      await act(async () => {
+        pending = Promise.resolve(getConfirmCallback('onOk')())
+        for (let index = 0; index < 8; index += 1) await Promise.resolve()
+      })
+      expect(testState.messageInfo).toHaveBeenCalledWith(indeterminateCopy)
+      expect(testState.uninstall).toHaveBeenCalledTimes(1)
+
+      testState.routeParent = 'legacy'
+      await renderRoute()
+      const removalAction = container.querySelector<HTMLButtonElement>(
+        '[data-action-key="marketplace-install-project"]'
+      )
+      if (removalAction == null) throw new Error('Expected rebound marketplace removal action')
+      expect(removalAction.disabled).toBe(true)
+      expect(container.querySelector<HTMLElement>('[role="status"]')?.textContent).toBe(
+        indeterminateCopy
+      )
+      await act(async () => {
+        removalAction.click()
+      })
+      expect(testState.confirm).toHaveBeenCalledTimes(1)
+      expect(testState.getPlan).toHaveBeenCalledTimes(1)
+      expect(testState.uninstall).toHaveBeenCalledTimes(1)
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(250)
+        await pending
+      })
+      expect(testState.getConfig).toHaveBeenCalledTimes(2)
+      expect(testState.listCatalog).toHaveBeenCalledTimes(2)
+      expect(testState.mutateConfig).toHaveBeenCalledTimes(2)
+      expect(testState.mutateCatalog).toHaveBeenCalledTimes(2)
+      expect(testState.messageInfo).toHaveBeenCalledTimes(1)
+      expect(testState.messageSuccess).not.toHaveBeenCalled()
+      expect(testState.messageError).not.toHaveBeenCalled()
+      expect(testState.navigate).not.toHaveBeenCalledWith('/plugins/list')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps response-loss detail owned when a newer failed round supersedes runtime apply', async () => {
+    vi.useFakeTimers()
+    try {
+      let resolveRuntime: (() => void) | undefined
+      const removedConfig = { sources: { project: { plugins: { marketplaces: {} } } } }
+      const removedCatalog = {
+        ...testState.catalog,
+        plugins: testState.catalog.plugins.map(item => ({ ...item, installedSources: [] }))
+      }
+      testState.uninstall.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      testState.getConfig.mockResolvedValueOnce(removedConfig)
+      testState.listCatalog.mockResolvedValueOnce(removedCatalog)
+      testState.refreshPlugins.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveRuntime = () => resolve({ applied: true })
+        })
+      )
+      await renderRoute()
+      await clickUninstall()
+      let pending: Promise<void> | undefined
+      await act(async () => {
+        pending = Promise.resolve(getConfirmCallback('onOk')())
+        for (let index = 0; index < 8; index += 1) await Promise.resolve()
+      })
+      expect(testState.mutateConfig).toHaveBeenCalledTimes(1)
+      expect(testState.mutateCatalog).toHaveBeenCalledTimes(1)
+      expect(testState.refreshPlugins).toHaveBeenCalledTimes(1)
+
+      const newerAuthority = claimMarketplaceConvergenceAuthority(
+        resolveMarketplaceServerKey(testState.serverBaseUrl)
+      )
+      await settleMarketplaceConvergence(newerAuthority, () => [
+        Promise.reject(new Error('newer config failed')),
+        Promise.reject(new Error('newer catalog failed')),
+        Promise.reject(new Error('newer runtime failed'))
+      ])
+      await act(async () => {
+        resolveRuntime?.()
+        for (let index = 0; index < 8; index += 1) await Promise.resolve()
+      })
+
+      expect(testState.messageInfo).toHaveBeenCalledTimes(1)
+      expect(testState.messageSuccess).not.toHaveBeenCalled()
+      expect(testState.messageError).not.toHaveBeenCalled()
+      expect(testState.navigate).not.toHaveBeenCalled()
+      expect(
+        container.querySelector<HTMLButtonElement>(
+          '[data-action-key="marketplace-install-project"]'
+        )?.disabled
+      ).toBe(true)
+
+      await act(async () => {
+        root?.unmount()
+      })
+      root = undefined
+      await expect(pending).resolves.toBeUndefined()
+      expect(testState.messageInfo).toHaveBeenCalledTimes(1)
+      expect(testState.messageSuccess).not.toHaveBeenCalled()
+      expect(testState.navigate).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps response-loss detail owned when an ordinary provider refresh supersedes runtime apply', async () => {
+    vi.useFakeTimers()
+    try {
+      let isMarketplaceRuntimeCurrent: (() => boolean) | undefined
+      let resolveUninstallRuntime: (() => void) | undefined
+      const removedConfig = { sources: { project: { plugins: { marketplaces: {} } } } }
+      const removedCatalog = {
+        ...testState.catalog,
+        plugins: testState.catalog.plugins.map(item => ({ ...item, installedSources: [] }))
+      }
+      testState.uninstall.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      testState.getConfig.mockResolvedValueOnce(removedConfig)
+      testState.listCatalog.mockResolvedValueOnce(removedCatalog)
+      testState.refreshPlugins
+        .mockImplementationOnce((options?: { isCurrent?: () => boolean }) => {
+          isMarketplaceRuntimeCurrent = options?.isCurrent
+          return new Promise((resolve) => {
+            resolveUninstallRuntime = () => resolve({ applied: false })
+          })
+        })
+        .mockResolvedValueOnce({ applied: true })
+
+      await renderRoute()
+      await clickUninstall()
+      let pending: Promise<void> | undefined
+      await act(async () => {
+        pending = Promise.resolve(getConfirmCallback('onOk')())
+        for (let index = 0; index < 8; index += 1) await Promise.resolve()
+      })
+      expect(isMarketplaceRuntimeCurrent?.()).toBe(true)
+
+      await act(async () => {
+        await expect(testState.refreshPlugins()).resolves.toEqual({ applied: true })
+        expect(isMarketplaceRuntimeCurrent?.()).toBe(true)
+        resolveUninstallRuntime?.()
+        for (let index = 0; index < 8; index += 1) await Promise.resolve()
+      })
+
+      const status = container.querySelector<HTMLElement>('[role="status"]')
+      expect(status?.textContent).toBe(indeterminateCopy)
+      expect(status?.getAttribute('aria-live')).toBe('polite')
+      expect(status?.getAttribute('aria-atomic')).toBe('true')
+      expect(testState.messageInfo).toHaveBeenCalledTimes(1)
+      expect(testState.messageSuccess).not.toHaveBeenCalled()
+      expect(testState.messageError).not.toHaveBeenCalled()
+      expect(testState.navigate).not.toHaveBeenCalled()
+      expect(
+        container.querySelector<HTMLButtonElement>(
+          '[data-action-key="marketplace-install-project"]'
+        )?.disabled
+      ).toBe(true)
+
+      await act(async () => {
+        root?.unmount()
+      })
+      root = undefined
+      await expect(pending).resolves.toBeUndefined()
+      expect(testState.messageSuccess).not.toHaveBeenCalled()
+      expect(testState.navigate).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('stops active response-loss reconciliation on unmount without terminal feedback', async () => {
+    vi.useFakeTimers()
+    try {
+      let requestSignal: AbortSignal | undefined
+      testState.uninstall.mockImplementationOnce((
+        _scope: string,
+        _token: string,
+        options: { signal?: AbortSignal }
+      ) => {
+        requestSignal = options.signal
+        return Promise.reject(new TypeError('Failed to fetch'))
+      })
+      testState.listCatalog.mockResolvedValueOnce(testState.catalog)
+      testState.getConfig.mockResolvedValueOnce(testState.config)
+      await renderRoute()
+      await clickUninstall()
+      let pending: Promise<void> | undefined
+      await act(async () => {
+        pending = Promise.resolve(getConfirmCallback('onOk')())
+        for (let index = 0; index < 8; index += 1) await Promise.resolve()
+      })
+      expect(testState.messageInfo).toHaveBeenCalledWith(indeterminateCopy)
+      expect(testState.getConfig).toHaveBeenCalledTimes(1)
+      expect(testState.listCatalog).toHaveBeenCalledTimes(1)
+
+      await act(async () => {
+        root?.unmount()
+      })
+      root = undefined
+      await expect(pending).resolves.toBeUndefined()
+      expect(requestSignal?.aborted).toBe(true)
+      expect(testState.getConfig).toHaveBeenCalledTimes(1)
+      expect(testState.listCatalog).toHaveBeenCalledTimes(1)
+      expect(testState.messageSuccess).not.toHaveBeenCalled()
+      expect(testState.messageError).not.toHaveBeenCalled()
+      expect(testState.navigate).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('closes a stale quote and requires a fresh confirmation before retrying', async () => {
@@ -873,6 +1431,197 @@ describe('plugin store route marketplace uninstall detail action', () => {
     })
   })
 
+  it('never revives old convergence after the same detail tuple moves A to B to A', async () => {
+    let resolveCatalog: (() => void) | undefined
+    let resolveConfig: (() => void) | undefined
+    let resolveRuntime: (() => void) | undefined
+    let requestSignal: AbortSignal | undefined
+    testState.uninstall.mockImplementation((
+      _scope: string,
+      _token: string,
+      options: { signal?: AbortSignal }
+    ) => {
+      requestSignal = options.signal
+      return Promise.resolve({ identity: testState.plan.identity, removed: true })
+    })
+    testState.listCatalog.mockReturnValue(
+      new Promise((resolve) => {
+        resolveCatalog = () => resolve({ plugins: [], sources: [] })
+      })
+    )
+    testState.getConfig.mockReturnValue(
+      new Promise((resolve) => {
+        resolveConfig = () => resolve(testState.config)
+      })
+    )
+    testState.refreshPlugins.mockReturnValue(
+      new Promise((resolve) => {
+        resolveRuntime = () => resolve({ applied: true })
+      })
+    )
+    await renderRoute()
+    await clickUninstall()
+    let pending: Promise<void> | undefined
+    await act(async () => {
+      pending = Promise.resolve(getConfirmCallback('onOk')())
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(testState.refreshPlugins).toHaveBeenCalledTimes(1)
+    expect(testState.listCatalog).toHaveBeenCalledTimes(1)
+    expect(testState.getConfig).toHaveBeenCalledTimes(1)
+
+    testState.serverBaseUrl = 'https://other-workspace.example/'
+    await renderRoute()
+    expect(requestSignal?.aborted).toBe(true)
+    const runtimeAuthority = testState.refreshPlugins.mock.calls[0]?.[0] as {
+      isCurrent?: () => boolean
+    }
+    expect(runtimeAuthority.isCurrent?.()).toBe(false)
+    testState.serverBaseUrl = 'https://workspace.example'
+    await renderRoute()
+    expect(runtimeAuthority.isCurrent?.()).toBe(false)
+    await act(async () => {
+      resolveCatalog?.()
+      resolveConfig?.()
+      resolveRuntime?.()
+      await pending
+    })
+
+    expect(testState.mutateCatalog).not.toHaveBeenCalled()
+    expect(testState.mutateConfig).not.toHaveBeenCalled()
+    expect(testState.messageSuccess).not.toHaveBeenCalled()
+    expect(testState.messageError).not.toHaveBeenCalled()
+    expect(testState.navigate).not.toHaveBeenCalled()
+  })
+
+  it('continues server convergence without old-view writes after a same-server scope handoff', async () => {
+    let resolveCatalog: (() => void) | undefined
+    let resolveConfig: (() => void) | undefined
+    let resolveRuntime: (() => void) | undefined
+    testState.listCatalog.mockReturnValue(
+      new Promise((resolve) => {
+        resolveCatalog = () => resolve({ plugins: [], sources: [] })
+      })
+    )
+    testState.getConfig.mockReturnValue(
+      new Promise((resolve) => {
+        resolveConfig = () => resolve(testState.config)
+      })
+    )
+    testState.refreshPlugins.mockReturnValue(
+      new Promise((resolve) => {
+        resolveRuntime = () => resolve({ applied: true })
+      })
+    )
+    await renderRoute()
+    await clickUninstall()
+    let pending: Promise<void> | undefined
+    await act(async () => {
+      pending = Promise.resolve(getConfirmCallback('onOk')())
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(testState.refreshPlugins).toHaveBeenCalledTimes(1)
+    expect(testState.listCatalog).toHaveBeenCalledTimes(1)
+    expect(testState.getConfig).toHaveBeenCalledTimes(1)
+
+    testState.currentScope = createMarketplacePluginRouteKey('team', 'other')
+    await renderRoute()
+    const runtimeAuthority = testState.refreshPlugins.mock.calls[0]?.[0] as {
+      isCurrent?: () => boolean
+    }
+    expect(runtimeAuthority.isCurrent?.()).toBe(true)
+    await act(async () => {
+      resolveCatalog?.()
+      resolveConfig?.()
+      resolveRuntime?.()
+      await pending
+    })
+
+    expect(testState.mutateCatalog).toHaveBeenCalledTimes(1)
+    expect(testState.mutateConfig).toHaveBeenCalledTimes(1)
+    expect(testState.messageSuccess).not.toHaveBeenCalled()
+    expect(testState.messageError).not.toHaveBeenCalled()
+    expect(testState.navigate).not.toHaveBeenCalled()
+  })
+
+  it('continues response-loss reconciliation without old-view writes after a same-server scope handoff', async () => {
+    let rejectResponseLoss: (() => void) | undefined
+    let resolveCatalog: (() => void) | undefined
+    let resolveConfig: (() => void) | undefined
+    let resolveRuntime: (() => void) | undefined
+    let requestSignal: AbortSignal | undefined
+    testState.uninstall.mockImplementationOnce((
+      _scope: string,
+      _token: string,
+      options: { signal?: AbortSignal }
+    ) =>
+      new Promise((_resolve, reject) => {
+        requestSignal = options.signal
+        const rejectAbort = () => reject(new DOMException('Aborted', 'AbortError'))
+        options.signal?.addEventListener('abort', rejectAbort, { once: true })
+        rejectResponseLoss = () => {
+          options.signal?.removeEventListener('abort', rejectAbort)
+          reject(new TypeError('Failed to fetch'))
+        }
+      })
+    )
+    testState.listCatalog.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveCatalog = () => resolve({ plugins: [], sources: [] })
+      })
+    )
+    testState.getConfig.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveConfig = () => resolve({ sources: { project: { plugins: { marketplaces: {} } } } })
+      })
+    )
+    testState.refreshPlugins.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveRuntime = () => resolve({ applied: true })
+      })
+    )
+    await renderRoute()
+    await clickUninstall()
+    let pending: Promise<void> | undefined
+    await act(async () => {
+      pending = Promise.resolve(getConfirmCallback('onOk')())
+      await vi.waitFor(() => expect(testState.uninstall).toHaveBeenCalledTimes(1))
+    })
+    expect(
+      container.querySelector<HTMLButtonElement>(
+        '[data-action-key="marketplace-install-project"]'
+      )?.disabled
+    ).toBe(true)
+
+    testState.currentScope = createMarketplacePluginRouteKey('team', 'other')
+    await renderRoute()
+    expect(requestSignal?.aborted).toBe(false)
+    await act(async () => {
+      rejectResponseLoss?.()
+      await vi.waitFor(() => expect(testState.refreshPlugins).toHaveBeenCalledTimes(1))
+    })
+    const runtimeAuthority = testState.refreshPlugins.mock.calls[0]?.[0] as {
+      isCurrent?: () => boolean
+    }
+    expect(runtimeAuthority.isCurrent?.()).toBe(true)
+    await act(async () => {
+      resolveCatalog?.()
+      resolveConfig?.()
+      resolveRuntime?.()
+      await pending
+    })
+
+    expect(testState.mutateCatalog).toHaveBeenCalledTimes(1)
+    expect(testState.mutateConfig).toHaveBeenCalledTimes(1)
+    expect(testState.messageSuccess).not.toHaveBeenCalled()
+    expect(testState.messageError).not.toHaveBeenCalled()
+    expect(testState.navigate).not.toHaveBeenCalled()
+  })
+
   it('navigates after a successful uninstall even when post-success refresh reports a warning', async () => {
     testState.refreshPlugins.mockRejectedValueOnce(new Error('refresh failed'))
     await renderRoute()
@@ -930,6 +1679,9 @@ describe('plugin store route marketplace uninstall detail action', () => {
     root = undefined
     await expect(pending).resolves.toBeUndefined()
     expect(requestSignal?.aborted).toBe(true)
+    expect(testState.refreshPlugins).not.toHaveBeenCalled()
+    expect(testState.listCatalog).not.toHaveBeenCalled()
+    expect(testState.getConfig).not.toHaveBeenCalled()
     expect(testState.messageError).not.toHaveBeenCalled()
     expect(testState.navigate).not.toHaveBeenCalled()
   })

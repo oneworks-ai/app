@@ -30,7 +30,7 @@ import type {
 } from './plugin-manifest'
 import { projectPluginNotificationInput } from './plugin-notification-presentation'
 import { resolvePluginDisplayName } from './plugin-presentation'
-import type { PluginRegistry } from './plugin-registry'
+import type { PluginRegistry, PluginScopeRegistrationOwner } from './plugin-registry'
 import type { PluginThemeRegistration } from './plugin-theme-contract'
 
 export interface PluginClientContext {
@@ -111,14 +111,49 @@ interface PluginClientModule {
 }
 
 const noopDisposable = { dispose: () => {} }
-const noopNotificationHandle = { close: () => {}, id: '' }
+let noopNotificationRevision = 0
+const createNoopNotificationHandle = () => ({
+  close: () => {},
+  id: `plugin-notification-noop:${++noopNotificationRevision}`
+})
 
 const noopNotificationApi: NotificationApi = {
   close: () => {},
   isSourceMuted: () => false,
   muteSource: () => {},
-  show: () => noopNotificationHandle,
+  show: createNoopNotificationHandle,
   unmuteSource: () => {}
+}
+
+interface PluginOwnedNotification {
+  close: () => void
+  id: string
+  hostId: string
+  owner: PluginScopeRegistrationOwner
+  retire: () => void
+}
+
+const MAX_PLUGIN_NOTIFICATION_RECORDS_PER_OWNER = 24
+const pluginOwnedNotifications = new WeakMap<NotificationApi, Map<string, PluginOwnedNotification>>()
+const pluginNotificationOwnerNamespaces = new WeakMap<PluginScopeRegistrationOwner, string>()
+let pluginNotificationOwnerRevision = 0
+let pluginNotificationHostRevision = 0
+
+const createPluginNotificationHostId = (owner: PluginScopeRegistrationOwner) => {
+  let namespace = pluginNotificationOwnerNamespaces.get(owner)
+  if (namespace == null) {
+    namespace = `plugin-notification-owner:${++pluginNotificationOwnerRevision}`
+    pluginNotificationOwnerNamespaces.set(owner, namespace)
+  }
+  return `${namespace}:${++pluginNotificationHostRevision}`
+}
+
+const getPluginOwnedNotifications = (notifications: NotificationApi) => {
+  const current = pluginOwnedNotifications.get(notifications)
+  if (current != null) return current
+  const created = new Map<string, PluginOwnedNotification>()
+  pluginOwnedNotifications.set(notifications, created)
+  return created
 }
 
 const toDisposable = (cleanup: PluginCleanup): { dispose: () => void } | undefined => {
@@ -201,7 +236,8 @@ export const invokePluginRuntimeChannel = async (
   scope: string,
   channelId: string,
   invocation: PluginRuntimeChannelInvocation | undefined,
-  serverBaseUrl: string | undefined
+  serverBaseUrl: string | undefined,
+  signal?: AbortSignal
 ) => {
   const response = await fetch(
     buildPluginApiUrl(
@@ -212,7 +248,8 @@ export const invokePluginRuntimeChannel = async (
       body: JSON.stringify(invocation ?? {}),
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      method: 'POST'
+      method: 'POST',
+      signal
     }
   )
   if (!response.ok) {
@@ -340,8 +377,69 @@ export async function activatePluginClient({
   if (entryUrl == null || entryUrl === '') return
   if (!isActivationCurrent()) return
 
+  const registrationOwner = registry.createScopeRegistrationCheckpoint(instance.scope)
+  const isRegistrationCurrent = () =>
+    isActivationCurrent() &&
+    registry.isScopeRegistrationOwnerActive(instance.scope, registrationOwner)
   const hotCallbacks = new Set<() => void | Promise<void>>()
+  const rollbackActivation = () => {
+    hotCallbacks.clear()
+    registry.rollbackScopeRegistrations(instance.scope, registrationOwner)
+  }
+  const effectControllers = new Set<AbortController>()
+  const createInactiveError = () => new Error(`Plugin activation "${instance.scope}" is no longer active.`)
+  const runActivationEffect = async <T>(
+    effect: (signal: AbortSignal) => Promise<T>,
+    parentSignal?: AbortSignal
+  ) => {
+    if (!isRegistrationCurrent()) throw createInactiveError()
+    const controller = new AbortController()
+    const abortFromParent = () => controller.abort(parentSignal?.reason)
+    if (parentSignal?.aborted === true) abortFromParent()
+    else parentSignal?.addEventListener('abort', abortFromParent, { once: true })
+    effectControllers.add(controller)
+    const readAbortReason = () => (
+      controller.signal.reason instanceof Error ? controller.signal.reason : createInactiveError()
+    )
+    const aborted = controller.signal.aborted
+      ? Promise.reject<never>(readAbortReason())
+      : new Promise<never>((_resolve, reject) => {
+        controller.signal.addEventListener('abort', () => reject(readAbortReason()), { once: true })
+      })
+    try {
+      const result = await Promise.race([effect(controller.signal), aborted])
+      if (!isRegistrationCurrent()) throw createInactiveError()
+      return result
+    } finally {
+      effectControllers.delete(controller)
+      parentSignal?.removeEventListener('abort', abortFromParent)
+    }
+  }
+  registry.addDisposable(instance.scope, () => {
+    effectControllers.forEach(controller => controller.abort(createInactiveError()))
+    effectControllers.clear()
+  }, registrationOwner)
   const pluginI18n = createPluginI18nContext()
+  const scopedPluginI18n: PluginI18nContext = {
+    get language() {
+      return pluginI18n.language
+    },
+    get resolvedLanguage() {
+      return pluginI18n.resolvedLanguage
+    },
+    getLanguage: pluginI18n.getLanguage,
+    resolveText: pluginI18n.resolveText,
+    select: pluginI18n.select,
+    subscribe: listener => {
+      if (!isRegistrationCurrent()) return noopDisposable
+      return registry.addDisposable(
+        instance.scope,
+        pluginI18n.subscribe(listener),
+        registrationOwner
+      ) ?? noopDisposable
+    },
+    t: pluginI18n.t
+  }
   const pluginDisplayName = resolvePluginDisplayName(instance, pluginI18n.getLanguage())
   const notificationSource = {
     icon: 'extension',
@@ -350,64 +448,207 @@ export async function activatePluginClient({
     scope: instance.scope,
     title: pluginDisplayName
   }
+  const activationNotifications = new Set<PluginOwnedNotification>()
+  const activationNotificationsById = new Map<string, PluginOwnedNotification>()
+  const retireNotification = (owned: PluginOwnedNotification) => {
+    activationNotifications.delete(owned)
+    if (activationNotificationsById.get(owned.id) === owned) {
+      activationNotificationsById.delete(owned.id)
+    }
+    const current = pluginOwnedNotifications.get(notifications)
+    if (current?.get(owned.hostId) === owned) current.delete(owned.hostId)
+    if (current?.size === 0) pluginOwnedNotifications.delete(notifications)
+  }
+  const closeNotification = (owned: PluginOwnedNotification) => {
+    const current = pluginOwnedNotifications.get(notifications)
+    if (current?.get(owned.hostId) !== owned) {
+      owned.retire()
+      return
+    }
+    owned.retire()
+    owned.close()
+  }
+  registry.addDisposable(instance.scope, () => {
+    for (const owned of [...activationNotifications]) closeNotification(owned)
+    activationNotifications.clear()
+  }, registrationOwner)
   const ctx: PluginClientContext = {
     api: {
       fetch: (path, init) =>
-        fetch(buildPluginApiUrl(normalizePluginApiPath(instance.scope, path), serverBaseUrl), {
-          ...init,
-          credentials: init?.credentials ?? 'include'
-        })
+        runActivationEffect(
+          signal =>
+            fetch(buildPluginApiUrl(normalizePluginApiPath(instance.scope, path), serverBaseUrl), {
+              ...init,
+              credentials: init?.credentials ?? 'include',
+              signal
+            }),
+          init?.signal ?? undefined
+        )
     },
     commands: {
-      execute: (commandId, payload) => registry.executeCommand(instance.scope, commandId, payload, { serverBaseUrl }),
+      execute: (commandId, payload) =>
+        runActivationEffect(signal =>
+          registry.executeCommand(instance.scope, commandId, payload, { serverBaseUrl, signal })
+        ),
       register: (commandId, handler) =>
-        isActivationCurrent() ? registry.registerCommand(instance.scope, commandId, handler) : noopDisposable
+        isRegistrationCurrent()
+          ? registry.registerCommand(instance.scope, commandId, handler, registrationOwner)
+          : noopDisposable
     },
     hot: {
       accept: (callback) => {
-        if (!isActivationCurrent()) return noopDisposable
+        if (!isRegistrationCurrent()) return noopDisposable
         hotCallbacks.add(callback)
-        const disposable = { dispose: () => hotCallbacks.delete(callback) }
-        registry.addDisposable(instance.scope, disposable)
-        return disposable
+        return registry.addDisposable(
+          instance.scope,
+          { dispose: () => hotCallbacks.delete(callback) },
+          registrationOwner
+        )
       },
-      reload: () => reloadPlugin(instance.scope)
+      reload: async () => {
+        if (!isRegistrationCurrent()) throw createInactiveError()
+        await reloadPlugin(instance.scope)
+      }
     },
-    i18n: pluginI18n,
+    i18n: scopedPluginI18n,
     launcher: {
       registerSearchProvider: provider =>
-        isActivationCurrent()
-          ? registry.registerLauncherSearchProvider(instance.scope, provider)
+        isRegistrationCurrent()
+          ? registry.registerLauncherSearchProvider(instance.scope, provider, registrationOwner)
           : noopDisposable
     },
     notifications: {
-      close: notifications.close,
-      muteCurrentPlugin: () => notifications.muteSource(notificationSource),
-      show: input =>
-        isActivationCurrent()
-          ? notifications.show({
-            ...projectPluginNotificationInput(input),
-            source: notificationSource
-          })
-          : noopNotificationHandle
+      close: id => {
+        if (!isRegistrationCurrent()) return
+        const owned = activationNotificationsById.get(id)
+        if (owned?.owner !== registrationOwner) return
+        closeNotification(owned)
+      },
+      muteCurrentPlugin: () => {
+        if (isRegistrationCurrent()) notifications.muteSource(notificationSource)
+      },
+      show: input => {
+        if (!isRegistrationCurrent()) return createNoopNotificationHandle()
+        const projectedInput = projectPluginNotificationInput(input)
+        const sourceMuted = notifications.isSourceMuted(notificationSource)
+        let ownedNotification: PluginOwnedNotification | undefined
+        const isNotificationCurrent = () => {
+          const owned = ownedNotification
+          return owned != null &&
+            isRegistrationCurrent() &&
+            pluginOwnedNotifications.get(notifications)?.get(owned.hostId) === owned
+        }
+        const closeOwnedNotification = () => {
+          const owned = ownedNotification
+          if (owned != null && isNotificationCurrent()) closeNotification(owned)
+        }
+        const previousLocalNotification = projectedInput.id == null
+          ? undefined
+          : activationNotificationsById.get(projectedInput.id)
+        const hostId = projectedInput.id == null
+          ? undefined
+          : previousLocalNotification?.hostId ?? createPluginNotificationHostId(registrationOwner)
+        const handle = notifications.show({
+          ...projectedInput,
+          ...(hostId == null ? {} : { id: hostId }),
+          actions: projectedInput.actions?.map((action) => {
+            const closeOnSuccess = action.closeOnClick !== false
+            return {
+              ...action,
+              closeOnClick: false,
+              onClick: async (context) => {
+                if (!isNotificationCurrent()) return
+                try {
+                  const result = await action.onClick?.({
+                    ...context,
+                    close: () => {
+                      closeOwnedNotification()
+                    },
+                    muteSource: () => {
+                      if (!isNotificationCurrent()) return
+                      notifications.muteSource(notificationSource)
+                      ownedNotification?.retire()
+                    }
+                  })
+                  if (closeOnSuccess) closeOwnedNotification()
+                  return result
+                } catch (error) {
+                  if (isNotificationCurrent()) throw error
+                }
+              }
+            }
+          }),
+          source: notificationSource
+        })
+        const localId = projectedInput.id ?? handle.id
+        if (sourceMuted || notifications === noopNotificationApi) {
+          return {
+            close: () => {
+              if (isRegistrationCurrent()) handle.close()
+            },
+            id: localId
+          }
+        }
+        const ownedNotifications = getPluginOwnedNotifications(notifications)
+        const owned: PluginOwnedNotification = {
+          close: handle.close,
+          hostId: handle.id,
+          id: localId,
+          owner: registrationOwner,
+          retire: () => retireNotification(owned)
+        }
+        ownedNotification = owned
+        const replacedHostNotification = ownedNotifications.get(handle.id)
+        const replacedLocalNotification = activationNotificationsById.get(localId)
+        ownedNotifications.set(handle.id, owned)
+        activationNotificationsById.set(localId, owned)
+        replacedHostNotification?.retire()
+        if (
+          replacedLocalNotification != null &&
+          replacedLocalNotification !== replacedHostNotification
+        ) closeNotification(replacedLocalNotification)
+        activationNotifications.add(owned)
+        while (activationNotifications.size > MAX_PLUGIN_NOTIFICATION_RECORDS_PER_OWNER) {
+          activationNotifications.values().next().value?.retire()
+        }
+        return {
+          close: () => {
+            if (isRegistrationCurrent()) closeOwnedNotification()
+          },
+          id: localId
+        }
+      }
     },
     extensionPoints: {
       contribute: (target, contribution) =>
-        isActivationCurrent()
-          ? registry.contributeExtensionPoint(instance.scope, target, contribution)
+        isRegistrationCurrent()
+          ? registry.contributeExtensionPoint(instance.scope, target, contribution, registrationOwner)
           : noopDisposable,
-      has: target => isActivationCurrent() && registry.hasExtensionPoint(instance.scope, target),
+      has: target => isRegistrationCurrent() && registry.hasExtensionPoint(instance.scope, target),
       onAvailable: (target, callback) =>
-        isActivationCurrent()
-          ? registry.onExtensionPointAvailable(instance.scope, target, callback)
+        isRegistrationCurrent()
+          ? registry.onExtensionPointAvailable(instance.scope, target, callback, registrationOwner)
           : noopDisposable,
-      register: point => isActivationCurrent() ? registry.registerExtensionPoint(instance.scope, point) : noopDisposable
+      register: point =>
+        isRegistrationCurrent()
+          ? registry.registerExtensionPoint(instance.scope, point, registrationOwner)
+          : noopDisposable
     },
     manifest: instance.manifest,
     options: instance.options ?? {},
     pluginApis: {
-      call: (target, input, options) => registry.callPluginApi(instance.scope, target, input, options),
-      register: api => isActivationCurrent() ? registry.registerPluginApi(instance.scope, api) : noopDisposable
+      call: (target, input, options) =>
+        runActivationEffect(signal =>
+          registry.callPluginApi(instance.scope, target, input, {
+            ...options,
+            owner: registrationOwner,
+            signal
+          })
+        ),
+      register: api =>
+        isRegistrationCurrent()
+          ? registry.registerPluginApi(instance.scope, api, registrationOwner)
+          : noopDisposable
     },
     react: {
       Fragment,
@@ -419,54 +660,68 @@ export async function activatePluginClient({
       useState
     },
     routes: {
-      register: route => isActivationCurrent() ? registry.registerRoute(instance.scope, route) : noopDisposable
+      register: route =>
+        isRegistrationCurrent()
+          ? registry.registerRoute(instance.scope, route, registrationOwner)
+          : noopDisposable
     },
     runtime: {
       endpoint: runtimeEndpoint,
       invokeChannel: (channelId, invocation) =>
-        invokePluginRuntimeChannel(instance.scope, channelId, invocation, serverBaseUrl),
-      listEndpoints: () => listPluginRuntimeEndpoints({ serverBaseUrl })
+        runActivationEffect(signal =>
+          invokePluginRuntimeChannel(instance.scope, channelId, invocation, serverBaseUrl, signal)
+        ),
+      listEndpoints: () => runActivationEffect(signal => listPluginRuntimeEndpoints({ serverBaseUrl }, signal))
     },
     scope: instance.scope,
     slots: {
       register: (slot, contribution) =>
-        isActivationCurrent() ? registry.registerSlot(instance.scope, slot, contribution) : noopDisposable
+        isRegistrationCurrent()
+          ? registry.registerSlot(instance.scope, slot, contribution, registrationOwner)
+          : noopDisposable
     },
     themes: {
-      register: theme => isActivationCurrent() ? registry.registerTheme(instance.scope, theme) : noopDisposable
+      register: theme =>
+        isRegistrationCurrent()
+          ? registry.registerTheme(instance.scope, theme, registrationOwner)
+          : noopDisposable
     },
     views: {
       register: (viewId, renderer) =>
-        isActivationCurrent()
+        isRegistrationCurrent()
           ? registry.registerView(
             instance.scope,
-            typeof renderer === 'function' ? { id: viewId, render: renderer } : { ...renderer, id: viewId }
+            typeof renderer === 'function' ? { id: viewId, render: renderer } : { ...renderer, id: viewId },
+            registrationOwner
           )
           : noopDisposable
     }
   }
 
-  const registrationCheckpoint = registry.createScopeRegistrationCheckpoint(instance.scope)
   try {
     const versionedEntryUrl = addPluginClientImportVersion(entryUrl, getImportVersion())
     const module = await import(/* @vite-ignore */ versionedEntryUrl) as PluginClientModule
-    if (!isActivationCurrent()) return
-    const cleanup = await module.activatePlugin?.(ctx)
-    if (!isActivationCurrent()) {
-      toDisposable(cleanup)?.dispose()
-      hotCallbacks.clear()
+    if (!isRegistrationCurrent()) {
+      rollbackActivation()
       return
     }
-    registry.addDisposable(instance.scope, cleanup)
+    const cleanup = await module.activatePlugin?.(ctx)
+    registry.addDisposable(instance.scope, cleanup, registrationOwner)
+    if (!isRegistrationCurrent()) {
+      rollbackActivation()
+      return
+    }
     registry.addDisposable(instance.scope, () => {
       hotCallbacks.forEach((callback) => {
         void callback()
       })
       hotCallbacks.clear()
-    })
+    }, registrationOwner)
+    if (!isRegistrationCurrent()) rollbackActivation()
   } catch (error) {
-    if (!isActivationCurrent()) return
-    registry.rollbackScopeRegistrations(instance.scope, registrationCheckpoint)
+    const isCurrent = isRegistrationCurrent()
+    rollbackActivation()
+    if (!isCurrent) return
     registry.addDiagnostic({
       level: 'error',
       message: `Failed to activate plugin "${instance.scope}": ${

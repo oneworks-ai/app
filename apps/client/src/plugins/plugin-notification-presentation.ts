@@ -77,8 +77,9 @@ export const projectPluginNotificationInput = (
   const descriptionFormat = readField(shape, 'descriptionFormat')
   const level = readField(shape, 'level')
   const ttlMs = readField(shape, 'ttlMs')
+  const normalizedId = typeof id === 'string' && id.trim() !== '' ? id : undefined
   return {
-    ...(typeof id === 'string' ? { id } : {}),
+    ...(normalizedId == null ? {} : { id: normalizedId }),
     ...(typeof dedupeKey === 'string' ? { dedupeKey } : {}),
     title: typeof title === 'string' ? projectPluginPresentationValue(title) : PRIVATE_PLUGIN_PRESENTATION_VALUE,
     actions: projectPluginNotificationActions(readField(shape, 'actions')),
