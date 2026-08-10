@@ -1,0 +1,301 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "id": "claude-code",
+      "label": "Claude Code",
+      "kind": "adapter",
+      "icon": "assets/brand/adapters/claude-code.svg",
+      "enabled": true,
+      "featured": true,
+      "priority": 10
+    },
+    {
+      "id": "codex",
+      "label": "Codex",
+      "kind": "adapter",
+      "icon": "assets/brand/adapters/codex.svg",
+      "darkIcon": "assets/brand/adapters/codex-dark.svg",
+      "enabled": true,
+      "featured": true,
+      "priority": 20
+    },
+    {
+      "id": "copilot",
+      "label": "Copilot",
+      "kind": "adapter",
+      "icon": "assets/brand/adapters/copilot.svg",
+      "enabled": true,
+      "featured": true,
+      "priority": 30
+    },
+    {
+      "id": "gemini",
+      "label": "Gemini",
+      "kind": "adapter",
+      "icon": "assets/brand/adapters/gemini.svg",
+      "enabled": true,
+      "featured": true,
+      "priority": 40
+    },
+    {
+      "id": "kimi",
+      "label": "Kimi",
+      "kind": "adapter",
+      "icon": "assets/brand/adapters/kimi.svg",
+      "enabled": true,
+      "featured": true,
+      "priority": 50
+    },
+    {
+      "id": "opencode",
+      "label": "OpenCode",
+      "kind": "adapter",
+      "icon": "assets/brand/adapters/opencode.svg",
+      "enabled": true,
+      "featured": true,
+      "priority": 60
+    },
+    {
+      "id": "pi",
+      "label": "Pi",
+      "kind": "adapter",
+      "icon": "assets/brand/adapters/pi.svg",
+      "darkIcon": "assets/brand/adapters/pi-dark.svg",
+      "enabled": true,
+      "featured": true,
+      "priority": 70
+    },
+    {
+      "id": "openai",
+      "label": "OpenAI",
+      "kind": "model-service",
+      "icon": "apps/client/src/assets/model-providers/openai.svg",
+      "enabled": true,
+      "featured": true,
+      "priority": 10,
+      "themeAdaptive": true
+    },
+    {
+      "id": "deepseek",
+      "label": "DeepSeek",
+      "kind": "model-service",
+      "icon": "apps/client/src/assets/model-providers/deepseek.svg",
+      "enabled": true,
+      "featured": true,
+      "priority": 20,
+      "themeAdaptive": true
+    },
+    {
+      "id": "moonshot",
+      "label": "Moonshot",
+      "kind": "model-service",
+      "icon": "apps/client/src/assets/model-providers/moonshot.ico",
+      "enabled": true,
+      "featured": true,
+      "priority": 30
+    },
+    {
+      "id": "minimax",
+      "label": "MiniMax",
+      "kind": "model-service",
+      "icon": "apps/client/src/assets/model-providers/minimax.png",
+      "enabled": true,
+      "featured": true,
+      "priority": 40
+    },
+    {
+      "id": "qwen",
+      "label": "Qwen",
+      "kind": "model-service",
+      "icon": "apps/client/src/assets/model-providers/qwen.svg",
+      "enabled": true,
+      "featured": true,
+      "priority": 50
+    },
+    {
+      "id": "zhipu",
+      "label": "Zhipu GLM",
+      "kind": "model-service",
+      "icon": "apps/client/src/assets/model-providers/zhipu.png",
+      "enabled": true,
+      "featured": false,
+      "priority": 60
+    },
+    {
+      "id": "anthropic",
+      "label": "Anthropic",
+      "kind": "model-service",
+      "icon": "apps/client/src/assets/model-providers/anthropic.png",
+      "enabled": true,
+      "featured": false,
+      "priority": 70
+    },
+    {
+      "id": "aws",
+      "label": "AWS Bedrock",
+      "kind": "model-service",
+      "icon": "apps/client/src/assets/model-providers/aws.png",
+      "enabled": true,
+      "featured": false,
+      "priority": 80
+    },
+    {
+      "id": "azure",
+      "label": "Azure AI",
+      "kind": "model-service",
+      "icon": "apps/client/src/assets/model-providers/azure.ico",
+      "enabled": true,
+      "featured": false,
+      "priority": 90
+    },
+    {
+      "id": "gemini-models",
+      "label": "Google Gemini",
+      "kind": "model-service",
+      "icon": "apps/client/src/assets/model-providers/gemini.png",
+      "outputId": "gemini",
+      "enabled": true,
+      "featured": false,
+      "priority": 100
+    },
+    {
+      "id": "kimi-code",
+      "label": "Kimi Code",
+      "kind": "model-service",
+      "icon": "apps/client/src/assets/model-providers/kimi.svg",
+      "darkIcon": "apps/client/src/assets/model-providers/kimi-dark.svg",
+      "outputId": "kimi",
+      "enabled": true,
+      "featured": false,
+      "priority": 110
+    },
+    {
+      "id": "litellm",
+      "label": "LiteLLM",
+      "kind": "model-service",
+      "icon": "apps/client/src/assets/model-providers/litellm.png",
+      "enabled": true,
+      "featured": false,
+      "priority": 120
+    },
+    {
+      "id": "micu",
+      "label": "MiCU",
+      "kind": "model-service",
+      "icon": "apps/client/src/assets/model-providers/micu.png",
+      "enabled": true,
+      "featured": false,
+      "priority": 130
+    },
+    {
+      "id": "openrouter",
+      "label": "OpenRouter",
+      "kind": "model-service",
+      "icon": "apps/client/src/assets/model-providers/openrouter.ico",
+      "enabled": true,
+      "featured": false,
+      "priority": 140
+    },
+    {
+      "id": "portkey",
+      "label": "Portkey",
+      "kind": "model-service",
+      "icon": "apps/client/src/assets/model-providers/portkey.png",
+      "enabled": true,
+      "featured": false,
+      "priority": 150
+    },
+    {
+      "id": "requesty",
+      "label": "Requesty",
+      "kind": "model-service",
+      "icon": "apps/client/src/assets/model-providers/requesty.ico",
+      "enabled": true,
+      "featured": false,
+      "priority": 160
+    },
+    {
+      "id": "vercel",
+      "label": "Vercel AI Gateway",
+      "kind": "model-service",
+      "icon": "apps/client/src/assets/model-providers/vercel.png",
+      "enabled": true,
+      "featured": false,
+      "priority": 170,
+      "themeAdaptive": true
+    },
+    {
+      "id": "yunwu",
+      "label": "Yunwu",
+      "kind": "model-service",
+      "icon": "apps/client/src/assets/model-providers/yunwu.png",
+      "enabled": true,
+      "featured": false,
+      "priority": 180
+    },
+    {
+      "id": "telegram",
+      "label": "Telegram",
+      "kind": "channel",
+      "icon": "assets/brand/channels/telegram.svg",
+      "enabled": true,
+      "featured": true,
+      "priority": 10
+    },
+    {
+      "id": "lark",
+      "label": "Lark / Feishu",
+      "kind": "channel",
+      "icon": "apps/relay-admin/src/login/assets/feishu-logo.png",
+      "enabled": true,
+      "featured": true,
+      "priority": 20
+    },
+    {
+      "id": "wechat",
+      "label": "WeChat",
+      "kind": "channel",
+      "icon": "assets/brand/channels/wechat.svg",
+      "enabled": true,
+      "featured": true,
+      "priority": 30
+    },
+    {
+      "id": "wecom",
+      "label": "WeCom",
+      "kind": "channel",
+      "icon": "assets/brand/channels/wecom.svg",
+      "enabled": true,
+      "featured": true,
+      "priority": 40
+    },
+    {
+      "id": "qq-channel",
+      "label": "QQ Channel",
+      "kind": "channel",
+      "icon": "assets/brand/channels/qq.svg",
+      "enabled": true,
+      "featured": true,
+      "priority": 50
+    },
+    {
+      "id": "imessage",
+      "label": "iMessage",
+      "kind": "channel",
+      "icon": "assets/brand/channels/imessage.svg",
+      "enabled": true,
+      "featured": true,
+      "priority": 60
+    },
+    {
+      "id": "oneworks",
+      "label": "One Works Internal",
+      "kind": "channel",
+      "icon": "assets/brand/channels/oneworks.svg",
+      "enabled": false,
+      "featured": false,
+      "priority": 999
+    }
+  ]
+}

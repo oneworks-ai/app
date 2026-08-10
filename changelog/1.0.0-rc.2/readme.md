@@ -25,6 +25,7 @@
 - Add local support bundles containing bounded diagnostic facts, pseudonymized identifiers, and no raw application logs.
 - Keep the Launcher project directory search editable with the Left and Right Arrow keys, while retaining parent and active-directory navigation when the caret reaches the matching input boundary.
 - Roll out the Linear One Works visual identity across app, desktop, Android, Relay, extensions, public profiles, social previews, and generated distribution assets, with distinct Moonshot and Kimi provider artwork and one canonical brand profile.
+- Publish Pi's official light and dark marks through the product brand catalog, Brand Studio compositions, and generated social and Open Graph distribution assets.
 - Add a first-class Pi coding-agent adapter with persistent RPC sessions, native/default model reuse, and routed model, tool, and permission integration.
 
 ![Launcher project directory search](./launcher-directory-search.png)
