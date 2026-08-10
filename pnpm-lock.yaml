@@ -1154,6 +1154,10 @@ importers:
       '@paper-design/shaders':
         specifier: ^0.0.76
         version: 0.0.76
+    devDependencies:
+      esbuild:
+        specifier: ^0.27.2
+        version: 0.27.2
 
   packages/managed-plugins:
     dependencies:

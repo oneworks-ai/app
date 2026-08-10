@@ -30,6 +30,8 @@
         "default": "./src/brand-profile.ts"
       },
       "types": "./dist/brand-profile.d.ts",
+      "import": "./dist/brand-profile.js",
+      "require": "./dist/brand-profile.cjs",
       "default": "./dist/brand-profile.js"
     },
     "./canvas": {
@@ -77,10 +79,13 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && esbuild src/brand-profile.ts --bundle --platform=node --format=cjs --outfile=dist/brand-profile.cjs && node scripts/verify-node-runtime.mjs",
     "test": "pnpm -C ../.. exec vitest run --workspace vitest.workspace.ts --project bundler packages/icon/__tests__"
   },
   "dependencies": {
     "@paper-design/shaders": "^0.0.76"
+  },
+  "devDependencies": {
+    "esbuild": "^0.27.2"
   }
 }

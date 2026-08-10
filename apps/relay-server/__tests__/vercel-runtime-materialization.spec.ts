@@ -1,4 +1,5 @@
 import { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -50,10 +51,27 @@ describe('vercel runtime workspace materialization', () => {
     await mkdir(functionRoot, { recursive: true })
     await writeFile(
       path.join(sourceDirectory, 'package.json'),
-      '{"name":"@oneworks/icon","dependencies":{"@paper-design/shaders":"0.0.0"}}\n'
+      `${
+        JSON.stringify({
+          name: '@oneworks/icon',
+          type: 'module',
+          exports: {
+            './brand-profile': {
+              import: './dist/brand-profile.js',
+              require: './dist/brand-profile.cjs',
+              default: './dist/brand-profile.js'
+            }
+          },
+          dependencies: { '@paper-design/shaders': '0.0.0' }
+        })
+      }\n`
     )
     await writeFile(path.join(sourceDirectory, 'brand-profile.json'), '{"schemaVersion":1}\n')
     await writeFile(path.join(sourceDirectory, 'dist', 'brand-profile.js'), 'export const profile = 1\n')
+    await writeFile(
+      path.join(sourceDirectory, 'dist', 'brand-profile.cjs'),
+      'module.exports = { profile: 1 }\n'
+    )
     await writeFile(path.join(typesSourceDirectory, 'package.json'), '{"name":"@oneworks/types"}\n')
     await writeFile(
       path.join(typesSourceDirectory, 'dist', 'credential-revision.js'),
@@ -84,8 +102,12 @@ describe('vercel runtime workspace materialization', () => {
 
     expect((await lstat(targetDirectory)).isSymbolicLink()).toBe(false)
     expect((await lstat(typesTargetDirectory)).isSymbolicLink()).toBe(false)
+    const relayRequire = createRequire(path.join(relayDirectory, 'package.json'))
+    expect(relayRequire('@oneworks/icon/brand-profile')).toEqual({ profile: 1 })
     await expect(readFile(path.join(targetDirectory, 'dist', 'brand-profile.js'), 'utf8')).resolves
       .toBe('export const profile = 1\n')
+    await expect(readFile(path.join(targetDirectory, 'dist', 'brand-profile.cjs'), 'utf8')).resolves
+      .toBe('module.exports = { profile: 1 }\n')
     await expect(lstat(path.join(targetDirectory, 'node_modules'))).rejects.toMatchObject({ code: 'ENOENT' })
     await expect(
       readFile(path.join(typesTargetDirectory, 'dist', 'credential-revision.js'), 'utf8')
@@ -98,6 +120,10 @@ describe('vercel runtime workspace materialization', () => {
       .resolves.toBe('{"schemaVersion":1}\n')
     await expect(readFile(path.join(outputNodeModules, '@oneworks', 'icon', 'dist', 'brand-profile.js'), 'utf8'))
       .resolves.toBe('export const profile = 1\n')
+    await expect(readFile(path.join(outputNodeModules, '@oneworks', 'icon', 'dist', 'brand-profile.cjs'), 'utf8'))
+      .resolves.toBe('module.exports = { profile: 1 }\n')
+    const functionRequire = createRequire(path.join(functionRoot, 'index.js'))
+    expect(functionRequire('@oneworks/icon/brand-profile')).toEqual({ profile: 1 })
     await expect(lstat(path.join(outputNodeModules, '@oneworks', 'icon', 'node_modules'))).rejects
       .toMatchObject({ code: 'ENOENT' })
     await expect(readFile(path.join(outputNodeModules, '@paper-design', 'shaders', 'index.js'), 'utf8'))
