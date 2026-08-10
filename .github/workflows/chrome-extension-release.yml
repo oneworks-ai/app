@@ -1,3 +1,4 @@
+# eslint-disable max-lines
 name: Chrome Extension Release
 on:
   push:
@@ -28,9 +29,7 @@ jobs:
     timeout-minutes: 20
     permissions:
       artifact-metadata: write
-      attestations: write
       contents: read
-      id-token: write
     outputs:
       artifact_name: oneworks-v${{ steps.version.outputs.value }}
       store_archive: oneworks-v${{ steps.version.outputs.value }}.zip
@@ -91,10 +90,6 @@ jobs:
       - name: Write package checksums
         working-directory: packages/plugins/external-browser-driver/dist-package
         run: sha256sum *.zip > SHA256SUMS
-      - name: Attest extension packages
-        uses: actions/attest@v4
-        with:
-          subject-path: packages/plugins/external-browser-driver/dist-package/*.zip
       - name: Upload extension artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -105,15 +100,23 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
+    environment: Production
     timeout-minutes: 20
     permissions:
+      artifact-metadata: write
+      attestations: write
       contents: write
+      id-token: write
     steps:
       - name: Download packaged extensions
         uses: actions/download-artifact@v4
         with:
           name: ${{ needs.build.outputs.artifact_name }}
           path: dist
+      - name: Attest extension packages
+        uses: actions/attest@v4
+        with:
+          subject-path: dist/*.zip
       - name: Create or update GitHub Release
         env:
           GH_REPO: ${{ github.repository }}

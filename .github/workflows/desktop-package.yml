@@ -225,6 +225,7 @@ jobs:
       github.event_name != 'pull_request' &&
       !(github.event_name == 'workflow_dispatch' && inputs.create_release && inputs.candidate_run_id != '')
     runs-on: macos-26
+    environment: ${{ github.event_name == 'schedule' && 'Preview' || 'Production' }}
     timeout-minutes: 120
     outputs:
       signed: ${{ steps.desktop_build_policy.outputs.sign }}
@@ -561,6 +562,7 @@ jobs:
       - dispatch-policy
       - package
     runs-on: ubuntu-latest
+    environment: Production
     timeout-minutes: 20
     if: >-
       always() &&
