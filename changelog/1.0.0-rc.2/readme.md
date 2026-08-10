@@ -19,7 +19,10 @@
 - Add configurable personal and team Model Service usage reporting without collecting prompts, responses, credentials, or source content.
 - Add a unified Admin data dashboard for observed DAU, WAU, MAU, startup health, JavaScript exception fingerprints, and Model Service usage.
 - Add local support bundles containing bounded diagnostic facts, pseudonymized identifiers, and no raw application logs.
+- Keep the Launcher project directory search editable with the Left and Right Arrow keys, while retaining parent and active-directory navigation when the caret reaches the matching input boundary.
 - Roll out the Linear One Works visual identity across app, desktop, Android, Relay, extensions, public profiles, social previews, and generated distribution assets, with distinct Moonshot and Kimi provider artwork and one canonical brand profile.
 - Add a first-class Pi coding-agent adapter with persistent RPC sessions, native/default model reuse, and routed model, tool, and permission integration.
+
+![Launcher project directory search](./launcher-directory-search.png)
 
 ![Pi adapter selector](./pi-adapter-selector.png)

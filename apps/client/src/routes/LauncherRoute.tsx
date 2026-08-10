@@ -54,6 +54,7 @@ import { createOneWorksIconDataUri } from '#~/utils/oneworks-icon'
 import { getShortcutDisplayTokens, isShortcutMatch } from '#~/utils/shortcutUtils'
 import { resolveWorkspaceFileOpenerSelectModels } from '#~/utils/workspace-file-openers'
 import { rememberWorkspaceConnection } from '#~/workspace-connection-state'
+import { resolveLauncherInputKeyAction } from './launcher-input-keyboard'
 import { normalizePluginLauncherSearchResults } from './launcher-plugin-search'
 import type {
   LauncherRelayDeviceProject,
@@ -4074,53 +4075,43 @@ export function LauncherRoute({
       }
     }
 
-    if (
-      isDirectoryBrowserMode &&
-      event.key === 'ArrowLeft' &&
-      !event.metaKey &&
-      !event.ctrlKey &&
-      !event.altKey &&
-      !event.shiftKey &&
-      event.currentTarget.selectionStart === 0 &&
-      event.currentTarget.selectionEnd === 0
-    ) {
-      const parentDirectory = cloneDestinationList.parentDirectory?.trim()
-      if (
-        parentDirectory == null ||
-        parentDirectory === '' ||
-        normalizeDirectoryPathKey(parentDirectory) === normalizeDirectoryPathKey(cloneDestinationList.currentDirectory)
-      ) {
-        return
-      }
+    const activeIndex = Math.max(0, flatCommands.findIndex(command => command.id === activeCommandId))
+    const activeCommand = flatCommands[activeIndex]
+    const parentDirectory = cloneDestinationList.parentDirectory?.trim()
+    const canNavigateToParentDirectory = isDirectoryBrowserMode &&
+      parentDirectory != null &&
+      parentDirectory !== '' &&
+      normalizeDirectoryPathKey(parentDirectory) !== normalizeDirectoryPathKey(cloneDestinationList.currentDirectory)
+    const keyAction = resolveLauncherInputKeyAction({
+      canNavigateToParentDirectory,
+      canRunActiveSecondaryAction: activeCommand?.secondaryAction != null,
+      hasModifier: event.metaKey || event.ctrlKey || event.altKey || event.shiftKey,
+      isDirectoryBrowserMode,
+      key: event.key,
+      selectionEnd: event.currentTarget.selectionEnd,
+      selectionStart: event.currentTarget.selectionStart,
+      valueLength: event.currentTarget.value.length
+    })
+    if (keyAction == null) return
 
+    if (keyAction === 'navigate-parent-directory') {
       event.preventDefault()
-      openCloneDestinationDirectory(parentDirectory)
-      return
-    }
-
-    if (
-      event.key !== 'ArrowDown' &&
-      event.key !== 'ArrowUp' &&
-      event.key !== 'Enter' &&
-      !(isDirectoryBrowserMode && event.key === 'ArrowRight')
-    ) {
+      if (parentDirectory != null) openCloneDestinationDirectory(parentDirectory)
       return
     }
 
     event.preventDefault()
     if (flatCommands.length === 0) return
 
-    const activeIndex = Math.max(0, flatCommands.findIndex(command => command.id === activeCommandId))
-    if (event.key === 'Enter') {
-      runCommand(flatCommands[activeIndex])
+    if (keyAction === 'run-active-command') {
+      runCommand(activeCommand)
       return
     }
-    if (event.key === 'ArrowRight') {
-      runSecondaryCommandAndSelect(flatCommands[activeIndex])
+    if (keyAction === 'run-active-secondary-command') {
+      runSecondaryCommandAndSelect(activeCommand)
       return
     }
-
-    const offset = event.key === 'ArrowDown' ? 1 : -1
+    const offset = keyAction === 'move-active-down' ? 1 : -1
     const nextIndex = (activeIndex + offset + flatCommands.length) % flatCommands.length
     setActiveCommandId(flatCommands[nextIndex]?.id)
   }
