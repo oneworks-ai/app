@@ -13,6 +13,10 @@
 - Make Lark role bots in multi-bot chats respond only when the structured mention targets that exact bot, including fail-closed handling for commands addressed to another bot.
 - Keep channel connections and runtime-store consumption on the same workspace server in Web launcher mode, preventing duplicate manager connections and channel sessions that remain stuck without an executor.
 - Reject ChannelLink sets that reuse one channel key across different entities while allowing one entity to bind multiple external chats.
+- Refresh Git status automatically while visible, expose a localized manual refresh in desktop and compact menus, and preserve authoritative results across overlapping updates.
+
+  ![Compact Git status refresh action](./issue-187-git-status-refresh.jpg)
+
 - Localize chat archive and restore success feedback in English and Chinese.
 - Add localized, keyboard-accessible single-confirm deletion for archived conversations, while synchronizing mounted archive caches after successful deletes.
 - Add privacy-safe diagnostics across Web, PWA, Electron, CLI, Relay, and Codex-compatible OTLP ingestion.

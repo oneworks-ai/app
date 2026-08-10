@@ -2813,6 +2813,8 @@
     "newSessionTitle": "New session",
     "gitBranchSwitcher": "Switch branch",
     "gitOperations": "Git actions",
+    "gitRefreshStatus": "Refresh Git status",
+    "gitRefreshStatusFailed": "Failed to refresh Git status",
     "gitWorktree": "Worktree",
     "statusBarTitle": "Session status",
     "statusBarSessionSubtitle": "Track the current session workspace and git context here.",
