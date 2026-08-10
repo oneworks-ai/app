@@ -1,0 +1,50 @@
+# Default application ownership. This team reviews ordinary product changes.
+* @oneworks-ai/app-maintainers
+
+# Repository policy, CI, deployment, and publishing controls.
+/.github/ @oneworks-ai/app-release-ops
+/infra/ @oneworks-ai/app-release-ops
+/.oo/rules/release/ @oneworks-ai/app-release-ops
+
+# Release planning, tagging, publishing, installer, and identity tooling.
+/scripts/cli-package-release.ts @oneworks-ai/app-release-ops
+/scripts/homebrew-tap.ts @oneworks-ai/app-release-ops
+/scripts/publish-plan-* @oneworks-ai/app-release-ops
+/scripts/release-* @oneworks-ai/app-release-ops
+/scripts/stable-* @oneworks-ai/app-release-ops
+/scripts/windows-install.ts @oneworks-ai/app-release-ops
+/scripts/windows-installer-identity.* @oneworks-ai/app-release-ops
+/scripts/__tests__/desktop-package-workflow.spec.ts @oneworks-ai/app-release-ops
+/scripts/__tests__/homebrew-tap.spec.ts @oneworks-ai/app-release-ops
+/scripts/__tests__/publish-plan-* @oneworks-ai/app-release-ops
+/scripts/__tests__/*release* @oneworks-ai/app-release-ops
+/scripts/__tests__/stable-* @oneworks-ai/app-release-ops
+/scripts/__tests__/windows-install.spec.ts @oneworks-ai/app-release-ops
+
+# Workspace release identities and package-specific release pipelines.
+/package.json @oneworks-ai/app-release-ops
+/pnpm-workspace.yaml @oneworks-ai/app-release-ops
+/apps/**/package.json @oneworks-ai/app-release-ops
+/packages/**/package.json @oneworks-ai/app-release-ops
+/packages/plugins/**/plugin.json @oneworks-ai/app-release-ops
+/apps/desktop/scripts/ @oneworks-ai/app-release-ops
+/apps/desktop/__tests__/desktop-package-version.spec.ts @oneworks-ai/app-release-ops
+/apps/desktop/__tests__/desktop-release-channel.spec.ts @oneworks-ai/app-release-ops
+/apps/desktop/__tests__/mac-adhoc-seal.spec.ts @oneworks-ai/app-release-ops
+/apps/desktop/__tests__/notarize-artifacts.spec.ts @oneworks-ai/app-release-ops
+/apps/desktop/__tests__/release-candidate-manifest.spec.ts @oneworks-ai/app-release-ops
+/apps/desktop/__tests__/smoke-packaged-server.spec.ts @oneworks-ai/app-release-ops
+/apps/desktop/__tests__/verify-macos-adhoc-artifacts.spec.ts @oneworks-ai/app-release-ops
+/apps/vscode-extension/scripts/ @oneworks-ai/app-release-ops
+/packages/plugins/external-browser-driver/bin/extension-release.cjs @oneworks-ai/app-release-ops
+/packages/plugins/external-browser-driver/bin/materialize-extension.cjs @oneworks-ai/app-release-ops
+/packages/plugins/external-browser-driver/bin/package-extension.cjs @oneworks-ai/app-release-ops
+/packages/plugins/external-browser-driver/bin/publish-chrome-web-store.cjs @oneworks-ai/app-release-ops
+/packages/plugins/external-browser-driver/bin/validate-extension-package.cjs @oneworks-ai/app-release-ops
+/packages/plugins/external-browser-driver/__tests__/contract.spec.ts @oneworks-ai/app-release-ops
+/packages/plugins/external-browser-driver/__tests__/extension-release.spec.ts @oneworks-ai/app-release-ops
+
+# Hosted Relay control planes and their shared runtime.
+/apps/relay-admin/ @oneworks-ai/app-release-ops
+/apps/relay-server/ @oneworks-ai/app-release-ops
+/packages/plugins/relay/ @oneworks-ai/app-release-ops
