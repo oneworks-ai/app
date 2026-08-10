@@ -10,7 +10,7 @@ import { createSocket } from '#~/ws.js'
 
 import { listPluginSnapshot } from './api'
 import { PluginContext } from './plugin-context'
-import type { PluginContextValue } from './plugin-context'
+import type { PluginContextValue, PluginRefreshOptions } from './plugin-context'
 import type { PluginContributionSurface, PluginRuntimeInstance } from './plugin-manifest'
 import { PluginRegistry } from './plugin-registry'
 import { activatePluginClient } from './plugin-runtime'
@@ -44,6 +44,9 @@ export function PluginProvider({
   const instancesRef = useRef<PluginRuntimeInstance[]>([])
   const activationVersionsRef = useRef(new Map<string, number>())
   const importVersionsRef = useRef(new Map<string, number>())
+  const activationRefreshRevisionRef = useRef(0)
+  const committedRequestRevisionRef = useRef(0)
+  const requestRevisionRef = useRef(0)
   const runtimeEndpointRef = useRef<PluginRuntimeEndpoint | undefined>(undefined)
   const [runtimeEndpoint, setRuntimeEndpoint] = useState<PluginRuntimeEndpoint | undefined>(undefined)
   const [pluginSnapshotStatus, setPluginSnapshotStatus] = useState<'error' | 'loading' | 'ready'>('loading')
@@ -113,16 +116,21 @@ export function PluginProvider({
   ])
 
   const activateInstances = useCallback(async (instances: PluginRuntimeInstance[], didCancel: () => boolean) => {
-    instancesRef.current.forEach((instance) => {
+    if (didCancel()) return
+    for (const instance of instancesRef.current) {
+      if (didCancel()) return
       nextActivationVersion(instance.scope)
+      if (didCancel()) return
       registry.disposeScope(instance.scope)
-    })
-    instancesRef.current = instances
+    }
+    if (didCancel()) return
     registry.setInstances(instances)
+    instancesRef.current = instances
     for (const instance of instances) {
       if (didCancel()) return
       if (instance.enabled === false) continue
       const activationVersion = nextActivationVersion(instance.scope)
+      if (didCancel()) return
       await activatePluginClient({
         getImportVersion: () => getImportVersion(instance.scope),
         instance,
@@ -144,24 +152,50 @@ export function PluginProvider({
     reloadPlugin
   ])
 
-  const refreshPlugins = useCallback(async () => {
-    const pluginSnapshot = await listPluginSnapshot({ serverBaseUrl: pluginServerBaseUrl })
+  const loadAndActivatePlugins = useCallback(async (options: PluginRefreshOptions = {}) => {
+    const requestRevision = requestRevisionRef.current + 1
+    requestRevisionRef.current = requestRevision
+    const isRequestCurrent = () => options.isCurrent?.() ?? true
+    let pluginSnapshot
+    try {
+      pluginSnapshot = await listPluginSnapshot({ serverBaseUrl: pluginServerBaseUrl })
+    } catch (error) {
+      if (
+        !isRequestCurrent() ||
+        requestRevision !== requestRevisionRef.current ||
+        requestRevision < committedRequestRevisionRef.current
+      ) return undefined
+      throw error
+    }
+    if (!isRequestCurrent() || requestRevision < committedRequestRevisionRef.current) return undefined
+    committedRequestRevisionRef.current = requestRevision
+    const activationRevision = activationRefreshRevisionRef.current + 1
+    activationRefreshRevisionRef.current = activationRevision
+    const isActivationCurrent = () => activationRefreshRevisionRef.current === activationRevision
+    const isResultCurrent = () => isActivationCurrent() && isRequestCurrent()
     setRuntimeSnapshot(pluginSnapshot.runtime)
-    await activateInstances(pluginSnapshot.plugins, () => false)
+    await activateInstances(pluginSnapshot.plugins, () => !isActivationCurrent())
+    return isResultCurrent() ? isResultCurrent : undefined
   }, [activateInstances, pluginServerBaseUrl, setRuntimeSnapshot])
+
+  const refreshPlugins = useCallback(async (options?: PluginRefreshOptions) => {
+    const isCurrent = await loadAndActivatePlugins(options)
+    if (isCurrent?.() !== true) return { applied: false }
+    setPluginSnapshotStatus('ready')
+    if (!isCurrent()) return { applied: false }
+    setReady(true)
+    return { applied: isCurrent() }
+  }, [loadAndActivatePlugins])
 
   useEffect(() => {
     let didCancel = false
     setPluginSnapshotStatus('loading')
-    void listPluginSnapshot({ serverBaseUrl: pluginServerBaseUrl })
-      .then(async pluginSnapshot => {
-        if (didCancel) return
-        setRuntimeSnapshot(pluginSnapshot.runtime)
-        await activateInstances(pluginSnapshot.plugins, () => didCancel)
-        if (!didCancel) {
-          setPluginSnapshotStatus('ready')
-          setReady(true)
-        }
+    void loadAndActivatePlugins({ isCurrent: () => !didCancel })
+      .then((isCurrent) => {
+        if (isCurrent?.() !== true) return
+        setPluginSnapshotStatus('ready')
+        if (!isCurrent()) return
+        setReady(true)
       })
       .catch((error) => {
         if (didCancel) return
@@ -174,13 +208,15 @@ export function PluginProvider({
       })
     return () => {
       didCancel = true
+      activationRefreshRevisionRef.current += 1
+      committedRequestRevisionRef.current = requestRevisionRef.current + 1
       instancesRef.current.forEach((instance) => {
         nextActivationVersion(instance.scope)
         registry.disposeScope(instance.scope)
       })
       setRuntimeSnapshot(undefined)
     }
-  }, [activateInstances, nextActivationVersion, pluginServerBaseUrl, registry, setRuntimeSnapshot])
+  }, [loadAndActivatePlugins, nextActivationVersion, registry, setRuntimeSnapshot])
 
   useEffect(() => {
     let disposed = false

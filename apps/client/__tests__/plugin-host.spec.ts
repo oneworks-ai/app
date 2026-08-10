@@ -1153,16 +1153,19 @@ describe('client plugin host registry', () => {
     })
 
     expect(show).toHaveBeenCalledWith({
-      actions: [{ id: 'open', title: 'Open' }],
+      actions: [{ closeOnClick: false, id: 'open', onClick: expect.any(Function), title: 'Open' }],
       description: '**Finished**',
+      descriptionFormat: undefined,
+      level: undefined,
       source: {
         icon: 'extension',
         kind: 'plugin',
-        name: '@local/demo',
+        name: 'Demo Plugin',
         scope: 'demo',
         title: 'Demo Plugin'
       },
-      title: 'Done'
+      title: 'Done',
+      ttlMs: undefined
     })
   })
 

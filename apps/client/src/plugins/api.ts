@@ -77,10 +77,14 @@ export const listPlugins = async (options: PluginApiSourceOptions = {}) => {
   return snapshot.plugins
 }
 
-export const listPluginRuntimeEndpoints = async (options: PluginApiSourceOptions = {}) => {
+export const listPluginRuntimeEndpoints = async (
+  options: PluginApiSourceOptions = {},
+  signal?: AbortSignal
+) => {
   const response = await parsePublicPluginResponse(
     await fetchApiResponse(
-      createPluginApiUrl('/api/plugins/runtime/endpoints', options.serverBaseUrl)
+      createPluginApiUrl('/api/plugins/runtime/endpoints', options.serverBaseUrl),
+      { signal }
     )
   )
   return parsePublicPluginRuntimeEndpointsResponse(response).endpoints
