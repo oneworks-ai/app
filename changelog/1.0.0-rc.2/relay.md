@@ -5,4 +5,4 @@
 - Add the unified Admin data dashboard with operations, stability, JavaScript exception fingerprint, and Model Service views.
 - Replace the Admin daily observed-active chart with the client usage view's GitHub-style heatmap interaction, including day tooltips, Shift range selection, Escape clearing, and retention-aware availability.
 - Build shared runtime type exports before Vercel traces the Relay serverless function.
-- Build shared icon exports before Cloudflare and Vercel bundle Relay from a clean checkout.
+- Build shared icon exports before Cloudflare bundles Relay, and materialize the icon runtime package before Vercel traces the serverless function.
