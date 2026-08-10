@@ -1,6 +1,8 @@
 /* eslint-disable max-lines -- deployment smoke assertions intentionally remain in one executable script. */
 import process from 'node:process'
 
+import { assertExpectedRelayHealth, waitForExpectedRelayHealth } from './relay-release-readiness.mjs'
+
 const origin = (process.env.RELAY_ORIGIN ?? process.env.RELAY_DEV_ORIGIN ?? '').trim().replace(/\/+$/, '')
 const expectedVersion = (
   process.env.RELAY_EXPECTED_VERSION ??
@@ -8,6 +10,8 @@ const expectedVersion = (
     ''
 ).trim()
 const expectedBuildSha = (process.env.RELAY_EXPECTED_BUILD_SHA ?? '').trim()
+const readinessAttempts = Number(process.env.RELAY_SMOKE_READY_ATTEMPTS ?? '1')
+const readinessIntervalMs = Number(process.env.RELAY_SMOKE_READY_INTERVAL_MS ?? '20000')
 const expectedDeviceApiOrigin = (
   process.env.RELAY_EXPECTED_DEVICE_API_ORIGIN ??
     process.env.RELAY_DEV_CF_DEVICE_API_ORIGIN ??
@@ -49,23 +53,18 @@ const fetchJson = async path => {
   return JSON.parse(text)
 }
 
-const health = await fetchJson('/health')
-const assertExpectedHealth = (payload, label) => {
-  assert(payload.ok === true, `${label} did not return ok=true: ${JSON.stringify(payload)}`)
-  if (expectedVersion !== '') {
-    assert(
-      payload.version === expectedVersion,
-      `${label}.version should be "${expectedVersion}", got "${String(payload.version ?? '')}".`
+const health = await waitForExpectedRelayHealth({
+  attempts: readinessAttempts,
+  expectedBuildSha,
+  expectedVersion,
+  fetchHealth: async () => await fetchJson('/health'),
+  intervalMs: readinessIntervalMs,
+  onRetry: ({ attempt, attempts, error }) => {
+    console.warn(
+      `Relay readiness attempt ${attempt}/${attempts} failed: ${error instanceof Error ? error.message : String(error)}`
     )
   }
-  if (expectedBuildSha !== '') {
-    assert(
-      payload.buildSha === expectedBuildSha,
-      `${label}.buildSha should be "${expectedBuildSha}", got "${String(payload.buildSha ?? '')}".`
-    )
-  }
-}
-assertExpectedHealth(health, '/health')
+})
 
 let directDeviceHealth
 let deviceTransport
@@ -117,7 +116,11 @@ if (expectedDeviceApiOrigin !== '') {
     `Direct device /health returned ${directHealthResponse.status}: ${directHealthText.slice(0, 500)}`
   )
   directDeviceHealth = JSON.parse(directHealthText)
-  assertExpectedHealth(directDeviceHealth, 'Direct device /health')
+  assertExpectedRelayHealth(
+    directDeviceHealth,
+    { expectedBuildSha, expectedVersion },
+    'Direct device /health'
+  )
 
   deviceTransport = serviceInfo.deviceTransport
   const expectedControlUrl = new URL('/api/relay/devices/control', deviceApiUrl)

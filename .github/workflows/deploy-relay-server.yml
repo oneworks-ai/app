@@ -118,26 +118,20 @@ jobs:
             --commit-hash "${GITHUB_SHA}" \
             --commit-message "Deploy Relay production ${GITHUB_SHA}"
       - name: Smoke check Relay Cloudflare production
+        env:
+          RELAY_SMOKE_READY_ATTEMPTS: 30
         shell: bash
         run: |
           set -euo pipefail
           version="$(node -p "require('./apps/relay-server/package.json').version")"
-          for attempt in $(seq 1 30); do
-            echo "Production Cloudflare smoke attempt ${attempt}/30 against ${RELAY_PROD_CF_ORIGIN}"
-            if RELAY_ORIGIN="${RELAY_PROD_CF_ORIGIN}" \
-              RELAY_EXPECTED_BUILD_SHA="${GITHUB_SHA}" \
-              RELAY_EXPECTED_VERSION="$version" \
-              RELAY_EXPECTED_DEVICE_API_ORIGIN="${RELAY_PROD_CF_DEVICE_API_ORIGIN}" \
-              RELAY_EXPECTED_TRANSPORT=v1-websocket \
-              RELAY_EXPECTED_TRANSPORT_HEARTBEAT_MS=600000 \
-              RELAY_EXPECTED_SSO_PROVIDERS="${RELAY_PROD_EXPECTED_SSO_PROVIDERS:-}" \
-              node .github/workflows/scripts/relay-dev-smoke.mjs; then
-              exit 0
-            fi
-            sleep 20
-          done
-          echo "::error::Cloudflare production did not become healthy within 10 minutes."
-          exit 1
+          RELAY_ORIGIN="${RELAY_PROD_CF_ORIGIN}" \
+            RELAY_EXPECTED_BUILD_SHA="${GITHUB_SHA}" \
+            RELAY_EXPECTED_VERSION="$version" \
+            RELAY_EXPECTED_DEVICE_API_ORIGIN="${RELAY_PROD_CF_DEVICE_API_ORIGIN}" \
+            RELAY_EXPECTED_TRANSPORT=v1-websocket \
+            RELAY_EXPECTED_TRANSPORT_HEARTBEAT_MS=600000 \
+            RELAY_EXPECTED_SSO_PROVIDERS="${RELAY_PROD_EXPECTED_SSO_PROVIDERS:-}" \
+            node .github/workflows/scripts/relay-dev-smoke.mjs
   deploy-vercel:
     name: vercel-production
     needs: validate-source
@@ -165,6 +159,7 @@ jobs:
           PROD_PROJECT_ID: ${{ secrets.RELAY_PROD_VERCEL_PROJECT_ID }}
           EXPLICIT_PROJECT_ID: ${{ vars.RELAY_PROD_VERCEL_PROJECT_ID }}
           RELAY_PROD_VC_ORIGIN: ${{ vars.RELAY_PROD_VC_ORIGIN }}
+          RELAY_PROD_EXPECTED_SSO_PROVIDERS: ${{ vars.RELAY_PROD_EXPECTED_SSO_PROVIDERS }}
         run: node .github/workflows/scripts/relay-vercel-production.mjs
   deploy-external:
     name: external-production

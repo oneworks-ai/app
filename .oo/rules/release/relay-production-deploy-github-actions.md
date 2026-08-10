@@ -14,7 +14,7 @@ Cloudflare direct deploy 优先读取：
 - `RELAY_PROD_CF_WORKER_NAME`：默认 `oneworks-relay-server`。
 - `RELAY_PROD_CF_PAGES_PROJECT`：默认 `oneworks`。
 - `RELAY_PROD_CF_ORIGIN`：默认 `https://cf.oneworks.cloud`。
-- `RELAY_PROD_EXPECTED_SSO_PROVIDERS`：production smoke 必须看到的 provider id，逗号分隔。
+- `RELAY_PROD_EXPECTED_SSO_PROVIDERS`：Cloudflare 与 Vercel production smoke 必须看到的 provider id，逗号分隔；留空表示该部署没有声明必须启用的 SSO provider，不应误写成平台默认值。
 
 Vercel direct deploy 优先读取完整 pair：
 
@@ -27,6 +27,6 @@ Vercel 使用固定 CLI `58.4.4`。`pull`、`build` 与 `pnpm prepare:vercel-out
 
 `platform=external` 只用于将已验证的 immutable source handoff 给外部或 Node deployment。它要求以下完整原子 tuple：secret `RELAY_SERVER_DEPLOY_TOKEN`，以及 repository variables `RELAY_SERVER_DEPLOY_REPOSITORY` 和 `RELAY_SERVER_DEPLOY_WORKFLOW`。三项只在 external job 使用，缺少任一项即失败；不能用 Cloudflare、Vercel 或 dev 凭据补齐。该 handoff 不改变本地 Node package 的独立部署与回滚边界。
 
-生产凭据必须是同一平台的完整原子 pair，不能拼接、跨用或回退到 dev。Cloudflare smoke 必须断言 v1 WebSocket、600 秒 heartbeat 和 Worker device origin；Vercel smoke 必须断言 v2 long-poll、50 秒 hold、250 秒 idle retry。Worker deploy 必须保留平台现有 vars / secrets，并写入当前 Git SHA 作为 `ONEWORKS_RELAY_BUILD_SHA`。部署后必须验证 `/health.version`、`/health.buildSha`、未授权 Admin API、`/login` 配置，以及 `/admin` 实际引用的 JS / CSS 资产。
+生产凭据必须是同一平台的完整原子 pair，不能拼接、跨用或回退到 dev。Cloudflare smoke 必须断言 v1 WebSocket、600 秒 heartbeat 和 Worker device origin；Vercel smoke 必须断言 v2 long-poll、50 秒 hold、250 秒 idle retry。Worker deploy 必须保留平台现有 vars / secrets，并写入当前 Git SHA 作为 `ONEWORKS_RELAY_BUILD_SHA`。部署后先有界等待 `/health.version` 与 `/health.buildSha` 指向目标 release，再只运行一次完整 smoke；provider、Admin asset、权限或 transport 断言失败时立即失败，不能把确定性功能错误当成部署传播继续重试。
 
 回滚也按目标隔离：Node 重新部署该 Node 目标已验证的旧 immutable package / SHA；Cloudflare 将同一 slot 的 Worker 和 Pages 一起回滚到旧 immutable SHA；Vercel 将同一 project 回滚到旧 immutable SHA。不得删除 transport capability 以回到 legacy，也不得借用另一个平台的凭据、域名或 artifact。

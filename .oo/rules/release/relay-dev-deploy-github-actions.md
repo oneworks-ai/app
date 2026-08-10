@@ -54,6 +54,8 @@ Optional repository variable:
 
 When `RELAY_DEV_EXPECTED_SSO_PROVIDERS` is set, the smoke check requires `/api/auth/providers` and `/login` config to include those provider ids.
 
+Both dev jobs use the same readiness contract: poll only `/health` until its version and immutable build SHA match the checked-out release, then run the full provider, Admin asset, authorization, login, and transport smoke exactly once. This absorbs custom-domain propagation without delaying deterministic functional failures for the entire readiness window.
+
 ## Platform Runtime Env
 
 Runtime env still belongs in Cloudflare / Vercel platform secret stores, not in committed docs. For each dev slot, confirm at least:

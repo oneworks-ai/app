@@ -74,30 +74,34 @@ export function selectProjectCandidate(env) {
   return undefined
 }
 
+export function createSmokeEnv({ expectedProviders, home, origin, path, sha, version }) {
+  return {
+    HOME: home,
+    PATH: path,
+    RELAY_EXPECTED_BUILD_SHA: sha,
+    ...(expectedProviders == null ? {} : { RELAY_EXPECTED_SSO_PROVIDERS: expectedProviders }),
+    RELAY_SMOKE_READY_ATTEMPTS: '30',
+    RELAY_EXPECTED_TRANSPORT: 'v2-long-poll',
+    RELAY_EXPECTED_VERSION: version,
+    RELAY_ORIGIN: origin
+  }
+}
+
 async function smoke() {
   const origin = process.env.RELAY_PROD_VC_ORIGIN || 'https://vc.oneworks.cloud'
   const version = process.env.npm_package_version ??
     (await import(join(relayDir, 'package.json'), { with: { type: 'json' } })).default.version
-  for (let attempt = 1; attempt <= 30; attempt += 1) {
-    console.log(`Production Vercel smoke attempt ${attempt}/30 against ${origin}`)
-    try {
-      await run(process.execPath, ['.github/workflows/scripts/relay-dev-smoke.mjs'], {
-        cwd: workspace,
-        env: {
-          HOME: process.env.HOME,
-          PATH: process.env.PATH,
-          RELAY_ORIGIN: origin,
-          RELAY_EXPECTED_BUILD_SHA: process.env.GITHUB_SHA,
-          RELAY_EXPECTED_TRANSPORT: 'v2-long-poll',
-          RELAY_EXPECTED_VERSION: version
-        }
-      })
-      return
-    } catch {
-      if (attempt === 30) throw new Error(`Vercel production did not become healthy at ${origin} within 10 minutes.`)
-      await new Promise((resolve) => setTimeout(resolve, 20_000))
-    }
-  }
+  await run(process.execPath, ['.github/workflows/scripts/relay-dev-smoke.mjs'], {
+    cwd: workspace,
+    env: createSmokeEnv({
+      expectedProviders: process.env.RELAY_PROD_EXPECTED_SSO_PROVIDERS,
+      home: process.env.HOME,
+      origin,
+      path: process.env.PATH,
+      sha: process.env.GITHUB_SHA,
+      version
+    })
+  })
 }
 
 async function main() {
