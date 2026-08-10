@@ -6,7 +6,12 @@ import { pathToFileURL } from 'node:url'
 
 const require = createRequire(import.meta.url)
 const defaultRelayRoot = join(import.meta.dirname, '..')
-const defaultRuntimePackages = ['postgres', '@simplewebauthn/server', '@oneworks/icon']
+const defaultRuntimePackages = [
+  'postgres',
+  '@simplewebauthn/server',
+  '@oneworks/icon',
+  '@oneworks/types'
+]
 
 const getOutputLayout = (relayDirectory) => {
   const functionRoot = join(relayDirectory, '.vercel/output/functions/api/relay.func')
@@ -85,7 +90,8 @@ export async function prepareVercelOutput({
   runtimePackages = defaultRuntimePackages
 } = {}) {
   const resolvedPackageRootOverrides = packageRootOverrides ?? new Map([
-    ['@oneworks/icon', join(relayDirectory, '..', '..', 'packages', 'icon')]
+    ['@oneworks/icon', join(relayDirectory, '..', '..', 'packages', 'icon')],
+    ['@oneworks/types', join(relayDirectory, '..', '..', 'packages', 'types')]
   ])
   const { functionConfigPath, functionNodeModules } = getOutputLayout(relayDirectory)
   await mkdir(functionNodeModules, { recursive: true })
