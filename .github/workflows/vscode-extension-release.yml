@@ -117,6 +117,7 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
+    environment: Production
     timeout-minutes: 20
 
     steps:

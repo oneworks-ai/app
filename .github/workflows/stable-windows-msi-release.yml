@@ -33,6 +33,7 @@ jobs:
   release:
     name: Build and publish stable Windows MSI
     runs-on: windows-2022
+    environment: Production
     timeout-minutes: 45
     permissions:
       artifact-metadata: write

@@ -1,3 +1,4 @@
+# eslint-disable max-lines
 name: Release Tags
 on:
   pull_request:
@@ -43,8 +44,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
-      actions: write
-      contents: write
+      contents: read
+    outputs:
+      count: ${{ steps.plan.outputs.count }}
+      head: ${{ steps.range.outputs.head }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -133,8 +136,35 @@ jobs:
           )"
           echo "count=$count" >> "$GITHUB_OUTPUT"
           echo "Planned $count release tag(s)."
-      - name: Create release tags
+      - name: Upload release tag plan
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.plan.outputs.count != '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-tags-plan-${{ github.run_id }}
+          path: ${{ runner.temp }}/release-tags.json
+          if-no-files-found: error
+          retention-days: 1
+  create-tags:
+    name: create-release-tags
+    needs: plan
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.plan.outputs.count != '0'
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 10
+    permissions:
+      actions: write
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Download release tag plan
+        uses: actions/download-artifact@v4
+        with:
+          name: release-tags-plan-${{ github.run_id }}
+          path: ${{ runner.temp }}
+      - name: Create release tags
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -172,7 +202,7 @@ jobs:
               continue
             fi
             echo "Creating $tag for $name@$version from $package_path"
-            git tag -a "$tag" "${{ steps.range.outputs.head }}" -m "Release $name@$version"
+            git tag -a "$tag" "${{ needs.plan.outputs.head }}" -m "Release $name@$version"
             git push origin "refs/tags/$tag"
             case "$tag" in
               pkg/oneworks-desktop/v*)
