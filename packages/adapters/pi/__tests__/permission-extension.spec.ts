@@ -66,6 +66,19 @@ describe('generated Pi permission extension', () => {
     }
   )
 
+  it('allows a configured serverless ask in dontAsk mode without opening permission UI', async () => {
+    const handler = await loadToolCallHandler(buildPiPermissionExtension({
+      configuredPermissions: { bash: 'ask' },
+      guardUnknownTools: false,
+      permissionMode: 'dontAsk',
+      sessionId: 'session-serverless-dont-ask'
+    }))
+    const ctx = context()
+
+    await expect(handler({ toolName: 'bash', input: { command: 'pwd' } }, ctx)).resolves.toBeUndefined()
+    expect(ctx.ui.select).not.toHaveBeenCalled()
+  })
+
   it('uses the live server decision for an explicitly enabled custom tool', async () => {
     vi.stubEnv('__ONEWORKS_PROJECT_SERVER_HOST__', '127.0.0.1')
     vi.stubEnv('__ONEWORKS_PROJECT_SERVER_PORT__', '8787')
@@ -87,6 +100,28 @@ describe('generated Pi permission extension', () => {
     })
     expect(fetchMock).toHaveBeenCalledOnce()
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain('/api/interact/permission-check')
+  })
+
+  it('allows a live server ask in dontAsk mode without opening permission UI', async () => {
+    vi.stubEnv('__ONEWORKS_PROJECT_SERVER_HOST__', '127.0.0.1')
+    vi.stubEnv('__ONEWORKS_PROJECT_SERVER_PORT__', '8787')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ result: 'ask', source: 'projectAsk' })
+      }))
+    )
+    const handler = await loadToolCallHandler(buildPiPermissionExtension({
+      configuredPermissions: { bash: 'deny' },
+      guardUnknownTools: false,
+      permissionMode: 'dontAsk',
+      sessionId: 'session-live-dont-ask'
+    }))
+    const ctx = context()
+
+    await expect(handler({ toolName: 'bash', input: { command: 'pwd' } }, ctx)).resolves.toBeUndefined()
+    expect(ctx.ui.select).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -182,6 +217,57 @@ describe('generated Pi permission extension', () => {
     }))
 
     await expect(handler({ toolName: 'bash', input: { command: 'pwd' } }, context())).resolves.toBeUndefined()
+  })
+
+  it('blocks bypassPermissions when the configured permission server is unavailable', async () => {
+    vi.stubEnv('__ONEWORKS_PROJECT_SERVER_HOST__', '127.0.0.1')
+    vi.stubEnv('__ONEWORKS_PROJECT_SERVER_PORT__', '8787')
+    const fetchMock = vi.fn(async () => {
+      throw new Error('offline')
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const handler = await loadToolCallHandler(buildPiPermissionExtension({
+      configuredPermissions: { bash: 'allow' },
+      guardUnknownTools: false,
+      permissionMode: 'bypassPermissions',
+      sessionId: 'session-bypass-server-offline'
+    }))
+
+    await expect(handler({ toolName: 'bash', input: { command: 'pwd' } }, context())).resolves.toEqual({
+      block: true,
+      reason: 'One Works permission server is unavailable.'
+    })
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
+
+  it('probes a configured server in bypassPermissions without applying decisions or consuming cached once state', async () => {
+    vi.stubEnv('__ONEWORKS_PROJECT_SERVER_HOST__', '127.0.0.1')
+    vi.stubEnv('__ONEWORKS_PROJECT_SERVER_PORT__', '8787')
+    const fetchMock = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => ({
+      ok: true,
+      json: async () => ({ success: true, data: { result: 'deny', source: 'onceDeny' } })
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const source = buildPiPermissionExtension({
+      configuredPermissions: { bash: 'deny' },
+      guardUnknownTools: false,
+      oneTimePermissions: { bash: { decision: 'deny', key: 'Bash' } },
+      permissionMode: 'bypassPermissions',
+      sessionId: 'session-bypass-server-online'
+    })
+    const handler = await loadToolCallHandler(source)
+
+    await expect(handler({ toolName: 'bash', input: { command: 'pwd' } }, context())).resolves.toBeUndefined()
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      adapter: 'pi',
+      sessionId: 'session-bypass-server-online'
+    })
+    const bypassBranch = source.slice(
+      source.indexOf("if (MODE === 'bypassPermissions')"),
+      source.indexOf("if (MODE === 'plan'")
+    )
+    expect(bypassBranch).not.toContain('takeOneTime')
   })
 
   it.each(

@@ -39,7 +39,11 @@ async function resolveServerDecision(toolName, input, signal) {
     const response = await fetch('http://' + normalizeServerHost(host) + ':' + port + '/api/interact/permission-check', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId: SESSION_ID, adapter: 'pi', toolName, toolInput: input || {} }),
+      body: JSON.stringify({
+        sessionId: SESSION_ID,
+        adapter: 'pi',
+        ...(toolName == null ? {} : { toolName, toolInput: input || {} })
+      }),
       signal: signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal
     });
     if (!response.ok) return undefined;
@@ -67,17 +71,24 @@ export default function (pi) {
   pi.on('tool_call', async (event, ctx) => {
     const toolName = String(event.toolName || '').toLowerCase();
     const guardedByDefault = MUTATING.has(toolName) || (GUARD_UNKNOWN_TOOLS && !READ_ONLY.has(toolName));
-    if (MODE === 'bypassPermissions') return undefined;
+    const serverConfigured = Boolean(process.env.__ONEWORKS_PROJECT_SERVER_HOST__ && process.env.__ONEWORKS_PROJECT_SERVER_PORT__);
+    if (MODE === 'bypassPermissions') {
+      if (!serverConfigured) return undefined;
+      const serverResponse = await resolveServerDecision(undefined, undefined, ctx.signal);
+      return serverResponse == null
+        ? { block: true, reason: 'One Works permission server is unavailable.' }
+        : undefined;
+    }
     if (MODE === 'plan' && guardedByDefault) {
       return { block: true, reason: 'One Works plan mode blocks mutating Pi tools.' };
     }
-    const serverConfigured = Boolean(process.env.__ONEWORKS_PROJECT_SERVER_HOST__ && process.env.__ONEWORKS_PROJECT_SERVER_PORT__);
     if (!serverConfigured) {
       const oneTimeRecord = takeOneTime(toolName);
       const configured = oneTimeRecord?.decision ?? CONFIGURED[toolName] ?? 'inherit';
       if (configured === 'deny') {
         return { block: true, reason: 'Blocked by an explicit One Works permission.' };
       }
+      if (MODE === 'dontAsk') return undefined;
       if (configured === 'allow') return undefined;
       if (!guardedByDefault && configured !== 'ask') return undefined;
       const shouldAsk = configured === 'ask' || (
@@ -104,6 +115,7 @@ export default function (pi) {
     if (configured === 'deny') {
       return { block: true, reason: 'Blocked by an explicit One Works permission.' };
     }
+    if (MODE === 'dontAsk') return undefined;
     if (configured === 'allow') return undefined;
     if (!guardedByDefault && configured !== 'ask') return undefined;
     const shouldAsk = configured === 'ask' || (

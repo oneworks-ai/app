@@ -185,6 +185,26 @@ describe('session permission service', () => {
     })
   })
 
+  it('does not consume one-shot permission state for an availability probe without a subject', async () => {
+    runtimeState = {
+      allow: [],
+      deny: [],
+      onceAllow: ['Write'],
+      onceDeny: ['Bash']
+    }
+
+    await expect(resolvePermissionDecision({
+      sessionId: 'sess-1',
+      subject: undefined
+    })).resolves.toEqual({
+      result: 'inherit',
+      source: 'none'
+    })
+    expect(consumeSessionPermissionOnce).not.toHaveBeenCalled()
+    expect(runtimeState.onceAllow).toEqual(['Write'])
+    expect(runtimeState.onceDeny).toEqual(['Bash'])
+  })
+
   it('consumes one-shot deny before any other remembered decision', async () => {
     runtimeState = {
       allow: ['Write'],
