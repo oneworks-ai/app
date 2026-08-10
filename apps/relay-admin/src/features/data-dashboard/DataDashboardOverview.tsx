@@ -3,6 +3,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { AdminActionButton } from '../../shared/ui/AdminActionButton'
 import { AdminIcon } from '../../shared/ui/AdminIcon'
+import { DailyActivityHeatmap } from './@components/DailyActivityHeatmap'
+import { createDailyActivityHeatmapDays } from './@core/daily-activity-heatmap'
+import type { DailyActivityDateRange } from './@core/daily-activity-heatmap'
 import type { RelayDataDashboardOverview } from './dataDashboardApi'
 import { fetchRelayDataDashboardOverview } from './dataDashboardApi'
 
@@ -29,6 +32,7 @@ export const DataDashboardOverview = ({ onOpenDimension, token }: DataDashboardO
   const [data, setData] = useState<RelayDataDashboardOverview>()
   const [error, setError] = useState<string>()
   const [loading, setLoading] = useState(false)
+  const [selection, setSelection] = useState<DailyActivityDateRange>()
   const loadSequence = useRef(0)
   const load = useCallback(async () => {
     if (token.trim() === '') return
@@ -52,12 +56,19 @@ export const DataDashboardOverview = ({ onOpenDimension, token }: DataDashboardO
   const diagnosticSummary = data?.monthly.summary
   const usageSummary = data?.modelUsage.summary
   const activeTeams = Object.keys(usageSummary?.byTeam ?? {}).length
-  const series = data?.monthly.series ?? []
-  const maxActiveUsers = Math.max(1, ...series.map(item => item.activeUsers))
-  const latestDate = useMemo(() => series.at(-1)?.date, [series])
+  const availableActivityDays = Math.min(30, data?.monthly.retention.days ?? 30)
+  const activityDays = useMemo(() =>
+    data == null
+      ? []
+      : createDailyActivityHeatmapDays(
+        data.monthly.series,
+        new Date(data.observedAt),
+        availableActivityDays
+      ), [data])
+  const latestDate = activityDays.at(-1)?.date
 
   return (
-    <Spin className='relay-data-dashboard__overview-spinner' spinning={loading && data == null}>
+    <Spin spinning={loading && data == null} wrapperClassName='relay-data-dashboard__overview-spinner'>
       <section className='relay-data-dashboard__overview' aria-label='运营概览'>
         {error == null ? null : <Alert message={error} showIcon type='error' />}
         <div className='relay-data-dashboard__overview-actions'>
@@ -106,27 +117,17 @@ export const DataDashboardOverview = ({ onOpenDimension, token }: DataDashboardO
               <AdminIcon name='group' />
               <strong>每日观测活跃用户</strong>
             </span>
-            <small>{latestDate == null ? '最近 30 日' : `更新至 ${latestDate}`}</small>
+            <small>
+              最近一年 · 可观测 {availableActivityDays} 日
+              {latestDate == null ? null : ` · 更新至 ${latestDate}`}
+            </small>
           </div>
-          {series.length === 0
-            ? <Alert message='最近 30 日暂无已授权的活跃事件' type='info' />
-            : (
-              <div className='relay-data-dashboard__trend'>
-                {series.map(item => (
-                  <div
-                    className='relay-data-dashboard__trend-item'
-                    key={item.date}
-                    title={`${item.date} · ${item.activeUsers} 位观测活跃用户`}
-                  >
-                    <span>{item.activeUsers}</span>
-                    <div>
-                      <i style={{ height: `${Math.max(4, item.activeUsers / maxActiveUsers * 100)}%` }} />
-                    </div>
-                    <small>{item.date.slice(5)}</small>
-                  </div>
-                ))}
-              </div>
-            )}
+          <DailyActivityHeatmap
+            days={activityDays}
+            locale='zh-CN'
+            selection={selection}
+            onSelectionChange={setSelection}
+          />
         </Card>
 
         <div className='relay-data-dashboard__dimensions'>
