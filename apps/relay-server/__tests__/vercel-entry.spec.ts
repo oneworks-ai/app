@@ -18,9 +18,15 @@ describe('vercel Relay entry', () => {
     ) as { scripts?: Record<string, string> }
     const buildScript = packageJson.scripts?.['build:vercel'] ?? ''
     const typesBuild = 'pnpm -C ../../packages/types build'
+    const iconBuild = 'pnpm -C ../../packages/icon build'
+    const runtimeMaterialization = 'node scripts/materialize-vercel-runtime.mjs'
 
     expect(buildScript).toContain(typesBuild)
+    expect(buildScript).toContain(iconBuild)
+    expect(buildScript).toContain(runtimeMaterialization)
     expect(buildScript.indexOf(typesBuild)).toBeLessThan(buildScript.indexOf('pnpm build'))
+    expect(buildScript.indexOf(iconBuild)).toBeLessThan(buildScript.indexOf(runtimeMaterialization))
+    expect(buildScript.indexOf(runtimeMaterialization)).toBeLessThan(buildScript.indexOf('pnpm build'))
   })
 
   it('keeps a long-poll device online across its 300-second poll cycle', () => {

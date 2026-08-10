@@ -27,7 +27,8 @@
 - `cloudflare/worker.ts`：Cloudflare Worker + Durable Object 入口，使用 `cloudflare-do` driver，禁用内嵌 `/admin` 静态页。
 - Cloudflare device control 使用 Durable Object Hibernation WebSocket：固定 endpoint 为 `/api/relay/devices/control`，device id 只放 `x-oneworks-relay-device-id`，token 只放 `Authorization`；socket attachment 的凭据只保存 token hash，另保存设备标识和可选连接 IP 供共享 heartbeat metadata 使用。实例级 job observer 必须从 handler dependency 注入，不得使用 module-global observer。
 - `scripts/prepare-vercel-build.mjs`：`build:vercel` 的最后一步，把 `apps/relay-admin/dist/admin` 复制到 `apps/relay-server/public/admin`，让同一个 Vercel project 同时提供 `/admin` 和 Relay API。
-- `scripts/prepare-vercel-output.mjs`：本地 `vercel build --prebuilt` 后处理，把 pnpm workspace 下的 Postgres 与 WebAuthn runtime package 依赖闭包拷进 `.vercel/output/functions/api/relay.func/node_modules/`；本地 CLI prebuilt 部署前必须跑。
+- `scripts/materialize-vercel-runtime.mjs`：Vercel 托管 CI 构建（GitHub App 或 GitHub Actions CLI build）把 server 运行期使用的 `@oneworks/icon`、`@oneworks/types` workspace symlink 物化到 Relay project 内，确保函数 trace 捕获共享包的 `dist` 与 JSON 资产；仅在 `VERCEL=1` 且 `CI` 有效时执行真实复制，避免本地 prebuilt 修改 pnpm 链接。
+- `scripts/prepare-vercel-output.mjs`：本地 `vercel build --prebuilt` 后处理，从原始 workspace package 解析 OneWorks icon 与 shared types 的依赖，再把 Postgres、WebAuthn、icon、types 与传递依赖闭包拷进 `.vercel/output/functions/api/relay.func/node_modules/`；workspace package 输出不得嵌套复制其源 `node_modules`。本地 CLI prebuilt 部署前必须跑。
 - `src/telemetry/`：Relay trace 日志。
 - `src/diagnostics/`、`src/routes/diagnostics.ts`：标准 OTLP/HTTP JSON 接收、严格隐私投影、保留策略和 Admin 诊断查询。身份只来自已认证用户 / 配对设备，不能信任客户端 `userId`。
 - `src/model-usage/`、`src/routes/team-model-usage.ts`：内容无关的团队 Model Service 用量去重、保留、过滤和聚合。用量通过诊断入口接收，但授权与分析按团队边界执行；平台 owner/admin 或具有 `relay.teamModelUsage.read` 的团队成员才能读取。
