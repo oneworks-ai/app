@@ -2,15 +2,18 @@ import { Button, Dropdown } from 'antd'
 import { useTranslation } from 'react-i18next'
 
 import type { GitRepositoryState } from '@oneworks/types'
-import type { GitOperationAction, GitOperationKind } from './git-operation-utils'
 
-import { OverlayAction, OverlayPanel } from '#~/components/overlay'
+import { OverlayPanel } from '#~/components/overlay'
+
 import { SenderMobileSelectDrawer } from '../sender/@components/mobile-select-drawer/SenderMobileSelectDrawer'
+import { GitOperationMenuItems } from './GitOperationMenuItems'
+import type { GitOperationAction, GitOperationKind } from './git-operation-utils'
 import { getPrimaryGitOperationKind, isGitOperationDisabled } from './git-operation-utils'
 
 export function GitOperationsDropdown({
   compact = false,
   isBusy,
+  isRefreshing,
   open,
   placement = 'bottomLeft',
   repoState,
@@ -18,10 +21,12 @@ export function GitOperationsDropdown({
   onOpenChange,
   onOpenCommit,
   onPush,
+  onRefresh,
   onSync
 }: {
   compact?: boolean
   isBusy: boolean
+  isRefreshing: boolean
   open: boolean
   placement?: 'bottomLeft' | 'topLeft'
   repoState: GitRepositoryState
@@ -29,6 +34,7 @@ export function GitOperationsDropdown({
   onOpenChange: (open: boolean) => void
   onOpenCommit: () => void
   onPush: () => void
+  onRefresh: () => void
   onSync: () => void
 }) {
   const { t } = useTranslation()
@@ -64,24 +70,13 @@ export function GitOperationsDropdown({
   const triggerIcon = primaryAction?.icon ?? 'deployed_code'
   const triggerLabel = primaryAction?.label ?? operationTitle
   const menuItems = (
-    <>
-      {operationKinds.map(kind => {
-        const action = actionMap[kind]
-        return (
-          <OverlayAction
-            key={kind}
-            className='chat-header-git__operation-row'
-            disabled={action.disabled}
-            onClick={action.onClick}
-          >
-            <div className='chat-header-git__operation-row-main'>
-              <span className='chat-header-git__row-icon material-symbols-rounded'>{action.icon}</span>
-              <span className='chat-header-git__row-title'>{action.label}</span>
-            </div>
-          </OverlayAction>
-        )
-      })}
-    </>
+    <GitOperationMenuItems
+      actions={actionMap}
+      isRefreshDisabled={isBusy || isRefreshing}
+      operationKinds={operationKinds}
+      refreshLabel={t('chat.gitRefreshStatus')}
+      onRefresh={onRefresh}
+    />
   )
   const menuContent = compact
     ? (
