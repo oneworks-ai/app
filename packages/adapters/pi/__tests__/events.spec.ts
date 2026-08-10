@@ -5,7 +5,41 @@ import type { AdapterOutputEvent } from '@oneworks/types'
 import { PiEventProjector } from '#~/runtime/common/events.js'
 
 describe('pi event projector', () => {
-  it('streams one assistant message id and projects tools, usage, compaction, and settle', () => {
+  it('emits one authoritative assistant message after cumulative text updates', () => {
+    const events: AdapterOutputEvent[] = []
+    const projector = new PiEventProjector('openai/gpt-test', event => events.push(event), () => 1234)
+
+    projector.handle({ type: 'message_start', message: { role: 'assistant', content: [] } })
+    projector.handle({
+      type: 'message_update',
+      assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: '你好' }
+    })
+    projector.handle({
+      type: 'message_update',
+      assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: '！我是 Pi' }
+    })
+    projector.handle({
+      type: 'message_update',
+      assistantMessageEvent: { type: 'text_end', contentIndex: 0, content: '你好！我是 Pi' }
+    })
+    projector.handle({
+      type: 'message_end',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'text', text: '你好！我是 Pi' }],
+        stopReason: 'stop'
+      }
+    })
+
+    expect(events.filter(event => event.type === 'message')).toEqual([
+      expect.objectContaining({
+        type: 'message',
+        data: expect.objectContaining({ content: '你好！我是 Pi' })
+      })
+    ])
+  })
+
+  it('projects the authoritative assistant message, tools, usage, compaction, and settle', () => {
     const events: AdapterOutputEvent[] = []
     const projector = new PiEventProjector('default', event => events.push(event), () => 1234)
     projector.setModel('openai/gpt-test')
@@ -110,7 +144,7 @@ describe('pi event projector', () => {
       type: 'message_end',
       message: {
         role: 'assistant',
-        content: [],
+        content: [{ type: 'text', text: 'Partial response before failure' }],
         stopReason: 'error',
         errorMessage: 'authentication failed'
       }
@@ -130,6 +164,7 @@ describe('pi event projector', () => {
       data: expect.objectContaining({ type: 'operation_completed' })
     }))
     expect(events).not.toContainEqual({ type: 'stop' })
+    expect(events.some(event => event.type === 'message')).toBe(false)
   })
 
   it('waits through Pi auto-retry before deciding whether the turn failed', () => {
@@ -139,7 +174,12 @@ describe('pi event projector', () => {
     projector.handle({ type: 'agent_start' })
     projector.handle({
       type: 'message_end',
-      message: { role: 'assistant', content: [], stopReason: 'error', errorMessage: 'rate limited' }
+      message: {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Partial response before retry' }],
+        stopReason: 'error',
+        errorMessage: 'rate limited'
+      }
     })
     expect(events.some(event => event.type === 'error')).toBe(false)
     projector.handle({
@@ -161,6 +201,13 @@ describe('pi event projector', () => {
     projector.handle({ type: 'agent_settled' })
 
     expect(events.some(event => event.type === 'error')).toBe(false)
+    expect(
+      events.flatMap(event =>
+        event.type === 'message' && typeof event.data.content === 'string'
+          ? [event.data.content]
+          : []
+      )
+    ).toEqual(['Recovered'])
     expect(events).toContainEqual({ type: 'stop' })
     expect(events).toContainEqual(expect.objectContaining({
       type: 'operation',

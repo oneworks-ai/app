@@ -69,7 +69,7 @@ Pi is a real variation at the existing adapter seam, so it gets a new adapter pa
 
 1. **Question every requirement.** The actual requirement is seamless One Works consumption of Pi, not embedding Pi's SDK, reproducing its TUI, or matching every optional extension ecosystem feature.
 2. **Delete.** Delete SDK coupling, a duplicate session database, writes back to real HOME data, automatic third-party extension loading, fake MCP support, broad settings passthrough, and a custom UI flow.
-3. **Simplify and optimize.** Use one long-lived RPC process per One Works session, the same session UUID on both sides, explicit resources, a session-private generated-provider profile or durable project-private native-auth profile, a shared project session directory, and final `message_end` as the authority for streamed text.
+3. **Simplify and optimize.** Use one long-lived RPC process per One Works session, the same session UUID on both sides, explicit resources, a session-private generated-provider profile or durable project-private native-auth profile, a shared project session directory, and the final successful `message_end` as the authority for streamed text.
 4. **Accelerate cycle time.** Pin a protocol-compatible Pi minor line, install through the existing CLI preparer, isolate pure mappings from process control, and test against captured official protocol shapes before a real CLI smoke.
 5. **Automate.** Auto-prepare the CLI with install scripts disabled, generate session configuration and the permission extension, register the adapter in packaged runtimes, and gate with Vitest, typecheck, formatting, and a real RPC startup smoke.
 
@@ -101,7 +101,7 @@ The adapter has three internal layers:
 
 1. Start Pi with managed or configured CLI and reuse existing Pi auth without writing real profile data or session files.
 2. Create and resume the exact One Works session ID.
-3. Stream assistant text and tool activity, emit provider-reported usage, and stop on `agent_settled`.
+3. Consume Pi's streamed assistant output as one authoritative successful `message_end` message, keep tool activity live, emit provider-reported usage, and stop on `agent_settled`.
 4. Send a follow-up while idle, steer while active, and interrupt an active turn.
 5. Enforce `plan`, `acceptEdits`, `default`, `dontAsk`, and `bypassPermissions` in both launch modes, with scoped decision persistence in streaming sessions.
 6. Route a One Works model service through generated `models.json` without writing the API key to disk.
@@ -112,11 +112,11 @@ The adapter has three internal layers:
 
 ## Verification evidence
 
-The implemented design was validated on 2026-08-09 against Pi `0.84.1` and Node.js `22.20.0`:
+The implemented design was validated through 2026-08-10 against Pi `0.84.1` and Node.js `22.20.0`:
 
 - A real authenticated native Pi request returned the expected sentinel through the configured default provider.
 - `pnpm --silent tools adapter-e2e test pi` passed both the direct-answer and read-tool scenarios using the installed Pi CLI, the Responses API fixture, normalized hooks/events, and secret-leak assertions.
-- The Pi suite passed 11 files / 81 tests. The affected regression gate passed 10 files / 188 tests across task, utils, workspace-assets, server, CLI, client, and desktop. Installed Pi adapter E2E passed 2/2; its hook-order race fix remained stable across consecutive runs. `pnpm install --frozen-lockfile`, all six typecheck scopes, candidate ESLint, dprint, diff integrity, and submodule checks also passed.
+- The Pi suite passed 11 files / 86 tests. The current cross-layer regression gate passed 8 files / 143 tests across task, hooks, server, and client. Installed Pi adapter E2E passed 2/2; its hook-order race fix remained stable across consecutive runs. `pnpm install --frozen-lockfile`, all six typecheck scopes, candidate ESLint, dprint, diff integrity, and submodule checks also passed.
 - A headed Chromium run exercised the complete Web path: select Pi with the native `default` model, create a session, execute Pi's `read` tool against `packages/adapters/pi/package.json`, render `PI_UI_E2E_OK`, send a second turn, reload the session URL, restore its full history, and complete another turn after reconnect. The page reported no runtime errors; the console contained only Vite and React development notices.
 - Independent visual review passed in both light and dark themes. Pi kept the existing selector geometry, loaded its icon, preserved layout, and met the existing selected-label contrast threshold.
 
@@ -124,4 +124,4 @@ The automated RPC scenarios stay provider-independent, while the native and brow
 
 ## Known boundary
 
-Pi's public RPC mode is the compatibility boundary. A future Pi version outside `>=0.84.1 <0.85.0` must be revalidated before the managed version is advanced. Native third-party extensions remain opt-in because they execute with the same privileges as the Pi process. Under that opt-in, global extension paths are explicit, project extension discovery additionally requires `projectTrust: always`, custom tools must also be named in `tools.include`, and unknown custom tools follow the managed permission gate. Direct terminal sessions intentionally retain Pi's native two-choice prompt instead of the streaming session's scoped One Works permission UI. Serverless `allow_once` is claimed atomically before Pi starts, so a crash can only lose an authorization; `deny_once` stays durable and therefore remains conservative across restarts.
+Pi's public RPC mode is the compatibility boundary. A future Pi version outside `>=0.84.1 <0.85.0` must be revalidated before the managed version is advanced. The current adapter output contract has no ephemeral assistant-text delta event, so Pi emits one durable assistant message from the successful `message_end` instead of persisting cumulative token snapshots; true token-by-token UI would require a separately reviewed non-durable delta contract. Native third-party extensions remain opt-in because they execute with the same privileges as the Pi process. Under that opt-in, global extension paths are explicit, project extension discovery additionally requires `projectTrust: always`, custom tools must also be named in `tools.include`, and unknown custom tools follow the managed permission gate. Direct terminal sessions intentionally retain Pi's native two-choice prompt instead of the streaming session's scoped One Works permission UI. Serverless `allow_once` is claimed atomically before Pi starts, so a crash can only lose an authorization; `deny_once` stays durable and therefore remains conservative across restarts.

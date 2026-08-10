@@ -215,6 +215,13 @@ describe('createPiSession', () => {
     expect(events).toContainEqual(
       expect.objectContaining({ type: 'message', data: expect.objectContaining({ content: 'FOLLOW_UP_OK' }) })
     )
+    expect(
+      events.flatMap(event => (
+        event.type === 'message' && event.data.role === 'assistant' && typeof event.data.content === 'string'
+          ? [event.data.content]
+          : []
+      ))
+    ).toEqual(['FIRST_OK', 'FOLLOW_UP_OK'])
     expect(events).toContainEqual(
       expect.objectContaining({ type: 'usage', data: expect.objectContaining({ inputTokens: 4 }) })
     )
@@ -309,6 +316,9 @@ describe('createPiSession', () => {
       type: 'exit',
       data: expect.objectContaining({ exitCode: 1 })
     }))
+    expect(events.some(event => (
+      event.type === 'message' && event.data.role === 'assistant' && typeof event.data.content === 'string'
+    ))).toBe(false)
     expect(events).not.toContainEqual({ type: 'stop' })
   })
 
@@ -338,6 +348,13 @@ describe('createPiSession', () => {
     expect(events).toContainEqual(
       expect.objectContaining({ type: 'message', data: expect.objectContaining({ content: 'RECOVERED_OK' }) })
     )
+    expect(
+      events.flatMap(event => (
+        event.type === 'message' && event.data.role === 'assistant' && typeof event.data.content === 'string'
+          ? [event.data.content]
+          : []
+      ))
+    ).toEqual(['RECOVERED_OK'])
     expect(events.some(event => event.type === 'error')).toBe(false)
     expect(events.some(event => event.type === 'exit')).toBe(false)
     session.stop?.()

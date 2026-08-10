@@ -16,7 +16,6 @@ export class PiEventProjector {
   private assistantId?: string
   private assistantStartedAt = 0
   private pendingTurnFailure?: string
-  private readonly textBlocks = new Map<number, string>()
   private turnInterrupted = false
 
   constructor(
@@ -54,9 +53,6 @@ export class PiEventProjector {
         break
       case 'message_start':
         if (asRecord(event.message).role === 'assistant') this.startAssistant()
-        break
-      case 'message_update':
-        this.handleMessageUpdate(asRecord(event.assistantMessageEvent))
         break
       case 'message_end':
         this.handleMessageEnd(asRecord(event.message))
@@ -114,33 +110,18 @@ export class PiEventProjector {
   private startAssistant() {
     this.assistantId = `pi-assistant-${uuid()}`
     this.assistantStartedAt = this.now()
-    this.textBlocks.clear()
-  }
-
-  private handleMessageUpdate(delta: Record<string, unknown>) {
-    if (delta.type !== 'text_delta' && delta.type !== 'text_end') return
-    if (this.assistantId == null) this.startAssistant()
-    const index = typeof delta.contentIndex === 'number' ? delta.contentIndex : 0
-    const previous = this.textBlocks.get(index) ?? ''
-    this.textBlocks.set(
-      index,
-      delta.type === 'text_end' ? String(delta.content ?? previous) : previous + String(delta.delta ?? '')
-    )
-    const text = [...this.textBlocks.entries()].sort(([left], [right]) => left - right).map(([, value]) => value).join(
-      ''
-    )
-    if (text !== '') this.onEvent({ type: 'message', data: this.createMessage(text) })
   }
 
   private handleMessageEnd(message: Record<string, unknown>) {
     if (message.role !== 'assistant') return
     if (this.assistantId == null) this.startAssistant()
-    const text = readPiAssistantText(message)
-    if (text !== '') this.onEvent({ type: 'message', data: this.createMessage(text) })
-    this.emitUsage(message)
     const stopReason = asString(message.stopReason)
     const errorMessage = asString(message.errorMessage)
-    if (stopReason === 'error' || errorMessage != null) {
+    const failed = stopReason === 'error' || errorMessage != null
+    const text = readPiAssistantText(message)
+    if (!failed && text !== '') this.onEvent({ type: 'message', data: this.createMessage(text) })
+    this.emitUsage(message)
+    if (failed) {
       this.pendingTurnFailure = errorMessage ?? 'Pi model request failed.'
     } else {
       this.pendingTurnFailure = undefined
