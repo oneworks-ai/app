@@ -13,11 +13,11 @@
     },
     {
       "path": "apps/bootstrap/assets/npm-readme-header-dark.png",
-      "sha256": "b66bf122d90528ff9500728065115b861256e000c1cb51bd3dee51f8e9666f95"
+      "sha256": "9585b0b9c3d2eb5630f58612b29d28c14fd41d8001cc75ed108de574e798c7ac"
     },
     {
       "path": "apps/bootstrap/assets/npm-readme-header-light.png",
-      "sha256": "0c0c979261347ac6a4b6d19e5c591ebc3c83a205ff387b4bebd9e81763887039"
+      "sha256": "575f3e9a7cab33855a8ff0a8af932ba8fd20a741c4ce55cee0fb48fd32948133"
     },
     {
       "path": "apps/client/public/apple-touch-icon.png",
@@ -69,19 +69,19 @@
     },
     {
       "path": "apps/vscode-extension/assets/vscode-marketplace-dark.png",
-      "sha256": "70635abe5594486653351a041e33304c078d42431abe9db47c8db5fd3c020694"
+      "sha256": "0104ea5b2b7b0b717f5c0b07ebd2b3f0da30f682cba0d76d6df6d4b25f7e7c1f"
     },
     {
       "path": "apps/vscode-extension/assets/vscode-marketplace-light.png",
-      "sha256": "f5cf64736617f527efd3f312aee311ee29c6892ef287050bd8199f6dfd4daac7"
+      "sha256": "3533c4d2d288edf56f80868bdbf2178bdfa5771ee0df408989ef20a0a307b007"
     },
     {
       "path": "assets/brand/distribution/chrome-web-store-dark.png",
-      "sha256": "a9dc72ec042e6f460ccc0f1ec21d135a2719ee7648694a300fe6212f41849066"
+      "sha256": "835fdd221e84978d54359960d95c1c5ebc781fd6d33ea3bb11de7c0eef51b57c"
     },
     {
       "path": "assets/brand/distribution/chrome-web-store-light.png",
-      "sha256": "a55e48e37b8d7b863be3132860236ff5992eb2fa0def0d0bb869014e546350e6"
+      "sha256": "ecb49722c9b0c3259f2686755185f7d198db636d153f0bc386c2f50a1bdac0d0"
     },
     {
       "path": "assets/brand/distribution/chrome-web-store.README.md",
@@ -89,19 +89,19 @@
     },
     {
       "path": "assets/brand/distribution/github-org-readme-dark.png",
-      "sha256": "91254c086176fde2461e4c2953be9faf18febe67856ff7eb262a28ae1df34097"
+      "sha256": "2ab4d0c45180310394af432a12c145db531f27c89dbd7d7e6109473b26252255"
     },
     {
       "path": "assets/brand/distribution/github-org-readme-light.png",
-      "sha256": "cc0195114abf20550f8ade90a5e2b83b12406c704285a6cb1dd48a8b400cb812"
+      "sha256": "1f7c436a2d4b8f8cad69a08af16e14d5dd3a1f7fd547c978949cb1bef5f9a30e"
     },
     {
       "path": "assets/brand/distribution/github-social-preview-dark.png",
-      "sha256": "ddbe6b875d942d0fe2893abb93164da93b9173b70d0843234f1e0f3d2811f00b"
+      "sha256": "f32ae34f0163d4fb830520565036eea88651ba65bd7f18873e5c05f9c67671bc"
     },
     {
       "path": "assets/brand/distribution/github-social-preview-light.png",
-      "sha256": "4dba409748a8a68e9afc8b716ea7b971fdce5ce5c3654b46ddca87bbf5867a6d"
+      "sha256": "ed7c6be1d21a5d7481170a108799fe6e74a21405eebcfc92e08cad50c489c6eb"
     },
     {
       "path": "assets/brand/distribution/github-social-preview.README.md",
@@ -109,27 +109,27 @@
     },
     {
       "path": "assets/brand/distribution/homepage-open-graph-dark.png",
-      "sha256": "653282d26e51047264dbc5c6f50b1874ccc5fff14a0379a1f99a3f5a78dcb4c9"
+      "sha256": "1e0a10397b902a3dc2445c31074cc22fcf5fce59b69e5a51776baf05ad40a57d"
     },
     {
       "path": "assets/brand/distribution/homepage-open-graph-light.png",
-      "sha256": "89dde8faf81ea41509bc2508ee517938d3bf89192a1998975634f7b669a8e956"
+      "sha256": "214b92b67823c8c881dfea3eab6b2750c5d93996a0002eb9fdd1555035322302"
     },
     {
       "path": "assets/brand/distribution/npm-readme-header-dark.png",
-      "sha256": "b66bf122d90528ff9500728065115b861256e000c1cb51bd3dee51f8e9666f95"
+      "sha256": "9585b0b9c3d2eb5630f58612b29d28c14fd41d8001cc75ed108de574e798c7ac"
     },
     {
       "path": "assets/brand/distribution/npm-readme-header-light.png",
-      "sha256": "0c0c979261347ac6a4b6d19e5c591ebc3c83a205ff387b4bebd9e81763887039"
+      "sha256": "575f3e9a7cab33855a8ff0a8af932ba8fd20a741c4ce55cee0fb48fd32948133"
     },
     {
       "path": "assets/brand/distribution/vscode-marketplace-dark.png",
-      "sha256": "70635abe5594486653351a041e33304c078d42431abe9db47c8db5fd3c020694"
+      "sha256": "0104ea5b2b7b0b717f5c0b07ebd2b3f0da30f682cba0d76d6df6d4b25f7e7c1f"
     },
     {
       "path": "assets/brand/distribution/vscode-marketplace-light.png",
-      "sha256": "f5cf64736617f527efd3f312aee311ee29c6892ef287050bd8199f6dfd4daac7"
+      "sha256": "3533c4d2d288edf56f80868bdbf2178bdfa5771ee0df408989ef20a0a307b007"
     },
     {
       "path": "assets/brand/distribution/vscode-marketplace.README.md",
@@ -145,11 +145,11 @@
     },
     {
       "path": "assets/github-profile/profile/brand-header-dark.png",
-      "sha256": "91254c086176fde2461e4c2953be9faf18febe67856ff7eb262a28ae1df34097"
+      "sha256": "2ab4d0c45180310394af432a12c145db531f27c89dbd7d7e6109473b26252255"
     },
     {
       "path": "assets/github-profile/profile/brand-header-light.png",
-      "sha256": "cc0195114abf20550f8ade90a5e2b83b12406c704285a6cb1dd48a8b400cb812"
+      "sha256": "1f7c436a2d4b8f8cad69a08af16e14d5dd3a1f7fd547c978949cb1bef5f9a30e"
     },
     {
       "path": "assets/homepage/apps/homepage/src/assets/brand/app-icon-512.png",
@@ -181,7 +181,7 @@
     },
     {
       "path": "assets/homepage/apps/homepage/src/assets/social/social-card.png",
-      "sha256": "89dde8faf81ea41509bc2508ee517938d3bf89192a1998975634f7b669a8e956"
+      "sha256": "214b92b67823c8c881dfea3eab6b2750c5d93996a0002eb9fdd1555035322302"
     },
     {
       "path": "assets/homepage/packages/icon/brand-profile.json",
@@ -209,15 +209,15 @@
     },
     {
       "path": "packages/plugins/external-browser-driver/assets/chrome-web-store-dark.png",
-      "sha256": "a9dc72ec042e6f460ccc0f1ec21d135a2719ee7648694a300fe6212f41849066"
+      "sha256": "835fdd221e84978d54359960d95c1c5ebc781fd6d33ea3bb11de7c0eef51b57c"
     },
     {
       "path": "packages/plugins/external-browser-driver/assets/chrome-web-store-light.png",
-      "sha256": "a55e48e37b8d7b863be3132860236ff5992eb2fa0def0d0bb869014e546350e6"
+      "sha256": "ecb49722c9b0c3259f2686755185f7d198db636d153f0bc386c2f50a1bdac0d0"
     },
     {
       "path": "packages/plugins/external-browser-driver/store-assets/small-promo-tile.png",
-      "sha256": "ef8d8105c0e9501d9840fc17838480032ac7fe81201833d0a33e569e3f9db133"
+      "sha256": "c4de147ae0f97d785dfda9587d60b33ddf71f3bfc7cf9c060abef23b041e1c40"
     }
   ]
 }
