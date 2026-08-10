@@ -9,6 +9,7 @@ on:
       - apps/relay-admin/**
       - apps/relay-server/**
       - packages/components/**
+      - packages/icon/**
       - packages/route-layout/**
       - packages/types/**
       - package.json
@@ -35,7 +36,6 @@ env:
 concurrency:
   group: deploy-relay-dev-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
   deploy-cloudflare-dev:
     name: cloudflare-dev
@@ -67,20 +67,17 @@ jobs:
       - name: Checkout repository
         if: steps.credentials.outputs.available == 'true'
         uses: actions/checkout@v4
-
       - name: Setup pnpm
         if: steps.credentials.outputs.available == 'true'
         uses: pnpm/action-setup@v4
         with:
           version: 11.7.0
-
       - name: Setup Node.js
         if: steps.credentials.outputs.available == 'true'
         uses: actions/setup-node@v4
         with:
           node-version-file: .node-version
           cache: pnpm
-
       - name: Install dependencies
         if: steps.credentials.outputs.available == 'true'
         run: pnpm install --frozen-lockfile
@@ -88,6 +85,9 @@ jobs:
       - name: Build shared types artifact
         if: steps.credentials.outputs.available == 'true'
         run: pnpm -C packages/types build
+      - name: Build shared icon artifact
+        if: steps.credentials.outputs.available == 'true'
+        run: pnpm -C packages/icon build
       - name: Resolve expected Relay version
         if: steps.credentials.outputs.available == 'true'
         id: relay-version

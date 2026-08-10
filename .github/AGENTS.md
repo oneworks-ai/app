@@ -84,6 +84,7 @@ Relay production 通过 `deploy-relay-server.yml` 人工 promotion。外部发�
 - 不把 token 明文写入仓库、issue、日志或文档。
 - 新增 workflow 时统一设置 `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true`。
 - 修改 `.github/workflows/*.yml` 后至少跑 `pnpm exec eslint .github/workflows`；可用 `actionlint` 时一并检查。`dprint` 只检查同批 Markdown 等已配置格式的文件，不要把 “No files found” 当作 YAML 已通过。
+- Relay Server 直接导入 `@oneworks/icon/*` 的已发布子路径；Cloudflare Wrangler bundle 与 Vercel `build:vercel` 在干净 CI 中必须先构建 `packages/icon`，不能依赖其他 job 或本地残留的 `dist/`。
 - PR workflow 不得用顶层 `paths` / `paths-ignore` 过滤 required check；`quality.yml` 与 `desktop-package.yml` 必须始终创建稳定 required context，再在 job 内根据 `scripts/pr-validation-scope.cjs` 选择轻量或全量步骤。classifier 规则只能在该脚本维护，workflow 不复制 path list。
 - 需要验证 GitHub 侧真实结果时，用 `gh run list` / `gh run view` 看远端 workflow，不只看本地脚本。
 - 调整 homepage docs 跨仓部署时，还要确认 `oneworks-ai/oneworks-ai.github.io` 的 `Deploy Pages` workflow 真实通过，并验证 `https://oneworks.cloud/docs/`。
