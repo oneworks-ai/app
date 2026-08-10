@@ -23,16 +23,16 @@
 - `desktop-package.yml`：构建 macOS 桌面包；纯文档 PR 在 `macOS installer` required context 内复用同一 classifier 走轻量成功路径，不执行依赖安装或 package。任何非文档 / mixed PR 继续构建 arm64+x64 unsigned app bundle 并跑 authority smoke。nightly 用 unsigned arm64 DMG 跑完整 package / smoke / install verify，保留 3 天用于提前暴露发布回归。`pkg/oneworks-desktop/v*` tag 或手动 dispatch 统一构建 arm64+x64 的 DMG / PKG / ZIP；带 `release_tag`、不勾 `create_release` 可生成正式身份的候选产物，之后用 `candidate_run_id` 提升同一 artifact，无需重打包。GitHub Release 成功后复用 `deploy-homepage.yml` 自动等待官网刷新。
 - `relay-ci.yml`：只在 Relay Server / Admin / config hook 相关路径变化时跑 server test、admin test 和真实 `relay-config live-smoke`。
 - `deploy-relay-dev.yml`：Cloudflare dev Relay/Admin 由 Actions 部署并 smoke；Vercel dev Relay/Admin 由 Vercel GitHub App 部署，Actions 只轮询 `dev.vc.oneworks.cloud` 做 smoke，不能恢复长期 Vercel CLI token 发布路径。
-- `deploy-relay-server.yml`：手动把已批准的精确 `origin/main` SHA 提升到 Relay production；构建 Server + Admin artifact，优先触发完整配置的外部发布目标，否则直发官方 Cloudflare Worker / Pages 与 Vercel 单项目 Relay/Admin，并验证 build SHA、登录、未授权边界和真实 Admin 静态资产。
+- `deploy-relay-server.yml`：手动把已批准的精确 `origin/main` SHA 提升到 Relay production；按必填 `platform` input 选择 external handoff、Cloudflare、Vercel 或两套官方平台，并验证 build SHA、登录、未授权边界和真实 Admin 静态资产。
 - `deploy-relay-admin.yml`：只监听 Relay Admin 前端及其 UI 依赖，构建独立 Admin 平台 artifact 并可按变量触发外部前端部署。
 - `deploy-pwa.yml`：从 app 仓库触发 `oneworks-ai/pwa` 的部署 workflow。
 - `deploy-avatar.yml`：从 app 仓库触发 `oneworks-ai/avatar` 的 GitHub Pages 部署 workflow，只监听 avatar 相关路径。
 - `deploy-homepage.yml`：从 app 仓库触发 `oneworks-ai/oneworks-ai.github.io` 的 GitHub Pages 部署 workflow，只监听 `.oo/docs` 和自身 workflow。
 - `sync-brand-studio.yml`：产品品牌 catalog、adapter / model-provider / channel 元数据变化后向 Brand Studio 发送 `product-catalog-updated`；专用 token 缺失时输出 notice，并保留 Brand Studio 每六小时同步作为兜底。
 
-## 当前 Secrets / Variables
+## 凭据接口
 
-已配置仓库 secrets：
+本文件只记录公开 workflow 的输入契约，不记录仓库当前已配置、未配置或正在迁移的凭据状态。需要核对 live 状态时，使用有权访问仓库 Settings 的维护者会话；不要把查询结果回写到公开文档。
 
 - `NPM_TOKEN`
 - `VSCE_PAT`
@@ -41,29 +41,29 @@
 - `AVATAR_DEPLOY_TOKEN`
 - `HOMEPAGE_DEPLOY_TOKEN`
 
-Brand Studio 即时同步使用可选的 `BRAND_STUDIO_SYNC_TOKEN`。未配置时 workflow 不失败或复用其他仓库 token；Brand Studio 的定时同步继续兜底。
+Brand Studio 即时同步可使用可选的 `BRAND_STUDIO_SYNC_TOKEN`；缺少时 workflow 不失败或复用其他仓库 token，Brand Studio 的定时同步继续兜底。
 
-Relay production 通过 `deploy-relay-server.yml` 人工 promotion。外部发布目标的三项配置必须同时存在或同时缺省：
+Relay production 通过 `deploy-relay-server.yml` 人工 promotion。选择 external target 时，三项配置必须同时存在：
 
 - secret: `RELAY_SERVER_DEPLOY_TOKEN`
 - variables: `RELAY_SERVER_DEPLOY_REPOSITORY`、`RELAY_SERVER_DEPLOY_WORKFLOW`
 
-外部目标缺省时，使用完整成对的 `RELAY_PROD_CLOUDFLARE_API_TOKEN` / `RELAY_PROD_CLOUDFLARE_ACCOUNT_ID` 直发 Cloudflare production；迁移期间两项 production secret 都缺省时，才允许回退到完整成对的 dev Cloudflare 凭据；不能跨 production / dev 拼接 token 和 account id。production Worker / Pages / origin 可通过 `RELAY_PROD_CF_WORKER_NAME`、`RELAY_PROD_CF_PAGES_PROJECT`、`RELAY_PROD_CF_ORIGIN` 覆盖。`RELAY_PROD_CF_DEVICE_API_ORIGIN` 可把设备 bearer API 指向同一 Worker 的直连 HTTPS origin；workflow 会生成同源 WSS control endpoint，浏览器登录 / OAuth / Passkey 仍使用公开 Pages origin。
+Cloudflare production 只使用完整成对的 `RELAY_PROD_CLOUDFLARE_API_TOKEN` / `RELAY_PROD_CLOUDFLARE_ACCOUNT_ID`；缺少任一项必须失败，不能回退到 dev 凭据，也不能跨 production / dev 拼接 token 和 account id。production Worker / Pages / origin 可通过 `RELAY_PROD_CF_WORKER_NAME`、`RELAY_PROD_CF_PAGES_PROJECT`、`RELAY_PROD_CF_ORIGIN` 覆盖。`RELAY_PROD_CF_DEVICE_API_ORIGIN` 可把设备 bearer API 指向同一 Worker 的直连 HTTPS origin；workflow 会生成同源 WSS control endpoint，浏览器登录 / OAuth / Passkey 仍使用公开 Pages origin。
 
-同一 manual production promotion 在非 external 接管路径还部署官方 Vercel 单项目 Relay/Admin。优先使用完整 `RELAY_PROD_VERCEL_TOKEN` / `RELAY_PROD_VERCEL_ORG_ID`，两项都缺省时才回退到完整的现有 dev pair；`RELAY_PROD_VERCEL_PROJECT_ID` 可显式指定，否则按精确 `vc.oneworks.cloud` 域名唯一发现项目。常规 dev 部署仍由 Vercel GitHub App 完成，不能把这条 production CLI 路径用于 dev。
+同一 manual production promotion 在非 external 接管路径还部署官方 Vercel 单项目 Relay/Admin。Vercel production 只使用完整成对的 `RELAY_PROD_VERCEL_TOKEN` / `RELAY_PROD_VERCEL_ORG_ID`；缺少任一项必须失败，不能读取 dev pair。`RELAY_PROD_VERCEL_PROJECT_ID` 可显式指定，否则按精确 `vc.oneworks.cloud` 域名唯一发现项目。常规 dev 部署仍由 Vercel GitHub App 完成，不能把这条 production CLI 路径用于 dev。
 
 独立 Relay Admin 外部 artifact 发布仍由 `deploy-relay-admin.yml` 读取：
 
 - secret: `RELAY_ADMIN_DEPLOY_TOKEN`
 - variables: `RELAY_ADMIN_DEPLOY_REPOSITORY`、`RELAY_ADMIN_DEPLOY_WORKFLOW`
 
-官方 Relay dev slot：
+Relay dev workflow 使用独立的 dev 输入：
 
 - Cloudflare dev 需要 `RELAY_DEV_CLOUDFLARE_API_TOKEN`、`RELAY_DEV_CLOUDFLARE_ACCOUNT_ID`。
 - `RELAY_DEV_CF_DEVICE_API_ORIGIN` 可覆盖 dev Worker 的设备直连 HTTPS origin；不得包含 token、userinfo 或路径。
 - Vercel dev 通过 Vercel GitHub App 连接 `oneworks-ai/app` 的 `main` 分支和 `apps/relay-server` root directory；GitHub 侧只配置可选变量 `RELAY_DEV_VC_ORIGIN` 和 smoke 相关变量，不配置 `RELAY_DEV_VERCEL_TOKEN`。
 
-桌面签名需要但当前未配置的 secrets：
+桌面签名 workflow 使用以下成组输入；是否启用签名由 workflow 配置决定：
 
 - `APPLE_ID`
 - `APPLE_ID_PASSWORD`
@@ -73,11 +73,7 @@ Relay production 通过 `deploy-relay-server.yml` 人工 promotion。外部发�
 - `DESKTOP_CSC_INSTALLER_LINK`
 - `DESKTOP_CSC_INSTALLER_KEY_PASSWORD`
 
-已配置仓库 variables：
-
-- `VSCODE_EXTENSION_PUBLISHER=oneworks-ai`
-
-桌面 workflow 还读取这些可选 variables；未配置时使用 workflow 内默认值：
+其他发布 workflow 读取 `VSCODE_EXTENSION_PUBLISHER`。桌面 workflow 还读取以下可选 variables，并在 workflow 内提供默认行为：
 
 - `DESKTOP_SIGN=false`
 - `DESKTOP_AUTO_UPDATE=true`
