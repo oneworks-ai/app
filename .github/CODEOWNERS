@@ -1,0 +1,62 @@
+* @oneworks-ai/app-maintainers
+
+# Repository automation, infrastructure, and release policy
+/.github/workflows/ @oneworks-ai/app-release-ops
+/.github/AGENTS.md @oneworks-ai/app-release-ops
+/.github/CODEOWNERS @oneworks-ai/app-release-ops
+/.github/pull_request_template.md @oneworks-ai/app-release-ops
+/infra/ @oneworks-ai/app-release-ops
+/.oo/rules/RELEASE.md @oneworks-ai/app-release-ops
+/.oo/rules/RELAY-DEPLOYMENT.md @oneworks-ai/app-release-ops
+/.oo/rules/release/ @oneworks-ai/app-release-ops
+/.oo/rules/relay-deployment/ @oneworks-ai/app-release-ops
+
+# Release planning, package identity, publishing, and installers
+/scripts/cli-package-release.ts @oneworks-ai/app-release-ops
+/scripts/homebrew-tap.ts @oneworks-ai/app-release-ops
+/scripts/install-windows.ps1 @oneworks-ai/app-release-ops
+/scripts/publish-plan-* @oneworks-ai/app-release-ops
+/scripts/release-* @oneworks-ai/app-release-ops
+/scripts/stable-* @oneworks-ai/app-release-ops
+/scripts/vercel-ignore-build.mjs @oneworks-ai/app-release-ops
+/scripts/windows-install.ts @oneworks-ai/app-release-ops
+/scripts/windows-installer-identity.* @oneworks-ai/app-release-ops
+/scripts/__tests__/desktop-package-workflow.spec.ts @oneworks-ai/app-release-ops
+/scripts/__tests__/homebrew-tap.spec.ts @oneworks-ai/app-release-ops
+/scripts/__tests__/publish-plan-* @oneworks-ai/app-release-ops
+/scripts/__tests__/*release* @oneworks-ai/app-release-ops
+/scripts/__tests__/stable-* @oneworks-ai/app-release-ops
+/scripts/__tests__/vercel-ignore-build.spec.ts @oneworks-ai/app-release-ops
+/scripts/__tests__/windows-install.spec.ts @oneworks-ai/app-release-ops
+/package.json @oneworks-ai/app-release-ops
+/pnpm-workspace.yaml @oneworks-ai/app-release-ops
+/apps/**/package.json @oneworks-ai/app-release-ops
+/packages/**/package.json @oneworks-ai/app-release-ops
+/packages/plugins/**/plugin.json @oneworks-ai/app-release-ops
+
+# Desktop, editor, and browser-extension release pipelines
+/apps/desktop/scripts/ @oneworks-ai/app-release-ops
+/apps/desktop/build/ @oneworks-ai/app-release-ops
+/apps/desktop/electron-builder.yml @oneworks-ai/app-release-ops
+/apps/desktop/src/main/desktop-release-channel.ts @oneworks-ai/app-release-ops
+/apps/desktop/__tests__/desktop-package-version.spec.ts @oneworks-ai/app-release-ops
+/apps/desktop/__tests__/desktop-release-channel.spec.ts @oneworks-ai/app-release-ops
+/apps/desktop/__tests__/mac-adhoc-seal.spec.ts @oneworks-ai/app-release-ops
+/apps/desktop/__tests__/notarize-artifacts.spec.ts @oneworks-ai/app-release-ops
+/apps/desktop/__tests__/release-candidate-manifest.spec.ts @oneworks-ai/app-release-ops
+/apps/desktop/__tests__/smoke-packaged-server.spec.ts @oneworks-ai/app-release-ops
+/apps/desktop/__tests__/verify-macos-adhoc-artifacts.spec.ts @oneworks-ai/app-release-ops
+/apps/vscode-extension/scripts/ @oneworks-ai/app-release-ops
+/packages/plugins/external-browser-driver/bin/extension-release.cjs @oneworks-ai/app-release-ops
+/packages/plugins/external-browser-driver/bin/materialize-extension.cjs @oneworks-ai/app-release-ops
+/packages/plugins/external-browser-driver/bin/package-extension.cjs @oneworks-ai/app-release-ops
+/packages/plugins/external-browser-driver/bin/publish-chrome-web-store.cjs @oneworks-ai/app-release-ops
+/packages/plugins/external-browser-driver/bin/validate-extension-package.cjs @oneworks-ai/app-release-ops
+/packages/plugins/external-browser-driver/extension/manifest*.json @oneworks-ai/app-release-ops
+/packages/plugins/external-browser-driver/__tests__/contract.spec.ts @oneworks-ai/app-release-ops
+/packages/plugins/external-browser-driver/__tests__/extension-release.spec.ts @oneworks-ai/app-release-ops
+
+# Hosted Relay control planes and shared runtime
+/apps/relay-admin/ @oneworks-ai/app-release-ops
+/apps/relay-server/ @oneworks-ai/app-release-ops
+/packages/plugins/relay/ @oneworks-ai/app-release-ops
