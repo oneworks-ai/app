@@ -12,7 +12,6 @@ import {
   createSessionGitBranch,
   createSessionManagedWorktree,
   getApiErrorMessage,
-  getSessionGitState,
   getSessionWorkspace,
   listSessionGitBranches,
   transferSessionWorkspaceToLocal
@@ -24,6 +23,7 @@ import { getGitControlState } from './git-operation-utils'
 import { useChatGitCommit } from './use-chat-git-commit'
 import { useChatGitPushState } from './use-chat-git-push-state'
 import { useChatGitWorktrees } from './use-chat-git-worktrees'
+import { useSessionGitState } from './use-session-git-state'
 
 type GitActionKind =
   | 'branch-create'
@@ -50,11 +50,12 @@ export function useChatGitControls(sessionId: string) {
     () => getSessionWorkspace(sessionId),
     { revalidateOnFocus: false }
   )
-  const { data: repoState, mutate: mutateRepoState } = useSWR<GitRepositoryState>(
-    ['session-git-state', sessionId],
-    () => getSessionGitState(sessionId),
-    { revalidateOnFocus: false }
-  )
+  const {
+    data: repoState,
+    isValidating: isGitStateRefreshing,
+    mutate: mutateRepoState,
+    refresh: refreshRepoState
+  } = useSessionGitState(sessionId)
   const { data: branchData, isLoading: isBranchListLoading, mutate: mutateBranchData } = useSWR<GitBranchListResult>(
     shouldLoadBranches ? ['session-git-branches', sessionId] : null,
     () => listSessionGitBranches(sessionId),
@@ -81,7 +82,7 @@ export function useChatGitControls(sessionId: string) {
     if (nextRepo != null) {
       await mutateRepoState(nextRepo, { revalidate: false })
     } else {
-      await mutateRepoState()
+      await refreshRepoState()
     }
 
     if (shouldLoadBranches) {
@@ -100,6 +101,14 @@ export function useChatGitControls(sessionId: string) {
     }
 
     await mutateWorkspaceData()
+  }
+
+  const handleRefreshGitState = async () => {
+    try {
+      await refreshGitState()
+    } catch (error) {
+      void message.error(getApiErrorMessage(error, t('chat.gitRefreshStatusFailed')))
+    }
   }
 
   const commit = useChatGitCommit({
@@ -243,10 +252,12 @@ export function useChatGitControls(sessionId: string) {
     handleCreateManagedWorktree,
     handleOpenPushModal,
     handlePush,
+    handleRefreshGitState,
     handleTransferWorkspaceToLocal,
     hasBranchResults,
     isBranchListLoading,
     isBusy,
+    isGitStateRefreshing,
     availableLocalBranches,
     operationsMenuOpen,
     pendingAction,
