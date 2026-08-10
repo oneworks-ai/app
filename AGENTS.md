@@ -67,6 +67,7 @@ pnpm --silent tools dev-service ensure <target> --json
 ## 独立任务协作
 
 - 在声称不能为独立任务指定 model / reasoning 前，先检查当前 Codex 的 `create_thread`、`fork_thread`、`send_message_to_thread` 等线程能力及其 schema；`create_thread` delegation 可以建立干净独立任务与 worktree，同目录 fork 可以复用已有 worktree 和完成历史，后续线程消息也可能支持显式切换 model / reasoning。能力未核验前，不要把限制当作事实。
+- 用户已明确要求独立任务无需审批时，不得假定 Desktop `create_thread` 会继承用户或项目的 `approval_policy`：宿主可能注入更严格的 managed profile，项目 exec-policy 也可能在 bypass 模式下继续拒绝 `prompt` 命令。优先在隔离 worktree 中用持久化 Codex CLI 会话显式启动 `codex exec --dangerously-bypass-approvals-and-sandbox --ignore-rules -C <worktree> --json <prompt>`，记录 session ID，并只通过同样带这两个 flag 的 `codex exec resume` 继续；创建者负责监控、停止和 `codex archive`，不得把意外 `waitingOnApproval` 转给用户。Git / PR operator 仍须是独立会话，并在 prompt 中携带用户直接授权的精确仓库、分支、写操作、merge 和清理边界；完整边界与 smoke gate 见 `.oo/rules/maintenance/task-planning.md`。
 - commit、push、PR 创建或更新、无冲突 merge 执行等 Git / PR 写操作必须交给显式选定最低充分 model / reasoning 的独立任务（通常 Luna / low 或 medium）；不得因权限传递失败而回退主线程执行。边界清楚的实现和证据准备可用 Terra / medium；主线程始终保留授权、风险判断、独立审阅与 merge 决策。
 - 同一 worktree 同时只能有一个写入者。并行只读审阅可以共享；并行代码写入应优先使用独立 worktree。
 - 每个独立任务 prompt 必须携带主任务 thread ID，并要求 worker 在每个阶段完成、失败或阻塞时主动发送结构化回调；最终回调必须声明终态、证据、是否仍需 follow-up 和是否可归档。没有回调或等价的父线程核验证据不能视为完成，`idle` / worker 最终回复本身也不会自动归档线程。

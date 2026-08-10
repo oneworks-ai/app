@@ -110,6 +110,15 @@ Safe to archive: yes / no
 
 主线程收到此回调后仍要自行核验。`Safe to archive: yes` 不是归档指令，也不能覆盖未完成的 CI、merge、用户确认或证据检查。
 
+### 无审批独立任务的 CLI 入口
+
+- Desktop `create_thread` 的宿主启动策略可能高于 `~/.codex/config.toml` 和项目 `.codex/config.toml`，且当前线程 schema 不一定暴露 `approval_policy` / `permission_profile`。用户已明确要求“无需审批”时，不得把配置文件值当作新会话的实际权限，也不得先启动正式任务再等审批问题暴露。
+- 无审批独立任务优先使用专用 worktree 中的持久化 CLI 会话：`codex exec --dangerously-bypass-approvals-and-sandbox --ignore-rules -C <worktree> --json <prompt>`。`--ignore-rules` 是必要组成：项目 / 用户 exec-policy 的 `prompt` 规则可能在 bypass 模式下直接拒绝命令，而不是弹出审批。不要加 `--ephemeral`；从 JSONL 捕获 session ID，并记录 worktree、owner、deadline 和停止方法。首次采用或 Codex 版本、`CODEX_HOME`、项目 exec-policy 改变后，先运行无写入 smoke，并至少用一个明确授权但可逆的受限命令验证 exec-policy 不会拦截，再确认 CLI session 能被同一 Desktop / session inventory 按 ID 读取，最后才发送真实任务。
+- 后续指令只用 `codex exec resume --dangerously-bypass-approvals-and-sandbox --ignore-rules <session-id> <prompt>`。当前交互式 `codex resume` 不支持 `--ignore-rules`，不得用于承诺无审批的任务；需要持续输出时由创建者持有非交互 exec 的进程句柄、读取 JSONL 并按 deadline 停止。结束后由创建者核验终态、保留所需 worktree 证据并执行 `codex archive <session-id>`，用户无需照看、审批或清理子会话。
+- `--dangerously-bypass-approvals-and-sandbox --ignore-rules` 只取消 Codex 审批、sandbox 和本地 exec-policy 拦截，不扩大用户授予的任务范围；因本地规则不再提供防线，必须把精确授权、禁止事项、隔离 worktree、单一写入者、deadline、heartbeat、身份 / remote / scope preflight 和独立审阅写入 prompt 并由创建者核验。若任一 CLI flag、持久化、session ID 捕获、受限命令 smoke 或 Desktop inventory smoke 失败，立即停止并报告 capability gap，不回退到可能产生人工审批的正式 Desktop worker。
+- 如果由本任务创建的会话仍意外进入 `waitingOnApproval`，创建者不得要求用户处理。先中断 / 拒绝待审批操作，保留未提交 worktree，再将任务标记 `STOPPED` 并归档；只有可能丢失用户数据、需要扩大授权或无法安全停止时才向用户报告。该收口是下方“运行中等待审批不得提前归档”的窄例外：必须先确认 turn 已被中断，再归档。
+- Git commit、push、PR 创建 / 更新、merge 等远端写入仍必须由独立 Git operator 执行，主线程不得因 bypass 可用而接管。用户明确要求该独立任务无需审批时，可以使用同一持久化 CLI 入口，但 operator prompt 必须直接携带可追溯的本轮用户授权，并精确列出仓库、目标分支、允许的 commit / push / PR / merge 动作、merge 方式和分支清理范围；首次写入前仍须完成 `gh` 身份、remote、重复 PR、base、diff 和 `git push --dry-run` 预检。缺少精确授权、身份或范围时立即停止，不得把 full-access 当作授权，也不得扩大或重写历史。未要求绕过审批时，继续优先使用下方 project thread / same-directory fork 与项目 auto-review。
+
 ## 权限预检与审批恢复
 
 - Permission-sensitive external / network / install / Git 操作前，先用与目标、transport 和动作类别匹配的非变更 capability probe；配置文本、授权标签或旧任务成功不能替代真实探测。
