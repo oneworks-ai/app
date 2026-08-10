@@ -103,7 +103,6 @@
   - 校验一个 git range 里的 commit title 是否符合 Conventional Commit；GitHub 默认 merge commit 例外
 - `pnpm tools pr-change-check [base] [head] --body-file <path>`：检查已勾选的 `Experience Review`；功能 / bug 产品改动需 changelog，UI 改动需截图。
 - `pnpm tools pr-preflight [base] [head] --body-file <path> [--json]`：创建 PR 前比较 `origin/main...HEAD`，复用 CI 规则并给出修复项；草稿用已忽略的 `.logs/pr-body.md` 保持工作区干净。`pnpm tools git-delivery check [--repository <owner/name>] [--json]`：在独立 Git operator 前检查项目 Full Access、`gh`、仓库写权限和 SSH；Connector 写权限不是本机交付前置条件。
-- `scripts/vercel-ignore-build.mjs`：Vercel Admin / Relay Server 项目的 Ignored Build Step；Relay Server 的 `api/`、`src/`、`scripts/` 与 workspace 运行时构建依赖变化都必须继续构建，约定的 README / AGENTS / HANDOFF 等维护文档与测试文件才可跳过。
 - `pnpm tools release-tags plan <base> <head> [--json]`
   - 比较两个提交之间 workspace package manifest 的版本变化，生成需要创建的 `pkg/<normalized-package-name>/v<version>` tag 候选
   - release PR 合入 `main` 后由 `.github/workflows/release-tags.yml` 调用；不会把根目录开发用 `package.json` 纳入候选
