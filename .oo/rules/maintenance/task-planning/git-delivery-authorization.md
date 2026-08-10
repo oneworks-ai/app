@@ -7,7 +7,7 @@
 - 配置文件、任务 prompt、delegation 文本或“Full Access”标签只能说明预期权限，不能证明当前任务已经捕获对应 permission profile。任何 permission-sensitive external / network / install / Git 操作前，当前执行任务必须先运行一条与目标、transport 和动作类别匹配的非变更 capability probe；只记录非敏感结论，不把配置文本或旧任务成功当作替代证据。
 - 同一 host 的官方 `gh` credential 由任务复用，不为新 worktree / task 重做认证。GitHub API 的权威双信号是 `gh api user` 与 `gh api repos/<owner>/<repo>`：前者确认实际身份，后者确认目标仓库可达性和权限；`gh auth status` 只能作为辅助诊断，不能单独触发用户确认或 credential 变更。不得在任务内运行 `gh auth login`、`logout` 或 `refresh`，也不得仅因 status 文本要求用户登录。
 - Git transport 与 GitHub API 分开探测。交付前读取实际 remote，并让目标执行任务用 SSH 对精确目标 ref 做 `git push --dry-run` 或等价非变更协商；只有 API 双信号和 SSH probe 都通过，才说明该任务具备继续执行已授权操作的有效 capability。
-- 新任务一旦进入 `waitingOnApproval`，或无法使用 source task 已验证可用的 host localhost proxy，必须保持零变更，向主任务回调 `BLOCKED`、证据和 `Safe to archive`。协调器核验后归档并从已验证 Full Access source task 重建；不得把 approval / login 路由给用户，也不得在受限任务里试做相邻修复。
+- 普通 Desktop 任务进入 `waitingOnApproval` 时按下节做精确恢复；无法使用 source task 已验证可用的 host localhost proxy，或恢复后仍缺少目标 capability 时，保持零变更并回调 `BLOCKED`、证据和 `Safe to archive`，不得在受限任务里试做相邻修复。
 - 对用户已明确授权、能够安全共享 checkout 的非 Git release / read-only / install 工作，可以从已通过 capability probe 的 Full Access source task 创建 same-directory fork；prompt 必须声明“你就是执行者，不得继续委派”，并保持原授权的目标、动作和停止条件。Git commit、push、PR 创建 / 更新和 merge 继续遵守独立 Git operator 边界；无法建立有效 operator capability 时报告 capability gap，主线程不得接管 Git 写操作。
 - 项目 ask / approval 列表只对精确命令类别和目的生效；例如 `kill`、`chmod` 的已有条目不能证明或授权不相关的 external、install、Git 或 credential 操作。
 - Git / PR 独立任务的 prompt 必须包含精确的仓库、PR / 分支、允许的写操作、merge 方式、是否删除远端分支和本轮用户授权；只写“处理 PR”或“合入”不足以让审批者判断边界。
@@ -15,9 +15,18 @@
 - 创建 Git operator 前先完成官方 `gh` API 双信号、读取仓库实际 remote、运行目标 SSH push dry-run，再运行 `pnpm tools git-delivery check --repository <owner/name> --json`。只有本机官方 `gh`、repo-specific 权限、实际 Git transport 和项目 Full Access 配置的真实加载 probe 都 ready 时才开始 commit / push / PR；不要等到收尾阶段才发现授权链断裂。
 - 本项目是可信本地开发项目，`.codex/config.toml` 使用 `approval_policy = "never"` 与 `default_permissions = ":danger-full-access"`，让新加载任务获得完整文件系统和网络能力且不暂停等待审批。Full Access 只提供执行能力，不替代用户授权、独立 Git operator、目标限制、隐私边界或 capability probe；managed requirements 与显式启动覆盖仍有更高优先级。
 - 新项目配置与规则只对重新加载后的任务生效。Git 写操作必须交给通过项目线程能力新建、会重新加载 `.codex/config.toml` 的干净独立 Git operator；普通 collaboration child 即使继承 Full Access 也不能承担远端 Git 写操作。真实验收让新 operator 执行一条范围明确且可逆的 Git 元数据写入，并确认没有停在人工 `waitingOnApproval`；旧线程成功不能证明新配置已加载。
-- 如果 worker 仍进入 `waitingOnApproval`，不要在该受限 worker 内修改项目层权限或授权上下文。按零变更规则回调并归档后，协调器核对 effective config，再从已验证 Full Access source task 创建至多一个干净验证任务。不要连续 fork 带有长协调历史的主任务；需要共享同一 worktree时，prompt 必须明确“你就是执行者，不得再委派”。权限传递仍失败时记录 capability gap，不能让主线程接管远端 Git 写操作，也不能要求用户重复已经明确给出的授权。
+- 不要在等待审批的 worker 内修改项目层权限、授权上下文或命令 allowlist。普通 Desktop 任务先按下节恢复；仅当状态无效、恢复失败或 capability 仍缺失时，协调器才保留 worktree 并从 exact current main 重建至多一个干净验证任务。不要连续 fork 带有长协调历史的主任务；需要共享同一 worktree 时，prompt 必须明确“你就是执行者，不得再委派”。权限传递仍失败时记录 capability gap，不能让主线程接管远端 Git 写操作，也不能要求用户重复已经明确给出的授权。
 - GitHub Connector 返回 `Resource not accessible by integration` 只说明非标准集成不可用，不能成为修复、安装或改用 connector / 网页 UI 的理由。回到本机官方 `gh` 完成身份与仓库权限核验；`gh` 未 ready 时停止交付，不能绕开此门禁。
-- 不要额外添加命令级永久 `allow` 放行 `gh pr merge`、`git push` 或 `gh api`。项目 Full Access 已消除人工停顿；操作边界继续由可追溯用户授权、独立 Git operator、精确目标和 preflight 约束，而不是由宽泛命令前缀替代。
+- 不要添加命令级永久 `allow` 放行 `gh pr merge`、`git push`、`gh api` 或其它宽泛前缀；即使项目配置声明 Full Access，普通 Desktop 审批也只允许恢复精确命令一次。操作边界继续由可追溯用户授权、独立 Git operator、精确目标和 preflight 约束。
+
+### 普通 Desktop `waitingOnApproval` 恢复
+
+1. 协调器先从任务清单和线程状态确认待恢复的精确 task / thread，再只读核验 live main / base、冻结 manifest / scope、当前请求的完整命令或动作，以及来源用户历史中可追溯的授权。不能用相似任务、旧 revision、宽泛目标或 worker 自报代替这些证据。
+2. 五项证据仍完全一致时，在本机终端运行 `codex resume <thread-id>`，进入该 CLI 会话的审批 overlay，只选择一次性批准当前显示的精确命令。批准后立即确认原 turn 已恢复，并继续用 heartbeat / wait 监控直到下一阶段回调；不要授予 broad、persistent、prefix 或后续命令权限。
+3. `/approve` 只用于 Auto-review 拒绝了仍绑定同一 exact revision、同一 scope 和同一授权的操作，并且最多重试一次。再次拒绝、revision 改变或命令内容变化时停止并重新核验，不能循环 `/approve`。
+4. task / thread 不明、live main / base 已过期、冻结 scope 不匹配、命令或动作扩大、授权不可追溯，或操作具有新增破坏性时，拒绝 / 取消待审批动作并停止任务；保留 worktree 和审计证据，从 exact current main 重新组装、验证和独立审阅后再创建后续执行任务。
+5. 审批只证明当前 Codex 会话获得一次执行 capability。它不会授予 Git / PR 写入、改变 GitHub 身份或 remote，也不会取消独立 Git operator、exact-main、required checks、独立审阅以及禁止 rebase、force、手工冲突处理、分支删除和 admin bypass 的约束。
+6. 本流程只用于普通 Desktop 任务。只有用户从任务创建前就明确要求无审批时，才使用父文档的 [明确无审批独立任务的 CLI 入口](../task-planning.md#明确无审批独立任务的-cli-入口)；该 bypass 会话若意外进入 `waitingOnApproval`，视为 capability failure，必须拒绝 / 中断、保留 worktree、标记 `STOPPED` 并归档，不能转回本节临时批准。
 
 ## GitHub CLI 单一授权入口
 
@@ -50,7 +59,7 @@ Git / PR 写操作需要同时满足“任务范围精确”和“用户授权�
 2. 创建前核验 `create_thread`、`fork_thread`、`send_message_to_thread`、`wait_threads` 和归档工具的当前 schema，确认项目 / worktree 选择、状态锚点以及 model / reasoning 能力；不要用旧记忆猜参数。
 3. 创建后同步登记 thread / worktree、约十分钟 heartbeat、deadline 和 cleanup cutoff，并要求 operator 在阶段边界回调主任务。无论使用哪种入口，都要明确“你就是执行者，不得再委派”；任务输入用于收窄 capability，不得自行扩大来源用户授权。
 4. 第一次写入前完成只读 preflight：确认目标 worktree、已审阅的 diff、当前分支 / ref、远端同步、已有或重复 PR、base branch、适用 PR policy、Draft / merge 授权、merge 方式和分支清理范围。前置条件未满足时停在只读阶段；不要先创建 PR 再补查这些边界。
-5. 新 operator 先执行官方 `gh` API 双信号，再执行 `git push --dry-run` 或等价的无写入远端协商。只有这些受限命令真实到达对应 API / SSH remote，才能证明该任务的 host capability 有效；它们不授权后续 `commit`、真实 `push`、PR 创建 / 更新或 merge。任一 probe 进入 `waitingOnApproval` 或无法使用 host proxy 时保持零变更并回调，由协调器归档 / 重建；每一项 Git / PR 写操作仍须落在来源用户授权和 operator prompt 的精确 scope 内。
+5. 新 operator 先执行官方 `gh` API 双信号，再执行 `git push --dry-run` 或等价的无写入远端协商。只有这些受限命令真实到达对应 API / SSH remote，才能证明该任务的 host capability 有效；它们不授权后续 `commit`、真实 `push`、PR 创建 / 更新或 merge。任一 probe 进入 `waitingOnApproval` 时先按普通 Desktop 恢复流程核验和处理；证据不匹配、一次恢复失败或无法使用 host proxy 时才保持零变更并回调，由协调器保留 worktree 后重建。每一项 Git / PR 写操作仍须落在来源用户授权和 operator prompt 的精确 scope 内。
 6. preflight 和授权链路均通过后，operator 才按授权依次 commit、push、创建或复用 PR；required checks 和审批在 PR 上继续等待、核验。主线程保留是否满足 merge 条件的判断，operator 只执行已明确授权的 merge 方式和清理范围。
 7. 用 `wait_threads` 获取紧凑进度；终态证据核验后删除 heartbeat，立即 `set_thread_archived` 并确认归档成功，不要把执行日志重新灌入主线程。
 8. 如果授权只存在于当前 active turn，且状态可以交给独立 project worktree，使用带精确 delegation 的 `create_thread`；如果必须走 same-directory fork，则等该用户回合进入 completed history 后再创建。两条路径都无法形成可信 capability 时，记录并修复能力缺口，不让用户复述授权，也不回退主线程执行。
@@ -59,6 +68,6 @@ Git / PR 写操作需要同时满足“任务范围精确”和“用户授权�
 
 ## 区分 Codex 审批与 GitHub 授权
 
-- 命令尚未启动就返回 `Rejected(...)` 或进入 `waitingOnApproval`：检查 managed requirements、显式启动覆盖、任务是否重新加载项目 Full Access 配置，以及独立任务类型；不要让用户重复授权。
+- 命令尚未启动就返回 `Rejected(...)` 或进入 `waitingOnApproval`：先检查 managed requirements、显式启动覆盖、任务是否重新加载项目 Full Access 配置和独立任务类型，再按普通 Desktop 恢复流程处理仍有效的精确操作；不要让用户重复授权，也不要扩大批准范围。
 - 官方 `gh api` 已到达 GitHub 后返回 scope / repository permission 错误：这是当前 credential capability gap，不是 subagent prompt 权限问题。停止对应 API / PR 写入并回调，由协调器从已验证 source task 重建或报告缺口；不得在 worker 内 login、refresh 或修改 credential。Git push 的 SSH authority 仍由独立 dry-run 证明，不能用 API scope 文本代替。
 - GitHub Connector 返回 `Resource not accessible by integration`：这是被禁止用于交付的备用集成状态，不据此安装、修复或切换插件；GitHub 身份和权限只回到本机 `gh` 核验，Codex shell 审批仍单独处理。
