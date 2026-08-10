@@ -66,6 +66,7 @@ export function ChatGitControls({
             <GitOperationsDropdown
               compact={compact}
               isBusy={git.isBusy}
+              isRefreshing={git.isGitStateRefreshing}
               open={git.operationsMenuOpen}
               placement={placement}
               repoState={git.repoState}
@@ -73,6 +74,7 @@ export function ChatGitControls({
               onOpenChange={(nextOpen) => {
                 git.setOperationsMenuOpen(nextOpen)
                 if (nextOpen) {
+                  void git.handleRefreshGitState()
                   git.setBranchMenuOpen(false)
                   git.setWorktreeMenuOpen(false)
                 }
@@ -83,6 +85,7 @@ export function ChatGitControls({
                 git.setCommitModalOpen(true)
               }}
               onPush={git.handleOpenPushModal}
+              onRefresh={() => void git.handleRefreshGitState()}
               onSync={() => {
                 void git.runMutation(
                   'sync',

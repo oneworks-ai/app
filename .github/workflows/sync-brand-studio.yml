@@ -1,0 +1,50 @@
+name: Trigger Brand Studio Catalog Sync
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - assets/brand/**
+      - apps/client/src/assets/model-providers/**
+      - apps/client/src/resources/adapters.ts
+      - apps/relay-admin/src/login/assets/feishu-logo.png
+      - packages/adapters/*/src/icon.ts
+      - packages/channels/**
+      - packages/model-provider-catalog/**
+      - .github/workflows/sync-brand-studio.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: trigger-brand-studio-sync-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  trigger:
+    name: trigger-brand-studio-catalog-sync
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch product catalog update
+        env:
+          GH_TOKEN: ${{ secrets.BRAND_STUDIO_SYNC_TOKEN }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "::notice title=Brand Studio schedule fallback::BRAND_STUDIO_SYNC_TOKEN is not configured; the six-hour Brand Studio catalog sync remains active."
+            exit 0
+          fi
+
+          gh api \
+            --method POST \
+            repos/oneworks-ai/brand-studio/dispatches \
+            -f event_type=product-catalog-updated \
+            -f "client_payload[source_repository]=${GITHUB_REPOSITORY}" \
+            -f "client_payload[source_sha]=${SOURCE_SHA}"

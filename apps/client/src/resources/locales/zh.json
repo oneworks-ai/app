@@ -2814,6 +2814,8 @@
     "newSessionTitle": "新会话",
     "gitBranchSwitcher": "切换分支",
     "gitOperations": "Git 操作",
+    "gitRefreshStatus": "刷新 Git 状态",
+    "gitRefreshStatusFailed": "刷新 Git 状态失败",
     "gitWorktree": "Worktree",
     "statusBarTitle": "会话状态",
     "statusBarSessionSubtitle": "这里统一展示当前会话绑定的工作区和 Git 上下文。",

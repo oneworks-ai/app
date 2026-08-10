@@ -28,6 +28,7 @@
 - `deploy-pwa.yml`：从 app 仓库触发 `oneworks-ai/pwa` 的部署 workflow。
 - `deploy-avatar.yml`：从 app 仓库触发 `oneworks-ai/avatar` 的 GitHub Pages 部署 workflow，只监听 avatar 相关路径。
 - `deploy-homepage.yml`：从 app 仓库触发 `oneworks-ai/oneworks-ai.github.io` 的 GitHub Pages 部署 workflow，只监听 `.oo/docs` 和自身 workflow。
+- `sync-brand-studio.yml`：产品品牌 catalog、adapter / model-provider / channel 元数据变化后向 Brand Studio 发送 `product-catalog-updated`；专用 token 缺失时输出 notice，并保留 Brand Studio 每六小时同步作为兜底。
 
 ## 当前 Secrets / Variables
 
@@ -39,6 +40,8 @@
 - `PWA_DEPLOY_TOKEN`
 - `AVATAR_DEPLOY_TOKEN`
 - `HOMEPAGE_DEPLOY_TOKEN`
+
+Brand Studio 即时同步使用可选的 `BRAND_STUDIO_SYNC_TOKEN`。未配置时 workflow 不失败或复用其他仓库 token；Brand Studio 的定时同步继续兜底。
 
 Relay production 通过 `deploy-relay-server.yml` 人工 promotion。外部发布目标的三项配置必须同时存在或同时缺省：
 
