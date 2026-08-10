@@ -5,6 +5,10 @@ on:
     branches:
       - main
     paths:
+      - .github/workflows/deploy-relay-dev.yml
+      - .github/workflows/deploy-relay-server.yml
+      - .github/workflows/scripts/relay-*.d.mts
+      - .github/workflows/scripts/relay-*.mjs
       - apps/relay-admin/**
       - apps/relay-server/**
       - packages/components/**
@@ -18,6 +22,7 @@ on:
       - scripts/run-tools.mjs
       - scripts/relay-config-*.ts
       - scripts/__tests__/cli.spec.ts
+      - scripts/__tests__/relay-*.spec.ts
       - package.json
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
@@ -27,6 +32,10 @@ on:
     branches:
       - main
     paths:
+      - .github/workflows/deploy-relay-dev.yml
+      - .github/workflows/deploy-relay-server.yml
+      - .github/workflows/scripts/relay-*.d.mts
+      - .github/workflows/scripts/relay-*.mjs
       - apps/relay-admin/**
       - apps/relay-server/**
       - packages/components/**
@@ -40,6 +49,7 @@ on:
       - scripts/run-tools.mjs
       - scripts/relay-config-*.ts
       - scripts/__tests__/cli.spec.ts
+      - scripts/__tests__/relay-*.spec.ts
       - package.json
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
@@ -72,6 +82,8 @@ jobs:
             command: pnpm -C apps/relay-admin test
           - name: relay-live-smoke
             command: pnpm tools relay-config live-smoke --json
+          - name: relay-deployment-test
+            command: pnpm exec vitest run scripts/__tests__/relay-*.spec.ts
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

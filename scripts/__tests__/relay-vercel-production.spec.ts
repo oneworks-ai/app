@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   chooseCredentials,
+  createSmokeEnv,
   findProjectId,
   getVercelLayout,
   selectProjectCandidate
@@ -72,5 +73,37 @@ describe('findProjectId', () => {
     expect(selectProjectCandidate({ EXPLICIT_PROJECT_ID: 'prod-variable', DEV_PROJECT_ID: 'dev' })).toBe(
       'prod-variable'
     )
+  })
+})
+
+describe('createSmokeEnv', () => {
+  it('passes the immutable release identity and production provider contract to smoke', () => {
+    expect(createSmokeEnv({
+      expectedProviders: 'github,google-sso',
+      home: '/home/runner',
+      origin: 'https://relay.example.com',
+      path: '/usr/bin',
+      sha: 'abc123',
+      version: '1.2.3'
+    })).toEqual({
+      HOME: '/home/runner',
+      PATH: '/usr/bin',
+      RELAY_EXPECTED_BUILD_SHA: 'abc123',
+      RELAY_EXPECTED_SSO_PROVIDERS: 'github,google-sso',
+      RELAY_SMOKE_READY_ATTEMPTS: '30',
+      RELAY_EXPECTED_TRANSPORT: 'v2-long-poll',
+      RELAY_EXPECTED_VERSION: '1.2.3',
+      RELAY_ORIGIN: 'https://relay.example.com'
+    })
+  })
+
+  it('omits an unconfigured provider contract instead of stringifying undefined', () => {
+    expect(createSmokeEnv({
+      home: '/home/runner',
+      origin: 'https://relay.example.com',
+      path: '/usr/bin',
+      sha: 'abc123',
+      version: '1.2.3'
+    })).not.toHaveProperty('RELAY_EXPECTED_SSO_PROVIDERS')
   })
 })

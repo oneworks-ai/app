@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - .github/workflows/deploy-relay-dev.yml
+      - .github/workflows/scripts/relay-dev-smoke.mjs
+      - .github/workflows/scripts/relay-release-readiness.mjs
       - apps/relay-admin/**
       - apps/relay-server/**
       - packages/components/**
@@ -146,11 +148,12 @@ jobs:
         env:
           RELAY_EXPECTED_BUILD_SHA: ${{ github.sha }}
           RELAY_DEV_EXPECTED_VERSION: ${{ steps.relay-version.outputs.version }}
+          RELAY_SMOKE_READY_ATTEMPTS: 30
         shell: bash
         run: |
           set -euo pipefail
-          export RELAY_DEV_ORIGIN="${RELAY_DEV_CF_ORIGIN:-https://dev.cf.oneworks.cloud}"
-          RELAY_EXPECTED_DEVICE_API_ORIGIN="${RELAY_DEV_CF_DEVICE_API_ORIGIN}" \
+          RELAY_DEV_ORIGIN="${RELAY_DEV_CF_ORIGIN:-https://dev.cf.oneworks.cloud}" \
+            RELAY_EXPECTED_DEVICE_API_ORIGIN="${RELAY_DEV_CF_DEVICE_API_ORIGIN}" \
             RELAY_EXPECTED_TRANSPORT=v1-websocket \
             RELAY_EXPECTED_TRANSPORT_HEARTBEAT_MS=600000 \
             node .github/workflows/scripts/relay-dev-smoke.mjs
@@ -184,17 +187,10 @@ jobs:
         env:
           RELAY_EXPECTED_BUILD_SHA: ${{ github.sha }}
           RELAY_DEV_EXPECTED_VERSION: ${{ steps.relay-version.outputs.version }}
+          RELAY_SMOKE_READY_ATTEMPTS: 30
         shell: bash
         run: |
           set -euo pipefail
           origin="${RELAY_DEV_VC_ORIGIN:-https://dev.vc.oneworks.cloud}"
-          for attempt in $(seq 1 30); do
-            echo "Smoke attempt ${attempt}/30 against ${origin}"
-            if RELAY_DEV_ORIGIN="$origin" RELAY_EXPECTED_TRANSPORT=v2-long-poll \
-              node .github/workflows/scripts/relay-dev-smoke.mjs; then
-              exit 0
-            fi
-            sleep 20
-          done
-          echo "::error::Vercel GitHub App deployment did not become healthy at ${origin} within 10 minutes."
-          exit 1
+          RELAY_DEV_ORIGIN="$origin" RELAY_EXPECTED_TRANSPORT=v2-long-poll \
+            node .github/workflows/scripts/relay-dev-smoke.mjs
