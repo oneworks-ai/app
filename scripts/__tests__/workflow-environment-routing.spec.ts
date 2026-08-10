@@ -1,8 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
-const workflow = (name: string) =>
-  readFileSync(`.github/workflows/${name}`, 'utf8')
+const workflow = (name: string) => readFileSync(`.github/workflows/${name}`, 'utf8')
 
 function workflowJobs(workflowSource: string) {
   const jobsMarker = 'jobs:\n'
