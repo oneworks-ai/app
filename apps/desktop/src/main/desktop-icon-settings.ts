@@ -15,7 +15,7 @@ export interface DesktopIconSettings {
   iconTheme: DesktopIconTheme
 }
 
-export const DEFAULT_DESKTOP_ICON_THEME: DesktopIconTheme = 'metal'
+export const DEFAULT_DESKTOP_ICON_THEME: DesktopIconTheme = 'linear'
 export const DEFAULT_DESKTOP_ICON_APPEARANCE: DesktopIconAppearance = 'system'
 export const DEFAULT_DESKTOP_ICON_BACKGROUND: DesktopIconBackground = 'solid'
 export const DEFAULT_DESKTOP_ICON_SYNC: DesktopIconSync = true

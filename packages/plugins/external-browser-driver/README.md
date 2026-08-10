@@ -1,5 +1,11 @@
 # 浏览器控制
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/chrome-web-store-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="./assets/chrome-web-store-light.png">
+  <img alt="One Works 浏览器控制" src="./assets/chrome-web-store-light.png">
+</picture>
+
 浏览器控制通过浏览器扩展让 OneWorks Agent 接管用户明确配对的外部浏览器。当前实现和发行包仅支持 Google Chrome；能力与产品名称保持浏览器级语义，以便未来接入 Firefox 等支持扩展的浏览器。它复用内置浏览器控制的工作流和渐进式结果基础设施，但使用独立的 Chrome extension bridge、稳定的 `windowId` / `tabId` / `frameId` / `documentId` 与 typed tools；不依赖“当前标签页”猜测。任意 JavaScript/CDP、完整 Cookie 值和页面敏感字段默认关闭，用户可在设置或扩展 popup 中为当前浏览器会话显式开启。
 
 [English](./README.en.md)

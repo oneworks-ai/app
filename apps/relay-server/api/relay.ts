@@ -36,9 +36,12 @@ const publicOrigin = (value: string | undefined) => {
   }
 }
 export const createVercelRelayArgs = (env: RelayConfigEnv = process.env) => {
-  const { deviceTransport: _parsedDeviceTransport, ...parsedArgs } = parseRelayServerArgs([], env)
   const configuredPublicBaseUrl = publicOrigin(env.ONEWORKS_RELAY_PUBLIC_URL) ??
     publicOrigin(env.VERCEL_URL == null ? undefined : `https://${env.VERCEL_URL}`)
+  const resolvedEnv = configuredPublicBaseUrl == null
+    ? env
+    : { ...env, ONEWORKS_RELAY_PUBLIC_URL: configuredPublicBaseUrl }
+  const { deviceTransport: _parsedDeviceTransport, ...parsedArgs } = parseRelayServerArgs([], resolvedEnv)
   return {
     ...parsedArgs,
     buildSha: parsedArgs.buildSha ?? (env.VERCEL_GIT_COMMIT_SHA?.trim() || undefined),

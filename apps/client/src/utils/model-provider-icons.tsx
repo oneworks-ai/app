@@ -8,8 +8,8 @@ type BuiltinImageIcon =
   | { light: string; dark: string }
   | { src: string; invertInDark?: boolean }
 
-const moonshotLightIcon = new URL('../assets/model-providers/moonshot.svg', import.meta.url).href
-const moonshotDarkIcon = new URL('../assets/model-providers/moonshot-dark.svg', import.meta.url).href
+const kimiLightIcon = new URL('../assets/model-providers/kimi.svg', import.meta.url).href
+const kimiDarkIcon = new URL('../assets/model-providers/kimi-dark.svg', import.meta.url).href
 
 const builtinImageIconMap: Record<string, BuiltinImageIcon> = {
   anthropic: { src: new URL('../assets/model-providers/anthropic.png', import.meta.url).href },
@@ -17,11 +17,12 @@ const builtinImageIconMap: Record<string, BuiltinImageIcon> = {
   azure: { src: new URL('../assets/model-providers/azure.ico', import.meta.url).href },
   deepseek: { src: new URL('../assets/model-providers/deepseek.svg', import.meta.url).href, invertInDark: true },
   gemini: { src: new URL('../assets/model-providers/gemini.png', import.meta.url).href },
-  'kimi-k2': { light: moonshotLightIcon, dark: moonshotDarkIcon },
+  kimi: { light: kimiLightIcon, dark: kimiDarkIcon },
+  'kimi-k2': { light: kimiLightIcon, dark: kimiDarkIcon },
   litellm: { src: new URL('../assets/model-providers/litellm.png', import.meta.url).href },
   micu: { src: new URL('../assets/model-providers/micu.png', import.meta.url).href },
   minimax: { src: new URL('../assets/model-providers/minimax.png', import.meta.url).href },
-  moonshot: { light: moonshotLightIcon, dark: moonshotDarkIcon },
+  moonshot: { src: new URL('../assets/model-providers/moonshot.ico', import.meta.url).href },
   'oneworks-browser-driver': {
     src: new URL('../../../../packages/plugins/browser-driver/assets/icon.svg', import.meta.url).href
   },
@@ -78,6 +79,7 @@ const builtinMaterialIconMap: Record<string, string> = {
   deepseek: 'search_insights',
   gemini: 'diamond',
   litellm: 'account_tree',
+  kimi: 'nightlight',
   micu: 'hub',
   minimax: 'auto_awesome',
   model: 'neurology',

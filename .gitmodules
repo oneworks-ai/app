@@ -28,3 +28,6 @@
 [submodule "assets/demo-video"]
 	path = assets/demo-video
 	url = https://github.com/oneworks-ai/demo-video.git
+[submodule "assets/brand-studio"]
+	path = assets/brand-studio
+	url = https://github.com/oneworks-ai/brand-studio.git

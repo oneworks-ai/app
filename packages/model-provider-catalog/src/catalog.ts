@@ -128,7 +128,7 @@ export const MODEL_PROVIDER_DEFINITIONS = [
     id: 'kimi-code',
     title: 'Kimi Code',
     category: 'official',
-    icon: builtinIcon('moonshot'),
+    icon: builtinIcon('kimi'),
     description: 'Kimi Code membership benefit endpoint for coding agents.',
     defaultApiBaseUrl: 'https://api.kimi.com/coding/v1',
     defaultModels: ['kimi-for-coding'],

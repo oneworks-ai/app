@@ -1,20 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18">
-  <rect width="18" height="18" rx="4" fill="#0891b2" /><rect
-    x="3.3"
-    y="3.6"
-    width="11.4"
-    height="10.8"
-    rx="1.4"
-    fill="none"
-    stroke="#fff"
-    stroke-width="1.2"
-  /><path d="M3.6 6.6h10.8" stroke="#fff" stroke-width="1.1" /><circle
-    cx="5.2"
-    cy="5.1"
-    r=".55"
-    fill="#fff"
-  /><path
-    d="M6 8h2V7a1 1 0 1 1 2 0v1h2v1.6h.9a1.1 1.1 0 1 1 0 2.2H12v1.4h-1.7v-.8a1.1 1.1 0 1 0-2.2 0v.8H6v-1.7h.8a1 1 0 1 0 0-2H6V8Z"
-    fill="#fff"
-  />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>One Works Browser Control</title>
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="#0B1620"/>
+  <path d="M31 13c-10.4 0-18.6 7.6-18.6 18 0 10.8 8.8 19.7 19.6 19.7 10.2 0 17.8-7.5 17.8-16.5 0-8.1-6.2-14.4-14-14.4-7 0-12.4 5.1-12.4 11.3 0 5.7 4.6 10 10.1 10 4.8 0 8.4-3.3 8.4-7.4 0-3.6-2.7-6.2-6.1-6.2-2.7 0-4.6 2-4.6 4.4 0 2 1.5 3.4 3.3 3.4" fill="none" stroke="#E2EBF2" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="m39 37 5.6 15 3.1-5.1 5.6 5.5 3.1-3.2-5.5-5.4 5.1-3.1L39 37Z" fill="#42B9D1" stroke="#0B1620" stroke-width="2" stroke-linejoin="round"/>
 </svg>

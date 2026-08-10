@@ -28,6 +28,7 @@ export default config(
       'apps/server/src/**/*.js',
       'apps/server/__tests__/**/*.js',
       'apps/relay-server/src/routes/assets/**/*.js',
+      'assets/brand/brand-assets.manifest.json',
       'packages/core/src/**/*.js',
       'packages/core/__tests__/**/*.js',
       'packages/channels/lark/src/**/*.js',

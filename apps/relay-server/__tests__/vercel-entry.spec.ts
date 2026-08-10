@@ -63,4 +63,15 @@ describe('vercel Relay entry', () => {
   it('uses Vercel build metadata only at the Vercel entry', () => {
     expect(createVercelRelayArgs({ VERCEL_GIT_COMMIT_SHA: 'vercel-build' }).buildSha).toBe('vercel-build')
   })
+
+  it('uses the Vercel deployment profile for hosted brand assets', () => {
+    const args = createVercelRelayArgs({ VERCEL_URL: 'oneworks-relay.vercel.app' })
+
+    expect(args.avatarUrl).toBe(
+      'https://oneworks-relay.vercel.app/admin/assets/favicon-vercel-light.svg'
+    )
+    expect(args.email?.logoUrl).toBe(
+      'https://oneworks-relay.vercel.app/admin/assets/favicon-vercel-light.svg'
+    )
+  })
 })

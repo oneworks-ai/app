@@ -15,6 +15,8 @@ describe('launcher app icon themes', () => {
       theme: 'linear'
     })
     expect(normalizeDesktopIconSettings({ iconTheme: 'linear' }).iconTheme).toBe('linear')
+    expect(normalizeDesktopIconSettings({ iconTheme: 'unknown' }).iconTheme).toBe('linear')
+    expect(normalizeDesktopIconSettings(undefined).iconTheme).toBe('linear')
   })
 
   it('generates a linear preview through the shared icon renderer', () => {

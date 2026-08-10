@@ -99,8 +99,8 @@ const renderLoginPage = async (
   const input: RelayLoginRenderInput = {
     args: loginDevArgs,
     assets: {
-      faviconDarkHref: '/favicon-dark.svg',
-      faviconLightHref: '/favicon-light.svg',
+      faviconDarkHref: '/favicon-cloudflare-dark.svg',
+      faviconLightHref: '/favicon-cloudflare-light.svg',
       scriptSrc: '/src/login/main.tsx',
       styleHref: undefined
     },

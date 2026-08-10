@@ -19,4 +19,11 @@ describe('model provider catalog', () => {
       })
     ).toThrow('unknown provider: missing')
   })
+
+  it('keeps Moonshot and Kimi Code as distinct official brands', () => {
+    expect(MODEL_PROVIDER_DEFINITIONS.find(provider => provider.id === 'moonshot-intl')?.icon)
+      .toEqual({ kind: 'builtin', id: 'moonshot' })
+    expect(MODEL_PROVIDER_DEFINITIONS.find(provider => provider.id === 'kimi-code')?.icon)
+      .toEqual({ kind: 'builtin', id: 'kimi' })
+  })
 })

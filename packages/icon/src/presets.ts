@@ -1,10 +1,11 @@
+import { DEFAULT_BRAND_APPEARANCE, DEFAULT_BRAND_MODE, DEFAULT_BRAND_THEME } from './brand-profile.js'
 import type { OneWorksIconAppearance, OneWorksIconMode, OneWorksIconTheme } from './types.js'
 
 export const ONEWORKS_ICON_THEMES = [
-  'metal',
+  'linear',
   'industrial',
-  'matrix',
-  'linear'
+  'metal',
+  'matrix'
 ] as const satisfies readonly OneWorksIconTheme[]
 export const ONEWORKS_ICON_MODES = ['light', 'dark'] as const satisfies readonly OneWorksIconMode[]
 export const ONEWORKS_ICON_APPEARANCES = [
@@ -34,9 +35,9 @@ export const ONEWORKS_THEME_COLOR_PRESETS = [
   primaryColor: string
 }[]
 
-export const DEFAULT_ICON_THEME = 'metal' satisfies OneWorksIconTheme
-export const DEFAULT_ICON_MODE = 'dark' satisfies OneWorksIconMode
-export const DEFAULT_ICON_APPEARANCE = 'system' satisfies OneWorksIconAppearance
+export const DEFAULT_ICON_THEME = DEFAULT_BRAND_THEME
+export const DEFAULT_ICON_MODE = DEFAULT_BRAND_MODE
+export const DEFAULT_ICON_APPEARANCE = DEFAULT_BRAND_APPEARANCE
 export const DEFAULT_ICON_SEED = 'oneworks'
 export const DEFAULT_ICON_SIZE = 300
 export const DEFAULT_THEME_PRIMARY_COLOR =

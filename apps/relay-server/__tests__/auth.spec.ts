@@ -804,8 +804,8 @@ describe('relay server auth routes', () => {
     expect(response.headers.get('cache-control')).toBe('no-store')
     expect(response.headers.get('content-security-policy')).toBe("frame-ancestors 'none'")
     expect(body).toContain('id="relay-login-root"')
-    expect(body).toContain('/admin/assets/favicon-dark.svg')
-    expect(body).toContain('/admin/assets/favicon-light.svg')
+    expect(body).toContain('/admin/assets/favicon-cloudflare-dark.svg')
+    expect(body).toContain('/admin/assets/favicon-cloudflare-light.svg')
     expect(body).toContain('src="/admin/assets/login.js"')
     expect(body).toContain('Recent accounts')
     expect(body).not.toContain('data-account-section hidden')
@@ -832,6 +832,7 @@ describe('relay server auth routes', () => {
     expect(body).not.toContain('--relay-accent: #1f8f5f')
     expect(body).toContain("canvasClassName: 'relay-login__backdrop-canvas'")
     expect(body).toContain('fullscreen: true')
+    expect(body).toContain("theme: 'industrial'")
     expect(body).not.toContain("size: '100%'")
     expect(config.providers).toEqual([expect.objectContaining({
       icon: 'google',
@@ -853,6 +854,24 @@ describe('relay server auth routes', () => {
     expect(config.passwordLoginUrl).toBe('/api/auth/password-login')
     expect(body).toContain(encodeURIComponent('https://relay.example/login/complete'))
     expect(config.redirectUri).toContain('oneworks://relay/auth')
+  })
+
+  it('uses the Vercel Matrix brand profile on Vercel Relay origins', async () => {
+    const { baseUrl } = await listenRelay({
+      allowOrigin: 'https://app.example',
+      publicBaseUrl: 'https://vc.oneworks.cloud'
+    })
+    const response = await requestRaw(
+      baseUrl,
+      '/login?redirect_uri=https%3A%2F%2Fapp.example%2Fcallback'
+    )
+    const body = await response.text()
+
+    expect(response.status).toBe(200)
+    expect(body).toContain('/admin/assets/favicon-vercel-dark.svg')
+    expect(body).toContain('/admin/assets/favicon-vercel-light.svg')
+    expect(body).toContain("theme: 'matrix'")
+    expect(body).not.toContain("theme: 'industrial'")
   })
 
   it('marks GitHub login providers with the GitHub icon', async () => {

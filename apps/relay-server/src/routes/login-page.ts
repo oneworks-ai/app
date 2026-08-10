@@ -1,6 +1,9 @@
 /* eslint-disable max-lines -- login page renderer keeps the local HTML shell and scripts together. */
 import type { IncomingMessage } from 'node:http'
 
+import { ONEWORKS_RELAY_BRAND_THEMES, resolveOneWorksRelayBrandTheme } from '@oneworks/icon/brand-profile'
+import type { OneWorksIconTheme } from '@oneworks/icon/types'
+
 import { isRelayEmailProviderConfigured } from '../email/provider.js'
 import { isRelayTurnstileRequired } from '../email/turnstile.js'
 import type { RelayLoginMethod, RelayServerArgs } from '../types.js'
@@ -109,15 +112,26 @@ const renderLayout = (t: RelayLoginMessages, panelBody: string, options: { login
 const renderBackdrop = () =>
   '<div class="relay-login__backdrop" data-relay-login-background-loader="true" aria-hidden="true"></div>'
 
+const resolveRelayBrandTheme = (input: RelayLoginPageInput): OneWorksIconTheme =>
+  resolveOneWorksRelayBrandTheme(input.args.publicBaseUrl ?? input.req.headers.host)
+
+const resolveRelayBrandProfile = (input: RelayLoginPageInput) =>
+  resolveRelayBrandTheme(input) === ONEWORKS_RELAY_BRAND_THEMES.vercel ? 'vercel' : 'cloudflare'
+
 const defaultLoginAssets: Required<RelayLoginClientAssets> = {
-  faviconDarkHref: '/admin/assets/favicon-dark.svg',
-  faviconLightHref: '/admin/assets/favicon-light.svg',
+  faviconDarkHref: '/admin/assets/favicon-cloudflare-dark.svg',
+  faviconLightHref: '/admin/assets/favicon-cloudflare-light.svg',
   scriptSrc: '/admin/assets/login.js',
   styleHref: '/admin/assets/admin.css'
 }
 
-const resolveLoginAssets = (assets: RelayLoginClientAssets = {}): Required<RelayLoginClientAssets> => ({
+const resolveLoginAssets = (
+  assets: RelayLoginClientAssets = {},
+  brandProfile: 'cloudflare' | 'vercel' = 'cloudflare'
+): Required<RelayLoginClientAssets> => ({
   ...defaultLoginAssets,
+  faviconDarkHref: `/admin/assets/favicon-${brandProfile}-dark.svg`,
+  faviconLightHref: `/admin/assets/favicon-${brandProfile}-light.svg`,
   ...assets
 })
 
@@ -130,8 +144,17 @@ const renderFaviconLinks = (assets: Pick<Required<RelayLoginClientAssets>, 'favi
   escapeHtml(assets.faviconDarkHref)
 }" media="(prefers-color-scheme: dark)">`
 
-const shell = (t: RelayLoginMessages, body: string, script: string, assets?: RelayLoginClientAssets) => {
-  const resolvedAssets = resolveLoginAssets(assets)
+const shell = (
+  t: RelayLoginMessages,
+  body: string,
+  script: string,
+  assets?: RelayLoginClientAssets,
+  brandTheme: OneWorksIconTheme = ONEWORKS_RELAY_BRAND_THEMES.cloudflare
+) => {
+  const resolvedAssets = resolveLoginAssets(
+    assets,
+    brandTheme === ONEWORKS_RELAY_BRAND_THEMES.vercel ? 'vercel' : 'cloudflare'
+  )
 
   return `<!doctype html>
 <html lang="${escapeHtml(t.htmlLang)}">
@@ -142,12 +165,26 @@ ${renderFaviconLinks(resolvedAssets)}
     <title>${escapeHtml(t.documentTitle)}</title>
     <style>${renderRelayLoginStyle()}</style>
   </head>
-  <body>${renderBackdrop()}${body}${renderScriptTags(oneWorksIconLoaderScript, iconLoaderScript(), script)}</body>
+  <body>${renderBackdrop()}${body}${
+    renderScriptTags(
+      oneWorksIconLoaderScript,
+      iconLoaderScript(brandTheme),
+      script
+    )
+  }</body>
 </html>`
 }
 
-const loginShell = (t: RelayLoginMessages, config: unknown, assets: RelayLoginClientAssets = {}) => {
-  const resolvedAssets = resolveLoginAssets(assets)
+const loginShell = (
+  t: RelayLoginMessages,
+  config: unknown,
+  assets: RelayLoginClientAssets = {},
+  brandTheme: OneWorksIconTheme = ONEWORKS_RELAY_BRAND_THEMES.cloudflare
+) => {
+  const resolvedAssets = resolveLoginAssets(
+    assets,
+    brandTheme === ONEWORKS_RELAY_BRAND_THEMES.vercel ? 'vercel' : 'cloudflare'
+  )
   return `<!doctype html>
 <html lang="${escapeHtml(t.htmlLang)}">
   <head>
@@ -162,7 +199,7 @@ ${renderFaviconLinks(resolvedAssets)}
     ${renderBackdrop()}
     <div id="relay-login-root"></div>
     <script type="application/json" id="relay-login-config">${safeJson(config)}</script>
-    ${renderScriptTags(oneWorksIconLoaderScript, iconLoaderScript())}
+    ${renderScriptTags(oneWorksIconLoaderScript, iconLoaderScript(brandTheme))}
     <script type="module" src="${escapeHtml(resolvedAssets.scriptSrc)}"></script>
   </body>
 </html>`
@@ -190,10 +227,11 @@ export const renderRelayLoginPage = (input: RelayLoginPageInput) => {
         `
       ),
       '',
-      input.assets
+      input.assets,
+      resolveRelayBrandTheme(input)
     )
   }
-  return loginShell(t, config, input.assets)
+  return loginShell(t, config, input.assets, resolveRelayBrandTheme(input))
 }
 
 export const renderRelayLoginCompletePage = (input: RelayLoginPageInput) => {
@@ -219,6 +257,7 @@ export const renderRelayLoginCompletePage = (input: RelayLoginPageInput) => {
       loginFailedTitle: t.loginFailedTitle,
       tokenMissing: t.tokenMissing
     }),
-    input.assets
+    input.assets,
+    resolveRelayBrandTheme(input)
   )
 }

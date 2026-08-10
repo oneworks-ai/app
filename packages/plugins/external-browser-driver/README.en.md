@@ -1,5 +1,11 @@
 # Browser Control
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/chrome-web-store-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="./assets/chrome-web-store-light.png">
+  <img alt="One Works Browser Control" src="./assets/chrome-web-store-light.png">
+</picture>
+
 Browser Control lets a OneWorks Agent control an explicitly paired external browser through a browser extension. The current implementation and release artifacts support Google Chrome only; the capability and product name remain browser-level so extension-capable browsers such as Firefox can be added in the future. It reuses In-App Browser Control workflow and progressive-result infrastructure while keeping a separate Chrome bridge, stable `windowId` / `tabId` / `frameId` / `documentId` targets, and typed tools. It never guesses an implicit current tab. Arbitrary JavaScript/CDP, complete cookie values, and sensitive page fields are off by default; OneWorks Settings stores the user's explicit preferences independently of connection state and applies them to a compatible browser after it connects.
 
 [简体中文](./README.md)

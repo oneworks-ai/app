@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "defaultTheme": "linear",
+  "defaultAppearance": "system",
+  "defaultMode": "dark",
+  "surfaceRecipes": {
+    "content": "transparent",
+    "application": "solid",
+    "social": "composition"
+  },
+  "relayProfiles": {
+    "cloudflare": "industrial",
+    "vercel": "matrix"
+  }
+}

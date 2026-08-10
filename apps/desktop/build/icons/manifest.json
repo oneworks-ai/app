@@ -3,7 +3,7 @@
   "source": "assets/icon",
   "sourceCommit": "bb5dec3934aa7af6f9ce969c3c6b02e8337ac076",
   "sourceSeed": "1p8gydn1f36735",
-  "defaultTheme": "metal",
+  "defaultTheme": "linear",
   "fill": {
     "cropRatio": 0.82,
     "sourceSize": 1024,

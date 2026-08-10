@@ -71,6 +71,9 @@ export async function createReleaseStage(options = {}) {
       recursive: true
     })
     await cp(resolve(appRoot, 'README.md'), resolve(stageDir, 'README.md'))
+    await cp(resolve(appRoot, 'assets'), resolve(stageDir, 'assets'), {
+      recursive: true
+    })
     await cp(resolve(appRoot, 'resources'), resolve(stageDir, 'resources'), {
       recursive: true
     })
@@ -88,6 +91,7 @@ export async function createReleaseStage(options = {}) {
       extensionKind: sourceManifest.extensionKind,
       capabilities: sourceManifest.capabilities,
       files: [
+        'assets/**',
         'dist/**',
         'README.md',
         'resources/**'

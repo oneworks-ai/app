@@ -1,19 +1,21 @@
 import { copyFile, mkdir, readdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import process from 'node:process'
 
 const appDir = new URL('..', import.meta.url)
 const distDir = new URL('../dist/', import.meta.url)
 const adminDir = new URL('../dist/admin/', import.meta.url)
 const assetsDir = new URL('../dist/admin/assets/', import.meta.url)
+const relayBrandProfile = process.env.ONEWORKS_RELAY_BRAND_PROFILE === 'vercel' ? 'vercel' : 'cloudflare'
 
 const adminHtml = `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" type="image/svg+xml" href="/admin/assets/favicon-dark.svg">
-  <link rel="icon" type="image/svg+xml" href="/admin/assets/favicon-light.svg" media="(prefers-color-scheme: light)">
-  <link rel="icon" type="image/svg+xml" href="/admin/assets/favicon-dark.svg" media="(prefers-color-scheme: dark)">
+  <link rel="icon" type="image/svg+xml" href="/admin/assets/favicon-${relayBrandProfile}-dark.svg">
+  <link rel="icon" type="image/svg+xml" href="/admin/assets/favicon-${relayBrandProfile}-light.svg" media="(prefers-color-scheme: light)">
+  <link rel="icon" type="image/svg+xml" href="/admin/assets/favicon-${relayBrandProfile}-dark.svg" media="(prefers-color-scheme: dark)">
   <title>OneWorks Relay Admin</title>
   <link rel="stylesheet" href="/admin/assets/admin.css">
 </head>
