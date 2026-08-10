@@ -1,46 +1,26 @@
 import { App } from 'antd'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import type { PluginMarketplaceUninstallIdentity } from '@oneworks/types'
-
-import { ApiError, getApiErrorMessage } from '#~/api.js'
+import { ApiError, getApiErrorMessage } from '#~/api/base'
 import { getPluginMarketplaceUninstallPlan, uninstallPluginMarketplacePlugin } from '#~/plugins/marketplace-api'
+import {
+  publishMarketplaceUninstallAuthority,
+  resolveMarketplaceServerKey
+} from '#~/plugins/marketplace-mutation-authority'
 import { projectPluginPresentationValue } from '#~/plugins/plugin-presentation'
 
+import {
+  createPluginMarketplaceUninstallIdentityKey,
+  pluginMarketplaceUninstallIdentitiesMatch
+} from './@core/plugin-marketplace-uninstall'
+import type { UsePluginMarketplaceUninstallOptions } from './@core/plugin-marketplace-uninstall'
+import {
+  isPluginMarketplaceUninstallCommitUnknownError,
+  reconcilePluginMarketplaceUninstall
+} from './@core/plugin-marketplace-uninstall-convergence'
+import { usePluginMarketplaceUninstallLifecycle } from './@hooks/use-plugin-marketplace-uninstall-lifecycle'
 import { PluginUninstallIntentConfirmContent } from './PluginUninstallConfirmContent'
-
-interface PluginUninstallOperation {
-  controller: AbortController
-  generation: number
-  identity: PluginMarketplaceUninstallIdentity
-  phase: 'committed' | 'quoting' | 'removing'
-}
-
-interface UsePluginMarketplaceUninstallOptions {
-  displayName?: string
-  identity?: PluginMarketplaceUninstallIdentity
-  onRemoved?: () => void
-  refreshAfterRemoval: () => Promise<unknown>[]
-  serverBaseUrl?: string
-  surfaceKey: string
-}
-
-const identitiesMatch = (
-  left: PluginMarketplaceUninstallIdentity | undefined,
-  right: PluginMarketplaceUninstallIdentity | undefined
-) => (
-  left?.adapter === right?.adapter &&
-  left?.marketplace === right?.marketplace &&
-  left?.plugin === right?.plugin &&
-  left?.scope === right?.scope
-)
-
-const createIdentityKey = (identity: PluginMarketplaceUninstallIdentity | undefined) => (
-  identity == null
-    ? ''
-    : JSON.stringify([identity.adapter, identity.marketplace, identity.plugin, identity.scope])
-)
 
 export const usePluginMarketplaceUninstall = ({
   displayName,
@@ -52,53 +32,35 @@ export const usePluginMarketplaceUninstall = ({
 }: UsePluginMarketplaceUninstallOptions) => {
   const { message, modal } = App.useApp()
   const { t } = useTranslation()
-  const [operation, setOperation] = useState<PluginUninstallOperation>()
-  const activeIdentityRef = useRef(identity)
-  const generationRef = useRef(0)
-  const latestIdentityRef = useRef(identity)
   const modalRef = useRef<ReturnType<typeof modal.confirm>>()
-  const operationRef = useRef<PluginUninstallOperation>()
-  latestIdentityRef.current = identity
-  const identityKey = createIdentityKey(identity)
+  const serverKey = resolveMarketplaceServerKey(serverBaseUrl)
+  const identityKey = createPluginMarketplaceUninstallIdentityKey(identity)
+  const notifyCommitted = useCallback((refreshFailed: boolean) => {
+    if (refreshFailed) {
+      void message.error(t('pluginStore.uninstall.refreshFailed'))
+    } else {
+      void message.success(t('pluginStore.uninstall.success'))
+    }
+    onRemoved?.()
+  }, [message, onRemoved, t])
+  const lifecycle = usePluginMarketplaceUninstallLifecycle({
+    identity,
+    serverBaseUrl,
+    surfaceKey
+  })
 
   useEffect(() => {
-    generationRef.current += 1
-    operationRef.current?.controller.abort()
-    operationRef.current = undefined
-    activeIdentityRef.current = latestIdentityRef.current
-    setOperation(undefined)
     modalRef.current?.destroy()
     modalRef.current = undefined
-
     return () => {
-      generationRef.current += 1
-      operationRef.current?.controller.abort()
-      operationRef.current = undefined
       modalRef.current?.destroy()
       modalRef.current = undefined
     }
-  }, [surfaceKey])
-
-  useEffect(() => {
-    const currentOperation = operationRef.current
-    if (currentOperation == null) {
-      activeIdentityRef.current = latestIdentityRef.current
-      return
-    }
-    if (currentOperation.phase !== 'committed') {
-      currentOperation.controller.abort()
-      operationRef.current = undefined
-      activeIdentityRef.current = latestIdentityRef.current
-      setOperation(undefined)
-      modalRef.current?.destroy()
-      modalRef.current = undefined
-    }
-  }, [identityKey])
+  }, [identityKey, serverKey, surfaceKey])
 
   const confirm = useCallback(() => {
-    if (identity == null || operationRef.current != null) return
+    if (identity == null || lifecycle.pending) return
     const confirmedIdentity = identity
-    const modalGeneration = generationRef.current
     modalRef.current?.destroy()
     modalRef.current = modal.confirm({
       autoFocusButton: 'cancel',
@@ -109,67 +71,86 @@ export const usePluginMarketplaceUninstall = ({
       title: t('pluginStore.uninstall.title', {
         name: projectPluginPresentationValue(displayName ?? confirmedIdentity.plugin)
       }),
-      onCancel: () => {
-        const currentOperation = operationRef.current
-        if (
-          identitiesMatch(currentOperation?.identity, confirmedIdentity) &&
-          currentOperation?.generation === modalGeneration
-        ) {
-          currentOperation.controller.abort()
-        }
-      },
+      onCancel: () => lifecycle.cancel(confirmedIdentity),
       onOk: async () => {
-        if (
-          operationRef.current != null ||
-          !identitiesMatch(activeIdentityRef.current, confirmedIdentity)
-        ) {
-          return
-        }
-        const currentOperation: PluginUninstallOperation = {
-          controller: new AbortController(),
-          generation: generationRef.current,
-          identity: confirmedIdentity,
-          phase: 'quoting'
-        }
-        operationRef.current = currentOperation
-        setOperation(currentOperation)
-        const isCurrentOperation = () => (
-          operationRef.current === currentOperation &&
-          generationRef.current === currentOperation.generation
-        )
+        const current = lifecycle.begin(confirmedIdentity)
+        if (current == null) return
         try {
           const plan = await getPluginMarketplaceUninstallPlan(confirmedIdentity.scope, {
             serverBaseUrl,
-            signal: currentOperation.controller.signal
+            signal: current.controller.signal
           })
           if (
-            currentOperation.controller.signal.aborted ||
-            !isCurrentOperation() ||
+            current.controller.signal.aborted ||
+            !lifecycle.isViewCurrent(current) ||
             plan.available !== true ||
-            !identitiesMatch(plan.identity, confirmedIdentity)
+            !pluginMarketplaceUninstallIdentitiesMatch(plan.identity, confirmedIdentity)
           ) {
-            if (!currentOperation.controller.signal.aborted && isCurrentOperation()) {
+            if (!current.controller.signal.aborted && lifecycle.isViewCurrent(current)) {
               throw new Error(t('pluginStore.uninstall.failed'))
             }
             return
           }
-          currentOperation.phase = 'removing'
+          lifecycle.transition(current, 'removing')
           await uninstallPluginMarketplacePlugin(confirmedIdentity.scope, plan.token, {
             serverBaseUrl,
-            signal: currentOperation.controller.signal
+            signal: current.controller.signal
           })
-          if (currentOperation.controller.signal.aborted || !isCurrentOperation()) return
-          currentOperation.phase = 'committed'
-          const refreshResults = await Promise.allSettled(refreshAfterRemoval())
-          if (currentOperation.controller.signal.aborted || !isCurrentOperation()) return
-          if (refreshResults.some(result => result.status === 'rejected')) {
-            void message.error(t('pluginStore.uninstall.refreshFailed'))
-          } else {
-            void message.success(t('pluginStore.uninstall.success'))
+          if (!lifecycle.isServerCurrent(current)) return
+          lifecycle.transition(current, 'committed')
+          publishMarketplaceUninstallAuthority(current.serverKey, confirmedIdentity)
+          const reconciliation = await reconcilePluginMarketplaceUninstall({
+            identity: confirmedIdentity,
+            isServerCurrent: () => lifecycle.isServerCurrent(current),
+            refresh: refreshAfterRemoval,
+            serverKey: current.serverKey
+          })
+          try {
+            if (!reconciliation.isCurrent() || !lifecycle.isServerCurrent(current)) return
+            if (lifecycle.isViewCurrent(current)) notifyCommitted(reconciliation.refreshFailed)
+          } finally {
+            reconciliation.release()
           }
-          onRemoved?.()
         } catch (error) {
-          if (currentOperation.controller.signal.aborted || !isCurrentOperation()) return
+          if (
+            current.phase === 'removing' &&
+            isPluginMarketplaceUninstallCommitUnknownError(error) &&
+            lifecycle.isServerCurrent(current)
+          ) {
+            let attempt = 0
+            while (lifecycle.isServerCurrent(current)) {
+              lifecycle.transition(current, 'reconciling')
+              const reconciliation = await reconcilePluginMarketplaceUninstall({
+                identity: confirmedIdentity,
+                isServerCurrent: () => lifecycle.isServerCurrent(current),
+                refresh: refreshAfterRemoval,
+                serverKey: current.serverKey
+              })
+              let committed = false
+              try {
+                if (!lifecycle.isServerCurrent(current)) return
+                if (reconciliation.isCurrent() && reconciliation.state === 'committed') {
+                  lifecycle.transition(current, 'committed')
+                  publishMarketplaceUninstallAuthority(current.serverKey, confirmedIdentity)
+                  if (lifecycle.isViewCurrent(current)) notifyCommitted(false)
+                  committed = true
+                }
+              } finally {
+                reconciliation.release()
+              }
+              if (committed) return
+              const shouldNotify = current.indeterminateNotified !== true
+              current.indeterminateNotified = true
+              lifecycle.transition(current, 'indeterminate')
+              if (lifecycle.isViewCurrent(current) && shouldNotify) {
+                void message.info(t('pluginStore.uninstall.indeterminate'))
+              }
+              if (!await lifecycle.waitForReconciliation(current, attempt)) return
+              attempt += 1
+            }
+            return
+          }
+          if (current.controller.signal.aborted || !lifecycle.isViewCurrent(current)) return
           if (error instanceof ApiError && error.code === 'plugin_uninstall_plan_stale') {
             modalRef.current?.destroy()
             modalRef.current = undefined
@@ -179,19 +160,15 @@ export const usePluginMarketplaceUninstall = ({
           void message.error(getApiErrorMessage(error, t('pluginStore.uninstall.failed')))
           throw error
         } finally {
-          if (operationRef.current === currentOperation) {
-            operationRef.current = undefined
-            activeIdentityRef.current = latestIdentityRef.current
-            setOperation(undefined)
-          }
+          lifecycle.finish(current)
         }
       }
     })
-  }, [displayName, identity, message, modal, onRemoved, refreshAfterRemoval, serverBaseUrl, t])
-
+  }, [displayName, identity, lifecycle, message, modal, notifyCommitted, refreshAfterRemoval, serverBaseUrl, t])
   return {
     available: identity != null,
     confirm,
-    pending: operation != null
+    indeterminate: lifecycle.indeterminate,
+    pending: lifecycle.pending
   }
 }

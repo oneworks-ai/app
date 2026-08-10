@@ -33,13 +33,16 @@ export function WorkspaceOpeningOverlay({
   subtitle,
   title
 }: WorkspaceOpeningOverlayProps) {
-  const { t } = useTranslation()
+  const { i18n, t } = useTranslation()
   const iconHostRef = useRef<HTMLDivElement>(null)
   const iconHandleRef = useRef<OneWorksIconLoaderHandle | null>(null)
   const [tipIndex, setTipIndex] = useState(0)
   const [fallbackIconVisible, setFallbackIconVisible] = useState(false)
 
-  const tips = useMemo(() => workspaceOpeningTipKeys.map(key => t(`desktopStartupOverlay.tips.${key}`)), [t])
+  const tips = useMemo(
+    () => workspaceOpeningTipKeys.map(key => t(`desktopStartupOverlay.tips.${key}`)),
+    [i18n.resolvedLanguage, t]
+  )
   const currentTip = tips[tipIndex % tips.length] ?? t('desktopStartupOverlay.defaultTip')
 
   useEffect(() => {
@@ -90,9 +93,6 @@ export function WorkspaceOpeningOverlay({
         phase === 'exiting' ? 'is-exiting' : 'is-visible'
       ].join(' ')}
       data-phase={phase}
-      role='status'
-      aria-live='polite'
-      aria-busy='true'
     >
       <div className='workspace-opening-overlay__content'>
         <div
@@ -117,7 +117,12 @@ export function WorkspaceOpeningOverlay({
             draggable={false}
           />
         </div>
-        <div className='workspace-opening-overlay__copy'>
+        <div
+          className='workspace-opening-overlay__copy'
+          role='status'
+          aria-atomic='true'
+          aria-live='polite'
+        >
           <p className='workspace-opening-overlay__eyebrow'>{t('desktopStartupOverlay.eyebrow')}</p>
           <h2 className='workspace-opening-overlay__title'>{title}</h2>
           {subtitle != null && subtitle.trim() !== '' && (
@@ -125,7 +130,7 @@ export function WorkspaceOpeningOverlay({
           )}
         </div>
       </div>
-      <p className='workspace-opening-overlay__tip'>{currentTip}</p>
+      <p className='workspace-opening-overlay__tip' aria-hidden='true'>{currentTip}</p>
     </div>,
     document.body
   )

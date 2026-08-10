@@ -3,7 +3,7 @@
 import './PluginMarketplaceLanding.scss'
 
 import { App, Button, Empty, Form, Input, Modal, Spin, Switch, Tag, Tooltip } from 'antd'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import useSWR from 'swr'
 
@@ -15,7 +15,8 @@ import type {
   PluginMarketplaceCatalogSource,
   PluginMarketplaceConfigSource,
   PluginMarketplaceInstallTarget,
-  PluginMarketplaceUninstallIdentity
+  PluginMarketplaceUninstallIdentity,
+  PluginRuntimeInstance
 } from '@oneworks/types'
 
 import { getApiErrorMessage, getConfig, updateConfig } from '#~/api.js'
@@ -31,6 +32,18 @@ import {
   syncPluginMarketplaceSelection
 } from '#~/plugins/marketplace-api'
 import {
+  applyMarketplaceCacheRefresh,
+  captureMarketplaceSelectionSupersession,
+  claimMarketplaceConvergenceAuthority,
+  claimMarketplaceSourceIntentAuthority,
+  resolveMarketplaceServerKey
+} from '#~/plugins/marketplace-mutation-authority'
+import type {
+  MarketplaceConvergenceAuthority,
+  MarketplaceSourceIntentAuthority
+} from '#~/plugins/marketplace-mutation-authority'
+import type { PluginRefreshOptions, PluginRefreshResult } from '#~/plugins/plugin-context'
+import {
   projectPluginPresentationList,
   projectPluginPresentationValue,
   resolveMarketplacePluginDescription,
@@ -41,7 +54,14 @@ import {
 } from '#~/plugins/plugin-presentation'
 import { renderIconRef } from '#~/utils/model-provider-icons'
 
+import { isMarketplacePluginInstallable } from './@core/marketplace-plugin-selection'
+import type { MarketplacePluginSelectionController } from './@core/marketplace-plugin-selection'
+import { serializeMarketplaceSourceMutation } from './@core/marketplace-source-mutation'
+import type { PluginMarketplaceUninstallConvergenceTasks } from './@core/plugin-marketplace-uninstall'
+import { PluginMarketplaceUninstallStatus } from './PluginMarketplaceUninstallStatus'
 import { usePluginMarketplaceUninstall } from './use-plugin-marketplace-uninstall'
+
+export { isMarketplacePluginInstallable, isPluginInstalledForTarget } from './@core/marketplace-plugin-selection'
 
 type MarketplaceConfigSource = PluginMarketplaceConfigSource
 type MarketplacePanel = 'config' | 'filter'
@@ -53,10 +73,12 @@ type MarketplaceFormatFilter = MarketplaceFormat | 'all'
 type MarketplaceSortKey = 'default' | 'nameAsc' | 'nameDesc'
 
 interface PluginMarketplaceLandingProps {
+  marketplaceSelection: MarketplacePluginSelectionController
   query: string
+  runtimeInstances: readonly PluginRuntimeInstance[]
   serverBaseUrl?: string
   onOpenPlugin: (plugin: PluginMarketplaceCatalogPlugin) => void
-  onPluginsChanged: () => Promise<void>
+  onPluginsChanged: (options?: PluginRefreshOptions) => Promise<PluginRefreshResult>
   onQueryChange: (query: string) => void
 }
 
@@ -65,6 +87,11 @@ interface MarketplaceSourceItem {
   configSource?: MarketplaceConfigSource
   entry: MarketplaceConfigEntry
   key: string
+}
+
+interface MarketplaceSourceMutationLifecycle {
+  isServerCurrent: () => boolean
+  isViewCurrent: () => boolean
 }
 
 interface MarketplaceSourceFormValues {
@@ -85,18 +112,6 @@ const defaultMarketplaceFormats: MarketplaceExternalFormat[] = ['claude-code', '
 const ALL_MARKETPLACES = ''
 const PLUGIN_PAGE_SIZE = 20
 const pluginInstallTargets: PluginMarketplaceInstallTarget[] = ['project', 'global']
-
-export const isPluginInstalledForTarget = (
-  item: PluginMarketplaceCatalogPlugin,
-  target: PluginMarketplaceInstallTarget
-) =>
-  target === 'global'
-    ? item.installedSources?.includes('global') === true
-    : item.installedSources?.some(source => source === 'project' || source === 'user') === true
-
-export const isMarketplacePluginInstallable = (item: PluginMarketplaceCatalogPlugin) => (
-  item.installable !== false && item.marketplaceEnabled
-)
 
 const marketplaceFormatPresentation: Record<MarketplaceFormat, { iconId: string; label: string }> = {
   oneworks: { iconId: 'extension', label: 'One Works' },
@@ -186,7 +201,8 @@ export const resolveMarketplacePluginInstallIdentity = (
     | 'marketplaceType'
     | 'name'
   >,
-  target: PluginMarketplaceInstallTarget
+  target: PluginMarketplaceInstallTarget,
+  runtimeInstances: readonly PluginRuntimeInstance[] = []
 ) => {
   const hasAuthoritativeCatalogSource = item.configSource === 'project' || (
     item.builtIn === true && item.configSource == null
@@ -215,11 +231,27 @@ export const resolveMarketplacePluginInstallIdentity = (
   ) {
     return undefined
   }
+  const configuredScope = declaration.scope?.trim()
+  const matchingRuntimeInstances = configuredScope == null || configuredScope === ''
+    ? runtimeInstances.filter(instance => (
+      instance.sourceGroup === 'project' &&
+      instance.source?.kind === 'marketplace' &&
+      instance.source.adapter === adapter &&
+      instance.source.marketplace === item.marketplace &&
+      instance.source.plugin === item.name
+    ))
+    : []
+  const scope = configuredScope || (
+    matchingRuntimeInstances.length === 1
+      ? matchingRuntimeInstances[0]?.scope
+      : undefined
+  )
+  if (scope == null || scope === '') return undefined
   return {
     adapter,
     marketplace: item.marketplace,
     plugin: item.name,
-    scope: declaration.scope?.trim() || item.name
+    scope
   }
 }
 
@@ -425,11 +457,10 @@ const formatSourceSummary = (entry: MarketplaceConfigEntry) => {
 
 interface MarketplacePluginTargetActionProps {
   installed: boolean
-  isSavingPlugin: boolean
   item: PluginMarketplaceCatalogPlugin
   onToggle: () => void
-  refreshAfterRemoval: () => Promise<unknown>[]
-  saving: boolean
+  pending: boolean
+  refreshAfterRemoval: (authority: MarketplaceConvergenceAuthority) => PluginMarketplaceUninstallConvergenceTasks
   identity?: PluginMarketplaceUninstallIdentity
   serverBaseUrl?: string
   target: PluginMarketplaceInstallTarget
@@ -438,25 +469,27 @@ interface MarketplacePluginTargetActionProps {
 const MarketplacePluginTargetAction = ({
   installed,
   identity,
-  isSavingPlugin,
   item,
   onToggle,
+  pending,
   refreshAfterRemoval,
-  saving,
   serverBaseUrl,
   target
 }: MarketplacePluginTargetActionProps) => {
   const { t } = useTranslation()
-  const isManagedProjectRemoval = installed && target === 'project'
+  const hasManagedProjectRemoval = installed && target === 'project'
   const uninstall = usePluginMarketplaceUninstall({
     displayName: resolveMarketplacePluginDisplayName(item),
-    identity: isManagedProjectRemoval ? identity : undefined,
+    identity: hasManagedProjectRemoval ? identity : undefined,
     refreshAfterRemoval,
     serverBaseUrl,
-    surfaceKey: `marketplace-card:${item.marketplace}:${item.name}:${target}`
+    surfaceKey: `marketplace-card:${
+      resolveMarketplaceServerKey(serverBaseUrl)
+    }:${item.marketplace}:${item.name}:${target}`
   })
+  const isManagedProjectRemoval = target === 'project' && (installed || uninstall.pending)
   const title = t(
-    installed
+    isManagedProjectRemoval || installed
       ? 'pluginStore.removeMarketplacePlugin'
       : target === 'global'
       ? 'pluginStore.installMarketplacePluginGlobal'
@@ -464,34 +497,39 @@ const MarketplacePluginTargetAction = ({
   )
 
   return (
-    <Tooltip title={title}>
-      <Button
-        type={installed ? 'default' : 'primary'}
-        className='marketplace-card__icon-button'
-        aria-label={title}
-        disabled={!isMarketplacePluginInstallable(item) || (
-          isSavingPlugin && !saving
-        ) || (isManagedProjectRemoval && !uninstall.available)}
-        loading={isManagedProjectRemoval ? uninstall.pending : saving}
-        onClick={(event) => {
-          event.stopPropagation()
-          if (isManagedProjectRemoval) {
-            uninstall.confirm()
-          } else {
-            onToggle()
-          }
-        }}
-        icon={<MaterialSymbol name={target === 'global' ? 'public' : 'folder'} />}
-      />
-    </Tooltip>
+    <>
+      <Tooltip title={title}>
+        <Button
+          type={isManagedProjectRemoval || installed ? 'default' : 'primary'}
+          className='marketplace-card__icon-button'
+          aria-label={title}
+          disabled={!isMarketplacePluginInstallable(item) || pending || (
+            isManagedProjectRemoval && (uninstall.pending || !uninstall.available)
+          )}
+          loading={isManagedProjectRemoval ? uninstall.pending : pending}
+          onClick={(event) => {
+            event.stopPropagation()
+            if (isManagedProjectRemoval) {
+              uninstall.confirm()
+            } else {
+              onToggle()
+            }
+          }}
+          icon={<MaterialSymbol name={target === 'global' ? 'public' : 'folder'} />}
+        />
+      </Tooltip>
+      <PluginMarketplaceUninstallStatus active={uninstall.indeterminate} />
+    </>
   )
 }
 
 export function PluginMarketplaceLanding({
+  marketplaceSelection,
   onOpenPlugin,
   onPluginsChanged,
   onQueryChange,
   query,
+  runtimeInstances,
   serverBaseUrl
 }: PluginMarketplaceLandingProps) {
   const { t } = useTranslation()
@@ -507,7 +545,6 @@ export function PluginMarketplaceLanding({
   )
   const [sourceModalOpen, setSourceModalOpen] = useState(false)
   const [savingSourceKey, setSavingSourceKey] = useState<string>()
-  const [savingPluginKey, setSavingPluginKey] = useState<string>()
   const [expandedPanel, setExpandedPanel] = useState<MarketplacePanel>()
   const [sourceFilter, setSourceFilter] = useState<MarketplaceSourceFilter>('all')
   const [statusFilter, setStatusFilter] = useState<MarketplaceStatusFilter>('all')
@@ -515,10 +552,22 @@ export function PluginMarketplaceLanding({
   const [formatFilter, setFormatFilter] = useState<MarketplaceFormatFilter>('all')
   const [sortKey, setSortKey] = useState<MarketplaceSortKey>('default')
   const [pluginPage, setPluginPage] = useState(1)
+  const serverKey = resolveMarketplaceServerKey(serverBaseUrl)
+  const sourceServerLifecycleRef = useRef({ key: serverKey, revision: 0 })
+  if (sourceServerLifecycleRef.current.key !== serverKey) {
+    sourceServerLifecycleRef.current = {
+      key: serverKey,
+      revision: sourceServerLifecycleRef.current.revision + 1
+    }
+  }
+  const sourceViewRevisionRef = useRef(0)
 
   const mergedMarketplaces = useMemo(() => getMarketplaces(configRes, 'merged'), [configRes])
   const userPluginConfig = configRes?.sources?.user?.plugins ?? {}
   const userMarketplaces = userPluginConfig.marketplaces ?? {}
+  const latestUserPluginConfigRef = useRef(userPluginConfig)
+  const latestUserMarketplacesRef = useRef(userMarketplaces)
+  const latestMergedMarketplacesRef = useRef(mergedMarketplaces)
   const catalogPlugins = catalogRes?.plugins ?? []
   const catalogSourcesByKey = useMemo(() =>
     new Map(
@@ -543,6 +592,23 @@ export function PluginMarketplaceLanding({
     }
     return [...items.values()].sort((left, right) => left.key.localeCompare(right.key))
   }, [catalogRes?.sources, configRes, mergedMarketplaces])
+  const sourcePresentationNames = useMemo(
+    () => sourceItems.map(item => projectPluginPresentationValue(item.key)),
+    [sourceItems]
+  )
+  const accessibleSourceNames = useMemo(() => {
+    const presentationCounts = new Map<string, number>()
+    const presentationOrdinals = new Map<string, number>()
+    sourcePresentationNames.forEach((name) => {
+      presentationCounts.set(name, (presentationCounts.get(name) ?? 0) + 1)
+    })
+    return sourcePresentationNames.map((name) => {
+      if (presentationCounts.get(name) === 1) return name
+      const ordinal = (presentationOrdinals.get(name) ?? 0) + 1
+      presentationOrdinals.set(name, ordinal)
+      return t('pluginStore.marketplaceSourceDisambiguated', { index: ordinal, source: name })
+    })
+  }, [sourcePresentationNames, t])
   const marketplaceOptions = useMemo(() => [
     { label: t('pluginStore.marketplaceFilterAll'), value: ALL_MARKETPLACES },
     ...sourceItems.map(item => ({
@@ -602,32 +668,153 @@ export function PluginMarketplaceLanding({
   useEffect(() => {
     setPluginPage(current => Math.min(current, pluginPageCount))
   }, [pluginPageCount])
-  const refreshAfterUninstall = useCallback(() => [
-    mutateConfig(),
-    mutateCatalog(),
-    onPluginsChanged()
-  ], [mutateCatalog, mutateConfig, onPluginsChanged])
-  const writeUserMarketplaces = async (nextMarketplaces: MarketplaceConfig, successMessage?: string) => {
+  useEffect(() => {
+    latestUserPluginConfigRef.current = userPluginConfig
+    latestUserMarketplacesRef.current = userMarketplaces
+    latestMergedMarketplacesRef.current = mergedMarketplaces
+  }, [mergedMarketplaces, userMarketplaces, userPluginConfig])
+  useEffect(() => {
+    setSavingSourceKey(undefined)
+    setSourceModalOpen(false)
+  }, [serverKey])
+  useEffect(() => () => {
+    sourceViewRevisionRef.current += 1
+  }, [])
+  const claimSourceMutationLifecycle = (): MarketplaceSourceMutationLifecycle => {
+    const serverRevision = sourceServerLifecycleRef.current.revision
+    const viewRevision = sourceViewRevisionRef.current + 1
+    sourceViewRevisionRef.current = viewRevision
+    return {
+      isServerCurrent: () => sourceServerLifecycleRef.current.revision === serverRevision,
+      isViewCurrent: () =>
+        sourceServerLifecycleRef.current.revision === serverRevision &&
+        sourceViewRevisionRef.current === viewRevision
+    }
+  }
+  const runSourceMutation = async (
+    sourceKey: string,
+    lifecycle: MarketplaceSourceMutationLifecycle,
+    mutate: (authority: MarketplaceConvergenceAuthority) => Promise<void>
+  ) => {
+    if (!lifecycle.isViewCurrent()) return
+    setSavingSourceKey(sourceKey)
+    const pending = serializeMarketplaceSourceMutation(serverKey, async () => {
+      if (!lifecycle.isServerCurrent()) return
+      const authority = claimMarketplaceConvergenceAuthority(serverKey, lifecycle.isServerCurrent)
+      try {
+        await mutate(authority)
+      } finally {
+        authority.release()
+      }
+    })
+    try {
+      await pending
+    } finally {
+      if (lifecycle.isViewCurrent()) setSavingSourceKey(undefined)
+    }
+  }
+  const refreshAfterUninstall = useCallback((authority: MarketplaceConvergenceAuthority) => ({
+    catalog: applyMarketplaceCacheRefresh({
+      authority: authority.catalog,
+      load: () => listPluginMarketplaceCatalog({ serverBaseUrl }),
+      mutate: mutateCatalog
+    }),
+    config: applyMarketplaceCacheRefresh({
+      authority: authority.config,
+      load: () => getConfig({ serverBaseUrl }),
+      mutate: mutateConfig
+    }),
+    runtime: onPluginsChanged({ isCurrent: authority.runtime.isCurrent }).then(result => ({
+      applied: result.applied && authority.runtime.isCurrent()
+    }))
+  }), [mutateCatalog, mutateConfig, onPluginsChanged, serverBaseUrl])
+  const createSourceConvergenceTasks = (authority: MarketplaceConvergenceAuthority) => [
+    applyMarketplaceCacheRefresh({
+      authority: authority.config,
+      load: () => getConfig({ serverBaseUrl }),
+      mutate: mutateConfig
+    }),
+    applyMarketplaceCacheRefresh({
+      authority: authority.catalog,
+      load: () => listPluginMarketplaceCatalog({ serverBaseUrl }),
+      mutate: mutateCatalog
+    }),
+    onPluginsChanged({ isCurrent: authority.runtime.isCurrent })
+  ]
+  const convergeSourceMutation = async (
+    authority: MarketplaceConvergenceAuthority,
+    committedMarketplaces: string[] = []
+  ) => {
+    const supersedeCommittedSelections = captureMarketplaceSelectionSupersession(
+      serverKey,
+      committedMarketplaces.map(marketplace => ({ marketplace }))
+    )
+    await Promise.all(createSourceConvergenceTasks(authority))
+    if (
+      committedMarketplaces.length > 0 &&
+      authority.config.isCurrent() &&
+      authority.catalog.isCurrent() &&
+      authority.runtime.isCurrent()
+    ) {
+      supersedeCommittedSelections()
+    }
+  }
+  const convergeSourceMutationAfterFailure = async (
+    authority: MarketplaceConvergenceAuthority,
+    lifecycle: MarketplaceSourceMutationLifecycle
+  ) => {
+    if (!lifecycle.isServerCurrent()) return
+    await Promise.allSettled(createSourceConvergenceTasks(authority))
+  }
+  const writeUserMarketplaces = async (
+    nextMarketplaces: MarketplaceConfig,
+    authority: MarketplaceConvergenceAuthority
+  ) => {
+    const currentUserPluginConfig = latestUserPluginConfigRef.current
     await commitMarketplaceConfigUpdate(
       () =>
         updateConfig('user', 'plugins', {
-          ...userPluginConfig,
+          ...currentUserPluginConfig,
           marketplaces: nextMarketplaces
         }),
-      mutateConfig
+      () =>
+        applyMarketplaceCacheRefresh({
+          authority: authority.config,
+          load: () => getConfig({ serverBaseUrl }),
+          mutate: mutateConfig
+        })
     )
-    if (successMessage != null) void message.success(successMessage)
+    if (authority.config.isCurrent()) {
+      latestUserPluginConfigRef.current = {
+        ...currentUserPluginConfig,
+        marketplaces: nextMarketplaces
+      }
+      latestUserMarketplacesRef.current = nextMarketplaces
+    }
   }
 
-  const restoreUserMarketplaces = async () => {
+  const restoreUserMarketplaces = async (
+    authority: MarketplaceConvergenceAuthority,
+    previousUserPluginConfig: typeof userPluginConfig,
+    previousUserMarketplaces: MarketplaceConfig
+  ) => {
     await commitMarketplaceConfigUpdate(
       () =>
         updateConfig('user', 'plugins', {
-          ...userPluginConfig,
-          marketplaces: userMarketplaces
+          ...previousUserPluginConfig,
+          marketplaces: previousUserMarketplaces
         }),
-      mutateConfig
+      () =>
+        applyMarketplaceCacheRefresh({
+          authority: authority.config,
+          load: () => getConfig({ serverBaseUrl }),
+          mutate: mutateConfig
+        })
     )
+    if (authority.config.isCurrent()) {
+      latestUserPluginConfigRef.current = previousUserPluginConfig
+      latestUserMarketplacesRef.current = previousUserMarketplaces
+    }
   }
 
   const syncSourcePlugins = async (item: MarketplaceSourceItem, sourceEnabled: boolean) => {
@@ -647,134 +834,163 @@ export function PluginMarketplaceLanding({
   }
 
   const handleAddSource = async () => {
+    const lifecycle = claimSourceMutationLifecycle()
     let values: MarketplaceSourceFormValues
     try {
       values = await sourceForm.validateFields()
     } catch {
       return
     }
+    if (!lifecycle.isViewCurrent()) return
     const url = values.url.trim()
     const explicitKey = normalizeSourceKey(values.name ?? '')
     const baseKey = explicitKey !== '' ? explicitKey : deriveSourceKeyFromUrl(url)
-    setSavingSourceKey(baseKey)
-    try {
-      const entries = createMarketplaceSourceEntries({
-        baseKey,
-        formats: values.types,
-        occupied: mergedMarketplaces,
-        options: {
-          source: {
-            source: 'git',
-            url,
-            ...((values.ref?.trim() ?? '') !== '' ? { ref: values.ref?.trim() } : {}),
-            ...((values.path?.trim() ?? '') !== '' ? { path: values.path?.trim() } : {})
+    await runSourceMutation(baseKey, lifecycle, async (authority) => {
+      const sourceIntents: MarketplaceSourceIntentAuthority[] = []
+      try {
+        const entries = createMarketplaceSourceEntries({
+          baseKey,
+          formats: values.types,
+          occupied: latestMergedMarketplacesRef.current,
+          options: {
+            source: {
+              source: 'git',
+              url,
+              ...((values.ref?.trim() ?? '') !== '' ? { ref: values.ref?.trim() } : {}),
+              ...((values.path?.trim() ?? '') !== '' ? { path: values.path?.trim() } : {})
+            }
           }
+        })
+        sourceIntents.push(
+          ...Object.keys(entries).map(marketplace => (
+            claimMarketplaceSourceIntentAuthority(serverKey, marketplace)
+          ))
+        )
+        await writeUserMarketplaces({
+          ...latestUserMarketplacesRef.current,
+          ...entries
+        }, authority)
+        if (!lifecycle.isServerCurrent()) return
+        latestMergedMarketplacesRef.current = {
+          ...latestMergedMarketplacesRef.current,
+          ...entries
         }
-      })
-      await writeUserMarketplaces({
-        ...userMarketplaces,
-        ...entries
-      }, t('pluginStore.marketplaceSourceSaved'))
-      await mutateCatalog()
-      setSourceModalOpen(false)
-      sourceForm.resetFields()
-    } catch (error) {
-      void message.error(projectPluginPresentationValue(
-        getApiErrorMessage(error, t('pluginStore.marketplaceSourceSaveFailed'))
-      ))
-    } finally {
-      setSavingSourceKey(undefined)
-    }
+        await convergeSourceMutation(authority, Object.keys(entries))
+        if (!lifecycle.isViewCurrent()) return
+        void message.success(t('pluginStore.marketplaceSourceSaved'))
+        setSourceModalOpen(false)
+        sourceForm.resetFields()
+      } catch (error) {
+        await convergeSourceMutationAfterFailure(authority, lifecycle)
+        if (!lifecycle.isViewCurrent()) return
+        void message.error(projectPluginPresentationValue(
+          getApiErrorMessage(error, t('pluginStore.marketplaceSourceSaveFailed'))
+        ))
+      } finally {
+        sourceIntents.forEach(intent => intent.release())
+      }
+    })
   }
 
   const handleToggleSource = async (item: MarketplaceSourceItem, enabled: boolean) => {
-    setSavingSourceKey(item.key)
+    const lifecycle = claimSourceMutationLifecycle()
+    const sourceIntent = claimMarketplaceSourceIntentAuthority(serverKey, item.key)
     try {
-      const currentOverride = userMarketplaces[item.key]
-      await writeUserMarketplaces({
-        ...userMarketplaces,
-        [item.key]: createMarketplaceEnabledOverride(item.entry.type, currentOverride, enabled)
+      await runSourceMutation(item.key, lifecycle, async (authority) => {
+        const previousUserPluginConfig = latestUserPluginConfigRef.current
+        const previousUserMarketplaces = latestUserMarketplacesRef.current
+        try {
+          const currentOverride = previousUserMarketplaces[item.key]
+          await writeUserMarketplaces({
+            ...previousUserMarketplaces,
+            [item.key]: createMarketplaceEnabledOverride(item.entry.type, currentOverride, enabled)
+          }, authority)
+          if (!lifecycle.isServerCurrent()) return
+          try {
+            await syncSourcePlugins(item, enabled)
+          } catch (error) {
+            if (!lifecycle.isServerCurrent()) return
+            try {
+              await restoreUserMarketplaces(authority, previousUserPluginConfig, previousUserMarketplaces)
+            } catch {
+              // The authoritative refresh below still runs and the original sync error stays visible.
+            }
+            throw error
+          }
+          if (!lifecycle.isServerCurrent()) return
+          await convergeSourceMutation(authority, [item.key])
+          if (!lifecycle.isViewCurrent()) return
+          void message.success(
+            enabled
+              ? t('pluginStore.marketplaceSourceEnabled')
+              : t('pluginStore.marketplaceSourceDisabled')
+          )
+        } catch (error) {
+          await convergeSourceMutationAfterFailure(authority, lifecycle)
+          if (!lifecycle.isViewCurrent()) return
+          void message.error(projectPluginPresentationValue(
+            getApiErrorMessage(error, t('pluginStore.marketplaceSourceSaveFailed'))
+          ))
+        }
       })
-      try {
-        await syncSourcePlugins(item, enabled)
-      } catch (error) {
-        await restoreUserMarketplaces()
-        throw error
-      }
-      await mutateCatalog()
-      void message.success(
-        enabled
-          ? t('pluginStore.marketplaceSourceEnabled')
-          : t('pluginStore.marketplaceSourceDisabled')
-      )
-    } catch (error) {
-      void message.error(projectPluginPresentationValue(
-        getApiErrorMessage(error, t('pluginStore.marketplaceSourceSaveFailed'))
-      ))
     } finally {
-      setSavingSourceKey(undefined)
-    }
-  }
-
-  const handleTogglePlugin = async (
-    item: PluginMarketplaceCatalogPlugin,
-    target: PluginMarketplaceInstallTarget
-  ) => {
-    if (!isMarketplacePluginInstallable(item)) return
-    const enabled = !isPluginInstalledForTarget(item, target)
-    const savingKey = `${item.marketplace}:${item.name}:${target}`
-    setSavingPluginKey(savingKey)
-    try {
-      await syncPluginMarketplaceSelection(item.marketplace, item.name, enabled, target, { serverBaseUrl })
-      await Promise.all([mutateConfig(), mutateCatalog(), onPluginsChanged()])
-      void message.success(t(
-        enabled
-          ? target === 'global'
-            ? 'pluginStore.marketplacePluginInstalledGlobal'
-            : 'pluginStore.marketplacePluginInstalledProject'
-          : 'pluginStore.marketplacePluginRemoved'
-      ))
-    } catch (error) {
-      void message.error(projectPluginPresentationValue(
-        getApiErrorMessage(error, t('pluginStore.marketplacePluginSaveFailed'))
-      ))
-    } finally {
-      setSavingPluginKey(undefined)
+      sourceIntent.release()
     }
   }
 
   const handleRemoveSource = async (item: MarketplaceSourceItem) => {
-    setSavingSourceKey(item.key)
+    const lifecycle = claimSourceMutationLifecycle()
+    const sourceIntent = claimMarketplaceSourceIntentAuthority(serverKey, item.key)
     try {
-      const currentOverride = userMarketplaces[item.key]
-      await writeUserMarketplaces({
-        ...userMarketplaces,
-        [item.key]: createMarketplaceEnabledOverride(item.entry.type, currentOverride, false)
-      })
-      try {
-        await syncSourcePlugins(item, false)
-      } catch (error) {
-        await restoreUserMarketplaces()
-        throw error
-      }
-      const nextMarketplaces = { ...userMarketplaces }
-      delete nextMarketplaces[item.key]
-      await writeUserMarketplaces(nextMarketplaces, t('pluginStore.marketplaceSourceRemoved'))
-      await mutateCatalog()
-    } catch (error) {
-      try {
-        await restoreUserMarketplaces()
-        if (item.entry.enabled !== false) {
-          await syncSourcePlugins(item, true)
+      await runSourceMutation(item.key, lifecycle, async (authority) => {
+        const previousUserPluginConfig = latestUserPluginConfigRef.current
+        const previousUserMarketplaces = latestUserMarketplacesRef.current
+        try {
+          const currentOverride = previousUserMarketplaces[item.key]
+          await writeUserMarketplaces({
+            ...previousUserMarketplaces,
+            [item.key]: createMarketplaceEnabledOverride(item.entry.type, currentOverride, false)
+          }, authority)
+          if (!lifecycle.isServerCurrent()) return
+          try {
+            await syncSourcePlugins(item, false)
+          } catch (error) {
+            if (!lifecycle.isServerCurrent()) return
+            try {
+              await restoreUserMarketplaces(authority, previousUserPluginConfig, previousUserMarketplaces)
+              await convergeSourceMutation(authority)
+            } catch {
+              // The outer compensation keeps the original sync error and retries convergence.
+            }
+            throw error
+          }
+          if (!lifecycle.isServerCurrent()) return
+          const nextMarketplaces = { ...latestUserMarketplacesRef.current }
+          delete nextMarketplaces[item.key]
+          await writeUserMarketplaces(nextMarketplaces, authority)
+          await convergeSourceMutation(authority, [item.key])
+          if (lifecycle.isViewCurrent()) {
+            void message.success(t('pluginStore.marketplaceSourceRemoved'))
+          }
+        } catch (error) {
+          if (!lifecycle.isServerCurrent()) return
+          try {
+            await restoreUserMarketplaces(authority, previousUserPluginConfig, previousUserMarketplaces)
+            if (item.entry.enabled !== false) {
+              await syncSourcePlugins(item, true)
+            }
+          } catch {
+            // Keep the original error; authoritative convergence still runs below.
+          }
+          await convergeSourceMutationAfterFailure(authority, lifecycle)
+          if (!lifecycle.isViewCurrent()) return
+          void message.error(projectPluginPresentationValue(
+            getApiErrorMessage(error, t('pluginStore.marketplaceSourceSaveFailed'))
+          ))
         }
-      } catch {
-        // Keep the original error; the restored config will be reconciled on the next load.
-      }
-      void message.error(projectPluginPresentationValue(
-        getApiErrorMessage(error, t('pluginStore.marketplaceSourceSaveFailed'))
-      ))
+      })
     } finally {
-      setSavingSourceKey(undefined)
+      sourceIntent.release()
     }
   }
 
@@ -909,11 +1125,12 @@ export function PluginMarketplaceLanding({
           <div className='plugin-marketplace__config-source-list' role='list'>
             {sourceItems.length === 0
               ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('pluginStore.marketplaceSourcesEmpty')} />
-              : sourceItems.map((item) => {
+              : sourceItems.map((item, index) => {
                 const summary = formatSourceSummary(item.entry)
                 const catalogSource: PluginMarketplaceCatalogSource | undefined = catalogSourcesByKey.get(item.key)
                 const isUserSource = item.configSource === 'user' && item.builtIn !== true
-                const sourceName = projectPluginPresentationValue(item.key)
+                const sourceName = sourcePresentationNames[index] ?? projectPluginPresentationValue(item.key)
+                const accessibleSourceName = accessibleSourceNames[index] ?? sourceName
                 const sourceTitle = projectPluginPresentationValue(summary.title)
                 const sourceDetail = summary.detail === '' ? '' : projectPluginPresentationValue(summary.detail)
                 const sourceError = catalogSource?.error == null
@@ -946,6 +1163,12 @@ export function PluginMarketplaceLanding({
                     </div>
                     <div className='plugin-marketplace__source-actions'>
                       <Switch
+                        aria-label={t(
+                          item.entry.enabled !== false
+                            ? 'pluginStore.disableMarketplaceSourceNamed'
+                            : 'pluginStore.enableMarketplaceSourceNamed',
+                          { source: accessibleSourceName }
+                        )}
                         size='small'
                         checked={item.entry.enabled !== false}
                         loading={savingSourceKey === item.key}
@@ -956,7 +1179,9 @@ export function PluginMarketplaceLanding({
                           <Button
                             className='plugin-marketplace__icon-button'
                             type='text'
-                            aria-label={t('pluginStore.removeMarketplaceSource')}
+                            aria-label={t('pluginStore.removeMarketplaceSourceNamed', {
+                              source: accessibleSourceName
+                            })}
                             icon={<MaterialSymbol name='delete' />}
                             onClick={() => void handleRemoveSource(item)}
                           />
@@ -993,13 +1218,13 @@ export function PluginMarketplaceLanding({
                 total={filteredPluginItems.length}
                 onPageChange={setPluginPage}
                 renderItem={(item) => {
-                  const pluginKey = `${item.marketplace}:${item.name}`
                   const displayedVersion = item.version ?? resolvedPluginVersionMap.get(
                     JSON.stringify([item.marketplace, item.name])
                   )
-                  const projectInstalled = isPluginInstalledForTarget(item, 'project')
-                  const globalInstalled = isPluginInstalledForTarget(item, 'global')
-                  const isSavingPlugin = savingPluginKey?.startsWith(`${pluginKey}:`) === true
+                  const projectState = marketplaceSelection.getState(item, 'project')
+                  const globalState = marketplaceSelection.getState(item, 'global')
+                  const projectInstalled = projectState.installed
+                  const globalInstalled = globalState.installed
                   const sourceKind = item.builtIn === true
                     ? t('pluginStore.marketplaceSourceBuiltIn')
                     : t(`config.sources.${resolveMarketplaceConfigSource(item.configSource)}`)
@@ -1043,17 +1268,21 @@ export function PluginMarketplaceLanding({
                         </>
                       }
                       actions={pluginInstallTargets.map((target) => {
-                        const installed = target === 'global' ? globalInstalled : projectInstalled
+                        const selectionState = target === 'global' ? globalState : projectState
                         return (
                           <MarketplacePluginTargetAction
-                            installed={installed}
-                            isSavingPlugin={isSavingPlugin}
+                            installed={selectionState.installed}
                             item={item}
                             key={target}
-                            onToggle={() => void handleTogglePlugin(item, target)}
+                            onToggle={() => void marketplaceSelection.toggle(item, target)}
+                            pending={selectionState.pending}
                             refreshAfterRemoval={refreshAfterUninstall}
-                            saving={savingPluginKey === `${pluginKey}:${target}`}
-                            identity={resolveMarketplacePluginInstallIdentity(configRes, item, target)}
+                            identity={resolveMarketplacePluginInstallIdentity(
+                              configRes,
+                              item,
+                              target,
+                              runtimeInstances
+                            )}
                             serverBaseUrl={serverBaseUrl}
                             target={target}
                           />
@@ -1075,7 +1304,10 @@ export function PluginMarketplaceLanding({
         cancelText={t('config.actions.cancel')}
         destroyOnHidden
         onOk={() => void handleAddSource()}
-        onCancel={() => setSourceModalOpen(false)}
+        onCancel={() => {
+          sourceViewRevisionRef.current += 1
+          setSourceModalOpen(false)
+        }}
         afterClose={() => sourceForm.resetFields()}
       >
         <Form
