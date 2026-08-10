@@ -126,6 +126,15 @@ export default config(
   },
   {
     files: [
+      'assets/brand/catalog.json'
+    ],
+    rules: {
+      // Declarative catalog growth should not trade away standard JSON formatting.
+      'max-lines': 'off'
+    }
+  },
+  {
+    files: [
       '.oo/rfcs/**/*.md'
     ],
     rules: {
