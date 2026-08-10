@@ -72,6 +72,10 @@ Adapter-native managed installs live under the project home:
 
 That location is private runtime data and should not be committed.
 
+Pi consumes unified prompt assets, selected skills, and normalized hook events. It does not
+currently expose a stable native MCP seam, so selected MCP servers and OpenCode-only overlays are
+reported as skipped instead of loading an implicit third-party extension.
+
 ## Native Plugin Marketplaces
 
 One Works supports both Claude Code and Codex plugin marketplaces. Reusable skills, commands, agents, MCP servers, and hooks are converted into the unified asset layer. Codex `.app.json` integrations remain Codex-specific and are not converted.

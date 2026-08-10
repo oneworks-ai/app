@@ -10,7 +10,8 @@ describe('adapter native skill capabilities', () => {
       ['copilot', 'Copilot'],
       ['gemini', 'Gemini'],
       ['kimi', 'Kimi'],
-      ['opencode', 'OPENCODE_CONFIG_DIR']
+      ['opencode', 'OPENCODE_CONFIG_DIR'],
+      ['pi', '--skill']
     ] as const
   )('treats %s as a native skill adapter', (adapter, reasonText) => {
     expect(supportsNativeProjectSkills(adapter)).toBe(true)

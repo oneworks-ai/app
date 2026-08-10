@@ -37,7 +37,7 @@
 - `pnpm --silent tools dev-service ensure android-emulator --json`
   - 复用或启动机器级协调器选择的可见 Android AVD，并以 ADB boot 状态探活；AVD 跨 worktree 共享，不能只依据当前 worktree 快照并发启停
 - `pnpm tools adapter-e2e run <selection>`
-  - 真实离线 adapter E2E。`selection` 支持 `codex` / `claude-code` / `opencode` / case id / `all`
+  - 真实离线 adapter E2E。`selection` 支持 `codex` / `claude-code` / `opencode` / `pi` / case id / `all`
 - `pnpm tools adapter-e2e test [selection]`
   - 跑 `scripts/__tests__/adapter-e2e/adapter-e2e.spec.ts`
 - `pnpm tools adapter-e2e test [selection] --update`
@@ -142,7 +142,7 @@
 - `scripts/chrome-debug.ts`
   - Chrome DevTools 本地调试 helper，负责枚举目标页、连接 CDP 和执行 messenger 发送动作
 - `scripts/adapter-e2e/runners.ts`
-  - Codex / Claude / OpenCode 的真实运行路径
+  - Codex / Claude / OpenCode / Pi 的真实运行路径
 - `scripts/adapter-e2e/log.ts`
   - hook 日志解析与事件计数
 - `scripts/adapter-e2e/snapshot.ts`

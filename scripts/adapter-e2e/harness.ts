@@ -38,7 +38,11 @@ export const createAdapterE2EHarness = async (
     const resolvedCase = resolveAdapterE2ECase(testCase)
     const traceStartIndex = mockServer.getTrace().length
     let result: AdapterE2EResult
-    if (resolvedCase.adapter === 'codex' || resolvedCase.adapter === 'claude-code') {
+    if (
+      resolvedCase.adapter === 'codex' ||
+      resolvedCase.adapter === 'claude-code' ||
+      resolvedCase.adapter === 'pi'
+    ) {
       result = await runWrappedAdapter(resolvedCase, mockServer.port, options)
     } else if (resolvedCase.adapter === 'opencode') {
       result = await runOpenCode(resolvedCase, mockServer.port, options)

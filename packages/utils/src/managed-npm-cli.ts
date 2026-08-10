@@ -60,6 +60,7 @@ interface ResolveManagedNpmCliPathParams extends ResolveManagedNpmCliOptionsPara
 
 interface EnsureManagedNpmCliParams extends ResolveManagedNpmCliPathParams {
   cwd: string
+  ignoreInstallScripts?: boolean
   logger: Pick<Logger, 'info'>
   minimumVersion?: string
   preferSystem?: boolean
@@ -587,6 +588,7 @@ export const ensureManagedNpmCli = async (params: EnsureManagedNpmCliParams) => 
             '--no-save',
             '--no-audit',
             '--no-fund',
+            ...(params.ignoreInstallScripts === true ? ['--ignore-scripts'] : []),
             installOptions.packageSpec
           ],
           {

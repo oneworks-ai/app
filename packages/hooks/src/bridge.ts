@@ -111,6 +111,7 @@ export interface AdapterHookBridge {
   start: () => Promise<void>
   prepareInitialPrompt: (prompt?: string) => Promise<string | undefined>
   wrapSession: (session: HookBridgeSession) => HookBridgeSession
+  enqueueAfterPendingHooks: (runHook: () => Promise<unknown>) => void
   handleOutput: (event: HookBridgeOutputEvent) => void
   flush: () => Promise<void>
 }
@@ -141,15 +142,73 @@ export const createAdapterHookBridge = (params: {
   let killRequested = false
   let lastAssistantMessage: string | undefined
   let sessionEnded = false
+  const loggedQueueFailures = new WeakSet<Promise<unknown>>()
+
+  const recordQueueFailure = (
+    queue: Promise<unknown>,
+    message: string,
+    error: unknown
+  ) => {
+    if (loggedQueueFailures.has(queue)) return
+    loggedQueueFailures.add(queue)
+    ctx.logger.error(message, error)
+  }
 
   const enqueueOutputHook = (runHook: () => Promise<unknown>) => {
-    outputQueue = outputQueue
+    const pendingOutputQueue = outputQueue
+    outputQueue = pendingOutputQueue
       .catch((error) => {
-        ctx.logger.error('[HookBridge] output hook queue failed', error)
+        recordQueueFailure(pendingOutputQueue, '[HookBridge] output hook queue failed', error)
       })
       .then(async () => {
         await runHook()
       })
+  }
+
+  const enqueueAfterPendingHooks = (runHook: () => Promise<unknown>) => {
+    const pendingEmitQueue = emitQueue
+    enqueueOutputHook(async () => {
+      try {
+        await pendingEmitQueue
+      } catch (error) {
+        recordQueueFailure(pendingEmitQueue, '[HookBridge] emit queue failed', error)
+      }
+      await runHook()
+    })
+  }
+
+  const drainHookQueues = async (flushSessionHooks?: () => Promise<void>) => {
+    const pendingEmitQueue = emitQueue
+    let emitFailure: { error: unknown } | undefined
+    try {
+      await pendingEmitQueue
+    } catch (error) {
+      recordQueueFailure(pendingEmitQueue, '[HookBridge] emit queue failed', error)
+      emitFailure = { error }
+    }
+
+    const pendingOutputQueue = outputQueue
+    let outputFailure: { error: unknown } | undefined
+    try {
+      await pendingOutputQueue
+    } catch (error) {
+      recordQueueFailure(pendingOutputQueue, '[HookBridge] output hook queue failed', error)
+      outputFailure = { error }
+    }
+
+    let sessionFlushFailure: { error: unknown } | undefined
+    try {
+      await flushSessionHooks?.()
+    } catch (error) {
+      sessionFlushFailure = { error }
+    }
+
+    if (sessionFlushFailure != null && (emitFailure != null || outputFailure != null)) {
+      ctx.logger.error('[HookBridge] session hook flush failed', sessionFlushFailure.error)
+    }
+    if (emitFailure != null) throw emitFailure.error
+    if (outputFailure != null) throw outputFailure.error
+    if (sessionFlushFailure != null) throw sessionFlushFailure.error
   }
 
   const callBridgeHook = async (
@@ -355,9 +414,10 @@ export const createAdapterHookBridge = (params: {
           session.stop?.()
         },
       emit: (event) => {
-        emitQueue = emitQueue
+        const pendingEmitQueue = emitQueue
+        emitQueue = pendingEmitQueue
           .catch((error) => {
-            ctx.logger.error('[HookBridge] emit queue failed', error)
+            recordQueueFailure(pendingEmitQueue, '[HookBridge] emit queue failed', error)
           })
           .then(async () => {
             if (event.type === 'message') {
@@ -390,11 +450,16 @@ export const createAdapterHookBridge = (params: {
       },
       respondInteraction: (interactionId, data) => session.respondInteraction?.(interactionId, data),
       flushHooks: async () => {
-        await emitQueue
-        await outputQueue
-        await session.flushHooks?.()
+        await drainHookQueues(
+          session.flushHooks == null
+            ? undefined
+            : async () => {
+              await session.flushHooks?.()
+            }
+        )
       }
     }),
+    enqueueAfterPendingHooks,
     handleOutput: (event) => {
       if (event.type === 'message' && event.data.role === 'assistant') {
         observeMessage(event.data)
@@ -445,8 +510,7 @@ export const createAdapterHookBridge = (params: {
       }
     },
     flush: async () => {
-      await emitQueue
-      await outputQueue
+      await drainHookQueues()
     }
   }
 }

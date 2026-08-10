@@ -483,6 +483,7 @@ describe('model selection utilities', () => {
       'copilot',
       'kimi',
       'opencode',
+      'pi',
       'local-custom'
     ])
   })

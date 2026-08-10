@@ -11,6 +11,11 @@ import { adapterDisplayName as copilotDisplayName, adapterIcon as copilotIcon } 
 import { adapterDisplayName as geminiDisplayName, adapterIcon as geminiIcon } from '@oneworks/adapter-gemini/icon'
 import { adapterDisplayName as kimiDisplayName, adapterIcon as kimiIcon } from '@oneworks/adapter-kimi/icon'
 import { adapterDisplayName as opencodeDisplayName, adapterIcon as opencodeIcon } from '@oneworks/adapter-opencode/icon'
+import {
+  adapterDisplayName as piDisplayName,
+  adapterIcon as piIcon,
+  adapterIconDark as piIconDark
+} from '@oneworks/adapter-pi/icon'
 
 export interface AdapterDisplay {
   darkIcon?: string
@@ -43,6 +48,11 @@ export const adapterDisplayMap = {
   opencode: {
     title: opencodeDisplayName,
     icon: opencodeIcon
+  },
+  pi: {
+    title: piDisplayName,
+    icon: piIcon,
+    darkIcon: piIconDark
   }
 } as const satisfies Record<string, AdapterDisplay>
 

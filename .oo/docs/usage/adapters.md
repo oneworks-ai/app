@@ -13,20 +13,18 @@
 
 ## 前端选择器
 
-聊天输入框的适配器选择器默认展示当前应用内置支持的原生适配器：
+聊天输入框的适配器选择器默认展示当前应用内置支持的原生适配器：Claude Code（`claude-code`）、Codex（`codex`）、Copilot（`copilot`）、Gemini（`gemini`）、Kimi（`kimi`）、OpenCode（`opencode`）和 Pi（`pi`）。
 
-- `claude-code`
-- `codex`
-- `copilot`
-- `gemini`
-- `kimi`
-- `opencode`
-
-这些内置适配器不需要先写入 `.oo.config.json` 才能出现在选择器里。用户选择某个适配器发起会话后，运行时会沿用适配器自己的 CLI 准备逻辑，把托管 CLI 安装到项目共享 cache；首次启动某个适配器时可能会稍慢。
+以下 adapter 不需要先写入 `.oo.config.json` 才能出现在选择器里。用户选择某个 adapter 发起会话后，运行时会沿用 adapter 自己的 CLI 准备逻辑，把托管 CLI 安装到全局托管 bootstrap cache；首次启动某个 adapter 时可能会稍慢。
 
 没有配置 `general.defaultAdapter` 时，选择器默认选中 `codex`；用户手动切换后的本地选择仍会被保留。
 
 如果用户在 `adapters` 配置里添加自定义适配器 key，前端会把它展示在内置适配器的下方。内置适配器的隐藏/恢复是浏览器本地偏好，只影响前端选择器，不会写入项目或用户配置文件。
+
+## Pi coding-agent
+
+`pi` 适配器通过 Pi JSONL RPC 承载持续会话，默认托管 `@earendil-works/pi-coding-agent@0.84.1`，并支持复用原生/default provider 或使用会话私有 model service。
+完整配置、原生凭据继承、安全与运行时边界、CLI 准备方式见 [Pi coding-agent 适配器](./pi-adapter.md)。
 
 ## 适配器配置分组
 

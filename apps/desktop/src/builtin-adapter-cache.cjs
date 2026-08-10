@@ -10,7 +10,8 @@ const BUILTIN_ADAPTER_PACKAGES = [
   '@oneworks/adapter-copilot',
   '@oneworks/adapter-gemini',
   '@oneworks/adapter-kimi',
-  '@oneworks/adapter-opencode'
+  '@oneworks/adapter-opencode',
+  '@oneworks/adapter-pi'
 ]
 
 const BUILTIN_PLUGIN_PACKAGES = [

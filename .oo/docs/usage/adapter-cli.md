@@ -2,22 +2,23 @@
 
 返回启动服务：[runtime.md](./runtime.md)
 
-One Works 不把各原生 CLI 作为 adapter 包的运行时依赖。第一次使用时，adapter 会优先找显式配置的 binary、项目共享 cache、系统 `PATH`，都不可用时再安装到项目级共享 cache：
+One Works 不把各原生 CLI 作为 adapter 包的运行时依赖。第一次使用时，adapter 会优先找显式配置的 binary、全局托管 bootstrap cache、系统 `PATH`，都不可用时再安装到全局托管 bootstrap cache：
 
-- npm 托管：`codex`、`gemini`、`copilot`、`opencode`、`claude-code.cli`、`claude-code.routerCli`
+- npm 托管：`codex`、`gemini`、`copilot`、`opencode`、`pi`、`claude-code.cli`、`claude-code.routerCli`
 - uv 托管：`kimi.cli`
 
 默认托管版本：
 
-| Adapter                 | 托管包                           | 默认安装版本 | 兼容范围    |
-| ----------------------- | -------------------------------- | ------------ | ----------- |
-| `codex`                 | `@openai/codex`                  | `latest`     | `>=0.130.0` |
-| `gemini`                | `@google/gemini-cli`             | `0.38.2`     | 同默认版本  |
-| `copilot`               | `@github/copilot`                | `1.0.36`     | 同默认版本  |
-| `opencode`              | `opencode-ai`                    | `1.14.18`    | 同默认版本  |
-| `claude-code.cli`       | `@anthropic-ai/claude-code`      | `latest`     | `>=2.1.114` |
-| `claude-code.routerCli` | `@musistudio/claude-code-router` | `latest`     | `>=1.0.73`  |
-| `kimi.cli`              | `kimi-cli`                       | `1.36.0`     | 同默认版本  |
+| Adapter                 | 托管包                            | 默认安装版本 | 兼容范围           |
+| ----------------------- | --------------------------------- | ------------ | ------------------ |
+| `codex`                 | `@openai/codex`                   | `latest`     | `>=0.130.0`        |
+| `gemini`                | `@google/gemini-cli`              | `0.38.2`     | 同默认版本         |
+| `copilot`               | `@github/copilot`                 | `1.0.36`     | 同默认版本         |
+| `opencode`              | `opencode-ai`                     | `1.14.18`    | 同默认版本         |
+| `pi`                    | `@earendil-works/pi-coding-agent` | `0.84.1`     | `>=0.84.1 <0.85.0` |
+| `claude-code.cli`       | `@anthropic-ai/claude-code`       | `latest`     | `>=2.1.114`        |
+| `claude-code.routerCli` | `@musistudio/claude-code-router`  | `latest`     | `>=1.0.73`         |
+| `kimi.cli`              | `kimi-cli`                        | `1.36.0`     | 同默认版本         |
 
 可以在项目配置里固定来源和版本：
 
@@ -38,22 +39,26 @@ adapters:
       package: kimi-cli
       version: 1.36.0
       python: "3.13"
+  pi:
+    cli:
+      source: managed
+      version: 0.84.1
 ```
 
 `cli.source` 支持：
 
-- `managed`：使用项目共享 cache 中的托管 CLI；缺失时按 `autoInstall` 安装
+- `managed`：使用全局托管 bootstrap cache 中的托管 CLI；缺失时按 `autoInstall` 安装
 - `system`：优先使用系统 `PATH` 中的原生命令；缺失时仍可按 `autoInstall` 安装
 - `path`：只使用 `cli.path` 指向的 binary
 
 Codex adapter 还会把用户登录 shell 里可解析到的 `codex` 作为系统 CLI 候选；在 macOS 上，还会追加 `/Applications/Codex.app/Contents/Resources/codex` 和 `~/Applications/Codex.app/Contents/Resources/codex`。Claude Code adapter 也会把用户登录 shell 里可解析到的 `claude` / `ccr` 作为系统 CLI 候选。这些 fallback 候选都必须满足兼容范围，不能运行太旧的 CLI。
 
-把 `autoInstall` 设为 `false` 可以关闭首次使用时的自动安装。npm 托管 adapter 还支持 `cli.package`、`cli.npmPath`；Kimi 支持 `cli.package`、`cli.python`、`cli.uvPath`。
+把 `autoInstall` 设为 `false` 可以关闭首次使用时的自动安装。npm 托管 adapter 还支持 `cli.package`、`cli.npmPath`；Kimi 支持 `cli.package`、`cli.python`、`cli.uvPath`。Pi 需要 Node.js 22.19.0 或更高版本；其托管安装始终使用 `--ignore-scripts`，与上游推荐安装方式保持一致。
 
-如果希望提前把托管 CLI 下载到项目共享 cache，可以显式运行：
+如果希望提前把托管 CLI 下载到全局托管 bootstrap cache，可以显式运行：
 
 ```bash
-oneworks adapter prepare codex claude-code gemini
+oneworks adapter prepare codex claude-code gemini pi
 oneworks adapter prepare claude-code.routerCli
 oneworks adapter prepare --all
 ```
@@ -100,4 +105,7 @@ export __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__=/absolute/path/to/codex
 export __ONEWORKS_PROJECT_ADAPTER_KIMI_INSTALL_VERSION__=1.36.0
 export __ONEWORKS_PROJECT_ADAPTER_KIMI_INSTALL_PYTHON__=3.13
 export __ONEWORKS_PROJECT_ADAPTER_KIMI_UV_PATH__=/absolute/path/to/uv
+
+export __ONEWORKS_PROJECT_ADAPTER_PI_INSTALL_VERSION__=0.84.1
+export __ONEWORKS_PROJECT_ADAPTER_PI_CLI_PATH__=/absolute/path/to/pi
 ```

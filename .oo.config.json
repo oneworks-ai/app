@@ -9,7 +9,8 @@
     "copilot": {},
     "gemini": {},
     "kimi": {},
-    "opencode": {}
+    "opencode": {},
+    "pi": {}
   },
   "plugins": [
     {
@@ -60,7 +61,8 @@
       "models": [
         "codex-hooks",
         "claude-hooks",
-        "opencode-hooks"
+        "opencode-hooks",
+        "pi-hooks"
       ],
       "extra": {
         "codex": {
@@ -68,6 +70,9 @@
         },
         "opencode": {
           "wireApi": "responses"
+        },
+        "pi": {
+          "api": "openai-responses"
         }
       }
     },

@@ -64,11 +64,13 @@ export const readHookLog = async (input: {
 
 const resolveArtifactPath = (
   filePath: string,
+  ctxId: string,
   sessionId: string
-) => filePath.replace(':sessionId', sessionId)
+) => filePath.replace(':ctxId', ctxId).replace(':sessionId', sessionId)
 
 export const collectManagedArtifacts = async (input: {
   adapter: AdapterE2ETarget
+  ctxId: string
   sessionId: string
 }): Promise<VerifiedManagedArtifact[]> => {
   const definitions = MANAGED_ARTIFACTS[input.adapter]
@@ -78,7 +80,7 @@ export const collectManagedArtifacts = async (input: {
     let matchedCandidate: VerifiedManagedArtifact | undefined
 
     for (const candidate of definition.candidates) {
-      const candidatePath = resolveArtifactPath(candidate.path, input.sessionId)
+      const candidatePath = resolveArtifactPath(candidate.path, input.ctxId, input.sessionId)
       const exists = await waitForPath(candidatePath, 5_000)
       if (!exists) continue
 
@@ -97,7 +99,7 @@ export const collectManagedArtifacts = async (input: {
 
     if (matchedCandidate == null) {
       const attemptedPaths = definition.candidates
-        .map(candidate => resolveArtifactPath(candidate.path, input.sessionId))
+        .map(candidate => resolveArtifactPath(candidate.path, input.ctxId, input.sessionId))
         .join(', ')
       throw new Error(
         `Managed artifact ${definition.label} not satisfied by any candidate: ${attemptedPaths}`

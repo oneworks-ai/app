@@ -1,17 +1,19 @@
 import path from 'node:path'
 
-import { mockClaudeService, mockHome, mockModelService } from './runtime'
+import { mockClaudeService, mockHome, mockModelService, projectHome } from './runtime'
 import type { AdapterE2ETarget, ManagedArtifactDefinition } from './types'
 
 const codexPrompt = 'Use the Read tool exactly once on README.md, then reply with exactly E2E_CODEX and nothing else.'
 const claudePrompt = 'Use the Read tool exactly once on README.md, then reply with exactly E2E_CLAUDE and nothing else.'
 const opencodePrompt =
   'Use the read tool exactly once on README.md, then reply with exactly E2E_OPENCODE and nothing else.'
+const piPrompt = 'Use the read tool exactly once on README.md, then reply with exactly E2E_PI and nothing else.'
 
 export const ADAPTER_E2E_TARGETS: AdapterE2ETarget[] = [
   'codex',
   'claude-code',
-  'opencode'
+  'opencode',
+  'pi'
 ]
 
 export const ADAPTER_E2E_DEFAULTS: Record<AdapterE2ETarget, {
@@ -33,6 +35,11 @@ export const ADAPTER_E2E_DEFAULTS: Record<AdapterE2ETarget, {
     finalOutput: 'E2E_OPENCODE',
     model: `${mockModelService},opencode-hooks`,
     prompt: opencodePrompt
+  },
+  pi: {
+    finalOutput: 'E2E_PI',
+    model: `${mockModelService},pi-hooks`,
+    prompt: piPrompt
   }
 }
 
@@ -86,6 +93,15 @@ export const MANAGED_ARTIFACTS: Record<AdapterE2ETarget, ManagedArtifactDefiniti
           includes: ['"provider"', 'hook-smoke-mock']
         }
       ]
+    }
+  ],
+  pi: [
+    {
+      label: 'pi generated model config',
+      candidates: [{
+        path: path.resolve(projectHome, 'caches', ':ctxId', ':sessionId', 'adapter-pi', 'agent', 'models.json'),
+        includes: ['hook-smoke-mock', 'openai-responses', '$ONEWORKS_PI_']
+      }]
     }
   ]
 }

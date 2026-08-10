@@ -15,7 +15,10 @@ const mocks = vi.hoisted(() => ({
   loadConfigState: vi.fn(),
   resolveSessionWorkspaceFolder: vi.fn(),
   updateConfigFile: vi.fn(),
+  chmod: vi.fn(),
   mkdir: vi.fn(),
+  rename: vi.fn(),
+  rm: vi.fn(),
   writeFile: vi.fn(),
   getSessionLogger: vi.fn()
 }))
@@ -41,8 +44,17 @@ vi.mock('@oneworks/config', async () => {
 })
 
 vi.mock('node:fs/promises', () => ({
+  chmod: mocks.chmod,
   mkdir: mocks.mkdir,
+  rename: mocks.rename,
+  rm: mocks.rm,
   writeFile: mocks.writeFile
+}))
+
+vi.mock('proper-lockfile', () => ({
+  default: {
+    lock: vi.fn().mockResolvedValue(async () => undefined)
+  }
 }))
 
 vi.mock('#~/utils/logger.js', () => ({
@@ -67,6 +79,11 @@ describe('session permission service', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.chmod.mockResolvedValue(undefined)
+    mocks.mkdir.mockResolvedValue(undefined)
+    mocks.rename.mockResolvedValue(undefined)
+    mocks.rm.mockResolvedValue(undefined)
+    mocks.writeFile.mockResolvedValue(undefined)
 
     runtimeState = createEmptySessionPermissionState()
     channelActorSnapshot = undefined
@@ -168,6 +185,26 @@ describe('session permission service', () => {
     })
   })
 
+  it('does not consume one-shot permission state for an availability probe without a subject', async () => {
+    runtimeState = {
+      allow: [],
+      deny: [],
+      onceAllow: ['Write'],
+      onceDeny: ['Bash']
+    }
+
+    await expect(resolvePermissionDecision({
+      sessionId: 'sess-1',
+      subject: undefined
+    })).resolves.toEqual({
+      result: 'inherit',
+      source: 'none'
+    })
+    expect(consumeSessionPermissionOnce).not.toHaveBeenCalled()
+    expect(runtimeState.onceAllow).toEqual(['Write'])
+    expect(runtimeState.onceDeny).toEqual(['Bash'])
+  })
+
   it('consumes one-shot deny before any other remembered decision', async () => {
     runtimeState = {
       allow: ['Write'],
@@ -196,7 +233,7 @@ describe('session permission service', () => {
   it('consumes one-shot allow and leaves later session rules intact', async () => {
     runtimeState = {
       allow: ['Write'],
-      deny: [],
+      deny: ['Write'],
       onceAllow: ['Write'],
       onceDeny: []
     }
@@ -216,6 +253,18 @@ describe('session permission service', () => {
     }))
     expect(runtimeState.onceAllow).toEqual([])
     expect(runtimeState.allow).toEqual(['Write'])
+  })
+
+  it('serializes concurrent onceAllow consumption', async () => {
+    runtimeState = { allow: [], deny: ['Write'], onceAllow: ['Write'], onceDeny: [] }
+    const subject = { key: 'Write', label: 'Write', scope: 'tool' } as const
+    const results = await Promise.all([
+      resolvePermissionDecision({ sessionId: 'sess-1', subject }),
+      resolvePermissionDecision({ sessionId: 'sess-1', subject })
+    ])
+
+    expect(results.filter(result => result.source === 'onceAllow')).toHaveLength(1)
+    expect(results.filter(result => result.source === 'sessionDeny')).toHaveLength(1)
   })
 
   it('falls back to project ask when the session does not override the tool', async () => {
@@ -629,33 +678,89 @@ describe('session permission service', () => {
     }))
   })
 
-  it('keeps the DB permission state authoritative when mirror sync fails', async () => {
+  it('fails closed and restores a onceAllow when its mirror sync fails', async () => {
+    runtimeState = {
+      allow: [],
+      deny: ['Write'],
+      onceAllow: ['Write'],
+      onceDeny: []
+    }
+    mocks.writeFile.mockRejectedValueOnce(new Error('disk full'))
+
+    await expect(resolvePermissionDecision({
+      sessionId: 'sess-1',
+      subject: { key: 'Write', label: 'Write', scope: 'tool' }
+    })).rejects.toThrow('disk full')
+    expect(runtimeState.onceAllow).toEqual(['Write'])
+
+    await expect(resolvePermissionDecision({
+      sessionId: 'sess-1',
+      subject: { key: 'Write', label: 'Write', scope: 'tool' }
+    })).resolves.toMatchObject({ result: 'allow', source: 'onceAllow' })
+    await expect(resolvePermissionDecision({
+      sessionId: 'sess-1',
+      subject: { key: 'Write', label: 'Write', scope: 'tool' }
+    })).resolves.toMatchObject({ result: 'deny', source: 'sessionDeny' })
+  })
+
+  it('serializes a strict once rollback before a queued session deny mutation', async () => {
     runtimeState = {
       allow: [],
       deny: [],
       onceAllow: ['Write'],
       onceDeny: []
     }
-    mocks.writeFile.mockRejectedValueOnce(new Error('disk full'))
+    let rejectFirstMirrorWrite: (error: Error) => void = () => undefined
+    let markFirstMirrorWriteStarted: () => void = () => undefined
+    const firstMirrorWriteStarted = new Promise<void>(resolve => {
+      markFirstMirrorWriteStarted = resolve
+    })
+    mocks.writeFile.mockImplementationOnce(() =>
+      new Promise<void>((_resolve, reject) => {
+        rejectFirstMirrorWrite = reject
+        markFirstMirrorWriteStarted()
+      })
+    )
 
-    const result = await resolvePermissionDecision({
+    const onceDecision = resolvePermissionDecision({
       sessionId: 'sess-1',
-      subject: {
-        key: 'Write',
-        label: 'Write',
-        scope: 'tool'
-      }
+      subject: { key: 'Write', label: 'Write', scope: 'tool' }
+    })
+    await firstMirrorWriteStarted
+    const denyMutation = applyPermissionInteractionDecision({
+      sessionId: 'sess-1',
+      subjectKeys: ['Write'],
+      action: 'deny_session'
     })
 
-    expect(result).toEqual(expect.objectContaining({
-      result: 'allow',
-      source: 'onceAllow'
-    }))
-    expect(runtimeState.onceAllow).toEqual([])
-    expect(mocks.getSessionLogger).toHaveBeenCalledWith('sess-1', 'server')
+    expect(runtimeState).toEqual({
+      allow: [],
+      deny: [],
+      onceAllow: [],
+      onceDeny: []
+    })
+    rejectFirstMirrorWrite(new Error('disk full'))
+
+    await expect(onceDecision).rejects.toThrow('disk full')
+    await expect(denyMutation).resolves.toBeUndefined()
+    expect(runtimeState).toEqual({
+      allow: [],
+      deny: ['Write'],
+      onceAllow: [],
+      onceDeny: []
+    })
+    expect(JSON.parse(String(mocks.writeFile.mock.calls.at(-1)?.[1]))).toMatchObject({
+      permissionState: {
+        deny: ['Write']
+      }
+    })
+    await expect(resolvePermissionDecision({
+      sessionId: 'sess-1',
+      subject: { key: 'Write', label: 'Write', scope: 'tool' }
+    })).resolves.toMatchObject({ result: 'deny', source: 'sessionDeny' })
   })
 
-  it('writes permission mirror files for Kimi sessions', async () => {
+  it.each(['kimi', 'pi'])('writes permission mirror files for %s sessions', async (adapter) => {
     runtimeState = {
       allow: ['Shell'],
       deny: [],
@@ -671,17 +776,17 @@ describe('session permission service', () => {
       })),
       updateSessionRuntimeState,
       getSession: vi.fn(() => ({
-        id: 'sess-kimi',
-        adapter: 'kimi'
+        id: `sess-${adapter}`,
+        adapter
       }))
     })
 
-    await syncPermissionStateMirror('sess-kimi')
+    await syncPermissionStateMirror(`sess-${adapter}`)
 
     const mirrorContent = String(mocks.writeFile.mock.calls.at(-1)?.[1] ?? '{}')
     expect(JSON.parse(mirrorContent)).toMatchObject({
-      sessionId: 'sess-kimi',
-      adapter: 'kimi',
+      sessionId: `sess-${adapter}`,
+      adapter,
       permissionState: {
         allow: ['Bash']
       }

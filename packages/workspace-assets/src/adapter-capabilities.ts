@@ -6,7 +6,8 @@ const NATIVE_SKILL_ADAPTERS = new Set<WorkspaceAssetAdapter>([
   'copilot',
   'gemini',
   'kimi',
-  'opencode'
+  'opencode',
+  'pi'
 ])
 
 export const supportsNativeProjectSkills = (adapter?: string): adapter is WorkspaceAssetAdapter =>
@@ -23,5 +24,7 @@ export const resolveNativeSkillDiagnosticReason = (adapter: WorkspaceAssetAdapte
     ? 'Symlinked into GEMINI_CLI_HOME as a native Gemini skill.'
     : adapter === 'kimi'
     ? 'Staged into a Kimi --skills-dir directory as a native skill.'
+    : adapter === 'pi'
+    ? 'Passed to Pi as an explicit --skill resource with discovery disabled.'
     : 'Mirrored into OPENCODE_CONFIG_DIR as a native skill.'
 )

@@ -60,7 +60,7 @@ export async function buildAdapterAssetPlan(params: {
   }
 
   const selectedMcpNames = resolveSelectedMcpNames(params.bundle, params.options.mcpServers)
-  const mcpServers = Object.fromEntries(
+  const mcpServers = params.adapter === 'pi' ? {} : Object.fromEntries(
     selectedMcpNames.map(name => [name, params.bundle.mcpServers[name].payload.config])
   )
 
@@ -68,9 +68,11 @@ export async function buildAdapterAssetPlan(params: {
     const asset = params.bundle.mcpServers[name]
     pushDiagnostic(asset, {
       adapter: params.adapter,
-      status: params.adapter === 'claude-code' ? 'native' : 'translated',
+      status: params.adapter === 'claude-code' ? 'native' : params.adapter === 'pi' ? 'skipped' : 'translated',
       reason: params.adapter === 'claude-code'
         ? 'Mapped into adapter MCP settings.'
+        : params.adapter === 'pi'
+        ? 'Pi has no stable built-in MCP mapping; no third-party extension is loaded implicitly.'
         : 'Translated into adapter-specific MCP configuration.'
     })
   })
@@ -78,7 +80,7 @@ export async function buildAdapterAssetPlan(params: {
   params.bundle.hookPlugins.forEach((asset) => {
     pushDiagnostic(asset, {
       adapter: params.adapter,
-      status: 'native',
+      status: params.adapter === 'pi' ? 'translated' : 'native',
       reason: params.adapter === 'claude-code'
         ? 'Mapped into the Claude Code native hooks bridge.'
         : params.adapter === 'codex'
@@ -89,6 +91,8 @@ export async function buildAdapterAssetPlan(params: {
         ? 'Mapped into the Copilot CLI native hooks bridge.'
         : params.adapter === 'kimi'
         ? 'Mapped into the Kimi native hooks bridge.'
+        : params.adapter === 'pi'
+        ? 'Mapped through the normalized One Works adapter event hook bridge.'
         : 'Mapped into the OpenCode native hooks bridge.'
     })
   })
@@ -111,7 +115,9 @@ export async function buildAdapterAssetPlan(params: {
         reason: 'Mirrored into OPENCODE_CONFIG_DIR as a native OpenCode asset.'
       })
     })
-  } else if (params.adapter === 'codex' || params.adapter === 'copilot' || params.adapter === 'kimi') {
+  } else if (
+    params.adapter === 'codex' || params.adapter === 'copilot' || params.adapter === 'kimi' || params.adapter === 'pi'
+  ) {
     params.bundle.opencodeOverlayAssets.forEach((asset) => {
       pushDiagnostic(asset, {
         adapter: params.adapter,
@@ -120,6 +126,8 @@ export async function buildAdapterAssetPlan(params: {
           ? 'No stable native Codex mapping exists for this asset kind in V1.'
           : params.adapter === 'copilot'
           ? 'No stable native Copilot mapping exists for this asset kind in V1.'
+          : params.adapter === 'pi'
+          ? 'No stable native Pi mapping exists for this OpenCode asset kind in V1.'
           : 'No stable native Kimi mapping exists for this asset kind in V1.'
       })
     })
@@ -150,6 +158,8 @@ export async function buildAdapterAssetPlan(params: {
       }))
     ]
     : params.adapter === 'codex' || params.adapter === 'copilot'
+    ? selectedSkillOverlays
+    : params.adapter === 'pi'
     ? selectedSkillOverlays
     : params.adapter === 'kimi'
     ? selectedSkillAssets.map((asset): AdapterOverlayEntry => ({

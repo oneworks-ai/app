@@ -60,7 +60,8 @@ export const BUILTIN_NATIVE_ADAPTERS = [
   'copilot',
   'gemini',
   'kimi',
-  'opencode'
+  'opencode',
+  'pi'
 ] as const
 
 export type BuiltinNativeAdapter = typeof BUILTIN_NATIVE_ADAPTERS[number]

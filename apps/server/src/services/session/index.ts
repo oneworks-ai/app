@@ -1105,6 +1105,7 @@ export async function startAdapterSession(
               break
             case 'interaction_request': {
               const interaction = event.data
+              const isPermissionInteraction = interaction.payload.kind === 'permission'
               const permissionContext = interaction.payload.kind === 'permission'
                 ? interaction.payload.permissionContext
                 : undefined
@@ -1147,28 +1148,39 @@ export async function startAdapterSession(
                     if (!canDeliverInteraction) {
                       await session.respondInteraction?.(interaction.id, PERMISSION_DECISION_CANCEL)
                       emitSessionError(sessionId, {
-                        message: '权限确认通道不可用，已取消当前操作。',
-                        code: 'permission_request_failed',
-                        fatal: true
+                        message: isPermissionInteraction
+                          ? '权限确认通道不可用，已取消当前操作。'
+                          : '交互通道不可用，已取消当前输入请求。',
+                        code: isPermissionInteraction ? 'permission_request_failed' : 'interaction_request_failed',
+                        fatal: isPermissionInteraction
                       })
                       return
                     }
 
-                    pendingPermissionRecoveryStore.set(sessionId, {
-                      runId,
-                      interactionId: interaction.id
-                    })
+                    if (isPermissionInteraction) {
+                      pendingPermissionRecoveryStore.set(sessionId, {
+                        runId,
+                        interactionId: interaction.id
+                      })
+                    }
                     const answer = await requestInteraction(interaction.payload, {
                       interactionId: interaction.id
                     })
+                    if (activeAdapterRunStore.get(sessionId) !== runId) return
                     if (
-                      pendingPermissionRecoveryStore.get(sessionId)?.runId !== runId ||
-                      pendingPermissionRecoveryStore.get(sessionId)?.interactionId !== interaction.id
+                      (isPermissionInteraction && (
+                        pendingPermissionRecoveryStore.get(sessionId)?.runId !== runId ||
+                        pendingPermissionRecoveryStore.get(sessionId)?.interactionId !== interaction.id
+                      ))
                     ) {
                       return
                     }
 
-                    pendingPermissionRecoveryStore.delete(sessionId)
+                    if (isPermissionInteraction) pendingPermissionRecoveryStore.delete(sessionId)
+                    if (!isPermissionInteraction) {
+                      await session.respondInteraction?.(interaction.id, answer)
+                      return
+                    }
                     const decision = resolvePermissionInteractionDecision(answer)
                     if (decision == null || decision === PERMISSION_DECISION_CANCEL) {
                       await session.respondInteraction?.(interaction.id, PERMISSION_DECISION_CANCEL)
@@ -1176,7 +1188,9 @@ export async function startAdapterSession(
                       return
                     }
 
-                    if (decision !== 'deny_once') {
+                    // A live approval response itself consumes a one-time decision. Persisting
+                    // allow_once here would silently authorize the next matching tool call too.
+                    if (decision !== 'deny_once' && decision !== 'allow_once') {
                       const subjectKey = permissionContext?.subjectKey
                       if (subjectKey != null && subjectKey.trim() !== '') {
                         await applyPermissionInteractionDecision({
@@ -1197,12 +1211,16 @@ export async function startAdapterSession(
                     }
                     await session.respondInteraction?.(interaction.id, PERMISSION_DECISION_CANCEL)
                     emitSessionError(sessionId, {
-                      message: error instanceof Error && error.message.includes('timed out')
-                        ? '权限确认已超时，已取消当前操作。'
-                        : '权限确认失败，已取消当前操作。',
-                      code: 'permission_request_failed',
+                      message: isPermissionInteraction
+                        ? (error instanceof Error && error.message.includes('timed out')
+                          ? '权限确认已超时，已取消当前操作。'
+                          : '权限确认失败，已取消当前操作。')
+                        : (error instanceof Error && error.message.includes('timed out')
+                          ? '交互已超时，已取消当前输入请求。'
+                          : '交互失败，已取消当前输入请求。'),
+                      code: isPermissionInteraction ? 'permission_request_failed' : 'interaction_request_failed',
                       details: error instanceof Error ? { message: error.message } : { error: String(error) },
-                      fatal: true
+                      fatal: isPermissionInteraction
                     })
                   }
                 })()

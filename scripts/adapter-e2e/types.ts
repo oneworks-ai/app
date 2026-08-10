@@ -1,4 +1,4 @@
-export type AdapterE2ETarget = 'codex' | 'claude-code' | 'opencode'
+export type AdapterE2ETarget = 'codex' | 'claude-code' | 'opencode' | 'pi'
 
 export type AdapterTransport = 'wrapper' | 'upstream-fallback'
 

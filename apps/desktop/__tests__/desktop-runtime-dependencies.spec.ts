@@ -24,7 +24,8 @@ const bundledAdapterPackages = [
   '@oneworks/adapter-copilot',
   '@oneworks/adapter-gemini',
   '@oneworks/adapter-kimi',
-  '@oneworks/adapter-opencode'
+  '@oneworks/adapter-opencode',
+  '@oneworks/adapter-pi'
 ]
 
 const bundledPluginPackages = [

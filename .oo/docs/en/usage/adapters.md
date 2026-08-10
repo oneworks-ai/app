@@ -13,7 +13,12 @@ This page covers the adapter configuration structure in the Web configuration UI
 
 ## Frontend Selector
 
-The adapter selector in the chat input shows the native adapters built into the current application. Adapter configuration controls binary selection, managed CLI versions, model routing, accounts, and adapter-specific options.
+The adapter selector in the chat input shows the native adapters built into the current application: Claude Code, Codex, Copilot, Gemini, Kimi, OpenCode, and Pi. Adapter configuration controls binary selection, managed CLI versions, model routing, accounts, and adapter-specific options.
+
+## Pi coding-agent
+
+The `pi` adapter runs persistent sessions through Pi JSONL RPC, manages `@earendil-works/pi-coding-agent@0.84.1` by default, and can reuse Pi's native/default provider or a session-private model service.
+See the [Pi coding-agent Adapter](./pi-adapter.md) for complete configuration, native credential inheritance, security and runtime boundaries, and CLI preparation.
 
 ## Multiple Accounts
 

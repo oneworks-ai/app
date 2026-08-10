@@ -1,7 +1,5 @@
 /* eslint-disable max-lines */
 
-import { mkdir, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
 import process from 'node:process'
 
 import { getDb } from '#~/db/index.js'
@@ -28,7 +26,9 @@ import {
   normalizeSessionPermissionState,
   resolvePermissionMirrorPath,
   resolveTrustedOneworksCliPermissionSubjectFromToolCall,
-  splitManagedPermissionKeys
+  splitManagedPermissionKeys,
+  withPrivatePermissionMirrorLock,
+  writePrivatePermissionMirror
 } from '@oneworks/utils'
 import type { PermissionToolSubject, SessionPermissionState } from '@oneworks/utils'
 
@@ -156,7 +156,7 @@ export const syncPermissionStateMirror = async (
   } = {}
 ) => {
   const adapter = input.adapter ?? getDb().getSession(sessionId)?.adapter
-  if (adapter !== 'claude-code' && adapter !== 'kimi' && adapter !== 'opencode') {
+  if (adapter !== 'claude-code' && adapter !== 'kimi' && adapter !== 'opencode' && adapter !== 'pi') {
     return
   }
 
@@ -165,24 +165,28 @@ export const syncPermissionStateMirror = async (
   await migrateProjectHomeSegment(workspaceFolder, env, '.mock').catch(() => undefined)
   const { mergedConfig } = await loadConfigState(workspaceFolder)
   const mirrorPath = resolvePermissionMirrorPath(workspaceFolder, adapter, sessionId, env)
-  await mkdir(dirname(mirrorPath), { recursive: true })
-  await writeFile(
-    mirrorPath,
-    `${
-      JSON.stringify(
-        {
-          sessionId,
-          adapter,
-          permissionState: getSessionPermissionState(sessionId),
-          projectPermissions: buildMirrorProjectPermissions(mergedConfig),
-          updatedAt: Date.now()
-        },
-        null,
-        2
-      )
-    }\n`,
-    'utf8'
-  )
+  const writeMirror = async () =>
+    await writePrivatePermissionMirror(
+      mirrorPath,
+      `${
+        JSON.stringify(
+          {
+            sessionId,
+            adapter,
+            permissionState: getSessionPermissionState(sessionId),
+            projectPermissions: buildMirrorProjectPermissions(mergedConfig),
+            updatedAt: Date.now()
+          },
+          null,
+          2
+        )
+      }\n`
+    )
+  if (adapter === 'pi') {
+    await withPrivatePermissionMirrorLock(mirrorPath, writeMirror)
+  } else {
+    await writeMirror()
+  }
 }
 
 export { syncPermissionStateMirrorBestEffort }
@@ -213,6 +217,25 @@ const hasChannelSessionBuiltInPermission = (
   channelContext != null &&
   keyCandidates.some(key => CHANNEL_SESSION_BUILTIN_PERMISSION_KEY_SET.has(key))
 )
+
+const sessionPermissionTails = new Map<string, Promise<void>>()
+
+const withSessionPermissionQueue = async <Result>(sessionId: string, task: () => Promise<Result>) => {
+  const previous = sessionPermissionTails.get(sessionId) ?? Promise.resolve()
+  let release: () => void = () => undefined
+  const current = new Promise<void>(resolve => {
+    release = resolve
+  })
+  const tail = previous.then(() => current)
+  sessionPermissionTails.set(sessionId, tail)
+  await previous
+  try {
+    return await task()
+  } finally {
+    release()
+    if (sessionPermissionTails.get(sessionId) === tail) sessionPermissionTails.delete(sessionId)
+  }
+}
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value != null && !Array.isArray(value)
@@ -358,7 +381,7 @@ const resolveChannelPermissionDecision = async (params: {
   }
 }
 
-export const resolvePermissionDecision = async (params: {
+const resolvePermissionDecisionInternal = async (params: {
   sessionId: string
   subject: PermissionToolSubject | undefined
   lookupKeys?: string[]
@@ -372,9 +395,15 @@ export const resolvePermissionDecision = async (params: {
     subject.key,
     ...(params.lookupKeys ?? [])
   ])
+  const stateBeforeOnceDecision = getSessionPermissionState(sessionId)
   const onceDecision = getDb().consumeSessionPermissionOnce(sessionId, keyCandidates)
   if (onceDecision != null) {
-    await syncPermissionStateMirrorBestEffort(sessionId)
+    try {
+      await syncPermissionStateMirror(sessionId)
+    } catch (error) {
+      getDb().updateSessionRuntimeState(sessionId, { permissionState: stateBeforeOnceDecision })
+      throw error
+    }
     return {
       result: onceDecision.decision,
       source: onceDecision.decision === 'allow' ? 'onceAllow' : 'onceDeny',
@@ -416,6 +445,14 @@ export const resolvePermissionDecision = async (params: {
 
   return { result: 'inherit', source: 'none', subject }
 }
+
+export const resolvePermissionDecision = async (params: {
+  sessionId: string
+  subject: PermissionToolSubject | undefined
+  lookupKeys?: string[]
+}): Promise<PermissionResolution> => (
+  withSessionPermissionQueue(params.sessionId, () => resolvePermissionDecisionInternal(params))
+)
 
 const mutateSessionPermissionState = (
   state: SessionPermissionState,
@@ -491,24 +528,25 @@ export const applyPermissionInteractionDecision = async (params: {
   sessionId: string
   subjectKeys: string[]
   action: PermissionInteractionDecision
-}) => {
-  const subjectKeys = normalizeKeys(params.subjectKeys)
-  if (subjectKeys.length === 0) return
+}) =>
+  withSessionPermissionQueue(params.sessionId, async () => {
+    const subjectKeys = normalizeKeys(params.subjectKeys)
+    if (subjectKeys.length === 0) return
 
-  if (params.action === 'allow_project') {
-    await updateProjectPermissionLists(params.sessionId, subjectKeys, 'allow')
-  }
-  if (params.action === 'deny_project') {
-    await updateProjectPermissionLists(params.sessionId, subjectKeys, 'deny')
-  }
+    if (params.action === 'allow_project') {
+      await updateProjectPermissionLists(params.sessionId, subjectKeys, 'allow')
+    }
+    if (params.action === 'deny_project') {
+      await updateProjectPermissionLists(params.sessionId, subjectKeys, 'deny')
+    }
 
-  const nextState = mutateSessionPermissionState(
-    getSessionPermissionState(params.sessionId),
-    subjectKeys,
-    params.action
-  )
-  await updateSessionPermissionState(params.sessionId, nextState)
-}
+    const nextState = mutateSessionPermissionState(
+      getSessionPermissionState(params.sessionId),
+      subjectKeys,
+      params.action
+    )
+    await updateSessionPermissionState(params.sessionId, nextState)
+  })
 
 const buildPermissionOption = (
   label: string,

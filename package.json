@@ -51,6 +51,7 @@
     "@oneworks/adapter-gemini": "workspace:*",
     "@oneworks/adapter-kimi": "workspace:*",
     "@oneworks/adapter-opencode": "workspace:*",
+    "@oneworks/adapter-pi": "workspace:*",
     "@oneworks/cli": "workspace:*",
     "@oneworks/client": "workspace:*",
     "@oneworks/plugin-browser-driver": "workspace:*",

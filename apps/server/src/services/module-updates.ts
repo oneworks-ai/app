@@ -119,7 +119,8 @@ const moduleUpdateTargets: ModuleUpdateTarget[] = [
     ['copilot', 'Copilot adapter'],
     ['gemini', 'Gemini adapter'],
     ['kimi', 'Kimi adapter'],
-    ['opencode', 'OpenCode adapter']
+    ['opencode', 'OpenCode adapter'],
+    ['pi', 'Pi adapter']
   ].map(([adapter, label]) => ({
     activation: 'new-session' as const,
     group: 'adapter' as const,

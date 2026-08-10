@@ -89,6 +89,10 @@ oneworks --include-skill oneworks-cli-quickstart "explain oneworks CLI resume be
 
 The runtime may also select skills based on the task and available metadata.
 
+For Pi sessions, One Works disables automatic Pi resource discovery and passes every selected
+skill directory as an explicit `--skill` argument. Transitive dependencies are resolved before
+the adapter receives the selection.
+
 ## Dependency Details
 
 See:

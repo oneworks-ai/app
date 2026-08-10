@@ -6,6 +6,7 @@ import type {
   AdapterModelFallbackError,
   AdapterOutputEvent,
   AdapterQueryOptions,
+  AssetDiagnostic,
   Config,
   TaskDetail,
   WorkspaceAssetAdapter
@@ -234,7 +235,7 @@ export const run = async (
   const mergedModelServices = mergedConfig.modelServices ?? {}
   const serviceModels = listServiceModels(mergedModelServices)
   const mergedDefaultModelService = pickFirstNonEmptyString([mergedConfig.defaultModelService])
-  const supportedEffortAdapters = new Set(['claude-code', 'codex', 'copilot', 'kimi', 'opencode'])
+  const supportedEffortAdapters = new Set(['claude-code', 'codex', 'copilot', 'kimi', 'opencode', 'pi'])
   const supportsEffort = supportedEffortAdapters.has(runtimeAdapterType)
   const adapterCommonConfig = supportsEffort
     ? resolveAdapterCommonConfig<Record<string, unknown> & { effort?: AdapterQueryOptions['effort'] }, 'effort'>(
@@ -295,7 +296,8 @@ export const run = async (
     'copilot',
     'gemini',
     'kimi',
-    'opencode'
+    'opencode',
+    'pi'
   ])
   const supportsAssetPlan = (value: string): value is WorkspaceAssetAdapter => (
     supportedAssetPlanAdapters.has(value as WorkspaceAssetAdapter)
@@ -346,6 +348,22 @@ export const run = async (
         !runtimeMcpSelection.runtimeExclude.has(name)
       ))
   ) as Record<string, NonNullable<Config['mcpServers']>[string]>
+  const skippedRuntimeMcpServerNames = runtimeAdapterType === 'pi'
+    ? Object.keys(selectedRuntimeMcpServers)
+    : []
+  if (skippedRuntimeMcpServerNames.length > 0) {
+    logger.warn({
+      runtimeMcpServerNames: skippedRuntimeMcpServerNames
+    }, '[mcp] Skipping session companion MCP servers because Pi has no stable built-in MCP mapping')
+  }
+  const runtimeMcpDiagnostics: AssetDiagnostic[] = skippedRuntimeMcpServerNames.map(name => ({
+    assetId: `runtime-mcp:${name}`,
+    adapter: 'pi',
+    status: 'skipped',
+    reason: `Session companion MCP "${name}" was skipped because Pi has no stable built-in MCP mapping.`,
+    source: 'project',
+    origin: 'workspace'
+  }))
   const workspaceMcpServerNames = new Set(Object.keys(assetPlanBase?.mcpServers ?? {}))
   const shadowedRuntimeMcpServerNames = Object.keys(selectedRuntimeMcpServers)
     .filter(name => workspaceMcpServerNames.has(name))
@@ -355,17 +373,22 @@ export const run = async (
     }, '[mcp] Ignoring session companion MCP servers that would shadow workspace MCP servers')
   }
   const effectiveRuntimeMcpServers = Object.fromEntries(
-    Object.entries(selectedRuntimeMcpServers)
+    Object.entries(runtimeAdapterType === 'pi' ? {} : selectedRuntimeMcpServers)
       .filter(([name]) => !workspaceMcpServerNames.has(name))
   ) as Record<string, NonNullable<Config['mcpServers']>[string]>
-  const assetPlan = assetPlanBase == null
+  const assetPlanWithRuntimeDiagnostics = runtimeMcpDiagnostics.length === 0
+    ? assetPlanBase
+    : assetPlanBase == null
+    ? { adapter: 'pi' as const, diagnostics: runtimeMcpDiagnostics, mcpServers: {}, overlays: [] }
+    : { ...assetPlanBase, diagnostics: [...assetPlanBase.diagnostics, ...runtimeMcpDiagnostics] }
+  const assetPlan = assetPlanWithRuntimeDiagnostics == null
     ? undefined
     : Object.keys(effectiveRuntimeMcpServers).length === 0
-    ? assetPlanBase
+    ? assetPlanWithRuntimeDiagnostics
     : {
-      ...assetPlanBase,
+      ...assetPlanWithRuntimeDiagnostics,
       mcpServers: {
-        ...assetPlanBase.mcpServers,
+        ...assetPlanWithRuntimeDiagnostics.mcpServers,
         ...effectiveRuntimeMcpServers
       }
     }
@@ -399,12 +422,7 @@ export const run = async (
     model: resolvedModel,
     disabledEvents: nativeBridgeDisabledEvents
   })
-  let taskStopQueue = Promise.resolve()
   const wrappedOnEvent = (event: AdapterOutputEvent) => {
-    if (event.type !== 'operation') {
-      hookBridge.handleOutput(event)
-    }
-
     if (event.type === 'init') {
       originalOnEvent({
         ...event,
@@ -421,12 +439,8 @@ export const run = async (
 
     if (event.type === 'exit') {
       const { data } = event
-
-      taskStopQueue = taskStopQueue
-        .catch((e) => {
-          logger.error('[Hook] TaskStop queue failed', e)
-        })
-        .then(async () => {
+      hookBridge.enqueueAfterPendingHooks(async () => {
+        try {
           await callHook('TaskStop', {
             adapter: adapterType,
             cwd: runtimeCtx.cwd,
@@ -438,10 +452,14 @@ export const run = async (
             exitCode: data.exitCode,
             stderr: data.stderr
           }, runtimeCtx.env)
-        })
-        .catch((e) => {
+        } catch (e) {
           logger.error('[Hook] TaskStop failed', e)
-        })
+        }
+      })
+    }
+
+    if (event.type !== 'operation') {
+      hookBridge.handleOutput(event)
     }
     originalOnEvent(event)
   }
@@ -490,7 +508,6 @@ export const run = async (
       flushHooks: async () => {
         await flushBridgeHooks?.()
         await hookBridge.flush()
-        await taskStopQueue
       }
     },
     ctx: runtimeCtx,

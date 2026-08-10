@@ -258,6 +258,7 @@
     "node-notifier": "^10.0.1",
     "pacote": "^21.5.1",
     "pinyin-pro": "^3.28.1",
+    "proper-lockfile": "4.1.2",
     "semver": "^7.7.4",
     "zod": "^3.25.76"
   },
@@ -266,6 +267,7 @@
     "@types/node-notifier": "^8.0.5",
     "@types/npmcli__arborist": "^6.3.3",
     "@types/pacote": "^11.1.8",
+    "@types/proper-lockfile": "^4.1.4",
     "@types/semver": "^7.7.1"
   }
 }

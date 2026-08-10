@@ -1,0 +1,81 @@
+{
+  "caseId": "pi-direct-answer",
+  "adapter": "pi",
+  "transport": "wrapper",
+  "exitCode": 0,
+  "stdout": "E2E_PI_DIRECT",
+  "stderr": "",
+  "mockTrace": [
+    {
+      "path": "/responses",
+      "model": "pi-direct-answer",
+      "request": "Do not use any tool. Reply with exactly E2E_PI_DIRECT and nothing else.",
+      "inputTypes": [
+        "system",
+        "user"
+      ],
+      "selectedTool": {
+        "name": "read",
+        "args": {
+          "filePath": "<repo>/README.md",
+          "limit": 2000,
+          "offset": 1,
+          "path": "<repo>/README.md"
+        }
+      },
+      "response": {
+        "kind": "message",
+        "text": "E2E_PI_DIRECT"
+      }
+    }
+  ],
+  "log": {
+    "path": "<project-home>/logs/<ctxId>/<uuid>.log.md",
+    "entries": [
+      {
+        "event": "GenerateSystemPrompt"
+      },
+      {
+        "event": "TaskStart",
+        "adapter": "pi"
+      },
+      {
+        "event": "SessionStart",
+        "adapter": "pi",
+        "hookSource": "bridge",
+        "canBlock": true
+      },
+      {
+        "event": "UserPromptSubmit",
+        "adapter": "pi",
+        "hookSource": "bridge",
+        "canBlock": true,
+        "prompt": "Do not use any tool. Reply with exactly E2E_PI_DIRECT and nothing else."
+      },
+      {
+        "event": "Stop",
+        "adapter": "pi",
+        "hookSource": "bridge",
+        "canBlock": false
+      },
+      {
+        "event": "TaskStop",
+        "adapter": "pi",
+        "redacted": true
+      },
+      {
+        "event": "SessionEnd",
+        "adapter": "pi",
+        "hookSource": "bridge",
+        "canBlock": false
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "label": "pi generated model config",
+      "path": "<project-home>/caches/<ctxId>/<uuid>/adapter-pi/agent/models.json",
+      "content": "{\n  \"providers\": {\n    \"oneworks-hook-smoke-mock-5de841d2\": {\n      \"baseUrl\": \"http://127.0.0.1:<port>\",\n      \"api\": \"openai-responses\",\n      \"apiKey\": \"$ONEWORKS_PI_ONEWORKS_HOOK_SMOKE_MOCK_5DE841D2_API_KEY\",\n      \"authHeader\": false,\n      \"models\": [\n        {\n          \"id\": \"pi-direct-answer\",\n          \"name\": \"pi-direct-answer\",\n          \"reasoning\": false,\n          \"input\": [\n            \"text\"\n          ],\n          \"contextWindow\": 128000,\n          \"maxTokens\": 16384\n        }\n      ]\n    }\n  }\n}"
+    }
+  ]
+}

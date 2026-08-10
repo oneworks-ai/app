@@ -160,7 +160,7 @@ const inferToolNameFromHeader = (
     return normalized.slice(adapter.length + 1).trim() || undefined
   }
 
-  const knownAdapterPrefix = ['codex', 'claude-code', 'opencode']
+  const knownAdapterPrefix = ['codex', 'claude-code', 'opencode', 'pi']
     .find(prefix => normalized.startsWith(`${prefix} `))
   if (knownAdapterPrefix != null) {
     return normalized.slice(knownAdapterPrefix.length + 1).trim() || undefined
@@ -170,7 +170,7 @@ const inferToolNameFromHeader = (
 }
 
 const summarizeLog = (content: string) => {
-  return parseHookLogEntries(content).map((entry) => {
+  const entries = parseHookLogEntries(content).map((entry) => {
     const adapter = pickNestedString(entry.payload, [['adapter']])
     const toolName = pickNestedString(entry.payload, [
       ['toolName'],
@@ -212,6 +212,7 @@ const summarizeLog = (content: string) => {
       ])
     })
   })
+  return entries
 }
 
 const summarizeStdout = (stdout: string) => {
