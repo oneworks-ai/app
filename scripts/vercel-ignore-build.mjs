@@ -35,10 +35,11 @@ const projectPaths = {
     ...adminPaths,
     'apps/relay-server/api/',
     'apps/relay-server/package.json',
-    'apps/relay-server/scripts/prepare-vercel-build.mjs',
+    'apps/relay-server/scripts/',
     'apps/relay-server/src/',
     'apps/relay-server/tsconfig.json',
-    'apps/relay-server/vercel.json'
+    'apps/relay-server/vercel.json',
+    'packages/types/'
   ]
 }
 const ignoredBasenames = new Set(['.gitignore', '.npmignore', 'AGENTS.md', 'HANDOFF.md', 'README.md'])
@@ -122,7 +123,7 @@ function resolveBase(explicitBase, head) {
 }
 
 function getChangedFiles(base, head) {
-  return runGit(['diff', '--name-only', '--diff-filter=ACMRT', `${base}..${head}`])
+  return runGit(['diff', '--name-only', '--diff-filter=ACDMRT', `${base}..${head}`])
     .split('\n')
     .map(file => file.trim())
     .filter(Boolean)
