@@ -450,10 +450,49 @@ jobs:
             exit 1
           fi
 
+      - name: Import desktop application signing identity
+        if: steps.desktop_build_policy.outputs.sign == 'true'
+        shell: bash
+        env:
+          DESKTOP_CSC_KEY_PASSWORD: ${{ secrets.DESKTOP_CSC_KEY_PASSWORD }}
+          DESKTOP_CSC_LINK: ${{ secrets.DESKTOP_CSC_LINK }}
+        run: |
+          keychain="$RUNNER_TEMP/oneworks-desktop-signing.keychain-db"
+          p12="$RUNNER_TEMP/oneworks-desktop-application.p12"
+          keychain_password="$(openssl rand -hex 32)"
+
+          rm -f "$keychain" "$p12"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          printf '%s' "$DESKTOP_CSC_LINK" | base64 -D > "$p12"
+          security import "$p12" \
+            -k "$keychain" \
+            -P "$DESKTOP_CSC_KEY_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security >/dev/null
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "$keychain_password" \
+            "$keychain" >/dev/null
+
+          identity_count="$(security find-identity -v -p codesigning "$keychain" | awk '/Developer ID Application/ { count += 1 } END { print count + 0 }')"
+          if [[ "$identity_count" -ne 1 ]]; then
+            echo "Expected exactly one Developer ID Application identity in the temporary keychain." >&2
+            exit 1
+          fi
+
+          rm -f "$p12"
+          echo "ONEWORKS_DESKTOP_SIGNING_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+
       - name: Package desktop app
         working-directory: ${{ steps.desktop_workspace.outputs.workspace_dir }}
         run: pnpm desktop:package
         env:
+          APPLE_ID: ${{ steps.desktop_build_policy.outputs.sign == 'true' && secrets.APPLE_ID || '' }}
+          APPLE_ID_PASSWORD: ${{ steps.desktop_build_policy.outputs.sign == 'true' && secrets.APPLE_ID_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ steps.desktop_build_policy.outputs.sign == 'true' && secrets.APPLE_TEAM_ID || '' }}
           ONEWORKS_DESKTOP_ARCHS: ${{ steps.desktop_build_policy.outputs.archs }}
           ONEWORKS_DESKTOP_BUILD_GIT_BRANCH: ${{ github.head_ref || github.ref_name }}
           ONEWORKS_DESKTOP_BUILD_GIT_HASH: ${{ steps.desktop_workspace.outputs.source_sha }}
@@ -461,8 +500,14 @@ jobs:
           ONEWORKS_DESKTOP_ENABLE_AUTO_UPDATE: ${{ steps.desktop_release.outputs.auto_update }}
           ONEWORKS_DESKTOP_OFFICIAL_RELEASE_BUILD: ${{ steps.desktop_release.outputs.enabled }}
           ONEWORKS_DESKTOP_RELEASE_BUILD: ${{ steps.desktop_release.outputs.enabled }}
+          ONEWORKS_DESKTOP_SIGN: ${{ steps.desktop_build_policy.outputs.sign }}
           ONEWORKS_DESKTOP_UPDATE_CHANNEL: ${{ steps.desktop_release.outputs.update_channel }}
           ONEWORKS_DESKTOP_VERSION: ${{ steps.desktop_release.outputs.version }}
+
+      - name: Verify signed and notarized macOS app bundles
+        if: steps.desktop_build_policy.outputs.sign == 'true'
+        working-directory: ${{ steps.desktop_workspace.outputs.workspace_dir }}
+        run: node "$GITHUB_WORKSPACE/apps/desktop/scripts/verify-macos-signed-apps.cjs" apps/desktop/out
 
       - name: Seal immutable unsigned product app bundles
         if: inputs.product_source_sha != '' && steps.desktop_build_policy.outputs.sign != 'true'
@@ -502,6 +547,16 @@ jobs:
           ONEWORKS_DESKTOP_UPDATE_CHANNEL: ${{ steps.desktop_release.outputs.update_channel }}
           ONEWORKS_DESKTOP_VERSION: ${{ steps.desktop_release.outputs.version }}
           ONEWORKS_DESKTOP_SIGN: ${{ steps.desktop_build_policy.outputs.sign }}
+
+      - name: Remove temporary desktop signing keychain
+        if: always() && steps.desktop_build_policy.outputs.sign == 'true'
+        shell: bash
+        run: |
+          keychain="$RUNNER_TEMP/oneworks-desktop-signing.keychain-db"
+          rm -f "$RUNNER_TEMP/oneworks-desktop-application.p12"
+          if [[ -e "$keychain" ]]; then
+            security delete-keychain "$keychain"
+          fi
 
       - name: Verify every unsigned macOS artifact seal
         if: steps.desktop_build_policy.outputs.sign != 'true'

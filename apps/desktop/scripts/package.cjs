@@ -16,6 +16,7 @@ const {
 } = require('./desktop-package-version.cjs')
 const { normalizeAppBundleSymlinks } = require('./mac-adhoc-seal.cjs')
 const { normalizeMacIconFormat, resolveDarwinPackagerIconPath } = require('./mac-icon-support.cjs')
+const { resolveMacSigningOptions } = require('./mac-signing-options.cjs')
 
 const desktopRoot = path.resolve(__dirname, '..')
 const workspaceRoot = path.resolve(desktopRoot, '../..')
@@ -459,15 +460,15 @@ const pruneUnusedPlatformBinaries = (stagingDir, targetArch) => {
   pruneNodeNotifierVendors(stagingDir)
 }
 
-const resolvePackagedAppRoot = (appPath) => {
-  if (process.platform === 'darwin') {
-    return path.join(appPath, `${appName}.app`, 'Contents', 'Resources', 'app')
+let packageIconPath
+
+const resolvePackagedAppRoot = (buildPath, platform) => {
+  if (platform === 'darwin') {
+    return path.join(buildPath, `${appName}.app`, 'Contents', 'Resources', 'app')
   }
 
-  return path.join(appPath, 'resources', 'app')
+  return path.join(buildPath, 'resources', 'app')
 }
-
-let packageIconPath
 
 const resolvePackageIconPath = () => {
   if (packageIconPath != null) return packageIconPath
@@ -561,7 +562,15 @@ const packageDesktopArch = async (targetArch, { buildSourceResources }) => {
       console.log('[desktop] auto-update config disabled for this package')
     }
 
+    const signingOptions = resolveMacSigningOptions({ appName, desktopRoot })
     const appPaths = await packager({
+      afterCopyExtraResources: [({ buildPath, platform }) => {
+        const packagedAppRoot = resolvePackagedAppRoot(buildPath, platform)
+        rewriteStagingSymlinks(packagedAppRoot, packagedAppRoot, stagingDir)
+        if (platform === 'darwin') {
+          normalizeAppBundleSymlinks(path.join(buildPath, `${appName}.app`))
+        }
+      }],
       appBundleId: appMetadata.appId,
       appCategoryType: 'public.app-category.developer-tools',
       appCopyright: 'Copyright One Works contributors',
@@ -590,15 +599,11 @@ const packageDesktopArch = async (targetArch, { buildSourceResources }) => {
       out: outputDir,
       overwrite: true,
       platform: process.platform,
-      prune: false
+      prune: false,
+      ...signingOptions
     })
 
     for (const appPath of appPaths) {
-      const packagedAppRoot = resolvePackagedAppRoot(appPath)
-      rewriteStagingSymlinks(packagedAppRoot, packagedAppRoot, stagingDir)
-      if (process.platform === 'darwin') {
-        normalizeAppBundleSymlinks(path.resolve(packagedAppRoot, '../../..'))
-      }
       console.log(`[desktop] packaged ${appPath}`)
     }
   } finally {

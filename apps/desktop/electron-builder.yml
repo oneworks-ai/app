@@ -2,7 +2,6 @@ appId: ai.oneworks.desktop
 productName: One Works
 artifactName: oneworks-${version}-${os}-${arch}.${ext}
 copyright: Copyright One Works contributors
-afterSign: scripts/notarize.cjs
 afterAllArtifactBuild: scripts/notarize-artifacts.cjs
 icon: build/icon
 
