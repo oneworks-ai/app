@@ -6,11 +6,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const addSessionSubscriberSocket = vi.fn()
 const removeSessionSubscriberSocket = vi.fn()
+const notifySessionUpdated = vi.fn()
 const attachSocketToSession = vi.fn()
 const detachSocketFromSession = vi.fn()
 const getAdapterSessionRuntime = vi.fn()
 const startAdapterSession = vi.fn()
 const handleInteractionResponse = vi.fn()
+const getSessionInteraction = vi.fn()
 const processUserMessage = vi.fn()
 const interruptSession = vi.fn()
 const killSession = vi.fn()
@@ -61,6 +63,7 @@ vi.mock('#~/services/session/index.js', () => ({
 }))
 
 vi.mock('#~/services/session/interaction.js', () => ({
+  getSessionInteraction,
   handleInteractionResponse
 }))
 
@@ -69,7 +72,8 @@ vi.mock('#~/services/session/runtime.js', () => ({
   removeSessionSubscriberSocket,
   attachSocketToSession,
   detachSocketFromSession,
-  getAdapterSessionRuntime
+  getAdapterSessionRuntime,
+  notifySessionUpdated
 }))
 
 vi.mock('#~/utils/logger.js', () => ({
@@ -84,6 +88,7 @@ describe('setupWebSocket', () => {
     vi.clearAllMocks()
     connectionHandler = undefined
     getAdapterSessionRuntime.mockReturnValue(undefined)
+    getSessionInteraction.mockReturnValue(undefined)
     resolveWebAuthConfig.mockResolvedValue({ enabled: false })
     verifySessionToken.mockResolvedValue(true)
     getBearerTokenFromHeader.mockReturnValue(undefined)

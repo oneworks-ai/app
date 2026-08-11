@@ -4,11 +4,13 @@ import path from 'node:path'
 
 import Router from '@koa/router'
 import type {
+  PluginRequestPrincipal,
   PluginRuntimeChannelInvocation,
   PluginRuntimeChannelResponse,
   PluginRuntimeEndpoint
 } from '@oneworks/types'
 
+import { getWorkspaceRequestPrincipal } from '#~/services/auth/index.js'
 import { getPluginManager } from '#~/services/plugins/index.js'
 import { setPluginMarketplaceSelection } from '#~/services/plugins/marketplace-selection.js'
 import { syncPluginMarketplaceSelection } from '#~/services/plugins/marketplace-sync.js'
@@ -21,7 +23,8 @@ import { resolvePluginMarketplaceVersions } from '#~/services/plugins/marketplac
 import { listPluginMarketplaceCatalog } from '#~/services/plugins/marketplace.js'
 import { listNativeHostPluginAssets, listNativeHostPlugins } from '#~/services/plugins/native-host.js'
 import { normalizeRuntimeEndpoint, readProxyHandlerBody } from '#~/services/plugins/runtime.js'
-import { HttpError, badRequest, conflict, notFound } from '#~/utils/http.js'
+import { PluginProxyPermissionError } from '#~/services/plugins/types.js'
+import { HttpError, badRequest, conflict, forbidden, notFound, unauthorized } from '#~/utils/http.js'
 
 const HOP_BY_HOP_HEADERS = new Set([
   'connection',
@@ -55,6 +58,18 @@ const getBodyBuffer = async (ctx: Router.RouterContext) => {
     return Buffer.alloc(0)
   }
   return Buffer.from(JSON.stringify(request.body))
+}
+
+const requirePluginRequestPrincipal = (ctx: Router.RouterContext): PluginRequestPrincipal => {
+  const principal = getWorkspaceRequestPrincipal(ctx)
+  if (principal == null) {
+    throw unauthorized(
+      'Plugin API caller identity is unavailable.',
+      undefined,
+      'plugin_principal_required'
+    )
+  }
+  return principal
 }
 
 const normalizeRuntimeChannelBody = (body: unknown): {
@@ -117,6 +132,9 @@ const contentTypeForPath = (filePath: string) => {
 
 const normalizeRouteError = (error: unknown) => {
   if (error instanceof HttpError) return error
+  if (error instanceof PluginProxyPermissionError) {
+    return forbidden(error.message, { permission: error.permission }, 'plugin_permission_denied')
+  }
   const message = error instanceof Error ? error.message : String(error)
   if (message.includes('not registered')) {
     return notFound(message, undefined, 'plugin_not_found')
@@ -515,7 +533,8 @@ export function pluginsRouter(): Router {
           path: toAssetPath(ctx.params.devPath),
           query: ctx.querystring === '' ? '' : `?${ctx.querystring}`,
           headers: ctx.headers,
-          body: await getBodyBuffer(ctx)
+          body: await getBodyBuffer(ctx),
+          principal: requirePluginRequestPrincipal(ctx)
         }
       )
       ctx.state.skipApiEnvelope = true
@@ -538,7 +557,8 @@ export function pluginsRouter(): Router {
           path: toAssetPath(ctx.params.proxyPath),
           query: ctx.querystring === '' ? '' : `?${ctx.querystring}`,
           headers: ctx.headers,
-          body: await getBodyBuffer(ctx)
+          body: await getBodyBuffer(ctx),
+          principal: requirePluginRequestPrincipal(ctx)
         }
       )
       ctx.state.skipApiEnvelope = true
@@ -561,7 +581,8 @@ export function pluginsRouter(): Router {
           path: '',
           query: ctx.querystring === '' ? '' : `?${ctx.querystring}`,
           headers: ctx.headers,
-          body: await getBodyBuffer(ctx)
+          body: await getBodyBuffer(ctx),
+          principal: requirePluginRequestPrincipal(ctx)
         }
       )
       ctx.state.skipApiEnvelope = true

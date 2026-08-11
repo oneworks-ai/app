@@ -33,6 +33,7 @@ vi.mock('#~/services/config/index.js', () => ({
 }))
 
 vi.mock('#~/services/session/interaction.js', () => ({
+  getSessionInteraction: vi.fn(),
   handleInteractionResponse: vi.fn().mockResolvedValue(true)
 }))
 
@@ -46,7 +47,9 @@ vi.mock('#~/channels/state.js', () => ({
 }))
 
 vi.mock('#~/services/session/index.js', () => ({
+  getSessionInteraction: vi.fn(),
   killSession: vi.fn(),
+  processUserMessage: vi.fn(),
   startAdapterSession: vi.fn().mockResolvedValue(undefined)
 }))
 
@@ -380,10 +383,14 @@ beforeEach(() => {
   createChannelAuthorizationRequest.mockReturnValue({
     id: 'auth-1',
     channelType: 'lark',
+    issuerKey: 'lark:default',
+    channelKey: 'lark:default',
+    channelId: 'ch1',
     channelLinkName: 'wan-ke-chat',
     requesterUserId: 'user-yijie',
     requesterAccountId: 'ou_1',
     credentialKey: null,
+    allowedApprovers: ['user:user-yijie', 'account:lark:default:admin1'],
     capability: 'im.chat.member.add',
     status: 'pending',
     message: '拉群',
@@ -410,10 +417,14 @@ beforeEach(() => {
   getChannelAuthorizationRequest.mockReturnValue({
     id: 'auth-1',
     channelType: 'lark',
+    issuerKey: 'lark:default',
+    channelKey: 'lark:default',
+    channelId: 'ch1',
     channelLinkName: 'wan-ke-chat',
     requesterUserId: 'user-yijie',
     requesterAccountId: 'ou_1',
     credentialKey: null,
+    allowedApprovers: ['user:user-yijie', 'account:lark:default:admin1'],
     capability: 'im.chat.member.add',
     status: 'pending',
     message: '拉群',
@@ -544,9 +555,16 @@ describe('non-command input', () => {
         definition: {} as never,
         entity: 'owo-demo',
         external: { type: 'chat', chatId: 'ch1' },
-        ingress: { ambientRouting: false, createOnCommand: false },
+        ingress: {
+          ambientRouting: false,
+          createOnCommand: false,
+          createOnMention: true,
+          createOnPendingIntent: true,
+          createOnReplyToBot: true
+        },
         name: 'wan-ke-chat',
-        path: '/workspace/.oo/channels/wan-ke-chat/channel.json'
+        path: '/workspace/.oo/channels/wan-ke-chat/channel.json',
+        routing: { accounts: {}, default: {}, modes: {}, users: {} }
       },
       commandText: '/help',
       inbound: makeInbound({ sessionType: 'group', text: '/help' }) as any
@@ -568,9 +586,16 @@ describe('non-command input', () => {
         definition: {} as never,
         entity: 'owo-demo',
         external: { type: 'chat', chatId: 'ch1' },
-        ingress: { ambientRouting: false, createOnCommand: false },
+        ingress: {
+          ambientRouting: false,
+          createOnCommand: false,
+          createOnMention: true,
+          createOnPendingIntent: true,
+          createOnReplyToBot: true
+        },
         name: 'wan-ke-chat',
-        path: '/workspace/.oo/channels/wan-ke-chat/channel.json'
+        path: '/workspace/.oo/channels/wan-ke-chat/channel.json',
+        routing: { accounts: {}, default: {}, modes: {}, users: {} }
       },
       commandText: '/help',
       inbound: makeInbound({ mentionedBot: true, sessionType: 'group', text: '/help' }) as any
@@ -612,8 +637,16 @@ describe('command audit runs', () => {
         definition: {} as never,
         entity: 'owo-demo',
         external: { type: 'direct', senderId: 'ou_1' },
+        ingress: {
+          ambientRouting: false,
+          createOnCommand: true,
+          createOnMention: true,
+          createOnPendingIntent: true,
+          createOnReplyToBot: true
+        },
         name: 'wan-ke-dm',
-        path: '/workspace/.oo/channels/wan-ke-dm/channel.json'
+        path: '/workspace/.oo/channels/wan-ke-dm/channel.json',
+        routing: { accounts: {}, default: {}, modes: {}, users: {} }
       },
       commandText: '/whoami',
       inbound: makeInbound({ messageId: 'om_1', senderId: 'ou_1' }) as any
@@ -645,7 +678,7 @@ describe('command audit runs', () => {
     })
   })
 
-  it('records denied admin command runs', async () => {
+  it('audits a rejected unlisted authorization action', async () => {
     const ctx = makeCtx({
       commandText: '/auth grant auth-1',
       config: { type: 'lark', access: { admins: ['admin1'] } } as any,
@@ -657,12 +690,43 @@ describe('command audit runs', () => {
     expect(createChannelCommandRun).toHaveBeenCalledWith(expect.objectContaining({
       commandName: 'grant',
       commandPath: ['/auth', 'grant'],
-      permission: 'admin',
+      permission: 'everyone',
       rawArgs: ['auth-1']
     }))
     expect(finishChannelCommandRun).toHaveBeenCalledWith('cmd-run-1', {
-      status: 'denied'
+      status: 'success'
     })
+  })
+
+  it('does not let a non-admin inspect another sender policy state or audit', async () => {
+    const options = {
+      channelLink: {
+        channelKey: 'lark:default',
+        entity: 'assistant',
+        external: { type: 'chat' },
+        ingress: {
+          ambientRouting: false,
+          createOnCommand: true,
+          createOnMention: true,
+          createOnPendingIntent: true,
+          createOnReplyToBot: true
+        },
+        name: 'support',
+        path: '/workspace/.oo/channels/support/channel.json',
+        definition: {} as never
+      } as any,
+      config: { type: 'lark', access: { admins: ['admin1'] } } as any,
+      inbound: makeInbound({ senderId: 'user1' }) as any
+    }
+    const ctx = makeCtx({ ...options, commandText: '/policy status user2' })
+
+    await channelCommandMiddleware(ctx, vi.fn())
+
+    expect(ctx.reply).toHaveBeenCalledWith('您没有权限执行该操作，只有管理员才能执行该指令。')
+
+    const auditCtx = makeCtx({ ...options, commandText: '/policy audit user2' })
+    await channelCommandMiddleware(auditCtx, vi.fn())
+    expect(auditCtx.reply).toHaveBeenCalledWith('您没有权限执行该操作，只有管理员才能执行该指令。')
   })
 
   it('records failed command runs before returning the generic error reply', async () => {
@@ -697,7 +761,12 @@ describe('channel command tool registry', () => {
       commandPath: ['auth', 'grant'],
       slashUsage: '/auth grant <id>',
       descriptionKey: 'cmd.auth.grant.description',
-      permission: 'admin',
+      permission: 'everyone',
+      approval: {
+        capability: 'channel.authorization.grant',
+        risk: 'high',
+        visibility: 'dm'
+      },
       actorAuthority: 'sender',
       source: 'command-spec',
       inputSchema: {
@@ -795,6 +864,28 @@ describe('channel command tool registry', () => {
     })
   })
 
+  it('projects distinct path-derived approval capabilities for legacy command specs', () => {
+    const tools = listChannelCommandTools()
+    const help = tools.find(tool => tool.name === 'channel.help')
+    const whoami = tools.find(tool => tool.name === 'channel.whoami')
+
+    expect(help?.approval).toMatchObject({
+      capability: 'channel.command.help',
+      risk: 'low',
+      visibility: 'public'
+    })
+    expect(whoami?.approval).toMatchObject({
+      capability: 'channel.command.whoami',
+      risk: 'low',
+      visibility: 'public'
+    })
+  })
+
+  it('keeps policy mute reason optional in the typed command schema', () => {
+    const mute = listChannelCommandTools().find(tool => tool.name === 'channel.policy.mute')
+    expect(mute?.inputSchema).toMatchObject({ required: ['senderId'] })
+  })
+
   it('keeps optional, required, and rest arguments in the generated schema', () => {
     const tools = listChannelCommandTools()
 
@@ -866,8 +957,8 @@ describe('channel command tool invocation', () => {
       metadata: expect.objectContaining({
         actorAuthority: 'sender',
         approval: expect.objectContaining({
-          capability: 'channel.command.auth.grant',
-          reasonCode: 'admin-allowed',
+          capability: 'channel.authorization.grant',
+          reasonCode: 'default-allow',
           status: 'allow'
         }),
         toolName: 'channel.auth.grant',
@@ -918,7 +1009,7 @@ describe('channel command tool invocation', () => {
       metadata: expect.objectContaining({
         actorAuthority: 'sender',
         approval: expect.objectContaining({
-          capability: 'channel.command.auth.resume',
+          capability: 'channel.authorization.resume',
           status: 'allow'
         }),
         toolName: 'channel.auth.resume',
@@ -973,7 +1064,7 @@ describe('channel command tool invocation', () => {
     expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining('auth-1 | manual | Write'))
   })
 
-  it('keeps admin permissions when a typed command tool is invoked', async () => {
+  it('enforces typed approver authority when a typed command tool is invoked', async () => {
     const ctx = makeCtx({
       commandText: '',
       config: { type: 'lark', access: { admins: ['admin1'] } } as any,
@@ -984,12 +1075,12 @@ describe('channel command tool invocation', () => {
 
     expect(result).toMatchObject({
       commandPath: ['/auth', 'grant'],
-      status: 'denied'
+      status: 'success'
     })
     expect(updateChannelAuthorizationRequest).not.toHaveBeenCalled()
-    expect(ctx.reply).toHaveBeenCalledWith('您没有权限执行该操作，只有管理员才能执行该指令。')
+    expect(ctx.reply).toHaveBeenCalledWith('授权请求 auth-1 不属于当前频道、当前审批人，或已经处理。')
     expect(finishChannelCommandRun).toHaveBeenCalledWith('cmd-run-1', {
-      status: 'denied'
+      status: 'success'
     })
   })
 
@@ -1033,6 +1124,38 @@ describe('channel command tool invocation', () => {
   })
 })
 
+describe('operator policy commands', () => {
+  it('recognizes an explicitly mentioned group command and audits sender-scoped denial', async () => {
+    const next = vi.fn()
+    const ctx = makeCtx({
+      channelLink: {
+        entity: 'operator',
+        ingress: { createOnCommand: true, createOnMention: true },
+        name: 'operator-room'
+      } as any,
+      commandText: '/availability off',
+      config: { access: { admins: ['admin1'] }, type: 'oneworks' } as any,
+      inbound: makeInbound({
+        channelType: 'oneworks',
+        mentionedBot: true,
+        sessionType: 'group'
+      }) as any
+    })
+
+    await channelCommandMiddleware(ctx, next)
+
+    expect(next).not.toHaveBeenCalled()
+    expect(createChannelCommandRun).toHaveBeenCalledWith(expect.objectContaining({
+      commandName: 'off',
+      commandPath: ['/availability', 'off'],
+      permission: 'admin',
+      senderId: 'user1'
+    }))
+    expect(finishChannelCommandRun).toHaveBeenCalledWith('cmd-run-1', { status: 'denied' })
+    expect(ctx.reply).toHaveBeenCalledWith('您没有权限执行该操作，只有管理员才能执行该指令。')
+  })
+})
+
 describe('/identity command', () => {
   const actorAccount = {
     issuerKey: 'lark:default',
@@ -1062,8 +1185,16 @@ describe('/identity command', () => {
         definition: {} as never,
         entity: 'owo-demo',
         external: { type: 'direct', senderId: 'ou_1' },
+        ingress: {
+          ambientRouting: false,
+          createOnCommand: true,
+          createOnMention: true,
+          createOnPendingIntent: true,
+          createOnReplyToBot: true
+        },
         name: 'wan-ke-dm',
-        path: '/workspace/.oo/channels/wan-ke-dm/channel.json'
+        path: '/workspace/.oo/channels/wan-ke-dm/channel.json',
+        routing: { accounts: {}, default: {}, modes: {}, users: {} }
       },
       commandText: '/identity link',
       inbound: makeInbound({ messageId: 'om_1', senderId: 'ou_1' }) as any
@@ -1226,7 +1357,7 @@ describe('/help command', () => {
     await channelCommandMiddleware(ctx, next)
 
     expect(ctx.reply).toHaveBeenCalledOnce()
-    expect(String(vi.mocked(ctx.reply).mock.calls[0][0])).toContain('第 1/4 页')
+    expect(String(vi.mocked(ctx.reply).mock.calls[0][0])).toContain('第 1/6 页')
     expect(ctx.pushFollowUps).toHaveBeenCalledWith({
       messageId: 'om-help-1',
       followUps: [{ content: '/help --page=2' }]
@@ -1282,7 +1413,7 @@ describe('/help command', () => {
 
   it('supports help paging callbacks through explicit page arguments', async () => {
     const ctx = makeCtx({
-      commandText: '/help --page=2',
+      commandText: '/help --page=4',
       config: { type: 'lark', access: { admins: ['user1'] } } as any
     })
 
@@ -1290,11 +1421,11 @@ describe('/help command', () => {
 
     expect(ctx.reply).toHaveBeenCalledOnce()
     const message = String(vi.mocked(ctx.reply).mock.calls[0][0])
-    expect(message).toContain('第 2/4 页')
+    expect(message).toContain('第 4/6 页')
     expect(message).toContain('/session stop')
     expect(ctx.pushFollowUps).toHaveBeenCalledWith({
       messageId: undefined,
-      followUps: [{ content: '/help --page=1' }, { content: '/help --page=3' }]
+      followUps: [{ content: '/help --page=3' }, { content: '/help --page=5' }]
     })
   })
 
@@ -2052,8 +2183,16 @@ describe('/auth command', () => {
         definition: {} as any,
         entity: 'owo-demo',
         external: { type: 'chat', chatId: 'oc_1' },
+        ingress: {
+          ambientRouting: false,
+          createOnCommand: true,
+          createOnMention: true,
+          createOnPendingIntent: true,
+          createOnReplyToBot: true
+        },
         name: 'wan-ke-chat',
-        path: '/workspace/.oo/channels/wan-ke-chat/channel.json'
+        path: '/workspace/.oo/channels/wan-ke-chat/channel.json',
+        routing: { accounts: {}, default: {}, modes: {}, users: {} }
       }
     })
 
@@ -2239,7 +2378,7 @@ describe('/auth command', () => {
     expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining('auth-1 | manual | Write'))
   })
 
-  it('blocks non-admin senders from granting authorization requests', async () => {
+  it('rejects unlisted senders from granting authorization requests', async () => {
     const ctx = makeCtx({
       commandText: '/auth grant auth-1',
       config: { type: 'lark', access: { admins: ['admin1'] } } as any,
@@ -2249,7 +2388,31 @@ describe('/auth command', () => {
     await channelCommandMiddleware(ctx, vi.fn())
 
     expect(updateChannelAuthorizationRequest).not.toHaveBeenCalled()
-    expect(ctx.reply).toHaveBeenCalledWith('您没有权限执行该操作，只有管理员才能执行该指令。')
+    expect(ctx.reply).toHaveBeenCalledWith('授权请求 auth-1 不属于当前频道、当前审批人，或已经处理。')
+  })
+
+  it('lets an exact issuer-qualified non-admin approver grant and resume a request', async () => {
+    getChannelAuthorizationRequest.mockReturnValue({
+      ...getChannelAuthorizationRequest(),
+      allowedApprovers: ['account:lark:default:ou_requester']
+    })
+    const ctx = makeCtx({
+      commandText: '/auth grant auth-1',
+      config: { type: 'lark', access: { admins: ['admin1'] } } as any,
+      inbound: makeInbound({ senderId: 'ou_requester' }) as any
+    })
+
+    await channelCommandMiddleware(ctx, vi.fn())
+
+    expect(resolveChannelAuthorizationRequestRecord).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'auth-1',
+      status: 'granted'
+    }))
+    expect(resumeReadyChannelIntents).toHaveBeenCalledWith({
+      filter: { authorizationRequestId: 'auth-1' },
+      limit: 20
+    })
+    expect(ctx.reply).toHaveBeenCalledWith('授权请求 auth-1 已标记为 已批准。')
   })
 
   it('/auth grant resolves a pending authorization request for admins', async () => {

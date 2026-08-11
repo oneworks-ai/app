@@ -9,6 +9,7 @@ import i18n from '#~/i18n'
 import { createPluginI18nContext, localizePluginContributionItem } from '#~/plugins/plugin-i18n'
 import type { PluginRuntimeInstance } from '#~/plugins/plugin-manifest'
 import { PluginRegistry } from '#~/plugins/plugin-registry'
+import { createPluginRouteSidebarOverride } from '#~/plugins/plugin-route-sidebar'
 import {
   activatePluginClient,
   addPluginClientImportVersion,
@@ -30,6 +31,35 @@ vi.mock('#~/components/monaco/use-monaco-theme', () => ({ useMonacoTheme: () => 
 vi.mock('monaco-editor', () => ({ editor: {} }))
 
 describe('client plugin host registry', () => {
+  it('adapts plugin route resources to the shared route sidebar contract', () => {
+    const onSelectItem = vi.fn()
+    const sidebar = createPluginRouteSidebarOverride('plugin-route:demo:rooms', {
+      activeKey: 'room-1',
+      ariaLabel: 'Chat rooms',
+      emptyText: 'No chat rooms',
+      groups: [{
+        items: [{ icon: 'meeting_room', key: 'room-1', label: 'Design review' }],
+        key: 'rooms'
+      }],
+      onSelectItem,
+      search: {
+        onChange: vi.fn(),
+        placeholder: 'Search chat rooms',
+        value: ''
+      }
+    })
+
+    expect(sidebar).toMatchObject({
+      activeKey: 'room-1',
+      key: 'plugin-route:demo:rooms',
+      search: { placeholder: 'Search chat rooms' }
+    })
+    const item = sidebar.groups[0]?.items[0]
+    expect(item).toBeDefined()
+    sidebar.onSelectItem(item!)
+    expect(onSelectItem).toHaveBeenCalledWith(item)
+  })
+
   it('exposes settings page contributions through plugin detail preferences', () => {
     expect(pluginContributionGroups).toContainEqual(expect.objectContaining({
       key: 'settingsPages',
@@ -984,6 +1014,18 @@ describe('client plugin host registry', () => {
       'http://127.0.0.1:50802/__oneworks_plugin_runtime__/' +
         'http%3A%2F%2F%5B%3A%3A1%5D%3A50982/api/plugins/relay/client/index.js'
     )
+
+    expect(resolvePluginClientEntryUrl({
+      clientOrigin: 'http://127.0.0.1:50802',
+      instance: {
+        ...instance,
+        devClientEntryUrl: undefined,
+        sourceGroup: 'builtIn'
+      },
+      isDevelopment: true,
+      runtimeEndpoint,
+      useDesktopProxy: false
+    })).toBe('http://127.0.0.1:50802/api/plugins/relay/client/index.js')
   })
 
   it('versions the complete runtime-source module namespace', () => {
@@ -1152,7 +1194,7 @@ describe('client plugin host registry', () => {
       reloadPlugin: vi.fn()
     })
 
-    expect(show).toHaveBeenCalledWith({
+    expect(show).toHaveBeenCalledWith(expect.objectContaining({
       actions: [{ closeOnClick: false, id: 'open', onClick: expect.any(Function), title: 'Open' }],
       description: '**Finished**',
       descriptionFormat: undefined,
@@ -1166,7 +1208,7 @@ describe('client plugin host registry', () => {
       },
       title: 'Done',
       ttlMs: undefined
-    })
+    }))
   })
 
   it('exposes host language and localized text helpers to client plugins', async () => {

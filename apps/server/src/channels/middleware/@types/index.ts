@@ -1,4 +1,5 @@
 import type {
+  ChannelExecutionContext,
   ChatMessageContent,
   ConfigSource,
   EffortLevel,
@@ -17,6 +18,7 @@ import type {
 import type { AdapterAccountDetail } from '@oneworks/types'
 
 import type { CanonicalUserRow, ChannelAccountRow, ChannelIdentityLinkRow } from '#~/db/index.js'
+import type { ResolvedChannelRoute } from '#~/services/channel-ingress-router/index.js'
 import type { ResolvedChannelLink } from '#~/services/channel-links/index.js'
 
 import type { LanguageCode, MessageArgs, MessageCatalog } from '../i18n'
@@ -84,6 +86,8 @@ export interface ChannelContext {
   channelLink?: ResolvedChannelLink
   /** Sender resolved through channel identity tables, when the inbound event has a sender id */
   actor?: ChannelActorContext
+  /** Caller-stable id for retries of one command invocation. */
+  commandInvocationId?: string
   /** Resolved from DB before running the middleware chain */
   sessionId: string | undefined
   /** Channel-level preferred adapter used when the next session is created */
@@ -92,6 +96,20 @@ export interface ChannelContext {
   channelPermissionMode: SessionPermissionMode | undefined
   /** Channel-level preferred effort used when the next session is created */
   channelEffort: EffortLevel | undefined
+  /** Ingress Router route resolved before debounce and dispatch. */
+  ingressRoute?: ResolvedChannelRoute
+  /** Immutable work-location and delivery-target snapshot for this child session. */
+  executionContext?: ChannelExecutionContext
+  /** Resolve another configured outbound account when an allowed Room target names its channel key. */
+  resolveOutboundChannel?: (channelKey: string) => {
+    config?: ChannelBaseConfig
+    connection?: ChannelConnection<ChannelTextMessage>
+    key: string
+    status: 'connected' | 'disabled' | 'error'
+    type: string
+  } | undefined
+  /** Router run audit id, attached to the child run only for create_child. */
+  ingressRouterRunId?: string
   /** Parsed rich content items from inbound.raw, if any */
   contentItems: ChatMessageContent[] | undefined
   /** Normalized text stripped of @-tags and speaker prefixes, used for command matching */

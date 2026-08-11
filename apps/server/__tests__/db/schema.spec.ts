@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- schema migration coverage keeps the complete legacy fixture in one suite. */
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { agentRoomsSchemaModule } from '../../src/db/agentRooms/schema'
@@ -7,6 +8,7 @@ import { channelCommandsSchemaModule } from '../../src/db/channelCommands/schema
 import { channelConversationsSchemaModule } from '../../src/db/channelConversations/schema'
 import { channelIdentitiesSchemaModule } from '../../src/db/channelIdentities/schema'
 import { channelPoliciesSchemaModule } from '../../src/db/channelPolicies/schema'
+import { channelScenariosSchemaModule } from '../../src/db/channelScenarios/schema'
 import { channelSessionsSchemaModule } from '../../src/db/channelSessions/schema'
 import { initSchema } from '../../src/db/schema'
 import type { SchemaModule } from '../../src/db/schema'
@@ -37,6 +39,55 @@ describe('db schema modules', () => {
       'custom_records'
     )
     expect(tables).toHaveLength(1)
+  })
+
+  it('upgrades legacy authorization requests before creating scoped indexes', () => {
+    sqlite = createSqliteDatabase(':memory:')
+    sqlite.exec(`
+      CREATE TABLE channel_authorization_requests (
+        id TEXT PRIMARY KEY,
+        channelType TEXT NOT NULL,
+        channelLinkName TEXT,
+        requesterUserId TEXT,
+        requesterAccountId TEXT,
+        credentialSubjectUserId TEXT,
+        credentialKey TEXT,
+        capability TEXT NOT NULL,
+        status TEXT NOT NULL,
+        message TEXT,
+        metadataJson TEXT,
+        createdAt INTEGER NOT NULL,
+        updatedAt INTEGER NOT NULL,
+        expiresAt INTEGER,
+        resolvedAt INTEGER
+      );
+      INSERT INTO channel_authorization_requests (
+        id, channelType, capability, status, metadataJson, createdAt, updatedAt
+      ) VALUES (
+        'auth-legacy', 'lark', 'drive.read', 'pending',
+        '{"channelKey":"lark:product-team","channelId":"oc_1"}', 1, 1
+      );
+    `)
+
+    initSchema(sqlite, [channelIdentitiesSchemaModule])
+
+    const columns = sqlite.prepare('PRAGMA table_info(channel_authorization_requests)').all<{ name: string }>()
+    expect(columns.map(column => column.name)).toEqual(expect.arrayContaining([
+      'issuerKey',
+      'channelKey',
+      'channelId',
+      'allowedApproversJson'
+    ]))
+    expect(
+      sqlite.prepare(`
+      SELECT issuerKey, channelKey, channelId FROM channel_authorization_requests WHERE id = 'auth-legacy'
+    `).get()
+    ).toEqual({ issuerKey: 'lark:product-team', channelKey: 'lark:product-team', channelId: 'oc_1' })
+    expect(
+      sqlite.prepare(`
+      SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_channel_authorization_requests_scope'
+    `).get()
+    ).toEqual(expect.objectContaining({ name: 'idx_channel_authorization_requests_scope' }))
   })
 
   it('does not restore an unbound legacy channel session on later schema initialization', () => {
@@ -132,6 +183,7 @@ describe('db schema modules', () => {
       channelCommandsSchemaModule,
       channelIdentitiesSchemaModule,
       channelPoliciesSchemaModule,
+      channelScenariosSchemaModule,
       automationSchemaModule,
       agentRoomsSchemaModule
     ])
@@ -162,6 +214,7 @@ describe('db schema modules', () => {
     const replyThrottleColumns = sqlite.prepare('PRAGMA table_info(channel_reply_throttles)').all<{ name: string }>()
     const offhourBacklogColumns = sqlite.prepare('PRAGMA table_info(channel_offhour_backlog)').all<{ name: string }>()
     const webhookNonceColumns = sqlite.prepare('PRAGMA table_info(channel_webhook_nonces)').all<{ name: string }>()
+    const channelScenarioColumns = sqlite.prepare('PRAGMA table_info(channel_scenarios)').all<{ name: string }>()
     const automationRuleColumns = sqlite.prepare('PRAGMA table_info(automation_rules)').all<{ name: string }>()
     const automationTaskColumns = sqlite.prepare('PRAGMA table_info(automation_tasks)').all<{ name: string }>()
     const automationRunColumns = sqlite.prepare('PRAGMA table_info(automation_runs)').all<{ name: string }>()
@@ -368,6 +421,17 @@ describe('db schema modules', () => {
       'reservationExpiresAt',
       'expiresAt'
     ]))
+    expect(channelScenarioColumns.map(column => column.name)).toEqual(expect.arrayContaining([
+      'id',
+      'name',
+      'roomRef',
+      'actorRole',
+      'userLabel',
+      'sessionType',
+      'text',
+      'createdAt',
+      'updatedAt'
+    ]))
     expect(replyThrottleColumns.map(column => column.name)).toEqual(expect.arrayContaining([
       'throttleKey',
       'policyType',
@@ -421,7 +485,10 @@ describe('db schema modules', () => {
     ]))
     expect(agentRoomColumns.map(column => column.name)).toEqual(expect.arrayContaining([
       'archivedAt',
-      'favoritedAt'
+      'favoritedAt',
+      'ownerAccountId',
+      'ownerNodeId',
+      'ownerSourceId'
     ]))
   })
 

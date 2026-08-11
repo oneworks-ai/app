@@ -10,11 +10,19 @@ import { logger } from '#~/utils/logger.js'
 import { getAuthDataDir, isPasswordValid, readOrCreateSecretFile } from './session-token'
 
 export {
+  LOCAL_WORKSPACE_REQUEST_PRINCIPAL,
+  createWebAccountRequestPrincipal,
+  getWorkspaceRequestPrincipal,
+  setWorkspaceRequestPrincipal
+} from './request-principal'
+
+export {
   AUTH_COOKIE_NAME,
   clearAuthCookie,
   createSessionToken,
   getBearerTokenFromHeader,
   getCookieFromHeader,
+  resolveSessionTokenClaims,
   setAuthCookie,
   verifySessionToken
 } from './session-token'
@@ -63,8 +71,8 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
 )
 
-const isLocalServerHost = (host: string) => {
-  const normalized = host.trim().toLowerCase()
+export const isLocalServerHost = (host?: string) => {
+  const normalized = host?.trim().toLowerCase() ?? ''
   return normalized === '' ||
     normalized === 'localhost' ||
     normalized === '::1' ||

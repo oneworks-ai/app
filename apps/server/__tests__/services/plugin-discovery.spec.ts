@@ -128,6 +128,7 @@ describe('plugin discovery', () => {
   })
 
   it.each([
+    '@oneworks/plugin-channel-oneworks',
     '@oneworks/plugin-browser-driver',
     '@oneworks/plugin-external-browser-driver',
     '@oneworks/plugin-cua-driver'
@@ -143,6 +144,30 @@ describe('plugin discovery', () => {
       requestId: packageId,
       rootDir: `/cache/${packageId}`,
       scope: packageId,
+      sourceType: 'package'
+    }])
+
+    const result = await discoverPluginInstances()
+
+    expect(result.instances[0]?.sourceGroup).toBe('builtIn')
+  })
+
+  it('keeps a configured bundled package trusted by immutable package provenance', async () => {
+    const packageId = '@oneworks/plugin-channel-oneworks'
+    mocks.loadConfigState.mockResolvedValue({
+      globalConfig: {},
+      mergedConfig: { plugins: [{ id: packageId, options: { navigation: {} }, scope: 'chat-rooms' }] },
+      projectSource: {
+        resolvedConfig: { plugins: [{ id: packageId, options: { navigation: {} }, scope: 'chat-rooms' }] }
+      },
+      workspaceFolder: '/workspace'
+    })
+    mocks.resolveConfiguredPluginInstances.mockResolvedValue([{
+      children: [],
+      packageId,
+      requestId: packageId,
+      rootDir: '/cache/channel-oneworks',
+      scope: 'chat-rooms',
       sourceType: 'package'
     }])
 

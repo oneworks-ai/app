@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { createChannelConnection } from '../src/connection'
-import type { OneWorksDebugConnection } from '../src/connection'
+import type { OneWorksConnection } from '../src/connection'
 import { channelDefinition } from '../src/index'
 import {
   ONEWORKS_WEBHOOK_NONCE_HEADER,
@@ -67,6 +67,7 @@ describe('oneworks native channel', () => {
     const result = await connection.handleWebhook?.(signedWebhookRequest({
       contentItems: [{ text: 'hi', type: 'text' }],
       messageId: 'msg-1',
+      mentionedBot: true,
       roomId: 'room-demo',
       senderId: 'user-a',
       text: '@OWO hi'
@@ -85,6 +86,7 @@ describe('oneworks native channel', () => {
       channelId: 'room-demo',
       channelType: 'oneworks',
       messageId: 'msg-1',
+      mentionedBot: true,
       replyTo: {
         receiveId: 'room-demo',
         receiveIdType: 'room'
@@ -172,6 +174,51 @@ describe('oneworks native channel', () => {
     expect(message).toHaveBeenCalledWith(expect.objectContaining({
       senderId: 'oneworks-simulation:user-a'
     }))
+  })
+
+  it('requires loopback transport for signed product simulation metadata', async () => {
+    const connection = await createChannelConnection({ type: 'oneworks', webhookSecret: 'secret' })
+    const message = vi.fn()
+    await connection.startReceiving?.({ channelKey: 'oneworks-main', handlers: { message } })
+    const body = {
+      roomId: 'room-demo',
+      senderId: 'isolated-admin',
+      simulation: { actorRole: 'admin', userLabel: 'Scenario Admin' },
+      text: '/status'
+    }
+    const remoteRequest = signedWebhookRequest(body, { nonce: 'nonce-remote-product' })
+
+    await expect(
+      connection.handleWebhook?.({
+        ...remoteRequest,
+        headers: { ...remoteRequest.headers, 'x-oneworks-product-simulation': 'true' },
+        remoteAddress: '203.0.113.10'
+      })
+    ).resolves.toEqual(expect.objectContaining({ statusCode: 200 }))
+
+    expect(message).toHaveBeenCalledWith(expect.objectContaining({
+      senderId: 'isolated-admin',
+      synthetic: undefined
+    }))
+
+    const loopbackRequest = signedWebhookRequest(body, { nonce: 'nonce-loopback-product' })
+    await expect(
+      connection.handleWebhook?.({
+        ...loopbackRequest,
+        headers: { ...loopbackRequest.headers, 'x-oneworks-product-simulation': '1' },
+        remoteAddress: '::1'
+      })
+    ).resolves.toEqual(expect.objectContaining({ statusCode: 200 }))
+
+    expect(message).toHaveBeenLastCalledWith(expect.objectContaining({
+      senderId: 'oneworks-simulation:isolated-admin',
+      synthetic: {
+        actorRole: 'admin',
+        kind: 'product_simulation',
+        userLabel: 'Scenario Admin'
+      }
+    }))
+    expect(message.mock.calls[1][0].raw).toMatchObject({ source: 'oneworks-product_simulation' })
   })
 
   it('rejects stale signatures, tampered bodies, and replayed nonces', async () => {
@@ -302,9 +349,13 @@ describe('oneworks native channel', () => {
     })
   })
 
-  it('exposes and clears debug outbound message snapshots', async () => {
+  it('exposes and clears local outbox message snapshots', async () => {
+    const outboundStore = { upsert: vi.fn() }
     const connection = await createChannelConnection({
       type: 'oneworks'
+    }, {
+      channelKey: 'oneworks-main',
+      outboundStore
     })
 
     const sent = await connection.sendMessage({
@@ -318,8 +369,8 @@ describe('oneworks native channel', () => {
       text: 'updated'
     })
 
-    const debugConnection = connection as OneWorksDebugConnection
-    const messages = debugConnection.getDebugOutboundMessages()
+    const nativeConnection = connection as OneWorksConnection
+    const messages = nativeConnection.getLocalOutboxMessages()
     expect(messages).toHaveLength(1)
     expect(messages[0]).toEqual(expect.objectContaining({
       messageId: sent?.messageId,
@@ -329,11 +380,17 @@ describe('oneworks native channel', () => {
     }))
     expect(messages[0]?.createdAt).toEqual(expect.any(Number))
     expect(messages[0]?.updatedAt).toEqual(expect.any(Number))
+    expect(outboundStore.upsert).toHaveBeenLastCalledWith(expect.objectContaining({
+      channelKey: 'oneworks-main',
+      channelType: 'oneworks',
+      messageId: sent?.messageId,
+      text: 'updated'
+    }))
 
     messages.splice(0)
-    expect(debugConnection.getDebugOutboundMessages()).toHaveLength(1)
+    expect(nativeConnection.getLocalOutboxMessages()).toHaveLength(1)
 
-    debugConnection.clearDebugOutboundMessages()
-    expect(debugConnection.getDebugOutboundMessages()).toEqual([])
+    nativeConnection.clearLocalOutboxMessages()
+    expect(nativeConnection.getLocalOutboxMessages()).toEqual([])
   })
 })

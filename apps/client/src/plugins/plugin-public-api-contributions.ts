@@ -206,6 +206,10 @@ const EXTENSION_CONTRIBUTION_SHAPE = object(
 )
 
 const CONTRIBUTION_SHAPES: Record<string, PublicJsonShape> = {
+  channelNavigation: array(object(mergeFields(
+    BASE_FIELDS,
+    jsonFields('id', 'optionsKey', 'priority')
+  ))),
   chatHeaderActions: array(object(mergeFields(
     BASE_FIELDS,
     jsonFields('command', 'id', 'title'),

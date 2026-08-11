@@ -113,6 +113,12 @@ describe('loadChannelModule', () => {
           throw error
         }
 
+        if (specifier === '@oneworks/plugin-channel-external-channel') {
+          const error = new Error(`Cannot find module '${specifier}'`) as Error & { code?: string }
+          error.code = 'MODULE_NOT_FOUND'
+          throw error
+        }
+
         if (specifier === '@scope/channel-external') {
           return {
             channelDefinition: {

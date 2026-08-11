@@ -568,6 +568,37 @@ describe('plugin resolver', () => {
     })
   })
 
+  it('preserves supported first-party server capabilities and drops unknown values', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'oneworks-plugin-resolver-'))
+    tempDirs.push(tempDir)
+
+    const workspace = join(tempDir, 'workspace')
+    const pluginRoot = join(workspace, 'room-relay-plugin')
+    await mkdir(pluginRoot, { recursive: true })
+    await writeFile(
+      join(pluginRoot, 'plugin.json'),
+      JSON.stringify({
+        name: 'room-relay-plugin',
+        plugin: {
+          server: {
+            capabilities: ['roomRelay', 'unknownCapability'],
+            roles: ['workspace']
+          }
+        }
+      })
+    )
+
+    const [instance] = await resolveConfiguredPluginInstances({
+      cwd: workspace,
+      plugins: [{ id: './room-relay-plugin' }]
+    })
+
+    expect(instance?.manifest?.plugin?.server).toEqual({
+      capabilities: ['roomRelay'],
+      roles: ['workspace']
+    })
+  })
+
   it('discovers runtime plugins in global, dev, and explicit order without auto-loading project installs', async () => {
     const tempDir = await mkdtemp(join(tmpdir(), 'oneworks-plugin-resolver-'))
     tempDirs.push(tempDir)
@@ -639,6 +670,7 @@ describe('plugin resolver', () => {
       env: { __ONEWORKS_PROJECT_DISABLE_GLOBAL_CONFIG__: '1' },
       includeDefaultOfficialPlugins: true
     })).resolves.toEqual([
+      { id: '@oneworks/plugin-channel-oneworks' },
       { id: '@oneworks/plugin-browser-driver' },
       { id: '@oneworks/plugin-external-browser-driver' },
       { id: '@oneworks/plugin-cua-driver' },
@@ -651,6 +683,7 @@ describe('plugin resolver', () => {
       includeDefaultOfficialPlugins: true,
       plugins: [{ id: '@oneworks/plugin-relay', enabled: false }]
     })).resolves.toEqual([
+      { id: '@oneworks/plugin-channel-oneworks' },
       { id: '@oneworks/plugin-browser-driver' },
       { id: '@oneworks/plugin-external-browser-driver' },
       { id: '@oneworks/plugin-cua-driver' },

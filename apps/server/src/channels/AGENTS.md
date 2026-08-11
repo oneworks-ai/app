@@ -23,8 +23,10 @@ channels/
     emoji-registry.ts   自动记录入站平台自定义表情的可复用 id
     access-control.ts   检查 allowPrivateChat / allowGroupChat / 黑白名单
     resolve-session.ts  从 DB 查询当前 channel 绑定的 sessionId
+    policy-gate.ts      软屏蔽、警告等级和策略固定回复；被拦截消息不进入 runtime
     availability-gate.ts  ChannelLink availability gate，按 workHours / offHours / throttle / backlog 决定是否继续
     ingress-gate.ts     ChannelLink ingress 确定性 gate，按 ambientRouting / mention / command 决定是否继续
+    ingress-router.ts   entity-scoped 四态 router；只有 create_child 继续进入 dispatch
     group-message-debounce.ts  群聊普通消息防抖合并，slash command 不延迟
     ack.ts              向 channel 发送「处理中」确认
     admin-gate.ts       无 session 时限制非 admin 用户创建新会话
@@ -67,10 +69,12 @@ identityMiddleware         → 记录 sender 平台账号并解析 canonical use
 accessControlMiddleware    → 权限不符截断（admins 豁免所有控制）
 emojiRegistryMiddleware    → 自动记录入站平台自定义表情引用
 resolveSessionMiddleware   → 填充 ctx.sessionId
-channelCommandMiddleware   → 识别到指令处理并截断，否则 next()
-interactionResponseMiddleware → 处理待确认/权限问题的频道回复
+policyGateMiddleware       → 软屏蔽 / 警告 / 策略固定回复与审计
 availabilityGateMiddleware → ChannelLink 下班时段固定话术 / 节流 / 截断
 ingressGateMiddleware      → ChannelLink 关闭 ambientRouting 时，拦截普通群聊消息
+ingressRouterMiddleware    → 记录 ignore / observe / create_child / defer，只有 create_child 继续
+channelCommandMiddleware   → 已知指令处理并截断，否则 next()
+interactionResponseMiddleware → 非指令文本才尝试处理待确认/权限问题的频道回复
 groupMessageDebounceMiddleware → 群聊普通消息按配置短暂合并
 ackMiddleware              → 发送处理中状态
 adminGateMiddleware        → 无 session 且非 admin 截断并提示
@@ -178,8 +182,10 @@ export const resolveChannelSessionMcpServers =
 - `handlers.ts` 只保留出站事件处理（`handleSessionEvent`），入站逻辑全部在管道中
 - `command-invocation.ts` 只用于 agent / CLI / HTTP 侧的 typed channel command 调用；它必须从真实 channel runtime state 和当前消息上下文还原发送者身份，不要手动提升为管理员或复用当前 CLI 登录态
 - `identity.ts` 只解析入站 sender 的平台账号与已绑定 canonical user，不自动创建 canonical user
-- `availability-gate.ts` 只处理确定性上下班窗口、固定话术、DB 节流与 off-hours backlog 写入；`bypassUsers` 可填 sender ID 或已绑定 canonical user ID；digest 和更复杂策略状态后续放到独立服务
-- `ingress-gate.ts` 只做确定性 gate；模型 router、pending intent、审批和策略状态不要塞进这里
+- `policy-gate.ts` 只消费已经解析的策略裁决并负责固定回复；策略状态、等级升级和审计写入放在 `services/channel-policy`。
+- `availability-gate.ts` 只处理确定性上下班窗口、固定话术、DB 节流与 off-hours backlog 写入；`bypassUsers` 可填 sender ID 或已绑定 canonical user ID。
+- `ingress-gate.ts` 只做确定性意图 gate；模型路由和四态审计放在 `ingress-router.ts` 与 `services/channel-ingress-router`，pending intent 和审批不要塞进这里。
+- 已知 slash command 必须在 policy、availability、ingress 和 router 之后执行，避免 `@` 其他 bot、屏蔽期或下班期命令绕过门禁；它必须在 `interactionResponseMiddleware` 之前执行，避免待确认文本把合法命令吞掉。
 - HTTP webhook 入口只做 route 参数整理与 channel manager 分发；平台 payload 解析和 secret 校验放在对应 channel package 的 `handleWebhook`
 - `state.ts` 只管理内存状态，不写 DB
 - `loader.ts` 只负责动态加载频道连接模块

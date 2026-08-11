@@ -1732,16 +1732,22 @@ describe('runtime store projection', () => {
     const store = (await discoverRuntimeSessionStores([root]))[0] as RuntimeSessionStore
     const first = await replayRuntimeStore(store, { db, broadcast: false, agentRoomProjectionEnabled: true })
     db.updateSession('sess-state-completed', { status: 'terminated' })
+    const deliverSessionTerminal = vi.fn()
     await replayRuntimeStore(store, {
       db,
       broadcast: false,
       agentRoomProjectionEnabled: true,
-      checkpoint: first.checkpoint
+      checkpoint: first.checkpoint,
+      deliverSessionTerminal
     })
 
     expect(db.getSession('sess-state-completed')).toEqual(expect.objectContaining({
       status: 'completed'
     }))
+    expect(deliverSessionTerminal).toHaveBeenCalledWith({
+      sessionId: 'sess-state-completed',
+      status: 'completed'
+    })
     expect(db.getAgentRoomDetail('room-state')?.messages).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

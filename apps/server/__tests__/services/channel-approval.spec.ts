@@ -10,6 +10,7 @@ vi.mock('#~/db/index.js', () => ({
 const createChannelAuthorizationRequest = vi.fn()
 const getChannelAuthorizationRequest = vi.fn()
 const getChannelUserCredential = vi.fn()
+const listChannelAccountsForUser = vi.fn()
 const upsertChannelPendingIntent = vi.fn()
 
 beforeEach(() => {
@@ -23,6 +24,7 @@ beforeEach(() => {
   }))
   getChannelAuthorizationRequest.mockReturnValue(undefined)
   getChannelUserCredential.mockReturnValue(undefined)
+  listChannelAccountsForUser.mockReturnValue([])
   upsertChannelPendingIntent.mockReturnValue({
     id: 'channel-pending-auth:channel-approval:demo'
   })
@@ -30,6 +32,7 @@ beforeEach(() => {
     createChannelAuthorizationRequest,
     getChannelAuthorizationRequest,
     getChannelUserCredential,
+    listChannelAccountsForUser,
     upsertChannelPendingIntent
   } as any)
 })
@@ -189,6 +192,10 @@ describe('resolveChannelApproval', () => {
       status: 'ask_trigger_user'
     })
     expect(createChannelAuthorizationRequest).toHaveBeenCalledWith(expect.objectContaining({
+      allowedApprovers: expect.not.arrayContaining([
+        'user:user-requester',
+        'account:lark-main:ou_requester'
+      ]),
       id: requestId,
       capability: 'im.chat.member.add',
       channelLinkName: 'wan-ke-chat',
@@ -310,7 +317,7 @@ describe('resolveChannelApproval', () => {
     }))
     expect(upsertChannelPendingIntent).toHaveBeenCalledWith(expect.objectContaining({
       authorizationRequestId: requestId,
-      ownerAccountId: 'ou_requester',
+      ownerAccountId: undefined,
       ownerUserId: 'user-owner',
       payload: expect.objectContaining({
         credentialSubjectUserId: 'user-owner'

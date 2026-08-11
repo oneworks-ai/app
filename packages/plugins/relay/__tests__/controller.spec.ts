@@ -6,6 +6,7 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import type { SharedAgentRoomDirectoryEntry } from '@oneworks/types'
 import { ONEWORKS_AUTH_STORE_VERSION, readOneWorksAuthStore, writeOneWorksAuthStore } from '@oneworks/utils/auth-store'
 
 import { createRelayDeviceStore } from '../src/server/store.js'
@@ -32,6 +33,54 @@ const flushAsyncWork = async () => {
 }
 
 describe('relay plugin controller', () => {
+  it('qualifies Room tunnel ownership and live requests with the Relay server id', async () => {
+    stubRelayFetch('remote-device-token', {
+      deviceTransport: {
+        apiBaseUrl: 'http://127.0.0.1:1/',
+        controlWebSocketUrl: 'ws://127.0.0.1:1/api/relay/devices/control',
+        version: 1
+      }
+    })
+    const registerTunnel = vi.fn()
+    const handleRequest = vi.fn(async () => ({ handled: true }))
+    const { commands, disposers } = await createPluginHarness(
+      {
+        autoConnect: false,
+        enableOfficialCloudflareRelay: false,
+        enableOfficialVercelRelay: false,
+        servers: [{ baseUrl: 'https://relay.example/', id: 'prod', pairingToken: 'pair-token' }]
+      },
+      { roomTunnel: { handleRequest, registerTunnel } }
+    )
+
+    await commands.get('connect')?.()
+    const ownerSourceId = registerTunnel.mock.calls[0]?.[1]?.ownerSourceId
+    expect(registerTunnel).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        ownerSourceId: expect.stringMatching(/^relay:[a-f0-9]{64}$/u),
+        ownerUserId: 'owner'
+      })
+    )
+
+    const tunnel = registerTunnel.mock.calls[0]?.[0]
+    const frames: string[] = []
+    tunnel.setTransport((frame: string) => frames.push(frame))
+    tunnel.handleFrame({
+      action: 'view',
+      operationId: 'operation-1',
+      principal: { id: 'viewer', type: 'user' },
+      requestId: 'request-1',
+      shareId: 'share-1',
+      type: 'room-request'
+    })
+    await flushAsyncWork()
+
+    expect(handleRequest).toHaveBeenCalledWith(expect.objectContaining({ requestId: 'request-1' }), ownerSourceId)
+    expect(frames).toContainEqual(expect.stringContaining('"type":"room-response"'))
+    disposers.forEach(dispose => dispose())
+  })
+
   it('keeps the relay device identity in the user-level store across project homes', async () => {
     const homeDir = await mkdtemp(join(tmpdir(), 'oneworks-relay-plugin-home-'))
     const firstProjectHome = await mkdtemp(join(tmpdir(), 'oneworks-relay-plugin-project-a-'))
@@ -967,6 +1016,104 @@ describe('relay plugin controller', () => {
       remoteBaseUrl: 'https://relay.team.example.test',
       sessionAuthenticated: true
     })
+  })
+
+  it('lists shared Rooms across authenticated accounts without exposing account credentials', async () => {
+    let listVisible: (() => Promise<SharedAgentRoomDirectoryEntry[]>) | undefined
+    const unregister = vi.fn()
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === 'https://offline.example.test/api/relay/rooms') {
+        throw new TypeError('relay unavailable')
+      }
+      if (url === 'https://team.example.test/api/relay/rooms') {
+        expect(init?.headers).toMatchObject({ authorization: 'Bearer team-session-secret' })
+        return new Response(
+          JSON.stringify({
+            rooms: [{
+              availability: 'online',
+              createdAt: '2026-08-01T08:00:00.000Z',
+              ownerDeviceId: 'private-device-id',
+              ownerUserId: 'private-owner-id',
+              roomId: 'private-local-room-id',
+              shareId: 'shared-room-1',
+              status: 'active',
+              title: 'Product review',
+              updatedAt: '2026-08-02T09:30:00.000Z'
+            }]
+          }),
+          { status: 200 }
+        )
+      }
+      return new Response(JSON.stringify({ rooms: [] }), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { disposers } = await createPluginHarness(
+      {
+        autoConnect: false,
+        enableOfficialCloudflareRelay: false,
+        enableOfficialVercelRelay: false
+      },
+      {
+        roomTunnel: {
+          handleRequest: vi.fn(),
+          registerDirectoryClient: client => {
+            listVisible = client.listVisible
+            return unregister
+          }
+        }
+      }
+    )
+    await writeOneWorksAuthStore({
+      accounts: [
+        {
+          accountKey: 'team:owner',
+          email: 'owner@team.example.test',
+          enabled: true,
+          name: 'Team Workspace',
+          serverId: 'team',
+          serverUrl: 'https://team.example.test',
+          sessionToken: 'team-session-secret',
+          userId: 'owner'
+        },
+        {
+          accountKey: 'offline:owner',
+          enabled: true,
+          serverId: 'offline',
+          serverUrl: 'https://offline.example.test',
+          sessionToken: 'offline-session-secret',
+          userId: 'owner'
+        }
+      ],
+      servers: {
+        offline: { id: 'offline', name: 'Offline Relay', url: 'https://offline.example.test' },
+        team: { id: 'team', name: 'Team Relay', url: 'https://team.example.test' }
+      },
+      version: ONEWORKS_AUTH_STORE_VERSION
+    })
+
+    await expect(listVisible?.()).resolves.toEqual([
+      {
+        room: {
+          availability: 'online',
+          createdAt: '2026-08-01T08:00:00.000Z',
+          shareId: 'shared-room-1',
+          status: 'active',
+          title: 'Product review',
+          updatedAt: '2026-08-02T09:30:00.000Z'
+        },
+        sourceLabel: 'Team Workspace',
+        sourceRef: expect.stringMatching(/^[a-f0-9]{24}$/u)
+      }
+    ])
+    const serialized = JSON.stringify(await listVisible?.())
+    expect(serialized).not.toContain('team:owner')
+    expect(serialized).not.toContain('team-session-secret')
+    expect(serialized).not.toContain('private-device-id')
+    expect(serialized).not.toContain('private-owner-id')
+    expect(serialized).not.toContain('private-local-room-id')
+    disposers.forEach(dispose => dispose())
+    expect(unregister).toHaveBeenCalledOnce()
   })
 
   it('matches configured relay servers to auth accounts by remote url', async () => {

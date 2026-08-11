@@ -50,7 +50,12 @@ const addCommonOptions = (command: Command, options: { defaultPath?: boolean } =
   return withPath
     .option('-c, --channel <channel>', 'Channel type or channel ref, for example wechat')
     .option('-f, --filter <id>', 'Memory id to target or filter')
-    .option('-s, --scope <scope>', 'Memory scope: global, channel, session, or user', 'channel')
+    .option('--session-type <type>', 'Memory visibility context: direct or group')
+    .option(
+      '-s, --scope <scope>',
+      'Memory scope: global, entity, channel, conversation, session, or user',
+      'channel'
+    )
 }
 
 const run = async (action: MemoryAction, opts: MemoryCommandOptions) => {

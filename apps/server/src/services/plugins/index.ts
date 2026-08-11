@@ -7,6 +7,7 @@ export type {
   PluginCommandInvocation,
   PluginContributionManifest,
   PluginDiagnostic,
+  PluginOneWorksChannelFacade,
   PluginRuntimeInstance,
   PluginServerContext
 } from './types.js'

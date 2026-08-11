@@ -96,6 +96,9 @@ const isProjectedChildSessionMessage = (message: AgentRoomMessage) => {
 }
 
 const shouldShowTimelineMessage = (message: AgentRoomMessage) => {
+  if (message.deliveries.length > 0) {
+    return true
+  }
   if (message.eventType != null) {
     return visibleTimelineEventTypes.has(message.eventType)
   }
@@ -727,7 +730,30 @@ const toMessageSource = (
     latestLeaderWorkingMessageTargets
   ),
   targetLabel: getMessageTargetLabel(message, membersByKey, runsByKey),
-  interactionRequest: getInteractionRequestView(message)
+  interactionRequest: getInteractionRequestView(message),
+  channelReferences: [
+    ...(message.origin == null
+      ? []
+      : [{
+        ...(message.origin.accountLabel != null ? { accountLabel: message.origin.accountLabel } : {}),
+        channelKey: message.origin.channelKey,
+        channelType: message.origin.channelType,
+        direction: 'source' as const,
+        id: `source:${message.id}`,
+        label: message.origin.conversationLabel ?? message.origin.accountLabel ?? message.origin.channelType,
+        ...(message.origin.navigation != null ? { navigation: message.origin.navigation } : {})
+      }]),
+    ...message.deliveries.map(delivery => ({
+      ...(delivery.target.accountLabel != null ? { accountLabel: delivery.target.accountLabel } : {}),
+      channelKey: delivery.target.channelKey,
+      channelType: delivery.target.channelType,
+      direction: 'delivery' as const,
+      id: delivery.id,
+      label: delivery.target.label,
+      ...(delivery.navigation != null ? { navigation: delivery.navigation } : {}),
+      status: delivery.status
+    }))
+  ]
 })
 
 const toApprovalBatchSource = (
@@ -781,7 +807,23 @@ const toApprovalBatchSource = (
   }
 }
 
-export function buildAgentRoomRouteViewModel(detail: AgentRoomDetailResponse): AgentRoomViewModel {
+type AgentRoomRouteMessageInput =
+  & Omit<AgentRoomMessage, 'deliveries' | 'sequence'>
+  & Partial<Pick<AgentRoomMessage, 'deliveries' | 'sequence'>>
+
+type AgentRoomRouteDetailInput = Omit<AgentRoomDetailResponse, 'messages'> & {
+  messages: AgentRoomRouteMessageInput[]
+}
+
+export function buildAgentRoomRouteViewModel(input: AgentRoomRouteDetailInput): AgentRoomViewModel {
+  const detail: AgentRoomDetailResponse = {
+    ...input,
+    messages: input.messages.map((message, index) => ({
+      ...message,
+      deliveries: message.deliveries ?? [],
+      sequence: message.sequence ?? index + 1
+    }))
+  }
   const runsByMemberKey = new Map<string, AgentRoomRunView[]>()
   for (const run of detail.runs) {
     const runView: AgentRoomRunView = {

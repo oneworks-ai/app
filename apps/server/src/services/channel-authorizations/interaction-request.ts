@@ -1,6 +1,8 @@
 import { getDb } from '#~/db/index.js'
 import { resolveChannelApproval } from '#~/services/channel-approval/index.js'
 
+import { buildChannelApproverPrincipals } from './approvers.js'
+
 import { summarizeApprovalDecision, trimNonEmpty } from './metadata.js'
 import { ensurePendingIntentForAuthorizationRequest } from './pending-intents.js'
 import type { EnsureChannelAuthorizationRequestInput, InteractionRequestEvent } from './types.js'
@@ -73,15 +75,22 @@ export const ensureChannelAuthorizationRequestForInteraction = (input: EnsureCha
   const request = db.createChannelAuthorizationRequest({
     id,
     channelType: input.binding.channelType,
+    issuerKey: input.binding.channelKey,
+    channelKey: input.binding.channelKey,
+    channelId: input.binding.channelId,
     channelLinkName: input.link?.name,
     requesterUserId: requesterUser?.id,
     requesterAccountId,
     capability,
     message: input.event.payload.question,
+    allowedApprovers: buildChannelApproverPrincipals({
+      credentialSubjectUserId: undefined,
+      issuerKey: input.binding.channelKey,
+      requesterAccountId,
+      requesterUserId: requesterUser?.id
+    }),
     metadata: {
       adapter: permissionContext?.adapter,
-      allowedApproverRefs: [requesterAccountId, requesterUser?.id]
-        .filter((value): value is string => value != null),
       approval: summarizeApprovalDecision(approval),
       channelId: input.binding.channelId,
       channelKey: input.binding.channelKey,

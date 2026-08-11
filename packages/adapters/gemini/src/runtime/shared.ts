@@ -67,6 +67,7 @@ export interface GeminiSettings {
     enabled?: boolean
     logPrompts?: boolean
   }
+  tools?: []
   security?: {
     auth?: {
       selectedType?: 'gateway'
@@ -462,6 +463,7 @@ export const buildGeminiSettings = (params: {
   mcpServers: Record<string, NonNullable<Config['mcpServers']>[string]>
   model?: string
   nativeHooks?: GeminiNativeHooksSettings
+  tools?: []
 }): GeminiSettings => {
   const {
     adapterConfig,
@@ -470,7 +472,8 @@ export const buildGeminiSettings = (params: {
     generatedContextFileName,
     mcpServers,
     model,
-    nativeHooks
+    nativeHooks,
+    tools
   } = params
 
   const telemetryOff = adapterConfig.telemetry !== 'inherit'
@@ -524,6 +527,7 @@ export const buildGeminiSettings = (params: {
           Object.entries(mcpServers).map(([name, server]) => [name, translateMcpServerConfig(server)])
         )
       }),
+    ...(tools == null ? {} : { tools }),
     ...(nativeHooks?.hooksConfig == null ? {} : { hooksConfig: nativeHooks.hooksConfig }),
     ...(nativeHooks?.hooks == null ? {} : { hooks: nativeHooks.hooks })
   }

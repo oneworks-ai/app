@@ -97,6 +97,16 @@ Plugin UI should match the host application:
 
 Plugin UI should not describe itself with tutorial text when a familiar control can make the action obvious.
 
+## Route Chrome And Resource Sidebars
+
+Standalone plugin routes can integrate with the host page structure through `view.route`:
+
+- `setTitle(title)` sets the shared Route Header title.
+- `setBreadcrumb(breadcrumb)` declares the back relationship and breadcrumb.
+- `setActions(actions)` places view switches and commands in the Header action area.
+- `setSidebar(sidebar)` declares a route-specific secondary resource list, including groups, search state, active item, and empty text. The host renders it through the same sidebar mechanism used by data assets, scheduled tasks, the plugin market, and settings, including narrow-layout drawer behavior. Plugins should not project these resources into the ordinary session list or duplicate the same list in the route body.
+- `setLauncherChrome(chrome)` provides launcher-specific icon, avatar, title, and search title metadata.
+
 ## Tool-use presentations
 
 Plugins can declare `plugin.contributions.toolUsePresentations` to give their tools host-native icons, localized titles, compact targets, input fields, and result formats without shipping a client entry:

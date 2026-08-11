@@ -1051,6 +1051,8 @@ shortcuts:
       resetConfigCache()
       const [projectConfig] = await loadConfig({
         cwd: tempDir,
+        disableDevConfig: true,
+        disableGlobalConfig: true,
         jsonVariables: {}
       })
 
@@ -1496,6 +1498,8 @@ export default async (ctx) => {
       resetConfigCache()
       const [projectConfig, userConfig] = await loadConfig({
         cwd: tempDir,
+        disableDevConfig: true,
+        disableGlobalConfig: true,
         jsonVariables: {}
       })
 

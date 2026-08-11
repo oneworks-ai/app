@@ -15,7 +15,14 @@ const createTempDir = async () => {
   return cwd
 }
 
-const writeContext = async (cwd: string) => {
+const writeContext = async (
+  cwd: string,
+  options: {
+    context?: Record<string, unknown>
+    executionContext?: Record<string, unknown>
+    invocationToken?: string
+  } = {}
+) => {
   await fs.writeFile(
     path.join(cwd, 'channel-context.json'),
     `${
@@ -24,12 +31,14 @@ const writeContext = async (cwd: string) => {
           channelId: 'group-1',
           channelKey: 'erjie',
           channelType: 'wechat',
-          invocationToken: 'signed-child-run-token',
+          ...(options.executionContext == null ? {} : { executionContext: options.executionContext }),
+          ...(options.invocationToken == null ? {} : { invocationToken: options.invocationToken }),
           replyReceiveId: 'group-1',
           replyReceiveIdType: 'chat_id',
           senderId: 'wxid-user',
           sessionId: 'sess-1',
-          sessionType: 'group'
+          sessionType: 'group',
+          ...options.context
         },
         null,
         2
@@ -105,6 +114,100 @@ describe('oneworks channel command', () => {
         })
       })
     )
+  })
+
+  it('uses the typed channel.send command from an active child session', async () => {
+    const cwd = await createTempDir()
+    await writeContext(cwd, { invocationToken: 'signed-child-run-token' })
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ result: { status: 'success' } }))
+    )
+
+    await expect(runChannelCommand(['send', 'hello'], {
+      cwd,
+      env: createEnv(cwd),
+      fetch
+    })).resolves.toBe('Sent text message through channel erjie.')
+
+    expect(fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:9876/api/channels/erjie/commands/invoke',
+      expect.objectContaining({
+        method: 'POST'
+      })
+    )
+    expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toEqual({
+      input: {
+        message: 'hello',
+        target: {
+          channelId: 'group-1',
+          channelKey: 'erjie',
+          channelType: 'wechat',
+          receiveId: 'group-1',
+          receiveIdType: 'chat_id'
+        }
+      },
+      invocationToken: 'signed-child-run-token',
+      requestId: expect.stringMatching(/^[0-9a-f-]{36}$/u),
+      toolName: 'channel.send'
+    })
+  })
+
+  it('keeps sender authority on the source account while selecting a Room-bound cross-channel target', async () => {
+    const cwd = await createTempDir()
+    const wechatTarget = {
+      accountLabel: 'Service bot',
+      channelId: 'wx-group',
+      channelKey: 'wechat:service',
+      channelLinkName: 'product-wechat',
+      channelType: 'wechat',
+      conversationKind: 'group',
+      label: 'Product experience',
+      receiveId: 'wx-group',
+      receiveIdType: 'chatroom'
+    }
+    await writeContext(cwd, {
+      context: { channelKey: 'lark:product', channelType: 'lark' },
+      invocationToken: 'signed-child-run-token',
+      executionContext: {
+        availableDeliveryTargets: [wechatTarget],
+        entity: { id: 'owo', label: 'OWO' },
+        source: {
+          channelKey: 'lark:product',
+          channelType: 'lark',
+          conversation: { id: 'group-1', kind: 'group' },
+          message: { id: 'message-1' }
+        }
+      }
+    })
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ result: { status: 'success' } }))
+    )
+
+    await expect(runChannelCommand([
+      'send',
+      '--channel',
+      'wechat:service',
+      '--to',
+      'wx-group',
+      'hello'
+    ], {
+      cwd,
+      env: createEnv(cwd),
+      fetch
+    })).resolves.toBe('Sent text message through channel wechat:service.')
+
+    expect(fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:9876/api/channels/lark%3Aproduct/commands/invoke',
+      expect.objectContaining({
+        method: 'POST'
+      })
+    )
+    expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toEqual({
+      input: { message: 'hello', target: wechatTarget },
+      invocationToken: 'signed-child-run-token',
+      requestId: expect.stringMatching(/^[0-9a-f-]{36}$/u),
+      toolName: 'channel.send'
+    })
   })
 
   it('converts escaped line breaks in text payloads before sending', async () => {
@@ -450,7 +553,7 @@ describe('oneworks channel command', () => {
 
   it('invokes channel command tools with the channel sender context', async () => {
     const cwd = await createTempDir()
-    await writeContext(cwd)
+    await writeContext(cwd, { invocationToken: 'signed-child-run-token' })
     const env = createEnv(cwd)
     const fetch = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({
@@ -473,16 +576,15 @@ describe('oneworks channel command', () => {
     expect(fetch).toHaveBeenCalledWith(
       'http://127.0.0.1:9876/api/channels/erjie/commands/invoke',
       expect.objectContaining({
-        method: 'POST',
-        body: JSON.stringify({
-          input: {
-            id: 'auth-1'
-          },
-          invocationToken: 'signed-child-run-token',
-          toolName: 'channel.auth.grant'
-        })
+        method: 'POST'
       })
     )
+    expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toEqual({
+      input: { id: 'auth-1' },
+      invocationToken: 'signed-child-run-token',
+      requestId: expect.stringMatching(/^[0-9a-f-]{36}$/u),
+      toolName: 'channel.auth.grant'
+    })
   })
 
   it('posts OneWorks native simulation events to the channel webhook', async () => {

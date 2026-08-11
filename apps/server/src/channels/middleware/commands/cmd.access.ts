@@ -8,9 +8,9 @@ import { command, requiredArg } from './command-system'
 defineMessages('zh', {
   'cmd.access.description': '查看当前频道权限配置',
   'cmd.admins.description': '查看管理员列表',
-  'cmd.admin.description': '管理频道管理员',
-  'cmd.admin.add.description': '添加频道管理员',
-  'cmd.admin.remove.description': '移除频道管理员',
+  'cmd.admin.description': '管理OneWorks 频道员',
+  'cmd.admin.add.description': '添加OneWorks 频道员',
+  'cmd.admin.remove.description': '移除OneWorks 频道员',
   'cmd.allow.description': '配置发送者、群组或聊天类型的允许策略',
   'cmd.block.description': '配置发送者或群组的阻止策略',
   'choice.access.allow.sender.title': '发送者',

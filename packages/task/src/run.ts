@@ -316,7 +316,8 @@ export const run = async (
     selection: effectiveAdapterOptions.mcpServers
   })
   const assetPlanStartedAt = startupProfiler.now()
-  const assetPlanBaseRaw = runtimeCtx.assets == null || !supportsAssetPlan(runtimeAdapterType)
+  const assetPlanBaseRaw = effectiveAdapterOptions.executionProfile === 'structured_no_tools' ||
+      runtimeCtx.assets == null || !supportsAssetPlan(runtimeAdapterType)
     ? undefined
     : await buildAdapterAssetPlan({
       adapter: runtimeAdapterType,

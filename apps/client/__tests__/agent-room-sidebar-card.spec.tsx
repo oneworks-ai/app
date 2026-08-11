@@ -29,6 +29,7 @@ const createI18n = async () => {
 const room: SidebarRoomItem = {
   id: 'room-sidebar-cleanup',
   title: 'Project orchestration hub with a long title that should stay inside the sidebar row',
+  owner: { type: 'local' },
   hostSessionId: 'host-session',
   status: 'active',
   lastMessage: 'Reviewer is checking the release plan.',

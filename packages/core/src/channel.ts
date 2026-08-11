@@ -1,6 +1,8 @@
 import { z } from 'zod'
 
-import type { Config } from '@oneworks/types'
+import type { ChannelNavigationReference, Config } from '@oneworks/types'
+
+export type { ChannelNavigationReference } from '@oneworks/types'
 
 export interface ChannelMap {}
 
@@ -9,7 +11,7 @@ export type ChannelType = keyof ChannelMap
 export const channelAccessSchema = z.object({
   // 管理员
   admins: z.array(z.string()).optional().describe(
-    '频道管理员账号（sender ID），管理员拥有管理操作权限；blockedGroups 停收时仅允许管理员用 /start 恢复'
+    'OneWorks 频道员账号（sender ID），管理员拥有管理操作权限；blockedGroups 停收时仅允许管理员用 /start 恢复'
   ),
   // 会话类型控制
   allowPrivateChat: z.boolean().optional().describe('是否允许私聊消息，默认 true'),
@@ -18,8 +20,10 @@ export const channelAccessSchema = z.object({
   allowedGroups: z.array(z.string()).optional().describe('群组白名单（channel ID），设置后仅在指定群中响应'),
   blockedGroups: z.array(z.string()).optional().describe('群组黑名单（channel ID），在指定群中不响应'),
   // 用户访问控制
-  allowedSenders: z.array(z.string()).optional().describe('发送者白名单（sender ID），设置后仅白名单内的用户可交互'),
-  blockedSenders: z.array(z.string()).optional().describe('发送者黑名单（sender ID），黑名单内的用户消息将被忽略')
+  allowedSenders: z.array(z.string()).optional()
+    .describe('发送者白名单（原始 sender ID、user:<canonical user ID> 或 account:<issuer>:<account ID>）'),
+  blockedSenders: z.array(z.string()).optional()
+    .describe('发送者黑名单（原始 sender ID、user:<canonical user ID> 或 account:<issuer>:<account ID>）')
 })
 
 export type ChannelAccessConfig = z.infer<typeof channelAccessSchema>
@@ -90,6 +94,7 @@ export type ChannelConfig = {
 
 export interface ChannelSendResult {
   messageId?: string
+  navigation?: ChannelNavigationReference
 }
 
 export const MAX_CHANNEL_TEXT_MESSAGE_LENGTH = 200
@@ -124,6 +129,12 @@ export interface ChannelTextMention {
   type?: 'all' | 'user'
 }
 
+/** A same-issuer direct delivery target. Platform adapters map this to their native account identifier. */
+export interface ChannelPrivateMessage {
+  accountId: string
+  text: string
+}
+
 export interface ChannelFollowUp {
   content: string
   i18nContents?: Array<{
@@ -155,6 +166,7 @@ export interface ChannelMediaMessage {
 
 export interface ChannelConnection<TMessage> {
   sendMessage: (message: TMessage) => Promise<ChannelSendResult | undefined>
+  sendPrivateMessage?: (message: ChannelPrivateMessage) => Promise<ChannelSendResult | undefined>
   sendEmojiMessage?: (message: ChannelEmojiMessage) => Promise<ChannelSendResult | undefined>
   sendFileMessage?: (message: ChannelFileMessage) => Promise<ChannelSendResult | undefined>
   sendMediaMessage?: (message: ChannelMediaMessage) => Promise<ChannelSendResult | undefined>
@@ -209,6 +221,18 @@ export interface ChannelConnectionOptions {
     }) => void | Promise<void>
   }
   logger?: ChannelLogger
+  outboundStore?: {
+    upsert: (input: {
+      channelKey: string
+      channelType: string
+      createdAt: number
+      messageId: string
+      receiveId: string
+      receiveIdType: string
+      text: string
+      updatedAt?: number
+    }) => void | Promise<void>
+  }
 }
 
 export interface ChannelWebhookRequest {
@@ -234,8 +258,20 @@ export interface ChannelInboundEvent {
   mentionedBot?: boolean
   senderId?: string
   messageId?: string
+  /** Provider-owned links used to return from OneWorks to the source message or application. */
+  navigation?: ChannelNavigationReference
+  /** Platform message that this inbound event explicitly replies to. */
+  replyMessageId?: string
+  /** Platform root message for a thread when provided independently. */
+  rootMessageId?: string
   text?: string
   threadId?: string
+  /** Trusted synthetic actor metadata produced by a first-party product surface. */
+  synthetic?: {
+    actorRole: 'admin' | 'participant'
+    kind: 'product_simulation'
+    userLabel: string
+  }
   replyTo?: {
     receiveId: string
     receiveIdType: string

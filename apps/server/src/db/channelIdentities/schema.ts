@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- channel identity migrations stay in one ordered schema module. */
 import type { SchemaModule } from '../schema'
 
 export const channelIdentitiesSchemaModule: SchemaModule = {
@@ -113,6 +114,7 @@ export const channelIdentitiesSchemaModule: SchemaModule = {
         userId TEXT NOT NULL,
         channelType TEXT NOT NULL,
         credentialKey TEXT NOT NULL,
+        providerHandle TEXT,
         label TEXT,
         status TEXT NOT NULL,
         scopesJson TEXT,
@@ -129,11 +131,15 @@ export const channelIdentitiesSchemaModule: SchemaModule = {
       CREATE TABLE IF NOT EXISTS channel_authorization_requests (
         id TEXT PRIMARY KEY,
         channelType TEXT NOT NULL,
+        issuerKey TEXT,
+        channelKey TEXT,
+        channelId TEXT,
         channelLinkName TEXT,
         requesterUserId TEXT,
         requesterAccountId TEXT,
         credentialSubjectUserId TEXT,
         credentialKey TEXT,
+        allowedApproversJson TEXT,
         capability TEXT NOT NULL,
         status TEXT NOT NULL,
         message TEXT,
@@ -151,12 +157,47 @@ export const channelIdentitiesSchemaModule: SchemaModule = {
         ON channel_authorization_requests(channelType, credentialSubjectUserId, status);
     `)
     ensureColumn('channel_authorization_requests', 'credentialSubjectUserId', 'TEXT')
+    ensureColumn('channel_authorization_requests', 'issuerKey', 'TEXT')
+    ensureColumn('channel_authorization_requests', 'channelKey', 'TEXT')
+    ensureColumn('channel_authorization_requests', 'channelId', 'TEXT')
+    ensureColumn('channel_authorization_requests', 'allowedApproversJson', 'TEXT')
+    ensureColumn('channel_user_credentials_v2', 'providerHandle', 'TEXT')
+    exec(`
+      CREATE INDEX IF NOT EXISTS idx_channel_authorization_requests_scope
+        ON channel_authorization_requests(channelType, issuerKey, channelKey, channelId, status);
+
+      CREATE INDEX IF NOT EXISTS idx_channel_authorization_requests_scoped_requester
+        ON channel_authorization_requests(channelType, issuerKey, requesterUserId, requesterAccountId, status);
+
+      CREATE INDEX IF NOT EXISTS idx_channel_authorization_requests_scoped_subject
+        ON channel_authorization_requests(channelType, issuerKey, credentialSubjectUserId, status);
+    `)
     ensureColumn('channel_identity_link_codes', 'sourceIssuerKey', 'TEXT')
     ensureColumn('channel_identity_link_codes', 'consumedIssuerKey', 'TEXT')
     exec(`
       UPDATE channel_identity_link_codes
       SET sourceIssuerKey = sourceChannelType
       WHERE sourceIssuerKey IS NULL;
+    `)
+    // Legacy rows used metadata for scope. Copy only valid string values so new code can fail closed.
+    exec(`
+      UPDATE channel_authorization_requests
+      SET channelKey = json_extract(metadataJson, '$.channelKey')
+      WHERE channelKey IS NULL
+        AND metadataJson IS NOT NULL
+        AND json_valid(metadataJson)
+        AND typeof(json_extract(metadataJson, '$.channelKey')) = 'text';
+
+      UPDATE channel_authorization_requests
+      SET issuerKey = channelKey
+      WHERE issuerKey IS NULL AND channelKey IS NOT NULL;
+
+      UPDATE channel_authorization_requests
+      SET channelId = json_extract(metadataJson, '$.channelId')
+      WHERE channelId IS NULL
+        AND metadataJson IS NOT NULL
+        AND json_valid(metadataJson)
+        AND typeof(json_extract(metadataJson, '$.channelId')) = 'text';
     `)
   }
 }

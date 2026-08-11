@@ -1,5 +1,33 @@
 import type { ChannelRuntimeContext } from './channel-context.js'
 
+const renderExecutionContext = (context: ChannelRuntimeContext['executionContext']) => {
+  if (context == null) return []
+  const sourceLabel = [
+    context.source.accountLabel,
+    context.source.channelType,
+    context.source.conversation.label ?? context.source.conversation.id
+  ].filter(Boolean).join(' · ')
+  const targets = context.availableDeliveryTargets.map(target => (
+    `- ${target.label} [${target.channelType}:${target.channelKey}]`
+  ))
+  return [
+    '',
+    '当前工作位置：',
+    `- 实体：${context.entity.label} (${context.entity.id})`,
+    ...(context.room == null ? [] : [`- Room：${context.room.title} (${context.room.id})`]),
+    `- 来源：${sourceLabel}`,
+    ...(context.actor?.displayName == null ? [] : [`- 当前用户：${context.actor.displayName}`]),
+    ...(context.defaultReplyTarget == null
+      ? []
+      : [
+        `- 默认回复目标：${context.defaultReplyTarget.label} [${context.defaultReplyTarget.channelType}:${context.defaultReplyTarget.channelKey}]`
+      ]),
+    ...(targets.length === 0 ? [] : ['- 当前实体在此 Room 可用的发送目标：', ...targets]),
+    '- 回复默认回到本条消息的来源目标；跨频道或多目标发送必须显式选择目标，禁止自动广播。',
+    '- 读取或写入记忆时保留 Entity、CanonicalUser、Room、ChannelLink/Conversation、Thread 和 Message 来源；私聊记忆不得泄漏到群聊。'
+  ]
+}
+
 const trimNonEmpty = (value: unknown) => {
   if (typeof value !== 'string') return undefined
   const trimmed = value.trim()
@@ -16,6 +44,7 @@ export const buildChannelRuntimeSystemPrompt = (context: ChannelRuntimeContext |
   const channelId = trimNonEmpty(values?.channelId) ?? trimNonEmpty(values?.__ONEWORKS_PROJECT_CHANNEL_ID__)
   const sessionType = trimNonEmpty(values?.sessionType) ??
     trimNonEmpty(values?.__ONEWORKS_PROJECT_CHANNEL_SESSION_TYPE__)
+  const executionContext = values?.executionContext as ChannelRuntimeContext['executionContext']
 
   if (!channelType || !channelId) return undefined
 
@@ -45,6 +74,7 @@ export const buildChannelRuntimeSystemPrompt = (context: ChannelRuntimeContext |
     '<system-prompt>',
     `当前会话来自 ${channelLabel} channel ${targetLabel}环境。shell 中可以使用 \`oneworks mem\` 读写持久记忆，使用 \`oneworks channel\` 主动发送频道消息；这些都是 CLI 命令，不是聊天平台里的斜杠命令。`,
     ...(channelLinkLine == null ? [] : [channelLinkLine]),
+    ...renderExecutionContext(executionContext),
     '这些 CLI 已经作为 channel session 的环境能力注入，默认直接按下面示例调用；不要为了确认是否存在而先执行 `which oneworks`、`oneworks --help`、`oneworks mem --help`、`oneworks channel --help` 之类的探测命令。只有命令实际失败、参数不确定且下方示例不足，或用户明确要求时，才查询帮助。',
     '',
     'Chat History 与对外沟通：',
@@ -78,7 +108,7 @@ export const buildChannelRuntimeSystemPrompt = (context: ChannelRuntimeContext |
     '- 当用户提到“之前/上次/按老配置/记得我说过”等跨轮上下文，或当前任务明显依赖频道、用户、会话的长期信息时，先读取相关记忆。',
     '- 当你对当前消息里的人、昵称、群内梗、项目名、表情含义或上下文不熟，但它可能影响回复语气、关系距离或任务判断时，先用 `oneworks mem get`、`oneworks mem get -s user` 或 `oneworks mem list` 查小本本；不要只靠猜。',
     '- 当有人主动介绍自己、给出稳定偏好、身份、职责、项目背景、频道约定、常用配置或长期待办时，适合写入记忆。',
-    '- 如果查不到相关记忆，但本轮聊天产生了未来可复用的新线索，结束前用 `oneworks mem patch`、`oneworks mem patch -s user` 或 `oneworks mem patch -s session` 写一条简短记录；不要只在 Chat History 里说“我会记住”。',
+    '- 如果查不到相关记忆，但本轮聊天产生了未来可复用的新线索，结束前用 `oneworks mem patch`、`oneworks mem patch -s user`、`oneworks mem patch -s entity` 或 `oneworks mem patch -s conversation` 写一条简短记录；不要只在 Chat History 里说“我会记住”。',
     '- 当一次较长讨论形成明确主题、结论、决策、后续动作或排障线索时，可用简短摘要追加到与当前聊天话题一致的记忆文件。',
     '- 写入应简洁、可复用、带必要上下文；优先记录事实和偏好，不要记录未确认猜测、临时闲聊、口令、token、密钥或不必要的敏感个人信息。',
     '- 需要记录或读取记忆时，Chat History 里应该能看到真实的 `oneworks mem` CLI 调用记录，而不是只有“应该记录”的口头承诺。',
@@ -87,14 +117,16 @@ export const buildChannelRuntimeSystemPrompt = (context: ChannelRuntimeContext |
     '- `oneworks mem get`：读取当前 channel id 下默认 `README.md`，id 由 CLI 从环境和当前消息上下文读取。',
     '- `oneworks mem patch "..."`：向当前 channel id 下默认 `README.md` 追加记忆。',
     '- `oneworks mem patch -s user "..."`：记录当前发送者相关记忆；群聊里 sender id 会按当前消息动态解析。',
-    '- `oneworks mem patch -s session "..."`：记录仅属于当前 OneWorks session 的工作记忆。',
+    '- `oneworks mem patch -s entity "..."`：记录当前实体跨频道可复用的长期经验。',
+    '- `oneworks mem patch -s conversation "..."`：记录当前稳定对话线程的项目背景、结论或后续动作。',
+    '- `oneworks mem patch -s session "..."`：只记录当前物理子会话的临时工作信息，不用于跨轮连续记忆。',
     '- `oneworks mem list` / `oneworks mem get -p ./reference/topic.md`：发现和读取特定主题文件。',
     '',
     '频道命令工具：',
     '- 当你需要查询或调整频道内部状态（会话绑定、授权请求、管理员/access、adapter/model/permissionMode、静默/恢复等）时，不要在群里发送斜杠命令；使用 `oneworks channel command` 这个 agent CLI。',
     '- 查看可用 typed tools：`oneworks channel command list`。',
     '- 调用工具：`oneworks channel command invoke channel.auth.list` 或 `oneworks channel command invoke channel.auth.grant \'{ "id": "auth-1" }\'`。',
-    '- command tool 按当前消息发送者的身份和频道管理员配置执行，不能改成机器人、老板或当前 CLI 登录账号；如果返回权限不足，不要换身份重试。',
+    '- command tool 按当前消息发送者的身份和OneWorks 频道员配置执行，不能改成机器人、老板或当前 CLI 登录账号；如果返回权限不足，不要换身份重试。',
     '- command tool 的输出只回到 Chat History / shell，不会自动发到外部频道。需要让群里看到结果时，再用 `oneworks channel send "..."` 发送简短可见摘要。',
     '',
     '频道回复规则：',

@@ -2,8 +2,11 @@
 import type { Buffer } from 'node:buffer'
 import type { IncomingHttpHeaders } from 'node:http'
 
+import type { PluginRequestPrincipal, SharedAgentRoomDirectoryEntry } from '@oneworks/types'
+
 import type { RelayConfigSourcePreferences } from './config-source-preferences.js'
 import type { RelayPersonalDocumentSyncPreferences } from './personal-document-sync-preferences.js'
+import type { RelayRoomTunnel, RelayRoomTunnelRequest } from './room-tunnel.js'
 import type { RelayLocalSessionAdapter } from './session-types.js'
 
 export type RelayLocalizedText = string | Record<string, string>
@@ -33,6 +36,17 @@ export interface RelayPluginContext {
   logger: {
     warn: (...args: unknown[]) => void
   }
+  /** Supplied only by the local Room owner; it must re-check the share ACL before mutation. */
+  roomTunnel?: {
+    handleRequest: (request: RelayRoomTunnelRequest, ownerSourceId: string) => Promise<unknown>
+    registerDirectoryClient?: (client: {
+      listVisible: () => Promise<SharedAgentRoomDirectoryEntry[]>
+    }) => () => void
+    registerTunnel?: (
+      tunnel: Pick<RelayRoomTunnel, 'isConnected' | 'publishDescriptor' | 'subscribeConnection'>,
+      owner: { ownerDeviceId: string; ownerLabel?: string; ownerSourceId: string; ownerUserId: string }
+    ) => void
+  }
   sessions?: RelayLocalSessionAdapter
   registerApi: (apiId: string, options: RelayPluginApiRegistration) => void
   registerCommand: (commandId: string, handler: (payload?: unknown) => unknown | Promise<unknown>) => void
@@ -45,6 +59,7 @@ export interface PluginProxyRequest {
   query?: string
   headers?: IncomingHttpHeaders
   body: Buffer
+  principal: PluginRequestPrincipal
 }
 
 export interface PluginProxyResponse {

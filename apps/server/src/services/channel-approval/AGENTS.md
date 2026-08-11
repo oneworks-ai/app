@@ -1,7 +1,7 @@
 # channel-approval 服务说明
 
 - `index.ts`：对外 facade，只重导出 resolver 与公开类型。
-- `resolver.ts`：最小 ApprovalPolicyResolver，按触发 sender、频道管理员配置、用户 credential 状态和 capability 返回 allow / ask / deny 类裁决。
+- `resolver.ts`：最小 ApprovalPolicyResolver，按触发 sender、OneWorks 频道员配置、用户 credential 状态和 capability 返回 allow / ask / deny 类裁决。
 - `authorization-request.ts`：为需要授权的裁决创建稳定 request id，并幂等 upsert 对应 pending intent。
 - `types.ts`：公开输入、裁决和 credential requirement 类型。
 - `values.ts`：模块私有的身份引用规范化和管理员匹配。

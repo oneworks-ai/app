@@ -123,4 +123,47 @@ describe('channel API routes', () => {
       channelKey: 'oneworks-main'
     })
   })
+
+  it('preserves the command request ID across transport retries', async () => {
+    invokeChannelCommand.mockResolvedValue({
+      ok: true,
+      replies: [],
+      result: { status: 'success' }
+    })
+    const body = JSON.stringify({
+      input: { message: 'same' },
+      invocationToken: 'token-1',
+      requestId: 'request-1',
+      toolName: 'channel.send'
+    })
+
+    const first = await fetch(`${baseUrl}/api/channels/oneworks-main/commands/invoke`, {
+      body,
+      headers: { 'content-type': 'application/json' },
+      method: 'POST'
+    })
+    const retry = await fetch(`${baseUrl}/api/channels/oneworks-main/commands/invoke`, {
+      body,
+      headers: { 'content-type': 'application/json' },
+      method: 'POST'
+    })
+
+    expect(first.status).toBe(200)
+    expect(retry.status).toBe(200)
+    expect(invokeChannelCommand).toHaveBeenCalledTimes(2)
+    expect(invokeChannelCommand).toHaveBeenNthCalledWith(1, {
+      channelKey: 'oneworks-main',
+      input: { message: 'same' },
+      invocationToken: 'token-1',
+      requestId: 'request-1',
+      toolName: 'channel.send'
+    })
+    expect(invokeChannelCommand).toHaveBeenNthCalledWith(2, {
+      channelKey: 'oneworks-main',
+      input: { message: 'same' },
+      invocationToken: 'token-1',
+      requestId: 'request-1',
+      toolName: 'channel.send'
+    })
+  })
 })

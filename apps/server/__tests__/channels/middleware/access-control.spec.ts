@@ -111,6 +111,32 @@ describe('checkChannelAccess', () => {
     const config: any = { access: { allowedSenders: ['user1'], blockedSenders: ['user1'] } }
     expect(checkChannelAccess(makeInbound({ senderId: 'user1' }) as any, config)).toBe(false)
   })
+
+  it('matches issuer-qualified accounts and canonical users without raw-id collisions', () => {
+    expect(checkChannelAccess(
+      makeInbound({ senderId: 'same-account' }) as any,
+      { access: { allowedSenders: ['account:lark:main:same-account'] } } as any,
+      { accountId: 'same-account', issuerKey: 'lark:main' }
+    )).toBe(true)
+    expect(checkChannelAccess(
+      makeInbound({ senderId: 'same-account' }) as any,
+      { access: { allowedSenders: ['account:lark:other:same-account'] } } as any,
+      { accountId: 'same-account', issuerKey: 'lark:main' }
+    )).toBe(false)
+    expect(checkChannelAccess(
+      makeInbound({ senderId: 'platform-account' }) as any,
+      { access: { admins: ['user:canonical-owner'], allowPrivateChat: false } } as any,
+      { accountId: 'platform-account', canonicalUserId: 'canonical-owner', issuerKey: 'lark:main' }
+    )).toBe(true)
+  })
+
+  it('does not grant synthetic administrator scenarios a real admin bypass', () => {
+    const config: any = { access: { admins: ['real-admin'], allowPrivateChat: false } }
+    expect(checkChannelAccess(
+      makeInbound({ senderId: 'oneworks-simulation:isolated' }) as any,
+      config
+    )).toBe(false)
+  })
 })
 
 // ── accessControlMiddleware ─────────────────────────────────────────────────
@@ -162,6 +188,25 @@ describe('accessControlMiddleware', () => {
     expect(next).not.toHaveBeenCalled()
   })
 
+  it('does not trust a synthetic administrator role for access control', async () => {
+    const next = vi.fn()
+    const ctx = makeCtx({
+      config: { access: { admins: ['real-admin'], allowPrivateChat: false } } as any,
+      inbound: {
+        ...makeInbound({ senderId: 'oneworks-simulation:isolated' }),
+        synthetic: {
+          actorRole: 'admin',
+          kind: 'product_simulation',
+          userLabel: 'Scenario Admin'
+        }
+      } as any
+    })
+
+    await accessControlMiddleware(ctx, next)
+
+    expect(next).not.toHaveBeenCalled()
+  })
+
   it('stops admin ordinary messages from a stopped group', async () => {
     const next = vi.fn()
     const ctx = makeCtx({
@@ -180,6 +225,23 @@ describe('accessControlMiddleware', () => {
       commandText: '/start',
       config: { access: { admins: ['admin1'], blockedGroups: ['grp1'] } } as any,
       inbound: makeInbound({ channelId: 'grp1', senderId: 'admin1', sessionType: 'group' }) as any
+    })
+
+    await accessControlMiddleware(ctx, next)
+
+    expect(next).toHaveBeenCalledOnce()
+  })
+
+  it('lets a verified canonical admin keep admin access across issuer accounts', async () => {
+    const next = vi.fn().mockResolvedValue(undefined)
+    const ctx = makeCtx({
+      actor: {
+        account: { accountId: 'platform-account', issuerKey: 'lark:other' },
+        identityLink: { status: 'verified' },
+        user: { id: 'canonical-owner' }
+      } as any,
+      config: { access: { admins: ['user:canonical-owner'], allowPrivateChat: false } } as any,
+      inbound: makeInbound({ senderId: 'platform-account' }) as any
     })
 
     await accessControlMiddleware(ctx, next)

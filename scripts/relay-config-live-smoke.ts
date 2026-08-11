@@ -520,7 +520,7 @@ const createLiveWorkspace = async (input: {
       }
     ]
   })
-  await writeJson(join(projectHome, '.local', 'plugins', 'relay', 'device.json'), {
+  await writeJson(join(realHome, '.oneworks', 'relay', 'device.json'), {
     deviceId: LIVE_DEVICE_ID,
     deviceName: 'Relay Live Smoke Device',
     deviceSecret: 'relay-live-smoke-device-secret',

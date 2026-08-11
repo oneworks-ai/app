@@ -20,11 +20,13 @@
 
 ## Agent 侧频道记忆
 
-频道触发的 agent 会话会把当前 channel 绑定信息、当前消息上下文路径和一段轻量 `oneworks mem` 使用提示注入到 adapter 环境，agent 可以在 shell 里调用 `oneworks mem` 或 `oneworks mem` 读写记忆。记忆文件默认保存在 server data 目录下的 `channel-memory/v1/`，不写入用户 workspace。
+频道触发的 agent 会话会把当前 channel 绑定信息、当前消息上下文路径和一段轻量 `oneworks mem` 使用提示注入到 adapter 环境，agent 可以在 shell 里调用 `oneworks mem` 读写记忆。记忆文件默认保存在 server data 目录下的 `channel-memory/v1/`，不写入用户 workspace。
 
-channel session 中的 `oneworks mem` / `oneworks mem`、`oneworks channel` / `oneworks channel` 是已注入的环境能力；提示词会要求 agent 直接按示例调用，不要先用 `which oneworks`、`oneworks --help` 等探测命令确认 CLI 是否存在。只有命令失败、示例不足或用户明确要求时才查询帮助。
+channel session 中的 `oneworks mem` 和 `oneworks channel` 是已注入的环境能力；提示词会要求 agent 直接按示例调用，不要先用 `which oneworks`、`oneworks --help` 等探测命令确认 CLI 是否存在。只有命令失败、示例不足或用户明确要求时才查询帮助。
 
 server 会在每条入站消息调度前刷新当前消息上下文文件；群聊里 `oneworks mem -s user` 会按当前消息发送者解析 sender id，不依赖 session 启动时的静态 env。
+
+每轮调度前，server 会把当前 `entity`、`channel`、`conversation` 和 `user` 的默认 `README.md` 同步到结构化 Memory Resolver，再按组织、实体、频道、canonical user/account、来源会话类型、可见性、敏感级别和过期时间过滤后生成受预算限制的 MemorySnapshot。channel/user 文件路径同时按 channel key 隔离，user 文件再按 `direct` / `group` 物理隔离，私聊内容不会被后续群聊写入重分类。子会话终态会再次检查文件变化，提交结构化写回并记录审计；没有变化也会记录 `terminal_check`。同一 canonical user 在不同平台绑定后可以复用结构化 user 记忆，同一实体在多个 ChannelLink 工作时可以复用 entity 记忆。
 
 默认 scope 是 `channel`，默认路径是 `README.md`，默认 id 是当前平台会话 id：
 
@@ -38,19 +40,21 @@ oneworks mem list
 
 所有 subcommand 都支持：
 
-- `-p, --path <path>`：指定或过滤 id 下的文件路径，必须是相对路径；`get` / `set` / `patch` 默认 `README.md`，`list` 不传时列出全部路径。
+- `-p, --path <path>`：指定或过滤 id 下的文件路径，必须是相对路径；`get` / `set` / `patch` 默认 `README.md`，`list` 不传时列出全部路径。只有默认 `README.md` 自动进入结构化 resolver；自定义 reference 文件需要 agent 显式读取。
 - `-c, --channel <channel>`：指定或过滤 channel，例如 `wechat`。
 - `-f, --filter <id>`：指定或过滤平台相关 id；`get` / `set` / `patch` 用它定位目标，`list` 用它过滤结果。
-- `-s, --scope <scope>`：记忆维度，支持 `global`、`channel`、`session`、`user`。
+- `-s, --scope <scope>`：记忆维度，支持 `global`、`entity`、`channel`、`conversation`、`session`、`user`。
 
 scope 语义：
 
-- `global`：全局跨频道记忆，不需要平台 id。
+- `global`：CLI 可显式读取的全局文件，不自动注入频道 prompt。
+- `entity`：当前实体跨 ChannelLink 复用的长期经验。
 - `channel`：按当前平台会话 id 存储，跨 One Works session 可复用。
-- `session`：按当前 One Works session id 存储。
-- `user`：按平台用户 id 存储；如果平台没有提供 sender id，私聊会回退到 channel id。
+- `conversation`：按稳定对话状态存储，新的物理 ChildSession 会继续加载。
+- `session`：按当前物理 ChildSession id 存储，只适合本轮临时工作信息，不参与自动 resolver。
+- `user`：文件按平台用户 id 存储；结构化写回在存在身份绑定时归属 canonical user。
 
-`oneworks mem` / `oneworks mem` 有独立权限键 `bash-oneworks mem`；channel runtime 会默认允许这个内置窄权限，无需写入项目配置。它只放行 `get`、`list`、`set`、`patch` 这组记忆 CLI 子命令，不放开整个 Bash。
+`oneworks mem` 有独立权限键 `bash-oneworks-mem`；channel runtime 会默认允许这个内置窄权限，无需写入项目配置。它只放行 `get`、`list`、`set`、`patch` 这组记忆 CLI 子命令，不放开整个 Bash。
 
 ## Agent 侧频道发送
 
@@ -64,9 +68,9 @@ oneworks channel erjie send '{ "type": "image", "src": "https://example.com/resu
 oneworks channel erjie send "oneworks 主命令也支持同样能力"
 ```
 
-- `oneworks channel [channelKey] send <text|payload>` 默认从当前 channel 上下文解析 `channelKey`、`receiveId` 和 `receiveIdType`。
-- 需要覆盖目标时使用 `--to <receiveId>` 和 `--receive-id-type <type>`；本地 server 地址可用 `--server <baseUrl>` 覆盖。
-- One Works Chat History 是 agent 的内部工作记录和简短思路摘要，不等同于已经发送给外部频道用户的消息。对外可见的回复、澄清、通知、图片、文件或表情应通过 `oneworks channel` / `oneworks channel` CLI 触发；发送后 stop 文本只保留简短内部总结，避免复述已经发出的完整话术。
+- `oneworks channel [channelKey] send <text|payload>` 默认从当前 channel 上下文解析 `channelKey`、`receiveId` 和 `receiveIdType`；CLI 和 Agent Tool 共用同一个 `channel.send` 命令内核，一个 ChildSession 可以连续调用多次，每次调用只形成一条外部投递，不会因此创建新的 ChildSession。
+- 在 Room 中，默认目标是当前入站消息的原始 ChannelLink。跨平台或同平台跨账号发送只能显式选择当前实体可用的 Room ChannelLink，不会自动广播；成功和失败的外部发送都会写入本地 Room 时间线，并保留平台、账号、会话、provider message reference、导航能力和错误状态，界面默认只显示紧凑的平台图标，完整目标信息按需展开。
+- 需要覆盖目标时使用 `--to <receiveId>` 和 `--receive-id-type <type>`；本地 server 地址可用 `--server <baseUrl>` 覆盖。One Works Chat History 是 agent 的内部工作记录和简短思路摘要，不等同于已经发送给外部频道用户的消息；对外可见的回复、澄清、通知、图片、文件或表情应通过 `oneworks channel` CLI 触发，发送后 stop 文本只保留简短内部总结，避免复述已经发出的完整话术。
 - 文本包含 Markdown 反引号、`$`、括号等 shell 敏感字符时，不要用双引号包住整段正文；优先使用单引号 JSON payload（如上面的 `type: "text"` 示例），避免 shell 命令替换触发额外权限请求。
 - 文本载荷直接发送文本；对象载荷支持 `type: "image"` / `type: "file"` 和 `src`。WeChat 图片走 WechatApi `/message/postImage`，因此 `src` 应是平台可访问的图片 URL；支持文件发送的频道可以由 server 读取本地文件或下载 URL 后发送。
 - 平台自定义表情按通用 emoji registry 复用：`oneworks channel emoji list --platform wechat --sendable` 查看可发送素材，`oneworks channel emoji list --platform wechat --tag 赞同` 按标签找素材，`oneworks channel emoji list --platform wechat --recent --limit 5` 查看最近自动登记的素材，`oneworks channel emoji get thumbs-up-bear --platform wechat` 读取备注，`oneworks channel emoji send thumbs-up-bear --platform wechat` 发送。保存技术字段用 `oneworks channel emoji save thumbs-up-bear --platform wechat --emoji-md5 ... --emoji-size 102357 --label 点赞小熊 --alias 赞`；补充语义用 `oneworks channel emoji annotate thumbs-up-bear --platform wechat --tag 赞同 --note "适合回应认可、赞赏或没问题"`。WeChat 底层走 `/message/postEmoji`；只有在素材表里有 `emojiMd5` 和 `emojiSize` 时才能发送自定义表情，否则用普通文本或 Unicode emoji 回复。
@@ -117,7 +121,7 @@ oneworks channel command invoke channel.identity.accounts
 ```json
 {
   "channel": "lark:team",
-  "entity": "owo-demo",
+  "entity": "support-assistant",
   "external": {
     "type": "chat",
     "chatId": "oc_xxx"
@@ -133,6 +137,7 @@ oneworks channel command invoke channel.identity.accounts
 ```
 
 - 一个 channel link 只绑定一个实体。
+- 管理员初始化完成后，私聊也必须命中 direct ChannelLink；`allowPrivateChat` 只控制 transport access，不能代替实体绑定。未绑定私聊会关闭失败，不创建无实体 ChildSession。
 - `authorization.deliveryThrottleMs` 控制同一个授权请求重复送达的节流窗口，单位毫秒；默认 `1200000`，也就是 20 分钟。
 - `authorization.resume.mode` 控制授权处理后的续接方式：`immediate` 会在 grant / deny 后自动创建 `system_resume` child run；`manual` 只记录 resolved pending intent，等待管理员或 agent 通过 `channel.auth.resume` 显式恢复；`next_message` 等待同一 owner、同一 thread 的下一条相关消息，并把恢复上下文注入那一轮 child run。`authorization.resume.delayMs` 可给 `immediate` 增加最小延迟。
 - 权限请求送达后会记录 `delivery` 和平台返回的 `deliveryMessageId`，后续 grant / deny 会同步关闭关联的 pending intent。
@@ -173,3 +178,22 @@ oneworks channel command invoke channel.identity.accounts
 ## 平台接入
 
 Lark、OneWorks Native 与 WeChat 的配置示例和接入经验见 [Channel 平台接入](./channel-platforms.md)。
+
+## OneWorks Channel 与聊天室
+
+频道连接、凭证和 ChannelLink 仍由 OneWorks 内置频道能力统一管理，不需要再安装一个“管理所有频道”的插件。OneWorks 自身由两个可独立运行的部分组成：
+
+- `@oneworks/channel-oneworks` 是与 Lark、WeChat 同级的正式 Channel provider，负责标准收发、签名 webhook、平台引用和导航能力；没有产品插件时仍可正常工作。
+- `@oneworks/plugin-channel-oneworks` 是 OneWorks 聊天室产品入口，提供本地 Room、显式分享、OneWorks 模拟场景、脱敏运行链路和消息导航偏好；它不管理 Lark/WeChat 连接，也不替代会话管理。
+
+一个 Room 可以绑定跨平台和同平台多账号的多个 ChannelLink。每条入站消息保留来源，每条 Agent 外发保留目标；二者互不覆盖。Room 的完整消息、run、记忆和投递记录只保存在创建它的 owner 节点。只有显式分享的 Room 才会向 Relay 发布 descriptor 和 ACL；owner 离线时远端只能看到 Room 存在但不可用，Relay 不保存 transcript，也不排队离线消息。第一次分享 Room 时，需要选择当前在线的 Relay 所有者账号；只有一个在线账号时会自动选择。分享后远端 live 结果只包含消息正文、用户可见 label 和 opaque ref，不返回平台 channel/account/message/thread ID、session ID 或原始投递目标。每个远程写操作都必须传稳定的 `x-oneworks-room-operation-id`，并在传输失败后复用；owner 会在调用外部会话前先认领该 operation，因此重试不会重复执行同一副作用。聊天室产品 API 的 principal 由 host 请求派生：已登录 Web 账号和关闭认证的本机 loopback workspace 获得 workspace read/manage 权限；关闭认证的远程请求不获得 principal，并按 fail-closed 拒绝。
+“已分享”会聚合当前启用且登录有效的 Relay 账号所能看到的公开 Room 关系；单个账号不可达不会影响其他账号。在线状态来自 owner 实时隧道，而不是仅凭本地配置或历史 descriptor 推断；owner 重连后会重新发布显式分享。目录不会暴露 account key、session token、owner ID、owner-local Room ID 或 transcript。
+消息导航顺序由 OneWorks 聊天室插件自己的设置保存，可分别覆盖 provider 和 channel account。provider 只贡献真实可用的消息、会话、网页、原生应用或应用首页引用；用户可以选择优先在右侧 WebView、外部浏览器、原生应用或应用首页打开。
+
+OneWorks Simulation 会为每次请求生成新的 nonce、时间戳和 webhook 签名，再走同一个 OneWorks webhook、connection 与入站 middleware 链路。管理员和普通参与者场景都使用隔离的 synthetic principal；场景角色只用于 prompt 与审计，不授予真实管理员权限，也不会借用配置中的真实管理员 ID。`/access`、`/availability` 等指令仍经过同一 sender-scoped 权限裁决，synthetic principal 未列入频道管理员配置时会被拒绝。界面只显示安全 fingerprint、计数、状态和原因，不显示实际频道 ID、发送者 ID、签名、凭证字段或原始 payload。产品插件缺席不会影响任何 Channel 的收发链路。交付或复查频道矩阵时，可以运行只读验收命令：
+
+```bash
+pnpm tools channel-acceptance --workspace . --channel-type lark --expect-channels 10 --expect-entities 10 --expect-groups 6 --expect-links 20 --require-admins --require-credentials --require-group-allowlist --json
+```
+
+需要把运行态纳入验收时再传 `--db <runtime.sqlite>`。命令只输出矩阵计数、状态分组、短 fingerprint 和 violation code，不输出 app secret、群 ID、用户 ID、真实名称、原始消息或数据库路径。

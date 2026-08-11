@@ -10,6 +10,7 @@ import { migrateProjectHomeSegments } from '@oneworks/utils/project-home-migrati
 import type { ProjectHomeMigratedSegment } from '@oneworks/utils/project-home-migration'
 
 import { installAssetCreateConnectionGuard } from '#~/services/ai/asset-create-operation.js'
+import { commitChannelChildRunTerminal } from '#~/services/channel-lifecycle/index.js'
 import { startChannelResumeScheduler } from '#~/services/channel-resume/index.js'
 import { loadConfigState } from '#~/services/config/index.js'
 import { acquireConfigWatchRuntime } from '#~/services/config/watch.js'
@@ -255,7 +256,12 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
       runtimeStoreWatcherTimer = undefined
       logStartup('runtime store watcher start begin')
       try {
-        runtimeStoreWatcher = startRuntimeStoreWatcher({ deliverSessionEvent: handleChannelSessionEvent })
+        runtimeStoreWatcher = startRuntimeStoreWatcher({
+          deliverSessionEvent: handleChannelSessionEvent,
+          deliverSessionTerminal: (input) => {
+            commitChannelChildRunTerminal(input)
+          }
+        })
         logStartup('runtime store watcher start invoked')
         void runtimeStoreWatcher.scanAndReplay()
           .then(() => autoImportNativeProjectHistoryAndReplay(config))

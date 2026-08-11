@@ -5,6 +5,7 @@ import { parseAdapterE2ESelection } from './__tests__/adapter-e2e/cases'
 import { runAdapterE2ESuite } from './adapter-e2e/harness'
 import { runProcess } from './adapter-e2e/runtime'
 import { runAgentRoomResumeSmoke } from './agent-room-smoke'
+import { runChannelAcceptance } from './channel-acceptance'
 import {
   getDefaultChromeDebugPageUrlSubstring,
   parsePositiveIntegerOption,
@@ -128,6 +129,7 @@ interface ScriptsCliDeps {
   runChromeDebugMessengerSend: typeof runChromeDebugMessengerSend
   runChromeDebugMessengerClickReply: typeof runChromeDebugMessengerClickReply
   runChromeDebugMessengerClickText: typeof runChromeDebugMessengerClickText
+  runChannelAcceptance: typeof runChannelAcceptance
   runDemoVideoBatch: typeof runDemoVideoBatch
   runDemoVideoList: typeof runDemoVideoList
   runDemoVideoRecord: typeof runDemoVideoRecord
@@ -183,6 +185,7 @@ const defaultDeps: ScriptsCliDeps = {
   runChromeDebugMessengerSend,
   runChromeDebugMessengerClickReply,
   runChromeDebugMessengerClickText,
+  runChannelAcceptance,
   runDemoVideoBatch,
   runDemoVideoList,
   runDemoVideoRecord,
@@ -385,6 +388,64 @@ export const createScriptsCli = (inputDeps: Partial<ScriptsCliDeps> = {}) => {
       await deps.runAdapterSuite(parseAdapterE2ESelection(target), {
         passthroughStdIO: !options.quiet,
         printSummary: options.summary ?? true
+      })
+    })
+
+  program
+    .command('channel-acceptance')
+    .description('Validate a channel matrix and optional runtime database without exposing tenant identifiers')
+    .option('--workspace <path>', 'Workspace containing channel and entity definitions')
+    .option('--db <path>', 'Optional read-only runtime SQLite database')
+    .option('--channel-type <type>', 'Only inspect configured channels of this type')
+    .option(
+      '--expect-channels <count>',
+      'Expected configured channel count',
+      value => parseNonNegativeIntegerOption(value, 'expect-channels')
+    )
+    .option(
+      '--expect-entities <count>',
+      'Expected entity definition count',
+      value => parseNonNegativeIntegerOption(value, 'expect-entities')
+    )
+    .option(
+      '--expect-groups <count>',
+      'Expected unique linked group count',
+      value => parseNonNegativeIntegerOption(value, 'expect-groups')
+    )
+    .option(
+      '--expect-links <count>',
+      'Expected channel link count',
+      value => parseNonNegativeIntegerOption(value, 'expect-links')
+    )
+    .option('--require-admins', 'Require at least one configured admin for every linked channel', false)
+    .option('--require-credentials', 'Require app credentials for every linked Lark channel', false)
+    .option('--require-group-allowlist', 'Require every linked group in its channel allowlist', false)
+    .option('--json', 'Print machine-readable redacted output', false)
+    .action(async (options: {
+      channelType?: string
+      db?: string
+      expectChannels?: number
+      expectEntities?: number
+      expectGroups?: number
+      expectLinks?: number
+      json?: boolean
+      requireAdmins?: boolean
+      requireCredentials?: boolean
+      requireGroupAllowlist?: boolean
+      workspace?: string
+    }) => {
+      await deps.runChannelAcceptance({
+        channelType: options.channelType,
+        dbPath: options.db,
+        expectChannels: options.expectChannels,
+        expectEntities: options.expectEntities,
+        expectGroups: options.expectGroups,
+        expectLinks: options.expectLinks,
+        json: options.json ?? false,
+        requireAdmins: options.requireAdmins ?? false,
+        requireCredentials: options.requireCredentials ?? false,
+        requireGroupAllowlist: options.requireGroupAllowlist ?? false,
+        workspace: options.workspace
       })
     })
 

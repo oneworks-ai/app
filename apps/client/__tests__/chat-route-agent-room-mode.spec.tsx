@@ -124,6 +124,7 @@ const createSession = (id: string, overrides: Partial<Session> = {}): Session =>
 const createRoom = (id: string, hostSessionId?: string): AgentRoom => ({
   id,
   title: `${id} title`,
+  owner: { type: 'local' },
   ...(hostSessionId == null ? {} : { hostSessionId }),
   status: 'active',
   createdAt: 1,

@@ -59,8 +59,9 @@ describe('runtime store room projection', () => {
       env,
       homeDir
     })
+    const scopedEnv = createWorkspaceRuntimeEnv(worktree, env)
 
-    expect(roots[0]).toBe(resolveProjectHomePath(worktree, env, 'runtime'))
+    expect(roots[0]).toBe(resolveProjectHomePath(worktree, scopedEnv, 'runtime'))
     expect(roots).not.toContain(path.join(homeDir, '.oneworks/runtime'))
   })
 

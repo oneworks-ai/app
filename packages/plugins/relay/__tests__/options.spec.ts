@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { normalizeOptions, resolveActiveRelayServer } from '../src/server/options.js'
+import {
+  createRelayOwnerSourceId,
+  normalizeOptions,
+  resolveActiveRelayServer,
+  resolveRelayServers
+} from '../src/server/options.js'
 import {
   DEFAULT_OFFICIAL_RELAY_SERVER_ID,
   OFFICIAL_RELAY_CLOUDFLARE_BASE_URL,
@@ -78,6 +83,37 @@ describe('relay plugin options', () => {
       remoteBaseUrl: 'https://relay.example.com'
     })
     expect(options.servers[2]?.official).toBeUndefined()
+  })
+
+  it('uses the canonical Relay endpoint as the immutable Room owner source', () => {
+    const first = resolveActiveRelayServer({
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false,
+      servers: [{ baseUrl: 'https://relay-a.example', id: 'prod' }]
+    })
+    const replacement = resolveActiveRelayServer({
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false,
+      servers: [{ baseUrl: 'https://relay-b.example', id: 'prod' }]
+    })
+
+    const firstSourceId = createRelayOwnerSourceId(first!.remoteBaseUrl)
+    const replacementSourceId = createRelayOwnerSourceId(replacement!.remoteBaseUrl)
+    expect(firstSourceId).toMatch(/^relay:[a-f0-9]{64}$/u)
+    expect(replacementSourceId).not.toBe(firstSourceId)
+  })
+
+  it('rejects duplicate Relay server ids instead of selecting one ambiguously', () => {
+    expect(() =>
+      resolveRelayServers({
+        enableOfficialCloudflareRelay: false,
+        enableOfficialVercelRelay: false,
+        servers: [
+          { baseUrl: 'https://relay-a.example', id: 'prod' },
+          { baseUrl: 'https://relay-b.example', id: 'prod' }
+        ]
+      })
+    ).toThrow('Duplicate Relay server id: prod')
   })
 
   it('includes official development relay services in development builds', () => {

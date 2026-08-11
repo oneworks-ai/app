@@ -96,8 +96,11 @@ const normalizeStoredServers = (value: unknown): Record<string, RelayStoredServe
   return servers
 }
 
-export const createRelayDeviceStore = (projectHome: string) => {
-  const storePath = resolveGlobalOneWorksPath(process.env, ...STORE_PATH)
+export const createRelayDeviceStore = (
+  projectHome: string,
+  env: Record<string, string | null | undefined> = process.env
+) => {
+  const storePath = resolveGlobalOneWorksPath(env, ...STORE_PATH)
   const legacyStorePath = join(projectHome, ...LEGACY_STORE_PATH)
 
   const writeStore = async (store: RelayStore) => {

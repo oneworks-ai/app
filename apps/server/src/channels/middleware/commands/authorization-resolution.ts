@@ -1,5 +1,6 @@
 import { getDb } from '#~/db/index.js'
 import type { ChannelAuthorizationRequestRow } from '#~/db/index.js'
+import { isAllowedChannelApprover } from '#~/services/channel-authorizations/approvers.js'
 import { resolveChannelAuthorizationRequest } from '#~/services/channel-authorizations/index.js'
 import { resumeReadyChannelIntents } from '#~/services/channel-resume/index.js'
 
@@ -8,18 +9,6 @@ import { resolveRequesterAccountId, resolveRequesterUserId } from './authorizati
 import { command, optionalArg, requiredArg } from './command-system'
 
 const AUTH_RESUME_LIMIT = 20
-
-const readStringMetadata = (request: ChannelAuthorizationRequestRow, key: string) => {
-  const value = request.metadata?.[key]
-  return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
-}
-
-const readStringArrayMetadata = (request: ChannelAuthorizationRequestRow, key: string) => {
-  const value = request.metadata?.[key]
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === 'string' && item.trim() !== '')
-    : []
-}
 
 const canResolveRequest = (
   ctx: ChannelContext,
@@ -32,13 +21,15 @@ const canResolveRequest = (
     (request.status !== 'pending' || (request.expiresAt != null && request.expiresAt <= Date.now()))
   ) return false
   if (request.channelType !== ctx.inbound.channelType) return false
-  if (readStringMetadata(request, 'channelKey') !== ctx.channelKey) return false
-  if (readStringMetadata(request, 'channelId') !== ctx.inbound.channelId) return false
+  if (request.issuerKey !== ctx.channelKey || request.channelKey !== ctx.channelKey) return false
+  if (request.channelId !== ctx.inbound.channelId) return false
 
-  const actorRefs = [resolveRequesterAccountId(ctx), resolveRequesterUserId(ctx)]
-    .filter((value): value is string => value != null && value !== '')
-  const allowedApproverRefs = new Set(readStringArrayMetadata(request, 'allowedApproverRefs'))
-  return actorRefs.some(ref => allowedApproverRefs.has(ref))
+  return isAllowedChannelApprover({
+    accountId: resolveRequesterAccountId(ctx),
+    allowedApprovers: request.allowedApprovers,
+    issuerKey: ctx.channelKey,
+    userId: resolveRequesterUserId(ctx)
+  })
 }
 
 const getResolvableRequest = (ctx: ChannelContext, id: string, targetStatus: 'denied' | 'granted') => {
@@ -63,7 +54,7 @@ const manuallyResumeResolvedAuthorization = async (authorizationRequestId: strin
 export const createGrantAuthorizationCommand = () =>
   command<ChannelContext>('grant')
     .description('cmd.auth.grant.description')
-    .adminOnly()
+    .approval({ capability: 'channel.authorization.grant', risk: 'high', visibility: 'dm' })
     .argument(requiredArg('id'))
     .action(async ({ ctx, args: [id] }) => {
       if (getResolvableRequest(ctx, id, 'granted') == null) {
@@ -93,7 +84,7 @@ export const createGrantAuthorizationCommand = () =>
 export const createDenyAuthorizationCommand = () =>
   command<ChannelContext>('deny')
     .description('cmd.auth.deny.description')
-    .adminOnly()
+    .approval({ capability: 'channel.authorization.deny', risk: 'medium', visibility: 'dm' })
     .argument(requiredArg('id'))
     .argument(optionalArg('reason'))
     .action(async ({ ctx, args: [id, reason] }) => {
@@ -126,6 +117,7 @@ export const createDenyAuthorizationCommand = () =>
 export const createResumeAuthorizationCommand = () =>
   command<ChannelContext>('resume')
     .description('cmd.auth.resume.description')
+    .approval({ capability: 'channel.authorization.resume', risk: 'high', visibility: 'none' })
     .adminOnly()
     .argument(requiredArg('id'))
     .action(async ({ ctx, args: [id] }) => {
@@ -133,8 +125,9 @@ export const createResumeAuthorizationCommand = () =>
       if (
         request == null ||
         request.channelType !== ctx.inbound.channelType ||
-        readStringMetadata(request, 'channelKey') !== ctx.channelKey ||
-        readStringMetadata(request, 'channelId') !== ctx.inbound.channelId
+        request.issuerKey !== ctx.channelKey ||
+        request.channelKey !== ctx.channelKey ||
+        request.channelId !== ctx.inbound.channelId
       ) {
         await ctx.reply(ctx.t('auth.notFound', { id }))
         return

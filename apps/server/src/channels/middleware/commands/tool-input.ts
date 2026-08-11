@@ -61,6 +61,27 @@ const parseStringArgumentValue = (
   }
 }
 
+const stringifyToolRawValue = (value: unknown) =>
+  typeof value === 'string'
+    ? value
+    : JSON.stringify(value)
+
+const parseToolArgumentValue = (
+  argument: CommandArgumentSpec,
+  value: unknown
+): { ok: true; rawValue: string; value: unknown } | { ok: false; message: string } => {
+  if (argument.parseToolInput == null) return parseStringArgumentValue(argument, value)
+  try {
+    return {
+      ok: true,
+      rawValue: stringifyToolRawValue(value),
+      value: argument.parseToolInput(value)
+    }
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : String(error) }
+  }
+}
+
 const parseVariadicArgument = (
   argument: CommandArgumentSpec,
   rawInputValue: unknown,
@@ -142,7 +163,7 @@ export const parseChannelCommandToolInput = <TContext>(
       return { ok: false, code: 'missing-argument', message: `Missing argument: ${argument.name}`, usage }
     }
 
-    const parsed = parseStringArgumentValue(argument, rawInputValue)
+    const parsed = parseToolArgumentValue(argument, rawInputValue)
     if (!parsed.ok) return { ok: false, code: 'invalid-argument', message: parsed.message, usage }
     rawArgs.push(parsed.rawValue)
     args.push(parsed.value)

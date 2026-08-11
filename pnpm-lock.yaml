@@ -72,15 +72,27 @@ importers:
       '@oneworks/adapter-pi':
         specifier: workspace:*
         version: link:packages/adapters/pi
+      '@oneworks/channel-oneworks':
+        specifier: workspace:*
+        version: link:packages/channels/oneworks
       '@oneworks/cli':
         specifier: workspace:*
         version: link:apps/cli
       '@oneworks/client':
         specifier: workspace:*
         version: link:apps/client
+      '@oneworks/config':
+        specifier: workspace:*
+        version: link:packages/config
+      '@oneworks/definition-loader':
+        specifier: workspace:*
+        version: link:packages/definition-loader
       '@oneworks/plugin-browser-driver':
         specifier: workspace:*
         version: link:packages/plugins/browser-driver
+      '@oneworks/plugin-channel-oneworks':
+        specifier: workspace:*
+        version: link:packages/plugins/channel-oneworks
       '@oneworks/plugin-cua-driver':
         specifier: workspace:*
         version: link:packages/plugins/cua-driver
@@ -393,7 +405,7 @@ importers:
         version: 5.4.21(@types/node@24.12.2)(sass@1.97.2)(terser@5.46.1)
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/debug@4.1.13)(@types/node@24.12.2)(happy-dom@20.11.1)(sass@1.97.2)(terser@5.46.1)
+        version: 3.2.4(@types/debug@4.1.13)(@types/node@24.12.2)(happy-dom@20.11.1)(jiti@2.7.0)(sass@1.97.2)(terser@5.46.1)(yaml@2.8.1)
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -421,6 +433,9 @@ importers:
       '@oneworks/adapter-pi':
         specifier: workspace:*
         version: link:../../packages/adapters/pi
+      '@oneworks/channel-oneworks':
+        specifier: workspace:*
+        version: link:../../packages/channels/oneworks
       '@oneworks/cli':
         specifier: workspace:*
         version: link:../cli
@@ -442,6 +457,9 @@ importers:
       '@oneworks/plugin-browser-driver':
         specifier: workspace:*
         version: link:../../packages/plugins/browser-driver
+      '@oneworks/plugin-channel-oneworks':
+        specifier: workspace:*
+        version: link:../../packages/plugins/channel-oneworks
       '@oneworks/plugin-cua-driver':
         specifier: workspace:*
         version: link:../../packages/plugins/cua-driver
@@ -640,6 +658,9 @@ importers:
       '@oneworks/model-provider-catalog':
         specifier: workspace:*
         version: link:../../packages/model-provider-catalog
+      '@oneworks/plugin-channel-oneworks':
+        specifier: workspace:*
+        version: link:../../packages/plugins/channel-oneworks
       '@oneworks/register':
         specifier: workspace:*
         version: link:../../packages/register
@@ -652,6 +673,9 @@ importers:
       '@oneworks/runtime-store':
         specifier: workspace:*
         version: link:../../packages/runtime-store
+      '@oneworks/task':
+        specifier: workspace:*
+        version: link:../../packages/task
       '@oneworks/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -982,7 +1006,7 @@ importers:
     dependencies:
       '@larksuiteoapi/node-sdk':
         specifier: latest
-        version: 1.72.0
+        version: 1.73.0
       '@modelcontextprotocol/sdk':
         specifier: ^1.30.0
         version: 1.30.0(zod@3.25.76)
@@ -1209,6 +1233,16 @@ importers:
         version: 0.27.2
 
   packages/plugins/browser-driver: {}
+
+  packages/plugins/channel-oneworks:
+    dependencies:
+      '@oneworks/types':
+        specifier: workspace:*
+        version: link:../../types
+    devDependencies:
+      vite:
+        specifier: ^5.4.8
+        version: 5.4.21(@types/node@24.12.2)(sass@1.97.2)(terser@5.46.1)
 
   packages/plugins/china-red-theme:
     devDependencies:
@@ -2545,8 +2579,8 @@ packages:
     engines: {node: '>= 12'}
     deprecated: Please upgrade to v15 or higher. All reported bugs in this version are fixed in newer releases, dependencies have been updated, and security has been improved.
 
-  '@larksuiteoapi/node-sdk@1.72.0':
-    resolution: {integrity: sha512-8oKnaTxRFRNPQfeeG69yafdLzWvvrvXlIqX3QRvozR1/6kvZyi9iMhp6lwC+hMgJA/GCFwMZRadkJzlUE+kyvQ==}
+  '@larksuiteoapi/node-sdk@1.73.0':
+    resolution: {integrity: sha512-gs4EiupJ6RdYAEJGtuYrCVsB7wSMBwtUDK+ilpmOHD6RTvbtciW6AWciQO9coOQVuBZfh7hvAi25dPfCsny/nA==}
 
   '@levischuck/tiny-cbor@0.2.11':
     resolution: {integrity: sha512-llBRm4dT4Z89aRsm6u2oEZ8tfwL/2l6BwpZ7JcyieouniDECM5AqNgr/y08zalEIvW3RSK4upYyybDcmjXqAow==}
@@ -9604,7 +9638,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@larksuiteoapi/node-sdk@1.72.0':
+  '@larksuiteoapi/node-sdk@1.73.0':
     dependencies:
       axios: 1.19.0
       lodash.identity: 3.0.0
@@ -16547,15 +16581,16 @@ snapshots:
       - supports-color
       - terser
 
-  vite-node@3.2.4(@types/node@24.12.2)(sass@1.97.2)(terser@5.46.1):
+  vite-node@3.2.4(@types/node@24.12.2)(jiti@2.7.0)(sass@1.97.2)(terser@5.46.1)(yaml@2.8.1):
     dependencies:
       cac: 6.7.14
       debug: 4.4.3
       es-module-lexer: 1.7.0
       pathe: 2.0.3
-      vite: 5.4.21(@types/node@24.12.2)(sass@1.97.2)(terser@5.46.1)
+      vite: 6.4.3(@types/node@24.12.2)(jiti@2.7.0)(sass@1.97.2)(terser@5.46.1)(yaml@2.8.1)
     transitivePeerDependencies:
       - '@types/node'
+      - jiti
       - less
       - lightningcss
       - sass
@@ -16564,6 +16599,8 @@ snapshots:
       - sugarss
       - supports-color
       - terser
+      - tsx
+      - yaml
 
   vite@5.4.21(@types/node@22.18.12)(sass@1.97.2)(terser@5.46.1):
     dependencies:
@@ -16597,6 +16634,22 @@ snapshots:
       tinyglobby: 0.2.15
     optionalDependencies:
       '@types/node': 22.18.12
+      fsevents: 2.3.3
+      jiti: 2.7.0
+      sass: 1.97.2
+      terser: 5.46.1
+      yaml: 2.8.1
+
+  vite@6.4.3(@types/node@24.12.2)(jiti@2.7.0)(sass@1.97.2)(terser@5.46.1)(yaml@2.8.1):
+    dependencies:
+      esbuild: 0.25.12
+      fdir: 6.5.0(picomatch@4.0.5)
+      picomatch: 4.0.5
+      postcss: 8.5.25
+      rollup: 4.62.4
+      tinyglobby: 0.2.15
+    optionalDependencies:
+      '@types/node': 24.12.2
       fsevents: 2.3.3
       jiti: 2.7.0
       sass: 1.97.2
@@ -16639,7 +16692,7 @@ snapshots:
       - supports-color
       - terser
 
-  vitest@3.2.4(@types/debug@4.1.13)(@types/node@24.12.2)(happy-dom@20.11.1)(sass@1.97.2)(terser@5.46.1):
+  vitest@3.2.4(@types/debug@4.1.13)(@types/node@24.12.2)(happy-dom@20.11.1)(jiti@2.7.0)(sass@1.97.2)(terser@5.46.1)(yaml@2.8.1):
     dependencies:
       '@types/chai': 5.2.3
       '@vitest/expect': 3.2.4
@@ -16662,13 +16715,14 @@ snapshots:
       tinypool: 1.1.1
       tinyrainbow: 2.0.0
       vite: 5.4.21(@types/node@24.12.2)(sass@1.97.2)(terser@5.46.1)
-      vite-node: 3.2.4(@types/node@24.12.2)(sass@1.97.2)(terser@5.46.1)
+      vite-node: 3.2.4(@types/node@24.12.2)(jiti@2.7.0)(sass@1.97.2)(terser@5.46.1)(yaml@2.8.1)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/debug': 4.1.13
       '@types/node': 24.12.2
       happy-dom: 20.11.1
     transitivePeerDependencies:
+      - jiti
       - less
       - lightningcss
       - msw
@@ -16678,6 +16732,8 @@ snapshots:
       - sugarss
       - supports-color
       - terser
+      - tsx
+      - yaml
 
   void-elements@3.1.0: {}
 

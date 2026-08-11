@@ -15,6 +15,7 @@ import type {
   PluginManifest,
   PluginManifestChildDefinition,
   PluginRuntimeSourceGroup,
+  PluginServerCapability,
   PluginServerRuntimeRole
 } from '@oneworks/types'
 
@@ -32,22 +33,26 @@ const DISABLE_DEFAULT_OFFICIAL_PLUGINS_ENV = '__ONEWORKS_PROJECT_DISABLE_DEFAULT
 const DIRECTORY_MANIFEST_FILES = ['plugin.json', 'plugin.yaml', 'plugin.yml', 'package.json'] as const
 const KNOWN_PLUGIN_ASSET_DIRS = ['rules', 'skills', 'specs', 'entities', 'mcp', 'hooks', 'client', 'server', 'plugins']
 const DEFAULT_OFFICIAL_PLUGIN_CONFIGS: PluginConfig = [
+  { id: '@oneworks/plugin-channel-oneworks' },
   { id: '@oneworks/plugin-browser-driver' },
   { id: '@oneworks/plugin-external-browser-driver' },
   { id: '@oneworks/plugin-cua-driver' },
   { id: '@oneworks/plugin-relay' }
 ]
 const DEFAULT_OFFICIAL_PLUGIN_PACKAGE_IDS = new Set([
+  '@oneworks/plugin-channel-oneworks',
   '@oneworks/plugin-browser-driver',
   '@oneworks/plugin-external-browser-driver',
   '@oneworks/plugin-cua-driver',
   '@oneworks/plugin-relay',
   'browser-driver',
+  'channel-oneworks',
   'cua-driver',
   'external-browser-driver',
   'relay'
 ])
 const PLUGIN_SERVER_RUNTIME_ROLES = new Set<PluginServerRuntimeRole>(['manager', 'workspace'])
+const PLUGIN_SERVER_CAPABILITIES = new Set<PluginServerCapability>(['oneworksChannel', 'roomRelay'])
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
@@ -141,14 +146,22 @@ const normalizePluginServerManifest = (value: unknown): NonNullable<PluginManife
   if (!isRecord(value)) return undefined
   const entry = typeof value.entry === 'string' && value.entry.trim() !== '' ? value.entry.trim() : undefined
   const roles = normalizePluginServerRuntimeRoles(value.roles)
-  if (entry == null && roles.length === 0) return undefined
+  const capabilities = Array.isArray(value.capabilities)
+    ? [
+      ...new Set(value.capabilities.filter(
+        (capability): capability is PluginServerCapability =>
+          typeof capability === 'string' && PLUGIN_SERVER_CAPABILITIES.has(capability as PluginServerCapability)
+      ))
+    ]
+    : []
+  if (entry == null && roles.length === 0 && capabilities.length === 0) return undefined
   if (entry == null) {
-    return { roles }
+    return { ...(capabilities.length > 0 ? { capabilities } : {}), roles }
   }
   if (roles.length === 0) {
     throw new Error('Plugin server manifest must define plugin.server.roles with manager or workspace.')
   }
-  return { entry, roles }
+  return { ...(capabilities.length > 0 ? { capabilities } : {}), entry, roles }
 }
 
 const normalizeLocalizedTextMap = (value: unknown) => {

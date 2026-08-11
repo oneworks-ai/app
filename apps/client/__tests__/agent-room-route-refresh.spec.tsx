@@ -12,6 +12,18 @@ import {
 } from '#~/routes/AgentRoomRoute'
 import { buildAgentRoomArchiveExitTarget } from '#~/routes/agent-room-session-paths'
 
+vi.hoisted(() => {
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: {
+      clear: () => undefined,
+      getItem: () => null,
+      removeItem: () => undefined,
+      setItem: () => undefined
+    }
+  })
+})
+
 const mocks = vi.hoisted(() => ({
   chatRouteView: vi.fn((_props?: unknown) => null),
   getAgentRoom: vi.fn(),
@@ -42,6 +54,12 @@ vi.mock('react-router-dom', () => ({
   useNavigate: () => mocks.navigate,
   useParams: () => mocks.params,
   useSearchParams: () => [new URLSearchParams(mocks.search)]
+}))
+
+vi.mock('#~/plugins/plugin-context', () => ({
+  usePluginContext: () => ({
+    snapshot: { instances: [] }
+  })
 }))
 
 vi.mock('antd', async () => {
@@ -83,6 +101,7 @@ const roomDetail: AgentRoomDetailResponse = {
   room: {
     id: 'room-live',
     title: 'Live room',
+    owner: { type: 'local' },
     hostSessionId: 'host-session',
     status: 'active',
     createdAt: 1,
@@ -90,7 +109,9 @@ const roomDetail: AgentRoomDetailResponse = {
   },
   members: [],
   runs: [],
-  messages: []
+  messages: [],
+  channelLinks: [],
+  shares: []
 }
 
 describe('agent room route detail refresh', () => {

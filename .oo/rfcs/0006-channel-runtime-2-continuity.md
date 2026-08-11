@@ -1,7 +1,7 @@
 ---
 rfc: 0006
 title: Channel Runtime 2.0 - Conversation Continuity
-status: draft
+status: implemented
 authors:
   - Codex
 created: 2026-06-16
@@ -245,7 +245,7 @@ interaction 请求送达到频道后，channel handler 会按当前 channel sess
 
 可恢复任务的发现走同一套 sender-scoped 命令：`/auth list resumable` 或 typed command `channel.auth.list` with `{ "scope": "resumable" }` 会列出 `metadata.resume.status=ready` 的 resolved pending intent。普通用户只看到自己 owner user/account 下的任务；管理员可以看到当前 channel type 下所有可恢复任务。
 
-尚未落地的部分是平台送达策略和更细的 router 策略：系统还需要根据平台能力选择私信、ephemeral、公开提示或外部授权页；授权结果回来后，最小恢复器已经能消费 `metadata.resume` 并创建 fresh ChildSession，命令入口、后台 scheduler、显式 manual resume 和下一条 owner 消息都能触发对应恢复策略，但还需要 router 决定更复杂的延迟、摘要或跨 thread 归并场景。
+平台送达当前按可用能力选择 direct message 或脱敏 public hint，并通过持久 throttle 避免重复提醒；具体平台的 ephemeral/only-visible provider 和外部 OAuth 授权页仍是扩展点。授权结果回来后，恢复器可以按 immediate、manual 或 next_message 消费 `metadata.resume`，通过 lease 和稳定派生 ID 创建 fresh ChildSession；其他用户的消息不会误消费 owner 的 pending intent。
 
 ## Memory Loading
 
@@ -277,7 +277,7 @@ ContinuitySnapshot 解决“刚才聊到哪”，MemorySnapshot 解决“这个�
 
 `channel_pending_intents` 也已落地最小存储、授权写入、delivery 标记、默认 delivery throttle 和 grant/deny 收敛链路。ConversationState 会维护 `pendingIntentIds` 索引；DB repo 已提供 open / resolved intent 查询，resolved authorization intent 会带 `metadata.resume.status=ready`，`services/channel-resume` 可以按 authorization request、conversation、owner user/account 或 threadKey 加载并投递待续接事项。
 
-这仍不是完整 child lifecycle：后续需要继续补 router decision、outbound turn、lastBotReply、MemorySnapshot、平台化 pending intent delivery、更细的 resume policy、writeback result，以及更智能的 topic/thread resolver。
+当前 child lifecycle 已关联 router decision、continuity snapshot、MemorySnapshot、pending intent、terminal status 和 writeback audit；外发成功后会幂等追加 outbound turn 并刷新 `lastBotReply`。当前 topic resolver 保持确定性：平台 reply 优先，其次 direct channel，再次 group entity+actor；更智能的 topic split/merge 和平台专属 ephemeral delivery 属于后续兼容扩展，不改变 fresh ChildSession 不变量。
 
 ## Open Questions
 

@@ -72,6 +72,7 @@ const roomDetail: AgentRoomDetailResponse = {
   room: {
     id: 'room-1',
     title: 'Room one',
+    owner: { type: 'local' },
     status: 'active',
     createdAt: 1,
     updatedAt: 2
@@ -89,7 +90,9 @@ const roomDetail: AgentRoomDetailResponse = {
       updatedAt: 2
     }
   ],
-  messages: []
+  messages: [],
+  channelLinks: [],
+  shares: []
 }
 
 const childSession = {

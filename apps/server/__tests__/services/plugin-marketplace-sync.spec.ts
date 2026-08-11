@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import serverPackageJson from '../../package.json'
+
 import { syncPluginMarketplaceSelection } from '#~/services/plugins/marketplace-sync.js'
 
 const mocks = vi.hoisted(() => ({
@@ -97,7 +99,7 @@ describe('plugin marketplace sync', () => {
       plugins: [{
         id: '@oneworks/plugin-logger',
         scope: 'logs',
-        version: '0.1.0'
+        version: serverPackageJson.version
       }]
     })
 

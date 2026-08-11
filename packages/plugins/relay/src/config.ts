@@ -273,9 +273,10 @@ const setSecretValue = (patch: RelayConfigPatch, ref: string, value: string) => 
 
 const snapshotDeviceToken = async (
   projectHome: string,
+  env: Record<string, string | null | undefined>,
   snapshot: RelayConfigSnapshot
 ) => {
-  const store = await createRelayDeviceStore(projectHome).readStore()
+  const store = await createRelayDeviceStore(projectHome, env).readStore()
   const sourceServerId = readText(snapshot.sourceServerId)
   if (sourceServerId != null) {
     const exactServer = store.servers[sourceServerId]
@@ -291,13 +292,14 @@ const snapshotDeviceToken = async (
 
 const applySnapshotSecrets = async (
   projectHome: string,
+  env: Record<string, string | null | undefined>,
   snapshot: RelayConfigSnapshot,
   patch: RelayConfigPatch | undefined,
   matchedAssignmentIds: string[]
 ) => {
   const nextPatch = cloneConfigPatch(patch)
   if (nextPatch == null || matchedAssignmentIds.length === 0) return nextPatch
-  const deviceToken = await snapshotDeviceToken(projectHome, snapshot).catch(() => '')
+  const deviceToken = await snapshotDeviceToken(projectHome, env, snapshot).catch(() => '')
   if (deviceToken === '') return nextPatch
 
   const matchedIds = new Set(matchedAssignmentIds)
@@ -363,7 +365,7 @@ export const resolveConfig = async (context: RelayPluginConfigHookContext) => {
   })
   if (snapshot == null) return undefined
 
-  const store = await createRelayDeviceStore(projectHome).readStore()
+  const store = await createRelayDeviceStore(projectHome, context.env).readStore()
   const effectiveSnapshot = filterRelayConfigSnapshotByPreferences(
     snapshot,
     readRelayConfigSourcePreferencesForSnapshot(store, snapshot)
@@ -372,6 +374,7 @@ export const resolveConfig = async (context: RelayPluginConfigHookContext) => {
   const patch = annotateRelayModelServiceOwnership(
     await applySnapshotSecrets(
       projectHome,
+      context.env,
       effectiveSnapshot,
       resolved.patch,
       resolved.matchedAssignmentIds

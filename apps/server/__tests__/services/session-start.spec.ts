@@ -183,6 +183,7 @@ describe('startAdapterSession', () => {
       getSession: vi.fn(() => currentSession),
       getSessionRuntimeState,
       getChannelSessionBySessionId,
+      getChannelChildSessionRunBySessionId: vi.fn(() => undefined),
       getAgentRoomByHostSessionId,
       consumeSessionPermissionOnce,
       createSession,

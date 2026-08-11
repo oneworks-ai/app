@@ -13,6 +13,7 @@ const migrateLegacyChannelIdentityNamespace = vi.fn()
 const commitChannelWebhookNonce = vi.fn()
 const releaseChannelWebhookNonce = vi.fn()
 const reserveChannelWebhookNonce = vi.fn()
+const upsertChannelOutboundDelivery = vi.fn()
 const logger = {
   info: vi.fn(),
   warn: vi.fn(),
@@ -45,7 +46,8 @@ vi.mock('#~/db/index.js', () => ({
     commitChannelWebhookNonce,
     migrateLegacyChannelIdentityNamespace,
     releaseChannelWebhookNonce,
-    reserveChannelWebhookNonce
+    reserveChannelWebhookNonce,
+    upsertChannelOutboundDelivery
   })
 }))
 
@@ -479,6 +481,9 @@ describe('initChannels', () => {
       {
         channelKey: 'erjie',
         logger,
+        outboundStore: {
+          upsert: expect.any(Function)
+        },
         webhookNonceStore: {
           commit: expect.any(Function),
           release: expect.any(Function),
@@ -530,7 +535,8 @@ describe('initChannels', () => {
       headers: { 'x-test': '1' },
       query: { secret: 'secret' },
       body: { TypeName: 'AddMsg' },
-      rawBody: '{"TypeName":"AddMsg"}'
+      rawBody: '{"TypeName":"AddMsg"}',
+      remoteAddress: '::1'
     })
 
     expect(result).toEqual({
@@ -542,14 +548,14 @@ describe('initChannels', () => {
       headers: { 'x-test': '1' },
       query: { secret: 'secret' },
       body: { TypeName: 'AddMsg' },
-      rawBody: '{"TypeName":"AddMsg"}'
+      rawBody: '{"TypeName":"AddMsg"}',
+      remoteAddress: '::1'
     })
   })
 
   it('routes OneWorks native webhooks through receiving handlers with channel links', async () => {
     const { channelDefinition } = await import('../../../../packages/channels/oneworks/src/index.js')
     const { createChannelConnection } = await import('../../../../packages/channels/oneworks/src/connection.js')
-    const signature = await import('../../../../packages/channels/oneworks/src/webhook-signature.js')
     const channelLink = {
       channelKey: 'oneworks-main',
       entity: 'owo-demo',
@@ -573,7 +579,7 @@ describe('initChannels', () => {
           'oneworks-main': {
             type: 'oneworks',
             title: 'OneWorks Native',
-            webhookSecret: 'secret'
+            allowInsecureWebhooks: true
           }
         }
       }
@@ -585,26 +591,14 @@ describe('initChannels', () => {
       senderId: 'user-yijie',
       text: '@OWO hi'
     }
-    const rawBody = JSON.stringify(body)
-    const nonce = 'nonce-native-1'
-    const timestamp = String(Date.now())
     const result = await handleChannelWebhook({
       channelType: 'oneworks',
       channelKey: 'oneworks-main',
       method: 'POST',
-      headers: {
-        [signature.ONEWORKS_WEBHOOK_NONCE_HEADER]: nonce,
-        [signature.ONEWORKS_WEBHOOK_SIGNATURE_HEADER]: signature.buildOneWorksWebhookSignature({
-          body: rawBody,
-          nonce,
-          secret: 'secret',
-          timestamp
-        }),
-        [signature.ONEWORKS_WEBHOOK_TIMESTAMP_HEADER]: timestamp
-      },
+      headers: { host: 'localhost:8787' },
       query: {},
       body,
-      rawBody
+      remoteAddress: '::1'
     })
 
     expect(result).toEqual({
@@ -626,7 +620,7 @@ describe('initChannels', () => {
           receiveId: 'wan-ke-native',
           receiveIdType: 'room'
         },
-        senderId: 'user-yijie',
+        senderId: 'oneworks-simulation:user-yijie',
         sessionType: 'group',
         text: '@OWO hi'
       }),
@@ -634,8 +628,80 @@ describe('initChannels', () => {
       expect.objectContaining({
         title: 'OneWorks Native',
         type: 'oneworks',
-        webhookSecret: 'secret'
+        allowInsecureWebhooks: true
       }),
+      'project',
+      [channelLink]
+    )
+  })
+
+  it('treats a signed loopback product simulation as a trusted synthetic admin', async () => {
+    const { channelDefinition } = await import('../../../../packages/channels/oneworks/src/index.js')
+    const { createChannelConnection } = await import('../../../../packages/channels/oneworks/src/connection.js')
+    const { buildOneWorksWebhookSignature } = await import(
+      '../../../../packages/channels/oneworks/src/webhook-signature.js'
+    )
+    const channelLink = {
+      channelKey: 'oneworks-main',
+      entity: 'owo-demo',
+      external: { type: 'room', roomId: 'product-room' },
+      name: 'product-room',
+      path: '/workspace/.oo/channels/product-room/channel.json',
+      definition: {}
+    }
+    loadChannelLinks.mockResolvedValue([channelLink])
+    loadChannelModule.mockReturnValue({ create: createChannelConnection, definition: channelDefinition })
+    const { initChannels } = await import('#~/channels/index.js')
+    const { handleChannelWebhook } = await import('#~/channels/webhook.js')
+    await initChannels([{
+      source: 'project',
+      config: { channels: { 'oneworks-main': { type: 'oneworks', webhookSecret: 'secret' } } }
+    }])
+
+    const body = {
+      messageId: 'msg-product-admin',
+      roomId: 'product-room',
+      senderId: 'product-admin',
+      simulation: { actorRole: 'admin', userLabel: 'Scenario Admin' },
+      text: '/status'
+    }
+    const rawBody = JSON.stringify(body)
+    const nonce = 'product-loopback-admin'
+    const timestamp = String(Date.now())
+    const result = await handleChannelWebhook({
+      body,
+      channelKey: 'oneworks-main',
+      channelType: 'oneworks',
+      headers: {
+        'x-oneworks-channel-nonce': nonce,
+        'x-oneworks-channel-signature': buildOneWorksWebhookSignature({
+          body: rawBody,
+          nonce,
+          secret: 'secret',
+          timestamp
+        }),
+        'x-oneworks-channel-timestamp': timestamp,
+        'x-oneworks-product-simulation': '1'
+      },
+      method: 'POST',
+      query: {},
+      rawBody,
+      remoteAddress: '127.0.0.1'
+    })
+
+    expect(result).toEqual(expect.objectContaining({ statusCode: 200 }))
+    expect(handleInboundEvent).toHaveBeenCalledWith(
+      'oneworks-main',
+      expect.objectContaining({
+        senderId: 'oneworks-simulation:product-admin',
+        synthetic: {
+          actorRole: 'admin',
+          kind: 'product_simulation',
+          userLabel: 'Scenario Admin'
+        }
+      }),
+      expect.any(Object),
+      expect.any(Object),
       'project',
       [channelLink]
     )

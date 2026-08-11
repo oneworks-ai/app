@@ -21,9 +21,16 @@ const makeCtx = (overrides: Partial<ChannelContext> = {}): ChannelContext => ({
     channelKey: 'lark-main',
     entity: 'owo-demo',
     external: { type: 'chat', chatId: 'oc_123' },
-    ingress: { ambientRouting: false },
+    ingress: {
+      ambientRouting: false,
+      createOnCommand: true,
+      createOnMention: true,
+      createOnPendingIntent: true,
+      createOnReplyToBot: true
+    },
     name: 'wan-ke-chat',
     path: '/workspace/.oo/channels/wan-ke-chat/channel.json',
+    routing: { accounts: {}, default: {}, modes: {}, users: {} },
     definition: {} as never
   },
   sessionId: undefined,
@@ -60,7 +67,7 @@ describe('ingressGateMiddleware', () => {
 
     await ingressGateMiddleware(makeCtx(), next)
 
-    expect(next).not.toHaveBeenCalled()
+    expect(next).toHaveBeenCalledOnce()
   })
 
   it('still blocks ordinary group messages for an existing bound session', async () => {
@@ -68,7 +75,7 @@ describe('ingressGateMiddleware', () => {
 
     await ingressGateMiddleware(makeCtx({ sessionId: 'sess-1' }), next)
 
-    expect(next).not.toHaveBeenCalled()
+    expect(next).toHaveBeenCalledOnce()
   })
 
   it('allows group messages without a channel link', async () => {
@@ -126,7 +133,7 @@ describe('ingressGateMiddleware', () => {
       next
     )
 
-    expect(next).not.toHaveBeenCalled()
+    expect(next).toHaveBeenCalledOnce()
   })
 
   it('allows messages that explicitly mention the bot with a leading at tag', async () => {
@@ -161,7 +168,7 @@ describe('ingressGateMiddleware', () => {
       next
     )
 
-    expect(next).not.toHaveBeenCalled()
+    expect(next).toHaveBeenCalledOnce()
   })
 
   it('blocks structured mentions of another bot even when ambient routing is enabled', async () => {
@@ -171,7 +178,13 @@ describe('ingressGateMiddleware', () => {
       makeCtx({
         channelLink: {
           ...makeCtx().channelLink!,
-          ingress: { ambientRouting: true }
+          ingress: {
+            ambientRouting: true,
+            createOnCommand: true,
+            createOnMention: true,
+            createOnPendingIntent: true,
+            createOnReplyToBot: true
+          }
         },
         inbound: {
           ...makeCtx().inbound,
@@ -182,7 +195,7 @@ describe('ingressGateMiddleware', () => {
       next
     )
 
-    expect(next).not.toHaveBeenCalled()
+    expect(next).toHaveBeenCalledOnce()
   })
 
   it('allows a structured mention of the current bot without relying on rendered text', async () => {
@@ -213,6 +226,10 @@ describe('ingressGateMiddleware', () => {
           ...ctx.channelLink!,
           ingress: {
             ambientRouting: false,
+            createOnCommand: true,
+            createOnMention: true,
+            createOnPendingIntent: true,
+            createOnReplyToBot: true,
             mentionPatterns: ['@OWO']
           }
         },
@@ -233,7 +250,13 @@ describe('ingressGateMiddleware', () => {
       makeCtx({
         channelLink: {
           ...ctx.channelLink!,
-          ingress: { ambientRouting: true }
+          ingress: {
+            ambientRouting: true,
+            createOnCommand: true,
+            createOnMention: true,
+            createOnPendingIntent: true,
+            createOnReplyToBot: true
+          }
         }
       }),
       next

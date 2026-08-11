@@ -629,6 +629,66 @@ describe('scripts cli', () => {
     })
   })
 
+  it('dispatches redacted channel acceptance options', async () => {
+    const runChannelAcceptance = vi.fn(async () => ({
+      counts: {
+        adminReadyChannels: 10,
+        channels: 10,
+        credentialReadyChannels: 10,
+        entities: 10,
+        groupAllowlistReadyChannels: 10,
+        groups: 6,
+        linkedChannels: 10,
+        linkedEntities: 10,
+        links: 20
+      },
+      digest: 'fixture',
+      ok: true,
+      violations: []
+    }))
+    const cli = createScriptsCli({
+      runChannelAcceptance
+    })
+
+    await cli.parseAsync([
+      'node',
+      'oneworks-dev',
+      'channel-acceptance',
+      '--workspace',
+      '/tmp/workspace',
+      '--db',
+      '/tmp/runtime.sqlite',
+      '--channel-type',
+      'lark',
+      '--expect-channels',
+      '10',
+      '--expect-entities',
+      '10',
+      '--expect-groups',
+      '6',
+      '--expect-links',
+      '20',
+      '--require-admins',
+      '--require-credentials',
+      '--require-group-allowlist',
+      '--json'
+    ])
+
+    expect(runChannelAcceptance).toHaveBeenCalledWith({
+      channelType: 'lark',
+      dbPath: '/tmp/runtime.sqlite',
+      expectChannels: 10,
+      expectEntities: 10,
+      expectGroups: 6,
+      expectLinks: 20,
+      json: true,
+      requireAdmins: true,
+      requireCredentials: true,
+      requireGroupAllowlist: true,
+      workspace: '/tmp/workspace'
+    })
+  })
+
   it('dispatches PR change policy checks with PR body file', async () => {
     const runPrChangeCheck = vi.fn(async () => {})
     const cli = createScriptsCli({

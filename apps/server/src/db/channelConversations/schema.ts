@@ -18,6 +18,7 @@ export const channelConversationsSchemaModule: SchemaModule = {
         activeParticipantsJson TEXT,
         recentTurnIdsJson TEXT,
         pendingIntentIdsJson TEXT,
+        lastBotReplyJson TEXT,
         lastChildRunId TEXT,
         lastMessageId TEXT,
         createdAt INTEGER NOT NULL,
@@ -98,9 +99,10 @@ export const channelConversationsSchemaModule: SchemaModule = {
     exec(`
       DROP INDEX IF EXISTS idx_channel_conversation_states_thread;
       CREATE UNIQUE INDEX idx_channel_conversation_states_thread
-        ON channel_conversation_states(channelType, channelKey, channelId, entity, threadKey);
+        ON channel_conversation_states(channelType, channelKey, channelId, COALESCE(entity, ''), threadKey);
     `)
 
     ensureColumn('channel_conversation_states', 'pendingIntentIdsJson', 'TEXT')
+    ensureColumn('channel_conversation_states', 'lastBotReplyJson', 'TEXT')
   }
 }

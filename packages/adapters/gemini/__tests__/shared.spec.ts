@@ -78,6 +78,17 @@ describe('resolveGeminiBinaryPath', () => {
 })
 
 describe('gemini prompt and settings helpers', () => {
+  it('serializes the structured no-tools native request with no tools or MCP servers', () => {
+    expect(buildGeminiSettings({
+      adapterConfig: {},
+      approvalMode: 'default',
+      mcpServers: {},
+      tools: []
+    })).toEqual(expect.objectContaining({
+      tools: []
+    }))
+  })
+
   it('normalizes prompt content into plain text', () => {
     expect(normalizeGeminiPrompt([
       { type: 'text', text: 'Review this change' },

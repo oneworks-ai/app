@@ -36,7 +36,10 @@ describe('larkChannelDefinition.connect', () => {
     const connection = await createChannelConnection(config)
     await expect(connection.sendMessage({ text: 'hello', receiveId: 'oc_xxx', receiveIdType: 'chat_id' }))
       .resolves
-      .toEqual({ messageId: 'om_sent' })
+      .toEqual({
+        messageId: 'om_sent',
+        navigation: { appHomeUrl: 'https://www.feishu.cn/messenger/', embeddable: false }
+      })
 
     expect(Client).toHaveBeenCalledWith({
       appId: 'app_id',
@@ -95,7 +98,10 @@ describe('larkChannelDefinition.connect', () => {
           exportJsonUrl: 'http://localhost:8787/channels/actions/tool-call-export?sessionId=sess-1&toolUseId=tool-1'
         }]
       }
-    })).resolves.toEqual({ messageId: 'om_card' })
+    })).resolves.toEqual({
+      messageId: 'om_card',
+      navigation: { appHomeUrl: 'https://www.feishu.cn/messenger/', embeddable: false }
+    })
 
     const payload = create.mock.calls[0]?.[0]
     expect(payload).toEqual(expect.objectContaining({
@@ -170,7 +176,10 @@ describe('larkChannelDefinition.connect', () => {
           }]
         }
       })
-    ).resolves.toEqual({ messageId: 'om_card' })
+    ).resolves.toEqual({
+      messageId: 'om_card',
+      navigation: { appHomeUrl: 'https://www.feishu.cn/messenger/', embeddable: false }
+    })
 
     expect(patch).toHaveBeenCalledWith({
       path: {
@@ -334,7 +343,10 @@ describe('larkChannelDefinition.connect', () => {
         fileName: 'tool-call.json',
         content: JSON.stringify({ ok: true }, null, 2)
       })
-    ).resolves.toEqual({ messageId: 'om_file' })
+    ).resolves.toEqual({
+      messageId: 'om_file',
+      navigation: { appHomeUrl: 'https://www.feishu.cn/messenger/', embeddable: false }
+    })
 
     expect(fileCreate).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
@@ -386,7 +398,10 @@ describe('larkChannelDefinition.connect', () => {
       text: '# 标题\n- item1\n- item2\n```ts\nconsole.log(1)\n```',
       receiveId: 'oc_xxx',
       receiveIdType: 'chat_id'
-    })).resolves.toEqual({ messageId: 'om_post' })
+    })).resolves.toEqual({
+      messageId: 'om_post',
+      navigation: { appHomeUrl: 'https://www.feishu.cn/messenger/', embeddable: false }
+    })
 
     expect(create).toHaveBeenCalledWith({
       params: { receive_id_type: 'chat_id' },

@@ -1,3 +1,4 @@
+import type { ChannelExecutionContext } from '@oneworks/core'
 import type { ChannelBaseConfig, ChannelConnection, ChannelInboundEvent } from '@oneworks/core/channel'
 
 import type { ChannelTextMessage } from '#~/channels/middleware/@types/index.js'
@@ -8,7 +9,8 @@ import { buildChannelContextPrompt } from './context'
 export const buildSessionSystemPrompt = async (
   inbound: ChannelInboundEvent,
   config: ChannelBaseConfig | undefined,
-  connection: ChannelConnection<ChannelTextMessage> | undefined
+  connection: ChannelConnection<ChannelTextMessage> | undefined,
+  executionContext?: ChannelExecutionContext
 ): Promise<string | undefined> => {
   const [channelRulesPrompt, connectionSystemPrompt] = await Promise.all([
     loadChannelAgentRules(inbound.channelType),
@@ -16,7 +18,7 @@ export const buildSessionSystemPrompt = async (
   ])
   return [
     config?.systemPrompt,
-    buildChannelContextPrompt(inbound, config),
+    buildChannelContextPrompt(inbound, config, executionContext),
     channelRulesPrompt,
     connectionSystemPrompt
   ]

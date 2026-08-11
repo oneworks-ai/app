@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 
 import { buildUpdateStatement } from '../repo.utils'
 import type { SqliteDatabase } from '../sqlite'
-import { mapAuthorizationRequestRow } from './authorization-request-record'
+import { mapAuthorizationRequestRow, validateAllowedApprovers } from './authorization-request-record'
 import type {
   AuthorizationRequestInput,
   AuthorizationRequestUpdates,
@@ -11,8 +11,8 @@ import type {
 import { stringifyJson } from './json'
 
 const AUTHORIZATION_REQUEST_SELECT = `
-  id, channelType, channelLinkName, requesterUserId, requesterAccountId,
-  credentialSubjectUserId, credentialKey,
+  id, channelType, issuerKey, channelKey, channelId, channelLinkName, requesterUserId, requesterAccountId,
+  credentialSubjectUserId, credentialKey, allowedApproversJson,
   capability, status, message, metadataJson, createdAt, updatedAt, expiresAt, resolvedAt
 `
 
@@ -27,24 +27,29 @@ export function createAuthorizationRequestsRepo(db: SqliteDatabase) {
   }
 
   const createAuthorizationRequest = (row: AuthorizationRequestInput) => {
+    const allowedApprovers = validateAllowedApprovers(row.allowedApprovers)
     const now = Date.now()
     const id = row.id?.trim() || `auth_${randomUUID()}`
     const stmt = db.prepare(`
       INSERT INTO channel_authorization_requests (
-        id, channelType, channelLinkName, requesterUserId, requesterAccountId,
-        credentialSubjectUserId, credentialKey,
+        id, channelType, issuerKey, channelKey, channelId, channelLinkName, requesterUserId, requesterAccountId,
+        credentialSubjectUserId, credentialKey, allowedApproversJson,
         capability, status, message, metadataJson, createdAt, updatedAt, expiresAt, resolvedAt
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     stmt.run(
       id,
       row.channelType,
+      row.issuerKey ?? row.channelKey ?? null,
+      row.channelKey ?? row.issuerKey ?? null,
+      row.channelId ?? null,
       row.channelLinkName ?? null,
       row.requesterUserId ?? null,
       row.requesterAccountId ?? null,
       row.credentialSubjectUserId ?? null,
       row.credentialKey ?? null,
+      stringifyJson(allowedApprovers),
       row.capability,
       row.status ?? 'pending',
       row.message ?? null,
@@ -65,6 +70,7 @@ export function createAuthorizationRequestsRepo(db: SqliteDatabase) {
       {
         ...updates,
         metadataJson: updates.metadata,
+        allowedApproversJson: updates.allowedApprovers,
         updatedAt: Date.now()
       },
       [
@@ -73,6 +79,7 @@ export function createAuthorizationRequestsRepo(db: SqliteDatabase) {
         { key: 'metadataJson', toParam: value => stringifyJson(value) },
         { key: 'expiresAt' },
         { key: 'resolvedAt' },
+        { key: 'allowedApproversJson', toParam: value => stringifyJson(value) },
         { key: 'updatedAt' }
       ] as const
     )
@@ -126,9 +133,23 @@ export function createAuthorizationRequestsRepo(db: SqliteDatabase) {
     return stmt.all<ChannelAuthorizationRequestDbRow>(...params).map(row => mapAuthorizationRequestRow(row)!)
   }
 
+  const listPendingAuthorizationRequests = (channelType?: string, limit = 50) => {
+    const normalizedLimit = Number.isInteger(limit) && limit > 0 ? limit : 50
+    const stmt = db.prepare(`
+      SELECT ${AUTHORIZATION_REQUEST_SELECT}
+      FROM channel_authorization_requests
+      WHERE status = 'pending'${channelType == null ? '' : ' AND channelType = ?'}
+      ORDER BY createdAt ASC
+      LIMIT ?
+    `)
+    const params = channelType == null ? [normalizedLimit] : [channelType, normalizedLimit]
+    return stmt.all<ChannelAuthorizationRequestDbRow>(...params).map(row => mapAuthorizationRequestRow(row)!)
+  }
+
   return {
     createAuthorizationRequest,
     getAuthorizationRequest,
+    listPendingAuthorizationRequests,
     listPendingAuthorizationRequestsForAccount,
     listPendingAuthorizationRequestsForUser,
     resolveAuthorizationRequest,

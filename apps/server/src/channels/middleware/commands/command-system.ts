@@ -1,3 +1,5 @@
+import type { ConfigJsonSchema } from '@oneworks/types'
+
 // ── Argument types ──────────────────────────────────────────────────────────
 
 type CommandArgumentParser<TValue> = (value: string) => TValue
@@ -15,6 +17,9 @@ interface BaseArgumentSpec<TValue> {
   readonly description?: string
   readonly parse: CommandArgumentParser<TValue>
   readonly choices?: CommandArgumentChoices
+  /** JSON schema and native parser used by the typed tool frontend. */
+  readonly toolInputSchema?: ConfigJsonSchema
+  readonly parseToolInput?: (value: unknown) => TValue
 }
 
 export interface RequiredArgumentSpec<TValue> extends BaseArgumentSpec<TValue> {
@@ -57,6 +62,12 @@ const identity = <TValue>(value: TValue) => value
 interface ParserArgumentOptions<TValue> {
   description?: string
   parse?: CommandArgumentParser<TValue>
+}
+
+interface JsonArgumentOptions<TValue> {
+  description?: string
+  schema: ConfigJsonSchema
+  parse?: (value: unknown) => TValue
 }
 
 interface ChoiceArgumentOptions<TChoices extends readonly CommandArgumentChoice[]> {
@@ -130,6 +141,32 @@ export function optionalArg<TValue = string>(
   } as OptionalArgumentSpec<TValue>
 }
 
+const parseJsonArgument = (value: string) => JSON.parse(value) as unknown
+
+const createJsonArgument = <TValue>(
+  kind: 'optional' | 'required',
+  name: string,
+  options: JsonArgumentOptions<TValue>
+) => ({
+  kind,
+  name,
+  description: options.description,
+  parse: (value: string) => (options.parse ?? (value => value as TValue))(parseJsonArgument(value)),
+  parseToolInput: options.parse ?? (value => value as TValue),
+  toolInputSchema: options.schema,
+  choices: undefined
+})
+
+export const requiredJsonArg = <TValue = unknown>(
+  name: string,
+  options: JsonArgumentOptions<TValue>
+): RequiredArgumentSpec<TValue> => createJsonArgument('required', name, options) as RequiredArgumentSpec<TValue>
+
+export const optionalJsonArg = <TValue = unknown>(
+  name: string,
+  options: JsonArgumentOptions<TValue>
+): OptionalArgumentSpec<TValue> => createJsonArgument('optional', name, options) as OptionalArgumentSpec<TValue>
+
 export function variadicArg<const TChoices extends readonly CommandArgumentChoice[]>(
   name: string,
   options: ChoiceArgumentOptions<TChoices>
@@ -179,10 +216,69 @@ export function restArg<TValue = string>(
 type MaybePromise<TValue> = TValue | Promise<TValue>
 
 export type PermissionLevel = 'everyone' | 'admin'
+export type CommandRisk = 'low' | 'medium' | 'high'
+export type CommandVisibility = 'public' | 'dm' | 'ephemeral' | 'none'
+
+export interface CommandApprovalMetadata {
+  readonly capability?: string
+  readonly credential?: {
+    readonly credentialKey: string
+    readonly requiredScopes?: readonly string[]
+    readonly subjectUserId?: string
+  }
+  readonly risk: CommandRisk
+  readonly visibility: CommandVisibility
+}
+
+/**
+ * Declares a command's tool effect for the shared Tool Approval layer. A
+ * command with this metadata intentionally does not enter legacy channel-only
+ * approval; normal sender permission is still enforced by the runner.
+ */
+export interface CommandEffectMetadata {
+  readonly effect: 'external-read' | 'external-write' | 'local-read' | 'local-write'
+  readonly operation?: string
+  readonly risk: CommandRisk
+}
+
+export interface ResolvedCommandEffectMetadata extends CommandEffectMetadata {
+  readonly operation: string
+}
+
+export const resolveCommandEffectMetadata = (
+  metadata: CommandEffectMetadata | undefined,
+  commandPath: readonly string[]
+): ResolvedCommandEffectMetadata | undefined => {
+  if (metadata == null) return undefined
+  return {
+    ...metadata,
+    operation: metadata.operation ?? `channel.${commandPath.map(segment => segment.replace(/^\/+/, '')).join('.')}`
+  }
+}
+
+const legacyCommandApprovalMetadata: CommandApprovalMetadata = {
+  risk: 'low',
+  visibility: 'public'
+}
+
+export interface ResolvedCommandApprovalMetadata extends Omit<CommandApprovalMetadata, 'capability'> {
+  readonly capability: string
+}
+
+export const resolveCommandApprovalMetadata = (
+  metadata: CommandApprovalMetadata | undefined,
+  commandPath: readonly string[]
+): ResolvedCommandApprovalMetadata => ({
+  ...legacyCommandApprovalMetadata,
+  ...metadata,
+  capability: metadata?.capability ??
+    `channel.command.${commandPath.map(segment => segment.replace(/^\/+/, '')).join('.')}`
+})
 
 export interface CommandActionInput<TContext, TArgs extends readonly CommandArgumentSpec[]> {
   readonly ctx: TContext
   readonly args: InferArgumentValues<TArgs>
+  readonly commandRunId?: string
   readonly rawArgs: readonly string[]
   readonly commandPath: readonly string[]
   readonly usage: string
@@ -193,6 +289,8 @@ export interface CommandSpec<TContext, TArgs extends readonly CommandArgumentSpe
   readonly aliases: readonly string[]
   readonly descriptionKey: string | undefined
   readonly permission: PermissionLevel
+  readonly approval?: CommandApprovalMetadata
+  readonly effect?: CommandEffectMetadata
   readonly args: TArgs
   readonly subcommands: readonly AnyCommandSpec<TContext>[]
   readonly action: ((input: CommandActionInput<TContext, TArgs>) => MaybePromise<void>) | undefined
@@ -206,6 +304,8 @@ export interface CommandBuilder<TContext, TArgs extends readonly CommandArgument
   alias(...aliases: string[]): CommandBuilder<TContext, TArgs>
   description(key: string): CommandBuilder<TContext, TArgs>
   adminOnly(): CommandBuilder<TContext, TArgs>
+  approval(metadata: CommandApprovalMetadata): CommandBuilder<TContext, TArgs>
+  effect(metadata: CommandEffectMetadata): CommandBuilder<TContext, TArgs>
   argument<TSpec extends CommandArgumentSpec>(arg: TSpec): CommandBuilder<TContext, readonly [...TArgs, TSpec]>
   subcommand(sub: AnyCommandSpec<TContext>): CommandBuilder<TContext, TArgs>
   action(fn: (input: CommandActionInput<TContext, TArgs>) => MaybePromise<void>): CommandSpec<TContext, TArgs>
@@ -218,6 +318,8 @@ export const command = <TContext>(name: string): CommandBuilder<TContext, readon
     aliases: [] as string[],
     descriptionKey: undefined as string | undefined,
     permission: 'everyone' as PermissionLevel,
+    approval: legacyCommandApprovalMetadata as CommandApprovalMetadata,
+    effect: undefined as CommandEffectMetadata | undefined,
     args: [] as CommandArgumentSpec[],
     subcommands: [] as AnyCommandSpec<TContext>[],
     action: undefined as
@@ -230,6 +332,8 @@ export const command = <TContext>(name: string): CommandBuilder<TContext, readon
     aliases: state.aliases,
     descriptionKey: state.descriptionKey,
     permission: state.permission,
+    approval: state.approval,
+    effect: state.effect,
     args: state.args,
     subcommands: state.subcommands,
     action: state.action
@@ -246,6 +350,14 @@ export const command = <TContext>(name: string): CommandBuilder<TContext, readon
     },
     adminOnly() {
       state.permission = 'admin'
+      return builder
+    },
+    approval(metadata) {
+      state.approval = metadata
+      return builder
+    },
+    effect(metadata) {
+      state.effect = metadata
       return builder
     },
     argument(arg) {

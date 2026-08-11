@@ -29,6 +29,7 @@ const snapshotFromContributions = async (contributions: Record<string, unknown>)
 describe('public plugin contribution projection', () => {
   it('preserves every declared non-CLI contribution shape and intentional extension metadata', async () => {
     const contributions = {
+      channelNavigation: [{ id: 'room-links', optionsKey: 'navigation', priority: 100 }],
       chatHeaderActions: [{ command: 'chat', icon: 'chat', id: 'chat', title: 'Chat' }],
       chatHeaderMoreMenu: [{
         children: [{ id: 'child', title: 'Child' }],

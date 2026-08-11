@@ -149,8 +149,10 @@ export interface PluginClientManifest {
 }
 
 export type PluginServerRuntimeRole = 'manager' | 'workspace'
+export type PluginServerCapability = 'oneworksChannel' | 'roomRelay'
 
 export interface PluginServerManifest {
+  capabilities?: PluginServerCapability[]
   entry?: string
   roles: PluginServerRuntimeRole[]
 }
@@ -520,6 +522,13 @@ export interface PluginContributionRoute extends PluginContributionBase {
   routeId?: string
 }
 
+/** Supplies Room message navigation preferences from one plugin-owned options field. */
+export interface PluginContributionChannelNavigation extends PluginContributionBase {
+  id: string
+  optionsKey: string
+  priority?: number
+}
+
 interface PluginContributionSettingsPageBase extends PluginContributionBase {
   /** Host-owned Settings group where this page is rendered. */
   group?: PluginContributionSettingsPageGroup
@@ -571,6 +580,7 @@ export interface PluginExtensionContributionManifest extends PluginContributionB
 }
 
 export interface PluginContributionManifest extends PluginContributionAvailability {
+  channelNavigation?: PluginContributionChannelNavigation[]
   extensionContributions?: PluginExtensionContributionManifest[]
   extensionPoints?: PluginExtensionPointManifest[]
   navItems?: PluginContributionNavItem[]
@@ -633,6 +643,15 @@ export interface PluginContributionManifest extends PluginContributionAvailabili
    */
   toolUsePresentations?: PluginContributionToolUsePresentation[]
   routes?: PluginContributionRoute[]
+}
+
+export type PluginRequestPermission = 'workspace:manage' | 'workspace:read'
+
+/** Trusted caller context attached by the host to server-side plugin API requests. */
+export interface PluginRequestPrincipal {
+  id: string
+  kind: 'local_workspace' | 'web_account'
+  permissions: PluginRequestPermission[]
 }
 
 export interface PluginApiDocumentation {

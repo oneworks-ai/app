@@ -152,11 +152,14 @@ describe('web auth service', () => {
 
   it('creates and verifies signed session tokens', async () => {
     vi.stubEnv('__ONEWORKS_PROJECT_SERVER_ACTION_SECRET__', 'test-secret')
-    const { createSessionToken, verifySessionToken } = await import('#~/services/auth/index.js')
+    const { createSessionToken, resolveSessionTokenClaims, verifySessionToken } = await import(
+      '#~/services/auth/index.js'
+    )
     const env = createEnv(dataDir)
     const token = await createSessionToken(env, 'alice', 60_000)
 
     expect(await verifySessionToken(env, token)).toBe(true)
+    await expect(resolveSessionTokenClaims(env, token)).resolves.toMatchObject({ username: 'alice' })
     expect(await verifySessionToken(env, `${token}x`)).toBe(false)
   })
 })

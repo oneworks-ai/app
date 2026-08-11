@@ -308,6 +308,16 @@ export const resolvePluginClientEntryUrl = ({
     return entryUrl
   }
 
+  // Built-in clients are also served by the dev host. Keeping them same-origin
+  // avoids browser extension and private-network policies on random workspace ports.
+  if (
+    isDevelopment &&
+    instance.sourceGroup === 'builtIn' &&
+    clientOrigin != null
+  ) {
+    return new URL(entryUrl, clientOrigin).toString()
+  }
+
   const entryServerBaseUrl = normalizeServerBaseUrl(runtimeEndpoint?.serverBaseUrl) ??
     normalizeServerBaseUrl(serverBaseUrl)
   const resolvedEntryUrl = entryServerBaseUrl == null

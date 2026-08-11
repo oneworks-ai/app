@@ -1,5 +1,7 @@
 import { parseJson } from './json'
 
+export type ChannelOffhourBacklogStatus = 'pending' | 'leased' | 'processed' | 'failed'
+
 export interface ChannelOffhourBacklogDbRow {
   id: string
   channelType: string
@@ -15,6 +17,12 @@ export interface ChannelOffhourBacklogDbRow {
   rawJson: string | null
   createdAt: number
   processedAt: number | null
+  status: ChannelOffhourBacklogStatus
+  attempts: number
+  leaseOwner: string | null
+  leaseExpiresAt: number | null
+  lastError: string | null
+  digestChildRunId: string | null
 }
 
 export interface ChannelOffhourBacklogRow {
@@ -32,6 +40,12 @@ export interface ChannelOffhourBacklogRow {
   raw: unknown
   createdAt: number
   processedAt: number | null
+  status: ChannelOffhourBacklogStatus
+  attempts: number
+  leaseOwner: string | null
+  leaseExpiresAt: number | null
+  lastError: string | null
+  digestChildRunId: string | null
 }
 
 export interface OffhourBacklogInput {
@@ -51,10 +65,14 @@ export interface OffhourBacklogInput {
 }
 
 export interface OffhourBacklogFilter {
+  channelKey?: string
   channelLinkName?: string
   channelType?: string
   channelId?: string
+  entity?: string
   limit?: number
+  sessionType?: string
+  statuses?: readonly ChannelOffhourBacklogStatus[]
 }
 
 export function mapBacklogRow(
@@ -75,6 +93,12 @@ export function mapBacklogRow(
     text: row.text,
     raw: parseJson(row.rawJson),
     createdAt: row.createdAt,
-    processedAt: row.processedAt
+    processedAt: row.processedAt,
+    status: row.status,
+    attempts: row.attempts,
+    leaseOwner: row.leaseOwner,
+    leaseExpiresAt: row.leaseExpiresAt,
+    lastError: row.lastError,
+    digestChildRunId: row.digestChildRunId
   }
 }

@@ -1,12 +1,16 @@
 import type { SqliteDatabase } from '../sqlite'
-import { mapCredentialRow } from './credential-record'
+import {
+  assertOpaqueCredentialProviderHandle,
+  assertSafeCredentialMetadata,
+  mapCredentialRow
+} from './credential-record'
 import type { ChannelUserCredentialDbRow, ChannelUserCredentialInput } from './credential-record'
 import { stringifyJson } from './json'
 
 export function createCredentialsRepo(db: SqliteDatabase) {
   const getCredential = (issuerKey: string, userId: string, credentialKey: string) => {
     const stmt = db.prepare(`
-      SELECT issuerKey, userId, channelType, credentialKey, label, status, scopesJson, expiresAt, metadataJson,
+      SELECT issuerKey, userId, channelType, credentialKey, providerHandle, label, status, scopesJson, expiresAt, metadataJson,
              createdAt, updatedAt
       FROM channel_user_credentials_v2
       WHERE issuerKey = ? AND userId = ? AND credentialKey = ?
@@ -15,15 +19,18 @@ export function createCredentialsRepo(db: SqliteDatabase) {
   }
 
   const upsertCredential = (row: ChannelUserCredentialInput) => {
+    assertSafeCredentialMetadata(row.metadata)
+    assertOpaqueCredentialProviderHandle(row.providerHandle)
     const now = Date.now()
     const stmt = db.prepare(`
       INSERT INTO channel_user_credentials_v2 (
-        issuerKey, userId, channelType, credentialKey, label, status, scopesJson, expiresAt, metadataJson, createdAt,
+        issuerKey, userId, channelType, credentialKey, providerHandle, label, status, scopesJson, expiresAt, metadataJson, createdAt,
         updatedAt
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(issuerKey, userId, credentialKey) DO UPDATE SET
         channelType = excluded.channelType,
+        providerHandle = excluded.providerHandle,
         label = excluded.label,
         status = excluded.status,
         scopesJson = excluded.scopesJson,
@@ -36,6 +43,7 @@ export function createCredentialsRepo(db: SqliteDatabase) {
       row.userId,
       row.channelType,
       row.credentialKey,
+      row.providerHandle?.trim() || null,
       row.label ?? null,
       row.status ?? 'needs_auth',
       stringifyJson(row.scopes),
@@ -49,7 +57,7 @@ export function createCredentialsRepo(db: SqliteDatabase) {
 
   const listCredentialsForUser = (issuerKey: string, userId: string) => {
     const stmt = db.prepare(`
-      SELECT issuerKey, userId, channelType, credentialKey, label, status, scopesJson, expiresAt, metadataJson,
+      SELECT issuerKey, userId, channelType, credentialKey, providerHandle, label, status, scopesJson, expiresAt, metadataJson,
              createdAt, updatedAt
       FROM channel_user_credentials_v2
       WHERE issuerKey = ? AND userId = ?

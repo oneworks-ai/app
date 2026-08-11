@@ -42,6 +42,7 @@ try {
   for (
     const dependency of [
       '@oneworks/cli-helper',
+      '@oneworks/icon',
       '@oneworks/relay-admin',
       '@oneworks/types',
       '@simplewebauthn/server',

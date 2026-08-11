@@ -43,6 +43,7 @@ export function createChannelIdentitiesRepo(db: SqliteDatabase) {
     listAccountsForUser: accounts.listAccountsForUser,
     listCredentialsForUser: credentials.listCredentialsForUser,
     listPendingAuthorizationRequestsForAccount: authorizationRequests.listPendingAuthorizationRequestsForAccount,
+    listPendingAuthorizationRequests: authorizationRequests.listPendingAuthorizationRequests,
     listPendingAuthorizationRequestsForUser: authorizationRequests.listPendingAuthorizationRequestsForUser,
     migrateLegacyNamespace,
     resolveAuthorizationRequest: authorizationRequests.resolveAuthorizationRequest,

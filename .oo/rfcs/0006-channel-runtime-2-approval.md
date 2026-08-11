@@ -1,11 +1,11 @@
 ---
 rfc: 0006
 title: Channel Runtime 2.0 - Approval Policy
-status: draft
+status: implemented
 authors:
   - Codex
 created: 2026-06-16
-updated: 2026-06-17
+updated: 2026-08-09
 targetVersion: vNext
 ---
 
@@ -85,7 +85,7 @@ AND credential scope covers the requested resource/action
 - 每次 channel 消息投递都会把本轮 `actorAccountId`、`actorUserId`、channel link、message id 和 sender 写入 `sessions.channelActorSnapshot`。permission-check 优先使用这个 snapshot，旧会话才 fallback 到 `channel_sessions.senderId`，避免群聊后续消息覆盖 binding 后影响正在运行的权限审批。
 - 每次 channel inbound dispatch 都会写入 `channel_child_session_runs`，把 actor snapshot、messageId、entity、dispatch mode 和目标 sessionId 关联起来。权限请求和 authorization request 后续可以通过 sessionId / messageId / actor 追溯到触发 run。
 
-尚未落地的部分是完整 policy layer 解析、授权请求送达策略、授权页面/私信/ephemeral 的平台能力适配、credential secret 的真实存储，以及多账号 OAuth 登录后的真实 credential 激活链路。当前 resolver 是最小可执行内核，permission-check guardrail 只解决“不偷用本地登录态”的安全边界；没有 credential 时仍只能 ask / degrade / deny，不能代表发送者直接执行个人平台权限。
+当前 ApprovalPolicyResolver 已与 policy gate、sender-scoped command、interaction mirror、authorization delivery、pending intent 和三种 resume mode 接通。授权请求会绑定 requester、credential subject、conversation、child run 和不可变 actor/delivery snapshot；direct message 可用时优先私发，否则只发送脱敏 public hint，并按请求节流。仍未落地的是平台专属 ephemeral/only-visible provider、外部 OAuth 授权页面、多账号 credential provider 和真实 secret vault；在这些 provider 存在前，没有 active credential 的用户级动作仍只能 ask / degrade / deny，不能借用本地登录态、CLI profile、bot app secret 或管理员身份执行。
 
 ## Single-Account Compatibility
 

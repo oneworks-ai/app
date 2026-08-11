@@ -8,6 +8,10 @@ export const agentRoomsSchemaModule: SchemaModule = {
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
         hostSessionId TEXT,
+        ownerAccountId TEXT,
+        ownerNodeId TEXT,
+        ownerSourceId TEXT,
+        leaderEntity TEXT,
         status TEXT NOT NULL,
         lastMessage TEXT,
         archivedAt INTEGER,
@@ -60,6 +64,74 @@ export const agentRoomsSchemaModule: SchemaModule = {
         content TEXT NOT NULL,
         eventType TEXT,
         payloadJson TEXT,
+        sequence INTEGER NOT NULL DEFAULT 0,
+        idempotencyKey TEXT,
+        originJson TEXT,
+        createdAt INTEGER NOT NULL,
+        FOREIGN KEY(roomId) REFERENCES agent_rooms(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS agent_room_message_deliveries (
+        id TEXT PRIMARY KEY,
+        roomMessageId TEXT NOT NULL,
+        targetJson TEXT NOT NULL,
+        status TEXT NOT NULL,
+        providerMessageId TEXT,
+        navigationJson TEXT,
+        error TEXT,
+        sentAt INTEGER,
+        createdAt INTEGER NOT NULL,
+        updatedAt INTEGER NOT NULL,
+        FOREIGN KEY(roomMessageId) REFERENCES agent_room_messages(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS agent_room_channel_links (
+        roomId TEXT NOT NULL,
+        channelLinkName TEXT NOT NULL,
+        channelType TEXT NOT NULL,
+        channelKey TEXT NOT NULL,
+        channelId TEXT NOT NULL,
+        accountLabel TEXT,
+        conversationKind TEXT NOT NULL,
+        entity TEXT NOT NULL,
+        label TEXT NOT NULL,
+        receiveId TEXT NOT NULL,
+        receiveIdType TEXT NOT NULL,
+        threadId TEXT,
+        createdAt INTEGER NOT NULL,
+        PRIMARY KEY (roomId, channelLinkName),
+        FOREIGN KEY(roomId) REFERENCES agent_rooms(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS agent_room_shares (
+        id TEXT PRIMARY KEY,
+        roomId TEXT NOT NULL,
+        status TEXT NOT NULL,
+        relayRef TEXT,
+        publishedAt INTEGER,
+        revokedAt INTEGER,
+        createdAt INTEGER NOT NULL,
+        updatedAt INTEGER NOT NULL,
+        FOREIGN KEY(roomId) REFERENCES agent_rooms(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS agent_room_share_grants (
+        shareId TEXT NOT NULL,
+        principalType TEXT NOT NULL,
+        principalId TEXT NOT NULL,
+        permissionsJson TEXT NOT NULL,
+        createdAt INTEGER NOT NULL,
+        PRIMARY KEY (shareId, principalType, principalId),
+        FOREIGN KEY(shareId) REFERENCES agent_room_shares(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS agent_room_events (
+        id TEXT PRIMARY KEY,
+        roomId TEXT NOT NULL,
+        sequence INTEGER NOT NULL,
+        idempotencyKey TEXT,
+        type TEXT NOT NULL,
+        payloadJson TEXT NOT NULL,
         createdAt INTEGER NOT NULL,
         FOREIGN KEY(roomId) REFERENCES agent_rooms(id) ON DELETE CASCADE
       );
@@ -67,6 +139,10 @@ export const agentRoomsSchemaModule: SchemaModule = {
       CREATE INDEX IF NOT EXISTS idx_agent_rooms_hostSessionId ON agent_rooms(hostSessionId);
       CREATE INDEX IF NOT EXISTS idx_agent_room_messages_roomId ON agent_room_messages(roomId, createdAt);
       CREATE INDEX IF NOT EXISTS idx_agent_room_messages_runKey ON agent_room_messages(roomId, runKey);
+      CREATE INDEX IF NOT EXISTS idx_agent_room_deliveries_message ON agent_room_message_deliveries(roomMessageId);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_room_channel_links_lookup
+        ON agent_room_channel_links(channelType, channelKey, channelId);
+      CREATE INDEX IF NOT EXISTS idx_agent_room_shares_room ON agent_room_shares(roomId, status);
       CREATE INDEX IF NOT EXISTS idx_agent_room_runs_sessionId ON agent_room_runs(sessionId);
       CREATE INDEX IF NOT EXISTS idx_agent_room_runs_memberKey ON agent_room_runs(roomId, memberKey);
     `)
@@ -74,6 +150,10 @@ export const agentRoomsSchemaModule: SchemaModule = {
     if (getColumns('agent_rooms').length > 0) {
       ensureColumn('agent_rooms', 'archivedAt', 'INTEGER')
       ensureColumn('agent_rooms', 'favoritedAt', 'INTEGER')
+      ensureColumn('agent_rooms', 'ownerAccountId', 'TEXT')
+      ensureColumn('agent_rooms', 'ownerNodeId', 'TEXT')
+      ensureColumn('agent_rooms', 'ownerSourceId', 'TEXT')
+      ensureColumn('agent_rooms', 'leaderEntity', 'TEXT')
     }
 
     if (getColumns('agent_room_members').length > 0) {
@@ -90,6 +170,29 @@ export const agentRoomsSchemaModule: SchemaModule = {
       ensureColumn('agent_room_messages', 'runKey', 'TEXT')
       ensureColumn('agent_room_messages', 'eventType', 'TEXT')
       ensureColumn('agent_room_messages', 'payloadJson', 'TEXT')
+      ensureColumn('agent_room_messages', 'sequence', 'INTEGER NOT NULL DEFAULT 0')
+      ensureColumn('agent_room_messages', 'idempotencyKey', 'TEXT')
+      ensureColumn('agent_room_messages', 'originJson', 'TEXT')
     }
+
+    if (getColumns('agent_room_channel_links').length > 0) {
+      ensureColumn('agent_room_channel_links', 'accountLabel', 'TEXT')
+      ensureColumn('agent_room_channel_links', 'conversationKind', 'TEXT NOT NULL DEFAULT "unknown"')
+      ensureColumn('agent_room_channel_links', 'receiveId', 'TEXT NOT NULL DEFAULT ""')
+      ensureColumn('agent_room_channel_links', 'receiveIdType', 'TEXT NOT NULL DEFAULT ""')
+      ensureColumn('agent_room_channel_links', 'threadId', 'TEXT')
+    }
+
+    exec(`
+      DROP INDEX IF EXISTS idx_agent_room_channel_links_lookup;
+      CREATE UNIQUE INDEX idx_agent_room_channel_links_lookup
+        ON agent_room_channel_links(channelType, channelKey, channelId);
+      CREATE INDEX IF NOT EXISTS idx_agent_room_messages_sequence ON agent_room_messages(roomId, sequence);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_room_messages_idempotency
+        ON agent_room_messages(roomId, idempotencyKey) WHERE idempotencyKey IS NOT NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_room_events_idempotency
+        ON agent_room_events(roomId, idempotencyKey) WHERE idempotencyKey IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_agent_room_events_sequence ON agent_room_events(roomId, sequence);
+    `)
   }
 }

@@ -5,6 +5,7 @@ import type { ChannelAccessConfig } from '@oneworks/core/channel'
 import { loadConfigState } from '#~/services/config/index.js'
 
 import type { ChannelContext } from '../@types'
+import { isChannelAdminContext } from '../access-principal'
 import { dedupe } from './utils'
 
 type AccessListField = 'admins' | 'allowedSenders' | 'blockedSenders' | 'allowedGroups' | 'blockedGroups'
@@ -29,9 +30,7 @@ const resolveSourceChannels = async (source: ConfigSource) => {
 }
 
 export const isAdmin = (ctx: ChannelContext) => {
-  const admins = ctx.config?.access?.admins
-  const senderId = ctx.inbound.senderId
-  return senderId != null && admins?.includes(senderId) === true
+  return isChannelAdminContext(ctx)
 }
 
 export const updateChannelConfig = async (

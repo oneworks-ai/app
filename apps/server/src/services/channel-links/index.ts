@@ -2,7 +2,7 @@ import { basename, dirname } from 'node:path'
 
 import type { ChannelInboundEvent } from '@oneworks/core/channel'
 import { DefinitionLoader } from '@oneworks/definition-loader'
-import type { ChannelLink, Definition } from '@oneworks/types'
+import type { ChannelLink, ChannelLinkIngress, ChannelLinkRouting, Definition } from '@oneworks/types'
 
 import { getWorkspaceFolder } from '#~/services/config/index.js'
 
@@ -18,13 +18,22 @@ export interface ResolvedChannelLink {
   }
   authorization?: ChannelLink['authorization']
   availability?: ChannelLink['availability']
+  moderation?: ChannelLink['moderation']
   definition: Definition<ChannelLink>
   entity: string
   external: ChannelLink['external']
-  ingress?: ChannelLink['ingress']
+  ingress:
+    & Required<
+      Pick<
+        ChannelLinkIngress,
+        'ambientRouting' | 'createOnMention' | 'createOnCommand' | 'createOnReplyToBot' | 'createOnPendingIntent'
+      >
+    >
+    & ChannelLinkIngress
   name: string
   path: string
   channelKey: string
+  routing: Required<Pick<ChannelLinkRouting, 'default' | 'modes' | 'users' | 'accounts'>>
 }
 
 export interface ChannelLinkMatchResult {
@@ -48,13 +57,27 @@ const toResolvedChannelLink = (definition: Definition<ChannelLink>): ResolvedCha
   address: compileChannelLinkDefinitionAddress(definition),
   authorization: definition.attributes.authorization,
   availability: definition.attributes.availability,
+  moderation: definition.attributes.moderation,
   definition,
   entity: definition.attributes.entity.trim(),
   external: definition.attributes.external,
-  ingress: definition.attributes.ingress,
+  ingress: {
+    ambientRouting: definition.attributes.ingress?.ambientRouting ?? false,
+    createOnMention: definition.attributes.ingress?.createOnMention ?? true,
+    createOnCommand: definition.attributes.ingress?.createOnCommand ?? true,
+    createOnReplyToBot: definition.attributes.ingress?.createOnReplyToBot ?? true,
+    createOnPendingIntent: definition.attributes.ingress?.createOnPendingIntent ?? true,
+    ...definition.attributes.ingress
+  },
   name: resolveChannelLinkName(definition),
   path: definition.path,
-  channelKey: definition.attributes.channel.trim()
+  channelKey: definition.attributes.channel.trim(),
+  routing: {
+    default: definition.attributes.routing?.default ?? {},
+    modes: definition.attributes.routing?.modes ?? {},
+    users: definition.attributes.routing?.users ?? {},
+    accounts: definition.attributes.routing?.accounts ?? {}
+  }
 })
 
 export const loadChannelLinks = async (

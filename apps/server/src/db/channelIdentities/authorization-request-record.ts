@@ -6,11 +6,15 @@ export type ChannelAuthorizationRequestStatus = 'pending' | 'granted' | 'denied'
 export interface ChannelAuthorizationRequestDbRow {
   id: string
   channelType: string
+  issuerKey: string | null
+  channelKey: string | null
+  channelId: string | null
   channelLinkName: string | null
   requesterUserId: string | null
   requesterAccountId: string | null
   credentialSubjectUserId: string | null
   credentialKey: string | null
+  allowedApproversJson: string | null
   capability: string
   status: ChannelAuthorizationRequestStatus
   message: string | null
@@ -24,11 +28,15 @@ export interface ChannelAuthorizationRequestDbRow {
 export interface ChannelAuthorizationRequestRow {
   id: string
   channelType: string
+  issuerKey: string | null
+  channelKey: string | null
+  channelId: string | null
   channelLinkName: string | null
   requesterUserId: string | null
   requesterAccountId: string | null
   credentialSubjectUserId: string | null
   credentialKey: string | null
+  allowedApprovers: string[]
   capability: string
   status: ChannelAuthorizationRequestStatus
   message: string | null
@@ -42,11 +50,15 @@ export interface ChannelAuthorizationRequestRow {
 export interface AuthorizationRequestInput {
   id?: string | null
   channelType: string
+  issuerKey?: string | null
+  channelKey?: string | null
+  channelId?: string | null
   channelLinkName?: string | null
   requesterUserId?: string | null
   requesterAccountId?: string | null
   credentialSubjectUserId?: string | null
   credentialKey?: string | null
+  allowedApprovers?: string[]
   capability: string
   status?: ChannelAuthorizationRequestStatus
   message?: string | null
@@ -60,6 +72,36 @@ export interface AuthorizationRequestUpdates {
   metadata?: JsonRecord | null
   expiresAt?: number | null
   resolvedAt?: number | null
+  allowedApprovers?: string[]
+}
+
+const isTypedApproverPrincipal = (value: string) => (
+  /^user:[^:\s]+$/u.test(value) || /^account:\S+:[^:\s]+$/u.test(value)
+)
+
+export const validateAllowedApprovers = (value: readonly string[] | undefined) => {
+  const normalized = [...new Set((value ?? []).map(item => item.trim()))]
+  if (normalized.some(item => !isTypedApproverPrincipal(item))) {
+    throw new Error('allowed approvers must use user:<canonicalUserId> or account:<issuerKey>:<accountId>')
+  }
+  return normalized
+}
+
+const parseJsonStringArray = (value: string | null) => {
+  if (value == null || value === '') return []
+  try {
+    const parsed = JSON.parse(value) as unknown
+    return Array.isArray(parsed)
+      ? [
+        ...new Set(
+          parsed.filter((item): item is string => typeof item === 'string' && isTypedApproverPrincipal(item.trim()))
+            .map(item => item.trim())
+        )
+      ]
+      : []
+  } catch {
+    return []
+  }
 }
 
 export function mapAuthorizationRequestRow(
@@ -69,11 +111,15 @@ export function mapAuthorizationRequestRow(
   return {
     id: row.id,
     channelType: row.channelType,
+    issuerKey: row.issuerKey,
+    channelKey: row.channelKey,
+    channelId: row.channelId,
     channelLinkName: row.channelLinkName,
     requesterUserId: row.requesterUserId,
     requesterAccountId: row.requesterAccountId,
     credentialSubjectUserId: row.credentialSubjectUserId,
     credentialKey: row.credentialKey,
+    allowedApprovers: parseJsonStringArray(row.allowedApproversJson),
     capability: row.capability,
     status: row.status,
     message: row.message,

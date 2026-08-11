@@ -18,6 +18,7 @@ import type {
   AgentRoomInteractionRequestStatus,
   AgentRoomMember,
   AgentRoomMessage,
+  AgentRoomMessageOrigin,
   AgentRoomMessageReference,
   AgentRoomRun,
   AgentRoomRunStatus,
@@ -39,7 +40,17 @@ import { processUserMessage } from '#~/services/session/index.js'
 import { getSessionInteraction, handleInteractionResponse } from '#~/services/session/interaction.js'
 import { notifySessionUpdated } from '#~/services/session/runtime.js'
 
+import { createAgentRoomOwner } from './owner.js'
+import type { AgentRoomOwnerDependencies } from './owner.js'
+
 type AgentRoomDb = ReturnType<typeof getDb>
+type ProjectedAgentRoomMessage = Omit<AgentRoomMessage, 'deliveries' | 'sequence'>
+
+const toProjectedRoomMessage = (message: ProjectedAgentRoomMessage): AgentRoomMessage => ({
+  ...message,
+  deliveries: [],
+  sequence: message.createdAt
+})
 
 export interface AgentRoomSessionDelivery {
   processUserMessage: (sessionId: string, content: string) => Promise<void>
@@ -70,6 +81,8 @@ const defaultSessionDelivery: AgentRoomSessionDelivery = {
   getSessionInteraction,
   notifySessionUpdated
 }
+
+const appendUserMessageFlightsByDb = new WeakMap<object, Map<string, Promise<AgentRoomMessage>>>()
 
 const formatRuntimeRoomRunLine = (
   run: AgentRoomRun,
@@ -445,7 +458,7 @@ const toChildSessionUserRoomMessage = (
     memberKey: run.memberKey,
     runKey: run.key
   }
-  return {
+  return toProjectedRoomMessage({
     id: `child-user:${run.sessionId}:${event.message.id}`,
     roomId: room.id,
     role: 'user',
@@ -459,7 +472,7 @@ const toChildSessionUserRoomMessage = (
       target
     },
     createdAt: event.message.createdAt
-  }
+  })
 }
 
 const getHostInteractionRequestKind = (payload: unknown): AgentRoomEventRequestKind => (
@@ -591,7 +604,7 @@ const toHostInteractionRequestRoomMessage = (
     ? event.payload.permissionContext
     : undefined
 
-  return {
+  return toProjectedRoomMessage({
     id: `host-interaction:${hostSessionId}:${event.id}`,
     roomId: room.id,
     role: 'agent',
@@ -610,7 +623,7 @@ const toHostInteractionRequestRoomMessage = (
       ...(permissionContext != null ? { permissionContext } : {})
     },
     createdAt
-  }
+  })
 }
 
 const getHostChildRequestTarget = (content: string): AgentRoomUserMessageTarget | undefined => {
@@ -707,7 +720,7 @@ const getHostSessionRoomMessages = (
     }
 
     hasProjectedInitialUserMessage = true
-    projectedMessages.push({
+    projectedMessages.push(toProjectedRoomMessage({
       id: isInitialProjection
         ? `host-initial:${hostSessionId}:${currentHostTurnUserMessage.message.id}`
         : `host-user:${hostSessionId}:${currentHostTurnUserMessage.message.id}`,
@@ -720,7 +733,7 @@ const getHostSessionRoomMessages = (
         messageId: currentHostTurnUserMessage.message.id
       },
       createdAt: currentHostTurnUserMessage.message.createdAt
-    })
+    }))
   }
 
   const appendCurrentHostTurn = (turnEndAt?: number) => {
@@ -737,7 +750,7 @@ const getHostSessionRoomMessages = (
     }
 
     const target = currentHostTurnTarget
-    projectedMessages.push({
+    projectedMessages.push(toProjectedRoomMessage({
       id: `host-message:${hostSessionId}:${pendingAssistantMessage.message.id}`,
       roomId: room.id,
       role: 'agent',
@@ -752,7 +765,7 @@ const getHostSessionRoomMessages = (
         ...(target != null ? { target } : {})
       },
       createdAt: pendingAssistantMessage.message.createdAt
-    })
+    }))
     resetCurrentHostTurn()
   }
 
@@ -921,7 +934,7 @@ const getChildSessionRoomMessages = (
       const target = getRoomUserMessageTarget(currentRoomMessage)
       const memberKey = target?.memberKey ?? currentRoomMessage.memberKey
       const runKey = target?.runKey ?? currentRoomMessage.runKey
-      projectedMessages.push({
+      projectedMessages.push(toProjectedRoomMessage({
         id: `child-message:${sessionId}:${pendingAssistantMessage.message.id}`,
         roomId: room.id,
         role: 'agent',
@@ -936,7 +949,7 @@ const getChildSessionRoomMessages = (
           ...(target != null ? { target } : {})
         },
         createdAt: pendingAssistantMessage.message.createdAt
-      })
+      }))
 
       currentRoomMessage = undefined
       pendingAssistantMessage = undefined
@@ -1143,8 +1156,12 @@ const toRunRecord = (
 
 export function createAgentRoomService(
   db: AgentRoomDb = getDb(),
-  delivery: AgentRoomSessionDelivery = defaultSessionDelivery
+  delivery: AgentRoomSessionDelivery = defaultSessionDelivery,
+  ownerDependencies: Pick<AgentRoomOwnerDependencies, 'resolveChannelLink'> = {}
 ) {
+  const appendUserMessageFlights = appendUserMessageFlightsByDb.get(db) ?? new Map()
+  appendUserMessageFlightsByDb.set(db, appendUserMessageFlights)
+
   const requireRoom = (roomId: string): AgentRoom => {
     const room = db.getAgentRoom(roomId)
     if (room == null) {
@@ -1433,42 +1450,114 @@ export function createAgentRoomService(
     return stored
   }
 
-  const appendUserMessage = async (roomId: string, content: string, target?: AgentRoomUserMessageTarget) => {
+  const getStoredDeliveryState = (message: AgentRoomMessage) => {
+    if (!isRecord(message.payload)) return undefined
+    const state = (message.payload as Record<string, unknown>).deliveryState
+    return state === 'delivered' || state === 'failed' || state === 'pending' ? state : undefined
+  }
+
+  const resolveClaimedUserMessage = (message: AgentRoomMessage): AgentRoomMessage => {
+    const state = getStoredDeliveryState(message)
+    if (
+      state === 'delivered' ||
+      (state == null && isRecord(message.payload) && (message.payload as Record<string, unknown>).delivery != null)
+    ) {
+      return message
+    }
+    if (state === 'failed') {
+      throw new Error(`Agent room message delivery previously failed: ${message.id}`)
+    }
+    throw new Error(`Agent room message delivery outcome is unresolved: ${message.id}`)
+  }
+
+  const appendUserMessageOnce = async (
+    roomId: string,
+    content: string,
+    target?: AgentRoomUserMessageTarget,
+    options: { idempotencyKey?: string; origin?: AgentRoomMessageOrigin } = {}
+  ) => {
     const room = requireRoom(roomId)
     const now = Date.now()
-    const deliveryResult = await deliverUserMessage(room, content, target)
-    if (deliveryResult == null) {
-      throw new Error(`No deliverable session for agent room message: ${roomId}`)
-    }
-
-    const message = db.appendAgentRoomMessage({
+    const claim = db.claimAgentRoomMessage({
       roomId,
       role: 'user',
       content,
+      ...(options.idempotencyKey != null ? { idempotencyKey: options.idempotencyKey } : {}),
+      ...(options.origin != null ? { origin: options.origin } : {}),
       ...(target != null ? { memberKey: target.memberKey, runKey: target.runKey } : {}),
       payload: {
-        delivery: deliveryResult,
-        reactions: [{
-          kind: 'working',
-          createdAt: deliveryResult.receivedAt,
-          ...(deliveryResult.target != null ? { target: deliveryResult.target } : {})
-        }],
+        deliveryState: 'pending',
         ...(target != null ? { target } : {})
       },
       createdAt: now
     })
+    if (!claim.inserted) return resolveClaimedUserMessage(claim.message)
+
+    const deliveryResult = await deliverUserMessage(room, content, target)
+    if (deliveryResult == null) {
+      db.updateAgentRoomMessagePayload(claim.message.id, {
+        deliveryState: 'failed',
+        ...(target != null ? { target } : {})
+      })
+      throw new Error(`No deliverable session for agent room message: ${roomId}`)
+    }
+
+    const message = db.updateAgentRoomMessagePayload(claim.message.id, {
+      delivery: deliveryResult,
+      deliveryState: 'delivered',
+      reactions: [{
+        kind: 'working',
+        createdAt: deliveryResult.receivedAt,
+        ...(deliveryResult.target != null ? { target: deliveryResult.target } : {})
+      }],
+      ...(target != null ? { target } : {})
+    })
+    if (message == null) {
+      throw new Error(`Agent room message disappeared during delivery: ${claim.message.id}`)
+    }
     updateRoomSummary(roomId, content, now)
     return message
+  }
+
+  const appendUserMessage = (
+    roomId: string,
+    content: string,
+    target?: AgentRoomUserMessageTarget,
+    options: { idempotencyKey?: string; origin?: AgentRoomMessageOrigin } = {}
+  ) => {
+    const idempotencyKey = options.idempotencyKey
+    if (idempotencyKey == null) return appendUserMessageOnce(roomId, content, target, options)
+
+    const flightKey = `${roomId}:${idempotencyKey}`
+    const existingFlight = appendUserMessageFlights.get(flightKey)
+    if (existingFlight != null) return existingFlight
+
+    const flight = appendUserMessageOnce(roomId, content, target, options)
+    const tracked = flight.finally(() => {
+      if (appendUserMessageFlights.get(flightKey) === tracked) appendUserMessageFlights.delete(flightKey)
+    })
+    appendUserMessageFlights.set(flightKey, tracked)
+    return tracked
   }
 
   const applyEvent = (
     roomId: string,
     event: AgentRoomEvent,
     options: {
+      idempotencyKey?: string
       now?: number
     } = {}
   ): AgentRoomMessage => {
     const room = requireRoom(roomId)
+    if (event.id != null) {
+      const existingById = db.getAgentRoomMessage(event.id)
+      if (existingById != null && existingById.roomId === roomId) return existingById
+    }
+    const idempotencyKey = options.idempotencyKey ?? event.id
+    if (idempotencyKey != null) {
+      const existing = db.getAgentRoomMessageByIdempotencyKey(roomId, idempotencyKey)
+      if (existing != null) return existing
+    }
     const now = options.now ?? Date.now()
     const content = getEventContent(event)
     let summaryForState = content
@@ -1497,12 +1586,13 @@ export function createAgentRoomService(
     }
 
     const message = db.appendAgentRoomMessage({
-      id: event.id,
+      id: event.id ?? options.idempotencyKey,
       roomId,
       role: event.type === 'member_joined' ? 'system' : 'agent',
       memberKey: event.type === 'assignment_sent' ? getAssignmentSenderMemberKey(room) : event.member.key,
       ...(hasRun(event) ? { runKey: event.run.key } : {}),
       content,
+      ...(idempotencyKey != null ? { idempotencyKey } : {}),
       eventType: event.type,
       payload: event,
       createdAt: now
@@ -1516,30 +1606,7 @@ export function createAgentRoomService(
     if (persistedDetail == null) {
       return undefined
     }
-
-    const detail = filterDuplicateCompletedMessages(filterStaleTerminalMessages(persistedDetail))
-    const hostSessionMessages = getHostSessionRoomMessages(db, detail.room, detail.messages)
-    const childSessionMessages = getChildSessionRoomMessages(db, detail.room, detail.messages)
-    const sessionMessages = [...hostSessionMessages, ...childSessionMessages]
-    const messagesWithoutShadowedTerminals = filterTerminalMessagesShadowedByChildSessionMessages(
-      detail.messages,
-      childSessionMessages
-    )
-    const existingMessageIds = new Set(messagesWithoutShadowedTerminals.map(message => message.id))
-    const projectedMessages = sessionMessages.filter(message => !existingMessageIds.has(message.id))
-    if (projectedMessages.length === 0 && messagesWithoutShadowedTerminals.length === detail.messages.length) {
-      return applyDetailMessageSummary(detail)
-    }
-
-    return applyDetailMessageSummary({
-      ...detail,
-      messages: filterDuplicateCompletedMessages({
-        ...detail,
-        messages: [...projectedMessages, ...messagesWithoutShadowedTerminals].sort((left, right) =>
-          left.createdAt - right.createdAt
-        )
-      }).messages
-    })
+    return applyDetailMessageSummary(persistedDetail)
   }
 
   const listRooms = (filter?: Parameters<AgentRoomDb['listAgentRooms']>[0]) =>
@@ -1562,14 +1629,23 @@ export function createAgentRoomService(
       }
     })
 
+  const owner = createAgentRoomOwner({
+    appendUserMessage,
+    applyEvent,
+    db,
+    ...ownerDependencies
+  })
+
   return {
     appendUserMessage,
     applyEvent,
     createRoom: db.createAgentRoom.bind(db),
     deleteRoom: db.deleteAgentRoom.bind(db),
     ensureRoomForHostSession: db.ensureAgentRoomForHostSession.bind(db),
+    executeCommand: owner.execute,
     getRoomForHostSession: db.getAgentRoomByHostSessionId.bind(db),
     getDetail,
+    getOwnerSnapshot: owner.getSnapshot,
     listRoomSummaries,
     listRooms,
     respondInteraction,

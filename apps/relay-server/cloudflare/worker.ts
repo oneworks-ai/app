@@ -3,8 +3,15 @@ import { normalizeRelayDeviceTransport } from '@oneworks/types/relay-device-tran
 
 import { parseRelayServerArgs } from '../src/config.js'
 import type { RelayConfigEnv } from '../src/config.js'
-import { applyRelayControlHeartbeatFrame, createRelayControlAttachment } from '../src/platform/control-heartbeat.js'
+import {
+  applyRelayControlHeartbeatFrame,
+  createRelayControlAttachment,
+  parseRelayControlFrame,
+  validateRelayControlAttachment
+} from '../src/platform/control-heartbeat.js'
+import type { RelayControlAttachment } from '../src/platform/control-heartbeat.js'
 import { createRelayFetchHandler } from '../src/platform/fetch-handler.js'
+import { createRelayRooms } from '../src/rooms/index.js'
 import { createDurableObjectRelayStoreRepository } from '../src/storage/durable-object.js'
 import type { RelayDurableObjectStorage } from '../src/storage/durable-object.js'
 import { createRelayTelemetry } from '../src/telemetry/metrics.js'
@@ -159,6 +166,9 @@ export class RelayDurableObject {
   private readonly args
   private readonly state: RelayDurableObjectState
   private readonly telemetry = createRelayTelemetry()
+  private readonly rooms = createRelayRooms()
+  private readonly closedRoomSockets = new WeakSet<RelayWebSocket>()
+  private readonly roomOwners = new Map<RelayWebSocket, () => void>()
   private readonly platform: Required<RelayCloudflarePlatform>
 
   constructor(state: RelayDurableObjectState, env: RelayCloudflareEnv, platform: RelayCloudflarePlatform = {}) {
@@ -179,8 +189,77 @@ export class RelayDurableObject {
     this.handler = createRelayFetchHandler(this.args, {
       storeRepository: this.repository,
       telemetry: this.telemetry,
+      rooms: this.rooms,
       onForwardingJobAvailable: deviceId => this.notifyForwardingJobAvailable(deviceId)
     })
+  }
+
+  private bindRoomOwner(socket: RelayWebSocket, deviceId: string) {
+    if (this.closedRoomSockets.has(socket)) return
+    if (this.roomOwners.has(socket)) return
+    this.roomOwners.set(
+      socket,
+      this.rooms.bindOwner({
+        deviceId,
+        send: frame => socket.send(JSON.stringify(frame))
+      })
+    )
+  }
+
+  private unbindRoomOwner(socket: RelayWebSocket) {
+    this.roomOwners.get(socket)?.()
+    this.roomOwners.delete(socket)
+  }
+
+  private closeAndUnbind(socket: RelayWebSocket, code: number, reason: string) {
+    this.closedRoomSockets.add(socket)
+    this.unbindRoomOwner(socket)
+    socket.close(code, reason)
+  }
+
+  private readControlAttachment(socket: RelayWebSocket): RelayControlAttachment | undefined {
+    let rawAttachment: unknown
+    try {
+      rawAttachment = socket.deserializeAttachment()
+    } catch {
+      return undefined
+    }
+    if (rawAttachment == null || typeof rawAttachment !== 'object') return undefined
+    const attachment = rawAttachment as {
+      connectionIp?: unknown
+      deviceId?: unknown
+      deviceTokenHash?: unknown
+      version?: unknown
+    }
+    if (
+      attachment.version !== 1 ||
+      typeof attachment.deviceId !== 'string' ||
+      typeof attachment.deviceTokenHash !== 'string'
+    ) return undefined
+    return {
+      version: 1,
+      deviceId: attachment.deviceId,
+      deviceTokenHash: attachment.deviceTokenHash,
+      ...(typeof attachment.connectionIp === 'string' ? { connectionIp: attachment.connectionIp } : {})
+    }
+  }
+
+  private async restoreRoomOwners() {
+    for (const socket of this.state.getWebSockets()) {
+      const attachment = this.readControlAttachment(socket)
+      let valid = false
+      try {
+        valid = attachment != null &&
+          await validateRelayControlAttachment({ attachment, repository: this.repository })
+      } catch {
+        valid = false
+      }
+      if (attachment == null || !valid) {
+        this.closeAndUnbind(socket, 1008, 'invalid attachment')
+        continue
+      }
+      this.bindRoomOwner(socket, attachment.deviceId)
+    }
   }
 
   private notifyForwardingJobAvailable(deviceId: string) {
@@ -188,7 +267,7 @@ export class RelayDurableObject {
       try {
         socket.send(JSON.stringify({ type: 'jobs-available' }))
       } catch {
-        socket.close(1011, 'notification failed')
+        this.closeAndUnbind(socket, 1011, 'notification failed')
       }
     }
   }
@@ -219,60 +298,55 @@ export class RelayDurableObject {
       const server = pair[1]
       this.state.acceptWebSocket(server, [deviceId])
       server.serializeAttachment(attachment)
+      this.bindRoomOwner(server, deviceId)
       return this.platform.createUpgradeResponse(client)
     }
+    await this.restoreRoomOwners()
     return await this.handler(request)
   }
 
   async webSocketMessage(socket: RelayWebSocket, message: string | ArrayBuffer) {
-    let rawAttachment: unknown
+    const controlAttachment = this.readControlAttachment(socket)
+    let valid = false
     try {
-      rawAttachment = socket.deserializeAttachment()
+      valid = controlAttachment != null &&
+        await validateRelayControlAttachment({ attachment: controlAttachment, repository: this.repository })
     } catch {
-      socket.close(1008, 'invalid attachment')
+      valid = false
+    }
+    if (controlAttachment == null || !valid) {
+      this.closeAndUnbind(socket, 1008, 'invalid attachment')
       return
     }
-    if (rawAttachment == null || typeof rawAttachment !== 'object') {
-      socket.close(1008, 'invalid attachment')
-      return
+    this.bindRoomOwner(socket, controlAttachment.deviceId)
+    const parsed = parseRelayControlFrame(message)
+    const result = parsed !== 'frame-too-large' &&
+        (parsed?.type === 'room-descriptor' || parsed?.type === 'room-response')
+      ? await this.rooms.handleControlFrame({
+        attachment: controlAttachment,
+        frame: message,
+        repository: this.repository
+      })
+      : await applyRelayControlHeartbeatFrame({
+        args: this.args,
+        attachment: controlAttachment,
+        frame: message,
+        repository: this.repository,
+        telemetry: this.telemetry
+      })
+    if (result === 'frame-too-large') this.closeAndUnbind(socket, 1009, 'frame too large')
+    if (result === 'invalid-frame') this.closeAndUnbind(socket, 1003, 'invalid frame')
+    if (result === 'revoked') {
+      this.closeAndUnbind(socket, 1008, 'device token revoked')
     }
-    const attachment = rawAttachment as {
-      connectionIp?: unknown
-      deviceId?: unknown
-      deviceTokenHash?: unknown
-      version?: unknown
-    }
-    if (
-      attachment.version !== 1 ||
-      typeof attachment.deviceId !== 'string' ||
-      typeof attachment.deviceTokenHash !== 'string'
-    ) {
-      socket.close(1008, 'invalid attachment')
-      return
-    }
-    const attachmentDeviceId = attachment.deviceId
-    const attachmentDeviceTokenHash = attachment.deviceTokenHash
-    const result = await applyRelayControlHeartbeatFrame({
-      args: this.args,
-      attachment: {
-        version: 1,
-        deviceId: attachmentDeviceId,
-        deviceTokenHash: attachmentDeviceTokenHash,
-        ...(typeof attachment.connectionIp === 'string' ? { connectionIp: attachment.connectionIp } : {})
-      },
-      frame: message,
-      repository: this.repository,
-      telemetry: this.telemetry
-    })
-    if (result === 'frame-too-large') socket.close(1009, 'frame too large')
-    if (result === 'invalid-frame') socket.close(1003, 'invalid frame')
-    if (result === 'revoked') socket.close(1008, 'device token revoked')
   }
 
-  webSocketClose(_socket: RelayWebSocket, _code: number, _reason: string, _wasClean: boolean) {}
+  webSocketClose(socket: RelayWebSocket, _code: number, _reason: string, _wasClean: boolean) {
+    this.unbindRoomOwner(socket)
+  }
 
   webSocketError(socket: RelayWebSocket, _error: unknown) {
-    socket.close(1011, 'socket error')
+    this.closeAndUnbind(socket, 1011, 'socket error')
   }
 }
 

@@ -1,4 +1,11 @@
-export type ChannelChildSessionRunStatus = 'started' | 'dispatched' | 'failed'
+export type ChannelChildSessionRunStatus =
+  | 'started'
+  | 'dispatched'
+  | 'running'
+  | 'completed'
+  | 'blocked'
+  | 'failed'
+  | 'expired'
 export type ChannelChildSessionRunTriggerType = 'message' | 'message_batch' | 'system_resume'
 export type ChannelChildSessionRunDispatchMode = 'create_session' | 'continue_session'
 
@@ -22,12 +29,15 @@ export interface ChannelChildSessionRunDbRow {
   status: ChannelChildSessionRunStatus
   startedAt: number
   completedAt: number | null
+  memorySnapshotId: string | null
+  continuitySnapshotJson: string | null
   error: string | null
   metadataJson: string | null
 }
 
 export interface ChannelChildSessionRunRow extends Omit<ChannelChildSessionRunDbRow, 'metadataJson'> {
   metadata: Record<string, unknown> | null
+  continuitySnapshot: Record<string, unknown> | null
 }
 
 export const stringifyJson = (value: unknown) => {
@@ -56,6 +66,7 @@ export const mapRunRow = (row: ChannelChildSessionRunDbRow | undefined): Channel
   const { metadataJson, ...stored } = row
   return {
     ...stored,
-    metadata: parseMetadata(metadataJson)
+    metadata: parseMetadata(metadataJson),
+    continuitySnapshot: parseMetadata(row.continuitySnapshotJson)
   }
 }

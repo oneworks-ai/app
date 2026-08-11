@@ -1,11 +1,11 @@
 ---
 rfc: 0006
 title: Channel Runtime 2.0 - Policy Engine
-status: draft
+status: implemented
 authors:
   - Codex
 created: 2026-06-16
-updated: 2026-06-17
+updated: 2026-08-09
 targetVersion: vNext
 ---
 
@@ -123,7 +123,7 @@ muted_permanent
 - 重复 @ 不创建 child session。
 - 白名单用户可直接触发执行。
 
-当前实现先落了确定性 availability gate：当 ChannelLink 配置了 `availability.workHours`，且当前时间不在工作时间内，普通群聊消息会被截断；私聊或显式 mention 会回复 `offHours.replyText`，并按 `offHours.replyThrottleMs` 通过 `channel_reply_throttles` 做 DB 级节流；`availability.bypassSenders`、`availability.bypassUsers` 和频道管理员会绕过。`bypassUsers` 当前兼容平台 sender ID 和已解析的 canonical user ID；canonical user 来自 `identityMiddleware` 对当前 issuer 下 `channel_identity_links_v2` 的 verified 绑定解析。被下班 gate 截断的消息会写入 `channel_offhour_backlog`，后续还缺上班后的 digest / backlog process。
+当前实现已经覆盖 availability 与 moderation baseline：work-hours 之外的普通消息按配置 buffer 或 drop，显式 mention / 私聊的固定提示通过 DB throttle 限频；issuer-qualified account、verified canonical user 和管理员白名单可以绕过。buffer backlog 使用 lease、retry 与幂等状态机，`/backlog process` 会聚合消息并通过正常 dispatch 创建 digest ChildSession，不旁路调用模型。moderation 支持确定性 hit、可选无工具模型 review、warn、temporary mute、permanent mute、到期恢复、固定提示 throttle 和审计；被 mute 的普通消息直接丢弃，显式 mention 只在 throttle 窗口内解释一次。
 
 ## Backlog Processing
 
@@ -158,7 +158,7 @@ rate_limit_notice
 
 Throttle 记录应可过期并可审计，避免机器人在群里反复刷固定话术。
 
-当前落地表为 `channel_reply_throttles`，`availability-gate.ts` 使用 `policyType = off_hours_notice` 和 channel-level throttle key。后续 soft-ban / rate-limit 可复用同一表，换成 user/account/channel 级 key。
+`channel_reply_throttles` 由 off-hours、muted mention 和 authorization delivery 共用，并把 channel、policy type 与 actor/authorization subject 编入稳定 key。`channel_policy_states` 与 `channel_policy_events` 保存 account/user scope、命中次数、当前状态、期限、revision 和幂等事件；命令与自动 review 都经过同一状态机。
 
 ## Policy State
 

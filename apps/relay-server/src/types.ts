@@ -2,6 +2,8 @@
 
 import type { RelayDeviceTransport } from '@oneworks/types/relay-device-transport'
 
+import type { RelaySharedRoom } from './rooms/types.js'
+
 export type { RelayDeviceTransport } from '@oneworks/types/relay-device-transport'
 
 export interface RelayServerArgs {
@@ -820,6 +822,8 @@ export interface RelayStore {
   passkeys: RelayPasskeyCredential[]
   devices: RelayDevice[]
   deviceSessions: RelayDeviceSession[]
+  /** Explicit-share directory metadata only. Never Room messages, runs, or live payloads. */
+  sharedRooms?: RelaySharedRoom[]
   forwardingJobs: RelayForwardingJob[]
   diagnosticEvents?: RelayDiagnosticEvent[]
   modelUsageEvents?: RelayModelUsageEvent[]

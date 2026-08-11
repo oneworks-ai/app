@@ -91,7 +91,7 @@ describe('relay config hook', () => {
     }
     const projectHome = resolveProjectHomePath(workspaceFolder, env)
     const snapshotStore = createRelayConfigSnapshotStore(projectHome)
-    await createRelayDeviceStore(projectHome).writeStore({
+    await createRelayDeviceStore(projectHome, env).writeStore({
       deviceId: 'device-1',
       deviceName: 'Device 1',
       deviceSecret: 'device-secret',
@@ -432,7 +432,7 @@ describe('relay config hook', () => {
       __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: workspaceFolder
     }
     const projectHome = resolveProjectHomePath(workspaceFolder, env)
-    await createRelayDeviceStore(projectHome).writeStore({
+    await createRelayDeviceStore(projectHome, env).writeStore({
       deviceId: 'device-1',
       deviceName: 'Device 1',
       deviceSecret: 'device-secret',

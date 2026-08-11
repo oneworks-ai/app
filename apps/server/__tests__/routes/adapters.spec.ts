@@ -9,7 +9,7 @@ import bodyParser from 'koa-bodyparser'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { AdapterCtx } from '@oneworks/types'
-import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
+import { resolveAdapterAccountDir } from '@oneworks/utils'
 
 import { adaptersRouter } from '#~/routes/adapters.js'
 
@@ -138,16 +138,7 @@ describe('adapter routes', () => {
     expect(payload.account?.key).toBe('work')
     await expect(
       readFile(
-        resolveProjectHomePath(
-          workspaceFolder,
-          process.env,
-          '.local',
-          'adapters',
-          'codex',
-          'accounts',
-          'work',
-          'auth.json'
-        ),
+        path.join(resolveAdapterAccountDir(workspaceFolder, process.env, 'codex', 'work'), 'auth.json'),
         'utf8'
       )
     ).resolves.toBe('{"token":"demo"}\n')

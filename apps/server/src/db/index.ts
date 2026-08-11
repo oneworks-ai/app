@@ -53,11 +53,35 @@ import type {
   ChannelUserCredentialRow
 } from './channelIdentities/repo'
 import { channelIdentitiesSchemaModule } from './channelIdentities/schema'
+import { createChannelIngressRouterRunsRepo } from './channelIngressRouterRuns/repo'
+import type { ChannelIngressRouterDecision, ChannelIngressRouterRunRow } from './channelIngressRouterRuns/repo'
+import { channelIngressRouterRunsSchemaModule } from './channelIngressRouterRuns/schema'
+import { createChannelMemoriesRepo } from './channelMemories/repo'
+import type {
+  ChannelMemoryRow,
+  ChannelMemorySensitivity,
+  ChannelMemorySubjectType,
+  ChannelMemoryVisibility
+} from './channelMemories/repo'
+import { channelMemoriesSchemaModule } from './channelMemories/schema'
 import { createChannelMessagesRepo } from './channelMessages/repo'
 import { channelMessagesSchemaModule } from './channelMessages/schema'
+import { createChannelOutboundDeliveriesRepo } from './channelOutboundDeliveries/repo'
+import type { ChannelOutboundDeliveryRow } from './channelOutboundDeliveries/repo'
+import { channelOutboundDeliveriesSchemaModule } from './channelOutboundDeliveries/schema'
 import { createChannelPoliciesRepo } from './channelPolicies/repo'
-import type { ChannelOffhourBacklogRow, ChannelPolicyType, ChannelReplyThrottleRow } from './channelPolicies/repo'
+import type {
+  ChannelPolicyEventRow,
+  ChannelPolicyScope,
+  ChannelPolicyState,
+  ChannelPolicyStateRow,
+  ChannelPolicyType,
+  ChannelReplyThrottleRow
+} from './channelPolicies/repo'
 import { channelPoliciesSchemaModule } from './channelPolicies/schema'
+import type { ChannelScenarioRow } from './channelScenarios/record'
+import { createChannelScenariosRepo } from './channelScenarios/repo'
+import { channelScenariosSchemaModule } from './channelScenarios/schema'
 import { channelSessionsSchemaModule } from './channelSessions/schema'
 
 import { createChannelSessionsRepo } from './channelSessions/repo'
@@ -81,24 +105,34 @@ const dbSchemaModules = [
   sessionWorkspacesSchemaModule,
   channelSessionsSchemaModule,
   channelMessagesSchemaModule,
+  channelOutboundDeliveriesSchemaModule,
   channelActionTokensSchemaModule,
   channelConversationsSchemaModule,
+  channelMemoriesSchemaModule,
   channelChildRunsSchemaModule,
+  channelIngressRouterRunsSchemaModule,
   channelCommandsSchemaModule,
   channelIdentitiesSchemaModule,
   channelPoliciesSchemaModule,
+  channelScenariosSchemaModule,
   agentRoomsSchemaModule,
   automationSchemaModule,
   usageSchemaModule
 ] as const
 
 export type { SessionChannelActorSnapshot, SessionRuntimeState }
+export type { ChannelPolicyEventRow, ChannelPolicyScope, ChannelPolicyState, ChannelPolicyStateRow }
+export type { ChannelOffhourBacklogRow, ChannelOffhourBacklogStatus } from './channelPolicies/backlog-record'
 export type {
   ChannelChildSessionRunDispatchMode,
   ChannelChildSessionRunRow,
   ChannelChildSessionRunStatus,
   ChannelChildSessionRunTriggerType
 }
+export type { ChannelIngressRouterDecision, ChannelIngressRouterRunRow }
+export type { ChannelMemoryRow, ChannelMemorySensitivity, ChannelMemorySubjectType, ChannelMemoryVisibility }
+export type { ChannelScenarioRow }
+export type { ChannelOutboundDeliveryRow }
 export type {
   ChannelConversationStateRow,
   ChannelConversationTurnRole,
@@ -121,12 +155,16 @@ export class SqliteDb {
   private sessionQueue: ReturnType<typeof createSessionQueueRepo>
   private channelSessions: ReturnType<typeof createChannelSessionsRepo>
   private channelMessages: ReturnType<typeof createChannelMessagesRepo>
+  private channelOutboundDeliveries: ReturnType<typeof createChannelOutboundDeliveriesRepo>
   private channelActionTokens: ReturnType<typeof createChannelActionTokensRepo>
   private channelConversations: ReturnType<typeof createChannelConversationsRepo>
+  private channelMemories: ReturnType<typeof createChannelMemoriesRepo>
   private channelChildRuns: ReturnType<typeof createChannelChildRunsRepo>
+  private channelIngressRouterRuns: ReturnType<typeof createChannelIngressRouterRunsRepo>
   private channelCommands: ReturnType<typeof createChannelCommandsRepo>
   private channelIdentities: ReturnType<typeof createChannelIdentitiesRepo>
   private channelPolicies: ReturnType<typeof createChannelPoliciesRepo>
+  private channelScenarios: ReturnType<typeof createChannelScenariosRepo>
   private agentRooms: ReturnType<typeof createAgentRoomsRepo>
   private tags: ReturnType<typeof createTagsRepo>
   private automation: ReturnType<typeof createAutomationRepo>
@@ -141,12 +179,16 @@ export class SqliteDb {
     this.sessionQueue = createSessionQueueRepo(this.db)
     this.channelSessions = createChannelSessionsRepo(this.db)
     this.channelMessages = createChannelMessagesRepo(this.db)
+    this.channelOutboundDeliveries = createChannelOutboundDeliveriesRepo(this.db)
     this.channelActionTokens = createChannelActionTokensRepo(this.db)
     this.channelConversations = createChannelConversationsRepo(this.db)
+    this.channelMemories = createChannelMemoriesRepo(this.db)
     this.channelChildRuns = createChannelChildRunsRepo(this.db)
+    this.channelIngressRouterRuns = createChannelIngressRouterRunsRepo(this.db)
     this.channelCommands = createChannelCommandsRepo(this.db)
     this.channelIdentities = createChannelIdentitiesRepo(this.db)
     this.channelPolicies = createChannelPoliciesRepo(this.db)
+    this.channelScenarios = createChannelScenariosRepo(this.db)
     this.agentRooms = createAgentRoomsRepo(this.db)
     this.tags = createTagsRepo(this.db)
     this.automation = createAutomationRepo(this.db)
@@ -349,6 +391,29 @@ export class SqliteDb {
     return this.channelSessions.remove(channelKey, channelType, sessionType, channelId, threadId)
   }
 
+  upsertChannelOutboundDelivery(row: Parameters<typeof this.channelOutboundDeliveries.upsert>[0]) {
+    return this.channelOutboundDeliveries.upsert(row)
+  }
+
+  claimChannelOutboundOperation(row: Parameters<typeof this.channelOutboundDeliveries.claimOperation>[0]) {
+    return this.channelOutboundDeliveries.claimOperation(row)
+  }
+
+  finishChannelOutboundOperation(
+    operationId: string,
+    updates: Parameters<typeof this.channelOutboundDeliveries.finishOperation>[1]
+  ) {
+    return this.channelOutboundDeliveries.finishOperation(operationId, updates)
+  }
+
+  getChannelOutboundOperation(operationId: string) {
+    return this.channelOutboundDeliveries.getOperation(operationId)
+  }
+
+  listRecentChannelOutboundDeliveries(channelType: string, limit?: number) {
+    return this.channelOutboundDeliveries.listRecent(channelType, limit)
+  }
+
   rememberChannelMessage(messageKey: string, seenAt = Date.now()) {
     return this.channelMessages.rememberSeen(messageKey, seenAt)
   }
@@ -386,6 +451,12 @@ export class SqliteDb {
     return this.channelConversations.getStateByThread(row)
   }
 
+  getChannelConversationStateByLastBotReply(
+    row: Parameters<typeof this.channelConversations.getStateByLastBotReply>[0]
+  ) {
+    return this.channelConversations.getStateByLastBotReply(row)
+  }
+
   appendChannelConversationTurn(row: Parameters<typeof this.channelConversations.appendTurn>[0]) {
     return this.channelConversations.appendTurn(row)
   }
@@ -396,6 +467,10 @@ export class SqliteDb {
 
   listRecentChannelConversationTurns(conversationStateId: string, limit?: number) {
     return this.channelConversations.listRecentTurns(conversationStateId, limit)
+  }
+
+  listRecentChannelConversationTurnsByType(channelType: string, limit?: number) {
+    return this.channelConversations.listRecentTurnsByChannelType(channelType, limit)
   }
 
   upsertChannelPendingIntent(row: Parameters<typeof this.channelConversations.upsertPendingIntent>[0]) {
@@ -435,6 +510,42 @@ export class SqliteDb {
     return this.channelConversations.listResolvedPendingIntents(filter)
   }
 
+  upsertChannelMemory(row: Parameters<typeof this.channelMemories.upsert>[0]) {
+    return this.channelMemories.upsert(row)
+  }
+
+  getChannelMemory(id: string) {
+    return this.channelMemories.get(id)
+  }
+
+  listChannelMemoryCandidates(filter: Parameters<typeof this.channelMemories.listCandidates>[0]) {
+    return this.channelMemories.listCandidates(filter)
+  }
+
+  saveChannelMemorySnapshot(row: Parameters<typeof this.channelMemories.saveSnapshot>[0]) {
+    return this.channelMemories.saveSnapshot(row)
+  }
+
+  attachChannelMemorySnapshotToChildRun(snapshotId: string, childRunId: string) {
+    return this.channelMemories.attachSnapshotToChildRun(snapshotId, childRunId)
+  }
+
+  createPendingChannelMemoryWriteback(row: Parameters<typeof this.channelMemories.createPendingWriteback>[0]) {
+    return this.channelMemories.createPendingWriteback(row)
+  }
+
+  getChannelMemoryWritebackByPatchKey(childRunId: string, patchKey: string) {
+    return this.channelMemories.getWritebackByPatchKey(childRunId, patchKey)
+  }
+
+  commitChannelMemoryWriteback(id: string) {
+    return this.channelMemories.commitWriteback(id)
+  }
+
+  rejectChannelMemoryWriteback(id: string, error: string) {
+    return this.channelMemories.rejectWriteback(id, error)
+  }
+
   createChannelChildSessionRun(row: Parameters<typeof this.channelChildRuns.create>[0]) {
     return this.channelChildRuns.create(row)
   }
@@ -443,12 +554,40 @@ export class SqliteDb {
     return this.channelChildRuns.finish(id, updates)
   }
 
+  markChannelChildSessionRunDispatched(id: string, input: Parameters<typeof this.channelChildRuns.markDispatched>[1]) {
+    return this.channelChildRuns.markDispatched(id, input)
+  }
+
+  markChannelChildSessionRunRunning(id: string) {
+    return this.channelChildRuns.markRunning(id)
+  }
+
   getChannelChildSessionRun(id: string) {
     return this.channelChildRuns.get(id)
   }
 
+  getChannelChildSessionRunBySessionId(sessionId: string) {
+    return this.channelChildRuns.getBySessionId(sessionId)
+  }
+
   listRecentChannelChildSessionRuns(limit = 50) {
     return this.channelChildRuns.listRecent(limit)
+  }
+
+  createChannelIngressRouterRun(row: Parameters<typeof this.channelIngressRouterRuns.create>[0]) {
+    return this.channelIngressRouterRuns.create(row)
+  }
+
+  attachChannelIngressRouterRunChild(id: string, childRunId: string) {
+    return this.channelIngressRouterRuns.attachChildRun(id, childRunId)
+  }
+
+  getChannelIngressRouterRun(id: string) {
+    return this.channelIngressRouterRuns.get(id)
+  }
+
+  listRecentChannelIngressRouterRuns(limit = 50) {
+    return this.channelIngressRouterRuns.listRecent(limit)
   }
 
   createChannelCommandRun(row: Parameters<typeof this.channelCommands.create>[0]) {
@@ -457,6 +596,10 @@ export class SqliteDb {
 
   finishChannelCommandRun(id: string, updates: Parameters<typeof this.channelCommands.finish>[1]) {
     return this.channelCommands.finish(id, updates)
+  }
+
+  updateChannelCommandRunMetadata(id: string, metadata: Record<string, unknown>) {
+    return this.channelCommands.updateMetadata(id, metadata)
   }
 
   getChannelCommandRun(id: string) {
@@ -570,6 +713,10 @@ export class SqliteDb {
     return this.channelIdentities.listPendingAuthorizationRequestsForAccount(accountId, channelType)
   }
 
+  listPendingChannelAuthorizationRequests(channelType?: string, limit?: number) {
+    return this.channelIdentities.listPendingAuthorizationRequests(channelType, limit)
+  }
+
   consumeChannelReplyThrottle(row: Parameters<typeof this.channelPolicies.consumeReplyThrottle>[0]) {
     return this.channelPolicies.consumeReplyThrottle(row)
   }
@@ -590,12 +737,86 @@ export class SqliteDb {
     return this.channelPolicies.appendOffhourBacklog(row)
   }
 
+  claimChannelOffhourBacklog(input: Parameters<typeof this.channelPolicies.claimOffhourBacklog>[0]) {
+    return this.channelPolicies.claimOffhourBacklog(input)
+  }
+
+  attachChannelOffhourBacklogDigestChildRun(
+    input: Parameters<typeof this.channelPolicies.attachOffhourBacklogDigestChildRun>[0]
+  ) {
+    return this.channelPolicies.attachOffhourBacklogDigestChildRun(input)
+  }
+
+  completeChannelOffhourBacklogClaim(input: Parameters<typeof this.channelPolicies.completeOffhourBacklogClaim>[0]) {
+    return this.channelPolicies.completeOffhourBacklogClaim(input)
+  }
+
+  retryChannelOffhourBacklogClaim(input: Parameters<typeof this.channelPolicies.retryOffhourBacklogClaim>[0]) {
+    return this.channelPolicies.retryOffhourBacklogClaim(input)
+  }
+
+  getChannelAvailabilityOverride(channelLinkName: string) {
+    return this.channelPolicies.getChannelAvailabilityOverride(channelLinkName)
+  }
+
+  setChannelAvailabilityOverride(input: Parameters<typeof this.channelPolicies.setChannelAvailabilityOverride>[0]) {
+    return this.channelPolicies.setChannelAvailabilityOverride(input)
+  }
+
+  getChannelPolicyState(policyKey: string) {
+    return this.channelPolicies.getChannelPolicyState(policyKey)
+  }
+
+  getChannelPolicyEventByEventKey(eventKey: string) {
+    return this.channelPolicies.getChannelPolicyEventByEventKey(eventKey)
+  }
+
+  compareAndSetChannelPolicyState(row: Parameters<typeof this.channelPolicies.compareAndSetChannelPolicyState>[0]) {
+    return this.channelPolicies.compareAndSetChannelPolicyState(row)
+  }
+
+  applyChannelPolicyHit(row: Parameters<typeof this.channelPolicies.applyChannelPolicyHit>[0]) {
+    return this.channelPolicies.applyChannelPolicyHit(row)
+  }
+
+  appendChannelPolicyEvent(row: Parameters<typeof this.channelPolicies.appendChannelPolicyEvent>[0]) {
+    return this.channelPolicies.appendChannelPolicyEvent(row)
+  }
+
+  listChannelPolicyEvents(policyKey: string, limit?: number) {
+    return this.channelPolicies.listChannelPolicyEvents(policyKey, limit)
+  }
+
+  listRecentChannelPolicyEvents(limit?: number) {
+    return this.channelPolicies.listRecentChannelPolicyEvents(limit)
+  }
+
   getChannelOffhourBacklogItem(id: string) {
     return this.channelPolicies.getOffhourBacklogItem(id)
   }
 
   listPendingChannelOffhourBacklog(filter?: Parameters<typeof this.channelPolicies.listPendingOffhourBacklog>[0]) {
     return this.channelPolicies.listPendingOffhourBacklog(filter)
+  }
+
+  createChannelScenario(row: Parameters<typeof this.channelScenarios.create>[0]) {
+    return this.channelScenarios.create(row)
+  }
+
+  getChannelScenario(id: string) {
+    return this.channelScenarios.get(id)
+  }
+
+  listChannelScenarios() {
+    return this.channelScenarios.list()
+  }
+
+  updateChannelScenario(id: string, row: Parameters<typeof this.channelScenarios.update>[1]) {
+    return this.channelScenarios.update(id, row)
+  }
+
+  deleteChannelScenario(id: string) {
+    return this.channelScenarios.remove(id)
   }
 
   markChannelOffhourBacklogProcessed(ids: string[], processedAt = Date.now()) {
@@ -622,6 +843,10 @@ export class SqliteDb {
     return this.agentRooms.create(params)
   }
 
+  claimAgentRoomMessage(params: Parameters<typeof this.agentRooms.claimMessage>[0]) {
+    return this.agentRooms.claimMessage(params)
+  }
+
   ensureAgentRoomForHostSession(params: {
     hostSessionId: string
     title?: string
@@ -639,6 +864,13 @@ export class SqliteDb {
 
   updateAgentRoom(id: string, params: Parameters<typeof this.agentRooms.update>[1]) {
     return this.agentRooms.update(id, params)
+  }
+
+  updateAgentRoomMessagePayload(
+    id: string,
+    payload: Parameters<typeof this.agentRooms.updateMessagePayload>[1]
+  ) {
+    return this.agentRooms.updateMessagePayload(id, payload)
   }
 
   getAgentRoomMember(roomId: string, memberKey: string) {
@@ -671,6 +903,58 @@ export class SqliteDb {
 
   appendAgentRoomMessage(message: Parameters<typeof this.agentRooms.appendMessage>[0]) {
     return this.agentRooms.appendMessage(message)
+  }
+
+  appendAgentRoomEvent(event: Parameters<typeof this.agentRooms.appendEvent>[0]) {
+    return this.agentRooms.appendEvent(event)
+  }
+
+  getAgentRoomEventByIdempotencyKey(roomId: string, idempotencyKey: string) {
+    return this.agentRooms.getEventByIdempotencyKey(roomId, idempotencyKey)
+  }
+
+  getAgentRoomMessageByIdempotencyKey(roomId: string, idempotencyKey: string) {
+    return this.agentRooms.getMessageByIdempotencyKey(roomId, idempotencyKey)
+  }
+
+  getAgentRoomMessage(id: string) {
+    return this.agentRooms.getMessage(id)
+  }
+
+  saveAgentRoomMessageDelivery(delivery: Parameters<typeof this.agentRooms.saveDelivery>[0]) {
+    return this.agentRooms.saveDelivery(delivery)
+  }
+
+  saveAgentRoomChannelLink(link: Parameters<typeof this.agentRooms.saveChannelLink>[0]) {
+    return this.agentRooms.saveChannelLink(link)
+  }
+
+  findAgentRoomChannelLink(input: Parameters<typeof this.agentRooms.findRoomChannelLink>[0]) {
+    return this.agentRooms.findRoomChannelLink(input)
+  }
+
+  listAgentRoomChannelLinks(roomId: string) {
+    return this.agentRooms.listChannelLinks(roomId)
+  }
+
+  createAgentRoomShare(input: Parameters<typeof this.agentRooms.createShare>[0]) {
+    return this.agentRooms.createShare(input)
+  }
+
+  createAgentRoomShareWithOwner(input: Parameters<typeof this.agentRooms.createShareWithOwner>[0]) {
+    return this.agentRooms.createShareWithOwner(input)
+  }
+
+  listAgentRoomShares(roomId: string) {
+    return this.agentRooms.listShares(roomId)
+  }
+
+  getAgentRoomShare(shareId: string) {
+    return this.agentRooms.getShare(shareId)
+  }
+
+  revokeAgentRoomShare(roomId: string, shareId: string) {
+    return this.agentRooms.revokeShare(roomId, shareId)
   }
 
   deleteAgentRoom(id: string) {
@@ -800,5 +1084,5 @@ export type {
   ChannelIdentityLinkStatus,
   ChannelUserCredentialRow
 }
-export type { ChannelOffhourBacklogRow, ChannelPolicyType, ChannelReplyThrottleRow }
+export type { ChannelPolicyType, ChannelReplyThrottleRow }
 export type { SessionWorkspaceRow }

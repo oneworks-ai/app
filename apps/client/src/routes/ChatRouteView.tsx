@@ -316,7 +316,7 @@ export function ChatRouteView({
     onOpenWorkspaceFile,
     workspaceRootPath
   }: {
-    onOpenUrlInAppBrowser: (url: string, title?: string) => void
+    onOpenUrlInAppBrowser: (url: string, title?: string, placement?: 'bottom' | 'right') => void
     onOpenWorkspaceFile: (path: string, target?: Pick<WorkspaceFileLinkTarget, 'column' | 'line'>) => void
     workspaceRootPath?: string
   }) => (

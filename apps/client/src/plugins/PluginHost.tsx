@@ -7,6 +7,7 @@ import { useLocation, useParams } from 'react-router-dom'
 
 import { RouteContainerHeader } from '#~/components/layout/RouteContainerHeader'
 import { RouteContainerLayout } from '#~/components/layout/RouteContainerLayout'
+import { useRouteSidebar } from '#~/components/layout/route-sidebar-context'
 import { useRouteContainerSidebarOpener } from '#~/components/layout/use-route-container-sidebar-opener'
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
 import type { RouteContainerHeaderActionItem, RouteContainerHeaderBreadcrumb } from '@oneworks/components/route-layout'
@@ -21,8 +22,10 @@ import type {
   PluginHostComponentApi,
   PluginViewContext,
   PluginViewRouteLauncherChrome,
+  PluginViewRouteSidebar,
   PluginViewSurface
 } from './plugin-manifest'
+import { createPluginRouteSidebarOverride } from './plugin-route-sidebar'
 import { invokePluginRuntimeChannel } from './plugin-runtime'
 import { useRoutePluginChrome } from './route-plugin-chrome'
 
@@ -83,6 +86,7 @@ export function PluginViewHost({
   onRouteActionsChange,
   onRouteBreadcrumbChange,
   onRouteLauncherChromeChange,
+  onRouteSidebarChange,
   onRouteTitleChange,
   routeId,
   scope,
@@ -94,6 +98,7 @@ export function PluginViewHost({
   onRouteActionsChange?: (actions?: RouteContainerHeaderActionItem[]) => void
   onRouteBreadcrumbChange?: (breadcrumb?: RouteContainerHeaderBreadcrumb) => void
   onRouteLauncherChromeChange?: (chrome?: PluginViewRouteLauncherChrome) => void
+  onRouteSidebarChange?: (sidebar?: PluginViewRouteSidebar) => void
   onRouteTitleChange?: (title?: string) => void
   routeId?: string
   scope: string
@@ -172,6 +177,7 @@ export function PluginViewHost({
           setBreadcrumb: breadcrumb =>
             onRouteBreadcrumbChange?.(breadcrumb as RouteContainerHeaderBreadcrumb | undefined),
           setLauncherChrome: chrome => onRouteLauncherChromeChange?.(chrome),
+          setSidebar: sidebar => onRouteSidebarChange?.(sidebar),
           setTitle: onRouteTitleChange
         }
       }),
@@ -193,6 +199,7 @@ export function PluginViewHost({
     onRouteActionsChange,
     onRouteBreadcrumbChange,
     onRouteLauncherChromeChange,
+    onRouteSidebarChange,
     onRouteTitleChange,
     resolvedThemeMode,
     routeId,
@@ -271,23 +278,34 @@ export function PluginRoute() {
   const route = registry.findRoute(scope, routeId) ??
     snapshot.routes.find(item => item.scope === scope && item.id === routeId)
   const { openRouteSidebar } = useRouteContainerSidebarOpener()
+  const { clearRouteSidebar, hasRouteSidebarProvider, setRouteSidebar } = useRouteSidebar()
   const { headerActions: routePluginHeaderActions } = useRoutePluginChrome('plugin-route')
   const language = i18n.resolvedLanguage ?? i18n.language
   const [routeActionsOverride, setRouteActionsOverride] = useState<RouteContainerHeaderActionItem[]>([])
   const [routeBreadcrumbOverride, setRouteBreadcrumbOverride] = useState<RouteContainerHeaderBreadcrumb | undefined>()
   const [routeTitleOverride, setRouteTitleOverride] = useState<string | undefined>()
+  const routeSidebarKey = `plugin-route:${scope}:${routeId}`
   const handleRouteActionsChange = useCallback((actions?: RouteContainerHeaderActionItem[]) => {
     setRouteActionsOverride(actions ?? [])
   }, [])
   const handleRouteBreadcrumbChange = useCallback((breadcrumb?: RouteContainerHeaderBreadcrumb) => {
     setRouteBreadcrumbOverride(breadcrumb)
   }, [])
+  const handleRouteSidebarChange = useCallback((sidebar?: PluginViewRouteSidebar) => {
+    if (!hasRouteSidebarProvider) return
+    if (sidebar == null) {
+      clearRouteSidebar(routeSidebarKey)
+      return
+    }
+    setRouteSidebar(createPluginRouteSidebarOverride(routeSidebarKey, sidebar))
+  }, [clearRouteSidebar, hasRouteSidebarProvider, routeSidebarKey, setRouteSidebar])
 
   useEffect(() => {
     setRouteActionsOverride([])
     setRouteBreadcrumbOverride(undefined)
     setRouteTitleOverride(undefined)
   }, [routeId, scope])
+  useEffect(() => () => clearRouteSidebar(routeSidebarKey), [clearRouteSidebar, routeSidebarKey])
 
   if (route == null) {
     return null
@@ -317,6 +335,7 @@ export function PluginRoute() {
         viewId={route.viewId}
         onRouteActionsChange={handleRouteActionsChange}
         onRouteBreadcrumbChange={handleRouteBreadcrumbChange}
+        onRouteSidebarChange={handleRouteSidebarChange}
         onRouteTitleChange={setRouteTitleOverride}
       />
     </RouteContainerLayout>

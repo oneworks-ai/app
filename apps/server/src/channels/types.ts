@@ -14,6 +14,7 @@ export interface ChannelRuntimeState {
   configSource?: ConfigSource
   channelLinks?: ResolvedChannelLink[]
   error?: string
+  resolveRuntime?: (channelKey: string) => ChannelRuntimeState | undefined
 }
 
 export interface ChannelSessionBinding {

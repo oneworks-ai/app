@@ -187,7 +187,15 @@ describe('channel link service', () => {
       },
       name: 'wechat-dm',
       path: '/workspace/.oo/channels/wechat-dm/channel.json',
-      definition: {} as never
+      definition: {} as never,
+      ingress: {
+        ambientRouting: false,
+        createOnCommand: true,
+        createOnMention: true,
+        createOnPendingIntent: true,
+        createOnReplyToBot: true
+      },
+      routing: { accounts: {}, default: {}, modes: {}, users: {} }
     }
 
     expect(matchesChannelLinkInbound(link, {
@@ -222,7 +230,15 @@ describe('channel link service', () => {
       },
       name: 'wan-ke-native',
       path: '/workspace/.oo/channels/wan-ke-native/channel.json',
-      definition: {} as never
+      definition: {} as never,
+      ingress: {
+        ambientRouting: false,
+        createOnCommand: true,
+        createOnMention: true,
+        createOnPendingIntent: true,
+        createOnReplyToBot: true
+      },
+      routing: { accounts: {}, default: {}, modes: {}, users: {} }
     }
 
     expect(matchesChannelLinkInbound(link, {
@@ -263,7 +279,15 @@ describe('channel link service', () => {
       },
       name: 'wan-ke-dm',
       path: '/workspace/.oo/channels/wan-ke-dm/channel.json',
-      definition: {} as never
+      definition: {} as never,
+      ingress: {
+        ambientRouting: false,
+        createOnCommand: true,
+        createOnMention: true,
+        createOnPendingIntent: true,
+        createOnReplyToBot: true
+      },
+      routing: { accounts: {}, default: {}, modes: {}, users: {} }
     }
     const threadLink = {
       ...directLink,
@@ -326,7 +350,15 @@ describe('channel link service', () => {
         },
         name: 'demo-group',
         path: '/workspace/.oo/channels/demo-group/channel.json',
-        definition: {} as never
+        definition: {} as never,
+        ingress: {
+          ambientRouting: false,
+          createOnCommand: true,
+          createOnMention: true,
+          createOnPendingIntent: true,
+          createOnReplyToBot: true
+        },
+        routing: { accounts: {}, default: {}, modes: {}, users: {} }
       },
       {
         channelKey: 'lark-main',
@@ -337,7 +369,15 @@ describe('channel link service', () => {
         },
         name: 'demo-dm',
         path: '/workspace/.oo/channels/demo-dm/channel.json',
-        definition: {} as never
+        definition: {} as never,
+        ingress: {
+          ambientRouting: false,
+          createOnCommand: true,
+          createOnMention: true,
+          createOnPendingIntent: true,
+          createOnReplyToBot: true
+        },
+        routing: { accounts: {}, default: {}, modes: {}, users: {} }
       }
     ]
 

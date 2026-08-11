@@ -6,7 +6,8 @@ import type {
   ChannelFileMessage,
   ChannelFollowUp,
   ChannelInboundEvent,
-  ChannelLogger
+  ChannelLogger,
+  ChannelNavigationReference
 } from '@oneworks/core/channel'
 import { defineCreateChannelConnection } from '@oneworks/core/channel'
 
@@ -205,6 +206,13 @@ const reactionPool = [
   'SaluteFace'
 ]
 
+const buildLarkNavigation = (domain: LarkChannelConfig['domain']): ChannelNavigationReference => ({
+  appHomeUrl: domain === 'Lark'
+    ? 'https://www.larksuite.com/messenger/'
+    : 'https://www.feishu.cn/messenger/',
+  embeddable: false
+})
+
 const toStandardSessionType = (chatType: string) => {
   if (chatType === 'p2p') return 'direct'
   return 'group'
@@ -230,6 +238,7 @@ const toChannelInboundEvent = async (
   client: Client,
   options?: {
     currentBotOpenId?: string
+    navigation?: ChannelNavigationReference
     tenantTokenProvider?: () => Promise<string | undefined>
   }
 ): Promise<ChannelInboundEvent | null> => {
@@ -292,6 +301,9 @@ const toChannelInboundEvent = async (
     mentionedBot,
     senderId,
     messageId: message.message_id,
+    ...(options?.navigation != null ? { navigation: options.navigation } : {}),
+    replyMessageId: message.parent_id || undefined,
+    rootMessageId: message.root_id || undefined,
     threadId: message.thread_id ?? message.root_id ?? message.parent_id,
     text: displayText,
     replyTo: {
@@ -335,15 +347,27 @@ export const createChannelConnection = defineCreateChannelConnection(async (
     ...commonClientOptions
   })
   const tenantTokenProvider = createTenantTokenProvider(config)
+  const navigation = buildLarkNavigation(config.domain ?? 'Feishu')
+  const withNavigation = async <Result extends { messageId?: string }>(result: Promise<Result>) => ({
+    ...await result,
+    navigation
+  })
   return {
     sendMessage: async (message) => {
-      return sendLarkMessage(client, message, logger)
+      return await withNavigation(sendLarkMessage(client, message, logger))
+    },
+    sendPrivateMessage: async ({ accountId, text }) => {
+      return await withNavigation(sendLarkMessage(client, {
+        receiveId: accountId,
+        receiveIdType: 'open_id',
+        text
+      }, logger))
     },
     sendFileMessage: async (message) => {
-      return sendLarkFileMessage(client, message)
+      return await withNavigation(sendLarkFileMessage(client, message))
     },
     updateMessage: async (messageId, message) => {
-      return updateLarkMessage(client, messageId, message, logger)
+      return await withNavigation(updateLarkMessage(client, messageId, message, logger))
     },
     pushFollowUps: async ({ messageId, followUps }) => {
       await pushLarkFollowUps(messageId, followUps, tenantTokenProvider, config.domain)
@@ -355,6 +379,7 @@ export const createChannelConnection = defineCreateChannelConnection(async (
         'im.message.receive_v1': async (payload: unknown) => {
           const inbound = await toChannelInboundEvent(payload as LarkMessagePayload, client, {
             currentBotOpenId,
+            navigation,
             tenantTokenProvider
           })
           if (inbound == null) return

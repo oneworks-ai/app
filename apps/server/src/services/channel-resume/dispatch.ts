@@ -139,10 +139,8 @@ export const resumeChannelPendingIntent = async (input: {
         if (db.getChannelConversationTurn(turnId) == null) throw error
       }
     }
-    db.finishChannelChildSessionRun(childRun.id, {
-      sessionId: resumedSession.id,
-      status: 'dispatched'
-    })
+    db.markChannelChildSessionRunDispatched(childRun.id, { sessionId: resumedSession.id })
+    db.markChannelChildSessionRunRunning(childRun.id)
     const finishedIntent = db.finishChannelPendingIntentResumeClaim({
       claimId,
       id: intent.id,

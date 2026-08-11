@@ -5,6 +5,7 @@
 ## 快速入口
 
 - `watcher.ts`：runtime store watcher，发现 session store、读取增量事件并触发投影。
+  - watcher 同时把 channel child run 从 `dispatched` 收敛到 completed / failed / stopped 等终态，并触发 memory writeback；不要只更新普通 session/room 投影后留下永远 running 的 channel audit。
 - `history-import.ts`：扫描当前 workspace 对应的 Codex / Claude Code 原生 JSONL 历史，并导入成只读 runtime store session。
 - `projection.ts`：总投影入口，协调 metadata、session event、room event。
 - `metadata-projection.ts`：meta/state 到 session 与 room 初始状态的投影。
@@ -29,6 +30,7 @@
 ## Agent Room 投影注意事项
 
 - `status_changed` / `session_completed` 可以更新 run 状态，但不一定应该生成用户可见 room message；等待审批的 run 尤其不能被重复 terminal state 覆盖成 completed。
+- channel child run 的终态必须来自 runtime store 的真实 terminal event/status；`dispatched` 只表示投递成功。terminal callback 必须幂等，重复扫描不能重复写回 memory。
 - 给 child session 的 `send_message` / `resume` command 要保留 `roomId`、`runId`、`memberKey`、`source` 等上下文，否则前端无法区分消息来自用户、leader 还是其他实体。
 - runtime consumer 启动或恢复时，避免把 start command、follow-up command 和 adapter 自己产出的 user message 重复投影；去重依据应优先使用 command ack / submitted marker。
 

@@ -49,6 +49,7 @@ export interface RuntimeStoreWatcherOptions {
   broadcast?: boolean
   agentRoomProjectionEnabled?: boolean
   deliverSessionEvent?: RuntimeStoreSessionEventDelivery
+  deliverSessionTerminal?: RuntimeStoreSessionTerminalDelivery
 }
 
 export interface RuntimeStoreReplayOptions {
@@ -57,6 +58,7 @@ export interface RuntimeStoreReplayOptions {
   broadcast?: boolean
   agentRoomProjectionEnabled?: boolean
   deliverSessionEvent?: RuntimeStoreSessionEventDelivery
+  deliverSessionTerminal?: RuntimeStoreSessionTerminalDelivery
 }
 
 export interface RuntimeStoreReplayResult {
@@ -77,6 +79,12 @@ export type RuntimeStoreSessionEventDelivery = (
   sessionId: string,
   event: WSEvent
 ) => Promise<boolean> | boolean
+
+export type RuntimeStoreSessionTerminalDelivery = (input: {
+  error?: string
+  sessionId: string
+  status: 'completed' | 'expired' | 'failed'
+}) => Promise<void> | void
 
 const acquireEngineConsumerStartLock = async (store: RuntimeSessionStore) => {
   const lockPath = path.join(store.storePath, 'locks', ENGINE_CONSUMER_START_LOCK_FILENAME)
@@ -156,6 +164,13 @@ const isTerminalRuntimeStatus = (status: string | undefined) =>
   status === 'cancelled' ||
   status === 'killed'
 
+const resolveTerminalDeliveryStatus = (status: string | undefined) => {
+  if (status === 'completed') return 'completed' as const
+  if (status === 'failed' || status === 'crashed') return 'failed' as const
+  if (status === 'stopped' || status === 'cancelled' || status === 'killed') return 'expired' as const
+  return undefined
+}
+
 const isSessionActivationCommand = (command: RuntimeCommand) =>
   command.type === 'start' || command.type === 'resume' || command.type === 'send_message'
 
@@ -219,15 +234,13 @@ export async function replayRuntimeStore(
   const state = await readRuntimeSessionState(store)
   const session = options.db.getSession(store.sessionId)
   const projectedStateStatus = runtimeStatusToSessionStatus(state?.status)
-  if (
-    state != null &&
+  const shouldReconcileTerminalState = state != null &&
     isTerminalRuntimeStatus(state.status) &&
     projectedStateStatus != null &&
     !hasRuntimeEventAfterState(result.checkpoint, state) &&
     !isStartupFailureStateWithinGrace(state) &&
-    !hasActivationCommandAfterRuntimeState(commands, state.updatedAt) &&
-    session?.status !== projectedStateStatus
-  ) {
+    !hasActivationCommandAfterRuntimeState(commands, state.updatedAt)
+  if (shouldReconcileTerminalState && session?.status !== projectedStateStatus) {
     const projection = projectRuntimeEvent({
       id: `runtime-state:${store.sessionId}:${state.lastSeq ?? 0}:${state.status}`,
       seq: state.lastSeq,
@@ -245,6 +258,17 @@ export async function replayRuntimeStore(
       agentRoomProjectionEnabled: options.agentRoomProjectionEnabled
     })
     await deliverProjectedSessionEvents(projection, options.deliverSessionEvent)
+  }
+  const terminalDeliveryStatus = shouldReconcileTerminalState
+    ? resolveTerminalDeliveryStatus(state?.status)
+    : undefined
+  if (terminalDeliveryStatus != null && options.deliverSessionTerminal != null) {
+    const stateError = typeof state?.error === 'string' && state.error.trim() !== '' ? state.error : undefined
+    await options.deliverSessionTerminal({
+      ...(stateError == null ? {} : { error: stateError }),
+      sessionId: store.sessionId,
+      status: terminalDeliveryStatus
+    })
   }
 
   return {
@@ -324,6 +348,7 @@ export class RuntimeStoreWatcher {
   private readonly broadcast: boolean
   private readonly configuredAgentRoomProjectionEnabled: boolean | undefined
   private readonly deliverSessionEvent: RuntimeStoreSessionEventDelivery | undefined
+  private readonly deliverSessionTerminal: RuntimeStoreSessionTerminalDelivery | undefined
   private readonly checkpoints = new Map<string, RuntimeEventCheckpoint>()
   private readonly engineConsumers = new Map<string, ChildProcess>()
   private readonly runtimeMigrationCwds = new Map<string, NodeJS.ProcessEnv>()
@@ -341,6 +366,7 @@ export class RuntimeStoreWatcher {
     this.broadcast = options.broadcast ?? true
     this.configuredAgentRoomProjectionEnabled = options.agentRoomProjectionEnabled
     this.deliverSessionEvent = options.deliverSessionEvent
+    this.deliverSessionTerminal = options.deliverSessionTerminal
   }
 
   private resolveInitialRoots(cwd: string | undefined) {
@@ -424,7 +450,8 @@ export class RuntimeStoreWatcher {
       checkpoint: previous,
       broadcast: this.broadcast,
       agentRoomProjectionEnabled,
-      deliverSessionEvent: this.deliverSessionEvent
+      deliverSessionEvent: this.deliverSessionEvent,
+      deliverSessionTerminal: this.deliverSessionTerminal
     })
     this.checkpoints.set(store.storePath, result.checkpoint)
     await this.ensureServerRuntimeConsumer(store)

@@ -14,6 +14,7 @@ import {
 } from '@oneworks/channel-oneworks/webhook-signature'
 import { MAX_CHANNEL_TEXT_MESSAGE_LENGTH, countChannelTextMessageCharacters } from '@oneworks/core/channel'
 import type { ChannelTextMention } from '@oneworks/core/channel'
+import type { ChannelDeliveryTarget } from '@oneworks/types'
 import {
   filterChannelEmojiRegistryEntries,
   findChannelEmojiRegistryEntry,
@@ -135,6 +136,65 @@ const readContext = (env: NodeJS.ProcessEnv) => {
     return isRecord(parsed) ? parsed : {}
   } catch {
     return {}
+  }
+}
+
+const isDeliveryTarget = (value: unknown): value is ChannelDeliveryTarget => (
+  isRecord(value) &&
+  trimNonEmpty(value.channelId) != null &&
+  trimNonEmpty(value.channelKey) != null &&
+  trimNonEmpty(value.channelType) != null &&
+  trimNonEmpty(value.conversationKind) != null &&
+  trimNonEmpty(value.label) != null &&
+  trimNonEmpty(value.receiveId) != null &&
+  trimNonEmpty(value.receiveIdType) != null
+)
+
+const readExecutionTargets = (context: Record<string, unknown>) => {
+  const executionContext = isRecord(context.executionContext) ? context.executionContext : undefined
+  const targets = Array.isArray(executionContext?.availableDeliveryTargets)
+    ? executionContext.availableDeliveryTargets.filter(isDeliveryTarget)
+    : []
+  const defaultReplyTarget = isDeliveryTarget(executionContext?.defaultReplyTarget)
+    ? executionContext.defaultReplyTarget
+    : undefined
+  return { defaultReplyTarget, targets }
+}
+
+const resolveInvocationTarget = (input: {
+  context: Record<string, unknown>
+  currentChannelKey: string
+  parsed: Pick<ParsedChannelCommand, 'channelKey' | 'receiveId' | 'receiveIdType'>
+}): ChannelDeliveryTarget | Record<string, string | undefined> => {
+  const requestedChannelKey = trimNonEmpty(input.parsed.channelKey)
+  const requestedReceiveId = trimNonEmpty(input.parsed.receiveId)
+  const requestedReceiveIdType = trimNonEmpty(input.parsed.receiveIdType)
+  const hasExplicitTarget = requestedChannelKey != null || requestedReceiveId != null || requestedReceiveIdType != null
+  const { defaultReplyTarget, targets } = readExecutionTargets(input.context)
+  if (!hasExplicitTarget && defaultReplyTarget != null) return defaultReplyTarget
+  if (hasExplicitTarget && targets.length > 0) {
+    const matches = targets.filter(target => (
+      (requestedChannelKey == null || target.channelKey === requestedChannelKey) &&
+      (requestedReceiveId == null || target.receiveId === requestedReceiveId) &&
+      (requestedReceiveIdType == null || target.receiveIdType === requestedReceiveIdType)
+    ))
+    if (matches.length === 1) return matches[0]!
+    if (matches.length > 1) {
+      throw new Error('Channel target is ambiguous. Pass both --channel and --to.')
+    }
+    throw new Error('Channel target is not available to the current entity in this Room.')
+  }
+
+  const channelKey = requestedChannelKey ?? input.currentChannelKey
+  const receiveId = requestedReceiveId ??
+    trimNonEmpty(input.context.replyReceiveId) ??
+    trimNonEmpty(input.context.channelId)
+  return {
+    channelId: requestedReceiveId ?? trimNonEmpty(input.context.channelId) ?? receiveId,
+    channelKey,
+    channelType: channelKey === input.currentChannelKey ? trimNonEmpty(input.context.channelType) : undefined,
+    receiveId,
+    receiveIdType: requestedReceiveIdType ?? trimNonEmpty(input.context.replyReceiveIdType) ?? 'chat_id'
   }
 }
 
@@ -1012,6 +1072,7 @@ const runToolCommand = async (
       body: JSON.stringify({
         input: await parseToolInput(parsed.input),
         invocationToken,
+        requestId: randomUUID(),
         toolName
       })
     }
@@ -1046,9 +1107,8 @@ export const runChannelCommand = async (
   const message = await parseMessage(parsed.contentParts, { lineBreakToken: parsed.lineBreakToken })
   assertTextMessageLength(message)
   const mentions = resolveMentions(parsed)
-  const channelKey = trimNonEmpty(parsed.channelKey) ??
-    trimNonEmpty(context.channelKey) ??
-    trimNonEmpty(env[CHANNEL_KEY_ENV])
+  const currentChannelKey = trimNonEmpty(context.channelKey) ?? trimNonEmpty(env[CHANNEL_KEY_ENV])
+  const channelKey = trimNonEmpty(parsed.channelKey) ?? currentChannelKey
   const receiveId = trimNonEmpty(parsed.receiveId) ??
     trimNonEmpty(context.replyReceiveId) ??
     trimNonEmpty(context.channelId) ??
@@ -1063,6 +1123,49 @@ export const runChannelCommand = async (
   }
 
   const fetchImpl = options.fetch ?? globalThis.fetch
+  const invocationToken = trimNonEmpty(context.invocationToken)
+  const target = currentChannelKey == null
+    ? undefined
+    : resolveInvocationTarget({ context, currentChannelKey, parsed })
+  const payload = mentions == null
+    ? message
+    : typeof message === 'string'
+    ? { mentions, text: message, type: 'text' }
+    : isRecord(message)
+    ? {
+      ...message,
+      mentions: [...(Array.isArray(message.mentions) ? message.mentions : []), ...mentions]
+    }
+    : message
+
+  if (invocationToken != null) {
+    if (currentChannelKey == null || target == null) {
+      throw new Error('Channel command invoke must run from an active channel child session.')
+    }
+    const response = await fetchImpl(
+      `${resolveServerBaseUrl({ env, server: parsed.server })}/api/channels/${
+        encodeURIComponent(currentChannelKey)
+      }/commands/invoke`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          input: { message: payload, target },
+          invocationToken,
+          requestId: randomUUID(),
+          toolName: 'channel.send'
+        })
+      }
+    )
+    const data = await normalizeApiResponse(response)
+    const result = isRecord(data.result) ? data.result : {}
+    if (result.status !== 'success') {
+      throw new Error(typeof data.message === 'string' ? data.message : 'Channel send command failed.')
+    }
+    const messageType = isRecord(payload) && typeof payload.type === 'string' ? payload.type : 'text'
+    return `Sent ${messageType} message through channel ${channelKey}.`
+  }
+
   const response = await fetchImpl(
     `${resolveServerBaseUrl({ env, server: parsed.server })}/api/channels/${encodeURIComponent(channelKey)}/send`,
     {

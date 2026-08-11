@@ -51,7 +51,8 @@ export const sendJson = (
     ...headers,
     'content-type': 'application/json; charset=utf-8',
     'access-control-allow-origin': allowOrigin,
-    'access-control-allow-headers': 'content-type, authorization, x-oneworks-device-id, x-oneworks-team-id',
+    'access-control-allow-headers':
+      'content-type, authorization, x-oneworks-device-id, x-oneworks-team-id, x-oneworks-room-operation-id',
     'access-control-allow-methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS'
   })
   res.end(`${JSON.stringify(body)}\n`)

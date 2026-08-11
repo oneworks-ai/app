@@ -4,7 +4,11 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { AgentRoom, AgentRoomDetailResponse, Session } from '@oneworks/core'
 
-import { buildAgentRoomViewModel } from '#~/components/agent-room'
+import {
+  buildAgentRoomViewModel,
+  listChannelNavigationActions,
+  resolveChannelNavigationPreferences
+} from '#~/components/agent-room'
 import {
   buildGroupedSidebarConversationItems,
   buildSidebarConversationItems,
@@ -31,6 +35,7 @@ const createSession = (id: string, params: Partial<Session> = {}): Session => ({
 const room: AgentRoom = {
   id: 'room-multi-agent',
   title: 'Multi-agent rollout',
+  owner: { type: 'local' },
   hostSessionId: 'host-session',
   status: 'active',
   lastMessage: 'Reviewer is waiting for release notes.',
@@ -65,7 +70,9 @@ const roomDetail: AgentRoomDetailResponse = {
       updatedAt: 18
     }
   ],
-  messages: []
+  messages: [],
+  channelLinks: [],
+  shares: []
 }
 
 describe('agent room navigation', () => {
@@ -1480,6 +1487,71 @@ describe('agent room navigation', () => {
         content: 'Where are we now?'
       }
     }))
+  })
+
+  it('maps inbound and outbound channel provenance into compact navigation references', () => {
+    const viewModel = buildAgentRoomRouteViewModel({
+      ...roomDetail,
+      messages: [{
+        content: 'Release update',
+        createdAt: 20,
+        deliveries: [{
+          id: 'delivery-1',
+          navigation: { appHomeUrl: 'https://www.feishu.cn/messenger/', embeddable: false },
+          providerMessageId: 'om_out',
+          roomMessageId: 'message-1',
+          sentAt: 21,
+          status: 'sent',
+          target: {
+            accountLabel: 'Release bot',
+            channelId: 'oc_release',
+            channelKey: 'lark:release',
+            channelType: 'lark',
+            conversationKind: 'group',
+            label: 'Release room',
+            receiveId: 'oc_release',
+            receiveIdType: 'chat_id'
+          }
+        }],
+        id: 'message-1',
+        memberKey: 'reviewer',
+        origin: {
+          accountLabel: 'Product bot',
+          channelId: 'wx_product',
+          channelKey: 'wechat:product',
+          channelType: 'wechat',
+          conversationKind: 'group',
+          conversationLabel: 'Product group',
+          navigation: { appHomeUrl: 'weixin://', nativeAppUrl: 'weixin://' }
+        },
+        role: 'agent',
+        roomId: room.id,
+        sequence: 1
+      }]
+    })
+
+    expect(viewModel.messages[0]?.channelReferences).toEqual([
+      expect.objectContaining({ channelType: 'wechat', direction: 'source', label: 'Product group' }),
+      expect.objectContaining({ channelType: 'lark', direction: 'delivery', label: 'Release room', status: 'sent' })
+    ])
+  })
+
+  it('resolves plugin-owned account navigation preferences before provider and defaults', () => {
+    const preferences = resolveChannelNavigationPreferences({
+      accounts: { 'lark:release': ['nativeApp'] },
+      default: ['externalWeb'],
+      providers: { lark: ['rightPanel'] }
+    })
+
+    expect(listChannelNavigationActions({
+      channelKey: 'lark:release',
+      channelType: 'lark',
+      navigation: {
+        appHomeUrl: 'https://www.feishu.cn/messenger/',
+        embeddable: true,
+        nativeAppUrl: 'lark://client/chat/open'
+      }
+    }, preferences)).toEqual([{ mode: 'nativeApp', url: 'lark://client/chat/open' }])
   })
 
   it('preserves terminal member and run status from room projection independently of host session status', () => {
