@@ -459,9 +459,11 @@ jobs:
         run: |
           keychain="$RUNNER_TEMP/oneworks-desktop-signing.keychain-db"
           p12="$RUNNER_TEMP/oneworks-desktop-application.p12"
+          probe="$RUNNER_TEMP/oneworks-desktop-signing-probe"
           keychain_password="$(openssl rand -hex 32)"
+          trap 'rm -f "$p12" "$probe"' EXIT
 
-          rm -f "$keychain" "$p12"
+          rm -f "$keychain" "$p12" "$probe"
           security create-keychain -p "$keychain_password" "$keychain"
           security set-keychain-settings -lut 21600 "$keychain"
           security unlock-keychain -p "$keychain_password" "$keychain"
@@ -476,14 +478,26 @@ jobs:
             -s \
             -k "$keychain_password" \
             "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain"
 
-          identity_count="$(security find-identity -v -p codesigning "$keychain" | awk '/Developer ID Application/ { count += 1 } END { print count + 0 }')"
+          identities="$(security find-identity -v -p codesigning "$keychain")"
+          identity_count="$(printf '%s\n' "$identities" | awk '/Developer ID Application/ { count += 1 } END { print count + 0 }')"
           if [[ "$identity_count" -ne 1 ]]; then
             echo "Expected exactly one Developer ID Application identity in the temporary keychain." >&2
             exit 1
           fi
+          identity_hash="$(printf '%s\n' "$identities" | awk '/Developer ID Application/ { print $2; exit }')"
 
-          rm -f "$p12"
+          cp /usr/bin/true "$probe"
+          codesign \
+            --sign "$identity_hash" \
+            --force \
+            --keychain "$keychain" \
+            --timestamp \
+            --options runtime \
+            "$probe" >/dev/null
+          codesign --verify --strict "$probe"
+
           echo "ONEWORKS_DESKTOP_SIGNING_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
 
       - name: Package desktop app
@@ -554,6 +568,7 @@ jobs:
         run: |
           keychain="$RUNNER_TEMP/oneworks-desktop-signing.keychain-db"
           rm -f "$RUNNER_TEMP/oneworks-desktop-application.p12"
+          rm -f "$RUNNER_TEMP/oneworks-desktop-signing-probe"
           if [[ -e "$keychain" ]]; then
             security delete-keychain "$keychain"
           fi

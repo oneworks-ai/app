@@ -2,6 +2,8 @@
 
 App Store 外分发不走 Mac App Store 证书，使用 Apple Developer Program 的 Developer ID 证书和 notarization。
 
+GitHub Actions 把 `Developer ID Application` 导入临时 keychain 后，必须先把该 keychain 加入当前 user domain 的 search list，再用同一个精确 identity 和 `--keychain` 对一次性 executable 做真实 `codesign` / strict verify。`security find-identity` 只能证明 identity 可枚举，不能单独证明 `codesign` 能解析并使用对应私钥；探针失败时必须在打包前 fail closed，且不得输出 identity、证书或密码，临时 P12、探针和 keychain 必须由 always cleanup 收口。
+
 ## Secret 与 variable
 
 - `DESKTOP_CSC_LINK`：Developer ID Application `.p12`，base64 后写入 secret，用于签 `.app`。
