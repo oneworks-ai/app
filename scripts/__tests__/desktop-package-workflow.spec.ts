@@ -82,6 +82,49 @@ function runWithOutput(script: string, env: NodeJS.ProcessEnv) {
   }
 }
 
+function runSigningIdentityImport(codesignStatus = 0) {
+  const commandDir = mkdtempSync(path.join(tmpdir(), 'oneworks-desktop-signing-bin-'))
+  const runnerTemp = mkdtempSync(path.join(tmpdir(), 'oneworks-desktop-signing-runner-'))
+  const commandLog = path.join(runnerTemp, 'commands.log')
+  const githubEnv = path.join(runnerTemp, 'github-env')
+
+  const commands = {
+    base64: '#!/usr/bin/env bash\ncat\n',
+    codesign:
+      `#!/usr/bin/env bash\nprintf 'codesign %s\\n' "$*" >> "$FAKE_COMMAND_LOG"\nif [[ "$1" == "--sign" ]]; then exit "$FAKE_CODESIGN_STATUS"; fi\n`,
+    openssl: '#!/usr/bin/env bash\nprintf "temporary-keychain-password\\n"\n',
+    security:
+      `#!/usr/bin/env bash\nprintf 'security %s\\n' "$*" >> "$FAKE_COMMAND_LOG"\nif [[ "$1" == "find-identity" ]]; then\n  printf '  1) AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA "Developer ID Application: Example (TEAMID)"\\n'\nfi\n`
+  }
+
+  for (const [name, source] of Object.entries(commands)) {
+    const commandPath = path.join(commandDir, name)
+    writeFileSync(commandPath, source)
+    chmodSync(commandPath, 0o755)
+  }
+
+  try {
+    const result = runBash(
+      extractRunScript('Import desktop application signing identity'),
+      {
+        DESKTOP_CSC_KEY_PASSWORD: 'certificate-password',
+        DESKTOP_CSC_LINK: 'certificate-bytes',
+        FAKE_CODESIGN_STATUS: String(codesignStatus),
+        FAKE_COMMAND_LOG: commandLog,
+        GITHUB_ENV: githubEnv,
+        PATH: `${commandDir}:${process.env.PATH}`,
+        RUNNER_TEMP: runnerTemp
+      }
+    )
+    const log = readFileSync(commandLog, 'utf8')
+    const exportedEnv = result.status === 0 ? readFileSync(githubEnv, 'utf8') : ''
+    return { ...result, exportedEnv, log }
+  } finally {
+    rmSync(commandDir, { force: true, recursive: true })
+    rmSync(runnerTemp, { force: true, recursive: true })
+  }
+}
+
 function runReleaseTagGuard(status: number, output = '', sourceSha = 'a'.repeat(40)) {
   const commandDir = mkdtempSync(path.join(tmpdir(), 'oneworks-desktop-workflow-bin-'))
   const gitPath = path.join(commandDir, 'git')
@@ -501,6 +544,7 @@ describe('desktop package workflow', () => {
     expect(buildIndex).toBeLessThan(cleanupIndex)
     expect(workflow).toContain('ONEWORKS_DESKTOP_SIGNING_KEYCHAIN=$keychain')
     expect(workflow).toContain('security set-key-partition-list')
+    expect(workflow).toContain('security list-keychains -d user -s "$keychain"')
     expect(workflow).toMatch(
       /ONEWORKS_DESKTOP_SIGN: \$\{\{ steps\.desktop_build_policy\.outputs\.sign \}\}/u
     )
@@ -518,6 +562,38 @@ describe('desktop package workflow', () => {
       desktopPackageScript.indexOf('...signingOptions')
     )
     expect(workflow).not.toContain('APPLE_APP_SPECIFIC_PASSWORD')
+    expect(macosSigningRule).toContain(
+      '`security find-identity` 只能证明 identity 可枚举'
+    )
+  })
+
+  it('proves the imported identity is usable by codesign before packaging', () => {
+    const result = runSigningIdentityImport()
+
+    expect(result.status, result.stderr).toBe(0)
+    expect(result.log).toContain(
+      'security list-keychains -d user -s '
+    )
+    expect(result.log).toContain(
+      'codesign --sign AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA --force --keychain '
+    )
+    expect(result.log).toContain('--timestamp --options runtime')
+    expect(result.log).toContain('codesign --verify --strict')
+    expect(result.log.indexOf('security list-keychains')).toBeLessThan(
+      result.log.indexOf('codesign --sign')
+    )
+    expect(result.exportedEnv).toMatch(
+      /^ONEWORKS_DESKTOP_SIGNING_KEYCHAIN=.+oneworks-desktop-signing\.keychain-db$/mu
+    )
+  })
+
+  it('fails before exporting the keychain when the codesign probe cannot use the identity', () => {
+    const result = runSigningIdentityImport(1)
+
+    expect(result.status).toBe(1)
+    expect(result.log).toContain('codesign --sign')
+    expect(result.log).not.toContain('codesign --verify --strict')
+    expect(result.exportedEnv).toBe('')
   })
 
   it.each([
