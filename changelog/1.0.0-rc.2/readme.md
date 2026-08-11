@@ -1,6 +1,6 @@
 # One Works 1.0.0-rc.2
 
-- Keep macOS Developer ID signing and notarization on one repository-owned path, including nested app bundles, so signed Desktop installers complete without credential mismatches or unsigned embedded binaries.
+- Keep macOS Developer ID signing and notarization on one repository-owned path, including nested app bundles and large unpacked application trees, so signed Desktop installers complete without credential mismatches, unsigned embedded binaries, or file-descriptor exhaustion.
 - Make plugin marketplace install and removal actions reflect committed results immediately, remain retryable after failure, and converge safely across route, scope, server, and plugin-runtime refreshes.
 
   ![Plugin removal confirmation in the marketplace](./issue-182-plugin-remove-confirmation.jpg)

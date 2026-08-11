@@ -90,6 +90,7 @@
 - 桌面图标资产来自 `assets/icon` submodule；更新 submodule 后运行 `pnpm desktop:icons:sync`，默认根图标是工业风格。macOS package / make 默认 `--mac-icon auto`，只有完整 Xcode 26+ 的 `actool` 支持 Icon Composer 时才启用 `.icon` / `Assets.car`，否则继续使用 `.icns`；显式验证可用 `pnpm desktop:make:pkg:icon`。
 - 内置本机服务默认关闭 `webAuth`；server 数据库、日志和运行数据写入 project home。桌面自身运行状态（例如最近项目）继续写入 Electron `userData`；launcher 快捷键与系统应用图标同步偏好写入全局 `~/.oneworks/.oo.config.json` 的 `desktop` section。
 - 当前打包保持 `asar: false`，因为 staging 仍依赖 `pnpm deploy` 生成的依赖布局与原生模块路径。
+- `pnpm-workspace.yaml` 通过 `patchedDependencies` 对 `@electron/osx-sign@2.4.0` 的未封包应用遍历做串行化；上游仍使用无界 `Promise.all` 扫描每个文件，`asar: false` 的大目录会在 macOS runner 上触发 `EMFILE`。升级或移除补丁前必须先让 `osx-sign-walk.spec.ts` 和一次不创建 Release 的真实签名构建通过。
 - macOS 正式产物按 `arm64` / `x64` 分别构建并分别发布，不做 universal 合包。
 - Windows 当前 builder 目标仍是 `nsis-web`；正式安装包体验还未收口时，不要提前在外层文档里承诺 MSI / 完整离线安装器。
 
