@@ -35,14 +35,18 @@ Lark / 飞书频道使用开发者后台里的自建机器人应用接入。最�
 
 接入经验：
 
-- 区分「通道机器人应用」和「CLI 操作用应用」。通道配置里的 `appId` / `appSecret` 应指向真正负责监听和回复的机器人；群创建、拉人、查成员、发用户消息等 CLI 操作应固定使用一个专门的 `lark-cli --profile`，不要临时借用当前 active profile。若状态显示 `needs_refresh`，但仍有 `offline_access` 且 refresh token 未过期，下一次用户身份 API 调用通常会自动刷新，不一定需要重新扫码。
-- 角色矩阵演示时，可以创建多个机器人作为群成员，但通常只把一个演示服务机器人接到 One Works channel，避免凭证、事件订阅和回复身份互相混淆。如果每个角色都要独立回复，则每个 bot app 都需要独立的 channel key 与 `appId` / `appSecret`；同一角色进入多个群时复用同一个实体，并为每个 `bot app × chat` 建立一个 ChannelLink，一个 channel key 不应跨实体复用。
+- 区分「通道机器人应用」和「CLI 操作用应用」。通道配置里的 `appId` / `appSecret` 应指向真正负责监听和回复的机器人；群创建、拉人、查成员、发用户消息等 CLI 操作应固定使用一个专门的 `lark-cli --profile`，不要临时借用当前 active profile。
+- 飞书开放平台里应使用企业自建应用的「机器人」能力，不要走“智能体应用”创建入口。智能体应用适合飞书智能体生态，但不等同于 One Works Lark channel 的 bot 接入。
+- 角色矩阵演示时，可以创建多个机器人作为群成员，但通常只把一个演示服务机器人接到 One Works channel。这样能避免多个 bot app 的凭证、事件订阅和回复身份互相混淆。
+- 如果产品目标是让每个角色机器人都能独立回复，则每个 bot app 都需要独立的 channel key 与 `appId` / `appSecret`。同一角色进入多个群时复用同一个实体，并为每个 `bot app × chat` 建立一个 ChannelLink；一个 channel key 不应跨实体复用。
 - 在多机器人群里，结构化 `@` 只会触发被点名的机器人，`@` 其它机器人会关闭失败。完全没有 `@` 的 slash command 仍按 ChannelLink 的 `createOnCommand` 处理；如果群内多个 bot 都开启该入口，一条裸命令可能被多个 bot 接收。此时应关闭不需要的 `createOnCommand`，或在实现“群命令必须 `@` 当前 bot”的显式策略后再开启。
 - 同一实体的多个 ChannelLink 会复用角色定义和提示词，但不会自动获得跨群学习记忆；跨群记忆还需要单独实现并验证实体维度的加载与写回。
-- 外部群链路要同时满足三件事：目标群是外部群，机器人发布版本允许加入外部群，执行成员管理的 CLI 应用本身也具备对应外部群能力。只配置被邀请机器人不够；创建群后应立刻确认群确实是外部群，误建内部群时建议解散并重新创建外部群。若成员管理返回 `232033`，应优先检查当前 CLI profile 对应应用的外部群能力。
+- 外部群链路要同时满足三件事：目标群是外部群，机器人发布版本允许加入外部群，执行成员管理的 CLI 应用本身也具备对应外部群能力。只配置被邀请机器人不够；创建群后应立刻确认群确实是外部群，误建内部群时建议解散并重新创建外部群。
+- 使用 CLI 自动化管理群成员时，`lark-cli auth status --profile <name> --json` 可先判断用户 token 状态。若显示 `needs_refresh` 但还有 `offline_access` 且 refresh token 未过期，下一次用户身份 API 调用通常会自动刷新，不一定需要重新扫码。
 - 需要批量核对企业自建应用的 App ID 时，可为专用 CLI 应用申请 `admin:app.info:readonly` 并发布，然后调用 `GET /open-apis/application/v6/applications`。该管理员读取权限应留在 CLI 操作用应用，不要扩散到每个角色机器人。
-- 修改项目的 channel 配置文件后，正在运行的 server 可能仍持有旧的长连接；同一个 bot app 也不要同时连接多个旧 worktree 或遗留 server，否则飞书可能把事件交给任意一条连接。排查时用 `pnpm --silent tools dev-service status <target> --json` 确认服务归属，并在得到对应 target 的停止授权后退出旧服务、重启或确认 channel 已重新连接，再做真实群消息验证。
+- 修改项目的 channel 配置文件后，正在运行的 server 可能仍持有旧的长连接。需要重启或确认 channel 已重新连接后，再做真实群消息验证。
 - Web launcher 的 manager server 不应初始化 workspace channel；频道长连接、runtime watcher 和 resume scheduler 应由同一个 workspace server 持有。否则入站去重可能由 manager 抢先完成，而真正的会话执行器看不到该事件。
+- 同一个 bot app 不要同时连接多个旧 worktree 或遗留 server。飞书可能把事件交给任意一条长连接，造成同一机器人偶发使用旧配置回复。排查时用项目的 `pnpm --silent tools dev-service status <target> --json` 确认服务归属，并在得到对应 target 的停止授权后退出旧服务。
 - 自动创建的 channel session 需要明确可用的默认 adapter 和 model。项目若包含仅供测试的 mock model service，不应依赖“第一个可用模型”的回退结果；在 user / private 配置中设置 `defaultAdapter` / `defaultModel`，再确认 session 使用了目标 model 并走到 `completed`。
 - 闭环验证建议分两步：先用 bot 身份发送一条消息确认 `appId` / `appSecret` 和 `im:message` 可用；再让真实用户在目标群里明确 `@` 该机器人，确认结构化 mention、长连接事件、`allowedGroups`、session 调度和回复都生效，并确认同群其它机器人没有被误触发。不要用机器人自己发给自己当作入站验证；只有 bot 自发消息和 server connected 日志还不算完整入站闭环。
 

@@ -43,6 +43,39 @@ export const channelPoliciesSchemaModule: SchemaModule = {
       CREATE INDEX IF NOT EXISTS idx_channel_offhour_backlog_channel
         ON channel_offhour_backlog(channelType, channelId, processedAt, createdAt);
 
+      CREATE TABLE IF NOT EXISTS channel_policy_states (
+        policyKey TEXT NOT NULL PRIMARY KEY,
+        channelLinkName TEXT NOT NULL,
+        scope TEXT NOT NULL,
+        subjectKey TEXT NOT NULL,
+        state TEXT NOT NULL,
+        reason TEXT,
+        hits INTEGER NOT NULL DEFAULT 0,
+        hitWindowStartedAt INTEGER,
+        mutedUntil INTEGER,
+        revision INTEGER NOT NULL DEFAULT 1,
+        updatedBy TEXT NOT NULL,
+        updatedAt INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_channel_policy_states_subject
+        ON channel_policy_states(channelLinkName, scope, subjectKey);
+
+      CREATE TABLE IF NOT EXISTS channel_policy_events (
+        id TEXT NOT NULL PRIMARY KEY,
+        eventKey TEXT NOT NULL UNIQUE,
+        policyKey TEXT,
+        channelLinkName TEXT NOT NULL,
+        eventType TEXT NOT NULL,
+        actorUserId TEXT,
+        actorAccountId TEXT,
+        metadataJson TEXT,
+        createdAt INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_channel_policy_events_policy
+        ON channel_policy_events(policyKey, createdAt);
+
       CREATE TABLE IF NOT EXISTS channel_webhook_nonces (
         channelKey TEXT NOT NULL,
         nonce TEXT NOT NULL,

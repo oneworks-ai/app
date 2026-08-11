@@ -530,7 +530,8 @@ describe('initChannels', () => {
       headers: { 'x-test': '1' },
       query: { secret: 'secret' },
       body: { TypeName: 'AddMsg' },
-      rawBody: '{"TypeName":"AddMsg"}'
+      rawBody: '{"TypeName":"AddMsg"}',
+      remoteAddress: '::1'
     })
 
     expect(result).toEqual({
@@ -542,14 +543,14 @@ describe('initChannels', () => {
       headers: { 'x-test': '1' },
       query: { secret: 'secret' },
       body: { TypeName: 'AddMsg' },
-      rawBody: '{"TypeName":"AddMsg"}'
+      rawBody: '{"TypeName":"AddMsg"}',
+      remoteAddress: '::1'
     })
   })
 
   it('routes OneWorks native webhooks through receiving handlers with channel links', async () => {
     const { channelDefinition } = await import('../../../../packages/channels/oneworks/src/index.js')
     const { createChannelConnection } = await import('../../../../packages/channels/oneworks/src/connection.js')
-    const signature = await import('../../../../packages/channels/oneworks/src/webhook-signature.js')
     const channelLink = {
       channelKey: 'oneworks-main',
       entity: 'owo-demo',
@@ -573,7 +574,7 @@ describe('initChannels', () => {
           'oneworks-main': {
             type: 'oneworks',
             title: 'OneWorks Native',
-            webhookSecret: 'secret'
+            allowInsecureWebhooks: true
           }
         }
       }
@@ -585,26 +586,14 @@ describe('initChannels', () => {
       senderId: 'user-yijie',
       text: '@OWO hi'
     }
-    const rawBody = JSON.stringify(body)
-    const nonce = 'nonce-native-1'
-    const timestamp = String(Date.now())
     const result = await handleChannelWebhook({
       channelType: 'oneworks',
       channelKey: 'oneworks-main',
       method: 'POST',
-      headers: {
-        [signature.ONEWORKS_WEBHOOK_NONCE_HEADER]: nonce,
-        [signature.ONEWORKS_WEBHOOK_SIGNATURE_HEADER]: signature.buildOneWorksWebhookSignature({
-          body: rawBody,
-          nonce,
-          secret: 'secret',
-          timestamp
-        }),
-        [signature.ONEWORKS_WEBHOOK_TIMESTAMP_HEADER]: timestamp
-      },
+      headers: { host: 'localhost:8787' },
       query: {},
       body,
-      rawBody
+      remoteAddress: '::1'
     })
 
     expect(result).toEqual({
@@ -626,7 +615,7 @@ describe('initChannels', () => {
           receiveId: 'wan-ke-native',
           receiveIdType: 'room'
         },
-        senderId: 'user-yijie',
+        senderId: 'oneworks-simulation:user-yijie',
         sessionType: 'group',
         text: '@OWO hi'
       }),
@@ -634,7 +623,7 @@ describe('initChannels', () => {
       expect.objectContaining({
         title: 'OneWorks Native',
         type: 'oneworks',
-        webhookSecret: 'secret'
+        allowInsecureWebhooks: true
       }),
       'project',
       [channelLink]

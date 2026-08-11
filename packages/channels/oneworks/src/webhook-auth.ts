@@ -20,8 +20,14 @@ export const getHeaderValue = (
   return Array.isArray(value) ? value[0] : value
 }
 
-export const isLoopbackRequest = (request: ChannelWebhookRequest) => {
+export const ONEWORKS_PRODUCT_SIMULATION_HEADER = 'x-oneworks-product-simulation'
+
+export const isLoopbackTransport = (request: ChannelWebhookRequest) => {
   const address = request.remoteAddress?.trim().toLowerCase()
+  return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1'
+}
+
+export const isLoopbackRequest = (request: ChannelWebhookRequest) => {
   const host = getHeaderValue(request.headers, 'host')?.trim()
   if (host == null || host === '') return false
   let hostname: string
@@ -30,9 +36,13 @@ export const isLoopbackRequest = (request: ChannelWebhookRequest) => {
   } catch {
     return false
   }
-  const loopbackAddress = address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1'
   const loopbackHost = hostname === '127.0.0.1' || hostname === '::1' || hostname === 'localhost'
-  return loopbackAddress && loopbackHost
+  return isLoopbackTransport(request) && loopbackHost
+}
+
+export const isProductSimulationRequest = (request: ChannelWebhookRequest) => {
+  const marker = getHeaderValue(request.headers, ONEWORKS_PRODUCT_SIMULATION_HEADER)?.trim().toLowerCase()
+  return isLoopbackTransport(request) && (marker === '1' || marker === 'true')
 }
 
 export const resolveSignedWebhook = (config: OneWorksChannelConfig, request: ChannelWebhookRequest) => {

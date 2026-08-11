@@ -15,6 +15,11 @@
 .oneworks/
 .vercel/
 .oo.dev.config.json
+
+# Local tenant-specific channel bindings, entities, and inventory.
+.oo/channels/wan-ke-*/
+.oo/entities/owo-demo/
+.oo/entities/wan-ke-*/
 apps/desktop/release/
 apps/relay-server/public/
 .oo/rules/*.local.md

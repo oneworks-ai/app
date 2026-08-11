@@ -174,6 +174,50 @@ describe('oneworks native channel', () => {
     }))
   })
 
+  it('only grants product simulation actor metadata to loopback requests', async () => {
+    const message = vi.fn()
+    const connection = await createChannelConnection({ type: 'oneworks', webhookSecret: 'secret' })
+    await connection.startReceiving?.({ channelKey: 'oneworks-main', handlers: { message } })
+
+    const body = {
+      roomId: 'room-demo',
+      senderId: 'user-a',
+      simulation: { actorRole: 'admin' },
+      text: 'hi'
+    }
+    const remoteRequest = signedWebhookRequest(body, { nonce: 'remote-product-simulation' })
+    await expect(
+      connection.handleWebhook?.({
+        ...remoteRequest,
+        headers: {
+          ...remoteRequest.headers,
+          'x-oneworks-product-simulation': 'true'
+        },
+        remoteAddress: '203.0.113.10'
+      })
+    ).resolves.toEqual(expect.objectContaining({ statusCode: 200 }))
+    expect(message).toHaveBeenLastCalledWith(expect.objectContaining({
+      raw: expect.not.objectContaining({ simulation: expect.anything() }),
+      senderId: 'user-a'
+    }))
+
+    const loopbackRequest = signedWebhookRequest(body, { nonce: 'loopback-product-simulation' })
+    await expect(
+      connection.handleWebhook?.({
+        ...loopbackRequest,
+        headers: {
+          ...loopbackRequest.headers,
+          'x-oneworks-product-simulation': '1'
+        },
+        remoteAddress: '::1'
+      })
+    ).resolves.toEqual(expect.objectContaining({ statusCode: 200 }))
+    expect(message).toHaveBeenLastCalledWith(expect.objectContaining({
+      raw: expect.objectContaining({ simulation: { actorRole: 'admin' } }),
+      senderId: 'user-a'
+    }))
+  })
+
   it('rejects stale signatures, tampered bodies, and replayed nonces', async () => {
     const connection = await createChannelConnection({ type: 'oneworks', webhookSecret: 'secret' })
     const message = vi.fn()

@@ -9,6 +9,7 @@ import {
   releaseChannelAuthorizationRequestDelivery,
   reserveChannelAuthorizationRequestDelivery
 } from '#~/services/channel-authorizations/index.js'
+import { logger } from '#~/utils/logger.js'
 
 vi.mock('#~/db/index.js', () => ({
   getDb: vi.fn(() => ({
@@ -197,7 +198,7 @@ describe('channel handlers', () => {
     vi.resetModules()
   })
 
-  it('drops group messages that structurally mention another bot before pipeline side effects', async () => {
+  it('records and drops group messages that structurally mention another bot before commands or pipeline side effects', async () => {
     const ack = vi.fn().mockResolvedValue(undefined)
     const unack = vi.fn().mockResolvedValue(undefined)
     const sendMessage = vi.fn().mockResolvedValue({ messageId: 'om_unexpected' })
@@ -212,9 +213,9 @@ describe('channel handlers', () => {
         senderId: 'user_1',
         text: '/help',
         mentionedBot: false,
+        raw: {},
         ack,
-        unack,
-        raw: {}
+        unack
       },
       { sendMessage } as any,
       {
@@ -226,6 +227,17 @@ describe('channel handlers', () => {
     expect(ack).not.toHaveBeenCalled()
     expect(unack).not.toHaveBeenCalled()
     expect(sendMessage).not.toHaveBeenCalled()
+    expect(logger.info).toHaveBeenCalledWith({
+      channelId: 'chat_1',
+      channelKey: 'test',
+      channelLink: undefined,
+      channelType: 'lark',
+      decision: 'ignore',
+      messageId: 'om_other_bot',
+      reason: 'mentioned_other_bot',
+      senderId: 'user_1',
+      sessionType: 'group'
+    }, '[channel] recorded deterministic inbound router decision')
   })
 
   it('does not execute a bare group command when command intent is disabled', async () => {

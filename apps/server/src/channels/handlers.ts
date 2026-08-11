@@ -141,6 +141,21 @@ export const handleInboundEvent = async (
     return
   }
 
+  if (inbound.sessionType === 'group' && inbound.mentionedBot === false) {
+    logger.info({
+      channelId: inbound.channelId,
+      channelKey,
+      channelLink: channelLinkMatch?.link.name,
+      channelType: inbound.channelType,
+      decision: 'ignore',
+      messageId: inbound.messageId,
+      reason: 'mentioned_other_bot',
+      senderId: inbound.senderId,
+      sessionType: inbound.sessionType
+    }, '[channel] recorded deterministic inbound router decision')
+    return
+  }
+
   const ctx: ChannelContext = {
     channelKey,
     configSource,

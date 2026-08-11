@@ -15,13 +15,12 @@ const DEFAULT_OFF_HOURS_REPLY_TEXT = '我现在下班啦，消息会先记下，
 const DEFAULT_OFF_HOURS_REPLY_THROTTLE_MS = 20 * 60 * 1000
 
 const isBypassSender = (ctx: ChannelContext) => {
-  const senderId = ctx.inbound.senderId
-  if (senderId == null || senderId === '') return false
+  const accountId = ctx.actor?.account.accountId ?? ctx.inbound.senderId
+  if (accountId == null || accountId === '') return false
 
   const availability = ctx.channelLink?.availability
-  return ctx.config?.access?.admins?.includes(senderId) === true ||
-    availability?.bypassSenders?.includes(senderId) === true ||
-    availability?.bypassUsers?.includes(senderId) === true ||
+  return ctx.config?.access?.admins?.includes(ctx.inbound.senderId ?? '') === true ||
+    availability?.bypassSenders?.includes(accountId) === true ||
     (ctx.actor?.user?.id != null && availability?.bypassUsers?.includes(ctx.actor.user.id) === true)
 }
 
@@ -45,7 +44,8 @@ const buildThrottleKey = (ctx: ChannelContext) =>
     ctx.channelLink?.name ?? ctx.channelKey,
     ctx.inbound.channelType,
     ctx.inbound.sessionType,
-    ctx.inbound.channelId
+    ctx.inbound.channelId,
+    ctx.actor?.user?.id ?? ctx.actor?.account.accountId ?? ctx.inbound.senderId ?? 'anonymous'
   ].join('\0')
 
 const isTargetedChannelCommand = (ctx: ChannelContext) =>
@@ -113,7 +113,9 @@ export const availabilityGateMiddleware: ChannelMiddleware = async (ctx, next) =
   }
 
   const now = getAvailabilityNow().getTime()
-  rememberOffhourBacklog(ctx, now)
+  if (availability.offHours?.mode !== 'drop') {
+    rememberOffhourBacklog(ctx, now)
+  }
   if (shouldReplyOffHours(ctx) && shouldSendThrottledReply(ctx, now)) {
     await ctx.reply(availability.offHours?.replyText?.trim() || DEFAULT_OFF_HOURS_REPLY_TEXT)
   }

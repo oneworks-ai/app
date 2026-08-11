@@ -22,6 +22,7 @@ export interface ResolvedChannelLink {
   entity: string
   external: ChannelLink['external']
   ingress?: ChannelLink['ingress']
+  moderation?: ChannelLink['moderation']
   name: string
   path: string
   channelKey: string
@@ -52,6 +53,7 @@ const toResolvedChannelLink = (definition: Definition<ChannelLink>): ResolvedCha
   entity: definition.attributes.entity.trim(),
   external: definition.attributes.external,
   ingress: definition.attributes.ingress,
+  moderation: definition.attributes.moderation,
   name: resolveChannelLinkName(definition),
   path: definition.path,
   channelKey: definition.attributes.channel.trim()

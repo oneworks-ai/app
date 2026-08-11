@@ -10,6 +10,11 @@ import {
 } from '@oneworks/config'
 import type {
   ChannelLink,
+  ChannelLinkAvailability,
+  ChannelLinkModeration,
+  ChannelLinkModerationLevel,
+  ChannelLinkOffHours,
+  ChannelLinkWorkHour,
   Config,
   Definition,
   Entity,
@@ -466,14 +471,150 @@ const parseOptionalChannelLinkFile = async (path: string): Promise<Definition<Ch
       throw new Error('Channel link definition external.type must be non-empty')
     }
 
+    const availability = parseChannelLinkAvailability(parsed.availability)
+    const moderation = parseChannelLinkModeration(parsed.moderation)
+
     return {
       path,
       body: '',
-      attributes: parsed as unknown as ChannelLink
+      attributes: {
+        ...parsed,
+        channel: parsed.channel.trim(),
+        entity: parsed.entity.trim(),
+        external: { ...parsed.external, type: parsed.external.type.trim() },
+        ...(availability == null ? {} : { availability }),
+        ...(moderation == null ? {} : { moderation })
+      }
     }
   } catch (error) {
     warnInvalidWorkspaceAsset('channelLink', path, error)
     return undefined
+  }
+}
+
+const parseStringList = (value: unknown, field: string) => {
+  if (value == null) return undefined
+  if (!Array.isArray(value) || value.some(item => typeof item !== 'string' || item.trim() === '')) {
+    throw new Error(`${field} must be an array of non-empty strings`)
+  }
+  return value.map(item => item.trim())
+}
+
+const parseOptionalBoolean = (value: unknown, field: string) => {
+  if (value == null) return undefined
+  if (typeof value !== 'boolean') throw new Error(`${field} must be a boolean`)
+  return value
+}
+
+const parseOptionalPositiveNumber = (value: unknown, field: string) => {
+  if (value == null) return undefined
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    throw new Error(`${field} must be a non-negative number`)
+  }
+  return value
+}
+
+const parseChannelLinkAvailability = (value: unknown): ChannelLinkAvailability | undefined => {
+  if (value == null) return undefined
+  if (!isRecord(value)) throw new Error('Channel link availability must be an object')
+  const bypassUsers = parseStringList(value.bypassUsers, 'availability.bypassUsers')
+  const bypassSenders = parseStringList(value.bypassSenders, 'availability.bypassSenders')
+  const enabled = parseOptionalBoolean(value.enabled, 'availability.enabled')
+  const workHours = value.workHours == null
+    ? undefined
+    : parseChannelLinkWorkHours(value.workHours)
+  const offHours = value.offHours == null
+    ? undefined
+    : parseChannelLinkOffHours(value.offHours)
+  return {
+    enabled: enabled ?? true,
+    ...(typeof value.timezone === 'string' ? { timezone: value.timezone } : {}),
+    ...(workHours == null ? {} : { workHours }),
+    ...(offHours == null ? {} : { offHours }),
+    ...(bypassUsers == null ? {} : { bypassUsers }),
+    ...(bypassSenders == null ? {} : { bypassSenders })
+  }
+}
+
+const parseChannelLinkWorkHours = (value: unknown): ChannelLinkWorkHour[] => {
+  if (!Array.isArray(value)) throw new Error('availability.workHours must be an array')
+  return value.map((item, index) => {
+    if (!isRecord(item) || typeof item.start !== 'string' || typeof item.end !== 'string') {
+      throw new Error(`availability.workHours[${index}] must include start and end`)
+    }
+    if (item.days != null && (!Array.isArray(item.days) || item.days.some(day => !Number.isInteger(day) || day < 1 || day > 7))) {
+      throw new Error(`availability.workHours[${index}].days must contain ISO weekdays`)
+    }
+    return {
+      start: item.start,
+      end: item.end,
+      ...(item.days == null ? {} : { days: item.days })
+    }
+  })
+}
+
+const parseChannelLinkOffHours = (value: unknown): ChannelLinkOffHours => {
+  if (!isRecord(value)) throw new Error('availability.offHours must be an object')
+  if (value.mode != null && value.mode !== 'buffer' && value.mode !== 'drop') {
+    throw new Error('availability.offHours.mode must be buffer or drop')
+  }
+  const replyThrottleMs = parseOptionalPositiveNumber(value.replyThrottleMs, 'availability.offHours.replyThrottleMs')
+  return {
+    mode: value.mode === 'drop' ? 'drop' : 'buffer',
+    ...(typeof value.replyText === 'string' ? { replyText: value.replyText } : {}),
+    replyThrottleMs: replyThrottleMs ?? 20 * 60 * 1000
+  }
+}
+
+const parseChannelLinkModerationLevels = (value: unknown): ChannelLinkModerationLevel[] | undefined => {
+  if (value == null) return undefined
+  if (!Array.isArray(value)) throw new Error('moderation.levels must be an array')
+  return value.map((item, index) => {
+    if (!isRecord(item) || typeof item.hit !== 'number' || !Number.isInteger(item.hit) || item.hit < 1) {
+      throw new Error(`moderation.levels[${index}].hit must be a positive integer`)
+    }
+    if (item.action !== 'warn' && item.action !== 'mute' && item.action !== 'mute_permanent') {
+      throw new Error(`moderation.levels[${index}].action is invalid`)
+    }
+    const durationMs = parseOptionalPositiveNumber(item.durationMs, `moderation.levels[${index}].durationMs`)
+    if (item.action === 'mute' && (durationMs == null || durationMs === 0)) {
+      throw new Error(`moderation.levels[${index}].durationMs is required for mute`)
+    }
+    return { hit: item.hit, action: item.action, ...(durationMs == null ? {} : { durationMs }) }
+  })
+}
+
+const parseChannelLinkModeration = (value: unknown): ChannelLinkModeration | undefined => {
+  if (value == null) return undefined
+  if (!isRecord(value)) throw new Error('Channel link moderation must be an object')
+  const subjectScope = value.subjectScope
+  if (subjectScope != null && subjectScope !== 'account' && subjectScope !== 'user') {
+    throw new Error('moderation.subjectScope must be account or user')
+  }
+  const enabled = parseOptionalBoolean(value.enabled, 'moderation.enabled')
+  const autoPermanentMute = parseOptionalBoolean(value.autoPermanentMute, 'moderation.autoPermanentMute')
+  const replyThrottleMs = parseOptionalPositiveNumber(value.replyThrottleMs, 'moderation.replyThrottleMs')
+  return {
+    enabled: enabled ?? true,
+    ...(typeof value.reviewAdapter === 'string' ? { reviewAdapter: value.reviewAdapter } : {}),
+    ...(typeof value.reviewModel === 'string' ? { reviewModel: value.reviewModel } : {}),
+    ...(typeof value.reviewPrompt === 'string' ? { reviewPrompt: value.reviewPrompt } : {}),
+    ...(typeof value.replyText === 'string' ? { replyText: value.replyText } : {}),
+    ...(replyThrottleMs == null ? { replyThrottleMs: 10 * 60 * 1000 } : { replyThrottleMs }),
+    ...(subjectScope == null ? { subjectScope: 'account' } : { subjectScope }),
+    ...(parseChannelLinkModerationLevels(value.levels) == null
+      ? { levels: [] }
+      : { levels: parseChannelLinkModerationLevels(value.levels) }),
+    ...(autoPermanentMute == null ? { autoPermanentMute: false } : { autoPermanentMute }),
+    ...(parseStringList(value.bypassUsers, 'moderation.bypassUsers') == null
+      ? {}
+      : { bypassUsers: parseStringList(value.bypassUsers, 'moderation.bypassUsers') }),
+    ...(parseStringList(value.bypassAccounts, 'moderation.bypassAccounts') == null
+      ? {}
+      : { bypassAccounts: parseStringList(value.bypassAccounts, 'moderation.bypassAccounts') }),
+    ...(parseStringList(value.bypassSenders, 'moderation.bypassSenders') == null
+      ? {}
+      : { bypassSenders: parseStringList(value.bypassSenders, 'moderation.bypassSenders') })
   }
 }
 

@@ -56,7 +56,15 @@ import { channelIdentitiesSchemaModule } from './channelIdentities/schema'
 import { createChannelMessagesRepo } from './channelMessages/repo'
 import { channelMessagesSchemaModule } from './channelMessages/schema'
 import { createChannelPoliciesRepo } from './channelPolicies/repo'
-import type { ChannelOffhourBacklogRow, ChannelPolicyType, ChannelReplyThrottleRow } from './channelPolicies/repo'
+import type {
+  ChannelOffhourBacklogRow,
+  ChannelPolicyEventRow,
+  ChannelPolicyScope,
+  ChannelPolicyState,
+  ChannelPolicyStateRow,
+  ChannelPolicyType,
+  ChannelReplyThrottleRow
+} from './channelPolicies/repo'
 import { channelPoliciesSchemaModule } from './channelPolicies/schema'
 import { channelSessionsSchemaModule } from './channelSessions/schema'
 
@@ -93,6 +101,7 @@ const dbSchemaModules = [
 ] as const
 
 export type { SessionChannelActorSnapshot, SessionRuntimeState }
+export type { ChannelPolicyEventRow, ChannelPolicyScope, ChannelPolicyState, ChannelPolicyStateRow }
 export type {
   ChannelChildSessionRunDispatchMode,
   ChannelChildSessionRunRow,
@@ -588,6 +597,26 @@ export class SqliteDb {
 
   appendChannelOffhourBacklog(row: Parameters<typeof this.channelPolicies.appendOffhourBacklog>[0]) {
     return this.channelPolicies.appendOffhourBacklog(row)
+  }
+
+  getChannelPolicyState(policyKey: string) {
+    return this.channelPolicies.getChannelPolicyState(policyKey)
+  }
+
+  getChannelPolicyEventByEventKey(eventKey: string) {
+    return this.channelPolicies.getChannelPolicyEventByEventKey(eventKey)
+  }
+
+  compareAndSetChannelPolicyState(row: Parameters<typeof this.channelPolicies.compareAndSetChannelPolicyState>[0]) {
+    return this.channelPolicies.compareAndSetChannelPolicyState(row)
+  }
+
+  appendChannelPolicyEvent(row: Parameters<typeof this.channelPolicies.appendChannelPolicyEvent>[0]) {
+    return this.channelPolicies.appendChannelPolicyEvent(row)
+  }
+
+  listChannelPolicyEvents(policyKey: string, limit?: number) {
+    return this.channelPolicies.listChannelPolicyEvents(policyKey, limit)
   }
 
   getChannelOffhourBacklogItem(id: string) {

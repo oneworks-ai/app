@@ -11,7 +11,12 @@ import { defineCreateChannelConnection } from '@oneworks/core/channel'
 
 import { oneworksInboundWebhookSchema } from '#~/types.js'
 import type { OneWorksChannelConfig, OneWorksChannelMessage } from '#~/types.js'
-import { createWebhookNonceReservation, isLoopbackRequest, resolveSignedWebhook } from '#~/webhook-auth.js'
+import {
+  createWebhookNonceReservation,
+  isLoopbackRequest,
+  isProductSimulationRequest,
+  resolveSignedWebhook
+} from '#~/webhook-auth.js'
 
 export interface OneWorksDebugOutboundMessage extends OneWorksChannelMessage {
   createdAt: number
@@ -30,7 +35,11 @@ const resolveChannelId = (payload: { channelId?: string; roomId?: string; sender
 const resolveSessionType = (payload: { roomId?: string; sessionType?: 'direct' | 'group' }) =>
   payload.sessionType ?? (payload.roomId == null ? 'direct' : 'group')
 
-const normalizeInboundEvent = (payload: unknown, synthetic: boolean): ChannelInboundEvent | undefined => {
+const normalizeInboundEvent = (
+  payload: unknown,
+  synthetic: boolean,
+  productSimulation: boolean
+): ChannelInboundEvent | undefined => {
   const parsed = oneworksInboundWebhookSchema.safeParse(payload)
   if (!parsed.success) return undefined
 
@@ -53,6 +62,7 @@ const normalizeInboundEvent = (payload: unknown, synthetic: boolean): ChannelInb
       ...data,
       contentItems: data.contentItems,
       mentions: data.mentions,
+      ...(productSimulation ? { simulation: { actorRole: 'admin' } } : {}),
       source: 'oneworks-native'
     }
   }
@@ -116,7 +126,11 @@ export const createChannelConnection = defineCreateChannelConnection(async (
         return createWebhookResponse(503, { error: 'oneworks native channel is not receiving' })
       }
 
-      const event = normalizeInboundEvent(request.body, insecureSimulation)
+      const event = normalizeInboundEvent(
+        request.body,
+        insecureSimulation,
+        isProductSimulationRequest(request)
+      )
       if (event == null) {
         return createWebhookResponse(400, { error: 'invalid oneworks native channel payload' })
       }

@@ -18,6 +18,7 @@ import { identityMiddleware } from './identity'
 import { ingressGateMiddleware } from './ingress-gate'
 import { interactionResponseMiddleware } from './interaction-response'
 import { parseContentMiddleware } from './parse-content'
+import { policyGateMiddleware } from './policy-gate'
 import { resolveSessionMiddleware } from './resolve-session'
 
 export const pipeline = compose<ChannelContext>(
@@ -25,13 +26,14 @@ export const pipeline = compose<ChannelContext>(
   i18nMiddleware,
   parseContentMiddleware,
   identityMiddleware,
-  adminBootstrapMiddleware,
   accessControlMiddleware,
+  adminBootstrapMiddleware,
   emojiRegistryMiddleware,
   resolveSessionMiddleware,
-  channelCommandMiddleware,
   interactionResponseMiddleware,
+  policyGateMiddleware,
   availabilityGateMiddleware,
+  channelCommandMiddleware,
   ingressGateMiddleware,
   groupMessageDebounceMiddleware,
   ackMiddleware,

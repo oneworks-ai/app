@@ -114,8 +114,36 @@ export interface ChannelLinkAvailability {
   timezone?: string
   workHours?: ChannelLinkWorkHour[]
   offHours?: ChannelLinkOffHours
-  bypassSenders?: string[]
+  /** Canonical user ids only. */
   bypassUsers?: string[]
+  /** Platform account ids for this channel issuer only. */
+  bypassSenders?: string[]
+}
+
+export type ChannelModerationSeverity = 'none' | 'warn' | 'mute' | 'ban'
+
+export interface ChannelLinkModerationLevel {
+  hit: number
+  action: 'warn' | 'mute' | 'mute_permanent'
+  durationMs?: number
+}
+
+export interface ChannelLinkModeration {
+  enabled?: boolean
+  reviewAdapter?: string
+  reviewModel?: string
+  reviewPrompt?: string
+  replyText?: string
+  replyThrottleMs?: number
+  /** Account scope is the conservative default. User scope requires a verified canonical user. */
+  subjectScope?: 'account' | 'user'
+  levels?: ChannelLinkModerationLevel[]
+  autoPermanentMute?: boolean
+  /** Canonical user ids only. */
+  bypassUsers?: string[]
+  /** Issuer-scoped account ids. `bypassSenders` remains a compatibility alias. */
+  bypassAccounts?: string[]
+  bypassSenders?: string[]
 }
 
 export interface ChannelLinkAuthorization {
@@ -140,7 +168,7 @@ export interface ChannelLink {
   ingress?: ChannelLinkIngress
   authorization?: ChannelLinkAuthorization
   availability?: ChannelLinkAvailability
-  moderation?: Record<string, unknown>
+  moderation?: ChannelLinkModeration
   routing?: Record<string, unknown>
 }
 

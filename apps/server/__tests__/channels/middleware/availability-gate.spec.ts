@@ -176,6 +176,49 @@ describe('availabilityGateMiddleware', () => {
     }))
   })
 
+  it('does not buffer off-hours messages when the configured mode is drop', async () => {
+    setAvailabilityNowProviderForTests(() => new Date('2026-06-15T13:30:00.000Z'))
+    const next = vi.fn()
+    const ctx = makeCtx({
+      channelLink: {
+        ...makeCtx().channelLink!,
+        availability: {
+          ...makeCtx().channelLink!.availability,
+          offHours: { mode: 'drop' }
+        }
+      }
+    })
+
+    await availabilityGateMiddleware(ctx, next)
+
+    expect(next).not.toHaveBeenCalled()
+    expect(appendChannelOffhourBacklog).not.toHaveBeenCalled()
+  })
+
+  it('keys off-hours notices by the resolved actor instead of sharing one group throttle', async () => {
+    setAvailabilityNowProviderForTests(() => new Date('2026-06-15T13:30:00.000Z'))
+    const first = makeCtx({ commandText: '@OWO help', inbound: { ...makeCtx().inbound, mentionedBot: true } as any })
+    const second = makeCtx({
+      commandText: '@OWO help',
+      inbound: { ...makeCtx().inbound, mentionedBot: true, senderId: 'ou_2' } as any,
+      actor: {
+        account: {
+          issuerKey: 'lark:default', channelType: 'lark', accountId: 'ou_2', accountKey: 'lark:default:ou_2',
+          displayName: null, avatarUrl: null, metadata: null, createdAt: 1, updatedAt: 1
+        }
+      }
+    })
+
+    await availabilityGateMiddleware(first, vi.fn())
+    await availabilityGateMiddleware(second, vi.fn())
+
+    const keys = consumeChannelReplyThrottle.mock.calls.map(call => (
+      (((call as unknown[])[0] as { throttleKey: string }).throttleKey)
+    ))
+    expect(keys).toHaveLength(2)
+    expect(keys[0]).not.toBe(keys[1])
+  })
+
   it('replies for direct messages after hours without creating a session', async () => {
     setAvailabilityNowProviderForTests(() => new Date('2026-06-15T13:30:00.000Z'))
     const next = vi.fn()
