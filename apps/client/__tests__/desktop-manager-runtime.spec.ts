@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  connectDesktopManagerRuntimeIfAvailable,
   markDesktopManagerInteractiveWhenReady,
   resolveClientRoutePathname,
   resolveDesktopRuntimeIdentity
@@ -84,5 +85,19 @@ describe('desktop manager runtime', () => {
 
     await expect(markDesktopManagerInteractiveWhenReady()).resolves.toBe(false)
     expect(markDesktopInteractive).not.toHaveBeenCalled()
+  })
+
+  it('connects standalone routes through the exact manager endpoint and acknowledges core readiness', async () => {
+    window.history.replaceState(null, '', '/standalone/mobile-debug')
+    const getManagerConnection = vi.fn(async () => ({ serverBaseUrl: 'http://127.0.0.1:38902' }))
+    const markDesktopCoreReady = vi.fn(async () => undefined)
+    window.oneworksDesktop = {
+      getManagerConnection,
+      markDesktopCoreReady
+    }
+
+    await expect(connectDesktopManagerRuntimeIfAvailable()).resolves.toBe('http://127.0.0.1:38902')
+    expect(getManagerConnection).toHaveBeenCalledTimes(1)
+    expect(markDesktopCoreReady).toHaveBeenCalledTimes(1)
   })
 })

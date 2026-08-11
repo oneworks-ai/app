@@ -15,6 +15,7 @@ import {
   resolveActiveModulePackageDirSync,
   resolveAdapterPackageName,
   resolveAdapterRuntimeTarget,
+  resolveExistingAdapterPackageCacheDir,
   resolveExistingNpmPackageDirs,
   sanitizePackageName,
   tryLoadAdapterModelProviderImportCapability,
@@ -486,6 +487,55 @@ describe('adapter package helpers', () => {
       ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION: 'dev-missing',
       __ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__: packageCacheRoot
     })).toEqual([])
+  })
+
+  it('uses only the selected runtime version when desktop adapter metadata is absent or stale', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'ow-adapter-selected-cache-resolver-'))
+    tempDirs.push(tempDir)
+
+    const packageCacheRoot = join(tempDir, 'package-cache')
+    const adapterPackageName = '@acme/selected-cache-adapter'
+    const staleCacheDir = join(
+      packageCacheRoot,
+      'adapter-packages',
+      sanitizePackageName(adapterPackageName),
+      '9.0.0'
+    )
+    const selectedCacheDir = join(
+      packageCacheRoot,
+      'adapter-packages',
+      sanitizePackageName(adapterPackageName),
+      'dev-current'
+    )
+    await writeAdapterPackage(staleCacheDir, 'stale-adapter', adapterPackageName, {
+      version: '9.0.0'
+    })
+    await writeAdapterPackage(selectedCacheDir, 'selected-adapter', adapterPackageName, {
+      version: '2.0.0'
+    })
+
+    const staleBuiltinMetadata = JSON.stringify({
+      [adapterPackageName]: {
+        cacheDir: staleCacheDir,
+        cacheVersion: 'previous-build',
+        version: '9.0.0'
+      }
+    })
+
+    expect(resolveExistingAdapterPackageCacheDir(adapterPackageName, {
+      ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION: 'dev-current',
+      __ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__: packageCacheRoot
+    })).toBe(selectedCacheDir)
+    expect(resolveExistingAdapterPackageCacheDir(adapterPackageName, {
+      ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION: 'dev-current',
+      __ONEWORKS_DESKTOP_BUILTIN_ADAPTER_PACKAGES__: staleBuiltinMetadata,
+      __ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__: packageCacheRoot
+    })).toBe(selectedCacheDir)
+    expect(resolveExistingAdapterPackageCacheDir(adapterPackageName, {
+      ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION: 'dev-missing',
+      __ONEWORKS_DESKTOP_BUILTIN_ADAPTER_PACKAGES__: staleBuiltinMetadata,
+      __ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__: packageCacheRoot
+    })).toBeUndefined()
   })
 
   it('resolves only the package that matches the active module pointer metadata', async () => {

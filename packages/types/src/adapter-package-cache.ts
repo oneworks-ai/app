@@ -314,12 +314,24 @@ export const resolveExistingAdapterPackageCacheDir = (
   )
   const runtimePackageCacheVersion = resolveRuntimePackageCacheVersion(env)
   const builtinCacheVersion = builtinPackage?.cacheVersion ?? builtinPackage?.version
-  if (
-    runtimePackageCacheVersion != null &&
-    builtinCacheVersion === runtimePackageCacheVersion
-  ) {
-    const builtinCacheDir = resolveBuiltinPackageCacheDir()
-    if (builtinCacheDir != null) return builtinCacheDir
+  if (runtimePackageCacheVersion != null) {
+    if (builtinCacheVersion === runtimePackageCacheVersion) {
+      const builtinCacheDir = resolveBuiltinPackageCacheDir()
+      if (builtinCacheDir != null) return builtinCacheDir
+    }
+    const selectedRuntimeEntry = resolveExistingDevPackageCacheEntry(
+      'adapter-packages',
+      packageName,
+      env
+    )
+    if (
+      builtinCacheVersion === runtimePackageCacheVersion &&
+      builtinPackage?.version != null &&
+      selectedRuntimeEntry?.version !== builtinPackage.version
+    ) {
+      return undefined
+    }
+    return selectedRuntimeEntry?.cacheDir
   }
 
   const entries = resolveExistingPackageCacheEntries('adapter-packages', packageName, env)

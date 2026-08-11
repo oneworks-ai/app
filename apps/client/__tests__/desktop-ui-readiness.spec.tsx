@@ -68,5 +68,8 @@ describe('desktop UI readiness', () => {
     expect(workspaceConnectionGate).toContain('useDesktopUiReady()')
     expect(workspaceApp).toContain('useDesktopUiReady()')
     expect(standaloneThemeProvider).toContain('useDesktopUiReady(ready)')
+    expect(standaloneThemeProvider).toContain('connectDesktopManagerRuntimeIfAvailable()')
+    expect(standaloneThemeProvider).toContain('deferUntilRuntimeServerBaseUrl={waitsForDesktopManager}')
+    expect(standaloneThemeProvider).toContain('runtimeServerBaseUrl={managerServerBaseUrl}')
   })
 })
