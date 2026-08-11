@@ -66,7 +66,6 @@ describe('agent room service', () => {
     db.close()
     vi.useRealTimers()
   })
-
   it('persists the local owner and applies runtime events to room state', async () => {
     const room = service.createRoom({
       id: 'room-1',
@@ -124,7 +123,6 @@ describe('agent room service', () => {
     expect(service.getDetail(room.id)?.messages).toHaveLength(1)
     expect(service.getDetail(room.id)?.runs).toHaveLength(1)
   })
-
   it('stores inbound channel messages once with immutable provenance and sequence', async () => {
     const room = service.createRoom({ id: 'room-1', title: 'Build room' })
     const command = {
@@ -151,7 +149,6 @@ describe('agent room service', () => {
       })
     ])
   })
-
   it('records each Agent channel delivery as one idempotent Room message', async () => {
     const room = service.createRoom({ id: 'room-1', title: 'Build room' })
     const command = {
@@ -192,7 +189,6 @@ describe('agent room service', () => {
       })
     ])
   })
-
   it('preserves the provider error on a failed Agent channel delivery', async () => {
     const room = service.createRoom({ id: 'room-1', title: 'Build room' })
 
@@ -220,7 +216,6 @@ describe('agent room service', () => {
       expect.objectContaining({ error: 'provider unavailable', status: 'failed' })
     ])
   })
-
   it('attaches multiple channel accounts to one room without collapsing their identities', async () => {
     const room = service.createRoom({ id: 'room-1', title: 'Build room' })
     const makeLink = (channelKey: string, channelLinkName: string, label: string) => ({
@@ -257,7 +252,6 @@ describe('agent room service', () => {
       expect.objectContaining({ channelKey: 'wechat:service', entity: 'owo' })
     ])
   })
-
   it('rejects attaching one provider conversation to multiple rooms', async () => {
     const firstRoom = service.createRoom({ id: 'room-1', title: 'First room' })
     const secondRoom = service.createRoom({ id: 'room-2', title: 'Second room' })

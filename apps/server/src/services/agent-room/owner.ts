@@ -39,13 +39,11 @@ export interface AgentRoomOwner {
   ) => Promise<unknown>
   getSnapshot: (roomId: string) => AgentRoomDetail | undefined
 }
-
 const assertRoom = (db: ReturnType<typeof getDb>, roomId: string) => {
   const room = db.getAgentRoom(roomId)
   if (room == null) throw new Error(`Agent room not found: ${roomId}`)
   return room
 }
-
 export const createAgentRoomOwner = (dependencies: AgentRoomOwnerDependencies): AgentRoomOwner => {
   const db = dependencies.db ?? getDb()
   return {
@@ -183,7 +181,6 @@ export const createAgentRoomOwner = (dependencies: AgentRoomOwnerDependencies): 
         if (revoked) publishAgentRoomShareChanged(roomId)
         return result
       }
-
       if (dependencies.applyEvent == null) {
         throw new Error('Agent room owner does not support runtime events')
       }
