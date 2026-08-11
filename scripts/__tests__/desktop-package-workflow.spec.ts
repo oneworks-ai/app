@@ -6,6 +6,7 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const workflow = readFileSync('.github/workflows/desktop-package.yml', 'utf8')
+const electronBuilderConfig = readFileSync('apps/desktop/electron-builder.yml', 'utf8')
 const macosSigningRule = readFileSync('.oo/rules/release/macos-signing.md', 'utf8')
 const homepageWorkflow = readFileSync(
   '.github/workflows/deploy-homepage.yml',
@@ -477,6 +478,15 @@ describe('desktop package workflow', () => {
     )
 
     expect(result.status).toBe(0)
+  })
+
+  it('keeps notarization owned by the repository hooks', () => {
+    expect(electronBuilderConfig).toContain('afterSign: scripts/notarize.cjs')
+    expect(electronBuilderConfig).toContain(
+      'afterAllArtifactBuild: scripts/notarize-artifacts.cjs'
+    )
+    expect(electronBuilderConfig).toMatch(/mac:\n(?: {2}.+\n)* {2}notarize: false\n/u)
+    expect(workflow).not.toContain('APPLE_APP_SPECIFIC_PASSWORD')
   })
 
   it.each([
