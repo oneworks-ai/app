@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest'
 
 const workflow = readFileSync('.github/workflows/desktop-package.yml', 'utf8')
 const electronBuilderConfig = readFileSync('apps/desktop/electron-builder.yml', 'utf8')
+const desktopPackageScript = readFileSync('apps/desktop/scripts/package.cjs', 'utf8')
 const macosSigningRule = readFileSync('.oo/rules/release/macos-signing.md', 'utf8')
 const homepageWorkflow = readFileSync(
   '.github/workflows/deploy-homepage.yml',
@@ -480,12 +481,42 @@ describe('desktop package workflow', () => {
     expect(result.status).toBe(0)
   })
 
-  it('keeps notarization owned by the repository hooks', () => {
-    expect(electronBuilderConfig).toContain('afterSign: scripts/notarize.cjs')
+  it('signs and notarizes the immutable app before wrapping release artifacts', () => {
+    const importIndex = workflow.indexOf(
+      '      - name: Import desktop application signing identity'
+    )
+    const packageIndex = workflow.indexOf('      - name: Package desktop app')
+    const verifyIndex = workflow.indexOf(
+      '      - name: Verify signed and notarized macOS app bundles'
+    )
+    const buildIndex = workflow.indexOf('      - name: Build desktop artifacts')
+    const cleanupIndex = workflow.indexOf(
+      '      - name: Remove temporary desktop signing keychain'
+    )
+
+    expect(importIndex).toBeGreaterThanOrEqual(0)
+    expect(importIndex).toBeLessThan(packageIndex)
+    expect(packageIndex).toBeLessThan(verifyIndex)
+    expect(verifyIndex).toBeLessThan(buildIndex)
+    expect(buildIndex).toBeLessThan(cleanupIndex)
+    expect(workflow).toContain('ONEWORKS_DESKTOP_SIGNING_KEYCHAIN=$keychain')
+    expect(workflow).toContain('security set-key-partition-list')
+    expect(workflow).toMatch(
+      /ONEWORKS_DESKTOP_SIGN: \$\{\{ steps\.desktop_build_policy\.outputs\.sign \}\}/u
+    )
+    expect(workflow).toContain('verify-macos-signed-apps.cjs')
+    expect(workflow).toContain("if: always() && steps.desktop_build_policy.outputs.sign == 'true'")
+
+    expect(electronBuilderConfig).not.toContain('afterSign:')
     expect(electronBuilderConfig).toContain(
       'afterAllArtifactBuild: scripts/notarize-artifacts.cjs'
     )
     expect(electronBuilderConfig).toMatch(/mac:\n(?: {2}.+\n)* {2}notarize: false\n/u)
+    expect(desktopPackageScript).toContain('afterCopyExtraResources:')
+    expect(desktopPackageScript).not.toContain('afterCopy:')
+    expect(desktopPackageScript.indexOf('rewriteStagingSymlinks(packagedAppRoot')).toBeLessThan(
+      desktopPackageScript.indexOf('...signingOptions')
+    )
     expect(workflow).not.toContain('APPLE_APP_SPECIFIC_PASSWORD')
   })
 
