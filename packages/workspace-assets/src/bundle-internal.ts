@@ -542,7 +542,10 @@ const parseChannelLinkWorkHours = (value: unknown): ChannelLinkWorkHour[] => {
     if (!isRecord(item) || typeof item.start !== 'string' || typeof item.end !== 'string') {
       throw new Error(`availability.workHours[${index}] must include start and end`)
     }
-    if (item.days != null && (!Array.isArray(item.days) || item.days.some(day => !Number.isInteger(day) || day < 1 || day > 7))) {
+    if (
+      item.days != null &&
+      (!Array.isArray(item.days) || item.days.some(day => !Number.isInteger(day) || day < 1 || day > 7))
+    ) {
       throw new Error(`availability.workHours[${index}].days must contain ISO weekdays`)
     }
     return {

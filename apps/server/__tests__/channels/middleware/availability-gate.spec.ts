@@ -203,8 +203,15 @@ describe('availabilityGateMiddleware', () => {
       inbound: { ...makeCtx().inbound, mentionedBot: true, senderId: 'ou_2' } as any,
       actor: {
         account: {
-          issuerKey: 'lark:default', channelType: 'lark', accountId: 'ou_2', accountKey: 'lark:default:ou_2',
-          displayName: null, avatarUrl: null, metadata: null, createdAt: 1, updatedAt: 1
+          issuerKey: 'lark:default',
+          channelType: 'lark',
+          accountId: 'ou_2',
+          accountKey: 'lark:default:ou_2',
+          displayName: null,
+          avatarUrl: null,
+          metadata: null,
+          createdAt: 1,
+          updatedAt: 1
         }
       }
     })
@@ -213,7 +220,7 @@ describe('availabilityGateMiddleware', () => {
     await availabilityGateMiddleware(second, vi.fn())
 
     const keys = consumeChannelReplyThrottle.mock.calls.map(call => (
-      (((call as unknown[])[0] as { throttleKey: string }).throttleKey)
+      ((call as unknown[])[0] as { throttleKey: string }).throttleKey
     ))
     expect(keys).toHaveLength(2)
     expect(keys[0]).not.toBe(keys[1])

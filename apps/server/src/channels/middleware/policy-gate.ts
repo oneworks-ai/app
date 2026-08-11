@@ -1,9 +1,5 @@
 import { getDb } from '#~/db/index.js'
-import {
-  buildMutedNotice,
-  evaluateInboundPolicy,
-  resolvePolicySubject
-} from '#~/services/channel-policy/index.js'
+import { buildMutedNotice, evaluateInboundPolicy, resolvePolicySubject } from '#~/services/channel-policy/index.js'
 
 import type { ChannelContext, ChannelMiddleware } from './@types'
 import { hasExplicitChannelIntent } from './@utils'
@@ -15,14 +11,15 @@ const isAdmin = (ctx: ChannelContext) => {
   return senderId != null && ctx.config?.access?.admins?.includes(senderId) === true
 }
 
-const hasExplicitIntent = (ctx: ChannelContext) => hasExplicitChannelIntent({
-  commandText: ctx.commandText,
-  config: ctx.config,
-  createOnMention: ctx.channelLink?.ingress?.createOnMention,
-  mentionedBot: ctx.inbound.mentionedBot,
-  mentionPatterns: ctx.channelLink?.ingress?.mentionPatterns,
-  text: ctx.inbound.text
-})
+const hasExplicitIntent = (ctx: ChannelContext) =>
+  hasExplicitChannelIntent({
+    commandText: ctx.commandText,
+    config: ctx.config,
+    createOnMention: ctx.channelLink?.ingress?.createOnMention,
+    mentionedBot: ctx.inbound.mentionedBot,
+    mentionPatterns: ctx.channelLink?.ingress?.mentionPatterns,
+    text: ctx.inbound.text
+  })
 
 const buildActor = (ctx: ChannelContext) => {
   const accountId = ctx.actor?.account.accountId ?? ctx.inbound.senderId
@@ -39,14 +36,15 @@ const buildActor = (ctx: ChannelContext) => {
   }
 }
 
-const buildThrottleKey = (ctx: ChannelContext, subjectKey: string) => [
-  'muted-mention',
-  ctx.channelKey,
-  ctx.channelLink?.name ?? ctx.channelKey,
-  ctx.inbound.channelType,
-  ctx.inbound.channelId,
-  subjectKey
-].join('\0')
+const buildThrottleKey = (ctx: ChannelContext, subjectKey: string) =>
+  [
+    'muted-mention',
+    ctx.channelKey,
+    ctx.channelLink?.name ?? ctx.channelKey,
+    ctx.inbound.channelType,
+    ctx.inbound.channelId,
+    subjectKey
+  ].join('\0')
 
 export const policyGateMiddleware: ChannelMiddleware = async (ctx, next) => {
   const actor = buildActor(ctx)

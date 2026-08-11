@@ -1,12 +1,17 @@
 import type { SqliteDatabase } from '../sqlite'
 import { createOffhourBacklogRepo } from './backlog-repo'
-import { createReplyThrottlesRepo } from './throttle-repo'
 import { createChannelPolicyStateRepo } from './policy-repo'
+import { createReplyThrottlesRepo } from './throttle-repo'
 import { createWebhookNoncesRepo } from './webhook-nonce-repo'
 
 export type { ChannelOffhourBacklogRow } from './backlog-record'
+export type {
+  ChannelPolicyEventRow,
+  ChannelPolicyScope,
+  ChannelPolicyState,
+  ChannelPolicyStateRow
+} from './policy-record'
 export type { ChannelPolicyType, ChannelReplyThrottleRow } from './throttle-record'
-export type { ChannelPolicyEventRow, ChannelPolicyScope, ChannelPolicyState, ChannelPolicyStateRow } from './policy-record'
 
 export function createChannelPoliciesRepo(db: SqliteDatabase) {
   const throttles = createReplyThrottlesRepo(db)

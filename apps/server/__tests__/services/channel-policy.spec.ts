@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { getDb } from '#~/db/index.js'
 import type { ChannelPolicyEventRow } from '#~/db/channelPolicies/policy-record.js'
+import { getDb } from '#~/db/index.js'
 import {
   applyPolicyHit,
   evaluateInboundPolicy,
@@ -84,7 +84,9 @@ describe('channel policy service', () => {
       scope: 'user',
       subjectKey: 'user-1'
     })
-    expect(resolvePolicySubject(actor({ canonicalUserId: undefined, moderation: { enabled: true, subjectScope: 'user' } })))
+    expect(
+      resolvePolicySubject(actor({ canonicalUserId: undefined, moderation: { enabled: true, subjectScope: 'user' } }))
+    )
       .toMatchObject({ scope: 'account', subjectKey: 'account-1' })
   })
 

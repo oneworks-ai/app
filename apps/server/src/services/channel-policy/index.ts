@@ -9,7 +9,8 @@ import { reviewModerationMessage } from './moderation-review'
 import type { ModerationReview } from './moderation-review'
 
 const DEFAULT_HIT_WINDOW_MS = 24 * 60 * 60 * 1000
-const DEFAULT_MUTED_REPLY_TEXT = '当前消息已被暂时限制处理。原因：{reason}。剩余时间：{remaining}。下次可回复：{nextReplyAt}。如有异议请联系频道管理员。'
+const DEFAULT_MUTED_REPLY_TEXT =
+  '当前消息已被暂时限制处理。原因：{reason}。剩余时间：{remaining}。下次可回复：{nextReplyAt}。如有异议请联系频道管理员。'
 
 export interface PolicySubject {
   accountId: string
@@ -70,11 +71,13 @@ export const buildChannelPolicyKey = (channelLinkName: string, subject: PolicySu
   [channelLinkName, subject.scope, subject.subjectKey].join('\0')
 )
 
-const eventKey = (input: { type: string; policyKey: string; messageId?: string; revision?: number }) => createHash('sha256')
-  .update([input.type, input.policyKey, input.messageId ?? '', input.revision ?? ''].join('\0'))
-  .digest('hex')
+const eventKey = (input: { type: string; policyKey: string; messageId?: string; revision?: number }) =>
+  createHash('sha256')
+    .update([input.type, input.policyKey, input.messageId ?? '', input.revision ?? ''].join('\0'))
+    .digest('hex')
 
-const isBypassed = (actor: PolicyActor) => actor.isAdmin ||
+const isBypassed = (actor: PolicyActor) =>
+  actor.isAdmin ||
   canonicalListIncludes(actor.moderation?.bypassUsers, actor.canonicalUserId) ||
   accountListIncludes(actor.moderation?.bypassAccounts, actor.accountId) ||
   accountListIncludes(actor.moderation?.bypassSenders, actor.accountId)
@@ -158,7 +161,8 @@ export const applyPolicyHit = (input: {
   if (existingEvent != null) return getDb().getChannelPolicyState(policyKey)
   const current = getDb().getChannelPolicyState(policyKey)
   const normalized = current == null ? undefined : normalizeExpiredState(current, now)
-  const hits = normalized != null && normalized.hitWindowStartedAt != null && now - normalized.hitWindowStartedAt <= DEFAULT_HIT_WINDOW_MS
+  const hits = normalized != null && normalized.hitWindowStartedAt != null &&
+      now - normalized.hitWindowStartedAt <= DEFAULT_HIT_WINDOW_MS
     ? normalized.hits + 1
     : 1
   const level = findLevel(hits, moderation)
@@ -203,7 +207,9 @@ const formatRemaining = (until: number | null, now: number) => {
   return `${remainingMinutes} 分钟`
 }
 
-export const buildMutedNotice = (input: { state: ChannelPolicyStateRow; moderation?: ChannelLinkModeration; now?: number }) => {
+export const buildMutedNotice = (
+  input: { state: ChannelPolicyStateRow; moderation?: ChannelLinkModeration; now?: number }
+) => {
   const now = input.now ?? Date.now()
   const template = input.moderation?.replyText?.trim() || DEFAULT_MUTED_REPLY_TEXT
   const nextReplyAt = input.state.mutedUntil == null
@@ -269,7 +275,11 @@ export const evaluateInboundPolicy = async (actor: PolicyActor): Promise<PolicyD
   if (state?.state === 'muted_until' || state?.state === 'muted_permanent') {
     const subject = resolvePolicySubject(actor)
     getDb().appendChannelPolicyEvent({
-      eventKey: eventKey({ type: 'drop', policyKey: buildChannelPolicyKey(actor.channelLinkName, subject), messageId: actor.messageId }),
+      eventKey: eventKey({
+        type: 'drop',
+        policyKey: buildChannelPolicyKey(actor.channelLinkName, subject),
+        messageId: actor.messageId
+      }),
       policyKey: state.policyKey,
       channelLinkName: actor.channelLinkName,
       eventType: 'drop',
