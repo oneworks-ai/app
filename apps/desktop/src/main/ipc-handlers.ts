@@ -30,6 +30,8 @@ import {
   updateSavedPassword
 } from './browser-data-sync'
 import {
+  DESKTOP_CORE_READY_CHANNEL,
+  DESKTOP_UI_READY_CHANNEL,
   MANAGER_CONNECTION_CHANNEL,
   SERVER_READY_TIMEOUT_MS,
   WORKSPACE_CONNECTION_CHANNEL,
@@ -246,6 +248,8 @@ interface IpcHandlersInput {
   invokeCurrentWorkspacePluginResult: (windowRecord: WindowRecord, resultId: string) => Promise<unknown>
   listCurrentWorkspaceFileOpeners: (windowRecord: WindowRecord) => Promise<unknown>
   listWorkspaceFileOpeners: (workspaceFolder: string) => Promise<unknown>
+  markDesktopCoreReady: (windowRecord: WindowRecord) => void
+  markDesktopUiReady: (windowRecord: WindowRecord) => void
   markWorkspaceStartupWindowReady: (windowRecord: WindowRecord) => void
   openKeyboardShortcutsSettings: () => Promise<void>
   openCurrentWorkspaceResource: (windowRecord: WindowRecord, target: WorkspaceResourceTarget) => Promise<WindowRecord>
@@ -296,6 +300,8 @@ export const registerIpcHandlers = ({
   invokeCurrentWorkspacePluginResult,
   listCurrentWorkspaceFileOpeners,
   listWorkspaceFileOpeners,
+  markDesktopCoreReady,
+  markDesktopUiReady,
   markWorkspaceStartupWindowReady,
   openKeyboardShortcutsSettings,
   openCurrentWorkspaceFileInExternalOpener,
@@ -377,6 +383,18 @@ export const registerIpcHandlers = ({
     (_event, id: unknown, input: unknown) => updateSavedPassword(id, input)
   )
   ipcMain.handle('desktop:delete-saved-password', (_event, id: unknown) => deleteSavedPassword(id))
+
+  ipcMain.handle(DESKTOP_UI_READY_CHANNEL, (event) => {
+    const windowRecord = findWindowRecordForWebContents(event.sender)
+    if (windowRecord == null || !isWindowRecordUsable(windowRecord)) return
+    markDesktopUiReady(windowRecord)
+  })
+
+  ipcMain.handle(DESKTOP_CORE_READY_CHANNEL, (event) => {
+    const windowRecord = findWindowRecordForWebContents(event.sender)
+    if (windowRecord == null || !isWindowRecordUsable(windowRecord)) return
+    markDesktopCoreReady(windowRecord)
+  })
 
   ipcMain.handle(WORKSPACE_STARTUP_READY_CHANNEL, (event) => {
     const windowRecord = findWindowRecordForWebContents(event.sender)

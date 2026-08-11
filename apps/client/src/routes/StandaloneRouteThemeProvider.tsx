@@ -5,6 +5,8 @@ import type { ReactNode } from 'react'
 
 import { DEFAULT_THEME_PRIMARY_COLOR, normalizeThemePrimaryColor } from '@oneworks/icon/presets'
 
+import { connectDesktopManagerRuntimeIfAvailable } from '#~/desktop/manager-runtime'
+import { useDesktopUiReady } from '#~/desktop/use-desktop-ui-ready'
 import {
   THEME_PRIMARY_COLOR_STORAGE_KEY,
   applyThemePrimaryColorVariables,
@@ -40,6 +42,7 @@ const getInitialPrimaryColor = () => getStoredThemePrimaryColor() ?? DEFAULT_THE
 
 function ThemedStandaloneRoute({ children }: { children: ReactNode }) {
   const { ready } = usePluginContext()
+  useDesktopUiReady(ready)
   const themes = usePluginThemes()
   const setThemeMode = useSetAtom(themeAtom)
   const setThemePack = useSetAtom(themePackAtom)
@@ -135,8 +138,29 @@ function ThemedStandaloneRoute({ children }: { children: ReactNode }) {
 }
 
 export function StandaloneRouteThemeProvider({ children }: { children: ReactNode }) {
+  const isWebStandalone = window.oneworksDesktop == null
+  const [managerServerBaseUrl, setManagerServerBaseUrl] = useState<string | undefined>()
+  const waitsForDesktopManager = !isWebStandalone && managerServerBaseUrl == null
+
+  useEffect(() => {
+    if (isWebStandalone) return
+    let disposed = false
+    void connectDesktopManagerRuntimeIfAvailable()
+      .then((serverBaseUrl) => {
+        if (!disposed && serverBaseUrl != null) setManagerServerBaseUrl(serverBaseUrl)
+      })
+      .catch(error => console.error('[standalone-route] failed to connect to desktop manager', error))
+    return () => {
+      disposed = true
+    }
+  }, [isWebStandalone])
+
   return (
-    <PluginProvider runtimeSource='manager'>
+    <PluginProvider
+      deferUntilRuntimeServerBaseUrl={waitsForDesktopManager}
+      runtimeServerBaseUrl={managerServerBaseUrl}
+      runtimeSource='manager'
+    >
       <ThemedStandaloneRoute>{children}</ThemedStandaloneRoute>
     </PluginProvider>
   )

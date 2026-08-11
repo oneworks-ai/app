@@ -841,6 +841,62 @@ describe('runtime store engine consumer', () => {
     expect(plan.env.__ONEWORKS_RUNTIME_PROTOCOL_CONSUMER_ADAPTER__).toBe('codex')
   })
 
+  it('ignores stale built-in metadata when selecting the current runtime adapter cache', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'ow-runtime-consumer-current-adapter-cache-'))
+    const homeDir = path.join(root, 'home')
+    const appPackageDir = path.join(root, 'app-package')
+    const store = createStore(root)
+    await mkdir(appPackageDir, { recursive: true })
+    const staleCacheDir = await writeCachedAdapterPackage(
+      homeDir,
+      '@oneworks/adapter-codex',
+      '9.0.0',
+      'home',
+      'previous-build'
+    )
+    const currentCacheDir = await writeCachedAdapterPackage(
+      homeDir,
+      '@oneworks/adapter-codex',
+      '3.4.0-rc',
+      'home',
+      'dev-current'
+    )
+    const metadata = {
+      sessionId: 'sess-web',
+      cwd: '/workspace',
+      adapter: 'codex',
+      needsEngineConsumer: true,
+      createdAt: 100
+    } as RuntimeSessionMetadata
+
+    const plan = buildRuntimeConsumerSpawnPlan({
+      baseEnv: {
+        PATH: '',
+        __ONEWORKS_DESKTOP_BUILTIN_ADAPTER_PACKAGES__: JSON.stringify({
+          '@oneworks/adapter-codex': {
+            cacheDir: staleCacheDir,
+            cacheVersion: 'previous-build',
+            version: '9.0.0'
+          }
+        }),
+        __ONEWORKS_PROJECT_CLI_PACKAGE_DIR__: appPackageDir,
+        __ONEWORKS_PROJECT_PACKAGE_DIR__: appPackageDir,
+        __ONEWORKS_PROJECT_REAL_HOME__: homeDir,
+        __ONEWORKS_RUNTIME_PACKAGE_CACHE_VERSION__: 'dev-current',
+        __ONEWORKS_RUNTIME_PROTOCOL_FALLBACK_BOOTSTRAP_PATH__: '/opt/oneworks/bootstrap.js'
+      } as NodeJS.ProcessEnv,
+      command: {
+        message: 'Run web task'
+      },
+      cwd: '/workspace',
+      metadata,
+      store
+    })
+
+    expect(plan.env.__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__).toBe(currentCacheDir)
+    expect(plan.env.__ONEWORKS_RUNTIME_PROTOCOL_CONSUMER_ADAPTER__).toBe('codex')
+  })
+
   it('falls back to the built-in desktop adapter when global caches do not satisfy the built-in semver floor', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'ow-runtime-consumer-builtin-adapter-cache-'))
     const homeDir = path.join(root, 'home')

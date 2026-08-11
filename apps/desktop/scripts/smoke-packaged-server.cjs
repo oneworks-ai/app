@@ -196,7 +196,10 @@ const packagedMainSmokeMarker = '[oneworks-desktop] packaged manager smoke ready
 
 const runPackagedMainSmoke = async (paths) => {
   const smokeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'oneworks-desktop-main-smoke-'))
+  const realHomeDir = path.join(smokeRoot, 'home')
+  const packageCacheRootDir = path.join(realHomeDir, '.oneworks', 'bootstrap')
   const userDataDir = path.join(smokeRoot, 'user-data')
+  fs.mkdirSync(realHomeDir, { recursive: true })
   fs.mkdirSync(userDataDir, { recursive: true })
 
   try {
@@ -205,6 +208,9 @@ const runPackagedMainSmoke = async (paths) => {
         env: {
           ...process.env,
           ONEWORKS_TEST_DESKTOP_PACKAGE_MAIN_SMOKE: '1',
+          __ONEWORKS_PROJECT_DISABLE_GLOBAL_CONFIG__: '1',
+          __ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__: packageCacheRootDir,
+          __ONEWORKS_PROJECT_REAL_HOME__: realHomeDir,
           __IS_LOADER_CLI__: 'true',
           __IS_ONEWORKS_HOOK_LOADER__: 'true',
           __ONEWORKS_CLI_HELPER_LOADER_ACTIVE__: 'true',
@@ -245,6 +251,7 @@ const runPackagedMainSmoke = async (paths) => {
         finish()
       })
     })
+    assertIsolatedBuiltinPluginCache(paths.appDir, packageCacheRootDir)
   } finally {
     fs.rmSync(smokeRoot, { recursive: true, force: true })
   }
@@ -776,6 +783,24 @@ const assertIsolatedBuiltinPluginCache = (appDir, packageCacheRootDir) => {
   }
 }
 
+const assertServerCriticalPathDidNotMaterializeBuiltinPluginCache = (appDir, packageCacheRootDir) => {
+  for (const packageName of BUILTIN_PLUGIN_PACKAGES) {
+    const packagedPluginDir = path.join(appDir, 'node_modules', ...packageName.split('/'))
+    const packageInfo = readPackageInfo(packagedPluginDir)
+    for (const cacheVersion of ['latest', packageInfo.version]) {
+      const cacheDir = path.join(
+        packageCacheRootDir,
+        'npm',
+        sanitizePackageName(packageName),
+        cacheVersion
+      )
+      if (fs.existsSync(cacheDir)) {
+        throw new Error(`Packaged server critical path unexpectedly materialized a built-in plugin: ${cacheDir}`)
+      }
+    }
+  }
+}
+
 const runPackagedServerSmoke = async ({
   assertCatalog,
   envOverrides,
@@ -905,7 +930,7 @@ const main = async () => {
       smokeLabel: 'empty-workspace',
       workspaceFolder: emptyWorkspace
     })
-    assertIsolatedBuiltinPluginCache(paths.appDir, isolatedPackageCacheRoot)
+    assertServerCriticalPathDidNotMaterializeBuiltinPluginCache(paths.appDir, isolatedPackageCacheRoot)
   } finally {
     fs.rmSync(emptyRoot, { recursive: true, force: true })
   }

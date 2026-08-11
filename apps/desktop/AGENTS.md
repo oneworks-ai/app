@@ -67,7 +67,7 @@
 - Electron main 进程不重复实现 server 业务逻辑；桌面端 server 仍通过 `src/server-child.cjs` 复用 server workspace package。
 - 桌面启动诊断写入 Electron `userData/diagnostics/startup`：只记录稳定事件名、阶段、耗时、终态和分类错误，不写 workspace 路径、URL、原始错误消息、stack、配置或凭据。启动成功必须经过 renderer 可交互并持续稳定一段时间；上次进程未完成的启动会在下次启动标记为 `abandoned`。
 - 设置标准 `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` / `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=http/json` 时，桌面诊断会异步导出；发送失败不能阻断启动。Help 菜单支持导出同一事实模型的支持包，关联 ID 必须脱敏且不得补入 raw logs。
-- 本地 dev 安装包启动 workspace 时，安装包内 cli/server/client 是 runtime cache 的来源：`src/main/workspace-service-manager.ts` 和 `src/server-child.cjs` 会通过 `src/builtin-adapter-cache.cjs` 按 `desktop-build-source.json` 里的 dev cacheVersion 刷新 `~/.oneworks/bootstrap/npm/oneworks__cli/<cacheVersion>`、`oneworks__server/<cacheVersion>` 与 `oneworks__client/<cacheVersion>`；manifest 快路径还必须匹配每次打包唯一的 `runtimePackageBuildFingerprint` 及当前 platform/arch。排查“安装包还是旧代码”时必须核对这个 cache 里的真实文件，不要只看 `/Applications/.../Resources/app`。
+- 本地 dev 安装包内的 cli/server/client 是 runtime cache 的来源：`src/main/workspace-runtime-cache-manager.ts` 在桌面 core ready 后调度 `src/main/workspace-runtime-cache-refresh.ts`，后者通过 `src/builtin-adapter-cache.cjs` 按 `desktop-build-source.json` 里的 dev cacheVersion 刷新 `~/.oneworks/bootstrap/npm/oneworks__cli/<cacheVersion>`、`oneworks__server/<cacheVersion>` 与 `oneworks__client/<cacheVersion>`；manifest 快路径还必须匹配每次打包唯一的 `runtimePackageBuildFingerprint` 及当前 platform/arch。`src/server-child.cjs` 只消费已准备的 cache，并在缺失时使用包内 runtime，不能在 server ready 的关键路径物化可选 cache。排查“安装包还是旧代码”时必须核对这个 cache 里的真实文件，不要只看 `/Applications/.../Resources/app`。
 - `pnpm desktop:dev` 默认打开不绑定 workspace 的空项目启动页；`pnpm desktop:dev:workspace` 才以当前仓库作为 workspace 启动。两者都转发到统一 `dev-service ensure` 生命周期，由 Electron 启动共享 Vite client，并为每个 workspace 启动独立本机 server；前端改动应走共享 client 的 HMR，不需要重复构建静态 dist。`electron` 与 `electron-workspace` 受单实例约束，切换前必须先获得用户对当前 target 的显式停止授权。
 - 多 worktree / 多 AI 会话可能同时运行桌面开发态实例；排查崩溃或端口占用时，不要因为看到其他 worktree 的 Electron、`apps/desktop/src/server-child.cjs` 或 `apps/client/cli.cjs` 进程就直接清理。先列出 PID、启动时间、worktree 路径和命令来源，只有确认属于当前终端会话、明确是当前崩溃实例残留，或用户同意后才停止。
 - 桌面 main / preload 使用 `electron-vite` 构建，Electron 运行入口是 `dist/main/index.js`。
@@ -100,7 +100,7 @@
   - `electron.vite.config.ts`
   - `src/server-child.cjs`
   - `scripts/smoke-packaged-server.cjs`
-- 改桌面启动阶段、首屏就绪条件或启动失败兜底时，至少同时检查 `src/main/startup-diagnostics.ts`、`src/main/app-runtime.ts`、`src/main/window-manager.ts` 和 `apps/client/src/components/layout/desktop-workspace-startup-ready.ts`；不要把后台预加载失败误算成用户可见的启动失败。
+- 改桌面启动阶段、首屏就绪条件或启动失败兜底时，至少同时检查 `src/main/startup-diagnostics.ts`、`src/main/app-runtime.ts`、`src/main/window-manager.ts`、`apps/client/src/desktop/use-desktop-ui-ready.ts` 和各 surface 的实际挂载点；不要在 provider commit 或 `Suspense fallback={null}` 阶段提前上报 UI ready，也不要把后台预加载失败误算成用户可见的启动失败。
 - 改窗口创建、标题栏、`window.open`、多窗口或右键新窗口时，至少同时检查：
   - `src/main/browser-window-factory.ts`
   - `src/main/window-manager.ts`
@@ -116,7 +116,7 @@
 - 改菜单或快捷键时，`src/main/menu.ts` 与 `apps/client/src/desktop/view-shortcuts.ts` 要一起看；菜单项、tooltip 展示和 Monaco 内快捷键转发要保持同一套 action 名称。
 - 改 launcher 全局快捷键时，还要检查 `src/main/app-runtime.ts` 的 `globalShortcut` 注册 / 注销逻辑、`src/main/desktop-state-store.ts` 的持久化，以及 preload 注入给前端的 `getDesktopSettings` / `updateDesktopSettings`，避免 app 退出后快捷键残留或普通 Web 前端误展示桌面配置。
 - 改打包资源布局时，`scripts/package.cjs`、`scripts/make.cjs`、`scripts/sync-icons.cjs`、`scripts/mac-*.cjs`、`electron-builder.yml` 与 smoke test 要一起看；不要只改其中一个入口。
-- 改本地 dev 打包、workspace server 启动或 runtime package cache 时，必须同时检查 `scripts/package.cjs`、`src/builtin-adapter-cache.cjs`、`src/main/workspace-service-manager.ts`、`src/main/updates.ts`、`src/server-child.cjs` 和 `packages/types/src/adapter-package-cache.ts`；验证时至少核对安装后的 `desktop-build-source.json`、`/Applications/.../Resources/app/runtime-packages/@oneworks/client`、以及 `~/.oneworks/bootstrap/npm/oneworks__cli/<cacheVersion>` / `oneworks__server/<cacheVersion>` / `oneworks__client/<cacheVersion>` 里的真实文件内容。
+- 改本地 dev 打包、workspace server 启动或 runtime package cache 时，必须同时检查 `scripts/package.cjs`、`src/builtin-adapter-cache.cjs`、`src/main/workspace-runtime-cache-manager.ts`、`src/main/workspace-runtime-cache-refresh.ts`、`src/main/app-runtime.ts`、`src/server-child.cjs` 和 `packages/types/src/adapter-package-cache.ts`；cache manager 是后台任务的唯一生命周期 owner，负责去重、重排、取消、等待与失败重试，updates 和 workspace service 不应再各自触发物化。验证时至少核对安装后的 `desktop-build-source.json`、`/Applications/.../Resources/app/runtime-packages/@oneworks/client`、以及 `~/.oneworks/bootstrap/npm/oneworks__cli/<cacheVersion>` / `oneworks__server/<cacheVersion>` / `oneworks__client/<cacheVersion>` 里的真实文件内容。
 - 改打包脚本、图标同步脚本或生成资产时，提交前跑全仓 `pnpm dprint check` 和 `pnpm exec eslint .`，不要只跑改动文件范围；CI 的 format / lint 就是全仓检查。
 - 改图标生成资产时，同时检查 `dprint.json` 与 `.gitattributes`：生成 SVG 可按产物排除，`.icns` / `.ico` / `.png` 等二进制图标必须使用 `-text`，避免 Git EOL 规范化破坏文件。
 - 改 make target 校验时，要对照 `.github/workflows/desktop-package.yml`：tag / 手动完整构建使用 `ONEWORKS_DESKTOP_MAKE_TARGETS=dmg,zip,pkg`，并依赖 `dmg` 产物做安装验证。
@@ -133,7 +133,7 @@
 - 正式包的 runtime package cache version 必须读取 Electron 最终应用版本（`app.getVersion()`），不能读取依赖包版本。打包 staging 的应用 manifest 必须先写入 `ONEWORKS_DESKTOP_VERSION`，保证 Electron runtime、原生 bundle 与 runtime cache 目录使用同一最终版本；release tag 覆盖桌面版本但内部 workspace 包尚未对齐时也不能复用上一版 server / adapter 缓存。
 - 可信 packaged cache 首次落盘可以用 immutable cache version / build fingerprint 作为完整性标识，并在 APFS 等支持的文件系统上优先 clone 文件；不要在启动关键路径重复哈希和物理复制相同 bundle 内容。built-in plugin 的版本 cache 只读链接回不可变应用包，`latest` cache 再作为版本 cache 的轻量别名；应用位置或 build fingerprint 变化时必须由 manifest 校验重建链接。
 - `pnpm deploy --legacy --prod` 会让共享 workspace 的依赖状态暂时变成 production-only；`scripts/package.cjs` 在所有架构完成或失败后都必须用 frozen lockfile 恢复 dev dependencies，之后才能运行 packaged server smoke 或其他 workspace 脚本。不要依赖调用方额外执行 `pnpm install` 来修复打包命令留下的状态。
-- packaged server smoke 会在干净 runner 上首次准备完整 runtime package cache；默认 readiness deadline 必须覆盖低速 CI 的冷缓存路径，并在超时时输出 `server.log` 尾部，不能只留下无上下文的 “did not become ready”。如需实验性收紧可设置 `ONEWORKS_DESKTOP_SMOKE_TIMEOUT_MS`，但正式 workflow 使用覆盖冷启动的默认值。普通 HTTP 请求使用 `ONEWORKS_DESKTOP_SMOKE_REQUEST_TIMEOUT_MS`（默认 30 秒）；首次 Vite 编译本地插件源码使用独立的 `ONEWORKS_DESKTOP_SMOKE_COMPILE_TIMEOUT_MS`（默认 120 秒），不能通过全局放宽请求时限或跳过源码请求来规避发布 smoke。
+- packaged server smoke 必须分别验证干净 cache 下的 server readiness 与显式后台 cache refresh：server ready 不能等待完整 runtime package cache 物化，refresh 成功后仍要核对 cache 产物，并在任一阶段超时时输出 `server.log` 尾部，不能只留下无上下文的 “did not become ready”。如需实验性收紧可设置 `ONEWORKS_DESKTOP_SMOKE_TIMEOUT_MS`，但正式 workflow 使用覆盖低速 CI 的默认值。普通 HTTP 请求使用 `ONEWORKS_DESKTOP_SMOKE_REQUEST_TIMEOUT_MS`（默认 30 秒）；首次 Vite 编译本地插件源码使用独立的 `ONEWORKS_DESKTOP_SMOKE_COMPILE_TIMEOUT_MS`（默认 120 秒），不能通过全局放宽请求时限或跳过源码请求来规避发布 smoke。
 
 ## 已验证经验
 

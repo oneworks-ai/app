@@ -11,7 +11,7 @@ import { autoUpdater } from 'electron-updater'
 import { resolvePackagedCliPathEnv } from './cli-path-env'
 import { AUTO_UPDATE_CONFIG_FILES } from './constants'
 import { findDesktopReleaseTagInAtomFeed, parseDesktopReleaseTagChannel } from './desktop-release-channel'
-import { builtinPackageCachePath, resolveBundledRuntimeConsumerBootstrapPath } from './paths'
+import { resolveBundledRuntimeConsumerBootstrapPath } from './paths'
 import { writeProcessLine } from './process-utils'
 import { resolveDesktopRuntimePackageCacheVersionEnv } from './runtime-cache-version'
 import {
@@ -33,19 +33,6 @@ interface RuntimePackageStatus {
 }
 
 type RuntimePackageTarget = 'cli' | 'client' | 'server'
-
-interface BundledRuntimePackageCacheEntry {
-  cacheDir?: string
-  packageDir?: string
-  seeded?: boolean
-}
-
-interface BundledRuntimeCacheRefreshResult {
-  entries: BundledRuntimePackageCacheEntry[]
-}
-
-let workspaceRuntimeRefreshComplete = false
-let workspaceRuntimeRefreshPromise: Promise<void> | undefined
 
 const isAutoUpdateDisabled = () => /^(?:0|false|no|off)$/i.test(process.env.ONEWORKS_DESKTOP_AUTO_UPDATE ?? '')
 const isAutoUpdateDownloadDisabled = () => (
@@ -710,84 +697,4 @@ export const installCliRuntimeUpdates = async () => {
     title: 'CLI Runtime Update Installed',
     type: 'info'
   })
-}
-
-const buildBundledRuntimeCacheRefreshScript = () => `
-const cacheModule = require(${JSON.stringify(builtinPackageCachePath)})
-const entries = [
-  ...(cacheModule.ensureBuiltinRuntimePackageCache?.({ env: process.env, trustManifest: true }) ?? []),
-  ...(cacheModule.ensureBuiltinAdapterPackageCache?.({ env: process.env, trustManifest: true }) ?? [])
-]
-process.stdout.write(JSON.stringify({ entries }) + '\\n')
-`
-
-const readBundledRuntimeCacheRefreshResult = (stdout: string): BundledRuntimeCacheRefreshResult => {
-  const line = stdout
-    .split(/\r?\n/u)
-    .map(item => item.trim())
-    .filter(Boolean)
-    .at(-1)
-  if (line == null) {
-    throw new Error('Bundled workspace runtime cache refresh did not return a result.')
-  }
-  return JSON.parse(line) as BundledRuntimeCacheRefreshResult
-}
-
-const refreshBundledWorkspaceRuntimeCache = async () => {
-  if (!app.isPackaged) return false
-
-  const runtimePackageCacheVersionEnv = resolveDesktopRuntimePackageCacheVersionEnv()
-  if (Object.keys(runtimePackageCacheVersionEnv).length === 0) return false
-
-  const runtimeEnv = {
-    ...process.env,
-    ...runtimePackageCacheVersionEnv
-  }
-  const result = await execFileAsync(process.execPath, ['-e', buildBundledRuntimeCacheRefreshScript()], {
-    env: {
-      ...runtimeEnv,
-      ELECTRON_RUN_AS_NODE: '1'
-    },
-    maxBuffer: BOOTSTRAP_BUFFER_BYTES
-  })
-  const { entries } = readBundledRuntimeCacheRefreshResult(result.stdout)
-  if (entries.length === 0) return false
-
-  const seededCount = entries.filter(entry => entry.seeded === true).length
-  writeProcessLine(
-    process.stdout,
-    `[oneworks-runtime] refreshed bundled workspace package cache (${seededCount}/${entries.length} changed)`
-  )
-  return true
-}
-
-export const refreshWorkspaceRuntimeCacheInBackground = () => {
-  if (workspaceRuntimeRefreshComplete || workspaceRuntimeRefreshPromise != null) return
-
-  workspaceRuntimeRefreshPromise = Promise.resolve()
-    .then(async () => {
-      if (await refreshBundledWorkspaceRuntimeCache()) {
-        workspaceRuntimeRefreshComplete = true
-        return
-      }
-      return Promise.all([
-        runBootstrapRuntimeCommand('install', 'server'),
-        runBootstrapRuntimeCommand('install', 'client')
-      ]).then((statuses) => {
-        const summary = statuses
-          .map(status => `${status.packageName}@${status.latestVersion}`)
-          .join(', ')
-        writeProcessLine(
-          process.stdout,
-          `[oneworks-runtime] cached ${summary} for future workspace launches`
-        )
-      })
-    })
-    .then(() => {
-      workspaceRuntimeRefreshComplete = true
-    })
-    .catch(error => console.error('[oneworks-runtime] failed to refresh workspace runtime cache', error))
-    .finally(() => {
-      workspaceRuntimeRefreshPromise = undefined
-    })
 }

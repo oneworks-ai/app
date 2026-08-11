@@ -40,6 +40,8 @@ import { UsagePanel } from '#~/components/usage/UsagePanel'
 import type { UsagePanelHandle } from '#~/components/usage/UsagePanel'
 import { WorkspaceOpeningOverlay } from '#~/components/workspace/WorkspaceOpeningOverlay'
 import { getProjectFileIconMeta } from '#~/components/workspace/project-file-tree/project-file-tree-icons'
+import { markDesktopManagerInteractiveWhenReady } from '#~/desktop/manager-runtime'
+import { useDesktopUiReady } from '#~/desktop/use-desktop-ui-ready'
 import { useInterfaceLanguageConfig } from '#~/hooks/use-interface-language-config'
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
 import { appLanguageOptions, getActiveAppLanguageOption } from '#~/i18n'
@@ -906,6 +908,7 @@ export function LauncherRoute({
   onOpenWorkspaceResource,
   searchWorkspaceResources
 }: LauncherRouteProps = {}) {
+  useDesktopUiReady()
   const { i18n, t } = useTranslation()
   const navigate = useNavigate()
   const location = useLocation()
@@ -1008,6 +1011,15 @@ export function LauncherRoute({
   const isSearchComposingRef = useRef(false)
   const isSearchInputComposing = useCallback(() => isSearchComposingRef.current, [])
   const desktopApi = window.oneworksDesktop
+
+  useEffect(() => {
+    if (desktopApi == null) return
+    let disposed = false
+    void markDesktopManagerInteractiveWhenReady(() => !disposed)
+    return () => {
+      disposed = true
+    }
+  }, [desktopApi])
   const isMacShortcutLayout = desktopApi == null
     ? navigator.platform.includes('Mac')
     : desktopApi.platform === 'darwin'

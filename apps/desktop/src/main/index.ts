@@ -15,7 +15,7 @@ if (process.env[PACKAGE_MAIN_SMOKE_ENV] === '1') {
     .then(async () => {
       const result = await createDesktopApp().runPackagedManagerSmoke()
       process.stdout.write(
-        `${PACKAGE_MAIN_SMOKE_MARKER} manager=${result.managerUrl}\n`,
+        `${PACKAGE_MAIN_SMOKE_MARKER} manager=${result.managerUrl} cache=${result.cacheSource}\n`,
         () => app.exit(0)
       )
     })

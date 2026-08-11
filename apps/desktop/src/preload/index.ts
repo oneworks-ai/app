@@ -10,6 +10,8 @@ const selectorStateChannel = 'desktop:workspace-selector-state'
 const browserControlOpenPageChannel = 'desktop:browser-control:open-page'
 const browserControlPageCommandChannel = 'desktop:browser-control:page-command'
 const desktopSettingsChannel = 'desktop:settings'
+const desktopCoreReadyChannel = 'desktop:startup-core-ready'
+const desktopUiReadyChannel = 'desktop:startup-ui-ready'
 const desktopUpdateStatusChannel = 'desktop:update-status'
 const globalInterfaceLanguageChannel = 'desktop:global-interface-language'
 const managerConnectionChannel = 'desktop:manager-connection'
@@ -245,6 +247,8 @@ contextBridge.exposeInMainWorld('oneworksDesktop', {
   importPasswordCsv: (input?: unknown) => ipcRenderer.invoke('desktop:import-password-csv', input),
   listBrowserPasswordImportSources: () => ipcRenderer.invoke('desktop:list-browser-password-import-sources'),
   listSavedPasswords: (query?: string) => ipcRenderer.invoke('desktop:list-saved-passwords', query),
+  markDesktopCoreReady: () => ipcRenderer.invoke(desktopCoreReadyChannel),
+  markDesktopUiReady: () => ipcRenderer.invoke(desktopUiReadyChannel),
   authenticateSavedPasswordsAccess: (reason?: string) =>
     ipcRenderer.invoke('desktop:authenticate-saved-passwords-access', reason),
   revealSavedPassword: (id: string) => ipcRenderer.invoke('desktop:reveal-saved-password', id),
@@ -286,6 +290,7 @@ contextBridge.exposeInMainWorld('oneworksDesktop', {
       ipcRenderer.off(mobileDeviceVideoStreamStatusChannel, wrappedListener)
     }
   },
+  markDesktopInteractive: markWorkspaceStartupReady,
   markWorkspaceStartupReady,
   onDesktopSettingsChange: (listener: (value: unknown) => void) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, value: unknown) => {

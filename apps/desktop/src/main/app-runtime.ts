@@ -61,9 +61,11 @@ import { resolveDesktopRecordingThemeSource, setDesktopThemeSource } from './the
 import type { DesktopSettings, LaunchRequest, WindowRecord, WorkspaceSelectorWindowInput } from './types'
 import { DEFAULT_DESKTOP_AUTO_UPDATE, isDesktopUpdateChannel, resolveDefaultDesktopUpdateChannel } from './update-types'
 import type { DesktopUpdateStatus } from './update-types'
-import { createAutoUpdateManager, refreshWorkspaceRuntimeCacheInBackground } from './updates'
+import { createAutoUpdateManager } from './updates'
 import { createWindowManager } from './window-manager'
 import type { WindowManager } from './window-manager'
+import { createWorkspaceRuntimeCacheManager } from './workspace-runtime-cache-manager'
+import { refreshWorkspaceRuntimeCache } from './workspace-runtime-cache-refresh'
 import { createWorkspaceServiceManager } from './workspace-service-manager'
 
 const elapsedMs = (startedAt: number) => `${Date.now() - startedAt}ms`
@@ -478,6 +480,10 @@ export const createDesktopApp = () => {
     onClientOriginAvailable: publishDesktopClientOrigin,
     runtimeState
   })
+  const workspaceRuntimeCacheManager = createWorkspaceRuntimeCacheManager({
+    onError: error => console.error('[oneworks-runtime] failed to refresh workspace runtime cache', error),
+    runRefresh: refreshWorkspaceRuntimeCache
+  })
   const serviceManager = createWorkspaceServiceManager({
     broadcastWorkspaceSelectorState,
     findWorkspaceWindowRecord: workspaceFolder => windowManager?.findWorkspaceWindowRecord(workspaceFolder),
@@ -491,20 +497,26 @@ export const createDesktopApp = () => {
   })
   const runPackagedManagerSmoke = async () => {
     try {
-      const [launcherClientService, managerService] = await Promise.all([
+      const [launcherClientService, managerService, cacheSnapshot] = await Promise.all([
         launcherClientServiceManager.ensureLauncherClientService(),
-        managerServiceManager.ensureManagerService()
+        managerServiceManager.ensureManagerService(),
+        workspaceRuntimeCacheManager.refresh()
       ])
       if (launcherClientService.clientUrl == null || managerService.serverUrl == null) {
         throw new Error('The packaged desktop services did not publish their ready URLs.')
       }
+      if (cacheSnapshot.status !== 'ready' || cacheSnapshot.result == null) {
+        throw new Error('The packaged workspace runtime cache did not finish refreshing.')
+      }
       return {
+        cacheSource: cacheSnapshot.result.source,
         clientUrl: launcherClientService.clientUrl,
         managerUrl: managerService.serverUrl
       }
     } finally {
       runtimeState.isQuitting = true
       await Promise.all([
+        workspaceRuntimeCacheManager.stop(),
         launcherClientServiceManager.stopLauncherClientService(runtimeState.launcherClientService),
         managerServiceManager.stopManagerService(runtimeState.managerService)
       ])
@@ -521,6 +533,7 @@ export const createDesktopApp = () => {
       runtimeState.isQuitting = isQuitting
     },
     shutdown: async () => {
+      await workspaceRuntimeCacheManager.stop()
       await serviceManager.stopAllWorkspaceServices()
       await Promise.all([
         browserControlBroker.stop(),
@@ -708,6 +721,11 @@ export const createDesktopApp = () => {
       listCurrentWorkspaceFileOpeners: windowManager.listCurrentWorkspaceFileOpeners,
       listWorkspaceFileOpeners: windowManager.listWorkspaceFileOpeners,
       loadWorkspaceInWindow: windowManager.loadWorkspaceInWindow,
+      markDesktopCoreReady: () => {
+        startupDiagnostics?.stage('core.ready')
+        if (app.isPackaged) workspaceRuntimeCacheManager.schedule(1_000)
+      },
+      markDesktopUiReady: () => startupDiagnostics?.stage('ui.ready'),
       markWorkspaceStartupWindowReady: windowManager.markWorkspaceStartupWindowReady,
       openKeyboardShortcutsSettings,
       openCurrentWorkspaceFileInExternalOpener: windowManager.openCurrentWorkspaceFileInExternalOpener,
@@ -774,7 +792,7 @@ export const createDesktopApp = () => {
 
   const warmWorkspaceRuntimeCacheSoon = () => {
     if (!app.isPackaged) return
-    setTimeout(() => refreshWorkspaceRuntimeCacheInBackground(), 250)
+    workspaceRuntimeCacheManager.schedule(30_000)
   }
 
   const findLauncherWindowRecord = () => (
@@ -1076,6 +1094,7 @@ export const createDesktopApp = () => {
     app.on('before-quit', quitCoordinator.handleBeforeQuit)
 
     app.on('will-quit', () => {
+      void workspaceRuntimeCacheManager.stop()
       startupDiagnostics?.cancel()
       void startupDiagnostics?.flush().catch((error) => {
         console.warn('[oneworks-desktop] failed to flush startup diagnostics', error)

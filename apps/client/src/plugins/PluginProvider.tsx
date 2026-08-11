@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 
 import { getLauncherManagerServerBaseUrl } from '#~/api/launcher'
 import { useNotifications } from '#~/notifications/NotificationProvider'
-import { getRuntimeWorkspaceId, getServerBaseUrl, isServerManagerRole } from '#~/runtime-config'
+import { getRuntimeWorkspaceId, getServerBaseUrl, isServerManagerRole, normalizeServerBaseUrl } from '#~/runtime-config'
 import { createSocket } from '#~/ws.js'
 
 import { listPluginSnapshot } from './api'
@@ -24,6 +24,8 @@ type PluginRuntimeSource = 'current' | 'manager'
 
 interface PluginProviderProps {
   children: ReactNode
+  deferUntilRuntimeServerBaseUrl?: boolean
+  runtimeServerBaseUrl?: string
   runtimeSource?: PluginRuntimeSource
   surface?: PluginContributionSurface
 }
@@ -36,6 +38,8 @@ const resolvePluginRuntimeSource = (runtimeSource: PluginRuntimeSource | undefin
 
 export function PluginProvider({
   children,
+  deferUntilRuntimeServerBaseUrl = false,
+  runtimeServerBaseUrl,
   runtimeSource,
   surface = 'workspace'
 }: PluginProviderProps) {
@@ -59,10 +63,13 @@ export function PluginProvider({
     }), [registry])
 
   const pluginServerBaseUrl = useMemo(() => {
+    const explicitServerBaseUrl = normalizeServerBaseUrl(runtimeServerBaseUrl)
+    if (explicitServerBaseUrl != null) return explicitServerBaseUrl
+    if (deferUntilRuntimeServerBaseUrl) return undefined
     return resolvePluginRuntimeSource(runtimeSource) === 'manager'
       ? getLauncherManagerServerBaseUrl()
       : getServerBaseUrl()
-  }, [runtimeSource])
+  }, [deferUntilRuntimeServerBaseUrl, runtimeServerBaseUrl, runtimeSource])
 
   const setRuntimeSnapshot = useCallback((runtime: PluginRuntimeEndpoint | undefined) => {
     registry.setRuntimeContext({
@@ -88,6 +95,7 @@ export function PluginProvider({
   )
 
   const reloadPlugin = useCallback(async (scope: string) => {
+    if (pluginServerBaseUrl == null) return
     const instance = instancesRef.current.find(item => item.scope === scope)
     if (instance == null) return
     bumpImportVersion(scope)
@@ -116,6 +124,7 @@ export function PluginProvider({
   ])
 
   const activateInstances = useCallback(async (instances: PluginRuntimeInstance[], didCancel: () => boolean) => {
+    if (pluginServerBaseUrl == null) return
     if (didCancel()) return
     for (const instance of instancesRef.current) {
       if (didCancel()) return
@@ -153,6 +162,7 @@ export function PluginProvider({
   ])
 
   const loadAndActivatePlugins = useCallback(async (options: PluginRefreshOptions = {}) => {
+    if (pluginServerBaseUrl == null) return undefined
     const requestRevision = requestRevisionRef.current + 1
     requestRevisionRef.current = requestRevision
     const isRequestCurrent = () => options.isCurrent?.() ?? true
@@ -190,6 +200,12 @@ export function PluginProvider({
   useEffect(() => {
     let didCancel = false
     setPluginSnapshotStatus('loading')
+    if (pluginServerBaseUrl == null) {
+      setReady(true)
+      return () => {
+        didCancel = true
+      }
+    }
     void loadAndActivatePlugins({ isCurrent: () => !didCancel })
       .then((isCurrent) => {
         if (isCurrent?.() !== true) return
@@ -216,9 +232,10 @@ export function PluginProvider({
       })
       setRuntimeSnapshot(undefined)
     }
-  }, [loadAndActivatePlugins, nextActivationVersion, registry, setRuntimeSnapshot])
+  }, [loadAndActivatePlugins, nextActivationVersion, pluginServerBaseUrl, registry, setRuntimeSnapshot])
 
   useEffect(() => {
+    if (pluginServerBaseUrl == null) return
     let disposed = false
     let socket: WebSocket | undefined
     let connectTimer: ReturnType<typeof setTimeout> | undefined

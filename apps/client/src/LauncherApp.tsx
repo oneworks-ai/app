@@ -7,6 +7,7 @@ import { DEFAULT_THEME_PRIMARY_COLOR, normalizeThemePrimaryColor } from '@onewor
 import type { ConfigResponse } from '@oneworks/types'
 
 import { getConfig } from '#~/api'
+import { connectDesktopManagerRuntimeIfAvailable } from '#~/desktop/manager-runtime'
 import {
   THEME_PRIMARY_COLOR_STORAGE_KEY,
   applyThemePrimaryColorVariables,
@@ -151,6 +152,22 @@ function ThemedLauncherApp() {
 
 export function LauncherApp() {
   const isWebLauncher = window.oneworksDesktop == null
+  const [managerServerBaseUrl, setManagerServerBaseUrl] = useState<string | undefined>()
+  const waitsForDesktopManager = !isWebLauncher && managerServerBaseUrl == null
+
+  useEffect(() => {
+    if (isWebLauncher) return
+    let disposed = false
+    void connectDesktopManagerRuntimeIfAvailable()
+      .then((serverBaseUrl) => {
+        if (!disposed && serverBaseUrl != null) setManagerServerBaseUrl(serverBaseUrl)
+      })
+      .catch(error => console.error('[launcher] failed to connect to desktop manager', error))
+    return () => {
+      disposed = true
+    }
+  }, [isWebLauncher])
+
   useEffect(() => {
     document.documentElement.classList.add('oneworks-launcher-window')
     document.documentElement.classList.toggle('oneworks-launcher-web', isWebLauncher)
@@ -162,7 +179,12 @@ export function LauncherApp() {
 
   return (
     <NotificationProvider>
-      <PluginProvider runtimeSource='manager' surface='launcher'>
+      <PluginProvider
+        deferUntilRuntimeServerBaseUrl={waitsForDesktopManager}
+        runtimeServerBaseUrl={managerServerBaseUrl}
+        runtimeSource='manager'
+        surface='launcher'
+      >
         <ThemedLauncherApp />
       </PluginProvider>
     </NotificationProvider>
