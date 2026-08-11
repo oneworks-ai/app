@@ -4,6 +4,10 @@
 - automation/：automation 子域服务目录，负责规则执行与触发器调度
 - session/：会话子域服务目录，统一负责生命周期、交互、通知与运行态管理
 - channel-links/：频道链接定义解析，负责把 `.oo/channels/<link>/channel.*` 映射为入站 channel event 可用的实体绑定
+- channel-ingress-router/：在 session 创建前执行四态 ingress 决策、model invoker fail-closed 校验和 route precedence；每个 linked inbound 都必须留下 router audit，只有 `create_child` 可以继续 dispatch。
+- channel-continuity/：按已解析 thread 组装短期 continuity；ambient turns 使用独立 `channelKey + entity + channelId` buffer，只能注入未过期 turns，不能写入长期 memory。
+- channel-memory/：按 issuer、entity、channel、identity、visibility 和 expiry 筛选长期 memory，持久化 snapshot/writeback 审计。
+- oneworks-channel/：为第一方 OneWorks Channel 产品插件提供 workspace-only 的房间分享、模拟、链路与场景编排 facade；它不管理飞书、微信等 provider 的连接生命周期，插件也不得直接读取 DB 或 channel manager。
 - channel-approval/：频道权限裁决服务，区分 actor identity 与 actor credential，并为缺失 credential 生成授权请求
 - channel-authorizations/：频道授权请求服务，把 channel 权限交互镜像到可查询和可处理的授权状态
 - channel-resume/：频道恢复服务，消费 resolved pending intent 的 `metadata.resume` 并把恢复提示投递回原 session，包含后台 scheduler
@@ -23,6 +27,7 @@
 - module-updates.ts：运行时模块版本检测与 bootstrap cache 安装编排，供普通 web、bootstrap web 和桌面 workspace 共同使用
   - Core 模块必须按当前宿主筛选：集成 Web 只管理 web shell，独立 server 只管理 server，桌面端只管理实际加载的 client/server。
   - 桌面 runtime cache 的目录 key 可能是 `dev-*`，当前版本必须读取被启动链路选中的 package `package.json`，不能把目录名或其他历史 semver cache 当成当前版本；安装入口必须拒绝降级。
+- channel-runtime-key.ts：持久化到 SQLite 的频道复合键统一使用 JSON 编码，禁止使用 NUL 分隔符，避免驱动截断造成跨用户键碰撞。
 
 分层约定：services 统一承载跨入口复用的业务编排、运行态状态和配置装载；routes/websocket/channels 不直接维护会话缓存，不直接拼装 loadConfig 的 jsonVariables。
 

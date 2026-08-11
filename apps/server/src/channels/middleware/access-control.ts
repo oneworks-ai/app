@@ -3,21 +3,17 @@ import type { ChannelBaseConfig, ChannelInboundEvent } from '@oneworks/core/chan
 import { logger } from '#~/utils/logger.js'
 
 import type { ChannelMiddleware } from './@types'
+import { isChannelAdminPrincipal, matchesAnyAccessRef, resolveChannelAccessPrincipal } from './access-principal'
+import type { ChannelAccessPrincipal } from './access-principal'
 import { splitCommand } from './commands/utils'
 
-interface ChannelAccessCheckOptions {
+interface ChannelAccessCheckOptions extends ChannelAccessPrincipal {
   commandText?: string
 }
 
 const getCommandPrefix = (config: ChannelBaseConfig | undefined) => {
   const prefix = config?.commandPrefix?.trim()
   return prefix == null || prefix === '' ? '/' : prefix
-}
-
-const isAdmin = (inbound: ChannelInboundEvent, config: ChannelBaseConfig | undefined) => {
-  const admins = config?.access?.admins
-  const senderId = inbound.senderId
-  return senderId != null && admins?.includes(senderId) === true
 }
 
 const isStartCommand = (
@@ -37,17 +33,18 @@ export const checkChannelAccess = (
   const access = config.access
   if (!access) return true
   const senderId = inbound.senderId
+  const principal = { ...options, accountId: options.accountId ?? senderId }
 
   // Stopped groups block everyone, including admins; admins can only send /start to resume.
   if (inbound.sessionType === 'group') {
     const channelId = inbound.channelId
     if (access.blockedGroups && access.blockedGroups.includes(channelId)) {
-      return isAdmin(inbound, config) && isStartCommand(options.commandText, config)
+      return isChannelAdminPrincipal(access.admins, principal) && isStartCommand(options.commandText, config)
     }
   }
 
   // Admins bypass the remaining access controls.
-  if (isAdmin(inbound, config)) return true
+  if (isChannelAdminPrincipal(access.admins, principal)) return true
 
   // Check chat type permissions (default: both allowed)
   if (inbound.sessionType === 'direct' && access.allowPrivateChat === false) return false
@@ -62,18 +59,23 @@ export const checkChannelAccess = (
   }
 
   // Sender blacklist (takes priority over whitelist)
-  if (senderId && access.blockedSenders && access.blockedSenders.includes(senderId)) return false
+  if (matchesAnyAccessRef(access.blockedSenders, principal)) return false
 
   // Sender whitelist
   if (access.allowedSenders && access.allowedSenders.length > 0) {
-    if (!senderId || !access.allowedSenders.includes(senderId)) return false
+    if (!matchesAnyAccessRef(access.allowedSenders, principal)) return false
   }
 
   return true
 }
 
 export const accessControlMiddleware: ChannelMiddleware = async (ctx, next) => {
-  if (!checkChannelAccess(ctx.inbound, ctx.config, { commandText: ctx.commandText })) {
+  if (
+    !checkChannelAccess(ctx.inbound, ctx.config, {
+      commandText: ctx.commandText,
+      ...resolveChannelAccessPrincipal(ctx)
+    })
+  ) {
     logger.info({
       channelId: ctx.inbound.channelId,
       channelType: ctx.inbound.channelType,

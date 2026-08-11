@@ -387,6 +387,7 @@ export function PluginStoreRoute() {
       const nextPluginEnabled = !isPluginEnabled
       const pluginRoot = resolvePluginRootDisplay(plugin)
       const pluginSourceGroup = resolvePluginSourceGroup(plugin)
+      const isBundled = pluginSourceGroup === 'builtIn'
       const isWatchEnabled = plugin.watch?.enabled === true
       const nextWatchEnabled = !isWatchEnabled
 
@@ -399,15 +400,17 @@ export function PluginStoreRoute() {
             void navigate(`${PLUGIN_PATHS.list}/${encodeURIComponent(plugin.scope)}`)
           }
         },
-        {
-          key: `enabled-workspace:${plugin.scope}`,
-          label: t(isPluginEnabled ? 'pluginStore.disablePluginInWorkspace' : 'pluginStore.enablePluginInWorkspace'),
-          icon: <MaterialSymbol name={isPluginEnabled ? 'extension_off' : 'extension'} />,
-          disabled: updatingEnabledAction === `workspace:${plugin.scope}`,
-          onClick: () => {
-            void togglePluginEnabled(plugin.scope, nextPluginEnabled, 'workspace')
-          }
-        },
+        ...(!isBundled
+          ? [{
+            key: `enabled-workspace:${plugin.scope}`,
+            label: t(isPluginEnabled ? 'pluginStore.disablePluginInWorkspace' : 'pluginStore.enablePluginInWorkspace'),
+            icon: <MaterialSymbol name={isPluginEnabled ? 'extension_off' : 'extension'} />,
+            disabled: updatingEnabledAction === `workspace:${plugin.scope}`,
+            onClick: () => {
+              void togglePluginEnabled(plugin.scope, nextPluginEnabled, 'workspace')
+            }
+          }]
+          : []),
         ...(pluginSourceGroup === 'global'
           ? [{
             key: `enabled-global:${plugin.scope}`,
@@ -419,15 +422,17 @@ export function PluginStoreRoute() {
             }
           }]
           : []),
-        {
-          key: `watch:${plugin.scope}`,
-          label: t(isWatchEnabled ? 'pluginStore.disableWatch' : 'pluginStore.enableWatch'),
-          icon: <MaterialSymbol name={isWatchEnabled ? 'close' : 'speed'} />,
-          disabled: !isPluginEnabled || updatingWatchScope === plugin.scope,
-          onClick: () => {
-            void toggleWatch(plugin.scope, nextWatchEnabled)
-          }
-        },
+        ...(!isBundled
+          ? [{
+            key: `watch:${plugin.scope}`,
+            label: t(isWatchEnabled ? 'pluginStore.disableWatch' : 'pluginStore.enableWatch'),
+            icon: <MaterialSymbol name={isWatchEnabled ? 'close' : 'speed'} />,
+            disabled: !isPluginEnabled || updatingWatchScope === plugin.scope,
+            onClick: () => {
+              void toggleWatch(plugin.scope, nextWatchEnabled)
+            }
+          }]
+          : []),
         { key: `copy-divider:${plugin.scope}`, type: 'divider' },
         {
           key: `copy-scope:${plugin.scope}`,
@@ -525,19 +530,21 @@ export function PluginStoreRoute() {
       ]
       : []
     if (selectedPlugin != null) {
-      items.push({
-        active: selectedPlugin.enabled !== false,
-        disabled: updatingEnabledAction != null,
-        icon: selectedPlugin.enabled === false ? 'extension_off' : 'extension',
-        key: 'plugin-enabled',
-        label: t(
-          selectedPlugin.enabled === false
-            ? 'pluginStore.enablePluginInWorkspace'
-            : 'pluginStore.disablePluginInWorkspace'
-        ),
-        loading: updatingEnabledAction === `workspace:${selectedPlugin.scope}`,
-        onSelect: () => void togglePluginEnabled(selectedPlugin.scope, selectedPlugin.enabled === false, 'workspace')
-      })
+      if (selectedPlugin.sourceGroup !== 'builtIn') {
+        items.push({
+          active: selectedPlugin.enabled !== false,
+          disabled: updatingEnabledAction != null,
+          icon: selectedPlugin.enabled === false ? 'extension_off' : 'extension',
+          key: 'plugin-enabled',
+          label: t(
+            selectedPlugin.enabled === false
+              ? 'pluginStore.enablePluginInWorkspace'
+              : 'pluginStore.disablePluginInWorkspace'
+          ),
+          loading: updatingEnabledAction === `workspace:${selectedPlugin.scope}`,
+          onSelect: () => void togglePluginEnabled(selectedPlugin.scope, selectedPlugin.enabled === false, 'workspace')
+        })
+      }
       if (marketplaceUninstall.available) {
         items.push({
           danger: true,
@@ -549,7 +556,7 @@ export function PluginStoreRoute() {
           onSelect: marketplaceUninstall.confirm
         })
       }
-      if (selectedPlugin.watch != null) {
+      if (selectedPlugin.watch != null && selectedPlugin.sourceGroup !== 'builtIn') {
         items.push({
           active: selectedPlugin.watch.enabled,
           disabled: selectedPlugin.enabled === false || updatingWatchScope != null,

@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- shared workspace definition contracts stay colocated for loader exports. */
 import type { PluginOverlayConfig } from './plugin'
 
 export interface Filter {
@@ -93,8 +94,36 @@ export interface ChannelLinkIngress {
   ambientRouting?: boolean
   createOnCommand?: boolean
   createOnMention?: boolean
+  createOnReplyToBot?: boolean
+  createOnPendingIntent?: boolean
   mentionPatterns?: string[]
+  routerAdapter?: string
+  routerModel?: string
   routerPrompt?: string
+  observeWindow?: {
+    maxTurns?: number
+    ttlSeconds?: number
+  }
+}
+
+export type ChannelIngressDecision = 'ignore' | 'observe' | 'create_child' | 'defer'
+export type ChannelRouteMode = 'reply' | 'clarify' | 'digest' | 'admin' | 'background'
+export type ChannelRouteVisibility = 'public' | 'dm' | 'ephemeral' | 'none'
+
+export interface ChannelRoute {
+  adapter?: string
+  effort?: 'low' | 'medium' | 'high' | 'xhigh'
+  model?: string
+  visibility?: ChannelRouteVisibility
+}
+
+export interface ChannelLinkRouting {
+  default?: ChannelRoute
+  modes?: Partial<Record<ChannelRouteMode, ChannelRoute>>
+  /** Overrides for verified canonical user ids. */
+  users?: Record<string, ChannelRoute>
+  /** Overrides grouped by issuer, then platform account id. */
+  accounts?: Record<string, Record<string, ChannelRoute>>
 }
 
 export interface ChannelLinkWorkHour {
@@ -114,8 +143,42 @@ export interface ChannelLinkAvailability {
   timezone?: string
   workHours?: ChannelLinkWorkHour[]
   offHours?: ChannelLinkOffHours
-  bypassSenders?: string[]
+  /** Issuer-qualified account bypasses only. */
+  bypassAccounts?: ChannelLinkIssuerAccountRef[]
+  /** Compatibility name for issuer-qualified account bypasses. */
+  bypassSenders?: ChannelLinkIssuerAccountRef[]
+  /** Verified canonical user ids only. */
   bypassUsers?: string[]
+}
+
+export interface ChannelLinkIssuerAccountRef {
+  issuerKey: string
+  accountId: string
+}
+
+export interface ChannelLinkModerationLevel {
+  hit: number
+  action: 'warn' | 'mute' | 'mute_permanent'
+  durationMs?: number
+}
+
+export interface ChannelLinkModeration {
+  enabled?: boolean
+  reviewAdapter?: string
+  reviewModel?: string
+  reviewPrompt?: string
+  replyText?: string
+  replyThrottleMs?: number
+  subjectScope?: 'account' | 'user'
+  levels?: ChannelLinkModerationLevel[]
+  /** Defaults to false, so permanent mute is never implicit. */
+  autoPermanentMute?: boolean
+  /** Verified canonical user ids only. */
+  bypassUsers?: string[]
+  /** Issuer-qualified account bypasses only. */
+  bypassAccounts?: ChannelLinkIssuerAccountRef[]
+  /** Compatibility name for issuer-qualified account bypasses. */
+  bypassSenders?: ChannelLinkIssuerAccountRef[]
 }
 
 export interface ChannelLinkAuthorization {
@@ -140,8 +203,8 @@ export interface ChannelLink {
   ingress?: ChannelLinkIngress
   authorization?: ChannelLinkAuthorization
   availability?: ChannelLinkAvailability
-  moderation?: Record<string, unknown>
-  routing?: Record<string, unknown>
+  moderation?: ChannelLinkModeration
+  routing?: ChannelLinkRouting
 }
 
 export interface Skill {

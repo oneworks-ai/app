@@ -8,6 +8,8 @@ import process from 'node:process'
 import { enabledRelayAuthProviders } from './auth/sso-provider-registry.js'
 import { RelayRequestBodyTooLargeError, readRequestBody, sendJson } from './http.js'
 import { attachRelayNodeControl } from './platform/node-control.js'
+import { createRelayRooms } from './rooms/index.js'
+import type { RelayRooms } from './rooms/index.js'
 import { handleAdminAccessGroups } from './routes/access-groups.js'
 import { handleRelayAdminOpenApi, handleRelayProfileOpenApi } from './routes/admin-openapi.js'
 import { handleAdminSsoProviders } from './routes/admin-sso-providers.js'
@@ -32,6 +34,7 @@ import { handlePasswordLoginRoute } from './routes/password-login.js'
 import { handleRelayPersonalConfigRoute } from './routes/personal-config.js'
 import { handleProfileRoute } from './routes/profile.js'
 import { handleProjectRuleDocumentsRoute } from './routes/project-rule-documents.js'
+import { handleRelayRoomsRoute } from './routes/rooms.js'
 import { handleRelaySessionsRoute } from './routes/sessions.js'
 import { handleTeamDocumentsRoute } from './routes/team-documents.js'
 import { handleAdminMessagesRoute, handleTeamInvitationActionsRoute } from './routes/team-invitations.js'
@@ -288,7 +291,7 @@ export const createRelayHandler = (
   args: RelayServerArgs,
   telemetry: RelayTelemetry = createRelayTelemetry(),
   storeRepository?: RelayStoreRepository,
-  options: { onForwardingJobAvailable?: ForwardingJobAvailableObserver } = {}
+  options: { onForwardingJobAvailable?: ForwardingJobAvailableObserver; rooms?: RelayRooms } = {}
 ) => {
   let defaultStoreRepository: Promise<RelayStoreRepository> | undefined
   const loadStoreRepository = async () => {
@@ -367,6 +370,18 @@ export const createRelayHandler = (
     }
     const activeStoreRepository = await loadStoreRepository()
     setForwardingPayloadRepository(activeStoreRepository.forwardingPayloads)
+    if (options.rooms != null && url.pathname.startsWith('/api/relay/rooms')) {
+      await handleRelayRoomsRoute(
+        req,
+        res,
+        args,
+        await activeStoreRepository.read(),
+        activeStoreRepository,
+        url,
+        options.rooms
+      )
+      return
+    }
     const longPollDeviceId = getSessionJobLongPollDeviceId(req, url)
     if (longPollDeviceId != null) {
       await handleListJobsWithoutStoreLock(req, res, args, activeStoreRepository, url, longPollDeviceId, telemetry)
@@ -418,6 +433,7 @@ export const createRelayServer = (args: RelayServerArgs): Server => {
   const resolvedArgs = { ...args, deviceTransport }
   const telemetry = createRelayTelemetry()
   const repository = createRelayStoreRepository(resolvedArgs)
+  const rooms = createRelayRooms()
   const server = createServer((req, res) => {
     void handler(req, res).catch(error => {
       if (res.headersSent) {
@@ -429,9 +445,10 @@ export const createRelayServer = (args: RelayServerArgs): Server => {
       }, resolvedArgs.allowOrigin)
     })
   })
-  const nodeControl = attachRelayNodeControl({ args: resolvedArgs, repository, server, telemetry })
+  const nodeControl = attachRelayNodeControl({ args: resolvedArgs, repository, rooms, server, telemetry })
   const handler = createRelayHandler(resolvedArgs, telemetry, repository, {
-    onForwardingJobAvailable: nodeControl.onForwardingJobAvailable
+    onForwardingJobAvailable: nodeControl.onForwardingJobAvailable,
+    rooms
   })
   server.on('listening', () => {
     if (args.publicBaseUrl != null || args.port !== 0) return

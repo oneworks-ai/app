@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- plugin discovery keeps configured, bundled, and managed source precedence together. */
 import path from 'node:path'
 import process from 'node:process'
 
@@ -20,10 +21,18 @@ import type { ManagedPluginRuntimeIdentity } from './managed-plugin-runtime-iden
 
 const pluginConfigKey = (plugin: { id: string; scope?: string }) => `${plugin.id}\0${plugin.scope ?? ''}`
 const bundledOfficialPluginPackageIds = new Set([
+  '@oneworks/plugin-channel-oneworks',
   '@oneworks/plugin-browser-driver',
   '@oneworks/plugin-external-browser-driver',
   '@oneworks/plugin-cua-driver',
   '@oneworks/plugin-logger',
+  '@oneworks/plugin-relay'
+])
+const bundledImmutableTrustPluginPackageIds = new Set([
+  '@oneworks/plugin-channel-oneworks',
+  '@oneworks/plugin-browser-driver',
+  '@oneworks/plugin-external-browser-driver',
+  '@oneworks/plugin-cua-driver',
   '@oneworks/plugin-relay'
 ])
 
@@ -179,6 +188,9 @@ export const discoverPluginInstances = async () => {
       : managedSourceGroups.get(path.resolve(instance.rootDir)) ??
         (isPathInside(globalPluginsRoot, instance.rootDir)
           ? 'global'
+          : instance.sourceType === 'package' && instance.packageId != null &&
+              bundledImmutableTrustPluginPackageIds.has(instance.packageId)
+          ? 'builtIn'
           : explicitSourceGroups.get(pluginConfigKey({ id: instance.requestId, scope: instance.scope })) ??
             getOneWorksMarketplacePluginSourceGroup(instance, marketplaceSources) ??
             (instance.sourceType === 'package' && instance.packageId != null &&

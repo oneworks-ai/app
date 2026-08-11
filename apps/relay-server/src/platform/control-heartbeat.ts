@@ -78,7 +78,9 @@ const toBytes = (rawFrame: Exclude<RelayControlFrame, string>) => {
   return bytes
 }
 
-const parseHeartbeatFrame = (rawFrame: RelayControlFrame) => {
+export const parseRelayControlFrame = (
+  rawFrame: RelayControlFrame
+): Record<string, unknown> | 'frame-too-large' | undefined => {
   if (byteLength(rawFrame) > RELAY_CONTROL_MAX_FRAME_BYTES) return 'frame-too-large' as const
   const text = typeof rawFrame === 'string' ? rawFrame : new TextDecoder().decode(toBytes(rawFrame))
   let frame: unknown
@@ -88,8 +90,23 @@ const parseHeartbeatFrame = (rawFrame: RelayControlFrame) => {
     return undefined
   }
   if (frame == null || typeof frame !== 'object' || Array.isArray(frame)) return undefined
-  if ((frame as { type?: unknown }).type !== 'heartbeat') return undefined
-  return { payload: (frame as { payload?: unknown }).payload ?? {} }
+  return frame as Record<string, unknown>
+}
+
+export const validateRelayControlAttachment = async (input: {
+  attachment: RelayControlAttachment
+  repository: RelayStoreRepository
+}) => {
+  const store = await input.repository.read()
+  const device = store.devices.find(item =>
+    item.id === input.attachment.deviceId && (
+      deviceTokenHashMatches(item.deviceTokenHash, input.attachment.deviceTokenHash) || (
+        item.deviceToken != null &&
+        deviceTokenHashMatches(hashDeviceToken(item.deviceToken), input.attachment.deviceTokenHash)
+      )
+    )
+  )
+  return device != null && hasControlPermissions(store, device)
 }
 
 /**
@@ -103,7 +120,12 @@ export const applyRelayControlHeartbeatFrame = async (input: {
   repository: RelayStoreRepository
   telemetry?: RelayTelemetry
 }): Promise<RelayControlFrameResult> => {
-  const parsedFrame = parseHeartbeatFrame(input.frame)
+  const frame = parseRelayControlFrame(input.frame)
+  const parsedFrame = frame === 'frame-too-large'
+    ? frame
+    : frame?.type === 'heartbeat'
+    ? { payload: frame.payload ?? {} }
+    : undefined
   if (parsedFrame === 'frame-too-large') return parsedFrame
   if (parsedFrame == null) return 'invalid-frame'
   let result: RelayControlFrameResult = 'revoked'

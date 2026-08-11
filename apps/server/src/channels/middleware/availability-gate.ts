@@ -1,8 +1,10 @@
 import { getDb } from '#~/db/index.js'
+import { encodeChannelRuntimeKey } from '#~/services/channel-runtime-key.js'
 import { logger } from '#~/utils/logger.js'
 
 import type { ChannelContext, ChannelMiddleware } from './@types'
 import { hasExplicitChannelIntent, isChannelCommandText } from './@utils'
+import { isChannelAdminContext } from './access-principal'
 import { getAvailabilityNow, isWithinAvailabilityWorkHours } from './availability-work-hours'
 
 export {
@@ -15,14 +17,20 @@ const DEFAULT_OFF_HOURS_REPLY_TEXT = '我现在下班啦，消息会先记下，
 const DEFAULT_OFF_HOURS_REPLY_THROTTLE_MS = 20 * 60 * 1000
 
 const isBypassSender = (ctx: ChannelContext) => {
+  const account = ctx.actor?.account
   const senderId = ctx.inbound.senderId
-  if (senderId == null || senderId === '') return false
+  if (account == null || senderId == null || senderId === '') return false
 
   const availability = ctx.channelLink?.availability
-  return ctx.config?.access?.admins?.includes(senderId) === true ||
-    availability?.bypassSenders?.includes(senderId) === true ||
-    availability?.bypassUsers?.includes(senderId) === true ||
-    (ctx.actor?.user?.id != null && availability?.bypassUsers?.includes(ctx.actor.user.id) === true)
+  return isChannelAdminContext(ctx) ||
+    availability?.bypassAccounts?.some(item =>
+        item.issuerKey === account.issuerKey && item.accountId === account.accountId
+      ) === true ||
+    availability?.bypassSenders?.some(item =>
+        item.issuerKey === account.issuerKey && item.accountId === account.accountId
+      ) === true ||
+    (ctx.actor?.identityLink?.status === 'verified' && ctx.actor.user?.id != null &&
+      availability?.bypassUsers?.includes(ctx.actor.user.id) === true)
 }
 
 const shouldReplyOffHours = (ctx: ChannelContext) => (
@@ -39,14 +47,19 @@ const shouldReplyOffHours = (ctx: ChannelContext) => (
 )
 
 const buildThrottleKey = (ctx: ChannelContext) =>
-  [
+  encodeChannelRuntimeKey(
     'off-hours',
     ctx.channelKey,
     ctx.channelLink?.name ?? ctx.channelKey,
     ctx.inbound.channelType,
     ctx.inbound.sessionType,
-    ctx.inbound.channelId
-  ].join('\0')
+    ctx.inbound.channelId,
+    ctx.actor?.identityLink?.status === 'verified' && ctx.actor.user?.id != null
+      ? ctx.actor.user.id
+      : ctx.actor?.account == null
+      ? ctx.inbound.senderId ?? 'anonymous'
+      : encodeChannelRuntimeKey(ctx.actor.account.issuerKey, ctx.actor.account.accountId)
+  )
 
 const isTargetedChannelCommand = (ctx: ChannelContext) =>
   hasExplicitChannelIntent({
@@ -100,10 +113,12 @@ export const availabilityGateMiddleware: ChannelMiddleware = async (ctx, next) =
   }
 
   const availability = ctx.channelLink?.availability
+  const override = ctx.channelLink == null ? undefined : getDb().getChannelAvailabilityOverride(ctx.channelLink.name)
   if (
     ctx.channelLink == null ||
     availability == null ||
-    availability.enabled === false ||
+    override?.enabled === false ||
+    (override == null && availability.enabled === false) ||
     isBypassSender(ctx) ||
     isWithinAvailabilityWorkHours(availability) ||
     (isChannelCommandText(ctx.commandText, ctx.config) && isTargetedChannelCommand(ctx))
@@ -113,7 +128,9 @@ export const availabilityGateMiddleware: ChannelMiddleware = async (ctx, next) =
   }
 
   const now = getAvailabilityNow().getTime()
-  rememberOffhourBacklog(ctx, now)
+  if (availability.offHours?.mode !== 'drop') {
+    rememberOffhourBacklog(ctx, now)
+  }
   if (shouldReplyOffHours(ctx) && shouldSendThrottledReply(ctx, now)) {
     await ctx.reply(availability.offHours?.replyText?.trim() || DEFAULT_OFF_HOURS_REPLY_TEXT)
   }

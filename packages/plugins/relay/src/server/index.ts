@@ -8,6 +8,9 @@ export function activatePlugin(ctx: RelayPluginContext) {
   const controller = createRelayController(ctx)
   let disposed = false
   const options = normalizeOptions(ctx.options, ctx.runtime.role)
+  const unregisterRoomDirectory = ctx.roomTunnel?.registerDirectoryClient?.({
+    listVisible: controller.listSharedRooms
+  })
 
   ctx.registerCommand('connect', async payload => await controller.connect(payload))
   ctx.registerCommand('disconnect', async payload => await controller.disconnect(payload))
@@ -37,6 +40,7 @@ export function activatePlugin(ctx: RelayPluginContext) {
 
   ctx.dispose(() => {
     disposed = true
+    unregisterRoomDirectory?.()
     controller.dispose()
   })
 }

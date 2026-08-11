@@ -197,10 +197,10 @@ describe('nav rail window bar', () => {
     )
 
     expect(styles).toMatch(
-      /\.nav-rail-window-bar\.is-sidebar-collapsed\s*>\s*\.nav-rail-create-session-indicator\s*\{[^}]*position:\s*absolute;[^}]*inset-inline-start:\s*100%;[^}]*top:\s*50%;[^}]*width:\s*var\(--nav-rail-window-icon-size\);[^}]*pointer-events:\s*none;[^}]*transform:\s*translateY\(-50%\);/s
+      /\.nav-rail-window-bar\.is-sidebar-collapsed\s*>\s*\.nav-rail-create-session-indicator\s*\{[^}]*position:\s*absolute;[^}]*inset-inline-start:\s*100%;[^}]*top:\s*50%;[^}]*width:\s*var\(--nav-rail-window-icon-size\);[^}]*pointer-events:\s*none;[^}]*transform:\s*translateY\(-50%\);/
     )
     expect(styles).not.toMatch(
-      /\.nav-rail-window-bar\.is-sidebar-collapsed\.has-window-controls\s*>\s*\*\s*\{[^}]*transform:\s*translateY\(-1px\);/s
+      /\.nav-rail-window-bar\.is-sidebar-collapsed\.has-window-controls\s*>\s*\*\s*\{[^}]*transform:\s*translateY\(-1px\);/
     )
   })
 })

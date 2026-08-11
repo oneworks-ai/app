@@ -16,6 +16,7 @@ import type {
   SessionWorkspaceChanges
 } from '@oneworks/core'
 import type {
+  ChannelNavigationPreferences,
   ConfigResponse,
   ConfigSource,
   ConversationStarterConfig,
@@ -37,9 +38,11 @@ import {
   createAgentRoomSenderSubmit,
   getAgentRoomMemberMention,
   getAgentRoomMentionCompletions,
+  listChannelNavigationActions,
   resolveRoomTarget
 } from '#~/components/agent-room'
 import type {
+  AgentRoomChannelReferenceView,
   AgentRoomMemberView,
   AgentRoomMessageView,
   AgentRoomRunView,
@@ -329,6 +332,7 @@ export function ChatHistoryView({
   agentRoomTranscript?: {
     room: AgentRoomViewModel
     members: AgentRoomMemberView[]
+    navigationPreferences?: ChannelNavigationPreferences
     workspaceSessionId?: string
     onOpenHostSession?: () => void
     onOpenRun?: (run: AgentRoomRunView) => void
@@ -344,7 +348,7 @@ export function ChatHistoryView({
   onPendingFileCommentsChange?: (comments: PendingFileComment[]) => void
   onPendingAnnotationPreviewChange?: (state: PendingAnnotationPreviewState) => void
   hideHistoryTimeline?: boolean
-  onOpenUrlInAppBrowser?: (url: string, title?: string) => void
+  onOpenUrlInAppBrowser?: (url: string, title?: string, placement?: 'bottom' | 'right') => void
   onOpenWorkspaceFile?: (path: string, target?: Pick<WorkspaceFileLinkTarget, 'column' | 'line'>) => void
   workspaceRootPath?: string
   embeddedSessionChrome?: boolean
@@ -533,6 +537,54 @@ export function ChatHistoryView({
     onClearMessages
   })
   const isAgentRoomMode = agentRoomTranscript != null
+  const openChannelUrl = useCallback((url: string, mode: 'external' | 'native') => {
+    if (window.oneworksDesktop?.openExternalUrl != null) {
+      void window.oneworksDesktop.openExternalUrl(url).catch(error => {
+        void message.error(error instanceof Error ? error.message : String(error))
+      })
+      return
+    }
+    window.open(url, mode === 'native' ? '_self' : '_blank', 'noopener,noreferrer')
+  }, [message])
+  const handleOpenChannelReference = useCallback((reference: AgentRoomChannelReferenceView) => {
+    const actions = listChannelNavigationActions(
+      reference,
+      agentRoomTranscript?.navigationPreferences ?? {
+        default: ['rightPanel', 'externalWeb', 'nativeApp', 'appHome', 'ask']
+      }
+    )
+    const execute = (action: (typeof actions)[number]) => {
+      if (action.url == null) return
+      if (action.mode === 'rightPanel' && onOpenUrlInAppBrowser != null) {
+        onOpenUrlInAppBrowser(action.url, reference.label, 'right')
+        return
+      }
+      openChannelUrl(action.url, action.mode === 'nativeApp' ? 'native' : 'external')
+    }
+    const first = actions[0]
+    if (first == null) return
+    if (first.mode !== 'ask') {
+      execute(first)
+      return
+    }
+    const webAction = actions.find(action =>
+      action.mode === 'rightPanel' || action.mode === 'externalWeb' ||
+      action.mode === 'appHome'
+    )
+    const nativeAction = actions.find(action => action.mode === 'nativeApp')
+    if (webAction == null || nativeAction == null) {
+      execute(webAction ?? nativeAction ?? first)
+      return
+    }
+    modal.confirm({
+      title: t('agentRoom.navigation.chooseTitle'),
+      content: reference.label,
+      okText: t('agentRoom.navigation.openWeb'),
+      cancelText: t('agentRoom.navigation.openApp'),
+      onOk: () => execute(webAction),
+      onCancel: () => execute(nativeAction)
+    })
+  }, [agentRoomTranscript?.navigationPreferences, modal, onOpenUrlInAppBrowser, openChannelUrl, t])
   const agentRoomSenderSessionInfo = useMemo<SessionInfo | null>(() => {
     if (agentRoomTranscript == null) {
       return null
@@ -1960,6 +2012,7 @@ export function ChatHistoryView({
               ? (
                 <AgentRoomTranscript
                   room={agentRoomTranscript.room}
+                  onOpenChannelReference={handleOpenChannelReference}
                   onOpenHostSession={agentRoomTranscript.onOpenHostSession}
                   onOpenRun={agentRoomTranscript.onOpenRun}
                   onReplyToRun={agentRoomTranscript.onReplyToRun}

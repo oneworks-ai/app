@@ -141,6 +141,11 @@ export const initChannels = async (
       connection = await mod.create(connectionConfig, {
         channelKey: key,
         logger,
+        outboundStore: {
+          upsert: delivery => {
+            getDb().upsertChannelOutboundDelivery(delivery)
+          }
+        },
         webhookNonceStore: {
           commit: input => {
             getDb().commitChannelWebhookNonce(input)
@@ -158,7 +163,8 @@ export const initChannels = async (
         connection,
         config: connectionConfig as ChannelBaseConfig,
         configSource: entry.source,
-        channelLinks: matchedChannelLinks
+        channelLinks: matchedChannelLinks,
+        resolveRuntime: channelKey => states.get(channelKey)
       }
       await connection.startReceiving?.({
         channelKey: key,
@@ -306,8 +312,8 @@ export const sendChannelMessage = async (input: {
 }
 
 interface ChannelDebugOutboundConnection {
-  clearDebugOutboundMessages?: () => Promise<void> | void
-  getDebugOutboundMessages?: () => unknown[]
+  clearLocalOutboxMessages?: () => Promise<void> | void
+  getLocalOutboxMessages?: () => unknown[]
 }
 
 const getDebugOutboundConnection = (input: { channelKey: string }) => {
@@ -337,7 +343,7 @@ const getDebugOutboundConnection = (input: { channelKey: string }) => {
   }
 
   const connection = state.connection as ChannelDebugOutboundConnection
-  if (typeof connection.getDebugOutboundMessages !== 'function') {
+  if (typeof connection.getLocalOutboxMessages !== 'function') {
     return {
       ok: false as const,
       statusCode: 404,
@@ -356,14 +362,14 @@ export const listChannelDebugOutboundMessages = (input: { channelKey: string }) 
   if (!resolved.ok) return resolved
   return {
     ok: true as const,
-    messages: resolved.connection.getDebugOutboundMessages?.() ?? []
+    messages: resolved.connection.getLocalOutboxMessages?.() ?? []
   }
 }
 
 export const clearChannelDebugOutboundMessages = async (input: { channelKey: string }) => {
   const resolved = getDebugOutboundConnection(input)
   if (!resolved.ok) return resolved
-  await resolved.connection.clearDebugOutboundMessages?.()
+  await resolved.connection.clearLocalOutboxMessages?.()
   return {
     ok: true as const
   }

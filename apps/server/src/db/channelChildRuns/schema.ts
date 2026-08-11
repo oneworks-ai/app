@@ -2,7 +2,7 @@ import type { SchemaModule } from '../schema'
 
 export const channelChildRunsSchemaModule: SchemaModule = {
   name: 'channel-child-runs',
-  apply({ exec }) {
+  apply({ ensureColumn, exec }) {
     exec(`
       CREATE TABLE IF NOT EXISTS channel_child_session_runs (
         id TEXT PRIMARY KEY,
@@ -24,6 +24,8 @@ export const channelChildRunsSchemaModule: SchemaModule = {
         status TEXT NOT NULL,
         startedAt INTEGER NOT NULL,
         completedAt INTEGER,
+        memorySnapshotId TEXT,
+        continuitySnapshotJson TEXT,
         error TEXT,
         metadataJson TEXT
       );
@@ -40,5 +42,7 @@ export const channelChildRunsSchemaModule: SchemaModule = {
       CREATE INDEX IF NOT EXISTS idx_channel_child_session_runs_conversation
         ON channel_child_session_runs(conversationStateId, startedAt);
     `)
+    ensureColumn('channel_child_session_runs', 'memorySnapshotId', 'TEXT')
+    ensureColumn('channel_child_session_runs', 'continuitySnapshotJson', 'TEXT')
   }
 }

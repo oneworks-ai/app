@@ -1,7 +1,7 @@
 ---
 rfc: 0006
 title: Channel Runtime 2.0 - Ingress Router
-status: draft
+status: implemented
 authors:
   - Codex
 created: 2026-06-16
@@ -16,6 +16,8 @@ targetVersion: vNext
 Ingress Router 是每个 entity channel 的入站 gate。它可以使用确定性规则和轻量模型判断一条消息是否需要升级为 ChildSession，并为这次执行选择 mode、model、adapter、visibility 和 threadKey。
 
 Ingress Router 不选择 entity。entity 在进入 router 前已经由 `.oo/channels/<link>/channel.json` 唯一确定。
+
+当前模型 Router 只接受能由 adapter 明确证明“无工具、无 MCP、无 skill”的 `structured_no_tools` 执行档位。现阶段 Gemini 已实现该档位；其它 adapter 会返回 `unsupported` 并关闭失败为 `observe`，不会偷偷使用普通业务 session。`routerAdapter` 与 ChildSession 的 `routing.default.adapter` 相互独立，因此业务执行仍可使用 Codex、Claude Code 等 adapter。
 
 ## Channel Link Invariant
 
@@ -68,7 +70,7 @@ platform event
 - 被软屏蔽、下班普通消息、throttle 命中：直接按 PolicyEngine 处理。
 - 普通群聊消息：默认 observe 或 ignore，只有 `ambientRouting=true` 时才进入模型 router。
 
-当前实现先落了确定性 fast gate：当入站消息匹配到 ChannelLink，且 `ingress.ambientRouting === false`，普通群聊消息会在进入 debounce / ack / adminGate / dispatch 前停止；私聊、slash command、消息开头的结构化 `<at ...>` mention，以及 `ingress.mentionPatterns` 命中的平台文本 mention 会继续进入后续会话流。这个阶段还不会写 observe buffer，也不会调用模型 router；pending intent / reply-to-bot 需要后续表结构和事件关联能力再接入。
+当前实现已经覆盖完整 baseline：确定性规则先处理结构化 `mentionedBot` 三态、reply-to-current-bot、owner pending intent、command、私聊和 ambient 配置；`mentionedBot=false` 会在 command 与 availability 回复之前关闭失败。未被确定性规则决定且允许 ambient routing 的消息才调用无工具、结构化输出的轻量模型 Router。每次 linked inbound 都写入 `channel_ingress_router_runs`；ignore / observe / defer 不创建 ChildSession，模型超时、无 route、无效输出或越权 mode 都关闭失败为 observe。最终 route 按 global/default、mode、canonical user 和 issuer-qualified account override 合并，但不能切换 entity。
 
 ## Router Decision
 
@@ -129,13 +131,13 @@ Router 可以识别“这像是 channel command”，但不直接执行命令。
 示例：
 
 ```text
-.oo/channels/wan-ke-chat/channel.json
+.oo/channels/support-room/channel.json
 ```
 
 ```json
 {
   "channel": "lark-main",
-  "entity": "owo-demo",
+  "entity": "support-assistant",
   "external": {
     "type": "group",
     "chatId": "oc_xxx"
@@ -143,9 +145,9 @@ Router 可以识别“这像是 channel command”，但不直接执行命令。
   "ingress": {
     "ambientRouting": false,
     "routerModel": "gpt-5.4-mini",
-    "routerPrompt": "普通寒暄只观察；用户明确让 OWO 帮忙、总结、分析、创建或继续任务时才创建子会话。",
+    "routerPrompt": "普通寒暄只观察；用户明确让助手帮忙、总结、分析、创建或继续任务时才创建子会话。",
     "createOnMention": true,
-    "mentionPatterns": ["@OWO"],
+    "mentionPatterns": ["@assistant"],
     "createOnReplyToBot": true,
     "createOnPendingIntent": true,
     "observeWindow": {

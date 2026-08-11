@@ -1,4 +1,5 @@
 import type { ChannelMiddleware } from './@types'
+import { isChannelAdminContext } from './access-principal'
 import { ADMIN_BOOTSTRAP_REPLY_TEXT, hasChannelAdmins } from './admin-bootstrap'
 
 export const adminGateMiddleware: ChannelMiddleware = async (ctx, next) => {
@@ -15,8 +16,7 @@ export const adminGateMiddleware: ChannelMiddleware = async (ctx, next) => {
   }
 
   if (admins && admins.length > 0) {
-    const senderId = ctx.inbound.senderId
-    if (!senderId || !admins.includes(senderId)) {
+    if (!isChannelAdminContext(ctx)) {
       await ctx.reply('当前频道尚未初始化会话，请联系管理员发起对话。')
       return
     }

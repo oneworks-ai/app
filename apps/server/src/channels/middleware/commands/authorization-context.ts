@@ -38,14 +38,14 @@ export const listOwnPendingRequests = (ctx: ChannelContext) => {
   const userId = resolveRequesterUserId(ctx)
   if (userId != null && userId !== '') {
     return db.listPendingChannelAuthorizationRequestsForUser(userId, ctx.inbound.channelType)
-      .filter(request => request.metadata?.channelKey === ctx.channelKey)
+      .filter(request => request.issuerKey === ctx.channelKey && request.channelKey === ctx.channelKey)
   }
 
   const accountId = resolveRequesterAccountId(ctx)
   return accountId == null || accountId === ''
     ? []
     : db.listPendingChannelAuthorizationRequestsForAccount(accountId, ctx.inbound.channelType)
-      .filter(request => request.metadata?.channelKey === ctx.channelKey)
+      .filter(request => request.issuerKey === ctx.channelKey && request.channelKey === ctx.channelKey)
 }
 
 const buildOwnerResumeFilters = (ctx: ChannelContext) => {

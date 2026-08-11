@@ -6,6 +6,7 @@ import WebSocket from 'ws'
 
 import { visibleDevicePrivateMetadata } from '../src/devices/private-metadata.js'
 import { attachRelayNodeControl } from '../src/platform/node-control.js'
+import type { RelayRooms } from '../src/rooms/index.js'
 import type { RelayStoreRepository } from '../src/storage/repository.js'
 import { readRelayStore, writeRelayStore } from '../src/store.js'
 import { createRelayTelemetry } from '../src/telemetry/metrics.js'
@@ -304,6 +305,75 @@ describe('node relay control socket', () => {
       expect(visibleDevicePrivateMetadata(args, store.devices[0]).name).toBe('Burst 127')
     } finally {
       unblockFirstHeartbeat.resolve()
+      socket.terminate()
+      await new Promise<void>((resolve, reject) => server.close(error => error == null ? resolve() : reject(error)))
+    }
+  })
+
+  it('delivers every concurrent Room response while a preceding response is still being handled', async () => {
+    const store = createFixtureStore()
+    const firstResponseStarted = createDeferred()
+    const unblockFirstResponse = createDeferred()
+    const secondResponseHandled = createDeferred()
+    const receivedRequestIds: string[] = []
+    const rooms: RelayRooms = {
+      bindOwner: () => () => {},
+      forward: async () => ({ ok: true }),
+      handleControlFrame: async ({ frame }) => {
+        const requestId = JSON.parse(String(frame)).requestId as string
+        receivedRequestIds.push(requestId)
+        if (requestId === 'room-response-1') {
+          firstResponseStarted.resolve()
+          await unblockFirstResponse.promise
+        } else {
+          secondResponseHandled.resolve()
+        }
+        return 'applied'
+      },
+      isOwnerOnline: () => true,
+      listVisible: () => []
+    }
+    const repository: RelayStoreRepository = {
+      driver: 'json',
+      location: 'room-response-queue-test',
+      read: async () => store,
+      withStore: async callback => await callback(store, repository),
+      write: async () => {}
+    }
+    const args: RelayServerArgs = {
+      adminToken: 'admin-token',
+      allowOrigin: '*',
+      dataPath: 'room-response-queue-test',
+      host: '127.0.0.1',
+      port: 0
+    }
+    const server = createServer()
+    attachRelayNodeControl({ args, repository, rooms, server, telemetry: createRelayTelemetry() })
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+    const port = Number((server.address() as { port: number }).port)
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/api/relay/devices/control`, {
+      headers: { authorization: 'Bearer device-token-1', 'x-oneworks-relay-device-id': 'device-1' }
+    })
+    try {
+      await waitForOpen(socket)
+      socket.send(JSON.stringify({
+        ok: true,
+        requestId: 'room-response-1',
+        shareId: 'share-1',
+        type: 'room-response'
+      }))
+      await waitForSignal(firstResponseStarted.promise, 'the first Room response handler')
+      socket.send(JSON.stringify({
+        ok: true,
+        requestId: 'room-response-2',
+        shareId: 'share-1',
+        type: 'room-response'
+      }))
+      unblockFirstResponse.resolve()
+      await waitForSignal(secondResponseHandled.promise, 'the second Room response handler')
+      expect(receivedRequestIds).toEqual(['room-response-1', 'room-response-2'])
+    } finally {
+      unblockFirstResponse.resolve()
       socket.terminate()
       await new Promise<void>((resolve, reject) => server.close(error => error == null ? resolve() : reject(error)))
     }

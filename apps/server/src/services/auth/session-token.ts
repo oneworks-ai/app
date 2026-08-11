@@ -61,30 +61,52 @@ export const createSessionToken = async (env: ServerEnv, username: string, ttlMs
   return `${payload}.${signature}`
 }
 
-export const verifySessionToken = async (env: ServerEnv, token?: string | null) => {
+export interface SessionTokenClaims {
+  expiresAt: number
+  username: string
+}
+
+export const resolveSessionTokenClaims = async (
+  env: ServerEnv,
+  token?: string | null
+): Promise<SessionTokenClaims | undefined> => {
   if (token == null || token.trim() === '') {
-    return false
+    return undefined
   }
 
   const [payload, signature, extra] = token.split('.')
   if (payload == null || signature == null || extra != null) {
-    return false
+    return undefined
   }
 
   const expectedSignature = sign(payload, await getSessionSecret(env))
   if (!safeEqual(signature, expectedSignature)) {
-    return false
+    return undefined
   }
 
   try {
     const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf-8')) as {
       expiresAt?: unknown
+      username?: unknown
     }
-    return typeof parsed.expiresAt === 'number' && parsed.expiresAt > Date.now()
+    if (
+      typeof parsed.expiresAt !== 'number' ||
+      parsed.expiresAt <= Date.now() ||
+      typeof parsed.username !== 'string' ||
+      parsed.username.trim() === ''
+    ) return undefined
+
+    return {
+      expiresAt: parsed.expiresAt,
+      username: parsed.username.trim()
+    }
   } catch {
-    return false
+    return undefined
   }
 }
+
+export const verifySessionToken = async (env: ServerEnv, token?: string | null) =>
+  await resolveSessionTokenClaims(env, token) != null
 
 export const getBearerTokenFromHeader = (authorizationHeader?: string | string[] | null) => {
   const headerValue = Array.isArray(authorizationHeader) ? authorizationHeader[0] : authorizationHeader

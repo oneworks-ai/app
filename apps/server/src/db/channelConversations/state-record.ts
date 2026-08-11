@@ -14,12 +14,20 @@ export interface ChannelConversationStateDbRow {
   activeParticipantsJson: string | null
   recentTurnIdsJson: string | null
   pendingIntentIdsJson: string | null
+  lastBotReplyJson: string | null
   lastChildRunId: string | null
   lastMessageId: string | null
   createdAt: number
   updatedAt: number
   expiresAt: number | null
   metadataJson: string | null
+}
+
+export interface ChannelConversationLastBotReply {
+  childRunId: string
+  createdAt: number
+  messageId: string
+  summary: string
 }
 
 export interface ChannelConversationStateRow {
@@ -36,12 +44,27 @@ export interface ChannelConversationStateRow {
   activeParticipants: string[]
   recentTurnIds: string[]
   pendingIntentIds: string[]
+  lastBotReply: ChannelConversationLastBotReply | null
   lastChildRunId: string | null
   lastMessageId: string | null
   createdAt: number
   updatedAt: number
   expiresAt: number | null
   metadata: Record<string, unknown> | null
+}
+
+const parseLastBotReply = (value: string | null): ChannelConversationLastBotReply | null => {
+  const parsed = parseJsonRecord(value)
+  if (
+    parsed == null || typeof parsed.childRunId !== 'string' || typeof parsed.messageId !== 'string' ||
+    typeof parsed.summary !== 'string' || typeof parsed.createdAt !== 'number'
+  ) return null
+  return {
+    childRunId: parsed.childRunId,
+    createdAt: parsed.createdAt,
+    messageId: parsed.messageId,
+    summary: parsed.summary
+  }
 }
 
 export function mapStateRow(
@@ -62,6 +85,7 @@ export function mapStateRow(
     activeParticipants: parseStringArray(row.activeParticipantsJson),
     recentTurnIds: parseStringArray(row.recentTurnIdsJson),
     pendingIntentIds: parseStringArray(row.pendingIntentIdsJson),
+    lastBotReply: parseLastBotReply(row.lastBotReplyJson),
     lastChildRunId: row.lastChildRunId,
     lastMessageId: row.lastMessageId,
     createdAt: row.createdAt,

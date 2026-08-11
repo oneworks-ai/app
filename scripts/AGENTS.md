@@ -110,6 +110,10 @@
   - 通用 runtime session 证据入口：有界列出最近的 `runtime/sessions/*/events.jsonl`，用于 UI smoke、Electron 验证、adapter 调试和 release 验证，不要为 nonce/session discovery 在各脚本里重复写 parser
 - `pnpm tools runtime-evidence wait-reply --expected-reply <text> [--session-id <id>]`
   - 等待已完成 runtime session 的 assistant 回复；不传 `--session-id` 时按期望回复在有界 runtime store 中自动发现 session
+- `pnpm tools channel-acceptance --workspace <path> --channel-type <type> [--db <path>] --json`
+  - 对频道矩阵做脱敏交付检查：统计 channel、entity、group 和 ChannelLink，验证同一 channel key 不跨实体复用，并可要求管理员、凭证与群白名单均已配置。
+  - `--expect-channels`、`--expect-entities`、`--expect-groups`、`--expect-links` 用于锁定预期矩阵；`--require-admins`、`--require-credentials`、`--require-group-allowlist` 用于把缺失运行配置变成失败。
+  - 传 `--db` 时只读取 channel child run、router、command、pending intent、authorization 和 memory writeback 的分组计数。输出只包含计数、状态、短 fingerprint 和 violation code，不得扩展为输出 secret、原始 ID、真实名称、payload 或绝对路径。
 - `pnpm tools release-verify agent --channel beta --version auto`
   - AI-native 发布验证主入口：默认 `desktop-chat`，自动生成期望回复 nonce，打印 Electron UI action，随后在有界 runtime store 中自动发现匹配会话，不要求手动传 `--session-id`
   - 上层 agent 应先按输出的 UI action 操作 Electron，再让命令继续等待证据；如果已经知道 session id，可直接带 `--session-id` 缩短等待
@@ -137,14 +141,10 @@
 
 ## adapter-e2e 结构
 
-- `scripts/adapter-e2e/harness.ts`
-  - suite 生命周期
-- `scripts/chrome-debug.ts`
-  - Chrome DevTools 本地调试 helper，负责枚举目标页、连接 CDP 和执行 messenger 发送动作
-- `scripts/adapter-e2e/runners.ts`
-  - Codex / Claude / OpenCode / Pi 的真实运行路径
-- `scripts/adapter-e2e/log.ts`
-  - hook 日志解析与事件计数
+- `scripts/adapter-e2e/harness.ts`：suite 生命周期
+- `scripts/chrome-debug.ts`：Chrome DevTools 本地调试 helper，负责枚举目标页、连接 CDP 和执行 messenger 发送动作
+- `scripts/adapter-e2e/runners.ts`：Codex / Claude / OpenCode / Pi 的真实运行路径
+- `scripts/adapter-e2e/log.ts`：hook 日志解析与事件计数
 - `scripts/adapter-e2e/snapshot.ts`
   - 真实 CLI 结果 -> 稳定 snapshot projection
 - `scripts/adapter-e2e/mock-llm/request.ts`

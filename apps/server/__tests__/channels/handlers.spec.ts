@@ -3,24 +3,50 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { handleInboundEvent, handleSessionEvent } from '#~/channels/handlers.js'
 import { buildChannelSessionStopEvent } from '#~/channels/session-delivery.js'
 import { consumePendingUnack, deleteBinding, setBinding, setPendingUnack } from '#~/channels/state.js'
+import { getDb } from '#~/db/index.js'
 import {
   ensureChannelAuthorizationRequestForInteraction,
   markChannelAuthorizationRequestDelivered,
   releaseChannelAuthorizationRequestDelivery,
   reserveChannelAuthorizationRequestDelivery
 } from '#~/services/channel-authorizations/index.js'
+import { evaluateInboundPolicy } from '#~/services/channel-policy/index.js'
+import { startAdapterSession } from '#~/services/session/index.js'
+import {
+  clearSessionInteraction,
+  getSessionInteraction,
+  setSessionInteraction
+} from '#~/services/session/interaction.js'
+import { createSessionConnectionState, externalSessionStore } from '#~/services/session/runtime.js'
+
+const listChannelAccountsForUser = vi.hoisted(() => vi.fn())
+const getChannelSession = vi.hoisted(() => vi.fn())
+const createChannelCommandRun = vi.hoisted(() => vi.fn(() => ({ id: 'cmd-run-1' })))
+const createChannelIngressRouterRun = vi.hoisted(() => vi.fn(input => ({ ...input, id: 'router-run-1' })))
 
 vi.mock('#~/db/index.js', () => ({
   getDb: vi.fn(() => ({
-    createChannelCommandRun: vi.fn(() => ({ id: 'cmd-run-1' })),
+    createChannelCommandRun,
+    createChannelIngressRouterRun,
+    consumeChannelReplyThrottle: vi.fn(() => true),
     deleteChannelMessagesSeenBefore: vi.fn(),
+    appendChannelConversationTurn: vi.fn(),
+    ensureChannelConversationState: vi.fn(() => ({ id: 'conversation-1' })),
     finishChannelCommandRun: vi.fn(),
+    forgetChannelMessage: vi.fn(),
+    getChannelConversationStateByLastBotReply: vi.fn(),
+    getChannelConversationStateByThread: vi.fn(),
+    getChannelAvailabilityOverride: vi.fn(),
     getChannelIdentityLink: vi.fn(),
     getChannelPreference: vi.fn(),
-    getChannelSession: vi.fn(),
+    getChannelSession,
     getSession: vi.fn(),
+    getChannelChildSessionRunBySessionId: vi.fn(),
     getSessionRuntimeState: vi.fn(),
     rememberChannelMessage: vi.fn(() => true),
+    listOpenChannelPendingIntents: vi.fn(() => []),
+    listChannelAccountsForUser,
+    listRecentChannelConversationTurns: vi.fn(() => []),
     resolveCanonicalUserByChannelAccount: vi.fn(),
     updateSessionArchivedWithChildren: vi.fn(() => []),
     deleteChannelSessionBySessionId: vi.fn(),
@@ -46,6 +72,11 @@ vi.mock('#~/services/channel-authorizations/index.js', () => ({
   markChannelAuthorizationRequestDelivered: vi.fn(),
   releaseChannelAuthorizationRequestDelivery: vi.fn(),
   reserveChannelAuthorizationRequestDelivery: vi.fn(() => ({ reservedAt: 1_000 }))
+}))
+
+vi.mock('#~/services/channel-policy/index.js', async importOriginal => ({
+  ...await importOriginal<typeof import('#~/services/channel-policy/index.js')>(),
+  evaluateInboundPolicy: vi.fn()
 }))
 
 vi.mock('#~/services/session/runtime.js', async () => {
@@ -87,6 +118,7 @@ const makeRuntimeState = (
     channelLinks?: unknown[]
     channelType?: string
     sendMessage?: ReturnType<typeof vi.fn>
+    sendPrivateMessage?: ReturnType<typeof vi.fn>
     updateMessage?: ReturnType<typeof vi.fn>
     pushFollowUps?: ReturnType<typeof vi.fn>
     language?: 'zh' | 'en'
@@ -103,6 +135,7 @@ const makeRuntimeState = (
       },
       connection: {
         sendMessage: input.sendMessage ?? vi.fn().mockResolvedValue({ messageId: 'om_default' }),
+        sendPrivateMessage: input.sendPrivateMessage,
         updateMessage: input.updateMessage,
         pushFollowUps: input.pushFollowUps ?? vi.fn().mockResolvedValue(undefined)
       },
@@ -185,6 +218,7 @@ describe('channel handlers', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(reserveChannelAuthorizationRequestDelivery).mockReturnValue({ reservedAt: 1_000 })
+    getChannelSession.mockReturnValue(undefined)
     vi.stubEnv('__ONEWORKS_PROJECT_SERVER_ACTION_SECRET__', 'test-secret')
     deleteBinding('sess-1')
     consumePendingUnack('sess-1')
@@ -197,7 +231,7 @@ describe('channel handlers', () => {
     vi.resetModules()
   })
 
-  it('drops group messages that structurally mention another bot before pipeline side effects', async () => {
+  it('records and drops messages that structurally mention another bot before commands or pipeline side effects', async () => {
     const ack = vi.fn().mockResolvedValue(undefined)
     const unack = vi.fn().mockResolvedValue(undefined)
     const sendMessage = vi.fn().mockResolvedValue({ messageId: 'om_unexpected' })
@@ -220,12 +254,138 @@ describe('channel handlers', () => {
       {
         type: 'lark',
         access: { admins: ['admin_1'] }
-      }
+      },
+      'project',
+      [makeGroupChannelLink({ ambientRouting: false })] as any
     )
 
     expect(ack).not.toHaveBeenCalled()
     expect(unack).not.toHaveBeenCalled()
     expect(sendMessage).not.toHaveBeenCalled()
+    expect(createChannelCommandRun).not.toHaveBeenCalled()
+    expect(createChannelIngressRouterRun).toHaveBeenCalledWith(expect.objectContaining({
+      channelId: 'chat_1',
+      channelKey: 'test',
+      decision: 'ignore',
+      messageId: 'om_other_bot',
+      reason: 'mentioned_other_bot',
+      senderId: 'user_1',
+      sessionType: 'group'
+    }))
+  })
+
+  it('does not execute admin commands for a synthetic administrator scenario', async () => {
+    const sendMessage = vi.fn().mockResolvedValue({ messageId: 'om_unexpected' })
+
+    await handleInboundEvent(
+      'test',
+      {
+        channelType: 'oneworks',
+        sessionType: 'direct',
+        channelId: 'simulation-user',
+        messageId: 'simulation-admin-command',
+        senderId: 'oneworks-simulation:isolated',
+        synthetic: {
+          actorRole: 'admin',
+          kind: 'product_simulation',
+          userLabel: 'Scenario Admin'
+        },
+        text: '/access',
+        raw: {}
+      },
+      { sendMessage } as any,
+      { type: 'oneworks', access: { admins: ['real-admin'], allowPrivateChat: false } },
+      'project',
+      [{
+        channelKey: 'test',
+        definition: {} as never,
+        entity: 'owo-demo',
+        external: { accountId: 'oneworks-simulation:isolated', type: 'direct' },
+        ingress: {
+          ambientRouting: false,
+          createOnCommand: true,
+          createOnMention: true,
+          createOnPendingIntent: true,
+          createOnReplyToBot: true
+        },
+        name: 'simulation-direct-link',
+        path: '/workspace/.oo/channels/simulation-direct/channel.json',
+        routing: { accounts: {}, default: {}, modes: {}, users: {} }
+      }] as any
+    )
+
+    expect(createChannelCommandRun).not.toHaveBeenCalled()
+    expect(vi.mocked(startAdapterSession)).not.toHaveBeenCalled()
+    expect(sendMessage).not.toHaveBeenCalled()
+  })
+
+  it('does not create a child session for an unbound direct message', async () => {
+    const sendMessage = vi.fn().mockResolvedValue({ messageId: 'om_unexpected' })
+
+    await handleInboundEvent(
+      'test',
+      {
+        channelType: 'lark',
+        sessionType: 'direct',
+        channelId: 'unbound-user',
+        messageId: 'om_unbound_direct',
+        senderId: 'unbound-user',
+        text: 'hello',
+        raw: {}
+      },
+      { sendMessage } as any,
+      { type: 'lark', access: { admins: ['real-admin'], allowPrivateChat: true } },
+      'project',
+      []
+    )
+
+    expect(vi.mocked(startAdapterSession)).not.toHaveBeenCalled()
+    expect(sendMessage).not.toHaveBeenCalled()
+  })
+
+  it('short-circuits a muted subject in the real pipeline before router or child creation', async () => {
+    vi.mocked(evaluateInboundPolicy).mockResolvedValue({
+      kind: 'drop',
+      state: { mutedUntil: null, policyKey: 'policy-1', reason: 'spam', state: 'muted_permanent' } as any
+    })
+    const sendMessage = vi.fn().mockResolvedValue({ messageId: 'om_policy' })
+
+    await handleInboundEvent(
+      'test',
+      {
+        channelType: 'lark',
+        sessionType: 'direct',
+        channelId: 'user_1',
+        messageId: 'om_muted',
+        senderId: 'user_1',
+        text: 'help',
+        raw: {}
+      },
+      { sendMessage } as any,
+      { type: 'lark', access: { admins: ['admin_1'] } },
+      'project',
+      [{
+        channelKey: 'test',
+        definition: {} as never,
+        entity: 'owo-demo',
+        external: { accountId: 'user_1', type: 'direct' },
+        ingress: {
+          ambientRouting: true,
+          createOnCommand: true,
+          createOnMention: true,
+          createOnPendingIntent: true,
+          createOnReplyToBot: true
+        },
+        moderation: { enabled: true },
+        name: 'direct-link',
+        path: '/workspace/.oo/channels/direct/channel.json',
+        routing: { accounts: {}, default: {}, modes: {}, users: {} }
+      }] as any
+    )
+
+    expect(evaluateInboundPolicy).toHaveBeenCalledOnce()
+    expect(vi.mocked(getDb).mock.results[0]?.value.createChannelIngressRouterRun).not.toHaveBeenCalled()
+    expect(vi.mocked(startAdapterSession)).not.toHaveBeenCalled()
   })
 
   it('does not execute a bare group command when command intent is disabled', async () => {
@@ -314,6 +474,56 @@ describe('channel handlers', () => {
     expect(ack).toHaveBeenCalledOnce()
     expect(unack).toHaveBeenCalledOnce()
     expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining('/help') }))
+  })
+
+  it('executes a registered command before treating the message as a pending interaction response', async () => {
+    const sendMessage = vi.fn().mockResolvedValue({ messageId: 'om_help' })
+    externalSessionStore.set('sess-pending', createSessionConnectionState())
+    getChannelSession.mockReturnValue({
+      channelId: 'chat_1',
+      channelKey: 'test',
+      channelType: 'lark',
+      replyReceiveId: 'chat_1',
+      replyReceiveIdType: 'chat_id',
+      senderId: 'admin_1',
+      sessionId: 'sess-pending',
+      sessionType: 'group'
+    })
+    setSessionInteraction('sess-pending', {
+      id: 'interaction-pending',
+      payload: {
+        kind: 'permission',
+        options: [{ label: 'Allow once', value: 'allow_once' }],
+        question: 'Allow this operation?',
+        sessionId: 'sess-pending'
+      }
+    })
+
+    try {
+      await handleInboundEvent(
+        'test',
+        {
+          channelType: 'lark',
+          sessionType: 'group',
+          channelId: 'chat_1',
+          messageId: 'om_help_while_pending',
+          senderId: 'admin_1',
+          text: '/help',
+          mentionedBot: true,
+          raw: {}
+        },
+        { sendMessage } as any,
+        { type: 'lark', access: { admins: ['admin_1'] } },
+        'project',
+        [makeGroupChannelLink({ ambientRouting: false, createOnCommand: true })] as any
+      )
+
+      expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining('/help') }))
+      expect(getSessionInteraction('sess-pending')).toEqual(expect.objectContaining({ id: 'interaction-pending' }))
+    } finally {
+      clearSessionInteraction('sess-pending', 'interaction-pending')
+      externalSessionStore.delete('sess-pending')
+    }
   })
 
   it('delivers interaction requests to the bound channel and attaches quick actions', async () => {
@@ -435,6 +645,67 @@ describe('channel handlers', () => {
         { content: 'cancel' }
       ]
     })
+  })
+
+  it('delivers group permission prompts privately to a credential subject in the same issuer', async () => {
+    const sendMessage = vi.fn().mockResolvedValue({ messageId: 'om_public' })
+    const sendPrivateMessage = vi.fn().mockResolvedValue({ messageId: 'om_dm' })
+    listChannelAccountsForUser.mockReturnValue([{ accountId: 'ou_owner', issuerKey: 'test' }])
+    vi.mocked(ensureChannelAuthorizationRequestForInteraction).mockReturnValue({
+      channelKey: 'test',
+      credentialSubjectUserId: 'user-owner',
+      id: 'auth-owner',
+      issuerKey: 'test',
+      requesterAccountId: 'ou_requester',
+      requesterUserId: 'user-requester'
+    } as any)
+    bindTestSession({ channelId: 'oc_1', senderId: 'ou_requester', sessionType: 'group' })
+
+    await handleSessionEvent(
+      makeRuntimeState({ sendMessage, sendPrivateMessage }),
+      'sess-1',
+      makeInteractionRequestEvent({ kind: 'permission', question: 'Owner approval is required.' })
+    )
+
+    expect(sendPrivateMessage).toHaveBeenCalledWith({ accountId: 'ou_owner', text: expect.any(String) })
+    expect(sendMessage).not.toHaveBeenCalled()
+    expect(markChannelAuthorizationRequestDelivered).toHaveBeenCalledWith(expect.objectContaining({
+      delivery: 'dm',
+      deliveryMessageId: 'om_dm',
+      id: 'auth-owner'
+    }))
+  })
+
+  it('uses only a throttled safe public hint when a distinct owner lacks a same-issuer account', async () => {
+    const sendMessage = vi.fn().mockResolvedValue({ messageId: 'om_hint' })
+    const sendPrivateMessage = vi.fn().mockResolvedValue({ messageId: 'om_unexpected' })
+    listChannelAccountsForUser.mockReturnValue([{ accountId: 'ou_other', issuerKey: 'lark:other-team' }])
+    vi.mocked(ensureChannelAuthorizationRequestForInteraction).mockReturnValue({
+      channelKey: 'test',
+      credentialSubjectUserId: 'user-owner',
+      id: 'auth-owner',
+      issuerKey: 'test',
+      requesterAccountId: 'ou_requester',
+      requesterUserId: 'user-requester'
+    } as any)
+    bindTestSession({ channelId: 'oc_1', senderId: 'ou_requester', sessionType: 'group' })
+
+    await handleSessionEvent(
+      makeRuntimeState({ sendMessage, sendPrivateMessage }),
+      'sess-1',
+      makeInteractionRequestEvent({ kind: 'permission', question: 'Owner secret scope is required.' })
+    )
+
+    expect(sendPrivateMessage).not.toHaveBeenCalled()
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      text: '有一项私密授权等待处理。请私聊机器人或打开 OneWorks 聊天室继续。'
+    }))
+    expect(sendMessage.mock.calls[0]?.[0]?.text).not.toContain('Owner secret scope')
+    expect(markChannelAuthorizationRequestDelivered).toHaveBeenCalledWith(expect.objectContaining({
+      delivery: 'public_hint',
+      deliveryMessageId: 'om_hint',
+      id: 'auth-owner'
+    }))
   })
 
   it('suppresses repeated permission interaction delivery inside the authorization throttle window', async () => {
@@ -586,7 +857,7 @@ describe('channel handlers', () => {
       expect.objectContaining({
         receiveId: 'chat_1',
         receiveIdType: 'chat_id',
-        text: expect.stringContaining('[权限请求]')
+        text: '有一项私密授权等待处理。请私聊机器人或打开 OneWorks 聊天室继续。'
       })
     )
     expect(sendMessage).toHaveBeenNthCalledWith(

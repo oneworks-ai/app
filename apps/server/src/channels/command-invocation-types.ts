@@ -1,3 +1,5 @@
+import type { ChannelExecutionContext } from '@oneworks/core'
+
 export interface ChannelCommandInvocationContext {
   actorAccountId?: string
   actorUserId?: string
@@ -6,6 +8,7 @@ export interface ChannelCommandInvocationContext {
   channelLinkName?: string
   channelType?: string
   entity?: string
+  executionContext?: ChannelExecutionContext
   messageId?: string
   replyReceiveId?: string
   replyReceiveIdType?: string
@@ -21,5 +24,7 @@ export interface ChannelCommandInvocationInput {
   context?: ChannelCommandInvocationContext
   input?: unknown
   invocationToken?: string
+  /** Stable for retries of one CLI/tool invocation; new intentional calls must use a new id. */
+  requestId?: string
   toolName: string
 }

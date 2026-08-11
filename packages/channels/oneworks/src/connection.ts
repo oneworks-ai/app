@@ -4,58 +4,29 @@ import type {
   ChannelConnection,
   ChannelConnectionOptions,
   ChannelEventHandlers,
-  ChannelInboundEvent,
+  ChannelNavigationReference,
   ChannelWebhookResponse
 } from '@oneworks/core/channel'
 import { defineCreateChannelConnection } from '@oneworks/core/channel'
 
-import { oneworksInboundWebhookSchema } from '#~/types.js'
 import type { OneWorksChannelConfig, OneWorksChannelMessage } from '#~/types.js'
-import { createWebhookNonceReservation, isLoopbackRequest, resolveSignedWebhook } from '#~/webhook-auth.js'
+import {
+  createWebhookNonceReservation,
+  isLoopbackRequest,
+  isProductSimulationRequest,
+  resolveSignedWebhook
+} from '#~/webhook-auth.js'
+import { normalizeInboundEvent } from './inbound.js'
 
-export interface OneWorksDebugOutboundMessage extends OneWorksChannelMessage {
+export interface OneWorksOutboundMessage extends OneWorksChannelMessage {
   createdAt: number
   messageId: string
   updatedAt?: number
 }
 
-export interface OneWorksDebugConnection extends ChannelConnection<OneWorksChannelMessage> {
-  clearDebugOutboundMessages: () => void
-  getDebugOutboundMessages: () => OneWorksDebugOutboundMessage[]
-}
-
-const resolveChannelId = (payload: { channelId?: string; roomId?: string; senderId: string; threadId?: string }) =>
-  payload.channelId ?? payload.roomId ?? payload.threadId ?? `direct:${payload.senderId}`
-
-const resolveSessionType = (payload: { roomId?: string; sessionType?: 'direct' | 'group' }) =>
-  payload.sessionType ?? (payload.roomId == null ? 'direct' : 'group')
-
-const normalizeInboundEvent = (payload: unknown, synthetic: boolean): ChannelInboundEvent | undefined => {
-  const parsed = oneworksInboundWebhookSchema.safeParse(payload)
-  if (!parsed.success) return undefined
-
-  const data = parsed.data
-  const channelId = resolveChannelId(data)
-  const sessionType = resolveSessionType(data)
-  return {
-    channelType: 'oneworks',
-    sessionType,
-    channelId,
-    senderId: synthetic ? `oneworks-simulation:${data.senderId}` : data.senderId,
-    messageId: data.messageId ?? `oneworks-in-${randomUUID()}`,
-    text: data.text,
-    threadId: data.threadId,
-    replyTo: data.replyTo ?? {
-      receiveId: channelId,
-      receiveIdType: sessionType === 'group' ? 'room' : 'direct'
-    },
-    raw: {
-      ...data,
-      contentItems: data.contentItems,
-      mentions: data.mentions,
-      source: 'oneworks-native'
-    }
-  }
+export interface OneWorksConnection extends ChannelConnection<OneWorksChannelMessage> {
+  clearLocalOutboxMessages: () => void
+  getLocalOutboxMessages: () => OneWorksOutboundMessage[]
 }
 
 const createWebhookResponse = (statusCode: number, body: Record<string, unknown>): ChannelWebhookResponse => ({
@@ -66,23 +37,55 @@ const createWebhookResponse = (statusCode: number, body: Record<string, unknown>
 export const createChannelConnection = defineCreateChannelConnection(async (
   config: OneWorksChannelConfig,
   options?: ChannelConnectionOptions
-): Promise<OneWorksDebugConnection> => {
+): Promise<OneWorksConnection> => {
   let handlers: ChannelEventHandlers | undefined
-  const outboundMessages: OneWorksDebugOutboundMessage[] = []
+  const outboundMessages: OneWorksOutboundMessage[] = []
   const logger = options?.logger
   const reserveWebhookNonce = createWebhookNonceReservation(options)
+  const channelKey = options?.channelKey ?? 'default'
+  const navigation: ChannelNavigationReference | undefined = config.serverBaseUrl == null
+    ? undefined
+    : { appHomeUrl: config.serverBaseUrl, embeddable: true }
+
+  const persistOutbound = async (message: OneWorksOutboundMessage) => {
+    await options?.outboundStore?.upsert({
+      channelKey,
+      channelType: 'oneworks',
+      createdAt: message.createdAt,
+      messageId: message.messageId,
+      receiveId: message.receiveId,
+      receiveIdType: message.receiveIdType,
+      text: message.text,
+      updatedAt: message.updatedAt
+    })
+  }
 
   return {
     sendMessage: async (message) => {
       const messageId = `oneworks-out-${randomUUID()}`
-      outboundMessages.push({ ...message, createdAt: Date.now(), messageId })
+      const outbound = { ...message, createdAt: Date.now(), messageId }
+      outboundMessages.push(outbound)
+      await persistOutbound(outbound)
       await logger?.debug?.({
         channelType: 'oneworks',
         messageId,
         receiveId: message.receiveId,
         receiveIdType: message.receiveIdType
       }, '[oneworks-channel] outbound message recorded')
-      return { messageId }
+      return { messageId, ...(navigation != null ? { navigation } : {}) }
+    },
+    sendPrivateMessage: async ({ accountId, text }) => {
+      const messageId = `oneworks-out-${randomUUID()}`
+      const outbound = {
+        createdAt: Date.now(),
+        messageId,
+        receiveId: accountId,
+        receiveIdType: 'direct',
+        text
+      }
+      outboundMessages.push(outbound)
+      await persistOutbound(outbound)
+      return { messageId, ...(navigation != null ? { navigation } : {}) }
     },
     updateMessage: async (messageId, message) => {
       const index = outboundMessages.findIndex(item => item.messageId === messageId)
@@ -96,10 +99,11 @@ export const createChannelConnection = defineCreateChannelConnection(async (
       } else {
         outboundMessages.push({ ...message, createdAt: Date.now(), messageId })
       }
-      return { messageId }
+      await persistOutbound(outboundMessages.find(item => item.messageId === messageId)!)
+      return { messageId, ...(navigation != null ? { navigation } : {}) }
     },
-    getDebugOutboundMessages: () => outboundMessages.map(message => ({ ...message })),
-    clearDebugOutboundMessages: () => {
+    getLocalOutboxMessages: () => outboundMessages.map(message => ({ ...message })),
+    clearLocalOutboxMessages: () => {
       outboundMessages.splice(0)
     },
     handleWebhook: async (request) => {
@@ -108,6 +112,7 @@ export const createChannelConnection = defineCreateChannelConnection(async (
         config.webhookSecret == null &&
         config.allowInsecureWebhooks === true &&
         isLoopbackRequest(request)
+      const productSimulation = signed && isProductSimulationRequest(request)
       if (!signed && !insecureSimulation) {
         return createWebhookResponse(401, { error: 'unauthorized' })
       }
@@ -116,9 +121,16 @@ export const createChannelConnection = defineCreateChannelConnection(async (
         return createWebhookResponse(503, { error: 'oneworks native channel is not receiving' })
       }
 
-      const event = normalizeInboundEvent(request.body, insecureSimulation)
+      const event = normalizeInboundEvent(
+        request.body,
+        productSimulation ? 'product_simulation' : insecureSimulation ? 'insecure_simulation' : 'native',
+        navigation
+      )
       if (event == null) {
         return createWebhookResponse(400, { error: 'invalid oneworks native channel payload' })
+      }
+      if (productSimulation && event.synthetic == null) {
+        return createWebhookResponse(400, { error: 'product simulation metadata is required' })
       }
 
       const nonceReservation = signed ? await reserveWebhookNonce(request, Date.now()) : undefined

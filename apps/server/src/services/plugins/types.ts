@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- plugin runtime facade contracts stay colocated for host and package parity. */
 import type { Buffer } from 'node:buffer'
 import type { IncomingHttpHeaders } from 'node:http'
 
@@ -8,13 +9,18 @@ import type {
   PluginContributionManifest as SharedPluginContributionManifest,
   PluginLocalizedText,
   PluginNativeMetadata,
+  PluginRequestPermission,
+  PluginRequestPrincipal,
   PluginRuntimeApiRegistration,
   PluginRuntimeChannelInvocation,
   PluginRuntimeChannelRequest,
   PluginRuntimeEndpoint,
   PluginRuntimeSource,
   PluginRuntimeSourceGroup,
-  PluginServerRuntimeRole
+  PluginServerRuntimeRole,
+  RelayRoomDescriptor,
+  RelayRoomLiveRequest,
+  SharedAgentRoomDirectoryEntry
 } from '@oneworks/types'
 
 export const PLUGIN_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/
@@ -128,6 +134,7 @@ export interface PluginProxyRequest {
   query: string
   headers: IncomingHttpHeaders
   body: Buffer
+  principal: PluginRequestPrincipal
 }
 
 export interface PluginProxyResponse {
@@ -153,6 +160,24 @@ export interface PluginApiRegistration extends PluginApiDocumentation {
   proxy?: {
     target: string
   }
+  requiredPermission?: PluginRequestPermission
+}
+
+export class PluginProxyPermissionError extends Error {
+  constructor(readonly permission: PluginRequestPermission) {
+    super(`Plugin API requires the "${permission}" permission.`)
+    this.name = 'PluginProxyPermissionError'
+  }
+}
+
+export const requirePluginRequestPermission = (
+  principal: PluginRequestPrincipal | undefined,
+  permission: PluginRequestPermission
+) => {
+  const permissions = principal?.permissions ?? []
+  const allowed = permissions.includes(permission) ||
+    (permission === 'workspace:read' && permissions.includes('workspace:manage'))
+  if (!allowed) throw new PluginProxyPermissionError(permission)
 }
 
 export interface PluginSessionSubmitInput {
@@ -165,6 +190,38 @@ export interface PluginSessionSubmitInput {
 export interface PluginSessionAdapter {
   listSessions: () => unknown[] | Promise<unknown[]>
   submitMessage: (input: PluginSessionSubmitInput) => unknown | Promise<unknown>
+}
+
+export interface PluginOneWorksChannelFacade {
+  createRoomShare: (principal: PluginRequestPrincipal, roomId: string, input: unknown) => Promise<unknown>
+  createScenario: (principal: PluginRequestPrincipal, input: unknown) => Promise<unknown>
+  deleteScenario: (principal: PluginRequestPrincipal, scenarioRef: string) => Promise<boolean>
+  getTrace: (principal: PluginRequestPrincipal, limit?: unknown) => Promise<unknown>
+  injectSimulation: (principal: PluginRequestPrincipal, input: unknown) => Promise<unknown>
+  listRooms: (principal: PluginRequestPrincipal) => Promise<unknown>
+  listShareOwners: (principal: PluginRequestPrincipal) => Promise<unknown>
+  listShares: (principal: PluginRequestPrincipal) => Promise<unknown>
+  listSharedRooms: (principal: PluginRequestPrincipal) => Promise<unknown>
+  listSimulationTargets: (principal: PluginRequestPrincipal) => Promise<unknown>
+  listScenarios: (principal: PluginRequestPrincipal) => Promise<unknown>
+  runScenario: (principal: PluginRequestPrincipal, scenarioRef: string) => Promise<unknown>
+  revokeRoomShare: (principal: PluginRequestPrincipal, roomId: string, shareRef: string) => Promise<boolean>
+  updateScenario: (principal: PluginRequestPrincipal, scenarioRef: string, input: unknown) => Promise<unknown>
+}
+
+export interface PluginRoomRelayFacade {
+  handleRequest: (request: RelayRoomLiveRequest, ownerSourceId: string) => Promise<unknown>
+  registerDirectoryClient: (client: {
+    listVisible: () => Promise<SharedAgentRoomDirectoryEntry[]>
+  }) => () => void
+  registerTunnel: (
+    tunnel: {
+      isConnected: () => boolean
+      publishDescriptor: (descriptor: RelayRoomDescriptor) => boolean
+      subscribeConnection: (listener: (connected: boolean) => void) => () => void
+    },
+    owner: { ownerDeviceId: string; ownerLabel?: string; ownerSourceId: string; ownerUserId: string }
+  ) => void
 }
 
 export interface PluginServerContext {
@@ -180,6 +237,8 @@ export interface PluginServerContext {
   projectHome: string
   options: Record<string, unknown>
   sessions?: PluginSessionAdapter
+  oneworksChannel?: PluginOneWorksChannelFacade
+  roomTunnel?: PluginRoomRelayFacade
   logger: {
     info: (...args: unknown[]) => void
     warn: (...args: unknown[]) => void

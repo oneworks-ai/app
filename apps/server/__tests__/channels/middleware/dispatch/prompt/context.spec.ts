@@ -26,6 +26,26 @@ describe('buildChannelContextPrompt', () => {
     expect(result).toContain('你在此频道上的名字是「MyBot」。')
   })
 
+  it('frames product simulation identity as context without granting permissions', () => {
+    const result = buildChannelContextPrompt(
+      makeInbound({
+        channelType: 'oneworks',
+        synthetic: {
+          actorRole: 'admin',
+          kind: 'product_simulation',
+          userLabel: 'Scenario Admin'
+        }
+      }) as any,
+      undefined
+    )
+
+    expect(result).toContain('OneWorks 聊天室')
+    expect(result).toContain('Scenario Admin')
+    expect(result).toContain('场景角色为「管理员」')
+    expect(result).toContain('不授予任何真实权限')
+    expect(result).toContain('当前调用者和频道权限检查')
+  })
+
   it('omits bot name line when config.title is absent', () => {
     const result = buildChannelContextPrompt(makeInbound() as any, {} as any)
     expect(result).not.toContain('名字')
@@ -130,7 +150,7 @@ describe('buildChannelContextPrompt', () => {
     expect(result).toContain('oneworks channel command list')
     expect(result).toContain('oneworks channel command invoke channel.auth.list')
     expect(result).toContain('oneworks channel command invoke channel.auth.grant')
-    expect(result).toContain('按当前消息发送者的身份和频道管理员配置执行')
+    expect(result).toContain('按当前消息发送者的身份和OneWorks 频道员配置执行')
     expect(result).toContain('不能改成机器人、老板或当前 CLI 登录账号')
     expect(result).toContain('不会自动发到外部频道')
   })
@@ -149,8 +169,9 @@ describe('buildChannelContextPrompt', () => {
     expect(result).toContain('先用 `oneworks mem get`、`oneworks mem get -s user` 或 `oneworks mem list` 查小本本')
     expect(result).toContain('不要只靠猜')
     expect(result).toContain(
-      '结束前用 `oneworks mem patch`、`oneworks mem patch -s user` 或 `oneworks mem patch -s session` 写一条简短记录'
+      '`oneworks mem patch -s entity` 或 `oneworks mem patch -s conversation` 写一条简短记录'
     )
+    expect(result).toContain('当前物理子会话的临时工作信息，不用于跨轮连续记忆')
     expect(result).toContain('Chat History 里应该能看到真实的 `oneworks mem` CLI 调用记录')
   })
 

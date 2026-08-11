@@ -37,8 +37,7 @@ Lark / 飞书频道使用开发者后台里的自建机器人应用接入。最�
 
 - 区分「通道机器人应用」和「CLI 操作用应用」。通道配置里的 `appId` / `appSecret` 应指向真正负责监听和回复的机器人；群创建、拉人、查成员、发用户消息等 CLI 操作应固定使用一个专门的 `lark-cli --profile`，不要临时借用当前 active profile。若状态显示 `needs_refresh`，但仍有 `offline_access` 且 refresh token 未过期，下一次用户身份 API 调用通常会自动刷新，不一定需要重新扫码。
 - 角色矩阵演示时，可以创建多个机器人作为群成员，但通常只把一个演示服务机器人接到 One Works channel，避免凭证、事件订阅和回复身份互相混淆。如果每个角色都要独立回复，则每个 bot app 都需要独立的 channel key 与 `appId` / `appSecret`；同一角色进入多个群时复用同一个实体，并为每个 `bot app × chat` 建立一个 ChannelLink，一个 channel key 不应跨实体复用。
-- 在多机器人群里，结构化 `@` 只会触发被点名的机器人，`@` 其它机器人会关闭失败。完全没有 `@` 的 slash command 仍按 ChannelLink 的 `createOnCommand` 处理；如果群内多个 bot 都开启该入口，一条裸命令可能被多个 bot 接收。此时应关闭不需要的 `createOnCommand`，或在实现“群命令必须 `@` 当前 bot”的显式策略后再开启。
-- 同一实体的多个 ChannelLink 会复用角色定义和提示词，但不会自动获得跨群学习记忆；跨群记忆还需要单独实现并验证实体维度的加载与写回。
+- 在多机器人群里，结构化 `@` 只会触发被点名的机器人，`@` 其它机器人会关闭失败。完全没有 `@` 的 slash command 仍按 ChannelLink 的 `createOnCommand` 处理；如果群内多个 bot 都开启该入口，一条裸命令可能被多个 bot 接收。此时应关闭不需要的 `createOnCommand`，或在实现“群命令必须 `@` 当前 bot”的显式策略后再开启。同一实体的多个 ChannelLink 会复用角色定义和实体级结构化记忆；channel、conversation 和 user 记忆仍保留来源 channel key、会话类型和可见性边界，私聊内容不会因为实体复用而进入群聊 snapshot。
 - 外部群链路要同时满足三件事：目标群是外部群，机器人发布版本允许加入外部群，执行成员管理的 CLI 应用本身也具备对应外部群能力。只配置被邀请机器人不够；创建群后应立刻确认群确实是外部群，误建内部群时建议解散并重新创建外部群。若成员管理返回 `232033`，应优先检查当前 CLI profile 对应应用的外部群能力。
 - 需要批量核对企业自建应用的 App ID 时，可为专用 CLI 应用申请 `admin:app.info:readonly` 并发布，然后调用 `GET /open-apis/application/v6/applications`。该管理员读取权限应留在 CLI 操作用应用，不要扩散到每个角色机器人。
 - 修改项目的 channel 配置文件后，正在运行的 server 可能仍持有旧的长连接；同一个 bot app 也不要同时连接多个旧 worktree 或遗留 server，否则飞书可能把事件交给任意一条连接。排查时用 `pnpm --silent tools dev-service status <target> --json` 确认服务归属，并在得到对应 target 的停止授权后退出旧服务、重启或确认 channel 已重新连接，再做真实群消息验证。
@@ -85,6 +84,8 @@ OneWorks 内置 `oneworks` channel type，用于产品内房间、演示空间�
   }
 }
 ```
+
+开启 `ambientRouting` 并使用模型判断普通群聊时，应单独配置 `ingress.routerAdapter` 和 `ingress.routerModel`。当前只有 Gemini 实现了可证明不加载工具、MCP 和 skill 的 `structured_no_tools` 路由档位；其它 adapter 会关闭失败为 `observe`，不会创建子会话。业务 ChildSession 的 adapter 仍由 `routing` 独立选择。
 
 本地模拟优先使用 CLI 注入 native 入站事件：
 

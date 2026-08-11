@@ -46,13 +46,16 @@ import {
 import { resolveGlobalOneWorksDir, resolveProjectOoPath } from '@oneworks/utils/ai-path'
 import type { ResolvedPluginInstance } from '@oneworks/utils/plugin-resolver'
 
+import { createAgentRoomRelayFacade } from '#~/services/agent-room/relay.js'
 import { loadConfigState } from '#~/services/config/index.js'
 import { listLauncherWorkspaceRuntimeEndpoints } from '#~/services/launcher/manager.js'
+import { createOneWorksChannelFacade } from '#~/services/oneworks-channel/index.js'
 import { logger } from '#~/utils/logger.js'
 
 import { compilePluginClientSource } from './client-source-compiler.js'
 import type { CompiledPluginClientSource } from './client-source-compiler.js'
 import { discoverPluginInstances } from './discovery.js'
+import { hasFirstPartyPluginCapability } from './first-party-capabilities.js'
 import type { ManagedPluginRuntimeIdentity } from './managed-plugin-runtime-identity.js'
 import { loadPluginRuntimeManifest, resolvePluginClientAssetRoot, resolvePluginServerEntryPath } from './manifest.js'
 import { isLoopbackProxyTarget, proxyToLoopbackTarget } from './proxy.js'
@@ -69,7 +72,7 @@ import type {
   PluginRuntimeManifest,
   PluginServerContext
 } from './types.js'
-import { PLUGIN_ID_PATTERN } from './types.js'
+import { PLUGIN_ID_PATTERN, requirePluginRequestPermission } from './types.js'
 
 const nodeRequire = createRequire(__filename)
 
@@ -1064,6 +1067,7 @@ const CLI_COMMAND_ROUTE_SHAPE: PublicContributionRouteShape = {
   children: { i18n: I18N_ROUTE_SHAPE }
 }
 const CONTRIBUTION_KEYS = new Set([
+  'channelNavigation',
   'chatHeaderActions',
   'chatHeaderMoreMenu',
   'chatInteractionPanelEmptyActions',
@@ -1093,6 +1097,10 @@ const CONTRIBUTION_KEYS = new Set([
 const CONTRIBUTION_ROUTE_SHAPE: PublicContributionRouteShape = {
   allowedKeys: CONTRIBUTION_KEYS,
   children: {
+    channelNavigation: {
+      allowedKeys: contributionKeySet(BASE_CONTRIBUTION_KEYS, ['id', 'optionsKey', 'priority']),
+      children: BASE_CONTRIBUTION_CHILDREN
+    },
     chatHeaderActions: {
       allowedKeys: contributionKeySet(BASE_CONTRIBUTION_KEYS, ['command', 'icon', 'id', 'title']),
       children: BASE_CONTRIBUTION_CHILDREN
@@ -2499,6 +2507,7 @@ export class PluginManager {
     if (api == null) {
       throw new Error(`Plugin API "${scope}/${apiId}" is not registered.`)
     }
+    requirePluginRequestPermission(request.principal, api.requiredPermission ?? 'workspace:read')
     if (api.handler != null) {
       return await api.handler(request)
     }
@@ -2588,19 +2597,24 @@ export class PluginManager {
     return await handler({ resultId, providerId, itemId, action: 'invoke' })
   }
 
-  async createProxyRequest(ctx: {
-    method: string
-    path: string
-    querystring: string
-    headers: NodeJS.Dict<string | string[]>
-    req: NodeJS.ReadableStream
-  }, pathValue: string): Promise<PluginProxyRequest> {
+  async createProxyRequest(
+    ctx: {
+      method: string
+      path: string
+      querystring: string
+      headers: NodeJS.Dict<string | string[]>
+      req: NodeJS.ReadableStream
+    },
+    pathValue: string,
+    principal: PluginProxyRequest['principal']
+  ): Promise<PluginProxyRequest> {
     return {
       method: ctx.method,
       path: pathValue,
       query: ctx.querystring === '' ? '' : `?${ctx.querystring}`,
       headers: ctx.headers,
-      body: await readRequestBody(ctx.req)
+      body: await readRequestBody(ctx.req),
+      principal
     }
   }
 
@@ -3459,6 +3473,11 @@ export class PluginManager {
   private createServerContext(record: RuntimeRecord): PluginServerContext {
     const scope = record.instance.scope
     const runtimeEndpoint = this.getRuntimeEndpoint()
+    const roomRelay = hasFirstPartyPluginCapability(record.instance, record.manifest, 'roomRelay') &&
+        runtimeEndpoint.role === 'workspace'
+      ? createAgentRoomRelayFacade()
+      : undefined
+    if (roomRelay != null) record.disposables.push(roomRelay.dispose)
     return {
       scope,
       pluginRoot: record.instance.pluginRoot,
@@ -3466,6 +3485,11 @@ export class PluginManager {
       projectHome: this.projectHome,
       options: record.instance.options ?? {},
       sessions: createPluginSessionAdapter(),
+      ...(hasFirstPartyPluginCapability(record.instance, record.manifest, 'oneworksChannel') &&
+          runtimeEndpoint.role === 'workspace'
+        ? { oneworksChannel: createOneWorksChannelFacade() }
+        : {}),
+      ...(roomRelay == null ? {} : { roomTunnel: roomRelay }),
       logger,
       runtime: {
         endpoint: runtimeEndpoint,

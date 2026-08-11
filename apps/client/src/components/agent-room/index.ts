@@ -1,6 +1,11 @@
 export { AgentRoomRoster } from './@components/AgentRoomRoster'
 export { buildAgentRoomViewModel } from './@core/build-room-view-model'
 export {
+  getDefaultChannelNavigationPreferences,
+  listChannelNavigationActions,
+  resolveChannelNavigationPreferences
+} from './@core/channel-navigation'
+export {
   createAgentRoomSenderSubmit,
   getAgentRoomMemberMention,
   getAgentRoomMentionCompletions,
@@ -12,6 +17,7 @@ export type {
   AgentRoomApprovalBatchActionView,
   AgentRoomApprovalBatchItemView,
   AgentRoomApprovalBatchView,
+  AgentRoomChannelReferenceView,
   AgentRoomComputedViewModel,
   AgentRoomInteractionRequestView,
   AgentRoomLayoutMode,

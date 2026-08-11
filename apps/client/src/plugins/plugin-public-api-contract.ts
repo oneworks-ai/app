@@ -39,6 +39,7 @@ const API_MODES = new Set(['handler', 'proxy'])
 const RUNTIME_STATUSES = new Set(['offline', 'online', 'unknown'])
 const CLI_COMMAND_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/u
 const CONTRIBUTION_KEYS = new Set([
+  'channelNavigation',
   'chatHeaderActions',
   'chatHeaderMoreMenu',
   'chatInteractionPanelEmptyActions',

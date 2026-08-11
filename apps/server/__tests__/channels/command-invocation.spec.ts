@@ -19,11 +19,14 @@ vi.mock('#~/services/adapter-accounts.js', () => ({
 
 vi.mock('#~/services/session/index.js', () => ({
   killSession: vi.fn(),
+  processUserMessage: vi.fn(),
   startAdapterSession: vi.fn().mockResolvedValue(undefined)
 }))
 
 vi.mock('#~/services/session/interaction.js', () => ({
-  handleInteractionResponse: vi.fn().mockResolvedValue(true)
+  getSessionInteraction: vi.fn(),
+  handleInteractionResponse: vi.fn().mockResolvedValue(true),
+  notifySessionUpdated: vi.fn()
 }))
 
 vi.mock('#~/services/channel-resume/index.js', () => ({
@@ -41,8 +44,10 @@ vi.mock('#~/services/session/workspace.js', () => ({
 
 const createChannelCommandRun = vi.fn()
 const finishChannelCommandRun = vi.fn()
+const finishChannelOutboundOperation = vi.fn()
 const getChannelAuthorizationRequest = vi.fn()
 const getChannelChildSessionRun = vi.fn()
+const getChannelCommandRun = vi.fn()
 const getChannelIdentityLink = vi.fn()
 const getChannelPreference = vi.fn()
 const getChannelSession = vi.fn()
@@ -58,11 +63,12 @@ const listPendingChannelAuthorizationRequestsForUser = vi.fn()
 const resolveCanonicalUserByChannelAccount = vi.fn()
 const resolveChannelAuthorizationRequestRecord = vi.fn()
 const updateChannelAuthorizationRequest = vi.fn()
+const updateChannelCommandRunMetadata = vi.fn()
 const updateChannelPendingIntent = vi.fn()
 const upsertChannelAccount = vi.fn()
 const upsertChannelPreference = vi.fn()
 
-const makeState = (): ChannelRuntimeState => ({
+const makeState = (connection?: ChannelRuntimeState['connection']): ChannelRuntimeState => ({
   key: 'lark-main',
   type: 'lark',
   status: 'connected',
@@ -73,6 +79,7 @@ const makeState = (): ChannelRuntimeState => ({
     }
   },
   configSource: 'project',
+  connection,
   channelLinks: [
     {
       channelKey: 'lark-main',
@@ -82,8 +89,16 @@ const makeState = (): ChannelRuntimeState => ({
         chatId: 'oc_1',
         type: 'chat'
       },
+      ingress: {
+        ambientRouting: false,
+        createOnCommand: true,
+        createOnMention: true,
+        createOnPendingIntent: true,
+        createOnReplyToBot: true
+      },
       name: 'wan-ke-chat',
-      path: '/workspace/.oo/channels/wan-ke-chat/channel.json'
+      path: '/workspace/.oo/channels/wan-ke-chat/channel.json',
+      routing: { accounts: {}, default: {}, modes: {}, users: {} }
     }
   ]
 })
@@ -94,6 +109,9 @@ const makeInvocationToken = () =>
     childRunId: 'child-run-1',
     sessionId: 'sess-1'
   })
+
+const activeChildRunStatuses = ['started', 'dispatched', 'running'] as const
+const terminalChildRunStatuses = ['completed', 'blocked', 'failed', 'expired'] as const
 
 const makeChildRun = (overrides: Record<string, unknown> = {}) => ({
   actorAccountId: 'admin1',
@@ -186,14 +204,23 @@ beforeEach(() => {
   listChannelUserCredentials.mockReturnValue([])
   createChannelCommandRun.mockReturnValue({ id: 'cmd-run-1', status: 'started' })
   finishChannelCommandRun.mockReturnValue({ id: 'cmd-run-1', status: 'success' })
+  getChannelCommandRun.mockReturnValue({
+    id: 'cmd-run-1',
+    metadata: { effect: { effect: 'external-write', operation: 'channel.send' } }
+  })
+  finishChannelOutboundOperation.mockReturnValue({ operationId: 'operation-1', status: 'sent' })
   getChannelAuthorizationRequest.mockReturnValue({
+    allowedApprovers: ['user:user-admin', 'account:lark-main:admin1'],
     capability: 'im.chat.member.add',
+    channelId: 'oc_1',
+    channelKey: 'lark-main',
     channelLinkName: 'wan-ke-chat',
     channelType: 'lark',
     createdAt: 1,
     credentialKey: null,
     expiresAt: null,
     id: 'auth-1',
+    issuerKey: 'lark-main',
     message: '拉群',
     metadata: {
       allowedApproverRefs: ['admin1', 'user-admin'],
@@ -225,12 +252,18 @@ beforeEach(() => {
     }
   ])
   vi.mocked(getDb).mockReturnValue({
+    claimChannelOutboundOperation: vi.fn(input => ({
+      claimed: true,
+      operation: { operationId: input.operationId, status: 'pending' }
+    })),
     createChannelCommandRun,
     deleteChannelSession: vi.fn(),
     deleteChannelSessionBySessionId: vi.fn(),
     finishChannelCommandRun,
+    finishChannelOutboundOperation,
     getChannelAuthorizationRequest,
     getChannelChildSessionRun,
+    getChannelCommandRun,
     getChannelIdentityLink,
     getChannelPreference,
     getChannelSession,
@@ -246,6 +279,7 @@ beforeEach(() => {
     resolveCanonicalUserByChannelAccount,
     resolveChannelAuthorizationRequest: resolveChannelAuthorizationRequestRecord,
     updateChannelAuthorizationRequest,
+    updateChannelCommandRunMetadata,
     updateChannelPendingIntent,
     updateSession: vi.fn(),
     updateSessionArchivedWithChildren: vi.fn(),
@@ -256,6 +290,80 @@ beforeEach(() => {
 })
 
 describe('invokeChannelCommandForState', () => {
+  it.each(activeChildRunStatuses)(
+    'sends through an active %s child-run sender context without channel-specific approval',
+    async status => {
+      const sendMessage = vi.fn().mockResolvedValue({ messageId: 'om_sent' })
+      getChannelChildSessionRun.mockReturnValueOnce(makeChildRun({ status }))
+
+      const result = await invokeChannelCommandForState(makeState({ sendMessage }), {
+        input: {
+          message: 'done',
+          target: {
+            channelId: 'oc_release',
+            channelKey: 'lark-main',
+            channelType: 'lark',
+            receiveId: 'oc_release',
+            receiveIdType: 'chat_id'
+          }
+        },
+        invocationToken: makeInvocationToken(),
+        toolName: 'channel.send'
+      })
+
+      expect(result).toMatchObject({
+        ok: true,
+        result: { commandPath: ['/send'], source: 'natural_language', status: 'success' }
+      })
+      expect(sendMessage).toHaveBeenCalledWith({
+        receiveId: 'oc_release',
+        receiveIdType: 'chat_id',
+        text: 'done'
+      })
+      expect(createChannelCommandRun).toHaveBeenCalledWith(expect.objectContaining({
+        actorAccountId: 'admin1',
+        actorUserId: 'user-admin',
+        metadata: expect.objectContaining({
+          authorization: { status: 'allow', strategy: 'sender-permission' },
+          effect: expect.objectContaining({ effect: 'external-write', operation: 'channel.send' })
+        }),
+        senderId: 'admin1'
+      }))
+      expect(createChannelCommandRun.mock.calls[0]?.[0]?.metadata).not.toHaveProperty('approval')
+    }
+  )
+
+  it.each(terminalChildRunStatuses)(
+    'rejects external writes from a terminal %s child run',
+    async status => {
+      const sendMessage = vi.fn().mockResolvedValue({ messageId: 'om_sent' })
+      getChannelChildSessionRun.mockReturnValueOnce(makeChildRun({ status }))
+
+      const result = await invokeChannelCommandForState(makeState({ sendMessage }), {
+        input: {
+          message: 'done',
+          target: {
+            channelId: 'oc_release',
+            channelKey: 'lark-main',
+            channelType: 'lark',
+            receiveId: 'oc_release',
+            receiveIdType: 'chat_id'
+          }
+        },
+        invocationToken: makeInvocationToken(),
+        toolName: 'channel.send'
+      })
+
+      expect(result).toMatchObject({
+        ok: false,
+        statusCode: 403,
+        message: expect.stringContaining('authority is unavailable or inconsistent')
+      })
+      expect(sendMessage).not.toHaveBeenCalled()
+      expect(createChannelCommandRun).not.toHaveBeenCalled()
+    }
+  )
+
   it('invokes channel command tools with the current sender as actor', async () => {
     const result = await invokeChannelCommandForState(makeState(), {
       input: {
@@ -309,7 +417,7 @@ describe('invokeChannelCommandForState', () => {
       commandPath: ['/auth', 'grant'],
       entity: 'owo-demo',
       messageId: 'om_1',
-      permission: 'admin',
+      permission: 'everyone',
       rawArgs: ['auth-1'],
       senderId: 'admin1',
       sessionType: 'group',
@@ -470,7 +578,7 @@ describe('invokeChannelCommandForState', () => {
     expect(updateChannelAuthorizationRequest).not.toHaveBeenCalled()
   })
 
-  it('does not let non-admin senders perform admin command tools', async () => {
+  it('does not let an unlisted sender resolve a request through forged command context', async () => {
     getChannelChildSessionRun.mockReturnValueOnce(makeChildRun({
       actorAccountId: 'user1',
       actorUserId: 'user-regular',
@@ -501,15 +609,13 @@ describe('invokeChannelCommandForState', () => {
 
     expect(result).toMatchObject({
       ok: true,
-      replies: ['您没有权限执行该操作，只有管理员才能执行该指令。'],
+      replies: ['授权请求 auth-1 不属于当前频道、当前审批人，或已经处理。'],
       result: {
         commandPath: ['/auth', 'grant'],
-        status: 'denied'
+        status: 'success'
       }
     })
     expect(updateChannelAuthorizationRequest).not.toHaveBeenCalled()
-    expect(finishChannelCommandRun).toHaveBeenCalledWith('cmd-run-1', {
-      status: 'denied'
-    })
+    expect(resolveChannelAuthorizationRequestRecord).not.toHaveBeenCalled()
   })
 })

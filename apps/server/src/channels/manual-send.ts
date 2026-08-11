@@ -11,6 +11,7 @@ import type {
   ChannelTextMention
 } from '@oneworks/core/channel'
 import { MAX_CHANNEL_TEXT_MESSAGE_LENGTH, countChannelTextMessageCharacters } from '@oneworks/core/channel'
+import type { ChannelDeliveryTarget, ChannelNavigationReference } from '@oneworks/types'
 import { findChannelEmojiRegistryEntry } from '@oneworks/utils'
 
 import { resolveChannelMemoryRoot } from '#~/services/session/channel-context.js'
@@ -44,8 +45,30 @@ export interface SendManualChannelMessageInput {
   sessionId?: string
 }
 
+/**
+ * The shared outbound kernel used by the typed command runtime and the legacy
+ * HTTP/CLI transport. It deliberately accepts one resolved target only: a
+ * caller that wants to reach another conversation must invoke it again.
+ */
+export interface ExecuteChannelSendInput {
+  channelKey: string
+  channelType: string
+  config?: ChannelRuntimeState['config']
+  connection?: ChannelRuntimeState['connection']
+  cwd?: string
+  mentions?: unknown
+  payload: unknown
+  sessionId?: string
+  target: Pick<ChannelDeliveryTarget, 'receiveId' | 'receiveIdType'>
+}
+
 export type SendManualChannelMessageResult =
-  | { ok: true; messageId?: string; type: ManualPayloadType }
+  | {
+    ok: true
+    messageId?: string
+    navigation?: ChannelNavigationReference
+    type: ManualPayloadType
+  }
   | { ok: false; message: string; statusCode: number }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
@@ -312,12 +335,10 @@ const mergeMentions = (...groups: Array<ChannelTextMention[] | undefined>) => {
   return merged.length === 0 ? undefined : merged
 }
 
-export const sendManualChannelMessage = async (
-  states: Map<string, ChannelRuntimeState>,
-  input: SendManualChannelMessageInput
+export const executeChannelSend = async (
+  input: ExecuteChannelSendInput
 ): Promise<SendManualChannelMessageResult> => {
-  const state = states.get(input.channelKey)
-  if (state?.connection == null) {
+  if (input.connection == null) {
     return {
       ok: false,
       statusCode: 404,
@@ -326,7 +347,7 @@ export const sendManualChannelMessage = async (
   }
 
   const sessionId = trimNonEmpty(input.sessionId)
-  if (sessionId != null && state.config?.silentSessions?.includes(sessionId) === true) {
+  if (sessionId != null && input.config?.silentSessions?.includes(sessionId) === true) {
     return {
       ok: false,
       statusCode: 403,
@@ -334,7 +355,7 @@ export const sendManualChannelMessage = async (
     }
   }
 
-  const receiveId = trimNonEmpty(input.receiveId)
+  const receiveId = trimNonEmpty(input.target.receiveId)
   if (receiveId == null) {
     return {
       ok: false,
@@ -343,7 +364,7 @@ export const sendManualChannelMessage = async (
     }
   }
 
-  const receiveIdType = trimNonEmpty(input.receiveIdType) ?? 'chat_id'
+  const receiveIdType = trimNonEmpty(input.target.receiveIdType) ?? 'chat_id'
   const payload = parsePayload(input.payload)
   if ('error' in payload) {
     return {
@@ -372,12 +393,17 @@ export const sendManualChannelMessage = async (
         receiveIdType,
         text: payload.text ?? ''
       }
-      const result = await state.connection.sendMessage(message)
-      return { ok: true, type: 'text', messageId: result?.messageId }
+      const result = await input.connection.sendMessage(message)
+      return {
+        ok: true,
+        type: 'text',
+        messageId: result?.messageId,
+        ...(result?.navigation != null ? { navigation: result.navigation } : {})
+      }
     }
 
     if (payload.type === 'emoji') {
-      if (state.connection.sendEmojiMessage == null) {
+      if (input.connection.sendEmojiMessage == null) {
         return {
           ok: false,
           statusCode: 501,
@@ -385,7 +411,7 @@ export const sendManualChannelMessage = async (
         }
       }
       const emojiMessage = await buildEmojiMessage(payload, {
-        channelType: state.type,
+        channelType: input.channelType,
         cwd: input.cwd,
         receiveId,
         receiveIdType
@@ -397,35 +423,55 @@ export const sendManualChannelMessage = async (
           message: emojiMessage.error
         }
       }
-      const result = await state.connection.sendEmojiMessage(emojiMessage)
-      return { ok: true, type: 'emoji', messageId: result?.messageId }
+      const result = await input.connection.sendEmojiMessage(emojiMessage)
+      return {
+        ok: true,
+        type: 'emoji',
+        messageId: result?.messageId,
+        ...(result?.navigation != null ? { navigation: result.navigation } : {})
+      }
     }
 
-    if (state.connection.sendMediaMessage != null && isHttpUrl(payload.src ?? '')) {
-      const result = await state.connection.sendMediaMessage(buildMediaMessage(payload, {
+    if (input.connection.sendMediaMessage != null && isHttpUrl(payload.src ?? '')) {
+      const result = await input.connection.sendMediaMessage(buildMediaMessage(payload, {
         receiveId,
         receiveIdType
       }))
-      return { ok: true, type: payload.type, messageId: result?.messageId }
+      return {
+        ok: true,
+        type: payload.type,
+        messageId: result?.messageId,
+        ...(result?.navigation != null ? { navigation: result.navigation } : {})
+      }
     }
 
-    if (state.connection.sendFileMessage != null) {
-      const result = await state.connection.sendFileMessage(
+    if (input.connection.sendFileMessage != null) {
+      const result = await input.connection.sendFileMessage(
         await loadFileMessage(payload, {
           cwd: input.cwd,
           receiveId,
           receiveIdType
         })
       )
-      return { ok: true, type: payload.type, messageId: result?.messageId }
+      return {
+        ok: true,
+        type: payload.type,
+        messageId: result?.messageId,
+        ...(result?.navigation != null ? { navigation: result.navigation } : {})
+      }
     }
 
-    if (state.connection.sendMediaMessage != null) {
-      const result = await state.connection.sendMediaMessage(buildMediaMessage(payload, {
+    if (input.connection.sendMediaMessage != null) {
+      const result = await input.connection.sendMediaMessage(buildMediaMessage(payload, {
         receiveId,
         receiveIdType
       }))
-      return { ok: true, type: payload.type, messageId: result?.messageId }
+      return {
+        ok: true,
+        type: payload.type,
+        messageId: result?.messageId,
+        ...(result?.navigation != null ? { navigation: result.navigation } : {})
+      }
     }
 
     return {
@@ -436,7 +482,7 @@ export const sendManualChannelMessage = async (
   } catch (error) {
     logger.warn({
       channelKey: input.channelKey,
-      channelType: state.type,
+      channelType: input.channelType,
       messageType: payload.type,
       receiveId,
       receiveIdType,
@@ -448,4 +494,25 @@ export const sendManualChannelMessage = async (
       message: error instanceof Error ? error.message : String(error)
     }
   }
+}
+
+export const sendManualChannelMessage = async (
+  states: Map<string, ChannelRuntimeState>,
+  input: SendManualChannelMessageInput
+): Promise<SendManualChannelMessageResult> => {
+  const state = states.get(input.channelKey)
+  return await executeChannelSend({
+    channelKey: input.channelKey,
+    channelType: state?.type ?? 'unknown',
+    config: state?.config,
+    connection: state?.connection,
+    cwd: input.cwd,
+    mentions: input.mentions,
+    payload: input.payload,
+    sessionId: input.sessionId,
+    target: {
+      receiveId: input.receiveId ?? '',
+      receiveIdType: input.receiveIdType ?? 'chat_id'
+    }
+  })
 }

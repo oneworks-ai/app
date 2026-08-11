@@ -6,11 +6,13 @@ import type {
   AgentRoomViewModel
 } from '#~/components/agent-room'
 import type { ChatHeaderRoomIconStatus } from '#~/components/chat/ChatHeader'
+import type { ChannelNavigationPreferences } from '@oneworks/types'
 
 export interface ChatRouteAgentRoomTranscript {
   room: AgentRoomViewModel
   roomIconStatus?: ChatHeaderRoomIconStatus
   members: AgentRoomMemberView[]
+  navigationPreferences?: ChannelNavigationPreferences
   workspaceSessionId?: string
   onOpenHostSession?: () => void
   onOpenRun?: (run: AgentRoomRunView) => void

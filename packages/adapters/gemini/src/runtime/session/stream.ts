@@ -41,6 +41,7 @@ export const createStreamGeminiSession = async (
   })
   const binaryPath = resolveGeminiBinaryPath(ctx.env, ctx.cwd)
   const approvalMode = resolveGeminiApprovalMode(options.permissionMode)
+  const noTools = options.executionProfile === 'structured_no_tools'
   const promptFiles = await ensureGeminiPromptFiles(ctx, options)
   const proxyRoute = resolvedModel.routedService == null
     ? undefined
@@ -51,9 +52,10 @@ export const createStreamGeminiSession = async (
     approvalMode,
     externalAuth: proxyRoute != null,
     generatedContextFileName: promptFiles.generatedContextFileName,
-    mcpServers: options.assetPlan?.mcpServers ?? {},
+    mcpServers: noTools ? {} : options.assetPlan?.mcpServers ?? {},
     model: resolvedModel.cliModel,
-    nativeHooks
+    nativeHooks,
+    ...(noTools ? { tools: [] } : {})
   })
   await writeGeminiSettings(ctx, settings)
 

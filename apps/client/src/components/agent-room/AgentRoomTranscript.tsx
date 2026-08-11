@@ -6,11 +6,17 @@ import { useTranslation } from 'react-i18next'
 
 import { AgentRoomMessageList } from './@components/AgentRoomMessageList'
 import { buildAgentRoomViewModel } from './@core/build-room-view-model'
-import type { AgentRoomMessageView, AgentRoomRunView, AgentRoomViewModel } from './@types/agent-room-view'
+import type {
+  AgentRoomChannelReferenceView,
+  AgentRoomMessageView,
+  AgentRoomRunView,
+  AgentRoomViewModel
+} from './@types/agent-room-view'
 
 export interface AgentRoomTranscriptProps {
   room: AgentRoomViewModel
   onOpenHostSession?: () => void
+  onOpenChannelReference?: (reference: AgentRoomChannelReferenceView) => void
   onOpenRun?: (run: AgentRoomRunView) => void
   onReplyToRun?: (message: AgentRoomMessageView) => void
   onRespondInteraction?: (interactionId: string, data: string | string[]) => Promise<void> | void
@@ -21,6 +27,7 @@ export interface AgentRoomTranscriptProps {
 export function AgentRoomTranscript({
   room,
   onOpenHostSession,
+  onOpenChannelReference,
   onOpenRun,
   onReplyToRun,
   onRespondInteraction,
@@ -42,6 +49,7 @@ export function AgentRoomTranscript({
             variant='transcript'
             showTimelineSeparators
             onOpenHostSession={onOpenHostSession}
+            onOpenChannelReference={onOpenChannelReference}
             onOpenRun={onOpenRun}
             onReplyToRun={onReplyToRun}
             onRespondInteraction={onRespondInteraction}

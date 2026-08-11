@@ -23,6 +23,7 @@ describe('agentRoomsRouter', () => {
     createRoom: vi.fn(),
     deleteRoom: vi.fn(),
     ensureRoomForHostSession: vi.fn(),
+    executeCommand: vi.fn(),
     getDetail: vi.fn(),
     getRoomForHostSession: vi.fn(),
     listRooms: vi.fn(),
@@ -164,7 +165,7 @@ describe('agentRoomsRouter', () => {
       run: { key: 'schema-plan', sessionId: 'session-1', title: 'Schema plan' },
       summary: 'Done'
     }
-    service.applyEvent.mockReturnValue(message)
+    service.executeCommand.mockResolvedValue(message)
 
     const handler = findRouteHandler('/:id/events', 'POST')
     const ctx = {
@@ -180,7 +181,11 @@ describe('agentRoomsRouter', () => {
 
     await handler(ctx)
 
-    expect(service.applyEvent).toHaveBeenCalledWith('room-1', event)
+    expect(service.executeCommand).toHaveBeenCalledWith('room-1', {
+      idempotencyKey: 'event-1',
+      type: 'apply_event',
+      event
+    })
     expect(ctx.body).toEqual({ message })
   })
 
@@ -192,7 +197,7 @@ describe('agentRoomsRouter', () => {
       content: 'Please continue',
       createdAt: 1
     }
-    service.appendUserMessage.mockReturnValue(message)
+    service.executeCommand.mockResolvedValue(message)
 
     const handler = findRouteHandler('/:id/messages', 'POST')
     const ctx = {
@@ -208,9 +213,16 @@ describe('agentRoomsRouter', () => {
 
     await handler(ctx)
 
-    expect(service.appendUserMessage).toHaveBeenCalledWith('room-1', 'Please continue', {
-      memberKey: 'architect',
-      runKey: 'schema-plan'
+    expect(service.executeCommand).toHaveBeenCalledWith('room-1', {
+      idempotencyKey: expect.any(String),
+      type: 'append_message',
+      message: {
+        content: 'Please continue',
+        target: {
+          memberKey: 'architect',
+          runKey: 'schema-plan'
+        }
+      }
     })
     expect(ctx.body).toEqual({ message })
   })
@@ -252,6 +264,37 @@ describe('agentRoomsRouter', () => {
     await expect(handler(ctx)).rejects.toMatchObject({
       status: 409,
       code: 'agent_room_interaction_not_pending'
+    })
+  })
+
+  it('accepts only the ChannelLink name and drops caller-authored delivery authority', async () => {
+    service.executeCommand.mockResolvedValue({ channelLinkName: 'trusted-link' })
+    const handler = findRouteHandler('/:id/commands', 'POST')
+    const ctx = {
+      params: { id: 'room-1' },
+      request: {
+        body: {
+          idempotencyKey: 'attach-trusted-link',
+          link: {
+            channelId: 'forged-channel',
+            channelKey: 'forged-key',
+            channelLinkName: 'trusted-link',
+            channelType: 'forged-provider',
+            entity: 'forged-entity',
+            receiveId: 'forged-recipient'
+          },
+          type: 'attach_channel'
+        }
+      },
+      body: undefined
+    }
+
+    await handler(ctx)
+
+    expect(service.executeCommand).toHaveBeenCalledWith('room-1', {
+      idempotencyKey: 'attach-trusted-link',
+      link: { channelLinkName: 'trusted-link' },
+      type: 'attach_channel'
     })
   })
 })

@@ -11,6 +11,7 @@ import {
   resolveChannelAuthorizationRequest,
   shouldDeliverChannelAuthorizationRequest
 } from '#~/services/channel-authorizations/index.js'
+import { encodeChannelRuntimeKey } from '#~/services/channel-runtime-key.js'
 import { handleInteractionResponse } from '#~/services/session/interaction.js'
 
 vi.mock('#~/db/index.js', () => ({
@@ -72,8 +73,16 @@ const link = {
   definition: {} as never,
   entity: 'owo-demo',
   external: { type: 'chat', chatId: 'oc_1' },
+  ingress: {
+    ambientRouting: false,
+    createOnCommand: true,
+    createOnMention: true,
+    createOnPendingIntent: true,
+    createOnReplyToBot: true
+  },
   name: 'wan-ke-chat',
-  path: '/workspace/.oo/channels/wan-ke-chat/channel.json'
+  path: '/workspace/.oo/channels/wan-ke-chat/channel.json',
+  routing: { accounts: {}, default: {}, modes: {}, users: {} }
 }
 
 describe('channel authorization service', () => {
@@ -169,9 +178,13 @@ describe('channel authorization service', () => {
     expect(createChannelAuthorizationRequest).toHaveBeenCalledWith({
       id: 'channel-interaction:sess-1:interaction-1',
       channelType: 'lark',
+      issuerKey: 'lark-main',
+      channelKey: 'lark-main',
+      channelId: 'oc_1',
       channelLinkName: 'wan-ke-chat',
       requesterUserId: 'user-yijie',
       requesterAccountId: 'ou_1',
+      allowedApprovers: ['user:user-yijie', 'account:lark-main:ou_1'],
       capability: 'Write',
       message: '当前任务需要使用 Write 才能继续，请选择处理方式。',
       metadata: expect.objectContaining({
@@ -561,7 +574,7 @@ describe('channel authorization service', () => {
       now: 1_000
     })).toEqual({ reservedAt: 1_000 })
     expect(consumeChannelReplyThrottle).toHaveBeenCalledWith(expect.objectContaining({
-      throttleKey: 'authorization-request-delivery\u0000auth-1',
+      throttleKey: encodeChannelRuntimeKey('authorization-request-delivery', 'auth-1'),
       policyType: 'authorization_request_delivery',
       channelType: 'lark',
       channelId: 'oc_1',
@@ -572,13 +585,13 @@ describe('channel authorization service', () => {
     releaseChannelAuthorizationRequestDelivery({ id: 'auth-1', reservedAt: 1_000 })
     expect(releaseChannelReplyThrottle).toHaveBeenCalledWith({
       lastSentAt: 1_000,
-      throttleKey: 'authorization-request-delivery\u0000auth-1'
+      throttleKey: encodeChannelRuntimeKey('authorization-request-delivery', 'auth-1')
     })
   })
 
   it('uses reply throttle state to suppress repeated delivery', () => {
     getChannelReplyThrottle.mockReturnValue({
-      throttleKey: 'authorization-request-delivery\u0000auth-1',
+      throttleKey: encodeChannelRuntimeKey('authorization-request-delivery', 'auth-1'),
       policyType: 'authorization_request_delivery',
       channelType: 'lark',
       channelId: 'oc_1',

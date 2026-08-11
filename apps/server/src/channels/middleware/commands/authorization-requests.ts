@@ -1,4 +1,5 @@
 import { getDb } from '#~/db/index.js'
+import { buildChannelApproverPrincipals } from '#~/services/channel-authorizations/approvers.js'
 
 import type { ChannelContext } from '../@types'
 import {
@@ -19,6 +20,7 @@ const AUTH_LIST_SCOPE_CHOICES = [
 export const createAuthorizationRequestCommand = () =>
   command<ChannelContext>('request')
     .description('cmd.auth.request.description')
+    .approval({ capability: 'channel.authorization.request', risk: 'medium', visibility: 'dm' })
     .argument(requiredArg('capability'))
     .argument(optionalArg('message'))
     .action(async ({ ctx, args: [capability, message] }) => {
@@ -30,11 +32,21 @@ export const createAuthorizationRequestCommand = () =>
 
       const request = getDb().createChannelAuthorizationRequest({
         channelType: ctx.inbound.channelType,
+        issuerKey: ctx.channelKey,
+        channelKey: ctx.channelKey,
+        channelId: ctx.inbound.channelId,
         channelLinkName: ctx.channelLink?.name,
         requesterUserId: resolveRequesterUserId(ctx),
         requesterAccountId,
         capability,
         message: message?.trim() === '' ? null : message,
+        allowedApprovers: buildChannelApproverPrincipals({
+          channelAdmins: ctx.config?.access?.admins,
+          credentialSubjectUserId: resolveRequesterUserId(ctx),
+          issuerKey: ctx.channelKey,
+          requesterAccountId,
+          requesterUserId: resolveRequesterUserId(ctx)
+        }),
         metadata: {
           channelKey: ctx.channelKey,
           channelId: ctx.inbound.channelId,
@@ -51,6 +63,7 @@ export const createAuthorizationRequestCommand = () =>
 export const createListAuthorizationCommand = () =>
   command<ChannelContext>('list')
     .description('cmd.auth.list.description')
+    .approval({ capability: 'channel.authorization.list', risk: 'low', visibility: 'dm' })
     .argument(optionalArg('scope', { choices: AUTH_LIST_SCOPE_CHOICES }))
     .action(async ({ ctx, args: [scope] }) => {
       if (scope === 'resumable') {

@@ -5,7 +5,7 @@ status: draft
 authors:
   - Codex
 created: 2026-06-16
-updated: 2026-08-09
+updated: 2026-08-11
 targetVersion: vNext
 ---
 
@@ -13,274 +13,472 @@ targetVersion: vNext
 
 ## Summary
 
-Channel Runtime 2.0 把飞书、微信、Telegram、Discord 等频道从“一个频道绑定一个长期 session”升级为“实体驱动的多频道工作系统”。
+Channel Runtime 2.0 把 OneWorks、飞书、微信、Telegram、Discord 等消息入口统一成实体驱动的多渠道工作系统，并把现有 Agent Room 激进重构为唯一的 Room 领域。
 
-核心变化：
+核心语义：
 
-- 每条频道消息或消息批先进入 entity-scoped IngressRouter；只有 create_child 决策才触发短生命周期 child session。
-- 长期 channel session 只保存实体在该频道的记忆、策略、backlog 和路由状态。
-- 跨平台账号通过 identity graph 绑定到 canonical user。
-- 记忆加载由 Memory Resolver 负责 scope、权限、相关性和预算控制。
-- 支持软屏蔽、上下班、回复节流、管理员/老板白名单、模型与 adapter 路由。
-- 一个实体可以在多个频道工作，实体、用户、频道和账号维度的记忆各自可控。
-- 提供正式的 OneWorks native channel，可作为产品内频道使用，也可通过 simulation webhook 做本地调试。
+- **Room 是协作聚合，不是传输协议。** 一个 Room 可以接入多个 ChannelLink，并聚合人、实体、run、消息和投递结果。
+- **Channel 是传输 provider。** `lark`、`wechat`、`oneworks` 等 provider 负责收发、原生身份、平台引用和导航能力。
+- **创建 Room 的账号和执行节点拥有完整权威数据。** Room 消息、run、记忆和投递明细只保存在 owner 节点。
+- **Relay 只保存显式分享关系、ACL、presence 和在线路由。** 它不保存 Room 消息正文、run 内容或离线消息队列。
+- **每条需要执行的入站消息创建短生命周期 ChildSession。** 持续对话由 Room、ChannelLink、线程状态、pending intent 和带来源的记忆恢复，不复用一个无限增长的 adapter session。
+- **实体可以绑定多个平台和同平台多个账号。** Agent 发消息时从实体可用且当前 actor 有权使用的 ChannelLink 中显式选择目标，不自动广播。
+- **所有执行都知道自己在哪里。** ChildSession 获得不可变的 `ChannelExecutionContext`，明确 entity、Room、provider、channel key、账号、会话、actor 和默认回复目标。
+- **命令只有一个内核。** CLI、Agent Tool 和产品 UI 都调用同一份 `ChannelCommandDefinition`/executor；权限按触发用户和统一 Tool Approval 计算。
 
-细节分册： [Ingress Router](./0006-channel-runtime-2-ingress-router.md)、[Channel Commands](./0006-channel-runtime-2-channel-commands.md)、[OneWorks Native Channel Plugin](./0006-channel-runtime-2-oneworks-channel-plugin.md)、[Identity And Routing](./0006-channel-runtime-2-identity-routing.md)、[Memory Resolver](./0006-channel-runtime-2-memory.md)、[Policy Engine](./0006-channel-runtime-2-policy.md)、[Approval Policy](./0006-channel-runtime-2-approval.md)、[Conversation Continuity](./0006-channel-runtime-2-continuity.md)。
+分册：
 
-## Motivation
-
-当前 channel 模型适合简单的单群/单人持续对话，但真实团队协作里会出现：
-
-- 群聊多人消息持续进入一个大上下文，容易污染 session。
-- 同一个人在多个频道类型和多个 Lark app 下无法被识别为同一人。
-- 频道记忆没有清晰的隐私、来源和可见范围。
-- 机器人没有原生上下班、软屏蔽、节流、backlog 和用户级策略。
-- 多角色机器人矩阵缺少统一实体模型，记忆、技能和经验难以复用。
-
-目标产品语义是：**频道消息不是继续一个大聊天，而是触发某个实体在某个频道为某个已识别用户工作一次。**
+- [Ingress Router](./0006-channel-runtime-2-ingress-router.md)
+- [Channel Commands](./0006-channel-runtime-2-channel-commands.md)
+- [OneWorks Channel 与聊天室插件](./0006-channel-runtime-2-oneworks-channel-plugin.md)
+- [Identity And Routing](./0006-channel-runtime-2-identity-routing.md)
+- [Memory Resolver](./0006-channel-runtime-2-memory.md)
+- [Policy Engine](./0006-channel-runtime-2-policy.md)
+- [Approval Policy](./0006-channel-runtime-2-approval.md)
+- [Conversation Continuity](./0006-channel-runtime-2-continuity.md)
 
 ## Goals
 
-- 将 inbound channel message 先映射为 entity-scoped ingress event，再按决策升级为 child session execution。
-- 保留 channel session 作为长期工作区，而不是长期执行上下文。
-- 引入 Entity、EntityChannel、CanonicalUser 和 ChannelAccount。
-- 将记忆读取改为受控 MemorySnapshot。
-- 将记忆写回改为结构化、可审计、可回滚的 patch。
-- 支持 warn、temporary mute、permanent mute 等软屏蔽等级。
-- 支持下班固定话术、回复 throttle、backlog 和上班后统一处理。
-- 支持按 entity/channel/user/account/mode 路由模型和 adapter。
-- 将 channel command 统一为 agent 可调用的 typed command tools，并按发送者权限执行。
-- 提供 first-party OneWorks native channel，用同一套 runtime 承载产品内频道、演示和本地调试。
-- 兼容现有 `channels` 配置，并提供渐进迁移。
+- 用一个 Room 领域替代历史 Agent Room 与频道会话之间重复且冲突的数据模型。
+- 支持消息来自任意 provider，也支持 Agent 把不同消息发送到不同 provider、账号和外部会话。
+- 支持一个 Entity 使用多个 channel key；同一 provider 可以配置多个账号。
+- 保留 `.oo.config.json` 的平台连接配置和 `.oo/channels/<link>/channel.json` 的实体绑定。
+- 在消息、记忆、权限、审计和导航中保留 provider/account/conversation provenance。
+- 支持跨平台身份绑定到 CanonicalUser，但不把身份绑定误认为 delegated credential。
+- 支持软屏蔽、上下班、节流、backlog、白名单以及按 actor/mode 路由模型和 adapter。
+- 支持显式且有限的 Room 分享；远端只在 owner 在线时读取或操作被分享的 Room。
+- 复用现有 Agent Room 时间线、成员、run、审批/输入卡片和右侧 WebView 交互。
+- 允许激进迁移历史 Agent Room 数据；当前没有线上用户，不维护长期兼容层。
 
 ## Non-Goals
 
-- 不调用飞书/微信/TG/Discord 的真实封禁 API。
-- 不凭昵称或头像自动合并身份。
-- 不默认把私聊记忆带入群聊。
-- 不把完整原始聊天记录无脑写入长期记忆。
-- 不要求所有频道类型一次性支持完全相同的能力。
-- 不在单账号登录阶段假装可以代表每个群成员调用其个人平台权限。
+- 不用 Relay 保存或搜索 Room 消息正文、run 内容和记忆正文。
+- 不同步 execution node 上所有 Room；未显式分享的 Room 不得出现在 Relay。
+- 不把不同 ChannelLink 自动互相转发，也不默认群发到实体的所有账号。
+- 不凭昵称或头像自动合并跨平台身份。
+- 不默认把私聊记忆带入群聊，或把一个 issuer 的账号/权限带到另一个 issuer。
+- 不调用外部平台的真实封禁 API；软屏蔽只在 OneWorks ingress 层丢弃或固定回复。
+- 不在 Channel Runtime 内单独实现一套审批产品；外部写操作接入统一 Tool Approval。
+- 不要求所有 provider 一次性支持消息级深链、WebView、ephemeral 消息或离线补拉。
 
-## Concept Model
+## Architecture
 
-```text
-Entity
-  一个可工作的机器人实体，例如 OWO、产品、测试、运维。
+```mermaid
+flowchart LR
+  subgraph Providers["Channel providers"]
+    Lark["Lark channel"]
+    WeChat["WeChat channel"]
+    OWC["OneWorks channel"]
+  end
 
-ChannelLink
-  .oo/channels/<link>/channel.json 中的外部频道入口。一个 link 必须且只能绑定一个 Entity。
+  subgraph Owner["Owner account + execution node"]
+    Ingress["Ingress + Policy + Router"]
+    Room["Room domain"]
+    Command["Channel command kernel"]
+    Memory["Memory resolver"]
+    Runtime["ChildSession runtime"]
+    Plugin["plugin-channel-oneworks"]
+  end
 
-ChannelAccount
-  某人在某平台、某租户、某 app 下的账号身份。
+  subgraph Relay["Relay metadata plane"]
+    Directory["SharedRoomDescriptor"]
+    ACL["ACL + presence + routing"]
+    Live["Live encrypted forwarding"]
+  end
 
-CanonicalUser
-  OneWorks 认知里的同一个人，可绑定多个 ChannelAccount。
-
-EntityChannel
-  ChannelLink 物化后的实体频道绑定，存配置、策略和 runtime 状态。
-
-IngressRouter
-  EntityChannel 自己的入站 gate，只判断 ignore / observe / create_child / defer，以及模型、adapter 和可见性。
-
-ChannelSession
-  EntityChannel 的长期工作区，存记忆、策略、backlog 和成员状态。
-
-ChildSession
-  每条消息或消息批触发的一次短执行，结束后提炼写回。
-
-ChannelCommandTool
-  Agent 可调用的频道命令工具，例如 identity、policy、availability、memory；执行权限按触发消息的发送者解析。
+  Lark --> Ingress
+  WeChat --> Ingress
+  OWC --> Ingress
+  Ingress --> Room
+  Room --> Memory
+  Memory --> Runtime
+  Runtime --> Command
+  Command --> Lark
+  Command --> WeChat
+  Command --> OWC
+  Plugin --> Room
+  Plugin --> Directory
+  Room -. "explicit share metadata" .-> Directory
+  ACL --> Live
+  Live <-. "online only" .-> Room
 ```
 
-ChildSession 的执行上下文是一次性 runtime context：包含原始 inbound message、当前 entity/channel/canonical user/channel account、策略裁决、受控记忆快照、模型/adapter 路由和外部回复目标。它即用即结束，释放运行态上下文；持续对话靠 ChannelSession 中的 ConversationState、recent turns、pending intents 和 MemorySnapshot 维持，审计记录与写回结果保留。
+### Dependency Boundaries
 
-当前 runtime 的具体落地是：每条被路由处理的入站消息都创建一个新的 OneWorks session，上一条 ChildSession 只作为 `parentSessionId` 和 workspace 来源，不复用仍在运行的 adapter session。新子会话在启动前获得不可变的 actor/delivery snapshot；父会话的持久 session 权限会复制到子会话，一次性权限通过 SQLite 事务只移动给一个子会话。授权恢复同样创建新的 ChildSession，不向原 runtime 直接追加消息。
+```text
+packages/types / packages/core
+  shared Room, Channel, command, delivery and navigation contracts
 
-身份和凭证分两层处理：`ChannelAccount -> CanonicalUser` 只解决“这是谁”，`ChannelUserCredential / AuthorizationRequest` 只解决“这次能不能代表他执行某个能力”。多平台、多账号绑定不会自动带来可执行权限；没有用户凭证时只能走授权、降级或拒绝。
+packages/channels/*
+  provider connections, native identifiers, send/receive and navigation resolution
+  no Room orchestration, memory policy or product UI
 
-授权请求进一步拆成 `requester` 和 `credentialSubject`：requester 是触发频道消息的人，credential subject 是需要提供可执行凭证的人。默认两者相同；当工具明确要求资源 owner 或其他用户凭证时，resolver 返回 `ask_resource_owner`，pending intent 归属 credential subject，而不是把触发者和授权人混为一谈。
+apps/server
+  Room, identity, policy, memory, command and share business orchestration
+  routes/websocket/channels -> services -> db
 
-## Child Session Permissions
+packages/plugins/channel-oneworks
+  OneWorks Chat Rooms product entry, sharing, simulations, scenarios,
+  trace presentation and navigation preferences
+  no provider credential lifecycle and no direct DB access
 
-ChildSession 权限由触发用户身份、channel/entity 配置上限、当前 mode 和 policy decision 合成，默认最小权限，不直接继承 bot 或长期 ChannelSession 的全部能力。普通用户只能使用当前频道允许的工具和外显回复能力；管理员/老板白名单可提升到配置允许的高权限；系统触发任务使用 service principal，但仍受 entity/channel 上限约束。具体权限申请由 ApprovalPolicyResolver 按用户、账号、工具、风险和资源所有者决定自动通过、询问本人、询问管理员/老板、降级或拒绝；所有决策都写入 child run。
+packages/plugins/relay + apps/relay-server
+  device presence, explicit shared-room directory/ACL and online forwarding
+  no Room content persistence
 
-当前 OneWorks 尚不支持多账号登录时，`actor=发送者` 只用于权限裁决和审计，不代表系统已经拥有该用户的平台 token。需要用户级凭证的工具调用必须检查 `actorCredentialState`：已绑定且已授权才允许执行；未授权则生成 pending approval / authorization intent，并优先私信、ephemeral 消息或授权页请求本人授权；无法私信也无法发仅本人可见消息时，只能公开提示其加机器人好友或进入管理后台授权。app 级或 service principal 能力可以继续用于机器人发言、读取频道事件等低风险频道能力，但不能冒充发送者执行个人权限操作。
+apps/client
+  Room timeline, compact provenance/delivery UI and right-side WebView
+```
 
-因此当前阶段不要求实现多账号登录闭环。系统先稳定区分 `actor identity` 和 `actor credential`：前者来自消息发送者，用于权限、审计、记忆和审批归属；后者只有用户显式授权后才可用于个人 API。没有 credential 时，ChildSession 和 channel command tool 必须进入 pending authorization / degrade / deny，而不是退回当前桌面登录态、CLI 登录态或机器人 app secret。
+## Domain Model
 
-单账号兼容阶段的执行门禁是：channel-bound 子会话只把本地 session/project permission 当作运行器侧约束，不能把本地 allow 当作外部发送者授权。除一次性 interaction grant 和明确属于 channel runtime 的低风险内置 CLI 权限外，非内置工具调用要进入 ApprovalPolicyResolver，并生成可审计的 authorization request。执行前权限检查优先读取本轮消息写入的 `channelActorSnapshot`，而不是可被后续消息刷新覆盖的长期 channel binding。Agent 调用 typed channel command 时只能提交服务端签发的短期 child-run token；服务端根据 token 关联的 child run、session snapshot 和 immutable delivery binding 重建 actor，不接受 CLI 自报的 `senderId`、`sessionId` 或管理员身份。
+### Entity
 
-推荐把这个阶段命名为 `single-login runner mode`：当前桌面登录、CLI profile、bot app secret 只是运行器或 service principal 的能力来源，用于启动 runtime、收发机器人消息和读写本地项目状态；它不是频道发送者的 delegated credential。所有用户级外部动作都必须先解析 `credentialSubject`，再查询该 subject 的 credential provider。没有 active credential 时，系统只能：
+可工作的 Agent 身份。一个 Entity 可以使用多个 `ChannelLink`，包括跨 provider 和同 provider 多账号。
 
-- 创建 pending authorization intent，并把授权请求送到 credential subject；
-- 在能力允许范围内降级成只读、只回复说明或只生成草稿；
-- 明确拒绝，并记录原因。
+### Channel Connection
 
-这允许 MVP 不实现多账号同时登录，但不会牺牲权限正确性；后续接入 OAuth、多账号切换或企业代管时，只需要补 credential provider，不需要重写 identity、router 或 child session 模型。
+`.oo.config.json` 中 `channels[channelKey]` 对应一个真实平台连接和发送身份。例如两个不同飞书 bot app 必须使用两个 channel key。`channelKey` 是 issuer namespace，参与身份、权限、记忆和审计隔离。
+
+### ChannelLink
+
+`.oo/channels/<link>/channel.json` 中的外部入口/投递目标，包含：
+
+- `channelKey`
+- 外部 address，例如 direct/group/thread
+- 一个 Entity
+- ingress、availability、moderation、routing 和 display metadata
+
+一个 ChannelLink 只能绑定一个 Entity。一个 Entity 可以绑定任意多个 ChannelLink。当前 loader 继续 fail-fast 拒绝同一个 channel key 跨 Entity 复用，避免同一 bot credential/issuer 被多个实体混用；未来若支持共享 service account，必须先引入显式 ownership/impersonation contract，不能静默放宽。
+
+### Room
+
+本地协作聚合和权威边界：
+
+- owner account、owner execution node
+- leader Entity
+- members 和 runs
+- append-only RoomEvent
+- timeline/member/run 等本地 projection
+- 绑定的 ChannelLink 集合
+- share 配置和 grant
+
+Room 可以没有外部 ChannelLink，也可以聚合多个 provider。Agent Room 是这个领域的产品名称，不再是一套平行的数据模型。
+
+### RoomChannelLink
+
+Room 与既有 ChannelLink 的关联。它声明消息可以从哪里进入 Room、Agent 可以向哪里发送，以及该 link 在 Room 中的展示名和默认行为。它不复制 provider credential。
+
+同一个 `(channelType, channelKey, channelId)` provider conversation 只能归属一个 Room；数据库唯一约束和 attach command 都 fail-fast，不能依赖查询顺序挑选 Room。
+
+### RoomMessage
+
+Room 时间线中的消息或事件。消息保留两个彼此独立的维度：
+
+- `source`：消息实际来自哪个 provider/channel key/link/account/conversation/message/thread。
+- `deliveries[]`：Agent 将消息投递到了哪些目标、每个目标的状态、平台 message reference 和错误。
+
+一条消息可以来自飞书但只在 Room 内回复，也可以由 Agent 从 Room 发到微信。没有 delivery 的 Room 内消息仍然有效。
+
+需要外部副作用的 Room message 先以 `pending` 状态和幂等键原子认领，再调用 session/provider。成功后写成 `delivered`；进程崩溃或结果不确定时保留待确认状态，同一幂等键不得再次触发外部发送。
+
+### ChannelAccount And CanonicalUser
+
+`ChannelAccount` 表示某人在特定 provider + channel key issuer 下的外部账号。多个 ChannelAccount 可以显式绑定到一个 `CanonicalUser`，用于跨平台识别、用户记忆和审计。
+
+身份绑定只回答“是谁”。个人 OAuth/token/credential 另行回答“是否能代表他执行”。两者不得互相推导。
+
+### RoomShare
+
+owner 节点本地保存的分享定义和授权。权限至少包括：
+
+- `view`
+- `send`
+- `target_member`
+- `open_run`
+- `approve`
+- `manage_share`
+
+默认远端分享只授予 `view` 和 `send`。run/session ID、workspace path 和内部错误默认不出 owner 节点；需要 `open_run` 时也返回 opaque remote reference，不暴露本地路径。
+
+第一次分享 ownerless Room 时，产品插件必须把它绑定到当前在线且由用户选定的 Relay account/node；只有一个候选时可以自动选择，零个或多个未选候选都 fail-closed。后续不能把 Room 静默迁移给另一个 owner account。
+
+### SharedRoomDescriptor
+
+Relay 只持久化：
+
+- share ID、owner user/device/node
+- Room 的公开 label/icon/summary
+- grantee/role/ACL
+- owner presence 与 route metadata
+- capability/version 信息
+
+它不包含消息、run、memory、prompt、workspace path、外部平台原始 ID 或发送凭证。
+
+## Ownership And Availability
+
+1. Room 的完整状态只存在 owner account 的 execution node。
+2. 只有显式分享的 Room 才向 Relay 发布 `SharedRoomDescriptor`。
+3. 远端访问时 Relay 先校验 share ACL 和 owner presence，再建立 live route。
+4. owner account 或 owner node 离线时，远端只能看到 Room 存在但 unavailable。
+5. Relay 不为 Room 内容建立离线队列，也不在 owner 上线后回放远端消息。
+6. 外部 provider 自己保存的历史可由 owner node 上线后按 provider capability 补拉；这是 provider 行为，不是 Relay 内容存储。
+7. owner 节点最终重新校验 actor、share scope 和操作权限；Relay 的 ACL 不是唯一授权点。
 
 ## Inbound Lifecycle
 
 ```text
-receive platform event
-  -> normalize channel/account/message/mentions
-  -> resolve ChannelLink and its single Entity
+receive provider event
+  -> normalize provider/account/conversation/message/mentions
+  -> resolve channel key and ChannelLink
+  -> resolve Entity and optional Room binding
   -> resolve ChannelAccount and CanonicalUser
-  -> resolve EntityChannel
   -> hard access check
-  -> PolicyEngine: soft-ban/off-hours/throttle/backlog
+  -> PolicyEngine: mute/off-hours/throttle/backlog
   -> IngressRouter: ignore/observe/create_child/defer
-  -> stop if no child session is needed
-  -> MemoryResolver builds MemorySnapshot
+  -> persist RoomEvent/source provenance when visible to the Room
+  -> stop when no execution is needed
+  -> build ChannelExecutionContext
+  -> MemoryResolver builds scoped snapshot
   -> route model and adapter
   -> create ChildSession
-  -> execute and send external reply if needed
-  -> extract memory and policy updates
-  -> commit writebacks
+  -> execute commands and record deliveries
+  -> terminal memory/writeback classification
+  -> update local Room projections
 ```
 
-PolicyEngine 和 IngressRouter 都在 child session 前执行。普通屏蔽期消息、下班普通消息、被 throttle 的重复 @、普通闲聊观察消息都不会创建 child session。
+PolicyEngine 和 IngressRouter 都在 ChildSession 前执行。被软屏蔽、下班普通消息、重复提醒和只观察的群聊不会创建 ChildSession。
 
-## Config Shape
+## ChannelExecutionContext
 
-平台连接和密钥继续放在 `.oo.config.json` 的 `channels`。实体定义继续放在 `.oo/entities/<entity>/`。外部频道入口不应内联写进 `.oo.config.json`，而应作为目录化定义放在 `.oo/channels/<link>/channel.json`；每个 channel link 只能绑定一个 entity，模型 gate、上下班、屏蔽、记忆 scope 都配置在这个 link 文件上。
+每个 ChildSession 在开始时获得不可变 context：
 
-`.oo.config.json` 只声明平台连接：
+```ts
+interface ChannelExecutionContext {
+  entity: { id: string; label: string }
+  room?: { id: string; title: string; ownerNodeId: string }
+  source: {
+    channelType: string
+    channelKey: string
+    channelLinkId?: string
+    accountLabel?: string
+    tenantLabel?: string
+    conversation: {
+      id: string
+      kind: string
+      label?: string
+      threadId?: string
+    }
+    message: { id?: string; replyToId?: string; rootId?: string }
+  }
+  actor?: {
+    externalAccountId?: string
+    canonicalUserId?: string
+    displayName?: string
+  }
+  defaultReplyTarget?: ChannelDeliveryTarget
+  availableDeliveryTargets: ChannelDeliveryTarget[]
+}
+```
+
+系统提示必须把它投影为简洁的人类可读“当前工作位置”，例如：
+
+```text
+当前实体：产品助手
+当前房间：示例脑暴
+来源：飞书 / 示例组织 / 产品机器人 / 示例脑暴 / 线程 123
+触发用户：示例用户（canonical user 已绑定）
+默认回复：原飞书线程
+```
+
+## Conversation Continuity
+
+每条被路由执行的入站消息创建一个新 ChildSession。连续对话不靠复用 adapter session，而靠程序化 thread key 和受控上下文恢复：
+
+1. 优先使用 provider 原生 thread/root/reply reference。
+2. 没有原生 thread 时使用 `channelKey + ChannelLink + conversation + actor + pending intent` 计算 continuity key。
+3. IngressRouter 只决定是否执行和使用哪个模型/adapter，不决定把消息“塞给哪个仍在运行的 session”。
+4. 最近 turns 有时间、数量和参与者预算；不会把整个群聊历史带进每轮。
+5. pending intent 明确目标用户和所需动作；相关用户下一条消息可继续，其他用户不会误续。
+6. Agent 一次任务需要发送多条消息时，在同一个 ChildSession 内多次调用 command kernel，不为每次 outbound send 创建新 session。
+
+## Memory Loading And Writeback
+
+Memory Resolver 按以下层次加载，并在预算前执行权限和来源过滤：
+
+1. Entity 长期经验
+2. CanonicalUser 跨平台偏好
+3. Room 共享决策/项目记忆
+4. 当前 ChannelLink/外部会话记忆
+5. 当前 thread/recent turns
+6. 当前 message
+
+每条记忆必须携带：scope、visibility、sensitivity、entity、room、canonical user、channel type、channel key、ChannelLink、conversation kind/id、source message/run 和 expiry。
+
+写回分类：
+
+- 可跨场景复用的稳定经验 -> Entity
+- 用户偏好 -> CanonicalUser
+- 项目/协作决策 -> Room
+- 平台或群内临时约定 -> ChannelLink/conversation
+- 私聊内容 -> direct/private scope，默认禁止进入 group snapshot
+
+同一 provider 的不同 channel key 视为不同 issuer；没有显式 identity/memory policy 不得互相读取。
+
+## Outbound Commands
+
+Agent 通过统一 command kernel 执行外发：
+
+```text
+ChannelCommandDefinition
+  schema + actor context + permission + effect + audit + structured result
+     |-- CLI: oneworks channel send ...
+     |-- Tool: channel.send
+     `-- UI/debug thin client
+```
+
+`channel.send` 至少接受一个显式 `ChannelDeliveryTarget` 和内容。默认目标来自 `ChannelExecutionContext.defaultReplyTarget`；跨渠道目标必须显式指定。多个目标是多次或数组式显式调用，不自动广播。
+
+外部发送声明统一 effect metadata：
+
+```json
+{
+  "effect": "external-write",
+  "operation": "channel.send",
+  "actor": "canonical-user-or-service-principal",
+  "entity": "entity-id",
+  "destinations": ["opaque-delivery-target"]
+}
+```
+
+统一 Tool Approval 后续决定 auto-allow / ask / deny；Channel Runtime 不单独实现审批 UI。
+
+## Message Navigation
+
+provider 可选实现：
+
+```ts
+declare function resolveMessageNavigation(reference: unknown): {
+  messageWebUrl?: string
+  conversationWebUrl?: string
+  nativeAppUrl?: string
+  appHomeUrl?: string
+  embeddable?: boolean
+}
+```
+
+provider 只提供真实可用的 URL/capability。`@oneworks/plugin-channel-oneworks` 保存用户的导航顺序偏好，支持 default 和 provider/account override，例如 `rightPanel`、`externalWeb`、`nativeApp`、`appHome`、`ask`。
+
+客户端点击消息上的平台图标/投递 chip 后：
+
+1. 按插件偏好选择入口。
+2. `rightPanel` 复用 `ChatWorkspaceDrawer`。
+3. iframe 被 CSP/X-Frame-Options 拒绝时继续下一个 fallback。
+4. 无消息级 URL 时降级到会话；再无会话入口时降级到应用首页或原生 App，例如微信。
+
+## Product UI
+
+Room 时间线复用现有 Agent Room 交互：成员、leader、run、审批/输入卡、直接 @member、room/session 视角切换。
+
+消息来源/投递使用紧凑图标 chip：
+
+- 单目标：`[Lark icon] 示例脑暴 ✓`
+- 多目标：逐个显示紧凑的平台图标 chip；不把其余目标折叠成不可操作的 `+N`
+- 账号/bot、组织、状态和错误放 tooltip/popover
+- 成功状态弱化，失败明确显示
+
+人类 composer 仍然只是在 Room 中发消息。provider/账号目标由 Agent 的 `channel.send` 命令选择，不在 composer 上制造一个“用户代 Agent 选择渠道”的主流程。
+
+## Config
+
+平台连接继续放在 `.oo.config.json`：
 
 ```json
 {
   "channels": {
-    "lark-main": {
-      "type": "lark",
-      "appId": "cli_xxx",
-      "appSecret": "replace-with-secret"
-    }
+    "lark-product": { "type": "lark", "appId": "...", "appSecret": "..." },
+    "lark-demo": { "type": "lark", "appId": "...", "appSecret": "..." },
+    "oneworks-local": { "type": "oneworks", "webhookSecret": "..." }
   }
 }
 ```
 
-实体仍按已有目录组织：
+实体和 ChannelLink 继续目录化：
 
 ```text
-.oo/entities/owo-demo/README.md
+.oo/entities/product/README.md
+.oo/channels/product-lark/channel.json
+.oo/channels/product-wechat/channel.json
 ```
 
-频道链接按目录组织：
+Room、RoomChannelLink 和 RoomShare 是运行时本地数据，不内联进 `.oo.config.json`。OneWorks 聊天室插件的导航偏好使用插件自身 options/config，不污染 provider credential 配置。
 
-```text
-.oo/channels/wan-ke-chat/channel.json
-```
+## Persistence
 
-```json
-{
-  "channel": "lark-main",
-  "entity": "owo-demo",
-  "external": {
-    "type": "group",
-    "chatId": "oc_xxx"
-  },
-  "memoryScope": "entity+channel+user",
-  "ingress": {
-    "ambientRouting": false,
-    "routerPrompt": "普通寒暄只观察；明确请求 OWO 帮忙时才创建子会话。"
-  },
-  "authorization": {
-    "deliveryThrottleMs": 1200000,
-    "resume": {
-      "mode": "immediate",
-      "delayMs": 0
-    }
-  },
-  "availability": {},
-  "moderation": {},
-  "routing": {}
-}
-```
+owner 节点 SQLite 的目标表：
 
-现有 `channels.<key>.access` 仍可继续工作。迁移后它属于 hard access；channel link 文件里的 `availability`、`moderation`、`ingress`、`routing` 属于 entity channel 的 soft policy / execution policy。
+- `rooms`
+- `room_members`
+- `room_runs`
+- `room_events`
+- `room_channel_links`
+- `room_shares`
+- `room_share_grants`
+- `room_messages` projection
+- `room_message_deliveries` projection
+- 现有 channel identity/policy/router/child-run/command/memory 表
 
-## Data Model Draft
+当前实现采用混合持久化：`room_events` 是 append-only 的审计与命令幂等日志，Room 元数据、成员、run、消息和投递表则直接维护当前权威状态。事件日志当前不包含重建这些表所需的全部状态，因此不能把它描述为完整 event source，也不能承诺仅靠事件从零重建 projection。若后续要切换到完整 event sourcing，需要单独补齐事件模型、版本化 replay 和迁移验证。历史 `agent_rooms*` 数据采用 additive schema extension 和一次性 contract cutover，不提供长期 dual-read/dual-write。
 
-核心表：`entities`、`channel_links`、`entity_channels`、`channel_accounts`、`canonical_users`、`identity_links`、`channel_sessions`、`ingress_router_runs`、`child_session_runs`、`channel_command_runs`、`memories`、`memory_snapshots`、`memory_writebacks`、`policy_states`、`policy_events`、`reply_throttles`、`offhour_backlog`、`conversation_states`、`conversation_turns`、`pending_intents`、`routing_rules`。
+Relay 的目标存储只有：
 
-当前已落地的 server SQLite 表：
+- shared room descriptor
+- share ACL
+- owner node presence/capabilities
+- route/session metadata、大小、时间和错误码
 
-- `channel_sessions_v2`、`channel_preferences_v2`：按 `channelKey + sessionType + channelId` 隔离的当前 ChildSession 绑定和频道级 adapter / permission / effort 偏好；`channel_session_deliveries` 为每个 ChildSession 保存不可变发送目标。
-- `channel_seen_messages`：已有入站消息去重。
-- `channel_action_tokens`：已有频道动作短期 nonce。
-- `channel_accounts_v2`、`canonical_users`、`channel_identity_links_v2`、`channel_identity_link_codes`：identity graph 基础表和短期跨账号绑定码。账号与绑定以 `channelKey` 作为 issuer namespace，避免同一平台不同 app/tenant 的外部账号 ID 相互碰撞。
-- `channel_user_credentials_v2`：新增 issuer-scoped 用户 channel credential 元信息表，以 `channelKey + userId + credentialKey` 隔离不同 app/tenant，只存状态和引用，不存 token。旧表仅作为单 issuer 安全迁移来源。
-- `channel_authorization_requests`：新增授权请求状态表，用于后续 pending authorization intent。
-- `channel_child_session_runs`：新增 channel inbound 到 runtime session 的最小 child run 审计表，记录 actor、message、entity、dispatch mode、sessionId 和投递状态。当前 `dispatched` 表示已交给 runtime，不代表业务任务完成。
-- `channel_conversation_states`、`channel_conversation_turns`：新增 deterministic `threadKey` 下的连续性状态和 recent turns，记录当前 thread 的参与者、最近 turn、最后消息和 child run 关联；当前只承载最小连续性索引，不做完整 transcript 或 memory writeback。
-- `channel_pending_intents`：新增最小 pending intent 表。当前 `resolveChannelApproval(createAuthorizationRequest: true)` 和 mirrored `interaction_request(kind=permission)` 在上下文包含 `threadKey` 时，会把 pending authorization 同步写为 `need_approval` intent，并关联 authorization request、conversation state、child run、owner user/account 和 required action。interaction 请求送达频道后会写入 `delivery` / `deliveryMessageId`，并通过 `channel_reply_throttles(policyType=authorization_request_delivery)` 按 `authorization.deliveryThrottleMs` 抑制同一 authorization request 的重复送达，默认 20 分钟；`authorization.resume.mode` 会随 mirrored request 写入 metadata，并在 grant / deny 后进入 resolved intent 的 `metadata.resume`。`immediate` 且已过 `notBefore` 的 ready intent 可被 `/auth grant|deny` 或后台 scheduler 自动消费；`manual` 和 `next_message` 只保留 ready intent，等待显式恢复或下一条相关消息触发。`services/channel-resume` 使用带 lease 的原子 claim 消费 ready intent，创建新的 `system_resume` ChildSession；worker 中断后，过期 lease 可被重新领取。
-- `channel_command_runs`：新增 channel command fast path 审计表，记录 actor、command path、权限级别、状态和错误。
-- `channel_reply_throttles`：新增策略固定话术节流状态表。
-- `channel_offhour_backlog`：新增下班期被 gate 截断消息的 backlog 表。
-- `@oneworks/channel-oneworks`：新增 first-party `oneworks` channel type，支持本地 simulation webhook 注入 inbound event，并复用 server channel manager 的完整入站管道。配置 secret 时 webhook 使用 timestamp + nonce + raw body 的 HMAC-SHA256 签名并拒绝超时或重放；无 secret 的调试入口仅允许显式开启且实际 socket 来源为 loopback。
+Relay content boundary 必须拒绝 RoomEvent、message body、run payload、memory、prompt、platform raw event 和 credential。
 
-仍处于 draft 的表包括：`entities`、`channel_links`、`entity_channels` 的持久化物化层，`ingress_router_runs`、完整 child run 生命周期 / tool-call / memory writeback 记录、memory / policy event / routing 相关表，以及 pending intent 平台私信 / ephemeral 送达策略、backlog digest/process 运行记录。
+## Security Invariants
 
-## Commands
+- 所有跨平台 ID 都在 provider + channel key issuer 内解释。
+- 结构化 mention 必须区分当前 bot、其他 bot、没有结构化 mention。
+- remote share 操作在 Relay 和 owner 节点双重授权。
+- synthetic simulation actor 不能提升为桌面用户、企业管理员或真实平台用户。
+- CLI/Tool 不接受自报 sender/admin/session；服务端用短期 token 重建 actor/context。
+- Room 分享不暴露本地路径、真实 credential、原始外部 ID 或未授权 run。
+- Relay 不以日志、审计、重试或诊断名义保存消息正文。
+- 私聊/用户记忆进入群聊前必须有显式策略。
 
-命令组：`/identity whoami|link|accounts|unlink|audit`、`/auth request|list|grant|deny`、`/policy status|warn|mute|unmute`、`/availability status|off|on`、`/backlog list|process`、`/memory show|pin|forget|audit`。
+## Migration
 
-当前已落地 `/identity whoami|link|accounts` 的最小自助链路：`/identity link` 在当前账号生成短期绑定码，`/identity link <code>` 从另一个账号消费并绑定到同一 canonical user，`/identity accounts` 列出已绑定账号。该流程只绑定身份和记忆归属，不授予或复制 executable credential。
+由于历史 Agent Room 没有线上用户，本次采用 additive schema extension 和一次性 contract cutover：
 
-这些命令不作为绕过 agent 的旁路执行器。它们应注册为 `channel.*` typed tools：slash command、自然语言请求和系统续接都可以触发同一套工具，但工具调用必须携带 `actor=发送者 canonical user/channel account`，并由 ApprovalPolicyResolver 按发送者权限裁决。
+1. 在现有 `agent_rooms*` schema 上追加 owner/archive/favorite 等列，并创建 RoomEvent、RoomChannelLink、RoomShare 和 delivery 表。
+2. 既有 Room/member/run/message 行继续作为当前状态读取；缺少 owner 字段的 Room 解释为本地 owner，不改写原始消息来源。
+3. 当前迁移不为历史行合成 RoomEvent，也不声称事件日志可以重建既有 projection；只有新命令从启用本 contract 后开始追加审计/幂等事件。
+4. 无法证明来源的历史内容保持无外部 provider provenance，不伪造 Lark、WeChat 或其他平台身份。
+5. API/类型直接切换新 contract；不保留 dual write 和长期兼容分支。若未来确需历史事件回填，应单独提供可重复执行、带数量校验和回滚证据的 migration。
 
-## Migration Plan
+## Delivery Slices
 
-Phase 1:
+1. **Contract and local Room authority**：共享类型、schema、repo/service、一次性迁移、source/delivery provenance。
+2. **Execution context and memory**：ChildSession context、thread continuity、scoped MemorySnapshot/writeback。
+3. **Command kernel**：`channel.send` CLI/Tool 共用 executor、effect/audit、delivery result。
+4. **OneWorks provider and product plugin**：provider 导航能力、Room/分享/场景/trace 产品入口、配置化 fallback。
+5. **Live shared Room**：Relay descriptor/ACL/presence/live gateway，owner offline fail-closed。
+6. **Room UI**：紧凑平台图标、delivery 状态、右侧 WebView、remote unavailable/redacted states。
+7. **Validation**：provider contract、privacy/issuer、Room migration、live-only Relay、真实 UI 与至少 Lark/OneWorks E2E。
 
-- 为现有 channel 创建默认 `.oo/entities/<entity>/` 和 `.oo/channels/<link>/channel.json`，迁移现有 `channel_sessions` 为长期 channel session，并为已知 senderId 生成 platform-local canonical user。
+## Acceptance Criteria
 
-Phase 2:
-
-- 每条 inbound message 先经过 IngressRouter，只有 create_child 决策才注入 MemorySnapshot、创建 child session，并增加 writeback extractor、channel command tools 和 channel summary 写回。
-
-Phase 3:
-
-- 启用 warn、mute、off-hours、throttle、backlog。
-
-Phase 4:
-
-- 增加 identity linking、canonical user memory、user/account 级访问控制。
-
-Phase 5:
-
-- 增加模型/adapter 路由、ingress router prompt 和 entity 多频道管理 UI。
-
-## Security And Privacy
-
-- 不按显示名自动合并身份。
-- 私聊来源记忆默认不能进入群聊 prompt。
-- 跨平台记忆必须有明确 scope。
-- 敏感记忆默认不注入 prompt。
-- 身份合并、永久屏蔽、记忆删除都要有 audit log。
-- 模型路由必须尊重 provider 和数据敏感性策略。
-- 单账号登录阶段必须显式区分 actor identity 与 executable credential；没有用户凭证时只能降级、询问或拒绝。
-
-## Observability
-
-每次 ingress router run 和 child run 应记录 resolved channel link/entity/account/user、policy decision、router decision、memory candidate/filter counts、snapshot id、model/adapter route、reply throttle decision 和 writeback result，用来解释“为什么没回”“为什么创建了会话”“为什么记住了”“为什么用了这个模型”。
-
-## MVP
-
-第一版建议只做：
-
-- entity 和 entity channel 基础模型；
-- channel link 唯一绑定 entity；
-- 每条频道消息先过 IngressRouter，必要时再创建 child session；
-- channel session memory snapshot 和 conversation state；
-- child session 结束后写回 channel summary；
-- `/identity whoami` 和管理员手工绑定；
-- channel command typed tools 和 sender-scoped 权限裁决；
-- warn 和 temporary account-level mute；
-- off-hours 固定话术、throttle 和 backlog；
-- default / moderation / user override 模型路由。
-- OneWorks native channel plugin 的基础 room、trace 和 simulation mode。
-
-## Design Principle
-
-频道里的长期状态属于 entity/channel/user memory，短期执行属于 child session。策略和记忆必须有作用域、可审计、可撤销；模型不应该被迫从一个无限增长的大聊天上下文里猜当前任务。
+- 一个 Entity 可以绑定两个不同 Lark channel key 和一个 WeChat channel key，且 context/记忆/权限不串 issuer。
+- 一条 Lark 入站消息进入 Room 后保留来源，Agent 可显式回复原线程或另发到 WeChat；不会自动广播。
+- Agent 在一个 ChildSession 中可发送多条频道消息，不额外创建 ChildSession。
+- Room 的私聊记忆不会出现在群聊 snapshot。
+- 未分享 Room 不会出现在 Relay；分享后远端只看到 descriptor。
+- owner 离线时远端拿不到 transcript，也无法把消息排队到 Relay。
+- owner 在线时，远端 `send` 经 Relay live route 到 owner，owner 重新授权后写入本地 RoomEvent。
+- 消息 chip 展示平台图标；支持的 provider 可在右侧 WebView 打开，失败时按插件偏好降级。
+- `@oneworks/channel-oneworks` 在没有产品插件时仍能收发；`@oneworks/plugin-channel-oneworks` 不管理飞书/微信连接生命周期。
+- 仓库中不存在 `@oneworks/plugin-channel-management` 兼容别名或通用管理职责。

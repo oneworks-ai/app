@@ -5,6 +5,7 @@ import path from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { resolveAdapterAccountDir } from '@oneworks/utils'
 import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 
 import { registerAccountsCommand } from '#~/commands/accounts.js'
@@ -98,7 +99,7 @@ describe('accounts command', () => {
 
     await expect(
       readFile(
-        resolveProjectHomePath(cwd, process.env, '.local', 'adapters', 'codex', 'accounts', 'work', 'auth.json'),
+        path.join(resolveAdapterAccountDir(cwd, process.env, 'codex', 'work'), 'auth.json'),
         'utf8'
       )
     ).resolves.toBe('{"token":"demo"}\n')

@@ -20,6 +20,7 @@ import { normalizeRelayDiagnosticEvents } from './diagnostics/store.js'
 import { normalizeRelayModelUsageEvents } from './model-usage/store.js'
 import { normalizeRelayPersonalConfigSnapshot } from './personal-config.js'
 import { normalizeRelayProjectRuleDocumentSnapshot } from './project-rule-documents.js'
+import { normalizeRelaySharedRooms } from './rooms/store.js'
 import { sanitizeRelayStorageValue } from './storage/content-boundary.js'
 import { normalizeRelaySsoProviders } from './storage/sso-providers.js'
 import { normalizeRelayTeamDocumentSnapshot } from './team-documents.js'
@@ -96,6 +97,7 @@ const defaultStore = (): RelayStore => ({
   passkeys: [],
   devices: [],
   deviceSessions: [],
+  sharedRooms: [],
   forwardingJobs: [],
   diagnosticEvents: [],
   modelUsageEvents: [],
@@ -1005,6 +1007,7 @@ export const normalizeRelayStore = (value: unknown): RelayStore => {
         value != null
       )
       : [],
+    sharedRooms: normalizeRelaySharedRooms(store.sharedRooms),
     forwardingJobs: Array.isArray(store.forwardingJobs)
       ? store.forwardingJobs.filter(isRecord).map(normalizeForwardingJob).filter((value): value is RelayForwardingJob =>
         value != null

@@ -2,6 +2,7 @@ import { Buffer } from 'node:buffer'
 import { EventEmitter } from 'node:events'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
+import type { RelayRooms } from '../rooms/index.js'
 import { createRelayHandler } from '../server.js'
 import type { ForwardingJobAvailableObserver } from '../session-forwarding/job-handlers.js'
 import type { RelayStoreRepository } from '../storage/repository.js'
@@ -129,10 +130,12 @@ export const createRelayFetchHandler = (
     storeRepository: RelayStoreRepository
     telemetry?: RelayTelemetry
     onForwardingJobAvailable?: ForwardingJobAvailableObserver
+    rooms?: RelayRooms
   }
 ) => {
   const handler = createRelayHandler(args, options.telemetry, options.storeRepository, {
-    onForwardingJobAvailable: options.onForwardingJobAvailable
+    onForwardingJobAvailable: options.onForwardingJobAvailable,
+    rooms: options.rooms
   })
   return async (request: Request) => {
     const body = new Uint8Array(await request.arrayBuffer())

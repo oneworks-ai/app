@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid'
 
-import type { Session, SessionHistoryImport } from '@oneworks/core'
+import type { ChannelExecutionContext, Session, SessionHistoryImport } from '@oneworks/core'
 import { createEmptySessionPermissionState, normalizeSessionPermissionState } from '@oneworks/utils'
 import type { SessionPermissionState } from '@oneworks/utils'
 
@@ -21,6 +21,7 @@ export interface SessionChannelActorSnapshot {
   childRunId?: string
   conversationStateId?: string
   entity?: string
+  executionContext?: ChannelExecutionContext
   messageId?: string
   replyReceiveId?: string
   replyReceiveIdType?: string
@@ -219,6 +220,9 @@ const normalizeChannelActorSnapshot = (value: unknown): SessionChannelActorSnaps
     childRunId: trimNonEmpty(value.childRunId),
     conversationStateId: trimNonEmpty(value.conversationStateId),
     entity: trimNonEmpty(value.entity),
+    executionContext: isRecord(value.executionContext)
+      ? JSON.parse(JSON.stringify(value.executionContext)) as ChannelExecutionContext
+      : undefined,
     messageId: trimNonEmpty(value.messageId),
     replyReceiveId: trimNonEmpty(value.replyReceiveId),
     replyReceiveIdType: trimNonEmpty(value.replyReceiveIdType),

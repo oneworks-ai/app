@@ -59,6 +59,7 @@
 - Chrome 插件操作开放平台时，Playwright role click 可能能定位但不触发飞书后台按钮；这时优先用 `dom_cua.get_visible_dom()` 解析 `<button node_id=...>保存</button>` / `<button node_id=...>确认发布</button>`，再用 `dom_cua.click({ node_id })`。把这种方式作为页面行为异常时的通用 fallback，并继续用发布状态核验结果。
 - 上传头像时如果浏览器 / 系统文件选择器无法完成选择或“打开”按钮灰掉，马上告诉用户需要他在文件选择器里选中目标文件；用户选完后，agent 继续负责页面内保存、创建版本和确认发布。
 - Web 飞书消息页可能能读到 accessibility tree，但点击/输入不一定落到 canvas/富文本编辑器。优先用 Codex Chrome / Browser / Computer Use 操作网页版；只有网页版富文本输入确实无法稳定操作时，说明阻塞并请求使用飞书桌面端作为 fallback。发送代表用户的群消息属于对外通信，发送前要说明内容并等待确认。
+- 飞书消息页的会话列表可能能稳定截图并读出群名、外部标签和历史回复，但 synthetic Playwright / CUA 点击仍不改变 active feed。先等待页面稳定，核对目标元素可见、命中区域和 console，再尝试一次语义点击与一次可见 DOM/CUA fallback；仍无变化时把它记录为网页自动化输入阻塞，不要宣称发送了新消息，也不要用反复盲点替代证据。可用专用 CLI 验证矩阵与成员，用已可见的真实历史回执作为补充，但 fresh inbound E2E 仍要明确标注是否完成。
 - 修改 `.oo.dev.config.json` channel appId/secret 后，正在运行的 server 不一定自动重连 Lark WS。闭环检查顺序是：确认对应 channel key，确认 `appId` 属于演示服务 bot 且 `secret` 来自同一 app，确认 `allowedGroups` 是目标外部群，经授权后用 `pnpm --silent tools dev-service restart web --json` 重启当前 worktree 的服务或确认日志里出现新的 `[channels] channel connected`，再做入站消息验证。
 - Web launcher 的 `manager` server 只能负责控制面，不能初始化 workspace channel。频道长连接、runtime store watcher 和 resume scheduler 必须由同一个 workspace server 持有；否则 manager 可能先写入全局去重记录和 session，真正消费 runtime 的 workspace 收不到事件，会话就会长期停在 `running`。
 - 同一个 bot app 不能同时被旧 worktree、旧 manager 或遗留 workspace server 持有长连接。飞书可能把事件分配给任意连接，表现为同一条 `@` 偶发命中新旧配置。排查时先从错误回复对应的 server 日志反查 workspace，再通过 `dev-service status <target> --json` 找到所有者；不要只重启当前 worktree 就认为旧连接已经退出。
@@ -67,4 +68,5 @@
 - `lark-cli auth status --profile <bot> --json` 的 bot `ready` 只说明本地存在 App ID/secret，不会主动向飞书校验 secret。仍要执行一次只读或发送 API；返回 `20002 invalid_client` 时，从可信的项目私有配置重新同步同一个 app 的 secret，并用 `--app-secret-stdin`，不要把 secret 放进 argv、日志或文档。
 - Channel bot 与 `owo-cli` 看到的同一个用户 `open_id` 不同。若角色 bot 不申请成员读取权限，应从该 bot 实际收到的已知用户消息中记录 sender `open_id`，核对身份后再写入对应 channel 的 `access.admins`。不要把 CLI app 的 open_id 直接复制过去，也不要把矩阵里的 `includeBoss` 当作权限配置。
 - 外部群写操作要区分错误：`232033` 表示执行成员管理的 app 没有外部群管理能力；`230027` 常见于用户 token 虽有发送 scope，但 app 版本或租户策略不允许代表用户向外部群发消息；`99991672` 表示目标 bot app 根本没有申请对应 API scope。三者都需要在正确自建应用里补配置并发布，重复扫码或换身份不能替代。
+- 用户身份已经重新授权 `im:message` / `im:message.send_as_user`，token 校验也正常，但对外部群仍持续返回 `230027` 时，应判定为当前 app/租户的代表用户外部群发送策略限制。不要继续循环扫码；改用已登录飞书网页或客户端做真实用户 `@` 验收，并把 API 限制单独记入验收结论。
 - `lark-cli` 较旧时可能没有新的应用自管理命令或输出行为。看到 `_notice.update` 后用 `lark-cli update` 同步升级 CLI 和官方 skills；升级完成后重启 AI Agent 才能让新 skills 在新会话中生效。

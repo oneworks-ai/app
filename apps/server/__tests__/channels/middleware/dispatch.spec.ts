@@ -86,6 +86,10 @@ const claimChannelPendingIntentResume = vi.fn()
 const listResolvedChannelPendingIntents = vi.fn()
 const finishChannelPendingIntentResumeClaim = vi.fn()
 const getSessionRuntimeState = vi.fn()
+const getChannelConversationState = vi.fn()
+const getChannelConversationStateByThread = vi.fn()
+const listRecentChannelConversationTurns = vi.fn()
+const listOpenChannelPendingIntents = vi.fn()
 const updateChannelPendingIntent = vi.fn()
 const transferSessionPermissionState = vi.fn()
 
@@ -175,6 +179,10 @@ beforeEach(async () => {
     id: 'turn-1'
   })
   listResolvedChannelPendingIntents.mockReturnValue([])
+  getChannelConversationStateByThread.mockReturnValue(undefined)
+  listRecentChannelConversationTurns.mockReturnValue([])
+  listOpenChannelPendingIntents.mockReturnValue([])
+  getChannelConversationState.mockReturnValue(undefined)
   claimChannelPendingIntentResume.mockReset()
   claimChannelPendingIntentResume.mockImplementation(input => ({
     ...makeNextMessageResumeIntent(),
@@ -190,12 +198,24 @@ beforeEach(async () => {
   })
   vi.mocked(getDb).mockReturnValue({
     appendChannelConversationTurn,
+    attachChannelIngressRouterRunChild: vi.fn(),
+    attachChannelMemorySnapshotToChildRun: vi.fn(),
     claimChannelPendingIntentResume,
     createChannelChildSessionRun,
     ensureChannelConversationState,
     finishChannelPendingIntentResumeClaim,
     finishChannelChildSessionRun,
+    findAgentRoomChannelLink: vi.fn(() => undefined),
     getSessionRuntimeState,
+    getChannelConversationState,
+    getChannelConversationStateByThread,
+    listChannelMemoryCandidates: vi.fn(() => []),
+    listAgentRoomChannelLinks: vi.fn(() => []),
+    listOpenChannelPendingIntents,
+    listRecentChannelConversationTurns,
+    markChannelChildSessionRunDispatched: vi.fn(),
+    markChannelChildSessionRunRunning: vi.fn(),
+    saveChannelMemorySnapshot: vi.fn(() => 'snapshot-1'),
     listResolvedChannelPendingIntents,
     transferSessionPermissionState,
     updateChannelPendingIntent
@@ -250,9 +270,8 @@ describe('dispatchMiddleware', () => {
         threadKey: 'direct:lark_default:ch1',
         triggerType: 'message'
       }))
-      expect(finishChannelChildSessionRun).toHaveBeenCalledWith('child-run-1', {
-        sessionId: 'new-sess',
-        status: 'dispatched'
+      expect(vi.mocked(getDb)().markChannelChildSessionRunDispatched).toHaveBeenCalledWith('child-run-1', {
+        sessionId: 'new-sess'
       })
       expect(appendChannelConversationTurn).toHaveBeenCalledWith(expect.objectContaining({
         actorAccountId: 'user1',
@@ -330,7 +349,15 @@ describe('dispatchMiddleware', () => {
           external: { type: 'chat', chatId: 'ch1' },
           name: 'wan-ke-chat',
           path: '/workspace/.oo/channels/wan-ke-chat/channel.json',
-          definition: {} as never
+          definition: {} as never,
+          ingress: {
+            ambientRouting: false,
+            createOnCommand: true,
+            createOnMention: true,
+            createOnPendingIntent: true,
+            createOnReplyToBot: true
+          },
+          routing: { accounts: {}, default: {}, modes: {}, users: {} }
         }
       })
 
@@ -343,6 +370,50 @@ describe('dispatchMiddleware', () => {
         channelLinkName: 'wan-ke-chat',
         entity: 'owo-demo'
       }))
+    })
+
+    it('hydrates a child with unexpired shared ambient turns only', async () => {
+      getChannelConversationStateByThread.mockReturnValue({ id: 'ambient-state' })
+      getChannelConversationState.mockReturnValue({
+        activeParticipants: [],
+        expiresAt: null,
+        id: 'conversation-1',
+        lastBotReply: null,
+        summary: null,
+        threadKey: 'direct:lark_default:ch1',
+        topic: null
+      })
+      listRecentChannelConversationTurns.mockReturnValueOnce([]).mockReturnValueOnce([
+        { createdAt: Date.now(), role: 'inbound', summary: 'ambient context', text: 'ambient context' }
+      ])
+      const ctx = makeCtx({
+        channelLink: {
+          channelKey: 'lark:default',
+          definition: {} as never,
+          entity: 'owo-demo',
+          external: { type: 'chat', chatId: 'ch1' },
+          ingress: {
+            ambientRouting: false,
+            createOnCommand: true,
+            createOnMention: true,
+            createOnPendingIntent: true,
+            createOnReplyToBot: true,
+            observeWindow: { maxTurns: 2, ttlSeconds: 60 }
+          },
+          name: 'wan-ke-chat',
+          path: '/workspace/.oo/channels/wan-ke-chat/channel.json',
+          routing: { accounts: {}, default: {}, modes: {}, users: {} }
+        }
+      })
+
+      await dispatchMiddleware(ctx, vi.fn().mockResolvedValue(undefined))
+
+      const childRun = createChannelChildSessionRun.mock.calls.at(-1)?.[0]
+      expect(childRun.continuitySnapshot).toEqual(expect.objectContaining({
+        ambientRecentTurns: [expect.objectContaining({ summary: 'ambient context' })]
+      }))
+      expect(vi.mocked(createSessionWithInitialMessage).mock.calls.at(-1)?.[0].initialRuntimeContent)
+        .toContain('<ambient-channel-context>')
     })
 
     it('uses contentItems when present instead of text', async () => {
@@ -502,13 +573,11 @@ describe('dispatchMiddleware', () => {
         sessionId: 'new-sess'
       }))
       expect(transferSessionPermissionState).toHaveBeenCalledWith('existing-sess', 'new-sess')
-      expect(createChannelChildSessionRun).toHaveBeenCalledWith(expect.objectContaining({
-        dispatchMode: 'continue_session',
-        sessionId: 'existing-sess'
-      }))
-      expect(finishChannelChildSessionRun).toHaveBeenCalledWith('child-run-1', {
-        sessionId: 'new-sess',
-        status: 'dispatched'
+      const childRunInput = createChannelChildSessionRun.mock.calls[0]![0]
+      expect(childRunInput.dispatchMode).toBe('continue_session')
+      expect(childRunInput.sessionId).toBeUndefined()
+      expect(vi.mocked(getDb)().markChannelChildSessionRunDispatched).toHaveBeenCalledWith('child-run-1', {
+        sessionId: 'new-sess'
       })
       expect(ctx.sessionId).toBe('new-sess')
     })

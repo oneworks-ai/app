@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import serverPackageJson from '../../package.json'
+
 import { resolvePluginMarketplaceVersions } from '#~/services/plugins/marketplace-version-resolver.js'
 import { listPluginMarketplaceCatalog } from '#~/services/plugins/marketplace.js'
 
@@ -152,9 +154,9 @@ describe('plugin marketplace catalog', () => {
       displayName: 'Logger',
       marketplaceType: 'oneworks',
       name: '@oneworks/plugin-logger',
-      sourceLabel: '@oneworks/plugin-logger@0.1.0',
+      sourceLabel: `@oneworks/plugin-logger@${serverPackageJson.version}`,
       sourceType: 'npm',
-      version: '0.1.0'
+      version: serverPackageJson.version
     }))
     expect(official).toContainEqual(expect.objectContaining({
       category: 'themes',

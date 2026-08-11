@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid'
 
 import type {
   AgentRoom,
+  AgentRoomChannelLink,
   AgentRoomDetail,
   AgentRoomEvent,
   AgentRoomEventRequestKind,
@@ -13,9 +14,15 @@ import type {
   AgentRoomMemberKind,
   AgentRoomMemberStatus,
   AgentRoomMessage,
+  AgentRoomMessageDelivery,
+  AgentRoomMessageDeliveryStatus,
+  AgentRoomMessageOrigin,
   AgentRoomMessageRole,
   AgentRoomRun,
   AgentRoomRunStatus,
+  AgentRoomShare,
+  AgentRoomShareGrant,
+  AgentRoomSharePermission,
   AgentRoomStatus,
   AgentRoomUserMessagePayload
 } from '@oneworks/core'
@@ -28,6 +35,10 @@ interface AgentRoomRow {
   id: string
   title: string
   hostSessionId: string | null
+  ownerAccountId: string | null
+  ownerNodeId: string | null
+  ownerSourceId: string | null
+  leaderEntity: string | null
   status: string
   lastMessage: string | null
   archivedAt: number | null
@@ -75,13 +86,80 @@ interface AgentRoomMessageRow {
   content: string
   eventType: string | null
   payloadJson: string | null
+  sequence: number
+  idempotencyKey: string | null
+  originJson: string | null
   createdAt: number
+}
+
+interface AgentRoomMessageDeliveryRow {
+  id: string
+  roomMessageId: string
+  targetJson: string
+  status: string
+  providerMessageId: string | null
+  navigationJson: string | null
+  error: string | null
+  sentAt: number | null
+  createdAt: number
+  updatedAt: number
+}
+
+interface AgentRoomChannelLinkRow {
+  accountLabel: string | null
+  roomId: string
+  channelLinkName: string
+  channelType: string
+  channelKey: string
+  channelId: string
+  conversationKind: string
+  entity: string
+  label: string
+  receiveId: string
+  receiveIdType: string
+  threadId: string | null
+  createdAt: number
+}
+
+interface AgentRoomShareRow {
+  id: string
+  roomId: string
+  status: string
+  relayRef: string | null
+  publishedAt: number | null
+  revokedAt: number | null
+  createdAt: number
+  updatedAt: number
+}
+
+interface AgentRoomShareGrantRow {
+  shareId: string
+  principalType: string
+  principalId: string
+  permissionsJson: string
+  createdAt: number
+}
+
+export interface AgentRoomEventRow {
+  createdAt: number
+  id: string
+  idempotencyKey: string | null
+  payloadJson: string
+  roomId: string
+  sequence: number
+  type: string
+}
+
+export interface AgentRoomStoredEvent extends Omit<AgentRoomEventRow, 'payloadJson'> {
+  payload: unknown
 }
 
 export interface CreateAgentRoomParams {
   id?: string
   title: string
   hostSessionId?: string
+  leaderEntity?: string
+  owner?: AgentRoom['owner']
   status?: AgentRoomStatus
   createdAt?: number
 }
@@ -96,18 +174,53 @@ export type SaveAgentRoomRunParams = Omit<AgentRoomRun, 'createdAt' | 'updatedAt
   updatedAt?: number
 }
 
-export type AppendAgentRoomMessageParams = Omit<AgentRoomMessage, 'id' | 'createdAt'> & {
+export type AppendAgentRoomMessageParams =
+  & Omit<
+    AgentRoomMessage,
+    'createdAt' | 'deliveries' | 'id' | 'sequence'
+  >
+  & {
+    id?: string
+    createdAt?: number
+    deliveries?: AgentRoomMessageDelivery[]
+    sequence?: number
+  }
+
+export type SaveAgentRoomChannelLinkParams = Omit<AgentRoomChannelLink, 'createdAt'> & { createdAt?: number }
+
+export interface CreateAgentRoomShareParams {
+  grants: Array<Pick<AgentRoomShareGrant, 'permissions' | 'principalId' | 'principalType'>>
   id?: string
-  createdAt?: number
+  roomId: string
+}
+
+export interface CreateAgentRoomShareWithOwnerParams extends CreateAgentRoomShareParams {
+  event: {
+    idempotencyKey: string
+    type: string
+  }
+  owner: {
+    accountId: string
+    nodeId: string
+    sourceId: string
+  }
 }
 
 export interface UpdateAgentRoomParams {
   hostSessionId?: string | null
+  ownerAccountId?: string | null
+  ownerNodeId?: string | null
+  ownerSourceId?: string | null
   status?: AgentRoomStatus
   lastMessage?: string | null
   archivedAt?: number | null
   favoritedAt?: number | null
   updatedAt?: number
+}
+
+export interface ClaimAgentRoomMessageResult {
+  inserted: boolean
+  message: AgentRoomMessage
 }
 
 export type AgentRoomListFilter = 'active' | 'archived' | 'all'
@@ -128,6 +241,9 @@ const stringifyJson = (value: unknown) => value === undefined ? null : JSON.stri
 
 const agentRoomUpdateFields = [
   { key: 'hostSessionId', toParam: value => value ?? null },
+  { key: 'ownerAccountId', toParam: value => value ?? null },
+  { key: 'ownerNodeId', toParam: value => value ?? null },
+  { key: 'ownerSourceId', toParam: value => value ?? null },
   { key: 'status' },
   { key: 'lastMessage', toParam: value => value ?? null },
   { key: 'archivedAt', toParam: value => value ?? null },
@@ -138,6 +254,13 @@ const agentRoomUpdateFields = [
 const mapRoomRow = (row: AgentRoomRow): AgentRoom => ({
   id: row.id,
   title: row.title,
+  owner: {
+    type: 'local',
+    ...(row.ownerAccountId != null ? { accountId: row.ownerAccountId } : {}),
+    ...(row.ownerNodeId != null ? { nodeId: row.ownerNodeId } : {}),
+    ...(row.ownerSourceId != null ? { sourceId: row.ownerSourceId } : {})
+  },
+  ...(row.leaderEntity != null ? { leaderEntity: row.leaderEntity } : {}),
   ...(row.hostSessionId != null ? { hostSessionId: row.hostSessionId } : {}),
   status: row.status as AgentRoomStatus,
   ...(row.lastMessage != null ? { lastMessage: row.lastMessage } : {}),
@@ -177,13 +300,57 @@ const mapRunRow = (row: AgentRoomRunRow): AgentRoomRun => ({
   updatedAt: row.updatedAt
 })
 
-const mapMessageRow = (row: AgentRoomMessageRow): AgentRoomMessage => ({
+const mapDeliveryRow = (row: AgentRoomMessageDeliveryRow): AgentRoomMessageDelivery => ({
+  id: row.id,
+  roomMessageId: row.roomMessageId,
+  target: parseJson<AgentRoomMessageDelivery['target']>(row.targetJson)!,
+  status: row.status as AgentRoomMessageDeliveryStatus,
+  ...(row.providerMessageId != null ? { providerMessageId: row.providerMessageId } : {}),
+  ...(row.navigationJson != null
+    ? { navigation: parseJson<NonNullable<AgentRoomMessageDelivery['navigation']>>(row.navigationJson) }
+    : {}),
+  ...(row.error != null ? { error: row.error } : {}),
+  ...(row.sentAt != null ? { sentAt: row.sentAt } : {})
+})
+
+const mapChannelLinkRow = (row: AgentRoomChannelLinkRow): AgentRoomChannelLink => ({
+  channelId: row.channelId,
+  channelKey: row.channelKey,
+  channelLinkName: row.channelLinkName,
+  channelType: row.channelType,
+  conversationKind: row.conversationKind as AgentRoomChannelLink['conversationKind'],
+  createdAt: row.createdAt,
+  entity: row.entity,
+  label: row.label,
+  receiveId: row.receiveId,
+  receiveIdType: row.receiveIdType,
+  roomId: row.roomId,
+  ...(row.accountLabel != null ? { accountLabel: row.accountLabel } : {}),
+  ...(row.threadId != null ? { threadId: row.threadId } : {})
+})
+
+const mapShareGrantRow = (row: AgentRoomShareGrantRow): AgentRoomShareGrant => ({
+  createdAt: row.createdAt,
+  permissions: parseJson<AgentRoomSharePermission[]>(row.permissionsJson) ?? [],
+  principalId: row.principalId,
+  principalType: row.principalType as AgentRoomShareGrant['principalType'],
+  shareId: row.shareId
+})
+
+const mapMessageRow = (
+  row: AgentRoomMessageRow,
+  deliveries: AgentRoomMessageDelivery[] = []
+): AgentRoomMessage => ({
   id: row.id,
   roomId: row.roomId,
   role: row.role as AgentRoomMessageRole,
   ...(row.memberKey != null ? { memberKey: row.memberKey } : {}),
   ...(row.runKey != null ? { runKey: row.runKey } : {}),
   content: row.content,
+  sequence: row.sequence,
+  ...(row.idempotencyKey != null ? { idempotencyKey: row.idempotencyKey } : {}),
+  ...(row.originJson != null ? { origin: parseJson<AgentRoomMessageOrigin>(row.originJson) } : {}),
+  deliveries,
   ...(row.eventType != null ? { eventType: row.eventType as AgentRoomEventType } : {}),
   ...(row.payloadJson != null
     ? { payload: parseJson<AgentRoomEvent | AgentRoomUserMessagePayload | Record<string, unknown>>(row.payloadJson) }
@@ -192,6 +359,107 @@ const mapMessageRow = (row: AgentRoomMessageRow): AgentRoomMessage => ({
 })
 
 export function createAgentRoomsRepo(db: SqliteDatabase) {
+  const mapEventRow = (row: AgentRoomEventRow): AgentRoomStoredEvent => ({
+    createdAt: row.createdAt,
+    id: row.id,
+    idempotencyKey: row.idempotencyKey,
+    payload: parseJson(row.payloadJson),
+    roomId: row.roomId,
+    sequence: row.sequence,
+    type: row.type
+  })
+
+  const getEventByIdempotencyKey = (roomId: string, idempotencyKey: string): AgentRoomStoredEvent | undefined => {
+    const row = db.prepare(`
+      SELECT * FROM agent_room_events WHERE roomId = ? AND idempotencyKey = ?
+    `).get<AgentRoomEventRow>(roomId, idempotencyKey)
+    return row == null ? undefined : mapEventRow(row)
+  }
+
+  const appendEvent = (input: {
+    id?: string
+    idempotencyKey?: string
+    payload: unknown
+    roomId: string
+    type: string
+  }): AgentRoomStoredEvent => {
+    const insert = db.transaction((event: typeof input): string => {
+      if (event.idempotencyKey != null) {
+        const existing = db.prepare(`
+          SELECT id FROM agent_room_events WHERE roomId = ? AND idempotencyKey = ?
+        `).get<Pick<AgentRoomEventRow, 'id'>>(event.roomId, event.idempotencyKey)
+        if (existing != null) return existing.id
+      }
+
+      const id = event.id ?? uuidv4()
+      const createdAt = Date.now()
+      const sequence = db.prepare(
+        'SELECT COALESCE(MAX(sequence), 0) + 1 AS value FROM agent_room_events WHERE roomId = ?'
+      ).get<{ value: number }>(event.roomId)?.value ?? 1
+      db.prepare(`
+        INSERT INTO agent_room_events (
+          id, roomId, sequence, idempotencyKey, type, payloadJson, createdAt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id,
+        event.roomId,
+        sequence,
+        event.idempotencyKey ?? null,
+        event.type,
+        stringifyJson(event.payload),
+        createdAt
+      )
+      return id
+    })
+    const id = insert(input)
+    const stored = db.prepare('SELECT * FROM agent_room_events WHERE id = ?').get<AgentRoomEventRow>(id)
+    if (stored == null) throw new Error(`Failed to append agent room event: ${id}`)
+    return mapEventRow(stored)
+  }
+  const listDeliveries = (roomMessageId: string): AgentRoomMessageDelivery[] =>
+    db.prepare(`
+      SELECT * FROM agent_room_message_deliveries
+      WHERE roomMessageId = ?
+      ORDER BY createdAt ASC, id ASC
+    `).all<AgentRoomMessageDeliveryRow>(roomMessageId).map(mapDeliveryRow)
+
+  const listChannelLinks = (roomId: string): AgentRoomChannelLink[] =>
+    db.prepare(`
+      SELECT * FROM agent_room_channel_links
+      WHERE roomId = ?
+      ORDER BY createdAt ASC, channelLinkName ASC
+    `).all<AgentRoomChannelLinkRow>(roomId).map(mapChannelLinkRow)
+
+  const listShareGrants = (shareId: string): AgentRoomShareGrant[] =>
+    db.prepare(`
+      SELECT * FROM agent_room_share_grants
+      WHERE shareId = ?
+      ORDER BY createdAt ASC, principalType ASC, principalId ASC
+    `).all<AgentRoomShareGrantRow>(shareId).map(mapShareGrantRow)
+
+  const mapShareRow = (row: AgentRoomShareRow): AgentRoomShare => ({
+    createdAt: row.createdAt,
+    grants: listShareGrants(row.id),
+    id: row.id,
+    ...(row.publishedAt != null ? { publishedAt: row.publishedAt } : {}),
+    ...(row.relayRef != null ? { relayRef: row.relayRef } : {}),
+    ...(row.revokedAt != null ? { revokedAt: row.revokedAt } : {}),
+    roomId: row.roomId,
+    status: row.status as AgentRoomShare['status'],
+    updatedAt: row.updatedAt
+  })
+
+  const listShares = (roomId: string): AgentRoomShare[] =>
+    db.prepare(`
+      SELECT * FROM agent_room_shares
+      WHERE roomId = ?
+      ORDER BY createdAt DESC, id ASC
+    `).all<AgentRoomShareRow>(roomId).map(mapShareRow)
+
+  const getShare = (shareId: string): AgentRoomShare | undefined => {
+    const row = db.prepare('SELECT * FROM agent_room_shares WHERE id = ?').get<AgentRoomShareRow>(shareId)
+    return row == null ? undefined : mapShareRow(row)
+  }
   const list = (filter: AgentRoomListFilter = 'active'): AgentRoom[] => {
     const whereClause = filter === 'active'
       ? 'WHERE archivedAt IS NULL'
@@ -226,15 +494,30 @@ export function createAgentRoomsRepo(db: SqliteDatabase) {
     const room: AgentRoom = {
       id: params.id ?? uuidv4(),
       title: params.title,
+      owner: params.owner ?? { type: 'local' },
+      ...(params.leaderEntity != null ? { leaderEntity: params.leaderEntity } : {}),
       ...(params.hostSessionId != null ? { hostSessionId: params.hostSessionId } : {}),
       status: params.status ?? 'active',
       createdAt: now,
       updatedAt: now
     }
     db.prepare(`
-      INSERT INTO agent_rooms (id, title, hostSessionId, status, createdAt, updatedAt)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(room.id, room.title, room.hostSessionId ?? null, room.status, room.createdAt, room.updatedAt)
+      INSERT INTO agent_rooms (
+        id, title, hostSessionId, ownerAccountId, ownerNodeId, ownerSourceId,
+        leaderEntity, status, createdAt, updatedAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      room.id,
+      room.title,
+      room.hostSessionId ?? null,
+      room.owner.accountId ?? null,
+      room.owner.nodeId ?? null,
+      room.owner.sourceId ?? null,
+      room.leaderEntity ?? null,
+      room.status,
+      room.createdAt,
+      room.updatedAt
+    )
     return room
   }
 
@@ -368,39 +651,233 @@ export function createAgentRoomsRepo(db: SqliteDatabase) {
 
   const getMessage = (id: string): AgentRoomMessage | undefined => {
     const row = db.prepare('SELECT * FROM agent_room_messages WHERE id = ?').get<AgentRoomMessageRow>(id)
-    return row == null ? undefined : mapMessageRow(row)
+    return row == null ? undefined : mapMessageRow(row, listDeliveries(id))
   }
 
-  const appendMessage = (message: AppendAgentRoomMessageParams): AgentRoomMessage => {
-    const id = message.id ?? uuidv4()
-    const createdAt = message.createdAt ?? Date.now()
-    db.prepare(`
-      INSERT OR IGNORE INTO agent_room_messages (
-        id, roomId, role, memberKey, runKey, content, eventType, payloadJson, createdAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      id,
-      message.roomId,
-      message.role,
-      message.memberKey ?? null,
-      message.runKey ?? null,
-      message.content,
-      message.eventType ?? null,
-      stringifyJson(message.payload),
-      createdAt
-    )
+  const getMessageByIdempotencyKey = (roomId: string, idempotencyKey: string): AgentRoomMessage | undefined => {
+    const row = db.prepare(`
+      SELECT * FROM agent_room_messages WHERE roomId = ? AND idempotencyKey = ?
+    `).get<AgentRoomMessageRow>(roomId, idempotencyKey)
+    return row == null ? undefined : mapMessageRow(row, listDeliveries(row.id))
+  }
 
-    const stored = getMessage(id)
+  const saveDelivery = (delivery: AgentRoomMessageDelivery): AgentRoomMessageDelivery => {
+    const now = Date.now()
+    db.prepare(`
+      INSERT INTO agent_room_message_deliveries (
+        id, roomMessageId, targetJson, status, providerMessageId, navigationJson,
+        error, sentAt, createdAt, updatedAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        status = excluded.status,
+        providerMessageId = excluded.providerMessageId,
+        navigationJson = excluded.navigationJson,
+        error = excluded.error,
+        sentAt = excluded.sentAt,
+        updatedAt = excluded.updatedAt
+    `).run(
+      delivery.id,
+      delivery.roomMessageId,
+      stringifyJson(delivery.target),
+      delivery.status,
+      delivery.providerMessageId ?? null,
+      stringifyJson(delivery.navigation),
+      delivery.error ?? null,
+      delivery.sentAt ?? null,
+      now,
+      now
+    )
+    return mapDeliveryRow(
+      db.prepare('SELECT * FROM agent_room_message_deliveries WHERE id = ?')
+        .get<AgentRoomMessageDeliveryRow>(delivery.id)!
+    )
+  }
+
+  const claimMessage = (message: AppendAgentRoomMessageParams): ClaimAgentRoomMessageResult => {
+    const insert = db.transaction((input: AppendAgentRoomMessageParams): { id: string; inserted: boolean } => {
+      if (input.idempotencyKey != null) {
+        const existing = db.prepare(`
+          SELECT id FROM agent_room_messages WHERE roomId = ? AND idempotencyKey = ?
+        `).get<Pick<AgentRoomMessageRow, 'id'>>(input.roomId, input.idempotencyKey)
+        if (existing != null) return { id: existing.id, inserted: false }
+      }
+
+      const id = input.id ?? uuidv4()
+      const createdAt = input.createdAt ?? Date.now()
+      const sequence = input.sequence ?? (
+        db.prepare('SELECT COALESCE(MAX(sequence), 0) + 1 AS value FROM agent_room_messages WHERE roomId = ?')
+          .get<{ value: number }>(input.roomId)?.value ?? 1
+      )
+      db.prepare(`
+        INSERT INTO agent_room_messages (
+          id, roomId, role, memberKey, runKey, content, eventType, payloadJson,
+          sequence, idempotencyKey, originJson, createdAt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id,
+        input.roomId,
+        input.role,
+        input.memberKey ?? null,
+        input.runKey ?? null,
+        input.content,
+        input.eventType ?? null,
+        stringifyJson(input.payload),
+        sequence,
+        input.idempotencyKey ?? null,
+        stringifyJson(input.origin),
+        createdAt
+      )
+
+      for (const delivery of input.deliveries ?? []) {
+        saveDelivery({ ...delivery, roomMessageId: id })
+      }
+      return { id, inserted: true }
+    })
+    const result = insert(message)
+    const stored = getMessage(result.id)
     if (stored == null) {
-      throw new Error(`Failed to append agent room message: ${id}`)
+      throw new Error(`Failed to append agent room message: ${result.id}`)
     }
-    return stored
+    return { inserted: result.inserted, message: stored }
+  }
+
+  const appendMessage = (message: AppendAgentRoomMessageParams): AgentRoomMessage => claimMessage(message).message
+
+  const updateMessagePayload = (
+    id: string,
+    payload: AgentRoomUserMessagePayload | Record<string, unknown>
+  ): AgentRoomMessage | undefined => {
+    db.prepare('UPDATE agent_room_messages SET payloadJson = ? WHERE id = ?').run(stringifyJson(payload), id)
+    return getMessage(id)
   }
 
   const listMessages = (roomId: string): AgentRoomMessage[] => {
-    return db.prepare('SELECT * FROM agent_room_messages WHERE roomId = ? ORDER BY createdAt ASC, rowid ASC')
+    return db.prepare('SELECT * FROM agent_room_messages WHERE roomId = ? ORDER BY sequence ASC, rowid ASC')
       .all<AgentRoomMessageRow>(roomId)
-      .map(mapMessageRow)
+      .map(row => mapMessageRow(row, listDeliveries(row.id)))
+  }
+
+  const saveChannelLink = (link: SaveAgentRoomChannelLinkParams): AgentRoomChannelLink => {
+    const createdAt = link.createdAt ?? Date.now()
+    const existingOwner = findRoomChannelLink({
+      channelId: link.channelId,
+      channelKey: link.channelKey,
+      channelType: link.channelType
+    })
+    if (
+      existingOwner != null &&
+      (existingOwner.roomId !== link.roomId || existingOwner.channelLinkName !== link.channelLinkName)
+    ) {
+      throw new Error(
+        `Channel conversation is already attached to agent room ${existingOwner.roomId}: ` +
+          `${link.channelType}/${link.channelKey}/${link.channelId}`
+      )
+    }
+    db.prepare(`
+      INSERT INTO agent_room_channel_links (
+        roomId, channelLinkName, channelType, channelKey, channelId, accountLabel,
+        conversationKind, entity, label, receiveId, receiveIdType, threadId, createdAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(roomId, channelLinkName) DO UPDATE SET
+        channelType = excluded.channelType,
+        channelKey = excluded.channelKey,
+        channelId = excluded.channelId,
+        accountLabel = excluded.accountLabel,
+        conversationKind = excluded.conversationKind,
+        entity = excluded.entity,
+        label = excluded.label,
+        receiveId = excluded.receiveId,
+        receiveIdType = excluded.receiveIdType,
+        threadId = excluded.threadId
+    `).run(
+      link.roomId,
+      link.channelLinkName,
+      link.channelType,
+      link.channelKey,
+      link.channelId,
+      link.accountLabel ?? null,
+      link.conversationKind,
+      link.entity,
+      link.label,
+      link.receiveId,
+      link.receiveIdType,
+      link.threadId ?? null,
+      createdAt
+    )
+    return mapChannelLinkRow(
+      db.prepare(`
+      SELECT * FROM agent_room_channel_links WHERE roomId = ? AND channelLinkName = ?
+    `).get<AgentRoomChannelLinkRow>(link.roomId, link.channelLinkName)!
+    )
+  }
+
+  const findRoomChannelLink = (input: {
+    channelId: string
+    channelKey: string
+    channelType: string
+  }): AgentRoomChannelLink | undefined => {
+    const row = db.prepare(`
+      SELECT * FROM agent_room_channel_links
+      WHERE channelType = ? AND channelKey = ? AND channelId = ?
+      LIMIT 1
+    `).get<AgentRoomChannelLinkRow>(input.channelType, input.channelKey, input.channelId)
+    return row == null ? undefined : mapChannelLinkRow(row)
+  }
+
+  const createShare = (input: CreateAgentRoomShareParams): AgentRoomShare => {
+    const id = input.id ?? uuidv4()
+    const now = Date.now()
+    db.transaction(() => {
+      db.prepare(`
+        INSERT INTO agent_room_shares (id, roomId, status, createdAt, updatedAt)
+        VALUES (?, ?, 'active', ?, ?)
+      `).run(id, input.roomId, now, now)
+      const insertGrant = db.prepare(`
+        INSERT INTO agent_room_share_grants (
+          shareId, principalType, principalId, permissionsJson, createdAt
+        ) VALUES (?, ?, ?, ?, ?)
+      `)
+      for (const grant of input.grants) {
+        insertGrant.run(id, grant.principalType, grant.principalId, stringifyJson(grant.permissions), now)
+      }
+    })()
+    return mapShareRow(db.prepare('SELECT * FROM agent_room_shares WHERE id = ?').get<AgentRoomShareRow>(id)!)
+  }
+
+  const createShareWithOwner = (input: CreateAgentRoomShareWithOwnerParams): AgentRoomShare => {
+    return db.transaction(() => {
+      const room = get(input.roomId)
+      if (room == null) throw new Error(`Agent room not found: ${input.roomId}`)
+      if (room.owner.accountId != null && room.owner.accountId !== input.owner.accountId) {
+        throw new Error('A Room cannot be moved to a different Relay owner account.')
+      }
+      if (room.owner.sourceId != null && room.owner.sourceId !== input.owner.sourceId) {
+        throw new Error('A Room cannot be moved to a different Relay service.')
+      }
+      const updated = update(input.roomId, {
+        ownerAccountId: input.owner.accountId,
+        ownerNodeId: input.owner.nodeId,
+        ownerSourceId: input.owner.sourceId
+      })
+      if (updated == null) throw new Error(`Agent room not found: ${input.roomId}`)
+      const share = createShare(input)
+      appendEvent({
+        idempotencyKey: input.event.idempotencyKey,
+        payload: share,
+        roomId: input.roomId,
+        type: input.event.type
+      })
+      return share
+    })()
+  }
+
+  const revokeShare = (roomId: string, shareId: string) => {
+    const now = Date.now()
+    return db.prepare(`
+      UPDATE agent_room_shares
+      SET status = 'revoked', revokedAt = ?, updatedAt = ?
+      WHERE id = ? AND roomId = ? AND status = 'active'
+    `).run(now, now, shareId, roomId).changes > 0
   }
 
   const getDetail = (id: string): AgentRoomDetail | undefined => {
@@ -411,9 +888,11 @@ export function createAgentRoomsRepo(db: SqliteDatabase) {
 
     return {
       room,
+      channelLinks: listChannelLinks(id),
       members: listMembers(id),
       runs: listRuns(id),
-      messages: listMessages(id)
+      messages: listMessages(id),
+      shares: listShares(id)
     }
   }
 
@@ -423,22 +902,37 @@ export function createAgentRoomsRepo(db: SqliteDatabase) {
   }
 
   return {
+    appendEvent,
     appendMessage,
+    claimMessage,
+    createShare,
+    createShareWithOwner,
     create,
     get,
     getByHostSessionId,
     getDetail,
+    getEventByIdempotencyKey,
+    findRoomChannelLink,
     getMember,
     getMessage,
+    getMessageByIdempotencyKey,
     getRun,
+    getShare,
     list,
+    listChannelLinks,
+    listDeliveries,
     listMembers,
     listMessages,
     listRuns,
     listRunsForMember,
+    listShares,
     remove,
+    revokeShare,
+    saveChannelLink,
+    saveDelivery,
     saveMember,
     saveRun,
+    updateMessagePayload,
     update
   }
 }

@@ -1,17 +1,23 @@
 /* eslint-disable max-lines */
 
+import { randomUUID } from 'node:crypto'
+
 import Router from '@koa/router'
 
 import type {
   AgentRoom,
+  AgentRoomCommand,
   AgentRoomEvent,
   AgentRoomEventMember,
   AgentRoomEventRun,
+  AgentRoomMessage,
+  AgentRoomMessageOrigin,
   AgentRoomRunStatus,
   AgentRoomUserMessageTarget,
   UpdateAgentRoomMetadataRequest
 } from '@oneworks/core'
 
+import { resolveAgentRoomChannelLink } from '#~/services/agent-room/channel-link.js'
 import { createAgentRoomService } from '#~/services/agent-room/index.js'
 import { publishClientEvent } from '#~/services/client-events.js'
 import { badRequest, conflict, methodNotAllowed, notFound } from '#~/utils/http.js'
@@ -124,6 +130,92 @@ const normalizeTarget = (value: unknown): AgentRoomUserMessageTarget | undefined
   }
 }
 
+const normalizeOrigin = (value: unknown): AgentRoomMessageOrigin | undefined => {
+  if (!isRecord(value)) return undefined
+  const channelId = asString(value.channelId)
+  const channelKey = asString(value.channelKey)
+  const channelType = asString(value.channelType)
+  const conversationKind = asString(value.conversationKind)
+  if (channelId == null || channelKey == null || channelType == null || conversationKind == null) {
+    return undefined
+  }
+  return {
+    channelId,
+    channelKey,
+    channelType,
+    conversationKind,
+    ...(asString(value.accountId) != null ? { accountId: asString(value.accountId) } : {}),
+    ...(asString(value.accountLabel) != null ? { accountLabel: asString(value.accountLabel) } : {}),
+    ...(asString(value.channelLinkName) != null ? { channelLinkName: asString(value.channelLinkName) } : {}),
+    ...(asString(value.conversationLabel) != null ? { conversationLabel: asString(value.conversationLabel) } : {}),
+    ...(asString(value.providerMessageId) != null ? { providerMessageId: asString(value.providerMessageId) } : {}),
+    ...(asString(value.threadId) != null ? { threadId: asString(value.threadId) } : {})
+  }
+}
+
+type PublicAgentRoomCommand = Exclude<
+  AgentRoomCommand,
+  { type: 'ingest_channel_message' | 'record_channel_delivery' | 'record_delivery' }
+>
+
+const normalizeCommand = (value: unknown): PublicAgentRoomCommand | undefined => {
+  if (!isRecord(value) || !isNonEmptyString(value.idempotencyKey) || !isNonEmptyString(value.type)) {
+    return undefined
+  }
+  const idempotencyKey = value.idempotencyKey.trim()
+  if (value.type === 'append_message' && isRecord(value.message) && isNonEmptyString(value.message.content)) {
+    const origin = value.message.origin == null ? undefined : normalizeOrigin(value.message.origin)
+    if (value.message.origin != null && origin == null) return undefined
+    return {
+      idempotencyKey,
+      type: value.type,
+      message: {
+        content: value.message.content.trim(),
+        ...(normalizeTarget(value.message.target) != null ? { target: normalizeTarget(value.message.target) } : {}),
+        ...(origin != null ? { origin } : {})
+      }
+    }
+  }
+  if (value.type === 'apply_event' && isRoomEvent(value.event)) {
+    return { idempotencyKey, type: value.type, event: value.event }
+  }
+  if (value.type === 'attach_channel' && isRecord(value.link)) {
+    if (!isNonEmptyString(value.link.channelLinkName)) return undefined
+    return {
+      idempotencyKey,
+      type: value.type,
+      link: {
+        channelLinkName: value.link.channelLinkName.trim()
+      }
+    }
+  }
+  if (value.type === 'create_share' && isRecord(value.share) && Array.isArray(value.share.grants)) {
+    const permissions = new Set(['approve', 'manage_share', 'open_run', 'send', 'target_member', 'view'])
+    const grants = value.share.grants.flatMap((grant) => {
+      if (
+        !isRecord(grant) ||
+        (grant.principalType !== 'team' && grant.principalType !== 'user') ||
+        !isNonEmptyString(grant.principalId) ||
+        !Array.isArray(grant.permissions) ||
+        !grant.permissions.every(permission => typeof permission === 'string' && permissions.has(permission))
+      ) return []
+      return [{
+        principalId: grant.principalId.trim(),
+        principalType: grant.principalType as 'team' | 'user',
+        permissions: grant.permissions as Array<
+          'approve' | 'manage_share' | 'open_run' | 'send' | 'target_member' | 'view'
+        >
+      }]
+    })
+    if (grants.length !== value.share.grants.length) return undefined
+    return { idempotencyKey, type: value.type, share: { grants } }
+  }
+  if (value.type === 'revoke_share' && isNonEmptyString(value.shareId)) {
+    return { idempotencyKey, type: value.type, shareId: value.shareId.trim() }
+  }
+  return undefined
+}
+
 const normalizeInteractionResponseData = (value: unknown): string | string[] | undefined => {
   if (typeof value === 'string') {
     return value
@@ -153,7 +245,7 @@ const publishAgentRoomUpdated = (roomId: string, room?: AgentRoom) => {
 
 export function agentRoomsRouter(): Router {
   const router = new Router()
-  const service = createAgentRoomService()
+  const service = createAgentRoomService(undefined, undefined, { resolveChannelLink: resolveAgentRoomChannelLink })
 
   router.get(['/', ''], (ctx) => {
     ctx.body = { rooms: service.listRooms() }
@@ -224,6 +316,25 @@ export function agentRoomsRouter(): Router {
     ctx.body = detail
   })
 
+  router.post('/:id/commands', async (ctx) => {
+    const { id } = ctx.params as { id: string }
+    const command = normalizeCommand(
+      isRecord(ctx.request.body) && ctx.request.body.command != null
+        ? ctx.request.body.command
+        : ctx.request.body
+    )
+    if (command == null) {
+      throw badRequest('Invalid room command', undefined, 'invalid_agent_room_command')
+    }
+    try {
+      const result = await service.executeCommand(id, command)
+      publishAgentRoomUpdated(id)
+      ctx.body = { result }
+    } catch (error) {
+      throw toNotFound(error, id)
+    }
+  })
+
   router.patch('/:id', (ctx) => {
     const { id } = ctx.params as { id: string }
     const update = normalizeMetadataUpdate(ctx.request.body)
@@ -242,17 +353,31 @@ export function agentRoomsRouter(): Router {
 
   router.post('/:id/messages', async (ctx) => {
     const { id } = ctx.params as { id: string }
-    const { content, target } = ctx.request.body as {
+    const { content, idempotencyKey, origin, target } = ctx.request.body as {
       content?: string
+      idempotencyKey?: string
+      origin?: unknown
       target?: unknown
     }
     const normalizedContent = content?.trim()
     if (normalizedContent == null || normalizedContent === '') {
       throw badRequest('message content is required', undefined, 'invalid_agent_room_message')
     }
+    const normalizedOrigin = origin == null ? undefined : normalizeOrigin(origin)
+    if (origin != null && normalizedOrigin == null) {
+      throw badRequest('Invalid message origin', undefined, 'invalid_agent_room_message_origin')
+    }
 
     try {
-      const message = await service.appendUserMessage(id, normalizedContent, normalizeTarget(target))
+      const message = await service.executeCommand(id, {
+        idempotencyKey: asString(idempotencyKey) ?? randomUUID(),
+        type: 'append_message',
+        message: {
+          content: normalizedContent,
+          ...(normalizeTarget(target) != null ? { target: normalizeTarget(target) } : {}),
+          ...(normalizedOrigin != null ? { origin: normalizedOrigin } : {})
+        }
+      }) as AgentRoomMessage
       publishAgentRoomUpdated(id)
       ctx.body = { message }
     } catch (error) {
@@ -284,7 +409,7 @@ export function agentRoomsRouter(): Router {
     }
   })
 
-  router.post('/:id/events', (ctx) => {
+  router.post('/:id/events', async (ctx) => {
     const { id } = ctx.params as { id: string }
     const body = ctx.request.body as {
       type?: string
@@ -295,7 +420,11 @@ export function agentRoomsRouter(): Router {
     }
 
     try {
-      const message = service.applyEvent(id, body.event)
+      const message = await service.executeCommand(id, {
+        idempotencyKey: body.event.id ?? randomUUID(),
+        type: 'apply_event',
+        event: body.event
+      }) as AgentRoomMessage
       publishAgentRoomUpdated(id)
       ctx.body = { message }
     } catch (error) {

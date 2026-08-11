@@ -1,4 +1,5 @@
 /* eslint-disable max-lines -- plugin route coverage shares one Koa fixture across scoped runtime scenarios. */
+import { Buffer } from 'node:buffer'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import http from 'node:http'
 import os from 'node:os'
@@ -12,6 +13,7 @@ import bodyParser from 'koa-bodyparser'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { pluginsRouter } from '#~/routes/plugins.js'
+import { LOCAL_WORKSPACE_REQUEST_PRINCIPAL, setWorkspaceRequestPrincipal } from '#~/services/auth/index.js'
 import { getPluginManager, resetPluginManagerForTests } from '#~/services/plugins/index.js'
 
 const mocks = vi.hoisted(() => ({
@@ -57,6 +59,10 @@ describe('pluginsRouter', () => {
     const router = pluginsRouter()
     rootRouter.use(router.routes())
     rootRouter.use(router.allowedMethods())
+    app.use(async (ctx, next) => {
+      setWorkspaceRequestPrincipal(ctx, LOCAL_WORKSPACE_REQUEST_PRINCIPAL)
+      await next()
+    })
     app.use(bodyParser())
     app.use(rootRouter.routes())
     app.use(rootRouter.allowedMethods())
@@ -588,7 +594,8 @@ describe('pluginsRouter', () => {
             properties: {
               method: { type: 'string' },
               path: { type: 'string' },
-              body: { type: 'string' }
+              body: { type: 'string' },
+              principalKind: { type: 'string' }
             }
           },
           headerSchema: {
@@ -601,7 +608,12 @@ describe('pluginsRouter', () => {
           handler: async request => ({
             status: 201,
             headers: { 'content-type': 'application/json' },
-            body: { method: request.method, path: request.path, body: request.body.toString('utf8') }
+            body: {
+              method: request.method,
+              path: request.path,
+              body: request.body.toString('utf8'),
+              principalKind: request.principal.kind
+            }
           })
         })
         ctx.registerApi('unsafe-description', {
@@ -636,7 +648,22 @@ describe('pluginsRouter', () => {
     expect(payload).toEqual({
       method: 'POST',
       path: 'search',
-      body: '{"query":"one"}'
+      body: '{"query":"one"}',
+      principalKind: 'local_workspace'
+    })
+
+    await expect(
+      getPluginManager().handleProxy('api', 'local', {
+        body: Buffer.alloc(0),
+        headers: {},
+        method: 'GET',
+        path: '',
+        principal: { id: 'readless', kind: 'web_account', permissions: [] },
+        query: ''
+      })
+    ).rejects.toMatchObject({
+      name: 'PluginProxyPermissionError',
+      permission: 'workspace:read'
     })
 
     const listResponse = await fetch(`${baseUrl}/api/plugins`)
@@ -685,7 +712,8 @@ describe('pluginsRouter', () => {
           properties: {
             method: { type: 'string' },
             path: { type: 'string' },
-            body: { type: 'string' }
+            body: { type: 'string' },
+            principalKind: { type: 'string' }
           }
         },
         target: '/api/plugins/api/proxy/local',
@@ -1362,6 +1390,7 @@ describe('pluginsRouter', () => {
           entry: './client/index.js'
         },
         contributions: {
+          channelNavigation: [{ id: 'room-links', optionsKey: 'navigation', priority: 100 }],
           chatHeaderMoreMenu: [{
             href: 'https://docs.example.test/plugins',
             id: 'docs-link',
@@ -1547,6 +1576,7 @@ describe('pluginsRouter', () => {
     expect(unsafeOpaqueContributionPlugin.contributions).toBeUndefined()
     expect(unsafeOpaqueContributionPlugin.manifest?.plugin?.contributions).toBeUndefined()
     expect(plugin.contributions).toEqual({
+      channelNavigation: [{ id: 'room-links', optionsKey: 'navigation', priority: 100 }],
       chatHeaderMoreMenu: [{
         href: 'https://docs.example.test/plugins',
         id: 'docs-link',

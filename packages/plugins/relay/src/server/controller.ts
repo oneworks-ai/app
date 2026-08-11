@@ -18,6 +18,7 @@ import type { OneWorksAuthAccount, OneWorksAuthServer, OneWorksAuthStore } from 
 import { WebSocket, WebSocketServer } from 'ws'
 import type { RawData } from 'ws'
 
+import type { SharedAgentRoomDescriptor, SharedAgentRoomDirectoryEntry } from '@oneworks/types'
 import { normalizeRelayDeviceTransport } from '@oneworks/types/relay-device-transport'
 import type { RelayDeviceTransport } from '@oneworks/types/relay-device-transport'
 
@@ -48,7 +49,7 @@ import type { RelayConfigSyncResult } from './config-sync.js'
 import { createRelayDeviceControlChannel } from './device-control-channel.js'
 import { createRelayLoopLeaseManager } from './loop-lease.js'
 import type { RelayLoopLease } from './loop-lease.js'
-import { normalizeOptions, resolveActiveRelayServer, resolveRelayServers } from './options.js'
+import { createRelayOwnerSourceId, normalizeOptions, resolveActiveRelayServer, resolveRelayServers } from './options.js'
 import type { ResolvedRelayServer } from './options.js'
 import {
   readRelayPersonalDocumentSyncKind,
@@ -68,6 +69,7 @@ import {
   syncRelayTeamDocuments
 } from './personal-document-sync.js'
 import type { RelayDocumentScope } from './personal-document-sync.js'
+import { createRelayRoomTunnel } from './room-tunnel.js'
 import { createRelaySessionWorker } from './session-worker.js'
 import { createRelayDeviceStore, createRelayManagementServerStore, createRelayServiceInfoStore } from './store.js'
 import type { RelayManagementServerStore } from './store.js'
@@ -124,6 +126,7 @@ export interface RelayController {
   getPublicStatus: () => Promise<RelayPublicStatus>
   getServiceInfo: (payload?: unknown) => Promise<RelayServiceInfo>
   listDocumentEntries: (payload?: unknown) => Promise<unknown>
+  listSharedRooms: () => Promise<SharedAgentRoomDirectoryEntry[]>
   openDocumentPath: (payload?: unknown) => Promise<unknown>
   readDocumentContent: (payload?: unknown) => Promise<unknown>
   getConfigShareProfileDetail: (payload?: unknown) => Promise<unknown>
@@ -1151,6 +1154,24 @@ const fetchRelayProfileJson = async (
   return body
 }
 
+const normalizeSharedAgentRoomDescriptor = (value: unknown): SharedAgentRoomDescriptor | undefined => {
+  if (!isRecord(value)) return undefined
+  const shareId = readOptionalText(value.shareId)
+  const title = readOptionalText(value.title)
+  const createdAt = readOptionalText(value.createdAt)
+  const updatedAt = readOptionalText(value.updatedAt)
+  if (shareId == null || title == null || createdAt == null || updatedAt == null) return undefined
+  return {
+    availability: value.availability === 'online' ? 'online' : 'offline',
+    createdAt,
+    ...(readOptionalText(value.icon) == null ? {} : { icon: readOptionalText(value.icon) }),
+    shareId,
+    status: value.status === 'revoked' ? 'revoked' : 'active',
+    title,
+    updatedAt
+  }
+}
+
 const authServerFromRelayServer = (server: ResolvedRelayServer) => ({
   id: server.id,
   name: server.name,
@@ -1771,6 +1792,26 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
   const writeOneWorksAuthStore = (store: OneWorksAuthStore) => (
     writeOneWorksAuthStoreFile(store, authStoreEnv)
   )
+  const listSharedRooms = async (): Promise<SharedAgentRoomDirectoryEntry[]> => {
+    const authStore = await readOneWorksAuthStore()
+    const accounts = authStore.accounts.filter(account => account.enabled !== false && isSessionAuthenticated(account))
+    const results = await Promise.allSettled(accounts.map(async account => {
+      const response = await fetchRelayProfileJson(account, '/api/relay/rooms')
+      const sourceLabel = account.name?.trim() || account.email?.trim() ||
+        authStore.servers[account.serverId]?.name?.trim() || new URL(account.serverUrl).host
+      const sourceRef = createHash('sha256')
+        .update(`relay-room-source:${account.accountKey}`)
+        .digest('hex')
+        .slice(0, 24)
+      return Array.isArray(response.rooms)
+        ? response.rooms.flatMap(value => {
+          const room = normalizeSharedAgentRoomDescriptor(value)
+          return room == null ? [] : [{ room, sourceLabel, sourceRef }]
+        })
+        : []
+    }))
+    return results.flatMap(result => result.status === 'fulfilled' ? result.value : [])
+  }
   let state = initialState()
   let disposed = false
   let explicitConnectVersion = 0
@@ -4592,11 +4633,31 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
             })
             : undefined
           if (sessionWorker != null) sessionWorkers.set(connectionKey, sessionWorker)
+          const roomTunnel = createRelayRoomTunnel()
+          roomTunnel.setRequestHandler(
+            ctx.roomTunnel == null
+              ? undefined
+              : request =>
+                ctx.roomTunnel!.handleRequest(
+                  request,
+                  createRelayOwnerSourceId(activeServer.remoteBaseUrl)
+                )
+          )
+          const ownerUserId = nextStoredServer?.account?.id ?? authAccount?.userId
+          if (ownerUserId != null && ownerUserId.trim() !== '') {
+            ctx.roomTunnel?.registerTunnel?.(roomTunnel, {
+              ownerDeviceId: deviceId,
+              ownerLabel: nextStoredServer?.account?.name ?? authAccount?.name ?? activeServer.name,
+              ownerSourceId: createRelayOwnerSourceId(activeServer.remoteBaseUrl),
+              ownerUserId
+            })
+          }
           controlChannels.set(
             connectionKey,
             createRelayDeviceControlChannel({
               heartbeat,
               logger: ctx.logger,
+              roomTunnel,
               sessionWorker,
               transport: serviceInfo.deviceTransport
             })
@@ -5062,6 +5123,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
     importPersonalDocumentRootAgents,
     listWorkspaceDirectories,
     listDocumentEntries,
+    listSharedRooms,
     openWorkspaceProxy,
     openDocumentPath,
     readDocumentContent,

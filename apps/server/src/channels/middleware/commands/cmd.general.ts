@@ -107,6 +107,7 @@ const formatArgumentHelp = (
     aliases: [],
     descriptionKey: undefined,
     permission: 'everyone',
+    approval: undefined,
     args: [argument],
     subcommands: [],
     action: undefined

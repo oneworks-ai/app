@@ -1,4 +1,4 @@
-import type { AgentRoomMessageView, AgentRoomRunView } from '../@types/agent-room-view'
+import type { AgentRoomChannelReferenceView, AgentRoomMessageView, AgentRoomRunView } from '../@types/agent-room-view'
 import { AgentRoomBubble } from './AgentRoomBubble'
 
 const getAgentSenderKey = (message: AgentRoomMessageView) => {
@@ -51,6 +51,7 @@ export function AgentRoomMessageList({
   messages,
   variant = 'standalone',
   onOpenHostSession,
+  onOpenChannelReference,
   onOpenRun,
   onReplyToRun,
   onRespondInteraction,
@@ -61,6 +62,7 @@ export function AgentRoomMessageList({
   showTimelineSeparators?: boolean
   variant?: 'standalone' | 'transcript'
   onOpenHostSession?: () => void
+  onOpenChannelReference?: (reference: AgentRoomChannelReferenceView) => void
   onOpenRun?: (run: AgentRoomRunView) => void
   onReplyToRun?: (message: AgentRoomMessageView) => void
   onRespondInteraction?: (interactionId: string, data: string | string[]) => Promise<void> | void
@@ -76,6 +78,7 @@ export function AgentRoomMessageList({
           showAvatar={shouldShowAgentAvatar(messages, index)}
           showAuthor={shouldShowAgentAuthor(messages, index)}
           onOpenHostSession={onOpenHostSession}
+          onOpenChannelReference={onOpenChannelReference}
           onOpenRun={onOpenRun}
           onReplyToRun={onReplyToRun}
           onRespondInteraction={onRespondInteraction}

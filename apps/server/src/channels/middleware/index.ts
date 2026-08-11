@@ -16,8 +16,10 @@ import { groupMessageDebounceMiddleware } from './group-message-debounce'
 import { i18nMiddleware } from './i18n'
 import { identityMiddleware } from './identity'
 import { ingressGateMiddleware } from './ingress-gate'
+import { ingressRouterMiddleware } from './ingress-router'
 import { interactionResponseMiddleware } from './interaction-response'
 import { parseContentMiddleware } from './parse-content'
+import { policyGateMiddleware } from './policy-gate'
 import { resolveSessionMiddleware } from './resolve-session'
 
 export const pipeline = compose<ChannelContext>(
@@ -25,14 +27,16 @@ export const pipeline = compose<ChannelContext>(
   i18nMiddleware,
   parseContentMiddleware,
   identityMiddleware,
-  adminBootstrapMiddleware,
   accessControlMiddleware,
+  adminBootstrapMiddleware,
   emojiRegistryMiddleware,
   resolveSessionMiddleware,
-  channelCommandMiddleware,
-  interactionResponseMiddleware,
+  policyGateMiddleware,
   availabilityGateMiddleware,
   ingressGateMiddleware,
+  ingressRouterMiddleware,
+  channelCommandMiddleware,
+  interactionResponseMiddleware,
   groupMessageDebounceMiddleware,
   ackMiddleware,
   adminGateMiddleware,

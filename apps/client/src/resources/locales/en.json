@@ -1866,6 +1866,18 @@
       "ariaLabel": "{{title}} transcript",
       "empty": "No public room messages yet"
     },
+    "navigation": {
+      "chooseTitle": "Open channel destination",
+      "source": "Source: {{target}}",
+      "delivery": "Delivery: {{target}}",
+      "status": {
+        "failed": "Failed",
+        "pending": "Pending",
+        "sent": "Sent"
+      },
+      "openWeb": "Open web",
+      "openApp": "Open app"
+    },
     "status": {
       "room": {
         "active": "Active",

@@ -1,6 +1,6 @@
 import { Suspense, lazy } from 'react'
 import type { ComponentType, ReactNode } from 'react'
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
 
 import type { ExperimentsConfig } from '@oneworks/types'
 
@@ -8,6 +8,9 @@ import { useDesktopWorkspaceStartupReady } from '#~/components/layout/desktop-wo
 import { useExperimentsState } from '#~/hooks/use-experiments'
 import { PluginRoute } from '#~/plugins/PluginHost'
 import { PluginProvider } from '#~/plugins/PluginProvider'
+import { PluginContext, usePluginContext } from '#~/plugins/plugin-context'
+import type { PluginContextValue } from '#~/plugins/plugin-context'
+import { getRuntimeWorkspaceId } from '#~/runtime-config'
 
 const lazyNamedRoute = <T extends Record<K, ComponentType>, K extends keyof T>(
   loader: () => Promise<T>,
@@ -40,6 +43,29 @@ function WorkspacePluginStoreRoute() {
   return (
     <PluginProvider runtimeSource='current'>
       <PluginStoreRoute />
+    </PluginProvider>
+  )
+}
+
+function WorkspacePluginRouteSelection({ fallback }: { fallback: PluginContextValue }) {
+  const current = usePluginContext()
+  const { routeId = '', scope = '' } = useParams()
+  if (!current.ready) return null
+  const hasCurrentRoute = current.registry.findRoute(scope, routeId) != null ||
+    current.snapshot.routes.some(route => route.scope === scope && route.id === routeId)
+  return hasCurrentRoute
+    ? <PluginRoute />
+    : <PluginContext.Provider value={fallback}>
+      <PluginRoute />
+    </PluginContext.Provider>
+}
+
+function WorkspaceAwarePluginRoute() {
+  const fallback = usePluginContext()
+  if (getRuntimeWorkspaceId() == null) return <PluginRoute />
+  return (
+    <PluginProvider runtimeSource='current'>
+      <WorkspacePluginRouteSelection fallback={fallback} />
     </PluginProvider>
   )
 }
@@ -120,7 +146,7 @@ export function AppRoutes() {
           <Route path='/plugins/store/:scope' element={<WorkspacePluginStoreRoute />} />
           <Route path='/plugins/:scope/diagnostics' element={<WorkspacePluginStoreRoute />} />
           <Route path='/plugins/:scope' element={<WorkspacePluginStoreRoute />} />
-          <Route path='/plugins/:scope/:routeId/*' element={<PluginRoute />} />
+          <Route path='/plugins/:scope/:routeId/*' element={<WorkspaceAwarePluginRoute />} />
           <Route path='/launcher/*' element={<Navigate to='/' replace />} />
           <Route path='*' element={<NotFoundRoute />} />
         </Routes>

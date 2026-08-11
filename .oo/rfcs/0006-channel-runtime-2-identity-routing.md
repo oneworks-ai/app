@@ -1,11 +1,11 @@
 ---
 rfc: 0006
 title: Channel Runtime 2.0 - Identity And Routing
-status: draft
+status: implemented
 authors:
   - Codex
 created: 2026-06-16
-updated: 2026-06-17
+updated: 2026-08-09
 targetVersion: vNext
 ---
 
@@ -26,7 +26,7 @@ channelType + tenantId + appId/botId + accountId
 例子：
 
 ```text
-user_123 = 一介
+user_123 = 示例用户
   - lark / tenant=A / app=OWO演示 / open_id=ou_xxx
   - lark / tenant=A / app=owo-cli / open_id=ou_yyy
   - wechat / openid=wx_xxx

@@ -7,6 +7,7 @@ import type { RelayDeviceTransport } from '@oneworks/types/relay-device-transpor
 
 import { createHeartbeatBody, sendHeartbeat } from './heartbeat.js'
 import type { RelayHeartbeatOptions } from './heartbeat.js'
+import type { RelayRoomTunnel } from './room-tunnel.js'
 import type { RelaySessionWorker } from './session-worker.js'
 
 export const RELAY_CONTROL_HEARTBEAT_MS = 30_000
@@ -34,6 +35,7 @@ export interface RelayDeviceControlChannelOptions {
   logger?: { warn: (...args: unknown[]) => void }
   random?: () => number
   sessionWorker?: RelaySessionWorker
+  roomTunnel?: RelayRoomTunnel
   transport?: RelayDeviceTransport
   webSocketFactory?: (url: string, headers: Record<string, string>) => ControlSocket
 }
@@ -63,6 +65,7 @@ export const createRelayDeviceControlChannel = (
   let stopped = false
   let online = false
   let socket: ControlSocket | undefined
+  let roomTransport: ((frame: string) => void) | undefined
   let socketTimeout: ReturnType<typeof setTimeout> | undefined
   let heartbeatTimer: ReturnType<typeof setTimeout> | undefined
   let snapshotTimer: ReturnType<typeof setTimeout> | undefined
@@ -278,6 +281,8 @@ export const createRelayDeviceControlChannel = (
   const becomeOffline = () => {
     if (stopped) return
     online = false
+    if (roomTransport != null) options.roomTunnel?.clearTransport(roomTransport)
+    roomTransport = undefined
     clearTimer(socketTimeout)
     socketTimeout = undefined
     clearTimer(heartbeatTimer)
@@ -297,6 +302,8 @@ export const createRelayDeviceControlChannel = (
   const becomeOnline = (openedSocket: ControlSocket) => {
     if (stopped || socket !== openedSocket) return
     online = true
+    roomTransport = (frame: string) => openedSocket.send(frame)
+    options.roomTunnel?.setTransport(roomTransport)
     retryBaseMs = RELAY_CONTROL_RETRY_MIN_MS
     clearTimer(socketTimeout)
     socketTimeout = undefined
@@ -351,6 +358,8 @@ export const createRelayDeviceControlChannel = (
       }
       if (frame != null && typeof frame === 'object' && (frame as { type?: unknown }).type === 'jobs-available') {
         claimJobs()
+      } else {
+        options.roomTunnel?.handleFrame(frame)
       }
     })
     current.on('error', error => {
@@ -401,6 +410,8 @@ export const createRelayDeviceControlChannel = (
       snapshotAbort?.abort()
       snapshotCheckAbort?.abort()
       socket?.close(1000, 'relay control stopped')
+      if (roomTransport != null) options.roomTunnel?.clearTransport(roomTransport)
+      roomTransport = undefined
       socket = undefined
       options.sessionWorker?.stop()
     }

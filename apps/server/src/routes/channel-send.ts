@@ -70,7 +70,8 @@ export function channelSendRouter(): Router {
       channelKey: ctx.params.channelKey,
       toolName,
       input: body.input,
-      invocationToken: trimNonEmpty(body.invocationToken)
+      invocationToken: trimNonEmpty(body.invocationToken),
+      requestId: trimNonEmpty(body.requestId)
     })
 
     if (!result.ok) {

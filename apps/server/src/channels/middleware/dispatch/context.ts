@@ -1,4 +1,4 @@
-import type { ChatMessageContent } from '@oneworks/core'
+import type { ChannelExecutionContext, ChatMessageContent } from '@oneworks/core'
 import type { ChannelInboundEvent } from '@oneworks/core/channel'
 
 import { getDb } from '#~/db/index.js'
@@ -6,6 +6,8 @@ import type { writeChannelMessageContext } from '#~/services/session/index.js'
 
 import type { ChannelMiddleware } from '../@types'
 import { stripSpeakerPrefix } from '../@utils'
+
+export { buildChannelExecutionContext, projectInboundMessageToRoom } from './execution-context'
 
 const THREAD_SEGMENT_MAX_LENGTH = 120
 
@@ -30,6 +32,7 @@ export const buildChannelMessageContext = (
   runtime: {
     childRunId?: string
     conversationStateId?: string
+    executionContext?: ChannelExecutionContext
     threadKey?: string
   } = {}
 ): Parameters<typeof writeChannelMessageContext>[1] => ({
@@ -42,6 +45,7 @@ export const buildChannelMessageContext = (
   childRunId: runtime.childRunId,
   conversationStateId: runtime.conversationStateId,
   entity: ctx.channelLink?.entity,
+  executionContext: runtime.executionContext,
   messageId: ctx.inbound.messageId,
   replyReceiveId: ctx.inbound.replyTo?.receiveId,
   replyReceiveIdType: ctx.inbound.replyTo?.receiveIdType,
@@ -53,11 +57,24 @@ export const buildChannelMessageContext = (
 
 export const resolveChannelThread = (ctx: Parameters<ChannelMiddleware>[0]) => {
   const entitySegment = toThreadSegment(ctx.channelLink?.entity ?? ctx.channelKey, 'default')
-  const threadId = ctx.inbound.threadId
+  const threadId = ctx.inbound.threadId ?? ctx.inbound.rootMessageId
   if (threadId != null && threadId.trim() !== '') {
     return {
       reason: 'platform_reply',
       threadKey: `reply:thread:${toThreadSegment(threadId, 'unknown')}`
+    }
+  }
+  const replyMessageId = ctx.inbound.replyMessageId
+  if (replyMessageId != null && replyMessageId.trim() !== '') {
+    const state = getDb().getChannelConversationStateByLastBotReply({
+      channelId: ctx.inbound.channelId,
+      channelKey: ctx.channelKey,
+      channelType: ctx.inbound.channelType,
+      entity: ctx.channelLink?.entity,
+      messageId: replyMessageId
+    })
+    if (state != null) {
+      return { reason: 'reply_to_bot', threadKey: state.threadKey }
     }
   }
   if (ctx.inbound.sessionType === 'direct') {

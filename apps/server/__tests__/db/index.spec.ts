@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SqliteDb } from '#~/db/index.js'
 import { createSqliteDatabase } from '#~/db/sqlite.js'
 import type { SqliteDatabase } from '#~/db/sqlite.js'
+import { encodeChannelRuntimeKey } from '#~/services/channel-runtime-key.js'
 
 describe('sqliteDb', () => {
   let sqlite: SqliteDatabase
@@ -19,6 +20,137 @@ describe('sqliteDb', () => {
   afterEach(() => {
     db.close()
     vi.useRealTimers()
+  })
+
+  it('atomically persists policy hit state with an idempotent event and CAS revision', () => {
+    const accountPrincipal = encodeChannelRuntimeKey('lark:main', 'account-1')
+    const policyKey = encodeChannelRuntimeKey('support', 'account', accountPrincipal)
+    const event = {
+      actorAccountId: accountPrincipal,
+      channelLinkName: 'support',
+      eventKey: 'event-1',
+      eventType: 'hit',
+      policyKey
+    }
+    const state = {
+      channelLinkName: 'support',
+      hitWindowStartedAt: Date.now(),
+      hits: 1,
+      mutedUntil: null,
+      policyKey: event.policyKey,
+      reason: 'spam',
+      scope: 'account' as const,
+      state: 'warned' as const,
+      subjectKey: accountPrincipal,
+      updatedAt: Date.now(),
+      updatedBy: 'test'
+    }
+
+    expect(db.applyChannelPolicyHit({ event, resolveState: () => state })).toMatchObject({
+      applied: true,
+      state: { revision: 1 }
+    })
+    expect(db.applyChannelPolicyHit({ event, resolveState: () => ({ ...state, hits: 99 }) })).toMatchObject({
+      applied: false,
+      state: { hits: 1 }
+    })
+    expect(db.compareAndSetChannelPolicyState({ ...state, expectedRevision: 1, hits: 2 })).toMatchObject({
+      hits: 2,
+      revision: 2
+    })
+    expect(db.compareAndSetChannelPolicyState({ ...state, expectedRevision: 1, hits: 3 })).toBeUndefined()
+    expect(db.listChannelPolicyEvents(event.policyKey)).toHaveLength(1)
+    expect(db.listRecentChannelPolicyEvents()).toEqual([
+      expect.objectContaining({ channelLinkName: 'support', eventKey: 'event-1' })
+    ])
+
+    const secondAccountPrincipal = encodeChannelRuntimeKey('lark:main', 'account-2')
+    const secondPolicyKey = encodeChannelRuntimeKey('support', 'account', secondAccountPrincipal)
+    expect(db.applyChannelPolicyHit({
+      event: {
+        ...event,
+        actorAccountId: secondAccountPrincipal,
+        eventKey: 'event-2',
+        policyKey: secondPolicyKey
+      },
+      resolveState: () => ({
+        ...state,
+        policyKey: secondPolicyKey,
+        subjectKey: secondAccountPrincipal
+      })
+    })).toMatchObject({ applied: true, state: { revision: 1 } })
+    expect(db.getChannelPolicyState(policyKey)).toEqual(expect.objectContaining({ subjectKey: accountPrincipal }))
+    expect(db.getChannelPolicyState(secondPolicyKey)).toEqual(
+      expect.objectContaining({ subjectKey: secondAccountPrincipal })
+    )
+  })
+
+  it('leases, retries, and completes off-hours backlog rows with owner-scoped CAS', () => {
+    db.appendChannelOffhourBacklog({
+      channelId: 'oc_1',
+      channelKey: 'lark-main',
+      channelLinkName: 'support',
+      channelType: 'lark',
+      entity: 'assistant',
+      id: 'backlog-1',
+      sessionType: 'group',
+      text: 'first'
+    })
+    db.appendChannelOffhourBacklog({
+      channelId: 'oc_2',
+      channelKey: 'lark-main',
+      channelLinkName: 'support',
+      channelType: 'lark',
+      entity: 'assistant',
+      id: 'backlog-2',
+      sessionType: 'group',
+      text: 'separate target'
+    })
+
+    const firstClaim = db.claimChannelOffhourBacklog({ leaseMs: 100, leaseOwner: 'worker-a' })
+    expect(firstClaim).toHaveLength(1)
+    expect(firstClaim[0]).toMatchObject({ attempts: 1, id: 'backlog-1', status: 'leased' })
+    expect(db.completeChannelOffhourBacklogClaim({ ids: ['backlog-1'], leaseOwner: 'worker-b' })).toBe(0)
+    expect(db.retryChannelOffhourBacklogClaim({ error: 'dispatch failed', ids: ['backlog-1'], leaseOwner: 'worker-a' }))
+      .toBe(1)
+    expect(db.getChannelOffhourBacklogItem('backlog-1')).toMatchObject({
+      lastError: 'dispatch failed',
+      status: 'pending'
+    })
+
+    const secondClaim = db.claimChannelOffhourBacklog({ leaseMs: 100, leaseOwner: 'worker-b' })
+    expect(secondClaim).toHaveLength(1)
+    expect(secondClaim[0]).toMatchObject({ attempts: 2, id: 'backlog-1', status: 'leased' })
+    expect(db.attachChannelOffhourBacklogDigestChildRun({
+      digestChildRunId: 'digest-1',
+      ids: ['backlog-1'],
+      leaseOwner: 'worker-b'
+    })).toBe(1)
+    expect(db.completeChannelOffhourBacklogClaim({ ids: ['backlog-1'], leaseOwner: 'worker-b' })).toBe(1)
+    expect(db.getChannelOffhourBacklogItem('backlog-1')).toMatchObject({
+      digestChildRunId: 'digest-1',
+      processedAt: expect.any(Number),
+      status: 'processed'
+    })
+
+    db.appendChannelOffhourBacklog({
+      channelId: 'oc_3',
+      channelKey: 'lark-main',
+      channelLinkName: 'support',
+      channelType: 'lark',
+      entity: 'assistant',
+      id: 'backlog-stale',
+      sessionType: 'group'
+    })
+    const staleFilter = { channelId: 'oc_3' }
+    expect(db.claimChannelOffhourBacklog({ filter: staleFilter, leaseMs: 100, leaseOwner: 'worker-c', now: 1_000 }))
+      .toHaveLength(1)
+    expect(db.claimChannelOffhourBacklog({ filter: staleFilter, leaseMs: 100, leaseOwner: 'worker-d', now: 1_099 }))
+      .toHaveLength(0)
+    expect(db.claimChannelOffhourBacklog({ filter: staleFilter, leaseMs: 100, leaseOwner: 'worker-d', now: 1_100 }))
+      .toMatchObject([
+        { attempts: 2, id: 'backlog-stale', leaseOwner: 'worker-d' }
+      ])
   })
 
   it('keeps session, message and tag persistence compatible through the public API', () => {
@@ -249,14 +381,10 @@ describe('sqliteDb', () => {
       triggerType: 'message'
     }))
 
-    db.finishChannelChildSessionRun('child-run-1', {
-      completedAt: Date.now() + 10,
-      sessionId: 'sess-channel-1',
-      status: 'dispatched'
-    })
+    db.markChannelChildSessionRunDispatched('child-run-1', { sessionId: 'sess-channel-1' })
 
     expect(db.getChannelChildSessionRun('child-run-1')).toEqual(expect.objectContaining({
-      completedAt: Date.now() + 10,
+      completedAt: null,
       sessionId: 'sess-channel-1',
       status: 'dispatched'
     }))
@@ -324,6 +452,10 @@ describe('sqliteDb', () => {
     expect(db.listRecentChannelConversationTurns(state.id)).toEqual([
       expect.objectContaining({ id: turn.id })
     ])
+    expect(db.listRecentChannelConversationTurnsByType('lark')).toEqual([
+      expect.objectContaining({ id: turn.id })
+    ])
+    expect(db.listRecentChannelConversationTurnsByType('oneworks')).toEqual([])
   })
 
   it('isolates conversation state for the same external chat across channel issuers', () => {
@@ -347,6 +479,25 @@ describe('sqliteDb', () => {
     expect(first.id).not.toBe(second.id)
     expect(first.channelKey).toBe('lark-app-a')
     expect(second.channelKey).toBe('lark-app-b')
+  })
+
+  it('atomically reuses one conversation state for concurrent equivalent initialization', async () => {
+    const input = {
+      channelId: 'oc_shared',
+      channelKey: 'lark-main',
+      channelType: 'lark',
+      entity: undefined,
+      sessionType: 'group',
+      threadKey: 'group:default:actor:user-yijie'
+    }
+
+    const [first, second] = await Promise.all([
+      Promise.resolve().then(() => db.ensureChannelConversationState(input)),
+      Promise.resolve().then(() => db.ensureChannelConversationState(input))
+    ])
+
+    expect(first.id).toBe(second.id)
+    expect(db.getChannelConversationStateByThread(input)?.id).toBe(first.id)
   })
 
   it('maintains channel pending intents under conversation state', () => {
@@ -1091,11 +1242,15 @@ describe('sqliteDb', () => {
     const request = db.createChannelAuthorizationRequest({
       id: 'auth-1',
       channelType: 'lark',
+      issuerKey: 'lark:product-team',
+      channelKey: 'lark:product-team',
+      channelId: 'oc_demo',
       channelLinkName: 'wanke-demo',
       requesterUserId: 'user-yijie',
       requesterAccountId: 'ou_lark_yijie',
       credentialSubjectUserId: 'user-owner',
       credentialKey: 'lark-cli:user-yijie',
+      allowedApprovers: ['user:user-yijie', 'account:lark:product-team:ou_lark_yijie'],
       capability: 'im.chat.member.add',
       message: '需要授权拉机器人进群',
       metadata: { targetChatId: 'oc_demo' },
@@ -1105,11 +1260,15 @@ describe('sqliteDb', () => {
     expect(request).toEqual(expect.objectContaining({
       id: 'auth-1',
       channelType: 'lark',
+      issuerKey: 'lark:product-team',
+      channelKey: 'lark:product-team',
+      channelId: 'oc_demo',
       channelLinkName: 'wanke-demo',
       requesterUserId: 'user-yijie',
       requesterAccountId: 'ou_lark_yijie',
       credentialSubjectUserId: 'user-owner',
       credentialKey: 'lark-cli:user-yijie',
+      allowedApprovers: ['user:user-yijie', 'account:lark:product-team:ou_lark_yijie'],
       capability: 'im.chat.member.add',
       status: 'pending',
       message: '需要授权拉机器人进群',
@@ -1123,6 +1282,9 @@ describe('sqliteDb', () => {
       expect.objectContaining({ id: 'auth-1' })
     ])
     expect(db.listPendingChannelAuthorizationRequestsForAccount('ou_lark_yijie', 'lark')).toEqual([
+      expect.objectContaining({ id: 'auth-1' })
+    ])
+    expect(db.listPendingChannelAuthorizationRequests('lark')).toEqual([
       expect.objectContaining({ id: 'auth-1' })
     ])
 
@@ -1142,11 +1304,66 @@ describe('sqliteDb', () => {
       resolvedAt: Date.now()
     }))
     expect(db.listPendingChannelAuthorizationRequestsForUser('user-yijie', 'lark')).toEqual([])
+    expect(db.listPendingChannelAuthorizationRequests('lark')).toEqual([])
+  })
+
+  it('persists reusable OneWorks channel scenarios with stable synthetic users', () => {
+    const scenario = db.createChannelScenario({
+      actorRole: 'participant',
+      name: 'Release check',
+      roomRef: '0123456789abcdef',
+      sessionType: 'group',
+      text: 'Verify the release state.',
+      userLabel: 'release-manager'
+    })
+
+    expect(db.listChannelScenarios()).toEqual([
+      expect.objectContaining({ actorRole: 'participant', id: scenario.id, userLabel: 'release-manager' })
+    ])
+    expect(db.updateChannelScenario(scenario.id, { userLabel: 'release-owner' })).toEqual(
+      expect.objectContaining({ userLabel: 'release-owner' })
+    )
+    expect(db.deleteChannelScenario(scenario.id)).toBe(true)
+    expect(db.getChannelScenario(scenario.id)).toBeUndefined()
+  })
+
+  it('rejects inline secrets from credential metadata and provider handles', () => {
+    const base = {
+      channelType: 'lark',
+      credentialKey: 'lark-user',
+      issuerKey: 'lark:product-team',
+      providerHandle: 'keychain:credential-42',
+      userId: 'user-1'
+    }
+
+    expect(() =>
+      db.upsertChannelUserCredential({
+        ...base,
+        metadata: { accessToken: 'sk-not-allowed' }
+      })
+    ).toThrow('secret-like keys')
+    expect(() =>
+      db.upsertChannelUserCredential({
+        ...base,
+        providerHandle: 'inline:sk-not-allowed'
+      })
+    ).toThrow('bounded opaque provider reference')
+    expect(() =>
+      db.upsertChannelUserCredential({
+        ...base,
+        providerHandle: 'keychain:Bearer-token'
+      })
+    ).toThrow('bounded opaque provider reference')
+    expect(db.upsertChannelUserCredential(base)).toEqual(expect.objectContaining({
+      providerHandle: 'keychain:credential-42',
+      status: 'needs_auth'
+    }))
   })
 
   it('persists channel reply throttle consumption windows', () => {
+    const throttleKey = encodeChannelRuntimeKey('off-hours', 'wan-ke-chat', 'lark', 'group', 'oc_1')
     expect(db.consumeChannelReplyThrottle({
-      throttleKey: 'off-hours\0wan-ke-chat\0lark\0group\0oc_1',
+      throttleKey,
       policyType: 'off_hours_notice',
       channelType: 'lark',
       channelId: 'oc_1',
@@ -1157,7 +1374,7 @@ describe('sqliteDb', () => {
       now: Date.now()
     })).toBe(true)
     expect(db.consumeChannelReplyThrottle({
-      throttleKey: 'off-hours\0wan-ke-chat\0lark\0group\0oc_1',
+      throttleKey,
       policyType: 'off_hours_notice',
       channelType: 'lark',
       channelId: 'oc_1',
@@ -1168,7 +1385,7 @@ describe('sqliteDb', () => {
       now: Date.now() + 1000
     })).toBe(false)
     expect(db.consumeChannelReplyThrottle({
-      throttleKey: 'off-hours\0wan-ke-chat\0lark\0group\0oc_1',
+      throttleKey,
       policyType: 'off_hours_notice',
       channelType: 'lark',
       channelId: 'oc_1',
@@ -1179,7 +1396,7 @@ describe('sqliteDb', () => {
       now: Date.now() + 20 * 60 * 1000 + 1
     })).toBe(true)
 
-    expect(db.getChannelReplyThrottle('off-hours\0wan-ke-chat\0lark\0group\0oc_1')).toEqual(
+    expect(db.getChannelReplyThrottle(throttleKey)).toEqual(
       expect.objectContaining({
         policyType: 'off_hours_notice',
         channelType: 'lark',

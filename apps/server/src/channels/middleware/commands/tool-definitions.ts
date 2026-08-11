@@ -1,7 +1,7 @@
 import type { ConfigJsonSchema } from '@oneworks/types'
 
 import type { AnyCommandSpec, CommandArgumentChoice, CommandArgumentSpec } from './command-system'
-import { formatUsage } from './command-system'
+import { formatUsage, resolveCommandApprovalMetadata, resolveCommandEffectMetadata } from './command-system'
 import { createToolName, formatUsageAncestors } from './tool-path'
 import type {
   ChannelCommandToolArgument,
@@ -16,6 +16,7 @@ const mapChoice = (choice: CommandArgumentChoice): ChannelCommandToolArgumentCho
 })
 
 const getScalarArgumentSchema = (argument: CommandArgumentSpec): ConfigJsonSchema => {
+  if (argument.toolInputSchema != null) return argument.toolInputSchema
   const schema: ConfigJsonSchema = { type: 'string' }
   if (argument.description != null && argument.description !== '') {
     schema.description = argument.description
@@ -59,19 +60,25 @@ const createCommandToolDefinition = <TContext>(
   command: AnyCommandSpec<TContext>,
   commandPath: readonly string[],
   prefix: string
-): ChannelCommandToolDefinition => ({
-  name: createToolName(commandPath),
-  namespace: 'channel',
-  commandPath,
-  commandAliases: command.aliases,
-  slashUsage: formatUsage(command, formatUsageAncestors(commandPath.slice(0, -1), prefix), prefix),
-  descriptionKey: command.descriptionKey,
-  permission: command.permission,
-  actorAuthority: 'sender',
-  source: 'command-spec',
-  inputSchema: createInputSchema(command.args),
-  arguments: command.args.map(mapArgument)
-})
+): ChannelCommandToolDefinition => {
+  const effect = resolveCommandEffectMetadata(command.effect, commandPath)
+  return {
+    name: createToolName(commandPath),
+    namespace: 'channel',
+    commandPath,
+    commandAliases: command.aliases,
+    slashUsage: formatUsage(command, formatUsageAncestors(commandPath.slice(0, -1), prefix), prefix),
+    descriptionKey: command.descriptionKey,
+    permission: command.permission,
+    ...(effect == null
+      ? { approval: resolveCommandApprovalMetadata(command.approval, commandPath) }
+      : { effect }),
+    actorAuthority: 'sender',
+    source: 'command-spec',
+    inputSchema: createInputSchema(command.args),
+    arguments: command.args.map(mapArgument)
+  }
+}
 
 export const listChannelCommandToolDefinitions = <TContext>(
   commands: readonly AnyCommandSpec<TContext>[],

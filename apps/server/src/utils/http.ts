@@ -79,6 +79,9 @@ export const badRequest = (message = 'Bad Request', details?: unknown, code?: st
 export const unauthorized = (message = 'Unauthorized', details?: unknown, code?: string) =>
   createHttpError(401, message, { details, code })
 
+export const forbidden = (message = 'Forbidden', details?: unknown, code?: string) =>
+  createHttpError(403, message, { details, code })
+
 export const notFound = (message = 'Not Found', details?: unknown, code?: string) =>
   createHttpError(404, message, { details, code })
 

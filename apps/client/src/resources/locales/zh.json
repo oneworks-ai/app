@@ -1867,6 +1867,18 @@
       "ariaLabel": "{{title}} 记录",
       "empty": "暂无公开房间消息"
     },
+    "navigation": {
+      "chooseTitle": "打开频道位置",
+      "source": "来源：{{target}}",
+      "delivery": "投递：{{target}}",
+      "status": {
+        "failed": "失败",
+        "pending": "等待中",
+        "sent": "已送达"
+      },
+      "openWeb": "打开网页",
+      "openApp": "打开应用"
+    },
     "status": {
       "room": {
         "active": "进行中",

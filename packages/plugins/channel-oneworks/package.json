@@ -1,0 +1,43 @@
+{
+  "name": "@oneworks/plugin-channel-oneworks",
+  "type": "module",
+  "version": "1.0.0-rc.2",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "packages/plugins/channel-oneworks"
+  },
+  "exports": {
+    ".": "./plugin.json",
+    "./client": {
+      "source": "./client/src/index.tsx",
+      "default": "./client/dist/index.js"
+    },
+    "./server": {
+      "source": "./server/src/index.ts",
+      "default": "./server/dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "AGENTS.md",
+    "assets",
+    "client/dist",
+    "plugin.json",
+    "server/dist"
+  ],
+  "scripts": {
+    "build": "pnpm run build:client && pnpm run build:server",
+    "build:client": "tsc -p client/tsconfig.json --noEmit && vite build --config client/vite.config.ts",
+    "build:server": "tsc -p server/tsconfig.json",
+    "test": "pnpm -C ../../.. exec vitest run --workspace vitest.workspace.ts --project node packages/plugins/channel-oneworks/__tests__",
+    "typecheck": "tsc -p server/tsconfig.json --noEmit && tsc -p client/tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@oneworks/types": "workspace:*"
+  },
+  "devDependencies": {
+    "vite": "^5.4.8"
+  }
+}

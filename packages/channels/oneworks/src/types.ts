@@ -47,13 +47,20 @@ export const oneworksInboundWebhookSchema = z.object({
   channelId: z.string().min(1).optional(),
   contentItems: z.array(z.unknown()).optional(),
   messageId: z.string().min(1).optional(),
+  mentionedBot: z.boolean().optional(),
+  replyMessageId: z.string().min(1).optional(),
   mentions: z.array(channelTextMentionSchema).optional(),
   replyTo: z.object({
     receiveId: z.string().min(1),
     receiveIdType: z.string().min(1)
   }).optional(),
   roomId: z.string().min(1).optional(),
+  rootMessageId: z.string().min(1).optional(),
   senderId: z.string().min(1),
+  simulation: z.object({
+    actorRole: z.enum(['admin', 'participant']),
+    userLabel: z.string().trim().min(1).max(80)
+  }).strict().optional(),
   sessionType: z.enum(['group', 'direct']).optional(),
   text: z.string().optional(),
   threadId: z.string().min(1).optional()

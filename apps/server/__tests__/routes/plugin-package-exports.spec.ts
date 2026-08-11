@@ -10,6 +10,7 @@ import bodyParser from 'koa-bodyparser'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { pluginsRouter } from '#~/routes/plugins.js'
+import { LOCAL_WORKSPACE_REQUEST_PRINCIPAL, setWorkspaceRequestPrincipal } from '#~/services/auth/index.js'
 import { getPluginManager, resetPluginManagerForTests } from '#~/services/plugins/index.js'
 
 const mocks = vi.hoisted(() => ({
@@ -41,6 +42,10 @@ describe('plugin package export conventions', () => {
     rootRouter.use(router.routes())
     rootRouter.use(router.allowedMethods())
     app.use(bodyParser())
+    app.use((ctx, next) => {
+      setWorkspaceRequestPrincipal(ctx, LOCAL_WORKSPACE_REQUEST_PRINCIPAL)
+      return next()
+    })
     app.use(rootRouter.routes())
     app.use(rootRouter.allowedMethods())
 

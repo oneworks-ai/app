@@ -1,15 +1,23 @@
 /* eslint-disable max-lines -- plugin host components wire shared host UI into plugin views */
 import Editor from '@monaco-editor/react'
-import { Button, Dropdown, Input, Segmented, Switch } from 'antd'
+import { App, Button, Dropdown, Input, Segmented, Spin, Switch } from 'antd'
 import type { editor as MonacoEditorNamespace } from 'monaco-editor'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import useSWR from 'swr'
 
 import type { ChatMessageContent, SessionQueuedMessageMode } from '@oneworks/core'
 import type { ConfigResponse } from '@oneworks/types'
 
-import { getConfig } from '#~/api.js'
+import { getAgentRoom, getConfig, respondAgentRoomInteraction, sendAgentRoomMessage } from '#~/api.js'
+import {
+  AgentRoomTranscript,
+  createAgentRoomSenderSubmit,
+  getAgentRoomMemberMention,
+  resolveRoomTarget
+} from '#~/components/agent-room'
+import type { AgentRoomMemberView, AgentRoomMessageView, AgentRoomRunView } from '#~/components/agent-room'
 import { Sender } from '#~/components/chat/sender/Sender'
 import { ChatStatusBar } from '#~/components/chat/status-bar/ChatStatusBar'
 import { FieldRow } from '#~/components/config/ConfigFieldRow'
@@ -41,6 +49,7 @@ import { useChatAdapterAccountSelection } from '#~/hooks/chat/use-chat-adapter-a
 import { useChatEffort } from '#~/hooks/chat/use-chat-effort'
 import { useChatModelAdapterSelection } from '#~/hooks/chat/use-chat-model-adapter-selection'
 import { useChatPermissionMode } from '#~/hooks/chat/use-chat-permission-mode'
+import { buildAgentRoomRouteViewModel } from '#~/routes/agent-room-route-view-model'
 
 import type {
   PluginHostActionItem,
@@ -465,6 +474,135 @@ function PluginHostList(props: PluginHostComponentPropsById['list']) {
         </li>
       ))}
     </ul>
+  )
+}
+
+function PluginHostAgentRoom(props: PluginHostComponentPropsById['agentRoom']) {
+  const { message } = App.useApp()
+  const { t } = useTranslation()
+  const roomId = props.roomId.trim()
+  const [composerTarget, setComposerTarget] = useState<{ content: string; key: string } | null>(null)
+  const [submitLoading, setSubmitLoading] = useState(false)
+  const { data, error, isLoading, mutate } = useSWR(
+    roomId === '' ? null : `/api/agent-rooms/${encodeURIComponent(roomId)}`,
+    () => getAgentRoom(roomId)
+  )
+  const room = useMemo(() => data == null ? undefined : buildAgentRoomRouteViewModel(data), [data])
+
+  const sendText = useCallback(async (text: string) => {
+    if (room == null) return false
+
+    const resolution = resolveRoomTarget(text, room.members)
+    if (resolution.status === 'empty') return false
+    if (resolution.status === 'missing') {
+      void message.warning(t('agentRoom.composer.error.missingTarget', { target: resolution.mention }))
+      return false
+    }
+    if (resolution.status === 'ambiguous') {
+      void message.warning(t('agentRoom.composer.error.ambiguousTarget', { target: resolution.mention }))
+      return false
+    }
+    if (resolution.status === 'empty-targeted-message') {
+      void message.warning(t('agentRoom.composer.error.emptyTargetedMessage', { target: resolution.previewLabel }))
+      return false
+    }
+
+    setSubmitLoading(true)
+    try {
+      const request = createAgentRoomSenderSubmit(resolution)
+      await sendAgentRoomMessage(roomId, {
+        content: request.content,
+        ...(request.target == null ? {} : { target: request.target })
+      })
+      await mutate()
+      return true
+    } catch (nextError) {
+      console.error('Failed to send embedded agent room message:', nextError)
+      void message.error(t('common.operationFailed'))
+      return false
+    } finally {
+      setSubmitLoading(false)
+    }
+  }, [message, mutate, room, roomId, t])
+
+  const sendContent = useCallback(async (content: ChatMessageContent[]) => {
+    if (content.some(item => item.type !== 'text')) {
+      void message.warning(t('agentRoom.composer.error.unsupportedAttachments'))
+      return false
+    }
+
+    return sendText(
+      content
+        .filter((item): item is Extract<ChatMessageContent, { type: 'text' }> => item.type === 'text')
+        .map(item => item.text)
+        .join('\n')
+        .trim()
+    )
+  }, [message, sendText, t])
+
+  const openRun = useCallback((run: AgentRoomRunView) => {
+    const workspacePrefix = globalThis.location.pathname.match(/^\/ui\/w\/[^/]+/u)?.[0] ?? ''
+    globalThis.location.assign(
+      `${workspacePrefix}/rooms/${encodeURIComponent(roomId)}/sessions/${encodeURIComponent(run.sessionId)}`
+    )
+  }, [roomId])
+
+  const selectMemberTarget = useCallback((member: AgentRoomMemberView) => {
+    setComposerTarget({
+      content: `${getAgentRoomMemberMention(member)} `,
+      key: `${member.memberKey}:${Date.now()}:${Math.random().toString(16).slice(2)}`
+    })
+  }, [])
+
+  if (roomId === '' || isLoading) {
+    return (
+      <div className='plugin-host-agent-room__status' aria-label={t('common.loading')}>
+        <Spin size='large' />
+      </div>
+    )
+  }
+
+  if (room == null || error != null) {
+    return (
+      <div className='plugin-host-agent-room__status' role='status'>
+        {t('common.roomNotFound')}
+      </div>
+    )
+  }
+
+  return (
+    <div className={['plugin-host-agent-room', props.className].filter(Boolean).join(' ')}>
+      <div className='plugin-host-agent-room__messages'>
+        <AgentRoomTranscript
+          room={room}
+          onOpenRun={openRun}
+          onReplyToRun={(item: AgentRoomMessageView) => {
+            if (item.run != null) openRun(item.run)
+          }}
+          onRespondInteraction={async (interactionId, response) => {
+            await respondAgentRoomInteraction(roomId, interactionId, { data: response })
+            await mutate()
+          }}
+          onSelectMemberTarget={selectMemberTarget}
+        />
+      </div>
+      <div className='plugin-host-agent-room__composer sender-container'>
+        <Sender
+          key={composerTarget?.key ?? room.id}
+          agentRoomTargetMembers={room.members}
+          autoFocus={composerTarget != null}
+          hideHeaderControls
+          hideReferenceActions
+          hideSelectionControls
+          initialContent={composerTarget?.content}
+          modelUnavailable={false}
+          onInterrupt={noop}
+          onSend={sendText}
+          onSendContent={sendContent}
+          submitLoading={submitLoading}
+        />
+      </div>
+    </div>
   )
 }
 
@@ -1233,6 +1371,7 @@ export const createPluginHostComponentReactApi = (
   options: { launcherSearchValue?: string } = {}
 ): PluginHostComponentReactApi => ({
   ActionBar: PluginHostActionBar,
+  AgentRoom: PluginHostAgentRoom,
   Button: PluginHostButton,
   CodeEditor: PluginHostCodeEditor,
   Icon: PluginHostIcon,
@@ -1273,6 +1412,14 @@ export const renderPluginHostComponent = (
 ) => {
   if (component === 'actionBar') {
     return <PluginHostActionBar {...((props as PluginHostComponentPropsById['actionBar'] | undefined) ?? {})} />
+  }
+
+  if (component === 'agentRoom') {
+    return (
+      <PluginHostAgentRoom
+        {...((props as PluginHostComponentPropsById['agentRoom'] | undefined) ?? { roomId: '' })}
+      />
+    )
   }
 
   if (component === 'button') {

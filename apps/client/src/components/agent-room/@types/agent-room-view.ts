@@ -4,7 +4,8 @@ import type {
   AgentRoomEventRequestKind,
   AgentRoomInteractionOption,
   AgentRoomInteractionRequestStatus,
-  AgentRoomMemberKind
+  AgentRoomMemberKind,
+  ChannelNavigationReference
 } from '@oneworks/core'
 
 export type AgentRoomLayoutMode = 'desktop' | 'compact' | 'responsive'
@@ -128,7 +129,19 @@ export interface AgentRoomMessageSource {
   options?: AgentRoomActionOption[]
   reactions?: AgentRoomMessageReactionView[]
   approvalBatch?: AgentRoomApprovalBatchView
+  channelReferences?: AgentRoomChannelReferenceView[]
   interactionRequest?: AgentRoomInteractionRequestView
+}
+
+export interface AgentRoomChannelReferenceView {
+  accountLabel?: string
+  channelKey: string
+  channelType: string
+  direction: 'delivery' | 'source'
+  id: string
+  label: string
+  navigation?: ChannelNavigationReference
+  status?: 'failed' | 'pending' | 'sent'
 }
 
 export interface AgentRoomMessageView extends AgentRoomMessageSource {

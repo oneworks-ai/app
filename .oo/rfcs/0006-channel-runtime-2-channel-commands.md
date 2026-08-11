@@ -1,7 +1,7 @@
 ---
 rfc: 0006
 title: Channel Runtime 2.0 - Channel Commands
-status: draft
+status: implemented
 authors:
   - Codex
 created: 2026-06-16
@@ -187,7 +187,7 @@ Fast path 只是省掉模型理解，不是绕过 runtime。
 - 新增 `/auth list`：普通用户查看自己的 pending 授权请求；未绑定 canonical user 时按平台账号查询。
 - 新增 `/auth grant <id>`、`/auth deny <id> [reason]`：管理员可把 pending 授权请求标记为 granted / denied；当请求由 session permission interaction 自动镜像而来时，会 best-effort 调用 `handleInteractionResponse` 续接原会话。
 
-这一步已经把授权状态同时暴露为 slash fast path 和 agent CLI typed invocation，并补上了 run 审计、typed registry 元数据、server route 和 ChildSession prompt 注入。command runner 已接入 `services/channel-approval` 的最小 resolver：权限主体优先使用当前 inbound sender，管理员命令不再直接读 `isAdmin(ctx)` 作为唯一裁决点，approval 摘要会写入 `channel_command_runs.metadata.approval`。它还没有接入 MCP/native tool surface，也还没有接入完整 policy layer 与授权送达策略；后续要把更多 child session tool call、actor credential 检查、审批送达和审计记录统一起来。
+这一步已经把授权状态同时暴露为 slash fast path 和 agent CLI typed invocation，并补上 run 审计、typed registry 元数据、server route、短期 child-run capability token 和 ChildSession prompt 注入。command middleware 位于 policy、availability、ingress 与 Router 之后，因而不会绕过 `mentionedBot=false`、mute、off-hours 或 link 的 `createOnCommand`。command runner 使用 sender actor snapshot、ApprovalPolicyResolver、credential state 和 approver resolution；slash 与 typed invocation 共享同一 action、权限结果和 `channel_command_runs` 审计。CLI transport 只返回内部结果，agent 需要外发时再显式调用 `oneworks channel send`。
 
 ## Single-Login Constraint
 

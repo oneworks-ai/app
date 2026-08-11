@@ -17,6 +17,7 @@ import type {
   WorkspaceAsset,
   WorkspaceAssetKind
 } from '@oneworks/types'
+
 import {
   mergeMarketplaceConfigs,
   mergeProcessEnvWithProjectEnv,
@@ -39,6 +40,7 @@ import type { ResolvedPluginInstance } from '@oneworks/utils/plugin-resolver'
 import fg from 'fast-glob'
 import fm from 'front-matter'
 import yaml from 'js-yaml'
+import { normalizeChannelLink } from './channel-link'
 
 import {
   resolveDocumentName,
@@ -469,7 +471,9 @@ const parseOptionalChannelLinkFile = async (path: string): Promise<Definition<Ch
     return {
       path,
       body: '',
-      attributes: parsed as unknown as ChannelLink
+      attributes: normalizeChannelLink(parsed, message => {
+        console.warn(`[workspace-assets] ${path}: ${message}`)
+      })
     }
   } catch (error) {
     warnInvalidWorkspaceAsset('channelLink', path, error)

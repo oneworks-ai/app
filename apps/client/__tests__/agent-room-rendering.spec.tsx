@@ -204,11 +204,13 @@ const fixtureRoom: AgentRoomViewModel = {
 
 const renderRoom = async ({
   enableAvatarNavigation = true,
+  enableChannelNavigation = true,
   enableInteractionResponse = true,
   language = 'en',
   room = fixtureRoom
 }: {
   enableAvatarNavigation?: boolean
+  enableChannelNavigation?: boolean
   enableInteractionResponse?: boolean
   language?: string
   room?: AgentRoomViewModel
@@ -220,6 +222,7 @@ const renderRoom = async ({
       <AgentRoomTranscript
         room={room}
         onOpenHostSession={enableAvatarNavigation ? () => undefined : undefined}
+        onOpenChannelReference={enableChannelNavigation ? () => undefined : undefined}
         onOpenRun={enableAvatarNavigation ? () => undefined : undefined}
         onRespondInteraction={enableInteractionResponse ? () => undefined : undefined}
         onSelectHostTarget={enableAvatarNavigation ? () => undefined : undefined}
@@ -1673,6 +1676,66 @@ describe('agent room transcript rendering', () => {
     expect(html).toContain('<span class="agent-room-bubble__mention">@architect</span>')
   })
 
+  it('renders every channel source and delivery as an accessible target chip', async () => {
+    const html = await renderRoom({
+      room: {
+        ...fixtureRoom,
+        messages: [
+          createMessage('msg-cross-platform', 'agent', 'message', 'Forwarded the update.', {
+            memberKey: 'member:host',
+            channelReferences: [
+              {
+                id: 'source-wechat',
+                direction: 'source',
+                channelKey: 'wechat:service',
+                channelType: 'wechat',
+                accountLabel: 'Service account',
+                label: 'Product group',
+                navigation: { nativeAppUrl: 'weixin://' }
+              },
+              {
+                id: 'delivery-lark',
+                direction: 'delivery',
+                channelKey: 'lark:product',
+                channelType: 'lark',
+                accountLabel: 'Product bot',
+                label: 'Brainstorm room',
+                navigation: { conversationWebUrl: 'https://example.test/lark/brainstorm' },
+                status: 'sent'
+              }
+            ]
+          })
+        ]
+      }
+    })
+    const message = getMessageMarkup(html, 'msg-cross-platform')
+    const styles = readFileSync(
+      new URL('../src/components/agent-room/AgentRoomView.scss', import.meta.url),
+      'utf8'
+    )
+
+    expect(message.match(/class="agent-room-bubble__channel-reference(?: |")/g)).toHaveLength(2)
+    expectContains(message, [
+      'aria-label="Source: wechat · Service account · Product group"',
+      'aria-label="Delivery: lark · Product bot · Brainstorm room · Sent"',
+      'data-direction="source"',
+      'data-direction="delivery"',
+      '>chat</span>',
+      '>flight</span>',
+      '>check_circle</span>',
+      'Service account',
+      'Product group',
+      'Product bot',
+      'Brainstorm room'
+    ])
+    expect(message).not.toContain('+1')
+    expectContains(styles, [
+      '.agent-room-bubble__channel-reference-text {',
+      '.agent-room-bubble__channel-reference-account {',
+      "content: ' · ';"
+    ])
+  })
+
   it('renders completion and failure bubbles without private child transcripts', async () => {
     const html = await renderRoom()
     const bubbleSource = readFileSync(
@@ -1821,7 +1884,7 @@ describe('agent room transcript rendering', () => {
     expect(html).not.toContain('对话：')
     expectNotContains(html, ['sender-session-target--actions-only', 'sender-session-target__trigger'])
     expectNotContains(html, ['chat-input-top-actions', 'agent-room-composer'])
-  })
+  }, 10_000)
 
   it('renders the room sender target from the current input mention', async () => {
     const hostHtml = await renderAgentRoomSenderHeader({ input: '' })

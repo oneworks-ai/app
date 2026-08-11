@@ -101,6 +101,12 @@ export function createChannelCommandsRepo(db: SqliteDatabase) {
     return get(id)
   }
 
+  const updateMetadata = (id: string, metadata: Record<string, unknown>) => {
+    db.prepare('UPDATE channel_command_runs SET metadataJson = ? WHERE id = ?')
+      .run(stringifyJson(metadata), id)
+    return get(id)
+  }
+
   const listRecent = (limit = 50) => {
     const normalizedLimit = Number.isInteger(limit) && limit > 0 ? limit : 50
     const stmt = db.prepare(`
@@ -119,6 +125,7 @@ export function createChannelCommandsRepo(db: SqliteDatabase) {
     create,
     finish,
     get,
-    listRecent
+    listRecent,
+    updateMetadata
   }
 }

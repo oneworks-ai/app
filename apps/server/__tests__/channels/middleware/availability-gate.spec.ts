@@ -16,6 +16,7 @@ vi.mock('#~/db/index.js', () => ({
 
 const appendChannelOffhourBacklog = vi.fn()
 const consumeChannelReplyThrottle = vi.fn(() => true)
+const getChannelAvailabilityOverride = vi.fn()
 
 const makeCtx = (overrides: Partial<ChannelContext> = {}): ChannelContext => ({
   channelKey: 'lark-main',
@@ -45,10 +46,16 @@ const makeCtx = (overrides: Partial<ChannelContext> = {}): ChannelContext => ({
     entity: 'owo-demo',
     external: { type: 'chat', chatId: 'oc_123' },
     ingress: {
+      ambientRouting: false,
+      createOnCommand: true,
+      createOnMention: true,
+      createOnPendingIntent: true,
+      createOnReplyToBot: true,
       mentionPatterns: ['@OWO']
     },
     name: 'wan-ke-chat',
     path: '/workspace/.oo/channels/wan-ke-chat/channel.json',
+    routing: { accounts: {}, default: {}, modes: {}, users: {} },
     definition: {} as never
   },
   sessionId: undefined,
@@ -83,9 +90,12 @@ beforeEach(() => {
   appendChannelOffhourBacklog.mockReset()
   consumeChannelReplyThrottle.mockReset()
   consumeChannelReplyThrottle.mockReturnValue(true)
+  getChannelAvailabilityOverride.mockReset()
+  getChannelAvailabilityOverride.mockReturnValue(undefined)
   vi.mocked(getDb).mockReturnValue({
     appendChannelOffhourBacklog,
-    consumeChannelReplyThrottle
+    consumeChannelReplyThrottle,
+    getChannelAvailabilityOverride
   } as any)
 })
 
@@ -208,11 +218,24 @@ describe('availabilityGateMiddleware', () => {
     setAvailabilityNowProviderForTests(() => new Date('2026-06-15T13:30:00.000Z'))
     const next = vi.fn().mockResolvedValue(undefined)
     const ctx = makeCtx({
+      actor: {
+        account: {
+          issuerKey: 'lark:default',
+          channelType: 'lark',
+          accountId: 'ou_1',
+          accountKey: 'lark:default:ou_1',
+          displayName: null,
+          avatarUrl: null,
+          metadata: null,
+          createdAt: 1,
+          updatedAt: 1
+        }
+      },
       channelLink: {
         ...makeCtx().channelLink!,
         availability: {
           ...makeCtx().channelLink!.availability,
-          bypassSenders: ['ou_1']
+          bypassSenders: [{ accountId: 'ou_1', issuerKey: 'lark:default' }]
         }
       }
     })
@@ -245,6 +268,16 @@ describe('availabilityGateMiddleware', () => {
           displayName: '一介',
           createdAt: 1,
           updatedAt: 1
+        },
+        identityLink: {
+          issuerKey: 'lark:default',
+          channelType: 'lark',
+          accountId: 'ou_1',
+          userId: 'user-1',
+          status: 'verified',
+          source: null,
+          createdAt: 1,
+          updatedAt: 1
         }
       },
       channelLink: {
@@ -261,6 +294,37 @@ describe('availabilityGateMiddleware', () => {
     expect(next).toHaveBeenCalledOnce()
     expect(ctx.reply).not.toHaveBeenCalled()
     expect(appendChannelOffhourBacklog).not.toHaveBeenCalled()
+  })
+
+  it('does not treat a matching raw account id from another issuer as an availability bypass', async () => {
+    setAvailabilityNowProviderForTests(() => new Date('2026-06-15T13:30:00.000Z'))
+    const next = vi.fn()
+    const ctx = makeCtx({
+      actor: {
+        account: {
+          issuerKey: 'lark:other',
+          channelType: 'lark',
+          accountId: 'ou_1',
+          accountKey: 'lark:other:ou_1',
+          displayName: null,
+          avatarUrl: null,
+          metadata: null,
+          createdAt: 1,
+          updatedAt: 1
+        }
+      },
+      channelLink: {
+        ...makeCtx().channelLink!,
+        availability: {
+          ...makeCtx().channelLink!.availability,
+          bypassAccounts: [{ accountId: 'ou_1', issuerKey: 'lark:default' }]
+        }
+      }
+    })
+
+    await availabilityGateMiddleware(ctx, next)
+
+    expect(next).not.toHaveBeenCalled()
   })
 
   it('lets slash commands pass after hours', async () => {

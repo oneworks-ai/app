@@ -1,6 +1,12 @@
 import type { ConfigJsonSchema } from '@oneworks/types'
 
-import type { CommandArgumentSpec, CommandParseSuccess, PermissionLevel } from './command-system'
+import type {
+  CommandArgumentSpec,
+  CommandParseSuccess,
+  PermissionLevel,
+  ResolvedCommandApprovalMetadata,
+  ResolvedCommandEffectMetadata
+} from './command-system'
 
 export type ChannelCommandToolArgumentKind = CommandArgumentSpec['kind']
 
@@ -25,6 +31,10 @@ export interface ChannelCommandToolDefinition {
   readonly slashUsage: string
   readonly descriptionKey?: string
   readonly permission: PermissionLevel
+  /** Legacy channel-only approval metadata for non-effect commands. */
+  readonly approval?: ResolvedCommandApprovalMetadata
+  /** Unified Tool Approval metadata, when this command has an external effect. */
+  readonly effect?: ResolvedCommandEffectMetadata
   readonly actorAuthority: 'sender'
   readonly source: 'command-spec'
   readonly inputSchema: ConfigJsonSchema

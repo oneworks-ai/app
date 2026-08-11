@@ -1,4 +1,5 @@
 /* eslint-disable max-lines -- relay option normalization keeps official presets and capability flags together. */
+import { createHash } from 'node:crypto'
 import { hostname } from 'node:os'
 import process from 'node:process'
 
@@ -30,6 +31,9 @@ import {
 export interface ResolvedRelayServer extends RelayServerOptions {
   pairingToken: string
 }
+
+export const createRelayOwnerSourceId = (remoteBaseUrl: string) =>
+  `relay:${createHash('sha256').update(new URL(remoteBaseUrl).toString()).digest('hex')}`
 
 const OFFICIAL_RELAY_OPTION_DEFAULTS = {
   enableOfficialCloudflareRelay: true,
@@ -136,10 +140,18 @@ const readConfiguredServers = (options: Record<string, unknown>) => {
 }
 
 export const resolveRelayServers = (options: Record<string, unknown>): ResolvedRelayServer[] => {
-  return [
+  const servers = [
     ...readOfficialServers(options),
     ...readConfiguredServers(options)
   ]
+  const ids = new Set<string>()
+  for (const server of servers) {
+    if (ids.has(server.id)) {
+      throw new Error(`Duplicate Relay server id: ${server.id}`)
+    }
+    ids.add(server.id)
+  }
+  return servers
 }
 
 const resolveServerAlias = (value: string) => {

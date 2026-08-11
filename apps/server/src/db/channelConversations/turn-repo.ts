@@ -120,9 +120,23 @@ export function createConversationTurnsRepo(db: SqliteDatabase, states: Conversa
       .reverse()
   }
 
+  const listRecentTurnsByChannelType = (channelType: string, limit = RECENT_TURN_LIMIT) => {
+    const normalizedLimit = Number.isInteger(limit) && limit > 0 ? limit : RECENT_TURN_LIMIT
+    const stmt = db.prepare(`
+      SELECT ${TURN_SELECT_FIELDS}
+      FROM channel_conversation_turns
+      WHERE channelType = ?
+      ORDER BY createdAt DESC
+      LIMIT ?
+    `)
+    return stmt.all<ChannelConversationTurnDbRow>(channelType, normalizedLimit)
+      .map(row => mapTurnRow(row)!)
+  }
+
   return {
     appendTurn,
     getTurn,
-    listRecentTurns
+    listRecentTurns,
+    listRecentTurnsByChannelType
   }
 }

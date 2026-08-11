@@ -20,7 +20,7 @@ export function createChannelChildRunsRepo(db: SqliteDatabase) {
   const selectFields = `
     id, channelType, channelKey, channelId, sessionType, channelLinkName, entity,
     actorUserId, actorAccountId, senderId, messageId, sessionId, conversationStateId,
-    threadKey, triggerType, dispatchMode, status, startedAt, completedAt, error, metadataJson
+    threadKey, triggerType, dispatchMode, status, startedAt, completedAt, memorySnapshotId, continuitySnapshotJson, error, metadataJson
   `
 
   const get = (id: string) => {
@@ -30,6 +30,13 @@ export function createChannelChildRunsRepo(db: SqliteDatabase) {
       WHERE id = ?
     `)
     return mapRunRow(stmt.get<ChannelChildSessionRunDbRow>(id))
+  }
+
+  const getBySessionId = (sessionId: string) => {
+    const stmt = db.prepare(
+      `SELECT ${selectFields} FROM channel_child_session_runs WHERE sessionId = ? ORDER BY startedAt DESC LIMIT 1`
+    )
+    return mapRunRow(stmt.get<ChannelChildSessionRunDbRow>(sessionId))
   }
 
   const create = (row: {
@@ -52,6 +59,8 @@ export function createChannelChildRunsRepo(db: SqliteDatabase) {
     status?: ChannelChildSessionRunStatus
     startedAt?: number
     metadata?: Record<string, unknown> | null
+    memorySnapshotId?: string | null
+    continuitySnapshot?: unknown
   }) => {
     const id = row.id?.trim() || `channel_child_${randomUUID()}`
     const startedAt = row.startedAt ?? Date.now()
@@ -59,9 +68,9 @@ export function createChannelChildRunsRepo(db: SqliteDatabase) {
       INSERT INTO channel_child_session_runs (
         id, channelType, channelKey, channelId, sessionType, channelLinkName, entity,
         actorUserId, actorAccountId, senderId, messageId, sessionId, conversationStateId, threadKey, triggerType,
-        dispatchMode, status, startedAt, completedAt, error, metadataJson
+        dispatchMode, status, startedAt, completedAt, memorySnapshotId, continuitySnapshotJson, error, metadataJson
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     stmt.run(
       id,
@@ -83,6 +92,8 @@ export function createChannelChildRunsRepo(db: SqliteDatabase) {
       row.status ?? 'started',
       startedAt,
       null,
+      row.memorySnapshotId ?? null,
+      stringifyJson(row.continuitySnapshot),
       null,
       stringifyJson(row.metadata)
     )
@@ -93,15 +104,40 @@ export function createChannelChildRunsRepo(db: SqliteDatabase) {
     completedAt?: number
     error?: string | null
     sessionId?: string | null
-    status: Exclude<ChannelChildSessionRunStatus, 'started'>
+    memorySnapshotId?: string | null
+    status: Exclude<ChannelChildSessionRunStatus, 'started' | 'dispatched' | 'running'>
   }) => {
     const completedAt = updates.completedAt ?? Date.now()
     const stmt = db.prepare(`
       UPDATE channel_child_session_runs
-      SET status = ?, sessionId = COALESCE(?, sessionId), completedAt = ?, error = ?
+      SET status = ?, sessionId = COALESCE(?, sessionId), memorySnapshotId = COALESCE(?, memorySnapshotId), completedAt = ?, error = ?
       WHERE id = ?
     `)
-    stmt.run(updates.status, updates.sessionId ?? null, completedAt, updates.error ?? null, id)
+    stmt.run(
+      updates.status,
+      updates.sessionId ?? null,
+      updates.memorySnapshotId ?? null,
+      completedAt,
+      updates.error ?? null,
+      id
+    )
+    return get(id)
+  }
+
+  const markDispatched = (id: string, input: { sessionId?: string | null }) => {
+    db.prepare(`
+      UPDATE channel_child_session_runs
+      SET status = 'dispatched', sessionId = COALESCE(?, sessionId)
+      WHERE id = ? AND status IN ('started', 'dispatched')
+    `).run(input.sessionId ?? null, id)
+    return get(id)
+  }
+
+  const markRunning = (id: string) => {
+    db.prepare(`
+      UPDATE channel_child_session_runs SET status = 'running'
+      WHERE id = ? AND status IN ('started', 'dispatched', 'running')
+    `).run(id)
     return get(id)
   }
 
@@ -120,6 +156,9 @@ export function createChannelChildRunsRepo(db: SqliteDatabase) {
     create,
     finish,
     get,
-    listRecent
+    getBySessionId,
+    listRecent,
+    markDispatched,
+    markRunning
   }
 }

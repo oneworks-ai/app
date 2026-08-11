@@ -1,9 +1,9 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
-import { resolveContext } from './context'
-import { META_FILE_NAME, ensureRelativeMemoryPath, fromStorageSegment, normalizeScope, trimNonEmpty } from './shared'
-import type { MemoryCommandOptions, MemoryScope } from './shared'
+import { META_FILE_NAME, ensureRelativeMemoryPath, fromStorageSegment, trimNonEmpty } from './shared'
+import type { MemoryAccess, MemoryCommandOptions, MemoryScope, MemoryVisibilityPartition } from './shared'
+import { resolveTarget } from './target'
 
 interface MemoryEntry {
   channel?: string
@@ -11,13 +11,26 @@ interface MemoryEntry {
   memoryPath: string
   scope: MemoryScope
   size: number
+  visibilityPartition?: MemoryVisibilityPartition
 }
 
 const decodeEntryParts = (scope: MemoryScope, parts: string[]) => {
   if (scope === 'global') {
     return { fileParts: parts, id: undefined, channel: undefined }
   }
-  if (scope === 'session') {
+  if (scope === 'entity' || scope === 'room') {
+    const visibilityPartition: MemoryVisibilityPartition | undefined =
+      parts[1] === 'direct' || parts[1] === 'organization'
+        ? parts[1]
+        : undefined
+    return {
+      fileParts: visibilityPartition == null ? [] : parts.slice(2),
+      id: parts[0] == null ? undefined : fromStorageSegment(parts[0]),
+      channel: undefined,
+      visibilityPartition
+    }
+  }
+  if (scope === 'conversation' || scope === 'session') {
     return {
       fileParts: parts.slice(1),
       id: parts[0] == null ? undefined : fromStorageSegment(parts[0]),
@@ -55,7 +68,8 @@ const maybeAddEntry = async (
     id: decoded.id,
     memoryPath,
     scope: options.scope,
-    size: stat.size
+    size: stat.size,
+    visibilityPartition: decoded.visibilityPartition
   })
 }
 
@@ -96,17 +110,62 @@ const collectEntriesUnder = async (
 const scopeRootName = (scope: MemoryScope) => {
   if (scope === 'global') return 'global'
   if (scope === 'channel') return 'channels'
+  if (scope === 'conversation') return 'conversations'
+  if (scope === 'entity') return 'entities'
+  if (scope === 'room') return 'rooms'
   if (scope === 'session') return 'sessions'
   return 'users'
 }
 
-export const listMemoryEntries = async (options: MemoryCommandOptions) => {
-  const context = resolveContext(options)
-  const scope = normalizeScope(options.scope)
+const collectAuthorizedEntries = async (options: MemoryCommandOptions, access: MemoryAccess) => {
+  const { target } = resolveTarget({ ...options, path: options.path ?? 'README.md' }, access)
+  const entries: MemoryEntry[] = []
+  const memoryPathFilter = options.path == null ? undefined : ensureRelativeMemoryPath(options.path)
+
+  const walk = async (dir: string, fileParts: string[]) => {
+    let items: import('node:fs').Dirent[]
+    try {
+      items = await fs.readdir(dir, { withFileTypes: true })
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
+      throw error
+    }
+    for (const item of items) {
+      if (item.name === META_FILE_NAME) continue
+      const itemPath = path.resolve(dir, item.name)
+      if (item.isDirectory()) {
+        await walk(itemPath, [...fileParts, item.name])
+      } else if (item.isFile()) {
+        const memoryPath = [...fileParts, item.name].join('/')
+        if (memoryPathFilter != null && memoryPath !== memoryPathFilter) continue
+        const stat = await fs.stat(itemPath)
+        entries.push({
+          channel: access.scope === 'channel' || access.scope === 'user' ? access.context.channelRef : undefined,
+          id: access.displayId,
+          memoryPath,
+          scope: access.scope,
+          size: stat.size,
+          visibilityPartition: target.visibilityPartition
+        })
+      }
+    }
+  }
+
+  await walk(target.dir, [])
+  return entries
+}
+
+export const listMemoryEntries = async (options: MemoryCommandOptions, access: MemoryAccess) => {
+  if (access.mode === 'channel-child') {
+    return await collectAuthorizedEntries(options, access)
+  }
+
+  const { context, scope } = access
+  const channelFilter = trimNonEmpty(options.channel) == null ? undefined : context.channelRef
   const entries = await collectEntriesUnder(
     path.resolve(context.root, scopeRootName(scope)),
     scope,
-    trimNonEmpty(options.channel),
+    channelFilter,
     trimNonEmpty(options.filter),
     options.path
   )
@@ -124,6 +183,7 @@ export const formatEntries = (entries: MemoryEntry[]) => {
       entry.scope,
       entry.channel,
       entry.id,
+      entry.visibilityPartition,
       entry.memoryPath,
       `${entry.size}B`
     ].filter(Boolean).join('\t')

@@ -15,6 +15,7 @@ const BUILTIN_ADAPTER_PACKAGES = [
 ]
 
 const BUILTIN_PLUGIN_PACKAGES = [
+  '@oneworks/plugin-channel-oneworks',
   '@oneworks/plugin-browser-driver',
   '@oneworks/plugin-external-browser-driver',
   '@oneworks/plugin-cua-driver',

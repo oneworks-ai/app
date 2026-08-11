@@ -1,5 +1,7 @@
 /* eslint-disable max-lines */
 
+import type { ChannelDeliveryTarget, ChannelNavigationReference } from './channel-runtime'
+
 export type AgentRoomStatus = 'active' | 'idle' | 'completed' | 'failed'
 export type AgentRoomMemberKind = 'host' | 'entity' | 'task'
 export type AgentRoomMemberStatus = 'idle' | 'active' | 'waiting' | 'completed' | 'failed' | 'stopped'
@@ -8,15 +10,68 @@ export type AgentRoomRunStatus = 'running' | 'waiting' | 'completed' | 'failed' 
 export type AgentRoomEventRequestKind = 'confirmation' | 'input' | 'progress'
 export type AgentRoomEventResumeKind = 'message' | 'confirmation' | 'input' | 'permission_recovery'
 
+export interface AgentRoomOwner {
+  accountId?: string
+  nodeId?: string
+  sourceId?: string
+  type: 'local'
+}
+
 export interface AgentRoom {
   id: string
   title: string
+  owner: AgentRoomOwner
+  leaderEntity?: string
   hostSessionId?: string
   status: AgentRoomStatus
   lastMessage?: string
   archivedAt?: number
   favoritedAt?: number
   createdAt: number
+  updatedAt: number
+}
+
+export interface AgentRoomChannelLink {
+  accountLabel?: string
+  channelId: string
+  channelKey: string
+  channelLinkName: string
+  channelType: string
+  conversationKind: ChannelDeliveryTarget['conversationKind']
+  createdAt: number
+  entity: string
+  label: string
+  receiveId: string
+  receiveIdType: string
+  roomId: string
+  threadId?: string
+}
+
+export type AgentRoomSharePermission =
+  | 'approve'
+  | 'manage_share'
+  | 'open_run'
+  | 'send'
+  | 'target_member'
+  | 'view'
+
+export interface AgentRoomShareGrant {
+  createdAt: number
+  principalId: string
+  principalType: 'team' | 'user'
+  permissions: AgentRoomSharePermission[]
+  shareId: string
+}
+
+export interface AgentRoomShare {
+  createdAt: number
+  grants: AgentRoomShareGrant[]
+  id: string
+  publishedAt?: number
+  relayRef?: string
+  revokedAt?: number
+  roomId: string
+  status: 'active' | 'revoked'
   updatedAt: number
 }
 
@@ -162,9 +217,37 @@ export interface AgentRoomUserMessageDelivery {
 
 export interface AgentRoomUserMessagePayload {
   delivery?: AgentRoomUserMessageDelivery
+  deliveryState?: 'delivered' | 'failed' | 'pending'
   replyTo?: AgentRoomMessageReference
   reactions?: AgentRoomMessageReaction[]
   target?: AgentRoomUserMessageTarget
+}
+
+export interface AgentRoomMessageOrigin {
+  accountId?: string
+  accountLabel?: string
+  channelId: string
+  channelKey: string
+  channelLinkName?: string
+  channelType: string
+  conversationKind: string
+  conversationLabel?: string
+  navigation?: ChannelNavigationReference
+  providerMessageId?: string
+  threadId?: string
+}
+
+export type AgentRoomMessageDeliveryStatus = 'failed' | 'pending' | 'sent'
+
+export interface AgentRoomMessageDelivery {
+  error?: string
+  id: string
+  navigation?: ChannelNavigationReference
+  providerMessageId?: string
+  roomMessageId: string
+  sentAt?: number
+  status: AgentRoomMessageDeliveryStatus
+  target: ChannelDeliveryTarget
 }
 
 export interface AgentRoomMessage {
@@ -174,6 +257,10 @@ export interface AgentRoomMessage {
   memberKey?: string
   runKey?: string
   content: string
+  sequence: number
+  idempotencyKey?: string
+  origin?: AgentRoomMessageOrigin
+  deliveries: AgentRoomMessageDelivery[]
   eventType?: AgentRoomEventType
   payload?: AgentRoomEvent | AgentRoomUserMessagePayload | Record<string, unknown>
   createdAt: number
@@ -184,6 +271,8 @@ export interface AgentRoomDetail {
   members: AgentRoomMember[]
   runs: AgentRoomRun[]
   messages: AgentRoomMessage[]
+  channelLinks: AgentRoomChannelLink[]
+  shares: AgentRoomShare[]
 }
 
 export interface AgentRoomListResponse {
@@ -212,6 +301,8 @@ export interface CreateAgentRoomRequest {
   id?: string
   title: string
   hostSessionId?: string
+  leaderEntity?: string
+  owner?: AgentRoomOwner
 }
 export interface CreateAgentRoomResponse {
   room: AgentRoom
@@ -225,8 +316,47 @@ export interface EnsureAgentRoomResponse {
 }
 export interface AgentRoomMessageWriteRequest {
   content: string
+  idempotencyKey?: string
+  origin?: AgentRoomMessageOrigin
   target?: AgentRoomUserMessageTarget
 }
+
+export interface RecordAgentRoomChannelDeliveryRequest {
+  content: string
+  error?: string
+  memberKey?: string
+  navigation?: ChannelNavigationReference
+  providerMessageId?: string
+  status: AgentRoomMessageDeliveryStatus
+  target: ChannelDeliveryTarget
+}
+
+export interface AttachAgentRoomChannelLinkRequest {
+  channelLinkName: string
+}
+
+export interface CreateAgentRoomShareRequest {
+  grants: Array<{
+    principalId: string
+    principalType: 'team' | 'user'
+    permissions: AgentRoomSharePermission[]
+  }>
+}
+
+export type AgentRoomCommand =
+  | {
+    idempotencyKey: string
+    type: 'ingest_channel_message'
+    message: { content: string; memberKey?: string; origin: AgentRoomMessageOrigin }
+  }
+  | { idempotencyKey: string; type: 'append_message'; message: AgentRoomMessageWriteRequest }
+  | { idempotencyKey: string; type: 'apply_event'; event: AgentRoomEvent }
+  | { idempotencyKey: string; type: 'attach_channel'; link: AttachAgentRoomChannelLinkRequest }
+  | { idempotencyKey: string; type: 'create_share'; share: CreateAgentRoomShareRequest }
+  | { idempotencyKey: string; type: 'revoke_share'; shareId: string }
+  | { idempotencyKey: string; type: 'record_delivery'; delivery: AgentRoomMessageDelivery }
+  | { idempotencyKey: string; type: 'record_channel_delivery'; delivery: RecordAgentRoomChannelDeliveryRequest }
+
 export interface AgentRoomMessageWriteResponse {
   message: AgentRoomMessage
 }

@@ -6,65 +6,37 @@ import { WebSocketServer } from 'ws'
 import type WebSocket from 'ws'
 import type { RawData } from 'ws'
 
-import type { ForwardingJobAvailableObserver } from '../session-forwarding/job-handlers.js'
+import type { RelayRooms } from '../rooms/index.js'
 import type { RelayStoreRepository } from '../storage/repository.js'
 import type { RelayTelemetry } from '../telemetry/metrics.js'
 import type { RelayServerArgs } from '../types.js'
 import {
   RELAY_CONTROL_MAX_FRAME_BYTES,
   applyRelayControlHeartbeatFrame,
-  createRelayControlAttachment
+  createRelayControlAttachment,
+  parseRelayControlFrame
 } from './control-heartbeat.js'
 import type { RelayControlFrame } from './control-heartbeat.js'
+import { denyUpgrade, isControlUpgrade, notifyNodeControlSocket } from './node-control-upgrade.js'
+
+export { notifyNodeControlSocket }
 
 interface NodeControlConnection {
   attachment: NonNullable<ReturnType<typeof createRelayControlAttachment>>
   closed: boolean
   inFlight: boolean
   isAlive: boolean
-  pendingFrame?: RelayControlFrame
-}
-
-export interface RelayNodeControl {
-  close: () => void
-  onForwardingJobAvailable: ForwardingJobAvailableObserver
-}
-
-const NODE_CONTROL_UPGRADE_BASE_URL = 'http://relay-control.invalid'
-
-const isControlUpgrade = (req: IncomingMessage) => {
-  const requestTarget = req.url ?? '/'
-  // Upgrade request targets must stay origin-form. Never use a client-provided Host as a URL base:
-  // this handler is an EventEmitter listener, so a parsing exception would otherwise escape sync.
-  if (!requestTarget.startsWith('/')) return false
-  try {
-    const url = new URL(requestTarget, NODE_CONTROL_UPGRADE_BASE_URL)
-    return url.pathname === '/api/relay/devices/control' && url.search === ''
-  } catch {
-    return false
-  }
-}
-
-const denyUpgrade = (socket: Socket) => {
-  socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n')
-  socket.destroy()
-}
-
-/** A failed fan-out is a stale control connection, never a failure of the committed job. */
-export const notifyNodeControlSocket = (socket: Pick<WebSocket, 'send' | 'terminate'>) => {
-  try {
-    socket.send(JSON.stringify({ type: 'jobs-available' }))
-  } catch {
-    socket.terminate()
-  }
+  pendingHeartbeat?: RelayControlFrame
+  pendingRoomFrames: RelayControlFrame[]
 }
 
 export const attachRelayNodeControl = (input: {
   args: RelayServerArgs
   repository: RelayStoreRepository
+  rooms?: RelayRooms
   server: Server
   telemetry: RelayTelemetry
-}): RelayNodeControl => {
+}) => {
   const webSockets = new WebSocketServer({ maxPayload: RELAY_CONTROL_MAX_FRAME_BYTES, noServer: true })
   const clients = new Map<WebSocket, NodeControlConnection>()
   const onUpgrade = (req: IncomingMessage, socket: Socket, head: Buffer) => {
@@ -87,23 +59,52 @@ export const attachRelayNodeControl = (input: {
         return
       }
       webSockets.handleUpgrade(req, socket, head, client => {
-        const entry: NodeControlConnection = { attachment, closed: false, inFlight: false, isAlive: true }
+        const entry: NodeControlConnection = {
+          attachment,
+          closed: false,
+          inFlight: false,
+          isAlive: true,
+          pendingRoomFrames: []
+        }
         clients.set(client, entry)
+        const clearRoomOwner = input.rooms?.bindOwner({
+          deviceId: attachment.deviceId,
+          send: frame => client.send(JSON.stringify(frame))
+        })
         const closeClient = (code: number, reason: string) => {
           entry.closed = true
-          entry.pendingFrame = undefined
+          entry.pendingHeartbeat = undefined
+          entry.pendingRoomFrames.length = 0
+          clearRoomOwner?.()
           client.close(code, reason)
+        }
+        const nextPendingFrame = () => {
+          const roomFrame = entry.pendingRoomFrames.shift()
+          if (roomFrame != null) return roomFrame
+          const heartbeat = entry.pendingHeartbeat
+          entry.pendingHeartbeat = undefined
+          return heartbeat
         }
         const applyFrame = (frame: RelayControlFrame) => {
           if (entry.closed) return
           entry.inFlight = true
-          void applyRelayControlHeartbeatFrame({
-            args: input.args,
-            attachment: entry.attachment,
-            frame,
-            repository: input.repository,
-            telemetry: input.telemetry
-          }).then(result => {
+          const parsed = parseRelayControlFrame(frame)
+          const isRoomFrame = parsed !== 'frame-too-large' &&
+            (parsed?.type === 'room-descriptor' || parsed?.type === 'room-response')
+          const applied = isRoomFrame
+            ? input.rooms?.handleControlFrame({
+              attachment: entry.attachment,
+              frame,
+              repository: input.repository
+            }) ?? Promise.resolve('invalid-frame' as const)
+            : applyRelayControlHeartbeatFrame({
+              args: input.args,
+              attachment: entry.attachment,
+              frame,
+              repository: input.repository,
+              telemetry: input.telemetry
+            })
+          void applied.then(result => {
             if (result === 'frame-too-large') {
               closeClient(1009, 'frame too large')
               return
@@ -116,8 +117,7 @@ export const attachRelayNodeControl = (input: {
               closeClient(1008, 'device token revoked')
               return
             }
-            const pendingFrame = entry.pendingFrame
-            entry.pendingFrame = undefined
+            const pendingFrame = nextPendingFrame()
             if (pendingFrame != null && !entry.closed && clients.has(client)) {
               applyFrame(pendingFrame)
               return
@@ -132,7 +132,14 @@ export const attachRelayNodeControl = (input: {
           if (entry.closed) return
           const frame = data as RawData as RelayControlFrame
           if (entry.inFlight) {
-            entry.pendingFrame = frame
+            const parsed = parseRelayControlFrame(frame)
+            if (parsed !== 'frame-too-large' && parsed?.type === 'heartbeat') {
+              entry.pendingHeartbeat = frame
+            } else if (entry.pendingRoomFrames.length < 256) {
+              entry.pendingRoomFrames.push(frame)
+            } else {
+              closeClient(1013, 'control frame backlog exceeded')
+            }
             return
           }
           applyFrame(frame)
@@ -142,7 +149,9 @@ export const attachRelayNodeControl = (input: {
         client.on('error', () => {})
         client.on('close', () => {
           entry.closed = true
-          entry.pendingFrame = undefined
+          entry.pendingHeartbeat = undefined
+          entry.pendingRoomFrames.length = 0
+          clearRoomOwner?.()
           clients.delete(client)
         })
       })
@@ -179,7 +188,7 @@ export const attachRelayNodeControl = (input: {
   }) as Server['close']
   return {
     close,
-    onForwardingJobAvailable: deviceId => {
+    onForwardingJobAvailable: (deviceId: string) => {
       for (const [socket, entry] of clients) {
         if (entry.attachment.deviceId === deviceId && socket.readyState === socket.OPEN) {
           notifyNodeControlSocket(socket)

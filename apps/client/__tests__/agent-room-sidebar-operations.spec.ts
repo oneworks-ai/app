@@ -23,6 +23,7 @@ const makeJsonResponse = (body: unknown) => {
 const room: AgentRoom = {
   id: 'room-ops',
   title: 'Room operations',
+  owner: { type: 'local' },
   status: 'active',
   createdAt: 10,
   updatedAt: 20

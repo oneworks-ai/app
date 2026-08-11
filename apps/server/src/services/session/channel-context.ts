@@ -3,68 +3,15 @@ import { chmod, mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { cwd as processCwd, env as processEnv } from 'node:process'
 
-import { resolveProjectHomePath } from '@oneworks/utils'
-
 import { getDb } from '#~/db/index.js'
 import { createChannelCommandInvocationToken } from '#~/services/channel-commands/invocation-token.js'
+import { resolveProjectHomePath } from '@oneworks/utils'
+
+import { normalizeChannelRuntimeContext } from './channel-runtime-context.js'
 
 export { buildChannelRuntimeSystemPrompt } from './channel-runtime-prompt.js'
-
-export interface ChannelRuntimeContext {
-  actorAccountId?: string
-  actorUserId?: string
-  channelId?: string
-  channelKey?: string
-  channelLinkName?: string
-  channelType?: string
-  childRunId?: string
-  conversationStateId?: string
-  entity?: string
-  messageId?: string
-  replyReceiveId?: string
-  replyReceiveIdType?: string
-  senderId?: string
-  sessionId?: string
-  sessionType?: string
-  threadId?: string
-  threadKey?: string
-}
-
-const trimNonEmpty = (value: unknown) => {
-  if (typeof value !== 'string') return undefined
-  const trimmed = value.trim()
-  return trimmed === '' ? undefined : trimmed
-}
-
-const isRecord = (value: unknown): value is Record<string, unknown> => (
-  value != null && typeof value === 'object' && !Array.isArray(value)
-)
-
-export const normalizeChannelRuntimeContext = (value: unknown): ChannelRuntimeContext | undefined => {
-  if (!isRecord(value)) return undefined
-
-  const context: ChannelRuntimeContext = {
-    actorAccountId: trimNonEmpty(value.actorAccountId),
-    actorUserId: trimNonEmpty(value.actorUserId),
-    channelId: trimNonEmpty(value.channelId),
-    channelKey: trimNonEmpty(value.channelKey),
-    channelLinkName: trimNonEmpty(value.channelLinkName),
-    channelType: trimNonEmpty(value.channelType),
-    childRunId: trimNonEmpty(value.childRunId),
-    conversationStateId: trimNonEmpty(value.conversationStateId),
-    entity: trimNonEmpty(value.entity),
-    messageId: trimNonEmpty(value.messageId),
-    replyReceiveId: trimNonEmpty(value.replyReceiveId),
-    replyReceiveIdType: trimNonEmpty(value.replyReceiveIdType),
-    senderId: trimNonEmpty(value.senderId),
-    sessionId: trimNonEmpty(value.sessionId),
-    sessionType: trimNonEmpty(value.sessionType),
-    threadId: trimNonEmpty(value.threadId),
-    threadKey: trimNonEmpty(value.threadKey)
-  }
-
-  return Object.values(context).some(item => item != null) ? context : undefined
-}
+export { normalizeChannelRuntimeContext }
+export type ChannelRuntimeContext = NonNullable<ReturnType<typeof normalizeChannelRuntimeContext>>
 
 export const resolveChannelMemoryRoot = (
   cwd = processCwd(),
@@ -170,6 +117,7 @@ export const writeChannelMessageContext = async (
       childRunId: context.childRunId,
       conversationStateId: context.conversationStateId,
       entity: context.entity,
+      executionContext: context.executionContext,
       invocationToken,
       messageId: context.messageId,
       replyReceiveId: context.replyReceiveId,

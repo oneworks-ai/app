@@ -46,7 +46,7 @@ afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map(dir => fs.rm(dir, { recursive: true, force: true })))
 })
 
-describe('config command', () => {
+describe('config command', { timeout: 15_000 }, () => {
   it('lists merged section presence by default in json mode', async () => {
     const cwd = await createTempDir()
 

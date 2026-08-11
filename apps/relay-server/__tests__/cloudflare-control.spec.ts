@@ -87,6 +87,12 @@ const setup = async () => {
   return { client, object, server, state }
 }
 
+const relayEnv = {
+  ONEWORKS_RELAY_DEVICE_API_URL: 'https://worker.example',
+  ONEWORKS_RELAY_DEVICE_CONTROL_WS_URL: 'wss://worker.example/api/relay/devices/control',
+  RELAY_OBJECT: {}
+} as never
+
 const upgradeRequest = (token = 'device-token-1') =>
   new Request(
     'https://relay/api/relay/devices/control',
@@ -119,6 +125,77 @@ describe('cloudflare relay control socket', () => {
       deviceTokenHash: hashDeviceToken('device-token-1')
     })
     expect(JSON.stringify(server.attachment)).not.toContain('device-token-1')
+  })
+
+  it('restores a hibernated Room owner before serving ordinary HTTP requests', async () => {
+    const { object, server, state } = await setup()
+    await object.fetch(upgradeRequest())
+    await object.webSocketMessage(
+      server as never,
+      JSON.stringify({
+        descriptor: {
+          acls: [{ permissions: ['view'], principalId: 'user-2', principalType: 'user' }],
+          createdAt: '2026-01-01T00:00:00.000Z',
+          ownerDeviceId: 'device-1',
+          ownerNodeId: 'device-1',
+          ownerUserId: 'user-1',
+          shareId: 'share-hibernated',
+          status: 'active',
+          title: 'Hibernated room',
+          updatedAt: '2026-01-01T00:00:00.000Z'
+        },
+        type: 'room-descriptor'
+      })
+    )
+
+    const restored = new RelayDurableObject(state as never, relayEnv)
+    const response = await restored.fetch(
+      new Request('https://relay/api/relay/rooms', {
+        headers: { authorization: 'Bearer member-token-2' }
+      })
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({
+      rooms: [{ availability: 'online', shareId: 'share-hibernated' }]
+    })
+  })
+
+  it('removes revoked Room owner presence before serving the same HTTP request', async () => {
+    const { object, server, state } = await setup()
+    await object.fetch(upgradeRequest())
+    await object.webSocketMessage(
+      server as never,
+      JSON.stringify({
+        descriptor: {
+          acls: [{ permissions: ['view'], principalId: 'user-2', principalType: 'user' }],
+          createdAt: '2026-01-01T00:00:00.000Z',
+          ownerDeviceId: 'device-1',
+          ownerNodeId: 'device-1',
+          ownerUserId: 'user-1',
+          shareId: 'share-revoked-owner',
+          status: 'active',
+          title: 'Revoked owner room',
+          updatedAt: '2026-01-01T00:00:00.000Z'
+        },
+        type: 'room-descriptor'
+      })
+    )
+    const store = await state.storage.get<ReturnType<typeof createFixtureStore>>('relay:store')
+    store!.devices[0].deviceTokenHash = hashDeviceToken('rotated-token')
+    await state.storage.put('relay:store', store)
+
+    const response = await object.fetch(
+      new Request('https://relay/api/relay/rooms', {
+        headers: { authorization: 'Bearer member-token-2' }
+      })
+    )
+
+    expect(server.closed[0]).toBe(1008)
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({
+      rooms: [{ availability: 'offline', shareId: 'share-revoked-owner' }]
+    })
   })
 
   it('revalidates every frame and applies heartbeat through the shared mutation', async () => {
@@ -207,11 +284,47 @@ describe('cloudflare relay control socket', () => {
     expect(server.sent).toEqual([])
   })
 
-  it('closes malformed frames without exposing attachment contents', async () => {
+  it('closes malformed frames and removes Room owner presence synchronously', async () => {
     const { object, server } = await setup()
     await object.fetch(upgradeRequest())
+    await object.webSocketMessage(
+      server as never,
+      JSON.stringify({
+        descriptor: {
+          acls: [{ permissions: ['view'], principalId: 'user-2', principalType: 'user' }],
+          createdAt: '2026-01-01T00:00:00.000Z',
+          ownerDeviceId: 'device-1',
+          ownerNodeId: 'device-1',
+          ownerUserId: 'user-1',
+          shareId: 'share-invalid-frame',
+          status: 'active',
+          title: 'Invalid frame room',
+          updatedAt: '2026-01-01T00:00:00.000Z'
+        },
+        type: 'room-descriptor'
+      })
+    )
+    await object.webSocketMessage(
+      server as never,
+      JSON.stringify({
+        ok: true,
+        requestId: 'already-completed-request',
+        shareId: 'share-invalid-frame',
+        type: 'room-response'
+      })
+    )
     await object.webSocketMessage(server as never, '{')
+
+    const response = await object.fetch(
+      new Request('https://relay/api/relay/rooms', {
+        headers: { authorization: 'Bearer member-token-2' }
+      })
+    )
+
     expect(server.closed[0]).toBe(1003)
+    await expect(response.json()).resolves.toMatchObject({
+      rooms: [{ availability: 'offline', shareId: 'share-invalid-frame' }]
+    })
   })
 
   it('closes oversized frames with the shared 1009 limit', async () => {

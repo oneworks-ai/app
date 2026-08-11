@@ -5,9 +5,13 @@ import type { ServerEnv } from '@oneworks/core'
 import { ASSET_PRE_COMMIT_DETAILS, markAssetPreCommitFailure } from '#~/services/ai/asset-create-error.js'
 import {
   AUTH_COOKIE_NAME,
+  LOCAL_WORKSPACE_REQUEST_PRINCIPAL,
+  createWebAccountRequestPrincipal,
   getBearerTokenFromHeader,
+  isLocalServerHost,
+  resolveSessionTokenClaims,
   resolveWebAuthConfig,
-  verifySessionToken
+  setWorkspaceRequestPrincipal
 } from '#~/services/auth/index.js'
 import { unauthorized } from '#~/utils/http.js'
 import { ASSET_CREATE_PATH } from './asset-create-body.js'
@@ -20,7 +24,7 @@ const PUBLIC_API_PATHS = new Set([
 
 interface AuthMiddlewareOperations {
   resolveConfig?: typeof resolveWebAuthConfig
-  verifyToken?: typeof verifySessionToken
+  resolveToken?: typeof resolveSessionTokenClaims
 }
 
 export const authMiddleware = (
@@ -48,6 +52,9 @@ export const authMiddleware = (
       throw error
     }
     if (!config.enabled) {
+      if (isLocalServerHost(env.__ONEWORKS_PROJECT_SERVER_HOST__)) {
+        setWorkspaceRequestPrincipal(ctx, LOCAL_WORKSPACE_REQUEST_PRINCIPAL)
+      }
       await next()
       return
     }
@@ -57,9 +64,9 @@ export const authMiddleware = (
       : undefined
     const token = getBearerTokenFromHeader(ctx.get('Authorization')) ?? ctx.cookies.get(AUTH_COOKIE_NAME) ??
       queryAuthToken
-    let authenticated
+    let claims
     try {
-      authenticated = await (operations.verifyToken ?? verifySessionToken)(env, token)
+      claims = await (operations.resolveToken ?? resolveSessionTokenClaims)(env, token)
     } catch (error) {
       if (isAssetCreate) {
         throw markAssetPreCommitFailure(
@@ -70,7 +77,7 @@ export const authMiddleware = (
       }
       throw error
     }
-    if (!authenticated) {
+    if (claims == null) {
       throw unauthorized(
         'Login required',
         isAssetCreate ? ASSET_PRE_COMMIT_DETAILS : undefined,
@@ -78,6 +85,7 @@ export const authMiddleware = (
       )
     }
 
+    setWorkspaceRequestPrincipal(ctx, createWebAccountRequestPrincipal(claims.username))
     await next()
   }
 }

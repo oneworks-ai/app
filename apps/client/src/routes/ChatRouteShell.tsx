@@ -236,7 +236,7 @@ const launcherResourceKinds = new Set<DesktopWorkspaceResourceTarget['kind']>([
 type ChatRouteHistoryView =
   | ReactNode
   | ((controls: {
-    onOpenUrlInAppBrowser: (url: string, title?: string) => void
+    onOpenUrlInAppBrowser: (url: string, title?: string, placement?: 'bottom' | 'right') => void
     onOpenWorkspaceFile: (path: string, target?: Pick<WorkspaceFileLinkTarget, 'column' | 'line'>) => void
     workspaceRootPath?: string
   }) => ReactNode)
@@ -1098,12 +1098,12 @@ export function ChatRouteShell({
     if (normalizedUrl === '') return
 
     const normalizedTitle = title?.trim()
-    if (placement === 'right' && browserControlRequestId != null) {
+    if (placement === 'right') {
       setWorkspaceDrawerOpenWithPanelState(true)
       setRightBrowserControlOpenPageRequest({
         placement,
         openMode,
-        requestId: browserControlRequestId,
+        requestId: browserControlRequestId ?? `channel-navigation:${++nextInteractionPanelShortcutRequestId}`,
         url: normalizedUrl,
         ...(normalizedTitle == null || normalizedTitle === '' || normalizedTitle === normalizedUrl
           ? {}
@@ -1307,7 +1307,7 @@ export function ChatRouteShell({
   const resolvedHistoryView = useMemo(() => (
     typeof historyView === 'function'
       ? historyView({
-        onOpenUrlInAppBrowser: handleOpenUrlInAppBrowser,
+        onOpenUrlInAppBrowser: (url, title, placement) => handleOpenUrlInAppBrowser(url, title, undefined, placement),
         onOpenWorkspaceFile: handleOpenWorkspaceFileInInteractionPanel,
         workspaceRootPath
       })

@@ -527,6 +527,14 @@ ctx.views.register('home', {
 - `language`: 当前界面语言，与 `view.host.language` 一致。
 - `resolveText(value, fallback)`: 按当前界面语言解析插件自带文案。React view 内的按钮、placeholder、菜单项和状态文案应使用这个方法，不要用 `view.host.language.startsWith('zh')` 手写分支。
 
+独立插件路由还可以通过 `view.route` 接入宿主通用页面结构：
+
+- `setTitle(title)`：设置通用 Route Header 标题。
+- `setBreadcrumb(breadcrumb)`：设置返回关系和面包屑。
+- `setActions(actions)`：把页面切换或命令放到 Header 右侧操作区。
+- `setSidebar(sidebar)`：声明当前路由的二级资源列表、搜索、选中项和空状态。宿主会复用数据资产、定时任务、插件市场和设置所使用的通用侧栏机制，并负责窄屏抽屉行为；插件不应把资源伪装成普通会话，也不应在 route body 内重复绘制同一列表。
+- `setLauncherChrome(chrome)`：设置 Launcher 场景的图标、头像和搜索标题。
+
 `view.ui` 是宿主暴露给 React view 的声明式组件集合，组件名和命令式 component id 一一对应：
 
 - `view.ui.Icon`

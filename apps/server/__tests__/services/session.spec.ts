@@ -93,6 +93,7 @@ describe('session service', () => {
 
     vi.mocked(getDb).mockReturnValue({
       saveMessage,
+      getChannelChildSessionRunBySessionId: vi.fn(() => undefined),
       getChannelSessionBySessionId: vi.fn(() => undefined),
       getMessages,
       listSessionQueuedMessages: vi.fn(() => []),

@@ -1,12 +1,13 @@
 import { getDb } from '#~/db/index.js'
 import type { ChannelPendingIntentDelivery } from '#~/db/index.js'
+import { encodeChannelRuntimeKey } from '#~/services/channel-runtime-key.js'
 
-import { readStringMetadata, trimNonEmpty } from './metadata.js'
+import { trimNonEmpty } from './metadata.js'
 
 const AUTHORIZATION_DELIVERY_THROTTLE_MS = 20 * 60 * 1000
 
 const buildAuthorizationDeliveryThrottleKey = (authorizationRequestId: string) =>
-  `authorization-request-delivery\0${authorizationRequestId}`
+  encodeChannelRuntimeKey('authorization-request-delivery', authorizationRequestId)
 
 export const markChannelAuthorizationRequestDelivered = (input: {
   delivery: ChannelPendingIntentDelivery
@@ -51,9 +52,7 @@ export const reserveChannelAuthorizationRequestDelivery = (input: {
     throttleKey: buildAuthorizationDeliveryThrottleKey(input.id),
     policyType: 'authorization_request_delivery',
     channelType: request.channelType,
-    channelId: firstIntent?.channelId ??
-      readStringMetadata(request.metadata, 'channelId') ??
-      input.id,
+    channelId: firstIntent?.channelId ?? request.channelId ?? input.id,
     channelLinkName: firstIntent?.channelLinkName ?? request.channelLinkName,
     actorUserId: firstIntent?.ownerUserId ?? request.credentialSubjectUserId ?? request.requesterUserId,
     actorAccountId: firstIntent?.ownerAccountId ?? request.requesterAccountId,

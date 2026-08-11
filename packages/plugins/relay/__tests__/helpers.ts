@@ -9,7 +9,7 @@ import { vi } from 'vitest'
 import { activatePlugin } from '../src/server/index.js'
 import type { RelayLocalSessionAdapter } from '../src/server/session-types.js'
 import { createRelayDeviceStore } from '../src/server/store.js'
-import type { RelayConfigDistributionStatus } from '../src/server/types.js'
+import type { RelayConfigDistributionStatus, RelayPluginContext } from '../src/server/types.js'
 
 export type CommandHandler = (payload?: unknown) => unknown | Promise<unknown>
 export type ApiHandler = (request: { body: Buffer; method: string; path: string }) => unknown | Promise<unknown>
@@ -163,6 +163,7 @@ export const createPluginHarness = async (
     }
     prepareHomeDir?: (homeDir: string) => Promise<void> | void
     prepareProjectHome?: (projectHome: string) => Promise<void> | void
+    roomTunnel?: RelayPluginContext['roomTunnel']
     runtimeRole?: 'manager' | 'workspace'
     sessions?: RelayLocalSessionAdapter
     workspaceFolder?: string
@@ -210,6 +211,7 @@ export const createPluginHarness = async (
         callback()
       })
     },
+    roomTunnel: harnessOptions.roomTunnel,
     sessions: harnessOptions.sessions
   } as never)
 

@@ -1,4 +1,4 @@
-import type { ChatMessageContent } from '@oneworks/core'
+import type { ChannelExecutionContext, ChatMessageContent } from '@oneworks/core'
 
 import { getDb } from '#~/db/index.js'
 import { finishChannelResumeIntentsForChildRun } from '#~/services/channel-resume/index.js'
@@ -14,11 +14,13 @@ export const createStartedChannelChildRun = (
   input: {
     conversationStateId: string
     contentKind: 'text' | 'rich'
+    continuitySnapshot?: unknown
     dispatchMode: DispatchMode
+    executionContext: ChannelExecutionContext
     model?: string
+    memorySnapshotId?: string
     nextMessageResumeIntentIds?: string[]
     runtimeContent?: string | ChatMessageContent[]
-    sessionId?: string
     threadKey: string
     threadReason: string
   }
@@ -35,19 +37,22 @@ export const createStartedChannelChildRun = (
     messageId: ctx.inbound.messageId,
     conversationStateId: input.conversationStateId,
     metadata: {
-      adapter: ctx.channelAdapter,
+      adapter: ctx.ingressRoute?.adapter ?? ctx.channelAdapter,
       contentKind: input.contentKind,
-      effort: ctx.channelEffort,
+      effort: ctx.ingressRoute?.effort ?? ctx.channelEffort,
+      executionContext: input.executionContext,
       hasRuntimeContent: input.runtimeContent != null,
       model: input.model,
+      ingressRoute: ctx.ingressRoute,
       ...(input.nextMessageResumeIntentIds == null || input.nextMessageResumeIntentIds.length === 0
         ? {}
         : { nextMessageResumeIntentIds: input.nextMessageResumeIntentIds }),
       permissionMode: ctx.channelPermissionMode,
       threadReason: input.threadReason
     },
+    continuitySnapshot: input.continuitySnapshot,
+    memorySnapshotId: input.memorySnapshotId,
     senderId: ctx.inbound.senderId,
-    sessionId: input.sessionId,
     sessionType: ctx.inbound.sessionType,
     threadKey: input.threadKey,
     triggerType: 'message'
@@ -70,11 +75,16 @@ export const finishStartedChannelChildRun = (
     : input.error instanceof Error
     ? input.error.message
     : String(input.error)
-  getDb().finishChannelChildSessionRun(childRun.id, {
-    ...(error == null ? {} : { error }),
-    sessionId: input.sessionId,
-    status: input.status
-  })
+  if (input.status === 'dispatched') {
+    getDb().markChannelChildSessionRunDispatched(childRun.id, { sessionId: input.sessionId })
+    getDb().markChannelChildSessionRunRunning(childRun.id)
+  } else {
+    getDb().finishChannelChildSessionRun(childRun.id, {
+      ...(error == null ? {} : { error }),
+      sessionId: input.sessionId,
+      status: 'failed'
+    })
+  }
   if (input.intents.length > 0) {
     finishChannelResumeIntentsForChildRun({
       childRunId: childRun.id,

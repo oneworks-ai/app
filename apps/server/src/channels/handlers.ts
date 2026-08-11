@@ -10,6 +10,8 @@ import {
   releaseChannelAuthorizationRequestDelivery,
   reserveChannelAuthorizationRequestDelivery
 } from '#~/services/channel-authorizations/index.js'
+import { resolveChannelIngressRoute } from '#~/services/channel-ingress-router/route.js'
+import { recordChannelOutboundTurn } from '#~/services/channel-lifecycle/index.js'
 import { resolveChannelLinkBinding, resolveInboundChannelLink } from '#~/services/channel-links/index.js'
 import type { ResolvedChannelLink } from '#~/services/channel-links/index.js'
 import { extractTextFromMessage } from '#~/services/session/events.js'
@@ -97,6 +99,28 @@ const buildChannelErrorText = (language: string, event: ChannelErrorEvent) => {
     ].join('\n')
 }
 
+const buildAuthorizationPublicHint = (language: string) =>
+  language === 'en'
+    ? 'A private approval is waiting. Please message the bot directly or open OneWorks Chat Rooms to continue.'
+    : '有一项私密授权等待处理。请私聊机器人或打开 OneWorks 聊天室继续。'
+
+const resolveAuthorizationPrivateRecipient = (input: {
+  channelKey: string
+  credentialSubjectUserId?: string | null
+  requesterAccountId?: string | null
+  requesterUserId?: string | null
+}) => {
+  if (
+    input.credentialSubjectUserId != null &&
+    input.credentialSubjectUserId !== input.requesterUserId
+  ) {
+    const ownerAccount = getDb().listChannelAccountsForUser(input.credentialSubjectUserId)
+      .find(account => account.issuerKey === input.channelKey)
+    return ownerAccount?.accountId
+  }
+  return input.requesterAccountId ?? undefined
+}
+
 const matchesSessionSearch = (session: ReturnType<ReturnType<typeof getDb>['getSession']>, query: string) => {
   const normalizedQuery = normalizeSearchText(query)
   if (normalizedQuery === '') return true
@@ -115,6 +139,45 @@ const matchesSessionSearch = (session: ReturnType<ReturnType<typeof getDb>['getS
   return haystack.includes(normalizedQuery)
 }
 
+const recordMentionedOtherBotIngress = (input: {
+  channelKey: string
+  channelLink: ResolvedChannelLink | undefined
+  inbound: ChannelInboundEvent
+}) => {
+  const route = resolveChannelIngressRoute({
+    channelKey: input.channelKey,
+    channelLink: input.channelLink,
+    inbound: input.inbound
+  } as ChannelContext, 'reply')
+  getDb().createChannelIngressRouterRun({
+    actorAccountId: null,
+    actorUserId: null,
+    adapter: route.adapter ?? null,
+    candidateCount: 0,
+    channelId: input.inbound.channelId,
+    channelKey: input.channelKey,
+    channelLinkName: input.channelLink?.name ?? null,
+    channelType: input.inbound.channelType,
+    childRunId: null,
+    confidence: 1,
+    contextCount: 0,
+    decision: 'ignore',
+    entity: input.channelLink?.entity ?? null,
+    error: null,
+    filteredCount: 0,
+    latencyMs: 0,
+    messageId: input.inbound.messageId ?? null,
+    mode: route.mode,
+    model: route.model ?? null,
+    reason: 'mentioned_other_bot',
+    senderId: input.inbound.senderId ?? null,
+    sessionType: input.inbound.sessionType,
+    syntheticActorRole: input.inbound.synthetic?.actorRole ?? null,
+    syntheticUserLabel: input.inbound.synthetic?.userLabel ?? null,
+    visibility: route.visibility ?? null
+  })
+}
+
 export const handleInboundEvent = async (
   channelKey: string,
   inbound: ChannelInboundEvent,
@@ -123,10 +186,6 @@ export const handleInboundEvent = async (
   configSource?: ConfigSource,
   channelLinks: readonly ResolvedChannelLink[] = []
 ) => {
-  if (inbound.sessionType === 'group' && inbound.mentionedBot === false) {
-    return
-  }
-
   const channelLinkMatch = resolveInboundChannelLink(channelLinks, { channelKey, inbound })
   if (channelLinkMatch != null && channelLinkMatch.duplicates.length > 0) {
     logger.error({
@@ -138,6 +197,15 @@ export const handleInboundEvent = async (
       messageId: inbound.messageId,
       sessionType: inbound.sessionType
     }, '[channel] rejected inbound message because multiple channel links matched')
+    return
+  }
+
+  if (inbound.sessionType === 'group' && inbound.mentionedBot === false) {
+    recordMentionedOtherBotIngress({
+      channelKey,
+      channelLink: channelLinkMatch?.link,
+      inbound
+    })
     return
   }
 
@@ -500,6 +568,11 @@ export const handleSessionEvent = async (
 
     try {
       const result = await connection.sendMessage(outboundMessage)
+      recordChannelOutboundTurn({
+        sessionId,
+        messageId: result?.messageId,
+        text: outboundMessage.text
+      })
       serverLogger.info(
         buildChannelMessageLogContext(outboundMessage, {
           ...deliveryBaseContext,
@@ -669,8 +742,54 @@ export const handleSessionEvent = async (
     }
 
     let result
+    let delivery: 'dm' | 'public_hint' = binding.sessionType === 'direct' ? 'dm' : 'public_hint'
+    let deliveredFullPrompt = true
     try {
-      result = await deliverMessage({ receiveId, receiveIdType, text })
+      const privateRecipient = binding.sessionType !== 'group' || authorizationRequest == null
+        ? undefined
+        : resolveAuthorizationPrivateRecipient({
+          channelKey: binding.channelKey,
+          credentialSubjectUserId: authorizationRequest.credentialSubjectUserId,
+          requesterAccountId: authorizationRequest.requesterAccountId,
+          requesterUserId: authorizationRequest.requesterUserId
+        })
+      const sendPrivateMessage = connection.sendPrivateMessage
+      const canSendPrivateApproval = binding.sessionType === 'group' &&
+        authorizationRequest?.issuerKey === binding.channelKey &&
+        authorizationRequest.channelKey === binding.channelKey &&
+        privateRecipient != null &&
+        sendPrivateMessage != null
+      if (canSendPrivateApproval) {
+        try {
+          result = await sendPrivateMessage({
+            accountId: privateRecipient,
+            text
+          })
+          delivery = 'dm'
+        } catch (error) {
+          deliveredFullPrompt = false
+          serverLogger.warn({
+            sessionId,
+            interactionId: event.id,
+            authorizationRequestId: authorizationRequest.id,
+            error: getErrorMessage(error)
+          }, '[channel] Private authorization delivery failed; sending safe public hint')
+          result = await deliverMessage({
+            receiveId,
+            receiveIdType,
+            text: buildAuthorizationPublicHint(language)
+          })
+        }
+      } else if (binding.sessionType === 'group' && authorizationRequest?.id != null) {
+        deliveredFullPrompt = false
+        result = await deliverMessage({
+          receiveId,
+          receiveIdType,
+          text: buildAuthorizationPublicHint(language)
+        })
+      } else {
+        result = await deliverMessage({ receiveId, receiveIdType, text })
+      }
     } catch (error) {
       if (authorizationRequest?.id != null && deliveryReservation != null) {
         releaseChannelAuthorizationRequestDelivery({
@@ -683,7 +802,7 @@ export const handleSessionEvent = async (
     if (authorizationRequest?.id != null) {
       markChannelAuthorizationRequestDelivered({
         id: authorizationRequest.id,
-        delivery: binding.sessionType === 'direct' ? 'dm' : 'public_hint',
+        delivery,
         deliveryMessageId: result?.messageId,
         windowMs: authorizationDeliveryThrottleMs
       })
@@ -692,6 +811,7 @@ export const handleSessionEvent = async (
 
     if (
       !event.payload.multiselect &&
+      deliveredFullPrompt &&
       options.length > 0 &&
       result?.messageId != null &&
       connection.pushFollowUps

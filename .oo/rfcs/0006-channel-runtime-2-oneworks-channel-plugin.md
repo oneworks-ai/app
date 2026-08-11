@@ -1,281 +1,165 @@
----
-rfc: 0006
-title: Channel Runtime 2.0 - OneWorks Native Channel Plugin
-status: draft
-authors:
-  - Codex
-created: 2026-06-16
-updated: 2026-06-17
-targetVersion: vNext
----
+# RFC 0006 Companion: OneWorks Channel And Chat Rooms Plugin
 
-# RFC 0006: OneWorks Native Channel Plugin
+## Decision
 
-## Summary
-
-OneWorks 需要一个正式的 first-party native channel 插件。它不是临时 debug adapter，而是 OneWorks 自己的频道类型：可以承载产品内群聊、演示空间、团队试用房间和本地 runtime 调试。
-
-本地调试能力应作为这个插件的 simulation mode，而不是另起一套假 runtime。无论是真实用户在产品内发消息，还是开发者用假用户回放场景，事件都必须经过同一条 Channel Runtime 2.0 链路。
-
-## Positioning
-
-建议命名：
+OneWorks Channel 由两个独立包组成：
 
 ```text
-package: @oneworks/channel-oneworks
-channel type: oneworks
-product name: OneWorks Channel
+@oneworks/channel-oneworks
+  正式 first-party Channel provider
+  与 @oneworks/channel-lark、@oneworks/channel-wechat 同级
+
+@oneworks/plugin-channel-oneworks
+  OneWorks 聊天室的产品入口
+  负责 Room 分享、模拟场景、链路查看和导航偏好
 ```
 
-它提供：
+它们不是同一个抽象，也不应通过包名特殊判断粘在 server 中。
 
-- OneWorks 产品内可用的 room / direct / thread 频道。
-- 正式 channel adapter，和 lark / wechat 一样注册到 `channels`。
-- 插件 UI，用于查看房间、消息、trace、pending approval 和 command run。
-- simulation mode，用于本地调试、scenario replay、自动化测试和演示。
+## Provider Responsibilities
 
-调试是能力，不是身份。不要把正式 channel type 命名为 `debug`。
+`@oneworks/channel-oneworks`：
 
-## Why A Plugin
+- 实现 `ChannelConnection` 和 `oneworks` channel type。
+- 规范化 OneWorks 入站事件并进入标准 middleware。
+- 执行 OneWorks 出站投递并返回平台 message reference。
+- 提供可选 message/conversation/app navigation capability。
+- 支持签名 simulation webhook，便于本地测试同一条真实 ingress 链路。
+- 不创建 Room、不选择 Entity、不加载记忆、不运行 Agent、不实现产品页面。
 
-放在插件里，而不是写死进 core runtime，有几个好处：
+provider 必须能在产品插件缺席时独立运行。
 
-- core runtime 只定义 channel contract、trace contract 和插件扩展点。
-- native channel 可以独立迭代 UI、scenario runner 和 room 管理。
-- 私有化部署可以选择是否启用这个插件。
-- 外部团队也可以参考它实现自己的 first-party channel。
+## Product Plugin Responsibilities
 
-但它是 first-party 插件，应随默认开发环境安装，作为 Channel Runtime 的标准测试和演示入口。
+`@oneworks/plugin-channel-oneworks`：
 
-## Current Landing
+- 创建/查看 OneWorks Room 产品入口。
+- 管理显式 RoomShare 和远端 availability 展示。
+- 提供 simulation playground 和可重复 scenario。
+- 展示经过脱敏的 ingress/run/delivery trace。
+- 保存消息导航偏好和 provider/account override。
+- 复用 host 提供的 Room、share、scenario、trace facade。
 
-当前已落地最小 first-party channel package：
+它明确不负责：
 
-- `packages/channels/oneworks`，包名 `@oneworks/channel-oneworks`，由 server 像 lark / wechat 一样通过 `type: "oneworks"` 加载。
-- `apps/server` 已声明对 `@oneworks/channel-oneworks` 的 workspace 依赖，`pnpm install` 后会在 server workspace 下创建 symlink。
-- `createChannelConnection` 支持标准 `sendMessage`、`updateMessage`、`startReceiving` 和 `handleWebhook`。
-- `handleWebhook` 可用于 simulation mode：POST 到 `/channels/oneworks/<channelKey>/webhook`，payload 会被规范化为 `ChannelInboundEvent`，然后交给 server channel manager 的同一条入站管道。
-- `oneworks channel <channelKey> simulate ...` 已提供 CLI 入口，用于本地向 native webhook 注入文本或结构化 payload。
-- server manager 回归已覆盖 native webhook 进入真实 `oneworks` connection 后，继续携带对应 ChannelLink 调用 receiving handler。
-- 出站消息先记录在 native connection 内存中并返回 `oneworks-out-*` message id；server 暴露 `GET /api/channels/<channelKey>/debug/outbound` 和 `DELETE /api/channels/<channelKey>/debug/outbound`，CLI 暴露 `oneworks channel <channelKey> debug outbound [--limit N|--clear]`，用于本地观察模拟场景的出站内容。后续 UI/room 持久化可以在这个边界上继续扩展。
+- 列举并管理所有飞书/微信 credential 或连接生命周期。
+- 代替内置 Channel 配置能力。
+- 直接读取 server DB、ChannelManager 或 Relay store。
+- 成为通用会话管理页面。
+- 绕过标准 ingress、command、approval 或 audit 链路。
 
-这还不是完整 UI 插件：Rooms / Playground / Trace / Pending / Scenarios 等管理界面仍未落地。但服务端 channel type 已经可以作为本地调试和自动化测试入口，不需要飞书/微信外部平台也能验证 ChannelLink、identity、command、availability、ingress 和 child session 链路。
+## Host Capability
 
-## Runtime Contract
+插件通过受控 capability contribution 获得 `ctx.oneworksChannel`。server 不按包名分支业务；只有内置来源、manifest 声明 capability、workspace role 三项同时满足时才注入。
 
-OneWorks native channel 只 fake 平台，不 fake runtime。
+```ts
+interface PluginOneWorksChannelFacade {
+  listRooms(): Promise<OneWorksRoomSummary[]>
+  listShares(): Promise<OneWorksRoomShareSummary[]>
+  listSharedRooms(): Promise<OneWorksSharedRoomSummary[]>
+  createRoomShare(
+    roomId: string,
+    input: unknown
+  ): Promise<OneWorksRoomShareSummary>
+  revokeRoomShare(roomId: string, shareRef: string): Promise<boolean>
+  listSimulationTargets(): Promise<OneWorksChannelSimulationTarget[]>
+  getTrace(input?: unknown): Promise<OneWorksTraceItem[]>
+  injectSimulation(input: unknown): Promise<OneWorksSimulationResult>
+  listScenarios(): Promise<OneWorksScenario[]>
+  createScenario(input: unknown): Promise<OneWorksScenario>
+  updateScenario(scenarioRef: string, input: unknown): Promise<OneWorksScenario>
+  deleteScenario(scenarioRef: string): Promise<boolean>
+  runScenario(scenarioRef: string): Promise<OneWorksSimulationResult>
+}
+```
 
-必须经过：
+所有返回值使用 opaque ref 和脱敏 label，不返回 secret、原始 sender ID、真实 credential、workspace path 或未授权 session ID。
+
+每个插件 API 请求都必须携带 host 派生的 `PluginRequestPrincipal`，而不是信任客户端提交的用户字段。已登录 Web 账号和关闭认证的本机 loopback workspace 可获得 `workspace:read` / `workspace:manage`；关闭认证的远程 bind 不产生受信 principal。OneWorks 聊天室 API 默认要求 `workspace:manage`，plugin manager 和 facade 均重复校验，缺少 identity 返回 401，权限不足返回 403。
+
+Room 详情、创建和普通消息操作继续使用 host 的 Agent Room 路由，不在插件 facade 里复制一套 Room API。导航设置通过 manifest 的 `channelNavigation` contribution 声明插件 options 字段，继续使用 host-rendered plugin settings，不通过 server facade 读写。
+
+## Sharing Model
+
+插件发起分享时：
 
 ```text
-ChannelLink
-  -> IngressRouter
-  -> ConversationState / MemorySnapshot
-  -> ChildSession
-  -> ChannelCommandTool
-  -> OutboundTurn
+local RoomShare write
+  -> publish SharedRoomDescriptor to Relay
+  -> Relay stores descriptor + ACL + owner route
+  -> remote user's authenticated Relay account lists the shared Room relation
+  -> owner tunnel connected: descriptor is online and a live route can be established
+  -> owner offline: show unavailable, no transcript
 ```
 
-不允许插件 UI 直接调用 agent、直接写 memory、直接绕过 ApprovalPolicyResolver，或直接伪造 child run result。
+只有分享出去的 Room 发布 descriptor。插件不能调用“列出 execution node 所有 Room”的 Relay API，也不能把未分享 Room 当作远端可发现资源。
 
-## Relationship To Agent Room
+## Local And Cloud Execution
 
-现有 Agent Room 是产品内的协作投影：它围绕 host session、member、run 和 room message 展示子任务协作状态，并把用户消息投递给 host 或指定 member run。它默认使用 OneWorks 当前登录态和产品内权限语义。
+OneWorks 聊天室不引入一个持有 Room 数据的独立云端执行服务。owner 节点本地执行、存储和授权；Relay 只做有限连接。
 
-OneWorks native channel 是 channel runtime 的平台实现。它可以复用 Agent Room 的房间、成员、消息和前端交互组件作为产品内承载，但进入 runtime 时必须重新归一化成标准频道事件：
+远端操作的数据路径：
 
 ```text
-room/direct/thread message
-  -> ChannelLink
-  -> ChannelAccount
-  -> CanonicalUser
-  -> IngressRouter / PolicyEngine
-  -> ChildSession
+remote client
+  -> Relay authenticated shared-room live request
+  -> owner node live gateway
+  -> owner validates share scope + actor + Room state
+  -> owner Room service / command kernel
+  -> live result projection
 ```
 
-因此两者不应互相替代：
+Relay 不缓存请求正文供离线重试。连接中断时调用失败，客户端明确显示 owner offline 或 route interrupted。
 
-- Agent Room 负责展示和投递 OneWorks 内部协作。
-- Native channel 负责模拟或承载一个真实频道类型，包括 identity、authorization、policy gate、command run 和 outbound delivery。
-- 如果 native channel 使用 room UI，也只能把 room 当成外层 transport / surface，不能跳过 ChannelLink、ApprovalPolicyResolver、pending intent 或 child run 审计。
+`listSharedRooms` 只聚合当前启用且登录有效的 Relay 账号。每个账号独立读取公开目录，一个账号不可达不会隐藏其他账号的结果。返回值只包含来源 label、opaque source/share ref、标题、图标、分享状态、更新时间和由 owner tunnel 实时连接推导的 availability；不包含 account key、session token、owner ID、owner-local Room ID 或 transcript。owner 重新连接时会重新发布它名下的显式分享，离线期间不会排队 descriptor 或消息正文。
 
-这个边界能避免“room 里已经登录了当前用户，所以 channel 就拥有所有人的权限”的误判。
+## Navigation Preferences
 
-## Single-Login Constraint
-
-当前 OneWorks 尚不支持多账号同时登录。Native channel 在生产模式下能把 OneWorks 当前用户直接映射成 canonical user，但这只解决 actor identity；它不等于系统已经拥有其它平台账号、其它成员或模拟用户的 executable credential。
-
-多账号登录不是 native channel 的前置条件。runtime 收到消息时以 `ChannelAccount` 作为 actor identity，并通过 identity link 解析 canonical user；工具真正执行前再单独检查 credential subject 是否有 active credential。管理面可以先只展示当前登录用户可见的信息和授权入口，后续再补多账号切换/代管视图，但底层权限记录必须已经能容纳同一个 canonical user 下的多个 channel account 和多个 credential subject。
-
-执行规则：
-
-- channel command tool 和 child session 的权限按消息发送者 actor 裁决。
-- 用户级 API 必须在当前 `channelKey` issuer 下检查 `channel_user_credentials_v2` 是否 active 且 scope 覆盖。
-- 没有 credential 时只能发起 authorization request、降级或拒绝，不能借用桌面登录态、CLI profile、bot app secret 或当前房间 owner 的权限。
-- `/whoami` 应展示 channel account、canonical user、identity link 和 credential 数量，用于排查“认得这个人”和“能代表他执行”是否混淆。
-
-## Config
-
-示例：
-
-`.oo.config.json` 只声明 native channel 平台连接：
+导航偏好属于产品插件，而不是 `.oo.config.json` 的 provider credential：
 
 ```json
 {
-  "channels": {
-    "oneworks-main": {
-      "type": "oneworks",
-      "title": "OneWorks Native Channel",
-      "webhookSecret": "replace-with-dev-secret"
+  "navigation": {
+    "default": ["rightPanel", "externalWeb", "nativeApp", "appHome"],
+    "providers": {
+      "wechat": ["nativeApp", "appHome"],
+      "lark": ["rightPanel", "externalWeb", "nativeApp"]
+    },
+    "accounts": {
+      "lark:product-bot": ["externalWeb", "rightPanel"]
     }
   }
 }
 ```
 
-频道入口放在目录化 channel link 文件：
+provider 决定哪些 URL 存在和能否嵌入；插件只决定用户偏好的尝试顺序。`rightPanel` 复用现有 `ChatWorkspaceDrawer`，iframe 不可用时继续 fallback。
 
-```text
-.oo/channels/wan-ke-chat/channel.json
-```
+## Product Surface
 
-```json
-{
-  "channel": "oneworks-main",
-  "entity": "owo-demo",
-  "external": {
-    "type": "room",
-    "roomId": "wan-ke-chat"
-  },
-  "ingress": {
-    "ambientRouting": false,
-    "routerPrompt": "普通寒暄只观察；明确请求 OWO 帮忙时才创建子会话。"
-  },
-  "routing": {
-    "default": { "model": "gpt-5.4", "adapter": "codex" }
-  }
-}
-```
+第一屏是实际 Room/分享工作区，不做营销 landing page。推荐视图：
 
-一个 channel link 文件仍然只能绑定一个 entity。native channel 不因为在 OneWorks 内部就绕过这个约束。
+- **聊天室**：左侧复用 host 的通用资源列表与搜索，主区域直接显示当前选中的真实 Room；不在主区域再复制一层 Room 列表，也不冒充所有 provider 的连接管理。
+- **已分享**：本地显式分享、权限摘要和撤销操作，以及当前 Relay 登录账号可见的远端 descriptor 与实时在线状态。
+- **Scenarios**：OneWorks provider simulation 和可重复场景；场景角色只进入 prompt 与审计，不能提升真实频道权限。
+- **Trace**：脱敏 ingress、ChildSession、command、delivery 链路。
+- **Settings**：host-rendered plugin config 保存消息导航顺序和 provider/account override，不在工作台重复一页表单。
 
-最小 simulation payload：
+Room 内消息只显示紧凑的平台图标和目标 label；完整账号、组织、状态、deep link 放在 popover。点击后按导航偏好在右侧 WebView 或外部应用打开。
 
-```json
-{
-  "roomId": "wan-ke-chat",
-  "senderId": "user-yijie",
-  "messageId": "sim-1",
-  "text": "@OWO hi"
-}
-```
+## Capability And Package Discovery
 
-如果未配置 `webhookSecret`，webhook 默认拒绝请求。只有显式设置 `allowInsecureWebhooks: true` 且请求 Host 为 loopback 时才允许无 secret 的本地 simulation；共享或公网环境必须配置 secret。
+- 官方默认插件 ID：`@oneworks/plugin-channel-oneworks`
+- server capability：`oneworksChannel`
+- client contribution：`channelNavigation`
+- channel type：`oneworks`
+- 不保留 `@oneworks/plugin-channel-management`、`channelManagement` 或 `channel-management` alias。
+- packaged desktop 必须同时包含 provider 和产品插件，但二者可独立启停。
 
-## Channel Features
+## Testing
 
-正式能力：
-
-- group room、direct room、thread/reply。
-- mention 当前 entity 和成员。
-- slash command 和自然语言 command。
-- bot outbound message、ephemeral message、DM fallback。
-- pending approval 入口。
-- message delivery state 和 outbound echo suppression。
-- room membership、role 和 visibility。
-
-Simulation mode 额外能力：
-
-- 创建 synthetic users。
-- send-as-user 注入 inbound event。
-- scenario replay。
-- 人工触发 webhook-like event。
-- 开关 bot echo，用来验证 suppression。
-- 时间旅行，用于测试 off-hours / throttle / mute expiry。
-
-这些调试能力必须受本地开发或管理员权限保护，不能在普通生产房间暴露。
-
-## Plugin Contributions
-
-插件应贡献：
-
-```json
-{
-  "plugin": {
-    "contributions": {
-      "channels": [
-        {
-          "type": "oneworks",
-          "entry": "./server/channel"
-        }
-      ],
-      "navItems": [
-        {
-          "id": "oneworks-channel",
-          "title": "OneWorks Channel",
-          "icon": "forum"
-        }
-      ]
-    }
-  }
-}
-```
-
-如果当前 plugin system 还没有 `channels` extension point，需要补这个扩展点，而不是把 native channel 写死到 server。
-
-## UI Surfaces
-
-建议提供这些视图：
-
-- Rooms: 查看和创建 native rooms。
-- Playground: 选择 room、用户、消息类型并发送。
-- Trace: 展示 IngressRouterRun、ChildSessionRun、ChannelCommandRun、OutboundTurn。
-- Pending: 查看 pending intents 和 approval delivery。
-- Scenarios: 运行 YAML/JSON 场景文件。
-
-UI 的目标不是“调试页”，而是 native channel 的管理与体验页。Playground / Scenarios 是其中的高级能力。
-
-## Scenario Files
-
-场景文件应表达真实频道事件：
-
-```yaml
-room: wan-ke-chat
-entity: owo-demo
-steps:
-  - user: A
-    text: 你好
-  - user: B
-    text: 我知道了
-  - user: C
-    text: "@OWO 知道啥"
-    expect:
-      childSession: true
-      replyContains: 不确定
-```
-
-scenario runner 只负责注入 inbound events 和断言 trace，不直接调用内部函数制造结果。
-
-## Identity
-
-生产模式下，native channel 的发送者来自 OneWorks 当前登录用户。它可以直接映射 canonical user。
-
-Simulation mode 下，synthetic user 必须标记来源：
-
-```text
-account provider = oneworks-sim
-trust = simulated
-```
-
-simulated account 默认不能参与跨平台身份合并，除非管理员显式允许。
-
-## Security
-
-- 普通用户不能 send-as-other-user。
-- 生产 room 默认关闭 simulation mode。
-- simulation mode 的所有 event 都要写 audit。
-- command tool 权限仍按 ActorContext 走，不因为是 native channel 就使用管理员权限。
-- trace 里敏感信息要按 viewer 权限过滤。
-
-## Design Principle
-
-OneWorks native channel 是正式产品能力，也是 Channel Runtime 的标准实验场。它的价值在于用同一条真实 runtime 链路同时服务产品体验、演示和本地调试。
+- provider：schema、签名、重放保护、入站规范化、出站 message ref、navigation resolution。
+- host capability：仅 built-in + workspace 注入，project/manager 不注入。
+- product plugin：Room/share/scenario/trace/navigation facade，不出现通用 provider credential 管理。
+- security：synthetic admin 场景不能执行真实 admin command；未绑定 direct inbound 不能创建无实体 ChildSession。
+- Relay：仅显式 share descriptor，owner offline 不返回 content，不存在离线 content queue。
+- UI：本地/远端 unavailable、紧凑平台图标、失败 delivery、right WebView 与 fallback。

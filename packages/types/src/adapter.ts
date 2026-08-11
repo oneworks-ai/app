@@ -282,6 +282,8 @@ export interface AdapterQueryOptions {
   promptAssetIds?: string[]
   assetBundle?: WorkspaceAssetBundle
   assetPlan?: AdapterAssetPlan
+  /** A restricted runtime profile for structured, model-only classification. */
+  executionProfile?: 'structured_no_tools'
   onEvent: (event: AdapterOutputEvent) => void
 }
 

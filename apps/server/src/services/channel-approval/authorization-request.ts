@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 
 import { getDb } from '#~/db/index.js'
 import type { ChannelAuthorizationRequestRow } from '#~/db/index.js'
+import { buildChannelApproverPrincipals } from '#~/services/channel-authorizations/approvers.js'
 
 import type { ChannelApprovalRequestInput } from './types.js'
 import { trimNonEmpty } from './values.js'
@@ -43,6 +44,10 @@ const ensureAuthorizationPendingIntent = (
   const ownerUserId = trimNonEmpty(credentialSubjectUserId) ??
     trimNonEmpty(request.credentialSubjectUserId) ??
     requesterUserId
+  const requesterAccountId = trimNonEmpty(input.actorAccountId) ?? trimNonEmpty(input.senderId)
+  const ownerAccountId = ownerUserId == null || ownerUserId === requesterUserId
+    ? requesterAccountId
+    : getDb().listChannelAccountsForUser(ownerUserId).find(account => account.issuerKey === input.channelKey)?.accountId
 
   getDb().upsertChannelPendingIntent({
     id: buildPendingIntentId(request.id),
@@ -63,7 +68,7 @@ const ensureAuthorizationPendingIntent = (
       sessionId: trimNonEmpty(input.sessionId),
       source: input.source
     },
-    ownerAccountId: trimNonEmpty(input.actorAccountId) ?? trimNonEmpty(input.senderId),
+    ownerAccountId,
     ownerUserId,
     payload: {
       authorizationRequestId: request.id,
@@ -103,6 +108,9 @@ export const ensureAuthorizationRequest = (
   const request = db.createChannelAuthorizationRequest({
     id,
     channelType: input.channelType,
+    issuerKey: trimNonEmpty(input.channelKey),
+    channelKey: trimNonEmpty(input.channelKey),
+    channelId: trimNonEmpty(input.channelId),
     channelLinkName: trimNonEmpty(input.channelLinkName),
     requesterUserId,
     requesterAccountId,
@@ -110,18 +118,16 @@ export const ensureAuthorizationRequest = (
     credentialKey: trimNonEmpty(input.credential?.credentialKey),
     capability: input.capability,
     message: `Capability ${input.capability} requires authorization.`,
+    allowedApprovers: buildChannelApproverPrincipals({
+      channelAdmins: input.channelAdmins,
+      credentialSubjectUserId,
+      issuerKey: trimNonEmpty(input.channelKey),
+      requesterAccountId,
+      requesterUserId
+    }),
     metadata: {
       actorAccountId: requesterAccountId,
       actorUserId: trimNonEmpty(input.actorUserId),
-      allowedApproverRefs: [
-        ...new Set(
-          [
-            ...(input.channelAdmins ?? []),
-            credentialSubjectUserId,
-            requesterUserId
-          ].map(trimNonEmpty).filter((value): value is string => value != null)
-        )
-      ],
       channelId: trimNonEmpty(input.channelId),
       channelKey: trimNonEmpty(input.channelKey),
       childRunId: trimNonEmpty(input.childRunId),

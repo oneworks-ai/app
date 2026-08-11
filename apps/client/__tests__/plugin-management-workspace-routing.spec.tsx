@@ -95,8 +95,22 @@ const ok = (data: unknown) =>
     status: 200
   })
 
-const runtimePlugin = (scope: string) => ({
+const runtimePlugin = (scope: string, withRoute = false) => ({
   enabled: true,
+  ...(withRoute
+    ? {
+      manifest: {
+        name: scope,
+        plugin: {
+          contributions: {
+            roles: ['workspace'],
+            routes: [{ clientView: 'view', id: 'view', title: 'Workspace view' }]
+          }
+        },
+        version: '1.0.0'
+      }
+    }
+    : {}),
   name: scope,
   requestId: scope,
   scope,
@@ -189,7 +203,7 @@ describe('plugin management workspace transport', () => {
         transportState.requestUrls.push(url.toString())
         const origin = url.origin === 'https://manager.example' ? 'manager' : 'workspace'
         if (url.pathname === '/api/plugins') {
-          return ok({ plugins: [runtimePlugin(`${origin}-runtime`)] })
+          return ok({ plugins: [runtimePlugin(`${origin}-runtime`, origin === 'workspace')] })
         }
         if (url.pathname === '/api/plugins/marketplace/catalog') {
           return ok(catalog(origin))
@@ -265,6 +279,14 @@ describe('plugin management workspace transport', () => {
     await waitFor(() => {
       expect(container.querySelector('[data-testid="contributed-route"]')?.textContent)
         .toBe('https://manager.example')
+    })
+  })
+
+  it('uses the workspace runtime for workspace-contributed routes', async () => {
+    root = renderRoutes(container, '/plugins/workspace-runtime/view')
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="contributed-route"]')?.textContent)
+        .toBe('https://workspace.example')
     })
   })
 })

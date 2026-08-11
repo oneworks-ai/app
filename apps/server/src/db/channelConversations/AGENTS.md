@@ -19,3 +19,4 @@
 - pending intent 独立保存在 `channel_pending_intents`，不要混进 conversation turn；memory snapshot 和 tool-call audit 后续各自独立建模。
 - resolved authorization intent 可以携带 `metadata.resume`，表示授权结果已经准备好被后续 system-child resume 或调度器消费。
 - `threadKey` 当前由确定性 resolver 生成；模型 router 接入后可继续写入同一 state。
+- `lastBotReplyJson` 是已送达 outbound turn 的平台 message reference；reply resolver 只能匹配这个明确记录，不得猜测当前 bot 的回复。

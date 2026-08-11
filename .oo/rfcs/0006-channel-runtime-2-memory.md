@@ -1,15 +1,23 @@
 ---
 rfc: 0006
 title: Channel Runtime 2.0 - Memory Resolver
-status: draft
+status: implemented
 authors:
   - Codex
 created: 2026-06-16
-updated: 2026-06-16
+updated: 2026-08-09
 targetVersion: vNext
 ---
 
 # RFC 0006: Memory Resolver
+
+## Current Landing
+
+当前 baseline 已落地 `channel_memories`、`channel_memory_snapshots` 和 `channel_memory_writebacks`：每条 create-child 决策在启动前按 issuer、org、entity、channel、verified canonical user / account、conversation、visibility、sensitivity 和 expiry 过滤候选，再排序并按 item/token budget 固化不可变 MemorySnapshot。snapshot id 会绑定 child run，并与 continuity 一起注入 system context。
+
+频道 agent 通过受限的 `oneworks mem get|list|set|patch` 能力读取和显式固化可复用经验；system prompt 要求它在不熟悉上下文时先查记忆，并在本轮产生长期价值时于结束前真实写入，而不是口头承诺。每轮 dispatch 前，file-memory sync 会把当前 `entity`、`channel`、稳定 `conversation` 和 `user` 文件导入结构化 store；terminal lifecycle 会再次检测变更，按 child run 幂等提交 writeback 并记录 `terminal_check`。`session` scope 只属于一次性物理 ChildSession，不参与跨轮加载。
+
+`user` 文件仍按当前平台 sender 保存，但同步到结构化 store 时优先归属已验证 canonical user；因此身份绑定后可跨平台加载。`entity` memory 不限制单个 channel id，可在同一实体的多个 ChannelLink 间复用；direct 来源的 user memory 仍不能进入 group prompt。基于独立模型的自动提炼器属于后续可选增强；它不能把原始 transcript 全量写入长期记忆，也不能绕过下面的 scope、visibility、sensitivity 和 provenance 规则。
 
 ## Summary
 
@@ -124,16 +132,9 @@ Renderer 再把 snapshot 转成 system/runtime prompt。
 
 ## Writeback
 
-child session 结束后 extractor 输出 patch：
+当前实现由本轮 agent 自己做语义判断：产生长期价值时必须在结束前真实调用 `oneworks mem`。terminal lifecycle 随后读取允许自动加载的 scope，按内容 hash 去重，把完整文件状态更新到确定性的 memory id，并为每个变化记录 `file_memory_sync` writeback；最后总是记录一次 `terminal_check`，说明本轮是 `committed` 还是 `no_change`。重复 terminal event 不会产生重复 patch。
 
-Extractor 输出结构化 patch，例如 `channelMemory`、`userMemory`、`entityMemory`、`policyUpdates`。Patch 要带 confidence、source child run 和审计信息。
-
-写回分两层：
-
-- hot memory: 立即可见，短期有效；
-- stable memory: 经合并、去重、审计后长期固化。
-
-低置信度 patch 进入 candidate，不直接稳定化。
+自动同步只处理默认 `README.md`。自定义 reference/topic 文件仍可由 agent 显式读取，用于避免把大段资料自动注入每个 prompt。未来若加入独立 extractor，其输出仍必须走同一结构化 upsert、privacy filter 和 writeback audit，不能直接改长期 memory。
 
 ## Cache Invalidation
 

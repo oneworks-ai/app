@@ -1,10 +1,12 @@
+import type { ChannelExecutionContext } from '@oneworks/core'
 import type { ChannelBaseConfig, ChannelInboundEvent } from '@oneworks/core/channel'
 
 import { buildChannelRuntimeSystemPrompt } from '#~/services/session/channel-context.js'
 
 export const buildChannelContextPrompt = (
   inbound: ChannelInboundEvent,
-  config: ChannelBaseConfig | undefined
+  config: ChannelBaseConfig | undefined,
+  executionContext?: ChannelExecutionContext
 ): string | undefined => {
   const lines: string[] = []
 
@@ -16,6 +18,14 @@ export const buildChannelContextPrompt = (
   const botName = config?.title
   if (botName) {
     lines.push(`你在此频道上的名字是「${botName}」。`)
+  }
+
+  if (inbound.synthetic?.kind === 'product_simulation') {
+    const roleLabel = inbound.synthetic.actorRole === 'admin' ? '管理员' : '参与者'
+    lines.push(
+      `这是来自 OneWorks 聊天室的受信任场景模拟，模拟用户为「${inbound.synthetic.userLabel}」，场景角色为「${roleLabel}」。`,
+      '该场景角色只用于模拟对话上下文，不授予任何真实权限；所有操作仍按当前调用者和频道权限检查。'
+    )
   }
 
   // Admin identities
@@ -31,7 +41,8 @@ export const buildChannelContextPrompt = (
     replyReceiveId: inbound.replyTo?.receiveId,
     replyReceiveIdType: inbound.replyTo?.receiveIdType,
     senderId: inbound.senderId,
-    sessionType: inbound.sessionType
+    sessionType: inbound.sessionType,
+    executionContext
   })
   if (runtimePrompt != null) {
     lines.push(runtimePrompt)

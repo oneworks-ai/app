@@ -7,7 +7,7 @@ import type { ChannelConversationStateDbRow } from './state-record'
 
 const STATE_SELECT_FIELDS = `
   id, channelType, channelKey, channelId, sessionType, channelLinkName, entity,
-  threadKey, topic, summary, activeParticipantsJson, recentTurnIdsJson, pendingIntentIdsJson,
+  threadKey, topic, summary, activeParticipantsJson, recentTurnIdsJson, pendingIntentIdsJson, lastBotReplyJson,
   lastChildRunId, lastMessageId, createdAt, updatedAt, expiresAt, metadataJson
 `
 
@@ -63,6 +63,23 @@ export function createConversationStatesRepo(db: SqliteDatabase) {
     ))
   }
 
+  const getStateByLastBotReply = (
+    input: { channelType: string; channelKey: string; channelId: string; entity?: string | null; messageId: string }
+  ) => {
+    const stmt = db.prepare(
+      `SELECT ${STATE_SELECT_FIELDS} FROM channel_conversation_states WHERE channelType = ? AND channelKey = ? AND channelId = ? AND entity IS ? AND json_extract(lastBotReplyJson, '$.messageId') = ? LIMIT 1`
+    )
+    return mapStateRow(
+      stmt.get<ChannelConversationStateDbRow>(
+        input.channelType,
+        input.channelKey,
+        input.channelId,
+        input.entity ?? null,
+        input.messageId
+      )
+    )
+  }
+
   const ensureState = (row: {
     id?: string | null
     channelType: string
@@ -75,32 +92,20 @@ export function createConversationStatesRepo(db: SqliteDatabase) {
     metadata?: Record<string, unknown> | null
     now?: number
   }) => {
-    const existing = getStateByThread(row)
     const now = row.now ?? Date.now()
-    if (existing != null) {
-      db.prepare(`
-        UPDATE channel_conversation_states
-        SET channelKey = ?, sessionType = ?, channelLinkName = ?, updatedAt = ?, metadataJson = COALESCE(?, metadataJson)
-        WHERE id = ?
-      `).run(
-        row.channelKey,
-        row.sessionType,
-        row.channelLinkName ?? null,
-        now,
-        stringifyJson(row.metadata),
-        existing.id
-      )
-      return getState(existing.id)!
-    }
-
     const id = row.id?.trim() || makeStateId(row)
     db.prepare(`
       INSERT INTO channel_conversation_states (
         id, channelType, channelKey, channelId, sessionType, channelLinkName, entity,
-        threadKey, topic, summary, activeParticipantsJson, recentTurnIdsJson, pendingIntentIdsJson,
+        threadKey, topic, summary, activeParticipantsJson, recentTurnIdsJson, pendingIntentIdsJson, lastBotReplyJson,
         lastChildRunId, lastMessageId, createdAt, updatedAt, expiresAt, metadataJson
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT DO UPDATE SET
+        sessionType = excluded.sessionType,
+        channelLinkName = excluded.channelLinkName,
+        updatedAt = excluded.updatedAt,
+        metadataJson = COALESCE(excluded.metadataJson, channel_conversation_states.metadataJson)
     `).run(
       id,
       row.channelType,
@@ -117,17 +122,19 @@ export function createConversationStatesRepo(db: SqliteDatabase) {
       JSON.stringify([]),
       null,
       null,
+      null,
       now,
       now,
       null,
       stringifyJson(row.metadata)
     )
-    return getState(id)!
+    return getStateByThread(row)!
   }
 
   return {
     ensureState,
     getState,
+    getStateByLastBotReply,
     getStateByThread
   }
 }

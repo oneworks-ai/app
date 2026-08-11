@@ -2,6 +2,7 @@
 import './AgentRoomRoute.scss'
 
 import { App, Spin } from 'antd'
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import useSWR from 'swr'
@@ -13,9 +14,11 @@ import {
   sendAgentRoomMessage,
   updateAgentRoomMetadata
 } from '#~/api'
+import { resolveChannelNavigationPreferences } from '#~/components/agent-room'
 import type { AgentRoomMessageView, AgentRoomRunView } from '#~/components/agent-room'
 import { RouteErrorState } from '#~/components/error-state'
 import { useDesktopWorkspaceStartupReady } from '#~/components/layout/desktop-workspace-startup-ready'
+import { usePluginContext } from '#~/plugins/plugin-context'
 
 import { ChatRouteStatusShell } from './ChatRouteStatusShell'
 import { ChatRouteView } from './ChatRouteView'
@@ -54,6 +57,21 @@ export function AgentRoomRoute() {
   const { roomId } = useParams()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  const { snapshot: pluginSnapshot } = usePluginContext()
+  const navigationPreferences = useMemo(() => {
+    const candidate = pluginSnapshot.instances
+      .filter(instance => instance.enabled)
+      .flatMap(instance => (
+        instance.manifest?.plugin?.contributions?.channelNavigation?.map(contribution => ({
+          contribution,
+          options: instance.options
+        })) ?? []
+      ))
+      .sort((left, right) => (right.contribution.priority ?? 0) - (left.contribution.priority ?? 0))[0]
+    return resolveChannelNavigationPreferences(
+      candidate == null ? undefined : candidate.options?.[candidate.contribution.optionsKey]
+    )
+  }, [pluginSnapshot.instances])
   const {
     data: roomDetail,
     isLoading,
@@ -171,6 +189,7 @@ export function AgentRoomRoute() {
         room: roomView,
         roomIconStatus: roomDetail.room.status,
         members: roomView.members,
+        navigationPreferences,
         workspaceSessionId: roomDetail.room.hostSessionId,
         onOpenHostSession: handleOpenHostSession,
         onOpenRun: handleOpenRun,

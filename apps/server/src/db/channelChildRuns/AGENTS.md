@@ -2,7 +2,7 @@
 
 本目录维护 `channel_child_session_runs` 的 schema 和 repo。
 
-它记录每次 channel inbound 消息被 dispatch 到 runtime session 的事实：触发频道、actor、消息、实体、sessionId、dispatch mode 和状态。当前实现还没有把执行完全拆成短生命周期 child session，所以 `dispatched` 只表示已投递给 runtime，不表示业务任务完成。
+它记录每次 channel inbound 消息被 dispatch 到 runtime session 的事实：触发频道、actor、消息、实体、sessionId、dispatch mode 和状态。`dispatched` 只表示已投递给 runtime，必须保持 `completedAt` 为空；runtime store watcher 通过 `services/channel-lifecycle` 幂等写入 terminal 状态并触发 memory writeback。只允许 terminal 状态写入完成时间。`memorySnapshotId` 与 `continuitySnapshotJson` 是本轮注入审计锚点。
 
 ## 文件职责
 

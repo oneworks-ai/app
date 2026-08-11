@@ -763,6 +763,121 @@
   min-width: 0;
 }
 
+.agent-room-bubble__channel-references {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+.agent-room-bubble__channel-reference {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: min(100%, 240px);
+  min-height: 24px;
+  padding: 2px 7px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 74%, transparent);
+  border-radius: 6px;
+  background: color-mix(
+    in srgb,
+    var(--sub-bg-color) 88%,
+    var(--primary-color) 12%
+  );
+  color: var(--sub-text-color);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+
+  .material-symbols-rounded {
+    flex: 0 0 auto;
+    color: var(--primary-text-color);
+    font-size: 15px;
+  }
+
+  &:hover:not(:disabled),
+  &:focus-visible:not(:disabled) {
+    border-color: color-mix(
+      in srgb,
+      var(--primary-color) 52%,
+      var(--border-color)
+    );
+    color: var(--text-color);
+  }
+
+  &:focus-visible {
+    outline: 2px solid
+      color-mix(in srgb, var(--primary-color) 34%, transparent);
+    outline-offset: 2px;
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 1;
+  }
+
+  &.is-failed {
+    border-color: color-mix(
+      in srgb,
+      var(--error-color) 45%,
+      var(--border-color)
+    );
+  }
+}
+
+.agent-room-bubble--user .agent-room-bubble__channel-reference {
+  border-color: color-mix(in srgb, #ffffff 38%, transparent);
+  background: color-mix(in srgb, #ffffff 14%, transparent);
+  color: color-mix(in srgb, #ffffff 88%, var(--primary-color));
+
+  .material-symbols-rounded {
+    color: #ffffff;
+  }
+}
+
+.agent-room-bubble__channel-reference-text {
+  display: inline-flex;
+  min-width: 0;
+}
+
+.agent-room-bubble__channel-reference-account {
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &::after {
+    content: ' · ';
+  }
+}
+
+.agent-room-bubble__channel-reference-label {
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-room-bubble__channel-reference-status {
+  flex: 0 0 auto;
+  font-size: 14px;
+}
+
+.agent-room-bubble__channel-reference.is-failed
+  .agent-room-bubble__channel-reference-status {
+  color: var(--error-color);
+}
+
+.agent-room-bubble__channel-reference.is-pending
+  .agent-room-bubble__channel-reference-status {
+  color: var(--warning-color);
+}
+
+.agent-room-bubble__channel-reference.is-sent
+  .agent-room-bubble__channel-reference-status {
+  color: var(--success-color);
+}
+
 .agent-room-bubble__content {
   max-width: 100%;
   min-width: 0;

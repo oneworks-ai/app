@@ -32,6 +32,7 @@ import { resolveProjectOoBaseDir } from '@oneworks/utils'
 import { handleChannelSessionEvent, resolveChannelSessionMcpServers } from '#~/channels/index.js'
 import { buildChannelSessionStopEvent } from '#~/channels/session-delivery.js'
 import { getDb } from '#~/db/index.js'
+import { commitChannelChildRunTerminal } from '#~/services/channel-lifecycle/index.js'
 import { loadConfigState } from '#~/services/config/index.js'
 import { recordSessionModelUsage } from '#~/services/model-usage.js'
 import { resolveRuntimeProtocolCliCommand } from '#~/services/runtime-cli-command.js'
@@ -1376,6 +1377,11 @@ export async function startAdapterSession(
               updateAndNotifySession(sessionId, {
                 status: exitCode === 0 ? 'completed' : 'failed'
               })
+              commitChannelChildRunTerminal({
+                error: exitCode === 0 ? undefined : stderr,
+                sessionId,
+                status: exitCode === 0 ? 'completed' : 'failed'
+              })
               if (exitCode === 0) {
                 maybeDispatchQueuedTurn(sessionId, async (content) => {
                   await processUserMessage(sessionId, content)
@@ -1439,6 +1445,7 @@ export async function startAdapterSession(
               )
               if (latestSession?.status !== 'failed') {
                 updateAndNotifySession(sessionId, { status: 'completed' })
+                commitChannelChildRunTerminal({ sessionId, status: 'completed' })
                 maybeDispatchQueuedTurn(sessionId, async (content) => {
                   await processUserMessage(sessionId, content)
                 })
@@ -1810,6 +1817,7 @@ export function killSession(
 
   if (cached != null || pendingRecovery != null || hadPendingInteraction) {
     updateAndNotifySession(sessionId, { status: 'terminated' })
+    commitChannelChildRunTerminal({ sessionId, status: 'expired' })
   }
 }
 

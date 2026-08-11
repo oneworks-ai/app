@@ -1,6 +1,6 @@
 ---
 name: oneworks-mem
-description: 说明 agent 如何用 oneworks mem CLI 在 channel、session、user、global 维度读写持久记忆，并判断什么时候应该读取、追加或更新记忆。
+description: 说明 agent 如何用 oneworks mem CLI 在 entity、channel、conversation、user、session、global 维度读写记忆，并判断什么时候应该读取、追加或更新记忆。
 ---
 
 当任务发生在 channel 会话里，或用户要求保存、读取、整理长期上下文时使用这个 skill。`oneworks mem` 是给 agent 在 shell 中调用的 CLI，不是发送到聊天频道里的文本命令。
@@ -21,13 +21,15 @@ description: 说明 agent 如何用 oneworks mem CLI 在 channel、session、use
 - `-p, --path <path>`：指定或过滤 id 下的相对文件路径。`get` / `set` / `patch` 默认 `README.md`，`list` 不传时不过滤路径。
 - `-c, --channel <channel>`：指定或过滤 channel，例如 `wechat`。
 - `-f, --filter <id>`：指定或过滤平台相关 id。对 `get` / `set` / `patch` 是目标 id，对 `list` 是过滤条件。
-- `-s, --scope <scope>`：记忆维度，支持 `channel`、`user`、`session`、`global`。
+- `-s, --scope <scope>`：记忆维度，支持 `entity`、`channel`、`conversation`、`user`、`session`、`global`。
 
 ## Scope 选择
 
+- `entity`：用于当前实体跨 ChannelLink 复用的长期经验、操作约定和稳定判断。
 - `channel`：默认 scope。用于当前群聊、私聊、帖子或平台会话的长期上下文；适合频道主题、项目背景、群约定、常用配置、长期排障线索。
+- `conversation`：用于稳定对话线程的背景、决策和后续动作；新的物理 ChildSession 会继续加载。
 - `user`：用于当前发送者个人相关信息；适合姓名、称呼、职责、稳定偏好、常用工作方式。只在信息来自本人、被明确确认，或对任务持续有用时写入。群聊中不要手填 sender id，让 CLI 从当前消息上下文解析。
-- `session`：用于当前 OneWorks session 的临时工作记忆；适合本次任务状态、排查步骤、未完成 TODO、刚形成但未必长期有效的结论。
+- `session`：用于当前物理 ChildSession 的临时工作记忆；不会作为跨轮连续记忆自动加载。
 - `global`：用于跨频道也成立的通用事实或用户明确要求全局记住的规则；谨慎使用。
 
 ## 什么时候读取
@@ -47,6 +49,8 @@ description: 说明 agent 如何用 oneworks mem CLI 在 channel、session、use
 oneworks mem get
 oneworks mem list
 oneworks mem get -s user
+oneworks mem get -s entity
+oneworks mem get -s conversation
 oneworks mem get -s session
 oneworks mem get -p ./reference/wechat.md
 ```
@@ -72,7 +76,9 @@ oneworks mem get -p ./reference/wechat.md
 ```bash
 oneworks mem patch "用户偏好：希望排查链路时先验证公网入口，再看服务日志。"
 oneworks mem patch -s user "用户自我介绍：二姐，主要维护 WeChat channel 接入。"
-oneworks mem patch -s session "本次排查：已确认 webhook secret 正确，下一步检查回调日志。"
+oneworks mem patch -s entity "Lark 长连接重启前先确认没有其它 workspace 占用同一应用。"
+oneworks mem patch -s conversation "本次排查：已确认 webhook secret 正确，下一步检查回调日志。"
+oneworks mem patch -s session "临时工作区：当前只读日志位于本子会话生成的路径。"
 oneworks mem patch -p ./reference/wechat.md "WechatApi 重连后需要重新注册 callback。"
 ```
 

@@ -207,6 +207,9 @@
       "sourceRoot": "./src"
     },
     "server": {
+      "capabilities": [
+        "roomRelay"
+      ],
       "roles": [
         "manager",
         "workspace"

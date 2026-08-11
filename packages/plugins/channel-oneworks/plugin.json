@@ -1,0 +1,135 @@
+{
+  "__oneWorksPluginManifest": true,
+  "name": "@oneworks/plugin-channel-oneworks",
+  "displayName": "Chat Rooms",
+  "displayNameI18n": {
+    "en": "Chat Rooms",
+    "zh-Hans": "聊天室"
+  },
+  "description": "Chat rooms, sharing, simulations, and delivery traces for OneWorks.",
+  "descriptionI18n": {
+    "en": "Chat rooms, sharing, simulations, and delivery traces for OneWorks.",
+    "zh-Hans": "聊天室、分享、场景模拟与投递链路入口。"
+  },
+  "icon": "./assets/icon.svg",
+  "version": "1.0.0-rc.2",
+  "config": {
+    "schema": {
+      "type": "object",
+      "titleI18n": {
+        "en": "Chat Rooms options",
+        "zh-Hans": "聊天室选项"
+      },
+      "properties": {
+        "navigation": {
+          "type": "object",
+          "additionalProperties": false,
+          "titleI18n": {
+            "en": "Channel navigation",
+            "zh-Hans": "频道跳转"
+          },
+          "properties": {
+            "default": {
+              "type": "array",
+              "uniqueItems": true,
+              "default": ["rightPanel", "externalWeb", "nativeApp", "appHome", "ask"],
+              "items": {
+                "type": "string",
+                "enum": ["rightPanel", "externalWeb", "nativeApp", "appHome", "ask"]
+              },
+              "titleI18n": {
+                "en": "Default open order",
+                "zh-Hans": "默认打开顺序"
+              }
+            },
+            "providers": {
+              "type": "object",
+              "default": {},
+              "additionalProperties": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "enum": ["rightPanel", "externalWeb", "nativeApp", "appHome", "ask"]
+                }
+              },
+              "titleI18n": {
+                "en": "Provider overrides",
+                "zh-Hans": "平台覆盖"
+              }
+            },
+            "accounts": {
+              "type": "object",
+              "default": {},
+              "additionalProperties": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "enum": ["rightPanel", "externalWeb", "nativeApp", "appHome", "ask"]
+                }
+              },
+              "titleI18n": {
+                "en": "Account overrides",
+                "zh-Hans": "账号覆盖"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "plugin": {
+    "client": {
+      "entry": "./client/dist/index.js",
+      "sourceRoot": "./client/src"
+    },
+    "server": {
+      "entry": "./server/dist/index.js",
+      "capabilities": ["oneworksChannel"],
+      "roles": ["workspace"]
+    },
+    "contributions": {
+      "roles": ["workspace"],
+      "surfaces": ["workspace"],
+      "channelNavigation": [
+        {
+          "id": "room-message-links",
+          "optionsKey": "navigation",
+          "priority": 100
+        }
+      ],
+      "settingsPages": [
+        {
+          "id": "channel-navigation",
+          "title": "Message Navigation",
+          "titleI18n": {
+            "en": "Message Navigation",
+            "zh-Hans": "消息跳转"
+          },
+          "descriptionI18n": {
+            "en": "Choose how Room message links open for each provider and account.",
+            "zh-Hans": "配置不同平台和账号的 Room 消息跳转方式。"
+          },
+          "icon": "open_in_new",
+          "pluginConfig": true
+        }
+      ],
+      "routes": [
+        {
+          "id": "oneworks-channel",
+          "title": "Chat Rooms",
+          "titleI18n": {
+            "en": "Chat Rooms",
+            "zh-Hans": "聊天室"
+          },
+          "descriptionI18n": {
+            "en": "Open OneWorks chat rooms, sharing, simulations, and delivery traces.",
+            "zh-Hans": "查看聊天室、分享、模拟场景和投递链路。"
+          },
+          "clientView": "oneworks-channel"
+        }
+      ]
+    }
+  }
+}

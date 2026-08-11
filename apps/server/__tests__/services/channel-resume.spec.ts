@@ -148,6 +148,8 @@ beforeEach(() => {
     createChannelChildSessionRun,
     finishChannelPendingIntentResumeClaim,
     finishChannelChildSessionRun,
+    markChannelChildSessionRunDispatched: vi.fn(),
+    markChannelChildSessionRunRunning: vi.fn(),
     getChannelChildSessionRun,
     getChannelConversationTurn,
     getChannelPendingIntent,
@@ -350,9 +352,8 @@ describe('channel resume service', () => {
       role: 'system',
       threadKey: 'group:owo-demo:actor:user-yijie'
     }))
-    expect(finishChannelChildSessionRun).toHaveBeenCalledWith('resume-run-1', {
-      sessionId: 'resume-sess-new',
-      status: 'dispatched'
+    expect(vi.mocked(getDb)().markChannelChildSessionRunDispatched).toHaveBeenCalledWith('resume-run-1', {
+      sessionId: 'resume-sess-new'
     })
     expect(finishChannelPendingIntentResumeClaim).toHaveBeenCalledWith({
       claimId: expect.any(String),
@@ -451,6 +452,19 @@ describe('channel resume service', () => {
     })
     expect(createChannelChildSessionRun).not.toHaveBeenCalled()
     expect(createSessionWithInitialMessage).not.toHaveBeenCalled()
+  })
+
+  it('dispatches a concurrent authorization resume only once', async () => {
+    claimChannelPendingIntentResume.mockReturnValueOnce(readyIntent).mockReturnValueOnce(undefined)
+
+    const [first, second] = await Promise.all([
+      resumeChannelPendingIntent({ intentId: 'pending-auth-1', now: 1_000 }),
+      resumeChannelPendingIntent({ intentId: 'pending-auth-1', now: 1_000 })
+    ])
+
+    expect([first.status, second.status].sort()).toEqual(['dispatched', 'skipped'])
+    expect(createChannelChildSessionRun).toHaveBeenCalledOnce()
+    expect(createSessionWithInitialMessage).toHaveBeenCalledOnce()
   })
 
   it('reclaims a dispatching resume intent after its lease expires', async () => {

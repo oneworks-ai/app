@@ -457,6 +457,11 @@ export interface PluginHostListComponentProps {
   items: PluginHostListItem[]
 }
 
+export interface PluginHostAgentRoomComponentProps {
+  className?: string
+  roomId: string
+}
+
 export interface PluginHostInteractionListAvatar {
   alt?: string
   fallback?: string
@@ -643,6 +648,7 @@ export interface PluginHostProjectFileTreeComponentProps {
 
 export interface PluginHostComponentPropsById {
   actionBar: PluginHostActionBarComponentProps
+  agentRoom: PluginHostAgentRoomComponentProps
   button: PluginHostButtonComponentProps
   codeEditor: PluginHostCodeEditorComponentProps
   icon: PluginHostIconComponentProps
@@ -678,6 +684,7 @@ export interface PluginHostComponentApi {
 
 export interface PluginHostComponentReactApi {
   ActionBar: ComponentType<PluginHostActionBarComponentProps>
+  AgentRoom: ComponentType<PluginHostAgentRoomComponentProps>
   Button: ComponentType<PluginHostButtonComponentProps>
   CodeEditor: ComponentType<PluginHostCodeEditorComponentProps>
   Icon: ComponentType<PluginHostIconComponentProps>
@@ -727,6 +734,7 @@ export interface PluginViewContext {
     setActions: (actions?: PluginViewRouteHeaderAction[]) => void
     setBreadcrumb: (breadcrumb?: PluginViewRouteHeaderBreadcrumb) => void
     setLauncherChrome: (chrome?: PluginViewRouteLauncherChrome) => void
+    setSidebar: (sidebar?: PluginViewRouteSidebar) => void
     setTitle: (title?: string) => void
   }
   routeId?: string
@@ -765,6 +773,37 @@ export interface PluginViewRouteHeaderBreadcrumb {
   ariaLabel?: string
   backLabel?: string
   currentTitle?: ReactNode
+}
+
+export interface PluginViewRouteSidebarItem {
+  activeIcon?: IconAsset
+  icon?: IconAsset
+  key: string
+  label: ReactNode
+  searchText?: string
+}
+
+export interface PluginViewRouteSidebarGroup {
+  activeIcon?: IconAsset
+  icon?: IconAsset
+  items: PluginViewRouteSidebarItem[]
+  key: string
+  label?: ReactNode
+  searchableText?: string
+  selectable?: boolean
+}
+
+export interface PluginViewRouteSidebar {
+  activeKey?: string
+  ariaLabel?: string
+  emptyText?: ReactNode
+  groups: PluginViewRouteSidebarGroup[]
+  search: {
+    placeholder?: string
+    value: string
+    onChange: (value: string) => void
+  }
+  onSelectItem: (item: PluginViewRouteSidebarItem) => void
 }
 
 export interface PluginViewRouteLauncherChrome {

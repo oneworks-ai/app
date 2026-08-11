@@ -27,7 +27,12 @@ function createSchemaContext(db: SqliteDatabase): SchemaContext {
     ensureColumn: (tableName: string, columnName: string, definition: string) => {
       const columns = getColumns(tableName)
       if (!columns.includes(columnName)) {
-        db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`)
+        try {
+          db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`)
+        } catch (error) {
+          // Another connection may complete the same additive migration after our initial PRAGMA read.
+          if (!getColumns(tableName).includes(columnName)) throw error
+        }
       }
     }
   }

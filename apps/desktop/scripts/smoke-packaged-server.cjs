@@ -129,6 +129,12 @@ const firstExistingPath = (...candidates) => {
 }
 
 const packagedBuiltinPluginRequirements = {
+  '@oneworks/plugin-channel-oneworks': [
+    'package.json',
+    'plugin.json',
+    'client/dist/index.js',
+    'server/dist/index.js'
+  ],
   '@oneworks/plugin-browser-driver': [
     'package.json',
     'plugin.json',

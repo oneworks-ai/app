@@ -10,7 +10,7 @@ export type {
   ChannelPendingIntentRow,
   ChannelPendingIntentStatus
 } from './pending-intent-record'
-export type { ChannelConversationStateRow } from './state-record'
+export type { ChannelConversationLastBotReply, ChannelConversationStateRow } from './state-record'
 export type { ChannelConversationTurnRole, ChannelConversationTurnRow } from './turn-record'
 
 export function createChannelConversationsRepo(db: SqliteDatabase) {
@@ -25,10 +25,12 @@ export function createChannelConversationsRepo(db: SqliteDatabase) {
     ensureState: states.ensureState,
     getPendingIntent: pendingIntentReaders.getPendingIntent,
     getState: states.getState,
+    getStateByLastBotReply: states.getStateByLastBotReply,
     getStateByThread: states.getStateByThread,
     getTurn: turns.getTurn,
     listOpenPendingIntents: pendingIntentReaders.listOpenPendingIntents,
     listRecentTurns: turns.listRecentTurns,
+    listRecentTurnsByChannelType: turns.listRecentTurnsByChannelType,
     listResolvedPendingIntents: pendingIntentReaders.listResolvedPendingIntents,
     finishPendingIntentResumeClaim: pendingIntentWriters.finishPendingIntentResumeClaim,
     updatePendingIntent: pendingIntentWriters.updatePendingIntent,

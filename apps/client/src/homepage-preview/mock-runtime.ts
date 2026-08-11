@@ -783,7 +783,9 @@ const createRoomMessage = (
   role,
   content,
   createdAt,
-  ...patch
+  ...patch,
+  deliveries: patch.deliveries ?? [],
+  sequence: patch.sequence ?? createdAt
 })
 
 const buildPreviewRoomDetail = (now: number, hostSessionId: string): AgentRoomDetailResponse => {
@@ -840,6 +842,7 @@ const buildPreviewRoomDetail = (now: number, hostSessionId: string): AgentRoomDe
     room: {
       id: roomId,
       title: t('roomTitle'),
+      owner: { type: 'local', nodeId: 'homepage-preview' },
       hostSessionId,
       status: 'active',
       lastMessage: t('roomLastMessage'),
@@ -882,6 +885,8 @@ const buildPreviewRoomDetail = (now: number, hostSessionId: string): AgentRoomDe
       }
     ],
     runs: [claudeRun, codexRun],
+    channelLinks: [],
+    shares: [],
     messages: [
       createRoomMessage(roomId, 'system', t('roomMemberJoined', { member: 'Codex' }), now - 14 * 60_000, {
         id: 'homepage-room-member-codex',
