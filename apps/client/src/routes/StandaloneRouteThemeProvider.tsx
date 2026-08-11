@@ -5,6 +5,7 @@ import type { ReactNode } from 'react'
 
 import { DEFAULT_THEME_PRIMARY_COLOR, normalizeThemePrimaryColor } from '@oneworks/icon/presets'
 
+import { useDesktopUiReady } from '#~/desktop/use-desktop-ui-ready'
 import {
   THEME_PRIMARY_COLOR_STORAGE_KEY,
   applyThemePrimaryColorVariables,
@@ -40,6 +41,7 @@ const getInitialPrimaryColor = () => getStoredThemePrimaryColor() ?? DEFAULT_THE
 
 function ThemedStandaloneRoute({ children }: { children: ReactNode }) {
   const { ready } = usePluginContext()
+  useDesktopUiReady(ready)
   const themes = usePluginThemes()
   const setThemeMode = useSetAtom(themeAtom)
   const setThemePack = useSetAtom(themePackAtom)

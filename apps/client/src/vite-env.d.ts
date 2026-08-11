@@ -744,6 +744,9 @@ interface Window {
     >
     listBrowserPasswordImportSources?: () => Promise<DesktopBrowserPasswordImportSource[]>
     listSavedPasswords?: (query?: string) => Promise<DesktopSavedPasswordRecord[]>
+    markDesktopCoreReady?: () => Promise<void>
+    markDesktopInteractive?: () => void
+    markDesktopUiReady?: () => Promise<void>
     authenticateSavedPasswordsAccess?: (reason?: string) => Promise<DesktopSavedPasswordAccessAuthenticationResult>
     revealSavedPassword?: (id: string) => Promise<string>
     copySavedPasswordField?: (id: string, field: 'username' | 'password') => Promise<void>

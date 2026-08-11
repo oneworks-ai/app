@@ -425,6 +425,7 @@ export const createWindowManager = ({
       showLauncherWindowRecord(windowRecord)
       logDesktopTiming(`launcher shell visible elapsed=${elapsedMs(startedAt)}`)
     }
+    onStartupStage?.('shell.ready')
     return true
   }
 
@@ -528,24 +529,36 @@ export const createWindowManager = ({
     }
 
     let service: Awaited<ReturnType<typeof ensureLauncherClientService>>
+    const managerServicePromise = ensureManagerService()
+      .then((managerService) => {
+        logDesktopTiming(
+          `launcher manager ready url=${managerService.serverUrl ?? 'none'} elapsed=${elapsedMs(startedAt)}`
+        )
+        onStartupStage?.('manager.ready')
+        return managerService
+      })
+      .catch((error) => {
+        console.error('[oneworks-desktop] failed to load launcher manager', error)
+        onStartupDegraded?.(error, {
+          code: 'launcher.manager_startup_failed',
+          domain: 'server',
+          retryable: true
+        })
+        throw error
+      })
+    void managerServicePromise.catch(() => undefined)
     try {
-      logDesktopTiming(`launcher waiting for shared client and manager elapsed=${elapsedMs(startedAt)}`)
+      logDesktopTiming(`launcher waiting for shared client elapsed=${elapsedMs(startedAt)}`)
       const clientServicePromise = ensureLauncherClientService()
-      const managerServicePromise = ensureManagerService()
-      const [clientService, managerService] = await Promise.all([clientServicePromise, managerServicePromise])
-      service = clientService
+      service = await clientServicePromise
       logDesktopTiming(
-        `launcher runtimes ready client=${service.clientUrl ?? 'none'} ` +
-          `manager=${managerService.serverUrl ?? 'none'} elapsed=${elapsedMs(startedAt)}`
+        `launcher client ready url=${service.clientUrl ?? 'none'} elapsed=${elapsedMs(startedAt)}`
       )
       if (!isWindowRecordUsable(windowRecord)) {
         return
       }
       if (service.clientUrl == null) {
         throw new Error('The local One Works launcher client did not publish a URL.')
-      }
-      if (managerService.serverUrl == null) {
-        throw new Error('The local One Works manager server did not publish a URL.')
       }
       onStartupStage?.('client.ready')
     } catch (error) {
@@ -557,7 +570,7 @@ export const createWindowManager = ({
         windowRecord.window.close()
         return
       }
-      console.error('[oneworks-desktop] failed to load launcher runtimes', error)
+      console.error('[oneworks-desktop] failed to load launcher client', error)
       onStartupDegraded?.(error, {
         code: 'launcher.client_startup_failed',
         domain: 'client',

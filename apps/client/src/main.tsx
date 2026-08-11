@@ -26,21 +26,14 @@ import {
   getClientBase,
   isDesktopClientMode,
   mergeRuntimeEnv,
-  normalizeServerBaseUrl,
   resolveDevDocumentTitle,
   resolveWorkspaceIdFromPathname
 } from '#~/runtime-config.js'
 import { setupMobileViewport } from '#~/utils/mobile-viewport.js'
 
 import App from './App'
-import { installDesktopManagerRuntimeIfAvailable } from './desktop/manager-runtime'
+import { installDesktopRuntimeIdentityIfAvailable } from './desktop/manager-runtime'
 import { normalizeAppLanguage } from './i18n'
-import { getRestorableWorkspaceConnection } from './workspace-connection-restore'
-import {
-  applyWorkspaceConnection,
-  rememberWorkspaceConnection,
-  withWorkspaceRouteId
-} from './workspace-connection-state'
 
 const gitRefLabel = import.meta.env.__ONEWORKS_PROJECT_GIT_REF_LABEL__ ?? ''
 
@@ -62,25 +55,7 @@ document.title = resolveDevDocumentTitle(document.title, {
   gitRef: import.meta.env.__ONEWORKS_PROJECT_DEV_GIT_REF__
 })
 
-const installDesktopWorkspaceRuntimeIfAvailable = async () => {
-  const connection = await window.oneworksDesktop?.getWorkspaceConnection?.()
-    .catch((error) => {
-      console.warn('[desktop] failed to load workspace connection', error)
-      return undefined
-    })
-  const serverBaseUrl = normalizeServerBaseUrl(connection?.serverBaseUrl)
-  if (serverBaseUrl == null) return
-
-  mergeRuntimeEnv({
-    __ONEWORKS_PROJECT_CLIENT_MODE__: 'desktop',
-    __ONEWORKS_PROJECT_SERVER_BASE_URL__: serverBaseUrl,
-    ...(connection?.workspaceFolder == null
-      ? {}
-      : { __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: connection.workspaceFolder })
-  })
-}
-
-const installWorkspaceRouteRuntimeIfAvailable = async () => {
+const installWorkspaceRouteRuntimeIfAvailable = () => {
   const workspaceId = resolveWorkspaceIdFromPathname(window.location.pathname)
   if (workspaceId == null) return
 
@@ -92,32 +67,6 @@ const installWorkspaceRouteRuntimeIfAvailable = async () => {
     __ONEWORKS_PROJECT_SERVER_ROLE__: 'workspace',
     __ONEWORKS_PROJECT_WORKSPACE_ID__: workspaceId
   })
-
-  const restoredConnection = await getRestorableWorkspaceConnection(workspaceId)
-    .catch((error) => {
-      console.warn('[workspace] failed to restore workspace connection', error)
-      return undefined
-    })
-  if (restoredConnection == null) return
-  const { connection, transport } = restoredConnection
-  const serverBaseUrl = normalizeServerBaseUrl(connection.serverBaseUrl)
-  if (serverBaseUrl == null) return
-  const managerServerBaseUrl = getLauncherManagerServerBaseUrl(connection.managerServerBaseUrl)
-  const routeConnection = withWorkspaceRouteId(connection, workspaceId)
-
-  mergeRuntimeEnv({
-    __ONEWORKS_PROJECT_MANAGER_SERVER_BASE_URL__: managerServerBaseUrl
-  })
-  applyWorkspaceConnection({
-    serverBaseUrl,
-    workspaceFolder: routeConnection.workspaceFolder,
-    workspaceId: routeConnection.workspaceId
-  })
-  rememberWorkspaceConnection({
-    ...routeConnection,
-    managerServerBaseUrl,
-    serverBaseUrl
-  }, transport)
 }
 
 const shouldRetryOnError = (error: unknown) => {
@@ -166,9 +115,8 @@ const renderApp = () => {
 }
 
 const startApp = async () => {
-  await installDesktopManagerRuntimeIfAvailable()
-  await installWorkspaceRouteRuntimeIfAvailable()
-  await installDesktopWorkspaceRuntimeIfAvailable()
+  installDesktopRuntimeIdentityIfAvailable()
+  installWorkspaceRouteRuntimeIfAvailable()
   setupMobileViewport()
 
   appClientBase = getClientBase()

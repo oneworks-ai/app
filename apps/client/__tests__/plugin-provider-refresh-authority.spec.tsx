@@ -128,6 +128,45 @@ describe('plugin provider refresh authority', () => {
     Reflect.deleteProperty(globalThis, '__pluginProviderAuthorityRaceStarted')
   })
 
+  it('renders a baseline registry without contacting a guessed manager origin', async () => {
+    mocks.listPluginSnapshot.mockResolvedValue(createSnapshot('runtime-manager', createInstance('manager')))
+
+    await act(async () => {
+      root.render(
+        <PluginProvider
+          deferUntilRuntimeServerBaseUrl
+          runtimeSource='manager'
+        >
+          <ContextProbe />
+        </PluginProvider>
+      )
+    })
+    await flushPromises()
+
+    expect(mocks.listPluginSnapshot).not.toHaveBeenCalled()
+    expect(mocks.createSocket).not.toHaveBeenCalled()
+    expect(latestContext).toMatchObject({
+      pluginSnapshotStatus: 'loading',
+      ready: true
+    })
+
+    await act(async () => {
+      root.render(
+        <PluginProvider
+          runtimeServerBaseUrl='http://127.0.0.1:38901'
+          runtimeSource='manager'
+        >
+          <ContextProbe />
+        </PluginProvider>
+      )
+    })
+    await flushPromises()
+
+    expect(mocks.listPluginSnapshot).toHaveBeenCalledWith({
+      serverBaseUrl: 'http://127.0.0.1:38901'
+    })
+  })
+
   it('preserves current same-key registrations when an older activation loses authority', async () => {
     const initialLoad = createDeferred<PluginSnapshot>()
     const staleLoad = createDeferred<PluginSnapshot>()

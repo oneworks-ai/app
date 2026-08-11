@@ -29,7 +29,6 @@ import type {
   WorkspaceSelectorWindowInput,
   WorkspaceService
 } from './types'
-import { refreshWorkspaceRuntimeCacheInBackground } from './updates'
 
 interface WorkspaceServiceManagerInput {
   broadcastWorkspaceSelectorState: () => void
@@ -367,7 +366,6 @@ export const createWorkspaceServiceManager = ({
       })
 
       await waitForServerStartup(child)
-      refreshWorkspaceRuntimeCacheInBackground()
 
       service.serverUrl = `http://${SERVER_HOST}:${port}`
       service.status = 'ready'

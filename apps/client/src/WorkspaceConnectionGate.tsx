@@ -11,6 +11,7 @@ import { getApiErrorMessage } from '#~/api/base'
 import { restartLauncherWorkspace } from '#~/api/launcher'
 import { DesktopWorkspaceStartupReadyContext } from '#~/components/layout/desktop-workspace-startup-ready'
 import { WorkspaceOpeningOverlay } from '#~/components/workspace/WorkspaceOpeningOverlay'
+import { useDesktopUiReady } from '#~/desktop/use-desktop-ui-ready'
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
 import { getRestorableWorkspaceConnection } from '#~/workspace-connection-restore'
 import type {
@@ -64,6 +65,7 @@ export function WorkspaceConnectionGate({
   children,
   workspaceId
 }: PropsWithChildren<{ workspaceId?: string }>) {
+  useDesktopUiReady()
   const { t } = useTranslation()
   const { resolvedThemeMode } = useResolvedThemeMode()
   const [state, setState] = useState<ConnectionState>({ status: 'loading' })
@@ -191,6 +193,7 @@ export function WorkspaceConnectionGate({
     try {
       const { connection, transport } = await getWorkspaceConnection()
       applyWorkspaceConnection(connection)
+      void window.oneworksDesktop?.markDesktopCoreReady?.()
       if (transport != null) {
         rememberWorkspaceConnection(connection, transport)
       }
@@ -223,6 +226,7 @@ export function WorkspaceConnectionGate({
         const { connection, transport } = await getWorkspaceConnection()
         if (disposed) return
         applyWorkspaceConnection(connection)
+        void window.oneworksDesktop?.markDesktopCoreReady?.()
         if (transport != null) {
           rememberWorkspaceConnection(connection, transport)
         }
@@ -256,6 +260,7 @@ export function WorkspaceConnectionGate({
     try {
       const connection = withWorkspaceRouteId(await restartLauncherWorkspace(workspaceId), workspaceId)
       applyWorkspaceConnection(connection)
+      void window.oneworksDesktop?.markDesktopCoreReady?.()
       rememberWorkspaceConnection(connection, 'local')
       setState({ status: 'ready' })
     } catch (error) {

@@ -59,31 +59,6 @@ logServerChildStartup('packaged esbuild configured')
 
 const isManagerServer = process.env.__ONEWORKS_PROJECT_SERVER_ROLE__ === 'manager'
 
-try {
-  logServerChildStartup('builtin package cache prepare begin')
-  const {
-    ensureBuiltinAdapterPackageCache,
-    ensureBuiltinPluginPackageCache,
-    ensureBuiltinRuntimePackageCache,
-    runBuiltinPackageCachePreparationOnce
-  } = require('./builtin-adapter-cache.cjs')
-  const prepared = runBuiltinPackageCachePreparationOnce({
-    env: process.env,
-    prepare: () => {
-      if (isManagerServer) {
-        ensureBuiltinPluginPackageCache({ env: process.env, trustManifest: true })
-        return
-      }
-      ensureBuiltinRuntimePackageCache({ env: process.env, trustManifest: true })
-      ensureBuiltinAdapterPackageCache({ env: process.env, trustManifest: true })
-      ensureBuiltinPluginPackageCache({ env: process.env, trustManifest: true })
-    }
-  })
-  logServerChildStartup(`builtin package cache prepare ${prepared ? 'complete' : 'skipped inherited'}`)
-} catch (error) {
-  console.error('[desktop] failed to prepare built-in package cache:', error)
-}
-
 const resolveConfiguredServerPackageDir = () => {
   const configuredPackageDir = process.env.__ONEWORKS_DESKTOP_SERVER_PACKAGE_DIR__
   if (typeof configuredPackageDir !== 'string' || configuredPackageDir.trim() === '') {
