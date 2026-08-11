@@ -21,6 +21,8 @@ overrides:
   rollup@>=4.0.0 <4.59.0: 4.62.4
   string.prototype.matchall: npm:@nolyfill/string.prototype.matchall@latest
   unbox-primitive: npm:@nolyfill/unbox-primitive@latest
+patchedDependencies:
+  '@electron/osx-sign@2.4.0': patches/@electron__osx-sign@2.4.0.patch
 onlyBuiltDependencies:
   - '@swc/core'
   - '@parcel/watcher'

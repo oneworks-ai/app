@@ -1,0 +1,47 @@
+diff --git a/dist/util.js b/dist/util.js
+index 7674259258cb14f846c3a2ab75a0e22dbe1b79ce..1117b74a00ffcd1fc076745701fa307753a97267 100644
+--- a/dist/util.js
++++ b/dist/util.js
+@@ -114,8 +114,9 @@ export async function validateOptsPlatform(opts) {
+ export async function walk(dirPath) {
+     debugLog('Walking... ' + dirPath);
+     async function _walkAsync(dirPath) {
++        const result = [];
+         const children = await fs.promises.readdir(dirPath);
+-        return await Promise.all(children.map(async (child) => {
++        for (const child of children) {
+             const filePath = path.resolve(dirPath, child);
+             const stat = await fs.promises.lstat(filePath);
+             if (stat.isFile()) {
+@@ -123,9 +124,15 @@ export async function walk(dirPath) {
+                     case '.cstemp': // Temporary file generated from past codesign
+                         debugLog('Removing... ' + filePath);
+                         await fs.promises.rm(filePath, { recursive: true, force: true });
+-                        return null;
++                        break;
+                     default:
+-                        return await getFilePathIfBinary(filePath);
++                        {
++                            const binaryPath = await getFilePathIfBinary(filePath);
++                            if (binaryPath) {
++                                result.push(binaryPath);
++                            }
++                        }
++                        break;
+                 }
+             }
+             else if (stat.isDirectory() && !stat.isSymbolicLink()) {
+@@ -135,10 +142,10 @@ export async function walk(dirPath) {
+                     case '.framework': // Framework
+                         walkResult.push(filePath);
+                 }
+-                return walkResult;
++                result.push(walkResult);
+             }
+-            return null;
+-        }));
++        }
++        return result;
+     }
+     const allPaths = await _walkAsync(dirPath);
+     return compactFlattenedList(allPaths);

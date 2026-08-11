@@ -22,6 +22,9 @@ overrides:
   string.prototype.matchall: npm:@nolyfill/string.prototype.matchall@latest
   unbox-primitive: npm:@nolyfill/unbox-primitive@latest
 
+patchedDependencies:
+  '@electron/osx-sign@2.4.0': ee753dc8a8fa1d1f72f53cd5c74e3f11afa439ce8f44264fc96d711fe1555f36
+
 importers:
 
   .:
@@ -9103,7 +9106,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@electron/osx-sign@2.4.0':
+  '@electron/osx-sign@2.4.0(patch_hash=ee753dc8a8fa1d1f72f53cd5c74e3f11afa439ce8f44264fc96d711fe1555f36)':
     dependencies:
       debug: 4.4.3
       isbinaryfile: 4.0.10
@@ -9117,7 +9120,7 @@ snapshots:
       '@electron/asar': 4.2.0
       '@electron/get': 4.0.3
       '@electron/notarize': 3.1.1
-      '@electron/osx-sign': 2.4.0
+      '@electron/osx-sign': 2.4.0(patch_hash=ee753dc8a8fa1d1f72f53cd5c74e3f11afa439ce8f44264fc96d711fe1555f36)
       '@electron/universal': 3.0.3
       '@electron/windows-sign': 2.0.2
       '@malept/cross-spawn-promise': 2.0.0
