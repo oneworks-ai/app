@@ -18,6 +18,10 @@ import {
   resolvePluginClientEntryUrl
 } from '#~/plugins/plugin-runtime'
 import {
+  buildPluginCompactNavigationActions,
+  buildPluginSidebarNavigationItems
+} from '#~/plugins/plugin-sidebar-navigation'
+import {
   buildRoutePluginSidebarContextMenu,
   resolveRouteContributionText,
   routeTargetMatches
@@ -33,6 +37,42 @@ vi.mock('#~/components/monaco/use-monaco-theme', () => ({ useMonacoTheme: () => 
 vi.mock('monaco-editor', () => ({ editor: {} }))
 
 describe('client plugin host registry', () => {
+  it('projects plugin navigation actions into the shared sidebar action slot', () => {
+    const navigate = vi.fn()
+    const items = buildPluginSidebarNavigationItems({
+      items: [{
+        actions: [{
+          id: 'shared',
+          title: 'Shared',
+          titleI18n: { 'zh-Hans': '已分享' },
+          icon: 'group',
+          route: '/plugins/demo/rooms?section=shared'
+        }],
+        icon: 'meeting_room',
+        id: 'rooms',
+        pluginScope: 'demo',
+        route: '/plugins/demo/rooms',
+        title: 'Chat rooms'
+      }],
+      language: 'zh-Hans',
+      navigate,
+      pathname: '/plugins/demo/rooms'
+    })
+
+    expect(items[0]).toMatchObject({
+      actions: [{ icon: 'group', label: '已分享' }],
+      icon: 'meeting_room',
+      isActive: true,
+      label: 'Chat rooms'
+    })
+    items[0]?.actions?.[0]?.onSelect()
+    expect(navigate).toHaveBeenCalledWith('/plugins/demo/rooms?section=shared')
+
+    expect(buildPluginCompactNavigationActions(items)).toMatchObject([
+      { icon: 'group', key: 'compact:demo:rooms:shared', label: '已分享' }
+    ])
+  })
+
   it('adapts plugin route resources to the shared route sidebar contract', () => {
     const onSelectItem = vi.fn()
     const sidebar = createPluginRouteSidebarOverride('plugin-route:demo:rooms', {
@@ -413,8 +453,18 @@ describe('client plugin host registry', () => {
                 title: 'Account search'
               }],
               navItems: [{
+                actions: [{
+                  id: 'manager-action',
+                  roles: ['manager'],
+                  surfaces: ['launcher'],
+                  title: 'Manager action'
+                }, {
+                  id: 'workspace-action',
+                  surfaces: ['workspace'],
+                  title: 'Workspace action'
+                }],
                 id: 'account-nav',
-                surfaces: ['workspace'],
+                surfaces: ['launcher'],
                 title: 'Account nav'
               }],
               routes: [{
@@ -456,7 +506,13 @@ describe('client plugin host registry', () => {
         pluginScope: 'account'
       })
     ])
-    expect(snapshot.slots['nav.items']).toBeUndefined()
+    expect(snapshot.slots['nav.items']).toEqual([
+      expect.objectContaining({
+        actions: [expect.objectContaining({ id: 'manager-action' })],
+        id: 'account-nav',
+        pluginScope: 'account'
+      })
+    ])
     expect(snapshot.routes).toEqual([
       expect.objectContaining({
         id: 'home',

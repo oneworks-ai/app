@@ -68,6 +68,13 @@ describe('public plugin contribution projection', () => {
         title: 'Account'
       }],
       navItems: [{
+        actions: [{
+          icon: 'group',
+          id: 'shared',
+          route: '/plugins/docs?section=shared',
+          surfaces: ['workspace'],
+          title: 'Shared'
+        }],
         descriptionI18n: { en: 'Navigation' },
         id: 'nav',
         payload: { mode: 'safe' },
@@ -183,6 +190,13 @@ describe('public plugin contribution projection', () => {
   it('keeps route fields but rejects filesystem values in titles and payloads', async () => {
     const safeSnapshot = await snapshotFromContributions({
       navItems: [{
+        actions: [{
+          icon: 'group',
+          id: 'shared',
+          route: '/plugins/docs?section=shared',
+          surfaces: ['workspace'],
+          title: 'Shared'
+        }],
         icon: './assets/docs.svg',
         id: 'docs',
         route: '/plugins/docs',
@@ -196,6 +210,13 @@ describe('public plugin contribution projection', () => {
     })
     expect(safeSnapshot.plugins[0]?.contributions).toEqual({
       navItems: [{
+        actions: [{
+          icon: 'group',
+          id: 'shared',
+          route: '/plugins/docs?section=shared',
+          surfaces: ['workspace'],
+          title: 'Shared'
+        }],
         icon: './assets/docs.svg',
         id: 'docs',
         route: '/plugins/docs',
@@ -211,6 +232,13 @@ describe('public plugin contribution projection', () => {
     for (
       const contributions of [{
         navItems: [{ id: 'unsafe', route: '/plugins/unsafe', title: '/private/title' }]
+      }, {
+        navItems: [{
+          actions: [{ id: 'unsafe-action', route: 'javascript:alert(1)', title: 'Unsafe action' }],
+          id: 'unsafe',
+          route: '/plugins/unsafe',
+          title: 'Unsafe'
+        }]
       }, {
         navItems: [{ id: 'unsafe', payload: { label: '%2Fprivate%2Fsecret' }, title: 'Unsafe' }]
       }, {

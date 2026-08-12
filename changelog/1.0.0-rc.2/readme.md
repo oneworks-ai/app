@@ -11,6 +11,7 @@
 - Add Channel Runtime v2 foundations for entity-bound channel links, sender-scoped commands and approvals, cross-channel identity linking, resumable conversations, availability policies, and the first-party OneWorks channel.
 - Add the OneWorks Chat Rooms product plugin for local Rooms, owner-bound explicit sharing, signed webhook simulations, reusable scenarios, redacted live traces, idempotent delivery, and navigation preferences while keeping provider connection management in the built-in Channel system.
 - Keep Chat Rooms usable across desktop and compact layouts by letting the timeline fill the available surface, anchoring the composer at the bottom without duplicate insets, and opening sharing and trace tools as returnable subpages.
+- Align Chat Rooms with shared route chrome by showing the selected room in the header, moving collection shortcuts beside the sidebar entry, removing duplicate body titles and redundant navigation, and relying on automatic data revalidation instead of manual refresh.
 
   ![Chat Rooms with a full-height timeline and bottom composer](./chat-rooms-layout.png)
 

@@ -17,6 +17,7 @@ import type {
   PluginContributionNavFooterAccountPopover,
   PluginContributionNavFooterItem,
   PluginContributionNavItem,
+  PluginContributionNavItemAction,
   PluginContributionRoute,
   PluginContributionRouteHeaderAction,
   PluginContributionRouteMenuItem,
@@ -77,6 +78,7 @@ export type {
   PluginContributionNavFooterAccountPopover,
   PluginContributionNavFooterItem,
   PluginContributionNavItem,
+  PluginContributionNavItemAction,
   PluginContributionRoute,
   PluginContributionRouteHeaderAction,
   PluginContributionRouteMenuItem,
@@ -713,6 +715,13 @@ export interface PluginHostComponentReactApi {
 
 export interface PluginViewContext {
   components: PluginHostComponentApi
+  data: {
+    useQuery: <TData>(
+      key: string | null,
+      fetcher: () => Promise<TData>,
+      options?: PluginViewQueryOptions
+    ) => PluginViewQueryResult<TData>
+  }
   extensions: {
     getContributions: (target: string) => Array<PluginExtensionContributionRegistration & { pluginScope: string }>
     hasPoint: (target: string) => boolean
@@ -732,6 +741,7 @@ export interface PluginViewContext {
     listEndpoints: () => Promise<PluginRuntimeEndpoint[]>
   }
   route?: {
+    navigate: (target: string, options?: { replace?: boolean }) => void
     setActions: (actions?: PluginViewRouteHeaderAction[]) => void
     setBreadcrumb: (breadcrumb?: PluginViewRouteHeaderBreadcrumb) => void
     setLauncherChrome: (chrome?: PluginViewRouteLauncherChrome) => void
@@ -746,6 +756,19 @@ export interface PluginViewContext {
     state: unknown
   }
   ui: PluginHostComponentReactApi
+}
+
+export interface PluginViewQueryOptions {
+  refreshInterval?: number
+  revalidateOnFocus?: boolean
+  revalidateOnReconnect?: boolean
+}
+
+export interface PluginViewQueryResult<TData> {
+  data?: TData
+  error?: unknown
+  isLoading: boolean
+  mutate: () => Promise<TData | undefined>
 }
 
 export interface PluginViewRouteHeaderAction {

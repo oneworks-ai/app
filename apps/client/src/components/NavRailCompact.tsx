@@ -14,7 +14,8 @@ export interface NavRailCompactItem {
   icon: IconAsset
   key: string
   label: string
-  path: string
+  onSelect?: () => void
+  path?: string
 }
 
 export interface NavRailCompactMoreAction {
@@ -113,7 +114,8 @@ export function NavRailCompact({
             aria-label={item.label}
             onClick={() => {
               setIsMoreSheetOpen(false)
-              onNavClick(item.key, item.path)
+              if (item.onSelect != null) item.onSelect()
+              else if (item.path != null) onNavClick(item.key, item.path)
               onAction?.()
             }}
             icon={renderIconAsset({

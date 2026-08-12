@@ -21,7 +21,10 @@ Use repository files as the team's revisioned, version-controlled design memory.
    - prohibited patterns;
    - expected user behaviors;
    - required screenshots and observable checks.
+   - host chrome ownership: which existing header, sidebar, breadcrumb, and action slot already names or navigates the current object.
 5. Keep task-specific coordinates and temporary adjustments in the Visual Brief, not durable memory.
+
+Before adding a visible title, breadcrumb, navigation button, refresh command, or outer padding, inspect the complete host surface. Do not duplicate a title already owned by the route header, place collection navigation in object-level header actions, add manual refresh when the data layer already revalidates, or let both the host and embedded view own the same inset. Prefer the host's existing sidebar action, breadcrumb, header action, and data-query contracts.
 
 ## Classify user feedback
 

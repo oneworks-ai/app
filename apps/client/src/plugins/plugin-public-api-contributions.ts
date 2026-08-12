@@ -97,6 +97,12 @@ const NAV_FOOTER_SHAPE = object({
   ...MENU_SHAPE.fields,
   accountPopover: NAV_FOOTER_POPOVER_SHAPE
 })
+const NAV_ITEM_ACTION_SHAPE = object(mergeFields(
+  BASE_FIELDS,
+  jsonFields('command', 'id', 'payload', 'title'),
+  assetFields('icon'),
+  routeFields('route')
+))
 
 const ROUTE_HEADER_SHAPE = object(mergeFields(
   BASE_FIELDS,
@@ -228,7 +234,8 @@ const CONTRIBUTION_SHAPES: Record<string, PublicJsonShape> = {
     BASE_FIELDS,
     jsonFields('command', 'id', 'payload', 'title'),
     assetFields('icon'),
-    routeFields('route')
+    routeFields('route'),
+    { actions: array(NAV_ITEM_ACTION_SHAPE) }
   ))),
   navMoreMenu: array(MENU_SHAPE),
   roles: json,

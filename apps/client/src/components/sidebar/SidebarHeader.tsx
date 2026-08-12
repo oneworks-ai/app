@@ -19,8 +19,8 @@ import { addDesktopViewShortcutListener } from '#~/desktop/view-shortcuts'
 import { useExperiments } from '#~/hooks/use-experiments'
 import { useResponsiveLayout } from '#~/hooks/use-responsive-layout'
 import type { SidebarSessionSortOrder } from '#~/hooks/use-sidebar-query-state'
-import { resolvePluginContributionText } from '#~/plugins/plugin-i18n'
 import type { PluginContributionNavItem } from '#~/plugins/plugin-manifest'
+import { buildPluginSidebarNavigationItems } from '#~/plugins/plugin-sidebar-navigation'
 import { usePluginCommandExecutor, usePluginSlot } from '#~/plugins/plugin-slots'
 import { sessionListSearchThresholdAtom } from '#~/store/index'
 import { formatShortcutLabel } from '#~/utils/shortcutUtils'
@@ -435,22 +435,12 @@ export function SidebarHeader({
       }
     })
 
-    const contributedItems = pluginNavItems.map((item): SidebarHeaderNavigationItem => {
-      const route = item.route ?? `/plugins/${item.pluginScope}/${item.id}`
-      const isActive = location.pathname === route
-      return {
-        icon: item.icon ?? 'layers',
-        isActive,
-        key: `plugin:${item.pluginScope}:${item.id}`,
-        label: resolvePluginContributionText(item, 'title', pluginLanguage) ?? item.title,
-        onSelect: () => {
-          if (item.route == null && item.command != null && executePluginCommand != null) {
-            void executePluginCommand(item.pluginScope, item.command, item.payload)
-            return
-          }
-          void navigate(route)
-        }
-      }
+    const contributedItems: SidebarHeaderNavigationItem[] = buildPluginSidebarNavigationItems({
+      executeCommand: executePluginCommand,
+      items: pluginNavItems,
+      language: pluginLanguage,
+      navigate: route => void navigate(route),
+      pathname: location.pathname
     })
 
     return [...coreItems, ...contributedItems]

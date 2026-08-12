@@ -758,21 +758,29 @@ export class PluginRegistry {
     if (!this.isContributionAvailable(instance, contribution, inheritedAvailability)) return undefined
 
     const preparedContribution = this.applyInheritedAvailability(contribution, inheritedAvailability)
-    const children = (preparedContribution as { children?: unknown }).children
-    if (!Array.isArray(children)) return preparedContribution
-
     const childInheritedAvailability = this.getChildInheritedAvailability(preparedContribution, inheritedAvailability)
-    const filteredChildren = children
-      .filter(isRecord)
-      .map(child => this.prepareContribution(instance, child, childInheritedAvailability))
-      .filter((child): child is Record<string, unknown> => child != null)
+    let result = preparedContribution as Record<string, unknown>
+    let changed = false
 
-    if (filteredChildren.length === children.length) return preparedContribution
-    const rest = { ...(preparedContribution as Record<string, unknown>) }
-    delete rest.children
-    return (filteredChildren.length === 0
-      ? rest
-      : { ...rest, children: filteredChildren }) as T
+    for (const field of ['actions', 'children'] as const) {
+      const entries = result[field]
+      if (!Array.isArray(entries)) continue
+
+      const filteredEntries = entries
+        .filter(isRecord)
+        .map(entry => this.prepareContribution(instance, entry, childInheritedAvailability))
+        .filter((entry): entry is Record<string, unknown> => entry != null)
+      const fieldChanged = filteredEntries.length !== entries.length ||
+        filteredEntries.some((entry, index) => entry !== entries[index])
+      if (!fieldChanged) continue
+
+      if (!changed) result = { ...result }
+      changed = true
+      if (filteredEntries.length === 0) delete result[field]
+      else result[field] = filteredEntries
+    }
+
+    return (changed ? result : preparedContribution) as T
   }
 
   private applyInheritedAvailability<T extends object>(
