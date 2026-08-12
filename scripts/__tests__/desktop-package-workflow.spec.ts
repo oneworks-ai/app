@@ -1,6 +1,6 @@
 /* eslint-disable max-lines -- one workflow contract is intentionally exercised end to end. */
 import { spawnSync } from 'node:child_process'
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -292,6 +292,9 @@ describe('desktop package workflow', () => {
     expect(workflow).toContain('builder_source_sha:')
     expect(workflow).toContain('product_source_sha:')
     expect(workflow).toContain('replace_existing_release:')
+    expect(workflow).toContain('notarization_history_only:')
+    expect(workflow).toContain('notarization_run_id:')
+    expect(workflow).toContain('notarization_stage:')
     expect(workflow).toContain('product_source_sha cannot be combined with candidate_run_id.')
     expect(workflow).toContain("inputs.candidate_run_id != ''")
     expect(workflow).toContain(
@@ -367,7 +370,9 @@ describe('desktop package workflow', () => {
     expect(wrongRef.status).toBe(1)
     expect(wrongRef.stderr).toContain('protected refs/heads/main')
     expect(workflow).toContain('path: product-source')
-    expect(workflow).toContain('ref: $' + '{{ inputs.product_source_sha }}')
+    expect(workflow).toContain(
+      'ref: $' + '{{ steps.notarization_recovery.outputs.source_sha || inputs.product_source_sha }}'
+    )
     expect(workflow).toContain(
       'working-directory: $' + '{{ steps.desktop_workspace.outputs.workspace_dir }}'
     )
@@ -524,7 +529,7 @@ describe('desktop package workflow', () => {
     expect(result.status).toBe(0)
   })
 
-  it('signs and notarizes the immutable app before wrapping release artifacts', () => {
+  it('persists asynchronous app and installer notarization before bounded waits', () => {
     const importIndex = workflow.indexOf(
       '      - name: Import desktop application signing identity'
     )
@@ -532,15 +537,88 @@ describe('desktop package workflow', () => {
     const verifyIndex = workflow.indexOf(
       '      - name: Verify signed and notarized macOS app bundles'
     )
+    const prepareAppIndex = workflow.indexOf(
+      '      - name: Prepare signed app notarization recovery state'
+    )
+    const submitAppIndex = workflow.indexOf(
+      '      - name: Submit signed apps for notarization without waiting'
+    )
+    const retainAppIndex = workflow.indexOf(
+      '      - name: Retain exact signed app notarization recovery state'
+    )
+    const resumeAppIndex = workflow.indexOf(
+      '      - name: Reconcile and submit app notarization recovery state'
+    )
+    const bindAppIndex = workflow.indexOf(
+      '      - name: Bind updated app notarization recovery state to this run'
+    )
+    const retainUpdatedAppIndex = workflow.indexOf(
+      '      - name: Retain updated app notarization recovery state'
+    )
+    const waitAppIndex = workflow.indexOf(
+      '      - name: Wait for existing app notarization submissions'
+    )
     const buildIndex = workflow.indexOf('      - name: Build desktop artifacts')
+    const prepareInstallerIndex = workflow.indexOf(
+      '      - name: Prepare installer notarization recovery state'
+    )
+    const submitInstallerIndex = workflow.indexOf(
+      '      - name: Submit installers for notarization without waiting'
+    )
+    const retainInstallerIndex = workflow.indexOf(
+      '      - name: Retain exact installer notarization recovery state'
+    )
+    const resumeInstallerIndex = workflow.indexOf(
+      '      - name: Reconcile and submit installer notarization recovery state'
+    )
+    const bindInstallerIndex = workflow.indexOf(
+      '      - name: Bind updated installer notarization recovery state to this run'
+    )
+    const retainUpdatedInstallerIndex = workflow.indexOf(
+      '      - name: Retain updated installer notarization recovery state'
+    )
+    const waitInstallerIndex = workflow.indexOf(
+      '      - name: Wait for existing installer notarization submissions'
+    )
     const cleanupIndex = workflow.indexOf(
       '      - name: Remove temporary desktop signing keychain'
     )
 
     expect(importIndex).toBeGreaterThanOrEqual(0)
     expect(importIndex).toBeLessThan(packageIndex)
+    expect(packageIndex).toBeLessThan(prepareAppIndex)
+    expect(prepareAppIndex).toBeLessThan(submitAppIndex)
+    expect(submitAppIndex).toBeLessThan(retainAppIndex)
+    expect(retainAppIndex).toBeLessThan(waitAppIndex)
+    expect(retainAppIndex).toBeLessThan(resumeAppIndex)
+    expect(resumeAppIndex).toBeLessThan(bindAppIndex)
+    expect(bindAppIndex).toBeLessThan(retainUpdatedAppIndex)
+    expect(retainUpdatedAppIndex).toBeLessThan(waitAppIndex)
+    expect(waitAppIndex).toBeLessThan(verifyIndex)
     expect(packageIndex).toBeLessThan(verifyIndex)
     expect(verifyIndex).toBeLessThan(buildIndex)
+    expect(buildIndex).toBeLessThan(prepareInstallerIndex)
+    expect(prepareInstallerIndex).toBeLessThan(submitInstallerIndex)
+    expect(submitInstallerIndex).toBeLessThan(retainInstallerIndex)
+    expect(retainInstallerIndex).toBeLessThan(waitInstallerIndex)
+    expect(retainInstallerIndex).toBeLessThan(resumeInstallerIndex)
+    expect(resumeInstallerIndex).toBeLessThan(bindInstallerIndex)
+    expect(bindInstallerIndex).toBeLessThan(retainUpdatedInstallerIndex)
+    expect(retainUpdatedInstallerIndex).toBeLessThan(waitInstallerIndex)
+    expect(workflow).toContain('desktop-app-notarization-recovery')
+    expect(workflow).toContain('desktop-installer-notarization-recovery')
+    expect(workflow).toContain('--timeout-minutes 20')
+    expect(workflow).toContain('--build-branch "$' + '{{ steps.desktop_build_source.outputs.branch }}"')
+    expect(workflow).toContain('--build-time "$' + '{{ steps.desktop_build_source.outputs.time }}"')
+    expect(workflow).toContain('--run-id "$GITHUB_RUN_ID"')
+    expect(workflow).toContain('--run-attempt "$GITHUB_RUN_ATTEMPT"')
+    expect(workflow).toContain('RECOVERY_BUILD_TIME: $' + '{{ steps.notarization_recovery.outputs.build_time }}')
+    expect(workflow).toContain('RECOVERY_BUILD_BRANCH: $' + '{{ steps.notarization_recovery.outputs.build_branch }}')
+    expect(extractRunScript('Wait for existing app notarization submissions')).not.toContain(' submit ')
+    expect(extractRunScript('Wait for existing installer notarization submissions')).not.toContain(' submit ')
+    expect(extractRunScript('Reconcile and submit app notarization recovery state')).toContain(' reconcile ')
+    expect(extractRunScript('Reconcile and submit installer notarization recovery state')).toContain(' reconcile ')
+    expect(workflow).toContain('ONEWORKS_DESKTOP_DEFER_NOTARIZATION')
     expect(buildIndex).toBeLessThan(cleanupIndex)
     expect(workflow).toContain('ONEWORKS_DESKTOP_SIGNING_KEYCHAIN=$keychain')
     expect(workflow).toContain('security set-key-partition-list')
@@ -556,6 +634,7 @@ describe('desktop package workflow', () => {
       'afterAllArtifactBuild: scripts/notarize-artifacts.cjs'
     )
     expect(electronBuilderConfig).toMatch(/mac:\n(?: {2}.+\n)* {2}notarize: false\n/u)
+    expect(electronBuilderConfig).toMatch(/dmg:\n(?: {2}.+\n)* {2}writeUpdateInfo: false\n/u)
     expect(desktopPackageScript).toContain('afterCopyExtraResources:')
     expect(desktopPackageScript).not.toContain('afterCopy:')
     expect(desktopPackageScript.indexOf('rewriteStagingSymlinks(packagedAppRoot')).toBeLessThan(
@@ -565,6 +644,189 @@ describe('desktop package workflow', () => {
     expect(macosSigningRule).toContain(
       '`security find-identity` 只能证明 identity 可枚举'
     )
+  })
+
+  it('supports read-only history and exact recovery without combining remote mutations', () => {
+    const script = extractRunScript('Validate desktop workflow request')
+    const history = runBash(script, {
+      CANDIDATE_RUN_ID: '',
+      CREATE_RELEASE_REQUESTED: 'false',
+      NOTARIZATION_HISTORY_ONLY: 'true',
+      NOTARIZATION_RUN_ID: '',
+      NOTARIZATION_STAGE: '',
+      REPLACE_EXISTING_RELEASE: 'false'
+    })
+    const recovery = runBash(script, {
+      CANDIDATE_RUN_ID: '',
+      CREATE_RELEASE_REQUESTED: 'false',
+      NOTARIZATION_HISTORY_ONLY: 'false',
+      NOTARIZATION_RUN_ID: '31527515015',
+      NOTARIZATION_STAGE: 'app',
+      REPLACE_EXISTING_RELEASE: 'false'
+    })
+    const invalidRecovery = runBash(script, {
+      CANDIDATE_RUN_ID: '',
+      CREATE_RELEASE_REQUESTED: 'false',
+      NOTARIZATION_HISTORY_ONLY: 'false',
+      NOTARIZATION_RUN_ID: '31527515015',
+      NOTARIZATION_STAGE: 'unknown',
+      REPLACE_EXISTING_RELEASE: 'false'
+    })
+    const mixedHistory = runBash(script, {
+      BUILDER_SOURCE_SHA: '',
+      CANDIDATE_RUN_ID: '',
+      CREATE_RELEASE_REQUESTED: 'false',
+      NOTARIZATION_HISTORY_ONLY: 'true',
+      NOTARIZATION_RUN_ID: '',
+      NOTARIZATION_STAGE: '',
+      PRODUCT_SOURCE_SHA: 'a'.repeat(40),
+      RELEASE_TAG_INPUT: '',
+      REPLACE_EXISTING_RELEASE: 'false'
+    })
+    const mixedRecovery = runBash(script, {
+      BUILDER_SOURCE_SHA: 'b'.repeat(40),
+      CANDIDATE_RUN_ID: '',
+      CREATE_RELEASE_REQUESTED: 'false',
+      NOTARIZATION_HISTORY_ONLY: 'false',
+      NOTARIZATION_RUN_ID: '31527515015',
+      NOTARIZATION_STAGE: 'app',
+      PRODUCT_SOURCE_SHA: 'a'.repeat(40),
+      RELEASE_TAG_INPUT: '',
+      REPLACE_EXISTING_RELEASE: 'false'
+    })
+    const installerWorkspace = runWithOutput(
+      extractRunScript('Resolve desktop workspace'),
+      {
+        GITHUB_SHA: 'c'.repeat(40),
+        NOTARIZATION_BUILDER_SHA: 'b'.repeat(40),
+        NOTARIZATION_SOURCE_SHA: 'a'.repeat(40),
+        NOTARIZATION_STAGE: 'installer',
+        PRODUCT_SOURCE_SHA: ''
+      }
+    )
+    const appWorkspace = runWithOutput(
+      extractRunScript('Resolve desktop workspace'),
+      {
+        GITHUB_SHA: 'c'.repeat(40),
+        NOTARIZATION_BUILDER_SHA: 'b'.repeat(40),
+        NOTARIZATION_SOURCE_SHA: 'a'.repeat(40),
+        NOTARIZATION_STAGE: 'app',
+        PRODUCT_SOURCE_SHA: ''
+      }
+    )
+
+    expect(history.status, history.stderr).toBe(0)
+    expect(recovery.status, recovery.stderr).toBe(0)
+    expect(invalidRecovery.status).toBe(1)
+    expect(invalidRecovery.stderr).toContain('notarization_stage must be app or installer')
+    expect(mixedHistory.status).toBe(1)
+    expect(mixedHistory.stderr).toContain('notarization_history_only cannot be combined')
+    expect(mixedRecovery.status).toBe(1)
+    expect(mixedRecovery.stderr).toContain('notarization recovery cannot be combined')
+    expect(installerWorkspace.status, installerWorkspace.stderr).toBe(0)
+    expect(installerWorkspace.output).toContain(`builder_sha=${'b'.repeat(40)}`)
+    expect(appWorkspace.status, appWorkspace.stderr).toBe(0)
+    expect(appWorkspace.output).toContain(`builder_sha=${'c'.repeat(40)}`)
+    expect(workflow).toContain('name: Apple notarization history')
+    expect(workflow).toContain('Query Apple notarization history')
+    expect(workflow).toContain('Download notarization recovery state')
+    expect(workflow).toContain('inputs.notarization_history_only')
+  })
+
+  it('fails historical product signing before blocking notarization tooling can run', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'oneworks-desktop-product-tooling-'))
+    const scriptsDir = path.join(root, 'apps', 'desktop', 'scripts')
+    mkdirSync(scriptsDir, { recursive: true })
+    mkdirSync(path.join(root, 'patches'), { recursive: true })
+    writeFileSync(path.join(scriptsDir, 'mac-signing-options.cjs'), 'module.exports = { osxSign: {} }\n')
+    writeFileSync(
+      path.join(scriptsDir, 'notarize-artifacts.cjs'),
+      'process.env.ONEWORKS_DESKTOP_DEFER_NOTARIZATION\n'
+    )
+    writeFileSync(
+      path.join(root, 'pnpm-workspace.yaml'),
+      "patchedDependencies:\n  '@electron/osx-sign@2.4.0': patches/@electron__osx-sign@2.4.0.patch\n"
+    )
+    writeFileSync(path.join(root, 'apps', 'desktop', 'electron-builder.yml'), 'dmg:\n  writeUpdateInfo: false\n')
+    writeFileSync(path.join(root, 'patches', '@electron__osx-sign@2.4.0.patch'), 'patch')
+
+    try {
+      const script = extractRunScript('Validate recoverable product signing tooling')
+      const current = runBash(script, { PRODUCT_WORKSPACE: root })
+      expect(current.status, current.stderr).toBe(0)
+
+      writeFileSync(
+        path.join(scriptsDir, 'mac-signing-options.cjs'),
+        'module.exports = { osxNotarize: {} }\n'
+      )
+      const historical = runBash(script, { PRODUCT_WORKSPACE: root })
+      expect(historical.status).toBe(1)
+      expect(historical.stderr).toContain('predates the recoverable Desktop signing toolchain')
+    } finally {
+      rmSync(root, { force: true, recursive: true })
+    }
+  })
+
+  it('binds recovery artifacts to the exact failed workflow run and attempt', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'oneworks-desktop-recovery-run-'))
+    const commandDir = path.join(root, 'bin')
+    const stateDir = path.join(root, 'state')
+    mkdirSync(commandDir, { recursive: true })
+    mkdirSync(stateDir, { recursive: true })
+    const runId = '31527515015'
+    const headSha = 'b'.repeat(40)
+    const state = {
+      artifactProvenance: {
+        headSha,
+        runAttempt: 1,
+        runId,
+        workflowPath: '.github/workflows/desktop-package.yml'
+      },
+      buildBranch: 'main',
+      builderSha: headSha,
+      buildTime: '2026-08-11T12:00:00.000Z',
+      releaseTag: 'pkg/oneworks-desktop/v1.0.0-rc.2',
+      schemaVersion: 1,
+      sourceSha: 'a'.repeat(40),
+      stage: 'app'
+    }
+    writeFileSync(path.join(stateDir, 'notarization-state.json'), JSON.stringify(state))
+    const ghPath = path.join(commandDir, 'gh')
+    writeFileSync(ghPath, '#!/usr/bin/env bash\nprintf "%s" "$FAKE_RUN_JSON"\n')
+    chmodSync(ghPath, 0o755)
+    const validRun = {
+      conclusion: 'cancelled',
+      head_sha: headSha,
+      id: Number(runId),
+      path: '.github/workflows/desktop-package.yml',
+      repository: { full_name: 'oneworks-ai/app' },
+      run_attempt: 1,
+      status: 'completed'
+    }
+    const execute = (run: Record<string, unknown>) =>
+      runWithOutput(extractRunScript('Inspect notarization recovery state'), {
+        EXPECTED_STAGE: 'app',
+        FAKE_RUN_JSON: JSON.stringify(run),
+        GH_TOKEN: 'token',
+        GITHUB_REPOSITORY: 'oneworks-ai/app',
+        NOTARIZATION_RUN_ID: runId,
+        PATH: `${commandDir}:${process.env.PATH}`,
+        REQUESTED_RELEASE_TAG: state.releaseTag,
+        RUNNER_TEMP: root,
+        STATE_DIR: stateDir
+      })
+
+    try {
+      const valid = execute(validRun)
+      expect(valid.status, valid.stderr).toBe(0)
+      expect(valid.output).toContain(`source_sha=${state.sourceSha}`)
+
+      const mismatched = execute({ ...validRun, head_sha: 'c'.repeat(40) })
+      expect(mismatched.status).toBe(1)
+      expect(mismatched.stderr).toContain('does not match the requested stage or source contract')
+    } finally {
+      rmSync(root, { force: true, recursive: true })
+    }
   })
 
   it('proves the imported identity is usable by codesign before packaging', () => {

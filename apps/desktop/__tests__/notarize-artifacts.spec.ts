@@ -21,4 +21,22 @@ describe('desktop installer notarization', () => {
       '/release/oneworks-arm64.pkg'
     ])
   })
+
+  it('keeps deferred notarization out of electron-builder', async () => {
+    const previousSign = process.env.ONEWORKS_DESKTOP_SIGN
+    const previousDeferred = process.env.ONEWORKS_DESKTOP_DEFER_NOTARIZATION
+    process.env.ONEWORKS_DESKTOP_SIGN = 'true'
+    process.env.ONEWORKS_DESKTOP_DEFER_NOTARIZATION = 'true'
+    try {
+      const result = await require('../scripts/notarize-artifacts.cjs').default({
+        artifactPaths: ['/release/oneworks-arm64.dmg']
+      })
+      expect(result).toEqual([])
+    } finally {
+      if (previousSign == null) delete process.env.ONEWORKS_DESKTOP_SIGN
+      else process.env.ONEWORKS_DESKTOP_SIGN = previousSign
+      if (previousDeferred == null) delete process.env.ONEWORKS_DESKTOP_DEFER_NOTARIZATION
+      else process.env.ONEWORKS_DESKTOP_DEFER_NOTARIZATION = previousDeferred
+    }
+  })
 })

@@ -11,11 +11,6 @@ const { resolveMacSigningOptions } = require('../scripts/mac-signing-options.cjs
     env?: NodeJS.ProcessEnv
     platform?: NodeJS.Platform
   }) => {
-    osxNotarize?: {
-      appleId: string
-      appleIdPassword: string
-      teamId: string
-    }
     osxSign?: {
       continueOnError: boolean
       identity: string
@@ -52,12 +47,8 @@ describe('macOS app signing options', () => {
     })).toEqual({})
   })
 
-  it.each([
-    'APPLE_ID',
-    'APPLE_ID_PASSWORD',
-    'APPLE_TEAM_ID',
-    'ONEWORKS_DESKTOP_SIGNING_KEYCHAIN'
-  ])('fails closed when %s is missing', missingName => {
+  it('fails closed when the application signing keychain is missing', () => {
+    const missingName = 'ONEWORKS_DESKTOP_SIGNING_KEYCHAIN'
     expect(() =>
       resolveMacSigningOptions({
         appName: 'One Works',
@@ -68,7 +59,7 @@ describe('macOS app signing options', () => {
     ).toThrow(missingName)
   })
 
-  it('signs the full app with Developer ID and notarizes before packaging returns', () => {
+  it('signs the full app while leaving notarization to the recoverable workflow', () => {
     const desktopRoot = '/workspace/apps/desktop'
     const options = resolveMacSigningOptions({
       appName: 'One Works',
@@ -77,11 +68,7 @@ describe('macOS app signing options', () => {
       platform: 'darwin'
     })
 
-    expect(options.osxNotarize).toEqual({
-      appleId: completeEnv.APPLE_ID,
-      appleIdPassword: completeEnv.APPLE_ID_PASSWORD,
-      teamId: completeEnv.APPLE_TEAM_ID
-    })
+    expect(options).not.toHaveProperty('osxNotarize')
     expect(options.osxSign).toMatchObject({
       continueOnError: false,
       identity: 'Developer ID Application',

@@ -24,7 +24,7 @@ const run = (command, args) => {
   return `${result.stdout ?? ''}${result.stderr ?? ''}`
 }
 
-const verifySignedMacAppBundle = ({ appPath, runCommand = run }) => {
+const verifySignedMacAppBundle = ({ appPath, requireNotarization = true, runCommand = run }) => {
   assertPortableAppBundleSymlinks(appPath)
   runCommand('codesign', ['--verify', '--deep', '--strict', '--verbose=4', appPath])
   const details = runCommand('codesign', ['-d', '--verbose=4', appPath])
@@ -40,26 +40,31 @@ const verifySignedMacAppBundle = ({ appPath, runCommand = run }) => {
   if (!/^Runtime Version=.+/mu.test(details)) {
     throw new Error(`Expected hardened runtime signing for ${appPath}.`)
   }
-  runCommand('xcrun', ['stapler', 'validate', appPath])
-  runCommand('spctl', ['--assess', '--type', 'execute', '--verbose=4', appPath])
+  if (requireNotarization) {
+    runCommand('xcrun', ['stapler', 'validate', appPath])
+    runCommand('spctl', ['--assess', '--type', 'execute', '--verbose=4', appPath])
+  }
   return details
 }
 
-const verifySignedMacAppBundles = ({ outputDir, runCommand = run }) => {
+const verifySignedMacAppBundles = ({ outputDir, requireNotarization = true, runCommand = run }) => {
   const appPaths = findPrepackagedAppBundles(outputDir)
   if (appPaths.length === 0) {
     throw new Error(`No prepackaged macOS app bundles were found in ${outputDir}.`)
   }
   for (const appPath of appPaths) {
-    verifySignedMacAppBundle({ appPath, runCommand })
-    console.log(`[desktop] verified signed and notarized app ${appPath}`)
+    verifySignedMacAppBundle({ appPath, requireNotarization, runCommand })
+    console.log(`[desktop] verified signed${requireNotarization ? ' and notarized' : ''} app ${appPath}`)
   }
   return appPaths
 }
 
 const runCli = () => {
-  const outputDir = path.resolve(process.argv[2] ?? 'apps/desktop/out')
-  verifySignedMacAppBundles({ outputDir })
+  const args = process.argv.slice(2)
+  const requireNotarization = !args.includes('--signature-only')
+  const outputArg = args.find(arg => arg !== '--signature-only')
+  const outputDir = path.resolve(outputArg ?? 'apps/desktop/out')
+  verifySignedMacAppBundles({ outputDir, requireNotarization })
 }
 
 if (require.main === module) {

@@ -12,10 +12,12 @@ const {
 } = require('../scripts/verify-macos-signed-apps.cjs') as {
   verifySignedMacAppBundle: (input: {
     appPath: string
+    requireNotarization?: boolean
     runCommand?: (command: string, args: string[]) => string
   }) => string
   verifySignedMacAppBundles: (input: {
     outputDir: string
+    requireNotarization?: boolean
     runCommand?: (command: string, args: string[]) => string
   }) => string[]
 }
@@ -47,6 +49,25 @@ describe('signed macOS app verification', () => {
       `xcrun stapler validate ${appPath}`,
       `spctl --assess --type execute --verbose=4 ${appPath}`
     ])
+  })
+
+  it('can verify the complete signature before asynchronous notarization', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'oneworks-signed-app-pre-notary-'))
+    const appPath = path.join(root, 'One Works.app')
+    await mkdir(appPath)
+    const commands: string[] = []
+
+    verifySignedMacAppBundle({
+      appPath,
+      requireNotarization: false,
+      runCommand: (command, args) => {
+        commands.push(`${command} ${args.join(' ')}`)
+        return command === 'codesign' && args[0] === '-d' ? signedDetails : ''
+      }
+    })
+
+    expect(commands).toHaveLength(2)
+    expect(commands.every(command => command.startsWith('codesign '))).toBe(true)
   })
 
   it.each([

@@ -18,18 +18,10 @@ const resolveMacSigningOptions = ({
 }) => {
   if (platform !== 'darwin' || !isTruthy(env.ONEWORKS_DESKTOP_SIGN)) return {}
 
-  const appleId = readRequiredValue(env, 'APPLE_ID')
-  const appleIdPassword = readRequiredValue(env, 'APPLE_ID_PASSWORD')
-  const teamId = readRequiredValue(env, 'APPLE_TEAM_ID')
   const keychain = readRequiredValue(env, 'ONEWORKS_DESKTOP_SIGNING_KEYCHAIN')
   const entitlements = path.join(desktopRoot, 'build', 'entitlements.mac.plist')
 
   return {
-    osxNotarize: {
-      appleId,
-      appleIdPassword,
-      teamId
-    },
     osxSign: {
       continueOnError: false,
       identity: 'Developer ID Application',
