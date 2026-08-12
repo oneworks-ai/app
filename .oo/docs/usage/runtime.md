@@ -112,7 +112,7 @@ webAuth:
 - `HOME` 可用于隔离运行环境，默认落到 project home 的 `.mock` 子目录。启动入口会把真实 home 里的常见 dot 目录和 macOS `Library/Keychains`、`Library/Application Support` 桥接进 mock home；直接软链路径如果已有旧文件或目录，会先移动到同级 `.backup-*` 再创建正确软链。
 - `modelServices` 是共享层配置；各 adapter 会按自己的原生运行时做映射，具体以对应 adapter 文档为准。
   - `claude-code` 对 Anthropic、Kimi、DeepSeek、百炼/Qwen、智谱 GLM、MiniMax、OpenRouter、Requesty、Vercel AI Gateway、Portkey 等已知 Anthropic-compatible 官方入口优先直连；其它 OpenAI-compatible `service,model` 继续回退 Claude Code Router
-  - `codex` 与 `gemini` 走 adapter 自己的本地代理
+  - `codex` 与 `gemini` 走 adapter 自己的本地代理；`grok` 把 routed service 写成 session 级原生 custom model
   - 部分 adapter 会把 provider 配置写进 session 级或原生配置文件
 - 选择内置服务商时，One Works 会从 provider catalog 自动补齐常见 Host 和协议；通常只需配置 `provider` 与 `apiKey`。`apiBaseUrl` 和 `apiProtocol` 保留为兼容网关、私有部署或服务商特殊端点的显式覆盖。Codex 以 Responses 作为本地源协议，并能处理下面四种上游格式的请求、非流式响应和 SSE 流：
 

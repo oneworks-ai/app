@@ -24,6 +24,36 @@ import { buildAdapterAssetPlan, resolvePromptAssetSelection, resolveWorkspaceAss
 import { createWorkspace, installPluginPackage, writeDocument } from './test-helpers'
 
 describe('buildAdapterAssetPlan', () => {
+  it('stages Grok skills and skips OpenCode-only overlays', async () => {
+    const workspace = await createWorkspace()
+    await installPluginPackage(workspace, '@oneworks/plugin-demo', {
+      'package.json': JSON.stringify({ name: '@oneworks/plugin-demo', version: '1.0.0' }),
+      'opencode/commands/review.md': '# review\n'
+    })
+    await writeDocument(
+      join(workspace, '.oo/skills/research/SKILL.md'),
+      '---\ndescription: Research\n---\nRead the docs.'
+    )
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      configs: [{ plugins: [{ id: 'demo' }] }, undefined],
+      useDefaultOneworksMcpServer: false
+    })
+    const plan = await buildAdapterAssetPlan({
+      adapter: 'grok',
+      bundle,
+      options: { skills: { include: ['research'] } }
+    })
+
+    expect(plan.overlays).toEqual([
+      expect.objectContaining({ kind: 'skill', targetPath: 'skills/research' })
+    ])
+    expect(plan.diagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({ adapter: 'grok', status: 'native' }),
+      expect.objectContaining({ adapter: 'grok', status: 'skipped' })
+    ]))
+  })
+
   it('builds codex diagnostics for native skills, mcp, hook plugins, and unsupported opencode assets', async () => {
     const workspace = await createWorkspace()
 

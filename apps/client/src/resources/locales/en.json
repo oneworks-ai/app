@@ -337,15 +337,16 @@
     "importing": "Importing History",
     "quickImport": "Import {{platform}} history",
     "emptyTitle": "No importable history found",
-    "emptyDescription": "No Codex, Claude Code, or Cursor history sessions were found for the current project.",
+    "emptyDescription": "No Codex, Claude Code, Cursor, or Grok history sessions were found for the current project.",
     "failed": "Failed to import native history",
-    "failedDescription": "Try again later, or check the local Codex / Claude Code / Cursor history directories.",
+    "failedDescription": "Try again later, or check the local Codex / Claude Code / Cursor / Grok history directories.",
     "open": "Open imported session",
     "dismiss": "Later",
     "platforms": {
       "codex": "Codex",
       "claudeCode": "Claude Code",
-      "cursor": "Cursor"
+      "cursor": "Cursor",
+      "grok": "Grok"
     },
     "manager": {
       "allPlatforms": "All",

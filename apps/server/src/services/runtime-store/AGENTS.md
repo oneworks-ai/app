@@ -6,7 +6,7 @@
 
 - `watcher.ts`：runtime store watcher，发现 session store、读取增量事件并触发投影。
   - watcher 同时把 channel child run 从 `dispatched` 收敛到 completed / failed / stopped 等终态，并触发 memory writeback；不要只更新普通 session/room 投影后留下永远 running 的 channel audit。
-- `history-import.ts`：扫描当前 workspace 对应的 Codex / Claude Code / Cursor 原生 JSONL 历史，并导入成只读 runtime store session；Cursor 项目归属从 `~/.cursor/projects/<encoded-workspace>` 解析，`subagents/` 保留为子任务来源。
+- `history-import.ts`：扫描当前 workspace 对应的 Codex / Claude Code / Cursor / Grok 原生 JSONL 历史，并导入成只读 runtime store session；Cursor 项目归属从 `~/.cursor/projects/<encoded-workspace>` 解析，`subagents/` 保留为子任务来源。
 - `projection.ts`：总投影入口，协调 metadata、session event、room event。
 - `metadata-projection.ts`：meta/state 到 session 与 room 初始状态的投影。
 - `session-projection.ts`：runtime status 到 server session status 的映射。

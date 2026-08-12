@@ -13,7 +13,7 @@ This page covers the adapter configuration structure in the Web configuration UI
 
 ## Frontend Selector
 
-The adapter selector in the chat input shows the native adapters built into the current application: Claude Code, Codex, Copilot, Cursor, Gemini, Kimi, OpenCode, and Pi. Adapter configuration controls binary selection, managed CLI versions, model routing, accounts, and adapter-specific options.
+The adapter selector in the chat input shows the native adapters built into the current application: Claude Code, Codex, Copilot, Cursor, Gemini, Grok, Kimi, OpenCode, and Pi. Adapter configuration controls binary selection, managed CLI versions, model routing, accounts, and adapter-specific options.
 
 ## Pi coding-agent
 
@@ -54,6 +54,7 @@ Native CLI installation and version pinning are covered in [Adapter CLI Installa
 
 - Claude Code connects directly to known official Anthropic-compatible endpoints for Anthropic, Kimi, DeepSeek, Alibaba Qwen/Bailian, Zhipu GLM, MiniMax, OpenRouter, Requesty, Vercel AI Gateway, and Portkey; other OpenAI-compatible routed models can still use Claude Code Router.
 - Codex and Gemini use adapter-owned local proxy behavior.
+- Grok writes routed `service,model` selections into a session-scoped native custom model entry and supports `chat_completions`, `responses`, and `messages` backends.
 - Some adapters write provider configuration to native config files or session-level state.
 
 Workspaces launched by a Launcher or daemon manager reuse a manager-owned Codex app-server
@@ -138,6 +139,12 @@ Stream sessions consume Cursor's JSON output and retain the native chat id, so l
 The External Sessions configuration page can preview and import Codex, Claude Code, and Cursor history for the current project or across discovered projects. Cursor transcripts are read from `~/.cursor/projects/*/agent-transcripts/**/*.jsonl`; regular chats and tasks under `subagents/` remain distinguishable.
 
 Import is read-only with respect to Cursor data. The resulting completed external session retains user messages, assistant text, and tool calls, and repeated imports are deduplicated by native session id and source file. Because Cursor encodes the workspace path in its project directory name, candidates are imported only when that directory can be matched to the current project, an explicitly selected project path, or Cursor workspace metadata.
+
+## Grok Build CLI
+
+The `grok` adapter uses xAI's official Grok Build CLI with managed installation, model routing, MCP servers, skills, hooks, and migration of resumable native UUID sessions.
+
+See the [Grok Build CLI Adapter](./grok-adapter.md) for full configuration, the project-shared session home, external-session import, and login boundaries.
 
 ## Environment Boundaries
 

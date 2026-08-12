@@ -13,7 +13,7 @@
 
 ## 前端选择器
 
-聊天输入框的适配器选择器默认展示当前应用内置支持的原生适配器：Claude Code（`claude-code`）、Codex（`codex`）、Copilot（`copilot`）、Cursor（`cursor`）、Gemini（`gemini`）、Kimi（`kimi`）、OpenCode（`opencode`）和 Pi（`pi`）。
+聊天输入框的适配器选择器默认展示当前应用内置支持的原生适配器：Claude Code（`claude-code`）、Codex（`codex`）、Copilot（`copilot`）、Cursor（`cursor`）、Gemini（`gemini`）、Grok（`grok`）、Kimi（`kimi`）、OpenCode（`opencode`）和 Pi（`pi`）。
 
 以下 adapter 不需要先写入 `.oo.config.json` 才能出现在选择器里。用户选择某个 adapter 发起会话后，运行时会沿用 adapter 自己的 CLI 准备逻辑，把托管 CLI 安装到全局托管 bootstrap cache；首次启动某个 adapter 时可能会稍慢。
 
@@ -191,3 +191,9 @@ adapters:
 配置页“外部会话”可以预览和导入当前项目或已发现项目的 Codex、Claude Code 与 Cursor 历史。Cursor 会话从 `~/.cursor/projects/*/agent-transcripts/**/*.jsonl` 读取；普通会话和 `subagents/` 下的子任务会分别标记。
 
 导入只读取源 JSONL，不修改 Cursor 数据。导入结果会成为 One Works 中可查看的已完成外部会话，并保留用户消息、助手文本和工具调用；重复导入会按原生 session id 与源文件去重。由于 Cursor 的项目目录名是工作区路径的压缩形式，Cursor 候选只在能匹配当前项目、显式选择的项目路径或 Cursor 工作区元数据时导入。
+
+## Grok Build CLI
+
+`grok` 使用 xAI 官方 Grok Build CLI，支持托管安装、模型路由、MCP、skills、hooks，以及按原生 UUID 迁移并续接已有会话。
+
+完整配置、project-shared session home、外部会话导入和登录边界见 [Grok Build CLI 适配器](./grok-adapter.md)。

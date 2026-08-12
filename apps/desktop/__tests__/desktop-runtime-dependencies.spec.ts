@@ -24,6 +24,7 @@ const bundledAdapterPackages = [
   '@oneworks/adapter-copilot',
   '@oneworks/adapter-cursor',
   '@oneworks/adapter-gemini',
+  '@oneworks/adapter-grok',
   '@oneworks/adapter-kimi',
   '@oneworks/adapter-opencode',
   '@oneworks/adapter-pi'

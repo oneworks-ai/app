@@ -27,7 +27,7 @@ adapters:
 ## Account Pool and Shared Models
 
 - These accounts come from official Codex sign-in and represent ChatGPT/Codex plan accounts, not API-key profiles under `modelServices`. Enabling the pool adds **Auto** to the Codex chat account selector.
-- `shareBuiltinModels` appears as **Share Codex built-in models**. It adds one `codex built-in models` group to Claude Code, Gemini, OpenCode, Kimi, Pi, and Copilot. PM injects a runtime-only Chat Completions route and credential, so users configure no host, port, protocol, or token and persistent `modelServices` stay unchanged.
+- `shareBuiltinModels` appears as **Share Codex built-in models**. It adds one `codex built-in models` group to Claude Code, Gemini, Grok, OpenCode, Kimi, Pi, and Copilot. PM injects a runtime-only Chat Completions route and credential, so users configure no host, port, protocol, or token and persistent `modelServices` stay unchanged.
 - The Codex source account comes from the Auto pool, or the default account when the pool is disabled. Models are not duplicated per account.
 - The account selector immediately left of Adapter always controls the active adapter's own account. For example, Claude Code still displays and selects its Claude Code account while it uses a shared Codex model; that control is not a Codex source-account selector.
 - Auto considers healthy accounts in descending priority only for a newly created session. The account becomes sticky before the first assistant, tool, or interaction result, and resumes keep that physical account.

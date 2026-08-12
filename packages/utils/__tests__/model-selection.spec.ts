@@ -488,6 +488,7 @@ describe('model selection utilities', () => {
       'codex',
       'copilot',
       'cursor',
+      'grok',
       'kimi',
       'opencode',
       'pi',

@@ -23,6 +23,7 @@ export type WorkspaceAssetAdapter =
   | 'copilot'
   | 'cursor'
   | 'gemini'
+  | 'grok'
   | 'kimi'
   | 'opencode'
   | 'pi'

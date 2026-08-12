@@ -3,12 +3,13 @@ import { resolveConfigState, resolveRuntimeAdapterConfigState } from '@oneworks/
 import { loadAdapterCliPreparer, normalizeAdapterPackageId, resolveAdapterRuntimeTarget } from '@oneworks/types'
 import type { AdapterCliPrepareContext, AdapterCliPrepareTarget, AdapterCliPreparer, Config } from '@oneworks/types'
 
-const KNOWN_PREPARE_ADAPTERS = [
+export const KNOWN_PREPARE_ADAPTERS = [
   'codex',
   'claude-code',
   'gemini',
   'copilot',
   'cursor',
+  'grok',
   'opencode',
   'kimi',
   'pi'

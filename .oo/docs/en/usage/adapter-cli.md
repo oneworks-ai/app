@@ -11,7 +11,7 @@ One Works does not package every native CLI as a runtime dependency of its adapt
 
 Managed packages:
 
-- npm managed: `codex`, `gemini`, `copilot`, `opencode`, `pi`, `claude-code.cli`, `claude-code.routerCli`
+- npm managed: `codex`, `gemini`, `grok`, `copilot`, `opencode`, `pi`, `claude-code.cli`, `claude-code.routerCli`
 - uv managed: `kimi.cli`
 - official archive managed: `cursor`
 
@@ -21,6 +21,7 @@ Default managed versions:
 | ----------------------- | --------------------------------- | ----------------------- | ------------------ |
 | `codex`                 | `@openai/codex`                   | `latest`                | `>=0.130.0`        |
 | `gemini`                | `@google/gemini-cli`              | `0.38.2`                | default version    |
+| `grok`                  | `@xai-official/grok`              | `1.0.3`                 | default version    |
 | `copilot`               | `@github/copilot`                 | `1.0.36`                | default version    |
 | `opencode`              | `opencode-ai`                     | `1.14.18`               | default version    |
 | `pi`                    | `@earendil-works/pi-coding-agent` | `0.84.1`                | `>=0.84.1 <0.85.0` |
@@ -71,7 +72,7 @@ Set `autoInstall: false` to disable first-use installation. npm-managed adapters
 Prepare managed CLIs ahead of time:
 
 ```bash
-oneworks adapter prepare codex claude-code cursor gemini pi
+oneworks adapter prepare codex claude-code cursor gemini grok pi
 oneworks adapter prepare claude-code.routerCli
 oneworks adapter prepare --all
 ```
@@ -89,7 +90,7 @@ The `-A <adapter>@<version>` form writes `adapters.<adapter>.cli.version` into l
 
 `@oneworks/cli` postinstall reads `.oo.config.json` or `infra/.oo.config.json` at the project root. It only calls `oneworks adapter prepare --from-postinstall` when it finds `prepareOnInstall: true`. It skips by default when `CI=true`. Use `ONEWORKS_POSTINSTALL_PREPARE=1` to warm caches in CI, or `ONEWORKS_SKIP_ADAPTER_PREPARE=1` / `ONEWORKS_SKIP_POSTINSTALL=1` to skip.
 
-Temporary environment overrides use upper-case adapter names such as `CODEX`, `CURSOR`, `GEMINI`, `CLAUDE_CODE`, and `CLAUDE_CODE_ROUTER`:
+Temporary environment overrides use upper-case adapter names such as `CODEX`, `CURSOR`, `GEMINI`, `GROK`, `CLAUDE_CODE`, and `CLAUDE_CODE_ROUTER`:
 
 ```bash
 export __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_SOURCE__=managed

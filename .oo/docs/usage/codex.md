@@ -27,7 +27,7 @@ adapters:
 ## 账号池与共享模型
 
 - 这里的账号来自官方 Codex 登录，是 ChatGPT/Codex 套餐账号，不是 `modelServices` 的 API key profile。启用账号池后，Codex 聊天账号选择器会出现 `Auto`。
-- `shareBuiltinModels` 在 Codex 适配器配置页显示为“共享 Codex 内置模型”。启用后，Claude Code、Gemini、OpenCode、Kimi、Pi 与 Copilot 的模型选择器会出现一组 `codex 内置模型`。PM 仅在任务运行时注入内部 Chat Completions 路由与凭据，用户无需配置 Host、端口、协议或 Token，持久 `modelServices` 也不会改写。
+- `shareBuiltinModels` 在 Codex 适配器配置页显示为“共享 Codex 内置模型”。启用后，Claude Code、Gemini、Grok、OpenCode、Kimi、Pi 与 Copilot 的模型选择器会出现一组 `codex 内置模型`。PM 仅在任务运行时注入内部 Chat Completions 路由与凭据，用户无需配置 Host、端口、协议或 Token，持久 `modelServices` 也不会改写。
 - 共享模型的 Codex 来源账号由 Codex Auto 池选择；未启用账号池时使用默认账号。模型不会按账号重复展示。
 - 聊天页右下角、Adapter 左侧的账号选择器始终控制当前 Adapter 自己的账号。比如 Claude Code 选择共享 Codex 模型时，这里仍显示和选择 Claude Code 账号；它不是 Codex 来源账号选择器。
 - `Auto` 仅在创建新会话时按 `priority` 从高到低选择健康账号。会话产生首个 assistant、tool 或交互结果后就固定账号；resume 也继续使用原账号。

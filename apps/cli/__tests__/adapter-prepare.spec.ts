@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { AdapterCliPreparer } from '@oneworks/types'
 
 import { normalizeCliArgs } from '#~/cli-argv.js'
-import { resolveAdapterPrepareRequests } from '#~/commands/adapter.js'
+import { KNOWN_PREPARE_ADAPTERS, resolveAdapterPrepareRequests } from '#~/commands/adapter/prepare-selection.js'
 
 const createPreparer = (
   adapter: string,
@@ -97,6 +97,13 @@ describe('adapter prepare command selection', () => {
       'codex.cli',
       'claude-code.cli',
       'claude-code.routerCli'
+    ])
+  })
+
+  it('keeps Cursor and Grok in the stable preparer discovery registry', () => {
+    expect(KNOWN_PREPARE_ADAPTERS.filter(adapter => adapter === 'cursor' || adapter === 'grok')).toEqual([
+      'cursor',
+      'grok'
     ])
   })
 

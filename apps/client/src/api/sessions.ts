@@ -26,13 +26,13 @@ export async function listSessions(
   return fetchApiJson<{ sessions: Session[] }>(path)
 }
 
-export type NativeHistoryAdapter = 'codex' | 'claude-code' | 'cursor'
+export type NativeHistoryAdapter = 'codex' | 'claude-code' | 'cursor' | 'grok'
 export type NativeHistoryCandidateScope = 'all' | 'unarchived' | 'archived'
 export type NativeHistoryProjectScope = 'current-project' | 'all-projects'
 export type NativeHistoryThreadScope = 'all' | 'user' | 'subagent'
 export type NativeHistoryTimeSort = 'activity' | 'createdAt' | 'updatedAt'
 
-export const nativeHistoryAdapters: NativeHistoryAdapter[] = ['codex', 'claude-code', 'cursor']
+export const nativeHistoryAdapters: NativeHistoryAdapter[] = ['codex', 'claude-code', 'cursor', 'grok']
 
 export const isNativeHistoryAdapter = (value: string | undefined): value is NativeHistoryAdapter => (
   value != null && nativeHistoryAdapters.includes(value as NativeHistoryAdapter)

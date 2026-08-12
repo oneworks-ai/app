@@ -338,15 +338,16 @@
     "importing": "正在导入历史",
     "quickImport": "导入 {{platform}} 历史会话",
     "emptyTitle": "未找到可导入的历史",
-    "emptyDescription": "没有找到属于当前项目的 Codex、Claude Code 或 Cursor 历史会话。",
+    "emptyDescription": "没有找到属于当前项目的 Codex、Claude Code、Cursor 或 Grok 历史会话。",
     "failed": "导入原生历史失败",
-    "failedDescription": "请稍后重试，或检查本机 Codex / Claude Code / Cursor 历史目录。",
+    "failedDescription": "请稍后重试，或检查本机 Codex / Claude Code / Cursor / Grok 历史目录。",
     "open": "打开导入会话",
     "dismiss": "稍后再说",
     "platforms": {
       "codex": "Codex",
       "claudeCode": "Claude Code",
-      "cursor": "Cursor"
+      "cursor": "Cursor",
+      "grok": "Grok"
     },
     "manager": {
       "allPlatforms": "全部",

@@ -350,6 +350,7 @@ describe('chat model selector helpers', () => {
       'claude-code',
       'copilot',
       'cursor',
+      'grok',
       'kimi',
       'opencode',
       'pi',

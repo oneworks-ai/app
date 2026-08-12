@@ -42,6 +42,7 @@
     "@oneworks/adapter-copilot": "workspace:*",
     "@oneworks/adapter-cursor": "workspace:*",
     "@oneworks/adapter-gemini": "workspace:*",
+    "@oneworks/adapter-grok": "workspace:*",
     "@oneworks/adapter-kimi": "workspace:*",
     "@oneworks/adapter-opencode": "workspace:*",
     "@oneworks/adapter-pi": "workspace:*",

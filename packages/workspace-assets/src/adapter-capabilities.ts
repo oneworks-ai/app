@@ -6,6 +6,7 @@ const NATIVE_SKILL_ADAPTERS = new Set<WorkspaceAssetAdapter>([
   'copilot',
   'cursor',
   'gemini',
+  'grok',
   'kimi',
   'opencode',
   'pi'
@@ -25,6 +26,8 @@ export const resolveNativeSkillDiagnosticReason = (adapter: WorkspaceAssetAdapte
     ? 'Staged in the isolated Cursor data directory as a native skill.'
     : adapter === 'gemini'
     ? 'Symlinked into GEMINI_CLI_HOME as a native Gemini skill.'
+    : adapter === 'grok'
+    ? 'Staged into the session GROK_HOME as a native Grok skill.'
     : adapter === 'kimi'
     ? 'Staged into a Kimi --skills-dir directory as a native skill.'
     : adapter === 'pi'

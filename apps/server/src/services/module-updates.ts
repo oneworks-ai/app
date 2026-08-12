@@ -119,6 +119,7 @@ const moduleUpdateTargets: ModuleUpdateTarget[] = [
     ['copilot', 'Copilot adapter'],
     ['cursor', 'Cursor adapter'],
     ['gemini', 'Gemini adapter'],
+    ['grok', 'Grok adapter'],
     ['kimi', 'Kimi adapter'],
     ['opencode', 'OpenCode adapter'],
     ['pi', 'Pi adapter']
