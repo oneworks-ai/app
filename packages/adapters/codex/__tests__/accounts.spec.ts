@@ -15,10 +15,13 @@ import type { AdapterCtx } from '@oneworks/types'
 import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 
 import {
+  classifyCodexAccountPoolFailure,
   getCodexAccountDetail,
   getCodexAccounts,
   manageCodexAccount,
-  prepareCodexSessionHome
+  markCodexAccountPoolFailure,
+  prepareCodexSessionHome,
+  resolveCodexAccountPoolCandidates
 } from '#~/runtime/accounts.js'
 
 const tempDirs: string[] = []
@@ -734,6 +737,128 @@ describe('prepareCodexSessionHome', () => {
     await expect(readFile(legacyRollout, 'utf8')).resolves.toBe(rolloutBytes)
     await expect(readlink(join(result.homeDir, '.codex', 'sessions'))).rejects.toMatchObject({ code: 'EINVAL' })
     expect((await stat(join(result.homeDir, '.codex', 'sessions'))).isDirectory()).toBe(true)
+  })
+})
+
+describe('codex automatic account pool', () => {
+  const inlineAuth = (accountId: string) => ({
+    type: 'codex-auth-json',
+    encoding: 'base64',
+    token: Buffer.from(JSON.stringify({
+      auth_mode: 'chatgpt',
+      tokens: { account_id: accountId }
+    })).toString('base64')
+  })
+
+  it('orders ready accounts by priority and excludes disabled or cooling accounts', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-account-pool-'))
+    const cacheStore = new Map<string, unknown>()
+    tempDirs.push(workspace)
+    const ctx = createTestCtx(workspace, {
+      cacheStore,
+      configs: [{
+        adapters: {
+          codex: {
+            defaultAccount: 'backup',
+            accountPool: { enabled: true, cooldownMs: 60_000 },
+            accounts: {
+              primary: { priority: 100, auth: inlineAuth('acct-primary') },
+              backup: { priority: 50, auth: inlineAuth('acct-backup') },
+              paused: { priority: 1000, disabled: true, auth: inlineAuth('acct-paused') }
+            }
+          }
+        }
+      } as any]
+    })
+
+    const initial = await resolveCodexAccountPoolCandidates(ctx, 'gpt-5.4')
+    expect(initial.candidates.map(candidate => candidate.key)).toEqual(['primary', 'backup'])
+
+    await markCodexAccountPoolFailure({
+      ctx,
+      candidate: initial.candidates[0]!,
+      model: 'gpt-5.4',
+      cooldownMs: 60_000,
+      reason: 'rate_limit'
+    })
+
+    expect((await resolveCodexAccountPoolCandidates(ctx, 'gpt-5.4')).candidates.map(candidate => candidate.key))
+      .toEqual(['backup'])
+    const anotherSessionCtx = createTestCtx(workspace, {
+      cacheStore: new Map<string, unknown>(),
+      configs: ctx.configs
+    })
+    expect(
+      (await resolveCodexAccountPoolCandidates(anotherSessionCtx, 'gpt-5.4')).candidates.map(candidate => candidate.key)
+    ).toEqual(['backup'])
+    expect((await resolveCodexAccountPoolCandidates(ctx, 'gpt-5.5')).candidates.map(candidate => candidate.key))
+      .toEqual(['primary', 'backup'])
+  })
+
+  it('uses the configured default account when callers explicitly opt out of the Auto pool', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-account-default-'))
+    tempDirs.push(workspace)
+    const result = await prepareCodexSessionHome({
+      ctx: createTestCtx(workspace, {
+        configs: [{
+          adapters: {
+            codex: {
+              defaultAccount: 'backup',
+              accountPool: { enabled: true },
+              accounts: {
+                primary: { priority: 100, auth: inlineAuth('acct-primary') },
+                backup: { priority: 10, auth: inlineAuth('acct-backup') }
+              }
+            }
+          }
+        } as any]
+      }),
+      sessionId: 'shared-client',
+      useAccountPool: false
+    })
+
+    expect(result.accountKey).toBe('backup')
+  })
+
+  it('invalidates cooldown state when credentials change', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-account-pool-credential-'))
+    const cacheStore = new Map<string, unknown>()
+    tempDirs.push(workspace)
+    const config = {
+      adapters: {
+        codex: {
+          accountPool: { enabled: true, cooldownMs: 60_000 },
+          accounts: {
+            work: { priority: 100, auth: inlineAuth('acct-old') }
+          }
+        }
+      }
+    }
+    const ctx = createTestCtx(workspace, { cacheStore, configs: [config as any] })
+    const [candidate] = (await resolveCodexAccountPoolCandidates(ctx, 'gpt-5.4')).candidates
+    await markCodexAccountPoolFailure({
+      ctx,
+      candidate: candidate!,
+      model: 'gpt-5.4',
+      cooldownMs: 60_000,
+      reason: 'auth'
+    })
+    expect((await resolveCodexAccountPoolCandidates(ctx, 'gpt-5.4')).candidates).toEqual([])
+
+    config.adapters.codex.accounts.work.auth = inlineAuth('acct-new')
+    expect((await resolveCodexAccountPoolCandidates(ctx, 'gpt-5.4')).candidates.map(entry => entry.key))
+      .toEqual(['work'])
+  })
+
+  it('classifies only retry-safe account failures', () => {
+    expect(classifyCodexAccountPoolFailure(new Error('429 rate limit exceeded'), 60_000))
+      .toEqual({ reason: 'rate_limit', cooldownMs: 60_000 })
+    expect(classifyCodexAccountPoolFailure(new Error('401 Unauthorized'), 60_000))
+      .toEqual({ reason: 'auth', cooldownMs: 15 * 60_000 })
+    expect(classifyCodexAccountPoolFailure(new Error('503 temporarily unavailable'), 60_000))
+      .toEqual({ reason: 'transient', cooldownMs: 30_000 })
+    expect(classifyCodexAccountPoolFailure(new Error('Malformed tool response'), 60_000))
+      .toBeUndefined()
   })
 })
 

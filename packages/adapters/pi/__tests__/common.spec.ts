@@ -94,10 +94,10 @@ describe('pi runtime mappings', () => {
       modelServices: {
         team: {
           apiBaseUrl: 'https://gateway.example.test/v1/responses',
+          apiProtocol: 'openai-responses',
           apiKey: 'top-secret',
           maxOutputTokens: 32000,
           extra: {
-            codex: { wireApi: 'responses' },
             pi: { input: ['text', 'image'] }
           }
         }
@@ -110,6 +110,21 @@ describe('pi runtime mappings', () => {
     expect(JSON.stringify(resolved.modelsConfig)).toContain('"authHeader":false')
     expect(Object.values(resolved.env)).toContain('top-secret')
     expect(JSON.stringify(resolved.modelsConfig)).toContain('https://gateway.example.test/v1')
+  })
+
+  it('fails closed for a declared Gemini Interactions service', () => {
+    expect(() =>
+      resolvePiModel({
+        model: 'gemini,gemini-3',
+        modelServices: {
+          gemini: {
+            apiBaseUrl: 'https://example.test/v1beta',
+            apiProtocol: 'gemini-interactions',
+            apiKey: 'secret'
+          }
+        }
+      })
+    ).toThrow(/does not support Gemini Interactions/)
   })
 
   it('does not replace header-only authentication with a dummy bearer token', () => {

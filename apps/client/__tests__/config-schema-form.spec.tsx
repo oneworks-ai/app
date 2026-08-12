@@ -391,6 +391,52 @@ describe('config schema form', () => {
     expect(html).not.toContain('config-view__detail-list')
   })
 
+  it('renders Codex built-in model sharing as one boolean switch without connection fields', () => {
+    const uiSection: ConfigUiSection = {
+      key: 'adapters',
+      kind: 'recordMap',
+      recordMap: {
+        mode: 'keyed',
+        keyPlaceholder: 'Adapter key',
+        schemas: {
+          codex: {
+            fields: [{
+              path: ['shareBuiltinModels'],
+              type: 'boolean',
+              label: 'Share built-in models',
+              defaultValue: false
+            }]
+          }
+        },
+        unknownSchema: { fields: [] },
+        unknownEditor: 'json'
+      }
+    }
+
+    const html = renderToStaticMarkup(
+      <SectionForm
+        sectionKey='adapters'
+        uiSection={uiSection}
+        value={{ codex: {} }}
+        onChange={() => undefined}
+        mergedModelServices={{}}
+        mergedAdapters={{}}
+        detailRoute={{
+          kind: 'detailCollectionItem',
+          fieldPath: [],
+          itemKey: 'codex'
+        }}
+        t={t}
+      />
+    )
+
+    expect(html).toContain('Share built-in models')
+    expect(html).toContain('ant-switch')
+    expect(html).not.toContain('Host')
+    expect(html).not.toContain('Port')
+    expect(html).not.toContain('Token')
+  })
+
   it('renders schema-driven channel entries as a navigable summary list', () => {
     const uiSection: ConfigUiSection = {
       key: 'channels',
@@ -940,6 +986,7 @@ describe('config schema form', () => {
     expect(groupFor('icon')).toBe('customization')
     expect(groupFor('homepageUrl')).toBe('customization')
     expect(groupFor('apiBaseUrl')).toBe('access')
+    expect(groupFor('apiProtocol')).toBe('access')
     expect(resolvedGroupFor('apiBaseUrl', { provider: 'kimi-code' })).toBe('providerAccess')
     expect(resolvedGroupFor('apiBaseUrl', {}, { provider: 'kimi-code' })).toBe('providerAccess')
     expect(resolvedGroupFor('apiBaseUrl', {})).toBe('access')
@@ -955,6 +1002,16 @@ describe('config schema form', () => {
     expect(groupFor('timeoutMs')).toBe('advanced')
     expect(groupFor('maxOutputTokens')).toBe('advanced')
     expect(groupFor('extra')).toBe('advanced')
+
+    const protocolField = itemFields.find(field => field.path.join('.') === 'apiProtocol')
+    expect(protocolField?.options?.map(option => option.value)).toEqual([
+      '',
+      'openai-responses',
+      'openai-chat-completions',
+      'anthropic-messages',
+      'gemini-generate-content',
+      'gemini-interactions'
+    ])
   })
 
   it('renders Coding Plan service details without expanding the full plan metadata inline', () => {
@@ -1010,6 +1067,7 @@ describe('config schema form', () => {
     )
 
     expect(html).toContain('config.fields.modelServices.item.apiBaseUrl.label')
+    expect(html).toContain('config.fields.modelServices.item.apiProtocol.label')
     expect(html).toContain('https://example.com/v1')
   })
 

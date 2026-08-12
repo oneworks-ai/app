@@ -11,6 +11,8 @@ import type {
   ModelServiceConfig,
   ResolvedModelServiceConfig
 } from '@oneworks/types'
+import type { ModelServiceApiProtocol } from '@oneworks/types/model-service-protocol'
+import { MODEL_SERVICE_API_PROTOCOLS } from '@oneworks/types/model-service-protocol'
 
 import { MODEL_PROVIDER_CATALOG, validateModelProviderCatalog } from '@oneworks/model-provider-catalog'
 
@@ -19,6 +21,8 @@ export { MODEL_PROVIDER_DEFINITIONS } from './model-provider-registry'
 export const DEFAULT_MODEL_SERVICE_ICON: IconRef = { kind: 'builtin', id: 'model-service' }
 export const DEFAULT_MODEL_ICON: IconRef = { kind: 'builtin', id: 'model' }
 export const MODEL_SERVICE_COLLECTION_SEPARATOR = '/'
+
+const MODEL_SERVICE_API_PROTOCOL_SET = new Set<ModelServiceApiProtocol>(MODEL_SERVICE_API_PROTOCOLS)
 
 export interface ModelServiceResolutionIssue {
   type: 'missing_api_base_url'
@@ -95,12 +99,64 @@ export const resolveCollectionModelService = (
     ...(collection.icon != null ? { icon: collection.icon } : {}),
     ...(collection.homepageUrl != null ? { homepageUrl: collection.homepageUrl } : {}),
     ...(collection.apiBaseUrl != null ? { apiBaseUrl: collection.apiBaseUrl } : {}),
+    ...(collection.apiProtocol != null ? { apiProtocol: collection.apiProtocol } : {}),
     ...(collection.billing != null ? { billing: collection.billing } : {}),
     ...(collection.codingPlan != null ? { codingPlan: collection.codingPlan } : {}),
     ...(collection.providerOptions != null ? { providerOptions: collection.providerOptions } : {}),
     ...childService,
     kind: 'service'
   }
+}
+
+/**
+ * Resolves the upstream wire protocol. Explicit config always wins; legacy hints
+ * remain supported so existing model-service entries do not change behavior.
+ */
+export const resolveExplicitModelServiceApiProtocol = (
+  service: ModelServiceConfig | undefined
+): ModelServiceApiProtocol | undefined => {
+  if (service?.apiProtocol != null) {
+    if (MODEL_SERVICE_API_PROTOCOL_SET.has(service.apiProtocol)) return service.apiProtocol
+    throw new Error(`Unsupported model service apiProtocol: ${JSON.stringify(service.apiProtocol)}.`)
+  }
+  return undefined
+}
+
+export const resolveModelServiceApiProtocol = (
+  service: ModelServiceConfig | undefined
+): ModelServiceApiProtocol | undefined => {
+  const explicitProtocol = resolveExplicitModelServiceApiProtocol(service)
+  if (explicitProtocol != null) return explicitProtocol
+
+  const extra = asRecord(service?.extra)
+  const codexExtra = asRecord(extra?.codex)
+  const codexWireApi = normalizeString(codexExtra?.wireApi)
+  if (codexWireApi === 'responses') return 'openai-responses'
+  if (codexWireApi === 'chat') return 'openai-chat-completions'
+
+  const piExtra = asRecord(extra?.pi)
+  switch (normalizeString(piExtra?.api)) {
+    case 'openai-responses':
+      return 'openai-responses'
+    case 'openai-completions':
+      return 'openai-chat-completions'
+    case 'anthropic-messages':
+      return 'anthropic-messages'
+    case 'google-generative-ai':
+      return 'gemini-generate-content'
+  }
+
+  const apiBaseUrl = normalizeString(service?.apiBaseUrl)?.toLowerCase()
+  if (apiBaseUrl == null) {
+    return getModelProviderDefinition(resolveModelProviderIdentity(service).provider)?.defaultApiProtocol
+  }
+  if (/\/responses\/?(?:[?#].*)?$/u.test(apiBaseUrl)) return 'openai-responses'
+  if (/\/chat\/completions\/?(?:[?#].*)?$/u.test(apiBaseUrl)) return 'openai-chat-completions'
+  if (/\/messages\/?(?:[?#].*)?$/u.test(apiBaseUrl)) return 'anthropic-messages'
+  if (apiBaseUrl.includes(':generatecontent') || apiBaseUrl.includes(':streamgeneratecontent')) {
+    return 'gemini-generate-content'
+  }
+  return getModelProviderDefinition(resolveModelProviderIdentity(service).provider)?.defaultApiProtocol
 }
 
 export const resolveModelServiceFromMap = (
@@ -314,10 +370,22 @@ export const resolveModelServicePlanProtocolBaseUrl = (
   protocol: 'openai' | 'anthropic'
 ) => normalizeString(resolveModelServiceCodingPlan(service)?.protocols?.[protocol]?.baseUrl)
 
-export const resolveModelServiceApiBaseUrl = (service: ModelServiceConfig | undefined) =>
-  normalizeString(service?.apiBaseUrl) ??
-    getModelProviderDefinition(resolveModelProviderIdentity(service).provider)?.defaultApiBaseUrl ??
-    resolveModelServicePlanProtocolBaseUrl(service, 'openai')
+export const resolveModelServiceApiBaseUrl = (service: ModelServiceConfig | undefined) => {
+  const explicitApiBaseUrl = normalizeString(service?.apiBaseUrl)
+  if (explicitApiBaseUrl != null) return explicitApiBaseUrl
+
+  const apiProtocol = resolveModelServiceApiProtocol(service)
+  const planProtocol = apiProtocol === 'anthropic-messages'
+    ? 'anthropic'
+    : apiProtocol === 'openai-responses' || apiProtocol === 'openai-chat-completions'
+    ? 'openai'
+    : undefined
+  const planApiBaseUrl = planProtocol == null
+    ? undefined
+    : resolveModelServicePlanProtocolBaseUrl(service, planProtocol)
+  return planApiBaseUrl ??
+    getModelProviderDefinition(resolveModelProviderIdentity(service).provider)?.defaultApiBaseUrl
+}
 
 export const resolveModelServiceModels = (service: ModelServiceConfig | undefined) => {
   const configuredModels = normalizeStringArray(service?.models)
@@ -341,6 +409,7 @@ export const resolveModelServiceConfig = (
   const identity = resolveModelProviderIdentity(service)
   const providerDefinition = getModelProviderDefinition(identity.provider)
   const apiBaseUrl = resolveModelServiceApiBaseUrl(service)
+  const apiProtocol = resolveModelServiceApiProtocol(service)
   const billing = resolveModelServiceBilling(service)
   const codingPlan = resolveModelServiceCodingPlan(service)
   const configuredModels = normalizeStringArray(service.models)
@@ -358,6 +427,7 @@ export const resolveModelServiceConfig = (
       ...service,
       ...(identity.provider != null ? { provider: identity.provider } : {}),
       apiBaseUrl,
+      ...(apiProtocol != null ? { apiProtocol } : {}),
       apiKey: service.apiKey ?? '',
       ...(billing != null ? { billing } : {}),
       ...(codingPlan != null ? { codingPlan } : {}),

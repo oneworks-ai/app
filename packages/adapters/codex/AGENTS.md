@@ -55,6 +55,17 @@ Primary implementation entrypoints for Codex hooks:
   - exposes Codex model selector metadata to One Works
   - prefers Codex's `model_catalog_json` config file or `models_cache.json` under `CODEX_HOME` / `~/.codex`
   - falls back to packaged model metadata only when no Codex catalog/cache is readable
+  - exposes a separate model-service loader that never uses packaged fallback entries; shared adapters publish only catalog/cache models already visible to the ChatGPT-backed Codex session, and do not filter them by the API-key-only `supported_in_api` flag
+- `src/model-sharing.ts`
+  - implements the optional adapter model-sharing bridge used by the manager PM WebSocket endpoint
+  - starts the official `codex app-server --listen stdio://` in an account-bound HOME and validates bounded JSON-RPC messages without exposing OAuth credentials
+  - reuses a stable credential-bound app-server HOME; omitted accounts stay on the configured default and explicit accounts never fail over mid-RPC
+  - the server transport never reads `auth.json`
+- `src/shared-model.ts`
+  - implements the runtime-only Codex built-in model service consumed by other adapters
+  - routes through the official account-bound `codex app-server`, delegates dynamic function tools back to the caller, and owns request limits, pre-result Auto failover, and teardown
+  - stays separate from the raw app-server-compatible bridge in `src/model-sharing.ts`; neither path calls private ChatGPT endpoints or exposes OAuth credentials
+  - may adapt CLIProxyAPI's translator/test topology, but never its private `chatgpt.com` executor, `codex-tui` identity headers, account header transport, or OAuth client identity/token exchange; One Works uses only the installed official CLI/app-server transport
 - `src/runtime/model-provider-import.ts`
   - implements the shared `model-provider-import` discovery capability used by the explicit Model Services import row; adapter init never imports automatically
   - reads user-level Codex `model_providers` for global imports and workspace layers for project imports

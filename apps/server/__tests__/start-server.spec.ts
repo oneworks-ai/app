@@ -39,7 +39,9 @@ const startServerMocks = vi.hoisted(() => {
     runtimeStoreWatcher,
     setupWebSocket: vi.fn(),
     startChannelResumeScheduler: vi.fn(() => channelResumeScheduler),
-    startRuntimeStoreWatcher: vi.fn(() => runtimeStoreWatcher)
+    startRuntimeStoreWatcher: vi.fn(() => runtimeStoreWatcher),
+    writeServerInstanceState: vi.fn(async () => undefined),
+    removeServerInstanceStateForPid: vi.fn(async () => undefined)
   }
 })
 
@@ -83,6 +85,11 @@ vi.mock('#~/services/runtime-store/history-import.js', () => ({
 
 vi.mock('#~/services/runtime-store/watcher.js', () => ({
   startRuntimeStoreWatcher: startServerMocks.startRuntimeStoreWatcher
+}))
+
+vi.mock('#~/services/server-instance.js', () => ({
+  removeServerInstanceStateForPid: startServerMocks.removeServerInstanceStateForPid,
+  writeServerInstanceState: startServerMocks.writeServerInstanceState
 }))
 
 vi.mock('#~/services/web-debug/chii.js', () => ({
@@ -197,14 +204,23 @@ describe('shouldOwnWorkspaceRuntime', () => {
 
 describe('startServer workspace runtime ownership', () => {
   it('does not start workspace channel or runtime owners in manager mode', async () => {
-    const { close } = await startRuntimeForRole('manager')
+    const { close, runtime } = await startRuntimeForRole('manager')
 
     expect(startServerMocks.initChannels).not.toHaveBeenCalled()
     expect(startServerMocks.startChannelResumeScheduler).not.toHaveBeenCalled()
+    expect(startServerMocks.writeServerInstanceState).toHaveBeenCalledWith(
+      runtime.env,
+      expect.objectContaining({
+        pid: process.pid,
+        role: 'manager',
+        serverBaseUrl: expect.stringMatching(/^http:\/\//u)
+      })
+    )
     await vi.advanceTimersByTimeAsync(500)
     expect(startServerMocks.startRuntimeStoreWatcher).not.toHaveBeenCalled()
 
     await close()
+    expect(startServerMocks.removeServerInstanceStateForPid).toHaveBeenCalledWith(runtime.env, process.pid)
   })
 
   it('starts channels, the resume scheduler, and the runtime watcher in workspace mode', async () => {

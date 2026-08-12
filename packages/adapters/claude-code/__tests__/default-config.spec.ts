@@ -113,6 +113,90 @@ describe('generateDefaultCCRConfigJSON', () => {
     expect(config.Router.default).toBe('kimi,kimi-k2')
   })
 
+  it('keeps CCR provider routing on chat completions when only the catalog has a Responses default', () => {
+    const raw = generateDefaultCCRConfigJSON({
+      cwd: '/tmp/project',
+      userConfig: {
+        defaultModelService: 'openai',
+        defaultModel: 'gpt-5.4',
+        modelServices: {
+          openai: {
+            provider: 'openai',
+            apiKey: 'openai-key',
+            models: ['gpt-5.4']
+          }
+        }
+      }
+    })
+
+    const config = JSON.parse(raw) as {
+      Providers: Array<{ api_base_url: string; transformer?: unknown }>
+    }
+
+    expect(config.Providers[0]).toMatchObject({
+      api_base_url: 'https://api.openai.com/v1/chat/completions'
+    })
+    expect(config.Providers[0]?.transformer).toBeUndefined()
+  })
+
+  it('uses the Responses endpoint and transformer when CCR is explicitly configured for Responses', () => {
+    const raw = generateDefaultCCRConfigJSON({
+      cwd: '/tmp/project',
+      userConfig: {
+        defaultModelService: 'openai',
+        defaultModel: 'gpt-5.4',
+        modelServices: {
+          openai: {
+            provider: 'openai',
+            apiProtocol: 'openai-responses',
+            apiKey: 'openai-key',
+            models: ['gpt-5.4']
+          }
+        }
+      }
+    })
+
+    const config = JSON.parse(raw) as {
+      Providers: Array<{ api_base_url: string; transformer?: { use?: unknown[] } }>
+    }
+
+    expect(config.Providers[0]).toMatchObject({
+      api_base_url: 'https://api.openai.com/v1/responses',
+      transformer: { use: ['openai-responses'] }
+    })
+  })
+
+  it('persists only environment placeholders for the runtime Codex shared provider', () => {
+    const raw = generateDefaultCCRConfigJSON({
+      cwd: '/tmp/project',
+      selectedModel: 'oneworks-codex,gpt-5.4',
+      config: {
+        modelServices: {
+          'oneworks-codex': {
+            apiProtocol: 'openai-chat-completions',
+            apiBaseUrl: 'http://127.0.0.1:9876/api/internal/codex-shared-model/v1',
+            apiKey: 'runtime-only-secret',
+            models: ['gpt-5.4']
+          }
+        }
+      }
+    })
+
+    const config = JSON.parse(raw) as {
+      ONEWORKS_RUNTIME_MODEL_CAPABILITY_REVISION?: string
+      Providers: Array<Record<string, unknown>>
+    }
+
+    expect(config.Providers[0]).toMatchObject({
+      name: 'oneworks-codex',
+      api_base_url: '$' + '{__ONEWORKS_PROJECT_CODEX_SHARED_MODEL_UPSTREAM_URL__}',
+      api_key: '$' + '{__ONEWORKS_PROJECT_CODEX_SHARED_MODEL_TOKEN__}'
+    })
+    expect(config.ONEWORKS_RUNTIME_MODEL_CAPABILITY_REVISION).toMatch(/^[a-f0-9]{64}$/)
+    expect(raw).not.toContain('runtime-only-secret')
+    expect(raw).not.toContain('127.0.0.1:9876')
+  })
+
   it('uses chat completions endpoints for Coding Plan OpenAI-compatible roots in CCR', () => {
     const raw = generateDefaultCCRConfigJSON({
       cwd: '/tmp/project',
@@ -324,5 +408,56 @@ describe('generateDefaultCCRConfigJSON', () => {
     }
 
     expect(config.transformers.some(item => item.path.endsWith('logger.ts'))).toBe(false)
+  })
+
+  it('ignores invalid sibling services when an explicit model selects a valid service', () => {
+    const raw = generateDefaultCCRConfigJSON({
+      cwd: '/tmp/project',
+      selectedModel: 'selected,gpt-5',
+      config: {
+        modelServices: {
+          sibling: {
+            apiBaseUrl: 'http://127.0.0.1:$' + '{UNRESOLVED_PORT}/v1',
+            models: ['sibling-model']
+          },
+          selected: {
+            apiProtocol: 'openai-responses',
+            apiBaseUrl: 'http://127.0.0.1:8787/internal/v1',
+            apiKey: 'selected-key',
+            models: ['gpt-5']
+          }
+        }
+      }
+    })
+
+    const config = JSON.parse(raw) as {
+      Providers: Array<{ name: string; api_base_url: string }>
+      Router: { default: string }
+    }
+
+    expect(config.Providers).toEqual([
+      expect.objectContaining({
+        name: 'selected',
+        api_base_url: 'http://127.0.0.1:8787/internal/v1/responses'
+      })
+    ])
+    expect(config.Router.default).toBe('selected,gpt-5')
+  })
+
+  it('rejects an invalid explicitly selected service URL', () => {
+    expect(() =>
+      generateDefaultCCRConfigJSON({
+        cwd: '/tmp/project',
+        selectedModel: 'selected,gpt-5',
+        config: {
+          modelServices: {
+            selected: {
+              apiBaseUrl: 'http://127.0.0.1:$' + '{UNRESOLVED_PORT}/v1',
+              models: ['gpt-5']
+            }
+          }
+        }
+      })
+    ).toThrow('Invalid URL')
   })
 })

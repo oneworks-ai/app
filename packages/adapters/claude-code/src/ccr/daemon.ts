@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import net from 'node:net'
 import { dirname, resolve } from 'node:path'
 import process from 'node:process'
@@ -10,7 +10,7 @@ import { mergeProcessEnvWithProjectEnv, resolveProjectOoPath } from '@oneworks/u
 import { ensureManagedNpmCli } from '@oneworks/utils/managed-npm-cli'
 
 import { resolveClaudeCodeAdapterConfig } from '../runtime-config'
-import { generateDefaultCCRConfigJSON } from './config'
+import { generateDefaultCCRConfigJSON, resolveClaudeCodeRouterRuntimeModelServiceEnv } from './config'
 import {
   CLAUDE_CODE_ROUTER_CLI_COMPATIBILITY_RANGE,
   CLAUDE_CODE_ROUTER_CLI_PACKAGE,
@@ -208,7 +208,8 @@ const defaultRouterDeps: ClaudeCodeRouterDeps = {
 
 export const ensureClaudeCodeRouterReady = async (
   ctx: Pick<AdapterCtx, 'configState' | 'configs' | 'cwd' | 'env'>,
-  deps: Partial<ClaudeCodeRouterDeps> = {}
+  deps: Partial<ClaudeCodeRouterDeps> = {},
+  selectedModel?: string
 ) => {
   const { cwd, env, configs: [config, userConfig] } = ctx
   const { native: adapterOptions } = resolveClaudeCodeAdapterConfig(ctx)
@@ -216,7 +217,8 @@ export const ensureClaudeCodeRouterReady = async (
     cwd,
     config,
     userConfig,
-    adapterOptions
+    adapterOptions,
+    selectedModel
   })
   const routerDeps = {
     ...defaultRouterDeps,
@@ -243,8 +245,9 @@ export const ensureClaudeCodeRouterReady = async (
   }
   const configChanged = previousConfigText !== configText
   if (configChanged) {
-    await writeFile(configPath, configText, 'utf8')
+    await writeFile(configPath, configText, { encoding: 'utf8', mode: 0o600 })
   }
+  await chmod(configPath, 0o600)
 
   let pid = await readPidFile(pidPath)
   let isRunning = pid != null && routerDeps.isProcessAlive(pid)
@@ -282,6 +285,7 @@ export const ensureClaudeCodeRouterReady = async (
     env.__ONEWORKS_PROJECT_ADAPTER_CLAUDE_CODE_ROUTER_CLI_PATH__ = cliPath
     const spawnEnv: NodeJS.ProcessEnv = {
       ...mergeProcessEnvWithProjectEnv(env, { workspaceFolder: cwd }),
+      ...resolveClaudeCodeRouterRuntimeModelServiceEnv({ config, userConfig }),
       HOME: mockHome
     }
 

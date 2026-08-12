@@ -42,12 +42,22 @@ const codexAdapterAccountSchema = adapterAccountConfigCommonSchema.extend({
   source: z.string().optional().describe('Codex account source'),
   createdAt: z.number().optional().describe('Account creation timestamp'),
   updatedAt: z.number().optional().describe('Account update timestamp'),
-  authDigest: z.string().optional().describe('SHA-256 digest of the Codex auth payload')
+  authDigest: z.string().optional().describe('SHA-256 digest of the Codex auth payload'),
+  priority: z.number().int().optional().describe('Automatic account selection priority'),
+  disabled: z.boolean().optional().describe('Exclude this account from automatic selection')
 })
 
 export const codexAdapterConfigSchema = z.object({
   cli: adapterNativeCliConfigSchema.optional().describe('Managed Codex CLI runtime'),
   defaultAccount: z.string().optional().describe('Default Codex account key'),
+  accountPool: z.object({
+    enabled: z.boolean().optional().describe('Automatically select a healthy Codex account for new sessions'),
+    strategy: z.literal('sticky-priority').optional().describe('Keep each session on the selected account'),
+    cooldownMs: z.number().int().positive().optional().describe('Fallback cooldown for account-scoped failures')
+  }).optional().describe('Official Codex account pool selection'),
+  shareBuiltinModels: z.boolean().optional().describe(
+    'Share Codex built-in models with other One Works adapters and managed Codex clients through the existing PM service'
+  ),
   accounts: z.record(z.string(), codexAdapterAccountSchema).optional().describe('Available Codex accounts'),
   accountTombstones: z.record(
     z.string(),
@@ -99,7 +109,7 @@ const codexAdapterUiSchema = buildConfigUiObjectSchema(
   adapterConfigCommonSchema.merge(codexAdapterConfigSchema)
 )
 const codexAccountUiSchema = buildConfigUiObjectSchema(codexAdapterAccountSchema)
-const editableCodexAccountFields = new Set(['title', 'description', 'authFile'])
+const editableCodexAccountFields = new Set(['title', 'description', 'authFile', 'priority', 'disabled'])
 
 export const adapterConfigContribution = defineAdapterConfigContribution({
   adapterKey: 'codex',
@@ -125,6 +135,7 @@ export const adapterConfigContribution = defineAdapterConfigContribution({
     extraCommonKeys: ['effort'] as const,
     deepMergeKeys: [
       'cli',
+      'accountPool',
       'accounts',
       'accountTombstones',
       'sandboxPolicy',

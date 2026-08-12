@@ -60,6 +60,7 @@
     "@oneworks/diagnostics": "workspace:*",
     "@oneworks/fs-authority-native": "workspace:*",
     "@oneworks/managed-plugins": "workspace:*",
+    "@oneworks/model-protocol": "workspace:*",
     "@oneworks/model-provider-catalog": "workspace:*",
     "@oneworks/plugin-channel-oneworks": "workspace:*",
     "@oneworks/register": "workspace:*",

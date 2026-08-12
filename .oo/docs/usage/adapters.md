@@ -72,6 +72,8 @@
 - `title`
 - `description`
 - `authFile`
+- `priority`
+- `disabled`
 
 其中 `description` 会用多行输入框编辑；`authFile` 用于显式引用现有 Codex `auth.json`。通过账号管理入口新增的 Codex 凭证会直接保存到 global config，不依赖 project home artifact。
 
@@ -99,38 +101,7 @@ npx oneworks accounts remove <adapter> <accountName>
 
 ## Codex 示例
 
-`codex` 已经接入这套通用多账号能力。配置示例：
-
-```yaml
-adapters:
-  codex:
-    defaultAccount: work
-    accounts:
-      work:
-        title: Work
-        description: 公司账号
-      personal:
-        title: Personal
-        authFile: /absolute/path/to/personal-auth.json
-```
-
-行为说明：
-
-- “设置 → 模型服务”列表底部有独立导入行：左侧可搜索选择声明了模型服务导入能力的 adapter package，右侧点击“导入”；每个 adapter 自己声明支持 Global、Project 或 User 中的哪些来源
-- 空项目没有 `adapters` 配置时，运行时默认使用 `codex`，不会为了启动会话主动写入 `.oo.config.json`
-- 如果本机存在 `~/.codex/auth.json`，Codex 适配器会把它作为只读 fallback 账号展示和使用，不会自动复制或删除
-- 由 Launcher / daemon manager 启动的 workspace 会在账号、启动参数和有效进程 / 网络 profile 一致时跨 workspace 复用同一个 manager-owned Codex app-server；model provider、MCP、cwd、权限、One Works workspace / session 运行时元数据和 selected skills 按 thread 下发，不会仅因切换 workspace 或 provider 重启进程。其他进程级环境差异会形成不同 profile。manager ready 后会纯后台预热最多 3 个默认 / 已配置账号，不阻塞 Launcher 启动；空闲进程默认保留 5 分钟，可通过 `appServer.idleTimeoutMs` 调整
-- One Works managed hook 会由共享 app-server 回调 manager，再只转发到 owning workspace lease 执行；回调能力按 lease 下发到 thread config，不进入共享 app-server 的进程环境。workspace 自带的 `.codex/hooks.json` 仍由 Codex 按 thread cwd 发现。thread 注册后以 lease + thread ID + cwd 校验归属；创建 thread 的短暂窗口只允许同一 lease 内的 pending setup 以 cwd 绑定，不会跨 workspace 猜测 owner
-- direct mode 仍使用 session 隔离 HOME；没有 manager 的 standalone stream 保留 project-local fallback pool。manager-owned stream 使用机器共享的 app-server profile HOME 并挂载所选账号 `auth.json`，但不会把 workspace skills / hooks 软链进共享 HOME
-- `network.httpProxy` / `httpsProxy` / `allProxy` / `noProxy` 与 `caCertificate` 只作用于 Codex adapter；配置同时覆盖原生 Codex 进程和 One Works 的 provider 转发请求。本地转发地址始终加入 `NO_PROXY`；`caCertificate` 可传 PEM 文件路径或内联 PEM，内联内容会先落到权限为 `0600` 的 profile 私有文件
-- 在该导入行选择 `Codex config.toml`：当前来源为 Global 时，会把用户级 `CODEX_HOME/config.toml` 或 `~/.codex/config.toml` 中缺失的 provider 导入 global `modelServices`；只有点击“导入”时才执行
-- 当前来源为 Project 时，同一选项会把可信 workspace `.codex/config.toml` 中的 provider 导入 project `.oo.config.*`；Codex 原生会忽略 project 层的 provider/auth 字段，但 One Works 会按 `global < project < user` 使用导入结果。未信任的 project 层不导入，也不会把 global/user provider 展开复制进 project 文件
-- 两类导入都不会修改原 Codex 配置，也不会覆盖目标 One Works source 中已有的服务
-- “设置 → 环境”同样在列表底部提供通用 adapter 导入行，来源只支持 Project 与 User。选择 Codex 后会安全读取当前 workspace `.codex/environments` 下有界的普通 `*.toml` 文件（包括默认、编号和命名环境）；`setup` 映射为 `create`，`cleanup` 映射为 `destroy`，当前平台脚本会覆盖默认脚本。空的基础脚本视为未配置，因此只声明平台脚本也能导入；环境 ID 末尾的 `.local`（不区分大小写）会被规范化，因为该后缀保留给 One Works 的 User 来源展示语义
-- Codex environment 的 `actions` 不等价于 One Works 生命周期 `start`，因此只会报告为跳过，不会被错误迁移；导入只新增缺失环境，不合并或覆盖已有目录，也不会修改原生 TOML
-- Web 模型选择器优先复用 Codex 本地模型目录：`CODEX_HOME` / `~/.codex/config.toml` 里的 `model_catalog_json`，其次是 `models_cache.json`；没有可读目录时才回退内置模型列表
-- Web 配置页默认展示缓存后的额度快照；当前 Codex quota 快照默认缓存 5 分钟
-- CLI `oneworks accounts show codex <account>` 会主动刷新一次最新额度信息
+Codex 已接入通用多账号、Auto 账号池、内置模型共享、官方客户端桥接和原生配置导入。完整配置与行为说明见 [Codex 账号、共享模型与客户端接入](./codex.md)。
 
 ## Claude Code 示例
 

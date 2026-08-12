@@ -13,6 +13,8 @@ import type {
 } from '@oneworks/types'
 import { loadAdapter, resolveAdapterRuntimeTarget } from '@oneworks/types'
 import {
+  CODEX_SHARED_MODEL_SERVICE_KEY,
+  CODEX_SHARED_MODEL_TOKEN_ENV,
   createStartupProfiler,
   listServiceModels,
   nowStartupMs,
@@ -141,6 +143,42 @@ const formatAdapterModelFallbackError = (error: AdapterModelFallbackError) => {
   return `Adapter "${error.adapter}" defaultModel "${error.defaultModel}" is also not allowed${ruleSuffix}.`
 }
 
+const stripRuntimeModelCapability = (base: Omit<AdapterCtx, 'logger' | 'cache'>) => {
+  const env = { ...base.env }
+  delete env[CODEX_SHARED_MODEL_TOKEN_ENV]
+  const stripConfig = (config: Config | undefined) => {
+    if (config?.modelServices?.[CODEX_SHARED_MODEL_SERVICE_KEY] == null) return config
+    const service = config.modelServices[CODEX_SHARED_MODEL_SERVICE_KEY]
+    return {
+      ...config,
+      modelServices: {
+        ...config.modelServices,
+        [CODEX_SHARED_MODEL_SERVICE_KEY]: {
+          ...service,
+          apiKey: undefined,
+          apiBaseUrl: undefined
+        }
+      }
+    }
+  }
+  return {
+    ...base,
+    env,
+    configs: [stripConfig(base.configs[0]), stripConfig(base.configs[1])] as AdapterCtx['configs'],
+    ...(base.configState == null
+      ? {}
+      : {
+        configState: {
+          ...base.configState,
+          effectiveProjectConfig: stripConfig(base.configState.effectiveProjectConfig),
+          projectConfig: stripConfig(base.configState.projectConfig),
+          userConfig: stripConfig(base.configState.userConfig),
+          mergedConfig: stripConfig(base.configState.mergedConfig)!
+        }
+      })
+  }
+}
+
 declare module '@oneworks/types' {
   interface Cache {
     base: Omit<AdapterCtx, 'logger' | 'cache'>
@@ -229,7 +267,7 @@ export const run = async (
   const { logger, cache, ...base } = runtimeCtx
 
   const cacheSetStartedAt = startupProfiler.now()
-  await cache.set('base', base)
+  await cache.set('base', stripRuntimeModelCapability(base))
   startupProfiler.mark('task.cache.set.base', cacheSetStartedAt)
 
   const mergedModelServices = mergedConfig.modelServices ?? {}

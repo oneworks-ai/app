@@ -335,15 +335,26 @@ describe('codex runtime broker driver', () => {
       method: 'turn/interrupt',
       params: { threadId: 'thread-a', turnId: 'turn-a' }
     })).resolves.toEqual({ method: 'turn/interrupt' })
+    await expect(harness.broker.invoke('workspace:a', workspaceA.leaseId, 'rpc.request', {
+      method: 'thread/inject_items',
+      params: {
+        threadId: 'thread-a',
+        items: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] }]
+      }
+    })).resolves.toEqual({ method: 'thread/inject_items' })
     await expect(harness.broker.invoke('workspace:a', workspaceA.leaseId, 'rpc.respond', {
       id: 41,
       result: { decision: 'decline' }
     })).resolves.toEqual({})
 
-    expect(harness.rpcRequest).toHaveBeenCalledOnce()
+    expect(harness.rpcRequest).toHaveBeenCalledTimes(2)
     expect(harness.rpcRequest).toHaveBeenCalledWith(
       'turn/interrupt',
       { threadId: 'thread-a', turnId: 'turn-a' }
+    )
+    expect(harness.rpcRequest).toHaveBeenCalledWith(
+      'thread/inject_items',
+      expect.objectContaining({ threadId: 'thread-a' })
     )
     expect(harness.rpc.respond).toHaveBeenCalledWith(41, { decision: 'decline' })
 
@@ -351,4 +362,35 @@ describe('codex runtime broker driver', () => {
     await harness.broker.release('workspace:b', workspaceB.leaseId)
     await harness.broker.dispose()
   })
+
+  it.each(['thread.unregister', 'session.close', 'lease.release'] as const)(
+    'releases global thread ownership after %s',
+    async cleanup => {
+      const harness = createHarness()
+      const workspaceA = await acquire(harness.broker, 'workspace:a')
+      await harness.broker.invoke('workspace:a', workspaceA.leaseId, 'thread.register', {
+        cwd: '/tmp/workspace-a',
+        threadId: 'reused-thread'
+      })
+
+      if (cleanup === 'lease.release') {
+        await harness.broker.release('workspace:a', workspaceA.leaseId)
+      } else {
+        await harness.broker.invoke('workspace:a', workspaceA.leaseId, cleanup, {
+          threadId: 'reused-thread',
+          ...(cleanup === 'session.close' ? { responses: [] } : {})
+        })
+      }
+
+      const workspaceB = await acquire(harness.broker, 'workspace:b')
+      await expect(harness.broker.invoke('workspace:b', workspaceB.leaseId, 'thread.register', {
+        cwd: '/tmp/workspace-b',
+        threadId: 'reused-thread'
+      })).resolves.toEqual({})
+
+      if (cleanup !== 'lease.release') await harness.broker.release('workspace:a', workspaceA.leaseId)
+      await harness.broker.release('workspace:b', workspaceB.leaseId)
+      await harness.broker.dispose()
+    }
+  )
 })

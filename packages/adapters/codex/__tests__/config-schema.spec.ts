@@ -3,9 +3,10 @@ import { describe, expect, it } from 'vitest'
 import { codexAdapterConfigSchema } from '#~/config-schema.js'
 
 describe('codex adapter config schema', () => {
-  it('accepts shared app-server and adapter network settings', () => {
+  it('accepts shared app-server, model sharing, and adapter network settings', () => {
     expect(codexAdapterConfigSchema.parse({
       appServer: { idleTimeoutMs: 0 },
+      shareBuiltinModels: true,
       network: {
         httpProxy: 'http://127.0.0.1:7890',
         httpsProxy: 'http://127.0.0.1:7890',
@@ -15,6 +16,7 @@ describe('codex adapter config schema', () => {
       }
     })).toMatchObject({
       appServer: { idleTimeoutMs: 0 },
+      shareBuiltinModels: true,
       network: { noProxy: ['internal.example.test'] }
     })
   })

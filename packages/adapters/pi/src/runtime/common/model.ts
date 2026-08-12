@@ -5,6 +5,7 @@ import {
   flattenModelServices,
   parseServiceModelSelector,
   resolveModelProviderIdentity,
+  resolveModelServiceApiProtocol,
   resolveModelServiceConfig
 } from '@oneworks/utils'
 
@@ -41,6 +42,18 @@ const normalizeHeaders = (value: unknown) =>
 const resolveExtra = (service: ModelServiceConfig) => asRecord(asRecord(service.extra).pi)
 
 const inferApi = (service: ModelServiceConfig, baseUrl: string, extra: Record<string, unknown>): PiCustomApi => {
+  switch (resolveModelServiceApiProtocol(service)) {
+    case 'openai-responses':
+      return 'openai-responses'
+    case 'openai-chat-completions':
+      return 'openai-completions'
+    case 'anthropic-messages':
+      return 'anthropic-messages'
+    case 'gemini-generate-content':
+      return 'google-generative-ai'
+    case 'gemini-interactions':
+      throw new Error('Pi adapter does not support Gemini Interactions model services.')
+  }
   const explicitApi = normalizeString(extra.api)
   if (
     explicitApi === 'anthropic-messages' ||

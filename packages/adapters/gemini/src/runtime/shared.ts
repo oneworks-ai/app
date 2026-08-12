@@ -17,6 +17,8 @@ import type {
 import {
   omitAdapterCommonConfig,
   parseServiceModelSelector,
+  resolveModelServiceApiProtocol,
+  resolveModelServiceFromMap,
   syncSymlinkTarget,
   unlinkMockHomeBridgePaths
 } from '@oneworks/utils'
@@ -217,15 +219,15 @@ const resolveGeminiRoutedModel = (ctx: AdapterCtx, rawModel: string) => {
   const parsed = parseServiceModelSelector(rawModel)
   if (parsed == null) return undefined
 
-  const service = resolveMergedModelServices(ctx)[parsed.serviceKey]
+  const service = resolveModelServiceFromMap(resolveMergedModelServices(ctx), parsed.serviceKey)
   if (service == null) {
     throw new Error(`Gemini adapter could not find model service "${parsed.serviceKey}".`)
   }
 
-  const wireApi = normalizeNonEmptyString(asPlainObject(asPlainObject(service.extra).codex).wireApi)
-  if (wireApi === 'responses') {
+  const apiProtocol = resolveModelServiceApiProtocol(service)
+  if (apiProtocol != null && apiProtocol !== 'openai-chat-completions') {
     throw new Error(
-      `Gemini adapter only supports chat/completions-style model services, but "${parsed.serviceKey}" is configured for Responses API.`
+      `Gemini adapter only supports OpenAI Chat Completions model services, but "${parsed.serviceKey}" is configured for ${apiProtocol}.`
     )
   }
 

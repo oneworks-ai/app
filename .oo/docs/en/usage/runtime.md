@@ -116,6 +116,32 @@ webAuth:
   - `claude-code` connects directly to known official Anthropic-compatible endpoints for Anthropic, Kimi, DeepSeek, Alibaba Qwen/Bailian, Zhipu GLM, MiniMax, OpenRouter, Requesty, Vercel AI Gateway, and Portkey; other OpenAI-compatible `service,model` selections fall back to Claude Code Router.
   - `codex` and `gemini` use adapter-owned local proxies.
   - some adapters write provider config into session-level or native config files.
+- When a built-in provider is selected, One Works fills in the common host and protocol from the provider catalog; normally only `provider` and `apiKey` are required. Keep `apiBaseUrl` and `apiProtocol` as explicit overrides for gateways, private deployments, or provider-specific endpoints. Codex keeps Responses as its local source protocol and handles requests, non-stream responses, and SSE streams across the four upstream formats below:
+
+```yaml
+modelServices:
+  openai-native:
+    provider: openai
+    apiKey: ${OPENAI_API_KEY}
+
+  openai-compatible:
+    apiBaseUrl: https://gateway.example.com/v1
+    apiProtocol: openai-chat-completions
+    apiKey: ${GATEWAY_API_KEY}
+
+  claude-compatible:
+    provider: anthropic
+    apiKey: ${ANTHROPIC_API_KEY}
+
+  gemini-compatible:
+    apiBaseUrl: https://generativelanguage.googleapis.com/v1beta
+    apiProtocol: gemini-generate-content
+    apiKey: ${GEMINI_API_KEY}
+```
+
+- Values are `openai-responses`, `openai-chat-completions`, `anthropic-messages`, `gemini-generate-content`, and `gemini-interactions`. Codex conversion currently supports the first four; `gemini-interactions` fails explicitly instead of being sent as another protocol.
+- Built-in providers use their catalog defaults. Explicit URLs still get unambiguous endpoint inference first, and legacy `extra.codex.wireApi` hints remain compatible. Declare the protocol for a custom gateway. Collection profiles inherit it and may override it.
+  - Current conversion covers text, images, function tools, JSON schema, reasoning summaries, usage, and streaming lifecycle events. Non-function built-in tools, audio, files, and heterogeneous content that cannot be mapped reliably fail closed rather than being silently discarded.
 - Coding Plan and Token Plan mean provider billing products, not agent Plan Mode. Prefer dedicated provider ids such as `qwen-coding-plan`, `zhipu-coding-plan`, `minimax-token-plan`, `kimi-code`, `tencent-tokenhub-coding-plan`, `volcengine-ark-coding-plan`, and `baidu-qianfan-coding-plan`; do not mix plan keys with ordinary API keys or plan base URLs with ordinary API base URLs.
 - Plan model lists come from the built-in catalog by default and do not assume `/v1/models` works. Write `models` only when you want a fixed allowlist:
 

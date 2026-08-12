@@ -21,6 +21,7 @@ const PUBLIC_API_PATHS = new Set([
   '/api/auth/login',
   '/api/auth/logout'
 ])
+const INTERNAL_CAPABILITY_PATH_PREFIX = '/api/internal/codex-shared-model/'
 
 interface AuthMiddlewareOperations {
   resolveConfig?: typeof resolveWebAuthConfig
@@ -32,7 +33,11 @@ export const authMiddleware = (
   operations: AuthMiddlewareOperations = {}
 ): Koa.Middleware => {
   return async (ctx, next) => {
-    if (!ctx.path.startsWith('/api') || PUBLIC_API_PATHS.has(ctx.path)) {
+    if (
+      !ctx.path.startsWith('/api') ||
+      PUBLIC_API_PATHS.has(ctx.path) ||
+      ctx.path.startsWith(INTERNAL_CAPABILITY_PATH_PREFIX)
+    ) {
       await next()
       return
     }

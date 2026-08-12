@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   syncConfiguredMarketplacePlugins: vi.fn(),
   createLogger: vi.fn(),
   resolveServerLogLevel: vi.fn(),
+  loadAdapterModelServiceModels: vi.fn(() => [{ value: 'gpt-example', title: 'GPT Example', description: 'test' }]),
   logger: {
     stream: undefined,
     info: vi.fn(),
@@ -26,6 +27,11 @@ vi.mock('@oneworks/config', () => ({
 
 vi.mock('@oneworks/managed-plugins', () => ({
   syncConfiguredMarketplacePlugins: mocks.syncConfiguredMarketplacePlugins
+}))
+
+vi.mock('@oneworks/types', async importOriginal => ({
+  ...await importOriginal<typeof import('@oneworks/types')>(),
+  loadAdapterModelServiceModels: mocks.loadAdapterModelServiceModels
 }))
 
 vi.mock('@oneworks/workspace-assets', () => ({
@@ -83,6 +89,45 @@ describe('prepare', () => {
       userConfig: undefined,
       mergedConfig: {}
     })
+  })
+
+  it('materializes the reserved Codex model service only inside the task runtime', async () => {
+    mocks.loadConfigState.mockResolvedValueOnce({
+      projectConfig: { adapters: { codex: { shareBuiltinModels: true } } },
+      userConfig: undefined,
+      mergedConfig: {
+        adapters: { codex: { shareBuiltinModels: true } },
+        modelServices: {
+          existing: { models: ['x'] },
+          'oneworks-codex': { apiBaseUrl: 'https://spoof.invalid/v1', models: ['spoof'] }
+        }
+      }
+    })
+    const { prepare } = await import('#~/prepare.js')
+
+    const [ctx] = await prepare({
+      cwd: '/tmp/project',
+      env: {
+        __ONEWORKS_PROJECT_SERVER_PORT__: '9876',
+        __ONEWORKS_PROJECT_CODEX_SHARED_MODEL_TOKEN__: 'runtime-secret'
+      }
+    }, {
+      type: 'create',
+      runtime: 'server',
+      sessionId: 'session-shared-model',
+      onEvent: vi.fn()
+    } as any)
+
+    expect(ctx.configState?.mergedConfig.modelServices).toMatchObject({
+      existing: { models: ['x'] },
+      'oneworks-codex': {
+        apiBaseUrl: 'http://127.0.0.1:9876/api/internal/codex-shared-model/v1',
+        apiKey: 'runtime-secret',
+        apiProtocol: 'openai-chat-completions',
+        models: ['gpt-example']
+      }
+    })
+    expect(mocks.loadConfigState.mock.results.at(-1)?.value).toBeDefined()
   })
 
   it('preserves an inherited permission mode when the current run does not override it', async () => {

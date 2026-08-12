@@ -41,7 +41,7 @@ describe('model adapter compatibility', () => {
         unsupportedAdapters: ['codex']
       },
       modelSupported: {
-        apiBaseUrl: 'https://api.moonshot.ai/v1/chat/completions',
+        apiBaseUrl: 'https://service.example.com/v1',
         apiKey: 'token',
         models: ['kimi-model']
       },

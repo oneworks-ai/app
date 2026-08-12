@@ -5,7 +5,9 @@ import { resolveConfigState } from '@oneworks/config'
 import { NATIVE_HOOK_BRIDGE_ADAPTER_ENV, readJsonFileOrDefault, resolveMockHome } from '@oneworks/hooks'
 import type { AdapterCtx, AdapterQueryOptions, Config } from '@oneworks/types'
 import {
+  resolveExplicitModelServiceApiProtocol,
   resolveModelServiceConfig,
+  resolveModelServiceFromMap,
   resolveModelServiceModels,
   resolveModelServicePlanProtocolBaseUrl,
   resolveProjectOoPath
@@ -306,15 +308,20 @@ const resolveOfficialAnthropicModelService = (
 ) => {
   const selection = parseModelServiceModel(model)
   if (selection == null) return undefined
-  const configuredService = modelServices?.[selection.serviceKey]
+  const configuredService = resolveModelServiceFromMap(modelServices, selection.serviceKey)
+  const explicitApiProtocol = resolveExplicitModelServiceApiProtocol(configuredService)
   const resolved = resolveModelServiceConfig(configuredService).service
   if (resolved == null) return undefined
-  const provider = resolveOfficialAnthropicProvider(resolved.provider, resolved.apiBaseUrl)
-  if (provider == null) return undefined
+  if (explicitApiProtocol != null && explicitApiProtocol !== 'anthropic-messages') return undefined
+  const matchedProvider = resolveOfficialAnthropicProvider(resolved.provider, resolved.apiBaseUrl)
+  if (matchedProvider == null && explicitApiProtocol !== 'anthropic-messages') return undefined
+  const provider = matchedProvider ?? 'anthropic'
   const planAnthropicBaseUrl = resolveModelServicePlanProtocolBaseUrl(resolved, 'anthropic')
   return {
     apiKey: resolved.apiKey,
-    baseUrl: planAnthropicBaseUrl ?? resolveOfficialAnthropicBaseUrl(provider, resolved.apiBaseUrl),
+    baseUrl: planAnthropicBaseUrl ?? (matchedProvider == null
+      ? resolveRootAnthropicBaseUrl(resolved.apiBaseUrl)
+      : resolveOfficialAnthropicBaseUrl(provider, resolved.apiBaseUrl)),
     extra: resolved.extra,
     model: selection.modelName,
     models: resolveModelServiceModels(resolved),
@@ -493,7 +500,7 @@ export const prepareClaudeExecution = async (
     )
   }
   if (useCCR) {
-    const router = await ensureClaudeCodeRouterReady(ctx)
+    const router = await ensureClaudeCodeRouterReady(ctx, {}, model)
     settings.env = {
       ...settings.env,
       ANTHROPIC_BASE_URL: `http://${router.host}:${router.port}`,

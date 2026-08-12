@@ -7,13 +7,20 @@ import {
   resolveUseDefaultOneworksMcpServer
 } from '@oneworks/config'
 import { syncConfiguredMarketplacePlugins } from '@oneworks/managed-plugins'
-import type { AdapterCtx, AdapterQueryOptions } from '@oneworks/types'
+import type { AdapterBuiltinModel, AdapterCtx, AdapterQueryOptions, Config } from '@oneworks/types'
+import { loadAdapterModelServiceModels } from '@oneworks/types'
 import {
+  CODEX_SHARED_MODEL_PATH,
+  CODEX_SHARED_MODEL_SERVICE_KEY,
+  CODEX_SHARED_MODEL_TOKEN_ENV,
+  createCodexSharedModelService,
   createStartupProfiler,
+  isCodexSharedModelEnabled,
   mergeProcessEnvWithProjectEnv,
   migrateProjectHomeSegments,
   nowStartupMs,
-  sanitizeOneWorksLoaderEnv
+  sanitizeOneWorksLoaderEnv,
+  withoutReservedCodexSharedModelService
 } from '@oneworks/utils'
 import { getCacheWithLegacyFallback, setCache } from '@oneworks/utils/cache'
 import { createLogger } from '@oneworks/utils/create-logger'
@@ -65,7 +72,43 @@ export const prepare = async (
 
   const jsonVariables = buildConfigJsonVariables(cwd, env)
   const configLoadStartedAt = nowStartupMs()
-  const configState = await loadConfigState({ cwd, env, jsonVariables })
+  const loadedConfigState = await loadConfigState({ cwd, env, jsonVariables })
+  const sharingEnabled = isCodexSharedModelEnabled(loadedConfigState.mergedConfig)
+  const sharedModelToken = env[CODEX_SHARED_MODEL_TOKEN_ENV]
+  const serverPort = env.__ONEWORKS_PROJECT_SERVER_PORT__
+  const canMaterializeSharedModel = sharingEnabled &&
+    typeof sharedModelToken === 'string' && sharedModelToken !== '' &&
+    typeof serverPort === 'string' && serverPort !== ''
+  let sharedBuiltinModels: AdapterBuiltinModel[] | undefined
+  if (canMaterializeSharedModel) {
+    try {
+      sharedBuiltinModels = loadAdapterModelServiceModels('codex', { cwd })
+    } catch {
+      sharedBuiltinModels = undefined
+    }
+  }
+  const withSharedModel = (value: Config | undefined) => {
+    const sanitized = withoutReservedCodexSharedModelService(value)
+    if (!canMaterializeSharedModel || sanitized == null) return sanitized
+    return {
+      ...sanitized,
+      modelServices: {
+        ...(sanitized.modelServices ?? {}),
+        [CODEX_SHARED_MODEL_SERVICE_KEY]: createCodexSharedModelService({
+          builtinModels: sharedBuiltinModels,
+          apiBaseUrl: `http://127.0.0.1:${serverPort}${CODEX_SHARED_MODEL_PATH}/v1`,
+          apiKey: sharedModelToken
+        })
+      }
+    }
+  }
+  const configState = {
+    ...loadedConfigState,
+    effectiveProjectConfig: withSharedModel(loadedConfigState.effectiveProjectConfig),
+    projectConfig: withSharedModel(loadedConfigState.projectConfig),
+    userConfig: withSharedModel(loadedConfigState.userConfig),
+    mergedConfig: withSharedModel(loadedConfigState.mergedConfig)!
+  }
   const {
     effectiveProjectConfig,
     projectConfig,

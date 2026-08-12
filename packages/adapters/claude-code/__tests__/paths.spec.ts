@@ -9,6 +9,7 @@ import { resolveManagedNpmCliPaths } from '@oneworks/utils/managed-npm-cli'
 import {
   CLAUDE_CODE_CLI_PACKAGE,
   CLAUDE_CODE_CLI_VERSION,
+  CLAUDE_CODE_ROUTER_CLI_COMPATIBILITY_RANGE,
   CLAUDE_CODE_ROUTER_CLI_PACKAGE,
   CLAUDE_CODE_ROUTER_CLI_VERSION,
   resolveAdapterCliPath,
@@ -16,6 +17,11 @@ import {
 } from '../src/ccr/paths'
 
 describe('claude code CLI paths', () => {
+  it('pins the CCR release supported by the managed transformer contract', () => {
+    expect(CLAUDE_CODE_ROUTER_CLI_VERSION).toBe('1.0.73')
+    expect(CLAUDE_CODE_ROUTER_CLI_COMPATIBILITY_RANGE).toBe('1.0.73')
+  })
+
   it('uses a managed Claude binary from the global bootstrap cache', async () => {
     const home = await mkdtemp(join(tmpdir(), 'ow-claude-home-'))
     const worktree = await mkdtemp(join(tmpdir(), 'ow-claude-worktree-'))

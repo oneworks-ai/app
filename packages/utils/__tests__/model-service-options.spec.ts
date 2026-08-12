@@ -4,6 +4,7 @@ import {
   installModelProviderCatalog,
   resetModelProviderCatalog,
   resolveModelProviderIdentity,
+  resolveModelServiceApiProtocol,
   resolveModelServiceBilling,
   resolveModelServiceCodingPlan,
   resolveModelServiceConfig,
@@ -36,8 +37,70 @@ describe('model service options', () => {
 
     expect(result.issues).toEqual([])
     expect(result.service?.apiBaseUrl).toBe('https://api.moonshot.cn/v1')
+    expect(result.service?.apiProtocol).toBe('openai-chat-completions')
     expect(result.service?.providerDefinition?.title).toBe('Moonshot China')
     expect(resolveModelServiceHomepageUrl(result.service)).toBe('https://platform.kimi.com')
+  })
+
+  it('resolves common official providers without protocol or host configuration', () => {
+    expect(resolveModelServiceConfig({ provider: 'openai', apiKey: 'token' }).service).toMatchObject({
+      apiBaseUrl: 'https://api.openai.com/v1',
+      apiProtocol: 'openai-responses'
+    })
+    expect(resolveModelServiceConfig({ provider: 'anthropic', apiKey: 'token' }).service).toMatchObject({
+      apiBaseUrl: 'https://api.anthropic.com/v1',
+      apiProtocol: 'anthropic-messages'
+    })
+    expect(resolveModelServiceConfig({ provider: 'google-gemini', apiKey: 'token' }).service).toMatchObject({
+      apiBaseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+      apiProtocol: 'openai-chat-completions'
+    })
+  })
+
+  it('keeps explicit protocol and host overrides ahead of provider defaults', () => {
+    expect(
+      resolveModelServiceConfig({
+        provider: 'anthropic',
+        apiBaseUrl: 'https://gateway.example.test/v1/responses',
+        apiProtocol: 'openai-responses',
+        apiKey: 'token'
+      }).service
+    ).toMatchObject({
+      apiBaseUrl: 'https://gateway.example.test/v1/responses',
+      apiProtocol: 'openai-responses'
+    })
+  })
+
+  it('pairs coding-plan protocol overrides with their matching endpoint', () => {
+    expect(
+      resolveModelServiceConfig({
+        provider: 'qwen-coding-plan',
+        apiProtocol: 'anthropic-messages',
+        apiKey: 'token'
+      }).service
+    ).toMatchObject({
+      apiBaseUrl: 'https://coding.dashscope.aliyuncs.com/apps/anthropic',
+      apiProtocol: 'anthropic-messages'
+    })
+  })
+
+  it('resolves explicit wire protocols before legacy hints and URL inference', () => {
+    expect(resolveModelServiceApiProtocol({
+      apiProtocol: 'anthropic-messages',
+      apiBaseUrl: 'https://example.test/v1/responses',
+      extra: { codex: { wireApi: 'chat' } }
+    })).toBe('anthropic-messages')
+    expect(resolveModelServiceApiProtocol({
+      extra: { codex: { wireApi: 'chat' } }
+    })).toBe('openai-chat-completions')
+    expect(resolveModelServiceApiProtocol({
+      apiBaseUrl: 'https://example.test/v1/responses'
+    })).toBe('openai-responses')
+    expect(() =>
+      resolveModelServiceApiProtocol({
+        apiProtocol: 'openai-compatible'
+      } as unknown as ModelServiceConfig)
+    ).toThrow(/Unsupported model service apiProtocol/)
   })
 
   it('resolves configured descriptions before provider default descriptions', () => {
@@ -315,7 +378,7 @@ describe('model service options', () => {
     })
   })
 
-  it('does not expose provider-only official services to codex without declared compatibility', () => {
+  it('exposes provider-only official services to codex through catalog protocol defaults', () => {
     const providerOnlyServices: Record<string, ModelServiceConfig> = {
       kimi: { provider: 'moonshot-cn', apiKey: 'token' }
     }
@@ -327,7 +390,13 @@ describe('model service options', () => {
         modelServices: providerOnlyServices,
         serviceModels
       }).map(entry => entry.selectorValue)
-    ).toEqual([])
+    ).toEqual([
+      'kimi,kimi-k2.7-code',
+      'kimi,kimi-k2.6',
+      'kimi,kimi-k2.5',
+      'kimi,kimi-k2-0905-preview',
+      'kimi,kimi-k2'
+    ])
   })
 
   it('exposes only the currently supported DeepSeek Responses model to codex', () => {
@@ -345,7 +414,7 @@ describe('model service options', () => {
     ).toEqual(['deepseek,deepseek-v4-flash'])
   })
 
-  it('rejects legacy chat wire services for codex', () => {
+  it('keeps legacy chat wire services available through the Codex Responses translator', () => {
     const codexCompatibleServices: Record<string, ModelServiceConfig> = {
       kimi: {
         provider: 'moonshot-cn',
@@ -365,6 +434,12 @@ describe('model service options', () => {
         modelServices: codexCompatibleServices,
         serviceModels
       }).map(entry => entry.selectorValue)
-    ).toEqual([])
+    ).toEqual([
+      'kimi,kimi-k2.7-code',
+      'kimi,kimi-k2.6',
+      'kimi,kimi-k2.5',
+      'kimi,kimi-k2-0905-preview',
+      'kimi,kimi-k2'
+    ])
   })
 })

@@ -13,7 +13,9 @@ import type {
 import {
   mergeProcessEnvWithProjectEnv,
   omitAdapterCommonConfig,
+  resolveModelServiceApiProtocol,
   resolveModelServiceConfig,
+  resolveModelServiceFromMap,
   resolveProjectMockHome,
   syncSymlinkTarget
 } from '@oneworks/utils'
@@ -205,7 +207,7 @@ export const resolveCopilotModelConfig = (
   const commaIdx = normalizedRawModel.indexOf(',')
   const serviceKey = normalizedRawModel.slice(0, commaIdx).trim()
   const modelId = normalizedRawModel.slice(commaIdx + 1).trim()
-  const service = resolveMergedModelServices(ctx)[serviceKey]
+  const service = resolveModelServiceFromMap(resolveMergedModelServices(ctx), serviceKey)
   const extra = asPlainObject(service?.extra?.copilot) as CopilotProviderExtra | undefined
   if (service == null) {
     return {
@@ -221,7 +223,15 @@ export const resolveCopilotModelConfig = (
     }
   }
 
-  const wireApi = asString(extra?.wireApi)
+  const apiProtocol = resolveModelServiceApiProtocol(resolvedService)
+  if (apiProtocol != null && apiProtocol !== 'openai-responses' && apiProtocol !== 'openai-chat-completions') {
+    throw new Error(`Copilot adapter does not support ${apiProtocol} model services.`)
+  }
+  const wireApi = apiProtocol === 'openai-responses'
+    ? 'responses'
+    : apiProtocol === 'openai-chat-completions'
+    ? 'chat'
+    : asString(extra?.wireApi)
   const providerBaseUrl = normalizeCopilotProviderBaseUrl(resolvedService.apiBaseUrl, wireApi)
   const maxPromptTokens = asPositiveIntegerString(extra?.maxPromptTokens)
   const maxOutputTokens = asPositiveIntegerString(extra?.maxOutputTokens ?? resolvedService.maxOutputTokens)

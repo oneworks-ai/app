@@ -193,6 +193,11 @@ describe('relay personal global config route', () => {
         configPatch: {
           adapters: {
             codex: {
+              accountPool: {
+                cooldownMs: 120000,
+                enabled: true,
+                strategy: 'sticky-priority'
+              },
               accounts: {
                 default: {
                   auth: {
@@ -200,7 +205,9 @@ describe('relay personal global config route', () => {
                     token,
                     type: 'codex-auth-json'
                   },
-                  email: 'owner@example.test'
+                  disabled: false,
+                  email: 'owner@example.test',
+                  priority: 100
                 }
               }
             },
@@ -266,6 +273,11 @@ describe('relay personal global config route', () => {
       configPatch: {
         adapters: {
           codex: {
+            accountPool: {
+              cooldownMs: 120000,
+              enabled: true,
+              strategy: 'sticky-priority'
+            },
             accounts: {
               default: {
                 auth: {
@@ -273,7 +285,9 @@ describe('relay personal global config route', () => {
                   token,
                   type: 'codex-auth-json'
                 },
-                email: 'owner@example.test'
+                disabled: false,
+                email: 'owner@example.test',
+                priority: 100
               }
             }
           },

@@ -73,6 +73,51 @@ interface CodexConfiguredAccount {
   generation?: string
   credentialRevision?: string
   credentialUpdatedAt?: number
+  priority?: number
+  disabled?: boolean
+}
+
+interface CodexAccountPoolConfig {
+  enabled: boolean
+  strategy: 'sticky-priority'
+  cooldownMs: number
+}
+
+interface CodexAccountPoolHealthEntry {
+  credentialFingerprint?: string
+  retryAt: number
+  reason: 'auth' | 'plan' | 'rate_limit' | 'transient'
+}
+
+// Runtime health belongs to the workspace/account/model, not to one task or
+// session cache. Keeping it process-local also lets the accounts API and new
+// sessions observe the same cooldown without syncing ephemeral health data.
+const codexAccountPoolHealth = new Map<string, CodexAccountPoolHealthEntry>()
+const MAX_CODEX_ACCOUNT_POOL_HEALTH_ENTRIES = 512
+
+const accountPoolHealthKey = (
+  cwd: string,
+  accountKey: string,
+  model: string | undefined
+) => `${resolve(cwd)}\u0000${accountKey}\u0000${model ?? ''}`
+
+const getActiveAccountPoolHealth = (
+  cwd: string,
+  descriptor: CodexAccountDescriptor,
+  model: string | undefined,
+  now = Date.now()
+) => {
+  const key = accountPoolHealthKey(cwd, descriptor.key, model)
+  const entry = codexAccountPoolHealth.get(key)
+  if (
+    entry == null ||
+    entry.retryAt <= now ||
+    entry.credentialFingerprint !== descriptor.credentialFingerprint
+  ) {
+    if (entry != null) codexAccountPoolHealth.delete(key)
+    return undefined
+  }
+  return entry
 }
 
 interface CodexInlineAuthConfig {
@@ -126,6 +171,9 @@ interface CodexAccountDescriptor {
   status: NonNullable<AdapterAccountInfo['status']>
   metadata?: CodexStoredAccountMetadata
   identity?: CodexAccountIdentity
+  priority: number
+  disabled: boolean
+  credentialFingerprint?: string
 }
 
 interface CodexAccountProbe extends CodexAccountIdentity {
@@ -1767,11 +1815,17 @@ const resolveCodexAdapterConfig = (ctx: Pick<AdapterCtx, 'configs'>) => {
     )
     : {}
   const accountTombstones = normalizeAdapterAccountTombstones(rawConfig.accountTombstones)
+  const rawPool = isRecord(rawConfig.accountPool) ? rawConfig.accountPool : {}
 
   return {
     defaultAccount: getAdapterConfiguredDefaultAccount(rawConfig),
     accounts: filterActiveAdapterAccounts(rawAccounts, accountTombstones),
-    accountTombstones
+    accountTombstones,
+    accountPool: {
+      enabled: rawPool.enabled === true,
+      strategy: 'sticky-priority' as const,
+      cooldownMs: parseFiniteNumber(rawPool.cooldownMs) ?? 5 * 60_000
+    } satisfies CodexAccountPoolConfig
   }
 }
 
@@ -2289,6 +2343,9 @@ const buildRealHomeAccountDescriptor = async (
     authFilePath: realAuthPath,
     sourceKind: 'real-home',
     status: 'ready',
+    priority: 0,
+    disabled: false,
+    credentialFingerprint: authDigest,
     metadata,
     identity: authIdentity
   } satisfies CodexAccountDescriptor
@@ -2344,6 +2401,10 @@ const collectConfiguredAccountDescriptors = async (
       authContent: hasConfiguredAuthFile ? undefined : authContent,
       sourceKind,
       status: hasConfiguredAuthFile || hasInlineAuth ? 'ready' : 'missing',
+      priority: parseFiniteNumber(configuredAccount.priority) ?? 0,
+      disabled: configuredAccount.disabled === true,
+      credentialFingerprint: normalizeNonEmptyString(configuredAccount.credentialRevision) ??
+        metadata.authDigest ?? authFileFingerprint?.authDigest,
       metadata,
       identity: mergedIdentity
     })
@@ -2411,7 +2472,8 @@ const pickPreferredCodexDescriptor = (
     return {
       ...configuredAccount,
       authContent: undefined,
-      authFilePath: realHomeAccount.authFilePath
+      authFilePath: realHomeAccount.authFilePath,
+      credentialFingerprint: realHomeAccount.credentialFingerprint
     }
   }
 
@@ -2686,7 +2748,7 @@ const collectCodexAccountDescriptors = async (
   ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'ctxId' | 'configs'>,
   _options: { refresh?: boolean } = {}
 ) => {
-  const { defaultAccount, accounts: configuredAccounts } = resolveCodexAdapterConfig(ctx)
+  const { defaultAccount, accounts: configuredAccounts, accountPool } = resolveCodexAdapterConfig(ctx)
   const configuredDescriptors = await collectConfiguredAccountDescriptors(ctx, configuredAccounts)
   const realHomeDescriptor = await buildRealHomeAccountDescriptor(ctx).catch(() => undefined)
   const descriptors = dedupeCodexAccountDescriptors([
@@ -2710,6 +2772,7 @@ const collectCodexAccountDescriptors = async (
 
   return {
     defaultAccount: resolvedDefaultAccount,
+    accountPool,
     accounts: sortedDescriptors
       .sort((left, right) => {
         if (left.key === resolvedDefaultAccount) return -1
@@ -2717,6 +2780,89 @@ const collectCodexAccountDescriptors = async (
         return compareCodexAccountDescriptors(left, right)
       })
   }
+}
+
+export interface CodexAccountPoolCandidate {
+  key: string
+  priority: number
+  credentialFingerprint?: string
+}
+
+export const resolveCodexAccountPoolCandidates = async (
+  ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'ctxId' | 'configs'>,
+  model?: string
+) => {
+  const catalog = await collectCodexAccountDescriptors(ctx)
+  if (!catalog.accountPool.enabled) {
+    return { enabled: false, candidates: [] as CodexAccountPoolCandidate[], cooldownMs: catalog.accountPool.cooldownMs }
+  }
+  const ready = catalog.accounts.filter(descriptor => (
+    hasCodexAccountAuth(descriptor) &&
+    descriptor.status === 'ready' &&
+    !descriptor.disabled
+  ))
+  const candidates = ready
+    .filter(descriptor => getActiveAccountPoolHealth(ctx.cwd, descriptor, model) == null)
+    .sort((left, right) => (
+      right.priority - left.priority ||
+      Number(right.key === catalog.defaultAccount) - Number(left.key === catalog.defaultAccount) ||
+      left.key.localeCompare(right.key)
+    ))
+    .map(descriptor => ({
+      key: descriptor.key,
+      priority: descriptor.priority,
+      credentialFingerprint: descriptor.credentialFingerprint
+    }))
+  const retryAt = ready
+    .map(descriptor => getActiveAccountPoolHealth(ctx.cwd, descriptor, model))
+    .filter((entry): entry is CodexAccountPoolHealthEntry => entry != null)
+    .reduce<number | undefined>((earliest, entry) => (
+      earliest == null ? entry.retryAt : Math.min(earliest, entry.retryAt)
+    ), undefined)
+  return {
+    enabled: true,
+    candidates,
+    cooldownMs: catalog.accountPool.cooldownMs,
+    retryAt
+  }
+}
+
+export const markCodexAccountPoolFailure = async (params: {
+  ctx: Pick<AdapterCtx, 'cwd'>
+  candidate: CodexAccountPoolCandidate
+  model?: string
+  cooldownMs: number
+  reason: 'auth' | 'plan' | 'rate_limit' | 'transient'
+}) => {
+  if (codexAccountPoolHealth.size >= MAX_CODEX_ACCOUNT_POOL_HEALTH_ENTRIES) {
+    const oldestKey = codexAccountPoolHealth.keys().next().value
+    if (oldestKey != null) codexAccountPoolHealth.delete(oldestKey)
+  }
+  codexAccountPoolHealth.set(accountPoolHealthKey(params.ctx.cwd, params.candidate.key, params.model), {
+    credentialFingerprint: params.candidate.credentialFingerprint,
+    retryAt: Date.now() + params.cooldownMs,
+    reason: params.reason
+  })
+}
+
+export const classifyCodexAccountPoolFailure = (
+  error: unknown,
+  fallbackCooldownMs: number
+): { cooldownMs: number; reason: 'auth' | 'plan' | 'rate_limit' | 'transient' } | undefined => {
+  const message = error instanceof Error ? error.message : String(error)
+  if (/\b401\b|unauthori[sz]ed|invalid[^\n]*(?:token|credential)/iu.test(message)) {
+    return { reason: 'auth', cooldownMs: Math.max(fallbackCooldownMs, 15 * 60_000) }
+  }
+  if (/\b(?:402|403)\b|payment required|forbidden|subscription|plan limit/iu.test(message)) {
+    return { reason: 'plan', cooldownMs: Math.max(fallbackCooldownMs, 15 * 60_000) }
+  }
+  if (/\b429\b|too many requests|rate.?limit|quota/iu.test(message)) {
+    return { reason: 'rate_limit', cooldownMs: fallbackCooldownMs }
+  }
+  if (/\b(?:408|500|502|503|504)\b|timed? ?out|temporar(?:y|ily) unavailable|overloaded/iu.test(message)) {
+    return { reason: 'transient', cooldownMs: Math.min(fallbackCooldownMs, 30_000) }
+  }
+  return undefined
 }
 
 export const listCodexAppServerWarmupAccountKeys = async (
@@ -2805,6 +2951,8 @@ const buildCodexAccountDetail = (params: {
     description: baseDescription,
     status,
     isDefault: descriptor.key === defaultAccount,
+    priority: descriptor.priority,
+    disabled: descriptor.disabled,
     quota: overrideError == null ? mergedProbe?.quota : undefined,
     avatarUrl: normalizeNonEmptyString(configuredAccount?.avatarUrl) ??
       normalizeNonEmptyString(descriptor.metadata?.avatarUrl) ??
@@ -3124,13 +3272,15 @@ const syncSharedCodexSessionHomeFiles = async (
 }
 
 export const prepareCodexSessionHome = async (params: {
-  ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'ctxId' | 'configs'>
+  ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'ctxId' | 'configs'> & Partial<Pick<AdapterCtx, 'cache'>>
   sessionId: string
   account?: string
+  model?: string
   nativeProviderConfigOverrides?: string[]
   appServerProfileKey?: string
   nativeHooksAvailable?: boolean
   sharedAppServerHome?: boolean
+  useAccountPool?: boolean
 }) => {
   const { ctx, sessionId } = params
   const startupProfiler = createStartupProfiler({
@@ -3143,7 +3293,17 @@ export const prepareCodexSessionHome = async (params: {
   const collectStartedAt = startupProfiler.now()
   const catalog = await collectCodexAccountDescriptors(ctx)
   startupProfiler.mark('codex.accounts.collectDescriptors', collectStartedAt)
+  const poolSelection = requestedAccount == null && params.useAccountPool !== false && catalog.accountPool.enabled
+    ? await resolveCodexAccountPoolCandidates(ctx, params.model)
+    : undefined
+  if (poolSelection?.enabled === true && poolSelection.candidates.length === 0) {
+    const retryHint = poolSelection.retryAt == null
+      ? ''
+      : ` Earliest retry: ${new Date(poolSelection.retryAt).toISOString()}.`
+    throw new Error(`No healthy Codex account is available in the automatic account pool.${retryHint}`)
+  }
   const selectedAccountKey = requestedAccount ??
+    poolSelection?.candidates[0]?.key ??
     catalog.defaultAccount ??
     catalog.accounts.find(account => account.status === 'ready')?.key
   const selectedAccount = selectedAccountKey == null
@@ -3270,7 +3430,12 @@ export const getCodexAccounts = async (
         email: normalizeNonEmptyString(descriptor.identity?.email) ??
           normalizeNonEmptyString(descriptor.metadata?.email),
         status: descriptor.status,
-        isDefault: descriptor.key === catalog.defaultAccount
+        isDefault: descriptor.key === catalog.defaultAccount,
+        priority: descriptor.priority,
+        disabled: descriptor.disabled,
+        ...(getActiveAccountPoolHealth(ctx.cwd, descriptor, options.model) != null
+          ? { retryAt: getActiveAccountPoolHealth(ctx.cwd, descriptor, options.model)!.retryAt }
+          : {})
       })
       continue
     }
@@ -3297,6 +3462,11 @@ export const getCodexAccounts = async (
         email: detail.email,
         status: detail.status,
         isDefault: detail.isDefault,
+        priority: detail.priority,
+        disabled: detail.disabled,
+        ...(getActiveAccountPoolHealth(ctx.cwd, descriptor, options.model) != null
+          ? { retryAt: getActiveAccountPoolHealth(ctx.cwd, descriptor, options.model)!.retryAt }
+          : {}),
         quota: detail.quota
       })
     } catch (error) {
@@ -3314,7 +3484,12 @@ export const getCodexAccounts = async (
         displayName: detail.displayName,
         email: detail.email,
         status: detail.status,
-        isDefault: detail.isDefault
+        isDefault: detail.isDefault,
+        priority: detail.priority,
+        disabled: detail.disabled,
+        ...(getActiveAccountPoolHealth(ctx.cwd, descriptor, options.model) != null
+          ? { retryAt: getActiveAccountPoolHealth(ctx.cwd, descriptor, options.model)!.retryAt }
+          : {})
       })
     }
   }
@@ -3322,6 +3497,10 @@ export const getCodexAccounts = async (
   return {
     defaultAccount: catalog.defaultAccount,
     accounts,
+    automaticSelection: {
+      enabled: catalog.accountPool.enabled,
+      strategy: 'sticky-priority'
+    },
     actions: [...CODEX_ACCOUNT_LIST_ACTIONS]
   }
 }
@@ -3618,6 +3797,9 @@ export const manageCodexAccount = async (
         authContent,
         sourceKind: 'global-config',
         status: 'ready',
+        priority: existingConfiguredAccount?.priority ?? 0,
+        disabled: existingConfiguredAccount?.disabled === true,
+        credentialFingerprint: authDigest,
         metadata,
         identity: mergeCodexAccountProbes(existingConfiguredAccount?.identity, metadata)
       },

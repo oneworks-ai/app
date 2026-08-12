@@ -50,7 +50,7 @@ export function useReferenceActionsStatusBarItems({
     const availableAccountOptions = accountOptions ?? []
     const availableAdapterOptions = adapterOptions ?? []
     const hiddenAdapterOptions = hiddenBuiltinAdapterOptions ?? []
-    const selectedAccountOption = availableAccountOptions.find(option => option.value === selectedAccount)
+    const selectedAccountOption = availableAccountOptions.find(option => option.value === (selectedAccount ?? ''))
     const selectedAdapterOption = availableAdapterOptions.find(option => option.value === selectedAdapter)
     const canShowAccount = showAccountSelector && availableAccountOptions.length > 0
     const canShowAdapter = availableAdapterOptions.length > 1 || hiddenAdapterOptions.length > 0
@@ -60,7 +60,7 @@ export function useReferenceActionsStatusBarItems({
     const selectedKeys: string[] = []
 
     if (canShowAccount) {
-      if (selectedAccount != null) selectedKeys.push(`${accountMenuKeyPrefix}${selectedAccount}`)
+      selectedKeys.push(`${accountMenuKeyPrefix}${selectedAccount ?? ''}`)
       items.push({
         key: 'status-account',
         label: t('chat.accountSelectPlaceholder'),
@@ -73,8 +73,12 @@ export function useReferenceActionsStatusBarItems({
           key: `${accountMenuKeyPrefix}${option.value}`,
           label: option.label,
           description: option.meta,
-          icon: selectedAccount === option.value ? 'check' : 'person',
-          selected: selectedAccount === option.value
+          icon: (selectedAccount ?? '') === option.value
+            ? 'check'
+            : option.automatic === true
+            ? 'switch_account'
+            : 'person',
+          selected: (selectedAccount ?? '') === option.value
         }))
       })
     }
