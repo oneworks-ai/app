@@ -175,7 +175,13 @@ jobs:
           const fs = require('node:fs')
           const plan = JSON.parse(fs.readFileSync(process.env.PLAN_FILE, 'utf8'))
           for (const item of plan.tags) {
-            console.log([item.tag, item.name, item.version, item.path].join('\t'))
+            console.log([
+              item.tag,
+              item.name,
+              item.version,
+              item.path,
+              item.desktopSigningPolicy ?? ''
+            ].join('\t'))
           }
           NODE
           dispatch_chrome_extension_release() {
@@ -188,10 +194,21 @@ jobs:
               -f release_tag="$tag" \
               -f publish_store="$publish_store"
           }
-          while IFS=$'\t' read -r tag name version package_path; do
+          while IFS=$'\t' read -r tag name version package_path desktop_signing_policy; do
             if [ -z "$tag" ]; then
               continue
             fi
+            case "$tag" in
+              pkg/oneworks-desktop/v*)
+                case "$desktop_signing_policy" in
+                  auto|signed|unsigned) ;;
+                  *)
+                    echo "Desktop release tag $tag is missing a valid immutable signing policy." >&2
+                    exit 1
+                    ;;
+                esac
+                ;;
+            esac
             if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
               echo "Release tag already exists: $tag"
               case "$tag" in
@@ -212,6 +229,7 @@ jobs:
                   --ref "$tag" \
                   -f create_release=true \
                   -f release_tag="$tag" \
+                  -f signing_policy="$desktop_signing_policy" \
                   -f retention_days=14
                 ;;
               pkg/oneworks-plugin-external-browser-driver/v*)

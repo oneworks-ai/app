@@ -14,6 +14,8 @@ import {
   parseGitNameStatusZ
 } from '../release-tags'
 
+const releaseTagsWorkflow = readFileSync('.github/workflows/release-tags.yml', 'utf8')
+
 describe('release tag planning', () => {
   it('creates release tags for changed workspace package versions', () => {
     const plan = createReleaseTagPlanFromManifestChanges([
@@ -78,6 +80,11 @@ describe('release tag planning', () => {
         },
         after: {
           name: '@oneworks/desktop',
+          oneworks: {
+            release: {
+              macosSigningPolicy: 'unsigned'
+            }
+          },
           private: true,
           version: '4.0.0-alpha.1'
         }
@@ -100,6 +107,7 @@ describe('release tag planning', () => {
       'pkg/oneworks-plugin-new/v0.1.0'
     ])
     expect(plan.tags[0]?.private).toBe(true)
+    expect(plan.tags[0]?.desktopSigningPolicy).toBe('unsigned')
     expect(plan.tags[1]?.isNewPackage).toBe(true)
   })
 
@@ -152,6 +160,35 @@ describe('release tag planning', () => {
       'pkg/oneworks-desktop/v1.0.0-rc.0',
       'pkg/oneworks-plugin-external-browser-driver/v1.0.0-rc.0'
     ])
+    expect(
+      plan.tags.find(candidate => candidate.name === '@oneworks/desktop')?.desktopSigningPolicy
+    ).toBe('auto')
+  })
+
+  it('passes the immutable Desktop signing policy to the tag-driven dispatch', () => {
+    expect(releaseTagsWorkflow).toContain("item.desktopSigningPolicy ?? ''")
+    expect(releaseTagsWorkflow).toContain('-f signing_policy="$desktop_signing_policy"')
+    expect(releaseTagsWorkflow).toContain('auto|signed|unsigned) ;;')
+  })
+
+  it('fails closed when Desktop release signing metadata is invalid', () => {
+    expect(() =>
+      createReleaseTagPlanFromManifestChanges([
+        {
+          path: 'apps/desktop/package.json',
+          before: { name: '@oneworks/desktop', private: true, version: '1.0.0-rc.2' },
+          after: {
+            name: '@oneworks/desktop',
+            oneworks: { release: { macosSigningPolicy: 'sometimes' } },
+            private: true,
+            version: '1.0.0-rc.3'
+          }
+        }
+      ], {
+        base: 'base',
+        head: 'head'
+      })
+    ).toThrow('macosSigningPolicy must be auto, signed, or unsigned')
   })
 
   it('creates a stable VS Code tag and retains its store collision guard', () => {

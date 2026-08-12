@@ -60,6 +60,15 @@ on:
         description: Release identity for a candidate build or promotion. Must start with pkg/oneworks-desktop/v.
         required: false
         type: string
+      signing_policy:
+        default: auto
+        description: Requested signing policy. Official tags remain bound to apps/desktop/package.json metadata.
+        options:
+          - auto
+          - signed
+          - unsigned
+        required: false
+        type: choice
       retention_days:
         default: "14"
         description: Number of days to keep workflow artifacts.
@@ -189,10 +198,19 @@ jobs:
           PRODUCT_SOURCE_SHA: ${{ inputs.product_source_sha }}
           RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
           REPLACE_EXISTING_RELEASE: ${{ inputs.replace_existing_release }}
+          SIGNING_POLICY: ${{ inputs.signing_policy }}
         shell: bash
         run: |
+          SIGNING_POLICY="${SIGNING_POLICY:-auto}"
+          case "$SIGNING_POLICY" in
+            auto|signed|unsigned) ;;
+            *)
+              echo "signing_policy must be auto, signed, or unsigned." >&2
+              exit 1
+              ;;
+          esac
           if [[ "$NOTARIZATION_HISTORY_ONLY" == "true" ]]; then
-            if [[ "$CREATE_RELEASE_REQUESTED" == "true" || -n "$BUILDER_SOURCE_SHA" || -n "$CANDIDATE_RUN_ID" || -n "$NOTARIZATION_RUN_ID" || -n "$NOTARIZATION_STAGE" || -n "$PRODUCT_SOURCE_SHA" || -n "$RELEASE_TAG_INPUT" || "$REPLACE_EXISTING_RELEASE" == "true" ]]; then
+            if [[ "$CREATE_RELEASE_REQUESTED" == "true" || -n "$BUILDER_SOURCE_SHA" || -n "$CANDIDATE_RUN_ID" || -n "$NOTARIZATION_RUN_ID" || -n "$NOTARIZATION_STAGE" || -n "$PRODUCT_SOURCE_SHA" || -n "$RELEASE_TAG_INPUT" || "$REPLACE_EXISTING_RELEASE" == "true" || "$SIGNING_POLICY" != "auto" ]]; then
               echo "notarization_history_only cannot be combined with build, promotion, or recovery inputs." >&2
               exit 1
             fi
@@ -209,6 +227,10 @@ jobs:
             fi
             if [[ -n "$BUILDER_SOURCE_SHA" || -n "$CANDIDATE_RUN_ID" || -n "$PRODUCT_SOURCE_SHA" || "$REPLACE_EXISTING_RELEASE" == "true" ]]; then
               echo "notarization recovery cannot be combined with product rebuild, candidate promotion, or release replacement." >&2
+              exit 1
+            fi
+            if [[ "$SIGNING_POLICY" == "unsigned" ]]; then
+              echo "notarization recovery cannot change the effective signing policy to unsigned." >&2
               exit 1
             fi
           fi
@@ -508,6 +530,27 @@ jobs:
           echo "update_channel=$update_channel" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve immutable desktop signing policy
+        id: desktop_signing_metadata
+        env:
+          PRODUCT_WORKSPACE: ${{ steps.desktop_workspace.outputs.workspace_dir }}
+        run: |
+          node - "$PRODUCT_WORKSPACE" "$GITHUB_OUTPUT" <<'NODE'
+          const fs = require('node:fs')
+          const path = require('node:path')
+          const [workspace, outputPath] = process.argv.slice(2)
+          const manifest = JSON.parse(
+            fs.readFileSync(path.join(workspace, 'apps/desktop/package.json'), 'utf8')
+          )
+          const policy = manifest.oneworks?.release?.macosSigningPolicy ?? 'auto'
+          if (!['auto', 'signed', 'unsigned'].includes(policy)) {
+            throw new Error(
+              '@oneworks/desktop oneworks.release.macosSigningPolicy must be auto, signed, or unsigned.'
+            )
+          }
+          fs.appendFileSync(outputPath, `policy=${policy}\n`)
+          NODE
+
       - name: Resolve desktop build source metadata
         id: desktop_build_source
         env:
@@ -524,27 +567,100 @@ jobs:
         id: desktop_build_policy
         shell: bash
         env:
-          DESKTOP_SIGN_REQUESTED: ${{ vars.DESKTOP_SIGN || 'false' }}
+          CREATE_RELEASE_REQUESTED: ${{ inputs.create_release || false }}
+          DESKTOP_SIGN_CAPABLE: ${{ vars.DESKTOP_SIGN || 'false' }}
           EVENT_NAME: ${{ github.event_name }}
+          MANIFEST_SIGNING_POLICY: ${{ steps.desktop_signing_metadata.outputs.policy }}
           NOTARIZATION_RECOVERY: ${{ inputs.notarization_run_id != '' }}
+          RELEASE_CHANNEL: ${{ steps.desktop_release.outputs.update_channel }}
+          RELEASE_ENABLED: ${{ steps.desktop_release.outputs.enabled }}
+          REQUESTED_SIGNING_POLICY: ${{ inputs.signing_policy || 'auto' }}
         run: |
           archs="arm64,x64"
+          effective_policy="unsigned"
           make_targets="dmg,zip,pkg"
           sign=false
+          MANIFEST_SIGNING_POLICY="${MANIFEST_SIGNING_POLICY:-auto}"
+          REQUESTED_SIGNING_POLICY="${REQUESTED_SIGNING_POLICY:-auto}"
 
-          if [[ "$NOTARIZATION_RECOVERY" == "true" ]]; then
-            sign=true
-          elif [[ "$EVENT_NAME" == "schedule" ]]; then
+          case "$REQUESTED_SIGNING_POLICY" in
+            auto|signed|unsigned) ;;
+            *)
+              echo "Requested Desktop signing policy must be auto, signed, or unsigned." >&2
+              exit 1
+              ;;
+          esac
+          case "$MANIFEST_SIGNING_POLICY" in
+            auto|signed|unsigned) ;;
+            *)
+              echo "Immutable Desktop signing policy must be auto, signed, or unsigned." >&2
+              exit 1
+              ;;
+          esac
+
+          if [[ "$EVENT_NAME" == "schedule" ]]; then
             archs="arm64"
             make_targets="dmg"
           else
-            case "$DESKTOP_SIGN_REQUESTED" in
-              true|TRUE|1|yes|YES|on|ON) sign=true ;;
-            esac
+            immutable_effective_policy="$MANIFEST_SIGNING_POLICY"
+            if [[ "$immutable_effective_policy" == "auto" ]]; then
+              if [[ "$RELEASE_ENABLED" != "true" ]]; then
+                immutable_effective_policy="unsigned"
+              else
+                case "$RELEASE_CHANNEL" in
+                  alpha|beta) immutable_effective_policy="unsigned" ;;
+                  rc|stable) immutable_effective_policy="signed" ;;
+                  *)
+                    echo "Unsupported Desktop release channel: $RELEASE_CHANNEL." >&2
+                    exit 1
+                    ;;
+                esac
+              fi
+            fi
+
+            if [[ "$RELEASE_CHANNEL" == "stable" && "$RELEASE_ENABLED" == "true" && ( "$immutable_effective_policy" != "signed" || "$REQUESTED_SIGNING_POLICY" == "unsigned" ) ]]; then
+              echo "Stable Desktop releases must be Developer ID signed and Apple-notarized; unsigned is forbidden." >&2
+              exit 1
+            fi
+
+            if [[ "$RELEASE_ENABLED" == "true" ]]; then
+              if [[ "$REQUESTED_SIGNING_POLICY" != "auto" && "$REQUESTED_SIGNING_POLICY" != "$immutable_effective_policy" ]]; then
+                echo "Versioned Desktop release signing policy must match the immutable effective package policy." >&2
+                exit 1
+              fi
+              effective_policy="$immutable_effective_policy"
+            else
+              effective_policy="$REQUESTED_SIGNING_POLICY"
+              if [[ "$effective_policy" == "auto" ]]; then
+                effective_policy="$immutable_effective_policy"
+              fi
+            fi
+
+            if [[ "$RELEASE_CHANNEL" == "stable" && "$RELEASE_ENABLED" == "true" && "$effective_policy" != "signed" ]]; then
+              echo "Stable Desktop releases must be Developer ID signed and Apple-notarized; unsigned is forbidden." >&2
+              exit 1
+            fi
+            if [[ "$NOTARIZATION_RECOVERY" == "true" && "$effective_policy" != "signed" ]]; then
+              echo "Notarization recovery must preserve an effective signed policy." >&2
+              exit 1
+            fi
+
+            if [[ "$effective_policy" == "signed" ]]; then
+              case "$DESKTOP_SIGN_CAPABLE" in
+                true|TRUE|1|yes|YES|on|ON) sign=true ;;
+                *)
+                  echo "Desktop signing is required by the effective policy, but DESKTOP_SIGN capability is disabled." >&2
+                  exit 1
+                  ;;
+              esac
+            fi
           fi
 
           echo "archs=$archs" >> "$GITHUB_OUTPUT"
+          echo "effective_policy=$effective_policy" >> "$GITHUB_OUTPUT"
+          echo "manifest_policy=$MANIFEST_SIGNING_POLICY" >> "$GITHUB_OUTPUT"
           echo "make_targets=$make_targets" >> "$GITHUB_OUTPUT"
+          echo "requested_policy=$REQUESTED_SIGNING_POLICY" >> "$GITHUB_OUTPUT"
           echo "sign=$sign" >> "$GITHUB_OUTPUT"
 
       - name: Validate recoverable product signing tooling
@@ -1018,7 +1134,10 @@ jobs:
           ONEWORKS_DESKTOP_BUILD_GIT_HASH: ${{ steps.desktop_workspace.outputs.source_sha }}
           ONEWORKS_DESKTOP_BUILD_TIME: ${{ steps.desktop_build_source.outputs.time }}
           ONEWORKS_DESKTOP_MAKE_TARGETS: ${{ steps.desktop_build_policy.outputs.make_targets }}
+          ONEWORKS_DESKTOP_IMMUTABLE_SIGNING_POLICY: ${{ steps.desktop_build_policy.outputs.manifest_policy }}
           ONEWORKS_DESKTOP_RELEASE_TAG: ${{ steps.desktop_release.outputs.tag }}
+          ONEWORKS_DESKTOP_REQUESTED_SIGNING_POLICY: ${{ steps.desktop_build_policy.outputs.requested_policy }}
+          ONEWORKS_DESKTOP_SIGNING_POLICY: ${{ steps.desktop_build_policy.outputs.effective_policy }}
           ONEWORKS_DESKTOP_SIGN: ${{ steps.desktop_build_policy.outputs.sign }}
 
       - name: Upload installer artifacts
@@ -1113,13 +1232,43 @@ jobs:
         run: node apps/desktop/scripts/release-candidate-manifest.cjs verify release-artifacts
         env:
           ONEWORKS_DESKTOP_EXPECTED_ARCHS: arm64,x64
+          ONEWORKS_DESKTOP_ENFORCE_IMMUTABLE_SIGNING_POLICY: "true"
           ONEWORKS_DESKTOP_EXPECTED_MAKE_TARGETS: dmg,zip,pkg
+          ONEWORKS_DESKTOP_EXPECTED_SIGNING_POLICY: ${{ inputs.signing_policy || 'auto' }}
           ONEWORKS_DESKTOP_RELEASE_TAG: ${{ steps.release.outputs.tag }}
+
+      - name: Verify immutable signing policy source
+        env:
+          CANDIDATE_IMMUTABLE_SIGNING_POLICY: ${{ steps.candidate.outputs.immutable_signing_policy }}
+          SOURCE_SHA: ${{ steps.candidate.outputs.source_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "$SOURCE_SHA"
+          actual_policy="$({
+            git show "$SOURCE_SHA:apps/desktop/package.json" |
+              node -e '
+                let source = ""
+                process.stdin.setEncoding("utf8")
+                process.stdin.on("data", chunk => { source += chunk })
+                process.stdin.on("end", () => {
+                  const manifest = JSON.parse(source)
+                  const policy = manifest.oneworks?.release?.macosSigningPolicy ?? "auto"
+                  if (!["auto", "signed", "unsigned"].includes(policy)) process.exit(1)
+                  process.stdout.write(policy)
+                })
+              '
+          })"
+          if [[ "$actual_policy" != "$CANDIDATE_IMMUTABLE_SIGNING_POLICY" ]]; then
+            echo "Desktop candidate immutable signing policy does not match its product source." >&2
+            exit 1
+          fi
 
       - name: Enforce complete unsigned bundle sealing
         env:
           AD_HOC_SEALED: ${{ steps.candidate.outputs.ad_hoc_sealed }}
           BUILDER_SHA: ${{ steps.candidate.outputs.builder_sha }}
+          EFFECTIVE_SIGNING_POLICY: ${{ steps.candidate.outputs.effective_signing_policy }}
           EXPECTED_BUILDER_SHA: ${{ inputs.builder_source_sha }}
           EXPECTED_PRODUCT_SHA: ${{ inputs.product_source_sha }}
           REPLACE_EXISTING_RELEASE: ${{ inputs.replace_existing_release }}
@@ -1131,6 +1280,10 @@ jobs:
         run: |
           if [[ "$SIGNED" != "true" && "$AD_HOC_SEALED" != "true" ]]; then
             echo "Unsigned desktop release candidates must contain a complete ad-hoc bundle seal." >&2
+            exit 1
+          fi
+          if [[ "$SIGNED" == "true" && "$EFFECTIVE_SIGNING_POLICY" != "signed" ]] || [[ "$SIGNED" != "true" && "$EFFECTIVE_SIGNING_POLICY" != "unsigned" ]]; then
+            echo "Desktop release candidate signing bytes do not match the effective signing policy." >&2
             exit 1
           fi
           if [[ "$REPLACE_EXISTING_RELEASE" == "true" ]]; then
@@ -1237,6 +1390,7 @@ jobs:
         env:
           AD_HOC_SEALED: ${{ steps.candidate.outputs.ad_hoc_sealed }}
           BUILDER_SHA: ${{ steps.candidate.outputs.builder_sha }}
+          EFFECTIVE_SIGNING_POLICY: ${{ steps.candidate.outputs.effective_signing_policy }}
           REPLACE_EXISTING_RELEASE: ${{ inputs.replace_existing_release }}
           SIGNED: ${{ steps.candidate.outputs.signed }}
           SOURCE_SHA: ${{ steps.candidate.outputs.source_sha }}
@@ -1246,7 +1400,7 @@ jobs:
           if [[ "$SIGNED" == "true" ]]; then
             signing_note="- Developer ID signed and Apple-notarized macOS installers"
           elif [[ "$AD_HOC_SEALED" == "true" ]]; then
-            signing_note="- Unsigned macOS installers with a complete ad-hoc bundle seal; Gatekeeper still requires manual approval"
+            signing_note="- Unsigned macOS installers with a complete ad-hoc bundle seal; no Apple notarization was requested, and Gatekeeper still requires manual approval"
           else
             signing_note="- Unsigned macOS installers; Gatekeeper may require manual approval"
           fi
@@ -1257,6 +1411,7 @@ jobs:
             echo "One Works desktop release ${TAG}"
             echo
             echo "$signing_note"
+            echo "- Effective macOS signing policy: $EFFECTIVE_SIGNING_POLICY"
             echo "- Intel (x64) and Apple Silicon (arm64): .dmg, .pkg, .zip"
             echo "- Product source: $SOURCE_SHA"
             echo "- Release builder: $BUILDER_SHA"

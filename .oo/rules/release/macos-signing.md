@@ -15,13 +15,18 @@ Apple 公证可能把新 team / 新 app 放入持续一两天的深入分析。w
 - `APPLE_ID`：Apple Developer 账号邮箱。
 - `APPLE_ID_PASSWORD`：Apple app-specific password，不是 Apple ID 登录密码。
 - `APPLE_TEAM_ID`：Apple Developer Team ID。
-- `DESKTOP_SIGN=true`：仓库 variable，显式打开桌面签名。
+- `DESKTOP_SIGN=true`：仓库 variable，只表示签名凭据 / 能力可用；具体版本是否签名由不可变发布策略决定。
 
 桌面 workflow 对纯文档 PR 只运行不构建产物的轻量兼容门禁；非文档或 mixed PR 构建 unsigned
 arm64+x64 app bundle 并执行 native authority smoke，但不生成安装包，也不读取签名 secret。每日 nightly 使用 unsigned
 arm64 DMG 跑 package / smoke / install verify。真正的双架构安装包
-只由 `pkg/oneworks-desktop/v*` tag 或手动 dispatch 触发。手动 artifact 按仓库 variable
-决定是否签名；tag 和手动 release 同样遵循 `DESKTOP_SIGN`。未启用时仍不具备 Apple
+只由 `pkg/oneworks-desktop/v*` tag 或手动 dispatch 触发。`apps/desktop/package.json` 的私有
+`oneworks.release.macosSigningPolicy` 把具体版本锁为 `auto` / `signed` / `unsigned`：`auto`
+下 alpha / beta 默认 unsigned，rc 默认 signed，stable 必须 signed；具体 rc 可以显式锁为
+unsigned，stable 无论 manifest 或 dispatch 输入都禁止 unsigned。`workflow_dispatch` 保留
+`auto` / `signed` / `unsigned` 选择用于候选与恢复，但官方 tag 发布必须与 manifest 一致。
+`DESKTOP_SIGN` 只作为 signed 所需能力和凭据总开关，不能把要求 signed 的版本降级成 unsigned。
+effective policy 为 unsigned 时仍不具备 Apple
 信任，但必须对 prepackaged `.app` 做完整 ad-hoc resource sealing，并让六个 arm64 / x64
 DMG、PKG、ZIP 逐一通过 `codesign --verify --deep --strict`；不允许发布只有 linker signature
 的半签名 bundle。sealing 前还必须把 workspace 绝对 symlink 重写到 app 内已打包的相对目标，并
@@ -33,9 +38,9 @@ DMG、PKG、ZIP 逐一通过 `codesign --verify --deep --strict`；不允许发�
 gh variable set DESKTOP_SIGN --repo oneworks-ai/app --body true
 ```
 
-当前 `desktop-package.yml` 的 tag / 手动构建会同时生成 `.dmg`、`.zip` 和 `.pkg`；因此开启 `DESKTOP_SIGN=true` 时，Application 和 Installer 两套证书都必须存在。缺任何一个，workflow 会在 `Validate desktop signing credentials` 失败，不允许继续生成半加签产物。纯文档 PR 只运行轻量门禁；其他普通 PR 只构建 unsigned app bundle 并验证 authority，不进入安装包 job，也不会读取签名 secrets。
+当前 `desktop-package.yml` 的 tag / 手动构建会同时生成 `.dmg`、`.zip` 和 `.pkg`；因此 effective policy 为 signed 且 `DESKTOP_SIGN=true` 时，Application 和 Installer 两套证书都必须存在。缺任何一个，workflow 会在 `Validate desktop signing credentials` 失败，不允许继续生成半加签产物。纯文档 PR 只运行轻量门禁；其他普通 PR 只构建 unsigned app bundle 并验证 authority，不进入安装包 job，也不会读取签名 secrets。
 
-手动 `create_release=true` 或 `pkg/oneworks-desktop/v*` tag 构建没有启用签名时会继续生成并发布 unsigned 安装包。候选 manifest 必须记录 `adHocSealed=true`，并区分不可变 product source SHA 与用于重建的 builder SHA。macOS Gatekeeper 仍可能要求用户手动批准；下载页和 Release notes 不得把这类产物描述为 Developer ID 已签名或已公证。
+手动 `create_release=true` 或 `pkg/oneworks-desktop/v*` tag 的 effective policy 为 unsigned 时会继续生成并发布 unsigned 安装包。候选 manifest 必须记录 `effectiveSigningPolicy=unsigned`、`adHocSealed=true`，并区分不可变 product source SHA 与用于重建的 builder SHA；同 tag 候选提升和恢复不得改变 effective policy。macOS Gatekeeper 仍可能要求用户手动批准；下载页和 Release notes 必须明确未提交 Apple notarization，且不得把这类产物描述为 Developer ID 已签名或已公证。
 
 已发布 tag 的同版本紧急修复只允许在用户明确授权覆盖资产后使用 `product_source_sha`：输入必须是完整 SHA，且必须精确等于 release tag peeled commit。workflow 从该提交构建产品代码、用当前受审 workflow 工具完成 sealing，并在候选里同时记录 product / builder SHA；tag 不得移动。覆盖前必须在本地归档旧 Release 全部资产与摘要，候选六个安装包和 quarantine 边界全部通过后才能提升。
 

@@ -222,14 +222,107 @@ describe('desktop package workflow', () => {
     const nightlyPolicy = runWithOutput(
       extractRunScript('Resolve desktop build policy'),
       {
-        DESKTOP_SIGN_REQUESTED: 'true',
-        EVENT_NAME: 'schedule'
+        DESKTOP_SIGN_CAPABLE: 'true',
+        EVENT_NAME: 'schedule',
+        MANIFEST_SIGNING_POLICY: 'auto',
+        REQUESTED_SIGNING_POLICY: 'auto'
       }
     )
     expect(nightlyPolicy.status).toBe(0)
     expect(nightlyPolicy.output).toContain('archs=arm64')
     expect(nightlyPolicy.output).toContain('make_targets=dmg')
     expect(nightlyPolicy.output).toContain('sign=false')
+  })
+
+  it.each([
+    ['alpha', 'auto', 'auto', 'unsigned', 'false'],
+    ['beta', 'auto', 'auto', 'unsigned', 'false'],
+    ['rc', 'auto', 'auto', 'signed', 'true'],
+    ['rc', 'unsigned', 'unsigned', 'unsigned', 'false']
+  ])(
+    'resolves %s requested=%s manifest=%s to %s',
+    (channel, requestedPolicy, manifestPolicy, effectivePolicy, sign) => {
+      const policy = runWithOutput(
+        extractRunScript('Resolve desktop build policy'),
+        {
+          CREATE_RELEASE_REQUESTED: 'false',
+          DESKTOP_RELEASE_TAG_PREFIX: 'pkg/oneworks-desktop/v',
+          DESKTOP_SIGN_CAPABLE: 'true',
+          EVENT_NAME: 'workflow_dispatch',
+          GITHUB_REF: 'refs/heads/main',
+          MANIFEST_SIGNING_POLICY: manifestPolicy,
+          NOTARIZATION_RECOVERY: 'false',
+          RELEASE_CHANNEL: channel,
+          RELEASE_ENABLED: 'true',
+          REQUESTED_SIGNING_POLICY: requestedPolicy
+        }
+      )
+
+      expect(policy.status, policy.stderr).toBe(0)
+      expect(policy.output).toContain(`effective_policy=${effectivePolicy}`)
+      expect(policy.output).toContain(`sign=${sign}`)
+    }
+  )
+
+  it('fails stable unsigned and preserves immutable official and recovery policies', () => {
+    const script = extractRunScript('Resolve desktop build policy')
+    const baseEnv = {
+      DESKTOP_RELEASE_TAG_PREFIX: 'pkg/oneworks-desktop/v',
+      DESKTOP_SIGN_CAPABLE: 'true',
+      EVENT_NAME: 'workflow_dispatch',
+      GITHUB_REF: 'refs/heads/main',
+      NOTARIZATION_RECOVERY: 'false',
+      RELEASE_ENABLED: 'true'
+    }
+    const stableUnsigned = runWithOutput(script, {
+      ...baseEnv,
+      CREATE_RELEASE_REQUESTED: 'false',
+      MANIFEST_SIGNING_POLICY: 'auto',
+      RELEASE_CHANNEL: 'stable',
+      REQUESTED_SIGNING_POLICY: 'unsigned'
+    })
+    const driftingCandidateRc = runWithOutput(script, {
+      ...baseEnv,
+      CREATE_RELEASE_REQUESTED: 'false',
+      MANIFEST_SIGNING_POLICY: 'auto',
+      RELEASE_CHANNEL: 'rc',
+      REQUESTED_SIGNING_POLICY: 'unsigned'
+    })
+    const driftingSignedCandidateRc = runWithOutput(script, {
+      ...baseEnv,
+      CREATE_RELEASE_REQUESTED: 'false',
+      MANIFEST_SIGNING_POLICY: 'unsigned',
+      RELEASE_CHANNEL: 'rc',
+      REQUESTED_SIGNING_POLICY: 'signed'
+    })
+    const lockedOfficialRc = runWithOutput(script, {
+      ...baseEnv,
+      CREATE_RELEASE_REQUESTED: 'true',
+      MANIFEST_SIGNING_POLICY: 'unsigned',
+      RELEASE_CHANNEL: 'rc',
+      REQUESTED_SIGNING_POLICY: 'unsigned'
+    })
+    const driftingRecovery = runWithOutput(script, {
+      ...baseEnv,
+      CREATE_RELEASE_REQUESTED: 'false',
+      MANIFEST_SIGNING_POLICY: 'unsigned',
+      NOTARIZATION_RECOVERY: 'true',
+      RELEASE_CHANNEL: 'rc',
+      REQUESTED_SIGNING_POLICY: 'signed'
+    })
+
+    expect(stableUnsigned.status).toBe(1)
+    expect(stableUnsigned.stderr).toContain('Stable Desktop releases must be Developer ID signed')
+    expect(driftingCandidateRc.status).toBe(1)
+    expect(driftingCandidateRc.stderr).toContain('must match the immutable effective package policy')
+    expect(driftingSignedCandidateRc.status).toBe(1)
+    expect(driftingSignedCandidateRc.stderr).toContain(
+      'must match the immutable effective package policy'
+    )
+    expect(lockedOfficialRc.status, lockedOfficialRc.stderr).toBe(0)
+    expect(lockedOfficialRc.output).toContain('effective_policy=unsigned')
+    expect(driftingRecovery.status).toBe(1)
+    expect(driftingRecovery.stderr).toContain('must match the immutable effective package policy')
   })
 
   it('builds a release-identity candidate without publishing it', () => {
@@ -303,6 +396,15 @@ describe('desktop package workflow', () => {
     expect(workflow).toContain(
       'node apps/desktop/scripts/release-candidate-manifest.cjs verify release-artifacts'
     )
+    expect(workflow).toContain('name: Verify immutable signing policy source')
+    expect(workflow).toContain(
+      'Desktop candidate immutable signing policy does not match its product source.'
+    )
+    const immutablePolicySyntax = spawnSync('bash', ['--noprofile', '--norc', '-n'], {
+      encoding: 'utf8',
+      input: extractRunScript('Verify immutable signing policy source')
+    })
+    expect(immutablePolicySyntax.status, immutablePolicySyntax.stderr).toBe(0)
     expect(workflow).toContain('actions: read\n      contents: write')
     expect(workflow).toContain(
       `SOURCE_SHA: \${{ steps.candidate.outputs.source_sha }}`
@@ -429,8 +531,11 @@ describe('desktop package workflow', () => {
     const policy = runWithOutput(
       extractRunScript('Resolve desktop build policy'),
       {
-        DESKTOP_SIGN_REQUESTED: 'false',
-        EVENT_NAME: 'workflow_dispatch'
+        DESKTOP_SIGN_CAPABLE: 'true',
+        EVENT_NAME: 'workflow_dispatch',
+        MANIFEST_SIGNING_POLICY: 'auto',
+        RELEASE_ENABLED: 'false',
+        REQUESTED_SIGNING_POLICY: 'auto'
       }
     )
     const validation = runBash(
@@ -482,6 +587,10 @@ describe('desktop package workflow', () => {
     expect(workflow).not.toContain('/Applications/One Works.app')
     expect(workflow).toContain(
       'Unsigned desktop release candidates must contain a complete ad-hoc bundle seal.'
+    )
+    expect(workflow).toContain(
+      'ONEWORKS_DESKTOP_SIGNING_POLICY: $' +
+        '{{ steps.desktop_build_policy.outputs.effective_policy }}'
     )
     expect(workflow).toContain('Retain existing release backup')
     expect(workflow).toContain('retention-days: 90')
@@ -672,6 +781,15 @@ describe('desktop package workflow', () => {
       NOTARIZATION_STAGE: 'unknown',
       REPLACE_EXISTING_RELEASE: 'false'
     })
+    const driftingRecoveryPolicy = runBash(script, {
+      CANDIDATE_RUN_ID: '',
+      CREATE_RELEASE_REQUESTED: 'false',
+      NOTARIZATION_HISTORY_ONLY: 'false',
+      NOTARIZATION_RUN_ID: '31527515015',
+      NOTARIZATION_STAGE: 'app',
+      REPLACE_EXISTING_RELEASE: 'false',
+      SIGNING_POLICY: 'unsigned'
+    })
     const mixedHistory = runBash(script, {
       BUILDER_SOURCE_SHA: '',
       CANDIDATE_RUN_ID: '',
@@ -719,6 +837,8 @@ describe('desktop package workflow', () => {
     expect(recovery.status, recovery.stderr).toBe(0)
     expect(invalidRecovery.status).toBe(1)
     expect(invalidRecovery.stderr).toContain('notarization_stage must be app or installer')
+    expect(driftingRecoveryPolicy.status).toBe(1)
+    expect(driftingRecoveryPolicy.stderr).toContain('cannot change the effective signing policy')
     expect(mixedHistory.status).toBe(1)
     expect(mixedHistory.stderr).toContain('notarization_history_only cannot be combined')
     expect(mixedRecovery.status).toBe(1)
@@ -862,7 +982,7 @@ describe('desktop package workflow', () => {
     [
       'false',
       'true',
-      '- Unsigned macOS installers with a complete ad-hoc bundle seal; Gatekeeper still requires manual approval'
+      '- Unsigned macOS installers with a complete ad-hoc bundle seal; no Apple notarization was requested, and Gatekeeper still requires manual approval'
     ],
     [
       'false',
@@ -880,6 +1000,7 @@ describe('desktop package workflow', () => {
       {
         AD_HOC_SEALED: adHocSealed,
         BUILDER_SHA: 'b'.repeat(40),
+        EFFECTIVE_SIGNING_POLICY: signed === 'true' ? 'signed' : 'unsigned',
         REPLACE_EXISTING_RELEASE: 'false',
         SIGNED: signed,
         SOURCE_SHA: 'a'.repeat(40),
@@ -889,6 +1010,9 @@ describe('desktop package workflow', () => {
 
     expect(result.status).toBe(0)
     expect(result.output).toContain(expectedNote)
+    expect(result.output).toContain(
+      `- Effective macOS signing policy: ${signed === 'true' ? 'signed' : 'unsigned'}`
+    )
     expect(result.output).toContain(
       '- Intel (x64) and Apple Silicon (arm64): .dmg, .pkg, .zip'
     )
@@ -902,6 +1026,7 @@ describe('desktop package workflow', () => {
       {
         AD_HOC_SEALED: 'true',
         BUILDER_SHA: 'b'.repeat(40),
+        EFFECTIVE_SIGNING_POLICY: 'unsigned',
         REPLACE_EXISTING_RELEASE: 'true',
         SIGNED: 'false',
         SOURCE_SHA: 'a'.repeat(40),
