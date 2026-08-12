@@ -42,6 +42,12 @@ npx oneworks --adapter gemini --print 你好
 npx oneworks --adapter copilot --print 你好
 ```
 
+### Cursor
+
+```bash
+npx oneworks --adapter cursor --print 你好
+```
+
 ## Native skills smoke
 
 ### Claude Code
@@ -109,6 +115,20 @@ npx oneworks --adapter copilot --print --no-inject-default-system-prompt --inclu
 
 - 输出命中 probe skill 的固定文本
 - 说明 selected skill 已经 stage 到 `<project-home>/.mock/copilot/sessions/<session>/skills`，并通过 `COPILOT_SKILLS_DIRS` 被 Copilot CLI 原生发现
+
+### Cursor
+
+1. 在 `.oo/skills/<probe>/SKILL.md` 放一个只会命中特定触发词的 probe skill
+2. 运行：
+
+```bash
+npx oneworks --adapter cursor --print --no-inject-default-system-prompt --include-skill <probe> 'ow cursor native skill probe'
+```
+
+预期：
+
+- 输出命中 probe skill 的固定文本
+- selected skill 已经投影到 session 隔离的 `.cursor/skills/<probe>`，且真实 `~/.cursor` 没有被改写
 
 ## Routed model service smoke
 

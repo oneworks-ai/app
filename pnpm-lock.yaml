@@ -60,6 +60,9 @@ importers:
       '@oneworks/adapter-copilot':
         specifier: workspace:*
         version: link:packages/adapters/copilot
+      '@oneworks/adapter-cursor':
+        specifier: workspace:*
+        version: link:packages/adapters/cursor
       '@oneworks/adapter-gemini':
         specifier: workspace:*
         version: link:packages/adapters/gemini
@@ -298,6 +301,9 @@ importers:
       '@oneworks/adapter-copilot':
         specifier: workspace:*
         version: link:../../packages/adapters/copilot
+      '@oneworks/adapter-cursor':
+        specifier: workspace:*
+        version: link:../../packages/adapters/cursor
       '@oneworks/adapter-gemini':
         specifier: workspace:*
         version: link:../../packages/adapters/gemini
@@ -421,6 +427,9 @@ importers:
       '@oneworks/adapter-copilot':
         specifier: workspace:*
         version: link:../../packages/adapters/copilot
+      '@oneworks/adapter-cursor':
+        specifier: workspace:*
+        version: link:../../packages/adapters/cursor
       '@oneworks/adapter-gemini':
         specifier: workspace:*
         version: link:../../packages/adapters/gemini
@@ -859,6 +868,24 @@ importers:
         version: 3.25.76
 
   packages/adapters/copilot:
+    dependencies:
+      '@oneworks/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@oneworks/hooks':
+        specifier: workspace:*
+        version: link:../../hooks
+      '@oneworks/types':
+        specifier: workspace:*
+        version: link:../../types
+      '@oneworks/utils':
+        specifier: workspace:*
+        version: link:../../utils
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
+
+  packages/adapters/cursor:
     dependencies:
       '@oneworks/core':
         specifier: workspace:*

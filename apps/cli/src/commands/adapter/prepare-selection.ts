@@ -8,6 +8,7 @@ const KNOWN_PREPARE_ADAPTERS = [
   'claude-code',
   'gemini',
   'copilot',
+  'cursor',
   'opencode',
   'kimi',
   'pi'

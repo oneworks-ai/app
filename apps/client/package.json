@@ -53,6 +53,7 @@
     "@oneworks/adapter-claude-code": "workspace:*",
     "@oneworks/adapter-codex": "workspace:*",
     "@oneworks/adapter-copilot": "workspace:*",
+    "@oneworks/adapter-cursor": "workspace:*",
     "@oneworks/adapter-gemini": "workspace:*",
     "@oneworks/adapter-kimi": "workspace:*",
     "@oneworks/adapter-opencode": "workspace:*",

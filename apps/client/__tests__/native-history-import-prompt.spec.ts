@@ -30,6 +30,14 @@ describe('native history import prompt helpers', () => {
     ])).toBe('Codex / Claude Code')
   })
 
+  it('includes Cursor in mixed adapter summaries', () => {
+    expect(getNativeHistoryImportAdapterSummary([
+      createImportSession('session-a', 2000, 'cursor'),
+      createImportSession('session-b', 3000, 'codex'),
+      createImportSession('session-c', 4000, 'claude-code')
+    ])).toBe('Codex / Claude Code / Cursor')
+  })
+
   it('opens the newest imported session first', () => {
     expect(selectNativeHistoryImportPromptSession([
       createImportSession('older', 1000),

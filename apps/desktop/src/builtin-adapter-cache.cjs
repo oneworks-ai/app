@@ -8,6 +8,7 @@ const BUILTIN_ADAPTER_PACKAGES = [
   '@oneworks/adapter-claude-code',
   '@oneworks/adapter-codex',
   '@oneworks/adapter-copilot',
+  '@oneworks/adapter-cursor',
   '@oneworks/adapter-gemini',
   '@oneworks/adapter-kimi',
   '@oneworks/adapter-opencode',

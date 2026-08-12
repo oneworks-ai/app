@@ -59,6 +59,7 @@ export const BUILTIN_NATIVE_ADAPTERS = [
   'claude-code',
   'codex',
   'copilot',
+  'cursor',
   'gemini',
   'kimi',
   'opencode',

@@ -337,14 +337,15 @@
     "importing": "Importing History",
     "quickImport": "Import {{platform}} history",
     "emptyTitle": "No importable history found",
-    "emptyDescription": "No Codex or Claude Code history sessions were found for the current project.",
+    "emptyDescription": "No Codex, Claude Code, or Cursor history sessions were found for the current project.",
     "failed": "Failed to import native history",
-    "failedDescription": "Try again later, or check the local Codex / Claude Code history directories.",
+    "failedDescription": "Try again later, or check the local Codex / Claude Code / Cursor history directories.",
     "open": "Open imported session",
     "dismiss": "Later",
     "platforms": {
       "codex": "Codex",
-      "claudeCode": "Claude Code"
+      "claudeCode": "Claude Code",
+      "cursor": "Cursor"
     },
     "manager": {
       "allPlatforms": "All",
@@ -428,7 +429,8 @@
       "togglePlatform": "Select {{platform}}",
       "platformDescriptions": {
         "codex": "Scans ~/.codex/sessions and archived_sessions.",
-        "claude-code": "Scans Claude Code sessions under ~/.claude/projects."
+        "claude-code": "Scans Claude Code sessions under ~/.claude/projects.",
+        "cursor": "Scans JSONL transcripts under ~/.cursor/projects."
       }
     }
   },

@@ -13,7 +13,7 @@
 
 ## 前端选择器
 
-聊天输入框的适配器选择器默认展示当前应用内置支持的原生适配器：Claude Code（`claude-code`）、Codex（`codex`）、Copilot（`copilot`）、Gemini（`gemini`）、Kimi（`kimi`）、OpenCode（`opencode`）和 Pi（`pi`）。
+聊天输入框的适配器选择器默认展示当前应用内置支持的原生适配器：Claude Code（`claude-code`）、Codex（`codex`）、Copilot（`copilot`）、Cursor（`cursor`）、Gemini（`gemini`）、Kimi（`kimi`）、OpenCode（`opencode`）和 Pi（`pi`）。
 
 以下 adapter 不需要先写入 `.oo.config.json` 才能出现在选择器里。用户选择某个 adapter 发起会话后，运行时会沿用 adapter 自己的 CLI 准备逻辑，把托管 CLI 安装到全局托管 bootstrap cache；首次启动某个 adapter 时可能会稍慢。
 
@@ -163,3 +163,31 @@ adapters:
 - `mode` 会直接映射 `--mode`，并优先于 `autopilot` / plan permission；需要 autopilot 时推荐配置 `mode: autopilot` 或 `autopilot: true` 二选一
 
 当前不实现 Copilot 多账号 API；需要登录、切换或排查账号时，使用官方 CLI 的 `/login`、`/logout`、`/user` 流程。
+
+## Cursor 示例
+
+`cursor` 使用 Cursor Agent CLI。One Works 默认从官方发行包安装托管 CLI，也可以复用系统 `agent` / `cursor-agent`，或指定现有 binary：
+
+```yaml
+adapters:
+  cursor:
+    cli:
+      source: managed
+      version: latest
+    mode: agent
+    approveMcps: true
+```
+
+行为说明：
+
+- stream 会话使用 Cursor 的 JSON 输出，并保存原生 chat id；后续 One Works 消息通过 `--resume` 继续同一个 Cursor 会话
+- system prompt、所选 skills、MCP servers 和 hooks 都写入 session 隔离的 Cursor config/data 目录，不覆盖真实 `~/.cursor`
+- 本机 Cursor CLI 登录配置会复制到 session 隔离目录；macOS keychain 通过路径桥接给原生 CLI
+- `force`、`autoReview`、`approveMcps`、`sandbox`、`endpoint`、`additionalDirs`、`pluginDirs` 和 `headers` 会映射到 Cursor Agent CLI 参数
+- 当前不提供 Cursor 多账号 API；登录状态仍由 Cursor Agent CLI 管理
+
+## 迁移原生历史会话
+
+配置页“外部会话”可以预览和导入当前项目或已发现项目的 Codex、Claude Code 与 Cursor 历史。Cursor 会话从 `~/.cursor/projects/*/agent-transcripts/**/*.jsonl` 读取；普通会话和 `subagents/` 下的子任务会分别标记。
+
+导入只读取源 JSONL，不修改 Cursor 数据。导入结果会成为 One Works 中可查看的已完成外部会话，并保留用户消息、助手文本和工具调用；重复导入会按原生 session id 与源文件去重。由于 Cursor 的项目目录名是工作区路径的压缩形式，Cursor 候选只在能匹配当前项目、显式选择的项目路径或 Cursor 工作区元数据时导入。

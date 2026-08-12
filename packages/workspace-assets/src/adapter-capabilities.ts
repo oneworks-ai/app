@@ -4,6 +4,7 @@ const NATIVE_SKILL_ADAPTERS = new Set<WorkspaceAssetAdapter>([
   'claude-code',
   'codex',
   'copilot',
+  'cursor',
   'gemini',
   'kimi',
   'opencode',
@@ -20,6 +21,8 @@ export const resolveNativeSkillDiagnosticReason = (adapter: WorkspaceAssetAdapte
     ? 'Mirrored into the Codex mock home as a native skill.'
     : adapter === 'copilot'
     ? 'Staged for Copilot CLI native skill discovery.'
+    : adapter === 'cursor'
+    ? 'Staged in the isolated Cursor data directory as a native skill.'
     : adapter === 'gemini'
     ? 'Symlinked into GEMINI_CLI_HOME as a native Gemini skill.'
     : adapter === 'kimi'

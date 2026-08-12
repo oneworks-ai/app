@@ -89,6 +89,8 @@ export async function buildAdapterAssetPlan(params: {
         ? 'Mapped into the Gemini native hooks bridge.'
         : params.adapter === 'copilot'
         ? 'Mapped into the Copilot CLI native hooks bridge.'
+        : params.adapter === 'cursor'
+        ? 'Mapped into the Cursor native hooks bridge.'
         : params.adapter === 'kimi'
         ? 'Mapped into the Kimi native hooks bridge.'
         : params.adapter === 'pi'
@@ -116,7 +118,8 @@ export async function buildAdapterAssetPlan(params: {
       })
     })
   } else if (
-    params.adapter === 'codex' || params.adapter === 'copilot' || params.adapter === 'kimi' || params.adapter === 'pi'
+    params.adapter === 'codex' || params.adapter === 'copilot' || params.adapter === 'cursor' ||
+    params.adapter === 'kimi' || params.adapter === 'pi'
   ) {
     params.bundle.opencodeOverlayAssets.forEach((asset) => {
       pushDiagnostic(asset, {
@@ -126,6 +129,8 @@ export async function buildAdapterAssetPlan(params: {
           ? 'No stable native Codex mapping exists for this asset kind in V1.'
           : params.adapter === 'copilot'
           ? 'No stable native Copilot mapping exists for this asset kind in V1.'
+          : params.adapter === 'cursor'
+          ? 'No stable native Cursor mapping exists for this asset kind in V1.'
           : params.adapter === 'pi'
           ? 'No stable native Pi mapping exists for this OpenCode asset kind in V1.'
           : 'No stable native Kimi mapping exists for this asset kind in V1.'
@@ -157,7 +162,7 @@ export async function buildAdapterAssetPlan(params: {
         targetPath: asset.payload.targetSubpath
       }))
     ]
-    : params.adapter === 'codex' || params.adapter === 'copilot'
+    : params.adapter === 'codex' || params.adapter === 'copilot' || params.adapter === 'cursor'
     ? selectedSkillOverlays
     : params.adapter === 'pi'
     ? selectedSkillOverlays

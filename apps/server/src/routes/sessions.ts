@@ -90,7 +90,7 @@ export function sessionsRouter(): Router {
     'dontAsk',
     'bypassPermissions'
   ])
-  const nativeHistoryAdapters = new Set<NativeHistoryAdapter>(['codex', 'claude-code'])
+  const nativeHistoryAdapters = new Set<NativeHistoryAdapter>(['codex', 'claude-code', 'cursor'])
   const nativeHistoryCandidateScopes = new Set<NativeHistoryCandidateScope>(['all', 'unarchived', 'archived'])
   const nativeHistoryProjectScopes = new Set<NativeHistoryProjectScope>(['current-project', 'all-projects'])
   const nativeHistoryThreadScopes = new Set<NativeHistoryThreadScope>(['all', 'user', 'subagent'])

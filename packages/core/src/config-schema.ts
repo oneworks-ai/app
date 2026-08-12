@@ -406,7 +406,7 @@ export const serverConfigSchema = z.object({
     .describe('Extra public paths allowed on non-local hosts; channel webhook paths are always allowed')
 })
 
-const nativeHistoryImportAdapterSchema = z.enum(['codex', 'claude-code'])
+const nativeHistoryImportAdapterSchema = z.enum(['codex', 'claude-code', 'cursor'])
 
 const nativeHistoryImportAdapterConfigSchema = z.object({
   autoImport: z.boolean().optional().describe('Override automatic native history import for this adapter'),

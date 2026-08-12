@@ -6,11 +6,9 @@ export const selectNativeHistoryImportPromptSession = (sessions: NativeHistoryIm
 
 export const getNativeHistoryImportAdapterSummary = (sessions: NativeHistoryImportSession[]) => {
   const adapters = new Set(sessions.map(session => session.adapter))
-  if (adapters.has('codex') && adapters.has('claude-code')) {
-    return 'Codex / Claude Code'
-  }
-  if (adapters.has('claude-code')) {
-    return 'Claude Code'
-  }
-  return 'Codex'
+  return [
+    adapters.has('codex') ? 'Codex' : undefined,
+    adapters.has('claude-code') ? 'Claude Code' : undefined,
+    adapters.has('cursor') ? 'Cursor' : undefined
+  ].filter((value): value is string => value != null).join(' / ')
 }

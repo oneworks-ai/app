@@ -20,7 +20,7 @@
 
 配置文件被 CLI、手动编辑或 extends 链路中的文件改动后，后端会通过 websocket 广播 `config_updated`。前端订阅层只负责刷新 `/api/config` 及其派生缓存，不直接覆盖本地草稿；真正的冲突处理留在配置编辑器内部完成。
 
-外部软件会话历史管理属于配置页的独立 app 级入口：`ExternalSessionsPanel.tsx` 负责当前项目维度的 Codex / Claude Code 历史导入、平台选择和已导入外部会话列表；不要把这类管理入口塞进 NavRail More 菜单或一次性弹窗。
+外部软件会话历史管理属于配置页的独立 app 级入口：`ExternalSessionsPanel.tsx` 负责当前项目维度的 Codex / Claude Code / Cursor 历史导入、平台选择和已导入外部会话列表；不要把这类管理入口塞进 NavRail More 菜单或一次性弹窗。
 
 Worktree Environment 的 Project / User source switch 属于 route header；列表正文从搜索入口开始，不再重复标题或来源切换。原生环境导入入口位于搜索框尾部、创建按钮左侧，并与创建保持相同的 icon-only 样式；点击后由 `AdapterImportDialog.tsx` 先选择 adapter capability，再显式确认导入。source 和请求状态由 `ConfigView.tsx` 持有。
 

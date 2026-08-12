@@ -25,12 +25,15 @@ export const defaultNativeHistoryImportMaxFileSizeBytes = 50 * 1024 * 1024
 
 export const nativeHistoryAdapterIcons: Record<NativeHistoryAdapter, string> = {
   codex: 'terminal',
-  'claude-code': 'auto_awesome'
+  'claude-code': 'auto_awesome',
+  cursor: 'near_me'
 }
 
 export const getAdapterLabelKey = (adapter: NativeHistoryAdapter) => (
   adapter === 'codex'
     ? 'nativeHistoryImport.platforms.codex'
+    : adapter === 'cursor'
+    ? 'nativeHistoryImport.platforms.cursor'
     : 'nativeHistoryImport.platforms.claudeCode'
 )
 

@@ -71,6 +71,7 @@ describe('config schema bundle', () => {
         'packages/adapters/claude-code/package.json',
         'packages/adapters/codex/package.json',
         'packages/adapters/copilot/package.json',
+        'packages/adapters/cursor/package.json',
         'packages/adapters/gemini/package.json',
         'packages/adapters/kimi/package.json',
         'packages/adapters/opencode/package.json'
