@@ -1,7 +1,7 @@
 {
   "name": "@oneworks/route-layout",
   "type": "module",
-  "version": "1.0.0-rc.2",
+  "version": "1.0.0-rc.3",
   "description": "Shared route container layout primitives for OneWorks React surfaces",
   "license": "MIT",
   "repository": {

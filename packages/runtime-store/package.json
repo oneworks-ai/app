@@ -1,6 +1,6 @@
 {
   "name": "@oneworks/runtime-store",
-  "version": "1.0.0-rc.2",
+  "version": "1.0.0-rc.3",
   "description": "Local file runtime store for One Works agent sessions",
   "license": "MIT",
   "repository": {
