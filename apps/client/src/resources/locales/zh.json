@@ -418,6 +418,7 @@
       "importOne": "导入",
       "alreadyImported": "已导入",
       "emptyCandidates": "没有找到属于当前项目的 {{platform}} 历史会话",
+      "emptyCandidatesAllProjects": "没有在已发现项目中找到 {{platform}} 历史会话",
       "largeFileSize": "大文件 {{size}}",
       "autoSkippedSize": "自动跳过 {{size}}",
       "autoSkippedSizeTooltip": "超过自动导入尺寸限制，自动导入会跳过该文件；手动导入仍可执行。文件大小：{{size}}",

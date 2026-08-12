@@ -417,6 +417,7 @@
       "importOne": "Import",
       "alreadyImported": "Imported",
       "emptyCandidates": "No {{platform}} history sessions were found for this project",
+      "emptyCandidatesAllProjects": "No {{platform}} history sessions were found in discovered projects",
       "largeFileSize": "Large {{size}}",
       "autoSkippedSize": "Auto skips {{size}}",
       "autoSkippedSizeTooltip": "Exceeds the automatic import size limit, so auto import skips this file. Manual import is still available. Size: {{size}}",
