@@ -23,7 +23,7 @@ adapters:
 ## 运行时行为
 
 - 默认托管 `@xai-official/grok`，也可用 `cli.source: system` 或 `cli.source: path` 指向已有 `grok`。
-- 原生模型名直接传给 `--model`；共享模型选择器里的 `service,model` 会写成 session 级 Grok custom model，支持 `chat_completions`、`responses` 和 `messages` backend。
+- 原生模型名直接传给 `--model`；共享模型选择器里的 `service,model` 或 `collection/profile,model` 会写成 session 级 Grok custom model。`apiProtocol` 的 OpenAI Chat Completions、OpenAI Responses 与 Anthropic Messages 分别映射到 `chat_completions`、`responses` 和 `messages` backend；不兼容的 Gemini 协议不会出现在 Grok 模型列表中，runtime 也会拒绝误配。
 - selected MCP servers 会写入 session `config.toml` 的 `mcp_servers`，selected skills 会投影到 `$GROK_HOME/skills`。
 - system prompt、permission mode、effort 和 tool include/exclude 会映射到 Grok 原生 CLI 参数。
 - hook plugins 会接入 Grok native `PreToolUse`、`PostToolUse` 和 `Stop`；其中 `PreToolUse` 保留阻断能力，对应通用 bridge 事件自动去重。

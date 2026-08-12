@@ -9,7 +9,9 @@ import type { AdapterCtx, AdapterQueryOptions, Config, ModelServiceConfig } from
 import {
   omitAdapterCommonConfig,
   parseServiceModelSelector,
+  resolveModelServiceApiProtocol,
   resolveModelServiceConfig,
+  resolveModelServiceFromMap,
   resolveProjectOoPath,
   syncSymlinkTarget
 } from '@oneworks/utils'
@@ -240,13 +242,22 @@ const normalizeApiBaseUrl = (baseUrl: string) =>
     .replace(/\/(?:chat\/completions|responses|messages)\/?$/u, '')
     .replace(/\/+$/u, '')
 
+const mapApiProtocolToGrokBackend = (apiProtocol: NonNullable<ReturnType<typeof resolveModelServiceApiProtocol>>) => {
+  if (apiProtocol === 'openai-chat-completions') return 'chat_completions'
+  if (apiProtocol === 'openai-responses') return 'responses'
+  if (apiProtocol === 'anthropic-messages') return 'messages'
+  throw new Error(`Grok adapter does not support ${apiProtocol} model services.`)
+}
+
 const resolveApiBackend = (service: ModelServiceConfig) => {
+  if (service.apiProtocol != null) {
+    return mapApiProtocolToGrokBackend(resolveModelServiceApiProtocol(service)!)
+  }
   const grokExtra = asPlainRecord(asPlainRecord(service.extra).grok)
   const explicit = normalizeString(grokExtra.apiBackend)
   if (explicit === 'chat_completions' || explicit === 'responses' || explicit === 'messages') return explicit
-  return asPlainRecord(asPlainRecord(service.extra).codex).wireApi === 'responses'
-    ? 'responses'
-    : 'chat_completions'
+  const inferredProtocol = resolveModelServiceApiProtocol(service)
+  return inferredProtocol == null ? 'chat_completions' : mapApiProtocolToGrokBackend(inferredProtocol)
 }
 
 const buildRoutedModel = (params: {
@@ -255,7 +266,7 @@ const buildRoutedModel = (params: {
 }) => {
   const parsed = parseServiceModelSelector(params.rawModel)
   if (parsed == null) return undefined
-  const service = resolveMergedModelServices(params.ctx)[parsed.serviceKey]
+  const service = resolveModelServiceFromMap(resolveMergedModelServices(params.ctx), parsed.serviceKey)
   if (service == null) {
     throw new Error(`Grok adapter could not find model service "${parsed.serviceKey}".`)
   }

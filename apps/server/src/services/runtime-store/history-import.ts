@@ -254,6 +254,10 @@ const asString = (value: unknown) => (
   typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
 )
 
+const isGrokSyntheticUser = (value: Record<string, unknown>) => (
+  value.type === 'user' && asString(value.synthetic_reason) != null
+)
+
 const asStringArray = (value: unknown) => (
   Array.isArray(value)
     ? value.map(asString).filter((item): item is string => item != null)
@@ -1311,7 +1315,7 @@ const readConversationPreview = async (
         }
       } else if (adapter === 'grok') {
         if (createdAt === 0) createdAt = timestamp
-        if (value.type === 'user') {
+        if (value.type === 'user' && !isGrokSyntheticUser(value)) {
           title ??= readContentText(value.content)
         }
       } else {
@@ -1629,7 +1633,7 @@ const parseGrokConversation = (
     if (!isRecord(record.value)) continue
     const value = record.value
     if (value.type !== 'user' && value.type !== 'assistant') continue
-    if (value.type === 'user' && asString(value.synthetic_reason) != null) continue
+    if (isGrokSyntheticUser(value)) continue
     const content = normalizeClaudeContent(value.content)
     if (content == null) continue
     messages.push({

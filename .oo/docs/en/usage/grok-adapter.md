@@ -23,7 +23,7 @@ adapters:
 ## Runtime behavior
 
 - Managed mode installs `@xai-official/grok`; `cli.source: system` and `cli.source: path` can select an existing `grok` binary.
-- Native model names are passed to `--model`. A shared `service,model` selection becomes a session-level Grok custom model using the `chat_completions`, `responses`, or `messages` backend.
+- Native model names are passed to `--model`. A shared `service,model` or `collection/profile,model` selection becomes a session-level Grok custom model. OpenAI Chat Completions, OpenAI Responses, and Anthropic Messages `apiProtocol` values map to the `chat_completions`, `responses`, and `messages` backends; incompatible Gemini protocols are hidden from the Grok model list and rejected by the runtime if misconfigured.
 - Selected MCP servers are written to `mcp_servers` in the session `config.toml`, and selected skills are projected into `$GROK_HOME/skills`.
 - System prompts, permission mode, effort, and tool include/exclude filters use native Grok CLI arguments.
 - Hook plugins use Grok's native `PreToolUse`, `PostToolUse`, and `Stop` events. `PreToolUse` remains blockable, and generic bridge events are deduplicated.
