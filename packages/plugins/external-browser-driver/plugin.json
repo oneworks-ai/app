@@ -7,7 +7,7 @@
     "zh-Hans": "浏览器控制"
   },
   "icon": "./assets/icon.svg",
-  "version": "1.0.0-rc.2",
+  "version": "1.0.0-rc.3",
   "assets": {
     "skills": "skills",
     "mcp": "mcp"

@@ -1,6 +1,6 @@
 {
   "name": "@oneworks/managed-plugins",
-  "version": "1.0.0-rc.2",
+  "version": "1.0.0-rc.3",
   "description": "Managed native plugin installation and sync for One Works",
   "license": "MIT",
   "repository": {

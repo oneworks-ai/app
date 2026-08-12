@@ -2,7 +2,7 @@
   "publisher": "oneworks-ai",
   "name": "@oneworks/vscode-extension",
   "displayName": "One Works",
-  "version": "1.0.0-rc.2",
+  "version": "1.0.0-rc.3",
   "private": true,
   "description": "One Works VS Code shell",
   "license": "MIT",

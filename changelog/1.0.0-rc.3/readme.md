@@ -1,0 +1,8 @@
+# One Works 1.0.0-rc.3
+
+- Add Channel Runtime v2 and complete channel-backed chat rooms, including navigation through the host workspace UI.
+- Add managed adapter accounts and the Pi coding-agent integration with its catalog and product assets.
+- Add privacy-safe diagnostics, Model Service usage dashboards, and Relay daily-activity views.
+- Make Desktop startup feel faster while hardening packaging, signing, and recoverable release operations.
+- Improve reliability for plugin uninstalls, archive deletion feedback, chat Git status, launcher keyboard navigation, and chat-room layout.
+- Distribute the macOS rc.3 installers unsigned with a complete ad-hoc seal; Gatekeeper requires manual approval and no Apple notarization is requested.
