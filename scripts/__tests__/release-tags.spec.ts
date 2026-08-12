@@ -236,7 +236,7 @@ describe('release tag planning', () => {
     ).toThrow(/must be newer/u)
   })
 
-  it('coordinates the root and all 68 workspace manifests on 1.0.0-rc.3', () => {
+  it('coordinates the root and all 69 workspace manifests on 1.0.0-rc.3', () => {
     const manifestPaths = [
       'package.json',
       ...readPackageManifestPaths('apps'),
@@ -251,7 +251,7 @@ describe('release tag planning', () => {
       manifest: JSON.parse(readFileSync(manifestPath, 'utf8'))
     }))
 
-    expect(manifests).toHaveLength(69)
+    expect(manifests).toHaveLength(70)
     expect(
       manifests
         .map(({ manifest }) => `${manifest.name}@${manifest.version}`)
