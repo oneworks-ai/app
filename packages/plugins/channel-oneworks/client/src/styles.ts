@@ -15,8 +15,9 @@ export const oneworksChannelCss = `
 .oneworks-channel__status.is-active, .oneworks-channel__status.is-connected, .oneworks-channel__status.is-completed, .oneworks-channel__status.is-processed, .oneworks-channel__status.is-success { color: var(--success-color, #237b4b); }
 .oneworks-channel__status.is-blocked, .oneworks-channel__status.is-deferred_work, .oneworks-channel__status.is-leased, .oneworks-channel__status.is-pending { color: var(--warning-color, #9a6700); }
 .oneworks-channel__status.is-denied, .oneworks-channel__status.is-error, .oneworks-channel__status.is-failed { color: var(--error-color, #c43d3d); }
-.oneworks-channel__room-surface { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100%; min-height: 0; min-width: 0; }
-.oneworks-channel__share-editor { border-bottom: 1px solid var(--border-color, #d8dee4); border-top: 1px solid var(--border-color, #d8dee4); display: grid; gap: 12px; padding: 12px 2px 14px; }
+.oneworks-channel__room-surface { display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0; }
+.oneworks-channel__room { flex: 1 1 0; height: auto; min-height: 0; }
+.oneworks-channel__share-editor { border-bottom: 1px solid var(--border-color, #d8dee4); border-top: 1px solid var(--border-color, #d8dee4); display: grid; flex: 0 0 auto; gap: 12px; padding: 12px 2px 14px; }
 .oneworks-channel__share-heading { align-items: center; display: flex; justify-content: space-between; min-width: 0; }
 .oneworks-channel__share-heading strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .oneworks-channel__share-fields { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(180px, 1fr)); }

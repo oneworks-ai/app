@@ -119,9 +119,26 @@ function OneWorksChannelView({ ctx, react, view }) {
   }, [load])
   useEffect(() => view.i18n?.subscribe?.(() => setLanguageVersion(value => value + 1))?.dispose, [view.i18n])
   useEffect(() => {
-    view.route?.setTitle(t('Chat Rooms', '聊天室'))
-    return () => view.route?.setTitle(undefined)
-  }, [t, view.route])
+    const activeSection = sections.find(section => section.key === activeTab)
+    if (activeTab === 'rooms' || activeSection == null) {
+      view.route?.setTitle(t('Chat Rooms', '聊天室'))
+      view.route?.setBreadcrumb(undefined)
+    } else {
+      view.route?.setTitle(activeSection.label)
+      view.route?.setBreadcrumb({
+        currentTitle: activeSection.label,
+        onBack: () => {
+          setActiveTab('rooms')
+          setShareDraft(emptyShareDraft())
+        },
+        parentTitle: t('Chat Rooms', '聊天室')
+      })
+    }
+    return () => {
+      view.route?.setBreadcrumb(undefined)
+      view.route?.setTitle(undefined)
+    }
+  }, [activeTab, sections, t, view.route])
   useEffect(() => {
     if (!sections.some(section => section.key === activeTab)) setActiveTab('rooms')
   }, [activeTab, sections])
@@ -294,7 +311,7 @@ function OneWorksChannelView({ ctx, react, view }) {
   }, [activeTab, loading, selectedRoomId, sidebarQuery, sidebarRooms, t, view.route])
 
   useEffect(() => {
-    const sectionActions = sections.map(section => ({
+    const sectionActions = sections.filter(section => section.key !== activeTab).map(section => ({
       active: activeTab === section.key,
       icon: section.icon,
       key: `section:${section.key}`,
@@ -354,7 +371,7 @@ function OneWorksChannelView({ ctx, react, view }) {
       ? null
       : <div className='oneworks-channel__room-surface'>
         {renderShareEditor()}
-        <AgentRoom roomId={room.roomId} />
+        <AgentRoom className='oneworks-channel__room' inset={false} roomId={room.roomId} />
       </div>
 
   const renderShareEditor = () => {
