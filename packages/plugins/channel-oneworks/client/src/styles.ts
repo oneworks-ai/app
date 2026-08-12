@@ -2,10 +2,8 @@ export const oneworksChannelCss = `
 .oneworks-channel { color: var(--text-color, #20242a); flex: 1 1 auto; font: 13px/1.45 ui-sans-serif, system-ui, sans-serif; height: 100%; min-height: 0; min-width: 0; overflow: auto; overscroll-behavior: contain; padding-right: 2px; }
 .oneworks-channel.is-room { overflow: hidden; padding-right: 0; }
 .oneworks-channel *, .oneworks-channel *::before, .oneworks-channel *::after { box-sizing: border-box; }
-.oneworks-channel__panel { min-width: 0; padding-top: 14px; }
+.oneworks-channel__panel { min-width: 0; }
 .oneworks-channel__panel.is-room { height: 100%; min-height: 0; padding-top: 0; }
-.oneworks-channel__heading { align-items: center; display: flex; gap: 12px; justify-content: space-between; margin-bottom: 14px; min-height: 34px; }
-.oneworks-channel__heading h2 { font-size: 15px; line-height: 1.25; margin: 0; }
 .oneworks-channel__list, .oneworks-channel__scenario-list { border-top: 1px solid var(--border-color, #d8dee4); min-width: 0; }
 .oneworks-channel__row { align-items: center; border-bottom: 1px solid var(--border-color, #d8dee4); display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr) auto; min-height: 52px; padding: 8px 2px; }
 .oneworks-channel__row-main { min-width: 0; }
@@ -46,9 +44,6 @@ export const oneworksChannelCss = `
   .oneworks-channel__scenario-list { margin-top: 4px; }
 }
 @media (max-width: 700px) {
-  .oneworks-channel__panel { padding-top: 10px; }
-  .oneworks-channel__heading { align-items: flex-start; }
-  .oneworks-channel__heading span { max-width: 240px; }
   .oneworks-channel__playground-grid, .oneworks-channel__scenario-editor .oneworks-channel__playground-grid { grid-template-columns: 1fr; }
   .oneworks-channel__controls { border-bottom: 1px solid var(--border-color, #d8dee4); border-right: 0; padding-bottom: 14px; padding-right: 0; }
   .oneworks-channel__row { align-items: start; grid-template-columns: minmax(0, 1fr) auto; }

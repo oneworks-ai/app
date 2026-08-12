@@ -46,6 +46,10 @@ import type {
   PluginContributionNavFooterItem,
   PluginContributionNavItem
 } from '#~/plugins/plugin-manifest'
+import {
+  buildPluginCompactNavigationActions,
+  buildPluginSidebarNavigationItems
+} from '#~/plugins/plugin-sidebar-navigation'
 import { usePluginCommandExecutor, usePluginSlot } from '#~/plugins/plugin-slots'
 import { usePluginThemes } from '#~/plugins/plugin-themes'
 import { buildLauncherClientPath } from '#~/runtime-config'
@@ -1506,19 +1510,28 @@ export function NavRail({
   const handleNavClick = (_key: string, path: string) => {
     void navigate(path)
   }
+  const pluginNavigationItems = React.useMemo(() =>
+    buildPluginSidebarNavigationItems({
+      executeCommand: executePluginCommand,
+      items: pluginNavItems,
+      language: pluginLanguage,
+      navigate: route => void navigate(route),
+      pathname: currentPath
+    }), [currentPath, executePluginCommand, navigate, pluginLanguage, pluginNavItems])
   const resolvedNavItems = React.useMemo(() => [
     ...navItems,
-    ...pluginNavItems.map(item => ({
-      active: item.route != null && currentPath === item.route,
+    ...pluginNavigationItems.map(item => ({
+      active: item.isActive,
       icon: item.icon ?? 'layers',
-      key: `plugin:${item.pluginScope}:${item.id}`,
-      label: resolvePluginContributionText(item, 'title', pluginLanguage) ?? item.title,
-      path: item.route ?? `/plugins/${item.pluginScope}/${item.id}`
+      key: item.key,
+      label: item.label,
+      onSelect: item.onSelect
     }))
-  ], [currentPath, navItems, pluginLanguage, pluginNavItems])
+  ], [navItems, pluginNavigationItems])
   const resolvedCompactMoreActions = React.useMemo<NavRailCompactMoreAction[]>(() => [
-    ...compactMoreActions
-  ], [compactMoreActions])
+    ...compactMoreActions,
+    ...buildPluginCompactNavigationActions(pluginNavigationItems)
+  ], [compactMoreActions, pluginNavigationItems])
   const compactMoreMenuSections = React.useMemo<NavRailMoreMenuSection[]>(() => [
     ...moreMenuSections,
     ...appendMenuItemToLastSection(

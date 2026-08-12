@@ -1402,7 +1402,16 @@ describe('pluginsRouter', () => {
             target: 'owner/point',
             title: 'Consumer'
           }],
-          navItems: [{ id: 'home', route: '/plugins/docs', title: 'Docs' }]
+          navItems: [{
+            actions: [{
+              id: 'shared',
+              route: '/plugins/docs?section=shared',
+              title: 'Shared'
+            }],
+            id: 'home',
+            route: '/plugins/docs',
+            title: 'Docs'
+          }]
         }
       }
     })
@@ -1588,7 +1597,12 @@ describe('pluginsRouter', () => {
         target: 'owner/point',
         title: 'Consumer'
       }],
-      navItems: [{ id: 'home', route: '/plugins/docs', title: 'Docs' }]
+      navItems: [{
+        actions: [{ id: 'shared', route: '/plugins/docs?section=shared', title: 'Shared' }],
+        id: 'home',
+        route: '/plugins/docs',
+        title: 'Docs'
+      }]
     })
     expect(plugin.client).not.toHaveProperty('devClientEntryKind')
     expect(plugin.client).not.toHaveProperty('devClientEntryUrl')

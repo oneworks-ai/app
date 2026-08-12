@@ -4,11 +4,11 @@
 
 ## 有效规范索引
 
-### OW-DM-001 — 相邻边界间距归属
+### OW-DM-001 — 宿主 chrome 与相邻边界单一归属
 
-- Revision / status / rule / scope: 3 / ACTIVE / 相邻元素的同一条接缝只能由一层负责留白；项目默认 spacing token 为 10px，双侧内部 padding 同时保留时必须使用可见分割线 / OneWorks project，adjacent component and section boundaries。
-- Applies / does not apply / examples: 相邻组件、字段、section、列表行、header 或内容区共享同一条边界时适用；两个结构各自的内部 padding 由可见分割线明确隔开时不适用。正例是 parent gap、前一项底部 padding 或后一项顶部 padding 三选一并使用项目 token；共享额度面板把常驻限额与可折叠重置卡收进同一卡片，用单条分割线保留两侧等距 padding；账号详情的 profile、tabs 和 tab panel 只由 `--subpage-tertiary-gap` 形成标准 `10px` 接缝；共享 `NativeTabs` 不通过相邻 panel 选择器自动注入 `margin-block-start`。反例是三者叠加成无语义大空白，或把同一额度内容拆成两张卡再用 gap 拼接。
-- Ownership / implementation / source / lifecycle / enforcement: [`styles.md`](./styles.md) 中的“相邻区块的间距归属”拥有规则，具体 surface 的共享 spacing token / parent gap / 单侧 padding 拥有实现；来源为用户明确设计标准，2026-07-11 生效，不替代旧规则，例外在下方登记；由 computed box model、DOM 几何检查或模块视觉回归执行。
+- Revision / status / rule / scope: 4 / ACTIVE / 相邻元素的同一条接缝只能由一层负责留白；宿主 route header 唯一拥有当前页面或资源名称与 breadcrumb；稳定的集合级入口放到 `nav.items[].actions`，对象级命令才进入 `view.route.setActions(...)`；宿主数据层自动重验证时不暴露手动刷新；项目默认 spacing token 为 10px，双侧内部 padding 同时保留时必须使用可见分割线 / OneWorks project，host chrome、plugin routes、adjacent component and section boundaries。
+- Applies / does not apply / examples: 相邻组件、字段、section、列表行、header 或内容区共享同一条边界，或插件嵌入共享 header、sidebar、breadcrumb、SWR query、route body 时适用；正文中真正独立且 header 未表达的 subsection 标题不受限制。正例是选中聊天室后 header 显示聊天室名，集合入口位于左侧聊天室入口右侧，正文直接显示时间线且 parent gap、前一项底部 padding 或后一项顶部 padding 三选一；反例是 header 与正文重复“已分享”、二级页 header actions 再放“聊天室”、自动重验证旁仍保留刷新、宿主和嵌入内容叠加 padding，或把同一额度内容拆成两张卡再用 gap 拼接。
+- Ownership / implementation / source / lifecycle / enforcement: [`styles.md`](./styles.md) 的“相邻区块的间距归属”、`apps/client/src/plugins/AGENTS.md` 与 `ui-design-memory` skill 的 `UDM-T008` 共同拥有；实现入口为共享 spacing token、`PluginViewContext.route`、`PluginViewContext.data`、`PluginContributionNavItem.actions` 和共享 route/sidebar components；来源为用户 2026-07-11 至 2026-08-12 的明确设计标准；例外在下方登记；由 computed box model、plugin host 契约测试、SWR revalidation 测试和独立全页面视觉审阅执行。
 
 ### OW-DM-002 — 紧凑 chrome 尺寸语言
 

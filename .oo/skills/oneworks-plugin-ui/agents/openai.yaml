@@ -1,0 +1,4 @@
+interface:
+  display_name: OneWorks Plugin UI
+  short_description: Build plugin pages with native host chrome
+  default_prompt: Use $oneworks-plugin-ui to design or revise this OneWorks plugin page without duplicating host chrome.

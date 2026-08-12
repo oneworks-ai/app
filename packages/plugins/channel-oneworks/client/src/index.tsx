@@ -57,78 +57,99 @@ const channelIconByType = {
 
 const channelIcon = channelType => channelIconByType[channelType?.toLowerCase()] ?? 'hub'
 
-function OneWorksChannelView({ ctx, react, view }) {
+export const buildOneWorksChannelRoute = scope => `/plugins/${scope}/oneworks-channel`
+export const buildOneWorksRoomRoute = roomId => `/rooms/${encodeURIComponent(roomId)}`
+
+export function OneWorksChannelView({ ctx, react, view }) {
   const h = react.createElement
   const { useCallback, useEffect, useMemo, useState } = react
   const { AgentRoom, Button, Icon, Input, Select } = view.ui
   const [languageVersion, setLanguageVersion] = useState(0)
-  const [data, setData] = useState(emptyData)
   const t = useMemo(() => (en, chinese) => view.i18n?.resolveText?.({ en, 'zh-Hans': chinese }, en) ?? en, [
     view.i18n,
     languageVersion
   ])
-  const sections = useMemo(() => [
-    { key: 'rooms', label: t('Chat rooms', '聊天室'), icon: 'meeting_room' },
-    { key: 'shared', label: t('Shared', '已分享'), icon: 'group' },
-    ...(data.simulationTargets.length > 0
-      ? [{ key: 'playground', label: t('Playground', '调试台'), icon: 'play_circle' }]
-      : []),
-    ...(data.simulationTargets.some(target => target.capabilities?.includes('scenarios'))
-      ? [{ key: 'scenarios', label: t('Scenarios', '场景'), icon: 'bookmark' }]
-      : []),
-    { key: 'trace', label: t('Trace', '链路'), icon: 'timeline' }
-  ], [data.simulationTargets, t])
-  const [activeTab, setActiveTab] = useState('rooms')
+  const readActiveSection = useCallback(() => {
+    const section = new URLSearchParams(globalThis.location.search).get('section')
+    return ['playground', 'scenarios', 'shared', 'trace'].includes(section) ? section : 'rooms'
+  }, [])
+  const [activeTab, setActiveTab] = useState(readActiveSection)
   const [selectedRoomId, setSelectedRoomId] = useState('')
   const [sidebarQuery, setSidebarQuery] = useState('')
   const [draft, setDraft] = useState(() => emptyDraft(''))
   const [shareDraft, setShareDraft] = useState(emptyShareDraft)
   const [editingScenarioRef, setEditingScenarioRef] = useState(null)
-  const [error, setError] = useState(null)
+  const [actionError, setActionError] = useState(null)
   const [lastSimulation, setLastSimulation] = useState(null)
-  const [loading, setLoading] = useState(true)
   const [notice, setNotice] = useState(null)
   const [working, setWorking] = useState(false)
+  const pluginRoute = useMemo(() => buildOneWorksChannelRoute(ctx.scope), [ctx.scope])
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const [rooms, sharedRooms, shareOwners, shares, simulationTargets, trace, scenarios] = await Promise.all([
-        request(ctx, 'rooms'),
-        request(ctx, 'shared'),
-        request(ctx, 'share-owners'),
-        request(ctx, 'shares'),
-        request(ctx, 'simulation-targets'),
-        request(ctx, 'trace'),
-        request(ctx, 'scenarios')
-      ])
-      setData({ rooms, scenarios, sharedRooms, shareOwners, shares, simulationTargets, trace })
-      setSelectedRoomId(current => rooms.some(room => room.roomId === current) ? current : rooms[0]?.roomId || '')
-      const firstTarget = simulationTargets.find(target => target.capabilities?.includes('simulation'))
-      setDraft(current => ({ ...current, roomRef: current.roomRef || firstTarget?.roomRef || '' }))
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : String(nextError))
-    } finally {
-      setLoading(false)
-    }
-  }, [ctx])
+  const {
+    data: loadedData,
+    error: queryError,
+    isLoading: loading,
+    mutate
+  } = view.data.useQuery('oneworks-channel:overview', async () => {
+    const [rooms, sharedRooms, shareOwners, shares, simulationTargets, trace, scenarios] = await Promise.all([
+      request(ctx, 'rooms'),
+      request(ctx, 'shared'),
+      request(ctx, 'share-owners'),
+      request(ctx, 'shares'),
+      request(ctx, 'simulation-targets'),
+      request(ctx, 'trace'),
+      request(ctx, 'scenarios')
+    ])
+    return { rooms, scenarios, sharedRooms, shareOwners, shares, simulationTargets, trace }
+  }, {
+    refreshInterval: 10_000,
+    revalidateOnFocus: true,
+    revalidateOnReconnect: true
+  })
+  const data = useMemo(() => loadedData ?? emptyData(), [loadedData])
+  const error = actionError ?? (queryError == null
+    ? null
+    : queryError instanceof Error
+    ? queryError.message
+    : String(queryError))
+  const sections = useMemo(() => [
+    { key: 'rooms', label: t('Chat rooms', '聊天室'), icon: 'meeting_room' },
+    { key: 'shared', label: t('Shared', '已分享'), icon: 'group' },
+    { key: 'playground', label: t('Playground', '调试台'), icon: 'play_circle' },
+    { key: 'scenarios', label: t('Scenarios', '场景'), icon: 'bookmark' },
+    { key: 'trace', label: t('Trace', '链路'), icon: 'timeline' }
+  ], [t])
+  const selectedRoom = useMemo(() => data.rooms.find(room => room.roomId === selectedRoomId), [
+    data.rooms,
+    selectedRoomId
+  ])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    setSelectedRoomId(current =>
+      data.rooms.some(room => room.roomId === current)
+        ? current
+        : data.rooms[0]?.roomId || ''
+    )
+    const firstTarget = data.simulationTargets.find(target => target.capabilities?.includes('simulation'))
+    setDraft(current => ({ ...current, roomRef: current.roomRef || firstTarget?.roomRef || '' }))
+  }, [data.rooms, data.simulationTargets])
   useEffect(() => view.i18n?.subscribe?.(() => setLanguageVersion(value => value + 1))?.dispose, [view.i18n])
+  useEffect(() => {
+    const syncSection = () => setActiveTab(readActiveSection())
+    globalThis.addEventListener('oneworks:plugin-route-change', syncSection)
+    return () => globalThis.removeEventListener('oneworks:plugin-route-change', syncSection)
+  }, [readActiveSection])
   useEffect(() => {
     const activeSection = sections.find(section => section.key === activeTab)
     if (activeTab === 'rooms' || activeSection == null) {
-      view.route?.setTitle(t('Chat Rooms', '聊天室'))
+      view.route?.setTitle(selectedRoom?.title ?? t('Chat Rooms', '聊天室'))
       view.route?.setBreadcrumb(undefined)
     } else {
       view.route?.setTitle(activeSection.label)
       view.route?.setBreadcrumb({
         currentTitle: activeSection.label,
         onBack: () => {
-          setActiveTab('rooms')
+          view.route?.navigate(pluginRoute)
           setShareDraft(emptyShareDraft())
         },
         parentTitle: t('Chat Rooms', '聊天室')
@@ -138,7 +159,7 @@ function OneWorksChannelView({ ctx, react, view }) {
       view.route?.setBreadcrumb(undefined)
       view.route?.setTitle(undefined)
     }
-  }, [activeTab, sections, t, view.route])
+  }, [activeTab, pluginRoute, sections, selectedRoom?.title, t, view.route])
   useEffect(() => {
     if (!sections.some(section => section.key === activeTab)) setActiveTab('rooms')
   }, [activeTab, sections])
@@ -155,10 +176,6 @@ function OneWorksChannelView({ ctx, react, view }) {
     draft.roomRef,
     simulationRooms
   ])
-  const selectedRoom = useMemo(() => data.rooms.find(room => room.roomId === selectedRoomId), [
-    data.rooms,
-    selectedRoomId
-  ])
   const sidebarRooms = useMemo(() => {
     const query = sidebarQuery.trim().toLowerCase()
     if (!query) return data.rooms
@@ -174,15 +191,15 @@ function OneWorksChannelView({ ctx, react, view }) {
 
   const execute = async (action, successMessage, onSuccess = undefined) => {
     setWorking(true)
-    setError(null)
+    setActionError(null)
     setNotice(null)
     try {
       const result = await action()
       onSuccess?.(result)
       setNotice(successMessage)
-      await load()
+      await mutate()
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : String(nextError))
+      setActionError(nextError instanceof Error ? nextError.message : String(nextError))
     } finally {
       setWorking(false)
     }
@@ -242,9 +259,8 @@ function OneWorksChannelView({ ctx, react, view }) {
   }
 
   const openRoom = useCallback(room => {
-    const workspacePrefix = globalThis.location.pathname.match(/^\/ui\/w\/[^/]+/u)?.[0] ?? ''
-    globalThis.location.assign(`${workspacePrefix}/rooms/${encodeURIComponent(room.roomId)}`)
-  }, [])
+    view.route?.navigate(buildOneWorksRoomRoute(room.roomId))
+  }, [view.route])
 
   const createShare = async () =>
     await execute(
@@ -303,34 +319,17 @@ function OneWorksChannelView({ ctx, react, view }) {
       },
       onSelectItem: item => {
         setSelectedRoomId(item.key)
-        setActiveTab('rooms')
+        view.route?.navigate(pluginRoute)
         setShareDraft(emptyShareDraft())
       }
     })
     return () => view.route?.setSidebar(undefined)
-  }, [activeTab, loading, selectedRoomId, sidebarQuery, sidebarRooms, t, view.route])
+  }, [activeTab, loading, pluginRoute, selectedRoomId, sidebarQuery, sidebarRooms, t, view.route])
 
   useEffect(() => {
-    const sectionActions = sections.filter(section => section.key !== activeTab).map(section => ({
-      active: activeTab === section.key,
-      icon: section.icon,
-      key: `section:${section.key}`,
-      label: section.label,
-      onSelect: () => {
-        setActiveTab(section.key)
-        setShareDraft(emptyShareDraft())
-      },
-      title: section.label
-    }))
     const roomActions = selectedRoom == null || activeTab !== 'rooms'
       ? []
       : [{
-        icon: 'open_in_new',
-        key: 'open-room',
-        label: t('Open Room', '打开聊天室'),
-        onSelect: () => openRoom(selectedRoom),
-        title: t('Open Room', '打开聊天室')
-      }, {
         active: shareDraft.roomId === selectedRoom.roomId,
         icon: 'share',
         key: 'share-room',
@@ -338,27 +337,11 @@ function OneWorksChannelView({ ctx, react, view }) {
         onSelect: () => openShareEditor(selectedRoom),
         title: t('Share Room', '分享聊天室')
       }]
-    view.route?.setActions([
-      ...sectionActions,
-      ...roomActions,
-      {
-        disabled: loading || working,
-        icon: 'refresh',
-        key: 'refresh',
-        label: t('Refresh', '刷新'),
-        loading,
-        onSelect: () => void load(),
-        title: t('Refresh', '刷新')
-      }
-    ])
+    view.route?.setActions(roomActions)
     return () => view.route?.setActions(undefined)
   }, [
     activeTab,
-    load,
-    loading,
-    openRoom,
     openShareEditor,
-    sections,
     selectedRoom,
     shareDraft.roomId,
     t,
@@ -700,6 +683,12 @@ function OneWorksChannelView({ ctx, react, view }) {
       </div>
     </div>
 
+  const hasScenarioTarget = data.simulationTargets.some(target => target.capabilities?.includes('scenarios'))
+  const renderUnavailableTarget = () =>
+    <div className='oneworks-channel__empty'>
+      <Icon name='link_off' />
+      <span>{t('No available OneWorks target.', '暂无可用的 OneWorks 目标。')}</span>
+    </div>
   const content = loading
     ? <div className='oneworks-channel__empty'>
       <Icon name='progress_activity' />
@@ -709,20 +698,17 @@ function OneWorksChannelView({ ctx, react, view }) {
     : activeTab === 'shared'
     ? renderShares()
     : activeTab === 'playground'
-    ? <div className='oneworks-channel__form'>{renderMessageFields()}</div>
+    ? simulationRooms.length === 0
+      ? renderUnavailableTarget()
+      : <div className='oneworks-channel__form'>{renderMessageFields()}</div>
     : activeTab === 'scenarios'
-    ? renderScenarios()
+    ? hasScenarioTarget ? renderScenarios() : renderUnavailableTarget()
     : renderTrace()
 
   const isRoomSurface = activeTab === 'rooms'
 
   return <section className={`oneworks-channel ${isRoomSurface ? 'is-room' : ''}`} aria-busy={loading}>
     <main className={`oneworks-channel__panel ${isRoomSurface ? 'is-room' : ''}`}>
-      {isRoomSurface
-        ? null
-        : <div className='oneworks-channel__heading'>
-          <h2>{sections.find(section => section.key === activeTab)?.label}</h2>
-        </div>}
       {error != null ? <p className='oneworks-channel__message is-error' role='alert'>{error}</p> : null}
       {notice != null ? <p className='oneworks-channel__message' role='status'>{notice}</p> : null}
       {content}
@@ -738,7 +724,33 @@ export async function activatePlugin(ctx) {
     renderNode: view => ctx.react.createElement(OneWorksChannelView, { ctx, react: ctx.react, view })
   })]
   if (/(?:^|\/)w\/[^/]+(?:\/|$)/u.test(globalThis.location?.pathname ?? '')) {
+    const route = buildOneWorksChannelRoute(ctx.scope)
     disposables.push(ctx.slots.register('nav.items', {
+      actions: [{
+        id: 'shared',
+        title: 'Shared',
+        titleI18n: { en: 'Shared', 'zh-Hans': '已分享' },
+        icon: 'group',
+        route: `${route}?section=shared`
+      }, {
+        id: 'playground',
+        title: 'Playground',
+        titleI18n: { en: 'Playground', 'zh-Hans': '调试台' },
+        icon: 'play_circle',
+        route: `${route}?section=playground`
+      }, {
+        id: 'scenarios',
+        title: 'Scenarios',
+        titleI18n: { en: 'Scenarios', 'zh-Hans': '场景' },
+        icon: 'bookmark',
+        route: `${route}?section=scenarios`
+      }, {
+        id: 'trace',
+        title: 'Trace',
+        titleI18n: { en: 'Trace', 'zh-Hans': '链路' },
+        icon: 'timeline',
+        route: `${route}?section=trace`
+      }],
       id: 'oneworks-channel',
       title: 'Chat Rooms',
       titleI18n: { en: 'Chat Rooms', 'zh-Hans': '聊天室' },
@@ -747,7 +759,7 @@ export async function activatePlugin(ctx) {
         'zh-Hans': '打开聊天室、分享、模拟场景与投递链路。'
       },
       icon: 'meeting_room',
-      route: `/plugins/${ctx.scope}/oneworks-channel`
+      route
     }))
   }
   return () => {

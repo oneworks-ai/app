@@ -929,6 +929,18 @@ const NAV_FOOTER_ROUTE_SHAPE: PublicContributionRouteShape = {
   },
   routeKeys: new Set(['href', 'route'])
 }
+const NAV_ITEM_ACTION_ROUTE_SHAPE: PublicContributionRouteShape = {
+  allowedKeys: contributionKeySet(BASE_CONTRIBUTION_KEYS, [
+    'command',
+    'icon',
+    'id',
+    'payload',
+    'route',
+    'title'
+  ]),
+  children: BASE_CONTRIBUTION_CHILDREN,
+  routeKeys: new Set(['route'])
+}
 const ROUTE_HEADER_ROUTE_SHAPE: PublicContributionRouteShape = {
   allowedKeys: contributionKeySet(BASE_CONTRIBUTION_KEYS, [
     'active',
@@ -1121,6 +1133,7 @@ const CONTRIBUTION_ROUTE_SHAPE: PublicContributionRouteShape = {
     navFooterBefore: NAV_FOOTER_ROUTE_SHAPE,
     navItems: {
       allowedKeys: contributionKeySet(BASE_CONTRIBUTION_KEYS, [
+        'actions',
         'command',
         'icon',
         'id',
@@ -1128,7 +1141,7 @@ const CONTRIBUTION_ROUTE_SHAPE: PublicContributionRouteShape = {
         'route',
         'title'
       ]),
-      children: BASE_CONTRIBUTION_CHILDREN,
+      children: { ...BASE_CONTRIBUTION_CHILDREN, actions: NAV_ITEM_ACTION_ROUTE_SHAPE },
       routeKeys: new Set(['route'])
     },
     navMoreMenu: MENU_ROUTE_SHAPE,

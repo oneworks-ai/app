@@ -113,3 +113,19 @@ These revisioned standards come from repeated explicit UI feedback summarized on
 - Supersedes: none
 - Exceptions: Explicitly approved creative interpretation.
 - Automatic enforcement: Matched reference/actual screenshots and completed independent visual review.
+
+## UDM-T008 — Give host chrome one semantic owner
+
+- Revision: 1
+- Status: ACTIVE
+- Rule: Existing host chrome owns page identity, hierarchy, collection navigation, object commands, refresh semantics, and outer insets. Embedded or plugin content starts with the actual body and must not repeat the same title, breadcrumb, navigation, refresh action, or padding.
+- Scope: OneWorks team / host-rendered routes, plugin pages, embedded workspaces, and secondary views.
+- Applies when: A shared route header, sidebar, breadcrumb, data-query layer, or outer layout already represents the current page or object.
+- Does not apply when: The content introduces a distinct subsection whose heading is required for body structure and is not already named by host chrome.
+- Positive example: The route header shows the selected room name, sidebar inline actions open collection subpages, and the room body begins with the timeline.
+- Negative example: The header and body both say “Shared”, a “Chat rooms” button repeats breadcrumb navigation, or a manual refresh sits beside SWR-backed content.
+- Source: Repeated OneWorks plugin-page feedback, made explicit 2026-08-12.
+- Effective date: 2026-08-12.
+- Supersedes: none.
+- Exceptions: Genuine body subsections with independent semantic structure.
+- Automatic enforcement: DOM assertions for unique page titles/actions, shared host-contract tests, and whole-surface visual review.

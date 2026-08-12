@@ -3,7 +3,8 @@ import './PluginHost.scss'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
-import { useLocation, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import useSWR from 'swr'
 
 import { RouteContainerHeader } from '#~/components/layout/RouteContainerHeader'
 import { RouteContainerLayout } from '#~/components/layout/RouteContainerLayout'
@@ -12,6 +13,7 @@ import { useRouteContainerSidebarOpener } from '#~/components/layout/use-route-c
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
 import type { RouteContainerHeaderActionItem, RouteContainerHeaderBreadcrumb } from '@oneworks/components/route-layout'
 
+import { getRuntimeWorkspaceId } from '#~/runtime-config'
 import { listPluginRuntimeEndpoints, setPluginOptions } from './api'
 import { usePluginContext } from './plugin-context'
 import type { PluginHostComponentEntry } from './plugin-host-components'
@@ -21,6 +23,7 @@ import type {
   PluginDisposable,
   PluginHostComponentApi,
   PluginViewContext,
+  PluginViewQueryOptions,
   PluginViewRouteLauncherChrome,
   PluginViewRouteSidebar,
   PluginViewSurface
@@ -120,6 +123,7 @@ export function PluginViewHost({
     [launcherSearchValue, surface]
   )
   const location = useLocation()
+  const navigate = useNavigate()
   const pluginI18n = useMemo(() => createPluginI18nContext(), [])
   const view = useMemo(
     () => snapshot.views.find(item => item.scope === scope && item.id === viewId),
@@ -138,8 +142,20 @@ export function PluginViewHost({
     await refreshPlugins()
     return savedOptions
   }, [pluginServerBaseUrl, refreshPlugins, scope])
+  const queryRuntimeKey = useMemo(() => [
+    runtimeEndpoint?.workspaceId ?? getRuntimeWorkspaceId() ?? 'launcher',
+    runtimeEndpoint?.role ?? 'unknown-role',
+    runtimeEndpoint?.id ?? 'unknown-runtime',
+    runtimeEndpoint?.serverBaseUrl ?? pluginServerBaseUrl ?? 'same-origin'
+  ], [pluginServerBaseUrl, runtimeEndpoint])
+  const dataApi = useMemo<PluginViewContext['data']>(() => ({
+    useQuery<TData>(key: string | null, fetcher: () => Promise<TData>, options?: PluginViewQueryOptions) {
+      return useSWR<TData>(key == null ? null : ['plugin-view', ...queryRuntimeKey, scope, key], fetcher, options)
+    }
+  }), [queryRuntimeKey, scope])
   const viewContext = useMemo<PluginViewContext>(() => ({
     components: hostComponentApi,
+    data: dataApi,
     extensions: {
       getContributions: target => registry.getExtensionContributions(scope, target),
       hasPoint: target => registry.hasExtensionPoint(scope, target)
@@ -173,6 +189,7 @@ export function PluginViewHost({
       ? {}
       : {
         route: {
+          navigate: (target, options) => void navigate(target, options),
           setActions: (actions) => onRouteActionsChange?.(actions as RouteContainerHeaderActionItem[] | undefined),
           setBreadcrumb: breadcrumb =>
             onRouteBreadcrumbChange?.(breadcrumb as RouteContainerHeaderBreadcrumb | undefined),
@@ -187,6 +204,7 @@ export function PluginViewHost({
     ui: pluginHostComponentReactApi
   }), [
     hostComponentApi,
+    dataApi,
     isDarkMode,
     language,
     launcherSearchValue,
@@ -201,6 +219,7 @@ export function PluginViewHost({
     onRouteLauncherChromeChange,
     onRouteSidebarChange,
     onRouteTitleChange,
+    navigate,
     resolvedThemeMode,
     routeId,
     scope,

@@ -188,10 +188,20 @@ export interface PluginContributionBase extends PluginContributionAvailability {
 }
 
 export interface PluginContributionNavItem extends PluginContributionBase {
+  actions?: PluginContributionNavItemAction[]
   id: string
   title: string
   icon?: string
   command?: string
+  payload?: unknown
+  route?: string
+}
+
+export interface PluginContributionNavItemAction extends PluginContributionBase {
+  id: string
+  title: string
+  command?: string
+  icon?: string
   payload?: unknown
   route?: string
 }
