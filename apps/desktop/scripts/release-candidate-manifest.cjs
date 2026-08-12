@@ -9,6 +9,8 @@ const RELEASE_VERSION_PATTERN = /^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$/
 const SOURCE_SHA_PATTERN = /^[0-9a-f]{40}$/i
 const ALLOWED_ARCHITECTURES = new Set(['arm64', 'x64'])
 const ALLOWED_TARGETS = new Set(['dmg', 'pkg', 'zip'])
+const ALLOWED_SIGNING_POLICIES = new Set(['signed', 'unsigned'])
+const ALLOWED_SIGNING_POLICY_REQUESTS = new Set(['auto', 'signed', 'unsigned'])
 const UPDATE_CHANNELS = new Set(['stable', 'alpha', 'beta', 'rc'])
 
 const normalizeDeclaredList = (items, allowedValues, name) => {
@@ -101,12 +103,20 @@ const assertExpectedSet = (actual, expectedCsv, allowedValues, name) => {
   }
 }
 
+const resolveImmutableSigningPolicy = (updateChannel, immutableSigningPolicy) => {
+  if (immutableSigningPolicy !== 'auto') return immutableSigningPolicy
+  return updateChannel === 'alpha' || updateChannel === 'beta' ? 'unsigned' : 'signed'
+}
+
 const createCandidateManifest = ({
   adHocSealed,
   architectures,
   artifactDirectory,
   builderSha,
   createdAt,
+  effectiveSigningPolicy,
+  immutableSigningPolicy,
+  requestedSigningPolicy,
   signed,
   sourceSha,
   tag,
@@ -121,6 +131,30 @@ const createCandidateManifest = ({
   }
   if (typeof adHocSealed !== 'boolean' || adHocSealed === signed) {
     throw new Error('Desktop release candidates must be either Developer ID signed or ad-hoc sealed.')
+  }
+  if (!ALLOWED_SIGNING_POLICIES.has(effectiveSigningPolicy)) {
+    throw new Error('Desktop release candidate effective signing policy must be signed or unsigned.')
+  }
+  if (!ALLOWED_SIGNING_POLICY_REQUESTS.has(immutableSigningPolicy)) {
+    throw new Error('Desktop release candidate immutable signing policy must be auto, signed, or unsigned.')
+  }
+  if (!ALLOWED_SIGNING_POLICY_REQUESTS.has(requestedSigningPolicy)) {
+    throw new Error('Desktop release candidate requested signing policy must be auto, signed, or unsigned.')
+  }
+  if (release.updateChannel === 'stable' && effectiveSigningPolicy !== 'signed') {
+    throw new Error('Stable Desktop release candidates must be Developer ID signed and Apple-notarized.')
+  }
+  if (
+    resolveImmutableSigningPolicy(release.updateChannel, immutableSigningPolicy) !==
+      effectiveSigningPolicy
+  ) {
+    throw new Error('Desktop release candidate effective signing policy drifted from immutable metadata.')
+  }
+  if (requestedSigningPolicy !== 'auto' && requestedSigningPolicy !== effectiveSigningPolicy) {
+    throw new Error('Desktop release candidate requested signing policy drifted from immutable metadata.')
+  }
+  if ((effectiveSigningPolicy === 'signed') !== signed) {
+    throw new Error('Desktop release candidate bytes do not match the effective signing policy.')
   }
   if (Number.isNaN(Date.parse(createdAt))) {
     throw new TypeError('Desktop release candidate createdAt must be an ISO timestamp.')
@@ -141,11 +175,14 @@ const createCandidateManifest = ({
   })
 
   const manifest = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     ...release,
     sourceSha: sourceSha.toLowerCase(),
     builderSha: builderSha.toLowerCase(),
     createdAt,
+    effectiveSigningPolicy,
+    immutableSigningPolicy,
+    requestedSigningPolicy,
     signed,
     adHocSealed,
     architectures: declaredArchitectures,
@@ -166,7 +203,7 @@ const readCandidateManifest = artifactDirectory => {
     throw new Error(`Desktop release candidate manifest was not found at ${manifestPath}.`)
   }
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
-  if (manifest?.schemaVersion !== 1 && manifest?.schemaVersion !== 2) {
+  if (![1, 2, 3].includes(manifest?.schemaVersion)) {
     throw new Error(`Unsupported desktop release candidate schema: ${manifest?.schemaVersion}.`)
   }
   return manifest
@@ -174,12 +211,19 @@ const readCandidateManifest = artifactDirectory => {
 
 const verifyCandidateManifest = ({
   artifactDirectory,
+  enforceImmutableSigningPolicy,
   expectedArchitectures,
+  expectedSigningPolicy,
   expectedTag,
   expectedTargets
 }) => {
   const manifest = readCandidateManifest(artifactDirectory)
   const release = resolveReleaseIdentity(expectedTag)
+  if (enforceImmutableSigningPolicy === true && manifest.schemaVersion !== 3) {
+    throw new Error(
+      'Desktop release candidate schema does not record immutable signing policy; rebuild it before promotion.'
+    )
+  }
   if (
     manifest.tag !== expectedTag || manifest.version !== release.version ||
     manifest.updateChannel !== release.updateChannel
@@ -199,6 +243,46 @@ const verifyCandidateManifest = ({
     if (typeof manifest.adHocSealed !== 'boolean' || manifest.adHocSealed === manifest.signed) {
       throw new Error('Desktop release candidate manifest has an invalid signing mode.')
     }
+  }
+  if (manifest.schemaVersion === 3) {
+    if (!SOURCE_SHA_PATTERN.test(manifest.builderSha)) {
+      throw new Error('Desktop release candidate manifest contains an invalid builder SHA.')
+    }
+    if (typeof manifest.adHocSealed !== 'boolean' || manifest.adHocSealed === manifest.signed) {
+      throw new Error('Desktop release candidate manifest has an invalid signing mode.')
+    }
+    if (!ALLOWED_SIGNING_POLICIES.has(manifest.effectiveSigningPolicy)) {
+      throw new Error('Desktop release candidate manifest contains an invalid effective signing policy.')
+    }
+    if (!ALLOWED_SIGNING_POLICY_REQUESTS.has(manifest.immutableSigningPolicy)) {
+      throw new Error('Desktop release candidate manifest contains an invalid immutable signing policy.')
+    }
+    if (!ALLOWED_SIGNING_POLICY_REQUESTS.has(manifest.requestedSigningPolicy)) {
+      throw new Error('Desktop release candidate manifest contains an invalid requested signing policy.')
+    }
+  }
+  const effectiveSigningPolicy = manifest.schemaVersion === 3
+    ? manifest.effectiveSigningPolicy
+    : (manifest.signed ? 'signed' : 'unsigned')
+  if ((effectiveSigningPolicy === 'signed') !== manifest.signed) {
+    throw new Error('Desktop release candidate bytes do not match the effective signing policy.')
+  }
+  if (release.updateChannel === 'stable' && effectiveSigningPolicy !== 'signed') {
+    throw new Error('Stable Desktop release candidates must be Developer ID signed and Apple-notarized.')
+  }
+  if (
+    enforceImmutableSigningPolicy === true &&
+    resolveImmutableSigningPolicy(release.updateChannel, manifest.immutableSigningPolicy) !==
+      effectiveSigningPolicy
+  ) {
+    throw new Error('Desktop release candidate effective signing policy drifted from immutable metadata.')
+  }
+  if (
+    expectedSigningPolicy &&
+    expectedSigningPolicy !== 'auto' &&
+    expectedSigningPolicy !== effectiveSigningPolicy
+  ) {
+    throw new Error('Desktop release candidate effective signing policy does not match the promotion request.')
   }
   if (!Array.isArray(manifest.artifacts) || manifest.artifacts.length === 0) {
     throw new Error('Desktop release candidate manifest contains no artifact records.')
@@ -224,7 +308,10 @@ const verifyCandidateManifest = ({
     version: release.version
   })
 
-  return manifest
+  return {
+    ...manifest,
+    effectiveSigningPolicy
+  }
 }
 
 const writeOutputs = (outputPath, manifest) => {
@@ -236,6 +323,8 @@ const writeOutputs = (outputPath, manifest) => {
         `signed=${manifest.signed}`,
         `ad_hoc_sealed=${manifest.adHocSealed === true}`,
         `builder_sha=${manifest.builderSha ?? manifest.sourceSha}`,
+        `effective_signing_policy=${manifest.effectiveSigningPolicy}`,
+        `immutable_signing_policy=${manifest.immutableSigningPolicy ?? 'auto'}`,
         `source_sha=${manifest.sourceSha}`,
         `tag=${manifest.tag}`,
         `update_channel=${manifest.updateChannel}`,
@@ -256,6 +345,9 @@ const runCli = () => {
       artifactDirectory,
       builderSha: process.env.ONEWORKS_DESKTOP_BUILDER_GIT_HASH ?? '',
       createdAt: process.env.ONEWORKS_DESKTOP_BUILD_TIME,
+      effectiveSigningPolicy: process.env.ONEWORKS_DESKTOP_SIGNING_POLICY ?? '',
+      immutableSigningPolicy: process.env.ONEWORKS_DESKTOP_IMMUTABLE_SIGNING_POLICY ?? '',
+      requestedSigningPolicy: process.env.ONEWORKS_DESKTOP_REQUESTED_SIGNING_POLICY ?? '',
       signed: /^(1|true|yes|on)$/i.test(process.env.ONEWORKS_DESKTOP_SIGN ?? ''),
       sourceSha: process.env.ONEWORKS_DESKTOP_BUILD_GIT_HASH ?? '',
       tag: process.env.ONEWORKS_DESKTOP_RELEASE_TAG ?? '',
@@ -267,7 +359,11 @@ const runCli = () => {
   if (command === 'verify') {
     const manifest = verifyCandidateManifest({
       artifactDirectory,
+      enforceImmutableSigningPolicy: /^(1|true|yes|on)$/i.test(
+        process.env.ONEWORKS_DESKTOP_ENFORCE_IMMUTABLE_SIGNING_POLICY ?? ''
+      ),
       expectedArchitectures: process.env.ONEWORKS_DESKTOP_EXPECTED_ARCHS,
+      expectedSigningPolicy: process.env.ONEWORKS_DESKTOP_EXPECTED_SIGNING_POLICY,
       expectedTag: process.env.ONEWORKS_DESKTOP_RELEASE_TAG ?? '',
       expectedTargets: process.env.ONEWORKS_DESKTOP_EXPECTED_MAKE_TARGETS
     })

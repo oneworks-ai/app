@@ -14,6 +14,7 @@ import { buildPackageReleaseTag } from './cli-package-release'
 
 export interface PackageManifestSnapshot {
   name?: unknown
+  oneworks?: unknown
   private?: unknown
   version?: unknown
 }
@@ -25,6 +26,7 @@ export interface PackageManifestChange {
 }
 
 export interface ReleaseTagCandidate {
+  desktopSigningPolicy?: DesktopSigningPolicy
   isNewPackage: boolean
   name: string
   path: string
@@ -33,6 +35,11 @@ export interface ReleaseTagCandidate {
   tag: string
   version: string
 }
+
+export type DesktopSigningPolicy = 'auto' | 'signed' | 'unsigned'
+
+const desktopPackageName = '@oneworks/desktop'
+const desktopSigningPolicies = new Set<DesktopSigningPolicy>(['auto', 'signed', 'unsigned'])
 
 export interface ReleaseTagPlan {
   base: string
@@ -66,6 +73,31 @@ const readPackageIdentity = (manifest: null | PackageManifestSnapshot) => {
   }
 }
 
+const readDesktopSigningPolicy = (
+  manifest: null | PackageManifestSnapshot,
+  packageName: string
+): DesktopSigningPolicy | undefined => {
+  if (packageName !== desktopPackageName) return undefined
+  if (manifest == null) {
+    throw new Error(`${desktopPackageName} release manifest is missing.`)
+  }
+
+  const oneworks = manifest.oneworks
+  const release = typeof oneworks === 'object' && oneworks != null
+    ? (oneworks as { release?: unknown }).release
+    : undefined
+  const policy = typeof release === 'object' && release != null
+    ? (release as { macosSigningPolicy?: unknown }).macosSigningPolicy
+    : undefined
+  const normalized = policy ?? 'auto'
+  if (typeof normalized !== 'string' || !desktopSigningPolicies.has(normalized as DesktopSigningPolicy)) {
+    throw new Error(
+      `${desktopPackageName} oneworks.release.macosSigningPolicy must be auto, signed, or unsigned.`
+    )
+  }
+  return normalized as DesktopSigningPolicy
+}
+
 export const createReleaseTagPlanFromManifestChanges = (
   changes: PackageManifestChange[],
   input: {
@@ -97,7 +129,9 @@ export const createReleaseTagPlanFromManifestChanges = (
       assertVscodeStoreVersionAvailable(tag, input.existingReleaseTags)
     }
 
+    const desktopSigningPolicy = readDesktopSigningPolicy(change.after, after.name)
     tags.set(tag, {
+      ...(desktopSigningPolicy == null ? {} : { desktopSigningPolicy }),
       isNewPackage: before == null,
       name: after.name,
       path: change.path,

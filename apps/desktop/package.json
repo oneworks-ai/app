@@ -9,6 +9,11 @@
     "type": "git",
     "url": "git+https://github.com/oneworks-ai/app.git"
   },
+  "oneworks": {
+    "release": {
+      "macosSigningPolicy": "auto"
+    }
+  },
   "main": "./dist/main/index.js",
   "scripts": {
     "build:electron": "electron-vite build --config electron.vite.config.ts --outDir dist --ignoreConfigWarning",

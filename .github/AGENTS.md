@@ -75,7 +75,7 @@ Relay dev workflow 使用独立的 dev 输入：
 
 其他发布 workflow 读取 `VSCODE_EXTENSION_PUBLISHER`。桌面 workflow 还读取以下可选 variables，并在 workflow 内提供默认行为：
 
-- `DESKTOP_SIGN=false`
+- `DESKTOP_SIGN=false`（只表示签名能力 / 凭据总开关；具体版本 policy 由 `apps/desktop/package.json` 锁定）
 - `DESKTOP_AUTO_UPDATE=true`
 
 ## 维护约束
