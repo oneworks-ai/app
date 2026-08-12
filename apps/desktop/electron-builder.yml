@@ -36,6 +36,7 @@ mac:
 dmg:
   icon: build/icon.icns
   sign: false
+  writeUpdateInfo: false
 
 pkg:
   installLocation: /Applications

@@ -37,6 +37,11 @@ exports.default = async function notarizeMacArtifacts(buildResult) {
     return []
   }
 
+  if (isTruthy(process.env.ONEWORKS_DESKTOP_DEFER_NOTARIZATION)) {
+    console.log('[desktop] deferring installer notarization to the recoverable workflow state machine')
+    return []
+  }
+
   const { notarize } = require('@electron/notarize')
   const credentials = readNotarizationCredentials()
   for (const artifactPath of artifactPaths) {

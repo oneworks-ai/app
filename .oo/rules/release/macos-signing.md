@@ -4,6 +4,8 @@ App Store 外分发不走 Mac App Store 证书，使用 Apple Developer Program 
 
 GitHub Actions 把 `Developer ID Application` 导入临时 keychain 后，必须先把该 keychain 加入当前 user domain 的 search list，再用同一个精确 identity 和 `--keychain` 对一次性 executable 做真实 `codesign` / strict verify。`security find-identity` 只能证明 identity 可枚举，不能单独证明 `codesign` 能解析并使用对应私钥；探针失败时必须在打包前 fail closed，且不得输出 identity、证书或密码，临时 P12、探针和 keychain 必须由 always cleanup 收口。
 
+Apple 公证可能把新 team / 新 app 放入持续一两天的深入分析。workflow 不得用一个覆盖签名、上传和等待的 `submit --wait` 长进程承载恢复边界：app、DMG、PKG 都必须先用 `--no-wait` 取得 submission ID，把精确待公证字节、大小、SHA-256、source / builder SHA、build branch / time 和 ID 写入 recovery artifact，再做 20 分钟有界轮询。仍为 `In Progress` 时本轮明确停止；后续通过原 run id 和 `app` / `installer` stage 下载并校验同一 artifact，且必须用 GitHub API 核对原 run 的 repository、workflow path、attempt、head SHA 与失败终态，只查询既有 ID、staple 和完成剩余构建。若 submit 返回前连接中断，先保存 attempted marker，再以团队 history 的文件名和有限时间窗唯一对账；只能提交从未尝试过的剩余 target，每次恢复都绑定当前 run 并重新上传更新后的状态。无法唯一归因、混入 product rebuild 输入，或历史 source 仍使用同步公证 / 未启用 osx-sign 串行补丁 / DMG update info 时都必须在打包前 fail closed，不得重新签名或重复 submit。团队历史只读检查使用 `notarization_history_only=true`，不能与任何构建、版本或恢复输入混用。
+
 ## Secret 与 variable
 
 - `DESKTOP_CSC_LINK`：Developer ID Application `.p12`，base64 后写入 secret，用于签 `.app`。
@@ -95,6 +97,26 @@ gh workflow run desktop-package.yml \
   --ref main \
   -f create_release=false \
   -f release_tag=pkg/oneworks-desktop/v0.1.0-beta.11
+```
+
+如果 Apple 超过有界等待时间，保留失败 run，不要重跑完整构建。按失败步骤选择恢复 stage：
+
+```bash
+gh workflow run desktop-package.yml \
+  --repo oneworks-ai/app \
+  --ref main \
+  -f create_release=false \
+  -f notarization_run_id=<failed-run-id> \
+  -f notarization_stage=app
+```
+
+只读查看当前 team 的 submission ID 与状态时使用：
+
+```bash
+gh workflow run desktop-package.yml \
+  --repo oneworks-ai/app \
+  --ref main \
+  -f notarization_history_only=true
 ```
 
 下载 workflow artifact 后在 macOS 上验证：

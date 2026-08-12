@@ -34,6 +34,19 @@ on:
         description: Create or update a GitHub Release with the generated artifacts.
         required: false
         type: boolean
+      notarization_history_only:
+        default: false
+        description: Query Apple notarization history without building, submitting, releasing, or changing artifacts.
+        required: false
+        type: boolean
+      notarization_run_id:
+        description: Prior Desktop Package run whose exact notarization recovery artifact should be resumed without resubmission.
+        required: false
+        type: string
+      notarization_stage:
+        description: Recovery stage from notarization_run_id; must be app or installer.
+        required: false
+        type: string
       product_source_sha:
         description: Optional immutable product commit to rebuild with the reviewed workflow tooling. Must equal the peeled release tag.
         required: false
@@ -54,6 +67,7 @@ on:
         type: number
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
@@ -169,11 +183,35 @@ jobs:
           BUILDER_SOURCE_SHA: ${{ inputs.builder_source_sha }}
           CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
           CREATE_RELEASE_REQUESTED: ${{ inputs.create_release }}
+          NOTARIZATION_HISTORY_ONLY: ${{ inputs.notarization_history_only }}
+          NOTARIZATION_RUN_ID: ${{ inputs.notarization_run_id }}
+          NOTARIZATION_STAGE: ${{ inputs.notarization_stage }}
           PRODUCT_SOURCE_SHA: ${{ inputs.product_source_sha }}
           RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
           REPLACE_EXISTING_RELEASE: ${{ inputs.replace_existing_release }}
         shell: bash
         run: |
+          if [[ "$NOTARIZATION_HISTORY_ONLY" == "true" ]]; then
+            if [[ "$CREATE_RELEASE_REQUESTED" == "true" || -n "$BUILDER_SOURCE_SHA" || -n "$CANDIDATE_RUN_ID" || -n "$NOTARIZATION_RUN_ID" || -n "$NOTARIZATION_STAGE" || -n "$PRODUCT_SOURCE_SHA" || -n "$RELEASE_TAG_INPUT" || "$REPLACE_EXISTING_RELEASE" == "true" ]]; then
+              echo "notarization_history_only cannot be combined with build, promotion, or recovery inputs." >&2
+              exit 1
+            fi
+            exit 0
+          fi
+          if [[ -n "$NOTARIZATION_RUN_ID" || -n "$NOTARIZATION_STAGE" ]]; then
+            if [[ ! "$NOTARIZATION_RUN_ID" =~ ^[0-9]+$ ]]; then
+              echo "notarization_run_id must be a numeric GitHub Actions run id." >&2
+              exit 1
+            fi
+            if [[ "$NOTARIZATION_STAGE" != "app" && "$NOTARIZATION_STAGE" != "installer" ]]; then
+              echo "notarization_stage must be app or installer." >&2
+              exit 1
+            fi
+            if [[ -n "$BUILDER_SOURCE_SHA" || -n "$CANDIDATE_RUN_ID" || -n "$PRODUCT_SOURCE_SHA" || "$REPLACE_EXISTING_RELEASE" == "true" ]]; then
+              echo "notarization recovery cannot be combined with product rebuild, candidate promotion, or release replacement." >&2
+              exit 1
+            fi
+          fi
           if [[ "$CREATE_RELEASE_REQUESTED" == "true" && -z "$RELEASE_TAG_INPUT" ]]; then
             echo "release_tag is required when create_release is enabled manually." >&2
             exit 1
@@ -216,6 +254,24 @@ jobs:
             fi
           fi
 
+  notarization-history:
+    name: Apple notarization history
+    needs: dispatch-policy
+    if: github.event_name == 'workflow_dispatch' && inputs.notarization_history_only
+    runs-on: macos-26
+    environment: Production
+    timeout-minutes: 10
+    steps:
+      - name: Checkout release tooling
+        uses: actions/checkout@v4
+
+      - name: Query Apple notarization history
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: node apps/desktop/scripts/notarization-state.cjs history
+
   package:
     name: macOS release installer
     needs: dispatch-policy
@@ -223,6 +279,7 @@ jobs:
       always() &&
       (needs.dispatch-policy.result == 'success' || needs.dispatch-policy.result == 'skipped') &&
       github.event_name != 'pull_request' &&
+      !(github.event_name == 'workflow_dispatch' && inputs.notarization_history_only) &&
       !(github.event_name == 'workflow_dispatch' && inputs.create_release && inputs.candidate_run_id != '')
     runs-on: macos-26
     environment: ${{ github.event_name == 'schedule' && 'Preview' || 'Production' }}
@@ -233,6 +290,64 @@ jobs:
     steps:
       - name: Checkout release tooling
         uses: actions/checkout@v4
+
+      - name: Download notarization recovery state
+        if: github.event_name == 'workflow_dispatch' && inputs.notarization_run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          name: desktop-${{ inputs.notarization_stage }}-notarization-recovery
+          path: ${{ runner.temp }}/oneworks-desktop-notarization-recovery
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.notarization_run_id }}
+
+      - name: Inspect notarization recovery state
+        id: notarization_recovery
+        if: github.event_name == 'workflow_dispatch' && inputs.notarization_run_id != ''
+        env:
+          EXPECTED_STAGE: ${{ inputs.notarization_stage }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NOTARIZATION_RUN_ID: ${{ inputs.notarization_run_id }}
+          REQUESTED_RELEASE_TAG: ${{ inputs.release_tag }}
+          STATE_DIR: ${{ runner.temp }}/oneworks-desktop-notarization-recovery
+        shell: bash
+        run: |
+          run_path="$RUNNER_TEMP/oneworks-notarization-source-run.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$NOTARIZATION_RUN_ID" > "$run_path"
+          node - "$STATE_DIR" "$EXPECTED_STAGE" "$REQUESTED_RELEASE_TAG" "$GITHUB_OUTPUT" "$run_path" <<'NODE'
+          const fs = require('node:fs')
+          const path = require('node:path')
+          const [stateDir, expectedStage, requestedReleaseTag, outputPath, runPath] = process.argv.slice(2)
+          const state = JSON.parse(fs.readFileSync(path.join(stateDir, 'notarization-state.json'), 'utf8'))
+          const run = JSON.parse(fs.readFileSync(runPath, 'utf8'))
+          const provenance = state.artifactProvenance ?? {}
+          if (
+            state.schemaVersion !== 1 ||
+            state.stage !== expectedStage ||
+            !/^[0-9a-f]{40}$/i.test(state.sourceSha) ||
+            !/^[0-9a-f]{40}$/i.test(state.builderSha) ||
+            typeof state.buildBranch !== 'string' ||
+            state.buildBranch === '' ||
+            /[\r\n]/.test(state.buildBranch) ||
+            Number.isNaN(Date.parse(state.buildTime)) ||
+            String(run.id) !== provenance.runId ||
+            run.run_attempt !== provenance.runAttempt ||
+            run.head_sha !== provenance.headSha ||
+            run.path !== provenance.workflowPath ||
+            run.repository?.full_name !== process.env.GITHUB_REPOSITORY ||
+            run.status !== 'completed' ||
+            !['cancelled', 'failure', 'timed_out'].includes(run.conclusion) ||
+            !/^$|^pkg\/oneworks-desktop\/v[0-9A-Za-z.-]+$/.test(state.releaseTag ?? '') ||
+            (requestedReleaseTag && state.releaseTag !== requestedReleaseTag)
+          ) {
+            throw new Error('Notarization recovery state does not match the requested stage or source contract')
+          }
+          fs.appendFileSync(outputPath, `build_branch=${state.buildBranch}\n`)
+          fs.appendFileSync(outputPath, `build_time=${state.buildTime}\n`)
+          fs.appendFileSync(outputPath, `builder_sha=${state.builderSha}\n`)
+          fs.appendFileSync(outputPath, `release_tag=${state.releaseTag ?? ''}\n`)
+          fs.appendFileSync(outputPath, `source_sha=${state.sourceSha}\n`)
+          NODE
 
       - name: Validate requested product source
         env:
@@ -280,25 +395,37 @@ jobs:
           fi
 
       - name: Checkout immutable product source
-        if: github.event_name == 'workflow_dispatch' && inputs.product_source_sha != ''
+        if: >-
+          github.event_name == 'workflow_dispatch' &&
+          (inputs.product_source_sha != '' || inputs.notarization_run_id != '')
         uses: actions/checkout@v4
         with:
           path: product-source
-          ref: ${{ inputs.product_source_sha }}
+          ref: ${{ steps.notarization_recovery.outputs.source_sha || inputs.product_source_sha }}
 
       - name: Resolve desktop workspace
         id: desktop_workspace
         env:
+          NOTARIZATION_SOURCE_SHA: ${{ steps.notarization_recovery.outputs.source_sha }}
+          NOTARIZATION_BUILDER_SHA: ${{ steps.notarization_recovery.outputs.builder_sha }}
+          NOTARIZATION_STAGE: ${{ inputs.notarization_stage }}
           PRODUCT_SOURCE_SHA: ${{ inputs.product_source_sha }}
         shell: bash
         run: |
           workspace_dir="."
           source_sha="$GITHUB_SHA"
-          if [[ -n "$PRODUCT_SOURCE_SHA" ]]; then
+          builder_sha="$GITHUB_SHA"
+          if [[ -n "$NOTARIZATION_SOURCE_SHA" ]]; then
+            workspace_dir="product-source"
+            source_sha="$NOTARIZATION_SOURCE_SHA"
+            if [[ "$NOTARIZATION_STAGE" == "installer" ]]; then
+              builder_sha="$NOTARIZATION_BUILDER_SHA"
+            fi
+          elif [[ -n "$PRODUCT_SOURCE_SHA" ]]; then
             workspace_dir="product-source"
             source_sha="$PRODUCT_SOURCE_SHA"
           fi
-          echo "builder_sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          echo "builder_sha=$builder_sha" >> "$GITHUB_OUTPUT"
           echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
           echo "workspace_dir=$workspace_dir" >> "$GITHUB_OUTPUT"
 
@@ -328,7 +455,7 @@ jobs:
           CREATE_RELEASE_REQUESTED: ${{ inputs.create_release || false }}
           DESKTOP_AUTO_UPDATE_REQUESTED: ${{ vars.DESKTOP_AUTO_UPDATE || 'true' }}
           EVENT_NAME: ${{ github.event_name }}
-          RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
+          RELEASE_TAG_INPUT: ${{ inputs.release_tag || steps.notarization_recovery.outputs.release_tag }}
         run: |
           if [[ "$EVENT_NAME" == "workflow_dispatch" && "$CREATE_RELEASE_REQUESTED" == "true" && -z "$RELEASE_TAG_INPUT" ]]; then
             echo "release_tag is required when create_release is enabled manually." >&2
@@ -383,8 +510,15 @@ jobs:
 
       - name: Resolve desktop build source metadata
         id: desktop_build_source
+        env:
+          RECOVERY_BUILD_BRANCH: ${{ steps.notarization_recovery.outputs.build_branch }}
+          RECOVERY_BUILD_TIME: ${{ steps.notarization_recovery.outputs.build_time }}
         shell: bash
-        run: echo "time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+        run: |
+          build_branch="${RECOVERY_BUILD_BRANCH:-${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}}"
+          build_time="${RECOVERY_BUILD_TIME:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
+          echo "branch=$build_branch" >> "$GITHUB_OUTPUT"
+          echo "time=$build_time" >> "$GITHUB_OUTPUT"
 
       - name: Resolve desktop build policy
         id: desktop_build_policy
@@ -392,12 +526,15 @@ jobs:
         env:
           DESKTOP_SIGN_REQUESTED: ${{ vars.DESKTOP_SIGN || 'false' }}
           EVENT_NAME: ${{ github.event_name }}
+          NOTARIZATION_RECOVERY: ${{ inputs.notarization_run_id != '' }}
         run: |
           archs="arm64,x64"
           make_targets="dmg,zip,pkg"
           sign=false
 
-          if [[ "$EVENT_NAME" == "schedule" ]]; then
+          if [[ "$NOTARIZATION_RECOVERY" == "true" ]]; then
+            sign=true
+          elif [[ "$EVENT_NAME" == "schedule" ]]; then
             archs="arm64"
             make_targets="dmg"
           else
@@ -409,6 +546,36 @@ jobs:
           echo "archs=$archs" >> "$GITHUB_OUTPUT"
           echo "make_targets=$make_targets" >> "$GITHUB_OUTPUT"
           echo "sign=$sign" >> "$GITHUB_OUTPUT"
+
+      - name: Validate recoverable product signing tooling
+        if: >-
+          steps.desktop_build_policy.outputs.sign == 'true' &&
+          steps.desktop_workspace.outputs.workspace_dir != '.'
+        env:
+          PRODUCT_WORKSPACE: ${{ steps.desktop_workspace.outputs.workspace_dir }}
+        run: |
+          node - "$PRODUCT_WORKSPACE" <<'NODE'
+          const fs = require('node:fs')
+          const path = require('node:path')
+          const workspace = path.resolve(process.argv[2])
+          const read = relativePath => fs.readFileSync(path.join(workspace, relativePath), 'utf8')
+          const signing = read('apps/desktop/scripts/mac-signing-options.cjs')
+          const installers = read('apps/desktop/scripts/notarize-artifacts.cjs')
+          const workspaceConfig = read('pnpm-workspace.yaml')
+          const builderConfig = read('apps/desktop/electron-builder.yml')
+          const patchPath = path.join(workspace, 'patches', '@electron__osx-sign@2.4.0.patch')
+          if (
+            signing.includes('osxNotarize') ||
+            !installers.includes('ONEWORKS_DESKTOP_DEFER_NOTARIZATION') ||
+            !workspaceConfig.includes("'@electron/osx-sign@2.4.0'") ||
+            !builderConfig.includes('writeUpdateInfo: false') ||
+            !fs.existsSync(patchPath)
+          ) {
+            throw new Error(
+              'Product source predates the recoverable Desktop signing toolchain; cut a new source identity instead of entering blocking notarization.'
+            )
+          }
+          NODE
 
       - name: Validate desktop signing credentials
         shell: bash
@@ -451,7 +618,7 @@ jobs:
           fi
 
       - name: Import desktop application signing identity
-        if: steps.desktop_build_policy.outputs.sign == 'true'
+        if: steps.desktop_build_policy.outputs.sign == 'true' && inputs.notarization_run_id == ''
         shell: bash
         env:
           DESKTOP_CSC_KEY_PASSWORD: ${{ secrets.DESKTOP_CSC_KEY_PASSWORD }}
@@ -501,6 +668,7 @@ jobs:
           echo "ONEWORKS_DESKTOP_SIGNING_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
 
       - name: Package desktop app
+        if: inputs.notarization_run_id == ''
         working-directory: ${{ steps.desktop_workspace.outputs.workspace_dir }}
         run: pnpm desktop:package
         env:
@@ -508,7 +676,7 @@ jobs:
           APPLE_ID_PASSWORD: ${{ steps.desktop_build_policy.outputs.sign == 'true' && secrets.APPLE_ID_PASSWORD || '' }}
           APPLE_TEAM_ID: ${{ steps.desktop_build_policy.outputs.sign == 'true' && secrets.APPLE_TEAM_ID || '' }}
           ONEWORKS_DESKTOP_ARCHS: ${{ steps.desktop_build_policy.outputs.archs }}
-          ONEWORKS_DESKTOP_BUILD_GIT_BRANCH: ${{ github.head_ref || github.ref_name }}
+          ONEWORKS_DESKTOP_BUILD_GIT_BRANCH: ${{ steps.desktop_build_source.outputs.branch }}
           ONEWORKS_DESKTOP_BUILD_GIT_HASH: ${{ steps.desktop_workspace.outputs.source_sha }}
           ONEWORKS_DESKTOP_BUILD_TIME: ${{ steps.desktop_build_source.outputs.time }}
           ONEWORKS_DESKTOP_ENABLE_AUTO_UPDATE: ${{ steps.desktop_release.outputs.auto_update }}
@@ -518,17 +686,140 @@ jobs:
           ONEWORKS_DESKTOP_UPDATE_CHANNEL: ${{ steps.desktop_release.outputs.update_channel }}
           ONEWORKS_DESKTOP_VERSION: ${{ steps.desktop_release.outputs.version }}
 
+      - name: Restore signed app notarization recovery payload
+        id: restore_app_notarization
+        if: inputs.notarization_run_id != '' && inputs.notarization_stage == 'app'
+        working-directory: ${{ steps.desktop_workspace.outputs.workspace_dir }}
+        run: >-
+          node "$GITHUB_WORKSPACE/apps/desktop/scripts/notarization-state.cjs"
+          restore
+          --state-dir "$RUNNER_TEMP/oneworks-desktop-notarization-recovery"
+          --workspace-dir "$PWD"
+
+      - name: Verify signed apps before notarization
+        if: >-
+          steps.desktop_build_policy.outputs.sign == 'true' &&
+          (inputs.notarization_run_id == '' || inputs.notarization_stage == 'app')
+        working-directory: ${{ steps.desktop_workspace.outputs.workspace_dir }}
+        run: >-
+          node "$GITHUB_WORKSPACE/apps/desktop/scripts/verify-macos-signed-apps.cjs"
+          --signature-only
+          apps/desktop/out
+
+      - name: Prepare signed app notarization recovery state
+        id: prepare_app_notarization
+        if: steps.desktop_build_policy.outputs.sign == 'true' && inputs.notarization_run_id == ''
+        working-directory: ${{ steps.desktop_workspace.outputs.workspace_dir }}
+        run: >-
+          node "$GITHUB_WORKSPACE/apps/desktop/scripts/notarization-state.cjs"
+          prepare
+          --stage app
+          --state-dir "$RUNNER_TEMP/oneworks-desktop-app-notarization"
+          --workspace-dir "$PWD"
+          --build-branch "${{ steps.desktop_build_source.outputs.branch }}"
+          --build-time "${{ steps.desktop_build_source.outputs.time }}"
+          --run-id "$GITHUB_RUN_ID"
+          --run-attempt "$GITHUB_RUN_ATTEMPT"
+          --run-head-sha "$GITHUB_SHA"
+          --source-sha "${{ steps.desktop_workspace.outputs.source_sha }}"
+          --builder-sha "${{ steps.desktop_workspace.outputs.builder_sha }}"
+          --release-tag "${{ steps.desktop_release.outputs.tag }}"
+
+      - name: Submit signed apps for notarization without waiting
+        if: steps.desktop_build_policy.outputs.sign == 'true' && inputs.notarization_run_id == ''
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: >-
+          node apps/desktop/scripts/notarization-state.cjs
+          submit
+          --state-dir "$RUNNER_TEMP/oneworks-desktop-app-notarization"
+
+      - name: Retain exact signed app notarization recovery state
+        if: always() && steps.prepare_app_notarization.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-app-notarization-recovery
+          path: ${{ runner.temp }}/oneworks-desktop-app-notarization
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: ${{ github.event_name == 'workflow_dispatch' && inputs.retention_days || 14 }}
+
+      - name: Reconcile and submit app notarization recovery state
+        id: resume_app_notarization
+        if: inputs.notarization_run_id != '' && inputs.notarization_stage == 'app'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          state_dir="$RUNNER_TEMP/oneworks-desktop-notarization-recovery"
+          node apps/desktop/scripts/notarization-state.cjs reconcile --state-dir "$state_dir"
+          node apps/desktop/scripts/notarization-state.cjs submit --state-dir "$state_dir"
+
+      - name: Bind updated app notarization recovery state to this run
+        id: bind_app_notarization
+        if: >-
+          always() &&
+          inputs.notarization_run_id != '' &&
+          inputs.notarization_stage == 'app' &&
+          steps.restore_app_notarization.outcome == 'success'
+        run: >-
+          node apps/desktop/scripts/notarization-state.cjs bind
+          --state-dir "$RUNNER_TEMP/oneworks-desktop-notarization-recovery"
+          --run-id "$GITHUB_RUN_ID"
+          --run-attempt "$GITHUB_RUN_ATTEMPT"
+          --run-head-sha "$GITHUB_SHA"
+
+      - name: Retain updated app notarization recovery state
+        if: >-
+          always() &&
+          inputs.notarization_run_id != '' &&
+          inputs.notarization_stage == 'app' &&
+          steps.bind_app_notarization.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-app-notarization-recovery
+          path: ${{ runner.temp }}/oneworks-desktop-notarization-recovery
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: ${{ inputs.retention_days }}
+
+      - name: Wait for existing app notarization submissions
+        if: >-
+          steps.desktop_build_policy.outputs.sign == 'true' &&
+          (inputs.notarization_run_id == '' || inputs.notarization_stage == 'app')
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          NOTARIZATION_RUN_ID: ${{ inputs.notarization_run_id }}
+        shell: bash
+        run: |
+          state_dir="$RUNNER_TEMP/oneworks-desktop-app-notarization"
+          if [[ -n "$NOTARIZATION_RUN_ID" ]]; then
+            state_dir="$RUNNER_TEMP/oneworks-desktop-notarization-recovery"
+          fi
+          node apps/desktop/scripts/notarization-state.cjs wait \
+            --state-dir "$state_dir" \
+            --timeout-minutes 20
+          node apps/desktop/scripts/notarization-state.cjs staple \
+            --state-dir "$state_dir" \
+            --workspace-dir "${{ steps.desktop_workspace.outputs.workspace_dir }}"
+
       - name: Verify signed and notarized macOS app bundles
-        if: steps.desktop_build_policy.outputs.sign == 'true'
+        if: steps.desktop_build_policy.outputs.sign == 'true' && inputs.notarization_stage != 'installer'
         working-directory: ${{ steps.desktop_workspace.outputs.workspace_dir }}
         run: node "$GITHUB_WORKSPACE/apps/desktop/scripts/verify-macos-signed-apps.cjs" apps/desktop/out
 
       - name: Seal immutable unsigned product app bundles
-        if: inputs.product_source_sha != '' && steps.desktop_build_policy.outputs.sign != 'true'
+        if: inputs.notarization_run_id == '' && inputs.product_source_sha != '' && steps.desktop_build_policy.outputs.sign != 'true'
         working-directory: ${{ steps.desktop_workspace.outputs.workspace_dir }}
         run: node "$GITHUB_WORKSPACE/apps/desktop/scripts/mac-adhoc-seal.cjs" seal-output apps/desktop/out
 
       - name: Smoke test packaged server
+        if: inputs.notarization_stage != 'installer'
         working-directory: ${{ steps.desktop_workspace.outputs.workspace_dir }}
         run: pnpm -C apps/desktop smoke:package
         env:
@@ -537,10 +828,12 @@ jobs:
           ONEWORKS_DESKTOP_RELEASE_BUILD: ${{ steps.desktop_release.outputs.enabled }}
 
       - name: Restore desktop build dependencies
+        if: inputs.notarization_stage != 'installer'
         working-directory: ${{ steps.desktop_workspace.outputs.workspace_dir }}
         run: pnpm install --frozen-lockfile --prod=false
 
       - name: Build desktop artifacts
+        if: inputs.notarization_stage != 'installer'
         working-directory: ${{ steps.desktop_workspace.outputs.workspace_dir }}
         run: pnpm -C apps/desktop make:from-package
         env:
@@ -554,6 +847,7 @@ jobs:
           DEBUG: electron-builder
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ONEWORKS_DESKTOP_ARCHS: ${{ steps.desktop_build_policy.outputs.archs }}
+          ONEWORKS_DESKTOP_DEFER_NOTARIZATION: ${{ steps.desktop_build_policy.outputs.sign }}
           ONEWORKS_DESKTOP_MAKE_TARGETS: ${{ steps.desktop_build_policy.outputs.make_targets }}
           ONEWORKS_DESKTOP_OFFICIAL_RELEASE_BUILD: ${{ steps.desktop_release.outputs.enabled }}
           ONEWORKS_DESKTOP_PUBLISH: never
@@ -561,6 +855,116 @@ jobs:
           ONEWORKS_DESKTOP_UPDATE_CHANNEL: ${{ steps.desktop_release.outputs.update_channel }}
           ONEWORKS_DESKTOP_VERSION: ${{ steps.desktop_release.outputs.version }}
           ONEWORKS_DESKTOP_SIGN: ${{ steps.desktop_build_policy.outputs.sign }}
+
+      - name: Restore installer notarization recovery payload
+        id: restore_installer_notarization
+        if: inputs.notarization_run_id != '' && inputs.notarization_stage == 'installer'
+        working-directory: ${{ steps.desktop_workspace.outputs.workspace_dir }}
+        run: >-
+          node "$GITHUB_WORKSPACE/apps/desktop/scripts/notarization-state.cjs"
+          restore
+          --state-dir "$RUNNER_TEMP/oneworks-desktop-notarization-recovery"
+          --workspace-dir "$PWD"
+
+      - name: Prepare installer notarization recovery state
+        id: prepare_installer_notarization
+        if: steps.desktop_build_policy.outputs.sign == 'true' && inputs.notarization_stage != 'installer'
+        working-directory: ${{ steps.desktop_workspace.outputs.workspace_dir }}
+        run: >-
+          node "$GITHUB_WORKSPACE/apps/desktop/scripts/notarization-state.cjs"
+          prepare
+          --stage installer
+          --state-dir "$RUNNER_TEMP/oneworks-desktop-installer-notarization"
+          --workspace-dir "$PWD"
+          --build-branch "${{ steps.desktop_build_source.outputs.branch }}"
+          --build-time "${{ steps.desktop_build_source.outputs.time }}"
+          --run-id "$GITHUB_RUN_ID"
+          --run-attempt "$GITHUB_RUN_ATTEMPT"
+          --run-head-sha "$GITHUB_SHA"
+          --source-sha "${{ steps.desktop_workspace.outputs.source_sha }}"
+          --builder-sha "${{ steps.desktop_workspace.outputs.builder_sha }}"
+          --release-tag "${{ steps.desktop_release.outputs.tag }}"
+
+      - name: Submit installers for notarization without waiting
+        if: steps.desktop_build_policy.outputs.sign == 'true' && inputs.notarization_stage != 'installer'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: >-
+          node apps/desktop/scripts/notarization-state.cjs
+          submit
+          --state-dir "$RUNNER_TEMP/oneworks-desktop-installer-notarization"
+
+      - name: Retain exact installer notarization recovery state
+        if: always() && steps.prepare_installer_notarization.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-installer-notarization-recovery
+          path: ${{ runner.temp }}/oneworks-desktop-installer-notarization
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: ${{ github.event_name == 'workflow_dispatch' && inputs.retention_days || 14 }}
+
+      - name: Reconcile and submit installer notarization recovery state
+        id: resume_installer_notarization
+        if: inputs.notarization_run_id != '' && inputs.notarization_stage == 'installer'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          state_dir="$RUNNER_TEMP/oneworks-desktop-notarization-recovery"
+          node apps/desktop/scripts/notarization-state.cjs reconcile --state-dir "$state_dir"
+          node apps/desktop/scripts/notarization-state.cjs submit --state-dir "$state_dir"
+
+      - name: Bind updated installer notarization recovery state to this run
+        id: bind_installer_notarization
+        if: >-
+          always() &&
+          inputs.notarization_run_id != '' &&
+          inputs.notarization_stage == 'installer' &&
+          steps.restore_installer_notarization.outcome == 'success'
+        run: >-
+          node apps/desktop/scripts/notarization-state.cjs bind
+          --state-dir "$RUNNER_TEMP/oneworks-desktop-notarization-recovery"
+          --run-id "$GITHUB_RUN_ID"
+          --run-attempt "$GITHUB_RUN_ATTEMPT"
+          --run-head-sha "$GITHUB_SHA"
+
+      - name: Retain updated installer notarization recovery state
+        if: >-
+          always() &&
+          inputs.notarization_run_id != '' &&
+          inputs.notarization_stage == 'installer' &&
+          steps.bind_installer_notarization.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-installer-notarization-recovery
+          path: ${{ runner.temp }}/oneworks-desktop-notarization-recovery
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: ${{ inputs.retention_days }}
+
+      - name: Wait for existing installer notarization submissions
+        if: steps.desktop_build_policy.outputs.sign == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          NOTARIZATION_STAGE: ${{ inputs.notarization_stage }}
+        shell: bash
+        run: |
+          state_dir="$RUNNER_TEMP/oneworks-desktop-installer-notarization"
+          if [[ "$NOTARIZATION_STAGE" == "installer" ]]; then
+            state_dir="$RUNNER_TEMP/oneworks-desktop-notarization-recovery"
+          fi
+          node apps/desktop/scripts/notarization-state.cjs wait \
+            --state-dir "$state_dir" \
+            --timeout-minutes 20
+          node apps/desktop/scripts/notarization-state.cjs staple \
+            --state-dir "$state_dir" \
+            --workspace-dir "${{ steps.desktop_workspace.outputs.workspace_dir }}"
 
       - name: Remove temporary desktop signing keychain
         if: always() && steps.desktop_build_policy.outputs.sign == 'true'
@@ -588,7 +992,7 @@ jobs:
         working-directory: ${{ steps.desktop_workspace.outputs.workspace_dir }}
         run: pnpm -C apps/desktop verify:macos-install
         env:
-          ONEWORKS_DESKTOP_BUILD_GIT_BRANCH: ${{ github.head_ref || github.ref_name }}
+          ONEWORKS_DESKTOP_BUILD_GIT_BRANCH: ${{ steps.desktop_build_source.outputs.branch }}
           ONEWORKS_DESKTOP_BUILD_GIT_HASH: ${{ steps.desktop_workspace.outputs.source_sha }}
           ONEWORKS_DESKTOP_BUILD_TIME: ${{ steps.desktop_build_source.outputs.time }}
           ONEWORKS_DESKTOP_INSTALL_ARCH: arm64
