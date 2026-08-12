@@ -160,6 +160,10 @@ const COPILOT_NATIVE_BRIDGE_DISABLED_EVENTS: Array<
   'PreToolUse' | 'PostToolUse' | 'Stop'
 > = ['PreToolUse', 'PostToolUse', 'Stop']
 
+const GROK_NATIVE_BRIDGE_DISABLED_EVENTS: Array<
+  'PreToolUse' | 'PostToolUse' | 'Stop'
+> = ['PreToolUse', 'PostToolUse', 'Stop']
+
 export const run = async (
   options: RunTaskOptions,
   adapterOptions: AdapterQueryOptions
@@ -235,7 +239,7 @@ export const run = async (
   const mergedModelServices = mergedConfig.modelServices ?? {}
   const serviceModels = listServiceModels(mergedModelServices)
   const mergedDefaultModelService = pickFirstNonEmptyString([mergedConfig.defaultModelService])
-  const supportedEffortAdapters = new Set(['claude-code', 'codex', 'copilot', 'kimi', 'opencode', 'pi'])
+  const supportedEffortAdapters = new Set(['claude-code', 'codex', 'copilot', 'grok', 'kimi', 'opencode', 'pi'])
   const supportsEffort = supportedEffortAdapters.has(runtimeAdapterType)
   const adapterCommonConfig = supportsEffort
     ? resolveAdapterCommonConfig<Record<string, unknown> & { effort?: AdapterQueryOptions['effort'] }, 'effort'>(
@@ -295,6 +299,7 @@ export const run = async (
     'codex',
     'copilot',
     'gemini',
+    'grok',
     'kimi',
     'opencode',
     'pi'
@@ -411,6 +416,8 @@ export const run = async (
       ? BASE_NATIVE_BRIDGE_DISABLED_EVENTS
       : runtimeAdapterType === 'copilot' && runtimeCtx.env.__ONEWORKS_PROJECT_COPILOT_NATIVE_HOOKS_AVAILABLE__ === '1'
       ? COPILOT_NATIVE_BRIDGE_DISABLED_EVENTS
+      : runtimeAdapterType === 'grok' && runtimeCtx.env.__ONEWORKS_PROJECT_GROK_NATIVE_HOOKS_AVAILABLE__ === '1'
+      ? GROK_NATIVE_BRIDGE_DISABLED_EVENTS
       : runtimeAdapterType === 'opencode' && runtimeCtx.env.__ONEWORKS_PROJECT_OPENCODE_NATIVE_HOOKS_AVAILABLE__ === '1'
       ? OPENCODE_NATIVE_BRIDGE_DISABLED_EVENTS
       : []

@@ -59,6 +59,7 @@ export const BUILTIN_NATIVE_ADAPTERS = [
   'codex',
   'copilot',
   'gemini',
+  'grok',
   'kimi',
   'opencode',
   'pi'

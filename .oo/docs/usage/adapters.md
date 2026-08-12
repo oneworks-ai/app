@@ -13,7 +13,7 @@
 
 ## 前端选择器
 
-聊天输入框的适配器选择器默认展示当前应用内置支持的原生适配器：Claude Code（`claude-code`）、Codex（`codex`）、Copilot（`copilot`）、Gemini（`gemini`）、Kimi（`kimi`）、OpenCode（`opencode`）和 Pi（`pi`）。
+聊天输入框的适配器选择器默认展示当前应用内置支持的原生适配器：Claude Code（`claude-code`）、Codex（`codex`）、Copilot（`copilot`）、Gemini（`gemini`）、Grok（`grok`）、Kimi（`kimi`）、OpenCode（`opencode`）和 Pi（`pi`）。
 
 以下 adapter 不需要先写入 `.oo.config.json` 才能出现在选择器里。用户选择某个 adapter 发起会话后，运行时会沿用 adapter 自己的 CLI 准备逻辑，把托管 CLI 安装到全局托管 bootstrap cache；首次启动某个 adapter 时可能会稍慢。
 
@@ -192,3 +192,36 @@ adapters:
 - `mode` 会直接映射 `--mode`，并优先于 `autopilot` / plan permission；需要 autopilot 时推荐配置 `mode: autopilot` 或 `autopilot: true` 二选一
 
 当前不实现 Copilot 多账号 API；需要登录、切换或排查账号时，使用官方 CLI 的 `/login`、`/logout`、`/user` 流程。
+
+## Grok 示例
+
+`grok` 使用 xAI 官方 Grok Build CLI。One Works 为每个 session 生成独立的 `$GROK_HOME`，保留原生 session 续接，同时只引用真实 Grok home 里的登录凭据和受管策略文件。
+
+```yaml
+adapters:
+  grok:
+    cli:
+      source: managed
+      version: 1.0.3
+    effort: high
+    disableAutoUpdate: true
+    disableMemory: false
+    disableSubagents: false
+    disableWebSearch: false
+    configContent:
+      ui:
+        screen_mode: minimal
+```
+
+行为说明：
+
+- 默认托管 `@xai-official/grok`，也可用 `cli.source: system` 或 `cli.source: path` 指向已有 `grok`
+- 原生模型名直接传给 `--model`；共享模型选择器里的 `service,model` 会写成 session 级 Grok custom model，支持 `chat_completions`、`responses` 和 `messages` backend
+- selected MCP servers 会写入 session `config.toml` 的 `mcp_servers`，selected skills 会投影到 `$GROK_HOME/skills`
+- system prompt、permission mode、effort 和 tool include/exclude 会映射到 Grok 原生 CLI 参数
+- hook plugins 会接入 Grok native `PreToolUse` / `PostToolUse` / `Stop`；其中 `PreToolUse` 保留阻断能力，对应通用 bridge 事件自动去重
+- 自动更新检查默认关闭；memory、subagents 和 web search 默认保留，只有对应 `disable*` 配置为 `true` 时才关闭
+- session home 使用 project-shared 稳定路径；续接时会按同一个 UUID 从旧版 context 目录或真实 `$GROK_HOME` 迁移原生会话，因此切换 worktree / runtime context 后仍可继续
+- “外部会话”会扫描 `$GROK_HOME/sessions`（默认 `~/.grok/sessions`），支持按项目预览并导入 Grok 原生历史；导入副本保持只读语义
+
+One Works 当前不提供 Grok 多账号 API；首次登录或切换登录态时使用官方 `grok login` / `grok logout`。

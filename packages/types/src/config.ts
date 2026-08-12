@@ -852,7 +852,7 @@ export interface ServerConfig {
   publicPaths?: string[]
 }
 
-export type NativeHistoryImportAdapter = 'codex' | 'claude-code'
+export type NativeHistoryImportAdapter = 'codex' | 'claude-code' | 'grok'
 
 export interface NativeHistoryImportAdapterConfig {
   autoImport?: boolean

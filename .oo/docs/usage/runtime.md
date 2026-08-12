@@ -112,7 +112,7 @@ webAuth:
 - `HOME` 可用于隔离运行环境，默认落到 project home 的 `.mock` 子目录。启动入口会把真实 home 里的常见 dot 目录和 macOS `Library/Keychains`、`Library/Application Support` 桥接进 mock home；直接软链路径如果已有旧文件或目录，会先移动到同级 `.backup-*` 再创建正确软链。
 - `modelServices` 是共享层配置；各 adapter 会按自己的原生运行时做映射，具体以对应 adapter 文档为准。
   - `claude-code` 对 Anthropic、Kimi、DeepSeek、百炼/Qwen、智谱 GLM、MiniMax、OpenRouter、Requesty、Vercel AI Gateway、Portkey 等已知 Anthropic-compatible 官方入口优先直连；其它 OpenAI-compatible `service,model` 继续回退 Claude Code Router
-  - `codex` 与 `gemini` 走 adapter 自己的本地代理
+  - `codex` 与 `gemini` 走 adapter 自己的本地代理；`grok` 把 routed service 写成 session 级原生 custom model
   - 部分 adapter 会把 provider 配置写进 session 级或原生配置文件
 - Coding Plan / Token Plan 指服务商的计费套餐，不是 agent Plan Mode。选择这类服务时优先使用专属 provider id，例如 `qwen-coding-plan`、`zhipu-coding-plan`、`minimax-token-plan`、`kimi-code`、`tencent-tokenhub-coding-plan`、`volcengine-ark-coding-plan`、`baidu-qianfan-coding-plan`；不要把套餐 key 和普通 API key、套餐 base URL 和普通 API base URL 混用。
 - 套餐模型列表默认来自内置目录，不假设 `/v1/models` 可用。只有想固定 allowlist 时才写 `models`：

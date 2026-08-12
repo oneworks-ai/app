@@ -13,7 +13,7 @@ This page covers the adapter configuration structure in the Web configuration UI
 
 ## Frontend Selector
 
-The adapter selector in the chat input shows the native adapters built into the current application: Claude Code, Codex, Copilot, Gemini, Kimi, OpenCode, and Pi. Adapter configuration controls binary selection, managed CLI versions, model routing, accounts, and adapter-specific options.
+The adapter selector in the chat input shows the native adapters built into the current application: Claude Code, Codex, Copilot, Gemini, Grok, Kimi, OpenCode, and Pi. Adapter configuration controls binary selection, managed CLI versions, model routing, accounts, and adapter-specific options.
 
 ## Pi coding-agent
 
@@ -52,6 +52,7 @@ Native CLI installation and version pinning are covered in [Adapter CLI Installa
 
 - Claude Code connects directly to known official Anthropic-compatible endpoints for Anthropic, Kimi, DeepSeek, Alibaba Qwen/Bailian, Zhipu GLM, MiniMax, OpenRouter, Requesty, Vercel AI Gateway, and Portkey; other OpenAI-compatible routed models can still use Claude Code Router.
 - Codex and Gemini use adapter-owned local proxy behavior.
+- Grok writes routed `service,model` selections into a session-scoped native custom model entry and supports `chat_completions`, `responses`, and `messages` backends.
 - Some adapters write provider configuration to native config files or session-level state.
 
 Workspaces launched by a Launcher or daemon manager reuse a manager-owned Codex app-server
@@ -114,6 +115,32 @@ Codex environment actions are not lifecycle `start` scripts, so they are reporte
 skipped rather than migrated incorrectly. Import creates only missing environments,
 never merges into or overwrites an existing environment directory, and never modifies
 the native TOML files.
+
+## Grok Example
+
+The `grok` adapter uses xAI's official Grok Build CLI. One Works gives every session an isolated `$GROK_HOME`, preserving native session resume while referencing selected credentials and policy files from the real Grok home.
+
+```yaml
+adapters:
+  grok:
+    cli:
+      source: managed
+      version: 1.0.3
+    effort: high
+    disableAutoUpdate: true
+    disableMemory: false
+    disableSubagents: false
+    disableWebSearch: false
+    configContent:
+      ui:
+        screen_mode: minimal
+```
+
+Selected MCP servers and skills are projected into the session home. System prompts, permission mode, effort, and tool filters use native CLI flags. Hook plugins use Grok's native `PreToolUse`, `PostToolUse`, and `Stop` events; `PreToolUse` remains blockable. Auto-update checks are disabled by default, while memory, subagents, and web search remain enabled unless their corresponding `disable*` option is true.
+
+The session home uses a project-shared stable path. On resume, One Works can migrate the matching native UUID from a legacy context-scoped home or the real `$GROK_HOME`, so sessions keep working after switching worktrees or runtime contexts. The External Sessions panel also scans `$GROK_HOME/sessions` (normally `~/.grok/sessions`) and can preview and import native Grok history for the current project; imported copies remain read-only.
+
+One Works does not currently expose a Grok multiple-account API. Use the native `grok login` and `grok logout` commands to change the CLI login state.
 
 ## Environment Boundaries
 

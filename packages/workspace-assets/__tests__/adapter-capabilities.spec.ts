@@ -9,6 +9,7 @@ describe('adapter native skill capabilities', () => {
       ['codex', 'Codex'],
       ['copilot', 'Copilot'],
       ['gemini', 'Gemini'],
+      ['grok', 'Grok'],
       ['kimi', 'Kimi'],
       ['opencode', 'OPENCODE_CONFIG_DIR'],
       ['pi', '--skill']

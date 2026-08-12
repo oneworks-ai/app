@@ -1,0 +1,9 @@
+const GROK_ICON_SVG = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <rect width="48" height="48" rx="12" fill="#111111"/>
+  <path d="M34.8 15.2A14 14 0 1 0 37 29h-8.8v-5H42v3c0 9.9-8 18-18 18S6 36.9 6 27 14.1 9 24 9c4.8 0 9.2 1.9 12.4 5.1l-1.6 1.1Z" fill="#fff"/>
+  <path d="m29.5 13 5.5-4-2 6.5 5.5 4-6.8-.1-2.2 6.4-2-6.4-6.8.1 5.5-4L24 9l5.5 4Z" fill="#fff"/>
+</svg>`
+
+export const adapterIcon = `data:image/svg+xml;utf8,${encodeURIComponent(GROK_ICON_SVG)}`
+export const adapterDisplayName = 'Grok'
