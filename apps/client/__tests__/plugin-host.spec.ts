@@ -1,4 +1,6 @@
 /* eslint-disable max-lines -- plugin host registry coverage keeps shared setup and runtime contract cases together. */
+import { readFileSync } from 'node:fs'
+
 import { isValidElement } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -517,6 +519,18 @@ describe('client plugin host registry', () => {
       title: 'setting'
     })
     expect(isValidElement(settingRow)).toBe(true)
+    const flushAgentRoom = renderPluginHostComponent('agentRoom', {
+      inset: false,
+      roomId: 'room-demo'
+    })
+    expect(isValidElement(flushAgentRoom)).toBe(true)
+    expect((flushAgentRoom as { props?: { inset?: boolean } }).props?.inset).toBe(false)
+    const pluginHostStyles = readFileSync(
+      new URL('../src/plugins/PluginHost.scss', import.meta.url),
+      'utf8'
+    )
+    expect(pluginHostStyles).toContain('.plugin-host-agent-room.is-flush .plugin-host-agent-room__messages')
+    expect(pluginHostStyles).toContain('.plugin-host-agent-room.is-flush .plugin-host-agent-room__composer')
   }, 20_000)
 
   it('merges route-owned chrome overrides with plugin-provided route chrome', () => {

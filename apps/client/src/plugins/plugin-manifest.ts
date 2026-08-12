@@ -459,6 +459,7 @@ export interface PluginHostListComponentProps {
 
 export interface PluginHostAgentRoomComponentProps {
   className?: string
+  inset?: boolean
   roomId: string
 }
 

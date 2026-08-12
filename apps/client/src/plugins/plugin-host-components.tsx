@@ -571,7 +571,13 @@ function PluginHostAgentRoom(props: PluginHostComponentPropsById['agentRoom']) {
   }
 
   return (
-    <div className={['plugin-host-agent-room', props.className].filter(Boolean).join(' ')}>
+    <div
+      className={[
+        'plugin-host-agent-room',
+        props.inset === false ? 'is-flush' : '',
+        props.className
+      ].filter(Boolean).join(' ')}
+    >
       <div className='plugin-host-agent-room__messages'>
         <AgentRoomTranscript
           room={room}

@@ -10,6 +10,10 @@
 - Prefer adapter packages from the current development workspace over stale managed caches, while preserving installed and packaged runtime cache precedence.
 - Add Channel Runtime v2 foundations for entity-bound channel links, sender-scoped commands and approvals, cross-channel identity linking, resumable conversations, availability policies, and the first-party OneWorks channel.
 - Add the OneWorks Chat Rooms product plugin for local Rooms, owner-bound explicit sharing, signed webhook simulations, reusable scenarios, redacted live traces, idempotent delivery, and navigation preferences while keeping provider connection management in the built-in Channel system.
+- Keep Chat Rooms usable across desktop and compact layouts by letting the timeline fill the available surface, anchoring the composer at the bottom without duplicate insets, and opening sharing and trace tools as returnable subpages.
+
+  ![Chat Rooms with a full-height timeline and bottom composer](./chat-rooms-layout.png)
+
 - Manage multiple Claude Code accounts through the official CLI login flow, isolated account profiles, portable or device-bound credential handling, cached usage, and Relay-safe account synchronization.
 - Add a generic manager-owned runtime broker with owner-bound workspace leases, lease-capable idempotent callbacks, bidirectional events/requests, stale cleanup, and reusable adapter/plugin drivers.
 - Reuse Codex app-server processes across manager-launched workspaces, warm up to three configured account profiles without blocking startup, and route managed hooks back to the owning workspace while keeping skills thread-scoped.

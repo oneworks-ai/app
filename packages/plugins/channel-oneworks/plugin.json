@@ -118,6 +118,7 @@
       "routes": [
         {
           "id": "oneworks-channel",
+          "icon": "meeting_room",
           "title": "Chat Rooms",
           "titleI18n": {
             "en": "Chat Rooms",

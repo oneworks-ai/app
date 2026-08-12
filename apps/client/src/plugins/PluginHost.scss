@@ -87,6 +87,11 @@
   }
 }
 
+.plugin-host-agent-room.is-flush .plugin-host-agent-room__messages,
+.plugin-host-agent-room.is-flush .plugin-host-agent-room__composer {
+  padding: 0;
+}
+
 .plugin-host-component-file-tree {
   min-height: 0;
   overflow: auto;
