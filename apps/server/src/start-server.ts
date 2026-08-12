@@ -11,25 +11,21 @@ import { migrateProjectHomeSegments } from '@oneworks/utils/project-home-migrati
 import type { ProjectHomeMigratedSegment } from '@oneworks/utils/project-home-migration'
 
 import { installAssetCreateConnectionGuard } from '#~/services/ai/asset-create-operation.js'
-import { commitChannelChildRunTerminal } from '#~/services/channel-lifecycle/index.js'
-import { startChannelResumeScheduler } from '#~/services/channel-resume/index.js'
+import type { startChannelResumeScheduler } from '#~/services/channel-resume/index.js'
 import { loadConfigState } from '#~/services/config/index.js'
 import { acquireConfigWatchRuntime } from '#~/services/config/watch.js'
 import { initializeModelProviderCatalog } from '#~/services/model-providers/catalog-loader.js'
-import { getPluginManager } from '#~/services/plugins/index.js'
 import {
   disposeRuntimeBrokerDrivers,
   initializeRuntimeBrokerDrivers,
   scheduleRuntimeBrokerWarmup
 } from '#~/services/runtime-broker/drivers/index.js'
 import { configureRuntimeBrokerTransport, disposeRuntimeBroker } from '#~/services/runtime-broker/index.js'
-import { autoImportNativeProjectHistoryAndReplay } from '#~/services/runtime-store/history-import.js'
-import { startRuntimeStoreWatcher } from '#~/services/runtime-store/watcher.js'
+import type { startRuntimeStoreWatcher } from '#~/services/runtime-store/watcher.js'
 import { removeServerInstanceStateForPid, writeServerInstanceState } from '#~/services/server-instance.js'
 import { installWebDebugChii } from '#~/services/web-debug/chii.js'
 
-import { handleChannelSessionEvent, initChannels } from './channels'
-import type { ChannelConfigSourceEntry } from './channels'
+import type { ChannelConfigSourceEntry, initChannels } from './channels'
 import { initMiddlewares } from './middlewares'
 import { isDefaultServerDataDir, migrateDefaultServerDataDir } from './project-home-data-migration'
 import { mountRoutes } from './routes'
@@ -252,24 +248,35 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
   let runtimeStoreWatcher: ReturnType<typeof startRuntimeStoreWatcher> | undefined
   let runtimeStoreWatcherTimer: ReturnType<typeof setTimeout> | undefined
   let pluginRuntimePreloadTimer: ReturnType<typeof setTimeout> | undefined
+  let pluginRuntimePreloadPromise: Promise<void> | undefined
   let channelResumeScheduler: ReturnType<typeof startChannelResumeScheduler> | undefined
+  let channelManager: Awaited<ReturnType<typeof initChannels>> | undefined
   let runtimeBrokerTransport: RuntimeBrokerLoopbackTransport | undefined
+  let channelsModule: typeof import('./channels/index.js') | undefined
+  let serverClosed = false
 
   const scheduleRuntimeStoreWatcher = () => {
     logStartup(`runtime store watcher start scheduled delay=${RUNTIME_STORE_WATCHER_DELAY_MS}ms`)
-    runtimeStoreWatcherTimer = setTimeout(() => {
+    runtimeStoreWatcherTimer = setTimeout(async () => {
       runtimeStoreWatcherTimer = undefined
       logStartup('runtime store watcher start begin')
       try {
-        runtimeStoreWatcher = startRuntimeStoreWatcher({
-          deliverSessionEvent: handleChannelSessionEvent,
+        const [loadedChannels, channelLifecycle, runtimeStoreHistory, runtimeStore] = await Promise.all([
+          channelsModule == null ? import('./channels/index.js') : Promise.resolve(channelsModule),
+          import('#~/services/channel-lifecycle/index.js'),
+          import('#~/services/runtime-store/history-import.js'),
+          import('#~/services/runtime-store/watcher.js')
+        ])
+        if (serverClosed) return
+        runtimeStoreWatcher = runtimeStore.startRuntimeStoreWatcher({
+          deliverSessionEvent: loadedChannels.handleChannelSessionEvent,
           deliverSessionTerminal: (input) => {
-            commitChannelChildRunTerminal(input)
+            channelLifecycle.commitChannelChildRunTerminal(input)
           }
         })
         logStartup('runtime store watcher start invoked')
-        void runtimeStoreWatcher.scanAndReplay()
-          .then(() => autoImportNativeProjectHistoryAndReplay(config))
+        await runtimeStoreWatcher.scanAndReplay()
+          .then(() => runtimeStoreHistory.autoImportNativeProjectHistoryAndReplay(config))
           .then((result) => {
             if (result.importedEvents > 0 || result.matchedFiles > 0) {
               logger.info({
@@ -280,12 +287,9 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
               }, '[runtime-store] Native project history auto import complete')
             }
           })
-          .catch(error => {
-            logger.warn({ error }, '[runtime-store] Runtime store initial replay or native history auto import failed')
-          })
       } catch (error) {
         logStartup('runtime store watcher start failed')
-        logger.warn({ error }, '[runtime-store] Failed to start watcher')
+        logger.warn({ error }, '[runtime-store] Failed to start watcher or replay runtime history')
       }
     }, RUNTIME_STORE_WATCHER_DELAY_MS)
   }
@@ -295,8 +299,13 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
     logStartup('plugin runtime preload scheduled')
     pluginRuntimePreloadTimer = setTimeout(() => {
       pluginRuntimePreloadTimer = undefined
+      if (serverClosed) return
       logStartup('plugin runtime preload begin')
-      void getPluginManager().load()
+      pluginRuntimePreloadPromise = import('#~/services/plugins/index.js')
+        .then(async ({ getPluginManager }) => {
+          if (serverClosed) return
+          await getPluginManager().load()
+        })
         .then(() => {
           logStartup('plugin runtime preload complete')
         })
@@ -305,6 +314,29 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
           logger.warn({ error }, '[plugins] Failed to preload plugin runtime')
         })
     }, 0)
+  }
+
+  const initializeWorkspaceRuntimeOwners = async (serverPublicBaseUrl: string | undefined) => {
+    logStartup('channels init begin')
+    const loadedChannelsModule = await import('./channels/index.js')
+    channelsModule = loadedChannelsModule
+    channelManager = await loadedChannelsModule.initChannels(configs, {
+      serverBaseUrl: serverPublicBaseUrl
+    })
+    logStartup('channels init complete')
+    logStartup('channel resume scheduler start begin')
+    const { startChannelResumeScheduler: startScheduler } = await import(
+      '#~/services/channel-resume/index.js'
+    )
+    channelResumeScheduler = startScheduler()
+    logStartup('channel resume scheduler start complete')
+  }
+
+  const disposePluginRuntime = async () => {
+    if (env.__ONEWORKS_PROJECT_SERVER_ROLE__ !== 'manager') return
+    await pluginRuntimePreloadPromise
+    const { getPluginManager } = await import('#~/services/plugins/index.js')
+    await getPluginManager().dispose()
   }
 
   try {
@@ -329,9 +361,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
     setupWebSocket(server, env)
     logStartup('websocket setup complete')
     if (ownsWorkspaceRuntime) {
-      logStartup('channels init begin')
-      await initChannels(configs, { serverBaseUrl: serverPublicBaseUrl })
-      logStartup('channels init complete')
+      await initializeWorkspaceRuntimeOwners(serverPublicBaseUrl)
     } else {
       logStartup('channels init skipped for manager role')
     }
@@ -379,9 +409,6 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
     })
     if (ownsWorkspaceRuntime) {
       scheduleRuntimeStoreWatcher()
-      logStartup('channel resume scheduler start begin')
-      channelResumeScheduler = startChannelResumeScheduler()
-      logStartup('channel resume scheduler start complete')
     } else {
       logStartup('runtime store watcher skipped for manager role')
       logStartup('channel resume scheduler skipped for manager role')
@@ -394,6 +421,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
 
     server.once('close', () => {
       void removeServerInstanceStateForPid(env, process.pid)
+      serverClosed = true
       if (runtimeStoreWatcherTimer != null) {
         clearTimeout(runtimeStoreWatcherTimer)
         runtimeStoreWatcherTimer = undefined
@@ -404,8 +432,13 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
       }
       runtimeStoreWatcher?.stop()
       channelResumeScheduler?.stop()
+      void channelManager?.closeAll().catch(error => {
+        logger.warn({ error }, '[channels] Failed to close channel runtime')
+      })
       configWatch.release()
-      void getPluginManager().dispose()
+      void disposePluginRuntime().catch(error => {
+        logger.warn({ error }, '[plugins] Failed to dispose plugin runtime')
+      })
       if (env.__ONEWORKS_PROJECT_SERVER_ROLE__ === 'manager') {
         void runtimeBrokerTransport?.close().catch(error => {
           logger.warn({ error }, '[runtime-broker] Failed to close loopback transport')
@@ -428,7 +461,9 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
     }
     runtimeStoreWatcher?.stop()
     channelResumeScheduler?.stop()
+    await channelManager?.closeAll()
     configWatch.release()
+    await disposePluginRuntime()
     if (env.__ONEWORKS_PROJECT_SERVER_ROLE__ === 'manager') {
       await runtimeBrokerTransport?.close()
       runtimeBrokerTransport = undefined

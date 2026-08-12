@@ -294,6 +294,7 @@ describe('plugin resolver', () => {
     const runtimePackageDir = join(tempDir, 'runtime')
     const realHome = join(tempDir, 'home')
     const bundledPluginRoot = join(runtimePackageDir, 'node_modules/@oneworks/plugin-relay')
+    const bundledLoggerPluginRoot = join(runtimePackageDir, 'node_modules/@oneworks/plugin-logger')
     const activePluginRoot = resolveManagedPluginPackageInstallDir({
       env: {
         __ONEWORKS_PROJECT_REAL_HOME__: realHome
@@ -301,16 +302,38 @@ describe('plugin resolver', () => {
       packageName: '@oneworks/plugin-relay',
       version: '0.1.0'
     })
+    const activeLoggerPluginRoot = resolveManagedPluginPackageInstallDir({
+      env: {
+        __ONEWORKS_PROJECT_REAL_HOME__: realHome
+      },
+      packageName: '@oneworks/plugin-logger',
+      version: '0.1.0'
+    })
     await mkdir(workspace, { recursive: true })
     await mkdir(join(realHome, '.oneworks/bootstrap/module-updates'), { recursive: true })
     await writeLoggerPluginPackage(bundledPluginRoot, '0.2.0', '@oneworks/plugin-relay')
     await writeLoggerPluginPackage(activePluginRoot, '0.1.0', '@oneworks/plugin-relay')
+    await writeLoggerPluginPackage(bundledLoggerPluginRoot, '0.2.0')
+    await writeLoggerPluginPackage(activeLoggerPluginRoot, '0.1.0')
     await writeFile(
       join(realHome, '.oneworks/bootstrap/module-updates/oneworks__plugin-relay.json'),
       JSON.stringify(
         {
           packageDir: activePluginRoot,
           packageName: '@oneworks/plugin-relay',
+          updatedAt: '2026-06-06T00:00:00.000Z',
+          version: '0.1.0'
+        },
+        null,
+        2
+      )
+    )
+    await writeFile(
+      join(realHome, '.oneworks/bootstrap/module-updates/oneworks__plugin-logger.json'),
+      JSON.stringify(
+        {
+          packageDir: activeLoggerPluginRoot,
+          packageName: '@oneworks/plugin-logger',
           updatedAt: '2026-06-06T00:00:00.000Z',
           version: '0.1.0'
         },
@@ -331,9 +354,20 @@ describe('plugin resolver', () => {
       plugins: [{ id: '@oneworks/plugin-relay' }],
       preferBundledOfficialPlugins: true
     })
+    const [normalLogger] = await resolveConfiguredPluginInstances({
+      cwd: workspace,
+      plugins: [{ id: 'logger' }]
+    })
+    const [preferredLogger] = await resolveConfiguredPluginInstances({
+      cwd: workspace,
+      plugins: [{ id: 'logger' }],
+      preferBundledOfficialPlugins: true
+    })
 
     expect(normal?.rootDir).toBe(activePluginRoot)
     expect(preferred?.rootDir).toBe(bundledPluginRoot)
+    expect(normalLogger?.rootDir).toBe(activeLoggerPluginRoot)
+    expect(preferredLogger?.rootDir).toBe(bundledLoggerPluginRoot)
   })
 
   it('does not treat an older workspace package as the bundled official plugin', async () => {

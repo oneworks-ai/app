@@ -11,7 +11,6 @@ import { getApiErrorMessage } from '#~/api/base'
 import { restartLauncherWorkspace } from '#~/api/launcher'
 import { DesktopWorkspaceStartupReadyContext } from '#~/components/layout/desktop-workspace-startup-ready'
 import { WorkspaceOpeningOverlay } from '#~/components/workspace/WorkspaceOpeningOverlay'
-import { useDesktopUiReady } from '#~/desktop/use-desktop-ui-ready'
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
 import { getRestorableWorkspaceConnection } from '#~/workspace-connection-restore'
 import type {
@@ -27,6 +26,7 @@ import {
   rememberWorkspaceConnection,
   withWorkspaceRouteId
 } from '#~/workspace-connection-state'
+import { preloadWorkspaceSurface } from '#~/workspace-startup-preload'
 import { WorkspaceConnectionErrorView } from './WorkspaceConnectionErrorView'
 
 interface ResolvedWorkspaceConnection {
@@ -44,11 +44,7 @@ type ConnectionState =
     status: 'error'
   }
 
-type OpeningOverlayPhase = 'visible' | 'exiting' | 'hidden'
-
-const OPENING_OVERLAY_MIN_VISIBLE_MS = 720
-const OPENING_OVERLAY_EXIT_MS = 420
-const OPENING_OVERLAY_READY_FALLBACK_MS = 8_000
+type OpeningOverlayPhase = 'visible' | 'hidden'
 
 const createVersionConflictRestartKey = (details: LauncherWorkspaceVersionConflictDetails) => (
   JSON.stringify({
@@ -65,7 +61,6 @@ export function WorkspaceConnectionGate({
   children,
   workspaceId
 }: PropsWithChildren<{ workspaceId?: string }>) {
-  useDesktopUiReady()
   const { t } = useTranslation()
   const { resolvedThemeMode } = useResolvedThemeMode()
   const [state, setState] = useState<ConnectionState>({ status: 'loading' })
@@ -73,10 +68,10 @@ export function WorkspaceConnectionGate({
   const [isRestarting, setIsRestarting] = useState(false)
   const [overlayPhase, setOverlayPhase] = useState<OpeningOverlayPhase>('visible')
   const parentMarkWorkspaceStartupReady = useContext(DesktopWorkspaceStartupReadyContext)
-  const overlayMountedAtRef = useRef(performance.now())
+  const terminalMarkWorkspaceStartupReady = window.oneworksDesktop?.markWorkspaceStartupReady
   const overlayExitRequestedRef = useRef(false)
-  const overlayExitTimerRef = useRef<number | null>(null)
-  const overlayHiddenTimerRef = useRef<number | null>(null)
+  const workspaceStartupReadyRequestedRef = useRef(false)
+  const workspaceStartupReadyReportedRef = useRef(false)
   const autoRestartAttemptKeyRef = useRef<string | undefined>()
   const restartActivityRef = useRef<WorkspaceServerRestartActivity | undefined>()
   const desktopConnectionUnavailableMessageRef = useRef(t('workspaceConnection.desktopConnectionUnavailable'))
@@ -85,45 +80,39 @@ export function WorkspaceConnectionGate({
     desktopConnectionUnavailableMessageRef.current = t('workspaceConnection.desktopConnectionUnavailable')
   }, [t])
 
-  const clearOverlayTimers = useCallback(() => {
-    if (overlayExitTimerRef.current != null) {
-      window.clearTimeout(overlayExitTimerRef.current)
-      overlayExitTimerRef.current = null
-    }
-    if (overlayHiddenTimerRef.current != null) {
-      window.clearTimeout(overlayHiddenTimerRef.current)
-      overlayHiddenTimerRef.current = null
-    }
-  }, [])
-
   const resetOpeningOverlay = useCallback(() => {
-    clearOverlayTimers()
-    overlayMountedAtRef.current = performance.now()
     overlayExitRequestedRef.current = false
     setOverlayPhase('visible')
-  }, [clearOverlayTimers])
+  }, [])
 
   const requestOpeningOverlayExit = useCallback(() => {
     if (overlayExitRequestedRef.current) return
 
     overlayExitRequestedRef.current = true
-    const elapsedMs = performance.now() - overlayMountedAtRef.current
-    const delayMs = Math.max(0, OPENING_OVERLAY_MIN_VISIBLE_MS - elapsedMs)
-
-    overlayExitTimerRef.current = window.setTimeout(() => {
-      overlayExitTimerRef.current = null
-      setOverlayPhase('exiting')
-      overlayHiddenTimerRef.current = window.setTimeout(() => {
-        overlayHiddenTimerRef.current = null
-        setOverlayPhase('hidden')
-      }, OPENING_OVERLAY_EXIT_MS)
-    }, delayMs)
+    setOverlayPhase('hidden')
   }, [])
 
-  const markWorkspaceStartupReady = useCallback(() => {
+  const requestWorkspaceStartupSurfaceReady = useCallback(() => {
+    workspaceStartupReadyRequestedRef.current = true
     requestOpeningOverlayExit()
-    parentMarkWorkspaceStartupReady?.()
-  }, [parentMarkWorkspaceStartupReady, requestOpeningOverlayExit])
+  }, [requestOpeningOverlayExit])
+
+  useEffect(() => {
+    if (
+      overlayPhase !== 'hidden' ||
+      !workspaceStartupReadyRequestedRef.current ||
+      workspaceStartupReadyReportedRef.current
+    ) {
+      return
+    }
+
+    workspaceStartupReadyReportedRef.current = true
+    if (parentMarkWorkspaceStartupReady != null) {
+      parentMarkWorkspaceStartupReady()
+      return
+    }
+    terminalMarkWorkspaceStartupReady?.()
+  }, [overlayPhase, parentMarkWorkspaceStartupReady, terminalMarkWorkspaceStartupReady])
 
   const maybeRestartIdleWorkspaceServer = useCallback(async (
     details: LauncherWorkspaceVersionConflictDetails
@@ -216,6 +205,10 @@ export function WorkspaceConnectionGate({
   useEffect(() => {
     let disposed = false
 
+    void preloadWorkspaceSurface().catch((error) => {
+      console.warn('[workspace-startup] failed to preload the real workspace surface', error)
+    })
+
     void (async () => {
       resetOpeningOverlay()
       setState({ status: 'loading' })
@@ -270,23 +263,11 @@ export function WorkspaceConnectionGate({
     }
   }, [state, t, workspaceId])
 
-  useEffect(() => () => clearOverlayTimers(), [clearOverlayTimers])
-
   useEffect(() => {
     if (state.status === 'error') {
-      markWorkspaceStartupReady()
+      requestWorkspaceStartupSurfaceReady()
     }
-  }, [markWorkspaceStartupReady, state.status])
-
-  useEffect(() => {
-    if (state.status !== 'ready') return
-
-    const fallbackTimerId = window.setTimeout(
-      markWorkspaceStartupReady,
-      OPENING_OVERLAY_READY_FALLBACK_MS
-    )
-    return () => window.clearTimeout(fallbackTimerId)
-  }, [markWorkspaceStartupReady, state.status])
+  }, [requestWorkspaceStartupSurfaceReady, state.status])
 
   if (state.status === 'error') {
     return (
@@ -307,7 +288,7 @@ export function WorkspaceConnectionGate({
 
   return (
     <DesktopWorkspaceStartupReadyContext.Provider
-      value={shouldRenderChildren ? markWorkspaceStartupReady : null}
+      value={shouldRenderChildren ? requestWorkspaceStartupSurfaceReady : null}
     >
       {shouldRenderChildren
         ? children
@@ -315,7 +296,6 @@ export function WorkspaceConnectionGate({
       {shouldRenderOverlay && (
         <WorkspaceOpeningOverlay
           appearance={resolvedThemeMode}
-          phase={overlayPhase === 'exiting' ? 'exiting' : 'visible'}
           title={t('desktopStartupOverlay.title')}
         />
       )}

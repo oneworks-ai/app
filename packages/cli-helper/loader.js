@@ -1,11 +1,14 @@
+/* eslint-disable max-lines -- process re-exec and direct entry loading share one lifecycle boundary. */
 const { spawn } = require('node:child_process')
 const { existsSync } = require('node:fs')
 const Module = require('node:module')
 const path = require('node:path')
 const process = require('node:process')
+const { pathToFileURL } = require('node:url')
 
 const ENTRY_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts', '.js', '.mjs', '.cjs']
 const CLI_HELPER_LOADER_ACTIVE_ENV = '__ONEWORKS_CLI_HELPER_LOADER_ACTIVE__'
+const CLI_HELPER_PREFER_DIST_ENTRY_ENV = '__ONEWORKS_PROJECT_CLI_PREFER_DIST_ENTRY__'
 
 const readDesktopServerChildStartedAt = () => {
   const startedAt = Number(process.env.__ONEWORKS_DESKTOP_SERVER_CHILD_STARTED_AT__)
@@ -88,13 +91,15 @@ const resolveExistingEntrypoint = (value) => {
 
 const resolveCliEntrypoint = () => {
   const sourceEntrypoint = resolveExistingEntrypoint(process.env.__ONEWORKS_PROJECT_CLI_BIN_SOURCE_ENTRY__)
-  if (sourceEntrypoint != null) {
-    return sourceEntrypoint
-  }
-
   const distEntrypoint = resolveExistingEntrypoint(process.env.__ONEWORKS_PROJECT_CLI_BIN_DIST_ENTRY__)
-  if (distEntrypoint != null) {
-    return distEntrypoint
+  const candidates = process.env[CLI_HELPER_PREFER_DIST_ENTRY_ENV] === 'true'
+    ? [distEntrypoint, sourceEntrypoint]
+    : [sourceEntrypoint, distEntrypoint]
+
+  for (const candidate of candidates) {
+    if (candidate != null) {
+      return candidate
+    }
   }
 
   throw new Error(
@@ -117,6 +122,7 @@ if (process.env[CLI_HELPER_LOADER_ACTIVE_ENV] !== 'true') {
       ...process.env,
       NODE_OPTIONS: [
         '--conditions=__oneworks__',
+        `--import=${quoteNodeOptionValue(require.resolve('@oneworks/register/esm-register'))}`,
         `--require=${quoteNodeOptionValue(require.resolve('@oneworks/register/preload'))}`,
         process.env.NODE_OPTIONS ?? ''
       ].filter(Boolean).join(' ').trim(),
@@ -185,6 +191,15 @@ if (process.env[CLI_HELPER_LOADER_ACTIVE_ENV] !== 'true') {
   const cliEntrypoint = resolveCliEntrypoint()
   logDesktopLoaderTiming(`resolve entrypoint complete path=${cliEntrypoint}`)
   logDesktopLoaderTiming('requiring entrypoint begin')
-  require(cliEntrypoint)
-  logDesktopLoaderTiming('requiring entrypoint complete')
+  if (path.extname(cliEntrypoint) === '.mjs') {
+    void import(pathToFileURL(cliEntrypoint).href)
+      .then(() => logDesktopLoaderTiming('requiring entrypoint complete'))
+      .catch((error) => {
+        console.error(error)
+        process.exit(1)
+      })
+  } else {
+    require(cliEntrypoint)
+    logDesktopLoaderTiming('requiring entrypoint complete')
+  }
 }

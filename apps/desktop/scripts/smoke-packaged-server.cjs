@@ -297,6 +297,28 @@ const resolvePackagedPaths = () => {
   }
 }
 
+const assertPackagedServerRuntimeBundle = (appDir) => {
+  const runtimeDir = path.join(
+    appDir,
+    'node_modules',
+    '@oneworks',
+    'server',
+    'dist',
+    '__INTERNAL__home'
+  )
+  const entryPath = path.join(runtimeDir, 'index.mjs')
+  if (!fs.existsSync(entryPath)) {
+    throw new Error(`Packaged server runtime entry is missing: ${entryPath}`)
+  }
+  const chunksDir = path.join(runtimeDir, 'chunks')
+  const chunks = fs.existsSync(chunksDir)
+    ? fs.readdirSync(chunksDir).filter(file => file.endsWith('.mjs'))
+    : []
+  if (chunks.length === 0) {
+    throw new Error(`Packaged server runtime split chunks are missing: ${chunksDir}`)
+  }
+}
+
 const getAvailablePort = () =>
   new Promise((resolve, reject) => {
     const server = net.createServer()
@@ -844,19 +866,14 @@ const runPackagedServerSmoke = async ({
   const logStream = fs.createWriteStream(logPath)
   const child = spawn(paths.executablePath, [path.join(paths.appDir, 'src/server-child.cjs')], {
     cwd: workspaceFolder,
-    env: {
-      ...workspaceEnv,
-      DB_PATH: path.join(smokeRoot, 'db.sqlite'),
-      ELECTRON_RUN_AS_NODE: '1',
-      __ONEWORKS_PROJECT_CLIENT_BASE__: '/ui',
-      __ONEWORKS_PROJECT_CLIENT_DIST_PATH__: paths.clientDistDir,
-      __ONEWORKS_PROJECT_CLIENT_MODE__: 'desktop',
-      __ONEWORKS_PROJECT_SERVER_DATA_DIR__: dataDir,
-      __ONEWORKS_PROJECT_SERVER_HOST__: host,
-      __ONEWORKS_PROJECT_SERVER_LOG_DIR__: logDir,
-      __ONEWORKS_PROJECT_SERVER_PORT__: String(port),
-      __ONEWORKS_PROJECT_WEB_AUTH_ENABLED__: 'false'
-    },
+    env: createPackagedServerChildEnv({
+      clientDistDir: paths.clientDistDir,
+      dataDir,
+      dbPath: path.join(smokeRoot, 'db.sqlite'),
+      logDir,
+      port,
+      workspaceEnv
+    }),
     stdio: ['ignore', 'pipe', 'pipe']
   })
 
@@ -888,18 +905,41 @@ const runPackagedServerSmoke = async ({
   }
 }
 
+const createPackagedServerChildEnv = ({
+  clientDistDir,
+  dataDir,
+  dbPath = path.join(dataDir, 'db.sqlite'),
+  logDir,
+  port,
+  workspaceEnv
+}) => ({
+  ...workspaceEnv,
+  DB_PATH: dbPath,
+  ELECTRON_RUN_AS_NODE: '1',
+  __ONEWORKS_PROJECT_CLI_PREFER_DIST_ENTRY__: 'true',
+  __ONEWORKS_PROJECT_CLIENT_BASE__: '/ui',
+  __ONEWORKS_PROJECT_CLIENT_DIST_PATH__: clientDistDir,
+  __ONEWORKS_PROJECT_CLIENT_MODE__: 'desktop',
+  __ONEWORKS_PROJECT_SERVER_DATA_DIR__: dataDir,
+  __ONEWORKS_PROJECT_SERVER_HOST__: host,
+  __ONEWORKS_PROJECT_SERVER_LOG_DIR__: logDir,
+  __ONEWORKS_PROJECT_SERVER_PORT__: String(port),
+  __ONEWORKS_PROJECT_WEB_AUTH_ENABLED__: 'false'
+})
+
 const main = async () => {
   const paths = resolvePackagedPaths()
   assertPackagedBuiltinPlugins(paths.appDir)
+  assertPackagedServerRuntimeBundle(paths.appDir)
   await runPackagedMainSmoke(paths)
 
-  const sourceResult = await runPackagedServerSmoke({
+  const workspaceResult = await runPackagedServerSmoke({
     assertCatalog: async (pluginCatalog, port) => {
       await assertBuiltinRuntimeActive(pluginCatalog, port, { privatePaths: [workspaceRoot] })
       await assertLocalClientSourcesCompile(pluginCatalog, port)
     },
     paths,
-    smokeLabel: 'source-workspace',
+    smokeLabel: 'workspace-dist',
     workspaceFolder: workspaceRoot
   })
 
@@ -941,14 +981,16 @@ const main = async () => {
     fs.rmSync(emptyRoot, { recursive: true, force: true })
   }
 
-  console.log(sourceResult)
+  console.log(workspaceResult)
 }
 
 module.exports = {
   assertBuiltinRuntimeActive,
+  assertPackagedServerRuntimeBundle,
   assertLocalClientSourcesCompile,
   assertPublicPluginMetadata,
   createPackagedAsset,
+  createPackagedServerChildEnv,
   parsePluginCatalog,
   readLocalPluginClientSource,
   readServerText,

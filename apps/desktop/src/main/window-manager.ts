@@ -648,6 +648,7 @@ export const createWindowManager = ({
 
     let clientUrl: string
     let workspaceService: Awaited<ReturnType<typeof ensureWorkspaceService>>
+    let workspaceServicePromise: ReturnType<typeof ensureWorkspaceService> | undefined
     let startupFailure: {
       code: string
       domain: DiagnosticFailureDomain
@@ -674,7 +675,10 @@ export const createWindowManager = ({
       try {
         setWorkspaceLoadingWindowBackground(windowRecord.window)
         logDesktopTiming(`workspace loadURL begin url=${workspaceUrl} elapsed=${elapsedMs(startedAt)}`)
-        await windowRecord.window.loadURL(workspaceUrl)
+        const rendererLoadPromise = windowRecord.window.loadURL(workspaceUrl)
+        workspaceServicePromise = ensureWorkspaceService(normalizedWorkspaceFolder)
+        void workspaceServicePromise.catch(() => undefined)
+        await rendererLoadPromise
         logDesktopTiming(`workspace loadURL complete elapsed=${elapsedMs(startedAt)}`)
         onStartupStage?.('renderer.loaded')
         focusWindowRecord(windowRecord)
@@ -701,7 +705,10 @@ export const createWindowManager = ({
         domain: 'server',
         retryable: true
       }
-      workspaceService = await ensureWorkspaceService(normalizedWorkspaceFolder)
+      if (workspaceServicePromise == null) {
+        throw new Error('The local One Works server did not start with the workspace renderer.')
+      }
+      workspaceService = await workspaceServicePromise
       if (workspaceService.serverUrl == null) {
         throw new Error('The local One Works server did not publish a URL.')
       }

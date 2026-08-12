@@ -27,7 +27,6 @@ import {
 import { useDesktopThemeSourceBridge, useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
 import { NotificationProvider } from '#~/notifications/NotificationProvider'
 import { PluginProvider } from '#~/plugins/PluginProvider'
-import { usePluginContext } from '#~/plugins/plugin-context'
 import { PluginThemeStyles, usePluginThemes } from '#~/plugins/plugin-themes'
 import {
   THEME_PACK_SETTINGS_STORAGE_KEY,
@@ -143,9 +142,7 @@ function useLauncherThemeConfig() {
 }
 
 function ThemedLauncherApp() {
-  const { ready } = usePluginContext()
   const themeConfig = useLauncherThemeConfig()
-  if (!ready) return null
   return (
     <ConfigProvider theme={themeConfig}>
       <PluginThemeStyles />

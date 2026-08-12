@@ -90,6 +90,6 @@ require('@oneworks/cli-helper/entry').runCliPackageEntrypoint(
     : {
       packageDir: serverPackageDir,
       sourceEntry: './src/index.ts',
-      distEntry: './dist/__INTERNAL__home/index.js'
+      distEntry: './dist/__INTERNAL__home/index.mjs'
     }
 )

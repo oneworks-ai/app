@@ -4,7 +4,8 @@
 
 ## 常见入口
 
-- `index.ts`：统一挂载各 route module 和 prefix。
+- `index.ts`：统一挂载各 route module 和 prefix。API route 通过 `lazy-router.ts` 在首个匹配请求时加载，静态 Client route 保持启动时挂载。
+- `lazy-router.ts`：为 route module 提供单一的并发安全加载边界，并保留子 Router 原有的 404 / 405 / `Allow` 语义。新增重叠 prefix 时必须先挂载更具体的 prefix。
 - `sessions.ts`：session detail、message queue、branch、message 操作等 session API。
 - `agent-rooms.ts`：Agent Room HTTP API。
 - `config.ts`：配置读取与写回 API。
@@ -41,4 +42,5 @@
 ## 回归
 
 - Route 改响应 shape 时，同时检查 client API 封装和 `packages/types/src/agent-room.ts`。
+- 改动 `index.ts` / `lazy-router.ts` 时，至少验证首请求加载、重复请求复用、并发请求去重，以及 404 / 405 / `Allow` 不回归。
 - Agent Room 行为优先跑 service 测试；route 层只在请求校验或 HTTP 状态码变化时补 route 测试。

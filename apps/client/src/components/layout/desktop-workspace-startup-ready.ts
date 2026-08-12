@@ -3,11 +3,9 @@ import { createContext, useContext, useEffect } from 'react'
 export const DesktopWorkspaceStartupReadyContext = createContext<(() => void) | null>(null)
 
 interface DesktopWorkspaceStartupReadyOptions {
-  timeoutMs?: number
   visibleSelector?: string
 }
 
-const DEFAULT_VISIBLE_READY_TIMEOUT_MS = 8_000
 const READY_PAINT_FALLBACK_MS = 250
 
 const isElementVisible = (element: Element) => {
@@ -29,7 +27,7 @@ export function useDesktopWorkspaceStartupReady(
   options: DesktopWorkspaceStartupReadyOptions = {}
 ) {
   const markReady = useContext(DesktopWorkspaceStartupReadyContext)
-  const { timeoutMs = DEFAULT_VISIBLE_READY_TIMEOUT_MS, visibleSelector } = options
+  const { visibleSelector } = options
 
   useEffect(() => {
     if (!ready || markReady == null) return
@@ -40,15 +38,10 @@ export function useDesktopWorkspaceStartupReady(
     let secondFrame: number | null = null
     let paintFallbackTimer: number | null = null
     let visibleObserver: MutationObserver | null = null
-    let visibleTimeout: number | null = null
 
     const stopWatchingVisibleElement = () => {
       visibleObserver?.disconnect()
       visibleObserver = null
-      if (visibleTimeout != null) {
-        window.clearTimeout(visibleTimeout)
-        visibleTimeout = null
-      }
     }
 
     const markReadyOnce = () => {
@@ -92,7 +85,6 @@ export function useDesktopWorkspaceStartupReady(
         childList: true,
         subtree: true
       })
-      visibleTimeout = window.setTimeout(finishAfterPaint, timeoutMs)
       checkVisibleElement()
     }
 
@@ -109,5 +101,5 @@ export function useDesktopWorkspaceStartupReady(
         window.clearTimeout(paintFallbackTimer)
       }
     }
-  }, [markReady, ready, timeoutMs, visibleSelector])
+  }, [markReady, ready, visibleSelector])
 }

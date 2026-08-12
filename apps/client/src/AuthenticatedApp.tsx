@@ -10,7 +10,6 @@ import { useClientEventStream } from '#~/hooks/use-client-event-stream'
 import { useSidebarNavigation } from '#~/hooks/use-sidebar-navigation'
 import { NotificationProvider } from '#~/notifications/NotificationProvider'
 import { PluginProvider } from '#~/plugins/PluginProvider'
-import { usePluginContext } from '#~/plugins/plugin-context'
 import { PluginThemeStyles } from '#~/plugins/plugin-themes'
 import { AppRoutes } from '#~/routes/AppRoutes'
 import { getRuntimeWorkspaceId } from '#~/runtime-config'
@@ -34,10 +33,8 @@ function HomepagePreviewNavigationBridgeSlot() {
 }
 
 function ThemedAuthenticatedApp() {
-  const { ready } = usePluginContext()
   const { activeTheme, isDarkMode, themeConfig, themePack, themeSettings } = useAppPreferences()
   const sidebarNavigation = useSidebarNavigation()
-  if (!ready) return null
 
   const themeBanner = shouldShowThemeBanner(activeTheme, themeSettings) && activeTheme?.banner != null
     ? (reserveWindowControls: boolean) => (

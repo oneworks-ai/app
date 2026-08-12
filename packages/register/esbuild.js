@@ -3,8 +3,11 @@ const Module = require('node:module')
 const path = require('node:path')
 const process = require('node:process')
 
+const { loadOrTransformSync, resolveCompilerConfigFingerprint } = require('./runtime-transpile-cache')
+
 const ONEWORKS_SOURCE_CONDITION = '__oneworks__'
 const packageRuntimeTranspileCache = new Map()
+const compilerConfigFingerprintCache = new Map()
 
 const normalizePath = (filename) => filename.split(path.sep).join('/')
 
@@ -143,8 +146,55 @@ Module._resolveFilename = function patchedResolveFilename(request, parent, isMai
   }
 }
 
-require('esbuild-register/dist/node.js').register({
+const transformVersion = require('esbuild/package.json').version
+const registerOptions = {
   target: `node${process.version.slice(1)}`,
   hookIgnoreNodeModules: false,
   hookMatcher: shouldCompileWithEsbuild
-})
+}
+
+const getCompilerConfigFingerprint = filename => {
+  const directory = path.dirname(filename)
+  const cached = compilerConfigFingerprintCache.get(directory)
+  if (cached != null) return cached
+  const fingerprint = resolveCompilerConfigFingerprint(filename)
+  compilerConfigFingerprintCache.set(directory, fingerprint)
+  return fingerprint
+}
+
+require('esbuild-register/dist/node.js').register(registerOptions)
+
+// Keep esbuild-register as the canonical compiler so tsconfig discovery,
+// source maps, import.meta.url handling, and CommonJS compatibility do not
+// drift. The wrapper only memoizes the generated JavaScript between the
+// short-lived desktop service processes used by warm startup.
+for (const extension of ['.cts', '.mts', '.ts', '.tsx']) {
+  const registeredHandler = Module._extensions[extension]
+  Module._extensions[extension] = function compileCachedOneWorksTypescript(module, filename) {
+    if (!shouldCompileWithEsbuild(filename)) {
+      return registeredHandler.call(this, module, filename)
+    }
+
+    const source = readFileSync(filename, 'utf8')
+    const compiled = loadOrTransformSync({
+      code: source,
+      compilerConfigFingerprint: getCompilerConfigFingerprint(filename),
+      filename,
+      options: registerOptions,
+      transform: () => {
+        let compiledCode
+        registeredHandler.call(this, {
+          _compile(code) {
+            compiledCode = code
+          }
+        }, filename)
+        if (typeof compiledCode !== 'string') {
+          throw new TypeError(`esbuild-register did not compile ${filename}`)
+        }
+        return compiledCode
+      },
+      transformVersion
+    })
+    module._compile(compiled, filename)
+  }
+}

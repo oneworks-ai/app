@@ -27,6 +27,9 @@
     "./esm-loader": {
       "default": "./esm-loader.mjs"
     },
+    "./esm-register": {
+      "default": "./esm-register.mjs"
+    },
     "./preload": {
       "types": "./preload.d.ts",
       "default": "./preload.js"
@@ -37,6 +40,7 @@
   "dependencies": {
     "dotenv": "^16.6.1",
     "esbuild": "^0.27.2",
-    "esbuild-register": "^3.6.0"
+    "esbuild-register": "^3.6.0",
+    "get-tsconfig": "^4.12.0"
   }
 }

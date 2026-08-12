@@ -33,6 +33,7 @@ describe('workspace opening overlay locale lifecycle', () => {
   afterEach(async () => {
     await act(async () => root.unmount())
     container.remove()
+    Reflect.deleteProperty(window, 'oneworksDesktop')
     await i18n.changeLanguage('en')
     vi.useRealTimers()
   })
@@ -63,5 +64,28 @@ describe('workspace opening overlay locale lifecycle', () => {
     })
     expect(visualTip?.textContent).not.toBe(firstVisualTip)
     expect(liveRegion?.textContent).toBe(liveMessage)
+  })
+
+  it('reports the real loading surface after the preload overlay exits without exposing fake input', async () => {
+    let finishReveal: (() => void) | undefined
+    const revealWorkspaceStartupSurface = vi.fn(() =>
+      new Promise<void>((resolve) => {
+        finishReveal = resolve
+      })
+    )
+    const markDesktopUiReady = vi.fn(async () => undefined)
+    window.oneworksDesktop = { markDesktopUiReady, revealWorkspaceStartupSurface }
+
+    await act(async () => root.render(<OverlayHarness />))
+
+    expect(revealWorkspaceStartupSurface).toHaveBeenCalledOnce()
+    expect(markDesktopUiReady).not.toHaveBeenCalled()
+    expect(document.querySelector('.workspace-opening-overlay input')).toBeNull()
+    expect(document.querySelector('.workspace-opening-overlay textarea')).toBeNull()
+    expect(document.querySelector('.workspace-opening-overlay button')).toBeNull()
+
+    await act(async () => finishReveal?.())
+
+    expect(markDesktopUiReady).toHaveBeenCalledOnce()
   })
 })

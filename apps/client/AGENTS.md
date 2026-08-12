@@ -55,7 +55,7 @@
 - 折叠左侧栏后的 `ChatHeader` 仍要保留展开侧栏、返回、前进、新建会话和右侧操作按钮；这些按钮必须继续带 tooltip 和快捷键说明。
 - sender/status bar 内 select 的视觉密度按 `.sender-container` 容器宽度逐级收缩，不按 viewport 直接判断；history 区宽度变化时 select 样式应同步调整。
 - 桌面端专属设置必须通过 `window.oneworksDesktop` 注入的数据和更新接口读取 / 保存，并且只在这些 API 存在时渲染；普通 Web/PWA 前端不能展示 Electron-only 配置项。
-- 桌面端根路径 workspace 由 `App.tsx` 进入 `WorkspaceConnectionGate`，再通过 `window.oneworksDesktop.getWorkspaceConnection()` 等待本机 server URL；不要在 `main.tsx` render 前做一次性阻塞探测，否则首次打开 workspace 超时后不会自动重试，只能靠 reload 修复。
+- 桌面端根路径 workspace 由 `App.tsx` 进入 `WorkspaceConnectionGate`，再通过 `window.oneworksDesktop.getWorkspaceConnection()` 等待本机 server URL；不要在 `main.tsx` render 前做一次性阻塞探测，否则首次打开 workspace 超时后不会自动重试，只能靠 reload 修复。连接期间只展示真实的 loading / error 状态；不得添加不能执行实际操作的伪输入框，也不得把这类占位控件计入 editable / interactive 启动指标。可以在 loading overlay 后预加载真实 `WorkspaceApp` / `AuthenticatedApp` / chat route 模块，让真实 sender 的模块解析与 server 启动重叠；不要因此提前挂载会请求错误 runtime 的应用树，也不要把预加载完成记作 readiness。真实 sender ready 后先卸载 loading overlay，再完成 desktop interactive 上报；不要用固定最短展示时间或淡出动画延迟真实交互，也不要在遮罩仍覆盖内容时提前计时。
 - 维护 homepage iframe 的 fullscreen / macOS 窗口预览时，`NavRail` 左侧窗口按钮栏要保持贴近标题：`.nav-rail-window-bar` 需要允许收缩（例如 `min-width: 0`），fullscreen 场景里的按钮栏宽度不要被 flex 内容撑回默认宽度，避免标题和最后一个按钮之间出现过大的空白。
 
 数据流约定：

@@ -137,6 +137,66 @@ require(${JSON.stringify(cliEntryPath)}).runCliPackageEntrypoint({
     expect(result.signal).toBeNull()
   })
 
+  it('prefers a packaged runtime bundle when explicitly requested', async () => {
+    const tempDir = await mkdtemp(resolve(tmpdir(), 'ow-cli-helper-dist-entry-'))
+    tempDirs.push(tempDir)
+
+    const sourceEntryPath = resolve(tempDir, 'source.cjs')
+    const distEntryPath = resolve(tempDir, 'dist.mjs')
+    await writeFile(sourceEntryPath, "process.stdout.write('source-entry')\n")
+    await writeFile(distEntryPath, "process.stdout.write('dist-entry')\n")
+
+    const result = spawnSync(
+      process.execPath,
+      [resolve(process.cwd(), 'packages/cli-helper/loader.js')],
+      {
+        cwd: process.cwd(),
+        env: {
+          ...process.env,
+          __ONEWORKS_CLI_HELPER_LOADER_ACTIVE__: 'true',
+          __ONEWORKS_PROJECT_CLI_BIN_DIST_ENTRY__: distEntryPath,
+          __ONEWORKS_PROJECT_CLI_BIN_SOURCE_ENTRY__: sourceEntryPath,
+          __ONEWORKS_PROJECT_CLI_PREFER_DIST_ENTRY__: 'true',
+          __ONEWORKS_PROJECT_PACKAGE_DIR__: tempDir
+        },
+        encoding: 'utf8'
+      }
+    )
+
+    expect(result.status).toBe(0)
+    expect(result.signal).toBeNull()
+    expect(result.stderr).toBe('')
+    expect(result.stdout).toBe('dist-entry')
+  })
+
+  it('exits when an ESM runtime entry fails to load', async () => {
+    const tempDir = await mkdtemp(resolve(tmpdir(), 'ow-cli-helper-broken-dist-entry-'))
+    tempDirs.push(tempDir)
+
+    const distEntryPath = resolve(tempDir, 'dist.mjs')
+    await writeFile(distEntryPath, "throw new Error('broken-runtime-entry')\n")
+
+    const result = spawnSync(
+      process.execPath,
+      [resolve(process.cwd(), 'packages/cli-helper/loader.js')],
+      {
+        cwd: process.cwd(),
+        env: {
+          ...process.env,
+          __ONEWORKS_CLI_HELPER_LOADER_ACTIVE__: 'true',
+          __ONEWORKS_PROJECT_CLI_BIN_DIST_ENTRY__: distEntryPath,
+          __ONEWORKS_PROJECT_CLI_PREFER_DIST_ENTRY__: 'true',
+          __ONEWORKS_PROJECT_PACKAGE_DIR__: tempDir
+        },
+        encoding: 'utf8'
+      }
+    )
+
+    expect(result.status).toBe(1)
+    expect(result.signal).toBeNull()
+    expect(result.stderr).toContain('broken-runtime-entry')
+  })
+
   it('installs its own TypeScript loader when the parent leaks a legacy loader marker', async () => {
     const tempDir = await mkdtemp(resolve(tmpdir(), 'ow-cli-helper-polluted-'))
     tempDirs.push(tempDir)
@@ -164,6 +224,41 @@ require(${JSON.stringify(cliEntryPath)}).runCliPackageEntrypoint({
     expect(result.signal).toBeNull()
     expect(result.stderr).toBe('')
     expect(result.stdout).toBe('loader-ready')
+  })
+
+  it('installs the ESM source resolver for lazy TypeScript imports', async () => {
+    const tempDir = await mkdtemp(resolve(tmpdir(), 'ow-cli-helper-lazy-import-'))
+    tempDirs.push(tempDir)
+
+    const entryPath = resolve(tempDir, 'entry.ts')
+    await writeFile(
+      entryPath,
+      "void import('./lazy.js').then(({ value }) => process.stdout.write(value))\n"
+    )
+    await writeFile(
+      resolve(tempDir, 'lazy.ts'),
+      "export const value: string = 'lazy-loader-ready'\n"
+    )
+
+    const result = spawnSync(
+      process.execPath,
+      [resolve(process.cwd(), 'packages/cli-helper/loader.js')],
+      {
+        cwd: process.cwd(),
+        env: {
+          ...process.env,
+          __ONEWORKS_CLI_HELPER_LOADER_ACTIVE__: undefined,
+          __ONEWORKS_PROJECT_PACKAGE_DIR__: tempDir,
+          __ONEWORKS_PROJECT_CLI_BIN_SOURCE_ENTRY__: entryPath
+        },
+        encoding: 'utf8'
+      }
+    )
+
+    expect(result.status).toBe(0)
+    expect(result.signal).toBeNull()
+    expect(result.stderr).toBe('')
+    expect(result.stdout).toBe('lazy-loader-ready')
   })
 
   it('bootstraps cli package environment before delegating to the loader', async () => {

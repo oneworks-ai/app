@@ -621,6 +621,46 @@ describe('desktop built-in adapter package cache', () => {
     await expect(readFile(path.join(tempDir, 'cache-link', MANIFEST_FILE), 'utf8')).resolves.toContain(secondPackage)
   })
 
+  it('copies a trusted packaged adapter graph once and links every adapter cache to it', async () => {
+    const tempDir = await createTempDir('oneworks-desktop-adapter-shared-bundle-')
+    const homeDir = path.join(tempDir, 'home')
+    const firstPackage = '@acme/adapter-bundle-first'
+    const secondPackage = '@acme/adapter-bundle-second'
+    const firstSource = await writeSourceAdapterPackage(tempDir, firstPackage, '1.0.0', 'first')
+    const secondSource = await writeSourceAdapterPackage(tempDir, secondPackage, '2.0.0', 'second')
+    const sharedDependencyDir = path.join(firstSource, 'node_modules', '@acme/runtime')
+    const secondDependencyDir = path.join(secondSource, 'node_modules', '@acme/runtime')
+    await rm(secondDependencyDir, { recursive: true, force: true })
+    await symlink(sharedDependencyDir, secondDependencyDir, process.platform === 'win32' ? 'junction' : 'dir')
+    const options = {
+      env: {
+        [PUBLIC_RUNTIME_PACKAGE_CACHE_VERSION_ENV]: 'packaged-build',
+        [RUNTIME_PACKAGE_BUILD_FINGERPRINT_ENV]: 'fingerprint-a',
+        [TRUST_DEV_RUNTIME_CACHE_MANIFEST_ENV]: '1'
+      },
+      homeDir,
+      packages: [firstPackage, secondPackage],
+      resolvePackageDir: (packageName: string) => packageName === firstPackage ? firstSource : secondSource,
+      trustManifest: true
+    }
+
+    const seeded = ensureBuiltinAdapterPackageCache(options)
+    const firstNodeModulesDir = path.join(seeded[0].cacheDir, 'node_modules')
+    const secondNodeModulesDir = path.join(seeded[1].cacheDir, 'node_modules')
+
+    expect(seeded.map(item => item.seeded)).toEqual([true, true])
+    expect((await lstat(firstNodeModulesDir)).isSymbolicLink()).toBe(true)
+    expect((await lstat(secondNodeModulesDir)).isSymbolicLink()).toBe(true)
+    expect(await realpath(firstNodeModulesDir)).toBe(await realpath(secondNodeModulesDir))
+    expect(await realpath(firstNodeModulesDir)).toContain(path.join(homeDir, '.oneworks', 'bootstrap'))
+    await expect(readFile(path.join(seeded[0].packageDir, 'src', 'models.ts'), 'utf8')).resolves.toContain('first')
+    await expect(readFile(path.join(seeded[1].packageDir, 'src', 'models.ts'), 'utf8')).resolves.toContain('second')
+    expect(require(path.join(seeded[0].packageDir, 'dist', 'index.js'))).toEqual({ runtime: true })
+    expect(require(path.join(seeded[1].packageDir, 'dist', 'index.js'))).toEqual({ runtime: true })
+
+    expect(ensureBuiltinAdapterPackageCache(options).map(item => item.seeded)).toEqual([false, false])
+  })
+
   it('uses the configured desktop dev runtime version in startup adapter metadata', async () => {
     const tempDir = await createTempDir('oneworks-desktop-adapter-dev-ensure-')
     const homeDir = path.join(tempDir, 'home')

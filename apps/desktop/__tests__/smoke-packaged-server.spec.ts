@@ -1,8 +1,11 @@
 import { EventEmitter } from 'node:events'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import type { ClientRequest, IncomingMessage, RequestOptions } from 'node:http'
 import { createRequire } from 'node:module'
+import os from 'node:os'
+import path from 'node:path'
 
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 const requireModule = createRequire(import.meta.url)
 const { BUILTIN_PLUGIN_PACKAGES } = requireModule('../src/builtin-adapter-cache.cjs') as {
@@ -10,7 +13,9 @@ const { BUILTIN_PLUGIN_PACKAGES } = requireModule('../src/builtin-adapter-cache.
 }
 const {
   assertBuiltinRuntimeActive,
+  assertPackagedServerRuntimeBundle,
   assertLocalClientSourcesCompile,
+  createPackagedServerChildEnv,
   createPackagedAsset,
   parsePluginCatalog,
   readLocalPluginClientSource,
@@ -24,7 +29,16 @@ const {
     port: number,
     options?: { privatePaths?: string[] }
   ) => Promise<void>
+  assertPackagedServerRuntimeBundle: (appDir: string) => void
   assertLocalClientSourcesCompile: (catalog: unknown, port: number) => Promise<void>
+  createPackagedServerChildEnv: (input: {
+    clientDistDir: string
+    dataDir: string
+    dbPath?: string
+    logDir: string
+    port: number
+    workspaceEnv: NodeJS.ProcessEnv
+  }) => NodeJS.ProcessEnv
   createPackagedAsset: (
     port: number,
     options?: {
@@ -63,6 +77,12 @@ const {
   ) => number
 }
 
+const tempDirs: string[] = []
+
+afterEach(async () => {
+  await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { force: true, recursive: true })))
+})
+
 const createRootFreeBuiltinCatalog = () => ({
   plugins: BUILTIN_PLUGIN_PACKAGES.map(packageId => ({
     ...(packageId === '@oneworks/plugin-relay'
@@ -83,6 +103,38 @@ const createRootFreeBuiltinCatalog = () => ({
 })
 
 describe('packaged server smoke timeouts', () => {
+  it('forces the packaged child through the split dist runtime', () => {
+    const env = createPackagedServerChildEnv({
+      clientDistDir: '/fixture/client',
+      dataDir: '/fixture/data',
+      logDir: '/fixture/logs',
+      port: 43110,
+      workspaceEnv: {}
+    })
+
+    expect(env.__ONEWORKS_PROJECT_CLI_PREFER_DIST_ENTRY__).toBe('true')
+  })
+
+  it('requires both the packaged runtime entry and at least one split chunk', async () => {
+    const appDir = await mkdtemp(path.join(os.tmpdir(), 'ow-packaged-runtime-'))
+    tempDirs.push(appDir)
+    const runtimeDir = path.join(
+      appDir,
+      'node_modules',
+      '@oneworks',
+      'server',
+      'dist',
+      '__INTERNAL__home'
+    )
+    await mkdir(path.join(runtimeDir, 'chunks'), { recursive: true })
+    await writeFile(path.join(runtimeDir, 'index.mjs'), 'export {}\n')
+
+    expect(() => assertPackagedServerRuntimeBundle(appDir)).toThrow('split chunks')
+
+    await writeFile(path.join(runtimeDir, 'chunks', 'runtime-fixture.mjs'), 'export {}\n')
+    expect(() => assertPackagedServerRuntimeBundle(appDir)).not.toThrow()
+  })
+
   it('accepts active built-in runtimes without resolved roots', async () => {
     await expect(
       assertBuiltinRuntimeActive(createRootFreeBuiltinCatalog(), 43110, {
