@@ -55,7 +55,8 @@
 - 用户要求长期、周期性监控外部状态时，默认创建与父会话隔离的 cron / scheduled task，不让父会话承担普通轮询回合。创建前先查同一目标和终态条件是否已有 monitor，优先复用或更新，避免重复监控。
 - 隔离 monitor 的每次运行只做有界、只读检查；监控授权不扩大为状态修改授权。只有出现有意义的状态变化、需要操作、检查失败或命中终态时，才向父会话发送一条简洁消息；普通“无变化”运行必须静默结束，不得向父会话追加任何内容。
 - 监控频率应按预期变化窗口和近期活动自适应：接近预期转换或刚发生变化时可短暂加密，长期稳定时逐步退避并设置合理上限。仅保留检测变化所需的最小非敏感游标或摘要，不在任务或调度状态中存储 secret、凭据、私有状态或私有载荷；命中终态并发送最终消息后，monitor 必须删除自身。
-- 每次隔离 monitor 运行都必须在完成所有必要的父会话通知，以及终态运行的 monitor 自删除动作后，显式调用 thread archive 能力归档当前执行 thread。普通“无变化”运行同样必须自归档；任何运行都不得归档父会话。
+- 每次隔离 monitor 运行都必须在完成所有必要的父会话通知，以及终态运行的 monitor 自删除动作后，显式调用 thread archive 能力归档当前执行 thread，并回读 `archived=true`。普通“无变化”运行同样必须自归档；prompt / 配置里的自归档文字、turn `completed` / `idle`、最终回复或 inbox item 都不是归档证据，任何运行都不得归档父会话。
+- scheduled execution 启动时先做一次非变更 thread-management capability probe；工具缺失、列表读取失败或归档超时时，不得重试到占满本轮预算，也不得声称清理成功。把精确 execution thread id（可获得时）和 `cleanup_pending` 写入最小 automation memory，静默结束；不得因普通无变化或单次 cleanup pending 生成 `::inbox-item`、final summary 或父会话消息。下一个具备 thread 能力的 monitor / 父协调器先按 automation id、精确标题和显式 thread id 归档已终止 orphan，逐条核验 `archived=true`，绝不使用模糊扫描归档主会话或仍在运行的任务。
 - 创建独立任务时同步建立约十分钟的 heartbeat，同时记录 pending worktree id；只有任务在同步创建调用内已经完成、已回调主任务且无需后续观察时才能省略。不要只靠子线程主动回来报喜。每次 heartbeat 至少检查线程状态、deadline、范围是否越界、Git 写入者、开发服务归属和是否已回调主任务；任务完成、失败、停止或取消后按下方“终态回调与归档”清单收口。
 - 为每个成本敏感子任务记录实际 `startedAt`、deadline 和可用的 interrupt / cancel 方法。Prompt 停止条件不构成硬超时；deadline 到达时必须主动中断，或停止等待、标记超时并使用已有证据，不能因为线程仍在推理而继续放任消耗。
 - 同时为协调器记录 worker cutoff、cleanup cutoff、integration cutoff 和 final deadline；在 cleanup cutoff 前完成结果提取、heartbeat 删除和独立线程归档，不能把正常清理拖到最终输出之后。若硬 deadline 迫使主线程先返回，必须明确报告尚未完成的归档，并让已经绑定本任务的外部监控器执行；不得把“已完全收口”作为结果交付。
@@ -82,6 +83,8 @@
 ## 终态回调与归档
 
 独立任务的完成状态、消息通知和归档是三件不同的事：worker 进入 `idle`、发送最终回复或把结果回调给主线程，都不会自动把线程移出任务列表。除上方明确要求自归档的隔离 scheduled monitor 执行 thread 外，归档由创建它的主线程负责；该特例只允许执行 thread 归档自身，绝不归档父会话。
+
+scheduled monitor 的“自归档”是必须验证的实际能力，不是 prompt 能保证的后置条件。当前运行无法调用 thread 工具时，允许以 `cleanup_pending` 终止，但清理债务仍属于创建者 / 父协调器：在下一次有能力的协调回合或用户可见最终交付前，必须读取该 execution 的真实 turn 状态，确认已经 `completed` / `interrupted` / `stopped`，再按显式 id 归档并回读结果。不得为了让侧栏变干净而归档仍在等待审批、CI 或外部恢复的任务；若外部监控已经接管且原 owner turn 已明确中断，可记录接管关系后归档原 owner。
 
 对于非 monitor 独立任务，主线程必须维护本任务创建的独立 thread id 清单，并对每个 thread 执行以下顺序：
 
