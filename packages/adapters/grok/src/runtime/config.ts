@@ -16,8 +16,8 @@ import {
 import type { ManagedNpmCliConfig } from '@oneworks/utils/managed-npm-cli'
 
 import { resolveGrokBinaryPath } from '../paths'
-import { writeGrokNativeHooks } from './native-hooks'
 import { migrateGrokSession } from './migration'
+import { writeGrokNativeHooks } from './native-hooks'
 
 export interface GrokAdapterConfig {
   cli?: ManagedNpmCliConfig
@@ -116,9 +116,10 @@ const sanitizeTomlValue = (value: unknown): unknown => {
   )
 }
 
-const toProcessEnv = (env: Record<string, string | null | undefined>) => Object.fromEntries(
-  Object.entries(env).filter((entry): entry is [string, string] => typeof entry[1] === 'string')
-)
+const toProcessEnv = (env: Record<string, string | null | undefined>) =>
+  Object.fromEntries(
+    Object.entries(env).filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+  )
 
 const resolveMergedModelServices = (ctx: Pick<AdapterCtx, 'configState' | 'configs'>) => {
   if (ctx.configState?.mergedConfig.modelServices != null) {
@@ -156,17 +157,18 @@ export const resolveRealGrokHome = (ctx: Pick<AdapterCtx, 'env'>) => {
 export const resolveGrokSessionHome = (params: {
   ctx: Pick<AdapterCtx, 'ctxId' | 'cwd' | 'env'>
   sessionId: string
-}) => resolve(
-  resolveProjectOoPath(
-    params.ctx.cwd,
-    params.ctx.env,
-    'caches',
-    'adapter-grok',
-    'sessions',
-    params.sessionId,
-  ),
-  'home'
-)
+}) =>
+  resolve(
+    resolveProjectOoPath(
+      params.ctx.cwd,
+      params.ctx.env,
+      'caches',
+      'adapter-grok',
+      'sessions',
+      params.sessionId
+    ),
+    'home'
+  )
 
 const readBaseConfig = async (ctx: Pick<AdapterCtx, 'env' | 'logger'>) => {
   const configPath = resolve(resolveRealGrokHome(ctx), 'config.toml')
@@ -185,12 +187,14 @@ const syncCredentials = async (params: {
   grokHome: string
 }) => {
   const realGrokHome = resolveRealGrokHome(params.ctx)
-  await Promise.all(CREDENTIAL_FILES.map(fileName => syncSymlinkTarget({
-    sourcePath: resolve(realGrokHome, fileName),
-    targetPath: resolve(params.grokHome, fileName),
-    type: 'file',
-    onMissingSource: 'remove'
-  })))
+  await Promise.all(CREDENTIAL_FILES.map(fileName =>
+    syncSymlinkTarget({
+      sourcePath: resolve(realGrokHome, fileName),
+      targetPath: resolve(params.grokHome, fileName),
+      type: 'file',
+      onMissingSource: 'remove'
+    })
+  ))
 }
 
 const syncSkills = async (params: {
@@ -231,9 +235,10 @@ const translateMcpServer = (server: NonNullable<Config['mcpServers']>[string]) =
   }
 }
 
-const normalizeApiBaseUrl = (baseUrl: string) => baseUrl
-  .replace(/\/(?:chat\/completions|responses|messages)\/?$/u, '')
-  .replace(/\/+$/u, '')
+const normalizeApiBaseUrl = (baseUrl: string) =>
+  baseUrl
+    .replace(/\/(?:chat\/completions|responses|messages)\/?$/u, '')
+    .replace(/\/+$/u, '')
 
 const resolveApiBackend = (service: ModelServiceConfig) => {
   const grokExtra = asPlainRecord(asPlainRecord(service.extra).grok)
@@ -332,12 +337,15 @@ export const prepareGrokSession = async (
   await syncCredentials({ ctx, grokHome })
   await syncSkills({ grokHome, overlays: options.assetPlan?.overlays ?? [] })
   await writeGrokNativeHooks({ env: ctx.env, grokHome })
-  await writeGrokConfig(grokHome, await buildGrokConfig({
-    adapterConfig,
-    ctx,
-    mcpServers: options.assetPlan?.mcpServers ?? {},
-    routedModel
-  }))
+  await writeGrokConfig(
+    grokHome,
+    await buildGrokConfig({
+      adapterConfig,
+      ctx,
+      mcpServers: options.assetPlan?.mcpServers ?? {},
+      routedModel
+    })
+  )
 
   const nativeHooksActive = ctx.env.__ONEWORKS_PROJECT_GROK_NATIVE_HOOKS_AVAILABLE__ === '1'
   return {
@@ -357,9 +365,10 @@ export const prepareGrokSession = async (
   }
 }
 
-const isForbiddenExtraOption = (option: string) => FORBIDDEN_EXTRA_OPTIONS.some(
-  forbidden => option === forbidden || option.startsWith(`${forbidden}=`)
-)
+const isForbiddenExtraOption = (option: string) =>
+  FORBIDDEN_EXTRA_OPTIONS.some(
+    forbidden => option === forbidden || option.startsWith(`${forbidden}=`)
+  )
 
 export const validateGrokExtraOptions = (options: string[] | undefined) => {
   for (const option of options ?? []) {
@@ -374,7 +383,7 @@ const resolveEffort = (
   configured: GrokAdapterConfig['effort']
 ) => {
   const effort = requested ?? configured
-  return effort === 'max' ? 'xhigh' : effort
+  return effort === 'max' || effort === 'ultra' ? 'xhigh' : effort
 }
 
 export const buildGrokCommonArgs = (params: {

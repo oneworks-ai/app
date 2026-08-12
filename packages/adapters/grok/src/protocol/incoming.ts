@@ -21,12 +21,14 @@ const isContentType = <T extends GrokMessageContent['type']>(
   type: T
 ): content is Extract<GrokMessageContent, { type: T }> => content.type === type
 
-const normalizeUsage = (usage: {
-  input_tokens?: number
-  output_tokens?: number
-  cache_read_input_tokens?: number
-  cache_creation_input_tokens?: number
-} | undefined) => (
+const normalizeUsage = (
+  usage: {
+    input_tokens?: number
+    output_tokens?: number
+    cache_read_input_tokens?: number
+    cache_creation_input_tokens?: number
+  } | undefined
+) => (
   usage == null || usage.input_tokens == null || usage.output_tokens == null
     ? undefined
     : {
@@ -103,9 +105,11 @@ export const handleGrokIncomingEvent = (
       return
     }
 
-    for (const item of contentList.filter(
-      (entry): entry is GrokToolResultContent => isContentType(entry, 'tool_result')
-    )) {
+    for (
+      const item of contentList.filter(
+        (entry): entry is GrokToolResultContent => isContentType(entry, 'tool_result')
+      )
+    ) {
       onEvent({
         type: 'message',
         data: {

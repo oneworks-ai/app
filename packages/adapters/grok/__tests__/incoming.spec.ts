@@ -9,16 +9,20 @@ describe('grok streaming-messages-json protocol', () => {
     const events: AdapterOutputEvent[] = []
     const onEvent = (event: AdapterOutputEvent) => events.push(event)
 
-    handleGrokIncomingEvent({
-      type: 'system',
-      subtype: 'init',
-      session_id: '11111111-1111-4111-8111-111111111111',
-      uuid: 'system-1',
-      model: 'oneworks-smoke',
-      cwd: '/workspace',
-      tools: ['Bash', 'Read'],
-      slash_commands: ['help']
-    }, onEvent, 'high')
+    handleGrokIncomingEvent(
+      {
+        type: 'system',
+        subtype: 'init',
+        session_id: '11111111-1111-4111-8111-111111111111',
+        uuid: 'system-1',
+        model: 'oneworks-smoke',
+        cwd: '/workspace',
+        tools: ['Bash', 'Read'],
+        slash_commands: ['help']
+      },
+      onEvent,
+      'high'
+    )
     handleGrokIncomingEvent({
       type: 'assistant',
       uuid: 'assistant-1',

@@ -5,12 +5,7 @@ import type { AdapterCtx, AdapterEvent, AdapterOutputEvent, AdapterQueryOptions,
 
 import { handleGrokIncomingEvent } from '../../protocol/incoming'
 import type { GrokIncomingEvent } from '../../protocol/types'
-import {
-  buildGrokHeadlessArgs,
-  prepareGrokSession,
-  resolveGrokAdapterConfig,
-  writeGrokPromptFile
-} from '../config'
+import { buildGrokHeadlessArgs, prepareGrokSession, resolveGrokAdapterConfig, writeGrokPromptFile } from '../config'
 import { getErrorMessage, isMissingGrokResume, normalizeGrokPrompt, toAdapterErrorData } from './shared'
 
 export const createStreamGrokSession = async (
@@ -67,6 +62,8 @@ export const createStreamGrokSession = async (
     let stderrBuffer = ''
     let didStop = false
     let didFatalError = false
+    const deferredResultEvents: AdapterOutputEvent[] = []
+    const resultErrorTexts: string[] = []
     const onParsedEvent: AdapterQueryOptions['onEvent'] = (outputEvent) => {
       if (outputEvent.type === 'stop') didStop = true
       if (outputEvent.type === 'error' && outputEvent.data.fatal !== false) didFatalError = true
@@ -76,7 +73,21 @@ export const createStreamGrokSession = async (
       const line = rawLine.trim()
       if (line === '') return
       try {
-        handleGrokIncomingEvent(JSON.parse(line) as GrokIncomingEvent, onParsedEvent, options.effort)
+        const parsed = JSON.parse(line) as GrokIncomingEvent
+        if (
+          parsed.type === 'result' &&
+          (parsed.subtype === 'error_during_execution' || parsed.is_error === true)
+        ) {
+          if (parsed.result?.trim()) resultErrorTexts.push(parsed.result.trim())
+          resultErrorTexts.push(...(parsed.errors ?? []).map(item => item.trim()).filter(Boolean))
+        }
+        handleGrokIncomingEvent(
+          parsed,
+          resume && allowResumeRetry && parsed.type === 'result'
+            ? outputEvent => deferredResultEvents.push(outputEvent)
+            : onParsedEvent,
+          options.effort
+        )
       } catch {
         ctx.logger.warn('Ignoring non-JSON Grok stdout line', { line })
       }
@@ -106,20 +117,25 @@ export const createStreamGrokSession = async (
     handleLine(stdoutBuffer)
     if (destroyed) return
 
-    if (exitCode !== 0) {
-      const errorText = stderrBuffer.trim()
-      if (resume && allowResumeRetry && isMissingGrokResume(errorText)) {
-        hasNativeSession = false
-        emitEvent({
-          type: 'error',
-          data: toAdapterErrorData('The Grok session was not found. Starting a fresh native session.', {
-            code: 'grok_resume_missing',
-            fatal: false
-          })
+    const failureText = [stderrBuffer.trim(), ...resultErrorTexts]
+      .filter(text => text !== '')
+      .join('\n')
+    if (resume && allowResumeRetry && isMissingGrokResume(failureText)) {
+      hasNativeSession = false
+      emitEvent({
+        type: 'error',
+        data: toAdapterErrorData('The Grok session was not found. Starting a fresh native session.', {
+          code: 'grok_resume_missing',
+          fatal: false
         })
-        await runTurn(event, false)
-        return
-      }
+      })
+      await runTurn(event, false)
+      return
+    }
+    for (const outputEvent of deferredResultEvents) onParsedEvent(outputEvent)
+
+    if (exitCode !== 0) {
+      const errorText = failureText
       if (!didFatalError) {
         emitEvent({
           type: 'error',

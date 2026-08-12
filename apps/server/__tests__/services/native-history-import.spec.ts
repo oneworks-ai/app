@@ -203,17 +203,30 @@ describe('native project history import', () => {
     const sourcePath = path.join(sessionDir, 'chat_history.jsonl')
     await mkdir(workspace, { recursive: true })
     await mkdir(sessionDir, { recursive: true })
-    await writeFile(path.join(sessionDir, 'summary.json'), JSON.stringify({
-      info: { id: nativeSessionId, cwd: workspace },
-      created_at: '2026-08-01T00:00:00.000Z',
-      updated_at: '2026-08-01T00:00:02.000Z',
-      current_model_id: 'grok-code-fast-1',
-      session_summary: 'Fix the Grok adapter'
-    }))
+    await writeFile(
+      path.join(sessionDir, 'summary.json'),
+      JSON.stringify({
+        info: { id: nativeSessionId, cwd: workspace },
+        created_at: '2026-08-01T00:00:00.000Z',
+        updated_at: '2026-08-01T00:00:02.000Z',
+        current_model_id: 'grok-code-fast-1',
+        session_summary: 'Fix the Grok adapter'
+      })
+    )
     await writeJsonl(sourcePath, [
       { type: 'system', content: 'system prompt' },
+      {
+        type: 'user',
+        synthetic_reason: 'project_instructions',
+        content: [{ type: 'text', text: 'Internal project instructions' }]
+      },
       { type: 'user', content: [{ type: 'text', text: 'Fix the adapter' }] },
-      { type: 'assistant', content: 'Done', model_id: 'grok-code-fast-1' }
+      { type: 'assistant', content: 'Done', model_id: 'grok-code-fast-1' },
+      {
+        type: 'user',
+        synthetic_reason: 'auto_continue',
+        content: [{ type: 'text', text: 'Internal automatic continuation' }]
+      }
     ])
 
     const preview = await previewNativeProjectHistory({
@@ -249,6 +262,18 @@ describe('native project history import', () => {
       adapter: 'grok',
       title: 'Fix the Grok adapter'
     }))
+
+    const runtimeRoot = resolveWorkspaceRuntimeStoreRoot(workspace, createWorkspaceRuntimeEnv(workspace, env))
+    const db = await replayImportedSessions(runtimeRoot)
+    expect(db.getMessages(imported.sessions[0]!.sessionId)).toEqual([
+      expect.objectContaining({
+        message: expect.objectContaining({ role: 'user', content: 'Fix the adapter' })
+      }),
+      expect.objectContaining({
+        message: expect.objectContaining({ role: 'assistant', content: 'Done' })
+      })
+    ])
+    db.close()
   })
 
   it('imports only Codex sessions whose cwd belongs to the current workspace and stays idempotent', async () => {

@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -7,11 +7,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import type { AdapterCtx, AdapterQueryOptions } from '@oneworks/types'
 
-import {
-  buildGrokCommonArgs,
-  prepareGrokSession,
-  resolveGrokSessionHome
-} from '../src/runtime/config'
+import { grokAdapterConfigSchema } from '../src/config-schema'
+import { buildGrokCommonArgs, prepareGrokSession, resolveGrokSessionHome } from '../src/runtime/config'
 
 const tempDirs: string[] = []
 
@@ -179,5 +176,18 @@ describe('grok runtime config', () => {
       '--disallowed-tools',
       'WebSearch'
     ])
+  })
+
+  it('keeps the public effort contract aligned with the native xhigh ceiling', () => {
+    expect(grokAdapterConfigSchema.parse({ effort: 'ultra' }).effort).toBe('ultra')
+    const args = buildGrokCommonArgs({
+      adapterConfig: {},
+      options: {
+        ...createOptions('/skill'),
+        effort: 'ultra'
+      }
+    })
+    expect(args).toContain('xhigh')
+    expect(args).not.toContain('ultra')
   })
 })

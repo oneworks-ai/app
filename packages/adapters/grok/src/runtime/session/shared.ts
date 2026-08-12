@@ -27,5 +27,6 @@ export const normalizeGrokPrompt = (content: AdapterMessageContent[]) => {
 }
 
 export const isMissingGrokResume = (value: string) => (
-  /session.*(?:not found|does not exist|missing)|no (?:matching|previous) session/i.test(value)
+  /(?:session|conversation).*(?:not found|does not exist|missing)|(?:not found|missing).*(?:session|conversation)|no conversation found with session|no (?:matching|previous) session/i
+    .test(value)
 )

@@ -4,8 +4,8 @@ import { dirname, resolve } from 'node:path'
 import process from 'node:process'
 
 import type { AdapterCtx } from '@oneworks/types'
-import { resolveManagedNpmCliBinaryPath } from '@oneworks/utils/managed-npm-cli'
 import { resolveProjectOoPath } from '@oneworks/utils'
+import { resolveManagedNpmCliBinaryPath } from '@oneworks/utils/managed-npm-cli'
 
 const require = createRequire(import.meta.url ?? __filename)
 const adapterPackageDir = dirname(require.resolve('@oneworks/adapter-grok/package.json'))
@@ -27,11 +27,12 @@ export const resolveGrokManagedRuntimeHome = (
   env: AdapterCtx['env']
 ) => resolveProjectOoPath(cwd, env, 'caches', 'adapter-grok', 'runtime-home')
 
-export const resolveGrokDownloadedBinaryPath = (grokHome: string) => resolve(
-  grokHome,
-  'bin',
-  process.platform === 'win32' ? 'grok.exe' : 'grok'
-)
+export const resolveGrokDownloadedBinaryPath = (grokHome: string) =>
+  resolve(
+    grokHome,
+    'bin',
+    process.platform === 'win32' ? 'grok.exe' : 'grok'
+  )
 
 export const resolveGrokBinaryPath = (
   env: AdapterCtx['env'],

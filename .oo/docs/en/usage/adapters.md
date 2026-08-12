@@ -116,31 +116,11 @@ skipped rather than migrated incorrectly. Import creates only missing environmen
 never merges into or overwrites an existing environment directory, and never modifies
 the native TOML files.
 
-## Grok Example
+## Grok Build CLI
 
-The `grok` adapter uses xAI's official Grok Build CLI. One Works gives every session an isolated `$GROK_HOME`, preserving native session resume while referencing selected credentials and policy files from the real Grok home.
+The `grok` adapter uses xAI's official Grok Build CLI with managed installation, model routing, MCP servers, skills, hooks, and migration of resumable native UUID sessions.
 
-```yaml
-adapters:
-  grok:
-    cli:
-      source: managed
-      version: 1.0.3
-    effort: high
-    disableAutoUpdate: true
-    disableMemory: false
-    disableSubagents: false
-    disableWebSearch: false
-    configContent:
-      ui:
-        screen_mode: minimal
-```
-
-Selected MCP servers and skills are projected into the session home. System prompts, permission mode, effort, and tool filters use native CLI flags. Hook plugins use Grok's native `PreToolUse`, `PostToolUse`, and `Stop` events; `PreToolUse` remains blockable. Auto-update checks are disabled by default, while memory, subagents, and web search remain enabled unless their corresponding `disable*` option is true.
-
-The session home uses a project-shared stable path. On resume, One Works can migrate the matching native UUID from a legacy context-scoped home or the real `$GROK_HOME`, so sessions keep working after switching worktrees or runtime contexts. The External Sessions panel also scans `$GROK_HOME/sessions` (normally `~/.grok/sessions`) and can preview and import native Grok history for the current project; imported copies remain read-only.
-
-One Works does not currently expose a Grok multiple-account API. Use the native `grok login` and `grok logout` commands to change the CLI login state.
+See the [Grok Build CLI Adapter](./grok-adapter.md) for full configuration, the project-shared session home, external-session import, and login boundaries.
 
 ## Environment Boundaries
 

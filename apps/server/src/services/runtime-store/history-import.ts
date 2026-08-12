@@ -1629,6 +1629,7 @@ const parseGrokConversation = (
     if (!isRecord(record.value)) continue
     const value = record.value
     if (value.type !== 'user' && value.type !== 'assistant') continue
+    if (value.type === 'user' && asString(value.synthetic_reason) != null) continue
     const content = normalizeClaudeContent(value.content)
     if (content == null) continue
     messages.push({

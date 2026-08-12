@@ -11,7 +11,7 @@ declare module '@oneworks/types' {
       disableMemory?: boolean
       disableSubagents?: boolean
       disableWebSearch?: boolean
-      effort?: 'low' | 'medium' | 'high' | 'max'
+      effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra'
     }
   }
 }

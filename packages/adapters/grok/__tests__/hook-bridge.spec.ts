@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  mapGrokHookInputToOneWorks,
-  mapOneWorksHookOutputToGrok,
-  supportsHookEvent
-} from '../src/hook-bridge'
+import { mapGrokHookInputToOneWorks, mapOneWorksHookOutputToGrok, supportsHookEvent } from '../src/hook-bridge'
 
 describe('grok native hook bridge', () => {
   it('maps snake-case native tool events into the shared hook contract', () => {

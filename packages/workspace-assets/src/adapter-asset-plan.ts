@@ -166,9 +166,9 @@ export async function buildAdapterAssetPlan(params: {
       }))
     ]
     : params.adapter === 'codex' ||
-      params.adapter === 'copilot' ||
-      params.adapter === 'grok' ||
-      params.adapter === 'pi'
+        params.adapter === 'copilot' ||
+        params.adapter === 'grok' ||
+        params.adapter === 'pi'
     ? selectedSkillOverlays
     : params.adapter === 'kimi'
     ? selectedSkillAssets.map((asset): AdapterOverlayEntry => ({

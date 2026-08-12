@@ -3,13 +3,14 @@ import { z } from 'zod'
 import {
   adapterNativeCliConfigSchema,
   defineAdapterConfigContribution,
-  effortLevelSchema,
   jsonValueSchema
 } from '@oneworks/core/config-schema'
 
+export const grokEffortSchema = z.enum(['low', 'medium', 'high', 'xhigh', 'max', 'ultra'])
+
 export const grokAdapterConfigSchema = z.object({
   cli: adapterNativeCliConfigSchema.optional().describe('Managed Grok Build CLI runtime'),
-  effort: effortLevelSchema.optional().describe('Reasoning effort level'),
+  effort: grokEffortSchema.optional().describe('Reasoning effort level; max and ultra map to native xhigh'),
   configContent: z.record(z.string(), jsonValueSchema).optional().describe('Raw Grok config.toml override'),
   disableAutoUpdate: z.boolean().optional().describe('Disable Grok auto update checks'),
   disableMemory: z.boolean().optional().describe('Disable Grok cross-session memory'),
