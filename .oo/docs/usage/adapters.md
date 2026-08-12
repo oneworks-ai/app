@@ -13,7 +13,7 @@
 
 ## 前端选择器
 
-聊天输入框的适配器选择器默认展示当前应用内置支持的原生适配器：Claude Code（`claude-code`）、Codex（`codex`）、Copilot（`copilot`）、Gemini（`gemini`）、Kimi（`kimi`）、OpenCode（`opencode`）和 Pi（`pi`）。
+聊天输入框的适配器选择器默认展示当前应用内置支持的原生适配器：Claude Code（`claude-code`）、Codex（`codex`）、Copilot（`copilot`）、Gemini（`gemini`）、Grok（`grok`）、Kimi（`kimi`）、OpenCode（`opencode`）和 Pi（`pi`）。
 
 以下 adapter 不需要先写入 `.oo.config.json` 才能出现在选择器里。用户选择某个 adapter 发起会话后，运行时会沿用 adapter 自己的 CLI 准备逻辑，把托管 CLI 安装到全局托管 bootstrap cache；首次启动某个 adapter 时可能会稍慢。
 
@@ -163,3 +163,9 @@ adapters:
 - `mode` 会直接映射 `--mode`，并优先于 `autopilot` / plan permission；需要 autopilot 时推荐配置 `mode: autopilot` 或 `autopilot: true` 二选一
 
 当前不实现 Copilot 多账号 API；需要登录、切换或排查账号时，使用官方 CLI 的 `/login`、`/logout`、`/user` 流程。
+
+## Grok Build CLI
+
+`grok` 使用 xAI 官方 Grok Build CLI，支持托管安装、模型路由、MCP、skills、hooks，以及按原生 UUID 迁移并续接已有会话。
+
+完整配置、project-shared session home、外部会话导入和登录边界见 [Grok Build CLI 适配器](./grok-adapter.md)。

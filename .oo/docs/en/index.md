@@ -32,6 +32,7 @@ This 21-second demo uses real desktop windows to open a workspace from the Launc
 - [Web UI and Terminal View](./usage/web.md)
 - [Adapter Configuration and Multiple Accounts](./usage/adapters.md)
 - [Pi coding-agent Adapter](./usage/pi-adapter.md)
+- [Grok Build CLI Adapter](./usage/grok-adapter.md)
 - [Token Usage](./usage/token-usage.md)
 - [PWA and Standalone Deployment](./usage/pwa.md)
 - [Relay Hosting, Login, and Identity Model](./usage/relay.md)

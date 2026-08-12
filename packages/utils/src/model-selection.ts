@@ -60,6 +60,7 @@ export const BUILTIN_NATIVE_ADAPTERS = [
   'codex',
   'copilot',
   'gemini',
+  'grok',
   'kimi',
   'opencode',
   'pi'
@@ -320,6 +321,10 @@ export const isModelServiceCompatibleWithAdapter = (params: {
   if (adapter === 'codex') {
     const apiProtocol = resolveConfiguredApiProtocol(params.service)
     if (apiProtocol === 'gemini-interactions') return false
+  }
+  if (adapter === 'grok') {
+    const apiProtocol = resolveConfiguredApiProtocol(params.service)
+    if (apiProtocol === 'gemini-generate-content' || apiProtocol === 'gemini-interactions') return false
   }
 
   const explicitCompatibility = resolveAdapterCompatibilityOverride({

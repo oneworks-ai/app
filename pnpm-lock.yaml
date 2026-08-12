@@ -63,6 +63,9 @@ importers:
       '@oneworks/adapter-gemini':
         specifier: workspace:*
         version: link:packages/adapters/gemini
+      '@oneworks/adapter-grok':
+        specifier: workspace:*
+        version: link:packages/adapters/grok
       '@oneworks/adapter-kimi':
         specifier: workspace:*
         version: link:packages/adapters/kimi
@@ -301,6 +304,9 @@ importers:
       '@oneworks/adapter-gemini':
         specifier: workspace:*
         version: link:../../packages/adapters/gemini
+      '@oneworks/adapter-grok':
+        specifier: workspace:*
+        version: link:../../packages/adapters/grok
       '@oneworks/adapter-kimi':
         specifier: workspace:*
         version: link:../../packages/adapters/kimi
@@ -424,6 +430,9 @@ importers:
       '@oneworks/adapter-gemini':
         specifier: workspace:*
         version: link:../../packages/adapters/gemini
+      '@oneworks/adapter-grok':
+        specifier: workspace:*
+        version: link:../../packages/adapters/grok
       '@oneworks/adapter-kimi':
         specifier: workspace:*
         version: link:../../packages/adapters/kimi
@@ -892,6 +901,27 @@ importers:
         version: link:../../utils
       zod:
         specifier: ^3.25.76
+        version: 3.25.76
+
+  packages/adapters/grok:
+    dependencies:
+      '@iarna/toml':
+        specifier: ^2.2.5
+        version: 2.2.5
+      '@oneworks/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@oneworks/hooks':
+        specifier: workspace:*
+        version: link:../../hooks
+      '@oneworks/types':
+        specifier: workspace:*
+        version: link:../../types
+      '@oneworks/utils':
+        specifier: workspace:*
+        version: link:../../utils
+      zod:
+        specifier: ^3.24.1
         version: 3.25.76
 
   packages/adapters/kimi:
@@ -2540,6 +2570,9 @@ packages:
   '@humanwhocodes/retry@0.4.3':
     resolution: {integrity: sha512-bV0Tgo9K4hfPCek+aMAn81RppFKv2ySDQeMoSZuvTASywNTnVJCArCZE2FWqpvIatKu7VMRLWlR1EazvVhDyhQ==}
     engines: {node: '>=18.18'}
+
+  '@iarna/toml@2.2.5':
+    resolution: {integrity: sha512-trnsAYxU3xnS1gPHPyU961coFyLkh4gAD/0zQ5mymY4yOZ+CYvsPqUbOFSw0aDM4y0tV7tiFxL/1XfXPNC6IPg==}
 
   '@isaacs/balanced-match@4.0.1':
     resolution: {integrity: sha512-yzMTt9lEb8Gv7zRioUilSglI0c0smZ9k5D65677DLWLtWJaXIS3CqcGyUFByYKlnUj6TkjLVs54fBl6+TiGQDQ==}
@@ -9589,6 +9622,8 @@ snapshots:
   '@humanwhocodes/module-importer@1.0.1': {}
 
   '@humanwhocodes/retry@0.4.3': {}
+
+  '@iarna/toml@2.2.5': {}
 
   '@isaacs/balanced-match@4.0.1': {}
 

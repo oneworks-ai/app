@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { CODEX_SHARED_MODEL_SERVICE_KEY, createCodexSharedModelService } from '#~/codex-shared-model-service.js'
 import { filterServiceModelsForAdapter, listServiceModels, resolveModelDefaultAdapter } from '#~/model-selection.js'
 import type { ModelMetadataConfig, ModelServiceConfig } from '@oneworks/types'
 
@@ -71,5 +72,33 @@ describe('model adapter compatibility', () => {
       'serviceSupported,plain-model',
       'modelSupported,kimi-model'
     ])
+  })
+
+  it('offers Codex shared models to Grok while hiding unsupported Gemini protocols', () => {
+    const modelServices: Record<string, ModelServiceConfig> = {
+      [CODEX_SHARED_MODEL_SERVICE_KEY]: createCodexSharedModelService({
+        builtinModels: [{
+          value: 'gpt-5.4',
+          title: 'GPT-5.4',
+          description: 'Shared Codex model'
+        }]
+      }),
+      gemini: {
+        apiBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+        apiKey: 'token',
+        apiProtocol: 'gemini-generate-content',
+        models: ['gemini-3'],
+        supportedAdapters: ['grok']
+      }
+    }
+
+    const selectors = filterServiceModelsForAdapter({
+      adapter: 'grok',
+      modelServices,
+      serviceModels: listServiceModels(modelServices)
+    }).map(entry => entry.selectorValue)
+
+    expect(selectors).toContain(`${CODEX_SHARED_MODEL_SERVICE_KEY},gpt-5.4`)
+    expect(selectors).not.toContain('gemini,gemini-3')
   })
 })

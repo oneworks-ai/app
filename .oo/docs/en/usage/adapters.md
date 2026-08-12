@@ -13,7 +13,7 @@ This page covers the adapter configuration structure in the Web configuration UI
 
 ## Frontend Selector
 
-The adapter selector in the chat input shows the native adapters built into the current application: Claude Code, Codex, Copilot, Gemini, Kimi, OpenCode, and Pi. Adapter configuration controls binary selection, managed CLI versions, model routing, accounts, and adapter-specific options.
+The adapter selector in the chat input shows the native adapters built into the current application: Claude Code, Codex, Copilot, Gemini, Grok, Kimi, OpenCode, and Pi. Adapter configuration controls binary selection, managed CLI versions, model routing, accounts, and adapter-specific options.
 
 ## Pi coding-agent
 
@@ -54,6 +54,7 @@ Native CLI installation and version pinning are covered in [Adapter CLI Installa
 
 - Claude Code connects directly to known official Anthropic-compatible endpoints for Anthropic, Kimi, DeepSeek, Alibaba Qwen/Bailian, Zhipu GLM, MiniMax, OpenRouter, Requesty, Vercel AI Gateway, and Portkey; other OpenAI-compatible routed models can still use Claude Code Router.
 - Codex and Gemini use adapter-owned local proxy behavior.
+- Grok writes routed `service,model` selections into a session-scoped native custom model entry and supports `chat_completions`, `responses`, and `messages` backends.
 - Some adapters write provider configuration to native config files or session-level state.
 
 Workspaces launched by a Launcher or daemon manager reuse a manager-owned Codex app-server
@@ -116,6 +117,12 @@ Codex environment actions are not lifecycle `start` scripts, so they are reporte
 skipped rather than migrated incorrectly. Import creates only missing environments,
 never merges into or overwrites an existing environment directory, and never modifies
 the native TOML files.
+
+## Grok Build CLI
+
+The `grok` adapter uses xAI's official Grok Build CLI with managed installation, model routing, MCP servers, skills, hooks, and migration of resumable native UUID sessions.
+
+See the [Grok Build CLI Adapter](./grok-adapter.md) for full configuration, the project-shared session home, external-session import, and login boundaries.
 
 ## Environment Boundaries
 

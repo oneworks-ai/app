@@ -193,6 +193,130 @@ afterEach(async () => {
 })
 
 describe('native project history import', () => {
+  it('previews and imports Grok native sessions from summary and chat history files', async () => {
+    const root = await createTempRoot()
+    const workspace = path.join(root, 'workspace')
+    const home = path.join(root, 'home')
+    const env = createTestEnv(workspace, home)
+    const nativeSessionId = '11111111-1111-4111-8111-111111111111'
+    const sessionDir = path.join(home, '.grok', 'sessions', encodeURIComponent(workspace), nativeSessionId)
+    const sourcePath = path.join(sessionDir, 'chat_history.jsonl')
+    await mkdir(workspace, { recursive: true })
+    await mkdir(sessionDir, { recursive: true })
+    await writeFile(
+      path.join(sessionDir, 'summary.json'),
+      JSON.stringify({
+        info: { id: nativeSessionId, cwd: workspace },
+        created_at: '2026-08-01T00:00:00.000Z',
+        updated_at: '2026-08-01T00:00:02.000Z',
+        current_model_id: 'grok-code-fast-1',
+        session_summary: 'Fix the Grok adapter'
+      })
+    )
+    await writeJsonl(sourcePath, [
+      { type: 'system', content: 'system prompt' },
+      {
+        type: 'user',
+        synthetic_reason: 'project_instructions',
+        content: [{ type: 'text', text: 'Internal project instructions' }]
+      },
+      { type: 'user', content: [{ type: 'text', text: 'Fix the adapter' }] },
+      { type: 'assistant', content: 'Done', model_id: 'grok-code-fast-1' },
+      {
+        type: 'user',
+        synthetic_reason: 'auto_continue',
+        content: [{ type: 'text', text: 'Internal automatic continuation' }]
+      }
+    ])
+
+    const preview = await previewNativeProjectHistory({
+      adapters: ['grok'],
+      cwd: workspace,
+      env,
+      homeDir: home
+    })
+    const imported = await importNativeProjectHistory({
+      adapters: ['grok'],
+      cwd: workspace,
+      env,
+      homeDir: home
+    })
+
+    expect(preview.adapters[0]).toEqual(expect.objectContaining({
+      adapter: 'grok',
+      matchedFiles: 1,
+      scannedFiles: 1
+    }))
+    expect(preview.adapters[0]!.candidates[0]).toEqual(expect.objectContaining({
+      cwd: workspace,
+      nativeSessionId,
+      title: 'Fix the Grok adapter'
+    }))
+    expect(imported).toEqual(expect.objectContaining({
+      importedSessions: 1,
+      importedEvents: 2,
+      matchedFiles: 1,
+      scannedFiles: 1
+    }))
+    expect(imported.sessions[0]).toEqual(expect.objectContaining({
+      adapter: 'grok',
+      title: 'Fix the Grok adapter'
+    }))
+
+    const runtimeRoot = resolveWorkspaceRuntimeStoreRoot(workspace, createWorkspaceRuntimeEnv(workspace, env))
+    const db = await replayImportedSessions(runtimeRoot)
+    expect(db.getMessages(imported.sessions[0]!.sessionId)).toEqual([
+      expect.objectContaining({
+        message: expect.objectContaining({ role: 'user', content: 'Fix the adapter' })
+      }),
+      expect.objectContaining({
+        message: expect.objectContaining({ role: 'assistant', content: 'Done' })
+      })
+    ])
+    db.close()
+  })
+
+  it('uses the first real Grok user message as the preview title when the summary is missing', async () => {
+    const root = await createTempRoot()
+    const workspace = path.join(root, 'workspace')
+    const home = path.join(root, 'home')
+    const env = createTestEnv(workspace, home)
+    const nativeSessionId = '22222222-2222-4222-8222-222222222222'
+    const sessionDir = path.join(home, '.grok', 'sessions', encodeURIComponent(workspace), nativeSessionId)
+    await mkdir(workspace, { recursive: true })
+    await mkdir(sessionDir, { recursive: true })
+    await writeFile(
+      path.join(sessionDir, 'summary.json'),
+      JSON.stringify({
+        info: { id: nativeSessionId, cwd: workspace },
+        created_at: '2026-08-01T00:00:00.000Z',
+        updated_at: '2026-08-01T00:00:02.000Z',
+        current_model_id: 'grok-code-fast-1'
+      })
+    )
+    await writeJsonl(path.join(sessionDir, 'chat_history.jsonl'), [
+      {
+        type: 'user',
+        synthetic_reason: 'project_instructions',
+        content: [{ type: 'text', text: 'Internal project instructions' }]
+      },
+      { type: 'user', content: [{ type: 'text', text: 'Fix the adapter' }] },
+      { type: 'assistant', content: 'Done', model_id: 'grok-code-fast-1' }
+    ])
+
+    const preview = await previewNativeProjectHistory({
+      adapters: ['grok'],
+      cwd: workspace,
+      env,
+      homeDir: home
+    })
+
+    expect(preview.adapters[0]!.candidates[0]).toEqual(expect.objectContaining({
+      nativeSessionId,
+      title: 'Fix the adapter'
+    }))
+  })
+
   it('imports only Codex sessions whose cwd belongs to the current workspace and stays idempotent', async () => {
     const root = await createTempRoot()
     const workspace = path.join(root, 'workspace')
