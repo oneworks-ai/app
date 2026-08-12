@@ -1,3 +1,4 @@
+import { readLauncherSettingsRuntimePolicy } from '#~/components/launcher/launcher-settings-runtime'
 import { getClientBase, mergeRuntimeEnv, normalizeServerBaseUrl } from '#~/runtime-config.js'
 
 interface DesktopRuntimeIdentity {
@@ -25,9 +26,9 @@ const isDesktopManagerRoutePathname = (pathname: string, clientBase: string) => 
 export const resolveDesktopRuntimeIdentity = (
   pathname: string,
   clientBase: string,
-  hasDesktopBridge: boolean
+  isElectronRuntime: boolean
 ): DesktopRuntimeIdentity | undefined => {
-  if (!hasDesktopBridge) return undefined
+  if (!isElectronRuntime) return undefined
   return {
     clientMode: 'desktop',
     serverRole: isDesktopManagerRoutePathname(pathname, clientBase) ? 'manager' : 'workspace'
@@ -46,7 +47,7 @@ export const installDesktopRuntimeIdentityIfAvailable = () => {
   const identity = resolveDesktopRuntimeIdentity(
     window.location.pathname,
     getClientBase(),
-    window.oneworksDesktop != null
+    readLauncherSettingsRuntimePolicy().isElectron
   )
   if (identity == null) return undefined
 
@@ -60,7 +61,7 @@ export const installDesktopRuntimeIdentityIfAvailable = () => {
 export const connectDesktopManagerRuntimeIfAvailable = async (
   options: ConnectDesktopManagerRuntimeOptions = {}
 ) => {
-  if (!isDesktopManagerRuntimeDocument() || window.oneworksDesktop == null) return undefined
+  if (!isDesktopManagerRuntimeDocument() || !readLauncherSettingsRuntimePolicy().isElectron) return undefined
   const connection = await window.oneworksDesktop?.getManagerConnection?.()
     .catch((error) => {
       console.warn('[desktop] failed to load manager connection', error)

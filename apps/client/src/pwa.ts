@@ -3,6 +3,12 @@ import { getClientCommitHash, getClientVersion } from '#~/client-build-info'
 const CACHE_PREFIX = 'oneworks-web'
 const DESKTOP_RESET_SESSION_KEY = 'oneworks-desktop-pwa-reset'
 
+export const isPwaUpdaterAvailable = (input: {
+  hasServiceWorker: boolean
+  isDesktop: boolean
+  isProd: boolean
+}) => input.hasServiceWorker && input.isProd && !input.isDesktop
+
 const normalizeBasePath = (clientBase: string) => {
   const trimmed = clientBase.trim()
   const withLeadingSlash = trimmed.startsWith('/') ? trimmed : `/${trimmed}`
@@ -77,10 +83,17 @@ export const setupPwa = async (input: {
   isDesktop: boolean
   isProd: boolean
 }) => {
-  if (!('serviceWorker' in navigator)) return
+  const hasServiceWorker = 'serviceWorker' in navigator
+  if (!hasServiceWorker) return
 
   const registration = getServiceWorkerRegistration(input.clientBase)
-  if (!input.isProd || input.isDesktop) {
+  if (
+    !isPwaUpdaterAvailable({
+      hasServiceWorker,
+      isDesktop: input.isDesktop,
+      isProd: input.isProd
+    })
+  ) {
     return await disableServiceWorker(registration.scope, input.isDesktop)
   }
 

@@ -7,6 +7,10 @@ import { DEFAULT_THEME_PRIMARY_COLOR, normalizeThemePrimaryColor } from '@onewor
 import type { ConfigResponse } from '@oneworks/types'
 
 import { getConfig } from '#~/api'
+import {
+  canUseLauncherApiConfig,
+  readLauncherSettingsRuntimePolicy
+} from '#~/components/launcher/launcher-settings-runtime'
 import { connectDesktopManagerRuntimeIfAvailable } from '#~/desktop/manager-runtime'
 import {
   THEME_PRIMARY_COLOR_STORAGE_KEY,
@@ -56,8 +60,10 @@ function useLauncherThemeConfig() {
   const themePackSettings = useAtomValue(themePackSettingsAtom)
   const { isDarkMode, themeMode } = useResolvedThemeMode()
   const desktopApi = window.oneworksDesktop
-  const canUseDesktopSettings = desktopApi?.getDesktopSettings != null
-  const canUseApiConfig = !canUseDesktopSettings && desktopApi == null
+  const launcherRuntimePolicy = readLauncherSettingsRuntimePolicy()
+  const electronDesktopApi = launcherRuntimePolicy.isElectron ? desktopApi : undefined
+  const canUseDesktopSettings = electronDesktopApi?.getDesktopSettings != null
+  const canUseApiConfig = !canUseDesktopSettings && canUseLauncherApiConfig(launcherRuntimePolicy)
   const [storedPrimaryColor, setStoredPrimaryColor] = useState(() => getStoredThemePrimaryColor())
   const [desktopSettings, setDesktopSettings] = useState<unknown>()
   const { data: configRes } = useSWR<ConfigResponse>(canUseApiConfig ? '/api/config' : null, getConfig)
@@ -103,15 +109,15 @@ function useLauncherThemeConfig() {
       return
     }
     let disposed = false
-    void desktopApi?.getDesktopSettings?.()
+    void electronDesktopApi?.getDesktopSettings?.()
       .then(settings => !disposed && setDesktopSettings(settings))
       .catch(error => !disposed && console.error('[launcher] failed to load desktop theme settings', error))
-    const dispose = desktopApi?.onDesktopSettingsChange?.(setDesktopSettings)
+    const dispose = electronDesktopApi?.onDesktopSettingsChange?.(setDesktopSettings)
     return () => {
       disposed = true
       dispose?.()
     }
-  }, [canUseDesktopSettings, desktopApi])
+  }, [canUseDesktopSettings, electronDesktopApi])
 
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
@@ -151,12 +157,14 @@ function ThemedLauncherApp() {
 }
 
 export function LauncherApp() {
-  const isWebLauncher = window.oneworksDesktop == null
+  const launcherRuntimePolicy = readLauncherSettingsRuntimePolicy()
+  const isElectronLauncher = launcherRuntimePolicy.isElectron
+  const isWebLauncher = !isElectronLauncher
   const [managerServerBaseUrl, setManagerServerBaseUrl] = useState<string | undefined>()
-  const waitsForDesktopManager = !isWebLauncher && managerServerBaseUrl == null
+  const waitsForDesktopManager = isElectronLauncher && managerServerBaseUrl == null
 
   useEffect(() => {
-    if (isWebLauncher) return
+    if (!isElectronLauncher) return
     let disposed = false
     void connectDesktopManagerRuntimeIfAvailable()
       .then((serverBaseUrl) => {
@@ -166,7 +174,7 @@ export function LauncherApp() {
     return () => {
       disposed = true
     }
-  }, [isWebLauncher])
+  }, [isElectronLauncher])
 
   useEffect(() => {
     document.documentElement.classList.add('oneworks-launcher-window')

@@ -47,6 +47,13 @@ import { getDesktopShortcutFromEvent, parseShortcut } from '#~/utils/shortcutUti
 
 import { LauncherExternalSessionsView } from './LauncherExternalSessionsView'
 import type { LauncherSearchChromeExtension } from './launcher-search-chrome'
+import {
+  canUseLauncherApiConfig,
+  getLauncherUpdateExperienceTranslationKeys,
+  isLauncherSettingAvailable,
+  readLauncherSettingsRuntimePolicy
+} from './launcher-settings-runtime'
+import type { LauncherSettingId } from './launcher-settings-runtime'
 
 export interface LauncherKeyboardHint {
   key: string
@@ -69,7 +76,7 @@ interface LauncherSettingItem {
   handleActivate?: () => void
   handleAdjust?: (direction: -1 | 1) => void
   icon: string
-  id: string
+  id: LauncherSettingId
   keywords: string[]
   layout?: 'inline' | 'stacked'
   title: string
@@ -232,8 +239,12 @@ export function LauncherSettingsView({
   const [themeMode, setThemeMode] = useAtom(themeAtom)
   const { resolvedThemeMode } = useResolvedThemeMode()
   const desktopApi = window.oneworksDesktop
-  const desktopPlatform = desktopApi?.platform
-  const canUseApiConfig = desktopApi == null
+  const launcherSettingsRuntimePolicy = useMemo(readLauncherSettingsRuntimePolicy, [])
+  const launcherSettingsRuntime = launcherSettingsRuntimePolicy.runtime
+  const launcherUpdaterAvailable = launcherSettingsRuntimePolicy.updaterAvailable
+  const electronDesktopApi = launcherSettingsRuntime === 'electron' ? desktopApi : undefined
+  const desktopPlatform = electronDesktopApi?.platform
+  const canUseApiConfig = canUseLauncherApiConfig(launcherSettingsRuntimePolicy)
   const { data: configRes, mutate: mutateConfig } = useSWR<ConfigResponse>(
     canUseApiConfig ? '/api/config' : null,
     getConfig
@@ -265,8 +276,8 @@ export function LauncherSettingsView({
   const isSettingsComposingRef = useRef(false)
   const sectionShortcutRevealTimerRef = useRef<number>()
   const [activeSectionId, setActiveSectionId] = useState<string>()
-  const canUpdateDesktopIcon = desktopApi?.getDesktopSettings != null &&
-    desktopApi.updateDesktopSettings != null
+  const canUpdateDesktopIcon = electronDesktopApi?.getDesktopSettings != null &&
+    electronDesktopApi.updateDesktopSettings != null
   const canUpdateAppIconPreferences = canUpdateDesktopIcon || (canUseApiConfig && configRes != null)
   const launcherShortcut = desktopSettings.launcherShortcut
   const iconTheme = desktopIconSettings.iconTheme
@@ -278,7 +289,7 @@ export function LauncherSettingsView({
     themes
   )
   const previewSources = useProjectThemePreviewSources({
-    desktopApi,
+    desktopApi: electronDesktopApi,
     iconAppearance: desktopIconSettings.iconAppearance,
     iconBackground,
     iconMode: resolvedThemeMode,
@@ -313,62 +324,62 @@ export function LauncherSettingsView({
   const updateLauncherShortcut = useCallback((launcherShortcut: string) => {
     const previousSettings = desktopSettings
     setDesktopSettings(prev => ({ ...prev, launcherShortcut }))
-    if (desktopApi?.updateDesktopSettings == null) return
+    if (electronDesktopApi?.updateDesktopSettings == null) return
 
-    void desktopApi.updateDesktopSettings({ launcherShortcut })
+    void electronDesktopApi.updateDesktopSettings({ launcherShortcut })
       .then(value => setDesktopSettings(normalizeDesktopSettings(value)))
       .catch((error) => {
         console.error('[launcher-settings] failed to update launcher shortcut', error)
         setDesktopSettings(previousSettings)
         void message.error(t('config.desktopSettings.saveFailed'))
       })
-  }, [desktopApi, desktopSettings, message, t])
+  }, [desktopSettings, electronDesktopApi, message, t])
   const updateOpenLastWorkspaceOnStartup = useCallback((openLastWorkspaceOnStartup: boolean) => {
     const previousSettings = desktopSettings
     setDesktopSettings(prev => ({ ...prev, openLastWorkspaceOnStartup }))
-    if (desktopApi?.updateDesktopSettings == null) return
+    if (electronDesktopApi?.updateDesktopSettings == null) return
 
-    void desktopApi.updateDesktopSettings({ openLastWorkspaceOnStartup })
+    void electronDesktopApi.updateDesktopSettings({ openLastWorkspaceOnStartup })
       .then(value => setDesktopSettings(normalizeDesktopSettings(value)))
       .catch((error) => {
         console.error('[launcher-settings] failed to update startup behavior', error)
         setDesktopSettings(previousSettings)
         void message.error(t('config.desktopSettings.saveFailed'))
       })
-  }, [desktopApi, desktopSettings, message, t])
+  }, [desktopSettings, electronDesktopApi, message, t])
   const updateDesktopAutoUpdate = useCallback((autoUpdate: boolean) => {
     const previousSettings = desktopSettings
     setDesktopSettings(prev => normalizeDesktopSettings({ ...prev, autoUpdate }))
-    if (desktopApi?.updateDesktopSettings == null) return
+    if (electronDesktopApi?.updateDesktopSettings == null) return
 
-    void desktopApi.updateDesktopSettings({ autoUpdate })
+    void electronDesktopApi.updateDesktopSettings({ autoUpdate })
       .then(value => setDesktopSettings(normalizeDesktopSettings(value)))
       .catch((error) => {
         console.error('[launcher-settings] failed to update desktop auto-update setting', error)
         setDesktopSettings(previousSettings)
         void message.error(t('config.desktopSettings.saveFailed'))
       })
-  }, [desktopApi, desktopSettings, message, t])
+  }, [desktopSettings, electronDesktopApi, message, t])
   const updateDesktopUpdateChannel = useCallback((updateChannel: DesktopUpdateChannel) => {
     const previousSettings = desktopSettings
     setDesktopSettings(prev => normalizeDesktopSettings({ ...prev, updateChannel }))
-    if (desktopApi?.updateDesktopSettings == null) return
+    if (electronDesktopApi?.updateDesktopSettings == null) return
 
-    void desktopApi.updateDesktopSettings({ updateChannel })
+    void electronDesktopApi.updateDesktopSettings({ updateChannel })
       .then(value => setDesktopSettings(normalizeDesktopSettings(value)))
       .catch((error) => {
         console.error('[launcher-settings] failed to update desktop update channel', error)
         setDesktopSettings(previousSettings)
         void message.error(t('config.desktopSettings.saveFailed'))
       })
-  }, [desktopApi, desktopSettings, message, t])
+  }, [desktopSettings, electronDesktopApi, message, t])
   const updateDesktopIconSettings = useCallback((
     patch: Partial<Pick<DesktopSettings, 'iconAppearance' | 'iconBackground' | 'iconTheme' | 'syncAppIcon'>>
   ) => {
     const previousSettings = desktopIconSettings
     setDesktopIconSettings(prev => normalizeDesktopIconSettings({ ...prev, ...patch }))
     setSavingDesktopIconSettings(true)
-    const update = desktopApi?.updateDesktopSettings == null
+    const update = electronDesktopApi?.updateDesktopSettings == null
       ? canUseApiConfig && configRes != null
         ? updateConfig('global', 'desktop', {
           ...cloneGlobalDesktopConfig(rawGlobalDesktop),
@@ -381,7 +392,7 @@ export function LauncherSettingsView({
           }
         })
         : Promise.reject(new Error('App icon settings are not available.'))
-      : desktopApi.updateDesktopSettings(patch)
+      : electronDesktopApi.updateDesktopSettings(patch)
 
     void update
       .then(value => setDesktopIconSettings(normalizeDesktopIconSettings(value)))
@@ -394,8 +405,8 @@ export function LauncherSettingsView({
   }, [
     canUseApiConfig,
     configRes,
-    desktopApi,
     desktopIconSettings,
+    electronDesktopApi,
     message,
     mutateConfig,
     rawGlobalDesktop,
@@ -404,9 +415,9 @@ export function LauncherSettingsView({
   const updateThemeMode = useCallback((nextThemeMode: ThemeMode) => {
     const previousThemeMode = themeMode
     setThemeMode(nextThemeMode)
-    if (desktopApi?.updateGlobalAppearanceConfig == null) return
+    if (electronDesktopApi?.updateGlobalAppearanceConfig == null) return
 
-    void desktopApi.updateGlobalAppearanceConfig({ themeMode: nextThemeMode })
+    void electronDesktopApi.updateGlobalAppearanceConfig({ themeMode: nextThemeMode })
       .then((value) => {
         const nextSettings = normalizeDesktopSettings(value)
         setThemeMode(normalizeThemeMode(nextSettings.themeMode))
@@ -418,11 +429,11 @@ export function LauncherSettingsView({
         setThemeMode(previousThemeMode)
         void message.error(t('config.desktopSettings.saveFailed'))
       })
-  }, [desktopApi, message, setThemeMode, t, themeMode])
+  }, [electronDesktopApi, message, setThemeMode, t, themeMode])
   const updateIconTheme = useCallback((nextIconTheme: DesktopIconTheme) => {
     const preset = getPresetByTheme(nextIconTheme)
     if (canUpdatePrimaryColor) {
-      const updatePrimaryColor = desktopApi?.updateGlobalAppearanceConfig == null
+      const updatePrimaryColor = electronDesktopApi?.updateGlobalAppearanceConfig == null
         ? canUseApiConfig && configRes != null
           ? updateConfig('global', 'appearance', {
             ...cloneGlobalAppearanceConfig(rawGlobalAppearance),
@@ -435,7 +446,7 @@ export function LauncherSettingsView({
             }
           })
           : undefined
-        : desktopApi.updateGlobalAppearanceConfig({ primaryColor: preset.primaryColor })
+        : electronDesktopApi.updateGlobalAppearanceConfig({ primaryColor: preset.primaryColor })
 
       if (updatePrimaryColor != null) {
         void updatePrimaryColor
@@ -451,8 +462,8 @@ export function LauncherSettingsView({
       iconTheme: nextIconTheme
     })
   }, [
-    desktopApi,
     desktopIconSettings.iconAppearance,
+    electronDesktopApi,
     iconBackground,
     canUpdatePrimaryColor,
     canUseApiConfig,
@@ -478,19 +489,28 @@ export function LauncherSettingsView({
   }, [desktopIconSettings.iconAppearance, iconBackground, iconTheme, updateDesktopIconSettings])
   const resetGeneralSettings = useCallback(() => {
     void resetGlobalInterfaceLanguage()
-    updateLauncherShortcut(fallbackLauncherShortcut)
-  }, [resetGlobalInterfaceLanguage, updateLauncherShortcut])
+    if (launcherSettingsRuntime === 'electron') {
+      updateLauncherShortcut(fallbackLauncherShortcut)
+    }
+  }, [launcherSettingsRuntime, resetGlobalInterfaceLanguage, updateLauncherShortcut])
   const resetBehaviorSettings = useCallback(() => {
-    updateOpenLastWorkspaceOnStartup(false)
-    updateDesktopAutoUpdate(true)
-    updateDesktopUpdateChannel('stable')
+    if (launcherSettingsRuntime === 'electron') {
+      updateOpenLastWorkspaceOnStartup(false)
+      updateDesktopAutoUpdate(true)
+      updateDesktopUpdateChannel('stable')
+    }
     setHideAfterAction(true)
     setLaunchAtLogin(false)
     setShowStatusPin(true)
     setShowCurrentProject(true)
     setSearchResources(true)
     setShowFooterHints(true)
-  }, [updateDesktopAutoUpdate, updateDesktopUpdateChannel, updateOpenLastWorkspaceOnStartup])
+  }, [
+    launcherSettingsRuntime,
+    updateDesktopAutoUpdate,
+    updateDesktopUpdateChannel,
+    updateOpenLastWorkspaceOnStartup
+  ])
   const resetAppearanceSettings = useCallback(() => {
     setTextSize('default')
     updateThemeMode('system')
@@ -514,7 +534,7 @@ export function LauncherSettingsView({
     }
 
     let disposed = false
-    void desktopApi?.getDesktopSettings?.()
+    void electronDesktopApi?.getDesktopSettings?.()
       .then((value) => {
         if (!disposed) {
           const nextSettings = normalizeDesktopSettings(value)
@@ -528,7 +548,7 @@ export function LauncherSettingsView({
         console.error('[launcher-settings] failed to load app icon settings', error)
       })
 
-    const dispose = desktopApi?.onDesktopSettingsChange?.((value) => {
+    const dispose = electronDesktopApi?.onDesktopSettingsChange?.((value) => {
       const nextSettings = normalizeDesktopSettings(value)
       setDesktopSettingsLoaded(true)
       setThemeMode(normalizeThemeMode(nextSettings.themeMode))
@@ -540,7 +560,11 @@ export function LauncherSettingsView({
       disposed = true
       dispose?.()
     }
-  }, [canUpdateDesktopIcon, canUseApiConfig, configRes, desktopApi, setThemeMode])
+  }, [canUpdateDesktopIcon, canUseApiConfig, configRes, electronDesktopApi, setThemeMode])
+
+  const updateExperienceTranslationKeys = launcherUpdaterAvailable
+    ? getLauncherUpdateExperienceTranslationKeys(launcherSettingsRuntime)
+    : undefined
 
   const sections = useMemo<LauncherSettingSection[]>(() => [
     {
@@ -666,6 +690,23 @@ export function LauncherSettingsView({
           keywords: ['update', 'channel', 'stable', 'rc', 'beta', 'alpha', '更新', '通道', '测试版'],
           title: t('launcher.settings.items.updateChannel.title')
         },
+        ...(updateExperienceTranslationKeys == null
+          ? []
+          : [
+            {
+              control: (
+                <span className='launcher-settings__runtime-status'>
+                  <span className='material-symbols-rounded' aria-hidden='true'>published_with_changes</span>
+                  {t(updateExperienceTranslationKeys.statusKey)}
+                </span>
+              ),
+              description: t(updateExperienceTranslationKeys.descriptionKey),
+              icon: 'system_update_alt',
+              id: 'update-experience',
+              keywords: ['update', 'web update', 'pwa', 'service worker', '更新', '网页', '渐进式应用'],
+              title: t(updateExperienceTranslationKeys.titleKey)
+            } satisfies LauncherSettingItem
+          ]),
         {
           actionLabel: t('launcher.footerHints.toggle'),
           control: (
@@ -989,6 +1030,7 @@ export function LauncherSettingsView({
     updateThemeMode,
     updateDesktopAutoUpdate,
     updateDesktopUpdateChannel,
+    updateExperienceTranslationKeys,
     updateOpenLastWorkspaceOnStartup,
     updateSyncAppIcon,
     windowMode,
@@ -1001,7 +1043,10 @@ export function LauncherSettingsView({
     sections
       .map(section => ({
         ...section,
-        items: section.items.filter(item => matchesQuery(normalizedQuery, item))
+        items: section.items.filter(item =>
+          isLauncherSettingAvailable(launcherSettingsRuntimePolicy, item.id) &&
+          matchesQuery(normalizedQuery, item)
+        )
       }))
       .filter(section =>
         section.items.length > 0 ||
@@ -1016,11 +1061,11 @@ export function LauncherSettingsView({
             ])
           )
         )
-      ), [normalizedQuery, sections])
+      ), [launcherSettingsRuntimePolicy, normalizedQuery, sections])
   const activeSection = filteredSections.find(section => section.id === activeSectionId) ?? filteredSections[0]
   const selectedSection = sections.find(section => section.id === activeSectionId)
   const flatItems = useMemo(() => activeSection?.items ?? [], [activeSection?.items])
-  const [activeSettingId, setActiveSettingId] = useState<string>()
+  const [activeSettingId, setActiveSettingId] = useState<LauncherSettingId>()
   const activeSetting = flatItems.find(item => item.id === activeSettingId) ?? flatItems[0]
   const sectionShortcutModifierLabel = isMac ? '⌘' : 'Ctrl'
   const activateSection = useCallback((

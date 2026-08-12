@@ -1,6 +1,7 @@
 import { useAtomValue } from 'jotai'
 import { useEffect, useMemo, useState } from 'react'
 
+import { readLauncherSettingsRuntimePolicy } from '#~/components/launcher/launcher-settings-runtime'
 import { themeAtom } from '#~/store'
 import type { ThemeMode } from '#~/store'
 
@@ -41,6 +42,7 @@ export function useResolvedThemeMode() {
 
 export function useDesktopThemeSourceBridge(themeMode: ThemeMode) {
   useEffect(() => {
+    if (!readLauncherSettingsRuntimePolicy().isElectron) return
     const desktopApi = window.oneworksDesktop
     const setThemeSource = desktopApi?.setThemeSource
     if (setThemeSource == null) return
