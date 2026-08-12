@@ -189,6 +189,9 @@ export interface AdapterAccountInfo {
   avatarUrl?: string
   status?: 'ready' | 'missing' | 'error'
   isDefault?: boolean
+  priority?: number
+  disabled?: boolean
+  retryAt?: number
   quota?: AdapterAccountQuotaInfo
 }
 
@@ -208,6 +211,10 @@ export interface AdapterAccountsQueryOptions {
 export interface AdapterAccountsResult {
   defaultAccount?: string
   accounts: AdapterAccountInfo[]
+  automaticSelection?: {
+    enabled: boolean
+    strategy: 'sticky-priority'
+  }
   actions?: AdapterAccountActionDescriptor[]
 }
 
@@ -296,6 +303,33 @@ export interface AdapterSession {
   pid?: number
 }
 
+export interface AdapterModelSharingBridgeOptions {
+  sessionId: string
+  account?: string
+  signal?: AbortSignal
+  onMessage: (message: string) => void
+  onError?: (error: Error) => void
+  onExit?: (code: number | null, signal: NodeJS.Signals | null) => void
+}
+
+export interface AdapterModelSharingBridge {
+  accountKey?: string
+  send: (message: string | Uint8Array) => Promise<void>
+  close: () => void
+}
+
+export interface AdapterSharedModelExecuteOptions {
+  request: Record<string, unknown>
+  sessionId: string
+  account?: string
+  signal?: AbortSignal
+}
+
+export interface AdapterSharedModelExecuteResult {
+  response: Record<string, unknown>
+  accountKey?: string
+}
+
 export interface Adapter {
   init?: (
     ctx: AdapterCtx
@@ -316,6 +350,14 @@ export interface Adapter {
     ctx: AdapterCtx,
     options: AdapterManageAccountOptions
   ) => Promise<AdapterManageAccountResult>
+  createModelSharingBridge?: (
+    ctx: AdapterCtx,
+    options: AdapterModelSharingBridgeOptions
+  ) => Promise<AdapterModelSharingBridge>
+  executeSharedModel?: (
+    ctx: AdapterCtx,
+    options: AdapterSharedModelExecuteOptions
+  ) => Promise<AdapterSharedModelExecuteResult>
   query: (
     ctx: AdapterCtx,
     options: AdapterQueryOptions

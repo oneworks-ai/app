@@ -100,6 +100,18 @@ describe('openCode config and model helpers', () => {
     })
   })
 
+  it('requires an explicit SDK package for non-OpenAI protocols', () => {
+    expect(() =>
+      resolveOpenCodeModel('anthropic,claude-sonnet', {
+        anthropic: {
+          apiBaseUrl: 'https://api.anthropic.com/v1',
+          apiProtocol: 'anthropic-messages',
+          apiKey: 'secret'
+        }
+      })
+    ).toThrow(/requires an explicit extra\.opencode\.npm package/)
+  })
+
   it('preserves provider prefix when explicit service syntax has no local mapping', () => {
     expect(resolveOpenCodeModel('openrouter,claude-sonnet-4.5', {})).toEqual({
       cliModel: 'openrouter/claude-sonnet-4.5',

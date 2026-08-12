@@ -33,6 +33,7 @@ const ADAPTER_PLUGIN_EXPORT = '/plugins'
 interface AdapterModelsExport {
   builtinModels?: unknown
   loadBuiltinModels?: unknown
+  loadModelServiceModels?: unknown
 }
 
 interface AdapterModelProviderImportExport {
@@ -509,6 +510,22 @@ export const loadAdapterBuiltinModels = (type: string, options: AdapterPackageLo
     if (Array.isArray(loaded)) return loaded as AdapterBuiltinModel[]
   }
   return Array.isArray(mod.builtinModels) ? mod.builtinModels as AdapterBuiltinModel[] : undefined
+}
+
+export const loadAdapterModelServiceModels = (type: string, options: AdapterPackageLoadOptions = {}) => {
+  const { packageName, packageRoot } = resolveAdapterLoadTarget(type, options)
+  const exportName = `${packageName}${ADAPTER_MODELS_EXPORT}`
+  const mod = loadAdapterPackageExport({
+    packageName,
+    request: packageRoot == null ? exportName : `${packageRoot}${ADAPTER_MODELS_EXPORT}`,
+    packageRoot,
+    exportKey: './models',
+    workspaceSourcePath: 'src/models.ts'
+  }) as AdapterModelsExport
+
+  if (typeof mod.loadModelServiceModels !== 'function') return undefined
+  const loaded = mod.loadModelServiceModels()
+  return Array.isArray(loaded) ? loaded as AdapterBuiltinModel[] : undefined
 }
 
 const isMissingAdapterPackageExportError = (

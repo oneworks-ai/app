@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -139,6 +139,103 @@ describe('ensureClaudeCodeRouterReady', () => {
     expect(connection.port).toBe(expectedPort)
     expect(config.PORT).toBe(String(expectedPort))
     expect(waitForReady).toHaveBeenCalledWith(expectedPort, 15000)
+    expect(spawnDetached).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the shared bearer and loopback endpoint in the daemon environment only', async () => {
+    const workspace = await createWorkspace()
+    const ctx = createCtx(workspace, {
+      defaultModelService: 'oneworks-codex',
+      defaultModel: 'gpt-5.4',
+      modelServices: {
+        'oneworks-codex': {
+          apiProtocol: 'openai-chat-completions',
+          apiBaseUrl: 'http://127.0.0.1:9876/api/internal/codex-shared-model/v1',
+          apiKey: 'runtime-only-secret',
+          models: ['gpt-5.4']
+        }
+      },
+      adapters: {
+        'claude-code': {
+          ccrOptions: { PORT: '4123', APIKEY: 'router-key' }
+        }
+      }
+    })
+    const spawnDetached = vi.fn(async () => undefined)
+
+    await ensureClaudeCodeRouterReady(ctx, {
+      resolveCliPath: () => '/bin/sh',
+      resolveRuntimePreloadPath: () => '/mock/register/preload.js',
+      isProcessAlive: vi.fn(() => false),
+      spawnDetached,
+      stopProcess: vi.fn(async () => undefined),
+      waitForReady: vi.fn(async () => undefined)
+    }, 'oneworks-codex,gpt-5.4')
+
+    const { configPath } = getRouterPaths(workspace, ctx.env)
+    const configText = await readFile(configPath, 'utf8')
+    const spawnArgs = spawnDetached.mock.calls[0] as unknown as [{ env: NodeJS.ProcessEnv }]
+
+    expect(configText).not.toContain('runtime-only-secret')
+    expect(configText).not.toContain('127.0.0.1:9876')
+    expect(configText).toContain('$' + '{__ONEWORKS_PROJECT_CODEX_SHARED_MODEL_TOKEN__}')
+    expect(configText).toContain('$' + '{__ONEWORKS_PROJECT_CODEX_SHARED_MODEL_UPSTREAM_URL__}')
+    expect((await stat(configPath)).mode & 0o777).toBe(0o600)
+    expect(spawnArgs[0]?.env).toMatchObject({
+      __ONEWORKS_PROJECT_CODEX_SHARED_MODEL_TOKEN__: 'runtime-only-secret',
+      __ONEWORKS_PROJECT_CODEX_SHARED_MODEL_UPSTREAM_URL__:
+        'http://127.0.0.1:9876/api/internal/codex-shared-model/v1/chat/completions'
+    })
+  })
+
+  it('restarts a live router when the runtime-only shared credential rotates', async () => {
+    const workspace = await createWorkspace()
+    const createSharedCtx = (apiKey: string) =>
+      createCtx(workspace, {
+        defaultModelService: 'oneworks-codex',
+        defaultModel: 'gpt-5.4',
+        modelServices: {
+          'oneworks-codex': {
+            apiProtocol: 'openai-chat-completions',
+            apiBaseUrl: 'http://127.0.0.1:9876/api/internal/codex-shared-model/v1',
+            apiKey,
+            models: ['gpt-5.4']
+          }
+        },
+        adapters: {
+          'claude-code': {
+            ccrOptions: { PORT: '4123', APIKEY: 'router-key' }
+          }
+        }
+      })
+    const oldCtx = createSharedCtx('old-runtime-secret')
+    const ctx = createSharedCtx('new-runtime-secret')
+    const { configPath, pidPath, routerHome } = getRouterPaths(workspace, ctx.env)
+    const oldConfigText = generateDefaultCCRConfigJSON({
+      cwd: workspace,
+      userConfig: oldCtx.configs[1],
+      adapterOptions: oldCtx.configs[1].adapters['claude-code'],
+      selectedModel: 'oneworks-codex,gpt-5.4'
+    })
+    await mkdir(routerHome, { recursive: true })
+    await writeFile(configPath, oldConfigText, 'utf8')
+    await writeFile(pidPath, '8642', 'utf8')
+    const stopProcess = vi.fn(async () => undefined)
+    const spawnDetached = vi.fn(async () => undefined)
+
+    await ensureClaudeCodeRouterReady(ctx, {
+      resolveCliPath: () => '/bin/sh',
+      resolveRuntimePreloadPath: () => '/mock/register/preload.js',
+      isProcessAlive: vi.fn(() => true),
+      spawnDetached,
+      stopProcess,
+      waitForReady: vi.fn(async () => undefined)
+    }, 'oneworks-codex,gpt-5.4')
+
+    const nextConfigText = await readFile(configPath, 'utf8')
+    expect(nextConfigText).not.toBe(oldConfigText)
+    expect(nextConfigText).not.toContain('new-runtime-secret')
+    expect(stopProcess).toHaveBeenCalledWith(8642)
     expect(spawnDetached).toHaveBeenCalledTimes(1)
   })
 

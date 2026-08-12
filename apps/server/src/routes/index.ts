@@ -15,6 +15,7 @@ import { benchmarkRouter } from './benchmark'
 import { channelActionsRouter } from './channel-actions'
 import { channelSendRouter } from './channel-send'
 import { channelWebhooksRouter } from './channel-webhooks'
+import { codexSharedModelRouter } from './codex-shared-model'
 import { configRouter } from './config'
 import { diagnosticsRouter } from './diagnostics'
 import { eventsRouter } from './events'
@@ -68,6 +69,7 @@ export const mountRoutes = async (
     { prefix: '/api/mobile-debug', router: mobileDebugRouter() },
     { prefix: '/api/plugins', router: pluginsRouter() },
     { prefix: '/api/internal/runtime-broker', router: runtimeBrokerRouter(env) },
+    { prefix: '/api/internal/codex-shared-model', router: codexSharedModelRouter(env) },
     { prefix: '/api/auth', router: authRouter(env) },
     { prefix: '/api/ai', router: aiRouter() },
     { prefix: '/api/benchmark', router: benchmarkRouter() },

@@ -162,6 +162,9 @@ export const createCodexAppServerRuntimeBrokerDriver = (options: {
           throw rpcAccessDenied(`Codex thread "${threadId}" is not owned by this workspace lease.`)
         }
       }
+      const releaseThreadOwnership = (threadId: string) => {
+        if (threadOwners.get(threadId)?.ownerId === context.ownerId) threadOwners.delete(threadId)
+      }
       const assertRpcRequestAllowed = (method: string, params: Record<string, unknown>) => {
         if (method === 'thread/start') {
           const cwd = normalizeCwd(readString(params.cwd, 'cwd'))
@@ -182,7 +185,9 @@ export const createCodexAppServerRuntimeBrokerDriver = (options: {
           }
           return
         }
-        if (['thread/unsubscribe', 'turn/interrupt', 'turn/start', 'turn/steer'].includes(method)) {
+        if (
+          ['thread/inject_items', 'thread/unsubscribe', 'turn/interrupt', 'turn/start', 'turn/steer'].includes(method)
+        ) {
           assertOwnedThread(readString(params.threadId, 'threadId'))
           return
         }
@@ -247,7 +252,11 @@ export const createCodexAppServerRuntimeBrokerDriver = (options: {
                 })
               }
               state.threads.delete(threadId)
-              await lease.unregisterThread(threadId)
+              try {
+                await lease.unregisterThread(threadId)
+              } finally {
+                releaseThreadOwnership(threadId)
+              }
               void lease.rpc.request('thread/unsubscribe', { threadId }, { timeoutMs: 5_000 }).catch(error => {
                 options.logger.debug('[codex runtime broker] thread unsubscribe during close failed', {
                   error,
@@ -278,7 +287,11 @@ export const createCodexAppServerRuntimeBrokerDriver = (options: {
               const threadId = readString(operationPayload.threadId, 'threadId')
               assertOwnedThread(threadId)
               state.threads.delete(threadId)
-              await lease.unregisterThread(threadId)
+              try {
+                await lease.unregisterThread(threadId)
+              } finally {
+                releaseThreadOwnership(threadId)
+              }
               return {}
             }
             case 'setup.begin': {
@@ -330,7 +343,11 @@ export const createCodexAppServerRuntimeBrokerDriver = (options: {
           for (const pending of state.pendingSetups.values()) pending.release()
           state.pendingSetups.clear()
           for (const threadId of state.threads.keys()) {
-            await lease.unregisterThread(threadId)
+            try {
+              await lease.unregisterThread(threadId)
+            } finally {
+              releaseThreadOwnership(threadId)
+            }
           }
           state.threads.clear()
           lease.release()

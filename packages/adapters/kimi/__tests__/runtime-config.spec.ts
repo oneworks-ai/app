@@ -540,13 +540,14 @@ exit 2
     }
   })
 
-  it('normalizes Moonshot chat completions URLs for Kimi providers', async () => {
+  it('keeps the Kimi provider subtype for explicit Chat Completions on Moonshot', async () => {
     const { ctx, cleanup } = await createCtx()
     try {
       ctx.configs = [{
         modelServices: {
           kimi: {
             apiBaseUrl: 'https://api.moonshot.oo/v1/chat/completions',
+            apiProtocol: 'openai-chat-completions',
             apiKey: 'kimi-token',
             models: ['kimi-k2.5']
           }
@@ -577,6 +578,44 @@ exit 2
       expect(config.services?.moonshot_fetch).toMatchObject({
         base_url: 'https://api.moonshot.oo/v1/fetch'
       })
+    } finally {
+      await cleanup()
+    }
+  })
+
+  it('honors an explicit generic Chat Completions protocol without Moonshot-only services', async () => {
+    const { ctx, cleanup } = await createCtx()
+    try {
+      ctx.configs = [{
+        modelServices: {
+          chat: {
+            apiBaseUrl: 'https://proxy.example/v1/chat/completions',
+            apiProtocol: 'openai-chat-completions',
+            apiKey: 'chat-token',
+            models: ['proxy-model']
+          }
+        }
+      }, undefined]
+
+      const base = await resolveKimiSessionBase(ctx, {
+        type: 'create',
+        runtime: 'cli',
+        sessionId: 'session-generic-chat',
+        model: 'chat,proxy-model',
+        onEvent: () => {}
+      })
+      const configPath = base.turnArgPrefix.at(base.turnArgPrefix.indexOf('--config-file') + 1)
+      const config = JSON.parse(await readFile(configPath as string, 'utf8')) as {
+        providers?: Record<string, { type?: string; base_url?: string }>
+        services?: Record<string, { base_url?: string }>
+      }
+
+      expect(config.providers?.chat).toMatchObject({
+        type: 'openai_legacy',
+        base_url: 'https://proxy.example/v1'
+      })
+      expect(config.services?.moonshot_search).toBeUndefined()
+      expect(config.services?.moonshot_fetch).toBeUndefined()
     } finally {
       await cleanup()
     }

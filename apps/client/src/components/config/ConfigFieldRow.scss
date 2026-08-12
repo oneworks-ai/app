@@ -143,6 +143,13 @@
   text-overflow: ellipsis;
 }
 
+.config-view__field-row:has(.ant-switch) .config-view__field-desc {
+  line-height: 1.45;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
 .config-view__field-control {
   display: flex;
   flex: 0 1 220px;

@@ -12,8 +12,8 @@ export const CLAUDE_CODE_CLI_PACKAGE = '@anthropic-ai/claude-code'
 export const CLAUDE_CODE_CLI_VERSION = 'latest'
 export const CLAUDE_CODE_CLI_COMPATIBILITY_RANGE = '>=2.1.114'
 export const CLAUDE_CODE_ROUTER_CLI_PACKAGE = '@musistudio/claude-code-router'
-export const CLAUDE_CODE_ROUTER_CLI_VERSION = 'latest'
-export const CLAUDE_CODE_ROUTER_CLI_COMPATIBILITY_RANGE = '>=1.0.73'
+export const CLAUDE_CODE_ROUTER_CLI_VERSION = '1.0.73'
+export const CLAUDE_CODE_ROUTER_CLI_COMPATIBILITY_RANGE = '1.0.73'
 const USER_SHELL_CHECK_TIMEOUT_MS = 3000
 
 export const toRealPath = (targetPath: string) => {

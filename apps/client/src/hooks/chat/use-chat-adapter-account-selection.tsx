@@ -1,4 +1,6 @@
+/* eslint-disable max-lines -- account selection keeps storage, quota labels, and Auto session semantics together. */
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import type { AdapterAccountInfo, AdapterAccountQuotaMetric } from '@oneworks/types'
 
@@ -16,8 +18,10 @@ export interface ChatAdapterAccountOption {
   avatarUrl?: string
   quota?: AdapterAccountInfo['quota']
   quotaWindows?: AccountQuotaWindow[]
+  automatic?: boolean
 }
 const ACCOUNT_STORAGE_KEY_PREFIX = 'oneworks_chat_adapter_account:'
+const AUTOMATIC_ACCOUNT_STORAGE_VALUE = '__automatic__'
 const EMAIL_PATTERN = /[\w.%+-]+@[\w.-]+\.[A-Z]{2,}/i
 const GENERIC_ACCOUNT_TITLES = new Set(['codex'])
 const formatQuotaMetric = (metric: AdapterAccountQuotaMetric) => {
@@ -70,17 +74,21 @@ const inferAccountLabel = (account: AdapterAccountInfo) => {
   return inferAccountEmail(account) ?? title ?? account.key
 }
 
-const readStoredAccount = (adapter: string | undefined) => {
+const readStoredSelection = (adapter: string | undefined) => {
   const normalizedAdapter = normalizeNonEmptyString(adapter)
   if (normalizedAdapter == null) {
-    return undefined
+    return { account: undefined, automatic: false }
   }
 
   try {
     const raw = localStorage.getItem(`${ACCOUNT_STORAGE_KEY_PREFIX}${normalizedAdapter}`)
-    return raw == null || raw.trim() === '' ? undefined : raw.trim()
+    const value = raw?.trim()
+    if (value === AUTOMATIC_ACCOUNT_STORAGE_VALUE) {
+      return { account: undefined, automatic: true }
+    }
+    return { account: value == null || value === '' ? undefined : value, automatic: false }
   } catch {
-    return undefined
+    return { account: undefined, automatic: false }
   }
 }
 
@@ -91,17 +99,24 @@ export function useChatAdapterAccountSelection({
   adapter?: string
   model?: string
 }) {
+  const { t } = useTranslation()
   const normalizedAdapter = normalizeNonEmptyString(adapter)
-  const [selectedAccount, setSelectedAccountState] = useState<string | undefined>(() => readStoredAccount(adapter))
+  const initialSelection = readStoredSelection(adapter)
+  const [selectedAccount, setSelectedAccountState] = useState<string | undefined>(initialSelection.account)
+  const [automaticSelectionRequested, setAutomaticSelectionRequested] = useState(initialSelection.automatic)
 
   useEffect(() => {
-    setSelectedAccountState(readStoredAccount(normalizedAdapter))
+    const stored = readStoredSelection(normalizedAdapter)
+    setSelectedAccountState(stored.account)
+    setAutomaticSelectionRequested(stored.automatic)
   }, [normalizedAdapter])
 
   const data = useAdapterAccountsWithQuota({ adapter: normalizedAdapter, model })
+  const accountsDataReady = data != null
+  const automaticSelectionEnabled = data?.automaticSelection?.enabled === true
 
   const accountOptions = useMemo<ChatAdapterAccountOption[]>(() => {
-    return (data?.accounts ?? [])
+    const accounts = (data?.accounts ?? [])
       .filter(account => account.status !== 'missing')
       .map(account => ({
         value: account.key,
@@ -113,7 +128,16 @@ export function useChatAdapterAccountSelection({
         quota: account.quota,
         quotaWindows: getAccountQuotaWindows(account.quota)
       }))
-  }, [data?.accounts])
+    return automaticSelectionEnabled
+      ? [{
+        value: '',
+        label: t('chat.accountSelectAutomatic'),
+        hint: t('chat.accountSelectAutomaticHint'),
+        meta: t('chat.accountSelectAutomaticHint'),
+        automatic: true
+      }, ...accounts]
+      : accounts
+  }, [automaticSelectionEnabled, data?.accounts, t])
 
   const findAccountOptionByAlias = useCallback((value?: string) => {
     const normalizedValue = normalizeNonEmptyString(value)
@@ -133,6 +157,9 @@ export function useChatAdapterAccountSelection({
 
   const resolveSelectableAccount = useCallback((value?: string, preserveUnknown = false) => {
     const normalizedValue = normalizeNonEmptyString(value)
+    if (normalizedValue == null && automaticSelectionEnabled) {
+      return undefined
+    }
     const accountValues = new Set(accountOptions.map(option => option.value))
     if (normalizedValue != null) {
       const matchedOption = findAccountOptionByAlias(normalizedValue)
@@ -150,47 +177,79 @@ export function useChatAdapterAccountSelection({
     }
 
     return accountOptions[0]?.value
-  }, [accountOptions, data?.defaultAccount, findAccountOptionByAlias])
+  }, [accountOptions, automaticSelectionEnabled, data?.defaultAccount, findAccountOptionByAlias])
 
   useEffect(() => {
     if (normalizedAdapter == null) {
       setSelectedAccountState(undefined)
+      setAutomaticSelectionRequested(false)
+      return
+    }
+
+    if (accountsDataReady && !automaticSelectionEnabled && automaticSelectionRequested) {
+      setAutomaticSelectionRequested(false)
+    }
+    if (automaticSelectionEnabled && selectedAccount == null) {
+      setAutomaticSelectionRequested(true)
+      return
+    }
+    if (automaticSelectionRequested && automaticSelectionEnabled) {
       return
     }
 
     const nextValue = resolveSelectableAccount(selectedAccount)
     setSelectedAccountState((prev) => prev === nextValue ? prev : nextValue)
-  }, [normalizedAdapter, resolveSelectableAccount, selectedAccount])
+  }, [
+    accountsDataReady,
+    automaticSelectionEnabled,
+    automaticSelectionRequested,
+    normalizedAdapter,
+    resolveSelectableAccount,
+    selectedAccount
+  ])
 
   useEffect(() => {
-    if (normalizedAdapter == null) {
+    if (normalizedAdapter == null || !accountsDataReady) {
       return
     }
 
     try {
       const storageKey = `${ACCOUNT_STORAGE_KEY_PREFIX}${normalizedAdapter}`
-      if (selectedAccount == null || selectedAccount.trim() === '') {
+      if (automaticSelectionRequested && automaticSelectionEnabled) {
+        localStorage.setItem(storageKey, AUTOMATIC_ACCOUNT_STORAGE_VALUE)
+      } else if (selectedAccount == null || selectedAccount.trim() === '') {
         localStorage.removeItem(storageKey)
       } else {
         localStorage.setItem(storageKey, selectedAccount)
       }
     } catch {}
-  }, [normalizedAdapter, selectedAccount])
+  }, [accountsDataReady, automaticSelectionEnabled, automaticSelectionRequested, normalizedAdapter, selectedAccount])
 
   const applySessionSelection = useCallback((params: { account?: string }) => {
-    const nextAccount = resolveSelectableAccount(params.account, data == null) ??
+    if (automaticSelectionRequested && automaticSelectionEnabled) {
+      return
+    }
+    const nextAccount = resolveSelectableAccount(params.account, !accountsDataReady) ??
       normalizeNonEmptyString(params.account)
     setSelectedAccountState((prev) => prev === nextAccount ? prev : nextAccount)
-  }, [data, resolveSelectableAccount])
+  }, [accountsDataReady, automaticSelectionEnabled, automaticSelectionRequested, resolveSelectableAccount])
 
   const updateSelectedAccount = useCallback((value?: string) => {
+    if (normalizeNonEmptyString(value) == null && automaticSelectionEnabled) {
+      setAutomaticSelectionRequested(true)
+      setSelectedAccountState(undefined)
+      return
+    }
+    setAutomaticSelectionRequested(false)
     const nextAccount = resolveSelectableAccount(value)
     setSelectedAccountState((prev) => prev === nextAccount ? prev : nextAccount)
-  }, [resolveSelectableAccount])
+  }, [automaticSelectionEnabled, resolveSelectableAccount])
 
   return {
     accountOptions,
-    selectedAccount: resolveSelectableAccount(selectedAccount, data == null) ?? selectedAccount,
+    selectedAccount: automaticSelectionRequested && automaticSelectionEnabled
+      ? undefined
+      : resolveSelectableAccount(selectedAccount, !accountsDataReady) ?? selectedAccount,
     setSelectedAccount: updateSelectedAccount,
     applySessionSelection,
     showAccountSelector: normalizedAdapter != null && accountOptions.length > 0

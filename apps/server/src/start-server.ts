@@ -1,4 +1,5 @@
 /* eslint-disable max-lines -- startup timing logs keep server bootstrap phases visible. */
+import { randomBytes } from 'node:crypto'
 import http from 'node:http'
 import process from 'node:process'
 
@@ -24,6 +25,7 @@ import {
 import { configureRuntimeBrokerTransport, disposeRuntimeBroker } from '#~/services/runtime-broker/index.js'
 import { autoImportNativeProjectHistoryAndReplay } from '#~/services/runtime-store/history-import.js'
 import { startRuntimeStoreWatcher } from '#~/services/runtime-store/watcher.js'
+import { removeServerInstanceStateForPid, writeServerInstanceState } from '#~/services/server-instance.js'
 import { installWebDebugChii } from '#~/services/web-debug/chii.js'
 
 import { handleChannelSessionEvent, initChannels } from './channels'
@@ -192,6 +194,9 @@ export async function createServerRuntime(logStartup?: StartupLog): Promise<Serv
   logStartup?.('create runtime begin')
   logStartup?.('project home segment migration deferred')
   const env = loadEnv()
+  const sharedModelToken = env.__ONEWORKS_PROJECT_CODEX_SHARED_MODEL_TOKEN__ ?? randomBytes(32).toString('base64url')
+  env.__ONEWORKS_PROJECT_CODEX_SHARED_MODEL_TOKEN__ = sharedModelToken
+  process.env.__ONEWORKS_PROJECT_CODEX_SHARED_MODEL_TOKEN__ = sharedModelToken
   logStartup?.('env loaded')
   logStartup?.('model provider catalog load begin')
   await initializeModelProviderCatalog(process.env)
@@ -364,7 +369,12 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
         mountRoutesOnListen(displayBaseUrl)
         logStartup('listen callback complete')
         emitDesktopServerReadyEvent(displayBaseUrl)
-        resolve()
+        void writeServerInstanceState(env, {
+          pid: process.pid,
+          role: env.__ONEWORKS_PROJECT_SERVER_ROLE__ === 'manager' ? 'manager' : 'workspace',
+          serverBaseUrl: displayBaseUrl,
+          startedAt: new Date().toISOString()
+        }).then(resolve, reject)
       })
     })
     if (ownsWorkspaceRuntime) {
@@ -383,6 +393,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
     scheduleProjectHomeSegmentMigration(logStartup)
 
     server.once('close', () => {
+      void removeServerInstanceStateForPid(env, process.pid)
       if (runtimeStoreWatcherTimer != null) {
         clearTimeout(runtimeStoreWatcherTimer)
         runtimeStoreWatcherTimer = undefined

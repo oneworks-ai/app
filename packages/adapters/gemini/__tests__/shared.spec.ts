@@ -346,7 +346,25 @@ describe('validateGeminiSelection', () => {
         }),
         model: 'openai,gpt-5.4'
       })
-    ).toThrow(/chat\/completions/)
+    ).toThrow(/OpenAI Chat Completions/)
+  })
+
+  it('rejects an explicit non-Chat protocol even when its base URL is ambiguous', () => {
+    expect(() =>
+      validateGeminiSelection({
+        ctx: createCtx({
+          adapters: { gemini: {} },
+          modelServices: {
+            anthropic: {
+              apiBaseUrl: 'https://api.anthropic.com/v1',
+              apiProtocol: 'anthropic-messages',
+              apiKey: 'secret'
+            }
+          }
+        }),
+        model: 'anthropic,claude-sonnet'
+      })
+    ).toThrow(/OpenAI Chat Completions/)
   })
 
   it('rejects service selectors that point to unknown services', () => {

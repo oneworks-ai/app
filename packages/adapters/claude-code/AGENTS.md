@@ -97,7 +97,8 @@ macOS 上所有 Claude 登录态都按机器级共享资源处理，不按同步
   - 出问题时更容易判断是上游 CLI 变化，还是中间层兼容问题。
 - 本包里的例子：
   - `@anthropic-ai/claude-code` 默认跟进最新稳定版。
-  - `@musistudio/claude-code-router` 默认保持在最新 `1.x`，除非已经确认 `2.x` 有明确维护信号且当前需求必须依赖其新能力。
+  - `@musistudio/claude-code-router` 当前精确锁定 `1.0.73`；该版本的环境变量插值和 transformer 行为已经过真实共享模型链路验证，不能让系统上的未知新版满足兼容范围。
+  - runtime-only model service 的 bearer 与 materialized loopback URL 只能作为 CCR 配置中的环境变量占位符，真实值只进入 daemon 子进程环境；配置文件使用 `0600`，高熵 capability 的单向指纹只用于识别轮换并触发 daemon 重启。
 
 ### 4. 主会话 binary 不能依赖系统 PATH
 

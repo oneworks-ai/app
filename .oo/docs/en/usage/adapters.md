@@ -42,6 +42,8 @@ oneworks accounts remove claude-code work
 
 Both adapters invoke official CLI login and status flows. Removal may invoke official logout only for portable credentials on a platform where the managed account is isolated. Claude Code gives each managed account a stable, isolated `CLAUDE_CONFIG_DIR`; macOS Keychain credentials remain device-bound, while an official `.credentials.json` can be stored as a portable snapshot. Removing a macOS or other device-bound account deletes only One Works' record and binding: the native login remains on that device. An explicit `claude auth logout` is a machine-level operation that affects the device's native login. Claude quota information comes only from the local `cachedUsageUtilization` snapshot.
 
+Codex supports managed accounts, an Auto account pool, built-in model sharing, the official-client bridge, and native configuration imports. See [Codex accounts, shared models, and client access](./codex.md) for the full configuration and behavior.
+
 Account data is private. Do not commit it to the workspace. A base64 payload is encoded, not encrypted; a device-bound account must be authenticated again on a new device. `.claude.json` is state and cached identity/usage, not a complete credential.
 
 ## Adapter CLI and Model Routing

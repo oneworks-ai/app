@@ -11,7 +11,9 @@ import type { AdapterCtx, AdapterQueryOptions, Config, ModelServiceConfig } from
 import {
   migrateProjectHomeSegment,
   parseServiceModelSelector,
+  resolveModelServiceApiProtocol,
   resolveModelServiceConfig,
+  resolveModelServiceFromMap,
   resolveProjectOoPath,
   syncSymlinkTarget
 } from '@oneworks/utils'
@@ -239,18 +241,32 @@ const buildGeneratedModelConfig = (params: {
   const parsed = parseServiceModelSelector(params.rawModel)
   if (parsed == null) return undefined
 
-  const service = params.modelServices[parsed.serviceKey]
+  const service = resolveModelServiceFromMap(params.modelServices, parsed.serviceKey)
   if (service == null) return undefined
   const resolved = resolveModelServiceConfig(service, ['modelServices', parsed.serviceKey])
   if (resolved.service == null) return undefined
   const resolvedService = resolved.service
 
   const extra = resolveModelServiceExtra(resolvedService)
-  const providerType = inferProviderType({
+  const apiProtocol = resolveModelServiceApiProtocol(resolvedService)
+  if (apiProtocol === 'gemini-interactions') {
+    throw new Error('Kimi adapter does not support gemini-interactions model services.')
+  }
+  const inferredProviderType = inferProviderType({
     apiBaseUrl: resolvedService.apiBaseUrl,
     providerType: typeof extra.providerType === 'string' ? extra.providerType : undefined,
     modelName: parsed.modelName
   })
+  const protocolProviderType: KimiProviderType | undefined = apiProtocol === 'openai-responses'
+    ? 'openai_responses'
+    : apiProtocol === 'openai-chat-completions'
+    ? inferredProviderType === 'kimi' ? 'kimi' : 'openai_legacy'
+    : apiProtocol === 'anthropic-messages'
+    ? 'anthropic'
+    : apiProtocol === 'gemini-generate-content'
+    ? inferredProviderType === 'vertexai' ? 'vertexai' : 'gemini'
+    : undefined
+  const providerType = protocolProviderType ?? inferredProviderType
   const providerKey = typeof extra.providerId === 'string' && extra.providerId.trim() !== ''
     ? extra.providerId.trim()
     : parsed.serviceKey

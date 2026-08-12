@@ -6,3 +6,6 @@
 - Make Desktop startup feel faster while hardening packaging, signing, and recoverable release operations.
 - Improve reliability for plugin uninstalls, archive deletion feedback, chat Git status, launcher keyboard navigation, and chat-room layout.
 - Distribute the macOS rc.3 installers unsigned with a complete ad-hoc seal; Gatekeeper requires manual approval and no Apple notarization is requested.
+- Add protocol-safe Model Service routing, Codex account-pool failover, and optional sharing of Codex built-in models with other One Works adapters while keeping each adapter's own account selector unchanged.
+
+  ![Codex built-in models in Claude Code](./codex-shared-models-claude-code.jpg)

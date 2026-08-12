@@ -14,6 +14,7 @@ import {
   getModelProviderDefinition,
   normalizeIconRef,
   resolveModelProviderIdentity,
+  resolveModelServiceApiProtocol,
   resolveModelServiceConfig,
   resolveModelServiceIcon,
   resolveModelServiceModels
@@ -285,10 +286,8 @@ const resolveAdapterCompatibilityOverride = (params: {
   return undefined
 }
 
-const hasResponsesModelServiceBaseUrl = (service: ModelServiceConfig | undefined) => (
-  normalizeNonEmptyString(resolveModelServiceConfig(service).service?.apiBaseUrl)?.replace(/\/+$/u, '').endsWith(
-    '/responses'
-  ) === true
+const resolveConfiguredApiProtocol = (service: ModelServiceConfig | undefined) => (
+  resolveModelServiceApiProtocol(resolveModelServiceConfig(service).service ?? service)
 )
 
 const resolveProviderAdapterCompatibility = (params: {
@@ -319,8 +318,8 @@ export const isModelServiceCompatibleWithAdapter = (params: {
   if (!adapter || params.service == null) return true
 
   if (adapter === 'codex') {
-    const codexWireApi = normalizeNonEmptyString(getModelServiceExtraRecord(params.service, 'codex').wireApi)
-    if (codexWireApi != null && codexWireApi !== 'responses') return false
+    const apiProtocol = resolveConfiguredApiProtocol(params.service)
+    if (apiProtocol === 'gemini-interactions') return false
   }
 
   const explicitCompatibility = resolveAdapterCompatibilityOverride({
@@ -339,12 +338,12 @@ export const isModelServiceCompatibleWithAdapter = (params: {
 
   if (adapter === 'codex') {
     const codexExtra = getModelServiceExtraRecord(params.service, 'codex')
-    return Object.keys(codexExtra).length > 0 || hasResponsesModelServiceBaseUrl(params.service)
+    return Object.keys(codexExtra).length > 0 || resolveConfiguredApiProtocol(params.service) != null
   }
 
   if (adapter === 'gemini') {
-    const codexWireApi = normalizeNonEmptyString(getModelServiceExtraRecord(params.service, 'codex').wireApi)
-    return codexWireApi !== 'responses' && !hasResponsesModelServiceBaseUrl(params.service)
+    const apiProtocol = resolveConfiguredApiProtocol(params.service)
+    return apiProtocol == null || apiProtocol === 'openai-chat-completions'
   }
 
   return true

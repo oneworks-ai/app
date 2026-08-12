@@ -663,7 +663,8 @@ export async function startAdapterSession(
       runtimeState.historySeed != null &&
       runtimeState.historySeed.trim() !== ''
     const adapterChanged = existing?.adapter != null && resolvedAdapter != null && existing.adapter !== resolvedAdapter
-    const type = !seededFromHistory && hasHistory && !adapterChanged ? 'resume' : 'create'
+    const accountChanged = options.account != null && existing?.account != null && options.account !== existing.account
+    const type = !seededFromHistory && hasHistory && !adapterChanged && !accountChanged ? 'resume' : 'create'
 
     const cached = getAdapterSessionRuntime(sessionId)
     if (cached != null) {
@@ -931,6 +932,7 @@ export async function startAdapterSession(
         'Checking adapter CLI.'
       )
 
+      let reportedResolvedAccount: string | undefined
       const { session } = await run({
         env,
         cwd: adapterCwd,
@@ -990,6 +992,14 @@ export async function startAdapterSession(
                 const persistedModel = resolvedModel ?? reportedModel
                 const persistedAdapter = resolvedAdapter ?? reportedAdapter
                 const persistedAccount = resolvedAccount ?? reportedAccount
+                reportedResolvedAccount = reportedAccount ?? reportedResolvedAccount
+                const activeRuntime = getAdapterSessionRuntime(sessionId)
+                if (
+                  reportedAccount != null &&
+                  activeRuntime?.config?.runId === runId
+                ) {
+                  activeRuntime.config.account = reportedAccount
+                }
                 serverLogger.info({
                   sessionId,
                   requestedModel: options.model,
@@ -1466,7 +1476,7 @@ export async function startAdapterSession(
           runId,
           model: resolvedModel,
           adapter: resolvedAdapter,
-          account: resolvedAccount,
+          account: reportedResolvedAccount ?? resolvedAccount,
           effort: resolvedEffort,
           fastMode: resolvedFastMode,
           permissionMode: resolvedPermissionMode,

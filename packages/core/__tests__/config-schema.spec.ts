@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { adapterAccountConfigCommonSchema } from '../src/config-schema'
+import { adapterAccountConfigCommonSchema, modelServiceConfigSchema } from '../src/config-schema'
 
 describe('adapter account config schema', () => {
   it('uses the shared credential revision domain and canonical form', () => {
@@ -15,5 +15,22 @@ describe('adapter account config schema', () => {
         credentialRevision: `${Number.MAX_SAFE_INTEGER + 1}:${uuid}`
       }).success
     ).toBe(false)
+  })
+})
+
+describe('model service protocol schema', () => {
+  it('accepts the five declared wire protocols and rejects unknown values', () => {
+    for (
+      const apiProtocol of [
+        'openai-responses',
+        'openai-chat-completions',
+        'anthropic-messages',
+        'gemini-generate-content',
+        'gemini-interactions'
+      ]
+    ) {
+      expect(modelServiceConfigSchema.safeParse({ apiProtocol }).success).toBe(true)
+    }
+    expect(modelServiceConfigSchema.safeParse({ apiProtocol: 'openai-compatible' }).success).toBe(false)
   })
 })

@@ -1,5 +1,5 @@
 import type { ModelServiceConfig, ResolvedModelServiceConfig } from '@oneworks/types'
-import { resolveModelServiceConfig } from '@oneworks/utils'
+import { resolveModelServiceApiProtocol, resolveModelServiceConfig, resolveModelServiceFromMap } from '@oneworks/utils'
 
 import { asPlainRecord, normalizeStringRecord } from './object-utils'
 
@@ -32,10 +32,10 @@ const getProviderExtra = (service: ModelServiceConfig) => ({
 
 const inferProviderPackage = (service: ResolvedModelServiceConfig, providerExtra: Record<string, unknown>) => {
   if (typeof providerExtra.npm === 'string' && providerExtra.npm.trim() !== '') return providerExtra.npm
-  const wireApi = typeof providerExtra.wireApi === 'string' ? providerExtra.wireApi : undefined
-  return wireApi === 'responses' || service.apiBaseUrl.includes('/responses')
-    ? '@ai-sdk/openai'
-    : '@ai-sdk/openai-compatible'
+  const protocol = resolveModelServiceApiProtocol(service)
+  if (protocol === 'openai-responses') return '@ai-sdk/openai'
+  if (protocol == null || protocol === 'openai-chat-completions') return '@ai-sdk/openai-compatible'
+  throw new Error(`OpenCode adapter requires an explicit extra.opencode.npm package for ${protocol} model services.`)
 }
 
 export const resolveOpenCodeModel = (
@@ -54,7 +54,7 @@ export const resolveOpenCodeModel = (
   const commaIndex = normalized.indexOf(',')
   const serviceKey = normalized.slice(0, commaIndex).trim()
   const modelId = normalized.slice(commaIndex + 1).trim()
-  const service = modelServices[serviceKey]
+  const service = resolveModelServiceFromMap(modelServices, serviceKey)
 
   if (!service || modelId === '') {
     return {

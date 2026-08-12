@@ -10,7 +10,9 @@ import type { AdapterCtx, AdapterQueryOptions, Config, ModelServiceConfig } from
 import {
   createStartupProfiler,
   mergeProcessEnvWithProjectEnv,
+  resolveModelServiceApiProtocol,
   resolveModelServiceConfig,
+  resolveModelServiceFromMap,
   sanitizeOneWorksLoaderEnv
 } from '@oneworks/utils'
 import { createLogger } from '@oneworks/utils/create-logger'
@@ -190,7 +192,7 @@ interface CodexModelProviderExtra {
   envHeaders?: Record<string, string>
   envKey?: string
   envKeyInstructions?: string
-  wireApi?: 'responses'
+  wireApi?: 'responses' | 'chat'
   queryParams?: Record<string, string>
   headers?: Record<string, string>
   nativeProvider?: boolean
@@ -342,21 +344,25 @@ const resolveRoutedServiceKey = (rawModel: string | undefined) => {
   return normalizedRawModel.slice(0, commaIdx).trim() || undefined
 }
 
-const normalizeProviderBaseUrl = (apiBaseUrl: string | undefined, wireApi: string | undefined) => {
+const normalizeProviderBaseUrl = (
+  apiBaseUrl: string | undefined,
+  apiProtocol: ModelServiceConfig['apiProtocol'] | undefined
+) => {
   if (typeof apiBaseUrl !== 'string' || apiBaseUrl.trim() === '') return undefined
-  return (wireApi ?? 'responses') === 'responses' && apiBaseUrl.endsWith('/responses')
-    ? apiBaseUrl.slice(0, -'/responses'.length)
-    : apiBaseUrl
+  const normalized = apiBaseUrl.replace(/\/+$/u, '')
+  if (apiProtocol === 'openai-responses') return normalized.replace(/\/responses$/u, '')
+  if (apiProtocol === 'openai-chat-completions') return normalized.replace(/\/chat\/completions$/u, '')
+  if (apiProtocol === 'anthropic-messages') return normalized.replace(/\/messages$/u, '')
+  if (apiProtocol === 'gemini-generate-content') {
+    return normalized.replace(/\/models\/[^/]+:(?:streamGenerateContent|generateContent)$/iu, '')
+  }
+  return normalized
 }
 
-const resolveCodexWireApi = (serviceKey: string, value: unknown): 'responses' | undefined => {
+const resolveCodexWireApi = (serviceKey: string, value: unknown): 'responses' => {
   const wireApi = readOptionalString(value)
-  if (wireApi == null || wireApi === 'responses') return wireApi
-
-  throw new Error(
-    `Codex no longer supports modelServices.${serviceKey}.extra.codex.wireApi=${JSON.stringify(wireApi)}. ` +
-      'Use "responses" with a Responses-compatible provider.'
-  )
+  if (wireApi == null || wireApi === 'responses' || wireApi === 'chat') return 'responses'
+  throw new Error(`Unsupported legacy Codex wire API for modelServices.${serviceKey}: ${JSON.stringify(wireApi)}.`)
 }
 
 /**
@@ -530,12 +536,13 @@ function buildCodexConfigOverrides(params: {
     const commaIdx = normalizedRawModel.indexOf(',')
     const serviceKey = normalizedRawModel.slice(0, commaIdx).trim()
     const modelId = normalizedRawModel.slice(commaIdx + 1).trim()
-    const service = modelServices[serviceKey]
+    const service = resolveModelServiceFromMap(modelServices, serviceKey)
 
     if (service) {
       const resolvedService = resolveConfiguredModelService(service)
       if (resolvedService) {
         const { title, apiBaseUrl, apiKey, extra, timeoutMs, maxOutputTokens } = resolvedService
+        const apiProtocol = resolveModelServiceApiProtocol(resolvedService) ?? 'openai-responses'
         const codexExtra = (extra?.codex as CodexModelProviderExtra | undefined) ?? {}
         const {
           auth,
@@ -561,7 +568,7 @@ function buildCodexConfigOverrides(params: {
         const providerId = readOptionalString(configuredProviderId) ?? serviceKey
         resolvedModelProvider = providerId
         const prefix = `model_providers.${toTomlDottedKeySegment(providerId)}`
-        const normalizedBaseUrl = normalizeProviderBaseUrl(apiBaseUrl, wireApi)
+        const normalizedBaseUrl = normalizeProviderBaseUrl(apiBaseUrl, apiProtocol)
         const normalizedHeaders = normalizeStringRecord(headers)
         const normalizedEnvHeaders = normalizeStringRecord(envHeaders)
         const normalizedQueryParams = normalizeStringRecord(queryParams)
@@ -569,7 +576,7 @@ function buildCodexConfigOverrides(params: {
         const normalizedMaxOutputTokens = normalizePositiveInteger(maxOutputTokens)
         const shouldProxyProvider = proxyBaseUrl != null && normalizedBaseUrl != null
 
-        if (nativeProvider === true) {
+        if (nativeProvider === true && apiProtocol === 'openai-responses') {
           nativeProviderConfigOverrides.push(`model_provider=${toToml(providerId)}`)
           const pushEncodedOverride = (key: string, value: unknown) => {
             const encoded = encodeCodexConfigValue(value)
@@ -640,6 +647,7 @@ function buildCodexConfigOverrides(params: {
           }
           const proxyMetaValue: CodexProxyMeta = {
             upstreamBaseUrl: normalizedBaseUrl,
+            upstreamProtocol: apiProtocol,
             ...(proxyNetwork != null ? { network: proxyNetwork } : {}),
             ...(Object.keys(routedHeaders).length > 0 ? { headers: routedHeaders } : {}),
             ...(Object.keys(normalizedQueryParams).length > 0 ? { queryParams: normalizedQueryParams } : {}),
@@ -649,7 +657,7 @@ function buildCodexConfigOverrides(params: {
               ...proxyDiagnostics,
               routedServiceKey: serviceKey,
               resolvedModel: modelId || undefined,
-              wireApi: wireApi ?? 'responses'
+              wireApi
             }
           }
           const proxyRoute = createCodexProxyMetaRoute(proxyMetaValue)
@@ -657,6 +665,7 @@ function buildCodexConfigOverrides(params: {
           proxyRoutes.push(proxyRoute)
           const fingerprintProxyMeta = fingerprintCodexProxyMeta({
             upstreamBaseUrl: normalizedBaseUrl,
+            upstreamProtocol: apiProtocol,
             ...(proxyNetwork != null ? { network: proxyNetwork } : {}),
             ...(Object.keys(routedHeaders).length > 0 ? { headers: routedHeaders } : {}),
             ...(Object.keys(normalizedQueryParams).length > 0 ? { queryParams: normalizedQueryParams } : {}),
@@ -664,7 +673,7 @@ function buildCodexConfigOverrides(params: {
             diagnostics: {
               routedServiceKey: serviceKey,
               resolvedModel: modelId || undefined,
-              wireApi: wireApi ?? 'responses'
+              wireApi
             }
           })
           pushArgs(`${prefix}.base_url=${toToml(proxyBaseUrl)}`)
@@ -1065,13 +1074,13 @@ export async function resolveSessionBase(
     : requestedEffort
 
   const routedServiceKey = resolveRoutedServiceKey(options.model)
-  const routedService = routedServiceKey != null ? mergedModelServices[routedServiceKey] : undefined
+  const routedService = routedServiceKey != null
+    ? resolveModelServiceFromMap(mergedModelServices, routedServiceKey)
+    : undefined
   const resolvedRoutedService = resolveConfiguredModelService(routedService)
   const routedCodexExtra = (resolvedRoutedService?.extra?.codex as CodexModelProviderExtra | undefined) ?? {}
-  const routedWireApi = routedServiceKey != null
-    ? resolveCodexWireApi(routedServiceKey, routedCodexExtra.wireApi)
-    : undefined
-  const shouldUseProxy = routedCodexExtra.nativeProvider !== true &&
+  const routedApiProtocol = resolveModelServiceApiProtocol(resolvedRoutedService) ?? 'openai-responses'
+  const shouldUseProxy = (routedCodexExtra.nativeProvider !== true || routedApiProtocol !== 'openai-responses') &&
     typeof resolvedRoutedService?.apiBaseUrl === 'string' &&
     resolvedRoutedService.apiBaseUrl.trim() !== ''
   const proxyLogger = shouldUseProxy
@@ -1095,7 +1104,7 @@ export async function resolveSessionBase(
       proxyBaseUrl,
       upstreamBaseUrl: normalizeProviderBaseUrl(
         resolvedRoutedService?.apiBaseUrl,
-        routedWireApi
+        routedApiProtocol
       ) ?? resolvedRoutedService?.apiBaseUrl
     })
   }
@@ -1233,6 +1242,7 @@ export async function resolveSessionBase(
     ctx,
     sessionId: options.sessionId,
     account: options.account,
+    model: resolvedModel,
     nativeProviderConfigOverrides: options.mode === 'direct'
       ? nativeProviderConfigOverrides
       : undefined,

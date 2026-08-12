@@ -3,6 +3,7 @@ import process from 'node:process'
 import type { Command } from 'commander'
 import { Option } from 'commander'
 
+import { connectManagedCodexClient } from './adapter/connect'
 import type { AdapterPrepareCommandOptions } from './adapter/prepare'
 import { runAdapterPrepareCommand } from './adapter/prepare'
 
@@ -14,6 +15,32 @@ export function registerAdapterCommand(program: Command) {
   const adapterCommand = program
     .command('adapter')
     .description('Manage adapter runtime resources')
+
+  const connectCommand = adapterCommand
+    .command('connect')
+    .description('Connect managed clients to adapter runtime services')
+
+  connectCommand
+    .command('codex')
+    .description('Open the official Codex CLI against built-in models shared by the current One Works PM service')
+    .option('--account <account>', 'Use the default account or fix a Codex account key')
+    .addHelpText(
+      'after',
+      `
+Examples:
+  oneworks adapter connect codex
+  oneworks adapter connect codex --account work
+`
+    )
+    .action(async (options: { account?: string }) => {
+      try {
+        const exitCode = await connectManagedCodexClient(options)
+        if (exitCode !== 0) process.exitCode = exitCode
+      } catch (error) {
+        console.error(formatErrorMessage(error))
+        process.exitCode = 1
+      }
+    })
 
   adapterCommand
     .command('prepare [targets...]')

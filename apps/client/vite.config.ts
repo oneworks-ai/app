@@ -161,6 +161,7 @@ export default defineConfig({
       sourceAlias('@oneworks/utils/asset-slug', '../../packages/utils/src/asset-slug.ts'),
       sourceAlias('@oneworks/channel-lark', '../../packages/channels/lark/src/index.ts'),
       sourceAlias('@oneworks/core', '../../packages/core/src/index.ts'),
+      sourceAlias('@oneworks/types/model-service-protocol', '../../packages/types/src/model-service-protocol.ts'),
       sourceAlias('@oneworks/types/standalone-route', '../../packages/types/src/standalone-route.ts'),
       sourceAlias('@oneworks/types', '../../packages/types/src/index.ts'),
       sourceAlias('@oneworks/utils', '../../packages/utils/src/index.ts')
