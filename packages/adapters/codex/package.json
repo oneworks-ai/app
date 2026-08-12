@@ -144,6 +144,7 @@
     "@oneworks/config": "workspace:*",
     "@oneworks/core": "workspace:*",
     "@oneworks/hooks": "workspace:*",
+    "@oneworks/model-protocol": "workspace:*",
     "@oneworks/register": "workspace:*",
     "@oneworks/runtime-broker": "workspace:*",
     "@oneworks/types": "workspace:*",

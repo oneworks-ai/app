@@ -51,6 +51,19 @@ describe('authMiddleware', () => {
     expect(resolveWebAuthConfig).not.toHaveBeenCalled()
   })
 
+  it('delegates the internal Codex model capability to its own bearer check', async () => {
+    const { authMiddleware } = await import('#~/middlewares/auth.js')
+    const next = vi.fn()
+
+    await authMiddleware({} as any)(
+      createCtx('/api/internal/codex-shared-model/v1/chat/completions') as any,
+      next
+    )
+
+    expect(next).toHaveBeenCalledOnce()
+    expect(resolveWebAuthConfig).not.toHaveBeenCalled()
+  })
+
   it('rejects protected api routes when auth is enabled and token is invalid', async () => {
     resolveWebAuthConfig.mockResolvedValueOnce({ enabled: true })
     resolveSessionTokenClaims.mockResolvedValueOnce(undefined)

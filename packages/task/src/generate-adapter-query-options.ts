@@ -1,8 +1,15 @@
 import process from 'node:process'
 
 import { buildConfigJsonVariables, loadConfigState, mergeConfigs } from '@oneworks/config'
-import type { AdapterQueryOptions, PluginConfig } from '@oneworks/types'
-import { createStartupProfiler } from '@oneworks/utils'
+import type { AdapterBuiltinModel, AdapterQueryOptions, Config, PluginConfig } from '@oneworks/types'
+import { loadAdapterModelServiceModels } from '@oneworks/types'
+import {
+  CODEX_SHARED_MODEL_SERVICE_KEY,
+  createCodexSharedModelService,
+  createStartupProfiler,
+  isCodexSharedModelEnabled,
+  withoutReservedCodexSharedModelService
+} from '@oneworks/utils'
 import { resolvePromptAssetSelection, resolveWorkspaceAssetBundle } from '@oneworks/workspace-assets'
 
 import {
@@ -48,12 +55,38 @@ export async function generateAdapterQueryOptions(
     count: Object.keys(jsonVariables).length
   })
   const configStartedAt = startupProfiler.now()
+  const loadedConfigState = await loadConfigState({ cwd: effectiveCwd, jsonVariables })
+  const sharingEnabled = isCodexSharedModelEnabled(loadedConfigState.mergedConfig)
+  let sharedBuiltinModels: AdapterBuiltinModel[] | undefined
+  if (sharingEnabled) {
+    try {
+      sharedBuiltinModels = loadAdapterModelServiceModels('codex', { cwd: effectiveCwd })
+    } catch {
+      sharedBuiltinModels = undefined
+    }
+  }
+  const withSharedModel = (value: Config | undefined) => {
+    const sanitized = withoutReservedCodexSharedModelService(value)
+    if (!sharingEnabled || sanitized == null) return sanitized
+    return {
+      ...sanitized,
+      modelServices: {
+        ...(sanitized.modelServices ?? {}),
+        [CODEX_SHARED_MODEL_SERVICE_KEY]: createCodexSharedModelService({ builtinModels: sharedBuiltinModels })
+      }
+    }
+  }
   const {
     effectiveProjectConfig,
     projectConfig,
     userConfig,
     mergedConfig
-  } = await loadConfigState({ cwd: effectiveCwd, jsonVariables })
+  } = {
+    effectiveProjectConfig: withSharedModel(loadedConfigState.effectiveProjectConfig),
+    projectConfig: withSharedModel(loadedConfigState.projectConfig),
+    userConfig: withSharedModel(loadedConfigState.userConfig),
+    mergedConfig: withSharedModel(loadedConfigState.mergedConfig)!
+  }
   const config = effectiveProjectConfig ?? projectConfig
   startupProfiler.mark('generateAdapterQueryOptions.loadConfigState', configStartedAt)
   const mergePluginsStartedAt = startupProfiler.now()

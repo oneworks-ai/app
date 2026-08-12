@@ -84,10 +84,15 @@ export function AccountSelectControl({
   const isCompactControl = isCompactLayout || isTouchInteraction
 
   const selectedOption = useMemo(
-    () => accountOptions?.find(option => option.value === selectedAccount),
+    () => accountOptions?.find(option => option.value === (selectedAccount ?? '')),
     [accountOptions, selectedAccount]
   )
   const isDisabled = modelUnavailable || isThinking
+  const selectedAccountIcon = selectedOption?.automatic === true
+    ? <span className='material-symbols-rounded account-select__automatic-icon'>switch_account</span>
+    : selectedOption == null
+    ? <span className='material-symbols-rounded sender-responsive-select-button__icon'>switch_account</span>
+    : <AccountAvatar option={selectedOption} size='control' />
 
   const setPendingQuotaDialog = useCallback((pending: PendingAccountQuotaDialog | undefined) => {
     pendingQuotaDialogRef.current = pending
@@ -298,7 +303,9 @@ export function AccountSelectControl({
 
   const renderOption = (option: ChatAdapterAccountOption) => (
     <div className='account-option'>
-      <AccountAvatar option={option} />
+      {option.automatic === true
+        ? <span className='material-symbols-rounded account-option__automatic-icon'>switch_account</span>
+        : <AccountAvatar option={option} />}
       <div className='account-option__body'>
         <span className='account-option__title'>{option.label}</span>
         {option.meta != null && option.meta !== '' && (
@@ -316,7 +323,7 @@ export function AccountSelectControl({
           />
         </div>
       )}
-      <div className='account-option__actions'>
+      {option.automatic !== true && <div className='account-option__actions'>
         <Tooltip
           title={t('chat.accountSelectOpenAccountConfig', { account: option.label })}
           placement='left'
@@ -338,7 +345,7 @@ export function AccountSelectControl({
             <span className='material-symbols-rounded'>settings</span>
           </button>
         </Tooltip>
-      </div>
+      </div>}
     </div>
   )
 
@@ -416,13 +423,7 @@ export function AccountSelectControl({
                 setAccountSelectOpen(true)
               }}
             >
-              {selectedOption == null
-                ? (
-                  <span className='material-symbols-rounded sender-responsive-select-button__icon'>
-                    switch_account
-                  </span>
-                )
-                : <AccountAvatar option={selectedOption} size='control' />}
+              {selectedAccountIcon}
               <span className='sender-responsive-select-button__label'>
                 {selectedOption?.label ?? t('chat.accountSelectPlaceholder')}
               </span>
@@ -445,11 +446,11 @@ export function AccountSelectControl({
                     key={option.value}
                     role='option'
                     tabIndex={0}
-                    aria-selected={selectedAccount === option.value}
+                    aria-selected={(selectedAccount ?? '') === option.value}
                     className={[
                       'sender-mobile-select-option',
                       'account-mobile-select-option',
-                      selectedAccount === option.value ? 'is-selected' : ''
+                      (selectedAccount ?? '') === option.value ? 'is-selected' : ''
                     ].filter(Boolean).join(' ')}
                     onClick={() => handleAccountSelection(option.value)}
                     onKeyDown={(event) =>
@@ -458,7 +459,7 @@ export function AccountSelectControl({
                     <span className='sender-mobile-select-option__content'>
                       {renderOption(option)}
                     </span>
-                    {selectedAccount === option.value && (
+                    {(selectedAccount ?? '') === option.value && (
                       <span className='material-symbols-rounded sender-mobile-select-option__check'>check</span>
                     )}
                   </div>
@@ -500,7 +501,7 @@ export function AccountSelectControl({
             }}
             open={showAccountSelect}
             popupCloseKey={pendingQuotaDialog?.source === 'desktop' ? pendingQuotaDialog.token : undefined}
-            value={selectedAccount}
+            value={selectedAccount ?? ''}
             options={accountOptions}
             disabled={isDisabled}
             onChange={handleAccountSelection}
@@ -509,7 +510,7 @@ export function AccountSelectControl({
             optionRender={(option) => renderOption(option.data as ChatAdapterAccountOption)}
             optionLabelProp='label'
             placeholder={t('chat.accountSelectPlaceholder')}
-            prefix={selectedOption == null ? undefined : <AccountAvatar option={selectedOption} size='control' />}
+            prefix={selectedOption == null ? undefined : selectedAccountIcon}
             getPopupContainer={getAccountPopupContainer}
             popupMatchSelectWidth={false}
             popupRender={renderPopup}

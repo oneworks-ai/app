@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- integration fixtures stay together to share isolated workspace lifecycle. */
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -10,6 +11,7 @@ const tempDirs: string[] = []
 const originalRuntimeProtocolConsumer = process.env.__ONEWORKS_RUNTIME_PROTOCOL_CONSUMER__
 const originalProjectHomeProjectsDir = process.env.__ONEWORKS_PROJECT_HOME_PROJECTS_DIR__
 const originalProjectWorkspaceFolder = process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__
+const originalPackageCacheDir = process.env.__ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__
 
 const createWorkspace = async () => {
   const dir = await mkdtemp(join(tmpdir(), 'generate-adapter-query-options-'))
@@ -37,6 +39,11 @@ afterEach(async () => {
     delete process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__
   } else {
     process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__ = originalProjectWorkspaceFolder
+  }
+  if (originalPackageCacheDir == null) {
+    delete process.env.__ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__
+  } else {
+    process.env.__ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__ = originalPackageCacheDir
   }
   await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
 })
@@ -424,6 +431,7 @@ describe('generateAdapterQueryOptions', () => {
 
   it('merges injected plugins with workspace config plugins in the returned asset bundle', async () => {
     const workspace = await createWorkspace()
+    process.env.__ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__ = join(workspace, '.package-cache')
     const cliPluginDir = join(workspace, 'node_modules', '@oneworks', 'plugin-cli-skills')
     const loggerPluginDir = join(workspace, 'node_modules', '@oneworks', 'plugin-logger')
 

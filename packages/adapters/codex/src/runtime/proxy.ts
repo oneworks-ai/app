@@ -14,6 +14,15 @@ import type { ReadableStream as NodeReadableStream } from 'node:stream/web'
 import type { Dispatcher } from 'undici'
 import { Agent, ProxyAgent } from 'undici'
 
+import {
+  asString,
+  createResponseStreamTranslator,
+  isJsonObject,
+  translateResponseToResponses,
+  translateResponsesRequest
+} from '@oneworks/model-protocol'
+import type { JsonObject } from '@oneworks/model-protocol'
+import type { ModelServiceApiProtocol } from '@oneworks/types'
 import { createLogger } from '@oneworks/utils/create-logger'
 import type { Logger } from '@oneworks/utils/create-logger'
 
@@ -46,6 +55,7 @@ export interface CodexProxyDiagnostics {
 
 export interface CodexProxyMeta {
   upstreamBaseUrl: string
+  upstreamProtocol?: ModelServiceApiProtocol
   network?: CodexNetworkConfig
   queryParams?: Record<string, string>
   headers?: Record<string, string>
@@ -92,6 +102,8 @@ const proxyMetaRegistry = new Map<string, CodexProxyMeta>()
 let proxyRequestCounter = 0
 const MAX_PROXY_DISPATCHERS = 32
 const MAX_REQUEST_LOGGERS = 256
+export const CODEX_PROXY_MAX_REQUEST_BYTES = 8 * 1024 * 1024
+export const CODEX_PROXY_MAX_BUFFERED_RESPONSE_BYTES = 16 * 1024 * 1024
 
 const REDACTED_VALUE = '[REDACTED]'
 const SENSITIVE_LOG_KEY_PATTERNS = [
@@ -141,10 +153,22 @@ const decodeCodexProxyMeta = (rawValue: string): CodexProxyMeta => {
   return meta
 }
 
+class ProxyPayloadTooLargeError extends Error {}
+
 const readRequestBody = async (req: IncomingMessage) => {
+  const declaredLength = Number(normalizeHeaderValue(req.headers['content-length']))
+  if (Number.isFinite(declaredLength) && declaredLength > CODEX_PROXY_MAX_REQUEST_BYTES) {
+    throw new ProxyPayloadTooLargeError('Request body exceeds the proxy limit')
+  }
   const chunks: Buffer[] = []
+  let byteLength = 0
   for await (const chunk of req) {
-    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk)
+    const buffer = typeof chunk === 'string' ? Buffer.from(chunk) : chunk
+    byteLength += buffer.byteLength
+    if (byteLength > CODEX_PROXY_MAX_REQUEST_BYTES) {
+      throw new ProxyPayloadTooLargeError('Request body exceeds the proxy limit')
+    }
+    chunks.push(buffer)
   }
   return Buffer.concat(chunks)
 }
@@ -167,6 +191,13 @@ interface PreparedUpstreamBody {
   injectedMaxOutputTokens?: number
   strippedEncryptedReasoningItems?: number
   strippedEncryptedReasoningIncludes?: number
+}
+
+interface TranslatedUpstreamRequest {
+  body: string | Buffer | undefined
+  model?: string
+  stream: boolean
+  reasoningSummary?: string
 }
 
 interface EncryptedReasoningStripStats {
@@ -316,13 +347,16 @@ const maybeInjectMaxOutputTokens = (
 const prepareUpstreamBody = (
   requestBodyBuffer: Buffer,
   req: IncomingMessage,
-  proxyMeta: CodexProxyMeta
+  proxyMeta: CodexProxyMeta,
+  preserveEncryptedReasoning: boolean
 ): PreparedUpstreamBody => {
   const maxTokensBody = maybeInjectMaxOutputTokens(requestBodyBuffer, req, proxyMeta)
-  const strippedBody = stripEncryptedReasoningFromBody(
-    maxTokensBody.body,
-    normalizeContentType(req.headers['content-type'])
-  )
+  const strippedBody = preserveEncryptedReasoning
+    ? { body: maxTokensBody.body }
+    : stripEncryptedReasoningFromBody(
+      maxTokensBody.body,
+      normalizeContentType(req.headers['content-type'])
+    )
   return {
     body: strippedBody.body,
     injectedMaxOutputTokens: maxTokensBody.injectedMaxOutputTokens,
@@ -331,10 +365,145 @@ const prepareUpstreamBody = (
   }
 }
 
+const translateUpstreamRequest = (
+  preparedBody: string | Buffer | undefined,
+  protocol: ModelServiceApiProtocol
+): TranslatedUpstreamRequest => {
+  if (preparedBody == null || protocol === 'openai-responses') {
+    return { body: preparedBody, stream: false }
+  }
+  if (protocol === 'gemini-interactions') {
+    throw new Error('Codex Responses conversion does not support Gemini Interactions yet.')
+  }
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(toBodyBuffer(preparedBody)?.toString('utf8') ?? '')
+  } catch {
+    throw new Error('Codex protocol conversion requires a JSON Responses request body.')
+  }
+  if (!isJsonObject(parsed)) {
+    throw new Error('Codex protocol conversion requires a JSON object request body.')
+  }
+
+  return {
+    body: JSON.stringify(translateResponsesRequest({ target: protocol, request: parsed })),
+    model: typeof parsed.model === 'string' ? parsed.model : undefined,
+    stream: parsed.stream === true,
+    reasoningSummary: isJsonObject(parsed.reasoning) ? asString(parsed.reasoning.summary) : undefined
+  }
+}
+
+const stripKnownEndpoint = (pathname: string) =>
+  pathname
+    .replace(/\/(?:responses|chat\/completions|messages)\/?$/u, '')
+    .replace(/\/models\/[^/]+:(?:streamGenerateContent|generateContent)\/?$/iu, '')
+
+const buildProtocolUpstreamUrl = (params: {
+  upstreamBaseUrl: string
+  requestUrl: string
+  queryParams: Record<string, string>
+  protocol: ModelServiceApiProtocol
+  model?: string
+  stream: boolean
+}) => {
+  if (params.upstreamBaseUrl.includes('\\')) {
+    throw new Error('upstreamBaseUrl must be a valid URL')
+  }
+
+  const base = new URL(params.upstreamBaseUrl)
+  const basePath = stripKnownEndpoint(base.pathname).replace(/\/+$/u, '')
+  const localUrl = new URL(params.requestUrl, 'http://127.0.0.1')
+  if (localUrl.pathname === '/models') {
+    base.pathname = `${basePath}/models`
+  } else if (params.protocol === 'openai-responses') {
+    base.pathname = `${basePath}${localUrl.pathname === '/' ? '/responses' : localUrl.pathname}`
+  } else if (params.protocol === 'openai-chat-completions') {
+    base.pathname = `${basePath}/chat/completions`
+  } else if (params.protocol === 'anthropic-messages') {
+    base.pathname = `${basePath}/messages`
+  } else if (params.protocol === 'gemini-generate-content') {
+    if (params.model == null || params.model.trim() === '') {
+      throw new Error('Gemini GenerateContent conversion requires a model in the Responses request.')
+    }
+    const action = params.stream ? 'streamGenerateContent' : 'generateContent'
+    base.pathname = `${basePath}/models/${encodeURIComponent(params.model)}:${action}`
+    if (params.stream) base.searchParams.set('alt', 'sse')
+  } else {
+    throw new Error('Codex Responses conversion does not support Gemini Interactions yet.')
+  }
+  localUrl.searchParams.forEach((value, key) => base.searchParams.set(key, value))
+  for (const [key, value] of Object.entries(params.queryParams)) base.searchParams.set(key, value)
+  return base
+}
+
+const prepareProtocolHeaders = (
+  headers: Headers,
+  protocol: ModelServiceApiProtocol
+) => {
+  headers.set('Content-Type', 'application/json')
+  if (protocol === 'anthropic-messages') {
+    if (!headers.has('x-api-key') && headers.has('authorization')) {
+      headers.set('x-api-key', headers.get('authorization')!.replace(/^Bearer\s+/iu, ''))
+      headers.delete('authorization')
+    }
+    if (!headers.has('anthropic-version')) headers.set('anthropic-version', '2023-06-01')
+  }
+  if (protocol === 'gemini-generate-content' && !headers.has('x-goog-api-key') && headers.has('authorization')) {
+    headers.set('x-goog-api-key', headers.get('authorization')!.replace(/^Bearer\s+/iu, ''))
+    headers.delete('authorization')
+  }
+}
+
 const toFetchBody = (body: string | Buffer | undefined): BodyInit | undefined => {
   if (body == null) return undefined
   if (typeof body === 'string') return body
   return new Uint8Array(body)
+}
+
+const readBufferedResponse = async (response: Response) => {
+  if (response.body == null) return Buffer.alloc(0)
+  const reader = response.body.getReader()
+  const chunks: Buffer[] = []
+  let byteLength = 0
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    byteLength += value.byteLength
+    if (byteLength > CODEX_PROXY_MAX_BUFFERED_RESPONSE_BYTES) {
+      await reader.cancel()
+      throw new ProxyPayloadTooLargeError('Upstream response exceeds the proxy conversion limit')
+    }
+    chunks.push(Buffer.from(value))
+  }
+  return Buffer.concat(chunks)
+}
+
+const parseJsonObject = (buffer: Buffer, context: string): JsonObject => {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(buffer.toString('utf8'))
+  } catch {
+    throw new Error(`${context} returned invalid JSON.`)
+  }
+  if (!isJsonObject(parsed)) throw new Error(`${context} returned a non-object JSON body.`)
+  return parsed
+}
+
+const resolveUpstreamErrorMessage = (body: Buffer, status: number) => {
+  try {
+    const parsed = JSON.parse(body.toString('utf8')) as unknown
+    if (isJsonObject(parsed)) {
+      const nested = isJsonObject(parsed.error) ? parsed.error : undefined
+      const message = typeof nested?.message === 'string'
+        ? nested.message
+        : typeof parsed.message === 'string'
+        ? parsed.message
+        : undefined
+      if (message != null && message.trim() !== '') return message
+    }
+  } catch {}
+  return `Upstream model service returned HTTP ${status}.`
 }
 
 const writeJsonResponse = (
@@ -362,25 +531,6 @@ const writeJsonError = (
       message
     }
   })
-}
-
-const buildUpstreamUrl = (
-  upstreamBaseUrl: string,
-  requestUrl: string,
-  queryParams: Record<string, string>
-) => {
-  if (upstreamBaseUrl.includes('\\')) {
-    throw new Error('upstreamBaseUrl must be a valid URL')
-  }
-
-  const normalizedBaseUrl = upstreamBaseUrl.endsWith('/')
-    ? upstreamBaseUrl.slice(0, -1)
-    : upstreamBaseUrl
-  const upstreamUrl = new URL(`${normalizedBaseUrl}${requestUrl}`)
-  for (const [key, value] of Object.entries(queryParams)) {
-    upstreamUrl.searchParams.set(key, value)
-  }
-  return upstreamUrl
 }
 
 const normalizeHeaderValue = (value: string | string[] | undefined) => (
@@ -492,69 +642,33 @@ const isTextualContentType = (contentType: string | undefined) => (
   contentType?.endsWith('+xml') === true
 )
 
-interface SerializedBodyForLog {
-  byteLength: number
-  format: 'empty' | 'json' | 'form' | 'text' | 'binary'
-  json?: unknown
-  form?: Record<string, string | string[]>
-  text?: string
-  base64?: string
-}
-
-const serializeBodyForLog = (
+const summarizeBodyForLog = (
   body: string | Buffer | undefined,
   contentType: string | undefined
-): SerializedBodyForLog => {
+) => {
   const buffer = toBodyBuffer(body)
-  if (buffer == null || buffer.length === 0) {
-    return {
-      byteLength: 0,
-      format: 'empty'
-    }
-  }
-
-  const bodyText = buffer.toString('utf8')
-  const shouldTreatAsJson = contentType === 'application/json' ||
-    contentType?.endsWith('+json') === true ||
-    looksLikeJsonPayload(buffer)
-
-  if (shouldTreatAsJson) {
+  if (buffer == null || buffer.length === 0) return { byteLength: 0, format: 'empty' }
+  const base = { byteLength: buffer.length }
+  if (contentType === 'application/json' || contentType?.endsWith('+json') === true || looksLikeJsonPayload(buffer)) {
     try {
-      return {
-        byteLength: buffer.length,
-        format: 'json',
-        json: sanitizeForLog(JSON.parse(bodyText) as unknown)
+      const parsed = JSON.parse(buffer.toString('utf8')) as unknown
+      if (isPlainObject(parsed)) {
+        return {
+          ...base,
+          format: 'json',
+          keys: Object.keys(parsed).sort(),
+          model: typeof parsed.model === 'string' ? parsed.model : undefined,
+          stream: parsed.stream === true,
+          inputItems: Array.isArray(parsed.input) ? parsed.input.length : undefined,
+          tools: Array.isArray(parsed.tools) ? parsed.tools.length : undefined
+        }
       }
+      return { ...base, format: 'json' }
     } catch {
-      return {
-        byteLength: buffer.length,
-        format: 'text',
-        text: bodyText
-      }
+      return { ...base, format: 'invalid-json' }
     }
   }
-
-  if (contentType === 'application/x-www-form-urlencoded') {
-    return {
-      byteLength: buffer.length,
-      format: 'form',
-      form: sanitizeSearchParamsForLog(new URLSearchParams(bodyText))
-    }
-  }
-
-  if (isTextualContentType(contentType)) {
-    return {
-      byteLength: buffer.length,
-      format: 'text',
-      text: bodyText
-    }
-  }
-
-  return {
-    byteLength: buffer.length,
-    format: 'binary',
-    base64: buffer.toString('base64')
-  }
+  return { ...base, format: isTextualContentType(contentType) ? 'text' : 'binary' }
 }
 
 const summarizeProxyMeta = (proxyMeta: CodexProxyMeta) => ({
@@ -562,6 +676,7 @@ const summarizeProxyMeta = (proxyMeta: CodexProxyMeta) => ({
   queryParamKeys: Object.keys(proxyMeta.queryParams ?? {}),
   headerKeys: Object.keys(proxyMeta.headers ?? {}),
   hasMaxOutputTokens: typeof proxyMeta.maxOutputTokens === 'number',
+  upstreamProtocol: proxyMeta.upstreamProtocol ?? 'openai-responses',
   network: {
     hasHttpProxy: proxyMeta.network?.httpProxy != null,
     hasHttpsProxy: proxyMeta.network?.httpsProxy != null,
@@ -920,7 +1035,11 @@ const handleProxyRequest = async (
   let requestBodyBuffer: Buffer
   try {
     requestBodyBuffer = await readRequestBody(req)
-  } catch {
+  } catch (error) {
+    if (error instanceof ProxyPayloadTooLargeError) {
+      writeJsonError(res, 413, error.message)
+      return
+    }
     writeJsonError(res, 400, 'Failed to read request body')
     return
   }
@@ -928,8 +1047,41 @@ const handleProxyRequest = async (
   const requestStartedAt = Date.now()
   const requestUrl = req.url ?? '/responses'
   const requestContentType = normalizeContentType(req.headers['content-type'])
-  const preparedUpstreamBody = prepareUpstreamBody(requestBodyBuffer, req, proxyMeta)
-  const upstreamBody = preparedUpstreamBody.body
+  if (isModelsListRequest(req, requestUrl)) {
+    const responseBody = await buildSyntheticModelsResponse(proxyMeta)
+    requestLogger?.info('[codex proxy] returning synthetic model list', {
+      requestId,
+      ...summarizeRequest(req),
+      ...summarizeLocalUrl(requestUrl),
+      status: 200,
+      durationMs: Date.now() - requestStartedAt,
+      models: responseBody.models.map(model => model.slug)
+    })
+    writeJsonResponse(res, 200, responseBody)
+    return
+  }
+  const upstreamProtocol = proxyMeta.upstreamProtocol ?? 'openai-responses'
+  const preparedUpstreamBody = prepareUpstreamBody(
+    requestBodyBuffer,
+    req,
+    proxyMeta,
+    upstreamProtocol !== 'openai-responses'
+  )
+  let translatedRequest: TranslatedUpstreamRequest
+  try {
+    translatedRequest = translateUpstreamRequest(preparedUpstreamBody.body, upstreamProtocol)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unsupported model protocol request'
+    requestLogger?.warn('[codex proxy] request protocol conversion failed', {
+      requestId,
+      upstreamProtocol,
+      error: message,
+      body: summarizeBodyForLog(preparedUpstreamBody.body, requestContentType)
+    })
+    writeJsonError(res, 422, message)
+    return
+  }
+  const upstreamBody = translatedRequest.body
 
   const upstreamHeaders = new Headers()
   for (const [key, value] of Object.entries(req.headers)) {
@@ -943,14 +1095,18 @@ const handleProxyRequest = async (
   for (const [key, value] of Object.entries(proxyMeta.headers ?? {})) {
     upstreamHeaders.set(key, value)
   }
+  prepareProtocolHeaders(upstreamHeaders, upstreamProtocol)
 
   let upstreamUrl: URL
   try {
-    upstreamUrl = buildUpstreamUrl(
-      proxyMeta.upstreamBaseUrl,
+    upstreamUrl = buildProtocolUpstreamUrl({
+      upstreamBaseUrl: proxyMeta.upstreamBaseUrl,
       requestUrl,
-      proxyMeta.queryParams ?? {}
-    )
+      queryParams: proxyMeta.queryParams ?? {},
+      protocol: upstreamProtocol,
+      model: translatedRequest.model,
+      stream: translatedRequest.stream
+    })
   } catch (error) {
     requestLogger?.warn('[codex proxy] invalid upstream URL', {
       ...summarizeRequest(req),
@@ -969,22 +1125,8 @@ const handleProxyRequest = async (
       req.headers,
       new Set([CODEX_PROXY_META_HEADER_NAME.toLowerCase()])
     ),
-    incomingBody: serializeBodyForLog(requestBodyBuffer, requestContentType)
+    incomingBody: summarizeBodyForLog(requestBodyBuffer, requestContentType)
   })
-
-  if (isModelsListRequest(req, requestUrl)) {
-    const responseBody = await buildSyntheticModelsResponse(proxyMeta)
-    requestLogger?.info('[codex proxy] returning synthetic model list', {
-      requestId,
-      ...summarizeRequest(req),
-      ...summarizeLocalUrl(requestUrl),
-      status: 200,
-      durationMs: Date.now() - requestStartedAt,
-      models: responseBody.models.map(model => model.slug)
-    })
-    writeJsonResponse(res, 200, responseBody)
-    return
-  }
 
   requestLogger?.info('[codex proxy] forwarding request', {
     requestId,
@@ -992,7 +1134,8 @@ const handleProxyRequest = async (
     ...summarizeLocalUrl(requestUrl),
     ...summarizeUpstreamUrl(upstreamUrl),
     upstreamHeaders: sanitizeHeaderEntriesForLog(upstreamHeaders.entries()),
-    upstreamBody: serializeBodyForLog(upstreamBody, requestContentType),
+    upstreamProtocol,
+    upstreamBody: summarizeBodyForLog(upstreamBody, 'application/json'),
     proxyMutations: {
       requestBodyChanged: !Buffer.from(requestBodyBuffer).equals(toBodyBuffer(upstreamBody) ?? Buffer.alloc(0)),
       injectedMaxOutputTokens: preparedUpstreamBody.injectedMaxOutputTokens ?? null,
@@ -1029,13 +1172,6 @@ const handleProxyRequest = async (
       } as RequestInit & { dispatcher?: Dispatcher }
     )
     const responseContentType = normalizeContentType(upstreamResponse.headers.get('content-type') ?? undefined)
-    const shouldCaptureResponseBody = upstreamResponse.status >= 400 && responseContentType !== 'text/event-stream'
-    const responseBodyForLogPromise = shouldCaptureResponseBody
-      ? upstreamResponse.clone().text()
-        .then(text => serializeBodyForLog(text, responseContentType))
-        .catch(() => undefined)
-      : Promise.resolve(undefined)
-
     const responseHeaders = new Headers()
     upstreamResponse.headers.forEach((value, key) => {
       if (RESPONSE_HEADERS_TO_DROP.has(key.toLowerCase())) return
@@ -1049,44 +1185,82 @@ const handleProxyRequest = async (
       durationMs: Date.now() - requestStartedAt,
       responseHeaders: sanitizeHeaderEntriesForLog(responseHeaders.entries())
     })
-    res.writeHead(upstreamResponse.status, Object.fromEntries(responseHeaders.entries()))
-
-    if (upstreamResponse.body == null) {
-      const responseBodyForLog = await responseBodyForLogPromise
-      const completedLog = {
-        requestId,
-        ...summarizeUpstreamUrl(upstreamUrl),
-        status: upstreamResponse.status,
-        statusText: upstreamResponse.statusText,
-        durationMs: Date.now() - requestStartedAt,
-        responseBodyBytes: 0,
-        ...(responseBodyForLog != null ? { responseBody: responseBodyForLog } : {})
-      }
-      if (upstreamResponse.ok) {
-        requestLogger?.info('[codex proxy] request completed', completedLog)
+    let responseBodyBytes = 0
+    if (upstreamProtocol === 'openai-responses') {
+      res.writeHead(upstreamResponse.status, Object.fromEntries(responseHeaders.entries()))
+      if (upstreamResponse.body != null) {
+        const responseStream = Readable.fromWeb(upstreamResponse.body as NodeReadableStream)
+        responseStream.on('data', (chunk: unknown) => {
+          responseBodyBytes += chunk instanceof Uint8Array
+            ? chunk.byteLength
+            : Buffer.byteLength(String(chunk))
+        })
+        await pipeline(responseStream, res)
       } else {
-        requestLogger?.warn('[codex proxy] upstream returned error status', completedLog)
+        res.end()
       }
-      res.end()
-      return
+    } else if (upstreamProtocol === 'gemini-interactions') {
+      throw new Error('Codex Responses conversion does not support Gemini Interactions yet.')
+    } else if (!upstreamResponse.ok) {
+      const body = await readBufferedResponse(upstreamResponse)
+      responseBodyBytes = body.byteLength
+      writeJsonResponse(res, upstreamResponse.status, {
+        error: {
+          message: resolveUpstreamErrorMessage(body, upstreamResponse.status),
+          type: 'upstream_error',
+          upstream_status: upstreamResponse.status
+        }
+      })
+    } else if (translatedRequest.stream) {
+      if (upstreamResponse.body == null) throw new Error('Upstream streaming response has no body.')
+      responseHeaders.delete('content-encoding')
+      responseHeaders.delete('content-type')
+      responseHeaders.set('content-type', 'text/event-stream; charset=utf-8')
+      responseHeaders.set('cache-control', 'no-cache')
+      res.writeHead(upstreamResponse.status, Object.fromEntries(responseHeaders.entries()))
+      const translator = createResponseStreamTranslator({
+        source: upstreamProtocol,
+        requestId,
+        reasoningSummary: translatedRequest.reasoningSummary,
+        maxInputBytes: CODEX_PROXY_MAX_BUFFERED_RESPONSE_BYTES
+      })
+      const decoder = new TextDecoder()
+      const reader = upstreamResponse.body.getReader()
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          responseBodyBytes += value.byteLength
+          if (responseBodyBytes > CODEX_PROXY_MAX_BUFFERED_RESPONSE_BYTES) {
+            throw new ProxyPayloadTooLargeError('Upstream streaming response exceeds the proxy limit')
+          }
+          for (const frame of translator.push(decoder.decode(value, { stream: true }))) res.write(frame)
+        }
+        const tail = decoder.decode()
+        if (tail !== '') {
+          for (const frame of translator.push(tail)) res.write(frame)
+        }
+        for (const frame of translator.finish()) res.write(frame)
+        res.end()
+      } catch (error) {
+        abortController.abort()
+        await reader.cancel(error).catch(() => undefined)
+        const message = error instanceof Error ? error.message : 'Upstream stream conversion failed.'
+        for (const frame of translator.fail(message)) res.write(frame)
+        res.end()
+      }
+    } else {
+      const body = await readBufferedResponse(upstreamResponse)
+      responseBodyBytes = body.byteLength
+      const translated = translateResponseToResponses({
+        source: upstreamProtocol,
+        response: parseJsonObject(body, 'Upstream model service'),
+        requestId,
+        reasoningSummary: translatedRequest.reasoningSummary
+      })
+      writeJsonResponse(res, upstreamResponse.status, translated)
     }
 
-    const responseStream = Readable.fromWeb(upstreamResponse.body as NodeReadableStream)
-    let responseBodyBytes = 0
-    responseStream.on('data', (chunk: unknown) => {
-      if (typeof chunk === 'string') {
-        responseBodyBytes += Buffer.byteLength(chunk)
-        return
-      }
-      if (chunk instanceof Uint8Array) {
-        responseBodyBytes += chunk.byteLength
-        return
-      }
-      responseBodyBytes += Buffer.byteLength(String(chunk))
-    })
-
-    await pipeline(responseStream, res)
-    const responseBodyForLog = await responseBodyForLogPromise
     const completedLog = {
       requestId,
       ...summarizeUpstreamUrl(upstreamUrl),
@@ -1094,7 +1268,7 @@ const handleProxyRequest = async (
       statusText: upstreamResponse.statusText,
       durationMs: Date.now() - requestStartedAt,
       responseBodyBytes,
-      ...(responseBodyForLog != null ? { responseBody: responseBodyForLog } : {})
+      responseContentType
     }
     if (upstreamResponse.ok) {
       requestLogger?.info('[codex proxy] request completed', completedLog)

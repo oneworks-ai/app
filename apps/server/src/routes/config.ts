@@ -12,7 +12,12 @@ import {
   writeWorkspaceConfigSchemaFile
 } from '@oneworks/config'
 import type { ConfigSchemaResponse, ConfigSource } from '@oneworks/types'
-import { resolveProjectOoBaseDirName } from '@oneworks/utils'
+import {
+  CODEX_SHARED_MODEL_SERVICE_KEY,
+  createCodexSharedModelService,
+  isCodexSharedModelEnabled,
+  resolveProjectOoBaseDirName
+} from '@oneworks/utils'
 
 import { getWorkspaceFolder, loadConfigState } from '#~/services/config/index.js'
 import { badRequest, internalServerError, isHttpError } from '#~/utils/http.js'
@@ -80,6 +85,16 @@ export function configRouter(): Router {
         ? resolveProjectOoBaseDirName(process.env)
         : mergedConfig.baseDir ?? resolveProjectOoBaseDirName(process.env)
       mergedSections.adapterBuiltinModels = loadAdapterBuiltinModels(mergedConfig, workspaceFolder)
+      if (isCodexSharedModelEnabled(mergedConfig)) {
+        mergedSections.modelServices = {
+          ...(mergedSections.modelServices ?? {}),
+          [CODEX_SHARED_MODEL_SERVICE_KEY]: createCodexSharedModelService({
+            builtinModels: mergedSections.adapterBuiltinModels.codex
+          })
+        }
+      } else if (mergedSections.modelServices != null) {
+        delete mergedSections.modelServices[CODEX_SHARED_MODEL_SERVICE_KEY]
+      }
       const about = await buildConfigAbout()
       ctx.body = {
         sources: {

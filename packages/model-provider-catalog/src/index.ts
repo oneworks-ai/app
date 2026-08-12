@@ -1,4 +1,5 @@
 import type { ModelProviderCatalog, ModelProviderDefinition, ModelProviderHostMatcher } from '@oneworks/types'
+import { MODEL_SERVICE_API_PROTOCOLS } from '@oneworks/types/model-service-protocol'
 
 import { MODEL_PROVIDER_DEFINITIONS } from './catalog'
 
@@ -72,7 +73,10 @@ const isNonEmptyString = (value: unknown): value is string => (
 
 const isProviderDefinition = (value: unknown): value is ModelProviderDefinition => {
   if (!isRecord(value)) return false
-  return isNonEmptyString(value.id) && isNonEmptyString(value.title) && isNonEmptyString(value.category)
+  return isNonEmptyString(value.id) && isNonEmptyString(value.title) && isNonEmptyString(value.category) &&
+    (value.defaultApiProtocol == null || MODEL_SERVICE_API_PROTOCOLS.includes(
+      value.defaultApiProtocol as (typeof MODEL_SERVICE_API_PROTOCOLS)[number]
+    ))
 }
 
 const isHostMatcher = (value: unknown): value is ModelProviderHostMatcher => {

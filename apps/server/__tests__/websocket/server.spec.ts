@@ -22,7 +22,9 @@ const resolveWebAuthConfig = vi.fn()
 const verifySessionToken = vi.fn()
 const getBearerTokenFromHeader = vi.fn()
 
+const connectionHandlers: Array<(ws: any, req: any) => Promise<void>> = []
 let connectionHandler: ((ws: any, req: any) => Promise<void>) | undefined
+let codexConnectionHandler: ((ws: any, req: any) => Promise<void>) | undefined
 
 vi.mock('ws', () => {
   class MockWebSocketServer {
@@ -30,7 +32,7 @@ vi.mock('ws', () => {
 
     on(event: string, handler: (ws: any, req: any) => Promise<void>) {
       if (event === 'connection') {
-        connectionHandler = handler
+        connectionHandlers.push(handler)
       }
     }
   }
@@ -86,7 +88,9 @@ vi.mock('#~/utils/logger.js', () => ({
 describe('setupWebSocket', () => {
   beforeEach(async () => {
     vi.clearAllMocks()
+    connectionHandlers.length = 0
     connectionHandler = undefined
+    codexConnectionHandler = undefined
     getAdapterSessionRuntime.mockReturnValue(undefined)
     getSessionInteraction.mockReturnValue(undefined)
     resolveWebAuthConfig.mockResolvedValue({ enabled: false })
@@ -99,8 +103,28 @@ describe('setupWebSocket', () => {
 
     const { setupWebSocket } = await import('#~/websocket/server.js')
     setupWebSocket(new EventEmitter() as Server, {
+      __ONEWORKS_PROJECT_SERVER_ROLE__: 'manager',
       __ONEWORKS_PROJECT_SERVER_WS_PATH__: '/ws'
     } as any)
+    ;[codexConnectionHandler, connectionHandler] = connectionHandlers
+  })
+
+  it('blocks browser-origin loopback clients from the tokenless Codex bridge', async () => {
+    const ws = {
+      close: vi.fn(),
+      on: vi.fn(),
+      readyState: 1,
+      send: vi.fn()
+    }
+
+    await codexConnectionHandler?.(ws, {
+      url: '/api/adapters/codex/app-server',
+      headers: { host: 'localhost', origin: 'https://evil.example' },
+      socket: { remoteAddress: '127.0.0.1' }
+    })
+
+    expect(ws.close).toHaveBeenCalledWith(1008, 'Login required')
+    expect(verifySessionToken).not.toHaveBeenCalled()
   })
 
   it('closes websocket connections when auth is enabled and the cookie is invalid', async () => {

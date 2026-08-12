@@ -350,7 +350,10 @@ export const releaseCodexAppServerAfterCleanup = async (
 export async function createStreamCodexSession(
   base: CodexSessionBase,
   ctx: AdapterCtx,
-  options: AdapterQueryOptions
+  options: AdapterQueryOptions & {
+    deferInitialFailure?: boolean
+    onRecoverableInitialAccountFailure?: (error: Error) => boolean
+  }
 ) {
   const {
     logger,
@@ -435,6 +438,7 @@ export async function createStreamCodexSession(
   let usedCachedThread = false
   let didEmitExit = false
   let didEmitFatalError = false
+  let initialTurnCommitted = options.description == null
   let transcriptHookWatcher: ReturnType<typeof createCodexTranscriptHookWatcher> | undefined
   const threadSessionMapPath = spawnEnv.__ONEWORKS_CODEX_THREAD_SESSION_MAP__
   const activeOperationIds = new Set<string>()
@@ -454,6 +458,9 @@ export async function createStreamCodexSession(
         CODEX_RESPONSE_WAIT_OPERATION_ID,
         'Codex returned an assistant response.'
       )
+    }
+    if (event.type === 'message' || event.type === 'interaction_request' || event.type === 'stop') {
+      initialTurnCommitted = true
     }
     onEvent(event)
   }
@@ -638,8 +645,19 @@ export async function createStreamCodexSession(
           turnId: turn.id,
           error: turn.error
         })
+        const turnError = new Error(formatTurnErrorMessage(turn.error))
+        if (
+          !initialTurnCommitted &&
+          options.onRecoverableInitialAccountFailure?.(turnError) === true
+        ) {
+          didEmitExit = true
+          finishAllActiveOperations('operation_failed', 'Codex account attempt failed.', turnError.message)
+          activeTurnId = undefined
+          void releaseActiveResources()
+          return
+        }
         handleIncomingNotification(method, params, rpc, emitEvent, msgAcc, cmdAcc, approvalPolicy)
-        emitFailureAndExit(new Error(formatTurnErrorMessage(turn.error)))
+        emitFailureAndExit(turnError)
         activeTurnId = undefined
         return
       }
@@ -651,6 +669,15 @@ export async function createStreamCodexSession(
       activeTurnId = undefined
     } else if (method === 'item/started') {
       const item = (params as { item?: { type?: string; tokenCount?: unknown; trigger?: unknown } }).item
+      if (
+        item?.type === 'commandExecution' ||
+        item?.type === 'fileChange' ||
+        item?.type === 'dynamicToolCall' ||
+        item?.type === 'mcpToolCall' ||
+        item?.type === 'webSearch'
+      ) {
+        initialTurnCommitted = true
+      }
       if (item?.type === 'contextCompaction') {
         void callCodexObservationalPreCompactHook({
           cwd,
@@ -693,6 +720,7 @@ export async function createStreamCodexSession(
   const handleRequest = (id: number, method: string, params: Record<string, unknown>) => {
     if (method === 'item/commandExecution/requestApproval') {
       if (approvalPolicy === 'never') {
+        initialTurnCommitted = true
         rpc.respond(id, { decision: 'accept' })
         return
       }
@@ -713,6 +741,7 @@ export async function createStreamCodexSession(
         ]
       })
       if (managedDecision === 'allow') {
+        initialTurnCommitted = true
         rpc.respond(id, { decision: 'accept' })
         return
       }
@@ -746,6 +775,7 @@ export async function createStreamCodexSession(
 
     if (method === 'item/fileChange/requestApproval') {
       if (approvalPolicy === 'never') {
+        initialTurnCommitted = true
         rpc.respond(id, { decision: 'accept' })
         return
       }
@@ -781,6 +811,7 @@ export async function createStreamCodexSession(
       const question = payload.message?.trim() || '允许执行 MCP 工具调用？'
 
       if (approvalPolicy === 'never') {
+        if (isPermissionPrompt && supportsEmptyAcceptPayload) initialTurnCommitted = true
         rpc.respond(
           id,
           isPermissionPrompt && supportsEmptyAcceptPayload
@@ -799,6 +830,7 @@ export async function createStreamCodexSession(
           subjectKeys: subjectLookupKeys
         })
         if (managedDecision === 'allow') {
+          initialTurnCommitted = true
           rpc.respond(
             id,
             {
@@ -1174,6 +1206,12 @@ export async function createStreamCodexSession(
       await startTurn(input, 'initial')
     }
   } catch (err) {
+    if (options.deferInitialFailure === true && !initialTurnCommitted) {
+      didEmitExit = true
+      finishAllActiveOperations('operation_failed', 'Codex account attempt failed.', getErrorMessage(err))
+      void releaseActiveResources()
+      throw err
+    }
     emitFailureAndExit(err)
     throw err
   }

@@ -103,6 +103,11 @@ const buildMigratedModelService = (params: {
     title: readString(provider.name) ?? providerId,
     provider: providerId,
     ...(apiBaseUrl == null ? {} : { apiBaseUrl }),
+    ...(wireApi === 'responses'
+      ? { apiProtocol: 'openai-responses' as const }
+      : wireApi === 'chat'
+      ? { apiProtocol: 'openai-chat-completions' as const }
+      : {}),
     ...(envKey != null
       ? { apiKey: buildEnvReference(envKey) }
       : bearerToken == null

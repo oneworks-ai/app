@@ -22,6 +22,7 @@ export function createDirectCodexSession(base: CodexSessionBase, options: Adapte
     features,
     configOverrideArgs,
     resolvedModel,
+    resolvedAccount,
     cachedThreadId
   } = base
   const { onEvent, description, extraOptions, type: sessionType } = options
@@ -66,6 +67,10 @@ export function createDirectCodexSession(base: CodexSessionBase, options: Adapte
   if (isResume) {
     if (cachedThreadId) {
       args.push(cachedThreadId)
+    } else if (resolvedAccount != null) {
+      throw new Error(
+        `Cannot safely resume Codex direct mode for account "${resolvedAccount}" without an exact cached thread id.`
+      )
     } else {
       args.push('--last')
     }

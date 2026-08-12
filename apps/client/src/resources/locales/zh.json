@@ -2163,6 +2163,8 @@
     "referenceFile": "文件",
     "referenceFileDescription": "从当前项目目录树中选择要引用的文件。",
     "accountSelectPlaceholder": "选择账号",
+    "accountSelectAutomatic": "自动选择",
+    "accountSelectAutomaticHint": "优先使用健康的高优先级账号，并在本会话中保持固定。",
     "accountSelectCreateAccount": "快速创建 {{adapter}} 账号",
     "accountSelectCreateTitle": "接入 {{adapter}} 账号",
     "accountSelectCreateWaiting": "等待账号接入完成",
@@ -4420,7 +4422,12 @@
           },
           "apiBaseUrl": {
             "label": "API 地址",
-            "desc": "模型服务 API 地址覆盖；Coding Plan 和 Token Plan 必须使用套餐专属 Base URL。"
+            "desc": "留空时使用服务商目录中的常见 Host；仅在网关、私有部署或特殊端点时覆盖。Coding Plan 和 Token Plan 会自动选择与协议匹配的套餐地址。"
+          },
+          "apiProtocol": {
+            "label": "上游 API 协议",
+            "desc": "留空时根据服务商和 Host 自动推断；需要覆盖时可明确选择 Responses、Chat Completions、Anthropic Messages 或 Gemini GenerateContent。",
+            "placeholder": "请选择上游 API 协议"
           },
           "apiKey": {
             "label": "API 密钥",
@@ -4498,6 +4505,10 @@
         "defaultAccount": {
           "label": "默认账号",
           "desc": "这个适配器默认选中的账号 key。"
+        },
+        "shareBuiltinModels": {
+          "label": "共享 Codex 内置模型",
+          "desc": "让 Claude Code、Gemini、OpenCode 等 One Works Adapter 使用当前 Codex 账号的内置模型，同时保留官方 Codex CLI / app-server 客户端接入。复用 PM 服务，无需配置 Host、端口、协议或 Token。"
         },
         "items": {
           "label": "适配器明细",
@@ -4790,6 +4801,14 @@
       "modelServiceKind": {
         "service": "模型服务",
         "collection": "服务集合"
+      },
+      "modelServiceApiProtocol": {
+        "infer": "从现有配置推断",
+        "openaiResponses": "OpenAI Responses",
+        "openaiChatCompletions": "OpenAI Chat Completions",
+        "anthropicMessages": "Anthropic Messages",
+        "geminiGenerateContent": "Gemini GenerateContent",
+        "geminiInteractions": "Gemini Interactions（暂不可转换）"
       },
       "modelServiceManagementEndpointKind": {
         "none": "不使用管理接口",

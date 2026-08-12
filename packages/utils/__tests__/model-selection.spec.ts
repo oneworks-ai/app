@@ -39,6 +39,7 @@ describe('model selection utilities', () => {
     const services: Record<string, ModelServiceConfig> = {
       micu: {
         apiKey: '',
+        apiProtocol: 'anthropic-messages',
         kind: 'collection',
         management: {
           apiKey: 'management-token',
@@ -65,11 +66,13 @@ describe('model selection utilities', () => {
     ])
     expect(flattenModelServices(services)['micu/codex']).toMatchObject({
       apiKey: 'model-token',
+      apiProtocol: 'anthropic-messages',
       provider: 'micu'
     })
     expect(flattenModelServices(services)['micu/codex']?.management).toBeUndefined()
     expect(resolveModelServiceFromMap(services, 'micu/codex')).toMatchObject({
       apiKey: 'model-token',
+      apiProtocol: 'anthropic-messages',
       provider: 'micu'
     })
   })
@@ -202,7 +205,7 @@ describe('model selection utilities', () => {
         models: ['gpt-5']
       },
       kimi: {
-        apiBaseUrl: 'https://api.moonshot.ai/v1/chat/completions',
+        apiBaseUrl: 'https://chat.example.com/v1/chat/completions',
         apiKey: 'token',
         models: ['kimi-k2.5']
       },
@@ -227,6 +230,7 @@ describe('model selection utilities', () => {
       }).map(entry => entry.selectorValue)
     ).toEqual([
       'responses,gpt-5',
+      'kimi,kimi-k2.5',
       'explicit,explicit-model'
     ])
 
@@ -243,6 +247,7 @@ describe('model selection utilities', () => {
       }).map(entry => entry.selectorValue)
     ).toEqual([
       'responses,gpt-5',
+      'kimi,kimi-k2.5',
       'explicit,explicit-model'
     ])
 
@@ -258,6 +263,7 @@ describe('model selection utilities', () => {
         serviceModels
       }).map(entry => entry.selectorValue)
     ).toEqual([
+      'kimi,kimi-k2.5',
       'explicit,explicit-model'
     ])
   })

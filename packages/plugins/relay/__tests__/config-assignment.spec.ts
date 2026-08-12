@@ -100,6 +100,7 @@ describe('relay config assignment', () => {
         modelServices: {
           relay: {
             apiBaseUrl: 'https://relay.example.com/v1',
+            apiProtocol: 'anthropic-messages',
             apiKey: 'secret'
           }
         },
@@ -115,7 +116,8 @@ describe('relay config assignment', () => {
     )).toEqual({
       modelServices: {
         relay: {
-          apiBaseUrl: 'https://relay.example.com/v1'
+          apiBaseUrl: 'https://relay.example.com/v1',
+          apiProtocol: 'anthropic-messages'
         }
       },
       plugins: {
@@ -153,8 +155,15 @@ describe('relay config assignment', () => {
                   version: -1
                 },
                 authFile: '/Users/local/.codex/auth.json',
+                disabled: false,
+                priority: 100,
                 title: 'Work'
               }
+            },
+            accountPool: {
+              cooldownMs: 120000,
+              enabled: true,
+              strategy: 'sticky-priority'
             },
             defaultAccount: 'work'
           },
@@ -192,6 +201,11 @@ describe('relay config assignment', () => {
       adapters: {
         codex: {
           defaultAccount: 'work',
+          accountPool: {
+            cooldownMs: 120000,
+            enabled: true,
+            strategy: 'sticky-priority'
+          },
           accounts: {
             work: {
               auth: {
@@ -199,6 +213,8 @@ describe('relay config assignment', () => {
                 token,
                 type: 'codex-auth-json'
               },
+              disabled: false,
+              priority: 100,
               title: 'Work'
             }
           }

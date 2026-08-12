@@ -32,6 +32,14 @@
   }
 }
 
+.account-option__automatic-icon,
+.account-select__automatic-icon {
+  flex: 0 0 18px;
+  font-size: 18px;
+  line-height: 18px;
+  color: var(--sub-text-color);
+}
+
 .account-select--responsive {
   min-width: 0;
   max-width: min(148px, 100%);

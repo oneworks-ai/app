@@ -117,7 +117,12 @@ const toSyntheticDisplayName = (modelId: string) => (
 
 const resolveCodexHome = () => (
   normalizeNonEmptyString(process.env.CODEX_HOME) ??
-    resolve(normalizeNonEmptyString(process.env.HOME) ?? homedir(), '.codex')
+    resolve(
+      normalizeNonEmptyString(process.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
+        normalizeNonEmptyString(process.env.HOME) ??
+        homedir(),
+      '.codex'
+    )
 )
 
 const resolveCodexModelsCachePath = () => resolve(resolveCodexHome(), 'models_cache.json')
@@ -241,6 +246,9 @@ export const loadCodexBuiltinModels = (): AdapterBuiltinModel[] => {
   ]
 }
 
+export const loadCodexModelServiceModels = (): AdapterBuiltinModel[] => loadCachedBuiltinModels()
+
 export const loadBuiltinModels = loadCodexBuiltinModels
+export const loadModelServiceModels = loadCodexModelServiceModels
 
 export const builtinModels: AdapterBuiltinModel[] = loadCodexBuiltinModels()

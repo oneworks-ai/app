@@ -12,6 +12,8 @@ server 侧的 task / benchmark app-facing 入口位于 `@oneworks/app-runtime`�
 - services/agent-room/：Agent Room 领域服务，负责 room/member/run/message 聚合、用户消息投递和 host session 公开投影
 - services/runtime-store/：统一 CLI runtime protocol 的事件读取、session 投影、Agent Room 投影和 runtime store watcher
 - services/runtime-broker/：manager-owned 共享资源入口；`index.ts` 只维护 workspace owner / callback 凭据和通用 driver 注册，`drivers/` 是 built-in driver composition 与各自后台 warmup；通用 lease / 双向消息核心位于 `@oneworks/runtime-broker`。内部 HTTP transport 由 `routes/runtime-broker-transport.ts` 独立监听 loopback，与 manager 的公开 bind / display host 解耦
+- services/codex-model-sharing/：manager-only 的 Codex app-server WebSocket 桥接服务；复用公开 PM 端口与 PM 认证，账号凭据和原生进程准备仍由 Codex adapter capability 持有
+- services/server-instance.ts：server 启动后写入 project-home server data 下的 `instance.json`，供同一 PM 环境的外部 CLI 发现动态端口；写入与关闭清理必须按 PID 防止旧进程覆盖新实例
 - services/automation/：automation 子域服务，集中放置规则执行与调度逻辑
 - channels/：频道接入层，处理外部 IM/机器人平台消息管道
 - db/：持久化层，封装 SQLite 连接、按领域拆分的 schema 模块与 repo

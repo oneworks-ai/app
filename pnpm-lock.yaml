@@ -664,6 +664,9 @@ importers:
       '@oneworks/managed-plugins':
         specifier: workspace:*
         version: link:../../packages/managed-plugins
+      '@oneworks/model-protocol':
+        specifier: workspace:*
+        version: link:../../packages/model-protocol
       '@oneworks/model-provider-catalog':
         specifier: workspace:*
         version: link:../../packages/model-provider-catalog
@@ -839,6 +842,9 @@ importers:
       '@oneworks/hooks':
         specifier: workspace:*
         version: link:../../hooks
+      '@oneworks/model-protocol':
+        specifier: workspace:*
+        version: link:../../model-protocol
       '@oneworks/register':
         specifier: workspace:*
         version: link:../../register
@@ -1251,6 +1257,16 @@ importers:
       zod:
         specifier: ^3.25.76
         version: 3.25.76
+
+  packages/model-protocol:
+    dependencies:
+      '@oneworks/types':
+        specifier: workspace:*
+        version: link:../types
+    devDependencies:
+      esbuild:
+        specifier: ^0.27.2
+        version: 0.27.2
 
   packages/model-provider-catalog:
     dependencies:

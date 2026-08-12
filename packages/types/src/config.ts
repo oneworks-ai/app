@@ -1,5 +1,6 @@
 import type { EffortLevel } from './common'
 import type { GitBranchKind } from './git'
+import type { ModelServiceApiProtocol } from './model-service-protocol'
 import type { PluginConfig, ResolvedPluginInstanceMetadata } from './plugin'
 import type { SessionPermissionMode } from './session'
 import type { VoiceConfig } from './voice'
@@ -234,6 +235,7 @@ export interface ModelProviderDefinition {
   category: ModelProviderCategory
   icon?: IconRef
   defaultApiBaseUrl?: string
+  defaultApiProtocol?: ModelServiceApiProtocol
   defaultModels?: string[]
   billing?: ModelServiceBillingConfig
   codingPlan?: ModelProviderCodingPlanDefinition
@@ -275,6 +277,8 @@ export interface ModelServiceConfig {
   icon?: string
   homepageUrl?: string
   apiBaseUrl?: string
+  /** Wire protocol exposed by this upstream model service. */
+  apiProtocol?: ModelServiceApiProtocol
   apiKey?: string
   models?: string[]
   supportedAdapters?: string[]

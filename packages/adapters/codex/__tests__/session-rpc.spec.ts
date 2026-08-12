@@ -2124,40 +2124,48 @@ describe('createCodexSession RPC approval policy mapping', () => {
     session.kill()
   })
 
-  it('rejects the removed chat wire API before starting codex', async () => {
+  it('routes legacy chat wire services through the Responses translator', async () => {
     process.env.HOME = '/tmp'
+    const { proc } = makeProc()
+    spawnMock.mockReturnValue(proc)
 
-    await expect(
-      createCodexSession(
-        makeCtx({
-          configs: [
-            {
-              modelServices: {
-                legacy: {
-                  apiBaseUrl: 'https://example.test/v1',
-                  apiKey: 'test-key',
-                  extra: {
-                    codex: {
-                      wireApi: 'chat'
-                    }
+    const session = await createCodexSession(
+      makeCtx({
+        configs: [
+          {
+            modelServices: {
+              legacy: {
+                apiBaseUrl: 'https://example.test/v1',
+                apiKey: 'test-key',
+                extra: {
+                  codex: {
+                    wireApi: 'chat'
                   }
                 }
               }
-            },
-            undefined
-          ]
-        }),
-        {
-          cwd: '/tmp/workspace',
-          model: 'legacy,legacy-model',
-          prompt: 'hello'
-        } as any
-      )
-    ).rejects.toThrow(
-      'Codex no longer supports modelServices.legacy.extra.codex.wireApi="chat"'
+            }
+          },
+          undefined
+        ]
+      }),
+      {
+        type: 'create',
+        runtime: 'server',
+        sessionId: 'session-legacy-chat',
+        model: 'legacy,legacy-model',
+        description: 'hello',
+        onEvent: () => {}
+      } as any
     )
 
-    expect(spawnMock).not.toHaveBeenCalled()
+    const spawnArgs = spawnMock.mock.calls[0]?.[1] as string[]
+    const overrides = getConfigOverrides(spawnArgs)
+    expect(decodeProxyMeta(overrides, 'legacy')).toMatchObject({
+      upstreamBaseUrl: 'https://example.test/v1',
+      upstreamProtocol: 'openai-chat-completions'
+    })
+    expect(overrides).toContain('model_providers.legacy.wire_api="responses"')
+    session.kill()
   })
 
   it('routes provider-only model services with default base URL through the local proxy', async () => {

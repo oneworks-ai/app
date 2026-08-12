@@ -1,10 +1,10 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { loadCodexBuiltinModels } from '#~/models.js'
+import { loadCodexBuiltinModels, loadCodexModelServiceModels } from '#~/models.js'
 
 const tempDirs: string[] = []
 
@@ -32,6 +32,7 @@ describe('codex builtin models', () => {
             slug: 'gpt-later',
             display_name: 'GPT Later',
             description: 'Lower priority model',
+            supported_in_api: false,
             visibility: 'list',
             priority: 20
           },
@@ -185,5 +186,50 @@ describe('codex builtin models', () => {
         description: 'Flagship frontier model for professional work with industry-leading coding capabilities'
       }
     ])
+    expect(loadCodexModelServiceModels()).toEqual([])
+  })
+
+  it('keeps ChatGPT-visible catalog models even when they are not API-key models', async () => {
+    const codexHome = await mkdtemp(join(tmpdir(), 'ow-codex-chatgpt-models-'))
+    tempDirs.push(codexHome)
+    await writeFile(
+      join(codexHome, 'models_cache.json'),
+      JSON.stringify({
+        models: [{
+          slug: 'gpt-subscription-only',
+          display_name: 'GPT Subscription Only',
+          description: 'Available to ChatGPT-backed Codex sessions',
+          supported_in_api: false,
+          visibility: 'list'
+        }]
+      }),
+      'utf8'
+    )
+    vi.stubEnv('CODEX_HOME', codexHome)
+
+    expect(loadCodexModelServiceModels().map(model => model.value)).toEqual(['gpt-subscription-only'])
+  })
+
+  it('reads the real-home Codex catalog when the managed process HOME is isolated', async () => {
+    const realHome = await mkdtemp(join(tmpdir(), 'ow-codex-real-home-'))
+    const isolatedHome = await mkdtemp(join(tmpdir(), 'ow-codex-isolated-home-'))
+    tempDirs.push(realHome, isolatedHome)
+    await mkdir(join(realHome, '.codex'), { recursive: true })
+    await writeFile(
+      join(realHome, '.codex', 'models_cache.json'),
+      JSON.stringify({
+        models: [{
+          slug: 'gpt-real-home',
+          display_name: 'GPT Real Home',
+          description: 'Account-visible model',
+          visibility: 'list'
+        }]
+      }),
+      'utf8'
+    )
+    vi.stubEnv('HOME', isolatedHome)
+    vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', realHome)
+
+    expect(loadCodexModelServiceModels().map(model => model.value)).toEqual(['gpt-real-home'])
   })
 })

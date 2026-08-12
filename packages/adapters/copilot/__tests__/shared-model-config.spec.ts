@@ -35,12 +35,8 @@ describe('resolveCopilotModelConfig', () => {
         modelServices: {
           openai: {
             apiBaseUrl: 'https://example.test/v1/responses',
-            apiKey: 'test-key',
-            extra: {
-              copilot: {
-                wireApi: 'responses'
-              }
-            }
+            apiProtocol: 'openai-responses',
+            apiKey: 'test-key'
           }
         }
       }, undefined]
@@ -52,6 +48,23 @@ describe('resolveCopilotModelConfig', () => {
         COPILOT_PROVIDER_WIRE_API: 'responses'
       }
     })
+  })
+
+  it('rejects protocols that the Copilot provider bridge cannot represent', () => {
+    const { ctx } = makeCtx({
+      configs: [{
+        modelServices: {
+          anthropic: {
+            apiBaseUrl: 'https://api.anthropic.com/v1',
+            apiProtocol: 'anthropic-messages',
+            apiKey: 'secret'
+          }
+        }
+      }, undefined]
+    })
+
+    expect(() => resolveCopilotModelConfig(ctx, 'anthropic,claude-sonnet'))
+      .toThrow(/does not support anthropic-messages/)
   })
 
   it('uses provider default base URLs for routed services without apiBaseUrl', () => {

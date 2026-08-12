@@ -64,6 +64,7 @@ export const MODEL_PROVIDER_DEFINITIONS = [
     icon: builtinIcon('openai'),
     description: 'Official OpenAI API platform for GPT models and multimodal services.',
     defaultApiBaseUrl: 'https://api.openai.com/v1',
+    defaultApiProtocol: 'openai-responses',
     defaultModels: ['gpt-5', 'gpt-5-mini'],
     portal: portal('https://platform.openai.com', {
       billing: 'https://platform.openai.com/settings/organization/billing/overview',
@@ -81,6 +82,7 @@ export const MODEL_PROVIDER_DEFINITIONS = [
     icon: builtinIcon('anthropic'),
     description: 'Official Anthropic Console service for Claude models.',
     defaultApiBaseUrl: 'https://api.anthropic.com/v1',
+    defaultApiProtocol: 'anthropic-messages',
     portal: portal('https://console.anthropic.com', {
       billing: 'https://console.anthropic.com/settings/billing',
       apiKeys: 'https://console.anthropic.com/settings/keys',
@@ -97,6 +99,7 @@ export const MODEL_PROVIDER_DEFINITIONS = [
     icon: builtinIcon('moonshot'),
     description: 'Moonshot/Kimi China official OpenAI-compatible API service.',
     defaultApiBaseUrl: 'https://api.moonshot.cn/v1',
+    defaultApiProtocol: 'openai-chat-completions',
     defaultModels: ['kimi-k2.7-code', 'kimi-k2.6', 'kimi-k2.5', 'kimi-k2-0905-preview', 'kimi-k2'],
     portal: portal('https://platform.kimi.com', {
       billing: 'https://platform.kimi.com/console/account',
@@ -114,6 +117,7 @@ export const MODEL_PROVIDER_DEFINITIONS = [
     icon: builtinIcon('moonshot'),
     description: 'Moonshot/Kimi international official OpenAI-compatible API service.',
     defaultApiBaseUrl: 'https://api.moonshot.ai/v1',
+    defaultApiProtocol: 'openai-chat-completions',
     defaultModels: ['kimi-k2.7-code', 'kimi-k2.6', 'kimi-k2.5', 'kimi-k2-0905-preview', 'kimi-k2'],
     portal: portal('https://platform.kimi.ai', {
       billing: 'https://platform.kimi.ai/console/account',
@@ -131,6 +135,7 @@ export const MODEL_PROVIDER_DEFINITIONS = [
     icon: builtinIcon('kimi'),
     description: 'Kimi Code membership benefit endpoint for coding agents.',
     defaultApiBaseUrl: 'https://api.kimi.com/coding/v1',
+    defaultApiProtocol: 'openai-chat-completions',
     defaultModels: ['kimi-for-coding'],
     billing: kimiCodeBilling(),
     codingPlan: codingPlan({
@@ -165,6 +170,7 @@ export const MODEL_PROVIDER_DEFINITIONS = [
     icon: builtinIcon('deepseek'),
     description: 'Official DeepSeek OpenAI-compatible API service.',
     defaultApiBaseUrl: 'https://api.deepseek.com',
+    defaultApiProtocol: 'openai-chat-completions',
     defaultModels: ['deepseek-v4-flash', 'deepseek-v4-pro', 'deepseek-chat', 'deepseek-reasoner'],
     adapterSupport: {
       codex: {
@@ -187,6 +193,7 @@ export const MODEL_PROVIDER_DEFINITIONS = [
     icon: builtinIcon('minimax'),
     description: 'Official MiniMax API platform for chat, multimodal, and agent services.',
     defaultApiBaseUrl: 'https://api.minimax.io/v1',
+    defaultApiProtocol: 'openai-chat-completions',
     defaultModels: ['MiniMax-M3'],
     portal: portal('https://platform.minimaxi.com', {
       billing: 'https://platform.minimaxi.com/user-center/basic-information/interface-balance',
@@ -204,6 +211,7 @@ export const MODEL_PROVIDER_DEFINITIONS = [
     icon: builtinIcon('minimax'),
     description: 'MiniMax Token Plan subscription endpoint for MiniMax M-series coding models.',
     defaultApiBaseUrl: 'https://api.minimax.io/v1',
+    defaultApiProtocol: 'openai-chat-completions',
     defaultModels: ['MiniMax-M3'],
     billing: planBilling('token_plan', 'subscription_key', 'token'),
     codingPlan: codingPlan({
@@ -247,6 +255,7 @@ export const MODEL_PROVIDER_DEFINITIONS = [
     icon: builtinIcon('qwen'),
     description: 'Alibaba Cloud Bailian/DashScope API service for Qwen models.',
     defaultApiBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    defaultApiProtocol: 'openai-chat-completions',
     defaultModels: [
       'qwen3.7-max',
       'qwen3.7-plus',
@@ -271,6 +280,7 @@ export const MODEL_PROVIDER_DEFINITIONS = [
     icon: builtinIcon('qwen'),
     description: 'Alibaba Cloud Model Studio Coding Plan endpoint for coding agents.',
     defaultApiBaseUrl: 'https://coding.dashscope.aliyuncs.com/v1',
+    defaultApiProtocol: 'openai-chat-completions',
     defaultModels: [
       'qwen3.7-plus',
       'qwen3.6-plus',
@@ -332,6 +342,7 @@ export const MODEL_PROVIDER_DEFINITIONS = [
     icon: builtinIcon('zhipu'),
     description: 'Zhipu BigModel official API service for GLM models.',
     defaultApiBaseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    defaultApiProtocol: 'openai-chat-completions',
     defaultModels: ['glm-5.2[1m]', 'glm-5.2', 'glm-4.7', 'glm-4.5-air'],
     portal: portal('https://open.bigmodel.cn', {
       billing: 'https://open.bigmodel.cn/usercenter/resourcepool',
@@ -348,6 +359,7 @@ export const MODEL_PROVIDER_DEFINITIONS = [
     icon: builtinIcon('zhipu'),
     description: 'Zhipu GLM Coding Plan endpoint for supported coding tools.',
     defaultApiBaseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4',
+    defaultApiProtocol: 'openai-chat-completions',
     defaultModels: ['GLM-5.2'],
     billing: planBilling('coding_plan', 'coding_plan_key', 'request'),
     codingPlan: codingPlan({
@@ -383,6 +395,7 @@ export const MODEL_PROVIDER_DEFINITIONS = [
     icon: builtinIcon('tencent'),
     description: 'Tencent Cloud TokenHub Coding Plan endpoint for coding agents.',
     defaultApiBaseUrl: 'https://api.lkeap.cloud.tencent.com/coding/v3',
+    defaultApiProtocol: 'openai-chat-completions',
     defaultModels: ['tc-code-latest', 'hunyuan-2.0-instruct', 'minimax-m2.5', 'kimi-k2.5', 'glm-5'],
     billing: planBilling('coding_plan', 'coding_plan_key', 'request'),
     codingPlan: codingPlan({
@@ -417,6 +430,7 @@ export const MODEL_PROVIDER_DEFINITIONS = [
     icon: builtinIcon('volcengine'),
     description: 'Volcengine Ark Coding Plan endpoint for coding agents.',
     defaultApiBaseUrl: 'https://ark.cn-beijing.volces.com/api/coding/v3',
+    defaultApiProtocol: 'openai-chat-completions',
     defaultModels: ['doubao-seed-2.0-pro', 'glm-5.1', 'kimi-k2.6', 'minimax-m2.7'],
     billing: planBilling('coding_plan', 'coding_plan_key', 'request'),
     codingPlan: codingPlan({
@@ -451,6 +465,7 @@ export const MODEL_PROVIDER_DEFINITIONS = [
     icon: builtinIcon('baidu'),
     description: 'Baidu Qianfan Coding Plan endpoint for coding agents.',
     defaultApiBaseUrl: 'https://qianfan.baidubce.com/v2/coding',
+    defaultApiProtocol: 'openai-chat-completions',
     defaultModels: [
       'qianfan-code-latest',
       'kimi-k2.5',
@@ -516,6 +531,7 @@ export const MODEL_PROVIDER_DEFINITIONS = [
     icon: builtinIcon('gemini'),
     description: 'Google AI Studio and Gemini API service.',
     defaultApiBaseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    defaultApiProtocol: 'openai-chat-completions',
     portal: portal('https://aistudio.google.com', {
       billing: 'https://console.cloud.google.com/billing',
       apiKeys: 'https://aistudio.google.com/apikey',
@@ -544,6 +560,7 @@ export const MODEL_PROVIDER_DEFINITIONS = [
     icon: builtinIcon('openrouter'),
     description: 'OpenRouter model routing platform with OpenAI-compatible APIs.',
     defaultApiBaseUrl: 'https://openrouter.ai/api/v1',
+    defaultApiProtocol: 'openai-chat-completions',
     portal: portal('https://openrouter.ai', {
       billing: 'https://openrouter.ai/settings/credits',
       apiKeys: 'https://openrouter.ai/settings/keys',
@@ -559,6 +576,7 @@ export const MODEL_PROVIDER_DEFINITIONS = [
     icon: builtinIcon('vercel'),
     description: 'Vercel AI Gateway for routing requests across model providers.',
     defaultApiBaseUrl: 'https://ai-gateway.vercel.sh/v1',
+    defaultApiProtocol: 'openai-chat-completions',
     portal: portal('https://vercel.com/ai-gateway', {
       billing: 'https://vercel.com/dashboard/usage',
       docs: 'https://vercel.com/docs/ai-gateway',
@@ -573,6 +591,7 @@ export const MODEL_PROVIDER_DEFINITIONS = [
     icon: builtinIcon('requesty'),
     description: 'Requesty AI gateway for OpenAI-compatible model routing.',
     defaultApiBaseUrl: 'https://router.requesty.ai/v1',
+    defaultApiProtocol: 'openai-chat-completions',
     portal: portal('https://requesty.ai', {
       billing: 'https://app.requesty.ai/billing',
       apiKeys: 'https://app.requesty.ai/api-keys',
@@ -587,6 +606,7 @@ export const MODEL_PROVIDER_DEFINITIONS = [
     icon: builtinIcon('portkey'),
     description: 'Portkey AI gateway for managing and routing model traffic.',
     defaultApiBaseUrl: 'https://api.portkey.ai/v1',
+    defaultApiProtocol: 'openai-chat-completions',
     portal: portal('https://portkey.ai', {
       billing: 'https://app.portkey.ai/billing',
       apiKeys: 'https://app.portkey.ai/api-keys',
@@ -610,6 +630,7 @@ export const MODEL_PROVIDER_DEFINITIONS = [
     category: 'relay',
     icon: builtinIcon('micu'),
     defaultApiBaseUrl: 'https://www.micuapi.ai/v1',
+    defaultApiProtocol: 'openai-chat-completions',
     portal: portal('https://www.micuapi.ai', { docs: 'https://docs.micuapi.ai' }),
     capabilities: capabilities({ listModels: 'manual', balance: 'api', status: 'manual' })
   },

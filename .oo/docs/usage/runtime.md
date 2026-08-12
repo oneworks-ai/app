@@ -114,6 +114,32 @@ webAuth:
   - `claude-code` 对 Anthropic、Kimi、DeepSeek、百炼/Qwen、智谱 GLM、MiniMax、OpenRouter、Requesty、Vercel AI Gateway、Portkey 等已知 Anthropic-compatible 官方入口优先直连；其它 OpenAI-compatible `service,model` 继续回退 Claude Code Router
   - `codex` 与 `gemini` 走 adapter 自己的本地代理；`grok` 把 routed service 写成 session 级原生 custom model
   - 部分 adapter 会把 provider 配置写进 session 级或原生配置文件
+- 选择内置服务商时，One Works 会从 provider catalog 自动补齐常见 Host 和协议；通常只需配置 `provider` 与 `apiKey`。`apiBaseUrl` 和 `apiProtocol` 保留为兼容网关、私有部署或服务商特殊端点的显式覆盖。Codex 以 Responses 作为本地源协议，并能处理下面四种上游格式的请求、非流式响应和 SSE 流：
+
+```yaml
+modelServices:
+  openai-native:
+    provider: openai
+    apiKey: ${OPENAI_API_KEY}
+
+  openai-compatible:
+    apiBaseUrl: https://gateway.example.com/v1
+    apiProtocol: openai-chat-completions
+    apiKey: ${GATEWAY_API_KEY}
+
+  claude-compatible:
+    provider: anthropic
+    apiKey: ${ANTHROPIC_API_KEY}
+
+  gemini-compatible:
+    apiBaseUrl: https://generativelanguage.googleapis.com/v1beta
+    apiProtocol: gemini-generate-content
+    apiKey: ${GEMINI_API_KEY}
+```
+
+- 可选值是 `openai-responses`、`openai-chat-completions`、`anthropic-messages`、`gemini-generate-content` 和 `gemini-interactions`。当前 Codex 转换支持前四种；`gemini-interactions` 会明确报不支持，不会静默按其它协议发送。
+- 内置服务商优先使用 catalog 默认；显式 URL 仍会先做无歧义 endpoint 推断，并继续兼容旧的 `extra.codex.wireApi` hint。自定义网关建议显式声明协议。collection 的 profile 默认继承父级协议，也可以单独覆盖。
+  - 当前转换覆盖文本、图片、function tools、JSON schema、reasoning summary、usage 和流式生命周期。内建非 function tools、音频、文件和无法可靠映射的异构内容会 fail closed，以免语义被悄悄丢弃。
 - Coding Plan / Token Plan 指服务商的计费套餐，不是 agent Plan Mode。选择这类服务时优先使用专属 provider id，例如 `qwen-coding-plan`、`zhipu-coding-plan`、`minimax-token-plan`、`kimi-code`、`tencent-tokenhub-coding-plan`、`volcengine-ark-coding-plan`、`baidu-qianfan-coding-plan`；不要把套餐 key 和普通 API key、套餐 base URL 和普通 API base URL 混用。
 - 套餐模型列表默认来自内置目录，不假设 `/v1/models` 可用。只有想固定 allowlist 时才写 `models`：
 

@@ -91,6 +91,15 @@ const normalizeModelService = (value: unknown): Record<string, unknown> | undefi
     ...(normalizeText(value.title) == null ? {} : { title: normalizeText(value.title) }),
     ...(normalizeText(value.description) == null ? {} : { description: normalizeText(value.description) }),
     apiBaseUrl,
+    ...([
+        'openai-responses',
+        'openai-chat-completions',
+        'anthropic-messages',
+        'gemini-generate-content',
+        'gemini-interactions'
+      ].includes(String(value.apiProtocol))
+      ? { apiProtocol: value.apiProtocol }
+      : {}),
     ...(Array.isArray(value.models)
       ? { models: value.models.map(item => normalizeText(item)).filter((item): item is string => item != null) }
       : {}),
@@ -241,6 +250,8 @@ const normalizeAdapterAccount = (
     ...(normalizeNumber(value.credentialUpdatedAt) == null
       ? {}
       : { credentialUpdatedAt: normalizeNumber(value.credentialUpdatedAt) }),
+    ...(normalizeNumber(value.priority) == null ? {} : { priority: normalizeNumber(value.priority) }),
+    ...(typeof value.disabled === 'boolean' ? { disabled: value.disabled } : {}),
     ...(isRecord(quota) || Array.isArray(quota) ? { quota } : {}),
     ...(auth == null ? {} : { auth }),
     ...(state == null ? {} : { state })
@@ -312,6 +323,14 @@ const normalizeAccountAdapter = (
   let defaultAccount = normalizeText(value.defaultAccount)
   const accounts = { ...(normalizeAdapterAccounts(value.accounts, adapterKey) ?? {}) }
   const accountTombstones = { ...(normalizeAccountTombstones(value.accountTombstones) ?? {}) }
+  const rawPool = isRecord(value.accountPool) ? value.accountPool : undefined
+  const accountPool = rawPool == null
+    ? undefined
+    : {
+      ...(typeof rawPool.enabled === 'boolean' ? { enabled: rawPool.enabled } : {}),
+      ...(rawPool.strategy === 'sticky-priority' ? { strategy: rawPool.strategy } : {}),
+      ...(normalizeNumber(rawPool.cooldownMs) == null ? {} : { cooldownMs: normalizeNumber(rawPool.cooldownMs) })
+    }
   for (const [key, deletedGenerations] of Object.entries(accountTombstones)) {
     const account = isRecord(accounts[key]) ? accounts[key] : undefined
     if (accountGenerationIsDeleted(key, account, deletedGenerations)) delete accounts[key]
@@ -320,6 +339,7 @@ const normalizeAccountAdapter = (
   const adapter = {
     ...(defaultAccount == null ? {} : { defaultAccount }),
     ...(Object.keys(accounts).length === 0 ? {} : { accounts }),
+    ...(accountPool == null || Object.keys(accountPool).length === 0 ? {} : { accountPool }),
     ...(Object.keys(accountTombstones).length === 0 ? {} : { accountTombstones })
   }
   return Object.keys(adapter).length > 0 ? adapter : undefined

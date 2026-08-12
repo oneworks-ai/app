@@ -3,6 +3,7 @@ import { z } from 'zod'
 
 import type { ConfigUiField, ConfigUiFieldType, ConfigUiObjectSchema, ConfigUiRecordFieldSchema } from '@oneworks/types'
 import { normalizeCredentialRevision } from '@oneworks/types/credential-revision'
+import { MODEL_SERVICE_API_PROTOCOLS } from '@oneworks/types/model-service-protocol'
 
 import { channelBaseSchema } from './channel'
 
@@ -146,6 +147,8 @@ export const modelServiceConfigSchema = z.object({
   icon: z.string().optional().describe('Service icon override'),
   homepageUrl: z.string().optional().describe('Provider management homepage override'),
   apiBaseUrl: z.string().min(1).optional().describe('Provider API base URL override'),
+  apiProtocol: z.enum(MODEL_SERVICE_API_PROTOCOLS).optional()
+    .describe('Wire protocol exposed by this upstream model service'),
   apiKey: z.string().min(1).optional().describe('Provider API key'),
   models: z.array(z.string()).optional().describe('Supported model IDs'),
   supportedAdapters: z.array(z.string()).optional().describe('Adapter keys this service explicitly supports'),

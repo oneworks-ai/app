@@ -1,7 +1,16 @@
 import { createHash } from 'node:crypto'
 
 import type { Config, ModelServiceConfig, ResolvedModelServiceConfig } from '@oneworks/types'
-import { resolveModelDisplayMetadata, resolveModelServiceConfig, resolveModelServiceModels } from '@oneworks/utils'
+import {
+  CODEX_SHARED_MODEL_SERVICE_KEY,
+  CODEX_SHARED_MODEL_TOKEN_ENV,
+  CODEX_SHARED_MODEL_UPSTREAM_URL_ENV,
+  flattenModelServices,
+  resolveExplicitModelServiceApiProtocol,
+  resolveModelDisplayMetadata,
+  resolveModelServiceConfig,
+  resolveModelServiceModels
+} from '@oneworks/utils'
 
 import { resolveTransformerPath } from './paths'
 
@@ -42,10 +51,20 @@ const getServiceQueryParams = (service: ModelServiceConfig) => {
   return extra.claudeCodeRouter?.queryParams ?? extra.codex?.queryParams
 }
 
-const buildProviderBaseUrl = (service: ResolvedModelServiceConfig) => {
+const buildProviderBaseUrl = (
+  service: ResolvedModelServiceConfig,
+  explicitApiProtocol: ReturnType<typeof resolveExplicitModelServiceApiProtocol>
+) => {
   const queryParams = getServiceQueryParams(service)
   const url = new URL(service.apiBaseUrl)
   if (
+    (explicitApiProtocol === 'openai-responses' || explicitApiProtocol === 'openai-chat-completions') &&
+    !OPENAI_COMPATIBLE_ENDPOINT_PATTERN.test(url.pathname)
+  ) {
+    const endpoint = explicitApiProtocol === 'openai-responses' ? 'responses' : 'chat/completions'
+    url.pathname = `${url.pathname.replace(/\/+$/u, '')}/${endpoint}`
+  } else if (
+    explicitApiProtocol == null &&
     service.provider != null &&
     OPENAI_COMPATIBLE_CHAT_COMPLETIONS_PROVIDERS.has(service.provider) &&
     !OPENAI_COMPATIBLE_ENDPOINT_PATTERN.test(url.pathname)
@@ -68,6 +87,24 @@ const normalizePositiveInteger = (value: unknown): number | undefined => (
     : undefined
 )
 
+const buildProviderApiKey = (name: string, apiKey: string | undefined) => (
+  name === CODEX_SHARED_MODEL_SERVICE_KEY && apiKey != null
+    ? `\${${CODEX_SHARED_MODEL_TOKEN_ENV}}`
+    : apiKey
+)
+
+const buildProviderConfigUrl = (name: string, apiBaseUrl: string) => (
+  name === CODEX_SHARED_MODEL_SERVICE_KEY
+    ? `\${${CODEX_SHARED_MODEL_UPSTREAM_URL_ENV}}`
+    : apiBaseUrl
+)
+
+const buildRuntimeProviderFingerprint = (name: string, apiKey: string | undefined, apiBaseUrl: string) => (
+  name === CODEX_SHARED_MODEL_SERVICE_KEY && apiKey != null
+    ? createHash('sha256').update(`${apiKey}\0${apiBaseUrl}`).digest('hex')
+    : undefined
+)
+
 export const resolveDefaultClaudeCodeRouterPort = (cwd: string) => {
   const digest = createHash('sha256').update(cwd).digest()
   const hashValue = digest.readUInt32BE(0)
@@ -84,21 +121,35 @@ const hasMaxtokenTransformer = (use: unknown[]) =>
     return Array.isArray(entry) && entry[0] === 'maxtoken'
   })
 
-const buildProviderTransformer = (service: ModelServiceConfig) => {
+const buildProviderTransformer = (
+  service: ModelServiceConfig,
+  explicitApiProtocol: ReturnType<typeof resolveExplicitModelServiceApiProtocol>
+) => {
   const baseValue = service.extra?.claudeCodeRouterTransformer
   const maxOutputTokens = normalizePositiveInteger(service.maxOutputTokens)
+  if (
+    explicitApiProtocol === 'anthropic-messages' || explicitApiProtocol === 'gemini-generate-content' ||
+    explicitApiProtocol === 'gemini-interactions'
+  ) {
+    throw new Error(`Claude Code Router does not support ${explicitApiProtocol} model services.`)
+  }
+  const protocolTransformer = explicitApiProtocol === 'openai-responses' ? 'openai-responses' : undefined
 
-  if (maxOutputTokens == null) return baseValue
+  if (maxOutputTokens == null && protocolTransformer == null) return baseValue
   if (!isPlainObject(baseValue)) {
     return {
       use: [
-        ['maxtoken', { max_tokens: maxOutputTokens }]
+        ...(protocolTransformer == null ? [] : [protocolTransformer]),
+        ...(maxOutputTokens == null ? [] : [
+          ['maxtoken', { max_tokens: maxOutputTokens }]
+        ])
       ]
     }
   }
 
   const use = Array.isArray(baseValue.use) ? [...baseValue.use] : []
-  if (!hasMaxtokenTransformer(use)) {
+  if (protocolTransformer != null && !use.includes(protocolTransformer)) use.unshift(protocolTransformer)
+  if (maxOutputTokens != null && !hasMaxtokenTransformer(use)) {
     use.push(['maxtoken', { max_tokens: maxOutputTokens }])
   }
 
@@ -187,9 +238,13 @@ const resolveDefaultModel = (params: {
   config?: Config
   userConfig?: Config
   modelServices: Record<string, ModelServiceConfig>
+  selectedModel?: string
 }) => {
-  const { config, userConfig } = params
-  const modelServices = Object.fromEntries(
+  const { config, userConfig, selectedModel } = params
+  const selectedServiceKey = selectedModel?.includes(',')
+    ? selectedModel.split(',', 1)[0]?.trim()
+    : undefined
+  const resolvedModelServices = Object.fromEntries(
     Object.entries(params.modelServices)
       .map(([serviceKey, service]) => {
         const resolved = resolveModelServiceConfig(service, ['modelServices', serviceKey])
@@ -201,22 +256,44 @@ const resolveDefaultModel = (params: {
     ...(config?.models ?? {}),
     ...(userConfig?.models ?? {})
   }
-  const providers = Object.entries(modelServices).map(([name, configValue]) => ({
-    name,
-    api_base_url: buildProviderBaseUrl(configValue),
-    api_key: configValue.apiKey,
-    models: resolveModelServiceModels(configValue),
-    transformer: buildProviderTransformer(configValue)
-  }))
+  const providerEntries = Object.entries(resolvedModelServices).flatMap(([name, configValue]) => {
+    try {
+      // Catalog defaults describe the general upstream wire protocol. CCR has its
+      // own provider-specific compatibility routing, so only an explicit service
+      // protocol may override that established behavior here.
+      const explicitApiProtocol = resolveExplicitModelServiceApiProtocol(params.modelServices[name])
+      const apiBaseUrl = buildProviderBaseUrl(configValue, explicitApiProtocol)
+      const runtimeProviderFingerprint = buildRuntimeProviderFingerprint(name, configValue.apiKey, apiBaseUrl)
+      return [
+        [name, {
+          name,
+          api_base_url: buildProviderConfigUrl(name, apiBaseUrl),
+          api_key: buildProviderApiKey(name, configValue.apiKey),
+          models: resolveModelServiceModels(configValue),
+          transformer: buildProviderTransformer(configValue, explicitApiProtocol)
+        }, runtimeProviderFingerprint] as const
+      ]
+    } catch (error) {
+      if (selectedServiceKey == null || name === selectedServiceKey) throw error
+      return []
+    }
+  })
+  const providers = providerEntries.map(([, provider]) => provider)
+  const runtimeProviderFingerprint = providerEntries
+    .map(([, , fingerprint]) => fingerprint)
+    .find((fingerprint): fingerprint is string => fingerprint != null)
+  const modelServices = Object.fromEntries(
+    providerEntries.map(([name]) => [name, resolvedModelServices[name]])
+  )
   const defaultProvider = providers[0]
   if (!defaultProvider) {
     throw new Error('No modelServices found in config')
   }
-  const defaultModelServiceInput = userConfig?.defaultModelService ?? config?.defaultModelService
+  const defaultModelServiceInput = selectedServiceKey ?? userConfig?.defaultModelService ?? config?.defaultModelService
   const defaultModelServiceName = defaultModelServiceInput && modelServices[defaultModelServiceInput]
     ? defaultModelServiceInput
     : defaultProvider.name
-  const defaultModelInput = userConfig?.defaultModel ?? config?.defaultModel
+  const defaultModelInput = selectedModel ?? userConfig?.defaultModel ?? config?.defaultModel
   const resolvedByInput = defaultModelInput
     ? resolveModelCandidate(defaultModelInput, {
       modelServices,
@@ -230,6 +307,7 @@ const resolveDefaultModel = (params: {
     return {
       defaultModel: resolvedByInput,
       providers,
+      runtimeProviderFingerprint,
       defaultService: defaultModelServiceName,
       modelServices
     }
@@ -251,8 +329,34 @@ const resolveDefaultModel = (params: {
   return {
     defaultModel: `${defaultModelServiceName},${normalizedFallback}`,
     providers,
+    runtimeProviderFingerprint,
     defaultService: defaultModelServiceName,
     modelServices
+  }
+}
+
+export const resolveClaudeCodeRouterRuntimeModelServiceEnv = (params: {
+  config?: Config
+  userConfig?: Config
+}) => {
+  const modelServices = flattenModelServices({
+    ...(params.config?.modelServices ?? {}),
+    ...(params.userConfig?.modelServices ?? {})
+  })
+  const service = modelServices[CODEX_SHARED_MODEL_SERVICE_KEY]
+  if (service == null) return {}
+  const resolved = resolveModelServiceConfig(service, [
+    'modelServices',
+    CODEX_SHARED_MODEL_SERVICE_KEY
+  ]).service
+  if (resolved == null || resolved.apiKey == null) return {}
+
+  return {
+    [CODEX_SHARED_MODEL_TOKEN_ENV]: resolved.apiKey,
+    [CODEX_SHARED_MODEL_UPSTREAM_URL_ENV]: buildProviderBaseUrl(
+      resolved,
+      resolveExplicitModelServiceApiProtocol(service)
+    )
   }
 }
 
@@ -311,12 +415,13 @@ export const generateDefaultCCRConfigJSON = (params: {
   config?: Config
   userConfig?: Config
   adapterOptions?: NonNullable<Config['adapters']>['claude-code']
+  selectedModel?: string
 }) => {
-  const { cwd, config, userConfig, adapterOptions } = params
-  const modelServices = {
+  const { cwd, config, userConfig, adapterOptions, selectedModel } = params
+  const modelServices = flattenModelServices({
     ...(config?.modelServices ?? {}),
     ...(userConfig?.modelServices ?? {})
-  }
+  })
   const modelMetadata = {
     ...(config?.models ?? {}),
     ...(userConfig?.models ?? {})
@@ -324,12 +429,14 @@ export const generateDefaultCCRConfigJSON = (params: {
   const {
     defaultModel,
     providers,
+    runtimeProviderFingerprint,
     defaultService,
     modelServices: resolvedModelServices
   } = resolveDefaultModel({
     config,
     userConfig,
-    modelServices
+    modelServices,
+    selectedModel
   })
   const loggerEnabled = adapterOptions?.ccrTransformers?.logger ?? true
   const apiTimeoutMs = resolveCompatibleApiTimeoutMs({
@@ -359,6 +466,9 @@ export const generateDefaultCCRConfigJSON = (params: {
       PORT: String(routerPort),
       ...(adapterOptions?.ccrOptions ?? {}),
       ...(apiTimeoutMs != null ? { API_TIMEOUT_MS: apiTimeoutMs } : {}),
+      ...(runtimeProviderFingerprint == null
+        ? {}
+        : { ONEWORKS_RUNTIME_MODEL_CAPABILITY_REVISION: runtimeProviderFingerprint }),
       transformers,
       Providers: providers,
       Router: {

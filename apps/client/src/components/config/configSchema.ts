@@ -155,6 +155,15 @@ const modelServiceKindOptions: FieldSpec['options'] = [
   { value: 'collection', label: 'config.options.modelServiceKind.collection' }
 ]
 
+const modelServiceApiProtocolOptions: FieldSpec['options'] = [
+  { value: '', label: 'config.options.modelServiceApiProtocol.infer' },
+  { value: 'openai-responses', label: 'config.options.modelServiceApiProtocol.openaiResponses' },
+  { value: 'openai-chat-completions', label: 'config.options.modelServiceApiProtocol.openaiChatCompletions' },
+  { value: 'anthropic-messages', label: 'config.options.modelServiceApiProtocol.anthropicMessages' },
+  { value: 'gemini-generate-content', label: 'config.options.modelServiceApiProtocol.geminiGenerateContent' },
+  { value: 'gemini-interactions', label: 'config.options.modelServiceApiProtocol.geminiInteractions' }
+]
+
 const modelServiceManagementEndpointKindOptions: FieldSpec['options'] = [
   { value: '', label: 'config.options.modelServiceManagementEndpointKind.none' },
   { value: 'newapi', label: 'config.options.modelServiceManagementEndpointKind.newapi' }
@@ -451,6 +460,18 @@ const modelServiceDetailFields: FieldSpec[] = [
     resolveGroup: resolveModelServiceApiBaseUrlGroup,
     labelKey: 'config.fields.modelServices.item.apiBaseUrl.label',
     descriptionKey: 'config.fields.modelServices.item.apiBaseUrl.desc'
+  },
+  {
+    path: ['apiProtocol'],
+    type: 'select',
+    defaultValue: '',
+    icon: 'swap_horiz',
+    options: modelServiceApiProtocolOptions,
+    placeholderKey: 'config.fields.modelServices.item.apiProtocol.placeholder',
+    unsetWhenEmpty: true,
+    group: 'access',
+    labelKey: 'config.fields.modelServices.item.apiProtocol.label',
+    descriptionKey: 'config.fields.modelServices.item.apiProtocol.desc'
   },
   {
     path: ['apiKey'],

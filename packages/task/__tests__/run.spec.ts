@@ -158,6 +158,38 @@ describe('task run adapter init', () => {
     expect(initCallOrder).toBeLessThan(queryCallOrder)
   })
 
+  it('does not persist the runtime-only shared-model capability in task cache', async () => {
+    const ctx = createCtx()
+    ctx.env.__ONEWORKS_PROJECT_CODEX_SHARED_MODEL_TOKEN__ = 'runtime-secret'
+    ctx.configs = [{
+      adapters: createAdapters({ codex: {} }),
+      modelServices: {
+        'oneworks-codex': {
+          apiBaseUrl: 'http://127.0.0.1:8787/api/internal/codex-shared-model/v1',
+          apiKey: 'runtime-secret',
+          models: ['gpt-example']
+        }
+      }
+    }, undefined]
+    ctx.configState = {
+      mergedConfig: ctx.configs[0]!
+    }
+    prepareMock.mockResolvedValue([ctx])
+
+    await run({ adapter: 'codex', cwd: ctx.cwd, env: {} }, {
+      type: 'create',
+      runtime: 'server',
+      sessionId: 'session-no-capability-cache',
+      description: 'hello',
+      onEvent: vi.fn()
+    })
+
+    const cached = (ctx.cache.set as ReturnType<typeof vi.fn>).mock.calls
+      .find(([key]) => key === 'base')?.[1]
+    expect(JSON.stringify(cached)).not.toContain('runtime-secret')
+    expect(JSON.stringify(cached)).not.toContain('/api/internal/codex-shared-model')
+  })
+
   it('also runs adapter init for non-CLI runtimes', async () => {
     const ctx = createCtx()
     prepareMock.mockResolvedValue([ctx])

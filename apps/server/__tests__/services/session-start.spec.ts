@@ -993,6 +993,49 @@ describe('startAdapterSession', () => {
     expect(currentSession.permissionMode).toBe('bypassPermissions')
   })
 
+  it('keeps a late auto-selected account in the active runtime without restarting it', async () => {
+    currentSession = { ...currentSession, account: undefined }
+    let onEvent: ((event: any) => void) | undefined
+    const kill = vi.fn()
+
+    mocks.run.mockImplementationOnce(async (_options: unknown, adapterOptions: any) => {
+      onEvent = adapterOptions.onEvent
+      return {
+        session: {
+          kill,
+          emit: vi.fn()
+        }
+      }
+    })
+
+    const runtime = await startAdapterSession('sess-1', {
+      model: 'gpt-4o',
+      adapter: 'codex',
+      permissionMode: 'default'
+    })
+    expect(runtime.config?.account).toBeUndefined()
+
+    onEvent?.({
+      type: 'init',
+      data: {
+        model: 'gpt-4o',
+        adapter: 'codex',
+        account: 'personal'
+      }
+    })
+
+    expect(currentSession.account).toBe('personal')
+    expect(runtime.config?.account).toBe('personal')
+    expect(
+      await startAdapterSession('sess-1', {
+        model: 'gpt-4o',
+        adapter: 'codex',
+        permissionMode: 'default'
+      })
+    ).toBe(runtime)
+    expect(kill).not.toHaveBeenCalled()
+  })
+
   it('marks the session as failed when adapter startup throws', async () => {
     mocks.run.mockRejectedValueOnce(new Error('adapter init failed'))
 

@@ -3,9 +3,9 @@
   --oneworks-overlay-select-item-padding: var(--oneworks-overlay-item-padding);
   --oneworks-overlay-select-panel-padding-y: 0px;
 
-  width: 100% !important;
-  min-width: 100% !important;
-  max-width: none;
+  width: max(100%, 280px) !important;
+  min-width: 280px !important;
+  max-width: min(360px, calc(100vw - 24px));
   padding: var(--oneworks-overlay-panel-padding-y, 8px) 0 !important;
 
   .rc-virtual-list-holder-inner {

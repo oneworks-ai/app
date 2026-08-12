@@ -2162,6 +2162,8 @@
     "referenceFile": "File",
     "referenceFileDescription": "Choose files from the current project tree.",
     "accountSelectPlaceholder": "Select account",
+    "accountSelectAutomatic": "Automatic",
+    "accountSelectAutomaticHint": "Use the highest-priority healthy account and keep this session on it.",
     "accountSelectCreateAccount": "Quick create {{adapter}} account",
     "accountSelectCreateTitle": "Connect {{adapter}} account",
     "accountSelectCreateWaiting": "Waiting for account connection",
@@ -4423,7 +4425,12 @@
           },
           "apiBaseUrl": {
             "label": "API Base URL",
-            "desc": "Override the model service API URL. Coding Plan and Token Plan services must use their dedicated plan base URL."
+            "desc": "Leave empty to use the common provider host. Override only for gateways, private deployments, or special endpoints. Coding Plan and Token Plan providers automatically select the plan URL matching the protocol."
+          },
+          "apiProtocol": {
+            "label": "Upstream API Protocol",
+            "desc": "Leave empty to infer from the provider and host. Select an explicit Responses, Chat Completions, Anthropic Messages, or Gemini GenerateContent override when needed.",
+            "placeholder": "Select an upstream API protocol"
           },
           "apiKey": {
             "label": "API Key",
@@ -4501,6 +4508,10 @@
         "defaultAccount": {
           "label": "Default Account",
           "desc": "Default account key selected for this adapter."
+        },
+        "shareBuiltinModels": {
+          "label": "Share Codex built-in models",
+          "desc": "Let One Works adapters such as Claude Code, Gemini, and OpenCode use the current Codex account's built-in models, while retaining official Codex CLI / app-server client access. It reuses the PM service with no host, port, protocol, or token to configure."
         },
         "items": {
           "label": "Adapter Entries",
@@ -4793,6 +4804,14 @@
       "modelServiceKind": {
         "service": "Model service",
         "collection": "Service collection"
+      },
+      "modelServiceApiProtocol": {
+        "infer": "Infer from existing configuration",
+        "openaiResponses": "OpenAI Responses",
+        "openaiChatCompletions": "OpenAI Chat Completions",
+        "anthropicMessages": "Anthropic Messages",
+        "geminiGenerateContent": "Gemini GenerateContent",
+        "geminiInteractions": "Gemini Interactions (not yet convertible)"
       },
       "modelServiceManagementEndpointKind": {
         "none": "No management API",

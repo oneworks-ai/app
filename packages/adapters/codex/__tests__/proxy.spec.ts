@@ -463,6 +463,7 @@ describe('codex proxy', () => {
         headers: {
           [CODEX_PROXY_META_HEADER_NAME]: encodeCodexProxyMeta({
             upstreamBaseUrl: `http://127.0.0.1:${upstreamAddress.port}/api/modelhub/online`,
+            upstreamProtocol: 'openai-chat-completions',
             diagnostics: {
               requestedModel: 'modelhub,gpt-5.4',
               resolvedModel: 'gpt-5.4',
@@ -517,6 +518,197 @@ describe('codex proxy', () => {
         input_modalities: ['text', 'image']
       }]
     })
+    expect(upstreamHits).toBe(0)
+  })
+
+  it('converts Responses requests and replies across Chat, Anthropic, and Gemini upstreams', async () => {
+    const captured: Array<{
+      body: Record<string, unknown>
+      headers: IncomingMessage['headers']
+      url: string
+    }> = []
+    const upstream = createServer(async (req, res) => {
+      captured.push({
+        body: JSON.parse(await readRequestBody(req)) as Record<string, unknown>,
+        headers: req.headers,
+        url: req.url ?? ''
+      })
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      if (req.url?.includes('/chat/completions')) {
+        res.end(JSON.stringify({
+          choices: [{ message: { content: 'chat reply' } }],
+          usage: { prompt_tokens: 2, completion_tokens: 3, total_tokens: 5 }
+        }))
+      } else if (req.url?.includes('/messages')) {
+        res.end(JSON.stringify({
+          content: [{ type: 'text', text: 'anthropic reply' }],
+          usage: { input_tokens: 4, output_tokens: 5 }
+        }))
+      } else {
+        res.end(JSON.stringify({
+          candidates: [{ content: { parts: [{ text: 'gemini reply' }] } }],
+          usageMetadata: { promptTokenCount: 6, candidatesTokenCount: 7, totalTokenCount: 13 }
+        }))
+      }
+    })
+    upstreamServers.push(upstream)
+    await new Promise<void>((resolve, reject) => {
+      upstream.once('error', reject)
+      upstream.listen(0, '127.0.0.1', resolve)
+    })
+    const upstreamAddress = upstream.address()
+    if (upstreamAddress == null || typeof upstreamAddress === 'string') throw new Error('Missing upstream address')
+    const localProxy = await ensureCodexProxyServer()
+    const protocols = [
+      { protocol: 'openai-chat-completions', model: 'chat-model' },
+      { protocol: 'anthropic-messages', model: 'claude-model' },
+      { protocol: 'gemini-generate-content', model: 'gemini-model' }
+    ] as const
+
+    const responses = []
+    for (const entry of protocols) {
+      const response = await fetch(`${localProxy.baseUrl}/responses`, {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer test-key',
+          'Content-Type': 'application/json',
+          [CODEX_PROXY_META_HEADER_NAME]: encodeCodexProxyMeta({
+            upstreamBaseUrl: `http://127.0.0.1:${upstreamAddress.port}/v1`,
+            upstreamProtocol: entry.protocol
+          })
+        },
+        body: JSON.stringify({ model: entry.model, input: 'hello', stream: false })
+      })
+      expect(response.status).toBe(200)
+      responses.push(await response.json() as Record<string, unknown>)
+    }
+
+    expect(captured.map(request => request.url)).toEqual([
+      '/v1/chat/completions',
+      '/v1/messages',
+      '/v1/models/gemini-model:generateContent'
+    ])
+    expect(captured[0]).toMatchObject({
+      body: { model: 'chat-model', messages: [{ role: 'user', content: 'hello' }], stream: false },
+      headers: { authorization: 'Bearer test-key' }
+    })
+    expect(captured[1]).toMatchObject({
+      body: { model: 'claude-model', messages: [{ role: 'user' }], stream: false },
+      headers: { 'anthropic-version': '2023-06-01', 'x-api-key': 'test-key' }
+    })
+    expect(captured[1].headers.authorization).toBeUndefined()
+    expect(captured[2]).toMatchObject({
+      body: { contents: [{ role: 'user', parts: [{ text: 'hello' }] }] },
+      headers: { 'x-goog-api-key': 'test-key' }
+    })
+    expect(captured[2].headers.authorization).toBeUndefined()
+    expect(responses).toMatchObject([
+      { status: 'completed', output: [{ content: [{ text: 'chat reply' }] }], usage: { total_tokens: 5 } },
+      { status: 'completed', output: [{ content: [{ text: 'anthropic reply' }] }], usage: { total_tokens: 9 } },
+      { status: 'completed', output: [{ content: [{ text: 'gemini reply' }] }], usage: { total_tokens: 13 } }
+    ])
+  })
+
+  it('preserves One Works Anthropic reasoning carriers through the real proxy request path', async () => {
+    let capturedBody: Record<string, unknown> | undefined
+    const upstream = createServer(async (req, res) => {
+      capturedBody = JSON.parse(await readRequestBody(req)) as Record<string, unknown>
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({
+        content: [{ type: 'text', text: 'continued' }],
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 4, output_tokens: 1 }
+      }))
+    })
+    upstreamServers.push(upstream)
+    await new Promise<void>((resolve, reject) => {
+      upstream.once('error', reject)
+      upstream.listen(0, '127.0.0.1', resolve)
+    })
+    const upstreamAddress = upstream.address()
+    if (upstreamAddress == null || typeof upstreamAddress === 'string') throw new Error('Missing upstream address')
+
+    const localProxy = await ensureCodexProxyServer()
+    const carrier = `owmp:v1:${
+      JSON.stringify({
+        provider: 'anthropic',
+        signature: 'signed-thinking',
+        text: 'private reasoning'
+      })
+    }`
+    const response = await fetch(`${localProxy.baseUrl}/responses`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        [CODEX_PROXY_META_HEADER_NAME]: encodeCodexProxyMeta({
+          upstreamBaseUrl: `http://127.0.0.1:${upstreamAddress.port}/v1`,
+          upstreamProtocol: 'anthropic-messages'
+        })
+      },
+      body: JSON.stringify({
+        model: 'claude-model',
+        max_output_tokens: 4096,
+        reasoning: { effort: 'medium', summary: 'none' },
+        include: ['reasoning.encrypted_content'],
+        tools: [{ type: 'function', name: 'run', parameters: { type: 'object' } }],
+        input: [
+          { type: 'reasoning', encrypted_content: carrier },
+          { type: 'function_call', call_id: 'call_1', name: 'run', arguments: '{}' },
+          { type: 'function_call_output', call_id: 'call_1', output: 'ok' }
+        ]
+      })
+    })
+
+    expect(response.status).toBe(200)
+    expect(capturedBody).toMatchObject({
+      messages: [
+        {
+          role: 'assistant',
+          content: [
+            { type: 'thinking', thinking: 'private reasoning', signature: 'signed-thinking' },
+            { type: 'tool_use', id: 'call_1', name: 'run' }
+          ]
+        },
+        { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'call_1' }] }
+      ]
+    })
+  })
+
+  it('rejects unsupported conversion semantics and oversized request bodies before forwarding', async () => {
+    let upstreamHits = 0
+    const upstream = createServer((_req, res) => {
+      upstreamHits += 1
+      res.end('{}')
+    })
+    upstreamServers.push(upstream)
+    await new Promise<void>((resolve, reject) => {
+      upstream.once('error', reject)
+      upstream.listen(0, '127.0.0.1', resolve)
+    })
+    const upstreamAddress = upstream.address()
+    if (upstreamAddress == null || typeof upstreamAddress === 'string') throw new Error('Missing upstream address')
+    const proxy = await ensureCodexProxyServer()
+    const meta = encodeCodexProxyMeta({
+      upstreamBaseUrl: `http://127.0.0.1:${upstreamAddress.port}`,
+      upstreamProtocol: 'openai-chat-completions'
+    })
+
+    const unsupported = await fetch(`${proxy.baseUrl}/responses`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', [CODEX_PROXY_META_HEADER_NAME]: meta },
+      body: JSON.stringify({ input: [], tools: [{ type: 'computer_use_preview' }] })
+    })
+    expect(unsupported.status).toBe(422)
+    await expect(unsupported.json()).resolves.toMatchObject({
+      error: { message: expect.stringContaining('non-function Responses tool') }
+    })
+
+    const oversized = await fetch(`${proxy.baseUrl}/responses`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', [CODEX_PROXY_META_HEADER_NAME]: meta },
+      body: JSON.stringify({ input: 'x'.repeat(8 * 1024 * 1024) })
+    })
+    expect(oversized.status).toBe(413)
     expect(upstreamHits).toBe(0)
   })
 
@@ -638,13 +830,14 @@ describe('codex proxy', () => {
     expect(logContent).toContain('requestedModel: "azure,gpt-5.4"')
     expect(logContent).toContain('effectiveEffort: max')
     expect(logContent).toContain('authorization: "[REDACTED]"')
-    expect(logContent).toContain('encrypted_content: "[REDACTED]"')
+    expect(logContent).toContain('inputItems: 2')
+    expect(logContent).toContain('strippedEncryptedReasoningItems: 1')
     expect(logContent).not.toContain('log-secret')
     expect(logContent).not.toContain('base-secret')
     expect(logContent).not.toContain('query-secret')
     expect(logContent).toContain('api-version: 2025-04-01-preview')
     expect(logContent).toContain('api_key: "[REDACTED]"')
-    expect(logContent).toContain('max_output_tokens: 8192')
-    expect(logContent).toContain('message: upstream failed')
+    expect(logContent).toContain('injectedMaxOutputTokens: 8192')
+    expect(logContent).not.toContain('Reply with pong.')
   })
 })
