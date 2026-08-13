@@ -15,9 +15,11 @@ const startServerMocks = vi.hoisted(() => {
     stop: vi.fn()
   }
   const channelResumeScheduler = { stop: vi.fn() }
+  const channelManager = { closeAll: vi.fn(async () => undefined) }
+  const mountRoutesOnListen = vi.fn()
   const pluginManager = {
-    dispose: vi.fn(async () => undefined),
-    load: vi.fn(async () => undefined)
+    dispose: vi.fn(async (): Promise<void> => undefined),
+    load: vi.fn(async (): Promise<void> => undefined)
   }
   return {
     acquireConfigWatchRuntime: vi.fn(async () => ({ release: vi.fn() })),
@@ -27,14 +29,16 @@ const startServerMocks = vi.hoisted(() => {
       matchedFiles: 0,
       scannedFiles: 0
     })),
+    channelManager,
     channelResumeScheduler,
     getPluginManager: vi.fn(() => pluginManager),
     handleChannelSessionEvent: vi.fn(),
-    initChannels: vi.fn(async () => undefined),
+    initChannels: vi.fn(async () => channelManager),
     initMiddlewares: vi.fn(async () => undefined),
     installAssetCreateConnectionGuard: vi.fn(),
     installWebDebugChii: vi.fn(),
-    mountRoutes: vi.fn(async () => ({ onListen: vi.fn() })),
+    mountRoutes: vi.fn(async () => ({ onListen: mountRoutesOnListen })),
+    mountRoutesOnListen,
     pluginManager,
     runtimeStoreWatcher,
     setupWebSocket: vi.fn(),
@@ -223,15 +227,42 @@ describe('startServer workspace runtime ownership', () => {
     expect(startServerMocks.removeServerInstanceStateForPid).toHaveBeenCalledWith(runtime.env, process.pid)
   })
 
-  it('starts channels, the resume scheduler, and the runtime watcher in workspace mode', async () => {
+  it('initializes channel owners before advertising the workspace server', async () => {
     const { close } = await startRuntimeForRole('workspace')
 
     expect(startServerMocks.initChannels).toHaveBeenCalledOnce()
     expect(startServerMocks.startChannelResumeScheduler).toHaveBeenCalledOnce()
+    expect(startServerMocks.mountRoutesOnListen).toHaveBeenCalledOnce()
+    expect(startServerMocks.initChannels.mock.invocationCallOrder[0]).toBeLessThan(
+      startServerMocks.mountRoutesOnListen.mock.invocationCallOrder[0]!
+    )
     expect(startServerMocks.startRuntimeStoreWatcher).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(500)
+    await vi.dynamicImportSettled()
     expect(startServerMocks.startRuntimeStoreWatcher).toHaveBeenCalledOnce()
 
     await close()
+  })
+
+  it('serializes manager plugin disposal after an in-flight preload', async () => {
+    let finishLoad: (() => void) | undefined
+    startServerMocks.pluginManager.load.mockImplementationOnce(() =>
+      new Promise<void>((resolve) => {
+        finishLoad = resolve
+      })
+    )
+    const { close } = await startRuntimeForRole('manager')
+
+    await vi.advanceTimersByTimeAsync(0)
+    expect(startServerMocks.pluginManager.load).toHaveBeenCalledOnce()
+    const closePromise = close()
+    finishLoad?.()
+    await closePromise
+    await vi.dynamicImportSettled()
+
+    expect(startServerMocks.pluginManager.dispose).toHaveBeenCalledOnce()
+    expect(startServerMocks.pluginManager.load.mock.invocationCallOrder[0]).toBeLessThan(
+      startServerMocks.pluginManager.dispose.mock.invocationCallOrder[0]!
+    )
   })
 })

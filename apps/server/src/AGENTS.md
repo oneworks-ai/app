@@ -26,7 +26,7 @@ server 运行时通过 `__ONEWORKS_PROJECT_SERVER_ROLE__` 区分两类角色：
 - `manager`：不绑定用户 workspace，面向 launcher / daemon 控制面；project home 使用固定 `manager` key，默认 Web UI 进入 `/launcher`。
 - `workspace`：绑定单个 workspace，继续承载 session、config、git、files、plugins、runtime store 等项目内能力。
 
-`manager` 不初始化 workspace channel，也不消费 workspace runtime store。频道连接、runtime watcher 与 resume scheduler 必须由同一个 `workspace` server 持有，避免 manager 抢先去重入站消息后把会话留在无人消费的 runtime 目录。
+`manager` 不初始化 workspace channel，也不消费 workspace runtime store。频道连接、runtime watcher 与 resume scheduler 必须由同一个 `workspace` server 持有，避免 manager 抢先去重入站消息后把会话留在无人消费的 runtime 目录。Workspace Channel 必须在 HTTP listen / desktop ready 之前完成初始化；外部 webhook 可能在端口公开后立即到达，不能用固定延时把它后置并让早到事件落入 503 窗口。空配置下即使该阶段看起来可删除，也要先建立可缓冲、可重试的 capability contract 再改变时序。
 
 新增 launcher 控制面能力优先落到 manager role 的 route / service；不要把 workspace server 改成可随请求动态切目录，也不要把这类 Node 逻辑继续沉到 Electron main。每个 workspace 的长期运行态仍由独立 workspace server 维护。
 

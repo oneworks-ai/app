@@ -184,6 +184,8 @@
       background: var(--oneworks-desktop-startup-surface);
     }
 
+    html[data-oneworks-desktop-startup-surface-ready='true']
+      .oneworks-desktop-startup-overlay,
     html[data-oneworks-desktop-startup-ready='true']
       .oneworks-desktop-startup-overlay {
       opacity: 0;
@@ -319,6 +321,8 @@
 
     @media (prefers-reduced-motion: reduce) {
       .oneworks-desktop-startup-overlay,
+      html[data-oneworks-desktop-startup-surface-ready='true']
+        .oneworks-desktop-startup-overlay,
       html[data-oneworks-desktop-startup-ready='true']
         .oneworks-desktop-startup-overlay {
         transition: none;

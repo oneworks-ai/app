@@ -5,6 +5,7 @@ import { BrowserWindow } from 'electron'
 import type { WebContents } from 'electron'
 
 import type { DiagnosticFailureDomain } from '@oneworks/diagnostics'
+import type { DesktopWorkspaceStartupReadiness } from '@oneworks/types'
 import {
   isStandaloneDeviceRoutePath,
   normalizeStandaloneRoutePath as normalizeKnownStandaloneRoutePath
@@ -287,7 +288,7 @@ interface WindowManagerInput {
     }
   ) => void
   onStartupStage?: (name: string) => void
-  onStartupWindowReady?: () => void
+  onStartupWindowReady?: (readiness: DesktopWorkspaceStartupReadiness) => void
   onRendererGone?: (details: { reason: string }) => void
   refreshAppMenu: () => void
   rememberWorkspaceFolder: (workspaceFolder: string) => void
@@ -648,6 +649,7 @@ export const createWindowManager = ({
 
     let clientUrl: string
     let workspaceService: Awaited<ReturnType<typeof ensureWorkspaceService>>
+    let workspaceServicePromise: ReturnType<typeof ensureWorkspaceService> | undefined
     let startupFailure: {
       code: string
       domain: DiagnosticFailureDomain
@@ -674,7 +676,10 @@ export const createWindowManager = ({
       try {
         setWorkspaceLoadingWindowBackground(windowRecord.window)
         logDesktopTiming(`workspace loadURL begin url=${workspaceUrl} elapsed=${elapsedMs(startedAt)}`)
-        await windowRecord.window.loadURL(workspaceUrl)
+        const rendererLoadPromise = windowRecord.window.loadURL(workspaceUrl)
+        workspaceServicePromise = ensureWorkspaceService(normalizedWorkspaceFolder)
+        void workspaceServicePromise.catch(() => undefined)
+        await rendererLoadPromise
         logDesktopTiming(`workspace loadURL complete elapsed=${elapsedMs(startedAt)}`)
         onStartupStage?.('renderer.loaded')
         focusWindowRecord(windowRecord)
@@ -701,7 +706,10 @@ export const createWindowManager = ({
         domain: 'server',
         retryable: true
       }
-      workspaceService = await ensureWorkspaceService(normalizedWorkspaceFolder)
+      if (workspaceServicePromise == null) {
+        throw new Error('The local One Works server did not start with the workspace renderer.')
+      }
+      workspaceService = await workspaceServicePromise
       if (workspaceService.serverUrl == null) {
         throw new Error('The local One Works server did not publish a URL.')
       }
@@ -858,16 +866,20 @@ export const createWindowManager = ({
     return windowRecord
   }
 
-  const markWorkspaceStartupWindowReady = (windowRecord: WindowRecord) => {
+  const markWorkspaceStartupWindowReady = (
+    windowRecord: WindowRecord,
+    readiness: DesktopWorkspaceStartupReadiness
+  ) => {
     if (!isWindowRecordUsable(windowRecord)) return
-    onStartupWindowReady?.()
+    onStartupWindowReady?.(readiness)
     if (windowRecord.kind !== 'workspace' && windowRecord.kind !== 'standalone') return
 
     const startupElapsed = windowRecord.workspaceStartupStartedAt == null
       ? 'unknown'
       : elapsedMs(windowRecord.workspaceStartupStartedAt)
     logDesktopTiming(
-      `workspace renderer ready workspace=${windowRecord.workspaceFolder ?? 'none'} elapsed=${startupElapsed}`
+      `workspace renderer ready readiness=${readiness} ` +
+        `workspace=${windowRecord.workspaceFolder ?? 'none'} elapsed=${startupElapsed}`
     )
     restoreWorkspaceReadyWindowBackground(windowRecord.window)
   }

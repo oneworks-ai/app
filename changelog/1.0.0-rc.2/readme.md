@@ -5,7 +5,7 @@
 
   ![Plugin removal confirmation in the marketplace](./issue-182-plugin-remove-confirmation.jpg)
 
-- Show the real Desktop Launcher earlier and keep clean-profile startup reliable by moving built-in runtime cache preparation out of the server critical path, hydrating manager data incrementally, and cleaning up owned background work on exit.
+- Show a meaningful Desktop Workspace loading surface and the real Launcher before backend readiness, while using a packaged server startup bundle, lazy-loading API, WebSocket protocol, and optional debug/runtime modules, and deferring cache and hidden Launcher work beyond the real workspace sender; the first terminal startup outcome is reported only after a real surface replaces the loading overlay, with a usable sender marked interactive and an unavailable surface marked degraded.
 - Fix model provider catalog updates failing during installation from the module update screen, while returning stable client errors for malformed or unknown update targets.
 - Prefer adapter packages from the current development workspace over stale managed caches, while preserving installed and packaged runtime cache precedence.
 - Add Channel Runtime v2 foundations for entity-bound channel links, sender-scoped commands and approvals, cross-channel identity linking, resumable conversations, availability policies, and the first-party OneWorks channel.

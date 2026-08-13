@@ -22,14 +22,12 @@ const workspaceOpeningTipKeys = [
 
 interface WorkspaceOpeningOverlayProps {
   appearance: NonNullable<OneWorksIconLoaderOptions['appearance']>
-  phase?: 'exiting' | 'visible'
   subtitle?: string
   title: string
 }
 
 export function WorkspaceOpeningOverlay({
   appearance,
-  phase = 'visible',
   subtitle,
   title
 }: WorkspaceOpeningOverlayProps) {
@@ -44,6 +42,18 @@ export function WorkspaceOpeningOverlay({
     [i18n.resolvedLanguage, t]
   )
   const currentTip = tips[tipIndex % tips.length] ?? t('desktopStartupOverlay.defaultTip')
+
+  useEffect(() => {
+    const markUiReady = () => {
+      void window.oneworksDesktop?.markDesktopUiReady?.()
+    }
+    const revealStartupSurface = window.oneworksDesktop?.revealWorkspaceStartupSurface
+    if (revealStartupSurface == null) {
+      markUiReady()
+      return
+    }
+    void revealStartupSurface().then(markUiReady, markUiReady)
+  }, [])
 
   useEffect(() => {
     const host = iconHostRef.current
@@ -88,11 +98,8 @@ export function WorkspaceOpeningOverlay({
 
   return createPortal(
     <div
-      className={[
-        'workspace-opening-overlay',
-        phase === 'exiting' ? 'is-exiting' : 'is-visible'
-      ].join(' ')}
-      data-phase={phase}
+      className='workspace-opening-overlay is-visible'
+      data-phase='visible'
     >
       <div className='workspace-opening-overlay__content'>
         <div

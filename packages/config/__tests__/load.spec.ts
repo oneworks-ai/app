@@ -1140,8 +1140,10 @@ defaultModel: package-model
 
   it('merges config patches returned by configured plugin config hooks into the final user layer', async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), 'ow-config-plugin-hook-'))
+    const previousPackageDir = process.env.__ONEWORKS_PROJECT_PACKAGE_DIR__
 
     try {
+      process.env.__ONEWORKS_PROJECT_PACKAGE_DIR__ = tempDir
       const pluginRoot = path.join(tempDir, 'node_modules', '@oneworks', 'plugin-relay')
       await mkdir(path.join(pluginRoot, 'dist'), { recursive: true })
       await writeFile(
@@ -1247,6 +1249,7 @@ module.exports = async (ctx) => {
       expect(state.mergedConfig.defaultModelService).toBe('relay-team')
       expect(state.mergedConfig.permissions?.allow).toEqual(['OneWorks', 'RelayTool'])
     } finally {
+      restoreEnvValue('__ONEWORKS_PROJECT_PACKAGE_DIR__', previousPackageDir)
       resetConfigCache()
       await rm(tempDir, { force: true, recursive: true })
     }
@@ -1254,8 +1257,10 @@ module.exports = async (ctx) => {
 
   it('applies default official plugin config hooks and respects explicit disable', async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), 'ow-config-default-plugin-hook-'))
+    const previousPackageDir = process.env.__ONEWORKS_PROJECT_PACKAGE_DIR__
 
     try {
+      process.env.__ONEWORKS_PROJECT_PACKAGE_DIR__ = tempDir
       const pluginRoot = path.join(tempDir, 'node_modules', '@oneworks', 'plugin-relay')
       await mkdir(path.join(pluginRoot, 'dist'), { recursive: true })
       await writeFile(
@@ -1369,6 +1374,7 @@ module.exports = (ctx) => {
       expect(disabledState.userConfig?.defaultModelService).toBeUndefined()
       expect(disabledState.userConfig?.modelServices?.['default-relay-hook']).toBeUndefined()
     } finally {
+      restoreEnvValue('__ONEWORKS_PROJECT_PACKAGE_DIR__', previousPackageDir)
       resetConfigCache()
       await rm(tempDir, { force: true, recursive: true })
     }

@@ -18,6 +18,7 @@ export function SenderMonacoEditor({
   value,
   placeholder,
   disabled,
+  startupUnavailable = false,
   sendShortcut,
   sendShortcutDisabled,
   onSendShortcut,
@@ -36,6 +37,7 @@ export function SenderMonacoEditor({
   value: string
   placeholder: string
   disabled: boolean
+  startupUnavailable?: boolean
   sendShortcut: string
   sendShortcutDisabled?: boolean
   onSendShortcut: () => void
@@ -85,8 +87,15 @@ export function SenderMonacoEditor({
     handleEditorMount(...args)
   }, [handleEditorMount])
 
+  const isStartupEditable = isEditorReady && !disabled
+  const isStartupUnavailable = isEditorReady && startupUnavailable
+
   return (
-    <div className='chat-input-monaco' data-oneworks-sender-editor-ready={isEditorReady ? 'true' : undefined}>
+    <div
+      className='chat-input-monaco'
+      data-oneworks-sender-editor-ready={isStartupEditable ? 'true' : undefined}
+      data-oneworks-sender-editor-unavailable={isStartupUnavailable ? 'true' : undefined}
+    >
       <SenderAutomationInput
         editorRef={editorRef}
         value={value}

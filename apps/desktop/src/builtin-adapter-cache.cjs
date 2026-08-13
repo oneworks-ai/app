@@ -29,6 +29,7 @@ const BUILTIN_RUNTIME_SERVER_PACKAGE = '@oneworks/server'
 const BUILTIN_RUNTIME_CLIENT_PACKAGE = '@oneworks/client'
 
 const MANIFEST_FILE = '.oneworks-adapter-cache.json'
+const ADAPTER_BUNDLE_MANIFEST_FILE = '.oneworks-adapter-bundle.json'
 const NPM_PACKAGE_MANIFEST_FILE = '.oneworks-package-cache.json'
 const PACKAGE_CACHE_LAYOUT_VERSION = 4
 const BUILTIN_ADAPTER_PACKAGE_ENV = '__ONEWORKS_DESKTOP_BUILTIN_ADAPTER_PACKAGES__'
@@ -114,6 +115,19 @@ const resolveAdapterPackageCacheDir = (packageName, version, homeDir = resolveRe
 const resolveAdapterPackageInstallDir = (cacheDir, packageName) => (
   path.join(cacheDir, 'node_modules', ...splitPackageName(packageName))
 )
+
+const resolveAdapterBundleCacheDir = (
+  cacheVersion,
+  bundleKey,
+  homeDir = resolveRealHomeDir(),
+  packageCacheRootDir
+) =>
+  path.join(
+    packageCacheRootDir ?? path.join(homeDir, '.oneworks', 'bootstrap'),
+    'adapter-package-bundles',
+    cacheVersion,
+    bundleKey
+  )
 
 const resolveNpmPackageCacheDir = (packageName, version, homeDir = resolveRealHomeDir(), packageCacheRootDir) => (
   path.join(
@@ -364,26 +378,32 @@ const resolvePackageStoreDir = ({ packageDir, packageInfo, targetNodeModulesDir 
   )
 )
 
-const createPackageGraphEntries = (packageName, sourcePackageDir, targetNodeModulesDir) => (
-  resolvePackageClosure(packageName, sourcePackageDir).map((item) => {
-    const packageDir = fs.realpathSync(item.packageDir)
-    const packageInfo = readPackageInfo(packageDir)
-    if (packageInfo?.name !== item.packageName) {
-      throw new Error(`Invalid package dependency ${item.packageName}.`)
-    }
-
-    return {
-      packageDir,
-      packageInfo,
-      packageName: item.packageName,
-      storePackageDir: resolvePackageStoreDir({
+const createPackageSetGraphEntries = (packages, targetNodeModulesDir) => {
+  const entriesByPackageDir = new Map()
+  for (const { packageName, sourcePackageDir } of packages) {
+    for (const item of resolvePackageClosure(packageName, sourcePackageDir)) {
+      const packageDir = fs.realpathSync(item.packageDir)
+      const packageInfo = readPackageInfo(packageDir)
+      if (packageInfo?.name !== item.packageName) {
+        throw new Error(`Invalid package dependency ${item.packageName}.`)
+      }
+      if (entriesByPackageDir.has(packageDir)) continue
+      entriesByPackageDir.set(packageDir, {
         packageDir,
         packageInfo,
-        targetNodeModulesDir
+        packageName: item.packageName,
+        storePackageDir: resolvePackageStoreDir({
+          packageDir,
+          packageInfo,
+          targetNodeModulesDir
+        })
       })
     }
-  })
-)
+  }
+  return [...entriesByPackageDir.values()].sort((left, right) => (
+    left.packageName.localeCompare(right.packageName) || left.packageDir.localeCompare(right.packageDir)
+  ))
+}
 
 const symlinkPackageDir = (targetPackageDir, sourcePackageDir) => {
   fs.rmSync(targetPackageDir, { force: true, recursive: true })
@@ -396,8 +416,8 @@ const symlinkPackageDir = (targetPackageDir, sourcePackageDir) => {
   fs.symlinkSync(linkTarget, targetPackageDir, process.platform === 'win32' ? 'junction' : 'dir')
 }
 
-const copyPackageClosure = (packageName, sourcePackageDir, targetNodeModulesDir) => {
-  const entries = createPackageGraphEntries(packageName, sourcePackageDir, targetNodeModulesDir)
+const copyPackageClosures = (packages, targetNodeModulesDir) => {
+  const entries = createPackageSetGraphEntries(packages, targetNodeModulesDir)
   const entryByPackageDir = new Map(entries.map(entry => [entry.packageDir, entry]))
 
   for (const entry of entries) {
@@ -421,14 +441,20 @@ const copyPackageClosure = (packageName, sourcePackageDir, targetNodeModulesDir)
     }
   }
 
-  const rootEntry = entryByPackageDir.get(fs.realpathSync(sourcePackageDir))
-  if (rootEntry == null) {
-    throw new Error(`Failed to materialize package graph for ${packageName}.`)
+  for (const { packageName, sourcePackageDir } of packages) {
+    const rootEntry = entryByPackageDir.get(fs.realpathSync(sourcePackageDir))
+    if (rootEntry == null) {
+      throw new Error(`Failed to materialize package graph for ${packageName}.`)
+    }
+    symlinkPackageDir(
+      path.join(targetNodeModulesDir, ...splitPackageName(packageName)),
+      rootEntry.storePackageDir
+    )
   }
-  symlinkPackageDir(
-    path.join(targetNodeModulesDir, ...splitPackageName(packageName)),
-    rootEntry.storePackageDir
-  )
+}
+
+const copyPackageClosure = (packageName, sourcePackageDir, targetNodeModulesDir) => {
+  copyPackageClosures([{ packageName, sourcePackageDir }], targetNodeModulesDir)
 }
 
 const isCurrentCachedPackage = ({ cacheDir, cacheVersion, integrity, packageName, version }) => {
@@ -513,6 +539,180 @@ const isCurrentCachedNpmPackage = ({ cacheDir, cacheVersion, integrity, packageN
   } catch {
     return false
   }
+}
+
+const buildTrustedAdapterBundleDescriptor = ({
+  arch,
+  cacheVersion,
+  packages,
+  platform,
+  sourceCacheVersion
+}) => {
+  const packageIdentities = packages
+    .map(({ packageName, sourcePackageDir, version }) => ({
+      name: packageName,
+      sourcePackageDir: fs.realpathSync(sourcePackageDir),
+      version
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name))
+  const integrity = `trusted-${
+    hashString(JSON.stringify({
+      arch,
+      cacheVersion,
+      packages: packageIdentities,
+      platform,
+      sourceCacheVersion: sourceCacheVersion ?? null
+    }))
+  }`
+  return {
+    bundleKey: integrity.slice('trusted-'.length, 'trusted-'.length + 32),
+    manifest: {
+      arch,
+      cacheVersion,
+      integrity,
+      layoutVersion: PACKAGE_CACHE_LAYOUT_VERSION,
+      packages: packageIdentities.map(({ name, version }) => ({ name, version })),
+      platform,
+      source: 'builtin',
+      ...(sourceCacheVersion == null ? {} : { sourceCacheVersion })
+    }
+  }
+}
+
+const isCurrentTrustedAdapterBundle = ({ bundleDir, manifest: expectedManifest }) => {
+  const manifest = readManifest(bundleDir, ADAPTER_BUNDLE_MANIFEST_FILE)
+  if (
+    manifest?.arch !== expectedManifest.arch ||
+    manifest?.cacheVersion !== expectedManifest.cacheVersion ||
+    manifest?.integrity !== expectedManifest.integrity ||
+    manifest?.layoutVersion !== expectedManifest.layoutVersion ||
+    manifest?.platform !== expectedManifest.platform ||
+    manifest?.source !== expectedManifest.source ||
+    manifest?.sourceCacheVersion !== expectedManifest.sourceCacheVersion ||
+    JSON.stringify(manifest?.packages) !== JSON.stringify(expectedManifest.packages)
+  ) {
+    return false
+  }
+  return expectedManifest.packages.every(({ name, version }) => {
+    const packageInfo = readPackageInfo(resolveAdapterPackageInstallDir(bundleDir, name))
+    return packageInfo?.name === name && packageInfo.version === version
+  })
+}
+
+const materializeTrustedBuiltinAdapterPackages = ({
+  arch,
+  cacheVersion,
+  homeDir,
+  packageCacheRootDir,
+  packages,
+  platform,
+  sourceCacheVersion
+}) => {
+  const cacheEntries = packages.map(({ packageName, sourcePackageDir, version }) => {
+    const cacheDir = resolveAdapterPackageCacheDir(packageName, cacheVersion, homeDir, packageCacheRootDir)
+    const current = isCurrentCachedPackageManifest({
+      arch,
+      cacheDir,
+      cacheVersion,
+      packageName,
+      platform,
+      sourceCacheVersion,
+      version
+    })
+    return { cacheDir, current, packageName, sourcePackageDir, version }
+  })
+  if (cacheEntries.every(entry => entry.current)) {
+    return cacheEntries.map(({ cacheDir, packageName, version }) => ({
+      cacheVersion,
+      cacheDir,
+      packageDir: resolveAdapterPackageInstallDir(cacheDir, packageName),
+      seeded: false,
+      version
+    }))
+  }
+
+  const descriptor = buildTrustedAdapterBundleDescriptor({
+    arch,
+    cacheVersion,
+    packages,
+    platform,
+    sourceCacheVersion
+  })
+  const bundleDir = resolveAdapterBundleCacheDir(
+    cacheVersion,
+    descriptor.bundleKey,
+    homeDir,
+    packageCacheRootDir
+  )
+  if (!isCurrentTrustedAdapterBundle({ bundleDir, manifest: descriptor.manifest })) {
+    const stagingDir = `${bundleDir}.tmp-${process.pid}-${Date.now()}`
+    fs.rmSync(stagingDir, { recursive: true, force: true })
+    fs.mkdirSync(stagingDir, { recursive: true })
+    try {
+      copyPackageClosures(packages, path.join(stagingDir, 'node_modules'))
+      writeManifest(stagingDir, {
+        ...descriptor.manifest,
+        createdAt: new Date().toISOString()
+      }, ADAPTER_BUNDLE_MANIFEST_FILE)
+      fs.mkdirSync(path.dirname(bundleDir), { recursive: true })
+      fs.rmSync(bundleDir, { recursive: true, force: true })
+      fs.renameSync(stagingDir, bundleDir)
+    } catch (error) {
+      fs.rmSync(stagingDir, { recursive: true, force: true })
+      throw error
+    }
+  }
+
+  return cacheEntries.map(({ cacheDir, current, packageName, version }) => {
+    if (current) {
+      return {
+        cacheVersion,
+        cacheDir,
+        packageDir: resolveAdapterPackageInstallDir(cacheDir, packageName),
+        seeded: false,
+        version
+      }
+    }
+
+    const stagingDir = `${cacheDir}.tmp-${process.pid}-${Date.now()}`
+    fs.rmSync(stagingDir, { recursive: true, force: true })
+    fs.mkdirSync(stagingDir, { recursive: true })
+    try {
+      symlinkPackageDir(path.join(stagingDir, 'node_modules'), path.join(bundleDir, 'node_modules'))
+      writeManifest(stagingDir, {
+        arch,
+        cacheVersion,
+        createdAt: new Date().toISOString(),
+        integrity: resolveTrustedPackageIntegrity({
+          arch,
+          cacheVersion,
+          packageName,
+          platform,
+          sourceCacheVersion,
+          version
+        }),
+        layoutVersion: PACKAGE_CACHE_LAYOUT_VERSION,
+        name: packageName,
+        platform,
+        source: 'builtin',
+        ...(sourceCacheVersion == null ? {} : { sourceCacheVersion }),
+        version
+      })
+      fs.mkdirSync(path.dirname(cacheDir), { recursive: true })
+      fs.rmSync(cacheDir, { recursive: true, force: true })
+      fs.renameSync(stagingDir, cacheDir)
+    } catch (error) {
+      fs.rmSync(stagingDir, { recursive: true, force: true })
+      throw error
+    }
+    return {
+      cacheVersion,
+      cacheDir,
+      packageDir: resolveAdapterPackageInstallDir(cacheDir, packageName),
+      seeded: true,
+      version
+    }
+  })
 }
 
 const materializeBuiltinAdapterPackage = ({
@@ -954,19 +1154,37 @@ const ensureBuiltinAdapterPackageCache = (options = {}) => {
     sourceCacheVersion,
     trustManifest: options.trustManifest
   })
-  const seededPackages = packages.map((packageName) =>
-    materializeBuiltinAdapterPackage({
-      arch: options.arch,
+  const packageSources = packages.map((packageName) => {
+    const sourcePackageDir = options.resolvePackageDir?.(packageName) ?? resolveBuiltinAdapterPackageDir(packageName)
+    const packageInfo = readPackageInfo(sourcePackageDir)
+    if (packageInfo?.name !== packageName || packageInfo.version == null) {
+      throw new Error(`Invalid built-in adapter package: ${packageName}`)
+    }
+    return { packageName, sourcePackageDir, version: packageInfo.version }
+  })
+  const seededPackages = trustManifest && cacheVersion != null
+    ? materializeTrustedBuiltinAdapterPackages({
+      arch: options.arch ?? process.arch,
       cacheVersion,
       homeDir,
       packageCacheRootDir,
-      packageName,
-      platform: options.platform,
-      sourceCacheVersion: trustManifest ? sourceCacheVersion : undefined,
-      sourcePackageDir: options.resolvePackageDir?.(packageName) ?? resolveBuiltinAdapterPackageDir(packageName),
-      trustManifest
+      packages: packageSources,
+      platform: options.platform ?? process.platform,
+      sourceCacheVersion
     })
-  )
+    : packageSources.map(({ packageName, sourcePackageDir }) =>
+      materializeBuiltinAdapterPackage({
+        arch: options.arch,
+        cacheVersion,
+        homeDir,
+        packageCacheRootDir,
+        packageName,
+        platform: options.platform,
+        sourceCacheVersion: trustManifest ? sourceCacheVersion : undefined,
+        sourcePackageDir,
+        trustManifest
+      })
+    )
   const packageMetadata = Object.fromEntries(
     packages.map((packageName, index) => {
       const seededPackage = seededPackages[index]

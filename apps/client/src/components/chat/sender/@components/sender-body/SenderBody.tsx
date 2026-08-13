@@ -165,6 +165,7 @@ export function SenderBody({
         input={input}
         placeholder={placeholder || t('chat.inputPlaceholder')}
         disabled={(!isInlineEdit && modelUnavailable) || (isInlineEdit && isBusy)}
+        startupUnavailable={!isInlineEdit && modelUnavailable === true}
         secondarySendShortcut={secondarySendShortcut}
         onSecondarySendShortcut={onSecondarySendShortcut}
         minVisibleLineCount={minVisibleLineCount}

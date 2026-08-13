@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- config-hook resolution and ordered config application form one pipeline. */
 import { createRequire } from 'node:module'
 import process from 'node:process'
 import { pathToFileURL } from 'node:url'
@@ -102,33 +103,41 @@ const resolvePluginConfigHookInstances = async (
   const instances: Awaited<ReturnType<typeof resolveConfiguredPluginInstances>> = []
   const resolvedIdentities: string[] = []
 
-  for (const plugin of pluginConfigs) {
-    try {
-      const resolvedInstances = await resolveConfiguredPluginInstances({
-        cwd,
-        plugins: [plugin],
-        autoInstallManaged: false,
-        includeDisabled: true,
-        preferBundledOfficialPlugins: true
-      })
-      for (const instance of resolvedInstances) {
-        const identity = instance.packageId == null
-          ? `directory:${instance.rootDir}`
-          : `package:${instance.packageId}`
-        for (let index = resolvedIdentities.length - 1; index >= 0; index--) {
-          if (resolvedIdentities[index] !== identity) continue
-          resolvedIdentities.splice(index, 1)
-          instances.splice(index, 1)
+  const resolvedPluginGroups = await Promise.all(
+    pluginConfigs.map(async plugin => {
+      try {
+        return {
+          plugin,
+          resolvedInstances: await resolveConfiguredPluginInstances({
+            cwd,
+            plugins: [plugin],
+            autoInstallManaged: false,
+            includeDisabled: true,
+            preferBundledOfficialPlugins: true
+          })
         }
-        if (plugin.enabled === false) continue
-        resolvedIdentities.push(identity)
-        instances.push(instance)
+      } catch (error) {
+        if (!isOptionalConfigHookResolutionMiss(error)) {
+          console.warn(`Failed to resolve config hook for plugin ${plugin.id}:`, error)
+        }
+        return { plugin, resolvedInstances: [] }
       }
-    } catch (error) {
-      if (isOptionalConfigHookResolutionMiss(error)) {
-        continue
+    })
+  )
+
+  for (const { plugin, resolvedInstances } of resolvedPluginGroups) {
+    for (const instance of resolvedInstances) {
+      const identity = instance.packageId == null
+        ? `directory:${instance.rootDir}`
+        : `package:${instance.packageId}`
+      for (let index = resolvedIdentities.length - 1; index >= 0; index--) {
+        if (resolvedIdentities[index] !== identity) continue
+        resolvedIdentities.splice(index, 1)
+        instances.splice(index, 1)
       }
-      console.warn(`Failed to resolve config hook for plugin ${plugin.id}:`, error)
+      if (plugin.enabled === false) continue
+      resolvedIdentities.push(identity)
+      instances.push(instance)
     }
   }
 

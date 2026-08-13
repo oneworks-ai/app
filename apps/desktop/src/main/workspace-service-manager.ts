@@ -141,8 +141,10 @@ export const resolveDirectSourceLoaderEnv = (
   if (executable !== 'node' && path.basename(executable) !== 'node') return {}
 
   const registerPreloadPath = path.join(repoRoot, 'packages/register/preload.js')
+  const registerEsmPath = path.join(repoRoot, 'packages/register/esm-register.mjs')
   const nodeOptions = [
     '--conditions=__oneworks__',
+    `--import=${quoteNodeOptionValue(registerEsmPath)}`,
     `--require=${quoteNodeOptionValue(registerPreloadPath)}`
   ].filter(value => value.trim() !== '').join(' ').trim()
 
@@ -334,6 +336,7 @@ export const createWorkspaceServiceManager = ({
           __ONEWORKS_PROJECT_CLIENT_DIST_PATH__: clientDistPath ?? '',
           __ONEWORKS_PROJECT_CLIENT_MODE__: isDev ? 'none' : 'desktop',
           __ONEWORKS_PROJECT_CLIENT_PACKAGE_DIR__: clientPackageDir ?? '',
+          __ONEWORKS_PROJECT_CLI_PREFER_DIST_ENTRY__: isDev ? 'false' : 'true',
           __ONEWORKS_PROJECT_SERVER_DATA_DIR__: workspaceServiceDataPaths.dataDir,
           __ONEWORKS_PROJECT_SERVER_HOST__: SERVER_HOST,
           __ONEWORKS_PROJECT_SERVER_LOG_DIR__: workspaceServiceDataPaths.logDir,

@@ -115,12 +115,8 @@ const WORKSPACE_DRAWER_MIN_WIDTH = 220
 const WORKSPACE_DRAWER_MIN_CONTENT_WIDTH = 300
 const WORKSPACE_DRAWER_MAX_WIDTH_RATIO = 0.7
 const WORKSPACE_DRAWER_FILE_TAB_PREFIX = 'workspace-drawer:file:'
-const CHAT_ROUTE_STARTUP_READY_SELECTOR = [
-  '.chat-container.ready',
-  '.chat-container.ready .chat-messages.ready',
-  '.chat-container.ready .chat-settings-panel',
-  '.chat-container.ready .chat-timeline-view'
-].join(',')
+const CHAT_ROUTE_STARTUP_READY_SELECTOR = "[data-oneworks-sender-editor-ready='true']"
+const CHAT_ROUTE_STARTUP_DEGRADED_SELECTOR = "[data-oneworks-sender-editor-unavailable='true']"
 
 const isChatRouteDebugEnabled = () => {
   try {
@@ -1028,6 +1024,10 @@ export function ChatRouteShell({
     bottomPanel.shouldShowBottomPanel
   )
   useDesktopWorkspaceStartupReady(isReady, { visibleSelector: CHAT_ROUTE_STARTUP_READY_SELECTOR })
+  useDesktopWorkspaceStartupReady(isReady, {
+    readiness: 'degraded',
+    visibleSelector: CHAT_ROUTE_STARTUP_DEGRADED_SELECTOR
+  })
   const handleLocateWorkspacePath = useCallback((path: string) => {
     const normalizedPath = path.trim()
     if (normalizedPath === '') return

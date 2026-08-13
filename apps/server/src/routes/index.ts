@@ -6,29 +6,7 @@ import type { loadEnv } from '@oneworks/core'
 
 import { logger } from '#~/utils/logger.js'
 
-import { adaptersRouter } from './adapters'
-import { agentRoomsRouter } from './agent-rooms'
-import { aiRouter } from './ai'
-import { authRouter } from './auth'
-import { automationRouter } from './automation'
-import { benchmarkRouter } from './benchmark'
-import { channelActionsRouter } from './channel-actions'
-import { channelSendRouter } from './channel-send'
-import { channelWebhooksRouter } from './channel-webhooks'
-import { codexSharedModelRouter } from './codex-shared-model'
-import { configRouter } from './config'
-import { diagnosticsRouter } from './diagnostics'
-import { eventsRouter } from './events'
-import { gitRouter } from './git'
-import { interactRouter } from './interact'
-import { launcherRouter } from './launcher'
-import { mobileDebugRouter } from './mobile-debug'
-import { modelProvidersRouter, modelServicesRouter } from './model-providers'
-import { moduleUpdatesRouter } from './module-updates'
-import { pluginsRouter } from './plugins'
-import { runtimeBrokerRouter } from './runtime-broker'
-import { sessionsRouter } from './sessions'
-import { skillHubRouter } from './skill-hub'
+import { mountLazyRouter } from './lazy-router'
 import {
   DEFAULT_BASE_PLACEHOLDER,
   createRuntimeScript,
@@ -37,12 +15,6 @@ import {
   trimTrailingSlash
 } from './static-client'
 import { uiRouter } from './ui'
-import { usageRouter } from './usage'
-import { voiceRouter } from './voice'
-import { webDebugRouter } from './web-debug'
-import { webpageRouter } from './webpage'
-import { workspaceRouter } from './workspace'
-import { worktreeEnvironmentsRouter } from './worktree-environments'
 
 export interface MountRoutesOptions {
   logClientMount?: boolean
@@ -56,38 +28,72 @@ export const mountRoutes = async (
 ) => {
   const router = new Router()
   const clientBaseRedirects = new Map<string, string>()
-  const routers = [
-    { prefix: '/api/sessions/:sessionId/git', router: gitRouter() },
-    { prefix: '/api/sessions', router: sessionsRouter() },
-    { prefix: '/api/agent-rooms', router: agentRoomsRouter() },
-    { prefix: '/api/adapters', router: adaptersRouter() },
-    { prefix: '/api/interact', router: interactRouter() },
-    { prefix: '/api/launcher', router: launcherRouter(env) },
-    { prefix: '/api/module-updates', router: moduleUpdatesRouter() },
-    { prefix: '/api/model-providers', router: modelProvidersRouter() },
-    { prefix: '/api/model-services', router: modelServicesRouter() },
-    { prefix: '/api/mobile-debug', router: mobileDebugRouter() },
-    { prefix: '/api/plugins', router: pluginsRouter() },
-    { prefix: '/api/internal/runtime-broker', router: runtimeBrokerRouter(env) },
-    { prefix: '/api/internal/codex-shared-model', router: codexSharedModelRouter(env) },
-    { prefix: '/api/auth', router: authRouter(env) },
-    { prefix: '/api/ai', router: aiRouter() },
-    { prefix: '/api/benchmark', router: benchmarkRouter() },
-    { prefix: '/api/skill-hub', router: skillHubRouter() },
-    { prefix: '/channels', router: channelWebhooksRouter() },
-    { prefix: '/channels/actions', router: channelActionsRouter() },
-    { prefix: '/api/channels', router: channelSendRouter() },
-    { prefix: '/api/automation', router: automationRouter() },
-    { prefix: '/api/config', router: configRouter() },
-    { prefix: '/api/diagnostics', router: diagnosticsRouter() },
-    { prefix: '/api/events', router: eventsRouter() },
-    { prefix: '/api/usage', router: usageRouter() },
-    { prefix: '/api/voice', router: voiceRouter() },
-    { prefix: '/api/web-debug', router: webDebugRouter() },
-    { prefix: '/api/webpage', router: webpageRouter() },
-    { prefix: '/api/worktree-environments', router: worktreeEnvironmentsRouter() },
-    { prefix: '/api/workspace', router: workspaceRouter() }
-  ]
+  mountLazyRouter(router, '/api/sessions/:sessionId/git', async () => (await import('./git.js')).gitRouter())
+  mountLazyRouter(router, '/api/sessions', async () => (await import('./sessions.js')).sessionsRouter())
+  mountLazyRouter(router, '/api/agent-rooms', async () => (await import('./agent-rooms.js')).agentRoomsRouter())
+  mountLazyRouter(router, '/api/adapters', async () => (await import('./adapters.js')).adaptersRouter())
+  mountLazyRouter(router, '/api/interact', async () => (await import('./interact.js')).interactRouter())
+  mountLazyRouter(router, '/api/launcher', async () => (await import('./launcher.js')).launcherRouter(env))
+  mountLazyRouter(
+    router,
+    '/api/module-updates',
+    async () => (await import('./module-updates.js')).moduleUpdatesRouter()
+  )
+  mountLazyRouter(
+    router,
+    '/api/model-providers',
+    async () => (await import('./model-providers.js')).modelProvidersRouter()
+  )
+  mountLazyRouter(
+    router,
+    '/api/model-services',
+    async () => (await import('./model-providers.js')).modelServicesRouter()
+  )
+  mountLazyRouter(
+    router,
+    '/api/mobile-debug',
+    async () => (await import('./mobile-debug.js')).mobileDebugRouter()
+  )
+  mountLazyRouter(router, '/api/plugins', async () => (await import('./plugins.js')).pluginsRouter())
+  mountLazyRouter(
+    router,
+    '/api/internal/runtime-broker',
+    async () => (await import('./runtime-broker.js')).runtimeBrokerRouter(env)
+  )
+  mountLazyRouter(
+    router,
+    '/api/internal/codex-shared-model',
+    async () => (await import('./codex-shared-model.js')).codexSharedModelRouter(env)
+  )
+  mountLazyRouter(router, '/api/auth', async () => (await import('./auth.js')).authRouter(env))
+  mountLazyRouter(router, '/api/ai', async () => (await import('./ai.js')).aiRouter())
+  mountLazyRouter(router, '/api/benchmark', async () => (await import('./benchmark.js')).benchmarkRouter())
+  mountLazyRouter(router, '/api/skill-hub', async () => (await import('./skill-hub.js')).skillHubRouter())
+  mountLazyRouter(
+    router,
+    '/channels/actions',
+    async () => (await import('./channel-actions.js')).channelActionsRouter()
+  )
+  mountLazyRouter(
+    router,
+    '/channels',
+    async () => (await import('./channel-webhooks.js')).channelWebhooksRouter()
+  )
+  mountLazyRouter(router, '/api/channels', async () => (await import('./channel-send.js')).channelSendRouter())
+  mountLazyRouter(router, '/api/automation', async () => (await import('./automation.js')).automationRouter())
+  mountLazyRouter(router, '/api/config', async () => (await import('./config.js')).configRouter())
+  mountLazyRouter(router, '/api/diagnostics', async () => (await import('./diagnostics.js')).diagnosticsRouter())
+  mountLazyRouter(router, '/api/events', async () => (await import('./events.js')).eventsRouter())
+  mountLazyRouter(router, '/api/usage', async () => (await import('./usage.js')).usageRouter())
+  mountLazyRouter(router, '/api/voice', async () => (await import('./voice.js')).voiceRouter())
+  mountLazyRouter(router, '/api/web-debug', async () => (await import('./web-debug.js')).webDebugRouter())
+  mountLazyRouter(router, '/api/webpage', async () => (await import('./webpage.js')).webpageRouter())
+  mountLazyRouter(
+    router,
+    '/api/worktree-environments',
+    async () => (await import('./worktree-environments.js')).worktreeEnvironmentsRouter()
+  )
+  mountLazyRouter(router, '/api/workspace', async () => (await import('./workspace.js')).workspaceRouter())
 
   const clientMode = env.__ONEWORKS_PROJECT_CLIENT_MODE__
   const clientBase = normalizeClientBase(env.__ONEWORKS_PROJECT_CLIENT_BASE__)
@@ -115,22 +121,13 @@ export const mountRoutes = async (
         basePlaceholder: DEFAULT_BASE_PLACEHOLDER
       })
 
-    routers.push({
-      prefix: mountedClientBase,
-      router: createStaticUiRouter()
-    })
+    const staticUiRouter = createStaticUiRouter()
+    router.use(mountedClientBase, staticUiRouter.routes(), staticUiRouter.allowedMethods())
 
     if (clientBase !== DEFAULT_BASE_PLACEHOLDER) {
-      routers.push({
-        prefix: DEFAULT_BASE_PLACEHOLDER,
-        router: createStaticUiRouter()
-      })
+      const placeholderRouter = createStaticUiRouter()
+      router.use(DEFAULT_BASE_PLACEHOLDER, placeholderRouter.routes(), placeholderRouter.allowedMethods())
     }
-  }
-
-  for (const { prefix, router: childRouter } of routers) {
-    router
-      .use(prefix, childRouter.routes(), childRouter.allowedMethods())
   }
 
   app

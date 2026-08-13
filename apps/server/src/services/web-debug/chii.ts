@@ -408,7 +408,7 @@ const attachChiiWebSocketKeepAlive = (ws: ChiiWebSocketConnection) => {
   ws.once('error', cleanup)
 }
 
-const installChiiHttpMiddleware = (app: Koa, chiiWebSocketServer: ChiiWebSocketRuntime) => {
+const createChiiHttpMiddleware = (chiiWebSocketServer: ChiiWebSocketRuntime): Koa.Middleware => {
   const routerFactory = loadChiiRouter()
   const routerByDomain = new Map<string, Koa.Middleware>()
   const pathWithoutTrailingSlash = getPathWithoutTrailingSlash(WEB_DEBUG_CHII_BASE_PATH)
@@ -423,7 +423,7 @@ const installChiiHttpMiddleware = (app: Koa, chiiWebSocketServer: ChiiWebSocketR
     return router
   }
 
-  app.use(async (ctx, next) => {
+  return async (ctx, next) => {
     if (ctx.path === pathWithoutTrailingSlash) {
       ctx.redirect(WEB_DEBUG_CHII_BASE_PATH)
       return
@@ -478,11 +478,56 @@ const installChiiHttpMiddleware = (app: Koa, chiiWebSocketServer: ChiiWebSocketR
 
     const router = getRouter(ctx.host, basePath)
     await router(ctx, next)
+  }
+}
+
+const handleChiiUpgrade = (
+  chiiWebSocketServer: ChiiWebSocketRuntime,
+  request: IncomingMessage,
+  socket: Duplex,
+  head: Buffer,
+  upgradeRequest: ChiiUpgradeRequest
+) => {
+  const { _wss: wss } = chiiWebSocketServer
+  wss.handleUpgrade(request, socket, head, (ws) => {
+    const chiiWs = ws as ChiiWebSocketConnection
+    attachChiiConnectionMetadata(chiiWs, upgradeRequest)
+    attachChiiWebSocketKeepAlive(chiiWs)
+    attachChiiProtocolDebugLogging(chiiWs, upgradeRequest)
+    wss.emit('connection', chiiWs, request)
   })
 }
 
-const installChiiUpgradeMiddleware = (server: Server, chiiWebSocketServer: ChiiWebSocketRuntime) => {
-  const { _wss: wss } = chiiWebSocketServer
+const createChiiRuntime = () => {
+  const ChiiWebSocketServer = loadChiiWebSocketServer()
+  const chiiWebSocketServer = new ChiiWebSocketServer()
+  protectChiiTargetsFromStaleClose(chiiWebSocketServer.channelManager)
+  return {
+    chiiWebSocketServer,
+    httpMiddleware: createChiiHttpMiddleware(chiiWebSocketServer)
+  }
+}
+
+type ChiiRuntime = ReturnType<typeof createChiiRuntime>
+
+export const installWebDebugChii = ({ app, server }: { app: Koa; server: Server }) => {
+  if (installedServers.has(server)) return
+
+  let runtime: ChiiRuntime | undefined
+  const getRuntime = () => {
+    runtime ??= createChiiRuntime()
+    return runtime
+  }
+  const rootWithoutTrailingSlash = getPathWithoutTrailingSlash(WEB_DEBUG_CHII_BASE_PATH)
+
+  app.use(async (ctx, next) => {
+    if (ctx.path !== rootWithoutTrailingSlash && resolveChiiBasePath(ctx.path) == null) {
+      await next()
+      return
+    }
+
+    await getRuntime().httpMiddleware(ctx, next)
+  })
 
   server.on('upgrade', (request: IncomingMessage, socket: Duplex, head: Buffer) => {
     if (isHttpUpgradeSocketHandled(socket)) return
@@ -493,35 +538,22 @@ const installChiiUpgradeMiddleware = (server: Server, chiiWebSocketServer: ChiiW
       return
     }
 
+    markHttpUpgradeSocketHandled(socket)
     if (upgradeRequest === 'invalid') {
-      markHttpUpgradeSocketHandled(socket)
       socket.destroy()
       return
     }
 
-    markHttpUpgradeSocketHandled(socket)
-    wss.handleUpgrade(request, socket, head, (ws) => {
-      const chiiWs = ws as ChiiWebSocketConnection
-      attachChiiConnectionMetadata(chiiWs, upgradeRequest)
-      attachChiiWebSocketKeepAlive(chiiWs)
-      attachChiiProtocolDebugLogging(chiiWs, upgradeRequest)
-      wss.emit('connection', chiiWs, request)
-    })
+    try {
+      handleChiiUpgrade(getRuntime().chiiWebSocketServer, request, socket, head, upgradeRequest)
+    } catch {
+      socket.destroy()
+    }
   })
 
   server.once('close', () => {
-    wss.close()
+    runtime?.chiiWebSocketServer._wss.close()
     installedServers.delete(server)
   })
-}
-
-export const installWebDebugChii = ({ app, server }: { app: Koa; server: Server }) => {
-  if (installedServers.has(server)) return
-
-  const ChiiWebSocketServer = loadChiiWebSocketServer()
-  const chiiWebSocketServer = new ChiiWebSocketServer()
-  protectChiiTargetsFromStaleClose(chiiWebSocketServer.channelManager)
-  installChiiHttpMiddleware(app, chiiWebSocketServer)
-  installChiiUpgradeMiddleware(server, chiiWebSocketServer)
   installedServers.add(server)
 }

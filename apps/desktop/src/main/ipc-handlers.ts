@@ -4,6 +4,9 @@ import process from 'node:process'
 import { clipboard, ipcMain, nativeImage, session, shell } from 'electron'
 import type { WebContents } from 'electron'
 
+import { normalizeDesktopWorkspaceStartupReadiness } from '@oneworks/types'
+import type { DesktopWorkspaceStartupReadiness } from '@oneworks/types'
+
 import {
   interactionPanelWebviewPartition,
   listBrowserDownloads,
@@ -250,7 +253,10 @@ interface IpcHandlersInput {
   listWorkspaceFileOpeners: (workspaceFolder: string) => Promise<unknown>
   markDesktopCoreReady: (windowRecord: WindowRecord) => void
   markDesktopUiReady: (windowRecord: WindowRecord) => void
-  markWorkspaceStartupWindowReady: (windowRecord: WindowRecord) => void
+  markWorkspaceStartupWindowReady: (
+    windowRecord: WindowRecord,
+    readiness: DesktopWorkspaceStartupReadiness
+  ) => void
   openKeyboardShortcutsSettings: () => Promise<void>
   openCurrentWorkspaceResource: (windowRecord: WindowRecord, target: WorkspaceResourceTarget) => Promise<WindowRecord>
   openCurrentWorkspaceFileInExternalOpener: (
@@ -396,11 +402,11 @@ export const registerIpcHandlers = ({
     markDesktopCoreReady(windowRecord)
   })
 
-  ipcMain.handle(WORKSPACE_STARTUP_READY_CHANNEL, (event) => {
+  ipcMain.handle(WORKSPACE_STARTUP_READY_CHANNEL, (event, input: unknown) => {
     const windowRecord = findWindowRecordForWebContents(event.sender)
     if (windowRecord == null || !isWindowRecordUsable(windowRecord)) return
 
-    markWorkspaceStartupWindowReady(windowRecord)
+    markWorkspaceStartupWindowReady(windowRecord, normalizeDesktopWorkspaceStartupReadiness(input))
   })
 
   ipcMain.handle(WORKSPACE_CONNECTION_CHANNEL, async (event) => {

@@ -101,7 +101,8 @@
   - `electron.vite.config.ts`
   - `src/server-child.cjs`
   - `scripts/smoke-packaged-server.cjs`
-- 改桌面启动阶段、首屏就绪条件或启动失败兜底时，至少同时检查 `src/main/startup-diagnostics.ts`、`src/main/app-runtime.ts`、`src/main/window-manager.ts`、`apps/client/src/desktop/use-desktop-ui-ready.ts` 和各 surface 的实际挂载点；不要在 provider commit 或 `Suspense fallback={null}` 阶段提前上报 UI ready，也不要把后台预加载失败误算成用户可见的启动失败。
+- 改桌面启动阶段、首屏就绪条件或启动失败兜底时，至少同时检查 `src/main/startup-diagnostics.ts`、`src/main/app-runtime.ts`、`src/main/window-manager.ts`、`src/preload/index.ts`、`apps/client/src/desktop/use-desktop-ui-ready.ts` 和各 surface 的实际挂载点；不要在 provider commit 或 `Suspense fallback={null}` 阶段提前上报 UI ready，也不要把后台预加载失败误算成用户可见的启动失败。`revealWorkspaceStartupSurface` 只能在可见、可理解的 React 启动面挂载后移除静态 preload overlay；只有 `markWorkspaceStartupReady` 可以通过 IPC 完成 workspace 启动诊断，两个信号不得合并。
+- 打包桌面端时，`build:server` 会先生成 `apps/server/dist/__INTERNAL__home/index.mjs` 与按需加载的 ESM chunks；打包态 workspace server 通过显式环境变量优先使用这份 bundle，缺失时回退源码。bundle 只内联 `@oneworks/*` 启动图，server 自己声明的第三方运行时依赖继续由包目录解析；不要把 adapter / plugin 的运行时发现路径静态化。ESM banner 中的 `__dirname` 属于 entry / chunk，不再代表被内联包的原始目录；package-owned 资源必须从 `src/server-child.cjs` 注入的稳定 app root 或明确的 package root 解析。`scripts/smoke-packaged-server.cjs` 必须强制走 dist entry，并在启动前断言 entry/chunks 及运行时资产都存在；源码 fallback smoke 不能替代打包契约验证。
 - 改窗口创建、标题栏、`window.open`、多窗口或右键新窗口时，至少同时检查：
   - `src/main/browser-window-factory.ts`
   - `src/main/window-manager.ts`
@@ -117,7 +118,7 @@
 - 改菜单或快捷键时，`src/main/menu.ts` 与 `apps/client/src/desktop/view-shortcuts.ts` 要一起看；菜单项、tooltip 展示和 Monaco 内快捷键转发要保持同一套 action 名称。
 - 改 launcher 全局快捷键时，还要检查 `src/main/app-runtime.ts` 的 `globalShortcut` 注册 / 注销逻辑、`src/main/desktop-state-store.ts` 的持久化，以及 preload 注入给前端的 `getDesktopSettings` / `updateDesktopSettings`，避免 app 退出后快捷键残留或普通 Web 前端误展示桌面配置。
 - 改打包资源布局时，`scripts/package.cjs`、`scripts/make.cjs`、`scripts/sync-icons.cjs`、`scripts/mac-*.cjs`、`electron-builder.yml` 与 smoke test 要一起看；不要只改其中一个入口。
-- 改本地 dev 打包、workspace server 启动或 runtime package cache 时，必须同时检查 `scripts/package.cjs`、`src/builtin-adapter-cache.cjs`、`src/main/workspace-runtime-cache-manager.ts`、`src/main/workspace-runtime-cache-refresh.ts`、`src/main/app-runtime.ts`、`src/server-child.cjs` 和 `packages/types/src/adapter-package-cache.ts`；cache manager 是后台任务的唯一生命周期 owner，负责去重、重排、取消、等待与失败重试，updates 和 workspace service 不应再各自触发物化。验证时至少核对安装后的 `desktop-build-source.json`、`/Applications/.../Resources/app/runtime-packages/@oneworks/client`、以及 `~/.oneworks/bootstrap/npm/oneworks__cli/<cacheVersion>` / `oneworks__server/<cacheVersion>` / `oneworks__client/<cacheVersion>` 里的真实文件内容。
+- 改本地 dev 打包、workspace server 启动或 runtime package cache 时，必须同时检查 `scripts/package.cjs`、`src/builtin-adapter-cache.cjs`、`src/main/workspace-runtime-cache-manager.ts`、`src/main/workspace-runtime-cache-refresh.ts`、`src/main/app-runtime.ts`、`src/server-child.cjs` 和 `packages/types/src/adapter-package-cache.ts`；cache manager 是后台任务的唯一生命周期 owner，负责去重、重排、取消、等待与失败重试，updates 和 workspace service 不应再各自触发物化。完整 cache refresh 不得在 `core.ready` 到真实 `renderer.interactive` 的窗口抢跑；沿用延迟后台预热，并以真实交互、退出取消和无 orphan 为边界。验证时至少核对安装后的 `desktop-build-source.json`、`/Applications/.../Resources/app/runtime-packages/@oneworks/client`、以及 `~/.oneworks/bootstrap/npm/oneworks__cli/<cacheVersion>` / `oneworks__server/<cacheVersion>` / `oneworks__client/<cacheVersion>` 里的真实文件内容。
 - 改打包脚本、图标同步脚本或生成资产时，提交前跑全仓 `pnpm dprint check` 和 `pnpm exec eslint .`，不要只跑改动文件范围；CI 的 format / lint 就是全仓检查。
 - 改图标生成资产时，同时检查 `dprint.json` 与 `.gitattributes`：生成 SVG 可按产物排除，`.icns` / `.ico` / `.png` 等二进制图标必须使用 `-text`，避免 Git EOL 规范化破坏文件。
 - 改 make target 校验时，要对照 `.github/workflows/desktop-package.yml`：tag / 手动完整构建使用 `ONEWORKS_DESKTOP_MAKE_TARGETS=dmg,zip,pkg`，并依赖 `dmg` 产物做安装验证。

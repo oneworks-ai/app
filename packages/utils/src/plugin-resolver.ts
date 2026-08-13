@@ -44,11 +44,13 @@ const DEFAULT_OFFICIAL_PLUGIN_PACKAGE_IDS = new Set([
   '@oneworks/plugin-browser-driver',
   '@oneworks/plugin-external-browser-driver',
   '@oneworks/plugin-cua-driver',
+  '@oneworks/plugin-logger',
   '@oneworks/plugin-relay',
   'browser-driver',
   'channel-oneworks',
   'cua-driver',
   'external-browser-driver',
+  'logger',
   'relay'
 ])
 const PLUGIN_SERVER_RUNTIME_ROLES = new Set<PluginServerRuntimeRole>(['manager', 'workspace'])

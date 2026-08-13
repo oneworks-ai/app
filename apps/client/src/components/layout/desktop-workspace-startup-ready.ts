@@ -1,13 +1,18 @@
 import { createContext, useContext, useEffect } from 'react'
 
-export const DesktopWorkspaceStartupReadyContext = createContext<(() => void) | null>(null)
+import type { DesktopWorkspaceStartupReadiness } from '@oneworks/types'
+
+export const DesktopWorkspaceStartupReadyContext = createContext<
+  (
+    (readiness?: DesktopWorkspaceStartupReadiness) => void
+  ) | null
+>(null)
 
 interface DesktopWorkspaceStartupReadyOptions {
-  timeoutMs?: number
+  readiness?: DesktopWorkspaceStartupReadiness
   visibleSelector?: string
 }
 
-const DEFAULT_VISIBLE_READY_TIMEOUT_MS = 8_000
 const READY_PAINT_FALLBACK_MS = 250
 
 const isElementVisible = (element: Element) => {
@@ -29,7 +34,7 @@ export function useDesktopWorkspaceStartupReady(
   options: DesktopWorkspaceStartupReadyOptions = {}
 ) {
   const markReady = useContext(DesktopWorkspaceStartupReadyContext)
-  const { timeoutMs = DEFAULT_VISIBLE_READY_TIMEOUT_MS, visibleSelector } = options
+  const { readiness = 'editable', visibleSelector } = options
 
   useEffect(() => {
     if (!ready || markReady == null) return
@@ -40,15 +45,10 @@ export function useDesktopWorkspaceStartupReady(
     let secondFrame: number | null = null
     let paintFallbackTimer: number | null = null
     let visibleObserver: MutationObserver | null = null
-    let visibleTimeout: number | null = null
 
     const stopWatchingVisibleElement = () => {
       visibleObserver?.disconnect()
       visibleObserver = null
-      if (visibleTimeout != null) {
-        window.clearTimeout(visibleTimeout)
-        visibleTimeout = null
-      }
     }
 
     const markReadyOnce = () => {
@@ -60,7 +60,7 @@ export function useDesktopWorkspaceStartupReady(
         window.clearTimeout(paintFallbackTimer)
         paintFallbackTimer = null
       }
-      markReady()
+      markReady(readiness)
     }
 
     const finishAfterPaint = () => {
@@ -87,12 +87,18 @@ export function useDesktopWorkspaceStartupReady(
     } else {
       visibleObserver = new MutationObserver(checkVisibleElement)
       visibleObserver.observe(document.documentElement, {
-        attributeFilter: ['aria-hidden', 'class', 'data-oneworks-sender-editor-ready', 'hidden', 'style'],
+        attributeFilter: [
+          'aria-hidden',
+          'class',
+          'data-oneworks-sender-editor-ready',
+          'data-oneworks-sender-editor-unavailable',
+          'hidden',
+          'style'
+        ],
         attributes: true,
         childList: true,
         subtree: true
       })
-      visibleTimeout = window.setTimeout(finishAfterPaint, timeoutMs)
       checkVisibleElement()
     }
 
@@ -109,5 +115,5 @@ export function useDesktopWorkspaceStartupReady(
         window.clearTimeout(paintFallbackTimer)
       }
     }
-  }, [markReady, ready, timeoutMs, visibleSelector])
+  }, [markReady, readiness, ready, visibleSelector])
 }

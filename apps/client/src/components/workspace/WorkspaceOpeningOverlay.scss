@@ -33,14 +33,6 @@
   transition: opacity .28s ease, visibility 0s;
 }
 
-.workspace-opening-overlay.is-exiting {
-  opacity: 1;
-  pointer-events: none;
-  visibility: visible;
-  animation: workspace-opening-overlay-exit .42s ease both;
-  transition: none;
-}
-
 html.dark .workspace-opening-overlay {
   background: var(
     --oneworks-launcher-overlay-background,
@@ -65,13 +57,6 @@ html.dark .workspace-opening-overlay {
   transform: translateY(10px) scale(1);
   animation: workspace-opening-content-enter .34s cubic-bezier(.2, .8, .2, 1)
     both;
-}
-
-.workspace-opening-overlay.is-exiting .workspace-opening-overlay__content {
-  opacity: 1;
-  transform: translateY(10px) scale(1);
-  animation: workspace-opening-content-exit .3s ease both;
-  transition-duration: .24s;
 }
 
 .workspace-opening-overlay__icon {
@@ -187,13 +172,6 @@ html.dark .workspace-opening-overlay__icon-fallback--dark {
   animation: workspace-opening-tip-enter .38s ease both;
 }
 
-.workspace-opening-overlay.is-exiting .workspace-opening-overlay__tip {
-  opacity: 1;
-  transform: translateY(0);
-  animation: workspace-opening-tip-exit .24s ease both;
-  transition-duration: .2s;
-}
-
 @keyframes workspace-opening-overlay-enter {
   from {
     opacity: 0;
@@ -203,16 +181,6 @@ html.dark .workspace-opening-overlay__icon-fallback--dark {
   to {
     opacity: 1;
     visibility: visible;
-  }
-}
-
-@keyframes workspace-opening-overlay-exit {
-  from {
-    opacity: 1;
-  }
-
-  to {
-    opacity: 0;
   }
 }
 
@@ -228,18 +196,6 @@ html.dark .workspace-opening-overlay__icon-fallback--dark {
   }
 }
 
-@keyframes workspace-opening-content-exit {
-  from {
-    opacity: 1;
-    transform: translateY(10px) scale(1);
-  }
-
-  to {
-    opacity: 0;
-    transform: translateY(2px) scale(.99);
-  }
-}
-
 @keyframes workspace-opening-tip-enter {
   from {
     opacity: 0;
@@ -249,18 +205,6 @@ html.dark .workspace-opening-overlay__icon-fallback--dark {
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@keyframes workspace-opening-tip-exit {
-  from {
-    opacity: 1;
-    transform: translateY(0);
-  }
-
-  to {
-    opacity: 0;
-    transform: translateY(2px);
   }
 }
 
@@ -290,11 +234,6 @@ html.dark .workspace-opening-overlay__icon-fallback--dark {
   .workspace-opening-overlay.is-visible {
     opacity: 1;
     visibility: visible;
-  }
-
-  .workspace-opening-overlay.is-exiting {
-    opacity: 0;
-    visibility: hidden;
   }
 
   .workspace-opening-overlay__content,

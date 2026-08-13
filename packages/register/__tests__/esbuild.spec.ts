@@ -11,7 +11,7 @@ const require = createRequire(import.meta.url)
 describe('register/esbuild', () => {
   const tempDirs: string[] = []
 
-  const runWithRegister = (entryPath: string) =>
+  const runWithRegister = (entryPath: string, env?: NodeJS.ProcessEnv) =>
     spawnSync(
       process.execPath,
       [
@@ -22,7 +22,8 @@ describe('register/esbuild', () => {
         `console.log(JSON.stringify(require(${JSON.stringify(entryPath)})))`
       ],
       {
-        encoding: 'utf8'
+        encoding: 'utf8',
+        env: { ...process.env, ...env }
       }
     )
 
@@ -139,5 +140,64 @@ describe('register/esbuild', () => {
     expect(result.status).toBe(0)
     expect(result.stdout.trim()).toBe(JSON.stringify({ value: 42 }))
     expect(result.stderr).toBe('')
+  })
+
+  it('preserves esbuild-register tsconfig discovery while caching transforms', async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'ow-register-esbuild-'))
+    tempDirs.push(tempDir)
+
+    await writeFile(
+      path.join(tempDir, 'tsconfig.json'),
+      JSON.stringify({ compilerOptions: { jsxFactory: 'fixtureElement' } })
+    )
+    await writeFile(
+      path.join(tempDir, 'entry.tsx'),
+      [
+        'const fixtureElement = (tag: string, properties: object) => ({ tag, properties })',
+        'module.exports = <fixture value="ready" />'
+      ].join('\n')
+    )
+
+    const result = runWithRegister(path.join(tempDir, 'entry.tsx'))
+
+    expect(result.status).toBe(0)
+    expect(result.stdout.trim()).toBe(JSON.stringify({
+      tag: 'fixture',
+      properties: { value: 'ready' }
+    }))
+    expect(result.stderr).toBe('')
+  })
+
+  it('invalidates the cross-process cache when an extended tsconfig changes', async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'ow-register-esbuild-'))
+    tempDirs.push(tempDir)
+    const cacheDir = path.join(tempDir, 'cache')
+    await mkdir(tempDir, { recursive: true })
+    await writeFile(
+      path.join(tempDir, 'entry.tsx'),
+      [
+        "const fixtureA = () => 'a'",
+        "const fixtureB = () => 'b'",
+        'module.exports = <fixture />'
+      ].join('\n')
+    )
+    const env = { ONEWORKS_RUNTIME_TRANSPILE_CACHE_DIR: cacheDir }
+
+    await writeFile(
+      path.join(tempDir, 'tsconfig.json'),
+      JSON.stringify({ compilerOptions: { jsxFactory: 'fixtureA' } })
+    )
+    const first = runWithRegister(path.join(tempDir, 'entry.tsx'), env)
+
+    await writeFile(
+      path.join(tempDir, 'tsconfig.json'),
+      JSON.stringify({ compilerOptions: { jsxFactory: 'fixtureB' } })
+    )
+    const second = runWithRegister(path.join(tempDir, 'entry.tsx'), env)
+
+    expect(first.status).toBe(0)
+    expect(first.stdout.trim()).toBe(JSON.stringify('a'))
+    expect(second.status).toBe(0)
+    expect(second.stdout.trim()).toBe(JSON.stringify('b'))
   })
 })

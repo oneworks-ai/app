@@ -3,6 +3,8 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 import { mountOneWorksIconLoader } from '@oneworks/icon/loader'
 import type { OneWorksIconLoaderHandle } from '@oneworks/icon/loader'
+import { normalizeDesktopWorkspaceStartupReadiness } from '@oneworks/types'
+import type { DesktopWorkspaceStartupReadyInput } from '@oneworks/types'
 
 import { WORKSPACE_STARTUP_ICON_SEED } from '../workspace-startup-icon'
 
@@ -63,6 +65,8 @@ const workspaceStartupLocales = {
 let workspaceStartupIconHandle: OneWorksIconLoaderHandle | null = null
 let workspaceStartupTipInterval: number | null = null
 let workspaceStartupDisposeTimer: number | null = null
+let workspaceStartupDismissPromise: Promise<void> | null = null
+let resolveWorkspaceStartupDismiss: (() => void) | null = null
 
 const runWithDocumentElement = (callback: (root: HTMLElement) => void) => {
   const run = () => {
@@ -179,11 +183,20 @@ const installWorkspaceStartupOverlay = () => {
   })
 }
 
-const markWorkspaceStartupReady = () => {
+const dismissWorkspaceStartupOverlay = (kind: 'complete' | 'surface') => {
+  if (workspaceStartupDismissPromise == null) {
+    workspaceStartupDismissPromise = new Promise<void>((resolve) => {
+      resolveWorkspaceStartupDismiss = resolve
+    })
+  }
   const overlay = document.getElementById(workspaceStartupOverlayId)
-  void ipcRenderer.invoke(workspaceStartupReadyChannel).catch(() => undefined)
-  if (document.documentElement != null) {
-    document.documentElement.dataset.oneworksDesktopStartupReady = 'true'
+  const root = document.documentElement
+  if (root != null) {
+    if (kind === 'complete') {
+      root.dataset.oneworksDesktopStartupReady = 'true'
+    } else {
+      root.dataset.oneworksDesktopStartupSurfaceReady = 'true'
+    }
   }
   overlay?.setAttribute('aria-busy', 'false')
   overlay?.setAttribute('aria-hidden', 'true')
@@ -199,9 +212,36 @@ const markWorkspaceStartupReady = () => {
     workspaceStartupIconHandle?.dispose()
     workspaceStartupIconHandle = null
     overlay?.remove()
-    delete document.documentElement.dataset.oneworksDesktopStartupScreen
-    delete document.documentElement.dataset.oneworksDesktopStartupReady
+    if (root != null) {
+      delete root.dataset.oneworksDesktopStartupScreen
+      delete root.dataset.oneworksDesktopStartupSurfaceReady
+      if (kind === 'complete') {
+        delete root.dataset.oneworksDesktopStartupReady
+      }
+    }
+    const resolveDismiss = resolveWorkspaceStartupDismiss
+    workspaceStartupDismissPromise = null
+    resolveWorkspaceStartupDismiss = null
+    resolveDismiss?.()
   }, workspaceStartupExitMs)
+  return workspaceStartupDismissPromise
+}
+
+const revealWorkspaceStartupSurface = () => {
+  const root = document.documentElement
+  if (
+    root?.dataset.oneworksDesktopStartupSurfaceReady === 'true' ||
+    root?.dataset.oneworksDesktopStartupReady === 'true'
+  ) {
+    return workspaceStartupDismissPromise ?? Promise.resolve()
+  }
+  return dismissWorkspaceStartupOverlay('surface')
+}
+
+const markWorkspaceStartupReady = (input?: DesktopWorkspaceStartupReadyInput) => {
+  const readiness = normalizeDesktopWorkspaceStartupReadiness(input)
+  void ipcRenderer.invoke(workspaceStartupReadyChannel, { readiness }).catch(() => undefined)
+  void dismissWorkspaceStartupOverlay('complete')
 }
 
 applyInitialDesktopThemeMode()
@@ -249,6 +289,7 @@ contextBridge.exposeInMainWorld('oneworksDesktop', {
   listSavedPasswords: (query?: string) => ipcRenderer.invoke('desktop:list-saved-passwords', query),
   markDesktopCoreReady: () => ipcRenderer.invoke(desktopCoreReadyChannel),
   markDesktopUiReady: () => ipcRenderer.invoke(desktopUiReadyChannel),
+  revealWorkspaceStartupSurface,
   authenticateSavedPasswordsAccess: (reason?: string) =>
     ipcRenderer.invoke('desktop:authenticate-saved-passwords-access', reason),
   revealSavedPassword: (id: string) => ipcRenderer.invoke('desktop:reveal-saved-password', id),

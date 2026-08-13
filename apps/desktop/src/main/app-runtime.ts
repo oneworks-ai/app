@@ -548,6 +548,30 @@ export const createDesktopApp = () => {
     onStatusChange: broadcastUpdateStatus
   })
 
+  const findLauncherWindowRecord = () => (
+    Array.from(runtimeState.windows.values())
+      .find(candidate => candidate.kind === 'launcher' && !candidate.window.isDestroyed())
+  )
+
+  const preloadLauncherWindow = () => {
+    if (process.platform !== 'darwin') return
+    if (process.env.ONEWORKS_DESKTOP_SHOW_LAUNCHER_ON_STARTUP === '1') return
+    void windowManager.createLauncherWindow({ show: false }).catch((error) => {
+      console.warn('[oneworks-desktop] failed to preload launcher window', error)
+    })
+  }
+
+  let launcherPreloadScheduled = false
+  const scheduleLauncherPreloadAfterStartupReady = () => {
+    if (launcherPreloadScheduled || runtimeState.isQuitting || findLauncherWindowRecord() != null) return
+    launcherPreloadScheduled = true
+    const timer = setTimeout(() => {
+      if (runtimeState.isQuitting || findLauncherWindowRecord() != null) return
+      preloadLauncherWindow()
+    }, 1_000)
+    timer.unref()
+  }
+
   windowManager = createWindowManager({
     ensureLauncherClientService: launcherClientServiceManager.ensureLauncherClientService,
     ensureManagerService: managerServiceManager.ensureManagerService,
@@ -555,7 +579,18 @@ export const createDesktopApp = () => {
     forgetWorkspaceFolder,
     onStartupDegraded: (error, input) => startupDiagnostics?.degrade(error, input),
     onStartupStage: name => startupDiagnostics?.stage(name),
-    onStartupWindowReady: () => startupDiagnostics?.ready(),
+    onStartupWindowReady: (readiness) => {
+      if (readiness === 'editable') {
+        startupDiagnostics?.ready()
+        scheduleLauncherPreloadAfterStartupReady()
+      } else {
+        startupDiagnostics?.degrade(new Error('Workspace opened with a degraded renderer surface.'), {
+          code: 'workspace.renderer_surface_degraded',
+          domain: 'renderer',
+          retryable: true
+        })
+      }
+    },
     onRendererGone: details =>
       reportDesktopJavaScriptError(undefined, 'electron.renderer_gone', {
         fingerprintMaterial: details.reason,
@@ -723,7 +758,6 @@ export const createDesktopApp = () => {
       loadWorkspaceInWindow: windowManager.loadWorkspaceInWindow,
       markDesktopCoreReady: () => {
         startupDiagnostics?.stage('core.ready')
-        if (app.isPackaged) workspaceRuntimeCacheManager.schedule(1_000)
       },
       markDesktopUiReady: () => startupDiagnostics?.stage('ui.ready'),
       markWorkspaceStartupWindowReady: windowManager.markWorkspaceStartupWindowReady,
@@ -793,19 +827,6 @@ export const createDesktopApp = () => {
   const warmWorkspaceRuntimeCacheSoon = () => {
     if (!app.isPackaged) return
     workspaceRuntimeCacheManager.schedule(30_000)
-  }
-
-  const findLauncherWindowRecord = () => (
-    Array.from(runtimeState.windows.values())
-      .find(candidate => candidate.kind === 'launcher' && !candidate.window.isDestroyed())
-  )
-
-  const preloadLauncherWindow = () => {
-    if (process.platform !== 'darwin') return
-    if (process.env.ONEWORKS_DESKTOP_SHOW_LAUNCHER_ON_STARTUP === '1') return
-    void windowManager.createLauncherWindow({ show: false }).catch((error) => {
-      console.warn('[oneworks-desktop] failed to preload launcher window', error)
-    })
   }
 
   const toggleLauncherFromShortcut = () => {
@@ -1005,7 +1026,6 @@ export const createDesktopApp = () => {
         console.warn('[oneworks-desktop] failed to restore last workspace on startup', error)
         await windowManager.createLauncherWindow()
       }
-      preloadLauncherWindow()
     } else if (!hasPendingLaunchRequest) {
       await windowManager.createLauncherWindow()
     }
@@ -1020,7 +1040,9 @@ export const createDesktopApp = () => {
     autoUpdateManager.start()
     await flushPendingLaunchRequests()
     startupDiagnostics?.stage('launch.requests.ready')
-    preloadLauncherWindow()
+    if (startupWorkspaceFolder == null) {
+      preloadLauncherWindow()
+    }
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().some(window => window.isVisible())) {
