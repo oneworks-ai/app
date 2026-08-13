@@ -8,6 +8,10 @@ const normalizeNonEmptyString = (value: unknown) => (
   typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
 )
 
+const readNonBlankFilesystemPath = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== '' ? value : undefined
+)
+
 const normalizeOptionalStringList = (value: unknown) => (
   typeof value === 'string'
     ? [value]
@@ -33,7 +37,7 @@ const normalizeMarketplacePluginSource = (
         `Invalid marketplace plugin source at ${path}. Inline Claude settings marketplaces must use an explicit source object because config-backed marketplaces cannot resolve relative plugin paths.`
       )
     }
-    return value.trim()
+    return value
   }
   if (!isRecord(value) || typeof value.source !== 'string') {
     throw new TypeError(`Invalid marketplace plugin source at ${path}.`)
@@ -66,7 +70,7 @@ const normalizeMarketplacePluginSource = (
     }
     case 'git-subdir': {
       const url = normalizeNonEmptyString(value.url)
-      const subdirPath = normalizeNonEmptyString(value.path)
+      const subdirPath = readNonBlankFilesystemPath(value.path)
       if (url == null || subdirPath == null) {
         throw new TypeError(
           `Invalid marketplace plugin source at ${path}. "url" and "path" must be non-empty strings.`

@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { dirname, isAbsolute, resolve } from 'node:path'
+import { dirname, isAbsolute, resolve, sep } from 'node:path'
 import process from 'node:process'
 
 import {
@@ -10,21 +10,16 @@ import {
   resolveProjectOoBaseDir,
   resolveProjectWorkspaceFolder
 } from './ai-path'
+import { normalizeFilesystemDirPath, readFilesystemPathOutput } from './filesystem-dir-path'
 
 export const PROJECT_PRIMARY_WORKSPACE_FOLDER_ENV = '__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__'
 export const PROJECT_ONEWORKS_CACHE_DIR_ENV = '__ONEWORKS_PROJECT_CACHE_DIR__'
-
-const normalizeDirPath = (value: string | null | undefined) => {
-  const trimmed = value?.trim()
-  if (trimmed == null || trimmed === '') return undefined
-  return trimmed.replace(/[\\/]+$/, '')
-}
 
 const resolvePathFromBase = (
   baseDir: string,
   value: string | null | undefined
 ) => {
-  const normalizedValue = normalizeDirPath(value)
+  const normalizedValue = normalizeFilesystemDirPath(value)
   if (normalizedValue == null) {
     return undefined
   }
@@ -36,7 +31,7 @@ const resolvePathFromBase = (
   return resolve(baseDir, normalizedValue)
 }
 
-const isGitInternalPath = (targetPath: string) => targetPath.split(/[\\/]+/).includes('.git')
+const isGitInternalPath = (targetPath: string) => targetPath.split(sep).includes('.git')
 
 const resolveGitPrimaryWorkspaceFolder = (cwd: string) => {
   const result = (() => {
@@ -52,8 +47,8 @@ const resolveGitPrimaryWorkspaceFolder = (cwd: string) => {
   if (result == null) return undefined
   if (result.status !== 0) return undefined
 
-  const gitCommonDir = result.stdout?.trim()
-  if (gitCommonDir == null || gitCommonDir === '') return undefined
+  const gitCommonDir = readFilesystemPathOutput(result.stdout)
+  if (gitCommonDir == null) return undefined
 
   const workspaceFolder = resolve(cwd)
   const primaryWorkspaceFolder = dirname(resolve(cwd, gitCommonDir))

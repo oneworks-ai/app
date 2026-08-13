@@ -20,11 +20,13 @@ export const sanitizeModulePackageName = (packageName: string) => packageName.re
 export const splitModulePackageName = (packageName: string) => packageName.split('/')
 
 export const resolveModuleUpdateRealHomeDir = (env: NodeJS.ProcessEnv = process.env) => {
-  const realHome = env.__ONEWORKS_PROJECT_REAL_HOME__?.trim()
-  if (realHome) return realHome
+  const realHome = env.__ONEWORKS_PROJECT_REAL_HOME__
+  if (realHome != null && realHome.trim() !== '') return realHome
 
-  const home = env.HOME?.trim() || env.USERPROFILE?.trim()
-  return home || os.homedir()
+  const home = env.HOME
+  if (home != null && home.trim() !== '') return home
+  const userProfile = env.USERPROFILE
+  return userProfile != null && userProfile.trim() !== '' ? userProfile : os.homedir()
 }
 
 export const resolveBootstrapDataDir = (env: NodeJS.ProcessEnv = process.env) => (

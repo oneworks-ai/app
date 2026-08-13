@@ -60,6 +60,46 @@ describe('workspace file service', () => {
     await expect(readFile(join(workspaceDir, 'src', 'index.ts'), 'utf8')).resolves.toBe('export const value = 2\n')
   })
 
+  it('reads and updates the exact whitespace-bearing file instead of its adjacent peer', async () => {
+    const rawPath = ' notes.txt '
+    const adjacentPath = rawPath.trim()
+    await writeFile(join(workspaceDir, rawPath), 'raw\n')
+    await writeFile(join(workspaceDir, adjacentPath), 'adjacent\n')
+
+    await expect(readWorkspaceFile(rawPath)).resolves.toMatchObject({
+      content: 'raw\n',
+      path: rawPath
+    })
+    await expect(updateWorkspaceFile(rawPath, 'updated raw\n')).resolves.toMatchObject({
+      content: 'updated raw\n',
+      path: rawPath
+    })
+    await expect(readFile(join(workspaceDir, rawPath), 'utf8')).resolves.toBe('updated raw\n')
+    await expect(readFile(join(workspaceDir, adjacentPath), 'utf8')).resolves.toBe('adjacent\n')
+  })
+
+  it('keeps POSIX literal-backslash file and media paths distinct from nested peers', async () => {
+    if (process.platform === 'win32') return
+    const literalFile = String.raw`notes\draft.md`
+    const nestedFile = 'notes/draft.md'
+    const literalMedia = String.raw`assets\clip.mp4`
+    await mkdir(join(workspaceDir, 'notes'), { recursive: true })
+    await writeFile(join(workspaceDir, literalFile), 'literal\n')
+    await writeFile(join(workspaceDir, nestedFile), 'nested\n')
+    await writeFile(join(workspaceDir, literalMedia), Buffer.from([9, 8, 7]))
+
+    await expect(readWorkspaceFile(literalFile)).resolves.toMatchObject({
+      content: 'literal\n',
+      path: literalFile
+    })
+    await expect(updateWorkspaceFile(literalFile, 'updated\n')).resolves.toMatchObject({ path: literalFile })
+    await expect(readFile(join(workspaceDir, nestedFile), 'utf8')).resolves.toBe('nested\n')
+    await expect(resolveWorkspaceMediaResource(literalMedia)).resolves.toMatchObject({
+      filePath: await realpath(join(workspaceDir, literalMedia)),
+      path: literalMedia
+    })
+  })
+
   it('reads and updates internal symbolic link files', async () => {
     await symlink('src/index.ts', join(workspaceDir, 'index-link.ts'), 'file')
 
@@ -119,6 +159,23 @@ describe('workspace file service', () => {
     })
   })
 
+  it('resolves the exact whitespace-bearing relative media file', async () => {
+    const rawPath = 'assets/clip.mp4 '
+    const adjacentPath = rawPath.trim()
+    await writeFile(join(workspaceDir, rawPath), Buffer.from([9, 8, 7]))
+
+    await expect(resolveWorkspaceMediaResource(rawPath)).resolves.toMatchObject({
+      filePath: await realpath(join(workspaceDir, rawPath)),
+      mimeType: 'video/mp4',
+      path: rawPath,
+      size: 3
+    })
+    await expect(resolveWorkspaceMediaResource(adjacentPath)).resolves.toMatchObject({
+      filePath: await realpath(join(workspaceDir, adjacentPath)),
+      size: 4
+    })
+  })
+
   it('allows only session-enabled media under the product artifact root', async () => {
     const artifactPath = join(productArtifactDir, 'final screenshot.png')
 
@@ -136,6 +193,27 @@ describe('workspace file service', () => {
         code: 'workspace_media_path_not_authorized'
       } satisfies Partial<HttpError>
     )
+  })
+
+  it('resolves the exact whitespace-bearing absolute artifact path', async () => {
+    const rawPath = join(productArtifactDir, 'final screenshot.png ')
+    const adjacentPath = rawPath.trim()
+    await writeFile(rawPath, Buffer.from([7, 8, 9]))
+
+    await expect(resolveWorkspaceMediaResource(rawPath, {
+      allowProductArtifactPaths: true
+    })).resolves.toMatchObject({
+      filePath: await realpath(rawPath),
+      mimeType: 'image/png',
+      path: rawPath,
+      size: 3
+    })
+    await expect(resolveWorkspaceMediaResource(adjacentPath, {
+      allowProductArtifactPaths: true
+    })).resolves.toMatchObject({
+      filePath: await realpath(adjacentPath),
+      size: 4
+    })
   })
 
   it('rejects unauthorized, missing, directory, and escaping artifact paths', async () => {

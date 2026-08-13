@@ -51,9 +51,11 @@ Primary implementation entrypoints for Codex hooks:
   - exposes standard adapter account management actions: add and reauthenticate via `codex login`, detail lookup, refresh, and remove from global config
 - `src/paths.ts`
   - resolves the official `@openai/codex` JavaScript launcher to its platform package's native executable, because packaged Electron users may not have a standalone `node` binary on `PATH`
+  - recognizes the official `node_modules/.bin/codex` component layout with host-family separators only; on POSIX a literal backslash remains part of the explicit executable filename and must never redirect to an adjacent official launcher
 - `src/models.ts`
   - exposes Codex model selector metadata to One Works
   - prefers Codex's `model_catalog_json` config file or `models_cache.json` under `CODEX_HOME` / `~/.codex`
+  - treats `CODEX_HOME`, `HOME`, model catalog and configured auth-file values as filesystem identities: blank-check only, then preserve raw bytes through read/write/probe paths
   - falls back to packaged model metadata only when no Codex catalog/cache is readable
   - exposes a separate model-service loader that never uses packaged fallback entries; shared adapters publish only catalog/cache models already visible to the ChatGPT-backed Codex session, and do not filter them by the API-key-only `supported_in_api` flag
 - `src/model-sharing.ts`

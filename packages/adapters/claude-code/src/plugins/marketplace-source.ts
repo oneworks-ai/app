@@ -14,6 +14,10 @@ const normalizeNonEmptyString = (value: unknown) => (
   typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
 )
 
+const readFilesystemPath = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== '' ? value : undefined
+)
+
 const resolvePathWithinRoot = async (rootDir: string, candidatePath: string, description: string) => {
   const resolvedPath = path.resolve(rootDir, candidatePath)
   const relativePath = path.relative(rootDir, resolvedPath)
@@ -55,7 +59,7 @@ export const resolveMarketplacePluginSource = async (params: {
       )
     }
 
-    const pluginRootPrefix = normalizeNonEmptyString(params.catalog.metadata?.pluginRoot)
+    const pluginRootPrefix = readFilesystemPath(params.catalog.metadata?.pluginRoot)
     const relativeSource = pluginRootPrefix != null &&
         !params.source.startsWith('./') &&
         !params.source.startsWith('../')

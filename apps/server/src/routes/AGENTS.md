@@ -7,10 +7,12 @@
 - `index.ts`：统一挂载各 route module 和 prefix。API route 通过 `lazy-router.ts` 在首个匹配请求时加载，静态 Client route 保持启动时挂载。
 - `lazy-router.ts`：为 route module 提供单一的并发安全加载边界，并保留子 Router 原有的 404 / 405 / `Allow` 语义。新增重叠 prefix 时必须先挂载更具体的 prefix。
 - `sessions.ts`：session detail、message queue、branch、message 操作等 session API。
+  - native-history import 的 `projectPaths` / `sourcePaths` 是文件系统身份；route 只做数组与空白校验，必须把原字符串交给 importer，adapter 名称等非路径字段继续使用既有归一化。
 - `agent-rooms.ts`：Agent Room HTTP API。
 - `config.ts`：配置读取与写回 API。
 - `diagnostics.ts`：接收浏览器归一化后的无内容 JavaScript 异常事实；持久化与 OTLP 门控在 `../services/javascript-diagnostics.ts`。
 - `automation.ts`：automation API。
+- `channel-send.ts`：主动发送频道消息的 HTTP 入口；`cwd` 与本地附件路径是文件系统身份，route 只判空并保留原字符串，URL、receive ID、名称与消息文本继续使用普通文本归一化。
 - `module-updates.ts`：运行时模块版本检测与缓存安装 API；业务逻辑放在 `../services/module-updates.ts`。
 - `web-debug.ts`：跨入口浏览器调试 API；只返回 server 管理的调试 runtime 信息，业务逻辑放在 `../services/web-debug/`。
 - `mobile-debug.ts`：移动设备调试 API；Android ADB/scrcpy、iOS WDA、元素树和输入状态放在 `../services/mobile-debug/`。

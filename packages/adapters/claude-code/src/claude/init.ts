@@ -6,6 +6,7 @@ import { readJsonFileOrDefault, resolveMockHome, writeJsonFile } from '@oneworks
 import type { AdapterCtx } from '@oneworks/types'
 import {
   migrateProjectHomeSegments,
+  resolveOptionalPath,
   resolveProjectOoPath,
   syncSymlinkTarget,
   unlinkMockHomeBridgePaths
@@ -92,7 +93,8 @@ const syncClaudeMockHomeSkills = async (ctx: Pick<AdapterCtx, 'assets' | 'cwd' |
 }
 
 const syncClaudeMockHomeKeychains = async (ctx: Pick<AdapterCtx, 'cwd' | 'env'>) => {
-  const realHome = ctx.env.__ONEWORKS_PROJECT_REAL_HOME__?.trim() || process.env.__ONEWORKS_PROJECT_REAL_HOME__?.trim()
+  const realHome = resolveOptionalPath(ctx.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
+    resolveOptionalPath(process.env.__ONEWORKS_PROJECT_REAL_HOME__)
   const targetPath = resolve(resolveMockHome(ctx.cwd, ctx.env), 'Library', 'Keychains')
 
   if (realHome == null || realHome === '') {
@@ -110,7 +112,8 @@ const syncClaudeMockHomeKeychains = async (ctx: Pick<AdapterCtx, 'cwd' | 'env'>)
 const syncClaudeMockHomeProjectState = async (ctx: Pick<AdapterCtx, 'cwd' | 'env'>) => {
   const mockHome = resolveMockHome(ctx.cwd, ctx.env)
   const mockStatePath = resolve(mockHome, '.claude.json')
-  const realHome = ctx.env.__ONEWORKS_PROJECT_REAL_HOME__?.trim() || process.env.__ONEWORKS_PROJECT_REAL_HOME__?.trim()
+  const realHome = resolveOptionalPath(ctx.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
+    resolveOptionalPath(process.env.__ONEWORKS_PROJECT_REAL_HOME__)
   const realStatePath = realHome != null && realHome !== ''
     ? resolve(realHome, '.claude.json')
     : undefined

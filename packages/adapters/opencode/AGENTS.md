@@ -127,3 +127,5 @@ OpenCode 维护时优先记住：
 - 需要 mock `child_process` 的测试，mock 定义放在各自 spec 顶部；helper 不直接持有全局 mock 状态
 - 修改 adapter 行为时，至少补一条对应的 runtime 或 common 回归测试
 - OpenCode 的 native hooks 通过 `<project-home>/.mock/.config/opencode/plugins/oneworks-hooks.js` 接入；stdout 文本桥接只负责会话输出，不承担 native hooks
+- `REAL_HOME`、`OPENCODE_CONFIG_DIR` 与 `XDG_CONFIG_HOME` 是文件系统身份；只能用 `trim()` 判断空值，symlink、读取和 native hook 投影必须继续使用原字符串。
+- `AdapterMessageContent` 的 file `path` 也是文件系统身份；prompt 映射只判空并把原始字节交给 OpenCode files 参数，text、label、URL 等普通内容继续按各自文本规则处理。

@@ -190,10 +190,13 @@ const buildMoonshotServiceConfig = (baseUrl: string, apiKey: string, customHeade
 }
 
 const resolveRealKimiShareDir = (env: AdapterCtx['env']) => {
-  const explicit = env.__ONEWORKS_PROJECT_ADAPTER_KIMI_SHARE_DIR__?.trim() ??
-    env.KIMI_SHARE_DIR?.trim() ??
-    process.env.KIMI_SHARE_DIR?.trim()
-  return explicit != null && explicit !== '' ? explicit : resolve(homedir(), '.kimi')
+  const readFilesystemPath = (value: unknown) => (
+    typeof value === 'string' && value.trim() !== '' ? value : undefined
+  )
+  return readFilesystemPath(env.__ONEWORKS_PROJECT_ADAPTER_KIMI_SHARE_DIR__) ??
+    readFilesystemPath(env.KIMI_SHARE_DIR) ??
+    readFilesystemPath(process.env.KIMI_SHARE_DIR) ??
+    resolve(homedir(), '.kimi')
 }
 
 const resolveCopiedConfigPath = async (shareDir: string, realShareDir: string) => {

@@ -33,15 +33,19 @@ afterEach(() => {
 })
 
 describe('desktop runtime consumer bootstrap path', () => {
+  it('preserves an exact configured desktop runtime executable path', async () => {
+    const runtimePath = `${path.join(tmpdir(), 'oneworks runtime')} `
+    vi.stubEnv('ONEWORKS_DESKTOP_SERVER_RUNTIME', runtimePath)
+    const { resolveServerExecutable } = await import('../src/main/paths')
+    expect(resolveServerExecutable()).toBe(runtimePath)
+  })
   it('resolves the bundled One Works bootstrap entrypoint', async () => {
     const { resolveBundledRuntimeConsumerBootstrapPath } = await import('../src/main/paths')
-
     expect(resolveBundledRuntimeConsumerBootstrapPath()).toMatch(bundledBootstrapPattern)
   })
 
   it('passes the bundled bootstrap path to workspace server children as fallback only', async () => {
     const { resolveRuntimeConsumerBootstrapEnv } = await import('../src/main/workspace-service-manager')
-
     expect(resolveRuntimeConsumerBootstrapEnv()).toEqual({
       __ONEWORKS_RUNTIME_PROTOCOL_FALLBACK_BOOTSTRAP_PATH__: expect.stringMatching(bundledBootstrapPattern)
     })
@@ -52,7 +56,6 @@ describe('desktop runtime consumer bootstrap path', () => {
     vi.stubEnv('__ONEWORKS_PROJECT_CLIENT_FS_ALLOW__', JSON.stringify([customRoot]))
     const { resolveDesktopDevClientFsAllowEnv } = await import('../src/main/workspace-service-manager')
     const { repoRoot } = await import('../src/main/paths')
-
     const runtimeEnv = resolveDesktopDevClientFsAllowEnv(process.env)
     expect(JSON.parse(runtimeEnv.__ONEWORKS_PROJECT_CLIENT_FS_ALLOW__ ?? '[]')).toEqual([
       repoRoot,
@@ -69,7 +72,6 @@ describe('desktop runtime consumer bootstrap path', () => {
     electronMock.isPackaged = true
     vi.resetModules()
     const { resolveRuntimeConsumerBootstrapEnv } = await import('../src/main/workspace-service-manager')
-
     expect(resolveRuntimeConsumerBootstrapEnv()).toEqual({
       __ONEWORKS_RUNTIME_PROTOCOL_CONSUMER_CLI_PATH__: expect.stringMatching(bundledBootstrapPattern),
       __ONEWORKS_RUNTIME_PROTOCOL_FALLBACK_BOOTSTRAP_PATH__: expect.stringMatching(bundledBootstrapPattern)
@@ -484,7 +486,6 @@ describe('desktop runtime consumer bootstrap path', () => {
         'utf8'
       )
       await writeFile(path.join(distDir, 'index.html'), '<!doctype html>', 'utf8')
-
       const { resolveClientDistPath } = await import('../src/main/paths')
       electronMock.isPackaged = true
 

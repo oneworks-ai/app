@@ -189,6 +189,7 @@ export const resolveChannelSessionMcpServers =
 - HTTP webhook 入口只做 route 参数整理与 channel manager 分发；平台 payload 解析和 secret 校验放在对应 channel package 的 `handleWebhook`
 - `state.ts` 只管理内存状态，不写 DB
 - `loader.ts` 只负责动态加载频道连接模块
+- `manual-send.ts` 的 `cwd`、本地 `src` 和 `filePath` 是文件系统身份：只用 `trim()` 判空并把原字符串交给 resolve/readFile；HTTP(S) URL、receive ID、名称和普通文本继续沿用文本归一化
 - 新增中间件在 `middleware/` 下单独建文件，导出格式为 `export const <name>Middleware: ChannelMiddleware`，在 `middleware/index.ts` 中按顺序组装
 - 新增 prompt 片段在 `middleware/dispatch/prompt/` 下单独建文件，在 `middleware/dispatch/prompt/index.ts` 中汇总
 - `middleware/` 下的公共类型统一放在 `middleware/@types/`，不直接写在实现文件中

@@ -8,12 +8,11 @@ const isNodeError = (error: unknown): error is NodeJS.ErrnoException => (
 )
 
 export const ensureWorkspaceFolderExists = async (workspaceFolder: string) => {
-  const trimmedWorkspaceFolder = workspaceFolder.trim()
-  if (trimmedWorkspaceFolder === '') {
+  if (workspaceFolder.trim() === '') {
     throw new TypeError('A project folder path is required.')
   }
 
-  const resolvedWorkspaceFolder = path.resolve(trimmedWorkspaceFolder)
+  const resolvedWorkspaceFolder = path.resolve(workspaceFolder)
   try {
     const stats = await stat(resolvedWorkspaceFolder)
     if (!stats.isDirectory()) {
@@ -70,7 +69,7 @@ export const createWorkspaceFolderInDirectory = async ({
     throw new TypeError('A parent folder is required.')
   }
 
-  const normalizedParentDirectory = normalizeWorkspaceFolder(path.resolve(parentDirectory.trim()))
+  const normalizedParentDirectory = normalizeWorkspaceFolder(path.resolve(parentDirectory))
   if (normalizedParentDirectory == null) {
     throw new TypeError('A parent folder is required.')
   }

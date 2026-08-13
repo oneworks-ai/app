@@ -25,8 +25,7 @@ export const resolvePackagedCliPathEnv = (
     ...PACKAGED_POSIX_CLI_PATHS,
     ...(env.PATH ?? '').split(path.delimiter)
   ]
-    .map(entry => entry.trim())
-    .filter((entry, index, entries) => entry !== '' && entries.indexOf(entry) === index)
+    .filter((entry, index, entries) => entry.trim() !== '' && entries.indexOf(entry) === index)
 
   return { PATH: pathEntries.join(path.delimiter) }
 }

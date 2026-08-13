@@ -59,13 +59,18 @@ const CODEX_NATIVE_TARGETS: Partial<
   }
 }
 
-const normalizeNonEmptyString = (value: unknown) => (
-  typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
+const readFilesystemPath = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== '' ? value : undefined
 )
 
-const normalizeFilesystemPath = (value: string) => value.replaceAll('\\', '/')
+const normalizeFilesystemPath = (value: string, platform: NodeJS.Platform = process.platform) => (
+  platform === 'win32' ? value.replaceAll('\\', '/') : value
+)
 
-const resolveOfficialCodexLauncherPath = (binaryPath: string) => {
+const resolveOfficialCodexLauncherPath = (
+  binaryPath: string,
+  platform: NodeJS.Platform = process.platform
+) => {
   const candidates: string[] = []
   try {
     candidates.push(realpathSync(binaryPath))
@@ -73,13 +78,13 @@ const resolveOfficialCodexLauncherPath = (binaryPath: string) => {
     // A Windows command shim may not have a directly executable extension-free sibling.
   }
 
-  const normalizedBinaryPath = normalizeFilesystemPath(binaryPath)
+  const normalizedBinaryPath = normalizeFilesystemPath(binaryPath, platform)
   if (/\/node_modules\/\.bin\/codex(?:\.(?:cmd|ps1))?$/iu.test(normalizedBinaryPath)) {
     candidates.push(resolve(dirname(binaryPath), '..', '@openai', 'codex', 'bin', 'codex.js'))
   }
 
   return candidates.find((candidate) => (
-    normalizeFilesystemPath(candidate).endsWith('/@openai/codex/bin/codex.js') &&
+    normalizeFilesystemPath(candidate, platform).endsWith('/@openai/codex/bin/codex.js') &&
     existsSync(candidate)
   ))
 }
@@ -96,7 +101,7 @@ export const resolveOfficialCodexNativeBinaryPath = (
   const nativeTarget = CODEX_NATIVE_TARGETS[platform]?.[arch]
   if (nativeTarget == null) return binaryPath
 
-  const launcherPath = resolveOfficialCodexLauncherPath(binaryPath)
+  const launcherPath = resolveOfficialCodexLauncherPath(binaryPath, platform)
   if (launcherPath == null) return binaryPath
 
   try {
@@ -133,10 +138,10 @@ export const resolveCodexSystemBinaryPaths = (
       )
     }
 
-    const realHome = normalizeNonEmptyString(env.__ONEWORKS_PROJECT_REAL_HOME__) ??
-      normalizeNonEmptyString(process.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
-      normalizeNonEmptyString(env.HOME) ??
-      normalizeNonEmptyString(process.env.HOME)
+    const realHome = readFilesystemPath(env.__ONEWORKS_PROJECT_REAL_HOME__) ??
+      readFilesystemPath(process.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
+      readFilesystemPath(env.HOME) ??
+      readFilesystemPath(process.env.HOME)
 
     return Array.from(
       new Set([

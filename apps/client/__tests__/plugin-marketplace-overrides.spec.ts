@@ -71,6 +71,18 @@ describe('plugin marketplace config overrides', () => {
     })
   })
 
+  it('preserves a filesystem marketplace source path exactly in persisted overrides', () => {
+    const sourcePath = ' /plugins/team marketplace '
+    expect(
+      createMarketplaceSourceEntries({
+        baseKey: 'team',
+        formats: ['codex'],
+        occupied: {},
+        options: { source: { source: 'git', url: 'https://example.test/team.git', path: sourcePath } }
+      }).team
+    ).toMatchObject({ options: { source: { path: sourcePath } } })
+  })
+
   it('combines marketplace filters and name sorting', () => {
     const plugins: PluginMarketplaceCatalogPlugin[] = [
       {

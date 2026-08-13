@@ -92,11 +92,11 @@ describe('gemini prompt and settings helpers', () => {
   it('normalizes prompt content into plain text', () => {
     expect(normalizeGeminiPrompt([
       { type: 'text', text: 'Review this change' },
-      { type: 'file', path: '/tmp/project/README.md' },
+      { type: 'file', path: '/tmp/project/README.md ' },
       { type: 'image', url: 'file:///tmp/project/screenshot.png' }
     ])).toBe([
       'Review this change',
-      'Attached file: /tmp/project/README.md',
+      'Attached file: /tmp/project/README.md ',
       'Attached image: file:///tmp/project/screenshot.png'
     ].join('\n\n'))
   })

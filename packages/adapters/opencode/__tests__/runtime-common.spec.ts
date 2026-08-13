@@ -70,14 +70,14 @@ describe('openCode prompt and session helpers', () => {
   it('collects workspace file attachments into the file argument list', () => {
     const result = normalizeOpenCodePrompt([
       { type: 'text', text: 'Inspect these files' },
-      { type: 'file', path: 'apps/client/src/main.tsx' },
-      { type: 'file', path: '.oo/rules/CODING-STYLE.md' }
+      { type: 'file', path: ' apps/client/src/main.tsx' },
+      { type: 'file', path: '.oo/rules/CODING-STYLE.md ' }
     ] as any)
 
     expect(result.prompt).toBe('Inspect these files')
     expect(result.files).toEqual([
-      'apps/client/src/main.tsx',
-      '.oo/rules/CODING-STYLE.md'
+      ' apps/client/src/main.tsx',
+      '.oo/rules/CODING-STYLE.md '
     ])
   })
 

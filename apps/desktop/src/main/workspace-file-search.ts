@@ -35,12 +35,12 @@ const isPathInside = (parentPath: string, childPath: string) => {
 }
 
 const normalizeRelativePath = (workspaceFolder: string, rawPath: string) => {
-  const trimmed = rawPath.trim()
-  if (trimmed === '' || isAbsolute(trimmed)) {
+  if (rawPath.trim() === '' || isAbsolute(rawPath)) {
     return undefined
   }
 
-  const normalizedPath = relative(workspaceFolder, resolve(workspaceFolder, trimmed)).replaceAll('\\', '/')
+  const relativePath = relative(workspaceFolder, resolve(workspaceFolder, rawPath))
+  const normalizedPath = sep === '\\' ? relativePath.replaceAll('\\', '/') : relativePath
   if (normalizedPath === '' || normalizedPath === '.' || normalizedPath === '..' || normalizedPath.startsWith('../')) {
     return undefined
   }
@@ -113,12 +113,11 @@ export const resolveWorkspaceDirectoryPath = async (workspaceFolder: string, raw
 }
 
 const resolveAbsoluteExistingPath = async (rawPath: string, expectedType: 'directory' | 'file') => {
-  const trimmed = rawPath.trim()
-  if (trimmed === '' || !isAbsolute(trimmed)) {
+  if (rawPath.trim() === '' || !isAbsolute(rawPath)) {
     throw new Error(`Filesystem ${expectedType} path must be absolute.`)
   }
 
-  const targetRealPath = await realpath(trimmed)
+  const targetRealPath = await realpath(rawPath)
   const targetStat = await stat(targetRealPath)
   if (expectedType === 'directory' && !targetStat.isDirectory()) {
     throw new Error('Filesystem path is not a directory.')

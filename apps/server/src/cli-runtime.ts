@@ -58,18 +58,21 @@ export interface RunRuntimeEntryOptions {
 }
 
 const resolveOptionPath = (cwd: string, value?: string) => {
-  const trimmedValue = value?.trim()
-  if (!trimmedValue) {
+  if (value == null || value.trim() === '') {
     return undefined
   }
 
-  return resolve(cwd, trimmedValue)
+  return resolve(cwd, value)
 }
 
 const normalizeEnvValue = (value: string | undefined) => {
   const trimmedValue = value?.trim()
   return trimmedValue == null || trimmedValue === '' ? undefined : trimmedValue
 }
+
+const readNonBlankPath = (value: string | undefined) => (
+  value == null || value.trim() === '' ? undefined : value
+)
 
 const MANAGER_HOME_PROJECT_DIR = 'manager'
 
@@ -121,7 +124,7 @@ export const applyServerRuntimeEnv = (params: ApplyServerRuntimeEnvOptions) => {
   }
 
   const explicitWorkspaceFolder = resolveOptionPath(launchCwd, params.options.workspace)
-  const inheritedWorkspaceFolder = normalizeEnvValue(nextEnv.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__)
+  const inheritedWorkspaceFolder = readNonBlankPath(nextEnv.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__)
   const workspaceMode = params.defaults.workspaceMode ?? 'required'
   const workspaceFolder = explicitWorkspaceFolder ??
     (inheritedWorkspaceFolder == null && workspaceMode === 'optional'
@@ -170,7 +173,7 @@ export const applyServerRuntimeEnv = (params: ApplyServerRuntimeEnvOptions) => {
     if (shouldResetInheritedProjectHome) {
       delete nextEnv.__ONEWORKS_PROJECT_HOME_PROJECT_DIR__
       delete nextEnv.DB_PATH
-      const inheritedRealHome = normalizeEnvValue(nextEnv.__ONEWORKS_PROJECT_REAL_HOME__)
+      const inheritedRealHome = readNonBlankPath(nextEnv.__ONEWORKS_PROJECT_REAL_HOME__)
       if (inheritedRealHome == null) {
         delete nextEnv.HOME
       } else {
@@ -207,16 +210,19 @@ export const applyServerRuntimeEnv = (params: ApplyServerRuntimeEnvOptions) => {
 }
 
 export const runRuntimeEntry = async (options: RunRuntimeEntryOptions) => {
-  const workspaceFolder = options.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__?.trim()
-  const launchCwd = options.env.__ONEWORKS_PROJECT_LAUNCH_CWD__?.trim() || workspaceFolder || process.cwd()
+  const rawWorkspaceFolder = options.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__
+  const workspaceFolder = rawWorkspaceFolder?.trim() === '' ? undefined : rawWorkspaceFolder
+  const rawLaunchCwd = options.env.__ONEWORKS_PROJECT_LAUNCH_CWD__
+  const launchCwd = (rawLaunchCwd?.trim() === '' ? undefined : rawLaunchCwd) || workspaceFolder || process.cwd()
   const homeScopeCwd = workspaceFolder || launchCwd
   await migrateProjectHomeSegments(
     homeScopeCwd,
     options.env
   ).catch(() => undefined)
-  const serverDataDir = options.env.__ONEWORKS_PROJECT_SERVER_DATA_DIR__?.trim()
+  const serverDataDir = options.env.__ONEWORKS_PROJECT_SERVER_DATA_DIR__
   if (
-    serverDataDir != null && serverDataDir !== '' && isDefaultServerDataDir(homeScopeCwd, options.env, serverDataDir)
+    serverDataDir != null && serverDataDir.trim() !== '' &&
+    isDefaultServerDataDir(homeScopeCwd, options.env, serverDataDir)
   ) {
     await migrateDefaultServerDataDir(homeScopeCwd, options.env).catch(() => undefined)
   }

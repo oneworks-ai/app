@@ -172,4 +172,34 @@ describe('initOpenCodeAdapter', () => {
       code: 'ENOENT'
     })
   })
+
+  it('reads auth only from the exact whitespace-bearing real home', async () => {
+    const root = await createWorkspace()
+    const workspace = join(root, 'workspace')
+    const realHome = join(root, 'real-home ')
+    const adjacentHome = join(root, 'real-home')
+    const mockHome = resolveTestMockHome(workspace, realHome)
+    await mkdir(workspace, { recursive: true })
+    await mkdir(join(realHome, '.local', 'share', 'opencode'), { recursive: true })
+    await mkdir(join(adjacentHome, '.local', 'share', 'opencode'), { recursive: true })
+    await writeFile(join(realHome, '.local', 'share', 'opencode', 'auth.json'), '{"owner":"exact"}\n')
+    await writeFile(join(adjacentHome, '.local', 'share', 'opencode', 'auth.json'), '{"owner":"adjacent"}\n')
+
+    await initOpenCodeAdapter({
+      cwd: workspace,
+      env: {
+        HOME: mockHome,
+        __ONEWORKS_PROJECT_ADAPTER_OPENCODE_CLI_PATH__: join(workspace, 'fake-opencode'),
+        __ONEWORKS_PROJECT_REAL_HOME__: realHome
+      },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+      assets: { hookPlugins: [] }
+    } as any)
+
+    const authPath = join(mockHome, '.local', 'share', 'opencode', 'auth.json')
+    expect(resolve(dirname(authPath), await readlink(authPath))).toBe(
+      resolve(realHome, '.local', 'share', 'opencode', 'auth.json')
+    )
+    expect(await readFile(authPath, 'utf8')).toContain('exact')
+  })
 })

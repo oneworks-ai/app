@@ -1657,6 +1657,148 @@ describe('relay plugin scoped API', () => {
       .toBeUndefined()
   })
 
+  it('forwards exact raw filesystem paths through Relay list, create, and open jobs', async () => {
+    const relayBaseUrl = 'http://127.0.0.1:48892'
+    const workspaceFolder = '/workspaces/ remote project '
+    const forwardedRequests: Array<Record<string, unknown>> = []
+    const requestsByJobId = new Map<string, Record<string, unknown>>()
+    const json = (body: unknown) =>
+      new Response(JSON.stringify(body), {
+        headers: { 'content-type': 'application/json' },
+        status: 200
+      })
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input))
+      if (url.pathname === '/api/relay/devices') {
+        return json({
+          devices: [{
+            capabilities: { sessions: true, workspaceLauncher: true },
+            id: 'raw-path-device',
+            name: 'Raw Path Device',
+            status: 'online',
+            workspaceFolder
+          }]
+        })
+      }
+      if (url.pathname === '/api/relay/devices/raw-path-device/workspace/requests') {
+        const payload = JSON.parse(String(init?.body)) as { request?: Record<string, unknown> }
+        const request = payload.request ?? {}
+        const jobId = `raw-path-job-${forwardedRequests.length + 1}`
+        forwardedRequests.push(request)
+        requestsByJobId.set(jobId, request)
+        return json({ job: { id: jobId } })
+      }
+      const jobMatch = url.pathname.match(/^\/api\/relay\/session-jobs\/(raw-path-job-\d+)(\/result)?$/u)
+      if (jobMatch != null && jobMatch[2] == null) {
+        return json({ job: { id: jobMatch[1], status: 'succeeded' } })
+      }
+      if (jobMatch != null) {
+        const request = requestsByJobId.get(jobMatch[1]) ?? {}
+        const requestPath = String(request.path ?? '')
+        const responseBody = requestPath.startsWith('/api/launcher/directories')
+          ? { currentDirectory: workspaceFolder, directories: [] }
+          : requestPath === '/api/launcher/workspaces/create'
+          ? { workspaceFolder: `${workspaceFolder}/created` }
+          : {
+            serverBaseUrl: 'http://127.0.0.1:19002',
+            workspaceFolder,
+            workspaceId: 'w_raw_remote_1'
+          }
+        return json({
+          result: {
+            bodyBase64: Buffer.from(JSON.stringify(responseBody)).toString('base64'),
+            status: 200
+          }
+        })
+      }
+      return json({})
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { apis } = await createPluginHarness({
+      activeServerId: 'local',
+      enableOfficialCloudflareRelay: false,
+      enableOfficialVercelRelay: false,
+      servers: [{ id: 'local', baseUrl: relayBaseUrl }]
+    })
+    await writeOneWorksAuthStore({
+      accounts: [{
+        accountKey: 'http-127-0-0-1-48892:raw-path-user',
+        email: 'raw-path@local.test',
+        enabled: true,
+        loginId: 'raw-path-user',
+        name: 'Raw Path User',
+        role: 'owner',
+        serverId: 'http-127-0-0-1-48892',
+        serverUrl: relayBaseUrl,
+        sessionExpiresAt: '2999-01-01T00:00:00.000Z',
+        sessionToken: 'raw-path-session-token',
+        userId: 'raw-path-user'
+      }],
+      servers: {
+        'http-127-0-0-1-48892': {
+          id: 'http-127-0-0-1-48892',
+          name: 'Raw Path Relay',
+          url: relayBaseUrl
+        }
+      },
+      version: ONEWORKS_AUTH_STORE_VERSION
+    })
+    const handler = apis.get('relay')?.handler
+
+    const listResponse = await handler?.({
+      body: Buffer.from(JSON.stringify({
+        deviceId: 'raw-path-device',
+        directory: workspaceFolder,
+        serverId: 'local'
+      })),
+      method: 'POST',
+      path: 'workspaces/directories'
+    }) as { body?: { currentDirectory?: string }; status?: number }
+    const createResponse = await handler?.({
+      body: Buffer.from(JSON.stringify({
+        deviceId: 'raw-path-device',
+        parentDirectory: workspaceFolder,
+        projectName: ' Created Project ',
+        serverId: 'local'
+      })),
+      method: 'POST',
+      path: 'workspaces/create'
+    }) as { body?: { workspaceFolder?: string }; status?: number }
+    const openResponse = await handler?.({
+      body: Buffer.from(JSON.stringify({
+        deviceId: 'raw-path-device',
+        serverId: 'local',
+        workspaceFolder
+      })),
+      method: 'POST',
+      path: 'workspaces/open'
+    }) as {
+      body?: { relay?: { workspaceFolder?: string }; workspaceFolder?: string }
+      status?: number
+    }
+
+    const listRequest = forwardedRequests.find(request => String(request.path).startsWith('/api/launcher/directories'))
+    const createRequest = forwardedRequests.find(request => request.path === '/api/launcher/workspaces/create')
+    const openRequest = forwardedRequests.find(request => request.path === '/api/launcher/workspaces/open')
+    const decodeRequestBody = (request: Record<string, unknown> | undefined) =>
+      JSON.parse(
+        Buffer.from(String(request?.bodyBase64 ?? ''), 'base64').toString('utf8')
+      ) as Record<string, unknown>
+
+    expect(listResponse).toMatchObject({ body: { currentDirectory: workspaceFolder }, status: 200 })
+    expect(createResponse).toMatchObject({ body: { workspaceFolder: `${workspaceFolder}/created` }, status: 200 })
+    expect(openResponse).toMatchObject({
+      body: { relay: { workspaceFolder }, workspaceFolder },
+      status: 200
+    })
+    expect(new URL(String(listRequest?.path), relayBaseUrl).searchParams.get('directory')).toBe(workspaceFolder)
+    expect(decodeRequestBody(createRequest)).toEqual({
+      parentDirectory: workspaceFolder,
+      projectName: 'Created Project'
+    })
+    expect(decodeRequestBody(openRequest)).toEqual({ workspaceFolder })
+  })
+
   it('uses login callback tokens to register the current device', async () => {
     const fetchMock = stubRelayFetch('callback-device-token')
     const { apis, projectHome } = await createPluginHarness({

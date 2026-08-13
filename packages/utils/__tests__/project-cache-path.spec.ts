@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process'
-import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -62,6 +62,35 @@ describe('project shared cache path utils', () => {
     }
 
     expect(resolveProjectSharedCacheDir(worktree, env)).toBe(join(worktree, 'shared-cache'))
+  })
+
+  it('keeps whitespace-bearing primary workspace and cache identities exact', async () => {
+    const root = await createTempDir('ow-cache-raw-path-')
+    const primary = join(root, 'project ')
+    const adjacent = join(root, 'project')
+    const explicitCache = join(root, 'cache ')
+    const home = join(root, 'home ')
+    await Promise.all([mkdir(primary), mkdir(adjacent)])
+    const env = {
+      HOME: home,
+      __ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__: primary,
+      __ONEWORKS_PROJECT_CACHE_DIR__: explicitCache
+    }
+
+    expect(resolveProjectSharedWorkspaceFolder(adjacent, env)).toBe(primary)
+    expect(resolveProjectSharedCacheDir(adjacent, env)).toBe(explicitCache)
+    expect(resolveProjectSharedCachePath(adjacent, env, 'locks')).toBe(join(explicitCache, 'locks'))
+  })
+
+  it.runIf(process.platform !== 'win32')('keeps a POSIX literal-backslash primary workspace eligible', () => {
+    const primary = String.raw`/tmp/repo\.git\data`
+    const env = {
+      HOME: '/tmp/home',
+      __ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__: primary
+    }
+
+    expect(resolveProjectSharedWorkspaceFolder('/tmp/worktree', env)).toBe(primary)
+    expect(resolveProjectSharedCacheDir('/tmp/worktree', env)).toBe(resolveProjectHomePath(primary, env, 'caches'))
   })
 
   it.skipIf(!hasGit)('detects a git worktree primary workspace without env hints', async () => {

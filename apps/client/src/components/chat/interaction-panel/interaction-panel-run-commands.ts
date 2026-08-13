@@ -1,5 +1,7 @@
 import type { Config } from '@oneworks/types'
 
+import { readNonBlankFilesystemPath } from '#~/utils/filesystem-path-identity'
+
 export interface InteractionPanelRunCommand {
   cwd?: string
   env?: InteractionPanelRunCommandEnvVar[]
@@ -60,11 +62,11 @@ const normalizeRunCommand = (value: unknown): InteractionPanelRunCommand | null 
   if (script === '') return null
 
   const name = normalizeText(candidate.name)
-  const cwd = normalizeText(candidate.cwd)
+  const cwd = readNonBlankFilesystemPath(candidate.cwd)
   const env = normalizeRunCommandEnv(candidate.env)
   const icon = normalizeText(candidate.icon) || DEFAULT_RUN_COMMAND_ICON
   return {
-    ...(cwd !== '' ? { cwd } : {}),
+    ...(cwd != null ? { cwd } : {}),
     ...(env.length > 0 ? { env } : {}),
     id: normalizeText(candidate.id) || createRunCommandId(),
     icon,
@@ -105,8 +107,8 @@ export const getInteractionPanelRunCommandTitle = (command?: InteractionPanelRun
 }
 
 export const buildInteractionPanelRunCommandScript = (command: InteractionPanelRunCommand) => {
-  const cwd = normalizeText(command.cwd)
-  const cwdCommand = cwd === '' ? [] : [`cd ${shellQuote(cwd)}`]
+  const cwd = readNonBlankFilesystemPath(command.cwd)
+  const cwdCommand = cwd == null ? [] : [`cd ${shellQuote(cwd)}`]
   const exports = (command.env ?? [])
     .filter(item => ENV_KEY_PATTERN.test(item.key.trim()))
     .map(item => `export ${item.key.trim()}=${shellQuote(item.value)}`)

@@ -21,6 +21,10 @@ const normalizeText = (value: unknown) => (
   typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
 )
 
+const normalizePathText = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== '' ? value : undefined
+)
+
 const normalizeStringList = (value: unknown): string[] | undefined => {
   if (typeof value === 'string') {
     const text = normalizeText(value)
@@ -28,6 +32,17 @@ const normalizeStringList = (value: unknown): string[] | undefined => {
   }
   if (!Array.isArray(value)) return undefined
   const list = value.map(normalizeText).filter((item): item is string => item != null)
+  return list.length > 0 ? unique(list) : undefined
+}
+
+const normalizeFilesystemPatternList = (value: unknown): string[] | undefined => {
+  const readPattern = (item: unknown) => typeof item === 'string' && item.trim() !== '' ? item : undefined
+  if (typeof value === 'string') {
+    const pattern = readPattern(value)
+    return pattern == null ? undefined : [pattern]
+  }
+  if (!Array.isArray(value)) return undefined
+  const list = value.map(readPattern).filter((item): item is string => item != null)
   return list.length > 0 ? unique(list) : undefined
 }
 
@@ -39,8 +54,8 @@ export const normalizeRelayConfigSafeFields = (value: unknown): RelayConfigSafeF
 
 export const normalizeRelayConfigProjectRule = (value: unknown): RelayConfigProjectRule | undefined => {
   if (!isRecord(value)) return undefined
-  const allow = normalizeStringList(value.allow)
-  const deny = normalizeStringList(value.deny)
+  const allow = normalizeFilesystemPatternList(value.allow)
+  const deny = normalizeFilesystemPatternList(value.deny)
   return allow == null && deny == null ? undefined : { allow, deny }
 }
 
@@ -389,34 +404,132 @@ const matchPattern = (pattern: string, value: string) => {
   return new RegExp(expression, 'u').test(value)
 }
 
-const normalizePath = (value: string) => value.replace(/\\/gu, '/').replace(/\/+$/u, '')
+type RelayFilesystemPathFamily =
+  | 'posix-absolute'
+  | 'posix-relative'
+  | 'windows-drive-rooted'
+  | 'windows-drive-relative'
+  | 'windows-rooted'
+  | 'windows-unc'
 
-const getPathName = (value: string | undefined) => {
-  if (value == null) return undefined
-  const normalized = normalizePath(value)
-  const segments = normalized.split('/').filter(Boolean)
-  return segments[segments.length - 1]
+const relayFilesystemPathFamily = (value: string): RelayFilesystemPathFamily => {
+  if (/^[\\/]{2}/u.test(value)) return 'windows-unc'
+  if (/^[a-z]:[\\/]/iu.test(value)) return 'windows-drive-rooted'
+  if (/^[a-z]:/iu.test(value)) return 'windows-drive-relative'
+  if (value.startsWith('\\')) return 'windows-rooted'
+  return value.startsWith('/') ? 'posix-absolute' : 'posix-relative'
 }
 
-const getProjectCandidates = (context: RelayConfigProjectContext) => (
-  unique([
-    normalizeText(context.projectId),
-    normalizeText(context.projectName),
-    normalizeText(context.cwd),
-    normalizeText(context.workspaceFolder),
-    getPathName(normalizeText(context.cwd)),
-    getPathName(normalizeText(context.workspaceFolder)),
-    ...(normalizeText(context.cwd) == null ? [] : [normalizePath(normalizeText(context.cwd) ?? '')]),
-    ...(normalizeText(context.workspaceFolder) == null
-      ? []
-      : [normalizePath(normalizeText(context.workspaceFolder) ?? '')])
-  ].filter((value): value is string => value != null && value !== ''))
-)
+const stripTrailingPathSeparators = (value: string, floor: number, windowsFamily: boolean) => {
+  const isSeparator = windowsFamily
+    ? (character: string) => character === '/' || character === '\\'
+    : (character: string) => character === '/'
+  let end = value.length
+  while (end > floor && isSeparator(value[end - 1])) end -= 1
+  return value.slice(0, end)
+}
 
-const matchesAnyPattern = (patterns: string[] | undefined, candidates: string[]) => (
-  patterns == null || patterns.length === 0
-    ? false
-    : patterns.some(pattern => candidates.some(candidate => matchPattern(pattern, candidate)))
+const usesWindowsPathSeparators = (value: string) => relayFilesystemPathFamily(value).startsWith('windows-')
+
+const normalizePath = (value: string, family = relayFilesystemPathFamily(value)) => {
+  const windowsFamily = family.startsWith('windows-')
+  const floor = family === 'windows-unc'
+    ? (/^[\\/]{2}[^\\/]+[\\/]+[^\\/]+/u.exec(value)?.[0].length ?? 2)
+    : family === 'windows-drive-rooted'
+    ? 3
+    : family === 'windows-drive-relative'
+    ? 2
+    : family === 'windows-rooted' || family === 'posix-absolute'
+    ? 1
+    : 0
+  const driveRoot = /^([a-z]:)[\\/]/iu.exec(value)
+  if (driveRoot != null) {
+    const root = `${driveRoot[1]}/`
+    const rest = stripTrailingPathSeparators(value.slice(driveRoot[0].length).replace(/[\\/]+/gu, '/'), 0, true)
+    return rest === '' ? root : `${root}${rest}`
+  }
+  const uncRoot = family === 'windows-unc' ? /^[\\/]{2}([^\\/]+)[\\/]+([^\\/]+)/u.exec(value) : undefined
+  if (uncRoot != null) {
+    const root = `\\\\${uncRoot[1]}/${uncRoot[2]}`
+    const rest = stripTrailingPathSeparators(value.slice(uncRoot[0].length).replace(/[\\/]+/gu, '/'), 0, true)
+      .replace(/^\/+|\/+$/gu, '')
+    return rest === '' ? root : `${root}/${rest}`
+  }
+  if (family === 'windows-rooted') {
+    const rest = stripTrailingPathSeparators(value.slice(1).replace(/[\\/]+/gu, '/'), 0, true).replace(
+      /^\/+|\/+$/gu,
+      ''
+    )
+    return rest === '' ? '\\' : `\\${rest}`
+  }
+  if (family === 'posix-absolute') {
+    const rest = value.slice(1).replace(/^\/+|\/+$/gu, '')
+    return rest === '' ? '/' : `/${rest}`
+  }
+  return windowsFamily
+    ? stripTrailingPathSeparators(value.replace(/[\\/]+/gu, '/'), floor, true)
+    : value.replace(/\/+$/gu, '')
+}
+
+const relayFilesystemPathComparisonKey = (
+  value: string,
+  family = relayFilesystemPathFamily(value),
+  isBasename = false
+) => {
+  const normalized = isBasename
+    ? (family.startsWith('windows-') ? value.replace(/[\\/]+/gu, '/') : value)
+    : normalizePath(value, family)
+  return `${family}:${family.startsWith('windows-') ? normalized.toLowerCase() : normalized}`
+}
+
+const getPathName = (value: string | undefined) => {
+  if (
+    value == null || /^[a-z]:[\\/]*$/iu.test(value) || /^[\\/]$/u.test(value) ||
+    /^[\\/]{2}[^\\/]+[\\/][^\\/]+[\\/]*$/u.test(value)
+  ) return undefined
+  const normalized = normalizePath(value)
+  const segments = usesWindowsPathSeparators(normalized)
+    ? normalized.split(/[\\/]+/u).filter(Boolean)
+    : normalized.split(/\/+/u).filter(Boolean)
+  const name = segments[segments.length - 1]
+  return name == null ? undefined : { family: relayFilesystemPathFamily(value), value: name }
+}
+
+interface RelayProjectCandidate {
+  family?: RelayFilesystemPathFamily
+  isBasename?: boolean
+  value: string
+}
+
+const getProjectCandidates = (context: RelayConfigProjectContext) => {
+  const cwd = normalizePathText(context.cwd)
+  const workspaceFolder = normalizePathText(context.workspaceFolder)
+  const candidates: RelayProjectCandidate[] = [
+    ...[normalizeText(context.projectId), normalizeText(context.projectName)]
+      .filter((value): value is string => value != null && value !== '')
+      .map(value => ({ value })),
+    ...[cwd, workspaceFolder].filter((value): value is string => value != null)
+      .map(value => ({ family: relayFilesystemPathFamily(value), value })),
+    ...[getPathName(cwd), getPathName(workspaceFolder)]
+      .filter((value): value is NonNullable<typeof value> => value != null)
+      .map(value => ({ ...value, isBasename: true }))
+  ]
+  return [...new Map(candidates.map(candidate => [
+    `${candidate.family ?? 'text'}:${candidate.isBasename === true ? 'basename' : 'value'}:${candidate.value}`,
+    candidate
+  ])).values()]
+}
+
+const matchesAnyPattern = (patterns: string[] | undefined, candidates: RelayProjectCandidate[]) => (
+  patterns != null && patterns.length > 0 && patterns.some(pattern =>
+    candidates.some(candidate => {
+      const patternFamily = candidate.isBasename === true && !/[\\/]/u.test(pattern) ? candidate.family : undefined
+      return matchPattern(
+        relayFilesystemPathComparisonKey(pattern, patternFamily, candidate.isBasename === true),
+        relayFilesystemPathComparisonKey(candidate.value, candidate.family, candidate.isBasename === true)
+      )
+    })
+  )
 )
 
 export const matchesRelayConfigProject = (
@@ -424,8 +537,8 @@ export const matchesRelayConfigProject = (
   context: RelayConfigProjectContext
 ) => {
   const candidates = getProjectCandidates(context)
-  const allow = normalizeStringList(assignment.project?.allow)
-  const deny = normalizeStringList(assignment.project?.deny)
+  const allow = normalizeFilesystemPatternList(assignment.project?.allow)
+  const deny = normalizeFilesystemPatternList(assignment.project?.deny)
 
   if (matchesAnyPattern(deny, candidates)) return false
   if (allow == null || allow.length === 0) return true

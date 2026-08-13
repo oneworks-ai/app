@@ -24,6 +24,35 @@ afterEach(async () => {
 })
 
 describe('cli-helper loader wrapper', () => {
+  it('preserves exact NODE_PATH entries before module resolution', async () => {
+    const root = await mkdtemp(resolve(tmpdir(), 'ow-cli-helper-node-path-'))
+    tempDirs.push(root)
+    const adjacentModules = join(root, 'modules')
+    const exactModules = join(root, 'modules ')
+    const entryPath = join(root, 'entry.cjs')
+    for (const [modulesDir, identity] of [[adjacentModules, 'adjacent'], [exactModules, 'exact']] as const) {
+      const packageDir = join(modulesDir, 'identity')
+      await mkdir(packageDir, { recursive: true })
+      await writeFile(join(packageDir, 'index.js'), `module.exports = ${JSON.stringify(identity)}\n`, 'utf8')
+    }
+    await writeFile(entryPath, "process.stdout.write(require('identity'))\n", 'utf8')
+
+    const result = spawnSync(process.execPath, [resolve(process.cwd(), 'packages/cli-helper/loader.js')], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        NODE_PATH: [exactModules, adjacentModules].join(delimiter),
+        __ONEWORKS_PROJECT_CLI_BIN_SOURCE_ENTRY__: entryPath,
+        __ONEWORKS_PROJECT_PACKAGE_DIR__: root
+      },
+      encoding: 'utf8'
+    })
+
+    expect(result.status).toBe(0)
+    expect(result.stderr).toBe('')
+    expect(result.stdout).toBe('exact')
+  })
+
   it('forwards a required desktop owner IPC channel to the re-executed wrapper', async () => {
     const tempDir = await mkdtemp(resolve(tmpdir(), 'ow-cli-helper-owner-ipc-'))
     tempDirs.push(tempDir)
@@ -109,6 +138,31 @@ require(${JSON.stringify(cliEntryPath)}).runCliPackageEntrypoint({
     expect(resolveActiveCliPackageDir(packageName, bundledPackageDir, {
       __ONEWORKS_PROJECT_REAL_HOME__: tempDir
     })).toBe(bundledPackageDir)
+  })
+
+  it('reads active-package metadata only from the exact whitespace-bearing real home', async () => {
+    const root = await mkdtemp(resolve(tmpdir(), 'ow-cli-helper-home-path-'))
+    tempDirs.push(root)
+    const packageName = '@oneworks/server'
+    const bundledPackageDir = join(root, 'bundled')
+    const activePackageDir = join(root, 'active')
+    const exactHome = join(root, 'home ')
+    const adjacentHome = join(root, 'home')
+    await mkdir(bundledPackageDir)
+    await mkdir(activePackageDir)
+    await writeFile(join(activePackageDir, 'package.json'), JSON.stringify({ name: packageName, version: '4.0.0' }))
+    for (const [home, packageDir] of [[exactHome, activePackageDir], [adjacentHome, bundledPackageDir]] as const) {
+      const metadataDir = join(home, '.oneworks', 'bootstrap', 'module-updates')
+      await mkdir(metadataDir, { recursive: true })
+      await writeFile(
+        join(metadataDir, 'oneworks__server.json'),
+        JSON.stringify({ packageDir, packageName, version: '4.0.0' })
+      )
+    }
+
+    expect(resolveActiveCliPackageDir(packageName, bundledPackageDir, {
+      __ONEWORKS_PROJECT_REAL_HOME__: exactHome
+    })).toBe(activePackageDir)
   })
 
   it('propagates the spawned cli exit code', async () => {

@@ -175,7 +175,7 @@ export const projectPluginPresentationValue = (value: string | undefined) =>
 export const sanitizePluginAssetReference = (value: string | undefined) => {
   const presentationValue = sanitizePluginPresentationValue(value)
   if (presentationValue == null) return undefined
-  const safeText = presentationValue.trim()
+  const safeText = presentationValue
   const decodedSafeText = decodeSafePluginAssetReference(safeText)
   if (
     decodedSafeText == null ||
@@ -183,7 +183,7 @@ export const sanitizePluginAssetReference = (value: string | undefined) => {
     assetSuffixIsUnsafe(getPluginAssetQueryFragment(decodedSafeText) ?? '')
   ) return undefined
   const inspection = inspectExactUrl(decodedSafeText)
-  if (inspection === 'safe-asset') return safeText
+  if (inspection === 'safe-asset') return decodedSafeText.includes('\\') ? undefined : safeText
   if (inspection !== 'not-url') return undefined
   const absolutePublicPath = decodedSafeText.startsWith('/') && (() => {
     const firstSegment = decodedSafeText.slice(1).split('/', 1)[0]?.toLowerCase() ?? ''
@@ -193,7 +193,6 @@ export const sanitizePluginAssetReference = (value: string | undefined) => {
     (decodedSafeText.startsWith('/') && !absolutePublicPath) ||
     decodedSafeText.startsWith('~') ||
     decodedSafeText.startsWith('\\') ||
-    decodedSafeText.includes('\\') ||
     decodedSafeText.includes(':')
   ) return undefined
   return safeText

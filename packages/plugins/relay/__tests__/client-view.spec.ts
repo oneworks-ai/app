@@ -4,7 +4,13 @@ import { readFile } from 'node:fs/promises'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { activatePlugin } from '../src/client/index.js'
-import { RelayHomeView, modelUsageTeamSetting, renderAvatar } from '../src/client/react-view.js'
+import {
+  RelayHomeView,
+  buildRelayDeviceProjectGroups,
+  modelUsageTeamSetting,
+  renderAvatar,
+  renderDeviceProjectsPanel
+} from '../src/client/react-view.js'
 import { relayClientCss } from '../src/client/styles.js'
 import type {
   PluginClientContext,
@@ -103,6 +109,111 @@ afterEach(() => {
 })
 
 describe('relay plugin client view registration', () => {
+  it('keeps filesystem-distinct Relay projects through the Relay Home device panel and copies their exact path', async () => {
+    const exact = '/projects/app '
+    const copied: string[] = []
+    vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn(async value => copied.push(value)) } })
+    const notifications = { show: vi.fn() }
+    const { ctx } = createContext()
+    ctx.notifications = notifications
+    const groups = buildRelayDeviceProjectGroups({
+      id: 'device',
+      managementServers: [{
+        id: 'manager',
+        projects: [
+          { id: 'plain', workspaceFolder: '/projects/app' },
+          { id: 'space', workspaceFolder: exact },
+          { id: 'case', workspaceFolder: '/Projects/App' },
+          { id: 'literal', workspaceFolder: String.raw`/projects/team\secret` },
+          { id: 'nested', workspaceFolder: '/projects/team/secret' },
+          { id: 'windows-a', workspaceFolder: String.raw`C:\Projects\App` },
+          { id: 'windows-b', workspaceFolder: 'c:/projects/app' },
+          { id: 'rooted', workspaceFolder: String.raw`\project` },
+          { id: 'posix-rooted', workspaceFolder: '/project' },
+          { id: 'unc-a', workspaceFolder: String.raw`\\Server\Share` },
+          { id: 'unc-b', workspaceFolder: '//server/share' }
+        ]
+      }]
+    })
+    const projects = groups.flatMap(group => group.projects)
+
+    expect(projects.map(project => project.path)).toEqual(expect.arrayContaining([
+      '/projects/app',
+      exact,
+      '/Projects/App',
+      String.raw`/projects/team\secret`,
+      '/projects/team/secret',
+      String.raw`C:\Projects\App`
+    ]))
+    expect(projects).toHaveLength(9)
+    expect(projects.find(project => project.path === String.raw`/projects/team\secret`)?.title)
+      .toBe(String.raw`team\secret`)
+
+    const react = createReactHost()
+    const InteractionList = Symbol('InteractionList')
+    const panel = renderDeviceProjectsPanel({
+      ctx,
+      device: {
+        id: 'device',
+        managementServers: [{
+          id: 'manager',
+          projects: [
+            { id: 'plain', workspaceFolder: '/projects/app' },
+            { id: 'space', workspaceFolder: exact },
+            { id: 'case', workspaceFolder: '/Projects/App' },
+            { id: 'literal', workspaceFolder: String.raw`/projects/team\secret` },
+            { id: 'nested', workspaceFolder: '/projects/team/secret' },
+            { id: 'windows-a', workspaceFolder: String.raw`C:\Projects\App` },
+            { id: 'windows-b', workspaceFolder: 'c:/projects/app' },
+            { id: 'rooted', workspaceFolder: String.raw`\project` },
+            { id: 'posix-rooted', workspaceFolder: '/project' },
+            { id: 'unc-a', workspaceFolder: String.raw`\\Server\Share` },
+            { id: 'unc-b', workspaceFolder: '//server/share' }
+          ]
+        }]
+      },
+      filter: '',
+      managers: [{
+        id: 'manager',
+        projects: [
+          { id: 'plain', workspaceFolder: '/projects/app' },
+          { id: 'space', workspaceFolder: exact },
+          { id: 'case', workspaceFolder: '/Projects/App' },
+          { id: 'literal', workspaceFolder: String.raw`/projects/team\secret` },
+          { id: 'nested', workspaceFolder: '/projects/team/secret' },
+          { id: 'windows-a', workspaceFolder: String.raw`C:\Projects\App` },
+          { id: 'windows-b', workspaceFolder: 'c:/projects/app' },
+          { id: 'rooted', workspaceFolder: String.raw`\project` },
+          { id: 'posix-rooted', workspaceFolder: '/project' },
+          { id: 'unc-a', workspaceFolder: String.raw`\\Server\Share` },
+          { id: 'unc-b', workspaceFolder: '//server/share' }
+        ]
+      }],
+      onFilterChange: vi.fn(),
+      react,
+      view: { ui: { InteractionList } }
+    })
+    const list = (panel as {
+      children: Array<{
+        props: {
+          actions: (item: { path?: string }) => Array<{ onSelect: (item: { path?: string }) => void }>
+          items: Array<{ path?: string }>
+        }
+        type: unknown
+      }>
+    }).children[0]
+    expect(list.type).toBe(InteractionList)
+    expect(list.props.items).toHaveLength(9)
+    const exactItem = list.props.items.find(item => item.path === exact)
+    expect(exactItem).toBeDefined()
+    if (exactItem == null) throw new Error('Expected the exact project row')
+    list.props.actions(exactItem).at(0)?.onSelect(exactItem)
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(copied).toEqual([exact])
+    expect(notifications.show).toHaveBeenCalledWith(expect.objectContaining({ description: exact }))
+  })
+
   it('registers the home view as a React-only renderer', async () => {
     installBrowser()
     const { ctx, getHomeRegistration, react } = createContext()

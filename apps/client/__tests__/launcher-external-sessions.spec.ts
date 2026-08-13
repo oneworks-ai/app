@@ -2,9 +2,65 @@ import { readFileSync } from 'node:fs'
 
 import { describe, expect, it } from 'vitest'
 
+import { buildLauncherExternalSessionProjectOptions } from '#~/components/config/external-session-project-path'
+
 const readClientSource = (path: string) => readFileSync(new URL(`../src/${path}`, import.meta.url), 'utf8')
 
 describe('launcher external sessions', () => {
+  it('keeps whitespace-distinct workspace projects as separate option identities', () => {
+    const options = buildLauncherExternalSessionProjectOptions([
+      {
+        description: '/parent/project',
+        name: 'Project',
+        status: undefined,
+        workspaceFolder: '/parent/project'
+      },
+      {
+        description: '/parent/project ',
+        name: 'Project with whitespace',
+        status: undefined,
+        workspaceFolder: '/parent/project '
+      }
+    ] as never)
+
+    expect(options.map(option => option.value)).toEqual([
+      '/parent/project',
+      '/parent/project '
+    ])
+  })
+
+  it('keeps POSIX literal-backslash projects distinct from nested projects', () => {
+    const options = buildLauncherExternalSessionProjectOptions([
+      {
+        name: 'Literal backslash',
+        status: undefined,
+        workspaceFolder: String.raw`/projects/team\secret`
+      },
+      {
+        name: 'Nested project',
+        status: undefined,
+        workspaceFolder: '/projects/team/secret'
+      }
+    ] as never)
+
+    expect(options.map(option => option.value)).toEqual([
+      String.raw`/projects/team\secret`,
+      '/projects/team/secret'
+    ])
+  })
+
+  it('dedupes equivalent drive-relative projects without matching drive-rooted projects', () => {
+    const options = buildLauncherExternalSessionProjectOptions([
+      { name: 'Relative', status: undefined, workspaceFolder: String.raw`C:Projects\App` },
+      { name: 'Equivalent', status: undefined, workspaceFolder: 'c:projects/app' },
+      { name: 'Rooted', status: undefined, workspaceFolder: String.raw`C:\Projects\App` }
+    ] as never)
+
+    expect(options.map(option => option.value)).toEqual([
+      String.raw`C:Projects\App`,
+      String.raw`C:\Projects\App`
+    ])
+  })
   it('provides a global import section in launcher settings', () => {
     const settingsSource = readClientSource('components/launcher/LauncherSettingsView.tsx')
     const externalSessionsSource = readClientSource(
@@ -14,10 +70,14 @@ describe('launcher external sessions', () => {
     expect(settingsSource).toContain("id: 'external-sessions'")
     expect(settingsSource).toContain("t('launcher.settings.sections.externalSessions')")
     expect(settingsSource).toContain('<LauncherExternalSessionsView')
+    expect(settingsSource).toContain('observeActivation={observeActivation}')
+    expect(settingsSource).toContain('getModalContainer={getModalContainer}')
     expect(settingsSource).toContain('onImportComplete={onExternalSessionsImportComplete}')
     expect(settingsSource).toContain('workspaceProjects={workspaceProjects}')
     expect(externalSessionsSource).toContain('workspaceProjects: LauncherWorkspaceSelectorProject[]')
     expect(externalSessionsSource).toContain('onImportComplete={onImportComplete}')
+    expect(externalSessionsSource).toContain('activationActive={active}')
+    expect(externalSessionsSource).toContain('getModalContainer={getModalContainer}')
     expect(externalSessionsSource).toContain("fixedProjectScope='all-projects'")
     expect(externalSessionsSource).toContain('initialShowAllTime')
     expect(externalSessionsSource).toContain('onSearchChromeChange({')
@@ -97,6 +157,8 @@ describe('launcher external sessions', () => {
     expect(adapterSource).toContain(
       "t('nativeHistoryImport.manager.confirmImportAllTitle'"
     )
-    expect(adapterSource).toContain('onOk: () => handleImportSourcePaths(sourcePaths)')
+    expect(adapterSource).toContain('...(getModalContainer == null ? {} : { getContainer: getModalContainer })')
+    expect(adapterSource).toContain('if (!isActive || (activation != null && !activation.isCurrent())) return')
+    expect(adapterSource).toContain('await handleImportSourcePaths(sourcePaths, activation)')
   })
 })

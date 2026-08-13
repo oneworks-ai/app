@@ -17,6 +17,63 @@ afterEach(async () => {
 })
 
 describe('bridgeRealHomeToMockHome', () => {
+  it('bridges the exact whitespace-bearing entry without touching its adjacent peer', async () => {
+    const realHome = await mkdtemp(path.join(os.tmpdir(), 'ow-real-home-'))
+    const mockHome = await mkdtemp(path.join(os.tmpdir(), 'ow-mock-home-'))
+    tempDirs.push(realHome, mockHome)
+    const adjacentEntry = path.join('.config', 'tool')
+    const exactEntry = `${adjacentEntry} `
+    const adjacentSource = path.join(realHome, adjacentEntry)
+    const exactSource = path.join(realHome, exactEntry)
+    await Promise.all([
+      mkdir(adjacentSource, { recursive: true }),
+      mkdir(exactSource, { recursive: true })
+    ])
+
+    const { bridgeRealHomeToMockHome } = require('../mock-home-bridge.js') as typeof import('../mock-home-bridge')
+    bridgeRealHomeToMockHome({
+      realHome,
+      mockHome,
+      entries: [exactEntry],
+      directLinkEntries: [exactEntry],
+      includeDotEntries: false,
+      includePlatformEntries: false
+    })
+
+    expect(await readlink(path.join(mockHome, exactEntry))).toBe(exactSource)
+    await expect(lstat(path.join(mockHome, adjacentEntry))).rejects.toMatchObject({ code: 'ENOENT' })
+    expect((await lstat(adjacentSource)).isDirectory()).toBe(true)
+  })
+
+  it('bridges and claims only the exact whitespace-bearing home identity', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ow-home-identity-'))
+    const adjacentRealHome = path.join(root, 'real-home')
+    const realHome = path.join(root, 'real-home ')
+    const mockHome = path.join(root, 'mock-home ')
+    tempDirs.push(root)
+    await Promise.all([
+      mkdir(path.join(adjacentRealHome, '.config', 'tool'), { recursive: true }),
+      mkdir(path.join(realHome, '.config', 'tool'), { recursive: true }),
+      mkdir(mockHome, { recursive: true })
+    ])
+    await Promise.all([
+      writeFile(path.join(adjacentRealHome, '.config', 'tool', 'settings.json'), 'adjacent\n'),
+      writeFile(path.join(realHome, '.config', 'tool', 'settings.json'), 'exact\n')
+    ])
+    const { bridgeRealHomeToMockHome, claimMockHomePaths } = require(
+      '../mock-home-bridge.js'
+    ) as typeof import('../mock-home-bridge')
+
+    bridgeRealHomeToMockHome({ realHome, mockHome })
+    expect(await readlink(path.join(mockHome, '.config', 'tool'))).toBe(path.join(realHome, '.config', 'tool'))
+    claimMockHomePaths({ mockHome, paths: ['.config/tool'] })
+
+    await expect(lstat(path.join(mockHome, '.config', 'tool'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(readFile(path.join(realHome, '.config', 'tool', 'settings.json'), 'utf8')).resolves.toBe('exact\n')
+    await expect(readFile(path.join(adjacentRealHome, '.config', 'tool', 'settings.json'), 'utf8'))
+      .resolves.toBe('adjacent\n')
+  })
+
   it('bridges real home dot entries while directly reusing shared caches', async () => {
     const realHome = await mkdtemp(path.join(os.tmpdir(), 'ow-real-home-'))
     const mockHome = await mkdtemp(path.join(os.tmpdir(), 'ow-mock-home-'))

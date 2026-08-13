@@ -1,8 +1,10 @@
-import { mkdtemp, readFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 import { describe, expect, it, vi } from 'vitest'
+
+import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 
 import { createServerRuntimeSession } from '#~/services/runtime-store/session-control.js'
 
@@ -111,5 +113,38 @@ describe('runtime store session control', () => {
       status: 'completed',
       needsEngineConsumer: true
     })
+  })
+
+  it('persists the exact whitespace-bearing primary workspace in its distinct runtime root', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'ow-runtime-session-raw-path-'))
+    const workspace = path.join(root, 'app ')
+    const adjacentWorkspace = path.join(root, 'app')
+    const home = path.join(root, 'home ')
+    await Promise.all([mkdir(workspace), mkdir(adjacentWorkspace), mkdir(home)])
+    vi.stubEnv('HOME', home)
+    vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', home)
+    vi.stubEnv('__ONEWORKS_PROJECT_WORKSPACE_FOLDER__', workspace)
+    try {
+      const result = await createServerRuntimeSession({
+        cwd: workspace,
+        message: 'Keep raw workspace identity',
+        sessionId: 'sess-raw-workspace'
+      })
+      const meta = JSON.parse(await readFile(path.join(result.storePath, 'meta.json'), 'utf8')) as {
+        cwd?: string
+        primaryWorkspaceFolder?: string
+      }
+
+      expect(meta).toMatchObject({ cwd: workspace, primaryWorkspaceFolder: workspace })
+      expect(result.runtimeRoot).toContain(path.join(home, '.oneworks', 'projects'))
+      expect(result.runtimeRoot).not.toBe(resolveProjectHomePath(adjacentWorkspace, {
+        HOME: home,
+        __ONEWORKS_PROJECT_REAL_HOME__: home,
+        __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: adjacentWorkspace
+      }, 'runtime'))
+    } finally {
+      vi.unstubAllEnvs()
+      await rm(root, { force: true, recursive: true })
+    }
   })
 })

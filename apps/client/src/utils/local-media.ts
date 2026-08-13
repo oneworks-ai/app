@@ -1,3 +1,11 @@
+import {
+  getFilesystemPathFamily,
+  isAbsoluteFilesystemPath,
+  isWindowsFilesystemPath,
+  readNonBlankFilesystemPath,
+  stripOptionalTrailingPathSeparators
+} from './filesystem-path-identity'
+
 const IMAGE_EXTENSIONS = new Set([
   'apng',
   'avif',
@@ -13,6 +21,7 @@ const IMAGE_EXTENSIONS = new Set([
 const VIDEO_EXTENSIONS = new Set(['m4v', 'mov', 'mp4', 'ogv', 'webm'])
 const AUDIO_EXTENSIONS = new Set(['aac', 'flac', 'm4a', 'mp3', 'oga', 'ogg', 'wav'])
 const URL_SCHEME_PATTERN = /^[a-z][a-z0-9+.-]*:/i
+const WINDOWS_FILESYSTEM_PATH_PATTERN = /^[a-z]:/i
 
 export type LocalMediaKind = 'audio' | 'image' | 'video'
 
@@ -34,7 +43,16 @@ const getExtension = (value: string) => {
   return fileName.includes('.') ? fileName.split('.').pop()?.toLowerCase() ?? '' : ''
 }
 
-const normalizeWorkspaceRootPath = (value: string | undefined) => value?.trim().replace(/[\\/]+$/, '') ?? ''
+const normalizeWorkspaceRootPath = (value: string | undefined) => {
+  const rawPath = readNonBlankFilesystemPath(value)
+  return rawPath == null ? '' : stripOptionalTrailingPathSeparators(rawPath)
+}
+
+const normalizeWorkspaceFamilySeparators = (value: string, rootPath: string) => (
+  isWindowsFilesystemPath(rootPath)
+    ? value.replace(/\\/g, '/')
+    : value
+)
 
 export const parseLocalMediaSource = (value: string): LocalMediaSource | null => {
   const trimmed = value.trim()
@@ -42,15 +60,15 @@ export const parseLocalMediaSource = (value: string): LocalMediaSource | null =>
     trimmed === '' ||
     trimmed.startsWith('#') ||
     trimmed.startsWith('//') ||
-    URL_SCHEME_PATTERN.test(trimmed)
+    (!WINDOWS_FILESYSTEM_PATH_PATTERN.test(trimmed) && URL_SCHEME_PATTERN.test(trimmed))
   ) {
     return null
   }
 
-  const pathWithoutHash = trimmed.split('#')[0] ?? ''
+  const pathWithoutHash = value.split('#')[0] ?? ''
   const pathWithoutQuery = pathWithoutHash.split('?')[0] ?? ''
   const path = decodeLocalPath(pathWithoutQuery)
-  const extension = getExtension(path)
+  const extension = getExtension(path.trimEnd())
   const kind = IMAGE_EXTENSIONS.has(extension)
     ? 'image'
     : VIDEO_EXTENSIONS.has(extension)
@@ -59,7 +77,7 @@ export const parseLocalMediaSource = (value: string): LocalMediaSource | null =>
     ? 'audio'
     : null
 
-  return kind == null || path === '' ? null : { kind, path }
+  return kind == null || path.trim() === '' ? null : { kind, path }
 }
 
 export const parseLocalMediaSourceForWorkspaceRoot = (
@@ -67,16 +85,21 @@ export const parseLocalMediaSourceForWorkspaceRoot = (
   workspaceRootPath?: string
 ): LocalMediaSource | null => {
   const media = parseLocalMediaSource(value)
-  if (media == null || !media.path.startsWith('/')) return media
+  if (media == null || !isAbsoluteFilesystemPath(media.path)) return media
 
-  const normalizedPath = media.path.replace(/\\/g, '/')
+  const rawRoot = normalizeWorkspaceRootPath(workspaceRootPath)
+  const normalizedPath = normalizeWorkspaceFamilySeparators(media.path, rawRoot)
   if (/^\/(?:private\/)?tmp\/oneworks-cua(?:\/|$)/.test(normalizedPath)) {
     return media
   }
 
-  const normalizedRoot = normalizeWorkspaceRootPath(workspaceRootPath).replace(/\\/g, '/')
-  return normalizedRoot !== '' && (
-      normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}/`)
+  const normalizedRoot = normalizeWorkspaceFamilySeparators(rawRoot, rawRoot)
+  const sameFamily = getFilesystemPathFamily(rawRoot) === getFilesystemPathFamily(media.path)
+  const comparableRoot = isWindowsFilesystemPath(rawRoot) ? normalizedRoot.toLowerCase() : normalizedRoot
+  const comparablePath = isWindowsFilesystemPath(rawRoot) ? normalizedPath.toLowerCase() : normalizedPath
+  const rootPrefix = comparableRoot.endsWith('/') ? comparableRoot : `${comparableRoot}/`
+  return sameFamily && comparableRoot !== '' && (
+      comparablePath === comparableRoot || comparablePath.startsWith(rootPrefix)
     )
     ? media
     : null

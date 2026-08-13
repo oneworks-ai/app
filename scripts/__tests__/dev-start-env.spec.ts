@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { buildRuntimeEnv, resolveDevStartHomeProjectsDir, resolveDevStartInstanceId } from '../dev-start/env'
 import { resolveDesktopWorkspaceLaunchFolder } from '../dev-start/manager'
 import { repoRoot } from '../dev-start/paths'
+import { normalizePathValue, resolveProjectHomeDir } from '../dev-start/storage'
 
 describe('dev-start runtime env', () => {
   let tempHome = ''
@@ -80,5 +81,33 @@ describe('dev-start runtime env', () => {
 
     expect(resolveDesktopWorkspaceLaunchFolder('/tmp/current-validation-worktree'))
       .toBe('/tmp/current-validation-worktree')
+  })
+
+  it('derives distinct storage for whitespace-distinct project roots', () => {
+    const home = '/tmp/dev-home '
+    const projectsDir = '/tmp/dev-projects '
+    const exactWorkspace = '/tmp/workspace '
+    const adjacentWorkspace = '/tmp/workspace'
+    const baseEnv = {
+      __ONEWORKS_PROJECT_HOME_PROJECTS_DIR__: projectsDir,
+      __ONEWORKS_PROJECT_REAL_HOME__: home
+    }
+
+    expect(resolveProjectHomeDir({ ...baseEnv, __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: exactWorkspace }))
+      .not.toBe(resolveProjectHomeDir({ ...baseEnv, __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: adjacentWorkspace }))
+    expect(normalizePathValue(home)).toBe(home)
+    expect(resolveDevStartHomeProjectsDir(baseEnv, exactWorkspace)).toBe(projectsDir)
+  })
+
+  it.runIf(process.platform !== 'win32')('preserves POSIX literal trailing backslashes in storage identity', () => {
+    const workspaceFolder = '/tmp/workspace\\'
+    expect(normalizePathValue(workspaceFolder)).toBe(workspaceFolder)
+    expect(resolveProjectHomeDir({
+      __ONEWORKS_PROJECT_HOME_PROJECTS_DIR__: '/tmp/projects',
+      __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: workspaceFolder
+    })).not.toBe(resolveProjectHomeDir({
+      __ONEWORKS_PROJECT_HOME_PROJECTS_DIR__: '/tmp/projects',
+      __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: '/tmp/workspace'
+    }))
   })
 })

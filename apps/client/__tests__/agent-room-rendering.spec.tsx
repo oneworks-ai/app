@@ -53,6 +53,15 @@ vi.mock('monaco-editor', () => ({
   }
 }))
 
+vi.stubGlobal('localStorage', {
+  getItem: () => null,
+  setItem: () => undefined,
+  removeItem: () => undefined,
+  clear: () => undefined
+})
+
+const chatHistoryViewPromise = import('#~/components/chat/ChatHistoryView')
+
 const createI18n = async (lng = 'en') => {
   const i18n = createInstance()
   await i18n
@@ -312,6 +321,7 @@ const sessionFixture: Session = {
 }
 
 const renderChatHistoryShell = async ({
+  agentRoom = fixtureRoom,
   agentRoomSourceMembers,
   embeddedSessionChrome = false,
   language = 'en',
@@ -320,6 +330,7 @@ const renderChatHistoryShell = async ({
   roomMode,
   session = sessionFixture
 }: {
+  agentRoom?: AgentRoomViewModel
   agentRoomSourceMembers?: AgentRoomMemberView[]
   embeddedSessionChrome?: boolean
   language?: string
@@ -359,8 +370,7 @@ const renderChatHistoryShell = async ({
       disconnect() {}
     }
   )
-  const { ChatHistoryView } = await import('#~/components/chat/ChatHistoryView')
-  const i18n = await createI18n(language)
+  const [{ ChatHistoryView }, i18n] = await Promise.all([chatHistoryViewPromise, createI18n(language)])
 
   return renderToStaticMarkup(
     <I18nextProvider i18n={i18n}>
@@ -416,8 +426,8 @@ const renderChatHistoryShell = async ({
             hasAvailableModels
             agentRoomTranscript={roomMode
               ? {
-                room: fixtureRoom,
-                members: fixtureRoom.members,
+                room: agentRoom,
+                members: agentRoom.members,
                 workspaceSessionId: 'sess-host-room-plan',
                 onSubmitMessage: noop
               }
@@ -1871,7 +1881,10 @@ describe('agent room transcript rendering', () => {
   })
 
   it('renders the shared session sender in the room sender slot', async () => {
-    const html = await renderChatHistoryShell({ roomMode: true })
+    const html = await renderChatHistoryShell({
+      agentRoom: { ...fixtureRoom, messages: [] },
+      roomMode: true
+    })
 
     expectContains(
       html,

@@ -27,6 +27,8 @@
 - module-updates.ts：运行时模块版本检测与 bootstrap cache 安装编排，供普通 web、bootstrap web 和桌面 workspace 共同使用
   - Core 模块必须按当前宿主筛选：集成 Web 只管理 web shell，独立 server 只管理 server，桌面端只管理实际加载的 client/server。
   - 桌面 runtime cache 的目录 key 可能是 `dev-*`，当前版本必须读取被启动链路选中的 package `package.json`，不能把目录名或其他历史 semver cache 当成当前版本；安装入口必须拒绝降级。
+  - package/runtime 目录是文件系统身份：只用 `trim()` 判断空值，读取 `package.json`、创建 `require` 或选择安装根时必须继续使用原字符串。
+- git/：普通 branch / HEAD / remote / log 等文本命令继续使用 `trim()`；repository root 只移除终端 CR/LF，status、numstat、untracked file 和 worktree 等路径记录优先使用 NUL / porcelain framing，并且只剥离协议字段分隔符，不清理路径 payload。
 - channel-runtime-key.ts：持久化到 SQLite 的频道复合键统一使用 JSON 编码，禁止使用 NUL 分隔符，避免驱动截断造成跨用户键碰撞。
 
 分层约定：services 统一承载跨入口复用的业务编排、运行态状态和配置装载；routes/websocket/channels 不直接维护会话缓存，不直接拼装 loadConfig 的 jsonVariables。

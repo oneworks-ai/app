@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
@@ -67,6 +67,40 @@ afterEach(async () => {
 })
 
 describe('module update runtime scoping', () => {
+  it('keeps active package metadata inside the exact whitespace-bearing real home', async () => {
+    const root = await createTempDir()
+    const adjacentHome = path.join(root, 'home')
+    const exactHome = path.join(root, 'home ')
+    await Promise.all([
+      mkdir(adjacentHome, { recursive: true }),
+      mkdir(exactHome, { recursive: true })
+    ])
+    const packageDir = await writePackage(
+      path.join(exactHome, 'active-catalog'),
+      '@oneworks/model-provider-catalog',
+      '0.1.0-beta.11'
+    )
+    const adjacentMetadata = path.join(
+      adjacentHome,
+      '.oneworks/bootstrap/module-updates/oneworks__model-provider-catalog.json'
+    )
+    await mkdir(path.dirname(adjacentMetadata), { recursive: true })
+    await writeFile(adjacentMetadata, '{"sentinel":"adjacent"}\n', 'utf8')
+    vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', exactHome)
+
+    await writeActiveModulePackage({
+      packageDir,
+      packageName: '@oneworks/model-provider-catalog',
+      version: '0.1.0-beta.11'
+    })
+    const response = await checkModuleUpdates({ publishedVersionResolver: async () => '0.1.0-beta.11' })
+
+    expect(response.modules.find(item => item.id === 'catalog:model-providers')).toMatchObject({
+      currentVersion: '0.1.0-beta.11'
+    })
+    await expect(readFile(adjacentMetadata, 'utf8')).resolves.toBe('{"sentinel":"adjacent"}\n')
+  })
+
   it('recognizes every applicable checked module as an exact install target', async () => {
     const realHome = await createTempDir()
     const serverPackageDir = await writePackage(
@@ -225,6 +259,26 @@ describe('module update runtime scoping', () => {
         updateAvailable: true
       })
     ])
+  })
+
+  it('reads package metadata only from the exact whitespace-bearing runtime package directory', async () => {
+    const root = await createTempDir()
+    const exactPackageDir = await writePackage(
+      path.join(root, 'runtime '),
+      '@oneworks/server',
+      '0.1.0-beta.10'
+    )
+    await writePackage(path.join(root, 'runtime'), '@oneworks/server', '0.1.0-beta.1')
+    vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', root)
+    vi.stubEnv('__ONEWORKS_PROJECT_PACKAGE_DIR__', exactPackageDir)
+    vi.stubEnv('__ONEWORKS_PROJECT_SERVER_ENTRY_KIND__', 'server')
+
+    const response = await checkModuleUpdates({ publishedVersionResolver: async () => '0.1.0-beta.11' })
+
+    expect(response.modules.find(module => module.id === 'server')).toMatchObject({
+      currentVersion: '0.1.0-beta.10',
+      updateAvailable: true
+    })
   })
 
   it('rejects an older desktop package and a core target owned by another host', async () => {

@@ -1,3 +1,5 @@
+import { getFilesystemPathComparisonKey, readNonBlankFilesystemPath } from '#~/utils/filesystem-path-identity'
+
 export interface BrowserActivityRouteState {
   browserActivity: {
     projectKeys: string[]
@@ -5,7 +7,7 @@ export interface BrowserActivityRouteState {
   }
 }
 
-const normalizeBrowserActivityKey = (value: string | undefined) => {
+const normalizeBrowserActivityText = (value: string | undefined) => {
   const normalized = value?.trim()
   return normalized == null || normalized === '' ? undefined : normalized
 }
@@ -18,16 +20,22 @@ export const createBrowserActivityRouteState = ({
   sessionKey?: string
 }): BrowserActivityRouteState => ({
   browserActivity: {
-    projectKeys: Array.from(
-      new Set((projectKeys ?? []).map(normalizeBrowserActivityKey).filter((value): value is string => value != null))
-    ),
-    ...(normalizeBrowserActivityKey(sessionKey) == null ? {} : { sessionKey: normalizeBrowserActivityKey(sessionKey) })
+    projectKeys: (projectKeys ?? []).reduce<string[]>((keys, value) => {
+      const path = readNonBlankFilesystemPath(value)
+      return path == null ||
+          keys.some(key => getFilesystemPathComparisonKey(key) === getFilesystemPathComparisonKey(path))
+        ? keys
+        : [...keys, path]
+    }, []),
+    ...(normalizeBrowserActivityText(sessionKey) == null
+      ? {}
+      : { sessionKey: normalizeBrowserActivityText(sessionKey) })
   }
 })
 
 export const getCurrentWorkspaceBrowserActivityRouteState = async () => {
   const workspaceConnection = await window.oneworksDesktop?.getWorkspaceConnection?.()
-  const workspaceFolder = normalizeBrowserActivityKey(workspaceConnection?.workspaceFolder)
+  const workspaceFolder = readNonBlankFilesystemPath(workspaceConnection?.workspaceFolder)
   if (workspaceFolder == null) return undefined
   return createBrowserActivityRouteState({ projectKeys: [workspaceFolder] })
 }

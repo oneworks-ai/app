@@ -72,4 +72,11 @@ describe('plugin runtime host Vite watch classification', () => {
     ).toBe(true)
     expect(shouldIgnorePluginWatchPathForTests('client/vite.config.ts')).toBe(false)
   })
+
+  it.runIf(path.sep === '/')('treats POSIX literal backslashes as filename bytes in watcher paths', () => {
+    expect(shouldIgnorePluginWatchPathForTests(String.raw`src\node_modules\entry.ts`)).toBe(false)
+    expect(shouldIgnorePluginWatchPathForTests('src/node_modules/entry.ts')).toBe(true)
+    expect(classify(String.raw`client\src\view.tsx`)).toBe(false)
+    expect(classify('client/src/view.tsx')).toBe(true)
+  })
 })

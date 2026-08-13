@@ -256,9 +256,9 @@ describe('hook runtime', () => {
     expect(logContent).toContain('[plugin.logger]')
     expect(logContent).toContain('```yaml')
     expect(logContent).toContain('adapterOptions:')
-    expect(logContent).toContain('  systemPrompt: >-')
-    expect(logContent).toContain('    1233')
-    expect(logContent).toContain('    456')
+    expect(logContent).toContain('  hasSystemPrompt: true')
+    expect(logContent).not.toContain('1233')
+    expect(logContent).not.toContain('456')
   })
 
   it('skips plugins that are explicitly disabled in config', async () => {
@@ -392,8 +392,9 @@ describe('hook runtime', () => {
     expect(logFiles).toHaveLength(1)
 
     const logContent = await readFile(logFiles[0], 'utf-8')
-    expect(logContent).toContain('[REDACTED]')
-    expect(logContent).toContain('OPENAI_API_KEY')
+    expect(logContent).toContain('adapterOptions:')
+    expect(logContent).toContain('options:')
+    expect(logContent).not.toContain('OPENAI_API_KEY')
     expect(logContent).not.toContain(secretApiKey)
     expect(logContent).not.toContain(secretToken)
     expect(logContent).not.toContain('nested-secret')

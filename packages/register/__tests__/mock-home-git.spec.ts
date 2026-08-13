@@ -13,6 +13,30 @@ afterEach(async () => {
 })
 
 describe('linkRealHomeGitConfig', () => {
+  it('links git config from the exact whitespace-bearing real home', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ow-real-home-identity-'))
+    const adjacentRealHome = path.join(root, 'real-home')
+    const realHome = path.join(root, 'real-home ')
+    const mockHome = path.join(root, 'mock-home')
+    tempDirs.push(root)
+    await Promise.all([
+      mkdir(adjacentRealHome, { recursive: true }),
+      mkdir(realHome, { recursive: true }),
+      mkdir(mockHome, { recursive: true })
+    ])
+    await Promise.all([
+      writeFile(path.join(adjacentRealHome, '.gitconfig'), '[user]\n\tname = adjacent\n'),
+      writeFile(path.join(realHome, '.gitconfig'), '[user]\n\tname = exact\n')
+    ])
+
+    const { linkRealHomeGitConfig } = require('../mock-home-git.js') as typeof import('../mock-home-git')
+    linkRealHomeGitConfig({ realHome, mockHome })
+
+    expect(await readlink(path.join(mockHome, '.gitconfig'))).toBe(path.join(realHome, '.gitconfig'))
+    await expect(readFile(path.join(mockHome, '.gitconfig'), 'utf8')).resolves.toContain('name = exact')
+    await expect(readFile(path.join(adjacentRealHome, '.gitconfig'), 'utf8')).resolves.toContain('name = adjacent')
+  })
+
   it('links real home git config entries into the mock home', async () => {
     const realHome = await mkdtemp(path.join(os.tmpdir(), 'ow-real-home-'))
     const mockHome = await mkdtemp(path.join(os.tmpdir(), 'ow-mock-home-'))

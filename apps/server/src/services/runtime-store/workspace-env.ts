@@ -22,23 +22,22 @@ const isPathInside = (parentPath: string, targetPath: string) => {
   )
 }
 
-const normalizeEnvValue = (value: string | undefined) => {
-  const trimmedValue = value?.trim()
-  return trimmedValue == null || trimmedValue === '' ? undefined : trimmedValue
-}
+const readFilesystemEnvValue = (value: string | undefined) => (
+  value != null && value.trim() !== '' ? value : undefined
+)
 
 export const createWorkspaceRuntimeEnv = (
   workspaceFolder: string,
   env: NodeJS.ProcessEnv = processEnv
 ): NodeJS.ProcessEnv => {
   const normalizedWorkspaceFolder = path.resolve(workspaceFolder)
-  const inheritedWorkspaceFolder = normalizeEnvValue(env[PROJECT_WORKSPACE_FOLDER_ENV])
+  const inheritedWorkspaceFolder = readFilesystemEnvValue(env[PROJECT_WORKSPACE_FOLDER_ENV])
   const inheritedWorkspaceMatches = inheritedWorkspaceFolder != null &&
     path.resolve(inheritedWorkspaceFolder) === normalizedWorkspaceFolder
   const preserveInheritedPrimaryWorkspace = inheritedWorkspaceFolder != null &&
     inheritedWorkspaceMatches &&
-    normalizeEnvValue(env[PROJECT_PRIMARY_WORKSPACE_FOLDER_ENV]) != null
-  const inheritedHomeProjectDir = normalizeEnvValue(env[PROJECT_ONEWORKS_HOME_PROJECT_DIR_ENV])
+    readFilesystemEnvValue(env[PROJECT_PRIMARY_WORKSPACE_FOLDER_ENV]) != null
+  const inheritedHomeProjectDir = readFilesystemEnvValue(env[PROJECT_ONEWORKS_HOME_PROJECT_DIR_ENV])
   const shouldResetInheritedProjectHome = inheritedWorkspaceFolder == null
     ? inheritedHomeProjectDir != null
     : !inheritedWorkspaceMatches
@@ -62,7 +61,7 @@ export const createWorkspaceRuntimeEnv = (
     delete runtimeEnv.__ONEWORKS_PROJECT_SERVER_DATA_DIR__
     delete runtimeEnv.__ONEWORKS_PROJECT_SERVER_LOG_DIR__
 
-    const realHome = normalizeEnvValue(runtimeEnv.__ONEWORKS_PROJECT_REAL_HOME__)
+    const realHome = readFilesystemEnvValue(runtimeEnv.__ONEWORKS_PROJECT_REAL_HOME__)
     if (realHome == null) {
       delete runtimeEnv.HOME
     } else {
@@ -70,10 +69,9 @@ export const createWorkspaceRuntimeEnv = (
     }
   }
 
-  const ooBaseDirSourceCwd = runtimeEnv[PROJECT_OO_BASE_DIR_RESOLVE_CWD_ENV]?.trim()
+  const ooBaseDirSourceCwd = readFilesystemEnvValue(runtimeEnv[PROJECT_OO_BASE_DIR_RESOLVE_CWD_ENV])
   if (
     ooBaseDirSourceCwd == null ||
-    ooBaseDirSourceCwd === '' ||
     !isPathInside(normalizedWorkspaceFolder, path.resolve(ooBaseDirSourceCwd))
   ) {
     runtimeEnv[PROJECT_OO_BASE_DIR_RESOLVE_CWD_ENV] = normalizedWorkspaceFolder

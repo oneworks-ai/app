@@ -30,6 +30,7 @@ const hasGit = () => {
   }
 }
 const itWithGit = hasGit() ? it : it.skip
+const itWithGitAndPosix = hasGit() && process.platform !== 'win32' ? it : it.skip
 
 const createWorkspace = (name) => {
   const workspaceFolder = fs.mkdtempSync(path.join(os.tmpdir(), `oneworks-desktop-${name}-`))
@@ -52,6 +53,40 @@ describe('workspace-state helpers', () => {
 
     expect(normalizeWorkspaceFolder(aliasFolder)).toBe(fs.realpathSync.native(workspaceFolder))
   })
+
+  it('preserves leading and trailing whitespace in workspace identity and recent dedupe', () => {
+    const root = createWorkspace('raw-identity')
+    const workspaceFolder = path.join(root, process.platform === 'win32' ? ' workspace' : ' workspace ')
+    fs.mkdirSync(workspaceFolder)
+
+    const expectedWorkspaceFolder = fs.realpathSync.native(workspaceFolder)
+    expect(normalizeWorkspaceFolder(workspaceFolder)).toBe(expectedWorkspaceFolder)
+    expect(rememberRecentWorkspaceFolder([workspaceFolder], workspaceFolder)).toEqual([expectedWorkspaceFolder])
+    expect(removeRecentWorkspaceFolder([workspaceFolder], workspaceFolder)).toEqual([])
+  })
+
+  itWithGit('preserves leading and trailing whitespace reported by Git for a workspace root', () => {
+    const root = createWorkspace('git-raw-identity')
+    const projectFolder = path.join(root, process.platform === 'win32' ? ' git project' : ' git project ')
+    const nestedFolder = path.join(projectFolder, 'nested')
+    fs.mkdirSync(nestedFolder, { recursive: true })
+    execFileSync('git', ['-C', projectFolder, 'init'], { stdio: 'ignore' })
+
+    expect(resolveProjectWorkspaceFolder(nestedFolder)).toBe(fs.realpathSync.native(projectFolder))
+  })
+
+  itWithGitAndPosix(
+    'removes only Git terminal output framing for workspace roots containing an internal newline',
+    () => {
+      const root = createWorkspace('git-terminal-eol')
+      const projectFolder = path.join(root, 'project\nroot')
+      const nestedFolder = path.join(projectFolder, 'nested')
+      fs.mkdirSync(nestedFolder, { recursive: true })
+      execFileSync('git', ['-C', projectFolder, 'init'], { stdio: 'ignore' })
+
+      expect(resolveProjectWorkspaceFolder(nestedFolder)).toBe(fs.realpathSync.native(projectFolder))
+    }
+  )
 
   itWithGit('preserves linked git worktrees as distinct workspaces', () => {
     const projectFolder = createWorkspace('git-project')

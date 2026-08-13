@@ -20,6 +20,9 @@
   - adapter 可选 `model-provider-import` / `worktree-environment-import` discovery capability、source 声明与严格/可选 package export loader
   - capability 只发现并转换原生配置；调用方必须把当前目标 source 传给 discoverer，目标 config 的冲突保护和写回由消费方统一编排
   - package loader 保持显式 CLI package dir 优先；开发 workspace 的 runtime package dir 先于 managed adapter cache，已安装 / packaged runtime 则继续先用 managed cache
+  - path-shaped `packageId` / load target 先按原始 bytes 分类，只用 `trim()` 判空并把精确路径交给 import / require；普通 package id 才做文本归一化。runtime target、最终 loader 与 `__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__` / `__ONEWORKS_PROJECT_PACKAGE_DIR__` 的 require roots 必须遵守同一规则，不能在最后一跳把精确目录改写成相邻 package。
+- `src/adapter-package-cache.ts`
+  - bootstrap / desktop adapter package cache 的 real home、cache root 和 metadata `cacheDir` 是文件系统身份，只用 `trim()` 判空并保留原始字节；package 名、版本和其他 metadata 文本继续按普通规则归一化
 - `src/logger.ts`
   - 共享 `Logger` 接口
 - `src/mcp.ts`

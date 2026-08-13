@@ -28,6 +28,10 @@ const normalizeNonEmptyString = (value: unknown) => (
   typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
 )
 
+const readFilesystemPath = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== '' ? value : undefined
+)
+
 const isFalseLike = (value: string) => ['0', 'false', 'no', 'off'].includes(value.trim().toLowerCase())
 
 const normalizeSource = (value: unknown) => (
@@ -56,8 +60,8 @@ export const resolveKimiCliInstallOptions = (
     autoInstall: rawAutoInstall == null
       ? (adapterConfig.cli?.autoInstall ?? adapterConfig.autoInstall) !== false
       : !isFalseLike(rawAutoInstall),
-    binaryPath: normalizeNonEmptyString(env.__ONEWORKS_PROJECT_ADAPTER_KIMI_CLI_PATH__) ??
-      normalizeNonEmptyString(adapterConfig.cli?.path),
+    binaryPath: readFilesystemPath(env.__ONEWORKS_PROJECT_ADAPTER_KIMI_CLI_PATH__) ??
+      readFilesystemPath(adapterConfig.cli?.path),
     packageName: toUvPackageSpec(packageName, version),
     python: normalizeNonEmptyString(env.__ONEWORKS_PROJECT_ADAPTER_KIMI_INSTALL_PYTHON__) ??
       normalizeNonEmptyString(adapterConfig.cli?.python) ??
@@ -65,9 +69,9 @@ export const resolveKimiCliInstallOptions = (
       DEFAULT_KIMI_INSTALL_PYTHON,
     source: normalizeSource(env.__ONEWORKS_PROJECT_ADAPTER_KIMI_CLI_SOURCE__) ??
       normalizeSource(adapterConfig.cli?.source),
-    uvPath: normalizeNonEmptyString(env.__ONEWORKS_PROJECT_ADAPTER_KIMI_UV_PATH__) ??
-      normalizeNonEmptyString(adapterConfig.cli?.uvPath) ??
-      normalizeNonEmptyString(adapterConfig.uvPath) ??
+    uvPath: readFilesystemPath(env.__ONEWORKS_PROJECT_ADAPTER_KIMI_UV_PATH__) ??
+      readFilesystemPath(adapterConfig.cli?.uvPath) ??
+      readFilesystemPath(adapterConfig.uvPath) ??
       'uv'
   }
 }

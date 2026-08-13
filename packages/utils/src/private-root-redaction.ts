@@ -2,6 +2,7 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { readNonBlankFilesystemPath } from './filesystem-dir-path'
 import { hasLiteralRootBoundary, redactLiteralPrivateRoots } from './private-root-literal-redaction'
 
 const MAX_DECODE_DEPTH = 4
@@ -20,9 +21,20 @@ const isAbsolutePrivateRoot = (value: string) => (
   path.isAbsolute(value) || /^(?:file:\/\/\/|[a-z]:[\\/]|\\\\)/iu.test(value)
 )
 
-const trimTrailingSeparators = (value: string) => (
-  value.length <= 1 ? value : value.replace(/[\\/]+$/gu, '')
-)
+const isWindowsFilesystemPath = (value: string) => /^(?:[a-z]:[\\/]|[\\/]{2})/iu.test(value)
+
+const trimTrailingSeparators = (value: string) => {
+  const windowsFamily = isWindowsFilesystemPath(value)
+  const rootLength = /^[a-z]:[\\/]/iu.test(value)
+    ? 3
+    : /^[\\/]{2}[^\\/]+[\\/]+[^\\/]+[\\/]*/u.exec(value)?.[0].length ?? 0
+  let end = value.length
+  while (end > rootLength) {
+    if (value[end - 1] !== '/' && (!windowsFamily || value[end - 1] !== '\\')) break
+    end -= 1
+  }
+  return value.slice(0, end)
+}
 
 const toFilesystemPath = (value: string) => {
   if (!/^file:/iu.test(value)) return value
@@ -33,15 +45,17 @@ const toFilesystemPath = (value: string) => {
   }
 }
 
-const normalizeComparablePath = (value: string) =>
-  trimTrailingSeparators(
-    toFilesystemPath(value).replaceAll('\\', '/')
-  )
+const normalizeComparablePath = (value: string) => {
+  const filesystemPath = toFilesystemPath(value)
+  return isWindowsFilesystemPath(filesystemPath)
+    ? trimTrailingSeparators(filesystemPath).replaceAll('\\', '/').toLowerCase()
+    : trimTrailingSeparators(filesystemPath)
+}
 
 const getPrivateRoots = (roots: Array<string | null | undefined>) => [
   ...new Set(roots.flatMap((candidate) => {
-    const root = candidate?.trim()
-    if (root == null || root === '' || !isAbsolutePrivateRoot(root)) return []
+    const root = readNonBlankFilesystemPath(candidate)
+    if (root == null || !isAbsolutePrivateRoot(root)) return []
     const normalized = normalizeComparablePath(root)
     return normalized === '/' ? [] : [normalized]
   }))
@@ -99,7 +113,9 @@ const isPrivatePath = (value: string, roots: string[]) => {
     for (const root of roots) {
       if (
         normalized === root ||
-        (normalized.startsWith(root) && normalized[root.length] === '/')
+        (normalized.startsWith(root) && (
+          root.endsWith('/') || normalized[root.length] === '/'
+        ))
       ) return true
     }
   }

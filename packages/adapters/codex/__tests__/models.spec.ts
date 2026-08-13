@@ -14,6 +14,21 @@ afterEach(async () => {
 })
 
 describe('codex builtin models', () => {
+  it.runIf(process.platform !== 'win32')('reads the exact whitespace-bearing CODEX_HOME cache', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ow-codex-models-home-'))
+    const codexHome = join(root, 'home ')
+    tempDirs.push(root)
+    await mkdir(codexHome, { recursive: true })
+    await writeFile(
+      join(codexHome, 'models_cache.json'),
+      JSON.stringify({
+        models: [{ slug: 'exact-home-model', display_name: 'Exact Home', visibility: 'list' }]
+      })
+    )
+    vi.stubEnv('CODEX_HOME', codexHome)
+    expect(loadCodexBuiltinModels().some(model => model.value === 'exact-home-model')).toBe(true)
+  })
+
   it('loads visible model metadata from the Codex models cache', async () => {
     const codexHome = await mkdtemp(join(tmpdir(), 'ow-codex-models-cache-'))
     tempDirs.push(codexHome)

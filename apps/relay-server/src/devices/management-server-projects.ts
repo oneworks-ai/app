@@ -1,5 +1,5 @@
 import { isRecord } from '../utils.js'
-import { cleanDeviceMetadataText } from './device-environment.js'
+import { cleanDeviceMetadataPath, cleanDeviceMetadataText } from './device-environment.js'
 
 export interface RelayDeviceManagementServerProjectMetadata {
   createdAt?: string
@@ -20,7 +20,7 @@ const normalizeProject = (
   const name = cleanDeviceMetadataText(input.name)
   const status = cleanDeviceMetadataText(input.status)
   const title = cleanDeviceMetadataText(input.title)
-  const workspaceFolder = cleanDeviceMetadataText(input.workspaceFolder)
+  const workspaceFolder = cleanDeviceMetadataPath(input.workspaceFolder)
   if ([id, name, title, workspaceFolder].every(item => item === '')) return undefined
   return {
     ...(createdAt === '' ? {} : { createdAt }),
@@ -34,16 +34,19 @@ const normalizeProject = (
 }
 
 const projectKeyCandidates = (project: RelayDeviceManagementServerProjectMetadata) => {
-  const workspaceFolder = cleanDeviceMetadataText(project.workspaceFolder)
+  const workspaceFolder = cleanDeviceMetadataPath(project.workspaceFolder)
   const id = cleanDeviceMetadataText(project.id)
   const name = cleanDeviceMetadataText(project.name)
   const title = cleanDeviceMetadataText(project.title)
-  return [
+  const stableKeys = [
     workspaceFolder === '' ? undefined : `workspace:${workspaceFolder}`,
-    id === '' ? undefined : `id:${id}`,
+    id === '' ? undefined : `id:${id}`
+  ].filter((item): item is string => item != null)
+  if (stableKeys.length > 0) return stableKeys
+  return [
     name === '' ? undefined : `name:${name}`,
     title === '' ? undefined : `title:${title}`
-  ].filter((item): item is string => item != null && item !== '')
+  ].filter((item): item is string => item != null)
 }
 
 const projectSortTime = (project: RelayDeviceManagementServerProjectMetadata) => {
@@ -78,13 +81,22 @@ const dedupeProjects = (projects: RelayDeviceManagementServerProjectMetadata[], 
   for (const project of projects) {
     const aliases = projectKeyCandidates(project)
     if (aliases.length === 0) continue
-    const primaryKey = aliases
+    const workspaceKey = aliases.find(alias => alias.startsWith('workspace:'))
+    const matchedPrimaryKey = aliases
       .map(alias => primaryKeyByAlias.get(alias))
-      .find((item): item is string => item != null) ?? aliases[0]
+      .find((item): item is string => item != null)
+    const matchedProject = matchedPrimaryKey == null ? undefined : projectsByPrimaryKey.get(matchedPrimaryKey)
+    const matchedWorkspace = cleanDeviceMetadataPath(matchedProject?.workspaceFolder)
+    const incomingWorkspace = cleanDeviceMetadataPath(project.workspaceFolder)
+    const primaryKey = workspaceKey != null && matchedWorkspace !== '' && matchedWorkspace !== incomingWorkspace
+      ? workspaceKey
+      : matchedPrimaryKey ?? aliases[0]
     const next = mergeProject(projectsByPrimaryKey.get(primaryKey), project, seenAt)
     if (next == null) continue
     projectsByPrimaryKey.set(primaryKey, next)
-    for (const alias of projectKeyCandidates(next)) primaryKeyByAlias.set(alias, primaryKey)
+    for (const alias of projectKeyCandidates(next)) {
+      if (!primaryKeyByAlias.has(alias)) primaryKeyByAlias.set(alias, primaryKey)
+    }
   }
   return [...projectsByPrimaryKey.values()].sort((left, right) => projectSortTime(right) - projectSortTime(left))
 }

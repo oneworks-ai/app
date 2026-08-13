@@ -53,17 +53,20 @@ export const getWorkspaceServiceDataPaths = (workspaceFolder: string): Workspace
   }
 }
 
+const readFilesystemPath = (value: string | undefined) => (
+  value != null && value.trim() !== '' ? value : undefined
+)
+
 const createWorkspaceRuntimeEnv = (workspaceFolder: string): NodeJS.ProcessEnv => {
   const normalizedWorkspaceFolder = path.resolve(workspaceFolder)
-  const inheritedWorkspaceFolder = process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__?.trim()
+  const inheritedWorkspaceFolder = readFilesystemPath(process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__)
   const inheritedWorkspaceMatches = inheritedWorkspaceFolder != null &&
     inheritedWorkspaceFolder !== '' &&
     path.resolve(inheritedWorkspaceFolder) === normalizedWorkspaceFolder
   const preserveInheritedPrimaryWorkspace = inheritedWorkspaceFolder != null &&
     inheritedWorkspaceFolder !== '' &&
     inheritedWorkspaceMatches &&
-    process.env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__?.trim() != null &&
-    process.env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__?.trim() !== ''
+    readFilesystemPath(process.env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__) != null
   const env: NodeJS.ProcessEnv = {
     ...sanitizeDesktopChildProcessEnv(process.env),
     __ONEWORKS_PROJECT_LAUNCH_CWD__: normalizedWorkspaceFolder,
@@ -82,7 +85,7 @@ const createWorkspaceRuntimeEnv = (workspaceFolder: string): NodeJS.ProcessEnv =
     delete env.__ONEWORKS_PROJECT_HOME_PROJECT_DIR__
   }
 
-  const aiBaseDirSourceCwd = env.__ONEWORKS_PROJECT_BASE_DIR_RESOLVE_CWD__?.trim()
+  const aiBaseDirSourceCwd = readFilesystemPath(env.__ONEWORKS_PROJECT_BASE_DIR_RESOLVE_CWD__)
   if (
     aiBaseDirSourceCwd == null ||
     aiBaseDirSourceCwd === '' ||
@@ -95,15 +98,14 @@ const createWorkspaceRuntimeEnv = (workspaceFolder: string): NodeJS.ProcessEnv =
 }
 
 const parseClientFsAllow = (raw: string | undefined) => {
-  const value = raw?.trim()
-  if (value == null || value === '') return []
+  if (raw == null || raw.trim() === '') return []
   try {
-    const parsed = JSON.parse(value) as unknown
+    const parsed = JSON.parse(raw) as unknown
     if (Array.isArray(parsed)) {
       return parsed.filter((entry): entry is string => typeof entry === 'string' && entry.trim() !== '')
     }
   } catch {}
-  return value.split(path.delimiter).filter(entry => entry.trim() !== '')
+  return raw.split(path.delimiter).filter(entry => entry.trim() !== '')
 }
 
 export const resolveDesktopDevClientFsAllowEnv = (

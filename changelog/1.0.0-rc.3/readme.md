@@ -1,5 +1,8 @@
 # One Works 1.0.0-rc.3
 
+- Harden filesystem-path identity, plugin asset boundaries, Relay assignment handling, adapter loading, and Launcher directory interactions across desktop, web, and managed adapter workflows.
+  ![Launcher directory navigation and project actions](./issue-189-launcher-directory-actions.jpg)
+
 - Add Channel Runtime v2 and complete channel-backed chat rooms, including navigation through the host workspace UI.
 - Add managed adapter accounts and the Pi coding-agent integration with its catalog and product assets.
 - Add privacy-safe diagnostics, Model Service usage dashboards, and Relay daily-activity views.

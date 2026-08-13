@@ -380,13 +380,12 @@ export const mapContentToKimiWireInput = (content: AdapterMessageContent[]): Kim
         }]
     }
     if (item.type === 'file') {
-      const path = item.path.trim()
-      if (path === '') return []
+      if (item.path.trim() === '') return []
       return [{
         type: 'text',
         text: item.name?.trim()
-          ? `Context file: ${item.name.trim()} (${path})`
-          : `Context file: ${path}`
+          ? `Context file: ${item.name.trim()} (${item.path})`
+          : `Context file: ${item.path}`
       }]
     }
     return []

@@ -4,7 +4,7 @@ import path from 'node:path'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { ensureWorkspaceFolderExists } from '../src/main/workspace-folder-create'
+import { createWorkspaceFolderInDirectory, ensureWorkspaceFolderExists } from '../src/main/workspace-folder-create'
 
 const createdDirectories: string[] = []
 
@@ -44,5 +44,20 @@ describe('workspace folder creation', () => {
     await writeFile(workspaceFile, '')
 
     await expect(ensureWorkspaceFolderExists(workspaceFile)).rejects.toThrow('not a folder')
+  })
+
+  it('preserves leading and trailing whitespace in direct and parent folder identities', async () => {
+    const root = await createTempRoot()
+    const directWorkspace = path.join(root, ' direct workspace ')
+    const parentDirectory = path.join(root, ' parent directory ')
+    await mkdir(parentDirectory)
+
+    const createdDirectWorkspace = await ensureWorkspaceFolderExists(directWorkspace)
+    expect(createdDirectWorkspace).toBe(await realpath(directWorkspace))
+    const createdNestedWorkspace = await createWorkspaceFolderInDirectory({
+      parentDirectory,
+      projectName: 'project'
+    })
+    expect(createdNestedWorkspace).toBe(await realpath(path.join(parentDirectory, 'project')))
   })
 })

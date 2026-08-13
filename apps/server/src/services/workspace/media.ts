@@ -97,8 +97,8 @@ export const resolveWorkspaceMediaResource = async (
   } = {}
 ): Promise<WorkspaceMediaResource> => {
   const workspaceFolder = options.workspaceFolder ?? getWorkspaceFolder()
-  const trimmedPath = rawPath?.trim() ?? ''
-  if (trimmedPath === '') {
+  const path = rawPath ?? ''
+  if (path.trim() === '') {
     throw badRequest('Workspace media path is required', { path: rawPath }, 'workspace_media_path_required')
   }
 
@@ -113,12 +113,12 @@ export const resolveWorkspaceMediaResource = async (
   const canonicalRoots = [workspaceRealRoot, ...artifactRoots]
 
   let resolved: WorkspacePathEntry
-  if (!isAbsolute(trimmedPath)) {
-    resolved = await resolveWorkspaceFileEntryPath(trimmedPath, { workspaceFolder })
+  if (!isAbsolute(path)) {
+    resolved = await resolveWorkspaceFileEntryPath(path, { workspaceFolder })
   } else {
     const workspaceLexicalRoot = resolve(workspaceFolder)
     const lexicalRoots = [...new Set([workspaceLexicalRoot, workspaceRealRoot, ...artifactRoots])]
-    const requestedPath = resolve(trimmedPath)
+    const requestedPath = resolve(path)
 
     if (!lexicalRoots.some(root => isPathInside(root, requestedPath))) {
       throw badRequest(
@@ -152,7 +152,7 @@ export const resolveWorkspaceMediaResource = async (
     resolved = {
       filePath: targetRealPath,
       fileStat,
-      normalizedPath: trimmedPath
+      normalizedPath: path
     }
   }
 
@@ -169,7 +169,7 @@ export const resolveWorkspaceMediaResource = async (
     )
   }
 
-  const mimeType = MEDIA_MIME_BY_EXTENSION[getFileExtension(normalizedPath)]
+  const mimeType = MEDIA_MIME_BY_EXTENSION[getFileExtension(normalizedPath.trim())]
   if (mimeType == null) {
     throw badRequest(
       'Workspace resource is not a supported media file',

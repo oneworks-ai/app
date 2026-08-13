@@ -40,7 +40,7 @@ export const resolveClientDistPath = (distPath: string | undefined) => {
   const candidates: string[] = []
 
   if (distPath?.trim()) {
-    const rawPath = distPath.trim()
+    const rawPath = distPath
     const resolved = path.isAbsolute(rawPath) ? rawPath : path.resolve(workspaceFolder, rawPath)
     candidates.push(resolved)
   }
@@ -76,7 +76,7 @@ export const createRuntimeScript = (
   clientBase: string,
   serverBaseUrl?: string
 ) => {
-  const workspaceFolder = processEnv.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__?.trim()
+  const workspaceFolder = processEnv.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__
   const runtimeEnv = {
     __ONEWORKS_PROJECT_SERVER_BASE_URL__: serverBaseUrl ?? env.__ONEWORKS_PROJECT_PUBLIC_BASE_URL__,
     __ONEWORKS_PROJECT_SERVER_HOST__: env.__ONEWORKS_PROJECT_SERVER_HOST__,
@@ -85,7 +85,7 @@ export const createRuntimeScript = (
     __ONEWORKS_PROJECT_SERVER_ROLE__: env.__ONEWORKS_PROJECT_SERVER_ROLE__,
     __ONEWORKS_PROJECT_CLIENT_MODE__: env.__ONEWORKS_PROJECT_CLIENT_MODE__,
     __ONEWORKS_PROJECT_CLIENT_BASE__: clientBase,
-    ...(workspaceFolder == null || workspaceFolder === ''
+    ...(workspaceFolder == null || workspaceFolder.trim() === ''
       ? {}
       : { __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: workspaceFolder })
   }

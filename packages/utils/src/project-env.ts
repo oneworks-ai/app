@@ -7,12 +7,9 @@ import {
   PROJECT_WORKSPACE_FOLDER_ENV,
   PROJECT_WORKSPACE_FOLDER_RESOLVE_CWD_ENV
 } from './ai-path'
+import { normalizeFilesystemDirPath } from './filesystem-dir-path'
 
-const normalizeDirPath = (value: string | null | undefined) => {
-  const trimmed = value?.trim()
-  if (trimmed == null || trimmed === '') return undefined
-  return trimmed.replace(/[\\/]+$/, '')
-}
+const normalizeDirPath = normalizeFilesystemDirPath
 
 export const mergeProcessEnvWithProjectEnv = (
   env: Record<string, string | null | undefined> | undefined,

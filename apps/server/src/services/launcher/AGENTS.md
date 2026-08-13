@@ -19,3 +19,4 @@
 - workspace server 的实现版本 identity 只代表 server runtime 及其依赖；client-only dirty 改动不应改变 implementation identity，避免前端热改触发误判复用冲突。
 - workspace server 兼容性优先看 `runtimeCompatibilityVersion` 的 semver 家族；runtime hash/source hash 主要用于诊断展示。服务端通信或运行时契约出现不兼容变化时，先更新 `manager.ts` 里的兼容版本。
 - Electron main 可以继续管理窗口生命周期，但 launcher 的 Node/文件系统/启动 workspace server 能力应优先落在这里，再由桌面或 Web 前端调用。
+- 目录浏览、创建、打开、recent/dedupe、stop/forget 共用同一个文件系统路径身份：`trim()` 只判断空值，`path.resolve`、realpath、state key 与 workspace runtime 必须消费原字符串，不能把合法首尾空白折叠到相邻目录。

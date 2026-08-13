@@ -1,7 +1,7 @@
 /* eslint-disable max-lines */
 
 import { mkdir } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
+import { dirname, posix, resolve, win32 } from 'node:path'
 import { env as processEnv } from 'node:process'
 
 import type { WSEvent } from '@oneworks/core'
@@ -141,12 +141,16 @@ const getSessionOrThrow = (sessionId: string) => {
 }
 
 const resolveRepositoryDirectoryName = (repositoryRoot: string, fallback: string) => {
-  const segments = repositoryRoot
-    .split(/[\\/]+/)
-    .map(segment => segment.trim())
-    .filter(Boolean)
-
-  return segments.at(-1) ?? fallback
+  const pathApi = /^[a-z]:/iu.test(repositoryRoot) || repositoryRoot.startsWith('\\') ? win32 : posix
+  const root = pathApi.parse(repositoryRoot).root
+  let end = repositoryRoot.length
+  while (end > root.length) {
+    const trailingCharacter = repositoryRoot[end - 1]
+    if (trailingCharacter !== pathApi.sep && (pathApi !== win32 || trailingCharacter !== '/')) break
+    end -= 1
+  }
+  const name = pathApi.basename(repositoryRoot.slice(0, end))
+  return name === '' ? fallback : name
 }
 
 const resolveManagedWorktreePath = (
@@ -174,6 +178,10 @@ const buildManagedWorktreeBranchName = (baseBranch: string, sessionId: string) =
   return `${baseBranch}-session-${suffix}`
 }
 
+const readNonBlankPath = (value: string | null | undefined) => (
+  value != null && value.trim() !== '' ? value : undefined
+)
+
 const getLatestSessionInfoCwd = (sessionId: string) => {
   const event = getDb().getLatestSessionInfoMessage(sessionId) as WSEvent | undefined
   if (event?.type !== 'session_info' || !isRecord(event.info)) {
@@ -181,11 +189,12 @@ const getLatestSessionInfoCwd = (sessionId: string) => {
   }
 
   const info = event.info as SessionInfo & { cwd?: unknown }
-  if (typeof info.cwd !== 'string' || info.cwd.trim() === '') {
+  const rawCwd = typeof info.cwd === 'string' ? readNonBlankPath(info.cwd) : undefined
+  if (rawCwd == null) {
     return undefined
   }
 
-  const cwd = info.cwd.trim()
+  const cwd = rawCwd
   return cwd.startsWith('/') ? cwd : resolve(getWorkspaceFolder(), cwd)
 }
 
@@ -614,10 +623,11 @@ const deleteSessionWorkspaceRecord = async (
   })
 
   try {
+    const repositoryRoot = readNonBlankPath(workspace.repositoryRoot) ?? workspace.worktreePath
     await runConfiguredWorktreeEnvironmentScripts({
       operation: 'destroy',
       workspaceFolder: workspace.worktreePath,
-      repositoryRoot: workspace.repositoryRoot?.trim() || workspace.worktreePath,
+      repositoryRoot,
       baseRef: workspace.baseRef,
       environmentId: workspace.worktreeEnvironment,
       force: options.force === true,
@@ -625,7 +635,7 @@ const deleteSessionWorkspaceRecord = async (
     })
 
     await removeGitWorktree({
-      cwd: workspace.repositoryRoot?.trim() || workspace.worktreePath,
+      cwd: repositoryRoot,
       path: workspace.worktreePath,
       force: options.force !== false
     })

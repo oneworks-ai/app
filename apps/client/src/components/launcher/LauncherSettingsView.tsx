@@ -40,6 +40,7 @@ import { useInterfaceLanguageConfig } from '#~/hooks/use-interface-language-conf
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
 import { appLanguageOptions, getActiveAppLanguageOption } from '#~/i18n'
 import { usePluginThemes } from '#~/plugins/plugin-themes'
+import type { LauncherActivationObserver } from '#~/routes/launcher-workspace-open-lifecycle'
 import { normalizeThemeMode, themeAtom } from '#~/store/index.js'
 import type { ThemeMode } from '#~/store/index.js'
 import { deferImeCompositionEnd, isImeCompositionKeyEvent } from '#~/utils/keyboard-events'
@@ -81,6 +82,12 @@ interface LauncherSettingItem {
   layout?: 'inline' | 'stacked'
   title: string
 }
+
+const observeAlwaysActiveLauncher = (): LauncherActivationObserver => ({
+  isCurrent: () => true,
+  onInvalidate: () => () => {},
+  release: () => {}
+})
 
 interface LauncherSettingSection {
   content?: ReactNode
@@ -215,6 +222,8 @@ function LanguageSelectControl({
 }
 
 export function LauncherSettingsView({
+  active = true,
+  getModalContainer = () => document.body,
   isSearchInputComposing,
   query,
   onExternalSessionsImportComplete,
@@ -222,8 +231,11 @@ export function LauncherSettingsView({
   onQueryChange,
   onSearchChromeChange,
   onResetActionChange,
+  observeActivation = observeAlwaysActiveLauncher,
   workspaceProjects
 }: {
+  active?: boolean
+  getModalContainer?: () => HTMLElement
   isSearchInputComposing: () => boolean
   query: string
   onExternalSessionsImportComplete: () => Promise<void> | void
@@ -231,6 +243,7 @@ export function LauncherSettingsView({
   onQueryChange: (query: string) => void
   onSearchChromeChange: (extension: LauncherSearchChromeExtension | undefined) => void
   onResetActionChange: (action: LauncherSettingsResetAction | undefined) => void
+  observeActivation?: () => LauncherActivationObserver
   workspaceProjects: LauncherWorkspaceSelectorProject[]
 }) {
   const { message } = App.useApp()
@@ -965,10 +978,13 @@ export function LauncherSettingsView({
     {
       content: (
         <LauncherExternalSessionsView
+          active={active}
           config={configRes?.sources?.global?.general?.nativeHistoryImport}
+          getModalContainer={getModalContainer}
           onImportComplete={onExternalSessionsImportComplete}
           onQueryChange={onQueryChange}
           onSearchChromeChange={onSearchChromeChange}
+          observeActivation={observeActivation}
           query={query}
           workspaceProjects={workspaceProjects}
         />
@@ -989,6 +1005,7 @@ export function LauncherSettingsView({
       title: t('launcher.settings.sections.externalSessions')
     }
   ], [
+    active,
     currentLanguage,
     cycleLanguage,
     desktopSettings.autoUpdate,
@@ -1007,6 +1024,7 @@ export function LauncherSettingsView({
     launchAtLogin,
     normalizeLauncherShortcut,
     onExternalSessionsImportComplete,
+    observeActivation,
     onQueryChange,
     onSearchChromeChange,
     previewSources,

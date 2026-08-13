@@ -245,7 +245,8 @@ export const hasUnsafePublicUrlMetadata = (
 
 export const parsePublicAssetString = (value: unknown, state: PublicParseState) => {
   const parsed = parsePublicString(value, state)
-  if (parsed == null || hasUnsafePublicUrlWhitespace(parsed)) return undefined
+  if (parsed == null || [...parsed].some(character => (character.codePointAt(0) ?? 0) <= 31)) return undefined
+  if (/^[a-z][a-z\d+.-]*:/iu.test(parsed.trimStart()) && parsed !== parsed.trimStart()) return undefined
   if (/^https?:\/\//iu.test(parsed)) {
     try {
       const url = new URL(parsed)
@@ -259,11 +260,11 @@ export const parsePublicAssetString = (value: unknown, state: PublicParseState) 
   let candidate = parsed
   for (let depth = 0; depth <= MAX_PERCENT_DECODE_ROUNDS; depth += 1) {
     if (
-      hasUnsafePublicUrlWhitespace(candidate) ||
-      candidate.includes('\\') ||
+      [...candidate].some(character => (character.codePointAt(0) ?? 0) <= 31) ||
       candidate.startsWith('/') ||
+      candidate.startsWith('\\') ||
       /^[a-z][a-z\d+.-]*:/iu.test(candidate) ||
-      candidate.split(/[?#]/u)[0]?.split('/').includes('..')
+      candidate.split(/[?#]/u)[0]?.split(/[\\/]/u).includes('..')
     ) return undefined
     try {
       const decoded = decodeURIComponent(candidate)

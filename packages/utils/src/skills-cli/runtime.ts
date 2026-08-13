@@ -1,5 +1,6 @@
 import type { SkillsCliConfig } from '@oneworks/types'
 
+import { readNonBlankFilesystemPath } from '../filesystem-dir-path'
 import {
   buildManagedNpmCliInstallEnv,
   resolveManagedNpmCliInstallOptions,
@@ -35,7 +36,7 @@ export const resolveSkillsCliCommand = async (params: {
     env: cliEnv,
     config: normalizedConfig
   })
-  const explicitPath = params.config?.path?.trim()
+  const explicitPath = readNonBlankFilesystemPath(params.config?.path)
 
   if (explicitPath != null && explicitPath !== '') {
     return {

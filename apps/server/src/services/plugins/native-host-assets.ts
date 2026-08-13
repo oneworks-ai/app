@@ -35,7 +35,7 @@ export const listSafeNativeHostPluginAssets = async (
         typeof file.path !== 'string' ||
         file.path.trim() === '' ||
         file.path.includes('\0') ||
-        file.path.split(/[\\/]/u).includes('..') ||
+        file.path.split('/').includes('..') ||
         file.path.startsWith('/') ||
         /^[a-z]:[\\/]/iu.test(file.path) ||
         (
@@ -48,7 +48,7 @@ export const listSafeNativeHostPluginAssets = async (
       ) return []
       return [{
         contentKind: file.contentKind,
-        path: file.path.replaceAll('\\', '/'),
+        path: file.path,
         size: file.size,
         ...(file.truncated !== true ? {} : { truncated: true }),
         ...(plugin.adapter === 'codex' && group.kind === 'apps'

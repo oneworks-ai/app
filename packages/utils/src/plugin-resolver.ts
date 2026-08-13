@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { readFile, readdir } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { basename, dirname, extname, isAbsolute, relative, resolve } from 'node:path'
+import { basename, dirname, extname, isAbsolute, relative, resolve, sep } from 'node:path'
 import process from 'node:process'
 
 import { load as loadYaml } from 'js-yaml'
@@ -20,6 +20,7 @@ import type {
 } from '@oneworks/types'
 
 import { resolveGlobalOneWorksAssetsPath, resolveProjectOoPath } from './ai-path'
+import { readNonBlankFilesystemPath } from './filesystem-dir-path'
 import { listManagedPluginInstalls } from './managed-plugin'
 import {
   ensureManagedPluginPackage,
@@ -60,16 +61,17 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
 )
 
+const readPluginFilesystemPath = (value: unknown) => (
+  typeof value === 'string' ? readNonBlankFilesystemPath(value) : undefined
+)
+
 const normalizeOptions = (value: unknown): Record<string, unknown> => (
   isRecord(value) ? value : {}
 )
 
 const createWorkspaceRequire = (cwd: string) => createRequire(resolve(cwd, '__oneworks_plugin_loader__.cjs'))
 
-const normalizeRuntimePackageDir = (value: string | undefined) => {
-  const trimmed = value?.trim()
-  return trimmed != null && trimmed !== '' ? trimmed : undefined
-}
+const normalizeRuntimePackageDir = (value: string | undefined) => readPluginFilesystemPath(value)
 
 const unique = <T>(values: T[]) => [...new Set(values)]
 
@@ -113,14 +115,13 @@ const isTopLevelDirectoryReference = (id: string) => (
 
 const normalizePluginConfigHookManifest = (value: unknown): PluginManifest['configHook'] => {
   if (typeof value === 'string') {
-    const entry = value.trim()
-    return entry !== '' ? entry : undefined
+    return readPluginFilesystemPath(value)
   }
 
   if (!isRecord(value)) return undefined
 
-  const entry = typeof value.entry === 'string' ? value.entry.trim() : undefined
-  return entry != null && entry !== ''
+  const entry = readPluginFilesystemPath(value.entry)
+  return entry != null
     ? { entry } satisfies PluginConfigHookManifest
     : undefined
 }
@@ -146,7 +147,7 @@ const normalizePluginServerRuntimeRoles = (value: unknown): PluginServerRuntimeR
 
 const normalizePluginServerManifest = (value: unknown): NonNullable<PluginManifest['plugin']>['server'] => {
   if (!isRecord(value)) return undefined
-  const entry = typeof value.entry === 'string' && value.entry.trim() !== '' ? value.entry.trim() : undefined
+  const entry = readPluginFilesystemPath(value.entry)
   const roles = normalizePluginServerRuntimeRoles(value.roles)
   const capabilities = Array.isArray(value.capabilities)
     ? [
@@ -166,6 +167,29 @@ const normalizePluginServerManifest = (value: unknown): NonNullable<PluginManife
   return { ...(capabilities.length > 0 ? { capabilities } : {}), entry, roles }
 }
 
+const normalizePluginClientManifest = (value: unknown):
+  | NonNullable<
+    NonNullable<PluginManifest['plugin']>['client']
+  >
+  | undefined =>
+{
+  if (!isRecord(value)) return undefined
+  const entry = readPluginFilesystemPath(value.entry)
+  const root = typeof value.root === 'string' ? value.root : undefined
+  const devEntry = readPluginFilesystemPath(value.devEntry)
+  const devServer = typeof value.devServer === 'string' && value.devServer.trim() !== ''
+    ? value.devServer.trim()
+    : undefined
+  const sourceRoot = readPluginFilesystemPath(value.sourceRoot)
+  return {
+    ...(entry == null ? {} : { entry }),
+    ...(root == null ? {} : { root }),
+    ...(devEntry == null ? {} : { devEntry }),
+    ...(devServer == null ? {} : { devServer }),
+    ...(sourceRoot == null ? {} : { sourceRoot })
+  }
+}
+
 const normalizeLocalizedTextMap = (value: unknown) => {
   if (!isRecord(value)) return undefined
   const entries = Object.entries(value)
@@ -178,14 +202,13 @@ const normalizeLocalizedTextMap = (value: unknown) => {
 
 const normalizePluginIconPath = (value: unknown) => {
   if (typeof value !== 'string') return undefined
-  const normalized = value.trim().replaceAll('\\', '/')
+  const segments = sep === '\\' ? value.split(/[\\/]/u) : value.split('/')
   if (
-    normalized === '' || normalized.includes('\0') || isAbsolute(normalized) ||
-    /^[a-z]:\//iu.test(normalized) || normalized.split('/').includes('..')
+    value.trim() === '' || value.includes('\0') || isAbsolute(value) || segments.includes('..')
   ) {
     throw new Error('Plugin manifest icon must be a plugin-root-relative path without parent traversal.')
   }
-  return normalized
+  return value
 }
 
 const toPluginManifest = (value: unknown): PluginManifest | undefined => {
@@ -261,26 +284,7 @@ const toPluginManifest = (value: unknown): PluginManifest | undefined => {
     ...(configHook != null ? { configHook } : {}),
     plugin: isRecord(value.plugin)
       ? {
-        client: isRecord(value.plugin.client)
-          ? {
-            ...(typeof value.plugin.client.entry === 'string' && value.plugin.client.entry.trim() !== ''
-              ? { entry: value.plugin.client.entry.trim() }
-              : {}),
-            ...(typeof value.plugin.client.root === 'string' && value.plugin.client.root.trim() !== ''
-              ? { root: value.plugin.client.root.trim() }
-              : {}),
-            ...(typeof value.plugin.client.devEntry === 'string' && value.plugin.client.devEntry.trim() !== ''
-              ? { devEntry: value.plugin.client.devEntry.trim() }
-              : {}),
-            ...(typeof value.plugin.client.devServer === 'string' && value.plugin.client.devServer.trim() !== ''
-              ? { devServer: value.plugin.client.devServer.trim() }
-              : {}),
-            ...(typeof value.plugin.client.sourceRoot === 'string' &&
-                value.plugin.client.sourceRoot.trim() !== ''
-              ? { sourceRoot: value.plugin.client.sourceRoot.trim() }
-              : {})
-          }
-          : undefined,
+        client: normalizePluginClientManifest(value.plugin.client),
         server: normalizePluginServerManifest(value.plugin.server),
         contributions: isRecord(value.plugin.contributions)
           ? value.plugin.contributions as NonNullable<PluginManifest['plugin']>['contributions']
@@ -346,15 +350,20 @@ const normalizeWatch = (value: unknown) => (
 
 const normalizePluginInstanceConfig = (
   value: unknown,
-  path: string
+  path: string,
+  allowDirectoryReference = false
 ): PluginInstanceConfig => {
   if (!isRecord(value)) {
     throw new Error(`Invalid plugin instance at ${path}. Expected an object.`)
   }
 
-  const id = typeof value.id === 'string' && value.id.trim() !== ''
-    ? value.id.trim()
-    : undefined
+  const rawId = typeof value.id === 'string' ? value.id : undefined
+  const normalizedId = rawId?.trim()
+  const id = normalizedId == null || normalizedId === ''
+    ? undefined
+    : allowDirectoryReference && isTopLevelDirectoryReference(normalizedId)
+    ? rawId
+    : normalizedId
   if (id == null) {
     throw new Error(`Invalid plugin instance at ${path}. "id" must be a non-empty string.`)
   }
@@ -401,7 +410,7 @@ export const normalizePluginConfig = (
     )
   }
 
-  return plugins.map((plugin, index) => normalizePluginInstanceConfig(plugin, `${path}[${index}]`))
+  return plugins.map((plugin, index) => normalizePluginInstanceConfig(plugin, `${path}[${index}]`, true))
 }
 
 const resolvePackageRootFromRequires = (
@@ -750,17 +759,32 @@ const resolveManifestConfigEntryPath = (
   return existsSync(configPath) ? configPath : undefined
 }
 
+const hasManifestConfigEntry = (
+  instance: Pick<ResolvedPluginInstance, 'manifest'>
+) => (
+  typeof instance.manifest?.configHook === 'string' ||
+  (
+    instance.manifest?.configHook != null &&
+    typeof instance.manifest.configHook === 'object' &&
+    Object.hasOwn(instance.manifest.configHook, 'entry')
+  )
+)
+
 export const resolvePluginConfigEntryPathForInstance = (
   cwd: string,
   instance: Pick<ResolvedPluginInstance, 'manifest' | 'packageId' | 'rootDir'>
-) => (
-  resolveManifestConfigEntryPath(instance) ??
-    (
-      instance.packageId != null
-        ? resolvePluginConfigEntryPath(cwd, instance.packageId, instance.rootDir)
-        : resolveDirectoryPluginConfigEntryPath(instance.rootDir)
-    )
-)
+) => {
+  if (hasManifestConfigEntry(instance)) {
+    const entryPath = resolveManifestConfigEntryPath(instance)
+    if (entryPath == null) {
+      console.warn(`Configured plugin config hook is unavailable for "${instance.packageId ?? 'directory plugin'}".`)
+    }
+    return entryPath
+  }
+  return instance.packageId != null
+    ? resolvePluginConfigEntryPath(cwd, instance.packageId, instance.rootDir)
+    : resolveDirectoryPluginConfigEntryPath(instance.rootDir)
+}
 
 const resolveDirectoryPath = (baseDir: string, path: string) => (
   path.startsWith('/') ? path : resolve(baseDir, path)

@@ -44,8 +44,7 @@ export const decodeSafePluginAssetReference = (value: string) => {
   if (
     decoded == null ||
     decoded.includes('\0') ||
-    decoded.includes('\\') ||
-    getAssetPathname(decoded).split('/').includes('..')
+    getAssetPathname(decoded).split(/[\\/]/u).includes('..')
   ) return undefined
   return decoded
 }

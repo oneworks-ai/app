@@ -97,6 +97,25 @@ const parseSimpleYaml = (source: string) => {
 
 const parseYamlFile = async (filePath: string) => parseSimpleYaml(await readFile(filePath, 'utf8'))
 
+export const readPluginRelativeFilesystemPath = (
+  value: unknown,
+  pathApi: Pick<typeof path, 'isAbsolute' | 'sep'> = path
+) => {
+  if (typeof value !== 'string' || value.trim() === '') return undefined
+  const segments = pathApi.sep === '\\' ? value.split(/[\\/]/u) : value.split('/')
+  if (
+    value.includes('\0') ||
+    pathApi.isAbsolute(value) ||
+    segments.includes('..')
+  ) return undefined
+  return value
+}
+
+export const serializePluginFilesystemPathForRoute = (
+  value: string,
+  pathApi: Pick<typeof path, 'normalize' | 'sep'> = path
+) => pathApi.normalize(value).split(pathApi.sep).map(segment => encodeURIComponent(segment)).join('/')
+
 const normalizeRuntimeManifest = (value: unknown): PluginRuntimeManifest | undefined => {
   if (!isRecord(value)) return undefined
   const plugin = isRecord(value.plugin) ? value.plugin : undefined
@@ -111,12 +130,8 @@ const normalizeRuntimeManifest = (value: unknown): PluginRuntimeManifest | undef
         .map(([language, text]) => [language.trim(), text.trim()])
     )
     : undefined
-  const icon = typeof value.icon === 'string' ? value.icon.trim().replaceAll('\\', '/') : undefined
-  if (
-    icon != null && icon !== '' && (
-      icon.includes('\0') || path.isAbsolute(icon) || /^[a-z]:\//iu.test(icon) || icon.split('/').includes('..')
-    )
-  ) {
+  const icon = readPluginRelativeFilesystemPath(value.icon)
+  if (typeof value.icon === 'string' && value.icon.trim() !== '' && icon == null) {
     throw new Error('Plugin manifest icon must be a plugin-root-relative path without parent traversal.')
   }
 
@@ -129,7 +144,7 @@ const normalizeRuntimeManifest = (value: unknown): PluginRuntimeManifest | undef
   return {
     ...(manifest as unknown as PluginRuntimeManifest),
     ...(displayNameI18n != null && Object.keys(displayNameI18n).length > 0 ? { displayNameI18n } : {}),
-    ...(icon != null && icon !== '' ? { icon } : {})
+    ...(icon == null ? {} : { icon })
   }
 }
 
@@ -207,11 +222,11 @@ export const loadPluginRuntimeManifest = async (
 
 export const resolvePluginClientAssetRoot = async (pluginRoot: string, manifest: PluginRuntimeManifest) => {
   const client = manifest.plugin?.client
-  const configuredRoot = typeof client?.root === 'string' && client.root.trim() !== ''
-    ? client.root
-    : undefined
-  if (configuredRoot != null) {
-    return await resolveInsidePluginRoot(pluginRoot, configuredRoot) ?? pluginRoot
+  const explicitRoot = client?.root
+  if (typeof explicitRoot === 'string') {
+    const configuredRoot = explicitRoot.trim() !== '' ? explicitRoot : undefined
+    if (configuredRoot == null) return undefined
+    return await resolveInsidePluginRoot(pluginRoot, configuredRoot)
   }
 
   const entry = typeof client?.entry === 'string' && client.entry.trim() !== ''

@@ -12,6 +12,7 @@
 - `src/routes/admin-sso-providers.ts`：B 端托管 SSO provider 管理 API。
 - `src/routes/teams.ts`、`src/routes/team-*.ts`、`src/routes/config-secrets.ts`、`src/teams.ts`、`src/config-secrets.ts`：团队、成员、租户团队策略、配置 secret 加密存储 / 轮换 / 撤销 API 与团队配置消费权限 helper；`/api/relay/teams` 面向用户自助团队流程，`/api/admin/teams` 和 `/api/admin/team-policy` 只给站点管理员。
 - `src/routes/project-rule-documents.ts` / `src/project-rule-documents.ts`：项目规则 assignment 自有文档快照的当前用户与管理员 API、权限边界和持久化归一化；它不是账号 / 团队文档索引，也不负责读取正文或判断本地 Git 项目是否命中规则。
+- device-token config snapshots retain project assignments for the plugin's local Git-remote matcher when server metadata cannot verify repository identity; account/query snapshots keep explicit server-side project filtering.
 - `src/routes/personal-config.ts` / `src/routes/personal-config-write.ts`：个人 global config route 认证、并发响应与安全 partial-write 归一化；PUT 的 partial merge / strict validation 留在 write helper，route 不复制该协议。
 - `src/routes/admin-openapi.ts`：Relay 机器可读 OpenAPI 3.1 文档；平台管理员 API 挂载在 `/api/admin/openapi.json`，个人用户 API 挂载在 `/api/profile/openapi.json`，不要写入真实 token 或部署 secret。Admin 前端只读取这两份文档，不在 `apps/relay-admin` 复制 paths / schema。
 - `src/routes/profile.ts`：当前登录用户自己的 profile 安全 API，包括系统访问令牌、OpenAPI 调用审计查询、密码修改和 passkey 绑定；不要在这里实现他人用户管理动作。
@@ -19,6 +20,8 @@
 - `src/auth/sso-provider-*`：SSO provider 元数据校验、redaction、OAuth client 解析与 env / store 合并。
 - `src/email/`：验证码 / 邀请 / 登录邮件的 provider 抽象、Turnstile 校验、域名 evaluator 和发送风控；Admin UI 黑白名单管理留给 `apps/relay-admin` 后续任务，不要在这里写界面。
 - `src/session-forwarding/`：会话快照、job、payload / result 转发仓库和访问控制；JSON / SQLite 本地模式使用内存 payload 仓库，云端模式必须由存储 driver 提供可跨请求恢复的 payload 仓库。
+  - device registration / heartbeat、private / management metadata、config snapshot policy 和 session forwarding 中的 `workspaceFolder` / `cwd` 是文件系统身份；`project.allow` / `project.deny` 的每个非空 pattern（包括无分隔符的相对 basename 与 glob）也保留原始字节与 root family。入口只以 `trim()` 判空；IDs、names、timestamps、network 字段和普通文本继续按各自规则清理。
+  - management project 的稳定身份优先使用精确 `workspaceFolder`，缺失时才使用稳定 id；name / title 只用于显示和缺少稳定身份的兜底，不能把 basename 相同但 workspace 不同的项目合并。
 - `src/storage/`：store repository、SSO provider 归一化、JSON / SQLite / Postgres / Cloudflare Durable Object driver 与内容边界。
   - SQLite `withStore` 按规范化 data path 串行，并在同一连接的 `BEGIN IMMEDIATE` 内完成 canonical read、scoped repository write 与 commit / rollback；需要 read-modify-write 的调用方不能退回分离的顶层 read/write。
   - SQLite `:memory:` 由每个 repository 独占并在其生命周期内复用同一连接；同 repository 的 read/write/withStore 可见同一状态，不同 repository 必须隔离。文件路径仍按单次操作开关连接，避免常驻连接泄漏。
@@ -43,6 +46,7 @@
 - 项目规则文档绑定 config assignment，使用 `/api/relay/config-assignments/:assignmentId/documents` 或管理员同构路径同步。Relay Server 业务路由保存并透传客户端生成的密文格式 payload 以及同步、范围和审计元数据，不解析或索引文档正文；部署运营方能够复现当前命名空间派生密钥，因此文档不得承诺运营方无法解密。本地目录、Git 命中判断、路径安全和提示词注入由 Relay 插件负责，不能下沉到 server 或宿主应用。
 - Relay diagnostic store 同样不保存 OTLP log body，只保存白名单诊断事实与匿名关联 ID；新增 Codex/OneWorks 映射时先更新 `src/diagnostics/AGENTS.md` 的边界和隐私测试。
 - Relay device 的 alias / name / capabilities / workspaceFolder / pluginScope 是用户私有元数据。新写入必须加密存储，device token 只存 hash；admin 用户管理只返回 `deviceCount` / `maxDevices` 这类聚合字段，不返回其他用户设备详情。`alias` 是 OneWorks / Relay 内的展示名，不参与设备身份判断；真实机器名继续放在 `name`，用于兜底显示和排查。
+- Relay device/session 的 `workspaceFolder` 还是远端文件系统身份；store normalize、JSON/SQLite driver 和 session forwarding 只能用 `trim()` 判断空值并保留原字符串，避免把合法首尾空白重写成另一目录。其他用户私有文本字段继续遵守各自的归一化与加密边界。
 - `/api/relay/devices` 是当前 session 用户自己的设备列表。不要因为 owner/admin 有管理权限就把其他用户设备详情从这个接口返回。
 - 系统访问令牌属于当前登录用户，落库只存 hash 和 preview；生成接口只返回一次明文。权限按令牌所属用户的 role/capability 解析，不要给系统访问令牌绕过当前用户保护，例如禁止修改自己的 role。
 - 通过系统访问令牌调用 `/api/*` 时，`src/security/audit.ts` 需要记录 OpenAPI audit event，查询入口是 `/api/profile/openapi-audit` 且只能由登录 session 查看。
@@ -55,6 +59,7 @@
 - 登录 token 的最终 redirect 只允许与 `ONEWORKS_RELAY_ALLOW_ORIGIN` 同源的 Web URL、本地开发时的 loopback URL，或精确的 `oneworks://relay/auth` / `one-works://relay/auth` 回调形状；OAuth 中间回跳只额外允许当前 Relay origin 的 `/login/complete`，不得按“任意 HTTPS / 任意自定义协议”放行。
 - Passkey 注册默认必须先校验邮箱验证码；新用户是否还需要邀请码由 `ONEWORKS_RELAY_REGISTRATION_MODE` 决定。`invite_required` 是默认值，`email_verified` 允许邮箱验证后自注册，`admin_created_only` 禁止新账号自注册但允许已有用户绑定 passkey。`ONEWORKS_RELAY_PASSKEY_EMAIL_VERIFICATION_REQUIRED=off` 只允许新 passkey 自注册跳过邮箱确认，已有用户新增 passkey 仍必须验证邮箱。不要把这些策略硬编码到前端。
 - `ONEWORKS_RELAY_STORAGE_DRIVER=sqlite` 是单机 Node 生产推荐路径，`ONEWORKS_RELAY_DATA_PATH` 指向 SQLite 文件；不要把 SQLite 实现扩散到 routes 或 session-forwarding。
+- Relay project allow / deny 在 server normalize、store 与 snapshot 中是文件系统 pattern，不是普通显示文本；持久化保留非空原字节，matcher 按 root family 解释大小写、重复 / 混合 separator 和 basename，POSIX literal backslash 不得生成 `/` 或跨 family basename alias。server 与 plugin matcher 必须通过同一 contract matrix。
 - `/api/relay/config/global` 的 partial adapter patch 可以只切换到 canonical 中已存在的 `defaultAccount`；route 必须先按 `allowedFields` 做 partial normalize，再与 canonical 合并并 strict normalize，missing / tombstoned default 返回 400。
 - `ONEWORKS_RELAY_STORAGE_DRIVER=postgres` 是 Vercel / serverless Node 路径，连接串来自 `ONEWORKS_RELAY_POSTGRES_URL`、`DATABASE_URL` 或 `--data`；日志和 repository location 必须脱敏连接串密码。
 - `cloudflare-do` 只允许由 `cloudflare/worker.ts` 通过 Durable Object repository 创建，不要从 Node CLI 直接实例化。

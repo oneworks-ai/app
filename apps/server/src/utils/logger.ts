@@ -11,8 +11,8 @@ import { resolveServerLogLevel } from '@oneworks/utils/log-level'
 const env = loadEnv()
 const logLevel = resolveServerLogLevel(env)
 const resolveServerLogDir = () => {
-  const configuredLogDir = process.env.__ONEWORKS_PROJECT_SERVER_LOG_DIR__?.trim()
-  if (configuredLogDir == null || configuredLogDir === '') {
+  const configuredLogDir = process.env.__ONEWORKS_PROJECT_SERVER_LOG_DIR__
+  if (configuredLogDir == null || configuredLogDir.trim() === '') {
     return resolveProjectHomePath(processCwd(), process.env, 'logs', 'server')
   }
 

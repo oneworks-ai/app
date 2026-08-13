@@ -208,4 +208,25 @@ describe('launcher relay projects', () => {
       }
     ])
   })
+
+  it('preserves a relay workspace path with raw leading and trailing whitespace', () => {
+    const workspaceFolder = String.raw` \\server\share\ Project `
+    const status = {
+      servers: [{
+        connected: true,
+        devices: [{
+          capabilities: { sessions: true, workspaceLauncher: true },
+          id: 'windows-device',
+          name: 'Windows Host',
+          status: 'online',
+          workspaceFolder
+        }],
+        id: 'relay',
+        name: 'Relay'
+      }]
+    }
+
+    expect(normalizeLauncherRelayDirectoryTargets(status)[0]?.initialDirectory).toBe(workspaceFolder)
+    expect(normalizeLauncherRelayProjectGroups(status)[0]?.projects[0]?.workspaceFolder).toBe(workspaceFolder)
+  })
 })

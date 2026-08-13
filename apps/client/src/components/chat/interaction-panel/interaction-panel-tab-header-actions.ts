@@ -1,6 +1,7 @@
 import type { TFunction } from 'i18next'
 
 import { isWorkspaceShellScriptPath } from '#~/components/chat/workspace-file-editor/workspace-file-editor-language'
+import { readNonBlankFilesystemPath } from '#~/utils/filesystem-path-identity'
 
 import type { InteractionPanelRunCommand } from './interaction-panel-run-commands'
 import type { InteractionPanelTab } from './interaction-panel-tabs'
@@ -23,7 +24,7 @@ const buildShellFileRunCommand = (
 ): InteractionPanelRunCommand => {
   const fileName = getFileName(tab.path)
   const title = t('chat.interactionPanel.runShellFileTitle', { file: fileName })
-  const cwd = workspaceRootPath?.trim()
+  const cwd = readNonBlankFilesystemPath(workspaceRootPath)
 
   return {
     ...(cwd == null || cwd === '' ? {} : { cwd }),

@@ -3,6 +3,7 @@ import { readFile, readdir, readlink, realpath, stat } from 'node:fs/promises'
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 
 import { getWorkspaceFolder } from '#~/services/config/index.js'
+import { readGitdirControlFilePath } from '#~/utils/git-control-file.js'
 import { badRequest, notFound } from '#~/utils/http.js'
 
 const IGNORED_DIRECTORY_NAMES = new Set([
@@ -53,17 +54,18 @@ export const assertWorkspacePathInsideRealRoot = async (
 }
 
 export const normalizeWorkspacePath = (workspaceFolder: string, rawPath?: string) => {
-  const trimmed = rawPath?.trim() ?? ''
-  if (trimmed === '' || trimmed === '.') {
+  const path = rawPath ?? ''
+  if (path.trim() === '' || path === '.') {
     return ''
   }
 
-  if (isAbsolute(trimmed)) {
+  if (isAbsolute(path)) {
     throw badRequest('Workspace tree path must be relative', { path: rawPath }, 'invalid_workspace_tree_path')
   }
 
-  const resolved = resolve(workspaceFolder, trimmed)
-  const nextPath = relative(workspaceFolder, resolved).replaceAll('\\', '/')
+  const resolved = resolve(workspaceFolder, path)
+  const relativePath = relative(workspaceFolder, resolved)
+  const nextPath = sep === '\\' ? relativePath.replaceAll('\\', '/') : relativePath
   if (nextPath === '' || nextPath === '.') {
     return ''
   }
@@ -76,15 +78,9 @@ export const normalizeWorkspacePath = (workspaceFolder: string, rawPath?: string
 
 export const readGitdirFileTarget = async (filePath: string) => {
   const content = await readFile(filePath, 'utf8').catch(() => undefined)
-  const firstLine = content?.split(/\r?\n/, 1)[0]?.trim()
-  if (firstLine == null || !firstLine.toLowerCase().startsWith('gitdir:')) {
-    return undefined
-  }
-
-  const rawTarget = firstLine.slice('gitdir:'.length).trim()
-  if (rawTarget === '') {
-    return undefined
-  }
+  if (content == null) return undefined
+  const rawTarget = readGitdirControlFilePath(content)
+  if (rawTarget == null) return undefined
 
   return {
     rawTarget,

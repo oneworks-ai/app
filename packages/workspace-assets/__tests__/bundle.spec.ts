@@ -416,6 +416,53 @@ describe('resolveWorkspaceAssetBundle', () => {
     expect(bundle.skills[0]?.resolvedBy).toBe('home-bridge')
   })
 
+  it('preserves the exact whitespace-bearing real home for default home-bridge discovery', async () => {
+    const workspace = await createWorkspace()
+    const exactHome = join(workspace, 'real-home ')
+    const adjacentHome = join(workspace, 'real-home')
+    process.env.__ONEWORKS_PROJECT_REAL_HOME__ = exactHome
+    await writeDocument(
+      join(exactHome, '.agents/skills/exact/SKILL.md'),
+      '---\ndescription: exact home\n---\nexact home body'
+    )
+    await writeDocument(
+      join(adjacentHome, '.agents/skills/adjacent/SKILL.md'),
+      '---\ndescription: adjacent home\n---\nadjacent home body'
+    )
+
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      configs: [undefined, undefined],
+      useDefaultOneworksMcpServer: false
+    })
+
+    expect(bundle.skills.map(asset => asset.name)).toEqual(['exact'])
+    expect(bundle.skills[0]?.sourcePath).toBe(join(exactHome, '.agents/skills/exact/SKILL.md'))
+  })
+
+  it('preserves whitespace-bearing configured home-bridge roots', async () => {
+    const workspace = await createWorkspace()
+    const exactRoot = join(workspace, 'team-skills ')
+    const adjacentRoot = join(workspace, 'team-skills')
+    await writeDocument(
+      join(exactRoot, 'exact/SKILL.md'),
+      '---\ndescription: exact root\n---\nexact root body'
+    )
+    await writeDocument(
+      join(adjacentRoot, 'adjacent/SKILL.md'),
+      '---\ndescription: adjacent root\n---\nadjacent root body'
+    )
+
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      configs: [{ skills: { homeBridge: { roots: [exactRoot] } } }, undefined],
+      useDefaultOneworksMcpServer: false
+    })
+
+    expect(bundle.skills.map(asset => asset.name)).toEqual(['exact'])
+    expect(bundle.skills[0]?.sourcePath).toBe(join(exactRoot, 'exact/SKILL.md'))
+  })
+
   it('keeps the first matching skill when multiple homeBridge roots contain the same name', async () => {
     const workspace = await createWorkspace()
     const realHome = process.env.__ONEWORKS_PROJECT_REAL_HOME__

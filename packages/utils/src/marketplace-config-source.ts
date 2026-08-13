@@ -21,6 +21,10 @@ const normalizeNonEmptyString = (value: unknown) => (
   typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
 )
 
+const readNonBlankFilesystemPath = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== '' ? value : undefined
+)
+
 export interface NormalizeMarketplaceConfigOptions {
   allowSettingsPathPluginSources?: boolean
 }
@@ -44,7 +48,7 @@ const normalizeClaudeCodeMarketplaceSource = (
         source: 'github',
         repo,
         ...(normalizeNonEmptyString(value.ref) != null ? { ref: normalizeNonEmptyString(value.ref) } : {}),
-        ...(normalizeNonEmptyString(value.path) != null ? { path: normalizeNonEmptyString(value.path) } : {})
+        ...(readNonBlankFilesystemPath(value.path) != null ? { path: readNonBlankFilesystemPath(value.path) } : {})
       }
     }
     case 'git': {
@@ -56,11 +60,11 @@ const normalizeClaudeCodeMarketplaceSource = (
         source: 'git',
         url,
         ...(normalizeNonEmptyString(value.ref) != null ? { ref: normalizeNonEmptyString(value.ref) } : {}),
-        ...(normalizeNonEmptyString(value.path) != null ? { path: normalizeNonEmptyString(value.path) } : {})
+        ...(readNonBlankFilesystemPath(value.path) != null ? { path: readNonBlankFilesystemPath(value.path) } : {})
       }
     }
     case 'directory': {
-      const directoryPath = normalizeNonEmptyString(value.path)
+      const directoryPath = readNonBlankFilesystemPath(value.path)
       if (directoryPath == null) {
         throw new TypeError(`Invalid marketplace source at ${path}. "path" must be a non-empty string.`)
       }
@@ -85,8 +89,8 @@ const normalizeClaudeCodeMarketplaceSource = (
       }
       const metadata = isRecord(value.metadata)
         ? {
-          ...(normalizeNonEmptyString(value.metadata.pluginRoot) != null
-            ? { pluginRoot: normalizeNonEmptyString(value.metadata.pluginRoot) }
+          ...(readNonBlankFilesystemPath(value.metadata.pluginRoot) != null
+            ? { pluginRoot: readNonBlankFilesystemPath(value.metadata.pluginRoot) }
             : {})
         }
         : undefined

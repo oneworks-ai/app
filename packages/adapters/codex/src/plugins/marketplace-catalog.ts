@@ -22,10 +22,11 @@ export type {
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
 )
-
 const normalizeNonEmptyString = (value: unknown) => (
   typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
 )
+const readNonBlankFilesystemPath = (value: unknown) =>
+  typeof value === 'string' && value.trim() !== '' ? value : undefined
 
 const resolvePathWithinRoot = async (rootDir: string, candidatePath: string, description: string) => {
   const resolvedPath = path.resolve(rootDir, candidatePath)
@@ -71,7 +72,7 @@ const normalizeCatalog = async (
     }
     const name = normalizeNonEmptyString(value.name)
     const source = isRecord(value.source) ? value.source : undefined
-    const sourcePath = normalizeNonEmptyString(source?.path)
+    const sourcePath = readNonBlankFilesystemPath(source?.path)
     if (name == null || source?.source !== 'local' || sourcePath == null) {
       throw new TypeError(
         `Unsupported Codex marketplace plugin at ${description}.plugins[${index}]. Expected a local source.`
@@ -89,11 +90,10 @@ const normalizeCatalog = async (
       manifestInterface?.logoDark ??
       manifestInterface?.composerIcon
     const icon = pluginRoot == null ? undefined : await readNativeIconDataUrlWithin(pluginRoot, iconRef)
-    const listAssetDirectories = async (assetName: 'agents' | 'commands' | 'skills') => (
+    const listAssetDirectories = async (assetName: 'agents' | 'commands' | 'skills') =>
       pluginRoot == null
         ? []
         : (await listSafeChildDirectories(path.resolve(pluginRoot, assetName))).map(entry => entry.name)
-    )
     const [agents, commands, skills] = await Promise.all([
       listAssetDirectories('agents'),
       listAssetDirectories('commands'),

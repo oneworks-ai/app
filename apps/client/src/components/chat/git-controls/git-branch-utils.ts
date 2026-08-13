@@ -1,25 +1,31 @@
 import type { GitBranchSummary } from '@oneworks/types'
 
+import { getFilesystemPathComparisonKey, stripOptionalTrailingPathSeparators } from '#~/utils/filesystem-path-identity'
+
 const normalizeBranchText = (value: string) => value.trim().toLowerCase()
-const normalizeWorktreePath = (value: string) => value.trim().replace(/[/\\]+$/, '').replace(/\\/g, '/')
+
+export const normalizeGitFilesystemPathForComparison = stripOptionalTrailingPathSeparators
 
 export const formatGitWorktreePathLabel = (value: string) => {
-  const segments = normalizeWorktreePath(value).split('/').filter(Boolean)
+  const normalizedPath = normalizeGitFilesystemPathForComparison(value)
+  const separator = normalizedPath.startsWith('/') ? /\//u : /[\\/]/u
+  const segments = normalizedPath.split(separator).filter(Boolean)
   if (segments.length >= 2) {
     return segments.slice(-2).join('/')
   }
-  return segments[0] ?? value.trim()
+  return segments[0] ?? value
 }
 
 export const isGitBranchCheckedOutInOtherWorktree = (
   branch: GitBranchSummary,
   currentWorktreePath: string
 ) => {
-  if (branch.kind !== 'local' || branch.worktreePath == null || branch.worktreePath.trim() === '') {
+  if (branch.kind !== 'local' || branch.worktreePath == null || branch.worktreePath === '') {
     return false
   }
 
-  return normalizeWorktreePath(branch.worktreePath) !== normalizeWorktreePath(currentWorktreePath)
+  return getFilesystemPathComparisonKey(branch.worktreePath) !==
+    getFilesystemPathComparisonKey(currentWorktreePath)
 }
 
 export const getGitBranchCheckoutBlockedPath = (
@@ -29,7 +35,7 @@ export const getGitBranchCheckoutBlockedPath = (
 ) => {
   if (branch.kind === 'local') {
     return isGitBranchCheckedOutInOtherWorktree(branch, currentWorktreePath)
-      ? branch.worktreePath?.trim() ?? null
+      ? branch.worktreePath ?? null
       : null
   }
 
@@ -39,7 +45,7 @@ export const getGitBranchCheckoutBlockedPath = (
   }
 
   return isGitBranchCheckedOutInOtherWorktree(localPeer, currentWorktreePath)
-    ? localPeer.worktreePath?.trim() ?? null
+    ? localPeer.worktreePath ?? null
     : null
 }
 

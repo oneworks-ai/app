@@ -45,8 +45,7 @@ const GIT_HOME_ENTRIES = [
 ]
 
 const normalizeHome = (value) => {
-  const trimmed = typeof value === 'string' ? value.trim() : ''
-  return trimmed ? path.resolve(trimmed) : undefined
+  return typeof value === 'string' && value.trim() !== '' ? path.resolve(value) : undefined
 }
 
 const pathExistsOrSymlink = (targetPath) => {
@@ -83,10 +82,9 @@ const isPathInside = (parentPath, targetPath) => {
 }
 
 const normalizeBridgeEntry = (entry) => {
-  const normalized = typeof entry === 'string' ? entry.trim() : ''
-  if (normalized === '' || path.isAbsolute(normalized)) return undefined
+  if (typeof entry !== 'string' || entry.trim() === '' || path.isAbsolute(entry)) return undefined
 
-  const resolved = path.normalize(normalized)
+  const resolved = path.normalize(entry)
   if (resolved === '.' || resolved === '..' || resolved.startsWith(`..${path.sep}`)) {
     return undefined
   }

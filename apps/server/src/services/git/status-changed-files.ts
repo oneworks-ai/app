@@ -22,21 +22,20 @@ export const setGitStatusChangedFile = (
   path: string,
   patch: Pick<GitChangedFile, 'staged' | 'unstaged' | 'untracked'> & Pick<Partial<GitChangedFile>, 'submodule'>
 ) => {
-  const normalizedPath = path.trim()
-  if (normalizedPath === '') {
+  if (path === '') {
     return
   }
 
-  const existing = changedFilesByPath.get(normalizedPath) ?? {
-    path: normalizedPath,
+  const existing = changedFilesByPath.get(path) ?? {
+    path,
     staged: false,
     unstaged: false,
     untracked: false
   }
 
   const submodule = mergeSubmoduleChange(existing.submodule, patch.submodule)
-  changedFilesByPath.set(normalizedPath, {
-    path: normalizedPath,
+  changedFilesByPath.set(path, {
+    path,
     staged: existing.staged || patch.staged,
     unstaged: existing.unstaged || patch.unstaged,
     untracked: existing.untracked || patch.untracked,
@@ -46,40 +45,29 @@ export const setGitStatusChangedFile = (
 
 const getRestAfterFields = (line: string, fieldCount: number) => {
   let index = 0
-  let fieldsRead = 0
-
-  while (fieldsRead < fieldCount && index < line.length) {
-    while (index < line.length && (line[index] ?? '').trim() === '') {
-      index += 1
-    }
-    while (index < line.length && (line[index] ?? '').trim() !== '') {
-      index += 1
-    }
-    fieldsRead += 1
+  for (let fieldsRead = 0; fieldsRead < fieldCount; fieldsRead += 1) {
+    const separatorIndex = line.indexOf(' ', index)
+    if (separatorIndex < 0) return ''
+    index = separatorIndex + 1
   }
-
-  while (index < line.length && (line[index] ?? '').trim() === '') {
-    index += 1
-  }
-
   return line.slice(index)
 }
 
 export const parseGitStatusChangedPath = (line: string) => {
   if (line.startsWith('? ')) {
-    return line.slice(2).trim()
+    return line.slice(2)
   }
 
   if (line.startsWith('1 ')) {
-    return getRestAfterFields(line, 8).trim()
+    return getRestAfterFields(line, 8)
   }
 
   if (line.startsWith('2 ')) {
-    return getRestAfterFields(line, 9).split('\t')[0]?.trim() ?? ''
+    return getRestAfterFields(line, 9).split('\t')[0] ?? ''
   }
 
   if (line.startsWith('u ')) {
-    return getRestAfterFields(line, 10).trim()
+    return getRestAfterFields(line, 10)
   }
 
   return ''

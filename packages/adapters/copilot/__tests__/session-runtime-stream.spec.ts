@@ -8,6 +8,7 @@ import type { AdapterOutputEvent } from '@oneworks/types'
 import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 
 import { createCopilotSession } from '#~/runtime/session.js'
+import { buildCopilotChildEnv, resolveAdapterConfig } from '#~/runtime/shared.js'
 
 import {
   flushAsyncWork,
@@ -155,21 +156,23 @@ describe('createCopilotSession stream runtime', () => {
       cwd,
       env: {
         __ONEWORKS_PROJECT_ADAPTER_COPILOT_CLI_PATH__: '/bin/copilot',
-        COPILOT_AGENT_DIRS: '/existing/agents'
+        COPILOT_AGENT_DIRS: '/existing/agents',
+        COPILOT_CUSTOM_INSTRUCTIONS_DIRS: ' /existing/instructions ',
+        COPILOT_SKILLS_DIRS: ' /existing/skills '
       },
       configs: [{
         adapters: {
           copilot: {
             remote: true,
             agent: 'reviewer',
-            agentDirs: ['/tmp/agents-a', '/tmp/agents-b'],
-            pluginDirs: ['/tmp/plugin-a', '/tmp/plugin-b'],
+            agentDirs: ['/tmp/agents-a ', ' /tmp/agents-b'],
+            pluginDirs: ['/tmp/plugin-a ', ' /tmp/plugin-b'],
             additionalInstructions: 'Prefer small patches.',
             allowTools: ['shell(git:*)'],
             denyTools: ['shell(git push)'],
             allowUrls: ['https://docs.github.com/copilot/*'],
             denyUrls: ['https://example.invalid'],
-            additionalDirs: ['/tmp/shared'],
+            additionalDirs: ['/tmp/shared '],
             mode: 'autopilot',
             autopilot: true,
             maxAutopilotContinues: 2,
@@ -216,9 +219,9 @@ describe('createCopilotSession stream runtime', () => {
       '--agent',
       'reviewer',
       '--plugin-dir',
-      '/tmp/plugin-a',
+      '/tmp/plugin-a ',
       '--plugin-dir',
-      '/tmp/plugin-b',
+      ' /tmp/plugin-b',
       '--allow-tool',
       'shell(git:*)',
       '--deny-tool',
@@ -228,7 +231,7 @@ describe('createCopilotSession stream runtime', () => {
       '--deny-url',
       'https://example.invalid',
       '--add-dir',
-      '/tmp/shared',
+      '/tmp/shared ',
       '--mode',
       'autopilot',
       '--max-autopilot-continues',
@@ -241,7 +244,9 @@ describe('createCopilotSession stream runtime', () => {
     ]))
     expect(args).not.toContain('--no-remote')
     expect(args).not.toContain('--autopilot')
-    expect(spawnOptions.env?.COPILOT_AGENT_DIRS).toBe('/existing/agents,/tmp/agents-a,/tmp/agents-b')
+    expect(spawnOptions.env?.COPILOT_AGENT_DIRS).toBe('/existing/agents,/tmp/agents-a , /tmp/agents-b')
+    expect(spawnOptions.env?.COPILOT_SKILLS_DIRS).toBe(' /existing/skills ')
+    expect(spawnOptions.env?.COPILOT_CUSTOM_INSTRUCTIONS_DIRS).toBe(' /existing/instructions ')
     expect(spawnOptions.env?.COPILOT_ADDITIONAL_CUSTOM_INSTRUCTIONS).toBe('Prefer small patches.')
     expect(JSON.parse(
       await readFile(
@@ -255,6 +260,32 @@ describe('createCopilotSession stream runtime', () => {
         user: true
       },
       trusted_folders: [cwd]
+    })
+  })
+
+  it('preserves inherited comma-delimited filesystem roots before staging Copilot assets', async () => {
+    const cwd = await makeTempDir()
+    const skillDir = join(cwd, '.oo/skills/research')
+    await mkdir(skillDir, { recursive: true })
+    await writeFile(join(skillDir, 'SKILL.md'), 'skill', 'utf8')
+    const { ctx } = makeCtx({
+      cwd,
+      env: {
+        __ONEWORKS_PROJECT_ADAPTER_COPILOT_CLI_PATH__: '/bin/copilot',
+        COPILOT_SKILLS_DIRS: '/tmp/skills,adjacent'
+      }
+    })
+
+    await expect(buildCopilotChildEnv(ctx, {
+      sessionId: 'session-comma-path',
+      assetPlan: {
+        adapter: 'copilot',
+        diagnostics: [],
+        mcpServers: {},
+        overlays: [{ assetId: 'skill:research', kind: 'skill', sourcePath: skillDir, targetPath: 'skills/research' }]
+      }
+    } as any, resolveAdapterConfig(ctx))).resolves.toMatchObject({
+      COPILOT_SKILLS_DIRS: expect.stringContaining('/tmp/skills,adjacent')
     })
   })
 

@@ -103,6 +103,37 @@ describe('native Home plugin adapter discovery', () => {
     expect(result.diagnostics[0]?.code).toBe('native_plugin_cli_failed')
   })
 
+  it('discovers only the exact whitespace-bearing real and Codex homes', async () => {
+    await rm(home, { recursive: true, force: true })
+    home = `${home} `
+    const codexHome = path.join(home, '.codex ')
+    const adjacentCodexHome = path.join(home, '.codex')
+    await mkdir(path.join(codexHome, 'plugins/cache/team/raw/1.0.0/.codex-plugin'), { recursive: true })
+    await mkdir(path.join(adjacentCodexHome, 'plugins/cache/team/adjacent/1.0.0/.codex-plugin'), {
+      recursive: true
+    })
+    await writeFile(path.join(codexHome, 'config.toml'), '[plugins."raw@team"]\nenabled = true\n')
+    await writeFile(path.join(adjacentCodexHome, 'config.toml'), '[plugins."adjacent@team"]\nenabled = true\n')
+    await writeJson(
+      path.join(codexHome, 'plugins/cache/team/raw/1.0.0/.codex-plugin/plugin.json'),
+      { name: 'raw', version: '1.0.0' }
+    )
+    await writeJson(
+      path.join(adjacentCodexHome, 'plugins/cache/team/adjacent/1.0.0/.codex-plugin/plugin.json'),
+      { name: 'adjacent', version: '1.0.0' }
+    )
+    env = {
+      __ONEWORKS_PROJECT_REAL_HOME__: home,
+      CODEX_HOME: codexHome,
+      PATH: path.join(home, 'empty-bin')
+    }
+
+    const result = await codexManager.discover({ cwd: '/workspace', env })
+
+    expect(result.plugins.map(plugin => plugin.name)).toEqual(['raw'])
+    expect(result.plugins[0]?.source.displayPath).toContain('~/.codex ')
+  })
+
   it('lets the Codex adapter report global and project skills and deduplicates shared physical roots', async () => {
     const project = path.join(home, 'project')
     const homeSkillRoot = path.join(home, '.codex/skills/review')

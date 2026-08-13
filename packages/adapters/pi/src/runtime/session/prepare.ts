@@ -7,6 +7,7 @@ import type { AdapterCtx, AdapterQueryOptions, ModelServiceConfig } from '@onewo
 import {
   mergeProcessEnvWithProjectEnv,
   parseStrictPermissionMirrorDocument,
+  resolveOptionalPath,
   resolvePermissionMirrorPath,
   resolveProjectOoPath,
   withPrivatePermissionMirrorLock,
@@ -33,12 +34,9 @@ export interface PiSessionBase {
   spawnEnv: Record<string, string>
   tools: string[]
 }
-
-const resolveRealAgentDir = (ctx: AdapterCtx) => {
-  const explicit = ctx.env.__ONEWORKS_PROJECT_ADAPTER_PI_AGENT_DIR__?.trim() ?? process.env.PI_CODING_AGENT_DIR?.trim()
-  const realHome = ctx.env.__ONEWORKS_PROJECT_REAL_HOME__?.trim() ?? homedir()
-  return explicit && explicit !== '' ? resolve(explicit) : resolve(realHome, '.pi', 'agent')
-}
+const resolveRealAgentDir = ({ env }: AdapterCtx) =>
+  resolveOptionalPath(env.__ONEWORKS_PROJECT_ADAPTER_PI_AGENT_DIR__ ?? process.env.PI_CODING_AGENT_DIR) ??
+    resolve(resolveOptionalPath(env.__ONEWORKS_PROJECT_REAL_HOME__) ?? homedir(), '.pi', 'agent')
 
 const isServerConfigured = (env: Record<string, string | null | undefined>) => {
   const host = env.__ONEWORKS_PROJECT_SERVER_HOST__?.trim()

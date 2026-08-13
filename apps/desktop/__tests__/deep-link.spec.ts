@@ -25,6 +25,15 @@ describe('desktop deep links', () => {
     })
   })
 
+  it('preserves leading and trailing whitespace in a decoded workspace callback', () => {
+    expect(parseDesktopDeepLinkLaunchRequest(
+      'oneworks://relay/auth?workspace=%20%2Fworkspace%2Frelay%20&scope=relay'
+    )).toEqual({
+      workspaceFolder: ' /workspace/relay ',
+      routePath: 'plugins/relay/home?relayLogin=1'
+    })
+  })
+
   it('returns manager relay auth callbacks to the launcher plugin route', () => {
     const request = parseDesktopDeepLinkLaunchRequest(
       'oneworks://relay/auth?launcher=1&scope=relay&serverId=prod#relay_token=sso-token'

@@ -8,6 +8,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 const tempDirs: string[] = []
 const cliPath = path.resolve(process.cwd(), 'apps/cli/cli.js')
+const unavailableRelayConfigHookWarnings =
+  'Configured plugin config hook is unavailable for "@oneworks/plugin-relay".\n'.repeat(2)
 
 const createTempDir = async () => {
   const cwd = await fs.realpath(
@@ -73,7 +75,7 @@ describe('config command', { timeout: 15_000 }, () => {
     const result = runCli(cwd, ['config', 'list', '--json'])
 
     expect(result.status).toBe(0)
-    expect(result.stderr).toBe('')
+    expect(result.stderr).toBe(unavailableRelayConfigHookWarnings)
     expect(JSON.parse(result.stdout)).toEqual({
       ok: true,
       workspaceFolder: cwd,
@@ -215,12 +217,12 @@ describe('config command', { timeout: 15_000 }, () => {
 
     const getResult = runCli(cwd, ['config', 'get', 'models'])
     expect(getResult.status).toBe(0)
-    expect(getResult.stderr).toBe('')
+    expect(getResult.stderr).toBe(unavailableRelayConfigHookWarnings)
     expect(getResult.stdout).toBe(expectedModelsOutput)
 
     const listResult = runCli(cwd, ['config', 'list', 'models'])
     expect(listResult.status).toBe(0)
-    expect(listResult.stderr).toBe('')
+    expect(listResult.stderr).toBe(unavailableRelayConfigHookWarnings)
     expect(listResult.stdout).toBe(expectedModelsOutput)
   })
 
@@ -251,7 +253,7 @@ describe('config command', { timeout: 15_000 }, () => {
     const result = runCli(cwd, ['config', 'get', 'models'])
 
     expect(result.status).toBe(0)
-    expect(result.stderr).toBe('')
+    expect(result.stderr).toBe(unavailableRelayConfigHookWarnings)
     expect(result.stdout).toBe(
       'gpt-responses:\n' +
         '  gpt-5.4:\n' +

@@ -11,14 +11,13 @@ const sortGitWorktrees = (worktrees: GitWorktreeSummary[]) => {
 }
 
 const getCurrentWorktreeFallback = (repositoryRoot?: string, currentBranch?: string | null): GitWorktreeSummary[] => {
-  const path = repositoryRoot?.trim() ?? ''
-  if (path === '') {
+  if (repositoryRoot == null || repositoryRoot.trim() === '') {
     return []
   }
 
   const branchName = currentBranch?.trim() || null
   return [{
-    path,
+    path: repositoryRoot,
     branchName,
     isCurrent: true,
     isDetached: branchName == null

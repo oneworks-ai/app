@@ -87,6 +87,10 @@ const trimNonEmpty = (value: unknown) => {
   return trimmed === '' ? undefined : trimmed
 }
 
+const readNonBlankFilesystemPath = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== '' ? value : undefined
+)
+
 const normalizePayloadType = (value: unknown): ManualPayloadType | undefined => {
   const normalized = trimNonEmpty(value)?.toLowerCase()
   if (normalized === 'text' || normalized === 'image' || normalized === 'file' || normalized === 'emoji') {
@@ -190,7 +194,10 @@ const parsePayload = (payload: unknown): ManualPayload | { error: string } => {
     return { type, emojiId, emojiMd5, emojiSize, platform }
   }
 
-  const src = trimNonEmpty(payload.src) ?? trimNonEmpty(payload.url) ?? trimNonEmpty(payload.filePath)
+  const rawSrc = readNonBlankFilesystemPath(payload.src)
+  const src = rawSrc != null && isHttpUrl(rawSrc.trim())
+    ? rawSrc.trim()
+    : rawSrc ?? trimNonEmpty(payload.url) ?? readNonBlankFilesystemPath(payload.filePath)
   if (src == null) return { error: `${type} message requires src.` }
 
   return {

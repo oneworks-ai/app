@@ -20,6 +20,10 @@ export const builtinPackageCachePath = path.join(desktopRoot, 'src/builtin-adapt
 export const preloadPath = path.join(desktopRoot, 'dist/preload/index.js')
 export const isDev = !app.isPackaged
 
+const readFilesystemExecutable = (value: string | undefined) => (
+  value != null && value.trim() !== '' ? value : undefined
+)
+
 const CLIENT_PACKAGE_NAME = '@oneworks/client'
 const SERVER_PACKAGE_NAME = '@oneworks/server'
 
@@ -80,11 +84,8 @@ export const resolveClientDistPath = (env: NodeJS.ProcessEnv = process.env): str
 }
 
 export const resolveServerExecutable = () => {
-  if (
-    process.env.ONEWORKS_DESKTOP_SERVER_RUNTIME != null && process.env.ONEWORKS_DESKTOP_SERVER_RUNTIME.trim() !== ''
-  ) {
-    return process.env.ONEWORKS_DESKTOP_SERVER_RUNTIME.trim()
-  }
+  const configuredRuntime = readFilesystemExecutable(process.env.ONEWORKS_DESKTOP_SERVER_RUNTIME)
+  if (configuredRuntime != null) return configuredRuntime
 
   return app.isPackaged ? process.execPath : 'node'
 }
@@ -104,11 +105,8 @@ export const resolveCachedServerPackageEnv = (env: NodeJS.ProcessEnv = process.e
 }
 
 export const resolveClientDevExecutable = () => {
-  if (
-    process.env.ONEWORKS_DESKTOP_CLIENT_RUNTIME != null && process.env.ONEWORKS_DESKTOP_CLIENT_RUNTIME.trim() !== ''
-  ) {
-    return process.env.ONEWORKS_DESKTOP_CLIENT_RUNTIME.trim()
-  }
+  const configuredRuntime = readFilesystemExecutable(process.env.ONEWORKS_DESKTOP_CLIENT_RUNTIME)
+  if (configuredRuntime != null) return configuredRuntime
 
   return 'node'
 }

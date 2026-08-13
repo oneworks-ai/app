@@ -15,6 +15,7 @@ import {
   resolveProjectConfigDir,
   resolveProjectHomeDir,
   resolveProjectHomePath,
+  resolveProjectHomeProjectsDir,
   resolveProjectMockHome,
   resolveProjectOoBaseDirName,
   resolveProjectOoEntitiesDir,
@@ -23,6 +24,7 @@ import {
   resolveProjectWorkspaceFolder
 } from '#~/ai-path.js'
 import { toCanonicalAssetSlug } from '#~/asset-slug.js'
+import { normalizeFilesystemDirPath, readFilesystemPathOutput } from '#~/filesystem-dir-path.js'
 
 describe('ai path utils', () => {
   it('keeps astral letters intact and rejects Windows-reserved or trailing-space names', () => {
@@ -211,5 +213,62 @@ describe('ai path utils', () => {
       HOME: '/tmp/custom-home',
       __ONEWORKS_PROJECT_REAL_HOME__: '/tmp/home'
     })).toBe('/tmp/custom-home')
+  })
+
+  it('preserves whitespace-bearing filesystem env identity across workspace and project-home paths', () => {
+    const root = mkdtempSync(join(tmpdir(), 'ow-ai-path-raw-'))
+    try {
+      const workspace = join(root, 'workspace ')
+      const adjacentWorkspace = join(root, 'workspace')
+      const realHome = join(root, 'real home ')
+      const projectsDir = join(root, 'projects ')
+      const configDir = join(workspace, ' config ')
+      mkdirSync(workspace)
+      mkdirSync(adjacentWorkspace)
+      const env = {
+        HOME: realHome,
+        __ONEWORKS_PROJECT_REAL_HOME__: realHome,
+        __ONEWORKS_PROJECT_HOME_PROJECTS_DIR__: projectsDir,
+        __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: workspace,
+        __ONEWORKS_PROJECT_CONFIG_DIR__: configDir
+      }
+
+      expect(resolveProjectWorkspaceFolder(adjacentWorkspace, env)).toBe(workspace)
+      expect(resolveProjectConfigDir(adjacentWorkspace, env)).toBe(configDir)
+      expect(resolveProjectHomeProjectsDir(env)).toBe(projectsDir)
+      expect(resolveProjectHomeDir(workspace, env)).not.toBe(resolveProjectHomeDir(adjacentWorkspace, {
+        ...env,
+        __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: adjacentWorkspace
+      }))
+      expect(resolveProjectMockHome(workspace, env)).toBe(resolveProjectHomePath(workspace, env, '.mock'))
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('preserves filesystem root families and strips only terminal command newlines', () => {
+    expect(normalizeFilesystemDirPath('/')).toBe('/')
+    expect(normalizeFilesystemDirPath('\\')).toBe('\\')
+    expect(normalizeFilesystemDirPath('C:\\')).toBe('C:\\')
+    expect(normalizeFilesystemDirPath('C:')).toBe('C:')
+    expect(normalizeFilesystemDirPath('\\\\server\\share\\')).toBe('\\\\server\\share\\')
+    expect(normalizeFilesystemDirPath('/tmp/project///')).toBe('/tmp/project')
+    expect(normalizeFilesystemDirPath('/tmp/project\\')).toBe('/tmp/project\\')
+    expect(normalizeFilesystemDirPath('/tmp/project ')).toBe('/tmp/project ')
+    expect(readFilesystemPathOutput('/tmp/project \r\n')).toBe(
+      process.platform === 'win32' ? '/tmp/project ' : '/tmp/project \r'
+    )
+    expect(readFilesystemPathOutput('/tmp/project\n\n')).toBe('/tmp/project\n')
+    expect(readFilesystemPathOutput('/tmp/project\r')).toBe('/tmp/project\r')
+  })
+
+  it.runIf(process.platform !== 'win32')('treats POSIX literal backslashes as path bytes in final resolvers', () => {
+    const workspace = String.raw`/tmp/repo\.git\data`
+    expect(resolvePrimaryWorkspaceFolder('/tmp/worktree', {
+      [PROJECT_PRIMARY_WORKSPACE_FOLDER_ENV]: workspace
+    })).toBe(workspace)
+    expect(resolveProjectOoEntitiesDir('/tmp/project', {
+      __ONEWORKS_PROJECT_ENTITIES_DIR__: String.raw`entities\team`
+    })).toBe(String.raw`/tmp/project/.oo/entities\team`)
   })
 })

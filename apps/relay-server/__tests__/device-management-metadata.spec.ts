@@ -10,6 +10,105 @@ import { authHeaders, cleanupRelayFixtures, listenRelay, requestJson } from './h
 afterEach(cleanupRelayFixtures)
 
 describe('relay server device management metadata', () => {
+  it('keeps same-basename projects distinct while reconciling exact-workspace updates', async () => {
+    const { args, baseUrl } = await listenRelay()
+    await createInvite(args.dataPath, 'pair-same-basename')
+    const registered = await requestJson(baseUrl, '/api/relay/devices/register', {
+      method: 'POST',
+      headers: authHeaders('pair-same-basename'),
+      body: JSON.stringify({
+        deviceId: 'same-basename-device',
+        managementServer: {
+          id: 'manager-same-basename',
+          projects: [
+            { id: 'workspace:a', name: 'app', title: 'app', workspaceFolder: '/teams/a/app' },
+            { id: 'workspace:b', name: 'app', title: 'app', workspaceFolder: '/teams/b/app' }
+          ]
+        }
+      })
+    })
+    await requestJson(baseUrl, '/api/relay/devices/heartbeat', {
+      method: 'POST',
+      headers: authHeaders(String(registered.body.deviceToken)),
+      body: JSON.stringify({
+        managementServerId: 'manager-same-basename',
+        managementServerProjects: [
+          { id: 'workspace:a', name: 'app', title: 'App A updated', workspaceFolder: '/teams/a/app' }
+        ]
+      })
+    })
+
+    const devices = await requestJson(baseUrl, '/api/relay/devices', {
+      headers: authHeaders(userSessionToken)
+    })
+    const [device] = devices.body.devices as Array<Record<string, unknown>>
+    const [managementServer] = device.managementServers as Array<Record<string, unknown>>
+    const projects = managementServer.projects as Array<Record<string, unknown>>
+
+    expect(projects).toHaveLength(2)
+    expect(projects.map(project => project.workspaceFolder).sort()).toEqual(['/teams/a/app', '/teams/b/app'])
+    expect(projects.find(project => project.workspaceFolder === '/teams/a/app')?.title).toBe('App A updated')
+  })
+
+  it('keeps whitespace-distinct workspace identities through registration and heartbeat project metadata', async () => {
+    const adjacentWorkspace = '/parent/project'
+    const whitespaceWorkspace = '/parent/project '
+    const { args, baseUrl } = await listenRelay()
+    await createInvite(args.dataPath, 'pair-raw-workspaces')
+
+    const registered = await requestJson(baseUrl, '/api/relay/devices/register', {
+      method: 'POST',
+      headers: authHeaders('pair-raw-workspaces'),
+      body: JSON.stringify({
+        deviceId: 'raw-workspace-device',
+        deviceName: ' Raw Workspace Device ',
+        managementServer: {
+          id: 'manager-raw',
+          name: ' Raw Manager ',
+          projects: [
+            { id: 'adjacent', title: ' Adjacent ', workspaceFolder: adjacentWorkspace },
+            { id: 'whitespace', title: ' Whitespace ', workspaceFolder: whitespaceWorkspace }
+          ],
+          workspaceFolder: whitespaceWorkspace
+        },
+        workspaceFolder: whitespaceWorkspace
+      })
+    })
+    const heartbeat = await requestJson(baseUrl, '/api/relay/devices/heartbeat', {
+      method: 'POST',
+      headers: authHeaders(String(registered.body.deviceToken)),
+      body: JSON.stringify({
+        managementServerId: 'manager-raw',
+        managementServerProjects: [
+          { id: 'adjacent', title: ' Adjacent Updated ', workspaceFolder: adjacentWorkspace },
+          { id: 'whitespace', title: ' Whitespace Updated ', workspaceFolder: whitespaceWorkspace }
+        ],
+        workspaceFolder: whitespaceWorkspace
+      })
+    })
+    const devices = await requestJson(baseUrl, '/api/relay/devices', {
+      headers: authHeaders(userSessionToken)
+    })
+    const [device] = devices.body.devices as Array<Record<string, unknown>>
+    const [managementServer] = device.managementServers as Array<Record<string, unknown>>
+    const projects = managementServer.projects as Array<Record<string, unknown>>
+
+    expect(heartbeat.response.status).toBe(200)
+    expect(device).toMatchObject({ workspaceFolder: whitespaceWorkspace })
+    expect(managementServer).toMatchObject({
+      name: 'Raw Manager',
+      workspaceFolder: whitespaceWorkspace
+    })
+    expect(projects.map(project => project.workspaceFolder)).toEqual([
+      adjacentWorkspace,
+      whitespaceWorkspace
+    ])
+    expect(projects.map(project => project.title)).toEqual([
+      'Adjacent Updated',
+      'Whitespace Updated'
+    ])
+  })
+
   it('stores structured device environment and management server IP in private metadata', async () => {
     const { args, baseUrl } = await listenRelay()
     await createInvite(args.dataPath, 'pair-env')

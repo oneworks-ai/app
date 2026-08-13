@@ -341,6 +341,34 @@ describe('initClaudeCodeAdapter', () => {
     })
   })
 
+  it('links keychain and state only from the exact whitespace-bearing real home', async () => {
+    const root = await createWorkspace()
+    const workspace = join(root, 'workspace')
+    const realHome = join(root, 'real-home ')
+    const adjacentHome = join(root, 'real-home')
+    const mockHome = resolveTestMockHome(workspace, realHome)
+    await mkdir(workspace, { recursive: true })
+    await mkdir(join(realHome, 'Library', 'Keychains'), { recursive: true })
+    await mkdir(join(adjacentHome, 'Library', 'Keychains'), { recursive: true })
+    await writeFile(join(realHome, 'Library', 'Keychains', 'exact.keychain-db'), '')
+    await writeFile(join(adjacentHome, 'Library', 'Keychains', 'adjacent.keychain-db'), '')
+    await writeFile(join(realHome, '.claude.json'), JSON.stringify({ owner: 'exact' }))
+    await writeFile(join(adjacentHome, '.claude.json'), JSON.stringify({ owner: 'adjacent' }))
+
+    await initClaudeCodeAdapter({
+      cwd: workspace,
+      env: { HOME: mockHome, __ONEWORKS_PROJECT_REAL_HOME__: realHome },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+      assets: { hookPlugins: [] }
+    } as any)
+
+    const keychainsPath = join(mockHome, 'Library', 'Keychains')
+    expect(resolve(dirname(keychainsPath), await readlink(keychainsPath))).toBe(
+      resolve(realHome, 'Library', 'Keychains')
+    )
+    expect(JSON.parse(await readFile(join(mockHome, '.claude.json'), 'utf8'))).toMatchObject({ owner: 'exact' })
+  })
+
   it('keeps concurrent mock-home skill sync idempotent when multiple ow processes initialize Claude together', async () => {
     const workspace = await createWorkspace()
     const realHome = await createWorkspace()

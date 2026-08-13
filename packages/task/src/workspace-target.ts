@@ -12,10 +12,11 @@ export const resolveWorkspaceTaskTarget = async (params: {
   name?: string
 }): Promise<ResolvedWorkspaceTaskTarget> => {
   const cwd = params.cwd ?? process.cwd()
-  const name = params.name?.trim()
-  if (name == null || name === '') {
+  const rawName = params.name
+  if (rawName == null || rawName.trim() === '') {
     throw new Error('Workspace task requires a workspace name.')
   }
+  const name = rawName
 
   const [config, userConfig] = await loadConfig({
     cwd,

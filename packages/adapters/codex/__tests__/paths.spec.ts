@@ -4,7 +4,11 @@ import { dirname, join, relative } from 'node:path'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { resolveCodexBinaryPath, resolveOfficialCodexNativeBinaryPath } from '#~/paths.js'
+import {
+  resolveCodexBinaryPath,
+  resolveCodexSystemBinaryPaths,
+  resolveOfficialCodexNativeBinaryPath
+} from '#~/paths.js'
 
 const tempDirs: string[] = []
 
@@ -73,6 +77,25 @@ afterEach(async () => {
 })
 
 describe('resolveCodexBinaryPath', () => {
+  it.runIf(process.platform === 'darwin')('keeps the exact real home in Codex.app executable discovery', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'oneworks-codex-system-home-'))
+    const adjacentHome = join(root, 'home')
+    const exactHome = join(root, 'home ')
+    tempDirs.push(root)
+    await Promise.all([
+      mkdir(adjacentHome, { recursive: true }),
+      mkdir(exactHome, { recursive: true })
+    ])
+
+    const candidates = await resolveCodexSystemBinaryPaths({
+      HOME: adjacentHome,
+      __ONEWORKS_PROJECT_REAL_HOME__: exactHome
+    })
+
+    expect(candidates).toContain(join(exactHome, 'Applications', 'Codex.app', 'Contents', 'Resources', 'codex'))
+    expect(candidates).not.toContain(join(adjacentHome, 'Applications', 'Codex.app', 'Contents', 'Resources', 'codex'))
+  })
+
   it('uses the official npm package native executable without requiring node on PATH', async () => {
     const install = await createOfficialCodexInstall({
       arch: 'arm64',
@@ -123,4 +146,27 @@ describe('resolveCodexBinaryPath', () => {
       __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__: binaryPath
     })).toBe(binaryPath)
   })
+
+  it.runIf(process.platform !== 'win32')(
+    'does not reinterpret literal backslashes as npm layout separators',
+    async () => {
+      const installDir = await mkdtemp(join(tmpdir(), 'oneworks-literal-backslash-codex-'))
+      const exactBinary = join(installDir, String.raw`node_modules\.bin\codex`)
+      const adjacentLauncher = join(installDir, 'node_modules', '@openai', 'codex', 'bin', 'codex.js')
+      tempDirs.push(installDir)
+      await Promise.all([
+        mkdir(dirname(exactBinary), { recursive: true }),
+        mkdir(dirname(adjacentLauncher), { recursive: true })
+      ])
+      await Promise.all([
+        writeFile(exactBinary, '#!/bin/sh\n'),
+        writeFile(adjacentLauncher, '#!/usr/bin/env node\n')
+      ])
+
+      expect(resolveOfficialCodexNativeBinaryPath(exactBinary, {
+        arch: 'x64',
+        platform: 'linux'
+      })).toBe(exactBinary)
+    }
+  )
 })

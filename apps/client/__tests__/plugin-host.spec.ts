@@ -10,6 +10,7 @@ import { resolvePluginReadmeAssetPath } from '#~/components/plugins/plugin-readm
 import i18n from '#~/i18n'
 import { createPluginI18nContext, localizePluginContributionItem } from '#~/plugins/plugin-i18n'
 import type { PluginRuntimeInstance } from '#~/plugins/plugin-manifest'
+import { parsePublicPluginRuntimeInstance } from '#~/plugins/plugin-public-api'
 import { PluginRegistry } from '#~/plugins/plugin-registry'
 import { createPluginRouteSidebarOverride } from '#~/plugins/plugin-route-sidebar'
 import {
@@ -37,6 +38,28 @@ vi.mock('#~/components/monaco/use-monaco-theme', () => ({ useMonacoTheme: () => 
 vi.mock('monaco-editor', () => ({ editor: {} }))
 
 describe('client plugin host registry', () => {
+  it('keeps decoded backslash traversal out of NavRail contribution assets', () => {
+    const plugin = parsePublicPluginRuntimeInstance({
+      contributions: {
+        navItems: [
+          { icon: '..%5Cprivate%5Cavatar.svg', id: 'unsafe', title: 'Unsafe' },
+          { icon: 'extension', id: 'safe', title: 'Safe' }
+        ]
+      },
+      requestId: 'public-assets',
+      scope: 'public-assets'
+    })
+    expect(plugin).toBeDefined()
+
+    const navItems = getPluginContributions(plugin as PluginRuntimeInstance).navItems ?? []
+    expect(buildPluginSidebarNavigationItems({
+      items: navItems.map(item => ({ ...item, pluginScope: 'public-assets' })),
+      language: 'en',
+      navigate: vi.fn(),
+      pathname: '/plugins'
+    })).toEqual([])
+  })
+
   it('projects plugin navigation actions into the shared sidebar action slot', () => {
     const navigate = vi.fn()
     const items = buildPluginSidebarNavigationItems({

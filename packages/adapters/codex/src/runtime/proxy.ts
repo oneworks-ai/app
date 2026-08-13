@@ -106,6 +106,10 @@ export const CODEX_PROXY_MAX_REQUEST_BYTES = 8 * 1024 * 1024
 export const CODEX_PROXY_MAX_BUFFERED_RESPONSE_BYTES = 16 * 1024 * 1024
 
 const REDACTED_VALUE = '[REDACTED]'
+
+const readFilesystemPath = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== '' ? value : undefined
+)
 const SENSITIVE_LOG_KEY_PATTERNS = [
   /^authorization$/i,
   /^proxy-authorization$/i,
@@ -766,8 +770,8 @@ const SYNTHETIC_REASONING_LEVELS = [
 
 const resolveCodexModelsCachePath = () => (
   resolve(
-    normalizeNonEmptyString(process.env.CODEX_HOME) ??
-      resolve(normalizeNonEmptyString(process.env.HOME) ?? homedir(), '.codex'),
+    readFilesystemPath(process.env.CODEX_HOME) ??
+      resolve(readFilesystemPath(process.env.HOME) ?? homedir(), '.codex'),
     'models_cache.json'
   )
 )

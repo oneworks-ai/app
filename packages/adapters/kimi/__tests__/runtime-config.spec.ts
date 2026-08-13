@@ -73,6 +73,14 @@ const createCtx = async () => {
 }
 
 describe('kimi runtime helpers', () => {
+  it('preserves whitespace-bearing configured executable paths', () => {
+    expect(
+      resolveKimiCliInstallOptions({
+        __ONEWORKS_PROJECT_ADAPTER_KIMI_CLI_PATH__: ' /tmp/kimi '
+      }).binaryPath
+    ).toBe(' /tmp/kimi ')
+  })
+
   it('builds a custom agent file when system prompt or tool filtering is requested', () => {
     const content = buildKimiAgentFileContent({
       agent: 'okabe',

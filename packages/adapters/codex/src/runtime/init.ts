@@ -8,6 +8,7 @@ import type { AdapterCtx } from '@oneworks/types'
 import {
   createStartupProfiler,
   migrateProjectHomeSegments,
+  resolveOptionalPath,
   resolveProjectOoPath,
   syncSymlinkTarget,
   unlinkMockHomeBridgePaths
@@ -187,7 +188,8 @@ async function writeManagedCodexConfig(
   const mockHome = resolveMockHome(ctx.cwd, ctx.env)
   const configPath = join(mockHome, '.codex', 'config.toml')
   const currentConfigContent = await readOptionalTextFile(configPath)
-  const realHome = ctx.env.__ONEWORKS_PROJECT_REAL_HOME__?.trim() || process.env.__ONEWORKS_PROJECT_REAL_HOME__?.trim()
+  const realHome = resolveOptionalPath(ctx.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
+    resolveOptionalPath(process.env.__ONEWORKS_PROJECT_REAL_HOME__)
   const realConfigContent = realHome == null || realHome === ''
     ? undefined
     : await readOptionalTextFile(join(realHome, '.codex', 'config.toml'))
@@ -233,7 +235,8 @@ export const initCodexAdapter = async (ctx: AdapterCtx) => {
     env,
     sessionId: env.__ONEWORKS_PROJECT_SESSION_ID__ ?? ctx.ctxId
   })
-  const home = ctx.env.__ONEWORKS_PROJECT_REAL_HOME__?.trim() || process.env.__ONEWORKS_PROJECT_REAL_HOME__?.trim()
+  const home = resolveOptionalPath(ctx.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
+    resolveOptionalPath(process.env.__ONEWORKS_PROJECT_REAL_HOME__)
   const mockHome = resolveMockHome(ctx.cwd, ctx.env)
 
   const { native: adapterConfig } = resolveCodexAdapterConfig(ctx)

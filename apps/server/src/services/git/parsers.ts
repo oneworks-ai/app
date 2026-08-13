@@ -1,5 +1,6 @@
 import type { GitBranchSummary, GitChangedFile } from '@oneworks/types'
 
+import { splitGitNulRecords } from './path-records'
 import {
   parseGitStatusChangedPath,
   parseGitStatusSubmoduleChange,
@@ -28,9 +29,9 @@ export const parseGitStatus = (output: string): ParsedGitStatus => {
   let hasUntrackedChanges = false
   const changedFilesByPath = new Map<string, GitChangedFile>()
 
-  for (const rawLine of output.split(/\r?\n/)) {
-    const line = rawLine.trim()
-    if (line === '') {
+  const records = output.includes('\0') ? splitGitNulRecords(output) : output.split(/\r?\n/)
+  for (const line of records) {
+    if (line.trim() === '') {
       continue
     }
 
@@ -104,14 +105,18 @@ export const parseGitStatus = (output: string): ParsedGitStatus => {
 
 export const parseGitBranches = (output: string, currentBranch: string | null): GitBranchSummary[] => {
   const branches: GitBranchSummary[] = []
+  const records = output.includes('\0')
+    ? (() => {
+      const fields = splitGitNulRecords(output)
+      const grouped: string[][] = []
+      for (let index = 0; index < fields.length; index += 3) grouped.push(fields.slice(index, index + 3))
+      return grouped
+    })()
+    : output.split(/\r?\n/).filter(line => line.trim() !== '').map(line => line.split('\t'))
 
-  for (const rawLine of output.split(/\r?\n/)) {
-    if (rawLine.trim() === '') {
-      continue
-    }
-
-    const [name = '', fullRef = '', worktreePathRaw = ''] = rawLine.split('\t')
-    const worktreePath = worktreePathRaw.trim() === '' ? undefined : worktreePathRaw.trim()
+  for (const [rawName = '', fullRef = '', worktreePathRaw = ''] of records) {
+    const name = rawName.replace(/^(?:\r\n|\r|\n)+/u, '')
+    const worktreePath = worktreePathRaw === '' ? undefined : worktreePathRaw
     if (fullRef.startsWith('refs/heads/')) {
       branches.push({
         name,

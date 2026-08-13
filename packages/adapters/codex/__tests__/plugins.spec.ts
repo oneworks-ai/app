@@ -252,6 +252,43 @@ describe('codex plugin manager', () => {
     })
   })
 
+  it('uses the exact whitespace-bearing marketplace root and plugin source path', async () => {
+    const cwd = await createTempDir()
+    const exactRoot = path.join(cwd, 'marketplace ')
+    const adjacentRoot = path.join(cwd, 'marketplace')
+    for (const [root, description] of [[exactRoot, 'Exact plugin'], [adjacentRoot, 'Adjacent plugin']] as const) {
+      await fs.mkdir(path.join(root, '.agents', 'plugins'), { recursive: true })
+      await fs.mkdir(path.join(root, 'plugins', 'demo ', '.codex-plugin'), { recursive: true })
+      await fs.writeFile(
+        path.join(root, '.agents', 'plugins', 'marketplace.json'),
+        JSON.stringify({
+          name: 'team',
+          plugins: [{ name: 'demo', source: { source: 'local', path: './plugins/demo ' } }]
+        })
+      )
+      await fs.writeFile(
+        path.join(root, 'plugins', 'demo ', '.codex-plugin', 'plugin.json'),
+        JSON.stringify({ name: 'demo', description })
+      )
+    }
+
+    const result = await loadCodexMarketplaceCatalogFromSource(
+      path.join(cwd, 'temp'),
+      { source: 'directory', path: exactRoot },
+      'team',
+      async (_target, source) => source.type === 'path' ? source.path : ''
+    )
+
+    expect(result.rootDir).toBe(exactRoot)
+    expect(result.catalog.plugins[0]).toMatchObject({
+      description: 'Exact plugin',
+      source: {
+        source: 'local',
+        path: './plugins/demo '
+      }
+    })
+  })
+
   it('rejects Codex marketplace plugin symlinks outside the marketplace root', async () => {
     const cwd = await createTempDir()
     const marketplaceRoot = path.join(cwd, 'marketplace')

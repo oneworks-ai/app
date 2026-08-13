@@ -121,8 +121,8 @@ const installDesktopForWindows = async (
   asset: { digest?: string; name: string; url: string },
   installMode: DesktopInstallMode
 ) => {
-  const localAppData = process.env.LOCALAPPDATA?.trim()
-  if (installMode === 'user' && !localAppData) {
+  const localAppData = process.env.LOCALAPPDATA
+  if (installMode === 'user' && (localAppData == null || localAppData.trim() === '')) {
     throw new Error('LOCALAPPDATA is required to install the One Works desktop app on Windows.')
   }
 

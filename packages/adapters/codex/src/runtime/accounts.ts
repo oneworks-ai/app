@@ -244,6 +244,10 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
 )
 
+const readFilesystemPath = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== '' ? value : undefined
+)
+
 const pathExists = async (targetPath: string) => {
   try {
     await access(targetPath)
@@ -1210,7 +1214,7 @@ const clearCodexAccountQuotaCacheUnlocked = async (
 type CodexAccountFileCtx = Pick<AdapterCtx, 'cwd' | 'env'> & Partial<Pick<AdapterCtx, 'ctxId' | 'logger'>>
 
 const resolveConfiguredAuthFilePath = (ctx: Pick<AdapterCtx, 'cwd'>, authFile: string | undefined) => {
-  const normalized = normalizeNonEmptyString(authFile)
+  const normalized = readFilesystemPath(authFile)
   if (normalized == null) {
     return undefined
   }
@@ -1284,7 +1288,7 @@ const buildCodexGlobalAccountCredentialRevision = async (
   ctx: Pick<AdapterCtx, 'cwd'>,
   configuredAccount: CodexConfiguredAccount
 ): Promise<CodexGlobalAccountCredentialRevision> => {
-  const authFile = normalizeNonEmptyString(configuredAccount.authFile)
+  const authFile = readFilesystemPath(configuredAccount.authFile)
   const authFilePath = resolveConfiguredAuthFilePath(ctx, authFile)
   const authFileContent = authFilePath == null
     ? undefined
@@ -1792,9 +1796,9 @@ const parseResetCreditOutcome = (value: unknown): CodexRateLimitResetCreditOutco
 }
 
 const resolveRealHomeAuthPath = (ctx: Pick<AdapterCtx, 'env'>) => {
-  const realHome = normalizeNonEmptyString(ctx.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
-    normalizeNonEmptyString(process.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
-    normalizeNonEmptyString(process.env.HOME) ??
+  const realHome = readFilesystemPath(ctx.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
+    readFilesystemPath(process.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
+    readFilesystemPath(process.env.HOME) ??
     homedir()
   return realHome != null && realHome !== ''
     ? resolve(realHome, '.codex', 'auth.json')
@@ -3205,7 +3209,7 @@ const writeCodexSessionConfigFile = async (params: {
 }) => {
   const mockHome = resolveMockHome(params.ctx.cwd, params.ctx.env)
   const configSourceHome = params.sharedAppServerHome
-    ? params.ctx.env.__ONEWORKS_PROJECT_REAL_HOME__?.trim() || homedir()
+    ? readFilesystemPath(params.ctx.env.__ONEWORKS_PROJECT_REAL_HOME__) ?? homedir()
     : mockHome
   const sharedConfigPath = join(configSourceHome, '.codex', 'config.toml')
   let sharedConfigContent: string | undefined
@@ -3333,7 +3337,7 @@ export const prepareCodexSessionHome = async (params: {
     )
   const mockHome = resolveMockHome(ctx.cwd, ctx.env)
   const bridgeSourceHome = params.sharedAppServerHome
-    ? ctx.env.__ONEWORKS_PROJECT_REAL_HOME__?.trim() || homedir()
+    ? readFilesystemPath(ctx.env.__ONEWORKS_PROJECT_REAL_HOME__) ?? homedir()
     : mockHome
   const bridgeStartedAt = startupProfiler.now()
   bridgeRealHomeToMockHome({

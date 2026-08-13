@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { homedir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { join, posix, resolve, sep, win32 } from 'node:path'
 import process from 'node:process'
 
 import type { DevStartTarget } from './types'
@@ -11,8 +11,25 @@ export const normalizeText = (value: unknown) =>
   typeof value === 'string' && value.trim() !== ''
     ? value.trim()
     : undefined
+export const normalizeFilesystemPath = (value: unknown) => {
+  if (typeof value !== 'string' || value.trim() === '') return undefined
+  const windowsFamily = /^[a-z]:[\\/]/iu.test(value) || value.startsWith('\\') || (
+    sep === '\\' && !value.startsWith('/')
+  )
+  const root = windowsFamily ? win32.parse(value).root : posix.parse(value).root
+  let end = value.length
+  while (end > root.length) {
+    const character = value[end - 1]
+    if (character !== '/' && (!windowsFamily || character !== '\\')) break
+    end -= 1
+  }
+  return value.slice(0, end)
+}
 export const machineServiceDir = join(
-  resolve(normalizeText(process.env.__ONEWORKS_PROJECT_REAL_HOME__) ?? process.env.HOME ?? homedir()),
+  resolve(
+    normalizeFilesystemPath(process.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
+      normalizeFilesystemPath(process.env.HOME) ?? homedir()
+  ),
   '.oneworks/dev-service'
 )
 export const worktreeRegistryDir = join(machineServiceDir, 'worktrees')

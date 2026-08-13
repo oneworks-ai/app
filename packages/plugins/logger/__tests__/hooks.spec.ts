@@ -55,6 +55,26 @@ describe('logger plugin', () => {
     expect(textBlock).toContain('\n```')
   })
 
+  it('logs TaskStart as a safe summary without prompt or credentials', async () => {
+    const info = vi.fn()
+    const next = vi.fn().mockResolvedValue({ continue: true })
+    const result = await loggerPlugin.TaskStart?.({ logger: { info } } as never, {
+      adapter: 'codex',
+      cwd: '/workspace',
+      sessionId: 'session',
+      options: { env: { OPENAI_API_KEY: 'secret' } },
+      adapterOptions: { authorization: 'Bearer secret', systemPrompt: 'private prompt' }
+    } as never, next)
+
+    expect(result).toEqual({ continue: true })
+    expect(info).toHaveBeenCalledWith(expect.objectContaining({
+      adapter: 'codex',
+      adapterOptions: expect.objectContaining({ hasSystemPrompt: true })
+    }))
+    expect(JSON.stringify(info.mock.calls[0])).not.toContain('secret')
+    expect(JSON.stringify(info.mock.calls[0])).not.toContain('private prompt')
+  })
+
   it('externalizes large structured input values into payload files', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'ow-plugin-logger-'))
     tempDirs.push(cwd)

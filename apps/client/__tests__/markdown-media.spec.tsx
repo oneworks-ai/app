@@ -5,6 +5,7 @@ import { getSessionWorkspaceResourceUrl } from '#~/api/sessions'
 import { MarkdownContent } from '#~/components/MarkdownContent'
 import type { MarkdownMediaRenderProps } from '#~/components/MarkdownContent'
 import { MessageMedia, MessageMediaFallback } from '#~/components/chat/messages/MessageMedia'
+import { parseLocalMediaSource } from '#~/utils/local-media'
 
 vi.mock('#~/runtime-config.js', () => ({
   createServerUrl: (path: string) => new URL(path, 'http://api.example.com:8787').toString(),
@@ -61,6 +62,19 @@ describe('markdown local media rendering', () => {
     expect(html).toContain('crossorigin="use-credentials"')
     expect(html).toContain('<audio class="message-media message-media--audio"')
     expect(html).toContain('preload="metadata"')
+  })
+
+  it('keeps a whitespace-bearing media filename distinct through Markdown and the workspace request', () => {
+    const html = renderMarkdown('[exact clip](assets/clip.mp4%20)')
+
+    expect(html).toContain('/api/media?path=assets%2Fclip.mp4%20')
+    expect(html).not.toContain('/api/media?path=assets%2Fclip.mp4"')
+    expect(parseLocalMediaSource('assets/clip.mp4 ')).toEqual({
+      kind: 'video',
+      path: 'assets/clip.mp4 '
+    })
+    expect(parseLocalMediaSource('https://example.com/assets/clip.mp4%20')).toBeNull()
+    expect(parseLocalMediaSource('file:///tmp/clip.mp4%20')).toBeNull()
   })
 
   it('leaves remote URLs, anchors, origin URLs, and non-media links as links', () => {

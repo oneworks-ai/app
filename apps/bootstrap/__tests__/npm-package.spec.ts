@@ -1,11 +1,17 @@
-import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { Buffer } from 'node:buffer'
+import { execFile } from 'node:child_process'
+import { chmod, mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
+import { promisify } from 'node:util'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { resolvePackageManagerEnv, resolvePublishedPackageVersion } from '../src/npm-package'
+import { resolveBootstrapPackageCacheDir, resolveRealHomeDir } from '../src/paths'
+
+const execFileAsync = promisify(execFile)
 
 describe('bootstrap npm package env', () => {
   const originalCwd = process.cwd()
@@ -101,6 +107,50 @@ if (process.argv[2] === 'view') {
     expect(env.npm_config_userconfig).toBe(projectNpmrc)
     expect(env.NPM_CONFIG_REPLACE_REGISTRY_HOST).toBe('never')
     expect(env.npm_config_replace_registry_host).toBe('never')
+  })
+
+  it('preserves exact real-home and cache roots in the background refresh process', async () => {
+    await installFakeNpm()
+    const adjacentHome = path.join(tempDir, 'home')
+    const exactHome = path.join(tempDir, 'home ')
+    const adjacentCache = path.join(tempDir, 'cache')
+    const exactCache = path.join(tempDir, 'cache ')
+    const packageName = '@scope/pkg'
+    const version = '1.0.0'
+    const installedPackageDir = path.join(
+      exactCache,
+      'npm',
+      'scope__pkg',
+      version,
+      'node_modules',
+      '@scope',
+      'pkg'
+    )
+    await Promise.all([
+      mkdir(adjacentHome, { recursive: true }),
+      mkdir(exactHome, { recursive: true }),
+      mkdir(adjacentCache, { recursive: true }),
+      mkdir(installedPackageDir, { recursive: true })
+    ])
+    await writeFile(
+      path.join(installedPackageDir, 'package.json'),
+      JSON.stringify({ name: packageName, version }),
+      'utf8'
+    )
+    vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', exactHome)
+    vi.stubEnv('__ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__', exactCache)
+    vi.stubEnv('ONEWORKS_TEST_NPM_VIEW_VERSION', version)
+
+    expect(resolveRealHomeDir()).toBe(exactHome)
+    expect(resolveBootstrapPackageCacheDir()).toBe(exactCache)
+    const payload = Buffer.from(JSON.stringify({ packageName })).toString('base64url')
+    await execFileAsync(process.execPath, [
+      path.resolve(__dirname, '../package-version-refresh-worker.cjs'),
+      payload
+    ], { env: process.env })
+
+    await expect(readdir(path.join(exactCache, 'npm-version-cache'))).resolves.toHaveLength(1)
+    await expect(readdir(path.join(adjacentCache, 'npm-version-cache'))).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
   it('keeps an explicit npm userconfig override', async () => {

@@ -109,6 +109,10 @@ const normalizeNonEmptyString = (value: unknown) => (
   typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
 )
 
+const readFilesystemPath = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== '' ? value : undefined
+)
+
 const enrichLocalPluginVersions = async (
   rootDir: string,
   catalog: ClaudeMarketplaceCatalog
@@ -116,7 +120,7 @@ const enrichLocalPluginVersions = async (
   ...catalog,
   plugins: await Promise.all(catalog.plugins.map(async (plugin) => {
     if (normalizeNonEmptyString(plugin.version) != null || typeof plugin.source !== 'string') return plugin
-    const pluginRootPrefix = normalizeNonEmptyString(catalog.metadata?.pluginRoot)
+    const pluginRootPrefix = readFilesystemPath(catalog.metadata?.pluginRoot)
     const relativeSource = pluginRootPrefix != null &&
         !plugin.source.startsWith('./') &&
         !plugin.source.startsWith('../')

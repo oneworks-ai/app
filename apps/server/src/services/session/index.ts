@@ -199,6 +199,10 @@ const isPathInside = (parentPath: string, targetPath: string) => {
   )
 }
 
+const readFilesystemPath = (value: string | undefined) => (
+  value != null && value.trim() !== '' ? value : undefined
+)
+
 const createSessionProjectPathEnv = (params: {
   adapterCwd: string
   assetWorkspaceFolder: string
@@ -206,8 +210,8 @@ const createSessionProjectPathEnv = (params: {
   const adapterCwd = path.resolve(params.adapterCwd)
   const assetWorkspaceFolder = path.resolve(params.assetWorkspaceFolder)
   const env: NodeJS.ProcessEnv = createWorkspaceRuntimeEnv(adapterCwd, processEnv)
-  const aiBaseDir = env[PROJECT_OO_BASE_DIR_ENV]?.trim()
-  const aiBaseDirSourceCwd = env[PROJECT_OO_BASE_DIR_RESOLVE_CWD_ENV]?.trim()
+  const aiBaseDir = readFilesystemPath(env[PROJECT_OO_BASE_DIR_ENV])
+  const aiBaseDirSourceCwd = readFilesystemPath(env[PROJECT_OO_BASE_DIR_RESOLVE_CWD_ENV])
   const pathEnv: NodeJS.ProcessEnv = {
     ...env,
     [PROJECT_LAUNCH_CWD_ENV]: assetWorkspaceFolder,

@@ -1,5 +1,7 @@
 import { execFile } from 'node:child_process'
 
+import { stripGitPathLineEndings } from './path-records'
+
 export interface GitCommandError extends Error {
   code?: number | string | null
   stderr?: string
@@ -7,6 +9,8 @@ export interface GitCommandError extends Error {
 }
 
 const GIT_MAX_BUFFER = 1024 * 1024
+
+const normalizeGitStdout = (value: string) => value.trim()
 
 export const resolveGitErrorMessage = (error: unknown, fallback: string) => {
   if (error instanceof Error) {
@@ -39,7 +43,11 @@ export const isNotRepositoryError = (error: unknown) => {
   return gitError.code === 128 && /not a git repository/i.test(stderr)
 }
 
-export const runGit = async (args: string[], cwd: string) => {
+const runGitWithStdoutNormalizer = async (
+  args: string[],
+  cwd: string,
+  normalizeStdout: (value: string) => string
+) => {
   try {
     const result = await new Promise<{ stdout: string; stderr: string }>((resolvePromise, reject) => {
       execFile(
@@ -61,7 +69,7 @@ export const runGit = async (args: string[], cwd: string) => {
     })
 
     return {
-      stdout: result.stdout.trim(),
+      stdout: normalizeStdout(result.stdout),
       stderr: result.stderr.trim()
     }
   } catch (error) {
@@ -75,3 +83,15 @@ export const runGit = async (args: string[], cwd: string) => {
     throw wrappedError
   }
 }
+
+export const runGit = async (args: string[], cwd: string) => (
+  runGitWithStdoutNormalizer(args, cwd, normalizeGitStdout)
+)
+
+export const runGitPath = async (args: string[], cwd: string) => (
+  runGitWithStdoutNormalizer(args, cwd, stripGitPathLineEndings)
+)
+
+export const runGitRecords = async (args: string[], cwd: string) => (
+  runGitWithStdoutNormalizer(args, cwd, value => value)
+)

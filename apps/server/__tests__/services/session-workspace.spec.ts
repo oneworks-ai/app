@@ -127,10 +127,52 @@ describe('session workspace service', () => {
     expect(currentBranch).toBe('main-session-sess-1')
   })
 
+  it('discovers, provisions, and cleans up from the exact whitespace-bearing Git repository root', async () => {
+    const { deleteSessionWorkspace, provisionSessionWorkspace } = await import('#~/services/session/workspace.js')
+    const adjacentRepositoryRoot = path.join(primaryWorkspaceRoot, 'repository')
+    const repositoryRoot = path.join(primaryWorkspaceRoot, 'repository ')
+    for (
+      const [directory, content] of [
+        [adjacentRepositoryRoot, '# adjacent\n'],
+        [repositoryRoot, '# exact raw repository\n']
+      ] as const
+    ) {
+      await mkdir(directory)
+      runGit(directory, ['init'])
+      runGit(directory, ['config', 'user.email', 'ow@example.com'])
+      runGit(directory, ['config', 'user.name', 'One Works'])
+      await writeFile(path.join(directory, 'README.md'), content, 'utf8')
+      runGit(directory, ['add', 'README.md'])
+      runGit(directory, ['commit', '-m', 'init'])
+      runGit(directory, ['branch', '-M', 'main'])
+    }
+    process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__ = repositoryRoot
+    db.createSession('Raw repository', 'sess-raw-repository')
+
+    const workspace = await provisionSessionWorkspace('sess-raw-repository')
+
+    expect(path.basename(workspace.workspaceFolder)).toBe('repository ')
+    await expect(readFile(path.join(workspace.workspaceFolder, 'README.md'), 'utf8')).resolves.toBe(
+      '# exact raw repository\n'
+    )
+    expect(execFileSync('git', ['worktree', 'list', '--porcelain'], {
+      cwd: repositoryRoot,
+      encoding: 'utf8'
+    })).toContain(workspace.workspaceFolder)
+    expect(execFileSync('git', ['worktree', 'list', '--porcelain'], {
+      cwd: adjacentRepositoryRoot,
+      encoding: 'utf8'
+    })).not.toContain(workspace.workspaceFolder)
+
+    await expect(deleteSessionWorkspace('sess-raw-repository', { force: true })).resolves.toBe(true)
+    await expect(readdir(workspace.workspaceFolder)).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
   it('recovers legacy session cwd as an external workspace without creating a new worktree', async () => {
+    const { createPluginSessionAdapter } = await import('#~/services/plugins/session-adapter.js')
     const { resolveSessionWorkspace } = await import('#~/services/session/workspace.js')
     const session = db.createSession('Legacy', 'sess-legacy')
-    const legacyDir = path.join(workspaceRoot, 'packages', 'app')
+    const legacyDir = path.join(workspaceRoot, 'packages', ' app ')
     await mkdir(legacyDir, { recursive: true })
     const legacyInitEvent: WSEvent = {
       type: 'session_info',
@@ -159,6 +201,12 @@ describe('session workspace service', () => {
     })
     expect(workspace.repositoryRoot).toBeTruthy()
     expect(workspace.repositoryRoot).toContain(path.basename(workspaceRoot))
+    await expect(createPluginSessionAdapter().listSessions()).resolves.toEqual([
+      expect.objectContaining({
+        id: session.id,
+        workspaceFolder: legacyDir
+      })
+    ])
   })
 
   it('creates a managed worktree for an existing shared-workspace session', async () => {
@@ -1041,6 +1089,50 @@ describe('session workspace service', () => {
       derivation: { eligible: false, reason: 'workspace_unavailable' }
     })
     expect(db.getSessionWorkspace('sess-deleted')?.deletedAt).toEqual(expect.any(Number))
+  })
+
+  it('uses the exact whitespace-bearing repository root for managed worktree cleanup', async () => {
+    const { deleteSessionWorkspace } = await import('#~/services/session/workspace.js')
+    const repositoryRoot = path.join(primaryWorkspaceRoot, ' repository ')
+    const worktreePath = path.join(primaryWorkspaceRoot, ' worktree ')
+    const environmentDir = path.join(primaryWorkspaceRoot, '.oo', 'env', 'raw-cleanup')
+    const repositoryLog = path.join(primaryWorkspaceRoot, 'raw-cleanup-repository.log')
+    await mkdir(repositoryRoot)
+    await mkdir(environmentDir, { recursive: true })
+    await writeFile(
+      path.join(environmentDir, getBaseScriptFileName('destroy')),
+      buildScriptContent(
+        `printf "%s\\n" "$ONEWORKS_REPOSITORY_ROOT" > "${repositoryLog}"\n`,
+        `Set-Content -Path "${repositoryLog}" -Value "$($env:ONEWORKS_REPOSITORY_ROOT)"\n`
+      ),
+      'utf8'
+    )
+    runGit(repositoryRoot, ['init'])
+    runGit(repositoryRoot, ['config', 'user.email', 'ow@example.com'])
+    runGit(repositoryRoot, ['config', 'user.name', 'One Works'])
+    await writeFile(path.join(repositoryRoot, 'README.md'), '# raw repository\n', 'utf8')
+    runGit(repositoryRoot, ['add', 'README.md'])
+    runGit(repositoryRoot, ['commit', '-m', 'init'])
+    runGit(repositoryRoot, ['worktree', 'add', '-b', 'raw-cleanup', worktreePath])
+    db.createSession('Raw cleanup', 'sess-raw-cleanup')
+    db.upsertSessionWorkspace({
+      cleanupPolicy: 'delete_on_session_delete',
+      kind: 'managed_worktree',
+      repositoryRoot,
+      sessionId: 'sess-raw-cleanup',
+      state: 'ready',
+      worktreeEnvironment: 'raw-cleanup',
+      workspaceFolder: worktreePath,
+      worktreePath
+    })
+
+    await expect(deleteSessionWorkspace('sess-raw-cleanup', { force: true })).resolves.toBe(true)
+    expect(db.getSessionWorkspace('sess-raw-cleanup')).toMatchObject({
+      repositoryRoot,
+      state: 'deleted'
+    })
+    expect((await readFile(repositoryLog, 'utf8')).replace(/\r?\n$/u, '')).toBe(repositoryRoot)
+    await expect(readdir(worktreePath)).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
   it.each(['deleting', 'deleted'] as const)('does not repeat cleanup for a %s workspace row', async (state) => {

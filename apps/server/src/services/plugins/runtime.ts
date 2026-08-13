@@ -57,7 +57,13 @@ import type { CompiledPluginClientSource } from './client-source-compiler.js'
 import { discoverPluginInstances } from './discovery.js'
 import { hasFirstPartyPluginCapability } from './first-party-capabilities.js'
 import type { ManagedPluginRuntimeIdentity } from './managed-plugin-runtime-identity.js'
-import { loadPluginRuntimeManifest, resolvePluginClientAssetRoot, resolvePluginServerEntryPath } from './manifest.js'
+import {
+  loadPluginRuntimeManifest,
+  readPluginRelativeFilesystemPath,
+  resolvePluginClientAssetRoot,
+  resolvePluginServerEntryPath,
+  serializePluginFilesystemPathForRoute
+} from './manifest.js'
 import { isLoopbackProxyTarget, proxyToLoopbackTarget } from './proxy.js'
 import { createPluginSessionAdapter } from './session-adapter.js'
 import type {
@@ -80,7 +86,7 @@ interface RuntimeRecord {
   instance: PluginRuntimeInstance
   raw: ResolvedPluginInstance
   manifest: PluginRuntimeManifest
-  clientAssetRoot: string
+  clientAssetRoot?: string
   commands: Map<string, PluginCommandHandler>
   channels: Map<string, PluginRuntimeChannelHandler>
   apis: Map<string, PluginApiRegistration>
@@ -272,18 +278,22 @@ const createRuntimeEndpointId = (
   return `manager:${serverBaseUrl ?? process.pid}`
 }
 
+const readRuntimeEndpointPath = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== '' ? value : undefined
+)
+
 export const normalizeRuntimeEndpoint = (value: unknown): PluginRuntimeEndpoint | undefined => {
   if (!isRecord(value)) return undefined
   const role = value.role === 'manager' || value.role === 'workspace' ? value.role : undefined
   if (role == null) return undefined
   const id = typeof value.id === 'string' && value.id.trim() !== '' ? value.id.trim() : `${role}:unknown`
+  const projectHome = readRuntimeEndpointPath(value.projectHome)
+  const workspaceFolder = readRuntimeEndpointPath(value.workspaceFolder)
   return {
     id,
     role,
     ...(value.current === true ? { current: true } : {}),
-    ...(typeof value.projectHome === 'string' && value.projectHome.trim() !== ''
-      ? { projectHome: value.projectHome.trim() }
-      : {}),
+    ...(projectHome == null ? {} : { projectHome }),
     ...(typeof value.serverBaseUrl === 'string'
       ? { serverBaseUrl: normalizeRuntimeServerBaseUrl(value.serverBaseUrl) }
       : {}),
@@ -291,9 +301,7 @@ export const normalizeRuntimeEndpoint = (value: unknown): PluginRuntimeEndpoint 
     ...(value.status === 'online' || value.status === 'offline' || value.status === 'unknown'
       ? { status: value.status }
       : {}),
-    ...(typeof value.workspaceFolder === 'string' && value.workspaceFolder.trim() !== ''
-      ? { workspaceFolder: value.workspaceFolder.trim() }
-      : {}),
+    ...(workspaceFolder == null ? {} : { workspaceFolder }),
     ...(typeof value.workspaceId === 'string' && value.workspaceId.trim() !== ''
       ? { workspaceId: value.workspaceId }
       : {})
@@ -458,10 +466,7 @@ const deriveScope = (instance: ResolvedPluginInstance) => {
   return sanitizeScopePart(parts[parts.length - 1]) || 'plugin'
 }
 
-const normalizeEntryPathForUrl = (entry: string | undefined) => {
-  if (entry == null || entry.trim() === '') return undefined
-  return entry.replace(/^[./\\]+/, '').replace(/\\/g, '/')
-}
+const readPluginEntryPath = (entry: string | undefined) => readPluginRelativeFilesystemPath(entry)
 
 const isTranspiledServerEntry = (entryPath: string) => (
   ['.ts', '.tsx', '.mts', '.cts'].includes(path.extname(entryPath).toLowerCase())
@@ -477,35 +482,117 @@ const clearRequireCacheInsideRoot = (root: string) => {
   }
 }
 
+const loadPluginServerModuleFromExactPath = async (entryPath: string) => {
+  const registerRequire = createRequire(nodeRequire.resolve('@oneworks/register/esbuild'))
+  const { transformSync } = registerRequire('esbuild') as {
+    transformSync: (
+      source: string,
+      options: Record<string, unknown>
+    ) => { code: string }
+  }
+  const extension = path.extname(entryPath).toLowerCase()
+  const loader = extension === '.tsx'
+    ? 'tsx'
+    : extension === '.jsx'
+    ? 'jsx'
+    : extension === '.ts' || extension === '.mts' || extension === '.cts'
+    ? 'ts'
+    : 'js'
+  const importMetaUrlVariable = '__oneworks_plugin_import_meta_url__'
+  const transformed = transformSync(await readFile(entryPath, 'utf8'), {
+    banner: `const ${importMetaUrlVariable} = require('node:url').pathToFileURL(__filename).href;`,
+    define: { 'import.meta.url': importMetaUrlVariable },
+    format: 'cjs',
+    loader,
+    sourcefile: entryPath,
+    sourcemap: 'inline',
+    target: `node${process.version.slice(1)}`
+  })
+  interface RuntimeModule {
+    _compile: (source: string, filename: string) => void
+    exports: unknown
+    filename: string
+    paths: string[]
+  }
+  const ModuleConstructor = nodeRequire('node:module') as unknown as {
+    new(id?: string): RuntimeModule
+    _nodeModulePaths: (from: string) => string[]
+  }
+  const runtimeModule = new ModuleConstructor(entryPath)
+  runtimeModule.filename = entryPath
+  runtimeModule.paths = ModuleConstructor._nodeModulePaths(path.dirname(entryPath))
+  const moduleCache = nodeRequire.cache as unknown as Record<string, RuntimeModule | undefined>
+  moduleCache[entryPath] = runtimeModule
+  try {
+    runtimeModule._compile(transformed.code, entryPath)
+    return runtimeModule.exports
+  } catch (error) {
+    delete moduleCache[entryPath]
+    throw error
+  }
+}
+
 const loadPluginServerModule = async (entryPath: string, pluginRoot: string) => {
-  if (!isTranspiledServerEntry(entryPath)) {
+  const parserEntryPath = entryPath.trimEnd()
+  const requiresExactFilesystemLoader = path.sep === '/' && entryPath.includes('\\')
+  if (
+    parserEntryPath === entryPath &&
+    !isTranspiledServerEntry(entryPath) &&
+    !requiresExactFilesystemLoader
+  ) {
     return await import(`${pathToFileURL(entryPath).href}?t=${Date.now()}`) as unknown
   }
 
   nodeRequire('@oneworks/register/esbuild')
   clearRequireCacheInsideRoot(pluginRoot)
-  return nodeRequire(entryPath) as unknown
+  if (requiresExactFilesystemLoader) {
+    return await loadPluginServerModuleFromExactPath(entryPath)
+  }
+  if (parserEntryPath === entryPath) return nodeRequire(entryPath) as unknown
+
+  const filesystemExtension = path.extname(entryPath)
+  const parserExtension = path.extname(parserEntryPath)
+  const parserLoader = nodeRequire.extensions[parserExtension]
+  if (parserLoader == null) return nodeRequire(entryPath) as unknown
+
+  const previousLoader = nodeRequire.extensions[filesystemExtension]
+  nodeRequire.extensions[filesystemExtension] = parserLoader
+  try {
+    return nodeRequire(entryPath) as unknown
+  } finally {
+    if (previousLoader == null) {
+      delete nodeRequire.extensions[filesystemExtension]
+    } else {
+      nodeRequire.extensions[filesystemExtension] = previousLoader
+    }
+  }
+}
+
+const resolveClientEntryAssetPath = (manifest: PluginRuntimeManifest, entry = manifest.plugin?.client?.entry) => {
+  const client = manifest.plugin?.client
+  const entryPath = readPluginEntryPath(entry)
+  if (entryPath == null) return undefined
+  const rootPath = readPluginEntryPath(client?.root)
+  if (rootPath != null) {
+    const relativeEntry = path.relative(rootPath, entryPath)
+    return relativeEntry === '' || isPathOutside(relativeEntry) ? entryPath : relativeEntry
+  }
+  return path.basename(entryPath)
 }
 
 const resolveClientEntryUrlPath = (manifest: PluginRuntimeManifest, entry = manifest.plugin?.client?.entry) => {
-  const client = manifest.plugin?.client
-  const normalizedEntry = normalizeEntryPathForUrl(entry)
-  if (normalizedEntry == null) return undefined
-  if (typeof client?.root === 'string' && client.root.trim() !== '') {
-    const rootPath = normalizeEntryPathForUrl(client.root) ?? ''
-    const relativeEntry = path.posix.relative(rootPath, normalizedEntry)
-    return relativeEntry === '' || relativeEntry.startsWith('..') ? normalizedEntry : relativeEntry
-  }
-  return path.posix.basename(normalizedEntry)
+  const assetPath = resolveClientEntryAssetPath(manifest, entry)
+  return assetPath == null ? undefined : serializePluginFilesystemPathForRoute(assetPath)
 }
 
 const isClientEntryAvailable = async (
   pluginRoot: string,
-  clientAssetRoot: string,
+  clientAssetRoot: string | undefined,
   declaredEntry: string | undefined
 ) => {
-  const entry = declaredEntry?.trim()
-  if (entry == null || entry === '' || path.isAbsolute(entry)) return false
+  if (clientAssetRoot == null) return false
+  const entry = readRuntimeEndpointPath(declaredEntry)
+  if (entry == null || path.isAbsolute(entry)) return false
   const entryPath = path.resolve(pluginRoot, entry)
   if (!isPathInside(pluginRoot, entryPath)) return false
   const [realPluginRoot, realClientAssetRoot, realEntry, entryStat] = await Promise.all([
@@ -540,9 +627,9 @@ const resolveHostViteDevClientEntryUrl = async (
 ) => {
   const client = manifest.plugin?.client
   if (client?.devServer != null) return undefined
-  const normalizedEntry = normalizeEntryPathForUrl(devEntryPath)
-  if (normalizedEntry == null) return undefined
-  const absoluteEntry = path.resolve(pluginRoot, normalizedEntry)
+  const entryPath = readPluginEntryPath(devEntryPath)
+  if (entryPath == null) return undefined
+  const absoluteEntry = path.resolve(pluginRoot, entryPath)
   const entryStat = await stat(absoluteEntry).catch(() => undefined)
   if (entryStat?.isFile() !== true) return undefined
   const [realPluginRoot, realEntry, realAllowedRoots] = await Promise.all([
@@ -552,12 +639,12 @@ const resolveHostViteDevClientEntryUrl = async (
   ])
   if (!isPathInside(realPluginRoot, realEntry)) return undefined
   if (!realAllowedRoots.some(root => isPathInside(root, realEntry))) return undefined
-  return `${normalizeHostViteBasePath()}/@fs/${encodeURI(toPosixPath(realEntry).replace(/^\/+/, ''))}`
+  return `${normalizeHostViteBasePath()}/@fs/${serializePluginFilesystemPathForRoute(realEntry).replace(/^\/+/, '')}`
 }
 
 const parseHostViteExtraAllowedRoots = () => {
-  const raw = process.env.__ONEWORKS_PROJECT_CLIENT_FS_ALLOW__?.trim()
-  if (raw == null || raw === '') return []
+  const raw = process.env.__ONEWORKS_PROJECT_CLIENT_FS_ALLOW__
+  if (raw == null || raw.trim() === '') return []
   try {
     const parsed = JSON.parse(raw) as unknown
     if (Array.isArray(parsed)) {
@@ -608,12 +695,12 @@ const resolveRuntimeClientSourceEntry = async (
     return undefined
   }
   if (manifest.plugin?.client?.devServer != null) return undefined
-  const normalizedEntry = normalizeEntryPathForUrl(manifest.plugin?.client?.devEntry)
-  if (normalizedEntry == null) return undefined
-  const absoluteEntry = path.resolve(pluginRoot, normalizedEntry)
+  const entryPath = readPluginEntryPath(manifest.plugin?.client?.devEntry)
+  if (entryPath == null) return undefined
+  const absoluteEntry = path.resolve(pluginRoot, entryPath)
   const entryStat = await stat(absoluteEntry).catch(() => undefined)
   if (entryStat?.isFile() !== true) return undefined
-  const configuredSourceRoot = manifest.plugin?.client?.sourceRoot?.trim() || undefined
+  const configuredSourceRoot = readRuntimeEndpointPath(manifest.plugin?.client?.sourceRoot)
   const absoluteSourceRoot = configuredSourceRoot == null
     ? path.dirname(absoluteEntry)
     : path.resolve(pluginRoot, configuredSourceRoot)
@@ -636,16 +723,15 @@ const resolveRuntimeClientSourceEntry = async (
     return undefined
   }
   return {
-    requestPath: normalizedEntry,
+    requestPath: entryPath,
     sourceRoot: realSourceRoot
   }
 }
 
 const normalizeRuntimeClientSourceRequestPath = (requestPath: string) => {
-  const posixRequestPath = requestPath.replace(/\\/g, '/')
-  const versionedMatch = /^@v\/([^/]+)\/(.+)$/.exec(posixRequestPath)
+  const versionedMatch = /^@v\/([^/]+)\/(.+)$/.exec(requestPath)
   if (
-    posixRequestPath.startsWith('@v/') &&
+    requestPath.startsWith('@v/') &&
     (
       versionedMatch == null ||
       !/^[\w.-]{1,64}$/.test(versionedMatch[1] ?? '')
@@ -653,7 +739,7 @@ const normalizeRuntimeClientSourceRequestPath = (requestPath: string) => {
   ) {
     return undefined
   }
-  const sourcePath = versionedMatch?.[2] ?? posixRequestPath
+  const sourcePath = versionedMatch?.[2] ?? requestPath
   const segments = sourcePath.split('/')
   if (
     sourcePath === '' ||
@@ -721,13 +807,13 @@ const isHostViteManagedClientChange = ({
   const pluginRelativePath = path.relative(pluginRoot, changedPath)
   if (DISCOVERY_WATCH_FILE_NAMES.has(pluginRelativePath)) return false
 
-  const normalizedDevEntry = normalizeEntryPathForUrl(devEntry)
-  const devEntryPath = normalizedDevEntry == null ? undefined : path.resolve(pluginRoot, normalizedDevEntry)
+  const devEntryValue = readPluginEntryPath(devEntry)
+  const devEntryPath = devEntryValue == null ? undefined : path.resolve(pluginRoot, devEntryValue)
   if (devEntryPath == null || !isPathInside(pluginRoot, devEntryPath)) return false
 
-  const normalizedServerEntry = normalizeEntryPathForUrl(serverEntry)
-  if (normalizedServerEntry != null) {
-    const serverRoot = path.dirname(path.resolve(pluginRoot, normalizedServerEntry))
+  const serverEntryValue = readPluginEntryPath(serverEntry)
+  if (serverEntryValue != null) {
+    const serverRoot = path.dirname(path.resolve(pluginRoot, serverEntryValue))
     if (isPathInside(pluginRoot, serverRoot) && isPathInside(serverRoot, changedPath)) return false
   }
 
@@ -735,9 +821,9 @@ const isHostViteManagedClientChange = ({
   if (sourceRoot === path.resolve(pluginRoot)) return false
   if (isPathInside(sourceRoot, changedPath)) return true
 
-  const normalizedBuiltEntry = normalizeEntryPathForUrl(builtEntry)
-  if (normalizedBuiltEntry == null) return false
-  const builtEntryPath = path.resolve(pluginRoot, normalizedBuiltEntry)
+  const builtEntryValue = readPluginEntryPath(builtEntry)
+  if (builtEntryValue == null) return false
+  const builtEntryPath = path.resolve(pluginRoot, builtEntryValue)
   if (!isPathInside(pluginRoot, builtEntryPath)) return false
   const builtRoot = path.dirname(builtEntryPath)
   return builtRoot !== path.resolve(pluginRoot) && isPathInside(builtRoot, changedPath)
@@ -818,14 +904,7 @@ const sanitizePublicScope = (value: string | undefined, privatePaths: string[]) 
 }
 
 const normalizePublicRelativePath = (value: unknown) => {
-  if (typeof value !== 'string' || value.trim() === '') return undefined
-  const normalized = value.trim().replaceAll('\\', '/')
-  if (
-    normalized.includes('\0') ||
-    isAbsoluteFilesystemPath(normalized) ||
-    normalized.split('/').includes('..')
-  ) return undefined
-  return normalized
+  return readPluginRelativeFilesystemPath(value)
 }
 
 interface PublicContributionRouteShape {
@@ -1990,13 +2069,13 @@ const shouldIgnoreWatchPath = (relativePath: string) => {
   if (relativePath === '') return false
   if (relativePath.endsWith('.DS_Store')) return true
   if (VITE_CONFIG_BUNDLE_TEMP_PATTERN.test(relativePath)) return true
-  return relativePath.split(/[\\/]/).some(part => IGNORED_WATCH_PATH_PARTS.has(part))
+  return relativePath.split(path.sep).some(part => IGNORED_WATCH_PATH_PARTS.has(part))
 }
 
 const shouldReloadForDiscoveryPath = (relativePath: string) => {
   if (shouldIgnoreWatchPath(relativePath)) return false
   if (relativePath === '') return true
-  const parts = relativePath.split(/[\\/]/).filter(Boolean)
+  const parts = relativePath.split(path.sep).filter(Boolean)
   if (parts.length === 0) return true
   if (parts.length === 1) return true
   if (parts.length === 2 && DISCOVERY_WATCH_FILE_NAMES.has(parts[1] ?? '')) return true
@@ -2023,8 +2102,9 @@ export class PluginManager {
 
   private rememberPrivateRoots(values: Array<string | null | undefined>) {
     for (const value of values) {
-      if (typeof value === 'string' && value.trim() !== '' && isAbsoluteFilesystemPath(value.trim())) {
-        this.privateRoots.add(value.trim())
+      const pathValue = readRuntimeEndpointPath(value)
+      if (pathValue != null && isAbsoluteFilesystemPath(pathValue)) {
+        this.privateRoots.add(pathValue)
       }
     }
   }
@@ -2329,15 +2409,17 @@ export class PluginManager {
   async resolveClientAsset(scope: string, assetPath: string) {
     await this.load()
     const record = this.records.get(scope)
-    if (record == null || !record.instance.enabled) return undefined
+    if (record == null || !record.instance.enabled || record.clientAssetRoot == null) return undefined
 
-    const defaultAssetPath = resolveClientEntryUrlPath(record.manifest) ?? ''
-    const asset = await this.resolveScopedFile(record.clientAssetRoot, assetPath || defaultAssetPath)
+    const defaultAssetPath = resolveClientEntryAssetPath(record.manifest) ?? ''
+    const requestedAssetPath = assetPath || defaultAssetPath
+    const asset = await this.resolveScopedFile(record.clientAssetRoot, requestedAssetPath)
     if (asset == null) {
       return undefined
     }
     return {
       filePath: asset.filePath,
+      mimePath: requestedAssetPath,
       size: asset.size,
       stream: createReadStream(asset.filePath)
     }
@@ -2405,9 +2487,9 @@ export class PluginManager {
   async resolveClientSharedAsset(scope: string, assetPath: string) {
     await this.load()
     const record = this.records.get(scope)
-    if (record == null || !record.instance.enabled) return undefined
+    if (record == null || !record.instance.enabled || record.clientAssetRoot == null) return undefined
 
-    const defaultAssetPath = resolveClientEntryUrlPath(record.manifest) ?? ''
+    const defaultAssetPath = resolveClientEntryAssetPath(record.manifest) ?? ''
     const entryDir = defaultAssetPath === '' ? '' : path.dirname(defaultAssetPath)
     const sharedRoots = [
       path.resolve(record.clientAssetRoot, entryDir, '..', 'shared'),
@@ -2423,6 +2505,7 @@ export class PluginManager {
       if (asset == null) continue
       return {
         filePath: asset.filePath,
+        mimePath: assetPath,
         size: asset.size,
         stream: createReadStream(asset.filePath)
       }
@@ -2504,6 +2587,7 @@ export class PluginManager {
     if (asset == null) return undefined
     return {
       filePath: asset.filePath,
+      mimePath: assetPath,
       size: asset.size,
       stream: createReadStream(asset.filePath)
     }
@@ -2869,12 +2953,14 @@ export class PluginManager {
         manifest.plugin?.client?.devEntry ?? manifest.plugin?.client?.entry
       )
       const clientAssetRoot = await resolvePluginClientAssetRoot(pluginRoot, manifest)
+      const hasExplicitClientRoot = typeof manifest.plugin?.client?.root === 'string'
+      const clientRootUnavailable = hasExplicitClientRoot && clientAssetRoot == null
       const clientEntryAvailable = await isClientEntryAvailable(
         pluginRoot,
         clientAssetRoot,
         manifest.plugin?.client?.entry
       )
-      const needsClientEntryFallback = clientEntry != null && !clientEntryAvailable
+      const needsClientEntryFallback = clientEntry != null && !clientRootUnavailable && !clientEntryAvailable
       const runtimeClientSourceEntry = await resolveRuntimeClientSourceEntry(
         pluginRoot,
         manifest,
@@ -2902,9 +2988,9 @@ export class PluginManager {
       const runtimeClientSourceEntryUrl = runtimeClientSourceEntry == null
         ? undefined
         : `/api/plugins/${scope}/client-source/${
-          encodeURI(runtimeClientSourceEntry.requestPath)
-            .replaceAll('#', '%23')
-            .replaceAll('?', '%3F')
+          serializePluginFilesystemPathForRoute(
+            runtimeClientSourceEntry.requestPath
+          )
         }`
       const fallbackClientEntryUrl = needsClientEntryFallback
         ? runtimeClientSourceEntryUrl ?? hostViteDevClientEntryUrl
@@ -2914,6 +3000,15 @@ export class PluginManager {
           level: 'error',
           code: 'plugin_client_entry_unavailable',
           message: `Plugin "${scope}" client entry is missing and no safe source fallback is available.`,
+          scope,
+          pluginRoot
+        })
+      }
+      if (clientRootUnavailable) {
+        diagnostics.push({
+          level: 'error',
+          code: 'plugin_client_root_unavailable',
+          message: `Plugin "${scope}" client root is unavailable.`,
           scope,
           pluginRoot
         })
@@ -3396,7 +3491,7 @@ export class PluginManager {
 
   private getDetailAssetPath(record: RuntimeRecord, kind: PluginDetailAssetKind) {
     const value = record.manifest.assets?.[kind]
-    return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
+    return typeof value === 'string' && value.trim() !== '' ? value : undefined
   }
 
   private async collectDetailAssetFiles(root: string, relativePath: string): Promise<PluginDetailAssetFile[]> {

@@ -25,6 +25,7 @@ import type {
 import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 
 import { applyServerRuntimeEnv } from '#~/cli-runtime.js'
+import { stripGitPathLineEndings } from '#~/services/git/path-records.js'
 import { getRuntimeBrokerWorkspaceConnection } from '#~/services/runtime-broker/index.js'
 import { createWorkspaceRuntimeEnv } from '#~/services/runtime-store/workspace-env.js'
 import { badRequest, conflict, internalServerError, isHttpError, notFound } from '#~/utils/http.js'
@@ -204,10 +205,9 @@ const isDirectory = (value: string) => {
 
 const normalizeWorkspaceFolder = (value: unknown) => {
   if (typeof value !== 'string') return undefined
-  const trimmedValue = value.trim()
-  if (trimmedValue === '') return undefined
+  if (value.trim() === '') return undefined
 
-  const resolvedPath = path.resolve(trimmedValue)
+  const resolvedPath = path.resolve(value)
   if (!isDirectory(resolvedPath)) {
     return undefined
   }
@@ -230,7 +230,7 @@ const normalizePathForRemoval = (value: unknown) => {
   if (typeof value !== 'string' || value.trim() === '') {
     return undefined
   }
-  return resolveLauncherProjectWorkspaceFolder(value) ?? path.resolve(value.trim())
+  return resolveLauncherProjectWorkspaceFolder(value) ?? path.resolve(value)
 }
 
 const getWorkspaceDisplayName = (workspaceFolder: string) => path.basename(workspaceFolder) || workspaceFolder
@@ -420,6 +420,13 @@ const readGitLargeCommand = (cwd: string, args: string[]) => {
   }
 }
 
+const readGitPathCommand = (cwd: string, args: string[]) => {
+  const output = readGitLargeCommand(cwd, args)
+  if (output == null) return undefined
+  const pathOutput = stripGitPathLineEndings(output)
+  return pathOutput.trim() === '' ? undefined : pathOutput
+}
+
 const resolvePackageDir = () => (
   process.env.__ONEWORKS_PROJECT_PACKAGE_DIR__ ?? resolve(process.cwd(), 'apps/server')
 )
@@ -602,7 +609,10 @@ const createGitServerRuntimeImplementationId = (
 
 const resolveImplementationIdentity = (packageDir: string) => {
   const normalizedPackageDir = fs.realpathSync.native(packageDir)
-  const repoRoot = readGitCommand(normalizedPackageDir, ['rev-parse', '--path-format=absolute', '--show-toplevel'])
+  const repoRoot = readGitPathCommand(
+    normalizedPackageDir,
+    ['rev-parse', '--path-format=absolute', '--show-toplevel']
+  )
   const head = repoRoot == null ? undefined : readGitCommand(repoRoot, ['rev-parse', 'HEAD'])
   if (repoRoot != null && head != null) {
     const normalizedRepoRoot = fs.realpathSync.native(repoRoot)
@@ -1421,7 +1431,7 @@ const resolveDefaultDirectory = () => normalizeWorkspaceFolder(homedir()) ?? pat
 
 const resolveDirectory = (rawDirectory?: unknown) => {
   if (typeof rawDirectory === 'string' && rawDirectory.trim() !== '') {
-    const normalizedDirectory = normalizeWorkspaceFolder(path.resolve(rawDirectory.trim()))
+    const normalizedDirectory = normalizeWorkspaceFolder(path.resolve(rawDirectory))
     if (normalizedDirectory != null) return normalizedDirectory
   }
   return resolveDefaultDirectory()

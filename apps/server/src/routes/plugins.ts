@@ -97,7 +97,7 @@ const setProxyHeaders = (
 }
 
 const contentTypeForPath = (filePath: string) => {
-  const ext = path.extname(filePath).toLowerCase()
+  const ext = path.extname(filePath.trimEnd()).toLowerCase()
   switch (ext) {
     case '.js':
     case '.mjs':
@@ -335,7 +335,7 @@ export function pluginsRouter(): Router {
     }
 
     ctx.state.skipApiEnvelope = true
-    ctx.type = contentTypeForPath(asset.filePath)
+    ctx.type = contentTypeForPath(asset.mimePath)
     ctx.length = asset.size
     ctx.set('Cache-Control', 'private, no-cache')
     ctx.set('X-Content-Type-Options', 'nosniff')
@@ -482,7 +482,7 @@ export function pluginsRouter(): Router {
     }
 
     ctx.state.skipApiEnvelope = true
-    ctx.type = contentTypeForPath(asset.filePath)
+    ctx.type = contentTypeForPath(asset.mimePath)
     ctx.length = asset.size
     ctx.set('Cache-Control', 'private, no-cache')
     ctx.set('X-Content-Type-Options', 'nosniff')
@@ -516,7 +516,7 @@ export function pluginsRouter(): Router {
     }
 
     ctx.state.skipApiEnvelope = true
-    ctx.type = contentTypeForPath(asset.filePath)
+    ctx.type = contentTypeForPath(asset.mimePath)
     ctx.length = asset.size
     ctx.set('Cache-Control', 'private, no-cache')
     ctx.set('X-Content-Type-Options', 'nosniff')

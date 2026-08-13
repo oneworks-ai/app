@@ -19,15 +19,19 @@ interface ActiveModulePackageMetadata {
   version: string
 }
 
-const normalizeEnvPath = (value: string | null | undefined) => {
+const normalizeText = (value: string | null | undefined) => {
   const trimmed = value?.trim()
   return trimmed != null && trimmed !== '' ? trimmed : undefined
 }
 
+const readFilesystemPath = (value: string | null | undefined) => (
+  typeof value === 'string' && value.trim() !== '' ? value : undefined
+)
+
 const PACKAGE_CACHE_VERSION_PATTERN = /^[\w.+-]+$/u
 
 const normalizePackageCacheVersion = (value: string | null | undefined) => {
-  const normalized = normalizeEnvPath(value)
+  const normalized = normalizeText(value)
   if (normalized == null) return undefined
   return PACKAGE_CACHE_VERSION_PATTERN.test(normalized) && normalized !== '.' && normalized !== '..'
     ? normalized
@@ -126,14 +130,14 @@ export const comparePackageCacheVersions = (left: string, right: string) => {
 }
 
 export const resolvePackageCacheHomeDir = (env: PackageCacheEnv = process.env) => (
-  normalizeEnvPath(env.__ONEWORKS_PROJECT_REAL_HOME__) ??
-    normalizeEnvPath(env.HOME) ??
-    normalizeEnvPath(env.USERPROFILE) ??
+  readFilesystemPath(env.__ONEWORKS_PROJECT_REAL_HOME__) ??
+    readFilesystemPath(env.HOME) ??
+    readFilesystemPath(env.USERPROFILE) ??
     homedir()
 )
 
 export const resolveBootstrapPackageCacheRootDir = (env: PackageCacheEnv = process.env) => {
-  const configuredRoot = normalizeEnvPath(env.__ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__)
+  const configuredRoot = readFilesystemPath(env.__ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__)
   if (configuredRoot != null) return configuredRoot
 
   return join(resolvePackageCacheHomeDir(env), '.oneworks', 'bootstrap')
@@ -186,14 +190,14 @@ export const resolveActiveModulePackageDirSync = (
 
 const readDesktopBuiltinAdapterPackageInfo = (packageName: string, env: PackageCacheEnv = process.env) => {
   try {
-    const parsed = JSON.parse(normalizeEnvPath(env[DESKTOP_BUILTIN_ADAPTER_PACKAGES_ENV]) ?? '{}') as Record<
+    const parsed = JSON.parse(normalizeText(env[DESKTOP_BUILTIN_ADAPTER_PACKAGES_ENV]) ?? '{}') as Record<
       string,
       { cacheDir?: unknown; cacheVersion?: unknown; version?: unknown }
     >
     const info = parsed[packageName]
     if (info == null) return undefined
     return {
-      cacheDir: typeof info.cacheDir === 'string' && info.cacheDir.trim() !== '' ? info.cacheDir.trim() : undefined,
+      cacheDir: typeof info.cacheDir === 'string' && info.cacheDir.trim() !== '' ? info.cacheDir : undefined,
       cacheVersion: typeof info.cacheVersion === 'string' && info.cacheVersion.trim() !== ''
         ? info.cacheVersion.trim()
         : undefined,

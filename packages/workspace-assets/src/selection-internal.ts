@@ -15,7 +15,7 @@ import type {
   WorkspaceMcpSelection,
   WorkspaceSkillSelection
 } from '@oneworks/types'
-import { matchesDeclaredSkillSelector, normalizePath } from '@oneworks/utils'
+import { matchesDeclaredSkillSelector, resolveRelativePath } from '@oneworks/utils'
 import { mergePluginConfigs, normalizePluginConfig } from '@oneworks/utils/plugin-resolver'
 import fg from 'fast-glob'
 
@@ -211,23 +211,27 @@ const keyRuleReference = (rule: RuleReference) => (
   typeof rule === 'string' ? `string:${rule}` : `object:${JSON.stringify(rule)}`
 )
 
+const isFilesystemRuleReference = (value: string) => (
+  isPathLikeReference(value.trim(), {
+    pathSuffixes: ASSET_REFERENCE_PATH_SUFFIXES,
+    allowGlob: true
+  })
+)
+
 const qualifyEntityReference = (
   asset: EntityAsset,
   ref: string
 ) => {
-  const value = ref.trim()
-  if (value === '' || asset.scope == null) return value
-  if (parseScopedReference(value, { pathSuffixes: ASSET_REFERENCE_PATH_SUFFIXES }) != null) return value
-  if (
-    isPathLikeReference(value, {
-      pathSuffixes: ASSET_REFERENCE_PATH_SUFFIXES,
-      allowGlob: true
-    })
-  ) {
-    return value
+  const normalized = ref.trim()
+  if (normalized === '') return normalized
+  if (isFilesystemRuleReference(ref)) {
+    return ref
   }
+  if (parseScopedReference(normalized, { pathSuffixes: ASSET_REFERENCE_PATH_SUFFIXES }) != null) return normalized
 
-  return `${asset.scope}/${value}`
+  if (asset.scope == null) return normalized
+
+  return `${asset.scope}/${normalized}`
 }
 
 const qualifyEntityRuleReferences = (
@@ -448,9 +452,9 @@ const resolvePathMatchedRules = async (
     (await fg(ref, {
       cwd: bundle.cwd,
       absolute: true
-    })).map(normalizePath)
+    })).map(path => resolveRelativePath(bundle.cwd, path))
   )
-  return bundle.rules.filter(rule => matchedPaths.has(normalizePath(rule.sourcePath)))
+  return bundle.rules.filter(rule => matchedPaths.has(resolveRelativePath(bundle.cwd, rule.sourcePath)))
 }
 
 export const resolveRuleSelection = async (
@@ -484,12 +488,7 @@ export const resolveRuleSelection = async (
       ? ref.path
       : undefined
     if (value == null) continue
-    if (
-      isPathLikeReference(value, {
-        pathSuffixes: ASSET_REFERENCE_PATH_SUFFIXES,
-        allowGlob: true
-      })
-    ) {
+    if (isFilesystemRuleReference(value)) {
       const matched = await resolvePathMatchedRules(bundle, value)
       matched.forEach(addAsset)
       continue

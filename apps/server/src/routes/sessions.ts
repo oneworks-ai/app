@@ -171,7 +171,9 @@ export function sessionsRouter(): Router {
       )
     }
 
-    const sourcePaths = value.map(sourcePath => typeof sourcePath === 'string' ? sourcePath.trim() : '')
+    const sourcePaths = value.map(sourcePath => (
+      typeof sourcePath === 'string' && sourcePath.trim() !== '' ? sourcePath : ''
+    ))
     if (sourcePaths.includes('')) {
       throw badRequest(
         'Invalid native history source path',
@@ -194,7 +196,9 @@ export function sessionsRouter(): Router {
       )
     }
 
-    const projectPaths = value.map(projectPath => typeof projectPath === 'string' ? projectPath.trim() : '')
+    const projectPaths = value.map(projectPath => (
+      typeof projectPath === 'string' && projectPath.trim() !== '' ? projectPath : ''
+    ))
     if (projectPaths.includes('')) {
       throw badRequest(
         'Invalid native history project path',

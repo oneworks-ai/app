@@ -46,4 +46,6 @@
 - `loadConfig()` 返回共享 `Config`；不要再给 loader 加消费方专用泛型。
 - `defineConfig()` / system prompt helper 只消费共享 `Config` 类型，不在这里重新定义 schema。
 - merge 逻辑集中在 config 包内维护；`updateConfigFile()` 只处理配置文件持久化和受控字段更新。
+- `extends` 的每个非空原字符串都必须先按原字节尝试相对 / 绝对文件候选；filesystem-shaped relative / absolute specifier 的精确候选失败后必须直接报未找到，只有普通 package specifier 才能做文本归一化并进入 dependency resolution。workspace include/exclude 和对象 `path` 是文件系统路径或 glob，只用 `trim()` 判断空值并保留原字符串。
+- workspace schema 先解析显式 `adapters.<key>.packageId` / runtime target，再用已安装 adapter discovery 补齐缺失 key；同 key 时显式 target 必须保留其 contribution schema、validator 与 UI metadata，不能被后续 discovery 覆盖。
 - 新增环境变量替换、默认 system prompt 规则或缓存规则时，先补 `__tests__/*`。

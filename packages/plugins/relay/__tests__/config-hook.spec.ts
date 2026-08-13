@@ -40,6 +40,52 @@ const createContext = (
 })
 
 describe('relay config hook', () => {
+  it('keeps adjacent whitespace-distinct project homes and snapshots isolated', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'oneworks-relay-config-hook-raw-path-'))
+    tempDirs.push(root)
+    const workspaceFolder = join(root, 'workspace ')
+    const adjacentWorkspace = join(root, 'workspace')
+    const home = join(root, 'home ')
+    await Promise.all([mkdir(workspaceFolder), mkdir(adjacentWorkspace), mkdir(home)])
+    const env = {
+      __ONEWORKS_PROJECT_REAL_HOME__: home,
+      __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: workspaceFolder
+    }
+    const adjacentEnv = { ...env, __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: adjacentWorkspace }
+    const projectHome = resolveProjectHomePath(workspaceFolder, env)
+    const adjacentProjectHome = resolveProjectHomePath(adjacentWorkspace, adjacentEnv)
+    expect(projectHome).not.toBe(adjacentProjectHome)
+    await createRelayConfigSnapshotStore(projectHome).writeSnapshot({
+      assignments: [{
+        allowedFields: ['skills'],
+        configPatch: { skills: ['raw-workspace-skill'] },
+        id: 'raw-workspace',
+        project: { allow: [workspaceFolder] }
+      }],
+      lastError: null,
+      lastSyncedAt: '2026-08-01T00:00:00.000Z',
+      version: 'raw'
+    })
+    await createRelayConfigSnapshotStore(adjacentProjectHome).writeSnapshot({
+      assignments: [{
+        allowedFields: ['skills'],
+        configPatch: { skills: ['adjacent-skill'] },
+        id: 'adjacent',
+        project: { allow: [adjacentWorkspace] }
+      }],
+      lastError: null,
+      lastSyncedAt: '2026-08-01T00:00:00.000Z',
+      version: 'adjacent'
+    })
+
+    await expect(resolveConfig(createContext(workspaceFolder, env) as never)).resolves.toEqual({
+      skills: ['raw-workspace-skill']
+    })
+    await expect(createRelayConfigSnapshotStore(adjacentProjectHome).readSnapshot()).resolves.toMatchObject({
+      version: 'adjacent'
+    })
+  })
+
   it('matches project assignments from the workspace Git remote', async () => {
     const root = await mkdtemp(join(tmpdir(), 'oneworks-relay-config-hook-git-remote-'))
     tempDirs.push(root)

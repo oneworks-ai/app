@@ -37,6 +37,7 @@
 - 输入法判断复用 `src/utils/keyboard-events.ts`，不要在 launcher 里维护单独的 `keyCode === 229` 分支。
 - 录入快捷键的输入框是特殊交互区；section shortcut reveal 和 launcher 全局 key handler 都不能干扰它。
 - Launcher 顶部搜索输入框对 `ArrowLeft` / `ArrowRight` 使用边界所有权：有选区、修饰键或光标仍可在文本内移动时保留原生编辑；仅在目录浏览模式、无选区、光标到达对应边界且相应目录动作可用时，左键返回父目录、右键打开活动目录。命令列表继续接管 `ArrowUp` / `ArrowDown` / `Enter`。
+- Launcher 内的 destructive confirmation 属于 Launcher modal owner；AntD imperative modal 必须挂到 `LauncherRoute` 提供的 owner container，让 overlay focus trap 能把最内层可见 dialog 作为临时边界，不能默认 portal 到 `document.body`。
 
 ## 视觉细节
 

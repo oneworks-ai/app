@@ -106,6 +106,37 @@ describe('relay personal document sync', () => {
     ).rejects.toThrow('文档路径不在允许的同步命名空间内')
   })
 
+  it('reads and lists documents only from the exact whitespace-bearing real home', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'oneworks-relay-doc-home-path-'))
+    tempDirs.push(root)
+    const exactHome = join(root, 'home ')
+    const adjacentHome = join(root, 'home')
+    vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', exactHome)
+    vi.stubEnv('HOME', adjacentHome)
+    await writeHomeFile(exactHome, 'AGENTS.md', '# exact\n')
+    await writeHomeFile(adjacentHome, 'AGENTS.md', '# adjacent\n')
+
+    const entries = await listRelayDocumentEntries({ id: 'owner', type: 'account' })
+
+    expect(entries.map(entry => entry.path)).toContain('AGENTS.md')
+    await expect(readRelayDocumentContent('AGENTS.md')).resolves.toMatchObject({
+      content: '# exact\n',
+      path: 'AGENTS.md'
+    })
+  })
+
+  it('reads the exact whitespace-bearing document action path', async () => {
+    const homeDir = await createTempHome()
+    await writeHomeFile(homeDir, '.oo/rules/secret.md', '# adjacent\n')
+    await writeHomeFile(homeDir, '.oo/rules/secret.md ', '# exact\n')
+
+    await expect(readRelayDocumentContent('.oo/rules/secret.md ')).resolves.toMatchObject({
+      content: '# exact\n',
+      path: '.oo/rules/secret.md '
+    })
+    await expect(readHomeFile(homeDir, '.oo/rules/secret.md')).resolves.toBe('# adjacent\n')
+  })
+
   it('syncs user-root instruction documents by kind without uploading .local.md files or plaintext', async () => {
     const homeDir = await createTempHome()
     await writeHomeFile(homeDir, 'AGENTS.md', '# Root AGENTS\n')

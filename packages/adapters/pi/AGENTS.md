@@ -19,6 +19,7 @@ This package adapts Pi coding-agent to the shared One Works Adapter contract. It
 - Keep automatic Pi resources disabled. Selected One Works skills and the managed permission extension are explicit CLI paths; native extensions and their explicitly named tools are opt-in.
 - Do not translate MCP until Pi exposes a stable native seam or a separately reviewed extension is added.
 - Treat `message_end.message` as authoritative and `agent_settled` as the turn completion signal.
+- Treat configured Pi agent directories as filesystem identities: use trimming only to reject blank input and preserve the original bytes for directory creation, synchronization, and process environment.
 - Keep files near 200 lines; split pure mapping from I/O and process state.
 
 ## Verification

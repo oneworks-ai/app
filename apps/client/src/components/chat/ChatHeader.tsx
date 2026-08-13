@@ -28,6 +28,7 @@ import { useRoutePluginHeaderActions } from '../../plugins/route-plugin-chrome'
 import { isSidebarCollapsedAtom } from '../../store/index'
 import { buildSessionUrl } from '../../utils/chat-links'
 import { copyTextWithFeedback } from '../../utils/copy'
+import { getFilesystemPathDisplayName, readNonBlankFilesystemPath } from '../../utils/filesystem-path-identity'
 import { ConfigSectionPanel } from '../config'
 import type { FieldSpec } from '../config/configSchema'
 import { MaterialSymbol } from '../icons/MaterialSymbol'
@@ -84,13 +85,6 @@ const HEADER_WORKSPACE_ACTIONS_MORE_WIDTH = 880
 const normalizeTitle = (value?: string | null) => {
   const title = value?.trim()
   return title == null || title === '' ? undefined : title
-}
-
-const getDirectoryName = (value?: string | null) => {
-  const normalized = value?.trim().replace(/[/\\]+$/, '')
-  if (normalized == null || normalized === '') return undefined
-  const segments = normalized.split(/[/\\]+/).filter(Boolean)
-  return segments.at(-1) ?? normalized
 }
 
 export function ChatHeader({
@@ -219,7 +213,7 @@ export function ChatHeader({
     : (lastMessage != null && lastMessage !== '')
     ? lastMessage
     : t('common.newChat'))
-  const projectDirectoryName = hasSession ? undefined : getDirectoryName(projectWorkspaceFolder)
+  const projectDirectoryName = hasSession ? undefined : getFilesystemPathDisplayName(projectWorkspaceFolder)
   const compactionStatus = sessionCompactionInfo == null
     ? null
     : resolveSessionCompactionStatus(sessionCompactionInfo, sessionStatus)
@@ -303,7 +297,9 @@ export function ChatHeader({
     }
   }
 
-  const sessionWorkspacePath = sessionInfo?.type === 'init' ? sessionInfo.cwd.trim() : ''
+  const sessionWorkspacePath = sessionInfo?.type === 'init'
+    ? readNonBlankFilesystemPath(sessionInfo.cwd) ?? ''
+    : ''
   const menuIcon = (icon: string, isFilled = false) => (
     <MaterialSymbol className='chat-header-icon' name={icon} filled={isFilled} />
   )

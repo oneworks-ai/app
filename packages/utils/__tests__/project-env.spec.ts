@@ -97,4 +97,26 @@ describe('project env merging', () => {
     expect(env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__).toBe('/workspace-primary')
     expect(env.__ONEWORKS_PROJECT_HOME_PROJECT_DIR__).toBe('workspace-a-home')
   })
+
+  it('keeps whitespace-bearing workspace identities distinct from adjacent projects', () => {
+    process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__ = '/workspace/project'
+    process.env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__ = '/workspace/project'
+    process.env.__ONEWORKS_PROJECT_HOME_PROJECT_DIR__ = '/home/project'
+
+    const env = mergeProcessEnvWithProjectEnv({
+      __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: '/workspace/project '
+    })
+
+    expect(env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__).toBe('/workspace/project ')
+    expect(env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__).toBeUndefined()
+    expect(env.__ONEWORKS_PROJECT_HOME_PROJECT_DIR__).toBeUndefined()
+  })
+
+  it.runIf(process.platform !== 'win32')('preserves a trailing POSIX literal backslash in workspace identity', () => {
+    const workspaceFolder = '/workspace/project\\'
+    const env = mergeProcessEnvWithProjectEnv(undefined, { workspaceFolder })
+
+    expect(env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__).toBe(workspaceFolder)
+    expect(env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER_RESOLVE_CWD__).toBe(workspaceFolder)
+  })
 })

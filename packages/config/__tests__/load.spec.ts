@@ -163,6 +163,34 @@ describe('loadConfig', () => {
     }
   })
 
+  it('loads only the whitespace-bearing workspace config selected by raw env identity', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ow-config-raw-workspace-'))
+    const workspace = path.join(root, 'project ')
+    const adjacentWorkspace = path.join(root, 'project')
+    try {
+      await Promise.all([mkdir(workspace), mkdir(adjacentWorkspace)])
+      await Promise.all([
+        writeFile(path.join(workspace, '.oo.config.json'), JSON.stringify({ defaultModel: 'raw-project' })),
+        writeFile(path.join(adjacentWorkspace, '.oo.config.json'), JSON.stringify({ defaultModel: 'adjacent' }))
+      ])
+      const env = {
+        __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: workspace,
+        __ONEWORKS_PROJECT_WORKSPACE_FOLDER_RESOLVE_CWD__: workspace,
+        __ONEWORKS_PROJECT_DISABLE_DEV_CONFIG__: '1',
+        __ONEWORKS_PROJECT_DISABLE_GLOBAL_CONFIG__: '1'
+      }
+      resetConfigCache()
+
+      const state = await loadConfigState({ cwd: workspace, env })
+
+      expect(state.projectSource?.configPath).toBe(path.join(workspace, '.oo.config.json'))
+      expect(state.mergedConfig.defaultModel).toBe('raw-project')
+    } finally {
+      resetConfigCache()
+      await rm(root, { force: true, recursive: true })
+    }
+  })
+
   it('uses the supplied env when resolving the global config directory', async () => {
     const globalHomeA = await mkdtemp(path.join(os.tmpdir(), 'ow-config-global-a-'))
     const globalHomeB = await mkdtemp(path.join(os.tmpdir(), 'ow-config-global-b-'))
@@ -891,6 +919,7 @@ shortcuts:
       resetConfigCache()
       const [projectConfig, userConfig] = await loadConfig({
         cwd: tempDir,
+        disableGlobalConfig: true,
         jsonVariables: {
           TEST_API_KEY: 'secret-key'
         }
@@ -982,6 +1011,57 @@ shortcuts:
         }
       })
       expect(userConfig?.extend).toBeUndefined()
+    } finally {
+      resetConfigCache()
+      await rm(tempDir, { force: true, recursive: true })
+    }
+  })
+
+  it('loads the exact whitespace-bearing filesystem extend path', async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'ow-config-extend-path-'))
+
+    try {
+      await mkdir(path.join(tempDir, 'configs'), { recursive: true })
+      await Promise.all([
+        writeFile(path.join(tempDir, 'configs/base.yaml'), 'defaultModel: adjacent-model\n'),
+        writeFile(path.join(tempDir, 'configs/base.yaml '), 'defaultModel: exact-model\n'),
+        writeFile(path.join(tempDir, '.oo.config.json'), JSON.stringify({ extend: 'configs/base.yaml ' }))
+      ])
+      resetConfigCache()
+
+      const state = await loadConfigState({
+        cwd: tempDir,
+        disableDevConfig: true,
+        disableGlobalConfig: true
+      })
+
+      expect(state.projectSource?.extendPaths).toEqual(['configs/base.yaml '])
+      expect(state.mergedConfig.defaultModel).toBe('exact-model')
+    } finally {
+      resetConfigCache()
+      await rm(tempDir, { force: true, recursive: true })
+    }
+  })
+
+  it('does not reinterpret a missing exact filesystem extend as a trimmed dependency', async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'ow-config-extend-missing-path-'))
+
+    try {
+      await mkdir(path.join(tempDir, 'configs'), { recursive: true })
+      await Promise.all([
+        writeFile(path.join(tempDir, 'configs/base.yaml'), 'defaultModel: adjacent-model\n'),
+        writeFile(path.join(tempDir, '.oo.config.json'), JSON.stringify({ extend: 'configs/base.yaml ' }))
+      ])
+      resetConfigCache()
+
+      const state = await loadConfigState({
+        cwd: tempDir,
+        disableDevConfig: true,
+        disableGlobalConfig: true
+      })
+
+      expect(state.projectSource).toBeUndefined()
+      expect(state.mergedConfig.defaultModel).not.toBe('adjacent-model')
     } finally {
       resetConfigCache()
       await rm(tempDir, { force: true, recursive: true })
@@ -1871,6 +1951,7 @@ export default async (ctx) => {
       resetConfigCache()
       const config = await loadAdapterConfig('codex', {
         cwd: tempDir,
+        disableGlobalConfig: true,
         jsonVariables: {}
       })
 

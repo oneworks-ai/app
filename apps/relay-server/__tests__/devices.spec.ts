@@ -238,6 +238,7 @@ describe('relay server device routes', () => {
   })
 
   it('refreshes device heartbeat metadata with a device token', async () => {
+    const workspaceFolder = ' /workspace/relay project '
     const { args, baseUrl } = await listenRelay()
     await createInvite(args.dataPath, 'pair-heartbeat')
     const registered = await requestJson(baseUrl, '/api/relay/devices/register', {
@@ -259,7 +260,7 @@ describe('relay server device routes', () => {
       body: JSON.stringify({
         capabilities: { sessions: true, terminal: true },
         pluginScope: 'relay',
-        workspaceFolder: '/workspace-next'
+        workspaceFolder
       })
     })
     const store = await readRelayStore(args.dataPath)
@@ -272,7 +273,7 @@ describe('relay server device routes', () => {
         id: 'device-1',
         pluginScope: 'relay',
         status: 'online',
-        workspaceFolder: '/workspace-next'
+        workspaceFolder
       }
     })
     expect(heartbeat.body.device).not.toHaveProperty('deviceToken')

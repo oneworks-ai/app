@@ -1,3 +1,4 @@
+import { getDirectoryDisplayName } from './launcher-directory-paths'
 import type {
   LauncherRelayDeviceProject,
   LauncherRelayDeviceProjectGroup,
@@ -36,11 +37,9 @@ const readText = (value: unknown) => (
   typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
 )
 
-const getDirectoryDisplayName = (directory: string) => {
-  const normalizedDirectory = directory.replace(/[\\/]+$/u, '')
-  const name = normalizedDirectory.split(/[\\/]/u).filter(Boolean).at(-1)
-  return name == null || name === '' ? directory : name
-}
+const readDirectoryPath = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== '' ? value : undefined
+)
 
 const getDeviceDisplayName = (device: { alias?: string; id: string; name?: string }) => (
   readText(device.alias) ?? readText(device.name) ?? device.id
@@ -56,7 +55,7 @@ const normalizeRelayStatusDevice = (value: unknown): RelayStatusDevice | undefin
     id,
     name: readText(value.name) ?? id,
     status: readText(value.status),
-    workspaceFolder: readText(value.workspaceFolder)
+    workspaceFolder: readDirectoryPath(value.workspaceFolder)
   }
 }
 

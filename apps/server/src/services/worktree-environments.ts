@@ -1148,10 +1148,10 @@ const runShellScript = async (
     childEnv.ONEWORKS_SESSION_ID = options.sessionId.trim()
   }
   if (isNonEmptyString(options.sourceWorkspaceFolder)) {
-    childEnv.ONEWORKS_WORKTREE_SOURCE_PATH = options.sourceWorkspaceFolder.trim()
+    childEnv.ONEWORKS_WORKTREE_SOURCE_PATH = options.sourceWorkspaceFolder
   }
   if (isNonEmptyString(options.repositoryRoot)) {
-    childEnv.ONEWORKS_REPOSITORY_ROOT = options.repositoryRoot.trim()
+    childEnv.ONEWORKS_REPOSITORY_ROOT = options.repositoryRoot
   }
   if (isNonEmptyString(options.baseRef)) {
     childEnv.ONEWORKS_WORKTREE_BASE_REF = options.baseRef.trim()

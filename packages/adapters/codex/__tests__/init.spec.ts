@@ -1255,4 +1255,32 @@ describe('initCodexAdapter', () => {
       check_for_update_on_startup: true
     })
   })
+
+  it('loads user config only from the exact whitespace-bearing real home', async () => {
+    const root = await createWorkspace()
+    const workspace = join(root, 'workspace')
+    const realHome = join(root, 'real-home ')
+    const adjacentHome = join(root, 'real-home')
+    const mockHome = resolveTestMockHome(workspace, realHome)
+    await mkdir(workspace, { recursive: true })
+    await mkdir(join(realHome, '.codex'), { recursive: true })
+    await mkdir(join(adjacentHome, '.codex'), { recursive: true })
+    await writeFile(join(realHome, '.codex', 'config.toml'), 'model = "exact-model"\n')
+    await writeFile(join(adjacentHome, '.codex', 'config.toml'), 'model = "adjacent-model"\n')
+
+    await initCodexAdapter({
+      cwd: workspace,
+      env: {
+        HOME: mockHome,
+        __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__: '/bin/codex',
+        __ONEWORKS_PROJECT_REAL_HOME__: realHome
+      },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+      assets: { hookPlugins: [] }
+    } as any)
+
+    const managedConfig = await readFile(join(mockHome, '.codex', 'config.toml'), 'utf8')
+    expect(managedConfig).toContain('model = "exact-model"')
+    expect(managedConfig).not.toContain('adjacent-model')
+  })
 })

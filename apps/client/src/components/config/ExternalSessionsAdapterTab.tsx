@@ -3,7 +3,7 @@ import { RouteContainerHeaderActionButton, ShortcutTooltip } from '@oneworks/com
 import { App, Button, DatePicker, Empty, InputNumber, Space, Switch, message } from 'antd'
 import dayjs from 'dayjs'
 import type { Dayjs } from 'dayjs'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import useSWRInfinite from 'swr/infinite'
@@ -23,9 +23,15 @@ import type {
 import { ActionSearchToolbar } from '#~/components/action-search-toolbar/ActionSearchToolbar'
 import type { ActionSearchToolbarAction } from '#~/components/action-search-toolbar/ActionSearchToolbar'
 import { MobileAwareSelect } from '#~/components/mobile-aware-select/MobileAwareSelect'
+import type { LauncherActivationObserver } from '#~/routes/launcher-workspace-open-lifecycle'
 import { copyTextWithFeedback } from '#~/utils/copy'
 
 import { FieldRow } from './ConfigFieldRow'
+import {
+  getExternalSessionProjectLabel,
+  getExternalSessionProjectPathKey,
+  isExternalSessionCandidateWithinProjects
+} from './external-session-project-path'
 import {
   getAdapterLabelKey,
   nativeHistoryAdapterIcons,
@@ -128,25 +134,6 @@ const dateRangeValueToTimeRange = (value: DateRangeValue): NativeHistoryTimeRang
     }
 }
 
-const normalizeProjectPath = (value: string) => {
-  const normalized = value.trim().replaceAll('\\', '/').replace(/\/+$/u, '') || '/'
-  return /^[a-z]:/iu.test(normalized) ? normalized.toLowerCase() : normalized
-}
-
-const getProjectLabelFromPath = (value: string) => {
-  const normalized = value.trim().replaceAll('\\', '/').replace(/\/+$/u, '')
-  return normalized.split('/').at(-1) || value
-}
-
-const matchesProjectPaths = (candidateCwd: string, projectPaths: string[]) => {
-  const normalizedCandidateCwd = normalizeProjectPath(candidateCwd)
-  return projectPaths.length === 0 || projectPaths.some((projectPath) => {
-    const normalizedProjectPath = normalizeProjectPath(projectPath)
-    return normalizedCandidateCwd === normalizedProjectPath ||
-      normalizedCandidateCwd.startsWith(`${normalizedProjectPath}/`)
-  })
-}
-
 const resolveMatchingTimeRangePreset = (
   range: NativeHistoryTimeRange | undefined,
   now = Date.now()
@@ -175,6 +162,8 @@ export function ExternalSessionsAdapterTab({
   onProjectScopeChange,
   onQueryChange,
   onToolbarActionsChange,
+  getModalContainer,
+  observeActivation,
   projectScope,
   projectOptions,
   projectPaths,
@@ -197,6 +186,8 @@ export function ExternalSessionsAdapterTab({
   onProjectScopeChange: (scope: NativeHistoryProjectScope) => void
   onQueryChange?: (query: string) => void
   onToolbarActionsChange?: (actions: ActionSearchToolbarAction[]) => void
+  getModalContainer?: () => HTMLElement
+  observeActivation?: () => LauncherActivationObserver
   projectScope: NativeHistoryProjectScope
   projectOptions?: ExternalSessionsProjectOption[]
   projectPaths: string[]
@@ -209,11 +200,12 @@ export function ExternalSessionsAdapterTab({
     threadScope?: NativeHistoryThreadScope
     timeFilter?: NativeHistoryTimeFilter
     timeSort?: NativeHistoryTimeSort
-  }) => Promise<NativeHistoryImportResult | undefined>
+  }, activation?: LauncherActivationObserver) => Promise<NativeHistoryImportResult | undefined>
   showSettings?: boolean
   toolbarPlacement?: 'external' | 'inline'
 }) {
   const { modal } = App.useApp()
+  const importConfirmationRef = useRef<ReturnType<typeof modal.confirm>>()
   const { t } = useTranslation()
   const [uncontrolledQuery, setUncontrolledQuery] = useState('')
   const query = controlledQuery ?? uncontrolledQuery
@@ -231,6 +223,18 @@ export function ExternalSessionsAdapterTab({
   const [timeSort, setTimeSort] = useState<NativeHistoryTimeSort>('activity')
   const [expandedPanel, setExpandedPanel] = useState<'filter' | 'settings' | undefined>()
   const [importingSourcePaths, setImportingSourcePaths] = useState(() => new Set<string>())
+
+  useEffect(() => () => {
+    importConfirmationRef.current?.destroy()
+    importConfirmationRef.current = undefined
+  }, [])
+
+  useEffect(() => {
+    if (isActive) return
+    importConfirmationRef.current?.destroy()
+    importConfirmationRef.current = undefined
+    setImportingSourcePaths(new Set())
+  }, [isActive])
   const isMac = typeof navigator !== 'undefined' && navigator.platform.includes('Mac')
   const previewTimeFilter = useMemo(() =>
     compactTimeFilter({
@@ -348,14 +352,14 @@ export function ExternalSessionsAdapterTab({
   const mergedProjectOptions = useMemo<ExternalSessionsProjectOption[]>(() => {
     const optionsByPath = new Map<string, ExternalSessionsProjectOption>()
     for (const option of projectOptions ?? []) {
-      optionsByPath.set(normalizeProjectPath(option.value), option)
+      optionsByPath.set(getExternalSessionProjectPathKey(option.value), option)
     }
     for (const project of preview?.projects ?? []) {
-      const normalizedPath = normalizeProjectPath(project.path)
+      const normalizedPath = getExternalSessionProjectPathKey(project.path)
       if (!optionsByPath.has(normalizedPath)) {
         optionsByPath.set(normalizedPath, {
           description: project.path,
-          label: getProjectLabelFromPath(project.path),
+          label: getExternalSessionProjectLabel(project.path),
           value: project.path
         })
       }
@@ -363,7 +367,11 @@ export function ExternalSessionsAdapterTab({
     return Array.from(optionsByPath.values())
   }, [preview?.projects, projectOptions])
   const selectedProjectOptions = mergedProjectOptions
-    .filter(option => projectPaths.includes(option.value))
+    .filter(option =>
+      projectPaths.some(path => (
+        getExternalSessionProjectPathKey(path) === getExternalSessionProjectPathKey(option.value)
+      ))
+    )
   const projectPathsFilterLabel = projectPaths.length === 0
     ? undefined
     : selectedProjectOptions.length === 1 && projectPaths.length === 1
@@ -481,7 +489,7 @@ export function ExternalSessionsAdapterTab({
         (threadScopeFilter === 'subagent'
           ? candidate.threadSource === 'subagent'
           : candidate.threadSource !== 'subagent')
-      ) && matchesProjectPaths(candidate.cwd, projectPaths)
+      ) && isExternalSessionCandidateWithinProjects(candidate.cwd, projectPaths)
     ) ?? []
     if (normalizedQuery === '') {
       return candidates
@@ -496,8 +504,16 @@ export function ExternalSessionsAdapterTab({
     )
   }, [candidateScopeFilter, preview?.candidates, projectPaths, query, threadScopeFilter])
 
-  const handleImportSourcePaths = useCallback(async (sourcePaths: string[]) => {
+  const handleImportSourcePaths = useCallback(async (
+    sourcePaths: string[],
+    inheritedActivation?: LauncherActivationObserver
+  ) => {
     if (sourcePaths.length === 0) {
+      return
+    }
+    const activation = inheritedActivation ?? observeActivation?.()
+    if (activation != null && !activation.isCurrent()) {
+      if (inheritedActivation == null) activation.release()
       return
     }
     setImportingSourcePaths(new Set(sourcePaths))
@@ -510,7 +526,8 @@ export function ExternalSessionsAdapterTab({
         threadScope: threadScopeFilter,
         timeFilter: previewTimeFilter,
         timeSort
-      })
+      }, activation)
+      if (activation != null && !activation.isCurrent()) return
       if (result != null) {
         const importedSourcePaths = new Set(result.sessions.map(session => session.sourcePath))
         if (importedSourcePaths.size === 0) {
@@ -524,17 +541,19 @@ export function ExternalSessionsAdapterTab({
               ),
             { revalidate: false }
           )
-          void refreshPreview()
+          if (activation == null || activation.isCurrent()) void refreshPreview()
         }
       }
     } finally {
-      setImportingSourcePaths(new Set())
+      if (activation == null || activation.isCurrent()) setImportingSourcePaths(new Set())
+      if (activation != null && inheritedActivation == null) activation.release()
     }
   }, [
     adapter,
     previewTimeFilter,
     projectPaths,
     projectScope,
+    observeActivation,
     refreshPreview,
     runImport,
     threadScopeFilter,
@@ -546,18 +565,43 @@ export function ExternalSessionsAdapterTab({
     if (sourcePaths.length === 0) {
       return
     }
-    modal.confirm({
+    const activation = observeActivation?.()
+    if (activation != null && !activation.isCurrent()) {
+      activation.release()
+      return
+    }
+    importConfirmationRef.current?.destroy()
+    const confirmation = modal.confirm({
+      afterClose: () => activation?.release(),
       cancelText: t('common.cancel'),
       centered: true,
       content: t('nativeHistoryImport.manager.confirmImportAllDescription'),
+      ...(getModalContainer == null ? {} : { getContainer: getModalContainer }),
       okText: t('nativeHistoryImport.manager.importAll'),
       title: t('nativeHistoryImport.manager.confirmImportAllTitle', {
         count: sourcePaths.length,
         platform: platformLabel
       }),
-      onOk: () => handleImportSourcePaths(sourcePaths)
+      onOk: async () => {
+        if (!isActive || (activation != null && !activation.isCurrent())) return
+        await handleImportSourcePaths(sourcePaths, activation)
+      }
     })
-  }, [filteredCandidates, handleImportSourcePaths, modal, platformLabel, t])
+    importConfirmationRef.current = confirmation
+    activation?.onInvalidate(() => {
+      confirmation.destroy()
+      if (importConfirmationRef.current === confirmation) importConfirmationRef.current = undefined
+    })
+  }, [
+    filteredCandidates,
+    getModalContainer,
+    handleImportSourcePaths,
+    isActive,
+    modal,
+    observeActivation,
+    platformLabel,
+    t
+  ])
   const handleCopyCodexThreadLink = useCallback((nativeSessionId: string) => {
     void copyTextWithFeedback({
       failureMessage: t('common.copyFailed'),

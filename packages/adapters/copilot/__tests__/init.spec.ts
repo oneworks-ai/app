@@ -42,12 +42,16 @@ afterEach(async () => {
 describe('initCopilotAdapter', () => {
   it('symlinks macOS keychains into the isolated mock home and replaces an existing mock-home directory', async () => {
     const workspace = await createWorkspace()
-    const realHome = await createWorkspace()
+    const homeRoot = await createWorkspace()
+    const adjacentHome = join(homeRoot, 'real-home')
+    const realHome = join(homeRoot, 'real-home ')
     const mockHome = resolveTestMockHome(workspace, realHome)
     const keychainsPath = join(mockHome, 'Library', 'Keychains')
 
     await mkdir(join(realHome, 'Library', 'Keychains'), { recursive: true })
     await writeFile(join(realHome, 'Library', 'Keychains', 'login.keychain-db'), '')
+    await mkdir(join(adjacentHome, 'Library', 'Keychains'), { recursive: true })
+    await writeFile(join(adjacentHome, 'Library', 'Keychains', 'adjacent.keychain-db'), '')
     await mkdir(keychainsPath, { recursive: true })
     await writeFile(join(keychainsPath, 'stale.keychain-db'), '')
 
@@ -71,6 +75,7 @@ describe('initCopilotAdapter', () => {
     expect(resolve(dirname(keychainsPath), await readlink(keychainsPath))).toBe(
       resolve(realHome, 'Library', 'Keychains')
     )
+    await expect(lstat(join(keychainsPath, 'adjacent.keychain-db'))).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
   it('removes stale keychains entries when the real home keychains directory is unavailable', async () => {

@@ -248,6 +248,10 @@ const readOptionalString = (value: unknown) => (
   typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
 )
 
+const readOptionalPath = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== '' ? value : undefined
+)
+
 const normalizeRelaySource = (value: unknown): WorkspaceConnectionRelaySource | undefined => {
   if (!isRecord(value)) return undefined
   const source: WorkspaceConnectionRelaySource = {
@@ -255,7 +259,7 @@ const normalizeRelaySource = (value: unknown): WorkspaceConnectionRelaySource | 
     deviceName: readOptionalString(value.deviceName),
     serverId: readOptionalString(value.serverId),
     serverName: readOptionalString(value.serverName),
-    workspaceFolder: readOptionalString(value.workspaceFolder)
+    workspaceFolder: readOptionalPath(value.workspaceFolder)
   }
   return Object.values(source).some(item => item != null) ? source : undefined
 }
@@ -307,7 +311,7 @@ export const readRememberedWorkspaceConnectionMetadata = (
   if (transport != null && connection.transport !== transport) return undefined
   const serverBaseUrl = normalizeServerBaseUrl(connection.serverBaseUrl)
   if (serverBaseUrl == null) return undefined
-  const workspaceFolder = readOptionalString(connection.workspaceFolder)
+  const workspaceFolder = readOptionalPath(connection.workspaceFolder)
   const resolvedWorkspaceId = readOptionalString(connection.workspaceId)
   if (workspaceFolder == null || resolvedWorkspaceId == null) return undefined
   return {

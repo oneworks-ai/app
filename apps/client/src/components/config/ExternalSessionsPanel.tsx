@@ -1,13 +1,16 @@
 /* eslint-disable max-lines -- shared configuration and import-only launcher composition stay together. */
-import { InputNumber, Switch } from 'antd'
-import { useCallback, useState } from 'react'
+import { App, InputNumber, Switch } from 'antd'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { getApiErrorMessage, runNativeProjectHistoryImport } from '#~/api'
 import type { NativeHistoryAdapter, NativeHistoryProjectScope } from '#~/api'
 import type { ActionSearchToolbarAction } from '#~/components/action-search-toolbar/ActionSearchToolbar'
 import { NativeTabs } from '#~/components/native-tabs'
+import { useNativeHistoryImportNotification } from '#~/hooks/use-native-history-import-notification'
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
 import { getAdapterDisplay, resolveAdapterDisplayIcon } from '#~/resources/adapters'
+import type { LauncherActivationObserver } from '#~/routes/launcher-workspace-open-lifecycle'
 import { getRuntimeWorkspaceId } from '#~/runtime-config'
 import { FieldRow } from './ConfigFieldRow'
 import { ConfigSectionFrame } from './ConfigSectionFrame'
@@ -26,36 +29,43 @@ const megabytesToBytes = (value: number | null) => value == null ? null : Math.r
 const hasOwn = (value: object, key: string) => Object.prototype.hasOwnProperty.call(value, key)
 
 export function ExternalSessionsPanel({
+  activationActive = true,
   activeAdapter,
   config,
   fixedProjectScope,
   initialShowAllTime = false,
+  getModalContainer,
   onActiveAdapterChange,
   onConfigChange,
   onImportComplete,
   onQueryChange,
   onToolbarActionsChange,
+  observeActivation,
   projectOptions,
   query,
   showConfiguration = true,
   showHeader = true,
   toolbarPlacement = 'inline'
 }: {
+  activationActive?: boolean
   activeAdapter: NativeHistoryAdapter
   config?: NativeHistoryImportSettings
   fixedProjectScope?: NativeHistoryProjectScope
   initialShowAllTime?: boolean
+  getModalContainer?: () => HTMLElement
   onActiveAdapterChange: (adapter: NativeHistoryAdapter) => void
   onConfigChange: (next: NativeHistoryImportSettings | undefined) => void
   onImportComplete?: () => Promise<void> | void
   onQueryChange?: (query: string) => void
   onToolbarActionsChange?: (actions: ActionSearchToolbarAction[]) => void
+  observeActivation?: () => LauncherActivationObserver
   projectOptions?: ExternalSessionsProjectOption[]
   query?: string
   showConfiguration?: boolean
   showHeader?: boolean
   toolbarPlacement?: 'external' | 'inline'
 }) {
+  const { message } = App.useApp()
   const { i18n, t } = useTranslation()
   const { resolvedThemeMode } = useResolvedThemeMode()
   const runtimeHasCurrentProjectScope = getRuntimeWorkspaceId() != null
@@ -66,18 +76,42 @@ export function ExternalSessionsPanel({
   const [projectPaths, setProjectPaths] = useState<string[]>([])
   const hasCurrentProjectScope = fixedProjectScope == null && runtimeHasCurrentProjectScope
   const { isImporting, runImport } = useNativeHistoryImportAction()
+  const showNativeHistoryImportNotification = useNativeHistoryImportNotification()
+  const [isLauncherImporting, setIsLauncherImporting] = useState(false)
+  useEffect(() => {
+    if (!activationActive) setIsLauncherImporting(false)
+  }, [activationActive])
   const globalSizeLimit = config != null && hasOwn(config, 'maxFileSizeBytes')
     ? config.maxFileSizeBytes
     : defaultNativeHistoryImportMaxFileSizeBytes
   const runImportAndRefreshProjects = useCallback(async (
-    request: Parameters<typeof runImport>[0]
+    request: Parameters<typeof runImport>[0],
+    activation?: LauncherActivationObserver
   ) => {
-    const result = await runImport(request)
-    if (result != null) {
-      await onImportComplete?.()
+    if (activation == null) {
+      const result = await runImport(request)
+      if (result != null) await onImportComplete?.()
+      return result
     }
-    return result
-  }, [onImportComplete, runImport])
+    if (!activation.isCurrent() || isLauncherImporting) return undefined
+
+    setIsLauncherImporting(true)
+    try {
+      const result = await runNativeProjectHistoryImport(request)
+      if (!activation.isCurrent()) return undefined
+      await showNativeHistoryImportNotification(result, { showEmpty: true })
+      if (!activation.isCurrent()) return undefined
+      await onImportComplete?.()
+      return activation.isCurrent() ? result : undefined
+    } catch (error) {
+      if (activation.isCurrent()) {
+        void message.error(getApiErrorMessage(error, t('nativeHistoryImport.failedDescription')))
+      }
+      return undefined
+    } finally {
+      if (activation.isCurrent()) setIsLauncherImporting(false)
+    }
+  }, [isLauncherImporting, message, onImportComplete, runImport, showNativeHistoryImportNotification, t])
 
   const updateConfig = useCallback((patch: Partial<NativeHistoryImportSettings>) => {
     onConfigChange(compactNativeHistoryImportSettings({
@@ -202,10 +236,11 @@ export function ExternalSessionsPanel({
                 adapter={adapter}
                 config={config}
                 globalSizeLimit={globalSizeLimit}
+                getModalContainer={getModalContainer}
                 formatBytes={formatBytes}
                 formatTimestamp={formatTimestamp}
-                isActive={activeAdapter === adapter}
-                isImporting={isImporting}
+                isActive={activationActive && activeAdapter === adapter}
+                isImporting={isImporting || isLauncherImporting}
                 hasCurrentProjectScope={hasCurrentProjectScope}
                 initialShowAllTime={initialShowAllTime}
                 onAdapterConfigChange={patch => updateAdapterConfig(adapter, patch)}
@@ -213,6 +248,7 @@ export function ExternalSessionsPanel({
                 onProjectPathsChange={setProjectPaths}
                 onQueryChange={onQueryChange}
                 onToolbarActionsChange={onToolbarActionsChange}
+                observeActivation={observeActivation}
                 projectScope={projectScope}
                 projectOptions={projectOptions}
                 projectPaths={projectPaths}

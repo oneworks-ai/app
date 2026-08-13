@@ -17,8 +17,8 @@ export const ensureClaudeCliPath = async (params: {
   env: Record<string, string | null | undefined>
   cliConfig?: ClaudeCodeAdapterConfig['cli']
 }) => {
-  const cachedPath = params.ctx.env[CLAUDE_CLI_PATH_ENV]?.trim()
-  if (cachedPath != null && cachedPath !== '') {
+  const cachedPath = params.ctx.env[CLAUDE_CLI_PATH_ENV]
+  if (cachedPath != null && cachedPath.trim() !== '') {
     return cachedPath
   }
 
