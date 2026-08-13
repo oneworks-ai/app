@@ -31,3 +31,11 @@
 [submodule "assets/brand-studio"]
 	path = assets/brand-studio
 	url = https://github.com/oneworks-ai/brand-studio.git
+[submodule "vendors/NWYLZW/shikitor"]
+	path = vendors/NWYLZW/shikitor
+	url = https://github.com/NWYLZW/shikitor.git
+	branch = master
+[submodule "vendors/cordiverse/cordis"]
+	path = vendors/cordiverse/cordis
+	url = https://github.com/cordiverse/cordis.git
+	branch = main
