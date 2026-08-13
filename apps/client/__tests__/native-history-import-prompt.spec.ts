@@ -30,12 +30,22 @@ describe('native history import prompt helpers', () => {
     ])).toBe('Codex / Claude Code')
   })
 
-  it('includes Cursor in mixed adapter summaries', () => {
+  it('includes Cursor, Grok, and Qwen Code in mixed adapter summaries', () => {
     expect(getNativeHistoryImportAdapterSummary([
       createImportSession('session-a', 2000, 'cursor'),
       createImportSession('session-b', 3000, 'codex'),
-      createImportSession('session-c', 4000, 'claude-code')
-    ])).toBe('Codex / Claude Code / Cursor')
+      createImportSession('session-c', 4000, 'claude-code'),
+      createImportSession('session-d', 5000, 'grok'),
+      createImportSession('session-e', 6000, 'qwen-code')
+    ])).toBe('Codex / Claude Code / Cursor / Grok / Qwen Code')
+  })
+
+  it('includes Goose and Grok in mixed adapter summaries', () => {
+    expect(getNativeHistoryImportAdapterSummary([
+      createImportSession('session-a', 2000, 'goose'),
+      createImportSession('session-b', 3000, 'grok'),
+      createImportSession('session-c', 4000, 'cursor')
+    ])).toBe('Cursor / Goose / Grok')
   })
 
   it('opens the newest imported session first', () => {

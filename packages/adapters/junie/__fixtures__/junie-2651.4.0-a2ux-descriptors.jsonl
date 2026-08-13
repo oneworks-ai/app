@@ -1,0 +1,5 @@
+{"type":"session","timestamp":1786608000000,"sessionId":"session-2651-sanitized"}
+{"type":"step","timestamp":1786608000100,"name":"Read","details":"fixture.txt","output":"sanitized output"}
+{"type":"eap-future-decoration","timestamp":1786608000200,"message":"synthetic-forward-compatible"}
+{"type":"system","timestamp":1786608000300,"message":"Sanitized progress","details":"descriptor-derived"}
+{"type":"result","timestamp":1786608000400,"result":"Hello world","changes":[],"errorCode":[]}

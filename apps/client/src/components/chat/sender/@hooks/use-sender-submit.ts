@@ -1,4 +1,5 @@
 import type { SessionQueuedMessageMode } from '@oneworks/core'
+import type { InteractionResponseHandler } from '@oneworks/types'
 import type { TFunction } from 'i18next'
 
 import type { MessageInstance } from 'antd/es/message/interface'
@@ -42,7 +43,7 @@ export const useSenderSubmit = ({
   isInlineEdit: boolean
   modelUnavailable?: boolean
   interactionRequest?: { id: string } | null
-  onInteractionResponse?: (id: string, data: string | string[]) => void
+  onInteractionResponse?: InteractionResponseHandler
   onSend: (text: string, mode?: SessionQueuedMessageMode) => SenderSubmitResult | Promise<SenderSubmitResult>
   onSendContent: (
     content: ReturnType<typeof buildMessageContent>,
@@ -79,8 +80,12 @@ export const useSenderSubmit = ({
         )
         return
       }
-      onInteractionResponse(interactionRequest.id, input.trim())
-      resetComposer()
+      try {
+        await onInteractionResponse(interactionRequest.id, input.trim())
+        resetComposer()
+      } catch {
+        void message.error(t('chat.interactionResponseFailed'))
+      }
       return
     }
 

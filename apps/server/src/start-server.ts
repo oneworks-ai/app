@@ -278,12 +278,30 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
         await runtimeStoreWatcher.scanAndReplay()
           .then(() => runtimeStoreHistory.autoImportNativeProjectHistoryAndReplay(config))
           .then((result) => {
-            if (result.importedEvents > 0 || result.matchedFiles > 0) {
+            for (const diagnostic of result.diagnostics ?? []) {
+              logger.warn({
+                adapter: diagnostic.adapter,
+                code: diagnostic.code,
+                level: diagnostic.level,
+                skippedSessions: diagnostic.skippedSessions
+              }, diagnostic.message)
+            }
+            if (
+              result.importedEvents > 0 || result.matchedFiles > 0 ||
+              result.rejectedFiles > 0 || result.sizeLimitedFiles > 0
+            ) {
               logger.info({
+                aggregateLimitedBytes: result.aggregateLimitedBytes,
+                aggregateLimitedFiles: result.aggregateLimitedFiles,
                 importedEvents: result.importedEvents,
                 importedSessions: result.importedSessions,
                 matchedFiles: result.matchedFiles,
-                scannedFiles: result.scannedFiles
+                perFileLimitedBytes: result.perFileLimitedBytes,
+                perFileLimitedFiles: result.perFileLimitedFiles,
+                rejectedFiles: result.rejectedFiles,
+                scannedFiles: result.scannedFiles,
+                sizeLimitedBytes: result.sizeLimitedBytes,
+                sizeLimitedFiles: result.sizeLimitedFiles
               }, '[runtime-store] Native project history auto import complete')
             }
           })

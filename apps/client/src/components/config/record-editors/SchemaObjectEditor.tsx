@@ -85,6 +85,7 @@ export const SchemaObjectEditor = ({
     if (field.type === 'string' && resolvedOptions != null) {
       control = (
         <Select
+          aria-label={title}
           allowClear
           value={typeof valueToUse === 'string' && valueToUse !== '' ? valueToUse : undefined}
           options={buildSelectOptions(resolvedOptions)}
@@ -97,6 +98,7 @@ export const SchemaObjectEditor = ({
       control = sensitive
         ? (
           <Input.Password
+            aria-label={title}
             value={typeof valueToUse === 'string' ? valueToUse : ''}
             onChange={(event) => nextValue(event.target.value)}
             placeholder={field.placeholder ?? t('config.editor.secretPlaceholder')}
@@ -104,6 +106,7 @@ export const SchemaObjectEditor = ({
         )
         : (
           <Input
+            aria-label={title}
             value={typeof valueToUse === 'string' ? valueToUse : ''}
             onChange={(event) => nextValue(event.target.value)}
             placeholder={field.placeholder}
@@ -112,6 +115,7 @@ export const SchemaObjectEditor = ({
     } else if (field.type === 'multiline') {
       control = (
         <Input.TextArea
+          aria-label={title}
           value={typeof valueToUse === 'string' ? valueToUse : ''}
           onChange={(event) => nextValue(event.target.value)}
           autoSize={{ minRows: 2 }}
@@ -121,6 +125,7 @@ export const SchemaObjectEditor = ({
     } else if (field.type === 'number') {
       control = (
         <InputNumber
+          aria-label={title}
           value={typeof valueToUse === 'number' ? valueToUse : undefined}
           onChange={(input) => nextValue(typeof input === 'number' ? input : undefined)}
         />
@@ -128,6 +133,7 @@ export const SchemaObjectEditor = ({
     } else if (field.type === 'boolean') {
       control = (
         <Switch
+          aria-label={title}
           checked={Boolean(valueToUse)}
           onChange={(checked) => nextValue(checked)}
         />
@@ -135,6 +141,7 @@ export const SchemaObjectEditor = ({
     } else if (field.type === 'string[]') {
       control = (
         <StringArrayEditor
+          ariaLabel={title}
           value={Array.isArray(valueToUse) ? valueToUse.filter(item => typeof item === 'string') : []}
           onChange={(items) => nextValue(items)}
           t={t}
@@ -143,6 +150,7 @@ export const SchemaObjectEditor = ({
     } else if (field.type === 'select') {
       control = (
         <Select
+          aria-label={title}
           value={typeof valueToUse === 'string' ? valueToUse : undefined}
           options={buildSelectOptions(resolvedOptions ?? field.options ?? [])}
           onChange={(selected) => nextValue(selected)}
@@ -151,6 +159,7 @@ export const SchemaObjectEditor = ({
     } else {
       control = (
         <ComplexTextEditor
+          ariaLabel={title}
           value={valueToUse ?? {}}
           onChange={(updated) => nextValue(updated)}
         />

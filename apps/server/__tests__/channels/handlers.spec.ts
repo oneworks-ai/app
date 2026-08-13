@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { handleInboundEvent, handleSessionEvent } from '#~/channels/handlers.js'
+import { buildInteractionText } from '#~/channels/interaction.js'
 import { buildChannelSessionStopEvent } from '#~/channels/session-delivery.js'
 import { consumePendingUnack, deleteBinding, setBinding, setPendingUnack } from '#~/channels/state.js'
 import { getDb } from '#~/db/index.js'
@@ -215,6 +216,56 @@ const expectActionUrl = async (
 }
 
 describe('channel handlers', () => {
+  it.each(
+    [
+      [
+        'en',
+        'Permission is required to use write_file.',
+        'Always allow in Kiro (persistent)',
+        'Kiro option: Ask Kiro'
+      ],
+      [
+        'zh',
+        '使用 write_file 需要权限。',
+        '在 Kiro 中始终允许（持久）',
+        'Kiro 原生选项：Ask Kiro'
+      ]
+    ] as const
+  )('localizes structured Kiro permission semantics for %s channels', (
+    language,
+    question,
+    persistentLabel,
+    unknownLabel
+  ) => {
+    const text = buildInteractionText(language, {
+      sessionId: 'sess-kiro',
+      kind: 'permission',
+      question: 'write_file',
+      permissionContext: { adapter: 'kiro', subjectLabel: 'write_file' },
+      options: [
+        {
+          label: 'Always allow',
+          value: 'native-allow-always',
+          permission: { adapterLabel: 'Kiro', semantic: 'allow_persistent' }
+        },
+        {
+          label: 'Ask Kiro',
+          value: 'native-future',
+          permission: {
+            adapterLabel: 'Kiro',
+            nativeLabel: 'Ask Kiro',
+            semantic: 'native_unknown'
+          }
+        }
+      ]
+    })
+
+    expect(text).toContain(question)
+    expect(text).toContain(persistentLabel)
+    expect(text).toContain(unknownLabel)
+    expect(text).not.toContain('Always allow:')
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(reserveChannelAuthorizationRequestDelivery).mockReturnValue({ reservedAt: 1_000 })

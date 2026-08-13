@@ -1,17 +1,20 @@
 /* eslint-disable max-lines -- integration fixtures stay together to share isolated workspace lifecycle. */
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { Buffer } from 'node:buffer'
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { generateAdapterQueryOptions } from '#~/generate-adapter-query-options.js'
+import { resolveProjectOoPath } from '@oneworks/utils'
 
 const tempDirs: string[] = []
 const originalRuntimeProtocolConsumer = process.env.__ONEWORKS_RUNTIME_PROTOCOL_CONSUMER__
 const originalProjectHomeProjectsDir = process.env.__ONEWORKS_PROJECT_HOME_PROJECTS_DIR__
 const originalProjectWorkspaceFolder = process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__
 const originalPackageCacheDir = process.env.__ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__
+const originalKiroApiKey = process.env.KIRO_API_KEY
 
 const createWorkspace = async () => {
   const dir = await mkdtemp(join(tmpdir(), 'generate-adapter-query-options-'))
@@ -23,6 +26,8 @@ const writeDocument = async (filePath: string, content: string) => {
   await mkdir(dirname(filePath), { recursive: true })
   await writeFile(filePath, content)
 }
+
+const configVariable = (name: string) => ['$', '{', name, '}'].join('')
 
 afterEach(async () => {
   if (originalRuntimeProtocolConsumer == null) {
@@ -45,10 +50,132 @@ afterEach(async () => {
   } else {
     process.env.__ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__ = originalPackageCacheDir
   }
+  if (originalKiroApiKey == null) {
+    delete process.env.KIRO_API_KEY
+  } else {
+    process.env.KIRO_API_KEY = originalKiroApiKey
+  }
   await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
 })
 
 describe('generateAdapterQueryOptions', () => {
+  it('scrubs Kiro workspace query-options cache without mutating live MCP inputs', async () => {
+    const workspace = await createWorkspace()
+    const firstSecret = 'kiro-query-options secret/+?first'
+    const secondSecret = 'kiro-query-options secret/+?second'
+    process.env.__ONEWORKS_RUNTIME_PROTOCOL_CONSUMER__ = '1'
+    process.env.__ONEWORKS_PROJECT_HOME_PROJECTS_DIR__ = join(workspace, '.oneworks-projects')
+    process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__ = workspace
+    process.env.KIRO_API_KEY = firstSecret
+    const configPath = join(workspace, '.oo.config.json')
+    const writeMcpConfig = async (secret: string) => {
+      const encoded = encodeURIComponent(secret)
+      const fullyEncoded = [...Buffer.from(secret, 'utf8')]
+        .map((byte, index) =>
+          `%${
+            index % 2 === 0
+              ? byte.toString(16).padStart(2, '0').toUpperCase()
+              : byte.toString(16).padStart(2, '0')
+          }`
+        )
+        .join('')
+      await writeDocument(
+        configPath,
+        JSON.stringify(
+          {
+            disableGlobalConfig: true,
+            adapters: {
+              kiro: {
+                configContent: {
+                  [`header-${secret}`]: 'sensitive-key-value',
+                  [`encoded-${encoded}`]: 'encoded-key-value'
+                }
+              }
+            },
+            defaultIncludeMcpServers: ['stdio', 'remote', 'events'],
+            mcpServers: {
+              stdio: {
+                command: process.execPath,
+                args: ['fixture.mjs'],
+                env: {
+                  TOKEN: configVariable('KIRO_API_KEY'),
+                  AUTHORIZATION: `Bearer ${configVariable('KIRO_API_KEY')}`,
+                  SAFE_MODE: 'read-only'
+                }
+              },
+              remote: {
+                type: 'http',
+                url: `https://example.test/mcp?token=${configVariable('KIRO_API_KEY')}`,
+                headers: {
+                  Authorization: `Bearer ${configVariable('KIRO_API_KEY')}`,
+                  'x-encoded-secret': encoded,
+                  'x-safe-header': 'safe-value'
+                }
+              },
+              events: {
+                type: 'sse',
+                url: `https://example.test/events?encoded=${fullyEncoded}`,
+                headers: { 'x-secret': configVariable('KIRO_API_KEY'), 'x-fully-encoded': fullyEncoded }
+              }
+            }
+          },
+          null,
+          2
+        )
+      )
+    }
+    await writeMcpConfig(firstSecret)
+
+    const generate = async () =>
+      await generateAdapterQueryOptions(
+        undefined,
+        undefined,
+        workspace,
+        { adapter: 'kiro' }
+      )
+    const [, firstLiveOptions] = await generate()
+    expect(JSON.stringify(firstLiveOptions)).toContain(firstSecret)
+    expect(firstLiveOptions.assetBundle?.mcpServers.stdio?.payload.config).toEqual(expect.objectContaining({
+      env: expect.objectContaining({ TOKEN: firstSecret, SAFE_MODE: 'read-only' })
+    }))
+
+    const cacheDir = resolveProjectOoPath(workspace, process.env, 'caches', 'workspace-query-options')
+    const firstCacheFiles = await readdir(cacheDir)
+    expect(firstCacheFiles).toHaveLength(1)
+    const firstDisk = await readFile(join(cacheDir, firstCacheFiles[0]!), 'utf8')
+    for (
+      const material of [
+        firstSecret,
+        encodeURIComponent(firstSecret),
+        Buffer.from(firstSecret).toString('base64'),
+        `header-${firstSecret}`
+      ]
+    ) expect(firstDisk).not.toContain(material)
+    expect(firstDisk).toContain('SAFE_MODE')
+    expect(firstDisk).toContain('read-only')
+    expect(firstDisk).toContain('x-safe-header')
+
+    const cachedEntry = JSON.parse(firstDisk) as { resolvedOptions: { systemPrompt?: string } }
+    cachedEntry.resolvedOptions.systemPrompt = 'redacted-cache-must-not-reach-live-runtime'
+    await writeFile(join(cacheDir, firstCacheFiles[0]!), JSON.stringify(cachedEntry), 'utf8')
+    const [, cacheHitRegeneratedOptions] = await generate()
+    expect(JSON.stringify(cacheHitRegeneratedOptions)).toContain(firstSecret)
+    expect(JSON.stringify(cacheHitRegeneratedOptions)).not.toContain('[redacted Kiro credential]')
+    expect(JSON.stringify(cacheHitRegeneratedOptions)).not.toContain('redacted-cache-must-not-reach-live-runtime')
+
+    process.env.KIRO_API_KEY = secondSecret
+    await writeMcpConfig(secondSecret)
+    const [, resumedLiveOptions] = await generate()
+    expect(JSON.stringify(resumedLiveOptions)).toContain(secondSecret)
+    expect(JSON.stringify(resumedLiveOptions)).not.toContain(firstSecret)
+    const allDisk = (await Promise.all(
+      (await readdir(cacheDir)).map(async file => await readFile(join(cacheDir, file), 'utf8'))
+    )).join('\n')
+    for (const material of [firstSecret, secondSecret, encodeURIComponent(secondSecret)]) {
+      expect(allDisk).not.toContain(material)
+    }
+  })
+
   it('invalidates runtime query option cache when selected asset files change', async () => {
     const workspace = await createWorkspace()
     process.env.__ONEWORKS_RUNTIME_PROTOCOL_CONSUMER__ = '1'
@@ -439,6 +566,7 @@ describe('generateAdapterQueryOptions', () => {
       join(workspace, '.oo.config.json'),
       JSON.stringify(
         {
+          disableGlobalConfig: true,
           plugins: [
             {
               id: 'logger'

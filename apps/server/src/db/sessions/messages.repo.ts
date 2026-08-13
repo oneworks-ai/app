@@ -101,6 +101,25 @@ const getSessionMessageEventKey = (data: unknown): string | undefined => {
   return undefined
 }
 
+const isCumulativeAssistantTextUpdate = (previous: unknown, next: unknown) => {
+  if (!isRecord(previous) || !isRecord(next) || previous.type !== 'message' || next.type !== 'message') {
+    return false
+  }
+  const previousMessage = isRecord(previous.message) ? previous.message : undefined
+  const nextMessage = isRecord(next.message) ? next.message : undefined
+  if (previousMessage == null || nextMessage == null) return false
+  return previousMessage.role === 'assistant' &&
+    nextMessage.role === 'assistant' &&
+    previousMessage.id === nextMessage.id &&
+    previousMessage.createdAt === nextMessage.createdAt &&
+    typeof previousMessage.content === 'string' &&
+    typeof nextMessage.content === 'string' &&
+    nextMessage.content.length > previousMessage.content.length &&
+    nextMessage.content.startsWith(previousMessage.content) &&
+    previousMessage.usage == null &&
+    nextMessage.usage == null
+}
+
 export function createMessagesRepo(db: SqliteDatabase) {
   const backfillEventKeys = () => {
     const rows = db.prepare('SELECT id, data FROM messages WHERE eventKey IS NULL')
@@ -131,7 +150,14 @@ export function createMessagesRepo(db: SqliteDatabase) {
   const save = (sessionId: string, data: unknown) => {
     const eventKey = getSessionMessageEventKey(data)
     if (eventKey != null && hasEventKey(sessionId, eventKey)) {
-      return false
+      const existing = db.prepare(
+        'SELECT data FROM messages WHERE sessionId = ? AND eventKey = ? LIMIT 1'
+      ).get<{ data: string }>(sessionId, eventKey)
+      const parsed = existing == null ? undefined : JSON.parse(existing.data) as unknown
+      if (!isCumulativeAssistantTextUpdate(parsed, data)) return false
+      db.prepare('UPDATE messages SET data = ? WHERE sessionId = ? AND eventKey = ?')
+        .run(safeJsonStringify(data), sessionId, eventKey)
+      return true
     }
 
     const stmt = db.prepare('INSERT INTO messages (sessionId, data, eventKey, createdAt) VALUES (?, ?, ?, ?)')

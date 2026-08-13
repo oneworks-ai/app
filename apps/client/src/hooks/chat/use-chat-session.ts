@@ -103,9 +103,9 @@ export function useChatSession({ enableTimelineView, session }: { enableTimeline
     optimisticCreation,
     setInteractionRequest
   })
-  const handleInteractionResponse = useCallback((id: string, data: string | string[]) => {
+  const handleInteractionResponse = useCallback(async (id: string, data: string | string[]) => {
+    await submitInteractionResponse(id, data)
     reconcileAfterInteraction()
-    submitInteractionResponse(id, data)
   }, [reconcileAfterInteraction, submitInteractionResponse])
   const handlePermissionModeChange = useSessionPermissionModeChange(session?.id, setPermissionMode)
   const lastObservedSessionRef = useRef<ObservedSessionSelection | null>(null)

@@ -51,6 +51,7 @@
     "@koa/router": "^12.0.2",
     "@oneworks/adapter-claude-code": "workspace:*",
     "@oneworks/adapter-codex": "workspace:*",
+    "@oneworks/adapter-goose": "workspace:*",
     "@oneworks/app-runtime": "workspace:*",
     "@oneworks/channel-lark": "workspace:*",
     "@oneworks/channel-oneworks": "workspace:*",

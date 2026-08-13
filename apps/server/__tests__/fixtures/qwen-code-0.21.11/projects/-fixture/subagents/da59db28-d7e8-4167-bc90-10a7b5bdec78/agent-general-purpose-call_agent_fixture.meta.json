@@ -1,0 +1,14 @@
+{
+  "agentId": "general-purpose-call_agent_fixture",
+  "agentType": "general-purpose",
+  "description": "fixture child task",
+  "parentSessionId": "da59db28-d7e8-4167-bc90-10a7b5bdec78",
+  "toolUseId": "call_agent_fixture",
+  "parentAgentId": null,
+  "createdAt": "2026-08-13T07:50:15.646Z",
+  "status": "completed",
+  "isBackgrounded": true,
+  "lastUpdatedAt": "2026-08-13T07:50:15.697Z",
+  "resolvedApprovalMode": "yolo",
+  "model": "fixture-model"
+}

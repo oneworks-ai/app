@@ -20,6 +20,7 @@ import type {
   ConfigResponse,
   ConfigSource,
   ConversationStarterConfig,
+  InteractionResponseHandler,
   SessionCreationProgressEvent,
   SessionInfo
 } from '@oneworks/types'
@@ -288,7 +289,7 @@ export function ChatHistoryView({
   queuedMessages: SessionMessageQueueState
   onRetryConnection: () => void
   interactionRequest: { id: string; payload: AskUserQuestionParams } | null
-  onInteractionResponse: (id: string, data: string | string[]) => void
+  onInteractionResponse: InteractionResponseHandler
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>
   onClearMessages: () => void
   placeholder?: string
@@ -930,7 +931,7 @@ export function ChatHistoryView({
   }, [interactionOptions.length])
 
   const handleSubmitActiveInteractionOption = useCallback(() => {
-    if (interactionRequest == null) {
+    if (interactionRequest == null || interactionRequest.payload.multiselect === true) {
       return
     }
 
@@ -939,8 +940,12 @@ export function ChatHistoryView({
       return
     }
 
-    onInteractionResponse(interactionRequest.id, option.value ?? option.label)
-  }, [activeInteractionOptionIndex, interactionOptions, interactionRequest, onInteractionResponse])
+    void Promise.resolve()
+      .then(() => onInteractionResponse(interactionRequest.id, option.value ?? option.label))
+      .catch(() => {
+        void message.error(t('chat.interactionResponseFailed'))
+      })
+  }, [activeInteractionOptionIndex, interactionOptions, interactionRequest, message, onInteractionResponse, t])
 
   useEffect(() => {
     if (!initialScrollDoneRef.current && isReady && location.hash === '') {
@@ -1859,7 +1864,8 @@ export function ChatHistoryView({
             sessionInfo={senderSessionInfo}
             interactionRequest={isAgentRoomMode ? null : interactionRequest}
             onInteractionResponse={isAgentRoomMode ? undefined : onInteractionResponse}
-            interactionOptionNavigation={!isAgentRoomMode && interactionRequest != null && interactionOptions.length > 0
+            interactionOptionNavigation={!isAgentRoomMode && interactionRequest != null &&
+                interactionRequest.payload.multiselect !== true && interactionOptions.length > 0
               ? {
                 optionCount: interactionOptions.length,
                 activeIndex: activeInteractionOptionIndex,

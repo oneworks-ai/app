@@ -1,0 +1,99 @@
+{
+  "name": "@oneworks/adapter-goose",
+  "version": "1.0.0-rc.3",
+  "description": "Goose CLI Adapter for One Works",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneworks-ai/app.git",
+    "directory": "packages/adapters/goose"
+  },
+  "imports": {
+    "#~/*.js": {
+      "__oneworks__": {
+        "default": "./src/*.ts"
+      },
+      "default": {
+        "import": "./dist/*.mjs",
+        "require": "./dist/*.js"
+      }
+    }
+  },
+  "exports": {
+    ".": {
+      "__oneworks__": {
+        "default": "./src/index.ts"
+      },
+      "default": {
+        "import": "./dist/index.mjs",
+        "require": "./dist/index.js"
+      }
+    },
+    "./schema": {
+      "__oneworks__": {
+        "default": "./src/schema.ts"
+      },
+      "default": {
+        "import": "./dist/schema.mjs",
+        "require": "./dist/schema.js"
+      }
+    },
+    "./config-schema": {
+      "__oneworks__": {
+        "default": "./src/config-schema.ts"
+      },
+      "default": {
+        "import": "./dist/config-schema.mjs",
+        "require": "./dist/config-schema.js"
+      }
+    },
+    "./cli-prepare": {
+      "__oneworks__": {
+        "default": "./src/cli-prepare.ts"
+      },
+      "default": {
+        "import": "./dist/cli-prepare.mjs",
+        "require": "./dist/cli-prepare.js"
+      }
+    },
+    "./models": {
+      "__oneworks__": {
+        "default": "./src/models.ts"
+      },
+      "default": {
+        "import": "./dist/models.mjs",
+        "require": "./dist/models.js"
+      }
+    },
+    "./icon": {
+      "__oneworks__": {
+        "default": "./src/icon.ts"
+      },
+      "default": {
+        "import": "./dist/icon.mjs",
+        "require": "./dist/icon.js"
+      }
+    },
+    "./history": {
+      "__oneworks__": {
+        "default": "./src/history.ts"
+      },
+      "default": {
+        "import": "./dist/history.mjs",
+        "require": "./dist/history.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@agentclientprotocol/sdk": "^1.3.0",
+    "@oneworks/core": "workspace:*",
+    "@oneworks/types": "workspace:*",
+    "@oneworks/utils": "workspace:*",
+    "js-yaml": "^4.1.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9"
+  }
+}

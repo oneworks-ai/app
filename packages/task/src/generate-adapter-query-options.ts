@@ -18,6 +18,7 @@ import {
   readQueryOptionsCache,
   writeQueryOptionsCache
 } from './generate-adapter-query-options-cache'
+import { createKiroPersistenceBoundary } from './kiro-persistence'
 import { resolveQuerySelection } from './query-selection'
 import { resolveWorkspaceTaskTarget } from './workspace-target'
 
@@ -111,6 +112,9 @@ export async function generateAdapterQueryOptions(
     adapter: selection.adapter,
     model: selection.model
   })
+  const kiroPersistenceBoundary = selection.adapter === 'kiro'
+    ? createKiroPersistenceBoundary(process.env)
+    : undefined
   const cacheKey = isQueryOptionsCacheEnabled(input)
     ? buildQueryOptionsCacheKey({
       adapter: selection.adapter,
@@ -136,7 +140,7 @@ export async function generateAdapterQueryOptions(
     startupProfiler.mark('generateAdapterQueryOptions.cacheRead', cacheReadStartedAt, {
       hit: cached != null
     })
-    if (cached != null) {
+    if (cached != null && kiroPersistenceBoundary == null) {
       const [data, resolvedOptions] = cached
       return [
         data,
@@ -176,7 +180,10 @@ export async function generateAdapterQueryOptions(
       cacheKey,
       cwd: effectiveCwd,
       data,
-      resolvedOptions
+      resolvedOptions,
+      ...(kiroPersistenceBoundary == null
+        ? {}
+        : { scrubForPersistence: kiroPersistenceBoundary.scrub })
     }).catch(() => undefined)
     startupProfiler.mark('generateAdapterQueryOptions.cacheWrite', cacheWriteStartedAt)
   }

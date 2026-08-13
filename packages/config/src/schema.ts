@@ -574,7 +574,10 @@ const createUiSchema = (
         entryKinds: getPreferredAdapterEntries(adapterEntries).map(entry => ({
           key: entry.configKey,
           label: entry.contribution.title,
-          description: entry.contribution.description
+          description: entry.contribution.description,
+          capabilities: {
+            accounts: entry.contribution.capabilities?.accounts !== false
+          }
         })),
         schemas: Object.fromEntries(
           adapterEntries.map(entry => [

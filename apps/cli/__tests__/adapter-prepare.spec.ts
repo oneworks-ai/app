@@ -100,11 +100,34 @@ describe('adapter prepare command selection', () => {
     ])
   })
 
-  it('keeps Cursor and Grok in the stable preparer discovery registry', () => {
-    expect(KNOWN_PREPARE_ADAPTERS.filter(adapter => adapter === 'cursor' || adapter === 'grok')).toEqual([
+  it('keeps the integrated adapters in the stable preparer discovery registry', () => {
+    expect(KNOWN_PREPARE_ADAPTERS.filter(adapter =>
+      [
+        'cline',
+        'cursor',
+        'goose',
+        'droid',
+        'grok',
+        'kiro',
+        'junie',
+        'pi',
+        'qwen-code'
+      ].includes(adapter)
+    )).toEqual([
+      'cline',
       'cursor',
-      'grok'
+      'goose',
+      'droid',
+      'grok',
+      'kiro',
+      'junie',
+      'pi',
+      'qwen-code'
     ])
+  })
+
+  it('keeps DSH in the stable preparer discovery registry', () => {
+    expect(KNOWN_PREPARE_ADAPTERS).toContain('dsh')
   })
 
   it('rejects unknown explicit targets', () => {

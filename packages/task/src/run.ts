@@ -1,4 +1,12 @@
+import { Buffer } from 'node:buffer'
+
+import {
+  collectJunieAuthEnvironmentValues,
+  scrubJunieAuthEnvironmentForPersistence,
+  scrubJunieAuthValuesForPersistence
+} from '@oneworks/adapter-junie/auth-env'
 import { resolveAdapterCommonConfig, resolveConfigState, resolveRuntimeAdapterConfigState } from '@oneworks/config'
+import type { ConfigSourceState, ResolvedConfigState } from '@oneworks/config'
 import { callHook, createAdapterHookBridge } from '@oneworks/hooks'
 import type { HookInputs } from '@oneworks/hooks'
 import type {
@@ -19,12 +27,16 @@ import {
   listServiceModels,
   nowStartupMs,
   resolveAdapterModelCompatibility,
-  resolveEffectiveEffort
+  resolveEffectiveEffort,
+  scrubCredentialConfigForPersistence
 } from '@oneworks/utils'
-import { buildAdapterAssetPlan } from '@oneworks/workspace-assets'
+import { buildAdapterAssetPlan, resolveSelectedMcpNames } from '@oneworks/workspace-assets'
 
+import { applyKiroPersistenceBoundary, createKiroPersistenceBoundary } from './kiro-persistence'
+import { scrubCredentialGraphForPersistence, scrubTaskBaseForPersistence } from './persistence-scrub'
 import { prepare } from './prepare'
 import { resolveQuerySelection } from './query-selection'
+import { sanitizeTaskBaseForPersistence as sanitizeDroidTaskBaseForPersistence } from './task-cache-persistence'
 import type { RunTaskOptions } from './type'
 
 const pickFirstNonEmptyString = (values: unknown[]) => (
@@ -38,6 +50,44 @@ const RUNTIME_DEFAULT_MODEL_ENV = '__ONEWORKS_RUNTIME_PROTOCOL_DEFAULT_MODEL__'
 const RUNTIME_DEFAULT_EFFORT_ENV = '__ONEWORKS_RUNTIME_PROTOCOL_DEFAULT_EFFORT__'
 const RUNTIME_DEFAULT_PERMISSION_MODE_ENV = '__ONEWORKS_RUNTIME_PROTOCOL_DEFAULT_PERMISSION_MODE__'
 
+const CLINE_CREDENTIAL_ENV_KEY_PATTERN =
+  /(?:^|_)(?:api_?key|access_?key|account_?key|secret(?:_access)?_?key|client_?secret|password|passwd|token|credential|authorization|private_?key)(?:_|$)/iu
+
+const CLINE_SENSITIVE_ENV_KEYS = new Set([
+  'AWS_CONFIG_FILE',
+  'AWS_SHARED_CREDENTIALS_FILE',
+  'GOOGLE_APPLICATION_CREDENTIALS',
+  'SSH_AUTH_SOCK'
+])
+
+const CLINE_SENSITIVE_ENV_PREFIXES = [
+  'ANTHROPIC_',
+  'AWS_',
+  'AZURE_',
+  'CLINE_API_KEY',
+  'GCE_',
+  'GCLOUD_',
+  'GCP_',
+  'GEMINI_',
+  'GH_',
+  'GITHUB_',
+  'GIT_',
+  'GOOGLE_',
+  'OPENAI_'
+]
+
+const isClineCredentialEnvKey = (key: string) => {
+  const normalized = key.replace(/([a-z0-9])([A-Z])/gu, '$1_$2').replace(/-/gu, '_').toUpperCase()
+  return CLINE_SENSITIVE_ENV_KEYS.has(normalized) ||
+    CLINE_SENSITIVE_ENV_PREFIXES.some(prefix => normalized.startsWith(prefix)) ||
+    CLINE_CREDENTIAL_ENV_KEY_PATTERN.test(normalized)
+}
+
+const omitClineCredentialEnv = (env: AdapterCtx['env']): AdapterCtx['env'] =>
+  Object.fromEntries(
+    Object.entries(env).filter(([key]) => !isClineCredentialEnvKey(key))
+  )
+
 const setNonEmptyEnv = (
   env: Record<string, string | null | undefined>,
   key: string,
@@ -50,6 +100,8 @@ const setNonEmptyEnv = (
   }
   env[key] = normalized
 }
+
+const isStdioMcpServer = (server: NonNullable<Config['mcpServers']>[string]) => 'command' in server
 
 const resolveEffectivePermissionMode = (
   permissionMode: AdapterQueryOptions['permissionMode'],
@@ -103,7 +155,7 @@ const splitRuntimeMcpSelection = (params: {
   const include = splitRefs(effectiveSelection.include)
   const exclude = splitRefs(effectiveSelection.exclude)
 
-  return {
+  const result = {
     workspaceSelection: effectiveSelection.include == null && effectiveSelection.exclude == null
       ? undefined
       : {
@@ -114,6 +166,7 @@ const splitRuntimeMcpSelection = (params: {
     runtimeExclude: exclude.runtimeRefs,
     excludeAllWorkspaceMcp: effectiveSelection.include != null && include.workspaceRefs.length === 0
   }
+  return result
 }
 
 const formatAdapterModelRuleSuffix = (params: {
@@ -143,40 +196,196 @@ const formatAdapterModelFallbackError = (error: AdapterModelFallbackError) => {
   return `Adapter "${error.adapter}" defaultModel "${error.defaultModel}" is also not allowed${ruleSuffix}.`
 }
 
-const stripRuntimeModelCapability = (base: Omit<AdapterCtx, 'logger' | 'cache'>) => {
-  const env = { ...base.env }
-  delete env[CODEX_SHARED_MODEL_TOKEN_ENV]
-  const stripConfig = (config: Config | undefined) => {
-    if (config?.modelServices?.[CODEX_SHARED_MODEL_SERVICE_KEY] == null) return config
-    const service = config.modelServices[CODEX_SHARED_MODEL_SERVICE_KEY]
-    return {
-      ...config,
-      modelServices: {
-        ...config.modelServices,
-        [CODEX_SHARED_MODEL_SERVICE_KEY]: {
-          ...service,
-          apiKey: undefined,
-          apiBaseUrl: undefined
-        }
-      }
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  value != null && typeof value === 'object' && !Array.isArray(value)
+)
+
+const scrubJunieConfigContent = (
+  config: Config | undefined,
+  adapterKeys: ReadonlySet<string>,
+  authValues: readonly string[]
+) => {
+  if (config == null || config.adapters == null) return config
+  const adapters = config.adapters as Record<string, unknown>
+  let nextAdapters: Record<string, unknown> | undefined
+  for (const adapterKey of adapterKeys) {
+    const entry = adapters[adapterKey]
+    if (!isRecord(entry) || !Object.prototype.hasOwnProperty.call(entry, 'configContent')) continue
+    nextAdapters ??= { ...adapters }
+    nextAdapters[adapterKey] = {
+      ...entry,
+      configContent: scrubCredentialConfigForPersistence(
+        scrubJunieAuthValuesForPersistence(entry.configContent, authValues)
+      ) ?? {}
     }
   }
+  return nextAdapters == null ? config : { ...config, adapters: nextAdapters as Config['adapters'] }
+}
+
+const scrubJunieConfigSource = (
+  source: ConfigSourceState | undefined,
+  adapterKeys: ReadonlySet<string>,
+  authValues: readonly string[]
+): ConfigSourceState | undefined => {
+  if (source == null) return source
   return {
-    ...base,
+    ...source,
+    rawConfig: scrubJunieConfigContent(source.rawConfig, adapterKeys, authValues),
+    resolvedConfig: scrubJunieConfigContent(source.resolvedConfig, adapterKeys, authValues),
+    resolvedExtendSources: source.resolvedExtendSources?.map(
+      item => scrubJunieConfigSource(item, adapterKeys, authValues)!
+    )
+  }
+}
+
+const resolveJuniePersistenceAdapterKeys = (
+  config: Config,
+  cwd: string
+) => {
+  const adapterEntries = config.adapters as Record<string, unknown> | undefined
+  return new Set(
+    Object.keys(adapterEntries ?? {}).filter((adapterKey) => (
+      resolveAdapterRuntimeTarget(adapterKey, { config, cwd }).runtimeAdapter === 'junie'
+    ))
+  )
+}
+
+const sanitizeTaskBaseForPersistence = (
+  base: Omit<AdapterCtx, 'logger' | 'cache'>,
+  params: {
+    cwd: string
+    kiroPersistenceBoundary?: ReturnType<typeof createKiroPersistenceBoundary>
+    runtimeAdapterType: string
+  }
+) => {
+  const droidSafeBase = sanitizeDroidTaskBaseForPersistence(base, base)
+  const credentialSafeBase = scrubTaskBaseForPersistence(droidSafeBase, base)
+  const configState = credentialSafeBase.configState as ResolvedConfigState | undefined
+  const effectiveConfig = configState?.mergedConfig ?? credentialSafeBase.configs[1] ??
+    credentialSafeBase.configs[0] ?? {}
+  const junieAdapterKeys = resolveJuniePersistenceAdapterKeys(effectiveConfig, params.cwd)
+  const hasJunieConfig = junieAdapterKeys.size > 0
+  const authValues = collectJunieAuthEnvironmentValues(credentialSafeBase.env)
+  const runtimeEnv = params.runtimeAdapterType === 'cline'
+    ? omitClineCredentialEnv(credentialSafeBase.env)
+    : credentialSafeBase.env
+  const env = params.runtimeAdapterType === 'junie'
+    ? scrubJunieAuthEnvironmentForPersistence(runtimeEnv) as AdapterCtx['env']
+    : { ...runtimeEnv }
+  delete env[CODEX_SHARED_MODEL_TOKEN_ENV]
+  delete env.DEEPSEEK_API_KEY
+  delete env.DEEPSEEK_BASE_URL
+  const stripConfig = (config: Config | undefined) => {
+    if (config == null) return config
+    const configEnv = config.env == null ? undefined : { ...config.env }
+    if (configEnv != null) {
+      delete configEnv.DEEPSEEK_API_KEY
+      delete configEnv.DEEPSEEK_BASE_URL
+    }
+    const service = config.modelServices?.[CODEX_SHARED_MODEL_SERVICE_KEY]
+    const withoutRuntimeCapabilities: Config = {
+      ...config,
+      ...(configEnv == null ? {} : { env: configEnv }),
+      ...(service == null
+        ? {}
+        : {
+          modelServices: {
+            ...config.modelServices,
+            [CODEX_SHARED_MODEL_SERVICE_KEY]: {
+              ...service,
+              apiKey: undefined,
+              apiBaseUrl: undefined
+            }
+          }
+        })
+    }
+    return scrubJunieConfigContent(withoutRuntimeCapabilities, junieAdapterKeys, authValues)
+  }
+  const mergedConfig = configState?.mergedConfig ?? credentialSafeBase.configs[0] ??
+    credentialSafeBase.configs[1] ?? {}
+  const dshAdapterKeys = new Set([
+    'dsh',
+    ...Object.keys(mergedConfig.adapters ?? {}).filter(adapterKey => (
+      resolveAdapterRuntimeTarget(adapterKey, { config: mergedConfig, cwd: base.cwd }).runtimeAdapter === 'dsh'
+    ))
+  ])
+  const stripDeepSeekConfigGraph = (value: unknown, parentKey?: string): unknown => {
+    if (Array.isArray(value)) return value.map(entry => stripDeepSeekConfigGraph(entry))
+    if (value == null || typeof value !== 'object') return value
+    if (value instanceof Date || Buffer.isBuffer(value) || value instanceof Error) return value
+    if (value instanceof Map) {
+      return new Map(
+        Array.from(value.entries(), ([key, entry]) => [
+          stripDeepSeekConfigGraph(key),
+          stripDeepSeekConfigGraph(entry)
+        ])
+      )
+    }
+    if (value instanceof Set) {
+      return new Set(Array.from(value, entry => stripDeepSeekConfigGraph(entry)))
+    }
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([key]) => key !== 'DEEPSEEK_API_KEY' && key !== 'DEEPSEEK_BASE_URL')
+        .map(([key, entry]) => {
+          const isDshAdapterEntry = parentKey === 'adapters' && entry != null && typeof entry === 'object' && (
+            dshAdapterKeys.has(key) ||
+            resolveAdapterRuntimeTarget(key, {
+                config: { adapters: { [key]: entry } } as Config,
+                cwd: credentialSafeBase.cwd
+              }).runtimeAdapter === 'dsh'
+          )
+          if (isDshAdapterEntry) {
+            const { baseUrl: _baseUrl, ...safeEntry } = entry as Record<string, unknown>
+            return [key, stripDeepSeekConfigGraph(safeEntry, key)]
+          }
+          return [key, stripDeepSeekConfigGraph(entry, key)]
+        })
+    )
+  }
+  const persistentBase = {
+    ...credentialSafeBase,
     env,
-    configs: [stripConfig(base.configs[0]), stripConfig(base.configs[1])] as AdapterCtx['configs'],
-    ...(base.configState == null
+    configs: [
+      stripConfig(credentialSafeBase.configs[0]),
+      stripConfig(credentialSafeBase.configs[1])
+    ] as AdapterCtx['configs'],
+    ...(!hasJunieConfig || credentialSafeBase.assets?.configs == null
+      ? {}
+      : {
+        assets: {
+          ...credentialSafeBase.assets,
+          configs: [
+            stripConfig(credentialSafeBase.assets.configs[0]),
+            stripConfig(credentialSafeBase.assets.configs[1])
+          ] as AdapterCtx['configs']
+        }
+      }),
+    ...(configState == null
       ? {}
       : {
         configState: {
-          ...base.configState,
-          effectiveProjectConfig: stripConfig(base.configState.effectiveProjectConfig),
-          projectConfig: stripConfig(base.configState.projectConfig),
-          userConfig: stripConfig(base.configState.userConfig),
-          mergedConfig: stripConfig(base.configState.mergedConfig)!
+          ...configState,
+          effectiveProjectConfig: stripConfig(configState.effectiveProjectConfig),
+          globalConfig: hasJunieConfig ? stripConfig(configState.globalConfig) : configState.globalConfig,
+          projectConfig: stripConfig(configState.projectConfig),
+          userConfig: stripConfig(configState.userConfig),
+          mergedConfig: stripConfig(configState.mergedConfig)!,
+          ...(hasJunieConfig
+            ? {
+              globalSource: scrubJunieConfigSource(configState.globalSource, junieAdapterKeys, authValues),
+              projectSource: scrubJunieConfigSource(configState.projectSource, junieAdapterKeys, authValues),
+              userSource: scrubJunieConfigSource(configState.userSource, junieAdapterKeys, authValues)
+            }
+            : {})
         }
       })
   }
+  const deepSeekSafeBase = stripDeepSeekConfigGraph(persistentBase) as typeof persistentBase
+  const adapterSafeBase = params.runtimeAdapterType === 'kiro' && params.kiroPersistenceBoundary != null
+    ? params.kiroPersistenceBoundary.scrub(deepSeekSafeBase)
+    : deepSeekSafeBase
+  return adapterSafeBase
 }
 
 declare module '@oneworks/types' {
@@ -201,6 +410,32 @@ const COPILOT_NATIVE_BRIDGE_DISABLED_EVENTS: Array<
 const GROK_NATIVE_BRIDGE_DISABLED_EVENTS: Array<
   'PreToolUse' | 'PostToolUse' | 'Stop'
 > = ['PreToolUse', 'PostToolUse', 'Stop']
+
+const JUNIE_NATIVE_BRIDGE_DISABLED_EVENTS: Array<
+  'SessionStart' | 'SessionEnd' | 'PreToolUse' | 'Stop' | 'StopFailure'
+> = ['SessionStart', 'SessionEnd', 'PreToolUse', 'Stop', 'StopFailure']
+
+const DROID_NATIVE_BRIDGE_DISABLED_EVENTS: Array<
+  | 'SessionStart'
+  | 'UserPromptSubmit'
+  | 'PreToolUse'
+  | 'PostToolUse'
+  | 'Stop'
+  | 'Notification'
+  | 'SubagentStop'
+  | 'PreCompact'
+  | 'SessionEnd'
+> = [
+  'SessionStart',
+  'UserPromptSubmit',
+  'PreToolUse',
+  'PostToolUse',
+  'Stop',
+  'Notification',
+  'SubagentStop',
+  'PreCompact',
+  'SessionEnd'
+]
 
 export const run = async (
   options: RunTaskOptions,
@@ -258,7 +493,7 @@ export const run = async (
     adapterType,
     runtimeAdapterType
   )
-  const runtimeCtx: AdapterCtx = runtimeConfigState === configState
+  const resolvedRuntimeCtx: AdapterCtx = runtimeConfigState === configState
     ? ctx
     : {
       ...ctx,
@@ -268,16 +503,30 @@ export const run = async (
       ],
       configState: runtimeConfigState
     }
+  const kiroPersistenceBoundary = runtimeAdapterType === 'kiro'
+    ? createKiroPersistenceBoundary(resolvedRuntimeCtx.env)
+    : undefined
+  const runtimeCtx = kiroPersistenceBoundary == null
+    ? resolvedRuntimeCtx
+    : applyKiroPersistenceBoundary(resolvedRuntimeCtx, kiroPersistenceBoundary)
   const { logger, cache, ...base } = runtimeCtx
-
-  const cacheSetStartedAt = startupProfiler.now()
-  await cache.set('base', stripRuntimeModelCapability(base))
-  startupProfiler.mark('task.cache.set.base', cacheSetStartedAt)
 
   const mergedModelServices = mergedConfig.modelServices ?? {}
   const serviceModels = listServiceModels(mergedModelServices)
   const mergedDefaultModelService = pickFirstNonEmptyString([mergedConfig.defaultModelService])
-  const supportedEffortAdapters = new Set(['claude-code', 'codex', 'copilot', 'grok', 'kimi', 'opencode', 'pi'])
+  const supportedEffortAdapters = new Set([
+    'claude-code',
+    'codex',
+    'copilot',
+    'dsh',
+    'droid',
+    'grok',
+    'kiro',
+    'junie',
+    'kimi',
+    'opencode',
+    'pi'
+  ])
   const supportsEffort = supportedEffortAdapters.has(runtimeAdapterType)
   const adapterCommonConfig = supportsEffort
     ? resolveAdapterCommonConfig<Record<string, unknown> & { effort?: AdapterQueryOptions['effort'] }, 'effort'>(
@@ -310,6 +559,23 @@ export const run = async (
     adapter: adapterType,
     runtimeAdapter: runtimeAdapterType
   })
+  const sanitizeRuntimeArtifact = <T>(value: T): T => (
+    adapter.sanitizeRuntimeArtifact?.(runtimeCtx, value) ?? value
+  )
+  const runtimeArtifactEnv = sanitizeRuntimeArtifact(runtimeCtx.env)
+  const runtimeArtifactCtx = runtimeArtifactEnv === runtimeCtx.env
+    ? runtimeCtx
+    : { ...runtimeCtx, env: runtimeArtifactEnv }
+  const cacheSetStartedAt = startupProfiler.now()
+  await cache.set(
+    'base',
+    sanitizeTaskBaseForPersistence(sanitizeRuntimeArtifact(base), {
+      cwd: ctx.cwd,
+      kiroPersistenceBoundary,
+      runtimeAdapterType
+    })
+  )
+  startupProfiler.mark('task.cache.set.base', cacheSetStartedAt)
   const resolvedModel = compatibilityResult.model ?? resolvedSelection.model
   const selectionWarnings = compatibilityResult.warning != null ? [compatibilityResult.warning] : undefined
   if (!supportsEffort && effectiveAdapterOptions.effort != null) {
@@ -334,14 +600,21 @@ export const run = async (
   const originalOnEvent = effectiveAdapterOptions.onEvent
   const supportedAssetPlanAdapters = new Set<WorkspaceAssetAdapter>([
     'claude-code',
+    'cline',
     'codex',
     'copilot',
     'cursor',
+    'dsh',
+    'droid',
     'gemini',
+    'goose',
     'grok',
+    'kiro',
+    'junie',
     'kimi',
     'opencode',
-    'pi'
+    'pi',
+    'qwen-code'
   ])
   const supportsAssetPlan = (value: string): value is WorkspaceAssetAdapter => (
     supportedAssetPlanAdapters.has(value as WorkspaceAssetAdapter)
@@ -359,19 +632,25 @@ export const run = async (
     runtimeServerNames: new Set(Object.keys(runtimeMcpServers)),
     selection: effectiveAdapterOptions.mcpServers
   })
+  const shouldBuildAssetPlan = effectiveAdapterOptions.executionProfile !== 'structured_no_tools' &&
+    runtimeCtx.assets != null && supportsAssetPlan(runtimeAdapterType)
+  const selectedWorkspaceMcpServerNames = new Set(
+    !shouldBuildAssetPlan || runtimeMcpSelection.excludeAllWorkspaceMcp
+      ? []
+      : resolveSelectedMcpNames(runtimeCtx.assets!, runtimeMcpSelection.workspaceSelection)
+  )
   const assetPlanStartedAt = startupProfiler.now()
-  const assetPlanBaseRaw = effectiveAdapterOptions.executionProfile === 'structured_no_tools' ||
-      runtimeCtx.assets == null || !supportsAssetPlan(runtimeAdapterType)
-    ? undefined
-    : await buildAdapterAssetPlan({
+  const assetPlanBaseRaw = shouldBuildAssetPlan
+    ? await buildAdapterAssetPlan({
       adapter: runtimeAdapterType,
-      bundle: runtimeCtx.assets,
+      bundle: runtimeCtx.assets!,
       options: {
         mcpServers: runtimeMcpSelection.workspaceSelection,
         skills: effectiveAdapterOptions.skills,
         promptAssetIds: effectiveAdapterOptions.promptAssetIds
       }
     })
+    : undefined
   startupProfiler.mark('task.buildAdapterAssetPlan', assetPlanStartedAt, {
     adapter: adapterType,
     runtimeAdapter: runtimeAdapterType
@@ -386,6 +665,9 @@ export const run = async (
       mcpServers: {},
       diagnostics: assetPlanBaseRaw.diagnostics.filter(diagnostic => !workspaceMcpAssetIds.has(diagnostic.assetId))
     }
+  const claimedWorkspaceMcpServerNames = runtimeAdapterType === 'kiro'
+    ? selectedWorkspaceMcpServerNames
+    : new Set(Object.keys(assetPlanBase?.mcpServers ?? {}))
   const selectedRuntimeMcpServers = Object.fromEntries(
     Object.entries(runtimeMcpServers)
       .filter(([name]) => (
@@ -393,38 +675,71 @@ export const run = async (
         !runtimeMcpSelection.runtimeExclude.has(name)
       ))
   ) as Record<string, NonNullable<Config['mcpServers']>[string]>
-  const skippedRuntimeMcpServerNames = runtimeAdapterType === 'pi'
-    ? Object.keys(selectedRuntimeMcpServers)
-    : []
+  const supportsRuntimeMcpServer = (server: NonNullable<Config['mcpServers']>[string]) => (
+    runtimeAdapterType !== 'pi' &&
+    runtimeAdapterType !== 'dsh' &&
+    runtimeAdapterType !== 'cline' &&
+    (runtimeAdapterType !== 'goose' || server.type !== 'sse') &&
+    (runtimeAdapterType !== 'kiro' || isStdioMcpServer(server))
+  )
+  const skippedRuntimeMcpServerNames = Object.entries(selectedRuntimeMcpServers)
+    .filter(([, server]) => !supportsRuntimeMcpServer(server))
+    .map(([name]) => name)
+  const runtimeMcpSkipReason = (name: string) => (
+    runtimeAdapterType === 'pi'
+      ? `Session companion MCP "${name}" was skipped because Pi has no stable built-in MCP mapping.`
+      : runtimeAdapterType === 'dsh'
+      ? `Session companion MCP "${name}" was skipped because DSH ACP does not accept MCP servers.`
+      : runtimeAdapterType === 'cline'
+      ? `Session companion MCP "${name}" was skipped because Cline has no verified stable mapping.`
+      : runtimeAdapterType === 'goose'
+      ? `Session companion MCP "${name}" was skipped because Goose ACP does not support SSE transport.`
+      : `Session companion MCP "${name}" was skipped because verified Kiro ACP supports only stdio transport.`
+  )
   if (skippedRuntimeMcpServerNames.length > 0) {
+    const message = runtimeAdapterType === 'pi'
+      ? '[mcp] Skipping session companion MCP servers because pi has no verified stable mapping'
+      : runtimeAdapterType === 'dsh'
+      ? '[mcp] Skipping session companion MCP servers because DSH ACP does not accept MCP servers'
+      : runtimeAdapterType === 'goose'
+      ? '[mcp] Skipping SSE session companion MCP servers because Goose ACP does not support that transport'
+      : runtimeAdapterType === 'kiro'
+      ? '[mcp] Skipping non-stdio session companion MCP servers because verified Kiro ACP supports stdio only'
+      : `[mcp] Skipping unsupported session companion MCP servers for ${runtimeAdapterType}`
     logger.warn({
       runtimeMcpServerNames: skippedRuntimeMcpServerNames
-    }, '[mcp] Skipping session companion MCP servers because Pi has no stable built-in MCP mapping')
+    }, message)
   }
   const runtimeMcpDiagnostics: AssetDiagnostic[] = skippedRuntimeMcpServerNames.map(name => ({
     assetId: `runtime-mcp:${name}`,
-    adapter: 'pi',
+    adapter: runtimeAdapterType as WorkspaceAssetAdapter,
     status: 'skipped',
-    reason: `Session companion MCP "${name}" was skipped because Pi has no stable built-in MCP mapping.`,
+    reason: runtimeMcpSkipReason(name),
     source: 'project',
     origin: 'workspace'
   }))
-  const workspaceMcpServerNames = new Set(Object.keys(assetPlanBase?.mcpServers ?? {}))
-  const shadowedRuntimeMcpServerNames = Object.keys(selectedRuntimeMcpServers)
-    .filter(name => workspaceMcpServerNames.has(name))
+  const shadowedRuntimeMcpServerNames = Object.keys(runtimeMcpServers)
+    .filter(name => claimedWorkspaceMcpServerNames.has(name))
   if (shadowedRuntimeMcpServerNames.length > 0) {
     logger.warn({
       runtimeMcpServerNames: shadowedRuntimeMcpServerNames
     }, '[mcp] Ignoring session companion MCP servers that would shadow workspace MCP servers')
   }
   const effectiveRuntimeMcpServers = Object.fromEntries(
-    Object.entries(runtimeAdapterType === 'pi' ? {} : selectedRuntimeMcpServers)
-      .filter(([name]) => !workspaceMcpServerNames.has(name))
+    Object.entries(selectedRuntimeMcpServers)
+      .filter(([name, server]) => (
+        !claimedWorkspaceMcpServerNames.has(name) && supportsRuntimeMcpServer(server)
+      ))
   ) as Record<string, NonNullable<Config['mcpServers']>[string]>
   const assetPlanWithRuntimeDiagnostics = runtimeMcpDiagnostics.length === 0
     ? assetPlanBase
     : assetPlanBase == null
-    ? { adapter: 'pi' as const, diagnostics: runtimeMcpDiagnostics, mcpServers: {}, overlays: [] }
+    ? {
+      adapter: runtimeAdapterType as WorkspaceAssetAdapter,
+      diagnostics: runtimeMcpDiagnostics,
+      mcpServers: {},
+      overlays: []
+    }
     : { ...assetPlanBase, diagnostics: [...assetPlanBase.diagnostics, ...runtimeMcpDiagnostics] }
   const assetPlan = assetPlanWithRuntimeDiagnostics == null
     ? undefined
@@ -457,13 +772,34 @@ export const run = async (
       ? COPILOT_NATIVE_BRIDGE_DISABLED_EVENTS
       : runtimeAdapterType === 'cursor' && runtimeCtx.env.__ONEWORKS_PROJECT_CURSOR_NATIVE_HOOKS_AVAILABLE__ === '1'
       ? BASE_NATIVE_BRIDGE_DISABLED_EVENTS
+      : runtimeAdapterType === 'droid' && runtimeCtx.env.__ONEWORKS_PROJECT_DROID_NATIVE_HOOKS_AVAILABLE__ === '1'
+      ? DROID_NATIVE_BRIDGE_DISABLED_EVENTS
       : runtimeAdapterType === 'grok' && runtimeCtx.env.__ONEWORKS_PROJECT_GROK_NATIVE_HOOKS_AVAILABLE__ === '1'
       ? GROK_NATIVE_BRIDGE_DISABLED_EVENTS
+      : runtimeAdapterType === 'kiro' && runtimeCtx.env.__ONEWORKS_PROJECT_KIRO_NATIVE_HOOKS_AVAILABLE__ === '1'
+      ? BASE_NATIVE_BRIDGE_DISABLED_EVENTS
+      : runtimeAdapterType === 'junie' && runtimeCtx.env.__ONEWORKS_PROJECT_JUNIE_NATIVE_HOOKS_AVAILABLE__ === '1'
+      ? JUNIE_NATIVE_BRIDGE_DISABLED_EVENTS
+      : runtimeAdapterType === 'qwen-code' &&
+          runtimeCtx.env.__ONEWORKS_PROJECT_QWEN_CODE_NATIVE_HOOKS_AVAILABLE__ === '1'
+      ? BASE_NATIVE_BRIDGE_DISABLED_EVENTS
       : runtimeAdapterType === 'opencode' && runtimeCtx.env.__ONEWORKS_PROJECT_OPENCODE_NATIVE_HOOKS_AVAILABLE__ === '1'
       ? OPENCODE_NATIVE_BRIDGE_DISABLED_EVENTS
       : []
+  const hookRuntimeCtx = runtimeAdapterType === 'cline'
+    ? { ...runtimeCtx, env: omitClineCredentialEnv(runtimeCtx.env) }
+    : runtimeCtx
+  const hookTaskOptions = runtimeAdapterType === 'cline' && options.env != null
+    ? { ...options, env: omitClineCredentialEnv(options.env) }
+    : options
+  const createHookBoundary = <T>(input: T) => {
+    const sanitizedInput = sanitizeRuntimeArtifact(input)
+    const sanitizedEnv = sanitizeRuntimeArtifact(hookRuntimeCtx.env)
+    return scrubCredentialGraphForPersistence({ env: sanitizedEnv, input: sanitizedInput })
+  }
+  const hookBridgeRuntimeCtx = sanitizeRuntimeArtifact(hookRuntimeCtx)
   const hookBridge = createAdapterHookBridge({
-    ctx: runtimeCtx,
+    ctx: hookBridgeRuntimeCtx,
     adapter: runtimeAdapterType,
     runtime: effectiveAdapterOptions.runtime,
     sessionId: effectiveAdapterOptions.sessionId,
@@ -478,7 +814,7 @@ export const run = async (
         data: {
           ...event.data,
           adapter: adapterType,
-          effort: resolvedEffort ?? event.data.effort,
+          effort: runtimeAdapterType === 'kiro' ? event.data.effort : resolvedEffort ?? event.data.effort,
           selectionWarnings: selectionWarnings ?? event.data.selectionWarnings,
           assetDiagnostics: assetPlan?.diagnostics ?? event.data.assetDiagnostics
         }
@@ -490,19 +826,24 @@ export const run = async (
       const { data } = event
       hookBridge.enqueueAfterPendingHooks(async () => {
         try {
-          await callHook('TaskStop', {
+          const boundary = createHookBoundary({
             adapter: adapterType,
             cwd: runtimeCtx.cwd,
             sessionId: effectiveAdapterOptions.sessionId,
 
-            options,
+            options: hookTaskOptions,
             adapterOptions: effectiveAdapterOptions,
 
             exitCode: data.exitCode,
             stderr: data.stderr
-          }, runtimeCtx.env)
+          })
+          await callHook('TaskStop', boundary.input, boundary.env)
         } catch (e) {
-          logger.error('[Hook] TaskStop failed', e)
+          const boundary = scrubCredentialGraphForPersistence({
+            env: runtimeCtx.env,
+            error: e
+          })
+          logger.error('[Hook] TaskStop failed', boundary.error)
         }
       })
     }
@@ -514,14 +855,19 @@ export const run = async (
   }
 
   const taskStartStartedAt = startupProfiler.now()
-  const taskStartOutput = await callHook('TaskStart', {
+  const taskStartBoundary = createHookBoundary({
     adapter: adapterType,
     cwd: runtimeCtx.cwd,
     sessionId: effectiveAdapterOptions.sessionId,
 
-    options,
+    options: hookTaskOptions,
     adapterOptions: effectiveAdapterOptions
-  }, runtimeCtx.env)
+  })
+  const taskStartOutput = await callHook(
+    'TaskStart',
+    taskStartBoundary.input,
+    taskStartBoundary.env
+  )
   startupProfiler.mark('task.hook.TaskStart', taskStartStartedAt, { adapter: adapterType })
   if (taskStartOutput?.continue === false) {
     throw new Error(taskStartOutput.stopReason ?? 'TaskStart hook blocked task startup')

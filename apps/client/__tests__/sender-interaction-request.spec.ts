@@ -25,6 +25,18 @@ describe('sender interaction request visibility', () => {
     })).toBe(false)
   })
 
+  it('hides the freeform sender when the multi-select panel owns the complete answer', () => {
+    expect(shouldHideSenderForInteraction({
+      id: 'interaction-1',
+      payload: {
+        sessionId: 'sess-1',
+        question: '请选择目标',
+        kind: 'question',
+        multiselect: true
+      }
+    })).toBe(true)
+  })
+
   it('keeps the sender visible when there is no interaction', () => {
     expect(shouldHideSenderForInteraction(null)).toBe(false)
   })

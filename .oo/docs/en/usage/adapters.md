@@ -13,7 +13,19 @@ This page covers the adapter configuration structure in the Web configuration UI
 
 ## Frontend Selector
 
-The adapter selector in the chat input shows the native adapters built into the current application: Claude Code, Codex, Copilot, Cursor, Gemini, Grok, Kimi, OpenCode, and Pi. Adapter configuration controls binary selection, managed CLI versions, model routing, accounts, and adapter-specific options.
+The adapter selector in the chat input shows the native adapters built into the current application: Claude Code, Codex, Copilot, Cursor, [DSH](./dsh-adapter.md), Gemini, Grok, Kimi, OpenCode, and Pi. Adapter configuration controls binary selection, managed CLI versions, model routing, accounts, and adapter-specific options.
+The adapter selector in the chat input shows the native adapters built into the current application: Claude Code, Codex, Copilot, Cursor, Gemini, Goose, Grok, Kimi, OpenCode, and Pi. Adapter configuration controls binary selection, managed CLI versions, model routing, accounts, and adapter-specific options.
+The adapter selector in the chat input shows the native adapters built into the current application: Claude Code, Cline, Codex, Copilot, Cursor, Gemini, Grok, Kimi, OpenCode, and Pi. Adapter configuration controls binary selection, managed CLI versions, model routing, accounts, and adapter-specific options.
+
+## Cline CLI
+
+The `cline` adapter uses Cline's public ACP entry point with a verified `3.0.54` native-resume gate and a structured
+fresh-only fallback for non-gated system/path binaries. See the [Cline CLI Adapter](./cline-adapter.md) for runtime,
+credential isolation, assets, and read-only history behavior.
+The adapter selector in the chat input shows the native adapters built into the current application: Claude Code, Codex, Copilot, Cursor, Gemini, Grok, Kiro, Kimi, OpenCode, and Pi. Adapter configuration controls binary selection, managed CLI versions, model routing, accounts, and adapter-specific options.
+The adapter selector in the chat input shows the native adapters built into the current application: Claude Code, Codex, Copilot, Cursor, Gemini, Grok, Junie, Kimi, OpenCode, and Pi. Adapter configuration controls binary selection, managed CLI versions, model routing, accounts, and adapter-specific options.
+The adapter selector in the chat input shows the native adapters built into the current application: Claude Code, Codex, Copilot, Cursor, Gemini, Grok, Kimi, OpenCode, Pi, and Qwen Code. Adapter configuration controls binary selection, managed CLI versions, model routing, accounts, and adapter-specific options.
+The adapter selector in the chat input shows the native adapters built into the current application: Claude Code, Codex, Copilot, Cursor, Factory Droid, Gemini, Grok, Kimi, OpenCode, and Pi. Adapter configuration controls binary selection, managed CLI versions, model routing, accounts, and adapter-specific options.
 
 ## Pi coding-agent
 
@@ -55,6 +67,7 @@ Native CLI installation and version pinning are covered in [Adapter CLI Installa
 - Claude Code connects directly to known official Anthropic-compatible endpoints for Anthropic, Kimi, DeepSeek, Alibaba Qwen/Bailian, Zhipu GLM, MiniMax, OpenRouter, Requesty, Vercel AI Gateway, and Portkey; other OpenAI-compatible routed models can still use Claude Code Router.
 - Codex and Gemini use adapter-owned local proxy behavior.
 - Grok writes routed `service,model` selections into a session-scoped native custom model entry and supports `chat_completions`, `responses`, and `messages` backends.
+- Kiro exposes only its native **Default** entry in the static selector. Generic `modelServices` are not routed into Kiro; exact native IDs are accepted only when the live Kiro session advertises them.
 - Some adapters write provider configuration to native config files or session-level state.
 
 Workspaces launched by a Launcher or daemon manager reuse a manager-owned Codex app-server
@@ -136,7 +149,15 @@ Stream sessions consume Cursor's JSON output and retain the native chat id, so l
 
 ## Migrating Native Sessions
 
-The External Sessions configuration page can preview and import Codex, Claude Code, and Cursor history for the current project or across discovered projects. Cursor transcripts are read from `~/.cursor/projects/*/agent-transcripts/**/*.jsonl`; regular chats and tasks under `subagents/` remain distinguishable.
+The External Sessions configuration page can preview and import Codex, Claude Code, Cursor, Goose, and Grok history for the current project or across discovered projects. Cursor transcripts are read from `~/.cursor/projects/*/agent-transcripts/**/*.jsonl`; regular chats and tasks under `subagents/` remain distinguishable. Goose is read only through public `session list` and `session export` JSON commands, never through SQLite.
+
+Global native-history auto-import is a best-effort scan across enabled adapters, so a missing optional native CLI is reported without discarding imports from available adapters. Explicit adapter selection remains strict and actionable; mixed explicit selection retains successes and reports unavailable selections.
+The External Sessions configuration page can preview and import Codex, Claude Code, Cursor, Grok, and Qwen Code history for the current project or across discovered projects. Cursor transcripts are read from `~/.cursor/projects/*/agent-transcripts/**/*.jsonl`. Qwen Code reads 0.21.11-compatible JSONL under `projects/*/chats` and `projects/*/subagents`, and uses only the record `cwd` for project ownership.
+
+Every automatic, preview, and manual import read has a server-enforced 50 MiB per-file and aggregate ceiling. The automatic-import setting may choose a smaller per-file threshold; leaving it empty or setting it to `null` uses 50 MiB. Per-adapter settings inherit the global value when absent, while an explicit `null` uses 50 MiB. Values above 50 MiB are invalid. Manual import may read a file skipped by a smaller automatic threshold, but it cannot bypass the server ceiling.
+
+The preview and manual-import notice distinguish rejected files, per-file ceiling skips, and files left unread after aggregate budget exhaustion. Mixed results keep successful candidates visible. If every candidate is rejected or bounded, the UI reports an incomplete scan instead of claiming that no history exists.
+The External Sessions configuration page can preview and import Codex, Claude Code, Cursor, Factory Droid, and Grok history for the current project or across discovered projects. Cursor transcripts are read from `~/.cursor/projects/*/agent-transcripts/**/*.jsonl`, while Factory Droid sessions are read from `~/.factory/sessions/**/*.jsonl`; regular chats and native child tasks remain distinguishable.
 
 Import is read-only with respect to Cursor data. The resulting completed external session retains user messages, assistant text, and tool calls, and repeated imports are deduplicated by native session id and source file. Because Cursor encodes the workspace path in its project directory name, candidates are imported only when that directory can be matched to the current project, an explicitly selected project path, or Cursor workspace metadata.
 
@@ -144,7 +165,21 @@ Import is read-only with respect to Cursor data. The resulting completed externa
 
 The `grok` adapter uses xAI's official Grok Build CLI with managed installation, model routing, MCP servers, skills, hooks, and migration of resumable native UUID sessions.
 
-See the [Grok Build CLI Adapter](./grok-adapter.md) for full configuration, the project-shared session home, external-session import, and login boundaries.
+See the [Grok Build CLI Adapter](./grok-adapter.md) for full configuration, the project-shared session home, external-session import, and login boundaries. See the [JetBrains Junie CLI Adapter](./junie-adapter.md) for Junie's headless stream, native resume, isolation, hooks, Plan fallback, and unsupported history-import boundary.
+
+## Goose CLI
+
+The `goose` adapter uses Goose ACP for persistent structured sessions, isolated configuration, native tools, permission requests, MCP, and selected skills. See the [Goose CLI Adapter](./goose-adapter.md) for managed release verification, credential boundaries, model-service support, explicit fallbacks, and public-CLI history import.
+
+## Kiro CLI
+
+`kiro` uses Kiro's official ACP channel, an isolated `KIRO_HOME`, native session id/load, selected skills, stdio MCP, and native hooks. Remote MCP transports are reported as unsupported for the verified Kiro CLI 2.18.0 contract. See the [Kiro CLI Adapter](./kiro-adapter.md) for configuration, Amazon Q migration boundaries, authentication, and explicit fallbacks.
+
+## Qwen Code CLI
+
+The `qwen-code` adapter uses the Qwen Code 0.21.11 native headless protocol, native session ID/resume, isolated homes, skills, MCP, and native hooks. Routed models support only the verified OpenAI Chat Completions path, and the adapter never copies or links credential files from the real QWEN_HOME.
+
+See the [Qwen Code CLI Adapter](./qwen-code-adapter.md) for version constraints, authentication boundaries, history import, and fail-closed behavior.
 
 ## Environment Boundaries
 

@@ -43,6 +43,10 @@ export interface HookInputs {
     stopHookActive?: boolean
     lastAssistantMessage?: string
   }
+  StopFailure: HookInputCore & {
+    error: string
+    errorDetails: string
+  }
   SubagentStop: HookInputCore
   PreCompact: HookInputCore & {
     trigger?: string
@@ -139,6 +143,7 @@ export interface HookOutputs {
   }
   Notification: HookOutputCore
   Stop: HookOutputCore
+  StopFailure: HookOutputCore
   SessionStart: HookOutputCore & {
     hookSpecificOutput?: {
       hookEventName: 'SessionStart'

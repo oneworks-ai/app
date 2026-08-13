@@ -176,7 +176,8 @@ export const createBuiltinPermissionPlugin = (
         input.adapter !== 'claude-code' &&
         input.adapter !== 'gemini' &&
         input.adapter !== 'kimi' &&
-        input.adapter !== 'opencode'
+        input.adapter !== 'opencode' &&
+        input.adapter !== 'qwen-code'
       ) {
         return next()
       }

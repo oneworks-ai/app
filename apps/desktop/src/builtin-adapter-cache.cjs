@@ -6,14 +6,21 @@ const path = require('node:path')
 
 const BUILTIN_ADAPTER_PACKAGES = [
   '@oneworks/adapter-claude-code',
+  '@oneworks/adapter-cline',
   '@oneworks/adapter-codex',
   '@oneworks/adapter-copilot',
   '@oneworks/adapter-cursor',
+  '@oneworks/adapter-dsh',
+  '@oneworks/adapter-droid',
   '@oneworks/adapter-gemini',
+  '@oneworks/adapter-goose',
   '@oneworks/adapter-grok',
+  '@oneworks/adapter-kiro',
+  '@oneworks/adapter-junie',
   '@oneworks/adapter-kimi',
   '@oneworks/adapter-opencode',
-  '@oneworks/adapter-pi'
+  '@oneworks/adapter-pi',
+  '@oneworks/adapter-qwen-code'
 ]
 
 const BUILTIN_PLUGIN_PACKAGES = [

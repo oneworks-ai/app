@@ -188,7 +188,7 @@ describe('workspace assets snapshots', () => {
       }
     })
 
-    const adapters = ['claude-code', 'codex', 'cursor', 'gemini', 'opencode'] as const
+    const adapters = ['claude-code', 'codex', 'cursor', 'gemini', 'junie', 'opencode'] as const
     const plans = await Promise.all(adapters.map(adapter => (
       buildAdapterAssetPlan({
         adapter,

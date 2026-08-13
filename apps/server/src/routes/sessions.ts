@@ -1,6 +1,7 @@
 import Router from '@koa/router'
 import type { Context } from 'koa'
 
+import type { GooseCliConfig } from '@oneworks/adapter-goose/config-schema'
 import type {
   ChatMessage,
   ChatMessageContent,
@@ -13,8 +14,10 @@ import type {
 import type { GitBranchKind, SessionInfo, SessionInitInfo, SessionPromptType } from '@oneworks/types'
 
 import { getDb } from '#~/db/index.js'
+import { loadConfigState } from '#~/services/config/index.js'
 import { rememberLauncherWorkspaces } from '#~/services/launcher/manager.js'
 import {
+  DEFAULT_NATIVE_HISTORY_IMPORT_MAX_FILE_SIZE_BYTES,
   consumeNativeProjectHistoryImportPrompt,
   importNativeProjectHistoryAndReplay,
   previewNativeProjectHistory
@@ -90,11 +93,45 @@ export function sessionsRouter(): Router {
     'dontAsk',
     'bypassPermissions'
   ])
-  const nativeHistoryAdapters = new Set<NativeHistoryAdapter>(['codex', 'claude-code', 'cursor', 'grok'])
+  const nativeHistoryAdapters = new Set<NativeHistoryAdapter>([
+    'codex',
+    'claude-code',
+    'cline',
+    'cursor',
+    'droid',
+    'goose',
+    'grok',
+    'qwen-code'
+  ])
   const nativeHistoryCandidateScopes = new Set<NativeHistoryCandidateScope>(['all', 'unarchived', 'archived'])
   const nativeHistoryProjectScopes = new Set<NativeHistoryProjectScope>(['current-project', 'all-projects'])
   const nativeHistoryThreadScopes = new Set<NativeHistoryThreadScope>(['all', 'user', 'subagent'])
   const nativeHistoryTimeSorts = new Set<NativeHistoryTimeSort>(['activity', 'createdAt', 'updatedAt'])
+  const hasOwn = (value: object, key: string) => Object.prototype.hasOwnProperty.call(value, key)
+  const resolveGooseHistoryRouteOptions = async (
+    adapters: NativeHistoryAdapter[] | undefined,
+    includePreviewSizePolicy: boolean
+  ) => {
+    if (adapters != null && !adapters.includes('goose')) return {}
+    const { mergedConfig } = await loadConfigState()
+    const gooseCli = (mergedConfig.adapters as Record<string, { cli?: GooseCliConfig }> | undefined)?.goose?.cli
+    const result = gooseCli == null ? {} : { gooseCli }
+    if (!includePreviewSizePolicy) return result
+    const config = mergedConfig.nativeHistoryImport
+    const adapterConfig = config?.adapters?.goose
+    if (adapterConfig != null && hasOwn(adapterConfig, 'maxFileSizeBytes')) {
+      return {
+        ...result,
+        maxFileSizeBytesByAdapter: { goose: adapterConfig.maxFileSizeBytes ?? null }
+      }
+    }
+    if (config != null && hasOwn(config, 'maxFileSizeBytes')) {
+      return config.maxFileSizeBytes == null
+        ? { ...result, maxFileSizeBytesByAdapter: { goose: null } }
+        : { ...result, maxFileSizeBytes: config.maxFileSizeBytes }
+    }
+    return { ...result, maxFileSizeBytes: DEFAULT_NATIVE_HISTORY_IMPORT_MAX_FILE_SIZE_BYTES }
+  }
   const normalizeTags = (value: unknown) => (
     Array.isArray(value)
       ? value
@@ -392,7 +429,13 @@ export function sessionsRouter(): Router {
     const threadScope = normalizeNativeHistoryThreadScope(body.threadScope)
     const timeFilter = normalizeNativeHistoryTimeFilter(body.timeFilter)
     const timeSort = normalizeNativeHistoryTimeSort(body.timeSort)
+    const gooseOptions = await resolveGooseHistoryRouteOptions(adapters, true)
+    const previewDefaultSizePolicy = adapters?.every(adapter => adapter === 'goose') === true &&
+        'maxFileSizeBytesByAdapter' in gooseOptions
+      ? {}
+      : { maxFileSizeBytes: DEFAULT_NATIVE_HISTORY_IMPORT_MAX_FILE_SIZE_BYTES }
     ctx.body = await previewNativeProjectHistory({
+      ...previewDefaultSizePolicy,
       ...(adapters == null ? {} : { adapters }),
       ...(candidateScope == null ? {} : { candidateScope }),
       ...(previewCursor == null ? {} : { previewCursor }),
@@ -402,7 +445,8 @@ export function sessionsRouter(): Router {
       ...(sourcePaths == null ? {} : { sourcePaths }),
       ...(threadScope == null ? {} : { threadScope }),
       ...(timeFilter == null ? {} : { timeFilter }),
-      ...(timeSort == null ? {} : { timeSort })
+      ...(timeSort == null ? {} : { timeSort }),
+      ...gooseOptions
     })
   })
 
@@ -423,14 +467,25 @@ export function sessionsRouter(): Router {
     const threadScope = normalizeNativeHistoryThreadScope(body.threadScope)
     const timeFilter = normalizeNativeHistoryTimeFilter(body.timeFilter)
     const timeSort = normalizeNativeHistoryTimeSort(body.timeSort)
+    const gooseOptions = await resolveGooseHistoryRouteOptions(adapters, false)
+    const gooseOnly = adapters?.every(adapter => adapter === 'goose') === true
+    const manualDefaultSizePolicy = gooseOnly
+      ? {}
+      : { maxFileSizeBytes: DEFAULT_NATIVE_HISTORY_IMPORT_MAX_FILE_SIZE_BYTES }
+    const manualGooseOverride = !gooseOnly && (adapters == null || adapters.includes('goose'))
+      ? { maxFileSizeBytesByAdapter: { goose: null } }
+      : {}
     const result = await importNativeProjectHistoryAndReplay({
+      ...manualDefaultSizePolicy,
+      ...manualGooseOverride,
       ...(adapters == null ? {} : { adapters }),
       ...(projectPaths == null ? {} : { projectPaths }),
       ...(projectScope == null ? {} : { projectScope }),
       ...(sourcePaths == null ? {} : { sourcePaths }),
       ...(threadScope == null ? {} : { threadScope }),
       ...(timeFilter == null ? {} : { timeFilter }),
-      ...(timeSort == null ? {} : { timeSort })
+      ...(timeSort == null ? {} : { timeSort }),
+      ...gooseOptions
     })
     await rememberLauncherWorkspaces(result.sessions.map(session => session.workspaceCwd ?? session.cwd))
     ctx.body = result

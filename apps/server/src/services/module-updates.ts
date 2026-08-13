@@ -115,14 +115,21 @@ const moduleUpdateTargets: ModuleUpdateTarget[] = [
   },
   ...[
     ['claude-code', 'Claude Code adapter'],
+    ['cline', 'Cline adapter'],
     ['codex', 'Codex adapter'],
     ['copilot', 'Copilot adapter'],
     ['cursor', 'Cursor adapter'],
+    ['dsh', 'DSH adapter'],
+    ['droid', 'Factory Droid adapter'],
     ['gemini', 'Gemini adapter'],
+    ['goose', 'Goose adapter'],
     ['grok', 'Grok adapter'],
+    ['kiro', 'Kiro adapter'],
+    ['junie', 'Junie adapter'],
     ['kimi', 'Kimi adapter'],
     ['opencode', 'OpenCode adapter'],
-    ['pi', 'Pi adapter']
+    ['pi', 'Pi adapter'],
+    ['qwen-code', 'Qwen Code adapter']
   ].map(([adapter, label]) => ({
     activation: 'new-session' as const,
     group: 'adapter' as const,

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   BUILTIN_NATIVE_ADAPTERS,
   DEFAULT_NATIVE_ADAPTER,
+  filterServiceModelsForAdapter,
   hasRunnableChatModelSelection,
   listServiceModels,
   resolveAdapterForChatModelSelection,
@@ -21,16 +22,19 @@ const modelServices: Record<string, ModelServiceConfig> = {
   serviceA: {
     apiBaseUrl: 'https://service-a.example.com',
     apiKey: 'token-a',
-    models: ['modelX', 'modelAOnly']
+    models: ['modelX', 'modelAOnly'],
+    supportedAdapters: ['codex', 'grok', 'pi', 'cursor']
   },
   serviceB: {
     apiBaseUrl: 'https://service-b.example.com',
     apiKey: 'token-b',
-    models: ['modelX', 'modelBOnly']
+    models: ['modelX', 'modelBOnly'],
+    supportedAdapters: ['codex', 'grok', 'pi', 'cursor']
   }
 }
 
 const adapterBuiltinModels: Record<string, AdapterBuiltinModel[]> = {
+  cline: [{ value: 'default', title: 'Default', description: 'Cline native default' }],
   codex: [
     {
       value: 'builtin-fast',
@@ -57,6 +61,21 @@ const modelMetadata: Record<string, ModelMetadataConfig> = {
 }
 
 describe('chat model selector helpers', () => {
+  it('keeps Cline selector Default-only while preserving other adapter service models', () => {
+    const serviceModels = listServiceModels(modelServices)
+    expect(filterServiceModelsForAdapter({
+      adapter: 'cline',
+      modelServices,
+      serviceModels
+    })).toEqual([])
+    expect(adapterBuiltinModels.cline?.map(model => model.value)).toEqual(['default'])
+    expect(filterServiceModelsForAdapter({
+      adapter: 'pi',
+      modelServices,
+      serviceModels
+    })).toHaveLength(serviceModels.length)
+  })
+
   it('keeps duplicate model names unique by selector value', () => {
     const serviceModels = listServiceModels(modelServices)
     const selectors = serviceModels
@@ -174,6 +193,32 @@ describe('chat model selector helpers', () => {
       builtinModels: ['default', 'gpt-5.5'],
       serviceModels
     })).toBe('default')
+  })
+
+  it('shows only Kiro native Default and excludes external service-qualified models', () => {
+    const allServiceModels = listServiceModels(modelServices)
+    const kiroServiceModels = filterServiceModelsForAdapter({
+      adapter: 'kiro',
+      modelServices,
+      serviceModels: allServiceModels
+    })
+    expect(kiroServiceModels).toEqual([])
+    expect(resolveModelForChatAdapterSelection({
+      adapter: 'kiro',
+      adapters: {},
+      defaultModel: 'serviceB,modelBOnly',
+      defaultModelService: 'serviceB',
+      builtinModels: ['default'],
+      serviceModels: kiroServiceModels
+    })).toBe('default')
+
+    for (const adapter of ['codex', 'grok', 'pi', 'cursor']) {
+      expect(filterServiceModelsForAdapter({
+        adapter,
+        modelServices,
+        serviceModels: allServiceModels
+      })).toHaveLength(allServiceModels.length)
+    }
   })
 
   it('keeps explicit global default model before native adapter default', () => {
@@ -348,12 +393,19 @@ describe('chat model selector helpers', () => {
       hiddenBuiltinAdapters: ['codex', 'gemini']
     })).toEqual([
       'claude-code',
+      'cline',
       'copilot',
       'cursor',
+      'dsh',
+      'droid',
+      'goose',
       'grok',
+      'kiro',
+      'junie',
       'kimi',
       'opencode',
       'pi',
+      'qwen-code',
       'local-custom'
     ])
   })

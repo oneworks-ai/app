@@ -1,5 +1,6 @@
 import { nativeHistoryAdapters } from '#~/api'
 import type { NativeHistoryAdapter, NativeHistoryImportAdapterPreview } from '#~/api'
+import { NATIVE_HISTORY_IMPORT_MAX_FILE_SIZE_BYTES } from '@oneworks/types'
 
 export { nativeHistoryAdapters }
 
@@ -21,22 +22,68 @@ export interface ExternalSessionsProjectOption {
   value: string
 }
 
-export const defaultNativeHistoryImportMaxFileSizeBytes = 50 * 1024 * 1024
+export const defaultNativeHistoryImportMaxFileSizeBytes = NATIVE_HISTORY_IMPORT_MAX_FILE_SIZE_BYTES
+
+export const megabytesToNativeHistoryBytes = (value: number | null) => {
+  if (value == null) return null
+  const bytes = Math.round(value * 1024 * 1024)
+  return Number.isFinite(bytes) && bytes >= 0 && bytes <= NATIVE_HISTORY_IMPORT_MAX_FILE_SIZE_BYTES
+    ? bytes
+    : undefined
+}
+
+export const isValidNativeHistorySizeLimit = (value: number | null | undefined) => (
+  value == null || (
+    Number.isFinite(value) && value >= 0 && value <= NATIVE_HISTORY_IMPORT_MAX_FILE_SIZE_BYTES
+  )
+)
+
+export const resolveNativeHistoryGlobalSizeLimit = (
+  settings: NativeHistoryImportSettings | undefined
+) =>
+  typeof settings?.maxFileSizeBytes === 'number'
+    ? settings.maxFileSizeBytes
+    : NATIVE_HISTORY_IMPORT_MAX_FILE_SIZE_BYTES
+
+export const resolveNativeHistoryAdapterSizeLimit = (
+  settings: NativeHistoryImportSettings | undefined,
+  adapter: NativeHistoryAdapter
+) => {
+  const adapterSettings = settings?.adapters?.[adapter]
+  if (adapterSettings != null && Object.prototype.hasOwnProperty.call(adapterSettings, 'maxFileSizeBytes')) {
+    return typeof adapterSettings.maxFileSizeBytes === 'number'
+      ? adapterSettings.maxFileSizeBytes
+      : NATIVE_HISTORY_IMPORT_MAX_FILE_SIZE_BYTES
+  }
+  return resolveNativeHistoryGlobalSizeLimit(settings)
+}
 
 export const nativeHistoryAdapterIcons: Record<NativeHistoryAdapter, string> = {
   codex: 'terminal',
   'claude-code': 'auto_awesome',
+  cline: 'smart_toy',
   cursor: 'near_me',
-  grok: 'star'
+  droid: 'smart_toy',
+  goose: 'flutter_dash',
+  grok: 'star',
+  'qwen-code': 'code'
 }
 
 export const getAdapterLabelKey = (adapter: NativeHistoryAdapter) => (
   adapter === 'codex'
     ? 'nativeHistoryImport.platforms.codex'
+    : adapter === 'cline'
+    ? 'nativeHistoryImport.platforms.cline'
     : adapter === 'cursor'
     ? 'nativeHistoryImport.platforms.cursor'
+    : adapter === 'droid'
+    ? 'nativeHistoryImport.platforms.droid'
     : adapter === 'grok'
     ? 'nativeHistoryImport.platforms.grok'
+    : adapter === 'goose'
+    ? 'nativeHistoryImport.platforms.goose'
+    : adapter === 'qwen-code'
+    ? 'nativeHistoryImport.platforms.qwenCode'
     : 'nativeHistoryImport.platforms.claudeCode'
 )
 
@@ -57,10 +104,23 @@ export const removeImportedNativeHistoryPreviewCandidates = (
     return {
       ...page,
       candidates,
-      largeFiles: candidates.filter(candidate => candidate.isLarge).length,
-      largestFileBytes: Math.max(0, ...candidates.map(candidate => candidate.fileSizeBytes)),
+      largeFiles: candidates.filter(candidate => candidate.isLarge).length + page.perFileLimitedFiles,
+      largestFileBytes: Math.max(
+        page.perFileLimitedFiles > 0 ? page.largestFileBytes : 0,
+        ...candidates.map(candidate => candidate.fileSizeBytes)
+      ),
       matchedFiles: candidates.length,
-      totalBytes: candidates.reduce((sum, candidate) => sum + candidate.fileSizeBytes, 0)
+      aggregateLimitedBytes: page.aggregateLimitedBytes,
+      aggregateLimitedFiles: page.aggregateLimitedFiles,
+      perFileLimitedBytes: page.perFileLimitedBytes,
+      perFileLimitedFiles: page.perFileLimitedFiles,
+      rejectedFiles: page.rejectedFiles,
+      sizeLimitedBytes: page.sizeLimitedBytes,
+      sizeLimitedFiles: page.sizeLimitedFiles,
+      totalBytes: page.sizeLimitedBytes + candidates.reduce(
+        (sum, candidate) => sum + candidate.fileSizeBytes,
+        0
+      )
     }
   })
 }

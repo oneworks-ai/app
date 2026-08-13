@@ -26,7 +26,7 @@ export const createCodexSharedModelService = (params: {
   models: (params.builtinModels ?? [])
     .map(model => model.value)
     .filter(model => model !== 'default'),
-  supportedAdapters: ['claude-code', 'copilot', 'gemini', 'grok', 'kimi', 'opencode', 'pi']
+  supportedAdapters: ['claude-code', 'copilot', 'gemini', 'goose', 'grok', 'kimi', 'opencode', 'pi', 'qwen-code']
 })
 
 export const withCodexSharedModelService = (

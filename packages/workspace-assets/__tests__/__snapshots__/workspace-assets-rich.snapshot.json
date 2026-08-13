@@ -1015,6 +1015,154 @@
         }
       ]
     },
+    "junie": {
+      "adapter": "junie",
+      "mcpServers": {
+        "docs": {
+          "args": [
+            "docs-server"
+          ],
+          "command": "npx"
+        }
+      },
+      "overlays": [
+        {
+          "assetId": "agent:plugin:1:demo/release-helper:<workspace>/node_modules/@oneworks/plugin-demo/opencode/agents/release-helper.md",
+          "kind": "agent",
+          "sourcePath": "<workspace>/node_modules/@oneworks/plugin-demo/opencode/agents/release-helper.md",
+          "targetPath": "agents/release-helper.md"
+        },
+        {
+          "assetId": "skill:workspace:workspace:research:<workspace>/.oo/skills/research/SKILL.md",
+          "kind": "skill",
+          "sourcePath": "<workspace>/.oo/skills/research",
+          "targetPath": "skills/research"
+        }
+      ],
+      "diagnostics": [
+        {
+          "assetId": "agent:plugin:1:demo/release-helper:<workspace>/node_modules/@oneworks/plugin-demo/opencode/agents/release-helper.md",
+          "adapter": "junie",
+          "status": "native",
+          "source": "plugin",
+          "reason": "Passed to Junie through an explicit isolated --agent-location.",
+          "scope": "demo",
+          "packageId": "@oneworks/plugin-demo"
+        },
+        {
+          "assetId": "command:plugin:1:demo/review:<workspace>/node_modules/@oneworks/plugin-demo/opencode/commands/review.md",
+          "adapter": "junie",
+          "status": "skipped",
+          "source": "plugin",
+          "reason": "Junie has no verified native mapping for this OpenCode asset kind.",
+          "scope": "demo",
+          "packageId": "@oneworks/plugin-demo"
+        },
+        {
+          "assetId": "entity:workspace:workspace:architect:<workspace>/.oo/entities/architect/README.md",
+          "adapter": "junie",
+          "status": "prompt",
+          "source": "project",
+          "reason": "Mapped into the generated system prompt."
+        },
+        {
+          "assetId": "hookPlugin:plugin:0:logger:<workspace>/node_modules/@oneworks/plugin-logger",
+          "adapter": "junie",
+          "status": "native",
+          "source": "plugin",
+          "reason": "Mapped into the Junie headless native hooks bridge.",
+          "packageId": "@oneworks/plugin-logger"
+        },
+        {
+          "assetId": "hookPlugin:plugin:1:demo/demo:<workspace>/node_modules/@oneworks/plugin-demo",
+          "adapter": "junie",
+          "status": "native",
+          "source": "plugin",
+          "reason": "Mapped into the Junie headless native hooks bridge.",
+          "scope": "demo",
+          "packageId": "@oneworks/plugin-demo"
+        },
+        {
+          "assetId": "hookPlugin:plugin:2:telemetry:<workspace>/node_modules/@oneworks/plugin-telemetry",
+          "adapter": "junie",
+          "status": "native",
+          "source": "plugin",
+          "reason": "Mapped into the Junie headless native hooks bridge.",
+          "packageId": "@oneworks/plugin-telemetry"
+        },
+        {
+          "assetId": "mcpServer:workspace:workspace:docs:<workspace>/.oo.config.json",
+          "adapter": "junie",
+          "status": "translated",
+          "source": "project",
+          "reason": "Translated into adapter-specific MCP configuration."
+        },
+        {
+          "assetId": "mode:plugin:1:demo/strict:<workspace>/node_modules/@oneworks/plugin-demo/opencode/modes/strict.md",
+          "adapter": "junie",
+          "status": "skipped",
+          "source": "plugin",
+          "reason": "Junie has no verified native mapping for this OpenCode asset kind.",
+          "scope": "demo",
+          "packageId": "@oneworks/plugin-demo"
+        },
+        {
+          "assetId": "nativePlugin:plugin:1:demo/demo-plugin:<workspace>/node_modules/@oneworks/plugin-demo/opencode/plugins/demo-plugin.js",
+          "adapter": "junie",
+          "status": "skipped",
+          "source": "plugin",
+          "reason": "Junie has no verified native mapping for this OpenCode asset kind.",
+          "scope": "demo",
+          "packageId": "@oneworks/plugin-demo"
+        },
+        {
+          "assetId": "rule:plugin:1:demo/security:<workspace>/node_modules/@oneworks/plugin-demo/rules/security.md",
+          "adapter": "junie",
+          "status": "prompt",
+          "source": "plugin",
+          "reason": "Mapped into the generated system prompt.",
+          "scope": "demo",
+          "packageId": "@oneworks/plugin-demo"
+        },
+        {
+          "assetId": "rule:workspace:workspace:review:<workspace>/.oo/rules/review.md",
+          "adapter": "junie",
+          "status": "prompt",
+          "source": "project",
+          "reason": "Mapped into the generated system prompt."
+        },
+        {
+          "assetId": "skill:workspace:workspace:research:<workspace>/.oo/skills/research/SKILL.md",
+          "adapter": "junie",
+          "status": "native",
+          "source": "project",
+          "reason": "Passed to Junie through an explicit isolated --skill-location."
+        },
+        {
+          "assetId": "skill:workspace:workspace:research:<workspace>/.oo/skills/research/SKILL.md",
+          "adapter": "junie",
+          "status": "prompt",
+          "source": "project",
+          "reason": "Mapped into the generated system prompt."
+        },
+        {
+          "assetId": "spec:plugin:1:demo/release:<workspace>/node_modules/@oneworks/plugin-demo/specs/release/index.md",
+          "adapter": "junie",
+          "status": "prompt",
+          "source": "plugin",
+          "reason": "Mapped into the generated system prompt.",
+          "scope": "demo",
+          "packageId": "@oneworks/plugin-demo"
+        },
+        {
+          "assetId": "spec:workspace:workspace:release:<workspace>/.oo/specs/release/index.md",
+          "adapter": "junie",
+          "status": "prompt",
+          "source": "project",
+          "reason": "Mapped into the generated system prompt."
+        }
+      ]
+    },
     "opencode": {
       "adapter": "opencode",
       "mcpServers": {

@@ -73,6 +73,7 @@ describe('config schema bundle', () => {
         'packages/adapters/copilot/package.json',
         'packages/adapters/cursor/package.json',
         'packages/adapters/gemini/package.json',
+        'packages/adapters/goose/package.json',
         'packages/adapters/kimi/package.json',
         'packages/adapters/opencode/package.json'
       ]
@@ -587,6 +588,8 @@ describe('config schema bundle', () => {
             private: true,
             dependencies: {
               '@oneworks/adapter-codex': 'workspace:*',
+              '@oneworks/adapter-junie': 'workspace:*',
+              '@oneworks/adapter-droid': 'workspace:*',
               '@oneworks/channel-lark': 'workspace:*'
             }
           },
@@ -599,12 +602,14 @@ describe('config schema bundle', () => {
       const adapters = (bundle.jsonSchema.properties as Record<string, unknown>).adapters as Record<string, unknown>
       const adapterProperties = adapters.properties as Record<string, unknown>
       const codexSchema = adapterProperties.codex as Record<string, unknown>
+      const junieSchema = adapterProperties.junie as Record<string, unknown>
       const codexAccountFields = bundle.uiSchema.sections.adapters.recordMap.schemas.codex
         ?.recordFields?.accounts?.itemSchema?.fields.map(field => field.path.join('.')) ?? []
       const channels = (bundle.uiSchema.sections.channels.recordMap.schemas.lark?.fields ?? [])
         .map(field => field.path.join('.'))
 
       expect(bundle.extensions.adapters).toContain('codex')
+      expect(bundle.extensions.adapters).toContain('junie')
       expect(bundle.extensions.channels).toContain('lark')
       expect(codexSchema.properties).toMatchObject({
         model: { type: 'string' },
@@ -612,9 +617,28 @@ describe('config schema bundle', () => {
         experimentalApi: { type: 'boolean' },
         effort: { type: 'string' }
       })
+      expect(junieSchema.properties).toMatchObject({
+        cli: { type: 'object' },
+        provider: { type: 'string' },
+        effort: { type: 'string' },
+        review: { type: 'boolean' }
+      })
       expect(channels).toContain('appId')
       expect(channels).toContain('appSecret')
-      expect(codexAccountFields).toEqual(['title', 'description', 'authFile'])
+      expect(codexAccountFields).toEqual(['title', 'description', 'authFile', 'priority', 'disabled'])
+      expect(codexAccountFields).toEqual(['title', 'description', 'authFile', 'priority', 'disabled'])
+      expect(bundle.extensions.adapters).toContain('droid')
+      expect(bundle.uiSchema.sections.adapters.recordMap.entryKinds).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          key: 'codex',
+          capabilities: { accounts: true }
+        }),
+        expect.objectContaining({
+          key: 'droid',
+          label: 'Factory Droid',
+          capabilities: { accounts: false }
+        })
+      ]))
     } finally {
       await rm(tempDir, { recursive: true, force: true })
     }
@@ -688,6 +712,7 @@ describe('config schema bundle', () => {
         path.join(tempDir, '.oo.config.json'),
         JSON.stringify(
           {
+            disableGlobalConfig: true,
             adapters: {
               fast: {
                 packageId: './node_modules/@oneworks/adapter-codex'

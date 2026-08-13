@@ -338,16 +338,25 @@
     "importing": "正在导入历史",
     "quickImport": "导入 {{platform}} 历史会话",
     "emptyTitle": "未找到可导入的历史",
-    "emptyDescription": "没有找到属于当前项目的 Codex、Claude Code、Cursor 或 Grok 历史会话。",
+    "emptyDescription": "没有找到属于当前项目的 Codex、Claude Code、Cline、Cursor、Factory Droid、Goose、Grok 或 Qwen Code 历史会话。",
     "failed": "导入原生历史失败",
-    "failedDescription": "请稍后重试，或检查本机 Codex / Claude Code / Cursor / Grok 历史目录。",
+    "failedDescription": "请稍后重试，或检查本机 Codex / Claude Code / Cline / Cursor / Factory Droid / Grok / Qwen Code 历史目录以及 Goose 公开 session CLI。",
+    "incompleteTitle": "历史导入完成，但存在未读取文件",
+    "rejectedDescription": "有 {{count}} 个历史文件因格式错误、读取期间变化或路径不安全而被拒绝。",
+    "perFileLimitedDescription": "有 {{count}} 个历史文件超过 50 MiB 单文件上限（合计 {{size}}）。",
+    "aggregateLimitedDescription": "50 MiB 请求累计预算耗尽后，有 {{count}} 个历史文件未再读取（合计 {{size}}）。",
+    "retry": "重试导入",
     "open": "打开导入会话",
     "dismiss": "稍后再说",
     "platforms": {
       "codex": "Codex",
       "claudeCode": "Claude Code",
+      "cline": "Cline",
       "cursor": "Cursor",
-      "grok": "Grok"
+      "droid": "Factory Droid",
+      "goose": "Goose",
+      "grok": "Grok",
+      "qwenCode": "Qwen Code"
     },
     "manager": {
       "allPlatforms": "全部",
@@ -356,7 +365,8 @@
       "globalAutoImportTitle": "自动导入",
       "globalAutoImportDescription": "控制所有 adapter 的自动导入默认值；单个 adapter 的设置会优先覆盖这里。",
       "globalSizeLimitTitle": "自动导入尺寸限制",
-      "globalSizeLimitDescription": "自动导入时跳过超过该尺寸的历史文件；留空表示不限制。",
+      "globalSizeLimitDescription": "自动导入时跳过超过该尺寸的历史文件；服务端硬上限为 50 MiB，留空时使用该默认值。",
+      "invalidSizeLimitDescription": "尺寸限制无效，请输入 0 至 50 MiB。",
       "adapterAutoImportTitle": "{{platform}} 自动导入",
       "adapterAutoImportOverride": "当前 adapter 使用自己的开关，优先级高于全局设置。",
       "adapterAutoImportInherited": "当前 adapter 继承全局设置：{{state}}。",
@@ -365,7 +375,7 @@
       "inheritGlobal": "继承全局",
       "enabled": "启用",
       "disabled": "禁用",
-      "unlimited": "不限制",
+      "hardLimitMegabytes": "50",
       "importSelected": "导入所选平台",
       "importAdapterTitle": "导入 {{platform}}",
       "importAdapter": "导入 {{platform}}",
@@ -373,7 +383,12 @@
       "confirmImportAllTitle": "导入 {{count}} 个 {{platform}} 历史会话？",
       "confirmImportAllDescription": "将批量导入当前筛选结果；已导入的会话会自动跳过。",
       "previewTitle": "可导入历史",
-      "previewDescription": "展示当前项目可导入的历史会话；只读取元数据与文件大小。",
+      "previewDescription": "展示当前项目可导入的历史会话；预览通过各 adapter 文档约定的只读边界确定候选与大小，所有读取均受服务端 50 MiB 硬上限约束。",
+      "goosePreviewDisclosureTitle": "Goose 预览如何工作",
+      "goosePreviewDisclosure": "为展示真实大小，Goose 预览只对当前有界候选页运行公开的 session export 命令，并在内存中解析其中的消息和工具内容；只有你选择“导入”后才会写入历史。",
+      "goosePreviewFailedTitle": "Goose 历史预览失败",
+      "goosePreviewFailedDescription": "请确认 Goose CLI 已安装、配置的路径与版本有效，且公开 session 命令能正常返回有效 JSON，然后重试。",
+      "retryPreview": "重试预览",
       "previewLoading": "正在扫描候选文件与尺寸",
       "previewPending": "尚未完成候选扫描",
       "previewSummary": "扫描 {{scanned}} 个历史文件，匹配 {{files}} 个候选，总大小 {{total}}，最大 {{largest}}，大文件 {{largeFiles}} 个。",
@@ -420,9 +435,21 @@
       "alreadyImported": "已导入",
       "emptyCandidates": "没有找到属于当前项目的 {{platform}} 历史会话",
       "emptyCandidatesAllProjects": "没有在已发现项目中找到 {{platform}} 历史会话",
+      "incompleteCandidates": "{{platform}} 扫描未得到可导入候选，但部分历史文件未能读取。",
+      "qwenSourceRootRemediation": "请检查 Qwen 历史根目录解析顺序：QWEN_RUNTIME_DIR，其次 QWEN_HOME，最后 ~/.qwen。",
       "largeFileSize": "大文件 {{size}}",
       "autoSkippedSize": "自动跳过 {{size}}",
+      "autoSkippedManualAllowedSizePolicy": "自动导入会跳过此项；仍可手动“导入”。",
+      "diagnosticsTitle": "原生历史提示",
+      "diagnosticAdapterUnavailable": "无法校验 {{platform}} 配置的 CLI，因此其历史不可用。",
+      "diagnosticOversized": "一个历史 export 超过配置的导入尺寸限制。",
+      "diagnosticUnsupportedRecipe": "已跳过 {{count}} 个 Goose recipe 历史条目。",
+      "diagnosticUnsupportedSubagent": "已跳过 {{count}} 个 Goose subagent 历史条目。",
+      "diagnosticUnsupportedSubtaskScope": "Goose 的公开 session 命令不支持子任务历史；此提示不表示历史为空。",
       "autoSkippedSizeTooltip": "超过自动导入尺寸限制，自动导入会跳过该文件；手动导入仍可执行。文件大小：{{size}}",
+      "rejectedFilesSummary": "已拒绝 {{count}} 个格式错误、读取期间变化或路径不安全的历史文件。",
+      "perFileLimitSkippedSummary": "已跳过 {{count}} 个超过 50 MiB 单文件上限的历史文件（合计 {{size}}）。",
+      "aggregateLimitSkippedSummary": "50 MiB 请求累计预算耗尽后，停止读取 {{count}} 个历史文件（合计 {{size}}）。",
       "importedCount": "{{count}} 个",
       "resultTitle": "外部会话",
       "resultPending": "还没有执行本页导入；下方会展示当前项目已导入的外部会话。",
@@ -433,7 +460,8 @@
       "platformDescriptions": {
         "codex": "扫描 ~/.codex/sessions 与 archived_sessions。",
         "claude-code": "扫描 ~/.claude/projects 下的 Claude Code 会话。",
-        "cursor": "扫描 ~/.cursor/projects 下的 JSONL 会话记录。"
+        "cursor": "扫描 ~/.cursor/projects 下的 JSONL 会话记录。",
+        "qwen-code": "扫描与 Qwen Code 0.21.11 兼容的 chats 与 subagents 记录；来源根目录依次解析 QWEN_RUNTIME_DIR、QWEN_HOME，最后回退到 ~/.qwen。"
       }
     }
   },
@@ -1856,6 +1884,7 @@
     "interactionRequest": {
       "title": "权限请求",
       "titleWithSubject": "权限请求：{{subject}}",
+      "permissionQuestion": "请选择如何处理这次权限请求。",
       "options": "可提交选项",
       "response": "已回复：{{response}}",
       "command": {
@@ -2090,6 +2119,45 @@
     "permissionSuggestedMode": "建议模式",
     "permissionDeniedTools": "受限工具",
     "permissionReasons": "原因",
+    "permissionOptions": {
+      "nativeAdapter": "原生适配器",
+      "allow_once": {
+        "label": "仅允许本次",
+        "description": "只允许当前这次请求。"
+      },
+      "allow_session": {
+        "label": "当前会话内允许",
+        "description": "当前会话后续遇到同类请求时继续允许。"
+      },
+      "allow_project": {
+        "label": "当前项目内允许",
+        "description": "为当前项目保存同类请求的允许规则。"
+      },
+      "deny_once": {
+        "label": "仅拒绝本次",
+        "description": "只拒绝当前这次请求。"
+      },
+      "deny_session": {
+        "label": "当前会话内拒绝",
+        "description": "当前会话后续遇到同类请求时继续拒绝。"
+      },
+      "deny_project": {
+        "label": "当前项目内拒绝",
+        "description": "为当前项目保存同类请求的拒绝规则。"
+      },
+      "allow_persistent": {
+        "label": "在 {{adapter}} 中始终允许（持久）",
+        "description": "会修改 {{adapter}} 的权限状态，并在当前请求结束后继续生效。"
+      },
+      "deny_persistent": {
+        "label": "在 {{adapter}} 中始终拒绝（持久）",
+        "description": "会修改 {{adapter}} 的权限状态，并在当前请求结束后继续生效。"
+      },
+      "native_unknown": {
+        "label": "{{adapter}} 原生选项：{{nativeLabel}}",
+        "description": "原生适配器未说明此选项的权限范围。"
+      }
+    },
     "permissionExpandOptions": "展开更多选项",
     "permissionCollapseOptions": "收起更多选项",
     "permissionConfirmOption": "确认选项",
@@ -2111,6 +2179,12 @@
     "interactionOptionNavigation": "选项快速切换",
     "interactionOptionPrevious": "上一个选项",
     "interactionOptionNext": "下一个选项",
+    "interactionMultiSelectOptionSelected": "{{option}}，已选中",
+    "interactionMultiSelectOptionUnselected": "{{option}}，未选中",
+    "interactionMultiSelectCustomAnswer": "自定义答案（可选）",
+    "interactionMultiSelectCustomPlaceholder": "补充其他答案",
+    "interactionMultiSelectSubmit": "提交 {{count}} 个选项",
+    "interactionResponseFailed": "提交回答失败，请检查网络后重试。",
     "tooltipSlashCommands": "快捷指令",
     "tooltipMentionAgents": "提及代理",
     "tooltipInjectContext": "注入上下文",
@@ -3293,7 +3367,8 @@
       "gemini": "Gemini",
       "copilot": "Copilot",
       "kimi": "Kimi",
-      "opencode": "OpenCode"
+      "opencode": "OpenCode",
+      "qwen-code": "Qwen Code"
     },
     "sources": {
       "builtIn": "内置",
@@ -4531,9 +4606,40 @@
           "label": "共享 Codex 内置模型",
           "desc": "让 Claude Code、Gemini、OpenCode 等 One Works Adapter 使用当前 Codex 账号的内置模型，同时保留官方 Codex CLI / app-server 客户端接入。复用 PM 服务，无需配置 Host、端口、协议或 Token。"
         },
+        "allowUnrestrictedReadNetwork": {
+          "label": "确认 DSH 的宿主访问边界",
+          "desc": "DSH rc.6 必须显式确认：其 sandbox 会限制写入，但不会隔离宿主文件读取、进程可见性或网络访问。"
+        },
         "items": {
           "label": "适配器明细",
           "desc": "按适配器名称平铺配置，公共字段包括 `defaultModel`、`includeModels` 和 `excludeModels`"
+        }
+      },
+      "adaptersByKey": {
+        "droid": {
+          "cli": {
+            "label": "Factory Droid CLI",
+            "desc": "选择并配置已校验的受管、系统或显式路径 Factory Droid CLI 运行时。"
+          },
+          "effort": {
+            "label": "推理强度",
+            "desc": "为当前会话传给 Factory Droid 的推理强度。",
+            "options": {
+              "low": "低",
+              "medium": "中",
+              "high": "高",
+              "xhigh": "极高",
+              "max": "最大"
+            }
+          },
+          "configContent": {
+            "label": "Factory 设置覆盖",
+            "desc": "仅在当前会话内合并到隔离运行环境的 Factory 设置。"
+          },
+          "disableBuiltinSkills": {
+            "label": "禁用内置技能",
+            "desc": "在当前会话中禁用 Factory 内置技能。"
+          }
         }
       },
       "adapterAccount": {

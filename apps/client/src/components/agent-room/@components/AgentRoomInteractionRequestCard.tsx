@@ -1,29 +1,13 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import {
+  getPermissionInteractionOptionMeta,
+  resolvePermissionInteractionOptionCopy
+} from '#~/components/permission-interaction-copy'
+
 import { getStructuredCommandContent } from '../@core/interaction-request-content'
 import type { AgentRoomInteractionRequestView } from '../@types/agent-room-view'
-
-const primaryPermissionOptionValues = new Set(['allow_once', 'allow_session', 'deny_once'])
-
-const getOptionMeta = (value?: string) => {
-  switch (value) {
-    case 'allow_once':
-      return { icon: 'task_alt', tone: 'allow' as const }
-    case 'allow_session':
-      return { icon: 'history_toggle_off', tone: 'allow' as const }
-    case 'allow_project':
-      return { icon: 'folder_managed', tone: 'allow' as const }
-    case 'deny_once':
-      return { icon: 'cancel', tone: 'deny' as const }
-    case 'deny_session':
-      return { icon: 'block', tone: 'deny' as const }
-    case 'deny_project':
-      return { icon: 'folder_off', tone: 'deny' as const }
-    default:
-      return { icon: 'help', tone: 'neutral' as const }
-  }
-}
 
 const getResponseText = (response: AgentRoomInteractionRequestView['response']) => {
   if (response == null) {
@@ -53,15 +37,16 @@ export function AgentRoomInteractionRequestCard({
   const title = request.subjectLabel == null
     ? t('agentRoom.interactionRequest.title')
     : t('chat.permissionRequestTitleWithTool', { tool: request.subjectLabel })
-  const optionItems = request.options.map((option, index) => ({
-    option,
+  const optionItems = request.options.map((sourceOption, index) => ({
+    option: {
+      ...sourceOption,
+      ...resolvePermissionInteractionOptionCopy(sourceOption, t)
+    },
     index,
-    meta: getOptionMeta(option.value)
+    meta: getPermissionInteractionOptionMeta(sourceOption)
   }))
-  const primaryOptionItems = optionItems.filter(({ option }) => primaryPermissionOptionValues.has(option.value ?? ''))
-  const secondaryOptionItems = optionItems.filter(({ option }) =>
-    !primaryPermissionOptionValues.has(option.value ?? '')
-  )
+  const primaryOptionItems = optionItems.filter(({ meta }) => meta.primary)
+  const secondaryOptionItems = optionItems.filter(({ meta }) => !meta.primary)
   const shouldGroupPermissionOptions = primaryOptionItems.length > 0 && secondaryOptionItems.length > 0
   const visibleOptionItems = !shouldGroupPermissionOptions || showAllPermissionOptions
     ? optionItems
@@ -91,7 +76,13 @@ export function AgentRoomInteractionRequestCard({
         </div>
       </div>
       {structuredCommand == null
-        ? <div className='agent-room-interaction-request__question'>{content}</div>
+        ? (
+          <div className='agent-room-interaction-request__question'>
+            {request.requestKind === 'confirmation'
+              ? t('agentRoom.interactionRequest.permissionQuestion')
+              : content}
+          </div>
+        )
         : (
           <div className='agent-room-interaction-request__structured-question'>
             <div className='agent-room-interaction-request__question'>
@@ -142,6 +133,8 @@ export function AgentRoomInteractionRequestCard({
                 key={`${option.label}:${data}`}
                 type='button'
                 className={`agent-room-interaction-request__option agent-room-interaction-request__option--${meta.tone}`}
+                data-permission-semantic={meta.semantic}
+                aria-label={[option.label, option.description].filter(Boolean).join('. ')}
                 disabled={!canRespond || submittingValue != null}
                 title={option.description}
                 onClick={() => {

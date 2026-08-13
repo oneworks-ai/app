@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import type { ChatMessage } from '@oneworks/core'
+
 import {
   applyInteractionStateEvent,
   findLatestFatalError,
@@ -16,6 +18,7 @@ import {
   restoreSessionCompactionInfoFromHistoryEvents
 } from '#~/hooks/chat/session-compaction'
 import {
+  applyMessageEvent,
   applySessionOperationEvent,
   getChatMessageFromSessionHistoryEvent,
   restoreChatMessagesFromSessionHistoryEvents,
@@ -28,6 +31,41 @@ import {
 } from '#~/hooks/chat/use-chat-session-messages'
 
 describe('chat session interaction state', () => {
+  it('reconciles cumulative assistant chunks into one rendered message bubble', () => {
+    const base = { id: 'cline-turn-1', role: 'assistant' as const, createdAt: 100 }
+    const events = [
+      { type: 'message' as const, message: { ...base, content: 'first **' } },
+      { type: 'message' as const, message: { ...base, content: 'first **bold**\n```ts\n' } },
+      { type: 'message' as const, message: { ...base, content: 'first **bold**\n```ts\nconst ok = true\n```' } }
+    ]
+    const messages = events.reduce<ChatMessage[]>((current, event) => applyMessageEvent(current, event), [])
+    expect(messages).toEqual([{ ...base, content: 'first **bold**\n```ts\nconst ok = true\n```' }])
+  })
+
+  it('keeps text-tool-text segments in chronological bubbles while reconciling each segment', () => {
+    const first = { id: 'cline-segment-1', role: 'assistant' as const, createdAt: 100 }
+    const second = { id: 'cline-segment-2', role: 'assistant' as const, createdAt: 300 }
+    const tool: ChatMessage = {
+      id: 'cline-tool-1',
+      role: 'assistant',
+      content: [{ type: 'tool_use', id: 'cline-tool-1', name: 'adapter:cline:read', input: {} }],
+      createdAt: 200
+    }
+    const events = [
+      { type: 'message' as const, message: { ...first, content: 'before **' } },
+      { type: 'message' as const, message: { ...first, content: 'before **tool**' } },
+      { type: 'message' as const, message: tool },
+      { type: 'message' as const, message: { ...second, content: 'after `co' } },
+      { type: 'message' as const, message: { ...second, content: 'after `code`' } }
+    ]
+    const messages = events.reduce<ChatMessage[]>((current, event) => applyMessageEvent(current, event), [])
+    expect(messages).toEqual([
+      { ...first, content: 'before **tool**' },
+      tool,
+      { ...second, content: 'after `code`' }
+    ])
+  })
+
   it('restores workspace change events in history order and deduplicates by id', () => {
     expect(
       restoreSessionWorkspaceChangesFromHistoryEvents([
@@ -375,6 +413,34 @@ describe('chat session interaction state', () => {
       id: 'msg-1',
       role: 'user',
       content: 'existing websocket shape',
+      createdAt: 1
+    })
+  })
+
+  it('preserves imported Droid tool results and embedded documents with a legal assistant role', () => {
+    const content = [
+      { type: 'tool_result' as const, tool_use_id: 'factory-tool-1', content: 'ok', is_error: false },
+      {
+        type: 'file' as const,
+        path: 'factory-document://sha256/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+        name: 'report.pdf',
+        mimeType: 'application/pdf',
+        data: 'JVBERg==',
+        encoding: 'base64' as const
+      }
+    ]
+    expect(getChatMessageFromSessionHistoryEvent({
+      type: 'message',
+      message: {
+        id: 'factory-tool-result',
+        role: 'assistant',
+        content,
+        createdAt: 1
+      }
+    })).toEqual({
+      id: 'factory-tool-result',
+      role: 'assistant',
+      content,
       createdAt: 1
     })
   })

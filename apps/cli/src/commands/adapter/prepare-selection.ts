@@ -6,13 +6,20 @@ import type { AdapterCliPrepareContext, AdapterCliPrepareTarget, AdapterCliPrepa
 export const KNOWN_PREPARE_ADAPTERS = [
   'codex',
   'claude-code',
+  'cline',
   'gemini',
   'copilot',
   'cursor',
+  'dsh',
+  'goose',
+  'droid',
   'grok',
+  'kiro',
+  'junie',
   'opencode',
   'kimi',
-  'pi'
+  'pi',
+  'qwen-code'
 ]
 
 const SPECIAL_TARGET_ALIASES: Record<string, { adapter: string; target: string }> = {
