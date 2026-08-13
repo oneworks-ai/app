@@ -9,6 +9,7 @@ import type { RuntimeCommand } from '@oneworks/runtime-protocol'
 
 import type {
   AgentRoom,
+  AgentRoomChannelConnection,
   AgentRoomDetail,
   AgentRoomEvent,
   AgentRoomEventMember,
@@ -26,6 +27,8 @@ import type {
   AgentRoomSummary,
   AgentRoomUserMessageDelivery,
   AgentRoomUserMessageTarget,
+  ChannelDeliveryTarget,
+  ChannelExecutionContext,
   ChatMessageContent,
   Session,
   UpdateAgentRoomMetadataRequest,
@@ -36,7 +39,9 @@ import { getDb } from '#~/db/index.js'
 import { discoverRuntimeSessionStores, migrateRuntimeRoots } from '#~/services/runtime-store/discovery.js'
 import { resolveSessionRuntimeStoreRoot } from '#~/services/runtime-store/session-control.js'
 import { createWorkspaceRuntimeEnv } from '#~/services/runtime-store/workspace-env.js'
-import { processUserMessage } from '#~/services/session/index.js'
+import { buildChannelRuntimeSystemPrompt } from '#~/services/session/channel-context.js'
+import { createSessionWithInitialMessage } from '#~/services/session/create.js'
+import { processUserMessage, writeChannelMessageContext } from '#~/services/session/index.js'
 import { getSessionInteraction, handleInteractionResponse } from '#~/services/session/interaction.js'
 import { notifySessionUpdated } from '#~/services/session/runtime.js'
 
@@ -53,6 +58,7 @@ const toProjectedRoomMessage = (message: ProjectedAgentRoomMessage): AgentRoomMe
 })
 
 export interface AgentRoomSessionDelivery {
+  createSessionWithInitialMessage?: typeof createSessionWithInitialMessage
   processUserMessage: (sessionId: string, content: string) => Promise<void>
   handleInteractionResponse: (
     sessionId: string,
@@ -73,14 +79,56 @@ interface HostInteractionRequestState {
 interface RuntimeRoomMessageContext {
   currentRun?: AgentRoomRun
   detail: AgentRoomDetail
+  origin?: AgentRoomMessageOrigin
+}
+
+export interface AgentRoomExternalDeliveryContext {
+  actor?: {
+    canonicalUserId?: string
+    displayName?: string
+    externalAccountId?: string
+  }
+  channelId: string
+  channelKey: string
+  channelType: string
+  messageId: string
+  navigation?: AgentRoomMessageOrigin['navigation']
+  replyReceiveId: string
+  replyReceiveIdType: string
+  senderId?: string
+  sessionType: string
+  threadId?: string
 }
 
 const defaultSessionDelivery: AgentRoomSessionDelivery = {
+  createSessionWithInitialMessage,
   processUserMessage,
   handleInteractionResponse,
   getSessionInteraction,
   notifySessionUpdated
 }
+
+const toChannelDeliveryTarget = (connection: AgentRoomChannelConnection): ChannelDeliveryTarget => ({
+  ...(connection.accountLabel != null ? { accountLabel: connection.accountLabel } : {}),
+  channelId: connection.channelId,
+  channelKey: connection.channelKey,
+  channelLinkName: connection.channelLinkName,
+  channelType: connection.channelType,
+  conversationKind: connection.conversationKind,
+  label: connection.label,
+  receiveId: connection.receiveId,
+  receiveIdType: connection.receiveIdType,
+  ...(connection.threadId != null ? { threadId: connection.threadId } : {})
+})
+
+const channelDeliveryTargetKey = (target: ChannelDeliveryTarget) =>
+  [
+    target.channelType,
+    target.channelKey,
+    target.receiveIdType,
+    target.receiveId,
+    target.threadId ?? ''
+  ].join('\0')
 
 const appendUserMessageFlightsByDb = new WeakMap<object, Map<string, Promise<AgentRoomMessage>>>()
 
@@ -108,12 +156,25 @@ const buildRuntimeRoomMessageContent = (
   }
 
   const currentMemberKey = context.currentRun?.memberKey
+  const origin = context.origin
   return [
     '<agent-room-message>',
     'Current Agent Room context:',
     `- roomId: ${context.detail.room.id}`,
     `- roomTitle: ${context.detail.room.title}`,
     ...(currentMemberKey != null ? [`- currentMemberKey: ${currentMemberKey}`] : []),
+    ...(origin == null
+      ? []
+      : [
+        '- externalSource:',
+        `  - channelType: ${origin.channelType}`,
+        `  - channelKey: ${origin.channelKey}`,
+        `  - conversationId: ${origin.channelId}`,
+        ...(origin.conversationLabel == null ? [] : [`  - conversationLabel: ${origin.conversationLabel}`]),
+        ...(origin.providerMessageId == null ? [] : [`  - messageId: ${origin.providerMessageId}`]),
+        ...(origin.senderId == null ? [] : [`  - senderId: ${origin.senderId}`]),
+        ...(origin.senderDisplayName == null ? [] : [`  - senderDisplayName: ${origin.senderDisplayName}`])
+      ]),
     '- existing member sessions:',
     ...context.detail.runs.map(run => formatRuntimeRoomRunLine(run, context.currentRun)),
     '',
@@ -122,6 +183,12 @@ const buildRuntimeRoomMessageContent = (
     '- Do not start a new session for any existing member listed above.',
     '- To send a message to another existing member, use `session.message` targeting the exact `sessionId` listed above.',
     '- Set `source` to your current member key when sending to another member.',
+    ...(origin == null
+      ? []
+      : [
+        '- This is an external-channel message. Preserve the externalSource block when delegating to another member.',
+        '- Any externally visible reply must use the channel send capability; a normal assistant reply is internal only.'
+      ]),
     '',
     'User message:',
     content,
@@ -401,6 +468,16 @@ const getRoomMessageDelivery = (message: AgentRoomMessage) => {
   return payload.delivery
 }
 
+const getRoomMessageDeliveries = (message: AgentRoomMessage) => {
+  const payload = message.payload as unknown
+  if (!isRecord(payload)) return []
+  const deliveries = Array.isArray(payload.deliveries)
+    ? payload.deliveries.filter(isRecord)
+    : []
+  const delivery = getRoomMessageDelivery(message)
+  return delivery == null ? deliveries : [delivery, ...deliveries]
+}
+
 const toRoomUserMessageTarget = (value: Record<string, unknown>): AgentRoomUserMessageTarget | undefined => {
   const memberKey = typeof value.memberKey === 'string' ? value.memberKey : undefined
   const runKey = typeof value.runKey === 'string' ? value.runKey : undefined
@@ -424,8 +501,8 @@ const isDeliveredRoomUserMessage = (
     return false
   }
 
-  const delivery = getRoomMessageDelivery(message)
-  if (delivery == null || delivery.sessionId !== sessionId) {
+  const delivery = getRoomMessageDeliveries(message).find(item => item.sessionId === sessionId)
+  if (delivery == null) {
     return false
   }
 
@@ -851,20 +928,13 @@ const getChildDeliveredRoomUserMessages = (
   const messagesBySession = new Map<string, AgentRoomMessage[]>()
 
   for (const message of roomMessages) {
-    const delivery = getRoomMessageDelivery(message)
-    if (
-      message.role !== 'user' ||
-      delivery == null ||
-      typeof delivery.sessionId !== 'string' ||
-      delivery.sessionId === room.hostSessionId ||
-      getRoomUserMessageTarget(message) == null
-    ) {
-      continue
+    if (message.role !== 'user') continue
+    for (const delivery of getRoomMessageDeliveries(message)) {
+      if (typeof delivery.sessionId !== 'string' || delivery.sessionId === room.hostSessionId) continue
+      const messages = messagesBySession.get(delivery.sessionId) ?? []
+      messages.push(message)
+      messagesBySession.set(delivery.sessionId, messages)
     }
-
-    const messages = messagesBySession.get(delivery.sessionId) ?? []
-    messages.push(message)
-    messagesBySession.set(delivery.sessionId, messages)
   }
 
   return messagesBySession
@@ -1157,10 +1227,135 @@ const toRunRecord = (
 export function createAgentRoomService(
   db: AgentRoomDb = getDb(),
   delivery: AgentRoomSessionDelivery = defaultSessionDelivery,
-  ownerDependencies: Pick<AgentRoomOwnerDependencies, 'resolveChannelLink'> = {}
+  ownerDependencies: Pick<AgentRoomOwnerDependencies, 'resolveChannelConnection'> = {}
 ) {
   const appendUserMessageFlights = appendUserMessageFlightsByDb.get(db) ?? new Map()
   appendUserMessageFlightsByDb.set(db, appendUserMessageFlights)
+
+  const buildMemberExecutionContext = (
+    room: AgentRoom,
+    member: AgentRoomMember,
+    external: AgentRoomExternalDeliveryContext
+  ): ChannelExecutionContext => {
+    const memberConnections = db.listAgentRoomChannelConnectionsForMember(room.id, member.key)
+      .filter(connection => connection.status === 'active')
+    const sourceConnection = db.listAgentRoomChannelConnections(room.id).find(connection =>
+      connection.status === 'active' &&
+      connection.channelKey === external.channelKey &&
+      connection.channelType === external.channelType &&
+      connection.channelId === external.channelId
+    )
+    const connections = sourceConnection == null ||
+        memberConnections.some(connection =>
+          connection.memberKey === sourceConnection.memberKey &&
+          connection.channelLinkName === sourceConnection.channelLinkName
+        )
+      ? memberConnections
+      : [...memberConnections, sourceConnection]
+    const targets = new Map(
+      connections.map(connection => {
+        const target = toChannelDeliveryTarget(connection)
+        return [channelDeliveryTargetKey(target), target] as const
+      })
+    )
+    const defaultConnection = sourceConnection
+    const defaultReplyTarget = defaultConnection == null
+      ? undefined
+      : toChannelDeliveryTarget(defaultConnection)
+    if (defaultReplyTarget != null) {
+      targets.set(channelDeliveryTargetKey(defaultReplyTarget), defaultReplyTarget)
+    }
+    return {
+      ...(external.actor == null ? {} : { actor: external.actor }),
+      availableDeliveryTargets: [...targets.values()],
+      ...(defaultReplyTarget == null ? {} : { defaultReplyTarget }),
+      entity: { id: member.key, label: member.label },
+      room: {
+        id: room.id,
+        memberKey: member.key,
+        ...(room.owner.nodeId != null ? { ownerNodeId: room.owner.nodeId } : {}),
+        title: room.title
+      },
+      source: {
+        channelKey: external.channelKey,
+        ...(defaultConnection?.channelLinkName == null
+          ? {}
+          : { channelLinkName: defaultConnection.channelLinkName }),
+        channelType: external.channelType,
+        conversation: {
+          id: external.channelId,
+          kind: external.sessionType === 'direct' ? 'direct' : 'group',
+          ...(defaultConnection?.label == null ? {} : { label: defaultConnection.label }),
+          ...(external.threadId == null ? {} : { threadId: external.threadId })
+        },
+        message: { id: external.messageId }
+      }
+    }
+  }
+
+  const writeExternalSessionContext = async (
+    sessionId: string,
+    member: AgentRoomMember,
+    executionContext: ChannelExecutionContext,
+    external: AgentRoomExternalDeliveryContext
+  ) => {
+    const childRun = createExternalChildRun(sessionId, member, executionContext, external, 'continue_session')
+    if (childRun == null) throw new Error('Failed to create external Agent Room dispatch audit record.')
+    try {
+      await writeChannelMessageContext(sessionId, {
+        actorAccountId: external.actor?.externalAccountId ?? external.senderId,
+        actorUserId: external.actor?.canonicalUserId,
+        channelId: external.channelId,
+        channelKey: external.channelKey,
+        channelLinkName: executionContext.source.channelLinkName,
+        channelType: external.channelType,
+        childRunId: childRun.id,
+        entity: executionContext.entity.id,
+        executionContext,
+        messageId: external.messageId,
+        replyReceiveId: external.replyReceiveId,
+        replyReceiveIdType: external.replyReceiveIdType,
+        senderId: external.senderId,
+        sessionType: external.sessionType,
+        threadId: external.threadId,
+        threadKey: `room:${executionContext.room?.id}:${member.key}`
+      })
+    } catch (error) {
+      db.finishChannelChildSessionRun(childRun.id, {
+        error: error instanceof Error ? error.message : String(error),
+        sessionId,
+        status: 'failed'
+      })
+      throw error
+    }
+    return childRun
+  }
+
+  const createExternalChildRun = (
+    sessionId: string,
+    member: AgentRoomMember,
+    executionContext: ChannelExecutionContext,
+    external: AgentRoomExternalDeliveryContext,
+    dispatchMode: 'continue_session' | 'create_session'
+  ) =>
+    db.createChannelChildSessionRun({
+      actorAccountId: external.actor?.externalAccountId ?? external.senderId,
+      actorUserId: external.actor?.canonicalUserId,
+      channelId: external.channelId,
+      channelKey: external.channelKey,
+      channelLinkName: executionContext.source.channelLinkName,
+      channelType: external.channelType,
+      dispatchMode,
+      entity: executionContext.entity.id,
+      messageId: external.messageId,
+      metadata: { executionContext, roomId: executionContext.room?.id },
+      senderId: external.senderId,
+      sessionId,
+      sessionType: external.sessionType,
+      status: 'started',
+      threadKey: `room:${executionContext.room?.id}:${member.key}`,
+      triggerType: 'message'
+    })
 
   const requireRoom = (roomId: string): AgentRoom => {
     const room = db.getAgentRoom(roomId)
@@ -1357,6 +1552,113 @@ export function createAgentRoomService(
       runs[0]
   }
 
+  const startMemberSession = async (
+    room: AgentRoom,
+    member: AgentRoomMember,
+    content: string,
+    options: {
+      external?: AgentRoomExternalDeliveryContext
+      origin?: AgentRoomMessageOrigin
+    } = {}
+  ) => {
+    const create = delivery.createSessionWithInitialMessage
+    if (create == null) return undefined
+    const executionContext = options.external == null
+      ? undefined
+      : buildMemberExecutionContext(room, member, options.external)
+    const detail = db.getAgentRoomDetail(room.id)
+    if (detail == null) return undefined
+    const runtimeRoomContext: RuntimeRoomMessageContext = {
+      detail,
+      ...(options.origin == null ? {} : { origin: options.origin })
+    }
+    const childRun = executionContext == null || options.external == null
+      ? undefined
+      : createExternalChildRun('', member, executionContext, options.external, 'create_session')
+    const channelContext = executionContext == null || options.external == null
+      ? undefined
+      : {
+        actorAccountId: options.external.actor?.externalAccountId ?? options.external.senderId,
+        actorUserId: options.external.actor?.canonicalUserId,
+        channelId: options.external.channelId,
+        channelKey: options.external.channelKey,
+        channelLinkName: executionContext.source.channelLinkName,
+        channelType: options.external.channelType,
+        ...(childRun == null ? {} : { childRunId: childRun.id }),
+        entity: executionContext.entity.id,
+        executionContext,
+        messageId: options.external.messageId,
+        replyReceiveId: options.external.replyReceiveId,
+        replyReceiveIdType: options.external.replyReceiveIdType,
+        senderId: options.external.senderId,
+        sessionType: options.external.sessionType,
+        threadId: options.external.threadId,
+        threadKey: `room:${room.id}:${member.key}`
+      }
+    let startedSessionId: string | undefined
+    let session: Session
+    try {
+      session = await create({
+        beforeStart: async (sessionId) => {
+          startedSessionId = sessionId
+          const now = Date.now()
+          db.saveAgentRoomRun({
+            createdAt: now,
+            key: sessionId,
+            memberKey: member.key,
+            roomId: room.id,
+            sessionId,
+            status: 'running',
+            title: room.title,
+            updatedAt: now
+          })
+          if (executionContext != null && options.external != null) {
+            if (childRun == null) throw new Error('Failed to create external Agent Room dispatch audit record.')
+            if (channelContext != null) await writeChannelMessageContext(sessionId, channelContext)
+            db.markChannelChildSessionRunDispatched(childRun.id, { sessionId })
+            db.markChannelChildSessionRunRunning(childRun.id)
+          }
+        },
+        ...(channelContext == null ? {} : { channelContext }),
+        initialMessage: content,
+        initialRuntimeContent: buildRuntimeRoomMessageContent(content, runtimeRoomContext),
+        ...(room.hostSessionId == null ? {} : { parentSessionId: room.hostSessionId }),
+        promptName: member.key,
+        promptType: 'entity',
+        room: {
+          hostSessionId: room.hostSessionId ?? null,
+          id: room.id,
+          member: {
+            ...(member.avatar == null ? {} : { avatar: member.avatar }),
+            key: member.key,
+            kind: member.kind,
+            label: member.label,
+            ...(member.subtitle == null ? {} : { subtitle: member.subtitle })
+          },
+          title: room.title
+        },
+        ...(channelContext == null
+          ? {}
+          : { systemPrompt: buildChannelRuntimeSystemPrompt(channelContext) }),
+        title: room.title,
+        workspace: {
+          createWorktree: false,
+          ...(room.hostSessionId == null ? {} : { sourceSessionId: room.hostSessionId })
+        }
+      })
+    } catch (error) {
+      if (childRun != null) {
+        db.finishChannelChildSessionRun(childRun.id, {
+          error: error instanceof Error ? error.message : String(error),
+          ...(startedSessionId == null ? {} : { sessionId: startedSessionId }),
+          status: 'failed'
+        })
+      }
+      throw error
+    }
+    return createMessageDelivery(session.id, 'message', { memberKey: member.key, runKey: session.id })
+  }
+
   const deliverUserMessage = async (
     room: AgentRoom,
     content: string,
@@ -1383,6 +1685,9 @@ export function createAgentRoomService(
     }
 
     const targetMember = target?.memberKey == null ? undefined : db.getAgentRoomMember(room.id, target.memberKey)
+    if (targetMember?.kind === 'entity') {
+      return await startMemberSession(room, targetMember, content)
+    }
     if (targetMember?.kind === 'host' && room.hostSessionId != null && room.hostSessionId !== '') {
       return await deliverSessionUserMessage(room.hostSessionId, content, { preferInteractionResponse: true })
         ? createMessageDelivery(room.hostSessionId, 'message', target)
@@ -1462,13 +1767,15 @@ export function createAgentRoomService(
   const getStoredDeliveryState = (message: AgentRoomMessage) => {
     if (!isRecord(message.payload)) return undefined
     const state = (message.payload as Record<string, unknown>).deliveryState
-    return state === 'delivered' || state === 'failed' || state === 'pending' ? state : undefined
+    return state === 'delivered' || state === 'failed' || state === 'observed' || state === 'pending'
+      ? state
+      : undefined
   }
 
   const resolveClaimedUserMessage = (message: AgentRoomMessage): AgentRoomMessage => {
     const state = getStoredDeliveryState(message)
     if (
-      state === 'delivered' ||
+      state === 'delivered' || state === 'observed' ||
       (state == null && isRecord(message.payload) && (message.payload as Record<string, unknown>).delivery != null)
     ) {
       return message
@@ -1547,6 +1854,152 @@ export function createAgentRoomService(
     })
     appendUserMessageFlights.set(flightKey, tracked)
     return tracked
+  }
+
+  const ingestExternalMessage = async (
+    roomId: string,
+    content: string,
+    origin: AgentRoomMessageOrigin,
+    external: AgentRoomExternalDeliveryContext,
+    memberKeys: string[]
+  ) => {
+    const room = requireRoom(roomId)
+    const idempotencyKey = `channel:${external.channelType}:${external.channelId}:${external.messageId}`
+    const processingMemberKeys = [...new Set(memberKeys)]
+    const requestedTargets = processingMemberKeys.length === 0
+      ? []
+      : room.leaderEntity == null
+      ? processingMemberKeys
+      : [room.leaderEntity]
+    const existing = db.getAgentRoomMessageByIdempotencyKey(roomId, idempotencyKey)
+    const existingPayload: Record<string, unknown> = existing?.payload != null && isRecord(existing.payload)
+      ? existing.payload as Record<string, unknown>
+      : {}
+    const previousDeliveries = Array.isArray(existingPayload.deliveries)
+      ? existingPayload.deliveries.filter(isRecord) as unknown as AgentRoomUserMessageDelivery[]
+      : []
+    const previousDeliveryErrors = Array.isArray(existingPayload.deliveryErrors)
+      ? existingPayload.deliveryErrors.filter((item): item is { error: string; memberKey: string } => (
+        isRecord(item) && typeof item.error === 'string' && typeof item.memberKey === 'string'
+      ))
+      : []
+    const attemptedMemberKeys = new Set(
+      Array.isArray(existingPayload.attemptedMemberKeys)
+        ? existingPayload.attemptedMemberKeys.filter((item): item is string => typeof item === 'string')
+        : [
+          ...previousDeliveries.flatMap(delivery => delivery.target?.memberKey ?? []),
+          ...previousDeliveryErrors.map(item => item.memberKey)
+        ]
+    )
+    const targets = requestedTargets.filter(memberKey => !attemptedMemberKeys.has(memberKey))
+    if (existing != null && targets.length === 0) {
+      return requestedTargets.length === 0 ? existing : resolveClaimedUserMessage(existing)
+    }
+    for (const memberKey of targets) attemptedMemberKeys.add(memberKey)
+    const now = Date.now()
+    const claim = existing == null
+      ? db.claimAgentRoomMessage({
+        content,
+        createdAt: now,
+        idempotencyKey,
+        origin,
+        payload: {
+          attemptedMemberKeys: [...attemptedMemberKeys],
+          deliveries: [],
+          deliveryState: 'pending'
+        },
+        role: 'user',
+        roomId
+      })
+      : { inserted: true, message: existing }
+    if (!claim.inserted) return resolveClaimedUserMessage(claim.message)
+    if (existing != null) {
+      db.updateAgentRoomMessagePayload(existing.id, {
+        ...existingPayload,
+        attemptedMemberKeys: [...attemptedMemberKeys],
+        deliveryState: 'pending'
+      })
+    }
+
+    const deliveries: AgentRoomUserMessageDelivery[] = [...previousDeliveries]
+    const deliveryErrors: Array<{ error: string; memberKey: string }> = [...previousDeliveryErrors]
+    for (const memberKey of targets) {
+      let childRunId: string | undefined
+      let childRunSessionId: string | undefined
+      try {
+        const member = db.getAgentRoomMember(roomId, memberKey) ??
+          db.listAgentRoomMembers(roomId).find(candidate =>
+            candidate.key === `entity:${memberKey}` || `entity:${candidate.key}` === memberKey
+          )
+        if (member == null || member.kind !== 'entity') {
+          deliveryErrors.push({ error: 'Agent Room member is unavailable.', memberKey })
+          continue
+        }
+        const run = resolveTargetRun(roomId, { memberKey: member.key })
+        if (run == null) {
+          const created = await startMemberSession(room, member, content, { external, origin })
+          if (created == null) {
+            deliveryErrors.push({ error: 'Agent Room member session could not be created.', memberKey })
+          } else {
+            deliveries.push(created)
+          }
+          continue
+        }
+        const executionContext = buildMemberExecutionContext(room, member, external)
+        const childRun = await writeExternalSessionContext(run.sessionId, member, executionContext, external)
+        childRunId = childRun.id
+        childRunSessionId = run.sessionId
+        const detail = db.getAgentRoomDetail(room.id)
+        const delivered = await deliverSessionUserMessage(run.sessionId, content, {
+          runtimeRoomContext: detail == null ? undefined : { currentRun: run, detail, origin }
+        })
+        if (delivered) {
+          db.markChannelChildSessionRunDispatched(childRun.id, { sessionId: run.sessionId })
+          db.markChannelChildSessionRunRunning(childRun.id)
+          deliveries.push(createMessageDelivery(run.sessionId, 'message', {
+            memberKey: member.key,
+            runKey: run.key
+          }))
+        } else {
+          deliveryErrors.push({ error: 'Agent Room member session is unavailable.', memberKey })
+          db.finishChannelChildSessionRun(childRun.id, {
+            error: 'Agent Room member session is unavailable.',
+            sessionId: run.sessionId,
+            status: 'failed'
+          })
+        }
+      } catch (error) {
+        if (childRunId != null) {
+          db.finishChannelChildSessionRun(childRunId, {
+            error: error instanceof Error ? error.message : String(error),
+            ...(childRunSessionId == null ? {} : { sessionId: childRunSessionId }),
+            status: 'failed'
+          })
+        }
+        deliveryErrors.push({
+          error: error instanceof Error ? error.message : String(error),
+          memberKey
+        })
+      }
+    }
+    const message = db.updateAgentRoomMessagePayload(claim.message.id, {
+      attemptedMemberKeys: [...attemptedMemberKeys],
+      deliveries,
+      ...(deliveryErrors.length === 0 ? {} : { deliveryErrors }),
+      deliveryState: attemptedMemberKeys.size === 0
+        ? 'observed'
+        : deliveryErrors.length === 0
+        ? 'delivered'
+        : 'failed',
+      reactions: deliveries.map(item => ({
+        createdAt: item.receivedAt,
+        kind: 'working' as const,
+        ...(item.target == null ? {} : { target: item.target })
+      }))
+    })
+    if (message == null) throw new Error(`Agent room message disappeared during external delivery: ${claim.message.id}`)
+    updateRoomSummary(roomId, content, now)
+    return message
   }
 
   const applyEvent = (
@@ -1655,6 +2108,7 @@ export function createAgentRoomService(
     getRoomForHostSession: db.getAgentRoomByHostSessionId.bind(db),
     getDetail,
     getOwnerSnapshot: owner.getSnapshot,
+    ingestExternalMessage,
     listRoomSummaries,
     listRooms,
     respondInteraction,

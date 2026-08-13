@@ -64,7 +64,7 @@ describe('agent Room Relay owner facade', () => {
       role: 'agent',
       roomId: 'room-1'
     })
-    state.db.saveAgentRoomChannelLink({
+    state.db.saveAgentRoomChannelConnection({
       channelId: 'raw-provider-channel',
       channelKey: 'raw-provider-key',
       channelLinkName: 'room-link',
@@ -72,9 +72,13 @@ describe('agent Room Relay owner facade', () => {
       conversationKind: 'group',
       entity: 'product',
       label: 'Product group',
+      memberKey: 'product',
+      muted: false,
       receiveId: 'raw-provider-receive-id',
       receiveIdType: 'chat_id',
       roomId: 'room-1',
+      requireMention: false,
+      status: 'active',
       threadId: 'raw-provider-thread'
     })
     state.db.createAgentRoomShare({

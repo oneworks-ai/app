@@ -64,7 +64,7 @@ export const resolveInboundForCommand = (
       channelType: trimNonEmpty(context.channelType) ?? state.type,
       channelId,
       messageId: trimNonEmpty(context.messageId) ?? `channel-command-${Date.now()}`,
-      raw: { source: 'channel_command_tool' },
+      raw: { entity: trimNonEmpty(context.entity), source: 'channel_command_tool' },
       ...(senderId == null ? {} : { senderId }),
       sessionType,
       ...(trimNonEmpty(context.threadId) == null ? {} : { threadId: trimNonEmpty(context.threadId) }),
@@ -91,5 +91,12 @@ export const resolveChannelLinkForCommand = (
     sessionType: inbound.sessionType,
     threadId: inbound.threadId
   })
-  return match == null || match.duplicates.length > 0 ? undefined : match.link
+  if (match == null) return undefined
+  const requestedEntity = inbound.raw != null && typeof inbound.raw === 'object'
+    ? trimNonEmpty((inbound.raw as Record<string, unknown>).entity)
+    : undefined
+  const candidates = [match.link, ...match.duplicates]
+  return requestedEntity == null
+    ? match.link
+    : candidates.find(link => link.entity === requestedEntity)
 }

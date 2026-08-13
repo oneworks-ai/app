@@ -17,7 +17,7 @@ import type {
   UpdateAgentRoomMetadataRequest
 } from '@oneworks/core'
 
-import { resolveAgentRoomChannelLink } from '#~/services/agent-room/channel-link.js'
+import { resolveAgentRoomChannelConnection } from '#~/services/agent-room/channel-link.js'
 import { createAgentRoomService } from '#~/services/agent-room/index.js'
 import { publishClientEvent } from '#~/services/client-events.js'
 import { badRequest, conflict, methodNotAllowed, notFound } from '#~/utils/http.js'
@@ -199,13 +199,49 @@ const normalizeCommand = (value: unknown): PublicAgentRoomCommand | undefined =>
   if (value.type === 'apply_event' && isRoomEvent(value.event)) {
     return { idempotencyKey, type: value.type, event: value.event }
   }
-  if (value.type === 'attach_channel' && isRecord(value.link)) {
-    if (!isNonEmptyString(value.link.channelLinkName)) return undefined
+  if (value.type === 'attach_member_channel' && isRecord(value.connection)) {
+    if (
+      !isNonEmptyString(value.connection.channelLinkName) ||
+      !isNonEmptyString(value.connection.memberKey) ||
+      (value.connection.muted != null && typeof value.connection.muted !== 'boolean') ||
+      (value.connection.requireMention != null && typeof value.connection.requireMention !== 'boolean')
+    ) return undefined
     return {
       idempotencyKey,
       type: value.type,
-      link: {
-        channelLinkName: value.link.channelLinkName.trim()
+      connection: {
+        channelLinkName: value.connection.channelLinkName.trim(),
+        memberKey: value.connection.memberKey.trim(),
+        ...(asString(value.connection.commandPrefix) != null
+          ? { commandPrefix: asString(value.connection.commandPrefix) }
+          : {}),
+        ...(typeof value.connection.muted === 'boolean' ? { muted: value.connection.muted } : {}),
+        ...(typeof value.connection.requireMention === 'boolean'
+          ? { requireMention: value.connection.requireMention }
+          : {})
+      }
+    }
+  }
+  if (value.type === 'update_member_channel' && isRecord(value.connection)) {
+    if (!isNonEmptyString(value.connection.channelLinkName) || !isNonEmptyString(value.connection.memberKey)) {
+      return undefined
+    }
+    const status = value.connection.status
+    if (status != null && status !== 'active' && status !== 'removed' && status !== 'unavailable') return undefined
+    return {
+      idempotencyKey,
+      type: value.type,
+      connection: {
+        channelLinkName: value.connection.channelLinkName.trim(),
+        memberKey: value.connection.memberKey.trim(),
+        ...(hasOwn(value.connection, 'commandPrefix')
+          ? { commandPrefix: value.connection.commandPrefix == null ? null : asString(value.connection.commandPrefix) }
+          : {}),
+        ...(typeof value.connection.muted === 'boolean' ? { muted: value.connection.muted } : {}),
+        ...(typeof value.connection.requireMention === 'boolean'
+          ? { requireMention: value.connection.requireMention }
+          : {}),
+        ...(status != null ? { status } : {})
       }
     }
   }
@@ -265,7 +301,9 @@ const publishAgentRoomUpdated = (roomId: string, room?: AgentRoom) => {
 
 export function agentRoomsRouter(): Router {
   const router = new Router()
-  const service = createAgentRoomService(undefined, undefined, { resolveChannelLink: resolveAgentRoomChannelLink })
+  const service = createAgentRoomService(undefined, undefined, {
+    resolveChannelConnection: resolveAgentRoomChannelConnection
+  })
 
   router.get(['/', ''], (ctx) => {
     ctx.body = { rooms: service.listRooms() }

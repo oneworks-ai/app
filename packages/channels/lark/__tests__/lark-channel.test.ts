@@ -635,9 +635,11 @@ describe('larkChannelDefinition.connect', () => {
     }
 
     const handler = vi.fn()
+    const availability = vi.fn()
     const connection = await createChannelConnection(config)
     await connection.startReceiving?.({
       handlers: {
+        availability,
         message: handler
       }
     })
@@ -671,8 +673,19 @@ describe('larkChannelDefinition.connect', () => {
       channelId: 'oc_xxx',
       senderId: 'ou_xxx',
       messageId: 'om_xxx',
-      text: '[ou_xxx]:\nping'
+      displayText: 'ping',
+      text: 'ping'
     }))
+    await dispatcher?.handlers['im.chat.member.bot.deleted_v1']?.({
+      app_id: 'app_id',
+      chat_id: 'oc_xxx'
+    })
+    expect(availability).toHaveBeenCalledWith({
+      channelId: 'oc_xxx',
+      channelType: 'lark',
+      reason: 'The Lark bot was removed from the group.',
+      status: 'unavailable'
+    })
   })
 
   it('formats mentions and identifies whether they target the current bot', async () => {
@@ -750,8 +763,9 @@ describe('larkChannelDefinition.connect', () => {
     expect(wsStart).toHaveBeenCalled()
     expect(handler).toHaveBeenCalledWith(expect.objectContaining({
       mentionedBot: true,
+      displayText: '@二介 /reset @奉自利 hi https://example.com/wiki/abc',
       text:
-        '[ou_sender]:\n<at type="lark" user_id="ou_1">二介</at> /reset <at type="lark" user_id="ou_2">奉自利</at> hi https://example.com/wiki/abc'
+        '<at type="lark" user_id="ou_1">二介</at> /reset <at type="lark" user_id="ou_2">奉自利</at> hi https://example.com/wiki/abc'
     }))
 
     handler.mockClear()
@@ -968,7 +982,8 @@ describe('larkChannelDefinition.connect', () => {
       path: { image_key: imageKey }
     }, {})
     expect(handler).toHaveBeenCalledWith(expect.objectContaining({
-      text: `[ou_sender]:\n<at type="lark" user_id="ou_1">二介</at> 你好\n<img image_key="${imageKey}" />`,
+      displayText: `@二介 你好\n<img image_key="${imageKey}" />`,
+      text: `<at type="lark" user_id="ou_1">二介</at> 你好\n<img image_key="${imageKey}" />`,
       raw: expect.objectContaining({
         contentItems: expect.any(Array),
         images: expect.any(Array)

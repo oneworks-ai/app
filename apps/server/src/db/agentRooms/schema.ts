@@ -106,6 +106,33 @@ export const agentRoomsSchemaModule: SchemaModule = {
         FOREIGN KEY(roomId) REFERENCES agent_rooms(id) ON DELETE CASCADE
       );
 
+      CREATE TABLE IF NOT EXISTS agent_room_member_channels (
+        roomId TEXT NOT NULL,
+        memberKey TEXT NOT NULL,
+        channelLinkName TEXT NOT NULL,
+        channelType TEXT NOT NULL,
+        channelKey TEXT NOT NULL,
+        channelId TEXT NOT NULL,
+        accountLabel TEXT,
+        conversationKind TEXT NOT NULL,
+        entity TEXT NOT NULL,
+        label TEXT NOT NULL,
+        receiveId TEXT NOT NULL,
+        receiveIdType TEXT NOT NULL,
+        threadId TEXT,
+        status TEXT NOT NULL DEFAULT 'active',
+        muted INTEGER NOT NULL DEFAULT 0,
+        requireMention INTEGER NOT NULL DEFAULT 0,
+        commandPrefix TEXT,
+        lastSeenAt INTEGER,
+        lastError TEXT,
+        createdAt INTEGER NOT NULL,
+        updatedAt INTEGER NOT NULL,
+        PRIMARY KEY (roomId, memberKey, channelLinkName),
+        FOREIGN KEY(roomId) REFERENCES agent_rooms(id) ON DELETE CASCADE,
+        FOREIGN KEY(roomId, memberKey) REFERENCES agent_room_members(roomId, memberKey) ON DELETE CASCADE
+      );
+
       CREATE TABLE IF NOT EXISTS agent_room_shares (
         id TEXT PRIMARY KEY,
         roomId TEXT NOT NULL,
@@ -143,8 +170,10 @@ export const agentRoomsSchemaModule: SchemaModule = {
       CREATE INDEX IF NOT EXISTS idx_agent_room_messages_roomId ON agent_room_messages(roomId, createdAt);
       CREATE INDEX IF NOT EXISTS idx_agent_room_messages_runKey ON agent_room_messages(roomId, runKey);
       CREATE INDEX IF NOT EXISTS idx_agent_room_deliveries_message ON agent_room_message_deliveries(roomMessageId);
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_room_channel_links_lookup
-        ON agent_room_channel_links(channelType, channelKey, channelId);
+      CREATE INDEX IF NOT EXISTS idx_agent_room_member_channels_room
+        ON agent_room_member_channels(roomId, memberKey);
+      CREATE INDEX IF NOT EXISTS idx_agent_room_member_channels_lookup
+        ON agent_room_member_channels(channelType, channelId);
       CREATE INDEX IF NOT EXISTS idx_agent_room_shares_room ON agent_room_shares(roomId, status);
       CREATE INDEX IF NOT EXISTS idx_agent_room_runs_sessionId ON agent_room_runs(sessionId);
       CREATE INDEX IF NOT EXISTS idx_agent_room_runs_memberKey ON agent_room_runs(roomId, memberKey);
@@ -182,16 +211,44 @@ export const agentRoomsSchemaModule: SchemaModule = {
 
     if (getColumns('agent_room_channel_links').length > 0) {
       ensureColumn('agent_room_channel_links', 'accountLabel', 'TEXT')
+      ensureColumn('agent_room_channel_links', 'channelType', 'TEXT NOT NULL DEFAULT ""')
+      ensureColumn('agent_room_channel_links', 'channelKey', 'TEXT NOT NULL DEFAULT ""')
+      ensureColumn('agent_room_channel_links', 'channelId', 'TEXT NOT NULL DEFAULT ""')
       ensureColumn('agent_room_channel_links', 'conversationKind', 'TEXT NOT NULL DEFAULT "unknown"')
+      ensureColumn('agent_room_channel_links', 'entity', 'TEXT NOT NULL DEFAULT ""')
+      ensureColumn('agent_room_channel_links', 'label', 'TEXT NOT NULL DEFAULT ""')
       ensureColumn('agent_room_channel_links', 'receiveId', 'TEXT NOT NULL DEFAULT ""')
       ensureColumn('agent_room_channel_links', 'receiveIdType', 'TEXT NOT NULL DEFAULT ""')
       ensureColumn('agent_room_channel_links', 'threadId', 'TEXT')
+      ensureColumn('agent_room_channel_links', 'createdAt', 'INTEGER NOT NULL DEFAULT 0')
     }
 
     exec(`
       DROP INDEX IF EXISTS idx_agent_room_channel_links_lookup;
-      CREATE UNIQUE INDEX idx_agent_room_channel_links_lookup
-        ON agent_room_channel_links(channelType, channelKey, channelId);
+      INSERT OR IGNORE INTO agent_room_members (
+        roomId, memberKey, kind, label, status,
+        activeRunCount, pendingCount, createdAt, updatedAt
+      )
+      SELECT
+        legacy.roomId, legacy.entity, 'entity',
+        CASE WHEN legacy.entity = '' THEN legacy.label ELSE legacy.entity END,
+        'idle', 0, 0, legacy.createdAt, legacy.createdAt
+      FROM agent_room_channel_links legacy
+      WHERE legacy.entity <> '';
+      INSERT OR IGNORE INTO agent_room_member_channels (
+        roomId, memberKey, channelLinkName, channelType, channelKey, channelId,
+        accountLabel, conversationKind, entity, label, receiveId, receiveIdType,
+        threadId, status, muted, requireMention, createdAt, updatedAt
+      )
+      SELECT
+        legacy.roomId,
+        legacy.entity,
+        legacy.channelLinkName, legacy.channelType, legacy.channelKey, legacy.channelId,
+        legacy.accountLabel, legacy.conversationKind, legacy.entity, legacy.label,
+        legacy.receiveId, legacy.receiveIdType, legacy.threadId,
+        'active', 0, 0, legacy.createdAt, legacy.createdAt
+      FROM agent_room_channel_links legacy
+      WHERE legacy.entity <> '';
       CREATE INDEX IF NOT EXISTS idx_agent_room_messages_sequence ON agent_room_messages(roomId, sequence);
       CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_room_messages_idempotency
         ON agent_room_messages(roomId, idempotencyKey) WHERE idempotencyKey IS NOT NULL;

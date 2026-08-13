@@ -12,6 +12,7 @@ import type {
   OneWorksChannelSimulationResult,
   OneWorksChannelSimulationTarget,
   OneWorksChannelTrace,
+  OneWorksRoomChannelConnectionPatchInput,
   OneWorksRoomCreateInput,
   OneWorksRoomEntity,
   OneWorksRoomPatchInput,
@@ -25,6 +26,7 @@ import {
   oneworksChannelScenarioInputSchema,
   oneworksChannelScenarioPatchSchema,
   oneworksChannelSimulationInputSchema,
+  oneworksRoomChannelConnectionPatchInputSchema,
   oneworksRoomCreateInputSchema,
   oneworksRoomPatchInputSchema,
   oneworksRoomShareInputSchema
@@ -35,6 +37,7 @@ import type { ChannelRuntimeState } from '#~/channels/types.js'
 import { handleChannelWebhook } from '#~/channels/webhook.js'
 import { getDb } from '#~/db/index.js'
 import type { ChannelScenarioRow } from '#~/db/index.js'
+import { resolveAgentRoomChannelConnection } from '#~/services/agent-room/channel-link.js'
 import { createAgentRoomService } from '#~/services/agent-room/index.js'
 import { createAgentRoomOwner } from '#~/services/agent-room/owner.js'
 import { listActiveAgentRoomRelayOwners, listSharedAgentRoomDirectory } from '#~/services/agent-room/relay.js'
@@ -160,7 +163,7 @@ const resolveScenario = (scenarioRef: string) =>
 const listProductRooms = (): OneWorksRoomSummary[] =>
   getDb().listAgentRooms('all').map(room => {
     const detail = getDb().getAgentRoomDetail(room.id)
-    const links = detail?.channelLinks ?? []
+    const links = detail?.channelConnections ?? []
     const platforms = new Map<string, { accountKeys: Set<string>; labels: Set<string> }>()
     for (const link of links) {
       const platform = platforms.get(link.channelType) ?? { accountKeys: new Set(), labels: new Set() }
@@ -177,15 +180,27 @@ const listProductRooms = (): OneWorksRoomSummary[] =>
       activeShareCount: (detail?.shares ?? []).filter(share => share.status === 'active').length,
       archived: room.archivedAt != null,
       ...(room.avatar == null ? {} : { avatar: room.avatar }),
-      channelLinkCount: links.length,
+      channelConnectionCount: links.length,
       ...(room.description == null ? {} : { description: room.description }),
       favorited: room.favoritedAt != null,
       ...(room.lastMessage == null ? {} : { lastMessage: room.lastMessage }),
       memberCount: detail?.members.length ?? 0,
       members: (detail?.members ?? []).map(member => ({
         ...(member.avatar == null ? {} : { avatar: member.avatar }),
+        channelConnections: links.filter(link => link.memberKey === member.key).map(link => ({
+          ...(link.accountLabel == null ? {} : { accountLabel: link.accountLabel }),
+          channelLinkName: link.channelLinkName,
+          channelType: link.channelType,
+          ...(link.commandPrefix == null ? {} : { commandPrefix: link.commandPrefix }),
+          conversationLabel: link.label,
+          ...(link.lastError == null ? {} : { lastError: link.lastError }),
+          muted: link.muted,
+          requireMention: link.requireMention,
+          status: link.status
+        })),
         ...(member.subtitle == null ? {} : { description: member.subtitle }),
         entityId: member.key,
+        isLeader: room.leaderEntity === member.key || `entity:${room.leaderEntity}` === member.key,
         name: member.label
       })),
       messageCount: detail?.messages.length ?? 0,
@@ -375,7 +390,13 @@ export const createOneWorksChannelFacade = () => ({
     const leader = selected[0]!
     const title = parsed.title ?? deriveRoomTitle(parsed.message)
     const roomId = `room_${randomUUID()}`
-    const service = createAgentRoomService()
+    const service = createAgentRoomService(undefined, undefined, {
+      resolveChannelConnection: resolveAgentRoomChannelConnection
+    })
+    const selectedEntityIds = new Set(selected.map(entity => entity.entityId))
+    const memberChannelLinks = getChannelStates().flatMap(state =>
+      (state.channelLinks ?? []).filter(link => selectedEntityIds.has(link.entity) && link.address != null)
+    )
     let roomCreated = false
     try {
       const session = await createSessionWithInitialMessage({
@@ -398,6 +419,21 @@ export const createOneWorksChannelFacade = () => ({
                 label: entity.name,
                 subtitle: entity.description
               }
+            })
+          }
+          for (const link of memberChannelLinks) {
+            await service.executeCommand(roomId, {
+              connection: {
+                channelLinkName: link.name,
+                ...(link.ingress.room?.commandPrefix == null
+                  ? {}
+                  : { commandPrefix: link.ingress.room.commandPrefix }),
+                memberKey: link.entity,
+                muted: link.ingress.room?.muted ?? false,
+                requireMention: link.ingress.room?.requireMention ?? false
+              },
+              idempotencyKey: `oneworks-room-connection:${roomId}:${link.name}`,
+              type: 'attach_member_channel'
             })
           }
           await service.executeCommand(roomId, {
@@ -468,6 +504,25 @@ export const createOneWorksChannelFacade = () => ({
     const patch: OneWorksRoomPatchInput = oneworksRoomPatchInputSchema.parse(input)
     const room = createAgentRoomService().updateRoomMetadata(roomId, patch)
     publishRoomUpdated(room.id, room.hostSessionId)
+    return listProductRooms().find(candidate => candidate.roomId === roomId)!
+  },
+  updateRoomChannelConnection: async (
+    principal: PluginRequestPrincipal,
+    roomId: string,
+    memberKey: string,
+    channelLinkName: string,
+    input: unknown
+  ): Promise<OneWorksRoomSummary> => {
+    requireProductAccess(principal)
+    const patch: OneWorksRoomChannelConnectionPatchInput = oneworksRoomChannelConnectionPatchInputSchema.parse(input)
+    await createAgentRoomService(undefined, undefined, {
+      resolveChannelConnection: resolveAgentRoomChannelConnection
+    }).executeCommand(roomId, {
+      connection: { channelLinkName, memberKey, ...patch },
+      idempotencyKey: `oneworks-room-connection:${randomUUID()}`,
+      type: 'update_member_channel'
+    })
+    publishRoomUpdated(roomId)
     return listProductRooms().find(candidate => candidate.roomId === roomId)!
   },
   deleteRoom: async (principal: PluginRequestPrincipal, roomId: string): Promise<boolean> => {

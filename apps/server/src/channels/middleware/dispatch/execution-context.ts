@@ -1,5 +1,5 @@
 import type {
-  AgentRoomChannelLink,
+  AgentRoomChannelConnection,
   AgentRoomMessageOrigin,
   ChannelConversationKind,
   ChannelDeliveryTarget,
@@ -24,7 +24,7 @@ const toConversationKind = (sessionType: string, threadId?: string): ChannelConv
   return sessionType === 'room' ? 'room' : 'unknown'
 }
 
-const toRoomDeliveryTarget = (link: AgentRoomChannelLink): ChannelDeliveryTarget => ({
+const toRoomDeliveryTarget = (link: AgentRoomChannelConnection): ChannelDeliveryTarget => ({
   ...(link.accountLabel != null ? { accountLabel: link.accountLabel } : {}),
   channelId: link.channelId,
   channelKey: link.channelKey,
@@ -51,12 +51,15 @@ export const buildChannelExecutionContext = (
 ): ChannelExecutionContext => {
   const { inbound } = ctx
   const db = getDb()
-  const roomLink = db.findAgentRoomChannelLink({
+  const roomConnections = db.findAgentRoomChannelConnections({
     channelId: inbound.channelId,
-    channelKey: ctx.channelKey,
     channelType: inbound.channelType
   })
-  const room = roomLink == null ? undefined : db.getAgentRoom(roomLink.roomId)
+  const roomConnection = roomConnections.find(connection =>
+    connection.channelKey === ctx.channelKey &&
+    (ctx.channelLink?.entity == null || connection.entity === ctx.channelLink.entity)
+  ) ?? roomConnections[0]
+  const room = roomConnection == null ? undefined : db.getAgentRoom(roomConnection.roomId)
   const conversationKind = toConversationKind(inbound.sessionType, inbound.threadId)
   const defaultReplyTarget = inbound.replyTo == null
     ? undefined
@@ -67,16 +70,16 @@ export const buildChannelExecutionContext = (
       ...(ctx.channelLink?.name != null ? { channelLinkName: ctx.channelLink.name } : {}),
       channelType: inbound.channelType,
       conversationKind,
-      label: roomLink?.label ?? ctx.channelLink?.name ?? ctx.config?.title ?? inbound.channelId,
+      label: roomConnection?.label ?? ctx.channelLink?.name ?? ctx.config?.title ?? inbound.channelId,
       receiveId: inbound.replyTo.receiveId,
       receiveIdType: inbound.replyTo.receiveIdType,
       ...(inbound.threadId != null ? { threadId: inbound.threadId } : {})
     } satisfies ChannelDeliveryTarget
-  const entity = ctx.channelLink?.entity ?? roomLink?.entity ?? ctx.channelKey
+  const entity = ctx.channelLink?.entity ?? roomConnection?.entity ?? ctx.channelKey
   const roomTargets = room == null
     ? []
-    : db.listAgentRoomChannelLinks(room.id)
-      .filter(link => link.entity === entity)
+    : db.listAgentRoomChannelConnections(room.id)
+      .filter(link => link.entity === entity && link.status === 'active')
       .map(toRoomDeliveryTarget)
   const targets = new Map(roomTargets.map(target => [deliveryTargetKey(target), target]))
   if (defaultReplyTarget != null) targets.set(deliveryTargetKey(defaultReplyTarget), defaultReplyTarget)
@@ -95,6 +98,7 @@ export const buildChannelExecutionContext = (
       : {
         room: {
           id: room.id,
+          ...(roomConnection?.memberKey != null ? { memberKey: roomConnection.memberKey } : {}),
           ...(room.owner.nodeId != null ? { ownerNodeId: room.owner.nodeId } : {}),
           title: room.title
         }
@@ -107,7 +111,7 @@ export const buildChannelExecutionContext = (
       conversation: {
         id: inbound.channelId,
         kind: conversationKind,
-        ...(roomLink?.label != null ? { label: roomLink.label } : {}),
+        ...(roomConnection?.label != null ? { label: roomConnection.label } : {}),
         ...(inbound.threadId != null ? { threadId: inbound.threadId } : {})
       },
       message: {
@@ -139,7 +143,7 @@ export const projectInboundMessageToRoom = async (
     ...(source.conversation.threadId != null ? { threadId: source.conversation.threadId } : {})
   }
   return await createAgentRoomOwner({ db: getDb() }).execute(executionContext.room.id, {
-    idempotencyKey: `channel:${source.channelType}:${source.channelKey}:${ctx.inbound.messageId}`,
+    idempotencyKey: `channel:${source.channelType}:${ctx.inbound.channelId}:${ctx.inbound.messageId}`,
     type: 'ingest_channel_message',
     message: {
       content,

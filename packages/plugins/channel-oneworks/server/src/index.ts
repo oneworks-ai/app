@@ -63,6 +63,13 @@ export function activatePlugin(ctx: {
     runScenario: (principal: PluginRequestPrincipal, scenarioRef: string) => Promise<unknown>
     revokeRoomShare: (principal: PluginRequestPrincipal, roomId: string, shareRef: string) => Promise<boolean>
     updateRoom: (principal: PluginRequestPrincipal, roomId: string, input: unknown) => Promise<unknown>
+    updateRoomChannelConnection: (
+      principal: PluginRequestPrincipal,
+      roomId: string,
+      memberKey: string,
+      channelLinkName: string,
+      input: unknown
+    ) => Promise<unknown>
     updateScenario: (principal: PluginRequestPrincipal, scenarioRef: string, input: unknown) => Promise<unknown>
   }
   logger: { info: (...args: unknown[]) => void }
@@ -113,6 +120,24 @@ export function activatePlugin(ctx: {
           const removed = await product.deleteRoom(request.principal, roomId)
           return removed ? json({ deleted: true }) : json({ error: 'Room not found.' }, 404)
         }
+      }
+      if (
+        request.method === 'PATCH' &&
+        parts[0] === 'rooms' &&
+        parts[2] === 'connections' &&
+        parts[3] != null &&
+        parts[4] != null &&
+        parts.length === 5
+      ) {
+        return json(
+          await product.updateRoomChannelConnection(
+            request.principal,
+            decodeURIComponent(parts[1] ?? ''),
+            decodeURIComponent(parts[3]),
+            decodeURIComponent(parts[4]),
+            body
+          )
+        )
       }
       if (request.method === 'GET' && parts[0] === 'rooms') return json(await product.listRooms(request.principal))
       if (request.method === 'GET' && parts[0] === 'share-owners') {

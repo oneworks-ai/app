@@ -52,11 +52,11 @@ describe('oneWorks Channel service', () => {
   it('lists Agent Rooms separately from provider-specific simulation targets', async () => {
     getDb.mockReturnValue({
       getAgentRoomDetail: vi.fn(() => ({
-        channelLinks: [
-          { accountLabel: 'Product bot', channelKey: 'lark-main', channelType: 'lark' },
-          { accountLabel: 'Service bot', channelKey: 'wechat-main', channelType: 'wechat' }
+        channelConnections: [
+          { accountLabel: 'Product bot', channelKey: 'lark-main', channelType: 'lark', memberKey: 'entity:product' },
+          { accountLabel: 'Service bot', channelKey: 'wechat-main', channelType: 'wechat', memberKey: 'entity:product' }
         ],
-        members: [{ key: 'entity:product' }],
+        members: [{ key: 'entity:product', label: 'Product' }],
         messages: [{ id: 'room-message' }],
         shares: [{ id: 'share', status: 'active' }]
       })),
@@ -106,7 +106,7 @@ describe('oneWorks Channel service', () => {
     expect(rooms).toEqual([
       expect.objectContaining({
         activeShareCount: 1,
-        channelLinkCount: 2,
+        channelConnectionCount: 2,
         memberCount: 1,
         messageCount: 1,
         roomId: 'product-room',

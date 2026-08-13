@@ -39,7 +39,7 @@ interface CreateSessionWorkspaceOptions {
 interface CreateSessionRoomOptions {
   id: string
   title?: string
-  hostSessionId?: string
+  hostSessionId?: string | null
   member: {
     avatar?: string
     key: string
@@ -244,7 +244,7 @@ export async function createSessionWithInitialMessage(options: {
           ...(room == null
             ? {}
             : {
-              hostSessionId: room.hostSessionId ?? session.id,
+              ...(room.hostSessionId === null ? {} : { hostSessionId: room.hostSessionId ?? session.id }),
               ...(room.member.avatar == null ? {} : { memberAvatar: room.member.avatar }),
               memberKey: room.member.key,
               memberKind: room.member.kind ?? 'entity',

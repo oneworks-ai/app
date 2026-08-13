@@ -929,16 +929,20 @@ export class SqliteDb {
     return this.agentRooms.saveDelivery(delivery)
   }
 
-  saveAgentRoomChannelLink(link: Parameters<typeof this.agentRooms.saveChannelLink>[0]) {
-    return this.agentRooms.saveChannelLink(link)
+  saveAgentRoomChannelConnection(link: Parameters<typeof this.agentRooms.saveChannelConnection>[0]) {
+    return this.agentRooms.saveChannelConnection(link)
   }
 
-  findAgentRoomChannelLink(input: Parameters<typeof this.agentRooms.findRoomChannelLink>[0]) {
-    return this.agentRooms.findRoomChannelLink(input)
+  findAgentRoomChannelConnections(input: Parameters<typeof this.agentRooms.findRoomChannelConnections>[0]) {
+    return this.agentRooms.findRoomChannelConnections(input)
   }
 
-  listAgentRoomChannelLinks(roomId: string) {
-    return this.agentRooms.listChannelLinks(roomId)
+  listAgentRoomChannelConnections(roomId: string) {
+    return this.agentRooms.listChannelConnections(roomId)
+  }
+
+  listAgentRoomChannelConnectionsForMember(roomId: string, memberKey: string) {
+    return this.agentRooms.listChannelConnectionsForMember(roomId, memberKey)
   }
 
   createAgentRoomShare(input: Parameters<typeof this.agentRooms.createShare>[0]) {

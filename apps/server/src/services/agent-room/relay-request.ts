@@ -54,7 +54,7 @@ const sanitizeRun = (roomId: string, run: AgentRoomRun) => ({
 })
 
 export const sanitizeDetail = (detail: AgentRoomDetail) => ({
-  channelLinks: detail.channelLinks.map(link => ({
+  channelLinks: detail.channelConnections.map(link => ({
     accountLabel: link.accountLabel,
     channelRef: opaqueRef(
       'relay-room-channel',

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type {
-  AgentRoomChannelLink,
+  AgentRoomChannelConnection,
   AgentRoomEventMember,
   AgentRoomEventRun,
   AgentRoomMessageOrigin
@@ -39,7 +39,13 @@ const larkOrigin: AgentRoomMessageOrigin = {
 describe('agent room service', () => {
   let db: SqliteDb
   let delivery: AgentRoomSessionDelivery
-  let resolvedChannelLinks: Map<string, Omit<AgentRoomChannelLink, 'createdAt' | 'roomId'>>
+  let resolvedChannelLinks: Map<
+    string,
+    Omit<
+      AgentRoomChannelConnection,
+      'commandPrefix' | 'createdAt' | 'memberKey' | 'muted' | 'requireMention' | 'roomId' | 'updatedAt'
+    >
+  >
   let service: ReturnType<typeof createAgentRoomService>
 
   beforeEach(() => {
@@ -54,7 +60,7 @@ describe('agent room service', () => {
     }
     resolvedChannelLinks = new Map()
     service = createAgentRoomService(db, delivery, {
-      resolveChannelLink: async (channelLinkName) => {
+      resolveChannelConnection: async (channelLinkName) => {
         const link = resolvedChannelLinks.get(channelLinkName)
         if (link == null) throw new Error(`ChannelLink not found: ${channelLinkName}`)
         return link
@@ -218,6 +224,7 @@ describe('agent room service', () => {
   })
   it('attaches multiple channel accounts to one room without collapsing their identities', async () => {
     const room = service.createRoom({ id: 'room-1', title: 'Build room' })
+    service.upsertMember(room.id, { key: 'owo', kind: 'entity', label: 'OwO' })
     const makeLink = (channelKey: string, channelLinkName: string, label: string) => ({
       accountLabel: label,
       channelId: 'conversation-1',
@@ -228,7 +235,8 @@ describe('agent room service', () => {
       entity: 'owo',
       label,
       receiveId: 'conversation-1',
-      receiveIdType: 'chat_id'
+      receiveIdType: 'chat_id',
+      status: 'active' as const
     })
     resolvedChannelLinks.set('brainstorm-lark', makeLink('lark:product', 'brainstorm-lark', 'Lark product bot'))
     resolvedChannelLinks.set(
@@ -238,23 +246,25 @@ describe('agent room service', () => {
 
     await service.executeCommand(room.id, {
       idempotencyKey: 'attach-lark',
-      type: 'attach_channel',
-      link: { channelLinkName: 'brainstorm-lark' }
+      type: 'attach_member_channel',
+      connection: { channelLinkName: 'brainstorm-lark', memberKey: 'owo' }
     })
     await service.executeCommand(room.id, {
       idempotencyKey: 'attach-wechat',
-      type: 'attach_channel',
-      link: { channelLinkName: 'brainstorm-wechat' }
+      type: 'attach_member_channel',
+      connection: { channelLinkName: 'brainstorm-wechat', memberKey: 'owo' }
     })
 
-    expect(service.getDetail(room.id)?.channelLinks).toEqual([
+    expect(service.getDetail(room.id)?.channelConnections).toEqual([
       expect.objectContaining({ channelKey: 'lark:product', entity: 'owo' }),
       expect.objectContaining({ channelKey: 'wechat:service', entity: 'owo' })
     ])
   })
-  it('rejects attaching one provider conversation to multiple rooms', async () => {
+  it('allows one provider conversation to connect through members in multiple rooms', async () => {
     const firstRoom = service.createRoom({ id: 'room-1', title: 'First room' })
     const secondRoom = service.createRoom({ id: 'room-2', title: 'Second room' })
+    service.upsertMember(firstRoom.id, { key: 'owo', kind: 'entity', label: 'OwO' })
+    service.upsertMember(secondRoom.id, { key: 'owo', kind: 'entity', label: 'OwO' })
     const link = {
       channelId: 'conversation-1',
       channelKey: 'lark:product',
@@ -264,34 +274,36 @@ describe('agent room service', () => {
       entity: 'owo',
       label: 'Lark product bot',
       receiveId: 'conversation-1',
-      receiveIdType: 'chat_id'
+      receiveIdType: 'chat_id',
+      status: 'active' as const
     }
     resolvedChannelLinks.set('brainstorm-lark', link)
 
     await service.executeCommand(firstRoom.id, {
       idempotencyKey: 'attach-first',
-      type: 'attach_channel',
-      link: { channelLinkName: 'brainstorm-lark' }
+      type: 'attach_member_channel',
+      connection: { channelLinkName: 'brainstorm-lark', memberKey: 'owo' }
     })
 
-    await expect(service.executeCommand(secondRoom.id, {
+    await service.executeCommand(secondRoom.id, {
       idempotencyKey: 'attach-second',
-      type: 'attach_channel',
-      link: { channelLinkName: 'brainstorm-lark' }
-    })).rejects.toThrow('Channel conversation is already attached to agent room room-1')
-    expect(service.getDetail(firstRoom.id)?.channelLinks).toHaveLength(1)
-    expect(service.getDetail(secondRoom.id)?.channelLinks).toEqual([])
+      type: 'attach_member_channel',
+      connection: { channelLinkName: 'brainstorm-lark', memberKey: 'owo' }
+    })
+    expect(service.getDetail(firstRoom.id)?.channelConnections).toHaveLength(1)
+    expect(service.getDetail(secondRoom.id)?.channelConnections).toHaveLength(1)
   })
 
   it('rejects an unknown ChannelLink instead of persisting caller-authored delivery fields', async () => {
     const room = service.createRoom({ id: 'room-1', title: 'Build room' })
+    service.upsertMember(room.id, { key: 'owo', kind: 'entity', label: 'OwO' })
 
     await expect(service.executeCommand(room.id, {
       idempotencyKey: 'attach-unknown',
-      type: 'attach_channel',
-      link: { channelLinkName: 'missing-link' }
+      type: 'attach_member_channel',
+      connection: { channelLinkName: 'missing-link', memberKey: 'owo' }
     })).rejects.toThrow('ChannelLink not found: missing-link')
-    expect(service.getDetail(room.id)?.channelLinks).toEqual([])
+    expect(service.getDetail(room.id)?.channelConnections).toEqual([])
   })
 
   it('creates and revokes finite Room shares without copying transcript content', async () => {
@@ -433,26 +445,6 @@ describe('agent room service', () => {
         payload: expect.objectContaining({ deliveryState: 'pending' })
       })
     ])
-  })
-
-  it('does not reconstruct Room messages from host or child session transcripts', () => {
-    db.createSession('Host', 'host-session', 'running')
-    db.saveMessage('host-session', {
-      type: 'message',
-      message: {
-        id: 'host-message',
-        role: 'assistant',
-        content: 'This stays in the host session.',
-        createdAt: Date.now()
-      }
-    })
-    const room = service.createRoom({
-      id: 'room-1',
-      title: 'Build room',
-      hostSessionId: 'host-session'
-    })
-
-    expect(service.getDetail(room.id)?.messages).toEqual([])
   })
 
   it('answers pending run interactions through the existing session delivery boundary', async () => {

@@ -611,6 +611,22 @@ describe('invokeChannelCommandForState', () => {
     expect(updateChannelAuthorizationRequest).not.toHaveBeenCalled()
   })
 
+  it('rejects a token whose child run no longer exists', async () => {
+    getChannelChildSessionRun.mockReturnValueOnce(undefined)
+
+    const result = await invokeChannelCommandForState(makeState(), {
+      invocationToken: makeInvocationToken(),
+      toolName: 'channel.whoami'
+    })
+
+    expect(result).toMatchObject({
+      message: expect.stringContaining('authority is unavailable'),
+      ok: false,
+      statusCode: 403
+    })
+    expect(createChannelCommandRun).not.toHaveBeenCalled()
+  })
+
   it('does not let an unlisted sender resolve a request through forged command context', async () => {
     getChannelChildSessionRun.mockReturnValueOnce(makeChildRun({
       actorAccountId: 'user1',

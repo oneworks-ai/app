@@ -885,7 +885,7 @@ const buildPreviewRoomDetail = (now: number, hostSessionId: string): AgentRoomDe
       }
     ],
     runs: [claudeRun, codexRun],
-    channelLinks: [],
+    channelConnections: [],
     shares: [],
     messages: [
       createRoomMessage(roomId, 'system', t('roomMemberJoined', { member: 'Codex' }), now - 14 * 60_000, {

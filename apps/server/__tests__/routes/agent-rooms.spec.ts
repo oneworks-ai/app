@@ -275,15 +275,16 @@ describe('agentRoomsRouter', () => {
       request: {
         body: {
           idempotencyKey: 'attach-trusted-link',
-          link: {
+          connection: {
             channelId: 'forged-channel',
             channelKey: 'forged-key',
             channelLinkName: 'trusted-link',
             channelType: 'forged-provider',
             entity: 'forged-entity',
+            memberKey: 'product',
             receiveId: 'forged-recipient'
           },
-          type: 'attach_channel'
+          type: 'attach_member_channel'
         }
       },
       body: undefined
@@ -293,8 +294,8 @@ describe('agentRoomsRouter', () => {
 
     expect(service.executeCommand).toHaveBeenCalledWith('room-1', {
       idempotencyKey: 'attach-trusted-link',
-      link: { channelLinkName: 'trusted-link' },
-      type: 'attach_channel'
+      connection: { channelLinkName: 'trusted-link', memberKey: 'product' },
+      type: 'attach_member_channel'
     })
   })
 })

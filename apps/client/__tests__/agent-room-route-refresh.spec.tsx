@@ -110,7 +110,7 @@ const roomDetail: AgentRoomDetailResponse = {
   members: [],
   runs: [],
   messages: [],
-  channelLinks: [],
+  channelConnections: [],
   shares: []
 }
 

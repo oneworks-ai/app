@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid'
 
 import type {
   AgentRoom,
-  AgentRoomChannelLink,
+  AgentRoomChannelConnection,
   AgentRoomDetail,
   AgentRoomEvent,
   AgentRoomEventRequestKind,
@@ -107,7 +107,7 @@ interface AgentRoomMessageDeliveryRow {
   updatedAt: number
 }
 
-interface AgentRoomChannelLinkRow {
+interface AgentRoomChannelConnectionRow {
   accountLabel: string | null
   roomId: string
   channelLinkName: string
@@ -117,10 +117,18 @@ interface AgentRoomChannelLinkRow {
   conversationKind: string
   entity: string
   label: string
+  lastError: string | null
+  lastSeenAt: number | null
+  memberKey: string
+  muted: number
+  commandPrefix: string | null
+  requireMention: number
   receiveId: string
   receiveIdType: string
   threadId: string | null
+  status: string
   createdAt: number
+  updatedAt: number
 }
 
 interface AgentRoomShareRow {
@@ -190,7 +198,10 @@ export type AppendAgentRoomMessageParams =
     sequence?: number
   }
 
-export type SaveAgentRoomChannelLinkParams = Omit<AgentRoomChannelLink, 'createdAt'> & { createdAt?: number }
+export type SaveAgentRoomChannelConnectionParams = Omit<AgentRoomChannelConnection, 'createdAt' | 'updatedAt'> & {
+  createdAt?: number
+  updatedAt?: number
+}
 
 export interface CreateAgentRoomShareParams {
   grants: Array<Pick<AgentRoomShareGrant, 'permissions' | 'principalId' | 'principalType'>>
@@ -325,19 +336,27 @@ const mapDeliveryRow = (row: AgentRoomMessageDeliveryRow): AgentRoomMessageDeliv
   ...(row.sentAt != null ? { sentAt: row.sentAt } : {})
 })
 
-const mapChannelLinkRow = (row: AgentRoomChannelLinkRow): AgentRoomChannelLink => ({
+const mapChannelConnectionRow = (row: AgentRoomChannelConnectionRow): AgentRoomChannelConnection => ({
   channelId: row.channelId,
   channelKey: row.channelKey,
   channelLinkName: row.channelLinkName,
   channelType: row.channelType,
-  conversationKind: row.conversationKind as AgentRoomChannelLink['conversationKind'],
+  conversationKind: row.conversationKind as AgentRoomChannelConnection['conversationKind'],
   createdAt: row.createdAt,
   entity: row.entity,
   label: row.label,
+  memberKey: row.memberKey,
+  muted: row.muted !== 0,
+  requireMention: row.requireMention !== 0,
   receiveId: row.receiveId,
   receiveIdType: row.receiveIdType,
   roomId: row.roomId,
+  status: row.status as AgentRoomChannelConnection['status'],
+  updatedAt: row.updatedAt,
   ...(row.accountLabel != null ? { accountLabel: row.accountLabel } : {}),
+  ...(row.commandPrefix != null ? { commandPrefix: row.commandPrefix } : {}),
+  ...(row.lastError != null ? { lastError: row.lastError } : {}),
+  ...(row.lastSeenAt != null ? { lastSeenAt: row.lastSeenAt } : {}),
   ...(row.threadId != null ? { threadId: row.threadId } : {})
 })
 
@@ -435,12 +454,22 @@ export function createAgentRoomsRepo(db: SqliteDatabase) {
       ORDER BY createdAt ASC, id ASC
     `).all<AgentRoomMessageDeliveryRow>(roomMessageId).map(mapDeliveryRow)
 
-  const listChannelLinks = (roomId: string): AgentRoomChannelLink[] =>
+  const listChannelConnections = (roomId: string): AgentRoomChannelConnection[] =>
     db.prepare(`
-      SELECT * FROM agent_room_channel_links
+      SELECT * FROM agent_room_member_channels
       WHERE roomId = ?
-      ORDER BY createdAt ASC, channelLinkName ASC
-    `).all<AgentRoomChannelLinkRow>(roomId).map(mapChannelLinkRow)
+      ORDER BY createdAt ASC, memberKey ASC, channelLinkName ASC
+    `).all<AgentRoomChannelConnectionRow>(roomId).map(mapChannelConnectionRow)
+
+  const listChannelConnectionsForMember = (
+    roomId: string,
+    memberKey: string
+  ): AgentRoomChannelConnection[] =>
+    db.prepare(`
+    SELECT * FROM agent_room_member_channels
+    WHERE roomId = ? AND memberKey = ?
+    ORDER BY createdAt ASC, channelLinkName ASC
+  `).all<AgentRoomChannelConnectionRow>(roomId, memberKey).map(mapChannelConnectionRow)
 
   const listShareGrants = (shareId: string): AgentRoomShareGrant[] =>
     db.prepare(`
@@ -773,28 +802,19 @@ export function createAgentRoomsRepo(db: SqliteDatabase) {
       .map(row => mapMessageRow(row, listDeliveries(row.id)))
   }
 
-  const saveChannelLink = (link: SaveAgentRoomChannelLinkParams): AgentRoomChannelLink => {
+  const saveChannelConnection = (
+    link: SaveAgentRoomChannelConnectionParams
+  ): AgentRoomChannelConnection => {
     const createdAt = link.createdAt ?? Date.now()
-    const existingOwner = findRoomChannelLink({
-      channelId: link.channelId,
-      channelKey: link.channelKey,
-      channelType: link.channelType
-    })
-    if (
-      existingOwner != null &&
-      (existingOwner.roomId !== link.roomId || existingOwner.channelLinkName !== link.channelLinkName)
-    ) {
-      throw new Error(
-        `Channel conversation is already attached to agent room ${existingOwner.roomId}: ` +
-          `${link.channelType}/${link.channelKey}/${link.channelId}`
-      )
-    }
+    const updatedAt = link.updatedAt ?? Date.now()
     db.prepare(`
-      INSERT INTO agent_room_channel_links (
-        roomId, channelLinkName, channelType, channelKey, channelId, accountLabel,
-        conversationKind, entity, label, receiveId, receiveIdType, threadId, createdAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(roomId, channelLinkName) DO UPDATE SET
+      INSERT INTO agent_room_member_channels (
+        roomId, memberKey, channelLinkName, channelType, channelKey, channelId,
+        accountLabel, conversationKind, entity, label, receiveId, receiveIdType,
+        threadId, status, muted, requireMention, commandPrefix, lastSeenAt,
+        lastError, createdAt, updatedAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(roomId, memberKey, channelLinkName) DO UPDATE SET
         channelType = excluded.channelType,
         channelKey = excluded.channelKey,
         channelId = excluded.channelId,
@@ -804,9 +824,17 @@ export function createAgentRoomsRepo(db: SqliteDatabase) {
         label = excluded.label,
         receiveId = excluded.receiveId,
         receiveIdType = excluded.receiveIdType,
-        threadId = excluded.threadId
+        threadId = excluded.threadId,
+        status = excluded.status,
+        muted = excluded.muted,
+        requireMention = excluded.requireMention,
+        commandPrefix = excluded.commandPrefix,
+        lastSeenAt = excluded.lastSeenAt,
+        lastError = excluded.lastError,
+        updatedAt = excluded.updatedAt
     `).run(
       link.roomId,
+      link.memberKey,
       link.channelLinkName,
       link.channelType,
       link.channelKey,
@@ -818,27 +846,39 @@ export function createAgentRoomsRepo(db: SqliteDatabase) {
       link.receiveId,
       link.receiveIdType,
       link.threadId ?? null,
-      createdAt
+      link.status,
+      link.muted ? 1 : 0,
+      link.requireMention ? 1 : 0,
+      link.commandPrefix ?? null,
+      link.lastSeenAt ?? null,
+      link.lastError ?? null,
+      createdAt,
+      updatedAt
     )
-    return mapChannelLinkRow(
+    return mapChannelConnectionRow(
       db.prepare(`
-      SELECT * FROM agent_room_channel_links WHERE roomId = ? AND channelLinkName = ?
-    `).get<AgentRoomChannelLinkRow>(link.roomId, link.channelLinkName)!
+      SELECT * FROM agent_room_member_channels
+      WHERE roomId = ? AND memberKey = ? AND channelLinkName = ?
+    `).get<AgentRoomChannelConnectionRow>(link.roomId, link.memberKey, link.channelLinkName)!
     )
   }
 
-  const findRoomChannelLink = (input: {
+  const findRoomChannelConnections = (input: {
     channelId: string
-    channelKey: string
     channelType: string
-  }): AgentRoomChannelLink | undefined => {
-    const row = db.prepare(`
-      SELECT * FROM agent_room_channel_links
-      WHERE channelType = ? AND channelKey = ? AND channelId = ?
-      LIMIT 1
-    `).get<AgentRoomChannelLinkRow>(input.channelType, input.channelKey, input.channelId)
-    return row == null ? undefined : mapChannelLinkRow(row)
-  }
+    channelKey?: string
+  }): AgentRoomChannelConnection[] =>
+    db.prepare(`
+    SELECT * FROM agent_room_member_channels
+    WHERE channelType = ? AND channelId = ?
+      AND (? IS NULL OR channelKey = ?)
+    ORDER BY roomId ASC, memberKey ASC, channelLinkName ASC
+  `).all<AgentRoomChannelConnectionRow>(
+        input.channelType,
+        input.channelId,
+        input.channelKey ?? null,
+        input.channelKey ?? null
+      ).map(mapChannelConnectionRow)
 
   const createShare = (input: CreateAgentRoomShareParams): AgentRoomShare => {
     const id = input.id ?? uuidv4()
@@ -904,7 +944,7 @@ export function createAgentRoomsRepo(db: SqliteDatabase) {
 
     return {
       room,
-      channelLinks: listChannelLinks(id),
+      channelConnections: listChannelConnections(id),
       members: listMembers(id),
       runs: listRuns(id),
       messages: listMessages(id),
@@ -928,14 +968,15 @@ export function createAgentRoomsRepo(db: SqliteDatabase) {
     getByHostSessionId,
     getDetail,
     getEventByIdempotencyKey,
-    findRoomChannelLink,
+    findRoomChannelConnections,
     getMember,
     getMessage,
     getMessageByIdempotencyKey,
     getRun,
     getShare,
     list,
-    listChannelLinks,
+    listChannelConnections,
+    listChannelConnectionsForMember,
     listDeliveries,
     listMembers,
     listMessages,
@@ -944,7 +985,7 @@ export function createAgentRoomsRepo(db: SqliteDatabase) {
     listShares,
     remove,
     revokeShare,
-    saveChannelLink,
+    saveChannelConnection,
     saveDelivery,
     saveMember,
     saveRun,

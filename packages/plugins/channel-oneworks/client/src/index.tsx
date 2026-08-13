@@ -114,7 +114,7 @@ export const buildOneWorksChannelRoute = scope => `/plugins/${scope}/oneworks-ch
 export const buildOneWorksRoomRoute = (scope, roomId) =>
   `${buildOneWorksChannelRoute(scope)}/rooms/${encodeURIComponent(roomId)}`
 
-const roomPanelKeys = ['members', 'details']
+const roomPanelKeys = ['channels', 'members', 'details']
 
 const readRoomPanelState = () => {
   const params = new URLSearchParams(globalThis.location.search)
@@ -156,6 +156,7 @@ export function OneWorksChannelView({ ctx, react, view }) {
   const {
     AgentRoom,
     Button,
+    ChannelPlatformIcon,
     EntityCard,
     EntitySummary,
     GroupAvatar,
@@ -165,7 +166,8 @@ export function OneWorksChannelView({ ctx, react, view }) {
     SearchInput,
     Select,
     Sender,
-    SettingsSection
+    SettingsSection,
+    Switch
   } = view.ui
   const [languageVersion, setLanguageVersion] = useState(0)
   const t = useMemo(() => (en, chinese) => view.i18n?.resolveText?.({ en, 'zh-Hans': chinese }, en) ?? en, [
@@ -616,7 +618,16 @@ export function OneWorksChannelView({ ctx, react, view }) {
         {renderEntityAvatar(resolvedMember)}
         <span className='oneworks-channel__panel-member-copy'>
           <strong>{resolvedMember.name}</strong>
-          {resolvedMember.description ? <span>{resolvedMember.description}</span> : null}
+          <span>
+            {resolvedMember.isLeader
+              ? t('Leader · routes new group messages', 'Leader · 默认接收并路由群消息')
+              : resolvedMember.channelConnections.length > 0
+              ? t(
+                `${resolvedMember.channelConnections.length} channel connection(s)`,
+                `${resolvedMember.channelConnections.length} 个频道连接`
+              )
+              : resolvedMember.description}
+          </span>
         </span>
         <Icon name='chevron_right' size='small' />
       </button>
@@ -648,6 +659,13 @@ export function OneWorksChannelView({ ctx, react, view }) {
     const roomActions = selectedRoom == null || activeTab !== 'rooms'
       ? []
       : [{
+        active: activeRoomPanel === 'channels',
+        icon: 'hub',
+        key: 'room-channels',
+        label: t('Connections', '关联频道'),
+        onSelect: () => setRoomPanel('channels'),
+        title: t('Connections', '关联频道')
+      }, {
         active: activeRoomPanel === 'members',
         icon: 'group',
         key: 'room-members',
@@ -727,6 +745,40 @@ export function OneWorksChannelView({ ctx, react, view }) {
     )
   }
 
+  const setConnectionProcessing = useCallback(async (member, connection, enabled) => {
+    if (selectedRoom == null || working) return
+    setWorking(true)
+    setActionError(null)
+    setNotice(null)
+    try {
+      await request(
+        ctx,
+        [
+          'rooms',
+          encodeURIComponent(selectedRoom.roomId),
+          'connections',
+          encodeURIComponent(member.entityId),
+          encodeURIComponent(connection.channelLinkName)
+        ].join('/'),
+        {
+          body: JSON.stringify({ muted: !enabled }),
+          headers: { 'content-type': 'application/json' },
+          method: 'PATCH'
+        }
+      )
+      setNotice(
+        enabled
+          ? t('New channel messages will be processed.', '新的频道消息将进入处理。')
+          : t('New channel messages will only be observed.', '新的频道消息将只观察、不处理。')
+      )
+      await mutate()
+    } catch (nextError) {
+      setActionError(nextError instanceof Error ? nextError.message : String(nextError))
+    } finally {
+      setWorking(false)
+    }
+  }, [ctx, mutate, selectedRoom, t, working])
+
   useEffect(() => {
     if (selectedRoom == null || activeTab !== 'rooms' || activeRoomPanel == null) {
       view.route?.setSidePanel(undefined)
@@ -737,17 +789,84 @@ export function OneWorksChannelView({ ctx, react, view }) {
     const selectedRoomMember = selectedRoomMemberSnapshot == null
       ? undefined
       : resolveRoomMember(selectedRoomMemberSnapshot)
-    const roomPlatformSummary = selectedRoom.platforms.length === 0
-      ? t('OneWorks local', 'OneWorks 本地')
-      : selectedRoom.platforms
-        .flatMap(platform => platform.labels.length === 0 ? [platform.channelType] : platform.labels)
-        .join(' · ')
+    const selectedMemberConnections = selectedRoomMember?.channelConnections ?? []
+
+    const renderConnection = (connection, member) =>
+      <div
+        className={`oneworks-channel__connection is-${connection.status}`}
+        key={`${member.entityId}:${connection.channelLinkName}`}
+      >
+        <ChannelPlatformIcon
+          channelType={connection.channelType}
+          className='oneworks-channel__connection-icon'
+        />
+        <span className='oneworks-channel__connection-copy'>
+          <strong>{connection.conversationLabel}</strong>
+          <small>{connection.accountLabel ?? connection.channelType}</small>
+          <small>{t('Brought in by', '由此成员带入')} · {member.name}</small>
+        </span>
+        <span className={`oneworks-channel__connection-status is-${connection.status}`}>
+          {connection.muted
+            ? t('Muted', '已静音')
+            : connection.status === 'active'
+            ? t('Connected', '已连接')
+            : connection.status === 'removed'
+            ? t('Removed', '已移除')
+            : t('Unavailable', '不可用')}
+        </span>
+        <span className='oneworks-channel__connection-policy'>
+          <span>
+            {connection.muted
+              ? t('Observe only', '仅观察')
+              : connection.requireMention
+              ? t('Process only when mentioned', '仅被 @ 时处理')
+              : connection.commandPrefix
+              ? t(`Process prefix ${connection.commandPrefix}`, `处理前缀 ${connection.commandPrefix}`)
+              : t('Process every new message', '处理每条新消息')}
+          </span>
+          <Switch
+            ariaLabel={t(
+              `Process messages from ${connection.conversationLabel}`,
+              `处理来自 ${connection.conversationLabel} 的消息`
+            )}
+            checked={!connection.muted}
+            disabled={connection.status !== 'active' || working}
+            onChange={enabled => void setConnectionProcessing(member, connection, enabled)}
+            size='small'
+          />
+        </span>
+      </div>
 
     view.route?.setSidePanel({
       activeTab: activeRoomPanel,
       ariaLabel: t('Chat room panel', '群聊面板'),
       openedTabs: openedRoomPanels,
       tabs: [{
+        content: <div className='oneworks-channel__side-content is-connections'>
+          <p className='oneworks-channel__connection-intro'>
+            {t(
+              'Connections belong to members, not to the room. The same external group may be observed by more than one Team Chat.',
+              '连接属于群成员，不属于群本身；同一个外部群可以进入多个团队群聊。'
+            )}
+          </p>
+          <div className='oneworks-channel__connections'>
+            {selectedRoom.members.flatMap(member => {
+              const resolvedMember = resolveRoomMember(member)
+              return resolvedMember.channelConnections.map(connection => renderConnection(connection, resolvedMember))
+            })}
+            {selectedRoom.channelConnectionCount === 0
+              ? <div className='oneworks-channel__empty is-compact'>
+                <Icon name='link_off' />
+                <span>{t('No member channel connections.', '暂无成员频道连接。')}</span>
+              </div>
+              : null}
+          </div>
+        </div>,
+        icon: 'hub',
+        key: 'channels',
+        label: t('Connections', '关联频道'),
+        title: t('Connections', '关联频道')
+      }, {
         content: <div className='oneworks-channel__side-content is-members'>
           {selectedRoomMember == null
             ? <div className='oneworks-channel__panel-members'>
@@ -765,7 +884,13 @@ export function OneWorksChannelView({ ctx, react, view }) {
               }, {
                 icon: 'hub',
                 label: t('Available through', '关联渠道'),
-                value: roomPlatformSummary
+                value: selectedMemberConnections.length === 0
+                  ? t('OneWorks local', '仅 OneWorks 本地')
+                  : selectedMemberConnections.map(connection => connection.conversationLabel).join(' · ')
+              }, {
+                icon: selectedRoomMember.isLeader ? 'crown' : 'person',
+                label: t('Room role', '群内角色'),
+                value: selectedRoomMember.isLeader ? 'Leader' : t('Member', '成员')
               }]}
               name={selectedRoomMember.name}
               openDetailsLabel={t('View full entity details', '查看完整实体详情')}
@@ -850,6 +975,7 @@ export function OneWorksChannelView({ ctx, react, view }) {
     roomSettings,
     selectedRoom,
     selectedRoomMemberId,
+    setConnectionProcessing,
     t,
     view.route,
     working

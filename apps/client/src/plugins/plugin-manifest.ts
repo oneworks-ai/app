@@ -496,6 +496,11 @@ export interface PluginHostIconComponentProps {
   tone?: PluginHostIconTone
 }
 
+export interface PluginHostChannelPlatformIconComponentProps {
+  channelType: string
+  className?: string
+}
+
 export interface PluginHostListItem {
   actions?: ReactNode
   active?: boolean
@@ -708,6 +713,7 @@ export interface PluginHostComponentPropsById {
   actionBar: PluginHostActionBarComponentProps
   agentRoom: PluginHostAgentRoomComponentProps
   button: PluginHostButtonComponentProps
+  channelPlatformIcon: PluginHostChannelPlatformIconComponentProps
   codeEditor: PluginHostCodeEditorComponentProps
   entityCard: PluginHostEntityCardComponentProps
   entitySummary: PluginHostEntitySummaryComponentProps
@@ -748,6 +754,7 @@ export interface PluginHostComponentReactApi {
   ActionBar: ComponentType<PluginHostActionBarComponentProps>
   AgentRoom: ComponentType<PluginHostAgentRoomComponentProps>
   Button: ComponentType<PluginHostButtonComponentProps>
+  ChannelPlatformIcon: ComponentType<PluginHostChannelPlatformIconComponentProps>
   CodeEditor: ComponentType<PluginHostCodeEditorComponentProps>
   EntityCard: ComponentType<PluginHostEntityCardComponentProps>
   EntitySummary: ComponentType<PluginHostEntitySummaryComponentProps>

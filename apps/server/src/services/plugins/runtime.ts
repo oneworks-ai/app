@@ -3388,6 +3388,7 @@ export class PluginManager {
       await activatePlugin(ctx)
       await Promise.all(record.localServices.values())
     } catch (error) {
+      logger.error({ err: error, scope: record.instance.scope }, '[plugins] activation failed')
       await this.clearRecordRuntime(record)
       record.instance.enabled = false
       const diagnostic = {

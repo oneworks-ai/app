@@ -140,6 +140,12 @@ export interface ChannelLinkIngress {
     maxTurns?: number
     ttlSeconds?: number
   }
+  /** Agent Room consumption policy for this member-scoped external connection. */
+  room?: {
+    commandPrefix?: string
+    muted?: boolean
+    requireMention?: boolean
+  }
 }
 
 export type ChannelIngressDecision = 'ignore' | 'observe' | 'create_child' | 'defer'

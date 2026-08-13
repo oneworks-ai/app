@@ -64,6 +64,18 @@ export const oneworksChannelCss = `
 .oneworks-channel__message.is-error { color: var(--error-color, #c43d3d); }
 .oneworks-channel__side-content { box-sizing: border-box; min-height: 100%; padding: 10px 12px; width: 100%; }
 .oneworks-channel__side-content.is-members { padding: 0; }
+.oneworks-channel__side-content.is-connections { display: grid; gap: 10px; align-content: start; }
+.oneworks-channel__connection-intro { color: var(--sub-text-color, #5c6570); font-size: 12px; margin: 0; }
+.oneworks-channel__connections { border-top: 1px solid var(--border-color, #d8dee4); display: grid; }
+.oneworks-channel__connection { align-items: center; border-bottom: 1px solid var(--border-color, #d8dee4); display: grid; gap: 2px 10px; grid-template-columns: 24px minmax(0, 1fr) auto; min-height: 68px; padding: 9px 2px; }
+.oneworks-channel__connection-icon { height: 24px; object-fit: contain; width: 24px; }
+.oneworks-channel__connection-copy { display: grid; min-width: 0; }
+.oneworks-channel__connection-copy strong, .oneworks-channel__connection-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oneworks-channel__connection-copy small, .oneworks-channel__connection-policy { color: var(--sub-text-color, #5c6570); font-size: 11px; }
+.oneworks-channel__connection-status { color: var(--success-color, #237b4b); font-size: 11px; }
+.oneworks-channel__connection-status.is-removed, .oneworks-channel__connection-status.is-unavailable { color: var(--error-color, #c43d3d); }
+.oneworks-channel__connection-policy { align-items: center; display: flex; gap: 8px; grid-column: 2 / -1; justify-content: space-between; }
+.oneworks-channel__empty.is-compact { min-height: 86px; }
 .oneworks-channel__panel-members { display: grid; width: 100%; }
 .oneworks-channel__panel-member { align-items: center; background: transparent; border: 0; border-bottom: 1px solid var(--border-color, #d8dee4); color: inherit; cursor: pointer; display: grid; font: inherit; gap: 10px; grid-template-columns: 36px minmax(0, 1fr) 18px; min-height: 58px; padding: 8px 12px; text-align: left; width: 100%; }
 .oneworks-channel__panel-member:hover { background: var(--tag-hover-bg, #f5f7f9); }

@@ -19,6 +19,7 @@ import {
   resolveRoomTarget
 } from '#~/components/agent-room'
 import type { AgentRoomMemberView, AgentRoomMessageView, AgentRoomRunView } from '#~/components/agent-room'
+import { ChannelPlatformIcon } from '#~/components/channel-platform-icon/ChannelPlatformIcon'
 import { Sender } from '#~/components/chat/sender/Sender'
 import { ChatStatusBar } from '#~/components/chat/status-bar/ChatStatusBar'
 import { FieldRow } from '#~/components/config/ConfigFieldRow'
@@ -1433,6 +1434,7 @@ export const createPluginHostComponentReactApi = (
   ActionBar: PluginHostActionBar,
   AgentRoom: PluginHostAgentRoom,
   Button: PluginHostButton,
+  ChannelPlatformIcon,
   CodeEditor: PluginHostCodeEditor,
   EntityCard,
   EntitySummary,
@@ -1488,6 +1490,14 @@ export const renderPluginHostComponent = (
 
   if (component === 'button') {
     return <PluginHostButton {...((props as PluginHostComponentPropsById['button'] | undefined) ?? {})} />
+  }
+
+  if (component === 'channelPlatformIcon') {
+    return <ChannelPlatformIcon
+      {...((props as PluginHostComponentPropsById['channelPlatformIcon'] | undefined) ?? {
+        channelType: 'oneworks'
+      })}
+    />
   }
 
   if (component === 'codeEditor') {

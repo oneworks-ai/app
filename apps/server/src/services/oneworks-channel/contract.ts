@@ -22,9 +22,18 @@ export const oneworksRoomPatchInputSchema = z.object({
   title: z.string().trim().min(1).max(80).optional()
 }).strict().refine(value => Object.keys(value).length > 0, 'At least one room field is required.')
 
+export const oneworksRoomChannelConnectionPatchInputSchema = z.object({
+  commandPrefix: z.string().trim().max(80).nullable().optional(),
+  muted: z.boolean().optional(),
+  requireMention: z.boolean().optional()
+}).strict().refine(value => Object.keys(value).length > 0, 'At least one connection field is required.')
+
 export type OneWorksRoomEntity = z.infer<typeof oneworksRoomEntitySchema>
 export type OneWorksRoomCreateInput = z.infer<typeof oneworksRoomCreateInputSchema>
 export type OneWorksRoomPatchInput = z.infer<typeof oneworksRoomPatchInputSchema>
+export type OneWorksRoomChannelConnectionPatchInput = z.infer<
+  typeof oneworksRoomChannelConnectionPatchInputSchema
+>
 
 export const oneworksChannelSimulationTargetSchema = z.object({
   binding: z.enum(['default', 'direct', 'group', 'thread']),
@@ -46,8 +55,22 @@ export const oneworksRoomPlatformSchema = z.object({
 
 export const oneworksRoomMemberSchema = z.object({
   avatar: z.string().optional(),
+  channelConnections: z.array(
+    z.object({
+      accountLabel: z.string().optional(),
+      channelLinkName: z.string(),
+      channelType: z.string(),
+      commandPrefix: z.string().optional(),
+      conversationLabel: z.string(),
+      lastError: z.string().optional(),
+      muted: z.boolean(),
+      requireMention: z.boolean(),
+      status: z.enum(['active', 'removed', 'unavailable'])
+    }).strict()
+  ),
   description: z.string().optional(),
   entityId: z.string(),
+  isLeader: z.boolean(),
   name: z.string()
 }).strict()
 
@@ -55,7 +78,7 @@ export const oneworksRoomSummarySchema = z.object({
   activeShareCount: z.number().int().nonnegative(),
   archived: z.boolean(),
   avatar: z.string().optional(),
-  channelLinkCount: z.number().int().nonnegative(),
+  channelConnectionCount: z.number().int().nonnegative(),
   description: z.string().optional(),
   favorited: z.boolean(),
   lastMessage: z.string().optional(),

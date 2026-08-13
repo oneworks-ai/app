@@ -210,6 +210,13 @@ export interface PluginOneWorksChannelFacade {
   runScenario: (principal: PluginRequestPrincipal, scenarioRef: string) => Promise<unknown>
   revokeRoomShare: (principal: PluginRequestPrincipal, roomId: string, shareRef: string) => Promise<boolean>
   updateRoom: (principal: PluginRequestPrincipal, roomId: string, input: unknown) => Promise<unknown>
+  updateRoomChannelConnection: (
+    principal: PluginRequestPrincipal,
+    roomId: string,
+    memberKey: string,
+    channelLinkName: string,
+    input: unknown
+  ) => Promise<unknown>
   updateScenario: (principal: PluginRequestPrincipal, scenarioRef: string, input: unknown) => Promise<unknown>
 }
 

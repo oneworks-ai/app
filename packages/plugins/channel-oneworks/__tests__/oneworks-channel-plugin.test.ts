@@ -20,6 +20,7 @@ describe('oneWorks Rooms plugin', () => {
     const listShareOwners = vi.fn(async () => [{ label: 'Owner', ownerRef: 'owner-ref' }])
     const listShares = vi.fn(async () => [{ roomId: 'room-1', shareRef: 'share-ref' }])
     const revokeRoomShare = vi.fn(async () => true)
+    const updateRoomChannelConnection = vi.fn(async () => ({ roomId: 'room-1' }))
     activatePlugin({
       oneworksChannel: {
         createRoom: vi.fn(),
@@ -39,6 +40,7 @@ describe('oneWorks Rooms plugin', () => {
         runScenario: vi.fn(),
         revokeRoomShare,
         updateRoom: vi.fn(),
+        updateRoomChannelConnection,
         updateScenario: vi.fn()
       },
       logger: { info: vi.fn() },
@@ -83,6 +85,19 @@ describe('oneWorks Rooms plugin', () => {
     })).resolves.toMatchObject({ body: { ok: true }, status: 200 })
     expect(createRoomShare).toHaveBeenCalledWith(principal, 'room-1', { grants: [] })
     expect(revokeRoomShare).toHaveBeenCalledWith(principal, 'room-1', 'share-ref')
+    await expect(handler({
+      body: Buffer.from('{"muted":true}'),
+      method: 'PATCH',
+      path: 'rooms/room-1/connections/product/product-lark',
+      principal
+    })).resolves.toMatchObject({ body: { roomId: 'room-1' }, status: 200 })
+    expect(updateRoomChannelConnection).toHaveBeenCalledWith(
+      principal,
+      'room-1',
+      'product',
+      'product-lark',
+      { muted: true }
+    )
   })
 
   it('ships a workspace-only chat room route using shared sidebar and header chrome', async () => {

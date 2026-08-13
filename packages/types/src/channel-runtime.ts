@@ -48,6 +48,7 @@ export interface ChannelExecutionContext {
   }
   room?: {
     id: string
+    memberKey?: string
     ownerNodeId?: string
     title: string
   }

@@ -71,7 +71,7 @@ const roomDetail: AgentRoomDetailResponse = {
     }
   ],
   messages: [],
-  channelLinks: [],
+  channelConnections: [],
   shares: []
 }
 

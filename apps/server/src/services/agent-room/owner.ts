@@ -1,5 +1,4 @@
 import type {
-  AgentRoomChannelLink,
   AgentRoomCommand,
   AgentRoomDetail,
   AgentRoomEvent,
@@ -9,6 +8,8 @@ import type {
 } from '@oneworks/core'
 
 import { getDb } from '#~/db/index.js'
+import type { ResolvedAgentRoomChannelConnection } from './channel-link.js'
+import { executeAgentRoomChannelCommand } from './owner-channel-commands.js'
 import { publishAgentRoomShareChanged } from './share-events.js'
 
 export interface AgentRoomOwnerDependencies {
@@ -24,9 +25,9 @@ export interface AgentRoomOwnerDependencies {
     options: { idempotencyKey: string }
   ) => AgentRoomMessage
   db?: ReturnType<typeof getDb>
-  resolveChannelLink?: (
+  resolveChannelConnection?: (
     channelLinkName: string
-  ) => Promise<Omit<AgentRoomChannelLink, 'createdAt' | 'roomId'>>
+  ) => Promise<ResolvedAgentRoomChannelConnection>
 }
 
 export interface AgentRoomOwner {
@@ -91,19 +92,8 @@ export const createAgentRoomOwner = (dependencies: AgentRoomOwnerDependencies): 
         })
         return message
       }
-      if (command.type === 'attach_channel') {
-        if (dependencies.resolveChannelLink == null) {
-          throw new Error('Agent room owner does not support ChannelLink attachment')
-        }
-        const resolvedLink = await dependencies.resolveChannelLink(command.link.channelLinkName)
-        const link = db.saveAgentRoomChannelLink({ ...resolvedLink, roomId })
-        db.appendAgentRoomEvent({
-          idempotencyKey: command.idempotencyKey,
-          payload: link,
-          roomId,
-          type: command.type
-        })
-        return link
+      if (command.type === 'attach_member_channel' || command.type === 'update_member_channel') {
+        return await executeAgentRoomChannelCommand(db, dependencies, roomId, command)
       }
       if (command.type === 'record_delivery') {
         const delivery = db.saveAgentRoomMessageDelivery(command.delivery)

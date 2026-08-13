@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { resolveAgentRoomChannelLink } from '#~/services/agent-room/channel-link.js'
+import { resolveAgentRoomChannelConnection } from '#~/services/agent-room/channel-link.js'
 
 const { getChannelManager } = vi.hoisted(() => ({ getChannelManager: vi.fn() }))
 
@@ -28,7 +28,7 @@ describe('agent Room ChannelLink resolver', () => {
   })
 
   it('constructs the attachment only from the loaded runtime and ChannelLink', async () => {
-    await expect(resolveAgentRoomChannelLink('trusted-link')).resolves.toEqual({
+    await expect(resolveAgentRoomChannelConnection('trusted-link')).resolves.toEqual({
       accountLabel: 'Product bot',
       channelId: 'oc_trusted',
       channelKey: 'lark:product',
@@ -38,15 +38,16 @@ describe('agent Room ChannelLink resolver', () => {
       entity: 'product',
       label: 'trusted-link',
       receiveId: 'oc_trusted',
-      receiveIdType: 'chat_id'
+      receiveIdType: 'chat_id',
+      status: 'active'
     })
   })
 
   it('fails closed for unknown links and providers without a receive id type', async () => {
-    await expect(resolveAgentRoomChannelLink('missing-link')).rejects.toThrow('ChannelLink not found')
+    await expect(resolveAgentRoomChannelConnection('missing-link')).rejects.toThrow('ChannelLink not found')
     const state = getChannelManager.mock.results[0]?.value.states.get('lark:product')
     state.type = 'custom-provider'
-    await expect(resolveAgentRoomChannelLink('trusted-link')).rejects.toThrow('external.receiveIdType')
+    await expect(resolveAgentRoomChannelConnection('trusted-link')).rejects.toThrow('external.receiveIdType')
   })
 
   it('rejects thread links until the authoritative parent conversation is available', async () => {
@@ -54,7 +55,7 @@ describe('agent Room ChannelLink resolver', () => {
     state.channelLinks[0].address = { id: 'thread-1', kind: 'thread' }
     state.channelLinks[0].external = { threadId: 'thread-1', type: 'thread' }
 
-    await expect(resolveAgentRoomChannelLink('trusted-link')).rejects.toThrow(
+    await expect(resolveAgentRoomChannelConnection('trusted-link')).rejects.toThrow(
       'Thread ChannelLink is not deliverable without its parent conversation'
     )
   })
