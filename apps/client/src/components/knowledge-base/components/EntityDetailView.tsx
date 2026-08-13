@@ -13,7 +13,6 @@ import {
   deleteEntityChannelLink,
   getEntityDetail,
   getEntityRuntime,
-  getWorkspaceResourceUrl,
   updateEntityChannelAccount,
   updateEntityConfig,
   updateEntityMemory
@@ -21,6 +20,7 @@ import {
 import { MarkdownContent } from '#~/components/MarkdownContent'
 import { ActionSearchFilterPanel } from '#~/components/action-search-toolbar/ActionSearchFilterPanel'
 import { ActionSearchToolbar } from '#~/components/action-search-toolbar/ActionSearchToolbar'
+import { ChannelPlatformIcon } from '#~/components/channel-platform-icon/ChannelPlatformIcon'
 import { WorkspaceFileEditorView } from '#~/components/chat/workspace-file-editor/WorkspaceFileEditorView'
 import type { WorkspaceFileEditorActions } from '#~/components/chat/workspace-file-editor/WorkspaceFileEditorView'
 import { SchemaObjectEditor } from '#~/components/config/record-editors/SchemaObjectEditor'
@@ -32,17 +32,6 @@ import { buildConfigUiSchemaFromJsonSchema } from '#~/components/plugins/plugin-
 import type { EntityRuntimeDetail } from '@oneworks/types'
 import type { KnowledgeEntityPage } from '../knowledge-routes'
 
-const channelIconByType: Record<string, string> = {
-  discord: 'forum',
-  lark: 'flight',
-  oneworks: 'all_inclusive',
-  telegram: 'send',
-  tg: 'send',
-  wechat: 'chat'
-}
-
-const getChannelIcon = (type: string) => channelIconByType[type.toLowerCase()] ?? 'hub'
-
 const channelLabelByType: Record<string, string> = {
   discord: 'Discord',
   lark: '飞书',
@@ -53,20 +42,6 @@ const channelLabelByType: Record<string, string> = {
 }
 
 const getChannelLabel = (type: string) => channelLabelByType[type.toLowerCase()] ?? type
-
-const channelAssetByType: Record<string, string> = {
-  lark: 'apps/relay-admin/src/login/assets/feishu-logo.png',
-  telegram: 'assets/brand/channels/telegram.svg',
-  tg: 'assets/brand/channels/telegram.svg',
-  wechat: 'assets/brand/channels/wechat.svg'
-}
-
-const ChannelPlatformIcon = ({ type }: { type: string }) => {
-  const asset = channelAssetByType[type.toLowerCase()]
-  return asset == null
-    ? <span className='material-symbols-rounded' aria-hidden='true'>{getChannelIcon(type)}</span>
-    : <img alt='' className='knowledge-entity-detail__platform-icon' src={getWorkspaceResourceUrl(asset)} />
-}
 
 const normalizeSearchQuery = (value: string) => value.trim().toLocaleLowerCase()
 
@@ -503,7 +478,10 @@ export function EntityDetailView({
                     className='knowledge-entity-detail__runtime-row knowledge-entity-detail__channel-row'
                     key={account.channelKey}
                   >
-                    <ChannelPlatformIcon type={account.type} />
+                    <ChannelPlatformIcon
+                      channelType={account.type}
+                      className='knowledge-entity-detail__platform-icon'
+                    />
                     <span className='knowledge-entity-detail__runtime-copy'>
                       <button
                         className='knowledge-entity-detail__text-action'

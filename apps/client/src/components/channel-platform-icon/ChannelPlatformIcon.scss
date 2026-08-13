@@ -1,0 +1,15 @@
+.channel-platform-icon {
+  display: block;
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+
+.channel-platform-icon.anticon {
+  line-height: 1;
+}
+
+.channel-platform-icon.anticon > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}

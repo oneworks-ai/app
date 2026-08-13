@@ -140,6 +140,12 @@
 - Rule / examples: 认证缺失或失效时仍保留完整额度卡片，继续展示最后一次额度或空结构，并在使用限额区域内给出本地化的重新登录提示；反例是以 `quota != null` 或登录状态为条件卸载整张卡片，让用户失去问题上下文与重新登录入口。
 - Ownership / source / exceptions / enforcement: 规则由 `apps/client/src/components/account-quota/AGENTS.md`、`AccountQuotaPanel.tsx` 与消费方拥有；来源为用户 2026-08-07 明确要求无论登录状态是否丢失都展示额度区域，并在区域内提示。账号记录本身已被删除时不适用；由 missing / error 且无 quota 的组件回归、配置详情与聊天弹窗真实页面视觉审阅执行。
 
+### OW-DM-014 — Agent Room 渠道流向与品牌标记
+
+- Revision / status / scope: 1 / ACTIVE / OneWorks project，Agent Room 外部渠道来源与投递标记，以及复用共享渠道平台图标的页面。
+- Rule / examples: 已知渠道必须使用对应品牌资产，只有未知渠道使用通用 `hub` fallback；Agent Room 中 `source` 标记位于气泡左侧，`delivery` 标记位于气泡右侧。正例是飞书入站消息左侧显示飞书品牌，Agent 发回飞书的回复右侧显示飞书品牌；反例是用 `flight`、`chat` 等语义近似 Material glyph 冒充渠道品牌，或把投递标记放在气泡左侧。
+- Ownership / source / exceptions / enforcement: 规则由 `apps/client/src/components/agent-room/AGENTS.md`、共享 `ChannelPlatformIcon` 和 Agent Room 气泡组件拥有；来源为用户 2026-08-14 对真实飞书群聊页面的明确反馈。OneWorks 内部投影不显示外部渠道标记；品牌素材必须由 client bundle 或产品资产入口提供，不依赖用户 workspace。由渠道别名参数化测试、`source < surface < delivery` DOM 顺序断言、production build 资产检查和用户可见页面审阅执行。
+
 ## 待确认冲突
 
 ### OW-DM-P001 — 主题侧栏是否保留渐变

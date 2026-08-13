@@ -19,6 +19,7 @@ import type {
   AgentRoomRunView,
   AgentRoomViewModel
 } from '#~/components/agent-room'
+import { ChannelPlatformIcon } from '#~/components/channel-platform-icon/ChannelPlatformIcon'
 import type {
   SenderToolbarData,
   SenderToolbarHandlers,
@@ -571,6 +572,28 @@ const renderAgentRoomSenderHeader = async ({
 }
 
 describe('agent room transcript rendering', () => {
+  it.each([
+    ['lark', 'feishu-logo.png'],
+    ['qq-channel', 'qq.svg'],
+    ['telegram', 'telegram.svg'],
+    ['wechat', 'wechat.svg']
+  ])('renders the %s channel with its bundled brand asset', (channelType, assetName) => {
+    const html = renderToStaticMarkup(<ChannelPlatformIcon channelType={channelType} />)
+
+    expect(html).toContain('<img')
+    expect(html).toContain(assetName)
+    expect(html).not.toContain('/api/workspace/resource')
+  })
+
+  it('renders the Discord brand glyph and a generic fallback only for unknown channels', () => {
+    const discord = renderToStaticMarkup(<ChannelPlatformIcon channelType='discord' />)
+    const unknown = renderToStaticMarkup(<ChannelPlatformIcon channelType='custom-provider' />)
+
+    expect(discord).toContain('anticon-discord')
+    expect(discord).not.toContain('>hub</span>')
+    expect(unknown).toContain('>hub</span>')
+  })
+
   it('renders the room transcript as chat bubbles without standalone room chrome', async () => {
     const html = await renderRoom()
 
@@ -1683,7 +1706,7 @@ describe('agent room transcript rendering', () => {
       room: {
         ...fixtureRoom,
         messages: [
-          createMessage('msg-cross-platform', 'agent', 'message', 'Forwarded the update.', {
+          createMessage('msg-cross-platform', 'user', 'message', 'Forwarded the update.', {
             memberKey: 'member:host',
             channelReferences: [
               {
@@ -1723,21 +1746,28 @@ describe('agent room transcript rendering', () => {
       'utf8'
     )
 
+    expect(message).toContain('agent-room-bubble--user')
     expect(message.match(/class="agent-room-bubble__channel-reference(?: |")/g)).toHaveLength(2)
     expectContains(message, [
       'aria-label="Source: wechat · Service account · Product group"',
       'aria-label="Delivery: lark · Product bot · Brainstorm room · Sent"',
       'data-direction="source"',
       'data-direction="delivery"',
-      '>chat</span>',
-      '>flight</span>'
+      'wechat.svg',
+      'feishu-logo.png'
     ])
-    expect(message.indexOf('agent-room-bubble__channel-references')).toBeLessThan(
-      message.indexOf('agent-room-bubble__surface')
-    )
+    const sourceIndex = message.indexOf('agent-room-bubble__channel-references--source')
+    const surfaceIndex = message.indexOf('agent-room-bubble__surface')
+    const deliveryIndex = message.indexOf('agent-room-bubble__channel-references--delivery')
+    expect(sourceIndex).toBeGreaterThanOrEqual(0)
+    expect(sourceIndex).toBeLessThan(surfaceIndex)
+    expect(deliveryIndex).toBeGreaterThan(surfaceIndex)
     expect(message).not.toContain('agent-room-bubble__channel-reference-text')
     expect(message).not.toContain('>check_circle</span>')
     expect(message).not.toContain('>all_inclusive</span>')
+    expect(message).not.toContain('>chat</span>')
+    expect(message).not.toContain('>flight</span>')
+    expect(message).not.toContain('/api/workspace/resource')
     expect(message).not.toContain('+1')
     expectContains(styles, [
       '.agent-room-bubble__message-row {',
