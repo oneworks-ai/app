@@ -1,6 +1,8 @@
 import { useCallback, useContext, useRef } from 'react'
 import type { PropsWithChildren } from 'react'
 
+import type { DesktopWorkspaceStartupReadiness } from '@oneworks/types'
+
 import { DesktopWorkspaceStartupReadyContext } from './desktop-workspace-startup-ready'
 
 export function DesktopWorkspaceStartupProvider({ children }: PropsWithChildren) {
@@ -9,15 +11,15 @@ export function DesktopWorkspaceStartupProvider({ children }: PropsWithChildren)
   const hasStartupOverlay = markWorkspaceStartupReady != null
   const readyRequestedRef = useRef(!hasStartupOverlay)
 
-  const markReady = useCallback(() => {
+  const markReady = useCallback((readiness: DesktopWorkspaceStartupReadiness = 'editable') => {
     if (!hasStartupOverlay || readyRequestedRef.current) return
 
     readyRequestedRef.current = true
     if (parentMarkReady != null) {
-      parentMarkReady()
+      parentMarkReady(readiness)
       return
     }
-    markWorkspaceStartupReady()
+    markWorkspaceStartupReady({ readiness })
   }, [hasStartupOverlay, markWorkspaceStartupReady, parentMarkReady])
 
   return (

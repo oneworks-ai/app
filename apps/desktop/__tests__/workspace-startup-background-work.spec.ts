@@ -31,8 +31,17 @@ describe('workspace startup background work', () => {
     )
 
     expect(source).toContain('const scheduleLauncherPreloadAfterStartupReady = () =>')
-    expect(source).toContain('onStartupWindowReady: () => {')
-    expect(source).toContain('scheduleLauncherPreloadAfterStartupReady()')
+    expect(source).toContain('onStartupWindowReady: (readiness) => {')
+    expect(source).toContain("if (readiness === 'editable')")
+    expect(source).toContain("code: 'workspace.renderer_surface_degraded'")
+    const startupReadyHandler = source.slice(
+      source.indexOf('onStartupWindowReady: (readiness) => {'),
+      source.indexOf('onRendererGone:')
+    )
+    const editableBranch = startupReadyHandler.slice(0, startupReadyHandler.indexOf('} else {'))
+    const degradedBranch = startupReadyHandler.slice(startupReadyHandler.indexOf('} else {'))
+    expect(editableBranch).toContain('scheduleLauncherPreloadAfterStartupReady()')
+    expect(degradedBranch).not.toContain('scheduleLauncherPreloadAfterStartupReady()')
     expect(workspaceStartupBranch).not.toContain('preloadLauncherWindow()')
   })
 

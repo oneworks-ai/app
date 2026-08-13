@@ -3,6 +3,8 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 import { mountOneWorksIconLoader } from '@oneworks/icon/loader'
 import type { OneWorksIconLoaderHandle } from '@oneworks/icon/loader'
+import { normalizeDesktopWorkspaceStartupReadiness } from '@oneworks/types'
+import type { DesktopWorkspaceStartupReadyInput } from '@oneworks/types'
 
 import { WORKSPACE_STARTUP_ICON_SEED } from '../workspace-startup-icon'
 
@@ -236,8 +238,9 @@ const revealWorkspaceStartupSurface = () => {
   return dismissWorkspaceStartupOverlay('surface')
 }
 
-const markWorkspaceStartupReady = () => {
-  void ipcRenderer.invoke(workspaceStartupReadyChannel).catch(() => undefined)
+const markWorkspaceStartupReady = (input?: DesktopWorkspaceStartupReadyInput) => {
+  const readiness = normalizeDesktopWorkspaceStartupReadiness(input)
+  void ipcRenderer.invoke(workspaceStartupReadyChannel, { readiness }).catch(() => undefined)
   void dismissWorkspaceStartupOverlay('complete')
 }
 

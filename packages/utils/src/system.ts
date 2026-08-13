@@ -1,4 +1,6 @@
 import { spawn } from 'node:child_process'
+import fs from 'node:fs'
+import { createRequire } from 'node:module'
 import path from 'node:path'
 import process from 'node:process'
 
@@ -25,6 +27,57 @@ export const notifyOptionsSchema = z.object({
 
 export type NotifyOptions = z.infer<typeof notifyOptionsSchema>
 
+const notificationAssetNames = {
+  icon: 'mcp.png',
+  sound: 'completed.mp3'
+} as const
+
+const hasNotificationAssets = (directory: string) => (
+  fs.existsSync(path.join(directory, notificationAssetNames.icon)) &&
+  fs.existsSync(path.join(directory, notificationAssetNames.sound))
+)
+
+const resolveUtilsPackageDir = (runtimePackageDir: string | undefined) => {
+  const normalizedPackageDir = runtimePackageDir?.trim()
+  if (normalizedPackageDir == null || normalizedPackageDir === '') return undefined
+
+  try {
+    const packageJsonPath = createRequire(path.join(normalizedPackageDir, 'package.json'))
+      .resolve('@oneworks/utils/package.json')
+    return path.dirname(packageJsonPath)
+  } catch {
+    return undefined
+  }
+}
+
+export const resolveDefaultNotificationAssetPaths = (
+  env: NodeJS.ProcessEnv = process.env,
+  moduleDir = __dirname
+) => {
+  const desktopAppDir = env.__ONEWORKS_DESKTOP_APP_DIR__?.trim()
+  const utilsPackageDirs = [
+    resolveUtilsPackageDir(env.__ONEWORKS_PROJECT_PACKAGE_DIR__),
+    desktopAppDir == null || desktopAppDir === ''
+      ? undefined
+      : path.join(desktopAppDir, 'node_modules', '@oneworks', 'utils')
+  ].filter((candidate): candidate is string => candidate != null)
+  const candidateDirectories = [
+    ...utilsPackageDirs.flatMap(packageDir => [
+      path.join(packageDir, 'src', 'assets'),
+      path.join(packageDir, 'dist', 'assets'),
+      path.join(packageDir, 'assets')
+    ]),
+    path.resolve(moduleDir, 'assets'),
+    path.resolve(moduleDir, '..', 'src', 'assets')
+  ]
+  const assetDir = candidateDirectories.find(hasNotificationAssets) ?? path.resolve(moduleDir, 'assets')
+
+  return {
+    icon: path.join(assetDir, notificationAssetNames.icon),
+    sound: path.join(assetDir, notificationAssetNames.sound)
+  }
+}
+
 export const notify = async (options: NotifyOptions) => {
   const {
     title,
@@ -36,8 +89,7 @@ export const notify = async (options: NotifyOptions) => {
     needConfirm
   } = options
 
-  const defaultIcon = path.resolve(__dirname, './assets/mcp.png')
-  const defaultSound = path.resolve(__dirname, './assets/completed.mp3')
+  const { icon: defaultIcon, sound: defaultSound } = resolveDefaultNotificationAssetPaths()
 
   const resolvedSound = typeof sound === 'string'
     ? sound

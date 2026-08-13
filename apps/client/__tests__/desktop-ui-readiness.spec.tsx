@@ -21,11 +21,51 @@ function ReadinessProbe({ ready }: { ready: boolean }) {
   return <main>Visible product state</main>
 }
 
-function WorkspaceReadinessProbe({ ready }: { ready: boolean }) {
+function WorkspaceReadinessProbe({
+  readiness = 'editable',
+  ready,
+  selector = "[data-oneworks-sender-editor-ready='true']"
+}: {
+  readiness?: 'degraded' | 'editable'
+  ready: boolean
+  selector?: string
+}) {
   useDesktopWorkspaceStartupReady(ready, {
-    visibleSelector: "[data-oneworks-sender-editor-ready='true']"
+    readiness,
+    visibleSelector: selector
   })
   return null
+}
+
+function SenderReadinessProbe({ unavailable }: { unavailable: boolean }) {
+  return (
+    <>
+      <WorkspaceReadinessProbe ready />
+      <WorkspaceReadinessProbe
+        readiness='degraded'
+        ready
+        selector="[data-oneworks-sender-editor-unavailable='true']"
+      />
+      <div
+        ref={(element) => {
+          if (element == null) return
+          element.getBoundingClientRect = () => ({
+            bottom: 20,
+            height: 20,
+            left: 0,
+            right: 100,
+            toJSON: () => ({}),
+            top: 0,
+            width: 100,
+            x: 0,
+            y: 0
+          })
+        }}
+        data-oneworks-sender-editor-ready={unavailable ? undefined : 'true'}
+        data-oneworks-sender-editor-unavailable={unavailable ? 'true' : undefined}
+      />
+    </>
+  )
 }
 
 function StartupProviderReadyProbe() {
@@ -50,6 +90,7 @@ describe('desktop UI readiness', () => {
   })
 
   afterEach(async () => {
+    vi.useRealTimers()
     await act(async () => root.unmount())
     container.remove()
     Reflect.deleteProperty(window, 'oneworksDesktop')
@@ -113,8 +154,10 @@ describe('desktop UI readiness', () => {
     expect(workspaceConnectionGate).not.toContain('OPENING_OVERLAY_MIN_VISIBLE_MS')
     expect(workspaceConnectionGate).not.toContain('OPENING_OVERLAY_EXIT_MS')
     expect(workspaceConnectionGate).toContain("overlayPhase !== 'hidden'")
-    expect(workspaceConnectionGate).toContain('parentMarkWorkspaceStartupReady()')
-    expect(workspaceConnectionGate).toContain('terminalMarkWorkspaceStartupReady?.()')
+    expect(workspaceConnectionGate).toContain('parentMarkWorkspaceStartupReady(workspaceStartupReadiness)')
+    expect(workspaceConnectionGate).toContain(
+      'terminalMarkWorkspaceStartupReady?.({ readiness: workspaceStartupReadiness })'
+    )
     expect(workspaceConnectionGate).not.toContain('fallbackTimerId')
     expect(desktopWorkspaceStartupReady).not.toContain('STARTUP_MIN_VISIBLE_MS')
     expect(appShell).not.toContain('AppShellStartupReadySignal')
@@ -127,11 +170,73 @@ describe('desktop UI readiness', () => {
   })
 
   it('uses the real sender editor as chat editable readiness', async () => {
-    const chatRouteShell = await readFile(path.join(clientRoot, 'src/routes/ChatRouteShell.tsx'), 'utf8')
+    const [chatRouteShell, senderBody, senderComposer, senderEditor] = await Promise.all([
+      readFile(path.join(clientRoot, 'src/routes/ChatRouteShell.tsx'), 'utf8'),
+      readFile(
+        path.join(
+          clientRoot,
+          'src/components/chat/sender/@components/sender-body/SenderBody.tsx'
+        ),
+        'utf8'
+      ),
+      readFile(
+        path.join(
+          clientRoot,
+          'src/components/chat/sender/@components/sender-composer-input/SenderComposerInput.tsx'
+        ),
+        'utf8'
+      ),
+      readFile(
+        path.join(
+          clientRoot,
+          'src/components/chat/sender/@components/sender-monaco-editor/SenderMonacoEditor.tsx'
+        ),
+        'utf8'
+      )
+    ])
 
     expect(chatRouteShell).toContain(
       'const CHAT_ROUTE_STARTUP_READY_SELECTOR = "[data-oneworks-sender-editor-ready=\'true\']"'
     )
+    expect(chatRouteShell).toContain(
+      'const CHAT_ROUTE_STARTUP_DEGRADED_SELECTOR = "[data-oneworks-sender-editor-unavailable=\'true\']"'
+    )
+    expect(senderBody).toContain('startupUnavailable={!isInlineEdit && modelUnavailable === true}')
+    expect(senderComposer).toContain('startupUnavailable={startupUnavailable}')
+    expect(senderEditor).toContain('const isStartupEditable = isEditorReady && !disabled')
+    expect(senderEditor).toContain('const isStartupUnavailable = isEditorReady && startupUnavailable')
+  })
+
+  it('reports the first real startup outcome once while the degraded sender can later become editable', async () => {
+    vi.useFakeTimers()
+    const markWorkspaceStartupReady = vi.fn()
+    window.oneworksDesktop = { markWorkspaceStartupReady }
+
+    await act(async () => {
+      root.render(
+        <DesktopWorkspaceStartupProvider>
+          <SenderReadinessProbe unavailable />
+        </DesktopWorkspaceStartupProvider>
+      )
+    })
+    await act(async () => vi.runAllTimersAsync())
+
+    expect(markWorkspaceStartupReady).toHaveBeenCalledOnce()
+    expect(markWorkspaceStartupReady).toHaveBeenCalledWith({ readiness: 'degraded' })
+
+    await act(async () => {
+      root.render(
+        <DesktopWorkspaceStartupProvider>
+          <SenderReadinessProbe unavailable={false} />
+        </DesktopWorkspaceStartupProvider>
+      )
+    })
+    await act(async () => vi.runAllTimersAsync())
+
+    expect(container.querySelector('[data-oneworks-sender-editor-ready="true"]')).not.toBeNull()
+    expect(container.querySelector('[data-oneworks-sender-editor-unavailable="true"]')).toBeNull()
+    expect(markWorkspaceStartupReady).toHaveBeenCalledOnce()
+    vi.useRealTimers()
   })
 
   it('does not hold an already connected real workspace behind a cosmetic minimum delay', async () => {
@@ -146,7 +251,7 @@ describe('desktop UI readiness', () => {
       )
     })
 
-    expect(markWorkspaceStartupReady).toHaveBeenCalledOnce()
+    expect(markWorkspaceStartupReady).toHaveBeenCalledWith({ readiness: 'editable' })
   })
 
   it('delegates a real surface-ready request to the connection gate before terminal readiness', async () => {
@@ -164,7 +269,7 @@ describe('desktop UI readiness', () => {
       )
     })
 
-    expect(requestConnectionGateExit).toHaveBeenCalledOnce()
+    expect(requestConnectionGateExit).toHaveBeenCalledWith('editable')
     expect(markWorkspaceStartupReady).not.toHaveBeenCalled()
   })
 

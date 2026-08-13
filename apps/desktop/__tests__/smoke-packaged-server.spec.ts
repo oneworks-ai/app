@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import type { ClientRequest, IncomingMessage, RequestOptions } from 'node:http'
 import { createRequire } from 'node:module'
 import os from 'node:os'
@@ -7,12 +7,14 @@ import path from 'node:path'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
+const desktopRoot = path.resolve(__dirname, '..')
 const requireModule = createRequire(import.meta.url)
 const { BUILTIN_PLUGIN_PACKAGES } = requireModule('../src/builtin-adapter-cache.cjs') as {
   BUILTIN_PLUGIN_PACKAGES: string[]
 }
 const {
   assertBuiltinRuntimeActive,
+  assertPackagedServerRuntimeAssets,
   assertPackagedServerRuntimeBundle,
   assertLocalClientSourcesCompile,
   createPackagedServerChildEnv,
@@ -29,6 +31,7 @@ const {
     port: number,
     options?: { privatePaths?: string[] }
   ) => Promise<void>
+  assertPackagedServerRuntimeAssets: (appDir: string) => void
   assertPackagedServerRuntimeBundle: (appDir: string) => void
   assertLocalClientSourcesCompile: (catalog: unknown, port: number) => Promise<void>
   createPackagedServerChildEnv: (input: {
@@ -133,6 +136,29 @@ describe('packaged server smoke timeouts', () => {
 
     await writeFile(path.join(runtimeDir, 'chunks', 'runtime-fixture.mjs'), 'export {}\n')
     expect(() => assertPackagedServerRuntimeBundle(appDir)).not.toThrow()
+  })
+
+  it('requires installed runtime assets and hands the stable app root to bundled server modules', async () => {
+    const appDir = await mkdtemp(path.join(os.tmpdir(), 'ow-packaged-assets-'))
+    tempDirs.push(appDir)
+    const requiredAssets = [
+      path.join(appDir, 'resources', 'scrcpy', 'scrcpy-server-v3.3.3'),
+      path.join(appDir, 'node_modules', '@oneworks', 'utils', 'src', 'assets', 'mcp.png'),
+      path.join(appDir, 'node_modules', '@oneworks', 'utils', 'src', 'assets', 'completed.mp3')
+    ]
+    await Promise.all(requiredAssets.map(async assetPath => {
+      await mkdir(path.dirname(assetPath), { recursive: true })
+      await writeFile(assetPath, 'asset fixture')
+    }))
+
+    expect(() => assertPackagedServerRuntimeAssets(appDir)).not.toThrow()
+    await rm(requiredAssets[0]!, { force: true })
+    expect(() => assertPackagedServerRuntimeAssets(appDir)).toThrow('scrcpy-server-v3.3.3')
+
+    const serverChild = await readFile(path.join(desktopRoot, 'src/server-child.cjs'), 'utf8')
+    expect(serverChild).toContain(
+      "process.env.__ONEWORKS_DESKTOP_APP_DIR__ = path.resolve(__dirname, '..')"
+    )
   })
 
   it('accepts active built-in runtimes without resolved roots', async () => {

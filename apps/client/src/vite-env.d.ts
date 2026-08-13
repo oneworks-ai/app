@@ -770,7 +770,9 @@ interface Window {
     onMobileDeviceVideoStreamStatus?: (
       listener: (value: DesktopMobileDeviceVideoStreamStatusEvent) => void
     ) => () => void
-    markWorkspaceStartupReady?: () => void
+    markWorkspaceStartupReady?: (
+      input?: import('@oneworks/types').DesktopWorkspaceStartupReadyInput
+    ) => void
     onDesktopSettingsChange?: (listener: (value: unknown) => void) => () => void
     onUpdateStatusChange?: (listener: (value: unknown) => void) => () => void
     onGlobalInterfaceLanguageConfigChange?: (listener: (value: unknown) => void) => () => void

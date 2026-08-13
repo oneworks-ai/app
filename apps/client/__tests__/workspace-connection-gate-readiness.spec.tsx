@@ -32,7 +32,12 @@ vi.mock('#~/hooks/use-resolved-theme-mode', () => ({
 }))
 
 vi.mock('#~/WorkspaceConnectionErrorView', () => ({
-  WorkspaceConnectionErrorView: () => <main data-testid='workspace-connection-error'>Connection error</main>
+  WorkspaceConnectionErrorView: ({ onRetry }: { onRetry: () => void }) => (
+    <main data-testid='workspace-connection-error'>
+      Connection error
+      <button type='button' onClick={onRetry}>Retry</button>
+    </main>
+  )
 }))
 
 vi.mock('#~/workspace-connection-restore', () => ({
@@ -104,6 +109,46 @@ describe('workspace connection gate startup readiness', () => {
     expect(document.querySelector('[data-testid="connected-workspace"]')).toBeNull()
     expect(document.querySelector('.workspace-opening-overlay')).toBeNull()
     expect(markWorkspaceStartupReady).toHaveBeenCalledOnce()
+    expect(markWorkspaceStartupReady).toHaveBeenCalledWith('degraded')
+  })
+
+  it('can retry into an editable surface without rewriting the first terminal startup outcome', async () => {
+    isWorkspaceConnectionResponseMock.mockReturnValueOnce(false).mockReturnValue(true)
+    const markWorkspaceStartupReady = vi.fn()
+    window.oneworksDesktop = {
+      getWorkspaceConnection: vi.fn()
+        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce({ serverBaseUrl: 'http://127.0.0.1:3000' })
+    }
+
+    await act(async () => {
+      root.render(
+        <DesktopWorkspaceStartupReadyContext.Provider value={markWorkspaceStartupReady}>
+          <WorkspaceConnectionGate>
+            <ConnectedWorkspaceProbe />
+          </WorkspaceConnectionGate>
+        </DesktopWorkspaceStartupReadyContext.Provider>
+      )
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(markWorkspaceStartupReady).toHaveBeenCalledOnce()
+    expect(markWorkspaceStartupReady).toHaveBeenCalledWith('degraded')
+
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[data-testid="workspace-connection-error"] button')
+        ?.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(document.querySelector('[data-testid="workspace-connection-error"]')).toBeNull()
+    expect(document.querySelector('[data-testid="connected-workspace"]')).not.toBeNull()
+    expect(document.querySelector('.workspace-opening-overlay')).toBeNull()
+    expect(markWorkspaceStartupReady).toHaveBeenCalledOnce()
   })
 
   it('reports terminal readiness only after the React opening overlay is unmounted', async () => {
@@ -131,5 +176,6 @@ describe('workspace connection gate startup readiness', () => {
     expect(document.querySelector('[data-testid="workspace-connection-error"]')).toBeNull()
     expect(document.querySelector('[data-testid="connected-workspace"]')).not.toBeNull()
     expect(markWorkspaceStartupReady).toHaveBeenCalledOnce()
+    expect(markWorkspaceStartupReady).toHaveBeenCalledWith({ readiness: 'editable' })
   })
 })

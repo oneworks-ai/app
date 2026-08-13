@@ -5,7 +5,7 @@ import type { PropsWithChildren } from 'react'
 import { useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import type { LauncherWorkspaceVersionConflictDetails } from '@oneworks/types'
+import type { DesktopWorkspaceStartupReadiness, LauncherWorkspaceVersionConflictDetails } from '@oneworks/types'
 
 import { getApiErrorMessage } from '#~/api/base'
 import { restartLauncherWorkspace } from '#~/api/launcher'
@@ -70,8 +70,11 @@ export function WorkspaceConnectionGate({
   const parentMarkWorkspaceStartupReady = useContext(DesktopWorkspaceStartupReadyContext)
   const terminalMarkWorkspaceStartupReady = window.oneworksDesktop?.markWorkspaceStartupReady
   const overlayExitRequestedRef = useRef(false)
-  const workspaceStartupReadyRequestedRef = useRef(false)
-  const workspaceStartupReadyReportedRef = useRef(false)
+  const workspaceStartupReadinessRequestedRef = useRef<DesktopWorkspaceStartupReadiness>()
+  const workspaceStartupReadinessReportedRef = useRef(false)
+  const [workspaceStartupReadiness, setWorkspaceStartupReadiness] = useState<
+    DesktopWorkspaceStartupReadiness | undefined
+  >()
   const autoRestartAttemptKeyRef = useRef<string | undefined>()
   const restartActivityRef = useRef<WorkspaceServerRestartActivity | undefined>()
   const desktopConnectionUnavailableMessageRef = useRef(t('workspaceConnection.desktopConnectionUnavailable'))
@@ -92,27 +95,37 @@ export function WorkspaceConnectionGate({
     setOverlayPhase('hidden')
   }, [])
 
-  const requestWorkspaceStartupSurfaceReady = useCallback(() => {
-    workspaceStartupReadyRequestedRef.current = true
+  const requestWorkspaceStartupSurfaceReady = useCallback((
+    readiness: DesktopWorkspaceStartupReadiness = 'editable'
+  ) => {
+    if (workspaceStartupReadinessRequestedRef.current == null) {
+      workspaceStartupReadinessRequestedRef.current = readiness
+      setWorkspaceStartupReadiness(readiness)
+    }
     requestOpeningOverlayExit()
   }, [requestOpeningOverlayExit])
 
   useEffect(() => {
     if (
       overlayPhase !== 'hidden' ||
-      !workspaceStartupReadyRequestedRef.current ||
-      workspaceStartupReadyReportedRef.current
+      workspaceStartupReadiness == null ||
+      workspaceStartupReadinessReportedRef.current
     ) {
       return
     }
 
-    workspaceStartupReadyReportedRef.current = true
+    workspaceStartupReadinessReportedRef.current = true
     if (parentMarkWorkspaceStartupReady != null) {
-      parentMarkWorkspaceStartupReady()
+      parentMarkWorkspaceStartupReady(workspaceStartupReadiness)
       return
     }
-    terminalMarkWorkspaceStartupReady?.()
-  }, [overlayPhase, parentMarkWorkspaceStartupReady, terminalMarkWorkspaceStartupReady])
+    terminalMarkWorkspaceStartupReady?.({ readiness: workspaceStartupReadiness })
+  }, [
+    overlayPhase,
+    parentMarkWorkspaceStartupReady,
+    terminalMarkWorkspaceStartupReady,
+    workspaceStartupReadiness
+  ])
 
   const maybeRestartIdleWorkspaceServer = useCallback(async (
     details: LauncherWorkspaceVersionConflictDetails
@@ -265,7 +278,7 @@ export function WorkspaceConnectionGate({
 
   useEffect(() => {
     if (state.status === 'error') {
-      requestWorkspaceStartupSurfaceReady()
+      requestWorkspaceStartupSurfaceReady('degraded')
     }
   }, [requestWorkspaceStartupSurfaceReady, state.status])
 

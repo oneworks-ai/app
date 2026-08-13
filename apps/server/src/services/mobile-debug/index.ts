@@ -38,6 +38,7 @@ import {
   sendIosWdaInput
 } from './ios-wda.js'
 import type { NormalizedIosWdaTargetConfig } from './ios-wda.js'
+import { SCRCPY_SERVER_VERSION, resolveScrcpyServerPath } from './runtime-assets.js'
 
 const ADB_TIMEOUT_MS = 10000
 const FETCH_TIMEOUT_MS = 5000
@@ -48,7 +49,6 @@ const ADB_SCREENSHOT_TIMEOUT_MS = 4000
 const ANDROID_DEVTOOLS_SOCKET_SCAN_TIMEOUT_MS = 1500
 const ADB_UIAUTOMATOR_DUMP_TIMEOUT_MS = 10000
 const ADB_UIAUTOMATOR_READ_TIMEOUT_MS = 3500
-const SCRCPY_SERVER_VERSION = '3.3.3'
 const SCRCPY_SERVER_REMOTE_PATH = `/data/local/tmp/oneworks-scrcpy-server-v${SCRCPY_SERVER_VERSION}.jar`
 const SCRCPY_VIDEO_BIT_RATE = 6_000_000
 const SCRCPY_MAX_FPS = 60
@@ -1690,24 +1690,6 @@ const createBufferReadableStream = (buffer: Uint8Array) =>
   })
 
 const getScrcpyVideoCodecName = (codec: number) => ScrcpyVideoCodecNameMap.get(codec) ?? `codec-${codec}`
-
-const getScrcpyServerPathCandidates = () => {
-  const fileName = `scrcpy-server-v${SCRCPY_SERVER_VERSION}`
-  return [
-    process.env.ONEWORKS_SCRCPY_SERVER_PATH,
-    path.join(process.cwd(), 'resources', 'scrcpy', fileName),
-    path.join(process.cwd(), 'apps', 'desktop', 'resources', 'scrcpy', fileName),
-    path.resolve(__dirname, '..', '..', '..', 'resources', 'scrcpy', fileName),
-    path.resolve(__dirname, '..', '..', '..', '..', 'apps', 'desktop', 'resources', 'scrcpy', fileName)
-  ].filter((candidate): candidate is string => candidate != null && candidate.trim() !== '')
-}
-
-const resolveScrcpyServerPath = () => {
-  for (const candidate of getScrcpyServerPathCandidates()) {
-    if (fs.existsSync(candidate)) return candidate
-  }
-  throw new Error(`scrcpy server v${SCRCPY_SERVER_VERSION} was not found.`)
-}
 
 const resolveAdbServerTcpSpec = () => {
   const rawSocket = process.env.ADB_SERVER_SOCKET?.trim()

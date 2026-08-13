@@ -46,6 +46,7 @@ export function SenderComposerInput({
   placeholder,
   input,
   disabled,
+  startupUnavailable,
   secondarySendShortcut,
   onSecondarySendShortcut,
   minVisibleLineCount,
@@ -85,6 +86,7 @@ export function SenderComposerInput({
   placeholder: string
   input: string
   disabled: boolean
+  startupUnavailable: boolean
   secondarySendShortcut?: string
   onSecondarySendShortcut?: () => void
   minVisibleLineCount?: number
@@ -135,6 +137,7 @@ export function SenderComposerInput({
         value={input}
         placeholder={placeholder}
         disabled={disabled || voiceEditorDisabled}
+        startupUnavailable={startupUnavailable}
         sendShortcut={toolbarState.resolvedSendShortcut}
         sendShortcutDisabled={toolbarState.sendBlocked || toolbarState.hideSubmitAction}
         onSendShortcut={toolbarHandlers.onSend}

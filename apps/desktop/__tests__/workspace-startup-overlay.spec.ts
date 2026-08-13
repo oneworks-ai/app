@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 
+import { normalizeDesktopWorkspaceStartupReadiness } from '@oneworks/types'
 import { describe, expect, it } from 'vitest'
 
 const desktopRoot = path.resolve(__dirname, '..')
@@ -25,8 +26,23 @@ describe('desktop workspace startup overlay', () => {
     expect(revealSource).toContain("dismissWorkspaceStartupOverlay('surface')")
     expect(revealSource).toContain('workspaceStartupDismissPromise ?? Promise.resolve()')
     expect(revealSource).not.toContain('ipcRenderer.invoke')
-    expect(completeSource).toContain('ipcRenderer.invoke(workspaceStartupReadyChannel)')
+    expect(completeSource).toContain('ipcRenderer.invoke(workspaceStartupReadyChannel, { readiness })')
     expect(completeSource).toContain("dismissWorkspaceStartupOverlay('complete')")
     expect(preload).toContain('revealWorkspaceStartupSurface,')
+  })
+
+  it('keeps only the omitted legacy payload editable and fails explicit malformed IPC input closed', async () => {
+    const [preload, ipcHandlers] = await Promise.all([
+      readFile(path.join(desktopRoot, 'src/preload/index.ts'), 'utf8'),
+      readFile(path.join(desktopRoot, 'src/main/ipc-handlers.ts'), 'utf8')
+    ])
+
+    expect(normalizeDesktopWorkspaceStartupReadiness()).toBe('editable')
+    expect(normalizeDesktopWorkspaceStartupReadiness(null)).toBe('degraded')
+    expect(normalizeDesktopWorkspaceStartupReadiness({})).toBe('degraded')
+    expect(preload).toContain('normalizeDesktopWorkspaceStartupReadiness(input)')
+    expect(ipcHandlers).toContain(
+      'markWorkspaceStartupWindowReady(windowRecord, normalizeDesktopWorkspaceStartupReadiness(input))'
+    )
   })
 })

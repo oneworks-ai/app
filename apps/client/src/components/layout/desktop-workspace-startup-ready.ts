@@ -1,8 +1,15 @@
 import { createContext, useContext, useEffect } from 'react'
 
-export const DesktopWorkspaceStartupReadyContext = createContext<(() => void) | null>(null)
+import type { DesktopWorkspaceStartupReadiness } from '@oneworks/types'
+
+export const DesktopWorkspaceStartupReadyContext = createContext<
+  (
+    (readiness?: DesktopWorkspaceStartupReadiness) => void
+  ) | null
+>(null)
 
 interface DesktopWorkspaceStartupReadyOptions {
+  readiness?: DesktopWorkspaceStartupReadiness
   visibleSelector?: string
 }
 
@@ -27,7 +34,7 @@ export function useDesktopWorkspaceStartupReady(
   options: DesktopWorkspaceStartupReadyOptions = {}
 ) {
   const markReady = useContext(DesktopWorkspaceStartupReadyContext)
-  const { visibleSelector } = options
+  const { readiness = 'editable', visibleSelector } = options
 
   useEffect(() => {
     if (!ready || markReady == null) return
@@ -53,7 +60,7 @@ export function useDesktopWorkspaceStartupReady(
         window.clearTimeout(paintFallbackTimer)
         paintFallbackTimer = null
       }
-      markReady()
+      markReady(readiness)
     }
 
     const finishAfterPaint = () => {
@@ -80,7 +87,14 @@ export function useDesktopWorkspaceStartupReady(
     } else {
       visibleObserver = new MutationObserver(checkVisibleElement)
       visibleObserver.observe(document.documentElement, {
-        attributeFilter: ['aria-hidden', 'class', 'data-oneworks-sender-editor-ready', 'hidden', 'style'],
+        attributeFilter: [
+          'aria-hidden',
+          'class',
+          'data-oneworks-sender-editor-ready',
+          'data-oneworks-sender-editor-unavailable',
+          'hidden',
+          'style'
+        ],
         attributes: true,
         childList: true,
         subtree: true
@@ -101,5 +115,5 @@ export function useDesktopWorkspaceStartupReady(
         window.clearTimeout(paintFallbackTimer)
       }
     }
-  }, [markReady, ready, visibleSelector])
+  }, [markReady, readiness, ready, visibleSelector])
 }

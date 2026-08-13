@@ -319,6 +319,18 @@ const assertPackagedServerRuntimeBundle = (appDir) => {
   }
 }
 
+const assertPackagedServerRuntimeAssets = (appDir) => {
+  const requiredAssets = [
+    path.join(appDir, 'resources', 'scrcpy', 'scrcpy-server-v3.3.3'),
+    path.join(appDir, 'node_modules', '@oneworks', 'utils', 'src', 'assets', 'mcp.png'),
+    path.join(appDir, 'node_modules', '@oneworks', 'utils', 'src', 'assets', 'completed.mp3')
+  ]
+  const missingAsset = requiredAssets.find(assetPath => !fs.existsSync(assetPath))
+  if (missingAsset != null) {
+    throw new Error(`Packaged server runtime asset is missing: ${missingAsset}`)
+  }
+}
+
 const getAvailablePort = () =>
   new Promise((resolve, reject) => {
     const server = net.createServer()
@@ -931,6 +943,7 @@ const main = async () => {
   const paths = resolvePackagedPaths()
   assertPackagedBuiltinPlugins(paths.appDir)
   assertPackagedServerRuntimeBundle(paths.appDir)
+  assertPackagedServerRuntimeAssets(paths.appDir)
   await runPackagedMainSmoke(paths)
 
   const workspaceResult = await runPackagedServerSmoke({
@@ -986,6 +999,7 @@ const main = async () => {
 
 module.exports = {
   assertBuiltinRuntimeActive,
+  assertPackagedServerRuntimeAssets,
   assertPackagedServerRuntimeBundle,
   assertLocalClientSourcesCompile,
   assertPublicPluginMetadata,

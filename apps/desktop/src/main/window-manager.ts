@@ -5,6 +5,7 @@ import { BrowserWindow } from 'electron'
 import type { WebContents } from 'electron'
 
 import type { DiagnosticFailureDomain } from '@oneworks/diagnostics'
+import type { DesktopWorkspaceStartupReadiness } from '@oneworks/types'
 import {
   isStandaloneDeviceRoutePath,
   normalizeStandaloneRoutePath as normalizeKnownStandaloneRoutePath
@@ -287,7 +288,7 @@ interface WindowManagerInput {
     }
   ) => void
   onStartupStage?: (name: string) => void
-  onStartupWindowReady?: () => void
+  onStartupWindowReady?: (readiness: DesktopWorkspaceStartupReadiness) => void
   onRendererGone?: (details: { reason: string }) => void
   refreshAppMenu: () => void
   rememberWorkspaceFolder: (workspaceFolder: string) => void
@@ -865,16 +866,20 @@ export const createWindowManager = ({
     return windowRecord
   }
 
-  const markWorkspaceStartupWindowReady = (windowRecord: WindowRecord) => {
+  const markWorkspaceStartupWindowReady = (
+    windowRecord: WindowRecord,
+    readiness: DesktopWorkspaceStartupReadiness
+  ) => {
     if (!isWindowRecordUsable(windowRecord)) return
-    onStartupWindowReady?.()
+    onStartupWindowReady?.(readiness)
     if (windowRecord.kind !== 'workspace' && windowRecord.kind !== 'standalone') return
 
     const startupElapsed = windowRecord.workspaceStartupStartedAt == null
       ? 'unknown'
       : elapsedMs(windowRecord.workspaceStartupStartedAt)
     logDesktopTiming(
-      `workspace renderer ready workspace=${windowRecord.workspaceFolder ?? 'none'} elapsed=${startupElapsed}`
+      `workspace renderer ready readiness=${readiness} ` +
+        `workspace=${windowRecord.workspaceFolder ?? 'none'} elapsed=${startupElapsed}`
     )
     restoreWorkspaceReadyWindowBackground(windowRecord.window)
   }

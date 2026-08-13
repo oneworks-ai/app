@@ -3,6 +3,7 @@ const path = require('node:path')
 
 const startedAt = Date.now()
 process.env.__ONEWORKS_DESKTOP_SERVER_CHILD_STARTED_AT__ = String(startedAt)
+process.env.__ONEWORKS_DESKTOP_APP_DIR__ = path.resolve(__dirname, '..')
 
 const { installDesktopServerOwnerChannel } = require('./server-owner-channel.cjs')
 installDesktopServerOwnerChannel()

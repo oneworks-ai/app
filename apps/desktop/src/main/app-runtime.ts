@@ -579,9 +579,17 @@ export const createDesktopApp = () => {
     forgetWorkspaceFolder,
     onStartupDegraded: (error, input) => startupDiagnostics?.degrade(error, input),
     onStartupStage: name => startupDiagnostics?.stage(name),
-    onStartupWindowReady: () => {
-      startupDiagnostics?.ready()
-      scheduleLauncherPreloadAfterStartupReady()
+    onStartupWindowReady: (readiness) => {
+      if (readiness === 'editable') {
+        startupDiagnostics?.ready()
+        scheduleLauncherPreloadAfterStartupReady()
+      } else {
+        startupDiagnostics?.degrade(new Error('Workspace opened with a degraded renderer surface.'), {
+          code: 'workspace.renderer_surface_degraded',
+          domain: 'renderer',
+          retryable: true
+        })
+      }
     },
     onRendererGone: details =>
       reportDesktopJavaScriptError(undefined, 'electron.renderer_gone', {

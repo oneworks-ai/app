@@ -102,7 +102,7 @@
   - `src/server-child.cjs`
   - `scripts/smoke-packaged-server.cjs`
 - 改桌面启动阶段、首屏就绪条件或启动失败兜底时，至少同时检查 `src/main/startup-diagnostics.ts`、`src/main/app-runtime.ts`、`src/main/window-manager.ts`、`src/preload/index.ts`、`apps/client/src/desktop/use-desktop-ui-ready.ts` 和各 surface 的实际挂载点；不要在 provider commit 或 `Suspense fallback={null}` 阶段提前上报 UI ready，也不要把后台预加载失败误算成用户可见的启动失败。`revealWorkspaceStartupSurface` 只能在可见、可理解的 React 启动面挂载后移除静态 preload overlay；只有 `markWorkspaceStartupReady` 可以通过 IPC 完成 workspace 启动诊断，两个信号不得合并。
-- 打包桌面端时，`build:server` 会先生成 `apps/server/dist/__INTERNAL__home/index.mjs` 与按需加载的 ESM chunks；打包态 workspace server 通过显式环境变量优先使用这份 bundle，缺失时回退源码。bundle 只内联 `@oneworks/*` 启动图，server 自己声明的第三方运行时依赖继续由包目录解析；不要把 adapter / plugin 的运行时发现路径静态化。`scripts/smoke-packaged-server.cjs` 必须强制走 dist entry 并在启动前断言 entry/chunks 存在，源码 fallback smoke 不能替代打包契约验证。
+- 打包桌面端时，`build:server` 会先生成 `apps/server/dist/__INTERNAL__home/index.mjs` 与按需加载的 ESM chunks；打包态 workspace server 通过显式环境变量优先使用这份 bundle，缺失时回退源码。bundle 只内联 `@oneworks/*` 启动图，server 自己声明的第三方运行时依赖继续由包目录解析；不要把 adapter / plugin 的运行时发现路径静态化。ESM banner 中的 `__dirname` 属于 entry / chunk，不再代表被内联包的原始目录；package-owned 资源必须从 `src/server-child.cjs` 注入的稳定 app root 或明确的 package root 解析。`scripts/smoke-packaged-server.cjs` 必须强制走 dist entry，并在启动前断言 entry/chunks 及运行时资产都存在；源码 fallback smoke 不能替代打包契约验证。
 - 改窗口创建、标题栏、`window.open`、多窗口或右键新窗口时，至少同时检查：
   - `src/main/browser-window-factory.ts`
   - `src/main/window-manager.ts`

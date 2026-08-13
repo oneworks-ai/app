@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises'
+import { mkdtemp, readFile, readdir, rm, stat } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
@@ -28,6 +28,12 @@ describe('server runtime bundle build', () => {
 
     const result = await buildServerRuntimeBundle({ outfile })
     const output = await readFile(outfile, 'utf8')
+    const runtimeModules = await Promise.all(
+      (await readdir(tempDir, { recursive: true }))
+        .filter(file => file.endsWith('.mjs'))
+        .map(file => readFile(path.join(tempDir, file), 'utf8'))
+    )
+    const runtimeSource = runtimeModules.join('\n')
     const outputs = Object.entries(result.metafile.outputs)
     const externalImports = outputs
       .flatMap(([, metadata]) => metadata.imports)
@@ -50,5 +56,11 @@ describe('server runtime bundle build', () => {
       [...new Set(externalImports.filter(entry => entry.startsWith('@oneworks/')))]
     ).toEqual(['@oneworks/fs-authority-native'])
     expect(output).not.toContain('Filesystem authority broker secret is unsafe')
+    expect(runtimeSource).toContain('__ONEWORKS_DESKTOP_APP_DIR__')
+    expect(runtimeSource).toContain('scrcpy-server-v')
+    expect(runtimeSource).toContain('SCRCPY_SERVER_VERSION')
+    expect(runtimeSource).toContain('3.3.3')
+    expect(runtimeSource).toContain('mcp.png')
+    expect(runtimeSource).toContain('completed.mp3')
   })
 })

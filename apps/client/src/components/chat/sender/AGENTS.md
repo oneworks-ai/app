@@ -20,6 +20,7 @@
 
 - sender 的真实提交状态来自 React / editor model，不等于 DOM 上看起来有文字。
 - 给 Electron、Computer Use 或其他可访问性自动化暴露输入路径时，必须把值写回同一套 composer/editor state，并触发正常 submit 前置校验；只改 contenteditable / Monaco DOM 会出现“看起来有字但点发送不创建会话”。
+- Desktop 启动只能在 Monaco 已挂载且 editor 未禁用时发布 `data-oneworks-sender-editor-ready=true`；模型不可用要用独立 degraded 标记释放真实配置界面，录音 / 转写等短暂锁定不属于 degraded 终态。禁用状态恢复后 UI 必须能真实变为 editable，但同一窗口启动的 terminal outcome 只能上报一次，不能用恢复事件改写已发生的 degraded 启动结果，也不能让 mounted 代替 editable。
 - 涉及 IME、富文本层或隐藏 automation input 的改动，要同时验证真实键盘输入、可访问性 `set_value`、点击发送后是否创建会话，以及首条用户消息是否保持原文。
 
 ## 响应式边界
