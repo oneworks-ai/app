@@ -19,6 +19,26 @@
         "require": "./dist/index.js"
       }
     },
+    "./adapter-package": {
+      "__oneworks__": {
+        "default": "./src/adapter-package.ts"
+      },
+      "types": "./dist/adapter-package.d.ts",
+      "default": {
+        "import": "./dist/adapter-package.mjs",
+        "require": "./dist/adapter-package.js"
+      }
+    },
+    "./adapter-package-cache": {
+      "__oneworks__": {
+        "default": "./src/adapter-package-cache.ts"
+      },
+      "types": "./dist/adapter-package-cache.d.ts",
+      "default": {
+        "import": "./dist/adapter-package-cache.mjs",
+        "require": "./dist/adapter-package-cache.js"
+      }
+    },
     "./standalone-route": {
       "__oneworks__": {
         "default": "./src/standalone-route.ts"
@@ -66,7 +86,7 @@
     "package.json"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/index.mjs && esbuild src/index.ts --bundle --platform=node --format=cjs --outfile=dist/index.js && esbuild src/standalone-route.ts --bundle --platform=neutral --format=esm --outfile=dist/standalone-route.mjs && esbuild src/standalone-route.ts --bundle --platform=node --format=cjs --outfile=dist/standalone-route.js && esbuild src/relay-device-transport.ts --bundle --platform=neutral --format=esm --outfile=dist/relay-device-transport.mjs && esbuild src/relay-device-transport.ts --bundle --platform=node --format=cjs --outfile=dist/relay-device-transport.js && esbuild src/credential-revision.ts --bundle --platform=neutral --format=esm --outfile=dist/credential-revision.mjs && esbuild src/credential-revision.ts --bundle --platform=node --format=cjs --outfile=dist/credential-revision.js && esbuild src/model-service-protocol.ts --bundle --platform=neutral --format=esm --outfile=dist/model-service-protocol.mjs && esbuild src/model-service-protocol.ts --bundle --platform=node --format=cjs --outfile=dist/model-service-protocol.js",
+    "build": "tsc -p tsconfig.build.json && esbuild src/index.ts --bundle --platform=neutral --format=esm --outfile=dist/index.mjs && esbuild src/index.ts --bundle --platform=node --format=cjs --outfile=dist/index.js && esbuild src/adapter-package.ts --bundle --platform=node --format=esm --outfile=dist/adapter-package.mjs && esbuild src/adapter-package.ts --bundle --platform=node --format=cjs --outfile=dist/adapter-package.js && esbuild src/adapter-package-cache.ts --bundle --platform=node --format=esm --outfile=dist/adapter-package-cache.mjs && esbuild src/adapter-package-cache.ts --bundle --platform=node --format=cjs --outfile=dist/adapter-package-cache.js && esbuild src/standalone-route.ts --bundle --platform=neutral --format=esm --outfile=dist/standalone-route.mjs && esbuild src/standalone-route.ts --bundle --platform=node --format=cjs --outfile=dist/standalone-route.js && esbuild src/relay-device-transport.ts --bundle --platform=neutral --format=esm --outfile=dist/relay-device-transport.mjs && esbuild src/relay-device-transport.ts --bundle --platform=node --format=cjs --outfile=dist/relay-device-transport.js && esbuild src/credential-revision.ts --bundle --platform=neutral --format=esm --outfile=dist/credential-revision.mjs && esbuild src/credential-revision.ts --bundle --platform=node --format=cjs --outfile=dist/credential-revision.js && esbuild src/model-service-protocol.ts --bundle --platform=neutral --format=esm --outfile=dist/model-service-protocol.mjs && esbuild src/model-service-protocol.ts --bundle --platform=node --format=cjs --outfile=dist/model-service-protocol.js",
     "prepack": "pnpm run build",
     "verify-pack": "pnpm run build && node scripts/verify-pack.mjs"
   },

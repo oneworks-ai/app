@@ -1,6 +1,6 @@
 import { resolveRuntimeAdapterConfigState } from '@oneworks/config'
 import type { AdapterCtx } from '@oneworks/types'
-import { loadAdapter, resolveAdapterPackageName, resolveAdapterRuntimeTarget } from '@oneworks/types'
+import { loadAdapter, resolveAdapterPackageName, resolveAdapterRuntimeTarget } from '@oneworks/types/adapter-package'
 import { mergeProcessEnvWithProjectEnv } from '@oneworks/utils'
 import { createLogger } from '@oneworks/utils/create-logger'
 

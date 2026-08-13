@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
 
-import { resolveActiveModulePackageDirSync } from '@oneworks/types'
+import { resolveActiveModulePackageDirSync } from '@oneworks/types/adapter-package-cache'
 
 interface ActiveModulePackageMetadata {
   packageDir: string

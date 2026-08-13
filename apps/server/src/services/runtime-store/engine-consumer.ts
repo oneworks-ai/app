@@ -8,7 +8,8 @@ import path from 'node:path'
 import process from 'node:process'
 
 import type { RuntimeCommand, RuntimeHeartbeat } from '@oneworks/runtime-protocol'
-import { resolveAdapterPackageName, resolveExistingAdapterPackageCacheDir } from '@oneworks/types'
+import { resolveAdapterPackageName } from '@oneworks/types'
+import { resolveExistingAdapterPackageCacheDir } from '@oneworks/types/adapter-package-cache'
 import { resolveProjectOoBaseDir } from '@oneworks/utils'
 
 import { createChannelRuntimeEnv, normalizeChannelRuntimeContext } from '#~/services/session/channel-context.js'

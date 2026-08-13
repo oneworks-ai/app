@@ -40,7 +40,10 @@ vi.mock('#~/prepare.js', () => ({
 
 vi.mock('@oneworks/types', () => ({
   defineAdapter: (adapter: unknown) => adapter,
-  NATIVE_HISTORY_IMPORT_MAX_FILE_SIZE_BYTES: 50 * 1024 * 1024,
+  NATIVE_HISTORY_IMPORT_MAX_FILE_SIZE_BYTES: 50 * 1024 * 1024
+}))
+
+vi.mock('@oneworks/types/adapter-package', () => ({
   loadAdapter: loadAdapterMock,
   resolveAdapterRuntimeTarget: (adapterKey: string, options?: { config?: { adapters?: Record<string, unknown> } }) => {
     const adapterConfig = options?.config?.adapters?.[adapterKey]
@@ -63,8 +66,7 @@ vi.mock('@oneworks/types', () => ({
       runtimeAdapter,
       ...(typeof packageId === 'string' ? { packageId } : {})
     }
-  },
-  sanitizePackageName: (packageName: string) => packageName.replace(/^@/, '').replace(/[\\/]/g, '__')
+  }
 }))
 
 vi.mock('@oneworks/hooks', () => ({

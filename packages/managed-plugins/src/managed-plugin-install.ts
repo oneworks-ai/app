@@ -5,13 +5,13 @@ import path from 'node:path'
 import process from 'node:process'
 
 import { buildConfigJsonVariables, loadConfigState } from '@oneworks/config'
-import { loadAdapterPluginInstaller, resolveAdapterRuntimeTarget } from '@oneworks/types'
 import type {
   AdapterPluginAddOptions,
   AdapterPluginAddResult,
   AdapterPluginInstaller,
   AdapterPluginManifest
 } from '@oneworks/types'
+import { loadAdapterPluginInstaller, resolveAdapterRuntimeTarget } from '@oneworks/types/adapter-package'
 import { resolveManagedPluginScope } from '@oneworks/utils'
 import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 import { getManagedPluginConfigPath, getManagedPluginInstallDir } from '@oneworks/utils/managed-plugin'

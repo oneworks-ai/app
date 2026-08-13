@@ -3,7 +3,7 @@ import type { AdapterBuiltinModel, Config } from '@oneworks/types'
 import {
   loadAdapterBuiltinModels as loadAdapterPackageBuiltinModels,
   resolveAdapterRuntimeTarget
-} from '@oneworks/types'
+} from '@oneworks/types/adapter-package'
 import { BUILTIN_NATIVE_ADAPTERS, normalizeNonEmptyString } from '@oneworks/utils/model-selection'
 
 import { getServerAppInfo } from '#~/utils/app-info.js'

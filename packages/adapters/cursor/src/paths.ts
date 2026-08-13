@@ -1,8 +1,8 @@
 import { existsSync, realpathSync } from 'node:fs'
 import { isAbsolute, relative, resolve } from 'node:path'
 
-import { resolveBootstrapPackageCacheRootDir } from '@oneworks/types'
 import type { AdapterCtx } from '@oneworks/types'
+import { resolveBootstrapPackageCacheRootDir } from '@oneworks/types/adapter-package-cache'
 
 export const CURSOR_INSTALL_URL = 'https://cursor.com/install'
 

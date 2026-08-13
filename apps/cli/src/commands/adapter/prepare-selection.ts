@@ -1,7 +1,11 @@
 /* eslint-disable max-lines -- prepare selection keeps parsing and runtime adapter aliasing together. */
 import { resolveConfigState, resolveRuntimeAdapterConfigState } from '@oneworks/config'
-import { loadAdapterCliPreparer, normalizeAdapterPackageId, resolveAdapterRuntimeTarget } from '@oneworks/types'
 import type { AdapterCliPrepareContext, AdapterCliPrepareTarget, AdapterCliPreparer, Config } from '@oneworks/types'
+import {
+  loadAdapterCliPreparer,
+  normalizeAdapterPackageId,
+  resolveAdapterRuntimeTarget
+} from '@oneworks/types/adapter-package'
 
 export const KNOWN_PREPARE_ADAPTERS = [
   'codex',

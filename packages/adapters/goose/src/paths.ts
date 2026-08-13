@@ -1,8 +1,8 @@
 import { isAbsolute, relative, resolve } from 'node:path'
 import process from 'node:process'
 
-import { resolveBootstrapPackageCacheRootDir } from '@oneworks/types'
 import type { AdapterCtx } from '@oneworks/types'
+import { resolveBootstrapPackageCacheRootDir } from '@oneworks/types/adapter-package-cache'
 
 import type { GooseCliConfig } from './config-schema'
 

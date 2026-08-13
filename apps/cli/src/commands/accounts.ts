@@ -2,7 +2,7 @@ import process from 'node:process'
 
 import { buildConfigJsonVariables, loadConfigState, resolveRuntimeAdapterConfigState } from '@oneworks/config'
 import type { AdapterCtx, AdapterManageAccountProgressEvent } from '@oneworks/types'
-import { loadAdapter, resolveAdapterRuntimeTarget } from '@oneworks/types'
+import { loadAdapter, resolveAdapterRuntimeTarget } from '@oneworks/types/adapter-package'
 import {
   mergeProcessEnvWithProjectEnv,
   persistAdapterAccountArtifacts,

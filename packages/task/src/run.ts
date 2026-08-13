@@ -19,7 +19,7 @@ import type {
   TaskDetail,
   WorkspaceAssetAdapter
 } from '@oneworks/types'
-import { loadAdapter, resolveAdapterRuntimeTarget } from '@oneworks/types'
+import { loadAdapter, resolveAdapterRuntimeTarget } from '@oneworks/types/adapter-package'
 import {
   CODEX_SHARED_MODEL_SERVICE_KEY,
   CODEX_SHARED_MODEL_TOKEN_ENV,

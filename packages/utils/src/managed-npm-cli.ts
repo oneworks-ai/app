@@ -7,8 +7,8 @@ import { dirname, isAbsolute, relative, resolve } from 'node:path'
 import process from 'node:process'
 import { promisify } from 'node:util'
 
-import { resolveBootstrapPackageCacheRootDir, resolvePackageCacheHomeDir } from '@oneworks/types'
 import type { Logger } from '@oneworks/types'
+import { resolveBootstrapPackageCacheRootDir, resolvePackageCacheHomeDir } from '@oneworks/types/adapter-package-cache'
 import semver from 'semver'
 
 import { withDirectoryInstallLock } from './install-lock'

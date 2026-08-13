@@ -20,8 +20,8 @@ const mocks = vi.hoisted(() => ({
   updateConfigFile: vi.fn()
 }))
 
-vi.mock('@oneworks/types', async importOriginal => ({
-  ...await importOriginal<typeof import('@oneworks/types')>(),
+vi.mock('@oneworks/types/adapter-package', async importOriginal => ({
+  ...await importOriginal<typeof import('@oneworks/types/adapter-package')>(),
   loadAdapterModelProviderImportCapability: mocks.loadAdapterModelProviderImportCapability,
   tryLoadAdapterModelProviderImportCapability: mocks.tryLoadAdapterModelProviderImportCapability
 }))

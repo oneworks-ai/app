@@ -11,8 +11,8 @@ import { run } from '#~/run.js'
 import type { AdapterOutputEvent } from '@oneworks/types'
 import { getCachePath } from '@oneworks/utils/cache'
 
-vi.mock('@oneworks/types', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@oneworks/types')>()
+vi.mock('@oneworks/types/adapter-package', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@oneworks/types/adapter-package')>()
   return {
     ...actual,
     loadAdapter: async (specifier: string) =>

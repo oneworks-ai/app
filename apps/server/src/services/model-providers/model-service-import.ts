@@ -9,7 +9,7 @@ import type {
   AdapterRuntimeTarget,
   ModelServiceConfig
 } from '@oneworks/types'
-import { tryLoadAdapterModelProviderImportCapability } from '@oneworks/types'
+import { tryLoadAdapterModelProviderImportCapability } from '@oneworks/types/adapter-package'
 import { mergeProcessEnvWithProjectEnv } from '@oneworks/utils'
 
 import { resolveSelectableAdapterRuntimeTargets } from '#~/services/adapter-imports.js'

@@ -4,7 +4,7 @@ import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
 
 import type { AdapterCtx } from '@oneworks/types'
-import { resolvePackageCacheHomeDir } from '@oneworks/types'
+import { resolvePackageCacheHomeDir } from '@oneworks/types/adapter-package-cache'
 import { resolveManagedNpmCliBinaryPath, resolveManagedNpmCliRootDir } from '@oneworks/utils/managed-npm-cli'
 
 const require = createRequire(import.meta.url ?? __filename)

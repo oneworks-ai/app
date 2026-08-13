@@ -3,7 +3,7 @@ import { isAbsolute, relative, resolve } from 'node:path'
 import process from 'node:process'
 
 import type { AdapterCtx } from '@oneworks/types'
-import { resolveBootstrapPackageCacheRootDir } from '@oneworks/types'
+import { resolveBootstrapPackageCacheRootDir } from '@oneworks/types/adapter-package-cache'
 
 export const KIRO_MANIFEST_URL = 'https://prod.download.cli.kiro.dev/stable/latest/manifest.json'
 export const KIRO_DOWNLOAD_ROOT = 'https://prod.download.cli.kiro.dev/stable'

@@ -18,8 +18,8 @@ vi.mock('@oneworks/config', async importOriginal => ({
   composeWorkspaceConfigSchemaBundle: mocks.composeWorkspaceConfigSchemaBundle
 }))
 
-vi.mock('@oneworks/types', async importOriginal => ({
-  ...await importOriginal<typeof import('@oneworks/types')>(),
+vi.mock('@oneworks/types/adapter-package', async importOriginal => ({
+  ...await importOriginal<typeof import('@oneworks/types/adapter-package')>(),
   tryLoadAdapterWorktreeEnvironmentImportCapability: mocks.tryLoadAdapterWorktreeEnvironmentImportCapability
 }))
 

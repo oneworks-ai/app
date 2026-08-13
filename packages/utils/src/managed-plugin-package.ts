@@ -8,7 +8,11 @@ import Arborist from '@npmcli/arborist'
 import pacote from 'pacote'
 import semver from 'semver'
 
-import { resolveBootstrapPackageCacheRootDir, resolvePackageCacheHomeDir, sanitizePackageName } from '@oneworks/types'
+import {
+  resolveBootstrapPackageCacheRootDir,
+  resolvePackageCacheHomeDir,
+  sanitizePackageName
+} from '@oneworks/types/adapter-package-cache'
 
 import { withDirectoryInstallLock } from './install-lock'
 

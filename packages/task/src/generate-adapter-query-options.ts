@@ -2,7 +2,7 @@ import process from 'node:process'
 
 import { buildConfigJsonVariables, loadConfigState, mergeConfigs } from '@oneworks/config'
 import type { AdapterBuiltinModel, AdapterQueryOptions, Config, PluginConfig } from '@oneworks/types'
-import { loadAdapterModelServiceModels } from '@oneworks/types'
+import { loadAdapterModelServiceModels } from '@oneworks/types/adapter-package'
 import {
   CODEX_SHARED_MODEL_SERVICE_KEY,
   createCodexSharedModelService,

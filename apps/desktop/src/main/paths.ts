@@ -9,7 +9,7 @@ import {
   comparePackageCacheVersions,
   resolveActiveModulePackageDirSync,
   resolveExistingNpmPackageDir
-} from '@oneworks/types'
+} from '@oneworks/types/adapter-package-cache'
 
 const nodeRequire = createRequire(__filename)
 const desktopRoot = app.getAppPath()
