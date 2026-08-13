@@ -4,13 +4,13 @@
 
 ## 内容分层
 
-| 内容 | 位置 | 生命周期 |
-| --- | --- | --- |
-| Review 入口和硬约束 | `.oo/rules/REVIEW.md` | 稳定、短小，避免频繁变化 |
-| 跨领域规则 | `review/core-rules.md` | 对所有 PR 生效 |
-| 领域规则 | `review/profiles/*.md` | 按 changed paths 和语义加载 |
+| 内容                   | 位置                     | 生命周期                                  |
+| ---------------------- | ------------------------ | ----------------------------------------- |
+| Review 入口和硬约束    | `.oo/rules/REVIEW.md`    | 稳定、短小，避免频繁变化                  |
+| 跨领域规则             | `review/core-rules.md`   | 对所有 PR 生效                            |
+| 领域规则               | `review/profiles/*.md`   | 按 changed paths 和语义加载               |
 | 尚未达到升级条件的经验 | `review/candidates/*.md` | 当前候选；升级、判定 one-off 或失效后删除 |
-| 可确定性检查 | CI、tests、scripts | 由规则链接到实现，不重复描述语义 |
+| 可确定性检查           | CI、tests、scripts       | 由规则链接到实现，不重复描述语义          |
 
 ## 规则变更 PR
 
