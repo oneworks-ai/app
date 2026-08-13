@@ -68,6 +68,37 @@ describe('workspace tree service', () => {
     })
   })
 
+  it('lists the exact whitespace-bearing directory instead of its adjacent peer', async () => {
+    const rawDirectory = ' project '
+    const adjacentDirectory = rawDirectory.trim()
+    await mkdir(join(workspaceDir, rawDirectory))
+    await mkdir(join(workspaceDir, adjacentDirectory))
+    await writeFile(join(workspaceDir, rawDirectory, 'raw.txt'), 'raw\n')
+    await writeFile(join(workspaceDir, adjacentDirectory, 'adjacent.txt'), 'adjacent\n')
+
+    await expect(listWorkspaceTree(rawDirectory)).resolves.toEqual({
+      path: rawDirectory,
+      entries: [
+        treeEntry(workspaceDir, `${rawDirectory}/raw.txt`, 'raw.txt', 'file')
+      ]
+    })
+  })
+
+  it('lists POSIX literal-backslash directories without crossing into nested peers', async () => {
+    if (process.platform === 'win32') return
+    const literalDirectory = String.raw`notes\drafts`
+    const nestedDirectory = 'notes/drafts'
+    await mkdir(join(workspaceDir, literalDirectory))
+    await mkdir(join(workspaceDir, nestedDirectory), { recursive: true })
+    await writeFile(join(workspaceDir, literalDirectory, 'literal.md'), 'literal\n')
+    await writeFile(join(workspaceDir, nestedDirectory, 'nested.md'), 'nested\n')
+
+    await expect(listWorkspaceTree(literalDirectory)).resolves.toEqual({
+      path: literalDirectory,
+      entries: [treeEntry(workspaceDir, `${literalDirectory}/literal.md`, 'literal.md', 'file')]
+    })
+  })
+
   it('lists symbolic links with their resolved link type', async () => {
     await symlink('src', join(workspaceDir, 'src-link'), 'dir')
     await symlink('README.md', join(workspaceDir, 'readme-link.md'), 'file')
@@ -122,6 +153,26 @@ describe('workspace tree service', () => {
         isExternal: true
       })
     ]))
+  })
+
+  it('preserves a whitespace-bearing Git pointer target in serialized tree metadata', async () => {
+    const exactGitdirPath = join(sessionWorkspaceDir, '.git', 'worktrees', 'demo ')
+    const adjacentGitdirPath = join(sessionWorkspaceDir, '.git', 'worktrees', 'demo')
+    await mkdir(exactGitdirPath, { recursive: true })
+    await mkdir(adjacentGitdirPath, { recursive: true })
+    await writeFile(join(workspaceDir, '.git'), `gitdir: ${exactGitdirPath}\r\n`)
+
+    const result = await listWorkspaceTree()
+
+    expect(result.entries).toEqual(expect.arrayContaining([
+      treeEntry(workspaceDir, '.git', '.git', 'directory', {
+        linkKind: 'gitdir',
+        linkTarget: exactGitdirPath,
+        linkType: 'directory',
+        isExternal: true
+      })
+    ]))
+    expect(JSON.stringify(result.entries)).not.toContain(`"linkTarget":"${adjacentGitdirPath}"`)
   })
 
   it('lists an internal symbolic link directory through its workspace-relative path', async () => {

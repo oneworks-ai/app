@@ -191,6 +191,46 @@ describe('runtime store engine consumer', () => {
     expect(plan.env.__ONEWORKS_AGENT_ROOM_HOST_SESSION_ID__).toBe('')
   })
 
+  it('preserves filesystem path bytes through the final consumer spawn plan', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'ow-runtime-consumer-raw-path-'))
+    const workspace = path.join(root, 'workspace ')
+    const cliPath = path.join(root, 'cli ')
+    const projectBaseDir = path.join(workspace, '.oo ')
+    const packageDir = path.join(root, 'package cache ')
+    const home = path.join(root, 'mock home ')
+    const realHome = path.join(root, 'real home')
+    const store = createStore(root, 'sess-raw-path')
+    await Promise.all([mkdir(workspace), mkdir(home), mkdir(realHome)])
+
+    const plan = buildRuntimeConsumerSpawnPlan({
+      baseEnv: {
+        HOME: home,
+        __ONEWORKS_PROJECT_REAL_HOME__: realHome,
+        __ONEWORKS_PROJECT_BASE_DIR__: projectBaseDir,
+        __ONEWORKS_PROJECT_BASE_DIR_RESOLVE_CWD__: workspace,
+        __ONEWORKS_PROJECT_CLI_PACKAGE_DIR__: packageDir,
+        __ONEWORKS_RUNTIME_PROTOCOL_CONSUMER_CLI_PATH__: cliPath
+      },
+      command: { message: 'Keep raw path bytes' },
+      cwd: workspace,
+      metadata: {
+        sessionId: 'sess-raw-path',
+        cwd: workspace,
+        needsEngineConsumer: true,
+        createdAt: 1
+      } as RuntimeSessionMetadata,
+      store
+    })
+
+    expect(plan).toMatchObject({ command: cliPath, cwd: workspace })
+    expect(plan.env).toMatchObject({
+      HOME: home,
+      __ONEWORKS_PROJECT_BASE_DIR__: projectBaseDir,
+      __ONEWORKS_PROJECT_CLI_PACKAGE_DIR__: packageDir,
+      __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: workspace
+    })
+  })
+
   it('passes the initial message as prompt text without prefixing the run command', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'ow-runtime-consumer-prompt-'))
     const store = createStore(root, 'sess-web')

@@ -34,6 +34,7 @@
 - `src/workspace-state.cjs`
   - 桌面最近项目、workspace 显示名、启动 workspace 解析入口。
   - 作为 project/workspace 打开或记录时，只规约到当前 Git worktree 的 top-level；linked worktree 必须保留为独立 workspace，不能折回 common `.git` 对应的原始 project 目录。
+  - Git top-level stdout 是路径协议记录：只能移除一个最后 LF / CRLF delimiter，不能按行拆分、普通文本 trim 或删除 POSIX basename 自身的 CR，因此仓库路径里的内部换行、空白与其他合法字节不会改变 recent/service identity。
   - 验证 Electron workspace 启动链路时，要同时看启动日志里的 `workspace=...`、窗口首屏是否无需 Cmd+R 退出 loading、以及会话状态栏 / runtime 日志中的 session cwd；三者必须指向同一个当前 worktree。
 - `electron.vite.config.ts`
   - 使用 `electron-vite` 编译 main / preload TypeScript 到 `dist/`
@@ -68,12 +69,16 @@
 - 桌面启动诊断写入 Electron `userData/diagnostics/startup`：只记录稳定事件名、阶段、耗时、终态和分类错误，不写 workspace 路径、URL、原始错误消息、stack、配置或凭据。启动成功必须经过 renderer 可交互并持续稳定一段时间；上次进程未完成的启动会在下次启动标记为 `abandoned`。
 - 设置标准 `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` / `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=http/json` 时，桌面诊断会异步导出；发送失败不能阻断启动。Help 菜单支持导出同一事实模型的支持包，关联 ID 必须脱敏且不得补入 raw logs。
 - 本地 dev 安装包内的 cli/server/client 是 runtime cache 的来源：`src/main/workspace-runtime-cache-manager.ts` 在桌面 core ready 后调度 `src/main/workspace-runtime-cache-refresh.ts`，后者通过 `src/builtin-adapter-cache.cjs` 按 `desktop-build-source.json` 里的 dev cacheVersion 刷新 `~/.oneworks/bootstrap/npm/oneworks__cli/<cacheVersion>`、`oneworks__server/<cacheVersion>` 与 `oneworks__client/<cacheVersion>`；manifest 快路径还必须匹配每次打包唯一的 `runtimePackageBuildFingerprint` 及当前 platform/arch。`src/server-child.cjs` 只消费已准备的 cache，并在缺失时使用包内 runtime，不能在 server ready 的关键路径物化可选 cache。排查“安装包还是旧代码”时必须核对这个 cache 里的真实文件，不要只看 `/Applications/.../Resources/app`。
+  - `builtin-adapter-cache.cjs` 的 real home、HOME/USERPROFILE 与 package cache root 是文件系统身份：只用 `trim()` 判空并保留原始字节；cache version / fingerprint 继续按文本规范化。
 - `pnpm desktop:dev` 默认打开不绑定 workspace 的空项目启动页；`pnpm desktop:dev:workspace` 才以当前仓库作为 workspace 启动。两者都转发到统一 `dev-service ensure` 生命周期，由 Electron 启动共享 Vite client，并为每个 workspace 启动独立本机 server；前端改动应走共享 client 的 HMR，不需要重复构建静态 dist。`electron` 与 `electron-workspace` 受单实例约束，切换前必须先获得用户对当前 target 的显式停止授权。
 - 多 worktree / 多 AI 会话可能同时运行桌面开发态实例；排查崩溃或端口占用时，不要因为看到其他 worktree 的 Electron、`apps/desktop/src/server-child.cjs` 或 `apps/client/cli.cjs` 进程就直接清理。先列出 PID、启动时间、worktree 路径和命令来源，只有确认属于当前终端会话、明确是当前崩溃实例残留，或用户同意后才停止。
 - 桌面 main / preload 使用 `electron-vite` 构建，Electron 运行入口是 `dist/main/index.js`。
 - 外部 CDP 只作为 agent 控制面使用，默认关闭；通过 `ONEWORKS_DESKTOP_CDP_PORT` / `--oneworks-cdp-port` 显式启用，并优先配合独立 `ONEWORKS_DESKTOP_USER_DATA_DIR` / `--oneworks-user-data-dir` 冷启动，避免被单实例锁转发到真实用户实例。
 - 完整 agent bridge protocol、runtime evidence 编排和 `desktop-control` CLI 属于仓库 `scripts/` 层，入口见 `scripts/AGENTS.md` 和 `scripts/desktop-control-protocol.md`；桌面 app 侧只维护 bootstrap 前的 opt-in CDP hook。
 - 空项目启动页和所有 workspace 窗口共用 launcher client service 管理的 client；Electron 另行维护一个用户级 manager server，Launcher 必须通过 preload IPC 获取其精确 `serverBaseUrl`，不能回退到固定 8787；每个 workspace service 仍只启动自己的 server。打开 workspace 后，main/preload 通过 IPC 告诉对应 renderer 当前窗口绑定的 `serverBaseUrl`，请求仍由前端直连 server HTTP / WebSocket。不要再为每个 workspace 启动独立 client。
+- workspace / directory 这类文件系统路径允许合法的首尾空白；IPC、目录浏览、clone/create、recent/dedupe 与 runtime env 边界只能用 `trim()` 判断空值，传给 `path.resolve`、Git、持久化和下游服务的必须是原字符串。项目名、仓库 URL 等非路径字段继续按各自规则归一化。
+- Browser Activity 持久化的 `projectKey`、workspace scope 与 download `filePath` 同样是文件系统身份；记录、筛选、open/reveal 只能判空并保留原字节，session key 与 URL 等文本维持原有归一化。
+- Desktop dev / child 启动链中的 `INIT_CWD`、`PATH` 项和 client fs-allow 项也是文件系统身份；只丢弃全空项目，保留每个非空项目的原始字节，平台分隔符与 JSON / 列表 framing 不能变成逐项文本 trim。
 - 空项目启动页默认可通过 `CommandOrControl+Space` 全局快捷键打开；快捷键值来自 Electron 注入的 desktop settings，可在桌面端配置页更新。macOS 上如果系统快捷键占用了 `Command+Space`，Electron 注册会失败并只打印 warning，不要在代码里静默换成另一个快捷键。
 - 桌面窗口统一使用隐藏 titlebar / traffic light 风格；新建窗口、右键会话新窗口、launcher 和 workspace selector 都必须通过 `browser-window-factory` 创建，避免出现系统默认标题栏。
 - macOS workspace 窗口的原生毛玻璃依赖 `vibrancy: 'sidebar'` 和 `transparent: true` 同时存在；client 侧会把 sidebar / titlebar 背景让给原生窗口材质。不要只设置透明背景色或只改前端 CSS，否则展开态 sidebar 容易退成实色灰块，和 launcher / 折叠态表现不一致。

@@ -7,6 +7,8 @@ import {
   applyWorkspaceConnection,
   getWorkspaceServerRestartActivity,
   isWorkspaceConnectionResponse,
+  readRememberedWorkspaceConnectionMetadata,
+  rememberWorkspaceConnection,
   withWorkspaceRouteId
 } from '#~/workspace-connection-state'
 
@@ -44,11 +46,19 @@ const clearRuntimeEnv = () => {
 
 describe('workspace connection state', () => {
   const fetchMock = vi.fn<typeof fetch>()
+  let storage: Map<string, string>
 
   beforeEach(() => {
     clearRuntimeEnv()
     fetchMock.mockReset()
+    storage = new Map()
     vi.stubGlobal('fetch', fetchMock)
+    vi.stubGlobal('localStorage', {
+      clear: () => storage.clear(),
+      getItem: (key: string) => storage.get(key) ?? null,
+      removeItem: (key: string) => storage.delete(key),
+      setItem: (key: string, value: string) => storage.set(key, value)
+    })
   })
 
   afterEach(() => {
@@ -156,5 +166,34 @@ describe('workspace connection state', () => {
     expect(isWorkspaceConnectionResponse(undefined)).toBe(false)
     expect(isWorkspaceConnectionResponse({ serverBaseUrl: '' })).toBe(false)
     expect(isWorkspaceConnectionResponse({ serverBaseUrl: 'file:///tmp/server' })).toBe(false)
+  })
+
+  it('preserves raw local and Relay workspace paths through persistence and reads', () => {
+    const workspaceFolder = '/tmp/ workspace '
+    rememberWorkspaceConnection({
+      relay: {
+        deviceId: ' device-1 ',
+        serverId: ' relay-1 ',
+        workspaceFolder
+      },
+      serverBaseUrl: 'https://relay.example',
+      workspaceFolder,
+      workspaceId: 'w_raw_path_1'
+    }, 'relay')
+
+    const persisted = JSON.parse(storage.get('oneworks_workspace_connections') ?? '{}') as Record<
+      string,
+      { relay?: { deviceId?: string; serverId?: string; workspaceFolder?: string }; workspaceFolder?: string }
+    >
+    expect(persisted.w_raw_path_1?.workspaceFolder).toBe(workspaceFolder)
+    expect(persisted.w_raw_path_1?.relay).toEqual({
+      deviceId: 'device-1',
+      serverId: 'relay-1',
+      workspaceFolder
+    })
+    expect(readRememberedWorkspaceConnectionMetadata('w_raw_path_1', 'relay')).toMatchObject({
+      relay: { workspaceFolder },
+      workspaceFolder
+    })
   })
 })

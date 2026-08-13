@@ -857,7 +857,7 @@ export function PluginMarketplaceLanding({
               source: 'git',
               url,
               ...((values.ref?.trim() ?? '') !== '' ? { ref: values.ref?.trim() } : {}),
-              ...((values.path?.trim() ?? '') !== '' ? { path: values.path?.trim() } : {})
+              ...((values.path?.trim() ?? '') !== '' ? { path: values.path } : {})
             }
           }
         })

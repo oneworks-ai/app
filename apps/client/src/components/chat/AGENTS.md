@@ -21,6 +21,8 @@
   - `MarkdownContent` 识别本地图片 / 视频 / 音频链接，`MessageItem` 注入 session-scoped resource URL。
   - 图片继续走可预览的 `MessageImage`；视频 / 音频 controls 与单次失败 fallback 统一由 `MessageMedia` 承载。
   - 本地文件授权、canonical path、Range / HEAD 与 MIME 只在 server workspace resource 链路实现，前端不能直接拼 `file://` 或读取文件系统。
+  - `session_info.cwd` / workspace root 是文件系统身份；传入 Launcher workspace context、Markdown link/resource resolver 和 session-scoped resource URL 时只能用 `trim()` 判空，不能改写原始路径字节。
+  - Markdown 本地媒体和 sender pending file / file-comment 的 path 是文件系统身份；draft 序列化、URL decode、媒体类型提示与消息提交只能判空并保留原始 / 解码后的精确路径，label、comment、content 和非路径 URL 继续按普通文本规则处理。workspace containment 按 root family 解释分隔符，POSIX literal backslash 不能映射成嵌套路径。
   - Markdown 链接可用 title 元数据显式声明打开意图：`oneworks:open=internal` 进入交互面板，`oneworks:open=external` 进入系统默认浏览器，`oneworks:open=workspace-file` 进入工作区文件标签；未声明时继续服从 `messageLinks` 配置，显式意图不得放宽 URL 或 workspace path 校验。
 - `tools/core/ToolRenderer.tsx` / `tools/DefaultTool.tsx`
   - 内置 adapter renderer 继续处理宿主特有工具；plugin MCP 工具的业务展示走通用 `toolUsePresentations` contribution。
@@ -97,6 +99,8 @@
 
 - `useResponsiveLayout` 的 compact 断点当前是 `600px`，只代表手机端 / 窄屏布局，不代表桌面左侧栏折叠。
 - `ChatHeader` 的折叠态 chrome 要同时覆盖 `isCompactLayout` 和 `isSidebarCollapsed`：桌面折叠侧栏时也必须渲染左侧操作按钮。
+- 无会话时 `ChatHeader` 和 Chat Launcher context 都复用 client filesystem display basename；只判空，POSIX 仅按 `/` 分段并保留 literal `\\` 与首尾空白，Windows root families 保留各自 separator 语义，title 继续使用原始 workspace path。
+- Git worktree checked-out / block comparisons同样按 client filesystem root family 执行：POSIX 保留 case 与 literal `\\`，Windows drive、single-root 与 UNC 仅在同 family 内按 separator / case 等价；UI 标签和 conflict payload 继续保留原始路径。
 - 折叠侧栏后的 header 左侧按钮固定包含：展开侧栏、返回、前进、新建会话；右侧继续保留 bottom panel、workspace drawer、view switch / more actions。
 - 桌面折叠态的“展开侧栏”按钮应触发 desktop sidebar toggle，不要打开 mobile sidebar modal。
 - header 的可拖拽区域和按钮点击区域要同时验证：主区域需要支持窗口拖拽，按钮和 tooltip target 必须 `no-drag` 且可点击。

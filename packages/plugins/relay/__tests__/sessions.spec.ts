@@ -12,6 +12,7 @@ afterEach(cleanupPluginFixtures)
 
 describe('relay plugin session helpers', () => {
   it('normalizes local sessions and submits forwarding jobs through the adapter', async () => {
+    const workspaceFolder = '/tmp/ relay workspace '
     const adapter = {
       listSessions: vi.fn(async () => [
         {
@@ -22,7 +23,7 @@ describe('relay plugin session helpers', () => {
           metadata: { source: 'test' },
           title: 'Relay session',
           userId: 'user-1',
-          workspaceFolder: '/tmp/relay-workspace'
+          workspaceFolder
         },
         {
           title: 'missing id'
@@ -52,7 +53,7 @@ describe('relay plugin session helpers', () => {
         messageCount: 4,
         title: 'Relay session',
         userId: 'user-1',
-        workspaceFolder: '/tmp/relay-workspace'
+        workspaceFolder
       }
     ])
     expect(JSON.stringify(snapshot)).not.toContain('do not relay this')

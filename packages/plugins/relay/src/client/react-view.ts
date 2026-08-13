@@ -7,6 +7,11 @@ import {
 } from '../shared/config-assignment-project.js'
 import { relayProjectRuleDocumentDisplayPath } from '../shared/document-paths.js'
 import {
+  readRelayFilesystemPath,
+  relayFilesystemPathBasename,
+  relayFilesystemPathComparisonKey
+} from '../shared/filesystem-path-identity.js'
+import {
   LOCAL_RELAY_SERVER_ID,
   OFFICIAL_RELAY_CLOUDFLARE_DEV_SERVER_ID,
   OFFICIAL_RELAY_CLOUDFLARE_SERVER_ID,
@@ -354,10 +359,12 @@ const personalDocumentSyncFullyEnabled = (sync?: RelayStatus['personalDocumentSy
   PERSONAL_DOCUMENT_SYNC_KINDS.every(kind => sync?.preferences?.[kind] === true)
 )
 
-const readDocumentPanelQueryValue = (key: 'doc' | 'q') => {
+export const readDocumentPanelQueryValue = (key: 'doc' | 'q') => {
   if (typeof window === 'undefined') return ''
   try {
-    return new URLSearchParams(window.location.search).get(key)?.trim() ?? ''
+    const value = new URLSearchParams(window.location.search).get(key) ?? ''
+    if (value.trim() === '') return ''
+    return key === 'q' ? value.trim() : value
   } catch {
     return ''
   }
@@ -367,7 +374,7 @@ const initialProjectRuleDetailTab = (): RelayProjectRuleDetailTab => (
   readDocumentPanelQueryValue('doc') === '' ? 'rules' : 'documents'
 )
 
-const writeDocumentPanelQuery = (input: { documentPath?: string | null; search: string }) => {
+export const writeDocumentPanelQuery = (input: { documentPath?: string | null; search: string }) => {
   if (typeof window === 'undefined') return
   try {
     const url = new URL(window.location.href)
@@ -377,8 +384,8 @@ const writeDocumentPanelQuery = (input: { documentPath?: string | null; search: 
     } else {
       url.searchParams.set('q', search)
     }
-    const documentPath = input.documentPath?.trim() ?? ''
-    if (documentPath === '') {
+    const documentPath = input.documentPath
+    if (documentPath == null || documentPath.trim() === '') {
       url.searchParams.delete('doc')
     } else {
       url.searchParams.set('doc', documentPath)
@@ -392,6 +399,22 @@ const writeDocumentPanelQuery = (input: { documentPath?: string | null; search: 
     // Ignore malformed browser location state; document UI still works without URL persistence.
   }
 }
+
+export const findDocumentItemByPath = <
+  T extends {
+    displayPath: string
+    exists: boolean
+    path: string
+    relativePath: string
+  },
+>(items: T[], requestedPath: string) =>
+  items.find(item =>
+    item.exists && (
+      item.relativePath === requestedPath ||
+      item.path === requestedPath ||
+      item.displayPath === requestedPath
+    )
+  )
 
 const documentEntryIcon = (entry: RelayPersonalDocumentEntry, team?: RelayProfileTeam) => {
   if (entry.kind === 'agents') return team == null ? 'description' : 'groups'
@@ -1755,13 +1778,7 @@ const DocumentSyncPanel = (
       return
     }
 
-    const matchedDocument = documentItems.find(item =>
-      item.exists && (
-        item.relativePath === requestedDocumentPath ||
-        item.path === requestedDocumentPath ||
-        item.displayPath === requestedDocumentPath
-      )
-    )
+    const matchedDocument = findDocumentItemByPath(documentItems, requestedDocumentPath)
     if (matchedDocument != null) {
       setSelectedDocumentKey(matchedDocument.key)
       setResolvedInitialDocumentQuery(true)
@@ -2215,12 +2232,7 @@ const isCurrentClientDevice = (
   return deviceId.startsWith('fixture-device:') && cleanText(device.pluginScope) === ctx.scope
 }
 
-const pathBasename = (path?: string) => {
-  const normalized = cleanText(path)?.replace(/[/\\]+$/u, '')
-  if (normalized == null) return undefined
-  const segments = normalized.split(/[/\\]+/u).filter(Boolean)
-  return segments.at(-1) ?? normalized
-}
+const pathBasename = relayFilesystemPathBasename
 
 const managementServerKindLabel = (kind?: string) => {
   const normalized = cleanText(kind)?.toLowerCase()
@@ -2354,8 +2366,8 @@ const projectTitle = (input: {
   title?: string
 }) => (
   pathBasename(input.path) ??
-    pathBasename(input.title) ??
-    pathBasename(input.name) ??
+    cleanText(input.title) ??
+    cleanText(input.name) ??
     input.fallbackTitle
 )
 
@@ -2370,7 +2382,7 @@ const managerProjectRows = (
   const declaredProjects = manager.projects ?? []
   const projects = declaredProjects
     .map((project, projectIndex): RelayDeviceProjectRow => {
-      const path = cleanText(project.workspaceFolder)
+      const path = readRelayFilesystemPath(project.workspaceFolder)
       const title = projectTitle({
         fallbackTitle: groupTitle,
         name: project.name,
@@ -2388,8 +2400,8 @@ const managerProjectRows = (
         updatedAt: cleanText(project.lastSeenAt) ?? cleanText(project.createdAt) ?? cleanText(manager.lastSeenAt)
       }
     })
-  if (projects.length === 0 && cleanText(manager.workspaceFolder) != null) {
-    const path = cleanText(manager.workspaceFolder)
+  if (projects.length === 0 && readRelayFilesystemPath(manager.workspaceFolder) != null) {
+    const path = readRelayFilesystemPath(manager.workspaceFolder)
     projects.push({
       groupId,
       groupKindLabel: kindLabel,
@@ -2416,7 +2428,7 @@ const deviceProjectGroups = (
   managers: RelayDeviceManagerSummary[]
 ): RelayDeviceProjectGroup[] => {
   if (managers.length === 0) {
-    const path = cleanText(device.workspaceFolder)
+    const path = readRelayFilesystemPath(device.workspaceFolder)
     if (path == null) return []
     const title = projectTitle({ fallbackTitle: deviceDisplayName(device), path })
     return [{
@@ -2456,7 +2468,7 @@ const timestampValue = (value?: string) => {
 }
 
 const projectIdentityKey = (project: RelayDeviceProjectRow) => (
-  cleanText(project.path)?.toLowerCase() ??
+  (project.path == null ? undefined : relayFilesystemPathComparisonKey(project.path)) ??
     cleanText(project.id)?.toLowerCase() ??
     project.title.toLowerCase()
 )
@@ -2522,6 +2534,10 @@ const dedupeDeviceProjectGroups = (groups: RelayDeviceProjectGroup[]) => {
     })
 }
 
+export const buildRelayDeviceProjectGroups = (device: RelayDeviceSummary) => (
+  dedupeDeviceProjectGroups(deviceProjectGroups(device, deviceManagementServers(device)))
+)
+
 const projectSearchValues = (project: RelayDeviceProjectRow, group: RelayDeviceProjectGroup) => [
   project.title,
   project.path,
@@ -2558,6 +2574,35 @@ const copyTextToClipboard = (
     .then(() => {
       ctx.notifications?.show?.({
         description: text,
+        level: 'success',
+        title: successTitle
+      })
+    })
+    .catch(error => {
+      ctx.notifications?.show?.({
+        description: toErrorMessage(error),
+        level: 'error',
+        title: '复制失败'
+      })
+    })
+}
+
+export const copyRelayFilesystemPathToClipboard = (
+  ctx: PluginClientContext,
+  value: string | undefined,
+  successTitle: string
+) => {
+  const path = readRelayFilesystemPath(value)
+  if (path == null) return
+  void (async () => {
+    if (navigator.clipboard?.writeText == null) {
+      throw new Error('当前环境不支持剪贴板。')
+    }
+    await navigator.clipboard.writeText(path)
+  })()
+    .then(() => {
+      ctx.notifications?.show?.({
+        description: path,
         level: 'success',
         title: successTitle
       })
@@ -3239,7 +3284,7 @@ const renderDeviceProfilePanel = (props: {
   )
 }
 
-const renderDeviceProjectsPanel = (props: {
+export const renderDeviceProjectsPanel = (props: {
   ctx: PluginClientContext
   device: RelayDeviceSummary
   filter: string
@@ -3255,18 +3300,18 @@ const renderDeviceProjectsPanel = (props: {
   const grouped = groups.length > 1
   const InteractionList = view?.ui?.InteractionList
   const copyProjectPath = (item: RelayDeviceProjectInteractionItem) => {
-    copyTextToClipboard(ctx, item.path, '路径已复制')
+    copyRelayFilesystemPathToClipboard(ctx, item.path, '路径已复制')
   }
   const projectItemFor = (
     group: RelayDeviceProjectGroup,
     project: RelayDeviceProjectRow
   ): RelayDeviceProjectInteractionItem => {
     const connection = deviceConnectionState(project.status ?? group.status)
-    const tooltip = cleanTextList([
-      project.path,
+    const tooltip = [
+      readRelayFilesystemPath(project.path),
       grouped ? group.title : undefined,
       connection.label
-    ]).join(' · ')
+    ].filter((value): value is string => value != null && value !== '').join(' · ')
     return {
       description: undefined,
       icon: 'folder_open',
@@ -3276,10 +3321,10 @@ const renderDeviceProjectsPanel = (props: {
       path: project.path,
       project,
       group,
-      searchText: cleanTextList([
+      searchText: [
         ...projectSearchValues(project, group),
-        project.path
-      ]).join(' '),
+        readRelayFilesystemPath(project.path)
+      ].filter((value): value is string => value != null && value !== '').join(' '),
       title: project.title,
       tooltip: tooltip === '' ? project.title : tooltip
     }
@@ -3304,7 +3349,7 @@ const renderDeviceProjectsPanel = (props: {
   const getProjectActions = (
     item: RelayDeviceProjectInteractionItem
   ): Array<PluginHostInteractionListAction<RelayDeviceProjectInteractionItem>> => {
-    if (item.kind !== 'project' || cleanText(item.path) == null) return []
+    if (item.kind !== 'project' || readRelayFilesystemPath(item.path) == null) return []
     return [{
       icon: 'content_copy',
       key: 'copy-path',
@@ -3380,11 +3425,11 @@ const renderDeviceProjectsPanel = (props: {
       ...groupRow,
       ...group.projects.map(project => {
         const connection = deviceConnectionState(project.status ?? group.status)
-        const projectTooltip = cleanTextList([
-          project.path,
+        const projectTooltip = [
+          readRelayFilesystemPath(project.path),
           group.title,
           connection.label
-        ]).join(' · ')
+        ].filter((value): value is string => value != null && value !== '').join(' · ')
         return react.createElement(
           'div',
           {

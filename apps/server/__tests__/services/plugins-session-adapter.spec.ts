@@ -51,6 +51,14 @@ describe('plugin session adapter', () => {
     await expect(adapter.listSessions()).resolves.toEqual([{ id: 'sess-1' }])
   })
 
+  it('preserves the exact session workspace identity for plugin consumers', async () => {
+    const workspaceFolder = '/workspace/ relay project '
+    vi.mocked(resolveSessionWorkspace).mockResolvedValue({ workspaceFolder } as never)
+    const adapter = createPluginSessionAdapter()
+
+    await expect(adapter.listSessions()).resolves.toEqual([{ id: 'sess-1', workspaceFolder }])
+  })
+
   it('submits a message into an existing session', async () => {
     const adapter = createPluginSessionAdapter()
 

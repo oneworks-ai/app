@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { resolveProjectHomePath } from '#~/ai-path.js'
 import {
   copyDirectoryContentsWithoutOverwrite,
+  copyDirectoryContentsWithoutOverwriteSync,
   migrateProjectHomeSegment,
   removeLegacyProjectHomeSegmentPath,
   resolveLegacyProjectHomeSegmentPaths
@@ -78,4 +79,29 @@ describe('project home migration', () => {
     await expect(readFile(join(targetDir, 'copied.txt'), 'utf8')).resolves.toBe('copied\n')
     await expect(readFile(join(targetDir, 'existing.txt'), 'utf8')).resolves.toBe('target\n')
   })
+
+  it.runIf(process.platform !== 'win32')(
+    'migrates POSIX literal-backslash names without treating them as volatile',
+    async () => {
+      const cwd = await mkdtemp(join(tmpdir(), 'ow-project-home-native-segments-'))
+      tempDirs.push(cwd)
+      const sourceDir = join(cwd, 'source')
+      const asyncTarget = join(cwd, 'async-target')
+      const syncTarget = join(cwd, 'sync-target')
+      const literalName = String.raw`note\.codex\.tmp\content.txt`
+      await mkdir(join(sourceDir, '.codex', '.tmp'), { recursive: true })
+      await writeFile(join(sourceDir, literalName), 'literal-backslash\n')
+      await writeFile(join(sourceDir, '.codex', '.tmp', 'volatile.txt'), 'skip\n')
+
+      await copyDirectoryContentsWithoutOverwrite({ sourceDir, targetDir: asyncTarget })
+      copyDirectoryContentsWithoutOverwriteSync({ sourceDir, targetDir: syncTarget })
+
+      await expect(readFile(join(asyncTarget, literalName), 'utf8')).resolves.toBe('literal-backslash\n')
+      await expect(readFile(join(syncTarget, literalName), 'utf8')).resolves.toBe('literal-backslash\n')
+      await expect(readFile(join(asyncTarget, '.codex', '.tmp', 'volatile.txt'), 'utf8'))
+        .rejects.toMatchObject({ code: 'ENOENT' })
+      await expect(readFile(join(syncTarget, '.codex', '.tmp', 'volatile.txt'), 'utf8'))
+        .rejects.toMatchObject({ code: 'ENOENT' })
+    }
+  )
 })

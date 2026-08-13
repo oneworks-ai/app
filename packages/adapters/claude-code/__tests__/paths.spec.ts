@@ -15,11 +15,24 @@ import {
   resolveAdapterCliPath,
   resolveClaudeCliPath
 } from '../src/ccr/paths'
+import { ensureClaudeCliPath } from '../src/claude/cli'
 
 describe('claude code CLI paths', () => {
   it('pins the CCR release supported by the managed transformer contract', () => {
     expect(CLAUDE_CODE_ROUTER_CLI_VERSION).toBe('1.0.73')
     expect(CLAUDE_CODE_ROUTER_CLI_COMPATIBILITY_RANGE).toBe('1.0.73')
+  })
+
+  it('preserves an exact whitespace-bearing cached executable path', async () => {
+    const cachedPath = '/opt/oneworks/claude '
+    await expect(ensureClaudeCliPath({
+      ctx: {
+        cwd: '/workspace',
+        env: { __ONEWORKS_PROJECT_ADAPTER_CLAUDE_CODE_CLI_PATH__: cachedPath },
+        logger: { info: () => undefined, warn: () => undefined, error: () => undefined, debug: () => undefined }
+      } as any,
+      env: {}
+    })).resolves.toBe(cachedPath)
   })
 
   it('uses a managed Claude binary from the global bootstrap cache', async () => {

@@ -1,31 +1,33 @@
 import type { GitWorktreeSummary } from '@oneworks/types'
 
-const normalizeWorktreePath = (value: string) => value.trim().replace(/[/\\]+$/, '').replace(/\\/g, '/')
+import { splitGitNulRecords } from './path-records'
+import { getGitWorktreePathComparisonKey } from './worktree'
 
 export const parseGitWorktrees = (output: string, currentWorktreePath: string): GitWorktreeSummary[] => {
   const worktrees: GitWorktreeSummary[] = []
-  const normalizedCurrentWorktreePath = normalizeWorktreePath(currentWorktreePath)
+  const normalizedCurrentWorktreePath = getGitWorktreePathComparisonKey(currentWorktreePath)
   let currentEntry: Partial<GitWorktreeSummary> | null = null
 
   const flushCurrentEntry = () => {
-    if (currentEntry?.path == null || currentEntry.path.trim() === '') {
+    if (currentEntry?.path == null || currentEntry.path === '') {
       currentEntry = null
       return
     }
 
-    const path = currentEntry.path.trim()
+    const path = currentEntry.path
     worktrees.push({
       path,
       branchName: currentEntry.branchName?.trim() || null,
-      isCurrent: normalizeWorktreePath(path) === normalizedCurrentWorktreePath,
+      isCurrent: getGitWorktreePathComparisonKey(path) === normalizedCurrentWorktreePath,
       isDetached: currentEntry.isDetached === true
     })
     currentEntry = null
   }
 
-  for (const rawLine of output.split(/\r?\n/)) {
-    const line = rawLine.trim()
-    if (line === '') {
+  const records = output.includes('\0') ? splitGitNulRecords(output) : output.split(/\r?\n/)
+  for (const rawLine of records) {
+    const line = rawLine.replace(/^(?:\r\n|\r|\n)+/u, '')
+    if (line.trim() === '') {
       flushCurrentEntry()
       continue
     }
@@ -33,7 +35,7 @@ export const parseGitWorktrees = (output: string, currentWorktreePath: string): 
     if (line.startsWith('worktree ')) {
       flushCurrentEntry()
       currentEntry = {
-        path: line.slice('worktree '.length).trim(),
+        path: line.slice('worktree '.length),
         branchName: null,
         isDetached: false
       }

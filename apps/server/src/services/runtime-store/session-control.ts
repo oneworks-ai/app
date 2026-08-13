@@ -27,6 +27,10 @@ export type ServerRuntimeSessionContent = string | ChatMessageContent[]
 
 const cloneContentItems = (content: ChatMessageContent[]) => structuredClone(content)
 
+const readFilesystemPath = (value: string | undefined) => (
+  value != null && value.trim() !== '' ? value : undefined
+)
+
 const INITIAL_PROMPT_DELIVERY = 'initial_prompt'
 const BRIDGE_MESSAGE_DELIVERY = 'bridge'
 
@@ -90,7 +94,7 @@ export async function createServerRuntimeSession(params: {
   const runtimeEnv = createWorkspaceRuntimeEnv(params.cwd, processEnv)
   const channelContext = normalizeChannelRuntimeContext(params.channelContext)
   const primaryWorkspaceFolder = resolveProjectPrimaryWorkspaceFolder(params.cwd, runtimeEnv) ??
-    runtimeEnv.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__?.trim() ??
+    readFilesystemPath(runtimeEnv.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__) ??
     params.cwd
   const session = await store.createSession(
     {

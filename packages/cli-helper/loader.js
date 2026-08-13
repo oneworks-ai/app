@@ -25,8 +25,7 @@ const splitNodePath = (value) => (
   typeof value === 'string'
     ? value
       .split(path.delimiter)
-      .map(item => item.trim())
-      .filter(Boolean)
+      .filter(item => item.trim() !== '')
     : []
 )
 

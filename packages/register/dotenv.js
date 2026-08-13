@@ -17,6 +17,7 @@ const { basename, dirname, isAbsolute, relative, resolve, sep } = require('node:
 const process = require('node:process')
 
 const dotenv = require('dotenv')
+const { normalizeFilesystemDirPath, readFilesystemPathOutput } = require('./filesystem-path')
 const { findWorkspaceRoot } = require('./workspace')
 
 const PRIMARY_WORKSPACE_ENV = '__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__'
@@ -33,14 +34,7 @@ const DEFAULT_PROJECT_OO_BASE_DIR = '.oo'
 const DEFAULT_PROJECT_ONEWORKS_HOME_PROJECTS_DIR = '.oneworks/projects'
 const PROJECT_HOME_MIGRATED_SEGMENTS = ['logs', 'caches', '.mock', '.local', 'runtime']
 
-const normalizeDirPath = (value) => {
-  const trimmed = typeof value === 'string' ? value.trim() : undefined
-  if (!trimmed) {
-    return undefined
-  }
-
-  return trimmed.replace(/[\\/]+$/, '')
-}
+const normalizeDirPath = normalizeFilesystemDirPath
 
 const resolvePathFromBase = (baseDir, value) => {
   const normalizedValue = normalizeDirPath(value)
@@ -163,7 +157,7 @@ const isPathInside = (parentPath, targetPath) => {
   )
 }
 
-const isGitInternalPath = (targetPath) => targetPath.split(/[\\/]+/).includes('.git')
+const isGitInternalPath = (targetPath) => targetPath.split(sep).includes('.git')
 
 const resolveLegacyProjectHomeSegmentPaths = (cwd = process.cwd(), env = process.env, segment) => {
   return {
@@ -339,8 +333,8 @@ const rememberProjectPathSources = (filePath, parsed) => {
 
 const resolvePrimaryWorkspaceFolder = (workspaceFolder, env = process.env) => {
   const normalizedWorkspaceFolder = resolve(workspaceFolder)
-  const explicitPrimaryWorkspaceFolder = env[PRIMARY_WORKSPACE_ENV]?.trim()
-  if (explicitPrimaryWorkspaceFolder) {
+  const explicitPrimaryWorkspaceFolder = env[PRIMARY_WORKSPACE_ENV]
+  if (explicitPrimaryWorkspaceFolder?.trim()) {
     const resolvedPrimaryWorkspaceFolder = resolvePathFromBase(
       resolveProjectLaunchCwd(workspaceFolder, env),
       explicitPrimaryWorkspaceFolder
@@ -362,7 +356,7 @@ const resolvePrimaryWorkspaceFolder = (workspaceFolder, env = process.env) => {
       return undefined
     }
 
-    const gitCommonDir = result.stdout?.trim()
+    const gitCommonDir = readFilesystemPathOutput(result.stdout)
     if (!gitCommonDir) {
       return undefined
     }
@@ -404,8 +398,7 @@ const loadDotenv = (options = {}) => {
   const envFiles = process.env.__ONEWORKS_PROJECT_DOTENV_FILES__
     ? process.env.__ONEWORKS_PROJECT_DOTENV_FILES__
       .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean)
+      .filter((file) => file.trim() !== '')
     : undefined
   const files = options.files ?? envFiles ?? ['.env', '.env.dev']
   const packageDir = process.env.__ONEWORKS_PROJECT_PACKAGE_DIR__

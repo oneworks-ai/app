@@ -17,6 +17,7 @@
   - Claude CLI 会话生命周期
   - `prepare.ts` 组装执行参数与 settings，`session.ts` 负责 spawn/stream，`init.ts` 负责 adapter 初始化与 mock-home skills 同步
   - `accounts.ts` 通过官方 `claude auth` 子命令管理账号，并以稳定 `CLAUDE_CONFIG_DIR` 隔离会话；`cli.ts` 统一解析受管 CLI
+  - `accounts.ts` 读取 real-home `.claude.json` 时仅以 `trim()` 判空并保留原始 home bytes；账号 key、title 与 quota 文本仍是普通文本字段
 - `src/plugins/*.ts`
   - Claude native plugin 的格式适配层：marketplace 解析、manifest/root 检测与 Claude -> One Works 资产转换
   - `index.ts` 只导出给 CLI core 使用的标准 installer hooks，不承载通用安装编排

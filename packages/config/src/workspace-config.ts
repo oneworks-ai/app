@@ -33,13 +33,12 @@ const mergeUniqueList = <T>(
 
 const toStringList = (value: unknown): string[] | undefined => {
   if (typeof value === 'string' && value.trim() !== '') {
-    return [value.trim()]
+    return [value]
   }
   if (!Array.isArray(value)) return undefined
 
   const list = value
     .filter((item): item is string => typeof item === 'string' && item.trim() !== '')
-    .map(item => item.trim())
   return list.length > 0 ? list : undefined
 }
 

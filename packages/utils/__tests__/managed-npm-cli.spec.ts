@@ -10,10 +10,56 @@ import {
   ensureManagedNpmCli,
   resolveManagedNpmCliBinaryPath,
   resolveManagedNpmCliInstallOptions,
-  resolveManagedNpmCliPaths
+  resolveManagedNpmCliPaths,
+  resolveUserShellBinaryPath
 } from '#~/managed-npm-cli.js'
 
 describe('managed npm cli utils', () => {
+  it.runIf(process.platform !== 'win32')('preserves terminal CR bytes in command-v executable paths', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-command-v-path-'))
+    const exactBinary = join(workspace, 'tool\r')
+    const adjacentBinary = join(workspace, 'tool')
+    const shellPath = join(workspace, 'shell')
+    await Promise.all([
+      writeFile(exactBinary, '#!/bin/sh\nexit 0\n'),
+      writeFile(adjacentBinary, '#!/bin/sh\nexit 1\n'),
+      writeFile(shellPath, `#!/bin/sh\nprintf 'startup noise\\n\\0%s\\n\\0' '${exactBinary}'\n`)
+    ])
+    await Promise.all([chmod(exactBinary, 0o755), chmod(adjacentBinary, 0o755), chmod(shellPath, 0o755)])
+
+    try {
+      await expect(resolveUserShellBinaryPath({ binaryName: 'tool', env: { SHELL: shellPath } }))
+        .resolves.toBe(exactBinary)
+      await expect(access(await realpath(exactBinary))).resolves.toBeUndefined()
+    } finally {
+      await rm(workspace, { recursive: true, force: true })
+    }
+  })
+
+  it.runIf(process.platform !== 'win32')(
+    'reads only a NUL-framed command-v path without rewriting embedded line feeds',
+    async () => {
+      const workspace = await mkdtemp(join(tmpdir(), 'ow-command-v-framed-path-'))
+      const exactBinary = join(workspace, 'tool\nexact')
+      const adjacentBinary = join(workspace, 'tool')
+      const shellPath = join(workspace, 'shell')
+      await Promise.all([
+        writeFile(exactBinary, '#!/bin/sh\nexit 0\n'),
+        writeFile(adjacentBinary, '#!/bin/sh\nexit 1\n'),
+        writeFile(shellPath, `#!/bin/sh\nprintf '/startup/noise\\n\\0%s\\n\\0/post-startup\\n' '${exactBinary}'\n`)
+      ])
+      await Promise.all([chmod(exactBinary, 0o755), chmod(adjacentBinary, 0o755), chmod(shellPath, 0o755)])
+
+      try {
+        await expect(resolveUserShellBinaryPath({ binaryName: 'tool', env: { SHELL: shellPath } }))
+          .resolves.toBe(exactBinary)
+        await expect(access(await realpath(exactBinary))).resolves.toBeUndefined()
+      } finally {
+        await rm(workspace, { recursive: true, force: true })
+      }
+    }
+  )
+
   it('does not reintroduce an inherited exact project home when building install env', () => {
     const previousWorkspace = process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__
     const previousPrimary = process.env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__

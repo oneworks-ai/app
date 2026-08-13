@@ -6,6 +6,10 @@ import type { PluginSessionAdapter } from './types.js'
 
 const readTextField = (value: unknown) => typeof value === 'string' ? value.trim() : ''
 
+const readPathField = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== '' ? value : ''
+)
+
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   value != null && typeof value === 'object' && !Array.isArray(value)
 )
@@ -23,7 +27,7 @@ const listSessionsWithWorkspace = async () => {
     }
 
     const workspace = await resolveSessionWorkspace(sessionId).catch(() => undefined)
-    const workspaceFolder = readTextField(workspace?.workspaceFolder)
+    const workspaceFolder = readPathField(workspace?.workspaceFolder)
     if (workspaceFolder === '') {
       return session
     }

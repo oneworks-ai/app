@@ -362,4 +362,92 @@ describe('applyServerRuntimeEnv', () => {
     await expect(readFile(resolve(env.__ONEWORKS_PROJECT_SERVER_DATA_DIR__!, 'web-auth-password'), 'utf8'))
       .resolves.toBe('legacy-password\n')
   })
+
+  it('does not classify a whitespace-distinct configured data directory as the default migration target', async () => {
+    const root = await mkdtemp(resolve(tmpdir(), 'ow-server-runtime-data-identity-'))
+    tempDirs.push(root)
+    const workspace = resolve(root, 'workspace')
+    const realHome = resolve(root, 'real-home')
+    const packageDir = resolve(process.cwd(), 'apps/server')
+    const entryPath = resolve(root, 'entry.js')
+    await mkdir(resolve(workspace, '.data'), { recursive: true })
+    await writeFile(resolve(workspace, '.data', 'migration-marker'), 'legacy\n', 'utf8')
+    await writeFile(entryPath, 'process.exit(0)\n', 'utf8')
+    const env = applyServerRuntimeEnv({
+      baseEnv: {
+        HOME: realHome,
+        __ONEWORKS_PROJECT_HOME_PROJECTS_DIR__: resolve(root, 'home-projects')
+      },
+      cwd: workspace,
+      packageDir,
+      options: { workspace },
+      defaults: {
+        allowCors: false,
+        clientMode: 'none',
+        entryKind: 'server',
+        serverHost: '127.0.0.1',
+        serverPort: '8787',
+        serverWsPath: '/ws'
+      }
+    })
+    const defaultDataDir = env.__ONEWORKS_PROJECT_SERVER_DATA_DIR__!
+    const rawDataDir = `${defaultDataDir} `
+    await Promise.all([
+      mkdir(defaultDataDir, { recursive: true }),
+      mkdir(rawDataDir, { recursive: true })
+    ])
+    env.__ONEWORKS_PROJECT_SERVER_DATA_DIR__ = rawDataDir
+
+    await expect(runRuntimeEntry({ entryPath, env })).resolves.toBe(0)
+
+    await expect(readFile(resolve(workspace, '.data', 'migration-marker'), 'utf8')).resolves.toBe('legacy\n')
+    await expect(readFile(resolve(defaultDataDir, 'migration-marker'), 'utf8')).rejects.toMatchObject({
+      code: 'ENOENT'
+    })
+    await expect(readFile(resolve(rawDataDir, 'migration-marker'), 'utf8')).rejects.toMatchObject({
+      code: 'ENOENT'
+    })
+  })
+
+  it('preserves raw workspace and launch cwd identity for runtime children', async () => {
+    const root = await mkdtemp(resolve(tmpdir(), 'ow-server-runtime-raw-path-'))
+    tempDirs.push(root)
+    const workspace = resolve(root, ' workspace ')
+    const realHome = resolve(root, 'real-home')
+    const packageDir = resolve(process.cwd(), 'apps/server')
+    const entryPath = resolve(root, 'entry.js')
+    const outputPath = resolve(root, 'runtime.json')
+    await mkdir(workspace, { recursive: true })
+    await mkdir(realHome, { recursive: true })
+    await writeFile(
+      entryPath,
+      "require('node:fs').writeFileSync(process.env.ONEWORKS_TEST_RUNTIME_OUT, JSON.stringify({ cwd: process.cwd(), workspaceFolder: process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__ }), 'utf8')\n",
+      'utf8'
+    )
+
+    const env = applyServerRuntimeEnv({
+      baseEnv: {
+        HOME: realHome,
+        ONEWORKS_TEST_RUNTIME_OUT: outputPath,
+        __ONEWORKS_PROJECT_HOME_PROJECTS_DIR__: resolve(root, 'home-projects')
+      },
+      cwd: workspace,
+      packageDir,
+      options: { workspace },
+      defaults: {
+        allowCors: false,
+        clientMode: 'none',
+        entryKind: 'server',
+        serverHost: '127.0.0.1',
+        serverPort: '8787',
+        serverWsPath: '/ws'
+      }
+    })
+
+    await expect(runRuntimeEntry({ entryPath, env })).resolves.toBe(0)
+    await expect(readFile(outputPath, 'utf8')).resolves.toBe(JSON.stringify({
+      cwd: await realpath(workspace),
+      workspaceFolder: workspace
+    }))
+  })
 })

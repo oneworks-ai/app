@@ -1253,6 +1253,112 @@ describe('plugin package export conventions', () => {
     }
   })
 
+  it('loads exact whitespace-bearing package export targets', async () => {
+    const pluginRoot = path.join(workspaceFolder, 'plugins', 'export-path-identity')
+    await mkdir(path.join(pluginRoot, 'client'), { recursive: true })
+    await mkdir(path.join(pluginRoot, 'server'), { recursive: true })
+    await Promise.all([
+      writeFile(path.join(pluginRoot, 'client', 'index.js '), 'export const identity = "exact"\n'),
+      writeFile(path.join(pluginRoot, 'client', 'index.js'), 'export const identity = "adjacent"\n'),
+      writeFile(
+        path.join(pluginRoot, 'server', 'index.mjs '),
+        'export async function activatePlugin(ctx) { ctx.registerCommand("identity", () => "exact") }\n'
+      ),
+      writeFile(
+        path.join(pluginRoot, 'server', 'index.mjs'),
+        'export async function activatePlugin(ctx) { ctx.registerCommand("identity", () => "adjacent") }\n'
+      ),
+      writeFile(
+        path.join(pluginRoot, 'plugin.json'),
+        JSON.stringify({ plugin: { server: { roles: ['workspace'] } } })
+      ),
+      writeFile(
+        path.join(pluginRoot, 'package.json'),
+        JSON.stringify({
+          name: '@local/export-path-identity',
+          exports: {
+            './client': './client/index.js ',
+            './server': './server/index.mjs ',
+            './package.json': './package.json'
+          }
+        })
+      )
+    ])
+    mocks.loadConfigState.mockResolvedValue({
+      workspaceFolder,
+      mergedConfig: { plugins: [{ id: pluginRoot, scope: 'export-path-identity' }] }
+    })
+
+    const listResponse = await fetch(`${baseUrl}/api/plugins`)
+    const payload = await listResponse.json() as {
+      plugins: Array<{ client?: { clientEntryUrl?: string }; scope: string }>
+    }
+    const plugin = payload.plugins.find(item => item.scope === 'export-path-identity')
+    expect(plugin).toEqual(expect.objectContaining({
+      client: expect.objectContaining({
+        clientEntryUrl: '/api/plugins/export-path-identity/client/index.js%20'
+      })
+    }))
+    const clientResponse = await fetch(`${baseUrl}${plugin?.client?.clientEntryUrl}`)
+    const commandResponse = await fetch(
+      `${baseUrl}/api/plugins/export-path-identity/commands/identity`,
+      { method: 'POST' }
+    )
+
+    await expect(clientResponse.text()).resolves.toContain('identity = "exact"')
+    await expect(commandResponse.text()).resolves.toBe('exact')
+  })
+
+  it.runIf(path.sep === '/')('keeps POSIX literal backslashes in package export filesystem identity', async () => {
+    const pluginRoot = path.join(workspaceFolder, 'plugins', 'export-backslash-identity')
+    await mkdir(pluginRoot, { recursive: true })
+    await Promise.all([
+      writeFile(path.join(pluginRoot, 'client\\entry.js'), 'export const identity = "literal"\n'),
+      writeFile(
+        path.join(pluginRoot, 'server\\entry.mjs'),
+        'export async function activatePlugin(ctx) { ctx.registerCommand("identity", () => "literal") }\n'
+      ),
+      writeFile(
+        path.join(pluginRoot, 'plugin.json'),
+        JSON.stringify({ plugin: { server: { roles: ['workspace'] } } })
+      ),
+      writeFile(
+        path.join(pluginRoot, 'package.json'),
+        JSON.stringify({
+          name: '@local/export-backslash-identity',
+          exports: {
+            './client': 'client\\entry.js',
+            './server': 'server\\entry.mjs',
+            './package.json': './package.json'
+          }
+        })
+      )
+    ])
+    mocks.loadConfigState.mockResolvedValue({
+      workspaceFolder,
+      mergedConfig: { plugins: [{ id: pluginRoot, scope: 'export-backslash-identity' }] }
+    })
+
+    const listResponse = await fetch(`${baseUrl}/api/plugins`)
+    const payload = await listResponse.json() as {
+      plugins: Array<{ client?: { clientEntryUrl?: string }; scope: string }>
+    }
+    const plugin = payload.plugins.find(item => item.scope === 'export-backslash-identity')
+    expect(plugin).toEqual(expect.objectContaining({
+      client: expect.objectContaining({
+        clientEntryUrl: '/api/plugins/export-backslash-identity/client/client%5Centry.js'
+      })
+    }))
+    const clientResponse = await fetch(`${baseUrl}${plugin?.client?.clientEntryUrl}`)
+    const commandResponse = await fetch(
+      `${baseUrl}/api/plugins/export-backslash-identity/commands/identity`,
+      { method: 'POST' }
+    )
+
+    await expect(clientResponse.text()).resolves.toContain('identity = "literal"')
+    await expect(commandResponse.text()).resolves.toBe('literal')
+  })
+
   async function startDevServer(source: string) {
     devServer = http.createServer((_req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/javascript' })

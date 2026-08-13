@@ -21,9 +21,10 @@ const readPackageInfo = async (packageJsonPath: string): Promise<ServerAppInfo |
 }
 
 export const getServerAppInfo = async (): Promise<ServerAppInfo> => {
-  const packageDir = processEnv.__ONEWORKS_PROJECT_PACKAGE_DIR__?.trim()
+  const rawPackageDir = processEnv.__ONEWORKS_PROJECT_PACKAGE_DIR__
+  const packageDir = rawPackageDir != null && rawPackageDir.trim() !== '' ? rawPackageDir : undefined
   const candidates = [
-    packageDir != null && packageDir !== '' ? resolve(packageDir, 'package.json') : undefined,
+    packageDir != null ? resolve(packageDir, 'package.json') : undefined,
     resolve(cwd(), 'apps/server/package.json'),
     resolve(cwd(), 'package.json')
   ].filter((item): item is string => item != null)

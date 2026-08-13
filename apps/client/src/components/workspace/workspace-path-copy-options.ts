@@ -1,5 +1,7 @@
 import type { TFunction } from 'i18next'
 
+import { readNonBlankFilesystemPath, stripOptionalTrailingPathSeparators } from '#~/utils/filesystem-path-identity'
+
 export interface WorkspacePathCopyOption {
   disabled?: boolean
   key: string
@@ -11,13 +13,14 @@ export interface WorkspacePathCopyOption {
 export const getWorkspacePathName = (path: string) => path.split('/').filter(Boolean).at(-1) ?? path
 
 export const buildWorkspaceAbsolutePath = (workspaceRootPath: string | undefined, relativePath: string) => {
-  const root = workspaceRootPath?.trim()
-  const path = relativePath.trim()
-  if (root == null || root === '' || path === '') return undefined
+  const root = readNonBlankFilesystemPath(workspaceRootPath)
+  const path = readNonBlankFilesystemPath(relativePath)
+  if (root == null || path == null) return undefined
 
   const separator = root.includes('\\') && !root.includes('/') ? '\\' : '/'
   const normalizedPath = separator === '\\' ? path.replaceAll('/', '\\') : path
-  return `${root.replace(/[\\/]+$/, '')}${separator}${normalizedPath}`
+  const normalizedRoot = stripOptionalTrailingPathSeparators(root)
+  return `${normalizedRoot}${normalizedRoot.endsWith(separator) ? '' : separator}${normalizedPath}`
 }
 
 export const buildWorkspacePathCopyOptions = ({

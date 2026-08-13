@@ -33,6 +33,10 @@ interface CodexCatalogSource {
   path: string
 }
 
+const readFilesystemPath = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== '' ? value : undefined
+)
+
 const DEFAULT_MODEL_OPTION: AdapterBuiltinModel = {
   value: 'default',
   title: 'Default',
@@ -116,10 +120,10 @@ const toSyntheticDisplayName = (modelId: string) => (
 )
 
 const resolveCodexHome = () => (
-  normalizeNonEmptyString(process.env.CODEX_HOME) ??
+  readFilesystemPath(process.env.CODEX_HOME) ??
     resolve(
-      normalizeNonEmptyString(process.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
-        normalizeNonEmptyString(process.env.HOME) ??
+      readFilesystemPath(process.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
+        readFilesystemPath(process.env.HOME) ??
         homedir(),
       '.codex'
     )
@@ -157,7 +161,7 @@ const resolveCodexModelCatalogPath = () => {
       if (!trimmedLine.startsWith('model_catalog_json')) continue
       const assignment = trimmedLine.slice('model_catalog_json'.length).trimStart()
       if (!assignment.startsWith('=')) continue
-      const parsedPath = normalizeNonEmptyString(parseTomlStringLiteral(assignment.slice(1)))
+      const parsedPath = readFilesystemPath(parseTomlStringLiteral(assignment.slice(1)))
       if (parsedPath == null) return undefined
       return resolve(codexHome, parsedPath)
     }

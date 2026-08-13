@@ -97,6 +97,46 @@ describe('ui static routing', () => {
     expect(assetBody).toBe('font-data')
   })
 
+  it('serves the exact whitespace-bearing static bundle instead of its adjacent sibling', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'ow-ui-raw-dist-'))
+    const adjacentDistDir = path.join(root, 'client-dist')
+    const rawDistDir = path.join(root, 'client-dist ')
+    await Promise.all([
+      mkdir(adjacentDistDir, { recursive: true }),
+      mkdir(rawDistDir, { recursive: true })
+    ])
+    await Promise.all([
+      writeFile(path.join(adjacentDistDir, 'index.html'), '<!doctype html><body>adjacent bundle</body>'),
+      writeFile(path.join(rawDistDir, 'index.html'), '<!doctype html><body>raw bundle</body>')
+    ])
+    const app = new Koa()
+    await mountRoutes(
+      app,
+      {
+        __ONEWORKS_PROJECT_SERVER_HOST__: '127.0.0.1',
+        __ONEWORKS_PROJECT_SERVER_PORT__: 0,
+        __ONEWORKS_PROJECT_SERVER_WS_PATH__: '/ws',
+        __ONEWORKS_PROJECT_CLIENT_MODE__: 'static',
+        __ONEWORKS_PROJECT_CLIENT_BASE__: '/raw-ui',
+        __ONEWORKS_PROJECT_CLIENT_DIST_PATH__: rawDistDir
+      } as Parameters<typeof mountRoutes>[1]
+    )
+    const rawServer = http.createServer(app.callback())
+    await new Promise<void>(resolve => rawServer.listen(0, '127.0.0.1', () => resolve()))
+    const address = rawServer.address()
+    if (address == null || typeof address === 'string') {
+      throw new Error('Failed to start raw dist test server')
+    }
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${address.port}/raw-ui/`)
+      await expect(response.text()).resolves.toContain('raw bundle')
+    } finally {
+      await new Promise<void>((resolve, reject) => rawServer.close(error => error == null ? resolve() : reject(error)))
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it('injects manager runtime without a workspace folder', () => {
     vi.stubEnv('__ONEWORKS_PROJECT_WORKSPACE_FOLDER__', '')
     const runtimeScript = createRuntimeScript(
@@ -117,6 +157,28 @@ describe('ui static routing', () => {
 
     expect(runtimeScript).toContain('"__ONEWORKS_PROJECT_SERVER_ROLE__":"manager"')
     expect(runtimeScript).not.toContain('__ONEWORKS_PROJECT_WORKSPACE_FOLDER__')
+  })
+
+  it('injects the exact raw workspace identity into the client runtime', () => {
+    const workspaceFolder = '/tmp/ workspace '
+    vi.stubEnv('__ONEWORKS_PROJECT_WORKSPACE_FOLDER__', workspaceFolder)
+    const runtimeScript = createRuntimeScript(
+      {
+        __ONEWORKS_PROJECT_SERVER_HOST__: '127.0.0.1',
+        __ONEWORKS_PROJECT_SERVER_PORT__: 8787,
+        __ONEWORKS_PROJECT_SERVER_WS_PATH__: '/ws',
+        __ONEWORKS_PROJECT_SERVER_DATA_DIR__: '/tmp/ow-data',
+        __ONEWORKS_PROJECT_SERVER_LOG_DIR__: '/tmp/ow-logs',
+        __ONEWORKS_PROJECT_SERVER_LOG_LEVEL__: 'info',
+        __ONEWORKS_PROJECT_SERVER_DEBUG__: false,
+        __ONEWORKS_PROJECT_SERVER_ALLOW_CORS__: false,
+        __ONEWORKS_PROJECT_SERVER_ROLE__: 'workspace',
+        __ONEWORKS_PROJECT_CLIENT_MODE__: 'static'
+      },
+      '/ui/'
+    )
+
+    expect(runtimeScript).toContain(`"__ONEWORKS_PROJECT_WORKSPACE_FOLDER__":${JSON.stringify(workspaceFolder)}`)
   })
 
   it('redirects the client base without a trailing slash to the mounted ui alias', async () => {

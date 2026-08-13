@@ -1,5 +1,7 @@
 import type { GitChangeSummary, GitHeadCommitSummary } from '@oneworks/types'
 
+import { splitGitNulRecords } from './path-records'
+
 export interface ParsedGitNumstatEntry {
   path: string
   additions: number
@@ -9,13 +11,38 @@ export interface ParsedGitNumstatEntry {
 export const parseGitNumstat = (output: string): ParsedGitNumstatEntry[] => {
   const entries: ParsedGitNumstatEntry[] = []
 
+  if (output.includes('\0')) {
+    const records = splitGitNulRecords(output)
+    for (let index = 0; index < records.length; index += 1) {
+      const record = records[index] ?? ''
+      const firstTab = record.indexOf('\t')
+      const secondTab = firstTab < 0 ? -1 : record.indexOf('\t', firstTab + 1)
+      if (firstTab < 0 || secondTab < 0) continue
+      const additionsText = record.slice(0, firstTab)
+      const deletionsText = record.slice(firstTab + 1, secondTab)
+      const inlinePath = record.slice(secondTab + 1)
+      let path = inlinePath
+      if (path === '') {
+        index += 2
+        path = records[index] ?? ''
+      }
+      if (path === '') continue
+      entries.push({
+        path,
+        additions: additionsText === '-' ? 0 : Number.parseInt(additionsText, 10) || 0,
+        deletions: deletionsText === '-' ? 0 : Number.parseInt(deletionsText, 10) || 0
+      })
+    }
+    return entries
+  }
+
   for (const rawLine of output.split(/\r?\n/)) {
     if (rawLine.trim() === '') {
       continue
     }
 
     const [additionsText = '', deletionsText = '', ...pathParts] = rawLine.split('\t')
-    const path = pathParts.at(-1)?.trim() ?? ''
+    const path = pathParts.at(-1) ?? ''
     if (path === '') {
       continue
     }

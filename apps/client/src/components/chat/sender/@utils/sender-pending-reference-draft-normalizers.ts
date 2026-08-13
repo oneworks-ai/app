@@ -100,8 +100,8 @@ const normalizePendingFiles = (value: unknown): PendingContextFile[] => {
 
   return value.flatMap((item): PendingContextFile[] => {
     if (!isRecord(item)) return []
-    const path = readStringField(item, 'path').trim()
-    if (path === '') return []
+    const path = readStringField(item, 'path')
+    if (path.trim() === '') return []
     return [{
       path,
       name: readOptionalStringField(item, 'name'),
@@ -180,12 +180,14 @@ const normalizePendingFileComments = (value: unknown): PendingFileComment[] => {
 
   return value.flatMap((item, index): PendingFileComment[] => {
     if (!isRecord(item)) return []
-    const path = readStringField(item, 'path').trim()
+    const path = readStringField(item, 'path')
     const selectedText = readStringField(item, 'selectedText').trim()
     const selections = normalizePendingFileCommentSelections(item.selections)
     const comment = readStringField(item, 'comment').trim()
     const targetLabel = readOptionalStringField(item, 'targetLabel')
-    if (path === '' || (selectedText === '' && selections.length === 0 && comment === '' && targetLabel == null)) {
+    if (
+      path.trim() === '' || (selectedText === '' && selections.length === 0 && comment === '' && targetLabel == null)
+    ) {
       return []
     }
     return [{

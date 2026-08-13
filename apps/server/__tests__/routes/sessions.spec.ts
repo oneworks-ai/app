@@ -239,6 +239,40 @@ describe('sessionsRouter', () => {
     expect(ctx.body).toEqual(result)
   })
 
+  it('forwards exact filesystem project and source path identities to native history import', async () => {
+    vi.mocked(getDb).mockReturnValue({} as any)
+    vi.mocked(importNativeProjectHistoryAndReplay).mockResolvedValue({
+      importedEvents: 0,
+      importedSessions: 0,
+      matchedFiles: 0,
+      scannedFiles: 0,
+      sessions: []
+    } as any)
+    const projectPath = '/workspace/project '
+    const sourcePath = '/history/session.jsonl '
+    const handleImport = findRouteHandler('/native-history-import/run', 'POST')
+    const ctx = {
+      request: {
+        body: {
+          adapters: ['codex'],
+          projectPaths: [projectPath],
+          projectScope: 'all-projects',
+          sourcePaths: [sourcePath]
+        }
+      },
+      body: undefined
+    }
+
+    await handleImport(ctx)
+
+    expect(importNativeProjectHistoryAndReplay).toHaveBeenCalledWith({
+      adapters: ['codex'],
+      projectPaths: [projectPath],
+      projectScope: 'all-projects',
+      sourcePaths: [sourcePath]
+    })
+  })
+
   it('previews native project history candidates without importing', async () => {
     const result = {
       adapters: [{

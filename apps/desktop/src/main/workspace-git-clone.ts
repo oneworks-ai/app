@@ -122,7 +122,7 @@ const resolveDefaultCloneDestinationDirectory = () => (
 
 const resolveCloneDestinationDirectory = (rawDirectory?: unknown) => {
   if (typeof rawDirectory === 'string' && rawDirectory.trim() !== '') {
-    const normalizedDirectory = normalizeWorkspaceFolder(path.resolve(rawDirectory.trim()))
+    const normalizedDirectory = normalizeWorkspaceFolder(path.resolve(rawDirectory))
     if (normalizedDirectory != null) return normalizedDirectory
   }
 
@@ -185,7 +185,7 @@ export const cloneGitRepositoryIntoDirectory = async ({
     throw new TypeError('A destination folder is required.')
   }
 
-  const normalizedDestinationDirectory = normalizeWorkspaceFolder(path.resolve(destinationDirectory.trim()))
+  const normalizedDestinationDirectory = normalizeWorkspaceFolder(path.resolve(destinationDirectory))
   if (normalizedDestinationDirectory == null) {
     throw new TypeError('A destination folder is required.')
   }

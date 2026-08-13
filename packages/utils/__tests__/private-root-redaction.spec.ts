@@ -52,4 +52,17 @@ describe('private root redaction', () => {
     expect(isCredentialShapedNativeAppValue('https://alice:s3cret@example.test/path')).toBe(true)
     expect(isCredentialShapedNativeAppValue('https://example.test/path')).toBe(false)
   })
+
+  it('redacts descendants of Windows drive and UNC share roots without changing POSIX aliases', () => {
+    expect(containsPrivateRoot('c:/secret/plugin', ['C:\\'])).toBe(true)
+    expect(redactPrivateRoots('Open C:\\secret\\plugin now', ['C:\\'])).toBe('Open [local path] now')
+    expect(redactPrivateRoots('\\\\server\\share\\secret\\plugin', ['\\\\Server\\Share\\'])).toBe(
+      '[local path]'
+    )
+    expect(redactPrivateRoots('Open \\\\server\\share\\secret\\plugin now', ['\\\\Server\\Share\\']))
+      .toBe('Open [local path] now')
+    expect(containsPrivateRoot('/server/share/secret', ['\\\\server\\share\\'])).toBe(false)
+    expect(redactPrivateRoots(String.raw`/server/share\secret`, ['\\\\server\\share\\']))
+      .toBe(String.raw`/server/share\secret`)
+  })
 })

@@ -34,6 +34,31 @@ afterEach(async () => {
 })
 
 describe('claude marketplace catalog versions', () => {
+  it.runIf(process.platform !== 'win32')('resolves an exact whitespace-bearing marketplace pluginRoot', async () => {
+    const rootDir = await fs.mkdtemp(path.join(tmpdir(), 'claude-marketplace-root-'))
+    tempDirs.push(rootDir)
+    await fs.mkdir(path.join(rootDir, '.claude-plugin'), { recursive: true })
+    await fs.mkdir(path.join(rootDir, 'plugins ', 'demo', '.claude-plugin'), { recursive: true })
+    await fs.writeFile(
+      path.join(rootDir, '.claude-plugin', 'marketplace.json'),
+      JSON.stringify({
+        metadata: { pluginRoot: 'plugins ' },
+        plugins: [{ name: 'demo', source: 'demo' }]
+      })
+    )
+    await fs.writeFile(
+      path.join(rootDir, 'plugins ', 'demo', '.claude-plugin', 'plugin.json'),
+      JSON.stringify({ version: '1.0.0' })
+    )
+    const loaded = await loadMarketplaceCatalogFromSource(
+      path.join(rootDir, 'temp'),
+      { source: 'directory', path: rootDir },
+      'test',
+      async () => rootDir
+    )
+    expect(loaded.catalog.plugins[0]?.version).toBe('1.0.0')
+  })
+
   it('enriches a local catalog entry from the plugin manifest version', async () => {
     const rootDir = await createMarketplace({}, { name: 'demo', version: '1.2.3' })
     const loaded = await loadMarketplaceCatalogFromSource(

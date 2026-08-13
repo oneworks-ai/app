@@ -10,6 +10,7 @@ import { resolveBootstrapPackageCacheRootDir, resolvePackageCacheHomeDir } from 
 import type { Logger } from '@oneworks/types'
 import semver from 'semver'
 
+import { readNonBlankFilesystemPath } from './filesystem-dir-path'
 import { withDirectoryInstallLock } from './install-lock'
 import { resolveProjectSharedCachePath } from './project-cache-path'
 import { mergeProcessEnvWithProjectEnv } from './project-env'
@@ -69,6 +70,14 @@ interface EnsureManagedNpmCliParams extends ResolveManagedNpmCliPathParams {
 }
 
 const execFileAsync = promisify(execFile)
+
+const readShellPathPayload = (value: string) => {
+  const start = value.indexOf('\0')
+  const end = start < 0 ? -1 : value.indexOf('\0', start + 1)
+  if (start < 0 || end < 0) return undefined
+  const payload = value.slice(start + 1, end)
+  return payload.endsWith('\n') ? payload.slice(0, -1) : undefined
+}
 const COMMAND_CHECK_TIMEOUT_MS = 15000
 
 const normalizeNonEmptyString = (value: unknown) => (
@@ -199,8 +208,8 @@ export const resolveManagedNpmCliInstallOptions = (
     autoInstall: rawAutoInstall == null
       ? params.config?.autoInstall !== false
       : !isFalseLike(rawAutoInstall),
-    npmPath: normalizeNonEmptyString(params.env[`${envPrefix}_NPM_PATH__`]) ??
-      normalizeNonEmptyString(params.config?.npmPath) ??
+    npmPath: readNonBlankFilesystemPath(params.env[`${envPrefix}_NPM_PATH__`]) ??
+      readNonBlankFilesystemPath(params.config?.npmPath) ??
       'npm',
     packageName,
     packageSpec: toPackageSpec(packageName, version),
@@ -265,9 +274,9 @@ const resolveLegacyManagedNpmCliPaths = (params: {
 export const resolveManagedNpmCliBinaryPath = (params: ResolveManagedNpmCliPathParams) => {
   const envPrefix = normalizeAdapterEnvPrefix(params.adapterKey)
   const installOptions = resolveManagedNpmCliInstallOptions(params)
-  const explicitPath = normalizeNonEmptyString(params.env[`${envPrefix}_CLI_PATH__`]) ??
-    normalizeNonEmptyString(params.configuredPath) ??
-    normalizeNonEmptyString(params.config?.path)
+  const explicitPath = readNonBlankFilesystemPath(params.env[`${envPrefix}_CLI_PATH__`]) ??
+    readNonBlankFilesystemPath(params.configuredPath) ??
+    readNonBlankFilesystemPath(params.config?.path)
 
   if (explicitPath != null) return explicitPath
   if (installOptions.source === 'system') return params.binaryName
@@ -330,14 +339,14 @@ export const resolveUserShellBinaryPath = async (params: {
   if (process.platform === 'win32') return undefined
 
   const env = params.env ?? {}
-  const shellPath = normalizeNonEmptyString(env.SHELL) ??
-    normalizeNonEmptyString(process.env.SHELL) ??
+  const shellPath = readNonBlankFilesystemPath(env.SHELL) ??
+    readNonBlankFilesystemPath(process.env.SHELL) ??
     (process.platform === 'darwin' ? '/bin/zsh' : '/bin/sh')
 
   try {
     const result = await execFileAsync(
       shellPath,
-      ['-lc', 'command -v "$1"', 'oneworks-resolve-binary', params.binaryName],
+      ['-lc', "printf '\\0'; command -v \"$1\"; printf '\\0'", 'oneworks-resolve-binary', params.binaryName],
       {
         env: {
           ...process.env,
@@ -350,10 +359,8 @@ export const resolveUserShellBinaryPath = async (params: {
         timeout: params.timeoutMs ?? COMMAND_CHECK_TIMEOUT_MS
       }
     )
-    return String(result.stdout ?? '')
-      .split(/\r?\n/u)
-      .map(line => line.trim())
-      .find(line => line.startsWith('/'))
+    const resolved = readShellPathPayload(String(result.stdout ?? ''))
+    return resolved != null && resolved.trim() !== '' && resolved.startsWith('/') ? resolved : undefined
   } catch {
     return undefined
   }
@@ -468,16 +475,18 @@ export const ensureManagedNpmCli = async (params: EnsureManagedNpmCliParams) => 
   })
   const probeEnv = mergeProcessEnvWithProjectEnv(params.env, { workspaceFolder: params.cwd })
   const envPrefix = normalizeAdapterEnvPrefix(params.adapterKey)
-  const explicitPath = normalizeNonEmptyString(params.env[`${envPrefix}_CLI_PATH__`]) ??
-    normalizeNonEmptyString(params.configuredPath) ??
-    normalizeNonEmptyString(params.config?.path)
+  const explicitPath = readNonBlankFilesystemPath(params.env[`${envPrefix}_CLI_PATH__`]) ??
+    readNonBlankFilesystemPath(params.configuredPath) ??
+    readNonBlankFilesystemPath(params.config?.path)
 
   const binaryPath = toRealPath(paths.binaryPath)
   const legacyBinaryPath = toRealPath(legacyPaths.binaryPath)
   const hasVersionPolicy = params.minimumVersion?.trim() || params.versionRange?.trim()
   const systemBinaryPaths = Array.from(
     new Set(
-      (params.systemBinaryPaths ?? []).map(normalizeNonEmptyString).filter((path): path is string => path != null)
+      (params.systemBinaryPaths ?? [])
+        .map(readNonBlankFilesystemPath)
+        .filter((path): path is string => path != null)
     )
   )
   const canRunCli = async (candidatePath: string, env: NodeJS.ProcessEnv) =>

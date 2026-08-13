@@ -20,7 +20,7 @@
 
 配置文件被 CLI、手动编辑或 extends 链路中的文件改动后，后端会通过 websocket 广播 `config_updated`。前端订阅层只负责刷新 `/api/config` 及其派生缓存，不直接覆盖本地草稿；真正的冲突处理留在配置编辑器内部完成。
 
-外部软件会话历史管理属于配置页的独立 app 级入口：`ExternalSessionsPanel.tsx` 负责当前项目维度的 Codex / Claude Code / Cursor 历史导入、平台选择和已导入外部会话列表；不要把这类管理入口塞进 NavRail More 菜单或一次性弹窗。
+外部软件会话历史管理属于配置页的独立 app 级入口：`ExternalSessionsPanel.tsx` 负责当前项目维度的 Codex / Claude Code / Cursor 历史导入、平台选择和已导入外部会话列表；不要把这类管理入口塞进 NavRail More 菜单或一次性弹窗。Launcher 内嵌 Import All 只能接收显式传入的 Launcher modal owner；普通 ConfigView 不传 owner，不能查询全局 Launcher portal，并在 inactive、close 或 unmount 时销毁确认框。
 
 Worktree Environment 的 Project / User source switch 属于 route header；列表正文从搜索入口开始，不再重复标题或来源切换。原生环境导入入口位于搜索框尾部、创建按钮左侧，并与创建保持相同的 icon-only 样式；点击后由 `AdapterImportDialog.tsx` 先选择 adapter capability，再显式确认导入。source 和请求状态由 `ConfigView.tsx` 持有。
 
@@ -64,6 +64,7 @@ Worktree Environment 的 Project / User source switch 属于 route header；列�
 ## 不变式
 
 - 不要在 `use-session-subscription.ts` 收到 `config_updated` 后直接覆盖本地编辑状态；订阅层只能触发 revalidate。
+- External session project 的 `workspaceFolder` 是文件系统身份：选项 value、去重、cwd containment 和 import selection 只能做 root-family 合法的分隔符 / 大小写规约，`trim()` 仅用于判空，首尾空白必须保留并与相邻路径保持不同身份；POSIX literal backslash 不得与 `/` 折叠，Windows drive-rooted、drive-relative、rooted 与 UNC 仍按各自 Windows family 比较。
 - `ConfigSourceSwitch` 如果放进 `RouteContainerHeader.actions`，必须保持和 route header chrome 一致的布局尺寸：外层文档高度 20px、按钮 20px、图标 14px。不要再用 `Space` 或额外 wrapper 包一层，也不要用 24px 高度直接撑大 header；如果需要更大的可视边框，用伪元素外扩，不改变布局高度。
 - 主配置编辑器按 `source + section` 做冲突判断，不要退化成整页级别的统一提示。
 - `draft === base` 且 `server !== base` 时，说明用户未改动，可直接把草稿同步到远端最新值。

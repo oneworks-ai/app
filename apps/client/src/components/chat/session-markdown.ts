@@ -1,5 +1,7 @@
 import type { ChatMessage, ChatMessageContent } from '@oneworks/core'
 
+import { readNonBlankFilesystemPath } from '../../utils/filesystem-path-identity'
+
 const stringifyStructuredValue = (value: unknown) => {
   if (typeof value === 'string') return value
   try {
@@ -68,9 +70,9 @@ export function buildSessionMarkdown({
   workspacePath?: string
 }) {
   const lines = [`# ${title}`, '', `- Session ID: ${sessionId}`]
-  const normalizedWorkspacePath = workspacePath?.trim()
-  if (normalizedWorkspacePath != null && normalizedWorkspacePath !== '') {
-    lines.push(`- Workspace: ${normalizedWorkspacePath}`)
+  const rawWorkspacePath = readNonBlankFilesystemPath(workspacePath)
+  if (rawWorkspacePath != null) {
+    lines.push(`- Workspace: ${rawWorkspacePath}`)
   }
 
   if (messages.length === 0) {

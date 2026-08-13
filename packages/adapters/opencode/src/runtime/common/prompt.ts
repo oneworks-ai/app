@@ -33,8 +33,7 @@ export const normalizeOpenCodePrompt = (content: AdapterMessageContent[]) => {
     }
 
     if (item.type === 'file') {
-      const filePath = item.path.trim()
-      if (filePath !== '') files.add(filePath)
+      if (item.path.trim() !== '') files.add(item.path)
       continue
     }
 

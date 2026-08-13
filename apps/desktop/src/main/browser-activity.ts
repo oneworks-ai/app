@@ -95,6 +95,10 @@ const normalizeOptionalText = (value: unknown) => {
   return text === '' ? undefined : text
 }
 
+const normalizeOptionalFilesystemPath = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== '' ? value : undefined
+)
+
 const normalizeHttpUrl = (value: unknown) => {
   const text = normalizeText(value)
   if (text === '') return undefined
@@ -114,7 +118,7 @@ const normalizeScopeFilter = (value: unknown): BrowserActivityScopeFilter => (
 
 const normalizeScopeInput = (input: unknown): BrowserActivityScopeInput => {
   if (!isRecord(input)) return {}
-  const projectKey = normalizeOptionalText(input.projectKey)
+  const projectKey = normalizeOptionalFilesystemPath(input.projectKey)
   const sessionKey = normalizeOptionalText(input.sessionKey)
   return {
     ...(projectKey == null ? {} : { projectKey }),
@@ -183,7 +187,7 @@ const normalizeDownloadRecord = (value: unknown): BrowserDownloadRecord | null =
   if (id == null || url == null || fileName == null) return null
   const now = new Date().toISOString()
   const completedAt = normalizeDateString(value.completedAt)
-  const filePath = normalizeOptionalText(value.filePath)
+  const filePath = normalizeOptionalFilesystemPath(value.filePath)
   const mimeType = normalizeOptionalText(value.mimeType)
   return {
     id,
@@ -372,7 +376,7 @@ export const registerInteractionPanelWebviewScope = (input: unknown) => {
     throw new TypeError('The webContents id is not an interaction-panel webview owned by this window.')
   }
   const alreadyRegistered = webviewScopesByWebContentsId.has(webContentsId)
-  const workspaceFolder = normalizeOptionalText(input.workspaceFolder)
+  const workspaceFolder = normalizeOptionalFilesystemPath(input.workspaceFolder)
   const controlRequestId = normalizeOptionalText(input.controlRequestId)
   const panelPageId = normalizeOptionalText(input.panelPageId)
   const scope: InteractionPanelWebviewScope = {
@@ -413,7 +417,7 @@ const getDownloadUrl = (item: DownloadItem) => {
 const getDownloadFileName = (item: DownloadItem) => {
   const filename = normalizeOptionalText(item.getFilename())
   if (filename != null) return filename
-  const savePath = normalizeOptionalText(item.getSavePath())
+  const savePath = normalizeOptionalFilesystemPath(item.getSavePath())
   if (savePath != null) return path.basename(savePath)
   try {
     const url = new URL(getDownloadUrl(item))
@@ -485,7 +489,7 @@ const buildDownloadRecord = (
   const scope = webviewScopesByWebContentsId.get(ownerWebContents.id) ?? {}
   const activityScope = normalizeScopeInput(scope)
   const mimeType = normalizeOptionalText(item.getMimeType())
-  const filePath = normalizeOptionalText(item.getSavePath())
+  const filePath = normalizeOptionalFilesystemPath(item.getSavePath())
   return {
     id,
     url: getDownloadUrl(item),
@@ -515,7 +519,7 @@ export const installBrowserActivityDownloadTracking = () => {
 
     item.on('updated', (_updatedEvent, state) => {
       void updateDownloadRecord(initialRecord.id, {
-        filePath: normalizeOptionalText(item.getSavePath()),
+        filePath: normalizeOptionalFilesystemPath(item.getSavePath()),
         receivedBytes: Math.max(0, item.getReceivedBytes()),
         state: state === 'interrupted' ? 'interrupted' : 'progressing',
         totalBytes: Math.max(0, item.getTotalBytes())
@@ -528,7 +532,7 @@ export const installBrowserActivityDownloadTracking = () => {
       const completedAt = new Date().toISOString()
       void updateDownloadRecord(initialRecord.id, {
         completedAt,
-        filePath: normalizeOptionalText(item.getSavePath()),
+        filePath: normalizeOptionalFilesystemPath(item.getSavePath()),
         receivedBytes: Math.max(0, item.getReceivedBytes()),
         state,
         totalBytes: Math.max(0, item.getTotalBytes())

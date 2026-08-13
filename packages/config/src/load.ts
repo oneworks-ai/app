@@ -1,7 +1,7 @@
 import { existsSync, statSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { dirname, extname, resolve } from 'node:path'
+import path, { dirname, extname, resolve } from 'node:path'
 import process from 'node:process'
 
 import type { AdapterConfigEntry, Config } from '@oneworks/types'
@@ -276,16 +276,22 @@ const mergeAdapterConfigEntries = <TEntry extends AdapterConfigRecord>(
   return mergedRecord
 }
 
+const normalizeExtendPath = (value: string) => {
+  return value.trim() === '' ? undefined : value
+}
+
 const toExtendPaths = (value: unknown) => {
-  if (typeof value === 'string' && value.trim() !== '') {
-    return [value.trim()]
+  if (typeof value === 'string') {
+    const path = normalizeExtendPath(value)
+    return path == null ? [] : [path]
   }
 
   if (!Array.isArray(value)) return []
 
   return value
-    .filter((item): item is string => typeof item === 'string' && item.trim() !== '')
-    .map(item => item.trim())
+    .filter((item): item is string => typeof item === 'string')
+    .map(normalizeExtendPath)
+    .filter((item): item is string => item != null)
 }
 
 const omitExtendField = (value: Config) => {
@@ -349,10 +355,12 @@ const resolveConfigCandidatesFromBasePath = (basePath: string) => (
 )
 
 const resolveDependencyExtendPath = (configPath: string, extendPath: string) => {
+  const dependencySpecifier = extendPath.trim()
+  if (dependencySpecifier === '') return undefined
   const resolver = createRequire(configPath)
 
   try {
-    const directResolvedPath = resolver.resolve(extendPath)
+    const directResolvedPath = resolver.resolve(dependencySpecifier)
     if (
       isExistingFilePath(directResolvedPath) &&
       CONFIG_FILE_EXTENSIONS.has(extname(directResolvedPath).toLowerCase())
@@ -361,7 +369,7 @@ const resolveDependencyExtendPath = (configPath: string, extendPath: string) => 
     }
   } catch {}
 
-  const parsed = parsePackageSpecifier(extendPath)
+  const parsed = parsePackageSpecifier(dependencySpecifier)
   if (parsed == null) return undefined
 
   try {
@@ -381,10 +389,20 @@ const resolveDependencyExtendPath = (configPath: string, extendPath: string) => 
   }
 }
 
+const isFilesystemExtendPath = (extendPath: string) => {
+  const normalized = extendPath.trim()
+  return (
+    path.isAbsolute(extendPath) ||
+    /^\.{1,2}(?:[\\/]|$)/u.test(extendPath) ||
+    /^[a-z]:[\\/]/iu.test(extendPath) ||
+    CONFIG_FILE_EXTENSIONS.has(extname(normalized).toLowerCase())
+  )
+}
+
 const resolveExistingExtendPath = (configPath: string, extendPath: string) => (
   resolveExtendCandidates(configPath, extendPath)
     .find(candidate => isExistingFilePath(candidate)) ??
-    resolveDependencyExtendPath(configPath, extendPath)
+    (isFilesystemExtendPath(extendPath) ? undefined : resolveDependencyExtendPath(configPath, extendPath))
 )
 
 const readConfigFile = async (
@@ -393,7 +411,9 @@ const readConfigFile = async (
 ) => {
   const configContent = await readFile(configPath, 'utf-8')
   const configResolvedContent = replaceJsonVariables(configContent, jsonVariables)
-  const extension = extname(configPath).toLowerCase()
+  // The path itself is an exact filesystem identity. Only the parser hint may
+  // ignore trailing whitespace after a conventional config-file suffix.
+  const extension = extname(configPath.trimEnd()).toLowerCase()
 
   if (extension === '.json') {
     return JSON.parse(configResolvedContent) as unknown

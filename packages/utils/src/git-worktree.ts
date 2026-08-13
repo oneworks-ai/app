@@ -1,5 +1,7 @@
 import { execFile } from 'node:child_process'
 
+import { readFilesystemPathOutput } from './filesystem-dir-path'
+
 export interface GitCommandError extends Error {
   code?: number | string | null
   stderr?: string
@@ -28,7 +30,8 @@ interface RemoveGitWorktreeOptions {
 
 const GIT_MAX_BUFFER = 1024 * 1024
 
-const normalizeOutput = (value: string) => value.trim()
+const normalizeStdout = (value: string) => value.trim()
+const normalizeStderr = (value: string) => value.trim()
 
 const formatGitErrorMessage = (error: unknown, fallback: string) => {
   if (error instanceof Error) {
@@ -61,7 +64,11 @@ export const isGitNotRepositoryError = (error: unknown) => {
   return gitError.code === 128 && /not a git repository/i.test(stderr)
 }
 
-export const runGitCommand = async (args: string[], cwd: string): Promise<RunGitResult> => {
+const runGitCommandWithStdoutNormalizer = async (
+  args: string[],
+  cwd: string,
+  normalizeCommandStdout: (value: string) => string
+): Promise<RunGitResult> => {
   try {
     const result = await new Promise<RunGitResult>((resolvePromise, reject) => {
       execFile(
@@ -78,8 +85,8 @@ export const runGitCommand = async (args: string[], cwd: string): Promise<RunGit
           }
 
           resolvePromise({
-            stdout: normalizeOutput(stdout),
-            stderr: normalizeOutput(stderr)
+            stdout: normalizeCommandStdout(stdout),
+            stderr: normalizeStderr(stderr)
           })
         }
       )
@@ -97,8 +104,16 @@ export const runGitCommand = async (args: string[], cwd: string): Promise<RunGit
   }
 }
 
+export const runGitCommand = async (args: string[], cwd: string): Promise<RunGitResult> => (
+  runGitCommandWithStdoutNormalizer(args, cwd, normalizeStdout)
+)
+
 export const resolveGitRepositoryRoot = async (cwd: string) => {
-  const { stdout } = await runGitCommand(['rev-parse', '--show-toplevel'], cwd)
+  const { stdout } = await runGitCommandWithStdoutNormalizer(
+    ['rev-parse', '--show-toplevel'],
+    cwd,
+    value => readFilesystemPathOutput(value) ?? ''
+  )
   return stdout
 }
 

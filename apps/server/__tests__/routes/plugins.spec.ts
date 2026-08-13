@@ -1,6 +1,6 @@
 /* eslint-disable max-lines -- plugin route coverage shares one Koa fixture across scoped runtime scenarios. */
 import { Buffer } from 'node:buffer'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
@@ -130,7 +130,7 @@ describe('pluginsRouter', () => {
     }
 
     expect(response.status).toBe(200)
-    expect(payload.diagnostics).toEqual([])
+    expect(payload.diagnostics).not.toContainEqual(expect.objectContaining({ scope: 'relay' }))
     expect(payload.plugins).toContainEqual(expect.objectContaining({
       enabled: false,
       packageId: '@oneworks/plugin-relay',
@@ -302,8 +302,10 @@ describe('pluginsRouter', () => {
       export async function activatePlugin(ctx) {
         ctx.runtime.registerChannel('echo', async request => ({
           payload: request.payload,
+          sourceProjectHome: request.source.projectHome,
           role: ctx.runtime.role,
           sourceRole: request.source.role,
+          sourceWorkspaceFolder: request.source.workspaceFolder,
           targetRole: request.target.role
         }))
       }
@@ -320,10 +322,20 @@ describe('pluginsRouter', () => {
     expect(runtimePayload.runtime).not.toHaveProperty('workspaceFolder')
     expect(JSON.stringify(runtimePayload)).not.toContain(workspaceFolder)
 
+    const sourceProjectHome = '/private/project home '
+    const sourceWorkspaceFolder = '/private/workspace '
     const response = await fetch(`${baseUrl}/api/plugins/runtime/runtime/channels/echo`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ payload: { text: 'hello' } })
+      body: JSON.stringify({
+        payload: { text: 'hello' },
+        source: {
+          id: 'workspace:source',
+          projectHome: sourceProjectHome,
+          role: 'workspace',
+          workspaceFolder: sourceWorkspaceFolder
+        }
+      })
     })
     const payload = await response.json()
 
@@ -333,7 +345,9 @@ describe('pluginsRouter', () => {
       payload: {
         payload: { text: 'hello' },
         role: 'workspace',
+        sourceProjectHome,
         sourceRole: 'workspace',
+        sourceWorkspaceFolder,
         targetRole: 'workspace'
       }
     })
@@ -459,6 +473,103 @@ describe('pluginsRouter', () => {
     })
   })
 
+  it('uses exact endpoint path roots when redacting public cross-runtime metadata', async () => {
+    vi.stubEnv('__ONEWORKS_PROJECT_SERVER_ROLE__', 'manager')
+    const projectHome = '/private/project home '
+    const runtimeWorkspaceFolder = '/private/workspace '
+    const projectHomeId = `workspace:${projectHome}:runtime`
+    const workspaceId = `workspace:${runtimeWorkspaceFolder}:runtime`
+    mocks.listLauncherWorkspaceRuntimeEndpoints.mockResolvedValueOnce([
+      {
+        id: projectHomeId,
+        projectHome,
+        role: 'workspace',
+        serverBaseUrl: 'http://127.0.0.1:8787',
+        status: 'online',
+        workspaceFolder: '/other/workspace'
+      },
+      {
+        id: workspaceId,
+        projectHome: '/other/project-home',
+        role: 'workspace',
+        serverBaseUrl: 'http://127.0.0.1:8788',
+        status: 'online',
+        workspaceFolder: runtimeWorkspaceFolder
+      }
+    ])
+    mockConfig([])
+
+    const response = await fetch(`${baseUrl}/api/plugins/runtime/endpoints`)
+    const payload = await response.json() as {
+      endpoints: Array<{ id: string; serverBaseUrl?: string }>
+    }
+    const serialized = JSON.stringify(payload)
+
+    expect(response.status).toBe(200)
+    const workspaceEndpoints = payload.endpoints.filter(endpoint =>
+      endpoint.serverBaseUrl === 'http://127.0.0.1:8787' ||
+      endpoint.serverBaseUrl === 'http://127.0.0.1:8788'
+    )
+    expect(workspaceEndpoints).toHaveLength(2)
+    expect(workspaceEndpoints.every(endpoint => endpoint.id !== projectHomeId && endpoint.id !== workspaceId)).toBe(
+      true
+    )
+    expect(serialized).not.toContain(projectHome)
+    expect(serialized).not.toContain(runtimeWorkspaceFolder)
+    expect(serialized).not.toContain(projectHome.trim())
+    expect(serialized).not.toContain(runtimeWorkspaceFolder.trim())
+  })
+
+  it('redacts mixed-case Windows endpoint metadata without treating POSIX aliases as the same root', async () => {
+    vi.stubEnv('__ONEWORKS_PROJECT_SERVER_ROLE__', 'manager')
+    const privateRoot = String.raw`C:\Users\Private\Project`
+    const publicAlias = 'c:/users/private/project/plugin'
+    mocks.listLauncherWorkspaceRuntimeEndpoints.mockResolvedValueOnce([{
+      id: `workspace:${publicAlias}`,
+      projectHome: privateRoot,
+      role: 'workspace',
+      serverBaseUrl: 'http://127.0.0.1:8791',
+      status: 'online',
+      workspaceFolder: publicAlias
+    }])
+    mockConfig([])
+
+    const response = await fetch(`${baseUrl}/api/plugins/runtime/endpoints`)
+    const serialized = JSON.stringify(await response.json())
+
+    expect(response.status).toBe(200)
+    expect(serialized).not.toContain(privateRoot)
+    expect(serialized).not.toContain(publicAlias)
+    expect(serialized).not.toContain('/users/private/project/plugin')
+  })
+
+  it('redacts encoded metadata with the exact whitespace-bearing runtime root', async () => {
+    const adjacentWorkspace = workspaceFolder
+    await rm(workspaceFolder, { force: true, recursive: true })
+    workspaceFolder = `${workspaceFolder} `
+    const pluginRoot = path.join(workspaceFolder, 'plugins', 'private-root')
+    const exactUrl = `https://example.test/metadata?root=${encodeURIComponent(workspaceFolder)}`
+    const adjacentUrl = `https://example.test/metadata?root=${encodeURIComponent(adjacentWorkspace)}`
+    await createPlugin(pluginRoot, {
+      name: 'private-root',
+      description: exactUrl,
+      displayName: adjacentUrl,
+      plugin: {}
+    })
+    mockConfig([{ id: pluginRoot, scope: 'private-root' }])
+
+    const response = await fetch(`${baseUrl}/api/plugins`)
+    const payload = await response.json() as {
+      plugins: Array<{ description?: string; displayName?: string; scope: string }>
+    }
+    const plugin = payload.plugins.find(entry => entry.scope === 'private-root')
+
+    expect(plugin?.description).toBe('[local path]')
+    expect(plugin?.displayName).toBe('[redacted]')
+    expect(plugin?.description).not.toBe(plugin?.displayName)
+    expect(JSON.stringify(plugin)).not.toContain(encodeURIComponent(workspaceFolder))
+  })
+
   it('serves client assets and rejects traversal', async () => {
     const pluginRoot = path.join(workspaceFolder, 'plugins', 'assets')
     await createPlugin(pluginRoot, {
@@ -476,6 +587,213 @@ describe('pluginsRouter', () => {
 
     const traversalResponse = await fetch(`${baseUrl}/api/plugins/assets/client/..%2Fplugin.json`)
     expect(traversalResponse.status).toBe(404)
+  })
+
+  it('preserves whitespace-bearing manifest paths through asset and source owners', async () => {
+    const pluginRoot = path.join(workspaceFolder, 'plugins', 'path-identity')
+    await createPlugin(pluginRoot, {
+      name: 'path-identity',
+      plugin: {
+        client: {
+          root: './client ',
+          entry: './client /index.js ',
+          sourceRoot: './source ',
+          devEntry: './source /entry.ts '
+        }
+      }
+    })
+    await mkdir(path.join(pluginRoot, 'client '))
+    await mkdir(path.join(pluginRoot, 'source '))
+    await mkdir(path.join(pluginRoot, 'source'))
+    await mkdir(path.join(pluginRoot, 'shared'))
+    await writeFile(path.join(pluginRoot, 'client ', 'index.js '), 'export const identity = "raw-asset"\n')
+    await writeFile(path.join(pluginRoot, 'source ', 'entry.ts '), 'export const identity = "raw-source"\n')
+    await writeFile(path.join(pluginRoot, 'source', 'entry.ts'), 'export const identity = "adjacent-source"\n')
+    await writeFile(path.join(pluginRoot, 'shared', 'theme.css '), '.exact { color: green }\n')
+    await writeFile(path.join(pluginRoot, 'icon.svg '), '<svg>exact</svg>')
+    await writeFile(path.join(pluginRoot, 'metadata.json '), '{"owner":"exact"}\n')
+    mockConfig([{ id: pluginRoot, scope: 'path-identity', watch: true }])
+
+    const listResponse = await fetch(`${baseUrl}/api/plugins`)
+    const listPayload = await listResponse.json() as {
+      plugins: Array<{ client?: { devClientEntryUrl?: string }; scope: string }>
+    }
+    const clientSourceUrl = listPayload.plugins.find(plugin => plugin.scope === 'path-identity')
+      ?.client?.devClientEntryUrl
+    expect(listResponse.status).toBe(200)
+    expect(clientSourceUrl).toBe('/api/plugins/path-identity/client-source/source%20/entry.ts%20')
+    const assetResponse = await fetch(`${baseUrl}/api/plugins/path-identity/client/index.js%20`)
+    const sharedResponse = await fetch(`${baseUrl}/api/plugins/path-identity/shared/theme.css%20`)
+    const svgResponse = await fetch(`${baseUrl}/api/plugins/path-identity/readme/assets/icon.svg%20`)
+    const jsonResponse = await fetch(`${baseUrl}/api/plugins/path-identity/readme/assets/metadata.json%20`)
+    const sourceResponse = await fetch(`${baseUrl}${clientSourceUrl}`)
+
+    expect(assetResponse.headers.get('content-type')).toContain('text/javascript')
+    expect(assetResponse.headers.get('x-content-type-options')).toBe('nosniff')
+    await expect(assetResponse.text()).resolves.toContain('raw-asset')
+    expect(sharedResponse.headers.get('content-type')).toContain('text/css')
+    expect(svgResponse.headers.get('content-type')).toContain('image/svg+xml')
+    expect(jsonResponse.headers.get('content-type')).toContain('application/json')
+    await expect(sharedResponse.text()).resolves.toContain('.exact')
+    await expect(svgResponse.text()).resolves.toContain('<svg>exact</svg>')
+    await expect(jsonResponse.json()).resolves.toEqual({ owner: 'exact' })
+    const compiledSource = await sourceResponse.text()
+    expect(sourceResponse.status).toBe(200)
+    expect(compiledSource).toContain('raw-source')
+    expect(compiledSource).not.toContain('adjacent-source')
+  })
+
+  it('does not widen a missing or blank explicit client root to the plugin root', async () => {
+    const pluginRoot = path.join(workspaceFolder, 'plugins', 'missing-client-root')
+    await createPlugin(pluginRoot, {
+      name: 'missing-client-root',
+      plugin: {
+        client: { root: ' ', entry: './client/index.js' }
+      }
+    })
+    await writeFile(path.join(pluginRoot, 'private-config.js'), 'export const secret = true\n')
+    mockConfig([{ id: pluginRoot, scope: 'missing-client-root' }])
+
+    const listResponse = await fetch(`${baseUrl}/api/plugins`)
+    const payload = await listResponse.json() as {
+      diagnostics: Array<{ code: string; scope: string }>
+      plugins: Array<{
+        client?: { clientEntryUrl?: string }
+        diagnostics?: Array<{ code: string; scope: string }>
+        scope: string
+      }>
+    }
+    const assetResponse = await fetch(`${baseUrl}/api/plugins/missing-client-root/client/private-config.js`)
+
+    expect(payload.plugins.find(plugin => plugin.scope === 'missing-client-root')?.client?.clientEntryUrl)
+      .toBeUndefined()
+    expect(payload.plugins.find(plugin => plugin.scope === 'missing-client-root')?.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: 'plugin_client_root_unavailable',
+        scope: 'missing-client-root'
+      })
+    )
+    expect(assetResponse.status).toBe(404)
+  })
+
+  it('uses exact server, icon, and detail-asset manifest paths at final owners', async () => {
+    const pluginRoot = path.join(workspaceFolder, 'plugins', 'manifest-paths')
+    await createPlugin(pluginRoot, {
+      __oneWorksPluginManifest: true,
+      assets: { rules: './rules ' },
+      configHook: { entry: './config.js ' },
+      icon: './assets/icon.svg ',
+      name: 'manifest-paths',
+      plugin: {
+        server: { entry: './server.mjs ', roles: ['workspace'] }
+      }
+    })
+    await mkdir(path.join(pluginRoot, 'assets'), { recursive: true })
+    await mkdir(path.join(pluginRoot, 'rules '))
+    await mkdir(path.join(pluginRoot, 'rules'))
+    await writeFile(path.join(pluginRoot, 'config.js '), 'module.exports = () => ({ owner: "exact" })\n')
+    await writeFile(path.join(pluginRoot, 'config.js'), 'module.exports = () => ({ owner: "adjacent" })\n')
+    await writeFile(path.join(pluginRoot, 'assets', 'icon.svg '), '<svg>exact</svg>')
+    await writeFile(path.join(pluginRoot, 'assets', 'icon.svg'), '<svg>adjacent</svg>')
+    await writeFile(path.join(pluginRoot, 'rules ', 'exact.md'), '# exact rule\n')
+    await writeFile(path.join(pluginRoot, 'rules', 'adjacent.md'), '# adjacent rule\n')
+    await writeFile(
+      path.join(pluginRoot, 'server.mjs '),
+      'export async function activatePlugin(ctx) { ctx.registerCommand("owner", () => "exact") }\n'
+    )
+    await writeFile(
+      path.join(pluginRoot, 'server.mjs'),
+      'export async function activatePlugin(ctx) { ctx.registerCommand("owner", () => "adjacent") }\n'
+    )
+    mockConfig([{ id: pluginRoot, scope: 'manifest-paths' }])
+
+    const commandResponse = await fetch(`${baseUrl}/api/plugins/manifest-paths/commands/owner`, { method: 'POST' })
+    const listResponse = await fetch(`${baseUrl}/api/plugins`)
+    const listPayload = await listResponse.json() as {
+      plugins: Array<{
+        manifest?: { icon?: string; plugin?: { server?: { entry?: string } } }
+        scope: string
+      }>
+    }
+    const assetsResponse = await fetch(`${baseUrl}/api/plugins/manifest-paths/assets`)
+    const assetsPayload = await assetsResponse.json() as {
+      groups: Array<{ files: Array<{ content?: string; path: string }>; kind: string }>
+    }
+
+    await expect(commandResponse.text()).resolves.toBe('exact')
+    expect(listPayload.plugins.find(plugin => plugin.scope === 'manifest-paths')?.manifest).toMatchObject({
+      icon: './assets/icon.svg ',
+      plugin: { server: { entry: './server.mjs ' } }
+    })
+    expect(assetsPayload.groups.find(group => group.kind === 'rules')?.files).toEqual([
+      expect.objectContaining({ content: '# exact rule\n', path: 'rules /exact.md' })
+    ])
+    expect(JSON.stringify(assetsPayload)).not.toContain('adjacent rule')
+  })
+
+  it.runIf(path.sep === '/')('round-trips POSIX backslash filenames through manifest and public routes', async () => {
+    const pluginRoot = path.join(workspaceFolder, 'plugins', 'backslash-paths')
+    await createPlugin(pluginRoot, {
+      __oneWorksPluginManifest: true,
+      assets: { rules: 'rules\\group' },
+      icon: 'assets\\icon.svg',
+      name: 'backslash-paths',
+      plugin: {
+        client: { entry: 'client\\index.js' },
+        server: { entry: 'server\\entry.mjs', roles: ['workspace'] }
+      }
+    })
+    await mkdir(path.join(pluginRoot, 'assets'), { recursive: true })
+    await Promise.all([
+      writeFile(path.join(pluginRoot, 'assets\\icon.svg'), '<svg>exact-backslash</svg>'),
+      writeFile(path.join(pluginRoot, 'assets', 'icon.svg'), '<svg>adjacent-separator</svg>'),
+      writeFile(path.join(pluginRoot, 'client\\index.js'), 'export const identity = "exact-backslash"\n'),
+      writeFile(path.join(pluginRoot, 'client', 'index.js'), 'export const identity = "adjacent-separator"\n'),
+      writeFile(
+        path.join(pluginRoot, 'server\\entry.mjs'),
+        'export async function activatePlugin(ctx) { ctx.registerCommand("identity", () => "exact-backslash") }\n'
+      )
+    ])
+    await mkdir(path.join(pluginRoot, 'rules\\group'), { recursive: true })
+    await mkdir(path.join(pluginRoot, 'rules', 'group'), { recursive: true })
+    await writeFile(path.join(pluginRoot, 'rules\\group', 'exact.md'), '# exact backslash\n')
+    await writeFile(path.join(pluginRoot, 'rules', 'group', 'adjacent.md'), '# adjacent separator\n')
+    mockConfig([{ id: pluginRoot, scope: 'backslash-paths' }])
+
+    const listResponse = await fetch(`${baseUrl}/api/plugins`)
+    const payload = await listResponse.json() as {
+      diagnostics: Array<{ code: string; message: string }>
+      plugins: Array<{
+        client?: { clientEntryUrl?: string }
+        enabled: boolean
+        icon?: string
+        manifest?: { icon?: string }
+        scope: string
+      }>
+    }
+    const plugin = payload.plugins.find(item => item.scope === 'backslash-paths')
+    expect(payload.diagnostics).toEqual([])
+    expect(plugin?.enabled).toBe(true)
+    expect(plugin?.client?.clientEntryUrl).toBe('/api/plugins/backslash-paths/client/client%5Cindex.js')
+    expect(plugin?.manifest?.icon).toBe('assets\\icon.svg')
+    const directClientAsset = await getPluginManager().resolveClientAsset('backslash-paths', 'client\\index.js')
+    expect(directClientAsset?.filePath).toBe(await realpath(path.join(pluginRoot, 'client\\index.js')))
+    directClientAsset?.stream.destroy()
+    const [clientResponse, iconResponse, commandResponse, assetsResponse] = await Promise.all([
+      fetch(`${baseUrl}${plugin?.client?.clientEntryUrl}`),
+      fetch(`${baseUrl}/api/plugins/backslash-paths/readme/assets/assets%5Cicon.svg`),
+      fetch(`${baseUrl}/api/plugins/backslash-paths/commands/identity`, { method: 'POST' }),
+      fetch(`${baseUrl}/api/plugins/backslash-paths/assets`)
+    ])
+    const assets = await assetsResponse.json() as {
+      groups: Array<{ files: Array<{ content?: string }>; kind: string }>
+    }
+
+    await expect(clientResponse.text()).resolves.toContain('exact-backslash')
+    await expect(iconResponse.text()).resolves.toContain('exact-backslash')
+    await expect(commandResponse.text()).resolves.toBe('exact-backslash')
+    expect(assets.groups.find(group => group.kind === 'rules')?.files[0]?.content).toBe('# exact backslash\n')
+    expect(JSON.stringify(assets)).not.toContain('adjacent separator')
   })
 
   it('serves plugin README.md and README assets inside the plugin root', async () => {
@@ -1633,7 +1951,7 @@ describe('pluginsRouter', () => {
     expect(JSON.stringify(payload)).not.toContain(workspaceFolder)
   }, 5_000)
 
-  function mockConfig(plugins: Array<{ enabled?: boolean; id: string; scope?: string }>) {
+  function mockConfig(plugins: Array<{ enabled?: boolean; id: string; scope?: string; watch?: boolean }>) {
     mocks.loadConfigState.mockResolvedValue({
       workspaceFolder,
       mergedConfig: { plugins }

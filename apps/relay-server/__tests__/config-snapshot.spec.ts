@@ -214,6 +214,73 @@ describe('relay config snapshot route', () => {
     expect(assignments.map(assignment => assignment.id)).toEqual(['basename-project'])
   })
 
+  it('keeps Git-targeted assignments in authenticated device snapshots for local canonical matching', async () => {
+    const { args, baseUrl } = await listenRelay()
+    const store = await seedUsers(args.dataPath)
+    upsertRelayConfigAssignment(store, {
+      configPatch: { defaultModelService: 'git-targeted' },
+      id: 'git-targeted',
+      project: { allow: ['github.com/oneworks-ai/app'] },
+      target: { userIds: ['user-1'] },
+      updatedAt: timestamp
+    })
+    await writeRelayStore(args.dataPath, store)
+
+    const deviceSnapshot = await requestJson(baseUrl, '/api/relay/config-snapshot', {
+      headers: authHeaders('user-1-device-token')
+    })
+    const accountSnapshot = await requestJson(baseUrl, '/api/relay/config-snapshot?projectId=customer-a', {
+      headers: authHeaders('user-1-session')
+    })
+
+    expect((deviceSnapshot.body.assignments as Array<{ id?: string }>).map(assignment => assignment.id))
+      .toContain('git-targeted')
+    expect((accountSnapshot.body.assignments as Array<{ id?: string }>).map(assignment => assignment.id))
+      .not.toContain('git-targeted')
+  })
+
+  it('persists and matches Windows project rules without crossing filesystem families', async () => {
+    const { args, baseUrl } = await listenRelay()
+    const store = await seedUsers(args.dataPath)
+    for (
+      const [id, allow] of [
+        ['drive', String.raw`C:\Projects\\App`],
+        ['unc', String.raw`\\Server\\Share`],
+        ['basename', 'app'],
+        ['rooted', String.raw`\project`],
+        ['posix', '/project']
+      ] as const
+    ) {
+      upsertRelayConfigAssignment(store, {
+        configPatch: { defaultModelService: id },
+        id,
+        project: { allow: [allow] },
+        target: { userIds: ['user-1'] },
+        updatedAt: timestamp
+      })
+    }
+    await writeRelayStore(args.dataPath, store)
+    const reloaded = await readRelayStore(args.dataPath)
+    expect(reloaded.configAssignments.find(assignment => assignment.id === 'unc')?.project?.allow)
+      .toEqual([String.raw`\\Server\\Share`])
+
+    const readIds = async (workspaceFolder: string) => {
+      const query = new URLSearchParams({ cwd: workspaceFolder, workspaceFolder })
+      const snapshot = await requestJson(baseUrl, `/api/relay/config-snapshot?${query}`, {
+        headers: authHeaders('user-1-session')
+      })
+      return (snapshot.body.assignments as Array<{ id?: string }>).map(assignment => assignment.id)
+    }
+
+    await expect(readIds('c:/projects/app')).resolves.toEqual(['drive', 'basename'])
+    await expect(readIds('/Projects/App')).resolves.toEqual([])
+    await expect(readIds('//server/share')).resolves.toEqual(['unc'])
+    await expect(readIds('/server/share')).resolves.toEqual([])
+    await expect(readIds('/project')).resolves.toEqual(['posix'])
+    await expect(readIds(String.raw`\project`)).resolves.toEqual(['rooted'])
+    await expect(readIds(String.raw`C:Projects\App`)).resolves.toEqual(['basename'])
+  })
+
   it('returns assignments targeted to one of the user teams', async () => {
     const { args, baseUrl } = await listenRelay()
     const store = await seedUsers(args.dataPath)

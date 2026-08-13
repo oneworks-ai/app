@@ -232,6 +232,35 @@ describe('relay storage repository', () => {
     })
   })
 
+  it('preserves raw workspace identity while reading and rewriting device sessions', async () => {
+    const dataPath = await createTempDataPath()
+    const repository = createRelayStoreRepository({ dataPath, storageDriver: 'json' })
+    const workspaceFolder = '/tmp/ relay workspace '
+    await mkdir(dirname(dataPath), { recursive: true })
+    await writeFile(
+      dataPath,
+      JSON.stringify({
+        deviceSessions: [{
+          createdAt: '2026-01-01T00:00:00.000Z',
+          deviceId: 'device-1',
+          id: 'session-1',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+          workspaceFolder
+        }]
+      }),
+      'utf8'
+    )
+
+    const store = await repository.read()
+    expect(store.deviceSessions[0]?.workspaceFolder).toBe(workspaceFolder)
+
+    await repository.write(store)
+    const rewritten = JSON.parse(await readFile(dataPath, 'utf8')) as {
+      deviceSessions?: Array<{ workspaceFolder?: string }>
+    }
+    expect(rewritten.deviceSessions?.[0]?.workspaceFolder).toBe(workspaceFolder)
+  })
+
   it('parses explicit storage driver config and exposes cloud storage adapters explicitly', () => {
     vi.stubEnv('ONEWORKS_RELAY_STORAGE_DRIVER', 'sqlite')
     const envArgs = parseRelayServerArgs([])

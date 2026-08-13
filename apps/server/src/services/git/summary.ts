@@ -1,6 +1,7 @@
 import type { GitChangeSummary, GitHeadCommitSummary } from '@oneworks/types'
 
-import { resolveGitErrorMessage, runGit } from './runner'
+import { splitGitNulRecords } from './path-records'
+import { resolveGitErrorMessage, runGit, runGitRecords } from './runner'
 import { parseGitHeadCommit, parseGitNumstat, summarizeGitNumstat } from './summary-parsers'
 
 const EMPTY_TREE_HASH = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
@@ -29,8 +30,8 @@ const isGitOutputOverflowError = (error: unknown) => {
 
 const listUntrackedFiles = async (repositoryRoot: string) => {
   try {
-    const { stdout } = await runGit(['ls-files', '--others', '--exclude-standard', '-z'], repositoryRoot)
-    return stdout.split('\0').map(item => item.trim()).filter(Boolean)
+    const { stdout } = await runGitRecords(['ls-files', '--others', '--exclude-standard', '-z'], repositoryRoot)
+    return splitGitNulRecords(stdout).filter(item => item !== '')
   } catch (error) {
     if (isGitOutputOverflowError(error)) {
       return []
@@ -56,14 +57,14 @@ const getUntrackedNumstatEntries = async (repositoryRoot: string) => {
 
 const getWorkingTreeNumstatEntries = async (repositoryRoot: string) => {
   try {
-    const { stdout } = await runGit(['diff', 'HEAD', '--numstat'], repositoryRoot)
+    const { stdout } = await runGitRecords(['diff', 'HEAD', '--numstat', '-z'], repositoryRoot)
     return parseGitNumstat(stdout)
   } catch (error) {
     if (!isMissingHeadError(error)) {
       throw error
     }
 
-    const { stdout } = await runGit(['diff', EMPTY_TREE_HASH, '--numstat'], repositoryRoot)
+    const { stdout } = await runGitRecords(['diff', EMPTY_TREE_HASH, '--numstat', '-z'], repositoryRoot)
     return parseGitNumstat(stdout)
   }
 }
@@ -73,7 +74,7 @@ export const getRepositoryChangeSummaries = async (repositoryRoot: string): Prom
   workingTreeSummary: GitChangeSummary
 }> => {
   const [stagedNumstat, workingTreeEntries, untrackedEntries] = await Promise.all([
-    runGit(['diff', '--cached', '--numstat'], repositoryRoot),
+    runGitRecords(['diff', '--cached', '--numstat', '-z'], repositoryRoot),
     getWorkingTreeNumstatEntries(repositoryRoot),
     getUntrackedNumstatEntries(repositoryRoot)
   ])

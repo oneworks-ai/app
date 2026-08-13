@@ -64,6 +64,8 @@
 - API 请求统一走 `src/api/`，避免在组件里直接手写 `fetch`。
 - 能复用的状态逻辑优先抽到 hooks，不在 route 和 view 间复制业务逻辑。
 - 配置页收到 `config_updated` 后，订阅层只负责刷新缓存；本地草稿和远端配置的冲突判断必须留在配置编辑器内部完成，避免静默覆盖用户正在编辑的内容。
+- workspace connection state 中的本机与 Relay `workspaceFolder` 是可重连的文件系统身份；持久化、读取、runtime env 与 reopen 只能用 `trim()` 判断空值并保留原字符串。device/server/workspace ID、显示名和 URL 继续按各自非路径契约归一化。
+- Browser Activity 的 `workspaceFolder`、`repositoryRoot` 与 `projectKey` 是文件系统 scope identity；route state、项目 option、record filter 和 Desktop store 必须保留非空原字节，session ID、标题和查询仍按普通文本处理。
 
 插件边界：
 

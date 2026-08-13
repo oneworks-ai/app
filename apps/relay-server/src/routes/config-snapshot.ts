@@ -12,6 +12,11 @@ const queryText = (url: URL, key: string) => {
   return value == null || value.trim() === '' ? undefined : value.trim()
 }
 
+const queryPath = (url: URL, key: string) => {
+  const value = url.searchParams.get(key)
+  return value == null || value.trim() === '' ? undefined : value
+}
+
 const findDeviceByToken = (store: RelayStore, token: string) => (
   token === '' ? undefined : store.devices.find(device => deviceTokenMatches(device, token))
 )
@@ -61,10 +66,10 @@ const projectContextFromRequest = (
 ): RelayConfigProjectContext => {
   const metadata = device == null ? undefined : visibleDevicePrivateMetadata(args, device)
   return {
-    cwd: queryText(url, 'cwd'),
+    cwd: queryPath(url, 'cwd'),
     projectId: queryText(url, 'projectId') ?? queryText(url, 'project'),
     projectName: queryText(url, 'projectName'),
-    workspaceFolder: queryText(url, 'workspaceFolder') ?? metadata?.workspaceFolder
+    workspaceFolder: queryPath(url, 'workspaceFolder') ?? metadata?.workspaceFolder
   }
 }
 
@@ -94,6 +99,7 @@ export const handleRelayConfigSnapshot = (
         recipientDevice: deviceResult.device,
         recipientDeviceToken,
         serverArgs: args,
+        shouldFilterProject: false,
         sourceServerId: args.publicBaseUrl
       }),
       args.allowOrigin

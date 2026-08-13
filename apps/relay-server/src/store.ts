@@ -616,7 +616,7 @@ const normalizeDeviceSession = (value: Record<string, unknown>): RelayDeviceSess
     title: typeof value.title === 'string' && value.title.trim() !== '' ? value.title.trim() : id,
     state: typeof value.state === 'string' && value.state.trim() !== '' ? value.state.trim() : undefined,
     workspaceFolder: typeof value.workspaceFolder === 'string' && value.workspaceFolder.trim() !== ''
-      ? value.workspaceFolder.trim()
+      ? value.workspaceFolder
       : undefined,
     lastActiveAt: typeof value.lastActiveAt === 'string' && value.lastActiveAt.trim() !== ''
       ? value.lastActiveAt.trim()

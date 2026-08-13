@@ -13,6 +13,10 @@ export interface RelayDeviceEnvironmentInfo {
 
 export const cleanDeviceMetadataText = (value: unknown) => typeof value === 'string' ? value.trim() : ''
 
+export const cleanDeviceMetadataPath = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== '' ? value : ''
+)
+
 const cleanBoundedText = (value: unknown, maxLength: number) => {
   const text = cleanDeviceMetadataText(value)
   return text === '' ? '' : text.slice(0, maxLength)

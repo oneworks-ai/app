@@ -87,6 +87,22 @@ describe('relay config assignment', () => {
     )).toBe(false)
   })
 
+  it('preserves root family, case, and literal-backslash project identities', () => {
+    const matches = (allow: string, workspaceFolder: string, deny?: string) =>
+      matchesRelayConfigProject(
+        { project: { allow: [allow], ...(deny == null ? {} : { deny: [deny] }) } },
+        { workspaceFolder }
+      )
+    expect(matches('C:/Projects/App', 'c:\\projects\\app')).toBe(true)
+    expect(matches('C:Projects/App', 'C:\\Projects\\App')).toBe(false)
+    expect(matches('\\\\Server\\Share', '//server/share')).toBe(true)
+    expect(matches('\\\\Server\\Share', '/server/share')).toBe(false)
+    expect(matches('\\project', '/project')).toBe(false)
+    expect(matches('/projects/team/secret', String.raw`/projects/team\secret`)).toBe(false)
+    expect(matches(String.raw`/projects/team\secret`, String.raw`/projects/team\secret`)).toBe(true)
+    expect(matches('C:/team/*', 'C:\\team\\app\\', 'C:/team/app')).toBe(false)
+  })
+
   it('filters config patches to safe allowed fields only', () => {
     expect(filterRelayConfigPatch(
       {

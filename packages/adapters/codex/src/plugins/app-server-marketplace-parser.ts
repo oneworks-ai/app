@@ -6,6 +6,10 @@ const optionalString = (value: unknown) => (
   typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
 )
 
+const optionalFilesystemPath = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== '' ? value : undefined
+)
+
 const stringList = (value: unknown) => (
   Array.isArray(value)
     ? value.filter((item): item is string => typeof item === 'string')
@@ -95,7 +99,7 @@ export const parseCodexAppServerPluginSummary = (
     name,
     source: {
       type: sourceType,
-      ...(optionalString(value.source.path) != null ? { path: optionalString(value.source.path) } : {})
+      ...(optionalFilesystemPath(value.source.path) != null ? { path: optionalFilesystemPath(value.source.path) } : {})
     },
     ...(optionalString(value.installPolicy) != null ? { installPolicy: optionalString(value.installPolicy) } : {}),
     ...(parsePluginInterface(value.interface) != null ? { interface: parsePluginInterface(value.interface) } : {}),
@@ -124,7 +128,7 @@ export const parseCodexAppServerPluginList = (value: unknown): CodexAppServerPlu
           const parsed = parseCodexAppServerPluginSummary(plugin)
           return parsed == null ? [] : [parsed]
         }),
-        ...(optionalString(marketplace.path) != null ? { path: optionalString(marketplace.path) } : {}),
+        ...(optionalFilesystemPath(marketplace.path) != null ? { path: optionalFilesystemPath(marketplace.path) } : {}),
         ...(optionalString(marketplaceInterface?.displayName) != null
           ? { title: optionalString(marketplaceInterface?.displayName) }
           : {})

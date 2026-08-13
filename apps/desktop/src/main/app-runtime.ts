@@ -66,6 +66,11 @@ import { createWindowManager } from './window-manager'
 import type { WindowManager } from './window-manager'
 import { createWorkspaceRuntimeCacheManager } from './workspace-runtime-cache-manager'
 import { refreshWorkspaceRuntimeCache } from './workspace-runtime-cache-refresh'
+import {
+  normalizeWorkspaceLaunchRequest,
+  openWorkspaceLaunchRequest,
+  stopWorkspaceRuntimeFolder
+} from './workspace-runtime-identity'
 import { createWorkspaceServiceManager } from './workspace-service-manager'
 
 const elapsedMs = (startedAt: number) => `${Date.now() - startedAt}ms`
@@ -363,47 +368,13 @@ export const createDesktopApp = () => {
     }
   }
 
-  const normalizeLaunchRequest = (launchRequest: LaunchRequest): LaunchRequest => {
-    const workspaceFolder = resolveProjectWorkspaceFolder(launchRequest.workspaceFolder)
-    return {
-      ...(launchRequest.launcherRoutePath == null ? {} : { launcherRoutePath: launchRequest.launcherRoutePath }),
-      ...(launchRequest.standaloneRoutePath == null ? {} : { standaloneRoutePath: launchRequest.standaloneRoutePath }),
-      ...(launchRequest.routePath == null ? {} : { routePath: launchRequest.routePath }),
-      ...(workspaceFolder == null ? {} : { workspaceFolder })
-    }
-  }
-
-  const openLaunchRequest = async (launchRequest: LaunchRequest) => {
-    const normalizedLaunchRequest = normalizeLaunchRequest(launchRequest)
-    if (normalizedLaunchRequest.standaloneRoutePath != null) {
-      await windowManager.openStandaloneTabWindow(normalizedLaunchRequest.standaloneRoutePath)
-      return
-    }
-    if (normalizedLaunchRequest.launcherRoutePath != null) {
-      await windowManager.openLauncherRouteWindow(normalizedLaunchRequest.launcherRoutePath)
-      return
-    }
-    if (normalizedLaunchRequest.workspaceFolder != null && normalizedLaunchRequest.routePath != null) {
-      await windowManager.openWorkspaceRouteWindow(
-        normalizedLaunchRequest.workspaceFolder,
-        normalizedLaunchRequest.routePath
-      )
-      return
-    }
-    if (normalizedLaunchRequest.workspaceFolder != null) {
-      await windowManager.openWorkspaceWindow(normalizedLaunchRequest.workspaceFolder)
-      return
-    }
-    await windowManager.createLauncherWindow()
-  }
-
   const queueOrOpenLaunchRequest = (launchRequest: LaunchRequest) => {
-    const normalizedLaunchRequest = normalizeLaunchRequest(launchRequest)
+    const normalizedLaunchRequest = normalizeWorkspaceLaunchRequest(launchRequest)
     if (!app.isReady()) {
       runtimeState.pendingLaunchRequests.push(normalizedLaunchRequest)
       return
     }
-    void openLaunchRequest(normalizedLaunchRequest).catch(handleDesktopError)
+    void openWorkspaceLaunchRequest(normalizedLaunchRequest, windowManager, true).catch(handleDesktopError)
   }
 
   const rememberWorkspaceFolder = (workspaceFolder: string) => {
@@ -608,28 +579,14 @@ export const createDesktopApp = () => {
       forget?: boolean
     } = {}
   ) => {
-    const workspaceFolderCandidate = workspaceFolder.trim()
-    const normalizedWorkspaceFolder = resolveProjectWorkspaceFolder(workspaceFolderCandidate) ??
-      workspaceFolderCandidate
-    const service = runtimeState.services.get(normalizedWorkspaceFolder)
-    const stopped = service != null
-    if (service != null) {
-      await serviceManager.stopWorkspaceService(service)
-    }
-
-    const removed = input.forget === true
-    if (removed) {
-      forgetWorkspaceFolder(normalizedWorkspaceFolder)
-    } else if (stopped) {
-      rememberWorkspaceFolder(normalizedWorkspaceFolder)
-    }
-
-    return {
-      ok: true,
-      removed,
-      stopped,
-      workspaceFolder: normalizedWorkspaceFolder
-    }
+    return await stopWorkspaceRuntimeFolder({
+      forgetWorkspaceFolder,
+      input,
+      rememberWorkspaceFolder,
+      services: runtimeState.services,
+      stopWorkspaceService: serviceManager.stopWorkspaceService,
+      workspaceFolder
+    })
   }
 
   const getManagerConnection = async () => {
@@ -702,7 +659,7 @@ export const createDesktopApp = () => {
     runtimeState.pendingLaunchRequests = []
 
     for (const launchRequest of pendingLaunchRequests) {
-      await openLaunchRequest(launchRequest)
+      await openWorkspaceLaunchRequest(launchRequest, windowManager, true)
     }
   }
 
@@ -1093,9 +1050,9 @@ export const createDesktopApp = () => {
     }
 
     if (initialDeepLinkRequest != null) {
-      runtimeState.pendingLaunchRequests.push(normalizeLaunchRequest(initialDeepLinkRequest))
+      runtimeState.pendingLaunchRequests.push(normalizeWorkspaceLaunchRequest(initialDeepLinkRequest))
     } else if (initialStandaloneLaunchRequest != null) {
-      runtimeState.pendingLaunchRequests.push(normalizeLaunchRequest(initialStandaloneLaunchRequest))
+      runtimeState.pendingLaunchRequests.push(normalizeWorkspaceLaunchRequest(initialStandaloneLaunchRequest))
     }
     app.on('second-instance', handleSecondInstance)
     app.on('open-url', handleOpenUrl)

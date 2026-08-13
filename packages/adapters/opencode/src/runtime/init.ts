@@ -4,6 +4,7 @@ import process from 'node:process'
 import type { AdapterCtx } from '@oneworks/types'
 import {
   migrateProjectHomeSegments,
+  resolveOptionalPath,
   resolveProjectMockHome,
   syncSymlinkTarget,
   unlinkMockHomeBridgePaths
@@ -36,7 +37,8 @@ export const initOpenCodeAdapter = async (ctx: AdapterCtx) => {
     logger: ctx.logger
   })
 
-  const realHome = ctx.env.__ONEWORKS_PROJECT_REAL_HOME__?.trim() || process.env.__ONEWORKS_PROJECT_REAL_HOME__?.trim()
+  const realHome = resolveOptionalPath(ctx.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
+    resolveOptionalPath(process.env.__ONEWORKS_PROJECT_REAL_HOME__)
   const aiHome = resolveProjectMockHome(ctx.cwd, ctx.env)
 
   if (realHome && aiHome) {

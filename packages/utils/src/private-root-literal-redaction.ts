@@ -12,7 +12,9 @@ export const hasLiteralRootBoundary = (
   const beforeSafe = start === 0 ||
     fileUrlPrefix ||
     (before != null && LITERAL_ROOT_BOUNDARY_PATTERN.test(before))
-  const afterSafe = end === value.length ||
+  const afterSafe = value.slice(start, end).endsWith('/') ||
+    value.slice(start, end).endsWith('\\') ||
+    end === value.length ||
     after === '/' ||
     after === '\\' ||
     (after != null && LITERAL_ROOT_BOUNDARY_PATTERN.test(after))
@@ -35,7 +37,10 @@ export const redactLiteralPrivateRoots = (
     if (root === '') continue
     let cursor = 0
     while (cursor < redacted.length) {
-      const start = redacted.indexOf(root, cursor)
+      const windowsFamily = /^(?:[a-z]:[\\/]|[\\/]{2})/iu.test(root)
+      const start = windowsFamily
+        ? redacted.toLowerCase().indexOf(root.toLowerCase(), cursor)
+        : redacted.indexOf(root, cursor)
       if (start < 0) break
       const end = start + root.length
       if (!hasLiteralRootBoundary(redacted, start, end)) {
@@ -43,8 +48,13 @@ export const redactLiteralPrivateRoots = (
         continue
       }
       let privatePathEnd = end
-      if (redacted[privatePathEnd] === '/' || redacted[privatePathEnd] === '\\') {
-        privatePathEnd += 1
+      const rootEndsWithSeparator = root.endsWith('/') || root.endsWith('\\')
+      if (
+        rootEndsWithSeparator ||
+        redacted[privatePathEnd] === '/' ||
+        redacted[privatePathEnd] === '\\'
+      ) {
+        if (!rootEndsWithSeparator) privatePathEnd += 1
         while (
           privatePathEnd < redacted.length &&
           !LITERAL_PATH_END_PATTERN.test(redacted[privatePathEnd] ?? '')

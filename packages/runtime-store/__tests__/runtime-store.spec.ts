@@ -386,6 +386,44 @@ describe('runtime store', () => {
     )
   })
 
+  it('keeps adjacent whitespace-distinct projects in separate runtime stores and locks', async () => {
+    const root = await createTempRoot()
+    const workspace = join(root, 'app ')
+    const adjacentWorkspace = join(root, 'app')
+    const home = await createTempRoot()
+    await Promise.all([mkdir(workspace), mkdir(adjacentWorkspace)])
+
+    const env = {
+      HOME: home,
+      __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: workspace
+    }
+    const runtimeRoot = await resolveRuntimeRoot({ cwd: workspace, env, homeDir: home })
+    const adjacentRuntimeRoot = await resolveRuntimeRoot({
+      cwd: adjacentWorkspace,
+      env: { ...env, __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: adjacentWorkspace },
+      homeDir: home
+    })
+    expect(runtimeRoot).not.toBe(adjacentRuntimeRoot)
+
+    const store = await createFileRuntimeStore(runtimeRoot)
+    const session = await store.createSession({
+      protocolVersion: DEFAULT_RUNTIME_PROTOCOL_VERSION,
+      supportedProtocolRange: DEFAULT_SUPPORTED_PROTOCOL_RANGE,
+      sessionId: 'sess_raw_workspace',
+      cwd: workspace,
+      createdAt: 1
+    })
+    const owner = await session.acquireOwnerLock('runtime_raw_workspace')
+    try {
+      expect(await session.readOwnerLock()).toMatchObject({ runtimeId: 'runtime_raw_workspace' })
+      expect((await store.readIndex()).sessions.sess_raw_workspace).toBeDefined()
+      const adjacentStore = await createFileRuntimeStore(adjacentRuntimeRoot)
+      expect((await adjacentStore.readIndex()).sessions.sess_raw_workspace).toBeUndefined()
+    } finally {
+      await owner.release()
+    }
+  })
+
   it('uses the home project runtime root when only a legacy .oneworks marker exists', async () => {
     const project = await createTempRoot()
     const home = await createTempRoot()

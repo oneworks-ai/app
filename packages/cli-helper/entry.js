@@ -5,12 +5,13 @@ const process = require('node:process')
 
 const sanitizePackageName = packageName => packageName.replace(/^@/, '').replace(/[\\/]/g, '__')
 
-const resolveRealHomeDir = (env) => (
-  env.__ONEWORKS_PROJECT_REAL_HOME__?.trim() ||
-  env.HOME?.trim() ||
-  env.USERPROFILE?.trim() ||
-  homedir()
-)
+const readFilesystemPath = value => typeof value === 'string' && value.trim() !== '' ? value : undefined
+
+const resolveRealHomeDir = (env) =>
+  readFilesystemPath(env.__ONEWORKS_PROJECT_REAL_HOME__) ??
+    readFilesystemPath(env.HOME) ??
+    readFilesystemPath(env.USERPROFILE) ??
+    homedir()
 
 const resolveActiveCliPackageDir = (packageName, packageDir, env = process.env) => {
   if (typeof packageName !== 'string' || packageName.trim() === '') return packageDir

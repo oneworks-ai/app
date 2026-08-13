@@ -96,6 +96,7 @@ import { usePluginSlot } from '#~/plugins/plugin-slots'
 import { useInstallRoutePluginMoreMenu, useInstallRoutePluginWindowBarActions } from '#~/plugins/route-plugin-chrome'
 import { getRuntimeWorkspaceId } from '#~/runtime-config'
 import { readDeviceShellSimulationMode, useStoredDevShellSimulation } from '#~/utils/device-shell-simulation'
+import { readNonBlankFilesystemPath } from '#~/utils/filesystem-path-identity'
 import type { WorkspaceFileLinkTarget } from '#~/utils/link-targets'
 import { isShortcutMatch } from '#~/utils/shortcutUtils'
 import {
@@ -105,6 +106,7 @@ import {
 
 import { ChatRouteBottomPanel } from './ChatRouteBottomPanel'
 import { LauncherOverlay } from './LauncherOverlay'
+import { buildChatLauncherWorkspaceContext, resolveChatWorkspaceRootPath } from './chat-workspace-context'
 
 const WEB_WORKSPACE_LAUNCHER_SHORTCUT = 'mod+shift+p'
 const SESSION_DOCK_PREVIEW_EXIT_MS = 180
@@ -241,11 +243,6 @@ const normalizeLauncherResourceTarget = (value: unknown): DesktopWorkspaceResour
 }
 
 const normalizeWebLauncherQuery = (query: string) => query.trim().toLowerCase()
-
-const getWorkspaceFolderName = (workspaceFolder: string) => {
-  const normalizedFolder = workspaceFolder.replace(/[\\/]+$/u, '')
-  return normalizedFolder.split(/[\\/]/u).filter(Boolean).at(-1) ?? workspaceFolder
-}
 
 const matchesWebLauncherQuery = (normalizedQuery: string, values: Array<string | undefined>) => {
   if (normalizedQuery === '') return true
@@ -575,8 +572,10 @@ export function ChatRouteShell({
     }
   }, [])
 
-  const sessionWorkspaceRootPath = sessionInfo?.type === 'init' ? sessionInfo.cwd.trim() : ''
-  const workspaceRootPath = sessionWorkspaceRootPath === '' ? projectWorkspaceFolder : sessionWorkspaceRootPath
+  const sessionWorkspaceRootPath = sessionInfo?.type === 'init'
+    ? readNonBlankFilesystemPath(sessionInfo.cwd)
+    : undefined
+  const workspaceRootPath = resolveChatWorkspaceRootPath(sessionWorkspaceRootPath, projectWorkspaceFolder)
   const terminalSessionId = resolvedWorkspaceSessionId ?? WORKSPACE_TERMINAL_SESSION_ID
   const isMac = typeof navigator !== 'undefined' && navigator.platform.includes('Mac')
   const fullscreenSessionWindowBarLabel = resolvedWorkspaceSession?.title?.trim() ||
@@ -648,7 +647,7 @@ export function ChatRouteShell({
     resolvedWorkspaceSessionId,
     terminalSessionId
   )
-  const canUseWorkspaceLauncher = workspaceRootPath != null && workspaceRootPath.trim() !== ''
+  const canUseWorkspaceLauncher = readNonBlankFilesystemPath(workspaceRootPath) != null
   const canUseWebLauncherShortcut = window.oneworksDesktop == null && canUseWorkspaceLauncher
   const webWorkspaceLauncherShortcutLabel = useMemo(
     () => formatInteractionPanelShortcut(WEB_WORKSPACE_LAUNCHER_SHORTCUT, isMac),
@@ -697,19 +696,10 @@ export function ChatRouteShell({
     },
     value: workspaceDrawerWidth
   })
-  const webLauncherWorkspaceContext = useMemo<DesktopWorkspaceSelectorProject | undefined>(() => {
-    const normalizedWorkspaceRootPath = workspaceRootPath?.trim()
-    if (normalizedWorkspaceRootPath == null || normalizedWorkspaceRootPath === '') return undefined
-
-    const workspaceName = getWorkspaceFolderName(normalizedWorkspaceRootPath)
-    return {
-      description: normalizedWorkspaceRootPath,
-      isCurrent: true,
-      name: workspaceName === '' ? displayTitle?.trim() || normalizedWorkspaceRootPath : workspaceName,
-      status: 'ready',
-      workspaceFolder: normalizedWorkspaceRootPath
-    }
-  }, [displayTitle, workspaceRootPath])
+  const webLauncherWorkspaceContext = useMemo<DesktopWorkspaceSelectorProject | undefined>(
+    () => buildChatLauncherWorkspaceContext(workspaceRootPath, displayTitle),
+    [displayTitle, workspaceRootPath]
+  )
   const handleSessionDockPreviewOpen = useCallback(() => {
     if (!isWorkspaceDrawerFullscreen) return
 
@@ -1029,11 +1019,11 @@ export function ChatRouteShell({
     visibleSelector: CHAT_ROUTE_STARTUP_DEGRADED_SELECTOR
   })
   const handleLocateWorkspacePath = useCallback((path: string) => {
-    const normalizedPath = path.trim()
-    if (normalizedPath === '') return
+    const rawPath = readNonBlankFilesystemPath(path)
+    if (rawPath == null) return
 
     setWorkspaceDrawerOpenWithPanelState(true, 'tree')
-    setWorkspaceDrawerLocateRequest(current => ({ id: (current?.id ?? 0) + 1, path: normalizedPath }))
+    setWorkspaceDrawerLocateRequest(current => ({ id: (current?.id ?? 0) + 1, path: rawPath }))
   }, [setWorkspaceDrawerOpenWithPanelState])
   const requestInteractionPanelShortcut = useCallback((
     action: InteractionPanelShortcutAction,
@@ -1106,21 +1096,17 @@ export function ChatRouteShell({
     path: string,
     target?: Pick<WorkspaceFileLinkTarget, 'column' | 'line'>
   ) => {
-    const normalizedPath = path.trim()
-    if (normalizedPath === '') return
-    const bottomExistingTab = sessionPanelState.bottom.tabs.find(tab =>
-      tab.kind === 'file' && tab.path === normalizedPath
-    )
-    const rightExistingTab = sessionPanelState.right.tabs.find(tab =>
-      tab.kind === 'file' && tab.path === normalizedPath
-    )
+    const rawPath = readNonBlankFilesystemPath(path)
+    if (rawPath == null) return
+    const bottomExistingTab = sessionPanelState.bottom.tabs.find(tab => tab.kind === 'file' && tab.path === rawPath)
+    const rightExistingTab = sessionPanelState.right.tabs.find(tab => tab.kind === 'file' && tab.path === rawPath)
     const hasFocusTarget = target?.line != null || target?.column != null
 
     if (bottomExistingTab != null && (bottomPanel.shouldShowBottomPanel || rightExistingTab == null)) {
       setIsTerminalPanelFolded(false)
       setIsTerminalOpen(true)
       requestInteractionPanelShortcut('open-workspace-file', {
-        path: normalizedPath,
+        path: rawPath,
         ...(target?.column == null ? {} : { column: target.column }),
         ...(target?.line == null ? {} : { line: target.line })
       })
@@ -1137,7 +1123,7 @@ export function ChatRouteShell({
       if (hasFocusTarget) {
         setRightWorkspaceFileFocusRequest({
           requestId: ++nextInteractionPanelShortcutRequestId,
-          path: normalizedPath,
+          path: rawPath,
           ...(target?.column == null ? {} : { column: target.column }),
           ...(target?.line == null ? {} : { line: target.line })
         })
@@ -1151,10 +1137,10 @@ export function ChatRouteShell({
       !bottomPanel.shouldShowBottomPanel
     ) {
       const tab = {
-        id: toRightWorkspaceFileTabId(normalizedPath),
+        id: toRightWorkspaceFileTabId(rawPath),
         kind: 'file' as const,
-        path: normalizedPath,
-        title: getFileName(normalizedPath)
+        path: rawPath,
+        title: getFileName(rawPath)
       }
       setWorkspaceDrawerOpenWithPanelState(true)
       updateSessionPanelArea('right', area => {
@@ -1171,7 +1157,7 @@ export function ChatRouteShell({
       if (hasFocusTarget) {
         setRightWorkspaceFileFocusRequest({
           requestId: ++nextInteractionPanelShortcutRequestId,
-          path: normalizedPath,
+          path: rawPath,
           ...(target?.column == null ? {} : { column: target.column }),
           ...(target?.line == null ? {} : { line: target.line })
         })
@@ -1182,7 +1168,7 @@ export function ChatRouteShell({
     setIsTerminalPanelFolded(false)
     setIsTerminalOpen(true)
     requestInteractionPanelShortcut('open-workspace-file', {
-      path: normalizedPath,
+      path: rawPath,
       ...(target?.column == null ? {} : { column: target.column }),
       ...(target?.line == null ? {} : { line: target.line })
     })
@@ -1578,7 +1564,7 @@ export function ChatRouteShell({
     }
 
     handledLauncherRequestIdRef.current = launcherRequestId
-    const launcherPath = params.get('launcherPath')?.trim()
+    const launcherPath = readNonBlankFilesystemPath(params.get('launcherPath'))
     const launcherSessionId = params.get('launcherSessionId')?.trim()
     const launcherTerminalId = params.get('launcherTerminalId')?.trim()
     const launcherTitle = params.get('launcherTitle')?.trim()
@@ -1607,7 +1593,7 @@ export function ChatRouteShell({
 
     const target = normalizeLauncherResourceTarget({
       kind: launcherAction,
-      ...(launcherPath == null || launcherPath === '' ? {} : { path: launcherPath }),
+      ...(launcherPath == null ? {} : { path: launcherPath }),
       ...(launcherSessionId == null || launcherSessionId === '' ? {} : { sessionId: launcherSessionId }),
       ...(launcherTerminalId == null || launcherTerminalId === '' ? {} : { terminalId: launcherTerminalId }),
       ...(launcherTitle == null || launcherTitle === '' ? {} : { title: launcherTitle }),

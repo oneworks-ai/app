@@ -342,6 +342,28 @@ describe('prepareCodexSessionHome', () => {
     expect(await readFile(join(realHome, '.codex', 'config.toml'), 'utf8')).toBe('model = "real"\n')
   })
 
+  it.runIf(process.platform !== 'win32')(
+    'uses the exact whitespace-bearing real home for shared session configuration',
+    async () => {
+      const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-exact-real-home-'))
+      const adjacentRealHome = join(workspace, 'real-home')
+      const realHome = join(workspace, 'real-home ')
+      tempDirs.push(workspace)
+      await mkdir(join(adjacentRealHome, '.codex'), { recursive: true })
+      await mkdir(join(realHome, '.codex'), { recursive: true })
+      await writeFile(join(adjacentRealHome, '.codex', 'config.toml'), 'model = "adjacent"\n')
+      await writeFile(join(realHome, '.codex', 'config.toml'), 'model = "exact"\n')
+
+      const result = await prepareCodexSessionHome({
+        ctx: { cwd: workspace, env: { __ONEWORKS_PROJECT_REAL_HOME__: realHome }, ctxId: 'ctx', configs: [] },
+        sessionId: 'session',
+        sharedAppServerHome: true
+      })
+
+      expect(await readFile(join(result.homeDir, '.codex', 'config.toml'), 'utf8')).toContain('model = "exact"')
+    }
+  )
+
   it('keeps global Codex runtime caches out of the isolated session home', async () => {
     const workspace = await mkdtemp(join(tmpdir(), 'ow-codex-session-home-pruned-'))
     const realHome = join(workspace, 'real-home')

@@ -8,7 +8,8 @@ import {
   getGitBranchCheckoutBlockedPath,
   getGitBranchViewState,
   hasExactGitBranchMatch,
-  isGitBranchCheckedOutInOtherWorktree
+  isGitBranchCheckedOutInOtherWorktree,
+  normalizeGitFilesystemPathForComparison
 } from '#~/components/chat/git-controls/git-branch-utils'
 
 describe('chat git branch utils', () => {
@@ -103,6 +104,55 @@ describe('chat git branch utils', () => {
       branches,
       '/Users/yijie/codes/oneworks-app'
     )).toBe('/Users/yijie/.codex/worktrees/3d03/oneworks-app')
+  })
+
+  it('keeps whitespace-distinct repository and worktree paths separate', () => {
+    const exactPath = '/worktrees/repository '
+    const branch: GitBranchSummary = {
+      name: 'feature/exact',
+      kind: 'local',
+      localName: 'feature/exact',
+      worktreePath: exactPath,
+      isCurrent: false
+    }
+
+    expect(isGitBranchCheckedOutInOtherWorktree(branch, '/worktrees/repository')).toBe(true)
+    expect(getGitBranchCheckoutBlockedPath(branch, [branch], '/worktrees/repository')).toBe(exactPath)
+    expect(isGitBranchCheckedOutInOtherWorktree(branch, exactPath)).toBe(false)
+  })
+
+  it('preserves the singly rooted Windows filesystem floor', () => {
+    expect(normalizeGitFilesystemPathForComparison('\\')).toBe('\\')
+    expect(normalizeGitFilesystemPathForComparison('\\workspace\\')).toBe('\\workspace')
+  })
+
+  it('compares only equivalent worktrees inside the same filesystem family', () => {
+    const branch: GitBranchSummary = {
+      name: 'feature/windows',
+      kind: 'local',
+      localName: 'feature/windows',
+      worktreePath: String.raw`C:\Work\Repo`,
+      isCurrent: false
+    }
+
+    expect(isGitBranchCheckedOutInOtherWorktree(branch, 'c:/work/repo')).toBe(false)
+    expect(getGitBranchCheckoutBlockedPath(branch, [branch], 'c:/work/repo')).toBeNull()
+    expect(isGitBranchCheckedOutInOtherWorktree(branch, String.raw`C:Work\Repo`)).toBe(true)
+    expect(isGitBranchCheckedOutInOtherWorktree({ ...branch, worktreePath: String.raw`\project` }, '/project')).toBe(
+      true
+    )
+    expect(
+      isGitBranchCheckedOutInOtherWorktree({ ...branch, worktreePath: String.raw`\\Server\Share` }, '//server/share')
+    ).toBe(false)
+    expect(isGitBranchCheckedOutInOtherWorktree({ ...branch, worktreePath: '/Projects/App' }, '/projects/app')).toBe(
+      true
+    )
+    expect(
+      isGitBranchCheckedOutInOtherWorktree(
+        { ...branch, worktreePath: String.raw`/projects/team\secret` },
+        '/projects/team/secret'
+      )
+    ).toBe(true)
   })
 
   it('formats worktree paths for compact display', () => {

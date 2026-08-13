@@ -53,7 +53,10 @@ export const parseDesktopDeepLinkLaunchRequest = (rawUrl: string): LaunchRequest
     return { launcherRoutePath: buildRelayPluginRoutePath(url, true) }
   }
 
-  const workspaceFolder = url.searchParams.get('workspace')?.trim() || undefined
+  const rawWorkspaceFolder = url.searchParams.get('workspace')
+  const workspaceFolder = rawWorkspaceFolder == null || rawWorkspaceFolder.trim() === ''
+    ? undefined
+    : rawWorkspaceFolder
   if (workspaceFolder == null) return undefined
   return {
     routePath: buildRelayPluginRoutePath(url),

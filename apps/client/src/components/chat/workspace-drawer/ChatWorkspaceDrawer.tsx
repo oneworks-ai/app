@@ -52,6 +52,7 @@ import type { PluginContributionWorkbenchAddMenuItem, PluginContributionWorkbenc
 import { usePluginCommandExecutor, usePluginSlot } from '#~/plugins/plugin-slots'
 import { interactionPanelPinnedTabLimitAtom } from '#~/store/index'
 import { readDeviceShellSimulationMode, useStoredDevShellSimulation } from '#~/utils/device-shell-simulation'
+import { readNonBlankFilesystemPath } from '#~/utils/filesystem-path-identity'
 
 import { usePanelTabCloseRequests } from '../interaction-panel/@components/terminal-tab-close/use-panel-tab-close-requests'
 import type { FrozenPanelTabCloseRequest } from '../interaction-panel/@components/terminal-tab-close/use-panel-tab-close-requests'
@@ -776,8 +777,8 @@ export function ChatWorkspaceDrawer({
   }, [pluginLanguage, pluginPages, pluginTabs, updateRightArea])
 
   useEffect(() => {
-    const path = locateFileRequest?.path.trim()
-    if (locateFileRequest == null || path == null || path === '') return
+    const path = readNonBlankFilesystemPath(locateFileRequest?.path)
+    if (locateFileRequest == null || path == null) return
 
     setTreeActivePath(path)
     handleWorkspaceTreeCommand('locate', path)
@@ -1224,11 +1225,11 @@ export function ChatWorkspaceDrawer({
   }, [updateRightArea])
 
   const openRightWorkspaceFilePath = useCallback((path: string) => {
-    const normalizedPath = path.trim()
-    if (normalizedPath === '') return
+    const rawPath = readNonBlankFilesystemPath(path)
+    if (rawPath == null) return
 
-    const tab = toWorkspaceDrawerFilePanelTab(normalizedPath)
-    const tabKey = toWorkspaceDrawerFileTabKey(normalizedPath)
+    const tab = toWorkspaceDrawerFilePanelTab(rawPath)
+    const tabKey = toWorkspaceDrawerFileTabKey(rawPath)
     setActiveTabKey(tabKey)
     setMobileViewMode('tab')
     upsertRightPanelTab(tab)

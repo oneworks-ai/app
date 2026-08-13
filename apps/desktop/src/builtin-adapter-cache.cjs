@@ -44,11 +44,11 @@ const PACKAGE_CACHE_VERSION_PATTERN = /^[\w.+-]+$/u
 const SKIPPED_PACKAGE_ENTRIES = new Set(['node_modules'])
 
 const normalizeEnvPath = value => (
-  typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
+  typeof value === 'string' && value.trim() !== '' ? value : undefined
 )
 
 const normalizePackageCacheVersion = (value) => {
-  const normalized = normalizeEnvPath(value)
+  const normalized = typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
   if (normalized == null) return undefined
   if (!PACKAGE_CACHE_VERSION_PATTERN.test(normalized) || normalized === '.' || normalized === '..') {
     throw new Error(`Runtime package cache version contains unsupported characters: ${normalized}.`)

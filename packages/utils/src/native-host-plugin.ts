@@ -12,6 +12,7 @@ import type {
   PluginDetailAssetFile
 } from '@oneworks/types'
 
+import { readNonBlankFilesystemPath } from './filesystem-dir-path'
 import { parseSkillFrontmatterValue } from './project-skills/shared'
 
 const MAX_NATIVE_MANIFEST_BYTES = 1024 * 1024
@@ -28,13 +29,13 @@ const NATIVE_ICON_MIME_TYPES: Record<string, string> = {
 }
 
 export const resolveRealUserHome = (env: Record<string, string | null | undefined>) => {
-  const configured = env.__ONEWORKS_PROJECT_REAL_HOME__?.trim()
-  return path.resolve(configured == null || configured === '' ? homedir() : configured)
+  const configured = readNonBlankFilesystemPath(env.__ONEWORKS_PROJECT_REAL_HOME__)
+  return path.resolve(configured ?? homedir())
 }
 
 export const resolveOptionalPath = (value: string | null | undefined) => {
-  const normalized = value?.trim()
-  return normalized == null || normalized === '' ? undefined : path.resolve(normalized)
+  const pathValue = readNonBlankFilesystemPath(value)
+  return pathValue == null ? undefined : path.resolve(pathValue)
 }
 
 export const createNativeHostPluginId = (adapter: string, identity: string) => (

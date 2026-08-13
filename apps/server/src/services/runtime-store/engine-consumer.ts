@@ -65,10 +65,14 @@ const isPathInside = (parentPath: string, targetPath: string) => {
   )
 }
 
+const readFilesystemPath = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== '' ? value : undefined
+)
+
 const resolveRuntimeProjectOoBaseDir = (cwd: string, env: NodeJS.ProcessEnv) => {
   const workspaceFolder = path.resolve(cwd)
-  const aiBaseDir = env[PROJECT_OO_BASE_DIR_ENV]?.trim()
-  const aiBaseDirSourceCwd = env[PROJECT_OO_BASE_DIR_RESOLVE_CWD_ENV]?.trim()
+  const aiBaseDir = readFilesystemPath(env[PROJECT_OO_BASE_DIR_ENV])
+  const aiBaseDirSourceCwd = readFilesystemPath(env[PROJECT_OO_BASE_DIR_RESOLVE_CWD_ENV])
   const pathEnv: NodeJS.ProcessEnv = {
     ...env,
     [PROJECT_LAUNCH_CWD_ENV]: workspaceFolder,
@@ -77,7 +81,6 @@ const resolveRuntimeProjectOoBaseDir = (cwd: string, env: NodeJS.ProcessEnv) => 
 
   if (
     aiBaseDir != null &&
-    aiBaseDir !== '' &&
     path.isAbsolute(aiBaseDir) &&
     !isPathInside(workspaceFolder, path.resolve(aiBaseDir))
   ) {
@@ -85,7 +88,6 @@ const resolveRuntimeProjectOoBaseDir = (cwd: string, env: NodeJS.ProcessEnv) => 
     delete pathEnv[PROJECT_OO_BASE_DIR_RESOLVE_CWD_ENV]
   } else if (
     aiBaseDirSourceCwd == null ||
-    aiBaseDirSourceCwd === '' ||
     !isPathInside(workspaceFolder, path.resolve(aiBaseDirSourceCwd))
   ) {
     pathEnv[PROJECT_OO_BASE_DIR_RESOLVE_CWD_ENV] = workspaceFolder
@@ -204,7 +206,7 @@ export const ensureRuntimeConsumerCodexConfigCliCompatibility = async (params: {
   const adapter = readString(params.adapter ?? params.env.__ONEWORKS_RUNTIME_PROTOCOL_CONSUMER_ADAPTER__)
   if (adapter !== 'codex') return false
 
-  const homeDir = readString(params.env.HOME)
+  const homeDir = readFilesystemPath(params.env.HOME)
   if (homeDir == null) return false
 
   const configPath = path.join(homeDir, '.codex', 'config.toml')
@@ -507,7 +509,7 @@ const resolveExistingRuntimeAdapterPackageCacheDir = (adapter: string, env: Node
 }
 
 const resolveRuntimeConsumerCli = (cwd: string, env: NodeJS.ProcessEnv) => {
-  const override = readString(env.__ONEWORKS_RUNTIME_PROTOCOL_CONSUMER_CLI_PATH__)
+  const override = readFilesystemPath(env.__ONEWORKS_RUNTIME_PROTOCOL_CONSUMER_CLI_PATH__)
   if (override != null) {
     return resolveCliTarget(override)
   }
@@ -536,7 +538,7 @@ const resolveRuntimeConsumerCli = (cwd: string, env: NodeJS.ProcessEnv) => {
     }
   }
 
-  const fallbackBootstrap = readString(env.__ONEWORKS_RUNTIME_PROTOCOL_FALLBACK_BOOTSTRAP_PATH__)
+  const fallbackBootstrap = readFilesystemPath(env.__ONEWORKS_RUNTIME_PROTOCOL_FALLBACK_BOOTSTRAP_PATH__)
   if (fallbackBootstrap != null) {
     return resolveCliTarget(fallbackBootstrap)
   }
@@ -546,7 +548,7 @@ const resolveRuntimeConsumerCli = (cwd: string, env: NodeJS.ProcessEnv) => {
     return { args: [], command: pathCommand }
   }
 
-  const fallback = readString(env.__ONEWORKS_RUNTIME_PROTOCOL_FALLBACK_CLI_PATH__)
+  const fallback = readFilesystemPath(env.__ONEWORKS_RUNTIME_PROTOCOL_FALLBACK_CLI_PATH__)
   if (fallback != null) {
     return resolveCliTarget(fallback)
   }
@@ -565,7 +567,7 @@ const resolveRuntimeConsumerCli = (cwd: string, env: NodeJS.ProcessEnv) => {
 }
 
 const findMissingSpawnPath = (plan: RuntimeConsumerSpawnPlan) => {
-  const entrypoint = readString(plan.args[0])
+  const entrypoint = readFilesystemPath(plan.args[0])
   if (
     plan.command === process.execPath && entrypoint != null && isPathLikeCommand(entrypoint) && !existsSync(entrypoint)
   ) {
@@ -694,7 +696,7 @@ export function buildRuntimeConsumerSpawnPlan(params: {
   store: RuntimeSessionStore
 }): RuntimeConsumerSpawnPlan {
   const rawBaseEnv = params.baseEnv ?? process.env
-  const cwd = readString(params.metadata.cwd) ?? params.cwd
+  const cwd = readFilesystemPath(params.metadata.cwd) ?? params.cwd
   const baseEnv = createWorkspaceRuntimeEnv(cwd, rawBaseEnv)
   const sessionId = params.metadata.sessionId
   const entity = params.command.entity ?? readString(params.metadata.entity)
@@ -709,7 +711,7 @@ export function buildRuntimeConsumerSpawnPlan(params: {
   }
 
   const cli = resolveRuntimeConsumerCli(cwd, baseEnv)
-  const existingCliPackageDir = readString(baseEnv.__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__)
+  const existingCliPackageDir = readFilesystemPath(baseEnv.__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__)
   const existingCliPackageHasAdapter = adapter != null &&
     existingCliPackageDir != null &&
     hasAdapterPackageInRuntimePackageDir(existingCliPackageDir, adapter)

@@ -1,3 +1,5 @@
+import { readNonBlankFilesystemPath } from '#~/utils/filesystem-path-identity'
+
 export interface WorkspaceFilePanelState {
   openPaths: string[]
   selectedPath: string | null
@@ -8,10 +10,10 @@ export const uniqueNonEmptyPaths = (paths: Array<string | null | undefined>) => 
   const result: string[] = []
   const seen = new Set<string>()
   for (const path of paths) {
-    const trimmed = path?.trim()
-    if (trimmed == null || trimmed === '' || seen.has(trimmed)) continue
-    seen.add(trimmed)
-    result.push(trimmed)
+    const rawPath = readNonBlankFilesystemPath(path)
+    if (rawPath == null || seen.has(rawPath)) continue
+    seen.add(rawPath)
+    result.push(rawPath)
   }
   return result
 }
@@ -19,7 +21,7 @@ export const uniqueNonEmptyPaths = (paths: Array<string | null | undefined>) => 
 export const normalizeWorkspaceFileState = (
   state: WorkspaceFilePanelState | undefined
 ): WorkspaceFilePanelState => {
-  const selectedPath = state?.selectedPath?.trim() || null
+  const selectedPath = readNonBlankFilesystemPath(state?.selectedPath) ?? null
   const openPaths = uniqueNonEmptyPaths([
     ...(state?.openPaths ?? []),
     selectedPath

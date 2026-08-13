@@ -3,6 +3,10 @@ export const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 export const toString = (value: unknown) => typeof value === 'string' ? value.trim() : ''
 
+export const toPathString = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== '' ? value : ''
+)
+
 export const toBoolean = (value: unknown, fallback: boolean) => typeof value === 'boolean' ? value : fallback
 
 export const toInteger = (value: unknown) => {

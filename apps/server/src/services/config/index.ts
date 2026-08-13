@@ -7,8 +7,8 @@ import {
 import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 
 export function getWorkspaceFolder() {
-  const workspaceFolder = processEnv.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__?.trim()
-  if (workspaceFolder != null && workspaceFolder !== '') {
+  const workspaceFolder = processEnv.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__
+  if (workspaceFolder != null && workspaceFolder.trim() !== '') {
     return workspaceFolder
   }
 

@@ -12,15 +12,18 @@ const DEFAULT_PACKAGE_TAG = 'latest'
 const NPM_BIN = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 const STALE_LOCK_MS = 5 * 60 * 1000
 
+const readFilesystemPath = value => typeof value === 'string' && value.trim() !== '' ? value : undefined
+
 const resolveRealHomeDir = () => {
-  const realHome = process.env.__ONEWORKS_PROJECT_REAL_HOME__?.trim() || process.env.HOME?.trim()
-  return realHome || os.homedir()
+  return readFilesystemPath(process.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
+    readFilesystemPath(process.env.HOME) ??
+    os.homedir()
 }
 
 const resolveBootstrapDataDir = () => path.join(resolveRealHomeDir(), '.oneworks', 'bootstrap')
 
 const resolveBootstrapPackageCacheDir = () => (
-  process.env.__ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__?.trim() || resolveBootstrapDataDir()
+  readFilesystemPath(process.env.__ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__) ?? resolveBootstrapDataDir()
 )
 
 const sanitizePackageName = packageName => packageName.replace(/^@/, '').replace(/[\\/]/g, '__')
@@ -305,6 +308,7 @@ const decodePayload = () => {
 const main = async () => {
   const { packageName } = decodePayload()
   const { metadataPath } = await resolvePackageVersionMetadataPath(packageName)
+  await ensureDirectory(path.dirname(metadataPath))
   const lockPath = `${metadataPath}.lock`
   if (!(await acquireLock(lockPath))) {
     return

@@ -1,8 +1,7 @@
-import { basename, resolve } from 'node:path'
+import { basename, relative, resolve, sep } from 'node:path'
 
 import { mergeConfigs } from '@oneworks/config'
 import type { Config, WorkspaceAsset } from '@oneworks/types'
-import { normalizePath, resolveRelativePath } from '@oneworks/utils'
 
 import { isDirectory, normalizeWorkspaceConfig, scanWorkspacePatterns } from './workspace-config'
 
@@ -45,7 +44,7 @@ const addCandidate = (
   candidates: Map<string, WorkspaceCandidate>,
   candidate: WorkspaceCandidate
 ) => {
-  const key = normalizePath(candidate.cwd)
+  const key = resolve(candidate.cwd)
   const existing = candidates.get(key)
   if (existing == null) {
     candidates.set(key, candidate)
@@ -59,6 +58,11 @@ const addCandidate = (
     name: candidate.name ?? existing.name,
     description: candidate.description ?? existing.description
   })
+}
+
+const resolveWorkspaceRelativePath = (parentPath: string, targetPath: string) => {
+  const relativePath = relative(parentPath, targetPath)
+  return sep === '\\' ? relativePath.replaceAll('\\', '/') : relativePath
 }
 
 const assignWorkspaceIds = (candidates: WorkspaceCandidate[]) => {
@@ -102,7 +106,7 @@ export const resolveConfiguredWorkspaceAssets = async (params: {
   const candidates = new Map<string, WorkspaceCandidate>()
 
   for (const path of await scanWorkspacePatterns(params.cwd, workspaceConfig.include, workspaceConfig.exclude)) {
-    const relativePath = resolveRelativePath(params.cwd, path)
+    const relativePath = resolveWorkspaceRelativePath(params.cwd, path)
     if (relativePath === '') continue
     addCandidate(candidates, {
       cwd: path,
@@ -122,7 +126,7 @@ export const resolveConfiguredWorkspaceAssets = async (params: {
           name: entry.name,
           description: entry.description,
           cwd: workspaceCwd,
-          path: resolveRelativePath(params.cwd, workspaceCwd),
+          path: resolveWorkspaceRelativePath(params.cwd, workspaceCwd),
           sourcePath
         })
       }
@@ -138,7 +142,7 @@ export const resolveConfiguredWorkspaceAssets = async (params: {
         ]
       )
     ) {
-      const relativePath = resolveRelativePath(params.cwd, path)
+      const relativePath = resolveWorkspaceRelativePath(params.cwd, path)
       if (relativePath === '') continue
       addCandidate(candidates, {
         name: entry.name,
@@ -169,13 +173,13 @@ export const findWorkspaceAsset = (
   workspaces: Array<Extract<WorkspaceAsset, { kind: 'workspace' }>>,
   ref: string
 ) => {
-  const normalizedRef = normalizePath(ref.trim())
+  if (ref.trim() === '') return undefined
   const matches = workspaces.filter(workspace =>
-    workspace.displayName === normalizedRef ||
-    workspace.name === normalizedRef ||
-    workspace.payload.id === normalizedRef ||
-    workspace.payload.path === normalizedRef ||
-    workspace.payload.name === normalizedRef
+    workspace.displayName === ref ||
+    workspace.name === ref ||
+    workspace.payload.id === ref ||
+    workspace.payload.path === ref ||
+    workspace.payload.name === ref
   )
 
   if (matches.length === 0) return undefined

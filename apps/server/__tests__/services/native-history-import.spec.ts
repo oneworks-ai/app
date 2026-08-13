@@ -194,6 +194,44 @@ afterEach(async () => {
 })
 
 describe('native project history import', () => {
+  it.runIf(process.platform !== 'win32')(
+    'preserves exact whitespace-bearing source and workspace identities',
+    async () => {
+      const root = await createTempRoot()
+      const workspace = path.join(root, 'workspace ')
+      const adjacentWorkspace = path.join(root, 'workspace')
+      const home = path.join(root, 'home')
+      const exactSource = path.join(home, '.codex', 'sessions', 'exact.jsonl ')
+      const adjacentSource = path.join(home, '.codex', 'sessions', 'exact.jsonl')
+      const env = createTestEnv(workspace, home)
+      await Promise.all([mkdir(workspace), mkdir(adjacentWorkspace)])
+      await writeJsonl(exactSource, [{
+        type: 'session_meta',
+        timestamp: '2026-08-01T00:00:00.000Z',
+        payload: { cwd: workspace, id: 'exact' }
+      }, {
+        type: 'event_msg',
+        timestamp: '2026-08-01T00:00:01.000Z',
+        payload: { type: 'user_message', message: 'Exact' }
+      }])
+      await writeJsonl(adjacentSource, [{
+        type: 'session_meta',
+        timestamp: '2026-08-01T00:00:00.000Z',
+        payload: { cwd: adjacentWorkspace, id: 'adjacent' }
+      }])
+
+      const preview = await previewNativeProjectHistory({
+        adapters: ['codex'],
+        cwd: workspace,
+        env,
+        homeDir: home,
+        sourcePaths: [exactSource, adjacentSource]
+      })
+      expect(preview.adapters[0]?.candidates.map(candidate => candidate.nativeSessionId)).toEqual(['exact'])
+      expect(preview.adapters[0]?.candidates[0]?.sourcePath).toBe(exactSource)
+    }
+  )
+
   it('previews and migrates Cursor JSONL transcripts for the current project', async () => {
     const root = await createTempRoot()
     const workspace = path.join(root, 'workspace-with-dash')

@@ -1,12 +1,17 @@
-import { relative } from 'node:path'
+import { isAbsolute, relative, sep } from 'node:path'
 
 export const normalizePath = (value: string) => value.split('\\').join('/')
 
+const normalizeFilesystemPath = (value: string) => (
+  sep === '\\' ? normalizePath(value) : value
+)
+
 export const resolveRelativePath = (cwd: string, value: string) => (
-  normalizePath(relative(cwd, value))
+  normalizeFilesystemPath(relative(cwd, value))
 )
 
 export const resolvePromptPath = (cwd: string, value: string) => {
   const relativePath = resolveRelativePath(cwd, value)
-  return relativePath.startsWith('..') ? normalizePath(value) : relativePath
+  const isOutside = relativePath === '..' || relativePath.startsWith('../') || isAbsolute(relativePath)
+  return isOutside ? normalizeFilesystemPath(value) : relativePath
 }

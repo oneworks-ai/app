@@ -235,4 +235,48 @@ describe('pi session preparation', () => {
     )
       .resolves.not.toContain('"decision"')
   })
+
+  it('inherits auth only from the exact whitespace-bearing native agent directory', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'oneworks-pi-agent-path-'))
+    tempDirs.push(root)
+    const cwd = join(root, 'workspace')
+    const projectHome = join(root, 'project-home')
+    const exactAgentDir = join(root, 'agent ')
+    const adjacentAgentDir = join(root, 'agent')
+    await mkdir(cwd, { recursive: true })
+    await mkdir(exactAgentDir, { recursive: true })
+    await mkdir(adjacentAgentDir, { recursive: true })
+    await writeFile(join(exactAgentDir, 'auth.json'), '{"owner":"exact"}\n')
+    await writeFile(join(adjacentAgentDir, 'auth.json'), '{"owner":"adjacent"}\n')
+    const ctx = {
+      ctxId: 'ctx-pi-path',
+      cwd,
+      env: {
+        __ONEWORKS_PROJECT_ADAPTER_PI_AGENT_DIR__: exactAgentDir,
+        __ONEWORKS_PROJECT_ADAPTER_PI_CLI_PATH__: join(root, 'pi'),
+        __ONEWORKS_PROJECT_HOME_PROJECT_DIR__: projectHome,
+        __ONEWORKS_PROJECT_REAL_HOME__: join(root, 'real-home')
+      },
+      cache: { get: async () => undefined, set: async () => ({ cachePath: '' }) },
+      logger: {
+        stream: new PassThrough(),
+        info: () => undefined,
+        warn: () => undefined,
+        error: () => undefined,
+        debug: () => undefined
+      },
+      configs: [{ adapters: { pi: {} } }, undefined]
+    } as AdapterCtx
+
+    const prepared = await preparePiSession(ctx, {
+      type: 'create',
+      runtime: 'cli',
+      sessionId: 'path-session',
+      model: 'default',
+      permissionMode: 'dontAsk',
+      onEvent: () => undefined
+    }, 'stream')
+
+    expect(await readFile(join(prepared.spawnEnv.PI_CODING_AGENT_DIR, 'auth.json'), 'utf8')).toContain('exact')
+  })
 })

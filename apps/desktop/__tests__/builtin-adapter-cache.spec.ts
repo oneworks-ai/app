@@ -28,6 +28,8 @@ const {
   resolveAdapterPackageInstallDir,
   resolveNpmPackageCacheDir,
   resolveNpmPackageInstallDir,
+  resolvePackageCacheRootDir,
+  resolveRealHomeDir,
   runBuiltinPackageCachePreparationOnce,
   sanitizePackageName
 } = require('../src/builtin-adapter-cache.cjs') as typeof import('../src/builtin-adapter-cache.cjs')
@@ -790,6 +792,39 @@ describe('desktop built-in adapter package cache', () => {
       readFile(path.join(resolveAdapterPackageInstallDir(seeded.cacheDir, packageName), 'src', 'models.ts'), 'utf8')
     ).resolves.toContain('configured')
   })
+
+  it.runIf(process.platform !== 'win32')(
+    'preserves exact whitespace-bearing home and cache roots when materializing packages',
+    async () => {
+      const tempDir = await createTempDir('oneworks-desktop-adapter-root-identity-')
+      const exactHome = path.join(tempDir, 'home ')
+      const adjacentHome = path.join(tempDir, 'home')
+      const exactCacheRoot = path.join(tempDir, 'cache ')
+      const adjacentCacheRoot = path.join(tempDir, 'cache')
+      const packageName = '@acme/adapter-root-identity'
+      const sourcePackageDir = await writeSourceAdapterPackage(tempDir, packageName, '1.2.3', 'exact')
+      const env = {
+        __ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__: exactCacheRoot,
+        __ONEWORKS_PROJECT_REAL_HOME__: exactHome
+      }
+
+      const [seeded] = ensureBuiltinAdapterPackageCache({
+        env,
+        packages: [packageName],
+        resolvePackageDir: () => sourcePackageDir
+      })
+
+      expect(resolveRealHomeDir(env)).toBe(exactHome)
+      expect(resolvePackageCacheRootDir(env)).toBe(exactCacheRoot)
+      expect(seeded.cacheDir).toBe(resolveAdapterPackageCacheDir(packageName, '1.2.3', exactHome, exactCacheRoot))
+      expect(seeded.cacheDir).not.toBe(
+        resolveAdapterPackageCacheDir(packageName, '1.2.3', adjacentHome, adjacentCacheRoot)
+      )
+      await expect(
+        readFile(path.join(resolveAdapterPackageInstallDir(seeded.cacheDir, packageName), 'src', 'models.ts'), 'utf8')
+      ).resolves.toContain('exact')
+    }
+  )
 
   it('materializes a built-in plugin and its runtime dependencies into the npm package cache', async () => {
     const tempDir = await createTempDir('oneworks-desktop-plugin-cache-')

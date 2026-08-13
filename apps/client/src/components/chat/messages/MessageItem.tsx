@@ -13,6 +13,7 @@ import type { MarkdownImageRenderProps, MarkdownMediaRenderProps } from '#~/comp
 import type { AgentRoomMemberView } from '#~/components/agent-room'
 import { getAppBrowserLinkUrl, openExternalLink } from '#~/components/markdown-link-context-menu-utils'
 import { RoomPixelAvatar } from '#~/components/room-pixel-avatar/RoomPixelAvatar'
+import { readNonBlankFilesystemPath } from '#~/utils/filesystem-path-identity'
 import { parseWorkspaceFileLinkForWorkspaceRoot } from '#~/utils/link-targets'
 import type { WorkspaceFileLinkTarget } from '#~/utils/link-targets'
 import { resolveMarkdownLinkIntentTarget } from '#~/utils/markdown-link-intent'
@@ -197,8 +198,8 @@ function MessageItemComponent({
   const editableContent = useMemo(() => getEditableMessageContent(msg), [msg])
   const copyableText = useMemo(() => getCopyableMessageText(msg), [msg])
   const resolvedWorkspaceRootPath = sessionInfo?.type === 'init'
-    ? sessionInfo.cwd.trim()
-    : workspaceRootPath?.trim() ?? ''
+    ? readNonBlankFilesystemPath(sessionInfo.cwd) ?? ''
+    : readNonBlankFilesystemPath(workspaceRootPath) ?? ''
   const actionMessageId = originalMessage.id
   const isPersistedMessage = sessionId != null && sessionId !== '' && !actionMessageId.startsWith('local-')
   const canEdit = isPersistedMessage && !isSessionBusy && isUser && editableContent != null

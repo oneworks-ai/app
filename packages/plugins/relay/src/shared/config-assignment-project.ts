@@ -1,16 +1,17 @@
-import { normalizeRelayConfigStringList, unique } from './config-assignment-patch.js'
+import { unique } from './config-assignment-patch.js'
 import type { RelayConfigAssignment, RelayConfigProjectContext } from './config-assignment-types.js'
+import {
+  readRelayFilesystemPath,
+  relayFilesystemPathBasenameCandidate,
+  relayFilesystemPathComparisonKey,
+  relayFilesystemPathFamily
+} from './filesystem-path-identity.js'
+import type { RelayFilesystemPathFamily } from './filesystem-path-identity.js'
 
-const normalizeText = (value: unknown) => (
-  typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
-)
+const normalizeText = (value: unknown) => typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
 
 const gitRepositoryHostPattern = /^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::\d+)?$/iu
-const caseInsensitiveRepositoryHosts = new Set([
-  'bitbucket.org',
-  'github.com',
-  'gitlab.com'
-])
+const caseInsensitiveRepositoryHosts = new Set(['bitbucket.org', 'github.com', 'gitlab.com'])
 
 export const normalizeRelayGitRepositoryIdentity = (value: unknown) => {
   const text = normalizeText(value)
@@ -91,59 +92,73 @@ const matchPattern = (pattern: string, value: string) => {
   return new RegExp(expression, 'u').test(value)
 }
 
-const normalizePath = (value: string) => value.replace(/\\/gu, '/').replace(/\/+$/u, '')
+const normalizeProjectPatterns = (value: unknown) => {
+  const values = typeof value === 'string' ? [value] : Array.isArray(value) ? value : undefined
+  if (values == null) return undefined
+  const patterns = unique(values.flatMap((item): string[] => {
+    if (typeof item !== 'string' || item.trim() === '') return []
+    return [item]
+  }))
+  return patterns.length === 0 ? undefined : patterns
+}
 
-const getPathName = (value: string | undefined) => {
-  if (value == null) return undefined
-  const normalized = normalizePath(value)
-  const segments = normalized.split('/').filter(Boolean)
-  return segments[segments.length - 1]
+interface RelayProjectCandidate {
+  family?: RelayFilesystemPathFamily
+  isBasename?: boolean
+  value: string
 }
 
 const getProjectCandidates = (context: RelayConfigProjectContext) => {
-  const cwd = normalizeText(context.cwd)
-  const workspaceFolder = normalizeText(context.workspaceFolder)
+  const cwd = readRelayFilesystemPath(context.cwd)
+  const workspaceFolder = readRelayFilesystemPath(context.workspaceFolder)
   const gitRepositories = (context.gitRepositories ?? [])
     .flatMap(repository => {
       const text = normalizeText(repository)
       const identity = normalizeRelayGitRepositoryIdentity(repository)
       return [text, identity].filter((value): value is string => value != null)
     })
-  return unique([
-    normalizeText(context.projectId),
-    normalizeText(context.projectName),
-    cwd,
-    workspaceFolder,
-    getPathName(cwd),
-    getPathName(workspaceFolder),
-    ...gitRepositories,
-    ...(cwd == null ? [] : [normalizePath(cwd)]),
-    ...(workspaceFolder == null ? [] : [normalizePath(workspaceFolder)])
-  ].filter((value): value is string => value != null && value !== ''))
+  const candidates: RelayProjectCandidate[] = [
+    ...[normalizeText(context.projectId), normalizeText(context.projectName), ...gitRepositories]
+      .filter((value): value is string => value != null && value !== '')
+      .map(value => ({ value })),
+    ...[cwd, workspaceFolder]
+      .filter((value): value is string => value != null)
+      .map(value => ({ family: relayFilesystemPathFamily(value), value })),
+    ...[relayFilesystemPathBasenameCandidate(cwd), relayFilesystemPathBasenameCandidate(workspaceFolder)]
+      .filter((value): value is NonNullable<typeof value> => value != null)
+      .map(value => ({ ...value, isBasename: true }))
+  ]
+  return [...new Map(candidates.map(candidate => [
+    `${candidate.family ?? 'text'}:${candidate.isBasename === true ? 'basename' : 'value'}:${candidate.value}`,
+    candidate
+  ])).values()]
 }
 
-const matchesProjectPattern = (pattern: string, candidate: string) => {
+const matchesProjectPattern = (pattern: string, candidate: RelayProjectCandidate) => {
   const repositoryPattern = normalizeRelayGitRepositoryIdentity(pattern)
-  const repositoryCandidate = normalizeRelayGitRepositoryIdentity(candidate)
+  const repositoryCandidate = normalizeRelayGitRepositoryIdentity(candidate.value)
   if (repositoryPattern != null && repositoryCandidate != null) {
     return relayGitRepositoryIdentitiesEqual(repositoryPattern, repositoryCandidate)
   }
-  return matchPattern(pattern, candidate)
+  const patternFamily = candidate.isBasename === true && !/[\\/]/u.test(pattern)
+    ? candidate.family
+    : undefined
+  return matchPattern(
+    relayFilesystemPathComparisonKey(pattern, patternFamily, candidate.isBasename === true),
+    relayFilesystemPathComparisonKey(candidate.value, candidate.family, candidate.isBasename === true)
+  )
 }
 
-const matchesAnyPattern = (patterns: string[] | undefined, candidates: string[]) => (
-  patterns == null || patterns.length === 0
-    ? false
-    : patterns.some(pattern => candidates.some(candidate => matchesProjectPattern(pattern, candidate)))
-)
+const matchesAnyPattern = (patterns: string[] | undefined, candidates: RelayProjectCandidate[]) =>
+  patterns?.some(pattern => candidates.some(candidate => matchesProjectPattern(pattern, candidate))) === true
 
 export const matchesRelayConfigProject = (
   assignment: Pick<RelayConfigAssignment, 'project'>,
   context: RelayConfigProjectContext
 ) => {
   const candidates = getProjectCandidates(context)
-  const allow = normalizeRelayConfigStringList(assignment.project?.allow)
-  const deny = normalizeRelayConfigStringList(assignment.project?.deny)
+  const allow = normalizeProjectPatterns(assignment.project?.allow)
+  const deny = normalizeProjectPatterns(assignment.project?.deny)
 
   if (matchesAnyPattern(deny, candidates)) return false
   if (allow == null || allow.length === 0) return true

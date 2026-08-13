@@ -23,11 +23,12 @@ import type { RuntimeEvent, RuntimeEventDraft, RuntimeMeta, RuntimeState } from 
 import type { Config } from '@oneworks/types'
 import { resolveProjectHomePath, resolveProjectWorkspaceFolder } from '@oneworks/utils/ai-path'
 import {
-  resolveProjectPrimaryWorkspaceFolder,
-  resolveProjectSharedWorkspaceFolder
+  PROJECT_PRIMARY_WORKSPACE_FOLDER_ENV,
+  resolveProjectPrimaryWorkspaceFolder
 } from '@oneworks/utils/project-cache-path'
 
 import { getDb } from '#~/db/index.js'
+import { readGitCommonDirControlFilePath, readGitdirControlFilePath } from '#~/utils/git-control-file.js'
 import { logger } from '#~/utils/logger.js'
 
 import { discoverRuntimeSessionStores } from './discovery.js'
@@ -255,6 +256,10 @@ const asString = (value: unknown) => (
   typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
 )
 
+const asFilesystemPath = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== '' ? value : undefined
+)
+
 const isGrokSyntheticUser = (value: Record<string, unknown>) => (
   value.type === 'user' && asString(value.synthetic_reason) != null
 )
@@ -288,6 +293,14 @@ const normalizeRealPath = (value: string) => {
   } catch {
     return resolved
   }
+}
+
+const resolveNativeHistoryPrimaryWorkspaceFolder = (cwd: string, env: NodeJS.ProcessEnv) => {
+  const explicitPrimaryWorkspaceFolder = asFilesystemPath(env[PROJECT_PRIMARY_WORKSPACE_FOLDER_ENV])
+  if (explicitPrimaryWorkspaceFolder != null) {
+    return normalizeRealPath(path.resolve(cwd, explicitPrimaryWorkspaceFolder))
+  }
+  return resolveProjectPrimaryWorkspaceFolder(cwd, {})
 }
 
 const findExistingPath = (value: string) => {
@@ -324,14 +337,8 @@ const findGitMetadataDir = (startPath: string): string | undefined => {
     }
     if (existsSync(dotGitPath)) {
       try {
-        const content = readFileSync(dotGitPath, 'utf8').trim()
-        const prefix = 'gitdir:'
-        if (content.toLowerCase().startsWith(prefix)) {
-          const gitDir = content.slice(prefix.length).trim()
-          if (gitDir !== '') {
-            return path.resolve(current, gitDir)
-          }
-        }
+        const gitDir = readGitdirControlFilePath(readFileSync(dotGitPath, 'utf8'))
+        if (gitDir != null) return path.resolve(current, gitDir)
       } catch {}
     }
 
@@ -345,8 +352,8 @@ const findGitMetadataDir = (startPath: string): string | undefined => {
 
 const resolveGitCommonDir = (gitDir: string) => {
   try {
-    const commonDir = readFileSync(path.join(gitDir, 'commondir'), 'utf8').trim()
-    if (commonDir !== '') {
+    const commonDir = readGitCommonDirControlFilePath(readFileSync(path.join(gitDir, 'commondir'), 'utf8'))
+    if (commonDir != null) {
       return normalizeRealPath(path.resolve(gitDir, commonDir))
     }
   } catch {}
@@ -721,7 +728,7 @@ const readCodexThreadMetadataIndex = async (homeDir: string): Promise<CodexThrea
     const threadRolloutPaths = new Map<string, string>()
     for (const row of rows) {
       const nativeSessionId = asString(row.id)
-      const sourcePath = asString(row.rollout_path)
+      const sourcePath = asFilesystemPath(row.rollout_path)
       if (nativeSessionId != null && sourcePath != null) {
         threadRolloutPaths.set(nativeSessionId, sourcePath)
       }
@@ -733,7 +740,7 @@ const readCodexThreadMetadataIndex = async (homeDir: string): Promise<CodexThrea
       if (nativeSessionId == null) {
         continue
       }
-      const sourcePath = asString(row.rollout_path)
+      const sourcePath = asFilesystemPath(row.rollout_path)
       const gitOriginUrl = asString(row.git_origin_url)
       const spawnStatus = spawnEdges.get(nativeSessionId)?.status
       const threadSource = asString(row.thread_source)
@@ -741,7 +748,7 @@ const readCodexThreadMetadataIndex = async (homeDir: string): Promise<CodexThrea
       const isCompletedSubagent = completedSubagentThreadIds.has(nativeSessionId)
       const metadata: CodexThreadMetadata = {
         createdAt: readCodexThreadTimestamp(row.created_at_ms, row.created_at),
-        cwd: asString(row.cwd),
+        cwd: asFilesystemPath(row.cwd),
         gitOriginUrl: gitOriginUrl == null ? undefined : normalizeRemoteUrl(gitOriginUrl),
         isArchived: isArchived === true || spawnStatus === 'closed' || isCompletedSubagent ? true : isArchived,
         isListed: sessionIndexThreadNames.has(nativeSessionId),
@@ -1020,7 +1027,7 @@ const resolveSourceDirs = (
   }
 
   if (adapter === 'grok') {
-    const grokHome = asString(env.GROK_HOME) ?? path.join(homeDir, '.grok')
+    const grokHome = asFilesystemPath(env.GROK_HOME) ?? path.join(homeDir, '.grok')
     return [path.join(grokHome, 'sessions')]
   }
 
@@ -1036,6 +1043,7 @@ const listNativeHistoryJsonlFiles = async (
   if (sourcePaths != null) {
     const seenPaths = new Set<string>()
     return sourcePaths
+      .filter(filePath => path.basename(filePath).trimEnd().endsWith('.jsonl'))
       .map(filePath => path.resolve(filePath))
       .filter((filePath) => {
         const normalizedPath = normalizeRealPath(filePath)
@@ -1045,7 +1053,6 @@ const listNativeHistoryJsonlFiles = async (
         seenPaths.add(normalizedPath)
         return true
       })
-      .filter(filePath => filePath.endsWith('.jsonl'))
       .filter(filePath => sourceDirs.some(sourceDir => isPathInside(sourceDir, filePath)))
       .filter((filePath) => {
         try {
@@ -1076,7 +1083,7 @@ const readGrokSessionMetadata = (filePath: string): GrokSessionMetadata | undefi
     const gitRemotes = asStringArray(summary.git_remotes)
     return {
       nativeSessionId,
-      cwd: asString(info?.cwd),
+      cwd: asFilesystemPath(info?.cwd),
       createdAt: getEventTime(summary.created_at, 0) || undefined,
       updatedAt: getEventTime(summary.last_active_at ?? summary.updated_at, 0) || undefined,
       title: asString(summary.session_summary),
@@ -1091,7 +1098,7 @@ const readGrokSessionMetadata = (filePath: string): GrokSessionMetadata | undefi
 const resolveProjectMatchContext = (cwd: string, env: NodeJS.ProcessEnv): ProjectMatchContext => {
   const workspaceFolder = resolveProjectWorkspaceFolder(cwd, env)
   const runtimeEnv = createWorkspaceRuntimeEnv(workspaceFolder, env)
-  const primaryWorkspaceFolder = resolveProjectPrimaryWorkspaceFolder(workspaceFolder, runtimeEnv)
+  const primaryWorkspaceFolder = resolveNativeHistoryPrimaryWorkspaceFolder(workspaceFolder, runtimeEnv)
   const roots = unique(
     [
       cwd,
@@ -1208,7 +1215,7 @@ const resolveConversationWorkspaceCwd = (
     }
 
     const candidateEnv = createWorkspaceRuntimeEnv(candidateCwd, env)
-    const sharedWorkspace = resolveProjectSharedWorkspaceFolder(candidateCwd, candidateEnv)
+    const sharedWorkspace = resolveNativeHistoryPrimaryWorkspaceFolder(candidateCwd, candidateEnv) ?? candidateCwd
     let workspaceCwd: string
     try {
       workspaceCwd = statSync(sharedWorkspace).isDirectory()
@@ -1404,7 +1411,7 @@ const readConversationPreview = async (
       if (adapter === 'codex') {
         const payload = isRecord(value.payload) ? value.payload : undefined
         if (value.type === 'session_meta') {
-          cwd ??= asString(payload?.cwd)
+          cwd ??= asFilesystemPath(payload?.cwd)
           nativeSessionId ??= asString(payload?.id)
           createdAt = getEventTime(payload?.timestamp, timestamp)
           title ??= asString(payload?.thread_name)
@@ -1423,7 +1430,7 @@ const readConversationPreview = async (
           title ??= readContentText(value.content)
         }
       } else {
-        cwd ??= asString(value.cwd)
+        cwd ??= asFilesystemPath(value.cwd)
         nativeSessionId ??= asString(value.sessionId) ?? asString(value.session_id)
         if (createdAt === 0) {
           createdAt = timestamp
@@ -1615,7 +1622,7 @@ const parseCodexConversation = (
     }
   }
 
-  const cwd = codexThreadMetadata?.cwd ?? asString(sessionMeta?.cwd)
+  const cwd = codexThreadMetadata?.cwd ?? asFilesystemPath(sessionMeta?.cwd)
   if (
     !isConversationInProjectScope(cwd, projectContext, projectScope, codexThreadMetadata?.gitOriginUrl) ||
     messages.length === 0
@@ -1689,7 +1696,7 @@ const parseClaudeConversation = (
       createdAt = timestamp
     }
     updatedAt = Math.max(updatedAt, timestamp)
-    cwd ??= asString(value.cwd)
+    cwd ??= asFilesystemPath(value.cwd)
     nativeSessionId ??= asString(value.sessionId) ?? asString(value.session_id)
 
     if (value.type === 'summary') {
@@ -2030,12 +2037,12 @@ const readConversationCwdFromRecords = (
     }
     if (adapter === 'codex') {
       const payload = isRecord(record.value.payload) ? record.value.payload : undefined
-      const cwd = record.value.type === 'session_meta' ? asString(payload?.cwd) : undefined
+      const cwd = record.value.type === 'session_meta' ? asFilesystemPath(payload?.cwd) : undefined
       if (cwd != null) {
         return cwd
       }
     } else if (adapter !== 'cursor') {
-      const cwd = asString(record.value.cwd)
+      const cwd = asFilesystemPath(record.value.cwd)
       if (cwd != null) {
         return cwd
       }

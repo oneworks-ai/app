@@ -4,16 +4,16 @@ import process from 'node:process'
 
 import type { AdapterCtx } from '@oneworks/types'
 
-const readString = (value: unknown) => (
-  typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
+const readFilesystemPath = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== '' ? value : undefined
 )
 
 export const resolveRealHome = (env: AdapterCtx['env']) => (
-  readString(env.__ONEWORKS_PROJECT_REAL_HOME__) ??
-    readString(process.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
+  readFilesystemPath(env.__ONEWORKS_PROJECT_REAL_HOME__) ??
+    readFilesystemPath(process.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
     homedir()
 )
 
 export const resolveRealCodexHome = (env: AdapterCtx['env']) => (
-  resolve(readString(env.CODEX_HOME) ?? resolve(resolveRealHome(env), '.codex'))
+  resolve(readFilesystemPath(env.CODEX_HOME) ?? resolve(resolveRealHome(env), '.codex'))
 )

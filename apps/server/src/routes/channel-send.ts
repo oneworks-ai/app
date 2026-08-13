@@ -18,6 +18,10 @@ const trimNonEmpty = (value: unknown) => {
   return trimmed === '' ? undefined : trimmed
 }
 
+const readNonBlankFilesystemPath = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== '' ? value : undefined
+)
+
 export function channelSendRouter(): Router {
   const router = new Router()
 
@@ -94,7 +98,7 @@ export function channelSendRouter(): Router {
     const body = isRecord(ctx.request.body) ? ctx.request.body : {}
     const result = await sendChannelMessage({
       channelKey: ctx.params.channelKey,
-      cwd: trimNonEmpty(body.cwd),
+      cwd: readNonBlankFilesystemPath(body.cwd),
       mentions: body.mentions,
       payload: body.message ?? body.payload ?? body.text,
       receiveId: trimNonEmpty(body.receiveId) ?? trimNonEmpty(body.channelId),

@@ -17,9 +17,9 @@ export const resolveChannelMemoryRoot = (
   cwd = processCwd(),
   env: NodeJS.ProcessEnv = processEnv
 ) => {
-  const serverDataDir = env.__ONEWORKS_PROJECT_SERVER_DATA_DIR__?.trim()
+  const serverDataDir = env.__ONEWORKS_PROJECT_SERVER_DATA_DIR__
   return path.resolve(
-    serverDataDir && serverDataDir !== ''
+    serverDataDir != null && serverDataDir.trim() !== ''
       ? serverDataDir
       : resolveProjectHomePath(cwd, env, 'server', 'data'),
     'channel-memory',

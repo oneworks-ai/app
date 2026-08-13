@@ -5,10 +5,14 @@
 ## 边界
 
 - `runtime.ts`：plugin manager 生命周期、注册上下文、命令/API/launcher 调用，以及按 scope 管理 watch 模式和 plugin 变更通知。
+  - cross-runtime endpoint 的 `projectHome` / `workspaceFolder` 是路径与 private-root policy 身份，只允许判空而不 trim；endpoint ID、URL 和普通文本继续使用现有 normalization。
+  - `configHook.entry`、`plugin.server.entry`、`plugin.client.entry` / `root` / `devEntry` / `sourceRoot`、`icon` 与 detail asset roots 是 manifest 到真实 executable / asset / compiler owner 的文件系统身份；serializer 和 runtime lookup 只能判空并保留原始字节，realpath、traversal 与 containment 校验继续在 owner 执行。真实路径验证后才按宿主分隔符逐段编码 public route；route token 不能反过来参与文件系统 lookup。name、version、scope、URL 等非路径字段继续按普通文本归一化。
+  - manifest 显式声明的 `configHook.entry` 与 `client.root` 是权限边界：精确目标缺失、越界或无效时分别禁用 hook / client asset route 并返回安全诊断，不能退回相邻 convention `config.js` 或扩大到整个 plugin root。只有字段真正缺席时才能采用 documented convention。公开 asset MIME 从已验证的声明 / route path hint 分类，不能 trim 或改写真实 filePath。
+  - package export target、native-host asset path 与 watcher 的 `path.relative` 结果服从宿主分隔符；POSIX literal backslash 是文件名字节，不能用跨平台 `/[\\/]/` 拆段、推断 client root、过滤 `node_modules` 或生成 public asset 别名。
 - `discovery.ts`：通过 server config service 与 resolver 获取当前 workspace plugin 实例。
 - `marketplace.ts`：读取当前配置里的插件市场源，解析 catalog，并为前端插件市场返回可搜索的插件条目。
 - `oneworks-official-marketplace.ts`：维护内置 One Works npm 插件白名单与当前应用版本目录；官方包的选择、安装和卸载继续走 `marketplace-selection.ts` / `marketplace-sync.ts`，不要在 route 或前端硬编码包列表。
-- `native-host.ts`：聚合各 adapter 对真实用户 Home 原生插件的只读发现；原生条目与 OneWorks runtime plugin 分开返回，不能进入 runtime activation。
+- `native-host.ts`：聚合各 adapter 对真实用户 Home 原生插件的只读发现；real Home 与 adapter config Home 是文件系统身份，只能判空后把原字符串交给 discovery。原生条目与 OneWorks runtime plugin 分开返回，不能进入 runtime activation。
 - `manifest.ts`：读取目录或 package manifest 中的 `plugin.client/server/contributions` runtime 字段，并按 `package.json` exports 约定补齐 `./client`、`./server` 默认入口。
 - `client-source-compiler.ts`：为 packaged/static/standalone runtime 中显式开启 watch 的本地目录插件，将 `exports["./client"].source` 通过受控 Vite library build 编译成单个内存 ESM；当 manifest 声明的生产 client entry 实际不存在时，同一受控编译路径也是所有插件（包括内置插件）的兜底，运行时不能继续向 client 发布必然 404 的生产 URL。不读取插件自己的 Vite / PostCSS 配置、不写回插件目录，已有可用 `dist` 时仍优先使用生产入口。源码默认只能引用 entry 所在目录；确需复用相邻 client shared 模块时，由插件显式声明受限于 plugin root 内的 `plugin.client.sourceRoot`，不要直接放宽到整个插件目录。
 - 生产 `client` / `server` entry 必须先验证真实文件可用再发布或激活；冷 source worktree 缺少 `dist` 时，统一重用 package export 的 `source` 条件。client 按宿主模式走受控编译器或 host Vite，server 走现有 TS source loader；不要在单个内置插件里补启动特例，也不要把同名根目录文件或逃逸 asset root 的 symlink 当作生产入口。

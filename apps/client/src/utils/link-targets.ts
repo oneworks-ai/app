@@ -1,3 +1,10 @@
+import {
+  getFilesystemPathFamily,
+  isWindowsFilesystemPath,
+  readNonBlankFilesystemPath,
+  stripOptionalTrailingPathSeparators
+} from './filesystem-path-identity'
+
 const IMAGE_EXTENSIONS = new Set([
   'apng',
   'avif',
@@ -13,6 +20,7 @@ const IMAGE_EXTENSIONS = new Set([
 
 const IMAGE_DATA_URL_PATTERN = /^data:image\/[a-z0-9.+-]+[;,]/i
 const URL_SCHEME_PATTERN = /^[a-z][a-z0-9+.-]*:/i
+const WINDOWS_FILESYSTEM_PATH_PATTERN = /^[a-z]:/i
 const PLAIN_WORKSPACE_FILE_PATTERN =
   /(^|[\s([<{])((?:\.\/)?(?:[\w.-]+\/)+[\w.-]+\.[a-z0-9][\w.-]*(?::\d+)?(?::\d+)?)(?=$|[\s)\]}>.,;!?])/gi
 
@@ -27,26 +35,14 @@ export interface WorkspaceFileLinkTarget {
 }
 
 export const getPathExtension = (value: string) => {
-  const trimmed = value.trim()
-  if (trimmed === '') {
-    return ''
-  }
-
-  const pathWithoutHash = trimmed.split('#')[0] ?? ''
-  const pathWithoutQuery = pathWithoutHash.split('?')[0] ?? ''
-  const fileName = pathWithoutQuery.split('/').pop() ?? pathWithoutQuery
+  const path = (value.trim().split('#')[0] ?? '').split('?')[0] ?? ''
+  const fileName = path.split('/').pop() ?? path
   return fileName.includes('.') ? fileName.split('.').pop()?.toLowerCase() ?? '' : ''
 }
 
 export const isLikelyImageUrl = (value: string) => {
   const trimmed = value.trim()
-  if (trimmed === '') {
-    return false
-  }
-
-  if (IMAGE_DATA_URL_PATTERN.test(trimmed)) {
-    return true
-  }
+  if (trimmed === '' || IMAGE_DATA_URL_PATTERN.test(trimmed)) return trimmed !== ''
 
   if (trimmed.startsWith('blob:')) {
     return true
@@ -60,7 +56,10 @@ export const isLikelyImageUrl = (value: string) => {
   }
 }
 
-export const isExternalUrl = (value: string) => URL_SCHEME_PATTERN.test(value.trim())
+export const isExternalUrl = (value: string) => {
+  const trimmed = value.trim()
+  return !WINDOWS_FILESYSTEM_PATH_PATTERN.test(trimmed) && URL_SCHEME_PATTERN.test(trimmed)
+}
 
 const splitLineColumnSuffix = (value: string) => {
   const match = /^(.+?)(?::(\d+))?(?::(\d+))?$/.exec(value)
@@ -83,7 +82,7 @@ const decodeLinkPath = (value: string) => {
 
 export const parseWorkspaceFileLink = (value: string): WorkspaceFileLinkTarget | null => {
   const trimmed = value.trim()
-  if (trimmed === '' || trimmed.startsWith('#') || isExternalUrl(trimmed)) {
+  if (trimmed === '' || trimmed.startsWith('#') || isWindowsFilesystemPath(trimmed) || isExternalUrl(trimmed)) {
     return null
   }
 
@@ -107,7 +106,15 @@ export const parseWorkspaceFileLink = (value: string): WorkspaceFileLinkTarget |
   }
 }
 
-const normalizeWorkspaceRootPath = (value: string | undefined) => value?.trim().replace(/[\\/]+$/, '') ?? ''
+const normalizeWorkspaceRootPath = (value: string | undefined) => {
+  const rawPath = readNonBlankFilesystemPath(value)
+  return rawPath == null ? '' : stripOptionalTrailingPathSeparators(rawPath)
+}
+const normalizeWorkspaceFamilySeparators = (value: string, rootPath: string) => (
+  isWindowsFilesystemPath(rootPath)
+    ? value.replace(/\\/g, '/')
+    : value
+)
 
 export const parseWorkspaceFileLinkForWorkspaceRoot = (
   value: string,
@@ -118,20 +125,32 @@ export const parseWorkspaceFileLinkForWorkspaceRoot = (
     return relativeTarget
   }
 
-  const rootPath = normalizeWorkspaceRootPath(workspaceRootPath).replace(/\\/g, '/')
+  const rawRootPath = normalizeWorkspaceRootPath(workspaceRootPath)
+  const rootPath = normalizeWorkspaceFamilySeparators(rawRootPath, rawRootPath)
   const trimmed = value.trim()
   if (rootPath === '' || trimmed === '' || trimmed.startsWith('#') || isExternalUrl(trimmed)) {
     return null
   }
 
   const splitTarget = splitLineColumnSuffix(
-    decodeLinkPath((trimmed.split('#')[0] ?? '').split('?')[0] ?? '').replace(/\\/g, '/')
+    normalizeWorkspaceFamilySeparators(
+      decodeLinkPath((trimmed.split('#')[0] ?? '').split('?')[0] ?? ''),
+      rawRootPath
+    )
   )
-  if (!splitTarget.path.startsWith(`${rootPath}/`)) {
+  const rootFamily = getFilesystemPathFamily(rawRootPath)
+  const candidateFamily = getFilesystemPathFamily(splitTarget.path)
+  if (rootFamily !== candidateFamily) {
+    return null
+  }
+  const comparableRoot = isWindowsFilesystemPath(rawRootPath) ? rootPath.toLowerCase() : rootPath
+  const comparablePath = isWindowsFilesystemPath(rawRootPath) ? splitTarget.path.toLowerCase() : splitTarget.path
+  const rootPrefix = comparableRoot.endsWith('/') ? comparableRoot : `${comparableRoot}/`
+  if (!comparablePath.startsWith(rootPrefix)) {
     return null
   }
 
-  const path = splitTarget.path.slice(rootPath.length + 1)
+  const path = splitTarget.path.slice(rootPath.length + (rootPath.endsWith('/') ? 0 : 1))
   if (path === '' || path.endsWith('/') || path.split('/').includes('..')) {
     return null
   }

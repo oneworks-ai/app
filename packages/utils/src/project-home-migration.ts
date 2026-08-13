@@ -133,7 +133,7 @@ const resolveSymlinkTypeSync = (sourceTargetPath: string) => {
 }
 
 const splitRelativePathSegments = (rootPath: string, targetPath: string) =>
-  relative(resolve(rootPath), resolve(targetPath)).split(/[\\/]+/).filter(Boolean)
+  relative(resolve(rootPath), resolve(targetPath)).split(sep).filter(Boolean)
 
 const shouldSkipVolatileMigrationPath = (sourcePath: string, context: CopyMigrationContext) => {
   const segments = splitRelativePathSegments(context.sourceRoot, sourcePath)

@@ -1,5 +1,6 @@
 /* eslint-disable max-lines -- relay controller coverage keeps account, config, and document sync scenarios together. */
 import { Buffer } from 'node:buffer'
+import { EventEmitter } from 'node:events'
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -21,8 +22,22 @@ import {
 } from './helpers.js'
 import type { RelayPluginStatus } from './helpers.js'
 
+const processMocks = vi.hoisted(() => ({ platform: vi.fn(), spawn: vi.fn() }))
+
+vi.mock('node:child_process', async (importOriginal) => ({
+  ...await importOriginal<typeof import('node:child_process')>(),
+  spawn: processMocks.spawn
+}))
+
+vi.mock('node:os', async (importOriginal) => ({
+  ...await importOriginal<typeof import('node:os')>(),
+  platform: processMocks.platform
+}))
+
 afterEach(async () => {
   vi.useRealTimers()
+  processMocks.platform.mockReset()
+  processMocks.spawn.mockReset()
   await cleanupPluginFixtures()
 })
 
@@ -33,6 +48,52 @@ const flushAsyncWork = async () => {
 }
 
 describe('relay plugin controller', () => {
+  it('preserves exact document path bytes through controller read and open actions', async () => {
+    processMocks.platform.mockReturnValue('win32')
+    processMocks.spawn.mockImplementation(() => {
+      const child = new EventEmitter() as EventEmitter & { unref: ReturnType<typeof vi.fn> }
+      child.unref = vi.fn()
+      queueMicrotask(() => child.emit('spawn'))
+      return child
+    })
+    const exactPath = '.oo/rules/report&|<>^().md '
+    const adjacentPath = '.oo/rules/report&|<>^().md'
+    const { apis, homeDir } = await createPluginHarness(
+      { autoConnect: false },
+      {
+        prepareHomeDir: async (home) => {
+          await mkdir(join(home, '.oo', 'rules'), { recursive: true })
+          await writeFile(join(home, exactPath), '# exact\n')
+          await writeFile(join(home, adjacentPath), '# adjacent\n')
+        }
+      }
+    )
+    const handler = apis.get('relay')?.handler
+
+    const readResponse = await handler?.({
+      body: Buffer.from(JSON.stringify({ path: exactPath })),
+      method: 'POST',
+      path: 'document-content'
+    }) as { body?: { content?: string; path?: string }; status?: number }
+    const openResponse = await handler?.({
+      body: Buffer.from(JSON.stringify({ mode: 'open', path: exactPath })),
+      method: 'POST',
+      path: 'document-path/open'
+    }) as { body?: { path?: string }; status?: number }
+
+    expect(readResponse).toMatchObject({ body: { content: '# exact\n', path: exactPath }, status: 200 })
+    expect(openResponse).toMatchObject({ body: { path: exactPath }, status: 200 })
+    expect(processMocks.spawn).toHaveBeenCalledWith(
+      'explorer.exe',
+      [join(homeDir, exactPath)],
+      { detached: true, stdio: 'ignore' }
+    )
+    const spawnedArguments = processMocks.spawn.mock.calls[0]?.[1] as string[] | undefined
+    expect(spawnedArguments).toContain(join(homeDir, exactPath))
+    expect(spawnedArguments).not.toContain(join(homeDir, adjacentPath))
+    expect(processMocks.spawn).not.toHaveBeenCalledWith('cmd', expect.anything(), expect.anything())
+  })
+
   it('qualifies Room tunnel ownership and live requests with the Relay server id', async () => {
     stubRelayFetch('remote-device-token', {
       deviceTransport: {

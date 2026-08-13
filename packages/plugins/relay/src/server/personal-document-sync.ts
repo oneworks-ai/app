@@ -7,6 +7,7 @@ import { homedir, platform } from 'node:os'
 import { basename, dirname, extname, relative, resolve, sep } from 'node:path'
 import process from 'node:process'
 
+import { resolveOptionalPath } from '@oneworks/utils'
 import { readOneWorksAuthStore } from '@oneworks/utils/auth-store'
 
 import { relayDocumentScopePathSegment, relayProjectRuleDocumentBasePayloadPath } from '../shared/document-paths.js'
@@ -260,11 +261,9 @@ const readProjectRuleDocumentSnapshotPayload = (
 }
 
 const resolveUserHomeDir = () =>
-  resolve(
-    process.env.__ONEWORKS_PROJECT_REAL_HOME__?.trim() ||
-      process.env.HOME?.trim() ||
-      homedir()
-  )
+  resolveOptionalPath(process.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
+    resolveOptionalPath(process.env.HOME) ??
+    resolve(homedir())
 
 const readPathStat = async (target: string) => {
   try {
@@ -305,8 +304,8 @@ export const isCanonicalRelayDocumentPayloadPath = (path: string) => {
 }
 
 const normalizeDocumentActionPayloadPath = (path: string) => {
-  const trimmed = path.trim()
-  const payloadPath = trimmed.startsWith('~/') ? trimmed.slice(2) : trimmed
+  if (path.trim() === '') return undefined
+  const payloadPath = path.startsWith('~/') ? path.slice(2) : path
   if (
     !isCanonicalRelayDocumentPayloadPath(payloadPath) ||
     (
@@ -367,8 +366,8 @@ export const openRelayDocumentPath = async (
     await spawnDesktopOpen('open', mode === 'reveal' ? ['-R', resolved.target] : [resolved.target])
   } else if (currentPlatform === 'win32') {
     await spawnDesktopOpen(
-      mode === 'reveal' ? 'explorer.exe' : 'cmd',
-      mode === 'reveal' ? [`/select,${resolved.target}`] : ['/c', 'start', '', resolved.target]
+      'explorer.exe',
+      mode === 'reveal' ? [`/select,${resolved.target}`] : [resolved.target]
     )
   } else {
     await spawnDesktopOpen('xdg-open', [mode === 'reveal' ? dirname(resolved.target) : resolved.target])

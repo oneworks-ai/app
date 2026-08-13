@@ -178,10 +178,11 @@ export const createRelayConfigSnapshotForUser = (
     recipientDevice?: RelayDevice
     recipientDeviceToken?: string
     serverArgs?: Pick<RelayServerArgs, 'adminToken' | 'dataPath' | 'deviceMetadataSecret'>
+    shouldFilterProject?: boolean
     sourceServerId?: string
   } = {}
 ): RelayConfigSnapshot => {
-  const shouldFilterProject = hasProjectContext(options.projectContext)
+  const shouldFilterProject = options.shouldFilterProject ?? hasProjectContext(options.projectContext)
   const teamIdsForUser = getRelayUserTeamIds(store, user)
   const legacyAssignments = store.configAssignments
     .map(normalizeRelayConfigAssignment)

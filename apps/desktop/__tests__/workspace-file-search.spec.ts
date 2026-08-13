@@ -1,11 +1,13 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
+  resolveFilesystemDirectoryPath,
   resolveFilesystemFilePath,
+  resolveWorkspaceDirectoryPath,
   resolveWorkspaceFilePath,
   searchFilesystemFiles,
   searchWorkspaceFiles
@@ -88,6 +90,61 @@ describe('workspace file search', () => {
     await expect(resolveWorkspaceFilePath(workspaceFolder, 'outside.txt')).rejects.toThrow(
       'Workspace file path escapes the workspace root.'
     )
+  })
+
+  it('opens exact whitespace-bearing workspace files and directories', async () => {
+    const workspaceFolder = await createWorkspace()
+    const rawDirectory = ' project '
+    const adjacentDirectory = rawDirectory.trim()
+    const rawFile = ' report.txt '
+    const rawFilePath = `${rawDirectory}/${rawFile}`
+    const adjacentFilePath = rawFilePath.trim()
+    await mkdir(join(workspaceFolder, rawDirectory))
+    await mkdir(join(workspaceFolder, adjacentDirectory))
+    await mkdir(join(workspaceFolder, dirname(adjacentFilePath)), { recursive: true })
+    await writeFile(join(workspaceFolder, rawDirectory, rawFile), 'raw\n')
+    await writeFile(join(workspaceFolder, adjacentFilePath), 'adjacent\n')
+
+    await expect(resolveWorkspaceDirectoryPath(workspaceFolder, rawDirectory)).resolves.toBe(
+      await realpath(join(workspaceFolder, rawDirectory))
+    )
+    await expect(resolveWorkspaceFilePath(workspaceFolder, rawFilePath)).resolves.toBe(
+      await realpath(join(workspaceFolder, rawDirectory, rawFile))
+    )
+  })
+
+  it('opens POSIX literal-backslash workspace entries without crossing into nested peers', async () => {
+    if (process.platform === 'win32') return
+    const workspaceFolder = await createWorkspace()
+    const literalDirectory = String.raw`dir\child`
+    const nestedDirectory = 'dir/child'
+    const literalFile = String.raw`dir\file.md`
+    const nestedFile = 'dir/file.md'
+    await mkdir(join(workspaceFolder, literalDirectory))
+    await mkdir(join(workspaceFolder, nestedDirectory), { recursive: true })
+    await writeFile(join(workspaceFolder, literalFile), 'literal\n')
+    await writeFile(join(workspaceFolder, nestedFile), 'nested\n')
+
+    await expect(resolveWorkspaceDirectoryPath(workspaceFolder, literalDirectory)).resolves.toBe(
+      await realpath(join(workspaceFolder, literalDirectory))
+    )
+    await expect(resolveWorkspaceFilePath(workspaceFolder, literalFile)).resolves.toBe(
+      await realpath(join(workspaceFolder, literalFile))
+    )
+  })
+
+  it('opens exact whitespace-bearing absolute files and directories', async () => {
+    const rootFolder = await createWorkspace()
+    const rawDirectory = join(rootFolder, ' absolute ')
+    const adjacentDirectory = rawDirectory.trim()
+    const rawFile = join(rawDirectory, ' file.txt ')
+    await mkdir(rawDirectory)
+    await mkdir(adjacentDirectory)
+    await writeFile(rawFile, 'raw\n')
+    await writeFile(rawFile.trim(), 'adjacent\n')
+
+    await expect(resolveFilesystemDirectoryPath(rawDirectory)).resolves.toBe(await realpath(rawDirectory))
+    await expect(resolveFilesystemFilePath(rawFile)).resolves.toBe(await realpath(rawFile))
   })
 
   it('rejects relative filesystem file paths', async () => {

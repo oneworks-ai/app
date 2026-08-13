@@ -9,7 +9,7 @@ import {
   writeJsonFile
 } from '@oneworks/hooks'
 import type { AdapterCtx } from '@oneworks/types'
-import { syncSymlinkTarget, unlinkMockHomeBridgePaths } from '@oneworks/utils'
+import { resolveOptionalPath, syncSymlinkTarget, unlinkMockHomeBridgePaths } from '@oneworks/utils'
 
 const MANAGED_PLUGIN_FILE_NAME = 'oneworks-hooks.js'
 const DEFAULT_OPENCODE_CONFIG = {
@@ -230,10 +230,12 @@ export const OneWorksHooks = async ({ directory }) => ({
 }
 
 const resolveSourceConfigDir = (ctx: Pick<AdapterCtx, 'env'>) => {
-  const explicit = ctx.env.OPENCODE_CONFIG_DIR?.trim() || process.env.OPENCODE_CONFIG_DIR?.trim()
-  if (explicit) return resolve(explicit)
+  const explicit = resolveOptionalPath(ctx.env.OPENCODE_CONFIG_DIR) ??
+    resolveOptionalPath(process.env.OPENCODE_CONFIG_DIR)
+  if (explicit != null) return explicit
 
-  const realHome = ctx.env.__ONEWORKS_PROJECT_REAL_HOME__?.trim() || process.env.__ONEWORKS_PROJECT_REAL_HOME__?.trim()
+  const realHome = resolveOptionalPath(ctx.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
+    resolveOptionalPath(process.env.__ONEWORKS_PROJECT_REAL_HOME__)
   return realHome ? resolve(realHome, '.config', 'opencode') : undefined
 }
 

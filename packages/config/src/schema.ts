@@ -32,11 +32,13 @@ interface ResolvedAdapterSchemaEntry {
   configKey: string
   contribution: AdapterConfigContribution
   isAlias: boolean
+  preserveConfigKey: boolean
 }
 
 interface AdapterSchemaSpecifier {
   configKey: string
   loadSpecifier: string
+  preserveConfigKey: boolean
 }
 
 export interface ConfigSchemaBundle {
@@ -363,11 +365,13 @@ const composeAdapterEntryValidationSchema = (contribution: AdapterConfigContribu
 
 const resolveAdapterSchemaEntry = (
   configKey: string,
-  contribution: AdapterConfigContribution
+  contribution: AdapterConfigContribution,
+  preserveConfigKey = false
 ): ResolvedAdapterSchemaEntry => ({
   configKey,
   contribution,
-  isAlias: configKey !== contribution.adapterKey
+  isAlias: configKey !== contribution.adapterKey,
+  preserveConfigKey
 })
 
 const dedupeResolvedAdapterSchemaEntries = (entries: readonly ResolvedAdapterSchemaEntry[]) =>
@@ -377,9 +381,12 @@ const dedupeResolvedAdapterSchemaEntries = (entries: readonly ResolvedAdapterSch
 
 const getPreferredAdapterEntries = (entries: readonly ResolvedAdapterSchemaEntry[]) => (
   Array.from(
-    new Map(entries.map(entry => [entry.contribution.adapterKey, entry])).values()
+    new Map(entries.map(entry => [entry.preserveConfigKey ? entry.configKey : entry.contribution.adapterKey, entry]))
+      .values()
   ).map((entry) => {
+    if (entry.preserveConfigKey) return entry
     const exactEntry = entries.find(candidate => (
+      candidate.preserveConfigKey === false &&
       candidate.contribution.adapterKey === entry.contribution.adapterKey &&
       candidate.isAlias === false
     ))
@@ -1186,10 +1193,15 @@ const createIssueErrorResult = (issues: readonly z.ZodIssue[]) => ({
   error: new z.ZodError([...issues])
 })
 
-const dedupeAdapterSchemaSpecifiers = (specifiers: readonly AdapterSchemaSpecifier[]) =>
-  Array.from(
-    new Map(specifiers.map(specifier => [specifier.configKey, specifier])).values()
-  )
+const dedupeAdapterSchemaSpecifiers = (specifiers: readonly AdapterSchemaSpecifier[]) => {
+  const byConfigKey = new Map<string, AdapterSchemaSpecifier>()
+  for (const specifier of specifiers) {
+    if (!byConfigKey.has(specifier.configKey)) {
+      byConfigKey.set(specifier.configKey, specifier)
+    }
+  }
+  return Array.from(byConfigKey.values())
+}
 
 export const composeBaseConfigSchemaBundle = () =>
   createBundle(
@@ -1214,14 +1226,16 @@ export const composeWorkspaceConfigSchemaBundle = async (
       })
       return {
         configKey: adapter.key,
-        loadSpecifier: adapterTarget.loadSpecifier
+        loadSpecifier: adapterTarget.loadSpecifier,
+        preserveConfigKey: isPathSpecifier(adapterTarget.loadSpecifier)
       }
     }),
     ...Array.from(packageNames)
       .filter(isAdapterPackageName)
       .map(packageName => ({
         configKey: adapterPackageNameToKey(packageName),
-        loadSpecifier: packageName
+        loadSpecifier: packageName,
+        preserveConfigKey: false
       }))
   ])
   const channelSpecifiers = new Set<string>([
@@ -1233,7 +1247,9 @@ export const composeWorkspaceConfigSchemaBundle = async (
     await Promise.all(
       adapterSpecifiers.map(async (specifier) => {
         const contribution = await loadAdapterContribution(specifier.loadSpecifier, options.cwd)
-        return contribution == null ? undefined : resolveAdapterSchemaEntry(specifier.configKey, contribution)
+        return contribution == null
+          ? undefined
+          : resolveAdapterSchemaEntry(specifier.configKey, contribution, specifier.preserveConfigKey)
       })
     )
   ).filter((entry): entry is ResolvedAdapterSchemaEntry => entry != null))

@@ -22,8 +22,13 @@ const syncCopilotMockHomeSymlink = async (params: {
   await syncCopilotManagedSymlink(params)
 }
 
+const readFilesystemPath = (value: string | null | undefined) => (
+  value != null && value.trim() !== '' ? value : undefined
+)
+
 const syncCopilotMockHomeKeychains = async (ctx: Pick<AdapterCtx, 'cwd' | 'env'>) => {
-  const realHome = ctx.env.__ONEWORKS_PROJECT_REAL_HOME__?.trim() || process.env.__ONEWORKS_PROJECT_REAL_HOME__?.trim()
+  const realHome = readFilesystemPath(ctx.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
+    readFilesystemPath(process.env.__ONEWORKS_PROJECT_REAL_HOME__)
   const targetPath = resolve(resolveCopilotMockHome(ctx), 'Library', 'Keychains')
 
   if (realHome == null || realHome === '') {

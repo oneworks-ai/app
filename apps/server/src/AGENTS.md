@@ -36,6 +36,8 @@ server 运行时通过 `__ONEWORKS_PROJECT_SERVER_ROLE__` 区分两类角色：
 
 配置约定：server 侧读取项目/用户配置时，统一经过 services/config/，避免在各模块内直接重复调用 loadConfig 和拼接 jsonVariables。
 
+workspace folder、launch cwd 和其他文件系统身份从 CLI / env / manager / plugin transport 进入后，只能用 `trim()` 判断空值；runtime child、config cwd、静态 client env、session/plugin projection 与持久化必须继续传递原字符串。ID、标题、消息和普通配置文本仍按各自契约归一化。
+
 DB 约定：schema 初始化必须走 `db/initSchema + schema modules` 的组合方式；新增领域时在 `db/*.schema.ts` 独立维护表结构和迁移，再由 `db/index.ts` 注入，避免单文件持续堆积。
 
 领域约定：automation 不再放在 src/automation；规则执行、legacy 数据兼容和 scheduler 状态统一收敛到 services/automation/，routes/automation.ts 只保留 HTTP 入参与响应处理。

@@ -5,7 +5,7 @@ const process = require('node:process')
 
 const shouldOpenCurrentWorkspace = process.argv.includes('--workspace')
 const env = { ...process.env }
-const launchWorkspace = env.INIT_CWD?.trim() || process.cwd()
+const launchWorkspace = env.INIT_CWD != null && env.INIT_CWD.trim() !== '' ? env.INIT_CWD : process.cwd()
 
 if (shouldOpenCurrentWorkspace) {
   env.ONEWORKS_DESKTOP_WORKSPACE = launchWorkspace

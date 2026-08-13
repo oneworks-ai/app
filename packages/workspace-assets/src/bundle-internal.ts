@@ -22,6 +22,7 @@ import {
   mergeMarketplaceConfigs,
   mergeProcessEnvWithProjectEnv,
   readProjectSkillsLockfile,
+  resolveOptionalPath,
   resolveProjectHomePath,
   resolveProjectOoBaseDir,
   resolveProjectOoEntitiesDir,
@@ -290,23 +291,19 @@ const resolveDisplayName = (name: string, scope?: string) => (
   scope != null && scope.trim() !== '' ? `${scope}/${name}` : name
 )
 
-const toStringList = (value: string | string[] | undefined) => {
+const toFilesystemPathList = (value: string | string[] | undefined) => {
   if (typeof value === 'string' && value.trim() !== '') {
-    return [value.trim()]
+    return [value]
   }
 
   if (!Array.isArray(value)) return [] as string[]
 
   return value
     .filter((item): item is string => typeof item === 'string' && item.trim() !== '')
-    .map(item => item.trim())
 }
 
-const resolveRealHomeDir = (env: NodeJS.ProcessEnv) => {
-  const value = env.__ONEWORKS_PROJECT_REAL_HOME__?.trim() || env.HOME?.trim()
-  if (value == null || value === '') return undefined
-  return resolve(value)
-}
+const resolveRealHomeDir = (env: NodeJS.ProcessEnv) =>
+  resolveOptionalPath(env.__ONEWORKS_PROJECT_REAL_HOME__) ?? resolveOptionalPath(env.HOME)
 
 const warnInvalidHomeSkillRoot = (root: string) => {
   console.warn(
@@ -336,7 +333,7 @@ const resolveHomeBridgeConfig = (configs: [Config?, Config?]) => {
 
   return {
     enabled: userHomeBridge?.enabled ?? projectHomeBridge?.enabled ?? true,
-    roots: toStringList(userHomeBridge?.roots ?? projectHomeBridge?.roots)
+    roots: toFilesystemPathList(userHomeBridge?.roots ?? projectHomeBridge?.roots)
   }
 }
 

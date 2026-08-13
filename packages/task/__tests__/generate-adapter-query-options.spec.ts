@@ -11,7 +11,8 @@ const tempDirs: string[] = []
 const originalRuntimeProtocolConsumer = process.env.__ONEWORKS_RUNTIME_PROTOCOL_CONSUMER__
 const originalProjectHomeProjectsDir = process.env.__ONEWORKS_PROJECT_HOME_PROJECTS_DIR__
 const originalProjectWorkspaceFolder = process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__
-const originalPackageCacheDir = process.env.__ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__
+const originalDisableGlobalConfig = process.env.__ONEWORKS_PROJECT_DISABLE_GLOBAL_CONFIG__
+const originalProjectRealHome = process.env.__ONEWORKS_PROJECT_REAL_HOME__
 
 const createWorkspace = async () => {
   const dir = await mkdtemp(join(tmpdir(), 'generate-adapter-query-options-'))
@@ -40,10 +41,15 @@ afterEach(async () => {
   } else {
     process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__ = originalProjectWorkspaceFolder
   }
-  if (originalPackageCacheDir == null) {
-    delete process.env.__ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__
+  if (originalDisableGlobalConfig == null) {
+    delete process.env.__ONEWORKS_PROJECT_DISABLE_GLOBAL_CONFIG__
   } else {
-    process.env.__ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__ = originalPackageCacheDir
+    process.env.__ONEWORKS_PROJECT_DISABLE_GLOBAL_CONFIG__ = originalDisableGlobalConfig
+  }
+  if (originalProjectRealHome == null) {
+    delete process.env.__ONEWORKS_PROJECT_REAL_HOME__
+  } else {
+    process.env.__ONEWORKS_PROJECT_REAL_HOME__ = originalProjectRealHome
   }
   await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
 })
@@ -431,7 +437,8 @@ describe('generateAdapterQueryOptions', () => {
 
   it('merges injected plugins with workspace config plugins in the returned asset bundle', async () => {
     const workspace = await createWorkspace()
-    process.env.__ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__ = join(workspace, '.package-cache')
+    process.env.__ONEWORKS_PROJECT_DISABLE_GLOBAL_CONFIG__ = '1'
+    process.env.__ONEWORKS_PROJECT_REAL_HOME__ = join(workspace, '.home')
     const cliPluginDir = join(workspace, 'node_modules', '@oneworks', 'plugin-cli-skills')
     const loggerPluginDir = join(workspace, 'node_modules', '@oneworks', 'plugin-logger')
 
@@ -500,5 +507,15 @@ describe('generateAdapterQueryOptions', () => {
     expect(resolvedConfig.assetBundle?.hookPlugins.map(asset => asset.packageId)).toEqual([
       '@oneworks/plugin-logger'
     ])
+  })
+
+  it.runIf(process.platform !== 'win32')('preserves an exact whitespace-bearing workspace selector', async () => {
+    const workspace = await createWorkspace()
+    await writeDocument(join(workspace, '.oo.config.json'), JSON.stringify({ workspaces: { include: ['services/*'] } }))
+    await mkdir(join(workspace, 'services', 'billing '), { recursive: true })
+    await mkdir(join(workspace, 'services', 'billing'), { recursive: true })
+
+    const [, resolvedConfig] = await generateAdapterQueryOptions('workspace', 'billing ', workspace)
+    expect(resolvedConfig.workspace?.path).toBe('services/billing ')
   })
 })

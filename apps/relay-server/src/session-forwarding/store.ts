@@ -8,6 +8,10 @@ const toOptionalString = (value: unknown) => {
   return text === '' ? undefined : text
 }
 
+const toOptionalPath = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== '' ? value : undefined
+)
+
 const toTimestamp = (value: unknown) => toOptionalString(value) ?? now()
 
 const normalizeDeviceSession = (
@@ -23,7 +27,7 @@ const normalizeDeviceSession = (
     userId: toOptionalString(value.userId),
     title: toOptionalString(value.title) ?? id,
     state: toOptionalString(value.state) ?? toOptionalString(value.status),
-    workspaceFolder: toOptionalString(value.workspaceFolder),
+    workspaceFolder: toOptionalPath(value.workspaceFolder),
     lastActiveAt: toOptionalString(value.lastActiveAt),
     createdAt: toTimestamp(value.createdAt),
     updatedAt: toOptionalString(value.updatedAt) ?? timestamp

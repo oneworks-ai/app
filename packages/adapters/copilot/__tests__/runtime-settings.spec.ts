@@ -63,6 +63,7 @@ describe('copilot runtime settings', () => {
 
   it('merges workspace trust into the managed Copilot settings by default', async () => {
     const cwd = await makeTempDir()
+    const exactTrustedFolder = join(cwd, 'existing workspace ')
     const { ctx } = makeCtx({ cwd })
     const configDir = await ensureCopilotConfigDir(ctx, {})
 
@@ -70,7 +71,7 @@ describe('copilot runtime settings', () => {
       join(configDir, 'settings.json'),
       JSON.stringify(
         {
-          trustedFolders: ['/existing/workspace'],
+          trustedFolders: [exactTrustedFolder, '   '],
           allowed_urls: ['https://example.com']
         },
         null,
@@ -93,9 +94,37 @@ describe('copilot runtime settings', () => {
     )
 
     expect(JSON.parse(await readFile(join(configDir, 'settings.json'), 'utf8'))).toEqual({
-      trusted_folders: ['/existing/workspace', cwd],
+      trusted_folders: [exactTrustedFolder, cwd],
       allowed_urls: ['https://example.com']
     })
+  })
+
+  it('reads and writes the exact whitespace-bearing configured directory', async () => {
+    const root = await makeTempDir()
+    const adjacentConfigDir = join(root, 'config')
+    const exactConfigDir = join(root, 'config ')
+    await Promise.all([
+      mkdir(adjacentConfigDir, { recursive: true }),
+      mkdir(exactConfigDir, { recursive: true })
+    ])
+    await writeFile(join(adjacentConfigDir, 'settings.json'), '{"sentinel":"adjacent"}\n', 'utf8')
+    const { ctx } = makeCtx({ cwd: root })
+
+    const configDir = await ensureCopilotConfigDir(ctx, { configDir: exactConfigDir })
+    await ensureCopilotRuntimeSettings(
+      ctx,
+      { type: 'create', runtime: 'server', sessionId: 'exact-config', onEvent: () => {} } as any,
+      {},
+      configDir
+    )
+
+    expect(configDir).toBe(exactConfigDir)
+    expect(JSON.parse(await readFile(join(exactConfigDir, 'settings.json'), 'utf8'))).toMatchObject({
+      trusted_folders: [root]
+    })
+    await expect(readFile(join(adjacentConfigDir, 'settings.json'), 'utf8')).resolves.toBe(
+      '{"sentinel":"adjacent"}\n'
+    )
   })
 
   it('removes legacy config.json after migrating it into settings.json', async () => {

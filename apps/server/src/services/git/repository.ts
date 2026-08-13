@@ -8,7 +8,14 @@ import { conflict } from '#~/utils/http.js'
 import type { ParsedGitStatus } from './parsers'
 
 import { parseGitBranches, parseGitStatus } from './parsers'
-import { isGitMissingError, isNotRepositoryError, resolveGitErrorMessage, runGit } from './runner'
+import {
+  isGitMissingError,
+  isNotRepositoryError,
+  resolveGitErrorMessage,
+  runGit,
+  runGitPath,
+  runGitRecords
+} from './runner'
 import { getHeadCommitSummary, getRepositoryChangeSummaries } from './summary'
 import { parseGitWorktrees } from './worktree-parser'
 
@@ -43,7 +50,7 @@ const resolveRepositoryContextForCwd = async (
   }
 
   try {
-    const { stdout } = await runGit(['rev-parse', '--show-toplevel'], cwd)
+    const { stdout } = await runGitPath(['rev-parse', '--show-toplevel'], cwd)
     return {
       available: true,
       cwd,
@@ -99,23 +106,23 @@ export const listRepositoryRemotes = async (repositoryRoot: string) => {
 }
 
 export const getRepositoryStatus = async (repositoryRoot: string): Promise<ParsedGitStatus> => {
-  const { stdout } = await runGit(
-    ['status', '--porcelain=v2', '--branch', '--untracked-files=all', '--ignore-submodules=none'],
+  const { stdout } = await runGitRecords(
+    ['status', '--porcelain=v2', '-z', '--branch', '--untracked-files=all', '--ignore-submodules=none'],
     repositoryRoot
   )
   return parseGitStatus(stdout)
 }
 
 export const getRepositoryBranches = async (repositoryRoot: string, currentBranch: string | null) => {
-  const { stdout } = await runGit(
-    ['for-each-ref', '--format=%(refname:short)\t%(refname)\t%(worktreepath)', 'refs/heads', 'refs/remotes'],
+  const { stdout } = await runGitRecords(
+    ['for-each-ref', '--format=%(refname:short)%00%(refname)%00%(worktreepath)%00', 'refs/heads', 'refs/remotes'],
     repositoryRoot
   )
   return parseGitBranches(stdout, currentBranch)
 }
 
 export const getRepositoryWorktrees = async (repositoryRoot: string): Promise<GitWorktreeSummary[]> => {
-  const { stdout } = await runGit(['worktree', 'list', '--porcelain'], repositoryRoot)
+  const { stdout } = await runGitRecords(['worktree', 'list', '--porcelain', '-z'], repositoryRoot)
   return parseGitWorktrees(stdout, repositoryRoot)
 }
 

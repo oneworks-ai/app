@@ -6,7 +6,7 @@ import type {
   RelayLocalSessionSnapshot,
   RelayLocalSessionSubmitInput
 } from './session-types.js'
-import { isRecord, toString } from './utils.js'
+import { isRecord, toPathString, toString } from './utils.js'
 
 const toOptionalNumber = (value: unknown) => {
   if (typeof value === 'number' && Number.isFinite(value)) return value
@@ -18,6 +18,11 @@ const toOptionalNumber = (value: unknown) => {
 const toOptionalString = (value: unknown) => {
   const text = toString(value)
   return text === '' ? undefined : text
+}
+
+const toOptionalPath = (value: unknown) => {
+  const path = toPathString(value)
+  return path === '' ? undefined : path
 }
 
 export const normalizeLocalRelaySession = (value: unknown): RelayLocalSession | undefined => {
@@ -34,7 +39,7 @@ export const normalizeLocalRelaySession = (value: unknown): RelayLocalSession | 
     messageCount: toOptionalNumber(value.messageCount),
     model: toOptionalString(value.model),
     adapter: toOptionalString(value.adapter),
-    workspaceFolder: toOptionalString(value.workspaceFolder)
+    workspaceFolder: toOptionalPath(value.workspaceFolder)
   }
 }
 

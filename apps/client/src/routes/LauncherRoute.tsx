@@ -3,7 +3,7 @@ import './LauncherRoute.scss'
 
 import { App, Dropdown, Tooltip } from 'antd'
 import type { MenuProps } from 'antd'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -56,7 +56,21 @@ import { createOneWorksIconDataUri } from '#~/utils/oneworks-icon'
 import { getShortcutDisplayTokens, isShortcutMatch } from '#~/utils/shortcutUtils'
 import { resolveWorkspaceFileOpenerSelectModels } from '#~/utils/workspace-file-openers'
 import { rememberWorkspaceConnection } from '#~/workspace-connection-state'
+
+import { createLauncherDirectoryCommandDescriptor } from './launcher-directory-command-descriptor'
+import {
+  buildDirectoryBreadcrumbs,
+  buildLauncherDirectoryRoutePath,
+  getDirectoryDisplayName,
+  hasNonBlankDirectoryPath,
+  isDirectoryPathInSameParent,
+  isLikelyAbsoluteDirectoryPath,
+  normalizeDirectoryPathKey,
+  normalizeStoredDirectoryPaths,
+  rememberDirectoryPath
+} from './launcher-directory-paths'
 import { resolveLauncherInputKeyAction } from './launcher-input-keyboard'
+import { createLauncherEscapeHandler } from './launcher-interaction-events'
 import { normalizePluginLauncherSearchResults } from './launcher-plugin-search'
 import type {
   LauncherRelayDeviceProject,
@@ -70,6 +84,12 @@ import {
   resolveLauncherUrlNavigation
 } from './launcher-route-state'
 import type { LauncherRoutingMode, LauncherViewMode } from './launcher-route-state'
+import {
+  LauncherWorkspaceOpenControllerOwnerContext,
+  createLauncherWorkspaceOpenController,
+  createLauncherWorkspaceOpenControllerOwner
+} from './launcher-workspace-open-lifecycle'
+import type { LauncherOpeningWorkspace, LauncherWorkspaceOpenLease } from './launcher-workspace-open-lifecycle'
 
 const emptyWorkspaceSelectorState: DesktopWorkspaceSelectorState = {
   recentProjects: [],
@@ -157,7 +177,7 @@ const encodeLauncherPathSegment = (value: string) => encodeURIComponent(value)
 
 const readLauncherDirectoryPathFromSearch = (search: string) => {
   const directory = new URLSearchParams(search).get(LAUNCHER_DIRECTORY_PATH_SEARCH_PARAM)
-  return directory == null || directory.trim() === '' ? undefined : directory
+  return hasNonBlankDirectoryPath(directory) ? directory : undefined
 }
 
 const readLauncherDirectoryRouteState = (
@@ -178,18 +198,6 @@ const readLauncherDirectoryRouteState = (
     mode,
     targetId: safeDecodeLauncherPathSegment(segments[3]) ?? 'local'
   }
-}
-
-const buildLauncherDirectoryRoutePath = (
-  mode: LauncherDirectoryBrowserMode,
-  targetId: string,
-  directory?: string
-) => {
-  const routePath = `/launcher/browse/${encodeLauncherPathSegment(mode)}/${encodeLauncherPathSegment(targetId)}`
-  const normalizedDirectory = directory?.trim()
-  return normalizedDirectory == null || normalizedDirectory === ''
-    ? routePath
-    : `${routePath}/${encodeLauncherPathSegment(normalizedDirectory)}`
 }
 
 const buildLauncherDirectoryRouteSearch = (search: string) => {
@@ -348,15 +356,12 @@ const getStoredCloneDestinationDirectoryList = (storageKey: string) => {
     const parsed = JSON.parse(localStorage.getItem(storageKey) ?? '[]') as unknown
     if (!Array.isArray(parsed)) return []
 
-    const seenDirectories = new Set<string>()
-    return parsed.flatMap((value) => {
-      if (typeof value !== 'string') return []
-      const normalizedDirectory = value.trim()
-      if (normalizedDirectory === '' || seenDirectories.has(normalizedDirectory)) return []
-
-      seenDirectories.add(normalizedDirectory)
-      return [normalizedDirectory]
-    })
+    return normalizeStoredDirectoryPaths(
+      parsed,
+      storageKey === CLONE_DESTINATION_FAVORITES_STORAGE_KEY
+        ? CLONE_DESTINATION_FAVORITE_LIMIT
+        : CLONE_DESTINATION_RECENT_LIMIT
+    )
   } catch {
     return []
   }
@@ -427,88 +432,8 @@ const persistCloneDestinationFavoriteDirectories = (directories: string[]) => {
   } catch {}
 }
 
-const rememberCloneDestinationDirectory = (directories: string[], directory: string) => {
-  const normalizedDirectory = directory.trim()
-  if (normalizedDirectory === '') return directories
-
-  return [
-    normalizedDirectory,
-    ...directories.filter(candidate => candidate !== normalizedDirectory)
-  ].slice(0, CLONE_DESTINATION_RECENT_LIMIT)
-}
-
-const getDirectoryDisplayName = (directory: string) => {
-  const normalizedDirectory = directory.replace(/[\\/]+$/u, '')
-  const name = normalizedDirectory.split(/[\\/]/u).filter(Boolean).at(-1)
-  return name == null || name === '' ? directory : name
-}
-
-const isLikelyAbsoluteDirectoryPath = (directory: string) => {
-  const trimmedDirectory = directory.trim()
-  return trimmedDirectory.startsWith('/') || /^[a-z]:[\\/]/iu.test(trimmedDirectory)
-}
-
-const normalizeDirectoryPathKey = (directory: string) => {
-  const normalizedDirectory = directory
-    .trim()
-    .replace(/[\\/]+/gu, '/')
-    .replace(/\/+$/u, '') || '/'
-  return /^[a-z]:/iu.test(normalizedDirectory) ? normalizedDirectory.toLowerCase() : normalizedDirectory
-}
-
-const isDirectoryPathInSameParent = (directory: string, parentDirectory: string) => {
-  const normalizedDirectory = directory.trim().replace(/[\\/]+$/u, '')
-  const parentBreadcrumb = buildDirectoryBreadcrumbs(normalizedDirectory).at(-2)
-  return parentBreadcrumb != null &&
-    normalizeDirectoryPathKey(parentBreadcrumb.path) === normalizeDirectoryPathKey(parentDirectory)
-}
-
-const buildDirectoryBreadcrumbs = (directory: string) => {
-  const trimmedDirectory = directory.trim()
-  if (trimmedDirectory === '') return []
-
-  const separator = trimmedDirectory.includes('\\') ? '\\' : '/'
-  const windowsDriveMatch = /^([a-z]:)/iu.exec(trimmedDirectory)
-  if (windowsDriveMatch != null) {
-    const drivePrefix = windowsDriveMatch[1]
-    const rootPath = `${drivePrefix}${separator}`
-    const segments = trimmedDirectory
-      .slice(drivePrefix.length)
-      .replace(/^[\\/]+/u, '')
-      .split(/[\\/]+/u)
-      .filter(Boolean)
-    return segments.reduce<Array<{ label: string; path: string }>>((breadcrumbs, segment) => {
-      const previousPath = breadcrumbs.at(-1)?.path ?? rootPath
-      breadcrumbs.push({
-        label: segment,
-        path: previousPath.endsWith(separator) ? `${previousPath}${segment}` : `${previousPath}${separator}${segment}`
-      })
-      return breadcrumbs
-    }, [{ label: rootPath, path: rootPath }])
-  }
-
-  if (trimmedDirectory.startsWith('/')) {
-    const segments = trimmedDirectory.replace(/\/+$/u, '').slice(1).split('/').filter(Boolean)
-    return segments.reduce<Array<{ label: string; path: string }>>((breadcrumbs, segment) => {
-      const previousPath = breadcrumbs.at(-1)?.path ?? '/'
-      breadcrumbs.push({
-        label: segment,
-        path: previousPath === '/' ? `/${segment}` : `${previousPath}/${segment}`
-      })
-      return breadcrumbs
-    }, [{ label: '/', path: '/' }])
-  }
-
-  const segments = trimmedDirectory.replace(/[\\/]+$/u, '').split(/[\\/]+/u).filter(Boolean)
-  return segments.reduce<Array<{ label: string; path: string }>>((breadcrumbs, segment) => {
-    const previousPath = breadcrumbs.at(-1)?.path
-    breadcrumbs.push({
-      label: segment,
-      path: previousPath == null ? segment : `${previousPath}${separator}${segment}`
-    })
-    return breadcrumbs
-  }, [])
-}
+const rememberCloneDestinationDirectory = (directories: string[], directory: string) =>
+  rememberDirectoryPath(directories, directory, CLONE_DESTINATION_RECENT_LIMIT)
 interface LauncherFileSearchItem {
   directory: string
   name: string
@@ -541,7 +466,8 @@ const launcherIconThemes = new Set<LauncherDesktopIconSettings['iconTheme']>(ONE
 
 interface LauncherCommand {
   action: () => Promise<void> | void
-  actionLabel?: 'back' | 'clone' | 'create' | 'open'
+  actionIcon?: string
+  actionLabel?: 'back' | 'clone' | 'create' | 'enter-directory' | 'open'
   avatarInitials?: string
   avatarUrl?: string
   automationPath?: string
@@ -558,6 +484,8 @@ interface LauncherCommand {
   removeLabel?: string
   recentSelectionId?: string
   secondaryAction?: () => Promise<void> | void
+  secondaryActionIcon?: string
+  secondaryActionLabel?: string
   subtitle?: string
   title: string
 }
@@ -599,7 +527,7 @@ const buildLauncherPluginCommandSections = (
     const groupOrder = getLauncherPluginSearchResultGroupOrder(result)
     section.order = section.order ?? groupOrder
     section.commands.push({
-      action: () => void options.invokeResult(result),
+      action: () => options.invokeResult(result),
       badge: result.badge,
       icon: result.icon ?? result.groupIcon ?? result.sectionIcon ?? 'layers',
       id: `plugin:${encodeURIComponent(result.id)}`,
@@ -641,11 +569,6 @@ interface LauncherSearchHistoryEntry {
 interface LauncherSearchHistoryState {
   entries: LauncherSearchHistoryEntry[]
   index: number
-}
-
-interface LauncherOpeningWorkspace {
-  name: string
-  path: string
 }
 
 type LauncherDirectoryBrowserTarget =
@@ -848,11 +771,11 @@ const normalizeWorkspaceResourceSearchResults = (value: unknown): DesktopWorkspa
 
 const mergeProjects = (state: DesktopWorkspaceSelectorState) => {
   const projectsByFolder = new Map<string, DesktopWorkspaceSelectorProject>()
-  for (const project of [...state.runningProjects, ...state.recentProjects]) {
-    if (project.workspaceFolder.trim() === '') {
+  for (const project of [...state.recentProjects, ...state.runningProjects]) {
+    if (!hasNonBlankDirectoryPath(project.workspaceFolder)) {
       continue
     }
-    projectsByFolder.set(project.workspaceFolder, project)
+    projectsByFolder.set(normalizeDirectoryPathKey(project.workspaceFolder), project)
   }
   return Array.from(projectsByFolder.values())
 }
@@ -909,11 +832,20 @@ export function LauncherRoute({
   searchWorkspaceResources
 }: LauncherRouteProps = {}) {
   useDesktopUiReady()
+  const launcherRouteRef = useRef<HTMLElement>(null)
+  const launcherModalPortalRef = useRef<HTMLDivElement>(null)
   const { i18n, t } = useTranslation()
   const navigate = useNavigate()
   const location = useLocation()
   const { pluginServerBaseUrl, registry, snapshot } = usePluginContext()
   const { message, modal } = App.useApp()
+  const getLauncherModalContainer = useCallback(() => {
+    const container = launcherModalPortalRef.current
+    if (container == null) {
+      throw new Error('Launcher modal portal owner is unavailable.')
+    }
+    return container
+  }, [])
   const launcherPluginRouteState = useMemo(
     () => routingMode === 'url' ? readLauncherPluginRouteState(location.pathname) : undefined,
     [location.pathname, routingMode]
@@ -995,6 +927,10 @@ export function LauncherRoute({
     setPluginRouteActions(actions ?? [])
   }, [])
   const [openingWorkspace, setOpeningWorkspace] = useState<LauncherOpeningWorkspace>()
+  const sharedWorkspaceOpenControllerOwner = useContext(LauncherWorkspaceOpenControllerOwnerContext)
+  const [localWorkspaceOpenControllerOwner] = useState(createLauncherWorkspaceOpenControllerOwner)
+  const workspaceOpenControllerOwner = sharedWorkspaceOpenControllerOwner ?? localWorkspaceOpenControllerOwner
+  const [workspaceOpenController] = useState(() => createLauncherWorkspaceOpenController({ setOpeningWorkspace }))
   const [settingsOperationHints, setSettingsOperationHints] = useState<LauncherKeyboardHint[]>([])
   const [settingsResetAction, setSettingsResetAction] = useState<LauncherSettingsResetAction>()
   const [injectedSearchChrome, setInjectedSearchChrome] = useState<LauncherSearchChromeExtension>()
@@ -1147,7 +1083,7 @@ export function LauncherRoute({
     })
   }, [isDirectoryBrowserMode, isFileSearchMode, syncLauncherStateToUrl])
   const injectedWorkspaceContext = useMemo(() => {
-    if (workspaceContext == null || workspaceContext.workspaceFolder.trim() === '') return undefined
+    if (workspaceContext == null || !hasNonBlankDirectoryPath(workspaceContext.workspaceFolder)) return undefined
 
     return {
       ...workspaceContext,
@@ -1230,13 +1166,24 @@ export function LauncherRoute({
     directoryBrowserTargetIdRef.current = directoryBrowserTargetId
   }, [directoryBrowserTargetId])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const detach = workspaceOpenControllerOwner.attach(workspaceOpenController)
+    return () => {
+      workspaceOpenController.invalidate({ clearOpening: false })
+      detach()
+    }
+  }, [workspaceOpenController, workspaceOpenControllerOwner])
+
+  useLayoutEffect(() => {
     const wasActive = isLauncherActiveRef.current
     isLauncherActiveRef.current = active
+    if (!active) {
+      workspaceOpenController.invalidate()
+    }
     if (!wasActive && active) {
       setDismissedProjectContextFolder(undefined)
     }
-  }, [active])
+  }, [active, workspaceOpenController])
 
   const focusSearchInput = useCallback(() => {
     window.requestAnimationFrame(() => {
@@ -1427,22 +1374,28 @@ export function LauncherRoute({
   }, [active, desktopApi])
 
   const refreshImportedWorkspaceProjects = useCallback(async () => {
+    const activation = workspaceOpenController.observeActivation()
     const statePromise = desktopApi?.getWorkspaceSelectorState?.() ??
       (desktopApi == null ? getLauncherWorkspaceSelectorState() : undefined)
     if (statePromise == null) {
+      activation.release()
       return
     }
     try {
       const state = await statePromise
+      if (!activation.isCurrent()) return
       setSelectorState(normalizeWorkspaceSelectorState(state))
       setDismissedProjectContextFolder(undefined)
       if (desktopApi == null) {
         setServerLauncherAvailability('available')
       }
     } catch (error) {
+      if (!activation.isCurrent()) return
       console.error('[launcher] failed to refresh imported workspaces', error)
+    } finally {
+      activation.release()
     }
-  }, [desktopApi])
+  }, [desktopApi, workspaceOpenController])
 
   useEffect(() => {
     if (
@@ -1558,7 +1511,7 @@ export function LauncherRoute({
   }, [desktopApi])
 
   useEffect(() => {
-    if (!isDirectoryBrowserMode) {
+    if (!active || !isDirectoryBrowserMode) {
       setCloneDestinationList(emptyCloneDestinationDirectoryList)
       setIsCloneDestinationLoading(false)
       setHasCloneDestinationError(false)
@@ -1582,12 +1535,13 @@ export function LauncherRoute({
     }
 
     const requestTargetId = activeDirectoryBrowserTarget?.id ?? 'local'
+    const activation = workspaceOpenController.observeActivation()
     let disposed = false
     setIsCloneDestinationLoading(true)
     setHasCloneDestinationError(false)
     void listCloneDestinationDirectories(cloneDestinationDirectory)
       .then((value) => {
-        if (disposed) return
+        if (disposed || !activation.isCurrent()) return
         if (directoryBrowserTargetIdRef.current !== requestTargetId) return
         const nextList = normalizeCloneDestinationDirectoryList(value)
         setCloneDestinationList(nextList)
@@ -1606,27 +1560,30 @@ export function LauncherRoute({
         setDirectoryBrowserHomeDirectory(prev => prev ?? nextList.currentDirectory)
       })
       .catch((error) => {
-        if (disposed) return
+        if (disposed || !activation.isCurrent()) return
         if (directoryBrowserTargetIdRef.current !== requestTargetId) return
         console.error('[launcher] failed to list clone destination directories', error)
         setCloneDestinationList(emptyCloneDestinationDirectoryList)
         setHasCloneDestinationError(true)
       })
       .finally(() => {
-        if (!disposed) {
+        if (!disposed && activation.isCurrent()) {
           setIsCloneDestinationLoading(false)
         }
       })
 
     return () => {
       disposed = true
+      activation.release()
     }
   }, [
+    active,
     activeDirectoryBrowserTarget,
     canUseServerLauncher,
     cloneDestinationDirectory,
     desktopApi,
-    isDirectoryBrowserMode
+    isDirectoryBrowserMode,
+    workspaceOpenController
   ])
 
   useEffect(() => {
@@ -1651,55 +1608,71 @@ export function LauncherRoute({
     void message.warning(t('launcher.desktopActionUnavailable'))
   }, [message, t])
 
-  const openWorkspace = useCallback(async (workspaceFolder: string, workspaceName?: string) => {
-    const normalizedWorkspaceFolder = workspaceFolder.trim()
-    if (normalizedWorkspaceFolder === '') {
-      void message.error(t('launcher.openWorkspaceFailed'))
-      focusSearchInput()
-      return
+  const openWorkspace = useCallback(async (
+    workspaceFolder: string,
+    workspaceName?: string,
+    existingLease?: LauncherWorkspaceOpenLease
+  ) => {
+    const lease = existingLease ?? workspaceOpenController.acquire()
+    if (!hasNonBlankDirectoryPath(workspaceFolder)) {
+      if (lease.isCurrent()) {
+        void message.error(t('launcher.openWorkspaceFailed'))
+        focusSearchInput()
+      }
+      return false
     }
 
-    setOpeningWorkspace({
-      name: workspaceName?.trim() || getDirectoryDisplayName(normalizedWorkspaceFolder),
-      path: normalizedWorkspaceFolder
-    })
-
-    const clearOpeningWorkspace = () => {
-      setOpeningWorkspace(current => current?.path === normalizedWorkspaceFolder ? undefined : current)
+    const opening = {
+      name: workspaceName?.trim() || getDirectoryDisplayName(workspaceFolder),
+      path: workspaceFolder
     }
 
-    try {
-      if (desktopApi?.openWorkspace != null) {
-        await desktopApi.openWorkspace(normalizedWorkspaceFolder)
-        onClose?.()
-        window.setTimeout(clearOpeningWorkspace, 320)
-        return
-      }
-
-      if (canUseServerLauncher) {
-        const result = await openLauncherWorkspace(normalizedWorkspaceFolder)
-        const workspaceClientBase = buildWorkspaceClientBase(result.workspaceId)
-        rememberWorkspaceConnection(result, 'local', {
-          managerServerBaseUrl: getLauncherManagerServerBaseUrl()
-        })
-        mergeRuntimeEnv({
-          __ONEWORKS_PROJECT_CLIENT_BASE__: workspaceClientBase,
-          __ONEWORKS_PROJECT_SERVER_BASE_URL__: result.serverBaseUrl,
-          __ONEWORKS_PROJECT_SERVER_ROLE__: 'workspace',
-          __ONEWORKS_PROJECT_WORKSPACE_ID__: result.workspaceId,
-          __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: result.workspaceFolder
-        })
-        window.location.assign(workspaceClientBase)
-        return
-      }
-
-      showDesktopActionUnavailable()
-      clearOpeningWorkspace()
-    } catch (error) {
+    const onError = (error: unknown) => {
       console.error('[launcher] failed to open workspace', error)
       void message.error(t('launcher.openWorkspaceFailed'))
-      clearOpeningWorkspace()
+      focusSearchInput()
     }
+
+    if (desktopApi?.openWorkspace != null) {
+      return workspaceOpenController.open({
+        clearDelayMs: 320,
+        execute: () => desktopApi.openWorkspace?.(workspaceFolder) ?? Promise.resolve(),
+        lease,
+        onError,
+        onSuccess: () => onClose?.(),
+        opening
+      })
+    }
+
+    if (canUseServerLauncher) {
+      return workspaceOpenController.open({
+        clearDelayMs: 320,
+        execute: () => openLauncherWorkspace(workspaceFolder),
+        lease,
+        onError,
+        onSuccess: (result) => {
+          const workspaceClientBase = buildWorkspaceClientBase(result.workspaceId)
+          rememberWorkspaceConnection(result, 'local', {
+            managerServerBaseUrl: getLauncherManagerServerBaseUrl()
+          })
+          mergeRuntimeEnv({
+            __ONEWORKS_PROJECT_CLIENT_BASE__: workspaceClientBase,
+            __ONEWORKS_PROJECT_SERVER_BASE_URL__: result.serverBaseUrl,
+            __ONEWORKS_PROJECT_SERVER_ROLE__: 'workspace',
+            __ONEWORKS_PROJECT_WORKSPACE_ID__: result.workspaceId,
+            __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: result.workspaceFolder
+          })
+          window.location.assign(workspaceClientBase)
+        },
+        opening
+      })
+    }
+
+    if (lease.isCurrent()) {
+      showDesktopActionUnavailable()
+      focusSearchInput()
+    }
+    return false
   }, [
     canUseServerLauncher,
     desktopApi,
@@ -1707,10 +1680,14 @@ export function LauncherRoute({
     message,
     onClose,
     showDesktopActionUnavailable,
-    t
+    t,
+    workspaceOpenController
   ])
 
-  const forgetWorkspace = useCallback(async (workspaceFolder: string) => {
+  const forgetWorkspace = useCallback(async (
+    workspaceFolder: string,
+    lease: LauncherWorkspaceOpenLease
+  ) => {
     const forgetWorkspaceApi = desktopApi?.forgetWorkspace
 
     try {
@@ -1719,9 +1696,10 @@ export function LauncherRoute({
       } else if (canUseServerLauncher) {
         await forgetLauncherWorkspace(workspaceFolder)
       } else {
-        showDesktopActionUnavailable()
+        if (lease.isCurrent()) showDesktopActionUnavailable()
         return
       }
+      if (!lease.isCurrent()) return
       const removedWorkspaceKey = normalizeDirectoryPathKey(workspaceFolder)
       setSelectorState(prev => ({
         ...prev,
@@ -1730,6 +1708,7 @@ export function LauncherRoute({
         )
       }))
     } catch (error) {
+      if (!lease.isCurrent()) return
       console.error('[launcher] failed to remove workspace from recents', error)
       void message.error(t('launcher.projects.removeFailed'))
     }
@@ -1737,6 +1716,7 @@ export function LauncherRoute({
 
   const stopWorkspace = useCallback(async (
     project: DesktopWorkspaceSelectorProject,
+    lease: LauncherWorkspaceOpenLease,
     input: {
       forget?: boolean
     } = {}
@@ -1750,10 +1730,11 @@ export function LauncherRoute({
       } else if (canUseServerLauncher) {
         await stopLauncherWorkspace(project.workspaceFolder, { forget: removed })
       } else {
-        showDesktopActionUnavailable()
+        if (lease.isCurrent()) showDesktopActionUnavailable()
         return
       }
 
+      if (!lease.isCurrent()) return
       const stoppedWorkspaceKey = normalizeDirectoryPathKey(project.workspaceFolder)
       setSelectorState((prev) => {
         const nextRecentProjects = prev.recentProjects.filter(candidate =>
@@ -1778,6 +1759,7 @@ export function LauncherRoute({
           : 'launcher.projects.stopServiceSuccess'
       ))
     } catch (error) {
+      if (!lease.isCurrent()) return
       console.error('[launcher] failed to stop workspace service', error)
       void message.error(getApiErrorMessage(error, t('launcher.projects.stopFailed')))
     }
@@ -1789,16 +1771,33 @@ export function LauncherRoute({
     t
   ])
 
+  const openLauncherConfirmation = useCallback((
+    lease: LauncherWorkspaceOpenLease,
+    createConfirmation: (afterClose: () => void) => ReturnType<typeof modal.confirm>
+  ) => {
+    let confirmation: ReturnType<typeof modal.confirm> | undefined
+    let unregisterInvalidation: () => void = () => {}
+    unregisterInvalidation = lease.onInvalidate(() => confirmation?.destroy())
+    confirmation = createConfirmation(unregisterInvalidation)
+    if (!lease.isCurrent()) confirmation.destroy()
+  }, [])
+
   const confirmForgetWorkspace = useCallback((project: DesktopWorkspaceSelectorProject) => {
-    modal.confirm({
-      cancelText: t('common.cancel'),
-      content: t('launcher.projects.removeConfirmDescription'),
-      okButtonProps: { danger: true },
-      okText: t('launcher.projects.removeConfirmOk'),
-      title: t('launcher.projects.removeConfirmTitle', { name: project.name }),
-      onOk: () => forgetWorkspace(project.workspaceFolder)
-    })
-  }, [forgetWorkspace, modal, t])
+    const lease = workspaceOpenController.acquire()
+    openLauncherConfirmation(lease, afterClose =>
+      modal.confirm({
+        afterClose,
+        cancelText: t('common.cancel'),
+        content: t('launcher.projects.removeConfirmDescription'),
+        getContainer: getLauncherModalContainer,
+        maskTransitionName: '',
+        okButtonProps: { danger: true },
+        okText: t('launcher.projects.removeConfirmOk'),
+        title: t('launcher.projects.removeConfirmTitle', { name: project.name }),
+        transitionName: '',
+        onOk: () => forgetWorkspace(project.workspaceFolder, lease)
+      }))
+  }, [forgetWorkspace, getLauncherModalContainer, modal, openLauncherConfirmation, t, workspaceOpenController])
 
   const confirmStopWorkspace = useCallback((
     project: DesktopWorkspaceSelectorProject,
@@ -1807,33 +1806,39 @@ export function LauncherRoute({
     } = {}
   ) => {
     const removed = input.forget === true
-    modal.confirm({
-      cancelText: t('common.cancel'),
-      content: t(
-        removed
-          ? 'launcher.projects.stopAndRemoveConfirmDescription'
-          : 'launcher.projects.stopServiceConfirmDescription'
-      ),
-      okButtonProps: { danger: true },
-      okText: t(
-        removed
-          ? 'launcher.projects.stopAndRemoveConfirmOk'
-          : 'launcher.projects.stopServiceConfirmOk'
-      ),
-      title: t(
-        removed
-          ? 'launcher.projects.stopAndRemoveConfirmTitle'
-          : 'launcher.projects.stopServiceConfirmTitle',
-        { name: project.name }
-      ),
-      onOk: () => stopWorkspace(project, { forget: removed })
-    })
-  }, [modal, stopWorkspace, t])
+    const lease = workspaceOpenController.acquire()
+    openLauncherConfirmation(lease, afterClose =>
+      modal.confirm({
+        afterClose,
+        cancelText: t('common.cancel'),
+        content: t(
+          removed
+            ? 'launcher.projects.stopAndRemoveConfirmDescription'
+            : 'launcher.projects.stopServiceConfirmDescription'
+        ),
+        getContainer: getLauncherModalContainer,
+        maskTransitionName: '',
+        okButtonProps: { danger: true },
+        okText: t(
+          removed
+            ? 'launcher.projects.stopAndRemoveConfirmOk'
+            : 'launcher.projects.stopServiceConfirmOk'
+        ),
+        title: t(
+          removed
+            ? 'launcher.projects.stopAndRemoveConfirmTitle'
+            : 'launcher.projects.stopServiceConfirmTitle',
+          { name: project.name }
+        ),
+        transitionName: '',
+        onOk: () => stopWorkspace(project, lease, { forget: removed })
+      }))
+  }, [getLauncherModalContainer, modal, openLauncherConfirmation, stopWorkspace, t, workspaceOpenController])
 
   const readDirectoryBrowserInitialDirectory = useCallback((target?: LauncherDirectoryBrowserTarget) => {
     if (target != null && directoryBrowserVisitedTargets[target.id] === true) {
       const rememberedDirectory = directoryBrowserDirectoriesByTarget[target.id]
-      if (rememberedDirectory != null && rememberedDirectory.trim() !== '') return rememberedDirectory
+      if (hasNonBlankDirectoryPath(rememberedDirectory)) return rememberedDirectory
     }
     if (target?.kind === 'relay') return target.initialDirectory
     return recentCloneDestinationDirectories[0] ?? projects[0]?.workspaceFolder
@@ -1925,14 +1930,17 @@ export function LauncherRoute({
       hasRelayDirectoryTargets
     if (!canListDirectories) {
       if (desktopApi?.chooseWorkspace != null) {
+        const lease = workspaceOpenController.acquire()
         try {
           const workspaceFolder = await desktopApi.chooseWorkspace()
-          if (workspaceFolder == null || workspaceFolder.trim() === '') {
+          if (!lease.isCurrent()) return
+          if (!hasNonBlankDirectoryPath(workspaceFolder)) {
             focusSearchInput()
             return
           }
-          await openWorkspace(workspaceFolder)
+          await openWorkspace(workspaceFolder, undefined, lease)
         } catch (error) {
+          if (!lease.isCurrent()) return
           console.error('[launcher] failed to choose workspace', error)
           void message.error(t('launcher.openWorkspaceFailed'))
           focusSearchInput()
@@ -1974,11 +1982,12 @@ export function LauncherRoute({
     readDirectoryBrowserInitialDirectory,
     setLauncherViewModeWithUrl,
     showDesktopActionUnavailable,
-    t
+    t,
+    workspaceOpenController
   ])
 
   const openCloneDestinationDirectory = useCallback((directory: string | undefined) => {
-    if (directory == null || directory.trim() === '') return
+    if (!hasNonBlankDirectoryPath(directory)) return
     const targetId = activeDirectoryBrowserTarget?.id ?? directoryBrowserTargetId
     setCloneDestinationDirectory(directory)
     setDirectoryBrowserDirectoriesByTarget(prev =>
@@ -2010,7 +2019,7 @@ export function LauncherRoute({
       setIsCloneDestinationLoading(true)
     }
     setCloneDestinationDirectory(nextDirectory)
-    if (nextDirectory != null && nextDirectory.trim() !== '') {
+    if (hasNonBlankDirectoryPath(nextDirectory)) {
       setDirectoryBrowserDirectoriesByTarget(prev =>
         prev[target.id] === nextDirectory
           ? prev
@@ -2026,15 +2035,16 @@ export function LauncherRoute({
   }, [directoryBrowserTargetId, focusSearchInput, readDirectoryBrowserInitialDirectory])
 
   const toggleCloneDestinationFavoriteDirectory = useCallback((directory: string) => {
-    const normalizedDirectory = directory.trim()
-    if (normalizedDirectory === '') return
+    if (!hasNonBlankDirectoryPath(directory)) return
+    const directoryKey = normalizeDirectoryPathKey(directory)
 
     setFavoriteCloneDestinationDirectories((prev) => {
-      const next = prev.includes(normalizedDirectory)
-        ? prev.filter(candidate => candidate !== normalizedDirectory)
+      const isFavorite = prev.some(candidate => normalizeDirectoryPathKey(candidate) === directoryKey)
+      const next = isFavorite
+        ? prev.filter(candidate => normalizeDirectoryPathKey(candidate) !== directoryKey)
         : [
-          normalizedDirectory,
-          ...prev.filter(candidate => candidate !== normalizedDirectory)
+          directory,
+          ...prev.filter(candidate => normalizeDirectoryPathKey(candidate) !== directoryKey)
         ].slice(0, CLONE_DESTINATION_FAVORITE_LIMIT)
       persistCloneDestinationFavoriteDirectories(next)
       return next
@@ -2056,28 +2066,35 @@ export function LauncherRoute({
       return
     }
 
-    const normalizedDestinationDirectory = destinationDirectory?.trim()
-    if (normalizedDestinationDirectory == null || normalizedDestinationDirectory === '') {
+    if (!hasNonBlankDirectoryPath(destinationDirectory)) {
       void message.error(t('launcher.cloneRepositoryDestinationRequired'))
       focusSearchInput()
       return
     }
 
-    setRecentCloneDestinationDirectories((prev) => {
-      const next = rememberCloneDestinationDirectory(prev, normalizedDestinationDirectory)
-      persistCloneDestinationDirectories(next)
-      return next
-    })
+    const lease = workspaceOpenController.acquire()
+    if (lease.isCurrent()) {
+      setRecentCloneDestinationDirectories((prev) => {
+        const next = rememberCloneDestinationDirectory(prev, destinationDirectory)
+        persistCloneDestinationDirectories(next)
+        return next
+      })
+    }
 
     void message.open({
       key: cloneRepositoryMessageKey,
       type: 'loading',
-      content: t('launcher.cloneRepositoryCloning', { path: normalizedDestinationDirectory }),
+      content: t('launcher.cloneRepositoryCloning', { path: destinationDirectory }),
       duration: 0
+    })
+    const unregisterInvalidationCleanup = lease.onInvalidate(() => {
+      message.destroy(cloneRepositoryMessageKey)
     })
 
     try {
-      const workspaceFolder = await cloneRepository(repositoryUrl, normalizedDestinationDirectory)
+      const workspaceFolder = await cloneRepository(repositoryUrl, destinationDirectory)
+      if (!lease.isCurrent()) return
+      unregisterInvalidationCleanup()
       if (workspaceFolder == null) {
         message.destroy(cloneRepositoryMessageKey)
         focusSearchInput()
@@ -2090,8 +2107,10 @@ export function LauncherRoute({
         content: t('launcher.cloneRepositorySuccess'),
         duration: 2
       })
-      await openWorkspace(workspaceFolder)
+      await openWorkspace(workspaceFolder, undefined, lease)
     } catch (error) {
+      if (!lease.isCurrent()) return
+      unregisterInvalidationCleanup()
       console.error('[launcher] failed to clone repository', error)
       void message.open({
         key: cloneRepositoryMessageKey,
@@ -2107,59 +2126,66 @@ export function LauncherRoute({
     openWorkspace,
     query,
     showDesktopActionUnavailable,
-    t
+    t,
+    workspaceOpenController
   ])
 
-  const openRemoteWorkspaceTarget = useCallback(async (target: {
-    deviceId: string
-    deviceName: string
-    name: string
-    serverId: string
-    serverName: string
-    workspaceFolder: string
-  }) => {
-    setOpeningWorkspace({
+  const openRemoteWorkspaceTarget = useCallback(async (
+    target: {
+      deviceId: string
+      deviceName: string
+      name: string
+      serverId: string
+      serverName: string
+      workspaceFolder: string
+    },
+    existingLease?: LauncherWorkspaceOpenLease
+  ) => {
+    const lease = existingLease ?? workspaceOpenController.acquire()
+    const opening = {
       name: target.name,
       path: `${target.deviceName} · ${target.workspaceFolder}`
-    })
-
-    try {
-      const result = await openLauncherRelayWorkspace({
-        deviceId: target.deviceId,
-        deviceName: target.deviceName,
-        serverId: target.serverId,
-        serverName: target.serverName,
-        workspaceFolder: target.workspaceFolder
-      })
-      const workspaceClientBase = buildWorkspaceClientBase(result.workspaceId)
-      rememberWorkspaceConnection(result, 'relay', {
-        managerServerBaseUrl: getLauncherManagerServerBaseUrl(),
-        relay: {
+    }
+    return workspaceOpenController.open({
+      clearDelayMs: 320,
+      execute: () =>
+        openLauncherRelayWorkspace({
           deviceId: target.deviceId,
           deviceName: target.deviceName,
           serverId: target.serverId,
           serverName: target.serverName,
-          workspaceFolder: result.workspaceFolder
-        }
-      })
-      mergeRuntimeEnv({
-        __ONEWORKS_PROJECT_CLIENT_BASE__: workspaceClientBase,
-        __ONEWORKS_PROJECT_SERVER_BASE_URL__: result.serverBaseUrl,
-        __ONEWORKS_PROJECT_SERVER_ROLE__: 'workspace',
-        __ONEWORKS_PROJECT_WORKSPACE_ID__: result.workspaceId,
-        __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: result.workspaceFolder
-      })
-      window.location.assign(workspaceClientBase)
-    } catch (error) {
-      console.error('[launcher] failed to open remote workspace', error)
-      void message.error(getApiErrorMessage(error, t('launcher.openWorkspaceFailed')))
-      setOpeningWorkspace(current =>
-        current?.path === `${target.deviceName} · ${target.workspaceFolder}`
-          ? undefined
-          : current
-      )
-    }
-  }, [message, t])
+          workspaceFolder: target.workspaceFolder
+        }),
+      lease,
+      onError: (error) => {
+        console.error('[launcher] failed to open remote workspace', error)
+        void message.error(getApiErrorMessage(error, t('launcher.openWorkspaceFailed')))
+        focusSearchInput()
+      },
+      onSuccess: (result) => {
+        const workspaceClientBase = buildWorkspaceClientBase(result.workspaceId)
+        rememberWorkspaceConnection(result, 'relay', {
+          managerServerBaseUrl: getLauncherManagerServerBaseUrl(),
+          relay: {
+            deviceId: target.deviceId,
+            deviceName: target.deviceName,
+            serverId: target.serverId,
+            serverName: target.serverName,
+            workspaceFolder: result.workspaceFolder
+          }
+        })
+        mergeRuntimeEnv({
+          __ONEWORKS_PROJECT_CLIENT_BASE__: workspaceClientBase,
+          __ONEWORKS_PROJECT_SERVER_BASE_URL__: result.serverBaseUrl,
+          __ONEWORKS_PROJECT_SERVER_ROLE__: 'workspace',
+          __ONEWORKS_PROJECT_WORKSPACE_ID__: result.workspaceId,
+          __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: result.workspaceFolder
+        })
+        window.location.assign(workspaceClientBase)
+      },
+      opening
+    })
+  }, [focusSearchInput, message, t, workspaceOpenController])
 
   const handleCreateWorkspaceInDirectory = useCallback(async (parentDirectory: string | undefined) => {
     const createWorkspaceInDirectory = desktopApi?.createWorkspaceInDirectory
@@ -2175,23 +2201,24 @@ export function LauncherRoute({
       return
     }
 
-    const normalizedParentDirectory = parentDirectory?.trim()
-    if (normalizedParentDirectory == null || normalizedParentDirectory === '') {
+    if (!hasNonBlankDirectoryPath(parentDirectory)) {
       void message.error(t('launcher.createWorkspaceParentRequired'))
       focusSearchInput()
       return
     }
 
+    const lease = workspaceOpenController.acquire()
     try {
       if (activeDirectoryBrowserTarget?.kind === 'relay') {
         const result = await createLauncherRelayWorkspaceInDirectory({
           deviceId: activeDirectoryBrowserTarget.deviceId,
-          parentDirectory: normalizedParentDirectory,
+          parentDirectory,
           projectName,
           serverId: activeDirectoryBrowserTarget.serverId
         })
+        if (!lease.isCurrent()) return
         const workspaceFolder = result.workspaceFolder
-        if (workspaceFolder == null || workspaceFolder.trim() === '') {
+        if (!hasNonBlankDirectoryPath(workspaceFolder)) {
           focusSearchInput()
           return
         }
@@ -2202,27 +2229,30 @@ export function LauncherRoute({
           serverId: activeDirectoryBrowserTarget.serverId,
           serverName: activeDirectoryBrowserTarget.serverName,
           workspaceFolder
-        })
+        }, lease)
         return
       }
 
       const workspaceFolder = createWorkspaceInDirectory == null
-        ? (await createLauncherWorkspaceInDirectory(normalizedParentDirectory, projectName)).workspaceFolder
-        : await createWorkspaceInDirectory(normalizedParentDirectory, projectName)
-      if (workspaceFolder == null || workspaceFolder.trim() === '') {
+        ? (await createLauncherWorkspaceInDirectory(parentDirectory, projectName)).workspaceFolder
+        : await createWorkspaceInDirectory(parentDirectory, projectName)
+      if (!lease.isCurrent()) return
+      if (!hasNonBlankDirectoryPath(workspaceFolder)) {
         focusSearchInput()
         return
       }
 
       setRecentCloneDestinationDirectories((prev) => {
-        const next = rememberCloneDestinationDirectory(prev, normalizedParentDirectory)
+        const next = rememberCloneDestinationDirectory(prev, parentDirectory)
         persistCloneDestinationDirectories(next)
         return next
       })
-      await openWorkspace(workspaceFolder)
+      await openWorkspace(workspaceFolder, undefined, lease)
     } catch (error) {
+      if (!lease.isCurrent()) return
       console.error('[launcher] failed to create workspace in directory', error)
       void message.error(getApiErrorMessage(error, t('launcher.createWorkspaceFailed')))
+      focusSearchInput()
     }
   }, [
     activeDirectoryBrowserTarget,
@@ -2234,44 +2264,58 @@ export function LauncherRoute({
     openRemoteWorkspaceTarget,
     query,
     showDesktopActionUnavailable,
-    t
+    t,
+    workspaceOpenController
   ])
 
   const handleOpenWorkspaceDirectory = useCallback(async (directory: string | undefined) => {
-    const normalizedDirectory = directory?.trim()
-    if (normalizedDirectory == null || normalizedDirectory === '') {
+    if (!hasNonBlankDirectoryPath(directory)) {
       void message.error(t('launcher.openWorkspaceFailed'))
       focusSearchInput()
       return
     }
 
+    const lease = workspaceOpenController.acquire()
     if (activeDirectoryBrowserTarget?.kind === 'relay') {
       await openRemoteWorkspaceTarget({
         deviceId: activeDirectoryBrowserTarget.deviceId,
         deviceName: activeDirectoryBrowserTarget.deviceName,
-        name: getDirectoryDisplayName(normalizedDirectory),
+        name: getDirectoryDisplayName(directory),
         serverId: activeDirectoryBrowserTarget.serverId,
         serverName: activeDirectoryBrowserTarget.serverName,
-        workspaceFolder: normalizedDirectory
-      })
+        workspaceFolder: directory
+      }, lease)
       return
     }
 
-    setRecentCloneDestinationDirectories((prev) => {
-      const next = rememberCloneDestinationDirectory(prev, normalizedDirectory)
-      persistCloneDestinationDirectories(next)
-      return next
-    })
+    if (lease.isCurrent()) {
+      setRecentCloneDestinationDirectories((prev) => {
+        const next = rememberCloneDestinationDirectory(prev, directory)
+        persistCloneDestinationDirectories(next)
+        return next
+      })
+    }
 
-    await openWorkspace(normalizedDirectory)
-  }, [activeDirectoryBrowserTarget, focusSearchInput, message, openRemoteWorkspaceTarget, openWorkspace, t])
+    await openWorkspace(directory, undefined, lease)
+  }, [
+    activeDirectoryBrowserTarget,
+    focusSearchInput,
+    message,
+    openRemoteWorkspaceTarget,
+    openWorkspace,
+    t,
+    workspaceOpenController
+  ])
 
   const openCurrentWorkspaceResource = useCallback(async (target: DesktopWorkspaceResourceTarget) => {
+    const lease = workspaceOpenController.acquire()
     if (onOpenWorkspaceResource != null) {
       try {
         await onOpenWorkspaceResource(target)
+        if (!lease.isCurrent()) return
         onClose?.()
       } catch (error) {
+        if (!lease.isCurrent()) return
         console.error('[launcher] failed to open workspace resource', error)
         void message.error(t('launcher.files.openFailed'))
       }
@@ -2286,10 +2330,19 @@ export function LauncherRoute({
     try {
       await desktopApi.openCurrentWorkspaceResource(target)
     } catch (error) {
+      if (!lease.isCurrent()) return
       console.error('[launcher] failed to open workspace resource', error)
       void message.error(t('launcher.files.openFailed'))
     }
-  }, [desktopApi, message, onClose, onOpenWorkspaceResource, showDesktopActionUnavailable, t])
+  }, [
+    desktopApi,
+    message,
+    onClose,
+    onOpenWorkspaceResource,
+    showDesktopActionUnavailable,
+    t,
+    workspaceOpenController
+  ])
 
   const openCurrentWorkspaceFile = useCallback(async (path: string) => {
     await openCurrentWorkspaceResource({ kind: 'file', path })
@@ -2301,13 +2354,15 @@ export function LauncherRoute({
       return
     }
 
+    const lease = workspaceOpenController.acquire()
     try {
       await desktopApi.openCurrentWorkspaceFileInExternalOpener(path, opener)
     } catch (error) {
+      if (!lease.isCurrent()) return
       console.error('[launcher] failed to open workspace file in external opener', error)
       void message.error(t('launcher.files.openFailed'))
     }
-  }, [desktopApi, message, showDesktopActionUnavailable, t])
+  }, [desktopApi, message, showDesktopActionUnavailable, t, workspaceOpenController])
 
   const openFilesystemFileInExternalOpener = useCallback(async (path: string, opener?: string) => {
     if (desktopApi?.openFilesystemFileInExternalOpener == null) {
@@ -2315,14 +2370,17 @@ export function LauncherRoute({
       return
     }
 
+    const lease = workspaceOpenController.acquire()
     try {
       await desktopApi.openFilesystemFileInExternalOpener(path, opener)
+      if (!lease.isCurrent()) return
       await desktopApi.hideLauncherWindow?.()
     } catch (error) {
+      if (!lease.isCurrent()) return
       console.error('[launcher] failed to open filesystem file in external opener', error)
       void message.error(t('launcher.files.openFailed'))
     }
-  }, [desktopApi, message, showDesktopActionUnavailable, t])
+  }, [desktopApi, message, showDesktopActionUnavailable, t, workspaceOpenController])
 
   const openFilesystemDirectory = useCallback(async (path: string) => {
     if (desktopApi?.openFilesystemDirectory == null) {
@@ -2330,14 +2388,17 @@ export function LauncherRoute({
       return
     }
 
+    const lease = workspaceOpenController.acquire()
     try {
       await desktopApi.openFilesystemDirectory(path)
+      if (!lease.isCurrent()) return
       await desktopApi.hideLauncherWindow?.()
     } catch (error) {
+      if (!lease.isCurrent()) return
       console.error('[launcher] failed to open filesystem directory', error)
       void message.error(t('launcher.openWorkspaceFailed'))
     }
-  }, [desktopApi, message, showDesktopActionUnavailable, t])
+  }, [desktopApi, message, showDesktopActionUnavailable, t, workspaceOpenController])
 
   const revealFilesystemPath = useCallback(async (path: string) => {
     if (desktopApi?.revealFilesystemPath == null) {
@@ -2345,10 +2406,13 @@ export function LauncherRoute({
       return
     }
 
+    const lease = workspaceOpenController.acquire()
     try {
       await desktopApi.revealFilesystemPath(path)
+      if (!lease.isCurrent()) return
       await desktopApi.hideLauncherWindow?.()
     } catch (error) {
+      if (!lease.isCurrent()) return
       console.error('[launcher] failed to reveal filesystem path', error)
       void message.error(t('launcher.projects.revealFailed', { manager: filesystemManagerName }))
     }
@@ -2357,7 +2421,8 @@ export function LauncherRoute({
     filesystemManagerName,
     message,
     showDesktopActionUnavailable,
-    t
+    t,
+    workspaceOpenController
   ])
 
   const showComingSoon = useCallback(() => {
@@ -2416,7 +2481,10 @@ export function LauncherRoute({
     return true
   }, [contextProject, setLauncherQueryWithUrl])
 
-  const searchLauncherPluginProviders = useCallback(async (rawQuery: string): Promise<LauncherPluginSearchResult[]> => {
+  const searchLauncherPluginProviders = useCallback(async (
+    rawQuery: string,
+    activation?: Pick<LauncherWorkspaceOpenLease, 'isCurrent'>
+  ): Promise<LauncherPluginSearchResult[]> => {
     if (launcherSearchProviders.length === 0) return []
 
     const providerResults = await Promise.all(launcherSearchProviders.map(async (provider) => {
@@ -2432,8 +2500,10 @@ export function LauncherRoute({
             providerId,
             query: rawQuery
           }, { serverBaseUrl: pluginServerBaseUrl })
+        if (activation != null && !activation.isCurrent()) return []
         return normalizeLauncherPluginSearchProviderResults(scope, provider, value)
       } catch (error) {
+        if (activation != null && !activation.isCurrent()) return []
         console.warn('[launcher] failed to search plugin provider', error)
         return []
       }
@@ -2443,7 +2513,7 @@ export function LauncherRoute({
   }, [launcherSearchProviders, pluginServerBaseUrl, registry])
 
   useEffect(() => {
-    if (contextProject == null) {
+    if (!active || contextProject == null) {
       setResourceResults(emptyWorkspaceResourceSearchResponse)
       setPluginResults([])
       setFileOpeners(null)
@@ -2452,16 +2522,26 @@ export function LauncherRoute({
       return
     }
 
-    void desktopApi?.listCurrentWorkspaceFileOpeners?.()
-      .then(setFileOpeners)
+    const listFileOpeners = desktopApi?.listCurrentWorkspaceFileOpeners
+    if (listFileOpeners == null) {
+      setFileOpeners(null)
+      return
+    }
+    const activation = workspaceOpenController.observeActivation()
+    void listFileOpeners()
+      .then((value) => {
+        if (activation.isCurrent()) setFileOpeners(value)
+      })
       .catch((error) => {
+        if (!activation.isCurrent()) return
         console.error('[launcher] failed to load workspace file openers', error)
         setFileOpeners(null)
       })
-  }, [contextProject, desktopApi])
+    return () => activation.release()
+  }, [active, contextProject, desktopApi, workspaceOpenController])
 
   useEffect(() => {
-    if (launcherViewMode !== 'commands' || isFileSearchMode || isDirectoryBrowserMode) {
+    if (!active || launcherViewMode !== 'commands' || isFileSearchMode || isDirectoryBrowserMode) {
       setResourceResults(emptyWorkspaceResourceSearchResponse)
       setPluginResults([])
       setIsResourceSearchLoading(false)
@@ -2486,9 +2566,11 @@ export function LauncherRoute({
     }
 
     let isCancelled = false
+    const activation = workspaceOpenController.observeActivation()
     setIsResourceSearchLoading(true)
     setHasResourceSearchError(false)
     const timeoutId = window.setTimeout(() => {
+      if (isCancelled || !activation.isCurrent()) return
       const resourceResultPromise: Promise<DesktopWorkspaceResourceSearchResponse> = contextProject == null
         ? Promise.resolve(emptyWorkspaceResourceSearchResponse)
         : searchResources == null
@@ -2511,34 +2593,37 @@ export function LauncherRoute({
         : searchPlugins(normalizedQuery)
           .then(result => normalizePluginLauncherSearchResults(result).results as LauncherPluginSearchResult[])
           .catch((error) => {
+            if (!activation.isCurrent()) return []
             console.warn('[launcher] failed to search workspace plugins', error)
             return []
           })
-      const launcherPluginResultPromise = searchLauncherPluginProviders(normalizedQuery)
+      const launcherPluginResultPromise = searchLauncherPluginProviders(normalizedQuery, activation)
 
       void Promise.all([resourceResultPromise, pluginResultPromise, launcherPluginResultPromise])
         .then(([result, workspacePlugins, launcherPlugins]) => {
-          if (isCancelled) return
+          if (isCancelled || !activation.isCurrent()) return
           setResourceResults(result ?? emptyWorkspaceResourceSearchResponse)
           setPluginResults([...launcherPlugins, ...workspacePlugins])
         })
         .catch((error) => {
-          if (isCancelled) return
+          if (isCancelled || !activation.isCurrent()) return
           console.error('[launcher] failed to search workspace resources', error)
           setResourceResults(emptyWorkspaceResourceSearchResponse)
           setPluginResults([])
           setHasResourceSearchError(true)
         })
         .finally(() => {
-          if (!isCancelled) setIsResourceSearchLoading(false)
+          if (!isCancelled && activation.isCurrent()) setIsResourceSearchLoading(false)
         })
     }, FILE_SEARCH_DEBOUNCE_MS)
 
     return () => {
       isCancelled = true
       window.clearTimeout(timeoutId)
+      activation.release()
     }
   }, [
+    active,
     contextProject,
     desktopApi,
     isDirectoryBrowserMode,
@@ -2547,11 +2632,12 @@ export function LauncherRoute({
     launcherViewMode,
     query,
     searchLauncherPluginProviders,
-    searchWorkspaceResources
+    searchWorkspaceResources,
+    workspaceOpenController
   ])
 
   useEffect(() => {
-    if (!isFileSearchMode) {
+    if (!active || !isFileSearchMode) {
       setFileSearchResults([])
       setIsFileSearchLoading(false)
       setHasFileSearchError(false)
@@ -2582,9 +2668,11 @@ export function LauncherRoute({
     }
 
     let isCancelled = false
+    const activation = workspaceOpenController.observeActivation()
     setIsFileSearchLoading(true)
     setHasFileSearchError(false)
     const timeoutId = window.setTimeout(() => {
+      if (isCancelled || !activation.isCurrent()) return
       const resultPromise = contextProject == null
         ? searchFilesystemFiles!(normalizedFileQuery, { includeDirectories: true })
           .then(result =>
@@ -2612,25 +2700,26 @@ export function LauncherRoute({
 
       void resultPromise
         .then((files) => {
-          if (isCancelled) return
+          if (isCancelled || !activation.isCurrent()) return
           setFileSearchResults(files.slice(0, FILE_SEARCH_RESULT_LIMIT))
         })
         .catch((error) => {
-          if (isCancelled) return
+          if (isCancelled || !activation.isCurrent()) return
           console.error('[launcher] failed to search launcher files', error)
           setFileSearchResults([])
           setHasFileSearchError(true)
         })
         .finally(() => {
-          if (!isCancelled) setIsFileSearchLoading(false)
+          if (!isCancelled && activation.isCurrent()) setIsFileSearchLoading(false)
         })
     }, FILE_SEARCH_DEBOUNCE_MS)
 
     return () => {
       isCancelled = true
       window.clearTimeout(timeoutId)
+      activation.release()
     }
-  }, [contextProject, desktopApi, isFileSearchMode, query, t])
+  }, [active, contextProject, desktopApi, isFileSearchMode, query, t, workspaceOpenController])
 
   const fileOpenerOptions = useMemo(() =>
     resolveWorkspaceFileOpenerSelectModels(
@@ -2763,7 +2852,9 @@ export function LauncherRoute({
   ])
 
   const invokePluginLauncherResult = useCallback(async (result: LauncherPluginSearchResult) => {
+    const activation = workspaceOpenController.observeActivation()
     const openPluginRoute = (route: string) => {
+      if (!activation.isCurrent()) return
       if (routingMode === 'url') {
         void navigate(route)
         return
@@ -2781,41 +2872,50 @@ export function LauncherRoute({
       void navigate(workspaceRoute)
     }
 
-    if (result.route != null) {
-      setIsLauncherMenuOpen(false)
-      openPluginRoute(result.route)
-      return
-    }
+    try {
+      if (result.route != null) {
+        setIsLauncherMenuOpen(false)
+        openPluginRoute(result.route)
+        return
+      }
 
-    if (result.providerScope != null && result.providerCommand != null) {
-      try {
+      if (result.providerScope != null && result.providerCommand != null) {
         const value = await registry.executeCommand(result.providerScope, result.providerCommand, {
           action: 'invoke',
           itemId: result.rawId,
           providerId: result.providerId,
           resultId: result.id
         }, { serverBaseUrl: pluginServerBaseUrl })
+        if (!activation.isCurrent()) return
         const route = getLauncherPluginSearchResultRoute(value)
         if (route != null) {
           setIsLauncherMenuOpen(false)
           openPluginRoute(route)
         }
-      } catch (error) {
-        console.error('[launcher] failed to invoke plugin launcher result', error)
-        void message.error(t('launcher.commandFailed'))
+        return
       }
-      return
-    }
 
-    try {
       const invokeResult = desktopApi?.plugins?.invokeCurrentWorkspaceResult
       if (invokeResult == null) return
       await invokeResult(result.id)
     } catch (error) {
+      if (!activation.isCurrent()) return
       console.error('[launcher] failed to invoke workspace plugin result', error)
       void message.error(t('launcher.commandFailed'))
+    } finally {
+      activation.release()
     }
-  }, [desktopApi, message, navigate, onClose, pluginServerBaseUrl, registry, routingMode, t])
+  }, [
+    desktopApi,
+    message,
+    navigate,
+    onClose,
+    pluginServerBaseUrl,
+    registry,
+    routingMode,
+    t,
+    workspaceOpenController
+  ])
 
   const openLauncherView = useCallback((mode: LauncherViewMode) => {
     setLauncherViewModeWithUrl(mode, { query: '' })
@@ -2840,13 +2940,16 @@ export function LauncherRoute({
       return
     }
 
+    const activation = workspaceOpenController.observeActivation()
     setIsLauncherMenuOpen(false)
-    void desktopApi.checkForUpdates({ interactive: true })
+    return desktopApi.checkForUpdates({ interactive: true })
       .catch((error) => {
+        if (!activation.isCurrent()) return
         console.error('[launcher] failed to check desktop updates', error)
         void message.error(t('config.desktopSettings.updates.checkFailed'))
       })
-  }, [desktopApi, message, t])
+      .finally(() => activation.release())
+  }, [desktopApi, message, t, workspaceOpenController])
 
   const openProjectFromPreview = useCallback(() => {
     setLauncherViewModeWithUrl('commands', { query: '', replace: true })
@@ -2973,7 +3076,7 @@ export function LauncherRoute({
 
     if (isDirectoryBrowserMode) {
       const currentDirectory = cloneDestinationList.currentDirectory
-      if (currentDirectory === '') return []
+      if (!hasNonBlankDirectoryPath(currentDirectory)) return []
 
       const useDirectoryMemory = activeDirectoryBrowserTarget?.kind !== 'relay'
       const currentDirectoryKey = normalizeDirectoryPathKey(currentDirectory)
@@ -3024,35 +3127,63 @@ export function LauncherRoute({
         const hasFavoriteAction = useDirectoryMemory && showFavoriteAction && !isBackAction
         const hasSecondaryAction = showSecondaryAction && !isBackAction
         const isFavorite = favoriteDirectoryKeys.has(normalizeDirectoryPathKey(path))
-        const action = isBackAction
-          ? () => openCloneDestinationDirectory(path)
-          : isCloneRepositoryMode
-          ? () => void handleCloneRepository(path)
+        const selectDirectory = isCloneRepositoryMode
+          ? () => handleCloneRepository(path)
           : isCreateWorkspaceDirectoryMode
-          ? () => void handleCreateWorkspaceInDirectory(path)
-          : () => void handleOpenWorkspaceDirectory(path)
-        const actionMenuLabel = isBackAction
+          ? () => handleCreateWorkspaceInDirectory(path)
+          : () => handleOpenWorkspaceDirectory(path)
+        const directoryInteraction = createLauncherDirectoryCommandDescriptor({
+          actions: {
+            enterDirectory: openCloneDestinationDirectory,
+            selectDirectory
+          },
+          operation: isBackAction
+            ? 'back'
+            : isOpenWorkspaceDirectoryMode && hasSecondaryAction
+            ? 'enter-directory'
+            : 'select-directory',
+          path,
+          withSecondaryAction: hasSecondaryAction
+        })
+        const resolvedActionLabel: LauncherCommand['actionLabel'] =
+          directoryInteraction.primaryIntent === 'enter-directory'
+            ? 'enter-directory'
+            : actionLabel
+        const actionMenuLabel = directoryInteraction.primaryIntent === 'enter-directory'
+          ? t('launcher.footerHints.enterDirectory')
+          : isBackAction
           ? t('launcher.footerHints.back')
           : actionLabel === 'clone'
           ? t('launcher.footerHints.clone')
           : actionLabel === 'create'
           ? t('launcher.footerHints.create')
-          : t('launcher.footerHints.open')
+          : t('launcher.footerHints.openAsProject')
+        const secondaryActionLabel = directoryInteraction.secondaryIntent === 'select-directory'
+          ? t('launcher.openDirectoryAsProject')
+          : t('launcher.footerHints.enterDirectory')
         const contextMenuItems: NonNullable<MenuProps['items']> = [
           {
-            icon: <span className='material-symbols-rounded launcher-command-menu__icon'>keyboard_return</span>,
+            icon: (
+              <span className='material-symbols-rounded launcher-command-menu__icon'>
+                {directoryInteraction.primaryIntent === 'enter-directory' ? 'chevron_right' : 'keyboard_return'}
+              </span>
+            ),
             key: 'primary-action',
             label: actionMenuLabel,
-            onClick: action
+            onClick: directoryInteraction.contextPrimaryAction
           },
-          ...(hasSecondaryAction
-            ? [{
-              icon: <span className='material-symbols-rounded launcher-command-menu__icon'>chevron_right</span>,
-              key: 'enter-directory',
-              label: t('launcher.footerHints.openDirectory'),
-              onClick: () => openCloneDestinationDirectory(path)
-            }]
-            : []),
+          ...(directoryInteraction.contextSecondaryAction == null
+            ? []
+            : [{
+              icon: (
+                <span className='material-symbols-rounded launcher-command-menu__icon'>
+                  {directoryInteraction.secondaryIntent === 'select-directory' ? 'folder_open' : 'chevron_right'}
+                </span>
+              ),
+              key: 'secondary-action',
+              label: secondaryActionLabel,
+              onClick: directoryInteraction.contextSecondaryAction
+            }]),
           ...(useDirectoryMemory
             ? [{
               icon: <span className='material-symbols-rounded launcher-command-menu__icon'>folder_open</span>,
@@ -3105,8 +3236,9 @@ export function LauncherRoute({
             : [])
         ]
         return {
-          action,
-          actionLabel,
+          action: directoryInteraction.primaryAction,
+          actionIcon: directoryInteraction.primaryIntent === 'enter-directory' ? 'chevron_right' : undefined,
+          actionLabel: resolvedActionLabel,
           contextMenuItems,
           favoriteAction: hasFavoriteAction ? () => toggleCloneDestinationFavoriteDirectory(path) : undefined,
           favoriteLabel: !hasFavoriteAction
@@ -3119,7 +3251,11 @@ export function LauncherRoute({
           automationPath: path,
           isFavorite,
           keywords: [name, path],
-          secondaryAction: hasSecondaryAction ? () => openCloneDestinationDirectory(path) : undefined,
+          secondaryAction: directoryInteraction.explicitAction,
+          secondaryActionIcon: directoryInteraction.secondaryIntent === 'select-directory'
+            ? 'folder_open'
+            : undefined,
+          secondaryActionLabel: directoryInteraction.explicitAction == null ? undefined : secondaryActionLabel,
           subtitle: path,
           title: name
         }
@@ -3130,7 +3266,7 @@ export function LauncherRoute({
           ? []
           : [{ name: '..', path: cloneDestinationList.parentDirectory }])
       ]
-      const directQueryDirectory = query.trim()
+      const directQueryDirectory = query
       const directQueryDirectories: DesktopCloneDestinationDirectory[] = (
           isOpenWorkspaceDirectoryMode &&
           isLikelyAbsoluteDirectoryPath(directQueryDirectory) &&
@@ -3141,6 +3277,9 @@ export function LauncherRoute({
           path: directQueryDirectory
         }]
         : []
+      const directQueryDirectoryKeys = new Set(
+        directQueryDirectories.map(directory => normalizeDirectoryPathKey(directory.path))
+      )
       const fixedDirectoryKeys = new Set(fixedDirectories.map(directory => normalizeDirectoryPathKey(directory.path)))
       const childDirectoryKeys = new Set(
         cloneDestinationList.directories.map(directory => normalizeDirectoryPathKey(directory.path))
@@ -3149,6 +3288,7 @@ export function LauncherRoute({
         ? favoriteCloneDestinationDirectories
           .filter(directory =>
             isHomeDirectory &&
+            !directQueryDirectoryKeys.has(normalizeDirectoryPathKey(directory)) &&
             !fixedDirectoryKeys.has(normalizeDirectoryPathKey(directory)) &&
             !childDirectoryKeys.has(normalizeDirectoryPathKey(directory))
           )
@@ -3162,12 +3302,14 @@ export function LauncherRoute({
           .filter(directory =>
             (
               isHomeDirectory &&
+              !directQueryDirectoryKeys.has(normalizeDirectoryPathKey(directory)) &&
               !fixedDirectoryKeys.has(normalizeDirectoryPathKey(directory)) &&
               !childDirectoryKeys.has(normalizeDirectoryPathKey(directory)) &&
               !favoriteDirectoryKeys.has(normalizeDirectoryPathKey(directory))
             ) ||
             (
               isDirectoryPathInSameParent(directory, currentDirectory) &&
+              !directQueryDirectoryKeys.has(normalizeDirectoryPathKey(directory)) &&
               !fixedDirectoryKeys.has(normalizeDirectoryPathKey(directory)) &&
               !childDirectoryKeys.has(normalizeDirectoryPathKey(directory)) &&
               !favoriteDirectoryKeys.has(normalizeDirectoryPathKey(directory))
@@ -3216,6 +3358,7 @@ export function LauncherRoute({
         ),
         ...cloneDestinationList.directories
           .slice()
+          .filter(directory => !directQueryDirectoryKeys.has(normalizeDirectoryPathKey(directory.path)))
           .sort(sortByFavoriteAndRecentSelection)
           .map(directory => toDestinationCommand(directory))
       ]
@@ -3481,7 +3624,9 @@ export function LauncherRoute({
     const projectCommandEntries = [
       ...projects.map((project, index) => ({
         command: {
-          action: () => void openWorkspace(project.workspaceFolder, project.name),
+          action: async () => {
+            await openWorkspace(project.workspaceFolder, project.name)
+          },
           contextMenuItems: buildProjectContextMenuItems(project),
           icon: getProjectStatusIcon(project.status),
           iconTone: getProjectStatusIconTone(project.status),
@@ -3500,9 +3645,7 @@ export function LauncherRoute({
       ...relayProjectGroups.flatMap((group, groupIndex) =>
         group.projects.map((project, projectIndex) => ({
           command: {
-            action: () => {
-              void openRemoteWorkspace(project)
-            },
+            action: () => openRemoteWorkspace(project),
             icon: 'computer',
             iconTone: 'project-remote',
             id: project.id,
@@ -3690,11 +3833,16 @@ export function LauncherRoute({
   const runCommand = useCallback((command?: LauncherCommand) => {
     if (command == null || openingWorkspace != null) return
     rememberLauncherSelection(command)
-    void Promise.resolve(command.action()).catch((error) => {
-      console.error('[launcher] command failed', error)
-      void message.error(t('launcher.commandFailed'))
-    })
-  }, [message, openingWorkspace, rememberLauncherSelection, t])
+    const activation = workspaceOpenController.observeActivation()
+    void Promise.resolve()
+      .then(() => command.action())
+      .catch((error) => {
+        if (!activation.isCurrent()) return
+        console.error('[launcher] command failed', error)
+        void message.error(t('launcher.commandFailed'))
+      })
+      .finally(() => activation.release())
+  }, [message, openingWorkspace, rememberLauncherSelection, t, workspaceOpenController])
 
   const runCommandAndSelect = useCallback((command?: LauncherCommand) => {
     if (command == null) return
@@ -3705,20 +3853,28 @@ export function LauncherRoute({
   const runSecondaryCommandAndSelect = useCallback((command?: LauncherCommand) => {
     if (command?.secondaryAction == null) return
     setActiveCommandId(command.id)
-    void Promise.resolve(command.secondaryAction()).catch((error) => {
-      console.error('[launcher] secondary command failed', error)
-      void message.error(t('launcher.commandFailed'))
-    })
-  }, [message, t])
+    const activation = workspaceOpenController.observeActivation()
+    void Promise.resolve()
+      .then(() => command.secondaryAction?.())
+      .catch((error) => {
+        if (!activation.isCurrent()) return
+        console.error('[launcher] secondary command failed', error)
+        void message.error(t('launcher.commandFailed'))
+      })
+      .finally(() => activation.release())
+  }, [message, t, workspaceOpenController])
 
   const getCommandActionLabel = useCallback((command: LauncherCommand) => {
     if (command.actionLabel === 'back') return t('launcher.footerHints.back')
     if (command.actionLabel === 'clone') return t('launcher.footerHints.clone')
     if (command.actionLabel === 'create') return t('launcher.footerHints.create')
+    if (command.actionLabel === 'enter-directory') return t('launcher.footerHints.enterDirectory')
+    if (command.actionLabel === 'open') return t('launcher.footerHints.openAsProject')
     return t('launcher.footerHints.open')
   }, [t])
 
   const hideLauncherWindow = useCallback(() => {
+    workspaceOpenController.invalidate()
     if (onClose != null) {
       onClose()
       return
@@ -3727,7 +3883,7 @@ export function LauncherRoute({
     void desktopApi?.hideLauncherWindow?.().catch((error) => {
       console.error('[launcher] failed to hide launcher window', error)
     })
-  }, [desktopApi, onClose])
+  }, [desktopApi, onClose, workspaceOpenController])
 
   const restoreSearchHistoryEntry = useCallback((entry: LauncherSearchHistoryEntry) => {
     const urlQuery = entry.directoryBrowserMode == null && !entry.isFileSearchMode ? entry.query : ''
@@ -3740,7 +3896,7 @@ export function LauncherRoute({
     if (
       historyDirectoryTargetId != null &&
       historyCloneDestinationDirectory != null &&
-      historyCloneDestinationDirectory.trim() !== ''
+      hasNonBlankDirectoryPath(historyCloneDestinationDirectory)
     ) {
       setDirectoryBrowserDirectoriesByTarget(prev =>
         prev[historyDirectoryTargetId] === historyCloneDestinationDirectory
@@ -3915,13 +4071,17 @@ export function LauncherRoute({
     if (!active) return
 
     const handleLauncherKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.defaultPrevented) return
+
       if (isImeCompositionKeyEvent(event, isSearchInputComposing())) {
         return
       }
 
       if (openingWorkspace != null) {
-        event.preventDefault()
-        event.stopPropagation()
+        if (!createLauncherEscapeHandler(hideLauncherWindow)(event)) {
+          event.preventDefault()
+          event.stopPropagation()
+        }
         return
       }
 
@@ -4008,7 +4168,9 @@ export function LauncherRoute({
     }
 
     if (openingWorkspace != null) {
-      event.preventDefault()
+      if (!createLauncherEscapeHandler(hideLauncherWindow)(event)) {
+        event.preventDefault()
+      }
       return
     }
 
@@ -4089,10 +4251,9 @@ export function LauncherRoute({
 
     const activeIndex = Math.max(0, flatCommands.findIndex(command => command.id === activeCommandId))
     const activeCommand = flatCommands[activeIndex]
-    const parentDirectory = cloneDestinationList.parentDirectory?.trim()
+    const parentDirectory = cloneDestinationList.parentDirectory
     const canNavigateToParentDirectory = isDirectoryBrowserMode &&
-      parentDirectory != null &&
-      parentDirectory !== '' &&
+      hasNonBlankDirectoryPath(parentDirectory) &&
       normalizeDirectoryPathKey(parentDirectory) !== normalizeDirectoryPathKey(cloneDestinationList.currentDirectory)
     const keyAction = resolveLauncherInputKeyAction({
       canNavigateToParentDirectory,
@@ -4268,17 +4429,15 @@ export function LauncherRoute({
           ? {
             key: 'primary-action',
             keys: 'Enter',
-            label: activeCommand.actionLabel === 'back'
-              ? t('launcher.footerHints.back')
-              : activeCommand.actionLabel === 'clone'
-              ? t('launcher.footerHints.clone')
-              : activeCommand.actionLabel === 'create'
-              ? t('launcher.footerHints.create')
-              : t('launcher.footerHints.open')
+            label: getCommandActionLabel(activeCommand)
           }
           : undefined,
         activeCommand?.secondaryAction != null
-          ? { key: 'secondary-action', keys: '→', label: t('launcher.footerHints.openDirectory') }
+          ? {
+            key: 'secondary-action',
+            keys: '→',
+            label: activeCommand.secondaryActionLabel ?? t('launcher.footerHints.enterDirectory')
+          }
           : undefined,
         { key: 'escape-back', keys: 'Esc', label: t('launcher.footerHints.back') }
       ].filter((hint): hint is { key: string; keys: string; label: string } => hint != null)
@@ -4325,6 +4484,7 @@ export function LauncherRoute({
 
   return (
     <main
+      ref={launcherRouteRef}
       className={[
         'launcher-route',
         launcherViewMode === 'plugin' ? 'is-plugin-route' : '',
@@ -4408,6 +4568,8 @@ export function LauncherRoute({
         >
           {launcherViewMode === 'settings' && (
             <LauncherSettingsView
+              active={active}
+              getModalContainer={getLauncherModalContainer}
               query={query}
               isSearchInputComposing={isSearchInputComposing}
               onExternalSessionsImportComplete={refreshImportedWorkspaceProjects}
@@ -4415,6 +4577,7 @@ export function LauncherRoute({
               onQueryChange={setLauncherQueryWithUrl}
               onResetActionChange={setSettingsResetAction}
               onSearchChromeChange={setInjectedSearchChrome}
+              observeActivation={workspaceOpenController.observeActivation}
               workspaceProjects={mergedProjects}
             />
           )}
@@ -4617,7 +4780,8 @@ export function LauncherRoute({
               <div className='launcher-command-section__items'>
                 {section.commands.map(command => {
                   const commandActionLabel = getCommandActionLabel(command)
-                  const commandSecondaryActionLabel = t('launcher.footerHints.openDirectory')
+                  const commandSecondaryActionLabel = command.secondaryActionLabel ??
+                    t('launcher.footerHints.enterDirectory')
                   const commandItem = (
                     <div
                       className={`launcher-command-item ${command.id === activeCommandId ? 'is-active' : ''}`}
@@ -4750,7 +4914,7 @@ export function LauncherRoute({
                             runCommandAndSelect(command)
                           }}
                         >
-                          <span className='material-symbols-rounded'>keyboard_return</span>
+                          <span className='material-symbols-rounded'>{command.actionIcon ?? 'keyboard_return'}</span>
                         </button>
                       </Tooltip>
                       {command.secondaryAction != null && (
@@ -4775,7 +4939,9 @@ export function LauncherRoute({
                               runSecondaryCommandAndSelect(command)
                             }}
                           >
-                            <span className='material-symbols-rounded'>chevron_right</span>
+                            <span className='material-symbols-rounded'>
+                              {command.secondaryActionIcon ?? 'chevron_right'}
+                            </span>
                           </button>
                         </Tooltip>
                       )}
@@ -4861,6 +5027,7 @@ export function LauncherRoute({
           </div>
         </div>
       </div>
+      <div ref={launcherModalPortalRef} className='launcher-route__modal-portal' />
       {openingWorkspace != null && (
         <WorkspaceOpeningOverlay
           appearance={resolvedThemeMode}

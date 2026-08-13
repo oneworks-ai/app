@@ -31,6 +31,32 @@ const snapshotFromRaw = async (json: string) => {
 }
 
 describe('public plugin API boundary', () => {
+  it('keeps whitespace and POSIX literal-backslash asset references from the public snapshot', async () => {
+    const snapshot = await snapshotFrom([{
+      icon: 'assets\\icon.svg ',
+      requestId: 'plugin',
+      scope: 'plugin'
+    }])
+    expect(snapshot.plugins[0]?.icon).toBe('assets\\icon.svg ')
+  })
+
+  it('rejects decoded backslash traversal from public contribution assets', async () => {
+    const snapshot = await snapshotFrom([{
+      plugin: {
+        contributions: {
+          navItems: [{
+            icon: '..%5Cprivate%5Cavatar.svg',
+            id: 'unsafe',
+            title: 'Unsafe'
+          }]
+        }
+      },
+      requestId: 'plugin',
+      scope: 'plugin'
+    }])
+
+    expect(snapshot.plugins[0]?.plugin?.contributions?.navItems).toBeUndefined()
+  })
   it('constructs a root-free fresh graph from the list snapshot transport', async () => {
     const snapshot = await snapshotFrom([{
       client: {

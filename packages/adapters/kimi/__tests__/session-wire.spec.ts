@@ -12,6 +12,7 @@ import type { AdapterCtx, AdapterOutputEvent } from '@oneworks/types'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createKimiSession } from '../src/runtime/session'
+import { mapContentToKimiWireInput } from '../src/runtime/wire-messages'
 
 vi.mock('node:child_process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:child_process')>()
@@ -131,6 +132,12 @@ afterEach(async () => {
 describe('kimi wire session', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it('preserves exact attachment paths in the final wire prompt', () => {
+    expect(mapContentToKimiWireInput([
+      { type: 'file', name: 'report.txt', path: ' reports/report.txt ' }
+    ])).toBe('Context file: report.txt ( reports/report.txt )')
   })
 
   it('starts Kimi in wire mode and maps wire events into adapter messages', async () => {

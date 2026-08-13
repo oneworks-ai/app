@@ -288,13 +288,111 @@ describe('git service', () => {
 
     expect(mocks.execFile).toHaveBeenCalledWith(
       'git',
-      ['diff', '4b825dc642cb6eb9a060e54bf8d69288fbee4904', '--numstat'],
+      ['diff', '4b825dc642cb6eb9a060e54bf8d69288fbee4904', '--numstat', '-z'],
       expect.objectContaining({
         cwd: '/workspace',
         maxBuffer: 1048576
       }),
       expect.any(Function)
     )
+  })
+
+  it('preserves path payload bytes in NUL and porcelain records', async () => {
+    const { parseGitBranches, parseGitStatus } = await import('#~/services/git/parsers.js')
+    const { parseGitNumstat } = await import('#~/services/git/summary-parsers.js')
+    const { parseGitWorktrees } = await import('#~/services/git/worktree-parser.js')
+    const exactFile = ' reports/report.txt '
+    const exactWorktree = '/worktrees/repository '
+
+    expect(parseGitStatus(`? ${exactFile}\0`).changedFiles[0]?.path).toBe(exactFile)
+    expect(
+      parseGitStatus(
+        `1 .M N... 100644 100644 100644 abcdef abcdef ${exactFile}\0`
+      ).changedFiles[0]?.path
+    ).toBe(exactFile)
+    expect(parseGitNumstat(`2\t1\t${exactFile}\0`)[0]?.path).toBe(exactFile)
+    expect(parseGitNumstat('0\t0\t\0 old.txt \0 renamed.txt \0')[0]?.path).toBe(' renamed.txt ')
+    expect(parseGitBranches(`feature/raw\0refs/heads/feature/raw\0${exactWorktree}\0\n`, null)[0])
+      .toMatchObject({ worktreePath: exactWorktree })
+    expect(
+      parseGitWorktrees(
+        `worktree ${exactWorktree}\0HEAD abcdef\0branch refs/heads/feature/raw\0\0`,
+        '/worktrees/repository'
+      )[0]
+    ).toMatchObject({ isCurrent: false, path: exactWorktree })
+  })
+
+  it('uses family-aware worktree identities for parser and branch enforcement', async () => {
+    const { getBlockedGitWorktreePath } = await import('#~/services/git/worktree.js')
+    const { parseGitWorktrees } = await import('#~/services/git/worktree-parser.js')
+    const local = {
+      isCurrent: false,
+      kind: 'local' as const,
+      localName: 'main',
+      name: 'main',
+      worktreePath: String.raw`C:\Work\Repo`
+    }
+
+    expect(getBlockedGitWorktreePath(local, [local], 'c:/work/repo')).toBeNull()
+    expect(getBlockedGitWorktreePath(local, [local], String.raw`C:Work\Repo`)).toBe(local.worktreePath)
+    expect(getBlockedGitWorktreePath({ ...local, worktreePath: String.raw`\project` }, [local], '/project')).toBe(
+      String.raw`\project`
+    )
+    expect(getBlockedGitWorktreePath({ ...local, worktreePath: String.raw`\\Server\Share` }, [local], '//server/share'))
+      .toBeNull()
+    expect(getBlockedGitWorktreePath({ ...local, worktreePath: '\\\\Server\\Share\\' }, [local], '//server/share'))
+      .toBeNull()
+    const worktreeOutput = [
+      String.raw`worktree C:\Work\Repo`,
+      'HEAD abcdef',
+      'branch refs/heads/main',
+      ''
+    ].join('\0')
+    expect(parseGitWorktrees(worktreeOutput, 'c:/work/repo')[0])
+      .toMatchObject({ isCurrent: true, path: String.raw`C:\Work\Repo` })
+    const uncWorktreeOutput = [
+      'worktree \\\\Server\\Share\\',
+      'HEAD abcdef',
+      'branch refs/heads/main',
+      ''
+    ].join('\0')
+    expect(parseGitWorktrees(uncWorktreeOutput, '//server/share')[0])
+      .toMatchObject({ isCurrent: true, path: '\\\\Server\\Share\\' })
+  })
+
+  it('does not reject branch checkout when Git records use an equivalent Windows worktree spelling', async () => {
+    mocks.resolveSessionWorkspace.mockResolvedValueOnce({
+      baseRef: 'main',
+      cleanupPolicy: 'delete_on_session_delete',
+      kind: 'managed_worktree',
+      repositoryRoot: 'c:/work/repo',
+      sessionId: 'sess-1',
+      state: 'ready',
+      workspaceFolder: 'c:/work/repo'
+    })
+    mockExecResponses(
+      { stdout: 'c:/work/repo\n' },
+      { stdout: '# branch.head feature/current\n' },
+      {
+        stdout: [
+          'feature/current\trefs/heads/feature/current\tc:/work/repo',
+          'main\trefs/heads/main\tC:\\Work\\Repo',
+          'origin/main\trefs/remotes/origin/main\t'
+        ].join('\n')
+      },
+      { stdout: '' },
+      { stdout: 'c:/work/repo\n' },
+      { stdout: '# branch.head main\n' },
+      { stdout: 'origin\n' },
+      { stdout: '' },
+      { stdout: '' },
+      { stdout: '' },
+      { stdout: 'abcdef0123456789\tmain' }
+    )
+
+    const { checkoutSessionGitBranch } = await import('#~/services/git/index.js')
+    await expect(checkoutSessionGitBranch('sess-1', { kind: 'remote', name: 'origin/main' }))
+      .resolves.toMatchObject({ currentBranch: 'main' })
   })
 
   it('creates a tracking branch when switching to a remote branch without a local peer', async () => {

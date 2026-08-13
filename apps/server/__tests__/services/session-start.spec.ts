@@ -434,6 +434,29 @@ describe('startAdapterSession', () => {
     }
   })
 
+  it('preserves an exact whitespace-bearing project base in the adapter process env', async () => {
+    const workspaceFolder = '/private/project '
+    const projectBaseDir = path.join(workspaceFolder, '.oo ')
+    const previousBaseDir = process.env.__ONEWORKS_PROJECT_BASE_DIR__
+    const previousResolveCwd = process.env.__ONEWORKS_PROJECT_BASE_DIR_RESOLVE_CWD__
+    process.env.__ONEWORKS_PROJECT_BASE_DIR__ = projectBaseDir
+    process.env.__ONEWORKS_PROJECT_BASE_DIR_RESOLVE_CWD__ = workspaceFolder
+    mocks.resolveSessionWorkspace.mockResolvedValueOnce({ workspaceFolder })
+    mocks.run.mockResolvedValueOnce({ session: { emit: vi.fn(), kill: vi.fn() } })
+
+    try {
+      await startAdapterSession('sess-1', { adapter: 'codex' })
+      const runEnv = (mocks.run.mock.calls[0]?.[0] as { env?: NodeJS.ProcessEnv }).env
+      expect(runEnv?.__ONEWORKS_PROJECT_BASE_DIR__).toBe(projectBaseDir)
+      expect(runEnv?.__ONEWORKS_PROJECT_BASE_DIR__).not.toBe(projectBaseDir.trim())
+    } finally {
+      if (previousBaseDir == null) delete process.env.__ONEWORKS_PROJECT_BASE_DIR__
+      else process.env.__ONEWORKS_PROJECT_BASE_DIR__ = previousBaseDir
+      if (previousResolveCwd == null) delete process.env.__ONEWORKS_PROJECT_BASE_DIR_RESOLVE_CWD__
+      else process.env.__ONEWORKS_PROJECT_BASE_DIR_RESOLVE_CWD__ = previousResolveCwd
+    }
+  })
+
   it('sets workspace env to the selected child workspace when resolving workspace targets', async () => {
     const emit = vi.fn()
     const kill = vi.fn()

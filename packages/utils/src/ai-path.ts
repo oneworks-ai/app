@@ -5,6 +5,8 @@ import { homedir } from 'node:os'
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import process from 'node:process'
 
+import { normalizeFilesystemDirPath, readFilesystemPathOutput, readNonBlankFilesystemPath } from './filesystem-dir-path'
+
 export const PROJECT_LAUNCH_CWD_ENV = '__ONEWORKS_PROJECT_LAUNCH_CWD__'
 export const PROJECT_WORKSPACE_FOLDER_ENV = '__ONEWORKS_PROJECT_WORKSPACE_FOLDER__'
 export const PROJECT_CONFIG_DIR_ENV = '__ONEWORKS_PROJECT_CONFIG_DIR__'
@@ -25,17 +27,11 @@ export const PROJECT_PRIMARY_WORKSPACE_FOLDER_ENV = '__ONEWORKS_PROJECT_PRIMARY_
 
 const PROJECT_HOME_OO_SEGMENTS = new Set(['logs', 'caches', '.mock', '.local', 'runtime'])
 
-const normalizeDirPath = (value: string | null | undefined) => {
-  const trimmed = value?.trim()
-  if (trimmed == null || trimmed === '') return undefined
-  return trimmed.replace(/[\\/]+$/, '')
-}
-
 const resolvePathFromBase = (
   baseDir: string,
   value: string | null | undefined
 ) => {
-  const normalizedValue = normalizeDirPath(value)
+  const normalizedValue = normalizeFilesystemDirPath(value)
   if (normalizedValue == null) {
     return undefined
   }
@@ -47,7 +43,7 @@ const resolvePathFromBase = (
   return resolve(baseDir, normalizedValue)
 }
 
-const toPathSegments = (value: string) => value.split(/[\\/]+/).filter(Boolean)
+const toPathSegments = (value: string) => value.split(sep).filter(Boolean)
 
 const normalizeProjectHomeWorkspaceFolder = (workspaceFolder: string) => {
   const resolvedWorkspaceFolder = resolve(workspaceFolder)
@@ -91,7 +87,7 @@ const isPathInside = (parentPath: string, targetPath: string) => {
   )
 }
 
-const isGitInternalPath = (targetPath: string) => targetPath.split(/[\\/]+/).includes('.git')
+const isGitInternalPath = (targetPath: string) => targetPath.split(sep).includes('.git')
 
 export const resolveProjectLaunchCwd = (
   cwd: string,
@@ -132,8 +128,8 @@ export const resolvePrimaryWorkspaceFolder = (
   env: Record<string, string | null | undefined> = process.env
 ) => {
   const normalizedWorkspaceFolder = resolveProjectWorkspaceFolder(cwd, env)
-  const explicitPrimaryWorkspaceFolder = env[PROJECT_PRIMARY_WORKSPACE_FOLDER_ENV]?.trim()
-  if (explicitPrimaryWorkspaceFolder != null && explicitPrimaryWorkspaceFolder !== '') {
+  const explicitPrimaryWorkspaceFolder = readNonBlankFilesystemPath(env[PROJECT_PRIMARY_WORKSPACE_FOLDER_ENV])
+  if (explicitPrimaryWorkspaceFolder != null) {
     const resolvedPrimaryWorkspaceFolder = resolvePathFromBase(
       resolveProjectLaunchCwd(cwd, env),
       explicitPrimaryWorkspaceFolder
@@ -155,8 +151,8 @@ export const resolvePrimaryWorkspaceFolder = (
       return undefined
     }
 
-    const gitCommonDir = result.stdout?.trim()
-    if (gitCommonDir == null || gitCommonDir === '') {
+    const gitCommonDir = readFilesystemPathOutput(result.stdout)
+    if (gitCommonDir == null) {
       return undefined
     }
 
@@ -181,13 +177,13 @@ export const resolveProjectConfigDir = (
 export const resolveProjectOoBaseDirName = (
   env: Record<string, string | null | undefined> = process.env
 ) => (
-  normalizeDirPath(env[PROJECT_OO_BASE_DIR_ENV]) ?? DEFAULT_PROJECT_OO_BASE_DIR
+  normalizeFilesystemDirPath(env[PROJECT_OO_BASE_DIR_ENV]) ?? DEFAULT_PROJECT_OO_BASE_DIR
 )
 
 export const resolveProjectOoEntitiesDirName = (
   env: Record<string, string | null | undefined> = process.env
 ) => (
-  normalizeDirPath(env[PROJECT_OO_ENTITIES_DIR_ENV]) ?? DEFAULT_PROJECT_OO_ENTITIES_DIR
+  normalizeFilesystemDirPath(env[PROJECT_OO_ENTITIES_DIR_ENV]) ?? DEFAULT_PROJECT_OO_ENTITIES_DIR
 )
 
 export const resolveProjectOoBaseDir = (
@@ -199,7 +195,7 @@ export const resolveProjectOoBaseDir = (
     return resolve(baseDir)
   }
 
-  if (normalizeDirPath(env[PROJECT_OO_BASE_DIR_ENV]) != null) {
+  if (normalizeFilesystemDirPath(env[PROJECT_OO_BASE_DIR_ENV]) != null) {
     return resolve(
       resolvePathSourceCwd(cwd, env, PROJECT_OO_BASE_DIR_RESOLVE_CWD_ENV) ?? resolveProjectLaunchCwd(cwd, env),
       baseDir
@@ -212,9 +208,9 @@ export const resolveProjectOoBaseDir = (
 export const resolveProjectRealHome = (
   env: Record<string, string | null | undefined> = process.env
 ) => {
-  const configuredHome = normalizeDirPath(env.__ONEWORKS_PROJECT_REAL_HOME__) ??
-    normalizeDirPath(env.HOME) ??
-    normalizeDirPath(env.USERPROFILE) ??
+  const configuredHome = normalizeFilesystemDirPath(env.__ONEWORKS_PROJECT_REAL_HOME__) ??
+    normalizeFilesystemDirPath(env.HOME) ??
+    normalizeFilesystemDirPath(env.USERPROFILE) ??
     homedir()
 
   return resolve(configuredHome)
@@ -241,7 +237,7 @@ export const resolveGlobalOneWorksAssetsPath = (
 export const resolveProjectHomeProjectsDir = (
   env: Record<string, string | null | undefined> = process.env
 ) => {
-  const configuredProjectsDir = normalizeDirPath(env[PROJECT_ONEWORKS_HOME_PROJECTS_DIR_ENV]) ??
+  const configuredProjectsDir = normalizeFilesystemDirPath(env[PROJECT_ONEWORKS_HOME_PROJECTS_DIR_ENV]) ??
     DEFAULT_PROJECT_ONEWORKS_HOME_PROJECTS_DIR
 
   return isAbsolute(configuredProjectsDir)
@@ -253,7 +249,7 @@ export const resolveProjectHomeDir = (
   cwd: string,
   env: Record<string, string | null | undefined> = process.env
 ) => {
-  const explicitProjectDir = normalizeDirPath(env[PROJECT_ONEWORKS_HOME_PROJECT_DIR_ENV])
+  const explicitProjectDir = normalizeFilesystemDirPath(env[PROJECT_ONEWORKS_HOME_PROJECT_DIR_ENV])
   if (explicitProjectDir != null) {
     return isAbsolute(explicitProjectDir)
       ? resolve(explicitProjectDir)
@@ -285,8 +281,10 @@ export const resolveProjectMockHome = (
   env: Record<string, string | null | undefined> = process.env
 ) => {
   const fallbackMockHome = resolveProjectHomePath(cwd, env, '.mock')
-  const explicitHome = normalizeDirPath(env.HOME ?? process.env.HOME)
-  const realHome = normalizeDirPath(env.__ONEWORKS_PROJECT_REAL_HOME__ ?? process.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
+  const explicitHome = normalizeFilesystemDirPath(env.HOME ?? process.env.HOME)
+  const realHome = normalizeFilesystemDirPath(
+    env.__ONEWORKS_PROJECT_REAL_HOME__ ?? process.env.__ONEWORKS_PROJECT_REAL_HOME__
+  ) ??
     resolveProjectRealHome(env)
   const resolvedExplicitHome = explicitHome == null ? undefined : resolve(explicitHome)
   const resolvedRealHome = resolve(realHome)

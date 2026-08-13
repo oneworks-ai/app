@@ -124,11 +124,12 @@ const candidate = (
   sourcePath: string,
   title: string,
   fileSizeBytes: number,
-  isLarge = false
+  isLarge = false,
+  cwd = '/projects/example'
 ): NativeHistoryImportPreviewCandidate => ({
   adapter: 'codex',
   createdAt: 100,
-  cwd: '/projects/example',
+  cwd,
   fileSizeBytes,
   isArchived: false,
   isImported: false,
@@ -211,7 +212,8 @@ const waitForText = async (text: string) => {
 }
 
 const renderAdapterTab = async (
-  runImport: (request: Record<string, unknown>) => Promise<NativeHistoryImportResult | undefined>
+  runImport: (request: Record<string, unknown>, activation?: unknown) => Promise<NativeHistoryImportResult | undefined>,
+  input: { projectOptions?: Array<{ label: string; value: string }>; projectPaths?: string[] } = {}
 ) => {
   const { ExternalSessionsAdapterTab } = await import(
     '#~/components/config/ExternalSessionsAdapterTab'
@@ -230,7 +232,8 @@ const renderAdapterTab = async (
           onAdapterConfigChange={() => undefined}
           onProjectPathsChange={() => undefined}
           onProjectScopeChange={() => undefined}
-          projectPaths={[]}
+          projectOptions={input.projectOptions}
+          projectPaths={input.projectPaths ?? []}
           projectScope='all-projects'
           runImport={runImport}
           showSettings={false}
@@ -294,13 +297,16 @@ describe('external sessions adapter import behavior', () => {
       await Promise.resolve()
     })
 
-    expect(runImport).toHaveBeenCalledWith(expect.objectContaining({
-      adapters: ['codex'],
-      projectScope: 'all-projects',
-      sourcePaths: [importedCandidate.sourcePath],
-      threadScope: 'user',
-      timeSort: 'activity'
-    }))
+    expect(runImport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        adapters: ['codex'],
+        projectScope: 'all-projects',
+        sourcePaths: [importedCandidate.sourcePath],
+        threadScope: 'user',
+        timeSort: 'activity'
+      }),
+      undefined
+    )
     expect(container.textContent).not.toContain(importedCandidate.title)
     expect(container.textContent).toContain(remainingCandidate.title)
     expect(mocks.previewNativeProjectHistory).toHaveBeenCalledTimes(2)
@@ -310,6 +316,49 @@ describe('external sessions adapter import behavior', () => {
 
     expect(container.textContent).not.toContain(importedCandidate.title)
     expect(container.textContent).toContain(remainingCandidate.title)
+  })
+
+  it('filters and imports only the selected whitespace-distinct project', async () => {
+    const adjacentProject = '/parent/project'
+    const selectedProject = '/parent/project '
+    const adjacentCandidate = candidate(
+      '/history/adjacent.jsonl',
+      'Adjacent candidate',
+      10,
+      false,
+      `${adjacentProject}/src`
+    )
+    const selectedCandidate = candidate(
+      '/history/selected.jsonl',
+      'Selected candidate',
+      20,
+      false,
+      `${selectedProject}/src`
+    )
+    mocks.previewNativeProjectHistory.mockResolvedValue(previewResult(adapterPreview([
+      adjacentCandidate,
+      selectedCandidate
+    ], { projects: [{ path: adjacentProject, sessionCount: 1 }, { path: selectedProject, sessionCount: 1 }] })))
+    const runImport = vi.fn().mockResolvedValue(importResult(selectedCandidate.sourcePath))
+
+    await renderAdapterTab(runImport, {
+      projectOptions: [{ label: 'Adjacent', value: adjacentProject }, { label: 'Selected', value: selectedProject }],
+      projectPaths: [selectedProject]
+    })
+    await waitForText(selectedCandidate.title)
+    expect(container.textContent).not.toContain(adjacentCandidate.title)
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('button[aria-label="导入"]')?.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(runImport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectPaths: [selectedProject],
+        sourcePaths: [selectedCandidate.sourcePath]
+      }),
+      undefined
+    )
   })
 
   it('keeps the row when the import does not return a result', async () => {

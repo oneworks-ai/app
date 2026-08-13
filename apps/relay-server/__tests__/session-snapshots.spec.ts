@@ -6,6 +6,29 @@ import { cleanupSessionRelayFixtures, listenSessionRelay, postSnapshot } from '.
 afterEach(cleanupSessionRelayFixtures)
 
 describe('relay server session snapshots', () => {
+  it('preserves an exact whitespace-bearing workspace through snapshot forwarding and listing', async () => {
+    const workspaceFolder = ' /tmp/relay workspace '
+    const { baseUrl } = await listenSessionRelay()
+    const snapshot = await postSnapshot(baseUrl, 'device-1', 'device-token-1', [{
+      id: 'session-raw-workspace',
+      title: ' Raw session title ',
+      userId: 'user-1',
+      workspaceFolder
+    }])
+    const listed = await requestJson(baseUrl, '/api/relay/devices/device-1/sessions', {
+      headers: authHeaders('member-token-1')
+    })
+
+    expect(snapshot.response.status).toBe(200)
+    expect(listed.body.sessions).toEqual([
+      expect.objectContaining({
+        id: 'session-raw-workspace',
+        title: 'Raw session title',
+        workspaceFolder
+      })
+    ])
+  })
+
   it('lists device sessions for admins and restricts member access by device/session owner', async () => {
     const { baseUrl } = await listenSessionRelay()
     const snapshot = await postSnapshot(baseUrl, 'device-1', 'device-token-1', [

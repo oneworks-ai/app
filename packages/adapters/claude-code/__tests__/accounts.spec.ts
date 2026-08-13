@@ -44,6 +44,22 @@ afterAll(() => {
 })
 
 describe('claude account lifecycle', () => {
+  it.runIf(process.platform !== 'win32')(
+    'keeps a whitespace-bearing real home distinct for account state',
+    async () => {
+      const cwd = await createTempDir('ow-claude-workspace-')
+      const realHome = await createTempDir('ow-claude-home-')
+      const exactHome = `${realHome} `
+      await mkdir(exactHome, { recursive: true })
+      await writeFile(
+        join(exactHome, '.claude.json'),
+        JSON.stringify({ cachedUsage: { fiveHour: { utilization: 7 } } })
+      )
+      const accounts = await getClaudeAccounts(createContext({ cwd, realHome: exactHome }), {})
+      expect(accounts.accounts).toEqual(expect.any(Array))
+    }
+  )
+
   it('serializes same-key adds before a second official login can change credentials', async () => {
     const cwd = await createTempDir('ow-claude-concurrent-workspace-')
     const realHome = await createTempDir('ow-claude-concurrent-home-')

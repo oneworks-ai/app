@@ -163,6 +163,10 @@ const normalizeEnvValue = (value: string | undefined) => {
   return normalized == null || normalized === '' ? undefined : normalized
 }
 
+const readFilesystemEnvPath = (value: string | undefined) => (
+  value != null && value.trim() !== '' ? value : undefined
+)
+
 const normalizeRuntimeCacheVersion = (value: string | undefined) => {
   const normalized = normalizeEnvValue(value)
   return normalized != null &&
@@ -387,7 +391,7 @@ const resolvePublishedPackageVersion = async (packageName: string, npmTag: strin
 }
 
 const resolveRuntimePackageJsonCandidates = (packageName: string) => {
-  const packageDir = process.env.__ONEWORKS_PROJECT_PACKAGE_DIR__?.trim()
+  const packageDir = readFilesystemEnvPath(process.env.__ONEWORKS_PROJECT_PACKAGE_DIR__)
   const candidates = [
     packageDir == null || packageDir === '' ? undefined : path.join(packageDir, 'package.json')
   ].filter((candidate): candidate is string => candidate != null)
@@ -432,7 +436,7 @@ const resolveModuleUpdateRuntimeHost = (): ModuleUpdateRuntimeHost => {
   if (resolveFirstRuntimeCacheVersion(DESKTOP_RUNTIME_VERSION_ENV_KEYS) != null) return 'desktop'
   if (normalizeEnvValue(process.env.__ONEWORKS_PROJECT_SERVER_ENTRY_KIND__) === 'web') return 'web'
 
-  const packageDir = normalizeEnvValue(process.env.__ONEWORKS_PROJECT_PACKAGE_DIR__)
+  const packageDir = readFilesystemEnvPath(process.env.__ONEWORKS_PROJECT_PACKAGE_DIR__)
   const packageInfo = packageDir == null
     ? undefined
     : readPackageInfoSync(path.join(packageDir, 'package.json'))
@@ -460,9 +464,9 @@ const readCurrentPackageVersion = (target: ModuleUpdateTarget) => {
       ? resolveActiveModulePackageDirSync(target.packageName)
       : undefined,
     target.id === 'client'
-      ? normalizeEnvValue(process.env.__ONEWORKS_PROJECT_CLIENT_PACKAGE_DIR__)
+      ? readFilesystemEnvPath(process.env.__ONEWORKS_PROJECT_CLIENT_PACKAGE_DIR__)
       : undefined,
-    normalizeEnvValue(process.env.__ONEWORKS_PROJECT_PACKAGE_DIR__),
+    readFilesystemEnvPath(process.env.__ONEWORKS_PROJECT_PACKAGE_DIR__),
     target.group === 'core' && resolveModuleUpdateRuntimeHost() === 'desktop'
       ? resolveSelectedRuntimePackageDir(target.packageName)
       : undefined

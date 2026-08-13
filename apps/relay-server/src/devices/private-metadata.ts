@@ -4,7 +4,12 @@ import process from 'node:process'
 
 import type { RelayDevice, RelayEncryptedPayload, RelayServerArgs } from '../types.js'
 import { isRecord } from '../utils.js'
-import { cleanDeviceMetadataText, cleanNetworkAddress, normalizeDeviceEnvironmentInfo } from './device-environment.js'
+import {
+  cleanDeviceMetadataPath,
+  cleanDeviceMetadataText,
+  cleanNetworkAddress,
+  normalizeDeviceEnvironmentInfo
+} from './device-environment.js'
 import type { RelayDeviceEnvironmentInfo } from './device-environment.js'
 import { normalizeManagementServers } from './management-server-metadata.js'
 import type { RelayDeviceManagementServerMetadata } from './management-server-metadata.js'
@@ -90,7 +95,7 @@ export const normalizeDevicePrivateMetadata = (
 ): RelayDevicePrivateMetadata => {
   const alias = cleanDeviceMetadataText(input.alias)
   const name = cleanDeviceMetadataText(input.name)
-  const workspaceFolder = cleanDeviceMetadataText(input.workspaceFolder)
+  const workspaceFolder = cleanDeviceMetadataPath(input.workspaceFolder)
   const pluginScope = cleanDeviceMetadataText(input.pluginScope)
   const lastSeenIp = cleanNetworkAddress(input.lastSeenIp)
   const registeredIp = cleanNetworkAddress(input.registeredIp)

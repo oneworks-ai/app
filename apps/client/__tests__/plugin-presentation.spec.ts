@@ -62,6 +62,12 @@ describe('plugin presentation', () => {
       name: 'extension',
       type: 'material'
     })
+    expect(resolvePluginPresentationIcon(createPlugin({ icon: 'assets\\icon.svg' }), 'http://localhost:3000'))
+      .toEqual({
+        alt: '',
+        src: 'http://localhost:3000/api/plugins/logger/readme/assets/assets%5Cicon.svg',
+        type: 'image'
+      })
   })
 
   it('trusts the server provenance and defaults missing legacy values to project', () => {
@@ -185,6 +191,8 @@ describe('plugin presentation', () => {
     expect(sanitizePluginAssetReference('/plugins/airtable/icon.svg')).toBe('/plugins/airtable/icon.svg')
     expect(sanitizePluginAssetReference('./assets/plugin-icon.svg')).toBe('./assets/plugin-icon.svg')
     expect(sanitizePluginAssetReference('icons/plugin%20icon.svg')).toBe('icons/plugin%20icon.svg')
+    expect(sanitizePluginAssetReference('assets%5Cicon.svg')).toBe('assets%5Cicon.svg')
+    expect(sanitizePluginAssetReference('..%5Cprivate%5Cicon.svg')).toBeUndefined()
     expect(sanitizePluginAssetReference(
       'https://example.invalid/assets/plugin%20icon.svg?theme=dark#public-v2'
     )).toBe('https://example.invalid/assets/plugin%20icon.svg?theme=dark#public-v2')

@@ -1,7 +1,7 @@
 import { createInstance } from 'i18next'
+import type { TOptions } from 'i18next'
 import type { ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { I18nextProvider } from 'react-i18next'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { buildTranslationResources } from '#~/i18n-resources'
@@ -16,8 +16,10 @@ interface CapturedMenuItem {
 
 const mocks = vi.hoisted(() => ({
   dropdownMenus: [] as unknown[][],
+  language: 'en',
   messageError: vi.fn(),
   messageSuccess: vi.fn(),
+  translate: (key: string, options?: TOptions) => key,
   updateSession: vi.fn()
 }))
 
@@ -44,9 +46,19 @@ vi.mock('antd', async (importOriginal) => {
   }
 })
 
-vi.mock('#~/api', async (importOriginal) => ({
-  ...await importOriginal<typeof import('#~/api')>(),
+vi.mock('../src/api', () => ({
+  ApiError: class ApiError extends Error {},
+  deleteSession: vi.fn(),
+  getApiErrorMessage: (_error: unknown, fallback: string) => fallback,
   updateSession: mocks.updateSession
+}))
+
+vi.mock('react-i18next', async (importOriginal) => ({
+  ...await importOriginal<typeof import('react-i18next')>(),
+  useTranslation: () => ({
+    i18n: { language: mocks.language, resolvedLanguage: mocks.language },
+    t: mocks.translate
+  })
 }))
 
 vi.mock('@oneworks/components/route-layout', () => ({
@@ -93,6 +105,8 @@ vi.mock('monaco-editor', () => ({
   editor: { defineTheme: vi.fn() }
 }))
 
+const chatHeaderModule = import('#~/components/chat/ChatHeader')
+
 const renderArchiveAction = async ({
   isArchived,
   language
@@ -100,7 +114,6 @@ const renderArchiveAction = async ({
   isArchived: boolean
   language: 'en' | 'zh'
 }) => {
-  const { ChatHeader } = await import('#~/components/chat/ChatHeader')
   const i18n = createInstance()
   await i18n.init({
     fallbackLng: false,
@@ -110,21 +123,22 @@ const renderArchiveAction = async ({
       './resources/locales/zh.json': { default: zh }
     })
   })
+  mocks.language = language
+  mocks.translate = (key, options) => i18n.t(key, options)
+  const { ChatHeader } = await chatHeaderModule
 
   renderToStaticMarkup(
-    <I18nextProvider i18n={i18n}>
-      <ChatHeader
-        activeView='history'
-        isArchived={isArchived}
-        isBottomPanelOpen={false}
-        isWorkspaceDrawerOpen={false}
-        sessionId='session-183'
-        sessionInfo={null}
-        onToggleBottomPanel={() => undefined}
-        onToggleWorkspaceDrawer={() => undefined}
-        onViewChange={() => undefined}
-      />
-    </I18nextProvider>
+    <ChatHeader
+      activeView='history'
+      isArchived={isArchived}
+      isBottomPanelOpen={false}
+      isWorkspaceDrawerOpen={false}
+      sessionId='session-183'
+      sessionInfo={null}
+      onToggleBottomPanel={() => undefined}
+      onToggleWorkspaceDrawer={() => undefined}
+      onViewChange={() => undefined}
+    />
   )
 
   const archiveAction = mocks.dropdownMenus
@@ -137,7 +151,7 @@ const renderArchiveAction = async ({
 }
 
 describe('chat header archive i18n', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks()
     mocks.dropdownMenus.length = 0
     mocks.updateSession.mockResolvedValue(undefined)

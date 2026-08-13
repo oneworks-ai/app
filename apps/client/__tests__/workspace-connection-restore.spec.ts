@@ -77,4 +77,32 @@ describe('workspace connection restore target isolation', () => {
     expect(mocks.getLauncherRelayWorkspaceConnection).toHaveBeenCalledOnce()
     expect(mocks.getLauncherWorkspaceConnection).not.toHaveBeenCalled()
   })
+
+  it('reopens a remembered Relay workspace with its exact raw filesystem path', async () => {
+    const workspaceFolder = '/tmp/ workspace '
+    mocks.readRememberedWorkspaceConnectionMetadata.mockImplementation((_id, transport) =>
+      transport === 'relay'
+        ? {
+          managerServerBaseUrl: 'http://127.0.0.1:8798',
+          relay: { deviceId: 'device-1', serverId: 'relay-1', workspaceFolder },
+          serverBaseUrl: 'https://relay.example',
+          transport: 'relay',
+          workspaceFolder,
+          workspaceId: 'w_remote_raw_1'
+        }
+        : undefined
+    )
+    mocks.getLauncherRelayWorkspaceConnection.mockResolvedValue(undefined)
+    mocks.openLauncherRelayWorkspace.mockResolvedValue({
+      serverBaseUrl: 'https://relay.example',
+      workspaceFolder,
+      workspaceId: 'w_remote_raw_1'
+    })
+
+    await expect(getRestorableWorkspaceConnection('w_remote_raw_1')).resolves.toMatchObject({
+      connection: { workspaceFolder },
+      transport: 'relay'
+    })
+    expect(mocks.openLauncherRelayWorkspace).toHaveBeenCalledWith(expect.objectContaining({ workspaceFolder }))
+  })
 })

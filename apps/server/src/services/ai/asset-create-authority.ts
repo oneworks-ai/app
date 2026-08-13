@@ -14,8 +14,8 @@ export const resolveAssetCreateAuthority = async (
   if (env.__ONEWORKS_PROJECT_SERVER_ROLE__ === 'manager') {
     throw badRequest('Data assets require a workspace server', undefined, 'asset_workspace_required')
   }
-  const configuredRoot = env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__?.trim()
-  if (configuredRoot == null || configuredRoot === '') {
+  const configuredRoot = env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__
+  if (configuredRoot == null || configuredRoot.trim() === '') {
     throw badRequest('Missing workspace authority', undefined, 'asset_workspace_required')
   }
   const workspaceRoot = await realpath(configuredRoot).catch(() => {

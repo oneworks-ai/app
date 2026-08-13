@@ -236,4 +236,32 @@ describe('ensureOpenCodeNativeHooksInstalled', () => {
       vi.resetModules()
     }
   })
+
+  it('mirrors only the exact whitespace-bearing OpenCode config directory', async () => {
+    const root = await createTempDir('opencode-hooks-path-')
+    const workspace = join(root, 'workspace')
+    const realHome = join(root, 'real-home')
+    const mockHome = resolveTestMockHome(workspace, realHome)
+    const exactConfigDir = join(root, 'config ')
+    const adjacentConfigDir = join(root, 'config')
+    await writeDocument(join(exactConfigDir, 'commands', 'exact.md'), '# exact')
+    await writeDocument(join(adjacentConfigDir, 'commands', 'adjacent.md'), '# adjacent')
+
+    const ctx = {
+      cwd: workspace,
+      env: {
+        HOME: mockHome,
+        OPENCODE_CONFIG_DIR: exactConfigDir,
+        __ONEWORKS_PROJECT_REAL_HOME__: realHome
+      },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+      assets: { hookPlugins: [] }
+    } as any
+
+    await ensureOpenCodeNativeHooksInstalled(ctx)
+
+    const commandsPath = join(mockHome, '.config', 'opencode', 'commands')
+    expect(resolve(dirname(commandsPath), await readlink(commandsPath))).toBe(resolve(exactConfigDir, 'commands'))
+    expect(await readFile(join(commandsPath, 'exact.md'), 'utf8')).toBe('# exact')
+  })
 })

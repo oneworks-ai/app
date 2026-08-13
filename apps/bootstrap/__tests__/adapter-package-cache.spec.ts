@@ -5,6 +5,12 @@ import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  resolveBootstrapPackageCacheRootDir,
+  resolveExistingAdapterPackageCacheDir,
+  resolvePackageCacheHomeDir
+} from '../../../packages/types/src/adapter-package-cache'
+
+import {
   readCliAdapterPackageRequest,
   resolveAdapterPackageName,
   resolveCliAdapterPackageDir
@@ -69,6 +75,52 @@ describe('bootstrap adapter package cache', () => {
         cliVersion: '3.2.4-alpha.5'
       })
     ).resolves.toBe(cacheDir)
+  })
+
+  it('selects the cache under the exact whitespace-bearing real home', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'ow-bootstrap-adapter-cache-home-'))
+    const adjacentHome = path.join(root, 'home')
+    const exactHome = path.join(root, 'home ')
+    tempDirs.push(root)
+    await Promise.all([
+      writeCachedAdapterPackage(adjacentHome, '@oneworks/adapter-codex', '3.4.9'),
+      writeCachedAdapterPackage(exactHome, '@oneworks/adapter-codex', '3.4.1')
+    ])
+    vi.stubEnv('__ONEWORKS_PROJECT_REAL_HOME__', exactHome)
+
+    await expect(resolveCliAdapterPackageDir({
+      adapter: 'codex',
+      cliVersion: '3.4.0'
+    })).resolves.toContain(`${path.sep}home ${path.sep}`)
+    expect(resolvePackageCacheHomeDir({ __ONEWORKS_PROJECT_REAL_HOME__: exactHome })).toBe(exactHome)
+    expect(resolveBootstrapPackageCacheRootDir({
+      __ONEWORKS_PROJECT_PACKAGE_CACHE_DIR__: `${root}${path.sep}cache `
+    })).toBe(`${root}${path.sep}cache `)
+  })
+
+  it('selects the exact whitespace-bearing desktop built-in cache directory', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'ow-bootstrap-adapter-desktop-cache-'))
+    const adjacentCache = path.join(root, 'builtin')
+    const exactCache = path.join(root, 'builtin ')
+    const packageName = '@oneworks/adapter-codex'
+    tempDirs.push(root)
+
+    for (const cacheDir of [adjacentCache, exactCache]) {
+      const packageDir = path.join(cacheDir, 'node_modules', ...packageName.split('/'))
+      await mkdir(packageDir, { recursive: true })
+      await writeFile(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify({ name: packageName, version: '3.4.0' }),
+        'utf8'
+      )
+    }
+
+    expect(resolveExistingAdapterPackageCacheDir(packageName, {
+      __ONEWORKS_DESKTOP_BUILTIN_ADAPTER_PACKAGES__: JSON.stringify({
+        [packageName]: { cacheDir: exactCache, version: '3.4.0' }
+      }),
+      __ONEWORKS_PROJECT_REAL_HOME__: root
+    })).toBe(exactCache)
   })
 
   it('uses the highest cached adapter package that satisfies the CLI semver floor', async () => {

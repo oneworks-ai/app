@@ -20,6 +20,14 @@
   - 左下角只承载 app 级菜单入口；右下角只承载当前选中项的可用操作提示。
   - `/` 文件搜索模式在 route 层只负责进入/退出模式、展示结果和调用 preload API。全局模式搜索电脑根目录；项目上下文模式搜索当前项目资源。
   - 非桌面环境下必须降级提示能力不可用，不要直接访问 Electron IPC。
+  - 目录浏览行的交互统一由 `launcher-directory-command-descriptor.ts` 装配：row、主 action、Enter 和右键主项进入目录；显式 `folder_open` action、ArrowRight 和右键次项才把目录作为项目打开。不要在 JSX、键盘和 context menu 中分别重建这套映射。
+- `chooseWorkspace`、clone、local / relay create 与后续 open 必须共用 `launcher-workspace-open-lifecycle.ts` 在首次 await 前取得的同一 lease。overlay close、`active=false` 和 route unmount 必须在 passive effects 前使旧 lease 失效；旧 settlement 不得再写环境、最近目录、导航、通知、focus 或 opening state。
+- workspace resource、filesystem external open、directory open 与 reveal 同样必须在首次 await 前取得 launcher lease；close/reopen 后的旧 resolve / reject 不能再关闭或隐藏新 launcher，也不能把错误或 focus 写入新 activation。
+  - 目录列表、文件 opener、workspace/plugin resource search、filesystem search 和通用 command dispatcher 使用同一 controller 的 non-exclusive activation observer；observer 只随 close、`active=false` 或 unmount 失效，不能抢占正在执行的 exclusive open/action lease。所有旧 resolve / reject 都要在写 loading、result、error、navigation 或 notification 前检查当前 activation。
+  - Stop/Forget confirmation 由 route 追踪 AntD handle，并在 close、`active=false`、unmount 的同步失效阶段先 destroy，再释放 focus 或调用 owner `onClose`。确认后的 API await 复用创建 dialog 时取得的 exclusive lease，旧 `onOk` 或旧 settlement 不能进入新 activation。
+  - `LauncherOverlay` 是 modal focus ownership 的消费边界：通过 `use-launcher-overlay-focus.ts` 复用 `@oneworks/route-layout` 的 modal focus primitives，打开时隔离 background 并约束 Tab / focusin；Launcher 自己触发的 AntD confirm 必须通过 `getContainer` 挂进 route owner，focus trap 在 confirm 存在时以最内层可见 dialog 为边界。关闭或卸载时 opener 必须同时满足 connected / visible / enabled / non-hidden / non-inert，并在 focus 后验证 `activeElement`，失败则继续尝试安全 background fallback 或 blur。不要增加 document 级常驻 shield。
+- Launcher 的 External Sessions Import All confirm 同样是 route-owned dialog：不得回退到 `document.body`，inactive、close 与 unmount 必须先销毁 handle，再释放 overlay focus；未确认的旧 `onOk`、已确认 import 的 resolve / reject、preview refresh 和 selector refresh 都服从同一 activation observer，不能在 reopen 后导入、提示或写回状态。
+  - filesystem path 语义由 `utils/filesystem-path-identity.ts` 的 shared reader/display basename 和 `launcher-directory-paths.ts` 的 directory route policy 共同拥有。仅允许用 `trim()` 判断空白；URL、breadcrumb、recent/favorite、dedupe key 与 IPC/API 必须保留 raw path。Windows drive-rooted、drive-relative、UNC、单根、POSIX 根和 relative path 是不同 root family，不能在 key、breadcrumb 或 Chat Launcher display name 中折叠；POSIX 路径里的 `\\` 是文件名字节，不能当成目录分隔符。
 - `AgentRoomRoute.tsx`
   - `/rooms/:roomId` 主入口。
   - 使用 SWR 拉取 `/api/agent-rooms/:id`。

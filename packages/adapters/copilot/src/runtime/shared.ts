@@ -119,13 +119,21 @@ const pickProjectLogPathEnv = (env: AdapterCtx['env']) =>
     })
   )
 
-const joinEnvList = (...values: Array<string | undefined>) => (
-  values
-    .flatMap(value => value?.split(',') ?? [])
-    .map(value => value.trim())
-    .filter(Boolean)
-    .join(',')
+const parseInheritedFilesystemEnvList = (value: string | undefined) => (
+  value?.split(',').filter(entry => entry.trim() !== '') ?? []
 )
+
+const joinFilesystemEnvList = (inherited: string | undefined, ...operands: Array<string | undefined>) => {
+  if (operands.some(value => value?.includes(','))) {
+    throw new Error(
+      'Copilot filesystem directory lists cannot contain commas because the child environment has no escape syntax.'
+    )
+  }
+  return [
+    ...parseInheritedFilesystemEnvList(inherited),
+    ...operands.filter((value): value is string => value != null && value.trim() !== '')
+  ].join(',')
+}
 
 const asPlainObject = (value: unknown): Record<string, unknown> | undefined => (
   value != null && typeof value === 'object' && !Array.isArray(value)
@@ -151,8 +159,7 @@ const asStringList = (value: unknown) => (
   Array.isArray(value)
     ? value
       .filter((entry): entry is string => typeof entry === 'string')
-      .map(entry => entry.trim())
-      .filter(Boolean)
+      .filter(entry => entry.trim() !== '')
     : []
 )
 
@@ -380,6 +387,12 @@ const pushStringListArg = (args: string[], flag: string, values: string[] | unde
   }
 }
 
+const pushFilesystemPathListArg = (args: string[], flag: string, values: string[] | undefined) => {
+  const paths = values?.filter(value => value.trim() !== '')
+  if (paths == null || paths.length === 0) return
+  for (const path of paths) args.push(flag, path)
+}
+
 const mapMcpServerForCopilot = (server: McpServerConfig) => {
   if (server.type === 'http' || server.type === 'sse') {
     return {
@@ -412,7 +425,9 @@ const buildAdditionalMcpConfig = (options: AdapterQueryOptions) => {
 }
 
 const resolveConfigDir = (ctx: AdapterCtx, adapterConfig: CopilotAdapterConfig) => (
-  adapterConfig.configDir?.trim() || resolve(resolveProjectMockHome(ctx.cwd, ctx.env), 'copilot')
+  adapterConfig.configDir != null && adapterConfig.configDir.trim() !== ''
+    ? adapterConfig.configDir
+    : resolve(resolveProjectMockHome(ctx.cwd, ctx.env), 'copilot')
 )
 
 export const ensureCopilotConfigDir = async (ctx: AdapterCtx, adapterConfig: CopilotAdapterConfig) => {
@@ -608,7 +623,7 @@ export const buildCopilotChildEnv = async (
   const existingAgentDirs = typeof ctx.env.COPILOT_AGENT_DIRS === 'string'
     ? ctx.env.COPILOT_AGENT_DIRS
     : process.env.COPILOT_AGENT_DIRS
-  const configuredAgentDirs = adapterConfig.agentDirs?.map(value => value.trim()).filter(Boolean).join(',')
+  const configuredAgentDirs = adapterConfig.agentDirs?.filter(value => value.trim() !== '')
   const configuredAdditionalInstructions = adapterConfig.additionalInstructions?.trim()
   const existingAdditionalInstructions = typeof ctx.env.COPILOT_ADDITIONAL_CUSTOM_INSTRUCTIONS === 'string'
     ? ctx.env.COPILOT_ADDITIONAL_CUSTOM_INSTRUCTIONS
@@ -629,13 +644,13 @@ export const buildCopilotChildEnv = async (
       ? ctx.env.COPILOT_AUTO_UPDATE
       : 'false',
     ...(skillsDir != null
-      ? { COPILOT_SKILLS_DIRS: joinEnvList(existingSkillDirs, skillsDir) }
+      ? { COPILOT_SKILLS_DIRS: joinFilesystemEnvList(existingSkillDirs, skillsDir) }
       : {}),
     ...(instructionsDir != null
-      ? { COPILOT_CUSTOM_INSTRUCTIONS_DIRS: joinEnvList(existingInstructionDirs, instructionsDir) }
+      ? { COPILOT_CUSTOM_INSTRUCTIONS_DIRS: joinFilesystemEnvList(existingInstructionDirs, instructionsDir) }
       : {}),
-    ...(configuredAgentDirs != null && configuredAgentDirs !== ''
-      ? { COPILOT_AGENT_DIRS: joinEnvList(existingAgentDirs, configuredAgentDirs) }
+    ...(configuredAgentDirs != null && configuredAgentDirs.length > 0
+      ? { COPILOT_AGENT_DIRS: joinFilesystemEnvList(existingAgentDirs, ...configuredAgentDirs) }
       : {}),
     ...(additionalInstructions !== ''
       ? { COPILOT_ADDITIONAL_CUSTOM_INSTRUCTIONS: additionalInstructions }
@@ -705,8 +720,8 @@ export const buildCopilotBaseArgs = async (params: {
   const agent = adapterConfig.agent?.trim()
   if (agent) args.push('--agent', agent)
 
-  pushStringListArg(args, '--plugin-dir', adapterConfig.pluginDirs)
-  pushStringListArg(args, '--add-dir', adapterConfig.additionalDirs)
+  pushFilesystemPathListArg(args, '--plugin-dir', adapterConfig.pluginDirs)
+  pushFilesystemPathListArg(args, '--add-dir', adapterConfig.additionalDirs)
   const mode = adapterConfig.mode?.trim()
   if (mode) args.push('--mode', mode)
   if (adapterConfig.autopilot === true && !mode && options.permissionMode !== 'plan') args.push('--autopilot')

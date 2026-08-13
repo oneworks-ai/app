@@ -24,13 +24,12 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
 
 const toStringList = (value: unknown): string[] => {
   if (typeof value === 'string' && value.trim() !== '') {
-    return [value.trim()]
+    return [value]
   }
   if (!Array.isArray(value)) return []
 
   return value
     .filter((item): item is string => typeof item === 'string' && item.trim() !== '')
-    .map(item => item.trim())
 }
 
 const normalizeWorkspaceEntry = (
@@ -38,7 +37,7 @@ const normalizeWorkspaceEntry = (
   value: string | WorkspaceConfigEntry
 ): NormalizedWorkspaceEntry | undefined => {
   if (typeof value === 'string') {
-    return { path: value }
+    return value.trim() === '' ? undefined : { path: value }
   }
 
   if (!isRecord(value)) return undefined
@@ -51,7 +50,7 @@ const normalizeWorkspaceEntry = (
     description: typeof value.description === 'string' && value.description.trim() !== ''
       ? value.description.trim()
       : undefined,
-    path: typeof value.path === 'string' && value.path.trim() !== '' ? value.path.trim() : undefined,
+    path: typeof value.path === 'string' && value.path.trim() !== '' ? value.path : undefined,
     include: [
       ...toStringList(value.include),
       ...toStringList(value.glob),

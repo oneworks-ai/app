@@ -31,7 +31,7 @@ const pickExportTarget = (
   depth = 0
 ): string | undefined => {
   if (depth > 8) return undefined
-  if (typeof value === 'string' && value.trim() !== '') return value.trim()
+  if (typeof value === 'string' && value.trim() !== '') return value
   if (Array.isArray(value)) {
     for (const candidate of value) {
       const target = pickExportTarget(candidate, conditions, depth + 1)
@@ -63,7 +63,9 @@ const resolvePackageExportTarget = (
 
 const startsWithPathSegment = (value: string | undefined, segment: string) => {
   if (value == null) return false
-  const normalized = value.replace(/^[./\\]+/, '').replaceAll('\\', '/')
+  const normalized = path.sep === '\\'
+    ? value.replace(/^[./\\]+/u, '').replaceAll('\\', '/')
+    : value.replace(/^[./]+/u, '')
   return normalized === segment || normalized.startsWith(`${segment}/`)
 }
 

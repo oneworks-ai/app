@@ -1,42 +1,8 @@
 import { useEffect, useRef } from 'react'
 import type { RefObject } from 'react'
 
+import { focusFirstModalElement, focusModalElement, getModalFocusableElements } from './modal-focus.js'
 import { useMobileSideSheetGestures } from './use-mobile-side-sheet-gestures.js'
-
-const FOCUSABLE_SELECTOR = [
-  'a[href]',
-  'button:not([disabled])',
-  'input:not([disabled])',
-  'select:not([disabled])',
-  'textarea:not([disabled])',
-  '[tabindex]:not([tabindex="-1"])'
-].join(', ')
-
-const getFocusableElements = (container: HTMLElement) =>
-  Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
-    .filter((element) =>
-      !element.hasAttribute('disabled') && element.getAttribute('aria-hidden') !== 'true' &&
-      element.offsetParent !== null
-    )
-
-const focusElement = (element: HTMLElement) => {
-  try {
-    element.focus({ preventScroll: true })
-  } catch {
-    element.focus()
-  }
-}
-
-const focusFirstElement = (container: HTMLElement) => {
-  const focusableElements = getFocusableElements(container)
-  const firstFocusableElement = focusableElements[0]
-  if (firstFocusableElement != null) {
-    focusElement(firstFocusableElement)
-  } else {
-    focusElement(container)
-  }
-  return focusableElements
-}
 
 export function useMobileSidebarModal({
   backgroundRefs,
@@ -97,7 +63,7 @@ export function useMobileSidebarModal({
 
     const focusFrame = window.requestAnimationFrame(() => {
       const sheet = sheetRef.current
-      if (sheet != null) focusFirstElement(sheet)
+      if (sheet != null) focusFirstModalElement(sheet)
     })
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -111,10 +77,10 @@ export function useMobileSidebarModal({
       const sheet = sheetRef.current
       if (sheet == null) return
 
-      const focusableElements = getFocusableElements(sheet)
+      const focusableElements = getModalFocusableElements(sheet)
       if (focusableElements.length === 0) {
         event.preventDefault()
-        focusElement(sheet)
+        focusModalElement(sheet)
         return
       }
 
@@ -125,14 +91,14 @@ export function useMobileSidebarModal({
       if (event.shiftKey) {
         if (activeTarget === firstElement || activeTarget === sheet) {
           event.preventDefault()
-          focusElement(lastElement)
+          focusModalElement(lastElement)
         }
         return
       }
 
       if (activeTarget === lastElement) {
         event.preventDefault()
-        focusElement(firstElement)
+        focusModalElement(firstElement)
       }
     }
 
@@ -142,7 +108,7 @@ export function useMobileSidebarModal({
       if (sheet == null || !(focusTarget instanceof HTMLElement)) return
       if (sheet.contains(focusTarget)) return
 
-      focusFirstElement(sheet)
+      focusFirstModalElement(sheet)
     }
 
     window.addEventListener('keydown', handleKeyDown)
@@ -156,7 +122,7 @@ export function useMobileSidebarModal({
       if (restoreFocusTarget != null && document.contains(restoreFocusTarget)) {
         window.requestAnimationFrame(() => {
           if (document.contains(restoreFocusTarget)) {
-            focusElement(restoreFocusTarget)
+            focusModalElement(restoreFocusTarget)
           }
         })
       }

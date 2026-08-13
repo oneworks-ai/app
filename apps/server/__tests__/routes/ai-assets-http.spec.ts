@@ -221,6 +221,22 @@ describe('asset create HTTP lifecycle with native authority', () => {
       .resolves.toContain('# HTTP Review')
   })
 
+  it('binds native publication to the exact whitespace-bearing workspace authority', async () => {
+    const adjacentWorkspace = workspace
+    workspace = path.join(root, 'workspace ')
+    await mkdir(workspace)
+    process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__ = workspace
+    await start()
+
+    const response = await createAndPoll([JSON.stringify({ kind: 'rule', name: 'Raw Authority' })])
+
+    expect(response.status).toBe(200)
+    await expect(readFile(path.join(workspace, '.oo/rules/raw-authority.md'), 'utf8'))
+      .resolves.toContain('# Raw Authority')
+    await expect(readFile(path.join(adjacentWorkspace, '.oo/rules/raw-authority.md'), 'utf8'))
+      .rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
   it('bounds unauthenticated chunked bodies before auth and marks committed false', async () => {
     await start()
     const response = await rawPost(['{"kind":"rule","name":"', 'x'.repeat(17 * 1024), '"}'], false)

@@ -1,3 +1,4 @@
+import { execFileSync, spawnSync } from 'node:child_process'
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import os from 'node:os'
@@ -7,9 +8,31 @@ import process from 'node:process'
 import { afterEach, describe, expect, it } from 'vitest'
 
 const require = createRequire(import.meta.url)
+const hasGit = spawnSync('git', ['--version']).status === 0
+
+interface DotenvModule {
+  loadDotenv: (options?: { workspaceFolder?: string; files?: string[] }) => void
+  migrateProjectHomeSegmentsSync: (
+    cwd?: string,
+    env?: NodeJS.ProcessEnv,
+    segments?: readonly string[]
+  ) => Array<{ migratedSources: string[]; targetDir: string }>
+  resolvePrimaryWorkspaceFolder: (workspaceFolder: string, env?: NodeJS.ProcessEnv) => string | undefined
+  resolveProjectConfigDir: (cwd?: string, env?: NodeJS.ProcessEnv) => string | undefined
+  resolveProjectHomePath: (cwd: string, env: NodeJS.ProcessEnv, ...segments: string[]) => string
+  resolveProjectMockHome: (cwd: string, env: NodeJS.ProcessEnv) => string
+  resolveProjectOoBaseDir: (cwd?: string, env?: NodeJS.ProcessEnv) => string
+  resolveProjectWorkspaceFolder: (cwd?: string, env?: NodeJS.ProcessEnv) => string
+}
+
+const loadDotenvModule = (): DotenvModule => {
+  const modulePath = require.resolve('../dotenv.js')
+  delete require.cache[modulePath]
+  return require(modulePath) as DotenvModule
+}
 
 describe('loadDotenv', () => {
-  const restoreKeys = ['TEST_PRIMARY_ONLY', 'TEST_SHARED_VALUE', 'TEST_CONFIG_ONLY']
+  const restoreKeys = ['TEST_PRIMARY_ONLY', 'TEST_SHARED_VALUE', 'TEST_CONFIG_ONLY', 'TEST_DOTENV_PATH']
   const restoreEnv = new Map<string, string | undefined>()
   const restoreScopedEnv = [
     '__ONEWORKS_PROJECT_LAUNCH_CWD__',
@@ -75,11 +98,7 @@ describe('loadDotenv', () => {
       process.env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__ = primaryDir
       delete process.env.__ONEWORKS_PROJECT_PACKAGE_DIR__
 
-      const modulePath = require.resolve('../dotenv.js')
-      delete require.cache[modulePath]
-      const { loadDotenv } = require(modulePath) as {
-        loadDotenv: (options?: { workspaceFolder?: string; files?: string[] }) => void
-      }
+      const { loadDotenv } = loadDotenvModule()
 
       delete process.env.TEST_PRIMARY_ONLY
       delete process.env.TEST_SHARED_VALUE
@@ -123,17 +142,11 @@ describe('loadDotenv', () => {
 
       process.chdir(launchDir)
 
-      const modulePath = require.resolve('../dotenv.js')
-      delete require.cache[modulePath]
       const {
         loadDotenv,
         resolveProjectWorkspaceFolder,
         resolveProjectConfigDir
-      } = require(modulePath) as {
-        loadDotenv: (options?: { workspaceFolder?: string; files?: string[] }) => void
-        resolveProjectWorkspaceFolder: (cwd?: string, env?: NodeJS.ProcessEnv) => string
-        resolveProjectConfigDir: (cwd?: string, env?: NodeJS.ProcessEnv) => string | undefined
-      }
+      } = loadDotenvModule()
 
       delete process.env.TEST_CONFIG_ONLY
       loadDotenv()
@@ -167,15 +180,10 @@ describe('loadDotenv', () => {
       await writeFile(path.join(workspaceDir, '.oo.config.json'), '{}\n')
       await writeFile(path.join(workspaceDir, '.env'), 'TEST_PRIMARY_ONLY=nested-root\nTEST_SHARED_VALUE=root\n')
 
-      const modulePath = require.resolve('../dotenv.js')
-      delete require.cache[modulePath]
       const {
         loadDotenv,
         resolveProjectWorkspaceFolder
-      } = require(modulePath) as {
-        loadDotenv: (options?: { workspaceFolder?: string; files?: string[] }) => void
-        resolveProjectWorkspaceFolder: (cwd?: string, env?: NodeJS.ProcessEnv) => string
-      }
+      } = loadDotenvModule()
 
       delete process.env.TEST_PRIMARY_ONLY
       delete process.env.TEST_SHARED_VALUE
@@ -216,17 +224,11 @@ describe('loadDotenv', () => {
       process.env.__ONEWORKS_PROJECT_CONFIG_DIR__ = 'business_modules/Miniapp'
       process.chdir(workspaceDir)
 
-      const modulePath = require.resolve('../dotenv.js')
-      delete require.cache[modulePath]
       const {
         loadDotenv,
         resolveProjectOoBaseDir,
         resolveProjectWorkspaceFolder
-      } = require(modulePath) as {
-        loadDotenv: (options?: { workspaceFolder?: string; files?: string[] }) => void
-        resolveProjectOoBaseDir: (cwd?: string, env?: NodeJS.ProcessEnv) => string
-        resolveProjectWorkspaceFolder: (cwd?: string, env?: NodeJS.ProcessEnv) => string
-      }
+      } = loadDotenvModule()
 
       loadDotenv()
 
@@ -245,19 +247,10 @@ describe('loadDotenv', () => {
     const realHome = await mkdtemp(path.join(os.tmpdir(), 'ow-dotenv-migration-home-'))
 
     try {
-      const modulePath = require.resolve('../dotenv.js')
-      delete require.cache[modulePath]
       const {
         migrateProjectHomeSegmentsSync,
         resolveProjectHomePath
-      } = require(modulePath) as {
-        migrateProjectHomeSegmentsSync: (
-          cwd?: string,
-          env?: NodeJS.ProcessEnv,
-          segments?: readonly string[]
-        ) => Array<{ migratedSources: string[]; targetDir: string }>
-        resolveProjectHomePath: (cwd: string, env: NodeJS.ProcessEnv, ...segments: string[]) => string
-      }
+      } = loadDotenvModule()
 
       const env = {
         ...process.env,
@@ -291,19 +284,10 @@ describe('loadDotenv', () => {
     const realHome = await mkdtemp(path.join(os.tmpdir(), 'ow-dotenv-migration-base-home-'))
 
     try {
-      const modulePath = require.resolve('../dotenv.js')
-      delete require.cache[modulePath]
       const {
         migrateProjectHomeSegmentsSync,
         resolveProjectHomePath
-      } = require(modulePath) as {
-        migrateProjectHomeSegmentsSync: (
-          cwd?: string,
-          env?: NodeJS.ProcessEnv,
-          segments?: readonly string[]
-        ) => Array<{ migratedSources: string[]; targetDir: string }>
-        resolveProjectHomePath: (cwd: string, env: NodeJS.ProcessEnv, ...segments: string[]) => string
-      }
+      } = loadDotenvModule()
 
       const env = {
         HOME: realHome,
@@ -350,15 +334,10 @@ describe('loadDotenv', () => {
     try {
       await mkdir(path.join(workspaceB, '.oo'), { recursive: true })
 
-      const modulePath = require.resolve('../dotenv.js')
-      delete require.cache[modulePath]
       const {
         loadDotenv,
         resolveProjectHomePath
-      } = require(modulePath) as {
-        loadDotenv: (options?: { workspaceFolder?: string; files?: string[] }) => void
-        resolveProjectHomePath: (cwd: string, env: NodeJS.ProcessEnv, ...segments: string[]) => string
-      }
+      } = loadDotenvModule()
 
       process.env.__ONEWORKS_PROJECT_LAUNCH_CWD__ = workspaceA
       process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__ = workspaceA
@@ -401,15 +380,10 @@ describe('loadDotenv', () => {
       )
       process.chdir(launchDir)
 
-      const modulePath = require.resolve('../dotenv.js')
-      delete require.cache[modulePath]
       const {
         loadDotenv,
         resolvePrimaryWorkspaceFolder
-      } = require(modulePath) as {
-        loadDotenv: (options?: { workspaceFolder?: string; files?: string[] }) => void
-        resolvePrimaryWorkspaceFolder: (workspaceFolder: string, env?: NodeJS.ProcessEnv) => string | undefined
-      }
+      } = loadDotenvModule()
 
       loadDotenv({ workspaceFolder: launchDir })
 
@@ -420,20 +394,96 @@ describe('loadDotenv', () => {
     }
   })
 
+  it('preserves leading and trailing whitespace in workspace and primary workspace paths', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ow-dotenv-raw-paths-'))
+    const workspaceDir = path.join(root, ' workspace ')
+    const primaryDir = path.join(root, ' primary ')
+
+    for (const key of restoreScopedEnv) {
+      restoreScopedValues.set(key, process.env[key])
+      delete process.env[key]
+    }
+
+    try {
+      await mkdir(workspaceDir)
+      await mkdir(primaryDir)
+      process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__ = workspaceDir
+      process.env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__ = primaryDir
+
+      const {
+        loadDotenv,
+        resolvePrimaryWorkspaceFolder
+      } = loadDotenvModule()
+
+      loadDotenv({ workspaceFolder: workspaceDir, files: [] })
+
+      const realWorkspaceDir = await realpath(workspaceDir)
+      expect(process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__).toBe(realWorkspaceDir)
+      expect(resolvePrimaryWorkspaceFolder(realWorkspaceDir, process.env)).toBe(path.resolve(primaryDir))
+    } finally {
+      await rm(root, { force: true, recursive: true })
+    }
+  })
+
+  it.runIf(process.platform !== 'win32' && hasGit)(
+    'discovers a Git primary whose POSIX component contains literal backslashes',
+    async () => {
+      const root = await mkdtemp(path.join(os.tmpdir(), 'ow-dotenv-git-backslash-'))
+      const primaryDir = path.join(root, String.raw`repo\.git\data`)
+      const worktreeDir = path.join(root, 'worktree')
+      try {
+        await mkdir(primaryDir, { recursive: true })
+        execFileSync('git', ['init'], { cwd: primaryDir, stdio: 'pipe' })
+        await writeFile(path.join(primaryDir, 'README.md'), 'initial\n')
+        execFileSync('git', ['add', 'README.md'], { cwd: primaryDir, stdio: 'pipe' })
+        execFileSync(
+          'git',
+          ['-c', 'user.email=ow@example.test', '-c', 'user.name=One Works', 'commit', '-m', 'initial'],
+          { cwd: primaryDir, stdio: 'pipe' }
+        )
+        execFileSync('git', ['worktree', 'add', '--detach', worktreeDir, 'HEAD'], {
+          cwd: primaryDir,
+          stdio: 'pipe'
+        })
+
+        const { resolvePrimaryWorkspaceFolder } = loadDotenvModule()
+        await expect(realpath(primaryDir)).resolves.toBe(resolvePrimaryWorkspaceFolder(worktreeDir, {}))
+      } finally {
+        await rm(root, { force: true, recursive: true })
+      }
+    }
+  )
+
+  it('loads only the exact whitespace-bearing dotenv filename from list framing', async () => {
+    const workspaceDir = await mkdtemp(path.join(os.tmpdir(), 'ow-dotenv-file-path-'))
+    for (const key of restoreKeys) {
+      restoreEnv.set(key, process.env[key])
+      delete process.env[key]
+    }
+    for (const key of restoreScopedEnv) {
+      restoreScopedValues.set(key, process.env[key])
+      delete process.env[key]
+    }
+
+    try {
+      await writeFile(path.join(workspaceDir, '.env'), 'TEST_DOTENV_PATH=adjacent\n')
+      await writeFile(path.join(workspaceDir, '.env '), 'TEST_DOTENV_PATH=exact\n')
+      process.env.__ONEWORKS_PROJECT_DOTENV_FILES__ = '.env '
+
+      loadDotenvModule().loadDotenv({ workspaceFolder: workspaceDir })
+
+      expect(process.env.TEST_DOTENV_PATH).toBe('exact')
+    } finally {
+      await rm(workspaceDir, { force: true, recursive: true })
+    }
+  })
+
   it('keeps dot-dot-prefixed child paths classified inside the workspace', async () => {
     const workspaceDir = await mkdtemp(path.join(os.tmpdir(), 'ow-dotenv-inside-'))
     const realHome = await mkdtemp(path.join(os.tmpdir(), 'ow-dotenv-inside-home-'))
 
     try {
-      const modulePath = require.resolve('../dotenv.js')
-      delete require.cache[modulePath]
-      const {
-        resolveProjectHomePath,
-        resolveProjectMockHome
-      } = require(modulePath) as {
-        resolveProjectHomePath: (cwd: string, env: NodeJS.ProcessEnv, ...segments: string[]) => string
-        resolveProjectMockHome: (cwd: string, env: NodeJS.ProcessEnv) => string
-      }
+      const { resolveProjectHomePath, resolveProjectMockHome } = loadDotenvModule()
       const env = {
         HOME: path.join(workspaceDir, '..cache-home'),
         __ONEWORKS_PROJECT_HOME_PROJECTS_DIR__: path.join(workspaceDir, '.oneworks-projects'),

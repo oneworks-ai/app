@@ -3,6 +3,12 @@ const { existsSync, realpathSync } = require('node:fs')
 const { dirname, resolve } = require('node:path')
 const process = require('node:process')
 
+const {
+  normalizeFilesystemDirPath,
+  readFilesystemPathOutput,
+  readNonBlankFilesystemPath
+} = require('./filesystem-path')
+
 const WORKSPACE_CONFIG_MARKERS = [
   '.oo.config.json',
   '.oo.config.yaml',
@@ -18,7 +24,7 @@ const WORKSPACE_ROOT_MARKERS = [
 ]
 
 const resolveAiBaseDir = () => (
-  process.env.__ONEWORKS_PROJECT_BASE_DIR__?.trim()?.replace(/[\\/]+$/, '') || '.oo'
+  normalizeFilesystemDirPath(process.env.__ONEWORKS_PROJECT_BASE_DIR__) || '.oo'
 )
 
 const normalizePath = (value) => {
@@ -52,7 +58,7 @@ const findGitRoot = (startDir) => {
       return undefined
     }
 
-    const gitRoot = result.stdout?.trim()
+    const gitRoot = readFilesystemPathOutput(result.stdout)
     return gitRoot ? normalizePath(gitRoot) : undefined
   } catch {
     return undefined
@@ -89,8 +95,10 @@ const findWorkspaceRoot = (startDir = process.cwd()) => {
 }
 
 const resolveWorkspaceFolder = (startDir = process.cwd()) => {
-  const explicitWorkspaceFolder = process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__?.trim()
-  return explicitWorkspaceFolder ? normalizePath(explicitWorkspaceFolder) : findWorkspaceRoot(startDir)
+  const explicitWorkspaceFolder = process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__
+  return readNonBlankFilesystemPath(explicitWorkspaceFolder) != null
+    ? normalizePath(explicitWorkspaceFolder)
+    : findWorkspaceRoot(startDir)
 }
 
 module.exports = {

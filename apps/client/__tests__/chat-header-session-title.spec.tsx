@@ -63,6 +63,7 @@ const renderHeader = async (props: {
     onOpenSession: () => void
   }
   enableTimelineView?: boolean
+  projectWorkspaceFolder?: string
 }) => {
   vi.stubGlobal('localStorage', {
     getItem: () => null,
@@ -80,6 +81,7 @@ const renderHeader = async (props: {
           roomIconSeed={props.roomIconSeed}
           roomIconStatus={props.roomIconStatus}
           moreItems={props.moreItems}
+          projectWorkspaceFolder={props.projectWorkspaceFolder}
           sessionId={props.sessionId ?? 'session-1'}
           sessionInfo={props.sessionInfo ?? null}
           sessionTitle={props.sessionTitle}
@@ -137,6 +139,20 @@ describe('chat header session title', () => {
 
     expect(html).toContain('aria-label="common.moreActions"')
     expect(html).toContain('more_vert')
+  })
+
+  it('renders exact root-family-aware project labels without changing the raw title path', async () => {
+    const literal = String.raw`/parent/team\secret`
+    const whitespace = '/parent/project '
+    const literalHtml = await renderHeader({ projectWorkspaceFolder: literal, sessionId: '' })
+    const whitespaceHtml = await renderHeader({ projectWorkspaceFolder: whitespace, sessionId: '' })
+    const windowsHtml = await renderHeader({ projectWorkspaceFolder: String.raw`C:\parent\secret`, sessionId: '' })
+
+    expect(literalHtml).toContain(`title="${literal}"`)
+    expect(literalHtml).toContain(String.raw`team\secret`)
+    expect(whitespaceHtml).toContain('>project </span>')
+    expect(whitespaceHtml).toContain(`title="${whitespace}"`)
+    expect(windowsHtml).toContain('>secret</span>')
   })
 
   it('hides unfinished timeline and settings from the primary header by default', async () => {

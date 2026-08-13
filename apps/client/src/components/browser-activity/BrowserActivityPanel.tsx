@@ -17,6 +17,11 @@ import {
   WorkspaceProjectSelect,
   WorkspaceSessionSelect
 } from '#~/components/workspace-scope-select/WorkspaceScopeSelect'
+import {
+  getFilesystemPathComparisonKey,
+  getFilesystemPathDisplayName,
+  readNonBlankFilesystemPath
+} from '#~/utils/filesystem-path-identity'
 
 import { ConfigSectionFrame } from '../config/ConfigSectionFrame'
 
@@ -90,18 +95,33 @@ const formatBytes = (value: number) => {
   return `${new Intl.NumberFormat(undefined, { maximumFractionDigits }).format(size)} ${units[unitIndex]}`
 }
 
-const normalizeScopeKey = (value: string | undefined) => {
+const normalizeTextScopeKey = (value: string | undefined) => {
   const normalized = value?.trim()
   return normalized == null || normalized === '' ? undefined : normalized
 }
 
-const normalizeScopeKeys = (values: Array<string | undefined>) => (
-  Array.from(new Set(values.map(normalizeScopeKey).filter((value): value is string => value != null)))
+const normalizeProjectKey = (value: string | undefined) => readNonBlankFilesystemPath(value)
+
+const getProjectComparisonKey = (value: string) => getFilesystemPathComparisonKey(value)
+
+const normalizeProjectKeys = (values: Array<string | undefined>) => (
+  values.reduce<string[]>((keys, value) => {
+    const path = normalizeProjectKey(value)
+    return path == null || keys.some(key => getProjectComparisonKey(key) === getProjectComparisonKey(path))
+      ? keys
+      : [...keys, path]
+  }, [])
+)
+
+const normalizeTextScopeKeys = (values: Array<string | undefined>) => (
+  Array.from(new Set(values.map(normalizeTextScopeKey).filter((value): value is string => value != null)))
 )
 
 const scopeKeyMatches = (recordKey: string | undefined, expectedKeys: string[]) => {
-  const normalizedRecordKey = normalizeScopeKey(recordKey)
-  return normalizedRecordKey != null && expectedKeys.includes(normalizedRecordKey)
+  const normalizedRecordKey = normalizeProjectKey(recordKey)
+  return normalizedRecordKey != null && expectedKeys.some(key => (
+    getProjectComparisonKey(key) === getProjectComparisonKey(normalizedRecordKey)
+  ))
 }
 
 const getScopeKeyDisplayName = (value: string) => {
@@ -109,8 +129,7 @@ const getScopeKeyDisplayName = (value: string) => {
     return new URL(value).host || value
   } catch {}
 
-  const normalizedPath = value.replace(/[\\/]+$/u, '')
-  const pathName = normalizedPath.split(/[\\/]/u).filter(Boolean).at(-1)
+  const pathName = getFilesystemPathDisplayName(value)
   if (pathName != null && pathName !== '') return pathName
   return value.length <= 24 ? value : `${value.slice(0, 12)}...${value.slice(-8)}`
 }
@@ -137,10 +156,10 @@ const normalizeWorkspaceSelectorState = (value: unknown): DesktopWorkspaceSelect
 
 const mergeWorkspaceProjects = (state: DesktopWorkspaceSelectorState) => {
   const projectsByFolder = new Map<string, DesktopWorkspaceSelectorProject>()
-  for (const project of [...state.runningProjects, ...state.recentProjects]) {
-    const workspaceFolder = normalizeScopeKey(project.workspaceFolder)
+  for (const project of [...state.recentProjects, ...state.runningProjects]) {
+    const workspaceFolder = normalizeProjectKey(project.workspaceFolder)
     if (workspaceFolder == null) continue
-    projectsByFolder.set(workspaceFolder, project)
+    projectsByFolder.set(getProjectComparisonKey(workspaceFolder), project)
   }
   return Array.from(projectsByFolder.values())
 }
@@ -157,17 +176,17 @@ const buildProjectScopeOptions = ({
   projects: DesktopWorkspaceSelectorProject[]
 }): WorkspaceScopeSelectOption[] => {
   const optionsByValue = new Map<string, WorkspaceScopeSelectOption>()
-  const currentProjectKeySet = new Set(currentProjectKeys)
+  const currentProjectKeySet = new Set(currentProjectKeys.map(getProjectComparisonKey))
   const currentProject = projects.find((project) => {
-    const workspaceFolder = normalizeScopeKey(project.workspaceFolder)
-    return workspaceFolder != null && currentProjectKeySet.has(workspaceFolder)
+    const workspaceFolder = normalizeProjectKey(project.workspaceFolder)
+    return workspaceFolder != null && currentProjectKeySet.has(getProjectComparisonKey(workspaceFolder))
   })
-  const currentProjectValue = normalizeScopeKey(currentProject?.workspaceFolder) ?? currentProjectKeys[0]
+  const currentProjectValue = normalizeProjectKey(currentProject?.workspaceFolder) ?? currentProjectKeys[0]
 
   if (currentProjectValue != null) {
     const currentProjectName = currentProject?.name.trim() || getScopeKeyDisplayName(currentProjectValue)
-    const currentProjectPath = normalizeScopeKey(currentProject?.workspaceFolder) ?? currentProjectValue
-    optionsByValue.set(currentProjectValue, {
+    const currentProjectPath = normalizeProjectKey(currentProject?.workspaceFolder) ?? currentProjectValue
+    optionsByValue.set(getProjectComparisonKey(currentProjectValue), {
       description: currentProjectName,
       descriptionTooltip: currentProjectPath,
       icon: 'folder_special',
@@ -179,12 +198,16 @@ const buildProjectScopeOptions = ({
   }
 
   for (const project of projects) {
-    const value = normalizeScopeKey(project.workspaceFolder)
+    const value = normalizeProjectKey(project.workspaceFolder)
     if (value == null) continue
-    if (value === currentProjectValue || currentProjectKeySet.has(value)) continue
+    if (
+      (currentProjectValue != null &&
+        getProjectComparisonKey(value) === getProjectComparisonKey(currentProjectValue)) ||
+      currentProjectKeySet.has(getProjectComparisonKey(value))
+    ) continue
     const projectName = project.name.trim() || getScopeKeyDisplayName(value)
     const description = project.description.trim()
-    optionsByValue.set(value, {
+    optionsByValue.set(getProjectComparisonKey(value), {
       icon: 'folder_open',
       label: projectName,
       title: description === '' ? value : `${projectName}\n${description}\n${value}`,
@@ -192,10 +215,14 @@ const buildProjectScopeOptions = ({
     })
   }
 
-  for (const value of normalizeScopeKeys(extraKeys)) {
-    if (optionsByValue.has(value)) continue
-    if (value === currentProjectValue || currentProjectKeySet.has(value)) continue
-    optionsByValue.set(value, {
+  for (const value of normalizeProjectKeys(extraKeys)) {
+    const key = getProjectComparisonKey(value)
+    if (optionsByValue.has(key)) continue
+    if (
+      (currentProjectValue != null && key === getProjectComparisonKey(currentProjectValue)) ||
+      currentProjectKeySet.has(key)
+    ) continue
+    optionsByValue.set(key, {
       icon: 'folder',
       label: getScopeKeyDisplayName(value),
       title: value,
@@ -203,9 +230,14 @@ const buildProjectScopeOptions = ({
     })
   }
 
-  const currentProjectOption = currentProjectValue == null ? undefined : optionsByValue.get(currentProjectValue)
+  const currentProjectOption = currentProjectValue == null
+    ? undefined
+    : optionsByValue.get(getProjectComparisonKey(currentProjectValue))
   const projectOptions = Array.from(optionsByValue.values())
-    .filter(option => option.value !== currentProjectValue)
+    .filter(option =>
+      currentProjectValue == null ||
+      getProjectComparisonKey(option.value) !== getProjectComparisonKey(currentProjectValue)
+    )
     .sort((left, right) => left.label.localeCompare(right.label))
   return currentProjectOption == null ? projectOptions : [currentProjectOption, ...projectOptions]
 }
@@ -222,26 +254,29 @@ const buildProjectLabelMap = ({
   const labels = new Map<string, string>()
 
   for (const project of projects) {
-    const workspaceFolder = normalizeScopeKey(project.workspaceFolder)
+    const workspaceFolder = normalizeProjectKey(project.workspaceFolder)
     if (workspaceFolder == null) continue
-    labels.set(workspaceFolder, project.name.trim() || getScopeKeyDisplayName(workspaceFolder))
+    labels.set(getProjectComparisonKey(workspaceFolder), project.name.trim() || getScopeKeyDisplayName(workspaceFolder))
   }
 
   for (const workspace of sessionWorkspaces) {
-    const workspaceFolder = normalizeScopeKey(workspace.workspaceFolder)
-    const repositoryRoot = normalizeScopeKey(workspace.repositoryRoot)
+    const workspaceFolder = normalizeProjectKey(workspace.workspaceFolder)
+    const repositoryRoot = normalizeProjectKey(workspace.repositoryRoot)
     const label = getScopeKeyDisplayName(repositoryRoot ?? workspaceFolder ?? '')
-    if (workspaceFolder != null && !labels.has(workspaceFolder)) {
-      labels.set(workspaceFolder, label)
+    if (workspaceFolder != null && !labels.has(getProjectComparisonKey(workspaceFolder))) {
+      labels.set(getProjectComparisonKey(workspaceFolder), label)
     }
-    if (repositoryRoot != null && !labels.has(repositoryRoot)) {
-      labels.set(repositoryRoot, labels.get(workspaceFolder ?? '') ?? label)
+    if (repositoryRoot != null && !labels.has(getProjectComparisonKey(repositoryRoot))) {
+      labels.set(
+        getProjectComparisonKey(repositoryRoot),
+        labels.get(workspaceFolder == null ? '' : getProjectComparisonKey(workspaceFolder)) ?? label
+      )
     }
   }
 
-  for (const value of normalizeScopeKeys(extraKeys)) {
-    if (!labels.has(value)) {
-      labels.set(value, getScopeKeyDisplayName(value))
+  for (const value of normalizeProjectKeys(extraKeys)) {
+    if (!labels.has(getProjectComparisonKey(value))) {
+      labels.set(getProjectComparisonKey(value), getScopeKeyDisplayName(value))
     }
   }
 
@@ -260,26 +295,26 @@ const buildProjectPathMap = ({
   const paths = new Map<string, string>()
 
   for (const project of projects) {
-    const workspaceFolder = normalizeScopeKey(project.workspaceFolder)
+    const workspaceFolder = normalizeProjectKey(project.workspaceFolder)
     if (workspaceFolder == null) continue
-    paths.set(workspaceFolder, workspaceFolder)
+    paths.set(getProjectComparisonKey(workspaceFolder), workspaceFolder)
   }
 
   for (const workspace of sessionWorkspaces) {
-    const workspaceFolder = normalizeScopeKey(workspace.workspaceFolder)
-    const repositoryRoot = normalizeScopeKey(workspace.repositoryRoot)
+    const workspaceFolder = normalizeProjectKey(workspace.workspaceFolder)
+    const repositoryRoot = normalizeProjectKey(workspace.repositoryRoot)
     const workspacePath = workspaceFolder ?? repositoryRoot
-    if (workspaceFolder != null && workspacePath != null && !paths.has(workspaceFolder)) {
-      paths.set(workspaceFolder, workspacePath)
+    if (workspaceFolder != null && workspacePath != null && !paths.has(getProjectComparisonKey(workspaceFolder))) {
+      paths.set(getProjectComparisonKey(workspaceFolder), workspacePath)
     }
-    if (repositoryRoot != null && workspacePath != null && !paths.has(repositoryRoot)) {
-      paths.set(repositoryRoot, workspacePath)
+    if (repositoryRoot != null && workspacePath != null && !paths.has(getProjectComparisonKey(repositoryRoot))) {
+      paths.set(getProjectComparisonKey(repositoryRoot), workspacePath)
     }
   }
 
-  for (const value of normalizeScopeKeys(extraKeys)) {
-    if (!paths.has(value)) {
-      paths.set(value, value)
+  for (const value of normalizeProjectKeys(extraKeys)) {
+    if (!paths.has(getProjectComparisonKey(value))) {
+      paths.set(getProjectComparisonKey(value), value)
     }
   }
 
@@ -287,7 +322,7 @@ const buildProjectPathMap = ({
 }
 
 const getWorkspaceProjectKeys = (workspace: SessionWorkspace | undefined) => (
-  normalizeScopeKeys([workspace?.repositoryRoot, workspace?.workspaceFolder])
+  normalizeProjectKeys([workspace?.repositoryRoot, workspace?.workspaceFolder])
 )
 
 const sessionMatchesProject = (
@@ -295,7 +330,9 @@ const sessionMatchesProject = (
   selectedProjectKey: string | undefined
 ) => {
   if (selectedProjectKey == null) return true
-  return getWorkspaceProjectKeys(workspace).includes(selectedProjectKey)
+  return getWorkspaceProjectKeys(workspace).some(key => (
+    getProjectComparisonKey(key) === getProjectComparisonKey(selectedProjectKey)
+  ))
 }
 
 const sessionMatchesArchiveFilter = (
@@ -304,7 +341,7 @@ const sessionMatchesArchiveFilter = (
   sessionArchiveById: Map<string, BrowserActivitySessionArchiveFilter>
 ) => {
   if (selectedArchiveFilter === 'all') return true
-  const normalizedSessionId = normalizeScopeKey(sessionId)
+  const normalizedSessionId = normalizeTextScopeKey(sessionId)
   return normalizedSessionId != null && sessionArchiveById.get(normalizedSessionId) === selectedArchiveFilter
 }
 
@@ -334,7 +371,7 @@ const buildSessionScopeOptions = ({
   sessions: Session[]
 }): WorkspaceScopeSelectOption[] => {
   const sessionById = new Map(sessions.map(session => [session.id, session]))
-  return normalizeScopeKeys([
+  return normalizeTextScopeKeys([
     ...sessions.map(session => session.id),
     ...extraKeys
   ]).map((value) => {
@@ -370,7 +407,7 @@ const matchesSelectedScope = (
   sessionArchiveById: Map<string, BrowserActivitySessionArchiveFilter>
 ) => {
   if (selectedProjectKey != null && !scopeKeyMatches(record.projectKey, [selectedProjectKey])) return false
-  if (selectedSessionKey != null && normalizeScopeKey(record.sessionKey) !== selectedSessionKey) return false
+  if (selectedSessionKey != null && normalizeTextScopeKey(record.sessionKey) !== selectedSessionKey) return false
   if (!sessionMatchesArchiveFilter(record.sessionKey, selectedArchiveFilter, sessionArchiveById)) return false
   return true
 }
@@ -420,8 +457,8 @@ export function BrowserActivityPanel({
   )
   const activeSessions = activeSessionsRes?.sessions ?? emptyBrowserActivitySessions
   const archivedSessions = archivedSessionsRes?.sessions ?? emptyBrowserActivitySessions
-  const normalizedInitialProjectKeys = useMemo(() => normalizeScopeKeys(initialProjectKeys), [initialProjectKeys])
-  const normalizedInitialSessionKey = normalizeScopeKey(initialSessionKey)
+  const normalizedInitialProjectKeys = useMemo(() => normalizeProjectKeys(initialProjectKeys), [initialProjectKeys])
+  const normalizedInitialSessionKey = normalizeTextScopeKey(initialSessionKey)
   const sessionArchiveById = useMemo(() => {
     const statuses = new Map<string, BrowserActivitySessionArchiveFilter>()
     for (const session of activeSessions) {
@@ -516,20 +553,23 @@ export function BrowserActivityPanel({
   const recordSessionProjectLabels = useMemo(() => {
     const labels = new Map<string, string>()
     for (const record of sourceRecords) {
-      const sessionKey = normalizeScopeKey(record.sessionKey)
-      const projectKey = normalizeScopeKey(record.projectKey)
+      const sessionKey = normalizeTextScopeKey(record.sessionKey)
+      const projectKey = normalizeProjectKey(record.projectKey)
       if (sessionKey == null || projectKey == null || labels.has(sessionKey)) continue
-      labels.set(sessionKey, projectLabelByKey.get(projectKey) ?? getScopeKeyDisplayName(projectKey))
+      labels.set(
+        sessionKey,
+        projectLabelByKey.get(getProjectComparisonKey(projectKey)) ?? getScopeKeyDisplayName(projectKey)
+      )
     }
     return labels
   }, [projectLabelByKey, sourceRecords])
   const recordSessionProjectPaths = useMemo(() => {
     const paths = new Map<string, string>()
     for (const record of sourceRecords) {
-      const sessionKey = normalizeScopeKey(record.sessionKey)
-      const projectKey = normalizeScopeKey(record.projectKey)
+      const sessionKey = normalizeTextScopeKey(record.sessionKey)
+      const projectKey = normalizeProjectKey(record.projectKey)
       if (sessionKey == null || projectKey == null || paths.has(sessionKey)) continue
-      paths.set(sessionKey, projectPathByKey.get(projectKey) ?? projectKey)
+      paths.set(sessionKey, projectPathByKey.get(getProjectComparisonKey(projectKey)) ?? projectKey)
     }
     return paths
   }, [projectPathByKey, sourceRecords])
@@ -537,7 +577,9 @@ export function BrowserActivityPanel({
     const labels = new Map(recordSessionProjectLabels)
     for (const session of sessions) {
       const projectKeys = getWorkspaceProjectKeys(sessionWorkspaceMap.get(session.id))
-      const projectLabel = projectKeys.map(projectKey => projectLabelByKey.get(projectKey)).find(Boolean) ??
+      const projectLabel = projectKeys.map(projectKey =>
+        projectLabelByKey.get(getProjectComparisonKey(projectKey))
+      ).find(Boolean) ??
         (projectKeys[0] == null ? undefined : getScopeKeyDisplayName(projectKeys[0]))
       if (projectLabel != null) {
         labels.set(session.id, projectLabel)
@@ -549,7 +591,9 @@ export function BrowserActivityPanel({
     const paths = new Map(recordSessionProjectPaths)
     for (const session of sessions) {
       const projectKeys = getWorkspaceProjectKeys(sessionWorkspaceMap.get(session.id))
-      const projectPath = projectKeys.map(projectKey => projectPathByKey.get(projectKey)).find(Boolean) ??
+      const projectPath = projectKeys.map(projectKey =>
+        projectPathByKey.get(getProjectComparisonKey(projectKey))
+      ).find(Boolean) ??
         projectKeys[0]
       if (projectPath != null) {
         paths.set(session.id, projectPath)
@@ -558,7 +602,9 @@ export function BrowserActivityPanel({
     return paths
   }, [projectPathByKey, recordSessionProjectPaths, sessionWorkspaceMap, sessions])
   const shouldIncludeInitialSession = (
-    selectedProjectKey == null || normalizedInitialProjectKeys.includes(selectedProjectKey)
+    selectedProjectKey == null || normalizedInitialProjectKeys.some(key => (
+      getProjectComparisonKey(key) === getProjectComparisonKey(selectedProjectKey)
+    ))
   ) && sessionMatchesArchiveFilter(normalizedInitialSessionKey, selectedArchiveFilter, sessionArchiveById)
   const sessionOptions = useMemo(() =>
     buildSessionScopeOptions({
@@ -582,7 +628,9 @@ export function BrowserActivityPanel({
     shouldIncludeInitialSession,
     t
   ])
-  const selectedProjectOption = projectOptions.find(option => option.value === selectedProjectKey)
+  const selectedProjectOption = projectOptions.find(option => (
+    selectedProjectKey != null && getProjectComparisonKey(option.value) === getProjectComparisonKey(selectedProjectKey)
+  ))
   const selectedSessionOption = sessionOptions.find(option => option.value === selectedSessionKey)
   const selectedArchiveFilterLabel = selectedArchiveFilter === 'all'
     ? undefined
@@ -682,7 +730,11 @@ export function BrowserActivityPanel({
   useEffect(() => {
     if (!recordsLoaded || appliedInitialFilterSignature === initialFilterSignature) return
 
-    const nextProjectKey = projectOptions.find(option => normalizedInitialProjectKeys.includes(option.value))?.value
+    const nextProjectKey = projectOptions.find(option =>
+      normalizedInitialProjectKeys.some(key => (
+        getProjectComparisonKey(key) === getProjectComparisonKey(option.value)
+      ))
+    )?.value
     const nextSessionKey = normalizedInitialSessionKey != null &&
         sessionOptions.some(option => option.value === normalizedInitialSessionKey)
       ? normalizedInitialSessionKey
@@ -701,7 +753,11 @@ export function BrowserActivityPanel({
   ])
 
   useEffect(() => {
-    if (selectedProjectKey != null && projectOptions.every(option => option.value !== selectedProjectKey)) {
+    if (
+      selectedProjectKey != null && projectOptions.every(option => (
+        getProjectComparisonKey(option.value) !== getProjectComparisonKey(selectedProjectKey)
+      ))
+    ) {
       setSelectedProjectKey(undefined)
     }
   }, [projectOptions, selectedProjectKey])

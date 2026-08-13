@@ -3,11 +3,11 @@ import { realpathSync } from 'node:fs'
 import { basename, isAbsolute, resolve } from 'node:path'
 import process from 'node:process'
 
-import { normalizeText, repoRoot } from './paths'
+import { normalizeFilesystemPath, repoRoot } from './paths'
 
 const DEV_START_HOME_PROJECTS_ROOT = '.oneworks/dev-instances'
 
-export const normalizePathValue = (value: unknown) => normalizeText(value)?.replace(/[\\/]+$/, '')
+export const normalizePathValue = normalizeFilesystemPath
 
 export const normalizeWorkspaceFolder = (value: string) => {
   const resolved = resolve(value)

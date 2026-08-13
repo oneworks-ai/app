@@ -47,8 +47,8 @@ export const isCodexConfigRecord = (value: unknown): value is Record<string, unk
   value != null && typeof value === 'object' && !Array.isArray(value)
 )
 
-const readString = (value: unknown) => (
-  typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
+const readFilesystemPath = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== '' ? value : undefined
 )
 
 const buildConfigReadEnv = (env: AdapterCtx['env'], codexHome: string): NodeJS.ProcessEnv => {
@@ -174,7 +174,7 @@ export const readCodexModelProviderConfig = async (
   }).then(result => {
     const userLayer = result.layers.find(layer => {
       const name = isCodexConfigRecord(layer.name) ? layer.name : undefined
-      const file = readString(name?.file)
+      const file = readFilesystemPath(name?.file)
       return name?.type === 'user' && file != null && resolve(file) === configPath
     })
     if (!isCodexConfigRecord(userLayer?.config)) {

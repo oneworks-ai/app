@@ -614,7 +614,7 @@ describe('config schema bundle', () => {
       })
       expect(channels).toContain('appId')
       expect(channels).toContain('appSecret')
-      expect(codexAccountFields).toEqual(['title', 'description', 'authFile'])
+      expect(codexAccountFields).toEqual(['title', 'description', 'authFile', 'priority', 'disabled'])
     } finally {
       await rm(tempDir, { recursive: true, force: true })
     }
@@ -738,6 +738,85 @@ module.exports.adapterConfigContribution = {
       })
       expect(knownValid.success).toBe(true)
       expect(knownWithUnknownKey.success).toBe(false)
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps an explicit configured adapter target ahead of a same-key discovered package', async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'ow-config-schema-'))
+    try {
+      await writeFile(
+        path.join(tempDir, 'package.json'),
+        JSON.stringify(
+          {
+            dependencies: { '@oneworks/adapter-codex': 'workspace:*' },
+            name: 'schema-test-workspace',
+            private: true
+          },
+          null,
+          2
+        )
+      )
+      await mkdir(path.join(tempDir, 'configured-adapter'), { recursive: true })
+      await writeFile(
+        path.join(tempDir, '.oo.config.json'),
+        JSON.stringify(
+          {
+            adapters: { codex: { packageId: './configured-adapter' } }
+          },
+          null,
+          2
+        )
+      )
+      await writeFile(
+        path.join(tempDir, 'configured-adapter', 'package.json'),
+        JSON.stringify(
+          {
+            exports: { './config-schema': './config-schema.js' },
+            name: 'configured-adapter',
+            private: true,
+            version: '1.0.0'
+          },
+          null,
+          2
+        )
+      )
+      await writeFile(
+        path.join(tempDir, 'configured-adapter', 'config-schema.js'),
+        `
+const { z } = require(${JSON.stringify(zodPath)})
+module.exports.adapterConfigContribution = {
+  adapterKey: 'codex', schema: z.object({ configuredOnly: z.boolean().optional() }), title: 'Configured Codex'
+}
+`
+      )
+      await writePackage(tempDir, '@oneworks/adapter-codex', {
+        'config-schema.js': `
+const { z } = require(${JSON.stringify(zodPath)})
+module.exports.adapterConfigContribution = {
+  adapterKey: 'codex', schema: z.object({ discoveredOnly: z.boolean().optional() }), title: 'Discovered Codex'
+}
+`
+      }, { './config-schema': './config-schema.js' })
+
+      const bundle = await composeWorkspaceConfigSchemaBundle({ cwd: tempDir })
+      const adapters = (bundle.jsonSchema.properties as Record<string, unknown>).adapters as Record<string, unknown>
+      const codexSchema = adapters.properties as Record<string, Record<string, unknown>>
+      const configured = await validateConfigSection('adapters', {
+        codex: { configuredOnly: true, packageId: './configured-adapter' }
+      }, { cwd: tempDir })
+      const discovered = await validateConfigSection('adapters', {
+        codex: { discoveredOnly: true, packageId: './configured-adapter' }
+      }, { cwd: tempDir })
+
+      expect(bundle.extensions.adapters).toContain('codex')
+      expect(codexSchema.codex?.properties).toMatchObject({ configuredOnly: { type: 'boolean' } })
+      expect(codexSchema.codex?.properties).not.toHaveProperty('discoveredOnly')
+      expect(bundle.uiSchema.sections.adapters.recordMap.entryKinds)
+        .toContainEqual(expect.objectContaining({ key: 'codex', label: 'Configured Codex' }))
+      expect(configured.success).toBe(true)
+      expect(discovered.success).toBe(false)
     } finally {
       await rm(tempDir, { recursive: true, force: true })
     }

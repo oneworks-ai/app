@@ -1,7 +1,12 @@
 import { createHash } from 'node:crypto'
 
 import { isRecord } from '../utils.js'
-import { cleanDeviceMetadataText, cleanNetworkAddress, normalizeDeviceEnvironmentInfo } from './device-environment.js'
+import {
+  cleanDeviceMetadataPath,
+  cleanDeviceMetadataText,
+  cleanNetworkAddress,
+  normalizeDeviceEnvironmentInfo
+} from './device-environment.js'
 import type { RelayDeviceEnvironmentInfo } from './device-environment.js'
 import { mergeManagementServerProjects, normalizeManagementServerProjects } from './management-server-projects.js'
 import type { RelayDeviceManagementServerProjectMetadata } from './management-server-projects.js'
@@ -47,7 +52,7 @@ const normalizeManagementServer = (input: ManagementServerInput): RelayDeviceMan
   const pluginScope = cleanDeviceMetadataText(input.pluginScope)
   const projects = normalizeManagementServerProjects(input.projects)
   const registeredIp = cleanNetworkAddress(input.registeredIp)
-  const workspaceFolder = cleanDeviceMetadataText(input.workspaceFolder)
+  const workspaceFolder = cleanDeviceMetadataPath(input.workspaceFolder)
   return {
     createdAt,
     ...(environment == null ? {} : { environment }),
@@ -89,7 +94,7 @@ export const upsertDeviceManagementServerMetadata = (
 ) => {
   const environment = normalizeDeviceEnvironmentInfo(input.environment)
   const pluginScope = cleanDeviceMetadataText(input.pluginScope)
-  const workspaceFolder = cleanDeviceMetadataText(input.workspaceFolder)
+  const workspaceFolder = cleanDeviceMetadataPath(input.workspaceFolder)
   const explicitId = cleanDeviceMetadataText(input.id)
   const kind = cleanDeviceMetadataText(input.kind)
   const lastSeenIp = cleanNetworkAddress(input.lastSeenIp)

@@ -195,6 +195,41 @@ describe('adapter package helpers', () => {
     })
   })
 
+  it.runIf(process.platform !== 'win32')('loads the exact whitespace-bearing adapter path', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'ow-adapter-path-identity-'))
+    tempDirs.push(tempDir)
+    const adjacentRuntimeDir = join(tempDir, 'configured-adapter')
+    const exactRuntimeDir = join(tempDir, 'configured-adapter ')
+    const adjacentPackageDir = join(adjacentRuntimeDir, 'node_modules', '@acme', 'custom-adapter')
+    const exactPackageDir = join(exactRuntimeDir, 'node_modules', '@acme', 'custom-adapter')
+    await Promise.all([
+      writeAdapterPackage(adjacentRuntimeDir, 'adjacent'),
+      writeAdapterPackage(exactRuntimeDir, 'exact')
+    ])
+
+    await expect(loadAdapter(exactPackageDir)).resolves.toMatchObject({ id: 'exact' })
+    await expect(loadAdapter(adjacentPackageDir)).resolves.toMatchObject({ id: 'adjacent' })
+  })
+
+  it.runIf(process.platform !== 'win32')(
+    'uses the exact whitespace-bearing runtime package directory for named adapter loads',
+    async () => {
+      const tempDir = await mkdtemp(join(tmpdir(), 'ow-adapter-runtime-path-identity-'))
+      tempDirs.push(tempDir)
+      const adjacentRuntimeDir = join(tempDir, 'runtime')
+      const exactRuntimeDir = join(tempDir, 'runtime ')
+      await Promise.all([
+        writeAdapterPackage(adjacentRuntimeDir, 'adjacent'),
+        writeAdapterPackage(exactRuntimeDir, 'exact')
+      ])
+
+      vi.stubEnv('__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__', exactRuntimeDir)
+      vi.stubEnv('__ONEWORKS_PROJECT_PACKAGE_DIR__', exactRuntimeDir)
+
+      await expect(loadAdapter('@acme/custom-adapter')).resolves.toMatchObject({ id: 'exact' })
+    }
+  )
+
   it('loads adapters from the caller package dir before the active runtime package dir', async () => {
     const tempDir = await mkdtemp(join(tmpdir(), 'ow-adapter-resolver-'))
     tempDirs.push(tempDir)

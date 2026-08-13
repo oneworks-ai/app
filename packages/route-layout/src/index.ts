@@ -1,3 +1,11 @@
+import {
+  focusFirstModalElement,
+  focusModalElement,
+  getModalFocusableElements,
+  isModalFocusableElement
+} from './modal-focus.js'
+
+export { focusFirstModalElement, focusModalElement, getModalFocusableElements, isModalFocusableElement }
 export * from './AppShellFrame.js'
 export * from './HostAppShell.js'
 export * from './HostIcon.js'

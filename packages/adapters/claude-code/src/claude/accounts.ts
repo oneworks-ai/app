@@ -159,6 +159,10 @@ const normalizeString = (value: unknown) => (
   typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
 )
 
+const readFilesystemPath = (value: unknown) => (
+  typeof value === 'string' && value.trim() !== '' ? value : undefined
+)
+
 const normalizeNumber = (value: unknown) => (
   typeof value === 'number' && Number.isFinite(value) ? value : undefined
 )
@@ -302,10 +306,10 @@ const createClaudeSessionLease = async (leasesDir: string) => {
 }
 
 const resolveRealHome = (ctx: Pick<AdapterCtx, 'env'>) => (
-  normalizeString(ctx.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
-    normalizeString(process.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
-    normalizeString(ctx.env.HOME) ??
-    normalizeString(process.env.HOME) ??
+  readFilesystemPath(ctx.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
+    readFilesystemPath(process.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
+    readFilesystemPath(ctx.env.HOME) ??
+    readFilesystemPath(process.env.HOME) ??
     homedir()
 )
 

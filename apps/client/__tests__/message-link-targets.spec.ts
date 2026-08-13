@@ -7,6 +7,7 @@ import {
   isLikelyImageUrl,
   normalizeWorkspaceFileLink,
   parseWorkspaceFileLink,
+  parseWorkspaceFileLinkForWorkspaceRoot,
   splitPlainWorkspaceFileLinks
 } from '#~/utils/link-targets'
 import { parseLocalMediaSource, parseLocalMediaSourceForWorkspaceRoot } from '#~/utils/local-media'
@@ -108,6 +109,87 @@ describe('message link targets', () => {
       path: '/tmp/oneworks-cua/run/movie.mp4'
     })
     expect(parseLocalMediaSourceForWorkspaceRoot('docs/readme.md', '/workspace/app')).toBeNull()
+  })
+
+  it('keeps whitespace-bearing workspace roots distinct for local resources and links', () => {
+    const workspaceRootPath = '/workspace/project '
+    expect(parseLocalMediaSourceForWorkspaceRoot(
+      '/workspace/project /assets/movie.mp4',
+      workspaceRootPath
+    )).toEqual({
+      kind: 'video',
+      path: '/workspace/project /assets/movie.mp4'
+    })
+    expect(parseLocalMediaSourceForWorkspaceRoot(
+      '/workspace/project/assets/movie.mp4',
+      workspaceRootPath
+    )).toBeNull()
+    expect(parseWorkspaceFileLinkForWorkspaceRoot(
+      '/workspace/project /docs/readme.md',
+      workspaceRootPath
+    )).toEqual({ path: 'docs/readme.md' })
+    expect(parseWorkspaceFileLinkForWorkspaceRoot(
+      '/workspace/project/docs/readme.md',
+      workspaceRootPath
+    )).toBeNull()
+  })
+
+  it('keeps POSIX literal backslashes distinct for workspace links and media', () => {
+    const workspaceRoot = String.raw`/workspace/a\b`
+    expect(parseWorkspaceFileLinkForWorkspaceRoot(
+      String.raw`/workspace/a\b/docs/readme.md`,
+      workspaceRoot
+    )).toEqual({ path: 'docs/readme.md' })
+    expect(parseWorkspaceFileLinkForWorkspaceRoot(
+      '/workspace/a/b/docs/readme.md',
+      workspaceRoot
+    )).toBeNull()
+    expect(parseLocalMediaSourceForWorkspaceRoot(
+      String.raw`/workspace/a\b/assets/movie.mp4`,
+      workspaceRoot
+    )).toEqual({ kind: 'video', path: String.raw`/workspace/a\b/assets/movie.mp4` })
+    expect(parseLocalMediaSourceForWorkspaceRoot(
+      '/workspace/a/b/assets/movie.mp4',
+      workspaceRoot
+    )).toBeNull()
+
+    const trailingLiteralBackslashRoot = '/workspace/project\\'
+    const exactMediaPath = '/workspace/project\\/assets/movie.mp4'
+    expect(parseLocalMediaSourceForWorkspaceRoot(exactMediaPath, trailingLiteralBackslashRoot))
+      .toEqual({ kind: 'video', path: exactMediaPath })
+    expect(parseLocalMediaSourceForWorkspaceRoot(
+      '/workspace/project/assets/movie.mp4',
+      trailingLiteralBackslashRoot
+    )).toBeNull()
+  })
+
+  it('recognizes Windows drive paths before URL scheme parsing', () => {
+    const workspaceRoot = String.raw`C:\workspace\project`
+    expect(parseWorkspaceFileLinkForWorkspaceRoot(
+      String.raw`C:\workspace\project\docs\readme.md`,
+      workspaceRoot
+    )).toEqual({ path: 'docs/readme.md' })
+    expect(parseLocalMediaSourceForWorkspaceRoot(
+      String.raw`C:\workspace\project\assets\movie.mp4`,
+      workspaceRoot
+    )).toEqual({ kind: 'video', path: String.raw`C:\workspace\project\assets\movie.mp4` })
+    expect(parseLocalMediaSourceForWorkspaceRoot('https://example.test/movie.mp4', workspaceRoot)).toBeNull()
+  })
+
+  it('keeps root-floor workspace containment bounded for links and media', () => {
+    expect(parseWorkspaceFileLinkForWorkspaceRoot('/docs/readme.md', '/'))
+      .toEqual({ path: 'docs/readme.md' })
+    expect(parseLocalMediaSourceForWorkspaceRoot('/assets/movie.mp4', '/'))
+      .toEqual({ kind: 'video', path: '/assets/movie.mp4' })
+    expect(parseWorkspaceFileLinkForWorkspaceRoot('C:/docs/readme.md', 'C:/'))
+      .toEqual({ path: 'docs/readme.md' })
+    expect(parseLocalMediaSourceForWorkspaceRoot('c:/assets/movie.mp4', 'C:/'))
+      .toEqual({ kind: 'video', path: 'c:/assets/movie.mp4' })
+    expect(parseWorkspaceFileLinkForWorkspaceRoot('D:/docs/readme.md', 'C:/')).toBeNull()
+    expect(parseLocalMediaSourceForWorkspaceRoot('D:/assets/movie.mp4', 'C:/')).toBeNull()
+    expect(parseWorkspaceFileLinkForWorkspaceRoot('//server/share/docs/readme.md', '//server/share'))
+      .toEqual({ path: 'docs/readme.md' })
+    expect(parseLocalMediaSourceForWorkspaceRoot('//server/other/movie.mp4', '//server/share')).toBeNull()
   })
 
   it('normalizes workspace file links for the bottom file tab', () => {

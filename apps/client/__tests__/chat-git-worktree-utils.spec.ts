@@ -3,6 +3,16 @@ import { describe, expect, it } from 'vitest'
 import { getGitWorktreeViewState } from '#~/components/chat/git-controls/git-worktree-utils'
 
 describe('chat git worktree utils', () => {
+  it('uses the exact repository root in the fallback worktree projection', () => {
+    expect(
+      getGitWorktreeViewState({
+        enabled: true,
+        repositoryRoot: '/workspace/repository ',
+        currentBranch: 'main'
+      }).worktrees[0]?.path
+    ).toBe('/workspace/repository ')
+  })
+
   it('shows the worktree button for any enabled git repository', () => {
     expect(getGitWorktreeViewState({
       enabled: true,

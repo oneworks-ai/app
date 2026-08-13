@@ -15,10 +15,9 @@ const isDirectory = (value) => {
 
 const normalizeWorkspaceFolder = (value) => {
   if (typeof value !== 'string') return undefined
-  const trimmedValue = value.trim()
-  if (trimmedValue === '') return undefined
+  if (value.trim() === '') return undefined
 
-  const resolvedPath = path.resolve(trimmedValue)
+  const resolvedPath = path.resolve(value)
   if (!isDirectory(resolvedPath)) {
     return undefined
   }
@@ -28,6 +27,16 @@ const normalizeWorkspaceFolder = (value) => {
   } catch {
     return resolvedPath
   }
+}
+
+const readGitFilesystemPathOutput = (value) => {
+  if (typeof value !== 'string') return undefined
+  const pathOutput = process.platform === 'win32' && value.endsWith('\r\n')
+    ? value.slice(0, -2)
+    : value.endsWith('\n')
+    ? value.slice(0, -1)
+    : value
+  return pathOutput.trim() === '' ? undefined : pathOutput
 }
 
 const readGitWorkspaceRoot = (workspaceFolder) => {
@@ -47,10 +56,7 @@ const readGitWorkspaceRoot = (workspaceFolder) => {
         timeout: 2_000
       }
     )
-    const [topLevel] = output
-      .split(/\r?\n/u)
-      .map(line => line.trim())
-      .filter(Boolean)
+    const topLevel = readGitFilesystemPathOutput(output)
 
     return normalizeWorkspaceFolder(topLevel)
   } catch {

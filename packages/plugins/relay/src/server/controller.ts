@@ -106,7 +106,7 @@ import type {
   RelayStore,
   RelayStoredServer
 } from './types.js'
-import { isRecord, normalizeRemoteBaseUrl, toString } from './utils.js'
+import { isRecord, normalizeRemoteBaseUrl, toPathString, toString } from './utils.js'
 import {
   RELAY_WORKSPACE_HTTP_MODE,
   RELAY_WORKSPACE_WS_CLOSE_MODE,
@@ -611,6 +611,10 @@ const readTextField = (payload: unknown, key: string) => (
   isRecord(payload) ? toString(payload[key]) : ''
 )
 
+const readPathField = (payload: unknown, key: string) => (
+  isRecord(payload) ? toPathString(payload[key]) : ''
+)
+
 const readPayloadArgs = (payload: unknown) => (
   isRecord(payload) && Array.isArray(payload.args)
     ? payload.args.map(item => toString(item)).filter(item => item !== '')
@@ -627,6 +631,11 @@ const readUserSelector = (payload: unknown) => (
 const readOptionalText = (value: unknown) => {
   const text = toString(value)
   return text === '' ? undefined : text
+}
+
+const readOptionalPath = (value: unknown) => {
+  const path = toPathString(value)
+  return path === '' ? undefined : path
 }
 
 const serverAliasForId = (serverId: string) => {
@@ -1465,7 +1474,7 @@ const normalizeRemoteDeviceProjectSummary = (value: unknown): RelayRemoteDeviceP
   const name = readOptionalText(value.name)
   const status = readOptionalText(value.status)
   const title = readOptionalText(value.title)
-  const workspaceFolder = readOptionalText(value.workspaceFolder)
+  const workspaceFolder = readOptionalPath(value.workspaceFolder)
   if ([createdAt, id, lastSeenAt, name, status, title, workspaceFolder].every(item => item == null)) {
     return undefined
   }
@@ -1500,7 +1509,7 @@ const normalizeRemoteDeviceManagementServerSummary = (
     : []
   const registeredIp = readOptionalText(value.registeredIp)
   const status = readOptionalText(value.status)
-  const workspaceFolder = readOptionalText(value.workspaceFolder)
+  const workspaceFolder = readOptionalPath(value.workspaceFolder)
   if (
     [createdAt, id, ip, kind, lastSeenAt, lastSeenIp, name, pluginScope, registeredIp, status, workspaceFolder]
       .every(item => item == null) &&
@@ -1540,7 +1549,7 @@ const normalizeRemoteDeviceSummary = (value: unknown): RelayRemoteDeviceSummary 
   const pluginScope = readOptionalText(value.pluginScope)
   const createdAt = readOptionalText(value.createdAt)
   const lastSeenAt = readOptionalText(value.lastSeenAt)
-  const workspaceFolder = readOptionalText(value.workspaceFolder)
+  const workspaceFolder = readOptionalPath(value.workspaceFolder)
   const capabilities = isRecord(value.capabilities) ? value.capabilities : undefined
   const managementServers = Array.isArray(value.managementServers)
     ? value.managementServers
@@ -2913,7 +2922,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
   const listWorkspaceDirectories = async (payload?: unknown) => {
     const body = isRecord(payload) ? payload : {}
     const { server, target } = await resolveWorkspaceJobTarget(body)
-    const directory = readTextField(body, 'directory')
+    const directory = readPathField(body, 'directory')
     const url = new URL('/api/launcher/directories', server.remoteBaseUrl)
     if (directory !== '') {
       url.searchParams.set('directory', directory)
@@ -2927,7 +2936,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
 
   const createWorkspaceInDirectory = async (payload?: unknown) => {
     const body = isRecord(payload) ? payload : {}
-    const parentDirectory = readTextField(body, 'parentDirectory')
+    const parentDirectory = readPathField(body, 'parentDirectory')
     const projectName = readTextField(body, 'projectName')
     if (parentDirectory === '' || projectName === '') {
       throw new Error('Remote parent directory and project name are required.')
@@ -2973,7 +2982,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
     }
     return {
       serverBaseUrl,
-      workspaceFolder: toString(body.workspaceFolder) || workspaceFolder,
+      workspaceFolder: toPathString(body.workspaceFolder) || workspaceFolder,
       workspaceId: toString(body.workspaceId)
     }
   }
@@ -2984,7 +2993,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
     const deviceId = readTextField(body, 'deviceId')
     const deviceName = readTextField(body, 'deviceName')
     const requestedServerName = readTextField(body, 'serverName')
-    const workspaceFolder = readTextField(body, 'workspaceFolder')
+    const workspaceFolder = readPathField(body, 'workspaceFolder')
     if (deviceId === '' || workspaceFolder === '') {
       throw new Error('Remote device id and workspace folder are required.')
     }
@@ -3608,7 +3617,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
 
   const openDocumentPath = async (payload?: unknown) => {
     const body = isRecord(payload) ? payload : {}
-    const path = toString(body.path)
+    const path = readPathField(body, 'path')
     if (path === '') {
       throw new Error('文档路径不能为空。')
     }
@@ -3617,7 +3626,7 @@ export const createRelayController = (ctx: RelayPluginContext): RelayController 
 
   const readDocumentContent = async (payload?: unknown) => {
     const body = isRecord(payload) ? payload : {}
-    const path = toString(body.path)
+    const path = readPathField(body, 'path')
     if (path === '') {
       throw new Error('文档路径不能为空。')
     }

@@ -64,8 +64,7 @@ const createWorkspaceRequire = (cwd: string) => createRequire(resolve(cwd, '__on
 const defaultAdapterRequire = createWorkspaceRequire(process.cwd())
 
 const normalizeRuntimePackageDir = (value: string | undefined) => {
-  const trimmed = value?.trim()
-  return trimmed != null && trimmed !== '' ? trimmed : undefined
+  return value != null && value.trim() !== '' ? value : undefined
 }
 
 const isPnpmWorkspacePackageDir = (packageDir: string) => {
@@ -325,7 +324,9 @@ const readConfiguredAdapterPackageId = (adapterKey: string, config?: Config) => 
   if (entry == null || typeof entry !== 'object' || Array.isArray(entry)) {
     return undefined
   }
-  return normalizeNonEmptyString((entry as Record<string, unknown>).packageId)
+  const packageId = (entry as Record<string, unknown>).packageId
+  if (typeof packageId !== 'string' || packageId.trim() === '') return undefined
+  return isPathSpecifier(packageId) ? packageId : normalizeNonEmptyString(packageId)
 }
 
 export const resolveAdapterRuntimeTarget = (
@@ -448,19 +449,18 @@ const loadAdapterPackageExport = (params: {
 }
 
 const resolveAdapterLoadTarget = (type: string, options: AdapterPackageLoadOptions = {}) => {
-  const trimmed = type.trim()
-  if (isPathSpecifier(trimmed)) {
-    const packageRoot = resolvePathSpecifier(trimmed, options.cwd)
+  if (type.trim() === '') {
+    return { packageName: resolveAdapterPackageName(type), packageRoot: undefined }
+  }
+  if (isPathSpecifier(type)) {
+    const packageRoot = resolvePathSpecifier(type, options.cwd)
     const packageName = readPackageJson(packageRoot)?.data.name ?? packageRoot
     return {
       packageName,
       packageRoot
     }
   }
-  return {
-    packageName: resolveAdapterPackageName(type),
-    packageRoot: undefined
-  }
+  return { packageName: resolveAdapterPackageName(type.trim()), packageRoot: undefined }
 }
 
 export const normalizeAdapterPackageId = (type: string) => {

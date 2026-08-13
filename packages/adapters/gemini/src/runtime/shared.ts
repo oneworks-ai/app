@@ -288,8 +288,7 @@ export const normalizeGeminiPrompt = (content: AdapterMessageContent[]) => {
     }
 
     if (item.type === 'file') {
-      const filePath = item.path.trim()
-      if (filePath !== '') promptParts.push(`Attached file: ${filePath}`)
+      if (item.path.trim() !== '') promptParts.push(`Attached file: ${item.path}`)
       continue
     }
 
