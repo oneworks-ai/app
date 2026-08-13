@@ -91,7 +91,10 @@ export const hasExperienceReviewChecklist = (body: string | undefined) => {
 
   return hasCheckedItem(section, /已判断是否需要沉淀经验/u) &&
     hasCheckedItem(section, /\$post-task-experience-review/u) &&
-    hasCheckedItem(section, /reviewer\s+PASS/u)
+    hasCheckedItem(
+      section,
+      /reviewer\s+(?:PASS|`?PASS`?\s*\/\s*`?NOT APPLICABLE`?)/u
+    )
 }
 
 export const hasPolicyConflictReviewChecklist = (body: string | undefined) => {
@@ -137,7 +140,7 @@ export const evaluatePrChangePolicy = (input: PrChangePolicyInput): PrChangePoli
 
   if (!hasExperienceReview) {
     violations.push(
-      'PR body must include a completed ## Experience Review checklist confirming experience judgment, $post-task-experience-review when needed, and reviewer PASS before merge.'
+      'PR body must include a completed ## Experience Review checklist confirming experience judgment, $post-task-experience-review when needed, and reviewer PASS / NOT APPLICABLE before merge.'
     )
   }
 

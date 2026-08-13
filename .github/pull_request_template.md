@@ -18,11 +18,18 @@ Not applicable
 
 -
 
+## Review Scope
+
+- Risk: low / medium / high
+- Applicable profiles:
+- Evidence:
+- Rule exceptions: none
+
 ## Experience Review
 
 - [ ] 已判断是否需要沉淀经验
 - [ ] 如需要，已运行 `$post-task-experience-review`
-- [ ] reviewer PASS 后才进入 merge
+- [ ] reviewer `PASS` / `NOT APPLICABLE` 后才进入 merge
 
 ## Policy Conflict Review
 

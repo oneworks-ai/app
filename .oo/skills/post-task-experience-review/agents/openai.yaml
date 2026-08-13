@@ -1,0 +1,4 @@
+interface:
+  display_name: PR Review & Experience Learning
+  short_description: 主动审查指定 PR、确认不明确意图，并沉淀已采纳 Review 经验
+  default_prompt: Use $post-task-experience-review to review a pull request and extract reusable rules from accepted feedback.
