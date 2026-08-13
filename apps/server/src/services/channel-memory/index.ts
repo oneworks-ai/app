@@ -1,17 +1,27 @@
 import { getDb } from '#~/db/index.js'
 import type { ChannelMemoryRow } from '#~/db/index.js'
+import type { EntityMemoryPolicy } from '@oneworks/types'
 
 import { syncChannelFileMemories } from './file-sync.js'
 import { filterChannelMemoryCandidates } from './filter.js'
 import type { ChannelMemoryResolverScope } from './filter.js'
-import { extractMemoryKeywords, rankChannelMemories, selectChannelMemoryBudget } from './ranking.js'
-import type { ChannelMemoryBudget } from './ranking.js'
+import {
+  extractMemoryKeywords,
+  rankChannelMemories,
+  resolveChannelMemoryGroupKey,
+  selectChannelMemoryCandidates,
+  selectChannelMemoryGroupBudget
+} from './ranking.js'
+import type { ChannelMemoryBudget, ChannelMemoryGroupBudget } from './ranking.js'
 
 export interface ChannelMemoryResolveInput extends ChannelMemoryResolverScope {
   budget?: ChannelMemoryBudget
+  maxCandidates?: number
+  groupBudget?: ChannelMemoryGroupBudget
   childRunId?: string
   conversationStateId?: string
   query: string
+  memoryPolicy?: EntityMemoryPolicy
   now?: number
   senderId?: string
   sourceMessageId?: string
@@ -23,6 +33,7 @@ export interface ChannelMemorySnapshot {
   id: string
   itemCount: number
   selectedMemories: ChannelMemoryRow[]
+  selectedGroups: Array<{ key: string; memoryIds: string[] }>
   tokenCount: number
 }
 
@@ -62,9 +73,21 @@ export const resolveChannelMemorySnapshot = (input: ChannelMemoryResolveInput): 
     roomId: input.roomId,
     threadKey: input.threadKey
   })
-  const filterResult = filterChannelMemoryCandidates(candidates, input, now)
-  const ranked = rankChannelMemories(filterResult.filtered, extractMemoryKeywords(input.query), now)
-  const selection = selectChannelMemoryBudget(ranked, input.budget ?? DEFAULT_BUDGET)
+  const filterResult = filterChannelMemoryCandidates(candidates, input, now, {
+    allowSensitive: input.memoryPolicy?.allowSensitive === true
+  })
+  const rankedMemories = rankChannelMemories(
+    filterResult.filtered,
+    extractMemoryKeywords(input.query),
+    now
+  )
+  const ranked = selectChannelMemoryCandidates(rankedMemories, input.maxCandidates)
+  const selection = selectChannelMemoryGroupBudget(ranked, input.budget ?? DEFAULT_BUDGET, input.groupBudget)
+  const selectedGroups = [...selection.selected.reduce((groups, memory) => {
+    const key = resolveChannelMemoryGroupKey(memory)
+    groups.set(key, [...(groups.get(key) ?? []), memory.id])
+    return groups
+  }, new Map<string, string[]>())].map(([key, memoryIds]) => ({ key, memoryIds }))
   const snapshotData = {
     conflicts: resolveConflicts(selection.selected),
     filteredCounts: filterResult.filteredCounts,
@@ -75,7 +98,8 @@ export const resolveChannelMemorySnapshot = (input: ChannelMemoryResolveInput): 
         selection.selected.filter(memory => memory.subjectType === subjectType).map(memory => memory.id)
       ])
     ),
-    selectedMemoryIds: selection.selected.map(memory => memory.id)
+    selectedMemoryIds: selection.selected.map(memory => memory.id),
+    selectedGroups
   }
   const id = getDb().saveChannelMemorySnapshot({
     accountId: input.accountId,
@@ -97,18 +121,40 @@ export const resolveChannelMemorySnapshot = (input: ChannelMemoryResolveInput): 
     id,
     itemCount: selection.selected.length,
     selectedMemories: selection.selected,
+    selectedGroups,
     tokenCount: selection.tokenCount
   }
 }
 
-export const renderChannelMemorySnapshot = (snapshot: ChannelMemorySnapshot) =>
-  snapshot.selectedMemories.length === 0
-    ? undefined
-    : [
-      '<channel-memory>',
-      ...snapshot.selectedMemories.map(memory => `- [${memory.subjectType}] ${memory.content}`),
-      '</channel-memory>'
-    ].join('\n')
+const renderPromptJson = (value: unknown) =>
+  (JSON.stringify(value) ?? 'null')
+    .replaceAll('<', '\\u003c')
+    .replaceAll('>', '\\u003e')
+    .replaceAll('&', '\\u0026')
+
+export const renderChannelMemorySnapshot = (snapshot: ChannelMemorySnapshot) => {
+  if (snapshot.selectedMemories.length === 0) return undefined
+  const memoriesById = new Map(snapshot.selectedMemories.map(memory => [memory.id, memory]))
+  return [
+    '<channel-memory>',
+    ...snapshot.selectedGroups.flatMap(group => [
+      '<memory-group>',
+      `visibility-group: ${renderPromptJson(group.key)}`,
+      ...group.memoryIds.flatMap(memoryId => {
+        const memory = memoriesById.get(memoryId)
+        return memory == null ? [] : [renderPromptJson({
+          content: memory.content,
+          id: memory.id,
+          source: memory.source,
+          subject: { id: memory.subjectId, type: memory.subjectType },
+          visibility: memory.visibility
+        })]
+      }),
+      '</memory-group>'
+    ]),
+    '</channel-memory>'
+  ].join('\n')
+}
 
 export const recordTerminalMemoryAudit = (
   childRunId: string,
@@ -131,4 +177,11 @@ export const recordTerminalMemoryAudit = (
 
 export { syncChannelFileMemories } from './file-sync.js'
 export { filterChannelMemoryCandidates } from './filter.js'
-export { extractMemoryKeywords, rankChannelMemories, selectChannelMemoryBudget } from './ranking.js'
+export {
+  extractMemoryKeywords,
+  rankChannelMemories,
+  resolveChannelMemoryGroupKey,
+  selectChannelMemoryBudget,
+  selectChannelMemoryCandidates,
+  selectChannelMemoryGroupBudget
+} from './ranking.js'

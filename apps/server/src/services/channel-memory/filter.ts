@@ -28,7 +28,8 @@ const includesWhenRestricted = (values: string[] | undefined, value: string | un
 export const filterChannelMemoryCandidates = (
   memories: ChannelMemoryRow[],
   scope: ChannelMemoryResolverScope,
-  now: number
+  now: number,
+  options: { allowSensitive?: boolean } = {}
 ): ChannelMemoryFilterResult => {
   const filteredCounts = { expired: 0, scope: 0, sensitive: 0, visibility: 0 }
   const filtered = memories.filter(memory => {
@@ -36,7 +37,7 @@ export const filterChannelMemoryCandidates = (
       filteredCounts.expired += 1
       return false
     }
-    if (memory.sensitivity !== 'normal') {
+    if (memory.sensitivity !== 'normal' && options.allowSensitive !== true) {
       filteredCounts.sensitive += 1
       return false
     }

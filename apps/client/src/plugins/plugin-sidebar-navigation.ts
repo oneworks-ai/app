@@ -14,6 +14,7 @@ export interface PluginSidebarNavigationItem {
   isActive: boolean
   key: string
   label: string
+  placement: 'afterCore' | 'beforeCore'
   onSelect: () => void
 }
 
@@ -55,9 +56,12 @@ export const buildPluginSidebarNavigationItems = ({
         onSelect: () => executeTarget(action, item.pluginScope, navigate, executeCommand)
       })),
       icon: item.icon ?? 'layers',
-      isActive: route != null && pathname === route.split('?')[0],
+      isActive: route != null && (
+        pathname === route.split('?')[0] || pathname.startsWith(`${route.split('?')[0]}/`)
+      ),
       key: `plugin:${item.pluginScope}:${item.id}`,
       label: resolvePluginContributionText(item, 'title', language) ?? item.title,
+      placement: item.placement ?? 'afterCore',
       onSelect: () => executeTarget({ ...item, route }, item.pluginScope, navigate, executeCommand)
     }
   })

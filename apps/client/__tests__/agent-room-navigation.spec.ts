@@ -487,7 +487,10 @@ describe('agent room navigation', () => {
         content: 'std/dev-planner joined the room',
         systemMessage: {
           kind: 'memberJoined',
-          memberLabel: 'std/dev-planner'
+          members: [{
+            memberKey: 'std/dev-planner',
+            label: 'std/dev-planner'
+          }]
         }
       })
     ])

@@ -85,6 +85,55 @@ describe('sqliteDb', () => {
     )
   })
 
+  it('lists every structured memory attributed to an entity', () => {
+    const base = {
+      confidence: .8,
+      entity: 'reviewer',
+      importance: .7,
+      issuer: 'main',
+      keywords: ['review'],
+      orgId: 'workspace-local',
+      pinned: false,
+      sensitivity: 'normal' as const,
+      source: {
+        channelId: 'chat-1',
+        channelKey: 'main',
+        channelType: 'lark',
+        issuer: 'main',
+        org: 'workspace-local',
+        sessionType: 'group'
+      }
+    }
+    db.upsertChannelMemory({
+      ...base,
+      content: 'entity memory',
+      id: 'entity-memory',
+      subjectId: 'reviewer',
+      subjectType: 'entity'
+    })
+    db.upsertChannelMemory({
+      ...base,
+      accountId: 'account-1',
+      content: 'account memory',
+      id: 'account-memory',
+      subjectId: 'account-1',
+      subjectType: 'account'
+    })
+    db.upsertChannelMemory({
+      ...base,
+      content: 'unrelated memory',
+      entity: 'other',
+      id: 'other-memory',
+      subjectId: 'other',
+      subjectType: 'entity'
+    })
+
+    expect(db.listChannelMemoriesByEntity('reviewer').map(memory => memory.id).sort()).toEqual([
+      'account-memory',
+      'entity-memory'
+    ])
+  })
+
   it('leases, retries, and completes off-hours backlog rows with owner-scoped CAS', () => {
     db.appendChannelOffhourBacklog({
       channelId: 'oc_1',

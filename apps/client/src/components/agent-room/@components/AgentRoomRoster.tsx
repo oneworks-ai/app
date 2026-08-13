@@ -3,9 +3,8 @@ import './AgentRoomRoster.scss'
 import { useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { RoomPixelAvatar } from '#~/components/room-pixel-avatar/RoomPixelAvatar'
-
 import type { AgentRoomLayoutMode, AgentRoomMemberView, AgentRoomRunView } from '../@types/agent-room-view'
+import { AgentRoomAvatarContent } from './AgentRoomAvatarContent'
 import { AgentRoomRunList } from './AgentRoomRunList'
 
 const getDisplayMemberLabel = (label: string) => label.trim().replace(/^@+/, '')
@@ -14,8 +13,6 @@ const getConfiguredAvatarLabel = (member: AgentRoomMemberView) => {
   const avatarLabel = member.avatarLabel?.trim()
   return avatarLabel === '' ? undefined : avatarLabel
 }
-
-const getAvatarSeed = (member: AgentRoomMemberView) => `agent-room:${member.memberKey}`
 
 export function AgentRoomRoster({
   defaultExpandedMemberKeys = [],
@@ -66,12 +63,15 @@ export function AgentRoomRoster({
               <div
                 className={[
                   'agent-room-roster__avatar',
-                  avatarLabel == null ? 'agent-room-roster__avatar--pixel' : ''
+                  member.avatar == null && avatarLabel == null ? 'agent-room-roster__avatar--pixel' : ''
                 ].filter(Boolean).join(' ')}
                 aria-hidden='true'
               >
-                {avatarLabel ??
-                  <RoomPixelAvatar className='agent-room-roster__avatar-pixel' seed={getAvatarSeed(member)} />}
+                <AgentRoomAvatarContent
+                  imageClassName='agent-room-roster__avatar-image'
+                  member={member}
+                  pixelClassName='agent-room-roster__avatar-pixel'
+                />
               </div>
               <div className='agent-room-roster__member-copy'>
                 <div className='agent-room-roster__member-name'>{displayLabel}</div>

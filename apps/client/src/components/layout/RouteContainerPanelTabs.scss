@@ -558,7 +558,7 @@
   height: 100%;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 6px;
   position: relative;
   overflow: visible;
@@ -600,6 +600,7 @@
 
 .route-container-panel-dock-tab__label {
   min-width: 0;
+  flex: 1 1 auto;
   overflow: hidden;
   font-size: 12px;
   font-weight: 600;
@@ -623,9 +624,7 @@
   width: var(--route-container-panel-dock-icon-size);
   height: var(--route-container-panel-dock-icon-size);
   min-width: var(--route-container-panel-dock-icon-size);
-  position: absolute;
-  top: 50%;
-  left: 0;
+  position: static;
   z-index: 1;
   display: inline-flex;
   align-items: center;
@@ -637,7 +636,6 @@
   cursor: pointer;
   opacity: 0;
   pointer-events: none;
-  transform: translateY(-50%);
   transition: opacity .12s ease;
 
   &:focus-visible {
@@ -654,6 +652,8 @@
 
 .route-container-panel-dock.is-icon-only
   .route-container-panel-dock-tab__close {
+  position: absolute;
+  top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
 }
@@ -665,11 +665,16 @@
       opacity: 1;
       pointer-events: auto;
     }
-
-    .route-container-panel-dock-tab__icon {
-      opacity: 0;
-    }
   }
+}
+
+.route-container-panel-dock.is-icon-only
+  .route-container-panel-dock-tab.is-closable:hover
+  .route-container-panel-dock-tab__icon,
+.route-container-panel-dock.is-icon-only
+  .route-container-panel-dock-tab.is-closable:focus-within
+  .route-container-panel-dock-tab__icon {
+  opacity: 0;
 }
 
 .route-container-panel-dock__header-actions {
@@ -768,7 +773,7 @@
   }
 }
 
-@container (max-width: 360px) {
+@container (max-width: 180px) {
   .route-container-panel-dock.is-responsive
     .route-container-panel-dock-tab__label {
     display: none;

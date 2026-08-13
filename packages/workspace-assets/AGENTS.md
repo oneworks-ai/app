@@ -17,6 +17,8 @@
   - 插件文档与 MCP 资产的 `${ONEWORKS_PLUGIN_*}` 模板投影；实例配置只通过显式 `${ONEWORKS_PLUGIN_OPTION:path}` 占位符注入
 - `src/prompt-selection.ts`
   - `resolvePromptAssetSelection()`
+- `src/entity-documents.ts`
+  - 解析组合式实体文档、继承顺序和有效实体上下文；`README.md` 只作为旧实体的 `ROLE.md` 兼容入口
 - `src/prompt-builders.ts`
   - rules / skills / specs / entities prompt 文本渲染
 - `src/adapter-asset-plan.ts`
@@ -33,6 +35,7 @@
   - workspace asset bundle 组装
   - prompt asset 选择
   - prompt 文本拼装
+  - `entity.yaml` / `entity.yml` 机器配置与实体 Markdown 文档的组合、继承和来源追踪
   - adapter asset plan 组装
 - 本包不负责：
   - 定义文档发现与解析
@@ -44,5 +47,7 @@
 - 只维护 workspace asset 领域逻辑；定义文档读取留在 `@oneworks/definition-loader`，cache 留在 `@oneworks/utils`。
 - 通用路径处理复用 `@oneworks/utils`；definition 名称/标识/摘要与 remote rule 投影复用 `@oneworks/definition-core`；prompt builder 仍留在本包内维护。
 - 共享 contract 继续依赖 `@oneworks/types`，不要把 task / hooks / mcp 逻辑反向塞进来。
+- 实体语义文档固定按 `IDENTITY.md`、`SOUL.md`、`ROLE.md`、`OPERATIONS.md`、`TOOLS.md`、`KNOWLEDGE.md`、`MEMORY_POLICY.md`、`MEMORY.md` 组织；新增文档种类时同步更新共享类型、API schema 和实体详情页。
+- `entity.yaml` / `entity.yml` 只保存模型、adapter、技能、工具、MCP、插件、文档路径与记忆硬边界，不保存 ChannelAccount、ChannelLink 或发送者权限。
 - 新增 asset 类型、prompt 选择规则或 adapter 投影时，优先补对应职责下的 spec 文件，不要继续把单测堆回一个综合 spec。
 - 影响 bundle / prompt selection / adapter plan 整体投影时，同步检查 `workspace-assets-rich.snapshot.json`；必要时用 `pnpm -C packages/workspace-assets test -- --update` 更新快照。

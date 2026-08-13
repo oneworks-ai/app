@@ -120,6 +120,7 @@ export const writeChannelMessageContext = async (
       executionContext: context.executionContext,
       invocationToken,
       messageId: context.messageId,
+      memoryPolicy: context.memoryPolicy,
       replyReceiveId: context.replyReceiveId,
       replyReceiveIdType: context.replyReceiveIdType,
       senderId: context.senderId,

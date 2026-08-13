@@ -34,6 +34,8 @@ import type { SqliteDatabase } from '../sqlite'
 interface AgentRoomRow {
   id: string
   title: string
+  avatar: string | null
+  description: string | null
   hostSessionId: string | null
   ownerAccountId: string | null
   ownerNodeId: string | null
@@ -157,6 +159,8 @@ export interface AgentRoomStoredEvent extends Omit<AgentRoomEventRow, 'payloadJs
 export interface CreateAgentRoomParams {
   id?: string
   title: string
+  avatar?: string
+  description?: string
   hostSessionId?: string
   leaderEntity?: string
   owner?: AgentRoom['owner']
@@ -207,6 +211,8 @@ export interface CreateAgentRoomShareWithOwnerParams extends CreateAgentRoomShar
 }
 
 export interface UpdateAgentRoomParams {
+  avatar?: string | null
+  description?: string | null
   hostSessionId?: string | null
   ownerAccountId?: string | null
   ownerNodeId?: string | null
@@ -215,6 +221,7 @@ export interface UpdateAgentRoomParams {
   lastMessage?: string | null
   archivedAt?: number | null
   favoritedAt?: number | null
+  title?: string
   updatedAt?: number
 }
 
@@ -240,6 +247,8 @@ const parseJson = <T>(value: string | null | undefined): T | undefined => {
 const stringifyJson = (value: unknown) => value === undefined ? null : JSON.stringify(value)
 
 const agentRoomUpdateFields = [
+  { key: 'avatar', toParam: value => value ?? null },
+  { key: 'description', toParam: value => value ?? null },
   { key: 'hostSessionId', toParam: value => value ?? null },
   { key: 'ownerAccountId', toParam: value => value ?? null },
   { key: 'ownerNodeId', toParam: value => value ?? null },
@@ -248,12 +257,15 @@ const agentRoomUpdateFields = [
   { key: 'lastMessage', toParam: value => value ?? null },
   { key: 'archivedAt', toParam: value => value ?? null },
   { key: 'favoritedAt', toParam: value => value ?? null },
+  { key: 'title' },
   { key: 'updatedAt' }
 ] as const satisfies ReadonlyArray<UpdateFieldDefinition<UpdateAgentRoomParams>>
 
 const mapRoomRow = (row: AgentRoomRow): AgentRoom => ({
   id: row.id,
   title: row.title,
+  ...(row.avatar != null ? { avatar: row.avatar } : {}),
+  ...(row.description != null ? { description: row.description } : {}),
   owner: {
     type: 'local',
     ...(row.ownerAccountId != null ? { accountId: row.ownerAccountId } : {}),
@@ -494,6 +506,8 @@ export function createAgentRoomsRepo(db: SqliteDatabase) {
     const room: AgentRoom = {
       id: params.id ?? uuidv4(),
       title: params.title,
+      ...(params.avatar != null ? { avatar: params.avatar } : {}),
+      ...(params.description != null ? { description: params.description } : {}),
       owner: params.owner ?? { type: 'local' },
       ...(params.leaderEntity != null ? { leaderEntity: params.leaderEntity } : {}),
       ...(params.hostSessionId != null ? { hostSessionId: params.hostSessionId } : {}),
@@ -503,12 +517,14 @@ export function createAgentRoomsRepo(db: SqliteDatabase) {
     }
     db.prepare(`
       INSERT INTO agent_rooms (
-        id, title, hostSessionId, ownerAccountId, ownerNodeId, ownerSourceId,
+        id, title, avatar, description, hostSessionId, ownerAccountId, ownerNodeId, ownerSourceId,
         leaderEntity, status, createdAt, updatedAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       room.id,
       room.title,
+      room.avatar ?? null,
+      room.description ?? null,
       room.hostSessionId ?? null,
       room.owner.accountId ?? null,
       room.owner.nodeId ?? null,

@@ -50,6 +50,7 @@ const shouldShowAgentAuthor = (messages: AgentRoomMessageView[], index: number) 
 export function AgentRoomMessageList({
   messages,
   variant = 'standalone',
+  onOpenEntity,
   onOpenHostSession,
   onOpenChannelReference,
   onOpenRun,
@@ -61,6 +62,7 @@ export function AgentRoomMessageList({
   messages: AgentRoomMessageView[]
   showTimelineSeparators?: boolean
   variant?: 'standalone' | 'transcript'
+  onOpenEntity?: (entityId: string) => void
   onOpenHostSession?: () => void
   onOpenChannelReference?: (reference: AgentRoomChannelReferenceView) => void
   onOpenRun?: (run: AgentRoomRunView) => void
@@ -77,6 +79,7 @@ export function AgentRoomMessageList({
           message={message}
           showAvatar={shouldShowAgentAvatar(messages, index)}
           showAuthor={shouldShowAgentAuthor(messages, index)}
+          onOpenEntity={onOpenEntity}
           onOpenHostSession={onOpenHostSession}
           onOpenChannelReference={onOpenChannelReference}
           onOpenRun={onOpenRun}

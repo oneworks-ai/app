@@ -102,6 +102,7 @@ export function Sender(props: SenderProps) {
           sessionTarget={props.sessionTarget}
           agentRoomTargetMembers={props.agentRoomTargetMembers}
           hideHeaderControls={props.hideHeaderControls}
+          layout={props.layout}
           showStatusBarControlsInMore={props.showStatusBarControlsInMore}
           statusBarGitControlsInMore={props.statusBarGitControlsInMore}
           showContextPicker={controller.attachments.showContextPicker}

@@ -25,6 +25,7 @@ interface EntitiesTabProps {
   onTagFilterChange: (value: string[]) => void
   onCreate: () => void
   onImport: () => void
+  onOpenEntity: (entityId: string) => void
 }
 
 export function EntitiesTab({
@@ -38,7 +39,8 @@ export function EntitiesTab({
   onQueryChange,
   onTagFilterChange,
   onCreate,
-  onImport
+  onImport,
+  onOpenEntity
 }: EntitiesTabProps) {
   const { t } = useTranslation()
   const [filtersOpen, setFiltersOpen] = React.useState(false)
@@ -105,6 +107,7 @@ export function EntitiesTab({
         resetKey={pageResetKey}
         total={total}
         onCreate={scope === 'project' ? onCreate : undefined}
+        onOpenEntity={onOpenEntity}
         onPageChange={setPage}
       />
     </TabContent>

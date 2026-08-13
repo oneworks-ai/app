@@ -295,6 +295,28 @@ describe('channel file memory sync', () => {
     }))
   })
 
+  it('only imports file scopes allowed by the entity memory policy', async () => {
+    const memoryRoot = await fs.mkdtemp(path.join(tmpdir(), 'oneworks-channel-memory-'))
+    tempDirs.push(memoryRoot)
+    await writeMemory(memoryRoot, ['entities', segment('bot'), 'organization'], 'entity memory')
+    await writeMemory(memoryRoot, ['rooms', segment('room-1'), 'organization'], 'room memory')
+    await writeMemory(
+      memoryRoot,
+      ['users', segment('lark:main'), segment('account-1'), segment('group')],
+      'user memory'
+    )
+
+    const result = syncChannelFileMemories({
+      ...scope(memoryRoot),
+      memoryPolicy: { writableScopes: ['entity'] }
+    })
+
+    expect(result.changedMemoryIds).toHaveLength(1)
+    expect([...memories.values()]).toEqual([
+      expect.objectContaining({ content: 'entity memory', subjectType: 'entity' })
+    ])
+  })
+
   it('commits an existing pending file-sync audit after a terminal retry', async () => {
     const memoryRoot = await fs.mkdtemp(path.join(tmpdir(), 'oneworks-channel-memory-'))
     tempDirs.push(memoryRoot)

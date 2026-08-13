@@ -1,4 +1,5 @@
 import type { ChannelExecutionContext, ChatMessageContent } from '@oneworks/core'
+import type { EntityMemoryPolicy } from '@oneworks/types'
 
 import { getDb } from '#~/db/index.js'
 import { finishChannelResumeIntentsForChildRun } from '#~/services/channel-resume/index.js'
@@ -17,6 +18,7 @@ export const createStartedChannelChildRun = (
     continuitySnapshot?: unknown
     dispatchMode: DispatchMode
     executionContext: ChannelExecutionContext
+    memoryPolicy?: EntityMemoryPolicy
     model?: string
     memorySnapshotId?: string
     nextMessageResumeIntentIds?: string[]
@@ -42,6 +44,7 @@ export const createStartedChannelChildRun = (
       effort: ctx.ingressRoute?.effort ?? ctx.channelEffort,
       executionContext: input.executionContext,
       hasRuntimeContent: input.runtimeContent != null,
+      memoryPolicy: input.memoryPolicy,
       model: input.model,
       ingressRoute: ctx.ingressRoute,
       ...(input.nextMessageResumeIntentIds == null || input.nextMessageResumeIntentIds.length === 0

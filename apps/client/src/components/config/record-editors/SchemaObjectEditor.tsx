@@ -1,4 +1,8 @@
-import { Input, InputNumber, Switch } from 'antd'
+/* eslint-disable max-lines -- Schema field selection and its shared workspace-file picker form one editor boundary. */
+import './RecordEditors.scss'
+
+import { Button, Input, InputNumber, Switch } from 'antd'
+import { useState } from 'react'
 import type { ReactNode } from 'react'
 
 import type { ConfigUiField, ConfigUiFieldOption, ConfigUiObjectSchema } from '@oneworks/types'
@@ -9,6 +13,7 @@ import { getTypeIcon, getValueByPath, isSensitiveKey, setValueByPath } from '../
 import type { TranslationFn } from '../configUtils'
 
 import { MobileAwareSelect as Select } from '#~/components/mobile-aware-select/MobileAwareSelect'
+import { ContextFilePicker } from '#~/components/workspace/ContextFilePicker'
 import { toLabel } from './schemaRecordUtils'
 
 const buildSelectOptions = (options: ConfigUiFieldOption[] = []) => (
@@ -32,6 +37,7 @@ export const SchemaObjectEditor = ({
   value,
   schema,
   onChange,
+  onCommit,
   t,
   hideFieldPaths,
   visibleFieldPaths,
@@ -42,6 +48,7 @@ export const SchemaObjectEditor = ({
   value: Record<string, unknown>
   schema: ConfigUiObjectSchema
   onChange: (nextValue: Record<string, unknown>) => void
+  onCommit?: (nextValue: Record<string, unknown>) => void
   t: TranslationFn
   hideFieldPaths?: string[][]
   visibleFieldPaths?: string[][]
@@ -49,6 +56,8 @@ export const SchemaObjectEditor = ({
   resolveFieldDescription?: (field: ConfigUiField, fallback: string) => string
   resolveFieldOptions?: (field: ConfigUiField) => ConfigUiFieldOption[] | undefined
 }) => {
+  const [filePickerField, setFilePickerField] = useState<ConfigUiField | null>(null)
+
   const renderField = (field: ConfigUiField) => {
     if (
       visibleFieldPaths != null && !visibleFieldPaths.some(visiblePath => (
@@ -82,7 +91,23 @@ export const SchemaObjectEditor = ({
     let control: ReactNode = null
     const stacked = field.type === 'json' || field.type === 'multiline' || field.type === 'string[]'
 
-    if (field.type === 'string' && resolvedOptions != null) {
+    if (field.type === 'string' && field.control === 'workspace-file') {
+      control = (
+        <div className='config-view__workspace-file-control'>
+          <Input
+            value={typeof valueToUse === 'string' ? valueToUse : ''}
+            onChange={(event) => nextValue(event.target.value)}
+            placeholder={field.placeholder}
+          />
+          <Button
+            aria-label={t('common.select')}
+            icon={<span className='material-symbols-rounded' aria-hidden='true'>folder_open</span>}
+            title={t('common.select')}
+            onClick={() => setFilePickerField(field)}
+          />
+        </div>
+      )
+    } else if (field.type === 'string' && resolvedOptions != null) {
       control = (
         <Select
           allowClear
@@ -171,8 +196,33 @@ export const SchemaObjectEditor = ({
   }
 
   return (
-    <div className='config-view__record-fields'>
-      {schema.fields.map(renderField)}
-    </div>
+    <>
+      <div className='config-view__record-fields'>
+        {schema.fields.map(renderField)}
+      </div>
+      <ContextFilePicker
+        multiple={false}
+        open={filePickerField != null}
+        selectableTypes='files'
+        selectedPaths={filePickerField == null
+          ? []
+          : [getValueByPath(value, filePickerField.path)].filter(
+            (item): item is string => typeof item === 'string' && item !== ''
+          )}
+        onCancel={() => setFilePickerField(null)}
+        onConfirm={(files) => {
+          const selectedPath = files[0]?.path
+          if (filePickerField == null || selectedPath == null) return
+          const nextValue = setValueByPath(
+            value,
+            filePickerField.path,
+            selectedPath
+          ) as Record<string, unknown>
+          onChange(nextValue)
+          onCommit?.(nextValue)
+          setFilePickerField(null)
+        }}
+      />
+    </>
   )
 }

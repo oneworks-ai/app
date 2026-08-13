@@ -2,6 +2,16 @@
   align-items: stretch;
 }
 
+.plugin-route__side-panel {
+  min-height: 0;
+  width: 100%;
+}
+
+.plugin-route__side-panel .route-container-panel-dock {
+  height: 100%;
+  width: 100%;
+}
+
 .plugin-view-host {
   flex: 1 1 auto;
   width: 100%;

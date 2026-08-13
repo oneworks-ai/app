@@ -71,9 +71,13 @@ export type {
 export {
   AssetCreateCommitIndeterminateError,
   createAsset,
+  createEntityChannelLink,
+  createEntityDocument,
   createSkill,
+  deleteEntityChannelLink,
   getAssetPreview,
   getEntityDetail,
+  getEntityRuntime,
   getRuleDetail,
   getSkillDetail,
   getSpecDetail,
@@ -83,7 +87,10 @@ export {
   listRules,
   listSkills,
   listSpecs,
-  listWorkspaces
+  listWorkspaces,
+  updateEntityChannelAccount,
+  updateEntityConfig,
+  updateEntityMemory
 } from './api/knowledge'
 export {
   createModelServiceManagementToken,

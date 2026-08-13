@@ -5,10 +5,11 @@ import type { editor as MonacoEditorNamespace } from 'monaco-editor'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import useSWR from 'swr'
 
 import type { ChatMessageContent, SessionQueuedMessageMode } from '@oneworks/core'
-import type { ConfigResponse } from '@oneworks/types'
+import type { ConfigJsonSchema, ConfigResponse } from '@oneworks/types'
 
 import { getAgentRoom, getConfig, respondAgentRoomInteraction, sendAgentRoomMessage } from '#~/api.js'
 import {
@@ -22,6 +23,10 @@ import { Sender } from '#~/components/chat/sender/Sender'
 import { ChatStatusBar } from '#~/components/chat/status-bar/ChatStatusBar'
 import { FieldRow } from '#~/components/config/ConfigFieldRow'
 import { ConfigSectionFrame } from '#~/components/config/ConfigSectionFrame'
+import { SchemaObjectEditor } from '#~/components/config/record-editors/SchemaObjectEditor'
+import { EntityCard } from '#~/components/entity-card'
+import { EntitySummary } from '#~/components/entity-summary'
+import { GroupAvatar } from '#~/components/group-avatar/GroupAvatar'
 import { InteractionList } from '#~/components/interaction-list'
 import type { InteractionListAction, InteractionListItem } from '#~/components/interaction-list'
 import { ListSearchInput } from '#~/components/list-search-input'
@@ -39,6 +44,7 @@ import {
   OverlayTree
 } from '#~/components/overlay'
 import type { OverlayMenuItem, OverlayTreeNode } from '#~/components/overlay'
+import { buildConfigUiSchemaFromJsonSchema } from '#~/components/plugins/plugin-config-json-schema'
 import { ProjectFileTree } from '#~/components/workspace/project-file-tree/ProjectFileTree'
 import type { ProjectFileTreeNode } from '#~/components/workspace/project-file-tree/project-file-tree-types'
 import {
@@ -480,6 +486,7 @@ function PluginHostList(props: PluginHostComponentPropsById['list']) {
 function PluginHostAgentRoom(props: PluginHostComponentPropsById['agentRoom']) {
   const { message } = App.useApp()
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const roomId = props.roomId.trim()
   const [composerTarget, setComposerTarget] = useState<{ content: string; key: string } | null>(null)
   const [submitLoading, setSubmitLoading] = useState(false)
@@ -487,7 +494,21 @@ function PluginHostAgentRoom(props: PluginHostComponentPropsById['agentRoom']) {
     roomId === '' ? null : `/api/agent-rooms/${encodeURIComponent(roomId)}`,
     () => getAgentRoom(roomId)
   )
-  const room = useMemo(() => data == null ? undefined : buildAgentRoomRouteViewModel(data), [data])
+  const room = useMemo(() => {
+    if (data == null) return undefined
+
+    const detail = props.memberAvatarOverrides == null
+      ? data
+      : {
+        ...data,
+        members: data.members.map(member =>
+          Object.prototype.hasOwnProperty.call(props.memberAvatarOverrides, member.key)
+            ? { ...member, avatar: props.memberAvatarOverrides?.[member.key] ?? undefined }
+            : member
+        )
+      }
+    return buildAgentRoomRouteViewModel(detail)
+  }, [data, props.memberAvatarOverrides])
 
   const sendText = useCallback(async (text: string) => {
     if (room == null) return false
@@ -541,11 +562,12 @@ function PluginHostAgentRoom(props: PluginHostComponentPropsById['agentRoom']) {
   }, [message, sendText, t])
 
   const openRun = useCallback((run: AgentRoomRunView) => {
-    const workspacePrefix = globalThis.location.pathname.match(/^\/ui\/w\/[^/]+/u)?.[0] ?? ''
-    globalThis.location.assign(
-      `${workspacePrefix}/rooms/${encodeURIComponent(roomId)}/sessions/${encodeURIComponent(run.sessionId)}`
-    )
-  }, [roomId])
+    navigate(`/rooms/${encodeURIComponent(roomId)}/sessions/${encodeURIComponent(run.sessionId)}`)
+  }, [navigate, roomId])
+
+  const openEntity = useCallback((entityId: string) => {
+    navigate(`/knowledge/entities/${encodeURIComponent(entityId)}`)
+  }, [navigate])
 
   const selectMemberTarget = useCallback((member: AgentRoomMemberView) => {
     setComposerTarget({
@@ -581,6 +603,7 @@ function PluginHostAgentRoom(props: PluginHostComponentPropsById['agentRoom']) {
       <div className='plugin-host-agent-room__messages'>
         <AgentRoomTranscript
           room={room}
+          onOpenEntity={openEntity}
           onOpenRun={openRun}
           onReplyToRun={(item: AgentRoomMessageView) => {
             if (item.run != null) openRun(item.run)
@@ -598,7 +621,6 @@ function PluginHostAgentRoom(props: PluginHostComponentPropsById['agentRoom']) {
           agentRoomTargetMembers={room.members}
           autoFocus={composerTarget != null}
           hideHeaderControls
-          hideReferenceActions
           hideSelectionControls
           initialContent={composerTarget?.content}
           modelUnavailable={false}
@@ -846,6 +868,31 @@ function PluginHostSettingRow(props: PluginHostComponentPropsById['settingRow'])
     >
       {props.children}
     </FieldRow>
+  )
+}
+
+function PluginHostJsonSchemaForm(props: PluginHostComponentPropsById['jsonSchemaForm']) {
+  const { i18n, t } = useTranslation()
+  const schema = useMemo(
+    () => buildConfigUiSchemaFromJsonSchema(props.jsonSchema as ConfigJsonSchema, i18n.language),
+    [i18n.language, props.jsonSchema]
+  )
+
+  if (schema == null) return null
+
+  return (
+    <div
+      className={props.className}
+      onBlur={() => props.onCommit?.(props.value)}
+    >
+      <SchemaObjectEditor
+        onChange={props.onChange}
+        onCommit={props.onCommit}
+        schema={schema}
+        t={t}
+        value={props.value}
+      />
+    </div>
   )
 }
 
@@ -1217,6 +1264,7 @@ function PluginSenderHost(props: PluginHostSenderComponentProps) {
     'sender-container',
     surface === 'chat' ? 'sender-container--chat-surface' : '',
     density === 'compact' ? 'sender-container--density-compact' : '',
+    props.layout === 'adaptive' ? 'sender-container--layout-adaptive' : '',
     'plugin-host-component-sender'
   ].filter(Boolean).join(' ')
 
@@ -1252,7 +1300,9 @@ function PluginSenderHost(props: PluginHostSenderComponentProps) {
         hideReferenceActions={props.hideReferenceActions}
         hideSelectionControls={props.hideSelectionControls}
         hideSubmitAction={props.hideSubmitAction}
+        enableVoiceInput={props.enableVoiceInput}
         initialContent={props.initialContent}
+        layout={props.layout}
         modelUnavailable={modelUnavailable}
         onCancel={props.onCancel}
         onClear={noop}
@@ -1345,12 +1395,16 @@ function PluginHostProjectFileTree(props: PluginHostComponentPropsById['projectF
 
 function PluginHostSettingsSection({
   children,
+  collapsible,
+  defaultCollapsed,
   description,
   icon,
   title
 }: PluginHostSettingsSectionComponentProps) {
   return (
     <ConfigSectionFrame
+      collapsible={collapsible}
+      defaultCollapsed={defaultCollapsed}
       icon={icon}
       title={title == null
         ? undefined
@@ -1380,6 +1434,9 @@ export const createPluginHostComponentReactApi = (
   AgentRoom: PluginHostAgentRoom,
   Button: PluginHostButton,
   CodeEditor: PluginHostCodeEditor,
+  EntityCard,
+  EntitySummary,
+  GroupAvatar,
   Icon: PluginHostIcon,
   Input: PluginHostInput,
   InteractionList: props => (
@@ -1389,6 +1446,7 @@ export const createPluginHostComponentReactApi = (
       surface={surface}
     />
   ),
+  JsonSchemaForm: PluginHostJsonSchemaForm,
   List: PluginHostList,
   NativeTabs: props => <PluginHostNativeTabs {...props} surface={surface} />,
   OverlayDropdown: PluginHostOverlayDropdown,
@@ -1440,6 +1498,36 @@ export const renderPluginHostComponent = (
     )
   }
 
+  if (component === 'entityCard') {
+    return (
+      <EntityCard
+        {...((props as PluginHostComponentPropsById['entityCard'] | undefined) ?? {
+          entityId: '',
+          name: ''
+        })}
+      />
+    )
+  }
+
+  if (component === 'entitySummary') {
+    return (
+      <EntitySummary
+        {...((props as PluginHostComponentPropsById['entitySummary'] | undefined) ?? {
+          entityId: '',
+          name: ''
+        })}
+      />
+    )
+  }
+
+  if (component === 'groupAvatar') {
+    return (
+      <GroupAvatar
+        {...((props as PluginHostComponentPropsById['groupAvatar'] | undefined) ?? { members: [] })}
+      />
+    )
+  }
+
   if (component === 'icon') {
     const iconProps = props as PluginHostComponentPropsById['icon'] | undefined
     return <PluginHostIcon {...(iconProps ?? { name: 'extension' })} />
@@ -1457,6 +1545,18 @@ export const renderPluginHostComponent = (
           items: []
         })}
         surface={surface}
+      />
+    )
+  }
+
+  if (component === 'jsonSchemaForm') {
+    return (
+      <PluginHostJsonSchemaForm
+        {...((props as PluginHostComponentPropsById['jsonSchemaForm'] | undefined) ?? {
+          jsonSchema: {},
+          onChange: noop,
+          value: {}
+        })}
       />
     )
   }

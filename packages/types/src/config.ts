@@ -1188,6 +1188,8 @@ export type ConfigUiFieldType =
   | 'json'
   | 'multiline'
 
+export type ConfigUiFieldControl = 'workspace-file'
+
 export interface ConfigUiFieldOption {
   value: string
   label?: string
@@ -1197,6 +1199,7 @@ export interface ConfigUiFieldOption {
 export interface ConfigUiField {
   path: string[]
   type: ConfigUiFieldType
+  control?: ConfigUiFieldControl
   defaultValue?: unknown
   label?: string
   description?: string

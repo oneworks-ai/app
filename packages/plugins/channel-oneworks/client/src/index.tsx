@@ -1,6 +1,8 @@
 /* eslint-disable max-lines -- the plugin owns its Room, scenario, and delivery-trace workbench. */
 /// <reference types="vite/client" />
 
+import { createSeededAvatarDataUri } from '@oneworks/avatar'
+
 import { oneworksChannelCss } from './styles'
 
 const asError = async response => {
@@ -16,6 +18,7 @@ const request = async (ctx, path, init = undefined) => {
 }
 
 const emptyData = () => ({
+  entities: [],
   rooms: [],
   scenarios: [],
   sharedRooms: [],
@@ -56,14 +59,114 @@ const channelIconByType = {
 }
 
 const channelIcon = channelType => channelIconByType[channelType?.toLowerCase()] ?? 'hub'
+const getWorkspaceResourceUrl = path => `/api/workspace/resource?path=${encodeURIComponent(path)}`
+const roomSettingsJsonSchema = {
+  type: 'object',
+  properties: {
+    title: {
+      type: 'string',
+      titleI18n: { en: 'Group name', 'zh-Hans': '群名' },
+      descriptionI18n: { en: 'Shown in the chat list and room header.', 'zh-Hans': '显示在群聊列表和群聊标题中。' },
+      'x-oneworks-ui': { icon: 'title', placeholder: 'Group name' }
+    },
+    description: {
+      type: 'string',
+      format: 'textarea',
+      titleI18n: { en: 'Introduction', 'zh-Hans': '介绍' },
+      descriptionI18n: {
+        en: 'Explain the room purpose and collaboration boundary.',
+        'zh-Hans': '说明群聊用途和协作边界。'
+      },
+      'x-oneworks-ui': { icon: 'description', placeholder: 'What is this group for?' }
+    },
+    avatar: {
+      type: 'string',
+      titleI18n: { en: 'Custom avatar', 'zh-Hans': '自定义头像' },
+      descriptionI18n: {
+        en: 'Use a workspace path or URL. Leave empty to compose member avatars.',
+        'zh-Hans': '填写工作区路径或 URL；留空时自动拼接成员头像。'
+      },
+      'x-oneworks-ui': {
+        control: 'workspace-file',
+        icon: 'image',
+        placeholder: 'Workspace path or URL'
+      }
+    },
+    isFavorited: {
+      type: 'boolean',
+      titleI18n: { en: 'Pin to favorites', 'zh-Hans': '收藏群聊' },
+      descriptionI18n: { en: 'Keep this room easy to find.', 'zh-Hans': '将群聊保留在便于访问的位置。' },
+      'x-oneworks-ui': { icon: 'star' }
+    },
+    isArchived: {
+      type: 'boolean',
+      titleI18n: { en: 'Archive', 'zh-Hans': '归档' },
+      descriptionI18n: {
+        en: 'Hide the room from active work without deleting history.',
+        'zh-Hans': '从活跃工作中隐藏群聊，但保留历史记录。'
+      },
+      'x-oneworks-ui': { icon: 'archive' }
+    }
+  }
+}
 
 export const buildOneWorksChannelRoute = scope => `/plugins/${scope}/oneworks-channel`
-export const buildOneWorksRoomRoute = roomId => `/rooms/${encodeURIComponent(roomId)}`
+export const buildOneWorksRoomRoute = (scope, roomId) =>
+  `${buildOneWorksChannelRoute(scope)}/rooms/${encodeURIComponent(roomId)}`
+
+const roomPanelKeys = ['members', 'details']
+
+const readRoomPanelState = () => {
+  const params = new URLSearchParams(globalThis.location.search)
+  const activePanel = roomPanelKeys.includes(params.get('panel')) ? params.get('panel') : null
+  const openedPanels = (params.get('panels') ?? '')
+    .split(',')
+    .filter(panel => roomPanelKeys.includes(panel))
+  return {
+    activePanel,
+    openedPanels: activePanel == null || openedPanels.includes(activePanel)
+      ? openedPanels
+      : [...openedPanels, activePanel]
+  }
+}
+
+const buildOneWorksRoomPanelRoute = (scope, roomId, activePanel, openedPanels) => {
+  const params = new URLSearchParams()
+  if (activePanel != null) params.set('panel', activePanel)
+  if (openedPanels.length > 0) params.set('panels', openedPanels.join(','))
+  const query = params.toString()
+  return `${buildOneWorksRoomRoute(scope, roomId)}${query === '' ? '' : `?${query}`}`
+}
+
+const readRoomIdFromLocation = scope => {
+  const marker = `${buildOneWorksChannelRoute(scope)}/rooms/`
+  const markerIndex = globalThis.location.pathname.indexOf(marker)
+  if (markerIndex < 0) return ''
+  const encodedRoomId = globalThis.location.pathname.slice(markerIndex + marker.length).split('/')[0]
+  try {
+    return decodeURIComponent(encodedRoomId)
+  } catch {
+    return ''
+  }
+}
 
 export function OneWorksChannelView({ ctx, react, view }) {
   const h = react.createElement
   const { useCallback, useEffect, useMemo, useState } = react
-  const { AgentRoom, Button, Icon, Input, Select } = view.ui
+  const {
+    AgentRoom,
+    Button,
+    EntityCard,
+    EntitySummary,
+    GroupAvatar,
+    Icon,
+    Input,
+    JsonSchemaForm,
+    SearchInput,
+    Select,
+    Sender,
+    SettingsSection
+  } = view.ui
   const [languageVersion, setLanguageVersion] = useState(0)
   const t = useMemo(() => (en, chinese) => view.i18n?.resolveText?.({ en, 'zh-Hans': chinese }, en) ?? en, [
     view.i18n,
@@ -74,8 +177,22 @@ export function OneWorksChannelView({ ctx, react, view }) {
     return ['playground', 'scenarios', 'shared', 'trace'].includes(section) ? section : 'rooms'
   }, [])
   const [activeTab, setActiveTab] = useState(readActiveSection)
-  const [selectedRoomId, setSelectedRoomId] = useState('')
+  const initialRoomPanelState = useMemo(readRoomPanelState, [])
+  const [activeRoomPanel, setActiveRoomPanel] = useState(initialRoomPanelState.activePanel)
+  const [openedRoomPanels, setOpenedRoomPanels] = useState(initialRoomPanelState.openedPanels)
+  const [selectedRoomId, setSelectedRoomId] = useState(() => readRoomIdFromLocation(ctx.scope))
+  const [selectedRoomMemberId, setSelectedRoomMemberId] = useState('')
+  const [selectedEntityIds, setSelectedEntityIds] = useState([])
+  const [entityQuery, setEntityQuery] = useState('')
   const [sidebarQuery, setSidebarQuery] = useState('')
+  const [roomSettings, setRoomSettings] = useState({
+    avatar: '',
+    description: '',
+    isArchived: false,
+    isFavorited: false,
+    title: ''
+  })
+  const [confirmingRoomDelete, setConfirmingRoomDelete] = useState(false)
   const [draft, setDraft] = useState(() => emptyDraft(''))
   const [shareDraft, setShareDraft] = useState(emptyShareDraft)
   const [editingScenarioRef, setEditingScenarioRef] = useState(null)
@@ -91,7 +208,8 @@ export function OneWorksChannelView({ ctx, react, view }) {
     isLoading: loading,
     mutate
   } = view.data.useQuery('oneworks-channel:overview', async () => {
-    const [rooms, sharedRooms, shareOwners, shares, simulationTargets, trace, scenarios] = await Promise.all([
+    const [entities, rooms, sharedRooms, shareOwners, shares, simulationTargets, trace, scenarios] = await Promise.all([
+      request(ctx, 'entities'),
       request(ctx, 'rooms'),
       request(ctx, 'shared'),
       request(ctx, 'share-owners'),
@@ -100,7 +218,7 @@ export function OneWorksChannelView({ ctx, react, view }) {
       request(ctx, 'trace'),
       request(ctx, 'scenarios')
     ])
-    return { rooms, scenarios, sharedRooms, shareOwners, shares, simulationTargets, trace }
+    return { entities, rooms, scenarios, sharedRooms, shareOwners, shares, simulationTargets, trace }
   }, {
     refreshInterval: 10_000,
     revalidateOnFocus: true,
@@ -119,30 +237,108 @@ export function OneWorksChannelView({ ctx, react, view }) {
     { key: 'scenarios', label: t('Scenarios', '场景'), icon: 'bookmark' },
     { key: 'trace', label: t('Trace', '链路'), icon: 'timeline' }
   ], [t])
-  const selectedRoom = useMemo(() => data.rooms.find(room => room.roomId === selectedRoomId), [
+  const entityById = useMemo(
+    () => new Map(data.entities.map(entity => [entity.entityId, entity])),
+    [data.entities]
+  )
+  const memberAvatarOverrides = useMemo(
+    () => Object.fromEntries(data.entities.map(entity => [entity.entityId, entity.avatar ?? null])),
+    [data.entities]
+  )
+  const resolveRoomMember = useCallback(member => {
+    const entity = entityById.get(member.entityId)
+    return entity == null
+      ? member
+      : {
+        ...member,
+        avatar: entity.avatar,
+        description: entity.description ?? member.description,
+        name: entity.name ?? member.name
+      }
+  }, [entityById])
+  const selectedRoomFromData = useMemo(() => data.rooms.find(room => room.roomId === selectedRoomId), [
     data.rooms,
     selectedRoomId
   ])
+  const [selectedRoomSnapshot, setSelectedRoomSnapshot] = useState(null)
+  const selectedRoom = selectedRoomFromData ?? (
+    selectedRoomSnapshot?.roomId === selectedRoomId ? selectedRoomSnapshot : undefined
+  )
+  const renderRoomAvatar = useCallback(room => (
+    <GroupAvatar
+      label={room.title}
+      members={room.avatar
+        ? [{ avatar: room.avatar, key: `room:${room.roomId}`, label: room.title }]
+        : room.members.map(member => {
+          const resolvedMember = resolveRoomMember(member)
+          return {
+            avatar: resolvedMember.avatar,
+            key: resolvedMember.entityId,
+            label: resolvedMember.name
+          }
+        })}
+    />
+  ), [GroupAvatar, resolveRoomMember])
+
+  const setRoomPanel = useCallback(panelKey => {
+    const nextActivePanel = activeRoomPanel === panelKey ? null : panelKey
+    const nextOpenedPanels = openedRoomPanels.includes(panelKey)
+      ? openedRoomPanels
+      : [...openedRoomPanels, panelKey]
+    setActiveRoomPanel(nextActivePanel)
+    setOpenedRoomPanels(nextOpenedPanels)
+    if (selectedRoomId !== '') {
+      view.route?.navigate(
+        buildOneWorksRoomPanelRoute(ctx.scope, selectedRoomId, nextActivePanel, nextOpenedPanels),
+        { replace: true }
+      )
+    }
+  }, [activeRoomPanel, ctx.scope, openedRoomPanels, selectedRoomId, view.route])
+
+  const handleRoomPanelChange = useCallback((nextActiveTab, nextOpenedTabs) => {
+    setActiveRoomPanel(nextActiveTab)
+    setOpenedRoomPanels(nextOpenedTabs)
+    if (selectedRoomId !== '') {
+      view.route?.navigate(
+        buildOneWorksRoomPanelRoute(ctx.scope, selectedRoomId, nextActiveTab, nextOpenedTabs),
+        { replace: true }
+      )
+    }
+  }, [ctx.scope, selectedRoomId, view.route])
 
   useEffect(() => {
-    setSelectedRoomId(current =>
-      data.rooms.some(room => room.roomId === current)
-        ? current
-        : data.rooms[0]?.roomId || ''
-    )
+    if (loading) return
+    setSelectedRoomId(current => {
+      const routedRoomId = readRoomIdFromLocation(ctx.scope)
+      if (routedRoomId) return routedRoomId
+      return data.rooms.some(room => room.roomId === current) ? current : ''
+    })
     const firstTarget = data.simulationTargets.find(target => target.capabilities?.includes('simulation'))
     setDraft(current => ({ ...current, roomRef: current.roomRef || firstTarget?.roomRef || '' }))
-  }, [data.rooms, data.simulationTargets])
+  }, [ctx.scope, data.rooms, data.simulationTargets, loading])
+  useEffect(() => {
+    if (selectedRoomFromData != null) setSelectedRoomSnapshot(selectedRoomFromData)
+  }, [selectedRoomFromData])
+  useEffect(() => {
+    setSelectedRoomSnapshot(current => current?.roomId === selectedRoomId ? current : null)
+    setSelectedRoomMemberId('')
+  }, [selectedRoomId])
   useEffect(() => view.i18n?.subscribe?.(() => setLanguageVersion(value => value + 1))?.dispose, [view.i18n])
   useEffect(() => {
-    const syncSection = () => setActiveTab(readActiveSection())
-    globalThis.addEventListener('oneworks:plugin-route-change', syncSection)
-    return () => globalThis.removeEventListener('oneworks:plugin-route-change', syncSection)
-  }, [readActiveSection])
+    const syncRoute = () => {
+      const roomPanelState = readRoomPanelState()
+      setActiveTab(readActiveSection())
+      setSelectedRoomId(readRoomIdFromLocation(ctx.scope))
+      setActiveRoomPanel(roomPanelState.activePanel)
+      setOpenedRoomPanels(roomPanelState.openedPanels)
+    }
+    globalThis.addEventListener('oneworks:plugin-route-change', syncRoute)
+    return () => globalThis.removeEventListener('oneworks:plugin-route-change', syncRoute)
+  }, [ctx.scope, readActiveSection])
   useEffect(() => {
     const activeSection = sections.find(section => section.key === activeTab)
     if (activeTab === 'rooms' || activeSection == null) {
-      view.route?.setTitle(selectedRoom?.title ?? t('Chat Rooms', '聊天室'))
+      view.route?.setTitle(selectedRoom?.title ?? t('Create group chat', '创建群聊'))
       view.route?.setBreadcrumb(undefined)
     } else {
       view.route?.setTitle(activeSection.label)
@@ -152,14 +348,22 @@ export function OneWorksChannelView({ ctx, react, view }) {
           view.route?.navigate(pluginRoute)
           setShareDraft(emptyShareDraft())
         },
-        parentTitle: t('Chat Rooms', '聊天室')
+        parentTitle: t('Team chats', '团队群聊')
       })
     }
-    return () => {
-      view.route?.setBreadcrumb(undefined)
-      view.route?.setTitle(undefined)
-    }
-  }, [activeTab, pluginRoute, sections, selectedRoom?.title, t, view.route])
+  }, [activeTab, loading, pluginRoute, sections, selectedRoom?.title, t, view.route])
+  useEffect(() => {
+    view.route?.setIcon(
+      activeTab === 'rooms' && selectedRoom != null
+        ? renderRoomAvatar(selectedRoom)
+        : undefined
+    )
+  }, [activeTab, renderRoomAvatar, selectedRoom, view.route])
+  useEffect(() => () => {
+    view.route?.setBreadcrumb(undefined)
+    view.route?.setIcon(undefined)
+    view.route?.setTitle(undefined)
+  }, [view.route])
   useEffect(() => {
     if (!sections.some(section => section.key === activeTab)) setActiveTab('rooms')
   }, [activeTab, sections])
@@ -183,11 +387,55 @@ export function OneWorksChannelView({ ctx, react, view }) {
       [
         room.title,
         room.lastMessage,
+        room.status,
+        room.archived ? t('Archived', '已归档') : t('Active', '进行中'),
         ...room.platforms.flatMap(platform => [platform.channelType, ...platform.labels])
       ].filter(Boolean).some(value => String(value).toLowerCase().includes(query))
     )
-  }, [data.rooms, sidebarQuery])
+  }, [data.rooms, sidebarQuery, t])
+  const visibleEntities = useMemo(() => {
+    const query = entityQuery.trim().toLowerCase()
+    if (!query) return data.entities
+    return data.entities.filter(entity =>
+      [entity.name, entity.description, entity.entityId]
+        .filter(Boolean)
+        .some(value => String(value).toLowerCase().includes(query))
+    )
+  }, [data.entities, entityQuery])
   const updateDraft = (field, value) => setDraft(current => ({ ...current, [field]: value }))
+
+  const toggleEntity = entityId => {
+    setSelectedEntityIds(current =>
+      current.includes(entityId)
+        ? current.filter(id => id !== entityId)
+        : [...current, entityId]
+    )
+  }
+
+  const createRoom = async (message) => {
+    const text = message.trim()
+    if (!text || selectedEntityIds.length === 0 || working) return false
+    setWorking(true)
+    setActionError(null)
+    setNotice(null)
+    try {
+      const room = await request(ctx, 'rooms', {
+        body: JSON.stringify({ entityIds: selectedEntityIds, message: text }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST'
+      })
+      await mutate()
+      setSelectedRoomId(room.roomId)
+      setSelectedEntityIds([])
+      view.route?.navigate(buildOneWorksRoomRoute(ctx.scope, room.roomId))
+      return true
+    } catch (nextError) {
+      setActionError(nextError instanceof Error ? nextError.message : String(nextError))
+      return false
+    } finally {
+      setWorking(false)
+    }
+  }
 
   const execute = async (action, successMessage, onSuccess = undefined) => {
     setWorking(true)
@@ -259,8 +507,9 @@ export function OneWorksChannelView({ ctx, react, view }) {
   }
 
   const openRoom = useCallback(room => {
-    view.route?.navigate(buildOneWorksRoomRoute(room.roomId))
-  }, [view.route])
+    setSelectedRoomId(room.roomId)
+    view.route?.navigate(buildOneWorksRoomRoute(ctx.scope, room.roomId))
+  }, [ctx.scope, view.route])
 
   const createShare = async () =>
     await execute(
@@ -293,7 +542,7 @@ export function OneWorksChannelView({ ctx, react, view }) {
   useEffect(() => {
     view.route?.setSidebar({
       activeKey: activeTab === 'rooms' ? selectedRoomId : undefined,
-      ariaLabel: t('Chat rooms', '聊天室'),
+      ariaLabel: t('Team chats', '团队群聊'),
       emptyText: loading
         ? t('Loading chat rooms...', '正在加载聊天室...')
         : sidebarQuery.trim()
@@ -301,7 +550,7 @@ export function OneWorksChannelView({ ctx, react, view }) {
         : t('No chat rooms yet.', '暂无聊天室。'),
       groups: [{
         items: sidebarRooms.map(room => ({
-          icon: channelIcon(room.platforms[0]?.channelType),
+          icon: renderRoomAvatar(room),
           key: room.roomId,
           label: room.title,
           searchText: [
@@ -319,31 +568,288 @@ export function OneWorksChannelView({ ctx, react, view }) {
       },
       onSelectItem: item => {
         setSelectedRoomId(item.key)
-        view.route?.navigate(pluginRoute)
+        view.route?.navigate(buildOneWorksRoomRoute(ctx.scope, item.key))
         setShareDraft(emptyShareDraft())
       }
     })
     return () => view.route?.setSidebar(undefined)
-  }, [activeTab, loading, pluginRoute, selectedRoomId, sidebarQuery, sidebarRooms, t, view.route])
+  }, [activeTab, ctx.scope, loading, renderRoomAvatar, selectedRoomId, sidebarQuery, sidebarRooms, t, view.route])
+
+  useEffect(() => {
+    if (selectedRoom == null || activeTab !== 'rooms') {
+      setActiveRoomPanel(null)
+      setOpenedRoomPanels([])
+    }
+  }, [activeTab, selectedRoom])
+
+  useEffect(() => {
+    setRoomSettings({
+      avatar: selectedRoom?.avatar ?? '',
+      description: selectedRoom?.description ?? '',
+      isArchived: selectedRoom?.archived ?? false,
+      isFavorited: selectedRoom?.favorited ?? false,
+      title: selectedRoom?.title ?? ''
+    })
+    setConfirmingRoomDelete(false)
+  }, [
+    selectedRoom?.archived,
+    selectedRoom?.avatar,
+    selectedRoom?.description,
+    selectedRoom?.favorited,
+    selectedRoom?.roomId,
+    selectedRoom?.title
+  ])
+
+  useEffect(() => {
+    if (activeRoomPanel !== 'details') setConfirmingRoomDelete(false)
+  }, [activeRoomPanel])
+
+  const renderRoomMember = member => {
+    const resolvedMember = resolveRoomMember(member)
+    return (
+      <button
+        className='oneworks-channel__panel-member'
+        key={resolvedMember.entityId}
+        type='button'
+        onClick={() => setSelectedRoomMemberId(resolvedMember.entityId)}
+      >
+        {renderEntityAvatar(resolvedMember)}
+        <span className='oneworks-channel__panel-member-copy'>
+          <strong>{resolvedMember.name}</strong>
+          {resolvedMember.description ? <span>{resolvedMember.description}</span> : null}
+        </span>
+        <Icon name='chevron_right' size='small' />
+      </button>
+    )
+  }
+
+  const saveRoomSettings = useCallback(nextSettings => {
+    if (selectedRoom == null || !nextSettings.title.trim()) return
+    setActionError(null)
+    setNotice(null)
+    void request(ctx, `rooms/${encodeURIComponent(selectedRoom.roomId)}`, {
+      body: JSON.stringify({
+        avatar: nextSettings.avatar.trim() || null,
+        description: nextSettings.description.trim() || null,
+        isArchived: nextSettings.isArchived,
+        isFavorited: nextSettings.isFavorited,
+        title: nextSettings.title.trim()
+      }),
+      headers: { 'content-type': 'application/json' },
+      method: 'PATCH'
+    })
+      .then(() => mutate())
+      .catch(nextError => {
+        setActionError(nextError instanceof Error ? nextError.message : String(nextError))
+      })
+  }, [ctx, mutate, selectedRoom])
 
   useEffect(() => {
     const roomActions = selectedRoom == null || activeTab !== 'rooms'
       ? []
       : [{
-        active: shareDraft.roomId === selectedRoom.roomId,
-        icon: 'share',
-        key: 'share-room',
-        label: t('Share Room', '分享聊天室'),
-        onSelect: () => openShareEditor(selectedRoom),
-        title: t('Share Room', '分享聊天室')
+        active: activeRoomPanel === 'members',
+        icon: 'group',
+        key: 'room-members',
+        label: t('Members', '群成员'),
+        onSelect: () => setRoomPanel('members'),
+        title: t('Members', '群成员')
+      }, {
+        active: activeRoomPanel === 'details',
+        icon: 'settings',
+        key: 'room-details',
+        label: t('Settings', '设置'),
+        onSelect: () => setRoomPanel('details'),
+        title: t('Settings', '设置')
+      }, {
+        icon: 'more_horiz',
+        key: 'room-more',
+        label: t('More', '更多'),
+        menuItems: [{
+          icon: 'share',
+          key: 'share-room',
+          label: t('Share Room', '分享聊天室'),
+          onSelect: () => openShareEditor(selectedRoom)
+        }, {
+          icon: roomSettings.isFavorited ? 'star' : 'star_border',
+          key: 'favorite-room',
+          label: roomSettings.isFavorited
+            ? t('Remove from favorites', '取消收藏')
+            : t('Add to favorites', '收藏群聊'),
+          onSelect: () =>
+            saveRoomSettings({
+              ...roomSettings,
+              isFavorited: !roomSettings.isFavorited
+            })
+        }, {
+          icon: roomSettings.isArchived ? 'unarchive' : 'archive',
+          key: 'archive-room',
+          label: roomSettings.isArchived
+            ? t('Unarchive', '取消归档')
+            : t('Archive', '归档'),
+          onSelect: () =>
+            saveRoomSettings({
+              ...roomSettings,
+              isArchived: !roomSettings.isArchived
+            })
+        }],
+        title: t('More', '更多')
       }]
     view.route?.setActions(roomActions)
     return () => view.route?.setActions(undefined)
   }, [
+    activeRoomPanel,
     activeTab,
     openShareEditor,
+    roomSettings,
+    saveRoomSettings,
     selectedRoom,
-    shareDraft.roomId,
+    setRoomPanel,
+    t,
+    view.route
+  ])
+
+  const deleteRoom = () => {
+    if (selectedRoom == null) return
+    if (!confirmingRoomDelete) {
+      setConfirmingRoomDelete(true)
+      return
+    }
+    void execute(
+      () => request(ctx, `rooms/${encodeURIComponent(selectedRoom.roomId)}`, { method: 'DELETE' }),
+      t('Chat room deleted.', '群聊已删除。'),
+      () => {
+        setActiveRoomPanel(null)
+        setOpenedRoomPanels([])
+        setSelectedRoomId('')
+        view.route?.navigate(pluginRoute)
+      }
+    )
+  }
+
+  useEffect(() => {
+    if (selectedRoom == null || activeTab !== 'rooms' || activeRoomPanel == null) {
+      view.route?.setSidePanel(undefined)
+      return () => view.route?.setSidePanel(undefined)
+    }
+
+    const selectedRoomMemberSnapshot = selectedRoom.members.find(member => member.entityId === selectedRoomMemberId)
+    const selectedRoomMember = selectedRoomMemberSnapshot == null
+      ? undefined
+      : resolveRoomMember(selectedRoomMemberSnapshot)
+    const roomPlatformSummary = selectedRoom.platforms.length === 0
+      ? t('OneWorks local', 'OneWorks 本地')
+      : selectedRoom.platforms
+        .flatMap(platform => platform.labels.length === 0 ? [platform.channelType] : platform.labels)
+        .join(' · ')
+
+    view.route?.setSidePanel({
+      activeTab: activeRoomPanel,
+      ariaLabel: t('Chat room panel', '群聊面板'),
+      openedTabs: openedRoomPanels,
+      tabs: [{
+        content: <div className='oneworks-channel__side-content is-members'>
+          {selectedRoomMember == null
+            ? <div className='oneworks-channel__panel-members'>
+              {selectedRoom.members.map(renderRoomMember)}
+            </div>
+            : <EntitySummary
+              avatar={selectedRoomMember.avatar}
+              contextLabel={t('Member in this chat', '当前群聊成员')}
+              description={selectedRoomMember.description}
+              entityId={selectedRoomMember.entityId}
+              items={[{
+                icon: 'meeting_room',
+                label: t('Chat room', '所在群聊'),
+                value: selectedRoom.title
+              }, {
+                icon: 'hub',
+                label: t('Available through', '关联渠道'),
+                value: roomPlatformSummary
+              }]}
+              name={selectedRoomMember.name}
+              openDetailsLabel={t('View full entity details', '查看完整实体详情')}
+              onBack={() => setSelectedRoomMemberId('')}
+              onOpenDetails={() =>
+                view.route?.navigate(
+                  `/knowledge/entities/${encodeURIComponent(selectedRoomMember.entityId)}`
+                )}
+            />}
+        </div>,
+        icon: 'group',
+        key: 'members',
+        label: t('Members', '群成员'),
+        title: t('Members', '群成员')
+      }, {
+        content: <div className='oneworks-channel__side-content'>
+          <div className='oneworks-channel__room-settings'>
+            <div className='oneworks-channel__room-settings-summary'>
+              <div className='oneworks-channel__room-settings-avatar'>
+                {renderRoomAvatar({ ...selectedRoom, avatar: roomSettings.avatar.trim() || undefined })}
+              </div>
+              <span>
+                <strong>{roomSettings.title || selectedRoom.title}</strong>
+                <small>{roomSettings.description || t('No introduction yet.', '暂无群聊介绍。')}</small>
+              </span>
+            </div>
+            <SettingsSection
+              collapsible
+              description={t('Room identity and lifecycle.', '群聊身份和生命周期。')}
+              icon='tune'
+              title={t('Chat room configuration', '群聊配置')}
+            >
+              <JsonSchemaForm
+                jsonSchema={roomSettingsJsonSchema}
+                value={roomSettings}
+                onChange={setRoomSettings}
+                onCommit={saveRoomSettings}
+              />
+            </SettingsSection>
+            <SettingsSection
+              description={t('This action permanently removes local history.', '此操作会永久移除本地历史。')}
+              icon='warning'
+              title={t('Danger zone', '危险操作')}
+            >
+              <Button
+                className='oneworks-channel__danger-button'
+                danger
+                disabled={working}
+                icon='delete'
+                label={confirmingRoomDelete ? t('Confirm delete', '确认删除') : t('Delete', '删除')}
+                onClick={deleteRoom}
+                type='primary'
+              />
+            </SettingsSection>
+            {confirmingRoomDelete
+              ? <p className='oneworks-channel__room-settings-warning'>
+                {t(
+                  'Deleting permanently removes the room and its local history.',
+                  '删除后将永久移除群聊及其本地历史。'
+                )}
+              </p>
+              : null}
+          </div>
+        </div>,
+        icon: 'settings',
+        key: 'details',
+        label: t('Settings', '设置'),
+        title: t('Settings', '设置')
+      }],
+      onTabChange: handleRoomPanelChange
+    })
+    return () => view.route?.setSidePanel(undefined)
+  }, [
+    activeRoomPanel,
+    activeTab,
+    handleRoomPanelChange,
+    openedRoomPanels,
+    confirmingRoomDelete,
+    pluginRoute,
+    renderRoomAvatar,
+    resolveRoomMember,
+    roomSettings,
+    selectedRoom,
+    selectedRoomMemberId,
     t,
     view.route,
     working
@@ -354,8 +860,94 @@ export function OneWorksChannelView({ ctx, react, view }) {
       ? null
       : <div className='oneworks-channel__room-surface'>
         {renderShareEditor()}
-        <AgentRoom className='oneworks-channel__room' inset={false} roomId={room.roomId} />
+        <AgentRoom
+          className='oneworks-channel__room'
+          inset={false}
+          memberAvatarOverrides={memberAvatarOverrides}
+          roomId={room.roomId}
+        />
       </div>
+
+  const renderEntityAvatar = entity =>
+    <img
+      alt=''
+      className='oneworks-channel__entity-avatar'
+      src={entity.avatar
+        ? getWorkspaceResourceUrl(entity.avatar)
+        : createSeededAvatarDataUri({ seed: `entity:${entity.entityId}`, size: 72, title: entity.name })}
+    />
+
+  const renderRoomCreator = () =>
+    <div className='oneworks-channel__creator'>
+      <div className='oneworks-channel__entity-picker'>
+        <div className='oneworks-channel__entity-picker-content'>
+          <div className='oneworks-channel__entity-picker-toolbar'>
+            <p className='oneworks-channel__creator-hint'>
+              {t('Choose the entities to invite', '选择要邀请进群的实体')}
+            </p>
+            <SearchInput
+              allowClear
+              ariaLabel={t('Search entities', '搜索实体')}
+              onChange={setEntityQuery}
+              placeholder={t('Search entities', '搜索实体')}
+              size='small'
+              value={entityQuery}
+            />
+          </div>
+          <div className='oneworks-channel__entity-grid'>
+            {visibleEntities.map(entity => {
+              const selected = selectedEntityIds.includes(entity.entityId)
+              return <EntityCard
+                avatar={entity.avatar}
+                description={entity.description}
+                entityId={entity.entityId}
+                key={entity.entityId}
+                name={entity.name}
+                selected={selected}
+                onOpenDetails={() => view.route?.navigate(`/knowledge/entities/${encodeURIComponent(entity.entityId)}`)}
+                onSelect={() => toggleEntity(entity.entityId)}
+              />
+            })}
+            {visibleEntities.length === 0 && (
+              <div className='oneworks-channel__entity-no-results'>
+                {t('No matching entities.', '没有匹配的实体。')}
+              </div>
+            )}
+            <button
+              className='oneworks-channel__entity-card is-create'
+              onClick={() => view.route?.navigate('/knowledge/entities?create=entity')}
+              type='button'
+            >
+              <span className='oneworks-channel__entity-avatar is-create' aria-hidden='true'>
+                <Icon name='add' />
+              </span>
+              <span className='oneworks-channel__entity-copy'>
+                <strong>{t('Create entity', '创建实体')}</strong>
+                <span>{t('Add another teammate', '添加新的团队成员')}</span>
+              </span>
+              <Icon name='arrow_forward' />
+            </button>
+          </div>
+        </div>
+      </div>
+      <div className='oneworks-channel__creator-composer'>
+        <Sender
+          autoFocus
+          density='compact'
+          enableVoiceInput
+          hideSelectionControls
+          layout='adaptive'
+          onSend={createRoom}
+          placeholder={selectedEntityIds.length === 0
+            ? t('Select at least one entity first', '请先选择至少一个实体')
+            : t('Send the first message to create the group', '发送第一条消息，创建群聊')}
+          showHeader={false}
+          showStatusBar={false}
+          submitLabel={t('Create group chat', '创建群聊')}
+          submitLoading={working}
+        />
+      </div>
+    </div>
 
   const renderShareEditor = () => {
     if (!shareDraft.roomId) return null
@@ -694,7 +1286,7 @@ export function OneWorksChannelView({ ctx, react, view }) {
       <Icon name='progress_activity' />
     </div>
     : activeTab === 'rooms'
-    ? renderRoomDetail(selectedRoom)
+    ? selectedRoom == null ? renderRoomCreator() : renderRoomDetail(selectedRoom)
     : activeTab === 'shared'
     ? renderShares()
     : activeTab === 'playground'
@@ -752,8 +1344,9 @@ export async function activatePlugin(ctx) {
         route: `${route}?section=trace`
       }],
       id: 'oneworks-channel',
-      title: 'Chat Rooms',
-      titleI18n: { en: 'Chat Rooms', 'zh-Hans': '聊天室' },
+      placement: 'beforeCore',
+      title: 'Team Chats',
+      titleI18n: { en: 'Team Chats', 'zh-Hans': '团队群聊' },
       descriptionI18n: {
         en: 'Open chat rooms, sharing, simulations, and delivery traces.',
         'zh-Hans': '打开聊天室、分享、模拟场景与投递链路。'

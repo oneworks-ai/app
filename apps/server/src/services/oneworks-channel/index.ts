@@ -2,7 +2,9 @@
 import { createHash, randomUUID } from 'node:crypto'
 
 import type { OneWorksChannelConfig } from '@oneworks/channel-oneworks'
-import type { AgentRoom, AgentRoomShare, PluginRequestPrincipal } from '@oneworks/types'
+import { resolveDocumentDescription, resolveEntityIdentifier } from '@oneworks/definition-core'
+import { DefinitionLoader } from '@oneworks/definition-loader'
+import type { AgentRoom, AgentRoomShare, Entity, PluginRequestPrincipal } from '@oneworks/types'
 import type {
   OneWorksChannelScenario,
   OneWorksChannelScenarioPatch,
@@ -10,6 +12,9 @@ import type {
   OneWorksChannelSimulationResult,
   OneWorksChannelSimulationTarget,
   OneWorksChannelTrace,
+  OneWorksRoomCreateInput,
+  OneWorksRoomEntity,
+  OneWorksRoomPatchInput,
   OneWorksRoomShareInput,
   OneWorksRoomShareOwner,
   OneWorksRoomShareSummary,
@@ -20,6 +25,8 @@ import {
   oneworksChannelScenarioInputSchema,
   oneworksChannelScenarioPatchSchema,
   oneworksChannelSimulationInputSchema,
+  oneworksRoomCreateInputSchema,
+  oneworksRoomPatchInputSchema,
   oneworksRoomShareInputSchema
 } from './contract.js'
 
@@ -28,9 +35,13 @@ import type { ChannelRuntimeState } from '#~/channels/types.js'
 import { handleChannelWebhook } from '#~/channels/webhook.js'
 import { getDb } from '#~/db/index.js'
 import type { ChannelScenarioRow } from '#~/db/index.js'
+import { createAgentRoomService } from '#~/services/agent-room/index.js'
 import { createAgentRoomOwner } from '#~/services/agent-room/owner.js'
 import { listActiveAgentRoomRelayOwners, listSharedAgentRoomDirectory } from '#~/services/agent-room/relay.js'
+import { publishClientEvent } from '#~/services/client-events.js'
+import { getWorkspaceFolder } from '#~/services/config/index.js'
 import { requirePluginRequestPermission } from '#~/services/plugins/types.js'
+import { createSessionWithInitialMessage } from '#~/services/session/create.js'
 import { buildOneWorksWebhookSignature } from '@oneworks/channel-oneworks/webhook-signature'
 
 const MAX_TRACE_ITEMS = 100
@@ -38,6 +49,39 @@ const requireProductAccess = (principal: PluginRequestPrincipal) =>
   requirePluginRequestPermission(principal, 'workspace:manage')
 const fingerprint = (namespace: string, value: string) =>
   createHash('sha256').update(`${namespace}:${value}`).digest('hex').slice(0, 16)
+
+const resolveEntityName = (entity: { attributes: Entity; path: string }) =>
+  entity.attributes.name?.trim() || resolveEntityIdentifier(entity.path) || 'Entity'
+
+const toProductEntity = (entity: {
+  attributes: Entity
+  body?: string
+  path: string
+  resolvedSource?: string
+}): OneWorksRoomEntity => {
+  const name = resolveEntityName(entity)
+  const avatar = entity.attributes.avatar?.trim()
+  return {
+    ...(avatar == null ? {} : { avatar }),
+    description: resolveDocumentDescription(entity.body ?? '', entity.attributes.description, name),
+    entityId: resolveEntityIdentifier(entity.path, entity.attributes.name),
+    name,
+    source: entity.resolvedSource === 'plugin' ? 'plugin' : 'project'
+  }
+}
+
+const deriveRoomTitle = (message: string) => {
+  const firstLine = message.split('\n')[0]?.trim() || 'Team chat'
+  return firstLine.length > 36 ? `${firstLine.slice(0, 36)}...` : firstLine
+}
+
+const publishRoomUpdated = (roomId: string, hostSessionId?: string) => {
+  publishClientEvent('agent-rooms', {
+    type: 'agent_room_updated',
+    roomId,
+    ...(hostSessionId == null ? {} : { hostSessionId })
+  })
+}
 
 interface ProductRuntimeRoom extends OneWorksChannelSimulationTarget {
   channelId: string
@@ -132,9 +176,18 @@ const listProductRooms = (): OneWorksRoomSummary[] =>
     return {
       activeShareCount: (detail?.shares ?? []).filter(share => share.status === 'active').length,
       archived: room.archivedAt != null,
+      ...(room.avatar == null ? {} : { avatar: room.avatar }),
       channelLinkCount: links.length,
+      ...(room.description == null ? {} : { description: room.description }),
+      favorited: room.favoritedAt != null,
       ...(room.lastMessage == null ? {} : { lastMessage: room.lastMessage }),
       memberCount: detail?.members.length ?? 0,
+      members: (detail?.members ?? []).map(member => ({
+        ...(member.avatar == null ? {} : { avatar: member.avatar }),
+        ...(member.subtitle == null ? {} : { description: member.subtitle }),
+        entityId: member.key,
+        name: member.label
+      })),
       messageCount: detail?.messages.length ?? 0,
       ...(activeOwner == null
         ? {}
@@ -302,9 +355,128 @@ const injectSimulation = async (
 }
 
 export const createOneWorksChannelFacade = () => ({
+  listEntities: async (principal: PluginRequestPrincipal): Promise<OneWorksRoomEntity[]> => {
+    requireProductAccess(principal)
+    const loader = new DefinitionLoader(getWorkspaceFolder())
+    return (await loader.loadDefaultEntities()).map(toProductEntity)
+  },
+  createRoom: async (principal: PluginRequestPrincipal, input: unknown): Promise<OneWorksRoomSummary> => {
+    requireProductAccess(principal)
+    const parsed: OneWorksRoomCreateInput = oneworksRoomCreateInputSchema.parse(input)
+    const loader = new DefinitionLoader(getWorkspaceFolder())
+    const available = new Map((await loader.loadDefaultEntities()).map(entity => {
+      const summary = toProductEntity(entity)
+      return [summary.entityId, summary] as const
+    }))
+    const entities = [...new Set(parsed.entityIds)].map(entityId => available.get(entityId))
+    if (entities.some(entity => entity == null)) throw new Error('One or more selected entities no longer exist.')
+
+    const selected = entities as OneWorksRoomEntity[]
+    const leader = selected[0]!
+    const title = parsed.title ?? deriveRoomTitle(parsed.message)
+    const roomId = `room_${randomUUID()}`
+    const service = createAgentRoomService()
+    let roomCreated = false
+    try {
+      const session = await createSessionWithInitialMessage({
+        beforeStart: async (hostSessionId) => {
+          service.createRoom({
+            hostSessionId,
+            id: roomId,
+            leaderEntity: leader.entityId,
+            title
+          })
+          roomCreated = true
+          for (const entity of selected) {
+            service.applyEvent(roomId, {
+              id: `runtime-member:${roomId}:${entity.entityId}`,
+              type: 'member_joined',
+              member: {
+                ...(entity.avatar == null ? {} : { avatar: entity.avatar }),
+                key: entity.entityId,
+                kind: 'entity',
+                label: entity.name,
+                subtitle: entity.description
+              }
+            })
+          }
+          await service.executeCommand(roomId, {
+            idempotencyKey: `oneworks-room-initial:${roomId}`,
+            type: 'ingest_channel_message',
+            message: {
+              content: parsed.message,
+              origin: {
+                channelId: roomId,
+                channelKey: 'oneworks:local',
+                channelType: 'oneworks',
+                conversationKind: 'group',
+                conversationLabel: title
+              }
+            }
+          })
+          service.applyEvent(roomId, {
+            id: `runtime-meta:${hostSessionId}`,
+            type: 'assignment_sent',
+            member: {
+              ...(leader.avatar == null ? {} : { avatar: leader.avatar }),
+              key: leader.entityId,
+              kind: 'entity',
+              label: leader.name,
+              subtitle: leader.description
+            },
+            run: {
+              key: hostSessionId,
+              sessionId: hostSessionId,
+              title
+            },
+            summary: 'Started working on the first group message.'
+          })
+        },
+        initialMessage: parsed.message,
+        promptName: leader.entityId,
+        promptType: 'entity',
+        room: {
+          id: roomId,
+          member: {
+            ...(leader.avatar == null ? {} : { avatar: leader.avatar }),
+            key: leader.entityId,
+            kind: 'entity',
+            label: leader.name,
+            subtitle: leader.description
+          },
+          title
+        },
+        title
+      })
+      publishRoomUpdated(roomId, session.id)
+      return listProductRooms().find(room => room.roomId === roomId)!
+    } catch (error) {
+      if (roomCreated) service.deleteRoom(roomId)
+      throw error
+    }
+  },
   listRooms: async (principal: PluginRequestPrincipal): Promise<OneWorksRoomSummary[]> => {
     requireProductAccess(principal)
     return listProductRooms()
+  },
+  updateRoom: async (
+    principal: PluginRequestPrincipal,
+    roomId: string,
+    input: unknown
+  ): Promise<OneWorksRoomSummary> => {
+    requireProductAccess(principal)
+    const patch: OneWorksRoomPatchInput = oneworksRoomPatchInputSchema.parse(input)
+    const room = createAgentRoomService().updateRoomMetadata(roomId, patch)
+    publishRoomUpdated(room.id, room.hostSessionId)
+    return listProductRooms().find(candidate => candidate.roomId === roomId)!
+  },
+  deleteRoom: async (principal: PluginRequestPrincipal, roomId: string): Promise<boolean> => {
+    requireProductAccess(principal)
+    const room = getDb().getAgentRoom(roomId)
+    if (room == null) return false
+    const removed = createAgentRoomService().deleteRoom(roomId)
+    if (removed) publishRoomUpdated(roomId, room.hostSessionId)
+    return removed
   },
   listSharedRooms: async (principal: PluginRequestPrincipal): Promise<OneWorksSharedRoomSummary[]> => {
     requireProductAccess(principal)

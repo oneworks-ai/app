@@ -148,7 +148,7 @@ const fixtureRoom: AgentRoomViewModel = {
       createdAtLabel: '10:29',
       systemMessage: {
         kind: 'memberJoined',
-        memberLabel: 'Host'
+        members: [{ memberKey: 'member:host', label: 'Host' }]
       }
     }),
     createMessage('msg-user-start', 'user', 'message', 'Please coordinate the room page implementation.', {
@@ -604,14 +604,14 @@ describe('agent room transcript rendering', () => {
     expectNotContains(html, 'agent-room-view__header agent-room-roster agent-room-composer'.split(' '))
   })
 
-  it('keeps leader avatar opening the host session while the leader name resets the composer target', async () => {
+  it('keeps leader avatar opening identity details while the leader name resets the composer target', async () => {
     const html = await renderRoom()
     const assignmentMessage = getMessageMarkup(html, 'msg-host-assignment')
 
     expectContains(assignmentMessage, [
       'class="agent-room-bubble__avatar agent-room-bubble__avatar-button"',
-      'aria-label="Open host session"',
-      'title="Open host session"',
+      'aria-label="leader"',
+      'title="leader"',
       'class="agent-room-bubble__author agent-room-bubble__author-button"',
       'aria-label="leader"',
       '>leader</button>',
@@ -1282,8 +1282,8 @@ describe('agent room transcript rendering', () => {
 
     expectContains(assignmentMessage, [
       'class="agent-room-bubble__avatar agent-room-bubble__avatar-button"',
-      'aria-label="Open host session"',
-      'title="Open host session"',
+      'aria-label="leader"',
+      'title="leader"',
       'class="agent-room-bubble__author agent-room-bubble__author-button"',
       'aria-label="leader"',
       '>leader</button>',
@@ -1548,15 +1548,16 @@ describe('agent room transcript rendering', () => {
     expectContains(systemMessage, [
       'agent-room-bubble--system',
       'agent-room-bubble__system-surface',
-      'Host joined the room'
+      'aria-label="host"',
+      '1 member joined the chat'
     ])
     expectNotContains(systemMessage, ['agent-room-bubble__time', '<time', 'title="10:29"', 'tabindex'])
     expectContains(styles, ['width: min(360px, 72%);', 'border: 0;', 'background: transparent;'])
   })
 
   it.each([
-    ['en', 'std/dev-planner joined the room', 'std/dev-planner 加入了房间'],
-    ['zh', 'std/dev-planner 加入了房间', 'std/dev-planner joined the room']
+    ['en', '1 member joined the chat', '1 位成员加入了群聊'],
+    ['zh', '1 位成员加入了群聊', '1 member joined the chat']
   ])('renders member joined system messages for %s locale', async (language, expected, unexpected) => {
     const html = await renderRoom({
       language,
@@ -1571,7 +1572,7 @@ describe('agent room transcript rendering', () => {
             {
               systemMessage: {
                 kind: 'memberJoined',
-                memberLabel: 'std/dev-planner'
+                members: [{ memberKey: 'std/dev-planner', label: 'std/dev-planner' }]
               }
             }
           )
@@ -1656,7 +1657,7 @@ describe('agent room transcript rendering', () => {
     expect(firstArchitectMessage).not.toContain('agent-room-bubble__avatar-button')
     expectContains(lastArchitectMessage, [
       'agent-room-bubble__avatar-button',
-      'aria-label="Open run: billing-review"'
+      'aria-label="architect"'
     ])
     expect(lastArchitectMessage).not.toContain('agent-room-bubble__author')
     expect(lastArchitectMessage).not.toContain('agent-room-bubble__meta')
@@ -1666,17 +1667,18 @@ describe('agent room transcript rendering', () => {
     expect(reviewerMessage).not.toContain('agent-room-bubble--avatar-hidden')
   })
 
-  it('keeps avatars non-clickable when no session navigation handler is available', async () => {
+  it('keeps avatar identity popovers available when session navigation handlers are absent', async () => {
     const html = await renderRoom({ enableAvatarNavigation: false })
 
     expect(html).toContain('agent-room-bubble__avatar')
-    expect(html).not.toContain('agent-room-bubble__avatar-button')
+    expect(html).toContain('agent-room-bubble__avatar-button')
+    expect(html).toContain('aria-expanded="false"')
     expect(html).not.toContain('agent-room-bubble__author-button')
     expect(html).toContain('<span class="agent-room-bubble__author">leader</span>')
     expect(html).toContain('<span class="agent-room-bubble__mention">@architect</span>')
   })
 
-  it('renders every channel source and delivery as an accessible target chip', async () => {
+  it('renders every external channel source and delivery as an icon outside the message surface', async () => {
     const html = await renderRoom({
       room: {
         ...fixtureRoom,
@@ -1684,6 +1686,13 @@ describe('agent room transcript rendering', () => {
           createMessage('msg-cross-platform', 'agent', 'message', 'Forwarded the update.', {
             memberKey: 'member:host',
             channelReferences: [
+              {
+                id: 'source-oneworks',
+                direction: 'source',
+                channelKey: 'oneworks:local',
+                channelType: 'oneworks',
+                label: 'Local room'
+              },
               {
                 id: 'source-wechat',
                 direction: 'source',
@@ -1721,18 +1730,21 @@ describe('agent room transcript rendering', () => {
       'data-direction="source"',
       'data-direction="delivery"',
       '>chat</span>',
-      '>flight</span>',
-      '>check_circle</span>',
-      'Service account',
-      'Product group',
-      'Product bot',
-      'Brainstorm room'
+      '>flight</span>'
     ])
+    expect(message.indexOf('agent-room-bubble__channel-references')).toBeLessThan(
+      message.indexOf('agent-room-bubble__surface')
+    )
+    expect(message).not.toContain('agent-room-bubble__channel-reference-text')
+    expect(message).not.toContain('>check_circle</span>')
+    expect(message).not.toContain('>all_inclusive</span>')
     expect(message).not.toContain('+1')
     expectContains(styles, [
-      '.agent-room-bubble__channel-reference-text {',
-      '.agent-room-bubble__channel-reference-account {',
-      "content: ' · ';"
+      '.agent-room-bubble__message-row {',
+      'gap: 6px;',
+      '.agent-room-bubble__channel-reference {',
+      'width: 24px;',
+      'background: transparent;'
     ])
   })
 

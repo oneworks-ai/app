@@ -187,6 +187,8 @@ describe('mounted Ant asset create flow', () => {
             sectionKey='entities'
             skillPage='project'
             onBack={vi.fn()}
+            onNavigateEntity={vi.fn()}
+            onNavigateEntityPage={vi.fn()}
             onNavigateSection={vi.fn()}
             onNavigateSkillPage={vi.fn()}
           />
@@ -206,6 +208,8 @@ describe('mounted Ant asset create flow', () => {
             sectionKey='rules'
             skillPage='project'
             onBack={vi.fn()}
+            onNavigateEntity={vi.fn()}
+            onNavigateEntityPage={vi.fn()}
             onNavigateSection={vi.fn()}
             onNavigateSkillPage={vi.fn()}
           />
@@ -245,6 +249,8 @@ describe('mounted Ant asset create flow', () => {
             sectionKey='rules'
             skillPage='project'
             onBack={vi.fn()}
+            onNavigateEntity={vi.fn()}
+            onNavigateEntityPage={vi.fn()}
             onNavigateSection={vi.fn()}
             onNavigateSkillPage={vi.fn()}
           />

@@ -78,6 +78,7 @@ export interface SenderProps {
   hideSelectionControls?: boolean
   hideSubmitAction?: boolean
   enableVoiceInput?: boolean
+  layout?: 'adaptive' | 'stacked'
   hiddenVoiceInputActions?: {
     onConfigure: () => void
     onShow: () => void

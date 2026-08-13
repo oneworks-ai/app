@@ -15,6 +15,7 @@ import type {
 
 export interface AgentRoomTranscriptProps {
   room: AgentRoomViewModel
+  onOpenEntity?: (entityId: string) => void
   onOpenHostSession?: () => void
   onOpenChannelReference?: (reference: AgentRoomChannelReferenceView) => void
   onOpenRun?: (run: AgentRoomRunView) => void
@@ -26,6 +27,7 @@ export interface AgentRoomTranscriptProps {
 
 export function AgentRoomTranscript({
   room,
+  onOpenEntity,
   onOpenHostSession,
   onOpenChannelReference,
   onOpenRun,
@@ -48,6 +50,7 @@ export function AgentRoomTranscript({
             messages={viewModel.messages}
             variant='transcript'
             showTimelineSeparators
+            onOpenEntity={onOpenEntity}
             onOpenHostSession={onOpenHostSession}
             onOpenChannelReference={onOpenChannelReference}
             onOpenRun={onOpenRun}

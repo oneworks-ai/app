@@ -5,6 +5,9 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   root: fileURLToPath(new URL('.', import.meta.url)),
   esbuild: { jsxFactory: 'h' },
+  resolve: {
+    conditions: ['browser', '__oneworks__', 'module', 'import', 'development']
+  },
   build: {
     copyPublicDir: false,
     emptyOutDir: true,

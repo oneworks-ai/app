@@ -1,4 +1,5 @@
 import { getDb } from '#~/db/index.js'
+import type { EntityMemoryPolicy } from '@oneworks/types'
 
 import {
   recordTerminalMemoryAudit,
@@ -11,6 +12,13 @@ type TerminalStatus = 'blocked' | 'completed' | 'expired' | 'failed'
 const isTerminalStatus = (status: string): status is TerminalStatus => (
   status === 'blocked' || status === 'completed' || status === 'expired' || status === 'failed'
 )
+
+const resolveMemoryPolicy = (metadata: Record<string, unknown> | null): EntityMemoryPolicy | undefined => {
+  const value = metadata?.memoryPolicy
+  return value != null && typeof value === 'object' && !Array.isArray(value)
+    ? value as EntityMemoryPolicy
+    : undefined
+}
 
 export const commitChannelChildRunTerminal = (input: {
   error?: string
@@ -29,6 +37,7 @@ export const commitChannelChildRunTerminal = (input: {
     conversationStateId: run.conversationStateId ?? undefined,
     entity: run.entity ?? undefined,
     issuer: run.channelKey,
+    memoryPolicy: resolveMemoryPolicy(run.metadata),
     orgId: resolveWorkspaceMemoryOrgScope(),
     senderId: run.senderId ?? undefined,
     sessionType: run.sessionType,

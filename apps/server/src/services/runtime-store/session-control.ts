@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- Runtime metadata, start command, state, and heartbeat are one atomic session bootstrap. */
 import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { env as processEnv } from 'node:process'
@@ -66,6 +67,16 @@ export async function createServerRuntimeSession(params: {
   permissionMode?: SessionPermissionMode
   promptName?: string
   promptType?: SessionPromptType
+  hostSessionId?: string
+  memberAvatar?: string
+  memberKey?: string
+  memberKind?: RuntimeMeta['memberKind']
+  memberLabel?: string
+  memberSubtitle?: string
+  roomId?: string
+  roomTitle?: string
+  runId?: string
+  runTitle?: string
   sessionId: string
   start?: boolean
   systemPrompt?: string
@@ -110,6 +121,16 @@ export async function createServerRuntimeSession(params: {
       ...(params.systemPrompt != null ? { systemPrompt: params.systemPrompt } : {}),
       ...(params.updateConfiguredSkills === true ? { updateConfiguredSkills: true } : {}),
       ...(channelContext != null ? { channelContext } : {}),
+      ...(params.hostSessionId != null ? { hostSessionId: params.hostSessionId } : {}),
+      ...(params.memberAvatar != null ? { memberAvatar: params.memberAvatar } : {}),
+      ...(params.memberKey != null ? { memberKey: params.memberKey } : {}),
+      ...(params.memberKind != null ? { memberKind: params.memberKind } : {}),
+      ...(params.memberLabel != null ? { memberLabel: params.memberLabel } : {}),
+      ...(params.memberSubtitle != null ? { memberSubtitle: params.memberSubtitle } : {}),
+      ...(params.roomId != null ? { roomId: params.roomId } : {}),
+      ...(params.roomTitle != null ? { roomTitle: params.roomTitle } : {}),
+      ...(params.runId != null ? { runId: params.runId } : {}),
+      ...(params.runTitle != null ? { runTitle: params.runTitle } : {}),
       createdAt: ts,
       needsEngineConsumer: true,
       primaryWorkspaceFolder
@@ -142,7 +163,17 @@ export async function createServerRuntimeSession(params: {
     ...(params.promptType != null ? { taskType: params.promptType } : {}),
     ...(params.promptName != null ? { name: params.promptName } : {}),
     ...(params.systemPrompt != null ? { systemPrompt: params.systemPrompt } : {}),
-    ...(params.updateConfiguredSkills === true ? { updateConfiguredSkills: true } : {})
+    ...(params.updateConfiguredSkills === true ? { updateConfiguredSkills: true } : {}),
+    ...(params.hostSessionId != null ? { hostSessionId: params.hostSessionId } : {}),
+    ...(params.memberAvatar != null ? { memberAvatar: params.memberAvatar } : {}),
+    ...(params.memberKey != null ? { memberKey: params.memberKey } : {}),
+    ...(params.memberKind != null ? { memberKind: params.memberKind } : {}),
+    ...(params.memberLabel != null ? { memberLabel: params.memberLabel } : {}),
+    ...(params.memberSubtitle != null ? { memberSubtitle: params.memberSubtitle } : {}),
+    ...(params.roomId != null ? { roomId: params.roomId } : {}),
+    ...(params.roomTitle != null ? { roomTitle: params.roomTitle } : {}),
+    ...(params.runId != null ? { runId: params.runId } : {}),
+    ...(params.runTitle != null ? { runTitle: params.runTitle } : {})
   }
   const state: RuntimeState = {
     protocolVersion: DEFAULT_RUNTIME_PROTOCOL_VERSION,

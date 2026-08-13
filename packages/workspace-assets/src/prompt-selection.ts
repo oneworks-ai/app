@@ -16,6 +16,7 @@ import type {
 
 import { supportsNativeProjectSkills } from './adapter-capabilities'
 import { resolveWorkspaceAssetBundle } from './bundle'
+import { resolveEntityDocumentSet } from './entity-documents'
 import {
   generateEntitiesRoutePrompt,
   generateRulesPrompt,
@@ -26,7 +27,6 @@ import {
 import {
   definitionWithResolvedName,
   pickDocumentAsset,
-  resolveEntityInheritance,
   resolveExcludedSkillRefs,
   resolveIncludedSkillRefs,
   resolveNamedSkillAssets,
@@ -85,17 +85,18 @@ export async function resolvePromptAssetSelection(params: {
 
     pinnedTargetAsset = baseTarget
     if (params.type === 'entity') {
-      const resolvedEntity = resolveEntityInheritance(
+      const resolvedEntity = await resolveEntityDocumentSet(
         effectiveBundle,
         baseTarget as Extract<WorkspaceAsset, { kind: 'entity' }>
       )
       targetDefinition = resolvedEntity.definition
       targetAssetIds = resolvedEntity.assetIds
+      targetBody = resolvedEntity.effectivePrompt
     } else {
       targetDefinition = baseTarget.payload.definition
       targetAssetIds = [baseTarget.id]
     }
-    targetBody = targetDefinition.body
+    if (params.type !== 'entity') targetBody = targetDefinition.body
     targetToolsFilter = targetDefinition.attributes.tools
     targetMcpServersFilter = targetDefinition.attributes.mcpServers
     targetInstancePath = baseTarget.instancePath

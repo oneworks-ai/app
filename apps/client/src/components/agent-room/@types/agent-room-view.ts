@@ -59,7 +59,7 @@ export interface AgentRoomMessageReferenceView {
 
 export interface AgentRoomSystemMessageView {
   kind: 'memberJoined'
-  memberLabel: string
+  members: Array<Pick<AgentRoomMemberView, 'avatar' | 'avatarLabel' | 'label' | 'memberKey'>>
 }
 
 export interface AgentRoomApprovalBatchItemView {
@@ -107,6 +107,7 @@ export interface AgentRoomMemberView {
   kind?: AgentRoomMemberKind
   label: string
   subtitle?: string
+  avatar?: string
   avatarLabel?: string
   status: AgentRoomMemberStatus
   pendingCount: number

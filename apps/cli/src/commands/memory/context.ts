@@ -55,6 +55,19 @@ const readRoomId = (channelContext: Record<string, unknown> | undefined) => {
   return trimNonEmpty((room as Record<string, unknown>).id)
 }
 
+const readMemoryPolicy = (channelContext: Record<string, unknown> | undefined) => {
+  const value = channelContext?.memoryPolicy
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const policy = value as Record<string, unknown>
+  return {
+    defaultTtlSeconds: typeof policy.defaultTtlSeconds === 'number' ? policy.defaultTtlSeconds : undefined,
+    requireEvidence: typeof policy.requireEvidence === 'boolean' ? policy.requireEvidence : undefined,
+    writableScopes: Array.isArray(policy.writableScopes)
+      ? policy.writableScopes.filter((item): item is string => typeof item === 'string')
+      : undefined
+  }
+}
+
 export const resolveContext = (options: MemoryCommandOptions): MemoryContext => {
   const cwd = options.cwd ?? process.cwd()
   const env = mergeProcessEnvWithProjectEnv(options.env, { workspaceFolder: cwd }) as NodeJS.ProcessEnv
@@ -112,6 +125,7 @@ export const resolveContext = (options: MemoryCommandOptions): MemoryContext => 
     ),
     entity: contextEntity ?? (hasChannelContext ? undefined : trimNonEmpty(env[CHANNEL_ENTITY_ENV])),
     invocationToken: trimNonEmpty(channelContext?.invocationToken),
+    memoryPolicy: readMemoryPolicy(channelContext),
     root: resolveRoot(cwd, env),
     roomId: readRoomId(channelContext),
     senderId,

@@ -1,4 +1,5 @@
 import type { ChannelExecutionContext } from '@oneworks/core'
+import type { EntityMemoryPolicy } from '@oneworks/types'
 
 export interface ChannelRuntimeContext {
   actorAccountId?: string
@@ -12,6 +13,7 @@ export interface ChannelRuntimeContext {
   entity?: string
   executionContext?: ChannelExecutionContext
   messageId?: string
+  memoryPolicy?: EntityMemoryPolicy
   replyReceiveId?: string
   replyReceiveIdType?: string
   senderId?: string
@@ -41,6 +43,11 @@ const normalizeExecutionContext = (value: unknown): ChannelExecutionContext | un
   return JSON.parse(JSON.stringify(value)) as ChannelExecutionContext
 }
 
+const normalizeMemoryPolicy = (value: unknown): EntityMemoryPolicy | undefined => {
+  if (!isRecord(value)) return undefined
+  return JSON.parse(JSON.stringify(value)) as EntityMemoryPolicy
+}
+
 export const normalizeChannelRuntimeContext = (value: unknown): ChannelRuntimeContext | undefined => {
   if (!isRecord(value)) return undefined
   const context: ChannelRuntimeContext = {
@@ -55,6 +62,7 @@ export const normalizeChannelRuntimeContext = (value: unknown): ChannelRuntimeCo
     entity: trimNonEmpty(value.entity),
     executionContext: normalizeExecutionContext(value.executionContext),
     messageId: trimNonEmpty(value.messageId),
+    memoryPolicy: normalizeMemoryPolicy(value.memoryPolicy),
     replyReceiveId: trimNonEmpty(value.replyReceiveId),
     replyReceiveIdType: trimNonEmpty(value.replyReceiveIdType),
     senderId: trimNonEmpty(value.senderId),

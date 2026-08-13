@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- Dispatch keeps continuity, memory, child-run audit, and session creation in one transaction. */
 import { getDb } from '#~/db/index.js'
 import {
   hydrateChannelContinuity,
@@ -9,9 +10,12 @@ import {
   resolveChannelMemorySnapshot,
   resolveWorkspaceMemoryOrgScope
 } from '#~/services/channel-memory/index.js'
+import { getWorkspaceFolder } from '#~/services/config/index.js'
 import { canTransferChannelPermissionState } from '#~/services/session/channel-permission-transfer.js'
 import { createSessionWithInitialMessage } from '#~/services/session/create.js'
 import { writeChannelMessageContext } from '#~/services/session/index.js'
+import { DefinitionLoader } from '@oneworks/definition-loader'
+import { buildServiceModelSelector } from '@oneworks/utils'
 
 import type { ChannelMiddleware } from '../@types'
 import { stripSpeakerPrefix } from '../@utils'
@@ -32,8 +36,18 @@ import { appendRuntimeText, buildRuntimeContentForAgent, resolveChannelMultimoda
 
 export const dispatchMiddleware: ChannelMiddleware = async (ctx, next) => {
   const { inbound, connection, config } = ctx
+  const entityDefinition = ctx.channelLink?.entity == null
+    ? undefined
+    : (await new DefinitionLoader(getWorkspaceFolder()).loadEntityDocumentSet(ctx.channelLink.entity))?.definition
+  const entityRuntime = entityDefinition?.attributes.runtime
+  const entityMemory = entityDefinition?.attributes.memory
   const hasContent = ctx.contentItems != null && ctx.contentItems.length > 0
-  const multimodalModel = ctx.ingressRoute?.model ?? resolveChannelMultimodalModel(ctx)
+  const entityModel = entityRuntime?.model == null
+    ? undefined
+    : entityRuntime.modelService == null || entityRuntime.model.includes(',')
+    ? entityRuntime.model
+    : buildServiceModelSelector(entityRuntime.modelService, entityRuntime.model)
+  const multimodalModel = ctx.ingressRoute?.model ?? entityModel ?? resolveChannelMultimodalModel(ctx)
   const dispatchContent = hasContent ? ctx.contentItems! : inbound.text ?? ''
   const executionContext = buildChannelExecutionContext(ctx)
   await projectInboundMessageToRoom(ctx, executionContext, summarizeDispatchContent(dispatchContent))
@@ -69,7 +83,19 @@ export const dispatchMiddleware: ChannelMiddleware = async (ctx, next) => {
     conversationStateId: conversationState.id,
     entity: ctx.channelLink?.entity,
     issuer: ctx.channelKey,
+    memoryPolicy: entityMemory,
     orgId: resolveWorkspaceMemoryOrgScope(),
+    maxCandidates: entityMemory?.maxCandidatesPerTurn,
+    budget: entityMemory?.maxItemsPerTurn == null && entityMemory?.maxTokensPerTurn == null
+      ? undefined
+      : {
+        maxItems: entityMemory.maxItemsPerTurn ?? 20,
+        maxTokens: entityMemory.maxTokensPerTurn ?? 3000
+      },
+    groupBudget: {
+      maxItemsPerGroup: entityMemory?.maxItemsPerGroup,
+      maxTokensPerGroup: entityMemory?.maxTokensPerGroup
+    },
     roomId: executionContext.room?.id,
     query: typeof dispatchContent === 'string' ? dispatchContent : inbound.text ?? '',
     senderId: inbound.senderId,
@@ -109,6 +135,7 @@ export const dispatchMiddleware: ChannelMiddleware = async (ctx, next) => {
     contentKind: hasContent ? 'rich' : 'text',
     dispatchMode,
     executionContext,
+    memoryPolicy: entityMemory,
     model: multimodalModel,
     runtimeContent,
     threadKey: thread.threadKey,
@@ -127,6 +154,7 @@ export const dispatchMiddleware: ChannelMiddleware = async (ctx, next) => {
     childRunId: childRun?.id,
     conversationStateId: conversationState.id,
     executionContext,
+    memoryPolicy: entityMemory,
     threadKey: thread.threadKey
   })
 
@@ -139,7 +167,7 @@ export const dispatchMiddleware: ChannelMiddleware = async (ctx, next) => {
       initialRuntimeContent: runtimeContent,
       parentSessionId,
       shouldStart: true,
-      adapter: ctx.ingressRoute?.adapter ?? ctx.channelAdapter,
+      adapter: ctx.ingressRoute?.adapter ?? entityRuntime?.adapter ?? ctx.channelAdapter,
       effort: ctx.ingressRoute?.effort ?? ctx.channelEffort,
       model: multimodalModel,
       permissionMode: ctx.channelPermissionMode,

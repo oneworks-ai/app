@@ -1312,6 +1312,9 @@ importers:
 
   packages/plugins/channel-oneworks:
     dependencies:
+      '@oneworks/avatar':
+        specifier: workspace:*
+        version: link:../../avatar
       '@oneworks/types':
         specifier: workspace:*
         version: link:../../types
