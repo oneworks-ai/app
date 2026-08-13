@@ -5,6 +5,7 @@ import type { ReactNode } from 'react'
 
 import { DEFAULT_THEME_PRIMARY_COLOR, normalizeThemePrimaryColor } from '@oneworks/icon/presets'
 
+import { readLauncherSettingsRuntimePolicy } from '#~/components/launcher/launcher-settings-runtime'
 import { connectDesktopManagerRuntimeIfAvailable } from '#~/desktop/manager-runtime'
 import { useDesktopUiReady } from '#~/desktop/use-desktop-ui-ready'
 import {
@@ -50,7 +51,8 @@ function ThemedStandaloneRoute({ children }: { children: ReactNode }) {
   const themePack = useAtomValue(themePackAtom)
   const themePackSettings = useAtomValue(themePackSettingsAtom)
   const { isDarkMode, themeMode } = useResolvedThemeMode()
-  const desktopApi = window.oneworksDesktop
+  const launcherRuntimePolicy = readLauncherSettingsRuntimePolicy()
+  const desktopApi = launcherRuntimePolicy.isElectron ? window.oneworksDesktop : undefined
   const canUseDesktopSettings = desktopApi?.getDesktopSettings != null
   const [storedPrimaryColor, setStoredPrimaryColor] = useState(getInitialPrimaryColor)
   const [desktopSettings, setDesktopSettings] = useState<unknown>()
@@ -138,12 +140,13 @@ function ThemedStandaloneRoute({ children }: { children: ReactNode }) {
 }
 
 export function StandaloneRouteThemeProvider({ children }: { children: ReactNode }) {
-  const isWebStandalone = window.oneworksDesktop == null
+  const launcherRuntimePolicy = readLauncherSettingsRuntimePolicy()
+  const isElectronStandalone = launcherRuntimePolicy.isElectron
   const [managerServerBaseUrl, setManagerServerBaseUrl] = useState<string | undefined>()
-  const waitsForDesktopManager = !isWebStandalone && managerServerBaseUrl == null
+  const waitsForDesktopManager = isElectronStandalone && managerServerBaseUrl == null
 
   useEffect(() => {
-    if (isWebStandalone) return
+    if (!isElectronStandalone) return
     let disposed = false
     void connectDesktopManagerRuntimeIfAvailable()
       .then((serverBaseUrl) => {
@@ -153,7 +156,7 @@ export function StandaloneRouteThemeProvider({ children }: { children: ReactNode
     return () => {
       disposed = true
     }
-  }, [isWebStandalone])
+  }, [isElectronStandalone])
 
   return (
     <PluginProvider

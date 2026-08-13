@@ -1242,6 +1242,20 @@
           "title": "Update channel",
           "desc": "Choose Stable, RC, Beta, or Alpha for the current project's desktop updates"
         },
+        "updateExperience": {
+          "title": {
+            "web": "Web updates",
+            "pwa": "Installed app updates"
+          },
+          "description": {
+            "web": "On load, the web app checks for a new version and warms its app shell before activating it",
+            "pwa": "When opened, the installed app checks for a new version and warms its app shell before activating it"
+          },
+          "status": {
+            "web": "Use after reloading",
+            "pwa": "Use after reopening or reloading"
+          }
+        },
         "statusPin": {
           "title": "Pin icon",
           "desc": "Show a Pin icon in the system status area for quick launcher access",

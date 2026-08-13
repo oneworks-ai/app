@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   connectDesktopManagerRuntimeIfAvailable,
+  installDesktopRuntimeIdentityIfAvailable,
   markDesktopManagerInteractiveWhenReady,
   resolveClientRoutePathname,
   resolveDesktopRuntimeIdentity
@@ -12,6 +13,8 @@ afterEach(() => {
   vi.restoreAllMocks()
   window.history.replaceState(null, '', '/')
   Reflect.deleteProperty(window, 'oneworksDesktop')
+  Reflect.deleteProperty(window, 'oneworksDeviceShell')
+  Reflect.deleteProperty(globalThis, '__ONEWORKS_PROJECT_RUNTIME_ENV__')
 })
 
 describe('desktop manager runtime', () => {
@@ -48,7 +51,8 @@ describe('desktop manager runtime', () => {
       }),
       markDesktopInteractive: vi.fn(() => {
         events.push('renderer.interactive')
-      })
+      }),
+      shellKind: 'electron'
     }
 
     await expect(markDesktopManagerInteractiveWhenReady()).resolves.toBe(true)
@@ -64,7 +68,8 @@ describe('desktop manager runtime', () => {
         throw new Error('Manager unavailable')
       }),
       markDesktopCoreReady: vi.fn(async () => undefined),
-      markDesktopInteractive
+      markDesktopInteractive,
+      shellKind: 'electron'
     }
 
     await expect(markDesktopManagerInteractiveWhenReady()).resolves.toBe(false)
@@ -80,7 +85,8 @@ describe('desktop manager runtime', () => {
       markDesktopCoreReady: vi.fn(async () => {
         throw new Error('IPC unavailable')
       }),
-      markDesktopInteractive
+      markDesktopInteractive,
+      shellKind: 'electron'
     }
 
     await expect(markDesktopManagerInteractiveWhenReady()).resolves.toBe(false)
@@ -93,11 +99,49 @@ describe('desktop manager runtime', () => {
     const markDesktopCoreReady = vi.fn(async () => undefined)
     window.oneworksDesktop = {
       getManagerConnection,
-      markDesktopCoreReady
+      markDesktopCoreReady,
+      shellKind: 'electron'
     }
 
     await expect(connectDesktopManagerRuntimeIfAvailable()).resolves.toBe('http://127.0.0.1:38902')
     expect(getManagerConnection).toHaveBeenCalledTimes(1)
     expect(markDesktopCoreReady).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['authoritative Android', { shellKind: 'electron' }, { shellKind: 'android' }],
+    ['unidentified partial bridge', {}, undefined]
+  ])('does not connect a manager for %s', async (_label, desktop, device) => {
+    window.history.replaceState(null, '', '/launcher')
+    const getManagerConnection = vi.fn(async () => ({ serverBaseUrl: 'http://127.0.0.1:38902' }))
+    window.oneworksDesktop = { ...desktop, getManagerConnection }
+    window.oneworksDeviceShell = device
+
+    await expect(connectDesktopManagerRuntimeIfAvailable()).resolves.toBeUndefined()
+    expect(getManagerConnection).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['authoritative Android', { shellKind: 'electron' }, { shellKind: 'android' }],
+    ['unidentified partial bridge', {}, undefined]
+  ])('does not install desktop identity for %s', (_label, desktop, device) => {
+    window.history.replaceState(null, '', '/launcher')
+    window.oneworksDesktop = desktop
+    window.oneworksDeviceShell = device
+
+    expect(installDesktopRuntimeIdentityIfAvailable()).toBeUndefined()
+  })
+
+  it('keeps an unidentified partial bridge partial after a prior desktop identity', async () => {
+    window.history.replaceState(null, '', '/launcher')
+    window.oneworksDesktop = { shellKind: 'electron' }
+    expect(installDesktopRuntimeIdentityIfAvailable()).toEqual({ clientMode: 'desktop', serverRole: 'manager' })
+
+    const getManagerConnection = vi.fn(async () => ({ serverBaseUrl: 'http://127.0.0.1:38902' }))
+    window.oneworksDesktop = { getManagerConnection }
+
+    await expect(connectDesktopManagerRuntimeIfAvailable()).resolves.toBeUndefined()
+    expect(installDesktopRuntimeIdentityIfAvailable()).toBeUndefined()
+    expect(getManagerConnection).not.toHaveBeenCalled()
   })
 })
