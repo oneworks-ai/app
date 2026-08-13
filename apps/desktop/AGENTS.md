@@ -6,6 +6,8 @@
 
 本地 dev 安装包 runtime cache、安装后仍像旧代码、`Switch Project` 兜底页和 packaged client/server cacheVersion 排查见 `../../.oo/rules/maintenance/desktop-packaged-runtime-cache.md`。
 
+Review 桌面双运行路径、bundle 外资源、ready 语义或真实安装产物时，加载 `../../.oo/rules/review/profiles/desktop-runtime.md`；本文件继续维护具体代码入口和验证命令。
+
 正式 macOS Release 的候选、下载摘要、安装 smoke、完整 Home / userData 隔离与零写入证据见 `../../.oo/rules/release/macos-signing.md#官方安装-smoke-的用户数据隔离`。
 
 ## 先看哪里

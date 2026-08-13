@@ -38,14 +38,14 @@ jobs:
           ## Experience Review
           - [x] 已判断是否需要沉淀经验
           - [x] 如需要，已运行 `$post-task-experience-review`
-          - [x] reviewer PASS 后才进入 merge
+          - [x] reviewer `PASS` / `NOT APPLICABLE` 后才进入 merge
           ```
 
           Checklist to confirm:
 
           - Decide whether this PR produced reusable project experience.
           - If experience should be captured, run `$post-task-experience-review`.
-          - Merge only after the independent reviewer reports PASS.
+          - Merge only after the independent reviewer reports `PASS` or `NOT APPLICABLE` for the Experience Review Result.
           - For workflow, permission, or release-rule documentation changes, also add this checked section to the PR body after an independent read-only conflict review:
 
           ```md

@@ -20,6 +20,7 @@ description: 仓库通用维护与验证细则，包含启动、lint、格式化
 - [能力展示录屏工具](./demo-video.md)
 - [Homepage Docs 维护经验](./homepage-docs.md)
 - [PR 经验复盘门禁](./pr-experience-review.md)
+- [PR Review 标准](../REVIEW.md)
 - [桌面端浏览器数据管理经验](./browser-data-management.md)
 - [桌面本地打包 Runtime Cache 经验](./desktop-packaged-runtime-cache.md)
 - [移动设备调试页维护经验](./mobile-device-debugging.md)
@@ -34,6 +35,7 @@ description: 仓库通用维护与验证细则，包含启动、lint、格式化
 - PR 截图证据断链、引用已删除分支或截图来源不真实：见 [PR 截图证据断链或来源不真实](./common-issues.md#pr-截图证据断链或来源不真实)。
 - 复杂任务需要拆 PR、开子线程、监控或沉淀经验：见 [任务规划、委派与经验沉淀](./task-planning.md)。
 - PR body 缺少经验复盘确认或需要维护提醒评论：见 [PR 经验复盘门禁](./pr-experience-review.md)。
+- 首次 Review、复审、合入判断或从已采纳意见提炼规则：见 [PR Review 标准](../REVIEW.md)。
 - 桌面端浏览器数据同步、密码管理、历史记录、下载内容或项目 / 会话范围过滤：见 [桌面端浏览器数据管理经验](./browser-data-management.md)。
 - 桌面本地 dev 安装包仍像旧代码、`Switch Project` 兜底页或 packaged runtime cache 排查：见 [桌面本地打包 Runtime Cache 经验](./desktop-packaged-runtime-cache.md)。
 - Electron WebView 右键“评论此元素”选错元素、坐标偏移或 hover / 右键路径不一致：见 [Electron WebView 右键元素评论坐标偏移](./common-issues.md#electron-webview-右键元素评论坐标偏移)。

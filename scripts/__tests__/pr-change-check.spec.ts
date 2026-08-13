@@ -8,7 +8,7 @@ const experienceReviewBody = [
   '## Experience Review',
   '- [x] 已判断是否需要沉淀经验',
   '- [x] 如需要，已运行 `$post-task-experience-review`',
-  '- [x] reviewer PASS 后才进入 merge'
+  '- [x] reviewer `PASS` / `NOT APPLICABLE` 后才进入 merge'
 ].join('\n')
 
 const policyConflictReviewBody = [
@@ -237,13 +237,13 @@ describe('pr-change-check', () => {
         '## Experience Review',
         '- [x] 已判断是否需要沉淀经验',
         '- [ ] 如需要，已运行 `$post-task-experience-review`',
-        '- [x] reviewer PASS 后才进入 merge'
+        '- [x] reviewer `PASS` / `NOT APPLICABLE` 后才进入 merge'
       ].join('\n')
     })
 
     expect(result.hasExperienceReview).toBe(false)
     expect(result.violations).toContain(
-      'PR body must include a completed ## Experience Review checklist confirming experience judgment, $post-task-experience-review when needed, and reviewer PASS before merge.'
+      'PR body must include a completed ## Experience Review checklist confirming experience judgment, $post-task-experience-review when needed, and reviewer PASS / NOT APPLICABLE before merge.'
     )
   })
 
