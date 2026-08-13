@@ -68,10 +68,13 @@ export function InteractionPanelRunCommandTaskView({
         <ChatTerminalView
           activeTerminalId={activeTerminalId}
           autoRestartExitedSession={false}
+          getTerminalGeneration={terminalPanes.getTerminalGeneration}
           panes={[pane]}
           sessionId={sessionId}
           onInfoChange={terminalPanes.handleInfoChange}
           onInitialCommandSent={terminalPanes.markInitialCommandSent}
+          onProcessReady={terminalPanes.handleProcessReady}
+          onProcessRestartAccepted={terminalPanes.handleProcessRestartAccepted}
           onRestartChange={terminalPanes.handleRestartChange}
           onTerminateChange={terminalPanes.handleTerminateChange}
         />

@@ -81,8 +81,6 @@ export function InteractionPanelDockWorkspace({
   getTabHeaderActions,
   onAddMenuClick,
   onActivateTab,
-  onCloseTab,
-  onCloseTabGroup,
   onCloseWorkspaceFilePaths,
   onEditPinnedTab,
   onIframeMetadataChange,
@@ -105,6 +103,7 @@ export function InteractionPanelDockWorkspace({
   onRunCommand,
   onReferenceAnnotations,
   onReferenceFileComments,
+  onRequestTabClose,
   hasPendingAnnotationReferences,
   pendingAnnotationPreview,
   pendingAnnotations,
@@ -204,35 +203,59 @@ export function InteractionPanelDockWorkspace({
       }
     })
   }, [])
-  const confirmFileCommentDraftClose = useCallback((targetTabs: InteractionPanelTab[], action: () => void) => {
+  const createFileCommentDraftClosePreflight = useCallback((targetTabs: InteractionPanelTab[]) => {
     const targetFileDraftStates = targetTabs
       .filter((tab): tab is Extract<InteractionPanelTab, { kind: 'file' }> => tab.kind === 'file')
       .map(tab => fileCommentDraftStateByPath[tab.path])
       .filter((state): state is WorkspaceFileCodeCommentDraftState => state?.hasDraft === true)
 
     if (targetFileDraftStates.length === 0) {
-      return false
+      return undefined
     }
 
-    modal.confirm({
-      title: t('chat.fileComments.discardDraftTitle'),
-      content: targetFileDraftStates.some(state => state.hasContent)
-        ? t('chat.fileComments.discardDraftContent')
-        : t('chat.fileComments.discardDraftEmptyContent'),
-      okText: t('chat.fileComments.discardDraftOk'),
-      cancelText: t('common.cancel'),
-      onOk: action
-    })
-    return true
-  }, [fileCommentDraftStateByPath, modal, t])
-  const runWithFileCommentDraftCloseGuard = useCallback((
-    targetTabs: InteractionPanelTab[],
-    action: () => void
-  ) => {
-    if (!confirmFileCommentDraftClose(targetTabs, action)) {
-      action()
+    return ({ cancel, proceed }: { cancel: () => void; proceed: () => void }) => {
+      let actionAfterHidden: (() => void) | undefined
+      let closeAfterHidden: (() => void) | undefined
+      let hidden = false
+      const instance = modal.confirm({
+        title: t('chat.fileComments.discardDraftTitle'),
+        content: targetFileDraftStates.some(state => state.hasContent)
+          ? t('chat.fileComments.discardDraftContent')
+          : t('chat.fileComments.discardDraftEmptyContent'),
+        okText: t('chat.fileComments.discardDraftOk'),
+        cancelText: t('common.cancel'),
+        focusTriggerAfterClose: false,
+        afterClose: () => {
+          hidden = true
+          const action = actionAfterHidden ?? closeAfterHidden
+          actionAfterHidden = undefined
+          closeAfterHidden = undefined
+          action?.()
+        },
+        onCancel: () => {
+          actionAfterHidden = cancel
+        },
+        onOk: () => {
+          actionAfterHidden = proceed
+        }
+      })
+      return {
+        close: (onAfterHidden?: () => void) => {
+          actionAfterHidden = undefined
+          closeAfterHidden = onAfterHidden
+          if (!hidden) {
+            instance.destroy()
+            return
+          }
+          closeAfterHidden = undefined
+          onAfterHidden?.()
+        }
+      }
     }
-  }, [confirmFileCommentDraftClose])
+  }, [fileCommentDraftStateByPath, modal, t])
+  const requestTabClose = useCallback((targetTabs: InteractionPanelTab[], anchorTabId?: string) => {
+    onRequestTabClose(targetTabs, anchorTabId, createFileCommentDraftClosePreflight(targetTabs))
+  }, [createFileCommentDraftClosePreflight, onRequestTabClose])
   const dockTabs = useMemo<Array<RouteContainerPanelDockTabItem<string>>>(() =>
     tabs.map(tab => {
       const pinnedTab = pinnedTabById[tab.id]
@@ -367,11 +390,8 @@ export function InteractionPanelDockWorkspace({
   ])
 
   const handleCloseTabGroup = useCallback((tab: InteractionPanelTab, scope: InteractionPanelTabCloseScope) => {
-    runWithFileCommentDraftCloseGuard(
-      getTabsForCloseScope(tabs, tab, scope),
-      () => onCloseTabGroup(tab, scope)
-    )
-  }, [onCloseTabGroup, runWithFileCommentDraftCloseGuard, tabs])
+    requestTabClose(getTabsForCloseScope(tabs, tab, scope), tab.id)
+  }, [requestTabClose, tabs])
 
   const getTabContextMenuItems = useCallback(
     (context: RouteContainerPanelTabMenuContext<string>) =>
@@ -415,12 +435,9 @@ export function InteractionPanelDockWorkspace({
 
   const handleTabClose = useCallback((tabKey: string) => {
     const tab = tabById[tabKey]
-    if (tab != null) {
-      if (confirmFileCommentDraftClose([tab], () => onCloseTab(tab))) return false
-      onCloseTab(tab)
-    }
-    return undefined
-  }, [confirmFileCommentDraftClose, onCloseTab, tabById])
+    if (tab != null) requestTabClose([tab], tab.id)
+    return false
+  }, [requestTabClose, tabById])
 
   const contextValue = {
     activeTab,
@@ -449,7 +466,7 @@ export function InteractionPanelDockWorkspace({
     workspaceFileFocusRequest,
     workspaceRootPath,
     onAddMenuClick,
-    onCloseTab: (tab: InteractionPanelTab) => runWithFileCommentDraftCloseGuard([tab], () => onCloseTab(tab)),
+    onCloseTab: (tab: InteractionPanelTab) => requestTabClose([tab], tab.id),
     onCloseTabGroup: handleCloseTabGroup,
     onCloseWorkspaceFilePaths,
     onEditPinnedTab,
@@ -488,7 +505,7 @@ export function InteractionPanelDockWorkspace({
         ariaLabel={t('chat.interactionPanel.addTab')}
         className='chat-interaction-panel__dock-workspace'
         closable
-        closeLabel={() => t('common.close')}
+        closeLabel={title => t('chat.interactionPanel.closeTab', { title })}
         createMenuItems={addMenuItems}
         createMenuLabel={t('chat.interactionPanel.addTab')}
         createMenuSelectedKeys={createMenuSelectedKeys}

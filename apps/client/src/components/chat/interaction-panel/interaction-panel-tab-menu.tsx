@@ -253,7 +253,7 @@ export const buildInteractionPanelPinnedTabMenuItems = ({
   {
     key: 'close',
     icon: renderMenuIcon('close'),
-    label: t('common.close'),
+    label: t('chat.interactionPanel.closeTab', { title: pinnedTab.tab.label }),
     onClick: () => onCloseTab(pinnedTab.tab)
   }
 ]

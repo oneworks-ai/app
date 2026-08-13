@@ -84,7 +84,7 @@ export function InteractionPanelDockPanelContentBody({
   const contentClassName = `chat-interaction-panel__dock-panel-content ${isPanelVisible ? 'is-visible' : 'is-hidden'}`
 
   if (tab.kind === 'terminal') {
-    const pane = terminalPanes.panes.find(item => item.id === tab.id)
+    const pane = terminalPanes.panes.find(item => item.id === tab.terminalId)
     if (pane == null) return null
     if (pane.runCommand != null) {
       return (
@@ -103,11 +103,14 @@ export function InteractionPanelDockPanelContentBody({
       <div className={contentClassName}>
         <ChatTerminalView
           activeTerminalId={isPanelVisible ? pane.id : ''}
+          getTerminalGeneration={terminalPanes.getTerminalGeneration}
           panes={[pane]}
           sessionId={terminalSessionId}
-          onExit={terminalPanes.closeTerminal}
+          onExit={terminalPanes.handleExit}
           onInfoChange={terminalPanes.handleInfoChange}
           onInitialCommandSent={terminalPanes.markInitialCommandSent}
+          onProcessReady={terminalPanes.handleProcessReady}
+          onProcessRestartAccepted={terminalPanes.handleProcessRestartAccepted}
           onRestartChange={terminalPanes.handleRestartChange}
           onTerminateChange={terminalPanes.handleTerminateChange}
         />

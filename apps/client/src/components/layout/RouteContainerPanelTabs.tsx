@@ -1534,6 +1534,7 @@ export function RouteContainerPanelDockWorkspace<TabKey extends string>({
     [panelChromeActions]
   )
   const activeTabRef = useRef<TabKey | null>(effectiveActiveTab)
+  const lastSettledLayoutRef = useRef<RouteContainerPanelDockLayout | null>(controlledLayout)
   const normalizedOpenedTabsRef = useRef(normalizedOpenedTabs)
   const visibleTabsRef = useRef(visibleTabs)
   const [isExternalDropTarget, setIsExternalDropTarget] = useState(false)
@@ -1599,6 +1600,16 @@ export function RouteContainerPanelDockWorkspace<TabKey extends string>({
       })
       return
     }
+    const missingVisiblePanel = visibleTabsRef.current.some(tab => !(tab.key in nextLayout.panels))
+    if (missingVisiblePanel) {
+      logRouteContainerPanelDockDebug('persist layout skipped', {
+        panelKey,
+        reason: 'controlled-panel-missing-before-close-settles',
+        visibleTabKeys: visibleTabsRef.current.map(tab => tab.key)
+      })
+      return
+    }
+    lastSettledLayoutRef.current = nextLayout
 
     const nextLayoutKey = serializeRouteContainerPanelLayoutKey(nextLayout)
     if (lastAppliedLayoutKeyRef.current === nextLayoutKey) {
@@ -1809,9 +1820,28 @@ export function RouteContainerPanelDockWorkspace<TabKey extends string>({
     const fallbackTab = nextOpenedTabs[Math.max(0, tabIndex - 1)] ?? nextOpenedTabs[0] ?? null
     const nextActiveTab = activeTabRef.current === typedTabKey ? fallbackTab : activeTabRef.current
 
-    if (onTabClose?.(typedTabKey) === false) return
+    if (onTabClose?.(typedTabKey) === false) return false
     onTabChange(nextActiveTab, nextOpenedTabs)
+    return true
   }, [onTabChange, onTabClose])
+
+  const rollbackRemovedPanel = useCallback((api: Dockview.DockviewApi) => {
+    const settledLayout = lastSettledLayoutRef.current
+    beginDockSync()
+    try {
+      if (settledLayout != null) api.fromJSON(settledLayout, { reuseExistingPanels: true })
+      syncRouteContainerPanelDockPanels(api, visibleTabsRef.current, activeTabRef.current)
+      const restoredLayout = normalizeRouteContainerPanelDockLayout(api.toJSON(), visibleTabsRef.current)
+      if (restoredLayout != null) {
+        lastSettledLayoutRef.current = restoredLayout
+        lastAppliedLayoutKeyRef.current = serializeRouteContainerPanelLayoutKey(restoredLayout)
+        lastReplayedLayoutStructureKeyRef.current = serializeRouteContainerPanelLayoutStructureKey(restoredLayout)
+      }
+    } finally {
+      endDockSync()
+    }
+    window.requestAnimationFrame(layoutDockToRootSize)
+  }, [beginDockSync, endDockSync, layoutDockToRootSize])
 
   useEffect(() => {
     const root = dockRootRef.current
@@ -1992,6 +2022,10 @@ export function RouteContainerPanelDockWorkspace<TabKey extends string>({
         onLayoutChange?.(savedLayout)
       }
       syncRouteContainerPanelDockPanels(event.api, visibleTabsRef.current, activeTabRef.current)
+      lastSettledLayoutRef.current = normalizeRouteContainerPanelDockLayout(
+        event.api.toJSON(),
+        visibleTabsRef.current
+      )
     } finally {
       endDockSync(persistLayout)
     }
@@ -2032,8 +2066,8 @@ export function RouteContainerPanelDockWorkspace<TabKey extends string>({
         persistLayout()
       }),
       event.api.onDidRemovePanel((panel) => {
-        if (isSyncingRef.current || !isTabClosable(panel.id)) return
-        closeTab(panel.id)
+        if (isSyncingRef.current) return
+        if (!isTabClosable(panel.id) || !closeTab(panel.id)) rollbackRemovedPanel(event.api)
       }),
       event.api.onDidLayoutChange(persistLayout)
     ]
@@ -2048,6 +2082,7 @@ export function RouteContainerPanelDockWorkspace<TabKey extends string>({
     onLayoutChange,
     panelKey,
     persistLayout,
+    rollbackRemovedPanel,
     selectTab,
     storageKey
   ])
@@ -2100,6 +2135,7 @@ export function RouteContainerPanelDockWorkspace<TabKey extends string>({
     try {
       api.fromJSON(controlledLayout, { reuseExistingPanels: true })
       syncRouteContainerPanelDockPanels(api, visibleTabsRef.current, activeTabRef.current)
+      lastSettledLayoutRef.current = normalizeRouteContainerPanelDockLayout(api.toJSON(), visibleTabsRef.current)
       lastAppliedLayoutKeyRef.current = controlledLayoutKey
       lastReplayedLayoutStructureKeyRef.current = controlledLayoutStructureKey
     } finally {
@@ -2148,6 +2184,7 @@ export function RouteContainerPanelDockWorkspace<TabKey extends string>({
     })
     try {
       syncRouteContainerPanelDockPanels(api, nextVisibleTabs, effectiveActiveTab)
+      lastSettledLayoutRef.current = normalizeRouteContainerPanelDockLayout(api.toJSON(), nextVisibleTabs)
     } finally {
       endDockSync()
     }

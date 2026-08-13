@@ -4909,6 +4909,25 @@
   }
 }
 
+.chat-terminal-close-live-region {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.chat-interaction-panel__close-owner {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+}
+
 .chat-interaction-panel__dock-context-menu-item {
   display: flex;
   align-items: center;

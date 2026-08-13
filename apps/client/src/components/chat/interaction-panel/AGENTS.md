@@ -10,6 +10,9 @@
   - iframe / webview 页面容器、地址栏、刷新、页面调试器右侧 dock、设备尺寸工具栏和 Chii target 自动注入。
 - `InteractionPanelDockWorkspace.tsx` / `../workspace-drawer/ChatWorkspaceDrawer.tsx` / `browser-control-agent-tab-state.ts` / `use-browser-control-agent-tab-state.ts`
   - 底部面板与右侧 workspace drawer 的 tab chrome 都必须接入 IAB Agent 操作状态；状态按 panel page id / browser page id / operation id 隔离，只短暂覆盖 tab 图标槽并复用 `@oneworks/cursor`，不能写回持久化 tab 模型或修改站点 favicon
+  - 两处 owner 的 tab 关闭必须在首次动作时冻结精确 tab / terminal identity；任何前置草稿弹窗、终端确认或异步 UI 之后都只能对当前状态与冻结 identity 的交集执行。运行中终端共用单一受控确认，按 `terminalSessionId + owner generation + terminal generation` 失效；终止失败只保留并重新选中失败终端，不能删除失败项、并发新增项或重排后的非目标项。关闭后的焦点必须在 React 提交后重新解析仍连接的 owner 控件，不能依赖已卸载 DOM 引用。底部面板的关闭协调器与焦点调度器必须归属 `InteractionPanelContent` 的稳定 `closeOwnerRef`，不能随 dock / empty workspace 切换卸载。
+- `@components/terminal-tab-close/`
+  - 底部面板与右侧 drawer 共用的 terminal tab 关闭私有子模块；集中维护冻结请求、确认编排、失败反馈和 React 提交后的焦点恢复，不向 interaction panel 之外扩展公共 API。
 - `InteractionPanelPageDebuggerListView.tsx`
   - 页面调试器列表 tab；只展示目标列表和内联 devtools iframe，不展示额外工具栏。
 - `interaction-panel-iframe-debug.ts`

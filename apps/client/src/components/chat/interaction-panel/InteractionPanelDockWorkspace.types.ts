@@ -26,13 +26,13 @@ import type {
   ChatWorkspaceDrawerAgentRoster
 } from '../workspace-drawer/ChatWorkspaceDrawer'
 import type { ChangedFilesLayout, ChangedTreeCommand } from '../workspace-drawer/changed-files-model'
+import type { PanelTabClosePreflight } from './@components/terminal-tab-close/terminal-tab-close-types'
 import type { InteractionPanelIframePage } from './InteractionPanelIframeView'
 import type { OpenInteractionPanelIframeUrlOptions } from './interaction-panel-iframe-pages'
 import type { InteractionPanelMobileDebugPage } from './interaction-panel-mobile-debug-pages'
 import type { InteractionPanelPinnedTab } from './interaction-panel-pinned-tabs'
 import type { InteractionPanelRunCommand } from './interaction-panel-run-commands'
 import type { InteractionPanelSessionPage } from './interaction-panel-session-pages'
-import type { InteractionPanelTabCloseScope } from './interaction-panel-tab-groups'
 import type { ActiveInteractionTab, InteractionPanelTab } from './interaction-panel-tabs'
 import type { useInteractionTerminalPanes } from './use-interaction-terminal-panes'
 
@@ -103,8 +103,6 @@ export interface InteractionPanelDockWorkspaceProps {
   ) => RouteContainerPanelDockActionItem[]
   onActivateTab: (tab: InteractionPanelTab) => void
   onAddMenuClick: NonNullable<MenuProps['onClick']>
-  onCloseTab: (tab: InteractionPanelTab) => void
-  onCloseTabGroup: (tab: InteractionPanelTab, scope: InteractionPanelTabCloseScope) => void
   onCloseWorkspaceFilePaths: (paths: string[]) => void
   onEditPinnedTab: (tab: InteractionPanelPinnedTab) => void
   onIframeMetadataChange: (pageId: string, metadata: { faviconUrl?: string; title?: string }) => void
@@ -133,6 +131,11 @@ export interface InteractionPanelDockWorkspaceProps {
   onRunCommand: (command: InteractionPanelRunCommand) => void
   onReferenceAnnotations?: (annotations: PendingAnnotation[]) => void
   onReferenceFileComments?: (comments: PendingFileComment[]) => void
+  onRequestTabClose: (
+    targetTabs: InteractionPanelTab[],
+    anchorTabId?: string,
+    preflight?: PanelTabClosePreflight
+  ) => boolean
   pendingAnnotationPreview?: PendingAnnotationPreviewState
   pendingAnnotations?: PendingAnnotation[]
   pendingFileComments?: PendingFileComment[]

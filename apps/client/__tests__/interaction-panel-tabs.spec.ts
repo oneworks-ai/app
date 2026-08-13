@@ -31,7 +31,8 @@ describe('interaction panel tabs', () => {
     expect(tabs[0]).toMatchObject({
       icon: 'terminal',
       kind: 'terminal',
-      label: 'Terminal 1'
+      label: 'Terminal 1',
+      terminalId: 'term-1'
     })
   })
 

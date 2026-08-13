@@ -14,6 +14,8 @@ import type { ChatRouteBottomPanelState } from '#~/hooks/chat/use-chat-route-bot
 import type { PluginContributionWorkbenchTab } from '#~/plugins/plugin-manifest'
 import { usePluginSlot } from '#~/plugins/plugin-slots'
 
+import { usePanelTabCloseRequests } from './@components/terminal-tab-close/use-panel-tab-close-requests'
+import type { FrozenPanelTabCloseRequest } from './@components/terminal-tab-close/use-panel-tab-close-requests'
 import type { InteractionPanelIframePage } from './InteractionPanelIframeView'
 import {
   createIframePage,
@@ -35,8 +37,6 @@ import {
 import type { InteractionPanelPluginPage } from './interaction-panel-plugin-pages'
 import { createInteractionPanelSessionPage } from './interaction-panel-session-pages'
 import type { InteractionPanelSessionPage } from './interaction-panel-session-pages'
-import { getFallbackTabAfterClose, getTabsForCloseScope } from './interaction-panel-tab-groups'
-import type { InteractionPanelTabCloseScope } from './interaction-panel-tab-groups'
 import {
   INTERACTION_PANEL_MOBILE_DEBUG_CONFIG_KEY,
   INTERACTION_PANEL_MOBILE_DEBUG_NO_DEVICES_KEY,
@@ -189,7 +189,8 @@ const toInteractionTab = ({
       id: tab.id,
       kind: 'terminal',
       label: tab.title,
-      shellKind: getTerminalTabShellKind(tab)
+      shellKind: getTerminalTabShellKind(tab),
+      terminalId: tab.terminalId
     }
   }
 
@@ -301,6 +302,7 @@ export function useInteractionPanelTabs({
   panelStateController,
   session,
   terminalPanes,
+  terminalSessionId,
   workspaceDrawerItems = [],
   t
 }: {
@@ -413,6 +415,12 @@ export function useInteractionPanelTabs({
     closeSessionPages: () => undefined,
     sessionPages
   })
+  const { createCloseRequest, isCloseRequestInvalidated, resolveCloseRequest } = usePanelTabCloseRequests({
+    ownerGeneration: terminalPanes.generation,
+    ownerId: terminalSessionId,
+    tabs,
+    terminalPanes
+  })
 
   useEffect(() => {
     const nextPages = normalizeInteractionPanelPluginPages(pluginPages, pluginWorkbenchTabs, language)
@@ -434,7 +442,7 @@ export function useInteractionPanelTabs({
 
   const activateTab = (tab: InteractionPanelTab) => {
     if (tab.kind === 'terminal') {
-      terminalPanes.setActiveTerminalId(tab.id)
+      terminalPanes.setActiveTerminalId(tab.terminalId)
       bottomPanel.handleSelectBottomPanelView('terminal')
       activateTabById(tab.id)
       return
@@ -634,8 +642,6 @@ export function useInteractionPanelTabs({
     upsertPanelTab(toSessionPanelTab(nextPage))
   }, [bottomPanel, canCreateSessionTab, sessionPages, upsertPanelTab])
 
-  const handleCloseTab = (tab: InteractionPanelTab) => handleCloseTabGroup(tab, 'current')
-
   const handleCloseWorkspaceFilePaths = (paths: string[]) => {
     const pathSet = new Set(paths.filter(path => path.trim() !== ''))
     if (pathSet.size <= 0) return
@@ -672,30 +678,79 @@ export function useInteractionPanelTabs({
     activateTabById(existingTab.id)
   }
 
-  const handleCloseTabGroup = (anchorTab: InteractionPanelTab, scope: InteractionPanelTabCloseScope) => {
-    const targetTabs = getTabsForCloseScope(tabs, anchorTab, scope)
-    if (targetTabs.length <= 0) return
-
-    const closeableTargetTabs = targetTabs.filter(tab => tab.canClose)
-    const targetIds = new Set(closeableTargetTabs.map(tab => tab.id))
-    const targetTerminalIds = closeableTargetTabs.filter(tab => tab.kind === 'terminal').map(tab => tab.id)
-    const targetSessionPageIds = new Set(closeableTargetTabs.filter(tab => tab.kind === 'session').map(tab => tab.id))
-    const targetFilePaths = closeableTargetTabs
+  const executeCloseRequest = useCallback((request: FrozenPanelTabCloseRequest) => {
+    const targetTabs = resolveCloseRequest(request).filter(tab => tab.canClose)
+    const frozenTargetByTabId = new Map(request.targets.map(target => [target.tabId, target]))
+    const passiveTerminalTabIds = new Set<string>()
+    const terminalTargets = targetTabs.flatMap(tab => {
+      if (tab.kind !== 'terminal') return []
+      const frozenTarget = frozenTargetByTabId.get(tab.id)
+      if (frozenTarget?.terminalId == null) return []
+      const currentGeneration = terminalPanes.getTerminalGeneration(frozenTarget.terminalId)
+      if (currentGeneration == null) {
+        passiveTerminalTabIds.add(tab.id)
+        return []
+      }
+      return frozenTarget.terminalGeneration === currentGeneration
+        ? [{ generation: currentGeneration, terminalId: frozenTarget.terminalId }]
+        : []
+    })
+    const terminalResult = terminalPanes.closeTerminalTargets(terminalTargets)
+    const closedTerminalIds = new Set(terminalResult.closedTerminalIds)
+    const successfulTabs = targetTabs.filter(tab =>
+      tab.kind !== 'terminal' || passiveTerminalTabIds.has(tab.id) || closedTerminalIds.has(tab.terminalId)
+    )
+    const successfulTabIds = new Set(successfulTabs.map(tab => tab.id))
+    const failedTerminalIds = new Set(terminalResult.failedTerminalIds)
+    const failedTabs = targetTabs.filter(tab => tab.kind === 'terminal' && failedTerminalIds.has(tab.terminalId))
+    const targetSessionPageIds = new Set(successfulTabs.filter(tab => tab.kind === 'session').map(tab => tab.id))
+    const targetFilePaths = successfulTabs
       .filter((tab): tab is Extract<InteractionPanelTab, { kind: 'file' }> => tab.kind === 'file')
       .map(tab => tab.path)
-    terminalPanes.closeTerminals(targetTerminalIds)
     bottomPanel.handleCloseWorkspaceFileTabs(targetFilePaths)
     closeInteractionPanelSessionPages(targetSessionPageIds)
 
-    const fallbackTab = getFallbackTabAfterClose(tabs, closeableTargetTabs, anchorTab)
-    updateBottomArea(current => {
-      const nextTabs = current.filter(tab => !targetIds.has(tab.id))
+    const failedTab = failedTabs[0]
+    if (failedTab?.kind === 'terminal') {
+      terminalPanes.setActiveTerminalId(failedTab.terminalId)
+      bottomPanel.handleSelectBottomPanelView('terminal')
+    }
+    const currentPanelTabs = bottomArea.tabs
+    const currentFirstClosedIndex = currentPanelTabs.findIndex(tab => successfulTabIds.has(tab.id))
+    const currentNextTabs = currentPanelTabs.filter(tab => !successfulTabIds.has(tab.id))
+    const resolvedActiveTabId = failedTab?.id ?? (
+      bottomArea.activeTabId != null && currentNextTabs.some(tab => tab.id === bottomArea.activeTabId)
+        ? bottomArea.activeTabId
+        : currentNextTabs[
+          Math.min(Math.max(currentFirstClosedIndex, 0), currentNextTabs.length - 1)
+        ]?.id
+    )
+    updateBottomArea((current, activeTabId) => {
+      const firstClosedIndex = current.findIndex(tab => successfulTabIds.has(tab.id))
+      const nextTabs = current.filter(tab => !successfulTabIds.has(tab.id))
+      const nextActiveTabId = failedTab?.id ?? (
+        activeTabId != null && nextTabs.some(tab => tab.id === activeTabId)
+          ? activeTabId
+          : nextTabs[Math.min(Math.max(firstClosedIndex, 0), nextTabs.length - 1)]?.id
+      )
       return {
         tabs: nextTabs,
-        activeTabId: fallbackTab == null || targetIds.has(fallbackTab.id) ? nextTabs[0]?.id : fallbackTab.id
+        ...(nextActiveTabId == null ? {} : { activeTabId: nextActiveTabId })
       }
     })
-  }
+    return {
+      ...(resolvedActiveTabId == null ? {} : { activeTabId: resolvedActiveTabId }),
+      failedTabIds: failedTabs.map(tab => tab.id)
+    }
+  }, [
+    bottomPanel,
+    bottomArea.activeTabId,
+    bottomArea.tabs,
+    closeInteractionPanelSessionPages,
+    resolveCloseRequest,
+    terminalPanes,
+    updateBottomArea
+  ])
 
   const handleMoveTab = useCallback((
     sourceId: string,
@@ -724,9 +779,10 @@ export function useInteractionPanelTabs({
     activeTab,
     activateTab,
     addTerminal,
+    createCloseRequest,
+    executeCloseRequest,
+    isCloseRequestInvalidated,
     handleAddMenuClick,
-    handleCloseTab,
-    handleCloseTabGroup,
     handleCloseWorkspaceFilePaths,
     handleIframeMetadataChange: (pageId: string, metadata: { faviconUrl?: string; title?: string }) =>
       updateWebTab(pageId, page => updateIframePageMetadata(page, metadata)),

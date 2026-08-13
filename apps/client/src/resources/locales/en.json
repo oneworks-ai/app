@@ -2785,7 +2785,15 @@
       "iframeZoomReset": "Reset zoom",
       "newSameShellTerminal": "New terminal with same shell",
       "iframeUrlPlaceholder": "Enter URL",
-      "sessionTitle": "Session {{index}}"
+      "sessionTitle": "Session {{index}}",
+      "terminalCloseConfirmTitle_one": "Close active terminal?",
+      "terminalCloseConfirmTitle_other": "Close active terminals?",
+      "terminalCloseConfirmContent_one": "This terminal is still running. Closing it will stop its process.",
+      "terminalCloseConfirmContent_other": "{{count}} terminals are still running. Closing them will stop their processes.",
+      "terminalCloseConfirmAction_one": "Close terminal",
+      "terminalCloseConfirmAction_other": "Close {{count}} terminals",
+      "terminalCloseFailed_one": "The terminal could not be closed and remains open.",
+      "terminalCloseFailed_other": "{{count}} terminals could not be closed and remain open."
     },
     "workspaceDrawerFileStatus": {
       "staged": "Staged",

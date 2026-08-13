@@ -162,7 +162,7 @@ export const buildInteractionPanelDockTabContextMenuItems = ({
     items.push(
       createDockContextMenuItem({
         icon: 'close',
-        label: t('common.close'),
+        label: t('chat.interactionPanel.closeTab', { title: tab.label }),
         onSelect: () => onCloseTabGroup(tab, 'current')
       }),
       createDockContextMenuItem({

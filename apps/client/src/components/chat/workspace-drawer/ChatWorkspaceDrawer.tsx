@@ -53,6 +53,9 @@ import { usePluginCommandExecutor, usePluginSlot } from '#~/plugins/plugin-slots
 import { interactionPanelPinnedTabLimitAtom } from '#~/store/index'
 import { readDeviceShellSimulationMode, useStoredDevShellSimulation } from '#~/utils/device-shell-simulation'
 
+import { usePanelTabCloseRequests } from '../interaction-panel/@components/terminal-tab-close/use-panel-tab-close-requests'
+import type { FrozenPanelTabCloseRequest } from '../interaction-panel/@components/terminal-tab-close/use-panel-tab-close-requests'
+import { useTerminalTabCloseCoordinator } from '../interaction-panel/@components/terminal-tab-close/use-terminal-tab-close-coordinator'
 import { InteractionPanelEmptyState } from '../interaction-panel/InteractionPanelEmptyState'
 import { InteractionPanelIframeView } from '../interaction-panel/InteractionPanelIframeView'
 import type { InteractionPanelIframePage } from '../interaction-panel/InteractionPanelIframeView'
@@ -85,7 +88,7 @@ import {
 import type { InteractionPanelPluginPage } from '../interaction-panel/interaction-panel-plugin-pages'
 import { createInteractionPanelSessionPage } from '../interaction-panel/interaction-panel-session-pages'
 import type { InteractionPanelSessionPage } from '../interaction-panel/interaction-panel-session-pages'
-import { getFallbackTabAfterClose, getTabsForCloseScope } from '../interaction-panel/interaction-panel-tab-groups'
+import { getTabsForCloseScope } from '../interaction-panel/interaction-panel-tab-groups'
 import type { InteractionPanelTabCloseScope } from '../interaction-panel/interaction-panel-tab-groups'
 import {
   INTERACTION_PANEL_MOBILE_DEBUG_CONFIG_KEY,
@@ -803,6 +806,11 @@ export function ChatWorkspaceDrawer({
     : openedTabKeys[0] ?? null
   const drawerInteractionTabs = useMemo<InteractionPanelTab[]>(() => {
     const terminalPaneById = new Map(drawerTerminalPanes.map(pane => [pane.id, pane]))
+    const runtimeTerminalPaneById = new Map(terminalPanes.panes.map(pane => [pane.id, pane]))
+    const panelTabByKey = new Map(rightPanelTabs.flatMap((tab) => {
+      const key = toWorkspaceDrawerDockKeyFromTab(tab)
+      return key == null ? [] : [[key, tab] as const]
+    }))
     const iframePageByKey = new Map(iframePages.map(page => [toWorkspaceDrawerIframeTabKey(page.id), page]))
     const mobileDebugPageByKey = new Map(
       mobileDebugPages.map(page => [toWorkspaceDrawerMobileDebugTabKey(page.id), page])
@@ -840,9 +848,11 @@ export function ChatWorkspaceDrawer({
 
       const terminalId = decodeWorkspaceDrawerHostedTabId(key, WORKSPACE_DRAWER_TERMINAL_TAB_PREFIX)
       const terminalPane = terminalId == null ? undefined : terminalPaneById.get(terminalId)
-      if (terminalPane != null) {
-        const icon = terminalPane.runCommand?.icon ?? (
-          terminalPanes.infoById[terminalPane.id]?.isExited === true ? 'terminal_off' : 'terminal'
+      const terminalPanelTab = panelTabByKey.get(key)
+      if (terminalId != null && terminalPane == null && runtimeTerminalPaneById.has(terminalId)) return []
+      if (terminalId != null && terminalPanelTab?.kind === 'terminal') {
+        const icon = terminalPane?.runCommand?.icon ?? (
+          terminalPane == null || terminalPanes.infoById[terminalId]?.isExited === true ? 'terminal_off' : 'terminal'
         )
 
         return [{
@@ -850,8 +860,9 @@ export function ChatWorkspaceDrawer({
           icon,
           id: key,
           kind: 'terminal',
-          label: terminalPane.title,
-          shellKind: terminalPane.shellKind
+          label: terminalPane?.title ?? terminalPanelTab.title,
+          shellKind: terminalPane?.shellKind ?? 'default',
+          terminalId
         }]
       }
 
@@ -925,16 +936,24 @@ export function ChatWorkspaceDrawer({
     mobileDebugPages,
     openedTabKeys,
     pluginPages,
+    rightPanelTabs,
     rightFilePaths,
     sessionPages,
     t,
     terminalPanes.infoById,
+    terminalPanes.panes,
     viewItemByKey
   ])
   const drawerTabById = useMemo(
     () => Object.fromEntries(drawerInteractionTabs.map(tab => [tab.id, tab])),
     [drawerInteractionTabs]
   )
+  const rightCloseRequests = usePanelTabCloseRequests({
+    ownerGeneration: terminalPanes.generation,
+    ownerId: `${terminalSessionId}:right`,
+    tabs: drawerInteractionTabs,
+    terminalPanes
+  })
   const drawerPinnedTabs = useInteractionPanelPinnedTabs({
     maxPinnedTabs,
     tabs: drawerInteractionTabs,
@@ -984,6 +1003,10 @@ export function ChatWorkspaceDrawer({
       persistedRightActiveTabKey
     })
     if (nextTabKey != null) {
+      const terminalTab = rightPanelTabs.find((tab): tab is Extract<SessionPanelTab, { kind: 'terminal' }> =>
+        tab.kind === 'terminal' && toWorkspaceDrawerDockKeyFromTab(tab) === nextTabKey
+      )
+      if (terminalTab != null) terminalPanes.setActiveTerminalId(terminalTab.terminalId)
       activeTabKeyRef.current = nextTabKey
       locallyActivatedRightTabKeyRef.current = nextTabKey
       setActiveTabKey(nextTabKey)
@@ -993,23 +1016,11 @@ export function ChatWorkspaceDrawer({
       setActiveTabKey(null)
     }
 
-    const nextOpenedTabKeySet = new Set<WorkspaceDrawerDockTabKey>(nextOpenedTabKeys)
     const previousTabByDockKey = new Map<WorkspaceDrawerDockTabKey, SessionPanelTab>()
     for (const tab of rightPanelTabs) {
       const key = toWorkspaceDrawerDockKeyFromTab(tab)
       if (key != null) previousTabByDockKey.set(key, tab)
     }
-    const closedTerminalIds = rightPanelTabs
-      .filter((tab): tab is Extract<SessionPanelTab, { kind: 'terminal' }> => tab.kind === 'terminal')
-      .filter(tab => {
-        const key = toWorkspaceDrawerDockKeyFromTab(tab)
-        return key == null || !nextOpenedTabKeySet.has(key)
-      })
-      .map(tab => tab.terminalId)
-    if (closedTerminalIds.length > 0) {
-      terminalPanes.closeTerminals(closedTerminalIds)
-    }
-
     updateRightArea(() => {
       const tabs = nextOpenedTabKeys.flatMap((key): SessionPanelTab[] => {
         if (isWorkspaceDrawerViewTabKey(key, availableViewSet)) {
@@ -1036,6 +1047,106 @@ export function ChatWorkspaceDrawer({
       }
     })
   }, [availableViewSet, persistedRightActiveTabKey, rightPanelTabs, terminalPanes, updateRightArea, viewItems])
+
+  const executeRightCloseRequest = useCallback((request: FrozenPanelTabCloseRequest) => {
+    const targetTabs = rightCloseRequests.resolveCloseRequest(request).filter(tab => tab.canClose)
+    const frozenTargetByTabId = new Map(request.targets.map(target => [target.tabId, target]))
+    const passiveTerminalTabIds = new Set<string>()
+    const terminalTargets = targetTabs.flatMap(tab => {
+      if (tab.kind !== 'terminal') return []
+      const frozenTarget = frozenTargetByTabId.get(tab.id)
+      if (frozenTarget?.terminalId == null) return []
+      const currentGeneration = terminalPanes.getTerminalGeneration(frozenTarget.terminalId)
+      if (currentGeneration == null) {
+        passiveTerminalTabIds.add(tab.id)
+        return []
+      }
+      return frozenTarget.terminalGeneration === currentGeneration
+        ? [{ generation: currentGeneration, terminalId: frozenTarget.terminalId }]
+        : []
+    })
+    const terminalResult = terminalPanes.closeTerminalTargets(terminalTargets)
+    const closedTerminalIds = new Set(terminalResult.closedTerminalIds)
+    const successfulTabs = targetTabs.filter(tab =>
+      tab.kind !== 'terminal' || passiveTerminalTabIds.has(tab.id) || closedTerminalIds.has(tab.terminalId)
+    )
+    const successfulTabKeys = new Set(successfulTabs.map(tab => tab.id as WorkspaceDrawerDockTabKey))
+    const failedTerminalIds = new Set(terminalResult.failedTerminalIds)
+    const failedTabs = targetTabs.filter(tab => tab.kind === 'terminal' && failedTerminalIds.has(tab.terminalId))
+    const failedTab = failedTabs[0]
+    if (failedTab?.kind === 'terminal') terminalPanes.setActiveTerminalId(failedTab.terminalId)
+
+    const currentEntries = rightPanelTabs.flatMap(tab => {
+      const key = toWorkspaceDrawerDockKeyFromTab(tab)
+      return key == null ? [] : [{ key, tab }]
+    })
+    const firstClosedIndex = currentEntries.findIndex(entry => successfulTabKeys.has(entry.key))
+    const nextEntries = currentEntries.filter(entry => !successfulTabKeys.has(entry.key))
+    const persistedActiveTab = rightPanelTabs.find(tab => tab.id === panelState.right.activeTabId)
+    const persistedActiveKey = persistedActiveTab == null ? null : toWorkspaceDrawerDockKeyFromTab(persistedActiveTab)
+    const nextActiveTabKey: WorkspaceDrawerDockTabKey | null =
+      (failedTab?.id as WorkspaceDrawerDockTabKey | undefined) ?? (
+        persistedActiveKey != null && nextEntries.some(entry => entry.key === persistedActiveKey)
+          ? persistedActiveKey
+          : nextEntries[Math.min(Math.max(firstClosedIndex, 0), nextEntries.length - 1)]?.key ?? null
+      )
+    updateRightArea((current, activeTabId) => {
+      const latestEntries = current.flatMap(tab => {
+        const key = toWorkspaceDrawerDockKeyFromTab(tab)
+        return key == null ? [] : [{ key, tab }]
+      })
+      const latestFirstClosedIndex = latestEntries.findIndex(entry => successfulTabKeys.has(entry.key))
+      const latestNextEntries = latestEntries.filter(entry => !successfulTabKeys.has(entry.key))
+      const currentActiveTab = current.find(tab => tab.id === activeTabId)
+      const currentActiveKey = currentActiveTab == null ? null : toWorkspaceDrawerDockKeyFromTab(currentActiveTab)
+      const latestActiveTabKey = (failedTab?.id as WorkspaceDrawerDockTabKey | undefined) ?? (
+        currentActiveKey != null && latestNextEntries.some(entry => entry.key === currentActiveKey)
+          ? currentActiveKey
+          : latestNextEntries[
+            Math.min(Math.max(latestFirstClosedIndex, 0), latestNextEntries.length - 1)
+          ]?.key
+      )
+      const tabs = latestNextEntries.map(entry => entry.tab)
+      const nextActiveTabId = latestActiveTabKey == null
+        ? undefined
+        : toWorkspaceDrawerPanelActiveTabId(latestActiveTabKey, availableViewSet)
+      return {
+        tabs,
+        ...(nextActiveTabId == null || !tabs.some(tab => tab.id === nextActiveTabId)
+          ? {}
+          : { activeTabId: nextActiveTabId })
+      }
+    })
+
+    activeTabKeyRef.current = nextActiveTabKey
+    locallyActivatedRightTabKeyRef.current = nextActiveTabKey
+    setActiveTabKey(nextActiveTabKey)
+    if (failedTab != null) setMobileViewMode('tab')
+    if (nextActiveTabKey == null) setMobileViewMode('overview')
+    return {
+      ...(nextActiveTabKey == null ? {} : { activeTabId: nextActiveTabKey }),
+      failedTabIds: failedTabs.map(tab => tab.id)
+    }
+  }, [
+    availableViewSet,
+    panelState.right.activeTabId,
+    rightCloseRequests,
+    rightPanelTabs,
+    terminalPanes,
+    updateRightArea
+  ])
+
+  const rightCloseCoordinator = useTerminalTabCloseCoordinator({
+    executeCloseRequest: executeRightCloseRequest,
+    getOwnerRoot: () => drawerRef.current,
+    isCloseRequestInvalidated: rightCloseRequests.isCloseRequestInvalidated,
+    message,
+    ownerGeneration: terminalPanes.generation,
+    ownerId: `${terminalSessionId}:right`,
+    resolveCloseRequest: rightCloseRequests.resolveCloseRequest,
+    t,
+    terminalPanes
+  })
 
   const updateRightWebTab = useCallback((
     pageId: string,
@@ -1239,15 +1350,18 @@ export function ChatWorkspaceDrawer({
 
   const handleCloseDockTabGroup = useCallback((tab: InteractionPanelTab, scope: InteractionPanelTabCloseScope) => {
     const targetTabs = getTabsForCloseScope(drawerInteractionTabs, tab, scope)
-    const targetTabKeys = new Set(targetTabs.map(item => item.id as WorkspaceDrawerDockTabKey))
-    const fallbackTab = getFallbackTabAfterClose(drawerInteractionTabs, targetTabs, tab)
-    const nextOpenedTabKeys = openedTabKeys.filter(key => !targetTabKeys.has(key))
-    const nextActiveTabKey = resolvedActiveTabKey != null && targetTabKeys.has(resolvedActiveTabKey)
-      ? (fallbackTab?.id as WorkspaceDrawerDockTabKey | undefined) ?? null
-      : resolvedActiveTabKey
+    const request = rightCloseRequests.createCloseRequest(targetTabs, tab.id)
+    rightCloseCoordinator.requestClose(request)
+  }, [drawerInteractionTabs, rightCloseCoordinator, rightCloseRequests])
 
-    handleDockTabChange(nextActiveTabKey, nextOpenedTabKeys)
-  }, [drawerInteractionTabs, handleDockTabChange, openedTabKeys, resolvedActiveTabKey])
+  const handleDockTabClose = useCallback((tabKey: WorkspaceDrawerDockTabKey) => {
+    const tab = drawerTabById[tabKey]
+    if (tab != null) {
+      const request = rightCloseRequests.createCloseRequest([tab], tab.id)
+      rightCloseCoordinator.requestClose(request)
+    }
+    return false
+  }, [drawerTabById, rightCloseCoordinator, rightCloseRequests])
 
   const getTabContextMenuItems = useCallback((
     context: RouteContainerPanelTabMenuContext<WorkspaceDrawerDockTabKey>
@@ -1517,25 +1631,29 @@ export function ChatWorkspaceDrawer({
       (tab) => {
         if (tab.kind !== 'terminal') return []
         const pane = terminalPaneById.get(tab.terminalId)
-        if (pane == null) return []
+        if (pane == null && terminalPanes.panes.some(item => item.id === tab.terminalId)) return []
         const tabKey = toWorkspaceDrawerDockKeyFromTab(tab)
         if (tabKey == null) return []
-        const icon = pane.runCommand?.icon ?? (
-          terminalPanes.infoById[pane.id]?.isExited === true ? 'terminal_off' : 'terminal'
+        const icon = pane?.runCommand?.icon ?? (
+          pane == null || terminalPanes.infoById[pane.id]?.isExited === true ? 'terminal_off' : 'terminal'
         )
         const pinnedTab = drawerPinnedTabById[tabKey]
+        const title = pane?.title ?? tab.title
 
         return [{
           activeIcon: pinnedTab?.icon ?? icon,
-          content: ({ isVisible }) => (
+          content: pane == null ? null : ({ isVisible }) => (
             <div className={`chat-interaction-panel__dock-panel-content ${isVisible ? 'is-visible' : 'is-hidden'}`}>
               <ChatTerminalView
                 activeTerminalId={isVisible ? pane.id : ''}
+                getTerminalGeneration={terminalPanes.getTerminalGeneration}
                 panes={[pane]}
                 sessionId={terminalSessionId}
-                onExit={terminalPanes.closeTerminal}
+                onExit={terminalPanes.handleExit}
                 onInfoChange={terminalPanes.handleInfoChange}
                 onInitialCommandSent={terminalPanes.markInitialCommandSent}
+                onProcessReady={terminalPanes.handleProcessReady}
+                onProcessRestartAccepted={terminalPanes.handleProcessRestartAccepted}
                 onRestartChange={terminalPanes.handleRestartChange}
                 onTerminateChange={terminalPanes.handleTerminateChange}
               />
@@ -1543,8 +1661,8 @@ export function ChatWorkspaceDrawer({
           ),
           icon: pinnedTab?.icon ?? icon,
           key: tabKey,
-          label: pinnedTab?.title ?? pane.title,
-          title: pinnedTab?.originalTitle ?? pane.title
+          label: pinnedTab?.title ?? title,
+          title: pinnedTab?.originalTitle ?? title
         }]
       }
     )
@@ -1810,14 +1928,11 @@ export function ChatWorkspaceDrawer({
   }, [handleDockTabChange, openedTabKeys])
 
   const closeMobileTab = useCallback((tabKey: WorkspaceDrawerDockTabKey) => {
-    const nextOpenedTabKeys = openedTabKeys.filter(key => key !== tabKey)
-    const nextActiveTabKey = resolvedActiveTabKey === tabKey
-      ? nextOpenedTabKeys.at(-1) ?? null
-      : resolvedActiveTabKey
-
-    handleDockTabChange(nextActiveTabKey, nextOpenedTabKeys)
-    if (nextActiveTabKey == null) setMobileViewMode('overview')
-  }, [handleDockTabChange, openedTabKeys, resolvedActiveTabKey])
+    const tab = drawerTabById[tabKey]
+    if (tab == null) return
+    const request = rightCloseRequests.createCloseRequest([tab], tab.id)
+    rightCloseCoordinator.requestClose(request)
+  }, [drawerTabById, rightCloseCoordinator, rightCloseRequests])
 
   const mobileCurrentHeaderActions = useMemo(() => {
     if (activeMobileTab == null) return []
@@ -1854,7 +1969,9 @@ export function ChatWorkspaceDrawer({
       disabled: activeMobileTab == null,
       icon: renderMenuIcon('close'),
       key: 'mobile-tabs-close-current',
-      label: t('common.close'),
+      label: activeMobileTab == null
+        ? t('common.close')
+        : t('chat.interactionPanel.closeTab', { title: getWorkspaceDrawerDockTabTitle(activeMobileTab) }),
       onClick: () => {
         if (activeMobileTab != null) closeMobileTab(activeMobileTab.key)
       }
@@ -1864,7 +1981,8 @@ export function ChatWorkspaceDrawer({
     activeMobileTab,
     closeMobileTab,
     mobileMoreAction?.menuItems,
-    mobileOverflowHeaderActions
+    mobileOverflowHeaderActions,
+    t
   ])
   const mobileLeadingActions = (
     <div className='route-container-header__leading-actions'>
@@ -1923,14 +2041,26 @@ export function ChatWorkspaceDrawer({
       />
     </Dropdown>
   )
-  const mobileActiveContent = activeMobileTab == null
+  const isMobilePageVisible = mobileViewMode === 'tab' && activeMobileTab != null
+  const mobileTerminalTabs = openedDockTabs.filter(tab => tab.key.startsWith(WORKSPACE_DRAWER_TERMINAL_TAB_PREFIX))
+  const mobileActiveContent = activeMobileTab == null ||
+      activeMobileTab.key.startsWith(WORKSPACE_DRAWER_TERMINAL_TAB_PREFIX)
     ? null
-    : renderWorkspaceDrawerDockTabContent(activeMobileTab, true)
+    : renderWorkspaceDrawerDockTabContent(activeMobileTab, isMobilePageVisible)
   const mobileDrawerContent = shouldUseMobileTabSwitcher
     ? (
-      mobileViewMode === 'tab' && activeMobileTab != null
-        ? (
-          <div className='chat-workspace-drawer__mobile-page'>
+      <>
+        {activeMobileTab != null && (
+          <div
+            className='chat-workspace-drawer__mobile-page'
+            hidden={!isMobilePageVisible}
+            aria-hidden={!isMobilePageVisible}
+            ref={(node) => {
+              if (node == null) return
+              if (isMobilePageVisible) node.removeAttribute('inert')
+              else node.setAttribute('inert', '')
+            }}
+          >
             <RouteChromeHeader
               className='chat-workspace-drawer__mobile-page-header'
               compact
@@ -1985,10 +2115,27 @@ export function ChatWorkspaceDrawer({
             />
             <div className='chat-workspace-drawer__mobile-page-body'>
               {mobileActiveContent}
+              {mobileTerminalTabs.map((tab) => {
+                const isVisible = isMobilePageVisible && activeMobileTab.key === tab.key
+                return (
+                  <div
+                    key={tab.key}
+                    hidden={!isVisible}
+                    aria-hidden={!isVisible}
+                    ref={(node) => {
+                      if (node == null) return
+                      if (isVisible) node.removeAttribute('inert')
+                      else node.setAttribute('inert', '')
+                    }}
+                  >
+                    {renderWorkspaceDrawerDockTabContent(tab, isVisible)}
+                  </div>
+                )
+              })}
             </div>
           </div>
-        )
-        : (
+        )}
+        {!isMobilePageVisible && (
           <div className='chat-workspace-drawer__mobile-switcher'>
             <RouteChromeHeader
               className='chat-workspace-drawer__mobile-switcher-header'
@@ -2050,7 +2197,7 @@ export function ChatWorkspaceDrawer({
                           <button
                             type='button'
                             className='chat-workspace-drawer__mobile-tab-card-close'
-                            aria-label={t('common.close')}
+                            aria-label={t('chat.interactionPanel.closeTab', { title })}
                             onClick={() => closeMobileTab(tab.key)}
                           >
                             <MaterialSymbol name='close' aria-hidden='true' />
@@ -2099,7 +2246,8 @@ export function ChatWorkspaceDrawer({
               })}
             </div>
           </div>
-        )
+        )}
+      </>
     )
     : (
       <RouteContainerPanelDockWorkspace
@@ -2107,7 +2255,7 @@ export function ChatWorkspaceDrawer({
         ariaLabel={t('chat.workspaceDrawerTitle')}
         className='chat-workspace-drawer__dock-workspace'
         closable
-        closeLabel={() => t('common.close')}
+        closeLabel={title => t('chat.interactionPanel.closeTab', { title })}
         createMenuItems={createMenuItems}
         createMenuLabel={t('chat.interactionPanel.addTab')}
         createMenuSelectedKeys={createMenuSelectedKeys}
@@ -2137,6 +2285,7 @@ export function ChatWorkspaceDrawer({
         }}
         onLayoutChange={handleRightDockLayoutChange}
         onTabChange={handleDockTabChange}
+        onTabClose={handleDockTabClose}
       />
     )
 
@@ -2163,6 +2312,7 @@ export function ChatWorkspaceDrawer({
           setEditingPinnedTab(null)
         }}
       />
+      {rightCloseCoordinator.feedback}
     </>
   )
 }
