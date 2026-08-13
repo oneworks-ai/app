@@ -30,6 +30,15 @@
       "priority": 30
     },
     {
+      "id": "cursor",
+      "label": "Cursor",
+      "kind": "adapter",
+      "icon": "assets/brand/adapters/cursor.svg",
+      "enabled": true,
+      "featured": true,
+      "priority": 35
+    },
+    {
       "id": "gemini",
       "label": "Gemini",
       "kind": "adapter",
@@ -37,6 +46,15 @@
       "enabled": true,
       "featured": true,
       "priority": 40
+    },
+    {
+      "id": "grok",
+      "label": "Grok",
+      "kind": "adapter",
+      "icon": "assets/brand/adapters/grok.svg",
+      "enabled": true,
+      "featured": true,
+      "priority": 45
     },
     {
       "id": "kimi",
