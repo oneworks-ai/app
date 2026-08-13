@@ -1,5 +1,8 @@
 /* eslint-disable max-lines -- interaction panel content maps the shared dock contract to each tab family in one place. */
+import { App } from 'antd'
 import type { MenuProps } from 'antd'
+import { useCallback, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import type { TerminalShellKind } from '@oneworks/types'
 
@@ -17,6 +20,12 @@ import type {
 } from '#~/components/layout/RouteContainerPanelTabs'
 import type { ChatRouteBottomPanelState } from '#~/hooks/chat/use-chat-route-bottom-panel'
 
+import type {
+  PanelTabCloseExecutionResult,
+  PanelTabClosePreflight
+} from './@components/terminal-tab-close/terminal-tab-close-types'
+import type { FrozenPanelTabCloseRequest } from './@components/terminal-tab-close/use-panel-tab-close-requests'
+import { useTerminalTabCloseCoordinator } from './@components/terminal-tab-close/use-terminal-tab-close-coordinator'
 import { InteractionPanelDockWorkspace } from './InteractionPanelDockWorkspace'
 import type {
   InteractionPanelDockTabHeaderActionContext,
@@ -29,7 +38,6 @@ import type { InteractionPanelMobileDebugPage } from './interaction-panel-mobile
 import type { InteractionPanelPinnedTab } from './interaction-panel-pinned-tabs'
 import type { InteractionPanelRunCommand } from './interaction-panel-run-commands'
 import type { InteractionPanelSessionPage } from './interaction-panel-session-pages'
-import type { InteractionPanelTabCloseScope } from './interaction-panel-tab-groups'
 import type { ActiveInteractionTab, InteractionPanelTab } from './interaction-panel-tabs'
 import type { useInteractionTerminalPanes } from './use-interaction-terminal-panes'
 
@@ -57,8 +65,9 @@ export function InteractionPanelContent({
   pinnedTabs,
   tabs,
   onActivateTab,
-  onCloseTab,
-  onCloseTabGroup,
+  onCreateCloseRequest,
+  onExecuteCloseRequest,
+  onIsCloseRequestInvalidated,
   onCloseWorkspaceFilePaths,
   onIframeUrlChange,
   onIframeMetadataChange,
@@ -162,8 +171,12 @@ export function InteractionPanelContent({
     context: InteractionPanelDockTabHeaderActionContext
   ) => RouteContainerPanelDockActionItem[]
   onActivateTab: (tab: InteractionPanelTab) => void
-  onCloseTab: (tab: InteractionPanelTab) => void
-  onCloseTabGroup: (tab: InteractionPanelTab, scope: InteractionPanelTabCloseScope) => void
+  onCreateCloseRequest: (
+    targetTabs: InteractionPanelTab[],
+    anchorTabId?: string
+  ) => FrozenPanelTabCloseRequest
+  onExecuteCloseRequest: (request: FrozenPanelTabCloseRequest) => PanelTabCloseExecutionResult
+  onIsCloseRequestInvalidated: (request: FrozenPanelTabCloseRequest) => boolean
   onCloseWorkspaceFilePaths: (paths: string[]) => void
   onEditPinnedTab: (tab: InteractionPanelPinnedTab) => void
   onNewSession: () => void
@@ -182,9 +195,28 @@ export function InteractionPanelContent({
   onUnpinTab: (tab: InteractionPanelTab) => void
 }) {
   const hasPanelContent = activeTab != null && tabs.length > 0
-
-  if (!hasPanelContent) {
-    return (
+  const closeOwnerRef = useRef<HTMLDivElement | null>(null)
+  const { t } = useTranslation()
+  const { message } = App.useApp()
+  const { feedback: closeFeedback, requestClose } = useTerminalTabCloseCoordinator({
+    executeCloseRequest: onExecuteCloseRequest,
+    externalFallbackLabel: t('chat.bottomPanelToggle'),
+    getOwnerRoot: () => closeOwnerRef.current,
+    isCloseRequestInvalidated: onIsCloseRequestInvalidated,
+    message,
+    ownerGeneration: terminalPanes.generation,
+    ownerId: terminalSessionId,
+    resolveCloseRequest: request => tabs.filter(tab => request.targets.some(target => target.tabId === tab.id)),
+    t,
+    terminalPanes
+  })
+  const requestTabClose = useCallback((
+    targetTabs: InteractionPanelTab[],
+    anchorTabId?: string,
+    preflight?: PanelTabClosePreflight
+  ) => requestClose(onCreateCloseRequest(targetTabs, anchorTabId), preflight), [onCreateCloseRequest, requestClose])
+  const content = !hasPanelContent
+    ? (
       <InteractionPanelEmptyDockWorkspace
         canCreateSessionTab={canCreateSessionTab}
         canFullscreenPanel={canFullscreenPanel}
@@ -206,73 +238,77 @@ export function InteractionPanelContent({
         workspaceDrawerCreateSelectedKeys={workspaceDrawerCreateSelectedKeys}
       />
     )
-  }
+    : (
+      <InteractionPanelDockWorkspace
+        activeTab={activeTab}
+        activeSessionFocusRequestId={activeSessionFocusRequestId}
+        activeSessionFocusSessionId={activeSessionFocusSessionId}
+        bottomPanel={bottomPanel}
+        canCreateSessionTab={canCreateSessionTab}
+        canFullscreenPanel={canFullscreenPanel}
+        canPinMoreTabs={canPinMoreTabs}
+        iframePages={iframePages}
+        isPanelFullscreen={isPanelFullscreen}
+        isPanelMinimized={isPanelMinimized}
+        isVisible={isVisible}
+        layout={layout}
+        markdownPreviewMode={markdownPreviewMode}
+        mobileDebugPages={mobileDebugPages}
+        openResourceShortcut={openResourceShortcut}
+        pinnedTabs={pinnedTabs}
+        projectUrlHistoryKey={projectUrlHistoryKey}
+        sessionId={sessionId}
+        sessionPages={sessionPages}
+        sessionUrlHistoryKey={sessionUrlHistoryKey}
+        tabs={tabs}
+        terminalPanes={terminalPanes}
+        terminalSessionId={terminalSessionId}
+        workspaceDrawerCreateItems={workspaceDrawerCreateItems}
+        workspaceDrawerCreateSelectedKeys={workspaceDrawerCreateSelectedKeys}
+        workspaceDrawerState={workspaceDrawerState}
+        workspaceFileFocusRequest={workspaceFileFocusRequest}
+        workspaceRootPath={workspaceRootPath}
+        getTabHeaderActions={getTabHeaderActions}
+        onActivateTab={onActivateTab}
+        onCloseWorkspaceFilePaths={onCloseWorkspaceFilePaths}
+        onEditPinnedTab={onEditPinnedTab}
+        onIframeMetadataChange={onIframeMetadataChange}
+        onIframePageChange={onIframePageChange}
+        onIframeNavigateHistory={onIframeNavigateHistory}
+        onIframeSelectHistory={onIframeSelectHistory}
+        onIframeUrlChange={onIframeUrlChange}
+        onLayoutChange={onLayoutChange}
+        onLocateWorkspacePath={onLocateWorkspacePath}
+        onMarkdownPreviewModeChange={onMarkdownPreviewModeChange}
+        onMobileDebugPageChange={onMobileDebugPageChange}
+        onAddMenuClick={onAddMenuClick}
+        onNewSession={onNewSession}
+        onNewTerminal={onNewTerminal}
+        onOpenIframeUrl={onOpenIframeUrl}
+        onPanelExpand={onPanelExpand}
+        onPanelClose={onPanelClose}
+        onPanelAction={onPanelAction}
+        onPinTab={onPinTab}
+        onPluginTabStateChange={onPluginTabStateChange}
+        onRunCommand={onRunCommand}
+        onReferenceAnnotations={onReferenceAnnotations}
+        onReferenceFileComments={onReferenceFileComments}
+        onRequestTabClose={requestTabClose}
+        hasPendingAnnotationReferences={hasPendingAnnotationReferences}
+        pendingAnnotationPreview={pendingAnnotationPreview}
+        pendingAnnotations={pendingAnnotations}
+        pendingFileComments={pendingFileComments}
+        onSelectWorkspaceFilePath={onSelectWorkspaceFilePath}
+        onSessionPageChange={onSessionPageChange}
+        onTogglePanelFullscreen={onTogglePanelFullscreen}
+        onUnpinTab={onUnpinTab}
+      />
+    )
 
   return (
-    <InteractionPanelDockWorkspace
-      activeTab={activeTab}
-      activeSessionFocusRequestId={activeSessionFocusRequestId}
-      activeSessionFocusSessionId={activeSessionFocusSessionId}
-      bottomPanel={bottomPanel}
-      canCreateSessionTab={canCreateSessionTab}
-      canFullscreenPanel={canFullscreenPanel}
-      canPinMoreTabs={canPinMoreTabs}
-      iframePages={iframePages}
-      isPanelFullscreen={isPanelFullscreen}
-      isPanelMinimized={isPanelMinimized}
-      isVisible={isVisible}
-      layout={layout}
-      markdownPreviewMode={markdownPreviewMode}
-      mobileDebugPages={mobileDebugPages}
-      openResourceShortcut={openResourceShortcut}
-      pinnedTabs={pinnedTabs}
-      projectUrlHistoryKey={projectUrlHistoryKey}
-      sessionId={sessionId}
-      sessionPages={sessionPages}
-      sessionUrlHistoryKey={sessionUrlHistoryKey}
-      tabs={tabs}
-      terminalPanes={terminalPanes}
-      terminalSessionId={terminalSessionId}
-      workspaceDrawerCreateItems={workspaceDrawerCreateItems}
-      workspaceDrawerCreateSelectedKeys={workspaceDrawerCreateSelectedKeys}
-      workspaceDrawerState={workspaceDrawerState}
-      workspaceFileFocusRequest={workspaceFileFocusRequest}
-      workspaceRootPath={workspaceRootPath}
-      getTabHeaderActions={getTabHeaderActions}
-      onActivateTab={onActivateTab}
-      onCloseTab={onCloseTab}
-      onCloseTabGroup={onCloseTabGroup}
-      onCloseWorkspaceFilePaths={onCloseWorkspaceFilePaths}
-      onEditPinnedTab={onEditPinnedTab}
-      onIframeMetadataChange={onIframeMetadataChange}
-      onIframePageChange={onIframePageChange}
-      onIframeNavigateHistory={onIframeNavigateHistory}
-      onIframeSelectHistory={onIframeSelectHistory}
-      onIframeUrlChange={onIframeUrlChange}
-      onLayoutChange={onLayoutChange}
-      onLocateWorkspacePath={onLocateWorkspacePath}
-      onMarkdownPreviewModeChange={onMarkdownPreviewModeChange}
-      onMobileDebugPageChange={onMobileDebugPageChange}
-      onAddMenuClick={onAddMenuClick}
-      onNewSession={onNewSession}
-      onNewTerminal={onNewTerminal}
-      onOpenIframeUrl={onOpenIframeUrl}
-      onPanelExpand={onPanelExpand}
-      onPanelClose={onPanelClose}
-      onPanelAction={onPanelAction}
-      onPinTab={onPinTab}
-      onPluginTabStateChange={onPluginTabStateChange}
-      onRunCommand={onRunCommand}
-      onReferenceAnnotations={onReferenceAnnotations}
-      onReferenceFileComments={onReferenceFileComments}
-      hasPendingAnnotationReferences={hasPendingAnnotationReferences}
-      pendingAnnotationPreview={pendingAnnotationPreview}
-      pendingAnnotations={pendingAnnotations}
-      pendingFileComments={pendingFileComments}
-      onSelectWorkspaceFilePath={onSelectWorkspaceFilePath}
-      onSessionPageChange={onSessionPageChange}
-      onTogglePanelFullscreen={onTogglePanelFullscreen}
-      onUnpinTab={onUnpinTab}
-    />
+    <div ref={closeOwnerRef} className='chat-interaction-panel__close-owner' tabIndex={-1}>
+      {content}
+      {closeFeedback}
+    </div>
   )
 }

@@ -1,6 +1,6 @@
 import './TerminalPane.scss'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { TerminalShellKind } from '@oneworks/types'
@@ -11,6 +11,11 @@ import type { RestartTerminalHandler } from '../@hooks/use-terminal-session'
 
 const formatShellLabel = (shell: string | undefined) => shell?.split('/').filter(Boolean).at(-1) ?? 'shell'
 
+export interface TerminalPaneLifecycleTarget {
+  generation: number
+  terminalId: string
+}
+
 export function TerminalPane({
   autoRestartExitedSession,
   initialCommand,
@@ -18,28 +23,37 @@ export function TerminalPane({
   onExit,
   onInfoChange,
   onInitialCommandSent,
+  onProcessReady,
+  onProcessRestartAccepted,
   onRestartChange,
   onTerminateChange,
   sessionId,
   shellKind,
-  terminalId
+  target
 }: {
   autoRestartExitedSession?: boolean
   initialCommand?: string
   isActive: boolean
-  onExit?: (terminalId: string) => void
-  onInfoChange: (terminalId: string, info: { shellLabel: string; isExited: boolean }) => void
-  onInitialCommandSent: (terminalId: string) => void
-  onRestartChange: (terminalId: string, handler: RestartTerminalHandler | null) => void
-  onTerminateChange: (terminalId: string, handler: (() => boolean) | null) => void
+  onExit?: (target: TerminalPaneLifecycleTarget) => void
+  onInfoChange: (target: TerminalPaneLifecycleTarget, info: { shellLabel: string; isExited: boolean }) => void
+  onInitialCommandSent: (target: TerminalPaneLifecycleTarget) => void
+  onProcessReady: (target: TerminalPaneLifecycleTarget, pid?: number) => void
+  onProcessRestartAccepted: (target: TerminalPaneLifecycleTarget) => void
+  onRestartChange: (target: TerminalPaneLifecycleTarget, handler: RestartTerminalHandler) => () => void
+  onTerminateChange: (target: TerminalPaneLifecycleTarget, handler: () => boolean) => () => void
   sessionId: string
   shellKind: TerminalShellKind
-  terminalId: string
+  target: TerminalPaneLifecycleTarget
 }) {
   const { t } = useTranslation()
   const inputHandlerRef = useRef<(data: string) => void>(() => undefined)
   const resizeHandlerRef = useRef<(cols: number, rows: number) => void>(() => undefined)
   const [shellLabel, setShellLabel] = useState('shell')
+  const lifecycleTarget = useMemo(
+    () => target,
+    [target.generation, target.terminalId]
+  )
+  const terminalId = lifecycleTarget.terminalId
   const {
     containerRef,
     fitTerminal,
@@ -69,6 +83,7 @@ export function TerminalPane({
     initialCols: lastMeasuredSize.cols,
     initialRows: lastMeasuredSize.rows,
     onReady: useCallback((event) => {
+      onProcessReady(lifecycleTarget, event.info.pid)
       const terminal = terminalRef.current
       if (terminal == null) return
 
@@ -78,38 +93,35 @@ export function TerminalPane({
         terminal.write(event.scrollback)
       }
       fitTerminal()
-    }, [fitTerminal, terminalRef]),
+    }, [fitTerminal, lifecycleTarget, onProcessReady, terminalRef]),
+    onProcessRestartAccepted: useCallback(() => {
+      onProcessRestartAccepted(lifecycleTarget)
+    }, [lifecycleTarget, onProcessRestartAccepted]),
     onInitialInputSent: useCallback(() => {
-      onInitialCommandSent(terminalId)
-    }, [onInitialCommandSent, terminalId]),
+      onInitialCommandSent(lifecycleTarget)
+    }, [lifecycleTarget, onInitialCommandSent]),
     onOutput: useCallback((data) => {
       terminalRef.current?.write(data)
     }, [terminalRef]),
     onExit: useCallback(() => {
-      onExit?.(terminalId)
-    }, [onExit, terminalId])
+      onExit?.(lifecycleTarget)
+    }, [lifecycleTarget, onExit])
   })
 
   useEffect(() => {
-    onTerminateChange(terminalId, terminateTerminal)
-    return () => {
-      onTerminateChange(terminalId, null)
-    }
-  }, [onTerminateChange, terminalId, terminateTerminal])
+    return onTerminateChange(lifecycleTarget, terminateTerminal)
+  }, [lifecycleTarget, onTerminateChange, terminateTerminal])
 
   useEffect(() => {
-    onRestartChange(terminalId, restartTerminal)
-    return () => {
-      onRestartChange(terminalId, null)
-    }
-  }, [onRestartChange, restartTerminal, terminalId])
+    return onRestartChange(lifecycleTarget, restartTerminal)
+  }, [lifecycleTarget, onRestartChange, restartTerminal])
 
   useEffect(() => {
-    onInfoChange(terminalId, {
+    onInfoChange(lifecycleTarget, {
       shellLabel,
       isExited: lastExit != null
     })
-  }, [lastExit, onInfoChange, shellLabel, terminalId])
+  }, [lastExit, lifecycleTarget, onInfoChange, shellLabel])
 
   useEffect(() => {
     if (!isActive) {

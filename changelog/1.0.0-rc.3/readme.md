@@ -12,3 +12,6 @@
 - Add a first-class Cursor Agent CLI adapter with managed installation, resumable streaming sessions, native skills, MCP and hook integration, plus read-only migration of local Cursor conversation history into One Works.
 - Include Cursor and Grok in the product brand catalog so catalog-driven assets cover every built-in adapter.
 - Add Shikitor and Cordis as organization-scoped vendor submodules, with Shikitor using Cordis to power its extensible editor-plugin playground.
+- Make terminal tab closing reliable across the bottom panel, Workspace drawer, and mobile overview by confirming active processes, preserving terminals that cannot be stopped, restoring focus to visible controls, and keeping canceled native tab closes in place.
+
+  ![Terminal close confirmation in the mobile Workspace overview](./issue-188-terminal-close-confirmation.jpg)

@@ -34,6 +34,7 @@ export function useTerminalSession({
   initialCols,
   initialRows,
   onReady,
+  onProcessRestartAccepted,
   onInitialInputSent,
   onOutput,
   onExit
@@ -47,6 +48,7 @@ export function useTerminalSession({
   initialCols: number
   initialRows: number
   onReady: (event: Extract<TerminalSessionEvent, { type: 'terminal_ready' }>) => void
+  onProcessRestartAccepted?: () => void
   onInitialInputSent?: () => void
   onOutput: (data: string) => void
   onExit?: (event: Extract<TerminalSessionEvent, { type: 'terminal_exit' }>) => void
@@ -63,6 +65,7 @@ export function useTerminalSession({
   const restartRunningOnReadyRef = useRef(true)
   const restartOnReadyRef = useRef(false)
   const restartRequestedRef = useRef(false)
+  const replacementAcceptedRef = useRef(false)
   const latestSizeRef = useRef({ cols: initialCols, rows: initialRows })
   const pendingResizeRef = useRef<{ cols: number; rows: number } | null>(null)
   const initialInputRef = useRef(initialInput)
@@ -70,6 +73,7 @@ export function useTerminalSession({
   const initialInputSentRef = useRef(false)
   const terminalStatusRef = useRef<'exited' | 'running' | 'unknown'>('unknown')
   const onReadyRef = useRef(onReady)
+  const onProcessRestartAcceptedRef = useRef(onProcessRestartAccepted)
   const onInitialInputSentRef = useRef(onInitialInputSent)
   const onOutputRef = useRef(onOutput)
   const onExitRef = useRef(onExit)
@@ -78,6 +82,7 @@ export function useTerminalSession({
   const [lastExit, setLastExit] = useState<{ exitCode: number | null; signal: number | null } | null>(null)
 
   onReadyRef.current = onReady
+  onProcessRestartAcceptedRef.current = onProcessRestartAccepted
   onInitialInputSentRef.current = onInitialInputSent
   onOutputRef.current = onOutput
   onExitRef.current = onExit
@@ -147,6 +152,11 @@ export function useTerminalSession({
     (cols: number, rows: number) => sendCommand({ type: 'terminal_resize', cols, rows }),
     [sendCommand]
   )
+  const notifyProcessRestartAccepted = useCallback(() => {
+    if (replacementAcceptedRef.current) return
+    replacementAcceptedRef.current = true
+    onProcessRestartAcceptedRef.current?.()
+  }, [])
   const sendRestartCommand = useCallback(() => {
     const restartSize = latestSizeRef.current
     restartRequestedRef.current = true
@@ -157,12 +167,13 @@ export function useTerminalSession({
       rows: restartSize.rows
     })
     if (sent) {
+      notifyProcessRestartAccepted()
       restartOnReadyRef.current = false
       restartRunningOnReadyRef.current = true
       terminalStatusRef.current = 'running'
     }
     return sent
-  }, [sendCommand])
+  }, [notifyProcessRestartAccepted, sendCommand])
   const terminateTerminal = useCallback(() => {
     restartAfterExitRef.current = false
     restartOnReadyRef.current = false
@@ -202,7 +213,11 @@ export function useTerminalSession({
 
       restartAfterExitRef.current = true
       const terminated = sendCommand({ type: 'terminal_terminate' })
-      if (!terminated) restartAfterExitRef.current = false
+      if (terminated) {
+        notifyProcessRestartAccepted()
+      } else {
+        restartAfterExitRef.current = false
+      }
       return terminated
     }
 
@@ -214,7 +229,7 @@ export function useTerminalSession({
       return false
     }
     return restarted
-  }, [clearInitialInputQueue, queueInitialInput, sendCommand, sendRestartCommand])
+  }, [clearInitialInputQueue, notifyProcessRestartAccepted, queueInitialInput, sendCommand, sendRestartCommand])
   const flushPendingResize = useCallback(() => {
     const pendingResize = pendingResizeRef.current
     if (pendingResize == null) {
@@ -285,6 +300,7 @@ export function useTerminalSession({
                     rows: restartSize.rows
                   } satisfies TerminalSessionCommand
                 ))
+                notifyProcessRestartAccepted()
               }
               return
             }
@@ -297,7 +313,9 @@ export function useTerminalSession({
               restartRunningOnReadyRef.current = true
               if (shouldRestartRunning) {
                 restartAfterExitRef.current = true
-                if (!sendCommand({ type: 'terminal_terminate' })) {
+                if (sendCommand({ type: 'terminal_terminate' })) {
+                  notifyProcessRestartAccepted()
+                } else {
                   restartAfterExitRef.current = false
                 }
                 return
@@ -306,6 +324,7 @@ export function useTerminalSession({
             restartOnReadyRef.current = false
             restartRunningOnReadyRef.current = true
             restartRequestedRef.current = false
+            replacementAcceptedRef.current = false
             setLastExit(null)
             onReadyRef.current(event)
             if (initialInputSentRef.current) {
@@ -363,6 +382,7 @@ export function useTerminalSession({
       expectedCloseRef.current = true
       clearTimer(reconnectTimerRef)
       clearInitialInputQueue()
+      replacementAcceptedRef.current = false
       socket.close()
       socketRef.current = null
     }
@@ -372,6 +392,7 @@ export function useTerminalSession({
     connectVersion,
     clearInitialInputQueue,
     flushPendingResize,
+    notifyProcessRestartAccepted,
     queueInitialInput,
     scheduleReconnect,
     sendRestartCommand,

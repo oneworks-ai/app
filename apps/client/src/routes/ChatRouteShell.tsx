@@ -8,9 +8,9 @@ import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import useSWR from 'swr'
 
-import type { ChatMessage, Session, SessionPanelAreaState, SessionPanelState } from '@oneworks/core'
+import type { ChatMessage, Session, SessionPanelAreaState } from '@oneworks/core'
 import { usePanelResize } from '@oneworks/route-layout'
-import type { SessionInfo, TerminalShellKind } from '@oneworks/types'
+import type { SessionInfo } from '@oneworks/types'
 
 import { getWorkspacePanelState, getWorkspacePanelStateCacheKey, isApiRemoteWorkspaceConnectionError } from '#~/api'
 import type { NavRailWindowBarAction } from '#~/components/NavRail'
@@ -48,6 +48,8 @@ import { formatInteractionPanelShortcut } from '#~/components/chat/interaction-p
 import {
   WORKSPACE_DRAWER_INTERACTION_TAB_PREFIX,
   getFileName,
+  getPanelStateActiveTerminalId,
+  getPanelStateTerminalPanes,
   toWorkspaceDrawerInteractionTabId
 } from '#~/components/chat/interaction-panel/interaction-panel-tabs'
 import { buildInteractionPanelWebsiteResources } from '#~/components/chat/interaction-panel/interaction-panel-website-resources'
@@ -67,7 +69,6 @@ import {
   writeSessionNotificationReadMarker
 } from '#~/components/chat/session-notification-indicator'
 import type { SessionNotificationReadMarker } from '#~/components/chat/session-notification-indicator'
-import type { TerminalPaneConfig } from '#~/components/chat/terminal/@utils/terminal-panes'
 import { WORKSPACE_TERMINAL_SESSION_ID } from '#~/components/chat/terminal/@utils/terminal-session-ids'
 import { parseWorkbenchDrawerViewMenuKey, toWorkbenchDrawerViewMenuKey } from '#~/components/chat/workbench-create-menu'
 import type {
@@ -152,32 +153,6 @@ const summarizeSessionPanelAreaForChatDebug = (area: SessionPanelAreaState) => (
   activeTabId: area.activeTabId,
   tabs: area.tabs.map(tab => ({ id: tab.id, kind: tab.kind }))
 })
-
-const terminalShellKinds = new Set<TerminalShellKind>(['default', 'zsh', 'bash', 'sh'])
-
-const isTerminalShellKind = (value: unknown): value is TerminalShellKind =>
-  typeof value === 'string' && terminalShellKinds.has(value as TerminalShellKind)
-
-const getPanelStateTerminalPanes = (panelState?: SessionPanelState): TerminalPaneConfig[] => (
-  (['bottom', 'right'] as const).flatMap(area =>
-    panelState?.[area].tabs.flatMap((tab): TerminalPaneConfig[] => {
-      if (tab.kind !== 'terminal') return []
-      return [{
-        id: tab.terminalId,
-        title: tab.title,
-        shellKind: isTerminalShellKind(tab.shellKind) ? tab.shellKind : 'default',
-        surface: area === 'right' ? 'workspace-drawer' : 'bottom',
-        ...(tab.runCommand == null ? {} : { runCommand: tab.runCommand as TerminalPaneConfig['runCommand'] })
-      }]
-    }) ?? []
-  )
-)
-
-const getPanelStateActiveTerminalId = (panelState?: SessionPanelState) => {
-  const bottomPanelState = panelState?.bottom
-  const activeTab = bottomPanelState?.tabs.find(tab => tab.id === bottomPanelState.activeTabId)
-  return activeTab?.kind === 'terminal' ? activeTab.terminalId : undefined
-}
 
 const clampWorkspaceDrawerWidth = (value: number, maxWidth = Number.POSITIVE_INFINITY) => {
   const resolvedMaxWidth = Number.isFinite(maxWidth)
@@ -1793,7 +1768,7 @@ export function ChatRouteShell({
         sidePanelClassName='chat-route-layout__workspace-panel'
         sidePanelCompactMode='overlay'
         sidePanelFullscreen={isWorkspaceDrawerFullscreen || isAndroidDeviceShell || isSimulatedMobileDeviceShell}
-        sidePanelLabel='工作区抽屉'
+        sidePanelLabel={t('chat.workspaceDrawerToggle')}
         sidePanelResize={{
           defaultWidth: WORKSPACE_DRAWER_DEFAULT_WIDTH,
           maxWidthRatio: WORKSPACE_DRAWER_MAX_WIDTH_RATIO,

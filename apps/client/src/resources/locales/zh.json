@@ -2786,7 +2786,11 @@
       "iframeZoomReset": "重置缩放",
       "newSameShellTerminal": "新建同类型终端",
       "iframeUrlPlaceholder": "输入 URL",
-      "sessionTitle": "会话 {{index}}"
+      "sessionTitle": "会话 {{index}}",
+      "terminalCloseConfirmTitle": "关闭运行中的终端？",
+      "terminalCloseConfirmContent": "仍有 {{count}} 个终端正在运行。关闭后会停止对应进程。",
+      "terminalCloseConfirmAction": "关闭终端",
+      "terminalCloseFailed": "有 {{count}} 个终端关闭失败，已保持打开。"
     },
     "workspaceDrawerFileStatus": {
       "staged": "已暂存",

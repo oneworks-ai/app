@@ -331,7 +331,8 @@ export function ChatInteractionPanel({
         id: existingPane.id,
         kind: 'terminal' as const,
         label: existingPane.title,
-        shellKind: existingPane.shellKind
+        shellKind: existingPane.shellKind,
+        terminalId: existingPane.id
       }
       panelTabs.activateTab(tab)
       pinnedTabs.pinTab(tab, { replaceOldest: true })
@@ -361,7 +362,8 @@ export function ChatInteractionPanel({
       id: pane.id,
       kind: 'terminal',
       label: pane.title,
-      shellKind: pane.shellKind
+      shellKind: pane.shellKind,
+      terminalId: pane.id
     }, { replaceOldest: true })
   }
   const handleNewWebPage = () => {
@@ -476,7 +478,8 @@ export function ChatInteractionPanel({
           id: currentRequest.terminalId,
           kind: 'terminal',
           label: existingPane.title,
-          shellKind: existingPane.shellKind
+          shellKind: existingPane.shellKind,
+          terminalId: existingPane.id
         })
       }
     } else if (currentRequest.action === 'new-session') {
@@ -584,8 +587,9 @@ export function ChatInteractionPanel({
             workspaceRootPath={workspaceRootPath}
             getTabHeaderActions={getTabHeaderActions}
             onActivateTab={handleActivateTab}
-            onCloseTab={panelTabs.handleCloseTab}
-            onCloseTabGroup={panelTabs.handleCloseTabGroup}
+            onCreateCloseRequest={panelTabs.createCloseRequest}
+            onExecuteCloseRequest={panelTabs.executeCloseRequest}
+            onIsCloseRequestInvalidated={panelTabs.isCloseRequestInvalidated}
             onCloseWorkspaceFilePaths={panelTabs.handleCloseWorkspaceFilePaths}
             onEditPinnedTab={setEditingPinnedTab}
             onIframeMetadataChange={panelTabs.handleIframeMetadataChange}

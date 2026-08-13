@@ -1,3 +1,6 @@
+import type { SessionPanelState } from '@oneworks/core'
+
+import { TERMINAL_SHELL_KINDS } from '#~/components/chat/terminal/@utils/terminal-panes'
 import type { TerminalPaneConfig } from '#~/components/chat/terminal/@utils/terminal-panes'
 import type { TerminalPaneInfo } from '#~/components/chat/terminal/ChatTerminalView'
 import { getWorkspaceFileIconMeta } from '#~/components/chat/workspace-drawer/workspace-drawer-icons'
@@ -15,6 +18,7 @@ export type InteractionPanelTab =
     icon: string
     label: string
     shellKind: TerminalPaneConfig['shellKind']
+    terminalId: string
     canClose: true
   }
   | { id: string; kind: 'file'; icon: string; label: string; path: string; canClose: true }
@@ -60,6 +64,31 @@ export const toWorkspaceDrawerInteractionTabId = (view: WorkspaceDrawerView) =>
 
 export const getFileName = (path: string) => path.split('/').filter(Boolean).at(-1) ?? path
 
+const normalizePanelTerminalShellKind = (value: unknown): TerminalPaneConfig['shellKind'] =>
+  typeof value === 'string' && TERMINAL_SHELL_KINDS.includes(value as TerminalPaneConfig['shellKind'])
+    ? value as TerminalPaneConfig['shellKind']
+    : 'default'
+
+export const getPanelStateTerminalPanes = (panelState?: SessionPanelState): TerminalPaneConfig[] =>
+  (['bottom', 'right'] as const).flatMap(area =>
+    panelState?.[area].tabs.flatMap((tab): TerminalPaneConfig[] => {
+      if (tab.kind !== 'terminal') return []
+      return [{
+        id: tab.terminalId,
+        title: tab.title,
+        shellKind: normalizePanelTerminalShellKind(tab.shellKind),
+        surface: area === 'right' ? 'workspace-drawer' : 'bottom',
+        ...(tab.runCommand == null ? {} : { runCommand: tab.runCommand as TerminalPaneConfig['runCommand'] })
+      }]
+    }) ?? []
+  )
+
+export const getPanelStateActiveTerminalId = (panelState?: SessionPanelState) => {
+  const bottomPanelState = panelState?.bottom
+  const activeTab = bottomPanelState?.tabs.find(tab => tab.id === bottomPanelState.activeTabId)
+  return activeTab?.kind === 'terminal' ? activeTab.terminalId : undefined
+}
+
 export const buildInteractionPanelTabs = ({
   filePaths,
   iframePages,
@@ -83,6 +112,7 @@ export const buildInteractionPanelTabs = ({
     icon: pane.runCommand?.icon ?? (terminalInfoById[pane.id]?.isExited === true ? 'terminal_off' : 'terminal'),
     label: pane.title,
     shellKind: pane.shellKind,
+    terminalId: pane.id,
     canClose: true as const
   })),
   ...filePaths.map(path => ({
