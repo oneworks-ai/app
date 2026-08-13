@@ -42,6 +42,7 @@ import {
   normalizeEditableMessageContent
 } from './message-content-utils'
 import { prepareMarkdownMessageContent } from './message-display-content'
+import { hasDisplayableMessageItemContent } from './message-renderability'
 
 interface MessageItemProps {
   anchorId: string
@@ -396,14 +397,7 @@ function MessageItemComponent({
 
     if (!Array.isArray(msg.content)) return null
 
-    const hasContent = msg.content.some((c: ChatMessageContent) => {
-      if (c.type === 'text') {
-        const parsedText = parseBrowserCommentMessage(c.text)
-        return (parsedText == null ? c.text.trim() : parsedText.remainingText) !== ''
-      }
-      return (c.type === 'image' && !isBrowserCommentScreenshotName(c.name)) || c.type === 'file'
-    }) ||
-      msg.toolCall != null
+    const hasContent = hasDisplayableMessageItemContent(msg)
     if (!hasContent) return null
 
     return (

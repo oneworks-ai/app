@@ -17,6 +17,7 @@ export const BROWSER_CONTROL_PAGE_COMMAND_CHANNEL = 'desktop:browser-control:pag
 export const WORKSPACE_SELECTOR_STATE_CHANNEL = 'desktop:workspace-selector-state'
 export const DESKTOP_SETTINGS_CHANNEL = 'desktop:settings'
 export const DESKTOP_CORE_READY_CHANNEL = 'desktop:startup-core-ready'
+export const DESKTOP_FIRST_ACTION_MILESTONE_CHANNEL = 'desktop:first-action-milestone'
 export const DESKTOP_UI_READY_CHANNEL = 'desktop:startup-ui-ready'
 export const DESKTOP_UPDATE_STATUS_CHANNEL = 'desktop:update-status'
 export const GLOBAL_INTERFACE_LANGUAGE_CHANNEL = 'desktop:global-interface-language'

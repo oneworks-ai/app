@@ -148,7 +148,8 @@ describe('session service', () => {
       } as any
     })
 
-    await processUserMessage('sess-1', 'hello world')
+    const clientActionId = 'client-action-00000000-0000-4000-8000-000000000001'
+    await processUserMessage('sess-1', 'hello world', { clientActionId })
 
     expect(saveMessage).toHaveBeenCalledOnce()
     expect(saveMessage).toHaveBeenCalledWith(
@@ -156,6 +157,7 @@ describe('session service', () => {
       expect.objectContaining({
         type: 'message',
         message: expect.objectContaining({
+          id: clientActionId,
           role: 'user',
           content: 'hello world'
         })
@@ -170,6 +172,7 @@ describe('session service', () => {
         status: 'running'
       })
     )
+    expect(updateSession.mock.invocationCallOrder[0]).toBeLessThan(saveMessage.mock.invocationCallOrder[0]!)
     expect(vi.mocked(notifySessionUpdated)).toHaveBeenCalledWith(
       'sess-1',
       expect.objectContaining({
@@ -207,6 +210,7 @@ describe('session service', () => {
     expect(kill).toHaveBeenCalledOnce()
     expect(adapterSessionStore.has('sess-1')).toBe(false)
     expect(updateSession).toHaveBeenCalledWith('sess-1', { status: 'terminated' })
+    expect(updateSession.mock.invocationCallOrder[0]).toBeLessThan(kill.mock.invocationCallOrder[0]!)
     expect(vi.mocked(notifySessionUpdated)).toHaveBeenCalledWith(
       'sess-1',
       expect.objectContaining({
@@ -311,7 +315,8 @@ describe('session service', () => {
       historySeedPending: false
     })
 
-    await processUserMessage('sess-1', 'wake up')
+    const clientActionId = 'client-action-00000000-0000-4000-8000-000000000001'
+    await processUserMessage('sess-1', 'wake up', { clientActionId })
 
     const command = JSON.parse(
       await readFile(path.join(migratedRuntimeRoot, 'sessions', 'sess-1', 'commands.jsonl'), 'utf8')
@@ -327,6 +332,7 @@ describe('session service', () => {
     }
 
     expect(command).toEqual(expect.objectContaining({
+      commandId: clientActionId,
       content: 'wake up',
       message: 'wake up',
       sessionId: 'sess-1',
@@ -358,6 +364,7 @@ describe('session service', () => {
         status: 'running'
       })
     )
+    expect(updateSession.mock.invocationCallOrder[0]).toBeLessThan(saveMessage.mock.invocationCallOrder[0]!)
     expect(getMessages).not.toHaveBeenCalled()
     expect(adapterSessionStore.has('sess-1')).toBe(false)
   })

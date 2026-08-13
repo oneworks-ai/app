@@ -23,6 +23,8 @@
 
 聊天本地媒体必须复用上述 resource 链路。普通 workspace route 只允许当前 workspace；只有 session-scoped route 可以额外读取产品认可的 `/tmp/oneworks-cua` artifact 根。不要新增接收任意绝对路径的文件代理，也不要绕过 canonical path、symlink 和 regular-file 检查。
 
+`sessions/:id/messages` 与 `sessions/:id/queued-messages` 的匿名 `clientActionId` 只接受闭合的 `client-action-*` 格式，并只用于 user turn / queue item / runtime command correlation；不得携带 prompt 或成为诊断维度。queued item dispatch 时必须把同一 ID 投影为真实 user turn ID。GET history 必须先读取 message window，再读取一次最新 session 状态，保持与 session service 的“running 先于 action message 持久化”因果约束一致，同时避免热路径的重复 session 查询。
+
 ## Agent Room Route
 
 `agent-rooms.ts` 只做这些事：

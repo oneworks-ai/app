@@ -760,6 +760,9 @@ export const createDesktopApp = () => {
       markDesktopCoreReady: () => {
         startupDiagnostics?.stage('core.ready')
       },
+      markDesktopFirstActionMilestone: (_windowRecord, milestone, sourceId) => {
+        startupDiagnostics?.markFirstActionMilestone(milestone, sourceId)
+      },
       markDesktopUiReady: () => startupDiagnostics?.stage('ui.ready'),
       markWorkspaceStartupWindowReady: windowManager.markWorkspaceStartupWindowReady,
       openKeyboardShortcutsSettings,

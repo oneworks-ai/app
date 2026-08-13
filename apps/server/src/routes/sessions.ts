@@ -142,6 +142,13 @@ export function sessionsRouter(): Router {
   const isSessionPermissionMode = (value: unknown): value is SessionPermissionMode => (
     typeof value === 'string' && sessionPermissionModes.has(value as SessionPermissionMode)
   )
+  const normalizeClientActionId = (value: unknown) => {
+    if (value === undefined) return undefined
+    if (typeof value !== 'string' || !/^client-action-[A-Za-z0-9-]{16,96}$/.test(value)) {
+      throw badRequest('Invalid client action ID', undefined, 'invalid_client_action_id')
+    }
+    return value
+  }
 
   const parsePositiveInt = (value?: string) => {
     if (value == null) {
@@ -508,12 +515,6 @@ export function sessionsRouter(): Router {
       beforeId?: string
       limit?: string
     }
-    const session = db.getSession(id)
-    if (session == null) {
-      throw notFound('Session not found', { id }, 'session_not_found')
-    }
-    const interaction = getSessionInteraction(id)
-
     const parsedLimit = parseLimit(limit)
     const parsedBeforeId = parsePositiveInt(beforeId)
     const parsedAfterId = parsePositiveInt(afterId)
@@ -527,6 +528,11 @@ export function sessionsRouter(): Router {
           limit: parsedLimit ?? 200
         }
     )
+    const session = db.getSession(id)
+    if (session == null) {
+      throw notFound('Session not found', { id }, 'session_not_found')
+    }
+    const interaction = getSessionInteraction(id)
     ctx.body = {
       cursor: messageWindow.cursor,
       messages: messageWindow.messages,
@@ -543,11 +549,17 @@ export function sessionsRouter(): Router {
       throw notFound('Session not found', { id }, 'session_not_found')
     }
 
-    const body = ctx.request.body as { content?: unknown; text?: unknown; permissionMode?: unknown }
+    const body = ctx.request.body as {
+      clientActionId?: unknown
+      content?: unknown
+      permissionMode?: unknown
+      text?: unknown
+    }
     const content = normalizeMessageContent(body)
     if (content == null) {
       throw badRequest('Message content cannot be empty', undefined, 'empty_message_content')
     }
+    const clientActionId = normalizeClientActionId(body.clientActionId)
 
     if (body.permissionMode !== undefined) {
       if (!isSessionPermissionMode(body.permissionMode)) {
@@ -563,7 +575,10 @@ export function sessionsRouter(): Router {
       }
     }
 
-    void processUserMessage(id, content).catch(() => undefined)
+    const processing = clientActionId == null
+      ? processUserMessage(id, content)
+      : processUserMessage(id, content, { clientActionId })
+    void processing.catch(() => undefined)
     ctx.body = { ok: true }
   })
 
@@ -713,6 +728,7 @@ export function sessionsRouter(): Router {
       permissionMode,
       adapter,
       account,
+      clientActionId: rawClientActionId,
       tags,
       updateSkills,
       workspace
@@ -731,6 +747,7 @@ export function sessionsRouter(): Router {
       permissionMode?: 'default' | 'acceptEdits' | 'plan' | 'dontAsk' | 'bypassPermissions'
       adapter?: string
       account?: string
+      clientActionId?: unknown
       tags?: string[]
       updateSkills?: boolean
       workspace?: {
@@ -744,6 +761,7 @@ export function sessionsRouter(): Router {
         }
       }
     }
+    const clientActionId = normalizeClientActionId(rawClientActionId)
     let session: Awaited<ReturnType<typeof createSessionWithInitialMessage>>
     try {
       session = await createSessionWithInitialMessage({
@@ -762,6 +780,7 @@ export function sessionsRouter(): Router {
         permissionMode,
         adapter,
         account,
+        ...(clientActionId == null ? {} : { clientActionId }),
         tags: normalizeTags(tags),
         updateSkills: updateSkills === true,
         workspace: workspace == null
@@ -1013,11 +1032,16 @@ export function sessionsRouter(): Router {
 
     if (body.type === 'stop') {
       const latestSession = db.getSession(id)
+      const terminalStatus = latestSession?.status === 'failed'
+        ? 'failed'
+        : latestSession?.status === 'terminated'
+        ? 'terminated'
+        : 'completed'
       void finalizeSessionWorkspaceChangeTracking(
         id,
-        latestSession?.status === 'failed' ? 'failed' : 'completed'
+        terminalStatus
       )
-      if (latestSession?.status !== 'failed') {
+      if (terminalStatus === 'completed') {
         updateAndNotifySession(id, { status: 'completed' })
       }
       ctx.body = { ok: true }
@@ -1061,10 +1085,12 @@ export function sessionsRouter(): Router {
 
   router.post('/:id/queued-messages', (ctx) => {
     const { id } = ctx.params as { id: string }
-    const { mode, content } = ctx.request.body as {
+    const { clientActionId: rawClientActionId, mode, content } = ctx.request.body as {
+      clientActionId?: unknown
       mode?: SessionQueuedMessageMode
       content?: ChatMessageContent[]
     }
+    const clientActionId = normalizeClientActionId(rawClientActionId)
 
     if (mode !== 'steer' && mode !== 'next') {
       throw badRequest('Invalid queued message mode', { mode }, 'invalid_queued_message_mode')
@@ -1078,7 +1104,12 @@ export function sessionsRouter(): Router {
       throw notFound('Session not found', { id }, 'session_not_found')
     }
 
-    const queuedMessage = createSessionQueuedMessage(id, mode, content)
+    const queuedMessage = createSessionQueuedMessage(
+      id,
+      mode,
+      content,
+      clientActionId == null ? undefined : { clientActionId }
+    )
     ctx.body = { queuedMessage, queuedMessages: listSessionQueuedMessages(id) }
   })
 

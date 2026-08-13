@@ -89,15 +89,27 @@ describe('connection manager', () => {
   it('reconnects a subscribed session after the server closes the socket', () => {
     const manager = new ConnectionManager()
     const onClose = vi.fn()
+    const onConnectionOpen = vi.fn()
     const onOpen = vi.fn()
 
-    manager.connect('session-1', { onClose, onOpen }, { model: 'gpt-5.2' })
+    manager.connect('session-1', { onClose, onConnectionOpen, onOpen }, { model: 'gpt-5.2' })
 
     expect(mockSockets).toHaveLength(1)
     expect(mockSockets[0].url).toContain('sessionId=session-1')
     expect(mockSockets[0].url).toContain('model=gpt-5.2')
 
     mockSockets[0].open()
+    expect(onConnectionOpen).toHaveBeenCalledTimes(1)
+
+    const reusedConnectionOpen = vi.fn()
+    const reusedOpen = vi.fn()
+    manager.connect('session-1', {
+      onConnectionOpen: reusedConnectionOpen,
+      onOpen: reusedOpen
+    }, { model: 'gpt-5.2' })
+    expect(reusedOpen).toHaveBeenCalledTimes(1)
+    expect(reusedConnectionOpen).not.toHaveBeenCalled()
+
     mockSockets[0].close(1006)
 
     expect(onClose).toHaveBeenCalledOnce()
@@ -113,6 +125,8 @@ describe('connection manager', () => {
 
     mockSockets[1].open()
     expect(onOpen).toHaveBeenCalledTimes(2)
+    expect(onConnectionOpen).toHaveBeenCalledTimes(2)
+    expect(reusedConnectionOpen).toHaveBeenCalledTimes(1)
   })
 
   it('does not reconnect after the last subscriber leaves', () => {
@@ -126,6 +140,28 @@ describe('connection manager', () => {
     vi.advanceTimersByTime(1000)
 
     expect(mockSockets).toHaveLength(1)
+  })
+
+  it('starts a new observation generation when an open socket is reused after a subscriber gap', () => {
+    const manager = new ConnectionManager()
+    const firstConnectionOpen = vi.fn()
+    const cleanup = manager.connect('session-1', { onConnectionOpen: firstConnectionOpen })
+
+    mockSockets[0].open()
+    expect(firstConnectionOpen).toHaveBeenCalledTimes(1)
+
+    cleanup()
+
+    const resumedConnectionOpen = vi.fn()
+    const resumedOpen = vi.fn()
+    manager.connect('session-1', {
+      onConnectionOpen: resumedConnectionOpen,
+      onOpen: resumedOpen
+    })
+
+    expect(mockSockets).toHaveLength(1)
+    expect(resumedConnectionOpen).toHaveBeenCalledTimes(1)
+    expect(resumedOpen).toHaveBeenCalledTimes(1)
   })
 
   it('does not reconnect when a subscriber marks the close as unrecoverable', () => {
@@ -177,5 +213,21 @@ describe('connection manager', () => {
 
     expect(fatalSessionError).toBe(true)
     expect(mockSockets).toHaveLength(1)
+  })
+
+  it('does not broadcast lifecycle events from a replaced socket generation', () => {
+    const manager = new ConnectionManager()
+    const onClose = vi.fn()
+    const onConnectionOpen = vi.fn()
+    manager.connect('session-1', { onClose, onConnectionOpen }, { model: 'model-a' })
+    mockSockets[0].open()
+    expect(onConnectionOpen).toHaveBeenCalledTimes(1)
+
+    manager.connect('session-1', {}, { model: 'model-b' })
+
+    expect(mockSockets).toHaveLength(2)
+    expect(onClose).not.toHaveBeenCalled()
+    mockSockets[1].open()
+    expect(onConnectionOpen).toHaveBeenCalledTimes(2)
   })
 })

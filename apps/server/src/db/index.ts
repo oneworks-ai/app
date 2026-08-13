@@ -318,9 +318,10 @@ export class SqliteDb {
   createSessionQueuedMessage(
     sessionId: string,
     mode: Parameters<typeof this.sessionQueue.create>[1],
-    content: Parameters<typeof this.sessionQueue.create>[2]
+    content: Parameters<typeof this.sessionQueue.create>[2],
+    options?: Parameters<typeof this.sessionQueue.create>[3]
   ) {
-    return this.sessionQueue.create(sessionId, mode, content)
+    return this.sessionQueue.create(sessionId, mode, content, options)
   }
 
   updateSessionQueuedMessage(

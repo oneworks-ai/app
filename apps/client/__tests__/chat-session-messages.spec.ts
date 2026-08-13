@@ -629,6 +629,7 @@ describe('chat session interaction state', () => {
 
   it('does not let an optimistic creating session hide runtime history state', () => {
     const creating = createOptimisticSessionCreation({
+      clientActionId: 'client-action-00000000-0000-4000-8000-000000000001',
       id: 'session-creating',
       initialMessage: 'hello',
       options: { id: 'session-creating' }

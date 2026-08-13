@@ -89,6 +89,7 @@ const sourceFrom = (serviceName: string, eventName: string): RelayDiagnosticSour
 const categoryFrom = (eventName: string, operationName: string | undefined): RelayDiagnosticCategory => {
   const value = `${eventName}.${operationName ?? ''}`.toLowerCase()
   if (value.includes('javascript.error') || value.includes('exception')) return 'error'
+  if (operationName === 'oneworks.app.first_action') return 'first-action'
   if (value.includes('startup') || value.includes('launch')) return 'startup'
   if (value.includes('auth') || value.includes('login')) return 'auth'
   if (value.includes('tool')) return 'tool'

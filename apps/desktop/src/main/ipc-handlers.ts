@@ -4,8 +4,8 @@ import process from 'node:process'
 import { clipboard, ipcMain, nativeImage, session, shell } from 'electron'
 import type { WebContents } from 'electron'
 
-import { normalizeDesktopWorkspaceStartupReadiness } from '@oneworks/types'
-import type { DesktopWorkspaceStartupReadiness } from '@oneworks/types'
+import { normalizeDesktopFirstActionMilestone, normalizeDesktopWorkspaceStartupReadiness } from '@oneworks/types'
+import type { DesktopFirstActionMilestone, DesktopWorkspaceStartupReadiness } from '@oneworks/types'
 
 import {
   interactionPanelWebviewPartition,
@@ -34,6 +34,7 @@ import {
 } from './browser-data-sync'
 import {
   DESKTOP_CORE_READY_CHANNEL,
+  DESKTOP_FIRST_ACTION_MILESTONE_CHANNEL,
   DESKTOP_UI_READY_CHANNEL,
   MANAGER_CONNECTION_CHANNEL,
   SERVER_READY_TIMEOUT_MS,
@@ -253,6 +254,11 @@ interface IpcHandlersInput {
   listCurrentWorkspaceFileOpeners: (windowRecord: WindowRecord) => Promise<unknown>
   listWorkspaceFileOpeners: (workspaceFolder: string) => Promise<unknown>
   markDesktopCoreReady: (windowRecord: WindowRecord) => void
+  markDesktopFirstActionMilestone: (
+    windowRecord: WindowRecord,
+    milestone: DesktopFirstActionMilestone,
+    sourceId: string
+  ) => void
   markDesktopUiReady: (windowRecord: WindowRecord) => void
   markWorkspaceStartupWindowReady: (
     windowRecord: WindowRecord,
@@ -309,6 +315,7 @@ export const registerIpcHandlers = ({
   listCurrentWorkspaceFileOpeners,
   listWorkspaceFileOpeners,
   markDesktopCoreReady,
+  markDesktopFirstActionMilestone,
   markDesktopUiReady,
   markWorkspaceStartupWindowReady,
   openKeyboardShortcutsSettings,
@@ -402,6 +409,27 @@ export const registerIpcHandlers = ({
     const windowRecord = findWindowRecordForWebContents(event.sender)
     if (windowRecord == null || !isWindowRecordUsable(windowRecord)) return
     markDesktopCoreReady(windowRecord)
+  })
+
+  ipcMain.handle(DESKTOP_FIRST_ACTION_MILESTONE_CHANNEL, (event, input: unknown) => {
+    const windowRecord = findWindowRecordForWebContents(event.sender)
+    const milestone = normalizeDesktopFirstActionMilestone(input)
+    const senderFrame = event.senderFrame
+    if (
+      windowRecord == null ||
+      !isWindowRecordUsable(windowRecord) ||
+      windowRecord.kind !== 'workspace' ||
+      milestone == null ||
+      senderFrame == null
+    ) {
+      return
+    }
+
+    markDesktopFirstActionMilestone(
+      windowRecord,
+      milestone,
+      `${event.sender.id}:${senderFrame.processId}:${senderFrame.frameToken}`
+    )
   })
 
   ipcMain.handle(WORKSPACE_STARTUP_READY_CHANNEL, (event, input: unknown) => {

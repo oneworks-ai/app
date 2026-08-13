@@ -4,6 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 
 import { resolveAuthContext } from '../auth/permissions.js'
 import { deviceTokenMatches } from '../devices/private-metadata.js'
+import { summarizeFirstActionEvents } from '../diagnostics/first-action-summary.js'
 import { normalizeOtlpModelUsage } from '../diagnostics/model-usage.js'
 import { normalizeOtlpLogs } from '../diagnostics/otlp.js'
 import { appendRelayDiagnosticEvents, diagnosticRetention } from '../diagnostics/store.js'
@@ -127,6 +128,7 @@ const summarizeEvents = (events: RelayDiagnosticEvent[]) => {
   const startupDurations = startup.flatMap(operation => (
     operation.readyDurationMs == null ? [] : [operation.readyDurationMs]
   ))
+  const firstAction = summarizeFirstActionEvents(events)
   return {
     affectedUsers: new Set(events.map(event => event.userId)).size,
     byFailure: countBy(events, event => event.errorCode),
@@ -136,6 +138,7 @@ const summarizeEvents = (events: RelayDiagnosticEvent[]) => {
     bySource: countBy(events, event => event.source),
     byVersion: countBy(events, event => event.serviceVersion),
     errorEvents: events.filter(event => event.severity === 'ERROR' || event.errorCode != null).length,
+    firstAction,
     startup: {
       attempts: startupOperations.size,
       p50DurationMs: percentile(startupDurations, 0.5),
@@ -160,6 +163,8 @@ const diagnosticSeries = (events: RelayDiagnosticEvent[]) => {
       activeUsers: summary.affectedUsers,
       date,
       errorEvents: summary.errorEvents,
+      firstActionAttempts: summary.firstAction.attempts,
+      firstActionSuccessRate: summary.firstAction.successRate,
       startupAttempts: summary.startup.attempts,
       startupSuccessRate: summary.startup.successRate,
       totalEvents: summary.total

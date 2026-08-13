@@ -58,6 +58,7 @@ export async function createServerRuntimeSession(params: {
   account?: string
   adapter?: string
   channelContext?: ChannelRuntimeContext
+  clientActionId?: string
   content?: ServerRuntimeSessionContent
   cwd: string
   effort?: EffortLevel
@@ -146,7 +147,7 @@ export async function createServerRuntimeSession(params: {
     type: 'start',
     priority: 20,
     source: 'web',
-    commandId: `session-start-${uuidv4()}`,
+    commandId: params.clientActionId ?? `session-start-${uuidv4()}`,
     content: message,
     message,
     title,

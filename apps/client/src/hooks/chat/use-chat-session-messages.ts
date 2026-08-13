@@ -15,6 +15,12 @@ import type { SessionCreationProgressEvent, SessionInfo } from '@oneworks/types'
 
 import { getSessionMessages } from '#~/api.js'
 import { connectionManager } from '#~/connectionManager.js'
+import {
+  markDesktopFirstActionSessionMessageObserved,
+  markDesktopFirstActionSessionSourceReset,
+  markDesktopFirstActionSessionStatusObserved,
+  restoreDesktopFirstActionFromSessionHistory
+} from '#~/diagnostics/desktop-first-action-runtime'
 import { isDeletedSessionUpdate, updateSessionCaches } from '#~/hooks/session-subscription-cache'
 import type { SessionUpdate } from '#~/hooks/session-subscription-cache'
 
@@ -690,6 +696,7 @@ export function useChatSessionMessages({
       }
 
       const currentMessages = restoreChatMessagesFromSessionHistoryEvents(events)
+      restoreDesktopFirstActionFromSessionHistory(sessionId, currentMessages, res.session?.status)
       const currentSessionCompactionEvents = restoreSessionCompactionEventsFromHistoryEvents(
         events,
         res.session?.status
@@ -1094,6 +1101,9 @@ export function useChatSessionMessages({
       }
 
       cleanup = connectionManager.connect(session.id, {
+        onConnectionOpen() {
+          markDesktopFirstActionSessionSourceReset(session.id)
+        },
         onOpen() {
           expectedCloseRef.current = false
           fatalSessionErrorRef.current = false
@@ -1156,8 +1166,18 @@ export function useChatSessionMessages({
             const updatedSession = data.session as SessionUpdate
             if (isDeletedSessionUpdate(updatedSession)) {
               removeSessionViewCache(updatedSession.id)
-            } else if (isSessionCompactionCompleteStatus(updatedSession.status)) {
-              updateSessionCompactionEvents(markSessionCompactionsCompressed)
+            } else {
+              if (updatedSession.id === session.id) {
+                if (
+                  updatedSession.status === 'completed' || updatedSession.status === 'failed' ||
+                  updatedSession.status === 'terminated'
+                ) {
+                  markDesktopFirstActionSessionStatusObserved(session.id, updatedSession.status)
+                }
+              }
+              if (isSessionCompactionCompleteStatus(updatedSession.status)) {
+                updateSessionCompactionEvents(markSessionCompactionsCompressed)
+              }
             }
             if (shouldRefreshHistoryForSessionUpdate(session, updatedSession)) {
               void refreshHistory({ updateReadiness: false })
@@ -1178,6 +1198,7 @@ export function useChatSessionMessages({
 
           if (data.type === 'message') {
             const message = getChatMessageFromSessionHistoryEvent(data)
+            markDesktopFirstActionSessionMessageObserved(session.id, message)
             if (message?.role === 'assistant') {
               applySessionOperationInfo(null, session.id)
               updateSessionCompactionEvents(markSessionCompactionsCompressed)
@@ -1252,6 +1273,7 @@ export function useChatSessionMessages({
           })
         },
         onClose(event) {
+          markDesktopFirstActionSessionSourceReset(session.id)
           if (isDisposed) return
           if (expectedCloseRef.current) {
             expectedCloseRef.current = false

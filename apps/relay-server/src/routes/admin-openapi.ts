@@ -19,6 +19,15 @@ const diagnosticCountMap = {
   additionalProperties: { type: 'integer', minimum: 0 }
 }
 
+const diagnosticDurationPercentiles = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    p50DurationMs: { oneOf: [{ type: 'number', minimum: 0 }, { type: 'null' }] },
+    p95DurationMs: { oneOf: [{ type: 'number', minimum: 0 }, { type: 'null' }] }
+  }
+}
+
 const jsonResponse = (description: string, schema: JsonObject) => ({
   content: {
     'application/json': {
@@ -546,7 +555,7 @@ const buildAllComponents = (bearerFormat: string) => ({
         eventName: { type: 'string' },
         category: {
           type: 'string',
-          enum: ['startup', 'error', 'command', 'agent', 'network', 'tool', 'auth', 'other']
+          enum: ['startup', 'first-action', 'error', 'command', 'agent', 'network', 'tool', 'auth', 'other']
         },
         severity: { type: 'string' },
         outcome: nullableString,
@@ -577,7 +586,8 @@ const buildAllComponents = (bearerFormat: string) => ({
         'byFingerprint',
         'byVersion',
         'byPlatform',
-        'startup'
+        'startup',
+        'firstAction'
       ],
       properties: {
         affectedUsers: { type: 'integer', minimum: 0 },
@@ -588,6 +598,29 @@ const buildAllComponents = (bearerFormat: string) => ({
         bySource: diagnosticCountMap,
         byVersion: diagnosticCountMap,
         errorEvents: { type: 'integer', minimum: 0 },
+        firstAction: {
+          type: 'object',
+          additionalProperties: false,
+          required: [
+            'attempts',
+            'pendingAttempts',
+            'appStartToSubmit',
+            'submitToAccepted',
+            'submitToResponse',
+            'submitToSuccess',
+            'terminalAttempts'
+          ],
+          properties: {
+            appStartToSubmit: diagnosticDurationPercentiles,
+            attempts: { type: 'integer', minimum: 0 },
+            pendingAttempts: { type: 'integer', minimum: 0 },
+            submitToAccepted: diagnosticDurationPercentiles,
+            submitToResponse: diagnosticDurationPercentiles,
+            submitToSuccess: diagnosticDurationPercentiles,
+            successRate: { oneOf: [{ type: 'number', minimum: 0, maximum: 1 }, { type: 'null' }] },
+            terminalAttempts: { type: 'integer', minimum: 0 }
+          }
+        },
         startup: {
           type: 'object',
           additionalProperties: false,
@@ -605,11 +638,20 @@ const buildAllComponents = (bearerFormat: string) => ({
     RelayDiagnosticSeriesPoint: {
       type: 'object',
       additionalProperties: false,
-      required: ['activeUsers', 'date', 'errorEvents', 'startupAttempts', 'totalEvents'],
+      required: [
+        'activeUsers',
+        'date',
+        'errorEvents',
+        'firstActionAttempts',
+        'startupAttempts',
+        'totalEvents'
+      ],
       properties: {
         activeUsers: { type: 'integer', minimum: 0 },
         date: { type: 'string', format: 'date' },
         errorEvents: { type: 'integer', minimum: 0 },
+        firstActionAttempts: { type: 'integer', minimum: 0 },
+        firstActionSuccessRate: { oneOf: [{ type: 'number', minimum: 0, maximum: 1 }, { type: 'null' }] },
         startupAttempts: { type: 'integer', minimum: 0 },
         startupSuccessRate: { oneOf: [{ type: 'number', minimum: 0, maximum: 1 }, { type: 'null' }] },
         totalEvents: { type: 'integer', minimum: 0 }

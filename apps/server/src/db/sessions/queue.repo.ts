@@ -54,7 +54,12 @@ export function createSessionQueueRepo(db: SqliteDatabase) {
     return row == null ? undefined : mapRow(row)
   }
 
-  const create = (sessionId: string, mode: SessionQueuedMessageMode, content: ChatMessageContent[]) => {
+  const create = (
+    sessionId: string,
+    mode: SessionQueuedMessageMode,
+    content: ChatMessageContent[],
+    options: { id?: string } = {}
+  ) => {
     const now = Date.now()
     const maxOrderStmt = db.prepare(`
       SELECT MAX(orderIndex) as orderIndex
@@ -64,7 +69,7 @@ export function createSessionQueueRepo(db: SqliteDatabase) {
     const current = maxOrderStmt.get<{ orderIndex: number | null }>(sessionId, mode)
     const orderIndex = (current?.orderIndex ?? -1) + 1
     const queuedMessage: SessionQueuedMessage = {
-      id: uuidv4(),
+      id: options.id ?? uuidv4(),
       sessionId,
       mode,
       content,
@@ -184,15 +189,7 @@ export function createSessionQueueRepo(db: SqliteDatabase) {
     return list(sessionId).filter(item => item.mode === mode)
   }
 
-  return {
-    list,
-    get,
-    create,
-    update,
-    move,
-    remove,
-    reorder
-  }
+  return { create, get, list, move, remove, reorder, update }
 }
 
 export type SessionQueueRepo = ReturnType<typeof createSessionQueueRepo>

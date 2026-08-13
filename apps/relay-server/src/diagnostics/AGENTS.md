@@ -7,5 +7,6 @@ This module is the privacy boundary for standard OTLP/HTTP diagnostic ingestion.
 - `model-usage.ts` recognizes only `oneworks.model.usage` and Codex `response.completed` usage records, projecting safe model/service dimensions and numeric counters into the separate team usage ledger.
 - `store.ts` normalizes persisted facts and applies retention.
 - Correlation identifiers from clients are pseudonymized before storage. The authenticated Relay user and optional owned device are the only accepted identity source.
+- `oneworks.app.first_action` uses the `first-action` category. Its summary keeps submit→accepted/response/success separate and joins app-start→submit only through the pseudonymous app session correlation; correlation IDs never become metric dimensions. Success rate uses terminal success/error/cancelled/abandoned attempts only, while genuinely in-flight operations remain visible as pending attempts.
 - Team attribution comes from a team-scoped token, a validated `x-oneworks-team-id`, or an unambiguous single active membership. Never trust a client attribute for `teamId`.
 - Route handling and admin queries live in `src/routes/diagnostics.ts`.

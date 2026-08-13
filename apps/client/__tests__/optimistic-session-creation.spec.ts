@@ -16,6 +16,7 @@ import {
 describe('optimistic session creation', () => {
   it('creates a temporary session and initial user message from the first send', () => {
     const creation = createOptimisticSessionCreation({
+      clientActionId: 'client-action-00000000-0000-4000-8000-000000000001',
       id: 'session-1',
       initialMessage: 'Build an optimistic session flow',
       model: 'test-model',
@@ -53,6 +54,7 @@ describe('optimistic session creation', () => {
     }
     const creation = markOptimisticSessionCreationFailed(
       createOptimisticSessionCreation({
+        clientActionId: 'client-action-00000000-0000-4000-8000-000000000001',
         id: 'session-1',
         initialMessage: 'Retry me',
         options: { id: 'session-1' }
@@ -70,6 +72,7 @@ describe('optimistic session creation', () => {
   it('lets real session state replace failed optimistic state after the backend succeeds', () => {
     const creation = markOptimisticSessionCreationFailed(
       createOptimisticSessionCreation({
+        clientActionId: 'client-action-00000000-0000-4000-8000-000000000001',
         id: 'session-1',
         initialMessage: 'hi',
         options: { id: 'session-1' }
@@ -93,6 +96,7 @@ describe('optimistic session creation', () => {
 
   it('keeps the optimistic message while only non-chat events have been persisted', () => {
     const creation = createOptimisticSessionCreation({
+      clientActionId: 'client-action-00000000-0000-4000-8000-000000000001',
       id: 'session-1',
       initialMessage: 'hi',
       options: { id: 'session-1' }
@@ -113,6 +117,7 @@ describe('optimistic session creation', () => {
 
   it('resolves a running optimistic session after the initial user message is projected', () => {
     const creation = createOptimisticSessionCreation({
+      clientActionId: 'client-action-00000000-0000-4000-8000-000000000001',
       id: 'session-1',
       initialMessage: 'hi',
       options: { id: 'session-1' }

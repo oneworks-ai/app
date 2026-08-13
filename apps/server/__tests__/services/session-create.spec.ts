@@ -453,6 +453,17 @@ describe('createSessionWithInitialMessage', () => {
     })
   })
 
+  it('passes the client action ID into the initial runtime command', async () => {
+    const clientActionId = 'client-action-00000000-0000-4000-8000-000000000001'
+
+    await createSessionWithInitialMessage({
+      clientActionId,
+      initialMessage: 'hello'
+    })
+
+    expect(mocks.createServerRuntimeSession).toHaveBeenCalledWith(expect.objectContaining({ clientActionId }))
+  })
+
   it('starts file-only initial content through runtime store', async () => {
     await createSessionWithInitialMessage({
       title: 'Demo',

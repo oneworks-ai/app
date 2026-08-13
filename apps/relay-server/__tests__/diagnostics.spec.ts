@@ -119,12 +119,19 @@ describe('relay diagnostic ingestion', () => {
     startup.stage('renderer.loaded')
     startup.ready('renderer.ready')
     startup.stable()
+    const firstAction = client.startOperation('oneworks.app.first_action')
+    firstAction.stage('first.submit')
+    firstAction.stage('submit.accepted')
+    firstAction.ready('first.response.received')
+    firstAction.stage('first.success')
+    firstAction.succeed()
     await client.flush()
 
-    const queried = await requestJson(baseUrl, '/api/admin/diagnostics?userId=member-1&category=startup', {
+    const queried = await requestJson(baseUrl, '/api/admin/diagnostics?userId=member-1', {
       headers: authHeaders('admin-token')
     })
-    const events = queried.body.events as RelayDiagnosticEvent[]
+    const allEvents = queried.body.events as RelayDiagnosticEvent[]
+    const events = allEvents.filter(event => event.category === 'startup')
 
     expect(queried.response.status).toBe(200)
     expect(events).toHaveLength(5)
@@ -143,16 +150,41 @@ describe('relay diagnostic ingestion', () => {
         p95DurationMs: expect.any(Number),
         successRate: 1
       },
-      total: 5
+      total: 12
     })
     expect(queried.body.series).toMatchObject([{
       activeUsers: 1,
       date: expect.any(String),
       startupAttempts: 1,
       startupSuccessRate: 1,
-      totalEvents: 5
+      totalEvents: 12
     }])
     expect(JSON.stringify(events)).not.toContain('private-live-session')
+
+    expect(allEvents.filter(event => event.category === 'first-action')).toHaveLength(7)
+    const firstActionSummary = (queried.body.summary as { firstAction: unknown }).firstAction
+    expect(firstActionSummary).toMatchObject({
+      appStartToSubmit: {
+        p50DurationMs: expect.any(Number),
+        p95DurationMs: expect.any(Number)
+      },
+      attempts: 1,
+      pendingAttempts: 0,
+      submitToAccepted: {
+        p50DurationMs: expect.any(Number),
+        p95DurationMs: expect.any(Number)
+      },
+      submitToResponse: {
+        p50DurationMs: expect.any(Number),
+        p95DurationMs: expect.any(Number)
+      },
+      submitToSuccess: {
+        p50DurationMs: expect.any(Number),
+        p95DurationMs: expect.any(Number)
+      },
+      successRate: 1,
+      terminalAttempts: 1
+    })
   })
 
   it('accepts OTLP/HTTP JSON, binds authenticated identity, and stores only safe facts', async () => {

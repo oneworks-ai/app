@@ -1267,6 +1267,32 @@ describe('startAdapterSession', () => {
     expect(mocks.finalizeSessionWorkspaceChangeTracking).toHaveBeenCalledWith('sess-1', 'failed')
   })
 
+  it('keeps the session terminated when an adapter stop arrives after user termination', async () => {
+    mocks.run.mockImplementationOnce(async (_options: unknown, adapterOptions: any) => {
+      currentSession = { ...currentSession, status: 'terminated' }
+      adapterOptions.onEvent({
+        type: 'stop',
+        data: undefined
+      })
+      return {
+        session: {
+          emit: vi.fn(),
+          kill: vi.fn()
+        }
+      }
+    })
+
+    await startAdapterSession('sess-1', {
+      model: 'gpt-4o',
+      adapter: 'codex',
+      permissionMode: 'default'
+    })
+
+    expect(currentSession.status).toBe('terminated')
+    expect(updateSession).not.toHaveBeenCalledWith('sess-1', { status: 'completed' })
+    expect(mocks.finalizeSessionWorkspaceChangeTracking).toHaveBeenCalledWith('sess-1', 'terminated')
+  })
+
   it('preserves the full model selector after adapter init reports a bare model id', async () => {
     let onEvent: ((event: any) => void) | undefined
 

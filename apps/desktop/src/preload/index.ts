@@ -3,8 +3,8 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 import { mountOneWorksIconLoader } from '@oneworks/icon/loader'
 import type { OneWorksIconLoaderHandle } from '@oneworks/icon/loader'
-import { normalizeDesktopWorkspaceStartupReadiness } from '@oneworks/types'
-import type { DesktopWorkspaceStartupReadyInput } from '@oneworks/types'
+import { normalizeDesktopFirstActionMilestone, normalizeDesktopWorkspaceStartupReadiness } from '@oneworks/types'
+import type { DesktopFirstActionMilestoneInput, DesktopWorkspaceStartupReadyInput } from '@oneworks/types'
 
 import { WORKSPACE_STARTUP_ICON_SEED } from '../workspace-startup-icon'
 
@@ -13,6 +13,7 @@ const browserControlOpenPageChannel = 'desktop:browser-control:open-page'
 const browserControlPageCommandChannel = 'desktop:browser-control:page-command'
 const desktopSettingsChannel = 'desktop:settings'
 const desktopCoreReadyChannel = 'desktop:startup-core-ready'
+const desktopFirstActionMilestoneChannel = 'desktop:first-action-milestone'
 const desktopUiReadyChannel = 'desktop:startup-ui-ready'
 const desktopUpdateStatusChannel = 'desktop:update-status'
 const globalInterfaceLanguageChannel = 'desktop:global-interface-language'
@@ -244,6 +245,13 @@ const markWorkspaceStartupReady = (input?: DesktopWorkspaceStartupReadyInput) =>
   void dismissWorkspaceStartupOverlay('complete')
 }
 
+const markDesktopFirstActionMilestone = (input: DesktopFirstActionMilestoneInput) => {
+  const milestone = normalizeDesktopFirstActionMilestone(input)
+  if (milestone == null) return
+
+  void ipcRenderer.invoke(desktopFirstActionMilestoneChannel, { milestone }).catch(() => undefined)
+}
+
 applyInitialDesktopThemeMode()
 installWorkspaceStartupOverlay()
 
@@ -289,6 +297,7 @@ contextBridge.exposeInMainWorld('oneworksDesktop', {
   listBrowserPasswordImportSources: () => ipcRenderer.invoke('desktop:list-browser-password-import-sources'),
   listSavedPasswords: (query?: string) => ipcRenderer.invoke('desktop:list-saved-passwords', query),
   markDesktopCoreReady: () => ipcRenderer.invoke(desktopCoreReadyChannel),
+  markDesktopFirstActionMilestone,
   markDesktopUiReady: () => ipcRenderer.invoke(desktopUiReadyChannel),
   revealWorkspaceStartupSurface,
   authenticateSavedPasswordsAccess: (reason?: string) =>

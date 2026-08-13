@@ -729,6 +729,7 @@ export type RelayDiagnosticCategory =
   | 'auth'
   | 'command'
   | 'error'
+  | 'first-action'
   | 'network'
   | 'other'
   | 'startup'

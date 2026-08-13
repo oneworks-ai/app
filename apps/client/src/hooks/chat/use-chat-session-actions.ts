@@ -22,6 +22,11 @@ import {
   terminateSession,
   updateQueuedMessage
 } from '#~/api.js'
+import {
+  beginDesktopFirstAction,
+  markDesktopFirstActionAccepted,
+  markDesktopFirstActionSubmitted
+} from '#~/diagnostics/desktop-first-action-runtime'
 import { useSenderHeaderQueryState } from '#~/hooks/use-sender-header-query-state.js'
 import { buildMessageBranchSearch } from '#~/utils/message-branch-session'
 import { createSocket } from '#~/ws.js'
@@ -352,7 +357,10 @@ export function useChatSessionActions({
         request.initialContent,
         request.model,
         request.options,
-        { signal: abortController.signal }
+        {
+          clientActionId: request.clientActionId,
+          signal: abortController.signal
+        }
       )
     } finally {
       clearTimeout(timer)
@@ -367,6 +375,9 @@ export function useChatSessionActions({
     }
 
     activeSessionCreationRequests.add(request.id)
+    if (request.clientActionId != null) {
+      markDesktopFirstActionSubmitted(request.id, request.clientActionId)
+    }
     let progressSocket: ReturnType<typeof openCreationProgressSocket> | undefined
     setCreationProgress([])
     try {
@@ -375,12 +386,18 @@ export function useChatSessionActions({
         : undefined
       await progressSocket?.ready
       const { session: newSession } = await createSessionWithTimeout(request)
+      if (request.clientActionId != null) {
+        markDesktopFirstActionAccepted(request.id, request.clientActionId)
+      }
 
       return await handleResolvedSessionCreation(newSession)
     } catch (err) {
       console.error(err)
       const recoveredSession = await resolveCreatedSession(request.id)
       if (recoveredSession != null) {
+        if (request.clientActionId != null) {
+          markDesktopFirstActionAccepted(request.id, request.clientActionId)
+        }
         return await handleResolvedSessionCreation(recoveredSession)
       }
       if (isOptimisticSessionDiscarded(request.id)) {
@@ -476,7 +493,9 @@ export function useChatSessionActions({
 
     if (!session?.id) {
       const id = createOptimisticSessionId()
+      const clientActionId = beginDesktopFirstAction(id)
       startOptimisticSessionCreation({
+        ...(clientActionId == null ? {} : { clientActionId }),
         id,
         title: sessionCreationContext?.title,
         initialMessage: text.trim(),
@@ -487,7 +506,9 @@ export function useChatSessionActions({
     }
 
     try {
-      await sendSessionMessage(session.id, text.trim(), { permissionMode })
+      await sendSessionMessage(session.id, text.trim(), {
+        permissionMode
+      })
       return true
     } catch (err) {
       console.error(err)
@@ -521,7 +542,9 @@ export function useChatSessionActions({
 
     if (!session?.id) {
       const id = createOptimisticSessionId()
+      const clientActionId = beginDesktopFirstAction(id)
       startOptimisticSessionCreation({
+        ...(clientActionId == null ? {} : { clientActionId }),
         id,
         title: sessionCreationContext?.title,
         initialContent: content,
@@ -532,7 +555,9 @@ export function useChatSessionActions({
     }
 
     try {
-      await sendSessionMessage(session.id, content, { permissionMode })
+      await sendSessionMessage(session.id, content, {
+        permissionMode
+      })
       return true
     } catch (err) {
       console.error(err)

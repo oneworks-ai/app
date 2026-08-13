@@ -11,8 +11,11 @@ const mocks = vi.hoisted(() => ({
   branchSessionFromMessage: vi.fn(),
   createQueuedMessage: vi.fn(),
   createSession: vi.fn(),
+  beginDesktopFirstAction: vi.fn(() => 'client-action-00000000-0000-4000-8000-000000000001'),
   deleteQueuedMessage: vi.fn(),
   deleteSession: vi.fn(),
+  markDesktopFirstActionAccepted: vi.fn(),
+  markDesktopFirstActionSubmitted: vi.fn(),
   getSessionMessages: vi.fn(),
   messageError: vi.fn(),
   messageWarning: vi.fn(),
@@ -81,6 +84,12 @@ vi.mock('#~/connectionManager.js', () => ({
     connect: vi.fn(() => vi.fn()),
     send: vi.fn()
   }
+}))
+
+vi.mock('#~/diagnostics/desktop-first-action-runtime', () => ({
+  beginDesktopFirstAction: mocks.beginDesktopFirstAction,
+  markDesktopFirstActionAccepted: mocks.markDesktopFirstActionAccepted,
+  markDesktopFirstActionSubmitted: mocks.markDesktopFirstActionSubmitted
 }))
 
 vi.mock('#~/hooks/use-sender-header-query-state.js', () => ({
@@ -353,6 +362,30 @@ describe('chat session queued message actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.getSessionMessages.mockReturnValue(new Promise(() => {}))
+  })
+
+  it('sends a real session request through the action-aware API boundary', async () => {
+    mocks.sendSessionMessage.mockResolvedValueOnce(undefined)
+    const actions = renderActions()
+
+    await expect(actions.send('hello')).resolves.toBe(true)
+
+    expect(mocks.beginDesktopFirstAction).not.toHaveBeenCalled()
+    expect(mocks.markDesktopFirstActionSubmitted).not.toHaveBeenCalled()
+    expect(mocks.sendSessionMessage).toHaveBeenCalledWith(session.id, 'hello', {
+      permissionMode: 'default'
+    })
+    expect(mocks.markDesktopFirstActionAccepted).not.toHaveBeenCalled()
+
+    mocks.markDesktopFirstActionAccepted.mockClear()
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    mocks.sendSessionMessage.mockRejectedValueOnce(new Error('request failed'))
+    try {
+      await expect(actions.send('retry')).resolves.toBe(false)
+      expect(mocks.markDesktopFirstActionAccepted).not.toHaveBeenCalled()
+    } finally {
+      consoleError.mockRestore()
+    }
   })
 
   it('syncs the current session queue from successful queued message API responses', async () => {
