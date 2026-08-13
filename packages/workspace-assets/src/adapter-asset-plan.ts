@@ -89,6 +89,8 @@ export async function buildAdapterAssetPlan(params: {
         ? 'Mapped into the Gemini native hooks bridge.'
         : params.adapter === 'copilot'
         ? 'Mapped into the Copilot CLI native hooks bridge.'
+        : params.adapter === 'cursor'
+        ? 'Mapped into the Cursor native hooks bridge.'
         : params.adapter === 'grok'
         ? 'Mapped into the Grok native hooks bridge.'
         : params.adapter === 'kimi'
@@ -120,6 +122,7 @@ export async function buildAdapterAssetPlan(params: {
   } else if (
     params.adapter === 'codex' ||
     params.adapter === 'copilot' ||
+    params.adapter === 'cursor' ||
     params.adapter === 'grok' ||
     params.adapter === 'kimi' ||
     params.adapter === 'pi'
@@ -132,6 +135,8 @@ export async function buildAdapterAssetPlan(params: {
           ? 'No stable native Codex mapping exists for this asset kind in V1.'
           : params.adapter === 'copilot'
           ? 'No stable native Copilot mapping exists for this asset kind in V1.'
+          : params.adapter === 'cursor'
+          ? 'No stable native Cursor mapping exists for this asset kind in V1.'
           : params.adapter === 'grok'
           ? 'No stable native Grok mapping exists for this asset kind in V1.'
           : params.adapter === 'pi'
@@ -167,6 +172,7 @@ export async function buildAdapterAssetPlan(params: {
     ]
     : params.adapter === 'codex' ||
         params.adapter === 'copilot' ||
+        params.adapter === 'cursor' ||
         params.adapter === 'grok' ||
         params.adapter === 'pi'
     ? selectedSkillOverlays

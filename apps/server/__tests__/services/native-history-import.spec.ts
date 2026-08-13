@@ -2,6 +2,7 @@
 import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -193,6 +194,239 @@ afterEach(async () => {
 })
 
 describe('native project history import', () => {
+  it('previews and migrates Cursor JSONL transcripts for the current project', async () => {
+    const root = await createTempRoot()
+    const workspace = path.join(root, 'workspace-with-dash')
+    const home = path.join(root, 'home')
+    const env = createTestEnv(workspace, home)
+    const projectKey = workspace
+      .replace(/[^a-z0-9]/gi, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-+|-+$/g, '')
+    const sourcePath = path.join(
+      home,
+      '.cursor',
+      'projects',
+      projectKey,
+      'agent-transcripts',
+      'cursor-native-1',
+      'cursor-native-1.jsonl'
+    )
+
+    await mkdir(workspace, { recursive: true })
+    const resolvedWorkspace = await realpath(workspace)
+    await writeJsonl(sourcePath, [
+      {
+        role: 'user',
+        message: {
+          content: [{ type: 'text', text: 'Migrate this Cursor session' }]
+        }
+      },
+      {
+        role: 'assistant',
+        message: {
+          content: [
+            { type: 'text', text: 'Cursor answer' },
+            { type: 'tool_use', name: 'readToolCall', input: { path: 'README.md' } }
+          ]
+        }
+      },
+      { type: 'turn_ended', status: 'success' }
+    ])
+
+    const preview = await previewNativeProjectHistory({
+      adapters: ['cursor'],
+      cwd: workspace,
+      env,
+      homeDir: home
+    })
+    const result = await importNativeProjectHistory({
+      adapters: ['cursor'],
+      cwd: workspace,
+      env,
+      homeDir: home
+    })
+
+    expect(preview).toEqual(expect.objectContaining({ matchedFiles: 1, scannedFiles: 1 }))
+    expect(preview.adapters[0]!.candidates[0]).toEqual(expect.objectContaining({
+      adapter: 'cursor',
+      cwd: resolvedWorkspace,
+      nativeSessionId: 'cursor-native-1',
+      title: 'Migrate this Cursor session'
+    }))
+    expect(result).toEqual(expect.objectContaining({
+      importedEvents: 2,
+      importedSessions: 1,
+      matchedFiles: 1,
+      scannedFiles: 1
+    }))
+
+    const runtimeRoot = resolveWorkspaceRuntimeStoreRoot(workspace, createWorkspaceRuntimeEnv(workspace, env))
+    const db = await replayImportedSessions(runtimeRoot)
+    const importedSessionId = result.sessions[0]!.sessionId
+    expect(db.getSession(importedSessionId)).toEqual(expect.objectContaining({
+      adapter: 'cursor',
+      status: 'completed',
+      title: 'Migrate this Cursor session'
+    }))
+    expect(db.getMessages(importedSessionId)).toEqual([
+      expect.objectContaining({
+        message: expect.objectContaining({ role: 'user', content: 'Migrate this Cursor session' })
+      }),
+      expect.objectContaining({
+        message: expect.objectContaining({
+          role: 'assistant',
+          content: expect.arrayContaining([
+            expect.objectContaining({ type: 'text', text: 'Cursor answer' }),
+            expect.objectContaining({ type: 'tool_use', name: 'readToolCall' })
+          ])
+        })
+      })
+    ])
+    db.close()
+  })
+
+  it('previews and imports selected Cursor histories from another project', async () => {
+    const root = await createTempRoot()
+    const workspace = path.join(root, 'workspace')
+    const selectedWorkspace = path.join(root, 'selected-project')
+    const home = path.join(root, 'home')
+    const env = createTestEnv(workspace, home)
+    const projectKey = selectedWorkspace
+      .replace(/[^a-z0-9]/gi, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-+|-+$/g, '')
+    const sourcePath = path.join(
+      home,
+      '.cursor',
+      'projects',
+      projectKey,
+      'agent-transcripts',
+      'cursor-native-selected',
+      'cursor-native-selected.jsonl'
+    )
+
+    await Promise.all([
+      mkdir(workspace, { recursive: true }),
+      mkdir(selectedWorkspace, { recursive: true })
+    ])
+    await writeJsonl(sourcePath, [
+      {
+        role: 'user',
+        message: { content: [{ type: 'text', text: 'Selected Cursor history' }] }
+      },
+      {
+        role: 'assistant',
+        message: { content: [{ type: 'text', text: 'Selected Cursor answer' }] }
+      }
+    ])
+
+    const selectedRealPath = await realpath(selectedWorkspace)
+    const preview = await previewNativeProjectHistory({
+      adapters: ['cursor'],
+      cwd: workspace,
+      env,
+      homeDir: home,
+      projectPaths: [selectedWorkspace],
+      projectScope: 'all-projects',
+      sourcePaths: [sourcePath]
+    })
+    const result = await importNativeProjectHistory({
+      adapters: ['cursor'],
+      cwd: workspace,
+      env,
+      homeDir: home,
+      projectPaths: [selectedWorkspace],
+      projectScope: 'all-projects',
+      sourcePaths: [sourcePath]
+    })
+
+    expect(preview.adapters[0]).toEqual(expect.objectContaining({
+      matchedFiles: 1,
+      projects: [{ path: selectedRealPath, sessionCount: 1 }],
+      candidates: [expect.objectContaining({
+        cwd: selectedRealPath,
+        nativeSessionId: 'cursor-native-selected'
+      })]
+    }))
+    expect(result).toEqual(expect.objectContaining({
+      importedEvents: 2,
+      importedSessions: 1,
+      matchedFiles: 1,
+      sessions: [expect.objectContaining({
+        cwd: selectedRealPath,
+        workspaceCwd: selectedRealPath
+      })]
+    }))
+  })
+
+  it('discovers all-project Cursor histories from workspace storage metadata', async () => {
+    const root = await createTempRoot()
+    const workspace = path.join(root, 'workspace')
+    const discoveredWorkspace = path.join(root, 'discovered-project')
+    const home = path.join(root, 'home')
+    const env = createTestEnv(workspace, home)
+    const projectKey = discoveredWorkspace
+      .replace(/[^a-z0-9]/gi, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-+|-+$/g, '')
+    const sourcePath = path.join(
+      home,
+      '.cursor',
+      'projects',
+      projectKey,
+      'agent-transcripts',
+      'cursor-native-discovered',
+      'cursor-native-discovered.jsonl'
+    )
+    const workspaceJsonPath = path.join(
+      home,
+      'Library',
+      'Application Support',
+      'Cursor',
+      'User',
+      'workspaceStorage',
+      'workspace-id',
+      'workspace.json'
+    )
+
+    await Promise.all([
+      mkdir(workspace, { recursive: true }),
+      mkdir(discoveredWorkspace, { recursive: true }),
+      mkdir(path.dirname(workspaceJsonPath), { recursive: true })
+    ])
+    await writeFile(workspaceJsonPath, `${JSON.stringify({ folder: pathToFileURL(discoveredWorkspace).href })}\n`)
+    await writeJsonl(sourcePath, [
+      {
+        role: 'user',
+        message: { content: [{ type: 'text', text: 'Discovered Cursor history' }] }
+      }
+    ])
+
+    const discoveredRealPath = await realpath(discoveredWorkspace)
+    const preview = await previewNativeProjectHistory({
+      adapters: ['cursor'],
+      cwd: workspace,
+      env,
+      homeDir: home,
+      projectScope: 'all-projects'
+    })
+    const result = await importNativeProjectHistory({
+      adapters: ['cursor'],
+      cwd: workspace,
+      env,
+      homeDir: home,
+      projectScope: 'all-projects'
+    })
+
+    expect(preview.adapters[0]!.candidates).toEqual([
+      expect.objectContaining({ cwd: discoveredRealPath, nativeSessionId: 'cursor-native-discovered' })
+    ])
+    expect(result.sessions).toEqual([
+      expect.objectContaining({ cwd: discoveredRealPath, workspaceCwd: discoveredRealPath })
+    ])
+  })
+
   it('previews and imports Grok native sessions from summary and chat history files', async () => {
     const root = await createTempRoot()
     const workspace = path.join(root, 'workspace')

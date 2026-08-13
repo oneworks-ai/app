@@ -956,6 +956,34 @@ describe('task run adapter init', () => {
     }))
   })
 
+  it('disables overlapping bridge events when Cursor native hooks are active', async () => {
+    const ctx = createCtx()
+    ctx.env.__ONEWORKS_PROJECT_CURSOR_NATIVE_HOOKS_AVAILABLE__ = '1'
+    ctx.configs = [{
+      adapters: createAdapters({
+        cursor: {}
+      })
+    }, undefined] as AdapterCtx['configs']
+    prepareMock.mockResolvedValue([ctx])
+
+    await run({
+      adapter: 'cursor',
+      cwd: ctx.cwd,
+      env: {}
+    }, {
+      type: 'create',
+      runtime: 'cli',
+      sessionId: 'session-cursor-native',
+      description: 'hello',
+      onEvent: vi.fn()
+    })
+
+    expect(createAdapterHookBridgeMock).toHaveBeenCalledWith(expect.objectContaining({
+      adapter: 'cursor',
+      disabledEvents: ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop']
+    }))
+  })
+
   it('disables overlapping bridge events when kimi native hooks are active', async () => {
     const ctx = createCtx()
     ctx.env.__ONEWORKS_PROJECT_KIMI_NATIVE_HOOKS_AVAILABLE__ = '1'

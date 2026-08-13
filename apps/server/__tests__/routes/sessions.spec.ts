@@ -279,7 +279,7 @@ describe('sessionsRouter', () => {
     const ctx = {
       request: {
         body: {
-          adapters: ['codex'],
+          adapters: ['codex', 'cursor'],
           candidateScope: 'unarchived',
           cursor: 'cursor-1',
           limit: 24,
@@ -299,7 +299,7 @@ describe('sessionsRouter', () => {
     await handlePreview(ctx)
 
     expect(previewNativeProjectHistory).toHaveBeenCalledWith({
-      adapters: ['codex'],
+      adapters: ['codex', 'cursor'],
       candidateScope: 'unarchived',
       previewCursor: 'cursor-1',
       previewLimit: 24,
@@ -323,7 +323,7 @@ describe('sessionsRouter', () => {
     const ctx = {
       request: {
         body: {
-          adapters: ['codex', 'cursor']
+          adapters: ['codex', 'unsupported-adapter']
         }
       },
       body: undefined

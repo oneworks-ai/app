@@ -349,6 +349,7 @@ describe('chat model selector helpers', () => {
     })).toEqual([
       'claude-code',
       'copilot',
+      'cursor',
       'grok',
       'kimi',
       'opencode',

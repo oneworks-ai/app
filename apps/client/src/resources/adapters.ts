@@ -8,6 +8,7 @@ import {
   adapterIconDark as codexIconDark
 } from '@oneworks/adapter-codex/icon'
 import { adapterDisplayName as copilotDisplayName, adapterIcon as copilotIcon } from '@oneworks/adapter-copilot/icon'
+import { adapterDisplayName as cursorDisplayName, adapterIcon as cursorIcon } from '@oneworks/adapter-cursor/icon'
 import { adapterDisplayName as geminiDisplayName, adapterIcon as geminiIcon } from '@oneworks/adapter-gemini/icon'
 import { adapterDisplayName as grokDisplayName, adapterIcon as grokIcon } from '@oneworks/adapter-grok/icon'
 import { adapterDisplayName as kimiDisplayName, adapterIcon as kimiIcon } from '@oneworks/adapter-kimi/icon'
@@ -37,6 +38,10 @@ export const adapterDisplayMap = {
   copilot: {
     title: copilotDisplayName,
     icon: copilotIcon
+  },
+  cursor: {
+    title: cursorDisplayName,
+    icon: cursorIcon
   },
   gemini: {
     title: geminiDisplayName,

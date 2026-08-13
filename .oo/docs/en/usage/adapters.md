@@ -13,7 +13,7 @@ This page covers the adapter configuration structure in the Web configuration UI
 
 ## Frontend Selector
 
-The adapter selector in the chat input shows the native adapters built into the current application: Claude Code, Codex, Copilot, Gemini, Grok, Kimi, OpenCode, and Pi. Adapter configuration controls binary selection, managed CLI versions, model routing, accounts, and adapter-specific options.
+The adapter selector in the chat input shows the native adapters built into the current application: Claude Code, Codex, Copilot, Cursor, Gemini, Grok, Kimi, OpenCode, and Pi. Adapter configuration controls binary selection, managed CLI versions, model routing, accounts, and adapter-specific options.
 
 ## Pi coding-agent
 
@@ -117,6 +117,28 @@ Codex environment actions are not lifecycle `start` scripts, so they are reporte
 skipped rather than migrated incorrectly. Import creates only missing environments,
 never merges into or overwrites an existing environment directory, and never modifies
 the native TOML files.
+
+## Cursor
+
+The `cursor` adapter runs Cursor Agent CLI. One Works installs an official managed CLI build by default, or it can use a system `agent` / `cursor-agent` binary or an explicit path.
+
+```yaml
+adapters:
+  cursor:
+    cli:
+      source: managed
+      version: latest
+    mode: agent
+    approveMcps: true
+```
+
+Stream sessions consume Cursor's JSON output and retain the native chat id, so later One Works turns resume the same Cursor chat. System instructions, selected skills, MCP servers, and hooks are staged in an isolated per-session Cursor config/data directory instead of modifying the real `~/.cursor`. Options such as `force`, `autoReview`, `approveMcps`, `sandbox`, `endpoint`, `additionalDirs`, `pluginDirs`, and `headers` map to Cursor Agent CLI flags. Cursor authentication remains managed by Cursor Agent CLI; One Works does not expose Cursor accounts through its multiple-account API.
+
+## Migrating Native Sessions
+
+The External Sessions configuration page can preview and import Codex, Claude Code, and Cursor history for the current project or across discovered projects. Cursor transcripts are read from `~/.cursor/projects/*/agent-transcripts/**/*.jsonl`; regular chats and tasks under `subagents/` remain distinguishable.
+
+Import is read-only with respect to Cursor data. The resulting completed external session retains user messages, assistant text, and tool calls, and repeated imports are deduplicated by native session id and source file. Because Cursor encodes the workspace path in its project directory name, candidates are imported only when that directory can be matched to the current project, an explicitly selected project path, or Cursor workspace metadata.
 
 ## Grok Build CLI
 

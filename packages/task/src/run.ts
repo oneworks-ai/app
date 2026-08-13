@@ -336,6 +336,7 @@ export const run = async (
     'claude-code',
     'codex',
     'copilot',
+    'cursor',
     'gemini',
     'grok',
     'kimi',
@@ -454,6 +455,8 @@ export const run = async (
       ? BASE_NATIVE_BRIDGE_DISABLED_EVENTS
       : runtimeAdapterType === 'copilot' && runtimeCtx.env.__ONEWORKS_PROJECT_COPILOT_NATIVE_HOOKS_AVAILABLE__ === '1'
       ? COPILOT_NATIVE_BRIDGE_DISABLED_EVENTS
+      : runtimeAdapterType === 'cursor' && runtimeCtx.env.__ONEWORKS_PROJECT_CURSOR_NATIVE_HOOKS_AVAILABLE__ === '1'
+      ? BASE_NATIVE_BRIDGE_DISABLED_EVENTS
       : runtimeAdapterType === 'grok' && runtimeCtx.env.__ONEWORKS_PROJECT_GROK_NATIVE_HOOKS_AVAILABLE__ === '1'
       ? GROK_NATIVE_BRIDGE_DISABLED_EVENTS
       : runtimeAdapterType === 'opencode' && runtimeCtx.env.__ONEWORKS_PROJECT_OPENCODE_NATIVE_HOOKS_AVAILABLE__ === '1'

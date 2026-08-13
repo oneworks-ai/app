@@ -1002,7 +1002,12 @@ export function ExternalSessionsAdapterTab({
                   description={isPreviewLoading
                     ? t('nativeHistoryImport.manager.previewLoading')
                     : matchedFiles === 0
-                    ? t('nativeHistoryImport.manager.emptyCandidates', { platform: platformLabel })
+                    ? t(
+                      projectScope === 'all-projects'
+                        ? 'nativeHistoryImport.manager.emptyCandidatesAllProjects'
+                        : 'nativeHistoryImport.manager.emptyCandidates',
+                      { platform: platformLabel }
+                    )
                     : t('nativeHistoryImport.manager.emptySearchResults')}
                 />
               </div>

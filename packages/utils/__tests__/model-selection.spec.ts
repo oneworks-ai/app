@@ -487,6 +487,7 @@ describe('model selection utilities', () => {
     })).toEqual([
       'codex',
       'copilot',
+      'cursor',
       'grok',
       'kimi',
       'opencode',

@@ -17,7 +17,16 @@ export type WorkspaceAssetKind =
   | 'command'
   | 'mode'
   | 'nativePlugin'
-export type WorkspaceAssetAdapter = 'claude-code' | 'codex' | 'copilot' | 'gemini' | 'grok' | 'kimi' | 'opencode' | 'pi'
+export type WorkspaceAssetAdapter =
+  | 'claude-code'
+  | 'codex'
+  | 'copilot'
+  | 'cursor'
+  | 'gemini'
+  | 'grok'
+  | 'kimi'
+  | 'opencode'
+  | 'pi'
 export type AssetDiagnosticStatus = 'native' | 'translated' | 'prompt' | 'skipped'
 
 export interface AssetDiagnostic {

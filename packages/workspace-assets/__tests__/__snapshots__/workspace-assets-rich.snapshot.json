@@ -738,6 +738,148 @@
         }
       ]
     },
+    "cursor": {
+      "adapter": "cursor",
+      "mcpServers": {
+        "docs": {
+          "args": [
+            "docs-server"
+          ],
+          "command": "npx"
+        }
+      },
+      "overlays": [
+        {
+          "assetId": "skill:workspace:workspace:research:<workspace>/.oo/skills/research/SKILL.md",
+          "kind": "skill",
+          "sourcePath": "<workspace>/.oo/skills/research",
+          "targetPath": "skills/research"
+        }
+      ],
+      "diagnostics": [
+        {
+          "assetId": "agent:plugin:1:demo/release-helper:<workspace>/node_modules/@oneworks/plugin-demo/opencode/agents/release-helper.md",
+          "adapter": "cursor",
+          "status": "skipped",
+          "source": "plugin",
+          "reason": "No stable native Cursor mapping exists for this asset kind in V1.",
+          "scope": "demo",
+          "packageId": "@oneworks/plugin-demo"
+        },
+        {
+          "assetId": "command:plugin:1:demo/review:<workspace>/node_modules/@oneworks/plugin-demo/opencode/commands/review.md",
+          "adapter": "cursor",
+          "status": "skipped",
+          "source": "plugin",
+          "reason": "No stable native Cursor mapping exists for this asset kind in V1.",
+          "scope": "demo",
+          "packageId": "@oneworks/plugin-demo"
+        },
+        {
+          "assetId": "entity:workspace:workspace:architect:<workspace>/.oo/entities/architect/README.md",
+          "adapter": "cursor",
+          "status": "prompt",
+          "source": "project",
+          "reason": "Mapped into the generated system prompt."
+        },
+        {
+          "assetId": "hookPlugin:plugin:0:logger:<workspace>/node_modules/@oneworks/plugin-logger",
+          "adapter": "cursor",
+          "status": "native",
+          "source": "plugin",
+          "reason": "Mapped into the Cursor native hooks bridge.",
+          "packageId": "@oneworks/plugin-logger"
+        },
+        {
+          "assetId": "hookPlugin:plugin:1:demo/demo:<workspace>/node_modules/@oneworks/plugin-demo",
+          "adapter": "cursor",
+          "status": "native",
+          "source": "plugin",
+          "reason": "Mapped into the Cursor native hooks bridge.",
+          "scope": "demo",
+          "packageId": "@oneworks/plugin-demo"
+        },
+        {
+          "assetId": "hookPlugin:plugin:2:telemetry:<workspace>/node_modules/@oneworks/plugin-telemetry",
+          "adapter": "cursor",
+          "status": "native",
+          "source": "plugin",
+          "reason": "Mapped into the Cursor native hooks bridge.",
+          "packageId": "@oneworks/plugin-telemetry"
+        },
+        {
+          "assetId": "mcpServer:workspace:workspace:docs:<workspace>/.oo.config.json",
+          "adapter": "cursor",
+          "status": "translated",
+          "source": "project",
+          "reason": "Translated into adapter-specific MCP configuration."
+        },
+        {
+          "assetId": "mode:plugin:1:demo/strict:<workspace>/node_modules/@oneworks/plugin-demo/opencode/modes/strict.md",
+          "adapter": "cursor",
+          "status": "skipped",
+          "source": "plugin",
+          "reason": "No stable native Cursor mapping exists for this asset kind in V1.",
+          "scope": "demo",
+          "packageId": "@oneworks/plugin-demo"
+        },
+        {
+          "assetId": "nativePlugin:plugin:1:demo/demo-plugin:<workspace>/node_modules/@oneworks/plugin-demo/opencode/plugins/demo-plugin.js",
+          "adapter": "cursor",
+          "status": "skipped",
+          "source": "plugin",
+          "reason": "No stable native Cursor mapping exists for this asset kind in V1.",
+          "scope": "demo",
+          "packageId": "@oneworks/plugin-demo"
+        },
+        {
+          "assetId": "rule:plugin:1:demo/security:<workspace>/node_modules/@oneworks/plugin-demo/rules/security.md",
+          "adapter": "cursor",
+          "status": "prompt",
+          "source": "plugin",
+          "reason": "Mapped into the generated system prompt.",
+          "scope": "demo",
+          "packageId": "@oneworks/plugin-demo"
+        },
+        {
+          "assetId": "rule:workspace:workspace:review:<workspace>/.oo/rules/review.md",
+          "adapter": "cursor",
+          "status": "prompt",
+          "source": "project",
+          "reason": "Mapped into the generated system prompt."
+        },
+        {
+          "assetId": "skill:workspace:workspace:research:<workspace>/.oo/skills/research/SKILL.md",
+          "adapter": "cursor",
+          "status": "native",
+          "source": "project",
+          "reason": "Staged in the isolated Cursor data directory as a native skill."
+        },
+        {
+          "assetId": "skill:workspace:workspace:research:<workspace>/.oo/skills/research/SKILL.md",
+          "adapter": "cursor",
+          "status": "prompt",
+          "source": "project",
+          "reason": "Mapped into the generated system prompt."
+        },
+        {
+          "assetId": "spec:plugin:1:demo/release:<workspace>/node_modules/@oneworks/plugin-demo/specs/release/index.md",
+          "adapter": "cursor",
+          "status": "prompt",
+          "source": "plugin",
+          "reason": "Mapped into the generated system prompt.",
+          "scope": "demo",
+          "packageId": "@oneworks/plugin-demo"
+        },
+        {
+          "assetId": "spec:workspace:workspace:release:<workspace>/.oo/specs/release/index.md",
+          "adapter": "cursor",
+          "status": "prompt",
+          "source": "project",
+          "reason": "Mapped into the generated system prompt."
+        }
+      ]
+    },
     "gemini": {
       "adapter": "gemini",
       "mcpServers": {

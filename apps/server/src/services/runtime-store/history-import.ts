@@ -1,7 +1,7 @@
 /* eslint-disable max-lines -- native history import needs parser compatibility in one place. */
 import { Buffer } from 'node:buffer'
 import { createHash } from 'node:crypto'
-import { createReadStream, existsSync, readFileSync, realpathSync, statSync } from 'node:fs'
+import { createReadStream, existsSync, readFileSync, readdirSync, realpathSync, statSync } from 'node:fs'
 import type { Dirent, Stats } from 'node:fs'
 import { mkdir, readdir, rm, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
@@ -10,6 +10,7 @@ import path from 'node:path'
 import process from 'node:process'
 import { createInterface } from 'node:readline'
 import type { DatabaseSync as NodeDatabaseSync } from 'node:sqlite'
+import { fileURLToPath } from 'node:url'
 
 import type { RuntimeContentItem } from '@oneworks/runtime-protocol'
 import {
@@ -36,7 +37,7 @@ import { createWorkspaceRuntimeEnv, resolveWorkspaceRuntimeStoreRoot } from './w
 const require = createRequire(__filename)
 const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite')
 
-export type NativeHistoryAdapter = 'codex' | 'claude-code' | 'grok'
+export type NativeHistoryAdapter = 'codex' | 'claude-code' | 'cursor' | 'grok'
 export type NativeHistoryCandidateScope = 'all' | 'unarchived' | 'archived'
 export type NativeHistoryProjectScope = 'current-project' | 'all-projects'
 export type NativeHistoryThreadScope = 'all' | 'user' | 'subagent'
@@ -238,7 +239,7 @@ const LARGE_NATIVE_HISTORY_FILE_BYTES = 25 * 1024 * 1024
 export const DEFAULT_NATIVE_HISTORY_IMPORT_MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
 const MAX_NATIVE_HISTORY_PREVIEW_LIMIT = 100
 const MAX_HISTORY_WALK_DEPTH = 8
-const NATIVE_HISTORY_ADAPTERS: NativeHistoryAdapter[] = ['codex', 'claude-code', 'grok']
+const NATIVE_HISTORY_ADAPTERS: NativeHistoryAdapter[] = ['codex', 'claude-code', 'cursor', 'grok']
 const IMPORT_SESSION_PREFIX = 'imported_'
 const TITLE_MAX_LENGTH = 80
 let defaultNativeHistoryImportInFlight: Promise<NativeHistoryImportResult> | undefined
@@ -813,6 +814,91 @@ const isArchivedNativeHistoryFile = (
   filePath: string
 ) => adapter === 'codex' && isPathInside(path.join(homeDir, '.codex', 'archived_sessions'), filePath)
 
+const toCursorProjectKey = (value: string) => (
+  value
+    .replace(/[^a-z0-9]/gi, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+)
+
+const readCursorProjectKeyFromSourcePath = (homeDir: string, filePath: string) => {
+  const projectsDir = normalizeRealPath(path.join(homeDir, '.cursor', 'projects'))
+  const relativePath = path.relative(projectsDir, normalizeRealPath(filePath))
+  if (relativePath === '' || relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    return undefined
+  }
+  return relativePath.split(path.sep)[0]
+}
+
+const readCursorWorkspaceFolder = (workspaceJsonPath: string) => {
+  try {
+    const value = JSON.parse(readFileSync(workspaceJsonPath, 'utf8')) as unknown
+    if (!isRecord(value)) return undefined
+    const location = asString(value.folder) ?? asString(value.workspace)
+    if (location == null) return undefined
+    const candidatePath = location.startsWith('file:')
+      ? fileURLToPath(location)
+      : path.resolve(path.dirname(workspaceJsonPath), location)
+    const stats = statSync(candidatePath)
+    return stats.isDirectory()
+      ? normalizeRealPath(candidatePath)
+      : stats.isFile()
+      ? normalizeRealPath(path.dirname(candidatePath))
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
+const readCursorWorkspaceRoots = (homeDir: string, env: NodeJS.ProcessEnv) => {
+  const storageRoots = unique([
+    env.CURSOR_DATA_PATH == null ? '' : path.join(env.CURSOR_DATA_PATH, 'User', 'workspaceStorage'),
+    env.APPDATA == null ? '' : path.join(env.APPDATA, 'Cursor', 'User', 'workspaceStorage'),
+    path.join(homeDir, 'Library', 'Application Support', 'Cursor', 'User', 'workspaceStorage'),
+    path.join(homeDir, '.config', 'Cursor', 'User', 'workspaceStorage'),
+    path.join(homeDir, 'AppData', 'Roaming', 'Cursor', 'User', 'workspaceStorage')
+  ].filter(Boolean))
+  const workspaceRoots: string[] = []
+  for (const storageRoot of storageRoots) {
+    let entries: Dirent[]
+    try {
+      entries = readdirSync(storageRoot, { withFileTypes: true })
+    } catch {
+      continue
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue
+      const workspaceRoot = readCursorWorkspaceFolder(path.join(storageRoot, entry.name, 'workspace.json'))
+      if (workspaceRoot != null) workspaceRoots.push(workspaceRoot)
+    }
+  }
+  return unique(workspaceRoots)
+}
+
+const resolveCursorConversationCwd = (
+  filePath: string,
+  homeDir: string,
+  projectContext: ProjectMatchContext,
+  projectPaths?: string[]
+) => {
+  const projectKey = readCursorProjectKeyFromSourcePath(homeDir, filePath)
+  if (projectKey == null) return undefined
+  const candidateRoots = unique([
+    ...projectContext.roots,
+    ...(projectPaths ?? []).map(normalizeRealPath)
+  ])
+  return candidateRoots.find((root) => {
+    const rootKey = toCursorProjectKey(root)
+    return rootKey === projectKey || rootKey === `private-${projectKey}` || projectKey === `private-${rootKey}`
+  })
+}
+
+const readCursorNativeSessionId = (filePath: string) => path.basename(filePath, '.jsonl')
+
+const readCursorThreadSource = (filePath: string) => (
+  filePath.split(path.sep).includes('subagents') ? 'subagent' : undefined
+)
+
 const getEventTime = (value: unknown, fallback: number) => {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value
@@ -927,6 +1013,10 @@ const resolveSourceDirs = (
       path.join(homeDir, '.codex', 'archived_sessions'),
       path.join(homeDir, '.codex', 'sessions')
     ]
+  }
+
+  if (adapter === 'cursor') {
+    return [path.join(homeDir, '.cursor', 'projects')]
   }
 
   if (adapter === 'grok') {
@@ -1242,6 +1332,9 @@ const readConversationPreview = async (
   codexThreadMetadata?: CodexThreadMetadata,
   fileStat?: Stats,
   codexThreadMetadataIndex?: CodexThreadMetadataIndex,
+  homeDir?: string,
+  projectContext?: ProjectMatchContext,
+  projectPaths?: string[],
   grokSessionMetadata?: GrokSessionMetadata
 ): Promise<NativeHistoryImportPreviewCandidate | undefined> => {
   const stat = fileStat ?? statSync(filePath)
@@ -1279,6 +1372,11 @@ const readConversationPreview = async (
   let title: string | undefined = codexThreadMetadata?.title ?? grokSessionMetadata?.title
   let updatedAt = codexThreadMetadata?.updatedAt ?? grokSessionMetadata?.updatedAt ?? 0
 
+  if (adapter === 'cursor' && homeDir != null && projectContext != null) {
+    cwd = resolveCursorConversationCwd(filePath, homeDir, projectContext, projectPaths)
+    nativeSessionId = readCursorNativeSessionId(filePath)
+  }
+
   try {
     for await (const line of lines) {
       const trimmed = line.trim()
@@ -1312,6 +1410,12 @@ const readConversationPreview = async (
           title ??= asString(payload?.thread_name)
         } else if (value.type === 'event_msg' && payload?.type === 'user_message') {
           title ??= asString(payload.message)
+        }
+      } else if (adapter === 'cursor') {
+        if (createdAt === 0) createdAt = stat.birthtimeMs || stat.mtimeMs
+        if (value.role === 'user') {
+          const message = isRecord(value.message) ? value.message : undefined
+          title ??= readContentText(message?.content)
         }
       } else if (adapter === 'grok') {
         if (createdAt === 0) createdAt = timestamp
@@ -1365,9 +1469,15 @@ const readConversationPreview = async (
       codexThreadMetadataIndex?.pinnedThreadIds.has(resolvedNativeSessionId) === true,
     nativeSessionId: resolvedNativeSessionId,
     sourcePath: filePath,
-    ...(getVisibleCodexThreadSource(effectiveCodexThreadMetadata) == null
+    ...((adapter === 'cursor'
+        ? readCursorThreadSource(filePath)
+        : getVisibleCodexThreadSource(effectiveCodexThreadMetadata)) == null
       ? {}
-      : { threadSource: getVisibleCodexThreadSource(effectiveCodexThreadMetadata) }),
+      : {
+        threadSource: adapter === 'cursor'
+          ? readCursorThreadSource(filePath)
+          : getVisibleCodexThreadSource(effectiveCodexThreadMetadata)
+      }),
     title: buildPreviewTitle(adapter, effectiveCodexThreadMetadata?.title ?? grokSessionMetadata?.title ?? title),
     updatedAt: effectiveCodexThreadMetadata?.updatedAt ?? grokSessionMetadata?.updatedAt ??
       (updatedAt || createdAt || stat.mtimeMs)
@@ -1619,6 +1729,77 @@ const parseClaudeConversation = (
   }
 }
 
+const parseCursorConversation = (
+  sourcePath: string,
+  records: JsonlRecord[],
+  projectContext: ProjectMatchContext,
+  projectScope: NativeHistoryProjectScope,
+  homeDir: string,
+  projectPaths?: string[]
+): NativeHistoryConversation | undefined => {
+  const stat = statSync(sourcePath)
+  const cwd = resolveCursorConversationCwd(sourcePath, homeDir, projectContext, projectPaths)
+  const messages: NativeHistoryMessage[] = []
+  const createdAt = stat.birthtimeMs || stat.mtimeMs
+  const updatedAt = stat.mtimeMs || createdAt
+
+  for (const record of records) {
+    if (!isRecord(record.value)) continue
+    const value = record.value
+    if (value.role !== 'user' && value.role !== 'assistant') continue
+    const message = isRecord(value.message) ? value.message : undefined
+    const normalizedContent: RuntimeContentItem[] = []
+    const contentItems = Array.isArray(message?.content)
+      ? message.content
+      : typeof message?.content === 'string'
+      ? [{ type: 'text', text: message.content }]
+      : []
+    for (const [itemIndex, item] of contentItems.entries()) {
+      if (!isRecord(item)) continue
+      if (item.type === 'text' && asString(item.text) != null) {
+        normalizedContent.push({ type: 'text', text: asString(item.text)! })
+      } else if (item.type === 'tool_use' && asString(item.name) != null) {
+        normalizedContent.push({
+          type: 'tool_use',
+          id: asString(item.id) ?? buildNativeMessageId('cursor', sourcePath, record.line, `tool-use-${itemIndex}`),
+          name: asString(item.name)!,
+          input: item.input ?? {}
+        })
+      } else if (item.type === 'tool_result' && asString(item.tool_use_id) != null) {
+        normalizedContent.push({
+          type: 'tool_result',
+          tool_use_id: asString(item.tool_use_id)!,
+          content: item.content ?? '',
+          ...(typeof item.is_error === 'boolean' ? { is_error: item.is_error } : {})
+        })
+      }
+    }
+    if (normalizedContent.length === 0) continue
+    const textOnly = normalizedContent.every(item => item.type === 'text')
+    messages.push({
+      id: buildNativeMessageId('cursor', sourcePath, record.line, String(value.role)),
+      role: value.role,
+      content: textOnly
+        ? normalizedContent.map(item => item.type === 'text' ? item.text : '').join('\n').trim()
+        : normalizedContent,
+      ts: updatedAt
+    })
+  }
+
+  if (!isConversationInProjectScope(cwd, projectContext, projectScope) || messages.length === 0) {
+    return undefined
+  }
+  return {
+    adapter: 'cursor',
+    createdAt,
+    cwd: cwd!,
+    messages,
+    nativeSessionId: readCursorNativeSessionId(sourcePath),
+    sourcePath,
+    updatedAt
+  }
+}
+
 const parseGrokConversation = (
   sourcePath: string,
   records: JsonlRecord[],
@@ -1812,11 +1993,15 @@ const parseConversation = (
   records: JsonlRecord[],
   projectContext: ProjectMatchContext,
   projectScope: NativeHistoryProjectScope,
-  codexThreadMetadata?: CodexThreadMetadata,
+  codexThreadMetadata: CodexThreadMetadata | undefined,
+  homeDir: string,
+  projectPaths: string[] | undefined,
   grokSessionMetadata?: GrokSessionMetadata
 ) =>
   adapter === 'codex'
     ? parseCodexConversation(filePath, records, projectContext, projectScope, codexThreadMetadata)
+    : adapter === 'cursor'
+    ? parseCursorConversation(filePath, records, projectContext, projectScope, homeDir, projectPaths)
     : adapter === 'grok'
     ? parseGrokConversation(filePath, records, projectContext, projectScope, grokSessionMetadata)
     : parseClaudeConversation(filePath, records, projectContext, projectScope)
@@ -1849,7 +2034,7 @@ const readConversationCwdFromRecords = (
       if (cwd != null) {
         return cwd
       }
-    } else {
+    } else if (adapter !== 'cursor') {
       const cwd = asString(record.value.cwd)
       if (cwd != null) {
         return cwd
@@ -2143,6 +2328,9 @@ export async function previewNativeProjectHistory(
   const projectScope = resolveNativeHistoryProjectScope(options)
   const adapterPreviews: NativeHistoryImportAdapterPreview[] = []
   const projectPathFilter = createProjectPathFilter(options.projectPaths)
+  const cursorProjectPaths = projectScope === 'all-projects'
+    ? unique([...(projectPathFilter ?? []), ...readCursorWorkspaceRoots(homeDir, runtimeEnv)])
+    : projectPathFilter
   const previewLimit = normalizeNativeHistoryPreviewLimit(options.previewLimit)
   const previewCursor = parseNativeHistoryPreviewCursor(options.previewCursor)
   const nextCursorOffsets: Partial<Record<NativeHistoryAdapter, number>> = {}
@@ -2189,6 +2377,9 @@ export async function previewNativeProjectHistory(
           codexThreadMetadata,
           sourceFile.stat,
           codexThreadMetadataIndex,
+          homeDir,
+          projectContext,
+          cursorProjectPaths,
           sourceFile.grokSessionMetadata
         )
         if (
@@ -2464,6 +2655,9 @@ async function importNativeProjectHistoryInternal(
   const projectContext = resolveProjectMatchContext(cwd, runtimeEnv)
   const projectScope = resolveNativeHistoryProjectScope(options)
   const projectPathFilter = createProjectPathFilter(options.projectPaths)
+  const cursorProjectPaths = projectScope === 'all-projects'
+    ? unique([...(projectPathFilter ?? []), ...readCursorWorkspaceRoots(homeDir, runtimeEnv)])
+    : projectPathFilter
   const changedRuntimeRoots = new Set<string>()
   const result: NativeHistoryImportResult = {
     importedEvents: 0,
@@ -2497,11 +2691,16 @@ async function importNativeProjectHistoryInternal(
           ? getCodexThreadMetadataFromRecords(codexThreadMetadataIndex, filePath, records, pathCodexThreadMetadata)
           : pathCodexThreadMetadata
         const grokSessionMetadata = adapter === 'grok' ? readGrokSessionMetadata(filePath) : undefined
-        if (!matchesNativeHistoryThreadScope(codexThreadMetadata, options.threadScope)) {
+        const threadMetadata = adapter === 'cursor'
+          ? { threadSource: readCursorThreadSource(filePath) }
+          : codexThreadMetadata
+        if (!matchesNativeHistoryThreadScope(threadMetadata, options.threadScope)) {
           continue
         }
-        const conversationCwd = codexThreadMetadata?.cwd ?? grokSessionMetadata?.cwd ??
-          readConversationCwdFromRecords(adapter, records)
+        const conversationCwd = codexThreadMetadata?.cwd ??
+          (adapter === 'cursor'
+            ? resolveCursorConversationCwd(filePath, homeDir, projectContext, cursorProjectPaths)
+            : grokSessionMetadata?.cwd ?? readConversationCwdFromRecords(adapter, records))
         const workspaceCwd = conversationCwd == null
           ? cwd
           : resolveConversationWorkspaceCwd(
@@ -2531,6 +2730,8 @@ async function importNativeProjectHistoryInternal(
           projectContext,
           projectScope,
           codexThreadMetadata,
+          homeDir,
+          cursorProjectPaths,
           grokSessionMetadata
         )
         if (conversation == null || !matchesNativeHistoryTimeFilter(conversation, options.timeFilter)) {

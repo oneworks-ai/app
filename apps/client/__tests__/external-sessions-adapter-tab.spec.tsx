@@ -81,6 +81,7 @@ vi.mock('react-i18next', () => ({
     t: (key: string) =>
       ({
         'nativeHistoryImport.manager.emptyCandidates': '没有候选会话',
+        'nativeHistoryImport.manager.emptyCandidatesAllProjects': '没有全局候选会话',
         'nativeHistoryImport.manager.emptySearchResults': '没有搜索结果',
         'nativeHistoryImport.manager.importOne': '导入',
         'nativeHistoryImport.manager.previewLoading': '正在加载',
@@ -253,6 +254,17 @@ describe('external sessions adapter import behavior', () => {
   afterEach(async () => {
     await act(async () => root.unmount())
     container.remove()
+  })
+
+  it('describes an empty all-project preview with global project scope', async () => {
+    mocks.previewNativeProjectHistory.mockResolvedValue(
+      previewResult(adapterPreview([]))
+    )
+
+    await renderAdapterTab(vi.fn())
+    await waitForText('没有全局候选会话')
+
+    expect(container.textContent).not.toContain('没有候选会话')
   })
 
   it('removes only the imported row before a slow background preview finishes', async () => {
