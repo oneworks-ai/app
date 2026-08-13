@@ -6,6 +6,10 @@ import useSWR, { useSWRConfig } from 'swr'
 import type { ConfigResponse, ConfigSection } from '@oneworks/types'
 
 import { getConfig, updateConfig } from '#~/api'
+import {
+  canUseLauncherApiConfig,
+  readLauncherSettingsRuntimePolicy
+} from '#~/components/launcher/launcher-settings-runtime'
 import { changeAppLanguage, clearAppLanguageOverride, getDefaultAppLanguage, normalizeAppLanguage } from '#~/i18n'
 
 type GeneralConfig = NonNullable<ConfigSection['general']>
@@ -25,10 +29,12 @@ export function useInterfaceLanguageConfig() {
   const { message } = App.useApp()
   const { i18n, t } = useTranslation()
   const desktopApi = window.oneworksDesktop
-  const canUseDesktopConfig = desktopApi?.getGlobalInterfaceLanguageConfig != null &&
+  const launcherRuntimePolicy = readLauncherSettingsRuntimePolicy()
+  const canUseDesktopConfig = launcherRuntimePolicy.isElectron &&
+    desktopApi?.getGlobalInterfaceLanguageConfig != null &&
     desktopApi.updateGlobalInterfaceLanguageConfig != null &&
     desktopApi.resetGlobalInterfaceLanguageConfig != null
-  const canUseApiConfig = !canUseDesktopConfig && desktopApi == null
+  const canUseApiConfig = !canUseDesktopConfig && canUseLauncherApiConfig(launcherRuntimePolicy)
   const { data } = useSWR<ConfigResponse>(canUseApiConfig ? '/api/config' : null, getConfig)
   const { data: desktopData, mutate: mutateDesktopData } = useSWR<DesktopInterfaceLanguageConfig>(
     canUseDesktopConfig ? 'desktop:global-interface-language-config' : null,
