@@ -9,4 +9,5 @@
 - Add protocol-safe Model Service routing, Codex account-pool failover, and optional sharing of Codex built-in models with other One Works adapters while keeping each adapter's own account selector unchanged.
 
   ![Codex built-in models in Claude Code](./codex-shared-models-claude-code.jpg)
+- Add a first-class Cursor Agent CLI adapter with managed installation, resumable streaming sessions, native skills, MCP and hook integration, plus read-only migration of local Cursor conversation history into One Works.
 - Include Cursor and Grok in the product brand catalog so catalog-driven assets cover every built-in adapter.
