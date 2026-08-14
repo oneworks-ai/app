@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-labelledby="dsh-title">
+  <title id="dsh-title">DSH terminal adapter</title>
+  <rect width="48" height="48" rx="12" fill="#202124"/>
+  <path d="m11 16 8 8-8 8" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M23 33h14" fill="none" stroke="#8ea0ff" stroke-width="3.2" stroke-linecap="round"/>
+</svg>

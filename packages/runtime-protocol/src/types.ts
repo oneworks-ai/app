@@ -299,6 +299,7 @@ export interface RuntimeMeta extends RuntimeJsonObject, RuntimeProtocolEnvelope 
   runId?: string
   runTitle?: string
   operationId?: string
+  sessionRecovery?: 'native-resume' | 'live-only'
   historyImport?: RuntimeHistoryImportMetadata
   createdAt: number
 }
@@ -307,7 +308,9 @@ export interface RuntimeHistoryImportMetadata extends RuntimeJsonObject {
   adapter: string
   importedAt: number
   nativeCwd?: string
+  nativeParentSessionId?: string
   nativeSessionId?: string
+  nativeSourceRoot?: string
   sourcePath?: string
   sourceUpdatedAt: number
   workspaceCwd?: string

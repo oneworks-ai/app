@@ -6,21 +6,22 @@ import process from 'node:process'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { normalizeAdapterPackageId, resolveAdapterPackageName } from '@oneworks/types'
 import {
   loadAdapter,
   loadAdapterBuiltinModels,
   loadAdapterModelProviderImportCapability,
   loadAdapterWorktreeEnvironmentImportCapability,
-  normalizeAdapterPackageId,
-  resolveActiveModulePackageDirSync,
-  resolveAdapterPackageName,
   resolveAdapterRuntimeTarget,
-  resolveExistingAdapterPackageCacheDir,
-  resolveExistingNpmPackageDirs,
-  sanitizePackageName,
   tryLoadAdapterModelProviderImportCapability,
   tryLoadAdapterWorktreeEnvironmentImportCapability
-} from '@oneworks/types'
+} from '@oneworks/types/adapter-package'
+import {
+  resolveActiveModulePackageDirSync,
+  resolveExistingAdapterPackageCacheDir,
+  resolveExistingNpmPackageDirs,
+  sanitizePackageName
+} from '@oneworks/types/adapter-package-cache'
 
 const tempDirs: string[] = []
 

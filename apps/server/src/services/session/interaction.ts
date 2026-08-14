@@ -303,10 +303,6 @@ export async function handleInteractionResponse(sessionId: string, interactionId
       hasMatchingStoredInteraction
     }, '[interaction] Handling interaction response')
 
-    if (pending != null) {
-      clearTimeout(pending.timer)
-    }
-
     if (isExternalSession && pending == null && hasMatchingStoredInteraction) {
       const didAppendCommand = await appendExternalRuntimeInteractionResponse(
         sessionId,
@@ -318,7 +314,12 @@ export async function handleInteractionResponse(sessionId: string, interactionId
           sessionId,
           interactionId
         }, '[interaction] External runtime interaction response could not be queued')
+        return false
       }
+    }
+
+    if (pending != null) {
+      clearTimeout(pending.timer)
     }
 
     clearSessionInteraction(sessionId, interactionId)

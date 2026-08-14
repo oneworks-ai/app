@@ -74,6 +74,39 @@ describe('product brand catalog', () => {
     expect(normalizeSvg(readRepositoryFile(pi!.darkIcon!))).toBe(normalizeSvg(decodeSvgDataUri(display.darkIcon)))
   })
 
+  it('publishes Cline with the official light and dark marks', () => {
+    const cline = catalog.entries.find(entry => entry.kind === 'adapter' && entry.id === 'cline')
+    const display = adapterDisplayMap.cline
+
+    expect(cline).toMatchObject({
+      darkIcon: 'assets/brand/adapters/cline-dark.svg',
+      enabled: true,
+      featured: true,
+      icon: 'assets/brand/adapters/cline.svg',
+      label: 'Cline',
+      priority: 15
+    })
+    expect(normalizeSvg(readRepositoryFile(cline!.icon))).toBe(normalizeSvg(decodeSvgDataUri(display.icon)))
+    expect(normalizeSvg(readRepositoryFile(cline!.darkIcon!))).toBe(
+      normalizeSvg(decodeSvgDataUri(display.darkIcon))
+    )
+  })
+
+  it('publishes Kiro with the same original neutral terminal mark used by the client package', () => {
+    const kiro = catalog.entries.find(entry => entry.kind === 'adapter' && entry.id === 'kiro')
+    const display = adapterDisplayMap.kiro
+
+    expect(kiro).toMatchObject({
+      enabled: true,
+      featured: true,
+      icon: 'assets/brand/adapters/kiro.svg',
+      label: 'Kiro',
+      priority: 47
+    })
+    expect(normalizeSvg(readRepositoryFile(kiro!.icon))).toBe(normalizeSvg(decodeSvgDataUri(display.icon)))
+    expect(readRepositoryFile(kiro!.icon)).not.toMatch(/ghost|official Kiro|#(?:7c3aed|9148ff|813eea|6932c8)/iu)
+  })
+
   it('references repository-contained source assets', () => {
     for (const entry of catalog.entries) {
       expect(entry.id).toMatch(/^[a-z0-9-]+$/u)

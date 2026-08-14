@@ -6,6 +6,7 @@ import { env as processEnv } from 'node:process'
 
 import { DEFAULT_SUPPORTED_PROTOCOL_RANGE, getCurrentProtocolVersion } from '@oneworks/runtime-protocol'
 import type { RuntimeCommand } from '@oneworks/runtime-protocol'
+import { normalizePermissionInteractionOptionPresentation } from '@oneworks/types'
 
 import type {
   AgentRoom,
@@ -504,11 +505,13 @@ const getHostInteractionRequestOptions = (payload: unknown): AgentRoomInteractio
     const description = typeof option.description === 'string' && option.description.trim() !== ''
       ? option.description.trim()
       : undefined
+    const permission = normalizePermissionInteractionOptionPresentation(option.permission)
 
     return [{
       label: option.label.trim(),
       ...(value != null ? { value } : {}),
-      ...(description != null ? { description } : {})
+      ...(description != null ? { description } : {}),
+      ...(permission != null ? { permission } : {})
     }]
   })
 

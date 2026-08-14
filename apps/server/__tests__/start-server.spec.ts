@@ -5,6 +5,8 @@ import process from 'node:process'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import type { NativeHistoryImportResult } from '../src/services/runtime-store/history-import.js'
+
 import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 
 import { migrateDefaultServerDataDir } from '../src/project-home-data-migration.js'
@@ -23,11 +25,19 @@ const startServerMocks = vi.hoisted(() => {
   }
   return {
     acquireConfigWatchRuntime: vi.fn(async () => ({ release: vi.fn() })),
-    autoImportNativeProjectHistoryAndReplay: vi.fn(async () => ({
+    autoImportNativeProjectHistoryAndReplay: vi.fn(async (): Promise<NativeHistoryImportResult> => ({
+      aggregateLimitedBytes: 0,
+      aggregateLimitedFiles: 0,
       importedEvents: 0,
       importedSessions: 0,
       matchedFiles: 0,
-      scannedFiles: 0
+      perFileLimitedBytes: 0,
+      perFileLimitedFiles: 0,
+      rejectedFiles: 0,
+      scannedFiles: 0,
+      sessions: [],
+      sizeLimitedBytes: 0,
+      sizeLimitedFiles: 0
     })),
     channelManager,
     channelResumeScheduler,
@@ -39,6 +49,8 @@ const startServerMocks = vi.hoisted(() => {
     installWebDebugChii: vi.fn(),
     mountRoutes: vi.fn(async () => ({ onListen: mountRoutesOnListen })),
     mountRoutesOnListen,
+    loggerInfo: vi.fn(),
+    loggerWarn: vi.fn(),
     pluginManager,
     runtimeStoreWatcher,
     setupWebSocket: vi.fn(),
@@ -102,6 +114,13 @@ vi.mock('#~/services/web-debug/chii.js', () => ({
 
 vi.mock('../src/middlewares/index.js', () => ({
   initMiddlewares: startServerMocks.initMiddlewares
+}))
+
+vi.mock('#~/utils/logger.js', () => ({
+  logger: {
+    info: startServerMocks.loggerInfo,
+    warn: startServerMocks.loggerWarn
+  }
 }))
 
 vi.mock('../src/routes/index.js', () => ({
@@ -264,5 +283,45 @@ describe('startServer workspace runtime ownership', () => {
     expect(startServerMocks.pluginManager.load.mock.invocationCallOrder[0]).toBeLessThan(
       startServerMocks.pluginManager.dispose.mock.invocationCallOrder[0]!
     )
+  })
+
+  it('reports an optional Goose auto-import skip without treating startup replay as failed', async () => {
+    startServerMocks.autoImportNativeProjectHistoryAndReplay.mockResolvedValueOnce({
+      aggregateLimitedBytes: 0,
+      aggregateLimitedFiles: 0,
+      diagnostics: [{
+        adapter: 'goose',
+        code: 'adapter_unavailable',
+        level: 'warning',
+        message: 'Skipped Goose native history because its configured CLI is unavailable.'
+      }],
+      importedEvents: 2,
+      importedSessions: 1,
+      matchedFiles: 1,
+      perFileLimitedBytes: 0,
+      perFileLimitedFiles: 0,
+      rejectedFiles: 0,
+      scannedFiles: 2,
+      sessions: [],
+      sizeLimitedBytes: 0,
+      sizeLimitedFiles: 0
+    })
+    const { close } = await startRuntimeForRole('workspace')
+
+    await vi.advanceTimersByTimeAsync(500)
+    await vi.waitFor(() => {
+      expect(startServerMocks.loggerWarn).toHaveBeenCalledWith({
+        adapter: 'goose',
+        code: 'adapter_unavailable',
+        level: 'warning',
+        skippedSessions: undefined
+      }, 'Skipped Goose native history because its configured CLI is unavailable.')
+    })
+    expect(startServerMocks.loggerWarn).not.toHaveBeenCalledWith(
+      expect.anything(),
+      '[runtime-store] Runtime store initial replay or native history auto import failed'
+    )
+
+    await close()
   })
 })

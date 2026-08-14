@@ -3,8 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { getDb } from '#~/db/index.js'
 import { sessionsRouter } from '#~/routes/sessions.js'
+import { loadConfigState } from '#~/services/config/index.js'
 import { rememberLauncherWorkspaces } from '#~/services/launcher/manager.js'
 import {
+  DEFAULT_NATIVE_HISTORY_IMPORT_MAX_FILE_SIZE_BYTES,
   consumeNativeProjectHistoryImportPrompt,
   importNativeProjectHistoryAndReplay,
   previewNativeProjectHistory
@@ -21,6 +23,7 @@ import {
   requestSessionTermination,
   updateAndNotifySession
 } from '#~/services/session/index.js'
+import { handleInteractionResponse } from '#~/services/session/interaction.js'
 import { notifySessionUpdated } from '#~/services/session/runtime.js'
 import {
   createSessionManagedWorktree,
@@ -32,6 +35,10 @@ import { disposeTerminalSession } from '#~/services/terminal/index.js'
 
 vi.mock('#~/db/index.js', () => ({
   getDb: vi.fn()
+}))
+
+vi.mock('#~/services/config/index.js', () => ({
+  loadConfigState: vi.fn()
 }))
 
 vi.mock('#~/services/launcher/manager.js', () => ({
@@ -61,6 +68,7 @@ vi.mock('#~/services/runtime-store/session-control.js', () => ({
 
 vi.mock('#~/services/runtime-store/history-import.js', () => ({
   consumeNativeProjectHistoryImportPrompt: vi.fn(),
+  DEFAULT_NATIVE_HISTORY_IMPORT_MAX_FILE_SIZE_BYTES: 50 * 1024 * 1024,
   importNativeProjectHistoryAndReplay: vi.fn(),
   previewNativeProjectHistory: vi.fn()
 }))
@@ -128,6 +136,7 @@ const findRouteHandler = (path: string, method: string) => {
 describe('sessionsRouter', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(loadConfigState).mockResolvedValue({ mergedConfig: {} } as never)
     resetSessionCreationCancellationState()
     vi.mocked(provisionSessionWorkspace).mockResolvedValue(undefined as any)
     vi.mocked(createServerRuntimeSession).mockResolvedValue({} as any)
@@ -231,11 +240,45 @@ describe('sessionsRouter', () => {
 
     expect(importNativeProjectHistoryAndReplay).toHaveBeenCalledWith({
       adapters: ['claude-code'],
+      maxFileSizeBytes: DEFAULT_NATIVE_HISTORY_IMPORT_MAX_FILE_SIZE_BYTES,
       projectPaths: ['/workspace/app', '/workspace/shared'],
       projectScope: 'all-projects',
       sourcePaths: ['/home/.claude/projects/app/1.jsonl']
     })
     expect(rememberLauncherWorkspaces).toHaveBeenCalledWith(['/workspace/imported-app'])
+    expect(ctx.body).toEqual(result)
+  })
+
+  it('keeps manual Goose import free of the automatic size limit', async () => {
+    const result = {
+      importedEvents: 2,
+      importedSessions: 1,
+      matchedFiles: 1,
+      scannedFiles: 1,
+      sessions: []
+    }
+    vi.mocked(getDb).mockReturnValue({} as any)
+    vi.mocked(importNativeProjectHistoryAndReplay).mockResolvedValue(result as any)
+    const handleImport = findRouteHandler('/native-history-import/run', 'POST')
+    const ctx = {
+      request: {
+        body: {
+          adapters: ['goose'],
+          sourcePaths: ['goose-cli://session/large-session']
+        }
+      },
+      body: undefined
+    }
+
+    await handleImport(ctx)
+
+    expect(importNativeProjectHistoryAndReplay).toHaveBeenCalledWith({
+      adapters: ['goose'],
+      sourcePaths: ['goose-cli://session/large-session']
+    })
+    expect(importNativeProjectHistoryAndReplay).not.toHaveBeenCalledWith(
+      expect.objectContaining({ maxFileSizeBytes: expect.anything() })
+    )
     expect(ctx.body).toEqual(result)
   })
 
@@ -279,7 +322,7 @@ describe('sessionsRouter', () => {
     const ctx = {
       request: {
         body: {
-          adapters: ['codex', 'cursor'],
+          adapters: ['codex', 'claude-code', 'cline', 'cursor', 'droid', 'goose', 'grok', 'qwen-code'],
           candidateScope: 'unarchived',
           cursor: 'cursor-1',
           limit: 24,
@@ -299,8 +342,9 @@ describe('sessionsRouter', () => {
     await handlePreview(ctx)
 
     expect(previewNativeProjectHistory).toHaveBeenCalledWith({
-      adapters: ['codex', 'cursor'],
+      adapters: ['codex', 'claude-code', 'cline', 'cursor', 'droid', 'goose', 'grok', 'qwen-code'],
       candidateScope: 'unarchived',
+      maxFileSizeBytes: 50 * 1024 * 1024,
       previewCursor: 'cursor-1',
       previewLimit: 24,
       projectPaths: ['/workspace/root', '/workspace/shared'],
@@ -315,6 +359,53 @@ describe('sessionsRouter', () => {
     expect(importNativeProjectHistoryAndReplay).not.toHaveBeenCalled()
     expect(ctx.body).toEqual(result)
   })
+
+  it.each([
+    [
+      'an inherited global limit',
+      { nativeHistoryImport: { maxFileSizeBytes: 12_345 } },
+      { adapters: ['goose'], maxFileSizeBytes: 12_345 }
+    ],
+    [
+      'an explicit Goose limit',
+      { nativeHistoryImport: { maxFileSizeBytes: 12_345, adapters: { goose: { maxFileSizeBytes: 67_890 } } } },
+      { adapters: ['goose'], maxFileSizeBytesByAdapter: { goose: 67_890 } }
+    ],
+    [
+      'an explicit null Goose limit',
+      { nativeHistoryImport: { maxFileSizeBytes: 12_345, adapters: { goose: { maxFileSizeBytes: null } } } },
+      { adapters: ['goose'], maxFileSizeBytesByAdapter: { goose: null } }
+    ]
+  ])(
+    'threads %s into explicit preview without changing manual import policy',
+    async (_label, mergedConfig, expected) => {
+      vi.mocked(getDb).mockReturnValue({} as any)
+      vi.mocked(loadConfigState).mockResolvedValue({ mergedConfig } as never)
+      vi.mocked(previewNativeProjectHistory).mockResolvedValue({ adapters: [] } as never)
+      vi.mocked(importNativeProjectHistoryAndReplay).mockResolvedValue({
+        aggregateLimitedBytes: 0,
+        aggregateLimitedFiles: 0,
+        importedEvents: 0,
+        importedSessions: 0,
+        matchedFiles: 0,
+        perFileLimitedBytes: 0,
+        perFileLimitedFiles: 0,
+        rejectedFiles: 0,
+        scannedFiles: 0,
+        sessions: [],
+        sizeLimitedBytes: 0,
+        sizeLimitedFiles: 0
+      })
+      const preview = findRouteHandler('/native-history-import/preview', 'POST')
+      const run = findRouteHandler('/native-history-import/run', 'POST')
+
+      await preview({ request: { body: { adapters: ['goose'] } }, body: undefined })
+      await run({ request: { body: { adapters: ['goose'] } }, body: undefined })
+
+      expect(previewNativeProjectHistory).toHaveBeenCalledWith(expected)
+      expect(importNativeProjectHistoryAndReplay).toHaveBeenCalledWith({ adapters: ['goose'] })
+    }
+  )
 
   it('rejects invalid native history import adapters', async () => {
     vi.mocked(getDb).mockReturnValue({} as any)
@@ -691,6 +782,49 @@ describe('sessionsRouter', () => {
       expect.any(Object)
     )
     expect(ctx.body).toEqual({ ok: true })
+  })
+
+  it('preserves multi-select arrays and returns success only after the task accepts the response', async () => {
+    vi.mocked(handleInteractionResponse).mockResolvedValue(true)
+    const handlePostEvent = findRouteHandler('/:id/events', 'POST')
+    const ctx = {
+      params: { id: 'session-interaction' },
+      request: {
+        body: {
+          type: 'interaction_response',
+          id: 'ask-1',
+          data: ['runtime', 'history']
+        }
+      },
+      body: undefined
+    }
+
+    await handlePostEvent(ctx)
+
+    expect(handleInteractionResponse).toHaveBeenCalledWith(
+      'session-interaction',
+      'ask-1',
+      ['runtime', 'history']
+    )
+    expect(ctx.body).toEqual({ ok: true })
+  })
+
+  it('rejects an interaction response when the task boundary cannot queue it', async () => {
+    vi.mocked(handleInteractionResponse).mockResolvedValue(false)
+    const handlePostEvent = findRouteHandler('/:id/events', 'POST')
+    const ctx = {
+      params: { id: 'session-interaction' },
+      request: {
+        body: {
+          type: 'interaction_response',
+          id: 'ask-stale',
+          data: []
+        }
+      },
+      body: undefined
+    }
+
+    await expect(handlePostEvent(ctx)).rejects.toThrow('Interaction response is no longer pending')
   })
 
   it('records a pending creation cancellation when terminating a session that is not stored yet', async () => {

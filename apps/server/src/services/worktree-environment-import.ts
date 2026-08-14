@@ -9,7 +9,7 @@ import type {
   WorktreeEnvironmentScriptKey,
   WorktreeEnvironmentSource
 } from '@oneworks/types'
-import { tryLoadAdapterWorktreeEnvironmentImportCapability } from '@oneworks/types'
+import { tryLoadAdapterWorktreeEnvironmentImportCapability } from '@oneworks/types/adapter-package'
 import { mergeProcessEnvWithProjectEnv } from '@oneworks/utils'
 
 import { resolveSelectableAdapterRuntimeTargets } from '#~/services/adapter-imports.js'

@@ -5,12 +5,8 @@ import { isAbsolute, resolve } from 'node:path'
 import process from 'node:process'
 
 import { buildConfigJsonVariables, loadConfigState } from '@oneworks/config'
-import {
-  SERVER_INSTANCE_FILE_NAME,
-  isServerInstanceState,
-  loadAdapterCliPreparer,
-  resolveAdapterRuntimeTarget
-} from '@oneworks/types'
+import { SERVER_INSTANCE_FILE_NAME, isServerInstanceState } from '@oneworks/types'
+import { loadAdapterCliPreparer, resolveAdapterRuntimeTarget } from '@oneworks/types/adapter-package'
 import { mergeProcessEnvWithProjectEnv, resolveProjectHomePath } from '@oneworks/utils'
 
 import { resolveCliWorkspaceCwd } from '#~/workspace.js'

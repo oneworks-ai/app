@@ -1,6 +1,6 @@
 /* eslint-disable max-lines -- candidate search, bulk import, and per-row import stay together for this narrow panel. */
 import { RouteContainerHeaderActionButton, ShortcutTooltip } from '@oneworks/components/route-layout'
-import { App, Button, DatePicker, Empty, InputNumber, Space, Switch, message } from 'antd'
+import { Alert, App, Button, DatePicker, Empty, InputNumber, Space, Switch, message } from 'antd'
 import dayjs from 'dayjs'
 import type { Dayjs } from 'dayjs'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -13,6 +13,7 @@ import type {
   NativeHistoryAdapter,
   NativeHistoryCandidateScope,
   NativeHistoryImportAdapterPreview,
+  NativeHistoryImportDiagnostic,
   NativeHistoryImportResult,
   NativeHistoryProjectScope,
   NativeHistoryThreadScope,
@@ -28,8 +29,11 @@ import { copyTextWithFeedback } from '#~/utils/copy'
 import { FieldRow } from './ConfigFieldRow'
 import {
   getAdapterLabelKey,
+  isValidNativeHistorySizeLimit,
+  megabytesToNativeHistoryBytes,
   nativeHistoryAdapterIcons,
-  removeImportedNativeHistoryPreviewCandidates
+  removeImportedNativeHistoryPreviewCandidates,
+  resolveNativeHistoryAdapterSizeLimit
 } from './external-sessions-panel-model'
 import type {
   ExternalSessionsProjectOption,
@@ -38,7 +42,6 @@ import type {
 } from './external-sessions-panel-model'
 
 const bytesToMegabytes = (value: number | null | undefined) => value == null ? null : value / 1024 / 1024
-const megabytesToBytes = (value: number | null) => value == null ? null : Math.round(value * 1024 * 1024)
 const hasOwn = (value: object, key: string) => Object.prototype.hasOwnProperty.call(value, key)
 const { RangePicker } = DatePicker
 type CandidateScopeFilter = NativeHistoryCandidateScope
@@ -163,7 +166,6 @@ const resolveMatchingTimeRangePreset = (
 export function ExternalSessionsAdapterTab({
   adapter,
   config,
-  globalSizeLimit,
   formatBytes,
   formatTimestamp,
   hasCurrentProjectScope,
@@ -185,7 +187,6 @@ export function ExternalSessionsAdapterTab({
 }: {
   adapter: NativeHistoryAdapter
   config?: NativeHistoryImportSettings
-  globalSizeLimit?: number | null
   formatBytes: (value: number) => string
   formatTimestamp: (value: number) => string
   hasCurrentProjectScope: boolean
@@ -231,6 +232,8 @@ export function ExternalSessionsAdapterTab({
   const [timeSort, setTimeSort] = useState<NativeHistoryTimeSort>('activity')
   const [expandedPanel, setExpandedPanel] = useState<'filter' | 'settings' | undefined>()
   const [importingSourcePaths, setImportingSourcePaths] = useState(() => new Set<string>())
+  const [previewDiagnostics, setPreviewDiagnostics] = useState<NativeHistoryImportDiagnostic[]>([])
+  const [importDiagnostics, setImportDiagnostics] = useState<NativeHistoryImportDiagnostic[]>([])
   const isMac = typeof navigator !== 'undefined' && navigator.platform.includes('Mac')
   const previewTimeFilter = useMemo(() =>
     compactTimeFilter({
@@ -239,6 +242,7 @@ export function ExternalSessionsAdapterTab({
     }), [createdAtRange, updatedAtRange])
   const {
     data: previewPages,
+    error: previewError,
     isLoading: isPreviewLoading,
     isValidating: isPreviewValidating,
     mutate: refreshPreview,
@@ -268,6 +272,9 @@ export function ExternalSessionsAdapterTab({
       ]
     },
     async ([, , , , , , , , , , , cursor]) => {
+      if (cursor == null) {
+        setPreviewDiagnostics([])
+      }
       const result = await previewNativeProjectHistory({
         adapters: [adapter],
         candidateScope: candidateScopeFilter,
@@ -279,6 +286,9 @@ export function ExternalSessionsAdapterTab({
         timeFilter: previewTimeFilter,
         timeSort
       })
+      if (cursor == null) {
+        setPreviewDiagnostics(result.diagnostics?.filter(diagnostic => diagnostic.adapter === adapter) ?? [])
+      }
       return result.adapters.find(item => item.adapter === adapter)
     },
     {
@@ -287,7 +297,8 @@ export function ExternalSessionsAdapterTab({
       focusThrottleInterval: 30_000,
       revalidateIfStale: true,
       revalidateOnFocus: true,
-      revalidateOnReconnect: false
+      revalidateOnReconnect: false,
+      shouldRetryOnError: false
     }
   )
   const preview = useMemo<NativeHistoryImportAdapterPreview | undefined>(() => {
@@ -309,18 +320,35 @@ export function ExternalSessionsAdapterTab({
       }
     }
     const lastPage = pages.at(-1)!
+    const aggregateLimitedBytes = Math.max(0, ...pages.map(page => page.aggregateLimitedBytes))
+    const aggregateLimitedFiles = Math.max(0, ...pages.map(page => page.aggregateLimitedFiles))
+    const perFileLimitedBytes = Math.max(0, ...pages.map(page => page.perFileLimitedBytes))
+    const perFileLimitedFiles = Math.max(0, ...pages.map(page => page.perFileLimitedFiles))
+    const sizeLimitedBytes = Math.max(0, ...pages.map(page => page.sizeLimitedBytes))
+    const sizeLimitedFiles = Math.max(0, ...pages.map(page => page.sizeLimitedFiles))
     return {
       adapter,
+      aggregateLimitedBytes,
+      aggregateLimitedFiles,
       candidates,
+      diagnostics: Array.from(new Set(pages.flatMap(page => page.diagnostics))),
       hasMore: lastPage.hasMore,
       isComplete: pages.every(page => page.isComplete),
-      largeFiles: pages.reduce((sum, page) => sum + page.largeFiles, 0),
+      largeFiles: candidates.filter(candidate => candidate.isLarge).length + perFileLimitedFiles,
       largestFileBytes: Math.max(0, ...pages.map(page => page.largestFileBytes)),
       matchedFiles: pages.reduce((sum, page) => sum + page.matchedFiles, 0),
       ...(lastPage.nextCursor == null ? {} : { nextCursor: lastPage.nextCursor }),
+      perFileLimitedBytes,
+      perFileLimitedFiles,
       projects: Array.from(projectsByPath, ([path, sessionCount]) => ({ path, sessionCount })),
+      rejectedFiles: Math.max(0, ...pages.map(page => page.rejectedFiles)),
       scannedFiles: Math.max(0, ...pages.map(page => page.scannedFiles)),
-      totalBytes: pages.reduce((sum, page) => sum + page.totalBytes, 0)
+      sizeLimitedBytes,
+      sizeLimitedFiles,
+      totalBytes: sizeLimitedBytes + candidates.reduce(
+        (sum, candidate) => sum + candidate.fileSizeBytes,
+        0
+      )
     }
   }, [adapter, previewPages])
   const adapterConfig = config?.adapters?.[adapter] ?? {}
@@ -328,8 +356,14 @@ export function ExternalSessionsAdapterTab({
   const hasAutoOverride = hasOwn(adapterConfig, 'autoImport')
   const hasSizeOverride = hasOwn(adapterConfig, 'maxFileSizeBytes')
   const effectiveAutoImport = adapterConfig.autoImport ?? config?.autoImport ?? false
-  const effectiveSizeLimit = hasSizeOverride ? adapterConfig.maxFileSizeBytes : globalSizeLimit
+  const effectiveSizeLimit = resolveNativeHistoryAdapterSizeLimit(config, adapter)
   const matchedFiles = preview?.matchedFiles ?? 0
+  const previewDiagnostic = preview?.diagnostics.at(-1)
+  const hasReadDiagnostics = (
+    (preview?.rejectedFiles ?? 0) +
+    (preview?.perFileLimitedFiles ?? 0) +
+    (preview?.aggregateLimitedFiles ?? 0)
+  ) > 0
   const hasMorePreview = preview?.hasMore === true
   const isLoadingMorePreview = isPreviewValidating && previewPages?.[previewPageCount - 1] == null
   const candidateScopeFilterLabel = candidateScopeFilter === 'all'
@@ -512,6 +546,7 @@ export function ExternalSessionsAdapterTab({
         timeSort
       })
       if (result != null) {
+        setImportDiagnostics(result.diagnostics?.filter(diagnostic => diagnostic.adapter === adapter) ?? [])
         const importedSourcePaths = new Set(result.sessions.map(session => session.sourcePath))
         if (importedSourcePaths.size === 0) {
           await refreshPreview()
@@ -658,6 +693,40 @@ export function ExternalSessionsAdapterTab({
       ))}
     </div>
   )
+  const diagnostics = [...previewDiagnostics, ...importDiagnostics]
+    .filter((diagnostic, index, values) =>
+      values.findIndex(value => (
+        value.code === diagnostic.code &&
+        value.sourceKind === diagnostic.sourceKind &&
+        value.message === diagnostic.message
+      )) === index
+    )
+  const isUnsupportedHistoryScope = diagnostics.some(
+    diagnostic => diagnostic.code === 'unsupported_history_scope'
+  )
+  const hasPreviewFailure = adapter === 'goose' && (
+    previewError != null || previewDiagnostics.some(diagnostic => diagnostic.code === 'adapter_unavailable')
+  )
+  const visibleDiagnostics = diagnostics.filter(
+    diagnostic => !(hasPreviewFailure && diagnostic.code === 'adapter_unavailable')
+  )
+  const formatDiagnostic = (diagnostic: NativeHistoryImportDiagnostic) => {
+    if (diagnostic.code === 'adapter_unavailable') {
+      return t('nativeHistoryImport.manager.diagnosticAdapterUnavailable', { platform: platformLabel })
+    }
+    if (diagnostic.code === 'history_oversized') {
+      return t('nativeHistoryImport.manager.diagnosticOversized')
+    }
+    if (diagnostic.code === 'unsupported_history_scope') {
+      return t('nativeHistoryImport.manager.diagnosticUnsupportedSubtaskScope')
+    }
+    return t(
+      diagnostic.sourceKind === 'recipe'
+        ? 'nativeHistoryImport.manager.diagnosticUnsupportedRecipe'
+        : 'nativeHistoryImport.manager.diagnosticUnsupportedSubagent',
+      { count: diagnostic.skippedSessions ?? 0 }
+    )
+  }
 
   return (
     <div className='config-view__external-session-tab'>
@@ -671,6 +740,50 @@ export function ExternalSessionsAdapterTab({
             actions={toolbarActions}
           />
         )}
+
+        {adapter === 'goose' && (
+          <Alert
+            showIcon
+            type='info'
+            message={t('nativeHistoryImport.manager.goosePreviewDisclosureTitle')}
+            description={t('nativeHistoryImport.manager.goosePreviewDisclosure')}
+          />
+        )}
+
+        {hasPreviewFailure && (
+          <Alert
+            showIcon
+            type='error'
+            message={t('nativeHistoryImport.manager.goosePreviewFailedTitle')}
+            description={t('nativeHistoryImport.manager.goosePreviewFailedDescription')}
+            action={
+              <Button size='small' onClick={() => void refreshPreview()}>
+                {t('nativeHistoryImport.manager.retryPreview')}
+              </Button>
+            }
+          />
+        )}
+
+        {visibleDiagnostics.length > 0 && (
+          <Alert
+            showIcon
+            type={visibleDiagnostics.some(diagnostic => diagnostic.level === 'error') ? 'error' : 'warning'}
+            message={t('nativeHistoryImport.manager.diagnosticsTitle')}
+            description={
+              <ul>
+                {visibleDiagnostics.map(diagnostic => (
+                  <li key={`${diagnostic.code}:${diagnostic.sourceKind ?? ''}:${diagnostic.message}`}>
+                    {formatDiagnostic(diagnostic)}
+                  </li>
+                ))}
+              </ul>
+            }
+          />
+        )}
+
+        <div className='config-view__detail-list-empty' role='note'>
+          {t(`nativeHistoryImport.manager.platformDescriptions.${adapter}`)}
+        </div>
 
         {showSettings && expandedPanel === 'settings' && (
           <div className='config-view__external-session-panel config-view__external-session-panel--settings'>
@@ -711,28 +824,31 @@ export function ExternalSessionsAdapterTab({
                 title={t('nativeHistoryImport.manager.adapterSizeLimitTitle', {
                   platform: platformLabel
                 })}
-                description={t('nativeHistoryImport.manager.effectiveSizeLimit', {
-                  size: effectiveSizeLimit == null
-                    ? t('nativeHistoryImport.manager.unlimited')
-                    : formatBytes(effectiveSizeLimit)
-                })}
+                description={isValidNativeHistorySizeLimit(effectiveSizeLimit)
+                  ? t('nativeHistoryImport.manager.effectiveSizeLimit', {
+                    size: formatBytes(effectiveSizeLimit)
+                  })
+                  : t('nativeHistoryImport.manager.invalidSizeLimitDescription')}
                 icon='data_thresholding'
               >
                 <Space className='config-view__external-session-size-control' wrap>
                   <InputNumber
-                    min={1}
+                    min={0}
+                    max={50}
                     precision={0}
                     placeholder={hasSizeOverride
-                      ? t('nativeHistoryImport.manager.unlimited')
+                      ? t('nativeHistoryImport.manager.hardLimitMegabytes')
                       : t('nativeHistoryImport.manager.inheritGlobal')}
                     suffix='MB'
                     value={hasSizeOverride
                       ? bytesToMegabytes(adapterConfig.maxFileSizeBytes)
                       : null}
-                    onChange={value =>
-                      onAdapterConfigChange({
-                        maxFileSizeBytes: megabytesToBytes(value)
-                      })}
+                    onChange={(value) => {
+                      const bytes = megabytesToNativeHistoryBytes(value)
+                      if (bytes !== undefined) {
+                        onAdapterConfigChange({ maxFileSizeBytes: bytes })
+                      }
+                    }}
                   />
                   {hasSizeOverride && (
                     <Button
@@ -995,12 +1111,48 @@ export function ExternalSessionsAdapterTab({
         )}
 
         <div className='config-view__external-session-candidate-list'>
-          {preview == null || matchedFiles === 0 || filteredCandidates.length === 0
+          {(preview?.rejectedFiles ?? 0) > 0 && (
+            <div className='config-view__detail-list-empty' role='status'>
+              {t('nativeHistoryImport.manager.rejectedFilesSummary', {
+                count: preview?.rejectedFiles ?? 0
+              })}
+            </div>
+          )}
+          {(preview?.perFileLimitedFiles ?? 0) > 0 && (
+            <div className='config-view__detail-list-empty' role='status'>
+              {t('nativeHistoryImport.manager.perFileLimitSkippedSummary', {
+                count: preview?.perFileLimitedFiles ?? 0,
+                size: formatBytes(preview?.perFileLimitedBytes ?? 0)
+              })}
+            </div>
+          )}
+          {(preview?.aggregateLimitedFiles ?? 0) > 0 && (
+            <div className='config-view__detail-list-empty' role='status'>
+              {t('nativeHistoryImport.manager.aggregateLimitSkippedSummary', {
+                count: preview?.aggregateLimitedFiles ?? 0,
+                size: formatBytes(preview?.aggregateLimitedBytes ?? 0)
+              })}
+            </div>
+          )}
+          {matchedFiles === 0 && (isUnsupportedHistoryScope || hasPreviewFailure)
+            ? null
+            : preview == null || matchedFiles === 0 || filteredCandidates.length === 0
             ? (
               <div className='config-view__detail-list-empty'>
                 <Empty
                   description={isPreviewLoading
                     ? t('nativeHistoryImport.manager.previewLoading')
+                    : matchedFiles === 0 && previewDiagnostic != null
+                    ? previewDiagnostic
+                    : matchedFiles === 0 && hasReadDiagnostics
+                    ? (
+                      <span>
+                        {t('nativeHistoryImport.manager.incompleteCandidates', { platform: platformLabel })}
+                        {adapter === 'qwen-code' && (
+                          <span>{t('nativeHistoryImport.manager.qwenSourceRootRemediation')}</span>
+                        )}
+                      </span>
+                    )
                     : matchedFiles === 0
                     ? t(
                       projectScope === 'all-projects'
@@ -1017,8 +1169,11 @@ export function ExternalSessionsAdapterTab({
                 {filteredCandidates.map((candidate) => {
                   const isOversized = effectiveSizeLimit != null && candidate.fileSizeBytes > effectiveSizeLimit
                   const sizeLabel = formatBytes(candidate.fileSizeBytes)
-                  const sizeTooltip = isOversized
-                    ? t('nativeHistoryImport.manager.autoSkippedSizeTooltip', { size: sizeLabel })
+                  const oversizePolicy = isOversized
+                    ? t('nativeHistoryImport.manager.autoSkippedManualAllowedSizePolicy')
+                    : undefined
+                  const oversizePolicyId = isOversized
+                    ? `native-history-oversize-policy-${encodeURIComponent(candidate.sourcePath)}`
                     : undefined
                   return (
                     <FieldRow
@@ -1046,23 +1201,26 @@ export function ExternalSessionsAdapterTab({
                         <div className='config-view__external-session-candidate-desc'>
                           <span>{formatTimestamp(candidate.updatedAt)}</span>
                           <span className='config-view__external-session-desc-separator'>·</span>
-                          {sizeTooltip == null
-                            ? (
-                              <span className='config-view__external-session-candidate-size'>
-                                {sizeLabel}
-                              </span>
-                            )
+                          <span
+                            className={[
+                              'config-view__external-session-candidate-size',
+                              isOversized
+                                ? 'config-view__external-session-candidate-size--warning'
+                                : ''
+                            ].filter(Boolean).join(' ')}
+                          >
+                            {sizeLabel}
+                          </span>
+                          {oversizePolicy == null
+                            ? null
                             : (
-                              <ShortcutTooltip
-                                isMac={isMac}
-                                title={sizeTooltip}
-                                placement='top'
-                                className='config-view__external-session-size-tooltip'
+                              <span
+                                id={oversizePolicyId}
+                                className='config-view__external-session-oversize-policy'
+                                role='note'
                               >
-                                <span className='config-view__external-session-candidate-size config-view__external-session-candidate-size--warning'>
-                                  {sizeLabel}
-                                </span>
-                              </ShortcutTooltip>
+                                {oversizePolicy}
+                              </span>
                             )}
                         </div>
                       }
@@ -1072,6 +1230,7 @@ export function ExternalSessionsAdapterTab({
                         <RouteContainerHeaderActionButton
                           isMac={isMac}
                           item={{
+                            ariaDescribedBy: oversizePolicyId,
                             disabled: candidate.isImported || isImporting,
                             icon: 'download',
                             key: 'import-candidate',

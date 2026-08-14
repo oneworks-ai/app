@@ -856,7 +856,18 @@ export interface ServerConfig {
   publicPaths?: string[]
 }
 
-export type NativeHistoryImportAdapter = 'codex' | 'claude-code' | 'cursor' | 'grok'
+export type NativeHistoryImportAdapter =
+  | 'codex'
+  | 'claude-code'
+  | 'cline'
+  | 'cursor'
+  | 'droid'
+  | 'goose'
+  | 'grok'
+  | 'qwen-code'
+
+/** Server-enforced ceiling for every native-history file and read operation. */
+export const NATIVE_HISTORY_IMPORT_MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
 
 export interface NativeHistoryImportAdapterConfig {
   autoImport?: boolean
@@ -1220,6 +1231,9 @@ export interface ConfigUiRecordKind {
   key: string
   label?: string
   description?: string
+  capabilities?: {
+    accounts?: boolean
+  }
 }
 
 export interface ConfigUiRecordMapSchema {

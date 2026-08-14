@@ -8,7 +8,7 @@ import {
 } from '@oneworks/config'
 import { syncConfiguredMarketplacePlugins } from '@oneworks/managed-plugins'
 import type { AdapterBuiltinModel, AdapterCtx, AdapterQueryOptions, Config } from '@oneworks/types'
-import { loadAdapterModelServiceModels } from '@oneworks/types'
+import { loadAdapterModelServiceModels } from '@oneworks/types/adapter-package'
 import {
   CODEX_SHARED_MODEL_PATH,
   CODEX_SHARED_MODEL_SERVICE_KEY,

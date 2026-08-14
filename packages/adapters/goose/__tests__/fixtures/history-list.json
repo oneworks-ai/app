@@ -1,0 +1,64 @@
+[
+  {
+    "id": "20260813_120000",
+    "working_dir": "/workspace/goose-project",
+    "name": "Refactor the adapter",
+    "user_set_name": true,
+    "session_type": "user",
+    "created_at": "2026-08-13T12:00:00Z",
+    "updated_at": "2026-08-13T12:05:00Z",
+    "last_message_at": "2026-08-13T12:06:00Z",
+    "message_count": 4,
+    "provider_name": "anthropic",
+    "model_config": { "model_name": "claude-sonnet-4-6" },
+    "archived_at": null
+  },
+  {
+    "id": "20260813_120000",
+    "working_dir": "/workspace/goose-project",
+    "name": "Refactor the adapter",
+    "user_set_name": true,
+    "session_type": "user",
+    "created_at": "2026-08-13T12:00:00Z",
+    "updated_at": "2026-08-13T12:05:30Z",
+    "last_message_at": "2026-08-13T12:06:30Z",
+    "message_count": 4,
+    "provider_name": "anthropic",
+    "model_config": { "model_name": "claude-sonnet-4-6" },
+    "archived_at": null
+  },
+  {
+    "id": "20260812_090000",
+    "working_dir": "/workspace/another-project",
+    "name": "Other project task",
+    "user_set_name": false,
+    "session_type": "user",
+    "created_at": "2026-08-12T09:00:00Z",
+    "updated_at": "2026-08-12T09:10:00Z",
+    "message_count": 2,
+    "provider_name": "openai",
+    "model_config": { "model_name": "gpt-5" },
+    "archived_at": "2026-08-12T10:00:00Z"
+  },
+  {
+    "id": "20260811_080000",
+    "working_dir": "/workspace/goose-project",
+    "name": "Internal subagent",
+    "session_type": "sub_agent",
+    "created_at": "2026-08-11T08:00:00Z",
+    "updated_at": "2026-08-11T08:10:00Z",
+    "message_count": 2,
+    "archived_at": null
+  },
+  {
+    "id": "20260810_070000",
+    "working_dir": "/workspace/goose-project",
+    "name": "Scheduled recipe run",
+    "session_type": "user",
+    "recipe": { "title": "fixture recipe" },
+    "created_at": "2026-08-10T07:00:00Z",
+    "updated_at": "2026-08-10T07:10:00Z",
+    "message_count": 2,
+    "archived_at": null
+  }
+]

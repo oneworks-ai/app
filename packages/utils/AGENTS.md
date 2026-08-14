@@ -28,8 +28,12 @@
   - 跨 config/server/adapter 共用的 marketplace 规范化与分层合并；One Works 官方市场声明在这里投影为普通 runtime plugin config
 - `src/managed-plugin-package.ts`
   - `@oneworks/plugin-*` package 的 bootstrap cache、registry fallback、metadata 解析与安装 helper
+- `src/managed-npm-cli.ts`
+  - adapter CLI 的共享 managed/system/path resolver 与 installer；默认 `legacy-inherit` 保持既有 consumer 行为，需要安全隔离的 adapter 必须显式选择 `minimal` 并传入已经 allowlist 过滤的 env。该 policy 同时覆盖 candidate/version probe、login-shell discovery、npm install/lifecycle child 与 post-install probe
 - `src/cache.ts`
   - home project `caches/<task>/<session>/<key>.json` 读写 helper
+- `src/credential-config-scrub.ts`
+  - 无业务编排的 JSON-compatible 纯克隆 / 凭据表示清洗 helper；供持久化边界使用，不调用 getter / `toJSON`，也不修改 runtime 输入。哪些 adapter / 字段需要应用该策略仍由消费包决定
 - `src/system.ts`
   - `notify()`
   - 桌面通知 options schema
@@ -46,6 +50,7 @@
   - 通用对象 key transform
   - 通用路径 helper
   - 通用 cache helper
+  - 通用持久化前 credential-bearing config clone/scrub helper
   - 通用 model selection helper
   - 通用插件解析 helper
   - managed plugin package cache / installer helper
@@ -59,5 +64,5 @@
 
 - 只放可复用、无业务编排的 helper；带产品语义的逻辑留在消费包。
 - 优先依赖 `@oneworks/types`，不要反向依赖 `core`、`hooks` 或 `mcp`。
-- 修改 logger、log level、插件解析或 managed plugin package installer 后，至少回归 `packages/utils/__tests__` 和相关消费方测试。
+- 修改 logger、log level、插件解析、credential config scrub 或 managed plugin package installer 后，至少回归 `packages/utils/__tests__` 和相关消费方测试。
 - `preferBundledOfficialPlugins` 只表示优先使用 runtime package roots（`__ONEWORKS_PROJECT_PACKAGE_DIR__` / `__ONEWORKS_PROJECT_CLI_PACKAGE_DIR__`）内真正随运行时提供的官方插件；不能把当前 workspace 的 `node_modules` 当作 bundled 来源。runtime 未携带目标插件时继续走 managed package cache / registry 解析。

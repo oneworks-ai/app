@@ -16,14 +16,14 @@ import {
   compactNativeHistoryImportSettings,
   defaultNativeHistoryImportMaxFileSizeBytes,
   getAdapterLabelKey,
+  isValidNativeHistorySizeLimit,
+  megabytesToNativeHistoryBytes,
   nativeHistoryAdapters
 } from './external-sessions-panel-model'
 import type { ExternalSessionsProjectOption, NativeHistoryImportSettings } from './external-sessions-panel-model'
 import { useNativeHistoryImportAction } from './use-native-history-import-action'
 
 const bytesToMegabytes = (value: number | null | undefined) => value == null ? null : value / 1024 / 1024
-const megabytesToBytes = (value: number | null) => value == null ? null : Math.round(value * 1024 * 1024)
-const hasOwn = (value: object, key: string) => Object.prototype.hasOwnProperty.call(value, key)
 
 export function ExternalSessionsPanel({
   activeAdapter,
@@ -66,9 +66,6 @@ export function ExternalSessionsPanel({
   const [projectPaths, setProjectPaths] = useState<string[]>([])
   const hasCurrentProjectScope = fixedProjectScope == null && runtimeHasCurrentProjectScope
   const { isImporting, runImport } = useNativeHistoryImportAction()
-  const globalSizeLimit = config != null && hasOwn(config, 'maxFileSizeBytes')
-    ? config.maxFileSizeBytes
-    : defaultNativeHistoryImportMaxFileSizeBytes
   const runImportAndRefreshProjects = useCallback(async (
     request: Parameters<typeof runImport>[0]
   ) => {
@@ -151,16 +148,22 @@ export function ExternalSessionsPanel({
 
             <FieldRow
               title={t('nativeHistoryImport.manager.globalSizeLimitTitle')}
-              description={t('nativeHistoryImport.manager.globalSizeLimitDescription')}
+              description={isValidNativeHistorySizeLimit(config?.maxFileSizeBytes)
+                ? t('nativeHistoryImport.manager.globalSizeLimitDescription')
+                : t('nativeHistoryImport.manager.invalidSizeLimitDescription')}
               icon='data_thresholding'
             >
               <InputNumber
-                min={1}
+                min={0}
+                max={defaultNativeHistoryImportMaxFileSizeBytes / 1024 / 1024}
                 precision={0}
-                placeholder={globalSizeLimit == null ? t('nativeHistoryImport.manager.unlimited') : '50'}
+                placeholder={t('nativeHistoryImport.manager.hardLimitMegabytes')}
                 suffix='MB'
-                value={bytesToMegabytes(globalSizeLimit)}
-                onChange={value => updateConfig({ maxFileSizeBytes: megabytesToBytes(value) })}
+                value={bytesToMegabytes(config?.maxFileSizeBytes)}
+                onChange={(value) => {
+                  const bytes = megabytesToNativeHistoryBytes(value)
+                  if (bytes !== undefined) updateConfig({ maxFileSizeBytes: bytes })
+                }}
               />
             </FieldRow>
           </>
@@ -201,7 +204,6 @@ export function ExternalSessionsPanel({
               <ExternalSessionsAdapterTab
                 adapter={adapter}
                 config={config}
-                globalSizeLimit={globalSizeLimit}
                 formatBytes={formatBytes}
                 formatTimestamp={formatTimestamp}
                 isActive={activeAdapter === adapter}

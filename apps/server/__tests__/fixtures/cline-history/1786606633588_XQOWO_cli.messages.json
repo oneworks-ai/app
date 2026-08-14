@@ -1,0 +1,158 @@
+{
+  "version": 1,
+  "updated_at": "2026-08-13T07:37:16.655Z",
+  "agent": "lead",
+  "sessionId": "1786606633588_XQOWO_cli",
+  "origin": {
+    "source": "cli",
+    "mode": "user",
+    "sessionId": "1786606633588_XQOWO_cli",
+    "version": "3.0.54"
+  },
+  "messages": [
+    {
+      "id": "msg_msr7glbb_u",
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "<user_input mode=\"act\">SANITIZED_TURN_1: emit text, request the command tool, then finish.</user_input>"
+        }
+      ],
+      "ts": 1786606633703
+    },
+    {
+      "id": "msg_J3bo42R4",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "SPIKE_TEXT_BEFORE_TOOL"
+        },
+        {
+          "type": "tool_use",
+          "id": "acp-spike-tool-call-1",
+          "name": "run_commands",
+          "input": {
+            "commands": [
+              "printf ACP_TOOL_OK"
+            ]
+          }
+        }
+      ],
+      "ts": 1786606633710,
+      "modelInfo": {
+        "id": "gpt-4o",
+        "provider": "openai-compatible"
+      }
+    },
+    {
+      "id": "msg_c3q193ek",
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "acp-spike-tool-call-1",
+          "name": "run_commands",
+          "content": [
+            {
+              "query": "printf ACP_TOOL_OK",
+              "result": "ACP_TOOL_OK",
+              "success": true
+            }
+          ]
+        }
+      ],
+      "ts": 1786606633724
+    },
+    {
+      "id": "msg_w7KUyQqj",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "SPIKE_TOOL_TURN_COMPLETE"
+        }
+      ],
+      "ts": 1786606633729,
+      "modelInfo": {
+        "id": "gpt-4o",
+        "provider": "openai-compatible"
+      },
+      "metrics": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0,
+        "cost": 0
+      }
+    },
+    {
+      "id": "msg_msr7gmn7_z",
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "<user_input mode=\"act\">SANITIZED_TURN_2: prove the first recovered continuation.</user_input>"
+        }
+      ],
+      "ts": 1786606635427
+    },
+    {
+      "id": "msg_5Asc6D8Y",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "SPIKE_SANITIZED_TURN_2_COMPLETE"
+        }
+      ],
+      "ts": 1786606635432,
+      "modelInfo": {
+        "id": "gpt-4o",
+        "provider": "openai-compatible"
+      },
+      "metrics": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0,
+        "cost": 0
+      }
+    },
+    {
+      "id": "msg_msr7gnl5_15",
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "<user_input mode=\"act\">SANITIZED_TURN_3: prove the second recovered continuation.</user_input>"
+        }
+      ],
+      "ts": 1786606636649
+    },
+    {
+      "id": "msg_IBicp2Gk",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "SPIKE_SANITIZED_TURN_3_COMPLETE"
+        }
+      ],
+      "ts": 1786606636653,
+      "modelInfo": {
+        "id": "gpt-4o",
+        "provider": "openai-compatible"
+      },
+      "metrics": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0,
+        "cost": 0
+      }
+    }
+  ],
+  "system_prompt": "[sanitized]"
+}

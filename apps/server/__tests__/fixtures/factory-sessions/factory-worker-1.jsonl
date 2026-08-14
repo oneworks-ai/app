@@ -1,0 +1,3 @@
+{"type":"session_start","sessionId":"factory-worker-1","title":"Factory worker fixture","owner":"fixture","cwd":"FACTORY_FIXTURE_CWD","decompSessionType":"worker","decompMissionId":"fixture-mission"}
+{"id":"worker-user-1","role":"user","content":[{"type":"text","text":"Run the delegated check"}],"createdAt":1786492860000,"updatedAt":1786492860000}
+{"id":"worker-assistant-1","role":"assistant","content":[{"type":"text","text":"Delegated check passed."}],"createdAt":1786492861000,"updatedAt":1786492861000,"parentId":"worker-user-1"}

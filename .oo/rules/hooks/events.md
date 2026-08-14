@@ -4,24 +4,26 @@
 
 ## 支持矩阵
 
-| Hook 事件                | Claude Code | Codex                                           | Gemini                 | Kimi     | OpenCode                                                      | Pi                                 |
-| ------------------------ | ----------- | ----------------------------------------------- | ---------------------- | -------- | ------------------------------------------------------------- | ---------------------------------- |
-| `TaskStart` / `TaskStop` | 框架触发    | 框架触发                                        | 框架触发               | 框架触发 | 框架触发                                                      | 框架触发                           |
-| `SessionStart`           | native      | native                                          | native                 | native   | native                                                        | bridge（启动前，`canBlock: true`） |
-| `UserPromptSubmit`       | native      | native                                          | native                 | native   | bridge                                                        | bridge（发送前，`canBlock: true`） |
-| `PreToolUse`             | native      | native                                          | native                 | native   | native                                                        | bridge (`canBlock: false`)         |
-| `PostToolUse`            | native      | native                                          | native                 | native   | native                                                        | bridge (`canBlock: false`)         |
-| `Stop`                   | native      | native                                          | native                 | native   | native                                                        | bridge (`canBlock: false`)         |
-| `SessionEnd`             | bridge      | bridge                                          | bridge                 | bridge   | bridge                                                        | bridge (`canBlock: false`)         |
-| `Notification`           | native      | 不支持                                          | 不支持                 | 不支持   | 不支持                                                        | 不支持                             |
-| `SubagentStop`           | native      | 不支持                                          | 不支持                 | 不支持   | 不支持                                                        | 不支持                             |
-| `PreCompact`             | native      | bridge (`contextCompaction`, `canBlock: false`) | native (`PreCompress`) | native   | native (`experimental.session.compacting`, `canBlock: false`) | 不支持                             |
+| Hook 事件                | Claude Code | Codex                                           | Gemini                 | Junie                      | Kimi     | OpenCode                                                      | Pi                                 |
+| ------------------------ | ----------- | ----------------------------------------------- | ---------------------- | -------------------------- | -------- | ------------------------------------------------------------- | ---------------------------------- |
+| `TaskStart` / `TaskStop` | 框架触发    | 框架触发                                        | 框架触发               | 框架触发                   | 框架触发 | 框架触发                                                      | 框架触发                           |
+| `SessionStart`           | native      | native                                          | native                 | native                     | native   | native                                                        | bridge（启动前，`canBlock: true`） |
+| `UserPromptSubmit`       | native      | native                                          | native                 | 不支持                     | native   | bridge                                                        | bridge（发送前，`canBlock: true`） |
+| `PreToolUse`             | native      | native                                          | native                 | native (`canBlock: true`)  | native   | native                                                        | bridge (`canBlock: false`)         |
+| `PostToolUse`            | native      | native                                          | native                 | 不支持                     | native   | native                                                        | bridge (`canBlock: false`)         |
+| `Stop`                   | native      | native                                          | native                 | native (`canBlock: true`)  | native   | native                                                        | bridge (`canBlock: false`)         |
+| `StopFailure`            | 不支持      | 不支持                                          | 不支持                 | native (`canBlock: false`) | 不支持   | 不支持                                                        | 不支持                             |
+| `SessionEnd`             | bridge      | bridge                                          | bridge                 | native (`canBlock: false`) | bridge   | bridge                                                        | bridge (`canBlock: false`)         |
+| `Notification`           | native      | 不支持                                          | 不支持                 | 不支持                     | 不支持   | 不支持                                                        | 不支持                             |
+| `SubagentStop`           | native      | 不支持                                          | 不支持                 | 不支持                     | 不支持   | 不支持                                                        | 不支持                             |
+| `PreCompact`             | native      | bridge (`contextCompaction`, `canBlock: false`) | native (`PreCompress`) | 不支持                     | native   | native (`experimental.session.compacting`, `canBlock: false`) | 不支持                             |
 
 - Gemini 原生 `PreCompress` 已映射到统一 `PreCompact`。
 - Kimi 原生 `PreCompact` 已接入统一 hook，并透传 `trigger` / `token_count`。
 - OpenCode 当前通过官方 `experimental.session.compacting` 映射到统一 `PreCompact`，但它只支持 compaction prompt/context 定制，不具备 `canBlock: true` 的阻断语义。
 - Codex 当前已把 stream app-server 的 `item/started -> contextCompaction` 映射到统一 `PreCompact`，但它仍是 bridge 观测事件，固定 `canBlock: false`，也不会回写 compaction prompt。
 - Pi 的 `SessionStart` 和 `UserPromptSubmit` 都在相应操作前通过通用 bridge，可阻断启动或发送；工具前后、`Stop` 与 `SessionEnd` 是 bridge 观测。Pi 暂不支持 `Notification`、`SubagentStop` 或 `PreCompact`。
+- Junie native owner 覆盖 `SessionStart` / `PreToolUse` / `Stop` / `StopFailure` / `SessionEnd`。`StopFailure` 归一化为带 `error` / `errorDetails` 的失败观测，固定 `canBlock: false`，其 hook output 不回写 CLI failure。native hooks active 时 framework bridge 只 suppress 这五类事件，避免重复执行；`UserPromptSubmit` / `PostToolUse` 等未验证事件不能一并禁用。
 
 ## Codex 特别说明
 
@@ -42,7 +44,7 @@
 
 ## 统一输入语义
 
-- `adapter`：`claude-code` / `codex` / `gemini` / `kimi` / `opencode` / `pi`
+- `adapter`：`claude-code` / `codex` / `gemini` / `junie` / `kimi` / `opencode` / `pi`
 - `runtime`：`cli` / `server` / `mcp`
 - `hookSource`：`native` 或 `bridge`
 - `canBlock`：当前事件是否还能真正阻止动作继续
@@ -55,5 +57,6 @@
 - native `PreToolUse`
 - native `PostToolUse`
 - `PreCompact`
+- Junie native `Stop`
 
-其余 bridge 观测事件、`Stop`、`SessionEnd`、`Notification`、`SubagentStop` 统一视为 `canBlock: false`。
+其余 bridge 观测事件、非 Junie `Stop`、`StopFailure`、`SessionEnd`、`Notification`、`SubagentStop` 统一视为 `canBlock: false`。

@@ -19,14 +19,21 @@ export type WorkspaceAssetKind =
   | 'nativePlugin'
 export type WorkspaceAssetAdapter =
   | 'claude-code'
+  | 'cline'
   | 'codex'
   | 'copilot'
   | 'cursor'
+  | 'dsh'
+  | 'droid'
   | 'gemini'
+  | 'goose'
   | 'grok'
+  | 'kiro'
+  | 'junie'
   | 'kimi'
   | 'opencode'
   | 'pi'
+  | 'qwen-code'
 export type AssetDiagnosticStatus = 'native' | 'translated' | 'prompt' | 'skipped'
 
 export interface AssetDiagnostic {

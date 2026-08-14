@@ -31,17 +31,29 @@ export function useNativeHistoryImportAction() {
       return undefined
     }
 
-    setIsImporting(true)
-    try {
-      const result = await runNativeProjectHistoryImport(request)
-      await showNativeHistoryImportNotification(result, { showEmpty: true })
-      return result
-    } catch (error) {
-      void message.error(getApiErrorMessage(error, t('nativeHistoryImport.failedDescription')))
-      return undefined
-    } finally {
-      setIsImporting(false)
+    let retryInFlight = false
+    const performImport = async () => {
+      if (retryInFlight) return undefined
+      retryInFlight = true
+      setIsImporting(true)
+      try {
+        const result = await runNativeProjectHistoryImport(request)
+        await showNativeHistoryImportNotification(result, {
+          onRetry: () => {
+            void performImport()
+          },
+          showEmpty: true
+        })
+        return result
+      } catch (error) {
+        void message.error(getApiErrorMessage(error, t('nativeHistoryImport.failedDescription')))
+        return undefined
+      } finally {
+        retryInFlight = false
+        setIsImporting(false)
+      }
     }
+    return performImport()
   }, [isImporting, message, showNativeHistoryImportNotification, t])
 
   return {

@@ -58,6 +58,7 @@ const isHookEventName = (value: string): value is keyof HookInputs => (
     PreToolUse: true,
     PostToolUse: true,
     Stop: true,
+    StopFailure: true,
     SubagentStop: true,
     PreCompact: true
   } satisfies Record<keyof HookInputs, true>)

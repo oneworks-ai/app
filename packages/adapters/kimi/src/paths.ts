@@ -2,8 +2,8 @@ import { existsSync, realpathSync } from 'node:fs'
 import { resolve } from 'node:path'
 import process from 'node:process'
 
-import { resolveBootstrapPackageCacheRootDir } from '@oneworks/types'
 import type { AdapterCtx } from '@oneworks/types'
+import { resolveBootstrapPackageCacheRootDir } from '@oneworks/types/adapter-package-cache'
 import { resolveProjectSharedCachePath } from '@oneworks/utils/project-cache-path'
 
 export const DEFAULT_KIMI_INSTALL_PACKAGE = 'kimi-cli'

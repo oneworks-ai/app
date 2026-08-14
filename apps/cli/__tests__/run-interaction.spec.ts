@@ -9,6 +9,7 @@ import { resolvePermissionMirrorPath } from '@oneworks/utils'
 import { describe, expect, it, vi } from 'vitest'
 
 import { getAdapterInteractionMessage, handlePrintEvent, parseCliInputControlEvent } from '#~/commands/run.js'
+import { attachInputBridge } from '#~/commands/run/input-bridge.js'
 import {
   supportsPrintInteractionResponses,
   supportsRuntimeInteractionResponses
@@ -196,6 +197,33 @@ describe('run command interaction handling', () => {
     stdin.end('{"type":"submit_input","data":"allow_once"}\n')
 
     await expect(decisionPromise).resolves.toBe('allow_once')
+  })
+
+  it('routes stream-json submit_input through a bound Kiro session response bridge', async () => {
+    const stdin = new PassThrough()
+    const respondInteraction = vi.fn().mockResolvedValue(undefined)
+    const session = {
+      emit: vi.fn(),
+      kill: vi.fn(),
+      respondInteraction
+    }
+    const stop = attachInputBridge({
+      format: 'stream-json',
+      session,
+      stdin: stdin as unknown as NodeJS.ReadStream,
+      onError: vi.fn(),
+      onInputClosed: vi.fn(),
+      submitInput: async event => {
+        await session.respondInteraction(event.interactionId ?? 'kiro-initial', event.data)
+      }
+    })
+
+    stdin.write('{"type":"submit_input","interactionId":"kiro-initial","data":"allow_once"}\n')
+    await vi.waitFor(() => {
+      expect(respondInteraction).toHaveBeenCalledWith('kiro-initial', 'allow_once')
+    })
+    stop()
+    stdin.end()
   })
 
   it('keeps pending recovery cache on cancel but clears it for terminal decisions', () => {

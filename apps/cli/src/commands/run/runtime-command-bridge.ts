@@ -14,6 +14,7 @@ export interface RuntimeCommandBridgeOptions {
   cwd: string
   env?: NodeJS.ProcessEnv
   intervalMs?: number
+  onActivity?: () => void
   session: RuntimeCommandBridgeSession
   sessionId: string
   sink: RuntimeEventSink
@@ -89,6 +90,7 @@ const dispatchCommand = async (
     case 'send_message':
     case 'resume':
       await options.sink.ackCommand(command)
+      await options.sink.recordSessionResumed(command)
       await options.sink.recordMessageCommand(command)
       options.session.emit({ type: 'message', content: toMessageContent(command) })
       return
@@ -154,6 +156,7 @@ export const attachRuntimeCommandBridge = async (options: RuntimeCommandBridgeOp
     const pending = orderRuntimeCommands(commands.filter(command => !processed.has(command.id)))
     for (const command of pending) {
       processed.add(command.id)
+      options.onActivity?.()
       try {
         await dispatchCommand(command, options)
       } catch (error) {

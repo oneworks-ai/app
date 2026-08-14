@@ -9,6 +9,13 @@ const output = execFileSync('pnpm', ['pack', '--dry-run', '--json'], {
 const report = JSON.parse(output.slice(output.lastIndexOf('\n{') + 1))
 const files = new Set(report.files.map(file => file.path))
 const requiredFiles = [
+  'dist/adapter-package-cache.d.ts',
+  'dist/adapter-package-cache.js',
+  'dist/adapter-package-cache.mjs',
+  'dist/adapter-package-contract.d.ts',
+  'dist/adapter-package.d.ts',
+  'dist/adapter-package.js',
+  'dist/adapter-package.mjs',
   'dist/index.d.ts',
   'dist/index.js',
   'dist/index.mjs',

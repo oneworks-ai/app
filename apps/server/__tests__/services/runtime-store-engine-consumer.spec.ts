@@ -127,6 +127,43 @@ describe('runtime store engine consumer', () => {
       queuedCommand: { ts: 200, type: 'stop' },
       state: { sessionId: 'sess-room-dev', status: 'failed', lastSeq: 10, updatedAt: 100 }
     })).toBe(false)
+    expect(shouldStartServerRuntimeConsumer({
+      heartbeat: {
+        pid: process.pid,
+        protocolVersion: '1.0.0',
+        runtimeId: 'ow-run-live',
+        status: 'completed',
+        updatedAt: Date.now()
+      },
+      metadata: { ...metadata, sessionRecovery: 'live-only' },
+      queuedCommand: { ts: Date.now() + 1, type: 'send_message' },
+      state: { sessionId: 'sess-room-dev', status: 'completed', lastSeq: 10, updatedAt: Date.now() - 1 }
+    })).toBe(false)
+    expect(shouldStartServerRuntimeConsumer({
+      env: { ONEWORKS_RUNTIME_CONSUMER_PRINT_IDLE_TIMEOUT_SECONDS: '600' },
+      heartbeat: {
+        pid: process.pid,
+        protocolVersion: '1.0.0',
+        runtimeId: 'ow-run-live-long-lease',
+        status: 'completed',
+        updatedAt: Date.now() - 300_000
+      },
+      metadata: { ...metadata, sessionRecovery: 'live-only' },
+      queuedCommand: { ts: Date.now() + 1, type: 'send_message' },
+      state: { sessionId: 'sess-room-dev', status: 'completed', lastSeq: 10, updatedAt: Date.now() - 300_001 }
+    })).toBe(false)
+    expect(shouldStartServerRuntimeConsumer({
+      heartbeat: {
+        pid: 99_999_999,
+        protocolVersion: '1.0.0',
+        runtimeId: 'ow-run-dead',
+        status: 'completed',
+        updatedAt: Date.now()
+      },
+      metadata: { ...metadata, sessionRecovery: 'live-only' },
+      queuedCommand: { ts: Date.now() + 1, type: 'send_message' },
+      state: { sessionId: 'sess-room-dev', status: 'completed', lastSeq: 10, updatedAt: Date.now() - 1 }
+    })).toBe(true)
   })
 
   it('builds a server-side consumer spawn plan for ordinary web sessions', async () => {

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { buildInteractionText } from '#~/channels/interaction.js'
 import type { ChannelContext } from '#~/channels/middleware/@types/index.js'
 import { createT, defineMessages } from '#~/channels/middleware/i18n.js'
 import { interactionResponseMiddleware } from '#~/channels/middleware/interaction-response.js'
@@ -26,6 +27,38 @@ const invalidSingleReply =
   '未识别你的回复，请回复以下任一选项的文本或序号：\n1. 继续并切换到 dontAsk\n2. 继续并切换到 bypassPermissions\n3. 取消'
 const invalidMultiReply =
   '未识别这些选项：好的。\n请回复以下选项的文本或序号，多个选项可用逗号、顿号或换行分隔：\n1. 米饭\n2. 面条\n3. 还没吃'
+
+const permissionOptions = [
+  {
+    label: 'Native request allow',
+    value: 'native-allow-once',
+    permission: { adapterLabel: 'Kiro', semantic: 'allow_once' as const }
+  },
+  {
+    label: 'Native persistent allow',
+    value: 'native-allow-always',
+    permission: { adapterLabel: 'Kiro', semantic: 'allow_persistent' as const }
+  },
+  {
+    label: 'Native request reject',
+    value: 'native-reject-once',
+    permission: { adapterLabel: 'Kiro', semantic: 'deny_once' as const }
+  },
+  {
+    label: 'Native persistent reject',
+    value: 'native-reject-always',
+    permission: { adapterLabel: 'Kiro', semantic: 'deny_persistent' as const }
+  },
+  {
+    label: 'Ask Kiro',
+    value: 'native-future-option',
+    permission: {
+      adapterLabel: 'Kiro',
+      nativeLabel: 'Ask Kiro',
+      semantic: 'native_unknown' as const
+    }
+  }
+]
 
 const makeInteraction = (payload: Record<string, unknown>) => ({
   id: 'interaction-1',
@@ -86,6 +119,13 @@ describe('interactionResponseMiddleware', () => {
       'interaction.response.invalidMulti': ({ invalid, choices }) =>
         `未识别这些选项：${invalid}。\n请回复以下选项的文本或序号，多个选项可用逗号、顿号或换行分隔：\n${choices}`
     })
+    defineMessages('en', {
+      'interaction.response.empty': 'This question only accepts a text reply. Reply with text directly.',
+      'interaction.response.invalidSingle': ({ choices }) =>
+        `That reply did not match. Reply with one option label or number:\n${choices}`,
+      'interaction.response.invalidMulti': ({ invalid, choices }) =>
+        `These selections did not match: ${invalid}.\nReply with option labels or numbers:\n${choices}`
+    })
   })
 
   it('consumes channel replies for pending multi-select interactions', async () => {
@@ -143,6 +183,86 @@ describe('interactionResponseMiddleware', () => {
     await interactionResponseMiddleware(ctx, vi.fn())
 
     expect(vi.mocked(handleInteractionResponse)).toHaveBeenCalledWith('sess-1', 'interaction-1', 'dontAsk')
+  })
+
+  it.each(
+    [
+      ['en', 'Allow once', 'native-allow-once'],
+      ['zh', '在 Kiro 中始终拒绝（持久）', 'native-reject-always'],
+      ['en', 'Native request reject', 'native-reject-once'],
+      ['zh', 'native-allow-always', 'native-allow-always'],
+      ['en', '5', 'native-future-option'],
+      ['zh', 'Kiro 原生选项：Ask Kiro', 'native-future-option']
+    ] as const
+  )(
+    'maps the displayed/native/number Kiro permission reply in %s back to its original option ID',
+    async (language, commandText, expectedOptionId) => {
+      const payload = {
+        kind: 'permission' as const,
+        question: 'Kiro permission?',
+        options: permissionOptions
+      }
+      const outbound = buildInteractionText(language, {
+        sessionId: 'sess-1',
+        ...payload
+      })
+      if (commandText !== '5' && !commandText.startsWith('Native ') && !commandText.startsWith('native-')) {
+        expect(outbound).toContain(commandText)
+      }
+      expect(outbound).toContain(
+        language === 'en'
+          ? 'Reply with the option label or number'
+          : '请直接回复选项文本或序号'
+      )
+      vi.mocked(getSessionInteraction).mockReturnValue(makeInteraction(payload))
+      const ctx = makeCtx({
+        commandText,
+        config: { language } as any,
+        t: createT(language)
+      })
+
+      await interactionResponseMiddleware(ctx, vi.fn())
+
+      expect(vi.mocked(handleInteractionResponse)).toHaveBeenCalledTimes(1)
+      expect(vi.mocked(handleInteractionResponse)).toHaveBeenCalledWith(
+        'sess-1',
+        'interaction-1',
+        expectedOptionId
+      )
+      expect(ctx.inbound.ack).toHaveBeenCalledTimes(1)
+    }
+  )
+
+  it('rejects a localized-label/native-alias collision instead of escalating request scope', async () => {
+    const options = [
+      {
+        label: 'Native request allow',
+        value: 'native-allow-once',
+        permission: { adapterLabel: 'Kiro', semantic: 'allow_once' as const }
+      },
+      {
+        label: 'Allow once',
+        value: 'native-allow-always',
+        permission: { adapterLabel: 'Kiro', semantic: 'allow_persistent' as const }
+      }
+    ]
+    const payload = { kind: 'permission' as const, question: 'Kiro permission?', options }
+    const outbound = buildInteractionText('en', { sessionId: 'sess-1', ...payload })
+    expect(outbound).toContain('1. Allow once')
+    expect(outbound).toContain('2. Always allow in Kiro (persistent)')
+    vi.mocked(getSessionInteraction).mockReturnValue(makeInteraction(payload))
+    const ctx = makeCtx({
+      commandText: 'Allow once',
+      config: { language: 'en' } as any,
+      t: createT('en')
+    })
+
+    await interactionResponseMiddleware(ctx, vi.fn())
+
+    expect(vi.mocked(handleInteractionResponse)).not.toHaveBeenCalled()
+    expect(ctx.reply).toHaveBeenCalledTimes(1)
+    expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining('That reply did not match.'))
+    expect(ctx.inbound.ack).not.toHaveBeenCalled()
   })
 
   it('replies with a retry hint when single-select text does not match any option', async () => {

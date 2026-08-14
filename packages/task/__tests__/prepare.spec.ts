@@ -29,8 +29,8 @@ vi.mock('@oneworks/managed-plugins', () => ({
   syncConfiguredMarketplacePlugins: mocks.syncConfiguredMarketplacePlugins
 }))
 
-vi.mock('@oneworks/types', async importOriginal => ({
-  ...await importOriginal<typeof import('@oneworks/types')>(),
+vi.mock('@oneworks/types/adapter-package', async importOriginal => ({
+  ...await importOriginal<typeof import('@oneworks/types/adapter-package')>(),
   loadAdapterModelServiceModels: mocks.loadAdapterModelServiceModels
 }))
 

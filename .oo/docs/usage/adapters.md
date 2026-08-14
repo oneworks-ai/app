@@ -13,7 +13,7 @@
 
 ## 前端选择器
 
-聊天输入框的适配器选择器默认展示当前应用内置支持的原生适配器：Claude Code（`claude-code`）、Codex（`codex`）、Copilot（`copilot`）、Cursor（`cursor`）、Gemini（`gemini`）、Grok（`grok`）、Kimi（`kimi`）、OpenCode（`opencode`）和 Pi（`pi`）。
+聊天输入框的适配器选择器默认展示当前应用内置支持的原生适配器：Claude Code（`claude-code`）、[Cline](./cline-adapter.md)（`cline`）、Codex（`codex`）、Copilot（`copilot`）、Cursor（`cursor`）、[Factory Droid](./droid-adapter.md)（`droid`）、[DSH](./dsh-adapter.md)（`dsh`）、Gemini（`gemini`）、[Goose](./goose-adapter.md)（`goose`）、Grok（`grok`）、[Junie](./junie-adapter.md)（`junie`）、[Kiro](./kiro-adapter.md)（`kiro`）、Kimi（`kimi`）、OpenCode（`opencode`）、Pi（`pi`）和 [Qwen Code](./qwen-code-adapter.md)（`qwen-code`）。
 
 以下 adapter 不需要先写入 `.oo.config.json` 才能出现在选择器里。用户选择某个 adapter 发起会话后，运行时会沿用 adapter 自己的 CLI 准备逻辑，把托管 CLI 安装到全局托管 bootstrap cache；首次启动某个 adapter 时可能会稍慢。
 
@@ -21,10 +21,15 @@
 
 如果用户在 `adapters` 配置里添加自定义适配器 key，前端会把它展示在内置适配器的下方。内置适配器的隐藏/恢复是浏览器本地偏好，只影响前端选择器，不会写入项目或用户配置文件。
 
+## Cline CLI
+
+`cline` adapter 使用 Cline 公开 ACP 入口，并以已验证的 `3.0.54` 作为 native resume 门禁；未通过门禁的 system/path binary 只使用结构化 fresh-only fallback。运行时、凭据隔离、资产与只读历史边界见 [Cline CLI 适配器](./cline-adapter.md)。
+
 ## Pi coding-agent
 
-`pi` 适配器通过 Pi JSONL RPC 承载持续会话，默认托管 `@earendil-works/pi-coding-agent@0.84.1`，并支持复用原生/default provider 或使用会话私有 model service。
-完整配置、原生凭据继承、安全与运行时边界、CLI 准备方式见 [Pi coding-agent 适配器](./pi-adapter.md)。
+`pi` 适配器通过 Pi JSONL RPC 承载持续会话，默认托管 `@earendil-works/pi-coding-agent@0.84.1`，并支持复用原生/default provider 或使用会话私有 model service。完整配置、原生凭据继承、安全与运行时边界、CLI 准备方式见 [Pi coding-agent 适配器](./pi-adapter.md)。
+
+`kiro` 使用 Kiro 官方 ACP 通道、隔离的 `KIRO_HOME`、原生 session id/load、selected skills、stdio MCP 与 native hooks；远程 MCP transport 在已验证的 Kiro CLI 2.18.0 contract 下会明确报告为 unsupported。静态模型选择器只展示原生 **Default**，不会把通用 `modelServices` 路由到 Kiro；只有 live Kiro session 明确广告的原生 model ID 才能作为精确选择。完整配置、Amazon Q 迁移边界、认证与降级说明见 [Kiro CLI 适配器](./kiro-adapter.md)。
 
 ## 适配器配置分组
 
@@ -126,31 +131,7 @@ npx oneworks accounts remove claude-code work
 
 `copilot` 使用官方 GitHub Copilot CLI。One Works 会把运行时配置写入 project home 的 `.mock/copilot/settings.json`，并把 CLI auth/keychain 交给官方 CLI 自己处理。
 
-```yaml
-adapters:
-  copilot:
-    cli:
-      source: managed
-      version: 1.0.36
-    remote: false
-    stream: true
-    agent: reviewer
-    agentDirs:
-      - /absolute/path/to/copilot-agents
-    pluginDirs:
-      - /absolute/path/to/copilot-plugin
-    mode: autopilot
-    allowTools:
-      - shell(git:*)
-    denyTools:
-      - shell(git push)
-    allowUrls:
-      - https://docs.github.com/copilot/*
-    additionalDirs:
-      - /absolute/path/to/shared-context
-    configContent:
-      askUser: false
-```
+项目配置可固定 `cli.source` / `cli.version`，并按需设置 `remote`、`stream`、`agent`、`agentDirs`、`pluginDirs`、`mode`、工具与 URL allow/deny 规则、`additionalDirs` 和 `configContent`。
 
 行为说明：
 
@@ -178,22 +159,26 @@ adapters:
     approveMcps: true
 ```
 
-行为说明：
-
-- stream 会话使用 Cursor 的 JSON 输出，并保存原生 chat id；后续 One Works 消息通过 `--resume` 继续同一个 Cursor 会话
-- system prompt、所选 skills、MCP servers 和 hooks 都写入 session 隔离的 Cursor config/data 目录，不覆盖真实 `~/.cursor`
-- 本机 Cursor CLI 登录配置会复制到 session 隔离目录；macOS keychain 通过路径桥接给原生 CLI
-- `force`、`autoReview`、`approveMcps`、`sandbox`、`endpoint`、`additionalDirs`、`pluginDirs` 和 `headers` 会映射到 Cursor Agent CLI 参数
-- 当前不提供 Cursor 多账号 API；登录状态仍由 Cursor Agent CLI 管理
+- stream 会话使用 Cursor 的 JSON 输出并保存原生 chat id，后续消息通过 `--resume` 继续同一会话；system prompt、所选 skills、MCP servers 和 hooks 写入 session 隔离的 config/data 目录，不覆盖真实 `~/.cursor`
+- 本机 Cursor CLI 登录配置会复制到隔离目录，macOS keychain 通过路径桥接；`force`、`autoReview`、`approveMcps`、`sandbox`、`endpoint`、`additionalDirs`、`pluginDirs` 和 `headers` 映射为原生参数，登录状态仍由 CLI 管理，One Works 不提供多账号 API
 
 ## 迁移原生历史会话
 
-配置页“外部会话”可以预览和导入当前项目或已发现项目的 Codex、Claude Code 与 Cursor 历史。Cursor 会话从 `~/.cursor/projects/*/agent-transcripts/**/*.jsonl` 读取；普通会话和 `subagents/` 下的子任务会分别标记。
+配置页“外部会话”可以预览和导入当前项目或已发现项目的 Codex、Claude Code、Cline、Cursor、Factory Droid、Goose、Grok 与 Qwen Code 历史。Cursor 读取 `~/.cursor/projects/*/agent-transcripts/**/*.jsonl`；Droid 读取 `~/.factory/sessions/**/*.jsonl`；Qwen Code 读取 0.21.11 兼容的 chats/subagents JSONL；Goose 只调用公开 `session list` / `session export` JSON 命令，绝不读取 SQLite。
 
+所有自动导入、预览和手动导入读取都受服务端 50 MiB 单文件与累计硬上限约束。自动导入可以设置更小的单文件阈值；留空或设为 `null` 时使用 50 MiB。adapter 未设置时继承全局值，显式 `null` 则使用 50 MiB；超过 50 MiB 的配置无效。手动导入可以读取被更小自动阈值跳过的文件，但不能绕过服务端硬上限。
+
+预览和手动导入通知会区分被拒绝的文件、超过单文件上限的文件，以及累计预算耗尽后未读取的文件；混合结果仍保留成功候选。若所有候选均被拒绝或受限，界面会报告扫描不完整，而不是宣称不存在历史记录。
+
+全局原生历史自动导入会按 best-effort 扫描已启用 adapter：某个可选原生 CLI 缺失时会报告，但不会丢弃其他可用 adapter 的导入结果。显式 adapter 选择仍保持严格且可操作；显式 mixed selection 会保留成功结果并报告不可用项。
 导入只读取源 JSONL，不修改 Cursor 数据。导入结果会成为 One Works 中可查看的已完成外部会话，并保留用户消息、助手文本和工具调用；重复导入会按原生 session id 与源文件去重。由于 Cursor 的项目目录名是工作区路径的压缩形式，Cursor 候选只在能匹配当前项目、显式选择的项目路径或 Cursor 工作区元数据时导入。
 
-## Grok Build CLI
+## Grok Build CLI 与 Goose CLI
 
-`grok` 使用 xAI 官方 Grok Build CLI，支持托管安装、模型路由、MCP、skills、hooks，以及按原生 UUID 迁移并续接已有会话。
+`goose` 通过 Goose ACP 提供持续结构化会话、隔离配置、原生工具、权限请求、MCP 与 selected skills。托管 release 校验、凭据边界、model-service 支持、明确 fallback 和 public CLI 历史导入见 [Goose CLI 适配器](./goose-adapter.md)。
+`grok` 使用 xAI 官方 Grok Build CLI，支持托管安装、模型路由、MCP、skills、hooks，以及按原生 UUID 迁移并续接已有会话。完整配置、project-shared session home、外部会话导入和登录边界见 [Grok Build CLI 适配器](./grok-adapter.md)。
+Junie 的 headless stream、原生续聊、隔离、hooks、Plan 降级与暂不支持历史导入的边界见 [JetBrains Junie CLI 适配器](./junie-adapter.md)。
 
-完整配置、project-shared session home、外部会话导入和登录边界见 [Grok Build CLI 适配器](./grok-adapter.md)。
+## Qwen Code CLI
+
+`qwen-code` 使用 Qwen Code 0.21.11 原生 headless 协议、session ID / resume、隔离 HOME、skills、MCP 和 native hooks；routed model 仅支持已验证的 OpenAI Chat Completions，且不会复制或软链真实 QWEN_HOME 凭据。完整边界见 [Qwen Code CLI 适配器](./qwen-code-adapter.md)。

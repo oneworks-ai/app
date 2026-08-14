@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 
 import type { AskUserQuestionParams, ChatMessageContent, SessionQueuedMessageMode, SessionStatus } from '@oneworks/core'
-import type { SessionInfo } from '@oneworks/types'
+import type { InteractionResponseHandler, SessionInfo } from '@oneworks/types'
 
 import type { AgentRoomTargetMember } from '#~/components/agent-room/@core/resolve-room-target'
 import type { ContextReferenceRequest } from '#~/components/workspace/context-file-types'
@@ -58,7 +58,7 @@ export interface SenderProps {
   sessionId?: string
   sessionInfo?: SessionInfo | null
   interactionRequest?: { id: string; payload: AskUserQuestionParams } | null
-  onInteractionResponse?: (id: string, data: string | string[]) => void
+  onInteractionResponse?: InteractionResponseHandler
   interactionOptionNavigation?: {
     optionCount: number
     activeIndex: number

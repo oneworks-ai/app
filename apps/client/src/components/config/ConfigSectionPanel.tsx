@@ -128,6 +128,7 @@ export function ConfigSectionPanel({
       mergedAdapters,
       t
     },
+    uiSection,
     t
   })
   const currentViewKey = getConfigDetailRouteKey(detailRoute)

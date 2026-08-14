@@ -14,6 +14,7 @@ import type {
   AgentRoomUserMessagePayload,
   AgentRoomUserMessageTarget
 } from '@oneworks/core'
+import { normalizePermissionInteractionOptionPresentation } from '@oneworks/types'
 
 import type {
   AgentRoomApprovalBatchActionView,
@@ -529,11 +530,13 @@ const getInteractionRequestOptions = (
     const description = typeof option.description === 'string' && option.description.trim() !== ''
       ? option.description.trim()
       : undefined
+    const permission = normalizePermissionInteractionOptionPresentation(option.permission)
 
     return [{
       label: option.label.trim(),
       ...(value != null ? { value } : {}),
-      ...(description != null ? { description } : {})
+      ...(description != null ? { description } : {}),
+      ...(permission != null ? { permission } : {})
     }]
   })
 }

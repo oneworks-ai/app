@@ -14,20 +14,28 @@ const relayPackageJson = require('../../../packages/plugins/relay/package.json')
   files?: string[]
   icon?: string
 }
-const { BUILTIN_PLUGIN_PACKAGES } = require('../src/builtin-adapter-cache.cjs') as {
+const { BUILTIN_ADAPTER_PACKAGES, BUILTIN_PLUGIN_PACKAGES } = require('../src/builtin-adapter-cache.cjs') as {
+  BUILTIN_ADAPTER_PACKAGES: string[]
   BUILTIN_PLUGIN_PACKAGES: string[]
 }
 
 const bundledAdapterPackages = [
   '@oneworks/adapter-claude-code',
+  '@oneworks/adapter-cline',
   '@oneworks/adapter-codex',
   '@oneworks/adapter-copilot',
   '@oneworks/adapter-cursor',
+  '@oneworks/adapter-dsh',
+  '@oneworks/adapter-droid',
   '@oneworks/adapter-gemini',
+  '@oneworks/adapter-goose',
   '@oneworks/adapter-grok',
+  '@oneworks/adapter-kiro',
+  '@oneworks/adapter-junie',
   '@oneworks/adapter-kimi',
   '@oneworks/adapter-opencode',
-  '@oneworks/adapter-pi'
+  '@oneworks/adapter-pi',
+  '@oneworks/adapter-qwen-code'
 ]
 
 const bundledPluginPackages = [
@@ -46,6 +54,7 @@ describe('desktop runtime dependencies', () => {
         Object.fromEntries(bundledAdapterPackages.map(packageName => [packageName, 'workspace:*']))
       )
     )
+    expect(BUILTIN_ADAPTER_PACKAGES).toEqual(bundledAdapterPackages)
   })
 
   it('bundles built-in plugin packages so packaged launches can seed the global package cache', () => {

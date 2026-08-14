@@ -149,6 +149,7 @@ export type {
   NativeHistoryAdapter,
   NativeHistoryCandidateScope,
   NativeHistoryImportAdapterPreview,
+  NativeHistoryImportDiagnostic,
   NativeHistoryImportPreviewCandidate,
   NativeHistoryImportPreviewProject,
   NativeHistoryImportPreviewResult,

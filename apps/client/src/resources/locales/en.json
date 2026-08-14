@@ -337,16 +337,25 @@
     "importing": "Importing History",
     "quickImport": "Import {{platform}} history",
     "emptyTitle": "No importable history found",
-    "emptyDescription": "No Codex, Claude Code, Cursor, or Grok history sessions were found for the current project.",
+    "emptyDescription": "No Codex, Claude Code, Cline, Cursor, Factory Droid, Goose, Grok, or Qwen Code history sessions were found for the current project.",
     "failed": "Failed to import native history",
-    "failedDescription": "Try again later, or check the local Codex / Claude Code / Cursor / Grok history directories.",
+    "failedDescription": "Try again later, or check the local Codex / Claude Code / Cline / Cursor / Factory Droid / Grok / Qwen Code history directories and the Goose public session CLI.",
+    "incompleteTitle": "History import finished with unread files",
+    "rejectedDescription": "{{count}} history files were rejected because they were malformed, changed while reading, or unsafe.",
+    "perFileLimitedDescription": "{{count}} history files exceeded the 50 MiB per-file maximum ({{size}} total).",
+    "aggregateLimitedDescription": "{{count}} history files were not read after the 50 MiB request budget was exhausted ({{size}} total).",
+    "retry": "Retry import",
     "open": "Open imported session",
     "dismiss": "Later",
     "platforms": {
       "codex": "Codex",
       "claudeCode": "Claude Code",
+      "cline": "Cline",
       "cursor": "Cursor",
-      "grok": "Grok"
+      "droid": "Factory Droid",
+      "goose": "Goose",
+      "grok": "Grok",
+      "qwenCode": "Qwen Code"
     },
     "manager": {
       "allPlatforms": "All",
@@ -355,7 +364,8 @@
       "globalAutoImportTitle": "Automatic Import",
       "globalAutoImportDescription": "Default automatic import setting for all adapters. Per-adapter settings take precedence.",
       "globalSizeLimitTitle": "Automatic Import Size Limit",
-      "globalSizeLimitDescription": "Skip history files above this size during automatic import. Leave empty for no limit.",
+      "globalSizeLimitDescription": "Skip history files above this size during automatic import. The server hard maximum is 50 MiB; leave empty to use that default.",
+      "invalidSizeLimitDescription": "Invalid size limit. Enter a value from 0 through 50 MiB.",
       "adapterAutoImportTitle": "{{platform}} Automatic Import",
       "adapterAutoImportOverride": "This adapter uses its own switch, which takes precedence over the global setting.",
       "adapterAutoImportInherited": "This adapter inherits the global setting: {{state}}.",
@@ -364,7 +374,7 @@
       "inheritGlobal": "Inherit Global",
       "enabled": "Enabled",
       "disabled": "Disabled",
-      "unlimited": "Unlimited",
+      "hardLimitMegabytes": "50",
       "importSelected": "Import Selected Platforms",
       "importAdapterTitle": "Import {{platform}}",
       "importAdapter": "Import {{platform}}",
@@ -372,7 +382,12 @@
       "confirmImportAllTitle": "Import {{count}} {{platform}} history sessions?",
       "confirmImportAllDescription": "This imports the current filtered results in bulk. Already imported sessions are skipped.",
       "previewTitle": "Importable History",
-      "previewDescription": "Shows history sessions that can be imported for this project. Only metadata and file sizes are read.",
+      "previewDescription": "Shows history sessions that can be imported for this project. Preview uses each adapter's documented read-only boundary, with all reads bounded by the 50 MiB server maximum.",
+      "goosePreviewDisclosureTitle": "How Goose preview works",
+      "goosePreviewDisclosure": "To measure truthful sizes, Goose preview runs the public session export command for only the bounded page of matching candidates and parses its message and tool content in memory. Nothing is imported until you choose Import.",
+      "goosePreviewFailedTitle": "Goose history preview failed",
+      "goosePreviewFailedDescription": "Verify that the Goose CLI is installed, its configured path and version are valid, and its public session commands complete with valid JSON, then retry.",
+      "retryPreview": "Retry preview",
       "previewLoading": "Scanning candidate files and sizes",
       "previewPending": "Candidate scan has not finished yet",
       "previewSummary": "Scanned {{scanned}} history files, matched {{files}} candidates, total {{total}}, largest {{largest}}, {{largeFiles}} large files.",
@@ -419,9 +434,23 @@
       "alreadyImported": "Imported",
       "emptyCandidates": "No {{platform}} history sessions were found for this project",
       "emptyCandidatesAllProjects": "No {{platform}} history sessions were found in discovered projects",
+      "incompleteCandidates": "The {{platform}} scan finished without importable candidates, but some history files could not be read.",
+      "qwenSourceRootRemediation": "Check the Qwen history root resolution order: QWEN_RUNTIME_DIR, then QWEN_HOME, then ~/.qwen.",
       "largeFileSize": "Large {{size}}",
       "autoSkippedSize": "Auto skips {{size}}",
+      "autoSkippedManualAllowedSizePolicy": "Automatic import skips this item; manual Import remains available.",
+      "diagnosticsTitle": "Native history notices",
+      "diagnosticAdapterUnavailable": "{{platform}} history is unavailable because its configured CLI could not be validated.",
+      "diagnosticOversized": "A history export exceeded the configured import size limit.",
+      "diagnosticUnsupportedRecipe": "Skipped {{count}} Goose recipe history entry.",
+      "diagnosticUnsupportedRecipe_other": "Skipped {{count}} Goose recipe history entries.",
+      "diagnosticUnsupportedSubagent": "Skipped {{count}} Goose subagent history entry.",
+      "diagnosticUnsupportedSubagent_other": "Skipped {{count}} Goose subagent history entries.",
+      "diagnosticUnsupportedSubtaskScope": "Goose Subtasks history is unsupported by the public session commands; this is not an empty-history result.",
       "autoSkippedSizeTooltip": "Exceeds the automatic import size limit, so auto import skips this file. Manual import is still available. Size: {{size}}",
+      "rejectedFilesSummary": "Rejected {{count}} malformed, changed, or unsafe history files.",
+      "perFileLimitSkippedSummary": "Skipped {{count}} history files above the 50 MiB per-file maximum ({{size}} total).",
+      "aggregateLimitSkippedSummary": "Stopped reading {{count}} history files after the 50 MiB request budget was exhausted ({{size}} total).",
       "importedCount": "{{count}}",
       "resultTitle": "External Sessions",
       "resultPending": "No import has been run from this page yet. Existing external sessions for this project are listed below.",
@@ -432,7 +461,8 @@
       "platformDescriptions": {
         "codex": "Scans ~/.codex/sessions and archived_sessions.",
         "claude-code": "Scans Claude Code sessions under ~/.claude/projects.",
-        "cursor": "Scans JSONL transcripts under ~/.cursor/projects."
+        "cursor": "Scans JSONL transcripts under ~/.cursor/projects.",
+        "qwen-code": "Scans Qwen Code 0.21.11-compatible chats and subagents. The source root resolves from QWEN_RUNTIME_DIR, then QWEN_HOME, then ~/.qwen."
       }
     }
   },
@@ -1855,6 +1885,7 @@
     "interactionRequest": {
       "title": "Permission request",
       "titleWithSubject": "Permission request: {{subject}}",
+      "permissionQuestion": "Choose how to handle this permission request.",
       "options": "Available responses",
       "response": "Responded: {{response}}",
       "command": {
@@ -2089,6 +2120,45 @@
     "permissionSuggestedMode": "Suggested mode",
     "permissionDeniedTools": "Restricted tools",
     "permissionReasons": "Reasons",
+    "permissionOptions": {
+      "nativeAdapter": "the native adapter",
+      "allow_once": {
+        "label": "Allow once",
+        "description": "Allows only this request."
+      },
+      "allow_session": {
+        "label": "Allow for this session",
+        "description": "Allows matching requests for the rest of this session."
+      },
+      "allow_project": {
+        "label": "Allow for this project",
+        "description": "Saves approval for matching requests in this project."
+      },
+      "deny_once": {
+        "label": "Deny once",
+        "description": "Denies only this request."
+      },
+      "deny_session": {
+        "label": "Deny for this session",
+        "description": "Denies matching requests for the rest of this session."
+      },
+      "deny_project": {
+        "label": "Deny for this project",
+        "description": "Saves rejection for matching requests in this project."
+      },
+      "allow_persistent": {
+        "label": "Always allow in {{adapter}} (persistent)",
+        "description": "Changes {{adapter}} permission state beyond the current request."
+      },
+      "deny_persistent": {
+        "label": "Always deny in {{adapter}} (persistent)",
+        "description": "Changes {{adapter}} permission state beyond the current request."
+      },
+      "native_unknown": {
+        "label": "{{adapter}} option: {{nativeLabel}}",
+        "description": "The native adapter did not advertise this option's scope."
+      }
+    },
     "permissionExpandOptions": "Show more options",
     "permissionCollapseOptions": "Show fewer options",
     "permissionConfirmOption": "Confirm option",
@@ -2110,6 +2180,13 @@
     "interactionOptionNavigation": "Quick option navigation",
     "interactionOptionPrevious": "Previous option",
     "interactionOptionNext": "Next option",
+    "interactionMultiSelectOptionSelected": "{{option}}, selected",
+    "interactionMultiSelectOptionUnselected": "{{option}}, not selected",
+    "interactionMultiSelectCustomAnswer": "Custom answer (optional)",
+    "interactionMultiSelectCustomPlaceholder": "Add another answer",
+    "interactionMultiSelectSubmit_one": "Submit {{count}} selection",
+    "interactionMultiSelectSubmit_other": "Submit {{count}} selections",
+    "interactionResponseFailed": "Couldn't submit this response. Check your connection and try again.",
     "tooltipSlashCommands": "Slash commands",
     "tooltipMentionAgents": "Mention agents",
     "tooltipInjectContext": "Inject context",
@@ -3296,7 +3373,8 @@
       "gemini": "Gemini",
       "copilot": "Copilot",
       "kimi": "Kimi",
-      "opencode": "OpenCode"
+      "opencode": "OpenCode",
+      "qwen-code": "Qwen Code"
     },
     "sources": {
       "builtIn": "Built-in",
@@ -4538,9 +4616,40 @@
           "label": "Share Codex built-in models",
           "desc": "Let One Works adapters such as Claude Code, Gemini, and OpenCode use the current Codex account's built-in models, while retaining official Codex CLI / app-server client access. It reuses the PM service with no host, port, protocol, or token to configure."
         },
+        "allowUnrestrictedReadNetwork": {
+          "label": "Acknowledge DSH host access",
+          "desc": "Required for DSH rc.6. Confirms that its sandbox limits writes but does not isolate host file reads, process visibility, or network access."
+        },
         "items": {
           "label": "Adapter Entries",
           "desc": "Flattened configuration by adapter name. Common fields include `defaultModel`, `includeModels`, and `excludeModels`."
+        }
+      },
+      "adaptersByKey": {
+        "droid": {
+          "cli": {
+            "label": "Factory Droid CLI",
+            "desc": "Select and configure the validated managed, system, or explicit Factory Droid CLI runtime."
+          },
+          "effort": {
+            "label": "Reasoning effort",
+            "desc": "Reasoning effort sent to Factory Droid for this session.",
+            "options": {
+              "low": "Low",
+              "medium": "Medium",
+              "high": "High",
+              "xhigh": "Extra high",
+              "max": "Maximum"
+            }
+          },
+          "configContent": {
+            "label": "Factory settings override",
+            "desc": "Session-scoped Factory settings merged into the isolated runtime configuration."
+          },
+          "disableBuiltinSkills": {
+            "label": "Disable built-in skills",
+            "desc": "Disable Factory built-in skills for this session."
+          }
         }
       },
       "adapterAccount": {

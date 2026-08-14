@@ -16,12 +16,9 @@ import {
   configSectionSchemas
 } from '@oneworks/core/config-schema'
 import type { Config, ConfigJsonSchema, ConfigUiSchema } from '@oneworks/types'
-import {
-  resolveAdapterKeyFromPackageName,
-  resolveAdapterPackageName,
-  resolveAdapterRuntimeTarget,
-  resolveExistingAdapterPackageCacheDir
-} from '@oneworks/types'
+import { resolveAdapterKeyFromPackageName, resolveAdapterPackageName } from '@oneworks/types'
+import { resolveAdapterRuntimeTarget } from '@oneworks/types/adapter-package'
+import { resolveExistingAdapterPackageCacheDir } from '@oneworks/types/adapter-package-cache'
 import { z } from 'zod'
 
 import { buildConfigJsonVariables, loadConfigState } from './load'
@@ -574,7 +571,10 @@ const createUiSchema = (
         entryKinds: getPreferredAdapterEntries(adapterEntries).map(entry => ({
           key: entry.configKey,
           label: entry.contribution.title,
-          description: entry.contribution.description
+          description: entry.contribution.description,
+          capabilities: {
+            accounts: entry.contribution.capabilities?.accounts !== false
+          }
         })),
         schemas: Object.fromEntries(
           adapterEntries.map(entry => [

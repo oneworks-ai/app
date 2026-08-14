@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { Config } from '@oneworks/types'
 
-import { buildSections } from '#~/routes/config-helpers.js'
+import { buildSections, loadAdapterBuiltinModels } from '#~/routes/config-helpers.js'
 
 describe('config helpers', () => {
   it('masks voice credentials and sensitive header values in config sections', () => {
@@ -82,5 +82,11 @@ describe('config helpers', () => {
       API_TOKEN: '******',
       SAFE_NAME: 'visible'
     })
+  })
+
+  it('discovers Kiro built-in models through the shared adapter registry', () => {
+    expect(loadAdapterBuiltinModels({}).kiro).toEqual([
+      expect.objectContaining({ value: 'default' })
+    ])
   })
 })

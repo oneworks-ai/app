@@ -12,17 +12,21 @@ import type {
   AdapterModelProviderImportSource
 } from './adapter-model-provider-import'
 import { resolveExistingAdapterPackageCacheDir } from './adapter-package-cache'
+import { resolveAdapterKeyFromPackageName, resolveAdapterPackageName } from './adapter-package-contract'
+import type {
+  AdapterPackageLoadOptions,
+  AdapterRuntimeTarget,
+  ResolveAdapterRuntimeTargetOptions
+} from './adapter-package-contract'
 import type {
   AdapterWorktreeEnvironmentImportCapability,
   AdapterWorktreeEnvironmentImportDiscoverer,
   AdapterWorktreeEnvironmentImportSource
 } from './adapter-worktree-environment-import'
-import type { AdapterBuiltinModel, Config } from './config'
+import type { AdapterBuiltinModel } from './config'
 import type { AdapterNativePluginManager } from './native-host-plugin'
 import type { AdapterPluginInstaller } from './native-plugin'
 
-const ADAPTER_SCOPE = '@oneworks'
-const ADAPTER_PREFIX = 'adapter-'
 const ADAPTER_CLI_PREPARE_EXPORT = '/cli-prepare'
 const ADAPTER_MODELS_EXPORT = '/models'
 const ADAPTER_MODEL_PROVIDER_IMPORT_EXPORT = '/model-provider-import'
@@ -44,21 +48,16 @@ interface AdapterWorktreeEnvironmentImportExport {
   default?: unknown
 }
 
-export interface AdapterRuntimeTarget {
-  instanceKey: string
-  loadSpecifier: string
-  runtimeAdapter: string
-  packageId?: string
-}
-
-export interface ResolveAdapterRuntimeTargetOptions {
-  config?: Config
-  cwd?: string
-}
-
-export interface AdapterPackageLoadOptions {
-  cwd?: string
-}
+export {
+  normalizeAdapterPackageId,
+  resolveAdapterKeyFromPackageName,
+  resolveAdapterPackageName
+} from './adapter-package-contract'
+export type {
+  AdapterPackageLoadOptions,
+  AdapterRuntimeTarget,
+  ResolveAdapterRuntimeTargetOptions
+} from './adapter-package-contract'
 
 const createWorkspaceRequire = (cwd: string) => createRequire(resolve(cwd, '__oneworks_adapter_loader__.cjs'))
 const defaultAdapterRequire = createWorkspaceRequire(process.cwd())
@@ -299,27 +298,15 @@ const loadPathPackageExport = (params: {
   }
 }
 
-export const resolveAdapterKeyFromPackageName = (packageName: string) => {
-  const normalized = normalizeNonEmptyString(packageName)
-  if (normalized == null) return undefined
-  if (normalized.startsWith('@oneworks/adapter-')) {
-    return normalizeAdapterPackageId(normalized.slice('@oneworks/'.length)).replace(/^adapter-/, '')
-  }
-  if (normalized.startsWith(ADAPTER_PREFIX)) {
-    return normalizeAdapterPackageId(normalized).replace(/^adapter-/, '')
-  }
-  if (!normalized.startsWith('@')) {
-    return normalizeAdapterPackageId(normalized).replace(/^adapter-/, '')
-  }
-  return normalized
-}
-
 const resolveAdapterKeyFromPathPackage = (packageRoot: string) => {
   const packageJson = readPackageJson(packageRoot)
   return packageJson?.data.name == null ? undefined : resolveAdapterKeyFromPackageName(packageJson.data.name)
 }
 
-const readConfiguredAdapterPackageId = (adapterKey: string, config?: Config) => {
+const readConfiguredAdapterPackageId = (
+  adapterKey: string,
+  config?: ResolveAdapterRuntimeTargetOptions['config']
+) => {
   const adapters = config?.adapters as Record<string, unknown> | undefined
   const entry = adapters?.[adapterKey]
   if (entry == null || typeof entry !== 'object' || Array.isArray(entry)) {
@@ -461,25 +448,6 @@ const resolveAdapterLoadTarget = (type: string, options: AdapterPackageLoadOptio
     packageName: resolveAdapterPackageName(type),
     packageRoot: undefined
   }
-}
-
-export const normalizeAdapterPackageId = (type: string) => {
-  const trimmed = type.trim()
-  if (trimmed.startsWith('@')) return trimmed
-
-  const hasAdapterPrefix = trimmed.startsWith(ADAPTER_PREFIX)
-  const adapterId = hasAdapterPrefix ? trimmed.slice(ADAPTER_PREFIX.length) : trimmed
-  const normalizedAdapterId = adapterId === 'claude' ? 'claude-code' : adapterId
-
-  return hasAdapterPrefix ? `${ADAPTER_PREFIX}${normalizedAdapterId}` : normalizedAdapterId
-}
-
-export const resolveAdapterPackageName = (type: string) => {
-  const normalizedType = normalizeAdapterPackageId(type)
-  if (normalizedType.startsWith('@')) return normalizedType
-  return normalizedType.startsWith(ADAPTER_PREFIX)
-    ? `${ADAPTER_SCOPE}/${normalizedType}`
-    : `${ADAPTER_SCOPE}/${ADAPTER_PREFIX}${normalizedType}`
 }
 
 export const loadAdapter = async (type: string, options: AdapterPackageLoadOptions = {}) => {

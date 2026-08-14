@@ -108,6 +108,8 @@ export interface SessionInitInfo {
   title?: string
   selectionWarnings?: AdapterModelFallbackWarning[]
   assetDiagnostics?: AssetDiagnostic[]
+  /** A live-only session accepts follow-up turns only while its runtime process remains connected. */
+  sessionRecovery?: 'native-resume' | 'live-only'
 }
 
 export interface SessionSummaryInfo {
@@ -331,6 +333,10 @@ export interface AdapterSharedModelExecuteResult {
 }
 
 export interface Adapter {
+  sanitizeRuntimeArtifact?: <T>(
+    ctx: AdapterCtx,
+    value: T
+  ) => T
   init?: (
     ctx: AdapterCtx
   ) => Promise<void>

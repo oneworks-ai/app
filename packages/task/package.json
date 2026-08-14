@@ -35,6 +35,7 @@
     "test": "pnpm -C ../.. exec vitest run --workspace vitest.workspace.ts --project bundler packages/task/__tests__"
   },
   "dependencies": {
+    "@oneworks/adapter-junie": "workspace:*",
     "@oneworks/config": "workspace:*",
     "@oneworks/hooks": "workspace:*",
     "@oneworks/managed-plugins": "workspace:*",

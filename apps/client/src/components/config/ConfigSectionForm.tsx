@@ -292,6 +292,29 @@ export const SectionForm = ({
     const translated = getFieldDescription(t, schemaSectionKey, field.path)
     return translated !== '' ? translated : fallback
   }
+  const resolveAdapterFieldLabel = (adapterKey: string) => (field: { path: string[] }, fallback: string) => {
+    const translated = t(`config.fields.adaptersByKey.${adapterKey}.${field.path.join('.')}.label`, {
+      defaultValue: ''
+    })
+    return translated !== '' ? translated : getFieldLabel(t, 'adapters', field.path, fallback)
+  }
+  const resolveAdapterFieldDescription = (adapterKey: string) => (field: { path: string[] }, fallback: string) => {
+    const translated = t(`config.fields.adaptersByKey.${adapterKey}.${field.path.join('.')}.desc`, {
+      defaultValue: ''
+    })
+    if (translated !== '') return translated
+    const common = getFieldDescription(t, 'adapters', field.path)
+    return common !== '' ? common : fallback
+  }
+  const resolveAdapterFieldOptions = (adapterKey: string) => (field: ConfigUiObjectSchema['fields'][number]) => (
+    field.options?.map(option => ({
+      ...option,
+      label: t(
+        `config.fields.adaptersByKey.${adapterKey}.${field.path.join('.')}.options.${option.value}`,
+        { defaultValue: option.label ?? option.value }
+      )
+    }))
+  )
   const renderAdapterSection = ({
     body,
     title,
@@ -340,6 +363,7 @@ export const SectionForm = ({
     )
   }
   const renderAdapterSchemaSection = ({
+    adapterKey,
     schema,
     currentValue,
     onCurrentValueChange,
@@ -350,6 +374,7 @@ export const SectionForm = ({
     collapseKey,
     resolveFieldOptions
   }: {
+    adapterKey: string
     schema: ConfigUiObjectSchema
     currentValue: Record<string, unknown>
     onCurrentValueChange: (nextValue: Record<string, unknown>) => void
@@ -375,21 +400,25 @@ export const SectionForm = ({
             onChange={onCurrentValueChange}
             t={t}
             visibleFieldPaths={visibleFieldPaths}
-            resolveFieldLabel={resolveSchemaFieldLabel('adapters')}
-            resolveFieldDescription={resolveSchemaFieldDescription('adapters')}
-            resolveFieldOptions={resolveFieldOptions}
+            resolveFieldLabel={resolveAdapterFieldLabel(adapterKey)}
+            resolveFieldDescription={resolveAdapterFieldDescription(adapterKey)}
+            resolveFieldOptions={field => (
+              resolveFieldOptions?.(field) ?? resolveAdapterFieldOptions(adapterKey)(field)
+            )}
           />
         </div>
       )
     })
   }
   const renderAdapterAdvancedSections = ({
+    adapterKey,
     schema,
     currentValue,
     onCurrentValueChange,
     modelSection,
     advancedSections
   }: {
+    adapterKey: string
     schema: ConfigUiObjectSchema
     currentValue: Record<string, unknown>
     onCurrentValueChange: (nextValue: Record<string, unknown>) => void
@@ -411,6 +440,7 @@ export const SectionForm = ({
     return (
       <div className='config-view__field-stack'>
         {hasModelSection && renderAdapterSchemaSection({
+          adapterKey,
           schema,
           currentValue,
           onCurrentValueChange,
@@ -431,6 +461,7 @@ export const SectionForm = ({
                 {visibleAdvancedSections.map(section => (
                   <Fragment key={section.key}>
                     {renderAdapterSchemaSection({
+                      adapterKey,
                       schema,
                       currentValue,
                       onCurrentValueChange,
@@ -1143,6 +1174,7 @@ export const SectionForm = ({
     route: detailRoute,
     placeholderEntries: getConfigDetailPlaceholderEntries(sectionKey),
     detailContext,
+    uiSection,
     t
   })
   const adapterDetailKey = (
@@ -1152,9 +1184,11 @@ export const SectionForm = ({
     )
     ? detailMeta.itemKey
     : null
+  const adapterSupportsAccounts = adapterDetailKey == null ||
+    uiSection?.recordMap.entryKinds?.find(kind => kind.key === adapterDetailKey)?.capabilities?.accounts !== false
 
   const { data: adapterAccountsData } = useSWR(
-    adapterDetailKey != null ? `/api/adapters/${adapterDetailKey}/accounts` : null,
+    adapterDetailKey != null && adapterSupportsAccounts ? `/api/adapters/${adapterDetailKey}/accounts` : null,
     () => getAdapterAccounts(adapterDetailKey!),
     {
       dedupingInterval: 30_000,
@@ -1809,7 +1843,7 @@ export const SectionForm = ({
       const isAdapterAccountsNestedRoute = sectionKey === 'adapters' &&
         detailRoute?.nestedPath?.[0] === 'accounts'
 
-      if (isAdapterAccountsNestedRoute) {
+      if (isAdapterAccountsNestedRoute && adapterSupportsAccounts) {
         return (
           <div className='config-view__detail-panel'>
             {detailNotice}
@@ -1851,7 +1885,8 @@ export const SectionForm = ({
         if (sectionKey === 'adapters') {
           const hiddenFieldPaths = [
             ...(isKnownEntry && uiSection.recordMap.mode === 'discriminated' ? [[discriminatorField]] : []),
-            ['accounts']
+            ['accounts'],
+            ...(adapterSupportsAccounts ? [] : [['defaultAccount'], ['accountTombstones']])
           ]
           const visibleAdapterFields = itemSchema.fields.filter(field =>
             !hiddenFieldPaths.some(hiddenPath => (
@@ -1957,6 +1992,7 @@ export const SectionForm = ({
               {detailNotice}
               <div className='config-view__field-stack'>
                 {renderAdapterSchemaSection({
+                  adapterKey: detailMeta.itemKey,
                   schema: itemSchema,
                   currentValue: detailMeta.item,
                   onCurrentValueChange: writeDetailItem,
@@ -1967,6 +2003,7 @@ export const SectionForm = ({
                   collapseKey: 'base'
                 })}
                 {renderAdapterSchemaSection({
+                  adapterKey: detailMeta.itemKey,
                   schema: itemSchema,
                   currentValue: detailMeta.item,
                   onCurrentValueChange: writeDetailItem,
@@ -1978,24 +2015,27 @@ export const SectionForm = ({
                       : undefined
                   )
                 })}
-                <AdapterAccountsManager
-                  adapterKey={detailMeta.itemKey}
-                  value={detailMeta.item}
-                  accountsData={adapterAccountsData}
-                  accountItemSchema={accountItemSchema}
-                  onChange={writeDetailItem}
-                  nestedPath={detailRoute?.nestedPath}
-                  onOpenNestedPath={(nextPath) => {
-                    onOpenDetailRoute?.({
-                      kind: detailRoute?.kind ?? 'detailCollectionItem',
-                      fieldPath: detailMeta.field.path,
-                      itemKey: detailMeta.itemKey,
-                      nestedPath: nextPath
-                    })
-                  }}
-                  t={t}
-                />
+                {adapterSupportsAccounts && (
+                  <AdapterAccountsManager
+                    adapterKey={detailMeta.itemKey}
+                    value={detailMeta.item}
+                    accountsData={adapterAccountsData}
+                    accountItemSchema={accountItemSchema}
+                    onChange={writeDetailItem}
+                    nestedPath={detailRoute?.nestedPath}
+                    onOpenNestedPath={(nextPath) => {
+                      onOpenDetailRoute?.({
+                        kind: detailRoute?.kind ?? 'detailCollectionItem',
+                        fieldPath: detailMeta.field.path,
+                        itemKey: detailMeta.itemKey,
+                        nestedPath: nextPath
+                      })
+                    }}
+                    t={t}
+                  />
+                )}
                 {renderAdapterAdvancedSections({
+                  adapterKey: detailMeta.itemKey,
                   schema: itemSchema,
                   currentValue: detailMeta.item,
                   onCurrentValueChange: writeDetailItem,
