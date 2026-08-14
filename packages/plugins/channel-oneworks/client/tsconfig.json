@@ -5,9 +5,9 @@
     "jsxFactory": "h",
     "lib": ["ES2022", "DOM"],
     "rootDir": "src",
+    "customConditions": ["__oneworks__"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "customConditions": ["__oneworks__"],
     "strict": false,
     "outDir": "dist",
     "skipLibCheck": true

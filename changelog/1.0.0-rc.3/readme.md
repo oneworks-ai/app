@@ -13,5 +13,6 @@
 - Include Cursor and Grok in the product brand catalog so catalog-driven assets cover every built-in adapter.
 - Add Shikitor and Cordis as organization-scoped vendor submodules, with Shikitor using Cordis to power its extensible editor-plugin playground.
 - Make terminal tab closing reliable across the bottom panel, Workspace drawer, and mobile overview by confirming active processes, preserving terminals that cannot be stopped, restoring focus to visible controls, and keeping canceled native tab closes in place.
+- Add member-scoped external channel connections for Team Chats, including multi-room mappings, per-connection processing policies, deduplicated inbound routing, delivery-state degradation, and related-channel/member attribution in the UI.
 
   ![Terminal close confirmation in the mobile Workspace overview](./issue-188-terminal-close-confirmation.jpg)
