@@ -100,6 +100,11 @@ export interface EntityRuntimeConfig {
   modelService?: string
 }
 
+export interface EntityTeamConfig {
+  relatedEntities?: string[]
+  role?: 'leader' | 'member'
+}
+
 export interface Entity {
   name?: string
   avatar?: string
@@ -113,6 +118,7 @@ export interface Entity {
   documents?: Partial<Record<EntityDocumentKind, string | EntityDocumentConfig>>
   memory?: EntityMemoryPolicy
   runtime?: EntityRuntimeConfig
+  team?: EntityTeamConfig
   rules?: RuleReference[]
   skills?: string[] | SkillSelection
   mcpServers?: Filter

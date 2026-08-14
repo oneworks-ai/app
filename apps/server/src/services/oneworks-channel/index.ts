@@ -80,7 +80,9 @@ const toProductEntity = (entity: {
     description: resolveDocumentDescription(entity.body ?? '', entity.attributes.description, name),
     entityId,
     name,
-    source: entity.resolvedSource === 'plugin' ? 'plugin' : 'project'
+    relatedEntityIds: [],
+    source: entity.resolvedSource === 'plugin' ? 'plugin' : 'project',
+    teamRole: entity.attributes.team?.role === 'leader' ? 'leader' : 'member'
   }
 }
 
@@ -114,14 +116,14 @@ const toAvailableProductEntity = async (definition: {
   path: string
   resolvedName?: string
   resolvedSource?: string
-}) => {
+}): Promise<OneWorksRoomEntity> => {
   const entity = toProductEntity(definition)
   const avatar = await resolveAvailableAvatar(entity.avatar)
   const { avatar: _avatar, ...fallback } = entity
   return avatar == null ? fallback : { ...fallback, avatar }
 }
 
-const indexProductEntitiesByReference = async (
+const resolveProductEntityCatalog = async (
   definitions: Array<{
     attributes: Entity
     body?: string
@@ -130,24 +132,52 @@ const indexProductEntitiesByReference = async (
     resolvedSource?: string
   }>
 ) => {
-  const byReference = new Map<string, OneWorksRoomEntity>()
+  const baseByReference = new Map<string, OneWorksRoomEntity>()
   const ambiguousReferences = new Set<string>()
-  const entities = await Promise.all(definitions.map(toAvailableProductEntity))
+  const baseEntities = await Promise.all(definitions.map(toAvailableProductEntity))
   for (const [index, definition] of definitions.entries()) {
-    const entity = entities[index]!
+    const entity = baseEntities[index]!
     for (const reference of getEntityReferences(definition)) {
       if (ambiguousReferences.has(reference)) continue
-      const existing = byReference.get(reference)
+      const existing = baseByReference.get(reference)
       if (existing != null && existing.entityId !== entity.entityId) {
-        byReference.delete(reference)
+        baseByReference.delete(reference)
         ambiguousReferences.add(reference)
         continue
       }
-      byReference.set(reference, entity)
+      baseByReference.set(reference, entity)
     }
   }
-  return byReference
+
+  const entities = baseEntities.map((entity, index) => {
+    const definition = definitions[index]!
+    const relatedReferences = entity.teamRole === 'leader' && Array.isArray(definition.attributes.team?.relatedEntities)
+      ? definition.attributes.team.relatedEntities
+      : []
+    const relatedEntityIds = [
+      ...new Set(relatedReferences.flatMap(reference => {
+        if (typeof reference !== 'string') return []
+        const related = baseByReference.get(reference.trim())
+        return related == null || related.entityId === entity.entityId || related.teamRole === 'leader'
+          ? []
+          : [related.entityId]
+      }))
+    ]
+    return { ...entity, relatedEntityIds }
+  })
+  const entitiesById = new Map(entities.map(entity => [entity.entityId, entity]))
+  const byReference = new Map(
+    [...baseByReference].flatMap(([reference, entity]) => {
+      const resolved = entitiesById.get(entity.entityId)
+      return resolved == null ? [] : [[reference, resolved] as const]
+    })
+  )
+  return { byReference, entities }
 }
+
+const indexProductEntitiesByReference = async (
+  definitions: Parameters<typeof resolveProductEntityCatalog>[0]
+) => (await resolveProductEntityCatalog(definitions)).byReference
 
 const deriveRoomTitle = (message: string) => {
   const firstLine = message.split('\n')[0]?.trim() || 'Team chat'
@@ -486,23 +516,28 @@ export const createOneWorksChannelFacade = () => ({
   listEntities: async (principal: PluginRequestPrincipal): Promise<OneWorksRoomEntity[]> => {
     requireProductAccess(principal)
     const loader = new DefinitionLoader(getWorkspaceFolder())
-    return await Promise.all((await loader.loadDefaultEntities()).map(toAvailableProductEntity))
+    return (await resolveProductEntityCatalog(await loader.loadDefaultEntities())).entities
   },
   createRoom: async (principal: PluginRequestPrincipal, input: unknown): Promise<OneWorksRoomSummary> => {
     requireProductAccess(principal)
     const parsed: OneWorksRoomCreateInput = oneworksRoomCreateInputSchema.parse(input)
     const loader = new DefinitionLoader(getWorkspaceFolder())
-    const available = new Map(
-      await Promise.all((await loader.loadDefaultEntities()).map(async entity => {
-        const summary = await toAvailableProductEntity(entity)
-        return [summary.entityId, summary] as const
-      }))
-    )
-    const entities = [...new Set(parsed.entityIds)].map(entityId => available.get(entityId))
+    const catalog = await resolveProductEntityCatalog(await loader.loadDefaultEntities())
+    const available = new Map(catalog.entities.map(entity => [entity.entityId, entity]))
+    const leaderEntityId = parsed.leaderEntityId ?? parsed.entityIds[0]!
+    const leader = available.get(leaderEntityId)
+    if (leader == null) throw new Error('The selected leader entity no longer exists.')
+    if (leader.teamRole !== 'leader') {
+      throw new Error('The selected entity is not registered as a Team Chat leader.')
+    }
+    const requestedMemberIds = parsed.leaderEntityId == null ? parsed.entityIds.slice(1) : parsed.entityIds
+    const selectedIds = [leader.entityId, ...leader.relatedEntityIds, ...requestedMemberIds]
+    const entities = [...new Set(selectedIds)].map(entityId => available.get(entityId))
     if (entities.some(entity => entity == null)) throw new Error('One or more selected entities no longer exist.')
-
     const selected = entities as OneWorksRoomEntity[]
-    const leader = selected[0]!
+    if (selected.slice(1).some(entity => entity.teamRole === 'leader')) {
+      throw new Error('Only one Team Chat leader can be selected.')
+    }
     const title = parsed.title ?? deriveRoomTitle(parsed.message)
     const roomId = `room_${randomUUID()}`
     const service = createAgentRoomService(undefined, undefined, {

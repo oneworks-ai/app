@@ -5,14 +5,20 @@ export const oneworksRoomEntitySchema = z.object({
   description: z.string(),
   entityId: z.string(),
   name: z.string(),
-  source: z.enum(['plugin', 'project'])
+  relatedEntityIds: z.array(z.string()),
+  source: z.enum(['plugin', 'project']),
+  teamRole: z.enum(['leader', 'member'])
 }).strict()
 
 export const oneworksRoomCreateInputSchema = z.object({
-  entityIds: z.array(z.string().trim().min(1)).min(1),
+  entityIds: z.array(z.string().trim().min(1)),
+  leaderEntityId: z.string().trim().min(1).optional(),
   message: z.string().trim().min(1),
   title: z.string().trim().min(1).max(80).optional()
-}).strict()
+}).strict().refine(
+  value => value.leaderEntityId != null || value.entityIds.length > 0,
+  'A leader entity is required.'
+)
 
 export const oneworksRoomPatchInputSchema = z.object({
   avatar: z.string().trim().max(2048).nullable().optional(),

@@ -38,7 +38,11 @@ vi.mock('@oneworks/definition-loader', () => ({
   DefinitionLoader: class {
     loadDefaultEntities = async () => [
       {
-        attributes: { description: 'Team leader', name: 'leader' },
+        attributes: {
+          description: 'Team leader',
+          name: 'leader',
+          team: { relatedEntities: ['qa'], role: 'leader' }
+        },
         body: 'Team leader',
         path: '/entities/leader/README.md',
         resolvedName: 'leader'
@@ -165,6 +169,23 @@ describe('oneWorks Channel service', () => {
       text: 'Not supported',
       userLabel: 'operator-a'
     })).rejects.toThrow('does not support simulation')
+  })
+
+  it('lists registered Team Chat leaders with canonical related entity ids', async () => {
+    const { createOneWorksChannelFacade } = await import('#~/services/oneworks-channel/index.js')
+
+    await expect(createOneWorksChannelFacade().listEntities(workspacePrincipal)).resolves.toEqual([
+      expect.objectContaining({
+        entityId: 'leader',
+        relatedEntityIds: ['qa'],
+        teamRole: 'leader'
+      }),
+      expect.objectContaining({
+        entityId: 'qa',
+        relatedEntityIds: [],
+        teamRole: 'member'
+      })
+    ])
   })
 
   it('redacts operational lists and injects a signed webhook through the channel manager', async () => {

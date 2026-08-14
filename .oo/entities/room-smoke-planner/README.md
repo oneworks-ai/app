@@ -5,11 +5,11 @@ tags:
   - test
   - agent-room
   - planning
-extends:
-  - std/dev-planner
-inherit:
-  prompt: append
-  skills: merge
+team:
+  role: leader
+  relatedEntities:
+    - room-smoke-dev
+    - room-smoke-qa
 ---
 
 # 角色

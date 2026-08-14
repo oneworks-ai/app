@@ -65,6 +65,25 @@ const entityConfigSchema = {
         model: { type: 'string', title: '模型' }
       }
     },
+    team: {
+      type: 'object',
+      title: '团队群聊',
+      description: '声明实体在团队群聊中的角色，以及选择 Leader 时自动带入的关联实体。',
+      properties: {
+        role: {
+          type: 'string',
+          enum: ['leader', 'member'],
+          enumNames: ['Leader', '普通成员'],
+          title: '团队角色'
+        },
+        relatedEntities: {
+          type: 'array',
+          items: { type: 'string' },
+          title: '关联实体',
+          description: '选择此 Leader 时自动加入团队群聊的实体名称。'
+        }
+      }
+    },
     extends: {
       type: 'array',
       items: { type: 'string' },
@@ -149,6 +168,7 @@ const editableEntityConfigKeys = [
   'mcpServers',
   'plugins',
   'runtime',
+  'team',
   'documents',
   'memory'
 ] as const

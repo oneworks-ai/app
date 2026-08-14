@@ -3,6 +3,8 @@ import './EntityCard.scss'
 import type { KeyboardEvent } from 'react'
 
 import { getWorkspaceResourceUrl } from '#~/api'
+import { GroupAvatar } from '#~/components/group-avatar/GroupAvatar'
+import type { GroupAvatarMember } from '#~/components/group-avatar/GroupAvatar'
 import { RoomPixelAvatar } from '#~/components/room-pixel-avatar/RoomPixelAvatar'
 
 const resolveAvatarUrl = (avatar: string | undefined) => {
@@ -16,7 +18,12 @@ export interface EntityCardProps {
   description?: string
   entityId: string
   name: string
+  relatedEntities?: GroupAvatarMember[]
+  relatedEntitiesLabel?: string
+  selectionMode?: 'checkbox' | 'radio'
   selected?: boolean
+  tabIndex?: number
+  onKeyDown?: (event: KeyboardEvent<HTMLButtonElement>) => void
   onOpenDetails?: () => void
   onSelect?: () => void
 }
@@ -26,12 +33,20 @@ export function EntityCard({
   description,
   entityId,
   name,
+  relatedEntities = [],
+  relatedEntitiesLabel,
+  selectionMode = 'checkbox',
   selected = false,
+  tabIndex = 0,
+  onKeyDown,
   onOpenDetails,
   onSelect
 }: EntityCardProps) {
   const avatarUrl = resolveAvatarUrl(avatar)
-  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+  const selectionLabel = description == null || description === '' ? name : `${name} ${description}`
+  const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    onKeyDown?.(event)
+    if (event.defaultPrevented) return
     if (event.key !== 'Enter' && event.key !== ' ') return
     event.preventDefault()
     onSelect?.()
@@ -39,13 +54,21 @@ export function EntityCard({
 
   return (
     <div
-      aria-checked={selected}
-      className={`entity-card ${selected ? 'is-selected' : ''}`}
-      role='checkbox'
-      tabIndex={0}
-      onClick={onSelect}
-      onKeyDown={handleKeyDown}
+      className={`entity-card ${relatedEntities.length > 0 ? 'has-related-entities' : ''} ${
+        selected ? 'is-selected' : ''
+      }`}
     >
+      <button
+        aria-checked={selected}
+        aria-label={selectionLabel}
+        className='entity-card__selector'
+        data-entity-id={entityId}
+        role={selectionMode}
+        tabIndex={tabIndex}
+        type='button'
+        onClick={onSelect}
+        onKeyDown={handleKeyDown}
+      />
       <span className='entity-card__avatar' aria-hidden='true'>
         {avatarUrl == null
           ? <RoomPixelAvatar className='entity-card__avatar-pixel' seed={`entity:${entityId}`} />
@@ -67,6 +90,20 @@ export function EntityCard({
           ? null
           : <span className='entity-card__description'>{description}</span>}
       </span>
+      {relatedEntities.length === 0
+        ? null
+        : <span
+          aria-label={relatedEntitiesLabel}
+          className='entity-card__related-entities'
+          title={relatedEntitiesLabel}
+        >
+          {relatedEntities.slice(0, 4).map(entity => (
+            <GroupAvatar key={entity.key} members={[entity]} />
+          ))}
+          {relatedEntities.length > 4
+            ? <span className='entity-card__related-count'>+{relatedEntities.length - 4}</span>
+            : null}
+        </span>}
     </div>
   )
 }

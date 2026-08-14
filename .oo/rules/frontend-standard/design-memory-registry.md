@@ -135,12 +135,17 @@
 - Rule / examples: 已知渠道必须使用对应品牌资产，只有未知渠道使用通用 `hub` fallback；Agent Room 中 `source` 标记位于气泡左侧，`delivery` 标记位于气泡右侧。正例是飞书入站消息左侧显示飞书品牌，Agent 发回飞书的回复右侧显示飞书品牌；反例是用 `flight`、`chat` 等语义近似 Material glyph 冒充渠道品牌，或把投递标记放在气泡左侧。
 - Ownership / source / exceptions / enforcement: 规则由 `apps/client/src/components/agent-room/AGENTS.md`、共享 `ChannelPlatformIcon` 和 Agent Room 气泡组件拥有；来源为用户 2026-08-14 对真实飞书群聊页面的明确反馈。OneWorks 内部投影不显示外部渠道标记；品牌素材必须由 client bundle 或产品资产入口提供，不依赖用户 workspace。由渠道别名参数化测试、`source < surface < delivery` DOM 顺序断言、production build 资产检查和用户可见页面审阅执行。
 
+### OW-DM-015 — Team Chat Leader 与关联成员选择
+
+- Revision / status / scope: 1 / ACTIVE / OneWorks project，Team Chat 创建页的 Leader 和普通成员选择。
+- Rule / examples: Leader 是独立单选组，选择后自动预选其实体定义中的关联成员，并在 Leader 卡片右下角展示关联成员头像；普通成员保持多选。反例是把 Leader 混入普通多选列表，或只在客户端临时保存关联关系。
+- Ownership / source / exceptions / enforcement: 规则由 `packages/plugins/channel-oneworks`、共享 `EntityCard` 和 `Entity.team` 契约拥有；来源为用户 2026-08-14 的明确反馈。服务端必须权威解析 `team.role` 与 `team.relatedEntities`，由 schema、创建服务、交互测试和桌面/窄屏真实页面审阅执行。
+
 ## 待确认冲突
 
 ### OW-DM-P001 — 主题侧栏是否保留渐变
 
-- Revision: 2
-- Status: SCOPED_EXCEPTION
+- Revision / status: 2 / SCOPED_EXCEPTION
 - Rule: Codex 主题侧栏使用单一中性纯色表面；其他主题继续遵循各自表面配方。
 - Source: 用户明确要求 Codex 主题移除渐变，2026-07-14；已由 `OW-DM-E002` 的主题范围约束承接。
 

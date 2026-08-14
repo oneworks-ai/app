@@ -1,5 +1,5 @@
 /* eslint-disable max-lines -- frontend plugin manifest keeps view, contribution, and host component contracts together */
-import type { ComponentType, ReactNode } from 'react'
+import type { ComponentType, KeyboardEventHandler, ReactNode } from 'react'
 
 import type { ChatMessageContent, SessionQueuedMessageMode } from '@oneworks/core'
 import type {
@@ -393,7 +393,12 @@ export interface PluginHostEntityCardComponentProps {
   description?: string
   entityId: string
   name: string
+  relatedEntities?: PluginHostGroupAvatarMember[]
+  relatedEntitiesLabel?: string
+  selectionMode?: 'checkbox' | 'radio'
   selected?: boolean
+  tabIndex?: number
+  onKeyDown?: KeyboardEventHandler<HTMLButtonElement>
   onOpenDetails?: () => void
   onSelect?: () => void
 }

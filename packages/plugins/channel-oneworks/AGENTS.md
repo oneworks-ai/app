@@ -14,3 +14,5 @@
 本地验证客户端改动前先运行 `pnpm --filter @oneworks/plugin-channel-oneworks build:client`，再通过统一 `dev-service restart web` 重启当前 worktree 的 Web 服务。插件运行时加载 `client/dist`；只修改 `client/src`、等待 Vite HMR 或仅刷新页面不会更新已加载的插件界面。
 
 产品 UI 可以使用本地 Room ID 完成应用内路由，并展示用户主动配置的账号标签。不要返回或渲染原始 channel / actor 标识、webhook headers、nonce、签名、credential、raw payload、memory、continuity 或 authorization metadata。
+
+创建团队群聊时，Leader 与普通成员是两个选择组：Leader 由实体定义的 `team.role: leader` 注册且只能单选；Leader 的 `team.relatedEntities` 由服务端解析并自动加入成员，创建页只负责预选和展示，Leader 卡片用宿主实体头像组件在右下角预览关联成员。

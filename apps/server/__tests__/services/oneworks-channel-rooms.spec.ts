@@ -35,7 +35,11 @@ vi.mock('@oneworks/definition-loader', () => ({
   DefinitionLoader: class {
     loadDefaultEntities = async () => [
       {
-        attributes: { description: 'Team leader', name: 'leader' },
+        attributes: {
+          description: 'Team leader',
+          name: 'leader',
+          team: { relatedEntities: ['std/qa'], role: 'leader' }
+        },
         body: 'Team leader',
         path: '/entities/leader/README.md',
         resolvedName: 'leader'
@@ -46,6 +50,16 @@ vi.mock('@oneworks/definition-loader', () => ({
         path: '/entities/qa/README.md',
         resolvedName: 'std/qa',
         resolvedSource: 'plugin'
+      },
+      {
+        attributes: {
+          description: 'Backup team leader',
+          name: 'backup-leader',
+          team: { role: 'leader' }
+        },
+        body: 'Backup team leader',
+        path: '/entities/backup-leader/README.md',
+        resolvedName: 'backup-leader'
       }
     ]
   }
@@ -251,5 +265,110 @@ describe('oneWorks Team Chat room lifecycle', () => {
       promptName: 'leader',
       promptType: 'entity'
     }))
+  })
+
+  it('uses an explicit registered leader and automatically adds its related entities', async () => {
+    let createdRoomId = ''
+    createRoom.mockImplementation((input) => {
+      createdRoomId = input.id
+      return input
+    })
+    createSessionWithInitialMessage.mockImplementationOnce(async (options) => {
+      await options.beforeStart?.('host-session')
+      return { id: 'host-session' }
+    })
+    getDb.mockReturnValue({
+      getAgentRoomDetail: vi.fn(() => ({
+        channelConnections: [],
+        members: [
+          { key: 'leader', kind: 'entity', label: 'leader' },
+          { key: 'std/qa', kind: 'entity', label: 'qa' }
+        ],
+        messages: [],
+        shares: []
+      })),
+      listAgentRooms: vi.fn(() => [{
+        createdAt: 1,
+        hostSessionId: 'host-session',
+        id: createdRoomId,
+        leaderEntity: 'leader',
+        owner: { type: 'local' },
+        status: 'active',
+        title: 'Ship the release',
+        updatedAt: 2
+      }])
+    })
+    getChannelManager.mockReturnValue({ states: new Map() })
+
+    const { createOneWorksChannelFacade } = await import('#~/services/oneworks-channel/index.js')
+    const room = await createOneWorksChannelFacade().createRoom(workspacePrincipal, {
+      entityIds: [],
+      leaderEntityId: 'leader',
+      message: 'Ship the release'
+    })
+
+    expect(room).toEqual(expect.objectContaining({ roomId: createdRoomId }))
+
+    expect(applyEvent).toHaveBeenCalledWith(
+      createdRoomId,
+      expect.objectContaining({
+        member: expect.objectContaining({ key: 'std/qa', kind: 'entity' }),
+        type: 'member_joined'
+      })
+    )
+    expect(createSessionWithInitialMessage).toHaveBeenCalledWith(expect.objectContaining({
+      promptName: 'leader',
+      promptType: 'entity'
+    }))
+  })
+
+  it('rejects a regular entity submitted as an explicit Team Chat leader', async () => {
+    const { createOneWorksChannelFacade } = await import('#~/services/oneworks-channel/index.js')
+
+    await expect(
+      createOneWorksChannelFacade().createRoom(workspacePrincipal, {
+        entityIds: [],
+        leaderEntityId: 'std/qa',
+        message: 'Invalid leader'
+      })
+    ).rejects.toThrow('not registered as a Team Chat leader')
+    expect(createSessionWithInitialMessage).not.toHaveBeenCalled()
+  })
+
+  it('rejects a regular entity submitted as a legacy Team Chat leader', async () => {
+    const { createOneWorksChannelFacade } = await import('#~/services/oneworks-channel/index.js')
+
+    await expect(
+      createOneWorksChannelFacade().createRoom(workspacePrincipal, {
+        entityIds: ['std/qa'],
+        message: 'Invalid legacy leader'
+      })
+    ).rejects.toThrow('not registered as a Team Chat leader')
+    expect(createSessionWithInitialMessage).not.toHaveBeenCalled()
+  })
+
+  it('rejects a second leader submitted as a Team Chat member', async () => {
+    const { createOneWorksChannelFacade } = await import('#~/services/oneworks-channel/index.js')
+
+    await expect(
+      createOneWorksChannelFacade().createRoom(workspacePrincipal, {
+        entityIds: ['backup-leader'],
+        leaderEntityId: 'leader',
+        message: 'Invalid second leader'
+      })
+    ).rejects.toThrow('Only one Team Chat leader can be selected')
+    expect(createSessionWithInitialMessage).not.toHaveBeenCalled()
+  })
+
+  it('rejects a second leader submitted through the legacy Team Chat shape', async () => {
+    const { createOneWorksChannelFacade } = await import('#~/services/oneworks-channel/index.js')
+
+    await expect(
+      createOneWorksChannelFacade().createRoom(workspacePrincipal, {
+        entityIds: ['leader', 'backup-leader'],
+        message: 'Invalid legacy second leader'
+      })
+    ).rejects.toThrow('Only one Team Chat leader can be selected')
+    expect(createSessionWithInitialMessage).not.toHaveBeenCalled()
   })
 })

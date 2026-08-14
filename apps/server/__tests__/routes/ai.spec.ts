@@ -142,7 +142,8 @@ describe('aiRouter', () => {
           path: '.oo/entities/reviewer/index.json',
           value: {
             memory: { writableScopes: ['entity'] },
-            runtime: { model: 'new-model' }
+            runtime: { model: 'new-model' },
+            team: { relatedEntities: ['qa'], role: 'leader' }
           }
         }
       },
@@ -158,6 +159,7 @@ describe('aiRouter', () => {
           description: 'Review changes',
           prompt: 'Inspect behavior.',
           runtime: { model: 'new-model' },
+          team: { relatedEntities: ['qa'], role: 'leader' },
           memory: { writableScopes: ['entity'] }
         },
         null,

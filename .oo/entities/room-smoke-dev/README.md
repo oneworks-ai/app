@@ -5,11 +5,6 @@ tags:
   - test
   - agent-room
   - development
-extends:
-  - std/dev-implementer
-inherit:
-  prompt: append
-  skills: merge
 ---
 
 # 角色
