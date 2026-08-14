@@ -66,6 +66,10 @@ export const oneworksChannelCss = `
 .oneworks-channel__side-content.is-members { padding: 0; }
 .oneworks-channel__side-content.is-connections { display: grid; gap: 10px; align-content: start; }
 .oneworks-channel__connection-intro { color: var(--sub-text-color, #5c6570); font-size: 12px; margin: 0; }
+.oneworks-channel__connection-candidates { background: var(--control-background-color, #f6f8fa); border: 1px solid var(--border-color, #d8dee4); border-radius: 6px; display: grid; gap: 3px; padding: 10px; }
+.oneworks-channel__connection-candidates > span { color: var(--sub-text-color, #5c6570); font-size: 11px; }
+.oneworks-channel__connection-candidates > :nth-child(3) { margin-top: 5px; min-width: 0; width: 100%; }
+.oneworks-channel__connection-candidate { align-items: center; border-top: 1px solid var(--border-color, #d8dee4); display: grid; gap: 8px; grid-template-columns: 24px minmax(0, 1fr) auto; min-height: 58px; padding: 8px 0 0; }
 .oneworks-channel__connections { border-top: 1px solid var(--border-color, #d8dee4); display: grid; }
 .oneworks-channel__connection { align-items: center; border-bottom: 1px solid var(--border-color, #d8dee4); display: grid; gap: 2px 10px; grid-template-columns: 24px minmax(0, 1fr) auto; min-height: 68px; padding: 9px 2px; }
 .oneworks-channel__connection-icon { height: 24px; object-fit: contain; width: 24px; }

@@ -1,8 +1,6 @@
 /* eslint-disable max-lines -- the plugin owns its Room, scenario, and delivery-trace workbench. */
 /// <reference types="vite/client" />
 
-import { createSeededAvatarDataUri } from '@oneworks/avatar'
-
 import { oneworksChannelCss } from './styles'
 
 const asError = async response => {
@@ -19,6 +17,7 @@ const request = async (ctx, path, init = undefined) => {
 
 const emptyData = () => ({
   entities: [],
+  roomConnectionCandidates: [],
   rooms: [],
   scenarios: [],
   sharedRooms: [],
@@ -59,7 +58,6 @@ const channelIconByType = {
 }
 
 const channelIcon = channelType => channelIconByType[channelType?.toLowerCase()] ?? 'hub'
-const getWorkspaceResourceUrl = path => `/api/workspace/resource?path=${encodeURIComponent(path)}`
 const roomSettingsJsonSchema = {
   type: 'object',
   properties: {
@@ -183,6 +181,7 @@ export function OneWorksChannelView({ ctx, react, view }) {
   const [activeRoomPanel, setActiveRoomPanel] = useState(initialRoomPanelState.activePanel)
   const [openedRoomPanels, setOpenedRoomPanels] = useState(initialRoomPanelState.openedPanels)
   const [selectedRoomId, setSelectedRoomId] = useState(() => readRoomIdFromLocation(ctx.scope))
+  const [selectedRoomConnectionName, setSelectedRoomConnectionName] = useState('')
   const [selectedRoomMemberId, setSelectedRoomMemberId] = useState('')
   const [selectedEntityIds, setSelectedEntityIds] = useState([])
   const [entityQuery, setEntityQuery] = useState('')
@@ -210,8 +209,19 @@ export function OneWorksChannelView({ ctx, react, view }) {
     isLoading: loading,
     mutate
   } = view.data.useQuery('oneworks-channel:overview', async () => {
-    const [entities, rooms, sharedRooms, shareOwners, shares, simulationTargets, trace, scenarios] = await Promise.all([
+    const [
+      entities,
+      roomConnectionCandidates,
+      rooms,
+      sharedRooms,
+      shareOwners,
+      shares,
+      simulationTargets,
+      trace,
+      scenarios
+    ] = await Promise.all([
       request(ctx, 'entities'),
+      request(ctx, 'room-connection-candidates'),
       request(ctx, 'rooms'),
       request(ctx, 'shared'),
       request(ctx, 'share-owners'),
@@ -220,7 +230,17 @@ export function OneWorksChannelView({ ctx, react, view }) {
       request(ctx, 'trace'),
       request(ctx, 'scenarios')
     ])
-    return { entities, rooms, scenarios, sharedRooms, shareOwners, shares, simulationTargets, trace }
+    return {
+      entities,
+      roomConnectionCandidates,
+      rooms,
+      scenarios,
+      sharedRooms,
+      shareOwners,
+      shares,
+      simulationTargets,
+      trace
+    }
   }, {
     refreshInterval: 10_000,
     revalidateOnFocus: true,
@@ -615,7 +635,14 @@ export function OneWorksChannelView({ ctx, react, view }) {
         type='button'
         onClick={() => setSelectedRoomMemberId(resolvedMember.entityId)}
       >
-        {renderEntityAvatar(resolvedMember)}
+        <GroupAvatar
+          className='oneworks-channel__entity-avatar'
+          members={[{
+            avatar: resolvedMember.avatar,
+            key: resolvedMember.entityId,
+            label: resolvedMember.name
+          }]}
+        />
         <span className='oneworks-channel__panel-member-copy'>
           <strong>{resolvedMember.name}</strong>
           <span>
@@ -779,6 +806,26 @@ export function OneWorksChannelView({ ctx, react, view }) {
     }
   }, [ctx, mutate, selectedRoom, t, working])
 
+  const attachConnection = useCallback(async candidate => {
+    if (selectedRoom == null || working) return
+    setWorking(true)
+    setActionError(null)
+    setNotice(null)
+    try {
+      await request(ctx, `rooms/${encodeURIComponent(selectedRoom.roomId)}/connections`, {
+        body: JSON.stringify({ channelLinkName: candidate.channelLinkName }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST'
+      })
+      setNotice(t('Channel mapped to this Team Chat.', '频道已映射到此团队群聊。'))
+      await mutate()
+    } catch (nextError) {
+      setActionError(nextError instanceof Error ? nextError.message : String(nextError))
+    } finally {
+      setWorking(false)
+    }
+  }, [ctx, mutate, selectedRoom, t, working])
+
   useEffect(() => {
     if (selectedRoom == null || activeTab !== 'rooms' || activeRoomPanel == null) {
       view.route?.setSidePanel(undefined)
@@ -790,6 +837,17 @@ export function OneWorksChannelView({ ctx, react, view }) {
       ? undefined
       : resolveRoomMember(selectedRoomMemberSnapshot)
     const selectedMemberConnections = selectedRoomMember?.channelConnections ?? []
+    const attachedConnectionNames = new Set(
+      selectedRoom.members.flatMap(member => member.channelConnections)
+        .filter(connection => connection.status !== 'removed')
+        .map(connection => connection.channelLinkName)
+    )
+    const availableConnections = data.roomConnectionCandidates.filter(candidate => (
+      !attachedConnectionNames.has(candidate.channelLinkName)
+    ))
+    const selectedAvailableConnection = availableConnections.find(candidate => (
+      candidate.channelLinkName === selectedRoomConnectionName
+    )) ?? availableConnections[0]
 
     const renderConnection = (connection, member) =>
       <div
@@ -849,6 +907,51 @@ export function OneWorksChannelView({ ctx, react, view }) {
               '连接属于群成员，不属于群本身；同一个外部群可以进入多个团队群聊。'
             )}
           </p>
+          {availableConnections.length > 0
+            ? <section className='oneworks-channel__connection-candidates'>
+              <strong>{t('Available member connections', '可关联的成员频道')}</strong>
+              <span>
+                {t(
+                  'Mapping a connection also adds its entity as a member of this Team Chat.',
+                  '完成映射后，对应实体也会加入这个团队群聊。'
+                )}
+              </span>
+              <Select
+                ariaLabel={t('Channel to map', '要映射的频道')}
+                disabled={working}
+                onChange={value => setSelectedRoomConnectionName(String(value))}
+                options={availableConnections.map(candidate => ({
+                  label: `${candidate.conversationLabel} · ${candidate.entityName}`,
+                  value: candidate.channelLinkName
+                }))}
+                value={selectedAvailableConnection?.channelLinkName}
+              />
+              <div className='oneworks-channel__connection-candidate'>
+                <ChannelPlatformIcon
+                  channelType={selectedAvailableConnection.channelType}
+                  className='oneworks-channel__connection-icon'
+                />
+                <span className='oneworks-channel__connection-copy'>
+                  <strong>{selectedAvailableConnection.conversationLabel}</strong>
+                  <small>{selectedAvailableConnection.accountLabel ?? selectedAvailableConnection.channelType}</small>
+                  <small>
+                    {t('Brought in by', '由此成员带入')} · {selectedAvailableConnection.entityName}
+                  </small>
+                </span>
+                <Button
+                  ariaLabel={t(
+                    `Map ${selectedAvailableConnection.conversationLabel} to this Team Chat`,
+                    `将 ${selectedAvailableConnection.conversationLabel} 映射到此团队群聊`
+                  )}
+                  disabled={working || selectedAvailableConnection.status !== 'connected'}
+                  icon='add_link'
+                  label={t('Map', '映射')}
+                  onClick={() => void attachConnection(selectedAvailableConnection)}
+                  size='small'
+                />
+              </div>
+            </section>
+            : null}
           <div className='oneworks-channel__connections'>
             {selectedRoom.members.flatMap(member => {
               const resolvedMember = resolveRoomMember(member)
@@ -966,6 +1069,8 @@ export function OneWorksChannelView({ ctx, react, view }) {
   }, [
     activeRoomPanel,
     activeTab,
+    attachConnection,
+    data.roomConnectionCandidates,
     handleRoomPanelChange,
     openedRoomPanels,
     confirmingRoomDelete,
@@ -974,6 +1079,7 @@ export function OneWorksChannelView({ ctx, react, view }) {
     resolveRoomMember,
     roomSettings,
     selectedRoom,
+    selectedRoomConnectionName,
     selectedRoomMemberId,
     setConnectionProcessing,
     t,
@@ -993,15 +1099,6 @@ export function OneWorksChannelView({ ctx, react, view }) {
           roomId={room.roomId}
         />
       </div>
-
-  const renderEntityAvatar = entity =>
-    <img
-      alt=''
-      className='oneworks-channel__entity-avatar'
-      src={entity.avatar
-        ? getWorkspaceResourceUrl(entity.avatar)
-        : createSeededAvatarDataUri({ seed: `entity:${entity.entityId}`, size: 72, title: entity.name })}
-    />
 
   const renderRoomCreator = () =>
     <div className='oneworks-channel__creator'>

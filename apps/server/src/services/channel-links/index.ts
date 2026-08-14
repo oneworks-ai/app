@@ -1,6 +1,7 @@
 import { basename, dirname } from 'node:path'
 
 import type { ChannelInboundEvent } from '@oneworks/core/channel'
+import { resolveEntityIdentifier } from '@oneworks/definition-core'
 import { DefinitionLoader } from '@oneworks/definition-loader'
 import type { ChannelLink, ChannelLinkIngress, ChannelLinkRouting, Definition } from '@oneworks/types'
 
@@ -88,20 +89,53 @@ export const loadChannelLinks = async (
     loader.loadDefaultChannelLinks(),
     loader.loadDefaultEntities()
   ])
-  const entityNames = new Set(entities.flatMap(entity =>
-    [
+  const entityReferences = new Map<string, string | null>()
+  for (const entity of entities) {
+    const canonicalEntity = entity.resolvedName?.trim() ||
+      resolveEntityIdentifier(entity.path, entity.attributes.name)
+    const references = [
       entity.resolvedName,
       trimNonEmpty(entity.attributes.name),
       basename(dirname(entity.path))
     ].filter((value): value is string => value != null)
-  ))
-  const links = definitions.map(toResolvedChannelLink)
-  for (const link of links) {
-    if (!entityNames.has(link.entity)) {
-      throw new Error(`Channel link ${link.path} references missing entity ${link.entity}.`)
+    for (const reference of references) {
+      if (entityReferences.has(reference) && entityReferences.get(reference) !== canonicalEntity) {
+        entityReferences.set(reference, null)
+      } else {
+        entityReferences.set(reference, canonicalEntity)
+      }
     }
   }
-  return links
+  const links = definitions.map(toResolvedChannelLink)
+  const normalizedLinks = links.map(link => {
+    const canonicalEntity = entityReferences.get(link.entity)
+    if (canonicalEntity === undefined) {
+      throw new Error(`Channel link ${link.path} references missing entity ${link.entity}.`)
+    }
+    if (canonicalEntity === null) {
+      throw new Error(`Channel link ${link.path} references ambiguous entity ${link.entity}.`)
+    }
+    return { ...link, entity: canonicalEntity }
+  })
+  const bindingKeys = new Map<string, ResolvedChannelLink>()
+  const linksByChannelKey = new Map<string, ResolvedChannelLink>()
+  for (const link of normalizedLinks) {
+    const existingChannelLink = linksByChannelKey.get(link.channelKey)
+    if (existingChannelLink != null && existingChannelLink.entity !== link.entity) {
+      throw new Error(
+        `Channel links ${existingChannelLink.path} and ${link.path} reuse channel key ` +
+          `${link.channelKey} across entities ${existingChannelLink.entity} and ${link.entity}.`
+      )
+    }
+    linksByChannelKey.set(link.channelKey, link)
+    const bindingKey = `${link.channelKey}\0${link.address!.kind}\0${link.address!.id}`
+    const existing = bindingKeys.get(bindingKey)
+    if (existing != null) {
+      throw new Error(`Channel links ${existing.path} and ${link.path} bind the same external address.`)
+    }
+    bindingKeys.set(bindingKey, link)
+  }
+  return normalizedLinks
 }
 
 export const resolveChannelLinkBinding = (

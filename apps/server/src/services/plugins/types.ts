@@ -193,6 +193,11 @@ export interface PluginSessionAdapter {
 }
 
 export interface PluginOneWorksChannelFacade {
+  attachRoomChannelConnection: (
+    principal: PluginRequestPrincipal,
+    roomId: string,
+    input: unknown
+  ) => Promise<unknown>
   createRoom: (principal: PluginRequestPrincipal, input: unknown) => Promise<unknown>
   createRoomShare: (principal: PluginRequestPrincipal, roomId: string, input: unknown) => Promise<unknown>
   createScenario: (principal: PluginRequestPrincipal, input: unknown) => Promise<unknown>
@@ -201,6 +206,7 @@ export interface PluginOneWorksChannelFacade {
   getTrace: (principal: PluginRequestPrincipal, limit?: unknown) => Promise<unknown>
   injectSimulation: (principal: PluginRequestPrincipal, input: unknown) => Promise<unknown>
   listEntities: (principal: PluginRequestPrincipal) => Promise<unknown>
+  listRoomChannelConnectionCandidates: (principal: PluginRequestPrincipal) => Promise<unknown>
   listRooms: (principal: PluginRequestPrincipal) => Promise<unknown>
   listShareOwners: (principal: PluginRequestPrincipal) => Promise<unknown>
   listShares: (principal: PluginRequestPrincipal) => Promise<unknown>

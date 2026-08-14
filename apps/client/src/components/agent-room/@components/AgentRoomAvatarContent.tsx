@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 import { getWorkspaceResourceUrl } from '#~/api'
 import { RoomPixelAvatar } from '#~/components/room-pixel-avatar/RoomPixelAvatar'
 
@@ -21,7 +23,10 @@ export function AgentRoomAvatarContent({
   pixelClassName: string
 }) {
   const avatar = resolveAgentRoomAvatar(member.avatar)
-  if (avatar != null) return <img alt='' className={imageClassName} src={avatar} />
+  const [failedAvatar, setFailedAvatar] = useState<string>()
+  if (avatar != null && failedAvatar !== avatar) {
+    return <img alt='' className={imageClassName} onError={() => setFailedAvatar(avatar)} src={avatar} />
+  }
 
   const avatarLabel = member.avatarLabel?.trim()
   if (avatarLabel != null && avatarLabel !== '') return avatarLabel

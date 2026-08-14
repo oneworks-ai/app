@@ -22,18 +22,9 @@ export const oneworksRoomPatchInputSchema = z.object({
   title: z.string().trim().min(1).max(80).optional()
 }).strict().refine(value => Object.keys(value).length > 0, 'At least one room field is required.')
 
-export const oneworksRoomChannelConnectionPatchInputSchema = z.object({
-  commandPrefix: z.string().trim().max(80).nullable().optional(),
-  muted: z.boolean().optional(),
-  requireMention: z.boolean().optional()
-}).strict().refine(value => Object.keys(value).length > 0, 'At least one connection field is required.')
-
 export type OneWorksRoomEntity = z.infer<typeof oneworksRoomEntitySchema>
 export type OneWorksRoomCreateInput = z.infer<typeof oneworksRoomCreateInputSchema>
 export type OneWorksRoomPatchInput = z.infer<typeof oneworksRoomPatchInputSchema>
-export type OneWorksRoomChannelConnectionPatchInput = z.infer<
-  typeof oneworksRoomChannelConnectionPatchInputSchema
->
 
 export const oneworksChannelSimulationTargetSchema = z.object({
   binding: z.enum(['default', 'direct', 'group', 'thread']),

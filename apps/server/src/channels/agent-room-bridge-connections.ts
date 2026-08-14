@@ -90,15 +90,27 @@ export const resolveAgentRoomConnectionsForInbound = async (input: {
   const candidateRoomIds = connections.length === 0
     ? [externalRoomId(inbound)]
     : [...new Set(connections.map(connection => connection.roomId))]
+  const service = createAgentRoomService()
   for (const roomId of candidateRoomIds) {
     const memberKeys = new Set(db.listAgentRoomMembers(roomId).map(member => member.key))
     for (const { link, state } of matchingLinks) {
-      const memberKey = memberKeys.has(link.entity)
+      let memberKey = memberKeys.has(link.entity)
         ? link.entity
         : memberKeys.has(`entity:${link.entity}`)
         ? `entity:${link.entity}`
         : undefined
-      if (memberKey == null) continue
+      if (memberKey == null) {
+        const entity = entities.get(link.entity)
+        service.upsertMember(roomId, {
+          ...(entity?.avatar == null ? {} : { avatar: entity.avatar }),
+          key: link.entity,
+          kind: 'entity',
+          label: entity?.label ?? link.entity,
+          ...(entity?.description == null ? {} : { subtitle: entity.description })
+        })
+        memberKey = link.entity
+        memberKeys.add(memberKey)
+      }
       const existing = db.listAgentRoomChannelConnectionsForMember(roomId, memberKey)
         .find(connection => connection.channelLinkName === link.name)
       if (existing?.status === 'removed') continue

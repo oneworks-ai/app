@@ -2,6 +2,7 @@ import './GroupAvatar.scss'
 
 import { createSeededAvatarDataUri } from '@oneworks/avatar'
 import type { CSSProperties } from 'react'
+import { useState } from 'react'
 
 import { getWorkspaceResourceUrl } from '#~/api'
 
@@ -23,6 +24,26 @@ const resolveAvatarUrl = (member: GroupAvatarMember) => {
     size: 72,
     title: member.label ?? member.key
   })
+}
+
+const resolveFallbackAvatarUrl = (member: GroupAvatarMember) =>
+  createSeededAvatarDataUri({
+    seed: `entity:${member.key}`,
+    size: 72,
+    title: member.label ?? member.key
+  })
+
+function GroupAvatarImage({ member }: { member: GroupAvatarMember }) {
+  const [failedAvatar, setFailedAvatar] = useState<string>()
+  const avatar = resolveAvatarUrl(member)
+  return (
+    <img
+      alt=''
+      draggable={false}
+      onError={() => setFailedAvatar(avatar)}
+      src={failedAvatar === avatar ? resolveFallbackAvatarUrl(member) : avatar}
+    />
+  )
 }
 
 const resolvePlacements = (count: number) => {
@@ -103,7 +124,7 @@ export function GroupAvatar({
             '--group-avatar-cell-y': `${placements[index].y}%`
           } as CSSProperties}
         >
-          <img alt='' draggable={false} src={resolveAvatarUrl(member)} />
+          <GroupAvatarImage member={member} />
         </span>
       ))}
     </span>

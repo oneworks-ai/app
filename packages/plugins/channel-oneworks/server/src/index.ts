@@ -2,6 +2,8 @@ import type { Buffer } from 'node:buffer'
 
 import type { PluginRequestPermission, PluginRequestPrincipal } from '@oneworks/types'
 
+import type { OneWorksChannelProductFacade } from './product-facade.js'
+
 const readBody = (body: Buffer) => {
   if (body.length === 0) return undefined
   try {
@@ -45,33 +47,7 @@ const productHeaderSchema = {
 }
 
 export function activatePlugin(ctx: {
-  oneworksChannel?: {
-    createRoom: (principal: PluginRequestPrincipal, input: unknown) => Promise<unknown>
-    createRoomShare: (principal: PluginRequestPrincipal, roomId: string, input: unknown) => Promise<unknown>
-    createScenario: (principal: PluginRequestPrincipal, input: unknown) => Promise<unknown>
-    deleteRoom: (principal: PluginRequestPrincipal, roomId: string) => Promise<boolean>
-    deleteScenario: (principal: PluginRequestPrincipal, scenarioRef: string) => Promise<boolean>
-    getTrace: (principal: PluginRequestPrincipal, limit?: unknown) => Promise<unknown>
-    injectSimulation: (principal: PluginRequestPrincipal, input: unknown) => Promise<unknown>
-    listEntities: (principal: PluginRequestPrincipal) => Promise<unknown>
-    listRooms: (principal: PluginRequestPrincipal) => Promise<unknown>
-    listShareOwners: (principal: PluginRequestPrincipal) => Promise<unknown>
-    listShares: (principal: PluginRequestPrincipal) => Promise<unknown>
-    listSharedRooms: (principal: PluginRequestPrincipal) => Promise<unknown>
-    listSimulationTargets: (principal: PluginRequestPrincipal) => Promise<unknown>
-    listScenarios: (principal: PluginRequestPrincipal) => Promise<unknown>
-    runScenario: (principal: PluginRequestPrincipal, scenarioRef: string) => Promise<unknown>
-    revokeRoomShare: (principal: PluginRequestPrincipal, roomId: string, shareRef: string) => Promise<boolean>
-    updateRoom: (principal: PluginRequestPrincipal, roomId: string, input: unknown) => Promise<unknown>
-    updateRoomChannelConnection: (
-      principal: PluginRequestPrincipal,
-      roomId: string,
-      memberKey: string,
-      channelLinkName: string,
-      input: unknown
-    ) => Promise<unknown>
-    updateScenario: (principal: PluginRequestPrincipal, scenarioRef: string, input: unknown) => Promise<unknown>
-  }
+  oneworksChannel?: OneWorksChannelProductFacade
   logger: { info: (...args: unknown[]) => void }
   registerApi: (id: string, options: {
     handler: (request: {
@@ -113,6 +89,21 @@ export function activatePlugin(ctx: {
       if (request.method === 'POST' && parts[0] === 'rooms' && parts.length === 1) {
         return json(await product.createRoom(request.principal, body))
       }
+      if (
+        request.method === 'POST' &&
+        parts[0] === 'rooms' &&
+        parts[2] === 'connections' &&
+        parts.length === 3
+      ) {
+        return json(
+          await product.attachRoomChannelConnection(
+            request.principal,
+            decodeURIComponent(parts[1] ?? ''),
+            body
+          ),
+          201
+        )
+      }
       if (parts[0] === 'rooms' && parts[1] != null && parts.length === 2) {
         const roomId = decodeURIComponent(parts[1])
         if (request.method === 'PATCH') return json(await product.updateRoom(request.principal, roomId, body))
@@ -140,6 +131,9 @@ export function activatePlugin(ctx: {
         )
       }
       if (request.method === 'GET' && parts[0] === 'rooms') return json(await product.listRooms(request.principal))
+      if (request.method === 'GET' && parts[0] === 'room-connection-candidates') {
+        return json(await product.listRoomChannelConnectionCandidates(request.principal))
+      }
       if (request.method === 'GET' && parts[0] === 'share-owners') {
         return json(await product.listShareOwners(request.principal))
       }

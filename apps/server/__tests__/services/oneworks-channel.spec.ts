@@ -7,7 +7,17 @@ const handleChannelWebhook = vi.fn()
 const getChannelManager = vi.fn()
 const getDb = vi.fn()
 const executeRoomCommand = vi.fn()
+const executeAgentRoomCommand = vi.fn()
+const upsertRoomMember = vi.fn()
+const createAgentRoomService = vi.fn(() => ({
+  applyEvent: vi.fn(),
+  createRoom: vi.fn(),
+  executeCommand: executeAgentRoomCommand,
+  upsertMember: upsertRoomMember
+}))
+const createSessionWithInitialMessage = vi.fn()
 const listActiveAgentRoomRelayOwners = vi.fn()
+const resolveWorkspaceImageResource = vi.fn()
 const workspacePrincipal: PluginRequestPrincipal = {
   id: 'local-workspace',
   kind: 'local_workspace',
@@ -20,11 +30,39 @@ vi.mock('#~/db/index.js', () => ({ getDb }))
 vi.mock('#~/services/agent-room/owner.js', () => ({
   createAgentRoomOwner: vi.fn(() => ({ execute: executeRoomCommand }))
 }))
+vi.mock('#~/services/agent-room/index.js', () => ({ createAgentRoomService }))
 vi.mock('#~/services/agent-room/relay.js', () => ({ listActiveAgentRoomRelayOwners }))
+vi.mock('#~/services/session/create.js', () => ({ createSessionWithInitialMessage }))
+vi.mock('#~/services/workspace/media.js', () => ({ resolveWorkspaceImageResource }))
+vi.mock('@oneworks/definition-loader', () => ({
+  DefinitionLoader: class {
+    loadDefaultEntities = async () => [
+      {
+        attributes: { description: 'Team leader', name: 'leader' },
+        body: 'Team leader',
+        path: '/entities/leader/README.md',
+        resolvedName: 'leader'
+      },
+      {
+        attributes: { description: 'Quality assurance', name: 'qa' },
+        body: 'Quality assurance',
+        path: '/entities/qa/README.md',
+        resolvedName: 'qa'
+      }
+    ]
+  }
+}))
 
 describe('oneWorks Channel service', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    resolveWorkspaceImageResource.mockResolvedValue({ mimeType: 'image/png' })
+    createAgentRoomService.mockReturnValue({
+      applyEvent: vi.fn(),
+      createRoom: vi.fn(),
+      executeCommand: executeAgentRoomCommand,
+      upsertMember: upsertRoomMember
+    })
     listActiveAgentRoomRelayOwners.mockReturnValue([{
       accountId: 'relay-owner-account',
       label: 'OneWorks owner',
@@ -50,13 +88,14 @@ describe('oneWorks Channel service', () => {
   })
 
   it('lists Agent Rooms separately from provider-specific simulation targets', async () => {
+    resolveWorkspaceImageResource.mockRejectedValue(new Error('Workspace resource not found'))
     getDb.mockReturnValue({
       getAgentRoomDetail: vi.fn(() => ({
         channelConnections: [
           { accountLabel: 'Product bot', channelKey: 'lark-main', channelType: 'lark', memberKey: 'entity:product' },
           { accountLabel: 'Service bot', channelKey: 'wechat-main', channelType: 'wechat', memberKey: 'entity:product' }
         ],
-        members: [{ key: 'entity:product', label: 'Product' }],
+        members: [{ avatar: '.oo/entities/product/avatar.png', key: 'entity:product', label: 'Product' }],
         messages: [{ id: 'room-message' }],
         shares: [{ id: 'share', status: 'active' }]
       })),
@@ -114,6 +153,7 @@ describe('oneWorks Channel service', () => {
       })
     ])
     expect(rooms[0]?.platforms.map(platform => platform.channelType)).toEqual(['lark', 'wechat'])
+    expect(rooms[0]?.members[0]).not.toHaveProperty('avatar')
     expect(targets.map(room => room.channelType)).toEqual(['lark', 'wechat', 'oneworks'])
     expect(targets.find(room => room.channelType === 'lark')?.capabilities).toEqual([])
     expect(targets.find(room => room.channelType === 'wechat')?.capabilities).toEqual([])

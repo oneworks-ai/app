@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { AgentRoomChannelConnection } from '@oneworks/types'
+
 import type { ChannelContext } from '#~/channels/middleware/@types/index.js'
 import { invokeChannelCommandTool, listChannelCommandTools } from '#~/channels/middleware/commands/index.js'
 import { createT, defineMessages } from '#~/channels/middleware/i18n.js'
@@ -42,6 +44,8 @@ const claimChannelOutboundOperation = vi.hoisted(() =>
 )
 const finishChannelOutboundOperation = vi.hoisted(() => vi.fn())
 const executeRoomCommand = vi.hoisted(() => vi.fn())
+const findAgentRoomChannelConnections = vi.hoisted(() => vi.fn<() => AgentRoomChannelConnection[]>(() => []))
+const saveAgentRoomChannelConnection = vi.hoisted(() => vi.fn())
 
 vi.mock('#~/db/index.js', () => ({
   getDb: vi.fn(() => ({
@@ -49,7 +53,9 @@ vi.mock('#~/db/index.js', () => ({
     createChannelCommandRun,
     finishChannelCommandRun,
     finishChannelOutboundOperation,
+    findAgentRoomChannelConnections,
     getChannelCommandRun,
+    saveAgentRoomChannelConnection,
     updateChannelCommandRunMetadata
   }))
 }))
@@ -102,6 +108,7 @@ describe('channel.send command kernel', () => {
     vi.clearAllMocks()
     commandRunSequence.value = 0
     executeRoomCommand.mockResolvedValue(undefined)
+    findAgentRoomChannelConnections.mockReturnValue([])
   })
 
   it('declares one external-write effect in the typed command registry', () => {
@@ -346,6 +353,17 @@ describe('channel.send command kernel', () => {
         }
       }
     })
+    findAgentRoomChannelConnections.mockReturnValue([{
+      ...target,
+      createdAt: 1,
+      entity: 'owo',
+      memberKey: 'entity:owo',
+      muted: false,
+      requireMention: false,
+      roomId: 'room-1',
+      status: 'active',
+      updatedAt: 1
+    }])
 
     await expect(invokeChannelCommandTool(ctx, 'channel.send', {
       message: 'Ship the update.'
@@ -366,6 +384,11 @@ describe('channel.send command kernel', () => {
       expect.stringMatching(/^channel-send:/u),
       { error: 'provider unavailable', status: 'failed' }
     )
+    expect(saveAgentRoomChannelConnection).toHaveBeenCalledWith(expect.objectContaining({
+      lastError: 'provider unavailable',
+      memberKey: 'entity:owo',
+      status: 'unavailable'
+    }))
   })
 
   it('does not call the provider again when a durable operation is already pending', async () => {
