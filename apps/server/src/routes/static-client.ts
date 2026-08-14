@@ -3,7 +3,7 @@ import path from 'node:path'
 import { cwd, env as processEnv } from 'node:process'
 
 import type { loadEnv } from '@oneworks/core'
-import { resolveExistingNpmPackageDirs } from '@oneworks/types'
+import { resolveExistingNpmPackageDirs } from '@oneworks/types/adapter-package-cache'
 
 import { resolveActiveModulePackageDirSync } from '#~/module-update-cache.js'
 

@@ -9,8 +9,8 @@ vi.mock('#~/services/config/index.js', () => ({
   loadConfigState: mocks.loadConfigState
 }))
 
-vi.mock('@oneworks/types', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@oneworks/types')>()
+vi.mock('@oneworks/types/adapter-package', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@oneworks/types/adapter-package')>()
   return {
     ...actual,
     resolveAdapterRuntimeTarget: (adapter: string) => ({ loadSpecifier: adapter }),

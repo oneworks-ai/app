@@ -21,6 +21,7 @@ export interface RouteContainerHeaderActionItem {
   activeIcon?: IconAsset
   activeLabel?: string
   activeTitle?: string
+  ariaDescribedBy?: string
   danger?: boolean
   disabled?: boolean
   loading?: boolean
@@ -59,6 +60,7 @@ export function RouteContainerHeaderActionButton({
       disabled={item.disabled}
       loading={item.loading}
       label={resolvedLabel}
+      aria-describedby={item.ariaDescribedBy}
       pressed={item.active == null ? undefined : isActive}
       onClick={item.onSelect}
       icon={renderIconAsset({

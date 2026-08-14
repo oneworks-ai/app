@@ -4,7 +4,7 @@ import process from 'node:process'
 import { pathToFileURL } from 'node:url'
 
 import { validateModelProviderCatalog } from '@oneworks/model-provider-catalog'
-import { resolveActiveModulePackageDirSync } from '@oneworks/types'
+import { resolveActiveModulePackageDirSync } from '@oneworks/types/adapter-package-cache'
 import { installModelProviderCatalog, resetModelProviderCatalog } from '@oneworks/utils/model-providers'
 
 export interface ActiveModelProviderCatalogInfo {

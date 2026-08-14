@@ -1,6 +1,6 @@
 import { composeWorkspaceConfigSchemaBundle } from '@oneworks/config'
 import type { Config } from '@oneworks/types'
-import { resolveAdapterRuntimeTarget } from '@oneworks/types'
+import { resolveAdapterRuntimeTarget } from '@oneworks/types/adapter-package'
 import { resolveSelectableAdapterKeys } from '@oneworks/utils'
 
 export const resolveSelectableAdapterRuntimeTargets = async (params: {

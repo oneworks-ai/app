@@ -9,6 +9,10 @@ export const getNativeHistoryImportAdapterSummary = (sessions: NativeHistoryImpo
   return [
     adapters.has('codex') ? 'Codex' : undefined,
     adapters.has('claude-code') ? 'Claude Code' : undefined,
-    adapters.has('cursor') ? 'Cursor' : undefined
+    adapters.has('cline') ? 'Cline' : undefined,
+    adapters.has('cursor') ? 'Cursor' : undefined,
+    adapters.has('goose') ? 'Goose' : undefined,
+    adapters.has('grok') ? 'Grok' : undefined,
+    adapters.has('qwen-code') ? 'Qwen Code' : undefined
   ].filter((value): value is string => value != null).join(' / ')
 }

@@ -1,0 +1,13 @@
+const QWEN_CODE_ICON_SVG = `
+<svg height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg">
+  <path d="M12 1.2 21.35 6.6v10.8L12 22.8 2.65 17.4V6.6L12 1.2Z" fill="#fff" opacity=".08"/>
+  <path d="m12 3.05 3.67 2.12-7.34 4.25-3.67-2.13L12 3.05Z" fill="#7347ff"/>
+  <path d="m15.67 5.17 3 1.73-6.67 3.86-3.67-2.12 7.34-4.25v.78Z" fill="#ab9bff"/>
+  <path d="m12 10.76 3.67 2.12-7.34 4.25-3.67-2.12L12 10.76Z" fill="#00ebd2"/>
+  <path d="m15.67 12.88 3.67 2.13L12 19.25l-3.67-2.12 7.34-4.25Z" fill="#00cfca"/>
+  <path d="M4.66 7.29 8.33 9.4v4.25l-3.67 2.13V7.29Z" fill="#0423db"/>
+  <path d="m8.33 9.4 3.67 2.13-3.67 2.12V9.4Z" fill="#1c54e4"/>
+</svg>`.trim()
+
+export const adapterIcon = `data:image/svg+xml;utf8,${encodeURIComponent(QWEN_CODE_ICON_SVG)}`
+export const adapterDisplayName = 'Qwen Code'

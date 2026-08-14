@@ -9,4 +9,5 @@ export type {
 } from './entity-documents'
 export { HOME_BRIDGE_RESOLVED_BY } from './home-bridge'
 export { resolvePromptAssetSelection } from './prompt-selection'
+export { resolveSelectedMcpNames } from './selection-internal'
 export { findWorkspaceAsset, resolveConfiguredWorkspaceAssets } from './workspaces'

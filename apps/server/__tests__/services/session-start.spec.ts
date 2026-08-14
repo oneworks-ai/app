@@ -18,6 +18,8 @@ import {
   notifySessionUpdated
 } from '#~/services/session/runtime.js'
 
+import { GoosePermissionBridge } from '../../../../packages/adapters/goose/src/runtime/interaction.js'
+
 const mocks = vi.hoisted(() => ({
   run: vi.fn(),
   generateAdapterQueryOptions: vi.fn(),
@@ -1054,6 +1056,44 @@ describe('startAdapterSession', () => {
     )
   })
 
+  it('does not cache a Cline runtime that exits during startup and permits a clean retry', async () => {
+    const deadEmit = vi.fn()
+    const deadKill = vi.fn()
+    const retryEmit = vi.fn()
+    const retryKill = vi.fn()
+    mocks.run
+      .mockImplementationOnce(async (_options: unknown, adapterOptions: any) => {
+        adapterOptions.onEvent({
+          type: 'error',
+          data: { code: 'cline_acp_eof', fatal: true, message: 'Cline startup exited.' }
+        })
+        adapterOptions.onEvent({
+          type: 'exit',
+          data: { exitCode: 1, stderr: '' }
+        })
+        return { session: { emit: deadEmit, kill: deadKill } }
+      })
+      .mockResolvedValueOnce({ session: { emit: retryEmit, kill: retryKill } })
+
+    const failed = await startAdapterSession('sess-1', {
+      adapter: 'cline',
+      permissionMode: 'default'
+    })
+    expect(failed.session.emit).toBe(deadEmit)
+    expect(currentSession.status).toBe('failed')
+    expect(adapterSessionStore.has('sess-1')).toBe(false)
+    expect(mocks.finalizeSessionWorkspaceChangeTracking).toHaveBeenCalledWith('sess-1', 'failed')
+
+    const retried = await startAdapterSession('sess-1', {
+      adapter: 'cline',
+      permissionMode: 'default'
+    })
+    expect(mocks.run).toHaveBeenCalledTimes(2)
+    expect(retried.session.emit).toBe(retryEmit)
+    expect(adapterSessionStore.get('sess-1')).toBe(retried)
+    expect(retryKill).not.toHaveBeenCalled()
+  })
+
   it('replaces the generated system prompt when appendSystemPrompt is false', async () => {
     mocks.generateAdapterQueryOptions.mockResolvedValueOnce([
       {},
@@ -1475,6 +1515,438 @@ describe('startAdapterSession', () => {
         })
       })
     )
+  })
+
+  it('maps a normalized server Goose permission decision back to the exact native ACP option id once', async () => {
+    let bridge: GoosePermissionBridge | undefined
+    let settleCount = 0
+
+    mocks.canRequestInteraction.mockReturnValue(true)
+    mocks.requestInteraction.mockResolvedValueOnce('allow_once')
+    mocks.run.mockImplementationOnce(async (_options: unknown, adapterOptions: any) => {
+      bridge = new GoosePermissionBridge(adapterOptions, adapterOptions.onEvent)
+      return {
+        session: {
+          emit: vi.fn(),
+          kill: vi.fn(),
+          respondInteraction: (interactionId: string, data: string | string[]) => bridge?.respond(interactionId, data)
+        }
+      }
+    })
+
+    await startAdapterSession('sess-1', {
+      model: 'default',
+      adapter: 'goose',
+      permissionMode: 'default'
+    })
+    const nativeResponse = bridge!.handle({
+      options: [
+        { kind: 'allow_once', name: 'Allow once', optionId: 'allow-once' },
+        { kind: 'reject_once', name: 'Reject once', optionId: 'reject-once' }
+      ],
+      sessionId: 'native-goose-session',
+      toolCall: {
+        kind: 'execute',
+        name: 'developer__execute',
+        rawInput: { command: 'echo must-not-be-persisted' },
+        title: 'Execute'
+      }
+    } as never).then((response) => {
+      settleCount += 1
+      return response
+    })
+
+    await expect(nativeResponse).resolves.toEqual({
+      outcome: { outcome: 'selected', optionId: 'allow-once' }
+    })
+    expect(settleCount).toBe(1)
+    expect(mocks.requestInteraction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.arrayContaining([expect.objectContaining({ value: 'allow_once' })]),
+        question: 'Allow Goose to run developer__execute?'
+      }),
+      expect.any(Object)
+    )
+    expect(JSON.stringify(mocks.requestInteraction.mock.calls)).not.toContain('must-not-be-persisted')
+  })
+
+  it.each([
+    { type: 'create' as const, permissionMode: 'default' as const },
+    { type: 'resume' as const, permissionMode: 'plan' as const }
+  ])('binds the server response bridge before a Kiro $type initial permission request', async ({
+    permissionMode,
+    type
+  }) => {
+    currentSession = {
+      ...currentSession,
+      adapter: 'kiro',
+      model: 'default',
+      permissionMode
+    }
+    if (type === 'resume') {
+      getMessages.mockReturnValue([{
+        type: 'message',
+        message: {
+          id: 'previous-answer',
+          role: 'assistant',
+          content: 'previous answer',
+          createdAt: Date.now()
+        }
+      }])
+    }
+    mocks.canRequestInteraction.mockReturnValue(true)
+    mocks.requestInteraction.mockResolvedValueOnce('allow_once')
+    const respondInteraction = vi.fn().mockResolvedValue(undefined)
+    mocks.run.mockImplementationOnce(async (_options: unknown, adapterOptions: any) => {
+      expect(adapterOptions.type).toBe(type)
+      expect(adapterOptions.permissionMode).toBe(permissionMode)
+      setImmediate(() => {
+        adapterOptions.onEvent({
+          type: 'interaction_request',
+          data: {
+            id: `kiro-initial-${type}`,
+            payload: {
+              sessionId: 'sess-1',
+              kind: 'permission',
+              question: 'Allow the initial Kiro tool?',
+              options: [{ label: 'Allow once', value: 'allow_once' }],
+              permissionContext: {
+                adapter: 'kiro',
+                currentMode: permissionMode,
+                subjectKey: 'write_file',
+                subjectLabel: 'write_file',
+                scope: 'tool',
+                projectConfigPath: '.oo.config.json'
+              }
+            }
+          }
+        })
+      })
+      return {
+        session: {
+          emit: vi.fn(),
+          kill: vi.fn(),
+          respondInteraction
+        }
+      }
+    })
+
+    const runtime = await startAdapterSession('sess-1', {
+      adapter: 'kiro',
+      model: 'default',
+      permissionMode
+    })
+    expect(runtime.session.respondInteraction).toBe(respondInteraction)
+    await vi.waitFor(() => {
+      expect(respondInteraction).toHaveBeenCalledWith(`kiro-initial-${type}`, 'allow_once')
+    })
+  })
+
+  it.each(
+    [
+      ['create', 'sessionAllow', 'allow', 'allow_once'],
+      ['resume', 'sessionDeny', 'deny', 'deny_once'],
+      ['create', 'projectAllow', 'allow', 'allow_once'],
+      ['resume', 'projectDeny', 'deny', 'deny_once']
+    ] as const
+  )(
+    'maps Kiro $type remembered $source through request-scoped native semantics',
+    async (type, source, storedResult, expectedDecision) => {
+      currentSession = {
+        ...currentSession,
+        adapter: 'kiro',
+        model: 'default',
+        permissionMode: 'default'
+      }
+      if (type === 'resume') {
+        getMessages.mockReturnValue([{
+          type: 'message',
+          message: {
+            id: 'previous-answer',
+            role: 'assistant',
+            content: 'previous answer',
+            createdAt: Date.now()
+          }
+        }])
+      }
+      const sessionDecision = source.startsWith('session')
+      getSessionRuntimeState.mockReturnValue({
+        runtimeKind: 'interactive',
+        historySeedPending: false,
+        permissionState: {
+          allow: sessionDecision && storedResult === 'allow' ? ['Bash'] : [],
+          deny: sessionDecision && storedResult === 'deny' ? ['Bash'] : [],
+          onceAllow: [],
+          onceDeny: []
+        }
+      })
+      mocks.loadConfigState.mockResolvedValue({
+        workspaceFolder: process.cwd(),
+        projectConfig: {},
+        mergedConfig: {
+          permissions: {
+            allow: !sessionDecision && storedResult === 'allow' ? ['Bash'] : [],
+            deny: !sessionDecision && storedResult === 'deny' ? ['Bash'] : [],
+            ask: []
+          }
+        }
+      })
+      const respondInteraction = vi.fn().mockResolvedValue(undefined)
+      let onEvent: ((event: any) => void) | undefined
+      mocks.run.mockImplementationOnce(async (_options: unknown, adapterOptions: any) => {
+        onEvent = adapterOptions.onEvent
+        return {
+          resolvedAdapter: 'kiro',
+          session: { emit: vi.fn(), kill: vi.fn(), respondInteraction }
+        }
+      })
+
+      await startAdapterSession('sess-1', {
+        adapter: 'kiro',
+        model: 'default',
+        permissionMode: 'default'
+      })
+      onEvent?.({
+        type: 'interaction_request',
+        data: {
+          id: `kiro-memory-${source}`,
+          payload: {
+            sessionId: 'sess-1',
+            kind: 'permission',
+            question: 'Allow Bash?',
+            options: [
+              {
+                label: 'Always allow',
+                value: 'native-allow-always',
+                permission: { adapterLabel: 'Kiro', semantic: 'allow_persistent' }
+              },
+              {
+                label: storedResult === 'allow' ? 'Allow once' : 'Reject once',
+                value: storedResult === 'allow' ? 'native-allow-once' : 'native-reject-once',
+                permission: {
+                  adapterLabel: 'Kiro',
+                  semantic: storedResult === 'allow' ? 'allow_once' : 'deny_once'
+                }
+              }
+            ],
+            permissionContext: {
+              adapter: 'kiro',
+              subjectKey: 'Bash',
+              subjectLabel: 'Bash',
+              scope: 'tool'
+            }
+          }
+        }
+      })
+
+      await vi.waitFor(() => {
+        expect(respondInteraction).toHaveBeenCalledTimes(1)
+        expect(respondInteraction).toHaveBeenCalledWith(`kiro-memory-${source}`, expectedDecision)
+      })
+      expect(mocks.requestInteraction).not.toHaveBeenCalled()
+      expect(JSON.stringify(respondInteraction.mock.calls)).not.toContain('always')
+    }
+  )
+
+  it('forwards only an explicit current Kiro native persistent ID without storing framework memory', async () => {
+    currentSession = { ...currentSession, adapter: 'kiro', model: 'default' }
+    mocks.canRequestInteraction.mockReturnValue(true)
+    mocks.requestInteraction.mockResolvedValueOnce('native-allow-always')
+    const respondInteraction = vi.fn().mockResolvedValue(undefined)
+    let onEvent: ((event: any) => void) | undefined
+    mocks.run.mockImplementationOnce(async (_options: unknown, adapterOptions: any) => {
+      onEvent = adapterOptions.onEvent
+      return {
+        resolvedAdapter: 'kiro',
+        session: { emit: vi.fn(), kill: vi.fn(), respondInteraction }
+      }
+    })
+
+    await startAdapterSession('sess-1', { adapter: 'kiro', model: 'default', permissionMode: 'default' })
+    onEvent?.({
+      type: 'interaction_request',
+      data: {
+        id: 'kiro-explicit-persistent',
+        payload: {
+          sessionId: 'sess-1',
+          kind: 'permission',
+          question: 'Persist native Kiro approval?',
+          options: [{
+            label: 'Always allow',
+            value: 'native-allow-always',
+            permission: { adapterLabel: 'Kiro', semantic: 'allow_persistent' }
+          }],
+          permissionContext: { adapter: 'kiro', subjectKey: 'Bash', subjectLabel: 'Bash', scope: 'tool' }
+        }
+      }
+    })
+
+    await vi.waitFor(() => {
+      expect(respondInteraction).toHaveBeenCalledTimes(1)
+      expect(respondInteraction).toHaveBeenCalledWith('kiro-explicit-persistent', 'native-allow-always')
+    })
+    expect(updateSessionRuntimeState).not.toHaveBeenCalledWith(
+      'sess-1',
+      expect.objectContaining({ permissionState: expect.anything() })
+    )
+  })
+
+  it('keeps opaque native permission forwarding isolated to Kiro', async () => {
+    currentSession = { ...currentSession, adapter: 'pi', model: 'default' }
+    mocks.canRequestInteraction.mockReturnValue(true)
+    mocks.requestInteraction.mockResolvedValueOnce('native-allow-always')
+    const respondInteraction = vi.fn().mockResolvedValue(undefined)
+    let onEvent: ((event: any) => void) | undefined
+    mocks.run.mockImplementationOnce(async (_options: unknown, adapterOptions: any) => {
+      onEvent = adapterOptions.onEvent
+      return {
+        resolvedAdapter: 'pi',
+        session: { emit: vi.fn(), kill: vi.fn(), respondInteraction }
+      }
+    })
+
+    await startAdapterSession('sess-1', { adapter: 'pi', model: 'default', permissionMode: 'default' })
+    onEvent?.({
+      type: 'interaction_request',
+      data: {
+        id: 'pi-opaque-persistent',
+        payload: {
+          sessionId: 'sess-1',
+          kind: 'permission',
+          question: 'Persist Pi approval?',
+          options: [{ label: 'Always allow', value: 'native-allow-always' }],
+          permissionContext: { adapter: 'pi', subjectKey: 'Bash', subjectLabel: 'Bash', scope: 'tool' }
+        }
+      }
+    })
+
+    await vi.waitFor(() => {
+      expect(respondInteraction).toHaveBeenCalledTimes(1)
+      expect(respondInteraction).toHaveBeenCalledWith('pi-opaque-persistent', 'cancel')
+    })
+    expect(respondInteraction).not.toHaveBeenCalledWith('pi-opaque-persistent', 'native-allow-always')
+  })
+
+  it.each(['allow_once', 'allow_session', 'deny_once', 'cancel'] as const)(
+    'normalizes a live Droid permission answer %s before returning it to the adapter',
+    async (answer) => {
+      const respondInteraction = vi.fn()
+      let onEvent: ((event: any) => void) | undefined
+      mocks.canRequestInteraction.mockReturnValue(true)
+      mocks.requestInteraction.mockResolvedValueOnce(answer)
+      mocks.run.mockImplementationOnce(async (_options: unknown, adapterOptions: any) => {
+        onEvent = adapterOptions.onEvent
+        return { session: { emit: vi.fn(), kill: vi.fn(), respondInteraction } }
+      })
+
+      await startAdapterSession('sess-1', {
+        model: 'default',
+        adapter: 'droid',
+        permissionMode: 'default'
+      })
+      onEvent?.({
+        type: 'interaction_request',
+        data: {
+          id: `droid-permission-${answer}`,
+          payload: {
+            sessionId: 'sess-1',
+            kind: 'permission',
+            question: 'Factory Droid requests permission for: Write',
+            options: [
+              { label: 'Proceed once', value: 'allow_once' },
+              { label: 'Proceed for session', value: 'allow_session' },
+              { label: 'Cancel', value: 'deny_once' }
+            ],
+            permissionContext: {
+              adapter: 'droid',
+              subjectKey: 'Write',
+              subjectLabel: 'Write',
+              scope: 'tool'
+            }
+          }
+        }
+      })
+
+      await vi.waitFor(() => {
+        expect(respondInteraction).toHaveBeenCalledWith(`droid-permission-${answer}`, answer)
+      })
+      expect(respondInteraction).toHaveBeenCalledTimes(1)
+    }
+  )
+
+  it('delivers Droid multi-question interactions sequentially through the server without empty answers', async () => {
+    const answers: Array<{ id: string; answer: string | string[] }> = []
+    let onEvent: ((event: any) => void) | undefined
+    mocks.canRequestInteraction.mockReturnValue(true)
+    mocks.requestInteraction.mockResolvedValueOnce('adapter-droid').mockResolvedValueOnce('vitest')
+    const respondInteraction = vi.fn(async (id: string, answer: string | string[]) => {
+      answers.push({ id, answer })
+      if (id === 'droid-question:request-1:1') {
+        onEvent?.({
+          type: 'interaction_request',
+          data: {
+            id: 'droid-question:request-1:2',
+            payload: { sessionId: 'sess-1', kind: 'question', question: 'Which suite?' }
+          }
+        })
+      }
+    })
+    mocks.run.mockImplementationOnce(async (_options: unknown, adapterOptions: any) => {
+      onEvent = adapterOptions.onEvent
+      return { session: { emit: vi.fn(), kill: vi.fn(), respondInteraction } }
+    })
+
+    await startAdapterSession('sess-1', { model: 'default', adapter: 'droid', permissionMode: 'default' })
+    onEvent?.({
+      type: 'interaction_request',
+      data: {
+        id: 'droid-question:request-1:1',
+        payload: { sessionId: 'sess-1', kind: 'question', question: 'Which package?' }
+      }
+    })
+    await vi.waitFor(() =>
+      expect(answers).toEqual([
+        { id: 'droid-question:request-1:1', answer: 'adapter-droid' },
+        { id: 'droid-question:request-1:2', answer: 'vitest' }
+      ])
+    )
+  })
+
+  it('preserves a Droid multi-select array until the adapter owns native serialization', async () => {
+    const respondInteraction = vi.fn()
+    let onEvent: ((event: any) => void) | undefined
+    mocks.canRequestInteraction.mockReturnValue(true)
+    mocks.requestInteraction.mockResolvedValueOnce(['runtime', 'history', 'custom target'])
+    mocks.run.mockImplementationOnce(async (_options: unknown, adapterOptions: any) => {
+      onEvent = adapterOptions.onEvent
+      return { session: { emit: vi.fn(), kill: vi.fn(), respondInteraction } }
+    })
+
+    await startAdapterSession('sess-1', { model: 'default', adapter: 'droid', permissionMode: 'default' })
+    onEvent?.({
+      type: 'interaction_request',
+      data: {
+        id: 'droid-question:request-multi:1',
+        payload: {
+          sessionId: 'sess-1',
+          kind: 'question',
+          question: 'Which targets?',
+          multiselect: true,
+          options: [
+            { label: 'runtime', value: 'runtime' },
+            { label: 'history', value: 'history' }
+          ]
+        }
+      }
+    })
+
+    await vi.waitFor(() => {
+      expect(respondInteraction).toHaveBeenCalledWith(
+        'droid-question:request-multi:1',
+        ['runtime', 'history', 'custom target']
+      )
+    })
+    expect(respondInteraction).toHaveBeenCalledTimes(1)
   })
 
   it('does not persist a live Pi allow_once response for the next tool call', async () => {

@@ -47,6 +47,7 @@ export interface CliRuntimeEventSinkOptions extends RuntimeEventSinkOptions {
   message?: string
   model?: string
   permissionMode?: RuntimeMeta['permissionMode']
+  sessionRecovery?: RuntimeMeta['sessionRecovery']
   title?: string
 }
 
@@ -283,6 +284,16 @@ export class RuntimeEventSink {
     })
   }
 
+  recordSessionResumed(command: RuntimeCommand) {
+    return this.append({
+      type: 'session_resumed',
+      status: 'running',
+      causedByCommandId: command.id,
+      commandId: command.commandId,
+      visibility: 'system'
+    })
+  }
+
   recordOperation(input: RuntimeOperationEventInput) {
     const status = input.type === 'operation_started'
       ? 'running'
@@ -303,14 +314,31 @@ export class RuntimeEventSink {
 
   handleAdapterEvent(event: AdapterOutputEvent) {
     if (event.type === 'init') {
-      return this.append({
-        type: 'session_started',
-        status: 'running',
-        title: event.data.title ?? this.meta?.title,
-        adapter: event.data.adapter,
-        model: event.data.model,
-        visibility: 'system'
-      })
+      this.queue = this.queue
+        .catch(() => {})
+        .then(async () => {
+          const session = this.store.session(this.sessionId)
+          const currentMeta = await session.readMeta()
+          if (currentMeta != null && event.data.sessionRecovery != null) {
+            await session.writeMeta({ ...currentMeta, sessionRecovery: event.data.sessionRecovery })
+          }
+          await this.appendNow({
+            type: 'session_started',
+            status: 'running',
+            title: event.data.title ?? this.meta?.title,
+            adapter: event.data.adapter,
+            model: event.data.model,
+            visibility: 'system'
+          })
+        })
+        .catch(error => {
+          console.error(
+            `[runtime-protocol] Failed to append runtime init: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          )
+        })
+      return this.queue
     }
 
     if (event.type === 'message') {
@@ -604,6 +632,7 @@ export const createCliRuntimeEventSink = async (options: CliRuntimeEventSinkOpti
       ...(options.fastMode != null ? { fastMode: options.fastMode } : {}),
       ...(trimOptional(options.model) != null ? { model: trimOptional(options.model) } : {}),
       ...(options.permissionMode != null ? { permissionMode: options.permissionMode } : {}),
+      ...(options.sessionRecovery != null ? { sessionRecovery: options.sessionRecovery } : {}),
       createdAt: ts
     } satisfies RuntimeMeta
   )

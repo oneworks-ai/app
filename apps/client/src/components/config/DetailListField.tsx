@@ -351,7 +351,12 @@ export const DetailCollectionField = ({
           serviceKey: key,
           source
         })
-        const displayTitle = sectionKey === 'adapters' ? resolveAdapterListTitle(key) : title
+        const registeredAdapterTitle = sectionKey === 'adapters' && uiSection?.kind === 'recordMap'
+          ? uiSection.recordMap.entryKinds?.find(kind => kind.key === key)?.label
+          : undefined
+        const displayTitle = sectionKey === 'adapters'
+          ? registeredAdapterTitle ?? (uiSection == null ? resolveAdapterListTitle(key) : key)
+          : title
         const displaySubtitle = sectionKey === 'adapters'
           ? resolveAdapterListSubtitle({ item, fallbackSubtitle: subtitle, t })
           : subtitle

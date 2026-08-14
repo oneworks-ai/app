@@ -441,6 +441,18 @@ const resolvePermissionInteractionDecision = (
   return undefined
 }
 
+const resolveExactNativePermissionOptionId = (
+  answer: string | string[],
+  options: AskUserQuestionParams['options']
+) => {
+  const rawAnswer = (Array.isArray(answer) ? answer[0] : answer)?.trim()
+  if (rawAnswer == null || rawAnswer === '' || resolvePermissionInteractionDecision(rawAnswer) != null) {
+    return undefined
+  }
+  const matches = (options ?? []).filter(option => option.value === rawAnswer)
+  return matches.length === 1 ? rawAnswer : undefined
+}
+
 const emitSessionError = (sessionId: string, data: AdapterErrorData) => {
   const event: WSEvent = {
     type: 'error',
@@ -914,6 +926,7 @@ export async function startAdapterSession(
         languagePrompt
       ].filter(Boolean).join('\n\n')
       let sawFatalError = false
+      let sawStartupExit = false
       let runtimeMcpServers: AdapterQueryOptions['runtimeMcpServers']
 
       try {
@@ -1125,6 +1138,7 @@ export async function startAdapterSession(
               const permissionContext = interaction.payload.kind === 'permission'
                 ? interaction.payload.permissionContext
                 : undefined
+              const interactionAdapter = permissionContext?.adapter ?? resolvedAdapter ?? options.adapter
               const subject = permissionContext?.subjectKey != null
                 ? resolvePermissionSubjectFromInput({ toolName: permissionContext.subjectKey })
                 : undefined
@@ -1143,7 +1157,9 @@ export async function startAdapterSession(
                       if (storedDecision.result === 'allow') {
                         await session.respondInteraction?.(
                           interaction.id,
-                          storedDecision.source === 'onceAllow' ? 'allow_once' : 'allow_session'
+                          interactionAdapter === 'kiro'
+                            ? 'allow_once'
+                            : (storedDecision.source === 'onceAllow' ? 'allow_once' : 'allow_session')
                         )
                         return
                       }
@@ -1151,7 +1167,9 @@ export async function startAdapterSession(
                       if (storedDecision.result === 'deny') {
                         await session.respondInteraction?.(
                           interaction.id,
-                          storedDecision.source === 'projectDeny' ? 'deny_project' : 'deny_session'
+                          interactionAdapter === 'kiro'
+                            ? 'deny_once'
+                            : (storedDecision.source === 'projectDeny' ? 'deny_project' : 'deny_session')
                         )
                         return
                       }
@@ -1198,6 +1216,16 @@ export async function startAdapterSession(
                       return
                     }
                     const decision = resolvePermissionInteractionDecision(answer)
+                    if (decision == null && interactionAdapter === 'kiro') {
+                      const nativeOptionId = resolveExactNativePermissionOptionId(
+                        answer,
+                        interaction.payload.options
+                      )
+                      if (nativeOptionId != null) {
+                        await session.respondInteraction?.(interaction.id, nativeOptionId)
+                        return
+                      }
+                    }
                     if (decision == null || decision === PERMISSION_DECISION_CANCEL) {
                       await session.respondInteraction?.(interaction.id, PERMISSION_DECISION_CANCEL)
                       emitSessionError(sessionId, buildPermissionDeclinedError('用户取消了本次权限授权。'))
@@ -1369,6 +1397,9 @@ export async function startAdapterSession(
 
               if (event.data.fatal !== false) {
                 sawFatalError = true
+                if (adapterCliPrepareOperationActive) {
+                  emitAdapterCliPrepareOperation('operation_failed', event.data.message)
+                }
               }
               applyEvent({
                 type: 'error',
@@ -1377,7 +1408,14 @@ export async function startAdapterSession(
               })
               break
             case 'exit': {
+              sawStartupExit = true
               const { exitCode, stderr } = event.data as { exitCode: number; stderr: string }
+              if (adapterCliPrepareOperationActive) {
+                emitAdapterCliPrepareOperation(
+                  'operation_failed',
+                  `Adapter exited during CLI startup with code ${exitCode}.`
+                )
+              }
               if (pendingPermissionRecoveryStore.get(sessionId)?.runId === runId) {
                 parkAdapterSessionRuntime(sessionId)
                 if (activeAdapterRunStore.get(sessionId) === runId) {
@@ -1475,22 +1513,25 @@ export async function startAdapterSession(
         db.updateSessionRuntimeState(sessionId, { historySeedPending: false })
       }
 
-      const runtime = setAdapterSessionRuntime(
-        sessionId,
-        bindAdapterSessionRuntime(connectionState, session, {
-          runId,
-          model: resolvedModel,
-          adapter: resolvedAdapter,
-          account: reportedResolvedAccount ?? resolvedAccount,
-          effort: resolvedEffort,
-          fastMode: resolvedFastMode,
-          permissionMode: resolvedPermissionMode,
-          promptType: resolvedPromptType,
-          promptName: resolvedPromptName,
-          seededFromHistory
-        })
-      )
-      if (listSessionQueuedMessages(sessionId).next.length > 0) {
+      const runtime = bindAdapterSessionRuntime(connectionState, session, {
+        runId,
+        model: resolvedModel,
+        adapter: resolvedAdapter,
+        account: reportedResolvedAccount ?? resolvedAccount,
+        effort: resolvedEffort,
+        fastMode: resolvedFastMode,
+        permissionMode: resolvedPermissionMode,
+        promptType: resolvedPromptType,
+        promptName: resolvedPromptName,
+        seededFromHistory
+      })
+      if (!sawStartupExit) {
+        setAdapterSessionRuntime(
+          sessionId,
+          runtime
+        )
+      }
+      if (!sawStartupExit && listSessionQueuedMessages(sessionId).next.length > 0) {
         armNextQueueInterrupt(sessionId)
       }
       return runtime

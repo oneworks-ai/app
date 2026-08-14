@@ -907,14 +907,14 @@ describe('agent room transcript rendering', () => {
       'Requesting permission to use 【Bash】. Choose how to proceed.',
       'Pending',
       'Confirmation',
-      'Allow Bash to poll child runs?',
+      'Choose how to handle this permission request.',
       'aria-label="Available responses"',
       'agent-room-interaction-request__option--allow',
       '>task_alt</span>',
       '>Allow once</span>',
-      'Only this command.',
+      'Allows only this request.',
       '>history_toggle_off</span>',
-      '>Allow session</span>',
+      '>Allow for this session</span>',
       'agent-room-interaction-request__option--deny',
       '>cancel</span>',
       '>Deny once</span>',
@@ -928,6 +928,138 @@ describe('agent room transcript rendering', () => {
       '>folder_managed</span>',
       '>block</span>',
       '>folder_off</span>'
+    ])
+  })
+
+  it.each(
+    [
+      [
+        'en',
+        'Always allow in Kiro (persistent)',
+        'Changes Kiro permission state beyond the current request.',
+        'Kiro option: Ask Kiro'
+      ],
+      [
+        'zh',
+        '在 Kiro 中始终允许（持久）',
+        '会修改 Kiro 的权限状态，并在当前请求结束后继续生效。',
+        'Kiro 原生选项：Ask Kiro'
+      ]
+    ] as const
+  )('renders Kiro native permission semantics and a11y copy for %s', async (
+    language,
+    persistentLabel,
+    persistentDescription,
+    unknownLabel
+  ) => {
+    const html = await renderRoom({
+      language,
+      room: {
+        ...fixtureRoom,
+        messages: [
+          createMessage('kiro-permission-card', 'agent', 'attention', 'write_file', {
+            memberKey: 'host:sess-host',
+            interactionRequest: {
+              sessionId: 'sess-host',
+              interactionId: 'kiro-permission:1',
+              requestKind: 'confirmation',
+              status: 'pending',
+              subjectLabel: 'write_file',
+              options: [
+                {
+                  label: 'Always allow',
+                  value: 'native-allow-always',
+                  permission: { adapterLabel: 'Kiro', semantic: 'allow_persistent' }
+                },
+                {
+                  label: 'Always reject',
+                  value: 'native-reject-always',
+                  permission: { adapterLabel: 'Kiro', semantic: 'deny_persistent' }
+                },
+                {
+                  label: 'Ask Kiro',
+                  value: 'allow_session',
+                  permission: {
+                    adapterLabel: 'Kiro',
+                    nativeLabel: 'Ask Kiro',
+                    semantic: 'native_unknown'
+                  }
+                }
+              ]
+            }
+          })
+        ]
+      }
+    })
+    const card = getMessageMarkup(html, 'kiro-permission-card')
+
+    expectContains(card, [persistentLabel, persistentDescription, unknownLabel])
+    expect(card).toContain(`aria-label="${persistentLabel}. ${persistentDescription}"`)
+    expectContains(card, [
+      'data-permission-semantic="allow_persistent"',
+      'data-permission-semantic="deny_persistent"',
+      'data-permission-semantic="native_unknown"',
+      'agent-room-interaction-request__option--allow',
+      'agent-room-interaction-request__option--deny',
+      'agent-room-interaction-request__option--neutral',
+      '>verified_user</span>',
+      '>gpp_bad</span>',
+      '>help</span>'
+    ])
+    expect(card).not.toContain('data-permission-semantic="allow_session"')
+  })
+
+  it('projects opaque Kiro request semantics into primary Agent Room actions without value guessing', async () => {
+    const html = await renderRoom({
+      room: {
+        ...fixtureRoom,
+        messages: [
+          createMessage('kiro-request-semantics-card', 'agent', 'attention', 'write_file', {
+            memberKey: 'host:sess-host',
+            interactionRequest: {
+              sessionId: 'sess-host',
+              interactionId: 'kiro-permission:request',
+              requestKind: 'confirmation',
+              status: 'pending',
+              subjectLabel: 'write_file',
+              options: [
+                {
+                  label: 'Allow this native request',
+                  value: 'opaque-request-allow',
+                  permission: { adapterLabel: 'Kiro', semantic: 'allow_once' }
+                },
+                {
+                  label: 'Reject this native request',
+                  value: 'opaque-request-deny',
+                  permission: { adapterLabel: 'Kiro', semantic: 'deny_once' }
+                },
+                {
+                  label: 'Unknown native scope',
+                  value: 'deny_once',
+                  permission: {
+                    adapterLabel: 'Kiro',
+                    nativeLabel: 'Unknown native scope',
+                    semantic: 'native_unknown'
+                  }
+                }
+              ]
+            }
+          })
+        ]
+      }
+    })
+    const card = getMessageMarkup(html, 'kiro-request-semantics-card')
+
+    expectContains(card, [
+      'data-permission-semantic="allow_once"',
+      'data-permission-semantic="deny_once"',
+      '>task_alt</span>',
+      '>cancel</span>',
+      'Show more options'
+    ])
+    expectNotContains(card, [
+      'Kiro option: Unknown native scope',
+      'data-permission-semantic="native_unknown"'
     ])
   })
 

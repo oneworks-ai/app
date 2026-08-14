@@ -1,6 +1,7 @@
 /* eslint-disable max-lines */
 
 import type { ChannelDeliveryTarget, ChannelNavigationReference } from './channel-runtime'
+import type { PermissionInteractionOptionPresentation } from './interaction'
 
 export type AgentRoomStatus = 'active' | 'idle' | 'completed' | 'failed'
 export type AgentRoomMemberKind = 'host' | 'entity' | 'task'
@@ -138,6 +139,7 @@ export interface AgentRoomInteractionOption {
   label: string
   value?: string
   description?: string
+  permission?: PermissionInteractionOptionPresentation
 }
 
 export type AgentRoomInteractionRequestStatus = 'pending' | 'handled' | 'expired'

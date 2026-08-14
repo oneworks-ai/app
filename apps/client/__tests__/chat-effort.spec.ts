@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import { builtinModels as junieBuiltinModels } from '@oneworks/adapter-junie/models'
+
 import { resolveAdapterModelRuntimeCapabilities } from '#~/hooks/chat/model-runtime-capabilities'
 import {
   CHAT_EFFORT_OPTIONS,
@@ -8,6 +10,17 @@ import {
 } from '#~/hooks/chat/use-chat-effort'
 
 describe('chat effort preference', () => {
+  it('exposes only the effort values proven by the Junie 26.8.10 CLI contract', () => {
+    const capabilities = resolveAdapterModelRuntimeCapabilities({
+      adapter: 'junie',
+      model: 'default',
+      adapterBuiltinModels: { junie: junieBuiltinModels }
+    })
+
+    expect(capabilities.supportedEfforts).toEqual(['low', 'medium', 'high'])
+    expect(capabilities.supportedEfforts).not.toContain('max')
+  })
+
   it('keeps only explicit effort levels in the slider options', () => {
     expect(CHAT_EFFORT_OPTIONS.map(option => option.value)).toEqual([
       'low',

@@ -28,14 +28,17 @@ vi.mock('#~/services/config/index.js', () => ({
   loadConfigState: mocks.loadConfigState
 }))
 
-vi.mock('@oneworks/types', () => ({
+vi.mock('@oneworks/types/adapter-package', () => ({
   loadAdapter: mocks.loadAdapter,
   resolveAdapterPackageName: (type: string) => `@oneworks/adapter-${type}`,
   resolveAdapterRuntimeTarget: (type: string) => ({
     instanceKey: type,
     loadSpecifier: type,
     runtimeAdapter: type
-  }),
+  })
+}))
+
+vi.mock('@oneworks/types/adapter-package-cache', () => ({
   sanitizePackageName: (packageName: string) => packageName.replace(/^@/, '').replace(/[\\/]/g, '__')
 }))
 

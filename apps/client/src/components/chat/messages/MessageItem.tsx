@@ -435,7 +435,7 @@ function MessageItemComponent({
             return (
               <div key={i} className='message-context-file'>
                 <span className='material-symbols-rounded message-context-file__icon'>description</span>
-                <code className='message-context-file__path'>{item.path}</code>
+                <code className='message-context-file__path'>{item.name ?? item.path}</code>
               </div>
             )
           }

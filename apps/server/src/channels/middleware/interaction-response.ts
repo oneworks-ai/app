@@ -7,6 +7,7 @@ import {
   resolveInteractionSelection,
   splitInteractionSelections
 } from '#~/channels/interaction.js'
+import { resolvePermissionOptionCopy } from '#~/channels/permission-interaction-copy.js'
 
 import type { ChannelContext, ChannelMiddleware } from './@types'
 import { syncChannelSessionBinding } from './bind-session'
@@ -32,6 +33,23 @@ const buildInteractionInvalidReply = (
 }
 
 type InteractionOption = Parameters<typeof resolveInteractionSelection>[1][number]
+
+const buildResponseOptions = (
+  ctx: ChannelContext,
+  kind: 'permission' | 'question' | undefined,
+  options: InteractionOption[]
+): InteractionOption[] => {
+  if (kind !== 'permission') return options
+  const language = ctx.config?.language ?? 'zh'
+  return options.map((sourceOption) => {
+    const displayed = resolvePermissionOptionCopy(language, sourceOption)
+    return {
+      ...sourceOption,
+      label: displayed.label,
+      aliases: [sourceOption.label]
+    }
+  })
+}
 
 const resolveControlledInteractionResponse = async (
   ctx: ChannelContext,
@@ -112,7 +130,11 @@ export const interactionResponseMiddleware: ChannelMiddleware = async (ctx, next
     return
   }
 
-  const options = interaction.payload.options ?? []
+  const options = buildResponseOptions(
+    ctx,
+    interaction.payload.kind,
+    interaction.payload.options ?? []
+  )
   const responseMode = getInteractionResponseMode(interaction.payload.kind)
   let responseData: string | string[]
 

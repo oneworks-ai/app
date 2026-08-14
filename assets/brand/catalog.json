@@ -11,6 +11,16 @@
       "priority": 10
     },
     {
+      "id": "cline",
+      "label": "Cline",
+      "kind": "adapter",
+      "icon": "assets/brand/adapters/cline.svg",
+      "darkIcon": "assets/brand/adapters/cline-dark.svg",
+      "enabled": true,
+      "featured": true,
+      "priority": 15
+    },
+    {
       "id": "codex",
       "label": "Codex",
       "kind": "adapter",
@@ -39,6 +49,25 @@
       "priority": 35
     },
     {
+      "id": "dsh",
+      "label": "DSH",
+      "kind": "adapter",
+      "icon": "assets/brand/adapters/dsh.svg",
+      "enabled": true,
+      "featured": true,
+      "priority": 37
+    },
+    {
+      "id": "droid",
+      "label": "Factory Droid",
+      "kind": "adapter",
+      "icon": "assets/brand/adapters/droid.svg",
+      "darkIcon": "assets/brand/adapters/droid-dark.svg",
+      "enabled": true,
+      "featured": true,
+      "priority": 38
+    },
+    {
       "id": "gemini",
       "label": "Gemini",
       "kind": "adapter",
@@ -48,6 +77,15 @@
       "priority": 40
     },
     {
+      "id": "goose",
+      "label": "Goose",
+      "kind": "adapter",
+      "icon": "assets/brand/adapters/goose.svg",
+      "enabled": true,
+      "featured": true,
+      "priority": 42
+    },
+    {
       "id": "grok",
       "label": "Grok",
       "kind": "adapter",
@@ -55,6 +93,24 @@
       "enabled": true,
       "featured": true,
       "priority": 45
+    },
+    {
+      "id": "kiro",
+      "label": "Kiro",
+      "kind": "adapter",
+      "icon": "assets/brand/adapters/kiro.svg",
+      "enabled": true,
+      "featured": true,
+      "priority": 47
+    },
+    {
+      "id": "junie",
+      "label": "Junie",
+      "kind": "adapter",
+      "icon": "assets/brand/adapters/junie.svg",
+      "enabled": true,
+      "featured": true,
+      "priority": 48
     },
     {
       "id": "kimi",
@@ -83,6 +139,15 @@
       "enabled": true,
       "featured": true,
       "priority": 70
+    },
+    {
+      "id": "qwen-code",
+      "label": "Qwen Code",
+      "kind": "adapter",
+      "icon": "assets/brand/adapters/qwen-code.svg",
+      "enabled": true,
+      "featured": true,
+      "priority": 80
     },
     {
       "id": "openai",

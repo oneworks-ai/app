@@ -566,14 +566,11 @@
 
 .config-view__external-session-candidate-desc {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 5px;
   max-width: 100%;
   min-width: 0;
-}
-
-.config-view__external-session-size-tooltip {
-  flex: 0 0 auto;
 }
 
 .config-view__external-session-desc-separator {
@@ -582,6 +579,13 @@
 
 .config-view__external-session-candidate-size--warning {
   color: var(--warning-color, #f59e0b);
+}
+
+.config-view__external-session-oversize-policy {
+  flex: 1 0 100%;
+  color: var(--sub-text-color);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .config-view__external-session-candidate-actions {

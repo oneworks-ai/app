@@ -19,10 +19,11 @@ description: 当任务涉及 hooks 方案、托管配置、事件矩阵或启用
 
 1. 初始化 adapter 时，在 project home 的 `.mock` 下生成托管配置。
 2. 各家 agent 的原生 hooks / plugin 机制都回调到同一个 One Works hook runtime。
-3. `TaskStart` / `TaskStop` / `SessionEnd` 这类框架事件仍由 One Works 自己触发。
+3. `TaskStart` / `TaskStop` 仍由 One Works 自己触发；没有已验证 native owner 的 `SessionEnd` 继续走 framework bridge，Junie 的 `SessionEnd` 由 native hook owner 接管并去重。
 
 ## 结果
 
-- `claude-code`、`codex`、`gemini`、`kimi`、`opencode`、`pi` 共用同一套 `plugins.<name>` hook 插件实现。
+- `claude-code`、`codex`、`gemini`、`junie`、`kimi`、`opencode`、`pi` 共用同一套 `plugins.<name>` hook 插件实现。
+- Junie native owner 覆盖 `SessionStart` / `PreToolUse` / `Stop` / `StopFailure` / `SessionEnd`；native hooks active 时，framework bridge 只 suppress 这五类重叠事件。
 - 用户真实 home 不会被自动改写。
 - 新接 agent 时，只需要补 mock 配置和事件映射，不需要重做一遍 hook 体系。

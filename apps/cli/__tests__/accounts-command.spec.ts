@@ -25,8 +25,8 @@ vi.mock('@oneworks/config', async (importOriginal) => {
   }
 })
 
-vi.mock('@oneworks/types', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@oneworks/types')>()
+vi.mock('@oneworks/types/adapter-package', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@oneworks/types/adapter-package')>()
   return {
     ...actual,
     loadAdapter: mocks.loadAdapter

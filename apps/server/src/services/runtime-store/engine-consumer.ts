@@ -8,7 +8,8 @@ import path from 'node:path'
 import process from 'node:process'
 
 import type { RuntimeCommand, RuntimeHeartbeat } from '@oneworks/runtime-protocol'
-import { resolveAdapterPackageName, resolveExistingAdapterPackageCacheDir } from '@oneworks/types'
+import { resolveAdapterPackageName } from '@oneworks/types'
+import { resolveExistingAdapterPackageCacheDir } from '@oneworks/types/adapter-package-cache'
 import { resolveProjectOoBaseDir } from '@oneworks/utils'
 
 import type { SqliteDb } from '#~/db/index.js'
@@ -380,6 +381,7 @@ export async function readRuntimeConsumerHeartbeat(
 }
 
 export function shouldStartServerRuntimeConsumer(params: {
+  env?: NodeJS.ProcessEnv
   heartbeat?: RuntimeHeartbeat
   metadata?: RuntimeSessionMetadata
   queuedCommand?: RuntimeConsumerQueuedCommand
@@ -387,6 +389,20 @@ export function shouldStartServerRuntimeConsumer(params: {
 }) {
   if (params.metadata?.needsEngineConsumer !== true) {
     return false
+  }
+  if (
+    params.metadata.sessionRecovery === 'live-only' &&
+    typeof params.heartbeat?.pid === 'number' &&
+    typeof params.heartbeat.updatedAt === 'number' &&
+    Date.now() - params.heartbeat.updatedAt <=
+      resolveRuntimeConsumerPrintIdleTimeoutSeconds(params.env ?? process.env) * 1_000
+  ) {
+    try {
+      process.kill(params.heartbeat.pid, 0)
+      return false
+    } catch {
+      // The recorded live-only runtime is gone; the normal recovery policy below applies.
+    }
   }
   const latestTerminalUpdatedAt = Math.max(
     typeof params.state?.updatedAt === 'number' && isTerminalStatus(params.state.status) ? params.state.updatedAt : 0,
@@ -842,6 +858,19 @@ export async function startServerRuntimeConsumer(params: {
   const shouldResumeTerminalSession = startCommand != null &&
     hasQueuedCommandAfterTerminal &&
     isMessageCommand(queuedCommand)
+  if (shouldResumeTerminalSession && params.metadata.sessionRecovery === 'live-only') {
+    await writeRuntimeConsumerStartFailure({
+      error: new Error(
+        `${
+          readString(params.metadata.adapter) ?? 'This adapter'
+        } can continue only while its live runtime is connected; ` +
+          'start a new session.'
+      ),
+      metadata: params.metadata,
+      store: params.store
+    })
+    return undefined
+  }
   const activationCommand = shouldResumeTerminalSession
     ? queuedCommand
     : startCommand ?? (isMessageCommand(queuedCommand) ? queuedCommand : undefined)

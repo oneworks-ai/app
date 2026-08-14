@@ -6,7 +6,9 @@
 
 - `watcher.ts`：runtime store watcher，发现 session store、读取增量事件并触发投影。
   - watcher 同时把 channel child run 从 `dispatched` 收敛到 completed / failed / stopped 等终态，并触发 memory writeback；不要只更新普通 session/room 投影后留下永远 running 的 channel audit。
-- `history-import.ts`：扫描当前 workspace 对应的 Codex / Claude Code / Cursor / Grok 原生 JSONL 历史，并导入成只读 runtime store session；Cursor 项目归属从 `~/.cursor/projects/<encoded-workspace>` 解析，`subagents/` 保留为子任务来源。
+- `history-import.ts`：扫描当前 workspace 对应的 Codex / Claude Code / Cline / Cursor / Grok 原生历史，并导入成只读 runtime store session；Cursor 项目归属从 `~/.cursor/projects/<encoded-workspace>` 解析，`subagents/` 保留为子任务来源。
+- `cline-history.ts`：Cline 私有只读导入边界；仅打开 `sessions.db` 与其显式引用的 messages artifact，强制 `readOnly + query_only`、路径 containment、symlink / sidecar / 尺寸 / schema 门禁，不读取 provider、config 或 credential 文件。
+- `history-import.ts`：扫描当前 workspace 对应的 Codex / Claude Code / Cursor / Grok / Qwen Code 原生历史，并导入成只读 runtime store session；Qwen Code 只接受记录内 `cwd` / `sessionId` 与 0.21.11 `chats` / `subagents` 元数据能相互验证的 JSONL，不从目录名猜项目归属。
 - `projection.ts`：总投影入口，协调 metadata、session event、room event。
 - `metadata-projection.ts`：meta/state 到 session 与 room 初始状态的投影。
 - `session-projection.ts`：runtime status 到 server session status 的映射。
@@ -57,3 +59,4 @@ Agent Room service 再通过这些 metadata 判断 leader prompt 是否应该公
 - 改 room 投影时同时看 `apps/server/__tests__/services/agent-room.spec.ts` 中 host projection / child request 用例。
 - 改 protocol 字段时同步跑 `packages/runtime-protocol` 测试，并检查 adapter 事件输出。
 - 改 consumer 启动环境、adapter package 解析或 Codex 配置归一化时，同步跑 `apps/server/__tests__/services/runtime-store-engine-consumer.spec.ts`，并检查新会话的 runtime 日志 cwd 是否仍等于当前 workspace。
+- 改 Qwen Code history 解析时同步跑 `apps/server/__tests__/services/native-history-import.spec.ts`；fixture 必须保持脱敏、只读、native ID / parent-child / tool-result 结构与 0.21.11 真实输出一致。

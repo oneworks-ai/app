@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- model selection compatibility scenarios intentionally share one fixture matrix. */
 import { describe, expect, it } from 'vitest'
 
 import { flattenModelServices, resolveModelServiceFromMap } from '#~/model-providers.js'
@@ -268,6 +269,27 @@ describe('model selection utilities', () => {
     ])
   })
 
+  it('fails Cline service-model compatibility closed even for explicit overrides', () => {
+    const services: Record<string, ModelServiceConfig> = {
+      explicit: {
+        apiKey: 'token',
+        models: ['gpt-5'],
+        supportedAdapters: ['cline']
+      }
+    }
+    expect(filterServiceModelsForAdapter({
+      adapter: 'cline',
+      modelServices: services,
+      models: { 'explicit,gpt-5': { supportedAdapters: ['cline'] } },
+      serviceModels: listServiceModels(services)
+    })).toEqual([])
+    expect(filterServiceModelsForAdapter({
+      adapter: 'pi',
+      modelServices: { generic: { apiKey: 'token', models: ['model'] } },
+      serviceModels: listServiceModels({ generic: { apiKey: 'token', models: ['model'] } })
+    })).toHaveLength(1)
+  })
+
   it('falls back to default service first model when no explicit model is configured', () => {
     const serviceModels = listServiceModels(modelServices)
 
@@ -485,13 +507,20 @@ describe('model selection utilities', () => {
       configuredAdapters: ['local-custom'],
       hiddenBuiltinAdapters: ['claude-code', 'gemini']
     })).toEqual([
+      'cline',
       'codex',
       'copilot',
       'cursor',
+      'dsh',
+      'droid',
+      'goose',
       'grok',
+      'kiro',
+      'junie',
       'kimi',
       'opencode',
       'pi',
+      'qwen-code',
       'local-custom'
     ])
   })

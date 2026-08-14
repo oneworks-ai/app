@@ -9,6 +9,7 @@ export const InteractionOptionSchema = z.object({
 export const AskUserQuestionParamsSchema = z.object({
   sessionId: z.string(),
   question: z.string(),
+  defaultValue: z.union([z.string(), z.array(z.string())]).optional(),
   options: z.array(InteractionOptionSchema).optional(),
   multiselect: z.boolean().optional(),
   kind: z.enum(['question', 'permission']).optional(),

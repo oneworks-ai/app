@@ -8,10 +8,12 @@ import type { TranslationFn } from './configUtils'
 
 export const ComplexTextEditor = ({
   value,
-  onChange
+  onChange,
+  ariaLabel
 }: {
   value: unknown
   onChange?: (nextValue: unknown) => void
+  ariaLabel?: string
 }) => {
   const { message } = App.useApp()
   const { t } = useTranslation()
@@ -23,6 +25,7 @@ export const ComplexTextEditor = ({
 
   return (
     <Input.TextArea
+      aria-label={ariaLabel}
       className='config-view__complex-editor'
       value={textValue}
       onChange={(event) => {
@@ -47,16 +50,19 @@ export const ComplexTextEditor = ({
 export const StringArrayEditor = ({
   value,
   onChange,
-  t
+  t,
+  ariaLabel
 }: {
   value: string[]
   onChange: (nextValue: string[]) => void
   t: TranslationFn
+  ariaLabel?: string
 }) => (
   <div className='config-view__array-list'>
     {value.map((item, index) => (
       <div key={`${index}-${item}`} className='config-view__array-item'>
         <Input
+          aria-label={`${ariaLabel ?? t('config.editor.itemPlaceholder')} ${index + 1}`}
           value={item}
           placeholder={t('config.editor.itemPlaceholder')}
           onChange={(event) => {

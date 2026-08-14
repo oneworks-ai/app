@@ -82,6 +82,11 @@ describe('module update runtime scoping', () => {
 
     expect(response.modules.length).toBeGreaterThan(0)
     expect(response.modules.every(module => isModuleUpdateTargetId(module.id))).toBe(true)
+    expect(response.modules).toContainEqual(expect.objectContaining({
+      id: 'adapter:cline',
+      packageName: '@oneworks/adapter-cline'
+    }))
+    expect(isModuleUpdateTargetId('adapter:kiro')).toBe(true)
     expect(isModuleUpdateTargetId('adapter:not-registered')).toBe(false)
     expect(isModuleUpdateTargetId('plugin:not-registered')).toBe(false)
     expect(isModuleUpdateTargetId('catalog:not-registered')).toBe(false)

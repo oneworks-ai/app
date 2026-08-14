@@ -463,6 +463,9 @@ describe('runtime protocol command mode', () => {
         content: [{ type: 'text', text: 'new follow up' }]
       }
     ])
+    expect(await readRuntimeEvents(cwd, 'sess-resume-bridge')).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'session_resumed', status: 'running' })
+    ]))
   })
 
   it('delivers bridge start commands as structured input instead of startup text', async () => {

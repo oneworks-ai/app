@@ -12,7 +12,7 @@ const MAX_CONTEXT_ITEM_LENGTH = 512
 const MAX_OUTPUT_LENGTH = 8192
 const MAX_PROMPT_LENGTH = 2000
 const MAX_TEXT_LENGTH = 4000
-const NO_TOOLS_ADAPTERS = new Set(['gemini'])
+const NO_TOOLS_ADAPTERS = new Set(['gemini', 'qwen-code'])
 
 const routerModelOutputSchema = z.object({
   confidence: z.number().finite().min(0).max(1),
@@ -64,13 +64,32 @@ const parseOutput = (events: AdapterOutputEvent[]) =>
     )
     .join('\n')
 
-const raceWithTimeout = async <T>(promise: Promise<T>, timeoutMs: number, phase: string): Promise<T> => {
+interface RouterDeadline {
+  expiresAt: number
+  timeoutMs: number
+}
+
+const createDeadline = (timeoutMs: number): RouterDeadline => ({
+  expiresAt: performance.now() + timeoutMs,
+  timeoutMs
+})
+
+const raceWithDeadline = async <T>(
+  promise: Promise<T>,
+  deadline: RouterDeadline,
+  phase: string
+): Promise<T> => {
+  const remainingMs = deadline.expiresAt - performance.now()
+  if (remainingMs <= 0) throw new Error(`Router ${phase} timed out after ${deadline.timeoutMs}ms total`)
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
     return await Promise.race([
       promise,
       new Promise<T>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`Router ${phase} timed out`)), timeoutMs)
+        timer = setTimeout(
+          () => reject(new Error(`Router ${phase} timed out after ${deadline.timeoutMs}ms total`)),
+          remainingMs
+        )
       })
     ])
   } finally {
@@ -106,6 +125,7 @@ export const invokeStructuredNoToolsJson = async (input: {
   let session: Awaited<ReturnType<typeof run>>['session'] | undefined
   let cancelled = false
   const timeoutMs = input.timeoutMs ?? 5000
+  const deadline = createDeadline(timeoutMs)
   try {
     const started = run({ adapter: input.adapter, cwd: input.cwd }, {
       assetBundle: EMPTY_ASSET_BUNDLE(input.cwd),
@@ -137,8 +157,8 @@ export const invokeStructuredNoToolsJson = async (input: {
       result.session.kill()
       await result.session.flushHooks?.().catch(() => undefined)
     }).catch(() => undefined)
-    session = await raceWithTimeout(started, timeoutMs, 'startup').then(result => result.session)
-    await raceWithTimeout(completion, timeoutMs, 'completion')
+    session = await raceWithDeadline(started, deadline, 'startup').then(result => result.session)
+    await raceWithDeadline(completion, deadline, 'completion')
     const output = parseOutput(events)
     if (output.length > MAX_OUTPUT_LENGTH) {
       return {
@@ -193,6 +213,7 @@ export const createRouterModelInvoker = (options: { cwd: string; timeoutMs?: num
     let session: Awaited<ReturnType<typeof run>>['session'] | undefined
     let cancelled = false
     const timeoutMs = options.timeoutMs ?? 5000
+    const deadline = createDeadline(timeoutMs)
     const context = input.context.slice(0, MAX_CONTEXT_ITEMS).map(item => clean(item, MAX_CONTEXT_ITEM_LENGTH))
     const prompt = input.prompt == null ? undefined : clean(input.prompt, MAX_PROMPT_LENGTH)
     const text = clean(input.text, MAX_TEXT_LENGTH)
@@ -229,8 +250,8 @@ export const createRouterModelInvoker = (options: { cwd: string; timeoutMs?: num
         result.session.kill()
         await result.session.flushHooks?.().catch(() => undefined)
       }).catch(() => undefined)
-      session = await raceWithTimeout(started, timeoutMs, 'startup').then(result => result.session)
-      await raceWithTimeout(completion, timeoutMs, 'completion')
+      session = await raceWithDeadline(started, deadline, 'startup').then(result => result.session)
+      await raceWithDeadline(completion, deadline, 'completion')
       const output = parseOutput(events)
       if (output.length > MAX_OUTPUT_LENGTH) {
         return {

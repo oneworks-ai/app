@@ -24,7 +24,170 @@ import { buildAdapterAssetPlan, resolvePromptAssetSelection, resolveWorkspaceAss
 import { createWorkspace, installPluginPackage, writeDocument } from './test-helpers'
 
 describe('buildAdapterAssetPlan', () => {
-  it('stages Grok skills and skips OpenCode-only overlays', async () => {
+  it('stages Cline skills while explicitly skipping unverified MCP and hooks', async () => {
+    const workspace = await createWorkspace()
+    await installPluginPackage(workspace, '@oneworks/plugin-logger', {
+      'package.json': JSON.stringify({ name: '@oneworks/plugin-logger', version: '1.0.0' }),
+      'hooks.js': 'module.exports = {}\n'
+    })
+    await writeDocument(
+      join(workspace, '.oo/skills/research/SKILL.md'),
+      '---\ndescription: Research\n---\nRead the docs.'
+    )
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      configs: [{
+        mcpServers: { docs: { command: 'npx', args: ['docs-server'] } },
+        plugins: [{ id: 'logger' }]
+      }, undefined],
+      useDefaultOneworksMcpServer: false
+    })
+    const plan = await buildAdapterAssetPlan({
+      adapter: 'cline',
+      bundle,
+      options: {
+        mcpServers: { include: ['docs'] },
+        skills: { include: ['research'] }
+      }
+    })
+
+    expect(plan.mcpServers).toEqual({})
+    expect(plan.overlays).toEqual([
+      expect.objectContaining({ kind: 'skill', targetPath: 'skills/research' })
+    ])
+    expect(plan.diagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({ adapter: 'cline', status: 'native', reason: expect.stringContaining('Cline') }),
+      expect.objectContaining({ adapter: 'cline', status: 'skipped', reason: expect.stringContaining('MCP') }),
+      expect.objectContaining({ adapter: 'cline', status: 'translated', reason: expect.stringContaining('hooks-dir') })
+    ]))
+  })
+
+  it('builds Kiro skill, MCP, hook, and unsupported-overlay diagnostics', async () => {
+    const workspace = await createWorkspace()
+    await installPluginPackage(workspace, '@oneworks/plugin-logger', {
+      'package.json': JSON.stringify({ name: '@oneworks/plugin-logger', version: '1.0.0' }),
+      'hooks.js': 'module.exports = {}\n'
+    })
+    await installPluginPackage(workspace, '@oneworks/plugin-demo', {
+      'package.json': JSON.stringify({ name: '@oneworks/plugin-demo', version: '1.0.0' }),
+      'opencode/commands/review.md': '# review\n'
+    })
+    await writeDocument(
+      join(workspace, '.oo/skills/research/SKILL.md'),
+      '---\ndescription: Research\n---\nRead the docs.'
+    )
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      configs: [{
+        plugins: [{ id: 'logger' }, { id: 'demo' }],
+        mcpServers: {
+          docs: { command: 'node', args: ['docs.mjs'] },
+          events: { type: 'sse', url: 'https://example.test/events', headers: {} },
+          remoteDocs: { type: 'http', url: 'https://example.test/mcp' }
+        }
+      }, undefined],
+      useDefaultOneworksMcpServer: false
+    })
+    const plan = await buildAdapterAssetPlan({
+      adapter: 'kiro',
+      bundle,
+      options: { skills: { include: ['research'] } }
+    })
+    const hookId = bundle.hookPlugins.find(asset => asset.packageId === '@oneworks/plugin-logger')?.id
+    const skillId = bundle.skills.find(asset => asset.name === 'research')?.id
+
+    expect(plan.mcpServers).toHaveProperty('docs')
+    expect(plan.mcpServers).not.toHaveProperty('events')
+    expect(plan.mcpServers).not.toHaveProperty('remoteDocs')
+    expect(plan.overlays).toEqual([
+      expect.objectContaining({ kind: 'skill', targetPath: 'skills/research' })
+    ])
+    expect(plan.diagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        adapter: 'kiro',
+        assetId: bundle.mcpServers.docs.id,
+        status: 'translated',
+        reason: expect.stringContaining('stdio')
+      }),
+      expect.objectContaining({
+        adapter: 'kiro',
+        assetId: bundle.mcpServers.remoteDocs.id,
+        status: 'skipped',
+        reason: expect.stringMatching(/verified CLI contract.*HTTP transport was skipped/u)
+      }),
+      expect.objectContaining({
+        adapter: 'kiro',
+        assetId: bundle.mcpServers.events.id,
+        status: 'skipped',
+        reason: expect.stringMatching(/verified CLI contract.*SSE transport was skipped/u)
+      }),
+      expect.objectContaining({ adapter: 'kiro', assetId: hookId, status: 'native' }),
+      expect.objectContaining({ adapter: 'kiro', assetId: skillId, status: 'native' }),
+      expect.objectContaining({ adapter: 'kiro', status: 'skipped' })
+    ]))
+    expect(plan.diagnostics).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ assetId: bundle.mcpServers.remoteDocs.id, status: 'translated' }),
+      expect.objectContaining({ assetId: bundle.mcpServers.events.id, status: 'translated' })
+    ]))
+  })
+
+  it('keeps remote MCP planning unchanged for adapters that support translation', async () => {
+    const workspace = await createWorkspace()
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      configs: [{
+        mcpServers: {
+          events: { type: 'sse', url: 'https://example.test/events', headers: {} },
+          remoteDocs: { type: 'http', url: 'https://example.test/mcp' }
+        }
+      }, undefined],
+      useDefaultOneworksMcpServer: false
+    })
+    const plan = await buildAdapterAssetPlan({ adapter: 'codex', bundle, options: {} })
+
+    expect(plan.mcpServers).toEqual({
+      events: expect.objectContaining({ type: 'sse' }),
+      remoteDocs: expect.objectContaining({ type: 'http' })
+    })
+    expect(plan.diagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({ assetId: bundle.mcpServers.events.id, status: 'translated' }),
+      expect.objectContaining({ assetId: bundle.mcpServers.remoteDocs.id, status: 'translated' })
+    ]))
+  })
+
+  it('stages Junie skills and agents while skipping unverified OpenCode commands', async () => {
+    const workspace = await createWorkspace()
+    await installPluginPackage(workspace, '@oneworks/plugin-demo', {
+      'package.json': JSON.stringify({ name: '@oneworks/plugin-demo', version: '1.0.0' }),
+      'opencode/agents/reviewer.md': '# reviewer\n',
+      'opencode/commands/review.md': '# review\n'
+    })
+    await writeDocument(
+      join(workspace, '.oo/skills/research/SKILL.md'),
+      '---\ndescription: Research\n---\nRead the docs.'
+    )
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      configs: [{ plugins: [{ id: 'demo' }] }, undefined],
+      useDefaultOneworksMcpServer: false
+    })
+    const plan = await buildAdapterAssetPlan({
+      adapter: 'junie',
+      bundle,
+      options: { skills: { include: ['research'] } }
+    })
+
+    expect(plan.overlays).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'skill', targetPath: 'skills/research' }),
+      expect.objectContaining({ kind: 'agent', targetPath: 'agents/reviewer.md' })
+    ]))
+    expect(plan.diagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({ adapter: 'junie', status: 'native' }),
+      expect.objectContaining({ adapter: 'junie', status: 'skipped' })
+    ]))
+  })
+
+  it.each(['grok', 'qwen-code'] as const)('stages %s skills and skips OpenCode-only overlays', async (adapter) => {
     const workspace = await createWorkspace()
     await installPluginPackage(workspace, '@oneworks/plugin-demo', {
       'package.json': JSON.stringify({ name: '@oneworks/plugin-demo', version: '1.0.0' }),
@@ -40,7 +203,7 @@ describe('buildAdapterAssetPlan', () => {
       useDefaultOneworksMcpServer: false
     })
     const plan = await buildAdapterAssetPlan({
-      adapter: 'grok',
+      adapter,
       bundle,
       options: { skills: { include: ['research'] } }
     })
@@ -49,8 +212,70 @@ describe('buildAdapterAssetPlan', () => {
       expect.objectContaining({ kind: 'skill', targetPath: 'skills/research' })
     ])
     expect(plan.diagnostics).toEqual(expect.arrayContaining([
-      expect.objectContaining({ adapter: 'grok', status: 'native' }),
-      expect.objectContaining({ adapter: 'grok', status: 'skipped' })
+      expect.objectContaining({ adapter, status: 'native' }),
+      expect.objectContaining({ adapter, status: 'skipped' })
+    ]))
+  })
+
+  it('keeps Goose skills and MCP native to its ACP boundary while leaving hooks in One Works', async () => {
+    const workspace = await createWorkspace()
+    await installPluginPackage(workspace, '@oneworks/plugin-logger', {
+      'package.json': JSON.stringify({ name: '@oneworks/plugin-logger', version: '1.0.0' }),
+      'hooks.js': 'module.exports = {}\n'
+    })
+    await installPluginPackage(workspace, '@oneworks/plugin-demo', {
+      'package.json': JSON.stringify({ name: '@oneworks/plugin-demo', version: '1.0.0' }),
+      'opencode/commands/review.md': '# review\n'
+    })
+    await writeDocument(
+      join(workspace, '.oo/skills/research/SKILL.md'),
+      '---\ndescription: Research\n---\nRead the docs.'
+    )
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      configs: [{
+        plugins: [{ id: 'logger' }, { id: 'demo' }],
+        mcpServers: {
+          docs: { command: 'node', args: ['docs-server.js'] },
+          remote: { type: 'http', url: 'https://example.test/mcp' },
+          events: { type: 'sse', url: 'https://example.test/events', headers: {} }
+        }
+      }, undefined],
+      useDefaultOneworksMcpServer: false
+    })
+    const plan = await buildAdapterAssetPlan({
+      adapter: 'goose',
+      bundle,
+      options: {
+        mcpServers: { include: ['docs', 'remote', 'events'] },
+        skills: { include: ['research'] }
+      }
+    })
+
+    expect(plan.mcpServers).toHaveProperty('docs')
+    expect(plan.mcpServers).toHaveProperty('remote')
+    expect(plan.mcpServers).not.toHaveProperty('events')
+    expect(plan.overlays).toEqual([
+      expect.objectContaining({ kind: 'skill', targetPath: 'skills/research' })
+    ])
+    expect(plan.diagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({ adapter: 'goose', status: 'native', reason: expect.stringContaining('Goose') }),
+      expect.objectContaining({ adapter: 'goose', status: 'translated', reason: expect.stringContaining('MCP') }),
+      expect.objectContaining({
+        adapter: 'goose',
+        status: 'skipped',
+        reason: expect.stringContaining('SSE')
+      }),
+      expect.objectContaining({
+        adapter: 'goose',
+        status: 'translated',
+        reason: expect.stringContaining('not injected')
+      }),
+      expect.objectContaining({
+        adapter: 'goose',
+        status: 'skipped',
+        reason: expect.stringContaining('recipes and extensions')
+      })
     ]))
   })
 
@@ -491,6 +716,79 @@ describe('buildAdapterAssetPlan', () => {
     ]))
   })
 
+  it('builds Droid native skills/hooks while explicitly skipping native plugins', async () => {
+    const workspace = await createWorkspace()
+
+    await installPluginPackage(workspace, '@oneworks/plugin-logger', {
+      'package.json': JSON.stringify(
+        {
+          name: '@oneworks/plugin-logger',
+          version: '1.0.0'
+        },
+        null,
+        2
+      ),
+      'hooks.js': 'module.exports = {}\n'
+    })
+    await installPluginPackage(workspace, '@oneworks/plugin-demo', {
+      'package.json': JSON.stringify(
+        {
+          name: '@oneworks/plugin-demo',
+          version: '1.0.0'
+        },
+        null,
+        2
+      ),
+      'opencode/commands/review.md': '# review\n'
+    })
+    await writeDocument(
+      join(workspace, '.oo/skills/research/SKILL.md'),
+      '---\ndescription: Research evidence\n---\nRead primary sources.'
+    )
+
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      configs: [{
+        plugins: [
+          { id: 'logger' },
+          { id: 'demo', scope: 'demo' }
+        ],
+        mcpServers: {
+          docs: { command: 'npx', args: ['docs-server'] }
+        }
+      }, undefined],
+      useDefaultOneworksMcpServer: false
+    })
+    const skillId = bundle.skills.find(asset => asset.name === 'research')?.id
+    const hookId = bundle.hookPlugins.find(asset => asset.packageId === '@oneworks/plugin-logger')?.id
+    const pluginId = bundle.opencodeOverlayAssets.find(asset => asset.kind === 'command')?.id
+    const mcpId = bundle.mcpServers.docs?.id
+
+    const plan = await buildAdapterAssetPlan({
+      adapter: 'droid',
+      bundle,
+      options: { skills: { include: ['research'] } }
+    })
+
+    expect(plan.mcpServers).toHaveProperty('docs')
+    expect(plan.overlays).toEqual([expect.objectContaining({
+      assetId: skillId,
+      kind: 'skill',
+      targetPath: 'skills/research'
+    })])
+    expect(plan.diagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({ adapter: 'droid', assetId: skillId, status: 'native' }),
+      expect.objectContaining({ adapter: 'droid', assetId: hookId, status: 'native' }),
+      expect.objectContaining({ adapter: 'droid', assetId: mcpId, status: 'translated' }),
+      expect.objectContaining({
+        adapter: 'droid',
+        assetId: pluginId,
+        reason: expect.stringContaining('no session-scoped plugin injection'),
+        status: 'skipped'
+      })
+    ]))
+  })
+
   it('builds kimi overlays for native skills and native hooks', async () => {
     const workspace = await createWorkspace()
 
@@ -652,6 +950,55 @@ describe('buildAdapterAssetPlan', () => {
       expect.objectContaining({ adapter: 'pi', assetId: researchSkillId, status: 'native' }),
       expect.objectContaining({ adapter: 'pi', assetId: docsMcpId, status: 'skipped' }),
       expect.objectContaining({ adapter: 'pi', assetId: commandId, status: 'skipped' })
+    ]))
+  })
+
+  it('keeps DSH skills in the prompt and explicitly skips MCP and OpenCode assets', async () => {
+    const workspace = await createWorkspace()
+
+    await installPluginPackage(workspace, '@oneworks/plugin-demo', {
+      'package.json': JSON.stringify({ name: '@oneworks/plugin-demo', version: '1.0.0' }, null, 2),
+      'opencode/commands/review.md': '# review\n'
+    })
+    await writeDocument(
+      join(workspace, '.oo/skills/research/SKILL.md'),
+      '---\ndescription: Research evidence\n---\nRead primary sources.'
+    )
+
+    const bundle = await resolveWorkspaceAssetBundle({
+      cwd: workspace,
+      configs: [{
+        plugins: [{ id: 'demo', scope: 'demo' }],
+        mcpServers: { docs: { command: 'npx', args: ['docs-server'] } }
+      }, undefined],
+      useDefaultOneworksMcpServer: false
+    })
+    const [, resolvedOptions] = await resolvePromptAssetSelection({
+      adapter: 'dsh',
+      bundle,
+      input: { skills: { include: ['research'] } },
+      type: undefined
+    })
+    const researchSkillId = bundle.skills.find(asset => asset.name === 'research')?.id
+    const docsMcpId = bundle.mcpServers.docs?.id
+    const commandId = bundle.opencodeOverlayAssets.find(asset => asset.kind === 'command')?.id
+    const plan = await buildAdapterAssetPlan({
+      adapter: 'dsh',
+      bundle,
+      options: {
+        mcpServers: resolvedOptions.mcpServers,
+        promptAssetIds: resolvedOptions.promptAssetIds,
+        skills: { include: ['research'] }
+      }
+    })
+
+    expect(resolvedOptions.systemPrompt).toContain('research')
+    expect(plan.mcpServers).toEqual({})
+    expect(plan.overlays).toEqual([])
+    expect(plan.diagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({ adapter: 'dsh', assetId: researchSkillId, status: 'prompt' }),
+      expect.objectContaining({ adapter: 'dsh', assetId: docsMcpId, status: 'skipped' }),
+      expect.objectContaining({ adapter: 'dsh', assetId: commandId, status: 'skipped' })
     ]))
   })
 })

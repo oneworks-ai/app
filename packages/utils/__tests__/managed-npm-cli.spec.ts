@@ -1,19 +1,158 @@
 /* eslint-disable max-lines -- managed CLI resolver tests cover several source fallback combinations. */
-import { access, chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { access, chmod, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, relative, sep } from 'node:path'
 
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  buildManagedNpmCliChildEnv,
   buildManagedNpmCliInstallEnv,
   ensureManagedNpmCli,
   resolveManagedNpmCliBinaryPath,
   resolveManagedNpmCliInstallOptions,
-  resolveManagedNpmCliPaths
+  resolveManagedNpmCliPaths,
+  resolveUserShellBinaryPath
 } from '#~/managed-npm-cli.js'
 
+afterEach(() => {
+  vi.unstubAllEnvs()
+})
+
 describe('managed npm cli utils', () => {
+  it('preserves inherited process env for legacy login-shell resolver callers', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-shell-binary-resolver-'))
+    const shellPath = join(workspace, 'capture-shell')
+    const recordPath = join(workspace, 'resolver-env.txt')
+    const binaryPath = join(workspace, 'legacy-tool')
+    const previousSentinel = process.env.ONEWORKS_LEGACY_RESOLVER_TEST
+    process.env.ONEWORKS_LEGACY_RESOLVER_TEST = 'legacy-inherited-value'
+    await writeFile(
+      shellPath,
+      `#!/bin/sh
+/usr/bin/printenv ONEWORKS_LEGACY_RESOLVER_TEST > '${recordPath}'
+printf '%s\n' '${binaryPath}'
+`,
+      'utf8'
+    )
+    await chmod(shellPath, 0o755)
+
+    try {
+      await expect(resolveUserShellBinaryPath({
+        binaryName: 'legacy-tool',
+        env: { SHELL: shellPath }
+      })).resolves.toBe(binaryPath)
+      await expect(readFile(recordPath, 'utf8')).resolves.toBe('legacy-inherited-value\n')
+    } finally {
+      if (previousSentinel == null) {
+        delete process.env.ONEWORKS_LEGACY_RESOLVER_TEST
+      } else {
+        process.env.ONEWORKS_LEGACY_RESOLVER_TEST = previousSentinel
+      }
+      await rm(workspace, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps legacy inheritance by default and enforces minimal allowlist plus tombstones when selected', () => {
+    vi.stubEnv('FACTORY_API_KEY', 'process-factory-secret')
+    vi.stubEnv('OPENAI_API_KEY', 'process-openai-secret')
+    vi.stubEnv('AWS_SECRET_ACCESS_KEY', 'process-aws-secret')
+    vi.stubEnv('GIT_INTERNAL_TOKEN', 'process-git-secret')
+    vi.stubEnv('INTERNAL_CANARY', 'process-internal-secret')
+    const projectEnv = {
+      FACTORY_TOKEN: 'project-factory-secret',
+      OPENAI_API_KEY: 'project-openai-secret',
+      PATH: '/safe/bin',
+      NPM_CONFIG_REGISTRY: 'https://registry.example.test'
+    }
+
+    const legacy = buildManagedNpmCliChildEnv({ cwd: '/workspace', env: projectEnv })
+    expect(legacy).toEqual(expect.objectContaining({
+      FACTORY_API_KEY: 'process-factory-secret',
+      FACTORY_TOKEN: 'project-factory-secret',
+      OPENAI_API_KEY: 'project-openai-secret',
+      AWS_SECRET_ACCESS_KEY: 'process-aws-secret'
+    }))
+
+    const minimal = buildManagedNpmCliChildEnv({
+      cwd: '/workspace',
+      env: projectEnv,
+      policy: {
+        mode: 'minimal',
+        tombstoneKeys: ['FACTORY_API_KEY', 'FACTORY_TOKEN'],
+        tombstonePrefixes: ['FACTORY_']
+      }
+    })
+    expect(minimal).toEqual(expect.objectContaining({
+      PATH: '/safe/bin',
+      NPM_CONFIG_REGISTRY: 'https://registry.example.test'
+    }))
+    for (
+      const key of [
+        'FACTORY_API_KEY',
+        'FACTORY_TOKEN',
+        'OPENAI_API_KEY',
+        'AWS_SECRET_ACCESS_KEY',
+        'GIT_INTERNAL_TOKEN',
+        'INTERNAL_CANARY'
+      ]
+    ) expect(minimal[key]).toBeUndefined()
+  })
+
+  it('applies the selected child-env policy to user-shell discovery', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-managed-shell-env-'))
+    const shellPath = join(workspace, 'capture-shell')
+    const minimalLog = join(workspace, 'minimal.log')
+    const legacyLog = join(workspace, 'legacy.log')
+    vi.stubEnv('FACTORY_API_KEY', 'process-factory-secret')
+    vi.stubEnv('OPENAI_API_KEY', 'process-openai-secret')
+    vi.stubEnv('AWS_SECRET_ACCESS_KEY', 'process-aws-secret')
+    await writeFile(
+      shellPath,
+      `#!/bin/sh
+printf '%s|%s|%s|%s\n' "\${FACTORY_API_KEY-unset}" "\${FACTORY_TOKEN-unset}" "\${OPENAI_API_KEY-unset}" "\${AWS_SECRET_ACCESS_KEY-unset}" >> "\${CAPTURE_LOG}"
+printf '%s\n' '/safe/tool'
+`
+    )
+    await chmod(shellPath, 0o755)
+
+    try {
+      await expect(resolveUserShellBinaryPath({
+        binaryName: 'tool',
+        childEnvPolicy: {
+          mode: 'minimal',
+          allowKeys: ['CAPTURE_LOG'],
+          tombstoneKeys: ['FACTORY_API_KEY', 'FACTORY_TOKEN'],
+          tombstonePrefixes: ['FACTORY_']
+        },
+        cwd: workspace,
+        env: {
+          SHELL: shellPath,
+          CAPTURE_LOG: minimalLog,
+          FACTORY_TOKEN: 'project-factory-secret',
+          OPENAI_API_KEY: 'project-openai-secret'
+        }
+      })).resolves.toBe('/safe/tool')
+      expect(await readFile(minimalLog, 'utf8')).toBe('unset|unset|unset|unset\n')
+
+      await expect(resolveUserShellBinaryPath({
+        binaryName: 'tool',
+        cwd: workspace,
+        env: {
+          SHELL: shellPath,
+          CAPTURE_LOG: legacyLog,
+          FACTORY_TOKEN: 'project-factory-secret',
+          OPENAI_API_KEY: 'project-openai-secret'
+        }
+      })).resolves.toBe('/safe/tool')
+      expect(await readFile(legacyLog, 'utf8')).toBe(
+        'process-factory-secret|project-factory-secret|project-openai-secret|process-aws-secret\n'
+      )
+    } finally {
+      await rm(workspace, { recursive: true, force: true })
+    }
+  })
+
   it('does not reintroduce an inherited exact project home when building install env', () => {
     const previousWorkspace = process.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__
     const previousPrimary = process.env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__
@@ -29,6 +168,7 @@ describe('managed npm cli utils', () => {
         env: {
           __ONEWORKS_PROJECT_WORKSPACE_FOLDER__: '/workspace-b'
         },
+        homeDir: '/isolated-cli-home',
         paths: {
           rootDir: '/cache-root',
           installDir: '/cache-root/install',
@@ -41,6 +181,8 @@ describe('managed npm cli utils', () => {
       expect(env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__).toBe('/workspace-b')
       expect(env.__ONEWORKS_PROJECT_PRIMARY_WORKSPACE_FOLDER__).toBeUndefined()
       expect(env.__ONEWORKS_PROJECT_HOME_PROJECT_DIR__).toBeUndefined()
+      expect(env.HOME).toBe('/isolated-cli-home')
+      expect(env.USERPROFILE).toBe('/isolated-cli-home')
       expect(env.npm_config_cache).toBe('/cache-root/npm-cache')
     } finally {
       if (previousWorkspace == null) {
@@ -73,9 +215,49 @@ describe('managed npm cli utils', () => {
       version: '0.121.0'
     })
 
-    expect(paths.binaryPath).toBe(
-      '/tmp/home/.oneworks/bootstrap/npm/openai-codex/0.121.0/node_modules/.bin/codex'
+    expect(paths.rootDir).toBe('/tmp/home/.oneworks/bootstrap/npm')
+    const [packageSegment, versionSegment] = relative(paths.rootDir, paths.installDir).split(sep)
+    expect(packageSegment).toMatch(/^openai-codex--[0-9a-f]{64}$/u)
+    expect(versionSegment).toMatch(/^0\.121\.0--[0-9a-f]{64}$/u)
+    expect(paths.binaryPath).toBe(join(paths.installDir, 'node_modules/.bin/codex'))
+  })
+
+  it('omits caller-selected credentials from the final login-shell environment', async () => {
+    if (process.platform === 'win32') return
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-managed-shell-'))
+    const shellPath = join(workspace, 'shell')
+    const previousKey = process.env.DEEPSEEK_API_KEY
+    const previousBaseUrl = process.env.DEEPSEEK_BASE_URL
+    await writeFile(
+      shellPath,
+      `#!/bin/sh
+if [ -n "$DEEPSEEK_API_KEY" ] || [ -n "$DEEPSEEK_BASE_URL" ]; then
+  exit 91
+fi
+printf '%s\n' '/safe/tool'
+`
     )
+    await chmod(shellPath, 0o755)
+    process.env.DEEPSEEK_API_KEY = 'host-key'
+    process.env.DEEPSEEK_BASE_URL = 'https://host-secret.example.invalid'
+
+    try {
+      await expect(resolveUserShellBinaryPath({
+        binaryName: 'tool',
+        env: {
+          DEEPSEEK_API_KEY: 'project-key',
+          DEEPSEEK_BASE_URL: 'https://project-secret.example.invalid',
+          SHELL: shellPath
+        },
+        omitKeys: ['DEEPSEEK_API_KEY', 'DEEPSEEK_BASE_URL']
+      })).resolves.toBe('/safe/tool')
+    } finally {
+      if (previousKey == null) delete process.env.DEEPSEEK_API_KEY
+      else process.env.DEEPSEEK_API_KEY = previousKey
+      if (previousBaseUrl == null) delete process.env.DEEPSEEK_BASE_URL
+      else process.env.DEEPSEEK_BASE_URL = previousBaseUrl
+      await rm(workspace, { recursive: true, force: true })
+    }
   })
 
   it('separates managed CLI installs by extra install key segments', () => {
@@ -91,9 +273,76 @@ describe('managed npm cli utils', () => {
       version: 'latest'
     })
 
-    expect(paths.binaryPath).toBe(
-      '/tmp/home/.oneworks/bootstrap/npm/registry/https-registry.example.com/skills/latest/node_modules/.bin/skills'
+    const segments = relative(paths.rootDir, paths.installDir).split(sep)
+    expect(segments).toHaveLength(4)
+    expect(segments[0]).toMatch(/^registry--[0-9a-f]{64}$/u)
+    expect(segments[1]).toMatch(/^https-registry\.example\.com--[0-9a-f]{64}$/u)
+    expect(segments[2]).toMatch(/^skills--[0-9a-f]{64}$/u)
+    expect(segments[3]).toMatch(/^latest--[0-9a-f]{64}$/u)
+  })
+
+  it('uses collision-resistant identity segments for scoped and custom package artifacts', () => {
+    const base = {
+      adapterKey: 'droid',
+      binaryName: 'droid',
+      cwd: '/tmp/worktree',
+      env: { __ONEWORKS_PROJECT_REAL_HOME__: '/tmp/home' },
+      version: '0.195.0'
+    }
+    const official = resolveManagedNpmCliPaths({ ...base, packageName: '@factory/cli' })
+    const lookalike = resolveManagedNpmCliPaths({ ...base, packageName: 'factory-cli' })
+
+    expect(official.installDir).not.toBe(lookalike.installDir)
+    expect(relative(official.rootDir, official.installDir)).toMatch(
+      /^factory-cli--[0-9a-f]{64}[/\\]0\.195\.0--[0-9a-f]{64}$/u
     )
+    expect(relative(lookalike.rootDir, lookalike.installDir)).toMatch(
+      /^factory-cli--[0-9a-f]{64}[/\\]0\.195\.0--[0-9a-f]{64}$/u
+    )
+  })
+
+  it('does not migrate a compatible-looking legacy cache with the wrong package identity', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-managed-npm-identity-'))
+    const home = join(workspace, 'home')
+    const legacyInstallDir = join(home, '.oneworks/bootstrap/npm/factory-cli/0.195.0')
+    const legacyBinary = join(legacyInstallDir, 'node_modules/.bin/droid')
+    const lookalikePackageDir = join(legacyInstallDir, 'node_modules/factory-cli')
+    const officialPackageDir = join(legacyInstallDir, 'node_modules/@factory/cli')
+    await mkdir(join(legacyInstallDir, 'node_modules/.bin'), { recursive: true })
+    await mkdir(lookalikePackageDir, { recursive: true })
+    await mkdir(join(officialPackageDir, 'bin'), { recursive: true })
+    await writeFile(legacyBinary, '#!/bin/sh\necho "droid 0.195.0"\n')
+    await chmod(legacyBinary, 0o755)
+    await writeFile(
+      join(lookalikePackageDir, 'package.json'),
+      JSON.stringify({ name: 'factory-cli', version: '0.195.0' })
+    )
+    await writeFile(join(officialPackageDir, 'bin/droid'), '#!/bin/sh\necho "droid 0.195.0"\n')
+    await chmod(join(officialPackageDir, 'bin/droid'), 0o755)
+    await writeFile(
+      join(officialPackageDir, 'package.json'),
+      JSON.stringify({ bin: { droid: 'bin/droid' }, name: '@factory/cli', version: '0.195.0' })
+    )
+
+    try {
+      await expect(ensureManagedNpmCli({
+        adapterKey: 'droid',
+        binaryName: 'droid',
+        cwd: workspace,
+        defaultPackageName: '@factory/cli',
+        defaultVersion: '0.195.0',
+        env: {
+          __ONEWORKS_PROJECT_ADAPTER_DROID_AUTO_INSTALL__: 'false',
+          __ONEWORKS_PROJECT_ADAPTER_DROID_CLI_SOURCE__: 'managed',
+          __ONEWORKS_PROJECT_REAL_HOME__: home
+        },
+        logger: { info: () => undefined },
+        versionRange: '>=0.195.0 <0.196.0'
+      })).rejects.toThrow('automatic install is disabled')
+      await expect(access(legacyBinary)).resolves.toBeUndefined()
+    } finally {
+      await rm(workspace, { recursive: true, force: true })
+    }
   })
 
   it('uses env version and package overrides when building install options', () => {
@@ -121,15 +370,23 @@ describe('managed npm cli utils', () => {
       __ONEWORKS_PROJECT_REAL_HOME__: '/tmp/home',
       __ONEWORKS_PROJECT_ADAPTER_OPENCODE_CLI_SOURCE__: 'managed'
     }
-    expect(resolveManagedNpmCliBinaryPath({
+    const params = {
       adapterKey: 'opencode',
       binaryName: 'opencode',
       cwd: '/tmp/worktree',
       defaultPackageName: 'opencode-ai',
       defaultVersion: '1.14.18',
       env
-    })).toBe(
-      '/tmp/home/.oneworks/bootstrap/npm/opencode-ai/1.14.18/node_modules/.bin/opencode'
+    }
+    expect(resolveManagedNpmCliBinaryPath(params)).toBe(
+      resolveManagedNpmCliPaths({
+        adapterKey: params.adapterKey,
+        binaryName: params.binaryName,
+        cwd: params.cwd,
+        env,
+        packageName: params.defaultPackageName,
+        version: params.defaultVersion
+      }).binaryPath
     )
   })
 
@@ -247,6 +504,135 @@ chmod +x "$tool"
     }
   })
 
+  it('omits caller-selected credentials from npm probes and install lifecycle environment', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-managed-npm-cli-'))
+    const npmPath = join(workspace, 'npm')
+    const recordPath = join(workspace, 'install-env.txt')
+    const previousKey = process.env.DEEPSEEK_API_KEY
+    const previousBaseUrl = process.env.DEEPSEEK_BASE_URL
+    const previousUnrelatedSecret = process.env.UNRELATED_PROVIDER_SECRET
+    await writeFile(
+      npmPath,
+      `#!/bin/sh
+if [ -n "$DEEPSEEK_API_KEY" ] || [ -n "$DEEPSEEK_BASE_URL" ] || [ -n "$UNRELATED_PROVIDER_SECRET" ]; then
+  exit 91
+fi
+if [ "$1" = "--version" ]; then
+  echo "10.0.0"
+  exit 0
+fi
+
+printf '%s|%s\n' "\${DEEPSEEK_API_KEY-unset}" "\${DEEPSEEK_BASE_URL-unset}" > "$ONEWORKS_MANAGED_TEST_RECORD"
+prefix=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--prefix" ]; then
+    shift
+    prefix="$1"
+  fi
+  shift
+done
+mkdir -p "$prefix/node_modules/.bin"
+printf '%s\n' '#!/bin/sh' 'exit 0' > "$prefix/node_modules/.bin/tool"
+chmod +x "$prefix/node_modules/.bin/tool"
+`
+    )
+    await chmod(npmPath, 0o755)
+    process.env.DEEPSEEK_API_KEY = 'host-key'
+    process.env.DEEPSEEK_BASE_URL = 'https://host-secret.example.invalid'
+    process.env.UNRELATED_PROVIDER_SECRET = 'must-not-reach-install'
+
+    try {
+      await ensureManagedNpmCli({
+        adapterKey: 'credential_safe_tool',
+        binaryName: 'tool',
+        cwd: workspace,
+        defaultPackageName: '@example/tool',
+        defaultVersion: '1.0.0',
+        env: {
+          DEEPSEEK_API_KEY: 'project-key',
+          DEEPSEEK_BASE_URL: 'https://project-secret.example.invalid',
+          HOME: workspace,
+          ONEWORKS_MANAGED_TEST_RECORD: recordPath,
+          __ONEWORKS_PROJECT_ADAPTER_CREDENTIAL_SAFE_TOOL_NPM_PATH__: npmPath
+        },
+        logger: { info: () => undefined },
+        subprocessEnvAllowKeys: ['HOME', 'ONEWORKS_MANAGED_TEST_RECORD'],
+        subprocessEnvOmitKeys: ['DEEPSEEK_API_KEY', 'DEEPSEEK_BASE_URL']
+      })
+
+      expect((await readFile(recordPath, 'utf8')).trim()).toBe('unset|unset')
+    } finally {
+      if (previousKey == null) delete process.env.DEEPSEEK_API_KEY
+      else process.env.DEEPSEEK_API_KEY = previousKey
+      if (previousBaseUrl == null) delete process.env.DEEPSEEK_BASE_URL
+      else process.env.DEEPSEEK_BASE_URL = previousBaseUrl
+      if (previousUnrelatedSecret == null) delete process.env.UNRELATED_PROVIDER_SECRET
+      else process.env.UNRELATED_PROVIDER_SECRET = previousUnrelatedSecret
+      await rm(workspace, { recursive: true, force: true })
+    }
+  })
+
+  it('installs companion packages and validates the resulting composition', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-managed-npm-cli-'))
+    const npmPath = join(workspace, 'npm')
+    const recordPath = join(workspace, 'install-args.txt')
+    await writeFile(
+      npmPath,
+      `#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo "10.0.0"
+  exit 0
+fi
+
+printf '%s\\n' "$@" > "$ONEWORKS_MANAGED_TEST_RECORD"
+prefix=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--prefix" ]; then
+    shift
+    prefix="$1"
+  fi
+  shift
+done
+
+mkdir -p "$prefix/node_modules/.bin"
+tool="$prefix/node_modules/.bin/tool"
+printf '%s\\n' '#!/bin/sh' 'exit 0' > "$tool"
+chmod +x "$tool"
+`
+    )
+    await chmod(npmPath, 0o755)
+    const validatedPaths: string[] = []
+
+    try {
+      const binaryPath = await ensureManagedNpmCli({
+        adapterKey: 'composed_tool',
+        binaryName: 'tool',
+        companionPackageSpecs: ['@example/plugin-a@1.0.0', '@example/plugin-b@1.0.0'],
+        cwd: workspace,
+        defaultPackageName: '@example/tool',
+        defaultVersion: '1.0.0',
+        env: {
+          HOME: workspace,
+          ONEWORKS_MANAGED_TEST_RECORD: recordPath,
+          __ONEWORKS_PROJECT_ADAPTER_COMPOSED_TOOL_NPM_PATH__: npmPath
+        },
+        logger: { info: () => undefined },
+        validateBinary: async (candidatePath) => {
+          validatedPaths.push(candidatePath)
+          return access(candidatePath).then(() => true, () => false)
+        }
+      })
+
+      const installArgs = (await readFile(recordPath, 'utf8')).trim().split('\n')
+      expect(installArgs).toContain('@example/tool@1.0.0')
+      expect(installArgs).toContain('@example/plugin-a@1.0.0')
+      expect(installArgs).toContain('@example/plugin-b@1.0.0')
+      expect(validatedPaths).toContain(binaryPath)
+    } finally {
+      await rm(workspace, { recursive: true, force: true })
+    }
+  })
+
   it('prefers the global managed install over a user PATH binary by default', async () => {
     const workspace = await mkdtemp(join(tmpdir(), 'ow-managed-npm-cli-'))
     const systemBinDir = join(workspace, 'system-bin')
@@ -315,7 +701,9 @@ exit 42
       })
 
       expect(binaryPath).not.toBe('tool')
-      expect(binaryPath).toContain('/.oneworks/bootstrap/npm/example-tool/1.0.0/')
+      expect(binaryPath).toMatch(
+        /[/\\]\.oneworks[/\\]bootstrap[/\\]npm[/\\]example-tool--[0-9a-f]{64}[/\\]1\.0\.0--[0-9a-f]{64}[/\\]/u
+      )
     } finally {
       await rm(workspace, { recursive: true, force: true })
     }
@@ -622,7 +1010,9 @@ exit 42
       })
 
       expect(binaryPath).not.toBe('tool')
-      expect(binaryPath).toContain('/.oneworks/bootstrap/npm/example-tool/1.0.0/')
+      expect(binaryPath).toMatch(
+        /[/\\]\.oneworks[/\\]bootstrap[/\\]npm[/\\]example-tool--[0-9a-f]{64}[/\\]1\.0\.0--[0-9a-f]{64}[/\\]/u
+      )
     } finally {
       await rm(workspace, { recursive: true, force: true })
     }
@@ -685,9 +1075,15 @@ exit 42
     const legacyCacheDir = join(workspace, '.oo/caches')
     const legacyBinDir = join(legacyCacheDir, 'adapter-custom_tool/cli/npm/example-tool/1.0.0/node_modules/.bin')
     const legacyToolPath = join(legacyBinDir, 'tool')
+    const legacyPackageDir = join(
+      legacyCacheDir,
+      'adapter-custom_tool/cli/npm/example-tool/1.0.0/node_modules/@example/tool'
+    )
+    const legacyPackageBinary = join(legacyPackageDir, 'bin/tool')
     await mkdir(legacyBinDir, { recursive: true })
+    await mkdir(join(legacyPackageDir, 'bin'), { recursive: true })
     await writeFile(
-      legacyToolPath,
+      legacyPackageBinary,
       `#!/bin/sh
 if [ "$1" = "--version" ]; then
   echo "legacy 1.0.0"
@@ -696,7 +1092,12 @@ fi
 exit 42
 `
     )
-    await chmod(legacyToolPath, 0o755)
+    await chmod(legacyPackageBinary, 0o755)
+    await symlink('../@example/tool/bin/tool', legacyToolPath)
+    await writeFile(
+      join(legacyPackageDir, 'package.json'),
+      JSON.stringify({ bin: { tool: 'bin/tool' }, name: '@example/tool', version: '1.0.0' })
+    )
 
     try {
       expect(resolveManagedNpmCliBinaryPath({
@@ -709,7 +1110,7 @@ exit 42
           __ONEWORKS_PROJECT_CACHE_DIR__: legacyCacheDir,
           __ONEWORKS_PROJECT_REAL_HOME__: join(workspace, 'home')
         }
-      })).toContain('/.oo/caches/adapter-custom_tool/cli/npm/example-tool/1.0.0/node_modules/.bin/tool')
+      })).toBe(await realpath(legacyToolPath))
     } finally {
       await rm(workspace, { recursive: true, force: true })
     }
@@ -720,6 +1121,11 @@ exit 42
     const legacyCacheDir = join(workspace, '.oo/caches')
     const legacyBinDir = join(legacyCacheDir, 'adapter-custom_tool/cli/npm/example-tool/1.0.0/node_modules/.bin')
     const legacyToolPath = join(legacyBinDir, 'tool')
+    const legacyPackageDir = join(
+      legacyCacheDir,
+      'adapter-custom_tool/cli/npm/example-tool/1.0.0/node_modules/@example/tool'
+    )
+    const legacyPackageBinary = join(legacyPackageDir, 'bin/tool')
     const env = {
       __ONEWORKS_PROJECT_CACHE_DIR__: legacyCacheDir,
       __ONEWORKS_PROJECT_ADAPTER_CUSTOM_TOOL_AUTO_INSTALL__: 'false',
@@ -737,8 +1143,9 @@ exit 42
     await writeFile(globalPaths.binaryPath, '#!/bin/sh\nexit 1\n')
     await chmod(globalPaths.binaryPath, 0o755)
     await mkdir(legacyBinDir, { recursive: true })
+    await mkdir(join(legacyPackageDir, 'bin'), { recursive: true })
     await writeFile(
-      legacyToolPath,
+      legacyPackageBinary,
       `#!/bin/sh
 if [ "$1" = "--version" ]; then
   echo "legacy 1.0.0"
@@ -747,7 +1154,12 @@ fi
 exit 42
 `
     )
-    await chmod(legacyToolPath, 0o755)
+    await chmod(legacyPackageBinary, 0o755)
+    await symlink('../@example/tool/bin/tool', legacyToolPath)
+    await writeFile(
+      join(legacyPackageDir, 'package.json'),
+      JSON.stringify({ bin: { tool: 'bin/tool' }, name: '@example/tool', version: '1.0.0' })
+    )
 
     try {
       const binaryPath = await ensureManagedNpmCli({
@@ -762,7 +1174,7 @@ exit 42
         }
       })
 
-      expect(binaryPath).toContain('/.oneworks/bootstrap/npm/example-tool/1.0.0/')
+      expect(await realpath(binaryPath)).toBe(await realpath(globalPaths.binaryPath))
       await expect(access(globalPaths.binaryPath)).resolves.toBeUndefined()
       await expect(access(legacyToolPath)).rejects.toThrow()
     } finally {
@@ -805,6 +1217,205 @@ exit 42
 
       expect(binaryPath).toBe('tool')
     } finally {
+      await rm(workspace, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps minimal probe children isolated while preserving legacy inheritance by default', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-managed-npm-cli-env-'))
+    const systemBinDir = join(workspace, 'system-bin')
+    const systemToolPath = join(systemBinDir, 'tool')
+    const recordPath = join(workspace, 'probe-env.jsonl')
+    const sentinelEntries = {
+      OPENAI_API_KEY: 'sentinel-openai',
+      AWS_SECRET_ACCESS_KEY: 'sentinel-aws',
+      AZURE_OPENAI_API_KEY: 'sentinel-azure',
+      GITHUB_TOKEN: 'sentinel-git',
+      INTERNAL_SECRET: 'sentinel-internal'
+    }
+    const previousEntries = Object.fromEntries(
+      Object.keys(sentinelEntries).map(key => [key, process.env[key]])
+    )
+    Object.assign(process.env, sentinelEntries)
+    await mkdir(systemBinDir, { recursive: true })
+    await writeFile(
+      systemToolPath,
+      `#!${process.execPath}
+const { appendFileSync } = require('node:fs')
+appendFileSync(${JSON.stringify(recordPath)}, JSON.stringify(process.env) + '\\n')
+console.log('tool 1.0.0')
+`
+    )
+    await chmod(systemToolPath, 0o755)
+
+    try {
+      const baseParams = {
+        adapterKey: 'env_probe_tool',
+        binaryName: 'tool',
+        cwd: workspace,
+        defaultPackageName: '@example/tool',
+        defaultVersion: '1.0.0',
+        env: {
+          HOME: workspace,
+          PATH: `${systemBinDir}:${process.env.PATH ?? ''}`,
+          REQUIRED_BASIC: 'present',
+          __ONEWORKS_PROJECT_ADAPTER_ENV_PROBE_TOOL_CLI_SOURCE__: 'system'
+        },
+        logger: { info: () => undefined }
+      }
+      await expect(ensureManagedNpmCli({
+        ...baseParams,
+        childEnvPolicy: 'minimal'
+      })).resolves.toBe('tool')
+      await expect(ensureManagedNpmCli(baseParams)).resolves.toBe('tool')
+
+      const [minimalEnv, legacyEnv] = (await readFile(recordPath, 'utf8'))
+        .trim()
+        .split('\n')
+        .map(line => JSON.parse(line) as NodeJS.ProcessEnv)
+      expect(minimalEnv).toEqual(expect.objectContaining({
+        HOME: workspace,
+        REQUIRED_BASIC: 'present'
+      }))
+      for (const key of Object.keys(sentinelEntries)) expect(minimalEnv).not.toHaveProperty(key)
+      expect(legacyEnv).toEqual(expect.objectContaining(sentinelEntries))
+    } finally {
+      for (const [key, value] of Object.entries(previousEntries)) {
+        if (value == null) delete process.env[key]
+        else process.env[key] = value
+      }
+      await rm(workspace, { recursive: true, force: true })
+    }
+  })
+
+  it('uses the minimal environment for npm install, lifecycle descendants, and managed probes', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-managed-npm-cli-install-env-'))
+    const npmPath = join(workspace, 'npm')
+    const recordPath = join(workspace, 'install-env.jsonl')
+    const managedToolSource = `#!${process.execPath}
+const { appendFileSync } = require('node:fs')
+appendFileSync(${JSON.stringify(recordPath)}, JSON.stringify({ stage: 'managed-probe', env: process.env }) + '\\n')
+console.log('tool 1.0.0')
+`
+    const sentinelEntries = {
+      JUNIE_API_KEY: 'sentinel-junie',
+      OPENAI_API_KEY: 'sentinel-openai',
+      AWS_SECRET_ACCESS_KEY: 'sentinel-aws',
+      AZURE_OPENAI_API_KEY: 'sentinel-azure',
+      GITHUB_TOKEN: 'sentinel-git',
+      INTERNAL_SECRET: 'sentinel-internal'
+    }
+    const previousEntries = Object.fromEntries(
+      Object.keys(sentinelEntries).map(key => [key, process.env[key]])
+    )
+    Object.assign(process.env, sentinelEntries)
+    await writeFile(
+      npmPath,
+      `#!${process.execPath}
+const { appendFileSync, chmodSync, mkdirSync, writeFileSync } = require('node:fs')
+const { join } = require('node:path')
+const { spawnSync } = require('node:child_process')
+const args = process.argv.slice(2)
+const stage = args[0] === '--version' ? 'npm-version' : 'npm-install'
+appendFileSync(${JSON.stringify(recordPath)}, JSON.stringify({ stage, env: process.env }) + '\\n')
+if (stage === 'npm-version') {
+  console.log('10.0.0')
+  process.exit(0)
+}
+spawnSync(process.execPath, ['-e', ${
+        JSON.stringify(
+          `require('node:fs').appendFileSync(${
+            JSON.stringify(recordPath)
+          }, JSON.stringify({ stage: 'postinstall-child', env: process.env }) + '\\n')`
+        )
+      }], { env: process.env, stdio: 'inherit' })
+const prefix = args[args.indexOf('--prefix') + 1]
+const binDir = join(prefix, 'node_modules', '.bin')
+mkdirSync(binDir, { recursive: true })
+const toolPath = join(binDir, 'tool')
+writeFileSync(toolPath, ${JSON.stringify(managedToolSource)})
+chmodSync(toolPath, 0o755)
+`
+    )
+    await chmod(npmPath, 0o755)
+
+    try {
+      await expect(ensureManagedNpmCli({
+        adapterKey: 'minimal_install_tool',
+        binaryName: 'tool',
+        childEnvPolicy: 'minimal',
+        cwd: workspace,
+        defaultPackageName: '@example/tool',
+        defaultVersion: '1.0.0',
+        env: {
+          HOME: workspace,
+          PATH: process.env.PATH,
+          __ONEWORKS_PROJECT_ADAPTER_MINIMAL_INSTALL_TOOL_CLI_SOURCE__: 'managed',
+          __ONEWORKS_PROJECT_ADAPTER_MINIMAL_INSTALL_TOOL_NPM_PATH__: npmPath,
+          __ONEWORKS_PROJECT_REAL_HOME__: workspace
+        },
+        installHomeDir: join(workspace, 'isolated-home'),
+        logger: { info: () => undefined }
+      })).resolves.toContain('/node_modules/.bin/tool')
+
+      const records = (await readFile(recordPath, 'utf8'))
+        .trim()
+        .split('\n')
+        .map(line => JSON.parse(line) as { env: NodeJS.ProcessEnv; stage: string })
+      expect(records.map(record => record.stage)).toEqual(expect.arrayContaining([
+        'npm-version',
+        'npm-install',
+        'postinstall-child',
+        'managed-probe'
+      ]))
+      for (const record of records) {
+        expect(record.env.HOME).toBe(
+          record.stage === 'npm-version' ? workspace : join(workspace, 'isolated-home')
+        )
+        for (const key of Object.keys(sentinelEntries)) expect(record.env).not.toHaveProperty(key)
+      }
+    } finally {
+      for (const [key, value] of Object.entries(previousEntries)) {
+        if (value == null) delete process.env[key]
+        else process.env[key] = value
+      }
+      await rm(workspace, { recursive: true, force: true })
+    }
+  })
+
+  it('uses the minimal environment for login-shell system discovery', async () => {
+    if (process.platform === 'win32') return
+    const workspace = await mkdtemp(join(tmpdir(), 'ow-managed-npm-cli-shell-env-'))
+    const shellPath = join(workspace, 'capture-shell')
+    const binaryPath = join(workspace, 'system-tool')
+    const recordPath = join(workspace, 'shell-env.json')
+    const previousSecret = process.env.INTERNAL_SECRET
+    process.env.INTERNAL_SECRET = 'sentinel-internal'
+    await writeFile(
+      shellPath,
+      `#!${process.execPath}
+require('node:fs').writeFileSync(${JSON.stringify(recordPath)}, JSON.stringify(process.env))
+console.log(${JSON.stringify(binaryPath)})
+`
+    )
+    await chmod(shellPath, 0o755)
+
+    try {
+      await expect(resolveUserShellBinaryPath({
+        binaryName: 'tool',
+        childEnvPolicy: 'minimal',
+        env: {
+          HOME: workspace,
+          PATH: process.env.PATH,
+          SHELL: shellPath
+        }
+      })).resolves.toBe(binaryPath)
+      const childEnv = JSON.parse(await readFile(recordPath, 'utf8')) as NodeJS.ProcessEnv
+      expect(childEnv).toEqual(expect.objectContaining({ HOME: workspace, SHELL: shellPath }))
+      expect(childEnv).not.toHaveProperty('INTERNAL_SECRET')
+    } finally {
+      if (previousSecret == null) delete process.env.INTERNAL_SECRET
+      else process.env.INTERNAL_SECRET = previousSecret
       await rm(workspace, { recursive: true, force: true })
     }
   })

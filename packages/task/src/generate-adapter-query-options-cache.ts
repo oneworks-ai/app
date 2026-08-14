@@ -180,6 +180,7 @@ export const writeQueryOptionsCache = async (params: {
   cwd: string
   data: PromptAssetResolution
   resolvedOptions: ResolvedPromptAssetOptions
+  scrubForPersistence?: <T>(value: T) => T
 }) => {
   const bundle = params.resolvedOptions.assetBundle
   if (bundle == null) return
@@ -194,6 +195,6 @@ export const writeQueryOptionsCache = async (params: {
   const cachePath = getCachePath(params.cwd, params.cacheKey)
   await mkdir(dirname(cachePath), { recursive: true })
   const tempPath = `${cachePath}.${randomUUID()}.tmp`
-  await writeFile(tempPath, `${JSON.stringify(entry, null, 2)}\n`, 'utf8')
+  await writeFile(tempPath, `${JSON.stringify(params.scrubForPersistence?.(entry) ?? entry, null, 2)}\n`, 'utf8')
   await rename(tempPath, cachePath)
 }

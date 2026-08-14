@@ -1,4 +1,6 @@
 /* eslint-disable max-lines -- detail route helpers intentionally keep path parsing and metadata resolution together */
+import type { ConfigUiSection } from '@oneworks/types'
+
 import type { DetailCollectionContext, FieldSpec } from './configSchema'
 import { configSchema } from './configSchema'
 import { getFieldLabel, getValueByPath } from './configUtils'
@@ -357,6 +359,7 @@ export const resolveConfigDetailRouteMeta = ({
   route,
   placeholderEntries,
   detailContext,
+  uiSection,
   t
 }: {
   sectionKey: string
@@ -366,6 +369,7 @@ export const resolveConfigDetailRouteMeta = ({
   route: ConfigDetailRoute | null
   placeholderEntries?: DetailCollectionPlaceholderEntry[]
   detailContext: DetailCollectionContext
+  uiSection?: ConfigUiSection
   t: TranslationFn
 }): ConfigDetailRouteMeta | null => {
   if (route == null) return null
@@ -387,7 +391,10 @@ export const resolveConfigDetailRouteMeta = ({
   if (entry == null) return null
 
   const fieldLabel = getFieldDisplayLabel({ field, sectionKey, t })
-  const itemLabel = field.detailCollection.getBreadcrumbLabel?.(
+  const registeredItemLabel = uiSection?.kind === 'recordMap' && field.path.length === 0
+    ? uiSection.recordMap.entryKinds?.find(kind => kind.key === entry.key)?.label
+    : undefined
+  const itemLabel = registeredItemLabel ?? field.detailCollection.getBreadcrumbLabel?.(
     entry.item,
     entry.key,
     entry.index,

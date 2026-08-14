@@ -2,10 +2,15 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 
+import { adapterConfigContribution as droidConfigContribution } from '@oneworks/adapter-droid/config-schema'
 import type { ConfigUiSection } from '@oneworks/types'
 
 import { SectionForm } from '#~/components/config/ConfigSectionForm'
-import { parseConfigDetailRoute, serializeConfigDetailRoute } from '#~/components/config/configDetail'
+import {
+  parseConfigDetailRoute,
+  resolveConfigDetailRouteMeta,
+  serializeConfigDetailRoute
+} from '#~/components/config/configDetail'
 import { configGroupMeta, configGroupOrder, configSchema } from '#~/components/config/configSchema'
 import { editableConfigSectionKeys } from '#~/components/config/editableConfigSections'
 
@@ -175,7 +180,7 @@ describe('config schema form', () => {
       />
     )
 
-    expect(html).toContain('Custom Adapter')
+    expect(html).toContain('custom-adapter')
     expect(html).toContain('config-view__detail-list')
   })
 
@@ -198,6 +203,8 @@ describe('config schema form', () => {
     expect(html).toContain('Custom Adapter')
     expect(html).toContain('Codex')
     expect(html.indexOf('Custom Adapter')).toBeLessThan(html.indexOf('Codex'))
+    expect(html).toContain('Kiro')
+    expect(html).toContain(encodeURIComponent('oneworks-terminal-adapter-title'))
   })
 
   it('opens an unconfigured built-in adapter placeholder as an editable detail page', () => {
@@ -244,6 +251,145 @@ describe('config schema form', () => {
 
     expect(html).toContain('Experimental API')
     expect(html).not.toContain('config.detail.inheritedReadonly')
+  })
+
+  it('uses registered Droid display metadata and hides account UI through adapter capabilities', () => {
+    const uiSection: ConfigUiSection = {
+      key: 'adapters',
+      kind: 'recordMap',
+      recordMap: {
+        mode: 'keyed',
+        entryKinds: [{
+          key: 'droid',
+          label: 'Factory Droid',
+          capabilities: { accounts: false }
+        }, {
+          key: 'codex',
+          label: 'Codex',
+          capabilities: { accounts: true }
+        }],
+        schemas: {
+          droid: {
+            fields: [{ path: ['defaultAccount'], type: 'string', label: 'Default account' }]
+          },
+          codex: {
+            fields: [{ path: ['defaultAccount'], type: 'string', label: 'Default account' }]
+          }
+        },
+        unknownSchema: { fields: [] }
+      }
+    }
+    const route = { kind: 'detailCollectionItem' as const, fieldPath: [], itemKey: 'droid' }
+    const meta = resolveConfigDetailRouteMeta({
+      sectionKey: 'adapters',
+      value: {},
+      route,
+      placeholderEntries: [{ key: 'droid' }],
+      detailContext: { mergedAdapters: {}, mergedModelServices: {}, t },
+      uiSection,
+      t
+    })
+    expect(meta?.itemLabel).toBe('Factory Droid')
+
+    const droidHtml = renderToStaticMarkup(
+      <SectionForm
+        sectionKey='adapters'
+        uiSection={uiSection}
+        value={{}}
+        onChange={() => undefined}
+        mergedModelServices={{}}
+        mergedAdapters={{}}
+        detailRoute={route}
+        t={t}
+      />
+    )
+    expect(droidHtml).not.toContain('Default account')
+    expect(droidHtml).not.toContain('config.accounts.title')
+
+    const codexHtml = renderToStaticMarkup(
+      <SectionForm
+        sectionKey='adapters'
+        uiSection={uiSection}
+        value={{}}
+        onChange={() => undefined}
+        mergedModelServices={{}}
+        mergedAdapters={{}}
+        detailRoute={{ ...route, itemKey: 'codex' }}
+        t={t}
+      />
+    )
+    expect(codexHtml).toContain('Default account')
+    expect(codexHtml).toContain('adapter-account-manager__state')
+  })
+
+  it('renders adapter-scoped Droid metadata, effort labels, and accessible controls in both locales', () => {
+    const droidOnlyUiSchema = {
+      ...droidConfigContribution.uiSchema!,
+      fields: droidConfigContribution.uiSchema!.fields.filter(field => (
+        ['cli', 'effort', 'configContent', 'disableBuiltinSkills'].includes(field.path[0] ?? '')
+      ))
+    }
+    const uiSection: ConfigUiSection = {
+      key: 'adapters',
+      kind: 'recordMap',
+      recordMap: {
+        mode: 'keyed',
+        entryKinds: [{
+          key: 'droid',
+          label: droidConfigContribution.title,
+          capabilities: droidConfigContribution.capabilities
+        }],
+        schemas: { droid: droidOnlyUiSchema },
+        unknownSchema: { fields: [] }
+      }
+    }
+    const route = { kind: 'detailCollectionItem' as const, fieldPath: [], itemKey: 'droid' }
+    const renderLocale = (translations: Record<string, string>) =>
+      renderToStaticMarkup(
+        <SectionForm
+          sectionKey='adapters'
+          uiSection={uiSection}
+          value={{ droid: { effort: 'xhigh' } }}
+          onChange={() => undefined}
+          mergedModelServices={{}}
+          mergedAdapters={{}}
+          detailRoute={route}
+          t={(key, options) => translations[key] ?? options?.defaultValue ?? key}
+        />
+      )
+    const enHtml = renderLocale({
+      'config.fields.adaptersByKey.droid.cli.label': 'Factory Droid CLI',
+      'config.fields.adaptersByKey.droid.cli.desc': 'Validated Factory Droid CLI runtime.',
+      'config.fields.adaptersByKey.droid.effort.label': 'Reasoning effort',
+      'config.fields.adaptersByKey.droid.effort.desc': 'Factory Droid reasoning effort.',
+      'config.fields.adaptersByKey.droid.effort.options.xhigh': 'Extra high',
+      'config.fields.adaptersByKey.droid.configContent.label': 'Factory settings override',
+      'config.fields.adaptersByKey.droid.disableBuiltinSkills.label': 'Disable built-in skills'
+    })
+    const zhHtml = renderLocale({
+      'config.fields.adaptersByKey.droid.cli.label': 'Factory Droid CLI',
+      'config.fields.adaptersByKey.droid.cli.desc': '已校验的 Factory Droid CLI 运行时。',
+      'config.fields.adaptersByKey.droid.effort.label': '推理强度',
+      'config.fields.adaptersByKey.droid.effort.desc': 'Factory Droid 推理强度。',
+      'config.fields.adaptersByKey.droid.effort.options.xhigh': '极高',
+      'config.fields.adaptersByKey.droid.configContent.label': 'Factory 设置覆盖',
+      'config.fields.adaptersByKey.droid.disableBuiltinSkills.label': '禁用内置技能'
+    })
+
+    expect(enHtml).toContain('Factory Droid CLI')
+    expect(enHtml).toContain('Reasoning effort')
+    expect(enHtml).toContain('Extra high')
+    expect(enHtml).toContain('Factory settings override')
+    expect(enHtml).toContain('Disable built-in skills')
+    expect(enHtml).toContain('aria-label="Factory Droid CLI"')
+    expect(enHtml).toContain('aria-label="Reasoning effort"')
+    expect(enHtml).not.toContain('>xhigh<')
+    expect(zhHtml).toContain('已校验的 Factory Droid CLI 运行时。')
+    expect(zhHtml).toContain('推理强度')
+    expect(zhHtml).toContain('极高')
+    expect(zhHtml).toContain('Factory 设置覆盖')
+    expect(zhHtml).toContain('禁用内置技能')
+    expect(zhHtml).toContain('aria-label="推理强度"')
   })
 
   it('opens a runtime adapter account when its config schema is unavailable', () => {

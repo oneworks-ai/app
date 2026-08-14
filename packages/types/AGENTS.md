@@ -16,10 +16,13 @@
 - `src/adapter.ts`
   - `Adapter`、`AdapterCtx`、`AdapterQueryOptions`
   - `loadAdapter()` / `defineAdapter()`
-- `src/adapter-model-provider-import.ts`、`src/adapter-worktree-environment-import.ts`、`src/adapter-package.ts`
+- `src/adapter-model-provider-import.ts`、`src/adapter-worktree-environment-import.ts`、`src/adapter-package-contract.ts`、`src/adapter-package.ts`
   - adapter 可选 `model-provider-import` / `worktree-environment-import` discovery capability、source 声明与严格/可选 package export loader
+  - browser-safe package naming / target contract 由根入口导出；Node loader 只从 `@oneworks/types/adapter-package` 导入
   - capability 只发现并转换原生配置；调用方必须把当前目标 source 传给 discoverer，目标 config 的冲突保护和写回由消费方统一编排
   - package loader 保持显式 CLI package dir 优先；开发 workspace 的 runtime package dir 先于 managed adapter cache，已安装 / packaged runtime 则继续先用 managed cache
+- `src/adapter-package-cache.ts`
+  - Node-only package cache authority 与文件系统解析，只从 `@oneworks/types/adapter-package-cache` 导入
 - `src/logger.ts`
   - 共享 `Logger` 接口
 - `src/mcp.ts`
@@ -47,5 +50,6 @@
 ## 维护约定
 
 - 只放跨包稳定 contract 和极薄的 runtime glue；不要把编排逻辑塞进来。
+- 根入口必须保持 browser-safe，不得 re-export `node:fs` / `node:os` / `node:path` / `node:process` 依赖；Node loader 与 cache authority 必须走显式 subpath。
 - 新增共享字段时，优先先看是否应该落在 `types`，再决定放到上层包。
 - adapter 包名解析规则集中在 `src/adapter.ts`，不要在消费方重复拼 `@oneworks/adapter-*`。

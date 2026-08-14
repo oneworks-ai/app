@@ -382,7 +382,11 @@ export const shouldUseOptimisticSessionOnlyView = (
 
 const getHistoryRefreshRetryDelay = (retryAttempt: number) => 800 * 2 ** retryAttempt
 
-const applyMessageEvent = (currentMessages: ChatMessage[], data: WSEvent, context?: MessageEventContext) => {
+export const applyMessageEvent = (
+  currentMessages: ChatMessage[],
+  data: WSEvent,
+  context?: MessageEventContext
+) => {
   const message = getChatMessageFromSessionHistoryEvent(data, context)
   if (message == null) return currentMessages
 

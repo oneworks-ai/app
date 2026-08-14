@@ -712,6 +712,48 @@ describe('sqliteDb', () => {
     expect(db.getSession(session.id)?.messageCount).toBe(1)
   })
 
+  it('persists only the latest monotonic assistant text projection for one streaming message id', () => {
+    const session = db.createSession('Cline stream', 'cline-stream', 'running')
+    const base = { id: 'cline-turn-1', role: 'assistant', createdAt: 100 }
+    const chunks = [
+      { type: 'message', message: { ...base, content: 'first **' } },
+      { type: 'message', message: { ...base, content: 'first **bold**\n```ts\n' } },
+      { type: 'message', message: { ...base, content: 'first **bold**\n```ts\nconst ok = true\n```' } }
+    ]
+    expect(chunks.map(event => db.saveMessage(session.id, event))).toEqual([true, true, true])
+    expect(db.getMessages(session.id)).toEqual([chunks[2]])
+    expect(db.getSession(session.id)?.messageCount).toBe(1)
+    expect(db.saveMessage(session.id, chunks[2])).toBe(false)
+  })
+
+  it('persists cumulative text-tool-text segments in their original chronology', () => {
+    const session = db.createSession('Cline chronology', 'cline-chronology', 'running')
+    const first = { id: 'cline-segment-1', role: 'assistant', createdAt: 100 }
+    const second = { id: 'cline-segment-2', role: 'assistant', createdAt: 300 }
+    const events = [
+      { type: 'message', message: { ...first, content: 'before **' } },
+      { type: 'message', message: { ...first, content: 'before **tool**' } },
+      {
+        type: 'message',
+        message: {
+          id: 'cline-tool-1',
+          role: 'assistant',
+          content: [{ type: 'tool_use', id: 'cline-tool-1', name: 'adapter:cline:read', input: {} }],
+          createdAt: 200
+        }
+      },
+      { type: 'message', message: { ...second, content: 'after `co' } },
+      { type: 'message', message: { ...second, content: 'after `code`' } }
+    ]
+    expect(events.map(event => db.saveMessage(session.id, event))).toEqual([true, true, true, true, true])
+    expect(db.getMessages(session.id)).toEqual([
+      events[1],
+      events[2],
+      events[4]
+    ])
+    expect(db.getSession(session.id)?.messageCount).toBe(3)
+  })
+
   it('persists channel message deduplication keys', () => {
     expect(db.rememberChannelMessage('wechat:group:room:msg-1')).toBe(true)
     expect(db.rememberChannelMessage('wechat:group:room:msg-1')).toBe(false)

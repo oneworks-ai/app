@@ -714,6 +714,8 @@ Notes:
         let printIdleTimeoutController: ReturnType<typeof createPrintIdleTimeoutController> | undefined
         let unhandledRejectionHandler: ((reason: unknown) => void) | undefined
         let uncaughtExceptionHandler: ((error: Error) => void) | undefined
+        let runtimeConsumerSessionRecovery: SessionInitInfo['sessionRecovery'] = 'native-resume'
+        let runtimeConsumerTurnIdle = false
         const cleanupRuntimeConsumerFailureHandlers = () => {
           if (unhandledRejectionHandler != null) {
             process.off('unhandledRejection', unhandledRejectionHandler)
@@ -828,7 +830,9 @@ Notes:
           printIdleTimeoutController = createPrintIdleTimeoutController({
             timeoutSeconds: opts.printIdleTimeout,
             onTimeout: () => {
-              const exitCode = exitController.getPendingExitCode() ?? 1
+              const exitCode = exitController.getPendingExitCode() ?? (
+                runtimeConsumerSessionRecovery === 'live-only' && runtimeConsumerTurnIdle ? 0 : 1
+              )
               console.error(
                 `[oneworks] Print mode idle timeout: no adapter events received for ${opts.printIdleTimeout} seconds.`
               )
@@ -867,8 +871,11 @@ Notes:
           ...adapterOptions,
           onEvent: (event: AdapterOutputEvent) => {
             printIdleTimeoutController?.recordEvent()
+            if (event.type === 'stop') runtimeConsumerTurnIdle = true
+            else if (event.type !== 'exit') runtimeConsumerTurnIdle = false
             void runtimeEventSink?.handleAdapterEvent(event)
             if (event.type === 'init') {
+              runtimeConsumerSessionRecovery = event.data.sessionRecovery ?? 'native-resume'
               if (adapterCliPrepareOperationActive) {
                 adapterCliPrepareOperationActive = false
                 void runtimeEventSink?.recordOperation({
@@ -958,7 +965,11 @@ Notes:
             if (event.type === 'exit') {
               handleExit(exitController.getPendingExitCode() ?? event.data.exitCode ?? 0)
             }
-            if (isRuntimeProtocolConsumer && event.type === 'stop') {
+            if (
+              isRuntimeProtocolConsumer &&
+              event.type === 'stop' &&
+              runtimeConsumerSessionRecovery !== 'live-only'
+            ) {
               handleExit(exitController.getPendingExitCode() ?? 0)
             }
             if (isRuntimeProtocolConsumer && event.type === 'error' && event.data.fatal !== false) {
@@ -991,6 +1002,10 @@ Notes:
             session,
             sessionId,
             sink: runtimeEventSink,
+            onActivity: () => {
+              runtimeConsumerTurnIdle = false
+              printIdleTimeoutController?.recordEvent()
+            },
             submitInput: submitPrintInput
           })
         }

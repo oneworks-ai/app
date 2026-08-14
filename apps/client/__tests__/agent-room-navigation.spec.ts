@@ -963,7 +963,11 @@ describe('agent room navigation', () => {
             permissionContext: {
               subjectLabel: 'Bash'
             },
-            options: [{ label: 'Allow once', value: 'allow_once' }]
+            options: [{
+              label: 'Always allow',
+              value: 'native-allow-always',
+              permission: { adapterLabel: 'Kiro', semantic: 'allow_persistent' }
+            }]
           },
           createdAt: 22
         }
@@ -981,7 +985,11 @@ describe('agent room navigation', () => {
           interactionId: 'codex-approval:2',
           requestKind: 'confirmation',
           status: 'pending',
-          options: [{ label: 'Allow once', value: 'allow_once' }],
+          options: [{
+            label: 'Always allow',
+            value: 'native-allow-always',
+            permission: { adapterLabel: 'Kiro', semantic: 'allow_persistent' }
+          }],
           subjectLabel: 'Bash'
         }
       })

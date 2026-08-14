@@ -354,7 +354,7 @@ describe('session interaction service', () => {
     expect(getSessionInteraction('sess-1')).toBeUndefined()
   })
 
-  it('treats sessions parked in the external runtime store as external for interaction responses', async () => {
+  it('keeps external interactions pending when the runtime command cannot be queued', async () => {
     const runtime = createSessionConnectionState()
     runtime.interactions.push({
       id: 'interaction-1',
@@ -365,25 +365,21 @@ describe('session interaction service', () => {
     })
     externalSessionStore.set('sess-1', runtime)
 
-    await handleInteractionResponse('sess-1', 'interaction-1', '继续')
+    await expect(handleInteractionResponse('sess-1', 'interaction-1', '继续')).resolves.toBe(false)
 
-    expect(runtime.interactions).toEqual([])
-    expect(vi.mocked(applySessionEvent)).toHaveBeenCalledWith(
+    expect(runtime.interactions).toEqual([
+      expect.objectContaining({ id: 'interaction-1' })
+    ])
+    expect(vi.mocked(applySessionEvent)).not.toHaveBeenCalledWith(
       'sess-1',
-      {
-        type: 'interaction_response',
-        id: 'interaction-1',
-        data: '继续'
-      },
-      expect.objectContaining({
-        broadcast: expect.any(Function)
-      })
+      expect.objectContaining({ type: 'interaction_response' }),
+      expect.anything()
     )
   })
 
   it('keeps queued interactions waiting when responses arrive out of order', async () => {
     const runtime = createSessionConnectionState()
-    externalSessionStore.set('sess-1', runtime)
+    adapterSessionStore.set('sess-1', runtime as any)
     setSessionInteraction('sess-1', {
       id: 'interaction-1',
       payload: {
@@ -457,6 +453,31 @@ describe('session interaction service', () => {
       requestId: 'approval-1',
       interactionId: 'approval-1',
       data: 'allow_once'
+    }))
+
+    runtime.interactions.push({
+      id: 'ask-multi-1',
+      payload: {
+        sessionId: 'sess-1',
+        question: 'Which targets?',
+        multiselect: true,
+        options: [
+          { label: 'Runtime', value: 'runtime' },
+          { label: 'History', value: 'history' }
+        ]
+      }
+    })
+    await expect(
+      handleInteractionResponse('sess-1', 'ask-multi-1', ['runtime', 'history'])
+    ).resolves.toBe(true)
+    const commands = (await readFile(
+      path.join(homeRuntimeRoot, 'sessions', 'sess-1', 'commands.jsonl'),
+      'utf8'
+    )).trim().split('\n').map(line => JSON.parse(line) as Record<string, unknown>)
+    expect(commands[1]).toEqual(expect.objectContaining({
+      type: 'submit_input',
+      interactionId: 'ask-multi-1',
+      data: ['runtime', 'history']
     }))
     await expect(pathExists(path.join(runtimeRoot, 'sessions', 'sess-1', 'commands.jsonl'))).resolves.toBe(false)
   })

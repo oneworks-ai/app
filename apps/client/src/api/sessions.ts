@@ -26,13 +26,30 @@ export async function listSessions(
   return fetchApiJson<{ sessions: Session[] }>(path)
 }
 
-export type NativeHistoryAdapter = 'codex' | 'claude-code' | 'cursor' | 'grok'
+export type NativeHistoryAdapter =
+  | 'codex'
+  | 'claude-code'
+  | 'cline'
+  | 'cursor'
+  | 'droid'
+  | 'goose'
+  | 'grok'
+  | 'qwen-code'
 export type NativeHistoryCandidateScope = 'all' | 'unarchived' | 'archived'
 export type NativeHistoryProjectScope = 'current-project' | 'all-projects'
 export type NativeHistoryThreadScope = 'all' | 'user' | 'subagent'
 export type NativeHistoryTimeSort = 'activity' | 'createdAt' | 'updatedAt'
 
-export const nativeHistoryAdapters: NativeHistoryAdapter[] = ['codex', 'claude-code', 'cursor', 'grok']
+export const nativeHistoryAdapters: NativeHistoryAdapter[] = [
+  'codex',
+  'claude-code',
+  'cline',
+  'cursor',
+  'droid',
+  'goose',
+  'grok',
+  'qwen-code'
+]
 
 export const isNativeHistoryAdapter = (value: string | undefined): value is NativeHistoryAdapter => (
   value != null && nativeHistoryAdapters.includes(value as NativeHistoryAdapter)
@@ -60,12 +77,31 @@ export interface NativeHistoryImportSession {
   workspaceCwd: string
 }
 
+export interface NativeHistoryImportDiagnostic {
+  adapter: NativeHistoryAdapter
+  code: 'adapter_unavailable' | 'history_oversized' | 'unsupported_history_kind' | 'unsupported_history_scope'
+  level: 'error' | 'warning'
+  message: string
+  nativeSessionId?: string
+  skippedSessions?: number
+  sourcePath?: string
+  sourceKind?: 'recipe' | 'subagent'
+}
+
 export interface NativeHistoryImportResult {
+  diagnostics?: NativeHistoryImportDiagnostic[]
+  aggregateLimitedBytes: number
+  aggregateLimitedFiles: number
   importedEvents: number
   importedSessions: number
   matchedFiles: number
+  perFileLimitedBytes: number
+  perFileLimitedFiles: number
+  rejectedFiles: number
   scannedFiles: number
   sessions: NativeHistoryImportSession[]
+  sizeLimitedBytes: number
+  sizeLimitedFiles: number
 }
 
 export interface NativeHistoryImportPreviewCandidate {
@@ -92,28 +128,45 @@ export interface NativeHistoryImportPreviewProject {
 
 export interface NativeHistoryImportAdapterPreview {
   adapter: NativeHistoryAdapter
+  aggregateLimitedBytes: number
+  aggregateLimitedFiles: number
   candidates: NativeHistoryImportPreviewCandidate[]
+  diagnostics: string[]
   hasMore: boolean
   isComplete: boolean
   largeFiles: number
   largestFileBytes: number
   matchedFiles: number
   nextCursor?: string
+  perFileLimitedBytes: number
+  perFileLimitedFiles: number
   projects: NativeHistoryImportPreviewProject[]
+  rejectedFiles: number
   scannedFiles: number
+  sizeLimitedBytes: number
+  sizeLimitedFiles: number
   totalBytes: number
 }
 
 export interface NativeHistoryImportPreviewResult {
   adapters: NativeHistoryImportAdapterPreview[]
+  diagnostics?: NativeHistoryImportDiagnostic[]
+  aggregateLimitedBytes: number
+  aggregateLimitedFiles: number
   hasMore: boolean
   isComplete: boolean
   largeFileThresholdBytes: number
   largeFiles: number
   largestFileBytes: number
   matchedFiles: number
+  maxFileSizeBytes: number
   nextCursor?: string
+  perFileLimitedBytes: number
+  perFileLimitedFiles: number
+  rejectedFiles: number
   scannedFiles: number
+  sizeLimitedBytes: number
+  sizeLimitedFiles: number
   totalBytes: number
 }
 
@@ -428,7 +481,11 @@ export async function updateSessionWorkspaceFile(
 export async function respondSessionInteraction(
   sessionId: string,
   interactionId: string,
-  data: string | string[]
+  data: string | string[],
+  request?: {
+    signal?: AbortSignal
+    timeoutMs?: number
+  }
 ): Promise<ApiOkResponse> {
   return fetchApiJson<ApiOkResponse>(`/api/sessions/${sessionId}/events`, {
     method: 'POST',
@@ -437,7 +494,9 @@ export async function respondSessionInteraction(
       type: 'interaction_response',
       id: interactionId,
       data
-    })
+    }),
+    signal: request?.signal,
+    timeoutMs: request?.timeoutMs
   })
 }
 

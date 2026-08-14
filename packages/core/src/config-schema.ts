@@ -1,6 +1,7 @@
 /* eslint-disable max-lines -- central config schema registry */
 import { z } from 'zod'
 
+import { NATIVE_HISTORY_IMPORT_MAX_FILE_SIZE_BYTES } from '@oneworks/types'
 import type { ConfigUiField, ConfigUiFieldType, ConfigUiObjectSchema, ConfigUiRecordFieldSchema } from '@oneworks/types'
 import { normalizeCredentialRevision } from '@oneworks/types/credential-revision'
 import { MODEL_SERVICE_API_PROTOCOLS } from '@oneworks/types/model-service-protocol'
@@ -27,6 +28,9 @@ export interface AdapterConfigContribution<
   TExtraCommonKey extends AdapterConfigSchemaKey<TSchema> = never,
 > {
   adapterKey: string
+  capabilities?: {
+    accounts?: boolean
+  }
   title?: string
   description?: string
   schema: TSchema
@@ -406,18 +410,27 @@ export const serverConfigSchema = z.object({
     .describe('Extra public paths allowed on non-local hosts; channel webhook paths are always allowed')
 })
 
-const nativeHistoryImportAdapterSchema = z.enum(['codex', 'claude-code', 'cursor', 'grok'])
+const nativeHistoryImportAdapterSchema = z.enum([
+  'codex',
+  'claude-code',
+  'cline',
+  'cursor',
+  'droid',
+  'goose',
+  'grok',
+  'qwen-code'
+])
 
 const nativeHistoryImportAdapterConfigSchema = z.object({
   autoImport: z.boolean().optional().describe('Override automatic native history import for this adapter'),
-  maxFileSizeBytes: z.number().int().nonnegative().nullable().optional()
-    .describe('Override automatic native history import file size limit for this adapter')
+  maxFileSizeBytes: z.number().int().nonnegative().max(NATIVE_HISTORY_IMPORT_MAX_FILE_SIZE_BYTES).nullable().optional()
+    .describe('Override automatic native history import file size limit, capped at the 50 MiB server maximum')
 })
 
 export const nativeHistoryImportConfigSchema = z.object({
   autoImport: z.boolean().optional().describe('Enable automatic native history import for all adapters by default'),
-  maxFileSizeBytes: z.number().int().nonnegative().nullable().optional()
-    .describe('Default automatic native history import file size limit'),
+  maxFileSizeBytes: z.number().int().nonnegative().max(NATIVE_HISTORY_IMPORT_MAX_FILE_SIZE_BYTES).nullable().optional()
+    .describe('Default automatic native history import file size limit, capped at the 50 MiB server maximum'),
   adapters: z.record(nativeHistoryImportAdapterSchema, nativeHistoryImportAdapterConfigSchema).optional()
     .describe('Per-adapter automatic native history import overrides')
 })

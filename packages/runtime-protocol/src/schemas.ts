@@ -292,6 +292,7 @@ export const RuntimeMetaSchema = z.object({
   runId: z.string().optional(),
   runTitle: z.string().optional(),
   operationId: z.string().optional(),
+  sessionRecovery: z.enum(['native-resume', 'live-only']).optional(),
   createdAt: z.number()
 }).passthrough()
 

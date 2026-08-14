@@ -92,6 +92,15 @@
         "require": "./dist/document-path.js"
       }
     },
+    "./embedded-document": {
+      "__oneworks__": {
+        "default": "./src/embedded-document.ts"
+      },
+      "default": {
+        "import": "./dist/embedded-document.mjs",
+        "require": "./dist/embedded-document.js"
+      }
+    },
     "./filesystem-authority": {
       "__oneworks__": {
         "default": "./src/filesystem-authority.ts"

@@ -57,14 +57,21 @@ export const DEFAULT_NATIVE_ADAPTER = 'codex'
 
 export const BUILTIN_NATIVE_ADAPTERS = [
   'claude-code',
+  'cline',
   'codex',
   'copilot',
   'cursor',
+  'dsh',
+  'droid',
   'gemini',
+  'goose',
   'grok',
+  'kiro',
+  'junie',
   'kimi',
   'opencode',
-  'pi'
+  'pi',
+  'qwen-code'
 ] as const
 
 export type BuiltinNativeAdapter = typeof BUILTIN_NATIVE_ADAPTERS[number]
@@ -318,6 +325,28 @@ export const isModelServiceCompatibleWithAdapter = (params: {
 }) => {
   const adapter = normalizeNonEmptyString(params.adapter)
   if (!adapter || params.service == null) return true
+  if (adapter === 'cline') return false
+
+  // The official DSH ACP composition owns DeepSeek provider routing. Generic
+  // One Works model services must not be projected into that native runtime.
+  if (adapter === 'dsh') return false
+
+  // Kiro's verified ACP contract exposes only native session models. Generic
+  // model services are not routed into Kiro and must never become selector
+  // claims, even when shared metadata names Kiro explicitly.
+  if (adapter === 'kiro') return false
+
+  // Junie owns its native provider, endpoint, and BYOK routing. Passing a One
+  // Works `service,model` selector would falsely imply that those credentials
+  // and endpoint were bridged, even when generic compatibility metadata opts in.
+  if (adapter === 'junie') return false
+
+  const explicitCompatibility = resolveAdapterCompatibilityOverride({
+    adapter,
+    supportedAdapters: params.service.supportedAdapters,
+    unsupportedAdapters: params.service.unsupportedAdapters
+  })
+  if (explicitCompatibility === false) return false
 
   if (adapter === 'codex') {
     const apiProtocol = resolveConfiguredApiProtocol(params.service)
@@ -327,12 +356,17 @@ export const isModelServiceCompatibleWithAdapter = (params: {
     const apiProtocol = resolveConfiguredApiProtocol(params.service)
     if (apiProtocol === 'gemini-generate-content' || apiProtocol === 'gemini-interactions') return false
   }
+  if (adapter === 'goose') {
+    const apiProtocol = resolveConfiguredApiProtocol(params.service)
+    if (apiProtocol !== 'openai-chat-completions' && apiProtocol !== 'anthropic-messages') return false
+  }
+  if (adapter === 'qwen-code') {
+    const apiProtocol = resolveConfiguredApiProtocol(params.service)
+    const provider = resolveModelProviderIdentity(params.service)
+    return apiProtocol === 'openai-chat-completions' &&
+      provider.confidence === 'configured' && provider.provider === 'openai'
+  }
 
-  const explicitCompatibility = resolveAdapterCompatibilityOverride({
-    adapter,
-    supportedAdapters: params.service.supportedAdapters,
-    unsupportedAdapters: params.service.unsupportedAdapters
-  })
   if (explicitCompatibility != null) return explicitCompatibility
 
   const providerCompatibility = resolveProviderAdapterCompatibility({
@@ -389,9 +423,18 @@ export const filterServiceModelsForAdapter = <TEntry extends ServiceModelEntry>(
 }) => {
   const adapter = normalizeNonEmptyString(params.adapter)
   if (!adapter) return params.serviceModels
+  if (adapter === 'kiro') return []
 
   const modelServices = flattenModelServices(params.modelServices)
+  if (adapter === 'cline') return []
   return params.serviceModels.filter((entry) => {
+    const serviceCompatibility = isModelServiceCompatibleWithAdapter({
+      adapter,
+      model: entry.model,
+      service: modelServices[entry.serviceKey]
+    })
+    if (adapter === 'qwen-code' && !serviceCompatibility) return false
+
     const modelCompatibility = resolveModelAdapterCompatibilityOverride({
       adapter,
       model: entry.selectorValue,
@@ -399,11 +442,7 @@ export const filterServiceModelsForAdapter = <TEntry extends ServiceModelEntry>(
     })
     if (modelCompatibility != null) return modelCompatibility
 
-    return isModelServiceCompatibleWithAdapter({
-      adapter,
-      model: entry.model,
-      service: modelServices[entry.serviceKey]
-    })
+    return serviceCompatibility
   })
 }
 

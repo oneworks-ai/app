@@ -1,6 +1,5 @@
 import process from 'node:process'
 
-import { loadAdapterNativePluginManager, resolveAdapterRuntimeTarget } from '@oneworks/types'
 import type {
   NativeHostPlugin,
   NativeHostPluginAssetGroup,
@@ -8,6 +7,7 @@ import type {
   NativeHostSkill,
   NativeHostSkillDiscoveryResult
 } from '@oneworks/types'
+import { loadAdapterNativePluginManager, resolveAdapterRuntimeTarget } from '@oneworks/types/adapter-package'
 import { resolveProjectHomePath } from '@oneworks/utils'
 
 import { loadConfigState } from '#~/services/config/index.js'

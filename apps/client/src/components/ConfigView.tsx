@@ -993,6 +993,7 @@ export function ConfigView() {
         mergedAdapters,
         t
       },
+      uiSection: uiSections[activeContentTab.key] as ConfigUiSection | undefined,
       t
     })
 
@@ -1007,7 +1008,8 @@ export function ConfigView() {
     mergedAdapters,
     mergedModelServices,
     sourceKey,
-    t
+    t,
+    uiSections
   ])
   const accountBreadcrumbAdapterKey = activeContentTab?.key === 'adapters' &&
       activeConfigDetail?.route.nestedPath?.[0] === 'accounts'
