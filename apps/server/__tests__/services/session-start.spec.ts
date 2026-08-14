@@ -144,6 +144,7 @@ describe('startAdapterSession', () => {
   const getChannelSessionBySessionId = vi.fn()
   const getAgentRoomByHostSessionId = vi.fn()
   const consumeSessionPermissionOnce = vi.fn()
+  const listSessionQueuedMessages = vi.fn()
   const updateSessionRuntimeState = vi.fn()
 
   beforeEach(() => {
@@ -175,14 +176,16 @@ describe('startAdapterSession', () => {
       runtimeKind: 'interactive',
       historySeedPending: false
     })
+    listSessionQueuedMessages.mockReturnValue([])
     getChannelSessionBySessionId.mockReturnValue(undefined)
     getAgentRoomByHostSessionId.mockReturnValue(undefined)
 
     vi.mocked(getDb).mockReturnValue({
       getMessages,
-      listSessionQueuedMessages: vi.fn(() => []),
+      listSessionQueuedMessages,
       saveMessage,
       getSession: vi.fn(() => currentSession),
+      getSessionStatus: vi.fn(() => currentSession.status),
       getSessionRuntimeState,
       getChannelSessionBySessionId,
       getChannelChildSessionRunBySessionId: vi.fn(() => undefined),
@@ -1267,6 +1270,43 @@ describe('startAdapterSession', () => {
     expect(mocks.finalizeSessionWorkspaceChangeTracking).toHaveBeenCalledWith('sess-1', 'failed')
   })
 
+  it('keeps the session failed when a fatal error is followed by a successful exit', async () => {
+    let onEvent: ((event: any) => void) | undefined
+    mocks.run.mockImplementationOnce(async (_options: unknown, adapterOptions: any) => {
+      onEvent = adapterOptions.onEvent
+      return {
+        session: {
+          emit: vi.fn(),
+          kill: vi.fn()
+        }
+      }
+    })
+
+    await startAdapterSession('sess-1', {
+      model: 'gpt-4o',
+      adapter: 'codex',
+      permissionMode: 'default'
+    })
+
+    listSessionQueuedMessages.mockClear()
+    onEvent?.({
+      type: 'error',
+      data: {
+        message: 'turn failed',
+        fatal: true
+      }
+    })
+    onEvent?.({
+      type: 'exit',
+      data: { exitCode: 0, stderr: '' }
+    })
+
+    expect(currentSession.status).toBe('failed')
+    expect(updateSession).not.toHaveBeenCalledWith('sess-1', { status: 'completed' })
+    expect(listSessionQueuedMessages).not.toHaveBeenCalled()
+    expect(mocks.finalizeSessionWorkspaceChangeTracking).toHaveBeenCalledWith('sess-1', 'failed')
+  })
+
   it('keeps the session terminated when an adapter stop arrives after user termination', async () => {
     mocks.run.mockImplementationOnce(async (_options: unknown, adapterOptions: any) => {
       currentSession = { ...currentSession, status: 'terminated' }
@@ -1291,6 +1331,43 @@ describe('startAdapterSession', () => {
     expect(currentSession.status).toBe('terminated')
     expect(updateSession).not.toHaveBeenCalledWith('sess-1', { status: 'completed' })
     expect(mocks.finalizeSessionWorkspaceChangeTracking).toHaveBeenCalledWith('sess-1', 'terminated')
+  })
+
+  it('keeps user termination authoritative when adapter kill emits exit synchronously', async () => {
+    let onEvent: ((event: any) => void) | undefined
+    const kill = vi.fn(() => {
+      onEvent?.({ type: 'exit', data: { exitCode: 0, stderr: '' } })
+    })
+    mocks.run.mockImplementationOnce(async (_options: unknown, adapterOptions: any) => {
+      onEvent = adapterOptions.onEvent
+      return {
+        session: {
+          emit: vi.fn(),
+          kill
+        }
+      }
+    })
+
+    await startAdapterSession('sess-1', {
+      model: 'gpt-4o',
+      adapter: 'codex',
+      permissionMode: 'default'
+    })
+
+    updateSession.mockClear()
+    listSessionQueuedMessages.mockClear()
+    mocks.finalizeSessionWorkspaceChangeTracking.mockClear()
+
+    killSession('sess-1')
+
+    expect(kill).toHaveBeenCalledOnce()
+    expect(currentSession.status).toBe('terminated')
+    expect(updateSession).toHaveBeenCalledWith('sess-1', { status: 'terminated' })
+    expect(updateSession).not.toHaveBeenCalledWith('sess-1', { status: 'completed' })
+    expect(listSessionQueuedMessages).not.toHaveBeenCalled()
+    expect(mocks.finalizeSessionWorkspaceChangeTracking).toHaveBeenCalledTimes(1)
+    expect(mocks.finalizeSessionWorkspaceChangeTracking).toHaveBeenCalledWith('sess-1', 'terminated')
+    expect(mocks.finalizeSessionWorkspaceChangeTracking).not.toHaveBeenCalledWith('sess-1', 'completed')
   })
 
   it('preserves the full model selector after adapter init reports a bare model id', async () => {

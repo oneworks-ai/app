@@ -26,6 +26,7 @@ import {
 import { handleInteractionResponse } from '#~/services/session/interaction.js'
 import { createSessionQueuedMessage } from '#~/services/session/queue.js'
 import { notifySessionUpdated } from '#~/services/session/runtime.js'
+import { finalizeSessionWorkspaceChangeTracking } from '#~/services/session/workspace-changes.js'
 import {
   createSessionManagedWorktree,
   deleteSessionWorkspace,
@@ -103,6 +104,10 @@ vi.mock('#~/services/session/queue.js', () => ({
 vi.mock('#~/services/session/runtime.js', () => ({
   broadcastSessionEvent: vi.fn(),
   notifySessionUpdated: vi.fn()
+}))
+
+vi.mock('#~/services/session/workspace-changes.js', () => ({
+  finalizeSessionWorkspaceChangeTracking: vi.fn()
 }))
 
 vi.mock('#~/services/session/workspace.js', () => ({
@@ -952,6 +957,70 @@ describe('sessionsRouter', () => {
     }
 
     await expect(handlePostEvent(ctx)).rejects.toThrow('Interaction response is no longer pending')
+  })
+
+  it.each([
+    {
+      body: { type: 'error', data: { message: 'late data error', fatal: true } },
+      event: {
+        type: 'error',
+        data: { message: 'late data error', fatal: true },
+        message: 'late data error'
+      }
+    },
+    {
+      body: { type: 'error', message: 'late legacy error' },
+      event: {
+        type: 'error',
+        data: { message: 'late legacy error', fatal: true },
+        message: 'late legacy error'
+      }
+    }
+  ])('normalizes $body error events through the terminal-aware session projector', ({ body, event }) => {
+    const session = { id: 'session-terminated', status: 'terminated' }
+    const db = { getSession: vi.fn(() => session) }
+    vi.mocked(getDb).mockReturnValue(db as any)
+
+    const handlePostEvent = findRouteHandler('/:id/events', 'POST')
+    const ctx = {
+      params: { id: session.id },
+      request: { body },
+      body: undefined
+    }
+
+    handlePostEvent(ctx)
+
+    expect(applySessionEvent).toHaveBeenCalledWith(
+      session.id,
+      event,
+      expect.objectContaining({ onSessionUpdated: expect.any(Function) })
+    )
+    expect(ctx.body).toEqual({ ok: true })
+  })
+
+  it.each([0, 1])('preserves external runtime termination when exit code %i arrives later', (exitCode) => {
+    const session = { id: 'session-terminated', status: 'terminated' }
+    const db = { getSession: vi.fn(() => session) }
+    vi.mocked(getDb).mockReturnValue(db as any)
+
+    const handlePostEvent = findRouteHandler('/:id/events', 'POST')
+    const ctx = {
+      params: { id: session.id },
+      request: {
+        body: {
+          type: 'exit',
+          data: { exitCode }
+        }
+      },
+      body: undefined
+    }
+
+    handlePostEvent(ctx)
+
+    expect(finalizeSessionWorkspaceChangeTracking).toHaveBeenCalledWith(session.id, 'terminated')
+    expect(updateAndNotifySession).not.toHaveBeenCalledWith(session.id, { status: 'completed' })
+    expect(applySessionEvent).not.toHaveBeenCalled()
+    expect(ctx.body).toEqual({ ok: true })
   })
 
   it('records a pending creation cancellation when terminating a session that is not stored yet', async () => {

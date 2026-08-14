@@ -86,6 +86,7 @@ import {
   setAdapterSessionRuntime,
   takeExternalSessionRuntime
 } from '#~/services/session/runtime.js'
+import { resolveSessionTerminalStatus } from '#~/services/session/terminal-status.js'
 import {
   beginSessionWorkspaceChangeTracking,
   clearSessionWorkspaceChangeTracking,
@@ -1413,21 +1414,23 @@ export async function startAdapterSession(
 
               recentPermissionToolUseStore.delete(sessionId)
 
-              void finalizeSessionWorkspaceChangeTracking(sessionId, exitCode === 0 ? 'completed' : 'failed')
-              updateAndNotifySession(sessionId, {
-                status: exitCode === 0 ? 'completed' : 'failed'
-              })
-              commitChannelChildRunTerminal({
-                error: exitCode === 0 ? undefined : stderr,
-                sessionId,
-                status: exitCode === 0 ? 'completed' : 'failed'
-              })
-              if (exitCode === 0) {
+              const latestSession = getDb().getSession(sessionId)
+              const terminalStatus = resolveSessionTerminalStatus(latestSession?.status, exitCode)
+              void finalizeSessionWorkspaceChangeTracking(sessionId, terminalStatus)
+              if (terminalStatus !== 'terminated') {
+                updateAndNotifySession(sessionId, { status: terminalStatus })
+                commitChannelChildRunTerminal({
+                  error: exitCode === 0 ? undefined : stderr,
+                  sessionId,
+                  status: terminalStatus
+                })
+              }
+              if (terminalStatus === 'completed') {
                 maybeDispatchQueuedTurn(sessionId, async (content, options) => {
                   await processUserMessage(sessionId, content, options)
                 })
               }
-              if (exitCode !== 0 && !sawFatalError) {
+              if (terminalStatus === 'failed' && exitCode !== 0 && !sawFatalError) {
                 const errorMessage = stderr !== ''
                   ? `Process exited with code ${exitCode}, stderr:\n${stderr}`
                   : `Process exited with code ${exitCode}`
@@ -1479,11 +1482,7 @@ export async function startAdapterSession(
               }
               forwardSessionEventToChannel(sessionId, buildChannelSessionStopEvent(stopMessage))
               const latestSession = getDb().getSession(sessionId)
-              const terminalStatus = latestSession?.status === 'failed'
-                ? 'failed'
-                : latestSession?.status === 'terminated'
-                ? 'terminated'
-                : 'completed'
+              const terminalStatus = resolveSessionTerminalStatus(latestSession?.status)
               void finalizeSessionWorkspaceChangeTracking(
                 sessionId,
                 terminalStatus

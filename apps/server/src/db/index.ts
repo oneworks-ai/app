@@ -203,6 +203,10 @@ export class SqliteDb {
     return this.sessions.get(id)
   }
 
+  getSessionStatus(id: string) {
+    return this.sessions.getStatus(id)
+  }
+
   getSessionRuntimeState(id: string) {
     return this.sessions.getRuntimeState(id)
   }

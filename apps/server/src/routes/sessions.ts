@@ -64,6 +64,7 @@ import {
   notifySessionCreationProgress,
   notifySessionUpdated
 } from '#~/services/session/runtime.js'
+import { resolveSessionTerminalStatus } from '#~/services/session/terminal-status.js'
 import { finalizeSessionWorkspaceChangeTracking } from '#~/services/session/workspace-changes.js'
 import {
   createSessionManagedWorktree,
@@ -1001,12 +1002,13 @@ export function sessionsRouter(): Router {
 
     if (body.type === 'exit') {
       const exitCode = Number(body.data?.exitCode ?? body.exitCode ?? 0)
-      void finalizeSessionWorkspaceChangeTracking(id, exitCode === 0 ? 'completed' : 'failed')
-      if (exitCode === 0) {
+      const latestSession = db.getSession(id)
+      const terminalStatus = resolveSessionTerminalStatus(latestSession?.status, exitCode)
+      void finalizeSessionWorkspaceChangeTracking(id, terminalStatus)
+      if (terminalStatus === 'completed') {
         updateAndNotifySession(id, { status: 'completed' })
-      } else {
+      } else if (terminalStatus === 'failed' && exitCode !== 0) {
         const stderr = body.data?.stderr ?? body.stderr ?? ''
-        const latestSession = db.getSession(id)
         if (latestSession?.status !== 'failed') {
           const message = stderr !== ''
             ? `Process exited with code ${exitCode}, stderr:\n${stderr}`
@@ -1032,11 +1034,7 @@ export function sessionsRouter(): Router {
 
     if (body.type === 'stop') {
       const latestSession = db.getSession(id)
-      const terminalStatus = latestSession?.status === 'failed'
-        ? 'failed'
-        : latestSession?.status === 'terminated'
-        ? 'terminated'
-        : 'completed'
+      const terminalStatus = resolveSessionTerminalStatus(latestSession?.status)
       void finalizeSessionWorkspaceChangeTracking(
         id,
         terminalStatus

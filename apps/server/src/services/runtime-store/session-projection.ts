@@ -1,6 +1,7 @@
 import type { Session, SessionHistoryImport, SessionStatus, WSEvent } from '@oneworks/core'
 
 import type { SqliteDb } from '#~/db/index.js'
+import { isPreservedSessionTerminalStatus } from '#~/services/session/terminal-status.js'
 
 import type { RuntimeEvent, RuntimeSessionMetadata } from './types.js'
 
@@ -111,7 +112,7 @@ export const shouldPreserveWaitingInteraction = (
   status: SessionStatus | undefined
 ) => (
   (status === 'running' || status === 'completed') &&
-  db.getSession(sessionId)?.status === 'waiting_input' &&
+  db.getSessionStatus(sessionId) === 'waiting_input' &&
   hasUnresolvedInteractionRequest(db, sessionId)
 )
 
@@ -120,11 +121,15 @@ export const shouldPreserveTerminalSessionStatus = (
   sessionId: string,
   status: SessionStatus | undefined,
   eventType: RuntimeEvent['type']
-) => (
-  status === 'running' &&
-  eventType === 'session_started' &&
-  isTerminalSessionStatus(db.getSession(sessionId)?.status)
-)
+) => {
+  const currentStatus = db.getSessionStatus(sessionId)
+  return isPreservedSessionTerminalStatus(currentStatus) ||
+    (
+      status === 'running' &&
+      eventType === 'session_started' &&
+      isTerminalSessionStatus(currentStatus)
+    )
+}
 
 export const ensureRuntimeSession = (db: SqliteDb, event: RuntimeEvent, metadata?: RuntimeSessionMetadata) => {
   const status = event.type === 'session_started'

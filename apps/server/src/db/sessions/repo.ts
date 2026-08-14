@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid'
 
-import type { ChannelExecutionContext, Session, SessionHistoryImport } from '@oneworks/core'
+import type { ChannelExecutionContext, Session, SessionHistoryImport, SessionStatus } from '@oneworks/core'
 import { createEmptySessionPermissionState, normalizeSessionPermissionState } from '@oneworks/utils'
 import type { SessionPermissionState } from '@oneworks/utils'
 
@@ -326,6 +326,12 @@ export function createSessionsRepo(db: SqliteDatabase) {
     return mapSessionRow(row)
   }
 
+  const getStatus = (id: string): SessionStatus | undefined => {
+    const row = db.prepare('SELECT status FROM sessions WHERE id = ?')
+      .get<Pick<SessionRow, 'status'>>(id)
+    return (row?.status as SessionStatus | null | undefined) ?? undefined
+  }
+
   const update = (id: string, updates: SessionUpdate) => {
     const statement = buildUpdateStatement('sessions', 'id', id, updates, sessionUpdateFields)
     if (!statement) return
@@ -514,6 +520,7 @@ export function createSessionsRepo(db: SqliteDatabase) {
     consumePermissionOnce,
     create,
     get,
+    getStatus,
     getRuntimeState,
     list,
     remove,

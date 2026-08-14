@@ -1,6 +1,7 @@
 import type { ChatMessage, ChatMessageContent, Session, WSEvent } from '@oneworks/core'
 
 import { getDb } from '#~/db/index.js'
+import { isPreservedSessionTerminalStatus } from '#~/services/session/terminal-status.js'
 
 export interface SessionEventCallbacks {
   broadcast?: (event: WSEvent) => void
@@ -56,6 +57,13 @@ export function applySessionEvent(
   } else if (event.type === 'error') {
     if (event.data.fatal !== false) {
       updates.status = 'failed'
+    }
+  }
+
+  if (updates.status != null) {
+    const currentStatus = db.getSessionStatus(sessionId)
+    if (isPreservedSessionTerminalStatus(currentStatus)) {
+      delete updates.status
     }
   }
 
