@@ -7,6 +7,7 @@
     "rootDir": "src",
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "customConditions": ["__oneworks__"],
     "strict": false,
     "outDir": "dist",
     "skipLibCheck": true

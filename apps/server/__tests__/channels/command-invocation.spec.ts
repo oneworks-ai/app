@@ -514,6 +514,39 @@ describe('invokeChannelCommandForState', () => {
     }))
   })
 
+  it('accepts a threadless binding returned from SQLite with a null thread id', async () => {
+    getChannelSessionBySessionId.mockReturnValueOnce({
+      channelId: 'oc_1',
+      channelKey: 'lark-main',
+      channelType: 'lark',
+      replyReceiveId: 'oc_1',
+      replyReceiveIdType: 'chat_id',
+      senderId: 'admin1',
+      sessionId: 'sess-1',
+      sessionType: 'group',
+      threadId: null
+    })
+
+    const sendMessage = vi.fn().mockResolvedValue({ messageId: 'om_sent' })
+    const result = await invokeChannelCommandForState(makeState({ sendMessage }), {
+      input: {
+        message: 'done',
+        target: {
+          channelId: 'oc_1',
+          channelKey: 'lark-main',
+          channelType: 'lark',
+          receiveId: 'oc_1',
+          receiveIdType: 'chat_id'
+        }
+      },
+      invocationToken: makeInvocationToken(),
+      toolName: 'channel.send'
+    })
+
+    expect(result).toMatchObject({ ok: true })
+    expect(sendMessage).toHaveBeenCalledOnce()
+  })
+
   it('invokes whoami against the authoritative session actor snapshot', async () => {
     getChannelChildSessionRun.mockReturnValueOnce(makeChildRun({ messageId: 'om_snapshot' }))
     getSessionRuntimeState.mockReturnValueOnce({

@@ -66,7 +66,7 @@ export const listMemory = async (options: MemoryCommandOptions) => {
 }
 
 export const writeMemory = async (mode: 'patch' | 'set', options: MemoryCommandOptions) => {
-  const access = await authorizeMemoryAccess(options)
+  const access = await authorizeMemoryAccess(options, 'write')
   const { context, target } = resolveTarget(options, access)
   const content = options.content ?? ''
   await fs.mkdir(path.dirname(target.filePath), { recursive: true })

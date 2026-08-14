@@ -522,6 +522,10 @@ export class SqliteDb {
     return this.channelMemories.listCandidates(filter)
   }
 
+  listChannelMemoriesByEntity(entity: string) {
+    return this.channelMemories.listByEntity(entity)
+  }
+
   saveChannelMemorySnapshot(row: Parameters<typeof this.channelMemories.saveSnapshot>[0]) {
     return this.channelMemories.saveSnapshot(row)
   }

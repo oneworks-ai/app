@@ -95,6 +95,17 @@ export function createChannelMemoriesRepo(db: SqliteDatabase) {
     ).map(row => mapChannelMemoryRow(row)!)
   }
 
+  const listByEntity = (entity: string) => {
+    const stmt = db.prepare(`
+      SELECT ${MEMORY_FIELDS}
+      FROM channel_memories
+      WHERE entity = ?
+        OR (subjectType = 'entity' AND subjectId = ?)
+      ORDER BY pinned DESC, updatedAt DESC
+    `)
+    return stmt.all<ChannelMemoryDbRow>(entity, entity).map(row => mapChannelMemoryRow(row)!)
+  }
+
   const upsert = (input: UpsertChannelMemoryInput) => {
     const id = input.id ?? `channel_memory_${randomUUID()}`
     const now = Date.now()
@@ -230,6 +241,7 @@ export function createChannelMemoriesRepo(db: SqliteDatabase) {
     createPendingWriteback,
     get,
     getWritebackByPatchKey,
+    listByEntity,
     listCandidates,
     rejectWriteback,
     saveSnapshot,

@@ -355,6 +355,18 @@ const mergeEntityDefinitions = (
       modes.mcpServers,
       mergeFilters
     ),
+    documents: {
+      ...parent.attributes.documents,
+      ...child.attributes.documents
+    },
+    memory: {
+      ...parent.attributes.memory,
+      ...child.attributes.memory
+    },
+    runtime: {
+      ...parent.attributes.runtime,
+      ...child.attributes.runtime
+    },
     plugins: child.attributes.plugins
   }
 })

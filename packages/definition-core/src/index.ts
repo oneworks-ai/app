@@ -72,7 +72,7 @@ export const resolveSpecIdentifier = (path: string, explicitName?: string) => (
 )
 
 export const resolveEntityIdentifier = (path: string, explicitName?: string) => (
-  resolveDocumentName(path, explicitName, ['readme.md', 'index.json'])
+  resolveDocumentName(path, explicitName, ['readme.md', 'index.json', 'entity.yaml', 'entity.yml'])
 )
 
 export const resolveSkillIdentifier = (path: string, explicitName?: string) => (

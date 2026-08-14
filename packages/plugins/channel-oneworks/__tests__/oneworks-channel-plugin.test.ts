@@ -22,11 +22,14 @@ describe('oneWorks Rooms plugin', () => {
     const revokeRoomShare = vi.fn(async () => true)
     activatePlugin({
       oneworksChannel: {
+        createRoom: vi.fn(),
         createRoomShare,
         createScenario: vi.fn(),
+        deleteRoom: vi.fn(),
         deleteScenario: vi.fn(),
         getTrace: vi.fn(),
         injectSimulation: vi.fn(),
+        listEntities: vi.fn(),
         listRooms,
         listShareOwners,
         listShares,
@@ -35,6 +38,7 @@ describe('oneWorks Rooms plugin', () => {
         listScenarios: vi.fn(),
         runScenario: vi.fn(),
         revokeRoomShare,
+        updateRoom: vi.fn(),
         updateScenario: vi.fn()
       },
       logger: { info: vi.fn() },
@@ -99,7 +103,7 @@ describe('oneWorks Rooms plugin', () => {
     expect(client).toContain('view.route?.setActions(roomActions)')
     expect(client).toContain('view.route?.setBreadcrumb({')
     expect(client).toContain('view.route?.navigate(pluginRoute)')
-    expect(client).toContain('view.route?.navigate(buildOneWorksRoomRoute(room.roomId))')
+    expect(client).toContain('view.route?.navigate(buildOneWorksRoomRoute(ctx.scope, room.roomId))')
     expect(client).not.toContain('view.route?.navigate(globalThis.location.pathname)')
     expect(client).not.toContain('match(/^\\/ui\\/w\\/[^/]+/u)')
     expect(client).toContain("view.data.useQuery('oneworks-channel:overview'")
@@ -107,11 +111,12 @@ describe('oneWorks Rooms plugin', () => {
     expect(client).toContain('revalidateOnFocus: true')
     expect(client).toContain('revalidateOnReconnect: true')
     expect(client).toContain("t('Search chat rooms', '搜索聊天室')")
-    expect(client).toContain("t('Chat Rooms', '聊天室')")
-    expect(client).toContain('const { AgentRoom, Button, Icon, Input, Select } = view.ui')
-    expect(client).toContain(
-      "<AgentRoom className='oneworks-channel__room' inset={false} roomId={room.roomId} />"
-    )
+    expect(client).toContain("t('Chat rooms', '聊天室')")
+    expect(client).toContain('AgentRoom,')
+    expect(client).toContain('Sender,')
+    expect(client).toContain("className='oneworks-channel__room'")
+    expect(client).toContain('memberAvatarOverrides={memberAvatarOverrides}')
+    expect(client).toContain('roomId={room.roomId}')
     expect(client).not.toContain("<span>{t('No chat rooms yet.', '暂无聊天室。')}</span>")
     expect(client).not.toContain('NativeTabs')
     expect(client).toContain('Synthetic user')
@@ -125,7 +130,7 @@ describe('oneWorks Rooms plugin', () => {
     expect(client).toMatch(/route: `\$\{route\}\?section=playground`/)
     expect(client).toMatch(/route: `\$\{route\}\?section=scenarios`/)
     expect(client).toMatch(/route: `\$\{route\}\?section=trace`/)
-    expect(client).toContain("view.route?.setTitle(selectedRoom?.title ?? t('Chat Rooms', '聊天室'))")
+    expect(client).toContain("view.route?.setTitle(selectedRoom?.title ?? t('Create group chat', '创建群聊'))")
     expect(client).not.toContain("role='button'")
     expect(styles).toContain('.oneworks-channel__room-surface {')
     expect(styles).toContain('display: flex; flex-direction: column; height: 100%')

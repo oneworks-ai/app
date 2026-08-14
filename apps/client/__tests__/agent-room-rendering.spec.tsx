@@ -19,6 +19,7 @@ import type {
   AgentRoomRunView,
   AgentRoomViewModel
 } from '#~/components/agent-room'
+import { ChannelPlatformIcon } from '#~/components/channel-platform-icon/ChannelPlatformIcon'
 import type {
   SenderToolbarData,
   SenderToolbarHandlers,
@@ -148,7 +149,7 @@ const fixtureRoom: AgentRoomViewModel = {
       createdAtLabel: '10:29',
       systemMessage: {
         kind: 'memberJoined',
-        memberLabel: 'Host'
+        members: [{ memberKey: 'member:host', label: 'Host' }]
       }
     }),
     createMessage('msg-user-start', 'user', 'message', 'Please coordinate the room page implementation.', {
@@ -571,6 +572,28 @@ const renderAgentRoomSenderHeader = async ({
 }
 
 describe('agent room transcript rendering', () => {
+  it.each([
+    ['lark', 'feishu-logo.png'],
+    ['qq-channel', 'qq.svg'],
+    ['telegram', 'telegram.svg'],
+    ['wechat', 'wechat.svg']
+  ])('renders the %s channel with its bundled brand asset', (channelType, assetName) => {
+    const html = renderToStaticMarkup(<ChannelPlatformIcon channelType={channelType} />)
+
+    expect(html).toContain('<img')
+    expect(html).toContain(assetName)
+    expect(html).not.toContain('/api/workspace/resource')
+  })
+
+  it('renders the Discord brand glyph and a generic fallback only for unknown channels', () => {
+    const discord = renderToStaticMarkup(<ChannelPlatformIcon channelType='discord' />)
+    const unknown = renderToStaticMarkup(<ChannelPlatformIcon channelType='custom-provider' />)
+
+    expect(discord).toContain('anticon-discord')
+    expect(discord).not.toContain('>hub</span>')
+    expect(unknown).toContain('>hub</span>')
+  })
+
   it('renders the room transcript as chat bubbles without standalone room chrome', async () => {
     const html = await renderRoom()
 
@@ -604,14 +627,14 @@ describe('agent room transcript rendering', () => {
     expectNotContains(html, 'agent-room-view__header agent-room-roster agent-room-composer'.split(' '))
   })
 
-  it('keeps leader avatar opening the host session while the leader name resets the composer target', async () => {
+  it('keeps leader avatar opening identity details while the leader name resets the composer target', async () => {
     const html = await renderRoom()
     const assignmentMessage = getMessageMarkup(html, 'msg-host-assignment')
 
     expectContains(assignmentMessage, [
       'class="agent-room-bubble__avatar agent-room-bubble__avatar-button"',
-      'aria-label="Open host session"',
-      'title="Open host session"',
+      'aria-label="leader"',
+      'title="leader"',
       'class="agent-room-bubble__author agent-room-bubble__author-button"',
       'aria-label="leader"',
       '>leader</button>',
@@ -1414,8 +1437,8 @@ describe('agent room transcript rendering', () => {
 
     expectContains(assignmentMessage, [
       'class="agent-room-bubble__avatar agent-room-bubble__avatar-button"',
-      'aria-label="Open host session"',
-      'title="Open host session"',
+      'aria-label="leader"',
+      'title="leader"',
       'class="agent-room-bubble__author agent-room-bubble__author-button"',
       'aria-label="leader"',
       '>leader</button>',
@@ -1680,15 +1703,16 @@ describe('agent room transcript rendering', () => {
     expectContains(systemMessage, [
       'agent-room-bubble--system',
       'agent-room-bubble__system-surface',
-      'Host joined the room'
+      'aria-label="host"',
+      '1 member joined the chat'
     ])
     expectNotContains(systemMessage, ['agent-room-bubble__time', '<time', 'title="10:29"', 'tabindex'])
     expectContains(styles, ['width: min(360px, 72%);', 'border: 0;', 'background: transparent;'])
   })
 
   it.each([
-    ['en', 'std/dev-planner joined the room', 'std/dev-planner 加入了房间'],
-    ['zh', 'std/dev-planner 加入了房间', 'std/dev-planner joined the room']
+    ['en', '1 member joined the chat', '1 位成员加入了群聊'],
+    ['zh', '1 位成员加入了群聊', '1 member joined the chat']
   ])('renders member joined system messages for %s locale', async (language, expected, unexpected) => {
     const html = await renderRoom({
       language,
@@ -1703,7 +1727,7 @@ describe('agent room transcript rendering', () => {
             {
               systemMessage: {
                 kind: 'memberJoined',
-                memberLabel: 'std/dev-planner'
+                members: [{ memberKey: 'std/dev-planner', label: 'std/dev-planner' }]
               }
             }
           )
@@ -1788,7 +1812,7 @@ describe('agent room transcript rendering', () => {
     expect(firstArchitectMessage).not.toContain('agent-room-bubble__avatar-button')
     expectContains(lastArchitectMessage, [
       'agent-room-bubble__avatar-button',
-      'aria-label="Open run: billing-review"'
+      'aria-label="architect"'
     ])
     expect(lastArchitectMessage).not.toContain('agent-room-bubble__author')
     expect(lastArchitectMessage).not.toContain('agent-room-bubble__meta')
@@ -1798,24 +1822,32 @@ describe('agent room transcript rendering', () => {
     expect(reviewerMessage).not.toContain('agent-room-bubble--avatar-hidden')
   })
 
-  it('keeps avatars non-clickable when no session navigation handler is available', async () => {
+  it('keeps avatar identity popovers available when session navigation handlers are absent', async () => {
     const html = await renderRoom({ enableAvatarNavigation: false })
 
     expect(html).toContain('agent-room-bubble__avatar')
-    expect(html).not.toContain('agent-room-bubble__avatar-button')
+    expect(html).toContain('agent-room-bubble__avatar-button')
+    expect(html).toContain('aria-expanded="false"')
     expect(html).not.toContain('agent-room-bubble__author-button')
     expect(html).toContain('<span class="agent-room-bubble__author">leader</span>')
     expect(html).toContain('<span class="agent-room-bubble__mention">@architect</span>')
   })
 
-  it('renders every channel source and delivery as an accessible target chip', async () => {
+  it('renders every external channel source and delivery as an icon outside the message surface', async () => {
     const html = await renderRoom({
       room: {
         ...fixtureRoom,
         messages: [
-          createMessage('msg-cross-platform', 'agent', 'message', 'Forwarded the update.', {
+          createMessage('msg-cross-platform', 'user', 'message', 'Forwarded the update.', {
             memberKey: 'member:host',
             channelReferences: [
+              {
+                id: 'source-oneworks',
+                direction: 'source',
+                channelKey: 'oneworks:local',
+                channelType: 'oneworks',
+                label: 'Local room'
+              },
               {
                 id: 'source-wechat',
                 direction: 'source',
@@ -1846,25 +1878,35 @@ describe('agent room transcript rendering', () => {
       'utf8'
     )
 
+    expect(message).toContain('agent-room-bubble--user')
     expect(message.match(/class="agent-room-bubble__channel-reference(?: |")/g)).toHaveLength(2)
     expectContains(message, [
       'aria-label="Source: wechat · Service account · Product group"',
       'aria-label="Delivery: lark · Product bot · Brainstorm room · Sent"',
       'data-direction="source"',
       'data-direction="delivery"',
-      '>chat</span>',
-      '>flight</span>',
-      '>check_circle</span>',
-      'Service account',
-      'Product group',
-      'Product bot',
-      'Brainstorm room'
+      'wechat.svg',
+      'feishu-logo.png'
     ])
+    const sourceIndex = message.indexOf('agent-room-bubble__channel-references--source')
+    const surfaceIndex = message.indexOf('agent-room-bubble__surface')
+    const deliveryIndex = message.indexOf('agent-room-bubble__channel-references--delivery')
+    expect(sourceIndex).toBeGreaterThanOrEqual(0)
+    expect(sourceIndex).toBeLessThan(surfaceIndex)
+    expect(deliveryIndex).toBeGreaterThan(surfaceIndex)
+    expect(message).not.toContain('agent-room-bubble__channel-reference-text')
+    expect(message).not.toContain('>check_circle</span>')
+    expect(message).not.toContain('>all_inclusive</span>')
+    expect(message).not.toContain('>chat</span>')
+    expect(message).not.toContain('>flight</span>')
+    expect(message).not.toContain('/api/workspace/resource')
     expect(message).not.toContain('+1')
     expectContains(styles, [
-      '.agent-room-bubble__channel-reference-text {',
-      '.agent-room-bubble__channel-reference-account {',
-      "content: ' · ';"
+      '.agent-room-bubble__message-row {',
+      'gap: 6px;',
+      '.agent-room-bubble__channel-reference {',
+      'width: 24px;',
+      'background: transparent;'
     ])
   })
 

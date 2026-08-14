@@ -1,7 +1,7 @@
 import './SenderMonacoEditor.scss'
 
 import Editor from '@monaco-editor/react'
-import { useCallback, useId, useState } from 'react'
+import { useCallback, useEffect, useId, useState } from 'react'
 import type { MutableRefObject } from 'react'
 
 import type { SessionInfo } from '@oneworks/types'
@@ -25,6 +25,7 @@ export function SenderMonacoEditor({
   secondarySendShortcut,
   onSecondarySendShortcut,
   minVisibleLineCount,
+  onMultilineChange,
   onInputChange,
   onCursorChange,
   onKeyDown,
@@ -44,6 +45,7 @@ export function SenderMonacoEditor({
   secondarySendShortcut?: string
   onSecondarySendShortcut?: () => void
   minVisibleLineCount?: number
+  onMultilineChange?: (multiline: boolean) => void
   onInputChange: (value: string, cursorOffset: number | null) => void
   onCursorChange: (cursorOffset: number | null) => void
   onKeyDown: (event: KeyboardEvent) => void
@@ -81,6 +83,10 @@ export function SenderMonacoEditor({
     resolveTokenDecorations
   })
   const [isEditorReady, setIsEditorReady] = useState(false)
+
+  useEffect(() => {
+    onMultilineChange?.(editorHeight > LINE_HEIGHT + 2)
+  }, [editorHeight, onMultilineChange])
 
   const handleStartupEditorMount = useCallback((...args: Parameters<typeof handleEditorMount>) => {
     setIsEditorReady(true)

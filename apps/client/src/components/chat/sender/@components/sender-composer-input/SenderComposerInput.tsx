@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { MutableRefObject } from 'react'
 
 import type { SessionInfo } from '@oneworks/types'
@@ -45,6 +46,7 @@ export function SenderComposerInput({
   onOpenPendingFileComment,
   placeholder,
   input,
+  layout,
   disabled,
   startupUnavailable,
   secondarySendShortcut,
@@ -85,6 +87,7 @@ export function SenderComposerInput({
   onOpenPendingFileComment?: (comment: PendingFileComment) => void
   placeholder: string
   input: string
+  layout?: SenderProps['layout']
   disabled: boolean
   startupUnavailable: boolean
   secondarySendShortcut?: string
@@ -111,9 +114,17 @@ export function SenderComposerInput({
   voiceInput?: SenderVoiceInputController
 }) {
   const voiceEditorDisabled = voiceInput != null && voiceInput.state.phase !== 'idle'
+  const [isMultiline, setIsMultiline] = useState(false)
+  const adaptive = layout === 'adaptive'
 
   return (
-    <div className='chat-input-composer'>
+    <div
+      className={[
+        'chat-input-composer',
+        adaptive ? 'chat-input-composer--adaptive' : '',
+        adaptive && isMultiline ? 'is-multiline' : ''
+      ].filter(Boolean).join(' ')}
+    >
       <SenderAttachments
         pendingImages={pendingImages}
         pendingFiles={pendingFiles}
@@ -144,6 +155,7 @@ export function SenderComposerInput({
         secondarySendShortcut={secondarySendShortcut}
         onSecondarySendShortcut={onSecondarySendShortcut}
         minVisibleLineCount={minVisibleLineCount}
+        onMultilineChange={adaptive ? setIsMultiline : undefined}
         onInputChange={onInputChange}
         onCursorChange={onCursorChange}
         onKeyDown={onKeyDown}

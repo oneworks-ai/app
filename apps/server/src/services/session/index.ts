@@ -315,7 +315,7 @@ const buildAgentRoomRuntimeContextPrompt = (
   }
 
   const detail = db.getAgentRoomDetail(room.id)
-  if (detail == null || detail.runs.length === 0) {
+  if (detail == null) {
     return undefined
   }
 
@@ -330,6 +330,9 @@ const buildAgentRoomRuntimeContextPrompt = (
       title: run.title
     })
   )
+  const memberLines = detail.members.map(member =>
+    `  - memberKey=${member.key} | label=${member.label} | kind=${member.kind} | status=${member.status}`
+  )
 
   return [
     '<system-prompt>',
@@ -337,8 +340,10 @@ const buildAgentRoomRuntimeContextPrompt = (
     `- roomId: ${room.id}`,
     `- roomTitle: ${room.title}`,
     ...(metadata?.memberKey != null ? [`- currentMemberKey: ${metadata.memberKey}`] : []),
+    '- room members:',
+    ...(memberLines.length === 0 ? ['  - none'] : memberLines),
     '- existing member sessions:',
-    ...runLines,
+    ...(runLines.length === 0 ? ['  - none'] : runLines),
     '',
     'Agent Room messaging rules:',
     '- If you need to send a message to another existing member in this room, do not start a new session for that member.',

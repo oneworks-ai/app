@@ -1,7 +1,10 @@
 export type KnowledgeSectionKey = 'skills' | 'entities' | 'flows' | 'rules'
 export type KnowledgeSkillPage = 'project' | 'store' | 'settings'
+export type KnowledgeEntityPage = 'role' | 'channels' | 'rooms' | 'models' | 'memory'
 
 export interface KnowledgeLocationState {
+  entityId?: string
+  entityPage?: KnowledgeEntityPage
   pathname: string
   search: string
   sectionKey: KnowledgeSectionKey
@@ -39,6 +42,11 @@ export const getKnowledgeSkillPath = (skillPage: KnowledgeSkillPage) => {
   }
 }
 
+export const getKnowledgeEntityPath = (entityId: string, page: KnowledgeEntityPage = 'role') => {
+  const base = `${KNOWLEDGE_PATHS.entities}/${encodeURIComponent(entityId)}`
+  return page === 'role' ? base : `${base}/${page}`
+}
+
 const normalizePathname = (pathname: string) => {
   if (pathname === '') return '/'
   return pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname
@@ -68,9 +76,24 @@ const resolveLegacyPath = (search: string) => {
 export const resolveKnowledgeLocation = (pathname: string, search: string): KnowledgeLocationState => {
   const normalizedPathname = normalizePathname(pathname)
   const nextSearch = stripLegacyPageParams(search)
+  const entityDetailMatch = normalizedPathname.match(
+    /^\/knowledge\/entities\/([^/]+)(?:\/(channels|rooms|models|memory))?$/u
+  )
   let nextPathname = normalizedPathname
   let sectionKey: KnowledgeSectionKey = 'skills'
   let skillPage: KnowledgeSkillPage = 'project'
+
+  if (entityDetailMatch != null) {
+    return {
+      entityId: decodeURIComponent(entityDetailMatch[1]!),
+      entityPage: (entityDetailMatch[2] as KnowledgeEntityPage | undefined) ?? 'role',
+      pathname: normalizedPathname,
+      search: nextSearch,
+      sectionKey: 'entities',
+      skillPage: 'project',
+      shouldReplace: nextSearch !== search
+    }
+  }
 
   switch (normalizedPathname) {
     case '/knowledge':

@@ -1217,16 +1217,25 @@ export function createAgentRoomService(
 
   const updateRoomMetadata = (roomId: string, update: UpdateAgentRoomMetadataRequest): AgentRoom => {
     const room = requireRoom(roomId)
-    if (update.isArchived === undefined && update.isFavorited === undefined) {
+    if (
+      update.avatar === undefined &&
+      update.description === undefined &&
+      update.isArchived === undefined &&
+      update.isFavorited === undefined &&
+      update.title === undefined
+    ) {
       return room
     }
 
     const now = Date.now()
     const updated = db.updateAgentRoom(roomId, {
+      ...(update.avatar !== undefined ? { avatar: update.avatar } : {}),
+      ...(update.description !== undefined ? { description: update.description } : {}),
       ...(update.isArchived !== undefined ? { archivedAt: update.isArchived ? room.archivedAt ?? now : null } : {}),
       ...(update.isFavorited !== undefined
         ? { favoritedAt: update.isFavorited ? room.favoritedAt ?? now : null }
         : {}),
+      ...(update.title !== undefined ? { title: update.title } : {}),
       updatedAt: now
     })
     if (updated == null) {

@@ -97,20 +97,40 @@ const normalizeMetadataUpdate = (value: unknown): UpdateAgentRoomMetadataRequest
   }
 
   const hasArchived = hasOwn(value, 'isArchived')
+  const hasAvatar = hasOwn(value, 'avatar')
+  const hasDescription = hasOwn(value, 'description')
   const hasFavorited = hasOwn(value, 'isFavorited')
-  if (!hasArchived && !hasFavorited) {
+  const hasTitle = hasOwn(value, 'title')
+  if (!hasArchived && !hasAvatar && !hasDescription && !hasFavorited && !hasTitle) {
     return undefined
   }
   if (
     (hasArchived && typeof value.isArchived !== 'boolean') ||
-    (hasFavorited && typeof value.isFavorited !== 'boolean')
+    (hasAvatar && value.avatar !== null && (typeof value.avatar !== 'string' || value.avatar.length > 2048)) ||
+    (hasDescription && value.description !== null &&
+      (typeof value.description !== 'string' || value.description.length > 2000)) ||
+    (hasFavorited && typeof value.isFavorited !== 'boolean') ||
+    (hasTitle && (typeof value.title !== 'string' || value.title.trim() === '' || value.title.length > 80))
   ) {
     return undefined
   }
 
   return {
+    ...(hasAvatar
+      ? {
+        avatar: value.avatar == null || (value.avatar as string).trim() === '' ? null : (value.avatar as string).trim()
+      }
+      : {}),
+    ...(hasDescription
+      ? {
+        description: value.description == null || (value.description as string).trim() === ''
+          ? null
+          : (value.description as string).trim()
+      }
+      : {}),
     ...(hasArchived ? { isArchived: value.isArchived as boolean } : {}),
-    ...(hasFavorited ? { isFavorited: value.isFavorited as boolean } : {})
+    ...(hasFavorited ? { isFavorited: value.isFavorited as boolean } : {}),
+    ...(hasTitle ? { title: (value.title as string).trim() } : {})
   }
 }
 

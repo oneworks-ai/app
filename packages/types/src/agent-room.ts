@@ -21,6 +21,8 @@ export interface AgentRoomOwner {
 export interface AgentRoom {
   id: string
   title: string
+  avatar?: string
+  description?: string
   owner: AgentRoomOwner
   leaderEntity?: string
   hostSessionId?: string
@@ -293,8 +295,11 @@ export interface AgentRoomHostSessionResponse {
 }
 export interface AgentRoomDetailResponse extends AgentRoomDetail {}
 export interface UpdateAgentRoomMetadataRequest {
+  avatar?: string | null
+  description?: string | null
   isArchived?: boolean
   isFavorited?: boolean
+  title?: string
 }
 export interface UpdateAgentRoomMetadataResponse {
   room: AgentRoom

@@ -6,11 +6,13 @@ import { readSessionWorkspaceFile, readWorkspaceFile, updateSessionWorkspaceFile
 const AUTOSAVE_DELAY_MS = 600
 
 export function useWorkspaceFileEditorState({
+  autosave = true,
   enabled = true,
   onSaveError,
   path,
   sessionId
 }: {
+  autosave?: boolean
   enabled?: boolean
   onSaveError: (err: unknown) => void
   path: string
@@ -57,7 +59,7 @@ export function useWorkspaceFileEditorState({
 
   const saveContent = useCallback(async (content: string) => {
     if (!enabled) {
-      return
+      return true
     }
     setIsSaving(true)
     try {
@@ -67,9 +69,11 @@ export function useWorkspaceFileEditorState({
       failedContentRef.current = null
       setSavedContent(result.content)
       await mutate(result, false)
+      return true
     } catch (err) {
       failedContentRef.current = content
       onSaveError(err)
+      return false
     } finally {
       setIsSaving(false)
     }
@@ -77,6 +81,7 @@ export function useWorkspaceFileEditorState({
 
   useEffect(() => {
     if (
+      !autosave ||
       !isDirty ||
       isSaving ||
       isLoading ||
@@ -92,19 +97,26 @@ export function useWorkspaceFileEditorState({
     }, AUTOSAVE_DELAY_MS)
 
     return () => window.clearTimeout(timer)
-  }, [data, draft, error, isDirty, isLoading, isSaving, saveContent])
+  }, [autosave, data, draft, error, isDirty, isLoading, isSaving, saveContent])
 
-  const saveNow = useCallback(() => {
+  const saveNow = useCallback(async () => {
     if (!enabled || !isDirty || isSaving) {
-      return
+      return true
     }
-    void saveContent(draft)
+    return saveContent(draft)
   }, [draft, enabled, isDirty, isSaving, saveContent])
+
+  const discardChanges = useCallback(() => {
+    failedContentRef.current = null
+    setDraft(savedContent)
+  }, [savedContent])
 
   return {
     data,
     draft,
     error,
+    discardChanges,
+    isDirty,
     isLoading,
     isSaving,
     saveNow,

@@ -457,6 +457,63 @@
   background: var(--input-focus-bg, #f9fafb);
 }
 
+.sender-container--layout-adaptive
+  .chat-input-composer--adaptive:not(.is-multiline) {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.sender-container--layout-adaptive
+  .chat-input-composer--adaptive:not(.is-multiline)
+  > .pending-attachments {
+  grid-column: 1 / -1;
+}
+
+.sender-container--layout-adaptive
+  .chat-input-composer--adaptive:not(.is-multiline)
+  .chat-input-toolbar {
+  display: contents;
+  align-self: center;
+  height: var(--chat-surface-toolbar-action-height);
+  margin: 0;
+  padding: 0;
+}
+
+.sender-container--layout-adaptive
+  .chat-input-composer--adaptive:not(.is-multiline)
+  .chat-input-monaco {
+  grid-column: 2;
+  min-width: 0;
+}
+
+.sender-container--layout-adaptive
+  .chat-input-composer--adaptive:not(.is-multiline)
+  .toolbar-left {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.sender-container--layout-adaptive
+  .chat-input-composer--adaptive:not(.is-multiline)
+  .toolbar-right {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.sender-container--layout-adaptive
+  .chat-input-composer--adaptive:not(.is-multiline)
+  .chat-input-toolbar::before {
+  display: none;
+}
+
+.sender-container--layout-adaptive
+  .chat-input-composer--adaptive:not(.is-multiline)
+  .toolbar-left:empty {
+  display: none;
+}
+
 .sender-container--chat-surface
   .sender-session-target.chat-input-header-block.is-expanded
   ~ .chat-input-composer {

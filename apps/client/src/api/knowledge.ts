@@ -1,4 +1,5 @@
-import type { MutationCommitState } from '@oneworks/types'
+/* eslint-disable max-lines -- Knowledge asset summaries, mutations, and detail clients share one public API module. */
+import type { EntityRuntimeDetail, MutationCommitState } from '@oneworks/types'
 
 import {
   AssetCreateCommitIndeterminateError,
@@ -185,6 +186,83 @@ export async function getEntityDetail(path: string): Promise<{ entity: EntityDet
   const url = createApiUrl('/api/ai/entities/detail')
   url.searchParams.set('path', path)
   return fetchApiJson<{ entity: EntityDetail }>(url)
+}
+
+export async function getEntityRuntime(path: string): Promise<{ runtime: EntityRuntimeDetail }> {
+  const url = createApiUrl('/api/ai/entities/runtime')
+  url.searchParams.set('path', path)
+  return fetchApiJson<{ runtime: EntityRuntimeDetail }>(url)
+}
+
+export async function updateEntityConfig(
+  path: string,
+  value: Record<string, unknown>
+): Promise<{ ok: true }> {
+  return fetchApiJson<{ ok: true }>('/api/ai/entities/config', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, value })
+  })
+}
+
+export async function createEntityDocument(
+  entityPath: string,
+  kind: EntityRuntimeDetail['documents'][number]['kind']
+): Promise<{ ok: true; path: string }> {
+  return fetchApiJson<{ ok: true; path: string }>('/api/ai/entities/documents', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ entityPath, kind })
+  })
+}
+
+export async function updateEntityMemory(
+  memoryId: string,
+  value: { content: string; keywords: string[]; pinned: boolean }
+): Promise<{ memory: EntityRuntimeDetail['memories'][number] }> {
+  return fetchApiJson<{ memory: EntityRuntimeDetail['memories'][number] }>(
+    `/api/ai/entities/memories/${encodeURIComponent(memoryId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(value)
+    }
+  )
+}
+
+export async function updateEntityChannelAccount(
+  channelKey: string,
+  enabled: boolean
+): Promise<{ ok: true }> {
+  return fetchApiJson<{ ok: true }>(
+    `/api/ai/entities/channel-accounts/${encodeURIComponent(channelKey)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled })
+    }
+  )
+}
+
+export async function createEntityChannelLink(value: {
+  channelKey: string
+  description: string
+  entityPath: string
+  externalId: string
+  externalType: string
+  name: string
+}): Promise<{ ok: true; path: string }> {
+  return fetchApiJson<{ ok: true; path: string }>('/api/ai/entities/channel-links', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(value)
+  })
+}
+
+export async function deleteEntityChannelLink(path: string): Promise<{ ok: true }> {
+  const url = createApiUrl('/api/ai/entities/channel-links')
+  url.searchParams.set('path', path)
+  return fetchApiJson<{ ok: true }>(url, { method: 'DELETE' })
 }
 
 export async function getRuleDetail(path: string): Promise<{ rule: RuleDetail }> {

@@ -6,10 +6,12 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { MarkdownContent } from '#~/components/MarkdownContent'
-import { RoomPixelAvatar } from '#~/components/room-pixel-avatar/RoomPixelAvatar'
-
+import { ChannelPlatformIcon } from '#~/components/channel-platform-icon/ChannelPlatformIcon'
+import { PinnedPopoverPortal } from '#~/components/chat/PinnedPopoverPortal'
+import { usePinnedPopover } from '#~/components/chat/usePinnedPopover'
 import type { AgentRoomChannelReferenceView, AgentRoomMessageView, AgentRoomRunView } from '../@types/agent-room-view'
 import { AgentRoomApprovalBatchCard } from './AgentRoomApprovalBatchCard'
+import { AgentRoomAvatarContent } from './AgentRoomAvatarContent'
 import { AgentRoomInteractionRequestCard } from './AgentRoomInteractionRequestCard'
 
 const COLLAPSED_CONTENT_HEIGHT = 240
@@ -32,23 +34,6 @@ const messageStatusByKind: Partial<Record<AgentRoomMessageView['kind'], AgentRoo
   failure: 'failed'
 }
 
-const channelIconByType: Record<string, string> = {
-  discord: 'forum',
-  lark: 'flight',
-  oneworks: 'all_inclusive',
-  telegram: 'send',
-  tg: 'send',
-  wechat: 'chat'
-}
-
-const getChannelIcon = (channelType: string) => channelIconByType[channelType.toLowerCase()] ?? 'hub'
-
-const channelStatusIconByStatus: Record<NonNullable<AgentRoomChannelReferenceView['status']>, string> = {
-  failed: 'error',
-  pending: 'schedule',
-  sent: 'check_circle'
-}
-
 const getChannelReferenceTitle = (reference: AgentRoomChannelReferenceView, t: TFunction) => {
   const target = [reference.channelType, reference.accountLabel, reference.label]
     .filter((value): value is string => value != null && value !== '')
@@ -59,6 +44,56 @@ const getChannelReferenceTitle = (reference: AgentRoomChannelReferenceView, t: T
     : `${directionLabel} · ${t(`agentRoom.navigation.status.${reference.status}`)}`
 }
 
+const renderChannelReferences = ({
+  onOpenChannelReference,
+  references,
+  t
+}: {
+  onOpenChannelReference?: (reference: AgentRoomChannelReferenceView) => void
+  references: AgentRoomChannelReferenceView[]
+  t: TFunction
+}) => {
+  if (references.length === 0) return null
+
+  const direction = references[0]?.direction
+
+  return (
+    <div
+      className={[
+        'agent-room-bubble__channel-references',
+        direction == null ? '' : `agent-room-bubble__channel-references--${direction}`
+      ].filter(Boolean).join(' ')}
+      data-direction={direction}
+    >
+      {references.map(reference => {
+        const isNavigable = reference.navigation != null && onOpenChannelReference != null
+        const referenceTitle = getChannelReferenceTitle(reference, t)
+        return (
+          <button
+            key={reference.id}
+            type='button'
+            className={[
+              'agent-room-bubble__channel-reference',
+              isNavigable ? '' : 'is-static',
+              reference.status == null ? '' : `is-${reference.status}`
+            ].filter(Boolean).join(' ')}
+            data-direction={reference.direction}
+            disabled={!isNavigable}
+            aria-label={referenceTitle}
+            title={referenceTitle}
+            onClick={() => onOpenChannelReference?.(reference)}
+          >
+            <ChannelPlatformIcon
+              channelType={reference.channelType}
+              className='agent-room-bubble__channel-platform-icon'
+            />
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 const getMessageIcon = (message: AgentRoomMessageView) => messageIconByKind[message.kind]
 
 const getDisplayAgentLabel = (label: string | undefined) => label == null ? '' : label.trim().replace(/^@+/, '')
@@ -67,10 +102,6 @@ const getConfiguredAvatarLabel = (message: AgentRoomMessageView) => {
   const avatarLabel = message.member?.avatarLabel?.trim()
   return avatarLabel === '' ? undefined : avatarLabel
 }
-
-const getAvatarSeed = (message: AgentRoomMessageView) => (
-  `agent-room:${message.member?.memberKey ?? message.memberKey ?? message.run?.memberKey ?? message.id}`
-)
 
 const getMessageStatus = (message: AgentRoomMessageView) => {
   if (message.interactionRequest?.status === 'handled') {
@@ -149,7 +180,25 @@ const renderMessageContent = (
 
 const renderSystemMessageContent = (message: AgentRoomMessageView, t: TFunction) => {
   if (message.systemMessage?.kind === 'memberJoined') {
-    return t('agentRoom.system.memberJoined', { member: message.systemMessage.memberLabel })
+    const members = message.systemMessage.members
+    return <>
+      <span
+        aria-label={members.map(member => member.label).join('、')}
+        className='agent-room-bubble__joined-avatars'
+        title={members.map(member => member.label).join('、')}
+      >
+        {members.slice(0, 5).map(member => (
+          <span className='agent-room-bubble__joined-avatar' key={member.memberKey}>
+            <AgentRoomAvatarContent
+              imageClassName='agent-room-bubble__joined-avatar-image'
+              member={member}
+              pixelClassName='agent-room-bubble__joined-avatar-pixel'
+            />
+          </span>
+        ))}
+      </span>
+      <span>{t('agentRoom.system.membersJoined', { count: members.length })}</span>
+    </>
   }
 
   return message.content
@@ -175,6 +224,7 @@ export function AgentRoomBubble({
   message,
   showAvatar = true,
   showAuthor = true,
+  onOpenEntity,
   onOpenHostSession,
   onOpenChannelReference,
   onOpenRun,
@@ -186,6 +236,7 @@ export function AgentRoomBubble({
   message: AgentRoomMessageView
   showAvatar?: boolean
   showAuthor?: boolean
+  onOpenEntity?: (entityId: string) => void
   onOpenHostSession?: () => void
   onOpenChannelReference?: (reference: AgentRoomChannelReferenceView) => void
   onOpenRun?: (run: AgentRoomRunView) => void
@@ -196,6 +247,7 @@ export function AgentRoomBubble({
 }) {
   const { t } = useTranslation()
   const contentRef = useRef<HTMLDivElement>(null)
+  const senderPopover = usePinnedPopover<HTMLButtonElement>({ align: 'start' })
   const [isContentExpanded, setIsContentExpanded] = useState(false)
   const [contentExpandedHeight, setContentExpandedHeight] = useState(COLLAPSED_CONTENT_HEIGHT)
   const [isContentOverflowing, setIsContentOverflowing] = useState(false)
@@ -240,7 +292,7 @@ export function AgentRoomBubble({
       >
         <span className='agent-room-bubble__system-surface'>
           <span className='material-symbols-rounded' aria-hidden='true'>{getMessageIcon(message)}</span>
-          <span>{renderSystemMessageContent(message, t)}</span>
+          <span className='agent-room-bubble__system-content'>{renderSystemMessageContent(message, t)}</span>
         </span>
       </div>
     )
@@ -258,6 +310,7 @@ export function AgentRoomBubble({
   const subtitle = isUserMessage ? undefined : message.member?.subtitle
   const run = message.run
   const canOpenRun = run != null && run.sessionId !== '' && onOpenRun != null
+  const canOpenEntity = message.member != null && message.member.kind !== 'host' && onOpenEntity != null
   const canOpenHostSession = isLeaderMessage && onOpenHostSession != null
   const canOpenSenderSession = canOpenHostSession || canOpenRun
   const canSelectHostTarget = isLeaderMessage && onSelectHostTarget != null
@@ -266,7 +319,11 @@ export function AgentRoomBubble({
   const targetMentionLabel = getMentionLabel(message.targetLabel)
   const canOpenTargetMention = targetMentionLabel != null && canOpenRun
   const avatarLabel = getConfiguredAvatarLabel(message)
-  const avatarSeed = getAvatarSeed(message)
+  const avatarMember = message.member ?? {
+    avatar: undefined,
+    avatarLabel: undefined,
+    memberKey: message.memberKey ?? message.run?.memberKey ?? message.id
+  }
   const openRunLabel = t('agentRoom.actions.openRun')
   const openHostSessionLabel = t('agentRoom.actions.openHostSession')
   const openRunTitle = run?.title == null || run.title === ''
@@ -278,7 +335,11 @@ export function AgentRoomBubble({
   const statusLabel = status == null ? undefined : t(`agentRoom.status.run.${status}`)
   const statusId = statusLabel == null ? undefined : `message-${message.id}-status`
   const reactions = message.reactions ?? []
-  const channelReferences = message.channelReferences ?? []
+  const channelReferences = (message.channelReferences ?? []).filter(
+    reference => reference.channelType.toLowerCase() !== 'oneworks'
+  )
+  const sourceChannelReferences = channelReferences.filter(reference => reference.direction === 'source')
+  const deliveryChannelReferences = channelReferences.filter(reference => reference.direction === 'delivery')
   const reactionsId = reactions.length > 0 ? `reaction-${message.id}` : undefined
   const replyTo = message.replyTo
   const replyToAuthorLabel = replyTo == null ? undefined : getReplyToAuthorLabel(replyTo, t)
@@ -301,6 +362,10 @@ export function AgentRoomBubble({
   const handleOpenRun = () => {
     if (run == null) return
     onOpenRun?.(run)
+  }
+  const handleOpenEntity = () => {
+    if (message.member == null || !canOpenEntity) return
+    onOpenEntity?.(message.member.memberKey)
   }
   const handleOpenSenderSession = () => {
     if (canOpenHostSession) {
@@ -344,31 +409,88 @@ export function AgentRoomBubble({
       aria-describedby={describedByIds === '' ? undefined : describedByIds}
     >
       {shouldRenderAvatar && (
-        canOpenSenderSession
+        message.member != null
           ? (
-            <button
-              type='button'
-              className={[
-                'agent-room-bubble__avatar',
-                avatarLabel == null ? 'agent-room-bubble__avatar--pixel' : '',
-                'agent-room-bubble__avatar-button'
-              ].filter(Boolean).join(' ')}
-              aria-label={openSenderTitle}
-              title={openSenderTitle}
-              onClick={handleOpenSenderSession}
-            >
-              {avatarLabel ?? <RoomPixelAvatar className='agent-room-bubble__avatar-pixel' seed={avatarSeed} />}
-            </button>
+            <>
+              <button
+                ref={senderPopover.rootRef}
+                type='button'
+                className={[
+                  'agent-room-bubble__avatar',
+                  avatarMember.avatar == null && avatarLabel == null ? 'agent-room-bubble__avatar--pixel' : '',
+                  'agent-room-bubble__avatar-button'
+                ].filter(Boolean).join(' ')}
+                aria-expanded={senderPopover.isPinned}
+                aria-label={authorLabel}
+                title={authorLabel}
+                onClick={senderPopover.togglePinned}
+                onPointerEnter={senderPopover.onRootPointerEnter}
+                onPointerLeave={senderPopover.onRootPointerLeave}
+              >
+                <AgentRoomAvatarContent
+                  imageClassName='agent-room-bubble__avatar-image'
+                  member={avatarMember}
+                  pixelClassName='agent-room-bubble__avatar-pixel'
+                />
+              </button>
+              <PinnedPopoverPortal
+                className='agent-room-bubble__sender-popover'
+                controller={senderPopover}
+                role='dialog'
+              >
+                <button
+                  className='agent-room-bubble__sender-popover-identity'
+                  disabled={!canOpenEntity}
+                  type='button'
+                  onClick={handleOpenEntity}
+                >
+                  <span className='agent-room-bubble__sender-popover-avatar' aria-hidden='true'>
+                    <AgentRoomAvatarContent
+                      imageClassName='agent-room-bubble__avatar-image'
+                      member={avatarMember}
+                      pixelClassName='agent-room-bubble__avatar-pixel'
+                    />
+                  </span>
+                  <span className='agent-room-bubble__sender-popover-copy'>
+                    <strong>{authorLabel}</strong>
+                    {subtitle != null && subtitle !== '' ? <span>{subtitle}</span> : null}
+                  </span>
+                </button>
+                {run != null && (
+                  <div className='agent-room-bubble__sender-popover-run'>
+                    <span className='material-symbols-rounded' aria-hidden='true'>forum</span>
+                    <span>
+                      <strong>{run.title || authorLabel}</strong>
+                      <small>{[run.status, run.updatedAtLabel].filter(Boolean).join(' · ')}</small>
+                    </span>
+                  </div>
+                )}
+                {canOpenSenderSession && (
+                  <button
+                    className='agent-room-bubble__sender-popover-action'
+                    type='button'
+                    onClick={handleOpenSenderSession}
+                  >
+                    <span className='material-symbols-rounded' aria-hidden='true'>open_in_new</span>
+                    <span>{openSenderTitle}</span>
+                  </button>
+                )}
+              </PinnedPopoverPortal>
+            </>
           )
           : (
             <div
               className={[
                 'agent-room-bubble__avatar',
-                avatarLabel == null ? 'agent-room-bubble__avatar--pixel' : ''
+                avatarMember.avatar == null && avatarLabel == null ? 'agent-room-bubble__avatar--pixel' : ''
               ].filter(Boolean).join(' ')}
               aria-hidden='true'
             >
-              {avatarLabel ?? <RoomPixelAvatar className='agent-room-bubble__avatar-pixel' seed={avatarSeed} />}
+              <AgentRoomAvatarContent
+                imageClassName='agent-room-bubble__avatar-image'
+                member={avatarMember}
+                pixelClassName='agent-room-bubble__avatar-pixel'
+              />
             </div>
           )
       )}
@@ -431,6 +553,11 @@ export function AgentRoomBubble({
           </div>
         )}
         <div className='agent-room-bubble__message-row'>
+          {renderChannelReferences({
+            onOpenChannelReference,
+            references: sourceChannelReferences,
+            t
+          })}
           <div className='agent-room-bubble__surface'>
             {statusLabel != null && (
               <span id={statusId} className='agent-room-bubble__status-text'>
@@ -499,52 +626,6 @@ export function AgentRoomBubble({
                 </span>
               </button>
             )}
-            {channelReferences.length > 0 && (
-              <div className='agent-room-bubble__channel-references'>
-                {channelReferences.map(reference => {
-                  const isNavigable = reference.navigation != null && onOpenChannelReference != null
-                  const referenceTitle = getChannelReferenceTitle(reference, t)
-                  return (
-                    <button
-                      key={reference.id}
-                      type='button'
-                      className={[
-                        'agent-room-bubble__channel-reference',
-                        isNavigable ? '' : 'is-static',
-                        reference.status == null ? '' : `is-${reference.status}`
-                      ].filter(Boolean).join(' ')}
-                      data-direction={reference.direction}
-                      disabled={!isNavigable}
-                      aria-label={referenceTitle}
-                      title={referenceTitle}
-                      onClick={() => onOpenChannelReference?.(reference)}
-                    >
-                      <span className='material-symbols-rounded' aria-hidden='true'>
-                        {getChannelIcon(reference.channelType)}
-                      </span>
-                      <span className='agent-room-bubble__channel-reference-text'>
-                        {reference.accountLabel != null && reference.accountLabel !== '' && (
-                          <span className='agent-room-bubble__channel-reference-account'>
-                            {reference.accountLabel}
-                          </span>
-                        )}
-                        <span className='agent-room-bubble__channel-reference-label'>
-                          {reference.label}
-                        </span>
-                      </span>
-                      {reference.status != null && (
-                        <span
-                          className='agent-room-bubble__channel-reference-status material-symbols-rounded'
-                          aria-hidden='true'
-                        >
-                          {channelStatusIconByStatus[reference.status]}
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-            )}
             {reactions.length > 0 && (
               <div id={reactionsId} className='agent-room-bubble__reactions'>
                 {reactions.map((reaction, index) => {
@@ -591,6 +672,11 @@ export function AgentRoomBubble({
               </div>
             )}
           </div>
+          {renderChannelReferences({
+            onOpenChannelReference,
+            references: deliveryChannelReferences,
+            t
+          })}
         </div>
       </div>
     </article>

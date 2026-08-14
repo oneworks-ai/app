@@ -35,7 +35,7 @@ export const resolveAuthoritativeCommandInput = (
     snapshot.channelId !== childRun.channelId || snapshot.sessionType !== childRun.sessionType ||
     binding == null || binding.channelKey !== childRun.channelKey || binding.channelType !== childRun.channelType ||
     binding.channelId !== childRun.channelId || binding.sessionType !== childRun.sessionType ||
-    binding.threadId !== snapshot.threadId
+    (binding.threadId ?? undefined) !== (snapshot.threadId ?? undefined)
   ) {
     return forbidden('Channel command child-run authority is unavailable or inconsistent.')
   }

@@ -513,14 +513,15 @@ describe('resolvePromptAssetSelection', () => {
       name: 'reviewer'
     })
 
-    expect(data.targetBody).toContain('基础身份。')
-    expect(data.targetBody).toContain('## Introduction\n\n负责发现行为回归。')
-    expect(data.targetBody).toContain('## Personality\n\n说话克制，先给出高风险问题。')
-    expect(data.targetBody).toContain('## Memory\n\n记住上次评审指出过缺少验证。')
-    expect(options.systemPrompt).toContain('## Introduction\n\n负责发现行为回归。')
-    expect(data.targetBody.indexOf('基础身份。')).toBeLessThan(data.targetBody.indexOf('## Introduction'))
-    expect(data.targetBody.indexOf('## Introduction')).toBeLessThan(data.targetBody.indexOf('## Personality'))
-    expect(data.targetBody.indexOf('## Personality')).toBeLessThan(data.targetBody.indexOf('## Memory'))
+    expect(data.targetBody).toContain('<entity-context entity="reviewer">')
+    expect(data.targetBody).toContain('<entity-document kind="role">\n\n基础身份。')
+    expect(data.targetBody).toContain('<entity-document kind="knowledge">\n\n负责发现行为回归。')
+    expect(data.targetBody).toContain('<entity-document kind="soul">\n\n说话克制，先给出高风险问题。')
+    expect(data.targetBody).toContain('<entity-document kind="memory">\n\n记住上次评审指出过缺少验证。')
+    expect(options.systemPrompt).toContain('<entity-document kind="knowledge">\n\n负责发现行为回归。')
+    expect(data.targetBody.indexOf('kind="soul"')).toBeLessThan(data.targetBody.indexOf('kind="role"'))
+    expect(data.targetBody.indexOf('kind="role"')).toBeLessThan(data.targetBody.indexOf('kind="knowledge"'))
+    expect(data.targetBody.indexOf('kind="knowledge"')).toBeLessThan(data.targetBody.indexOf('kind="memory"'))
   })
 
   it('appends alias prompt files for index json entities', async () => {
@@ -560,10 +561,10 @@ describe('resolvePromptAssetSelection', () => {
       name: 'reviewer'
     })
 
-    expect(data.targetBody).toContain('基础身份。')
-    expect(data.targetBody).toContain('## Introduction\n\n负责发现行为回归。')
-    expect(data.targetBody).toContain('## Personality\n\n说话克制，先给出高风险问题。')
-    expect(data.targetBody).toContain('## Memory\n\n记住上次评审指出过缺少验证。')
+    expect(data.targetBody).toContain('<entity-document kind="role">\n\n基础身份。')
+    expect(data.targetBody).toContain('<entity-document kind="knowledge">\n\n负责发现行为回归。')
+    expect(data.targetBody).toContain('<entity-document kind="soul">\n\n说话克制，先给出高风险问题。')
+    expect(data.targetBody).toContain('<entity-document kind="memory">\n\n记住上次评审指出过缺少验证。')
   })
 
   it('inherits prompt, rules, and skills from scoped plugin entities', async () => {

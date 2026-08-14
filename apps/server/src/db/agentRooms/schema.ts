@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- Agent Room tables, indexes, and additive migrations must remain in execution order. */
 import type { SchemaModule } from '../schema'
 
 export const agentRoomsSchemaModule: SchemaModule = {
@@ -7,6 +8,8 @@ export const agentRoomsSchemaModule: SchemaModule = {
       CREATE TABLE IF NOT EXISTS agent_rooms (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
+        avatar TEXT,
+        description TEXT,
         hostSessionId TEXT,
         ownerAccountId TEXT,
         ownerNodeId TEXT,
@@ -149,6 +152,8 @@ export const agentRoomsSchemaModule: SchemaModule = {
 
     if (getColumns('agent_rooms').length > 0) {
       ensureColumn('agent_rooms', 'archivedAt', 'INTEGER')
+      ensureColumn('agent_rooms', 'avatar', 'TEXT')
+      ensureColumn('agent_rooms', 'description', 'TEXT')
       ensureColumn('agent_rooms', 'favoritedAt', 'INTEGER')
       ensureColumn('agent_rooms', 'ownerAccountId', 'TEXT')
       ensureColumn('agent_rooms', 'ownerNodeId', 'TEXT')

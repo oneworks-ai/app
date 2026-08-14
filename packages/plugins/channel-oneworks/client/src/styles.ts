@@ -15,6 +15,29 @@ export const oneworksChannelCss = `
 .oneworks-channel__status.is-denied, .oneworks-channel__status.is-error, .oneworks-channel__status.is-failed { color: var(--error-color, #c43d3d); }
 .oneworks-channel__room-surface { display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0; }
 .oneworks-channel__room { flex: 1 1 0; height: auto; min-height: 0; }
+.oneworks-channel__creator { display: grid; grid-template-rows: minmax(0, 1fr) auto; height: 100%; min-height: 0; }
+.oneworks-channel__entity-picker { align-content: center; display: grid; justify-items: center; min-height: 0; overflow: auto; padding: 20px 0; width: 100%; }
+.oneworks-channel__entity-picker-content { display: grid; gap: 10px; max-width: 820px; width: 100%; }
+.oneworks-channel__entity-picker-toolbar { align-items: center; display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr) minmax(180px, 260px); }
+.oneworks-channel__entity-picker-toolbar > :last-child { min-width: 0; width: 100%; }
+.oneworks-channel__creator-hint { color: var(--sub-text-color, #5c6570); margin: 0; }
+.oneworks-channel__entity-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); max-width: 820px; width: 100%; }
+.oneworks-channel__entity-card { align-items: center; background: var(--content-background-color, #fff); border: 1px solid var(--border-color, #d8dee4); border-radius: 6px; color: inherit; cursor: pointer; display: grid; font: inherit; gap: 10px; grid-template-columns: 36px minmax(0, 1fr) 18px; min-height: 66px; padding: 10px; text-align: left; }
+.oneworks-channel__entity-card.is-create { border-style: dashed; }
+.oneworks-channel__entity-card.is-create > .material-symbols-rounded { color: var(--sub-text-color, #5c6570); }
+.oneworks-channel__entity-avatar { align-items: center; background: var(--control-background-color, #eef1f4); border-radius: 6px; display: flex; height: 36px; justify-content: center; object-fit: cover; overflow: hidden; width: 36px; }
+.oneworks-channel__entity-avatar.is-fallback { color: var(--sub-text-color, #5c6570); font-size: 14px; font-weight: 700; }
+.oneworks-channel__entity-avatar.is-create { color: var(--primary-color, #1677ff); }
+.oneworks-channel__entity-avatar.is-create > .material-symbols-rounded { font-size: 20px; }
+.oneworks-channel__entity-copy { display: grid; min-width: 0; }
+.oneworks-channel__entity-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oneworks-channel__entity-copy > span { color: var(--sub-text-color, #5c6570); display: -webkit-box; font-size: 12px; line-clamp: 2; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.oneworks-channel__entity-empty { align-items: center; color: var(--sub-text-color, #5c6570); display: grid; gap: 10px; justify-items: center; }
+.oneworks-channel__entity-empty > .material-symbols-rounded { font-size: 28px; }
+.oneworks-channel__entity-no-results { align-items: center; color: var(--sub-text-color, #5c6570); display: flex; justify-content: center; min-height: 66px; }
+.oneworks-channel__creator-composer { margin-top: auto; }
+.oneworks-channel__creator-composer .plugin-host-component-sender { width: 100%; }
+.oneworks-channel__creator-composer .toolbar-btn--reference .toolbar-btn__text { display: none; }
 .oneworks-channel__share-editor { border-bottom: 1px solid var(--border-color, #d8dee4); border-top: 1px solid var(--border-color, #d8dee4); display: grid; flex: 0 0 auto; gap: 12px; padding: 12px 2px 14px; }
 .oneworks-channel__share-heading { align-items: center; display: flex; justify-content: space-between; min-width: 0; }
 .oneworks-channel__share-heading strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -39,6 +62,26 @@ export const oneworksChannelCss = `
 .oneworks-channel__empty { align-items: center; color: var(--sub-text-color, #5c6570); display: flex; gap: 8px; justify-content: center; min-height: 120px; text-align: center; }
 .oneworks-channel__message { color: var(--sub-text-color, #5c6570); margin: 0 0 10px; }
 .oneworks-channel__message.is-error { color: var(--error-color, #c43d3d); }
+.oneworks-channel__side-content { box-sizing: border-box; min-height: 100%; padding: 10px 12px; width: 100%; }
+.oneworks-channel__side-content.is-members { padding: 0; }
+.oneworks-channel__panel-members { display: grid; width: 100%; }
+.oneworks-channel__panel-member { align-items: center; background: transparent; border: 0; border-bottom: 1px solid var(--border-color, #d8dee4); color: inherit; cursor: pointer; display: grid; font: inherit; gap: 10px; grid-template-columns: 36px minmax(0, 1fr) 18px; min-height: 58px; padding: 8px 12px; text-align: left; width: 100%; }
+.oneworks-channel__panel-member:hover { background: var(--tag-hover-bg, #f5f7f9); }
+.oneworks-channel__panel-member:focus-visible { outline: 2px solid color-mix(in srgb, var(--primary-color, #1677ff) 42%, transparent); outline-offset: -2px; }
+.oneworks-channel__panel-member > .material-symbols-rounded { color: var(--sub-text-color, #5c6570); }
+.oneworks-channel__panel-member-copy { display: grid; min-width: 0; }
+.oneworks-channel__panel-member-copy strong, .oneworks-channel__panel-member-copy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oneworks-channel__panel-member-copy span { color: var(--sub-text-color, #5c6570); font-size: 12px; }
+.oneworks-channel__room-settings { display: grid; gap: 14px; }
+.oneworks-channel__room-settings-summary { align-items: center; display: grid; gap: 12px; grid-template-columns: 56px minmax(0, 1fr); }
+.oneworks-channel__room-settings-avatar { align-items: center; display: flex; height: 56px; justify-content: center; width: 56px; }
+.oneworks-channel__room-settings-avatar > .group-avatar { --app-chrome-icon-size: 56px; border-radius: 6px; }
+.oneworks-channel__room-settings-summary > span { display: grid; gap: 3px; min-width: 0; }
+.oneworks-channel__room-settings-summary strong, .oneworks-channel__room-settings-summary small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oneworks-channel__room-settings-summary small, .oneworks-channel__room-settings-platforms { color: var(--sub-text-color, #5c6570); }
+.oneworks-channel__danger-button { width: 100%; }
+.oneworks-channel__danger-button.ant-btn { justify-content: center; }
+.oneworks-channel__room-settings-warning { color: var(--error-color, #c43d3d); font-size: 12px; margin: -4px 0 0; }
 @media (max-width: 980px) {
   .oneworks-channel__scenario-layout { grid-template-columns: 1fr; }
   .oneworks-channel__scenario-list { margin-top: 4px; }
@@ -49,5 +92,6 @@ export const oneworksChannelCss = `
   .oneworks-channel__row { align-items: start; grid-template-columns: minmax(0, 1fr) auto; }
   .oneworks-channel__row-detail { white-space: normal; }
   .oneworks-channel__share-fields { grid-template-columns: 1fr; }
+  .oneworks-channel__entity-picker-toolbar { grid-template-columns: 1fr; }
 }
 `

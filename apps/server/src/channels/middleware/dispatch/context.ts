@@ -1,5 +1,6 @@
 import type { ChannelExecutionContext, ChatMessageContent } from '@oneworks/core'
 import type { ChannelInboundEvent } from '@oneworks/core/channel'
+import type { EntityMemoryPolicy } from '@oneworks/types'
 
 import { getDb } from '#~/db/index.js'
 import type { writeChannelMessageContext } from '#~/services/session/index.js'
@@ -33,6 +34,7 @@ export const buildChannelMessageContext = (
     childRunId?: string
     conversationStateId?: string
     executionContext?: ChannelExecutionContext
+    memoryPolicy?: EntityMemoryPolicy
     threadKey?: string
   } = {}
 ): Parameters<typeof writeChannelMessageContext>[1] => ({
@@ -47,6 +49,7 @@ export const buildChannelMessageContext = (
   entity: ctx.channelLink?.entity,
   executionContext: runtime.executionContext,
   messageId: ctx.inbound.messageId,
+  memoryPolicy: runtime.memoryPolicy,
   replyReceiveId: ctx.inbound.replyTo?.receiveId,
   replyReceiveIdType: ctx.inbound.replyTo?.receiveIdType,
   senderId: ctx.inbound.senderId,

@@ -225,66 +225,12 @@ const DEFAULT_HOME_SKILL_ROOTS = [
   '~/.gemini/skills'
 ] as const
 
-const DEFAULT_ENTITY_PROMPT_FILE_SECTIONS = [
-  {
-    heading: 'Introduction',
-    fileNames: ['INTRODUCTION.md', 'introduction.md', '介绍.md']
-  },
-  {
-    heading: 'Personality',
-    fileNames: ['PERSONALITY.md', 'personality.md', '人格.md']
-  },
-  {
-    heading: 'Memory',
-    fileNames: ['MEMORY.md', 'memory.md', '记忆.md']
-  }
-] as const
-
 const isMissingFileError = (error: unknown) => (
   error != null &&
   typeof error === 'object' &&
   'code' in error &&
   (error as { code?: unknown }).code === 'ENOENT'
 )
-
-const readOptionalMarkdownBody = async (path: string) => {
-  try {
-    const content = await readFile(path, 'utf-8')
-    return fm<Record<string, never>>(content).body.trim()
-  } catch (err) {
-    if (isMissingFileError(err)) return undefined
-    throw err
-  }
-}
-
-const loadDefaultEntityPromptSection = async (
-  entityDir: string,
-  section: (typeof DEFAULT_ENTITY_PROMPT_FILE_SECTIONS)[number]
-) => {
-  for (const fileName of section.fileNames) {
-    const body = await readOptionalMarkdownBody(resolve(entityDir, fileName))
-    if (body == null || body === '') continue
-
-    return `## ${section.heading}\n\n${body}`
-  }
-
-  return undefined
-}
-
-const appendDefaultEntityPromptFiles = async (path: string, body: string) => {
-  if (!ENTITY_DIRECTORY_ENTRY_FILES.has(basename(path).toLowerCase())) return body
-
-  const sections = await Promise.all(
-    DEFAULT_ENTITY_PROMPT_FILE_SECTIONS.map(section => loadDefaultEntityPromptSection(dirname(path), section))
-  )
-
-  return [
-    body.trim(),
-    ...sections
-  ]
-    .filter((section): section is string => section != null && section !== '')
-    .join('\n\n')
-}
 
 const resolveDisplayName = (name: string, scope?: string) => (
   scope != null && scope.trim() !== '' ? `${scope}/${name}` : name
@@ -407,11 +353,25 @@ const parseOptionalDocument = async <TDefinition extends object>(
 
 const parseEntityMarkdownDocument = async (path: string): Promise<Definition<Entity>> => {
   const definition = await parseFrontmatterDocument<Entity>(path)
-
-  return {
-    ...definition,
-    body: await appendDefaultEntityPromptFiles(path, definition.body)
+  if (!ENTITY_DIRECTORY_ENTRY_FILES.has(basename(path).toLowerCase())) return definition
+  const sidecars = await Promise.all(['entity.yaml', 'entity.yml'].map(async fileName => {
+    const configPath = resolve(dirname(path), fileName)
+    const value = await parseStructuredFile(configPath).catch(error => {
+      if (isMissingFileError(error)) return undefined
+      throw error
+    })
+    return value == null ? undefined : { path: configPath, value }
+  }))
+  const existingSidecars = sidecars.filter(
+    (sidecar): sidecar is { path: string; value: unknown } => sidecar != null
+  )
+  if (existingSidecars.length > 1) {
+    throw new Error(`Entity directory cannot contain both entity.yaml and entity.yml: ${dirname(path)}`)
   }
+  const sidecar = existingSidecars[0]?.value
+  return isRecord(sidecar)
+    ? { ...definition, attributes: { ...definition.attributes, ...sidecar } as Entity }
+    : definition
 }
 
 const parseEntityIndexJson = async (path: string): Promise<Definition<Entity>> => {
@@ -427,7 +387,7 @@ const parseEntityIndexJson = async (path: string): Promise<Definition<Entity>> =
 
   return {
     path,
-    body: await appendDefaultEntityPromptFiles(path, prompt),
+    body: prompt,
     attributes: raw as Entity
   }
 }

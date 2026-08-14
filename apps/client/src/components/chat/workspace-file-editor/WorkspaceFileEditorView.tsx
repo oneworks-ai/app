@@ -30,7 +30,15 @@ import {
 import type { WorkspaceMarkdownPreviewMode } from './workspace-file-editor-language'
 import type { WorkspaceFileFocusRequest } from './workspace-file-focus-request'
 
+export interface WorkspaceFileEditorActions {
+  discard: () => void
+  isDirty: boolean
+  isSaving: boolean
+  save: () => Promise<boolean>
+}
+
 export function WorkspaceFileEditorView({
+  autosave = true,
   isOpen,
   markdownPreviewMode = 'preview',
   focusRequest,
@@ -44,6 +52,7 @@ export function WorkspaceFileEditorView({
   onReferenceFileComments,
   onReferenceWorkspacePaths,
   onSelectPath,
+  onActionsChange,
   openPaths,
   path,
   pendingFileComments,
@@ -52,6 +61,7 @@ export function WorkspaceFileEditorView({
   variant = 'dock',
   workspaceRootPath
 }: {
+  autosave?: boolean
   isOpen: boolean
   markdownPreviewMode?: WorkspaceMarkdownPreviewMode
   focusRequest?: WorkspaceFileFocusRequest | null
@@ -65,6 +75,7 @@ export function WorkspaceFileEditorView({
   onReferenceFileComments?: (comments: PendingFileComment[]) => void
   onReferenceWorkspacePaths?: (files: ContextPickerFile[]) => void
   onSelectPath: (path: string) => void
+  onActionsChange?: (actions: WorkspaceFileEditorActions) => void
   openPaths: string[]
   path: string
   pendingFileComments?: PendingFileComment[]
@@ -93,12 +104,32 @@ export function WorkspaceFileEditorView({
   const handleSaveError = useCallback((err: unknown) => {
     void message.error(getApiErrorMessage(err, t('common.operationFailed')))
   }, [message, t])
-  const { data, draft, error, isLoading, saveNow, setDraft } = useWorkspaceFileEditorState({
+  const {
+    data,
+    discardChanges,
+    draft,
+    error,
+    isDirty,
+    isLoading,
+    isSaving,
+    saveNow,
+    setDraft
+  } = useWorkspaceFileEditorState({
+    autosave,
     enabled: !isImagePreview,
     path,
     sessionId,
     onSaveError: handleSaveError
   })
+
+  useEffect(() => {
+    onActionsChange?.({
+      discard: discardChanges,
+      isDirty,
+      isSaving,
+      save: saveNow
+    })
+  }, [discardChanges, isDirty, isSaving, onActionsChange, saveNow])
 
   useEffect(() => setImageLoadFailed(false), [imageUrl])
   useEffect(() => {

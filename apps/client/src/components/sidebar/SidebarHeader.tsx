@@ -128,6 +128,7 @@ interface SidebarHeaderNavigationItem {
   isActive?: boolean
   key: string
   label: React.ReactNode
+  placement?: 'afterCore' | 'beforeCore'
   onSelect: () => void
   shortcut?: string
 }
@@ -443,7 +444,11 @@ export function SidebarHeader({
       pathname: location.pathname
     })
 
-    return [...coreItems, ...contributedItems]
+    return [
+      ...contributedItems.filter(item => item.placement === 'beforeCore'),
+      ...coreItems,
+      ...contributedItems.filter(item => item.placement !== 'beforeCore')
+    ]
   }, [
     automationEntryMode,
     executePluginCommand,

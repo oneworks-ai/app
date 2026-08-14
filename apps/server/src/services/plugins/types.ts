@@ -193,11 +193,14 @@ export interface PluginSessionAdapter {
 }
 
 export interface PluginOneWorksChannelFacade {
+  createRoom: (principal: PluginRequestPrincipal, input: unknown) => Promise<unknown>
   createRoomShare: (principal: PluginRequestPrincipal, roomId: string, input: unknown) => Promise<unknown>
   createScenario: (principal: PluginRequestPrincipal, input: unknown) => Promise<unknown>
+  deleteRoom: (principal: PluginRequestPrincipal, roomId: string) => Promise<boolean>
   deleteScenario: (principal: PluginRequestPrincipal, scenarioRef: string) => Promise<boolean>
   getTrace: (principal: PluginRequestPrincipal, limit?: unknown) => Promise<unknown>
   injectSimulation: (principal: PluginRequestPrincipal, input: unknown) => Promise<unknown>
+  listEntities: (principal: PluginRequestPrincipal) => Promise<unknown>
   listRooms: (principal: PluginRequestPrincipal) => Promise<unknown>
   listShareOwners: (principal: PluginRequestPrincipal) => Promise<unknown>
   listShares: (principal: PluginRequestPrincipal) => Promise<unknown>
@@ -206,6 +209,7 @@ export interface PluginOneWorksChannelFacade {
   listScenarios: (principal: PluginRequestPrincipal) => Promise<unknown>
   runScenario: (principal: PluginRequestPrincipal, scenarioRef: string) => Promise<unknown>
   revokeRoomShare: (principal: PluginRequestPrincipal, roomId: string, shareRef: string) => Promise<boolean>
+  updateRoom: (principal: PluginRequestPrincipal, roomId: string, input: unknown) => Promise<unknown>
   updateScenario: (principal: PluginRequestPrincipal, scenarioRef: string, input: unknown) => Promise<unknown>
 }
 
