@@ -79,6 +79,83 @@ describe('agent room external routing', () => {
     }))
   })
 
+  it('delivers external messages to a built-in host Leader without granting it entity channel authority', async () => {
+    const processUserMessage = vi.fn(async () => undefined)
+    const service = createAgentRoomService(db, {
+      createSessionWithInitialMessage: vi.fn(),
+      getSessionInteraction: vi.fn(),
+      handleInteractionResponse: vi.fn(() => true),
+      notifySessionUpdated: vi.fn(),
+      processUserMessage
+    })
+    db.createSession('Auto Leader', 'auto-leader-session', 'running')
+    const room = service.createRoom({
+      hostSessionId: 'auto-leader-session',
+      id: 'room-auto-leader',
+      leaderEntity: 'oneworks:auto-leader',
+      title: 'Automatic room'
+    })
+    service.upsertMember(room.id, { key: 'oneworks:auto-leader', kind: 'host', label: 'Auto Leader' })
+    service.upsertMember(room.id, { key: 'product', kind: 'entity', label: 'Product' })
+    db.saveAgentRoomChannelConnection({
+      channelId: 'oc_shared',
+      channelKey: 'lark:product',
+      channelLinkName: 'product-lark',
+      channelType: 'lark',
+      conversationKind: 'group',
+      entity: 'product',
+      label: '产品群',
+      memberKey: 'product',
+      muted: false,
+      receiveId: 'oc_shared',
+      receiveIdType: 'chat_id',
+      requireMention: false,
+      roomId: room.id,
+      status: 'active'
+    })
+    db.saveAgentRoomRun({
+      key: 'auto-leader-session',
+      memberKey: 'oneworks:auto-leader',
+      roomId: room.id,
+      sessionId: 'auto-leader-session',
+      status: 'running',
+      title: 'Auto Leader'
+    })
+
+    const result = await service.ingestExternalMessage(room.id, '请自动分配这条群消息', {
+      channelId: 'oc_shared',
+      channelKey: 'lark:product',
+      channelType: 'lark',
+      conversationKind: 'group',
+      providerMessageId: 'om_auto_leader'
+    }, {
+      channelId: 'oc_shared',
+      channelKey: 'lark:product',
+      channelType: 'lark',
+      messageId: 'om_auto_leader',
+      replyReceiveId: 'oc_shared',
+      replyReceiveIdType: 'chat_id',
+      sessionType: 'group'
+    }, ['product'])
+
+    expect(result.payload).toEqual(expect.objectContaining({
+      deliveries: [expect.objectContaining({
+        target: { memberKey: 'oneworks:auto-leader', runKey: 'auto-leader-session' }
+      })],
+      deliveryState: 'delivered'
+    }))
+    expect(processUserMessage).toHaveBeenCalledWith('auto-leader-session', '请自动分配这条群消息')
+    expect(db.getSessionRuntimeState('auto-leader-session')?.channelActorSnapshot).toBeUndefined()
+    expect(db.listRecentChannelChildSessionRuns(1)).toEqual([
+      expect.objectContaining({
+        channelLinkName: 'product-lark',
+        entity: 'product',
+        sessionId: null,
+        status: 'started'
+      })
+    ])
+  })
+
   it('does not reconstruct room messages from session transcripts', () => {
     db.createSession('Host', 'host-session', 'running')
     db.saveMessage('host-session', {

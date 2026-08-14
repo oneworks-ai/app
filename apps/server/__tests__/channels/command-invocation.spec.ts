@@ -124,6 +124,7 @@ const makeChildRun = (overrides: Record<string, unknown> = {}) => ({
   id: 'child-run-1',
   messageId: 'om_1',
   senderId: 'admin1',
+  sessionId: 'sess-1',
   sessionType: 'group',
   status: 'started',
   threadKey: 'group:owo-demo:actor:user-admin',
@@ -363,6 +364,73 @@ describe('invokeChannelCommandForState', () => {
       expect(createChannelCommandRun).not.toHaveBeenCalled()
     }
   )
+
+  it('rejects a delegation token replayed from a different session', async () => {
+    const sendMessage = vi.fn().mockResolvedValue({ messageId: 'om_sent' })
+    getChannelChildSessionRun.mockReturnValueOnce(makeChildRun({ sessionId: 'sess-other' }))
+
+    const result = await invokeChannelCommandForState(makeState({ sendMessage }), {
+      input: { message: 'done' },
+      invocationToken: makeInvocationToken(),
+      toolName: 'channel.send'
+    })
+
+    expect(result).toMatchObject({
+      message: expect.stringContaining('authority is unavailable or inconsistent'),
+      ok: false,
+      statusCode: 403
+    })
+    expect(sendMessage).not.toHaveBeenCalled()
+  })
+
+  it('does not borrow another room member connection when the owning connection is inactive', async () => {
+    const sendMessage = vi.fn().mockResolvedValue({ messageId: 'om_sent' })
+    const db = vi.mocked(getDb)() as any
+    db.listAgentRoomRuns = vi.fn().mockReturnValue([
+      { memberKey: 'member-owner', sessionId: 'sess-1' }
+    ])
+    db.listAgentRoomChannelConnections = vi.fn().mockReturnValue([
+      {
+        channelId: 'oc_1',
+        channelKey: 'lark-main',
+        channelLinkName: 'wan-ke-chat',
+        channelType: 'lark',
+        memberKey: 'member-owner',
+        status: 'removed'
+      },
+      {
+        channelId: 'oc_1',
+        channelKey: 'lark-main',
+        channelLinkName: 'wan-ke-chat',
+        channelType: 'lark',
+        memberKey: 'member-other',
+        status: 'active'
+      }
+    ])
+    getChannelChildSessionRun.mockReturnValueOnce(makeChildRun({ entity: 'member-owner' }))
+    getSessionRuntimeState.mockReturnValueOnce({
+      channelActorSnapshot: makeActorSnapshot({
+        entity: 'member-owner',
+        executionContext: {
+          room: { id: 'room-1', memberKey: 'member-owner', title: 'Room' }
+        }
+      })
+    })
+
+    const result = await invokeChannelCommandForState(makeState({ sendMessage }), {
+      input: { message: 'done' },
+      invocationToken: makeInvocationToken(),
+      toolName: 'channel.send'
+    })
+
+    expect(result).toMatchObject({
+      message: expect.stringContaining('authority is unavailable or inconsistent'),
+      ok: false,
+      statusCode: 403
+    })
+    expect(sendMessage).not.toHaveBeenCalled()
+    expect(createChannelCommandRun).not.toHaveBeenCalled()
+  })
 
   it('invokes channel command tools with the current sender as actor', async () => {
     const result = await invokeChannelCommandForState(makeState(), {

@@ -137,17 +137,26 @@ describe('oneWorks Team Chat creator', () => {
       await Promise.resolve()
     })
 
+    const automaticLeader = container.querySelector<HTMLButtonElement>('[data-entity-id="oneworks:auto-leader"]')!
     const leaderA = container.querySelector<HTMLButtonElement>('[data-entity-id="leader-a"]')!
     const leaderB = container.querySelector<HTMLButtonElement>('[data-entity-id="leader-b"]')!
+    expect(automaticLeader.getAttribute('role')).toBe('radio')
+    expect(automaticLeader.getAttribute('aria-checked')).toBe('true')
+    expect(automaticLeader.tabIndex).toBe(0)
+    expect(automaticLeader.closest('.entity-card')?.querySelector('.entity-card__name.is-static')?.textContent)
+      .toBe('Auto Leader')
     expect(leaderA.getAttribute('role')).toBe('radio')
     expect(leaderB.getAttribute('role')).toBe('radio')
     expect(leaderA.closest('.entity-card')?.querySelectorAll('.entity-card__related-entities .group-avatar'))
       .toHaveLength(
         2
       )
-    expect(leaderA.tabIndex).toBe(0)
+    expect(leaderA.tabIndex).toBe(-1)
     expect(leaderB.tabIndex).toBe(-1)
 
+    const memberGroup = container.querySelector<HTMLElement>('[role="group"]')!
+    expect(memberGroup.firstElementChild?.textContent).toContain('Start hiring')
+    expect(memberGroup.firstElementChild?.textContent).toContain('Plenty of headcount—join the team.')
     await act(async () => leaderA.click())
     expect(leaderA.getAttribute('aria-checked')).toBe('true')
     expect(container.querySelector('[data-entity-id="designer"]')?.getAttribute('aria-checked')).toBe('true')
@@ -175,11 +184,104 @@ describe('oneWorks Team Chat creator', () => {
     expect(JSON.parse(String(apiFetch.mock.calls[0]?.[1]?.body))).toEqual({
       entityIds: ['designer', 'engineer'],
       leaderEntityId: 'leader-b',
+      leaderMode: 'entity',
       message: 'Build the roadmap'
     })
     expect(mutate).toHaveBeenCalled()
     expect(navigate).toHaveBeenCalledWith(
       '/plugins/channel-oneworks/oneworks-channel/rooms/room-created'
     )
+  })
+
+  it('uses the built-in Auto Leader when no entity leader is selected', async () => {
+    const clientModulePath = '../../../packages/plugins/channel-oneworks/client/src/index.tsx'
+    const { OneWorksChannelView } = await import(/* @vite-ignore */ clientModulePath)
+    const apiFetch = vi.fn(async (_input: string, _init?: RequestInit) => ({
+      json: async () => ({ roomId: 'automatic-room' }),
+      ok: true
+    }))
+    const data = {
+      entities: [{
+        description: 'Builds features',
+        entityId: 'engineer',
+        name: 'Engineer',
+        relatedEntityIds: [],
+        source: 'project',
+        teamRole: 'member'
+      }],
+      roomConnectionCandidates: [],
+      rooms: [],
+      scenarios: [],
+      sharedRooms: [],
+      shareOwners: [],
+      shares: [],
+      simulationTargets: [],
+      trace: []
+    }
+    const Sender = (props: TestSenderProps) =>
+      createElement(
+        'button',
+        {
+          'data-placeholder': props.placeholder,
+          'data-testid': 'sender',
+          onClick: () => props.onSend('Build the release'),
+          type: 'button'
+        },
+        'Send'
+      )
+    const view = {
+      data: { useQuery: () => ({ data, isLoading: false, mutate: vi.fn() }) },
+      i18n: { resolveText: (value: { en: string }) => value.en },
+      route: {
+        navigate: vi.fn(),
+        setActions: vi.fn(),
+        setBreadcrumb: vi.fn(),
+        setIcon: vi.fn(),
+        setLauncherChrome: vi.fn(),
+        setSidePanel: vi.fn(),
+        setSidebar: vi.fn(),
+        setTitle: vi.fn()
+      },
+      ui: {
+        AgentRoom: () => null,
+        Button: () => null,
+        ChannelPlatformIcon: () => null,
+        EntityCard,
+        EntitySummary: () => null,
+        GroupAvatar: () => null,
+        Icon: () => null,
+        Input: () => null,
+        JsonSchemaForm: () => null,
+        SearchInput: () => null,
+        Select: () => null,
+        Sender,
+        SettingsSection: () => null,
+        Switch: () => null
+      }
+    }
+
+    await act(async () => {
+      root.render(createElement(OneWorksChannelView, {
+        ctx: { api: { fetch: apiFetch }, scope: 'channel-oneworks' },
+        react: React,
+        view
+      }))
+      await Promise.resolve()
+    })
+
+    const sender = container.querySelector<HTMLButtonElement>('[data-testid="sender"]')!
+    expect(sender.dataset.placeholder).toBe('Select at least one team member')
+    await act(async () => container.querySelector<HTMLButtonElement>('[data-entity-id="engineer"]')!.click())
+    expect(sender.dataset.placeholder).toBe('Send the first message to create the group')
+
+    await act(async () => {
+      sender.click()
+      await Promise.resolve()
+    })
+    expect(JSON.parse(String(apiFetch.mock.calls[0]?.[1]?.body))).toEqual({
+      entityIds: ['engineer'],
+      leaderMode: 'automatic',
+      message: 'Build the release'
+    })
   })
 })

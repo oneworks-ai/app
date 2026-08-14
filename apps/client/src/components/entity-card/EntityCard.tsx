@@ -75,17 +75,19 @@ export function EntityCard({
           : <img alt='' className='entity-card__avatar-image' src={avatarUrl} />}
       </span>
       <span className='entity-card__copy'>
-        <button
-          className='entity-card__name'
-          title={name}
-          type='button'
-          onClick={(event) => {
-            event.stopPropagation()
-            onOpenDetails?.()
-          }}
-        >
-          {name}
-        </button>
+        {onOpenDetails == null
+          ? <span className='entity-card__name is-static' title={name}>{name}</span>
+          : <button
+            className='entity-card__name'
+            title={name}
+            type='button'
+            onClick={(event) => {
+              event.stopPropagation()
+              onOpenDetails()
+            }}
+          >
+            {name}
+          </button>}
         {description == null || description === ''
           ? null
           : <span className='entity-card__description'>{description}</span>}

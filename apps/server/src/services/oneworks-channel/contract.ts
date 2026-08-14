@@ -10,16 +10,6 @@ export const oneworksRoomEntitySchema = z.object({
   teamRole: z.enum(['leader', 'member'])
 }).strict()
 
-export const oneworksRoomCreateInputSchema = z.object({
-  entityIds: z.array(z.string().trim().min(1)),
-  leaderEntityId: z.string().trim().min(1).optional(),
-  message: z.string().trim().min(1),
-  title: z.string().trim().min(1).max(80).optional()
-}).strict().refine(
-  value => value.leaderEntityId != null || value.entityIds.length > 0,
-  'A leader entity is required.'
-)
-
 export const oneworksRoomPatchInputSchema = z.object({
   avatar: z.string().trim().max(2048).nullable().optional(),
   description: z.string().trim().max(2000).nullable().optional(),
@@ -29,7 +19,6 @@ export const oneworksRoomPatchInputSchema = z.object({
 }).strict().refine(value => Object.keys(value).length > 0, 'At least one room field is required.')
 
 export type OneWorksRoomEntity = z.infer<typeof oneworksRoomEntitySchema>
-export type OneWorksRoomCreateInput = z.infer<typeof oneworksRoomCreateInputSchema>
 export type OneWorksRoomPatchInput = z.infer<typeof oneworksRoomPatchInputSchema>
 
 export const oneworksChannelSimulationTargetSchema = z.object({

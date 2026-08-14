@@ -554,6 +554,19 @@ export class SqliteDb {
     return this.channelChildRuns.create(row)
   }
 
+  claimChannelChildSessionDelegation(
+    id: Parameters<typeof this.channelChildRuns.claimDelegation>[0],
+    sessionId: Parameters<typeof this.channelChildRuns.claimDelegation>[1]
+  ) {
+    return this.channelChildRuns.claimDelegation(id, sessionId)
+  }
+
+  expirePendingChannelChildSessionDelegations(
+    input: Parameters<typeof this.channelChildRuns.expirePendingDelegations>[0]
+  ) {
+    return this.channelChildRuns.expirePendingDelegations(input)
+  }
+
   finishChannelChildSessionRun(id: string, updates: Parameters<typeof this.channelChildRuns.finish>[1]) {
     return this.channelChildRuns.finish(id, updates)
   }

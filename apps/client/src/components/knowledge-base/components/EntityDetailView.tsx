@@ -31,6 +31,7 @@ import { NativeTabs } from '#~/components/native-tabs/NativeTabs'
 import { buildConfigUiSchemaFromJsonSchema } from '#~/components/plugins/plugin-config-json-schema'
 import type { EntityRuntimeDetail } from '@oneworks/types'
 import type { KnowledgeEntityPage } from '../knowledge-routes'
+import { hasEntityDocumentContent } from './entity-document-status'
 
 const channelLabelByType: Record<string, string> = {
   discord: 'Discord',
@@ -281,7 +282,7 @@ export function EntityDetailView({
                   <span>
                     <strong>{t(presentation.labelKey)}</strong>
                     <small>
-                      {document.exists
+                      {hasEntityDocumentContent(document)
                         ? `${document.fragments.length} ${
                           t('knowledge.entities.documentSources', '个来源')
                         } · ${document.inherit}`

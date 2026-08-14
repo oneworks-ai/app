@@ -180,6 +180,8 @@ describe('oneWorks Rooms plugin', () => {
     expect(styles).toContain('.oneworks-channel__room-surface {')
     expect(styles).toContain('display: flex; flex-direction: column; height: 100%')
     expect(styles).toContain('.oneworks-channel__room { flex: 1 1 0;')
+    expect(styles).toContain('.oneworks-channel__entity-picker { align-content: safe center;')
+    expect(styles).toContain('padding: 20px 0;')
     expect(styles).toContain('@media (max-width: 700px)')
     expect(styles).not.toContain('.oneworks-channel__panel { padding-top: 10px; }')
     expect(manifest).toContain('"zh-Hans": "聊天室"')

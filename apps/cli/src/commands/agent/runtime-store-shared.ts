@@ -29,6 +29,7 @@ export interface CreateRuntimeSessionParams {
   memberLabel?: string
   memberKey?: string
   now?: () => number
+  operationId?: string
   parentSessionId?: string
   priority?: number
   roomId?: string
@@ -56,6 +57,7 @@ export interface AppendRuntimeCommandParams {
   data?: string | string[]
   env?: NodeJS.ProcessEnv
   now?: () => number
+  operationId?: string
 }
 
 export const trimRequired = (value: string | undefined, name: string) => {
@@ -104,6 +106,7 @@ export const buildCommand = (params: {
   fastMode?: boolean
   model?: string
   memberKey?: string
+  operationId?: string
   permissionMode?: 'default' | 'acceptEdits' | 'plan' | 'dontAsk' | 'bypassPermissions'
   roomId?: string
   runId?: string
@@ -133,6 +136,7 @@ export const buildCommand = (params: {
   if (params.model != null) command.model = params.model
   if (params.permissionMode != null) command.permissionMode = params.permissionMode
   if (params.memberKey != null) command.memberKey = params.memberKey
+  if (params.operationId != null) command.operationId = params.operationId
   if (params.roomId != null) command.roomId = params.roomId
   if (params.runId != null) command.runId = params.runId
   if (params.title != null) command.title = params.title

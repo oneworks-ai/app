@@ -1,7 +1,12 @@
 /* eslint-disable max-lines -- the plugin owns its Room, scenario, and delivery-trace workbench. */
 /// <reference types="vite/client" />
 
-import { filterRoomEntities, partitionRoomEntities, selectLeaderRelatedEntities } from './room-entity-selection'
+import {
+  AUTOMATIC_LEADER_ENTITY_ID,
+  filterRoomEntities,
+  partitionRoomEntities,
+  selectLeaderRelatedEntities
+} from './room-entity-selection'
 import { oneworksChannelCss } from './styles'
 
 const asError = async response => {
@@ -42,7 +47,6 @@ const emptyShareDraft = () => ({
   principalType: 'user',
   roomId: ''
 })
-
 const sharePermissions = {
   collaborate: ['view', 'send', 'target_member', 'open_run'],
   manage: ['view', 'send', 'target_member', 'open_run', 'approve', 'manage_share'],
@@ -184,7 +188,7 @@ export function OneWorksChannelView({ ctx, react, view }) {
   const [selectedRoomId, setSelectedRoomId] = useState(() => readRoomIdFromLocation(ctx.scope))
   const [selectedRoomConnectionName, setSelectedRoomConnectionName] = useState('')
   const [selectedRoomMemberId, setSelectedRoomMemberId] = useState('')
-  const [selectedLeaderEntityId, setSelectedLeaderEntityId] = useState('')
+  const [selectedLeaderEntityId, setSelectedLeaderEntityId] = useState(AUTOMATIC_LEADER_ENTITY_ID)
   const [selectedEntityIds, setSelectedEntityIds] = useState([])
   const [entityQuery, setEntityQuery] = useState('')
   const [sidebarQuery, setSidebarQuery] = useState('')
@@ -418,9 +422,27 @@ export function OneWorksChannelView({ ctx, react, view }) {
     )
   }, [data.rooms, sidebarQuery, t])
   const entityGroups = useMemo(() => partitionRoomEntities(data.entities), [data.entities])
+  const automaticLeaderEntity = useMemo(() => ({
+    description: t(
+      'Plans work, delegates it to selected members, and follows progress through completion.',
+      '根据所选成员的职责自动拆解、分配并跟进任务。'
+    ),
+    entityId: AUTOMATIC_LEADER_ENTITY_ID,
+    name: t('Auto Leader', '自动 Leader'),
+    relatedEntityIds: selectedEntityIds,
+    teamRole: 'leader'
+  }), [selectedEntityIds, t])
+  const leaderEntities = useMemo(
+    () => [automaticLeaderEntity, ...entityGroups.leaders],
+    [automaticLeaderEntity, entityGroups.leaders]
+  )
   const visibleEntityGroups = useMemo(
     () => partitionRoomEntities(filterRoomEntities(data.entities, entityQuery)),
     [data.entities, entityQuery]
+  )
+  const visibleLeaderEntities = useMemo(
+    () => filterRoomEntities(leaderEntities, entityQuery),
+    [entityQuery, leaderEntities]
   )
   const availableMemberIds = useMemo(
     () => new Set(entityGroups.members.map(entity => entity.entityId)),
@@ -431,7 +453,9 @@ export function OneWorksChannelView({ ctx, react, view }) {
   useEffect(() => {
     if (loading) return
     setSelectedLeaderEntityId(current =>
-      entityGroups.leaders.some(entity => entity.entityId === current) ? current : ''
+      current === AUTOMATIC_LEADER_ENTITY_ID || entityGroups.leaders.some(entity => entity.entityId === current)
+        ? current
+        : AUTOMATIC_LEADER_ENTITY_ID
     )
     setSelectedEntityIds(current => current.filter(entityId => availableMemberIds.has(entityId)))
   }, [availableMemberIds, entityGroups.leaders, loading])
@@ -446,37 +470,39 @@ export function OneWorksChannelView({ ctx, react, view }) {
 
   const selectLeaderEntity = entity => {
     setSelectedLeaderEntityId(entity.entityId)
+    if (entity.entityId === AUTOMATIC_LEADER_ENTITY_ID) return
     setSelectedEntityIds(current => selectLeaderRelatedEntities(current, entity, availableMemberIds))
   }
 
   const handleLeaderKeyDown = (event, entityId) => {
     const supportedKeys = ['ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'End', 'Home']
-    if (!supportedKeys.includes(event.key) || visibleEntityGroups.leaders.length === 0) return
+    if (!supportedKeys.includes(event.key) || visibleLeaderEntities.length === 0) return
     event.preventDefault()
-    const currentIndex = visibleEntityGroups.leaders.findIndex(entity => entity.entityId === entityId)
+    const currentIndex = visibleLeaderEntities.findIndex(entity => entity.entityId === entityId)
     if (currentIndex < 0) return
-    const lastIndex = visibleEntityGroups.leaders.length - 1
+    const lastIndex = visibleLeaderEntities.length - 1
     const nextIndex = event.key === 'Home'
       ? 0
       : event.key === 'End'
       ? lastIndex
       : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
-      ? (currentIndex - 1 + visibleEntityGroups.leaders.length) % visibleEntityGroups.leaders.length
-      : (currentIndex + 1) % visibleEntityGroups.leaders.length
+      ? (currentIndex - 1 + visibleLeaderEntities.length) % visibleLeaderEntities.length
+      : (currentIndex + 1) % visibleLeaderEntities.length
     const radioOptions = event.currentTarget.closest('[role="radiogroup"]')?.querySelectorAll('[role="radio"]')
     radioOptions?.[nextIndex]?.focus()
-    selectLeaderEntity(visibleEntityGroups.leaders[nextIndex])
+    selectLeaderEntity(visibleLeaderEntities[nextIndex])
   }
 
-  const focusableLeaderEntityId = visibleEntityGroups.leaders.some(
+  const focusableLeaderEntityId = visibleLeaderEntities.some(
       entity => entity.entityId === selectedLeaderEntityId
     )
     ? selectedLeaderEntityId
-    : visibleEntityGroups.leaders[0]?.entityId
+    : visibleLeaderEntities[0]?.entityId
 
   const createRoom = async (message) => {
     const text = message.trim()
-    if (!text || selectedLeaderEntityId === '' || working) return false
+    const automaticLeader = selectedLeaderEntityId === AUTOMATIC_LEADER_ENTITY_ID
+    if (!text || (automaticLeader && selectedEntityIds.length === 0) || working) return false
     setWorking(true)
     setActionError(null)
     setNotice(null)
@@ -484,7 +510,8 @@ export function OneWorksChannelView({ ctx, react, view }) {
       const room = await request(ctx, 'rooms', {
         body: JSON.stringify({
           entityIds: selectedEntityIds,
-          leaderEntityId: selectedLeaderEntityId,
+          ...(automaticLeader ? {} : { leaderEntityId: selectedLeaderEntityId }),
+          leaderMode: automaticLeader ? 'automatic' : 'entity',
           message: text
         }),
         headers: { 'content-type': 'application/json' },
@@ -492,7 +519,7 @@ export function OneWorksChannelView({ ctx, react, view }) {
       })
       await mutate()
       setSelectedRoomId(room.roomId)
-      setSelectedLeaderEntityId('')
+      setSelectedLeaderEntityId(AUTOMATIC_LEADER_ENTITY_ID)
       setSelectedEntityIds([])
       view.route?.navigate(buildOneWorksRoomRoute(ctx.scope, room.roomId))
       return true
@@ -1177,7 +1204,7 @@ export function OneWorksChannelView({ ctx, react, view }) {
               className='oneworks-channel__entity-grid is-leaders'
               role='radiogroup'
             >
-              {visibleEntityGroups.leaders.map(entity => {
+              {visibleLeaderEntities.map(entity => {
                 const relatedEntities = (entity.relatedEntityIds ?? []).flatMap(entityId => {
                   const related = entityById.get(entityId)
                   return related == null
@@ -1196,21 +1223,18 @@ export function OneWorksChannelView({ ctx, react, view }) {
                   selectionMode='radio'
                   tabIndex={focusableLeaderEntityId === entity.entityId ? 0 : -1}
                   onKeyDown={event => handleLeaderKeyDown(event, entity.entityId)}
-                  onOpenDetails={() =>
-                    view.route?.navigate(
-                      `/knowledge/entities/${encodeURIComponent(entity.entityId)}`
-                    )}
+                  onOpenDetails={entity.entityId === AUTOMATIC_LEADER_ENTITY_ID
+                    ? undefined
+                    : () =>
+                      view.route?.navigate(
+                        `/knowledge/entities/${encodeURIComponent(entity.entityId)}`
+                      )}
                   onSelect={() => selectLeaderEntity(entity)}
                 />
               })}
-              {visibleEntityGroups.leaders.length === 0 && (
+              {visibleLeaderEntities.length === 0 && (
                 <div className='oneworks-channel__entity-no-results'>
-                  {entityQuery.trim() === ''
-                    ? t(
-                      'No leader entities are registered. Set Team Chat role to Leader in an entity definition.',
-                      '还没有注册 Leader 实体；请在实体定义中将团队群聊角色设为 Leader。'
-                    )
-                    : t('No matching leader entities.', '没有匹配的 Leader 实体。')}
+                  {t('No matching leader entities.', '没有匹配的 Leader 实体。')}
                 </div>
               )}
             </div>
@@ -1225,6 +1249,20 @@ export function OneWorksChannelView({ ctx, react, view }) {
               className='oneworks-channel__entity-grid'
               role='group'
             >
+              <button
+                className='oneworks-channel__entity-card is-create'
+                onClick={() => view.route?.navigate('/knowledge/entities?create=entity')}
+                type='button'
+              >
+                <span className='oneworks-channel__entity-avatar is-create' aria-hidden='true'>
+                  <Icon name='person_add' />
+                </span>
+                <span className='oneworks-channel__entity-copy'>
+                  <strong>{t('Start hiring', '启动招聘')}</strong>
+                  <span>{t('Plenty of headcount—join the team.', '海量 HC，虚位以待。')}</span>
+                </span>
+                <Icon name='arrow_forward' />
+              </button>
               {visibleEntityGroups.members.map(entity => {
                 const selected = selectedEntityIds.includes(entity.entityId)
                 return <EntityCard
@@ -1246,20 +1284,6 @@ export function OneWorksChannelView({ ctx, react, view }) {
                   {t('No matching entities.', '没有匹配的实体。')}
                 </div>
               )}
-              <button
-                className='oneworks-channel__entity-card is-create'
-                onClick={() => view.route?.navigate('/knowledge/entities?create=entity')}
-                type='button'
-              >
-                <span className='oneworks-channel__entity-avatar is-create' aria-hidden='true'>
-                  <Icon name='add' />
-                </span>
-                <span className='oneworks-channel__entity-copy'>
-                  <strong>{t('Create entity', '创建实体')}</strong>
-                  <span>{t('Add another teammate', '添加新的团队成员')}</span>
-                </span>
-                <Icon name='arrow_forward' />
-              </button>
             </div>
           </section>
         </div>
@@ -1272,8 +1296,8 @@ export function OneWorksChannelView({ ctx, react, view }) {
           hideSelectionControls
           layout='adaptive'
           onSend={createRoom}
-          placeholder={selectedLeaderEntityId === ''
-            ? t('Select a team leader first', '请先选择团队 Leader')
+          placeholder={selectedLeaderEntityId === AUTOMATIC_LEADER_ENTITY_ID && selectedEntityIds.length === 0
+            ? t('Select at least one team member', '请至少选择一个团队成员')
             : t('Send the first message to create the group', '发送第一条消息，创建群聊')}
           showHeader={false}
           showStatusBar={false}

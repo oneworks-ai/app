@@ -322,6 +322,94 @@ describe('oneWorks Team Chat room lifecycle', () => {
     }))
   })
 
+  it('creates a Team Chat with the built-in Auto Leader and a roster-aware system prompt', async () => {
+    let createdRoomId = ''
+    createRoom.mockImplementation((input) => {
+      createdRoomId = input.id
+      return input
+    })
+    createSessionWithInitialMessage.mockImplementationOnce(async (options) => {
+      await options.beforeStart?.('host-session')
+      return { id: 'host-session' }
+    })
+    getDb.mockReturnValue({
+      getAgentRoomDetail: vi.fn(() => ({
+        channelConnections: [],
+        members: [
+          { key: 'oneworks:auto-leader', kind: 'host', label: 'Auto Leader' },
+          { key: 'std/qa', kind: 'entity', label: 'qa' }
+        ],
+        messages: [],
+        shares: []
+      })),
+      listAgentRooms: vi.fn(() => [{
+        createdAt: 1,
+        hostSessionId: 'host-session',
+        id: createdRoomId,
+        leaderEntity: 'oneworks:auto-leader',
+        owner: { type: 'local' },
+        status: 'active',
+        title: 'Verify the release',
+        updatedAt: 2
+      }])
+    })
+    getChannelManager.mockReturnValue({ states: new Map() })
+
+    const { createOneWorksChannelFacade } = await import('#~/services/oneworks-channel/index.js')
+    const room = await createOneWorksChannelFacade().createRoom(workspacePrincipal, {
+      entityIds: ['std/qa'],
+      leaderMode: 'automatic',
+      message: 'Verify the release'
+    })
+    expect(room).toEqual(expect.objectContaining({ roomId: createdRoomId }))
+
+    expect(createRoom).toHaveBeenCalledWith(expect.objectContaining({
+      hostSessionId: 'host-session',
+      leaderEntity: 'oneworks:auto-leader'
+    }))
+    expect(applyEvent).toHaveBeenCalledWith(
+      createdRoomId,
+      expect.objectContaining({
+        member: expect.objectContaining({ key: 'oneworks:auto-leader', kind: 'host' }),
+        type: 'member_joined'
+      })
+    )
+    expect(createSessionWithInitialMessage).toHaveBeenCalledWith(expect.objectContaining({
+      room: expect.objectContaining({
+        member: expect.objectContaining({ key: 'oneworks:auto-leader', kind: 'host' })
+      }),
+      systemPrompt: expect.stringMatching(/Auto Leader[\s\S]*std\/qa[\s\S]*session\.start/u)
+    }))
+    expect(createSessionWithInitialMessage.mock.calls[0]?.[0]).not.toHaveProperty('promptName')
+    expect(createSessionWithInitialMessage.mock.calls[0]?.[0]).not.toHaveProperty('promptType')
+    expect(createSessionWithInitialMessage.mock.calls[0]?.[0].systemPrompt).toContain(
+      'For every actionable user request, delegate at least one concrete assignment'
+    )
+    expect(createSessionWithInitialMessage.mock.calls[0]?.[0].systemPrompt).not.toContain(
+      'Handle a trivial request directly'
+    )
+  })
+
+  it('requires at least one regular member for the built-in Auto Leader', async () => {
+    const { createOneWorksChannelFacade } = await import('#~/services/oneworks-channel/index.js')
+
+    await expect(
+      createOneWorksChannelFacade().createRoom(workspacePrincipal, {
+        entityIds: [],
+        leaderMode: 'automatic',
+        message: 'No team'
+      })
+    ).rejects.toThrow('requires at least one team member')
+    await expect(
+      createOneWorksChannelFacade().createRoom(workspacePrincipal, {
+        entityIds: ['leader'],
+        leaderMode: 'automatic',
+        message: 'Leader as member'
+      })
+    ).rejects.toThrow('Only one Team Chat leader can be selected')
+    expect(createSessionWithInitialMessage).not.toHaveBeenCalled()
+  })
+
   it('rejects a regular entity submitted as an explicit Team Chat leader', async () => {
     const { createOneWorksChannelFacade } = await import('#~/services/oneworks-channel/index.js')
 

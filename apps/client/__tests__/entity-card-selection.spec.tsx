@@ -76,4 +76,20 @@ describe('entity card selection semantics', () => {
     expect(onOpenDetails).toHaveBeenCalledTimes(1)
     expect(onSelect).toHaveBeenCalledTimes(1)
   })
+
+  it('does not expose an inert details button when a card has no details route', async () => {
+    await act(async () => {
+      root.render(
+        <EntityCard
+          description='Coordinates the selected team'
+          entityId='oneworks:auto-leader'
+          name='Auto Leader'
+          selectionMode='radio'
+        />
+      )
+    })
+
+    expect(container.querySelector('.entity-card__name.is-static')?.textContent).toBe('Auto Leader')
+    expect(container.querySelector('button.entity-card__name')).toBeNull()
+  })
 })

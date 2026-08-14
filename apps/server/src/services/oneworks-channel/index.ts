@@ -6,6 +6,12 @@ import type { OneWorksChannelConfig } from '@oneworks/channel-oneworks'
 import { resolveDocumentDescription, resolveEntityIdentifier } from '@oneworks/definition-core'
 import { DefinitionLoader } from '@oneworks/definition-loader'
 import type { AgentRoom, AgentRoomShare, Entity, PluginRequestPrincipal } from '@oneworks/types'
+import {
+  AUTOMATIC_LEADER_DESCRIPTION,
+  AUTOMATIC_LEADER_MEMBER_KEY,
+  AUTOMATIC_LEADER_NAME,
+  buildAutomaticLeaderSystemPrompt
+} from './automatic-leader.js'
 import type {
   OneWorksChannelScenario,
   OneWorksChannelScenarioPatch,
@@ -13,7 +19,6 @@ import type {
   OneWorksChannelSimulationResult,
   OneWorksChannelSimulationTarget,
   OneWorksChannelTrace,
-  OneWorksRoomCreateInput,
   OneWorksRoomEntity,
   OneWorksRoomPatchInput,
   OneWorksRoomShareInput,
@@ -26,7 +31,6 @@ import {
   oneworksChannelScenarioInputSchema,
   oneworksChannelScenarioPatchSchema,
   oneworksChannelSimulationInputSchema,
-  oneworksRoomCreateInputSchema,
   oneworksRoomPatchInputSchema,
   oneworksRoomShareInputSchema
 } from './contract.js'
@@ -39,6 +43,8 @@ import {
   oneworksRoomChannelConnectionAttachInputSchema,
   oneworksRoomChannelConnectionPatchInputSchema
 } from './room-connections-contract.js'
+import type { OneWorksRoomCreateInput } from './room-create-contract.js'
+import { oneworksRoomCreateInputSchema } from './room-create-contract.js'
 
 import { getChannelManager } from '#~/channels/index.js'
 import type { ChannelRuntimeState } from '#~/channels/types.js'
@@ -524,20 +530,41 @@ export const createOneWorksChannelFacade = () => ({
     const loader = new DefinitionLoader(getWorkspaceFolder())
     const catalog = await resolveProductEntityCatalog(await loader.loadDefaultEntities())
     const available = new Map(catalog.entities.map(entity => [entity.entityId, entity]))
-    const leaderEntityId = parsed.leaderEntityId ?? parsed.entityIds[0]!
-    const leader = available.get(leaderEntityId)
-    if (leader == null) throw new Error('The selected leader entity no longer exists.')
-    if (leader.teamRole !== 'leader') {
+    const automaticLeader = parsed.leaderMode === 'automatic'
+    const leaderEntityId = automaticLeader ? undefined : parsed.leaderEntityId ?? parsed.entityIds[0]!
+    const leader = leaderEntityId == null ? undefined : available.get(leaderEntityId)
+    if (!automaticLeader && leader == null) throw new Error('The selected leader entity no longer exists.')
+    if (leader != null && leader.teamRole !== 'leader') {
       throw new Error('The selected entity is not registered as a Team Chat leader.')
     }
-    const requestedMemberIds = parsed.leaderEntityId == null ? parsed.entityIds.slice(1) : parsed.entityIds
-    const selectedIds = [leader.entityId, ...leader.relatedEntityIds, ...requestedMemberIds]
+    const requestedMemberIds = automaticLeader
+      ? parsed.entityIds
+      : parsed.leaderEntityId == null
+      ? parsed.entityIds.slice(1)
+      : parsed.entityIds
+    const selectedIds = automaticLeader
+      ? requestedMemberIds
+      : [leader!.entityId, ...leader!.relatedEntityIds, ...requestedMemberIds]
     const entities = [...new Set(selectedIds)].map(entityId => available.get(entityId))
     if (entities.some(entity => entity == null)) throw new Error('One or more selected entities no longer exist.')
     const selected = entities as OneWorksRoomEntity[]
-    if (selected.slice(1).some(entity => entity.teamRole === 'leader')) {
+    if (selected.slice(automaticLeader ? 0 : 1).some(entity => entity.teamRole === 'leader')) {
       throw new Error('Only one Team Chat leader can be selected.')
     }
+    const leaderMember = automaticLeader
+      ? {
+        key: AUTOMATIC_LEADER_MEMBER_KEY,
+        kind: 'host' as const,
+        label: AUTOMATIC_LEADER_NAME,
+        subtitle: AUTOMATIC_LEADER_DESCRIPTION
+      }
+      : {
+        ...(leader!.avatar == null ? {} : { avatar: leader!.avatar }),
+        key: leader!.entityId,
+        kind: 'entity' as const,
+        label: leader!.name,
+        subtitle: leader!.description
+      }
     const title = parsed.title ?? deriveRoomTitle(parsed.message)
     const roomId = `room_${randomUUID()}`
     const service = createAgentRoomService(undefined, undefined, {
@@ -554,21 +581,33 @@ export const createOneWorksChannelFacade = () => ({
           service.createRoom({
             hostSessionId,
             id: roomId,
-            leaderEntity: leader.entityId,
+            leaderEntity: leaderMember.key,
             title
           })
           roomCreated = true
-          for (const entity of selected) {
-            service.applyEvent(roomId, {
-              id: `runtime-member:${roomId}:${entity.entityId}`,
-              type: 'member_joined',
-              member: {
+          const members = automaticLeader
+            ? [
+              leaderMember,
+              ...selected.map(entity => ({
                 ...(entity.avatar == null ? {} : { avatar: entity.avatar }),
                 key: entity.entityId,
-                kind: 'entity',
+                kind: 'entity' as const,
                 label: entity.name,
                 subtitle: entity.description
-              }
+              }))
+            ]
+            : selected.map(entity => ({
+              ...(entity.avatar == null ? {} : { avatar: entity.avatar }),
+              key: entity.entityId,
+              kind: 'entity' as const,
+              label: entity.name,
+              subtitle: entity.description
+            }))
+          for (const member of members) {
+            service.applyEvent(roomId, {
+              id: `runtime-member:${roomId}:${member.key}`,
+              type: 'member_joined',
+              member
             })
           }
           for (const link of memberChannelLinks) {
@@ -603,33 +642,24 @@ export const createOneWorksChannelFacade = () => ({
           service.applyEvent(roomId, {
             id: `runtime-meta:${hostSessionId}`,
             type: 'assignment_sent',
-            member: {
-              ...(leader.avatar == null ? {} : { avatar: leader.avatar }),
-              key: leader.entityId,
-              kind: 'entity',
-              label: leader.name,
-              subtitle: leader.description
-            },
+            member: leaderMember,
             run: {
               key: hostSessionId,
               sessionId: hostSessionId,
               title
             },
-            summary: 'Started working on the first group message.'
+            summary: automaticLeader
+              ? 'Auto Leader is coordinating the first group message.'
+              : 'Started working on the first group message.'
           })
         },
         initialMessage: parsed.message,
-        promptName: leader.entityId,
-        promptType: 'entity',
+        ...(automaticLeader
+          ? { systemPrompt: buildAutomaticLeaderSystemPrompt(selected) }
+          : { promptName: leader!.entityId, promptType: 'entity' as const }),
         room: {
           id: roomId,
-          member: {
-            ...(leader.avatar == null ? {} : { avatar: leader.avatar }),
-            key: leader.entityId,
-            kind: 'entity',
-            label: leader.name,
-            subtitle: leader.description
-          },
+          member: leaderMember,
           title
         },
         title

@@ -133,6 +133,34 @@ export function createChannelChildRunsRepo(db: SqliteDatabase) {
     return get(id)
   }
 
+  const claimDelegation = (id: string, sessionId: string) => {
+    const result = db.prepare(`
+      UPDATE channel_child_session_runs
+      SET status = 'dispatched', sessionId = ?
+      WHERE id = ? AND status = 'started' AND sessionId IS NULL
+    `).run(sessionId, id)
+    return { claimed: result.changes > 0, run: get(id) }
+  }
+
+  const expirePendingDelegations = (input: {
+    beforeStartedAt: number
+    completedAt?: number
+    markerKey: string
+  }) => {
+    const completedAt = input.completedAt ?? Date.now()
+    const markerPath = `$.${input.markerKey}`
+    const result = db.prepare(`
+      UPDATE channel_child_session_runs
+      SET status = 'expired', completedAt = ?, error = 'Delegation expired before use.'
+      WHERE status = 'started'
+        AND sessionId IS NULL
+        AND startedAt < ?
+        AND metadataJson IS NOT NULL
+        AND json_type(metadataJson, ?) IS NOT NULL
+    `).run(completedAt, input.beforeStartedAt, markerPath)
+    return result.changes
+  }
+
   const markRunning = (id: string) => {
     db.prepare(`
       UPDATE channel_child_session_runs SET status = 'running'
@@ -153,7 +181,9 @@ export function createChannelChildRunsRepo(db: SqliteDatabase) {
   }
 
   return {
+    claimDelegation,
     create,
+    expirePendingDelegations,
     finish,
     get,
     getBySessionId,

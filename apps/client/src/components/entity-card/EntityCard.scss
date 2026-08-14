@@ -1,6 +1,7 @@
 .entity-card {
   display: grid;
   grid-template-columns: 36px minmax(0, 1fr);
+  align-content: center;
   align-items: center;
   gap: 10px;
   min-height: 66px;
@@ -100,12 +101,17 @@
   pointer-events: auto;
 }
 
-.entity-card__name:hover,
-.entity-card__name:focus-visible {
+.entity-card__name:not(.is-static):hover,
+.entity-card__name:not(.is-static):focus-visible {
   color: var(--primary-color);
   outline: none;
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+.entity-card__name.is-static {
+  cursor: default;
+  pointer-events: none;
 }
 
 .entity-card__description {

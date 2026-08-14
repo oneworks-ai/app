@@ -45,6 +45,11 @@ import { processUserMessage, writeChannelMessageContext } from '#~/services/sess
 import { getSessionInteraction, handleInteractionResponse } from '#~/services/session/interaction.js'
 import { notifySessionUpdated } from '#~/services/session/runtime.js'
 
+import {
+  createPendingAgentRoomExternalDelegation,
+  finishPendingAgentRoomExternalDelegations
+} from './external-delegation.js'
+import type { AgentRoomExternalDelegation } from './external-delegation.js'
 import { createAgentRoomOwner } from './owner.js'
 import type { AgentRoomOwnerDependencies } from './owner.js'
 
@@ -79,6 +84,7 @@ interface HostInteractionRequestState {
 interface RuntimeRoomMessageContext {
   currentRun?: AgentRoomRun
   detail: AgentRoomDetail
+  externalDelegations?: AgentRoomExternalDelegation[]
   origin?: AgentRoomMessageOrigin
 }
 
@@ -156,6 +162,7 @@ const buildRuntimeRoomMessageContent = (
   }
 
   const currentMemberKey = context.currentRun?.memberKey
+  const externalDelegations = context.externalDelegations ?? []
   const origin = context.origin
   return [
     '<agent-room-message>',
@@ -175,6 +182,14 @@ const buildRuntimeRoomMessageContent = (
         ...(origin.senderId == null ? [] : [`  - senderId: ${origin.senderId}`]),
         ...(origin.senderDisplayName == null ? [] : [`  - senderDisplayName: ${origin.senderDisplayName}`])
       ]),
+    ...(externalDelegations.length === 0
+      ? []
+      : [
+        '- authorizedDelegations:',
+        ...externalDelegations.map(delegation =>
+          `  - memberKey=${delegation.memberKey} | memberLabel=${delegation.memberLabel} | operationId=${delegation.operationId}`
+        )
+      ]),
     '- existing member sessions:',
     ...context.detail.runs.map(run => formatRuntimeRoomRunLine(run, context.currentRun)),
     '',
@@ -187,6 +202,8 @@ const buildRuntimeRoomMessageContent = (
       ? []
       : [
         '- This is an external-channel message. Preserve the externalSource block when delegating to another member.',
+        '- To authorize an external reply, delegate only to a member listed in authorizedDelegations and pass its exact one-time `operationId`.',
+        '- External reply delegation is the exception to the existing-session rule: always use `session.start` with `entity`, `memberKey`, and `operationId` so the server can bind a dedicated authorized session.',
         '- Any externally visible reply must use the channel send capability; a normal assistant reply is internal only.'
       ]),
     '',
@@ -1931,11 +1948,79 @@ export function createAgentRoomService(
           db.listAgentRoomMembers(roomId).find(candidate =>
             candidate.key === `entity:${memberKey}` || `entity:${candidate.key}` === memberKey
           )
-        if (member == null || member.kind !== 'entity') {
+        if (member == null) {
           deliveryErrors.push({ error: 'Agent Room member is unavailable.', memberKey })
           continue
         }
         const run = resolveTargetRun(roomId, { memberKey: member.key })
+        if (member.kind === 'host') {
+          const hostSessionId = run?.sessionId ?? room.hostSessionId
+          if (hostSessionId == null) {
+            deliveryErrors.push({ error: 'Agent Room host session is unavailable.', memberKey })
+            continue
+          }
+          const externalDelegations = processingMemberKeys.flatMap(processingMemberKey => {
+            const owningMember = db.getAgentRoomMember(room.id, processingMemberKey) ??
+              db.listAgentRoomMembers(room.id).find(candidate =>
+                candidate.key === `entity:${processingMemberKey}` || `entity:${candidate.key}` === processingMemberKey
+              )
+            if (owningMember == null || owningMember.kind !== 'entity') return []
+            const ownsSourceConnection = db.listAgentRoomChannelConnectionsForMember(room.id, owningMember.key)
+              .some(connection =>
+                connection.status === 'active' &&
+                connection.channelKey === external.channelKey &&
+                connection.channelType === external.channelType &&
+                connection.channelId === external.channelId
+              )
+            if (!ownsSourceConnection) return []
+            return [createPendingAgentRoomExternalDelegation({
+              executionContext: buildMemberExecutionContext(room, owningMember, external),
+              external,
+              hostSessionId,
+              member: owningMember,
+              room
+            }, db)]
+          })
+          let delivered = false
+          try {
+            const detail = db.getAgentRoomDetail(room.id)
+            delivered = await deliverSessionUserMessage(hostSessionId, content, {
+              runtimeRoomContext: detail == null
+                ? undefined
+                : {
+                  ...(run == null ? {} : { currentRun: run }),
+                  detail,
+                  externalDelegations,
+                  origin
+                }
+            })
+          } catch (error) {
+            finishPendingAgentRoomExternalDelegations(
+              externalDelegations,
+              error instanceof Error ? error.message : String(error),
+              db
+            )
+            throw error
+          }
+          if (delivered) {
+            deliveries.push(createMessageDelivery(hostSessionId, 'message', {
+              memberKey: member.key,
+              runKey: run?.key ?? hostSessionId
+            }))
+          } else {
+            finishPendingAgentRoomExternalDelegations(
+              externalDelegations,
+              'Agent Room host session is unavailable.',
+              db
+            )
+            deliveryErrors.push({ error: 'Agent Room host session is unavailable.', memberKey })
+          }
+          continue
+        }
+        if (member.kind !== 'entity') {
+          deliveryErrors.push({ error: 'Agent Room member is unavailable.', memberKey })
+          continue
+        }
         if (run == null) {
           const created = await startMemberSession(room, member, content, { external, origin })
           if (created == null) {

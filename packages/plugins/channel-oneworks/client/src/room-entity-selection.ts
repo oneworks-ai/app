@@ -7,6 +7,8 @@ export interface RoomEntitySelectionItem {
   teamRole?: 'leader' | 'member'
 }
 
+export const AUTOMATIC_LEADER_ENTITY_ID = 'oneworks:auto-leader'
+
 export const filterRoomEntities = <T extends RoomEntitySelectionItem>(entities: T[], query: string) => {
   const normalizedQuery = query.trim().toLowerCase()
   if (normalizedQuery === '') return entities
