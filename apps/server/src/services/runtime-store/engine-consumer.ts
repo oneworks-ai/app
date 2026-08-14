@@ -12,7 +12,14 @@ import { resolveAdapterPackageName } from '@oneworks/types'
 import { resolveExistingAdapterPackageCacheDir } from '@oneworks/types/adapter-package-cache'
 import { resolveProjectOoBaseDir } from '@oneworks/utils'
 
-import { createChannelRuntimeEnv, normalizeChannelRuntimeContext } from '#~/services/session/channel-context.js'
+import type { SqliteDb } from '#~/db/index.js'
+import { claimAgentRoomExternalDelegation } from '#~/services/agent-room/external-delegation-claim.js'
+import { failClaimedAgentRoomExternalDelegation } from '#~/services/agent-room/external-delegation.js'
+import {
+  buildChannelRuntimeSystemPrompt,
+  createChannelRuntimeEnv,
+  normalizeChannelRuntimeContext
+} from '#~/services/session/channel-context.js'
 import { logger } from '#~/utils/logger.js'
 
 import type { RuntimeSessionMetadata, RuntimeSessionState, RuntimeSessionStore } from './types.js'
@@ -104,6 +111,7 @@ export interface RuntimeConsumerStartCommand {
   messageDelivery?: string
   message?: string
   model?: string
+  operationId?: string
   permissionMode?: string
   promptName?: string
   promptType?: string
@@ -122,6 +130,7 @@ export interface RuntimeConsumerQueuedCommand {
   messageDelivery?: string
   message?: string
   model?: string
+  operationId?: string
   permissionMode?: string
   promptName?: string
   promptType?: string
@@ -264,6 +273,7 @@ const readRuntimeConsumerCommandFields = (command: RuntimeCommand): RuntimeConsu
   message: readString(command.content) ?? readString(command.message),
   messageDelivery: readString(command.messageDelivery),
   model: readString(command.model),
+  operationId: readString(command.operationId),
   permissionMode: readString(command.permissionMode),
   ...(readString(command.name) != null ? { promptName: readString(command.name) } : {}),
   ...(readString(command.taskType) != null ? { promptType: readString(command.taskType) } : {}),
@@ -682,23 +692,25 @@ const writeRuntimeConsumerExitFailureIfPending = async (params: {
     readRuntimeConsumerHeartbeat(params.store)
   ])
   if (isTerminalStatus(state?.status) || isTerminalStatus(heartbeat?.status)) {
-    return
+    return undefined
   }
 
   const runtimeId = readString(heartbeat?.runtimeId)
   if (runtimeId != null && runtimeId !== PENDING_RUNTIME_ID) {
-    return
+    return undefined
   }
 
   const exitSummary = params.signal == null
     ? `Runtime consumer exited before startup completed with code ${params.code ?? 'unknown'}.`
     : `Runtime consumer exited before startup completed with signal ${params.signal}.`
 
+  const error = new Error(exitSummary)
   await writeRuntimeConsumerStartFailure({
-    error: new Error(exitSummary),
+    error,
     metadata: params.metadata,
     store: params.store
   })
+  return error
 }
 
 export function buildRuntimeConsumerSpawnPlan(params: {
@@ -827,6 +839,11 @@ export function buildRuntimeConsumerSpawnPlan(params: {
 
 export async function startServerRuntimeConsumer(params: {
   baseEnv?: NodeJS.ProcessEnv
+  db?: SqliteDb
+  dependencies?: {
+    claimExternalDelegation?: typeof claimAgentRoomExternalDelegation
+    failExternalDelegation?: typeof failClaimedAgentRoomExternalDelegation
+  }
   metadata: RuntimeSessionMetadata
   store: RuntimeSessionStore
 }): Promise<ChildProcess | undefined> {
@@ -863,13 +880,48 @@ export async function startServerRuntimeConsumer(params: {
   }
 
   let plan: RuntimeConsumerSpawnPlan
+  let claimedExternalDelegationId: string | undefined
+  const failClaimedExternalDelegation = (error: unknown) =>
+    (
+      params.dependencies?.failExternalDelegation ?? failClaimedAgentRoomExternalDelegation
+    )({
+      error,
+      operationId: claimedExternalDelegationId,
+      sessionId: params.metadata.sessionId
+    }, params.db)
   try {
+    const externalDelegation = await (
+      params.dependencies?.claimExternalDelegation ?? claimAgentRoomExternalDelegation
+    )({
+      metadata: params.metadata,
+      operationId: activationCommand.operationId
+    }, params.db)
+    claimedExternalDelegationId = externalDelegation?.channelContext == null
+      ? undefined
+      : externalDelegation.run?.id
+    const channelSystemPrompt = externalDelegation?.channelContext == null
+      ? undefined
+      : buildChannelRuntimeSystemPrompt(externalDelegation.channelContext)
+    const metadata = externalDelegation?.channelContext == null || channelSystemPrompt == null
+      ? params.metadata
+      : {
+        ...params.metadata,
+        channelContext: externalDelegation.channelContext,
+        systemPrompt: channelSystemPrompt
+      }
+    if (channelSystemPrompt != null) {
+      await writeFile(
+        path.join(params.store.storePath, RUNTIME_SYSTEM_PROMPT_FILENAME),
+        channelSystemPrompt,
+        'utf8'
+      )
+    }
     plan = buildRuntimeConsumerSpawnPlan({
       baseEnv: params.baseEnv,
       command: activationCommand,
       cwd: params.metadata.cwd ?? process.cwd(),
       launchMode,
-      metadata: params.metadata,
+      metadata,
       store: params.store
     })
 
@@ -890,6 +942,7 @@ export async function startServerRuntimeConsumer(params: {
       throw new Error(`Runtime consumer CLI path does not exist: ${missingSpawnPath}`)
     }
   } catch (error) {
+    failClaimedExternalDelegation(error)
     await writeRuntimeConsumerStartFailure({
       error,
       metadata: params.metadata,
@@ -917,6 +970,7 @@ export async function startServerRuntimeConsumer(params: {
       stdio: 'ignore'
     })
   } catch (error) {
+    failClaimedExternalDelegation(error)
     await writeRuntimeConsumerStartFailure({
       error,
       metadata: params.metadata,
@@ -930,6 +984,7 @@ export async function startServerRuntimeConsumer(params: {
   }
 
   child.once('error', error => {
+    failClaimedExternalDelegation(error)
     void writeRuntimeConsumerStartFailure({
       error,
       metadata: params.metadata,
@@ -952,6 +1007,8 @@ export async function startServerRuntimeConsumer(params: {
       metadata: params.metadata,
       signal,
       store: params.store
+    }).then(error => {
+      if (error != null) failClaimedExternalDelegation(error)
     }).catch(error => {
       logger.warn({
         error: errorMessage(error),

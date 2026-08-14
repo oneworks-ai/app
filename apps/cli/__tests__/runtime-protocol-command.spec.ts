@@ -120,6 +120,7 @@ describe('runtime protocol command mode', () => {
       type: 'session.start',
       sessionId: 'sess-proto-start',
       entity: 'dev',
+      operationId: 'channel-child-delegation-1',
       title: 'Protocol developer',
       message: 'Start through protocol'
     }, {
@@ -142,12 +143,14 @@ describe('runtime protocol command mode', () => {
     const status = await readRuntimeStatus(cwd, 'sess-proto-start')
     expect(status.meta).toEqual(expect.objectContaining({
       entity: 'dev',
+      operationId: 'channel-child-delegation-1',
       title: 'Protocol developer'
     }))
     expect(await readRuntimeCommands(cwd, 'sess-proto-start')).toEqual([
       expect.objectContaining({
         commandId: 'proto-start-1',
         content: 'Start through protocol',
+        operationId: 'channel-child-delegation-1',
         type: 'start'
       })
     ])
@@ -355,6 +358,7 @@ describe('runtime protocol command mode', () => {
     const messageResult = await executeRuntimeProtocolCommand({
       protocolVersion: getCurrentProtocolVersion(),
       commandId: 'proto-message-1',
+      operationId: 'channel-child-delegation-2',
       type: 'session.message',
       sessionId: 'sess-proto-correlation',
       message: 'Continue'
@@ -393,6 +397,7 @@ describe('runtime protocol command mode', () => {
       expect.objectContaining({
         commandId: 'proto-message-1',
         content: 'Continue',
+        operationId: 'channel-child-delegation-2',
         type: 'send_message'
       }),
       expect.objectContaining({

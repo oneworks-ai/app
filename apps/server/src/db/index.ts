@@ -522,6 +522,10 @@ export class SqliteDb {
     return this.channelMemories.listCandidates(filter)
   }
 
+  listChannelMemoriesByEntity(entity: string) {
+    return this.channelMemories.listByEntity(entity)
+  }
+
   saveChannelMemorySnapshot(row: Parameters<typeof this.channelMemories.saveSnapshot>[0]) {
     return this.channelMemories.saveSnapshot(row)
   }
@@ -548,6 +552,19 @@ export class SqliteDb {
 
   createChannelChildSessionRun(row: Parameters<typeof this.channelChildRuns.create>[0]) {
     return this.channelChildRuns.create(row)
+  }
+
+  claimChannelChildSessionDelegation(
+    id: Parameters<typeof this.channelChildRuns.claimDelegation>[0],
+    sessionId: Parameters<typeof this.channelChildRuns.claimDelegation>[1]
+  ) {
+    return this.channelChildRuns.claimDelegation(id, sessionId)
+  }
+
+  expirePendingChannelChildSessionDelegations(
+    input: Parameters<typeof this.channelChildRuns.expirePendingDelegations>[0]
+  ) {
+    return this.channelChildRuns.expirePendingDelegations(input)
   }
 
   finishChannelChildSessionRun(id: string, updates: Parameters<typeof this.channelChildRuns.finish>[1]) {
@@ -925,16 +942,20 @@ export class SqliteDb {
     return this.agentRooms.saveDelivery(delivery)
   }
 
-  saveAgentRoomChannelLink(link: Parameters<typeof this.agentRooms.saveChannelLink>[0]) {
-    return this.agentRooms.saveChannelLink(link)
+  saveAgentRoomChannelConnection(link: Parameters<typeof this.agentRooms.saveChannelConnection>[0]) {
+    return this.agentRooms.saveChannelConnection(link)
   }
 
-  findAgentRoomChannelLink(input: Parameters<typeof this.agentRooms.findRoomChannelLink>[0]) {
-    return this.agentRooms.findRoomChannelLink(input)
+  findAgentRoomChannelConnections(input: Parameters<typeof this.agentRooms.findRoomChannelConnections>[0]) {
+    return this.agentRooms.findRoomChannelConnections(input)
   }
 
-  listAgentRoomChannelLinks(roomId: string) {
-    return this.agentRooms.listChannelLinks(roomId)
+  listAgentRoomChannelConnections(roomId: string) {
+    return this.agentRooms.listChannelConnections(roomId)
+  }
+
+  listAgentRoomChannelConnectionsForMember(roomId: string, memberKey: string) {
+    return this.agentRooms.listChannelConnectionsForMember(roomId, memberKey)
   }
 
   createAgentRoomShare(input: Parameters<typeof this.agentRooms.createShare>[0]) {

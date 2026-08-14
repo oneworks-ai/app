@@ -1,4 +1,4 @@
-import type { AgentRoomChannelLink } from '@oneworks/core'
+import type { AgentRoomChannelConnection } from '@oneworks/core'
 
 import { getChannelManager } from '#~/channels/index.js'
 
@@ -10,7 +10,7 @@ const trimNonEmpty = (value: unknown) => {
 
 const defaultReceiveIdType = (
   channelType: string,
-  kind: AgentRoomChannelLink['conversationKind']
+  kind: AgentRoomChannelConnection['conversationKind']
 ) => {
   if (channelType === 'lark') return kind === 'direct' ? 'open_id' : 'chat_id'
   if (channelType === 'wechat') return kind === 'direct' ? 'wxid' : 'chatroom'
@@ -18,9 +18,14 @@ const defaultReceiveIdType = (
   return undefined
 }
 
-export const resolveAgentRoomChannelLink = async (
+export type ResolvedAgentRoomChannelConnection = Omit<
+  AgentRoomChannelConnection,
+  'commandPrefix' | 'createdAt' | 'memberKey' | 'muted' | 'requireMention' | 'roomId' | 'updatedAt'
+>
+
+export const resolveAgentRoomChannelConnection = async (
   channelLinkName: string
-): Promise<Omit<AgentRoomChannelLink, 'createdAt' | 'roomId'>> => {
+): Promise<ResolvedAgentRoomChannelConnection> => {
   const manager = getChannelManager()
   if (manager == null) throw new Error('Channel runtime is not initialized.')
   const matches = [...manager.states.values()].flatMap(state =>
@@ -53,6 +58,7 @@ export const resolveAgentRoomChannelLink = async (
     entity: link.entity,
     label: link.name,
     receiveId: link.address.id,
-    receiveIdType
+    receiveIdType,
+    status: state.status === 'connected' ? 'active' : 'unavailable'
   }
 }

@@ -27,6 +27,7 @@ import type { CreateAssetFormValues } from './components/CreateAssetModal.js'
 import { CreateSkillModal } from './components/CreateSkillModal.js'
 import type { CreateSkillFormValues } from './components/CreateSkillModal.js'
 import { EntitiesTab } from './components/EntitiesTab.js'
+import { EntityDetailView } from './components/EntityDetailView.js'
 import { FlowsTab } from './components/FlowsTab.js'
 import { KnowledgeContentControls } from './components/KnowledgeContentControls.js'
 import { RulesTab } from './components/RulesTab.js'
@@ -40,7 +41,7 @@ import {
   isSkillHubSortKey
 } from './components/skill-hub-utils.js'
 import type { SkillHubInstallFilter, SkillHubSortKey } from './components/skill-hub-utils.js'
-import type { KnowledgeSectionKey, KnowledgeSkillPage } from './knowledge-routes.js'
+import type { KnowledgeEntityPage, KnowledgeSectionKey, KnowledgeSkillPage } from './knowledge-routes.js'
 
 interface KnowledgeQueryParams extends Record<string, string> {
   skillInstall: string
@@ -90,18 +91,26 @@ const toSkillHubSortKey = (value: string): SkillHubSortKey => (
 )
 
 interface KnowledgeBaseViewProps {
+  entityId?: string
+  entityPage?: KnowledgeEntityPage
   sectionKey: KnowledgeSectionKey
   skillPage: KnowledgeSkillPage
   onBack: () => void
   onNavigateSection: (sectionKey: KnowledgeSectionKey) => void
+  onNavigateEntity: (entityId: string) => void
+  onNavigateEntityPage: (entityId: string, page: KnowledgeEntityPage) => void
   onNavigateSkillPage: (skillPage: KnowledgeSkillPage) => void
 }
 
 export function KnowledgeBaseView({
+  entityId,
+  entityPage = 'role',
   sectionKey,
   skillPage,
   onBack,
   onNavigateSection,
+  onNavigateEntity,
+  onNavigateEntityPage,
   onNavigateSkillPage
 }: KnowledgeBaseViewProps) {
   const { t } = useTranslation()
@@ -292,6 +301,19 @@ export function KnowledgeBaseView({
   const handleCreateEntity = React.useCallback(() => {
     openAssetModal('entity')
   }, [openAssetModal])
+
+  React.useEffect(() => {
+    if (sectionKey !== 'entities') return
+    const params = new URLSearchParams(globalThis.location.search)
+    if (params.get('create') !== 'entity') return
+    openAssetModal('entity')
+    params.delete('create')
+    globalThis.history.replaceState(
+      globalThis.history.state,
+      '',
+      `${globalThis.location.pathname}${params.size === 0 ? '' : `?${params.toString()}`}${globalThis.location.hash}`
+    )
+  }, [openAssetModal, sectionKey])
 
   const handleImportEntity = React.useCallback(() => {
     message.info(t('knowledge.entities.importHint'))
@@ -486,6 +508,7 @@ export function KnowledgeBaseView({
           onTagFilterChange={setEntityTagFilter}
           onCreate={handleCreateEntity}
           onImport={handleImportEntity}
+          onOpenEntity={onNavigateEntity}
         />
       )
     },
@@ -657,6 +680,20 @@ export function KnowledgeBaseView({
       }
     }
 
+    if (activeSectionKey === 'entities' && entityId != null) {
+      return {
+        ancestors: [{
+          title: t('common.knowledgeBase'),
+          onSelect: () => onNavigateSection('entities')
+        }],
+        ariaLabel: t('knowledge.breadcrumbLabel'),
+        backLabel: t('common.back'),
+        currentTitle: entities.find(entity => entity.id === entityId)?.name ?? entityId,
+        onBack: () => onNavigateSection('entities'),
+        parentTitle: t('knowledge.tabs.entities')
+      }
+    }
+
     return {
       ariaLabel: t('knowledge.breadcrumbLabel'),
       backLabel: t('common.back'),
@@ -664,7 +701,17 @@ export function KnowledgeBaseView({
       onBack,
       parentTitle: t('common.knowledgeBase')
     }
-  }, [activeSection.label, activeSectionKey, onBack, onNavigateSkillPage, skillPage, t])
+  }, [
+    activeSection.label,
+    activeSectionKey,
+    entities,
+    entityId,
+    onBack,
+    onNavigateSection,
+    onNavigateSkillPage,
+    skillPage,
+    t
+  ])
 
   React.useLayoutEffect(() => {
     if (!hasRouteSidebarProvider) return undefined
@@ -729,7 +776,15 @@ export function KnowledgeBaseView({
           }
         />
       )}
-      {activeSection?.content}
+      {activeSectionKey === 'entities' && entityId != null
+        ? <EntityDetailView
+          activePage={entityPage}
+          entityId={entityId}
+          path={entities.find(entity => entity.name === entityId || entity.id === entityId)?.id}
+          resolving={isEntitiesLoading}
+          onNavigatePage={page => onNavigateEntityPage(entityId, page)}
+        />
+        : activeSection?.content}
       <CreateAssetModal
         form={createAssetForm}
         kind={createAssetKind}

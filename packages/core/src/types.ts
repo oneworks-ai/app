@@ -1,5 +1,7 @@
 export type {
   AgentRoom,
+  AgentRoomChannelConnection,
+  AgentRoomChannelConnectionStatus,
   AgentRoomChannelLink,
   AgentRoomCommand,
   AgentRoomDetail,
@@ -45,6 +47,7 @@ export type {
   AgentRoomUserMessagePayload,
   AgentRoomUserMessageTarget,
   AskUserQuestionParams,
+  AttachAgentRoomChannelConnectionRequest,
   AttachAgentRoomChannelLinkRequest,
   ChannelCommandEffect,
   ChannelConversationKind,

@@ -36,6 +36,23 @@ interface CreateSessionWorkspaceOptions {
   branch?: CreateSessionWorkspaceBranchOptions
 }
 
+interface CreateSessionRoomOptions {
+  id: string
+  title?: string
+  hostSessionId?: string | null
+  member: {
+    avatar?: string
+    key: string
+    kind?: 'entity' | 'host' | 'task'
+    label: string
+    subtitle?: string
+  }
+  run?: {
+    key?: string
+    title?: string
+  }
+}
+
 const resolveCreateSessionConfigWorkspaceFolder = async (sourceSessionId?: string) => {
   if (sourceSessionId != null && sourceSessionId !== '') {
     const workspace = await resolveSessionWorkspace(sourceSessionId)
@@ -91,6 +108,7 @@ export async function createSessionWithInitialMessage(options: {
   adapter?: string
   account?: string
   channelContext?: ChannelRuntimeContext
+  room?: CreateSessionRoomOptions
   updateSkills?: boolean
   workspace?: CreateSessionWorkspaceOptions
 }): Promise<Session> {
@@ -115,6 +133,7 @@ export async function createSessionWithInitialMessage(options: {
     adapter,
     account,
     channelContext,
+    room,
     updateSkills,
     workspace
   } = options
@@ -222,6 +241,20 @@ export async function createSessionWithInitialMessage(options: {
           adapter,
           account,
           ...(channelContext == null ? {} : { channelContext }),
+          ...(room == null
+            ? {}
+            : {
+              ...(room.hostSessionId === null ? {} : { hostSessionId: room.hostSessionId ?? session.id }),
+              ...(room.member.avatar == null ? {} : { memberAvatar: room.member.avatar }),
+              memberKey: room.member.key,
+              memberKind: room.member.kind ?? 'entity',
+              memberLabel: room.member.label,
+              ...(room.member.subtitle == null ? {} : { memberSubtitle: room.member.subtitle }),
+              roomId: room.id,
+              ...(room.title == null ? {} : { roomTitle: room.title }),
+              runId: room.run?.key ?? session.id,
+              runTitle: room.run?.title ?? title
+            }),
           promptType,
           promptName,
           updateConfiguredSkills: updateSkills === true

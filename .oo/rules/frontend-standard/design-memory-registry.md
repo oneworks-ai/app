@@ -18,21 +18,10 @@
 
 ### OW-DM-003 — 主会话时间线容器阈值与持续可见
 
-- Revision: 6
-- Status: ACTIVE
-- Rule: 主会话内容容器宽度超过 `820px` 且存在至少一个时间线节点时，左侧 timeline rail 持续展示；未配置时默认使用 `event-line`，用户可通过 global `appearance.historyTimelineMode` 显式切换为原有 `node` 模式。内容是否可滚动只决定上下边缘渐隐，不决定 rail 是否存在。
-- Scope: OneWorks project / desktop primary chat history timeline
-- Applies when: 宽度超过 `820px`、非嵌入式、非 Agent Room 的主会话消息历史存在时间线节点。
-- Does not apply when: 内容容器宽度不超过 `820px`、新会话没有节点、`embeddedSessionChrome`、Agent Room，或用户主动隐藏 rail；用户选择 `node` 时只替换 rail 的渲染模式，不移除可见性约束。
-- Positive example: 一问一答的短会话没有滚动空间，左侧仍显示事件短线。
-- Negative example: 因消息内容没有超过视口而移除整条 Event lines rail。
-- Owning rule: `apps/client/src/components/chat/AGENTS.md` 的消息级操作约束。
-- Token or implementation: `history-timeline/timeline-visibility.ts` 与对应单测。
-- Source: 用户先要求 Event line 模式在真实聊天页持续展示，随后明确把内容容器阈值调整为 `820px`，并要求在外观设置中支持 Event lines / Nodes 两种展示模式。
-- Effective date: 2026-07-13
-- Supersedes: OW-DM-003 Revision 3；保留 `820px` 阈值，并把用户显式选择 `node` 登记为 Event lines 默认规则的作用域例外。
-- Exceptions: 容器宽度不超过 `820px`、嵌入式会话、Agent Room、无节点、用户主动隐藏，以及用户显式选择 `node` 渲染模式。
-- Automatic enforcement: 纯可见性单测、真实短会话 DOM 断言和独立视觉审阅。
+- Revision / status / scope: 6 / ACTIVE / OneWorks project，desktop primary chat history timeline。
+- Rule / applicability: 主会话内容容器宽度超过 `820px`、非嵌入式、非 Agent Room 且存在至少一个时间线节点时，左侧 timeline rail 持续展示；未配置时默认使用 `event-line`，用户可通过 global `appearance.historyTimelineMode` 显式切换为原有 `node` 模式。内容是否可滚动只决定上下边缘渐隐，不决定 rail 是否存在。内容容器不超过 `820px`、新会话没有节点、`embeddedSessionChrome`、Agent Room、用户主动隐藏 rail 时不适用；选择 `node` 只替换渲染模式，不移除可见性约束。
+- Examples: 正例是一问一答的短会话没有滚动空间，左侧仍显示事件短线；反例是因消息内容没有超过视口而移除整条 Event lines rail。
+- Ownership / implementation / source / lifecycle / enforcement: `apps/client/src/components/chat/AGENTS.md` 的消息级操作约束拥有，实现在 `history-timeline/timeline-visibility.ts` 与对应单测；来源为用户先要求 Event line 模式在真实聊天页持续展示，随后明确把阈值调整为 `820px` 并要求支持 Event lines / Nodes；生效日期 2026-07-13；替代 OW-DM-003 Revision 3；例外为容器不超过 `820px`、嵌入式会话、Agent Room、无节点、用户主动隐藏及显式 `node` 模式；由纯可见性单测、真实短会话 DOM 断言和独立视觉审阅执行。
 
 ### OW-DM-004 — 主题包独立配置边界
 
@@ -140,12 +129,23 @@
 - Rule / examples: 认证缺失或失效时仍保留完整额度卡片，继续展示最后一次额度或空结构，并在使用限额区域内给出本地化的重新登录提示；反例是以 `quota != null` 或登录状态为条件卸载整张卡片，让用户失去问题上下文与重新登录入口。
 - Ownership / source / exceptions / enforcement: 规则由 `apps/client/src/components/account-quota/AGENTS.md`、`AccountQuotaPanel.tsx` 与消费方拥有；来源为用户 2026-08-07 明确要求无论登录状态是否丢失都展示额度区域，并在区域内提示。账号记录本身已被删除时不适用；由 missing / error 且无 quota 的组件回归、配置详情与聊天弹窗真实页面视觉审阅执行。
 
+### OW-DM-014 — Agent Room 渠道流向与品牌标记
+
+- Revision / status / scope: 1 / ACTIVE / OneWorks project，Agent Room 外部渠道来源与投递标记，以及复用共享渠道平台图标的页面。
+- Rule / examples: 已知渠道必须使用对应品牌资产，只有未知渠道使用通用 `hub` fallback；Agent Room 中 `source` 标记位于气泡左侧，`delivery` 标记位于气泡右侧。正例是飞书入站消息左侧显示飞书品牌，Agent 发回飞书的回复右侧显示飞书品牌；反例是用 `flight`、`chat` 等语义近似 Material glyph 冒充渠道品牌，或把投递标记放在气泡左侧。
+- Ownership / source / exceptions / enforcement: 规则由 `apps/client/src/components/agent-room/AGENTS.md`、共享 `ChannelPlatformIcon` 和 Agent Room 气泡组件拥有；来源为用户 2026-08-14 对真实飞书群聊页面的明确反馈。OneWorks 内部投影不显示外部渠道标记；品牌素材必须由 client bundle 或产品资产入口提供，不依赖用户 workspace。由渠道别名参数化测试、`source < surface < delivery` DOM 顺序断言、production build 资产检查和用户可见页面审阅执行。
+
+### OW-DM-015 — Team Chat Leader 与关联成员选择
+
+- Revision / status / scope: 5 / ACTIVE / OneWorks project，Team Chat 创建页的 Leader 和普通成员选择。
+- Rule / examples: Leader 是独立单选组，系统内置 Auto Leader 并作为没有显式实体 Leader 时的默认选择；Auto Leader 根据已选成员的名称和职责自动拆解、分配、跟进并汇总任务，至少需要一个普通成员，且不拥有实体频道连接。选择实体 Leader 后自动预选其定义中的关联成员，并在 Leader 卡片右下角展示关联成员头像；普通成员保持多选。两个选择组在桌面和中间宽度默认最多展示三行并各自纵向滚动；手机收为两行三列正方形卡片并隐藏描述，仍保留名称、头像、选择状态和 Leader 关联头像。正例是大量实体不会无限拉长页面，手机仍可紧凑扫描和选择且不制造外层与分组之间的竞争滚动；外部频道消息中，Auto Leader 只能把服务端生成的一次性委派交给真正拥有来源连接的实体子会话。反例是把 Leader 混入普通多选列表、要求先注册 Leader 才能创建群聊、给 Auto Leader 或非 owning member 发频道 token、允许同一委派被多会话重放、只在客户端临时保存关联关系，或让任一分组随实体数量无限增高。
+- Ownership / source / exceptions / enforcement: 规则由 `packages/plugins/channel-oneworks`、OneWorks Channel 服务、Agent Room host session、共享 `EntityCard` 和 `Entity.team` 契约拥有；来源为用户 2026-08-14 先要求实体 Leader 单选与关联成员和内置 Auto Leader，随后明确创建页分组三行滚动及手机正方形紧凑卡片。服务端必须权威解析 Leader 模式与 `team.role` / `team.relatedEntities`，Auto Leader 的动态 roster prompt 只包含已选实体且通过统一 runtime protocol 调度；每个可执行请求必须至少委派一次并跟进到终态。外部回复 authority 必须由服务端按 room / host / owning member / active connection 原子绑定到专用实体子会话，回复目标固定为原始入站事件快照，无效委派必须 fail closed，已绑定 session 可幂等恢复 context，未领取授权必须按 TTL 过期，并拒绝跨 session 重放。由 schema、创建服务、外部入站 host 投递、原子 delegation claim、command authority、过期清理、交互测试，以及桌面/中间宽度/手机的行数、滚动、正方形几何和真实页面审阅执行。
+
 ## 待确认冲突
 
 ### OW-DM-P001 — 主题侧栏是否保留渐变
 
-- Revision: 2
-- Status: SCOPED_EXCEPTION
+- Revision / status: 2 / SCOPED_EXCEPTION
 - Rule: Codex 主题侧栏使用单一中性纯色表面；其他主题继续遵循各自表面配方。
 - Source: 用户明确要求 Codex 主题移除渐变，2026-07-14；已由 `OW-DM-E002` 的主题范围约束承接。
 

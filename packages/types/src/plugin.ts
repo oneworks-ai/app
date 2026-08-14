@@ -192,6 +192,7 @@ export interface PluginContributionNavItem extends PluginContributionBase {
   id: string
   title: string
   icon?: string
+  placement?: 'afterCore' | 'beforeCore'
   command?: string
   payload?: unknown
   route?: string

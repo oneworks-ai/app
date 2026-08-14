@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- Sender body keeps the typed composer/header/picker wiring visible in one boundary. */
 import type { MutableRefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -68,6 +69,7 @@ export function SenderBody({
   sessionTarget,
   agentRoomTargetMembers,
   hideHeaderControls,
+  layout,
   showStatusBarControlsInMore,
   statusBarGitControlsInMore,
   showContextPicker,
@@ -117,6 +119,7 @@ export function SenderBody({
   sessionTarget?: SenderProps['sessionTarget']
   agentRoomTargetMembers?: SenderProps['agentRoomTargetMembers']
   hideHeaderControls?: boolean
+  layout?: SenderProps['layout']
   showStatusBarControlsInMore?: boolean
   statusBarGitControlsInMore?: SenderProps['statusBarGitControlsInMore']
   showContextPicker: boolean
@@ -127,7 +130,11 @@ export function SenderBody({
   const { t } = useTranslation()
   const { isCompactLayout } = useResponsiveLayout()
   const { isHeaderCollapsed } = useSenderHeaderQueryState()
-  const minVisibleLineCount = !isInlineEdit && !isCompactLayout ? 2 : 1
+  const minVisibleLineCount = layout === 'adaptive'
+    ? 1
+    : !isInlineEdit && !isCompactLayout
+    ? 2
+    : 1
   const showHeaderControlsInMore = hideHeaderControls !== true && !isInlineEdit && isHeaderCollapsed
 
   return (
@@ -163,6 +170,7 @@ export function SenderBody({
         onPendingAnnotationPreviewChange={onPendingAnnotationPreviewChange}
         onOpenPendingFileComment={onOpenPendingFileComment}
         input={input}
+        layout={layout}
         placeholder={placeholder || t('chat.inputPlaceholder')}
         disabled={(!isInlineEdit && modelUnavailable) || (isInlineEdit && isBusy)}
         startupUnavailable={!isInlineEdit && modelUnavailable === true}

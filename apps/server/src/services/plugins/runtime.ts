@@ -596,13 +596,14 @@ const resolveRuntimeClientSourceEntry = async (
   watchEnabled: boolean,
   managedSource: boolean,
   needsClientEntryFallback: boolean,
+  workspaceRoot: string,
   allowedRoots: string[]
 ): Promise<RuntimeClientSourceEntry | undefined> => {
   if (
     !usesRuntimeClientSourceCompiler() ||
     (
       !needsClientEntryFallback &&
-      (!watchEnabled || managedSource || raw.sourceType !== 'directory')
+      (!watchEnabled || managedSource)
     )
   ) {
     return undefined
@@ -617,14 +618,19 @@ const resolveRuntimeClientSourceEntry = async (
   const absoluteSourceRoot = configuredSourceRoot == null
     ? path.dirname(absoluteEntry)
     : path.resolve(pluginRoot, configuredSourceRoot)
-  const [realPluginRoot, realEntry, realSourceRoot, realAllowedRoots] = await Promise.all([
+  const [realPluginRoot, realEntry, realSourceRoot, realWorkspaceRoot, realAllowedRoots] = await Promise.all([
     realpath(pluginRoot).catch(() => path.resolve(pluginRoot)),
     realpath(absoluteEntry),
     realpath(absoluteSourceRoot).catch(() => undefined),
+    realpath(workspaceRoot).catch(() => path.resolve(workspaceRoot)),
     Promise.all(allowedRoots.map(root => realpath(root).catch(() => path.resolve(root))))
   ])
+  const relativeWorkspacePluginRoot = path.relative(realWorkspaceRoot, realPluginRoot)
+  const isLocalWorkspaceSource = isPathInside(realWorkspaceRoot, realPluginRoot) &&
+    !relativeWorkspacePluginRoot.split(path.sep).includes('node_modules')
   if (
     realSourceRoot == null ||
+    (!needsClientEntryFallback && raw.sourceType !== 'directory' && !isLocalWorkspaceSource) ||
     !isPathInside(realPluginRoot, realEntry) ||
     !isPathInside(realPluginRoot, realSourceRoot) ||
     !isPathInside(realSourceRoot, realEntry) ||
@@ -1138,6 +1144,7 @@ const CONTRIBUTION_ROUTE_SHAPE: PublicContributionRouteShape = {
         'icon',
         'id',
         'payload',
+        'placement',
         'route',
         'title'
       ]),
@@ -2882,6 +2889,7 @@ export class PluginManager {
         watchEnabled,
         this.managedPluginRoots.some(root => isPathInside(root, pluginRoot)),
         needsClientEntryFallback,
+        this.workspaceFolder,
         [
           this.workspaceFolder,
           ...getHostViteDevClientAllowedRoots()
@@ -3380,6 +3388,7 @@ export class PluginManager {
       await activatePlugin(ctx)
       await Promise.all(record.localServices.values())
     } catch (error) {
+      logger.error({ err: error, scope: record.instance.scope }, '[plugins] activation failed')
       await this.clearRecordRuntime(record)
       record.instance.enabled = false
       const diagnostic = {

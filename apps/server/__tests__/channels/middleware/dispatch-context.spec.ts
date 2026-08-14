@@ -29,9 +29,13 @@ const link = (
   conversationKind: 'group' as const,
   entity,
   label,
+  memberKey: entity,
+  muted: false,
   receiveId,
   receiveIdType: channelType === 'wechat' ? 'chatroom' : 'chat_id',
-  roomId: 'room-1'
+  roomId: 'room-1',
+  requireMention: false,
+  status: 'active' as const
 })
 
 const makeContext = (): ChannelContext => ({
@@ -65,14 +69,23 @@ describe('channel execution context', () => {
       title: 'Brainstorm',
       owner: { type: 'local', nodeId: 'node-1' }
     })
-    state.db.saveAgentRoomChannelLink(link(
+    state.db.saveAgentRoomMember({
+      activeRunCount: 0,
+      key: 'owo',
+      kind: 'entity',
+      label: 'OwO',
+      pendingCount: 0,
+      roomId: 'room-1',
+      status: 'idle'
+    })
+    state.db.saveAgentRoomChannelConnection(link(
       'lark:product',
       'brainstorm-lark',
       'lark',
       'Lark brainstorm',
       'oc_brainstorm'
     ))
-    state.db.saveAgentRoomChannelLink(link(
+    state.db.saveAgentRoomChannelConnection(link(
       'wechat:service',
       'brainstorm-wechat',
       'wechat',
@@ -92,7 +105,7 @@ describe('channel execution context', () => {
     expect(executionContext).toEqual(expect.objectContaining({
       actor: expect.objectContaining({ canonicalUserId: 'user-1', externalAccountId: 'ou_sender' }),
       entity: { id: 'owo', label: 'owo' },
-      room: { id: 'room-1', ownerNodeId: 'node-1', title: 'Brainstorm' },
+      room: { id: 'room-1', memberKey: 'owo', ownerNodeId: 'node-1', title: 'Brainstorm' },
       source: expect.objectContaining({
         channelKey: 'lark:product',
         channelType: 'lark',
@@ -107,7 +120,7 @@ describe('channel execution context', () => {
     expect(Object.isFrozen(executionContext)).toBe(true)
     expect(Object.isFrozen(executionContext.availableDeliveryTargets)).toBe(true)
 
-    state.db.saveAgentRoomChannelLink(link(
+    state.db.saveAgentRoomChannelConnection(link(
       'discord:community',
       'brainstorm-discord',
       'discord',
@@ -122,7 +135,7 @@ describe('channel execution context', () => {
     expect(state.db.getAgentRoomDetail('room-1')?.messages).toEqual([
       expect.objectContaining({
         content: 'Start the review.',
-        idempotencyKey: 'channel:lark:lark:product:om_1',
+        idempotencyKey: 'channel:lark:oc_brainstorm:om_1',
         memberKey: 'user:user-1',
         origin: expect.objectContaining({
           channelKey: 'lark:product',
@@ -135,7 +148,7 @@ describe('channel execution context', () => {
   })
 
   it("does not make another entity's Room account available for delivery", () => {
-    state.db.saveAgentRoomChannelLink(link(
+    state.db.saveAgentRoomChannelConnection(link(
       'lark:research',
       'brainstorm-research',
       'lark',

@@ -396,13 +396,18 @@ const getSystemMessage = (
     return undefined
   }
 
-  const memberLabel = getPayloadMemberLabel(message.payload) ??
-    (message.memberKey == null ? undefined : membersByKey.get(message.memberKey)?.label ?? message.memberKey)
-  return memberLabel == null
+  const member = message.memberKey == null ? undefined : membersByKey.get(message.memberKey)
+  const memberLabel = getPayloadMemberLabel(message.payload) ?? member?.label ?? message.memberKey
+  return memberLabel == null || message.memberKey == null
     ? undefined
     : {
       kind: 'memberJoined',
-      memberLabel
+      members: [{
+        memberKey: message.memberKey,
+        label: memberLabel,
+        ...(member?.avatar == null ? {} : { avatar: member.avatar }),
+        ...(member?.avatarLabel == null ? {} : { avatarLabel: member.avatarLabel })
+      }]
     }
 }
 
@@ -845,18 +850,26 @@ export function buildAgentRoomRouteViewModel(input: AgentRoomRouteDetailInput): 
     runsByMemberKey.set(run.memberKey, runs)
   }
 
-  const members: AgentRoomMemberView[] = detail.members.map(member => ({
-    memberKey: member.key,
-    kind: member.kind,
-    label: member.label,
-    subtitle: member.subtitle,
-    avatarLabel: member.avatar,
-    status: mapMemberStatus(member.status),
-    pendingCount: member.pendingCount,
-    activeRunCount: member.activeRunCount,
-    latestSummary: member.latestSummary,
-    runs: runsByMemberKey.get(member.key) ?? []
-  }))
+  const members: AgentRoomMemberView[] = detail.members.map(member => {
+    const avatar = member.avatar?.trim()
+    const isImageAvatar = avatar != null && avatar !== '' && (
+      /^(?:blob:|data:|https?:\/\/|\/)/u.test(avatar) ||
+      avatar.includes('/') ||
+      /\.(?:gif|jpe?g|png|svg|webp)(?:\?.*)?$/iu.test(avatar)
+    )
+    return {
+      memberKey: member.key,
+      kind: member.kind,
+      label: member.label,
+      subtitle: member.subtitle,
+      ...(isImageAvatar ? { avatar } : avatar == null || avatar === '' ? {} : { avatarLabel: avatar }),
+      status: mapMemberStatus(member.status),
+      pendingCount: member.pendingCount,
+      activeRunCount: member.activeRunCount,
+      latestSummary: member.latestSummary,
+      runs: runsByMemberKey.get(member.key) ?? []
+    }
+  })
 
   const membersByKey = new Map(members.map(member => [member.memberKey, member]))
   const runsByKey = new Map(

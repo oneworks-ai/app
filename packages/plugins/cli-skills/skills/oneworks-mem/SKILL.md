@@ -9,6 +9,8 @@ description: 说明 agent 如何用 oneworks mem CLI 在 entity、channel、conv
 
 在 channel 会话中，不要让模型自己抄写平台 id。`oneworks mem` 会从环境变量和 server 写入的当前消息上下文文件读取 session id、channel id、群聊当前发送者 sender id 等元数据。群聊里多人轮流说话时，`-s user` 默认指向当前这条消息的发送者。
 
+当前实体的 `MEMORY_POLICY.md` 定义“什么值得记、什么不应记、如何表述和何时淘汰”；`entity.yaml` 的 `memory` 段定义可写 scope、证据、有效期、敏感数据和每轮预算等硬边界。语义策略和硬边界都高于本 skill 的通用建议。命令拒绝写入时，不要改用别的文件路径绕过策略。
+
 ## 快速命令
 
 - `oneworks mem get`：读取当前默认记忆文件，等价于当前 channel id 下的 `README.md`。
@@ -43,6 +45,8 @@ description: 说明 agent 如何用 oneworks mem CLI 在 entity、channel、conv
 - 用户问“你知道 X 吗”“你还记得 X 吗”，或你准备吐槽/接梗但不确定上下文时，先 `oneworks mem get` / `oneworks mem get -s user` / `oneworks mem list`。
 - 准备写入前，先 `get` 或 `list`，避免重复、冲突或把同一主题写到多个地方。
 
+运行时加载结构化记忆时会先匹配可见性 group。`orgs` 必须命中；`conversationTypes`、`entities`、`rooms`、`channels` 等维度在同一 group 内按 OR、不同 group 之间按 AND 组合。不要因为实体名相同，就假设另一个组织、群聊或会话中的记忆可见。候选选择和预算也会按 visibility group 分配，避免单一高频群聊挤占全部上下文。
+
 常用读取：
 
 ```bash
@@ -67,6 +71,7 @@ oneworks mem get -p ./reference/wechat.md
 - 你刚刚从聊天中理解了一个原本不熟的群友、群内梗、项目名、表情用法、互动边界或话题背景，并且它会帮助未来更自然地回应。
 
 写入时尽量和当前聊天话题保持一致：同一主题聚合到同一个文件，摘要短而可执行，避免跨主题混写。
+每次只写一个稳定事实、偏好、约定或可复用经验。保留当前 child run、来源消息和可见性上下文作为证据；这些绑定由 runtime 与 CLI 自动完成，不要在正文里伪造平台 id 或来源字段。
 不要只在 Chat History 里写“我会记住”或“应该记录”；需要记忆时要真的调用 `oneworks mem patch`，让工具调用记录出现在过程里。
 
 ## 写入格式建议

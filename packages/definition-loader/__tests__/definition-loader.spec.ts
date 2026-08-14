@@ -42,6 +42,23 @@ afterEach(async () => {
 })
 
 describe('definitionLoader', () => {
+  it('resolves the repository Team Chat leader fixture without unavailable parent entities', async () => {
+    const loader = new DefinitionLoader(process.cwd())
+
+    await expect(loader.loadEntityDocumentSet('room-smoke-planner')).resolves.toEqual(
+      expect.objectContaining({
+        definition: expect.objectContaining({
+          attributes: expect.objectContaining({
+            team: {
+              relatedEntities: ['room-smoke-dev', 'room-smoke-qa'],
+              role: 'leader'
+            }
+          })
+        })
+      })
+    )
+  })
+
   it('loads local and remote rule references with overridden descriptions', async () => {
     const workspace = await createWorkspace()
     const loader = new DefinitionLoader(workspace)

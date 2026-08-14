@@ -2,6 +2,8 @@ import type { Buffer } from 'node:buffer'
 
 import type { PluginRequestPermission, PluginRequestPrincipal } from '@oneworks/types'
 
+import type { OneWorksChannelProductFacade } from './product-facade.js'
+
 const readBody = (body: Buffer) => {
   if (body.length === 0) return undefined
   try {
@@ -45,22 +47,7 @@ const productHeaderSchema = {
 }
 
 export function activatePlugin(ctx: {
-  oneworksChannel?: {
-    createRoomShare: (principal: PluginRequestPrincipal, roomId: string, input: unknown) => Promise<unknown>
-    createScenario: (principal: PluginRequestPrincipal, input: unknown) => Promise<unknown>
-    deleteScenario: (principal: PluginRequestPrincipal, scenarioRef: string) => Promise<boolean>
-    getTrace: (principal: PluginRequestPrincipal, limit?: unknown) => Promise<unknown>
-    injectSimulation: (principal: PluginRequestPrincipal, input: unknown) => Promise<unknown>
-    listRooms: (principal: PluginRequestPrincipal) => Promise<unknown>
-    listShareOwners: (principal: PluginRequestPrincipal) => Promise<unknown>
-    listShares: (principal: PluginRequestPrincipal) => Promise<unknown>
-    listSharedRooms: (principal: PluginRequestPrincipal) => Promise<unknown>
-    listSimulationTargets: (principal: PluginRequestPrincipal) => Promise<unknown>
-    listScenarios: (principal: PluginRequestPrincipal) => Promise<unknown>
-    runScenario: (principal: PluginRequestPrincipal, scenarioRef: string) => Promise<unknown>
-    revokeRoomShare: (principal: PluginRequestPrincipal, roomId: string, shareRef: string) => Promise<boolean>
-    updateScenario: (principal: PluginRequestPrincipal, scenarioRef: string, input: unknown) => Promise<unknown>
-  }
+  oneworksChannel?: OneWorksChannelProductFacade
   logger: { info: (...args: unknown[]) => void }
   registerApi: (id: string, options: {
     handler: (request: {
@@ -96,7 +83,57 @@ export function activatePlugin(ctx: {
     handler: async request => {
       const parts = routeParts(request.path)
       const body = readBody(request.body)
+      if (request.method === 'GET' && parts[0] === 'entities') {
+        return json(await product.listEntities(request.principal))
+      }
+      if (request.method === 'POST' && parts[0] === 'rooms' && parts.length === 1) {
+        return json(await product.createRoom(request.principal, body))
+      }
+      if (
+        request.method === 'POST' &&
+        parts[0] === 'rooms' &&
+        parts[2] === 'connections' &&
+        parts.length === 3
+      ) {
+        return json(
+          await product.attachRoomChannelConnection(
+            request.principal,
+            decodeURIComponent(parts[1] ?? ''),
+            body
+          ),
+          201
+        )
+      }
+      if (parts[0] === 'rooms' && parts[1] != null && parts.length === 2) {
+        const roomId = decodeURIComponent(parts[1])
+        if (request.method === 'PATCH') return json(await product.updateRoom(request.principal, roomId, body))
+        if (request.method === 'DELETE') {
+          const removed = await product.deleteRoom(request.principal, roomId)
+          return removed ? json({ deleted: true }) : json({ error: 'Room not found.' }, 404)
+        }
+      }
+      if (
+        request.method === 'PATCH' &&
+        parts[0] === 'rooms' &&
+        parts[2] === 'connections' &&
+        parts[3] != null &&
+        parts[4] != null &&
+        parts.length === 5
+      ) {
+        return json(
+          await product.updateRoomChannelConnection(
+            request.principal,
+            decodeURIComponent(parts[1] ?? ''),
+            decodeURIComponent(parts[3]),
+            decodeURIComponent(parts[4]),
+            body
+          )
+        )
+      }
       if (request.method === 'GET' && parts[0] === 'rooms') return json(await product.listRooms(request.principal))
+      if (request.method === 'GET' && parts[0] === 'room-connection-candidates') {
+        return json(await product.listRoomChannelConnectionCandidates(request.principal))
+      }
       if (request.method === 'GET' && parts[0] === 'share-owners') {
         return json(await product.listShareOwners(request.principal))
       }

@@ -16,6 +16,7 @@ import {
 
 import type { SqliteDb } from '#~/db/index.js'
 import { getDb } from '#~/db/index.js'
+import { expirePendingAgentRoomExternalDelegations } from '#~/services/agent-room/external-delegation.js'
 import { loadAgentRoomExperimentEnabled } from '#~/services/config/index.js'
 import { logger } from '#~/utils/logger.js'
 
@@ -68,6 +69,7 @@ export interface RuntimeStoreReplayResult {
 
 export interface RuntimeConsumerStartRegistry {
   consumers: Map<string, ChildProcess>
+  db?: SqliteDb
   starting: Set<string>
 }
 
@@ -311,6 +313,7 @@ export async function ensureServerRuntimeConsumerOnce(
     }
 
     const child = await startConsumer({
+      ...(registry.db == null ? {} : { db: registry.db }),
       metadata,
       store
     })
@@ -429,6 +432,7 @@ export class RuntimeStoreWatcher {
 
   private async scanAndReplayNow() {
     await this.migrateLegacyRuntimeRoots()
+    expirePendingAgentRoomExternalDelegations(Date.now(), this.db)
     const stores = await discoverRuntimeSessionStores([...this.roots])
     for (const store of stores) {
       await this.replayStore(store)
@@ -460,6 +464,7 @@ export class RuntimeStoreWatcher {
   private async ensureServerRuntimeConsumer(store: RuntimeSessionStore) {
     await ensureServerRuntimeConsumerOnce(store, {
       consumers: this.engineConsumers,
+      db: this.db,
       starting: this.startingEngineConsumers
     })
   }

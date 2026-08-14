@@ -4,7 +4,6 @@ const inboundQueues = new Map<string, Promise<void>>()
 
 const buildInboundQueueKey = (channelKey: string, inbound: ChannelInboundEvent) =>
   [
-    channelKey,
     inbound.channelType,
     inbound.sessionType,
     inbound.channelId

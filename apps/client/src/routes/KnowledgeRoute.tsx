@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 
 import { KnowledgeBaseView } from '#~/components/knowledge-base'
 import {
+  getKnowledgeEntityPath,
   getKnowledgeSectionPath,
   getKnowledgeSkillPath,
   resolveKnowledgeLocation
@@ -32,9 +33,13 @@ export function KnowledgeRoute() {
   return (
     <KnowledgeBaseView
       sectionKey={route.sectionKey}
+      entityId={route.entityId}
+      entityPage={route.entityPage}
       skillPage={route.skillPage}
       onBack={() => navigate(-1)}
       onNavigateSection={sectionKey => navigatePreservingFilters(getKnowledgeSectionPath(sectionKey))}
+      onNavigateEntity={entityId => navigatePreservingFilters(getKnowledgeEntityPath(entityId))}
+      onNavigateEntityPage={(entityId, page) => navigatePreservingFilters(getKnowledgeEntityPath(entityId, page))}
       onNavigateSkillPage={skillPage => navigatePreservingFilters(getKnowledgeSkillPath(skillPage))}
     />
   )

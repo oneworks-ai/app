@@ -31,6 +31,11 @@ export interface MemoryContext {
   conversationStateId?: string
   entity?: string
   invocationToken?: string
+  memoryPolicy?: {
+    defaultTtlSeconds?: number
+    requireEvidence?: boolean
+    writableScopes?: string[]
+  }
   root: string
   roomId?: string
   senderId?: string

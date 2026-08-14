@@ -41,18 +41,26 @@ const getAgentRoomSessionSourceMembers = (
     runsByMemberKey.set(run.memberKey, runs)
   }
 
-  return detail.members.map(member => ({
-    memberKey: member.key,
-    kind: member.kind,
-    label: member.label,
-    subtitle: member.subtitle,
-    avatarLabel: member.avatar,
-    status: member.status,
-    pendingCount: member.pendingCount,
-    activeRunCount: member.activeRunCount,
-    latestSummary: member.latestSummary,
-    runs: runsByMemberKey.get(member.key) ?? []
-  }))
+  return detail.members.map(member => {
+    const avatar = member.avatar?.trim()
+    const isImageAvatar = avatar != null && avatar !== '' && (
+      /^(?:blob:|data:|https?:\/\/|\/)/u.test(avatar) ||
+      avatar.includes('/') ||
+      /\.(?:gif|jpe?g|png|svg|webp)(?:\?.*)?$/iu.test(avatar)
+    )
+    return {
+      memberKey: member.key,
+      kind: member.kind,
+      label: member.label,
+      subtitle: member.subtitle,
+      ...(isImageAvatar ? { avatar } : avatar == null || avatar === '' ? {} : { avatarLabel: avatar }),
+      status: member.status,
+      pendingCount: member.pendingCount,
+      activeRunCount: member.activeRunCount,
+      latestSummary: member.latestSummary,
+      runs: runsByMemberKey.get(member.key) ?? []
+    }
+  })
 }
 
 function AgentRoomSessionNotFound({

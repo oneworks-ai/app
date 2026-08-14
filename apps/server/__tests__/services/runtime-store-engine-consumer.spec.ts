@@ -9,6 +9,10 @@ import process from 'node:process'
 
 import { describe, expect, it, vi } from 'vitest'
 
+import { SqliteDb } from '#~/db/index.js'
+import { createSqliteDatabase } from '#~/db/sqlite.js'
+import { claimAgentRoomExternalDelegation } from '#~/services/agent-room/external-delegation-claim.js'
+import { createPendingAgentRoomExternalDelegation } from '#~/services/agent-room/external-delegation.js'
 import {
   buildRuntimeConsumerSpawnPlan,
   ensureRuntimeConsumerCodexConfigCliCompatibility,
@@ -33,6 +37,67 @@ const createStore = (root: string, sessionId = 'sess-room-dev'): RuntimeSessionS
     metaPath: path.join(storePath, 'meta.json'),
     statePath: path.join(storePath, 'state.json')
   }
+}
+
+const createExternalDelegationFixture = (db: SqliteDb) => {
+  const room = db.createAgentRoom({
+    hostSessionId: 'host-session',
+    id: 'room-auto',
+    leaderEntity: 'oneworks:auto-leader',
+    title: 'Automatic room'
+  })
+  const member = db.saveAgentRoomMember({
+    activeRunCount: 0,
+    key: 'product',
+    kind: 'entity',
+    label: 'Product',
+    pendingCount: 0,
+    roomId: room.id,
+    status: 'idle'
+  })
+  db.saveAgentRoomChannelConnection({
+    channelId: 'oc_shared',
+    channelKey: 'lark:product',
+    channelLinkName: 'product-lark',
+    channelType: 'lark',
+    conversationKind: 'group',
+    entity: member.key,
+    label: '产品群',
+    memberKey: member.key,
+    muted: false,
+    receiveId: 'oc_shared',
+    receiveIdType: 'chat_id',
+    requireMention: false,
+    roomId: room.id,
+    status: 'active'
+  })
+  const delegation = createPendingAgentRoomExternalDelegation({
+    executionContext: {
+      availableDeliveryTargets: [],
+      entity: { id: member.key, label: member.label },
+      room: { id: room.id, memberKey: member.key, title: room.title },
+      source: {
+        channelKey: 'lark:product',
+        channelLinkName: 'product-lark',
+        channelType: 'lark',
+        conversation: { id: 'oc_shared', kind: 'group' },
+        message: { id: 'om_external' }
+      }
+    },
+    external: {
+      channelId: 'oc_shared',
+      channelKey: 'lark:product',
+      channelType: 'lark',
+      messageId: 'om_external',
+      replyReceiveId: 'oc_shared',
+      replyReceiveIdType: 'chat_id',
+      sessionType: 'group'
+    },
+    hostSessionId: 'host-session',
+    member,
+    room
+  }, db)
+  return { delegation, member, room }
 }
 
 const writeCachedAdapterPackage = async (
@@ -405,6 +470,7 @@ describe('runtime store engine consumer', () => {
         entity: 'room-smoke-dev',
         message: 'Run room child',
         model: 'mock,codex',
+        operationId: 'channel_child_delegation',
         permissionMode: 'dontAsk'
       },
       cwd: '/workspace',
@@ -1127,6 +1193,7 @@ describe('runtime store engine consumer', () => {
         model: 'mock,codex',
         permissionMode: 'dontAsk',
         messageDelivery: 'bridge',
+        operationId: 'channel_child_delegation',
         updateConfiguredSkills: true,
         content: 'Run room child'
       })
@@ -1140,6 +1207,7 @@ describe('runtime store engine consumer', () => {
       message: 'Run room child',
       messageDelivery: 'bridge',
       model: 'mock,codex',
+      operationId: 'channel_child_delegation',
       permissionMode: 'dontAsk',
       ts: 100,
       type: 'start',
@@ -1522,6 +1590,320 @@ describe('runtime store engine consumer', () => {
     expect(heartbeat.status).toBe('failed')
     expect(state.error).toContain('Runtime consumer CLI path does not exist')
     expect(heartbeat.error).toBe(state.error)
+  })
+
+  it('fails closed instead of spawning an Agent Room child with an unknown delegation', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'ow-runtime-consumer-invalid-delegation-'))
+    const store = createStore(root)
+    const db = new SqliteDb({ db: createSqliteDatabase(':memory:') })
+    await mkdir(store.storePath, { recursive: true })
+    await writeFile(
+      store.commandsPath,
+      JSON.stringify({
+        content: 'Delegated external reply',
+        entity: 'product',
+        id: 'cmd_start_1',
+        operationId: 'missing-delegation',
+        priority: 20,
+        protocolVersion: '1.0.0',
+        sessionId: store.sessionId,
+        source: 'cli',
+        ts: 100,
+        type: 'start'
+      })
+    )
+
+    try {
+      await expect(startServerRuntimeConsumer({
+        baseEnv: {
+          __ONEWORKS_RUNTIME_PROTOCOL_CONSUMER_CLI_PATH__: process.execPath
+        },
+        db,
+        metadata: {
+          createdAt: 100,
+          cwd: root,
+          entity: 'product',
+          hostSessionId: 'host-session',
+          memberKey: 'product',
+          memberKind: 'entity',
+          needsEngineConsumer: true,
+          operationId: 'missing-delegation',
+          parentSessionId: 'host-session',
+          protocolVersion: '1.0.0',
+          roomId: 'room-auto',
+          sessionId: store.sessionId,
+          title: 'Room child'
+        },
+        store
+      })).resolves.toBeUndefined()
+      const state = JSON.parse(await readFile(store.statePath, 'utf8')) as { error?: string; status?: string }
+      expect(state).toEqual(expect.objectContaining({
+        error: expect.stringContaining('invalid or unavailable'),
+        status: 'failed'
+      }))
+    } finally {
+      db.close()
+    }
+  })
+
+  it('terminalizes a claimed external delegation when consumer preparation fails', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'ow-runtime-consumer-delegation-prepare-failure-'))
+    const store = createStore(root, 'session-product')
+    const db = new SqliteDb({ db: createSqliteDatabase(':memory:') })
+    const room = db.createAgentRoom({
+      hostSessionId: 'host-session',
+      id: 'room-auto',
+      leaderEntity: 'oneworks:auto-leader',
+      title: 'Automatic room'
+    })
+    const member = db.saveAgentRoomMember({
+      activeRunCount: 0,
+      key: 'product',
+      kind: 'entity',
+      label: 'Product',
+      pendingCount: 0,
+      roomId: room.id,
+      status: 'idle'
+    })
+    db.saveAgentRoomChannelConnection({
+      channelId: 'oc_shared',
+      channelKey: 'lark:product',
+      channelLinkName: 'product-lark',
+      channelType: 'lark',
+      conversationKind: 'group',
+      entity: member.key,
+      label: '产品群',
+      memberKey: member.key,
+      muted: false,
+      receiveId: 'oc_shared',
+      receiveIdType: 'chat_id',
+      requireMention: false,
+      roomId: room.id,
+      status: 'active'
+    })
+    const delegation = createPendingAgentRoomExternalDelegation({
+      executionContext: {
+        availableDeliveryTargets: [],
+        entity: { id: member.key, label: member.label },
+        room: { id: room.id, memberKey: member.key, title: room.title },
+        source: {
+          channelKey: 'lark:product',
+          channelLinkName: 'product-lark',
+          channelType: 'lark',
+          conversation: { id: 'oc_shared', kind: 'group' },
+          message: { id: 'om_external' }
+        }
+      },
+      external: {
+        channelId: 'oc_shared',
+        channelKey: 'lark:product',
+        channelType: 'lark',
+        messageId: 'om_external',
+        replyReceiveId: 'oc_shared',
+        replyReceiveIdType: 'chat_id',
+        sessionType: 'group'
+      },
+      hostSessionId: 'host-session',
+      member,
+      room
+    }, db)
+    await mkdir(store.storePath, { recursive: true })
+    await writeFile(
+      store.commandsPath,
+      JSON.stringify({
+        content: 'Delegated external reply',
+        entity: member.key,
+        id: 'cmd_start_1',
+        operationId: delegation.operationId,
+        priority: 20,
+        protocolVersion: '1.0.0',
+        sessionId: store.sessionId,
+        source: 'cli',
+        ts: 100,
+        type: 'start'
+      })
+    )
+    const writeContext = vi.fn(async () => undefined)
+
+    try {
+      await expect(startServerRuntimeConsumer({
+        baseEnv: {
+          __ONEWORKS_RUNTIME_PROTOCOL_CONSUMER_CLI_PATH__: path.join(root, 'missing-dyai')
+        },
+        db,
+        dependencies: {
+          claimExternalDelegation: (input, claimDb) =>
+            claimAgentRoomExternalDelegation(
+              input,
+              claimDb ?? db,
+              { writeContext }
+            )
+        },
+        metadata: {
+          createdAt: 100,
+          cwd: root,
+          entity: member.key,
+          hostSessionId: 'host-session',
+          memberKey: member.key,
+          memberKind: 'entity',
+          needsEngineConsumer: true,
+          operationId: delegation.operationId,
+          parentSessionId: 'host-session',
+          protocolVersion: '1.0.0',
+          roomId: room.id,
+          sessionId: store.sessionId,
+          title: 'Room child'
+        },
+        store
+      })).resolves.toBeUndefined()
+      expect(writeContext).toHaveBeenCalledOnce()
+      expect(db.getChannelChildSessionRun(delegation.operationId)).toEqual(expect.objectContaining({
+        error: expect.stringContaining('Runtime consumer CLI path does not exist'),
+        sessionId: store.sessionId,
+        status: 'failed'
+      }))
+    } finally {
+      db.close()
+    }
+  })
+
+  it('terminalizes a claimed external delegation when the consumer exits before startup', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'ow-runtime-consumer-delegation-exit-'))
+    const store = createStore(root, 'session-product')
+    const consumerCli = path.join(root, 'dyai')
+    const db = new SqliteDb({ db: createSqliteDatabase(':memory:') })
+    const { delegation, member, room } = createExternalDelegationFixture(db)
+    await mkdir(store.storePath, { recursive: true })
+    await writeFile(consumerCli, '#!/bin/sh\nexit 7\n')
+    await chmod(consumerCli, 0o755)
+    await writeFile(
+      store.commandsPath,
+      JSON.stringify({
+        content: 'Delegated external reply',
+        entity: member.key,
+        id: 'cmd_start_1',
+        operationId: delegation.operationId,
+        priority: 20,
+        protocolVersion: '1.0.0',
+        sessionId: store.sessionId,
+        source: 'cli',
+        ts: 100,
+        type: 'start'
+      })
+    )
+
+    try {
+      const child = await startServerRuntimeConsumer({
+        baseEnv: {
+          __ONEWORKS_RUNTIME_PROTOCOL_CONSUMER_CLI_PATH__: consumerCli
+        },
+        db,
+        dependencies: {
+          claimExternalDelegation: (input, claimDb) =>
+            claimAgentRoomExternalDelegation(
+              input,
+              claimDb ?? db,
+              { writeContext: vi.fn(async () => undefined) }
+            )
+        },
+        metadata: {
+          createdAt: 100,
+          cwd: root,
+          entity: member.key,
+          hostSessionId: 'host-session',
+          memberKey: member.key,
+          memberKind: 'entity',
+          needsEngineConsumer: true,
+          operationId: delegation.operationId,
+          parentSessionId: 'host-session',
+          protocolVersion: '1.0.0',
+          roomId: room.id,
+          sessionId: store.sessionId,
+          title: 'Room child'
+        },
+        store
+      })
+      expect(child).toBeDefined()
+      await waitForAsync(async () => (
+        db.getChannelChildSessionRun(delegation.operationId)?.status === 'failed'
+      ))
+      expect(db.getChannelChildSessionRun(delegation.operationId)).toEqual(expect.objectContaining({
+        error: expect.stringContaining('exited before startup completed with code 7'),
+        sessionId: store.sessionId,
+        status: 'failed'
+      }))
+    } finally {
+      db.close()
+    }
+  })
+
+  it('terminalizes a claimed external delegation when spawning the consumer emits an error', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'ow-runtime-consumer-delegation-spawn-error-'))
+    const store = createStore(root, 'session-product')
+    const consumerCli = path.join(root, 'dyai')
+    const db = new SqliteDb({ db: createSqliteDatabase(':memory:') })
+    const { delegation, member, room } = createExternalDelegationFixture(db)
+    await mkdir(store.storePath, { recursive: true })
+    await writeFile(consumerCli, '#!/bin/sh\nexit 0\n')
+    await writeFile(
+      store.commandsPath,
+      JSON.stringify({
+        content: 'Delegated external reply',
+        entity: member.key,
+        id: 'cmd_start_1',
+        operationId: delegation.operationId,
+        priority: 20,
+        protocolVersion: '1.0.0',
+        sessionId: store.sessionId,
+        source: 'cli',
+        ts: 100,
+        type: 'start'
+      })
+    )
+
+    try {
+      const child = await startServerRuntimeConsumer({
+        baseEnv: {
+          __ONEWORKS_RUNTIME_PROTOCOL_CONSUMER_CLI_PATH__: consumerCli
+        },
+        db,
+        dependencies: {
+          claimExternalDelegation: (input, claimDb) =>
+            claimAgentRoomExternalDelegation(
+              input,
+              claimDb ?? db,
+              { writeContext: vi.fn(async () => undefined) }
+            )
+        },
+        metadata: {
+          createdAt: 100,
+          cwd: root,
+          entity: member.key,
+          hostSessionId: 'host-session',
+          memberKey: member.key,
+          memberKind: 'entity',
+          needsEngineConsumer: true,
+          operationId: delegation.operationId,
+          parentSessionId: 'host-session',
+          protocolVersion: '1.0.0',
+          roomId: room.id,
+          sessionId: store.sessionId,
+          title: 'Room child'
+        },
+        store
+      })
+      expect(child).toBeDefined()
+      await waitForAsync(async () => (
+        db.getChannelChildSessionRun(delegation.operationId)?.status === 'failed'
+      ))
+      expect(db.getChannelChildSessionRun(delegation.operationId)).toEqual(expect.objectContaining({
+        error: expect.stringMatching(/EACCES|spawn/),
+        sessionId: store.sessionId,
+        status: 'failed'
+      }))
+    } finally {
+      db.close()
+    }
   })
 
   it('marks sessions failed when the consumer exits before writing a runtime id', async () => {

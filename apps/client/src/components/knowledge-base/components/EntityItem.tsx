@@ -8,9 +8,10 @@ import { MetaList } from './MetaList'
 
 interface EntityItemProps {
   entity: EntitySummary
+  onOpen?: () => void
 }
 
-export function EntityItem({ entity }: EntityItemProps) {
+export function EntityItem({ entity, onOpen }: EntityItemProps) {
   const { t } = useTranslation()
   const tags = entity.tags ?? []
   const skills = entity.skills ?? []
@@ -20,10 +21,14 @@ export function EntityItem({ entity }: EntityItemProps) {
     <div className='knowledge-base-view__item'>
       <div className='knowledge-base-view__item-row'>
         <div className='knowledge-base-view__item-main'>
-          <div className='knowledge-base-view__item-title'>
+          <button
+            className='knowledge-base-view__item-title knowledge-base-view__item-title-button'
+            type='button'
+            onClick={onOpen}
+          >
             <span className='material-symbols-rounded knowledge-base-view__item-icon'>group_work</span>
             <span>{entity.name}</span>
-          </div>
+          </button>
           <div className='knowledge-base-view__item-desc'>{entity.description}</div>
           {tags.length > 0 && (
             <div className='knowledge-base-view__tag-list'>

@@ -6,6 +6,7 @@ import { getDb } from '#~/db/index.js'
 import { loadChannelLinks } from '#~/services/channel-links/index.js'
 import { logger } from '#~/utils/logger.js'
 
+import { updateAgentRoomConnectionAvailability } from './agent-room-connection-status'
 import { invokeChannelCommandForState, listInvokableChannelCommandTools } from './command-invocation'
 import type { ChannelCommandInvocationInput } from './command-invocation'
 import { applyChannelServerDefaults } from './defaults'
@@ -169,6 +170,9 @@ export const initChannels = async (
       await connection.startReceiving?.({
         channelKey: key,
         handlers: {
+          availability: async event => {
+            updateAgentRoomConnectionAvailability(key, event)
+          },
           message: async (event: ChannelInboundEvent) =>
             await enqueueChannelInboundEvent(
               key,
@@ -180,7 +184,8 @@ export const initChannels = async (
                   connection,
                   state.config,
                   state.configSource,
-                  state.channelLinks
+                  state.channelLinks,
+                  states.values()
                 )
             )
         }

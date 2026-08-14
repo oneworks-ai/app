@@ -181,10 +181,12 @@ const collectSchemaFields = (
   if (path.length === 0) return
 
   const fieldType = inferFieldType(schema)
+  const uiControl = firstString(ui.control, ui.type, ui.widget)
   const icon = sanitizePluginMaterialIcon(firstString(ui.icon)) ?? inferIcon(fieldType)
   fields.push({
     path,
     type: fieldType,
+    control: uiControl === 'workspace-file' ? uiControl : undefined,
     defaultValue: schema.default,
     label: resolveSchemaI18nField(schema, 'title', language),
     description: resolveSchemaI18nField(schema, 'description', language),
@@ -209,6 +211,13 @@ export const buildPluginConfigUiSchema = (
   if (config?.uiSchema != null) return config.uiSchema
 
   const jsonSchema = resolvePluginConfigJsonSchema(config)
+  return buildConfigUiSchemaFromJsonSchema(jsonSchema, language)
+}
+
+export const buildConfigUiSchemaFromJsonSchema = (
+  jsonSchema: ConfigJsonSchema | undefined,
+  language: string
+): ConfigUiObjectSchema | undefined => {
   if (!isRecord(jsonSchema)) return undefined
 
   const fields: ConfigUiField[] = []

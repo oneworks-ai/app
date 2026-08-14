@@ -1,5 +1,26 @@
 import { z } from 'zod'
 
+export const oneworksRoomEntitySchema = z.object({
+  avatar: z.string().optional(),
+  description: z.string(),
+  entityId: z.string(),
+  name: z.string(),
+  relatedEntityIds: z.array(z.string()),
+  source: z.enum(['plugin', 'project']),
+  teamRole: z.enum(['leader', 'member'])
+}).strict()
+
+export const oneworksRoomPatchInputSchema = z.object({
+  avatar: z.string().trim().max(2048).nullable().optional(),
+  description: z.string().trim().max(2000).nullable().optional(),
+  isArchived: z.boolean().optional(),
+  isFavorited: z.boolean().optional(),
+  title: z.string().trim().min(1).max(80).optional()
+}).strict().refine(value => Object.keys(value).length > 0, 'At least one room field is required.')
+
+export type OneWorksRoomEntity = z.infer<typeof oneworksRoomEntitySchema>
+export type OneWorksRoomPatchInput = z.infer<typeof oneworksRoomPatchInputSchema>
+
 export const oneworksChannelSimulationTargetSchema = z.object({
   binding: z.enum(['default', 'direct', 'group', 'thread']),
   capabilities: z.array(z.enum(['scenarios', 'simulation'])),
@@ -18,12 +39,37 @@ export const oneworksRoomPlatformSchema = z.object({
   labels: z.array(z.string())
 }).strict()
 
+export const oneworksRoomMemberSchema = z.object({
+  avatar: z.string().optional(),
+  channelConnections: z.array(
+    z.object({
+      accountLabel: z.string().optional(),
+      channelLinkName: z.string(),
+      channelType: z.string(),
+      commandPrefix: z.string().optional(),
+      conversationLabel: z.string(),
+      lastError: z.string().optional(),
+      muted: z.boolean(),
+      requireMention: z.boolean(),
+      status: z.enum(['active', 'removed', 'unavailable'])
+    }).strict()
+  ),
+  description: z.string().optional(),
+  entityId: z.string(),
+  isLeader: z.boolean(),
+  name: z.string()
+}).strict()
+
 export const oneworksRoomSummarySchema = z.object({
   activeShareCount: z.number().int().nonnegative(),
   archived: z.boolean(),
-  channelLinkCount: z.number().int().nonnegative(),
+  avatar: z.string().optional(),
+  channelConnectionCount: z.number().int().nonnegative(),
+  description: z.string().optional(),
+  favorited: z.boolean(),
   lastMessage: z.string().optional(),
   memberCount: z.number().int().nonnegative(),
+  members: z.array(oneworksRoomMemberSchema),
   messageCount: z.number().int().nonnegative(),
   ownerRef: z.string().optional(),
   platforms: z.array(oneworksRoomPlatformSchema),

@@ -41,6 +41,65 @@ describe('db schema modules', () => {
     expect(tables).toHaveLength(1)
   })
 
+  it('backfills a member before migrating a legacy room channel connection', () => {
+    sqlite = createSqliteDatabase(':memory:')
+    sqlite.exec(`
+      CREATE TABLE agent_rooms (
+        id TEXT PRIMARY KEY, title TEXT NOT NULL, hostSessionId TEXT, status TEXT NOT NULL,
+        createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL
+      );
+      CREATE TABLE agent_room_channel_links (
+        roomId TEXT NOT NULL,
+        channelLinkName TEXT NOT NULL,
+        channelType TEXT NOT NULL,
+        channelKey TEXT NOT NULL,
+        channelId TEXT NOT NULL,
+        accountLabel TEXT,
+        conversationKind TEXT NOT NULL,
+        entity TEXT NOT NULL,
+        label TEXT NOT NULL,
+        receiveId TEXT NOT NULL,
+        receiveIdType TEXT NOT NULL,
+        threadId TEXT,
+        createdAt INTEGER NOT NULL,
+        PRIMARY KEY (roomId, channelLinkName)
+      );
+      INSERT INTO agent_rooms (id, title, status, createdAt, updatedAt)
+      VALUES ('room-legacy', 'Legacy room', 'active', 1, 1);
+      INSERT INTO agent_room_channel_links (
+        roomId, channelLinkName, channelType, channelKey, channelId,
+        conversationKind, entity, label, receiveId, receiveIdType, createdAt
+      ) VALUES (
+        'room-legacy', 'legacy-product', 'lark', 'lark:product', 'oc_legacy',
+        'group', 'product', 'Legacy product', 'oc_legacy', 'chat_id', 1
+      );
+    `)
+
+    initSchema(sqlite, [agentRoomsSchemaModule])
+
+    expect(
+      sqlite.prepare(`
+      SELECT roomId, memberKey, kind, label FROM agent_room_members
+      WHERE roomId = 'room-legacy' AND memberKey = 'product'
+    `).get()
+    ).toEqual({
+      kind: 'entity',
+      label: 'product',
+      memberKey: 'product',
+      roomId: 'room-legacy'
+    })
+    expect(
+      sqlite.prepare(`
+      SELECT roomId, memberKey, channelLinkName FROM agent_room_member_channels
+      WHERE roomId = 'room-legacy'
+    `).get()
+    ).toEqual({
+      channelLinkName: 'legacy-product',
+      memberKey: 'product',
+      roomId: 'room-legacy'
+    })
+  })
+
   it('upgrades legacy authorization requests before creating scoped indexes', () => {
     sqlite = createSqliteDatabase(':memory:')
     sqlite.exec(`

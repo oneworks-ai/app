@@ -3,6 +3,7 @@ import { Buffer } from 'node:buffer'
 
 import type {
   ChannelConnection,
+  ChannelConversationAvailabilityEvent,
   ChannelFileMessage,
   ChannelFollowUp,
   ChannelInboundEvent,
@@ -288,7 +289,10 @@ const toChannelInboundEvent = async (
   })
   const rawText = parsed.rawText
   const formattedText = parsed.formattedText
-  const displayText = senderId ? `[${senderId}]:\n${formattedText ?? ''}` : formattedText
+  const displayText = formattedText?.replace(
+    /<at\s+type="lark"\s+user_id="[^"]*">([^<]*)<\/at>/gu,
+    '@$1'
+  )
   const groupMentions = message.chat_type === 'group' ? message.mentions : undefined
   const mentionedBot = groupMentions == null || groupMentions.length === 0
     ? undefined
@@ -305,7 +309,8 @@ const toChannelInboundEvent = async (
     replyMessageId: message.parent_id || undefined,
     rootMessageId: message.root_id || undefined,
     threadId: message.thread_id ?? message.root_id ?? message.parent_id,
-    text: displayText,
+    displayText,
+    text: formattedText,
     replyTo: {
       receiveId: message.chat_id,
       receiveIdType: 'chat_id'
@@ -375,7 +380,29 @@ export const createChannelConnection = defineCreateChannelConnection(async (
     startReceiving: async ({ handlers }) => {
       const currentBotOpenId = await resolveCurrentBotOpenId(client)
       const dispatcher = new EventDispatcher({})
+      const reportAvailability = async (
+        payload: { app_id?: string; chat_id?: string },
+        status: ChannelConversationAvailabilityEvent['status'],
+        reason?: string
+      ) => {
+        if (payload.chat_id == null || (payload.app_id != null && payload.app_id !== config.appId)) return
+        await handlers.availability?.({
+          channelId: payload.chat_id,
+          channelType: 'lark',
+          ...(reason == null ? {} : { reason }),
+          status
+        })
+      }
       dispatcher.register({
+        'im.chat.disbanded_v1': async (payload: { chat_id?: string }) => {
+          await reportAvailability(payload, 'unavailable', 'The Lark group was disbanded.')
+        },
+        'im.chat.member.bot.added_v1': async (payload: { app_id?: string; chat_id?: string }) => {
+          await reportAvailability(payload, 'active')
+        },
+        'im.chat.member.bot.deleted_v1': async (payload: { app_id?: string; chat_id?: string }) => {
+          await reportAvailability(payload, 'unavailable', 'The Lark bot was removed from the group.')
+        },
         'im.message.receive_v1': async (payload: unknown) => {
           const inbound = await toChannelInboundEvent(payload as LarkMessagePayload, client, {
             currentBotOpenId,

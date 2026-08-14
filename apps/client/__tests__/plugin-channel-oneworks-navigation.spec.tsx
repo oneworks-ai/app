@@ -54,8 +54,12 @@ describe('oneWorks chat room navigation', () => {
     } = await import(/* @vite-ignore */ clientModulePath)
     const navigate = vi.fn()
     const data = {
+      entities: [],
       rooms: [{
+        archived: false,
+        favorited: false,
         lastMessage: '',
+        members: [],
         platforms: [{ channelType: 'oneworks', labels: ['Local'] }],
         roomId: 'room/local',
         title: 'Local Room'
@@ -80,6 +84,9 @@ describe('oneWorks chat room navigation', () => {
       setBreadcrumb: vi.fn((next?: CapturedBreadcrumb) => {
         if (next != null) breadcrumb = next
       }),
+      setIcon: vi.fn(),
+      setLauncherChrome: vi.fn(),
+      setSidePanel: vi.fn(),
       setSidebar: vi.fn((next?: CapturedSidebar) => {
         if (next != null) sidebar = next
       }),
@@ -97,6 +104,7 @@ describe('oneWorks chat room navigation', () => {
         AgentRoom: () => null,
         Button: ({ ariaLabel, label, onClick, title }: TestButtonProps) =>
           createElement('button', { 'aria-label': ariaLabel, onClick, title }, label),
+        GroupAvatar: () => null,
         Icon: () => null,
         Input: () => null,
         Select: () => null
@@ -119,12 +127,12 @@ describe('oneWorks chat room navigation', () => {
     expect(navigate).toHaveBeenLastCalledWith(buildOneWorksChannelRoute('channel-oneworks'))
 
     await act(async () => sidebar?.onSelectItem?.({ key: 'room/local' }))
-    expect(navigate).toHaveBeenLastCalledWith(buildOneWorksChannelRoute('channel-oneworks'))
+    expect(navigate).toHaveBeenLastCalledWith(buildOneWorksRoomRoute('channel-oneworks', 'room/local'))
 
     const sharedRoom = container.querySelector<HTMLButtonElement>('.oneworks-channel__share-room-link')
     expect(sharedRoom?.textContent).toContain('Shared Room')
     await act(async () => sharedRoom?.click())
-    expect(navigate).toHaveBeenLastCalledWith(buildOneWorksRoomRoute('room/shared'))
+    expect(navigate).toHaveBeenLastCalledWith(buildOneWorksRoomRoute('channel-oneworks', 'room/shared'))
 
     for (const [target] of navigate.mock.calls) {
       expect(target).not.toContain('/ui/w/')

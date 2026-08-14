@@ -108,6 +108,7 @@ describe('initChannels', () => {
     expect(startReceiving).toHaveBeenCalledWith({
       channelKey: 'miniapp-gear',
       handlers: {
+        availability: expect.any(Function),
         message: expect.any(Function)
       }
     })
@@ -301,7 +302,8 @@ describe('initChannels', () => {
       expect.any(Object),
       expect.objectContaining({ type: 'lark' }),
       'project',
-      [channelLink]
+      [channelLink],
+      expect.anything()
     )
   })
 
@@ -631,7 +633,8 @@ describe('initChannels', () => {
         allowInsecureWebhooks: true
       }),
       'project',
-      [channelLink]
+      [channelLink],
+      expect.anything()
     )
   })
 
@@ -703,7 +706,8 @@ describe('initChannels', () => {
       expect.any(Object),
       expect.any(Object),
       'project',
-      [channelLink]
+      [channelLink],
+      expect.anything()
     )
   })
 

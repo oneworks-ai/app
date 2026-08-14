@@ -23,7 +23,9 @@ export function projectRuntimeEvent(event: RuntimeEvent, options: RuntimeProject
   const broadcast = options.broadcast === true
   ensureRuntimeSession(options.db, event, options.metadata)
   const sessionEvents = projectRuntimeSessionEvent(options.db, event, broadcast, options.metadata)
-  if (options.agentRoomProjectionEnabled === true) {
+  // Explicit room metadata is an opt-in contract. The experiment only controls
+  // implicit projection from ordinary host/child sessions.
+  if (options.agentRoomProjectionEnabled === true || options.metadata?.roomId != null) {
     projectRuntimeRoomEvent(options.db, event, options.metadata, {
       ...(options.hostRequestDelivery != null ? { hostRequestDelivery: options.hostRequestDelivery } : {})
     })

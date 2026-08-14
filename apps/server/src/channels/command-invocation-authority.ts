@@ -26,16 +26,42 @@ export const resolveAuthoritativeCommandInput = (
   const db = getDb()
   const childRun = db.getChannelChildSessionRun(payload.childRunId)
   const snapshot = db.getSessionRuntimeState(payload.sessionId)?.channelActorSnapshot
+  if (childRun == null || snapshot == null) {
+    return forbidden('Channel command child-run authority is unavailable or inconsistent.')
+  }
   const binding = db.getChannelSessionBySessionId(payload.sessionId)
+  const roomContext = snapshot?.executionContext?.room
+  const roomMemberKey = roomContext?.memberKey
+  const roomRun = roomContext == null || roomMemberKey == null
+    ? undefined
+    : db.listAgentRoomRuns(roomContext.id).find(run =>
+      run.sessionId === payload.sessionId &&
+      run.memberKey === roomMemberKey
+    )
+  const roomConnection = roomContext == null || roomMemberKey == null
+    ? undefined
+    : db.listAgentRoomChannelConnections(roomContext.id).find(connection =>
+      connection.memberKey === roomMemberKey &&
+      connection.status === 'active' &&
+      connection.channelKey === childRun.channelKey &&
+      connection.channelType === childRun.channelType &&
+      connection.channelId === childRun.channelId &&
+      (childRun.channelLinkName == null || connection.channelLinkName === childRun.channelLinkName)
+    )
+  const hasRoomAuthority = roomContext != null && roomMemberKey != null && roomRun != null && roomConnection != null &&
+    (childRun.entity == null || childRun.entity === roomMemberKey)
+  const hasChannelSessionAuthority = roomContext == null && binding != null &&
+    binding.channelKey === childRun.channelKey && binding.channelType === childRun.channelType &&
+    binding.channelId === childRun.channelId && binding.sessionType === childRun.sessionType &&
+    (binding.threadId ?? undefined) === (snapshot.threadId ?? undefined)
   if (
-    childRun == null || !activeChildRunStatuses.has(childRun.status) ||
+    !activeChildRunStatuses.has(childRun.status) ||
+    childRun.sessionId !== payload.sessionId ||
     childRun.channelKey !== state.key || childRun.channelType !== state.type ||
     snapshot?.childRunId !== childRun.id || snapshot.sessionId !== payload.sessionId ||
     snapshot.channelKey !== childRun.channelKey || snapshot.channelType !== childRun.channelType ||
     snapshot.channelId !== childRun.channelId || snapshot.sessionType !== childRun.sessionType ||
-    binding == null || binding.channelKey !== childRun.channelKey || binding.channelType !== childRun.channelType ||
-    binding.channelId !== childRun.channelId || binding.sessionType !== childRun.sessionType ||
-    binding.threadId !== snapshot.threadId
+    (!hasRoomAuthority && !hasChannelSessionAuthority)
   ) {
     return forbidden('Channel command child-run authority is unavailable or inconsistent.')
   }
@@ -57,8 +83,8 @@ export const resolveAuthoritativeCommandInput = (
         entity: childRun.entity ?? undefined,
         executionContext: snapshot.executionContext,
         messageId: childRun.messageId ?? undefined,
-        replyReceiveId: snapshot.replyReceiveId ?? binding.replyReceiveId,
-        replyReceiveIdType: snapshot.replyReceiveIdType ?? binding.replyReceiveIdType,
+        replyReceiveId: snapshot.replyReceiveId ?? binding?.replyReceiveId,
+        replyReceiveIdType: snapshot.replyReceiveIdType ?? binding?.replyReceiveIdType,
         senderId: childRun.senderId ?? childRun.actorAccountId ?? undefined,
         sessionId: payload.sessionId,
         sessionType: childRun.sessionType,

@@ -24,6 +24,11 @@ const listChannelAccountsForUser = vi.hoisted(() => vi.fn())
 const getChannelSession = vi.hoisted(() => vi.fn())
 const createChannelCommandRun = vi.hoisted(() => vi.fn(() => ({ id: 'cmd-run-1' })))
 const createChannelIngressRouterRun = vi.hoisted(() => vi.fn(input => ({ ...input, id: 'router-run-1' })))
+const bridgeInboundGroupMessageToAgentRooms = vi.hoisted(() => vi.fn().mockResolvedValue(false))
+
+vi.mock('#~/channels/agent-room-bridge.js', () => ({
+  bridgeInboundGroupMessageToAgentRooms
+}))
 
 vi.mock('#~/db/index.js', () => ({
   getDb: vi.fn(() => ({
@@ -268,6 +273,7 @@ describe('channel handlers', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    bridgeInboundGroupMessageToAgentRooms.mockResolvedValue(false)
     vi.mocked(reserveChannelAuthorizationRequestDelivery).mockReturnValue({ reservedAt: 1_000 })
     getChannelSession.mockReturnValue(undefined)
     vi.stubEnv('__ONEWORKS_PROJECT_SERVER_ACTION_SECRET__', 'test-secret')
@@ -323,6 +329,27 @@ describe('channel handlers', () => {
       senderId: 'user_1',
       sessionType: 'group'
     }))
+  })
+
+  it('lets the owning channel bridge a shared provider event after a non-owning channel declines it', async () => {
+    const event = {
+      channelType: 'lark' as const,
+      sessionType: 'group' as const,
+      channelId: 'chat_shared',
+      messageId: 'om_shared_bridge',
+      senderId: 'user_1',
+      text: 'shared group message',
+      mentionedBot: false,
+      raw: {}
+    }
+    bridgeInboundGroupMessageToAgentRooms
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true)
+
+    await handleInboundEvent('lark:non-owner', event, undefined, { type: 'lark' }, 'project', [], [])
+    await handleInboundEvent('lark:owner', event, undefined, { type: 'lark' }, 'project', [], [])
+
+    expect(bridgeInboundGroupMessageToAgentRooms).toHaveBeenCalledTimes(2)
   })
 
   it('does not execute admin commands for a synthetic administrator scenario', async () => {

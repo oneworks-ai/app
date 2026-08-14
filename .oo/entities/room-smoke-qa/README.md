@@ -5,11 +5,6 @@ tags:
   - test
   - agent-room
   - qa
-extends:
-  - std/dev-verifier
-inherit:
-  prompt: append
-  skills: merge
 ---
 
 # 角色

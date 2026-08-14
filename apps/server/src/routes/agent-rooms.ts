@@ -17,7 +17,7 @@ import type {
   UpdateAgentRoomMetadataRequest
 } from '@oneworks/core'
 
-import { resolveAgentRoomChannelLink } from '#~/services/agent-room/channel-link.js'
+import { resolveAgentRoomChannelConnection } from '#~/services/agent-room/channel-link.js'
 import { createAgentRoomService } from '#~/services/agent-room/index.js'
 import { publishClientEvent } from '#~/services/client-events.js'
 import { badRequest, conflict, methodNotAllowed, notFound } from '#~/utils/http.js'
@@ -97,20 +97,40 @@ const normalizeMetadataUpdate = (value: unknown): UpdateAgentRoomMetadataRequest
   }
 
   const hasArchived = hasOwn(value, 'isArchived')
+  const hasAvatar = hasOwn(value, 'avatar')
+  const hasDescription = hasOwn(value, 'description')
   const hasFavorited = hasOwn(value, 'isFavorited')
-  if (!hasArchived && !hasFavorited) {
+  const hasTitle = hasOwn(value, 'title')
+  if (!hasArchived && !hasAvatar && !hasDescription && !hasFavorited && !hasTitle) {
     return undefined
   }
   if (
     (hasArchived && typeof value.isArchived !== 'boolean') ||
-    (hasFavorited && typeof value.isFavorited !== 'boolean')
+    (hasAvatar && value.avatar !== null && (typeof value.avatar !== 'string' || value.avatar.length > 2048)) ||
+    (hasDescription && value.description !== null &&
+      (typeof value.description !== 'string' || value.description.length > 2000)) ||
+    (hasFavorited && typeof value.isFavorited !== 'boolean') ||
+    (hasTitle && (typeof value.title !== 'string' || value.title.trim() === '' || value.title.length > 80))
   ) {
     return undefined
   }
 
   return {
+    ...(hasAvatar
+      ? {
+        avatar: value.avatar == null || (value.avatar as string).trim() === '' ? null : (value.avatar as string).trim()
+      }
+      : {}),
+    ...(hasDescription
+      ? {
+        description: value.description == null || (value.description as string).trim() === ''
+          ? null
+          : (value.description as string).trim()
+      }
+      : {}),
     ...(hasArchived ? { isArchived: value.isArchived as boolean } : {}),
-    ...(hasFavorited ? { isFavorited: value.isFavorited as boolean } : {})
+    ...(hasFavorited ? { isFavorited: value.isFavorited as boolean } : {}),
+    ...(hasTitle ? { title: (value.title as string).trim() } : {})
   }
 }
 
@@ -179,13 +199,49 @@ const normalizeCommand = (value: unknown): PublicAgentRoomCommand | undefined =>
   if (value.type === 'apply_event' && isRoomEvent(value.event)) {
     return { idempotencyKey, type: value.type, event: value.event }
   }
-  if (value.type === 'attach_channel' && isRecord(value.link)) {
-    if (!isNonEmptyString(value.link.channelLinkName)) return undefined
+  if (value.type === 'attach_member_channel' && isRecord(value.connection)) {
+    if (
+      !isNonEmptyString(value.connection.channelLinkName) ||
+      !isNonEmptyString(value.connection.memberKey) ||
+      (value.connection.muted != null && typeof value.connection.muted !== 'boolean') ||
+      (value.connection.requireMention != null && typeof value.connection.requireMention !== 'boolean')
+    ) return undefined
     return {
       idempotencyKey,
       type: value.type,
-      link: {
-        channelLinkName: value.link.channelLinkName.trim()
+      connection: {
+        channelLinkName: value.connection.channelLinkName.trim(),
+        memberKey: value.connection.memberKey.trim(),
+        ...(asString(value.connection.commandPrefix) != null
+          ? { commandPrefix: asString(value.connection.commandPrefix) }
+          : {}),
+        ...(typeof value.connection.muted === 'boolean' ? { muted: value.connection.muted } : {}),
+        ...(typeof value.connection.requireMention === 'boolean'
+          ? { requireMention: value.connection.requireMention }
+          : {})
+      }
+    }
+  }
+  if (value.type === 'update_member_channel' && isRecord(value.connection)) {
+    if (!isNonEmptyString(value.connection.channelLinkName) || !isNonEmptyString(value.connection.memberKey)) {
+      return undefined
+    }
+    const status = value.connection.status
+    if (status != null && status !== 'active' && status !== 'removed' && status !== 'unavailable') return undefined
+    return {
+      idempotencyKey,
+      type: value.type,
+      connection: {
+        channelLinkName: value.connection.channelLinkName.trim(),
+        memberKey: value.connection.memberKey.trim(),
+        ...(hasOwn(value.connection, 'commandPrefix')
+          ? { commandPrefix: value.connection.commandPrefix == null ? null : asString(value.connection.commandPrefix) }
+          : {}),
+        ...(typeof value.connection.muted === 'boolean' ? { muted: value.connection.muted } : {}),
+        ...(typeof value.connection.requireMention === 'boolean'
+          ? { requireMention: value.connection.requireMention }
+          : {}),
+        ...(status != null ? { status } : {})
       }
     }
   }
@@ -245,7 +301,9 @@ const publishAgentRoomUpdated = (roomId: string, room?: AgentRoom) => {
 
 export function agentRoomsRouter(): Router {
   const router = new Router()
-  const service = createAgentRoomService(undefined, undefined, { resolveChannelLink: resolveAgentRoomChannelLink })
+  const service = createAgentRoomService(undefined, undefined, {
+    resolveChannelConnection: resolveAgentRoomChannelConnection
+  })
 
   router.get(['/', ''], (ctx) => {
     ctx.body = { rooms: service.listRooms() }

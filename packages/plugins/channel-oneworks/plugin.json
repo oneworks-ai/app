@@ -119,10 +119,10 @@
         {
           "id": "oneworks-channel",
           "icon": "meeting_room",
-          "title": "Chat Rooms",
+          "title": "Team Chats",
           "titleI18n": {
-            "en": "Chat Rooms",
-            "zh-Hans": "聊天室"
+            "en": "Team Chats",
+            "zh-Hans": "团队群聊"
           },
           "descriptionI18n": {
             "en": "Open OneWorks chat rooms, sharing, simulations, and delivery traces.",

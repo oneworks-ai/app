@@ -1,15 +1,15 @@
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash } from 'node:crypto'
 
-import type { ChannelDeliveryTarget, ChannelNavigationReference } from '@oneworks/types'
+import type { ChannelDeliveryTarget } from '@oneworks/types'
 
 import { executeChannelSend } from '#~/channels/manual-send.js'
 import { getDb } from '#~/db/index.js'
-import { createAgentRoomOwner } from '#~/services/agent-room/owner.js'
 
 import type { ChannelContext } from '../@types'
 import { defineMessages } from '../i18n'
 import { command, optionalJsonArg, requiredJsonArg } from './command-system'
-import { isRecord, normalizePayload, payloadSchema, resolveTarget, summarizePayload, targetSchema } from './send-target'
+import { recordRoomChannelDelivery } from './room-delivery'
+import { isRecord, normalizePayload, payloadSchema, resolveTarget, targetSchema } from './send-target'
 import type { ChannelSendPayload, ChannelSendTargetInput } from './send-target'
 
 defineMessages('zh', {
@@ -19,38 +19,6 @@ defineMessages('zh', {
 defineMessages('en', {
   'cmd.send.description': 'Send a message to the current channel or an explicit channel target'
 })
-
-const recordRoomDelivery = async (
-  ctx: ChannelContext,
-  input: {
-    error?: string
-    message: ChannelSendPayload
-    messageId?: string
-    navigation?: ChannelNavigationReference
-    operationId?: string
-    status: 'failed' | 'sent'
-    target: ChannelDeliveryTarget
-  }
-) => {
-  if (ctx.executionContext?.room == null) return
-
-  const deliveryId = input.operationId ?? (input.messageId == null
-    ? `channel-delivery:${input.status}:${randomUUID()}`
-    : `channel-delivery:${input.target.channelType}:${input.target.channelKey}:${input.messageId}`)
-  await createAgentRoomOwner({ db: getDb() }).execute(ctx.executionContext.room.id, {
-    idempotencyKey: deliveryId,
-    type: 'record_channel_delivery',
-    delivery: {
-      content: summarizePayload(input.message),
-      ...(input.error != null ? { error: input.error } : {}),
-      memberKey: `entity:${ctx.executionContext.entity.id}`,
-      ...(input.messageId != null ? { providerMessageId: input.messageId } : {}),
-      ...(input.navigation != null ? { navigation: input.navigation } : {}),
-      status: input.status,
-      target: input.target
-    }
-  })
-}
 
 const targetAuditKey = (target: ChannelDeliveryTarget) =>
   [
@@ -125,12 +93,12 @@ export const sendCommands = () => [
         : ctx.resolveOutboundChannel?.(resolvedTarget.channelKey)
       if (runtime == null || runtime.status !== 'connected' || runtime.connection == null) {
         const error = `Channel account ${resolvedTarget.channelKey} is not connected.`
-        await recordRoomDelivery(ctx, { error, message, status: 'failed', target: resolvedTarget })
+        await recordRoomChannelDelivery(ctx, { error, message, status: 'failed', target: resolvedTarget })
         throw new Error(error)
       }
       if (runtime.type !== resolvedTarget.channelType) {
         const error = `Channel target type mismatch for ${resolvedTarget.channelKey}.`
-        await recordRoomDelivery(ctx, { error, message, status: 'failed', target: resolvedTarget })
+        await recordRoomChannelDelivery(ctx, { error, message, status: 'failed', target: resolvedTarget })
         throw new Error(error)
       }
       const operation = createSendOperation(ctx, commandRunId, message, resolvedTarget)
@@ -165,7 +133,7 @@ export const sendCommands = () => [
           error: result.message,
           status: 'failed'
         })
-        await recordRoomDelivery(ctx, {
+        await recordRoomChannelDelivery(ctx, {
           error: result.message,
           message,
           operationId: operation.operationId,
@@ -179,7 +147,7 @@ export const sendCommands = () => [
         ...(result.navigation != null ? { navigation: result.navigation } : {}),
         status: 'sent'
       })
-      await recordRoomDelivery(ctx, {
+      await recordRoomChannelDelivery(ctx, {
         message,
         ...(result.messageId != null ? { messageId: result.messageId } : {}),
         ...(result.navigation != null ? { navigation: result.navigation } : {}),

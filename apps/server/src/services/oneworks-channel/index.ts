@@ -1,8 +1,17 @@
 /* eslint-disable max-lines -- the product facade keeps redacted rooms, trace, sharing, and scenarios aligned. */
 import { createHash, randomUUID } from 'node:crypto'
+import { basename, dirname } from 'node:path'
 
 import type { OneWorksChannelConfig } from '@oneworks/channel-oneworks'
-import type { AgentRoom, AgentRoomShare, PluginRequestPrincipal } from '@oneworks/types'
+import { resolveDocumentDescription, resolveEntityIdentifier } from '@oneworks/definition-core'
+import { DefinitionLoader } from '@oneworks/definition-loader'
+import type { AgentRoom, AgentRoomShare, Entity, PluginRequestPrincipal } from '@oneworks/types'
+import {
+  AUTOMATIC_LEADER_DESCRIPTION,
+  AUTOMATIC_LEADER_MEMBER_KEY,
+  AUTOMATIC_LEADER_NAME,
+  buildAutomaticLeaderSystemPrompt
+} from './automatic-leader.js'
 import type {
   OneWorksChannelScenario,
   OneWorksChannelScenarioPatch,
@@ -10,6 +19,8 @@ import type {
   OneWorksChannelSimulationResult,
   OneWorksChannelSimulationTarget,
   OneWorksChannelTrace,
+  OneWorksRoomEntity,
+  OneWorksRoomPatchInput,
   OneWorksRoomShareInput,
   OneWorksRoomShareOwner,
   OneWorksRoomShareSummary,
@@ -20,17 +31,35 @@ import {
   oneworksChannelScenarioInputSchema,
   oneworksChannelScenarioPatchSchema,
   oneworksChannelSimulationInputSchema,
+  oneworksRoomPatchInputSchema,
   oneworksRoomShareInputSchema
 } from './contract.js'
+import type {
+  OneWorksRoomChannelConnectionAttachInput,
+  OneWorksRoomChannelConnectionCandidate,
+  OneWorksRoomChannelConnectionPatchInput
+} from './room-connections-contract.js'
+import {
+  oneworksRoomChannelConnectionAttachInputSchema,
+  oneworksRoomChannelConnectionPatchInputSchema
+} from './room-connections-contract.js'
+import type { OneWorksRoomCreateInput } from './room-create-contract.js'
+import { oneworksRoomCreateInputSchema } from './room-create-contract.js'
 
 import { getChannelManager } from '#~/channels/index.js'
 import type { ChannelRuntimeState } from '#~/channels/types.js'
 import { handleChannelWebhook } from '#~/channels/webhook.js'
 import { getDb } from '#~/db/index.js'
 import type { ChannelScenarioRow } from '#~/db/index.js'
+import { resolveAgentRoomChannelConnection } from '#~/services/agent-room/channel-link.js'
+import { createAgentRoomService } from '#~/services/agent-room/index.js'
 import { createAgentRoomOwner } from '#~/services/agent-room/owner.js'
 import { listActiveAgentRoomRelayOwners, listSharedAgentRoomDirectory } from '#~/services/agent-room/relay.js'
+import { publishClientEvent } from '#~/services/client-events.js'
+import { getWorkspaceFolder } from '#~/services/config/index.js'
 import { requirePluginRequestPermission } from '#~/services/plugins/types.js'
+import { createSessionWithInitialMessage } from '#~/services/session/create.js'
+import { resolveWorkspaceImageResource } from '#~/services/workspace/media.js'
 import { buildOneWorksWebhookSignature } from '@oneworks/channel-oneworks/webhook-signature'
 
 const MAX_TRACE_ITEMS = 100
@@ -38,6 +67,136 @@ const requireProductAccess = (principal: PluginRequestPrincipal) =>
   requirePluginRequestPermission(principal, 'workspace:manage')
 const fingerprint = (namespace: string, value: string) =>
   createHash('sha256').update(`${namespace}:${value}`).digest('hex').slice(0, 16)
+
+const resolveEntityName = (entity: { attributes: Entity; path: string }) =>
+  entity.attributes.name?.trim() || resolveEntityIdentifier(entity.path) || 'Entity'
+
+const toProductEntity = (entity: {
+  attributes: Entity
+  body?: string
+  path: string
+  resolvedName?: string
+  resolvedSource?: string
+}): OneWorksRoomEntity => {
+  const name = resolveEntityName(entity)
+  const avatar = entity.attributes.avatar?.trim()
+  const entityId = entity.resolvedName?.trim() || resolveEntityIdentifier(entity.path, entity.attributes.name)
+  return {
+    ...(avatar == null ? {} : { avatar }),
+    description: resolveDocumentDescription(entity.body ?? '', entity.attributes.description, name),
+    entityId,
+    name,
+    relatedEntityIds: [],
+    source: entity.resolvedSource === 'plugin' ? 'plugin' : 'project',
+    teamRole: entity.attributes.team?.role === 'leader' ? 'leader' : 'member'
+  }
+}
+
+const getEntityReferences = (definition: {
+  attributes: Entity
+  path: string
+  resolvedName?: string
+}) => [
+  ...new Set([
+    definition.resolvedName?.trim(),
+    definition.attributes.name?.trim(),
+    basename(dirname(definition.path))
+  ].filter((value): value is string => value != null && value !== ''))
+]
+
+const resolveAvailableAvatar = async (value: string | undefined) => {
+  const avatar = value?.trim()
+  if (avatar == null || avatar === '') return undefined
+  if (/^(?:blob:|data:|https?:\/\/)/u.test(avatar)) return avatar
+  try {
+    await resolveWorkspaceImageResource(avatar)
+    return avatar
+  } catch {
+    return undefined
+  }
+}
+
+const toAvailableProductEntity = async (definition: {
+  attributes: Entity
+  body?: string
+  path: string
+  resolvedName?: string
+  resolvedSource?: string
+}): Promise<OneWorksRoomEntity> => {
+  const entity = toProductEntity(definition)
+  const avatar = await resolveAvailableAvatar(entity.avatar)
+  const { avatar: _avatar, ...fallback } = entity
+  return avatar == null ? fallback : { ...fallback, avatar }
+}
+
+const resolveProductEntityCatalog = async (
+  definitions: Array<{
+    attributes: Entity
+    body?: string
+    path: string
+    resolvedName?: string
+    resolvedSource?: string
+  }>
+) => {
+  const baseByReference = new Map<string, OneWorksRoomEntity>()
+  const ambiguousReferences = new Set<string>()
+  const baseEntities = await Promise.all(definitions.map(toAvailableProductEntity))
+  for (const [index, definition] of definitions.entries()) {
+    const entity = baseEntities[index]!
+    for (const reference of getEntityReferences(definition)) {
+      if (ambiguousReferences.has(reference)) continue
+      const existing = baseByReference.get(reference)
+      if (existing != null && existing.entityId !== entity.entityId) {
+        baseByReference.delete(reference)
+        ambiguousReferences.add(reference)
+        continue
+      }
+      baseByReference.set(reference, entity)
+    }
+  }
+
+  const entities = baseEntities.map((entity, index) => {
+    const definition = definitions[index]!
+    const relatedReferences = entity.teamRole === 'leader' && Array.isArray(definition.attributes.team?.relatedEntities)
+      ? definition.attributes.team.relatedEntities
+      : []
+    const relatedEntityIds = [
+      ...new Set(relatedReferences.flatMap(reference => {
+        if (typeof reference !== 'string') return []
+        const related = baseByReference.get(reference.trim())
+        return related == null || related.entityId === entity.entityId || related.teamRole === 'leader'
+          ? []
+          : [related.entityId]
+      }))
+    ]
+    return { ...entity, relatedEntityIds }
+  })
+  const entitiesById = new Map(entities.map(entity => [entity.entityId, entity]))
+  const byReference = new Map(
+    [...baseByReference].flatMap(([reference, entity]) => {
+      const resolved = entitiesById.get(entity.entityId)
+      return resolved == null ? [] : [[reference, resolved] as const]
+    })
+  )
+  return { byReference, entities }
+}
+
+const indexProductEntitiesByReference = async (
+  definitions: Parameters<typeof resolveProductEntityCatalog>[0]
+) => (await resolveProductEntityCatalog(definitions)).byReference
+
+const deriveRoomTitle = (message: string) => {
+  const firstLine = message.split('\n')[0]?.trim() || 'Team chat'
+  return firstLine.length > 36 ? `${firstLine.slice(0, 36)}...` : firstLine
+}
+
+const publishRoomUpdated = (roomId: string, hostSessionId?: string) => {
+  publishClientEvent('agent-rooms', {
+    type: 'agent_room_updated',
+    roomId,
+    ...(hostSessionId == null ? {} : { hostSessionId })
+  })
+}
 
 interface ProductRuntimeRoom extends OneWorksChannelSimulationTarget {
   channelId: string
@@ -92,6 +251,31 @@ const listProductRuntimeRooms = (): ProductRuntimeRoom[] =>
     })
   })
 
+const listProductRoomConnectionCandidates = async (): Promise<OneWorksRoomChannelConnectionCandidate[]> => {
+  const states = getChannelStates()
+  const accountLabels = new Map(states.map(state => [state.key, state.config?.title]))
+  const entities = await indexProductEntitiesByReference(
+    await new DefinitionLoader(getWorkspaceFolder()).loadDefaultEntities()
+  )
+  return listProductRuntimeRooms().flatMap(room => {
+    if (room.binding !== 'group' || room.channelType === 'oneworks' || room.entity == null || room.linkName == null) {
+      return []
+    }
+    const entity = entities.get(room.entity)
+    if (entity == null) return []
+    const accountLabel = accountLabels.get(room.channelKey)
+    return [{
+      ...(accountLabel == null ? {} : { accountLabel }),
+      channelLinkName: room.linkName,
+      channelType: room.channelType,
+      conversationLabel: room.label,
+      entityId: room.entity,
+      entityName: entity.name,
+      status: room.status
+    }]
+  })
+}
+
 const toPublicRoom = (
   { channelId: _channelId, channelKey: _channelKey, ...room }: ProductRuntimeRoom
 ): OneWorksChannelSimulationTarget => room
@@ -113,48 +297,81 @@ const toScenario = (row: ChannelScenarioRow): OneWorksChannelScenario => ({
 const resolveScenario = (scenarioRef: string) =>
   getDb().listChannelScenarios().find(row => fingerprint('oneworks-scenario', row.id) === scenarioRef)
 
-const listProductRooms = (): OneWorksRoomSummary[] =>
-  getDb().listAgentRooms('all').map(room => {
-    const detail = getDb().getAgentRoomDetail(room.id)
-    const links = detail?.channelLinks ?? []
-    const platforms = new Map<string, { accountKeys: Set<string>; labels: Set<string> }>()
-    for (const link of links) {
-      const platform = platforms.get(link.channelType) ?? { accountKeys: new Set(), labels: new Set() }
-      platform.accountKeys.add(link.channelKey)
-      if (link.accountLabel != null && link.accountLabel.trim() !== '') platform.labels.add(link.accountLabel)
-      platforms.set(link.channelType, platform)
-    }
-    const activeOwner = listActiveAgentRoomRelayOwners().find(owner =>
-      owner.accountId === room.owner.accountId &&
-      (room.owner.nodeId == null || owner.nodeId === room.owner.nodeId) &&
-      (room.owner.sourceId == null || owner.sourceId === room.owner.sourceId)
-    )
-    return {
-      activeShareCount: (detail?.shares ?? []).filter(share => share.status === 'active').length,
-      archived: room.archivedAt != null,
-      channelLinkCount: links.length,
-      ...(room.lastMessage == null ? {} : { lastMessage: room.lastMessage }),
-      memberCount: detail?.members.length ?? 0,
-      messageCount: detail?.messages.length ?? 0,
-      ...(activeOwner == null
-        ? {}
-        : {
-          ownerRef: fingerprint(
-            'oneworks-room-owner',
-            `${activeOwner.sourceId}:${activeOwner.accountId}:${activeOwner.nodeId}`
-          )
-        }),
-      platforms: [...platforms.entries()].map(([channelType, platform]) => ({
-        accountCount: platform.accountKeys.size,
-        channelType,
-        labels: [...platform.labels]
-      })),
-      roomId: room.id,
-      status: room.status,
-      title: room.title,
-      updatedAt: room.updatedAt
-    }
-  })
+const listProductRooms = async (): Promise<OneWorksRoomSummary[]> =>
+  await Promise.all(
+    getDb().listAgentRooms('all').map(async room => {
+      const detail = getDb().getAgentRoomDetail(room.id)
+      const links = detail?.channelConnections ?? []
+      const [roomAvatar, memberAvatars] = await Promise.all([
+        resolveAvailableAvatar(room.avatar),
+        Promise.all((detail?.members ?? []).map(async member =>
+          [
+            member.key,
+            await resolveAvailableAvatar(member.avatar)
+          ] as const
+        ))
+      ])
+      const memberAvatarByKey = new Map(memberAvatars)
+      const platforms = new Map<string, { accountKeys: Set<string>; labels: Set<string> }>()
+      for (const link of links) {
+        const platform = platforms.get(link.channelType) ?? { accountKeys: new Set(), labels: new Set() }
+        platform.accountKeys.add(link.channelKey)
+        if (link.accountLabel != null && link.accountLabel.trim() !== '') platform.labels.add(link.accountLabel)
+        platforms.set(link.channelType, platform)
+      }
+      const activeOwner = listActiveAgentRoomRelayOwners().find(owner =>
+        owner.accountId === room.owner.accountId &&
+        (room.owner.nodeId == null || owner.nodeId === room.owner.nodeId) &&
+        (room.owner.sourceId == null || owner.sourceId === room.owner.sourceId)
+      )
+      return {
+        activeShareCount: (detail?.shares ?? []).filter(share => share.status === 'active').length,
+        archived: room.archivedAt != null,
+        ...(roomAvatar == null ? {} : { avatar: roomAvatar }),
+        channelConnectionCount: links.length,
+        ...(room.description == null ? {} : { description: room.description }),
+        favorited: room.favoritedAt != null,
+        ...(room.lastMessage == null ? {} : { lastMessage: room.lastMessage }),
+        memberCount: detail?.members.length ?? 0,
+        members: (detail?.members ?? []).map(member => ({
+          ...(memberAvatarByKey.get(member.key) == null ? {} : { avatar: memberAvatarByKey.get(member.key) }),
+          channelConnections: links.filter(link => link.memberKey === member.key).map(link => ({
+            ...(link.accountLabel == null ? {} : { accountLabel: link.accountLabel }),
+            channelLinkName: link.channelLinkName,
+            channelType: link.channelType,
+            ...(link.commandPrefix == null ? {} : { commandPrefix: link.commandPrefix }),
+            conversationLabel: link.label,
+            ...(link.lastError == null ? {} : { lastError: link.lastError }),
+            muted: link.muted,
+            requireMention: link.requireMention,
+            status: link.status
+          })),
+          ...(member.subtitle == null ? {} : { description: member.subtitle }),
+          entityId: member.key,
+          isLeader: room.leaderEntity === member.key || `entity:${room.leaderEntity}` === member.key,
+          name: member.label
+        })),
+        messageCount: detail?.messages.length ?? 0,
+        ...(activeOwner == null
+          ? {}
+          : {
+            ownerRef: fingerprint(
+              'oneworks-room-owner',
+              `${activeOwner.sourceId}:${activeOwner.accountId}:${activeOwner.nodeId}`
+            )
+          }),
+        platforms: [...platforms.entries()].map(([channelType, platform]) => ({
+          accountCount: platform.accountKeys.size,
+          channelType,
+          labels: [...platform.labels]
+        })),
+        roomId: room.id,
+        status: room.status,
+        title: room.title,
+        updatedAt: room.updatedAt
+      }
+    })
+  )
 
 const toRoomShareSummary = (
   roomTitle: string,
@@ -302,9 +519,254 @@ const injectSimulation = async (
 }
 
 export const createOneWorksChannelFacade = () => ({
+  listEntities: async (principal: PluginRequestPrincipal): Promise<OneWorksRoomEntity[]> => {
+    requireProductAccess(principal)
+    const loader = new DefinitionLoader(getWorkspaceFolder())
+    return (await resolveProductEntityCatalog(await loader.loadDefaultEntities())).entities
+  },
+  createRoom: async (principal: PluginRequestPrincipal, input: unknown): Promise<OneWorksRoomSummary> => {
+    requireProductAccess(principal)
+    const parsed: OneWorksRoomCreateInput = oneworksRoomCreateInputSchema.parse(input)
+    const loader = new DefinitionLoader(getWorkspaceFolder())
+    const catalog = await resolveProductEntityCatalog(await loader.loadDefaultEntities())
+    const available = new Map(catalog.entities.map(entity => [entity.entityId, entity]))
+    const automaticLeader = parsed.leaderMode === 'automatic'
+    const leaderEntityId = automaticLeader ? undefined : parsed.leaderEntityId ?? parsed.entityIds[0]!
+    const leader = leaderEntityId == null ? undefined : available.get(leaderEntityId)
+    if (!automaticLeader && leader == null) throw new Error('The selected leader entity no longer exists.')
+    if (leader != null && leader.teamRole !== 'leader') {
+      throw new Error('The selected entity is not registered as a Team Chat leader.')
+    }
+    const requestedMemberIds = automaticLeader
+      ? parsed.entityIds
+      : parsed.leaderEntityId == null
+      ? parsed.entityIds.slice(1)
+      : parsed.entityIds
+    const selectedIds = automaticLeader
+      ? requestedMemberIds
+      : [leader!.entityId, ...leader!.relatedEntityIds, ...requestedMemberIds]
+    const entities = [...new Set(selectedIds)].map(entityId => available.get(entityId))
+    if (entities.some(entity => entity == null)) throw new Error('One or more selected entities no longer exist.')
+    const selected = entities as OneWorksRoomEntity[]
+    if (selected.slice(automaticLeader ? 0 : 1).some(entity => entity.teamRole === 'leader')) {
+      throw new Error('Only one Team Chat leader can be selected.')
+    }
+    const leaderMember = automaticLeader
+      ? {
+        key: AUTOMATIC_LEADER_MEMBER_KEY,
+        kind: 'host' as const,
+        label: AUTOMATIC_LEADER_NAME,
+        subtitle: AUTOMATIC_LEADER_DESCRIPTION
+      }
+      : {
+        ...(leader!.avatar == null ? {} : { avatar: leader!.avatar }),
+        key: leader!.entityId,
+        kind: 'entity' as const,
+        label: leader!.name,
+        subtitle: leader!.description
+      }
+    const title = parsed.title ?? deriveRoomTitle(parsed.message)
+    const roomId = `room_${randomUUID()}`
+    const service = createAgentRoomService(undefined, undefined, {
+      resolveChannelConnection: resolveAgentRoomChannelConnection
+    })
+    const selectedEntityIds = new Set(selected.map(entity => entity.entityId))
+    const memberChannelLinks = getChannelStates().flatMap(state =>
+      (state.channelLinks ?? []).filter(link => selectedEntityIds.has(link.entity) && link.address != null)
+    )
+    let roomCreated = false
+    try {
+      const session = await createSessionWithInitialMessage({
+        beforeStart: async (hostSessionId) => {
+          service.createRoom({
+            hostSessionId,
+            id: roomId,
+            leaderEntity: leaderMember.key,
+            title
+          })
+          roomCreated = true
+          const members = automaticLeader
+            ? [
+              leaderMember,
+              ...selected.map(entity => ({
+                ...(entity.avatar == null ? {} : { avatar: entity.avatar }),
+                key: entity.entityId,
+                kind: 'entity' as const,
+                label: entity.name,
+                subtitle: entity.description
+              }))
+            ]
+            : selected.map(entity => ({
+              ...(entity.avatar == null ? {} : { avatar: entity.avatar }),
+              key: entity.entityId,
+              kind: 'entity' as const,
+              label: entity.name,
+              subtitle: entity.description
+            }))
+          for (const member of members) {
+            service.applyEvent(roomId, {
+              id: `runtime-member:${roomId}:${member.key}`,
+              type: 'member_joined',
+              member
+            })
+          }
+          for (const link of memberChannelLinks) {
+            await service.executeCommand(roomId, {
+              connection: {
+                channelLinkName: link.name,
+                ...(link.ingress.room?.commandPrefix == null
+                  ? {}
+                  : { commandPrefix: link.ingress.room.commandPrefix }),
+                memberKey: link.entity,
+                muted: link.ingress.room?.muted ?? false,
+                requireMention: link.ingress.room?.requireMention ?? false
+              },
+              idempotencyKey: `oneworks-room-connection:${roomId}:${link.name}`,
+              type: 'attach_member_channel'
+            })
+          }
+          await service.executeCommand(roomId, {
+            idempotencyKey: `oneworks-room-initial:${roomId}`,
+            type: 'ingest_channel_message',
+            message: {
+              content: parsed.message,
+              origin: {
+                channelId: roomId,
+                channelKey: 'oneworks:local',
+                channelType: 'oneworks',
+                conversationKind: 'group',
+                conversationLabel: title
+              }
+            }
+          })
+          service.applyEvent(roomId, {
+            id: `runtime-meta:${hostSessionId}`,
+            type: 'assignment_sent',
+            member: leaderMember,
+            run: {
+              key: hostSessionId,
+              sessionId: hostSessionId,
+              title
+            },
+            summary: automaticLeader
+              ? 'Auto Leader is coordinating the first group message.'
+              : 'Started working on the first group message.'
+          })
+        },
+        initialMessage: parsed.message,
+        ...(automaticLeader
+          ? { systemPrompt: buildAutomaticLeaderSystemPrompt(selected) }
+          : { promptName: leader!.entityId, promptType: 'entity' as const }),
+        room: {
+          id: roomId,
+          member: leaderMember,
+          title
+        },
+        title
+      })
+      publishRoomUpdated(roomId, session.id)
+      return (await listProductRooms()).find(room => room.roomId === roomId)!
+    } catch (error) {
+      if (roomCreated) service.deleteRoom(roomId)
+      throw error
+    }
+  },
   listRooms: async (principal: PluginRequestPrincipal): Promise<OneWorksRoomSummary[]> => {
     requireProductAccess(principal)
-    return listProductRooms()
+    return await listProductRooms()
+  },
+  listRoomChannelConnectionCandidates: async (
+    principal: PluginRequestPrincipal
+  ): Promise<OneWorksRoomChannelConnectionCandidate[]> => {
+    requireProductAccess(principal)
+    return await listProductRoomConnectionCandidates()
+  },
+  attachRoomChannelConnection: async (
+    principal: PluginRequestPrincipal,
+    roomId: string,
+    input: unknown
+  ): Promise<OneWorksRoomSummary> => {
+    requireProductAccess(principal)
+    const parsed: OneWorksRoomChannelConnectionAttachInput = oneworksRoomChannelConnectionAttachInputSchema.parse(input)
+    const room = getDb().getAgentRoom(roomId)
+    if (room == null) throw new Error(`Agent room not found: ${roomId}`)
+    const resolved = await resolveAgentRoomChannelConnection(parsed.channelLinkName)
+    if (resolved.conversationKind !== 'group' || resolved.channelType === 'oneworks') {
+      throw new Error(`Only external group ChannelLinks can be mapped to a Team Chat: ${parsed.channelLinkName}`)
+    }
+    const loader = new DefinitionLoader(getWorkspaceFolder())
+    const entity = (await indexProductEntitiesByReference(await loader.loadDefaultEntities())).get(resolved.entity)
+    if (entity == null) throw new Error(`Entity not found for ChannelLink: ${parsed.channelLinkName}`)
+    const service = createAgentRoomService(undefined, undefined, {
+      resolveChannelConnection: resolveAgentRoomChannelConnection
+    })
+    const existingMember = getDb().getAgentRoomMember(roomId, entity.entityId) ??
+      getDb().getAgentRoomMember(roomId, `entity:${entity.entityId}`)
+    const memberKey = existingMember?.key ?? entity.entityId
+    if (existingMember == null) {
+      service.upsertMember(roomId, {
+        ...(entity.avatar == null ? {} : { avatar: entity.avatar }),
+        key: memberKey,
+        kind: 'entity',
+        label: entity.name,
+        subtitle: entity.description
+      })
+    }
+    const runtimeLink = getChannelStates().flatMap(state => state.channelLinks ?? [])
+      .find(link => link.name === parsed.channelLinkName)
+    await service.executeCommand(roomId, {
+      connection: {
+        channelLinkName: parsed.channelLinkName,
+        ...(runtimeLink?.ingress.room?.commandPrefix == null
+          ? {}
+          : { commandPrefix: runtimeLink.ingress.room.commandPrefix }),
+        memberKey,
+        muted: runtimeLink?.ingress.room?.muted ?? false,
+        requireMention: runtimeLink?.ingress.room?.requireMention ?? false
+      },
+      idempotencyKey: `oneworks-room-connection:${randomUUID()}`,
+      type: 'attach_member_channel'
+    })
+    publishRoomUpdated(roomId, room.hostSessionId)
+    return (await listProductRooms()).find(candidate => candidate.roomId === roomId)!
+  },
+  updateRoom: async (
+    principal: PluginRequestPrincipal,
+    roomId: string,
+    input: unknown
+  ): Promise<OneWorksRoomSummary> => {
+    requireProductAccess(principal)
+    const patch: OneWorksRoomPatchInput = oneworksRoomPatchInputSchema.parse(input)
+    const room = createAgentRoomService().updateRoomMetadata(roomId, patch)
+    publishRoomUpdated(room.id, room.hostSessionId)
+    return (await listProductRooms()).find(candidate => candidate.roomId === roomId)!
+  },
+  updateRoomChannelConnection: async (
+    principal: PluginRequestPrincipal,
+    roomId: string,
+    memberKey: string,
+    channelLinkName: string,
+    input: unknown
+  ): Promise<OneWorksRoomSummary> => {
+    requireProductAccess(principal)
+    const patch: OneWorksRoomChannelConnectionPatchInput = oneworksRoomChannelConnectionPatchInputSchema.parse(input)
+    await createAgentRoomService(undefined, undefined, {
+      resolveChannelConnection: resolveAgentRoomChannelConnection
+    }).executeCommand(roomId, {
+      connection: { channelLinkName, memberKey, ...patch },
+      idempotencyKey: `oneworks-room-connection:${randomUUID()}`,
+      type: 'update_member_channel'
+    })
+    publishRoomUpdated(roomId)
+    return (await listProductRooms()).find(candidate => candidate.roomId === roomId)!
+  },
+  deleteRoom: async (principal: PluginRequestPrincipal, roomId: string): Promise<boolean> => {
+    requireProductAccess(principal)
+    const room = getDb().getAgentRoom(roomId)
+    if (room == null) return false
+    const removed = createAgentRoomService().deleteRoom(roomId)
+    if (removed) publishRoomUpdated(roomId, room.hostSessionId)
+    return removed
   },
   listSharedRooms: async (principal: PluginRequestPrincipal): Promise<OneWorksSharedRoomSummary[]> => {
     requireProductAccess(principal)

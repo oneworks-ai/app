@@ -20,6 +20,8 @@ import { notifySessionUpdated } from '#~/services/session/runtime.js'
 import { resolveSessionWorkspace } from '#~/services/session/workspace.js'
 import { getSessionLogger, logger } from '#~/utils/logger.js'
 
+import { bridgeInboundGroupMessageToAgentRooms } from './agent-room-bridge'
+import { resolveActor } from './command-invocation-input'
 import { buildInteractionText } from './interaction'
 import { pipeline } from './middleware'
 import type { ChannelContext, ChannelTextMessage } from './middleware/@types'
@@ -184,9 +186,22 @@ export const handleInboundEvent = async (
   connection: ChannelConnection<ChannelTextMessage> | undefined,
   config?: ChannelBaseConfig,
   configSource?: ConfigSource,
-  channelLinks: readonly ResolvedChannelLink[] = []
+  channelLinks: readonly ResolvedChannelLink[] = [],
+  runtimeStates: Iterable<ChannelRuntimeState> = []
 ) => {
   const channelLinkMatch = resolveInboundChannelLink(channelLinks, { channelKey, inbound })
+  if (inbound.sessionType === 'group' && inbound.channelType !== 'oneworks' && inbound.messageId != null) {
+    const bridged = await bridgeInboundGroupMessageToAgentRooms({
+      ctx: {
+        actor: resolveActor(inbound, channelKey),
+        channelKey,
+        config,
+        inbound
+      },
+      states: runtimeStates
+    })
+    if (bridged) return
+  }
   if (channelLinkMatch != null && channelLinkMatch.duplicates.length > 0) {
     logger.error({
       channelId: inbound.channelId,

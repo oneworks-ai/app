@@ -67,6 +67,44 @@ export interface EntityInheritance {
   mcpServers?: EntityInheritanceMode
 }
 
+export type EntityDocumentKind =
+  | 'identity'
+  | 'soul'
+  | 'role'
+  | 'operations'
+  | 'tools'
+  | 'knowledge'
+  | 'memoryPolicy'
+  | 'memory'
+
+export interface EntityDocumentConfig {
+  path?: string
+  inherit?: EntityInheritanceMode
+}
+
+export interface EntityMemoryPolicy {
+  maxCandidatesPerTurn?: number
+  maxItemsPerTurn?: number
+  maxTokensPerTurn?: number
+  maxItemsPerGroup?: number
+  maxTokensPerGroup?: number
+  defaultTtlSeconds?: number
+  requireEvidence?: boolean
+  allowSensitive?: boolean
+  writableScopes?: string[]
+}
+
+export interface EntityRuntimeConfig {
+  adapter?: string
+  model?: string
+  modelService?: string
+}
+
+export interface EntityTeamConfig {
+  relatedEntities?: string[]
+  role?: 'leader' | 'member'
+}
+
 export interface Entity {
   name?: string
   avatar?: string
@@ -77,6 +115,10 @@ export interface Entity {
   inherit?: EntityInheritanceMode | EntityInheritance
   prompt?: string
   promptPath?: string
+  documents?: Partial<Record<EntityDocumentKind, string | EntityDocumentConfig>>
+  memory?: EntityMemoryPolicy
+  runtime?: EntityRuntimeConfig
+  team?: EntityTeamConfig
   rules?: RuleReference[]
   skills?: string[] | SkillSelection
   mcpServers?: Filter
@@ -103,6 +145,12 @@ export interface ChannelLinkIngress {
   observeWindow?: {
     maxTurns?: number
     ttlSeconds?: number
+  }
+  /** Agent Room consumption policy for this member-scoped external connection. */
+  room?: {
+    commandPrefix?: string
+    muted?: boolean
+    requireMention?: boolean
   }
 }
 

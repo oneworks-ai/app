@@ -145,7 +145,10 @@ const assertCurrentChannel = (requested: string | undefined, context: MemoryCont
   }
 }
 
-export const authorizeMemoryAccess = async (options: MemoryCommandOptions): Promise<MemoryAccess> => {
+export const authorizeMemoryAccess = async (
+  options: MemoryCommandOptions,
+  intent: 'read' | 'write' = 'read'
+): Promise<MemoryAccess> => {
   const context = resolveContext(options)
   const scope = normalizeScope(options.scope)
   if (context.channelContextPath == null) {
@@ -158,6 +161,15 @@ export const authorizeMemoryAccess = async (options: MemoryCommandOptions): Prom
   }
 
   await verifyActiveChannelChild(context, options)
+  if (intent === 'write') {
+    const writableScopes = context.memoryPolicy?.writableScopes
+    if (writableScopes != null && !writableScopes.includes(scope)) {
+      throw new Error(`Entity memory policy does not permit writing the ${scope} scope.`)
+    }
+    if (context.memoryPolicy?.requireEvidence === true && context.childRunId == null) {
+      throw new Error('Entity memory policy requires an active child run as write evidence.')
+    }
+  }
   if (scope === 'global') {
     throw new Error('Channel child memory access does not permit the global scope.')
   }

@@ -14,3 +14,5 @@
 本地验证客户端改动前先运行 `pnpm --filter @oneworks/plugin-channel-oneworks build:client`，再通过统一 `dev-service restart web` 重启当前 worktree 的 Web 服务。插件运行时加载 `client/dist`；只修改 `client/src`、等待 Vite HMR 或仅刷新页面不会更新已加载的插件界面。
 
 产品 UI 可以使用本地 Room ID 完成应用内路由，并展示用户主动配置的账号标签。不要返回或渲染原始 channel / actor 标识、webhook headers、nonce、签名、credential、raw payload、memory、continuity 或 authorization metadata。
+
+创建团队群聊时，Leader 与普通成员是两个选择组：系统内置 Auto Leader 并作为无显式实体 Leader 时的默认选择，它根据已选成员的名称和职责生成服务端 system prompt，通过统一 runtime protocol 分配、跟进并汇总任务；每个可执行请求必须至少委派一次并跟进到终态。Auto Leader 至少需要一个普通成员，且不拥有实体频道连接。外部频道消息由服务端给 Auto Leader 提供一次性委派描述，只有真正拥有该连接的实体子会话可原子领取并获得受限 `channel` authority；回复目标固定为原始入站事件快照，无效委派 fail closed，同 session 可幂等恢复 context，未领取授权按 TTL 过期；Auto Leader 自身、非 owning member 和重复领取都不得获得频道 token。实体 Leader 由实体定义的 `team.role: leader` 注册且只能单选，其 `team.relatedEntities` 由服务端解析并自动加入成员；创建页只负责预选和展示，Leader 卡片用宿主实体头像组件在右下角预览关联成员。Leader 与普通成员卡片区在桌面和中间宽度默认最多展示三行，超出后各自在固定窗口内纵向滚动；手机收为两行三列正方形卡片并隐藏描述，同时保留名称、头像、选择状态和 Leader 关联头像。

@@ -1,5 +1,5 @@
 /* eslint-disable max-lines -- frontend plugin manifest keeps view, contribution, and host component contracts together */
-import type { ComponentType, ReactNode } from 'react'
+import type { ComponentType, KeyboardEventHandler, ReactNode } from 'react'
 
 import type { ChatMessageContent, SessionQueuedMessageMode } from '@oneworks/core'
 import type {
@@ -209,6 +209,7 @@ export interface PluginViewHostContext {
 export type PluginViewI18nApi = PluginI18nContext
 
 export type PluginHostSenderDensity = 'compact' | 'default'
+export type PluginHostSenderLayout = 'adaptive' | 'stacked'
 export type PluginHostSenderSurface = 'chat' | 'plain'
 export type PluginHostControlSize = 'large' | 'middle' | 'small'
 export type PluginHostIconTone = 'danger' | 'default' | 'muted' | 'primary' | 'success' | 'warning'
@@ -379,6 +380,60 @@ export interface PluginHostCodeEditorComponentProps {
   value: string
 }
 
+export interface PluginHostJsonSchemaFormComponentProps {
+  className?: string
+  jsonSchema: Record<string, unknown>
+  onChange: (value: Record<string, unknown>) => void
+  onCommit?: (value: Record<string, unknown>) => void
+  value: Record<string, unknown>
+}
+
+export interface PluginHostEntityCardComponentProps {
+  avatar?: string
+  description?: string
+  entityId: string
+  name: string
+  relatedEntities?: PluginHostGroupAvatarMember[]
+  relatedEntitiesLabel?: string
+  selectionMode?: 'checkbox' | 'radio'
+  selected?: boolean
+  tabIndex?: number
+  onKeyDown?: KeyboardEventHandler<HTMLButtonElement>
+  onOpenDetails?: () => void
+  onSelect?: () => void
+}
+
+export interface PluginHostEntitySummaryItem {
+  icon?: string
+  label: string
+  value: string
+}
+
+export interface PluginHostEntitySummaryComponentProps {
+  avatar?: string
+  contextLabel?: string
+  description?: string
+  entityId: string
+  items?: PluginHostEntitySummaryItem[]
+  name: string
+  onBack?: () => void
+  onOpenDetails?: () => void
+  openDetailsLabel?: string
+  variant?: 'compact' | 'detail'
+}
+
+export interface PluginHostGroupAvatarMember {
+  avatar?: string
+  key: string
+  label?: string
+}
+
+export interface PluginHostGroupAvatarComponentProps {
+  className?: string
+  label?: string
+  members: PluginHostGroupAvatarMember[]
+}
+
 export interface PluginHostActionItem {
   danger?: boolean
   disabled?: boolean
@@ -446,6 +501,11 @@ export interface PluginHostIconComponentProps {
   tone?: PluginHostIconTone
 }
 
+export interface PluginHostChannelPlatformIconComponentProps {
+  channelType: string
+  className?: string
+}
+
 export interface PluginHostListItem {
   actions?: ReactNode
   active?: boolean
@@ -462,6 +522,7 @@ export interface PluginHostListComponentProps {
 export interface PluginHostAgentRoomComponentProps {
   className?: string
   inset?: boolean
+  memberAvatarOverrides?: Record<string, string | null>
   roomId: string
 }
 
@@ -582,6 +643,8 @@ export interface PluginHostSwitchComponentProps {
 
 export interface PluginHostSettingsSectionComponentProps {
   children: ReactNode
+  collapsible?: boolean
+  defaultCollapsed?: boolean
   description?: ReactNode
   icon?: string
   title?: ReactNode
@@ -601,11 +664,13 @@ export interface PluginHostSenderComponentProps {
   defaultAdapter?: string
   defaultModel?: string
   density?: PluginHostSenderDensity
+  enableVoiceInput?: boolean
   showHeader?: boolean
   hideReferenceActions?: boolean
   hideSelectionControls?: boolean
   hideSubmitAction?: boolean
   initialContent?: string
+  layout?: PluginHostSenderLayout
   modelUnavailable?: boolean
   onCancel?: () => void
   onInputChange?: (value: string) => void
@@ -653,10 +718,15 @@ export interface PluginHostComponentPropsById {
   actionBar: PluginHostActionBarComponentProps
   agentRoom: PluginHostAgentRoomComponentProps
   button: PluginHostButtonComponentProps
+  channelPlatformIcon: PluginHostChannelPlatformIconComponentProps
   codeEditor: PluginHostCodeEditorComponentProps
+  entityCard: PluginHostEntityCardComponentProps
+  entitySummary: PluginHostEntitySummaryComponentProps
+  groupAvatar: PluginHostGroupAvatarComponentProps
   icon: PluginHostIconComponentProps
   input: PluginHostInputComponentProps
   interactionList: PluginHostInteractionListComponentProps
+  jsonSchemaForm: PluginHostJsonSchemaFormComponentProps
   list: PluginHostListComponentProps
   nativeTabs: PluginHostNativeTabsComponentProps
   overlayDropdown: PluginHostOverlayDropdownComponentProps
@@ -689,10 +759,15 @@ export interface PluginHostComponentReactApi {
   ActionBar: ComponentType<PluginHostActionBarComponentProps>
   AgentRoom: ComponentType<PluginHostAgentRoomComponentProps>
   Button: ComponentType<PluginHostButtonComponentProps>
+  ChannelPlatformIcon: ComponentType<PluginHostChannelPlatformIconComponentProps>
   CodeEditor: ComponentType<PluginHostCodeEditorComponentProps>
+  EntityCard: ComponentType<PluginHostEntityCardComponentProps>
+  EntitySummary: ComponentType<PluginHostEntitySummaryComponentProps>
+  GroupAvatar: ComponentType<PluginHostGroupAvatarComponentProps>
   Icon: ComponentType<PluginHostIconComponentProps>
   Input: ComponentType<PluginHostInputComponentProps>
   InteractionList: ComponentType<PluginHostInteractionListComponentProps>
+  JsonSchemaForm: ComponentType<PluginHostJsonSchemaFormComponentProps>
   List: ComponentType<PluginHostListComponentProps>
   NativeTabs: ComponentType<PluginHostNativeTabsComponentProps>
   OverlayDropdown: ComponentType<PluginHostOverlayDropdownComponentProps>
@@ -744,7 +819,9 @@ export interface PluginViewContext {
     navigate: (target: string, options?: { replace?: boolean }) => void
     setActions: (actions?: PluginViewRouteHeaderAction[]) => void
     setBreadcrumb: (breadcrumb?: PluginViewRouteHeaderBreadcrumb) => void
+    setIcon: (icon?: IconAsset) => void
     setLauncherChrome: (chrome?: PluginViewRouteLauncherChrome) => void
+    setSidePanel: (panel?: PluginViewRouteSidePanel) => void
     setSidebar: (sidebar?: PluginViewRouteSidebar) => void
     setTitle: (title?: string) => void
   }
@@ -782,6 +859,14 @@ export interface PluginViewRouteHeaderAction {
   danger?: boolean
   disabled?: boolean
   loading?: boolean
+  menuItems?: Array<{
+    key: string
+    label: string
+    danger?: boolean
+    disabled?: boolean
+    icon?: string
+    onSelect?: () => void
+  }>
   shortcut?: string
   title?: string
   onSelect?: () => void
@@ -797,6 +882,22 @@ export interface PluginViewRouteHeaderBreadcrumb {
   ariaLabel?: string
   backLabel?: string
   currentTitle?: ReactNode
+}
+
+export interface PluginViewRouteSidePanelTab {
+  content: ReactNode
+  icon: string
+  key: string
+  label: string
+  title?: string
+}
+
+export interface PluginViewRouteSidePanel {
+  activeTab: string | null
+  openedTabs: string[]
+  tabs: PluginViewRouteSidePanelTab[]
+  ariaLabel?: string
+  onTabChange: (activeTab: string | null, openedTabs: string[]) => void
 }
 
 export interface PluginViewRouteSidebarItem {

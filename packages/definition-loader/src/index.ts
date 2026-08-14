@@ -19,7 +19,7 @@ import type {
   Spec,
   WorkspaceDefinitionPayload
 } from '@oneworks/types'
-import { resolveWorkspaceAssetBundle } from '@oneworks/workspace-assets'
+import { resolveEntityDocumentSet, resolveWorkspaceAssetBundle } from '@oneworks/workspace-assets'
 
 import fg from 'fast-glob'
 
@@ -158,6 +158,16 @@ export class DefinitionLoader {
 
   async loadDefaultEntities(): Promise<Definition<Entity>[]> {
     return this.loadWorkspaceDefinitions(bundle => bundle.entities)
+  }
+
+  async loadEntityDocumentSet(name: string) {
+    const bundle = await resolveWorkspaceAssetBundle({ cwd: this.cwd })
+    const asset = bundle.entities.find(entity => (
+      entity.displayName === name ||
+      entity.name === name ||
+      resolveEntityIdentifier(entity.sourcePath, entity.payload.definition.attributes.name) === name
+    ))
+    return asset == null ? undefined : resolveEntityDocumentSet(bundle, asset)
   }
 
   async loadChannelLink(name: string): Promise<Definition<ChannelLink> | undefined> {

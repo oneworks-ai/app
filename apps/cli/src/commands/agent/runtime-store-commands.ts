@@ -29,6 +29,7 @@ export const appendRuntimeCommand = async (params: AppendRuntimeCommandParams) =
     content,
     commandId: params.commandId,
     memberKey: params.memberKey,
+    operationId: params.operationId,
     priority: params.priority,
     requestId,
     roomId: params.roomId,

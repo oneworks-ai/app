@@ -7,7 +7,10 @@ import { useTranslation } from 'react-i18next'
 import type { ContextPickerFile } from './context-file-types'
 import { toContextPickerFiles } from './context-file-types'
 import { ProjectFileTree } from './project-file-tree/ProjectFileTree'
-import type { ProjectFileTreeSelection } from './project-file-tree/project-file-tree-types'
+import type {
+  ProjectFileTreeSelectableTypes,
+  ProjectFileTreeSelection
+} from './project-file-tree/project-file-tree-types'
 
 export type { ContextPickerFile } from './context-file-types'
 
@@ -15,6 +18,8 @@ export function ContextFilePicker({
   open,
   sessionId,
   selectedPaths,
+  multiple = true,
+  selectableTypes = 'all',
   variant = 'modal',
   onCancel,
   onConfirm
@@ -22,6 +27,8 @@ export function ContextFilePicker({
   open: boolean
   sessionId?: string
   selectedPaths: string[]
+  multiple?: boolean
+  selectableTypes?: ProjectFileTreeSelectableTypes
   variant?: 'inline' | 'modal'
   onCancel: () => void
   onConfirm: (files: ContextPickerFile[]) => void
@@ -42,8 +49,10 @@ export function ContextFilePicker({
   }, [open, selectedPathsKey])
 
   const handleSelectionChange = (selection: ProjectFileTreeSelection) => {
-    setCheckedPaths(selection.paths)
-    setSelectedFiles(toContextPickerFiles(selection.paths, selection.nodes))
+    const nextPaths = multiple ? selection.paths : selection.paths.slice(-1)
+    const nextNodes = multiple ? selection.nodes : selection.nodes.slice(-1)
+    setCheckedPaths(nextPaths)
+    setSelectedFiles(toContextPickerFiles(nextPaths, nextNodes))
   }
   const handleConfirm = () => {
     onConfirm(toContextPickerFiles(checkedPaths, selectedFiles))
@@ -54,7 +63,7 @@ export function ContextFilePicker({
       <div className='context-file-picker__body'>
         {open && (
           <ProjectFileTree
-            selectableTypes='all'
+            selectableTypes={selectableTypes}
             selectedPaths={checkedPaths}
             selectionMode='multiple'
             sessionId={sessionId}

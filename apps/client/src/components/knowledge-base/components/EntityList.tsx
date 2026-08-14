@@ -18,6 +18,7 @@ interface EntityListProps {
   total: number
   onCreate?: () => void
   onPageChange: (page: number) => void
+  onOpenEntity: (entityId: string) => void
 }
 
 export function EntityList({
@@ -28,6 +29,7 @@ export function EntityList({
   resetKey,
   total,
   onCreate,
+  onOpenEntity,
   onPageChange
 }: EntityListProps) {
   const { t } = useTranslation()
@@ -74,7 +76,7 @@ export function EntityList({
         resetKey={resetKey}
         renderItem={(entity) => (
           <List.Item className='knowledge-base-view__list-item'>
-            <EntityItem entity={entity} />
+            <EntityItem entity={entity} onOpen={() => onOpenEntity(entity.name)} />
           </List.Item>
         )}
         total={total}

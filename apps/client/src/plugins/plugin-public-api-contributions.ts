@@ -232,7 +232,7 @@ const CONTRIBUTION_SHAPES: Record<string, PublicJsonShape> = {
   navFooterBefore: array(NAV_FOOTER_SHAPE),
   navItems: array(object(mergeFields(
     BASE_FIELDS,
-    jsonFields('command', 'id', 'payload', 'title'),
+    jsonFields('command', 'id', 'payload', 'placement', 'title'),
     assetFields('icon'),
     routeFields('route'),
     { actions: array(NAV_ITEM_ACTION_SHAPE) }

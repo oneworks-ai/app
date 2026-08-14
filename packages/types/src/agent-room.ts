@@ -21,6 +21,8 @@ export interface AgentRoomOwner {
 export interface AgentRoom {
   id: string
   title: string
+  avatar?: string
+  description?: string
   owner: AgentRoomOwner
   leaderEntity?: string
   hostSessionId?: string
@@ -32,7 +34,14 @@ export interface AgentRoom {
   updatedAt: number
 }
 
-export interface AgentRoomChannelLink {
+export type AgentRoomChannelConnectionStatus = 'active' | 'removed' | 'unavailable'
+
+/**
+ * A member-scoped capability for reaching one external conversation.
+ * Rooms never own channels directly: the member that contributes the
+ * capability remains explicit even when several rooms observe the same chat.
+ */
+export interface AgentRoomChannelConnection {
   accountLabel?: string
   channelId: string
   channelKey: string
@@ -42,11 +51,22 @@ export interface AgentRoomChannelLink {
   createdAt: number
   entity: string
   label: string
+  lastError?: string
+  lastSeenAt?: number
+  memberKey: string
+  muted: boolean
+  commandPrefix?: string
+  requireMention: boolean
   receiveId: string
   receiveIdType: string
   roomId: string
+  status: AgentRoomChannelConnectionStatus
   threadId?: string
+  updatedAt: number
 }
+
+/** @deprecated Use AgentRoomChannelConnection. */
+export type AgentRoomChannelLink = AgentRoomChannelConnection
 
 export type AgentRoomSharePermission =
   | 'approve'
@@ -218,8 +238,11 @@ export interface AgentRoomUserMessageDelivery {
 }
 
 export interface AgentRoomUserMessagePayload {
+  attemptedMemberKeys?: string[]
   delivery?: AgentRoomUserMessageDelivery
-  deliveryState?: 'delivered' | 'failed' | 'pending'
+  deliveries?: AgentRoomUserMessageDelivery[]
+  deliveryErrors?: Array<{ error: string; memberKey: string }>
+  deliveryState?: 'delivered' | 'failed' | 'observed' | 'pending'
   replyTo?: AgentRoomMessageReference
   reactions?: AgentRoomMessageReaction[]
   target?: AgentRoomUserMessageTarget
@@ -236,6 +259,8 @@ export interface AgentRoomMessageOrigin {
   conversationLabel?: string
   navigation?: ChannelNavigationReference
   providerMessageId?: string
+  senderDisplayName?: string
+  senderId?: string
   threadId?: string
 }
 
@@ -273,7 +298,7 @@ export interface AgentRoomDetail {
   members: AgentRoomMember[]
   runs: AgentRoomRun[]
   messages: AgentRoomMessage[]
-  channelLinks: AgentRoomChannelLink[]
+  channelConnections: AgentRoomChannelConnection[]
   shares: AgentRoomShare[]
 }
 
@@ -293,8 +318,11 @@ export interface AgentRoomHostSessionResponse {
 }
 export interface AgentRoomDetailResponse extends AgentRoomDetail {}
 export interface UpdateAgentRoomMetadataRequest {
+  avatar?: string | null
+  description?: string | null
   isArchived?: boolean
   isFavorited?: boolean
+  title?: string
 }
 export interface UpdateAgentRoomMetadataResponse {
   room: AgentRoom
@@ -333,8 +361,24 @@ export interface RecordAgentRoomChannelDeliveryRequest {
   target: ChannelDeliveryTarget
 }
 
-export interface AttachAgentRoomChannelLinkRequest {
+export interface AttachAgentRoomChannelConnectionRequest {
   channelLinkName: string
+  commandPrefix?: string
+  memberKey: string
+  muted?: boolean
+  requireMention?: boolean
+}
+
+/** @deprecated Use AttachAgentRoomChannelConnectionRequest. */
+export type AttachAgentRoomChannelLinkRequest = AttachAgentRoomChannelConnectionRequest
+
+export interface UpdateAgentRoomChannelConnectionRequest {
+  channelLinkName: string
+  commandPrefix?: string | null
+  memberKey: string
+  muted?: boolean
+  requireMention?: boolean
+  status?: AgentRoomChannelConnectionStatus
 }
 
 export interface CreateAgentRoomShareRequest {
@@ -353,7 +397,8 @@ export type AgentRoomCommand =
   }
   | { idempotencyKey: string; type: 'append_message'; message: AgentRoomMessageWriteRequest }
   | { idempotencyKey: string; type: 'apply_event'; event: AgentRoomEvent }
-  | { idempotencyKey: string; type: 'attach_channel'; link: AttachAgentRoomChannelLinkRequest }
+  | { idempotencyKey: string; type: 'attach_member_channel'; connection: AttachAgentRoomChannelConnectionRequest }
+  | { idempotencyKey: string; type: 'update_member_channel'; connection: UpdateAgentRoomChannelConnectionRequest }
   | { idempotencyKey: string; type: 'create_share'; share: CreateAgentRoomShareRequest }
   | { idempotencyKey: string; type: 'revoke_share'; shareId: string }
   | { idempotencyKey: string; type: 'record_delivery'; delivery: AgentRoomMessageDelivery }

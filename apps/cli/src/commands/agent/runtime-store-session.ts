@@ -50,6 +50,7 @@ export const createRuntimeSession = async (params: CreateRuntimeSessionParams) =
   const memberKey = params.memberKey?.trim() || entity
   const memberAvatar = params.memberAvatar?.trim() || undefined
   const memberLabel = params.memberLabel?.trim() || entity
+  const operationId = params.operationId?.trim() || undefined
   const runId = params.runId?.trim() || sessionId
   const runTitle = params.runTitle?.trim() || title
   const ts = now()
@@ -75,6 +76,7 @@ export const createRuntimeSession = async (params: CreateRuntimeSessionParams) =
       ...(memberAvatar != null ? { memberAvatar } : {}),
       memberKind: 'entity',
       memberLabel,
+      ...(operationId != null ? { operationId } : {}),
       runId,
       runTitle,
       createdAt: ts,
@@ -98,6 +100,7 @@ export const createRuntimeSession = async (params: CreateRuntimeSessionParams) =
     fastMode,
     model,
     memberKey,
+    operationId,
     permissionMode,
     priority: params.priority,
     ...(roomId != null ? { roomId } : {}),

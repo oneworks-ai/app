@@ -117,4 +117,54 @@ describe('aiRouter', () => {
       ]
     })
   })
+
+  it('preserves index.json entity format when updating entity config', async () => {
+    const entityDir = path.join(workspaceFolder, '.oo', 'entities', 'reviewer')
+    const entityPath = path.join(entityDir, 'index.json')
+    await mkdir(entityDir, { recursive: true })
+    await writeFile(
+      entityPath,
+      JSON.stringify(
+        {
+          description: 'Review changes',
+          prompt: 'Inspect behavior.',
+          runtime: { model: 'old-model' }
+        },
+        null,
+        2
+      )
+    )
+
+    const handleUpdateEntityConfig = findRouteHandler('/entities/config', 'PATCH')
+    const ctx = {
+      request: {
+        body: {
+          path: '.oo/entities/reviewer/index.json',
+          value: {
+            memory: { writableScopes: ['entity'] },
+            runtime: { model: 'new-model' },
+            team: { relatedEntities: ['qa'], role: 'leader' }
+          }
+        }
+      },
+      body: undefined
+    }
+
+    await handleUpdateEntityConfig(ctx)
+
+    expect(ctx.body).toEqual({ ok: true })
+    await expect(readFile(entityPath, 'utf8')).resolves.toBe(`${
+      JSON.stringify(
+        {
+          description: 'Review changes',
+          prompt: 'Inspect behavior.',
+          runtime: { model: 'new-model' },
+          team: { relatedEntities: ['qa'], role: 'leader' },
+          memory: { writableScopes: ['entity'] }
+        },
+        null,
+        2
+      )
+    }\n`)
+  })
 })

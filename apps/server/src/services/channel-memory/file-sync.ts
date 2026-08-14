@@ -7,6 +7,7 @@ import path from 'node:path'
 import { getDb } from '#~/db/index.js'
 import type { ChannelMemorySubjectType, ChannelMemoryVisibility } from '#~/db/index.js'
 import { resolveChannelMemoryRoot } from '#~/services/session/channel-context.js'
+import type { EntityMemoryPolicy } from '@oneworks/types'
 
 import type { ChannelMemoryResolverScope } from './filter.js'
 import { extractMemoryKeywords } from './ranking.js'
@@ -19,12 +20,14 @@ export interface ChannelFileMemorySyncInput extends ChannelMemoryResolverScope {
   childRunId?: string
   conversationStateId?: string
   memoryRoot?: string
+  memoryPolicy?: EntityMemoryPolicy
   senderId?: string
   sourceMessageId?: string
 }
 
 interface FileMemoryTarget {
   filePath: string
+  scope: 'channel' | 'conversation' | 'entity' | 'room' | 'user'
   subjectId: string
   subjectType: ChannelMemorySubjectType
   visibilityPartition?: 'direct' | 'organization'
@@ -101,6 +104,7 @@ const resolveTargets = (input: ChannelFileMemorySyncInput, memoryRoot: string): 
         visibilityPartition,
         DEFAULT_MEMORY_PATH
       ),
+      scope: 'entity',
       subjectId: input.entity,
       subjectType: 'entity',
       visibilityPartition
@@ -115,6 +119,7 @@ const resolveTargets = (input: ChannelFileMemorySyncInput, memoryRoot: string): 
         visibilityPartition,
         DEFAULT_MEMORY_PATH
       ),
+      scope: 'room',
       subjectId: input.roomId,
       subjectType: 'room',
       visibilityPartition
@@ -128,6 +133,7 @@ const resolveTargets = (input: ChannelFileMemorySyncInput, memoryRoot: string): 
       toStorageSegment(input.channelId),
       DEFAULT_MEMORY_PATH
     ),
+    scope: 'channel',
     subjectId: `${input.issuer}:${input.channelId}`,
     subjectType: 'channel'
   })
@@ -139,6 +145,7 @@ const resolveTargets = (input: ChannelFileMemorySyncInput, memoryRoot: string): 
         toStorageSegment(input.conversationStateId),
         DEFAULT_MEMORY_PATH
       ),
+      scope: 'conversation',
       subjectId: input.conversationStateId,
       subjectType: 'conversation'
     })
@@ -153,6 +160,7 @@ const resolveTargets = (input: ChannelFileMemorySyncInput, memoryRoot: string): 
         toStorageSegment(input.sessionType),
         DEFAULT_MEMORY_PATH
       ),
+      scope: 'user',
       subjectId: input.canonicalUserId ?? input.accountId,
       subjectType: input.canonicalUserId == null ? 'account' : 'canonical_user'
     })
@@ -182,6 +190,8 @@ export const syncChannelFileMemories = (input: ChannelFileMemorySyncInput) => {
   const changedMemoryIds: string[] = []
 
   for (const target of resolveTargets(input, memoryRoot)) {
+    const writableScopes = input.memoryPolicy?.writableScopes
+    if (writableScopes != null && !writableScopes.includes(target.scope)) continue
     const content = readMemoryFile(target.filePath)
     if (content == null) continue
     const id = createMemoryId(input, target, memoryRoot)
@@ -219,12 +229,20 @@ export const syncChannelFileMemories = (input: ChannelFileMemorySyncInput) => {
     }
 
     if (changed) {
+      if (
+        input.memoryPolicy?.requireEvidence === true &&
+        input.childRunId == null && input.sourceMessageId == null
+      ) {
+        throw new Error('Entity memory policy requires evidence before memory writeback.')
+      }
+      const defaultTtlSeconds = input.memoryPolicy?.defaultTtlSeconds
       db.upsertChannelMemory({
         ...(target.subjectType === 'account' ? { accountId: input.accountId } : {}),
         ...(target.subjectType === 'canonical_user' ? { canonicalUserId: input.canonicalUserId } : {}),
         confidence: .8,
         content,
         entity: input.entity,
+        expiresAt: defaultTtlSeconds == null ? undefined : Date.now() + defaultTtlSeconds * 1000,
         id,
         importance: .75,
         issuer: input.issuer,

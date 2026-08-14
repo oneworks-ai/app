@@ -264,6 +264,8 @@ export interface ChannelInboundEvent {
   replyMessageId?: string
   /** Platform root message for a thread when provided independently. */
   rootMessageId?: string
+  /** Clean presentation text for product surfaces; routing metadata remains structured. */
+  displayText?: string
   text?: string
   threadId?: string
   /** Trusted synthetic actor metadata produced by a first-party product surface. */
@@ -283,9 +285,17 @@ export interface ChannelInboundEvent {
 
 export type ChannelEventHandler<TPayload = unknown> = (payload: TPayload) => void | Promise<void>
 
+export interface ChannelConversationAvailabilityEvent {
+  channelId: string
+  channelType: string
+  reason?: string
+  status: 'active' | 'unavailable'
+}
+
 export interface ChannelEventHandlers {
+  availability?: ChannelEventHandler<ChannelConversationAvailabilityEvent>
   message?: ChannelEventHandler<ChannelInboundEvent>
-  [event: string]: ChannelEventHandler | ChannelEventHandler<ChannelInboundEvent> | undefined
+  [event: string]: ChannelEventHandler<any> | undefined
 }
 
 export interface ChannelSessionMcpContext {

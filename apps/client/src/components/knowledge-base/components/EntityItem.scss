@@ -29,6 +29,23 @@
   font-weight: 500;
 }
 
+.knowledge-base-view__item-title-button {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+
+.knowledge-base-view__item-title-button:hover,
+.knowledge-base-view__item-title-button:focus-visible {
+  color: var(--primary-color);
+  outline: none;
+}
+
 .knowledge-base-view__item-icon {
   font-size: 18px;
   color: var(--sub-text-color);

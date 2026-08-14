@@ -73,6 +73,38 @@
   justify-content: flex-end;
 }
 
+.config-view__section-toggle {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  gap: var(--subpage-tertiary-gap);
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.config-view__section-toggle > .config-view__section-title {
+  flex: 1 1 auto;
+}
+
+.config-view__section-toggle-icon {
+  flex: 0 0 auto;
+  color: var(--sub-text-color);
+  font-size: 18px;
+  transition: transform .16s ease;
+}
+
+.config-view__editor-wrap--collapsible.is-collapsed
+  .config-view__section-toggle-icon {
+  transform: rotate(-90deg);
+}
+
 .config-view__section-header-extra {
   display: flex;
   align-items: center;
