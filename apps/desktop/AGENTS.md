@@ -61,7 +61,7 @@ Review 桌面双运行路径、bundle 外资源、ready 语义或真实安装产
 - `scripts/smoke-packaged-server.cjs`
   - 包内 server smoke test 契约；除基础 server 探活外，还必须确认默认内置 Relay、In-App Browser Control、Browser Control Chrome transport 和 Computer Control - CUA 的生产入口存在、runtime 已激活且没有 diagnostics
 - `scripts/diagnose-packaged-authority.cjs`
-  - `app` notarization recovery 的当前 builder 诊断入口；通过恢复 App executable 加载包内 native authority，在隔离目录验证 broker / peer / open / claim / publish / release / cleanup，只输出固定 phase / error code
+  - fresh signed build 与 `app` notarization recovery 的当前 builder 诊断入口；在任何 Apple app 操作前通过待提交 App executable 加载包内 native authority，在隔离目录验证 broker / peer / open / claim / publish / release / cleanup，只输出固定 phase / error code
 - `electron-builder.yml`
   - 目标平台、artifact 命名、GitHub publish 配置
 - `build/app-update.yml`
@@ -139,7 +139,7 @@ Review 桌面双运行路径、bundle 外资源、ready 语义或真实安装产
 - 启用签名的正式 macOS 构建不仅要 notarize `.app`：生成后的 `.dmg` 与 Developer ID Installer 签名 `.pkg` 也必须提交 notarization 并 staple；安装验证同时覆盖 `codesign` / `spctl --type execute`、`pkgutil` / `spctl --type install` 和 installer staple，避免只验证 DMG 内应用却发布不可安装的 PKG。
 - DMG 在 electron-builder 完成后还会因 staple 改变字节，因此 `dmg.writeUpdateInfo` 必须保持关闭，不能发布 stapling 前生成的 DMG blockmap / update digest；macOS 自动更新元数据只引用已包含 stapled app 的 ZIP，并由最终候选 manifest 对所有发布文件重新计算摘要。
 - `scripts/notarization-state.cjs` 是 app / DMG / PKG 公证恢复状态的唯一 owner：提交必须使用 `notarytool --no-wait`，等待前保存来源、build metadata、精确 payload 大小与 SHA-256、attempt marker / submission ID 并上传 recovery artifact；恢复时先按 history 唯一对账结果不明的 attempt，只提交从未尝试过的剩余 target，再保存更新状态，校验并还原同一字节、Accepted 后 staple。Apple 长时间 `In Progress`、连接中断或 runner 超时都不能触发重新签名、重复 submit 或绕过摘要验证。
-- `app` recovery 在原 product smoke 前还必须运行当前 builder 的 packaged authority 诊断；它只诊断恢复包内实现与 executable 的兼容性，不能改恢复字节、重试业务 asset 请求、跳过或替代旧 product 自己的 smoke。stderr 必须有界内收，外部只允许看到稳定 phase / error code。
+- fresh signed build 与 `app` recovery 在 signature-only 验证后、任何 Apple app prepare / reconcile / submit / wait 前，都必须运行当前 builder 的 packaged authority 诊断；unsigned 与 installer-only recovery 跳过。诊断只检查包内实现与 executable 的兼容性，不能改 App 字节、重试业务 asset 请求、跳过或替代最终 signed/notarized 验证后的 product smoke。stderr 必须有界内收，外部只允许看到稳定 phase / error code。
 - 改版本号传递或 artifact 命名时，保持 `pkg/oneworks-desktop/v*` tag、`artifactName` 与 `latest*.yml` 中的 URL 一致，否则自动更新会直接失效。
 - 正式包的 runtime package cache version 必须读取 Electron 最终应用版本（`app.getVersion()`），不能读取依赖包版本。打包 staging 的应用 manifest 必须先写入 `ONEWORKS_DESKTOP_VERSION`，保证 Electron runtime、原生 bundle 与 runtime cache 目录使用同一最终版本；release tag 覆盖桌面版本但内部 workspace 包尚未对齐时也不能复用上一版 server / adapter 缓存。
 - 可信 packaged cache 首次落盘可以用 immutable cache version / build fingerprint 作为完整性标识，并在 APFS 等支持的文件系统上优先 clone 文件；不要在启动关键路径重复哈希和物理复制相同 bundle 内容。built-in plugin 的版本 cache 只读链接回不可变应用包，`latest` cache 再作为版本 cache 的轻量别名；应用位置或 build fingerprint 变化时必须由 manifest 校验重建链接。

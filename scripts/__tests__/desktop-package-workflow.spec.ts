@@ -651,11 +651,14 @@ describe('desktop package workflow', () => {
       '      - name: Import desktop application signing identity'
     )
     const packageIndex = workflow.indexOf('      - name: Package desktop app')
+    const preNotarizationVerifyIndex = workflow.indexOf(
+      '      - name: Verify signed apps before notarization'
+    )
     const verifyIndex = workflow.indexOf(
       '      - name: Verify signed and notarized macOS app bundles'
     )
     const recoveryDiagnosticIndex = workflow.indexOf(
-      '      - name: Diagnose recovered packaged filesystem authority'
+      '      - name: Diagnose packaged filesystem authority before notarization'
     )
     const packagedSmokeIndex = workflow.indexOf(
       '      - name: Smoke test packaged server'
@@ -709,18 +712,20 @@ describe('desktop package workflow', () => {
 
     expect(importIndex).toBeGreaterThanOrEqual(0)
     expect(importIndex).toBeLessThan(packageIndex)
-    expect(packageIndex).toBeLessThan(prepareAppIndex)
+    expect(packageIndex).toBeLessThan(preNotarizationVerifyIndex)
+    expect(preNotarizationVerifyIndex).toBeLessThan(recoveryDiagnosticIndex)
+    expect(recoveryDiagnosticIndex).toBeLessThan(prepareAppIndex)
     expect(prepareAppIndex).toBeLessThan(submitAppIndex)
     expect(submitAppIndex).toBeLessThan(retainAppIndex)
     expect(retainAppIndex).toBeLessThan(waitAppIndex)
     expect(retainAppIndex).toBeLessThan(resumeAppIndex)
+    expect(recoveryDiagnosticIndex).toBeLessThan(resumeAppIndex)
     expect(resumeAppIndex).toBeLessThan(bindAppIndex)
     expect(bindAppIndex).toBeLessThan(retainUpdatedAppIndex)
     expect(retainUpdatedAppIndex).toBeLessThan(waitAppIndex)
     expect(waitAppIndex).toBeLessThan(verifyIndex)
     expect(packageIndex).toBeLessThan(verifyIndex)
-    expect(verifyIndex).toBeLessThan(recoveryDiagnosticIndex)
-    expect(recoveryDiagnosticIndex).toBeLessThan(packagedSmokeIndex)
+    expect(verifyIndex).toBeLessThan(packagedSmokeIndex)
     expect(verifyIndex).toBeLessThan(buildIndex)
     expect(buildIndex).toBeLessThan(prepareInstallerIndex)
     expect(prepareInstallerIndex).toBeLessThan(submitInstallerIndex)
@@ -771,12 +776,33 @@ describe('desktop package workflow', () => {
     )
   })
 
-  it('runs the current-builder authority diagnostic only for app recovery without replacing product smoke', () => {
-    const diagnosticStep = extractStep('Diagnose recovered packaged filesystem authority')
+  it('runs the current-builder authority diagnostic before Apple work while unsigned and installer recovery skip', () => {
+    const diagnosticName = 'Diagnose packaged filesystem authority before notarization'
+    const diagnosticStep = extractStep(diagnosticName)
     const productSmokeStep = extractStep('Smoke test packaged server')
+    const diagnosticIndex = workflow.indexOf(`      - name: ${diagnosticName}`)
+    const preNotarizationVerifyIndex = workflow.indexOf(
+      '      - name: Verify signed apps before notarization'
+    )
+    const prepareIndex = workflow.indexOf(
+      '      - name: Prepare signed app notarization recovery state'
+    )
+    const reconcileIndex = workflow.indexOf(
+      '      - name: Reconcile and submit app notarization recovery state'
+    )
+    const waitIndex = workflow.indexOf(
+      '      - name: Wait for existing app notarization submissions'
+    )
+    const finalVerifyIndex = workflow.indexOf(
+      '      - name: Verify signed and notarized macOS app bundles'
+    )
+    const smokeIndex = workflow.indexOf('      - name: Smoke test packaged server')
 
     expect(diagnosticStep).toContain(
-      "if: inputs.notarization_run_id != '' && inputs.notarization_stage == 'app'"
+      "steps.desktop_build_policy.outputs.sign == 'true'"
+    )
+    expect(diagnosticStep).toContain(
+      "(inputs.notarization_run_id == '' || inputs.notarization_stage == 'app')"
     )
     expect(diagnosticStep).toContain(
       'node "$GITHUB_WORKSPACE/apps/desktop/scripts/diagnose-packaged-authority.cjs"'
@@ -786,6 +812,17 @@ describe('desktop package workflow', () => {
     expect(diagnosticStep).not.toContain('APPLE_ID')
     expect(diagnosticStep).not.toContain('APPLE_ID_PASSWORD')
     expect(diagnosticStep).not.toContain('APPLE_TEAM_ID')
+    expect(workflow.match(new RegExp(`      - name: ${diagnosticName}`, 'gu'))).toHaveLength(1)
+    expect(workflow.match(/diagnose-packaged-authority\.cjs/gu)).toHaveLength(1)
+    expect(workflow).not.toContain('Diagnose recovered packaged filesystem authority')
+    expect(preNotarizationVerifyIndex).toBeLessThan(diagnosticIndex)
+    expect(
+      workflow.slice(preNotarizationVerifyIndex, diagnosticIndex).match(/^ {6}- name:/gmu)
+    ).toHaveLength(1)
+    expect(diagnosticIndex).toBeLessThan(prepareIndex)
+    expect(diagnosticIndex).toBeLessThan(reconcileIndex)
+    expect(diagnosticIndex).toBeLessThan(waitIndex)
+    expect(finalVerifyIndex).toBeLessThan(smokeIndex)
     expect(productSmokeStep).toContain('run: pnpm -C apps/desktop smoke:package')
     expect(productSmokeStep).toContain("if: inputs.notarization_stage != 'installer'")
   })
