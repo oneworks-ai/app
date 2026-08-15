@@ -13,6 +13,8 @@ const testState = vi.hoisted(() => ({
   getAdapterAccountDetail: vi.fn(),
   manageAdapterAccount: vi.fn(),
   messageError: vi.fn(),
+  messageDestroy: vi.fn(),
+  messageOpen: vi.fn(),
   messageInfo: vi.fn(),
   messageSuccess: vi.fn(),
   messageWarning: vi.fn(),
@@ -67,8 +69,10 @@ vi.mock('antd', () => ({
   App: {
     useApp: () => ({
       message: {
+        destroy: testState.messageDestroy,
         error: testState.messageError,
         info: testState.messageInfo,
+        open: testState.messageOpen,
         success: testState.messageSuccess,
         warning: testState.messageWarning
       }
@@ -311,6 +315,8 @@ describe('adapter accounts manager', () => {
     testState.getAdapterAccountDetail.mockReset()
     testState.manageAdapterAccount.mockReset()
     testState.messageError.mockReset()
+    testState.messageDestroy.mockReset()
+    testState.messageOpen.mockReset()
     testState.messageInfo.mockReset()
     testState.messageSuccess.mockReset()
     testState.messageWarning.mockReset()
@@ -530,7 +536,7 @@ describe('adapter accounts manager', () => {
       action: 'reauthenticate',
       account: 'work',
       refresh: false
-    })
+    }, expect.objectContaining({ onProgress: expect.any(Function) }))
     expect(testState.mutate).toHaveBeenCalledWith({ account }, { revalidate: false })
     expect(events).toEqual(['detail', 'list'])
     expect(testState.messageSuccess).toHaveBeenCalledWith('Signed in again.')

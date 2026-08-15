@@ -693,6 +693,7 @@ interface Window {
     createWorkspace?: () => Promise<string | undefined>
     createWorkspaceInDirectory?: (parentDirectory: string, projectName: string) => Promise<string | undefined>
     forgetWorkspace?: (workspaceFolder: string) => Promise<void>
+    focusCurrentWindow?: () => Promise<boolean>
     stopWorkspace?: (
       workspaceFolder: string,
       input?: { forget?: boolean }

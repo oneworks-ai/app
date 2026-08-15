@@ -2392,9 +2392,13 @@ process.exit(1)
       configs: [existingConfig as any]
     })
 
+    const progressPhases: string[] = []
     const result = await manageCodexAccount(ctx, {
       action: 'reauthenticate',
-      account: 'Work_Account'
+      account: 'Work_Account',
+      onProgress: event => {
+        if (event.phase != null) progressPhases.push(event.phase)
+      }
     })
 
     const globalConfig = JSON.parse(
@@ -2414,6 +2418,26 @@ process.exit(1)
     expect(globalConfig.adapters.codex.accounts['work-account']).toBeUndefined()
     await expect(stat(join(ambientCodexHome, 'auth.json'))).rejects.toMatchObject({ code: 'ENOENT' })
     expect(result.message).toContain('Reauthenticated Codex account')
+    expect(progressPhases).toEqual([
+      'preparing',
+      'awaiting-authorization',
+      'verifying',
+      'saving'
+    ])
+
+    progressPhases.length = 0
+    await manageCodexAccount(ctx, {
+      action: 'add',
+      onProgress: event => {
+        if (event.phase != null) progressPhases.push(event.phase)
+      }
+    })
+    expect(progressPhases).toEqual([
+      'preparing',
+      'awaiting-authorization',
+      'verifying',
+      'saving'
+    ])
   })
 
   it('does not recreate an account deleted while reauthentication is in progress', async () => {

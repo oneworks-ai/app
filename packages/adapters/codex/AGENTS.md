@@ -51,6 +51,9 @@ Primary implementation entrypoints for Codex hooks:
   - exposes standard adapter account management actions: add and reauthenticate via `codex login`, detail lookup, refresh, and remove from global config
 - `src/paths.ts`
   - resolves the official `@openai/codex` JavaScript launcher to its platform package's native executable, because packaged Electron users may not have a standalone `node` binary on `PATH`
+  - discovers the user's real login-shell HOME and common pnpm/Volta/local-bin plus Codex and ChatGPT app-bundle runtimes
+- `src/ensure-cli.ts`
+  - centralizes managed/system/bundled Codex CLI acquisition for init, CLI preparation, and account login
 - `src/models.ts`
   - exposes Codex model selector metadata to One Works
   - prefers Codex's `model_catalog_json` config file or `models_cache.json` under `CODEX_HOME` / `~/.codex`

@@ -14,8 +14,10 @@ import { useSWRConfig } from 'swr'
 import { getApiErrorMessage, manageAdapterAccount } from '#~/api'
 import { MobileAwareSelect as Select } from '#~/components/mobile-aware-select/MobileAwareSelect'
 import { OverlayAction, OverlayDivider } from '#~/components/overlay'
+import { focusDesktopWindowIfAvailable } from '#~/desktop/manager-runtime'
 import type { ChatAdapterAccountOption } from '#~/hooks/chat/use-chat-adapter-account-selection'
 import { useResponsiveLayout } from '#~/hooks/use-responsive-layout'
+import type { AdapterManageAccountProgressEvent } from '@oneworks/types'
 
 import type { SenderToolbarData, SenderToolbarHandlers, SenderToolbarState } from '../../@types/sender-toolbar-types'
 import {
@@ -35,6 +37,7 @@ interface PendingAccountQuotaDialog extends AccountQuotaDialogTarget {
   source: 'desktop' | 'mobile'
   token: number
 }
+type AccountActionProgressPhase = NonNullable<AdapterManageAccountProgressEvent['phase']>
 
 const renderSelectArrow = (onMouseDown: (event: ReactMouseEvent<HTMLSpanElement>) => void) => (
   <span className='material-symbols-rounded sender-select-arrow' onMouseDown={onMouseDown}>
@@ -70,6 +73,7 @@ export function AccountSelectControl({
   const [showAccountSelect, setShowAccountSelectState] = useState(false)
   const [creatingAccount, setCreatingAccount] = useState(false)
   const [cancelingCreateAccount, setCancelingCreateAccount] = useState(false)
+  const [createAccountProgress, setCreateAccountProgress] = useState<AccountActionProgressPhase>('preparing')
   const [mobileDrawerMotionInstance, setMobileDrawerMotionInstance] = useState(0)
   const [pendingQuotaDialog, setPendingQuotaDialogState] = useState<PendingAccountQuotaDialog>()
   const [quotaDialog, setQuotaDialog] = useState<AccountQuotaDialogTarget>()
@@ -206,13 +210,17 @@ export function AccountSelectControl({
     createAccountAbortRef.current = abortController
     setCreatingAccount(true)
     setCancelingCreateAccount(false)
+    setCreateAccountProgress('preparing')
 
     void (async () => {
       try {
         const result = await manageAdapterAccount(
           selectedAdapter,
           { action: 'add' },
-          { signal: abortController.signal }
+          {
+            signal: abortController.signal,
+            onProgress: event => event.phase != null && setCreateAccountProgress(event.phase)
+          }
         )
 
         await mutate((key) => (
@@ -225,6 +233,7 @@ export function AccountSelectControl({
           handlers.onAccountChange?.(result.accountKey)
         }
 
+        await focusDesktopWindowIfAvailable()
         void message.success(result.message ?? t('config.accounts.actionSuccess.add'))
       } catch (error) {
         if (abortController.signal.aborted || (error instanceof DOMException && error.name === 'AbortError')) {
@@ -553,7 +562,7 @@ export function AccountSelectControl({
             pending_actions
           </span>
           <div className='account-select-create-modal__title'>
-            {t('chat.accountSelectCreateWaiting')}
+            {t(`config.accounts.actionProgress.${createAccountProgress}`)}
           </div>
           <div className='account-select-create-modal__description'>
             {t('chat.accountSelectCreateDescription', { adapter: selectedAdapter ?? 'adapter' })}

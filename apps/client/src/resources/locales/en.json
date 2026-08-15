@@ -4024,6 +4024,12 @@
         "refresh": "Quota refreshed",
         "remove": "Account snapshot removed"
       },
+      "actionProgress": {
+        "preparing": "Preparing the official sign-in client...",
+        "awaiting-authorization": "Finish signing in in your browser...",
+        "verifying": "Verifying the sign-in credentials...",
+        "saving": "Saving the connected account..."
+      },
       "actionFailed": {
         "add": "Failed to connect account",
         "reauthenticate": "Failed to sign in again",

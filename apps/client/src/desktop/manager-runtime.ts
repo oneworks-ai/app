@@ -101,3 +101,11 @@ export const markDesktopManagerInteractiveWhenReady = async (
   markDesktopInteractive()
   return true
 }
+
+export const focusDesktopWindowIfAvailable = async () => {
+  try {
+    await window.oneworksDesktop?.focusCurrentWindow?.()
+  } catch {
+    // Desktop focus is best-effort and must not turn a completed account action into an error.
+  }
+}

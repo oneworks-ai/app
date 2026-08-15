@@ -4014,6 +4014,12 @@
         "refresh": "额度已刷新",
         "remove": "账号快照已删除"
       },
+      "actionProgress": {
+        "preparing": "正在准备官方登录客户端…",
+        "awaiting-authorization": "请在浏览器中完成登录…",
+        "verifying": "正在验证登录凭据…",
+        "saving": "正在保存已连接的账号…"
+      },
       "actionFailed": {
         "add": "账号接入失败",
         "reauthenticate": "重新登录失败",

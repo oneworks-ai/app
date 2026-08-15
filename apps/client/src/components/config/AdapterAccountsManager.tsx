@@ -9,6 +9,7 @@ import type {
   AdapterAccountActionDescriptor,
   AdapterAccountInfo,
   AdapterAccountsResult,
+  AdapterManageAccountProgressEvent,
   ConfigUiObjectSchema
 } from '@oneworks/types'
 
@@ -16,6 +17,7 @@ import { getAdapterAccounts, getApiErrorMessage, manageAdapterAccount } from '#~
 import { AccountQuotaPanel } from '#~/components/account-quota/AccountQuotaPanel'
 import { NativeTabs } from '#~/components/native-tabs'
 import { UsagePanel } from '#~/components/usage/UsagePanel'
+import { focusDesktopWindowIfAvailable } from '#~/desktop/manager-runtime'
 import { useAdapterAccountQuotaDetail } from '#~/hooks/use-adapter-account-quota-detail'
 
 import { getFieldDescription, getFieldLabel, getValueByPath, setValueByPath } from './configUtils'
@@ -40,6 +42,7 @@ const ACCOUNT_STATUS_ICON: Record<NonNullable<AdapterAccountInfo['status']>, str
 }
 
 type AccountDetailTab = 'usage' | 'settings'
+type AccountActionProgressPhase = NonNullable<AdapterManageAccountProgressEvent['phase']>
 
 const getConfiguredAccounts = (value: Record<string, unknown>) => {
   const configured = getValueByPath(value, ['accounts'])
@@ -441,13 +444,23 @@ const AccountDetailView = ({
   const settingsPanelId = `adapter-account-settings-panel-${adapterKey}-${accountKey}`
 
   const handleRunAction = async (action: AdapterAccountActionDescriptor) => {
+    const streamsProgress = action.key === 'reauthenticate'
+    const progressMessageKey = `adapter-account-${adapterKey}-${accountKey}-${action.key}`
+    const updateProgress = (phase: AccountActionProgressPhase) =>
+      message.open({
+        key: progressMessageKey,
+        type: 'loading',
+        duration: 0,
+        content: t(`config.accounts.actionProgress.${phase}`)
+      })
     setLoadingAction(action.key)
+    if (streamsProgress) updateProgress('preparing')
     try {
       const result = await manageAdapterAccount(adapterKey, {
         action: action.key,
         account: accountKey,
         refresh: action.key === 'refresh'
-      })
+      }, streamsProgress ? { onProgress: event => event.phase != null && updateProgress(event.phase) } : undefined)
       if (action.key === 'remove') {
         await onChanged()
         void message.success(result.message ?? t('config.accounts.actionSuccess.remove'))
@@ -461,10 +474,12 @@ const AccountDetailView = ({
         await refreshAccountDetail()
       }
       await onChanged().catch(() => undefined)
+      if (streamsProgress) await focusDesktopWindowIfAvailable()
       void message.success(result.message ?? t(`config.accounts.actionSuccess.${action.key}`))
     } catch (error) {
       void message.error(getApiErrorMessage(error, t(`config.accounts.actionFailed.${action.key}`)))
     } finally {
+      if (streamsProgress) message.destroy(progressMessageKey)
       setLoadingAction(undefined)
     }
   }
@@ -905,18 +920,31 @@ export const AdapterAccountsManager = ({
     if (action.key !== 'add') return
 
     setLoadingAction(action.key)
+    const progressMessageKey = `adapter-account-${adapterKey}-add`
+    const updateProgress = (phase: AccountActionProgressPhase) =>
+      message.open({
+        key: progressMessageKey,
+        type: 'loading',
+        duration: 0,
+        content: t(`config.accounts.actionProgress.${phase}`)
+      })
+    updateProgress('preparing')
     try {
-      const result = await manageAdapterAccount(adapterKey, { action: 'add' })
+      const result = await manageAdapterAccount(adapterKey, { action: 'add' }, {
+        onProgress: event => event.phase != null && updateProgress(event.phase)
+      })
       await refreshAccounts()
-      void message.success(result.message ?? t('config.accounts.actionSuccess.add'))
       if (result.accountKey != null && result.accountKey.trim() !== '') {
         onOpenNestedPath(['accounts', result.accountKey])
       } else {
         onOpenNestedPath(['accounts'])
       }
+      await focusDesktopWindowIfAvailable()
+      void message.success(result.message ?? t('config.accounts.actionSuccess.add'))
     } catch (error) {
       void message.error(getApiErrorMessage(error, t('config.accounts.actionFailed.add')))
     } finally {
+      message.destroy(progressMessageKey)
       setLoadingAction(undefined)
     }
   }
