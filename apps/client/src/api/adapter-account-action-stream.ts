@@ -15,7 +15,11 @@ const record = (v: unknown): v is Record<string, unknown> => v != null && typeof
 
 const toResponseError = async (response: Response) => {
   let payload: unknown
-  try { payload = JSON.parse(await response.text()) as unknown } catch { payload = undefined }
+  try {
+    payload = JSON.parse(await response.text()) as unknown
+  } catch {
+    payload = undefined
+  }
   const error = record(payload) && payload.success === false && record(payload.error) ? payload.error : undefined
   return new ApiError(response.status, {
     code: typeof error?.code === 'string' ? error.code : 'request_failed',
