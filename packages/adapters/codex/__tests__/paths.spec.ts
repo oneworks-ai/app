@@ -1,10 +1,14 @@
 import { chmod, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join, relative } from 'node:path'
+import { dirname, join, relative, resolve } from 'node:path'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { resolveCodexBinaryPath, resolveOfficialCodexNativeBinaryPath } from '#~/paths.js'
+import {
+  resolveCodexBinaryPath,
+  resolveCodexSystemBinaryPaths,
+  resolveOfficialCodexNativeBinaryPath
+} from '#~/paths.js'
 
 const tempDirs: string[] = []
 
@@ -122,5 +126,51 @@ describe('resolveCodexBinaryPath', () => {
       PATH: '/usr/bin:/bin',
       __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__: binaryPath
     })).toBe(binaryPath)
+  })
+})
+
+describe('resolveCodexSystemBinaryPaths', () => {
+  it('uses the real HOME for login-shell discovery and macOS candidates', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'oneworks-codex-system-paths-'))
+    const realHome = join(workspace, 'real-home')
+    const mockHome = join(workspace, 'mock-home')
+    const shellPath = join(workspace, 'login-shell')
+    const loginShellBinaryPath = join(realHome, 'bin', 'codex')
+    const mockShellBinaryPath = join(mockHome, 'bin', 'codex')
+    const previousHome = process.env.HOME
+    const previousShell = process.env.SHELL
+    tempDirs.push(workspace)
+
+    await mkdir(dirname(loginShellBinaryPath), { recursive: true })
+    await mkdir(dirname(mockShellBinaryPath), { recursive: true })
+    await writeFile(
+      shellPath,
+      `#!${process.execPath}
+console.log(process.env.HOME === ${JSON.stringify(realHome)}
+  ? ${JSON.stringify(loginShellBinaryPath)}
+  : ${JSON.stringify(mockShellBinaryPath)})
+`
+    )
+    await chmod(shellPath, 0o755)
+
+    process.env.HOME = realHome
+    process.env.SHELL = shellPath
+    try {
+      const paths = await resolveCodexSystemBinaryPaths({ HOME: mockHome }, { platform: 'darwin' })
+
+      expect(paths[0]).toBe(loginShellBinaryPath)
+      expect(paths).toContain(resolve(realHome, 'Library/pnpm/bin/codex'))
+      expect(paths).toContain('/Applications/Codex.app/Contents/Resources/codex')
+      expect(paths).toContain('/Applications/ChatGPT.app/Contents/Resources/codex')
+      expect(paths).toContain(resolve(realHome, 'Applications/Codex.app/Contents/Resources/codex'))
+      expect(paths).toContain(resolve(realHome, 'Applications/ChatGPT.app/Contents/Resources/codex'))
+      expect(paths).not.toContain(mockShellBinaryPath)
+      expect(paths).not.toContain(resolve(mockHome, 'Library/pnpm/bin/codex'))
+    } finally {
+      if (previousHome == null) delete process.env.HOME
+      else process.env.HOME = previousHome
+      if (previousShell == null) delete process.env.SHELL
+      else process.env.SHELL = previousShell
+    }
   })
 })

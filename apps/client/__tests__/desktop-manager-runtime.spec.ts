@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   connectDesktopManagerRuntimeIfAvailable,
+  focusDesktopWindowIfAvailable,
   installDesktopRuntimeIdentityIfAvailable,
   markDesktopManagerInteractiveWhenReady,
   resolveClientRoutePathname,
@@ -18,6 +19,26 @@ afterEach(() => {
 })
 
 describe('desktop manager runtime', () => {
+  it('delegates desktop focus when the bridge is available', async () => {
+    const focusCurrentWindow = vi.fn(async () => true)
+    window.oneworksDesktop = { focusCurrentWindow, shellKind: 'electron' }
+
+    await expect(focusDesktopWindowIfAvailable()).resolves.toBeUndefined()
+    expect(focusCurrentWindow).toHaveBeenCalledOnce()
+  })
+
+  it('tolerates an unavailable or rejected desktop focus bridge', async () => {
+    await expect(focusDesktopWindowIfAvailable()).resolves.toBeUndefined()
+
+    window.oneworksDesktop = {
+      focusCurrentWindow: vi.fn(async () => {
+        throw new Error('IPC unavailable')
+      }),
+      shellKind: 'electron'
+    }
+    await expect(focusDesktopWindowIfAvailable()).resolves.toBeUndefined()
+  })
+
   it('recognizes routes below the packaged client base', () => {
     expect(resolveClientRoutePathname('/ui/launcher', '/ui')).toBe('/launcher')
     expect(resolveClientRoutePathname('/ui/launcher/account', '/ui')).toBe('/launcher/account')

@@ -1250,6 +1250,7 @@ export const createWindowManager = ({
     findWindowRecord,
     findWindowRecordForWebContents,
     findWorkspaceWindowRecord,
+    focusWindowRecord,
     isWindowRecordUsable,
     loadWorkspaceInWindow,
     loadLauncherWindow,

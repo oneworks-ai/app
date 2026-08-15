@@ -214,6 +214,41 @@ describe('adapter routes', () => {
     expect(response.status).toBe(200)
   })
 
+  it('streams only safe progress phases and the public result', async () => {
+    let emitProgress:
+      | ((event: { phase?: string; stream: 'stdout' | 'stderr' | 'status'; message: string }) => void)
+      | undefined
+    const manageAccount = vi.fn().mockImplementation(async (
+      _adapterCtx: AdapterCtx,
+      options: { onProgress?: typeof emitProgress }
+    ) => {
+      emitProgress = options.onProgress
+      emitProgress?.({ phase: 'preparing', stream: 'status', message: 'safe phase' })
+      emitProgress?.({ stream: 'stdout', message: 'raw stdout secret' })
+      emitProgress?.({ stream: 'stderr', message: 'raw stderr secret' })
+      emitProgress?.({ phase: 'not-safe', stream: 'status', message: 'raw phase secret' })
+      return { accountKey: 'work', message: 'Connected account.' }
+    })
+    mocks.loadAdapter.mockResolvedValue({ manageAccount })
+
+    const response = await fetch(`${baseUrl}/api/adapters/codex/accounts/actions?stream=true`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+      body: JSON.stringify({ action: 'add' })
+    })
+    const body = await response.text()
+
+    expect(response.status).toBe(200)
+    expect(body).toContain('"type":"progress"')
+    expect(body).toContain('"phase":"preparing"')
+    expect(body).toContain('"type":"result"')
+    expect(body).toContain('"accountKey":"work"')
+    expect(body).not.toContain('raw stdout secret')
+    expect(body).not.toContain('raw stderr secret')
+    expect(body).not.toContain('raw phase secret')
+    expect(body).not.toContain('"stream"')
+  })
+
   it('returns adapter account detail through the dedicated detail route', async () => {
     mocks.loadAdapter.mockResolvedValue({
       getAccountDetail: vi.fn().mockResolvedValue({
