@@ -28,6 +28,7 @@ Channel Runtime 2.0 把 OneWorks、飞书、微信、Telegram、Discord 等消�
 
 分册：
 
+- [实施状态与剩余工作](./0006-channel-runtime-2-status.md)
 - [Ingress Router](./0006-channel-runtime-2-ingress-router.md)
 - [Channel Commands](./0006-channel-runtime-2-channel-commands.md)
 - [OneWorks Channel 与聊天室插件](./0006-channel-runtime-2-oneworks-channel-plugin.md)
@@ -165,11 +166,11 @@ apps/client
 
 Room 可以没有外部 ChannelLink，也可以聚合多个 provider。Agent Room 是这个领域的产品名称，不再是一套平行的数据模型。
 
-### RoomChannelLink
+### RoomChannelConnection
 
-Room 与既有 ChannelLink 的关联。它声明消息可以从哪里进入 Room、Agent 可以向哪里发送，以及该 link 在 Room 中的展示名和默认行为。它不复制 provider credential。
+Room 成员与既有 ChannelLink 的关联。它声明消息可以从哪里进入 Room、哪个成员拥有处理和投递权限，以及该连接在 Room 中的展示名和默认行为。它不复制 provider credential。
 
-同一个 `(channelType, channelKey, channelId)` provider conversation 只能归属一个 Room；数据库唯一约束和 attach command 都 fail-fast，不能依赖查询顺序挑选 Room。
+同一个 `(channelType, channelId)` provider conversation 可以进入多个 Room，也可以在同一 Room 中由多个成员分别持有连接；每条映射必须以 `(roomId, memberKey, channelLinkName)` 独立记录状态和处理策略。入站事件会扩展到所有符合条件的映射，provider 级去重不能让非 owning bot 抢先压掉 owning bot 的副本。一个 ChannelLink 仍然只能绑定一个 Entity，issuer 和 credential 也不能跨实体静默复用。
 
 ### RoomMessage
 
@@ -411,7 +412,7 @@ Room 时间线复用现有 Agent Room 交互：成员、leader、run、审批/�
 .oo/channels/product-wechat/channel.json
 ```
 
-Room、RoomChannelLink 和 RoomShare 是运行时本地数据，不内联进 `.oo.config.json`。OneWorks 聊天室插件的导航偏好使用插件自身 options/config，不污染 provider credential 配置。
+Room、RoomChannelConnection 和 RoomShare 是运行时本地数据，不内联进 `.oo.config.json`。OneWorks 聊天室插件的导航偏好使用插件自身 options/config，不污染 provider credential 配置。
 
 ## Persistence
 
@@ -454,7 +455,7 @@ Relay content boundary 必须拒绝 RoomEvent、message body、run payload、mem
 
 由于历史 Agent Room 没有线上用户，本次采用 additive schema extension 和一次性 contract cutover：
 
-1. 在现有 `agent_rooms*` schema 上追加 owner/archive/favorite 等列，并创建 RoomEvent、RoomChannelLink、RoomShare 和 delivery 表。
+1. 在现有 `agent_rooms*` schema 上追加 owner/archive/favorite 等列，并创建 RoomEvent、RoomChannelConnection、RoomShare 和 delivery 表。
 2. 既有 Room/member/run/message 行继续作为当前状态读取；缺少 owner 字段的 Room 解释为本地 owner，不改写原始消息来源。
 3. 当前迁移不为历史行合成 RoomEvent，也不声称事件日志可以重建既有 projection；只有新命令从启用本 contract 后开始追加审计/幂等事件。
 4. 无法证明来源的历史内容保持无外部 provider provenance，不伪造 Lark、WeChat 或其他平台身份。
