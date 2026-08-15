@@ -52,6 +52,7 @@ Review 桌面双运行路径、bundle 外资源、ready 语义或真实安装产
   - 维护默认金属风格根图标、macOS `.icon` appearance 包和运行时风格切换资产
 - `scripts/mac-*.cjs`、`scripts/make-targets.cjs`
   - macOS `.icon` / `.icns` 工具链探测、图标模式选择、prepackaged app 校验和 make target 参数解析
+  - `mac-signing-options.cjs` 只在 signed macOS 的 outer root App callback 刷新包内 native authority 双架构 manifest；嵌套 Mach-O 必须已经完成签名，root App 随后封装该 manifest，unsigned / helper callback 不得刷新
 - `scripts/make.cjs`
   - 从 prepackaged app 生成安装 / 分发产物
   - 支持 `--target` 和 macOS `--mac-icon auto|icns|icon`
@@ -95,6 +96,7 @@ Review 桌面双运行路径、bundle 外资源、ready 语义或真实安装产
 - 内置本机服务默认关闭 `webAuth`；server 数据库、日志和运行数据写入 project home。桌面自身运行状态（例如最近项目）继续写入 Electron `userData`；launcher 快捷键与系统应用图标同步偏好写入全局 `~/.oneworks/.oo.config.json` 的 `desktop` section。
 - 当前打包保持 `asar: false`，因为 staging 仍依赖 `pnpm deploy` 生成的依赖布局与原生模块路径。
 - `pnpm-workspace.yaml` 通过 `patchedDependencies` 对 `@electron/osx-sign@2.4.0` 的未封包应用遍历做串行化；上游仍使用无界 `Promise.all` 扫描每个文件，`asar: false` 的大目录会在 macOS runner 上触发 `EMFILE`。升级或移除补丁前必须先让 `osx-sign-walk.spec.ts` 和一次不创建 Release 的真实签名构建通过。
+- signed macOS 打包依赖 `@electron/osx-sign` 以 deepest-first 顺序逐个签名，并在所有嵌套 binary 后调用 outer root App 的 `optionsForFile`。只有这个回调可以从已签名的 `@oneworks/fs-authority-native` arm64 / x64 regular file 原子刷新 exact size / SHA-256 manifest，再由 root App 签名封装；不得启用会让 options callback 先于嵌套签名求值的 batch 模式，也不得在 unsigned 路径刷新。
 - macOS 正式产物按 `arm64` / `x64` 分别构建并分别发布，不做 universal 合包。
 - Windows 当前 builder 目标仍是 `nsis-web`；正式安装包体验还未收口时，不要提前在外层文档里承诺 MSI / 完整离线安装器。
 

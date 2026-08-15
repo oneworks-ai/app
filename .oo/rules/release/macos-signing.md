@@ -8,6 +8,8 @@ Apple 公证可能把新 team / 新 app 放入持续一两天的深入分析。w
 
 `app` stage 恢复并验证现有签名 / staple 后，先用当前受审 builder 的 `diagnose-packaged-authority.cjs` 通过恢复 App executable 加载包内 `@oneworks/fs-authority-native`，在隔离临时目录执行 broker / peer / open / claim / publish / release / cleanup 诊断；诊断只允许输出固定 phase / error code，必须有界捕获 stderr，不得泄露路径、原始消息或 secret。该诊断不修改恢复 App、不重试资产请求，也不替代不可变 product source 自己的 packaged-server smoke；任一步失败都在生成安装包前停止。
 
+Developer ID 签名会改变 native Mach-O 的字节。`@oneworks/fs-authority-native` 的双架构 size / SHA-256 manifest 必须在 `osx-sign` 已按 deepest-first 顺序签完嵌套 binary 后、签 root App 前，从包内两个已签名 regular file 原子刷新；随后 root App 签名把新 manifest 一并封装。该刷新只允许 signed macOS 的精确 outer App callback 执行，unsigned、helper App、symlink / 缺失 / 非闭合 manifest 或 artifact 都必须 fail closed；runtime loader 继续按原始字节做 exact size / SHA-256 校验，不能增加签名后白名单或跳过完整性检查。
+
 ## Secret 与 variable
 
 - `DESKTOP_CSC_LINK`：Developer ID Application `.p12`，base64 后写入 secret，用于签 `.app`。
