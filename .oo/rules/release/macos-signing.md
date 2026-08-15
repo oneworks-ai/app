@@ -6,6 +6,8 @@ GitHub Actions 把 `Developer ID Application` 导入临时 keychain 后，必须
 
 Apple 公证可能把新 team / 新 app 放入持续一两天的深入分析。workflow 不得用一个覆盖签名、上传和等待的 `submit --wait` 长进程承载恢复边界：app、DMG、PKG 都必须先用 `--no-wait` 取得 submission ID，把精确待公证字节、大小、SHA-256、source / builder SHA、build branch / time 和 ID 写入 recovery artifact，再做 20 分钟有界轮询。仍为 `In Progress` 时本轮明确停止；后续通过原 run id 和 `app` / `installer` stage 下载并校验同一 artifact，且必须用 GitHub API 核对原 run 的 repository、workflow path、attempt、head SHA 与失败终态，只查询既有 ID、staple 和完成剩余构建。若 submit 返回前连接中断，先保存 attempted marker，再以团队 history 的文件名和有限时间窗唯一对账；只能提交从未尝试过的剩余 target，每次恢复都绑定当前 run 并重新上传更新后的状态。无法唯一归因、混入 product rebuild 输入，或历史 source 仍使用同步公证 / 未启用 osx-sign 串行补丁 / DMG update info 时都必须在打包前 fail closed，不得重新签名或重复 submit。团队历史只读检查使用 `notarization_history_only=true`，不能与任何构建、版本或恢复输入混用。
 
+`app` stage 恢复并验证现有签名 / staple 后，先用当前受审 builder 的 `diagnose-packaged-authority.cjs` 通过恢复 App executable 加载包内 `@oneworks/fs-authority-native`，在隔离临时目录执行 broker / peer / open / claim / publish / release / cleanup 诊断；诊断只允许输出固定 phase / error code，必须有界捕获 stderr，不得泄露路径、原始消息或 secret。该诊断不修改恢复 App、不重试资产请求，也不替代不可变 product source 自己的 packaged-server smoke；任一步失败都在生成安装包前停止。
+
 ## Secret 与 variable
 
 - `DESKTOP_CSC_LINK`：Developer ID Application `.p12`，base64 后写入 secret，用于签 `.app`。

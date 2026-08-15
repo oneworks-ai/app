@@ -929,6 +929,17 @@ jobs:
         working-directory: ${{ steps.desktop_workspace.outputs.workspace_dir }}
         run: node "$GITHUB_WORKSPACE/apps/desktop/scripts/verify-macos-signed-apps.cjs" apps/desktop/out
 
+      - name: Diagnose recovered packaged filesystem authority
+        if: inputs.notarization_run_id != '' && inputs.notarization_stage == 'app'
+        working-directory: ${{ steps.desktop_workspace.outputs.workspace_dir }}
+        run: >-
+          node "$GITHUB_WORKSPACE/apps/desktop/scripts/diagnose-packaged-authority.cjs"
+          apps/desktop/out
+        env:
+          ONEWORKS_DESKTOP_OFFICIAL_RELEASE_BUILD: ${{ steps.desktop_release.outputs.enabled }}
+          ONEWORKS_DESKTOP_RELEASE_BUILD: ${{ steps.desktop_release.outputs.enabled }}
+          ONEWORKS_DESKTOP_SMOKE_ARCH: ${{ runner.os == 'macOS' && 'arm64' || '' }}
+
       - name: Seal immutable unsigned product app bundles
         if: inputs.notarization_run_id == '' && inputs.product_source_sha != '' && steps.desktop_build_policy.outputs.sign != 'true'
         working-directory: ${{ steps.desktop_workspace.outputs.workspace_dir }}

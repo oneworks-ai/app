@@ -23,6 +23,14 @@ const credentials = [
   'DESKTOP_CSC_INSTALLER_KEY_PASSWORD'
 ] as const
 
+function extractStep(stepName: string) {
+  const stepMarker = `      - name: ${stepName}\n`
+  const stepStart = workflow.indexOf(stepMarker)
+  expect(stepStart).toBeGreaterThanOrEqual(0)
+  const nextStep = workflow.indexOf('\n      - name:', stepStart + stepMarker.length)
+  return workflow.slice(stepStart, nextStep === -1 ? workflow.length : nextStep)
+}
+
 function extractRunScript(stepName: string) {
   const stepMarker = `      - name: ${stepName}\n`
   const stepStart = workflow.indexOf(stepMarker)
@@ -646,6 +654,12 @@ describe('desktop package workflow', () => {
     const verifyIndex = workflow.indexOf(
       '      - name: Verify signed and notarized macOS app bundles'
     )
+    const recoveryDiagnosticIndex = workflow.indexOf(
+      '      - name: Diagnose recovered packaged filesystem authority'
+    )
+    const packagedSmokeIndex = workflow.indexOf(
+      '      - name: Smoke test packaged server'
+    )
     const prepareAppIndex = workflow.indexOf(
       '      - name: Prepare signed app notarization recovery state'
     )
@@ -705,6 +719,8 @@ describe('desktop package workflow', () => {
     expect(retainUpdatedAppIndex).toBeLessThan(waitAppIndex)
     expect(waitAppIndex).toBeLessThan(verifyIndex)
     expect(packageIndex).toBeLessThan(verifyIndex)
+    expect(verifyIndex).toBeLessThan(recoveryDiagnosticIndex)
+    expect(recoveryDiagnosticIndex).toBeLessThan(packagedSmokeIndex)
     expect(verifyIndex).toBeLessThan(buildIndex)
     expect(buildIndex).toBeLessThan(prepareInstallerIndex)
     expect(prepareInstallerIndex).toBeLessThan(submitInstallerIndex)
@@ -753,6 +769,25 @@ describe('desktop package workflow', () => {
     expect(macosSigningRule).toContain(
       '`security find-identity` 只能证明 identity 可枚举'
     )
+  })
+
+  it('runs the current-builder authority diagnostic only for app recovery without replacing product smoke', () => {
+    const diagnosticStep = extractStep('Diagnose recovered packaged filesystem authority')
+    const productSmokeStep = extractStep('Smoke test packaged server')
+
+    expect(diagnosticStep).toContain(
+      "if: inputs.notarization_run_id != '' && inputs.notarization_stage == 'app'"
+    )
+    expect(diagnosticStep).toContain(
+      'node "$GITHUB_WORKSPACE/apps/desktop/scripts/diagnose-packaged-authority.cjs"'
+    )
+    expect(diagnosticStep).toContain('working-directory: $' + '{{ steps.desktop_workspace.outputs.workspace_dir }}')
+    expect(diagnosticStep).not.toContain('notarization-state.cjs')
+    expect(diagnosticStep).not.toContain('APPLE_ID')
+    expect(diagnosticStep).not.toContain('APPLE_ID_PASSWORD')
+    expect(diagnosticStep).not.toContain('APPLE_TEAM_ID')
+    expect(productSmokeStep).toContain('run: pnpm -C apps/desktop smoke:package')
+    expect(productSmokeStep).toContain("if: inputs.notarization_stage != 'installer'")
   })
 
   it('supports read-only history and exact recovery without combining remote mutations', () => {
