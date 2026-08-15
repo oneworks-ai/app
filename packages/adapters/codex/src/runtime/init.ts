@@ -3,6 +3,7 @@ import { access, mkdir, readFile, readdir, rm } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import process from 'node:process'
 
+import { ensureCodexCli } from '#~/ensure-cli.js'
 import { readJsonFileOrDefault, resolveMockHome, writeJsonFile } from '@oneworks/hooks'
 import type { AdapterCtx } from '@oneworks/types'
 import {
@@ -12,20 +13,7 @@ import {
   syncSymlinkTarget,
   unlinkMockHomeBridgePaths
 } from '@oneworks/utils'
-import { ensureManagedNpmCli } from '@oneworks/utils/managed-npm-cli'
-
-import {
-  CODEX_CLI_COMPATIBILITY_RANGE,
-  CODEX_CLI_PACKAGE,
-  CODEX_CLI_VERSION,
-  resolveCodexBinaryPath,
-  resolveCodexSystemBinaryPaths
-} from '#~/paths.js'
-import {
-  resolveCodexAdapterConfig,
-  resolveInitialManagedCodexConfigContent,
-  writeManagedCodexConfigFile
-} from './config'
+import { resolveInitialManagedCodexConfigContent, writeManagedCodexConfigFile } from './config'
 import { ensureCodexNativeHooksInstalled } from './native-hooks'
 
 const CODEX_MANAGED_SKILLS_STATE_FILE = '.oneworks-managed-skills.json'
@@ -236,22 +224,8 @@ export const initCodexAdapter = async (ctx: AdapterCtx) => {
   const home = ctx.env.__ONEWORKS_PROJECT_REAL_HOME__?.trim() || process.env.__ONEWORKS_PROJECT_REAL_HOME__?.trim()
   const mockHome = resolveMockHome(ctx.cwd, ctx.env)
 
-  const { native: adapterConfig } = resolveCodexAdapterConfig(ctx)
   const managedCliStartedAt = startupProfiler.now()
-  ctx.env.__ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__ = await ensureManagedNpmCli({
-    adapterKey: 'codex',
-    binaryName: 'codex',
-    bundledPath: resolveCodexBinaryPath(env, ctx.cwd),
-    config: adapterConfig.cli,
-    cwd: ctx.cwd,
-    defaultPackageName: CODEX_CLI_PACKAGE,
-    defaultVersion: CODEX_CLI_VERSION,
-    env,
-    logger: ctx.logger,
-    preferSystem: adapterConfig.cli?.source == null,
-    systemBinaryPaths: await resolveCodexSystemBinaryPaths(env),
-    versionRange: CODEX_CLI_COMPATIBILITY_RANGE
-  })
+  ctx.env.__ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__ = await ensureCodexCli(ctx)
   startupProfiler.mark('codex.init.ensureManagedNpmCli', managedCliStartedAt)
 
   if (home != null && home !== '') {

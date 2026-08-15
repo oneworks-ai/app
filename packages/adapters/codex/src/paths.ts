@@ -15,7 +15,16 @@ export const CODEX_CLI_PACKAGE = '@openai/codex'
 export const CODEX_CLI_VERSION = 'latest'
 export const CODEX_CLI_COMPATIBILITY_RANGE = '>=0.130.0'
 
-const CODEX_APP_CLI_RELATIVE_PATH = 'Applications/Codex.app/Contents/Resources/codex'
+const CODEX_APP_CLI_RELATIVE_PATHS = [
+  'Applications/Codex.app/Contents/Resources/codex',
+  'Applications/ChatGPT.app/Contents/Resources/codex'
+] as const
+const CODEX_USER_CLI_RELATIVE_PATHS = [
+  'Library/pnpm/bin/codex',
+  'Library/pnpm/codex',
+  '.local/bin/codex',
+  '.volta/bin/codex'
+] as const
 const CODEX_NATIVE_TARGETS: Partial<
   Record<
     NodeJS.Platform,
@@ -117,15 +126,23 @@ export const resolveOfficialCodexNativeBinaryPath = (
 }
 
 export const resolveCodexSystemBinaryPaths = (
-  env: AdapterCtx['env'] = {}
+  env: AdapterCtx['env'] = {},
+  runtime: { platform?: NodeJS.Platform } = {}
 ): Promise<string[]> => {
   const resolvePaths = async () => {
+    const realHome = normalizeNonEmptyString(env.__ONEWORKS_PROJECT_REAL_HOME__) ??
+      normalizeNonEmptyString(process.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
+      normalizeNonEmptyString(process.env.HOME) ??
+      normalizeNonEmptyString(env.HOME)
     const userShellCodexBinaryPath = await resolveUserShellBinaryPath({
       binaryName: 'codex',
-      env,
+      env: {
+        ...env,
+        ...(realHome == null ? {} : { HOME: realHome, USERPROFILE: realHome })
+      },
       timeoutMs: USER_SHELL_CHECK_TIMEOUT_MS
     })
-    if (process.platform !== 'darwin') {
+    if ((runtime.platform ?? process.platform) !== 'darwin') {
       return Array.from(
         new Set([
           ...(userShellCodexBinaryPath == null ? [] : [userShellCodexBinaryPath])
@@ -133,16 +150,12 @@ export const resolveCodexSystemBinaryPaths = (
       )
     }
 
-    const realHome = normalizeNonEmptyString(env.__ONEWORKS_PROJECT_REAL_HOME__) ??
-      normalizeNonEmptyString(process.env.__ONEWORKS_PROJECT_REAL_HOME__) ??
-      normalizeNonEmptyString(env.HOME) ??
-      normalizeNonEmptyString(process.env.HOME)
-
     return Array.from(
       new Set([
         ...(userShellCodexBinaryPath == null ? [] : [userShellCodexBinaryPath]),
-        '/Applications/Codex.app/Contents/Resources/codex',
-        ...(realHome == null ? [] : [resolve(realHome, CODEX_APP_CLI_RELATIVE_PATH)])
+        ...(realHome == null ? [] : CODEX_USER_CLI_RELATIVE_PATHS.map(path => resolve(realHome, path))),
+        ...CODEX_APP_CLI_RELATIVE_PATHS.map(path => resolve('/', path)),
+        ...(realHome == null ? [] : CODEX_APP_CLI_RELATIVE_PATHS.map(path => resolve(realHome, path)))
       ])
     )
   }

@@ -2,9 +2,11 @@ import type {
   AdapterAccountDetailResult,
   AdapterAccountsResult,
   AdapterManageAccountOptions,
+  AdapterManageAccountProgressEvent,
   AdapterManageAccountResult
 } from '@oneworks/types'
 
+import { streamAdapterAccountAction } from './adapter-account-action-stream'
 import { createApiUrl, fetchApiJson, jsonHeaders } from './base'
 
 export async function getAdapterAccounts(
@@ -52,8 +54,18 @@ export async function manageAdapterAccount(
     AdapterManageAccountOptions,
     'action' | 'account' | 'creditId' | 'model' | 'operationId' | 'refresh'
   >,
-  requestOptions?: Pick<RequestInit, 'signal'>
+  requestOptions?: Pick<RequestInit, 'signal'> & {
+    onProgress?: (event: Pick<AdapterManageAccountProgressEvent, 'phase'>) => void
+  }
 ): Promise<AdapterManageAccountResult> {
+  if (requestOptions?.onProgress != null) {
+    return await streamAdapterAccountAction({
+      adapter,
+      options,
+      onProgress: requestOptions.onProgress,
+      signal: requestOptions.signal ?? undefined
+    })
+  }
   return fetchApiJson<AdapterManageAccountResult>(
     createApiUrl(`/api/adapters/${encodeURIComponent(adapter)}/accounts/actions`),
     {

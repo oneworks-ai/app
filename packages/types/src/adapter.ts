@@ -236,6 +236,7 @@ export interface AdapterAccountCredentialArtifact {
 }
 
 export interface AdapterManageAccountProgressEvent {
+  phase?: 'preparing' | 'awaiting-authorization' | 'verifying' | 'saving'
   stream: 'stdout' | 'stderr' | 'status'
   message: string
 }

@@ -43,6 +43,7 @@ import {
 } from '@oneworks/utils'
 import { createLogger } from '@oneworks/utils/create-logger'
 
+import { ensureCodexCli } from '#~/ensure-cli.js'
 import { resolveCodexBinaryPath } from '#~/paths.js'
 import { CodexRpcClient } from '#~/protocol/rpc.js'
 import { fetchCodexProfileFromFile } from '#~/runtime/account-profile.js'
@@ -2990,12 +2991,17 @@ const resolveExistingCodexAccount = async (
 }
 
 const runCodexLogin = async (params: {
-  ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'ctxId'>
+  ctx: Pick<AdapterCtx, 'configs' | 'cwd' | 'env' | 'ctxId' | 'logger'>
   onProgress?: AdapterManageAccountOptions['onProgress']
   signal?: AbortSignal
 }) => {
   const { ctx, onProgress, signal } = params
-  const binaryPath = resolveCodexBinaryPath(ctx.env, ctx.cwd)
+  onProgress?.({
+    phase: 'preparing',
+    stream: 'status',
+    message: 'Preparing the official Codex CLI runtime.'
+  })
+  const binaryPath = await ensureCodexCli(ctx)
   const spawnEnv = buildSpawnEnv(ctx)
   const loginKey = `login-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
   const homeDir = resolveCodexProbeHomeDir(ctx, loginKey)
@@ -3006,11 +3012,6 @@ const runCodexLogin = async (params: {
   spawnEnv.HOME = homeDir
   spawnEnv.CODEX_HOME = codexHomeDir
   await mkdir(codexHomeDir, { recursive: true })
-  onProgress?.({
-    stream: 'status',
-    message: 'Starting isolated `codex login` flow.'
-  })
-
   let stdout = ''
   let stderr = ''
 
@@ -3026,6 +3027,14 @@ const runCodexLogin = async (params: {
         stdio: ['ignore', 'pipe', 'pipe']
       })
       let settled = false
+
+      proc.once('spawn', () => {
+        onProgress?.({
+          phase: 'awaiting-authorization',
+          stream: 'status',
+          message: 'Complete the Codex sign-in flow in your browser.'
+        })
+      })
 
       const finishResolve = () => {
         if (settled) return
@@ -3087,6 +3096,11 @@ const runCodexLogin = async (params: {
     })
 
     throwIfAborted(signal)
+    onProgress?.({
+      phase: 'verifying',
+      stream: 'status',
+      message: 'Verifying the Codex credentials returned by the official CLI.'
+    })
     if (!await pathExists(authFilePath)) {
       throw new Error('Codex login completed but no auth.json was written to the isolated home.')
     }
@@ -3780,6 +3794,11 @@ export const manageCodexAccount = async (
       createdAt: existingConfiguredAccount?.metadata?.createdAt ?? Date.now(),
       updatedAt: Date.now()
     }
+    options.onProgress?.({
+      phase: 'saving',
+      stream: 'status',
+      message: 'Saving the connected Codex account.'
+    })
     await withCodexAccountQuotaCacheLock(ctx, async () => {
       await upsertCodexGlobalAccountConfig(ctx, {
         key: accountKey,

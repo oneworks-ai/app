@@ -743,6 +743,7 @@ export const createDesktopApp = () => {
     registerIpcHandlers({
       buildWorkspaceSelectorState: windowManager.buildWorkspaceSelectorState,
       findWindowRecordForWebContents: windowManager.findWindowRecordForWebContents,
+      focusWindowRecord: windowManager.focusWindowRecord,
       forgetWorkspaceFolder,
       getDesktopIconPreviewDataUrl,
       getDesktopSettings: (windowRecord?: WindowRecord) =>

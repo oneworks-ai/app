@@ -240,6 +240,7 @@ interface IpcHandlersInput {
   buildWorkspaceSelectorState: (windowRecord?: WindowRecord) => WorkspaceSelectorState
   checkForUpdates: (input?: { interactive?: boolean }) => Promise<DesktopUpdateStatus>
   findWindowRecordForWebContents: (webContents: WebContents) => WindowRecord | undefined
+  focusWindowRecord: (windowRecord: WindowRecord) => void
   forgetWorkspaceFolder: (workspaceFolder: string) => void
   getDesktopIconPreviewDataUrl: (settings: Partial<DesktopSettings>) => string | undefined
   getDesktopSettings: (windowRecord?: WindowRecord) => Promise<DesktopSettings>
@@ -295,6 +296,7 @@ export const registerIpcHandlers = ({
   buildWorkspaceSelectorState,
   checkForUpdates,
   findWindowRecordForWebContents,
+  focusWindowRecord,
   forgetWorkspaceFolder,
   getDesktopIconPreviewDataUrl,
   getDesktopSettings,
@@ -734,6 +736,13 @@ export const registerIpcHandlers = ({
   ipcMain.handle('desktop:get-current-window-presentation-state', (event) => (
     getCurrentWindowPresentationState(findWindowRecordForWebContents(event.sender))
   ))
+
+  ipcMain.handle('desktop:focus-current-window', (event) => {
+    const windowRecord = findWindowRecordForWebContents(event.sender)
+    if (windowRecord == null || !isWindowRecordUsable(windowRecord)) return false
+    focusWindowRecord(windowRecord)
+    return true
+  })
 
   ipcMain.handle('desktop:set-current-window-always-on-top', (event, value: unknown) => {
     const windowRecord = findWindowRecordForWebContents(event.sender)

@@ -56,3 +56,5 @@ adapters:
 - “设置 → 模型服务”底部的 Adapter 导入行可以读取用户级或可信 workspace 的 Codex `config.toml` provider。导入仅在点击按钮后执行，只新增目标 One Works source 中缺失的服务，不修改原 Codex 配置。
 - “设置 → 环境”底部的 Adapter 导入行可以读取 workspace `.codex/environments` 下有界的普通 `*.toml` 文件。`setup` 映射为 `create`，`cleanup` 映射为 `destroy`；Codex `actions` 不等价于 One Works `start`，因此只报告为跳过。
 - Web 配置页默认展示缓存的额度快照；`oneworks accounts show codex <account>` 会主动刷新账号详情和额度。
+
+账号新增和重新登录会复用用户真实登录 shell、pnpm/Volta/local-bin，以及 Codex 或 ChatGPT 应用内置的官方 CLI，并显示准备、浏览器授权、凭据验证和保存阶段。完成后会刷新并打开账号详情，桌面端会在可用时恢复当前窗口。

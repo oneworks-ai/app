@@ -1,12 +1,137 @@
 /* eslint-disable max-lines -- adapter account routes share request normalization and response mapping. */
 
 import Router from '@koa/router'
+import { PassThrough } from 'node:stream'
 
-import type { AdapterManageAccountOptions } from '@oneworks/types'
+import type {
+  AdapterManageAccountOptions,
+  AdapterManageAccountProgressEvent,
+  AdapterManageAccountResult
+} from '@oneworks/types'
 import { persistAdapterAccountArtifacts, removeStoredAdapterAccount } from '@oneworks/utils'
 
 import { createServerAdapterAccountContext, isMissingAdapterPackageError } from '#~/services/adapter-accounts.js'
 import { badRequest, internalServerError, isHttpError } from '#~/utils/http.js'
+import { safeJsonStringify } from '#~/utils/json.js'
+
+const runAdapterAccountAction = async (
+  params: {
+    adapterKey: string
+    input: AdapterManageAccountOptions & { action: AdapterManageAccountOptions['action'] }
+    onProgress?: (event: AdapterManageAccountProgressEvent) => void
+    signal: AbortSignal
+  }
+): Promise<AdapterManageAccountResult> => {
+  const { adapterKey, input, onProgress, signal } = params
+  const { workspaceFolder, adapter, adapterCtx } = await createServerAdapterAccountContext(adapterKey)
+  if (adapter.manageAccount == null) {
+    throw badRequest(
+      `Adapter "${adapterKey}" does not support account management.`,
+      undefined,
+      'adapter_account_manage_unsupported'
+    )
+  }
+  const result = await adapter.manageAccount(adapterCtx, { ...input, onProgress, signal })
+  if ((result.artifacts ?? []).length > 0) {
+    if (result.accountKey == null || result.accountKey.trim() === '') {
+      throw badRequest('Adapter account action returned artifacts without an account key.', {
+        adapter: adapterKey,
+        action: input.action
+      }, 'adapter_account_missing_storage_key')
+    }
+    await persistAdapterAccountArtifacts({
+      cwd: workspaceFolder,
+      env: adapterCtx.env,
+      adapter: adapterKey,
+      account: result.accountKey,
+      artifacts: result.artifacts ?? []
+    })
+  }
+  if (result.removeStoredAccount === true) {
+    if (result.accountKey == null || result.accountKey.trim() === '') {
+      throw badRequest('Adapter account remove action requires an account key.', {
+        adapter: adapterKey,
+        action: input.action
+      }, 'adapter_account_missing_remove_key')
+    }
+    await removeStoredAdapterAccount({
+      cwd: workspaceFolder,
+      env: adapterCtx.env,
+      adapter: adapterKey,
+      account: result.accountKey
+    })
+  }
+  const detail = result.account == null && result.accountKey != null && result.accountKey.trim() !== '' &&
+      adapter.getAccountDetail != null
+    ? await adapter.getAccountDetail(adapterCtx, { account: result.accountKey, model: input.model, refresh: true })
+      .catch(() => undefined)
+    : undefined
+  const { artifacts: _artifacts, ...publicResult } = result
+  return { ...publicResult, ...(detail != null ? { account: detail.account } : {}) }
+}
+
+const streamAdapterAccountAction = (
+  ctx: Router.RouterContext,
+  adapterKey: string,
+  input: AdapterManageAccountOptions & { action: AdapterManageAccountOptions['action'] }
+) => {
+  const stream = new PassThrough()
+  const abortController = new AbortController()
+  let closed = false
+  ctx.state.skipApiEnvelope = true
+  ctx.status = 200
+  ctx.type = 'text/event-stream'
+  ctx.set('Cache-Control', 'no-cache, no-transform')
+  ctx.set('Connection', 'keep-alive')
+  ctx.set('X-Accel-Buffering', 'no')
+  ctx.body = stream
+  const write = (value: string) => {
+    if (!closed) stream.write(value)
+  }
+  const writeEvent = (value: unknown) => write(`data: ${safeJsonStringify(value)}\n\n`)
+  const abort = () => {
+    if (!abortController.signal.aborted) abortController.abort(new Error('Adapter account request aborted by client.'))
+  }
+  const onClose = () => {
+    if (!ctx.res.writableEnded) abort()
+  }
+  const heartbeat = setInterval(() => write(': heartbeat\n\n'), 15_000)
+  ctx.req.once('aborted', abort)
+  ctx.res.once('close', onClose)
+  write(': connected\n\n')
+  void runAdapterAccountAction({
+    adapterKey,
+    input,
+    signal: abortController.signal,
+    onProgress: event => {
+      if (event.phase != null) writeEvent({ type: 'progress', phase: event.phase })
+    }
+  }).then(result => writeEvent({ type: 'result', result })).catch(error => {
+    if (abortController.signal.aborted) return
+    const httpError = isHttpError(error)
+      ? error
+      : internalServerError('Failed to run adapter account action', {
+        code: 'adapter_account_action_failed',
+        cause: error,
+        details: { adapter: adapterKey }
+      })
+    writeEvent({
+      type: 'error',
+      error: {
+        code: httpError.code,
+        message: httpError.expose ? httpError.message : 'Internal Server Error',
+        status: httpError.status,
+        ...(httpError.details !== undefined ? { details: httpError.details } : {})
+      }
+    })
+  }).finally(() => {
+    closed = true
+    clearInterval(heartbeat)
+    ctx.req.off('aborted', abort)
+    ctx.res.off('close', onClose)
+    stream.end()
+  })
+}
 
 const normalizeAdapterKey = (value: unknown) => (
   typeof value === 'string' ? value.trim() : ''
@@ -144,6 +269,19 @@ export function adaptersRouter(): Router {
       )
     }
 
+    const input = {
+      action: action as AdapterManageAccountOptions['action'],
+      account,
+      creditId,
+      operationId,
+      model,
+      refresh
+    }
+    if (ctx.query.stream === 'true' || ctx.query.stream === '1') {
+      streamAdapterAccountAction(ctx, adapterKey, input)
+      return
+    }
+
     const abortController = new AbortController()
     const abortOnRequestClose = () => {
       if (!abortController.signal.aborted) {
@@ -151,98 +289,23 @@ export function adaptersRouter(): Router {
       }
     }
     ctx.req.once('aborted', abortOnRequestClose)
-    ctx.req.once('close', abortOnRequestClose)
+    ctx.res.once('close', abortOnRequestClose)
 
     try {
-      const { workspaceFolder, adapter, adapterCtx } = await createServerAdapterAccountContext(adapterKey)
-      if (adapter.manageAccount == null) {
-        throw badRequest(
-          `Adapter "${adapterKey}" does not support account management.`,
-          undefined,
-          'adapter_account_manage_unsupported'
-        )
-      }
-
-      const result = await adapter.manageAccount(adapterCtx, {
-        action: action as AdapterManageAccountOptions['action'],
-        account,
-        creditId,
-        operationId,
-        model,
-        refresh,
-        signal: abortController.signal
-      })
-
-      const accountArtifacts = result.artifacts ?? []
-      if (accountArtifacts.length > 0) {
-        if (result.accountKey == null || result.accountKey.trim() === '') {
-          throw badRequest(
-            'Adapter account action returned artifacts without an account key.',
-            { adapter: adapterKey, action },
-            'adapter_account_missing_storage_key'
-          )
-        }
-
-        await persistAdapterAccountArtifacts({
-          cwd: workspaceFolder,
-          env: adapterCtx.env,
-          adapter: adapterKey,
-          account: result.accountKey,
-          artifacts: result.artifacts ?? []
-        })
-      }
-
-      if (result.removeStoredAccount === true) {
-        if (result.accountKey == null || result.accountKey.trim() === '') {
-          throw badRequest(
-            'Adapter account remove action requires an account key.',
-            { adapter: adapterKey, action },
-            'adapter_account_missing_remove_key'
-          )
-        }
-
-        await removeStoredAdapterAccount({
-          cwd: workspaceFolder,
-          env: adapterCtx.env,
-          adapter: adapterKey,
-          account: result.accountKey
-        })
-      }
-
-      const detail = result.account == null &&
-          result.accountKey != null &&
-          result.accountKey.trim() !== '' &&
-          adapter.getAccountDetail != null
-        ? await adapter.getAccountDetail(adapterCtx, {
-          account: result.accountKey,
-          model,
-          refresh: true
-        }).catch(() => undefined)
-        : undefined
-      const { artifacts: _artifacts, ...publicResult } = result
-
-      ctx.body = {
-        ...publicResult,
-        ...(detail != null ? { account: detail.account } : {})
-      }
+      ctx.body = await runAdapterAccountAction({ adapterKey, input, signal: abortController.signal })
     } catch (error) {
       if (abortController.signal.aborted) {
         return
       }
-      if (isHttpError(error)) {
-        throw error
-      }
-      throw internalServerError(
-        'Failed to run adapter account action',
-        {
-          code: 'adapter_account_action_failed',
-          cause: error,
-          details: { adapter: adapterKey }
-        }
-      )
+      if (isHttpError(error)) throw error
+      throw internalServerError('Failed to run adapter account action', {
+        code: 'adapter_account_action_failed',
+        cause: error,
+        details: { adapter: adapterKey }
+      })
     } finally {
       ctx.req.off('aborted', abortOnRequestClose)
-      ctx.req.off('close', abortOnRequestClose)
+      ctx.res.off('close', abortOnRequestClose)
     }
   })
 

@@ -56,3 +56,5 @@ adapters:
 - The Adapter import row under **Settings → Model Services** reads user-level or trusted workspace Codex providers only when the user presses **Import**. It adds missing services without modifying native Codex configuration.
 - The Adapter import row under **Settings → Environment** reads bounded regular `*.toml` files under `.codex/environments`. `setup` maps to `create` and `cleanup` maps to `destroy`; Codex actions are reported as skipped because they are not One Works `start` lifecycle scripts.
 - The Web UI displays cached quota snapshots. `oneworks accounts show codex <account>` explicitly refreshes account details and quota.
+
+Adding or reauthenticating an account reuses the official CLI discovered from the user's real login shell, pnpm/Volta/local-bin locations, or the Codex and ChatGPT app bundles. The UI shows preparing, browser authorization, credential verification, and saving phases; after success it refreshes and opens the account detail and restores the desktop window when available.
