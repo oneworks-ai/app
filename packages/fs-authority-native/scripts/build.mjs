@@ -1,8 +1,15 @@
 import { spawnSync } from 'node:child_process'
-import { createHash } from 'node:crypto'
-import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, realpathSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import process from 'node:process'
+
+const require = createRequire(import.meta.url)
+const {
+  createNativeAuthorityArtifactEntry,
+  readNativeAuthorityManifest,
+  writeNativeAuthorityManifest
+} = require('../manifest.cjs')
 
 if (process.platform !== 'darwin') {
   throw new Error('Filesystem authority native builds are macOS-only')
@@ -44,33 +51,11 @@ const relativePath = `prebuilds/${tuple}/fs-authority.node`
 const destination = join(packageRoot, relativePath)
 mkdirSync(dirname(destination), { recursive: true })
 cpSync(built, destination)
-const bytes = readFileSync(destination)
 const manifestPath = join(packageRoot, 'prebuilds/manifest.json')
 let artifacts = {}
 if (existsSync(manifestPath)) {
-  const existing = JSON.parse(readFileSync(manifestPath, 'utf8'))
-  if (existing?.schemaVersion !== 1 || existing?.napiVersion !== 8 || existing?.artifacts == null) {
-    throw new Error('Existing native authority manifest is invalid')
-  }
-  artifacts = existing.artifacts
+  artifacts = readNativeAuthorityManifest(packageRoot).artifacts
 }
-artifacts[tuple] = {
-  path: relativePath,
-  size: statSync(destination).size,
-  sha256: createHash('sha256').update(bytes).digest('hex')
-}
-writeFileSync(
-  manifestPath,
-  `${
-    JSON.stringify(
-      {
-        schemaVersion: 1,
-        napiVersion: 8,
-        artifacts
-      },
-      null,
-      2
-    )
-  }\n`
-)
+artifacts = { ...artifacts, [tuple]: createNativeAuthorityArtifactEntry(packageRoot, tuple) }
+writeNativeAuthorityManifest(packageRoot, artifacts)
 process.stdout.write(`Built ${tuple}: ${destination}\n`)

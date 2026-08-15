@@ -1,6 +1,6 @@
 import { Buffer } from 'node:buffer'
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -12,6 +12,7 @@ const osxSignEntry = require.resolve('@electron/osx-sign', {
   paths: [path.dirname(packagerEntry)]
 })
 const osxSignUtil = path.join(path.dirname(osxSignEntry), 'util.js')
+const osxSignImplementation = path.join(path.dirname(osxSignEntry), 'sign.js')
 
 const walkProbe = String.raw`
 import fs from 'node:fs'
@@ -38,6 +39,19 @@ process.stdout.write(JSON.stringify({ maxActiveLstats, paths }))
 `
 
 describe('@electron/osx-sign traversal', () => {
+  it('invokes the root app options callback after sequential nested signing', () => {
+    const source = readFileSync(osxSignImplementation, 'utf8')
+    const loop = source.indexOf('for (const filePath of [...children, opts.app])')
+    const optionsCallback = source.indexOf('opts.optionsForFile(filePath)', loop)
+    const nestedCodesign = source.indexOf("await execFileAsync('codesign'", optionsCallback)
+    const verify = source.indexOf('await verifySignApplication(opts)', nestedCodesign)
+
+    expect(loop).toBeGreaterThan(-1)
+    expect(optionsCallback).toBeGreaterThan(loop)
+    expect(nestedCodesign).toBeGreaterThan(optionsCallback)
+    expect(verify).toBeGreaterThan(nestedCodesign)
+  })
+
   it('walks unpacked apps without unbounded file-descriptor concurrency', () => {
     const fixtureRoot = mkdtempSync(path.join(tmpdir(), 'oneworks-osx-sign-walk-'))
     const nestedFramework = path.join(
