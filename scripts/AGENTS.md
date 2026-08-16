@@ -131,8 +131,7 @@
   - 同步 `infra/windows/winget/` 下的 manifest 版本号；如果本次已经发布 Windows portable zip，需要同时传 `--winget-installer-url` 和 `--winget-installer-sha256`
   - One Works CLI 发版后执行；随后在 `infra/windows/scoop-bucket` 内提交并 push，再回到主仓库提交 submodule 指针和 winget 模板改动
 - `pnpm tools publish-plan -- [args]`
-  - 透传到 `scripts/publish-plan-core.mjs`
-  - 发布规则、检查清单和 tag 约定统一见 `.oo/rules/RELEASE.md`
+  - 透传到 `scripts/publish-plan-core.mjs`；npm workflow 的 `scripts/npm-publish-guard.mjs` 负责 fail-closed auth/registry/provenance，前者仍只负责计划、别名 closure 和 repository metadata；发布规则、检查清单和 tag 约定统一见 `.oo/rules/RELEASE.md`。
 
 ## publish-plan 使用备注
 

@@ -55,7 +55,7 @@ gh secret list --repo oneworks-ai/app
 - 已存在的 identity 缺少 Trusted Publisher，OIDC 发布出现 token-exchange / publish 认证失败，且 targeted package set 已冻结为 registry 中仍缺少目标版本的 identities。
 
 ```text
-bootstrap_with_token=true
+auth_mode=new-identity-bootstrap
 ```
 
 这时 workflow 才读取 `secrets.NPM_TOKEN`，用它完成首次 bootstrap 或 missing-trust 定向恢复。完成后必须立即为相关 package 配置 Trusted Publisher，随后发布改用 OIDC。配置前后都要审计所有 public identity（包括 publish aliases）；不要把 browser login 当作 CLI 或 OIDC 认证证据。

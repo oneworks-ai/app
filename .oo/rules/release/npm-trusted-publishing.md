@@ -7,7 +7,7 @@
 - **发布**：把已批准的版本和不可变产物发布到 registry。
 - **信任配置**：把已存在的 npm package 关联到 GitHub Actions OIDC publisher。
 
-两者不是同一步。新 npm identity 不能先用 Trusted Publishing 建立 package settings：第一次必须用 `NPM_TOKEN` bootstrap，成功后立即配置 Trusted Publisher，下一次发布才改用无 token 的 OIDC。`NPM_TOKEN` 是 bootstrap / 定向恢复 fallback，不是日常发布认证；绝不在文档、日志或命令回显中复制它的值。
+两者不是同一步。新 npm identity 不能先用 Trusted Publishing 建立 package settings：第一次必须用 `auth_mode=new-identity-bootstrap` 和 `NPM_TOKEN` bootstrap，成功后立即配置 Trusted Publisher，下一次发布才改用无 token 的 `auth_mode=oidc`。bootstrap 必须是明确非空的 alias-closed `packages`、`publish_all=false`、`publish_tag=onboarding`，并且每个 selected identity 在 registry 都不存在；它发布当前 pre-target 版本，不得声称目标发布 provenance。`NPM_TOKEN` 是 bootstrap / 定向恢复 fallback，不是日常发布认证；绝不在文档、日志或命令回显中复制它的值。
 
 ## npm 发布前：身份与登录态
 
@@ -56,9 +56,9 @@ npm pack <package>@<version> --dry-run --json >/dev/null
 
 目标 version 必须精确存在、目标 dist-tag 必须等于该 version、`dist.integrity` / `dist.shasum` / `dist.tarball` 必须非空，且远端 tarball 必须通过 npm 客户端的 integrity 验证。只冻结 / 选中仍缺失的 identities；不要广泛 republish。`--skip-existing` 可以保护已存在的同名同版本，但不能替代这次 reconciliation。
 
-只有两类已核实的认证缺口才使用 token recovery：全新的 identity 需要首次 bootstrap，或已存在的 identity 因缺少 Trusted Publisher 而出现 OIDC token-exchange / publish 认证失败；npm token-exchange 或 publish `404` 是后一种情况的可能症状，仍需结合 `npm trust list` 和 registry 状态确认。执行一次范围仅限 registry 中目标版本仍缺失 identities 的 targeted recovery：`packages` 只填写冻结后的缺失集合、`publish_all=false`，并显式设置 `bootstrap_with_token=true`。完成后立即按本页配置 trust，再对**完整 publish plan** 重跑上面的 exact version / dist-tag / integrity 审计；只有全部 identities（包括 aliases）通过才算 npm 分发完成。下一次发布恢复 tokenless OIDC。其他失败原因必须按实际错误处理，不要因为有 token 就把已存在版本重新发布。
+只有两类已核实的认证缺口才使用 token recovery：全新的 identity 需要首次 bootstrap，或已存在的 identity 因缺少 Trusted Publisher 而出现 OIDC token-exchange / publish 认证失败；npm token-exchange 或 publish `404` 是后一种情况的可能症状，仍需结合 `npm trust list` 和 registry 状态确认。执行一次范围仅限 registry 中目标版本仍缺失 identities 的 targeted recovery：`packages` 只填写冻结后的缺失集合、`publish_all=false`，并显式选择 `auth_mode=missing-trust-recovery`。但只要目标版本需要 provenance，该 mode 必须失败；修复 trust 后改用 OIDC 定向恢复。完成后立即按本页配置 trust，再对**完整 publish plan** 重跑上面的 exact version / dist-tag / integrity 审计；只有全部 identities（包括 aliases）通过才算 npm 分发完成。下一次发布恢复 tokenless OIDC。其他失败原因必须按实际错误处理，不要因为有 token 就把已存在版本重新发布。
 
-manifest provenance metadata 缺失或错误导致的 npm `E422` 属于包元数据校验失败，不是 token bootstrap / recovery 条件。mixed-result 时仍先冻结已成功 identities，只在受保护主线修复元数据和 pre-dispatch gate 后，对 registry 中缺失的 identity 走原 Trusted Publisher OIDC 定向恢复；不要开启 `bootstrap_with_token`，也不要改版本或移动既有 tag。同版本恢复在 dispatch 前还必须冻结双 SHA 证据：原始不可变 product / tag SHA、受保护主线上的 recovery / source SHA、精确的 metadata / gate-only diff，以及按包形态适用的 runtime、prebuild 与 tarball 内容对比；最终审计必须分别记录两个 SHA，并确认 registry provenance 如实指向实际执行恢复发布的 recovery commit，不能把原始 product / tag SHA 伪装成这次恢复的来源。
+manifest provenance metadata 缺失或错误导致的 npm `E422` 属于包元数据校验失败，不是 token bootstrap / recovery 条件。mixed-result 时仍先冻结已成功 identities，只在受保护主线修复元数据和 pre-dispatch gate 后，对 registry 中缺失的 identity 走原 Trusted Publisher OIDC 定向恢复；不要选择 token auth mode，也不要改版本或移动既有 tag。同版本恢复在 dispatch 前还必须冻结双 SHA 证据：原始不可变 product / tag SHA、受保护主线上的 recovery / source SHA、精确的 metadata / gate-only diff，以及按包形态适用的 runtime、prebuild 与 tarball 内容对比；最终审计必须分别记录两个 SHA，并确认 registry provenance 如实指向实际执行恢复发布的 recovery commit，不能把原始 product / tag SHA 伪装成这次恢复的来源。
 
 ## Open VSX：发布与 namespace verification 独立
 
