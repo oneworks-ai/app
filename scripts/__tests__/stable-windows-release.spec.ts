@@ -277,12 +277,15 @@ describe('stable Windows release asset', () => {
     ).toThrow('not an ancestor')
   })
 
-  it('preserves mixed npm failures after producing any available stable Windows asset', async () => {
+  it('gates stable Windows assets on complete npm publication and reconciliation', async () => {
     const workflow = await readFile('.github/workflows/npm-publish-alpha.yml', 'utf8')
 
     expect(workflow).toContain('id: npm_publish\n        continue-on-error: true')
-    expect(workflow).toContain("steps.npm_publish.outcome != 'skipped'")
-    expect(workflow).toContain("steps.npm_publish.outcome == 'failure'")
+    expect(workflow).toContain('id: npm_postflight\n        if: $' + '{{ always() && !inputs.dry_run }}')
+    expect(workflow).toContain(
+      "!inputs.dry_run && inputs.publish_tag == 'latest' && steps.npm_publish.outcome == 'success' && steps.npm_postflight.outcome == 'success'"
+    )
+    expect(workflow).toContain("steps.npm_publish.outcome == 'failure' || steps.npm_postflight.outcome == 'failure'")
     expect(workflow).toContain('name: Preserve npm publish failure')
   })
 

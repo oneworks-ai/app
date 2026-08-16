@@ -1,3 +1,4 @@
+# eslint-disable max-lines -- publish sequencing must remain visibly fail-closed.
 name: npm Publish
 on:
   workflow_dispatch:
@@ -21,11 +22,15 @@ on:
         description: npm dist-tag used when publishing. Use latest for the bootstrap redirect package group when bare npx should resolve to it.
         required: false
         type: string
-      bootstrap_with_token:
-        default: false
-        description: Use NPM_TOKEN only for a new-identity bootstrap or reconciled missing-trust recovery.
+      auth_mode:
+        default: oidc
+        description: oidc (default), new-identity-bootstrap, or missing-trust-recovery. Target releases require oidc provenance.
         required: false
-        type: boolean
+        type: choice
+        options:
+          - oidc
+          - new-identity-bootstrap
+          - missing-trust-recovery
 permissions:
   attestations: write
   contents: write
@@ -56,6 +61,13 @@ jobs:
           node-version-file: .node-version
           registry-url: https://registry.npmjs.org
 
+      - name: Create isolated npm user configuration
+        env:
+          NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/npm-publish.npmrc
+        run: |
+          umask 077
+          printf 'registry=https://registry.npmjs.org/\n' > "$NPM_CONFIG_USERCONFIG"
+
       - name: Install npm 11
         run: npm install -g npm@11
 
@@ -74,12 +86,13 @@ jobs:
 
       - name: Validate publish inputs
         env:
-          BOOTSTRAP_WITH_TOKEN: ${{ inputs.bootstrap_with_token }}
+          PUBLISH_AUTH_MODE: ${{ inputs.auth_mode }}
           DRY_RUN: ${{ inputs.dry_run }}
-          NODE_AUTH_TOKEN: ${{ inputs.bootstrap_with_token && secrets.NPM_TOKEN || '' }}
+          NODE_AUTH_TOKEN: ${{ (inputs.auth_mode == 'new-identity-bootstrap' || inputs.auth_mode == 'missing-trust-recovery') && secrets.NPM_TOKEN || '' }}
           PACKAGES: ${{ inputs.packages }}
           PUBLISH_ALL: ${{ inputs.publish_all }}
           PUBLISH_TAG: ${{ inputs.publish_tag }}
+          NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/npm-publish.npmrc
         shell: bash
         run: |
           set -euo pipefail
@@ -90,33 +103,37 @@ jobs:
             exit 1
           fi
 
-          if [ "${BOOTSTRAP_WITH_TOKEN}" = "true" ] && [ -z "${NODE_AUTH_TOKEN:-}" ]; then
-            echo "bootstrap_with_token=true requires the NPM_TOKEN secret." >&2
+          if [ "${PUBLISH_AUTH_MODE}" != "oidc" ] && [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "token authentication mode requires the NPM_TOKEN secret." >&2
             exit 1
           fi
           if [ "${PUBLISH_TAG}" = "latest" ]; then
             node ./scripts/stable-npm-release.mjs validate-selection
           fi
 
-      - name: Configure npm token authentication
+      - name: Configure explicit npm authentication mode
         env:
-          BOOTSTRAP_WITH_TOKEN: ${{ inputs.bootstrap_with_token }}
-          NODE_AUTH_TOKEN: ${{ inputs.bootstrap_with_token && secrets.NPM_TOKEN || '' }}
+          PUBLISH_AUTH_MODE: ${{ inputs.auth_mode }}
+          NODE_AUTH_TOKEN: ${{ (inputs.auth_mode == 'new-identity-bootstrap' || inputs.auth_mode == 'missing-trust-recovery') && secrets.NPM_TOKEN || '' }}
+          NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/npm-publish.npmrc
         shell: bash
         run: |
           set -euo pipefail
 
-          if [ "${BOOTSTRAP_WITH_TOKEN}" != "true" ]; then
-            echo "Trusted Publishing mode: not configuring NPM_TOKEN."
+          if [ "${PUBLISH_AUTH_MODE}" = "oidc" ]; then
+            unset NODE_AUTH_TOKEN
+            printf 'registry=https://registry.npmjs.org/\n' > "$NPM_CONFIG_USERCONFIG"
+            chmod 600 "$NPM_CONFIG_USERCONFIG"
+            echo "OIDC mode: no npm token fallback is configured."
             exit 0
           fi
 
           if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
-            echo "bootstrap_with_token=true requires NPM_TOKEN." >&2
+            echo "token authentication mode requires NPM_TOKEN." >&2
             exit 1
           fi
 
-          cat >> .npmrc <<'NPMRC'
+          cat > "$NPM_CONFIG_USERCONFIG" <<'NPMRC'
           registry=https://registry.npmjs.org/
           //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}
           //registry.npmjs.com/:_authToken=${NODE_AUTH_TOKEN}
@@ -124,48 +141,59 @@ jobs:
 
           npm whoami --registry https://registry.npmjs.org
 
+      - name: Prove publish authentication before the first publish
+        env:
+          NODE_AUTH_TOKEN: ${{ (inputs.auth_mode == 'new-identity-bootstrap' || inputs.auth_mode == 'missing-trust-recovery') && secrets.NPM_TOKEN || '' }}
+          NPM_PUBLISH_LATEST_SNAPSHOT: ${{ runner.temp }}/npm-publish-latest-before.json
+          NPM_PUBLISH_GUARD_SNAPSHOT: ${{ runner.temp }}/npm-publish-guard.json
+          NPM_PUBLISH_TARBALL_DIRECTORY: ${{ runner.temp }}/npm-publish-tarballs
+          PACKAGES: ${{ inputs.packages }}
+          PUBLISH_ALL: ${{ inputs.publish_all }}
+          PUBLISH_AUTH_MODE: ${{ inputs.auth_mode }}
+          PUBLISH_TAG: ${{ inputs.publish_tag }}
+          TARGET_PROVENANCE_REQUIRED: "true"
+          NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/npm-publish.npmrc
+        run: |
+          rm -rf "$NPM_PUBLISH_TARBALL_DIRECTORY"
+          mkdir -p "$NPM_PUBLISH_TARBALL_DIRECTORY"
+          node ./scripts/npm-publish-guard.mjs preflight
+
+      - name: Recheck targets before publish
+        env:
+          NPM_PUBLISH_GUARD_SNAPSHOT: ${{ runner.temp }}/npm-publish-guard.json
+          PACKAGES: ${{ inputs.packages }}
+          PUBLISH_ALL: ${{ inputs.publish_all }}
+        run: node ./scripts/npm-publish-guard.mjs prepublish
+
       - name: Publish packages
         id: npm_publish
         continue-on-error: true
         env:
-          BOOTSTRAP_WITH_TOKEN: ${{ inputs.bootstrap_with_token }}
+          PUBLISH_AUTH_MODE: ${{ inputs.auth_mode }}
           DRY_RUN: ${{ inputs.dry_run }}
           NPM_CONFIG_PROVENANCE: "true"
-          NODE_AUTH_TOKEN: ${{ inputs.bootstrap_with_token && secrets.NPM_TOKEN || '' }}
+          NODE_AUTH_TOKEN: ${{ (inputs.auth_mode == 'new-identity-bootstrap' || inputs.auth_mode == 'missing-trust-recovery') && secrets.NPM_TOKEN || '' }}
           PACKAGES: ${{ inputs.packages }}
           PUBLISH_ALL: ${{ inputs.publish_all }}
           PUBLISH_TAG: ${{ inputs.publish_tag }}
-        shell: bash
-        run: |
-          set -euo pipefail
+          NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/npm-publish.npmrc
+        run: node ./scripts/npm-publish-guard.mjs publish
 
-          trimmed_packages="$(printf '%s' "${PACKAGES:-}" | tr -d '[:space:]')"
-          if [ -z "$trimmed_packages" ] && [ "${PUBLISH_ALL}" != "true" ]; then
-            echo "packages is empty. Set publish_all=true only when you intentionally want the full public workspace publish plan." >&2
-            exit 1
-          fi
-
-          if [ "${BOOTSTRAP_WITH_TOKEN}" = "true" ]; then
-            echo "NPM_TOKEN is configured for an explicitly scoped bootstrap or missing-trust recovery."
-          else
-            unset NODE_AUTH_TOKEN
-            echo "Trusted Publishing mode: npm publish will authenticate through GitHub OIDC."
-          fi
-
-          tag="${PUBLISH_TAG:-alpha}"
-          args=(--publish --no-git-checks --skip-existing --tag "${tag}" --no-confirm-retry)
-          if [ "${DRY_RUN}" = "true" ]; then
-            args+=(--dry-run)
-          fi
-          if [ -n "${PACKAGES}" ]; then
-            args+=(--packages "${PACKAGES}")
-          fi
-
-          pnpm tools publish-plan -- "${args[@]}"
+      - name: Verify npm publish registry and provenance evidence
+        id: npm_postflight
+        if: ${{ always() && !inputs.dry_run }}
+        continue-on-error: true
+        env:
+          NPM_PUBLISH_GUARD_SNAPSHOT: ${{ runner.temp }}/npm-publish-guard.json
+          PACKAGES: ${{ inputs.packages }}
+          PUBLISH_ALL: ${{ inputs.publish_all }}
+          PUBLISH_AUTH_MODE: ${{ inputs.auth_mode }}
+          PUBLISH_TAG: ${{ inputs.publish_tag }}
+        run: node ./scripts/npm-publish-guard.mjs postflight
 
       - name: Build stable Windows portable asset
         id: windows_asset
-        if: ${{ always() && !inputs.dry_run && inputs.publish_tag == 'latest' && steps.npm_publish.outcome != 'skipped' }}
+        if: ${{ !inputs.dry_run && inputs.publish_tag == 'latest' && steps.npm_publish.outcome == 'success' && steps.npm_postflight.outcome == 'success' }}
         env:
           PACKAGES: ${{ inputs.packages }}
           PUBLISH_ALL: ${{ inputs.publish_all }}
@@ -190,9 +218,17 @@ jobs:
         run: node ./scripts/stable-windows-release.mjs publish
 
       - name: Reconcile stable npm registry
-        if: ${{ always() && !inputs.dry_run && inputs.publish_tag == 'latest' && steps.npm_publish.outcome != 'skipped' }}
+        if: ${{ !inputs.dry_run && inputs.publish_tag == 'latest' && steps.npm_publish.outcome == 'success' && steps.npm_postflight.outcome == 'success' }}
         run: node ./scripts/stable-npm-release.mjs verify-registry
 
       - name: Preserve npm publish failure
-        if: ${{ always() && steps.npm_publish.outcome == 'failure' }}
-        run: echo "One or more npm identities failed to publish; preserve the failed workflow for targeted recovery." >&2; exit 1
+        if: ${{ always() && (steps.npm_publish.outcome == 'failure' || steps.npm_postflight.outcome == 'failure') }}
+        run: echo "npm publish or full registry reconciliation failed; preserve this workflow for targeted recovery." >&2; exit 1
+
+      - name: Remove isolated npm credentials
+        if: ${{ always() }}
+        env:
+          NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/npm-publish.npmrc
+          NPM_PUBLISH_TARBALL_DIRECTORY: ${{ runner.temp }}/npm-publish-tarballs
+          NPM_PUBLISH_GUARD_SNAPSHOT: ${{ runner.temp }}/npm-publish-guard.json
+        run: rm -f "$NPM_CONFIG_USERCONFIG" "$NPM_PUBLISH_GUARD_SNAPSHOT"; rm -rf "$NPM_PUBLISH_TARBALL_DIRECTORY"
