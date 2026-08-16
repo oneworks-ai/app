@@ -19,6 +19,8 @@ import {
 export const npmRegistryRoot = 'https://registry.npmjs.org'
 export const npmOidcAudience = 'npm:registry.npmjs.org'
 export const npmOidcExchangeRoot = `${npmRegistryRoot}/-/npm/v1/oidc/token/exchange/package/`
+export const npmRegistryPropagationAttempts = 9
+export const npmRegistryPropagationDelayMs = 15_000
 export const npmPublishAuthModes = new Set(['oidc', 'new-identity-bootstrap', 'missing-trust-recovery'])
 export const slsaProvenancePredicateType = 'https://slsa.dev/provenance/v1'
 export const inTotoStatementType = 'https://in-toto.io/Statement/v1'
@@ -41,6 +43,28 @@ export async function fetchNpmPackageMetadata(name, fetchImpl = fetch) {
   if (response.status === 404) return null
   if (!response.ok) throw new Error(`${name} registry metadata returned HTTP ${response.status}`)
   return response.json()
+}
+const defaultSleep = delayMs => new Promise(resolve => setTimeout(resolve, delayMs))
+export async function waitForNpmRegistryVersions({
+  items,
+  attempts = npmRegistryPropagationAttempts,
+  delayMs = npmRegistryPropagationDelayMs,
+  fetchImpl = fetch,
+  sleep = defaultSleep
+}) {
+  if (!Number.isInteger(attempts) || attempts < 1 || !Number.isFinite(delayMs) || delayMs < 0) {
+    throw new Error('npm registry propagation retry policy is invalid.')
+  }
+  let missing = items.map(item => `${item.name}@${item.version}`)
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const metadata = await Promise.all(items.map(item => fetchNpmPackageMetadata(item.name, fetchImpl)))
+    missing = items.flatMap((item, index) =>
+      metadata[index]?.versions?.[item.version] == null ? [`${item.name}@${item.version}`] : []
+    )
+    if (!missing.length) return { attemptsUsed: attempt }
+    if (attempt < attempts) await sleep(delayMs)
+  }
+  throw new Error(`npm registry propagation timed out for: ${missing.join(', ')}`)
 }
 
 export async function loadNpmPublishSelection(
@@ -537,6 +561,7 @@ const runCli = async command => {
     return
   }
   if (command === 'postflight') {
+    await waitForNpmRegistryVersions({ items: selection.plan.items })
     const result = await verifyNpmPublishPostflight({
       mode: input.mode,
       items: selection.plan.items,

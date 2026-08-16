@@ -54,7 +54,7 @@ npm view <package> dist-tags.<tag> --json
 npm pack <package>@<version> --dry-run --json >/dev/null
 ```
 
-目标 version 必须精确存在、目标 dist-tag 必须等于该 version、`dist.integrity` / `dist.shasum` / `dist.tarball` 必须非空，且远端 tarball 必须通过 npm 客户端的 integrity 验证。只冻结 / 选中仍缺失的 identities；不要广泛 republish。`--skip-existing` 可以保护已存在的同名同版本，但不能替代这次 reconciliation。
+目标 version 必须精确存在、目标 dist-tag 必须等于该 version、`dist.integrity` / `dist.shasum` / `dist.tarball` 必须非空，且远端 tarball 必须通过 npm 客户端的 integrity 验证。publish 子进程成功后，postflight 先做有界 registry propagation 轮询，再执行完整字节与 provenance 对账；一次即时 `404` 不能直接判定 publish 未发生，也不能据此重复发布。只冻结 / 选中仍缺失的 identities；不要广泛 republish。`--skip-existing` 可以保护已存在的同名同版本，但不能替代这次 reconciliation。
 
 只有两类已核实的认证缺口才使用 token recovery：全新的 identity 需要首次 bootstrap，或已存在的 identity 因缺少 Trusted Publisher 而出现 OIDC token-exchange / publish 认证失败；npm token-exchange 或 publish `404` 是后一种情况的可能症状，仍需结合 `npm trust list` 和 registry 状态确认。执行一次范围仅限 registry 中目标版本仍缺失 identities 的 targeted recovery：`packages` 只填写冻结后的缺失集合、`publish_all=false`，并显式选择 `auth_mode=missing-trust-recovery`。但只要目标版本需要 provenance，该 mode 必须失败；修复 trust 后改用 OIDC 定向恢复。完成后立即按本页配置 trust，再对**完整 publish plan** 重跑上面的 exact version / dist-tag / integrity 审计；只有全部 identities（包括 aliases）通过才算 npm 分发完成。下一次发布恢复 tokenless OIDC。其他失败原因必须按实际错误处理，不要因为有 token 就把已存在版本重新发布。
 

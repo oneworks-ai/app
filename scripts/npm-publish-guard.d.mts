@@ -10,6 +10,8 @@ export interface NpmTarballDigest {
 export declare const npmRegistryRoot: string
 export declare const npmOidcAudience: string
 export declare const npmOidcExchangeRoot: string
+export declare const npmRegistryPropagationAttempts: number
+export declare const npmRegistryPropagationDelayMs: number
 export declare const npmPublishAuthModes: Set<NpmPublishAuthMode>
 export declare function redactNpmPublishSecrets(value: unknown, secrets?: string[]): string
 export declare function evaluateNpmPublishMode(
@@ -33,6 +35,15 @@ export declare function proveOidcExchangesBeforePublish(
     fetchImpl?: any
   }
 ): Promise<{ exchangedIdentityCount: number }>
+export declare function waitForNpmRegistryVersions(
+  input: {
+    items: Array<{ name: string; version: string }>
+    attempts?: number
+    delayMs?: number
+    fetchImpl?: any
+    sleep?: (delayMs: number) => Promise<void>
+  }
+): Promise<{ attemptsUsed: number }>
 export declare function freezeApprovedTarballs(
   input: { items: Array<{ name: string; version: string }> }
 ): Promise<Map<string, NpmTarballDigest>>
