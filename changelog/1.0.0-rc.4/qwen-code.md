@@ -1,4 +1,4 @@
-# @oneworks/adapter-qwen-code 1.0.0-rc.3
+# @oneworks/adapter-qwen-code 1.0.0-rc.4
 
 - Add managed Qwen Code 0.21.11 CLI execution with native stream-json projection, partial messages, tools, cancellation, and exact native session resume.
 - Isolate `HOME`, `QWEN_HOME`, and `QWEN_RUNTIME_DIR`; stage selected system instructions, skills, MCP servers, and native hooks without copying or linking credential files from the real Qwen home.

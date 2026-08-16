@@ -1,4 +1,4 @@
-# @oneworks/adapter-junie 1.0.0-rc.3
+# @oneworks/adapter-junie 1.0.0-rc.4
 
 - Add a first-class JetBrains Junie CLI adapter with managed/system/path CLI preparation, conservative 26.8 / 2651.4 version checks, isolated headless configuration, pinned `CliStreamEvent` step projection, native session-id resume, MCP, skills, agents, review, and native hooks.
 - Pin the advertised effort contract to `low`, `medium`, and `high`; build child environments from minimal process basics plus selected-provider authentication; preserve only shape-validated Linux credential-service locators without copying the user's Junie directory; degrade Plan Mode to explicit read-only instructions; and leave native history import unsupported until JetBrains publishes a stable verified schema.

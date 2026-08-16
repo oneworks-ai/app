@@ -1,4 +1,4 @@
-# @oneworks/adapter-droid 1.0.0-rc.3
+# @oneworks/adapter-droid 1.0.0-rc.4
 
 - Add a first-class Factory Droid CLI adapter using strict native `stream-jsonrpc` negotiation, incremental messages, tool/interaction events, cancellation, and native session resume.
 - Isolate Factory runtime state while mapping selected skills, MCP servers, system instructions, and native hooks without copying credentials or installing unsupported plugins.

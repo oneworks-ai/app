@@ -1,6 +1,6 @@
 {
   "name": "@oneworks/desktop",
-  "version": "1.0.0-rc.3",
+  "version": "1.0.0-rc.4",
   "private": true,
   "description": "One Works desktop shell",
   "author": "One Works contributors",
@@ -11,7 +11,7 @@
   },
   "oneworks": {
     "release": {
-      "macosSigningPolicy": "unsigned"
+      "macosSigningPolicy": "auto"
     }
   },
   "main": "./dist/main/index.js",

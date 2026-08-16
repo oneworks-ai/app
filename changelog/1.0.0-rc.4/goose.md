@@ -1,4 +1,4 @@
-# @oneworks/adapter-goose 1.0.0-rc.3
+# @oneworks/adapter-goose 1.0.0-rc.4
 
 - Add first-class Goose CLI support over the official ACP stdio boundary, including persistent native session resume, structured text/tool/permission events, cancellation, selected skills, MCP, system prompts, and isolated configuration.
 - Add fail-closed official release installation with exact platform assets, mandatory SHA-256 verification, safe extraction, atomic replacement, and final version probing.
