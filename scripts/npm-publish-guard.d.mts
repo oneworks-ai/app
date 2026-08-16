@@ -1,4 +1,4 @@
-import type { PublishPlan } from './publish-plan-core.mjs'
+import type { PublishPlan, PublishPlanItem } from './publish-plan-core.mjs'
 export type NpmPublishAuthMode = 'oidc' | 'new-identity-bootstrap' | 'missing-trust-recovery'
 export interface NpmTarballDigest {
   filePath?: string
@@ -36,6 +36,13 @@ export declare function proveOidcExchangesBeforePublish(
 export declare function freezeApprovedTarballs(
   input: { items: Array<{ name: string; version: string }> }
 ): Promise<Map<string, NpmTarballDigest>>
+export declare function preparePublishWorkspaceDependencies(
+  input: {
+    items: PublishPlanItem[]
+    repoRoot?: string
+    runCommand?: (command: string, args: string[], options: Record<string, unknown>) => { status?: number | null }
+  }
+): { sourceNames: string[] }
 export declare function executeFrozenPublish(
   input: Record<string, unknown>
 ): Promise<{ attempts: Array<{ name: string; status: number }> }>

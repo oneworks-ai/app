@@ -149,6 +149,26 @@ const defaultPackPackage = async ({ item, outputDir }) => {
     restore?.()
   }
 }
+const defaultRunCommand = (command, args, options) =>
+  spawnSync(command, args, {
+    encoding: 'utf8',
+    ...options
+  })
+export function preparePublishWorkspaceDependencies({
+  items,
+  repoRoot = process.cwd(),
+  runCommand = defaultRunCommand
+}) {
+  const sourceNames = Array.from(new Set(items.map(item => item.publishAliasFor ?? item.name)))
+  if (!sourceNames.length) throw new Error('npm publish dependency preparation requires at least one package.')
+  const args = sourceNames.flatMap(name => ['--filter', `${name}^...`])
+  args.push('--workspace-concurrency=1', '--if-present', 'run', 'build')
+  const result = runCommand('pnpm', args, { cwd: repoRoot, stdio: 'pipe' })
+  if (result.status !== 0) {
+    throw new Error('npm publish workspace dependency build failed before local packing.')
+  }
+  return { sourceNames }
+}
 export async function freezeApprovedTarballs({ items, outputDir, packPackage = defaultPackPackage }) {
   const ownedOutput = outputDir == null
   const packDirectory = outputDir ?? await mkdtemp(path.join(tmpdir(), 'oneworks-npm-pack-'))
@@ -183,12 +203,6 @@ export async function assertTargetsStillUnpublished({ items, preflightMetadata, 
   }
 }
 
-const defaultPublishCommand = (command, args, options) =>
-  spawnSync(command, args, {
-    encoding: 'utf8',
-    ...options
-  })
-
 export async function executeFrozenPublish({
   items,
   approvedTarballs,
@@ -196,7 +210,7 @@ export async function executeFrozenPublish({
   preflightMetadata,
   dryRun = false,
   fetchImpl = fetch,
-  runCommand = defaultPublishCommand,
+  runCommand = defaultRunCommand,
   stdout = process.stdout,
   stderr = process.stderr,
   secrets = []
@@ -409,6 +423,7 @@ export async function runNpmPublishPreflight(
     requestUrl,
     fetchImpl = fetch,
     fsOps,
+    prepareWorkspaceDependencies = preparePublishWorkspaceDependencies,
     packPackage,
     tarballDirectory
   } = {}
@@ -432,6 +447,7 @@ export async function runNpmPublishPreflight(
     registryMetadata
   })
   if (errors.length) throw new Error(`npm publish guard rejected dispatch: ${errors.join('; ')}`)
+  await prepareWorkspaceDependencies({ items: selection.plan.items, repoRoot })
   const approvedTarballs = await freezeApprovedTarballs({
     items: selection.plan.items,
     outputDir: tarballDirectory,
