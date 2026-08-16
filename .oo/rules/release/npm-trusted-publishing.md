@@ -15,7 +15,7 @@
 
 对每一个 identity 都审计其 Trusted Publisher 配置。浏览器已登录 npm 不表示 CLI 已认证；用 `npm whoami`（必要时完成 CLI login）确认操作者 CLI 身份。它只说明本地 CLI 登录态，**不**说明 GitHub OIDC 是否能发布，也不应被用作 OIDC 状态证明。
 
-在 dispatch 前还必须把 provenance repository metadata 视为发布不变量：每个选中的 public source workspace manifest 都要声明 `repository.type=git`、`repository.url=https://github.com/oneworks-ai/app.git`，且 `repository.directory` 精确等于仓库相对 workspace 路径；publish alias 继承并只校验其 source package。真实发布和 publish dry-run 都必须在第一个 publish 子进程前 fail closed，不能等 registry 以 `E422` 拒绝后再补元数据。
+在 dispatch 前还必须把 provenance repository metadata 视为发布不变量：每个选中的 public source workspace manifest 都要声明 `repository.type=git`、`repository.url=https://github.com/oneworks-ai/app.git`，且 `repository.directory` 精确等于仓库相对 workspace 路径；publish alias 继承并只校验其 source package。真实发布和 publish dry-run 都必须在第一个 publish 子进程前 fail closed，不能等 registry 以 `E422` 拒绝后再补元数据。冻结 tarball 前还要按 selected source package 构建其 workspace dependency closure；不能假设 fresh checkout 中已有依赖包 `dist`，也不能等单个 package 的 `prepack` 在批次中途才暴露缺失构建产物。
 
 ```bash
 # 对完整 identity set 中的每个 <package> 分别执行。

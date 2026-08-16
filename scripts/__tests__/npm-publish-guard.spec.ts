@@ -11,6 +11,7 @@ import {
   executeFrozenPublish,
   freezeApprovedTarballs,
   npmOidcAudience,
+  preparePublishWorkspaceDependencies,
   proveOidcExchangesBeforePublish,
   redactNpmPublishSecrets,
   verifyNpmPublishPostflight,
@@ -63,6 +64,44 @@ const provenance = (extra = {}) => ({
 })
 
 describe('npm publish guard', () => {
+  it('builds each selected source dependency closure before local packing', () => {
+    const runCommand = vi.fn(() => ({ status: 0 }))
+    const planItem = (name: string, publishAliasFor: string | null = null) => ({
+      name,
+      dir: `/repo/${name}`,
+      version: '1.0.0-rc.3',
+      nextVersion: '1.0.0-rc.3',
+      private: false,
+      publishAliasFor,
+      internalDependencies: [],
+      impactedDependents: []
+    })
+    const source = planItem('@oneworks/source')
+    const alias = planItem('source-alias', source.name)
+    const modelProtocol = planItem('@oneworks/model-protocol')
+    expect(preparePublishWorkspaceDependencies({
+      items: [source, alias, modelProtocol],
+      repoRoot: '/repo',
+      runCommand
+    })).toEqual({ sourceNames: [source.name, modelProtocol.name] })
+    expect(runCommand).toHaveBeenCalledWith('pnpm', [
+      '--filter',
+      '@oneworks/source^...',
+      '--filter',
+      '@oneworks/model-protocol^...',
+      '--workspace-concurrency=1',
+      '--if-present',
+      'run',
+      'build'
+    ], { cwd: '/repo', stdio: 'pipe' })
+    expect(() =>
+      preparePublishWorkspaceDependencies({
+        items: [modelProtocol],
+        runCommand: () => ({ status: 1 })
+      })
+    ).toThrow('dependency build failed before local packing')
+  })
+
   it('orders proof/recheck before publish, removes boolean auth, and always reconciles', async () => {
     const workflow = await readFile(`${process.cwd()}/.github/workflows/npm-publish-alpha.yml`, 'utf8')
     expect(workflow).toContain('auth_mode:')
