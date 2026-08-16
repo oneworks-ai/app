@@ -15,7 +15,8 @@ import {
   proveOidcExchangesBeforePublish,
   redactNpmPublishSecrets,
   verifyNpmPublishPostflight,
-  verifySlsaProvenance
+  verifySlsaProvenance,
+  waitForNpmRegistryVersions
 } from '../npm-publish-guard.mjs'
 
 const item = { name: '@oneworks/new', version: '1.0.0-rc.3' }
@@ -64,6 +65,29 @@ const provenance = (extra = {}) => ({
 })
 
 describe('npm publish guard', () => {
+  it('waits for bounded registry propagation before immutable postflight verification', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ versions: { [item.version]: {} } })))
+    const sleep = vi.fn(async () => {})
+    await expect(waitForNpmRegistryVersions({
+      items: [item],
+      attempts: 3,
+      delayMs: 25,
+      fetchImpl,
+      sleep
+    })).resolves.toEqual({ attemptsUsed: 2 })
+    expect(sleep).toHaveBeenCalledOnce()
+    expect(sleep).toHaveBeenCalledWith(25)
+    await expect(waitForNpmRegistryVersions({
+      items: [item],
+      attempts: 2,
+      delayMs: 0,
+      fetchImpl: async () => new Response(null, { status: 404 }),
+      sleep: async () => {}
+    })).rejects.toThrow(`registry propagation timed out for: ${item.name}@${item.version}`)
+  })
+
   it('builds each selected source dependency closure before local packing', () => {
     const runCommand = vi.fn(() => ({ status: 0 }))
     const planItem = (name: string, publishAliasFor: string | null = null) => ({
