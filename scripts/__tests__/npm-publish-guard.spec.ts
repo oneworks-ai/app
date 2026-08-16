@@ -112,6 +112,13 @@ describe('npm publish guard', () => {
     expect(workflow.indexOf('Recheck targets before publish')).toBeLessThan(
       workflow.indexOf('node ./scripts/npm-publish-guard.mjs publish')
     )
+    const publishStep = workflow.slice(
+      workflow.indexOf('- name: Publish packages'),
+      workflow.indexOf('- name: Verify npm publish registry and provenance evidence')
+    )
+    expect(publishStep).toContain(
+      'NPM_PUBLISH_GUARD_SNAPSHOT: ' + '$' + '{{ runner.temp }}/npm-publish-guard.json'
+    )
     expect(workflow).not.toContain('--skip-existing')
     expect(workflow).toContain('if: ' + '$' + '{{ always() && !inputs.dry_run }}')
   })

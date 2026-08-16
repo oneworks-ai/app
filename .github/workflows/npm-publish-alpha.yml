@@ -169,6 +169,7 @@ jobs:
         id: npm_publish
         continue-on-error: true
         env:
+          NPM_PUBLISH_GUARD_SNAPSHOT: ${{ runner.temp }}/npm-publish-guard.json
           PUBLISH_AUTH_MODE: ${{ inputs.auth_mode }}
           DRY_RUN: ${{ inputs.dry_run }}
           NPM_CONFIG_PROVENANCE: "true"
