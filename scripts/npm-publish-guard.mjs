@@ -2,7 +2,7 @@
 import { Buffer } from 'node:buffer'
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
@@ -155,6 +155,80 @@ export async function proveOidcExchangesBeforePublish({ selectedItems, requestTo
   return { exchangedIdentityCount: selectedItems.length }
 }
 
+const pnpmPackRecord = (value, item) => {
+  const records = Array.isArray(value) ? value : [value]
+  if (records.length !== 1) return null
+  const record = records[0]
+  if (
+    record == null || typeof record !== 'object' || record.name !== item.name || record.version !== item.version ||
+    typeof record.filename !== 'string' || !record.filename || !Array.isArray(record.files)
+  ) return null
+  return record
+}
+
+const isPlausibleJsonRoot = (output, start) => {
+  const character = output[start]
+  const next = output[start + 1]
+  if (character === '{') return next === '"' || next === '}' || /\s/.test(next)
+  return character === '[' && (next === '{' || next === ']' || /\s/.test(next))
+}
+
+export function extractPnpmPackRecord(stdout, item) {
+  const output = String(stdout)
+  const records = []
+  for (let start = 0; start < output.length; start += 1) {
+    if (!isPlausibleJsonRoot(output, start)) continue
+    let depth = 0
+    let inString = false
+    let escaped = false
+    for (let end = start; end < output.length; end += 1) {
+      const character = output[end]
+      if (inString) {
+        if (escaped) escaped = false
+        else if (character === '\\') escaped = true
+        else if (character === '"') inString = false
+        continue
+      }
+      if (character === '"') {
+        inString = true
+        continue
+      }
+      if (character === '{' || character === '[') depth += 1
+      else if (character === '}' || character === ']') depth -= 1
+      if (depth !== 0) continue
+      try {
+        const record = pnpmPackRecord(JSON.parse(output.slice(start, end + 1)), item)
+        if (record != null) records.push(record)
+      } catch {
+        // Lifecycle output can contain braces. Only complete JSON documents matching pnpm's pack schema count.
+      }
+      start = end
+      break
+    }
+    if (depth !== 0) throw new Error(`${item.name} local pack returned incomplete JSON output.`)
+  }
+  if (records.length !== 1) {
+    throw new Error(`${item.name} local pack did not return exactly one documented JSON result.`)
+  }
+  return records[0]
+}
+
+const readPackedTarball = async ({ item, outputDir, filename }) => {
+  const candidatePath = path.resolve(outputDir, filename)
+  const [canonicalOutputDir, canonicalCandidatePath] = await Promise.all([realpath(outputDir), realpath(candidatePath)])
+  const relativePath = path.relative(canonicalOutputDir, canonicalCandidatePath)
+  if (
+    !relativePath || relativePath === '..' || relativePath.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relativePath) ||
+    path.extname(canonicalCandidatePath) !== '.tgz'
+  ) throw new Error(`${item.name} local pack returned a tarball outside the frozen output directory.`)
+  const candidateStats = await lstat(candidatePath)
+  if (!candidateStats.isFile() || candidateStats.isSymbolicLink()) {
+    throw new Error(`${item.name} local pack returned an unsafe tarball path.`)
+  }
+  return { bytes: await readFile(canonicalCandidatePath), filePath: canonicalCandidatePath }
+}
+
 const defaultPackPackage = async ({ item, outputDir }) => {
   const restore = stagePublishAliasManifest(item)
   try {
@@ -164,11 +238,8 @@ const defaultPackPackage = async ({ item, outputDir }) => {
       stdio: 'pipe'
     })
     if (result.status !== 0) throw new Error(`${item.name} local pack failed.`)
-    const output = JSON.parse(String(result.stdout))
-    const filename = Array.isArray(output) ? output[0]?.filename : output?.filename
-    if (!filename) throw new Error(`${item.name} local pack did not return a filename.`)
-    const filePath = path.isAbsolute(filename) ? filename : path.join(outputDir, filename)
-    return { bytes: await readFile(filePath), filePath }
+    const { filename } = extractPnpmPackRecord(result.stdout, item)
+    return readPackedTarball({ item, outputDir, filename })
   } finally {
     restore?.()
   }

@@ -1,6 +1,6 @@
 import { Buffer } from 'node:buffer'
 import { createHash } from 'node:crypto'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   evaluateNpmPublishMode,
   executeFrozenPublish,
+  extractPnpmPackRecord,
   freezeApprovedTarballs,
   npmOidcAudience,
   preparePublishWorkspaceDependencies,
@@ -268,25 +269,79 @@ describe('npm publish guard', () => {
     ).resolves.toMatchObject({ complete: false })
   })
 
-  it('freezes local pnpm-pack bytes for a source package and its alias with absolute filenames', async () => {
+  it('extracts exactly one documented pnpm pack record from lifecycle output', () => {
+    const metadata = {
+      name: item.name,
+      version: item.version,
+      filename: '/tmp/package.tgz',
+      files: []
+    }
+    expect(extractPnpmPackRecord(`\u001B[32mlifecycle output\u001B[0m\n${JSON.stringify(metadata)}`, item)).toEqual(
+      metadata
+    )
+    expect(extractPnpmPackRecord(`\u001B[36mlifecycle output\u001B[0m${JSON.stringify(metadata)}`, item)).toEqual(
+      metadata
+    )
+    expect(extractPnpmPackRecord(`[prepack warning${JSON.stringify(metadata)}`, item)).toEqual(metadata)
+    expect(extractPnpmPackRecord(`lifecycle output\n${JSON.stringify([metadata])}\nmore lifecycle output`, item))
+      .toEqual(
+        metadata
+      )
+    expect(() => extractPnpmPackRecord(`${JSON.stringify(metadata)}\n${JSON.stringify(metadata)}`, item)).toThrow(
+      'exactly one documented JSON result'
+    )
+    expect(() => extractPnpmPackRecord('{"filename":"package.tgz"}', item)).toThrow(
+      'exactly one documented JSON result'
+    )
+    expect(() => extractPnpmPackRecord('{ '.repeat(10_000), item)).toThrow('incomplete JSON output')
+  })
+
+  it('freezes lifecycle-noisy source and alias tarballs, then publishes those exact bytes', async () => {
     const directory = await mkdtemp(path.join(tmpdir(), 'npm-publish-guard-pack-'))
+    const outputDirectory = await mkdtemp(path.join(tmpdir(), 'npm-publish-guard-output-'))
     const source = { name: 'source-package', version: '1.0.0', dir: directory, publishAliasFor: null }
     const alias = { ...source, name: 'alias-package', publishAliasFor: 'source-package' }
+    const calls: string[][] = []
     try {
       await writeFile(
         path.join(directory, 'package.json'),
         JSON.stringify({
           name: source.name,
           version: source.version,
-          bin: { 'source-package': './cli.js' }
+          bin: { 'source-package': './cli.js' },
+          scripts: { prepack: 'node prepack.cjs' }
         })
       )
       await writeFile(path.join(directory, 'cli.js'), 'console.log("ok")\n')
-      const frozen = await freezeApprovedTarballs({ items: [source, alias] })
-      expect(frozen.get(source.name)?.sha512).toHaveLength(128)
-      expect(frozen.get(alias.name)?.sha512).toHaveLength(128)
+      await writeFile(
+        path.join(directory, 'prepack.cjs'),
+        "process.stdout.write('\\u001B[32mnoisy lifecycle output\\u001B[0m[prepack warning')\n"
+      )
+      const frozen = await freezeApprovedTarballs({ items: [source, alias], outputDir: outputDirectory })
+      const canonicalOutputDirectory = await realpath(outputDirectory)
+      const sourceTarball = frozen.get(source.name)
+      const aliasTarball = frozen.get(alias.name)
+      expect(sourceTarball?.filePath?.startsWith(`${canonicalOutputDirectory}${path.sep}`)).toBe(true)
+      expect(aliasTarball?.filePath?.startsWith(`${canonicalOutputDirectory}${path.sep}`)).toBe(true)
+      expect(sourceTarball?.filePath).not.toBe(aliasTarball?.filePath)
+      expect(sourceTarball?.sha512).toHaveLength(128)
+      expect(aliasTarball?.sha512).toHaveLength(128)
+      await expect(executeFrozenPublish({
+        items: [source, alias],
+        approvedTarballs: frozen,
+        publishTag: 'rc',
+        dryRun: true,
+        preflightMetadata: new Map([[source.name, { versions: {} }], [alias.name, { versions: {} }]]),
+        fetchImpl: async () => new Response(null, { status: 404 }),
+        runCommand: (_command: string, args: string[]) => {
+          calls.push(args)
+          return { status: 0, stdout: '', stderr: '' }
+        }
+      })).resolves.toEqual({ attempts: [{ name: source.name, status: 0 }, { name: alias.name, status: 0 }] })
+      expect(calls.map(args => args[1])).toEqual([sourceTarball?.filePath, aliasTarball?.filePath])
     } finally {
       await rm(directory, { recursive: true, force: true })
+      await rm(outputDirectory, { recursive: true, force: true })
     }
   })
 
