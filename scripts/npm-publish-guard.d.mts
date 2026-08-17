@@ -14,6 +14,10 @@ export declare const npmRegistryPropagationAttempts: number
 export declare const npmRegistryPropagationDelayMs: number
 export declare const npmPublishAuthModes: Set<NpmPublishAuthMode>
 export declare function redactNpmPublishSecrets(value: unknown, secrets?: string[]): string
+export declare function extractPnpmPackRecord(
+  stdout: unknown,
+  item: { name: string; version: string }
+): { name: string; version: string; filename: string; files: unknown[] }
 export declare function evaluateNpmPublishMode(
   input: {
     mode: NpmPublishAuthMode
@@ -45,7 +49,10 @@ export declare function waitForNpmRegistryVersions(
   }
 ): Promise<{ attemptsUsed: number }>
 export declare function freezeApprovedTarballs(
-  input: { items: Array<{ name: string; version: string }> }
+  input: {
+    items: Array<{ name: string; version: string }>
+    outputDir?: string
+  }
 ): Promise<Map<string, NpmTarballDigest>>
 export declare function preparePublishWorkspaceDependencies(
   input: {
