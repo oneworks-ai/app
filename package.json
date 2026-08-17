@@ -1,6 +1,6 @@
 {
   "name": "oneworks-dev",
-  "version": "1.0.0-rc.3",
+  "version": "1.0.0-rc.4",
   "private": true,
   "packageManager": "pnpm@11.7.0",
   "license": "MIT",
