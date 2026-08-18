@@ -17,6 +17,14 @@
 - [运行时 API 与服务契约](.oo/rfcs/0006-standard-voice-runtime.md)
 - [Sender 交互、落地计划与验证](.oo/rfcs/0006-standard-voice-sender-plan.md)
 
+## 插件扩展面 RFC
+
+- [总览与结论](.oo/rfcs/0011-plugin-extensibility.md)
+- [现有扩展面盘点](.oo/rfcs/0011-plugin-extensibility-current-surface.md)
+- [DSH / Cordis 结构对照](.oo/rfcs/0011-plugin-extensibility-dsh-comparison.md)
+- [边界与设计纪律](.oo/rfcs/0011-plugin-extensibility-boundaries.md)
+- [行动项与优先级](.oo/rfcs/0011-plugin-extensibility-actions.md)
+
 ## 插件运行时 RFC
 
 - [目录结构、manifest 与共享契约](.oo/rfcs/plugin-runtime-layout-manifest.md)
