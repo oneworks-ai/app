@@ -16,6 +16,7 @@ import {
   registerSessionCreationCancellation,
   throwIfSessionCreationCancelled
 } from '#~/services/session/creation-cancellation.js'
+import { beginSessionCreation, isSessionCreationActive } from '#~/services/session/creation-lifecycle.js'
 import { notifySessionUpdated } from '#~/services/session/runtime.js'
 import {
   deleteSessionWorkspace,
@@ -139,6 +140,12 @@ export async function createSessionWithInitialMessage(options: {
   } = options
   const db = getDb()
   const creationCancellationId = id ?? `session-creation-${Date.now()}-${Math.random().toString(16).slice(2)}`
+  const creationAlreadyActive = id != null && isSessionCreationActive(id)
+  const existingRequestedSession = id == null ? undefined : db.getSession(id)
+  const creationAttempt = id != null &&
+      (existingRequestedSession == null || creationAlreadyActive)
+    ? beginSessionCreation(id)
+    : undefined
   const creationCancellation = registerSessionCreationCancellation(creationCancellationId)
   let session: Session | undefined
 
@@ -271,14 +278,19 @@ export async function createSessionWithInitialMessage(options: {
       }
     }
 
+    creationAttempt?.complete()
     return session
   } catch (err) {
-    if (session != null) {
-      await deleteSessionWorkspace(session.id, { force: true })
-      if (db.getSessionWorkspace(session.id)?.state !== 'deleting') {
-        db.deleteSessionWorkspace(session.id)
-        db.deleteSession(session.id)
+    try {
+      if (session != null) {
+        await deleteSessionWorkspace(session.id, { force: true })
+        if (db.getSessionWorkspace(session.id)?.state !== 'deleting') {
+          db.deleteSessionWorkspace(session.id)
+          db.deleteSession(session.id)
+        }
       }
+    } finally {
+      creationAttempt?.fail(err)
     }
     throw err
   } finally {

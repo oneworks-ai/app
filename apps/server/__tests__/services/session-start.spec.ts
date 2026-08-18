@@ -259,6 +259,18 @@ describe('startAdapterSession', () => {
     expect(runtime.session.kill).not.toHaveBeenCalled()
   })
 
+  it('rejects a missing session without creating database or workspace state', async () => {
+    currentSession = undefined
+
+    await expect(startAdapterSession('sess-missing')).rejects.toThrow(
+      'Session sess-missing does not exist'
+    )
+
+    expect(createSession).not.toHaveBeenCalled()
+    expect(mocks.provisionSessionWorkspace).not.toHaveBeenCalled()
+    expect(mocks.run).not.toHaveBeenCalled()
+  })
+
   it('deduplicates concurrent start requests for the same session', async () => {
     let resolveRun:
       | ((value: { session: { emit: ReturnType<typeof vi.fn>; kill: ReturnType<typeof vi.fn> } }) => void)

@@ -4,6 +4,12 @@ import type { Server } from 'node:http'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { SessionCreationWaitError } from '#~/services/session/creation-lifecycle.js'
+
+const lifecycleMocks = vi.hoisted(() => ({
+  waitForSessionCreation: vi.fn()
+}))
+
 const addSessionSubscriberSocket = vi.fn()
 const removeSessionSubscriberSocket = vi.fn()
 const notifySessionUpdated = vi.fn()
@@ -69,6 +75,16 @@ vi.mock('#~/services/session/interaction.js', () => ({
   handleInteractionResponse
 }))
 
+vi.mock('#~/services/session/creation-lifecycle.js', async () => {
+  const actual = await vi.importActual<typeof import('#~/services/session/creation-lifecycle.js')>(
+    '#~/services/session/creation-lifecycle.js'
+  )
+  return {
+    ...actual,
+    waitForSessionCreation: lifecycleMocks.waitForSessionCreation
+  }
+})
+
 vi.mock('#~/services/session/runtime.js', () => ({
   addSessionSubscriberSocket,
   removeSessionSubscriberSocket,
@@ -100,6 +116,7 @@ describe('setupWebSocket', () => {
       runtimeKind: 'interactive',
       historySeedPending: false
     })
+    lifecycleMocks.waitForSessionCreation.mockResolvedValue(undefined)
 
     const { setupWebSocket } = await import('#~/websocket/server.js')
     setupWebSocket(new EventEmitter() as Server, {
@@ -214,6 +231,159 @@ describe('setupWebSocket', () => {
       adapter: undefined
     })
     expect(attachSocketToSession).toHaveBeenCalledWith('sess-1', ws, 'adapter')
+  })
+
+  it('waits for HTTP session creation before starting the adapter', async () => {
+    let completeCreation: (() => void) | undefined
+    lifecycleMocks.waitForSessionCreation.mockImplementationOnce(() =>
+      new Promise<void>((resolve) => {
+        completeCreation = resolve
+      })
+    )
+    startAdapterSession.mockResolvedValue({ sockets: new Set(), session: {} })
+
+    const ws = {
+      close: vi.fn(),
+      on: vi.fn(),
+      readyState: 1,
+      send: vi.fn()
+    }
+    const connection = connectionHandler?.(ws, {
+      url: '/ws?sessionId=sess-early',
+      headers: { host: 'localhost' }
+    })
+
+    await vi.waitFor(() => {
+      expect(lifecycleMocks.waitForSessionCreation).toHaveBeenCalledWith('sess-early', {
+        signal: expect.any(AbortSignal)
+      })
+    })
+    expect(startAdapterSession).not.toHaveBeenCalled()
+    expect(attachSocketToSession).not.toHaveBeenCalled()
+
+    getSession.mockReturnValue({ id: 'sess-early', status: 'running' })
+    completeCreation?.()
+    await connection
+
+    expect(startAdapterSession).toHaveBeenCalledWith('sess-early', expect.any(Object))
+    expect(attachSocketToSession).toHaveBeenCalledWith('sess-early', ws, 'adapter')
+  })
+
+  it('ignores a socket that closed before the lazy session handler loaded', async () => {
+    const ws = {
+      close: vi.fn(),
+      on: vi.fn(),
+      readyState: 3,
+      send: vi.fn()
+    }
+
+    await connectionHandler?.(ws, {
+      url: '/ws?sessionId=sess-already-closed',
+      headers: { host: 'localhost' }
+    })
+
+    expect(lifecycleMocks.waitForSessionCreation).not.toHaveBeenCalled()
+    expect(startAdapterSession).not.toHaveBeenCalled()
+    expect(attachSocketToSession).not.toHaveBeenCalled()
+    expect(ws.send).not.toHaveBeenCalled()
+  })
+
+  it('closes an early websocket when HTTP session creation fails', async () => {
+    lifecycleMocks.waitForSessionCreation.mockRejectedValueOnce(
+      new SessionCreationWaitError('sess-failed', 'Session creation failed')
+    )
+
+    const ws = {
+      close: vi.fn(),
+      on: vi.fn(),
+      readyState: 1,
+      send: vi.fn()
+    }
+
+    await connectionHandler?.(ws, {
+      url: '/ws?sessionId=sess-failed',
+      headers: { host: 'localhost' }
+    })
+
+    expect(startAdapterSession).not.toHaveBeenCalled()
+    expect(ws.send).toHaveBeenCalledOnce()
+    expect(JSON.parse(String(ws.send.mock.calls[0]?.[0]))).toMatchObject({
+      type: 'error',
+      data: {
+        message: 'Session creation failed',
+        fatal: true
+      }
+    })
+    expect(ws.close).toHaveBeenCalledWith(1008, 'Session creation failed')
+  })
+
+  it('cancels the creation wait when the websocket closes early', async () => {
+    lifecycleMocks.waitForSessionCreation.mockImplementationOnce((_sessionId, options) =>
+      new Promise<void>((_resolve, reject) => {
+        options.signal?.addEventListener('abort', () => {
+          reject(new SessionCreationWaitError('sess-closed', 'Session creation wait cancelled'))
+        }, { once: true })
+      })
+    )
+
+    let closeHandler: (() => void) | undefined
+    const ws = {
+      close: vi.fn(),
+      on: vi.fn((event: string, handler: () => void) => {
+        if (event === 'close') closeHandler = handler
+      }),
+      readyState: 1,
+      send: vi.fn()
+    }
+    const connection = connectionHandler?.(ws, {
+      url: '/ws?sessionId=sess-closed',
+      headers: { host: 'localhost' }
+    })
+
+    await vi.waitFor(() => {
+      expect(closeHandler).toBeTypeOf('function')
+    })
+    closeHandler?.()
+    await connection
+
+    expect(startAdapterSession).not.toHaveBeenCalled()
+    expect(attachSocketToSession).not.toHaveBeenCalled()
+    expect(ws.send).not.toHaveBeenCalled()
+  })
+
+  it('does not attach a socket that closes while the adapter is starting', async () => {
+    let finishAdapterStart: ((runtime: { sockets: Set<unknown>; session: object }) => void) | undefined
+    startAdapterSession.mockImplementationOnce(() =>
+      new Promise((resolve) => {
+        finishAdapterStart = resolve
+      })
+    )
+    getSession.mockReturnValue({ id: 'sess-starting', status: 'running' })
+
+    let closeHandler: (() => void) | undefined
+    const ws = {
+      close: vi.fn(),
+      on: vi.fn((event: string, handler: () => void) => {
+        if (event === 'close') closeHandler = handler
+      }),
+      readyState: 1,
+      send: vi.fn()
+    }
+    const connection = connectionHandler?.(ws, {
+      url: '/ws?sessionId=sess-starting',
+      headers: { host: 'localhost' }
+    })
+
+    await vi.waitFor(() => {
+      expect(startAdapterSession).toHaveBeenCalledOnce()
+      expect(closeHandler).toBeTypeOf('function')
+    })
+    closeHandler?.()
+    finishAdapterStart?.({ sockets: new Set(), session: {} })
+    await connection
+
+    expect(attachSocketToSession).not.toHaveBeenCalled()
+    expect(ws.send).not.toHaveBeenCalled()
   })
 
   it('keeps completed sessions in passive mode when opening the page', async () => {

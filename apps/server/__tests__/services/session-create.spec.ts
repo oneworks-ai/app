@@ -6,6 +6,7 @@ import {
   cancelSessionCreation,
   resetSessionCreationCancellationState
 } from '#~/services/session/creation-cancellation.js'
+import { resetSessionCreationLifecycleState, waitForSessionCreation } from '#~/services/session/creation-lifecycle.js'
 
 const mocks = vi.hoisted(() => ({
   getWorkspaceFolder: vi.fn(),
@@ -62,6 +63,7 @@ describe('createSessionWithInitialMessage', () => {
   const createSession = vi.fn()
   const updateSession = vi.fn()
   const updateSessionRuntimeState = vi.fn()
+  const getSessionRuntimeState = vi.fn()
   const getSession = vi.fn()
   const getSessionWorkspace = vi.fn()
   const saveMessage = vi.fn()
@@ -74,6 +76,7 @@ describe('createSessionWithInitialMessage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     resetSessionCreationCancellationState()
+    resetSessionCreationLifecycleState()
 
     createSession.mockImplementation((title?: string, id?: string) => ({
       id: id ?? 'sess-1',
@@ -84,11 +87,16 @@ describe('createSessionWithInitialMessage', () => {
       id,
       createdAt: Date.now()
     }))
+    getSessionRuntimeState.mockReturnValue({
+      runtimeKind: 'interactive',
+      historySeedPending: false
+    })
     saveMessage.mockReturnValue(true)
     vi.mocked(getDb).mockReturnValue({
       createSession,
       updateSession,
       updateSessionRuntimeState,
+      getSessionRuntimeState,
       getSession,
       getSessionWorkspace,
       saveMessage,
@@ -158,6 +166,72 @@ describe('createSessionWithInitialMessage', () => {
     )
   })
 
+  it('wakes early websocket waiters only after workspace provisioning completes', async () => {
+    let sessionPersisted = false
+    let finishProvisioning: (() => void) | undefined
+    createSession.mockImplementationOnce((title?: string, id?: string) => {
+      sessionPersisted = true
+      return {
+        id: id ?? 'sess-creation-race',
+        title,
+        createdAt: Date.now()
+      }
+    })
+    getSession.mockImplementation((id: string) =>
+      sessionPersisted
+        ? { id, createdAt: Date.now() }
+        : undefined
+    )
+    mocks.provisionSessionWorkspace.mockImplementationOnce(() =>
+      new Promise((resolve) => {
+        finishProvisioning = () =>
+          resolve({
+            sessionId: 'sess-creation-race',
+            workspaceFolder: '/workspace/root'
+          })
+      })
+    )
+
+    const waitPromise = waitForSessionCreation('sess-creation-race')
+    let waiterSettled = false
+    void waitPromise.then(() => {
+      waiterSettled = true
+    })
+    const creationPromise = createSessionWithInitialMessage({
+      id: 'sess-creation-race',
+      shouldStart: false
+    })
+
+    await vi.waitFor(() => {
+      expect(mocks.provisionSessionWorkspace).toHaveBeenCalledOnce()
+    })
+    expect(waiterSettled).toBe(false)
+
+    finishProvisioning?.()
+    await creationPromise
+    await expect(waitPromise).resolves.toBeUndefined()
+  })
+
+  it('does not discard an existing non-shell session on duplicate creation', async () => {
+    getSession.mockReturnValue({
+      id: 'sess-existing',
+      createdAt: Date.now(),
+      messageCount: 0,
+      title: 'Existing session'
+    })
+    createSession.mockImplementationOnce(() => {
+      throw new Error('UNIQUE constraint failed: sessions.id')
+    })
+
+    await expect(createSessionWithInitialMessage({
+      id: 'sess-existing',
+      shouldStart: false
+    })).rejects.toThrow('UNIQUE constraint failed')
+
+    expect(mocks.deleteRuntimeSessionStores).not.toHaveBeenCalled()
+    expect(deleteSession).not.toHaveBeenCalled()
+  })
+
   it('cancels creation before a pending session is created', async () => {
     cancelSessionCreation('sess-cancel-before-create')
 
@@ -197,6 +271,46 @@ describe('createSessionWithInitialMessage', () => {
 
     expect(mocks.deleteSessionWorkspace).toHaveBeenCalledWith('sess-cancel-during-workspace', { force: true })
     expect(deleteSession).toHaveBeenCalledWith('sess-cancel-during-workspace')
+  })
+
+  it('keeps the first creation cancellable after an overlapping duplicate request fails', async () => {
+    let rejectProvisioning: ((error: unknown) => void) | undefined
+    createSession
+      .mockImplementationOnce((title?: string, id?: string) => ({
+        id: id ?? 'sess-overlap-cancel',
+        title,
+        createdAt: Date.now()
+      }))
+      .mockImplementationOnce(() => {
+        throw new Error('UNIQUE constraint failed: sessions.id')
+      })
+    mocks.provisionSessionWorkspace.mockImplementationOnce(async (_sessionId, options) =>
+      new Promise((_resolve, reject) => {
+        rejectProvisioning = reject
+        options.signal?.addEventListener('abort', () => {
+          reject(options.signal?.reason)
+        }, { once: true })
+      })
+    )
+
+    const firstCreation = createSessionWithInitialMessage({
+      id: 'sess-overlap-cancel',
+      initialMessage: 'hello'
+    })
+    await vi.waitFor(() => {
+      expect(rejectProvisioning).toBeTypeOf('function')
+    })
+
+    await expect(createSessionWithInitialMessage({
+      id: 'sess-overlap-cancel',
+      initialMessage: 'duplicate'
+    })).rejects.toThrow('UNIQUE constraint failed')
+
+    expect(cancelSessionCreation('sess-overlap-cancel')).toBe('active')
+    await expect(firstCreation).rejects.toMatchObject({
+      code: 'session_creation_cancelled'
+    })
+    expect(deleteSession).toHaveBeenCalledWith('sess-overlap-cancel')
   })
 
   it('uses the shared workspace by default when the project config is not set', async () => {
