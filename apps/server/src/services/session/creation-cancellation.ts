@@ -1,6 +1,11 @@
 const PENDING_CANCELLATION_TTL_MS = 5 * 60 * 1000
 
-const activeCreationControllers = new Map<string, AbortController>()
+interface ActiveSessionCreationCancellation {
+  controller: AbortController
+  registrations: number
+}
+
+const activeCreationControllers = new Map<string, ActiveSessionCreationCancellation>()
 const pendingCreationCancellations = new Map<string, number>()
 
 export class SessionCreationCancelledError extends Error {
@@ -26,16 +31,27 @@ const prunePendingCancellations = () => {
 export const registerSessionCreationCancellation = (sessionId: string) => {
   prunePendingCancellations()
 
-  const controller = new AbortController()
-  activeCreationControllers.set(sessionId, controller)
-  if (pendingCreationCancellations.delete(sessionId)) {
-    controller.abort(new SessionCreationCancelledError(sessionId))
+  let state = activeCreationControllers.get(sessionId)
+  if (state == null) {
+    state = {
+      controller: new AbortController(),
+      registrations: 0
+    }
+    activeCreationControllers.set(sessionId, state)
+    if (pendingCreationCancellations.delete(sessionId)) {
+      state.controller.abort(new SessionCreationCancelledError(sessionId))
+    }
   }
+  state.registrations += 1
+  let unregistered = false
 
   return {
-    signal: controller.signal,
+    signal: state.controller.signal,
     unregister: () => {
-      if (activeCreationControllers.get(sessionId) === controller) {
+      if (unregistered) return
+      unregistered = true
+      state.registrations = Math.max(0, state.registrations - 1)
+      if (state.registrations === 0 && activeCreationControllers.get(sessionId) === state) {
         activeCreationControllers.delete(sessionId)
       }
     }
@@ -50,10 +66,10 @@ export const cancelSessionCreation = (
 ) => {
   prunePendingCancellations()
 
-  const controller = activeCreationControllers.get(sessionId)
-  if (controller != null) {
-    if (!controller.signal.aborted) {
-      controller.abort(new SessionCreationCancelledError(sessionId))
+  const state = activeCreationControllers.get(sessionId)
+  if (state != null) {
+    if (!state.controller.signal.aborted) {
+      state.controller.abort(new SessionCreationCancelledError(sessionId))
     }
     return 'active' as const
   }

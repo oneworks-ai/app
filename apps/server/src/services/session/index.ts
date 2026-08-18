@@ -91,7 +91,7 @@ import {
   clearSessionWorkspaceChangeTracking,
   finalizeSessionWorkspaceChangeTracking
 } from '#~/services/session/workspace-changes.js'
-import { provisionSessionWorkspace, resolveSessionWorkspace } from '#~/services/session/workspace.js'
+import { resolveSessionWorkspace } from '#~/services/session/workspace.js'
 import { runConfiguredWorktreeEnvironmentScripts } from '#~/services/worktree-environments.js'
 import { getSessionLogger } from '#~/utils/logger.js'
 
@@ -359,12 +359,6 @@ const buildAgentRoomRuntimeContextPrompt = (
     '```',
     '</system-prompt>'
   ].join('\n')
-}
-
-const resolveInteractiveSessionWorktreeDefault = async () => {
-  const { mergedConfig } = await loadConfigState()
-    .catch(() => ({ mergedConfig: {} as { conversation?: { createSessionWorktree?: boolean } } }))
-  return mergedConfig.conversation?.createSessionWorktree ?? false
 }
 
 const uniqueStrings = (values: string[]) => [...new Set(values)]
@@ -663,10 +657,13 @@ export async function startAdapterSession(
 
   const startPromise = (async () => {
     const db = getDb()
+    const existing = db.getSession(sessionId)
+    if (existing == null) {
+      throw new Error(`Session ${sessionId} does not exist`)
+    }
     const historyMessages = db.getMessages(sessionId) as WSEvent[]
     const hasHistory = historyMessages.some(event => event.type === 'message')
     const serverLogger = getSessionLogger(sessionId, 'server')
-    const existing = db.getSession(sessionId)
     const runtimeState = db.getSessionRuntimeState(sessionId)
     const resolvedModel = options.model ?? existing?.model
     const resolvedAdapter = options.adapter ?? existing?.adapter
@@ -749,16 +746,6 @@ export async function startAdapterSession(
       resolvedPromptType,
       resolvedPromptName
     }, '[server] Starting new adapter process')
-
-    if (existing == null) {
-      serverLogger.info({ sessionId }, '[server] Session not found in DB, creating new entry')
-      db.createSession(undefined, sessionId, undefined, undefined, {
-        runtimeKind: 'interactive'
-      })
-      await provisionSessionWorkspace(sessionId, {
-        createWorktree: await resolveInteractiveSessionWorktreeDefault()
-      })
-    }
 
     const withResolvedPermissionMode = (
       updates: Partial<Omit<Session, 'id' | 'createdAt' | 'messageCount'>>

@@ -5,6 +5,11 @@ import { v4 as uuidv4 } from 'uuid'
 import type { WebSocket } from 'ws'
 
 import { getDb } from '#~/db/index.js'
+import {
+  SessionCreationWaitError,
+  isSessionCreationWaitError,
+  waitForSessionCreation
+} from '#~/services/session/creation-lifecycle.js'
 import { interruptSession, killSession, processUserMessage, startAdapterSession } from '#~/services/session/index.js'
 import { handleInteractionResponse } from '#~/services/session/interaction.js'
 import {
@@ -49,15 +54,33 @@ export const handleSessionWebSocketConnection = async (
 
   const serverLogger = getSessionLogger(sessionId, 'server')
   serverLogger.info({ sessionId }, '[server] Connection established')
+  const creationWaitController = new AbortController()
+  let socketClosed = ws.readyState !== WEBSOCKET_OPEN
+  const isSocketOpen = () => !socketClosed && ws.readyState === WEBSOCKET_OPEN
+  ws.on('close', () => {
+    socketClosed = true
+    creationWaitController.abort()
+  })
+  if (!isSocketOpen()) {
+    creationWaitController.abort()
+    return
+  }
 
   try {
+    await waitForSessionCreation(sessionId, {
+      signal: creationWaitController.signal
+    })
+    if (!isSocketOpen()) return
+
     const db = getDb()
     const sessionData = db.getSession(sessionId)
+    if (sessionData == null) {
+      throw new SessionCreationWaitError(sessionId, 'Session creation completed without a session record')
+    }
     const sessionRuntimeState = db.getSessionRuntimeState(sessionId)
     const isExternalSession = sessionRuntimeState?.runtimeKind === 'external'
     const cachedRuntime = getAdapterSessionRuntime(sessionId)
-    const shouldAutoStartAdapter = sessionData == null ||
-      sessionData.status === 'running' ||
+    const shouldAutoStartAdapter = sessionData.status === 'running' ||
       sessionData.status === 'waiting_input'
 
     if (isExternalSession) {
@@ -83,15 +106,20 @@ export const handleSessionWebSocketConnection = async (
         adapter,
         account
       })
-      attachSocketToSession(sessionId, ws, 'adapter')
       if (cached == null) {
         throw new Error(`Failed to initialize session runtime for ${sessionId}`)
       }
+      if (!isSocketOpen()) return
+      attachSocketToSession(sessionId, ws, 'adapter')
     } else {
       attachSocketToSession(sessionId, ws, 'external')
     }
   } catch (err) {
+    if (!isSocketOpen()) return
     sendSocketError(ws, err)
+    if (isSessionCreationWaitError(err)) {
+      ws.close(1008, 'Session creation failed')
+    }
     return
   }
 
