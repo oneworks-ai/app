@@ -10,7 +10,7 @@
 
 1. 读上游 CLI 传入的 hook 输入
 2. 归一化为[事件词汇表](0012-hook-plugin-convergence-events.md)定义的事件
-3. 上报到 runtime endpoint；若该事件是 `transform` / `decide`，等待回执并按上游协议格式写回
+3. 上报到 runtime endpoint；若该事件有返回契约（`waterfall` / `bail` / `decide`），等待回执并按上游协议格式写回
 
 **上报器内不加载任何插件代码。** 这条是硬约束——一旦上报器开始加载插件，两套系统就会重新分叉。
 
@@ -80,8 +80,11 @@ CLI 的 `run` 命令本来就在自己进程内驱动任务，已有 `apps/cli/s
 
 | mode        | 顺序语义                                              |
 | ----------- | ----------------------------------------------------- |
-| `notify`    | 顺序无关，监听器互相独立                              |
-| `transform` | 按 priority 升序；同 priority 按 scope 字典序稳定排序 |
+| `emit`      | 同步派发，按 priority 升序                            |
+| `parallel`  | 并发启动，顺序无关                                    |
+| `serial`    | 按 priority 升序，后者可观察前者副作用                |
+| `bail`      | 按 priority 升序，首个非 `undefined` 者短路           |
+| `waterfall` | 按 priority 升序；同 priority 按 scope 字典序稳定排序 |
 | `decide`    | 顺序无关（判定合并可交换）                            |
 
 **宿主内置监听器占用保留的 priority 段，第三方插件无法插到它前面。** 这条替代当前"靠数组第一个位置"的隐式保证。
