@@ -25,6 +25,14 @@
 - [边界与设计纪律](.oo/rfcs/0011-plugin-extensibility-boundaries.md)
 - [行动项与优先级](.oo/rfcs/0011-plugin-extensibility-actions.md)
 
+## Hook 与插件系统收敛 RFC
+
+- [总览](.oo/rfcs/0012-hook-plugin-convergence.md)
+- [通用事件 API 设计](.oo/rfcs/0012-hook-plugin-convergence-events-api.md)
+- [事件词汇表](.oo/rfcs/0012-hook-plugin-convergence-events.md)
+- [运行时与裁决语义](.oo/rfcs/0012-hook-plugin-convergence-runtime.md)
+- [迁移与兼容](.oo/rfcs/0012-hook-plugin-convergence-migration.md)
+
 ## 插件运行时 RFC
 
 - [目录结构、manifest 与共享契约](.oo/rfcs/plugin-runtime-layout-manifest.md)

@@ -76,7 +76,7 @@
 
 ## 4. Agent loop 拦截（`@oneworks/hooks`）
 
-15 个事件（`packages/hooks/src/type.ts`），其中数个**带决策权**：
+14 个事件（`packages/hooks/src/type.ts`），其中数个**带决策权**：
 
 | 事件                                                | 插件能做什么                                                                  |
 | --------------------------------------------------- | ----------------------------------------------------------------------------- |
@@ -132,6 +132,6 @@ export type Plugin =
 | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | "插件之间不能声明依赖，没有 inject 语义" | `children` 是组合依赖；`extensionPoints.onAvailable` + `pluginApis.call` 是完整的运行时依赖装配，含等待语义、自动回收、epoch 竞态保护 |
 | "没有视图侧扩展点"                       | `toolUsePresentations` 是完整的声明式渲染扩展，已在 cua-driver / browser-driver / external-browser-driver 生产使用                    |
-| "agent loop 没有任何 seam"               | `@oneworks/hooks` 有 15 个事件，含 `PreToolUse` 否决权、`GenerateSystemPrompt` 改写权、`continue: false` 停机权                       |
+| "agent loop 没有任何 seam"               | `@oneworks/hooks` 有 14 个事件，含 `PreToolUse` 否决权、`GenerateSystemPrompt` 改写权、`continue: false` 停机权                       |
 
 三次误判都是在能读到完整代码库的前提下发生的，根因是能力面分散在手写文档（`.oo/docs/usage/plugins/ui-runtime.md` 400+ 行）、SKILL.md 和源码之间，没有单一事实源。

@@ -38,7 +38,7 @@ One Works 的插件扩展面是分多轮长出来的：`plugins` 配置与 manif
 
 ## 结论摘要
 
-**我们的扩展面比内部认知的更完整。** 依赖装配（extension point 的 `onAvailable` 等待语义、`pluginApis.call` 的挂起队列）、视图侧声明式渲染（`toolUsePresentations`）、agent loop 拦截（`@oneworks/hooks` 的 15 个事件，含 `PreToolUse` 否决权）都已存在并在生产使用。
+**我们的扩展面比内部认知的更完整。** 依赖装配（extension point 的 `onAvailable` 等待语义、`pluginApis.call` 的挂起队列）、视图侧声明式渲染（`toolUsePresentations`）、agent loop 拦截（`@oneworks/hooks` 的 14 个事件，含 `PreToolUse` 否决权）都已存在并在生产使用。
 
 **真正缺失的是"注册型 seam"。** 现有 seam 全部是拦截型：宿主流程跑到某个点回调插件，插件可否决或增补，但不提供实现。缺的是"插件提供一个实现并成为运行时一部分"——典型是 model provider。这不是遗漏，而是 hook 的跨进程传输形态（每事件一次子进程往返）天然只能承载拦截型。要开注册型 seam 需走常驻 server plugin runtime，不是扩展 hook 事件表。
 
