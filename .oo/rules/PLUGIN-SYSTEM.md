@@ -1,6 +1,6 @@
 ---
 alwaysApply: false
-description: 当任务涉及插件系统的 manifest、解析装配、生命周期、ctx 能力面、插件间通信、UI 贡献、事件、信任边界或分发时加载的插件系统入口。
+description: 当任务涉及插件系统的统一模型（贡献/参与/提供）、manifest、解析装配、生命周期、事件、信任边界或分发时加载的插件系统入口。
 ---
 
 # 插件系统入口
@@ -13,10 +13,9 @@ description: 当任务涉及插件系统的 manifest、解析装配、生命周�
 - 插件包与 manifest：`plugin-system/manifest.md`（待写）
 - 解析与装配：`plugin-system/resolution.md`（待写）
 - 生命周期：`plugin-system/lifecycle.md`（待写）
-- ctx 能力面：`plugin-system/context.md`（待写）
-- 插件间通信：[`plugin-system/communication.md`](./plugin-system/communication.md)
-- UI 贡献：`plugin-system/contributions.md`（待写）
-- 事件系统：`plugin-system/events.md`（待写）
+- 贡献（UI、声明式渲染、extension points、资产）：[`plugin-system/contribute.md`](./plugin-system/contribute.md)
+- 参与（事件、mode、裁决）：[`plugin-system/participate.md`](./plugin-system/participate.md)
+- 提供（plugin APIs、commands、channels、注册型 seam）：[`plugin-system/provide.md`](./plugin-system/provide.md)
 - 信任与安全边界：`plugin-system/trust.md`（待写）
 - 分发与可见性：`plugin-system/distribution.md`（待写）
 
