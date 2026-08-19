@@ -53,9 +53,19 @@ security: true                该事件的结果影响权限或安全边界
 
 `define` 时校验，违反即失败（fail loud，纪律 4）：
 
-- `emit` + `cross-process` → 跨进程无法同步派发
+- `emit` + `cross-process` → 语义冗余，见下
 - 非 `decide` + `security: true` → 权限类事件只能用 `decide`
 - `decide` 缺判定格 → 无法合并
+
+### 为什么 `emit` 不可跨进程
+
+**不是因为技术上做不到。** 同进程的 `worker_threads` 之间可以用 `Atomics.wait()` + `SharedArrayBuffer` + `receiveMessageOnPort()` 实现真同步阻塞（`synckit` 即此模式；Node 允许主线程 `Atomics.wait`，浏览器禁止）。真跨进程（`child_process`）则基本不可行——`SharedArrayBuffer` 需要共享内存映射，传不过 IPC 管道；剩下 `execSync` 每事件起进程、阻塞 fd 读不可移植，都不该用。
+
+**真正的理由是语义冗余。** `emit` 的价值有三条：无 microtask 调度、派发点与监听器同栈使异常直接传播、顺序确定无交错。跨进程后三条全部失效——已有 IPC 往返使调度开销可忽略，栈本来就断了且异常必须序列化，顺序确定来自串行传输而非同步语义。
+
+因此跨进程的"同步 `emit`"实质是一个**阻塞的通知**，而那已经有名字了：`serial`。保留两个名字只会让插件作者在等价选项间做无意义的选择。
+
+该论证不依赖传输方式：即便未来把 hook worker 从 `child_process` 换成 `worker_threads`（为省冷启动，见[运行时与裁决语义](0012-hook-plugin-convergence-runtime.md)的待实测项），`Atomics.wait` 可用了，结论仍不变。
 
 ### 为什么权限类禁用 `bail`
 
