@@ -7,9 +7,24 @@ description: 贡献关系：插件交出数据、由接收方渲染或使用的�
 
 返回入口：[PLUGIN-SYSTEM.md](../PLUGIN-SYSTEM.md)
 
-**插件交出一份数据，接收方决定怎么用。** 单向，无返回值，权限强度最弱。
+**插件交出一份数据，接收方决定怎么用。** 单向，无返回值。
 
 接收方可能是宿主（UI slots、资产目录）或另一个插件（extension points）。无论哪种，**插件都不控制最终呈现**。
+
+## 安全分级不是一律 `none`
+
+按[统一模型的两个正交维度](./README.md#两个正交约束维度)，贡献的 security 属性挂在**通道**上，且并非一律最弱：
+
+| 通道                                                            | `transport`            | `security`     |
+| --------------------------------------------------------------- | ---------------------- | -------------- |
+| UI slots / views / routes / themes                              | `in-process`（client） | `none`         |
+| 声明式渲染 `toolUsePresentations`                               | `in-process`（client） | `none`         |
+| extension points                                                | `in-process`（client） | `none`         |
+| **资产目录**（skills / rules / specs / entities / mcp / hooks） | 构建期投影             | **`advisory`** |
+
+**资产是例外，必须单独对待。** `skills` / `rules` / `specs` / `entities` 进 system prompt，`mcp` 进工具集，`hooks` 进适配器的原生 hook 配置——它们直接决定模型看到什么、能调什么。
+
+因此资产贡献受 `advisory` 约束：**必须可从 session log 重建**（model-visible ⟺ logged）。新增资产类型时，同时要有对应的 session event，否则无法复现"agent 当时为什么这么做"。
 
 ## 为什么贡献是首选形态
 

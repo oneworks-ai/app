@@ -11,6 +11,20 @@ description: 提供关系：插件挂出具名能力供他方调用，含当前 
 
 因此提供类能力必须满足：调用方身份可见、契约可校验、超时可控、销毁可回收。
 
+## security 边界不在通道上
+
+按[统一模型的两个正交维度](./README.md#两个正交约束维度)，提供关系与另外两种关系有个本质差别：
+
+**通道本身无从分级。** plugin API 与 command 的 handler 是插件自己的代码，它能做什么完全取决于**宿主给了它什么 ctx 能力**，与它把这个能力怎么暴露出去无关。给通道打 `security` 标记既不可校验也无意义——插件可以声明 `none` 然后在 handler 里做任何 ctx 允许的事。
+
+推论：
+
+- **提供型通道不设 `security` 字段**，`define` 时也无从校验
+- 真正的约束落在 **ctx 能力面的设计**上：宿主不给的能力，插件无论如何暴露都拿不到
+- 因此新增 ctx 能力比新增提供型通道更需要评审——前者扩大了所有插件的能力上界
+
+`transport` 维度仍然适用：plugin APIs 是 `in-process`（client），commands 是 `cross-process`（client → server），channels 是 `in-process`（server）。
+
 ## Plugin APIs（client，✅）
 
 一对一、带 schema 的调用，是**跨插件调用的首选**。
