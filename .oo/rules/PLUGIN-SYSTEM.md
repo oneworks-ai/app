@@ -16,7 +16,7 @@ description: 当任务涉及插件系统的统一模型（贡献/参与/提供�
 - 贡献（UI、声明式渲染、extension points、资产）：[`plugin-system/contribute.md`](./plugin-system/contribute.md)
 - 参与（事件、mode、裁决）：[`plugin-system/participate.md`](./plugin-system/participate.md)
 - 提供（plugin APIs、commands、channels、注册型 seam）：[`plugin-system/provide.md`](./plugin-system/provide.md)
-- 信任与安全边界：`plugin-system/trust.md`（待写）
+- 信任与安全边界：[`plugin-system/trust.md`](./plugin-system/trust.md)
 - 分发与可见性：`plugin-system/distribution.md`（待写）
 
 相邻主题：

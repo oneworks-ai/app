@@ -60,7 +60,7 @@ description: 插件系统规范总览：统一模型、能力矩阵、实现状�
 因此：
 
 - **贡献与参与**的约束可在 `define` / 注册时机械校验
-- **提供**的约束只能落在 ctx 能力面的设计上，见 `trust.md`（待写）
+- **提供**的约束只能落在 ctx 能力面的设计上，见 [`trust.md`](./trust.md)
 
 ## 能力矩阵
 
@@ -83,7 +83,7 @@ description: 插件系统规范总览：统一模型、能力矩阵、实现状�
 1. **插件不能实例化其他插件。** 动态插件图由宿主经 overlay 注入，发生在配置解析层。
 2. **插件只能收紧权限，不能放宽。** 宿主基线判定是地基，插件判定取 meet。
 3. **能力不支持时必须 fail loud。** 禁止 accepted-then-ignored。
-4. **`scope` 是逻辑隔离，不是安全边界。** 真正的边界见 `trust.md`（待写）。
+4. **`scope` 是逻辑隔离，不是安全边界。** 真正的边界只有四道，见 [`trust.md`](./trust.md)。
 
 ## 分章
 
@@ -97,7 +97,7 @@ description: 插件系统规范总览：统一模型、能力矩阵、实现状�
 | `manifest.md`（待写）                | 插件包结构、manifest 字段、入口导出约定                                       |
 | `resolution.md`（待写）              | 发现来源、children、scope 分配、overlay、冲突处理                             |
 | `lifecycle.md`（待写）               | activate / dispose / reload / watch、失败态                                   |
-| `trust.md`（待写）                   | 信任模型、安全边界、什么不是保证                                              |
+| [`trust.md`](./trust.md)             | 信任：没有沙箱、四道真实边界、ctx 能力评审清单、什么不是保证                  |
 | `distribution.md`（待写）            | marketplace、安装卸载、版本、可见性与诊断                                     |
 
 ## 实现状态

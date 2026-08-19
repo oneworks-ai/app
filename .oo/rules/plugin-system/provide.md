@@ -20,8 +20,8 @@ description: 提供关系：插件挂出具名能力供他方调用，含当前 
 推论：
 
 - **提供型通道不设 `security` 字段**，`define` 时也无从校验
-- 真正的约束落在 **ctx 能力面的设计**上：宿主不给的能力，插件无论如何暴露都拿不到
-- 因此新增 ctx 能力比新增提供型通道更需要评审——前者扩大了所有插件的能力上界
+- 真正的约束落在 **ctx 能力面的设计**上：宿主不给的能力，插件无论如何暴露都拿不到（首方能力门见 [`trust.md`](./trust.md#1-ctx-能力面最重要的一道)）
+- 因此新增 ctx 能力比新增提供型通道更需要评审——前者扩大了所有插件的能力上界，评审清单见 [`trust.md`](./trust.md#新增-ctx-能力的评审清单)
 
 `transport` 维度仍然适用：plugin APIs 是 `in-process`（client），commands 是 `cross-process`（client → server），channels 是 `in-process`（server）。
 
