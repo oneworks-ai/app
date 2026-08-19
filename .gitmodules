@@ -39,3 +39,7 @@
 	path = vendors/cordiverse/cordis
 	url = https://github.com/cordiverse/cordis.git
 	branch = main
+[submodule "vendors/oneworks-ai/weave"]
+	path = vendors/oneworks-ai/weave
+	url = https://github.com/oneworks-ai/weave.git
+	branch = main
