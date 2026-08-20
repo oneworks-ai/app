@@ -16,7 +16,7 @@ import {
   resolveCachedServerPackageEnv,
   resolveClientDistPath,
   resolveClientPackageDir,
-  resolveServerExecutable,
+  resolveServerRuntime,
   serverChildPath
 } from './paths'
 import { isChildProcessRunning, killChildProcess, writePrefixedChunk } from './process-utils'
@@ -300,7 +300,8 @@ export const createWorkspaceServiceManager = ({
       const port = await getAvailablePort()
       logServerStartup(service.displayName, `startup port allocated port=${port} elapsed=${elapsedMs(startedAt)}`)
       const desktopClientOrigin = getDesktopClientOrigin()
-      const serverExecutable = resolveServerExecutable()
+      const serverRuntime = resolveServerRuntime()
+      const serverExecutable = serverRuntime.executable
       logServerStartup(
         service.displayName,
         `startup spawning executable=${serverExecutable} ` +
@@ -325,7 +326,7 @@ export const createWorkspaceServiceManager = ({
         env: {
           ...packagedWorkspaceRuntimeEnv,
           DB_PATH: workspaceServiceDataPaths.dbPath,
-          ELECTRON_RUN_AS_NODE: serverExecutable === process.execPath ? '1' : process.env.ELECTRON_RUN_AS_NODE,
+          ...serverRuntime.env,
           ...resolvePackagedCliPathEnv(packagedWorkspaceRuntimeEnv),
           ...resolveRuntimeConsumerBootstrapEnv(),
           ...resolveCachedServerPackageEnv(packagedWorkspaceRuntimeEnv),

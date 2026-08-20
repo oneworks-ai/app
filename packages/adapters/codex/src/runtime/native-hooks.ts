@@ -11,6 +11,7 @@ import {
   mergeManagedHookGroups,
   prepareManagedHookRuntime,
   readJsonFileOrDefault,
+  resolveManagedHookNodePath,
   resolveManagedHookScriptPath,
   shellQuote,
   writeJsonFile,
@@ -372,7 +373,7 @@ export const ensureCodexSharedNativeHooksInstalled = async (params: {
   const hooksPath = resolve(params.homeDir, '.codex', 'hooks.json')
   const existing = await readJsonFileOrDefault<unknown>(hooksPath, {})
   const command = buildNodeScriptCommand({
-    nodePath: process.execPath,
+    nodePath: resolveManagedHookNodePath(process.env),
     scriptPath: MANAGED_COMMAND_PATH
   })
   const merged = mergeManagedHookGroups({

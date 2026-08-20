@@ -14,7 +14,7 @@ import {
   repoRoot,
   resolveCachedServerPackageEnv,
   resolveClientPackageDir,
-  resolveServerExecutable,
+  resolveServerRuntime,
   serverChildPath
 } from './paths'
 import { isChildProcessRunning, killChildProcess, writePrefixedChunk } from './process-utils'
@@ -79,12 +79,13 @@ export const createManagerRuntimeEnv = ({
     ...runtimePackageCacheVersionEnv
   }
   const clientPackageDir = resolveClientPackageDir(packagedRuntimeEnv)
-  const serverExecutable = resolveServerExecutable()
+  const serverRuntime = resolveServerRuntime(env)
+  const serverExecutable = serverRuntime.executable
 
   return {
     ...packagedRuntimeEnv,
     DB_PATH: dbPath,
-    ELECTRON_RUN_AS_NODE: serverExecutable === process.execPath ? '1' : env.ELECTRON_RUN_AS_NODE,
+    ...serverRuntime.env,
     ...resolvePackagedCliPathEnv(packagedRuntimeEnv),
     ...resolveRuntimeConsumerBootstrapEnv(),
     ...resolveCachedServerPackageEnv(packagedRuntimeEnv),
@@ -195,7 +196,7 @@ export const createManagerServiceManager = ({
       const port = await getAvailablePort()
       service.port = port
       service.serverUrl = `http://${SERVER_HOST}:${port}`
-      const serverExecutable = resolveServerExecutable()
+      const serverExecutable = resolveServerRuntime().executable
       const launchCwd = isDev ? repoRoot : app.getPath('userData')
       const runtimeEnv = createManagerRuntimeEnv({
         clientOrigin,

@@ -67,6 +67,10 @@ export const buildNodeScriptCommand = (params: {
   scriptPath: string
 }) => `${shellQuote(params.nodePath)} ${shellQuote(params.scriptPath)}`
 
+export const resolveManagedHookNodePath = (
+  env: Record<string, string | null | undefined>
+) => env.__ONEWORKS_PROJECT_NODE_PATH__?.trim() || process.execPath
+
 export const prepareManagedHookRuntime = (
   ctx: {
     cwd: string
@@ -74,7 +78,7 @@ export const prepareManagedHookRuntime = (
   }
 ) => {
   const mockHome = resolveMockHome(ctx.cwd, ctx.env)
-  const nodePath = process.execPath
+  const nodePath = resolveManagedHookNodePath(ctx.env)
 
   ctx.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__ = ctx.env.__ONEWORKS_PROJECT_WORKSPACE_FOLDER__ ?? ctx.cwd
   ctx.env.__ONEWORKS_PROJECT_NODE_PATH__ = nodePath
