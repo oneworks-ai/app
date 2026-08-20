@@ -163,10 +163,15 @@ export function SessionList({
     }
 
     if (action.command != null) {
+      const runtimeSource = pluginSessionGroups.find(candidate => (
+        candidate.id === group.id && candidate.pluginScope === group.pluginScope
+      ))?.pluginRuntimeSource
+      if (runtimeSource == null) return
+
       await executePluginCommand?.(group.pluginScope, action.command, {
         actionId: action.id,
         groupId: group.id
-      })
+      }, runtimeSource)
       return
     }
 

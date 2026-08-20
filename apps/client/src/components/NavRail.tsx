@@ -36,6 +36,7 @@ import { useInterfaceLanguageConfig } from '#~/hooks/use-interface-language-conf
 import { usePanelResize } from '#~/hooks/use-panel-resize'
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
 import { appLanguageOptions, getActiveAppLanguageOption } from '#~/i18n'
+import type { PluginRuntimeSource } from '#~/plugins/plugin-context'
 import { resolvePluginContributionText } from '#~/plugins/plugin-i18n'
 import type {
   PluginContributionMenuItem,
@@ -95,6 +96,7 @@ const appendMenuItemToLastSection = (
 
 type ScopedPluginMenuItem = Omit<PluginContributionMenuItem, 'children'> & {
   children?: PluginContributionMenuItem[]
+  pluginRuntimeSource: PluginRuntimeSource
   pluginScope: string
 }
 
@@ -898,7 +900,7 @@ export function NavRail({
   const pluginLanguage = i18n.resolvedLanguage ?? i18n.language
   const runPluginMenuItem = React.useCallback((item: ScopedPluginMenuItem) => {
     if (item.command != null && executePluginCommand != null) {
-      void executePluginCommand(item.pluginScope, item.command, item.payload)
+      void executePluginCommand(item.pluginScope, item.command, item.payload, item.pluginRuntimeSource)
       return
     }
     if (item.route != null) {
@@ -911,11 +913,12 @@ export function NavRail({
   }, [executePluginCommand, navigate])
   const runPluginAccountPopoverAction = React.useCallback((
     pluginScope: string,
+    pluginRuntimeSource: PluginRuntimeSource,
     action: PluginContributionNavFooterAccountAction
   ) => {
     setOpenPluginFooterPopoverKey(null)
     if (action.command != null && executePluginCommand != null) {
-      void executePluginCommand(pluginScope, action.command, action.payload)
+      void executePluginCommand(pluginScope, action.command, action.payload, pluginRuntimeSource)
       return
     }
     if (action.route != null) {
@@ -929,9 +932,10 @@ export function NavRail({
   }, [executePluginCommand, navigate])
   const toNavRailPluginMenuItem = React.useCallback((
     item: ScopedPluginMenuItem | PluginContributionMenuItem,
-    pluginScope: string
+    pluginScope: string,
+    pluginRuntimeSource: PluginRuntimeSource
   ): NavRailMoreMenuItem => {
-    const scopedItem = { ...item, pluginScope }
+    const scopedItem = { ...item, pluginRuntimeSource, pluginScope }
     return {
       icon: scopedItem.icon ?? 'layers',
       key: `plugin:${pluginScope}:${scopedItem.id}`,
@@ -942,14 +946,14 @@ export function NavRail({
       danger: scopedItem.danger,
       disabled: scopedItem.disabled,
       shortcut: scopedItem.shortcut,
-      children: scopedItem.children?.map(child => toNavRailPluginMenuItem(child, pluginScope)),
+      children: scopedItem.children?.map(child => toNavRailPluginMenuItem(child, pluginScope, pluginRuntimeSource)),
       onSelect: () => {
         runPluginMenuItem(scopedItem)
       }
     }
   }, [currentPath, pluginLanguage, runPluginMenuItem])
   const pluginMoreMenuSections = React.useMemo<NavRailMoreMenuSection[]>(() => {
-    const items = pluginMoreItems.map(item => toNavRailPluginMenuItem(item, item.pluginScope))
+    const items = pluginMoreItems.map(item => toNavRailPluginMenuItem(item, item.pluginScope, item.pluginRuntimeSource))
 
     return items.length === 0
       ? []
@@ -965,7 +969,7 @@ export function NavRail({
           const isActive = item.route != null && currentPath === item.route
           const footerKey = `plugin-footer:${item.pluginScope}:${item.id}`
           const accountPopover = isPluginFooterAccountPopoverItem(item) ? item.accountPopover : undefined
-          const menuItem = toNavRailPluginMenuItem(item, item.pluginScope)
+          const menuItem = toNavRailPluginMenuItem(item, item.pluginScope, item.pluginRuntimeSource)
           const childItems = 'children' in menuItem && menuItem.children != null ? menuItem.children : []
           const hasDropdown = accountPopover != null || childItems.length > 0
           const dropdownItems = hasDropdown
@@ -1018,7 +1022,12 @@ export function NavRail({
           if (accountPopover != null) {
             const accountDropdownItems = buildAccountPopoverMenuItems({
               accountPopover,
-              onAction: (action) => runPluginAccountPopoverAction(item.pluginScope, action)
+              onAction: (action) =>
+                runPluginAccountPopoverAction(
+                  item.pluginScope,
+                  item.pluginRuntimeSource,
+                  action
+                )
             })
             return (
               <Dropdown

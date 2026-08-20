@@ -10,7 +10,7 @@ import { createSocket } from '#~/ws.js'
 
 import { listPluginSnapshot } from './api'
 import { PluginContext } from './plugin-context'
-import type { PluginContextValue, PluginRefreshOptions } from './plugin-context'
+import type { PluginContextValue, PluginRefreshOptions, PluginRuntimeSource } from './plugin-context'
 import type { PluginContributionSurface, PluginRuntimeInstance } from './plugin-manifest'
 import { PluginRegistry } from './plugin-registry'
 import { activatePluginClient } from './plugin-runtime'
@@ -19,8 +19,6 @@ interface PluginWatchEvent {
   type: 'plugin.changed' | 'plugin.ready' | 'plugin.watch.updated'
   scope: string
 }
-
-type PluginRuntimeSource = 'current' | 'manager'
 
 interface PluginProviderProps {
   children: ReactNode
@@ -43,6 +41,7 @@ export function PluginProvider({
   runtimeSource,
   surface = 'workspace'
 }: PluginProviderProps) {
+  const resolvedRuntimeSource = resolvePluginRuntimeSource(runtimeSource)
   const notifications = useNotifications()
   const registry = useMemo(() => new PluginRegistry(), [])
   const instancesRef = useRef<PluginRuntimeInstance[]>([])
@@ -66,10 +65,10 @@ export function PluginProvider({
     const explicitServerBaseUrl = normalizeServerBaseUrl(runtimeServerBaseUrl)
     if (explicitServerBaseUrl != null) return explicitServerBaseUrl
     if (deferUntilRuntimeServerBaseUrl) return undefined
-    return resolvePluginRuntimeSource(runtimeSource) === 'manager'
+    return resolvedRuntimeSource === 'manager'
       ? getLauncherManagerServerBaseUrl()
       : getServerBaseUrl()
-  }, [deferUntilRuntimeServerBaseUrl, runtimeServerBaseUrl, runtimeSource])
+  }, [deferUntilRuntimeServerBaseUrl, resolvedRuntimeSource, runtimeServerBaseUrl])
 
   const setRuntimeSnapshot = useCallback((runtime: PluginRuntimeEndpoint | undefined) => {
     registry.setRuntimeContext({
@@ -298,7 +297,15 @@ export function PluginProvider({
     }
   }, [bumpImportVersion, pluginServerBaseUrl, refreshPlugins])
 
+  const contributionRuntimeSources = useMemo(() => [{
+    pluginServerBaseUrl,
+    registry,
+    runtimeSource: resolvedRuntimeSource,
+    snapshot
+  }], [pluginServerBaseUrl, registry, resolvedRuntimeSource, snapshot])
+
   const value = useMemo<PluginContextValue>(() => ({
+    contributionRuntimeSources,
     pluginSnapshotStatus,
     pluginServerBaseUrl,
     ready,
@@ -308,6 +315,7 @@ export function PluginProvider({
     runtimeEndpoint,
     snapshot
   }), [
+    contributionRuntimeSources,
     pluginServerBaseUrl,
     pluginSnapshotStatus,
     ready,

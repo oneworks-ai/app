@@ -1,13 +1,22 @@
 // @vitest-environment happy-dom
-import { act } from 'react'
+import { act, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { NotificationProvider } from '#~/notifications/NotificationProvider'
+import { PluginContributionProvider } from '#~/plugins/PluginContributionProvider'
 import { PluginProvider } from '#~/plugins/PluginProvider'
 import { usePluginContext } from '#~/plugins/plugin-context'
+import type {
+  PluginContributionNavItem,
+  PluginContributionWorkbenchAddMenuItem,
+  PluginContributionWorkbenchTab
+} from '#~/plugins/plugin-manifest'
+import { buildPluginSidebarNavigationItems } from '#~/plugins/plugin-sidebar-navigation'
+import { usePluginCommandExecutor, usePluginSlot } from '#~/plugins/plugin-slots'
 import { AppRoutes } from '#~/routes/AppRoutes'
 import { mergeRuntimeEnv } from '#~/runtime-config'
 import type { RuntimeEnv } from '#~/runtime-config'
@@ -95,28 +104,59 @@ const ok = (data: unknown) =>
     status: 200
   })
 
-const runtimePlugin = (scope: string, withRoute = false) => ({
+const runtimePlugin = (
+  scope: string,
+  roles: Array<'manager' | 'workspace'>,
+  contributions: Record<string, unknown> = {}
+) => ({
   enabled: true,
-  ...(withRoute
-    ? {
-      manifest: {
-        name: scope,
-        plugin: {
-          contributions: {
-            roles: ['workspace'],
-            routes: [{ clientView: 'view', id: 'view', title: 'Workspace view' }]
-          }
-        },
-        version: '1.0.0'
-      }
-    }
-    : {}),
+  manifest: {
+    name: scope,
+    plugin: {
+      contributions: { roles, surfaces: ['workspace'], ...contributions },
+      server: { roles }
+    },
+    version: '1.0.0'
+  },
   name: scope,
   requestId: scope,
   scope,
   sourceGroup: 'project',
   watch: { enabled: false }
 })
+
+const runtimePlugins = (origin: 'manager' | 'workspace' | 'workspace-2') => {
+  const workspaceTitle = origin === 'workspace-2' ? 'Workspace navigation v2' : 'Workspace navigation'
+  const plugins = [
+    runtimePlugin('manager-runtime', ['manager'], {
+      navItems: [{ id: 'manager-nav', title: 'Manager navigation', route: '/plugins/manager-runtime/view' }],
+      routes: [{ clientView: 'view', id: 'view', title: 'Manager view' }],
+      workbenchAddMenu: [{ id: 'manager-add', tab: 'manager-tab', title: 'Manager add menu' }],
+      workbenchTabs: [{ clientView: 'view', id: 'manager-tab', title: 'Manager workbench tab' }]
+    }),
+    runtimePlugin('workspace-runtime', ['workspace'], {
+      navItems: [{
+        actions: [{ command: 'workspace-command', id: 'workspace-command', title: 'Workspace command' }],
+        id: 'workspace-nav',
+        route: '/plugins/workspace-runtime/view',
+        title: workspaceTitle
+      }],
+      routes: [{ clientView: 'view', id: 'view', title: 'Workspace view' }],
+      workbenchAddMenu: [{ id: 'workspace-add', tab: 'workspace-tab', title: 'Workspace add menu' }],
+      workbenchTabs: [{ clientView: 'view', id: 'workspace-tab', title: 'Workspace workbench tab' }]
+    }),
+    runtimePlugin('dual-runtime', ['manager', 'workspace'], {
+      navItems: [{
+        id: 'dual-nav',
+        title: origin === 'manager' ? 'Dual navigation from manager' : 'Dual navigation from workspace'
+      }]
+    }),
+    runtimePlugin('launcher-runtime', ['manager', 'workspace'], {
+      navItems: [{ id: 'launcher-nav', surfaces: ['launcher'], title: 'Launcher navigation' }]
+    })
+  ]
+  return origin === 'manager' ? plugins : plugins.filter(plugin => plugin.scope !== 'manager-runtime')
+}
 
 const catalog = (origin: 'manager' | 'workspace') => ({
   plugins: [{
@@ -137,12 +177,77 @@ const catalog = (origin: 'manager' | 'workspace') => ({
 })
 
 function ShellProbe() {
+  const navigate = useNavigate()
   const { pluginServerBaseUrl, snapshot } = usePluginContext()
+  const pluginNavItems = usePluginSlot<PluginContributionNavItem>('nav.items')
+  const pluginWorkbenchAddMenu = usePluginSlot<PluginContributionWorkbenchAddMenuItem>('workbench.addMenu')
+  const pluginWorkbenchTabs = usePluginSlot<PluginContributionWorkbenchTab>('workbench.tabs')
+  const executePluginCommand = usePluginCommandExecutor()
+  const navigationItems = useMemo(() =>
+    buildPluginSidebarNavigationItems({
+      executeCommand: executePluginCommand,
+      items: pluginNavItems,
+      language: 'en',
+      navigate: route => void navigate(route),
+      pathname: globalThis.location.pathname
+    }), [executePluginCommand, navigate, pluginNavItems])
   return (
-    <div data-server-base-url={pluginServerBaseUrl} data-testid='manager-shell'>
-      {snapshot.instances.map(item => item.scope).sort().join(',')}
-    </div>
+    <>
+      <div data-server-base-url={pluginServerBaseUrl} data-testid='manager-shell'>
+        {snapshot.instances.map(item => item.scope).sort().join(',')}
+      </div>
+      <nav aria-label='Plugin navigation'>
+        {navigationItems.map(item => (
+          <span key={item.key}>
+            <button data-testid={item.key} onClick={item.onSelect} type='button'>{item.label}</button>
+            {item.actions?.map(action => (
+              <button data-testid={action.key} key={action.key} onClick={action.onSelect} type='button'>
+                {action.label}
+              </button>
+            ))}
+          </span>
+        ))}
+      </nav>
+      <div data-testid='workbench-add-menu'>
+        {pluginWorkbenchAddMenu.map(item => item.title).join(',')}
+      </div>
+      <div data-testid='workbench-tabs'>
+        {pluginWorkbenchTabs.map(item => item.title).join(',')}
+      </div>
+    </>
   )
+}
+
+function ContributionBridgeHarness({ children }: { children: ReactNode }) {
+  const [enabled, setEnabled] = useState(true)
+  const [workspaceServerBaseUrl, setWorkspaceServerBaseUrl] = useState('https://workspace.example')
+  const content = (
+    <>
+      <button data-testid='toggle-contributions' onClick={() => setEnabled(value => !value)} type='button'>
+        toggle
+      </button>
+      <button
+        data-testid='switch-workspace-runtime'
+        onClick={() => setWorkspaceServerBaseUrl('https://workspace-2.example')}
+        type='button'
+      >
+        switch workspace
+      </button>
+      {children}
+    </>
+  )
+
+  return enabled
+    ? (
+      <PluginContributionProvider
+        runtimeServerBaseUrl={workspaceServerBaseUrl}
+        runtimeSource='current'
+        surface='workspace'
+      >
+        {content}
+      </PluginContributionProvider>
+    )
+    : content
 }
 
 const renderRoutes = (container: HTMLElement, path: string): Root => {
@@ -150,12 +255,14 @@ const renderRoutes = (container: HTMLElement, path: string): Root => {
   act(() => {
     root.render(
       <NotificationProvider>
-        <PluginProvider runtimeSource='manager'>
-          <ShellProbe />
-          <MemoryRouter initialEntries={[path]}>
-            <AppRoutes />
-          </MemoryRouter>
-        </PluginProvider>
+        <MemoryRouter initialEntries={[path]}>
+          <PluginProvider runtimeSource='manager'>
+            <ContributionBridgeHarness>
+              <ShellProbe />
+              <AppRoutes />
+            </ContributionBridgeHarness>
+          </PluginProvider>
+        </MemoryRouter>
       </NotificationProvider>
     )
   })
@@ -189,6 +296,7 @@ describe('plugin management workspace transport', () => {
     originalRuntimeEnv = runtimeGlobal.__ONEWORKS_PROJECT_RUNTIME_ENV__
     transportState.requestUrls.length = 0
     transportState.workspaceGeneration = 'workspace-v1'
+    globalThis.history.replaceState({}, '', '/ui/w/w_isolated123/')
     mergeRuntimeEnv({
       __ONEWORKS_PROJECT_MANAGER_SERVER_BASE_URL__: 'https://manager.example',
       __ONEWORKS_PROJECT_SERVER_BASE_URL__: 'https://workspace.example',
@@ -201,9 +309,24 @@ describe('plugin management workspace transport', () => {
       vi.fn(async (input: RequestInfo | URL) => {
         const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input : input.url)
         transportState.requestUrls.push(url.toString())
-        const origin = url.origin === 'https://manager.example' ? 'manager' : 'workspace'
+        const runtimeOrigin = url.origin === 'https://manager.example'
+          ? 'manager'
+          : url.origin === 'https://workspace-2.example'
+          ? 'workspace-2'
+          : 'workspace'
+        const origin = runtimeOrigin === 'manager' ? 'manager' : 'workspace'
         if (url.pathname === '/api/plugins') {
-          return ok({ plugins: [runtimePlugin(`${origin}-runtime`, origin === 'workspace')] })
+          return ok({
+            plugins: runtimePlugins(runtimeOrigin),
+            runtime: {
+              id: `${runtimeOrigin}-endpoint`,
+              role: runtimeOrigin === 'manager' ? 'manager' : 'workspace',
+              status: 'online'
+            }
+          })
+        }
+        if (url.pathname.includes('/commands/')) {
+          return ok({ origin: runtimeOrigin })
         }
         if (url.pathname === '/api/plugins/marketplace/catalog') {
           return ok(catalog(origin))
@@ -232,6 +355,7 @@ describe('plugin management workspace transport', () => {
     }
     container.remove()
     runtimeGlobal.__ONEWORKS_PROJECT_RUNTIME_ENV__ = originalRuntimeEnv
+    globalThis.history.replaceState({}, '', '/')
     vi.unstubAllGlobals()
     vi.clearAllMocks()
   })
@@ -272,6 +396,83 @@ describe('plugin management workspace transport', () => {
     ))
     expect(catalogAndConfigRequests.length).toBeGreaterThanOrEqual(4)
     expect(catalogAndConfigRequests.every(url => url.startsWith('https://workspace.example/'))).toBe(true)
+  })
+
+  it('discovers workspace host chrome without replacing manager ownership or leaking launcher contributions', async () => {
+    root = renderRoutes(container, '/')
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="plugin:manager-runtime:manager-nav"]')?.textContent)
+        .toBe('Manager navigation')
+      expect(container.querySelector('[data-testid="plugin:workspace-runtime:workspace-nav"]')?.textContent)
+        .toBe('Workspace navigation')
+    })
+
+    const navigationText = container.querySelector('nav')?.textContent ?? ''
+    expect(navigationText).toContain('Dual navigation from manager')
+    expect(navigationText).not.toContain('Dual navigation from workspace')
+    expect(navigationText.match(/Dual navigation from manager/gu)).toHaveLength(1)
+    expect(navigationText).not.toContain('Launcher navigation')
+    expect(container.querySelector('[data-testid="workbench-add-menu"]')?.textContent)
+      .toBe('Manager add menu')
+    expect(container.querySelector('[data-testid="workbench-tabs"]')?.textContent)
+      .toBe('Manager workbench tab')
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(
+        '[data-testid="workspace-runtime:workspace-nav:workspace-command"]'
+      )?.click()
+    })
+    await waitFor(() => {
+      expect(transportState.requestUrls.some(url => (
+        url.startsWith('https://workspace.example/') && url.includes('/commands/workspace-command')
+      ))).toBe(true)
+    })
+    expect(transportState.requestUrls.some(url => (
+      url.startsWith('https://manager.example/') && url.includes('/commands/workspace-command')
+    ))).toBe(false)
+  })
+
+  it('replaces supplemental contributions on runtime change and removes them on bridge unmount', async () => {
+    root = renderRoutes(container, '/')
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="plugin:workspace-runtime:workspace-nav"]')?.textContent)
+        .toBe('Workspace navigation')
+    })
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="switch-workspace-runtime"]')?.click()
+    })
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="plugin:workspace-runtime:workspace-nav"]')?.textContent)
+        .toBe('Workspace navigation v2')
+    })
+    expect((container.querySelector('nav')?.textContent ?? '').match(/Workspace navigation/gu)).toHaveLength(1)
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(
+        '[data-testid="workspace-runtime:workspace-nav:workspace-command"]'
+      )?.click()
+    })
+    await waitFor(() => {
+      expect(transportState.requestUrls.some(url => (
+        url.startsWith('https://workspace-2.example/') && url.includes('/commands/workspace-command')
+      ))).toBe(true)
+    })
+    expect(transportState.requestUrls.some(url => (
+      url.startsWith('https://workspace.example/') && url.includes('/commands/workspace-command')
+    ))).toBe(false)
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="toggle-contributions"]')?.click()
+    })
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="plugin:workspace-runtime:workspace-nav"]')).toBeNull()
+    })
+    expect(container.querySelector('[data-testid="plugin:manager-runtime:manager-nav"]')?.textContent)
+      .toBe('Manager navigation')
+    expect(container.querySelector('nav')?.textContent).toContain('Dual navigation from manager')
+    expect(container.querySelector('nav')?.textContent).not.toContain('Workspace navigation v2')
   })
 
   it('retains manager ownership for plugin-contributed routes', async () => {
