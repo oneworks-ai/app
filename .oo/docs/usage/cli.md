@@ -43,7 +43,7 @@
 - `oneworks logout [user]`：删除本机保存的 Relay 登录态
 - `oneworks accounts add <adapter> [accountName]`：触发 adapter 原生登录流程；Codex / Claude Code 保存 global 账号快照，返回 artifact 的其他 adapter 使用 project home 私有目录
 - `oneworks accounts show <adapter> <accountName>`：查看某个 adapter 账号的详情和最新额度摘要（CLI 当前会强制刷新）
-- `oneworks accounts remove <adapter> <accountName>`：删除 One Works 的 adapter 账号记录；只有 portable 且平台隔离的凭证才会同时执行官方 logout，device-bound 原生登录保留在设备上
+- `oneworks accounts remove <adapter> <accountName>`：删除 One Works 的 adapter 账号记录；只有官方 CLI 能把 logout 精确限定到所选账号时才会同时执行，默认 home 等机器级原生登录保留在设备上
 
 这些命令默认以项目根目录作为 workspace。每次 CLI 命令会记录开始、插件加载阶段、终态和耗时；可通过标准 OTel 环境变量发送到 Relay。完整配置和支持包边界见[诊断、遥测与支持包](./diagnostics.md)。
 

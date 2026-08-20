@@ -35,13 +35,14 @@ describe('claude managed account usage', () => {
   it('rejects a changed machine identity before reading quota', async () => {
     const cwd = await createTempDir('ow-claude-usage-identity-workspace-')
     const realHome = await createTempDir('ow-claude-usage-identity-home-')
-    let ctx = createContext({ cwd, realHome })
+    let ctx = createContext({ cwd, realHome, deviceCredential: true })
     await manageClaudeAccount(ctx, { action: 'add', account: 'work' })
     const globalConfig = await readGlobalConfig(realHome)
     mocks.resolveQuota.mockClear()
     ctx = createContext({
       cwd,
       realHome,
+      deviceCredential: true,
       statusEmail: 'other@example.test',
       userConfig: globalConfig
     })

@@ -14,9 +14,12 @@ export interface ClaudeAccountsTestContextOptions {
   userConfig?: Config
   deviceCredential?: boolean
   sharedNativeCredential?: boolean
+  machineWideNativeCredential?: boolean
   authOverride?: boolean
   commandLog?: string
   ignoreLoginSigterm?: boolean
+  invalidDefaultStatus?: boolean
+  invalidDefaultStatusAfterLogin?: boolean
   loginDelayMs?: number
   loginToken?: string
   loginEmail?: string
@@ -24,6 +27,7 @@ export interface ClaudeAccountsTestContextOptions {
   statusMissingAuthMethod?: boolean
   statusMissingProvider?: boolean
   statusMissingEmail?: boolean
+  defaultStatusMissingEmail?: boolean
   statusMissingOrgId?: boolean
   statusEmail?: string
   statusOrgId?: string
@@ -51,11 +55,29 @@ const args = process.argv.slice(2)
 const configDir = process.env.CLAUDE_CONFIG_DIR
 const realHome = process.env.__ONEWORKS_PROJECT_REAL_HOME__
 const sharedNativeCredential = process.env.FAKE_CLAUDE_SHARED_NATIVE === '1'
-const nativeMarkerPath = sharedNativeCredential
+const machineWideNativeCredential = process.env.FAKE_CLAUDE_MACHINE_WIDE_NATIVE === '1'
+const isolatedDeviceCredential = process.env.FAKE_CLAUDE_DEVICE === '1'
+const invalidDefaultAfterLoginMarker = path.join(realHome, '.fake-claude-invalid-default-after-login')
+const nativeMarkerPath = machineWideNativeCredential
   ? path.join(realHome, '.fake-claude-native-login.json')
-  : configDir == null ? undefined : path.join(configDir, '.native-login')
+  : configDir == null
+  ? sharedNativeCredential ? path.join(realHome, '.fake-claude-native-login.json') : undefined
+  : isolatedDeviceCredential ? path.join(configDir, '.native-login') : undefined
 if (process.env.FAKE_CLAUDE_COMMAND_LOG) {
   fs.appendFileSync(process.env.FAKE_CLAUDE_COMMAND_LOG, JSON.stringify(args) + '\\n')
+}
+if (
+  args[0] === 'auth' &&
+  args[1] === 'status' &&
+  configDir == null &&
+  (
+    process.env.FAKE_CLAUDE_INVALID_DEFAULT_STATUS === '1' ||
+    process.env.FAKE_CLAUDE_INVALID_DEFAULT_STATUS_AFTER_LOGIN === '1' &&
+      fs.existsSync(invalidDefaultAfterLoginMarker)
+  )
+) {
+  console.log('invalid default status')
+  process.exit(2)
 }
 if (!configDir) {
   if (!(args[0] === 'auth' && args[1] === 'status' && nativeMarkerPath && fs.existsSync(nativeMarkerPath))) {
@@ -71,7 +93,7 @@ if (args[0] === 'auth' && args[1] === 'login') {
   process.stdout.write('login started\\n')
   const loginDelayMs = Number(process.env.FAKE_CLAUDE_LOGIN_DELAY_MS || 0)
   if (loginDelayMs > 0) await new Promise(resolve => setTimeout(resolve, loginDelayMs))
-  if (process.env.FAKE_CLAUDE_DEVICE === '1' || sharedNativeCredential) fs.writeFileSync(nativeMarkerPath, JSON.stringify({
+  if (nativeMarkerPath) fs.writeFileSync(nativeMarkerPath, JSON.stringify({
     email: process.env.FAKE_CLAUDE_LOGIN_EMAIL || 'ada@example.test',
     orgId: process.env.FAKE_CLAUDE_LOGIN_ORG_ID || 'org-test'
   }))
@@ -100,6 +122,9 @@ if (args[0] === 'auth' && args[1] === 'login') {
       }
     }
   }))
+  if (process.env.FAKE_CLAUDE_INVALID_DEFAULT_STATUS_AFTER_LOGIN === '1') {
+    fs.writeFileSync(invalidDefaultAfterLoginMarker, '1')
+  }
   console.log('login complete')
   process.exit(0)
 }
@@ -129,7 +154,7 @@ if (args[0] === 'auth' && args[1] === 'status') {
   const nativeLoggedIn = nativeMarkerPath != null &&
     fs.existsSync(nativeMarkerPath) &&
     !(process.env.FAKE_CLAUDE_REQUIRE_DEFAULT_CONFIG_DIR === '1' && configDir != null)
-  const loggedIn = nativeLoggedIn || (!sharedNativeCredential && credentialPath != null && fs.existsSync(credentialPath))
+  const loggedIn = nativeLoggedIn || (credentialPath != null && fs.existsSync(credentialPath))
   let nativeIdentity = {}
   if (nativeLoggedIn) {
     try {
@@ -152,6 +177,7 @@ if (args[0] === 'auth' && args[1] === 'status') {
   if (process.env.FAKE_CLAUDE_STATUS_MISSING_AUTH_METHOD === '1') delete readyStatus.authMethod
   if (process.env.FAKE_CLAUDE_STATUS_MISSING_PROVIDER === '1') delete readyStatus.apiProvider
   if (process.env.FAKE_CLAUDE_STATUS_MISSING_EMAIL === '1') delete readyStatus.email
+  if (configDir == null && process.env.FAKE_CLAUDE_DEFAULT_STATUS_MISSING_EMAIL === '1') delete readyStatus.email
   if (process.env.FAKE_CLAUDE_STATUS_MISSING_ORG_ID === '1') delete readyStatus.orgId
   console.log(JSON.stringify(loggedIn ? readyStatus : { loggedIn: false, authMethod: 'none', apiProvider: 'firstParty' }))
   process.exit(loggedIn ? 0 : 1)
@@ -179,6 +205,7 @@ export const createClaudeAccountsTestContext = (params: ClaudeAccountsTestContex
     ...(params.inheritedConfigDir == null ? {} : { CLAUDE_CONFIG_DIR: params.inheritedConfigDir }),
     ...(params.deviceCredential ? { FAKE_CLAUDE_DEVICE: '1' } : {}),
     ...(params.sharedNativeCredential ? { FAKE_CLAUDE_SHARED_NATIVE: '1' } : {}),
+    ...(params.machineWideNativeCredential ? { FAKE_CLAUDE_MACHINE_WIDE_NATIVE: '1' } : {}),
     ...(params.authOverride
       ? {
         ANTHROPIC_API_KEY: 'must-not-bypass-selected-account',
@@ -192,6 +219,8 @@ export const createClaudeAccountsTestContext = (params: ClaudeAccountsTestContex
       : {}),
     ...(params.commandLog == null ? {} : { FAKE_CLAUDE_COMMAND_LOG: params.commandLog }),
     ...(params.ignoreLoginSigterm ? { FAKE_CLAUDE_IGNORE_SIGTERM: '1' } : {}),
+    ...(params.invalidDefaultStatus ? { FAKE_CLAUDE_INVALID_DEFAULT_STATUS: '1' } : {}),
+    ...(params.invalidDefaultStatusAfterLogin ? { FAKE_CLAUDE_INVALID_DEFAULT_STATUS_AFTER_LOGIN: '1' } : {}),
     ...(params.loginDelayMs == null ? {} : { FAKE_CLAUDE_LOGIN_DELAY_MS: String(params.loginDelayMs) }),
     ...(params.loginToken == null ? {} : { FAKE_CLAUDE_LOGIN_TOKEN: params.loginToken }),
     ...(params.loginEmail == null ? {} : { FAKE_CLAUDE_LOGIN_EMAIL: params.loginEmail }),
@@ -199,6 +228,7 @@ export const createClaudeAccountsTestContext = (params: ClaudeAccountsTestContex
     ...(params.statusMissingAuthMethod ? { FAKE_CLAUDE_STATUS_MISSING_AUTH_METHOD: '1' } : {}),
     ...(params.statusMissingProvider ? { FAKE_CLAUDE_STATUS_MISSING_PROVIDER: '1' } : {}),
     ...(params.statusMissingEmail ? { FAKE_CLAUDE_STATUS_MISSING_EMAIL: '1' } : {}),
+    ...(params.defaultStatusMissingEmail ? { FAKE_CLAUDE_DEFAULT_STATUS_MISSING_EMAIL: '1' } : {}),
     ...(params.statusMissingOrgId ? { FAKE_CLAUDE_STATUS_MISSING_ORG_ID: '1' } : {}),
     ...(params.statusEmail == null ? {} : { FAKE_CLAUDE_STATUS_EMAIL: params.statusEmail }),
     ...(params.statusOrgId == null ? {} : { FAKE_CLAUDE_STATUS_ORG_ID: params.statusOrgId }),

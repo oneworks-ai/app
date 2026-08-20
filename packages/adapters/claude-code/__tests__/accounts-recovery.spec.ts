@@ -73,7 +73,7 @@ describe('claude account login recovery', () => {
     await assertRestoredSnapshot()
   })
 
-  it('waits for a killed Darwin reauthentication before marking synced inline auth missing', async () => {
+  it('waits for a killed Darwin reauthentication before restoring the synced inline snapshot', async () => {
     const cwd = await createTempDir('ow-claude-darwin-abort-workspace-')
     const realHome = await createTempDir('ow-claude-darwin-abort-home-')
     const commandLog = join(await createTempDir('ow-claude-darwin-abort-log-'), 'commands.jsonl')
@@ -100,17 +100,17 @@ describe('claude account login recovery', () => {
       onProgress: (event) => {
         if (event.stream === 'stdout' && event.message.includes('login started')) controller.abort()
       }
-    })).rejects.toThrow(/cannot be rolled back per account/i)
+    })).rejects.toThrow(/isolated device credential cannot be rolled back/i)
 
     const commands = await readFile(commandLog, 'utf8')
     expect(commands).toContain('["auth","login","--claudeai"]')
-    expect(commands).not.toContain('["auth","logout"]')
+    expect(commands).toContain('["auth","logout"]')
     await new Promise(resolve => setTimeout(resolve, 350))
     await expect(access(join(realHome, '.fake-claude-native-login.json'))).rejects.toThrow()
     const configDir = join(resolveGlobalAdapterAccountDir(ctx.env, 'claude-code', 'portable'), 'config')
     expect(await readFile(join(configDir, '.credentials.json'), 'utf8')).toContain('test-token')
     expect(await readFile(join(configDir, '.oneworks-credential-revision'), 'utf8')).not.toBe('')
     const accounts = await getClaudeAccounts(ctx, {})
-    expect(accounts.accounts.find(account => account.key === 'portable')).toMatchObject({ status: 'missing' })
+    expect(accounts.accounts.find(account => account.key === 'portable')).toMatchObject({ status: 'ready' })
   })
 })

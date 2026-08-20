@@ -66,6 +66,20 @@ class ClaudeCredentialUnavailableError extends Error {
   }
 }
 
+class ClaudeDuplicateIdentityError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ClaudeDuplicateIdentityError'
+  }
+}
+
+class ClaudeCredentialIsolationError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ClaudeCredentialIsolationError'
+  }
+}
+
 const CLAUDE_SYSTEM_ACCOUNT_KEY = 'system'
 const CLAUDE_CREDENTIAL_TYPE = 'claude-credentials-json'
 const CLAUDE_DEVICE_CREDENTIAL_TYPE = 'claude-native-credential-store'
@@ -270,9 +284,10 @@ const isDeviceBoundClaudeAccount = (account: ClaudeConfiguredAccount | undefined
   isRecord(account?.auth) && account.auth.storage === 'device'
 )
 
-const usesMachineWideClaudeAuth = (account: ClaudeConfiguredAccount | undefined) => (
-  process.platform === 'darwin' || isDeviceBoundClaudeAccount(account)
-)
+const usesMachineWideClaudeAuth = (
+  ctx: Pick<AdapterCtx, 'env'>,
+  account: ClaudeConfiguredAccount | undefined
+) => usesSystemClaudeDeviceAuth(ctx, account)
 
 const withClaudeAccountResourceLock = async <T>(params: {
   ctx: Pick<AdapterCtx, 'env'>
@@ -281,7 +296,7 @@ const withClaudeAccountResourceLock = async <T>(params: {
   callback: () => Promise<T>
 }) => {
   const runAccountOperation = () => withClaudeAccountOperationLock(params.ctx, params.key, params.callback)
-  return usesMachineWideClaudeAuth(params.account)
+  return usesMachineWideClaudeAuth(params.ctx, params.account)
     ? await withClaudeDeviceAuthOperationLock(params.ctx, runAccountOperation)
     : await runAccountOperation()
 }
@@ -384,7 +399,7 @@ export const acquireClaudeAccountSessionLease = async (
 ) => {
   const isSystemSession = accountKey == null || accountKey === CLAUDE_SYSTEM_ACCOUNT_KEY
   const account = isSystemSession ? undefined : resolveExistingConfiguredAccount(ctx, accountKey)
-  const usesDeviceAuthResource = isSystemSession || usesMachineWideClaudeAuth(account)
+  const usesDeviceAuthResource = isSystemSession || usesMachineWideClaudeAuth(ctx, account)
   if (usesDeviceAuthResource) {
     return await withClaudeDeviceAuthOperationLock(ctx, async () => {
       if (accountKey != null && account != null) {
@@ -981,10 +996,10 @@ const assertManagedClaudeAuthStatus = (
   return status
 }
 
-const assertCompleteClaudeMachineIdentity = (status: ClaudeAuthStatus) => {
+const assertCompleteClaudeDeviceIdentity = (status: ClaudeAuthStatus) => {
   if (status.email == null || status.orgId == null) {
     throw new Error(
-      'Claude auth status did not provide the email and organization required for a machine-wide account binding.'
+      'Claude auth status did not provide the email and organization required for a device-bound account.'
     )
   }
 }
@@ -1067,7 +1082,7 @@ const readClaudeAccountProbe = async (params: {
   forceUsageRefresh?: boolean
 }) => {
   const status = await getClaudeAuthStatus(params)
-  if (params.expectedEmail != null || params.expectedOrganizationId != null) {
+  if (status.loggedIn && (params.expectedEmail != null || params.expectedOrganizationId != null)) {
     assertManagedClaudeAuthStatus(status, params.expectedEmail, params.expectedOrganizationId)
   }
   const state = sanitizeClaudeState(await readJsonRecord(resolveClaudeStatePath(params.ctx, params.configDir)))
@@ -1129,15 +1144,27 @@ const resolveAccountTitle = (
     normalizeString(probe?.status.orgName) ??
     key
 
-const resolveConfiguredDefaultAccount = (configured: ReturnType<typeof resolveConfiguredAccounts>) => {
+const resolveManagedSystemAccountKey = (
+  ctx: Pick<AdapterCtx, 'env'>,
+  configured: ReturnType<typeof resolveConfiguredAccounts>
+) => Object.entries(configured.accounts).find(([, account]) => usesSystemClaudeDeviceAuth(ctx, account))?.[0]
+
+const resolveConfiguredDefaultAccount = (
+  ctx: Pick<AdapterCtx, 'env'>,
+  configured: ReturnType<typeof resolveConfiguredAccounts>
+) => {
   const explicit = configured.defaultAccount
-  if (explicit === CLAUDE_SYSTEM_ACCOUNT_KEY || (explicit != null && configured.accounts[explicit] != null)) {
+  if (explicit === CLAUDE_SYSTEM_ACCOUNT_KEY) {
+    return resolveManagedSystemAccountKey(ctx, configured) ?? explicit
+  }
+  if (explicit != null && configured.accounts[explicit] != null) {
     return explicit
   }
   return Object.keys(configured.accounts)[0]
 }
 
 const buildAccountDetail = (params: {
+  ctx: Pick<AdapterCtx, 'env'>
   key: string
   account?: ClaudeConfiguredAccount
   defaultAccount?: string
@@ -1182,7 +1209,7 @@ const buildAccountDetail = (params: {
       },
     actions: params.system
       ? [...CLAUDE_SYSTEM_ACCOUNT_ACTIONS]
-      : usesMachineWideClaudeAuth(account)
+      : usesMachineWideClaudeAuth(params.ctx, account)
       ? [...CLAUDE_DEVICE_ACCOUNT_ACTIONS]
       : [...CLAUDE_ACCOUNT_ACTIONS]
   }
@@ -1196,7 +1223,7 @@ const probeConfiguredAccountUnlocked = async (
 ) => {
   await assertClaudeAccountGenerationIsCurrent(ctx, key, account)
   const configDir = await materializeClaudeAccount({ ctx, accountKey: key, account })
-  if (usesMachineWideClaudeAuth(account)) await assertClaudeDeviceAuthBinding(ctx, key, account)
+  if (usesMachineWideClaudeAuth(ctx, account)) await assertClaudeDeviceAuthBinding(ctx, key, account)
   const probe = await readClaudeAccountProbe({
     ctx,
     configDir: usesSystemClaudeDeviceAuth(ctx, account) ? undefined : configDir,
@@ -1226,6 +1253,27 @@ const probeConfiguredAccount = async (
     callback: async () => probeConfiguredAccountUnlocked(ctx, key, account)
   })
 
+const assertClaudeStoredIdentityIsUnique = (
+  key: string,
+  identity: Pick<ClaudeConfiguredAccount, 'email' | 'organizationId'>,
+  accounts: Record<string, unknown>
+) => {
+  const email = normalizeString(identity.email)?.toLowerCase()
+  const organizationId = normalizeString(identity.organizationId)
+  if (email == null || organizationId == null) return
+  for (const [otherKey, value] of Object.entries(accounts)) {
+    if (otherKey === key || !isRecord(value)) continue
+    if (
+      normalizeString(value.email)?.toLowerCase() === email &&
+      normalizeString(value.organizationId) === organizationId
+    ) {
+      throw new ClaudeDuplicateIdentityError(
+        `Claude identity "${identity.email}" is already connected as account "${otherKey}".`
+      )
+    }
+  }
+}
+
 const persistClaudeAccount = async (params: {
   ctx: Pick<AdapterCtx, 'cwd' | 'env'>
   key: string
@@ -1253,6 +1301,7 @@ const persistClaudeAccount = async (params: {
       if (accountChanged) {
         throw new Error(`Claude account "${params.key}" changed while this operation was in progress.`)
       }
+      assertClaudeStoredIdentityIsUnique(params.key, params.account, accounts)
       accounts[params.key] = {
         ...existing,
         ...params.account,
@@ -1279,13 +1328,14 @@ const persistClaudeAccount = async (params: {
 const removeClaudeAccountConfig = async (
   ctx: Pick<AdapterCtx, 'cwd' | 'env'>,
   key: string,
-  expectedAccount: ClaudeConfiguredAccount
+  expectedAccount: ClaudeConfiguredAccount,
+  beforeRemove?: () => Promise<void>
 ) => {
   await updateGlobalAdapterAccounts({
     adapter: 'claude-code',
     cwd: ctx.cwd,
     env: ctx.env,
-    update: (adapterConfig, accounts) => {
+    update: async (adapterConfig, accounts) => {
       const current = isRecord(accounts[key]) ? accounts[key] : undefined
       if (
         current == null ||
@@ -1295,6 +1345,7 @@ const removeClaudeAccountConfig = async (
       ) {
         throw new Error(`Claude account "${key}" changed while removal was waiting for the configuration lock.`)
       }
+      await beforeRemove?.()
       delete accounts[key]
       const accountTombstones = addAdapterAccountTombstone(
         normalizeAdapterAccountTombstones(adapterConfig.accountTombstones),
@@ -1359,7 +1410,7 @@ const buildStoredAccount = async (params: {
     description: source === 'claude-system-login'
       ? 'References the existing machine-wide Claude login shared with Claude Desktop and the default CLI.'
       : process.platform === 'darwin' || credentialContent == null
-      ? 'Logged in via `claude auth login`; the shared native device store permits one active managed identity.'
+      ? 'Logged in via `claude auth login` with an isolated Claude configuration and device-bound credential.'
       : 'Logged in via `claude auth login`; portable credential snapshot stored by One Works.',
     auth,
     state: encodeClaudeState(params.probe.state),
@@ -1415,24 +1466,178 @@ const readCanonicalClaudeAccount = async (
   key: string
 ) => (await readCanonicalClaudeAccounts(ctx))[key]
 
+const assertClaudeAuthStatusCanProveIsolation = (status: ClaudeAuthStatus | undefined) => {
+  if (status?.loggedIn !== true) return
+  assertManagedClaudeAuthStatus(status)
+  assertCompleteClaudeDeviceIdentity(status)
+}
+
+const claudeAuthStatusIdentityMatches = (
+  left: ClaudeAuthStatus | undefined,
+  right: ClaudeAuthStatus | undefined
+) => {
+  assertClaudeAuthStatusCanProveIsolation(left)
+  assertClaudeAuthStatusCanProveIsolation(right)
+  const leftEmail = normalizeString(left?.email)?.toLowerCase()
+  const rightEmail = normalizeString(right?.email)?.toLowerCase()
+  const leftOrganizationId = normalizeString(left?.orgId)
+  const rightOrganizationId = normalizeString(right?.orgId)
+  return left?.loggedIn === true && right?.loggedIn === true &&
+    leftEmail != null && rightEmail != null && leftEmail === rightEmail &&
+    leftOrganizationId != null && rightOrganizationId != null && leftOrganizationId === rightOrganizationId
+}
+
+const assertClaudeCredentialProfileIsIsolated = async (params: {
+  ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'logger' | 'configs' | 'configState'>
+  key: string
+  configDir: string
+  expectedAccount?: ClaudeConfiguredAccount
+  rejectPreexistingCredential?: boolean
+  targetStatus?: ClaudeAuthStatus
+}) => {
+  const targetStatus = params.targetStatus ?? await getClaudeAuthStatus({
+    ctx: params.ctx,
+    configDir: params.configDir
+  })
+  if (!targetStatus.loggedIn) return targetStatus
+  if (params.rejectPreexistingCredential === true) {
+    throw new ClaudeCredentialIsolationError(
+      `Claude config profile for "${params.key}" already resolves a native login before its isolated login starts. ` +
+        'This Claude CLI cannot safely prove that the profile is independent.'
+    )
+  }
+  if (params.expectedAccount != null) {
+    assertManagedClaudeAuthStatus(
+      targetStatus,
+      normalizeString(params.expectedAccount.email),
+      normalizeString(params.expectedAccount.organizationId)
+    )
+  }
+  const defaultStatus = await getClaudeAuthStatus({ ctx: params.ctx })
+  if (claudeAuthStatusIdentityMatches(targetStatus, defaultStatus)) {
+    throw new ClaudeCredentialIsolationError(
+      `Claude config profile for "${params.key}" shares the default Claude home credential. ` +
+        'One Works will not mutate or logout it as an isolated account.'
+    )
+  }
+  for (const [otherKey, account] of Object.entries(await readCanonicalClaudeAccounts(params.ctx))) {
+    if (otherKey === params.key || usesSystemClaudeDeviceAuth(params.ctx, account)) continue
+    const otherStatus = await getClaudeAuthStatus({
+      ctx: params.ctx,
+      configDir: resolveClaudeAccountConfigDir(params.ctx, otherKey)
+    })
+    if (claudeAuthStatusIdentityMatches(targetStatus, otherStatus)) {
+      throw new ClaudeCredentialIsolationError(
+        `Claude config profiles "${params.key}" and "${otherKey}" resolve the same native credential. ` +
+          'This Claude CLI cannot safely run them concurrently.'
+      )
+    }
+  }
+  return targetStatus
+}
+
+const buildClaudeAuthStatusFingerprint = (status: ClaudeAuthStatus) => {
+  assertClaudeAuthStatusCanProveIsolation(status)
+  return JSON.stringify({
+    apiProvider: normalizeString(status.apiProvider),
+    authMethod: normalizeString(status.authMethod),
+    email: normalizeString(status.email)?.toLowerCase(),
+    loggedIn: status.loggedIn,
+    orgId: normalizeString(status.orgId)
+  })
+}
+
+const readClaudeCredentialPeerSnapshot = async (
+  ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'logger' | 'configs' | 'configState'>,
+  key: string
+) => {
+  const snapshot: Record<string, string> = {
+    default: buildClaudeAuthStatusFingerprint(await getClaudeAuthStatus({ ctx }))
+  }
+  for (const [otherKey, account] of Object.entries(await readCanonicalClaudeAccounts(ctx))) {
+    if (otherKey === key || usesSystemClaudeDeviceAuth(ctx, account)) continue
+    snapshot[`account:${otherKey}`] = buildClaudeAuthStatusFingerprint(
+      await getClaudeAuthStatus({
+        ctx,
+        configDir: resolveClaudeAccountConfigDir(ctx, otherKey)
+      })
+    )
+  }
+  return snapshot
+}
+
+const assertClaudeCredentialPeersUnchanged = (
+  before: Record<string, string>,
+  after: Record<string, string>
+) => {
+  if (JSON.stringify(before) !== JSON.stringify(after)) {
+    throw new ClaudeCredentialIsolationError(
+      'Claude authentication changed the default or another account profile. ' +
+        'This CLI cannot safely treat the selected profile as an isolated credential.'
+    )
+  }
+}
+
+const assertClaudeIdentityIsUnique = async (params: {
+  ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'logger' | 'configs' | 'configState'>
+  key: string
+  status: ClaudeAuthStatus
+  compareSystemLogin: boolean
+}) => {
+  const email = normalizeString(params.status.email)?.toLowerCase()
+  const organizationId = normalizeString(params.status.orgId)
+  if (email == null || organizationId == null) return
+  assertClaudeStoredIdentityIsUnique(
+    params.key,
+    { email: params.status.email, organizationId: params.status.orgId },
+    await readCanonicalClaudeAccounts(params.ctx)
+  )
+  if (!params.compareSystemLogin) return
+  const systemStatus = await getClaudeAuthStatus({ ctx: params.ctx })
+  if (
+    systemStatus?.loggedIn === true &&
+    normalizeString(systemStatus.email)?.toLowerCase() === email &&
+    normalizeString(systemStatus.orgId) === organizationId
+  ) {
+    throw new ClaudeDuplicateIdentityError(
+      `Claude identity "${params.status.email}" is already available through the default Claude Desktop login.`
+    )
+  }
+}
+
 const recoverClaudeAccountAfterFailedLogin = async (
   ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'logger' | 'configs' | 'configState'>,
   key: string
 ) => {
-  // Once an official login process has existed, a native credential store may have
-  // changed even when the selected account has a restorable portable snapshot.
-  await rm(resolveClaudeDeviceAuthBindingPath(ctx), { force: true })
   const canonicalAccount = await readCanonicalClaudeAccount(ctx, key)
   const configDir = resolveClaudeAccountConfigDir(ctx, key)
   if (canonicalAccount == null) {
+    await runClaudeAuthCommand({
+      ctx,
+      args: ['auth', 'logout'],
+      configDir,
+      allowFailure: true
+    }).catch(() => undefined)
     await rm(resolveGlobalAdapterAccountDir(ctx.env, 'claude-code', key), { recursive: true, force: true })
     return 'device-credential-may-have-changed' as const
+  }
+  if (usesMachineWideClaudeAuth(ctx, canonicalAccount)) {
+    // A failed mutation of the default Claude home cannot be rolled back per account.
+    await clearClaudeDeviceAuthBinding(ctx, key, canonicalAccount)
   }
 
   const storage = isRecord(canonicalAccount.auth)
     ? normalizeString(canonicalAccount.auth.storage) ?? 'inline'
     : undefined
   if (storage === 'inline') {
+    if (process.platform === 'darwin') {
+      await runClaudeAuthCommand({
+        ctx,
+        args: ['auth', 'logout'],
+        configDir,
+        allowFailure: true
+      }).catch(() => undefined)
+    }
     await materializeClaudeAccount({
       ctx,
       accountKey: key,
@@ -1458,7 +1663,14 @@ const recoverClaudeAccountAfterFailedLogin = async (
   }
 
   if (storage === 'device') {
-    await clearClaudeDeviceAuthBinding(ctx, key, canonicalAccount)
+    if (!usesMachineWideClaudeAuth(ctx, canonicalAccount)) {
+      await runClaudeAuthCommand({
+        ctx,
+        args: ['auth', 'logout'],
+        configDir,
+        allowFailure: true
+      }).catch(() => undefined)
+    }
     await materializeClaudeAccount({ ctx, accountKey: key, account: canonicalAccount })
     return 'device-credential-missing' as const
   }
@@ -1476,15 +1688,17 @@ const withClaudeAuthMutationLock = async <T>(params: {
   callback: () => Promise<T>
 }) => {
   const runAccountMutation = () => withClaudeAccountOperationLock(params.ctx, params.key, params.callback)
+  const machineWideMutation = usesMachineWideClaudeAuth(params.ctx, params.account)
+  const serializeAcrossProfiles = process.platform === 'darwin' ||
+    params.deviceAuthPossible === true ||
+    machineWideMutation
   if (
-    params.deviceAuthPossible !== true &&
-    process.platform !== 'darwin' &&
-    !usesMachineWideClaudeAuth(params.account)
+    !serializeAcrossProfiles
   ) {
     return await runAccountMutation()
   }
   return await withClaudeDeviceAuthOperationLock(params.ctx, async () => {
-    await assertNoActiveClaudeDeviceAuthSessions(params.ctx)
+    if (machineWideMutation) await assertNoActiveClaudeDeviceAuthSessions(params.ctx)
     return await runAccountMutation()
   })
 }
@@ -1500,7 +1714,7 @@ export const resolveClaudeRuntimeAccount = async (params: {
 }> => {
   const configured = resolveConfiguredAccounts(params.ctx)
   const requested = normalizeString(params.requestedAccount)
-  const selectedKey = requested ?? resolveConfiguredDefaultAccount(configured)
+  const selectedKey = requested ?? resolveConfiguredDefaultAccount(params.ctx, configured)
   if (selectedKey == null) return {}
   if (selectedKey === CLAUDE_SYSTEM_ACCOUNT_KEY) {
     return { accountKey: selectedKey, credentialHome: 'default' }
@@ -1519,7 +1733,7 @@ export const resolveClaudeRuntimeAccount = async (params: {
         account,
         ensureTrust: true
       })
-      if (usesMachineWideClaudeAuth(account)) {
+      if (usesMachineWideClaudeAuth(params.ctx, account)) {
         await assertClaudeDeviceAuthBinding(params.ctx, selectedKey, account)
       }
       const useSystemAuth = usesSystemClaudeDeviceAuth(params.ctx, account)
@@ -1554,41 +1768,89 @@ export const getClaudeAccounts = async (
 ): Promise<AdapterAccountsResult> => {
   const configured = resolveConfiguredAccounts(ctx)
   const systemProbe = await readSystemClaudeAccountProbe(ctx).catch(() => undefined)
-  const defaultAccount = resolveConfiguredDefaultAccount(configured) ?? (
+  const requestedDefaultAccount = resolveConfiguredDefaultAccount(ctx, configured) ?? (
     systemProbe?.status.loggedIn === true ? CLAUDE_SYSTEM_ACCOUNT_KEY : undefined
   )
-  const configuredDetails = await Promise.all(
+  const buildIdentityKey = (email: unknown, organizationId: unknown) => {
+    const normalizedEmail = normalizeString(email)?.toLowerCase()
+    const normalizedOrganizationId = normalizeString(organizationId)
+    return normalizedEmail == null || normalizedOrganizationId == null
+      ? undefined
+      : JSON.stringify([normalizedEmail, normalizedOrganizationId])
+  }
+  const configuredCandidates = await Promise.all(
     Object.entries(configured.accounts).map(async ([key, account]) => {
+      let detail: AdapterAccountDetail
       try {
         const probe = await probeConfiguredAccount(ctx, key, account)
-        return buildAccountDetail({
+        detail = buildAccountDetail({
+          ctx,
           key,
           account,
-          defaultAccount,
+          defaultAccount: requestedDefaultAccount,
           probe
         })
       } catch (error) {
-        return buildAccountDetail({
+        detail = buildAccountDetail({
+          ctx,
           key,
           account,
-          defaultAccount,
+          defaultAccount: requestedDefaultAccount,
           error: error instanceof Error ? error.message : String(error),
           missing: error instanceof ClaudeCredentialUnavailableError
         })
       }
+      return {
+        detail,
+        identityKey: buildIdentityKey(account.email, account.organizationId)
+      }
     })
   )
-  const details = [
-    ...configuredDetails,
+  const candidates = [
+    ...configuredCandidates,
     ...(systemProbe?.status.loggedIn === true
-      ? [buildAccountDetail({
-        key: CLAUDE_SYSTEM_ACCOUNT_KEY,
-        defaultAccount,
-        probe: systemProbe,
-        system: true
-      })]
+      ? [{
+        detail: buildAccountDetail({
+          ctx,
+          key: CLAUDE_SYSTEM_ACCOUNT_KEY,
+          defaultAccount: requestedDefaultAccount,
+          probe: systemProbe,
+          system: true
+        }),
+        identityKey: buildIdentityKey(systemProbe.status.email, systemProbe.status.orgId)
+      }]
       : [])
-  ].sort((left, right) =>
+  ]
+  const ungrouped = candidates.filter(candidate => candidate.identityKey == null)
+  const identityGroups = Map.groupBy(
+    candidates.filter((candidate): candidate is typeof candidate & { identityKey: string } => (
+      candidate.identityKey != null
+    )),
+    candidate => candidate.identityKey
+  )
+  const selectedAccountKeyByCandidate = new Map<string, string>()
+  const selectedCandidates = [...identityGroups.values()].map(group => {
+    const selected = group.toSorted((left, right) => {
+      const readyDifference = Number(right.detail.status === 'ready') - Number(left.detail.status === 'ready')
+      if (readyDifference !== 0) return readyDifference
+      const defaultDifference = Number(right.detail.key === requestedDefaultAccount) -
+        Number(left.detail.key === requestedDefaultAccount)
+      if (defaultDifference !== 0) return defaultDifference
+      return left.detail.key.localeCompare(right.detail.key)
+    })[0]
+    for (const candidate of group) selectedAccountKeyByCandidate.set(candidate.detail.key, selected.detail.key)
+    return selected
+  })
+  const defaultAccount = requestedDefaultAccount == null
+    ? undefined
+    : selectedAccountKeyByCandidate.get(requestedDefaultAccount) ?? requestedDefaultAccount
+  const details = [
+    ...ungrouped,
+    ...selectedCandidates
+  ].map(candidate => ({
+    ...candidate.detail,
+    isDefault: candidate.detail.key === defaultAccount
+  })).sort((left, right) =>
     left.isDefault === right.isDefault ? left.title.localeCompare(right.title) : left.isDefault ? -1 : 1
   )
 
@@ -1615,12 +1877,13 @@ export const getClaudeAccountDetail = async (
   const key = normalizeString(options.account)
   if (key == null) throw new Error('Claude account key is required.')
   const configured = resolveConfiguredAccounts(ctx)
-  const defaultAccount = resolveConfiguredDefaultAccount(configured)
+  const defaultAccount = resolveConfiguredDefaultAccount(ctx, configured)
 
   if (key === CLAUDE_SYSTEM_ACCOUNT_KEY) {
     const probe = await readSystemClaudeAccountProbe(ctx, options.refresh === true)
     return {
       account: buildAccountDetail({
+        ctx,
         key,
         defaultAccount: defaultAccount ?? CLAUDE_SYSTEM_ACCOUNT_KEY,
         probe,
@@ -1658,11 +1921,12 @@ export const getClaudeAccountDetail = async (
       })
       : await probeConfiguredAccount(ctx, key, account)
     return {
-      account: buildAccountDetail({ key, account, defaultAccount, probe })
+      account: buildAccountDetail({ ctx, key, account, defaultAccount, probe })
     }
   } catch (error) {
     return {
       account: buildAccountDetail({
+        ctx,
         key,
         account,
         defaultAccount,
@@ -1696,7 +1960,9 @@ const loginClaudeAccount = async (
     ctx,
     key,
     account: existing,
-    deviceAuthPossible: true,
+    deviceAuthPossible: process.platform === 'darwin' &&
+      existing == null &&
+      Object.keys(configured.accounts).length === 0,
     callback: async () => {
       if (existing == null) await assertClaudeAccountKeyIsAvailable(ctx, key)
       else await assertClaudeAccountGenerationIsCurrent(ctx, key, existing)
@@ -1704,6 +1970,8 @@ const loginClaudeAccount = async (
       const configDir = existing == null
         ? resolveClaudeAccountConfigDir(ctx, key)
         : await materializeClaudeAccount({ ctx, accountKey: key, account: existing })
+      const useSystemAuth = existing != null && usesSystemClaudeDeviceAuth(ctx, existing)
+      const authConfigDir = useSystemAuth ? undefined : configDir
       const persistConnectedAccount = async (
         probe: ClaudeAccountProbe,
         message: string,
@@ -1722,14 +1990,21 @@ const loginClaudeAccount = async (
             ? { deviceBindingSource: resolveClaudeSystemDeviceBindingSource(ctx) }
             : {})
         })
-        if (usesMachineWideClaudeAuth(storedAccount)) assertCompleteClaudeMachineIdentity(probe.status)
+        if (isDeviceBoundClaudeAccount(storedAccount)) assertCompleteClaudeDeviceIdentity(probe.status)
+        await assertClaudeIdentityIsUnique({
+          ctx,
+          key,
+          status: probe.status,
+          compareSystemLogin: source !== 'claude-system-login'
+        })
         await persistClaudeAccount({ ctx, key, account: storedAccount, expectedAccount: existing ?? null })
-        if (usesMachineWideClaudeAuth(storedAccount)) {
+        if (usesMachineWideClaudeAuth(ctx, storedAccount)) {
           await writeClaudeDeviceAuthBinding(ctx, key, storedAccount)
         }
         return {
           accountKey: key,
           account: buildAccountDetail({
+            ctx,
             key,
             account: storedAccount,
             defaultAccount: configured.defaultAccount ?? key,
@@ -1750,7 +2025,7 @@ const loginClaudeAccount = async (
         if (nativeProbe != null) {
           try {
             assertManagedClaudeAuthStatus(nativeProbe.status)
-            assertCompleteClaudeMachineIdentity(nativeProbe.status)
+            assertCompleteClaudeDeviceIdentity(nativeProbe.status)
             reusableNativeProbe = nativeProbe
           } catch {}
         }
@@ -1768,6 +2043,18 @@ const loginClaudeAccount = async (
       }
 
       await mkdir(configDir, { recursive: true })
+      let credentialPeerSnapshot: Record<string, string> | undefined
+      if (authConfigDir != null) {
+        await assertClaudeCredentialProfileIsIsolated({
+          ctx,
+          key,
+          configDir: authConfigDir,
+          rejectPreexistingCredential: existing == null
+        })
+        if (process.platform === 'darwin') {
+          credentialPeerSnapshot = await readClaudeCredentialPeerSnapshot(ctx, key)
+        }
+      }
       options.onProgress?.({
         stream: 'status',
         message: `Starting official Claude login for isolated account "${key}".`
@@ -1777,20 +2064,76 @@ const loginClaudeAccount = async (
         await runClaudeAuthCommand({
           ctx,
           args: ['auth', 'login', '--claudeai'],
-          configDir,
+          configDir: authConfigDir,
           onProgress: options.onProgress,
           onSpawn: () => {
             loginSpawned = true
           },
           signal: options.signal
         })
-        const probe = await readClaudeAccountProbe({ ctx, configDir })
+        const probe = await readClaudeAccountProbe({ ctx, configDir: authConfigDir })
+        if (credentialPeerSnapshot != null) {
+          try {
+            assertClaudeCredentialPeersUnchanged(
+              credentialPeerSnapshot,
+              await readClaudeCredentialPeerSnapshot(ctx, key)
+            )
+          } catch (peerError) {
+            if (peerError instanceof ClaudeCredentialIsolationError) throw peerError
+            throw new ClaudeCredentialIsolationError(
+              `Claude login completed but One Works could not verify that profile "${key}" stayed isolated.`
+            )
+          }
+        }
         return await persistConnectedAccount(
           probe,
           `Connected Claude account "${key}" through the official CLI.`,
-          'claude-auth-login'
+          useSystemAuth ? 'claude-system-login' : 'claude-auth-login'
         )
       } catch (error) {
+        if (
+          loginSpawned &&
+          credentialPeerSnapshot != null &&
+          !(error instanceof ClaudeCredentialIsolationError)
+        ) {
+          try {
+            assertClaudeCredentialPeersUnchanged(
+              credentialPeerSnapshot,
+              await readClaudeCredentialPeerSnapshot(ctx, key)
+            )
+          } catch (peerError) {
+            if (peerError instanceof ClaudeCredentialIsolationError) throw peerError
+            throw new ClaudeCredentialIsolationError(
+              `Claude login failed and One Works could not verify that profile "${key}" remained isolated.`
+            )
+          }
+        }
+        if (error instanceof ClaudeCredentialIsolationError) {
+          if (existing == null) {
+            await rm(resolveGlobalAdapterAccountDir(ctx.env, 'claude-code', key), {
+              recursive: true,
+              force: true
+            })
+          }
+          throw error
+        }
+        if (error instanceof ClaudeDuplicateIdentityError && authConfigDir != null) {
+          if (existing == null) {
+            await runClaudeAuthCommand({
+              ctx,
+              args: ['auth', 'logout'],
+              configDir: authConfigDir,
+              allowFailure: true
+            }).catch(() => undefined)
+            await rm(resolveGlobalAdapterAccountDir(ctx.env, 'claude-code', key), {
+              recursive: true,
+              force: true
+            })
+          } else {
+            await recoverClaudeAccountAfterFailedLogin(ctx, key)
+          }
+          throw error
+        }
         if (loginSpawned) {
           let recovery: Awaited<ReturnType<typeof recoverClaudeAccountAfterFailedLogin>>
           try {
@@ -1807,9 +2150,12 @@ const loginClaudeAccount = async (
             )
           }
           if (recovery === 'device-credential-missing' || recovery === 'device-credential-may-have-changed') {
+            const machineWide = existing != null && usesMachineWideClaudeAuth(ctx, existing)
+            const recoveryMessage = machineWide
+              ? 'The machine-wide Claude login cannot be rolled back per account; authenticate the account again.'
+              : 'The isolated device credential cannot be rolled back; authenticate the account again.'
             throw new ClaudeCredentialUnavailableError(
-              `Claude login did not complete after the native credential store may have changed for "${key}". ` +
-                'The machine-wide Claude login cannot be rolled back per account; authenticate the account again.'
+              `Claude login did not complete after the device credential may have changed for "${key}". ${recoveryMessage}`
             )
           }
         }
@@ -1854,9 +2200,7 @@ export const manageClaudeAccount = async (
       callback: async () => {
         await assertClaudeAccountGenerationIsCurrent(ctx, key, existing)
         await assertNoActiveClaudeAccountSessions(ctx, key)
-        // Persist the deletion generation before local cleanup or any portable logout command so an
-        // interrupted removal cannot publish the deleted credential generation again.
-        if (usesMachineWideClaudeAuth(existing)) {
+        if (usesMachineWideClaudeAuth(ctx, existing)) {
           await removeClaudeAccountConfig(ctx, key, existing)
           await clearClaudeDeviceAuthBinding(ctx, key, existing)
           await rm(resolveGlobalAdapterAccountDir(ctx.env, 'claude-code', key), {
@@ -1870,22 +2214,37 @@ export const manageClaudeAccount = async (
           }
         }
         const configDir = await materializeClaudeAccount({ ctx, accountKey: key, account: existing })
-        await removeClaudeAccountConfig(ctx, key, existing)
-        options.onProgress?.({ stream: 'status', message: `Running official Claude logout for "${key}".` })
-        try {
-          await runClaudeAuthCommand({
+        await removeClaudeAccountConfig(ctx, key, existing, async () => {
+          const credentialPeerSnapshot = process.platform === 'darwin'
+            ? await readClaudeCredentialPeerSnapshot(ctx, key)
+            : undefined
+          const status = await assertClaudeCredentialProfileIsIsolated({
             ctx,
-            args: ['auth', 'logout'],
+            key,
             configDir,
-            onProgress: options.onProgress,
-            signal: options.signal
+            expectedAccount: existing
           })
-        } finally {
-          await rm(resolveGlobalAdapterAccountDir(ctx.env, 'claude-code', key), {
-            recursive: true,
-            force: true
-          })
-        }
+          if (status.loggedIn) {
+            options.onProgress?.({ stream: 'status', message: `Running official Claude logout for "${key}".` })
+            await runClaudeAuthCommand({
+              ctx,
+              args: ['auth', 'logout'],
+              configDir,
+              onProgress: options.onProgress,
+              signal: options.signal
+            })
+          }
+          if (credentialPeerSnapshot != null) {
+            assertClaudeCredentialPeersUnchanged(
+              credentialPeerSnapshot,
+              await readClaudeCredentialPeerSnapshot(ctx, key)
+            )
+          }
+        })
+        await rm(resolveGlobalAdapterAccountDir(ctx.env, 'claude-code', key), {
+          recursive: true,
+          force: true
+        })
         return {
           accountKey: key,
           message: `Logged out and removed Claude account "${key}".`
