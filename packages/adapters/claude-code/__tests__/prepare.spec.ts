@@ -102,11 +102,26 @@ describe('prepareClaudeExecution', () => {
     }
   })
 
-  it('injects the selected managed account config directory into the Claude process', async () => {
-    vi.mocked(resolveClaudeRuntimeAccount).mockResolvedValue({
-      accountKey: 'work',
-      configDir: '/private/account-config'
-    })
+  it.each(
+    [
+      [
+        'isolated',
+        {
+          accountKey: 'work',
+          configDir: '/private/account-config',
+          credentialHome: 'isolated',
+          managed: true
+        },
+        '/private/account-config'
+      ],
+      ['system-login reference', { accountKey: 'work', credentialHome: 'default', managed: true }, undefined]
+    ] as const
+  )('scrubs auth overrides for a selected %s managed account', async (
+    _kind,
+    runtimeAccount,
+    expectedConfigDir
+  ) => {
+    vi.mocked(resolveClaudeRuntimeAccount).mockResolvedValue(runtimeAccount)
 
     const prepared = await prepareClaudeExecution({
       ctxId: 'ctx-account',
@@ -119,7 +134,8 @@ describe('prepareClaudeExecution', () => {
         CLAUDE_CODE_OAUTH_REFRESH_TOKEN: 'must-not-win',
         CLAUDE_CODE_OAUTH_SCOPES: 'must-not-win',
         CLAUDE_CODE_OAUTH_TOKEN: 'must-not-win',
-        CLAUDE_CODE_USE_BEDROCK: '1'
+        CLAUDE_CODE_USE_BEDROCK: '1',
+        CLAUDE_CONFIG_DIR: '/ctx-must-not-win'
       },
       cache: {
         set: vi.fn(async (key: string, value: unknown) => {
@@ -141,9 +157,13 @@ describe('prepareClaudeExecution', () => {
         },
         adapters: {
           'claude-code': {
+            nativeEnv: {
+              CLAUDE_CONFIG_DIR: '/native-must-not-win'
+            },
             settingsContent: {
               apiKeyHelper: '/must/not/run',
               env: {
+                CLAUDE_CONFIG_DIR: '/settings-must-not-win',
                 ANTHROPIC_AUTH_TOKEN: 'raw-settings-must-not-win',
                 ANTHROPIC_BASE_URL: 'https://raw-settings-must-not-win.example',
                 ANTHROPIC_CUSTOM_HEADERS: 'x-raw-settings-must-not-win: true',
@@ -167,7 +187,7 @@ describe('prepareClaudeExecution', () => {
       requestedAccount: 'work'
     }))
     expect(prepared.accountKey).toBe('work')
-    expect(prepared.env.CLAUDE_CONFIG_DIR).toBe('/private/account-config')
+    expect(prepared.env.CLAUDE_CONFIG_DIR).toBe(expectedConfigDir)
     expect(prepared.env.ANTHROPIC_API_KEY).toBeUndefined()
     expect(prepared.env.ANTHROPIC_AUTH_TOKEN).toBeUndefined()
     expect(prepared.env.ANTHROPIC_BASE_URL).toBeUndefined()
@@ -184,13 +204,68 @@ describe('prepareClaudeExecution', () => {
     expect(settingsSnapshot?.env.CLAUDE_CODE_OAUTH_SCOPES).toBeUndefined()
     expect(settingsSnapshot?.env.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined()
     expect(settingsSnapshot?.env.CLAUDE_CODE_USE_VERTEX).toBeUndefined()
+    expect(settingsSnapshot?.env.CLAUDE_CONFIG_DIR).toBeUndefined()
     expect(settingsSnapshot?.apiKeyHelper).toBeUndefined()
+  })
+
+  it('keeps the explicit system account on the default profile across all config layers', async () => {
+    vi.mocked(resolveClaudeRuntimeAccount).mockResolvedValue({
+      accountKey: 'system',
+      credentialHome: 'default'
+    })
+
+    const prepared = await prepareClaudeExecution({
+      ctxId: 'ctx-system-account',
+      cwd: '/repo',
+      env: {
+        ANTHROPIC_API_KEY: 'system-override-remains',
+        CLAUDE_CONFIG_DIR: '/ctx-foreign-profile'
+      },
+      cache: {
+        set: vi.fn(async (key: string, value: unknown) => {
+          if (key === 'adapter.claude-code.settings') settingsSnapshot = value as Record<string, any>
+          return { cachePath: `/tmp/${key}.json` }
+        }) as any,
+        get: vi.fn(async () => undefined) as any
+      },
+      logger: {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn()
+      } as any,
+      configs: [{}, {
+        adapters: {
+          'claude-code': {
+            nativeEnv: {
+              CLAUDE_CONFIG_DIR: '/native-foreign-profile'
+            },
+            settingsContent: {
+              env: {
+                CLAUDE_CONFIG_DIR: '/settings-foreign-profile'
+              }
+            }
+          }
+        }
+      }]
+    }, {
+      type: 'create',
+      runtime: 'server',
+      sessionId: 'sess-system-account',
+      account: 'system',
+      onEvent: vi.fn()
+    })
+
+    expect(prepared.env.CLAUDE_CONFIG_DIR).toBeUndefined()
+    expect(prepared.env.ANTHROPIC_API_KEY).toBe('system-override-remains')
+    expect(settingsSnapshot?.env.CLAUDE_CONFIG_DIR).toBeUndefined()
   })
 
   it('rejects router models when a managed Claude account is selected', async () => {
     vi.mocked(resolveClaudeRuntimeAccount).mockResolvedValue({
       accountKey: 'work',
-      configDir: '/private/account-config'
+      credentialHome: 'default',
+      managed: true
     })
 
     await expect(prepareClaudeExecution({

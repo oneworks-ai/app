@@ -63,7 +63,7 @@
 - `src/claude/prepare.ts`：解析 `options.account`，物化所选账号并注入 `CLAUDE_CONFIG_DIR`
 - `.oo/rules/adapter-design/accounts.md`：共享账户协议、Relay 同步和多设备边界
 
-macOS Claude 凭证属于 Keychain 设备状态；Linux / Windows 可能使用 `.credentials.json`。`.claude.json` 只保存经过 allowlist 的账号状态和 cached usage，不是完整凭证。不要通过隐藏 PTY 驱动常驻 Claude TUI，也不要依赖私有 Keychain service 名称导出凭证。
+macOS Claude 凭证属于 Keychain 设备状态；Linux / Windows 可能使用 `.credentials.json`。`.claude.json` 只保存经过 allowlist 的账号状态和 cached usage，不是完整凭证。不要通过隐藏 PTY 驱动常驻 Claude TUI。usage 可以按 organization 只读解析 30 分钟内的 Desktop plan history 和本地 HTTP cache，后者只提取 quota / reset 响应且格式变化时安全回退；这些路径都保持在 Claude adapter 私有层。主动刷新可以受限读取当前官方 Keychain 条目，把 token 只在内存中用于 profile / usage 请求；不得输出、同步、持久化或把该私有 service 名称提升为公共协议。
 macOS 上所有 Claude 登录态都按机器级共享资源处理，不按同步 envelope 的 storage 推断可被 `CLAUDE_CONFIG_DIR` 隔离：来自 Linux / Windows 的 inline snapshot 必须经过当前机器的官方登录并建立 device binding 后才可用；登录成功后转为 device envelope 并清除旧 portable snapshot，不能把预物化的旧 `.credentials.json` 与新 native 身份组合。相关 auth、mutation 和会话统一走机器级 lock / lease，同一时间只允许一个 managed binding 显示为可用。删除 macOS managed 账号或任何 device-bound 账号只删除 One Works 记录和对应 binding，不调用无法限定到单账号的官方 logout；已启动的登录失败后也不能用 logout 冒充回滚，而应清除 binding 并要求重新认证。
 账户删除必须同时写通用 `accountTombstones`，只有显式新增同名账户产生不同 `generation` 后才能清除墓碑；普通 refresh 不得改变 generation。凭证冲突使用只在官方登录 / 重新认证时更新的 `credentialRevision`，不能使用配置文件 mtime 或普通 metadata `updatedAt`。
 

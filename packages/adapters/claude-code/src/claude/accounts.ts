@@ -36,6 +36,7 @@ import { withDirectoryInstallLock } from '@oneworks/utils/install-lock'
 import type { ClaudeCodeAdapterConfig } from '../config-schema'
 import { resolveClaudeCodeAdapterConfig } from '../runtime-config'
 import { ensureClaudeCliPath } from './cli'
+import { resolveClaudeAccountQuota } from './usage'
 
 type ClaudeConfiguredAccount = NonNullable<ClaudeCodeAdapterConfig['accounts']>[string]
 type ClaudeCredentialEnvelope = NonNullable<ClaudeConfiguredAccount['auth']>
@@ -120,7 +121,7 @@ const CLAUDE_ACCOUNT_ACTIONS = [
   {
     key: 'refresh' as const,
     label: 'Refresh',
-    description: 'Refresh official auth status and locally cached usage.',
+    description: 'Refresh official auth status and identity-matched usage.',
     scope: 'account' as const
   },
   {
@@ -554,13 +555,26 @@ const encodeInlineCredential = (content: string) => ({
   token: Buffer.from(content, 'utf8').toString('base64')
 })
 
-const encodeDeviceCredential = (configDir: string) => ({
+const encodeDeviceCredential = (bindingSource: string) => ({
   storage: 'device' as const,
   type: CLAUDE_DEVICE_CREDENTIAL_TYPE,
   version: 1 as const,
   portability: 'device-bound' as const,
-  binding: createHash('sha256').update(configDir).digest('hex')
+  binding: createHash('sha256').update(bindingSource).digest('hex')
 })
+
+const resolveClaudeSystemDeviceBindingSource = (ctx: Pick<AdapterCtx, 'env'>) => (
+  `system-home:${resolveRealHome(ctx)}`
+)
+
+const usesSystemClaudeDeviceAuth = (
+  ctx: Pick<AdapterCtx, 'env'>,
+  account: ClaudeConfiguredAccount | undefined
+) => {
+  const auth = account?.auth
+  return isClaudeDeviceCredentialEnvelope(auth) &&
+    auth.binding === encodeDeviceCredential(resolveClaudeSystemDeviceBindingSource(ctx)).binding
+}
 
 const pickScalarFields = (
   value: unknown,
@@ -631,9 +645,19 @@ const sanitizeCachedUsage = (value: unknown) => {
   if (extraUsage != null) utilization.extra_usage = extraUsage
   if (Object.keys(utilization).length === 0) return undefined
   return {
+    ...(normalizeString(value.accountUuid) == null ? {} : { accountUuid: normalizeString(value.accountUuid) }),
     ...(normalizeNumber(value.fetchedAtMs) == null ? {} : { fetchedAtMs: normalizeNumber(value.fetchedAtMs) }),
     utilization
   }
+}
+
+const cachedUsageMatchesOauthAccount = (
+  oauthAccount: Record<string, unknown> | undefined,
+  cachedUsage: Record<string, unknown> | undefined
+) => {
+  const oauthAccountUuid = normalizeString(oauthAccount?.accountUuid)
+  const cachedAccountUuid = normalizeString(cachedUsage?.accountUuid)
+  return oauthAccountUuid != null && cachedAccountUuid != null && oauthAccountUuid === cachedAccountUuid
 }
 
 const sanitizeClaudeState = (value: unknown) => {
@@ -642,7 +666,12 @@ const sanitizeClaudeState = (value: unknown) => {
   const oauthAccount = pickScalarFields(value.oauthAccount, CLAUDE_OAUTH_ACCOUNT_STATE_KEYS)
   const cachedUsageUtilization = sanitizeCachedUsage(value.cachedUsageUtilization)
   if (oauthAccount != null) state.oauthAccount = oauthAccount
-  if (cachedUsageUtilization != null) state.cachedUsageUtilization = cachedUsageUtilization
+  if (
+    cachedUsageUtilization != null &&
+    cachedUsageMatchesOauthAccount(oauthAccount, cachedUsageUtilization)
+  ) {
+    state.cachedUsageUtilization = cachedUsageUtilization
+  }
   if (typeof value.hasCompletedOnboarding === 'boolean') {
     state.hasCompletedOnboarding = value.hasCompletedOnboarding
   }
@@ -776,13 +805,16 @@ const buildAuthEnv = (
   ctx: Pick<AdapterCtx, 'env'>,
   configDir?: string
 ): Record<string, string | undefined> => {
+  const useRealHome = configDir == null || process.platform === 'darwin'
   const env = Object.fromEntries(
     Object.entries({
       ...process.env,
       ...ctx.env,
+      ...(useRealHome ? { HOME: resolveRealHome(ctx) } : {}),
       ...(configDir == null ? {} : { CLAUDE_CONFIG_DIR: configDir })
     }).filter((entry): entry is [string, string] => typeof entry[1] === 'string')
   )
+  if (configDir == null) delete env.CLAUDE_CONFIG_DIR
   return configDir == null ? env : scrubClaudeAuthEnvironment(env)
 }
 
@@ -979,6 +1011,9 @@ const parseCachedUsage = (state: Record<string, unknown> | undefined): AdapterAc
   const metrics: NonNullable<AdapterAccountQuotaInfo['metrics']> = []
   const addWindow = (id: string, label: string, value: unknown, primary = false) => {
     if (!isRecord(value)) return
+    const resetAt = normalizeString(value.resets_at)
+    const resetTimestamp = resetAt == null ? undefined : Date.parse(resetAt)
+    if (resetTimestamp != null && Number.isFinite(resetTimestamp) && resetTimestamp <= Date.now()) return
     const percent = normalizeNumber(value.utilization) ?? normalizeNumber(value.percent)
     if (percent == null) return
     metrics.push({
@@ -1027,22 +1062,41 @@ const parseCachedUsage = (state: Record<string, unknown> | undefined): AdapterAc
 const readClaudeAccountProbe = async (params: {
   ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'logger' | 'configs' | 'configState'>
   configDir?: string
+  expectedEmail?: string
+  expectedOrganizationId?: string
+  forceUsageRefresh?: boolean
 }) => {
   const status = await getClaudeAuthStatus(params)
+  if (params.expectedEmail != null || params.expectedOrganizationId != null) {
+    assertManagedClaudeAuthStatus(status, params.expectedEmail, params.expectedOrganizationId)
+  }
   const state = sanitizeClaudeState(await readJsonRecord(resolveClaudeStatePath(params.ctx, params.configDir)))
+  const cachedQuota = parseCachedUsage(state)
+  const quota = await resolveClaudeAccountQuota({
+    cachedQuota,
+    configDir: params.configDir,
+    expectedEmail: status.email,
+    expectedOrganizationId: status.orgId,
+    forceNetwork: params.forceUsageRefresh,
+    realHome: resolveRealHome(params.ctx)
+  })
   return {
     status,
     state,
-    quota: parseCachedUsage(state)
+    quota
   } satisfies ClaudeAccountProbe
 }
 
 const readSystemClaudeAccountProbe = async (
-  ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'logger' | 'configs' | 'configState'>
+  ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'logger' | 'configs' | 'configState'>,
+  forceUsageRefresh = false
 ) =>
   process.platform === 'darwin'
-    ? await withClaudeDeviceAuthOperationLock(ctx, async () => readClaudeAccountProbe({ ctx }))
-    : await readClaudeAccountProbe({ ctx })
+    ? await withClaudeDeviceAuthOperationLock(
+      ctx,
+      async () => readClaudeAccountProbe({ ctx, forceUsageRefresh })
+    )
+    : await readClaudeAccountProbe({ ctx, forceUsageRefresh })
 
 const resolveConfiguredAccounts = (ctx: Pick<AdapterCtx, 'configs' | 'configState'>) => {
   const adapters = mergeAdapterConfigs(
@@ -1112,7 +1166,7 @@ const buildAccountDetail = (params: {
     email: normalizeString(probe?.status.email) ?? normalizeString(account?.email),
     status: params.error != null && params.missing !== true ? 'error' : loggedIn ? 'ready' : 'missing',
     isDefault: params.key === params.defaultAccount,
-    quota: probe?.quota ?? (account?.quota as AdapterAccountQuotaInfo | undefined),
+    quota: probe == null && account != null ? parseCachedUsage(decodeClaudeState(account)) : probe?.quota,
     planType: normalizeString(probe?.status.subscriptionType) ?? normalizeString(account?.planType),
     accountType: normalizeString(probe?.status.authMethod) ?? normalizeString(account?.accountType),
     source: params.system
@@ -1137,12 +1191,19 @@ const buildAccountDetail = (params: {
 const probeConfiguredAccountUnlocked = async (
   ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'logger' | 'configs' | 'configState'>,
   key: string,
-  account: ClaudeConfiguredAccount
+  account: ClaudeConfiguredAccount,
+  forceUsageRefresh = false
 ) => {
   await assertClaudeAccountGenerationIsCurrent(ctx, key, account)
   const configDir = await materializeClaudeAccount({ ctx, accountKey: key, account })
   if (usesMachineWideClaudeAuth(account)) await assertClaudeDeviceAuthBinding(ctx, key, account)
-  const probe = await readClaudeAccountProbe({ ctx, configDir })
+  const probe = await readClaudeAccountProbe({
+    ctx,
+    configDir: usesSystemClaudeDeviceAuth(ctx, account) ? undefined : configDir,
+    expectedEmail: normalizeString(account.email),
+    expectedOrganizationId: normalizeString(account.organizationId),
+    forceUsageRefresh
+  })
   if (probe.status.loggedIn) {
     assertManagedClaudeAuthStatus(
       probe.status,
@@ -1258,27 +1319,46 @@ const buildStoredAccount = async (params: {
   probe: ClaudeAccountProbe
   existing?: ClaudeConfiguredAccount
   credentialChanged?: boolean
+  deviceBindingSource?: string
+  source?: 'claude-auth-login' | 'claude-system-login'
 }) => {
   const credentialPath = join(params.configDir, '.credentials.json')
   const credentialContent = await readOptionalTextFile(credentialPath)
   if (credentialContent != null && !isRecord(JSON.parse(credentialContent) as unknown)) {
     throw new Error('Claude wrote an invalid .credentials.json payload.')
   }
+  const existingDeviceAuth = isClaudeDeviceCredentialEnvelope(params.existing?.auth)
+    ? params.existing.auth
+    : undefined
+  const preserveExistingDeviceAuth = params.credentialChanged !== true && existingDeviceAuth != null
+  const deviceBindingSource = params.deviceBindingSource ?? params.configDir
   const storedCredential = process.platform === 'darwin' || credentialContent == null
-    ? {
-      auth: encodeDeviceCredential(params.configDir),
-      digestSource: `${CLAUDE_DEVICE_CREDENTIAL_TYPE}:${params.configDir}`
+    ? preserveExistingDeviceAuth
+      ? { auth: existingDeviceAuth, authDigest: normalizeString(params.existing?.authDigest) }
+      : {
+        auth: encodeDeviceCredential(deviceBindingSource),
+        authDigest: createHash('sha256')
+          .update(`${CLAUDE_DEVICE_CREDENTIAL_TYPE}:${deviceBindingSource}`)
+          .digest('hex')
+      }
+    : {
+      auth: encodeInlineCredential(credentialContent),
+      authDigest: createHash('sha256').update(credentialContent).digest('hex')
     }
-    : { auth: encodeInlineCredential(credentialContent), digestSource: credentialContent }
-  const { auth, digestSource: authDigestSource } = storedCredential
-  const authDigest = createHash('sha256').update(authDigestSource).digest('hex')
+  const { auth } = storedCredential
+  const authDigest = storedCredential.authDigest ?? createHash('sha256')
+    .update(`${CLAUDE_DEVICE_CREDENTIAL_TYPE}:${deviceBindingSource}`)
+    .digest('hex')
   const credentialChanged = params.credentialChanged === true || params.existing?.authDigest !== authDigest
   const oauthAccount = isRecord(params.probe.state?.oauthAccount) ? params.probe.state.oauthAccount : undefined
+  const source = params.source ?? normalizeString(params.existing?.source) ?? 'claude-auth-login'
 
   return {
     ...params.existing,
     title: resolveAccountTitle(params.key, params.existing, params.probe),
-    description: process.platform === 'darwin' || credentialContent == null
+    description: source === 'claude-system-login'
+      ? 'References the existing machine-wide Claude login shared with Claude Desktop and the default CLI.'
+      : process.platform === 'darwin' || credentialContent == null
       ? 'Logged in via `claude auth login`; the shared native device store permits one active managed identity.'
       : 'Logged in via `claude auth login`; portable credential snapshot stored by One Works.',
     auth,
@@ -1290,8 +1370,8 @@ const buildStoredAccount = async (params: {
     organizationId: normalizeString(params.probe.status.orgId) ?? normalizeString(params.existing?.organizationId),
     organizationTitle: normalizeString(params.probe.status.orgName) ??
       normalizeString(params.existing?.organizationTitle),
-    quota: params.probe.quota ?? params.existing?.quota,
-    source: 'claude-auth-login',
+    quota: params.probe.quota,
+    source,
     generation: params.existing?.generation ?? (
       params.existing == null ? createAdapterAccountGeneration() : undefined
     ),
@@ -1316,20 +1396,24 @@ const resolveExistingConfiguredAccount = (
   return account
 }
 
-const readCanonicalClaudeAccount = async (
-  ctx: Pick<AdapterCtx, 'env'>,
-  key: string
-) => {
+const readCanonicalClaudeAccounts = async (ctx: Pick<AdapterCtx, 'env'>) => {
   const globalConfig = await readJsonRecord(resolveGlobalOoConfigPath(ctx.env))
   const adapters = isRecord(globalConfig?.adapters) ? globalConfig.adapters : undefined
   const claudeConfig = isRecord(adapters?.['claude-code']) ? adapters['claude-code'] : undefined
-  const accounts = isRecord(claudeConfig?.accounts) ? claudeConfig.accounts : undefined
-  const account = isRecord(accounts?.[key]) ? accounts[key] as ClaudeConfiguredAccount : undefined
   const tombstones = normalizeAdapterAccountTombstones(claudeConfig?.accountTombstones)
-  return account != null && !isAdapterAccountGenerationDeleted(tombstones, key, account.generation)
-    ? account
-    : undefined
+  const accounts = isRecord(claudeConfig?.accounts)
+    ? Object.fromEntries(
+      Object.entries(claudeConfig.accounts)
+        .filter((entry): entry is [string, ClaudeConfiguredAccount] => isRecord(entry[1]))
+    )
+    : {}
+  return filterActiveAdapterAccounts(accounts, tombstones)
 }
+
+const readCanonicalClaudeAccount = async (
+  ctx: Pick<AdapterCtx, 'env'>,
+  key: string
+) => (await readCanonicalClaudeAccounts(ctx))[key]
 
 const recoverClaudeAccountAfterFailedLogin = async (
   ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'logger' | 'configs' | 'configState'>,
@@ -1408,12 +1492,19 @@ const withClaudeAuthMutationLock = async <T>(params: {
 export const resolveClaudeRuntimeAccount = async (params: {
   ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'logger' | 'configs' | 'configState'>
   requestedAccount?: string
-}): Promise<{ accountKey?: string; configDir?: string }> => {
+}): Promise<{
+  accountKey?: string
+  configDir?: string
+  credentialHome?: 'default' | 'isolated'
+  managed?: boolean
+}> => {
   const configured = resolveConfiguredAccounts(params.ctx)
   const requested = normalizeString(params.requestedAccount)
   const selectedKey = requested ?? resolveConfiguredDefaultAccount(configured)
   if (selectedKey == null) return {}
-  if (selectedKey === CLAUDE_SYSTEM_ACCOUNT_KEY) return { accountKey: selectedKey }
+  if (selectedKey === CLAUDE_SYSTEM_ACCOUNT_KEY) {
+    return { accountKey: selectedKey, credentialHome: 'default' }
+  }
   const account = configured.accounts[selectedKey]
   if (account == null) throw new Error(`Claude account "${selectedKey}" is not available.`)
   return await withClaudeAccountResourceLock({
@@ -1431,7 +1522,11 @@ export const resolveClaudeRuntimeAccount = async (params: {
       if (usesMachineWideClaudeAuth(account)) {
         await assertClaudeDeviceAuthBinding(params.ctx, selectedKey, account)
       }
-      const status = await getClaudeAuthStatus({ ctx: params.ctx, configDir })
+      const useSystemAuth = usesSystemClaudeDeviceAuth(params.ctx, account)
+      const status = await getClaudeAuthStatus({
+        ctx: params.ctx,
+        configDir: useSystemAuth ? undefined : configDir
+      })
       try {
         assertManagedClaudeAuthStatus(
           status,
@@ -1443,7 +1538,12 @@ export const resolveClaudeRuntimeAccount = async (params: {
           `Claude account "${selectedKey}" is not authenticated on this device. Sign in again before using it.`
         )
       }
-      return { accountKey: selectedKey, configDir }
+      return {
+        accountKey: selectedKey,
+        ...(useSystemAuth ? {} : { configDir }),
+        credentialHome: useSystemAuth ? 'default' : 'isolated',
+        managed: true
+      }
     }
   })
 }
@@ -1518,7 +1618,7 @@ export const getClaudeAccountDetail = async (
   const defaultAccount = resolveConfiguredDefaultAccount(configured)
 
   if (key === CLAUDE_SYSTEM_ACCOUNT_KEY) {
-    const probe = await readSystemClaudeAccountProbe(ctx)
+    const probe = await readSystemClaudeAccountProbe(ctx, options.refresh === true)
     return {
       account: buildAccountDetail({
         key,
@@ -1537,7 +1637,7 @@ export const getClaudeAccountDetail = async (
         key,
         account,
         callback: async () => {
-          const refreshedProbe = await probeConfiguredAccountUnlocked(ctx, key, account)
+          const refreshedProbe = await probeConfiguredAccountUnlocked(ctx, key, account, true)
           if (refreshedProbe.status.loggedIn) {
             await persistClaudeAccount({
               ctx,
@@ -1604,6 +1704,69 @@ const loginClaudeAccount = async (
       const configDir = existing == null
         ? resolveClaudeAccountConfigDir(ctx, key)
         : await materializeClaudeAccount({ ctx, accountKey: key, account: existing })
+      const persistConnectedAccount = async (
+        probe: ClaudeAccountProbe,
+        message: string,
+        source: 'claude-auth-login' | 'claude-system-login'
+      ) => {
+        assertManagedClaudeAuthStatus(probe.status)
+        const storedAccount = await buildStoredAccount({
+          ctx,
+          key,
+          configDir,
+          probe,
+          existing,
+          credentialChanged: true,
+          source,
+          ...(source === 'claude-system-login'
+            ? { deviceBindingSource: resolveClaudeSystemDeviceBindingSource(ctx) }
+            : {})
+        })
+        if (usesMachineWideClaudeAuth(storedAccount)) assertCompleteClaudeMachineIdentity(probe.status)
+        await persistClaudeAccount({ ctx, key, account: storedAccount, expectedAccount: existing ?? null })
+        if (usesMachineWideClaudeAuth(storedAccount)) {
+          await writeClaudeDeviceAuthBinding(ctx, key, storedAccount)
+        }
+        return {
+          accountKey: key,
+          account: buildAccountDetail({
+            key,
+            account: storedAccount,
+            defaultAccount: configured.defaultAccount ?? key,
+            probe
+          }),
+          message
+        } satisfies AdapterManageAccountResult
+      }
+
+      if (
+        existing == null &&
+        process.platform === 'darwin' &&
+        Object.keys(await readCanonicalClaudeAccounts(ctx)).length === 0
+      ) {
+        throwIfAborted(options.signal)
+        const nativeProbe = await readClaudeAccountProbe({ ctx }).catch(() => undefined)
+        let reusableNativeProbe: ClaudeAccountProbe | undefined
+        if (nativeProbe != null) {
+          try {
+            assertManagedClaudeAuthStatus(nativeProbe.status)
+            assertCompleteClaudeMachineIdentity(nativeProbe.status)
+            reusableNativeProbe = nativeProbe
+          } catch {}
+        }
+        if (reusableNativeProbe != null) {
+          options.onProgress?.({
+            stream: 'status',
+            message: `Using the existing machine-wide Claude login for account "${key}".`
+          })
+          return await persistConnectedAccount(
+            reusableNativeProbe,
+            `Connected existing machine-wide Claude login as account "${key}".`,
+            'claude-system-login'
+          )
+        }
+      }
+
       await mkdir(configDir, { recursive: true })
       options.onProgress?.({
         stream: 'status',
@@ -1622,30 +1785,11 @@ const loginClaudeAccount = async (
           signal: options.signal
         })
         const probe = await readClaudeAccountProbe({ ctx, configDir })
-        assertManagedClaudeAuthStatus(probe.status)
-        const storedAccount = await buildStoredAccount({
-          ctx,
-          key,
-          configDir,
+        return await persistConnectedAccount(
           probe,
-          existing,
-          credentialChanged: true
-        })
-        if (usesMachineWideClaudeAuth(storedAccount)) assertCompleteClaudeMachineIdentity(probe.status)
-        await persistClaudeAccount({ ctx, key, account: storedAccount, expectedAccount: existing ?? null })
-        if (usesMachineWideClaudeAuth(storedAccount)) {
-          await writeClaudeDeviceAuthBinding(ctx, key, storedAccount)
-        }
-        return {
-          accountKey: key,
-          account: buildAccountDetail({
-            key,
-            account: storedAccount,
-            defaultAccount: configured.defaultAccount ?? key,
-            probe
-          }),
-          message: `Connected Claude account "${key}" through the official CLI.`
-        } satisfies AdapterManageAccountResult
+          `Connected Claude account "${key}" through the official CLI.`,
+          'claude-auth-login'
+        )
       } catch (error) {
         if (loginSpawned) {
           let recovery: Awaited<ReturnType<typeof recoverClaudeAccountAfterFailedLogin>>
@@ -1692,7 +1836,7 @@ export const manageClaudeAccount = async (
     return {
       accountKey: key,
       account: detail.account,
-      message: `Refreshed Claude account "${key}" from official auth status and local cached usage.`
+      message: `Refreshed Claude account "${key}" from official auth status and identity-matched usage.`
     }
   }
 

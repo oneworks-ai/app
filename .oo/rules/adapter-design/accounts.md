@@ -42,13 +42,15 @@
 
 - 新增和重新认证只调用短生命周期官方命令 `claude auth login --claudeai`。
 - 状态调用 `claude auth status --json`。只有 portable 且平台能够隔离受管账号凭证时，删除才调用 `claude auth logout`；macOS Keychain 等 device-bound 删除只清除 One Works 账号记录和 binding。
-- 每个受管账号使用稳定的 `~/.oneworks/adapters/claude-code/accounts/<account>/config` 作为 `CLAUDE_CONFIG_DIR`；账号 key 不能包含路径分隔符或遍历段。
+- 通过官方登录建立的受管账号使用稳定的 `~/.oneworks/adapters/claude-code/accounts/<account>/config` 作为 `CLAUDE_CONFIG_DIR`；账号 key 不能包含路径分隔符或遍历段。
 - macOS 原生凭证留在 Keychain，并记录为 device-bound。Linux / Windows 等平台如果官方 CLI 写出 `.credentials.json`，则按 portable envelope 保存和物化。
+- macOS 第一次新增受管 Claude 账号时，可以复用 Desktop / 默认 CLI 已存在且经官方 status 验证的机器级 Claude.ai 登录，直接建立 device binding。该账号的凭证来源必须标记为默认 Claude home 引用，探测和运行时不得注入会让官方 CLI 报未登录的隔离 `CLAUDE_CONFIG_DIR`；但仍按 managed account 清理 API Key、Router 和 settings 认证覆盖。存在其他受管账号或重新认证时仍执行官方 login，避免无意复制同一机器身份为多个账号。
 - device-bound 删除不能把 One Works 记录删除等同于原生登出；设备登录仍然保留。用户显式执行 `claude auth logout` 时，必须把它视为影响该机器原生登录的机器级操作。
 - `.claude.json` 不作为凭证。只同步 `oauthAccount`、`cachedUsageUtilization` 和 onboarding 标记；`machineID`、项目路径、workspace trust 等设备 / 项目状态不进入全局快照。
 - 会话物化时重新写当前 workspace trust；托管 hooks 合入 session `--settings`，workspace skills 通过 session 临时 plugin 目录注入，避免 `CLAUDE_CONFIG_DIR` 隔离导致能力丢失。
-- quota 只解析官方 CLI 写入本地 `.claude.json` 的 `cachedUsageUtilization`。不要调用未公开 usage API，也不要把缓存值描述成实时额度。
+- quota 优先解析身份匹配的新鲜本地数据：CLI `.claude.json` 的 `cachedUsageUtilization` 必须匹配 `oauthAccount.accountUuid` 且窗口尚未 reset；macOS Claude Desktop `plan-usage-history.json` 和本地 HTTP cache 中的 usage 响应必须匹配当前 organization，年龄不超过 30 分钟，并只提取利用率 / reset 字段。Desktop HTTP cache 是 adapter 私有、可选的只读来源，格式变化必须安全回退，不能提升为通用账户协议。用户主动刷新时，可以按 Claude OAuth 的 profile + usage 只读链路查询；凭证只在内存中使用，profile email / organization 必须和所选账号完全匹配，响应有大小与超时上限，429 必须遵守 `Retry-After`，失败时保留安全的本地值。不得伪造 Claude Code 客户端名称、版本、设备 ID、TLS 或计费请求头，也不得把 OAuth token 写进 One Works 配置或日志。
 - session `projects/**/*.jsonl` 中的 assistant usage 是单次响应 token 计量，不是订阅窗口利用率；不要用 JSONL 累加值伪造 5 小时 / 7 天 quota。
+- Desktop 与 CLI 的默认机器登录和部分配置可以互通，但 session history 保持独立；不得把 Desktop 历史合并或声明成 One Works / CLI 历史。
 - 受管账户会话在启动前登记进程租约并在退出时释放；重新认证和删除必须拒绝仍有活动会话的账户，避免账号记录或 portable logout 与新进程读取凭证竞态。
 - 默认 Claude home 以只读 `system` 账号展示；One Works 不复制或删除该登录态。
 
@@ -61,7 +63,7 @@
 | Claude macOS Keychain      | device binding + 脱敏状态 | 显示账号但标记 missing，要求官方登录 |
 | `secret` ref               | ref + 元数据              | 只有设备拿到合法 envelope 后才可用   |
 
-复制 `.claude.json` 不能完成 Claude 凭证迁移；它主要保存应用状态、身份缓存和 cached usage。不要依赖未公开的 Keychain service 名称导出数据，也不要假定不同平台使用同一种凭证后端。
+复制 `.claude.json` 不能完成 Claude 凭证迁移；它主要保存应用状态、身份缓存和 cached usage。macOS usage 刷新只允许通过受限的本机 Keychain 读取把当前 OAuth token 临时送入 profile / usage 请求，不得导出、同步或持久化该 token；Keychain 名称或响应变化必须安全回退到本地缓存。不要假定不同平台使用同一种凭证后端。
 
 ## 禁止的登录实现
 

@@ -1,5 +1,6 @@
 const ROOT_ONLY_ARGS = new Set(['-h', '--help', '-V', '--version', 'help'])
 const ROOT_SUBCOMMANDS = new Set([
+  'accounts',
   'agent',
   'adapter',
   'benchmark',
