@@ -77,6 +77,7 @@ Review 桌面双运行路径、bundle 外资源、ready 语义或真实安装产
 - 多 worktree / 多 AI 会话可能同时运行桌面开发态实例；排查崩溃或端口占用时，不要因为看到其他 worktree 的 Electron、`apps/desktop/src/server-child.cjs` 或 `apps/client/cli.cjs` 进程就直接清理。先列出 PID、启动时间、worktree 路径和命令来源，只有确认属于当前终端会话、明确是当前崩溃实例残留，或用户同意后才停止。
 - 桌面 main / preload 使用 `electron-vite` 构建，Electron 运行入口是 `dist/main/index.js`。
 - 外部 CDP 只作为 agent 控制面使用，默认关闭；通过 `ONEWORKS_DESKTOP_CDP_PORT` / `--oneworks-cdp-port` 显式启用，并优先配合独立 `ONEWORKS_DESKTOP_USER_DATA_DIR` / `--oneworks-user-data-dir` 冷启动，避免被单实例锁转发到真实用户实例。
+- Electron 窗口启用 `sandbox: true`，preload 不能保留普通 workspace / npm 包的运行时 `require()`。新增 preload 运行时依赖时，必须同步维护 `electron.vite.config.ts` 的 `externalizeDeps.exclude` 与 `ssr.noExternal`；只有依赖需要从 workspace 源码解析时才补 preload alias。构建产物必须通过 `scripts/verify-sandboxed-preload.cjs` 检查，否则 preload 可能整体加载失败，renderer 也拿不到 `window.oneworksDesktop`。
 - 完整 agent bridge protocol、runtime evidence 编排和 `desktop-control` CLI 属于仓库 `scripts/` 层，入口见 `scripts/AGENTS.md` 和 `scripts/desktop-control-protocol.md`；桌面 app 侧只维护 bootstrap 前的 opt-in CDP hook。
 - 空项目启动页和所有 workspace 窗口共用 launcher client service 管理的 client；Electron 另行维护一个用户级 manager server，Launcher 必须通过 preload IPC 获取其精确 `serverBaseUrl`，不能回退到固定 8787；每个 workspace service 仍只启动自己的 server。打开 workspace 后，main/preload 通过 IPC 告诉对应 renderer 当前窗口绑定的 `serverBaseUrl`，请求仍由前端直连 server HTTP / WebSocket。不要再为每个 workspace 启动独立 client。
 - 空项目启动页默认可通过 `CommandOrControl+Space` 全局快捷键打开；快捷键值来自 Electron 注入的 desktop settings，可在桌面端配置页更新。macOS 上如果系统快捷键占用了 `Command+Space`，Electron 注册会失败并只打印 warning，不要在代码里静默换成另一个快捷键。

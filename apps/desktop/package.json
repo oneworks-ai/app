@@ -16,7 +16,7 @@
   },
   "main": "./dist/main/index.js",
   "scripts": {
-    "build:electron": "electron-vite build --config electron.vite.config.ts --outDir dist --ignoreConfigWarning",
+    "build:electron": "electron-vite build --config electron.vite.config.ts --outDir dist --ignoreConfigWarning && node ./scripts/verify-sandboxed-preload.cjs",
     "build:client": "pnpm -C ../client exec vite build",
     "build:plugins": "pnpm --filter @oneworks/plugin-channel-oneworks --filter @oneworks/plugin-external-browser-driver --filter @oneworks/plugin-cua-driver --filter @oneworks/plugin-relay build",
     "build:server": "pnpm -C ../server build:runtime",
@@ -34,7 +34,7 @@
     "smoke:package": "node ./scripts/smoke-packaged-server.cjs",
     "verify:macos-install": "node ./scripts/verify-macos-install.cjs",
     "test": "pnpm -C ../.. exec vitest run --workspace vitest.workspace.ts --project node apps/desktop/__tests__",
-    "test:package-preflight": "node ../../scripts/run-workspace-check.mjs --require-bin vitest -- pnpm -C ../.. exec vitest run --workspace vitest.workspace.ts --project node apps/desktop/__tests__/builtin-adapter-cache.spec.ts apps/desktop/__tests__/desktop-package-version.spec.ts apps/desktop/__tests__/diagnose-packaged-authority.spec.ts apps/desktop/__tests__/mac-adhoc-seal.spec.ts apps/desktop/__tests__/mac-signing-options.spec.ts apps/desktop/__tests__/notarization-state.spec.ts apps/desktop/__tests__/notarize-artifacts.spec.ts apps/desktop/__tests__/osx-sign-walk.spec.ts apps/desktop/__tests__/release-candidate-manifest.spec.ts apps/desktop/__tests__/runtime-consumer-cli-path.spec.ts apps/desktop/__tests__/smoke-packaged-server.spec.ts apps/desktop/__tests__/verify-macos-adhoc-artifacts.spec.ts apps/desktop/__tests__/verify-macos-signed-apps.spec.ts scripts/__tests__/desktop-package-workflow.spec.ts scripts/__tests__/workspace-dependency-bootstrap.spec.ts",
+    "test:package-preflight": "node ../../scripts/run-workspace-check.mjs --require-bin vitest -- pnpm -C ../.. exec vitest run --workspace vitest.workspace.ts --project node apps/desktop/__tests__/builtin-adapter-cache.spec.ts apps/desktop/__tests__/desktop-package-version.spec.ts apps/desktop/__tests__/diagnose-packaged-authority.spec.ts apps/desktop/__tests__/mac-adhoc-seal.spec.ts apps/desktop/__tests__/mac-signing-options.spec.ts apps/desktop/__tests__/notarization-state.spec.ts apps/desktop/__tests__/notarize-artifacts.spec.ts apps/desktop/__tests__/osx-sign-walk.spec.ts apps/desktop/__tests__/release-candidate-manifest.spec.ts apps/desktop/__tests__/runtime-consumer-cli-path.spec.ts apps/desktop/__tests__/sandboxed-preload-bundle.spec.ts apps/desktop/__tests__/smoke-packaged-server.spec.ts apps/desktop/__tests__/verify-macos-adhoc-artifacts.spec.ts apps/desktop/__tests__/verify-macos-signed-apps.spec.ts scripts/__tests__/desktop-package-workflow.spec.ts scripts/__tests__/workspace-dependency-bootstrap.spec.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
