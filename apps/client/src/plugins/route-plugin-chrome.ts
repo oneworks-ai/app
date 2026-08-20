@@ -15,6 +15,7 @@ import { buildNavRailMoreMenuItems, getNavRailMoreMenuSelectedKeys } from '#~/co
 import type { NavRailMoreMenuItem, NavRailMoreMenuSection } from '#~/components/nav-rail-more-menu'
 import { getClientBase } from '#~/runtime-config'
 
+import type { PluginRuntimeSource } from './plugin-context'
 import { resolvePluginContributionText } from './plugin-i18n'
 import type { PluginContributionRouteHeaderAction, PluginContributionRouteMenuItem } from './plugin-manifest'
 import { usePluginCommandExecutor, usePluginSlot } from './plugin-slots'
@@ -171,7 +172,12 @@ export function useRoutePluginHeaderActions(routeKey: string): RouteContainerHea
           shortcut: contribution.shortcut,
           title,
           onSelect: () => {
-            void executePluginCommand?.(contribution.pluginScope, contribution.command)
+            void executePluginCommand?.(
+              contribution.pluginScope,
+              contribution.command,
+              undefined,
+              contribution.pluginRuntimeSource
+            )
           }
         }
       }), [contributions, executePluginCommand, language, location.pathname, routeKey])
@@ -209,7 +215,12 @@ export function useRoutePluginWindowBarActions(routeKey: string): NavRailWindowB
           shortcut: contribution.shortcut,
           title,
           onSelect: () => {
-            void executePluginCommand?.(contribution.pluginScope, contribution.command)
+            void executePluginCommand?.(
+              contribution.pluginScope,
+              contribution.command,
+              undefined,
+              contribution.pluginRuntimeSource
+            )
           }
         }
       }), [contributions, executePluginCommand, language, location.pathname, routeKey])
@@ -219,9 +230,14 @@ function useRouteContributionRunner() {
   const navigate = useNavigate()
   const executePluginCommand = usePluginCommandExecutor()
 
-  return useCallback((contribution: PluginContributionRouteMenuItem & { pluginScope: string }, payload?: unknown) => {
+  return useCallback((contribution: ScopedRouteMenuContribution, payload?: unknown) => {
     if (contribution.command != null && contribution.command.trim() !== '') {
-      void executePluginCommand?.(contribution.pluginScope, contribution.command, payload)
+      void executePluginCommand?.(
+        contribution.pluginScope,
+        contribution.command,
+        payload,
+        contribution.pluginRuntimeSource
+      )
       return
     }
 
@@ -236,7 +252,10 @@ function useRouteContributionRunner() {
   }, [executePluginCommand, navigate])
 }
 
-type ScopedRouteMenuContribution = PluginContributionRouteMenuItem & { pluginScope: string }
+type ScopedRouteMenuContribution = PluginContributionRouteMenuItem & {
+  pluginRuntimeSource: PluginRuntimeSource
+  pluginScope: string
+}
 
 export const buildRoutePluginSidebarContextMenu = ({
   contributions,

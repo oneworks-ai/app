@@ -1439,7 +1439,12 @@ export function ChatWorkspaceDrawer({
       if (item == null) return
 
       if (item.command != null && executePluginCommand != null) {
-        void executePluginCommand(item.pluginScope, item.command, item.payload)
+        void executePluginCommand(
+          item.pluginScope,
+          item.command,
+          item.payload,
+          item.pluginRuntimeSource
+        )
         return
       }
       if (item.route != null) {

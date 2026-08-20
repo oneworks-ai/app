@@ -117,7 +117,7 @@ export function InteractionPanelEmptyDockWorkspace({
               void executePluginCommand?.(contribution.pluginScope, contribution.command, {
                 kind: 'chatInteractionPanelEmptyAction',
                 source: 'chat.interactionPanel.emptyActions'
-              })
+              }, contribution.pluginRuntimeSource)
               return
             }
 

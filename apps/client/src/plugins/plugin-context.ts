@@ -5,6 +5,15 @@ import type { PluginRegistry } from './plugin-registry'
 
 type PluginRegistrySnapshot = ReturnType<PluginRegistry['getSnapshot']>
 
+export type PluginRuntimeSource = 'current' | 'manager'
+
+export interface PluginContributionRuntimeSource {
+  pluginServerBaseUrl?: string
+  registry: PluginRegistry
+  runtimeSource: PluginRuntimeSource
+  snapshot: PluginRegistrySnapshot
+}
+
 export interface PluginRefreshOptions {
   isCurrent?: () => boolean
 }
@@ -14,6 +23,7 @@ export interface PluginRefreshResult {
 }
 
 export interface PluginContextValue {
+  contributionRuntimeSources: PluginContributionRuntimeSource[]
   pluginSnapshotStatus: 'error' | 'loading' | 'ready'
   pluginServerBaseUrl?: string
   ready: boolean
