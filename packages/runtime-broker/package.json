@@ -1,6 +1,6 @@
 {
   "name": "@oneworks/runtime-broker",
-  "version": "1.0.0-rc.4",
+  "version": "1.0.0-rc.5",
   "description": "Manager-owned shared runtime broker for One Works",
   "license": "MIT",
   "repository": {

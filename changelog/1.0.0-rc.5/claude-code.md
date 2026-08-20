@@ -1,4 +1,4 @@
-# @oneworks/adapter-claude-code 1.0.0-rc.4
+# @oneworks/adapter-claude-code 1.0.0-rc.5
 
 - Run the default Claude Desktop or CLI login alongside multiple isolated `CLAUDE_CONFIG_DIR` accounts, with
   concurrent sessions, deterministic same-identity deduplication, and default-account remapping.

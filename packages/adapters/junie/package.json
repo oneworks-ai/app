@@ -1,6 +1,6 @@
 {
   "name": "@oneworks/adapter-junie",
-  "version": "1.0.0-rc.4",
+  "version": "1.0.0-rc.5",
   "description": "JetBrains Junie CLI Adapter for One Works",
   "license": "MIT",
   "repository": {
