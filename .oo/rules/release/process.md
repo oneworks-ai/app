@@ -101,6 +101,8 @@ workflow 显示 success 还不等于整个发布完成。协调者在最终报�
 - GitHub Release job 失败时优先 rerun failed jobs；成功的 package job 和 artifact 不需要重跑。跨 run 恢复时使用 `candidate_run_id`，不能临时拿本地产物替换。
 - Release 资产上传成功后，workflow 必须复用 `deploy-homepage.yml` 触发并等待 homepage Pages。官网失败只重试 release / homepage 阶段，不重建候选。
 - nightly 只覆盖发布打包回归，不替代正式候选的双架构、全目标、签名 / notarization 和清单验证。
+- 对 alpha / beta / rc，唯一人工 Production gate 位于签名、公证和安装验证开始前的 `package` job。只有候选清单、tag source、签名策略和全部 asset digest 验证通过后，GitHub Release 与 Homepage 才在 `Release Automation` 环境连续完成；不要为同一不可变候选增加第二、第三次人工审批。stable 仍使用 `Production` 保护发布与 Homepage。
+- Desktop GitHub Release 必须在上传前对已验证的完整 release-artifacts 集使用 GitHub artifact attestation；候选 manifest、远端 SHA-256 和 attestation 三者共同构成可下载二进制的证据链。
 
 ## VS Code 扩展发布
 
@@ -122,8 +124,8 @@ workflow 显示 success 还不等于整个发布完成。协调者在最终报�
 - `@oneworks/plugin-external-browser-driver` 的 workspace semver 是发布身份；构建阶段把 `x.y.z-alpha.n` / `beta.n` / `rc.n` 映射为 Chrome 的四段整数版本，并把原版本保存在 `version_name`。稳定版使用第四段 `65535`，确保同一 patch 的 prerelease 小于稳定版。
 - `pnpm --filter @oneworks/plugin-external-browser-driver package:extension:all` 同时生成正式开发者 ZIP 与可选 minimal ZIP。无后缀的正式包复用 audited privileged flavor，声明 `debugger` / `proxy` 并进入 Chrome Web Store；`-minimal.zip` 仅作为低权限备用。E2E flavor 不得进入 CI artifact、GitHub Release 或商店。
 - `Release Tags` 创建并推送 `pkg/oneworks-plugin-external-browser-driver/v*` 后，必须显式 dispatch `chrome-extension-release.yml`：tag 由 `GITHUB_TOKEN` 推送，GitHub 会抑制该 token 产生的递归 workflow 事件，不能依赖 `on.push.tags`。release workflow 自动生成 checksums、artifact attestation 和 GitHub Release，预发布版本标记为 prerelease；人手或外部凭据推送 tag 时仍可由 `on.push.tags` 直接触发。
-- main 首次创建 Browser Control tag 时，`Release Tags` 会显式 dispatch `chrome-extension-release.yml` 并传入 `publish_store=true`；workflow 创建 GitHub Release 后，通过 `chrome-web-store` environment，使用 WIF impersonation 的短期 service-account access token 自动提交包含 `debugger` / `proxy` 的正式开发者 ZIP，不上传 minimal ZIP。
-- release run 若失败，优先 rerun failed jobs。重新运行 `Release Tags` 时，已有 Chrome tag 仍会显式 dispatch，但传入 `publish_store=false`，只用 clobber 语义恢复 GitHub Release，避免重复提交商店。商店 job 失败时，从同一 tag 手动 dispatch 并显式设置 `publish_store=true` 恢复。
+- `Release Tags` 对首次与既有 Browser Control tag 都显式 dispatch `chrome-extension-release.yml` 并传入 `publish_store=false`，只创建 checksums、artifact attestation 和 GitHub Release。Web Store 是独立分面：先用官方 `fetchStatus` 对账，只有没有 active upload、submitted revision、warning 或 takedown 时，才由单一 owner 从同一 tag 手动 dispatch 一次 `publish_store=true`。
+- release run 失败时优先 rerun failed jobs。Release Tags 重跑仍只恢复 GitHub Release，绝不触发商店提交；同 tag 商店提交如果看到已存在 active / accepted submission、状态无法解析或需 Dashboard 操作，保留为外部审核，不能重试 upload / publish。
 - Chrome Web Store API 只能更新已有 item。首次 item、Store listing、Privacy、测试说明、可见性和 service-account 授权必须先在 Developer Dashboard 完成；Package 页公钥、Item ID、仓库 canonical identity 与服务端 allowlist 必须一致，发布脚本也会在上传前交叉校验。workflow 不尝试绕过这些人工步骤。
 - 商店提交启用 `blockOnWarnings=true`、不跳过 review；上传处理失败、超时、警告阻断或返回未知发布状态时流水线必须失败。重跑前先用 Developer Dashboard / `fetchStatus` 确认当前 submission，避免重复提交。
 

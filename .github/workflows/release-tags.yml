@@ -233,7 +233,9 @@ jobs:
                   -f retention_days=14
                 ;;
               pkg/oneworks-plugin-external-browser-driver/v*)
-                dispatch_chrome_extension_release "$tag" true
+                # A Store submission remains an explicit, state-audited action:
+                # an earlier version can still be pending external review.
+                dispatch_chrome_extension_release "$tag" false
                 ;;
               *)
                 echo "No automated workflow dispatch configured for $tag"

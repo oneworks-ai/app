@@ -9,6 +9,11 @@ on:
       - .github/workflows/deploy-homepage.yml
   workflow_call:
     inputs:
+      release_automation:
+        default: false
+        description: Allow a verified prerelease candidate to continue without a second Production gate.
+        required: false
+        type: boolean
       source_sha:
         description: Exact app repository commit to use as the homepage source.
         required: true
@@ -38,7 +43,7 @@ jobs:
   trigger:
     name: trigger-homepage-repository
     runs-on: ubuntu-latest
-    environment: Production
+    environment: ${{ inputs.release_automation && 'Release Automation' || 'Production' }}
     timeout-minutes: 30
     steps:
       - name: Trigger homepage repository Pages deployment

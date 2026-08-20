@@ -255,6 +255,8 @@ describe('chrome Web Store V2 publishing', () => {
     const ciWorkflow = readFileSync(join(repositoryRoot, '.github/workflows/chrome-extension-ci.yml'), 'utf8')
     const workflow = readFileSync(join(repositoryRoot, '.github/workflows/chrome-extension-release.yml'), 'utf8')
     const releaseTags = readFileSync(join(repositoryRoot, '.github/workflows/release-tags.yml'), 'utf8')
+    const readme = readFileSync(join(repositoryRoot, 'packages/plugins/external-browser-driver/README.md'), 'utf8')
+    const readmeEn = readFileSync(join(repositoryRoot, 'packages/plugins/external-browser-driver/README.en.md'), 'utf8')
     const publishCli = readFileSync(
       join(repositoryRoot, 'packages/plugins/external-browser-driver/bin/publish-chrome-web-store.cjs'),
       'utf8'
@@ -274,16 +276,22 @@ describe('chrome Web Store V2 publishing', () => {
     expect(publishCli).not.toContain('<base-extension.zip>')
     expect(releaseTags).toContain('gh workflow run chrome-extension-release.yml')
     expect(releaseTags).toContain('-f publish_store="$publish_store"')
-    expect(releaseTags.match(/dispatch_chrome_extension_release "\$tag" (?:true|false)/gu)).toEqual([
+    expect(releaseTags.match(/dispatch_chrome_extension_release "\$tag" false/gu)).toEqual([
       'dispatch_chrome_extension_release "$tag" false',
-      'dispatch_chrome_extension_release "$tag" true'
+      'dispatch_chrome_extension_release "$tag" false'
     ])
     expect(releaseTags).toMatch(
       /if git rev-parse[\s\S]*?pkg\/oneworks-plugin-external-browser-driver\/v\*\)[\s\S]*?dispatch_chrome_extension_release "\$tag" false[\s\S]*?continue/u
     )
     expect(releaseTags).toMatch(
-      /Creating \$tag[\s\S]*?pkg\/oneworks-plugin-external-browser-driver\/v\*\)[\s\S]*?dispatch_chrome_extension_release "\$tag" true/u
+      /Creating \$tag[\s\S]*?pkg\/oneworks-plugin-external-browser-driver\/v\*\)[\s\S]*?dispatch_chrome_extension_release "\$tag" false/u
     )
+    for (const readmeText of [readme, readmeEn]) {
+      expect(readmeText).toContain('fetchStatus')
+      expect(readmeText).toContain('GitHub Release')
+      expect(readmeText).not.toMatch(/automatically upload|自动上传/u)
+      expect(readmeText).not.toMatch(/retry.*publish_store=true|publish_store=true.*重试/u)
+    }
     expect(ciWorkflow.match(/- \.github\/workflows\/release-tags\.yml/gu)).toHaveLength(2)
   })
 
@@ -292,6 +300,7 @@ describe('chrome Web Store V2 publishing', () => {
     const archivePath = join(directory, 'developer.zip')
     packager.packageExtension({ flavor: 'privileged', output: archivePath })
     const responses = [
+      new Response(JSON.stringify({})),
       new Response(JSON.stringify({ uploadState: 'IN_PROGRESS' })),
       new Response(JSON.stringify({ lastAsyncUploadState: 'SUCCEEDED' })),
       new Response(JSON.stringify({ state: 'PENDING_REVIEW' }))
@@ -317,21 +326,48 @@ describe('chrome Web Store V2 publishing', () => {
     })
     expect(sleep).toHaveBeenCalledOnce()
     expect(fetchImpl.mock.calls.map(call => call[0])).toEqual([
+      `https://store.invalid/v2/publishers/publisher-id/items/${CHROME_EXTENSION_ID}:fetchStatus`,
       `https://store.invalid/upload/v2/publishers/publisher-id/items/${CHROME_EXTENSION_ID}:upload`,
       `https://store.invalid/v2/publishers/publisher-id/items/${CHROME_EXTENSION_ID}:fetchStatus`,
       `https://store.invalid/v2/publishers/publisher-id/items/${CHROME_EXTENSION_ID}:publish`
     ])
-    expect(fetchImpl.mock.calls[2]?.[1]).toMatchObject({
+    expect(fetchImpl.mock.calls[3]?.[1]).toMatchObject({
       body: JSON.stringify({ blockOnWarnings: true, publishType: 'DEFAULT_PUBLISH', skipReview: false }),
       method: 'POST'
     })
+  })
+
+  it.each([
+    [{ submittedItemRevisionStatus: { state: 'PENDING_REVIEW' } }, /active submission: PENDING_REVIEW/u],
+    [{ submittedItemRevisionStatus: { state: 'STAGED' } }, /active submission: STAGED/u],
+    [{ lastAsyncUploadState: 'IN_PROGRESS' }, /active upload/u],
+    [{ warned: true }, /requires Dashboard action/u],
+    [{ takenDown: true }, /requires Dashboard action/u]
+  ])('refuses a non-terminal Store state before upload', async (status, expected) => {
+    const directory = temporaryDirectory()
+    const archivePath = join(directory, 'developer.zip')
+    packager.packageExtension({ flavor: 'privileged', output: archivePath })
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify(status)))
+
+    await expect(publisher.publishChromeWebStore({
+      accessToken: 'short-lived-access-token',
+      archivePath,
+      extensionId: CHROME_EXTENSION_ID,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      publisherId: 'publisher-id'
+    })).rejects.toThrow(expected)
+    expect(fetchImpl).toHaveBeenCalledOnce()
   })
 
   it('does not submit a publication when upload processing fails', async () => {
     const directory = temporaryDirectory()
     const archivePath = join(directory, 'developer.zip')
     packager.packageExtension({ flavor: 'privileged', output: archivePath })
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ uploadState: 'FAILED' })))
+    const responses = [
+      new Response(JSON.stringify({})),
+      new Response(JSON.stringify({ uploadState: 'FAILED' }))
+    ]
+    const fetchImpl = vi.fn(async () => responses.shift() ?? new Response('', { status: 500 }))
 
     await expect(publisher.publishChromeWebStore({
       accessToken: 'short-lived-access-token',
@@ -340,7 +376,7 @@ describe('chrome Web Store V2 publishing', () => {
       fetchImpl: fetchImpl as unknown as typeof fetch,
       publisherId: 'publisher-id'
     })).rejects.toThrow(/final state: FAILED/u)
-    expect(fetchImpl).toHaveBeenCalledOnce()
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
   })
 
   it('rejects a Chrome Web Store item that does not match the packaged extension identity', async () => {
