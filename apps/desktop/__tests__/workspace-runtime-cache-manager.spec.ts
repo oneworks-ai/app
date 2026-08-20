@@ -112,5 +112,7 @@ describe('workspace runtime cache manager', () => {
     expect(source.indexOf('ensureBuiltinAdapterPackageCache')).toBeLessThan(
       source.indexOf('ensureBuiltinRuntimePackageCache')
     )
+    expect(source).toContain('resolveDesktopBackgroundRuntime')
+    expect(source).not.toContain('executable: process.execPath')
   })
 })
