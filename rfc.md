@@ -33,6 +33,12 @@
 - [运行时与裁决语义](.oo/rfcs/0012-hook-plugin-convergence-runtime.md)
 - [迁移与兼容](.oo/rfcs/0012-hook-plugin-convergence-migration.md)
 
+## 插件内核 RFC
+
+- [总览与内核定律](.oo/rfcs/0013-plugin-kernel.md)
+- [内核接口](.oo/rfcs/0013-plugin-kernel-surface.md)
+- [迁移路径](.oo/rfcs/0013-plugin-kernel-migration.md)
+
 ## 插件运行时 RFC
 
 - [目录结构、manifest 与共享契约](.oo/rfcs/plugin-runtime-layout-manifest.md)

@@ -29,4 +29,5 @@ description: 当任务涉及插件系统的统一模型（贡献/参与/提供�
 
 - [RFC 0011 插件扩展面盘点与边界](../../rfc.md)（含七条设计纪律）
 - [RFC 0012 Hook 与插件系统收敛](../../rfc.md)
+- [RFC 0013 插件内核](../../rfc.md)（两个原语、三个横切设施、内核定律）
 - Plugin Runtime RFC（目录结构、server、client UI、落地计划）
