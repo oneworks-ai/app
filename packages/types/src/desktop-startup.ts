@@ -3,6 +3,9 @@ export type DesktopWorkspaceStartupReadiness = 'degraded' | 'editable'
 export const DESKTOP_FIRST_ACTION_MILESTONES = [
   'first.submit',
   'submit.accepted',
+  'submit.observed',
+  'submit.retrying',
+  'submit.uncertain',
   // The renderer received displayable assistant content. This is neither a provider token nor a paint timestamp.
   'first.response.received',
   'first.success',

@@ -12,11 +12,11 @@ const mocks = vi.hoisted(() => ({
   ) => await transport(ACTION_ID))
 }))
 
-vi.mock('#~/diagnostics/desktop-first-action-submit', () => ({
+vi.mock('#~/diagnostics/desktop-first-action/submit', () => ({
   submitWithDesktopFirstAction: mocks.submit
 }))
 
-vi.mock('#~/diagnostics/desktop-first-action-runtime', () => ({
+vi.mock('#~/diagnostics/desktop-first-action/runtime', () => ({
   markDesktopFirstActionTerminated: mocks.terminated
 }))
 

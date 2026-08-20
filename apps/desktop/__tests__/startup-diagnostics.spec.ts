@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DiagnosticEvent } from '@oneworks/diagnostics'
 import { FileDiagnosticJournal } from '@oneworks/diagnostics/node'
 
+import { DESKTOP_FIRST_ACTION_ACK_ABANDONMENT_TIMEOUT_MS } from '../src/main/first-action-diagnostics'
 import { createDesktopStartupDiagnostics, readDesktopDiagnosticReportingEnabled } from '../src/main/startup-diagnostics'
 
 const tempDirs: string[] = []
@@ -197,6 +198,53 @@ describe('desktop startup diagnostics', () => {
       ['operation.stage', 'first.success', '2026-08-09T00:00:00.100Z'],
       ['operation.completed', 'first.success', '2026-08-09T00:00:00.100Z']
     ])
+  })
+
+  it('durably terminates an acknowledgement-uncertain action in the main process', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-09T00:00:00.000Z'))
+    const diagnostics = createDesktopStartupDiagnostics({
+      createId: createIds(),
+      directory: await createTempDir(),
+      environment: 'test',
+      now: () => new Date(Date.now()),
+      otlpExporter: false
+    })
+
+    diagnostics.markFirstActionMilestone('first.submit', 'renderer-a')
+    diagnostics.markFirstActionMilestone('submit.uncertain', 'renderer-a')
+    vi.advanceTimersByTime(DESKTOP_FIRST_ACTION_ACK_ABANDONMENT_TIMEOUT_MS - 1)
+    expect(diagnostics.getFirstActionSnapshot()?.outcome).toBeUndefined()
+
+    vi.advanceTimersByTime(1)
+    expect(diagnostics.getFirstActionSnapshot()).toMatchObject({
+      failure: { code: 'app.first_action_ack_abandoned', domain: 'network' },
+      outcome: 'cancelled',
+      stage: 'first.terminated'
+    })
+  })
+
+  it('reschedules uncertainty on retry and cancels it after causal observation', async () => {
+    vi.useFakeTimers()
+    const diagnostics = createDesktopStartupDiagnostics({
+      createId: createIds(),
+      directory: await createTempDir(),
+      environment: 'test',
+      otlpExporter: false
+    })
+
+    diagnostics.markFirstActionMilestone('first.submit', 'renderer-a')
+    diagnostics.markFirstActionMilestone('submit.uncertain', 'renderer-a')
+    vi.advanceTimersByTime(DESKTOP_FIRST_ACTION_ACK_ABANDONMENT_TIMEOUT_MS - 1)
+    diagnostics.markFirstActionMilestone('submit.retrying', 'renderer-a')
+    vi.advanceTimersByTime(DESKTOP_FIRST_ACTION_ACK_ABANDONMENT_TIMEOUT_MS - 1)
+    expect(diagnostics.getFirstActionSnapshot()?.outcome).toBeUndefined()
+
+    diagnostics.markFirstActionMilestone('submit.observed', 'renderer-a')
+    vi.advanceTimersByTime(DESKTOP_FIRST_ACTION_ACK_ABANDONMENT_TIMEOUT_MS)
+    expect(diagnostics.getFirstActionSnapshot()?.outcome).toBeUndefined()
+    diagnostics.markFirstActionMilestone('first.success', 'renderer-a')
+    expect(diagnostics.getFirstActionSnapshot()?.outcome).toBe('success')
   })
 
   it('settles failed and user-terminated first actions without reporting success', async () => {

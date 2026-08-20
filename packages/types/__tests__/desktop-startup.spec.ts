@@ -21,6 +21,9 @@ describe('desktop first-action milestones', () => {
   it('accepts only the closed privacy-safe milestone contract', () => {
     expect(normalizeDesktopFirstActionMilestone({ milestone: 'first.submit' })).toBe('first.submit')
     expect(normalizeDesktopFirstActionMilestone({ milestone: 'submit.accepted' })).toBe('submit.accepted')
+    expect(normalizeDesktopFirstActionMilestone({ milestone: 'submit.observed' })).toBe('submit.observed')
+    expect(normalizeDesktopFirstActionMilestone({ milestone: 'submit.retrying' })).toBe('submit.retrying')
+    expect(normalizeDesktopFirstActionMilestone({ milestone: 'submit.uncertain' })).toBe('submit.uncertain')
     expect(normalizeDesktopFirstActionMilestone({ milestone: 'first.response.received' }))
       .toBe('first.response.received')
     expect(normalizeDesktopFirstActionMilestone({ milestone: 'first.success' })).toBe('first.success')

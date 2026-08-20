@@ -231,6 +231,81 @@ describe('desktop first-action diagnostics', () => {
     expect(milestones).toEqual(['first.submit', 'first.terminated'])
   })
 
+  it('reports uncertainty and refreshes its durable deadline on retry', () => {
+    const milestones: DesktopFirstActionMilestone[] = []
+    const reporter = createDesktopFirstActionReporter(milestone => milestones.push(milestone))
+
+    reporter.submitted('session-1', ACTION_ID)
+    reporter.uncertain('session-1', ACTION_ID)
+    reporter.submitted('session-1', ACTION_ID)
+    reporter.uncertain('session-1', ACTION_ID)
+
+    expect(milestones).toEqual([
+      'first.submit',
+      'submit.uncertain',
+      'submit.retrying'
+    ])
+  })
+
+  it('reports causal observation after a retry so main can clear the refreshed deadline', () => {
+    const milestones: DesktopFirstActionMilestone[] = []
+    const reporter = createDesktopFirstActionReporter(milestone => milestones.push(milestone))
+
+    reporter.submitted('session-1', ACTION_ID)
+    reporter.uncertain('session-1', ACTION_ID)
+    reporter.submitted('session-1', ACTION_ID)
+    reporter.messageObserved('session-1', actionMessage())
+
+    expect(milestones).toEqual([
+      'first.submit',
+      'submit.uncertain',
+      'submit.retrying',
+      'submit.observed'
+    ])
+  })
+
+  it('cancels uncertainty after transport or causal runtime acknowledgement', () => {
+    const acceptedMilestones: DesktopFirstActionMilestone[] = []
+    const accepted = createDesktopFirstActionReporter(milestone => acceptedMilestones.push(milestone))
+    accepted.submitted('session-accepted', ACTION_ID)
+    accepted.uncertain('session-accepted', ACTION_ID)
+    accepted.accepted('session-accepted', ACTION_ID)
+
+    const observedMilestones: DesktopFirstActionMilestone[] = []
+    const observed = createDesktopFirstActionReporter(milestone => observedMilestones.push(milestone))
+    observed.submitted('session-observed', ACTION_ID)
+    observed.uncertain('session-observed', ACTION_ID)
+    observed.messageObserved('session-observed', actionMessage())
+    observed.succeeded('session-observed')
+
+    expect(acceptedMilestones).toEqual(['first.submit', 'submit.uncertain', 'submit.accepted'])
+    expect(observedMilestones).toEqual([
+      'first.submit',
+      'submit.uncertain',
+      'submit.observed',
+      'first.success'
+    ])
+  })
+
+  it('does not let late transport uncertainty override an observed action', () => {
+    const milestones: DesktopFirstActionMilestone[] = []
+    const reporter = createDesktopFirstActionReporter(milestone => milestones.push(milestone))
+
+    reporter.submitted('session-1', ACTION_ID)
+    reporter.messageObserved('session-1', actionMessage())
+    reporter.uncertain('session-1', ACTION_ID)
+    reporter.succeeded('session-1')
+
+    expect(milestones).toEqual(['first.submit', 'first.success'])
+
+    const acceptedMilestones: DesktopFirstActionMilestone[] = []
+    const accepted = createDesktopFirstActionReporter(milestone => acceptedMilestones.push(milestone))
+    accepted.submitted('session-accepted', ACTION_ID)
+    accepted.accepted('session-accepted', ACTION_ID)
+    accepted.uncertain('session-accepted', ACTION_ID)
+    expect(acceptedMilestones).toEqual(['first.submit', 'submit.accepted'])
+  })
+
   it('hands off safely to the session stream when client events disconnect mid-action', () => {
     const milestones: DesktopFirstActionMilestone[] = []
     const reporter = createDesktopFirstActionReporter(milestone => milestones.push(milestone))

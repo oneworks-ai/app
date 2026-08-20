@@ -34,7 +34,7 @@ const earlierTimestamp = (current: string | undefined, next: string) => (
   current == null || next < current ? next : current
 )
 
-export const summarizeFirstActionEvents = (events: RelayDiagnosticEvent[]) => {
+const collectFirstActionEvents = (events: RelayDiagnosticEvent[]) => {
   const startupStartedAtBySession = new Map<string, string>()
   const operations = new Map<string, FirstActionOperation>()
 
@@ -77,7 +77,14 @@ export const summarizeFirstActionEvents = (events: RelayDiagnosticEvent[]) => {
     operations.set(key, operation)
   }
 
-  const values = [...operations.values()]
+  return { operations, startupStartedAtBySession }
+}
+
+const summarizeFirstActionOperations = (
+  operations: Iterable<FirstActionOperation>,
+  startupStartedAtBySession: Map<string, string>
+) => {
+  const values = [...operations]
   const terminal = values.filter(operation => operation.terminal)
   const successes = terminal.filter(operation => operation.succeeded).length
   return {
@@ -110,4 +117,29 @@ export const summarizeFirstActionEvents = (events: RelayDiagnosticEvent[]) => {
     successRate: terminal.length === 0 ? undefined : successes / terminal.length,
     terminalAttempts: terminal.length
   }
+}
+
+export const summarizeFirstActionEvents = (events: RelayDiagnosticEvent[]) => {
+  const { operations, startupStartedAtBySession } = collectFirstActionEvents(events)
+  return summarizeFirstActionOperations(operations.values(), startupStartedAtBySession)
+}
+
+export const summarizeFirstActionEventsByCohortDate = (events: RelayDiagnosticEvent[]) => {
+  const { operations, startupStartedAtBySession } = collectFirstActionEvents(events)
+  const operationsByDate = new Map<string, FirstActionOperation[]>()
+
+  for (const operation of operations.values()) {
+    if (operation.startedAt == null) continue
+    const date = operation.startedAt.slice(0, 10)
+    const values = operationsByDate.get(date) ?? []
+    values.push(operation)
+    operationsByDate.set(date, values)
+  }
+
+  return [...operationsByDate.entries()]
+    .map(([date, values]) => ({
+      date,
+      summary: summarizeFirstActionOperations(values, startupStartedAtBySession)
+    }))
+    .sort((left, right) => left.date.localeCompare(right.date))
 }

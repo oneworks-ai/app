@@ -359,6 +359,9 @@ const shouldSkipStaleTerminalEvent = (db: SqliteDb, roomId: string, roomEvent: A
     return existingRun.status === 'failed' || existingRun.status === 'stopped'
   }
   if (roomEvent.type === 'run_stopped') {
+    return existingRun.status === 'failed' || existingRun.status === 'stopped'
+  }
+  if (roomEvent.type === 'run_failed') {
     return existingRun.status === 'failed'
   }
 
@@ -505,7 +508,13 @@ export function projectRuntimeRoomEvent(
     runStatus === 'failed' ||
     runStatus === 'stopped'
   const summary = getRoomSummary(event)
+  const roomEvent = summary == null || summary.trim() === ''
+    ? undefined
+    : toRoomMessageEvent(event, member, run, summary)
   service.upsertMember(room.id, member, { now: getEventTime(event) })
+  if (roomEvent != null && shouldSkipStaleTerminalEvent(db, room.id, roomEvent)) {
+    return
+  }
   service.upsertRun(room.id, {
     ...run,
     memberKey: member.key,
@@ -525,10 +534,6 @@ export function projectRuntimeRoomEvent(
     )
   }
 
-  const roomEvent = summary == null || summary.trim() === ''
-    ? undefined
-    : toRoomMessageEvent(event, member, run, summary)
-
   if (event.type === 'session_started' || roomEvent != null) {
     ensureRuntimeMemberJoined(db, service, room.id, member, getEventTime(event))
   }
@@ -537,9 +542,6 @@ export function projectRuntimeRoomEvent(
     return
   }
 
-  if (shouldSkipStaleTerminalEvent(db, room.id, roomEvent)) {
-    return
-  }
   if (roomEvent.type === 'run_completed' && hasEquivalentCompletedRoomMessage(db, room.id, roomEvent)) {
     return
   }

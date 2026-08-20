@@ -20,7 +20,7 @@ import {
   markDesktopFirstActionSessionSourceReset,
   markDesktopFirstActionSessionStatusObserved,
   restoreDesktopFirstActionFromSessionHistory
-} from '#~/diagnostics/desktop-first-action-runtime'
+} from '#~/diagnostics/desktop-first-action/runtime'
 import { isDeletedSessionUpdate, updateSessionCaches } from '#~/hooks/session-subscription-cache'
 import type { SessionUpdate } from '#~/hooks/session-subscription-cache'
 

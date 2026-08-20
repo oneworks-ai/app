@@ -133,6 +133,28 @@ describe('runtime store room projection', () => {
     expect(shouldProjectRuntimeMetadata(metadata, options, 'Existing assignment.')).toBe(false)
   })
 
+  it('reprojects a late explicit room opt-in after a checkpoint without the experiment', () => {
+    db.createSession('Late explicit room', 'sess-late-explicit-room', 'running')
+    const metadata = {
+      sessionId: 'sess-late-explicit-room',
+      title: 'Late explicit room',
+      roomId: 'room-late-explicit',
+      roomTitle: 'Explicit runtime room'
+    }
+    const options = {
+      db,
+      broadcast: false,
+      agentRoomProjectionEnabled: false,
+      checkpoint: { offset: 1 }
+    }
+
+    expect(shouldProjectRuntimeMetadata(metadata, options)).toBe(true)
+    projectRuntimeMetadata(metadata, options)
+    expect(db.getAgentRoom('room-late-explicit')).toEqual(expect.objectContaining({
+      title: 'Explicit runtime room'
+    }))
+  })
+
   it('does not create a host session room when agent room projection is disabled by default', () => {
     db.createSession('Host task', 'host-session', 'running')
     projectRuntimeMetadata({
@@ -715,6 +737,53 @@ describe('runtime store room projection', () => {
       expect.objectContaining({ content: 'Developer joined the room' }),
       expect.objectContaining({ content: 'Start developer run.' }),
       expect.objectContaining({ content: 'Developer run failed.' })
+    ])
+  })
+
+  it('projects a preserved session failure when the room missed the terminal event', () => {
+    const metadata = {
+      sessionId: 'sess-runtime-missed-failure',
+      title: 'Missing failure runtime',
+      roomId: 'room-runtime-missed-failure',
+      hostSessionId: 'host-session',
+      memberKey: 'dev',
+      memberLabel: 'Developer',
+      runId: 'run-dev',
+      runTitle: 'Developer run'
+    }
+
+    projectRuntimeEvent({
+      id: 'evt-start',
+      seq: 1,
+      sessionId: metadata.sessionId,
+      type: 'session_started',
+      status: 'running',
+      visibility: 'room',
+      summary: 'Start developer run.'
+    }, { db, broadcast: false, agentRoomProjectionEnabled: true, metadata })
+    db.updateSession(metadata.sessionId, { status: 'failed' })
+    projectRuntimeEvent({
+      id: 'evt-late-completed',
+      seq: 2,
+      sessionId: metadata.sessionId,
+      type: 'session_completed',
+      status: 'completed',
+      visibility: 'room',
+      summary: 'Developer run completed.'
+    }, { db, broadcast: false, agentRoomProjectionEnabled: true, metadata })
+
+    const detail = db.getAgentRoomDetail(metadata.roomId)
+    expect(detail?.runs).toEqual([
+      expect.objectContaining({
+        key: 'run-dev',
+        latestSummary: 'Run failed',
+        status: 'failed'
+      })
+    ])
+    expect(detail?.messages.map(message => message.eventType)).toEqual([
+      'member_joined',
+      'assignment_sent',
+      'run_failed'
     ])
   })
 })

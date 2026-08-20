@@ -1898,7 +1898,7 @@ describe('runtime store projection', () => {
     const roomMessages = db.getAgentRoomDetail('room-state')?.messages ?? []
     expect(roomMessages).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        content: 'Runtime finished.',
+        content: 'Run stopped',
         eventType: 'run_stopped'
       })
     ]))

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { summarizeFirstActionEvents } from '../src/diagnostics/first-action-summary.js'
+import {
+  summarizeFirstActionEvents,
+  summarizeFirstActionEventsByCohortDate
+} from '../src/diagnostics/first-action-summary.js'
 import type { RelayDiagnosticEvent } from '../src/types.js'
 
 const event = (
@@ -70,5 +73,43 @@ describe('first-action diagnostic summary', () => {
       successRate: 0.5,
       terminalAttempts: 2
     })
+  })
+
+  it('keeps cross-midnight terminal facts in the original submit cohort', () => {
+    const series = summarizeFirstActionEventsByCohortDate([
+      event('success-started', '2026-08-09T23:59:59.000Z', {
+        eventName: 'oneworks.diagnostic.operation.started',
+        operationId: 'first-action-success'
+      }),
+      event('failed-started', '2026-08-09T23:59:59.500Z', {
+        eventName: 'oneworks.diagnostic.operation.started',
+        operationId: 'first-action-failed'
+      }),
+      event('success-completed', '2026-08-10T00:00:01.000Z', {
+        eventName: 'oneworks.diagnostic.operation.completed',
+        operationId: 'first-action-success',
+        outcome: 'success'
+      }),
+      event('failed-completed', '2026-08-10T00:00:02.000Z', {
+        eventName: 'oneworks.diagnostic.operation.completed',
+        operationId: 'first-action-failed',
+        outcome: 'abandoned'
+      }),
+      event('terminal-only', '2026-08-10T00:00:03.000Z', {
+        eventName: 'oneworks.diagnostic.operation.completed',
+        operationId: 'first-action-partial',
+        outcome: 'success'
+      })
+    ])
+
+    expect(series).toEqual([{
+      date: '2026-08-09',
+      summary: expect.objectContaining({
+        attempts: 2,
+        pendingAttempts: 0,
+        successRate: 0.5,
+        terminalAttempts: 2
+      })
+    }])
   })
 })

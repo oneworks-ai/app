@@ -38,6 +38,21 @@ const ROOM_REOPENING_EVENT_TYPES = new Set<RuntimeEvent['type']>([
   'session_started'
 ])
 
+const resolveRuntimeRoomTerminalStatus = (event: RuntimeEvent) => {
+  if (event.type === 'command_failed' || event.type === 'operation_failed' || event.type === 'session_failed') {
+    return 'failed'
+  }
+  if (event.type === 'operation_completed' || event.type === 'session_completed') {
+    return 'completed'
+  }
+  if (event.type === 'session_stopped') {
+    return 'stopped'
+  }
+  if (event.status === 'failed' || event.status === 'crashed') return 'failed'
+  if (event.status === 'stopped' || event.status === 'cancelled' || event.status === 'killed') return 'stopped'
+  return event.status === 'completed' ? 'completed' : undefined
+}
+
 const resolveRuntimeRoomEvent = (db: SqliteDb, event: RuntimeEvent): RuntimeEvent | undefined => {
   const isTerminalEvent = ROOM_TERMINAL_EVENT_TYPES.has(event.type)
   if (!isTerminalEvent && !ROOM_REOPENING_EVENT_TYPES.has(event.type) && event.status == null) {
@@ -52,10 +67,22 @@ const resolveRuntimeRoomEvent = (db: SqliteDb, event: RuntimeEvent): RuntimeEven
     return undefined
   }
 
+  const terminalStatus = status === 'terminated' ? 'stopped' : 'failed'
+  if (resolveRuntimeRoomTerminalStatus(event) === terminalStatus) {
+    return event
+  }
+  const terminalSummary = terminalStatus === 'stopped' ? 'Run stopped' : 'Run failed'
+
   return {
     ...event,
+    content: undefined,
+    error: undefined,
+    message: undefined,
+    publicSummary: terminalSummary,
+    question: undefined,
+    summary: terminalSummary,
     type: 'status_changed',
-    status: status === 'terminated' ? 'stopped' : 'failed'
+    status: terminalStatus
   }
 }
 

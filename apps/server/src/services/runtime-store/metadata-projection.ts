@@ -48,7 +48,7 @@ export const shouldProjectRuntimeMetadata = (
   options: RuntimeStoreReplayOptions,
   assignmentSummary?: string
 ) => {
-  const shouldProjectRoom = options.agentRoomProjectionEnabled === true
+  const shouldProjectRoom = options.agentRoomProjectionEnabled === true || metadata.roomId != null
   if (
     options.checkpoint == null ||
     options.db.getSession(metadata.sessionId) == null

@@ -14,8 +14,8 @@ import type {
   WorkspaceFileOpenResponse
 } from '@oneworks/types'
 
-import { markDesktopFirstActionTerminated } from '#~/diagnostics/desktop-first-action-runtime'
-import { submitWithDesktopFirstAction } from '#~/diagnostics/desktop-first-action-submit'
+import { markDesktopFirstActionTerminated } from '#~/diagnostics/desktop-first-action/runtime'
+import { submitWithDesktopFirstAction } from '#~/diagnostics/desktop-first-action/submit'
 
 import { createApiUrl, fetchApiJson, fetchApiJsonOrThrow, jsonHeaders } from './base'
 import type { ApiOkResponse, ApiRemoveResponse, SessionMessagesResponse } from './types'

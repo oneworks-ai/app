@@ -3,30 +3,9 @@ import type { DesktopFirstActionMilestone } from '@oneworks/types'
 
 import { isChatMessageDisplayable } from '#~/components/chat/messages/message-renderability'
 
-export type DesktopFirstActionObservationSource = 'client-events' | 'session-live'
+import type { DesktopFirstActionObservationSource, DesktopFirstActionReporter } from './types'
 
-export interface DesktopFirstActionReporter {
-  accepted: (sessionId: string, actionId: string) => void
-  messageObserved: (
-    sessionId: string,
-    message: ChatMessage | null | undefined,
-    source?: DesktopFirstActionObservationSource
-  ) => void
-  restore: (
-    sessionId: string,
-    messages: ChatMessage[],
-    status: SessionStatus | undefined
-  ) => void
-  resetSource: (source: DesktopFirstActionObservationSource, sessionId?: string) => void
-  statusObserved: (
-    sessionId: string,
-    status: SessionStatus,
-    source?: DesktopFirstActionObservationSource
-  ) => void
-  submitted: (sessionId: string, actionId: string) => boolean
-  succeeded: (sessionId: string, source?: DesktopFirstActionObservationSource) => void
-  terminated: (sessionId: string, actionId: string) => void
-}
+export type { DesktopFirstActionObservationSource, DesktopFirstActionReporter } from './types'
 
 interface SubmittedSessionState {
   actionId: string
@@ -54,25 +33,31 @@ export const createDesktopFirstActionReporter = (
 ): DesktopFirstActionReporter => {
   const emittedMilestones = new Set<DesktopFirstActionMilestone>()
   const sessions = new Map<string, SubmittedSessionState>()
+  let causallyAcknowledged = false
   let firstSessionId: string | undefined
   let superseded = false
   let terminalOutcome: 'failed' | 'success' | 'terminated' | undefined
+  let uncertaintyActive = false
 
   const emitOnce = (milestone: DesktopFirstActionMilestone) => {
     if (emittedMilestones.has(milestone)) return
     emittedMilestones.add(milestone)
     emit(milestone)
   }
-
+  const finish = (
+    outcome: 'failed' | 'success' | 'terminated',
+    milestone: Extract<DesktopFirstActionMilestone, 'first.failed' | 'first.success' | 'first.terminated'>
+  ) => {
+    if (terminalOutcome != null) return
+    terminalOutcome = outcome
+    uncertaintyActive = false
+    emitOnce(milestone)
+  }
   const stateFor = (sessionId: string) => {
     if (sessionId !== firstSessionId) return
     return sessions.get(sessionId)
   }
-
-  const sourceStateFor = (
-    sessionId: string,
-    source: DesktopFirstActionObservationSource
-  ) => {
+  const sourceStateFor = (sessionId: string, source: DesktopFirstActionObservationSource) => {
     const state = stateFor(sessionId)
     if (state == null) return
     let sourceState = state.sources.get(source)
@@ -81,6 +66,12 @@ export const createDesktopFirstActionReporter = (
       state.sources.set(source, sourceState)
     }
     return { sourceState, state }
+  }
+  const observeAction = () => {
+    causallyAcknowledged = true
+    if (!uncertaintyActive) return
+    uncertaintyActive = false
+    emitOnce('submit.observed')
   }
 
   const messageObserved = (
@@ -91,9 +82,9 @@ export const createDesktopFirstActionReporter = (
     const resolved = sourceStateFor(sessionId, source)
     if (resolved == null || message == null) return
     const { sourceState, state } = resolved
-
     if (message.role === 'user') {
       if (message.id === state.actionId) {
+        observeAction()
         sourceState.actionObserved = true
       } else if (sourceState.actionObserved) {
         sourceState.closed = true
@@ -105,7 +96,6 @@ export const createDesktopFirstActionReporter = (
       superseded || terminalOutcome != null || sourceState.closed || !sourceState.actionObserved ||
       !isDisplayableAssistantResponse(message)
     ) return
-
     emitOnce('first.response.received')
   }
 
@@ -119,23 +109,26 @@ export const createDesktopFirstActionReporter = (
       superseded || terminalOutcome != null || resolved?.sourceState.actionObserved !== true ||
       resolved.sourceState.closed
     ) return
-    if (status === 'completed') {
-      terminalOutcome = 'success'
-      emitOnce('first.success')
-    } else if (status === 'failed') {
-      terminalOutcome = 'failed'
-      emitOnce('first.failed')
-    } else if (status === 'terminated') {
-      terminalOutcome = 'terminated'
-      emitOnce('first.terminated')
-    }
+    if (status === 'completed') finish('success', 'first.success')
+    else if (status === 'failed') finish('failed', 'first.failed')
+    else if (status === 'terminated') finish('terminated', 'first.terminated')
   }
 
   return {
     accepted: (sessionId, actionId) => {
       const state = stateFor(sessionId)
-      if (state == null || state.actionId !== actionId) return
+      if (
+        state == null || state.actionId !== actionId || terminalOutcome === 'failed' ||
+        terminalOutcome === 'terminated'
+      ) return
+      causallyAcknowledged = true
+      uncertaintyActive = false
       emitOnce('submit.accepted')
+    },
+    failed: (sessionId, actionId) => {
+      const state = stateFor(sessionId)
+      if (state == null || state.actionId !== actionId || causallyAcknowledged) return
+      finish('failed', 'first.failed')
     },
     messageObserved,
     restore: (sessionId, messages, status) => {
@@ -143,27 +136,19 @@ export const createDesktopFirstActionReporter = (
       if (state == null) return
       const actionIndex = messages.findIndex(message => message.role === 'user' && message.id === state.actionId)
       if (actionIndex < 0) return
+      observeAction()
       const laterMessages = messages.slice(actionIndex + 1)
       const nextUserIndex = laterMessages.findIndex(message => message.role === 'user')
       const firstTurnMessages = nextUserIndex < 0 ? laterMessages : laterMessages.slice(0, nextUserIndex)
-      if (firstTurnMessages.some(isDisplayableAssistantResponse)) {
-        emitOnce('first.response.received')
-      }
+      if (firstTurnMessages.some(isDisplayableAssistantResponse)) emitOnce('first.response.received')
       if (nextUserIndex >= 0) {
         superseded = true
         return
       }
       if (superseded || terminalOutcome != null) return
-      if (status === 'completed') {
-        terminalOutcome = 'success'
-        emitOnce('first.success')
-      } else if (status === 'failed') {
-        terminalOutcome = 'failed'
-        emitOnce('first.failed')
-      } else if (status === 'terminated') {
-        terminalOutcome = 'terminated'
-        emitOnce('first.terminated')
-      }
+      if (status === 'completed') finish('success', 'first.success')
+      else if (status === 'failed') finish('failed', 'first.failed')
+      else if (status === 'terminated') finish('terminated', 'first.terminated')
     },
     resetSource: (source, sessionId) => {
       if (sessionId != null && sessionId !== firstSessionId) return
@@ -175,22 +160,28 @@ export const createDesktopFirstActionReporter = (
       if (!isNonEmptySessionId(sessionId) || !isNonEmptyActionId(actionId)) return false
       firstSessionId ??= sessionId
       if (sessionId !== firstSessionId) return false
-      if (!sessions.has(sessionId)) {
-        sessions.set(sessionId, {
-          actionId,
-          sources: new Map()
-        })
-      }
+      if (!sessions.has(sessionId)) sessions.set(sessionId, { actionId, sources: new Map() })
       if (sessions.get(sessionId)?.actionId !== actionId) return false
+      if (uncertaintyActive) {
+        emit('submit.retrying')
+      }
       emitOnce('first.submit')
       return true
     },
     succeeded: (sessionId, source) => statusObserved(sessionId, 'completed', source),
     terminated: (sessionId, actionId) => {
       const state = stateFor(sessionId)
-      if (state == null || state.actionId !== actionId || terminalOutcome != null) return
-      terminalOutcome = 'terminated'
-      emitOnce('first.terminated')
+      if (state == null || state.actionId !== actionId) return
+      finish('terminated', 'first.terminated')
+    },
+    uncertain: (sessionId, actionId) => {
+      const state = stateFor(sessionId)
+      if (
+        state == null || state.actionId !== actionId || terminalOutcome != null ||
+        causallyAcknowledged || uncertaintyActive
+      ) return
+      uncertaintyActive = true
+      emit('submit.uncertain')
     }
   }
 }

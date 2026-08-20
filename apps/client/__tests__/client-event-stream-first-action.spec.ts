@@ -11,13 +11,16 @@ const mocks = vi.hoisted(() => ({
   statusObserved: vi.fn()
 }))
 
-vi.mock('#~/diagnostics/desktop-first-action-runtime', () => ({
+vi.mock('#~/diagnostics/desktop-first-action/runtime', () => ({
   beginDesktopFirstAction: vi.fn(),
   markDesktopFirstActionAccepted: vi.fn(),
   markDesktopFirstActionClientEventMessageObserved: mocks.messageObserved,
   markDesktopFirstActionClientEventSourceReset: mocks.resetSource,
   markDesktopFirstActionClientEventStatusObserved: mocks.statusObserved,
-  markDesktopFirstActionSubmitted: vi.fn()
+  markDesktopFirstActionFailed: vi.fn(),
+  markDesktopFirstActionSubmitted: vi.fn(),
+  markDesktopFirstActionTerminated: vi.fn(),
+  markDesktopFirstActionUncertain: vi.fn()
 }))
 
 describe('client event stream first-action diagnostics', () => {

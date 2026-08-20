@@ -1,14 +1,16 @@
 import type { ChatMessage, SessionStatus } from '@oneworks/core'
 
-import { createDesktopFirstActionId, createDesktopFirstActionReporter } from './desktop-first-action'
+import { createDesktopFirstActionId, createDesktopFirstActionReporter } from './index'
 
 const reporter = createDesktopFirstActionReporter(
   milestone => window.oneworksDesktop?.markDesktopFirstActionMilestone?.({ milestone })
 )
 
 export const markDesktopFirstActionAccepted = reporter.accepted
+export const markDesktopFirstActionFailed = reporter.failed
 export const markDesktopFirstActionSubmitted = reporter.submitted
 export const markDesktopFirstActionTerminated = reporter.terminated
+export const markDesktopFirstActionUncertain = reporter.uncertain
 export const beginDesktopFirstAction = (sessionId: string) => {
   if (window.oneworksDesktop?.markDesktopFirstActionMilestone == null) return undefined
   const actionId = createDesktopFirstActionId()

@@ -36,6 +36,7 @@ import {
   SidebarListCollapsedActions
 } from '#~/components/sidebar-list/SidebarListHeader'
 import { addDesktopViewShortcutListener } from '#~/desktop/view-shortcuts'
+import { markDesktopFirstActionTerminated } from '#~/diagnostics/desktop-first-action/runtime'
 import { activeChatAdapterAtom } from '#~/hooks/chat/active-chat-adapter'
 import {
   markOptimisticSessionDiscarded,
@@ -532,6 +533,10 @@ export function Sidebar({
   }
 
   function discardOptimisticSession(id: string) {
+    const clientActionId = optimisticCreations[id]?.request.clientActionId
+    if (clientActionId != null) {
+      markDesktopFirstActionTerminated(id, clientActionId)
+    }
     markOptimisticSessionDiscarded(id)
     setOptimisticCreations((prev) => {
       if (prev[id] == null) return prev

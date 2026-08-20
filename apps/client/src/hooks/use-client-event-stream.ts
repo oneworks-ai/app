@@ -9,7 +9,7 @@ import {
   markDesktopFirstActionClientEventMessageObserved,
   markDesktopFirstActionClientEventSourceReset,
   markDesktopFirstActionClientEventStatusObserved
-} from '#~/diagnostics/desktop-first-action-runtime'
+} from '#~/diagnostics/desktop-first-action/runtime'
 import {
   isDeletedSessionUpdate,
   revalidateConfigRelatedCaches,

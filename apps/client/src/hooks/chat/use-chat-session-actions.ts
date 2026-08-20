@@ -25,8 +25,10 @@ import {
 import {
   beginDesktopFirstAction,
   markDesktopFirstActionAccepted,
-  markDesktopFirstActionSubmitted
-} from '#~/diagnostics/desktop-first-action-runtime'
+  markDesktopFirstActionSubmitted,
+  markDesktopFirstActionTerminated
+} from '#~/diagnostics/desktop-first-action/runtime'
+import { markDesktopFirstActionTransportError } from '#~/diagnostics/desktop-first-action/submit'
 import { useSenderHeaderQueryState } from '#~/hooks/use-sender-header-query-state.js'
 import { buildMessageBranchSearch } from '#~/utils/message-branch-session'
 import { createSocket } from '#~/ws.js'
@@ -401,10 +403,16 @@ export function useChatSessionActions({
         return await handleResolvedSessionCreation(recoveredSession)
       }
       if (isOptimisticSessionDiscarded(request.id)) {
+        if (request.clientActionId != null) {
+          markDesktopFirstActionTerminated(request.id, request.clientActionId)
+        }
         removeOptimisticCreation(request.id)
         await removeSessionFromCache(request.id)
         clearOptimisticSessionDiscarded(request.id)
         return false
+      }
+      if (request.clientActionId != null) {
+        markDesktopFirstActionTransportError(request.id, request.clientActionId, err)
       }
       const errorMessage = getApiErrorMessage(err, t('chat.sessionCreateFailedMessage'))
       updateOptimisticCreation(request.id, creation => markOptimisticSessionCreationFailed(creation, errorMessage))
@@ -584,6 +592,9 @@ export function useChatSessionActions({
     const sessionId = session.id
     const messageKey = `chat-session-stop-${sessionId}`
     const isCreatingSession = optimisticCreation?.status === 'creating'
+    const optimisticClientActionId = isCreatingSession
+      ? optimisticCreation.request.clientActionId
+      : undefined
     setTerminatingSessionId(sessionId)
     void message.open({
       type: 'loading',
@@ -601,6 +612,9 @@ export function useChatSessionActions({
       })
 
       if (isCreatingSession) {
+        if (optimisticClientActionId != null) {
+          markDesktopFirstActionTerminated(sessionId, optimisticClientActionId)
+        }
         markOptimisticSessionDiscarded(sessionId)
         removeOptimisticCreation(sessionId)
         await removeSessionFromCache(sessionId)
@@ -619,6 +633,7 @@ export function useChatSessionActions({
   }, [
     isThinking,
     message,
+    optimisticCreation,
     optimisticCreation?.status,
     removeOptimisticCreation,
     removeSessionFromCache,
