@@ -21,6 +21,7 @@ import type { SessionCompactionInfo } from '../../hooks/chat/session-compaction'
 import { resolveSessionCompactionStatus } from '../../hooks/chat/session-compaction'
 import { useResponsiveLayout } from '../../hooks/use-responsive-layout'
 import { useQueryParams } from '../../hooks/useQueryParams'
+import type { PluginRuntimeSource } from '../../plugins/plugin-context'
 import { resolvePluginContributionText } from '../../plugins/plugin-i18n'
 import type { PluginContributionChatHeaderAction, PluginContributionMenuItem } from '../../plugins/plugin-manifest'
 import { usePluginCommandExecutor, usePluginSlot } from '../../plugins/plugin-slots'
@@ -555,9 +556,15 @@ export function ChatHeader({
     sessionTitle,
     terminalSessionId
   }
-  const runPluginAction = (item: { command?: string; pluginScope: string; route?: string; href?: string }) => {
+  const runPluginAction = (item: {
+    command?: string
+    href?: string
+    pluginRuntimeSource: PluginRuntimeSource
+    pluginScope: string
+    route?: string
+  }) => {
     if (item.command != null && executePluginCommand != null) {
-      void executePluginCommand(item.pluginScope, item.command, pluginPayload)
+      void executePluginCommand(item.pluginScope, item.command, pluginPayload, item.pluginRuntimeSource)
       return
     }
     if (item.route != null) {

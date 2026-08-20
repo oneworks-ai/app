@@ -9,6 +9,7 @@ import { useAppPreferences } from '#~/hooks/use-app-preferences'
 import { useClientEventStream } from '#~/hooks/use-client-event-stream'
 import { useSidebarNavigation } from '#~/hooks/use-sidebar-navigation'
 import { NotificationProvider } from '#~/notifications/NotificationProvider'
+import { PluginContributionProvider } from '#~/plugins/PluginContributionProvider'
 import { PluginProvider } from '#~/plugins/PluginProvider'
 import { PluginThemeStyles } from '#~/plugins/plugin-themes'
 import { AppRoutes } from '#~/routes/AppRoutes'
@@ -69,12 +70,20 @@ function ThemedAuthenticatedApp() {
 
 export function AuthenticatedApp() {
   useClientEventStream()
-  const pluginRuntimeSource = getRuntimeWorkspaceId() == null ? undefined : 'manager'
+  const runtimeWorkspaceId = getRuntimeWorkspaceId()
+  const pluginRuntimeSource = runtimeWorkspaceId == null ? undefined : 'manager'
+  const app = runtimeWorkspaceId == null
+    ? <ThemedAuthenticatedApp />
+    : (
+      <PluginContributionProvider runtimeSource='current' surface='workspace'>
+        <ThemedAuthenticatedApp />
+      </PluginContributionProvider>
+    )
 
   return (
     <NotificationProvider>
       <PluginProvider runtimeSource={pluginRuntimeSource}>
-        <ThemedAuthenticatedApp />
+        {app}
       </PluginProvider>
     </NotificationProvider>
   )

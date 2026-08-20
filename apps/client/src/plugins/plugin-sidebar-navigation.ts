@@ -1,5 +1,6 @@
 import { resolvePluginContributionText } from './plugin-i18n'
 import type { PluginContributionNavItem } from './plugin-manifest'
+import type { PluginCommandExecutor, RuntimeScopedPluginContribution } from './plugin-slots'
 
 export interface PluginSidebarNavigationAction {
   icon: string
@@ -18,16 +19,17 @@ export interface PluginSidebarNavigationItem {
   onSelect: () => void
 }
 
-type RuntimePluginNavigationItem = PluginContributionNavItem & { pluginScope: string }
+type RuntimePluginNavigationItem = RuntimeScopedPluginContribution<PluginContributionNavItem>
 
 const executeTarget = (
   target: { command?: string; payload?: unknown; route?: string },
   pluginScope: string,
+  pluginRuntimeSource: RuntimePluginNavigationItem['pluginRuntimeSource'],
   navigate: (route: string) => void,
-  executeCommand?: (pluginScope: string, command: string, payload?: unknown) => Promise<unknown>
+  executeCommand?: PluginCommandExecutor
 ) => {
   if (target.route == null && target.command != null && executeCommand != null) {
-    void executeCommand(pluginScope, target.command, target.payload)
+    void executeCommand(pluginScope, target.command, target.payload, pluginRuntimeSource)
     return
   }
   if (target.route != null) navigate(target.route)
@@ -40,7 +42,7 @@ export const buildPluginSidebarNavigationItems = ({
   navigate,
   pathname
 }: {
-  executeCommand?: (pluginScope: string, command: string, payload?: unknown) => Promise<unknown>
+  executeCommand?: PluginCommandExecutor
   items: RuntimePluginNavigationItem[]
   language: string
   navigate: (route: string) => void
@@ -53,7 +55,14 @@ export const buildPluginSidebarNavigationItems = ({
         icon: action.icon ?? 'arrow_forward',
         key: `${item.pluginScope}:${item.id}:${action.id}`,
         label: resolvePluginContributionText(action, 'title', language) ?? action.title,
-        onSelect: () => executeTarget(action, item.pluginScope, navigate, executeCommand)
+        onSelect: () =>
+          executeTarget(
+            action,
+            item.pluginScope,
+            item.pluginRuntimeSource,
+            navigate,
+            executeCommand
+          )
       })),
       icon: item.icon ?? 'layers',
       isActive: route != null && (
@@ -62,7 +71,14 @@ export const buildPluginSidebarNavigationItems = ({
       key: `plugin:${item.pluginScope}:${item.id}`,
       label: resolvePluginContributionText(item, 'title', language) ?? item.title,
       placement: item.placement ?? 'afterCore',
-      onSelect: () => executeTarget({ ...item, route }, item.pluginScope, navigate, executeCommand)
+      onSelect: () =>
+        executeTarget(
+          { ...item, route },
+          item.pluginScope,
+          item.pluginRuntimeSource,
+          navigate,
+          executeCommand
+        )
     }
   })
 
