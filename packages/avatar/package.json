@@ -1,7 +1,7 @@
 {
   "name": "@oneworks/avatar",
   "type": "module",
-  "version": "1.0.0-rc.4",
+  "version": "1.0.0-rc.5",
   "description": "OneWorks avatar pixel emoticon SVG renderer",
   "license": "MIT",
   "repository": {

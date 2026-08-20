@@ -1,6 +1,6 @@
 {
   "name": "@oneworks/adapter-qwen-code",
-  "version": "1.0.0-rc.4",
+  "version": "1.0.0-rc.5",
   "description": "Qwen Code CLI Adapter for One Works",
   "license": "MIT",
   "repository": {

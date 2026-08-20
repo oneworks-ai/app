@@ -241,7 +241,7 @@ describe('release tag planning', () => {
     ).toThrow(/must be newer/u)
   })
 
-  it('coordinates the root and all 76 workspace manifests on 1.0.0-rc.4', () => {
+  it('coordinates the root and all 76 workspace manifests on 1.0.0-rc.5', () => {
     const manifestPaths = [
       'package.json',
       ...readPackageManifestPaths('apps'),
@@ -260,7 +260,7 @@ describe('release tag planning', () => {
     expect(
       manifests
         .map(({ manifest }) => `${manifest.name}@${manifest.version}`)
-        .filter(identity => !identity.endsWith('@1.0.0-rc.4'))
+        .filter(identity => !identity.endsWith('@1.0.0-rc.5'))
     ).toEqual([])
     expect(
       manifests
