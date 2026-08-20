@@ -100,6 +100,15 @@ const scrubManagedClaudeSettings = (settings: ClaudeExecutionSettings): ClaudeEx
   const scrubbed = { ...settings }
   delete scrubbed.apiKeyHelper
   scrubbed.env = scrubClaudeAuthEnvironment(settings.env ?? {})
+  delete scrubbed.env.CLAUDE_CONFIG_DIR
+  return scrubbed
+}
+
+const scrubClaudeConfigDirFromSettings = (
+  settings: ClaudeExecutionSettings
+): ClaudeExecutionSettings => {
+  const scrubbed = { ...settings, env: { ...(settings.env ?? {}) } }
+  delete scrubbed.env.CLAUDE_CONFIG_DIR
   return scrubbed
 }
 
@@ -494,7 +503,11 @@ export const prepareClaudeExecution = async (
   settings = deepMerge(deepMerge(settings, managedSettings), settingsContent) as ClaudeExecutionSettings
   const officialAnthropicService = resolveOfficialAnthropicModelService(model, mergedConfig.modelServices)
   const useCCR = officialAnthropicService == null && typeof model === 'string' && model.includes(',')
-  if (useCCR && runtimeAccount.configDir != null) {
+  const managedAccountSelected = runtimeAccount.managed === true || runtimeAccount.configDir != null
+  const managedCredentialHome = runtimeAccount.credentialHome ?? (
+    runtimeAccount.configDir != null ? 'isolated' : runtimeAccount.managed === true ? 'default' : undefined
+  )
+  if (useCCR && managedAccountSelected) {
     throw new Error(
       'Managed Claude accounts cannot be combined with Claude Code Router models because router credentials override the selected account.'
     )
@@ -515,13 +528,17 @@ export const prepareClaudeExecution = async (
       sessionId
     })
   }
-  if (officialAnthropicService != null && runtimeAccount.configDir == null) {
+  if (officialAnthropicService != null && !managedAccountSelected) {
     settings.env = {
       ...settings.env,
       ...buildOfficialAnthropicEnv(officialAnthropicService, settings.env)
     }
   }
-  if (runtimeAccount.configDir != null) settings = scrubManagedClaudeSettings(settings)
+  if (managedAccountSelected) {
+    settings = scrubManagedClaudeSettings(settings)
+  } else if (managedCredentialHome != null) {
+    settings = scrubClaudeConfigDirFromSettings(settings)
+  }
   const { mcpServers, ...unresolvedSettings } = settings
   unresolvedSettings.permissions.allow = [
     ...(unresolvedSettings.permissions.allow ?? []),
@@ -636,9 +653,15 @@ export const prepareClaudeExecution = async (
       }
       : {})
   }
-  const executionEnv = runtimeAccount.configDir == null
-    ? inheritedExecutionEnv
-    : scrubClaudeAuthEnvironment(inheritedExecutionEnv)
+  const executionEnv = managedAccountSelected
+    ? scrubClaudeAuthEnvironment(inheritedExecutionEnv)
+    : inheritedExecutionEnv
+  if (managedCredentialHome != null) {
+    delete executionEnv.CLAUDE_CONFIG_DIR
+    if (managedCredentialHome === 'isolated' && runtimeAccount.configDir != null) {
+      executionEnv.CLAUDE_CONFIG_DIR = runtimeAccount.configDir
+    }
+  }
 
   const cliPath = await ensureClaudeCliPath({
     ctx,

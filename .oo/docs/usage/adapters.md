@@ -121,11 +121,13 @@ npx oneworks accounts remove claude-code work
 行为说明：
 
 - 登录和状态只调用官方 `claude auth login --claudeai` 与 `claude auth status --json`；只有 portable 且平台隔离的凭证删除才会调用官方 `claude auth logout`。
-- 每个账号使用独立、稳定的 `CLAUDE_CONFIG_DIR`，会话通过所选账号目录隔离。
+- macOS 首次新增 Claude 账号时，如果 Desktop 或默认 CLI 已有有效的机器级 Claude.ai 登录，One Works 会直接保存 device-bound 账号卡片和 binding，不重复打开登录流程。该账号明确引用默认 Claude home，不伪装成隔离登录；已有受管账号的重新认证仍走官方登录。
+- 通过官方登录建立的受管账号使用独立、稳定的 `CLAUDE_CONFIG_DIR`。引用现有 Desktop / 默认 CLI 登录的账号沿用默认 Claude home；One Works 仍会清理可能覆盖所选账号的 API Key、Router 和 settings 认证配置。
 - macOS 的 Claude 凭证通常保存在 Keychain；Linux / Windows 可能使用 `.credentials.json`。前者按 device-bound 处理，新设备需要重新登录；后者可以保存 portable 快照。
 - 删除 macOS 或其他 device-bound 账号时，One Works 只删除自己的账号记录和 binding，设备上的原生 Claude 登录仍然保留。用户若显式运行 `claude auth logout`，应将其理解为影响该机器原生登录的机器级操作。
 - `.claude.json` 不是完整凭证。One Works 只保存账号身份和 `cachedUsageUtilization` 等 allowlist 状态，不复制 machine ID、项目列表或 workspace trust。
-- 额度展示来自本地 cached usage，不是实时远端查询。
+- 额度展示优先使用身份匹配且仍新鲜的本地缓存，包括 Claude CLI 的 `cachedUsageUtilization`、Claude Desktop 的计划用量历史，以及 Desktop 已缓存的同 organization usage 响应；后者可补充“首次发消息后开始”和精确重置时间。用户主动刷新时，One Works 可以用当前官方 OAuth 凭证在内存中查询 Anthropic usage；token 不会写入 One Works 配置或日志。远端 profile、Desktop 数据与所选账号的 email / organization 不匹配时一律拒绝，远端失败或限流时按 `Retry-After` 退避并继续使用安全的本地值。
+- Desktop 与 CLI 可以共享默认机器登录和部分配置，但会话历史不会因此合并；One Works 也不会把 Desktop 会话冒充为 CLI / One Works 会话。
 
 ## Copilot 示例
 

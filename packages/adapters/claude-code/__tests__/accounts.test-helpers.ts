@@ -9,6 +9,8 @@ import type { AdapterCtx, Config } from '@oneworks/types'
 export interface ClaudeAccountsTestContextOptions {
   cwd: string
   realHome: string
+  home?: string
+  inheritedConfigDir?: string
   userConfig?: Config
   deviceCredential?: boolean
   sharedNativeCredential?: boolean
@@ -25,6 +27,8 @@ export interface ClaudeAccountsTestContextOptions {
   statusMissingOrgId?: boolean
   statusEmail?: string
   statusOrgId?: string
+  requireRealHomeForIdentity?: boolean
+  requireDefaultConfigDirForNative?: boolean
 }
 
 export const createClaudeAccountsTestHarness = () => {
@@ -76,11 +80,13 @@ if (args[0] === 'auth' && args[1] === 'login') {
   }))
   fs.writeFileSync(statePath, JSON.stringify({
     oauthAccount: {
+      accountUuid: 'account-test',
       displayName: 'Ada',
       emailAddress: 'ada@example.test',
       accessToken: 'test-nested-secret'
     },
     cachedUsageUtilization: {
+      accountUuid: 'account-test',
       accessToken: 'test-nested-secret',
       fetchedAtMs: 1700000000000,
       utilization: {
@@ -120,7 +126,9 @@ if (args[0] === 'auth' && args[1] === 'status') {
     }))
     process.exit(0)
   }
-  const nativeLoggedIn = nativeMarkerPath != null && fs.existsSync(nativeMarkerPath)
+  const nativeLoggedIn = nativeMarkerPath != null &&
+    fs.existsSync(nativeMarkerPath) &&
+    !(process.env.FAKE_CLAUDE_REQUIRE_DEFAULT_CONFIG_DIR === '1' && configDir != null)
   const loggedIn = nativeLoggedIn || (!sharedNativeCredential && credentialPath != null && fs.existsSync(credentialPath))
   let nativeIdentity = {}
   if (nativeLoggedIn) {
@@ -132,8 +140,12 @@ if (args[0] === 'auth' && args[1] === 'status') {
     loggedIn: true,
     authMethod: 'claude.ai',
     apiProvider: 'firstParty',
-    email: process.env.FAKE_CLAUDE_STATUS_EMAIL || nativeIdentity.email || 'ada@example.test',
-    orgId: process.env.FAKE_CLAUDE_STATUS_ORG_ID || nativeIdentity.orgId || 'org-test',
+    email: process.env.FAKE_CLAUDE_REQUIRE_REAL_HOME_FOR_IDENTITY === '1' && process.env.HOME !== realHome
+      ? null
+      : process.env.FAKE_CLAUDE_STATUS_EMAIL || nativeIdentity.email || 'ada@example.test',
+    orgId: process.env.FAKE_CLAUDE_REQUIRE_REAL_HOME_FOR_IDENTITY === '1' && process.env.HOME !== realHome
+      ? null
+      : process.env.FAKE_CLAUDE_STATUS_ORG_ID || nativeIdentity.orgId || 'org-test',
     orgName: 'Example',
     subscriptionType: 'pro'
   }
@@ -163,6 +175,8 @@ export const createClaudeAccountsTestContext = (params: ClaudeAccountsTestContex
   cwd: params.cwd,
   env: {
     __ONEWORKS_PROJECT_REAL_HOME__: params.realHome,
+    ...(params.home == null ? {} : { HOME: params.home }),
+    ...(params.inheritedConfigDir == null ? {} : { CLAUDE_CONFIG_DIR: params.inheritedConfigDir }),
     ...(params.deviceCredential ? { FAKE_CLAUDE_DEVICE: '1' } : {}),
     ...(params.sharedNativeCredential ? { FAKE_CLAUDE_SHARED_NATIVE: '1' } : {}),
     ...(params.authOverride
@@ -187,7 +201,9 @@ export const createClaudeAccountsTestContext = (params: ClaudeAccountsTestContex
     ...(params.statusMissingEmail ? { FAKE_CLAUDE_STATUS_MISSING_EMAIL: '1' } : {}),
     ...(params.statusMissingOrgId ? { FAKE_CLAUDE_STATUS_MISSING_ORG_ID: '1' } : {}),
     ...(params.statusEmail == null ? {} : { FAKE_CLAUDE_STATUS_EMAIL: params.statusEmail }),
-    ...(params.statusOrgId == null ? {} : { FAKE_CLAUDE_STATUS_ORG_ID: params.statusOrgId })
+    ...(params.statusOrgId == null ? {} : { FAKE_CLAUDE_STATUS_ORG_ID: params.statusOrgId }),
+    ...(params.requireRealHomeForIdentity ? { FAKE_CLAUDE_REQUIRE_REAL_HOME_FOR_IDENTITY: '1' } : {}),
+    ...(params.requireDefaultConfigDirForNative ? { FAKE_CLAUDE_REQUIRE_DEFAULT_CONFIG_DIR: '1' } : {})
   },
   cache: {
     get: vi.fn(async () => undefined) as AdapterCtx['cache']['get'],

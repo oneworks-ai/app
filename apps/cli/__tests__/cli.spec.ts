@@ -16,6 +16,12 @@ describe('cli argv normalization', () => {
   it('preserves explicit subcommands and help/version flags', () => {
     expect(normalizeCliArgs(['run', 'hello'])).toEqual(['__run', 'run', 'hello'])
     expect(normalizeCliArgs(['__run', '--print', 'hi'])).toEqual(['__run', '--print', 'hi'])
+    expect(normalizeCliArgs(['accounts', 'show', 'claude-code', 'system'])).toEqual([
+      'accounts',
+      'show',
+      'claude-code',
+      'system'
+    ])
     expect(normalizeCliArgs(['list'])).toEqual(['list'])
     expect(normalizeCliArgs(['login'])).toEqual(['login'])
     expect(normalizeCliArgs(['logout'])).toEqual(['logout'])

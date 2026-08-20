@@ -10,6 +10,7 @@ import { withDirectoryInstallLock } from '@oneworks/utils/install-lock'
 
 import {
   acquireClaudeAccountSessionLease,
+  getClaudeAccountDetail,
   getClaudeAccounts,
   manageClaudeAccount,
   resolveClaudeRuntimeAccount
@@ -44,6 +45,107 @@ afterAll(() => {
 })
 
 describe('claude account lifecycle', () => {
+  it('hides expired cached usage windows for the current Desktop account', async () => {
+    const cwd = await createTempDir('ow-claude-expired-usage-workspace-')
+    const realHome = await createTempDir('ow-claude-expired-usage-home-')
+    platformSpy.mockReturnValue('darwin')
+    await writeFile(
+      join(realHome, '.fake-claude-native-login.json'),
+      JSON.stringify({ email: 'desktop@example.test', orgId: 'org-desktop' })
+    )
+    await writeFile(
+      join(realHome, '.claude.json'),
+      JSON.stringify({
+        oauthAccount: { accountUuid: 'account-current' },
+        cachedUsageUtilization: {
+          accountUuid: 'account-current',
+          fetchedAtMs: Date.now(),
+          utilization: {
+            five_hour: { utilization: 73, resets_at: '2020-01-01T00:00:00.000Z' },
+            seven_day: { utilization: 12, resets_at: '2030-01-01T00:00:00.000Z' }
+          }
+        }
+      })
+    )
+    const ctx = createContext({ cwd, realHome, sharedNativeCredential: true })
+
+    const accounts = await getClaudeAccounts(ctx, {})
+
+    expect(accounts.accounts).toEqual([
+      expect.objectContaining({
+        key: 'system',
+        quota: expect.objectContaining({
+          summary: '7-day usage: 12%',
+          metrics: [expect.objectContaining({ id: 'seven-day', value: '12%' })]
+        })
+      })
+    ])
+    await expect(resolveClaudeRuntimeAccount({ ctx, requestedAccount: 'system' })).resolves.toEqual({
+      accountKey: 'system',
+      credentialHome: 'default'
+    })
+
+    await writeFile(
+      join(realHome, '.claude.json'),
+      JSON.stringify({
+        oauthAccount: {},
+        cachedUsageUtilization: {
+          fetchedAtMs: Date.now(),
+          utilization: {
+            seven_day: { utilization: 12, resets_at: '2030-01-01T00:00:00.000Z' }
+          }
+        }
+      })
+    )
+    await expect(getClaudeAccounts(ctx, {})).resolves.toMatchObject({
+      accounts: [expect.objectContaining({ key: 'system', quota: undefined })]
+    })
+  })
+
+  it('clears a managed account quota after all verified cache windows expire', async () => {
+    const cwd = await createTempDir('ow-claude-managed-expired-workspace-')
+    const realHome = await createTempDir('ow-claude-managed-expired-home-')
+    let ctx = createContext({ cwd, realHome })
+
+    await manageClaudeAccount(ctx, { action: 'add', account: 'work' })
+    const globalConfig = await readGlobalConfig(realHome)
+    const account = (globalConfig.adapters?.['claude-code'] as any).accounts.work
+    const expiredState = {
+      oauthAccount: { accountUuid: 'account-test' },
+      cachedUsageUtilization: {
+        accountUuid: 'account-test',
+        fetchedAtMs: Date.now(),
+        utilization: {
+          five_hour: { utilization: 88, resets_at: '2020-01-01T00:00:00.000Z' }
+        }
+      }
+    }
+    account.state = {
+      storage: 'inline',
+      type: 'claude-account-state-json',
+      version: 1,
+      portability: 'portable',
+      encoding: 'base64',
+      token: Buffer.from(JSON.stringify(expiredState), 'utf8').toString('base64')
+    }
+    account.quota = { summary: 'stale quota', metrics: [] }
+    await writeFile(join(realHome, '.oneworks', '.oo.config.json'), JSON.stringify(globalConfig))
+    await writeFile(
+      join(resolveGlobalAdapterAccountDir(ctx.env, 'claude-code', 'work'), 'config', '.claude.json'),
+      JSON.stringify(expiredState)
+    )
+    ctx = createContext({ cwd, realHome, userConfig: globalConfig })
+
+    await expect(getClaudeAccounts(ctx, {})).resolves.toMatchObject({
+      accounts: [expect.objectContaining({ key: 'work', quota: undefined })]
+    })
+    await expect(getClaudeAccountDetail(ctx, { account: 'work', refresh: true })).resolves.toMatchObject({
+      account: expect.objectContaining({ key: 'work', quota: undefined })
+    })
+    const refreshedConfig = await readGlobalConfig(realHome)
+    expect((refreshedConfig.adapters?.['claude-code'] as any).accounts.work.quota).toBeUndefined()
+  })
+
   it('serializes same-key adds before a second official login can change credentials', async () => {
     const cwd = await createTempDir('ow-claude-concurrent-workspace-')
     const realHome = await createTempDir('ow-claude-concurrent-home-')
@@ -127,8 +229,9 @@ describe('claude account lifecycle', () => {
     await writeFile(
       join(accountConfigDir, '.claude.json'),
       JSON.stringify({
-        oauthAccount: { displayName: 'Ada' },
+        oauthAccount: { accountUuid: 'account-test', displayName: 'Ada' },
         cachedUsageUtilization: {
+          accountUuid: 'account-test',
           fetchedAtMs: 1700000001000,
           utilization: {
             five_hour: { utilization: 7, resets_at: '2030-01-01T00:00:00.000Z' }

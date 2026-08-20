@@ -50,6 +50,94 @@ afterAll(() => {
 })
 
 describe('claude machine-bound account auth', () => {
+  it('adopts the first existing Darwin Desktop login without starting another login flow', async () => {
+    const cwd = await createTempDir('ow-claude-existing-desktop-workspace-')
+    const realHome = await createTempDir('ow-claude-existing-desktop-home-')
+    const mockHome = await createTempDir('ow-claude-existing-desktop-mock-home-')
+    const commandLog = join(await createTempDir('ow-claude-existing-desktop-log-'), 'commands.jsonl')
+    platformSpy.mockReturnValue('darwin')
+    await writeFile(
+      join(realHome, '.fake-claude-native-login.json'),
+      JSON.stringify({ email: 'desktop@example.test', orgId: 'org-desktop' })
+    )
+    await writeFile(
+      join(realHome, '.claude.json'),
+      JSON.stringify({
+        oauthAccount: {
+          accountUuid: 'account-current',
+          displayName: 'Desktop User',
+          emailAddress: 'desktop@example.test'
+        },
+        cachedUsageUtilization: {
+          accountUuid: 'account-previous',
+          fetchedAtMs: Date.now(),
+          utilization: {
+            five_hour: { utilization: 91, resets_at: '2030-01-01T00:00:00.000Z' }
+          }
+        }
+      })
+    )
+    let ctx = createContext({
+      cwd,
+      realHome,
+      home: mockHome,
+      inheritedConfigDir: join(mockHome, 'wrong-profile'),
+      sharedNativeCredential: true,
+      commandLog,
+      requireDefaultConfigDirForNative: true,
+      requireRealHomeForIdentity: true
+    })
+    const progress = vi.fn()
+    const added = await manageClaudeAccount(ctx, {
+      action: 'add',
+      account: 'desktop',
+      onProgress: progress
+    })
+    expect(added).toMatchObject({
+      accountKey: 'desktop',
+      account: {
+        email: 'desktop@example.test',
+        status: 'ready',
+        quota: undefined
+      },
+      message: expect.stringMatching(/existing machine-wide Claude login/i)
+    })
+    expect(progress).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.stringMatching(/existing machine-wide Claude login/i)
+    }))
+    expect((await readFile(commandLog, 'utf8')).trim().split('\n')).toEqual([
+      '["auth","status","--json"]'
+    ])
+    const globalConfig = await readGlobalConfig(realHome)
+    expect((globalConfig.adapters?.['claude-code'] as any).accounts.desktop).toMatchObject({
+      auth: {
+        storage: 'device',
+        type: 'claude-native-credential-store',
+        portability: 'device-bound'
+      },
+      email: 'desktop@example.test',
+      organizationId: 'org-desktop'
+    })
+    ctx = createContext({
+      cwd,
+      realHome,
+      home: mockHome,
+      inheritedConfigDir: join(mockHome, 'wrong-profile'),
+      sharedNativeCredential: true,
+      userConfig: globalConfig,
+      requireDefaultConfigDirForNative: true,
+      requireRealHomeForIdentity: true
+    })
+    await expect(getClaudeAccounts(ctx, {})).resolves.toMatchObject({
+      defaultAccount: 'desktop',
+      accounts: expect.arrayContaining([
+        expect.objectContaining({ key: 'desktop', status: 'ready', quota: undefined })
+      ])
+    })
+    await expect(resolveClaudeRuntimeAccount({ ctx, requestedAccount: 'desktop' }))
+      .resolves.toEqual({ accountKey: 'desktop', credentialHome: 'default', managed: true })
+  })
+
   it('marks native credentials as device-bound and requires login on a second device', async () => {
     const cwd = await createTempDir('ow-claude-device-workspace-')
     const firstHome = await createTempDir('ow-claude-first-home-')
