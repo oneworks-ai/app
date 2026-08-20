@@ -34,6 +34,12 @@ const decodeSvgDataUri = (value: string) => {
     .trim()
 }
 
+const embeddedPngDataUri = (value: string) => {
+  const match = value.match(/href="(data:image\/png;base64,[^"]+)"/u)
+  expect(match?.[1]).toBeDefined()
+  return match![1]
+}
+
 const normalizeSvg = (value: string) =>
   value
     .trim()
@@ -92,7 +98,31 @@ describe('product brand catalog', () => {
     )
   })
 
-  it('publishes Kiro with the same original neutral terminal mark used by the client package', () => {
+  it('publishes the official Cursor light and dark cube marks', () => {
+    const cursor = catalog.entries.find(entry => entry.kind === 'adapter' && entry.id === 'cursor')
+    const display = adapterDisplayMap.cursor
+
+    expect(cursor).toMatchObject({
+      darkIcon: 'assets/brand/adapters/cursor-dark.svg',
+      icon: 'assets/brand/adapters/cursor.svg',
+      label: 'Cursor'
+    })
+    expect(normalizeSvg(readRepositoryFile(cursor!.icon))).toBe(normalizeSvg(decodeSvgDataUri(display.icon)))
+    expect(normalizeSvg(readRepositoryFile(cursor!.darkIcon!))).toBe(
+      normalizeSvg(decodeSvgDataUri(display.darkIcon!))
+    )
+  })
+
+  it('publishes official repository or product-site marks for DSH, Goose, and Kiro', () => {
+    for (const adapterKey of ['dsh', 'goose', 'kiro'] as const) {
+      const entry = catalog.entries.find(item => item.kind === 'adapter' && item.id === adapterKey)
+      const display = adapterDisplayMap[adapterKey]
+
+      expect(normalizeSvg(readRepositoryFile(entry!.icon))).toBe(normalizeSvg(decodeSvgDataUri(display.icon)))
+    }
+  })
+
+  it('publishes Kiro with its official purple ghost app icon', () => {
     const kiro = catalog.entries.find(entry => entry.kind === 'adapter' && entry.id === 'kiro')
     const display = adapterDisplayMap.kiro
 
@@ -104,7 +134,21 @@ describe('product brand catalog', () => {
       priority: 47
     })
     expect(normalizeSvg(readRepositoryFile(kiro!.icon))).toBe(normalizeSvg(decodeSvgDataUri(display.icon)))
-    expect(readRepositoryFile(kiro!.icon)).not.toMatch(/ghost|official Kiro|#(?:7c3aed|9148ff|813eea|6932c8)/iu)
+    expect(readRepositoryFile(kiro!.icon)).toMatch(/#9046FF/iu)
+    expect(readRepositoryFile(kiro!.icon)).not.toMatch(/terminal adapter/iu)
+  })
+
+  it('publishes Grok Build with the official SpaceXAI light and dark marks', () => {
+    const grok = catalog.entries.find(entry => entry.kind === 'adapter' && entry.id === 'grok')
+    const display = adapterDisplayMap.grok
+
+    expect(grok).toMatchObject({
+      darkIcon: 'assets/brand/adapters/grok-dark.svg',
+      icon: 'assets/brand/adapters/grok.svg',
+      label: 'Grok'
+    })
+    expect(embeddedPngDataUri(readRepositoryFile(grok!.icon))).toBe(display.icon)
+    expect(embeddedPngDataUri(readRepositoryFile(grok!.darkIcon!))).toBe(display.darkIcon)
   })
 
   it('references repository-contained source assets', () => {

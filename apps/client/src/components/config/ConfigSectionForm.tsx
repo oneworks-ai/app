@@ -2,17 +2,18 @@ import './ConfigSectionForm.scss'
 
 import { Button, Collapse, Empty, Input, InputNumber, Slider, Switch, Tabs } from 'antd'
 import type { ReactNode } from 'react'
-import { Fragment, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import useSWR from 'swr'
 
 import type { ConfigSource, ConfigUiObjectSchema, ConfigUiSection, ModelProviderDefinition } from '@oneworks/types'
 
 import { getAdapterAccounts, listModelProviders } from '#~/api'
+import { builtInAdapterSupportsAccounts } from '#~/resources/adapters'
 import { normalizeSendShortcut, resolveSendShortcut } from '#~/utils/shortcutUtils'
 
 import { MobileAwareSelect as Select } from '#~/components/mobile-aware-select/MobileAwareSelect'
 import { UsagePanel } from '#~/components/usage/UsagePanel'
-import { AdapterAccountsManager, mergeAccounts } from './AdapterAccountsManager'
+import { AdapterAccountsManager } from './AdapterAccountsManager'
 import type { AdapterImportAction } from './AdapterImportRow'
 import { DisplayValue } from './ConfigDisplayValue'
 import { ComplexTextEditor, StringArrayEditor } from './ConfigEditors'
@@ -82,6 +83,15 @@ const modelServiceProfileFieldKeys = new Set([
   'timeoutMs',
   'maxOutputTokens',
   'extra'
+])
+const adapterModelFieldKeys = new Set(['excludeModels', 'includeModels'])
+const adapterAdvancedFieldKeys = new Set([
+  'clientInfo',
+  'configOverrides',
+  'experimentalApi',
+  'features',
+  'maxOutputTokens',
+  'sandboxPolicy'
 ])
 const withModelProviderOptions = (
   fields: FieldSpec[],
@@ -175,6 +185,13 @@ const modelServiceDetailTabPathByKey = {
   usage: ['usage']
 } as const
 type ModelServiceDetailTabKey = keyof typeof modelServiceDetailTabPathByKey
+const adapterDetailTabPathByKey = {
+  accounts: ['accounts'],
+  advanced: ['advanced'],
+  base: [],
+  models: ['models']
+} as const
+type AdapterDetailTabKey = keyof typeof adapterDetailTabPathByKey
 
 const collectionTabKeyFromPath = (nestedPath: string[] | undefined): CollectionTabKey => {
   const segment = nestedPath?.[0]
@@ -193,6 +210,13 @@ const modelServiceDetailTabKeyFromPath = (nestedPath: string[] | undefined): Mod
   if (segment === 'plan') return 'plan'
   if (segment === 'usage') return 'usage'
   return 'service'
+}
+const adapterDetailTabKeyFromPath = (nestedPath: string[] | undefined): AdapterDetailTabKey => {
+  const segment = nestedPath?.[0]
+  if (segment === 'accounts') return 'accounts'
+  if (segment === 'advanced') return 'advanced'
+  if (segment === 'models') return 'models'
+  return 'base'
 }
 const isVisibleConfigField = (
   field: FieldSpec,
@@ -410,74 +434,6 @@ export const SectionForm = ({
       )
     })
   }
-  const renderAdapterAdvancedSections = ({
-    adapterKey,
-    schema,
-    currentValue,
-    onCurrentValueChange,
-    modelSection,
-    advancedSections
-  }: {
-    adapterKey: string
-    schema: ConfigUiObjectSchema
-    currentValue: Record<string, unknown>
-    onCurrentValueChange: (nextValue: Record<string, unknown>) => void
-    modelSection?: {
-      title: string
-      visibleFieldPaths: string[][]
-    }
-    advancedSections: Array<{
-      key: string
-      title: string
-      visibleFieldPaths: string[][]
-    }>
-  }) => {
-    const visibleAdvancedSections = advancedSections.filter(section => section.visibleFieldPaths.length > 0)
-    const hasModelSection = modelSection != null && modelSection.visibleFieldPaths.length > 0
-    if (!hasModelSection && visibleAdvancedSections.length === 0) return null
-    const shouldExpandAdvancedByDefault = !hasModelSection && visibleAdvancedSections.length > 0
-
-    return (
-      <div className='config-view__field-stack'>
-        {hasModelSection && renderAdapterSchemaSection({
-          adapterKey,
-          schema,
-          currentValue,
-          onCurrentValueChange,
-          visibleFieldPaths: modelSection.visibleFieldPaths,
-          title: modelSection.title,
-          collapsible: true,
-          defaultExpanded: true,
-          collapseKey: 'models'
-        })}
-        {visibleAdvancedSections.length > 0 && renderAdapterSection({
-          title: t('config.sectionGroups.advanced'),
-          collapsible: true,
-          defaultExpanded: shouldExpandAdvancedByDefault,
-          collapseKey: 'advanced',
-          body: (
-            <div className='config-view__subsection-body'>
-              <div className='config-view__field-stack'>
-                {visibleAdvancedSections.map(section => (
-                  <Fragment key={section.key}>
-                    {renderAdapterSchemaSection({
-                      adapterKey,
-                      schema,
-                      currentValue,
-                      onCurrentValueChange,
-                      visibleFieldPaths: section.visibleFieldPaths,
-                      title: section.title
-                    })}
-                  </Fragment>
-                ))}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    )
-  }
-
   if (uiSection?.kind === 'recordMap' && fields.length === 0) {
     const recordValue = (value != null && typeof value === 'object')
       ? value as Record<string, unknown>
@@ -1184,8 +1140,17 @@ export const SectionForm = ({
     )
     ? detailMeta.itemKey
     : null
+  const adapterEntryKind = adapterDetailKey == null
+    ? undefined
+    : uiSection?.recordMap.entryKinds?.find(kind => kind.key === adapterDetailKey)
+  const adapterDetailHasConfiguredAccounts = isRecord(detailMeta?.item) && (
+    isRecord(detailMeta.item.accounts) ||
+    (typeof detailMeta.item.defaultAccount === 'string' && detailMeta.item.defaultAccount.trim() !== '')
+  )
   const adapterSupportsAccounts = adapterDetailKey == null ||
-    uiSection?.recordMap.entryKinds?.find(kind => kind.key === adapterDetailKey)?.capabilities?.accounts !== false
+    adapterEntryKind?.capabilities?.accounts === true ||
+    adapterDetailHasConfiguredAccounts ||
+    (adapterEntryKind == null && builtInAdapterSupportsAccounts(adapterDetailKey))
 
   const { data: adapterAccountsData } = useSWR(
     adapterDetailKey != null && adapterSupportsAccounts ? `/api/adapters/${adapterDetailKey}/accounts` : null,
@@ -1196,27 +1161,6 @@ export const SectionForm = ({
       revalidateOnFocus: false
     }
   )
-  const adapterDefaultAccountOptions = useMemo(() => {
-    if (adapterDetailKey == null || !isRecord(detailMeta?.item)) return undefined
-
-    const configuredDefaultAccount =
-      typeof detailMeta.item.defaultAccount === 'string' && detailMeta.item.defaultAccount.trim() !== ''
-        ? detailMeta.item.defaultAccount.trim()
-        : undefined
-    const configuredAccountsValue = getValueByPath(detailMeta.item, ['accounts'])
-    const configuredAccounts = isRecord(configuredAccountsValue) ? { ...configuredAccountsValue } : {}
-
-    if (configuredDefaultAccount != null && configuredAccounts[configuredDefaultAccount] == null) {
-      configuredAccounts[configuredDefaultAccount] = { title: configuredDefaultAccount }
-    }
-
-    return mergeAccounts(configuredAccounts, adapterAccountsData?.accounts ?? [], configuredDefaultAccount)
-      .map((account) => ({
-        value: account.key,
-        label: account.title === account.key ? account.key : `${account.title} (${account.key})`
-      }))
-  }, [adapterAccountsData?.accounts, adapterDetailKey, detailMeta?.item])
-
   if (detailMeta != null) {
     const detailCollection = detailMeta.field.detailCollection
     const canOverrideInheritedDetailItem = detailCollection != null &&
@@ -1840,29 +1784,64 @@ export const SectionForm = ({
       const accountItemSchema = sectionKey === 'adapters'
         ? itemSchema?.recordFields?.accounts?.itemSchema
         : undefined
-      const isAdapterAccountsNestedRoute = sectionKey === 'adapters' &&
-        detailRoute?.nestedPath?.[0] === 'accounts'
+      if (shouldRenderJsonFallback && sectionKey === 'adapters') {
+        const openFallbackAdapterTab = (tabKey: 'accounts' | 'base') => {
+          onOpenDetailRoute?.({
+            kind: detailRoute?.kind ?? 'detailCollectionItem',
+            fieldPath: detailMeta.field.path,
+            itemKey: detailMeta.itemKey,
+            nestedPath: tabKey === 'accounts' ? ['accounts'] : []
+          })
+        }
+        const fallbackAdapterTabItems = [
+          {
+            key: 'base',
+            label: tabLabel('settings', t('config.sectionGroups.base')),
+            children: (
+              <ComplexTextEditor
+                value={detailMeta.item}
+                onChange={(next) => writeDetailItem((next ?? {}) as Record<string, unknown>)}
+              />
+            )
+          },
+          ...(adapterSupportsAccounts
+            ? [{
+              key: 'accounts',
+              label: tabLabel('manage_accounts', t('config.accounts.title')),
+              children: (
+                <AdapterAccountsManager
+                  adapterKey={detailMeta.itemKey}
+                  value={detailMeta.item}
+                  accountsData={adapterAccountsData}
+                  accountItemSchema={accountItemSchema}
+                  onChange={writeDetailItem}
+                  nestedPath={detailRoute?.nestedPath ?? ['accounts']}
+                  onOpenNestedPath={(nextPath) => {
+                    onOpenDetailRoute?.({
+                      kind: detailRoute?.kind ?? 'detailCollectionItem',
+                      fieldPath: detailMeta.field.path,
+                      itemKey: detailMeta.itemKey,
+                      nestedPath: nextPath
+                    })
+                  }}
+                  t={t}
+                />
+              )
+            }]
+            : [])
+        ]
+        const fallbackAdapterActiveTab = detailRoute?.nestedPath?.[0] === 'accounts' && adapterSupportsAccounts
+          ? 'accounts'
+          : 'base'
 
-      if (isAdapterAccountsNestedRoute && adapterSupportsAccounts) {
         return (
           <div className='config-view__detail-panel'>
             {detailNotice}
-            <AdapterAccountsManager
-              adapterKey={detailMeta.itemKey}
-              value={detailMeta.item}
-              accountsData={adapterAccountsData}
-              accountItemSchema={accountItemSchema}
-              onChange={writeDetailItem}
-              nestedPath={detailRoute.nestedPath}
-              onOpenNestedPath={(nextPath) => {
-                onOpenDetailRoute?.({
-                  kind: detailRoute.kind,
-                  fieldPath: detailMeta.field.path,
-                  itemKey: detailMeta.itemKey,
-                  nestedPath: nextPath
-                })
-              }}
-              t={t}
+            <Tabs
+              className='config-view__collection-tabs config-view__adapter-detail-tabs'
+              activeKey={fallbackAdapterActiveTab}
+              onChange={key => openFallbackAdapterTab(key as 'accounts' | 'base')}
+              items={fallbackAdapterTabItems}
             />
           </div>
         )
@@ -1886,7 +1865,8 @@ export const SectionForm = ({
           const hiddenFieldPaths = [
             ...(isKnownEntry && uiSection.recordMap.mode === 'discriminated' ? [[discriminatorField]] : []),
             ['accounts'],
-            ...(adapterSupportsAccounts ? [] : [['defaultAccount'], ['accountTombstones']])
+            ['defaultAccount'],
+            ['accountTombstones']
           ]
           const visibleAdapterFields = itemSchema.fields.filter(field =>
             !hiddenFieldPaths.some(hiddenPath => (
@@ -1894,44 +1874,24 @@ export const SectionForm = ({
               field.path.every((segment, index) => segment === hiddenPath[index])
             ))
           )
-          const defaultAccountFieldPaths = visibleAdapterFields
-            .filter(field => field.path.length === 1 && field.path[0] === 'defaultAccount')
-            .map(field => field.path)
-          const advancedFields = visibleAdapterFields
-            .filter(field => (
-              (field.path.length === 1 && (
-                field.path[0] === 'includeModels' ||
-                field.path[0] === 'excludeModels' ||
-                field.path[0] === 'experimentalApi' ||
-                field.path[0] === 'maxOutputTokens'
-              )) ||
+          const modelFields = visibleAdapterFields.filter(field => (
+            field.path.length === 1 && adapterModelFieldKeys.has(field.path[0] ?? '')
+          ))
+          const modelFieldPathKeys = new Set(modelFields.map(field => field.path.join('.')))
+          const advancedFields = visibleAdapterFields.filter(field => {
+            if (modelFieldPathKeys.has(field.path.join('.'))) return false
+            const topLevelKey = field.path.length === 1 ? field.path[0] : undefined
+            return (topLevelKey != null && adapterAdvancedFieldKeys.has(topLevelKey)) ||
               field.type === 'json' ||
               field.type === 'multiline' ||
               field.type === 'string[]'
-            ))
-          const primaryFieldPaths = visibleAdapterFields
-            .filter(field =>
-              !defaultAccountFieldPaths.some(path => (
-                field.path.length === path.length &&
-                field.path.every((segment, index) => segment === path[index])
-              ))
-            )
-            .filter(field =>
-              !advancedFields.some(advancedField => (
-                field.path.length === advancedField.path.length &&
-                field.path.every((segment, index) => segment === advancedField.path[index])
-              ))
-            )
+          })
+          const advancedFieldPathKeys = new Set(advancedFields.map(field => field.path.join('.')))
+          const baseFieldPaths = visibleAdapterFields
+            .filter(field => !modelFieldPathKeys.has(field.path.join('.')))
+            .filter(field => !advancedFieldPathKeys.has(field.path.join('.')))
             .map(field => field.path)
-          const modelSection = {
-            title: t('config.sectionGroups.models'),
-            visibleFieldPaths: advancedFields
-              .filter(field => (
-                isTopLevelField(field.path, 'includeModels') ||
-                isTopLevelField(field.path, 'excludeModels')
-              ))
-              .map(field => field.path)
-          }
+          const modelFieldPaths = modelFields.map(field => field.path)
           const advancedSections = [
             {
               key: 'runtime',
@@ -1973,8 +1933,6 @@ export const SectionForm = ({
               visibleFieldPaths: advancedFields
                 .filter(field =>
                   !(
-                    isTopLevelField(field.path, 'includeModels') ||
-                    isTopLevelField(field.path, 'excludeModels') ||
                     isTopLevelField(field.path, 'experimentalApi') ||
                     isTopLevelField(field.path, 'maxOutputTokens') ||
                     isTopLevelField(field.path, 'sandboxPolicy') ||
@@ -1986,43 +1944,54 @@ export const SectionForm = ({
                 .map(field => field.path)
             }
           ]
-
-          return (
-            <div className='config-view__detail-panel'>
-              {detailNotice}
-              <div className='config-view__field-stack'>
-                {renderAdapterSchemaSection({
+          const visibleAdvancedSections = advancedSections.filter(section => section.visibleFieldPaths.length > 0)
+          const openAdapterTab = (tabKey: AdapterDetailTabKey) => {
+            onOpenDetailRoute?.({
+              kind: detailRoute?.kind ?? 'detailCollectionItem',
+              fieldPath: detailMeta.field.path,
+              itemKey: detailMeta.itemKey,
+              nestedPath: [...adapterDetailTabPathByKey[tabKey]]
+            })
+          }
+          const adapterTabItems = [
+            {
+              key: 'base',
+              label: tabLabel('settings', t('config.sectionGroups.base')),
+              children: baseFieldPaths.length > 0
+                ? renderAdapterSchemaSection({
                   adapterKey: detailMeta.itemKey,
                   schema: itemSchema,
                   currentValue: detailMeta.item,
                   onCurrentValueChange: writeDetailItem,
-                  visibleFieldPaths: primaryFieldPaths,
-                  title: t('config.sectionGroups.base'),
-                  collapsible: true,
-                  defaultExpanded: true,
-                  collapseKey: 'base'
-                })}
-                {renderAdapterSchemaSection({
+                  visibleFieldPaths: baseFieldPaths
+                })
+                : <Empty description={t('common.noData')} image={null} />
+            },
+            ...(modelFieldPaths.length > 0
+              ? [{
+                key: 'models',
+                label: tabLabel('view_list', t('config.sectionGroups.models')),
+                children: renderAdapterSchemaSection({
                   adapterKey: detailMeta.itemKey,
                   schema: itemSchema,
                   currentValue: detailMeta.item,
                   onCurrentValueChange: writeDetailItem,
-                  visibleFieldPaths: defaultAccountFieldPaths,
-                  title: undefined,
-                  resolveFieldOptions: (field) => (
-                    field.path.length === 1 && field.path[0] === 'defaultAccount'
-                      ? adapterDefaultAccountOptions ?? []
-                      : undefined
-                  )
-                })}
-                {adapterSupportsAccounts && (
+                  visibleFieldPaths: modelFieldPaths
+                })
+              }]
+              : []),
+            ...(adapterSupportsAccounts
+              ? [{
+                key: 'accounts',
+                label: tabLabel('manage_accounts', t('config.accounts.title')),
+                children: (
                   <AdapterAccountsManager
                     adapterKey={detailMeta.itemKey}
                     value={detailMeta.item}
                     accountsData={adapterAccountsData}
                     accountItemSchema={accountItemSchema}
                     onChange={writeDetailItem}
-                    nestedPath={detailRoute?.nestedPath}
+                    nestedPath={detailRoute?.nestedPath ?? ['accounts']}
                     onOpenNestedPath={(nextPath) => {
                       onOpenDetailRoute?.({
                         kind: detailRoute?.kind ?? 'detailCollectionItem',
@@ -2033,16 +2002,46 @@ export const SectionForm = ({
                     }}
                     t={t}
                   />
-                )}
-                {renderAdapterAdvancedSections({
-                  adapterKey: detailMeta.itemKey,
-                  schema: itemSchema,
-                  currentValue: detailMeta.item,
-                  onCurrentValueChange: writeDetailItem,
-                  modelSection,
-                  advancedSections
-                })}
-              </div>
+                )
+              }]
+              : []),
+            ...(visibleAdvancedSections.length > 0
+              ? [{
+                key: 'advanced',
+                label: tabLabel('tune', t('config.sectionGroups.advanced')),
+                children: (
+                  <div className='config-view__field-stack'>
+                    {visibleAdvancedSections.map(section => (
+                      <div key={section.key}>
+                        {renderAdapterSchemaSection({
+                          adapterKey: detailMeta.itemKey,
+                          schema: itemSchema,
+                          currentValue: detailMeta.item,
+                          onCurrentValueChange: writeDetailItem,
+                          visibleFieldPaths: section.visibleFieldPaths,
+                          title: section.title
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                )
+              }]
+              : [])
+          ]
+          const adapterActiveTab = adapterDetailTabKeyFromPath(detailRoute?.nestedPath)
+          const adapterRenderedActiveTab = adapterTabItems.some(item => item.key === adapterActiveTab)
+            ? adapterActiveTab
+            : 'base'
+
+          return (
+            <div className='config-view__detail-panel'>
+              {detailNotice}
+              <Tabs
+                className='config-view__collection-tabs config-view__adapter-detail-tabs'
+                activeKey={adapterRenderedActiveTab}
+                onChange={key => openAdapterTab(key as AdapterDetailTabKey)}
+                items={adapterTabItems}
+              />
             </div>
           )
         }

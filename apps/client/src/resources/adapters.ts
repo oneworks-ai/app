@@ -13,7 +13,11 @@ import {
   adapterIconDark as codexIconDark
 } from '@oneworks/adapter-codex/icon'
 import { adapterDisplayName as copilotDisplayName, adapterIcon as copilotIcon } from '@oneworks/adapter-copilot/icon'
-import { adapterDisplayName as cursorDisplayName, adapterIcon as cursorIcon } from '@oneworks/adapter-cursor/icon'
+import {
+  adapterDisplayName as cursorDisplayName,
+  adapterIcon as cursorIcon,
+  adapterIconDark as cursorIconDark
+} from '@oneworks/adapter-cursor/icon'
 import {
   adapterDisplayName as droidDisplayName,
   adapterIcon as droidIcon,
@@ -22,7 +26,11 @@ import {
 import { adapterDisplayName as dshDisplayName, adapterIcon as dshIcon } from '@oneworks/adapter-dsh/icon'
 import { adapterDisplayName as geminiDisplayName, adapterIcon as geminiIcon } from '@oneworks/adapter-gemini/icon'
 import { adapterDisplayName as gooseDisplayName, adapterIcon as gooseIcon } from '@oneworks/adapter-goose/icon'
-import { adapterDisplayName as grokDisplayName, adapterIcon as grokIcon } from '@oneworks/adapter-grok/icon'
+import {
+  adapterDisplayName as grokDisplayName,
+  adapterIcon as grokIcon,
+  adapterIconDark as grokIconDark
+} from '@oneworks/adapter-grok/icon'
 import { adapterDisplayName as junieDisplayName, adapterIcon as junieIcon } from '@oneworks/adapter-junie/icon'
 import { adapterDisplayName as kimiDisplayName, adapterIcon as kimiIcon } from '@oneworks/adapter-kimi/icon'
 import { adapterDisplayName as kiroDisplayName, adapterIcon as kiroIcon } from '@oneworks/adapter-kiro/icon'
@@ -64,7 +72,8 @@ export const adapterDisplayMap = {
   },
   cursor: {
     title: cursorDisplayName,
-    icon: cursorIcon
+    icon: cursorIcon,
+    darkIcon: cursorIconDark
   },
   dsh: {
     title: dshDisplayName,
@@ -85,7 +94,8 @@ export const adapterDisplayMap = {
   },
   grok: {
     title: grokDisplayName,
-    icon: grokIcon
+    icon: grokIcon,
+    darkIcon: grokIconDark
   },
   kiro: {
     title: kiroDisplayName,
@@ -115,6 +125,10 @@ export const adapterDisplayMap = {
 } as const satisfies Record<string, AdapterDisplay>
 
 export const builtInAdapterKeys = Object.keys(adapterDisplayMap)
+
+export const builtInAdapterSupportsAccounts = (adapterKey: string) => (
+  builtInAdapterKeys.includes(adapterKey) && adapterKey !== 'droid'
+)
 
 export const getAdapterDisplay = (adapterKey: string): AdapterDisplay => {
   return adapterDisplayMap[adapterKey as keyof typeof adapterDisplayMap] ?? {

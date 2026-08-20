@@ -44,6 +44,7 @@
       "label": "Cursor",
       "kind": "adapter",
       "icon": "assets/brand/adapters/cursor.svg",
+      "darkIcon": "assets/brand/adapters/cursor-dark.svg",
       "enabled": true,
       "featured": true,
       "priority": 35
@@ -90,6 +91,7 @@
       "label": "Grok",
       "kind": "adapter",
       "icon": "assets/brand/adapters/grok.svg",
+      "darkIcon": "assets/brand/adapters/grok-dark.svg",
       "enabled": true,
       "featured": true,
       "priority": 45

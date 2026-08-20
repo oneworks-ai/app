@@ -81,18 +81,23 @@ vi.mock('antd', () => ({
   Button: ({
     'aria-label': ariaLabel,
     children,
+    className,
     disabled,
     icon,
     onClick
   }: {
     'aria-label'?: string
     children?: ReactNode
+    className?: string
     disabled?: boolean
     icon?: ReactNode
     onClick?: () => Promise<void> | void
   }) => {
     if (ariaLabel != null && onClick != null) testState.buttonOnClicks.set(ariaLabel, onClick)
-    return <button type='button' aria-label={ariaLabel} disabled={disabled}>{icon}{children}</button>
+    return <button type='button' aria-label={ariaLabel} className={className} disabled={disabled}>
+      {icon}
+      {children}
+    </button>
   },
   Collapse: ({ className, items }: {
     className?: string
@@ -353,6 +358,33 @@ describe('adapter accounts manager', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+  })
+
+  it('marks only the current default account with the filled-star state', async () => {
+    const { AdapterAccountsManager } = await import('#~/components/config/AdapterAccountsManager')
+    const html = renderToStaticMarkup(
+      <AdapterAccountsManager
+        adapterKey='codex'
+        value={{ defaultAccount: 'work' }}
+        accountsData={{
+          accounts: [
+            { key: 'work', title: 'Work', status: 'ready' },
+            { key: 'personal', title: 'Personal', status: 'ready' }
+          ],
+          actions: []
+        }}
+        nestedPath={['accounts']}
+        onChange={vi.fn()}
+        onOpenNestedPath={vi.fn()}
+        t={t}
+      />
+    )
+
+    expect(html.match(/adapter-account-manager__row-action--active/g)).toHaveLength(1)
+    expect(html).toContain(
+      'aria-label="Clear default account" class="adapter-account-manager__row-action adapter-account-manager__row-action--active"'
+    )
+    expect(html).toContain('aria-label="Set as default account" class="adapter-account-manager__row-action"')
   })
 
   it('loads and displays the selected account quota', async () => {

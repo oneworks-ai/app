@@ -20,7 +20,8 @@ import { UsagePanel } from '#~/components/usage/UsagePanel'
 import { focusDesktopWindowIfAvailable } from '#~/desktop/manager-runtime'
 import { useAdapterAccountQuotaDetail } from '#~/hooks/use-adapter-account-quota-detail'
 
-import { getFieldDescription, getFieldLabel, getValueByPath, setValueByPath } from './configUtils'
+import { getConfiguredAdapterAccounts, mergeAdapterAccounts } from './adapter-accounts'
+import { getFieldDescription, getFieldLabel, setValueByPath } from './configUtils'
 import type { TranslationFn } from './configUtils'
 import { SchemaObjectEditor } from './record-editors/SchemaObjectEditor'
 
@@ -45,8 +46,7 @@ type AccountDetailTab = 'usage' | 'settings'
 type AccountActionProgressPhase = NonNullable<AdapterManageAccountProgressEvent['phase']>
 
 const getConfiguredAccounts = (value: Record<string, unknown>) => {
-  const configured = getValueByPath(value, ['accounts'])
-  return isRecord(configured) ? configured : {}
+  return getConfiguredAdapterAccounts(value)
 }
 
 const getConfiguredAccountEntry = (value: Record<string, unknown>, accountKey: string) => {
@@ -118,24 +118,6 @@ const getAccountInitials = (...values: Array<string | undefined>) => {
     : Array.from(segments[0] ?? localPart).slice(0, 2)
 
   return characters.join('').toLocaleUpperCase()
-}
-
-const compareAccountInfo = (
-  left: Pick<AdapterAccountInfo, 'key' | 'title' | 'status' | 'isDefault'>,
-  right: Pick<AdapterAccountInfo, 'key' | 'title' | 'status' | 'isDefault'>
-) => {
-  if (left.isDefault === true && right.isDefault !== true) return -1
-  if (right.isDefault === true && left.isDefault !== true) return 1
-
-  if (left.status !== right.status) {
-    if (left.status === 'ready') return -1
-    if (right.status === 'ready') return 1
-  }
-
-  const titleOrder = normalizeText(left.title).localeCompare(normalizeText(right.title))
-  if (titleOrder !== 0) return titleOrder
-
-  return left.key.localeCompare(right.key)
 }
 
 const renderTooltipContent = (label: string, description?: string) => {
@@ -249,43 +231,6 @@ const AccountActionButtons = ({
       })}
     </div>
   )
-}
-
-export const mergeAccounts = (
-  configured: Record<string, unknown>,
-  discovered: AdapterAccountInfo[],
-  defaultAccountKey?: string
-) => {
-  const merged = new Map<string, AdapterAccountInfo>()
-
-  Object.entries(configured).forEach(([key, entry]) => {
-    const configuredEntry = isRecord(entry) ? entry : {}
-    const title = typeof configuredEntry.title === 'string' ? configuredEntry.title.trim() : ''
-    const description = typeof configuredEntry.description === 'string' ? configuredEntry.description.trim() : ''
-    merged.set(key, {
-      key,
-      title: title !== '' ? title : key,
-      ...(description !== '' ? { description } : {}),
-      status: 'missing'
-    })
-  })
-
-  discovered.forEach((account) => {
-    const existing = merged.get(account.key)
-    merged.set(account.key, {
-      ...existing,
-      ...account
-    })
-  })
-
-  return [...merged.values()]
-    .map(account => ({
-      ...account,
-      isDefault: defaultAccountKey != null && defaultAccountKey !== ''
-        ? account.key === defaultAccountKey
-        : account.isDefault
-    }))
-    .sort(compareAccountInfo)
 }
 
 export const AccountEditor = ({
@@ -806,8 +751,8 @@ const AccountsListView = ({
                       aria-label={isDefault
                         ? t('config.accounts.rowActions.clearDefault', { defaultValue: 'Clear default account' })
                         : t('config.accounts.rowActions.setDefault', { defaultValue: 'Set as default account' })}
-                      className={`adapter-account-manager__row-action ${
-                        isDefault ? 'adapter-account-manager__row-action--active' : ''
+                      className={`adapter-account-manager__row-action${
+                        isDefault ? ' adapter-account-manager__row-action--active' : ''
                       }`}
                       icon={<span className='material-symbols-rounded'>star</span>}
                       onClick={(event) => {
@@ -892,7 +837,7 @@ export const AdapterAccountsManager = ({
   const resolvedAccountsData = accountsData ?? localAccountsData
   const configuredAccounts = useMemo(() => getConfiguredAccounts(value), [value])
   const accounts = useMemo(
-    () => mergeAccounts(configuredAccounts, resolvedAccountsData?.accounts ?? [], configuredDefaultAccount),
+    () => mergeAdapterAccounts(configuredAccounts, resolvedAccountsData?.accounts ?? [], configuredDefaultAccount),
     [configuredAccounts, configuredDefaultAccount, resolvedAccountsData?.accounts]
   )
   const actionDescriptors = resolvedAccountsData?.actions ?? []
