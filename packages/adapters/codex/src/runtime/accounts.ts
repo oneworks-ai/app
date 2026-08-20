@@ -2,7 +2,7 @@
 import { Buffer } from 'node:buffer'
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { access, lstat, mkdir, readFile, readdir, rm } from 'node:fs/promises'
+import { access, chmod, lstat, mkdir, readFile, readdir, rm } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
@@ -137,6 +137,8 @@ interface CodexGlobalAccountCredentialRevision {
   authFile?: string
   authFileDigest?: string
   inlineAuthDigest?: string
+  generation?: string
+  credentialRevision?: string
 }
 
 interface CodexAccountIdentity {
@@ -182,6 +184,12 @@ interface CodexAccountProbe extends CodexAccountIdentity {
   quota?: AdapterAccountInfo['quota']
   resetCreditDetailsCapturedAt?: number
   resetCreditOutcome?: CodexRateLimitResetCreditOutcome
+}
+
+interface CodexAccountProbeResult {
+  probe: CodexAccountProbe
+  authContent: string
+  credentialsValidated: boolean
 }
 
 type CodexRateLimitResetCreditOutcome = 'reset' | 'alreadyRedeemed' | 'nothingToReset' | 'noCredit'
@@ -1299,7 +1307,9 @@ const buildCodexGlobalAccountCredentialRevision = async (
       : createHash('sha256').update(authFileContent).digest('hex'),
     inlineAuthDigest: inlineAuthContent == null
       ? undefined
-      : createHash('sha256').update(inlineAuthContent).digest('hex')
+      : createHash('sha256').update(inlineAuthContent).digest('hex'),
+    generation: normalizeNonEmptyString(configuredAccount.generation),
+    credentialRevision: normalizeNonEmptyString(configuredAccount.credentialRevision)
   }
 }
 
@@ -1309,7 +1319,9 @@ const codexGlobalAccountCredentialRevisionsMatch = (
 ) => (
   left.authFile === right.authFile &&
   left.authFileDigest === right.authFileDigest &&
-  left.inlineAuthDigest === right.inlineAuthDigest
+  left.inlineAuthDigest === right.inlineAuthDigest &&
+  left.generation === right.generation &&
+  left.credentialRevision === right.credentialRevision
 )
 
 const readCodexGlobalAccountCredentialRevision = async (
@@ -1834,10 +1846,19 @@ const resolveProbeLogger = (ctx: Pick<AdapterCtx, 'cwd' | 'ctxId' | 'env'>, key:
   createLogger(ctx.cwd, `${ctx.ctxId}/adapter-codex-accounts`, key, '', 'info', ctx.env as NodeJS.ProcessEnv)
 )
 
+const readCodexProbeAuthContent = async (authFilePath: string) => {
+  const authFileStat = await lstat(authFilePath)
+  if (!authFileStat.isSymbolicLink()) {
+    await chmod(authFilePath, 0o600)
+  }
+  return readFile(authFilePath, 'utf8')
+}
+
 const probeCodexAccount = async (params: {
   ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'ctxId'>
   homeDir: string
   authFilePath: string
+  binaryPath?: string
   refresh?: boolean
   fetchProfile?: boolean
   logKey: string
@@ -1846,18 +1867,20 @@ const probeCodexAccount = async (params: {
     idempotencyKey: string
   }
   timeoutMs?: number
-}): Promise<CodexAccountProbe> => {
+}): Promise<CodexAccountProbeResult> => {
   const { ctx, homeDir, authFilePath, refresh, fetchProfile, logKey, consumeResetCredit, timeoutMs } = params
   const logger = resolveProbeLogger(ctx, logKey)
-  const binaryPath = resolveCodexBinaryPath(ctx.env, ctx.cwd)
+  const binaryPath = params.binaryPath ?? resolveCodexBinaryPath(ctx.env, ctx.cwd)
   const spawnEnv = buildSpawnEnv(ctx)
   const authIdentity = await readCodexAuthIdentityFromFile(authFilePath)
   spawnEnv.HOME = homeDir
+  spawnEnv.CODEX_HOME = join(homeDir, '.codex')
 
   await mkdir(join(homeDir, '.codex'), { recursive: true })
+  const probeAuthFilePath = join(homeDir, '.codex', 'auth.json')
   await syncSymlinkTarget({
     sourcePath: authFilePath,
-    targetPath: join(homeDir, '.codex', 'auth.json'),
+    targetPath: probeAuthFilePath,
     type: 'file',
     onMissingSource: 'remove'
   })
@@ -1917,24 +1940,31 @@ const probeCodexAccount = async (params: {
       })
     let accountResult: unknown
     let rateLimitsResult: unknown
+    let accountReadSucceeded = false
+    let rateLimitsReadSucceeded = false
     let profile: Awaited<ReturnType<typeof fetchCodexProfileFromFile>>
     if (consumeResetCredit == null) {
       accountResult = await rpc.request('account/read', {
         ...(refresh === true ? { refreshToken: true } : {})
       })
+      await readCodexProbeAuthContent(probeAuthFilePath)
+      accountReadSucceeded = true
       const snapshotResult = await Promise.all([
         rpc.request('account/rateLimits/read'),
         fetchProfile === false
           ? Promise.resolve(undefined)
-          : fetchCodexProfileFromFile(authFilePath)
+          : fetchCodexProfileFromFile(probeAuthFilePath)
       ])
       rateLimitsResult = snapshotResult[0]
+      rateLimitsReadSucceeded = true
       profile = snapshotResult[1]
     } else {
       try {
         accountResult = await rpc.request('account/read', {
           ...(refresh === true ? { refreshToken: true } : {})
         })
+        await readCodexProbeAuthContent(probeAuthFilePath)
+        accountReadSucceeded = true
       } catch (error) {
         logger.warn('[codex account] reset credit was consumed, but account refresh failed', {
           error: error instanceof Error ? error.message : String(error)
@@ -1943,6 +1973,7 @@ const probeCodexAccount = async (params: {
 
       try {
         rateLimitsResult = await rpc.request('account/rateLimits/read')
+        rateLimitsReadSucceeded = true
       } catch (error) {
         logger.warn('[codex account] reset credit was consumed, but quota refresh failed', {
           error: error instanceof Error ? error.message : String(error)
@@ -1950,7 +1981,7 @@ const probeCodexAccount = async (params: {
       }
 
       if (fetchProfile !== false) {
-        profile = await fetchCodexProfileFromFile(authFilePath)
+        profile = await fetchCodexProfileFromFile(probeAuthFilePath)
       }
     }
 
@@ -2116,23 +2147,27 @@ const probeCodexAccount = async (params: {
       .join(' · ')
 
     return {
-      ...authIdentity,
-      accountType: accountType ?? authIdentity?.accountType,
-      displayName: profile?.displayName ?? authIdentity?.displayName,
-      email: email ?? authIdentity?.email,
-      planType: planType ?? authIdentity?.planType,
-      avatarUrl: profile?.avatarUrl,
-      resetCreditOutcome: parseResetCreditOutcome(consumeResult),
-      quota: summary === '' &&
-          metrics.length === 0 &&
-          rateLimitResetCredits == null
-        ? undefined
-        : {
-          summary: summary === '' ? undefined : summary,
-          metrics,
-          rateLimitResetCredits,
-          updatedAt: Date.now()
-        }
+      probe: {
+        ...authIdentity,
+        accountType: accountType ?? authIdentity?.accountType,
+        displayName: profile?.displayName ?? authIdentity?.displayName,
+        email: email ?? authIdentity?.email,
+        planType: planType ?? authIdentity?.planType,
+        avatarUrl: profile?.avatarUrl,
+        resetCreditOutcome: parseResetCreditOutcome(consumeResult),
+        quota: summary === '' &&
+            metrics.length === 0 &&
+            rateLimitResetCredits == null
+          ? undefined
+          : {
+            summary: summary === '' ? undefined : summary,
+            metrics,
+            rateLimitResetCredits,
+            updatedAt: Date.now()
+          }
+      },
+      authContent: await readCodexProbeAuthContent(probeAuthFilePath),
+      credentialsValidated: accountReadSucceeded && rateLimitsReadSucceeded
     }
   } finally {
     clearTimeout(timeout)
@@ -2548,8 +2583,10 @@ const writeProbeMetadata = async (params: {
   ctx: CodexAccountFileCtx
   descriptor: CodexAccountDescriptor
   probe: CodexAccountProbe
+  refreshedAuthContent?: string
+  expectedCredentialRevision?: CodexGlobalAccountCredentialRevision
 }) => {
-  const { ctx, descriptor, probe } = params
+  const { ctx, descriptor, probe, refreshedAuthContent, expectedCredentialRevision } = params
   const mergedProbe = mergeCodexAccountProbes(
     normalizeCodexIdentity(descriptor.identity),
     descriptor.metadata == null
@@ -2561,6 +2598,9 @@ const writeProbeMetadata = async (params: {
       },
     probe
   ) ?? probe
+  const refreshedAuthDigest = refreshedAuthContent == null
+    ? undefined
+    : createHash('sha256').update(refreshedAuthContent).digest('hex')
   const nextMetadata: CodexStoredAccountMetadata = {
     ...descriptor.metadata,
     quota: cloneQuotaInfo(mergedProbe.quota),
@@ -2581,6 +2621,7 @@ const writeProbeMetadata = async (params: {
       probe: mergedProbe
     }),
     description: descriptor.description ?? descriptor.metadata?.description,
+    authDigest: refreshedAuthDigest ?? descriptor.metadata?.authDigest,
     createdAt: descriptor.metadata?.createdAt ?? Date.now(),
     updatedAt: Date.now()
   }
@@ -2597,6 +2638,21 @@ const writeProbeMetadata = async (params: {
   })
 
   if (descriptor.sourceKind === 'global-config') {
+    if (
+      refreshedAuthContent != null &&
+      refreshedAuthContent !== descriptor.authContent
+    ) {
+      await upsertCodexGlobalAccountConfig(ctx, {
+        key: descriptor.key,
+        authContent: refreshedAuthContent,
+        metadata: nextMetadata,
+        expectedCredentialRevision
+      })
+      descriptor.authContent = refreshedAuthContent
+      descriptor.credentialFingerprint = refreshedAuthDigest
+      return
+    }
+
     await updateCodexGlobalAccountMetadata({
       ...ctx,
       logger: ctx.logger
@@ -2635,6 +2691,11 @@ const getCodexAccountProbeUnlocked = async (params: {
     })
   }
 
+  const expectedCredentialRevision = descriptor.sourceKind === 'global-config' &&
+      descriptor.authContent != null
+    ? await readCodexGlobalAccountCredentialRevision(ctx, descriptor.key)
+    : undefined
+
   const authSource = await writeDescriptorAuthSourceFile({ ctx, descriptor, scope })
   if (authSource == null) {
     return mergeProbeWithCachedQuotaUnlocked({
@@ -2644,7 +2705,7 @@ const getCodexAccountProbeUnlocked = async (params: {
     })
   }
 
-  const liveProbe = await probeCodexAccount({
+  const liveProbeResult = await probeCodexAccount({
     ctx,
     homeDir: authSource.homeDir,
     authFilePath: authSource.authFilePath,
@@ -2656,14 +2717,18 @@ const getCodexAccountProbeUnlocked = async (params: {
   const probe = await mergeProbeWithCachedQuotaUnlocked({
     ctx,
     descriptor,
-    probe: liveProbe,
+    probe: liveProbeResult.probe,
     live: true
   })
   if (probe == null) return undefined
   await writeProbeMetadata({
     ctx,
     descriptor,
-    probe
+    probe,
+    refreshedAuthContent: expectedCredentialRevision == null || !liveProbeResult.credentialsValidated
+      ? undefined
+      : liveProbeResult.authContent,
+    expectedCredentialRevision
   })
 
   return probe
@@ -3107,7 +3172,8 @@ const runCodexLogin = async (params: {
 
     return {
       homeDir,
-      authFilePath
+      authFilePath,
+      binaryPath
     }
   } catch (error) {
     await rm(homeDir, { recursive: true, force: true }).catch(() => {})
@@ -3597,6 +3663,10 @@ export const manageCodexAccount = async (
       if (authSource == null) {
         throw new Error(`Codex account "${normalizedAccount}" has no usable authentication source.`)
       }
+      const expectedCredentialRevision = descriptor.sourceKind === 'global-config' &&
+          descriptor.authContent != null
+        ? await readCodexGlobalAccountCredentialRevision(ctx, descriptor.key)
+        : undefined
 
       const consume = () =>
         probeCodexAccount({
@@ -3612,7 +3682,7 @@ export const manageCodexAccount = async (
           },
           timeoutMs: resolveCodexResetCreditOperationTimeoutMs(ctx.env)
         })
-      const liveProbe = descriptor.sourceKind === 'global-config'
+      const liveProbeResult = descriptor.sourceKind === 'global-config'
         ? await withCanonicalConfigWriteLock(
           resolveCodexGlobalConfigPath(ctx),
           async (targetPath) => {
@@ -3621,6 +3691,7 @@ export const manageCodexAccount = async (
           }
         )
         : await consume()
+      const liveProbe = liveProbeResult.probe
       const outcome = liveProbe.resetCreditOutcome
       if (outcome == null) {
         throw new Error('Codex returned an unknown reset credit outcome.')
@@ -3646,7 +3717,11 @@ export const manageCodexAccount = async (
         await writeProbeMetadata({
           ctx,
           descriptor,
-          probe
+          probe,
+          refreshedAuthContent: expectedCredentialRevision == null || !liveProbeResult.credentialsValidated
+            ? undefined
+            : liveProbeResult.authContent,
+          expectedCredentialRevision
         })
       } catch (error) {
         ctx.logger.warn('[codex account] reset credit outcome succeeded, but metadata persistence failed', {
@@ -3743,21 +3818,27 @@ export const manageCodexAccount = async (
     onProgress: options.onProgress,
     signal: options.signal
   })
+  const loginProbeHomeDir = resolveCodexProbeHomeDir(
+    ctx,
+    `login-probe-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+  )
 
   try {
     throwIfAborted(options.signal)
-    const authContent = await readFile(loginResult.authFilePath, 'utf8')
+    const probeResult = await probeCodexAccount({
+      ctx,
+      homeDir: loginProbeHomeDir,
+      authFilePath: loginResult.authFilePath,
+      binaryPath: loginResult.binaryPath,
+      refresh: true,
+      logKey: `login-${normalizedRequestedKey ?? 'new'}`
+    })
+    const authContent = probeResult.authContent
     const authDigest = createHash('sha256').update(authContent).digest('hex')
     const authIdentity = readCodexAuthIdentityFromContent(authContent)
     const probe = mergeCodexAccountProbes(
       authIdentity,
-      await probeCodexAccount({
-        ctx,
-        homeDir: resolveCodexProbeHomeDir(ctx, `login-probe-${Date.now().toString(36)}`),
-        authFilePath: loginResult.authFilePath,
-        refresh: true,
-        logKey: `login-${normalizedRequestedKey ?? 'new'}`
-      }).catch(() => undefined)
+      probeResult.probe
     )
     const existingConfiguredAccount = reauthenticationTarget?.descriptor ??
       await findConfiguredAccountByIdentity(ctx, {
@@ -3833,6 +3914,9 @@ export const manageCodexAccount = async (
         : `Connected Codex account "${detail.title}".`
     }
   } finally {
-    await rm(loginResult.homeDir, { recursive: true, force: true }).catch(() => {})
+    await Promise.all([
+      rm(loginResult.homeDir, { recursive: true, force: true }).catch(() => {}),
+      rm(loginProbeHomeDir, { recursive: true, force: true }).catch(() => {})
+    ])
   }
 }

@@ -39,7 +39,7 @@ Primary implementation entrypoints for Codex hooks:
   - keeps hooks/config in `<project-home>/.mock/.codex/`, maps workspace skills into `<project-home>/.mock/.agents/skills`, and mirrors each skill into `<project-home>/.mock/.codex/skills/<name>`
   - writes a managed `<project-home>/.mock/.codex/config.toml` that trusts the current workspace and suppresses startup update checks unless `configOverrides` restores them
 - `src/runtime/accounts.ts`
-  - reads Codex accounts from `adapters.codex.accounts`; `codex login` writes base64 encoded `auth.json` into global `~/.oneworks/.oo.config.json`
+  - reads Codex accounts from `adapters.codex.accounts`; `codex login` writes base64 encoded `auth.json` into global `~/.oneworks/.oo.config.json` only after `account/read` and `account/rateLimits/read` both succeed, and a refresh probe atomically persists any verified credential rotation with the existing generation / credential-revision guards
   - treats the current `~/.codex/auth.json` as a read-only fallback account source and does not migrate it into project-local storage
   - when a global inline account and `~/.codex/auth.json` have the same stable account identity, keeps the configured key / metadata but uses the real-home file as the local runtime credential; this avoids replaying an already-rotated inline refresh token without silently writing real-home auth back to One Works config
   - materializes inline session and probe auth through the shared atomic writer; both temporary and final private auth files are forced to `0600`
@@ -249,8 +249,8 @@ direct mode 的 HOME 按 session 隔离；standalone stream fallback 按 project
 
 - `ow accounts add codex [accountName]`
   - 在隔离 `HOME` / `CODEX_HOME` 下强制使用 file credential store 执行 `codex login`
-  - 登录完成后读取生成的 `auth.json`
-  - 把 `auth.json` base64 写入 global `~/.oneworks/.oo.config.json` 的 `adapters.codex.accounts.<key>.auth.token`
+  - 登录完成后通过 `account/read` 与 `account/rateLimits/read` 验证生成的 `auth.json`
+  - 只把验证成功（含官方 CLI 在验证期间轮换后）的 `auth.json` base64 写入 global `~/.oneworks/.oo.config.json` 的 `adapters.codex.accounts.<key>.auth.token`
 - Web 配置页 `Adapters -> Codex -> Accounts`
   - adapter 详情页会先展示 `defaultAccount` 选择，再展示 `账号` 入口
   - 账号根页可直接触发 `Connect account`
@@ -262,6 +262,7 @@ direct mode 的 HOME 按 session 隔离；standalone stream fallback 按 project
 额度探测补充：
 
 - Codex quota 现在通过 `codex app-server` 的 `account/rateLimits/read` 读取
+- 强制刷新如果让官方 CLI 轮换 global inline account 的 `auth.json`，必须在同一验证结果成功后以 canonical config lock 原子写回；验证失败保留旧凭据
 - 配置页默认读 global config 里的 quota 快照
 - 当前快照 TTL 是 5 分钟；CLI `ow accounts show codex <account>` 会强制刷新
 - 如果 Codex 只返回套餐信息而没有 credits / rate limits，前端只展示真实返回的套餐或窗口限额，不伪造额度余额
