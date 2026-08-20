@@ -6,7 +6,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { resolveProjectHomePath } from '@oneworks/utils/ai-path'
 
-import { ensureCodexNativeHooksInstalled, upsertCodexNativeHookTrustState } from '../src/runtime/native-hooks'
+import {
+  ensureCodexNativeHooksInstalled,
+  ensureCodexSharedNativeHooksInstalled,
+  upsertCodexNativeHookTrustState
+} from '../src/runtime/native-hooks'
 
 const tempDirs: string[] = []
 
@@ -22,6 +26,7 @@ const resolveTestMockHome = (workspace: string, realHome: string) =>
   resolveProjectHomePath(workspace, { HOME: realHome, __ONEWORKS_PROJECT_REAL_HOME__: realHome }, '.mock')
 
 afterEach(async () => {
+  vi.unstubAllEnvs()
   await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
 })
 
@@ -30,10 +35,12 @@ describe('ensureCodexNativeHooksInstalled', () => {
     const workspace = await createWorkspace()
     const realHome = join(workspace, 'real-home')
     const mockHome = resolveTestMockHome(workspace, realHome)
+    const headlessRuntime = '/fixture/One Works Helper'
     const ctx = {
       cwd: workspace,
       env: {
         HOME: mockHome,
+        __ONEWORKS_PROJECT_NODE_PATH__: headlessRuntime,
         __ONEWORKS_PROJECT_REAL_HOME__: realHome
       },
       logger: {
@@ -64,6 +71,7 @@ describe('ensureCodexNativeHooksInstalled', () => {
     expect(hooks.hooks?.PreToolUse?.[0]?.matcher).toBe('^Bash$')
     expect(hooks.hooks?.PostToolUse?.[0]?.matcher).toBe('^Bash$')
     expect(JSON.stringify(hooks)).toContain('call-hook.js')
+    expect(JSON.stringify(hooks)).toContain(headlessRuntime)
     expect(JSON.stringify(hooks)).not.toContain('codex-hook.js')
 
     const configContent = await readFile(join(mockHome, '.codex', 'config.toml'), 'utf8')
@@ -110,6 +118,22 @@ describe('ensureCodexNativeHooksInstalled', () => {
     expect(next).not.toContain('sha256:old')
     expect(next).not.toContain('sha256:stale')
     expect(next).toContain('trusted_hash = "sha256:')
+  })
+
+  it('uses the inherited headless runtime in manager-shared hook commands', async () => {
+    const homeDir = await createWorkspace()
+    const configPath = join(homeDir, '.codex', 'config.toml')
+    const headlessRuntime = '/fixture/One Works Helper'
+    vi.stubEnv('__ONEWORKS_PROJECT_NODE_PATH__', headlessRuntime)
+
+    await ensureCodexSharedNativeHooksInstalled({
+      configPath,
+      enabled: true,
+      homeDir
+    })
+
+    const hooks = await readFile(join(homeDir, '.codex', 'hooks.json'), 'utf8')
+    expect(hooks).toContain(headlessRuntime)
   })
 
   it('replaces previously managed codex-hook entries instead of duplicating them', async () => {

@@ -57,6 +57,11 @@ export interface RunRuntimeEntryOptions {
   env: NodeJS.ProcessEnv
 }
 
+export const resolveRuntimeNodeExecutable = (env: NodeJS.ProcessEnv) => {
+  const executable = env.__ONEWORKS_PROJECT_NODE_PATH__?.trim()
+  return executable == null || executable === '' ? process.execPath : executable
+}
+
 const resolveOptionPath = (cwd: string, value?: string) => {
   const trimmedValue = value?.trim()
   if (!trimmedValue) {
@@ -226,7 +231,7 @@ export const runRuntimeEntry = async (options: RunRuntimeEntryOptions) => {
   })
 
   const child = spawn(
-    process.execPath,
+    resolveRuntimeNodeExecutable(options.env),
     [
       '--conditions=__oneworks__',
       '--loader',

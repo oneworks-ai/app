@@ -11,7 +11,7 @@ import { autoUpdater } from 'electron-updater'
 import { resolvePackagedCliPathEnv } from './cli-path-env'
 import { AUTO_UPDATE_CONFIG_FILES } from './constants'
 import { findDesktopReleaseTagInAtomFeed, parseDesktopReleaseTagChannel } from './desktop-release-channel'
-import { resolveBundledRuntimeConsumerBootstrapPath } from './paths'
+import { resolveBundledRuntimeConsumerBootstrapPath, resolveDesktopBackgroundRuntime } from './paths'
 import { writeProcessLine } from './process-utils'
 import { resolveDesktopRuntimePackageCacheVersionEnv } from './runtime-cache-version'
 import {
@@ -647,15 +647,16 @@ const runBootstrapRuntimeCommand = async (action: 'check' | 'install', target: R
     ...process.env,
     ...runtimePackageCacheVersionEnv
   }
+  const runtime = resolveDesktopBackgroundRuntime()
 
   const result = await execFileAsync(
-    process.execPath,
+    runtime.executable,
     [bootstrapPath, 'runtime', action, target, '--json'],
     {
       env: {
         ...runtimeEnv,
         ...resolvePackagedCliPathEnv(runtimeEnv),
-        ELECTRON_RUN_AS_NODE: '1'
+        ...runtime.env
       },
       maxBuffer: BOOTSTRAP_BUFFER_BYTES
     }
