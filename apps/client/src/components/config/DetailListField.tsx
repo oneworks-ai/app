@@ -12,6 +12,7 @@ import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
 import { getAdapterDisplay, resolveAdapterDisplayIcon } from '#~/resources/adapters'
 import { renderIconRef } from '#~/utils/model-provider-icons'
 
+import { AdapterAccountPreview } from './AdapterAccountPreview'
 import { AdapterImportRow } from './AdapterImportRow'
 import type { AdapterImportAction } from './AdapterImportRow'
 import { DetailCollectionFieldActions } from './DetailCollectionFieldActions'
@@ -278,7 +279,12 @@ export const DetailCollectionField = ({
   }
 
   return (
-    <div className='config-view__detail-list'>
+    <div
+      className={`config-view__detail-list${
+        sectionKey === 'adapters' ? ' config-view__detail-list--adapter-grid' : ''
+      }`}
+      data-testid={sectionKey === 'adapters' ? 'adapter-summary-grid' : undefined}
+    >
       {isRecordMapCollection && sectionKey === 'modelServices' && modelServiceImportAction != null && (
         <AdapterImportRow action={modelServiceImportAction} />
       )}
@@ -332,7 +338,15 @@ export const DetailCollectionField = ({
           </div>
         </div>
       )}
-      {items.map(({ item, key, index, localIndex, source: itemSource, hasResolvedOverlay }) => {
+      {items.map(({
+        item,
+        key,
+        index,
+        localIndex,
+        resolvedItem,
+        source: itemSource,
+        hasResolvedOverlay
+      }) => {
         const title = detailCollection.getItemTitle(item, key, index, detailContext)
         const subtitle = detailCollection.getItemSubtitle?.(item, key, index, detailContext)
         const description = detailCollection.getItemDescription?.(item, key, index, detailContext)
@@ -370,6 +384,7 @@ export const DetailCollectionField = ({
         const detailCollectionActions = (isListCollection || isRecordMapCollection) && itemSource === 'local'
           ? (
             <DetailCollectionFieldActions
+              actionKind={sectionKey === 'adapters' ? 'reset' : 'remove'}
               index={localIndex ?? 0}
               itemCount={isListCollection
                 ? localListItems.length
@@ -392,6 +407,66 @@ export const DetailCollectionField = ({
             />
           )
           : null
+        const recordHeading = (
+          <div
+            className={`config-view__record-heading${
+              adapterDisplayIcon != null || modelServiceIcon != null ? ' has-adapter-icon' : ''
+            }`}
+          >
+            {adapterDisplay != null && (
+              <div className='config-view__adapter-icon-wrap' aria-hidden='true'>
+                {adapterDisplayIcon != null
+                  ? (
+                    <img
+                      className='config-view__adapter-icon'
+                      src={adapterDisplayIcon}
+                      alt=''
+                    />
+                  )
+                  : (
+                    <span className='config-view__adapter-icon-fallback material-symbols-rounded'>
+                      deployed_code
+                    </span>
+                  )}
+              </div>
+            )}
+            {modelServiceIcon != null && (
+              <div className='config-view__adapter-icon-wrap' aria-hidden='true'>
+                {renderIconRef({
+                  icon: modelServiceIcon,
+                  imageClassName: 'config-view__adapter-icon',
+                  symbolClassName: 'config-view__adapter-icon-fallback'
+                })}
+              </div>
+            )}
+            <div className='config-view__record-heading-text'>
+              <div className='config-view__detail-list-title'>
+                <span>{displayTitle}</span>
+                {(itemSource === 'inherited' || hasResolvedOverlay) && (
+                  <span
+                    className={`config-view__detail-badge${
+                      itemSource === 'inherited'
+                        ? ' config-view__detail-badge--readonly'
+                        : ' config-view__detail-badge--override'
+                    }`}
+                  >
+                    {itemSource === 'inherited'
+                      ? t('config.detail.inheritedBadge')
+                      : t('config.detail.overrideBadge')}
+                  </span>
+                )}
+              </div>
+              {sectionKey !== 'adapters' && displaySubtitle != null && displaySubtitle !== '' && (
+                <div className='config-view__record-subtitle'>
+                  {displaySubtitle}
+                </div>
+              )}
+              {sectionKey !== 'adapters' && description != null && description !== '' && (
+                <div className='config-view__record-desc'>{description}</div>
+              )}
+            </div>
+          </div>
+        )
         const modelServiceInlineActions = sectionKey === 'modelServices'
           ? (
             <>
@@ -433,6 +508,53 @@ export const DetailCollectionField = ({
             </>
           )
           : null
+        if (sectionKey === 'adapters') {
+          const adapterEntryKind = uiSection?.kind === 'recordMap'
+            ? uiSection.recordMap.entryKinds?.find(kind => kind.key === key)
+            : undefined
+          const hasConfiguredAccounts = resolvedItem.accounts != null &&
+            typeof resolvedItem.accounts === 'object' &&
+            !Array.isArray(resolvedItem.accounts)
+          const supportsAccounts = adapterEntryKind?.capabilities?.accounts === true || hasConfiguredAccounts
+          return (
+            <div
+              key={`${field.path.join('.')}:${key}:${title}`}
+              className={`config-view__record-card config-view__adapter-summary-card${
+                itemSource === 'inherited' ? ' config-view__record-card--readonly' : ''
+              }`}
+              data-adapter-key={key}
+            >
+              <div className='config-view__adapter-summary-header'>
+                <button type='button' className='config-view__detail-list-main' onClick={() => openDetail(key)}>
+                  {recordHeading}
+                </button>
+                {summaryControls}
+                {detailCollectionActions}
+              </div>
+              <AdapterAccountPreview
+                adapterKey={key}
+                adapterValue={resolvedItem}
+                supportsAccounts={supportsAccounts}
+                onOpenAccount={(accountKey) =>
+                  onOpenDetail({
+                    kind: 'detailCollectionItem',
+                    fieldPath: field.path,
+                    itemKey: key,
+                    nestedPath: ['accounts', accountKey]
+                  })}
+                onOpenAccounts={() =>
+                  onOpenDetail({
+                    kind: 'detailCollectionItem',
+                    fieldPath: field.path,
+                    itemKey: key,
+                    nestedPath: ['accounts']
+                  })}
+                t={t}
+              />
+            </div>
+          )
+        }
+
         return (
           <div
             key={`${field.path.join('.')}:${key}:${title}`}
@@ -442,64 +564,7 @@ export const DetailCollectionField = ({
           >
             <div className='config-view__detail-list-row'>
               <button type='button' className='config-view__detail-list-main' onClick={() => openDetail(key)}>
-                <div
-                  className={`config-view__record-heading${
-                    adapterDisplayIcon != null || modelServiceIcon != null ? ' has-adapter-icon' : ''
-                  }`}
-                >
-                  {adapterDisplay != null && (
-                    <div className='config-view__adapter-icon-wrap' aria-hidden='true'>
-                      {adapterDisplayIcon != null
-                        ? (
-                          <img
-                            className='config-view__adapter-icon'
-                            src={adapterDisplayIcon}
-                            alt=''
-                          />
-                        )
-                        : (
-                          <span className='config-view__adapter-icon-fallback material-symbols-rounded'>
-                            deployed_code
-                          </span>
-                        )}
-                    </div>
-                  )}
-                  {modelServiceIcon != null && (
-                    <div className='config-view__adapter-icon-wrap' aria-hidden='true'>
-                      {renderIconRef({
-                        icon: modelServiceIcon,
-                        imageClassName: 'config-view__adapter-icon',
-                        symbolClassName: 'config-view__adapter-icon-fallback'
-                      })}
-                    </div>
-                  )}
-                  <div className='config-view__record-heading-text'>
-                    <div className='config-view__detail-list-title'>
-                      <span>{displayTitle}</span>
-                      {(itemSource === 'inherited' || hasResolvedOverlay) && (
-                        <span
-                          className={`config-view__detail-badge${
-                            itemSource === 'inherited'
-                              ? ' config-view__detail-badge--readonly'
-                              : ' config-view__detail-badge--override'
-                          }`}
-                        >
-                          {itemSource === 'inherited'
-                            ? t('config.detail.inheritedBadge')
-                            : t('config.detail.overrideBadge')}
-                        </span>
-                      )}
-                    </div>
-                    {displaySubtitle != null && displaySubtitle !== '' && (
-                      <div className='config-view__record-subtitle'>
-                        {displaySubtitle}
-                      </div>
-                    )}
-                    {description != null && description !== '' && (
-                      <div className='config-view__record-desc'>{description}</div>
-                    )}
-                  </div>
-                </div>
+                {recordHeading}
               </button>
               {sectionKey === 'modelServices'
                 ? (

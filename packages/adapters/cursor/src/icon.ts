@@ -1,9 +1,9 @@
-const CURSOR_ICON_SVG = `
-<svg height="1em" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg">
-  <rect fill="#111111" height="22" rx="5" width="22" x="1" y="1"/>
-  <path d="M7 6.5 18 12 7 17.5l2.1-4.1L13 12l-3.9-1.4L7 6.5Z" fill="#FFFFFF"/>
-</svg>
-`.trim()
+// Official product mark sourced from https://cursor.com/en-US/brand.
+const CURSOR_ICON_SVG =
+  '<?xml version="1.0" encoding="UTF-8"?>\n<svg id="Ebene_1" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 466.73 532.09">\n  <!-- Generator: Adobe Illustrator 29.6.1, SVG Export Plug-In . SVG Version: 2.1.1 Build 9)  -->\n  <defs>\n    <style>\n      .st0 {\n        fill: #26251e;\n      }\n    </style>\n  </defs>\n  <path class="st0" d="M457.43,125.94L244.42,2.96c-6.84-3.95-15.28-3.95-22.12,0L9.3,125.94c-5.75,3.32-9.3,9.46-9.3,16.11v247.99c0,6.65,3.55,12.79,9.3,16.11l213.01,122.98c6.84,3.95,15.28,3.95,22.12,0l213.01-122.98c5.75-3.32,9.3-9.46,9.3-16.11v-247.99c0-6.65-3.55-12.79-9.3-16.11h-.01ZM444.05,151.99l-205.63,356.16c-1.39,2.4-5.06,1.42-5.06-1.36v-233.21c0-4.66-2.49-8.97-6.53-11.31L24.87,145.67c-2.4-1.39-1.42-5.06,1.36-5.06h411.26c5.84,0,9.49,6.33,6.57,11.39h-.01Z"/>\n</svg>'
+const CURSOR_ICON_DARK_SVG =
+  '<?xml version="1.0" encoding="UTF-8"?>\n<svg id="Ebene_1" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 466.73 532.09">\n  <!-- Generator: Adobe Illustrator 29.6.1, SVG Export Plug-In . SVG Version: 2.1.1 Build 9)  -->\n  <defs>\n    <style>\n      .st0 {\n        fill: #edecec;\n      }\n    </style>\n  </defs>\n  <path class="st0" d="M457.43,125.94L244.42,2.96c-6.84-3.95-15.28-3.95-22.12,0L9.3,125.94c-5.75,3.32-9.3,9.46-9.3,16.11v247.99c0,6.65,3.55,12.79,9.3,16.11l213.01,122.98c6.84,3.95,15.28,3.95,22.12,0l213.01-122.98c5.75-3.32,9.3-9.46,9.3-16.11v-247.99c0-6.65-3.55-12.79-9.3-16.11h-.01ZM444.05,151.99l-205.63,356.16c-1.39,2.4-5.06,1.42-5.06-1.36v-233.21c0-4.66-2.49-8.97-6.53-11.31L24.87,145.67c-2.4-1.39-1.42-5.06,1.36-5.06h411.26c5.84,0,9.49,6.33,6.57,11.39h-.01Z"/>\n</svg>'
 
 export const adapterIcon = `data:image/svg+xml;utf8,${encodeURIComponent(CURSOR_ICON_SVG)}`
+export const adapterIconDark = `data:image/svg+xml;utf8,${encodeURIComponent(CURSOR_ICON_DARK_SVG)}`
 export const adapterDisplayName = 'Cursor'

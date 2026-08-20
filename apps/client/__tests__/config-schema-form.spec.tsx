@@ -181,7 +181,10 @@ describe('config schema form', () => {
     )
 
     expect(html).toContain('custom-adapter')
-    expect(html).toContain('config-view__detail-list')
+    expect(html).toContain('config-view__detail-list--adapter-grid')
+    expect(html).toContain('config-view__adapter-summary-card')
+    expect(html).toContain('aria-label="config.editor.resetAdapterConfig"')
+    expect(html).toContain('settings_backup_restore')
   })
 
   it('renders built-in adapter placeholders after configured adapter entries', () => {
@@ -204,7 +207,7 @@ describe('config schema form', () => {
     expect(html).toContain('Codex')
     expect(html.indexOf('Custom Adapter')).toBeLessThan(html.indexOf('Codex'))
     expect(html).toContain('Kiro')
-    expect(html).toContain(encodeURIComponent('oneworks-terminal-adapter-title'))
+    expect(html).toContain(encodeURIComponent('#9046FF'))
   })
 
   it('opens an unconfigured built-in adapter placeholder as an editable detail page', () => {
@@ -243,7 +246,8 @@ describe('config schema form', () => {
         detailRoute={{
           kind: 'detailCollectionItem',
           fieldPath: [],
-          itemKey: 'codex'
+          itemKey: 'codex',
+          nestedPath: ['advanced']
         }}
         t={t}
       />
@@ -251,6 +255,43 @@ describe('config schema form', () => {
 
     expect(html).toContain('Experimental API')
     expect(html).not.toContain('config.detail.inheritedReadonly')
+  })
+
+  it('keeps schema-missing built-in adapter details in the shared tab shell', () => {
+    const uiSection: ConfigUiSection = {
+      key: 'adapters',
+      kind: 'recordMap',
+      recordMap: {
+        mode: 'keyed',
+        schemas: {},
+        unknownSchema: { fields: [] },
+        unknownEditor: 'json'
+      }
+    }
+    const renderAdapter = (itemKey: string, nestedPath?: string[]) =>
+      renderToStaticMarkup(
+        <SectionForm
+          sectionKey='adapters'
+          uiSection={uiSection}
+          value={{}}
+          onChange={() => undefined}
+          mergedModelServices={{}}
+          mergedAdapters={{}}
+          detailRoute={{ kind: 'detailCollectionItem', fieldPath: [], itemKey, nestedPath }}
+          t={t}
+        />
+      )
+
+    const kiroHtml = renderAdapter('kiro', ['accounts'])
+    const droidHtml = renderAdapter('droid')
+
+    expect(kiroHtml).toContain('config-view__adapter-detail-tabs')
+    expect(kiroHtml).toContain('data-node-key="base"')
+    expect(kiroHtml).toContain('data-node-key="accounts"')
+    expect(kiroHtml).toContain('adapter-account-manager__state')
+    expect(droidHtml).toContain('config-view__adapter-detail-tabs')
+    expect(droidHtml).toContain('data-node-key="base"')
+    expect(droidHtml).not.toContain('data-node-key="accounts"')
   })
 
   it('uses registered Droid display metadata and hides account UI through adapter capabilities', () => {
@@ -318,8 +359,89 @@ describe('config schema form', () => {
         t={t}
       />
     )
-    expect(codexHtml).toContain('Default account')
-    expect(codexHtml).toContain('adapter-account-manager__state')
+    expect(codexHtml).not.toContain('Default account')
+    expect(codexHtml).toContain('data-node-key="accounts"')
+    expect(codexHtml).not.toContain('adapter-account-manager__state')
+
+    const codexAccountsHtml = renderToStaticMarkup(
+      <SectionForm
+        sectionKey='adapters'
+        uiSection={uiSection}
+        value={{}}
+        onChange={() => undefined}
+        mergedModelServices={{}}
+        mergedAdapters={{}}
+        detailRoute={{ ...route, itemKey: 'codex', nestedPath: ['accounts'] }}
+        t={t}
+      />
+    )
+    expect(codexAccountsHtml).not.toContain('Default account')
+    expect(codexAccountsHtml).toContain('adapter-account-manager__state')
+  })
+
+  it('uses one route-backed tab layout for every registered adapter detail', () => {
+    const uiSection: ConfigUiSection = {
+      key: 'adapters',
+      kind: 'recordMap',
+      recordMap: {
+        mode: 'keyed',
+        entryKinds: [
+          { key: 'alpha', label: 'Alpha', capabilities: { accounts: true } },
+          { key: 'beta', label: 'Beta', capabilities: { accounts: false } }
+        ],
+        schemas: {
+          alpha: {
+            fields: [
+              { path: ['defaultModel'], type: 'string', label: 'Default model' },
+              { path: ['defaultAccount'], type: 'string', label: 'Default account' },
+              { path: ['includeModels'], type: 'string[]', label: 'Allowed models' },
+              { path: ['configContent'], type: 'multiline', label: 'Configuration override' }
+            ]
+          },
+          beta: {
+            fields: [
+              { path: ['defaultModel'], type: 'string', label: 'Default model' },
+              { path: ['excludeModels'], type: 'string[]', label: 'Blocked models' },
+              { path: ['experimentalApi'], type: 'boolean', label: 'Experimental API' }
+            ]
+          }
+        },
+        unknownSchema: { fields: [] }
+      }
+    }
+    const renderAdapter = (itemKey: 'alpha' | 'beta', nestedPath?: string[]) =>
+      renderToStaticMarkup(
+        <SectionForm
+          sectionKey='adapters'
+          uiSection={uiSection}
+          value={{ alpha: {}, beta: {} }}
+          onChange={() => undefined}
+          mergedModelServices={{}}
+          mergedAdapters={{}}
+          detailRoute={{ kind: 'detailCollectionItem', fieldPath: [], itemKey, nestedPath }}
+          t={t}
+        />
+      )
+
+    const alphaBaseHtml = renderAdapter('alpha')
+    const alphaModelsHtml = renderAdapter('alpha', ['models'])
+    const alphaAccountsHtml = renderAdapter('alpha', ['accounts'])
+    const alphaAdvancedHtml = renderAdapter('alpha', ['advanced'])
+    const betaHtml = renderAdapter('beta')
+
+    for (const html of [alphaBaseHtml, alphaModelsHtml, alphaAccountsHtml, alphaAdvancedHtml, betaHtml]) {
+      expect(html).toContain('config-view__adapter-detail-tabs')
+      expect(html).toContain('data-node-key="base"')
+      expect(html).toContain('data-node-key="models"')
+      expect(html).toContain('data-node-key="advanced"')
+    }
+    expect(alphaBaseHtml).toContain('Default model')
+    expect(alphaModelsHtml).toContain('Allowed models')
+    expect(alphaAccountsHtml).not.toContain('Default account')
+    expect(alphaAccountsHtml).toContain('adapter-account-manager__state')
+    expect(alphaAdvancedHtml).toContain('Configuration override')
+    expect(alphaBaseHtml).toContain('data-node-key="accounts"')
+    expect(betaHtml).not.toContain('data-node-key="accounts"')
   })
 
   it('renders adapter-scoped Droid metadata, effort labels, and accessible controls in both locales', () => {
@@ -344,7 +466,7 @@ describe('config schema form', () => {
       }
     }
     const route = { kind: 'detailCollectionItem' as const, fieldPath: [], itemKey: 'droid' }
-    const renderLocale = (translations: Record<string, string>) =>
+    const renderLocale = (translations: Record<string, string>) => (
       renderToStaticMarkup(
         <SectionForm
           sectionKey='adapters'
@@ -356,7 +478,19 @@ describe('config schema form', () => {
           detailRoute={route}
           t={(key, options) => translations[key] ?? options?.defaultValue ?? key}
         />
+      ) + renderToStaticMarkup(
+        <SectionForm
+          sectionKey='adapters'
+          uiSection={uiSection}
+          value={{ droid: { effort: 'xhigh' } }}
+          onChange={() => undefined}
+          mergedModelServices={{}}
+          mergedAdapters={{}}
+          detailRoute={{ ...route, nestedPath: ['advanced'] }}
+          t={(key, options) => translations[key] ?? options?.defaultValue ?? key}
+        />
       )
+    )
     const enHtml = renderLocale({
       'config.fields.adaptersByKey.droid.cli.label': 'Factory Droid CLI',
       'config.fields.adaptersByKey.droid.cli.desc': 'Validated Factory Droid CLI runtime.',
@@ -526,7 +660,8 @@ describe('config schema form', () => {
         detailRoute={{
           kind: 'detailCollectionItem',
           fieldPath: [],
-          itemKey: 'codex'
+          itemKey: 'codex',
+          nestedPath: ['advanced']
         }}
         t={t}
       />
@@ -534,6 +669,8 @@ describe('config schema form', () => {
 
     expect(html).toContain('Experimental API')
     expect(html).toContain('Max Output Tokens')
+    expect(html).toContain('data-node-key="base"')
+    expect(html).toContain('data-node-key="advanced"')
     expect(html).not.toContain('config-view__detail-list')
   })
 
