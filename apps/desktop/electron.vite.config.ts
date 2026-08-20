@@ -86,7 +86,7 @@ export default defineConfig({
   preload: {
     build: {
       externalizeDeps: {
-        exclude: ['@paper-design/shaders', '@oneworks/icon']
+        exclude: ['@paper-design/shaders', '@oneworks/icon', '@oneworks/types']
       },
       rollupOptions: {
         external: [
@@ -100,11 +100,11 @@ export default defineConfig({
       }
     },
     resolve: {
-      alias: iconSourceAliases,
+      alias: [...iconSourceAliases, ...typesSourceAliases],
       conditions: ['__oneworks__', 'node', 'import']
     },
     ssr: {
-      noExternal: ['@paper-design/shaders', '@oneworks/icon']
+      noExternal: ['@paper-design/shaders', '@oneworks/icon', '@oneworks/types']
     }
   }
 })
