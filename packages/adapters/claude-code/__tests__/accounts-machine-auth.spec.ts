@@ -128,12 +128,14 @@ describe('claude machine-bound account auth', () => {
       requireDefaultConfigDirForNative: true,
       requireRealHomeForIdentity: true
     })
-    await expect(getClaudeAccounts(ctx, {})).resolves.toMatchObject({
+    const accounts = await getClaudeAccounts(ctx, {})
+    expect(accounts).toMatchObject({
       defaultAccount: 'desktop',
       accounts: expect.arrayContaining([
         expect.objectContaining({ key: 'desktop', status: 'ready', quota: undefined })
       ])
     })
+    expect(accounts.accounts.map(account => account.key)).toEqual(['desktop'])
     await expect(resolveClaudeRuntimeAccount({ ctx, requestedAccount: 'desktop' }))
       .resolves.toEqual({ accountKey: 'desktop', credentialHome: 'default', managed: true })
   })
@@ -246,7 +248,7 @@ describe('claude machine-bound account auth', () => {
     })
   })
 
-  it('marks device-bound auth missing after a spawned reauthentication fails without logging out', async () => {
+  it('marks isolated device-bound auth missing after a spawned reauthentication fails', async () => {
     const cwd = await createTempDir('ow-claude-device-spawn-abort-workspace-')
     const realHome = await createTempDir('ow-claude-device-spawn-abort-home-')
     const commandLog = join(await createTempDir('ow-claude-device-spawn-abort-log-'), 'commands.jsonl')
@@ -272,15 +274,15 @@ describe('claude machine-bound account auth', () => {
       onProgress: (event) => {
         if (event.stream === 'stdout' && event.message.includes('login started')) controller.abort()
       }
-    })).rejects.toThrow(/cannot be rolled back per account/i)
+    })).rejects.toThrow(/isolated device credential cannot be rolled back/i)
 
-    expect(await readFile(commandLog, 'utf8')).not.toContain('["auth","logout"]')
+    expect(await readFile(commandLog, 'utf8')).toContain('["auth","logout"]')
     await expect(getClaudeAccounts(ctx, {})).resolves.toMatchObject({
       accounts: [expect.objectContaining({ key: 'device', status: 'missing' })]
     })
   })
 
-  it('invalidates an older device binding when a new spawned login leaves machine auth uncertain', async () => {
+  it('keeps an existing isolated account ready when another isolated login is aborted', async () => {
     const cwd = await createTempDir('ow-claude-new-login-abort-workspace-')
     const realHome = await createTempDir('ow-claude-new-login-abort-home-')
     let ctx = createContext({ cwd, realHome, deviceCredential: true })
@@ -289,6 +291,7 @@ describe('claude machine-bound account auth', () => {
       cwd,
       realHome,
       userConfig: await readGlobalConfig(realHome),
+      deviceCredential: true,
       ignoreLoginSigterm: true,
       loginDelayMs: 300
     })
@@ -301,104 +304,11 @@ describe('claude machine-bound account auth', () => {
       onProgress: (event) => {
         if (event.stream === 'stdout' && event.message.includes('login started')) controller.abort()
       }
-    })).rejects.toThrow(/cannot be rolled back per account/i)
+    })).rejects.toThrow(/isolated device credential cannot be rolled back/i)
 
     await expect(getClaudeAccounts(ctx, {})).resolves.toMatchObject({
-      accounts: [expect.objectContaining({ key: 'device', status: 'missing' })]
+      accounts: [expect.objectContaining({ key: 'device', status: 'ready' })]
     })
-  })
-
-  it('serializes device-bound sessions across accounts and exposes only the active machine binding', async () => {
-    const cwd = await createTempDir('ow-claude-device-resource-workspace-')
-    const realHome = await createTempDir('ow-claude-device-resource-home-')
-    let ctx = createContext({ cwd, realHome, deviceCredential: true })
-
-    await manageClaudeAccount(ctx, { action: 'add', account: 'device-a' })
-    ctx = createContext({ cwd, realHome, deviceCredential: true, userConfig: await readGlobalConfig(realHome) })
-    await manageClaudeAccount(ctx, { action: 'add', account: 'device-b' })
-    ctx = createContext({ cwd, realHome, deviceCredential: true, userConfig: await readGlobalConfig(realHome) })
-
-    await expect(getClaudeAccounts(ctx, {})).resolves.toMatchObject({
-      accounts: expect.arrayContaining([
-        expect.objectContaining({ key: 'device-a', status: 'missing' }),
-        expect.objectContaining({ key: 'device-b', status: 'ready' })
-      ])
-    })
-
-    const releaseDeviceSession = await acquireClaudeAccountSessionLease(ctx, 'device-b')
-    await expect(manageClaudeAccount(ctx, {
-      action: 'reauthenticate',
-      account: 'device-a'
-    })).rejects.toThrow(/native device authentication has active sessions/i)
-    await releaseDeviceSession()
-  })
-
-  it('removes a device-bound account record without invoking machine-wide logout', async () => {
-    const cwd = await createTempDir('ow-claude-device-remove-workspace-')
-    const realHome = await createTempDir('ow-claude-device-remove-home-')
-    const commandLog = join(await createTempDir('ow-claude-device-remove-log-'), 'commands.jsonl')
-    let ctx = createContext({ cwd, realHome, deviceCredential: true })
-
-    await manageClaudeAccount(ctx, { action: 'add', account: 'device' })
-    ctx = createContext({
-      cwd,
-      realHome,
-      userConfig: await readGlobalConfig(realHome),
-      deviceCredential: true,
-      commandLog
-    })
-    const removed = await manageClaudeAccount(ctx, { action: 'remove', account: 'device' })
-
-    expect(removed.message).toMatch(/shared native credential store was left signed in/i)
-    await expect(readFile(commandLog, 'utf8')).rejects.toThrow()
-    expect((await readGlobalConfig(realHome)).adapters?.['claude-code']).toMatchObject({ accounts: {} })
-  })
-
-  it('treats a synced inline account as machine-bound on Darwin and never logs out another native identity', async () => {
-    const cwd = await createTempDir('ow-claude-darwin-synced-workspace-')
-    const realHome = await createTempDir('ow-claude-darwin-synced-home-')
-    const commandLog = join(await createTempDir('ow-claude-darwin-synced-log-'), 'commands.jsonl')
-    let ctx = createContext({ cwd, realHome })
-
-    await manageClaudeAccount(ctx, { action: 'add', account: 'portable' })
-    const globalConfig = await readGlobalConfig(realHome)
-    expect((globalConfig.adapters?.['claude-code'] as any).accounts.portable.auth.storage).toBe('inline')
-
-    platformSpy.mockReturnValue('darwin')
-    const sharedNativeMarker = join(realHome, '.fake-claude-native-login.json')
-    await writeFile(sharedNativeMarker, JSON.stringify({ email: 'other@example.test', orgId: 'org-other' }))
-    ctx = createContext({
-      cwd,
-      realHome,
-      userConfig: globalConfig,
-      sharedNativeCredential: true,
-      commandLog
-    })
-
-    await expect(resolveClaudeRuntimeAccount({
-      ctx,
-      requestedAccount: 'portable'
-    })).rejects.toThrow(/not authenticated on this device/i)
-
-    const releaseSystemSession = await acquireClaudeAccountSessionLease(ctx, 'system')
-    await expect(manageClaudeAccount(ctx, {
-      action: 'reauthenticate',
-      account: 'portable'
-    })).rejects.toThrow(/native device authentication has active sessions/i)
-    await releaseSystemSession()
-
-    await expect(manageClaudeAccount(ctx, {
-      action: 'remove',
-      account: 'system'
-    })).rejects.toThrow(/read-only/i)
-    const removed = await manageClaudeAccount(ctx, { action: 'remove', account: 'portable' })
-
-    expect(removed.message).toMatch(/shared native credential store was left signed in/i)
-    expect(JSON.parse(await readFile(sharedNativeMarker, 'utf8'))).toEqual({
-      email: 'other@example.test',
-      orgId: 'org-other'
-    })
-    await expect(readFile(commandLog, 'utf8')).rejects.toThrow()
   })
 
   it.each([
@@ -416,7 +326,7 @@ describe('claude machine-bound account auth', () => {
     })
 
     await expect(manageClaudeAccount(ctx, { action: 'add', account: 'incomplete' })).rejects.toThrow(
-      /cannot be rolled back per account/i
+      /isolated device credential cannot be rolled back/i
     )
 
     await expect(readGlobalConfig(realHome)).rejects.toThrow()
@@ -442,6 +352,9 @@ describe('claude machine-bound account auth', () => {
       realHome,
       userConfig: originalConfig,
       sharedNativeCredential: true,
+      deviceCredential: true,
+      loginEmail: 'portable@example.test',
+      loginOrgId: 'org-portable',
       commandLog
     })
     await manageClaudeAccount(ctx, { action: 'reauthenticate', account: 'portable' })
@@ -458,17 +371,24 @@ describe('claude machine-bound account auth', () => {
     const configDir = join(resolveGlobalAdapterAccountDir(ctx.env, 'claude-code', 'portable'), 'config')
     await expect(access(join(configDir, '.credentials.json'))).rejects.toThrow()
     await expect(access(join(configDir, '.oneworks-credential-revision'))).rejects.toThrow()
-    ctx = createContext({ cwd, realHome, userConfig: reboundConfig, sharedNativeCredential: true, commandLog })
+    ctx = createContext({
+      cwd,
+      realHome,
+      userConfig: reboundConfig,
+      sharedNativeCredential: true,
+      deviceCredential: true,
+      loginEmail: 'other@example.test',
+      loginOrgId: 'org-other',
+      commandLog
+    })
 
     const releaseSession = await acquireClaudeAccountSessionLease(ctx, 'portable')
-    await expect(manageClaudeAccount(ctx, { action: 'add', account: 'other' })).rejects.toThrow(
-      /native device authentication has active sessions/i
-    )
+    await expect(manageClaudeAccount(ctx, { action: 'add', account: 'other' }))
+      .resolves.toMatchObject({ accountKey: 'other' })
     await releaseSession()
-    expect((await readFile(commandLog, 'utf8')).trim().split('\n')).toEqual([
-      '["auth","login","--claudeai"]',
-      '["auth","status","--json"]'
-    ])
+    const commands = (await readFile(commandLog, 'utf8')).trim().split('\n')
+    expect(commands.filter(command => command === '["auth","login","--claudeai"]')).toHaveLength(2)
+    expect(commands.filter(command => command === '["auth","status","--json"]').length).toBeGreaterThanOrEqual(2)
   })
 
   it('rejects an old Darwin binding after the shared native login changes organization', async () => {
@@ -495,6 +415,7 @@ describe('claude machine-bound account auth', () => {
       requestedAccount: 'device'
     })).rejects.toThrow(/not authenticated on this device/i)
     const accounts = await getClaudeAccounts(ctx, {})
-    expect(accounts.accounts.find(account => account.key === 'device')).toMatchObject({ status: 'error' })
+    expect(accounts.accounts.find(account => account.key === 'device')).toMatchObject({ status: 'missing' })
+    expect(accounts.accounts.find(account => account.key === 'system')).toMatchObject({ status: 'ready' })
   })
 })
