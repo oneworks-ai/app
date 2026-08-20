@@ -235,19 +235,22 @@ describe('codex account persistence', () => {
       authContent
     })
 
-    const result = await manageCodexAccount(createTestCtx(workspace, {
-      env,
-      configs: [{
-        adapters: {
-          codex: {
-            cli: { source: 'managed' }
+    const result = await manageCodexAccount(
+      createTestCtx(workspace, {
+        env,
+        configs: [{
+          adapters: {
+            codex: {
+              cli: { source: 'managed' }
+            }
           }
-        }
-      } as any]
-    }), {
-      action: 'add',
-      account: 'managed'
-    })
+        } as any]
+      }),
+      {
+        action: 'add',
+        account: 'managed'
+      }
+    )
 
     expect(result.accountKey).toBe('managed')
     const globalConfig = JSON.parse(
@@ -292,17 +295,20 @@ describe('codex account persistence', () => {
       failProbeMethod: 'account/read'
     })
 
-    await expect(manageCodexAccount(createTestCtx(workspace, {
-      env: {
-        HOME: resolveTestMockHome(workspace, realHome),
-        __ONEWORKS_PROJECT_REAL_HOME__: realHome,
-        __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__: fakeCodexPath
-      },
-      configs: [existingConfig as any]
-    }), {
-      action: 'reauthenticate',
-      account: 'work'
-    })).rejects.toThrow('token_expired')
+    await expect(manageCodexAccount(
+      createTestCtx(workspace, {
+        env: {
+          HOME: resolveTestMockHome(workspace, realHome),
+          __ONEWORKS_PROJECT_REAL_HOME__: realHome,
+          __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__: fakeCodexPath
+        },
+        configs: [existingConfig as any]
+      }),
+      {
+        action: 'reauthenticate',
+        account: 'work'
+      }
+    )).rejects.toThrow('token_expired')
 
     const persistedConfig = JSON.parse(await readFile(globalConfigPath, 'utf8')) as any
     const persistedAuth = persistedConfig.adapters.codex.accounts.work.auth
@@ -383,14 +389,17 @@ describe('codex account persistence', () => {
       refreshedAuthContent
     })
 
-    const result = await getCodexAccountDetail(createTestCtx(workspace, {
-      env: {
-        HOME: resolveTestMockHome(workspace, realHome),
-        __ONEWORKS_PROJECT_REAL_HOME__: realHome,
-        __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__: fakeCodexPath
-      },
-      configs: [existingConfig as any]
-    }), { account: 'work', refresh: true })
+    const result = await getCodexAccountDetail(
+      createTestCtx(workspace, {
+        env: {
+          HOME: resolveTestMockHome(workspace, realHome),
+          __ONEWORKS_PROJECT_REAL_HOME__: realHome,
+          __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__: fakeCodexPath
+        },
+        configs: [existingConfig as any]
+      }),
+      { account: 'work', refresh: true }
+    )
 
     expect(result.account.status).toBe('ready')
     const persistedConfig = JSON.parse(await readFile(globalConfigPath, 'utf8')) as any
@@ -423,7 +432,8 @@ describe('codex account persistence', () => {
     const fakeCodexPath = join(workspace, 'fake-codex.mjs')
     const globalConfigPath = join(realHome, '.oneworks', '.oo.config.json')
     const oldAuthContent = '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_work","refresh_token":"same"}}\n'
-    const refreshedAuthContent = '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_work","refresh_token":"rotated"}}\n'
+    const refreshedAuthContent =
+      '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_work","refresh_token":"rotated"}}\n'
     const existingConfig = {
       adapters: {
         codex: {
@@ -456,14 +466,17 @@ describe('codex account persistence', () => {
       }
     })
 
-    const result = await getCodexAccountDetail(createTestCtx(workspace, {
-      env: {
-        HOME: resolveTestMockHome(workspace, realHome),
-        __ONEWORKS_PROJECT_REAL_HOME__: realHome,
-        __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__: fakeCodexPath
-      },
-      configs: [existingConfig as any]
-    }), { account: 'work', refresh: true })
+    const result = await getCodexAccountDetail(
+      createTestCtx(workspace, {
+        env: {
+          HOME: resolveTestMockHome(workspace, realHome),
+          __ONEWORKS_PROJECT_REAL_HOME__: realHome,
+          __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__: fakeCodexPath
+        },
+        configs: [existingConfig as any]
+      }),
+      { account: 'work', refresh: true }
+    )
 
     expect(result.account.status).toBe('error')
     expect(result.account.description).toContain('changed while sign-in was in progress')
@@ -480,7 +493,8 @@ describe('codex account persistence', () => {
     const fakeCodexPath = join(workspace, 'fake-codex.mjs')
     const globalConfigPath = join(realHome, '.oneworks', '.oo.config.json')
     const oldAuthContent = '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_work","refresh_token":"old"}}\n'
-    const unverifiedAuthContent = '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_work","refresh_token":"unverified"}}\n'
+    const unverifiedAuthContent =
+      '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_work","refresh_token":"unverified"}}\n'
     const existingConfig = {
       adapters: {
         codex: {
@@ -507,14 +521,17 @@ describe('codex account persistence', () => {
       failProbeMethod: 'account/rateLimits/read'
     })
 
-    const result = await getCodexAccountDetail(createTestCtx(workspace, {
-      env: {
-        HOME: resolveTestMockHome(workspace, realHome),
-        __ONEWORKS_PROJECT_REAL_HOME__: realHome,
-        __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__: fakeCodexPath
-      },
-      configs: [existingConfig as any]
-    }), { account: 'work', refresh: true })
+    const result = await getCodexAccountDetail(
+      createTestCtx(workspace, {
+        env: {
+          HOME: resolveTestMockHome(workspace, realHome),
+          __ONEWORKS_PROJECT_REAL_HOME__: realHome,
+          __ONEWORKS_PROJECT_ADAPTER_CODEX_CLI_PATH__: fakeCodexPath
+        },
+        configs: [existingConfig as any]
+      }),
+      { account: 'work', refresh: true }
+    )
 
     expect(result.account.status).toBe('error')
     expect(result.account.description).toContain('token_expired')
