@@ -31,6 +31,22 @@ const originalProjectRealHome = process.env.__ONEWORKS_PROJECT_REAL_HOME__
 const countOccurrences = (content: string, search: string) => content.split(search).length - 1
 const resolveTestMockHome = (workspace: string, realHome: string) =>
   resolveProjectHomePath(workspace, { HOME: realHome, __ONEWORKS_PROJECT_REAL_HOME__: realHome }, '.mock')
+const fakeSuccessfulAccountProbe = `
+if (process.argv[2] === 'app-server') {
+  const readline = await import('node:readline')
+  const input = readline.default.createInterface({ input: process.stdin })
+  input.on('line', (line) => {
+    const message = JSON.parse(line)
+    if (message.id == null) return
+    const result = message.method === 'account/read'
+      ? { account: { type: 'chatgpt', planType: 'pro' } }
+      : message.method === 'account/rateLimits/read'
+      ? { rateLimits: { limitId: 'codex', planType: 'pro' } }
+      : {}
+    process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: message.id, result }) + '\\n')
+  })
+}
+`
 
 afterEach(async () => {
   if (originalHome == null) {
@@ -2360,7 +2376,8 @@ if (process.argv[2] === 'login') {
   process.exit(0)
 }
 
-process.exit(1)
+${fakeSuccessfulAccountProbe}
+if (process.argv[2] !== 'app-server') process.exit(1)
 `
     )
     await chmod(fakeCodexPath, 0o755)
@@ -2481,7 +2498,8 @@ if (process.argv[2] === 'login') {
   process.exit(0)
 }
 
-process.exit(1)
+${fakeSuccessfulAccountProbe}
+if (process.argv[2] !== 'app-server') process.exit(1)
 `
     )
     await chmod(fakeCodexPath, 0o755)
@@ -2546,7 +2564,8 @@ if (process.argv[2] === 'login') {
   process.exit(0)
 }
 
-process.exit(1)
+${fakeSuccessfulAccountProbe}
+if (process.argv[2] !== 'app-server') process.exit(1)
 `
     )
     await chmod(fakeCodexPath, 0o755)
