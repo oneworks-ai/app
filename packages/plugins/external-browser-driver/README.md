@@ -37,7 +37,7 @@ Chrome 应用商店的版本化截图、宣传图和审核文案维护在 [`stor
 
 ZIP 根目录直接包含 `manifest.json`。构建会把 workspace semver 映射为 Chrome 可比较的四段整数版本，并用 `version_name` 保留原始版本；例如 `0.1.0-beta.6` 映射为 `0.1.0.20006`。同一源码和版本重复构建会得到相同 SHA-256。`package:extension:all` 会同时校验固定扩展身份、图标、运行时入口、权限 flavor 和 E2E 泄漏。
 
-`.github/workflows/chrome-extension-ci.yml` 在相关 PR / main 变更时构建并保留开发者版、minimal 版和 `SHA256SUMS`。main 上首次创建 `pkg/oneworks-plugin-external-browser-driver/v*` tag 时，Release Tags 会显式触发 `.github/workflows/chrome-extension-release.yml`：创建带 provenance attestation 的 GitHub Release，并在通过 `chrome-web-store` environment 后，使用短期 WIF service-account token 自动上传完整开发者版和提交审核。重跑已有 tag 默认只恢复 GitHub Release，避免重复提交商店；商店失败可从同一 tag 手动 dispatch 并设置 `publish_store=true` 重试。
+`.github/workflows/chrome-extension-ci.yml` 在相关 PR / main 变更时构建并保留开发者版、minimal 版和 `SHA256SUMS`。main 上创建 `pkg/oneworks-plugin-external-browser-driver/v*` tag 时，Release Tags 会显式触发 `.github/workflows/chrome-extension-release.yml`，只创建带 provenance attestation 的 GitHub Release。Chrome Web Store 是独立步骤：只有在同一 tag 的显式操作中，先通过 `fetchStatus` 和 Dashboard 确认不存在活跃或已接受的提交后，才可单次上传完整开发者版并提交审核；任何待审、未知或要求处理的状态都必须停在外部审核边界，不能重试上传或发布。
 
 ## 能力矩阵
 

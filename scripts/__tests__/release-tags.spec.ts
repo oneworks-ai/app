@@ -171,6 +171,11 @@ describe('release tag planning', () => {
     expect(releaseTagsWorkflow).toContain('auto|signed|unsigned) ;;')
   })
 
+  it('creates the Chrome GitHub Release without blindly resubmitting the Store', () => {
+    expect(releaseTagsWorkflow).toContain('dispatch_chrome_extension_release "$tag" false')
+    expect(releaseTagsWorkflow).not.toContain('dispatch_chrome_extension_release "$tag" true')
+  })
+
   it('fails closed when Desktop release signing metadata is invalid', () => {
     expect(() =>
       createReleaseTagPlanFromManifestChanges([

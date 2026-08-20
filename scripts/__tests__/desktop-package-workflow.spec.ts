@@ -413,7 +413,9 @@ describe('desktop package workflow', () => {
       input: extractRunScript('Verify immutable signing policy source')
     })
     expect(immutablePolicySyntax.status, immutablePolicySyntax.stderr).toBe(0)
-    expect(workflow).toContain('actions: read\n      contents: write')
+    expect(workflow).toContain(
+      'actions: read\n      artifact-metadata: write\n      attestations: write\n      contents: write\n      id-token: write'
+    )
     expect(workflow).toContain(
       `SOURCE_SHA: \${{ steps.candidate.outputs.source_sha }}`
     )
@@ -495,6 +497,7 @@ describe('desktop package workflow', () => {
     expect(workflow).toContain(
       `source_sha: \${{ needs.release.outputs.source_sha }}`
     )
+    expect(workflow).toContain('release_automation: ${{ contains(inputs.release_tag || github.ref_name')
     expect(workflow).not.toContain('secrets: inherit')
     expect(workflow).toContain(
       `HOMEPAGE_DEPLOY_TOKEN: \${{ secrets.HOMEPAGE_DEPLOY_TOKEN }}`
@@ -502,6 +505,18 @@ describe('desktop package workflow', () => {
     expect(homepageWorkflow).toContain(
       'secrets:\n      HOMEPAGE_DEPLOY_TOKEN:'
     )
+  })
+
+  it('attests the verified immutable Desktop artifact set before publication', () => {
+    const verificationIndex = workflow.indexOf('      - name: Verify release tag source')
+    const attestationIndex = workflow.indexOf('      - name: Attest verified Desktop release artifacts')
+    const publicationIndex = workflow.indexOf('      - name: Create or update GitHub Release')
+
+    expect(verificationIndex).toBeGreaterThanOrEqual(0)
+    expect(attestationIndex).toBeGreaterThan(verificationIndex)
+    expect(publicationIndex).toBeGreaterThan(attestationIndex)
+    expect(workflow).toContain('uses: actions/attest@v4')
+    expect(workflow).toContain('subject-path: release-artifacts/*')
   })
 
   it('fails closed when the release tag source cannot be verified', () => {

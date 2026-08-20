@@ -7,6 +7,7 @@ const { validateExtensionArchive } = require('./validate-extension-package.cjs')
 
 const defaultApiRoot = 'https://chromewebstore.googleapis.com'
 const acceptedPublishStates = new Set(['PENDING_REVIEW', 'PUBLISHED', 'PUBLISHED_TO_TESTERS', 'STAGED'])
+const terminalSubmissionStates = new Set(['CANCELLED', 'REJECTED'])
 
 const delay = (milliseconds) => new Promise(resolveDelay => setTimeout(resolveDelay, milliseconds))
 
@@ -19,6 +20,22 @@ const responseJson = async (response, label) => {
     return JSON.parse(body)
   } catch {
     throw new Error(`${label} returned invalid JSON`)
+  }
+}
+
+const assertNoActiveSubmission = (status) => {
+  if (status == null || typeof status !== 'object' || Array.isArray(status)) {
+    throw new Error('Chrome Web Store status returned an invalid response')
+  }
+  const submissionState = status.submittedItemRevisionStatus?.state
+  if (submissionState != null && !terminalSubmissionStates.has(submissionState)) {
+    throw new Error(`Chrome Web Store has an active submission: ${String(submissionState)}`)
+  }
+  if (status.lastAsyncUploadState === 'IN_PROGRESS') {
+    throw new Error('Chrome Web Store has an active upload')
+  }
+  if (status.takenDown === true || status.warned === true) {
+    throw new Error('Chrome Web Store item requires Dashboard action before a new submission')
   }
 }
 
@@ -46,6 +63,13 @@ const publishChromeWebStore = async ({
   const itemName = `publishers/${encodeURIComponent(publisherId)}/items/${encodeURIComponent(extensionId)}`
   const authorization = { Authorization: `Bearer ${accessToken}` }
 
+  const statusUrl = `${apiRoot}/v2/${itemName}:fetchStatus`
+  const initialStatusResponse = await fetchImpl(statusUrl, {
+    headers: authorization,
+    signal: AbortSignal.timeout(requestTimeoutMs)
+  })
+  assertNoActiveSubmission(await responseJson(initialStatusResponse, 'Chrome Web Store preflight status'))
+
   const uploadResponse = await fetchImpl(`${apiRoot}/upload/v2/${itemName}:upload`, {
     body: readFileSync(archivePath),
     headers: {
@@ -59,7 +83,7 @@ const publishChromeWebStore = async ({
   let uploadState = upload.uploadState
   for (let attempt = 0; uploadState === 'IN_PROGRESS' && attempt < pollAttempts; attempt += 1) {
     await sleep(pollIntervalMs)
-    const statusResponse = await fetchImpl(`${apiRoot}/v2/${itemName}:fetchStatus`, {
+    const statusResponse = await fetchImpl(statusUrl, {
       headers: authorization,
       signal: AbortSignal.timeout(requestTimeoutMs)
     })

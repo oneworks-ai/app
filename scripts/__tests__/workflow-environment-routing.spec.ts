@@ -2,6 +2,8 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const workflow = (name: string) => readFileSync(`.github/workflows/${name}`, 'utf8')
+const releaseAutomationEnvironment = 'environment: $' +
+  "{{ inputs.release_automation && 'Release Automation' || 'Production' }}"
 
 function workflowJobs(workflowSource: string) {
   const jobsMarker = 'jobs:\n'
@@ -26,18 +28,33 @@ function job(workflowSource: string, jobName: string) {
 describe('workflow environment routing', () => {
   it.each([
     ['deploy-avatar.yml', 'trigger'],
-    ['deploy-homepage.yml', 'trigger'],
     ['deploy-pwa.yml', 'trigger'],
     ['deploy-relay-admin.yml', 'deploy'],
     ['deploy-relay-server.yml', 'deploy-cloudflare'],
     ['deploy-relay-server.yml', 'deploy-vercel'],
     ['deploy-relay-server.yml', 'deploy-external'],
-    ['desktop-package.yml', 'release'],
     ['npm-publish-alpha.yml', 'publish'],
     ['stable-windows-msi-release.yml', 'release'],
     ['vscode-extension-release.yml', 'release']
   ])('gates %s:%s with Production', (file, jobName) => {
     expect(job(workflow(file), jobName)).toContain('    environment: Production\n')
+  })
+
+  it('uses one pre-build Production gate for prerelease Desktop promotion', () => {
+    const desktop = workflow('desktop-package.yml')
+    const packageJob = job(desktop, 'package')
+    const release = job(desktop, 'release')
+    const homepage = job(desktop, 'homepage')
+    const homepageTrigger = job(workflow('deploy-homepage.yml'), 'trigger')
+
+    expect(packageJob).toContain("github.event_name == 'schedule' && 'Preview' || 'Production'")
+    expect(release).toContain("&& 'Release Automation' || 'Production'")
+    expect(release).toContain('      attestations: write\n')
+    expect(release).toContain('      id-token: write\n')
+    expect(release).toContain('uses: actions/attest@v4')
+    expect(release).toContain('subject-path: release-artifacts/*')
+    expect(homepage).toContain('release_automation: ${{ contains(inputs.release_tag || github.ref_name')
+    expect(homepageTrigger).toContain(releaseAutomationEnvironment)
   })
 
   it('keeps Chrome mutations behind their dedicated gates', () => {
@@ -96,7 +113,7 @@ describe('workflow environment routing', () => {
     const homepageTrigger = job(workflow('deploy-homepage.yml'), 'trigger')
 
     expect(desktopHomepage).toContain('uses: ./.github/workflows/deploy-homepage.yml')
-    expect(desktopHomepage).not.toContain('environment:')
-    expect(homepageTrigger).toContain('    environment: Production\n')
+    expect(desktopHomepage).not.toContain('    environment:')
+    expect(homepageTrigger).toContain(releaseAutomationEnvironment)
   })
 })
