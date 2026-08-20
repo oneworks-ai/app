@@ -347,6 +347,110 @@ describe('initChannels', () => {
     expect(typeof payload.error).toBe('string')
   })
 
+  it('does not create a connection while channel environment variables are unresolved', async () => {
+    const create = vi.fn()
+    const configVariable = (name: string) => `\${${name}}`
+    loadChannelModule.mockReturnValue({
+      definition: {
+        configSchema: z.object({
+          type: z.literal('lark'),
+          appId: z.string(),
+          appSecret: z.string()
+        })
+      },
+      create
+    })
+
+    const { initChannels } = await import('#~/channels/index.js')
+    const manager = await initChannels([{
+      source: 'project',
+      unresolvedJsonVariableReferences: [
+        { name: '1SECRET', path: ['channels', 'miniapp-gear', 'systemPrompt'] },
+        {
+          name: 'ONEWORKS_LARK_APP_SECRET',
+          path: ['channels', 'miniapp-gear', 'appSecret']
+        },
+        {
+          name: 'ONEWORKS_LARK_SYSTEM_PROMPT',
+          path: ['channels', 'miniapp-gear', 'systemPrompt']
+        }
+      ],
+      config: {
+        channels: {
+          'miniapp-gear': {
+            type: 'lark',
+            appId: 'cli_xxx',
+            appSecret: configVariable('ONEWORKS_LARK_APP_SECRET'),
+            systemPrompt: `Use ${configVariable('ONEWORKS_LARK_SYSTEM_PROMPT')} and ${configVariable('1SECRET')}.`
+          }
+        }
+      }
+    }])
+
+    expect(loadChannelModule).not.toHaveBeenCalled()
+    expect(create).not.toHaveBeenCalled()
+    expect(manager.states.get('miniapp-gear')).toMatchObject({
+      key: 'miniapp-gear',
+      type: 'lark',
+      status: 'error',
+      error: 'Missing environment variables: 1SECRET, ONEWORKS_LARK_APP_SECRET, ONEWORKS_LARK_SYSTEM_PROMPT',
+      configSource: 'project'
+    })
+    expect(logger.error).toHaveBeenCalledWith(
+      {
+        channelKey: 'miniapp-gear',
+        channelType: 'lark',
+        configSource: 'project',
+        error: 'Missing environment variables: 1SECRET, ONEWORKS_LARK_APP_SECRET, ONEWORKS_LARK_SYSTEM_PROMPT'
+      },
+      '[channels] channel config variables unresolved'
+    )
+  })
+
+  it('does not reinterpret token-shaped text introduced by a resolved variable', async () => {
+    const configVariable = (name: string) => `\${${name}}`
+    const startReceiving = vi.fn()
+    const create = vi.fn().mockResolvedValue({
+      close: vi.fn(),
+      startReceiving
+    })
+    loadChannelModule.mockReturnValue({
+      definition: {
+        configSchema: z.object({
+          type: z.literal('lark'),
+          appId: z.string(),
+          appSecret: z.string()
+        })
+      },
+      create
+    })
+
+    const { initChannels } = await import('#~/channels/index.js')
+    const manager = await initChannels([{
+      source: 'project',
+      unresolvedJsonVariableReferences: [{
+        name: 'ROTATE',
+        path: ['hooks', 'smoke', 'port']
+      }],
+      config: {
+        channels: {
+          'miniapp-gear': {
+            type: 'lark',
+            appId: 'cli_xxx',
+            appSecret: `prefix-${configVariable('ROTATE')}-suffix`
+          }
+        }
+      }
+    }])
+
+    expect(create).toHaveBeenCalledOnce()
+    expect(startReceiving).toHaveBeenCalledOnce()
+    expect(manager.states.get('miniapp-gear')).toMatchObject({
+      key: 'miniapp-gear',
+      status: 'connected'
+    })
+  })
+
   it('logs init failures and closes the partially created connection', async () => {
     const close = vi.fn()
     const startReceiving = vi.fn().mockRejectedValue(new Error('connection rejected'))

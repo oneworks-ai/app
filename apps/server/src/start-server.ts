@@ -146,9 +146,11 @@ const resolveEntryKind = (options: StartServerOptions): NonNullable<StartServerO
 
 const toChannelConfigSourceEntry = (
   source: ChannelConfigSourceEntry['source'],
-  config: ChannelConfigSourceEntry['config'] | undefined
+  config: ChannelConfigSourceEntry['config'] | undefined,
+  unresolvedJsonVariableReferences?: ChannelConfigSourceEntry['unresolvedJsonVariableReferences']
 ): ChannelConfigSourceEntry => ({
   source,
+  ...(unresolvedJsonVariableReferences == null ? {} : { unresolvedJsonVariableReferences }),
   ...(config == null ? {} : { config })
 })
 
@@ -221,12 +223,31 @@ export async function createServerRuntime(logStartup?: StartupLog): Promise<Serv
   installAssetCreateConnectionGuard(server)
   logStartup?.('koa and http server created')
   logStartup?.('config load begin')
-  const { globalConfig, projectSource, userConfig, mergedConfig } = await loadConfigState()
+  const {
+    globalConfig,
+    globalSource,
+    projectSource,
+    userConfig,
+    userSource,
+    mergedConfig
+  } = await loadConfigState()
   logStartup?.('config load complete')
   const configs = [
-    toChannelConfigSourceEntry('global', globalConfig),
-    toChannelConfigSourceEntry('project', projectSource?.resolvedConfig),
-    toChannelConfigSourceEntry('user', userConfig)
+    toChannelConfigSourceEntry(
+      'global',
+      globalConfig,
+      globalSource?.unresolvedJsonVariableReferences
+    ),
+    toChannelConfigSourceEntry(
+      'project',
+      projectSource?.resolvedConfig,
+      projectSource?.unresolvedJsonVariableReferences
+    ),
+    toChannelConfigSourceEntry(
+      'user',
+      userConfig,
+      userSource?.unresolvedJsonVariableReferences
+    )
   ] as const satisfies readonly ChannelConfigSourceEntry[]
 
   logStartup?.('create runtime complete')

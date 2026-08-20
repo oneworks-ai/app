@@ -1,0 +1,26 @@
+{
+  "name": "万可发布 · qxq【研发】",
+  "description": "项目、前端、研发、测试与运维的发布协同群。",
+  "channel": "lark:wan-ke-engineering",
+  "entity": "wan-ke-engineering",
+  "external": {
+    "type": "chat",
+    "chatId": "oc_711d58b78dfc1988e0616d956b870d39"
+  },
+  "ingress": {
+    "ambientRouting": false,
+    "createOnCommand": false,
+    "createOnMention": true,
+    "mentionPatterns": [
+      "@qxq【研发】",
+      "@qxq"
+    ]
+  },
+  "authorization": {
+    "deliveryThrottleMs": 1200000,
+    "resume": {
+      "mode": "immediate",
+      "delayMs": 0
+    }
+  }
+}

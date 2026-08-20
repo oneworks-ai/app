@@ -1,0 +1,26 @@
+{
+  "name": "万可增长 · OwO【产品】",
+  "description": "运营、数分与产品的增长实验群。",
+  "channel": "lark:wan-ke-product",
+  "entity": "wan-ke-product",
+  "external": {
+    "type": "chat",
+    "chatId": "oc_aa463b23f97a13e63b53e5d99cb791d9"
+  },
+  "ingress": {
+    "ambientRouting": false,
+    "createOnCommand": false,
+    "createOnMention": true,
+    "mentionPatterns": [
+      "@OwO【产品】",
+      "@OwO"
+    ]
+  },
+  "authorization": {
+    "deliveryThrottleMs": 1200000,
+    "resume": {
+      "mode": "immediate",
+      "delayMs": 0
+    }
+  }
+}

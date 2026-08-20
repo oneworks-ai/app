@@ -1,0 +1,26 @@
+{
+  "name": "万可脑爆 · OwO【产品】",
+  "description": "产品与设计的需求脑暴和决策群。",
+  "channel": "lark:wan-ke-product",
+  "entity": "wan-ke-product",
+  "external": {
+    "type": "chat",
+    "chatId": "oc_20b024001d5a2ab237b8c82f9595a099"
+  },
+  "ingress": {
+    "ambientRouting": false,
+    "createOnCommand": false,
+    "createOnMention": true,
+    "mentionPatterns": [
+      "@OwO【产品】",
+      "@OwO"
+    ]
+  },
+  "authorization": {
+    "deliveryThrottleMs": 1200000,
+    "resume": {
+      "mode": "immediate",
+      "delayMs": 0
+    }
+  }
+}

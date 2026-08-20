@@ -30,6 +30,27 @@ afterEach(async () => {
 })
 
 describe('channel link service', () => {
+  it('loads the repository role-bot channel links', async () => {
+    const links = await loadChannelLinks(process.cwd())
+
+    expect(links).toHaveLength(20)
+    expect(new Set(links.map(link => link.entity))).toEqual(
+      new Set([
+        'owo-demo',
+        'wan-ke-analytics',
+        'wan-ke-design',
+        'wan-ke-engineering',
+        'wan-ke-frontend',
+        'wan-ke-operations',
+        'wan-ke-ops',
+        'wan-ke-product',
+        'wan-ke-project',
+        'wan-ke-test'
+      ])
+    )
+    expect(links.every(link => link.channelKey.startsWith('lark:'))).toBe(true)
+  })
+
   it('loads directory channel links and resolves an inbound group event', async () => {
     const workspace = await createWorkspace()
     await writeDocument(

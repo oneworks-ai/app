@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 128 128"
+  width="256"
+  height="256"
+  role="img"
+  aria-label="qwq【测试】"
+  shape-rendering="crispEdges"
+>
+  <title>qwq【测试】</title>
+  <rect x="0" y="0" width="128" height="128" fill="#d1fae5" />
+  <g>
+    <rect x="12" y="61" width="6" height="6" fill="#064e3b" />
+    <rect x="19" y="61" width="6" height="6" fill="#064e3b" />
+    <rect x="26" y="61" width="6" height="6" fill="#064e3b" />
+    <rect x="5" y="68" width="6" height="6" fill="#064e3b" />
+    <rect x="33" y="68" width="6" height="6" fill="#064e3b" />
+    <rect x="5" y="75" width="6" height="6" fill="#064e3b" />
+    <rect x="33" y="75" width="6" height="6" fill="#064e3b" />
+    <rect x="5" y="82" width="6" height="6" fill="#064e3b" />
+    <rect x="26" y="82" width="6" height="6" fill="#064e3b" />
+    <rect x="33" y="82" width="6" height="6" fill="#064e3b" />
+    <rect x="12" y="89" width="6" height="6" fill="#064e3b" />
+    <rect x="19" y="89" width="6" height="6" fill="#064e3b" />
+    <rect x="33" y="89" width="6" height="6" fill="#064e3b" />
+    <rect x="33" y="96" width="6" height="6" fill="#064e3b" />
+    <rect x="47" y="54" width="6" height="6" fill="#064e3b" />
+    <rect x="75" y="54" width="6" height="6" fill="#064e3b" />
+    <rect x="47" y="61" width="6" height="6" fill="#064e3b" />
+    <rect x="75" y="61" width="6" height="6" fill="#064e3b" />
+    <rect x="47" y="68" width="6" height="6" fill="#064e3b" />
+    <rect x="61" y="68" width="6" height="6" fill="#064e3b" />
+    <rect x="75" y="68" width="6" height="6" fill="#064e3b" />
+    <rect x="47" y="75" width="6" height="6" fill="#064e3b" />
+    <rect x="54" y="75" width="6" height="6" fill="#064e3b" />
+    <rect x="61" y="75" width="6" height="6" fill="#064e3b" />
+    <rect x="68" y="75" width="6" height="6" fill="#064e3b" />
+    <rect x="75" y="75" width="6" height="6" fill="#064e3b" />
+    <rect x="54" y="82" width="6" height="6" fill="#064e3b" />
+    <rect x="68" y="82" width="6" height="6" fill="#064e3b" />
+    <rect x="96" y="61" width="6" height="6" fill="#064e3b" />
+    <rect x="103" y="61" width="6" height="6" fill="#064e3b" />
+    <rect x="110" y="61" width="6" height="6" fill="#064e3b" />
+    <rect x="89" y="68" width="6" height="6" fill="#064e3b" />
+    <rect x="117" y="68" width="6" height="6" fill="#064e3b" />
+    <rect x="89" y="75" width="6" height="6" fill="#064e3b" />
+    <rect x="117" y="75" width="6" height="6" fill="#064e3b" />
+    <rect x="89" y="82" width="6" height="6" fill="#064e3b" />
+    <rect x="110" y="82" width="6" height="6" fill="#064e3b" />
+    <rect x="117" y="82" width="6" height="6" fill="#064e3b" />
+    <rect x="96" y="89" width="6" height="6" fill="#064e3b" />
+    <rect x="103" y="89" width="6" height="6" fill="#064e3b" />
+    <rect x="117" y="89" width="6" height="6" fill="#064e3b" />
+    <rect x="117" y="96" width="6" height="6" fill="#064e3b" />
+  </g>
+</svg>

@@ -1,0 +1,177 @@
+{
+  "larkAppDefaults": {
+    "capability": "bot",
+    "eventMode": "long_connection",
+    "events": ["im.message.receive_v1"],
+    "scopes": [
+      "im:message",
+      "im:message:send_as_bot",
+      "im:message.group_at_msg.include_bot:readonly"
+    ],
+    "allowExternalGroups": true,
+    "mobileDefaultAbility": "bot",
+    "desktopDefaultAbility": "bot"
+  },
+  "cliAppRequirements": {
+    "profile": "owo-cli",
+    "appId": "cli_aaa59cad8d78dccc",
+    "scopes": [
+      "admin:app.info:readonly",
+      "application:application:patch",
+      "im:chat:read",
+      "im:chat:update",
+      "im:chat.members:write_only"
+    ],
+    "allowExternalGroups": true
+  },
+  "roles": [
+    {
+      "id": "product",
+      "entity": "wan-ke-product",
+      "channelKey": "lark:wan-ke-product",
+      "name": "OwO【产品】",
+      "currentName": "OwO【产品】",
+      "face": "OwO",
+      "palette": "ocean",
+      "appId": "cli_aaa567886c389cca",
+      "botOpenId": "ou_a954ada56bef071bbeaf6fa63d8e983e"
+    },
+    {
+      "id": "design",
+      "entity": "wan-ke-design",
+      "channelKey": "lark:wan-ke-design",
+      "name": "Ovo【设计】",
+      "currentName": "Ovo【设计】",
+      "face": "Ovo",
+      "palette": "iris",
+      "appId": "cli_aaa5600758789cc9",
+      "botOpenId": "ou_9d6be371fed863ef709b2902ebd39475"
+    },
+    {
+      "id": "frontend",
+      "entity": "wan-ke-frontend",
+      "channelKey": "lark:wan-ke-frontend",
+      "name": "Owo【前端】",
+      "currentName": "Owo【前端】",
+      "face": "Owo",
+      "palette": "sky",
+      "appId": "cli_aaa5abdf3038dcd2",
+      "botOpenId": "ou_b167ad9a1af67f297c13504df4eb4574"
+    },
+    {
+      "id": "engineering",
+      "entity": "wan-ke-engineering",
+      "channelKey": "lark:wan-ke-engineering",
+      "name": "qxq【研发】",
+      "currentName": "qxq【研发】",
+      "face": "qxq",
+      "palette": "midnight",
+      "appId": "cli_aaa567c16df91cbb",
+      "botOpenId": "ou_3d33b6883b28e3a646caf3cd52649895"
+    },
+    {
+      "id": "test",
+      "entity": "wan-ke-test",
+      "channelKey": "lark:wan-ke-test",
+      "name": "qwq【测试】",
+      "currentName": "qwq【测试】",
+      "face": "qwq",
+      "palette": "jade",
+      "appId": "cli_aaa567f1faf95cdc",
+      "botOpenId": "ou_83654db4b8da26e7103bbebdd8378d7e"
+    },
+    {
+      "id": "ops",
+      "entity": "wan-ke-ops",
+      "channelKey": "lark:wan-ke-ops",
+      "name": "0W0【运维】",
+      "currentName": "0W0【运维】",
+      "face": "0W0",
+      "palette": "terminal",
+      "appId": "cli_aaa567e1b6391cc2",
+      "botOpenId": "ou_1171c63c1e2699620e12ee3a833e4969"
+    },
+    {
+      "id": "operations",
+      "entity": "wan-ke-operations",
+      "channelKey": "lark:wan-ke-operations",
+      "name": "UvU【运营】",
+      "currentName": "UvU【运营】",
+      "face": "UvU",
+      "palette": "berry",
+      "appId": "cli_aaa5601603385ce7",
+      "botOpenId": "ou_d7a9e86453b96c74cef7cbc82b223477"
+    },
+    {
+      "id": "analytics",
+      "entity": "wan-ke-analytics",
+      "channelKey": "lark:wan-ke-analytics",
+      "name": "q0q【数分】",
+      "currentName": "q0q【数分】",
+      "face": "q0q",
+      "palette": "gold",
+      "appId": "cli_aaa5603707b95ccc",
+      "botOpenId": "ou_a77d839823d9e108c773ea9a5f073530"
+    },
+    {
+      "id": "project",
+      "entity": "wan-ke-project",
+      "channelKey": "lark:wan-ke-project",
+      "name": "n_n【项目】",
+      "currentName": "n_n【项目】",
+      "face": "n_n",
+      "palette": "coral",
+      "appId": "cli_aabaa692a238dcd2",
+      "botOpenId": "ou_287f4a055466c0a60c74933e5ba4e081"
+    },
+    {
+      "id": "demo",
+      "entity": "owo-demo",
+      "channelKey": "lark:product-team",
+      "name": "OWO",
+      "currentName": "OWO",
+      "face": "OWO",
+      "palette": "ocean",
+      "appId": "cli_aaba90fcc4389cb3",
+      "botOpenId": "ou_7e3d9e594a18cffb48cf09196c0635cc"
+    }
+  ],
+  "groups": [
+    {
+      "name": "万可闲聊",
+      "chatId": "oc_e533f5906d734ec0061633176b31aedf",
+      "roles": ["product", "operations", "demo"],
+      "includeBoss": true
+    },
+    {
+      "name": "万可脑爆",
+      "chatId": "oc_20b024001d5a2ab237b8c82f9595a099",
+      "roles": ["product", "design"],
+      "includeBoss": true
+    },
+    {
+      "name": "万可测试",
+      "chatId": "oc_b857784ed7ae69638288d78a61ec7909",
+      "roles": ["frontend", "engineering", "test"],
+      "includeBoss": true
+    },
+    {
+      "name": "万可监控",
+      "chatId": "oc_4f78c1fbad9da5205b7389000e33f30a",
+      "roles": ["ops", "engineering", "frontend", "analytics"],
+      "includeBoss": true
+    },
+    {
+      "name": "万可增长",
+      "chatId": "oc_aa463b23f97a13e63b53e5d99cb791d9",
+      "roles": ["operations", "analytics", "product"],
+      "includeBoss": true
+    },
+    {
+      "name": "万可发布",
+      "chatId": "oc_711d58b78dfc1988e0616d956b870d39",
+      "roles": ["project", "frontend", "engineering", "test", "ops"],
+      "includeBoss": true
+    }
+  ]
+}
