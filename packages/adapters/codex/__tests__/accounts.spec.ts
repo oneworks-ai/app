@@ -417,7 +417,9 @@ input.on('line', (line) => {
     const probeAuthPath = await readFile(probeAuthPathOutput, 'utf8')
     expect(probeAuthPath).not.toBe(first.authFilePath)
     await expect(lstat(probeAuthPath)).rejects.toMatchObject({ code: 'ENOENT' })
-    expect(JSON.parse(await readFile(probeAccountReadParamsPath, 'utf8'))).not.toHaveProperty('refreshToken')
+    expect(JSON.parse(await readFile(probeAccountReadParamsPath, 'utf8'))).toMatchObject({
+      refreshToken: true
+    })
     expect(await readFile(first.authFilePath!, 'utf8')).toBe(probeRotatedAuthContent)
     const probeFlushedConfig = JSON.parse(await readFile(globalConfigPath, 'utf8')) as any
     expect(Buffer.from(probeFlushedConfig.adapters.codex.accounts.work.auth.token, 'base64').toString('utf8'))

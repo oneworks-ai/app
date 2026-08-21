@@ -4155,6 +4155,7 @@ const getCodexAccountProbeUnlocked = async (params: {
       ctx,
       homeDir: authSource.homeDir,
       authFilePath: authSource.authFilePath,
+      refresh: true,
       fetchProfile: normalizeNonEmptyString(descriptor.metadata?.avatarUrl) == null ||
         normalizeNonEmptyString(descriptor.metadata?.displayName) == null,
       logKey: `${scope}-${descriptor.key}`

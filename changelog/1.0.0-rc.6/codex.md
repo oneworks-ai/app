@@ -1,7 +1,8 @@
 # @oneworks/adapter-codex 1.0.0-rc.6
 
-- Verify browser login credentials through the official Codex account and rate-limit reads before saving them, and
-  preserve verified credential rotations so quota refreshes no longer fall back to expired tokens.
+- Verify browser login credentials through the official Codex account and rate-limit reads before saving them. Normal
+  live quota probes now request official credential refresh and preserve only fully verified rotations, so expired
+  access tokens can recover without falling back to stale credentials.
 - Share one managed credential owner across local Codex sessions and flush session-owned rotations back to the
   portable account with race-safe revision and identity checks, including complete atomic file replacements. Live
   probes now rotate isolated copies and merge only fully verified results, without writing real-home or explicit
