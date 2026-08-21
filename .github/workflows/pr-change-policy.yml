@@ -10,6 +10,9 @@ on:
       - synchronize
       - edited
       - ready_for_review
+  merge_group:
+    types:
+      - checks_requested
 
 permissions:
   contents: read
@@ -18,7 +21,7 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 concurrency:
-  group: pr-change-policy-${{ github.event.pull_request.number }}
+  group: pr-change-policy-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -27,19 +30,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
+        if: github.event_name == 'pull_request'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Setup Node.js
+        if: github.event_name == 'pull_request'
         uses: actions/setup-node@v4
         with:
           node-version-file: .node-version
 
       - name: Write pull request body
+        if: github.event_name == 'pull_request'
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: printf '%s' "$PR_BODY" > "$RUNNER_TEMP/pr-body.md"
 
       - name: Check PR changelog, screenshots, and experience review
+        if: github.event_name == 'pull_request'
         run: node scripts/pr-change-check.cjs "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" --body-file "$RUNNER_TEMP/pr-body.md"
+
+      - name: Confirm queued pull request policy
+        if: github.event_name == 'merge_group'
+        run: echo "Every queued pull request already passed pr-change-policy on its immutable head revision."

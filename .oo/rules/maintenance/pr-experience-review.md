@@ -39,6 +39,7 @@
 - 硬门禁：`.github/workflows/pr-change-policy.yml` 与 `scripts/pr-change-check.cjs`
   - 独立 workflow 直接调用无 workspace 依赖的 `node scripts/pr-change-check.cjs <base> <head> --body-file <path>`；`scripts/pr-change-check.ts` 只作为本地 Commander 与其他 TS 工具的类型化桥接。
   - workflow 监听 `opened`、`reopened`、`synchronize`、`edited` 和 `ready_for_review`；policy concurrency 与源码检查隔离。正文编辑也会让 Quality / Desktop 核对 exact revision evidence，但不会取消 source run；已有成功证据时只生成轻量 required contexts，cache miss 时按当前范围 fail closed 重检。base edit 不允许复用旧 base 证据。
+  - workflow 同时监听 `merge_group: checks_requested`，为队列组合提交生成稳定的 `pr-change-policy` context。队列事件没有 PR body，只确认每个入队 head 已经通过同一 required policy；正文和变更范围仍只在不可变 PR head 上验证。
   - 新增或调整 checklist 文案时，同步更新 `scripts/__tests__/pr-change-check.spec.ts`。
 
 ## Checklist 判定

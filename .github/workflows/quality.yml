@@ -11,6 +11,9 @@ on:
       - synchronize
       - edited
       - ready_for_review
+  merge_group:
+    types:
+      - checks_requested
   push:
     branches:
       - main
@@ -21,12 +24,14 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  VALIDATION_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || '' }}
+  VALIDATION_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
 
 concurrency:
   group: >-
     quality-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}-${{
     github.event.action || 'none' }}-${{ github.event.changes.base != null }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
 
 jobs:
   classify-changes:
@@ -63,11 +68,11 @@ jobs:
         id: reuse_plan
         env:
           BASE_CHANGED: ${{ github.event.changes.base != null }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_SHA: ${{ env.VALIDATION_BASE_SHA }}
           BEFORE_SHA: ${{ github.event.before }}
           EVENT_ACTION: ${{ github.event.action }}
           EVENT_NAME: ${{ github.event_name }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          HEAD_SHA: ${{ env.VALIDATION_HEAD_SHA }}
         run: >-
           node scripts/pr-validation-reuse.cjs
           --event-name "$EVENT_NAME"
@@ -107,12 +112,12 @@ jobs:
       - name: Classify validation scope
         id: scope
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_SHA: ${{ env.VALIDATION_BASE_SHA }}
           EVENT_NAME: ${{ github.event_name }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          HEAD_SHA: ${{ env.VALIDATION_HEAD_SHA }}
         shell: bash
         run: |
-          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+          if [[ "$EVENT_NAME" == "pull_request" || "$EVENT_NAME" == "merge_group" ]]; then
             node scripts/pr-validation-scope.cjs \
               --base "$BASE_SHA" \
               --head "$HEAD_SHA" \
@@ -424,8 +429,8 @@ jobs:
       - name: Validate changed documentation scope, privacy, links, anchors, and diff
         if: needs.classify-changes.outputs.docs_changed == 'true' && matrix.name == 'lint'
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ env.VALIDATION_BASE_SHA }}
+          HEAD_SHA: ${{ env.VALIDATION_HEAD_SHA }}
         run: node scripts/docs-only-validation.mjs --base "$BASE_SHA" --head "$HEAD_SHA" --allow-mixed
 
       - name: Confirm check is not applicable
@@ -488,8 +493,8 @@ jobs:
 
       - name: Validate release documentation
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ env.VALIDATION_BASE_SHA }}
+          HEAD_SHA: ${{ env.VALIDATION_HEAD_SHA }}
         run: >-
           node scripts/docs-only-validation.mjs
           --base "$BASE_SHA"
@@ -506,13 +511,13 @@ jobs:
       REUSE_ALL: ${{ needs.classify-changes.outputs.reuse_all }}
     steps:
       - name: Checkout repository
-        if: env.REUSE_ALL != 'true'
+        if: env.REUSE_ALL != 'true' && github.event_name != 'merge_group'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Resolve commit range
-        if: env.REUSE_ALL != 'true'
+        if: env.REUSE_ALL != 'true' && github.event_name != 'merge_group'
         id: range
         shell: bash
         run: |
@@ -540,8 +545,12 @@ jobs:
           echo "head=$head" >> "$GITHUB_OUTPUT"
 
       - name: Check commit messages
-        if: env.REUSE_ALL != 'true'
+        if: env.REUSE_ALL != 'true' && github.event_name != 'merge_group'
         run: node scripts/check-commit-messages.mjs "${{ steps.range.outputs.base }}" "${{ steps.range.outputs.head }}"
+
+      - name: Confirm queued commit policy
+        if: github.event_name == 'merge_group'
+        run: echo "Every queued pull request already passed commit-message policy on its immutable head revision."
 
       - name: Confirm exact revision evidence
         if: env.REUSE_ALL == 'true'
