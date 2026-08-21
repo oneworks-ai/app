@@ -9,6 +9,7 @@ import { evaluatePrChangePolicy } from '../pr-change-policy'
 import {
   classifyChangedPaths,
   classifyPrValidationRange,
+  fullTypecheckScopes,
   isDocumentationPath,
   prValidationScopeVersion
 } from '../pr-validation-scope.cjs'
@@ -20,9 +21,6 @@ const runGit = (cwd: string, args: string[]) =>
     stdio: ['ignore', 'pipe', 'pipe']
   }).trim()
 
-const shouldRunFullValidation = (classifierResult: string, docsOnly: string | undefined) =>
-  classifierResult !== 'success' || docsOnly !== 'true'
-
 describe('pr validation scope', () => {
   it('classifies ordinary Markdown and internal module rules as docs-only', () => {
     const scope = classifyChangedPaths([
@@ -31,15 +29,36 @@ describe('pr validation scope', () => {
     ])
 
     expect(scope).toMatchObject({
+      clientBuild: false,
+      desktopPackage: false,
       docsChanged: true,
+      docsMedia: false,
       docsOnly: true,
+      envContract: false,
+      format: true,
       full: false,
+      lint: false,
       policyDocs: false,
       publicDocs: false,
       releaseDocs: false,
+      typecheck: false,
+      typecheckScopes: [],
+      unknown: false,
       version: prValidationScopeVersion
     })
     expect(scope.nonDocsFiles).toEqual([])
+  })
+
+  it('does not turn shared-package documentation into a client production build', () => {
+    expect(classifyChangedPaths([
+      'packages/adapters/codex/AGENTS.md',
+      'packages/avatar/README.md'
+    ])).toMatchObject({
+      clientBuild: false,
+      desktopPackage: false,
+      docsOnly: true,
+      typecheck: false
+    })
   })
 
   it('adds public-doc validation for root READMEs and .oo/docs media', () => {
@@ -51,9 +70,118 @@ describe('pr validation scope', () => {
 
     expect(scope).toMatchObject({
       docsChanged: true,
+      docsMedia: true,
       docsOnly: true,
       full: false,
       publicDocs: true
+    })
+  })
+
+  it('targets client-only validation without scheduling macOS packaging', () => {
+    const scope = classifyChangedPaths([
+      'apps/client/src/components/chat/ChatView.tsx',
+      'apps/client/__tests__/chat-view.spec.tsx',
+      'changelog/1.2.3/client.md'
+    ])
+
+    expect(scope).toMatchObject({
+      clientBuild: true,
+      desktopPackage: false,
+      docsMedia: false,
+      envContract: true,
+      lint: true,
+      typecheck: true,
+      typecheckScopes: ['web', 'web:test'],
+      unknown: false
+    })
+  })
+
+  it('builds client production assets even when a style-only change needs no typecheck', () => {
+    expect(classifyChangedPaths(['apps/client/src/styles/theme.css'])).toMatchObject({
+      clientBuild: true,
+      desktopPackage: false,
+      typecheck: false,
+      typecheckScopes: []
+    })
+  })
+
+  it('keeps adapter and brand-only changes off macOS while typechecking adapter code safely', () => {
+    expect(classifyChangedPaths(['assets/brand/logo.svg'])).toMatchObject({
+      clientBuild: false,
+      desktopPackage: false,
+      lint: false,
+      typecheck: false
+    })
+    expect(classifyChangedPaths(['packages/adapters/codex/src/index.ts'])).toMatchObject({
+      clientBuild: true,
+      desktopPackage: false,
+      typecheckScopes: fullTypecheckScopes
+    })
+  })
+
+  it('runs only node typecheck scopes for server-only changes and keeps desktop runtime coverage', () => {
+    expect(classifyChangedPaths(['apps/server/src/index.ts'])).toMatchObject({
+      clientBuild: false,
+      desktopPackage: true,
+      typecheckScopes: ['node', 'node:test']
+    })
+  })
+
+  it('fails dependency graph and unknown paths closed to all targets', () => {
+    expect(classifyChangedPaths(['pnpm-lock.yaml'])).toMatchObject({
+      desktopPackage: true,
+      typecheckScopes: fullTypecheckScopes,
+      unknown: false
+    })
+    expect(classifyChangedPaths(['apps/client/package.json'])).toMatchObject({
+      desktopPackage: true,
+      typecheckScopes: fullTypecheckScopes
+    })
+    expect(classifyChangedPaths(['.gitmodules'])).toMatchObject({
+      desktopPackage: true,
+      typecheckScopes: fullTypecheckScopes
+    })
+    for (
+      const configPath of [
+        'apps/relay-admin/tsconfig.json',
+        'packages/components/tsconfig.build.json',
+        'packages/icon/tsconfig.json'
+      ]
+    ) {
+      expect(classifyChangedPaths([configPath])).toMatchObject({
+        desktopPackage: true,
+        typecheck: true,
+        typecheckScopes: fullTypecheckScopes
+      })
+    }
+    expect(classifyChangedPaths(['new-surface/index.ts'])).toMatchObject({
+      desktopPackage: true,
+      docsMedia: true,
+      typecheckScopes: fullTypecheckScopes,
+      unknown: true,
+      unknownFiles: ['new-surface/index.ts']
+    })
+  })
+
+  it('routes exact gitlink pointer changes to their real consumers', () => {
+    expect(classifyChangedPaths(['assets/demo-video'])).toMatchObject({
+      desktopPackage: true,
+      docsMedia: true,
+      lint: true,
+      typecheck: true,
+      typecheckScopes: fullTypecheckScopes
+    })
+    expect(classifyChangedPaths(['assets/homepage'])).toMatchObject({
+      desktopPackage: false,
+      docsMedia: true,
+      publicDocs: true,
+      typecheck: false
+    })
+    expect(classifyChangedPaths(['assets/avatar'])).toMatchObject({
+      desktopPackage: false,
+      docsMedia: false,
+      publicDocs: false,
+      typecheck: false
     })
   })
 
@@ -125,10 +253,19 @@ describe('pr validation scope', () => {
   })
 
   it('fails empty or explicitly forced scopes closed to full CI', () => {
-    expect(classifyChangedPaths([])).toMatchObject({ docsOnly: false, full: true })
-    expect(classifyChangedPaths(['README.md'], { forceFull: true })).toMatchObject({
+    expect(classifyChangedPaths([])).toMatchObject({
+      desktopPackage: true,
       docsOnly: false,
-      full: true
+      full: true,
+      typecheckScopes: fullTypecheckScopes,
+      unknown: true
+    })
+    expect(classifyChangedPaths(['README.md'], { forceFull: true })).toMatchObject({
+      desktopPackage: true,
+      docsOnly: false,
+      full: true,
+      typecheckScopes: fullTypecheckScopes,
+      unknown: true
     })
   })
 
@@ -235,6 +372,7 @@ describe('pr validation scope', () => {
 describe('required context completion contract', () => {
   const qualityWorkflow = readFileSync('.github/workflows/quality.yml', 'utf8')
   const desktopWorkflow = readFileSync('.github/workflows/desktop-package.yml', 'utf8')
+  const policyWorkflow = readFileSync('.github/workflows/pr-change-policy.yml', 'utf8')
 
   it('keeps PR workflows unconditional so required contexts cannot remain pending', () => {
     const qualityTrigger = qualityWorkflow.slice(0, qualityWorkflow.indexOf('\npermissions:'))
@@ -255,12 +393,12 @@ describe('required context completion contract', () => {
         'lint',
         'format-check',
         'typecheck',
-        'commit-message',
-        'pr-change-policy'
+        'commit-message'
       ]
     ) {
       expect(qualityWorkflow).toContain(`name: ${context}`)
     }
+    expect(policyWorkflow).toContain('name: pr-change-policy')
     expect(desktopWorkflow).toContain('name: macOS installer')
   })
 
@@ -268,26 +406,57 @@ describe('required context completion contract', () => {
     expect(qualityWorkflow).toContain('node scripts/pr-validation-scope.cjs')
     expect(qualityWorkflow).toContain('Validate changed documentation scope, privacy, links, anchors, and diff')
     expect(qualityWorkflow).toContain("needs.classify-changes.outputs.docs_changed == 'true'")
-    expect(qualityWorkflow).toContain('Check docs-only formatting')
-    expect(qualityWorkflow).toContain('Confirm docs-only typecheck scope')
+    expect(qualityWorkflow).toContain('Run affected typecheck scopes')
+    expect(qualityWorkflow).toContain('Build affected client production bundle')
+    expect(qualityWorkflow).toContain('pnpm -C apps/client exec vite build')
+    expect(qualityWorkflow).toContain('outputs.client_build')
+    expect(qualityWorkflow).toContain('TYPECHECK_SCOPES: $' + '{{ needs.classify-changes.outputs.typecheck_scopes }}')
+    expect(qualityWorkflow).toContain("contains(env.TYPECHECK_SCOPES, 'node')")
+    expect(qualityWorkflow).toContain('uses: dprint/check@v2.3')
     expect(qualityWorkflow).toContain("needs.classify-changes.result != 'success'")
-    expect(qualityWorkflow).toContain("needs.classify-changes.outputs.docs_only != 'true'")
+    expect(qualityWorkflow).toContain("needs.classify-changes.outputs.typecheck == 'true'")
+    expect(qualityWorkflow).toContain("needs.classify-changes.outputs.docs_media == 'true'")
     expect(qualityWorkflow).toContain('Validate classifier output contract')
-    expect(qualityWorkflow).toContain("if: env.FULL_VALIDATION == 'true'")
+    const typecheckSteps = qualityWorkflow.slice(
+      qualityWorkflow.indexOf('      - name: Run affected typecheck scopes'),
+      qualityWorkflow.indexOf('      - name: Run documentation media verification')
+    )
+    expect(typecheckSteps.match(/needs\.classify-changes\.result != 'success'/gu)).toHaveLength(2)
+    expect(qualityWorkflow).toContain("if: env.RUN_CHECK != 'true'")
+    expect(qualityWorkflow).not.toContain('FULL_VALIDATION')
     expect(desktopWorkflow).toContain('node scripts/pr-validation-scope.cjs')
-    expect(desktopWorkflow).toContain('Confirm docs-only installer exclusion')
+    expect(desktopWorkflow).toContain('desktop_package: $' + '{{ steps.validation_scope.outputs.desktop_package }}')
+    expect(desktopWorkflow).toContain('name: macOS package smoke')
+    expect(desktopWorkflow).toContain('name: macOS installer')
+    expect(desktopWorkflow).toContain('Enforce macOS package result')
     expect(desktopWorkflow).toContain('Validate classifier output contract')
-    expect(desktopWorkflow).toContain("if: steps.validation_scope.outputs.docs_only != 'true'")
-    expect(desktopWorkflow).not.toContain("if: steps.validation_scope.outputs.full == 'true'")
+    expect(desktopWorkflow).toContain("needs.pr-scope.outputs.desktop_package == 'true'")
   })
 
-  it.each([
-    ['missing', undefined],
-    ['empty', ''],
-    ['malformed', 'TRUE'],
-    ['full', 'false']
-  ])('fails a successful classifier with %s docs_only output closed to full validation', (_label, docsOnly) => {
-    expect(shouldRunFullValidation('success', docsOnly)).toBe(true)
+  it('keeps dependency-free checks out of workspace installation paths', () => {
+    expect(policyWorkflow).toContain('node scripts/pr-change-check.cjs')
+    expect(policyWorkflow).not.toContain('pnpm install')
+    expect(policyWorkflow).not.toContain('git submodule update')
+
+    const qualityJob = qualityWorkflow.slice(
+      qualityWorkflow.indexOf('  quality:'),
+      qualityWorkflow.indexOf('  public-docs:')
+    )
+    expect(qualityJob).toContain("if: env.NEEDS_DEPENDENCIES == 'true'")
+    expect(qualityJob).toContain('run: node scripts/check-env-contract.mjs')
+    expect(qualityJob).toContain('uses: dprint/check@v2.3')
+  })
+
+  it('isolates PR body edits from source validation concurrency', () => {
+    const qualityTrigger = qualityWorkflow.slice(0, qualityWorkflow.indexOf('\npermissions:'))
+    const policyTrigger = policyWorkflow.slice(0, policyWorkflow.indexOf('\npermissions:'))
+
+    expect(qualityTrigger).not.toContain('- edited')
+    expect(policyTrigger).toContain('- edited')
+    expect(qualityWorkflow).not.toContain("github.event.action != 'edited'")
+    expect(policyWorkflow).toContain(
+      'group: pr-change-policy-$' + '{{ github.event.pull_request.number }}'
+    )
   })
 
   it('adds only the relevant public and release documentation gates', () => {

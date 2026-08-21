@@ -1,5 +1,3 @@
-import policyCore from './pr-change-policy.cjs'
-
 import type { ChangedPathEntry } from './pr-validation-scope.cjs'
 
 export interface PrChangePolicyInput {
@@ -20,11 +18,10 @@ export interface PrChangePolicyResult {
   violations: string[]
 }
 
-export const hasExperienceReviewChecklist: (body: string | undefined) => boolean =
-  policyCore.hasExperienceReviewChecklist
+declare const policyCore: {
+  evaluatePrChangePolicy(input: PrChangePolicyInput): PrChangePolicyResult
+  hasExperienceReviewChecklist(body: string | undefined): boolean
+  hasPolicyConflictReviewChecklist(body: string | undefined): boolean
+}
 
-export const hasPolicyConflictReviewChecklist: (body: string | undefined) => boolean =
-  policyCore.hasPolicyConflictReviewChecklist
-
-export const evaluatePrChangePolicy: (input: PrChangePolicyInput) => PrChangePolicyResult =
-  policyCore.evaluatePrChangePolicy
+export = policyCore

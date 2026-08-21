@@ -101,7 +101,7 @@
   - 切换本地 `~/.oneworks/auth.json` 的 Relay 账号调试 fixture；首次写入前会备份原文件到 `.logs/relay-auth-fixtures/original-auth.json`，后续用 `restore` 一键还原。用于快速验证左下角账号入口和账号管理页的单账号 / 单服务端多账号 / 多服务端多账号状态。
 - `pnpm tools commitmsg-check [base] [head]`
   - 校验一个 git range 里的 commit title 是否符合 Conventional Commit；GitHub 默认 merge commit 例外
-- `pnpm tools pr-change-check [base] [head] --body-file <path>`：检查已勾选的 `Experience Review`；功能 / bug 产品改动需 changelog，UI 改动需截图。
+- `pnpm tools pr-change-check [base] [head] --body-file <path>`：检查已勾选的 `Experience Review`；功能 / bug 产品改动需 changelog，UI 改动需截图。CI 直接使用无 workspace 依赖的 `scripts/pr-change-check.cjs`；`pr-change-check.ts` 是本地 Commander 与其他 TS 工具的类型化桥接，不要让轻量 required check 重新依赖 `pnpm install`。
 - `pnpm tools pr-preflight [base] [head] --body-file <path> [--json]`：创建 PR 前比较 `origin/main...HEAD`，复用 CI 规则并给出修复项；草稿用已忽略的 `.logs/pr-body.md` 保持工作区干净。`pnpm tools git-delivery check [--repository <owner/name>] [--json]`：在独立 Git operator 前检查项目 Full Access、`gh`、仓库写权限和 SSH；Connector 写权限不是本机交付前置条件。
 - `pnpm tools release-tags plan <base> <head> [--json]`
   - 比较两个提交之间 workspace package manifest 的版本变化，生成需要创建的 `pkg/<normalized-package-name>/v<version>` tag 候选
@@ -190,6 +190,7 @@
 
 ## 维护约定
 
+- `pr-validation-scope.cjs` 是 Quality 与 Desktop 共用的 fail-closed 变更分类契约；required workflow 保持无 `paths` 过滤并在 job 内按输出分流。client production closure 变化必须在 Ubuntu typecheck runner 内追加 Vite build 后才能跳过 macOS package。新增顶层路径、构建依赖或打包闭包时，要同步补分类器测试；未知路径必须回退全量检查与 Desktop package smoke。
 - 入口层只做命令解析和调度，不写业务逻辑；测试优先直接 import TS 模块，不要绕兼容 wrapper。
 - adapter E2E 的 case 定义、Vitest spec、mock-llm 单测、snapshot 必须放在 `scripts/__tests__/adapter-e2e/` 一处维护。
 - adapter E2E 新增场景时，先在 `scripts/__tests__/adapter-e2e/cases.ts` 定义 case 的 `prompt/model/mockScenarios/expectations`，再用 `mock-llm/rules.ts` 组合 mock 行为。

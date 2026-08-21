@@ -32,13 +32,13 @@
   - 监听 `pull_request_target` 的 `opened`、`edited`、`synchronize`。
   - 不 checkout PR 代码，只通过 Pull Requests API upsert 带 marker 的 `COMMENT` review summary。
   - 不使用 issue comments API；仓库关闭 Issues 时，普通 PR conversation comment 可能因 `issues/*/comments` 返回 integration 403。
-  - 提醒失败只输出 warning，避免软提醒误伤合并门禁；硬门禁仍由 `quality.yml` 的 `pr-change-policy` 执行。
+  - 提醒失败只输出 warning，避免软提醒误伤合并门禁；硬门禁仍由 `pr-change-policy.yml` 的同名 required check 执行。
   - 如需调整提醒文案，保持 marker `<!-- oneworks:experience-review-reminder -->` 不变，避免重复 review。
 - PR body 默认模板：`.github/pull_request_template.md`
   - `Experience Review` checklist 默认未勾选，创建 PR 后由作者按实际情况确认。
-- 硬门禁：`scripts/pr-change-check.ts`
-  - `quality.yml` 的 `pr-change-policy` job 调用 `pnpm tools pr-change-check <base> <head> --body-file <path>`。
-  - workflow 监听 `opened`、`reopened`、`synchronize`、`edited` 和 `ready_for_review`；正文编辑时 lint、format、typecheck 和 commit-message jobs 会跳过，只重跑这条窄门禁。
+- 硬门禁：`.github/workflows/pr-change-policy.yml` 与 `scripts/pr-change-check.cjs`
+  - 独立 workflow 直接调用无 workspace 依赖的 `node scripts/pr-change-check.cjs <base> <head> --body-file <path>`；`scripts/pr-change-check.ts` 只作为本地 Commander 与其他 TS 工具的类型化桥接。
+  - workflow 监听 `opened`、`reopened`、`synchronize`、`edited` 和 `ready_for_review`；正文编辑只重跑这条窄门禁，不会取消或生成 skipped 的 Quality 源码门禁。
   - 新增或调整 checklist 文案时，同步更新 `scripts/__tests__/pr-change-check.spec.ts`。
 
 ## Checklist 判定
@@ -58,4 +58,4 @@ CI 要求 PR body 中存在二级标题 `## Experience Review`，并在该 secti
 - `pnpm exec vitest run scripts/__tests__/pr-change-check.spec.ts`
 - 创建 PR 前先从 `.github/pull_request_template.md` 准备已忽略的 `.logs/pr-body.md`，再运行 `pnpm tools pr-preflight origin/main HEAD --body-file .logs/pr-body.md`。
 - `pnpm tools pr-change-check <base> <head> --body-file <path>`
-- `pnpm dprint check .github/workflows .github/pull_request_template.md .oo/rules/maintenance/pr-experience-review.md scripts/pr-change-policy.ts scripts/pr-change-check.ts scripts/pr-preflight.ts scripts/__tests__/pr-change-check.spec.ts`
+- `pnpm dprint check .github/workflows .github/pull_request_template.md .oo/rules/maintenance/pr-experience-review.md scripts/pr-change-policy.cjs scripts/pr-change-policy.ts scripts/pr-change-check.cjs scripts/pr-change-check.ts scripts/pr-preflight.ts scripts/__tests__/pr-change-check.spec.ts`
