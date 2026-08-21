@@ -41,6 +41,9 @@ interface PoolEntry {
   threads: Map<string, ThreadHandlers>
   threadSetupChain: Promise<void>
   idleTimer?: ReturnType<typeof setTimeout>
+  forceKillTimer?: ReturnType<typeof setTimeout>
+  shutdownPromise?: Promise<void>
+  resolveShutdown?: () => void
   exited: boolean
 }
 
@@ -77,6 +80,7 @@ export interface CodexAppServerLease {
 
 type CodexAppServerPool = Map<string, PoolEntry>
 const standalonePool: CodexAppServerPool = new Map()
+const CODEX_APP_SERVER_SHUTDOWN_GRACE_MS = 500
 
 const readThreadId = (params: Record<string, unknown>) => {
   if (typeof params.threadId === 'string' && params.threadId !== '') return params.threadId
@@ -112,13 +116,48 @@ const resolveThreadHandlers = (
   return entry.threads.size === 1 ? entry.threads.values().next().value : undefined
 }
 
-const closeEntry = (pool: CodexAppServerPool, entry: PoolEntry, reason: string) => {
+const finalizeEntry = (
+  pool: CodexAppServerPool,
+  entry: PoolEntry,
+  code: number | null,
+  reason: string
+) => {
   if (entry.exited) return
   entry.exited = true
   if (entry.idleTimer != null) clearTimeout(entry.idleTimer)
+  if (entry.forceKillTimer != null) clearTimeout(entry.forceKillTimer)
   pool.delete(entry.key)
   entry.rpc.destroy(reason)
-  entry.proc.kill()
+  for (const handler of [...entry.exitHandlers.values()]) handler(code)
+  entry.leases.clear()
+  entry.exitHandlers.clear()
+  entry.threads.clear()
+  entry.resolveShutdown?.()
+  entry.resolveShutdown = undefined
+}
+
+const closeEntry = (
+  pool: CodexAppServerPool,
+  entry: PoolEntry,
+  reason: string
+) => {
+  if (entry.exited) return Promise.resolve()
+  if (entry.shutdownPromise != null) return entry.shutdownPromise
+
+  entry.shutdownPromise = new Promise<void>((resolve) => {
+    entry.resolveShutdown = resolve
+  })
+  if (entry.proc.pid == null) {
+    finalizeEntry(pool, entry, -1, reason)
+    return entry.shutdownPromise
+  }
+
+  entry.proc.kill('SIGTERM')
+  entry.forceKillTimer = setTimeout(() => {
+    if (!entry.exited) entry.proc.kill('SIGKILL')
+  }, CODEX_APP_SERVER_SHUTDOWN_GRACE_MS)
+  entry.forceKillTimer.unref?.()
+  return entry.shutdownPromise
 }
 
 const createPoolEntry = (
@@ -181,27 +220,17 @@ const createPoolEntry = (
     handler.onRequest(id, method, requestParams)
   })
 
-  proc.on('exit', (code) => {
-    if (entry.exited) return
-    entry.exited = true
-    if (entry.idleTimer != null) clearTimeout(entry.idleTimer)
-    pool.delete(key)
-    rpc.destroy('Codex app-server exited')
-    for (const handler of [...entry.exitHandlers.values()]) handler(code)
-    entry.leases.clear()
-    entry.exitHandlers.clear()
-    entry.threads.clear()
-  })
+  proc.on('exit', (code) => finalizeEntry(pool, entry, code, 'Codex app-server exited'))
+  proc.on('close', (code) => finalizeEntry(pool, entry, code, 'Codex app-server closed'))
   proc.on('error', (error) => {
     if (entry.exited) return
-    entry.exited = true
-    if (entry.idleTimer != null) clearTimeout(entry.idleTimer)
-    pool.delete(key)
-    rpc.destroy(`Codex app-server process error: ${error.message}`)
-    for (const handler of [...entry.exitHandlers.values()]) handler(-1)
-    entry.leases.clear()
-    entry.exitHandlers.clear()
-    entry.threads.clear()
+    const reason = `Codex app-server process error: ${error.message}`
+    params.logger.error('[codex app-server pool] process error', { error })
+    if (proc.pid == null) {
+      finalizeEntry(pool, entry, -1, reason)
+      return
+    }
+    void closeEntry(pool, entry, reason)
   })
 
   entry.initPromise = rpc.request<{ userAgent?: string }>('initialize', {
@@ -216,8 +245,8 @@ const createPoolEntry = (
   }).then((result) => {
     rpc.notify('initialized', {})
     return result
-  }).catch((error) => {
-    closeEntry(pool, entry, 'Codex app-server initialization failed')
+  }).catch(async (error) => {
+    await closeEntry(pool, entry, 'Codex app-server initialization failed')
     throw error
   })
 
@@ -230,6 +259,10 @@ const acquireCodexAppServerFromPool = async (
 ): Promise<CodexAppServerLease & { userAgent?: string }> => {
   const key = params.profileKey
   let entry = pool.get(key)
+  if (entry?.shutdownPromise != null) {
+    await entry.shutdownPromise
+    entry = pool.get(key)
+  }
   if (entry == null || entry.exited) {
     entry = createPoolEntry(pool, key, params)
     pool.set(key, entry)
@@ -303,7 +336,7 @@ const acquireCodexAppServerFromPool = async (
         const idleTimeoutMs = Math.max(0, params.idleTimeoutMs)
         entry.idleTimer = setTimeout(() => {
           if (entry != null && entry.leases.size === 0) {
-            closeEntry(pool, entry, 'Codex app-server idle timeout')
+            void closeEntry(pool, entry, 'Codex app-server idle timeout')
           }
         }, idleTimeoutMs)
         entry.idleTimer.unref?.()
@@ -312,7 +345,7 @@ const acquireCodexAppServerFromPool = async (
   } catch (error) {
     entry.leases.delete(owner)
     if (params.signal?.aborted === true && entry.leases.size === 0 && !entry.exited) {
-      closeEntry(pool, entry, 'Codex app-server acquisition aborted')
+      await closeEntry(pool, entry, 'Codex app-server acquisition aborted')
     }
     throw error
   } finally {
@@ -327,9 +360,9 @@ export const createLocalCodexAppServerPool = () => {
   const pool: CodexAppServerPool = new Map()
   return {
     acquire: async (params: AcquireCodexAppServerParams) => await acquireCodexAppServerFromPool(pool, params),
-    dispose: () => {
-      for (const entry of [...pool.values()]) closeEntry(pool, entry, 'Codex app-server pool disposed')
-      pool.clear()
+    dispose: async () => {
+      const entries = [...pool.values()]
+      await Promise.all(entries.map(entry => closeEntry(pool, entry, 'Codex app-server pool disposed')))
     }
   }
 }
@@ -540,11 +573,9 @@ export const acquireCodexAppServer = async (
     : await acquireRemoteCodexAppServer(params, connection)
 }
 
-export const disposeLocalCodexAppServerPool = () => {
-  for (const entry of [...standalonePool.values()]) {
-    closeEntry(standalonePool, entry, 'Codex app-server pool reset')
-  }
-  standalonePool.clear()
+export const disposeLocalCodexAppServerPool = async () => {
+  const entries = [...standalonePool.values()]
+  await Promise.all(entries.map(entry => closeEntry(standalonePool, entry, 'Codex app-server pool reset')))
 }
 
 export const resetCodexAppServerPoolForTests = disposeLocalCodexAppServerPool

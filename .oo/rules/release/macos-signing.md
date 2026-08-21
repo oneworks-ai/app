@@ -21,7 +21,7 @@ Developer ID 签名会改变 native Mach-O 的字节。`@oneworks/fs-authority-n
 - `APPLE_TEAM_ID`：Apple Developer Team ID。
 - `DESKTOP_SIGN=true`：仓库 variable，只表示签名凭据 / 能力可用；具体版本是否签名由不可变发布策略决定。
 
-桌面 workflow 对纯文档 PR 只运行不构建产物的轻量兼容门禁；非文档或 mixed PR 构建 unsigned
+桌面 workflow 先在 Ubuntu 用 validation-scope v2 分类；普通 client、adapter、品牌资产和文档改动只运行不构建产物的轻量兼容门禁。只有桌面风险路径（桌面源码、native authority、打包工具、根 manifest / lockfile、正式包内 runtime closure 或未知路径）才构建 unsigned
 arm64+x64 app bundle 并执行 native authority smoke，但不生成安装包，也不读取签名 secret。每日 nightly 使用 unsigned
 arm64 DMG 跑 package / smoke / install verify。真正的双架构安装包
 只由 `pkg/oneworks-desktop/v*` tag 或手动 dispatch 触发。`apps/desktop/package.json` 的私有
@@ -36,13 +36,16 @@ DMG、PKG、ZIP 逐一通过 `codesign --verify --deep --strict`；不允许发�
 的半签名 bundle。sealing 前还必须把 workspace 绝对 symlink 重写到 app 内已打包的相对目标，并
 拒绝任何绝对或断裂 symlink；否则换一台机器后会被 Gatekeeper 判为损坏。GitHub Release
 会明确标记为 unsigned；启用时要求完整签名与 notarization。
+
+同一 PR 的后续 revision 只有在上一 base / head 已生成成功 Desktop evidence，且新增 revision 被 dependency-free planner 限定为 mode 未变的普通 source blob 修改、随后用 current base 的受审工具链逐文件证明当前 head Git blob 精确等于 ESLint Autofix 结果时，才允许复用 package smoke。正文编辑只能复用 exact base / head evidence；base retarget、cache miss、文件新增 / 删除 / rename、symlink / gitlink、配置变化或 Autofix 验证异常都必须重新运行当前 Desktop scope。该复用只适用于 PR unsigned smoke，不得用于 tag、候选提升、签名、公证或正式安装包。
+
 所有 secret 配好后，还必须设置仓库 variable：
 
 ```bash
 gh variable set DESKTOP_SIGN --repo oneworks-ai/app --body true
 ```
 
-当前 `desktop-package.yml` 的 tag / 手动构建会同时生成 `.dmg`、`.zip` 和 `.pkg`；因此 effective policy 为 signed 且 `DESKTOP_SIGN=true` 时，Application 和 Installer 两套证书都必须存在。缺任何一个，workflow 会在 `Validate desktop signing credentials` 失败，不允许继续生成半加签产物。纯文档 PR 只运行轻量门禁；其他普通 PR 只构建 unsigned app bundle 并验证 authority，不进入安装包 job，也不会读取签名 secrets。
+当前 `desktop-package.yml` 的 tag / 手动构建会同时生成 `.dmg`、`.zip` 和 `.pkg`；因此 effective policy 为 signed 且 `DESKTOP_SIGN=true` 时，Application 和 Installer 两套证书都必须存在。缺任何一个，workflow 会在 `Validate desktop signing credentials` 失败，不允许继续生成半加签产物。普通 client、adapter、品牌资产和文档 PR 只运行轻量门禁；只有分类器判定的桌面风险 PR 才构建 unsigned app bundle 并验证 authority，且不进入安装包 job，也不会读取签名 secrets。
 
 手动 `create_release=true` 或 `pkg/oneworks-desktop/v*` tag 的 effective policy 为 unsigned 时会继续生成并发布 unsigned 安装包。候选 manifest 必须记录 `effectiveSigningPolicy=unsigned`、`adHocSealed=true`，并区分不可变 product source SHA 与用于重建的 builder SHA；同 tag 候选提升和恢复不得改变 effective policy。macOS Gatekeeper 仍可能要求用户手动批准；下载页和 Release notes 必须明确未提交 Apple notarization，且不得把这类产物描述为 Developer ID 已签名或已公证。
 

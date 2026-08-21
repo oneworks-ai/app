@@ -8,6 +8,7 @@ const path = require('node:path')
 
 const { resolveProjectHomePath } = require('@oneworks/register/dotenv')
 const { BUILTIN_PLUGIN_PACKAGES } = require('../src/builtin-adapter-cache.cjs')
+const { resolveDesktopHeadlessRuntime } = require('../src/headless-runtime.cjs')
 const { resolveDesktopAppMetadata } = require('./desktop-app-metadata.cjs')
 const { normalizeArch } = require('./desktop-archs.cjs')
 
@@ -210,7 +211,7 @@ const runPackagedMainSmoke = async (paths) => {
 
   try {
     await new Promise((resolve, reject) => {
-      const child = spawn(paths.executablePath, [`--user-data-dir=${userDataDir}`], {
+      const child = spawn(paths.mainExecutablePath, [`--user-data-dir=${userDataDir}`], {
         env: {
           ...process.env,
           ONEWORKS_TEST_DESKTOP_PACKAGE_MAIN_SMOKE: '1',
@@ -270,13 +271,19 @@ const resolvePackagedPaths = () => {
     const bundleDir = path.join(packageDir, `${appName}.app`)
     const resourcesDir = path.join(bundleDir, 'Contents/Resources')
     const runtimePackageCacheMetadata = readRuntimePackageCacheMetadata(resourcesDir)
+    const mainExecutablePath = firstExistingPath(
+      path.join(bundleDir, 'Contents/MacOS', appMetadata.executableName),
+      path.join(bundleDir, 'Contents/MacOS', appMetadata.artifactBaseName)
+    )
     return {
       appDir: path.join(resourcesDir, 'app'),
       clientDistDir: path.join(resourcesDir, 'dist'),
-      executablePath: firstExistingPath(
-        path.join(bundleDir, 'Contents/MacOS', appMetadata.executableName),
-        path.join(bundleDir, 'Contents/MacOS', appMetadata.artifactBaseName)
-      ),
+      headlessRuntime: resolveDesktopHeadlessRuntime({
+        isPackaged: true,
+        platform: process.platform,
+        processExecutable: mainExecutablePath
+      }),
+      mainExecutablePath,
       ...runtimePackageCacheMetadata
     }
   }
@@ -286,13 +293,19 @@ const resolvePackagedPaths = () => {
   const executableName = process.platform === 'win32'
     ? `${appMetadata.executableName}.exe`
     : appMetadata.executableName
+  const mainExecutablePath = firstExistingPath(
+    path.join(packageDir, executableName),
+    path.join(packageDir, `${appName}.exe`)
+  )
   return {
     appDir: path.join(resourcesDir, 'app'),
     clientDistDir: path.join(resourcesDir, 'dist'),
-    executablePath: firstExistingPath(
-      path.join(packageDir, executableName),
-      path.join(packageDir, `${appName}.exe`)
-    ),
+    headlessRuntime: resolveDesktopHeadlessRuntime({
+      isPackaged: true,
+      platform: process.platform,
+      processExecutable: mainExecutablePath
+    }),
+    mainExecutablePath,
     ...runtimePackageCacheMetadata
   }
 }
@@ -876,16 +889,19 @@ const runPackagedServerSmoke = async ({
 
   const logPath = path.join(logDir, 'server.log')
   const logStream = fs.createWriteStream(logPath)
-  const child = spawn(paths.executablePath, [path.join(paths.appDir, 'src/server-child.cjs')], {
+  const child = spawn(paths.headlessRuntime.executable, [path.join(paths.appDir, 'src/server-child.cjs')], {
     cwd: workspaceFolder,
-    env: createPackagedServerChildEnv({
-      clientDistDir: paths.clientDistDir,
-      dataDir,
-      dbPath: path.join(smokeRoot, 'db.sqlite'),
-      logDir,
-      port,
-      workspaceEnv
-    }),
+    env: {
+      ...createPackagedServerChildEnv({
+        clientDistDir: paths.clientDistDir,
+        dataDir,
+        dbPath: path.join(smokeRoot, 'db.sqlite'),
+        logDir,
+        port,
+        workspaceEnv
+      }),
+      ...paths.headlessRuntime.env
+    },
     stdio: ['ignore', 'pipe', 'pipe']
   })
 

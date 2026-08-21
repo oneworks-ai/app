@@ -11,6 +11,8 @@ import {
   resolveExistingNpmPackageDir
 } from '@oneworks/types/adapter-package-cache'
 
+import { resolveDesktopHeadlessRuntime } from '../headless-runtime.cjs'
+
 const nodeRequire = createRequire(__filename)
 const desktopRoot = app.getAppPath()
 export const repoRoot = path.resolve(desktopRoot, '../..')
@@ -79,15 +81,22 @@ export const resolveClientDistPath = (env: NodeJS.ProcessEnv = process.env): str
   return candidates.find(candidate => candidate != null && fs.existsSync(path.join(candidate, 'index.html')))
 }
 
-export const resolveServerExecutable = () => {
-  if (
-    process.env.ONEWORKS_DESKTOP_SERVER_RUNTIME != null && process.env.ONEWORKS_DESKTOP_SERVER_RUNTIME.trim() !== ''
-  ) {
-    return process.env.ONEWORKS_DESKTOP_SERVER_RUNTIME.trim()
-  }
+export const resolveServerRuntime = (env: NodeJS.ProcessEnv = process.env) =>
+  resolveDesktopHeadlessRuntime({
+    fallbackExecutable: 'node',
+    isPackaged: app.isPackaged,
+    overrideExecutable: env.ONEWORKS_DESKTOP_SERVER_RUNTIME,
+    platform: process.platform,
+    processExecutable: process.execPath
+  })
 
-  return app.isPackaged ? process.execPath : 'node'
-}
+export const resolveDesktopBackgroundRuntime = () =>
+  resolveDesktopHeadlessRuntime({
+    fallbackExecutable: process.execPath,
+    isPackaged: app.isPackaged,
+    platform: process.platform,
+    processExecutable: process.execPath
+  })
 
 export const resolveCachedServerPackageDir = (env: NodeJS.ProcessEnv = process.env) => (
   app.isPackaged

@@ -50,6 +50,7 @@ describe('client plugin host registry', () => {
         }],
         icon: 'meeting_room',
         id: 'rooms',
+        pluginRuntimeSource: 'manager',
         pluginScope: 'demo',
         route: '/plugins/demo/rooms',
         title: 'Chat rooms'
@@ -691,6 +692,7 @@ describe('client plugin host registry', () => {
       contributions: [{
         command: 'hide',
         id: 'hide-entry',
+        pluginRuntimeSource: 'manager',
         pluginScope: 'demo',
         selected: true,
         shortcut: 'mod+k',

@@ -1139,6 +1139,12 @@
   background: var(--subpage-tertiary-bg);
 }
 
+.config-view__model-service-actions--compact {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
 .config-view__record-card:has(.config-view__model-service-list-tray) {
   container-type: inline-size;
   overflow: hidden;
@@ -1418,6 +1424,10 @@
   gap: 12px;
   min-width: 0;
   flex-wrap: wrap;
+}
+
+.config-view__model-service-action-header--actions-only {
+  justify-content: flex-end;
 }
 
 .config-view__model-service-action-title {

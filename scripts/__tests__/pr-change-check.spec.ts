@@ -263,19 +263,22 @@ describe('pr-change-check', () => {
     expect(result.violations).toEqual([])
   })
 
-  it('reruns only the PR policy job on PR body edits', () => {
+  it('keeps PR body policy independent while source jobs require exact revision evidence', () => {
     const qualityWorkflow = readFileSync('.github/workflows/quality.yml', 'utf8')
+    const policyWorkflow = readFileSync('.github/workflows/pr-change-policy.yml', 'utf8')
 
     expect(qualityWorkflow).toContain('      - edited')
-    expect(qualityWorkflow).toContain('  pr-change-policy:')
-    expect(qualityWorkflow).toContain('    name: pr-change-policy')
-    expect(qualityWorkflow.match(/github\.event\.action != 'edited'/gu)).toHaveLength(3)
-    expect(qualityWorkflow).toContain('PR_BODY: $' + '{{ github.event.pull_request.body }}')
-    expect(qualityWorkflow).not.toContain('gh pr view')
+    expect(qualityWorkflow).toContain('Restore exact source validation evidence')
+    expect(qualityWorkflow).toContain('github.event.changes.base != null')
+    expect(qualityWorkflow).not.toContain('name: pr-change-policy')
+    expect(policyWorkflow).toContain('      - edited')
+    expect(policyWorkflow).toContain('    name: pr-change-policy')
+    expect(policyWorkflow).toContain('PR_BODY: $' + '{{ github.event.pull_request.body }}')
+    expect(policyWorkflow).not.toContain('gh pr view')
   })
 
   it('gets policy paths from the authoritative rename- and deletion-aware classifier', () => {
-    const policyCheck = readFileSync('scripts/pr-change-check.ts', 'utf8')
+    const policyCheck = readFileSync('scripts/pr-change-check.cjs', 'utf8')
 
     expect(policyCheck).toContain('getChangedFilesFromEntries')
     expect(policyCheck).toContain('getChangedPathEntries')

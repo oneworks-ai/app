@@ -1,7 +1,11 @@
 import process from 'node:process'
 
 import { resolvePackagedCliPathEnv } from './cli-path-env'
-import { builtinPackageCachePath, resolveBundledRuntimeConsumerBootstrapPath } from './paths'
+import {
+  builtinPackageCachePath,
+  resolveBundledRuntimeConsumerBootstrapPath,
+  resolveDesktopBackgroundRuntime
+} from './paths'
 import { runOwnedChildCommand, writeProcessLine } from './process-utils'
 import { resolveDesktopRuntimePackageCacheVersionEnv } from './runtime-cache-version'
 import type { WorkspaceRuntimeCacheRefreshResult } from './workspace-runtime-cache-manager'
@@ -42,6 +46,7 @@ const refreshBundledWorkspaceRuntimeCache = async (
 ): Promise<WorkspaceRuntimeCacheRefreshResult | undefined> => {
   const runtimePackageCacheVersionEnv = resolveDesktopRuntimePackageCacheVersionEnv()
   if (Object.keys(runtimePackageCacheVersionEnv).length === 0) return undefined
+  const runtime = resolveDesktopBackgroundRuntime()
 
   const { stdout } = await runOwnedChildCommand({
     args: ['-e', buildBundledRuntimeCacheRefreshScript()],
@@ -49,9 +54,9 @@ const refreshBundledWorkspaceRuntimeCache = async (
     env: {
       ...process.env,
       ...runtimePackageCacheVersionEnv,
-      ELECTRON_RUN_AS_NODE: '1'
+      ...runtime.env
     },
-    executable: process.execPath,
+    executable: runtime.executable,
     signal
   })
   const { entries } = readJsonResult<BundledRuntimeCacheRefreshResult>(
@@ -85,15 +90,16 @@ const installBootstrapRuntimePackage = async (
     ...process.env,
     ...runtimePackageCacheVersionEnv
   }
+  const runtime = resolveDesktopBackgroundRuntime()
   const { stdout } = await runOwnedChildCommand({
     args: [bootstrapPath, 'runtime', 'install', target, '--json'],
     description: `Bootstrap runtime cache refresh for ${target}`,
     env: {
       ...runtimeEnv,
       ...resolvePackagedCliPathEnv(runtimeEnv),
-      ELECTRON_RUN_AS_NODE: '1'
+      ...runtime.env
     },
-    executable: process.execPath,
+    executable: runtime.executable,
     signal
   })
   return readJsonResult<RuntimePackageStatus>(

@@ -7,13 +7,21 @@ env:
   NODE_OPTIONS: --max-old-space-size=4096
 
 concurrency:
-  group: desktop-package-${{ github.event_name }}-${{ github.ref }}
+  group: >-
+    desktop-package-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}-${{
+    github.event.action || 'none' }}-${{ github.event.changes.base != null }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 on:
   pull_request:
     branches:
       - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - edited
+      - ready_for_review
   push:
     tags:
       - "pkg/oneworks-desktop/v*"
@@ -80,16 +88,108 @@ permissions:
   contents: read
 
 jobs:
-  pr-policy:
-    name: macOS installer
+  pr-scope:
     if: github.event_name == 'pull_request'
-    runs-on: macos-26
-    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    outputs:
+      desktop_package: ${{ steps.validation_scope.outputs.desktop_package }}
+      reuse_desktop: ${{ steps.reuse_result.outputs.reuse_desktop }}
+      reuse_mode: ${{ steps.reuse_plan.outputs.mode }}
     steps:
-      - name: Checkout repository
+      - name: Checkout pull request merge
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Plan validation evidence reuse
+        id: reuse_plan
+        env:
+          BASE_CHANGED: ${{ github.event.changes.base != null }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+          EVENT_ACTION: ${{ github.event.action }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: >-
+          node scripts/pr-validation-reuse.cjs
+          --event-name pull_request
+          --action "$EVENT_ACTION"
+          --base "$BASE_SHA"
+          --head "$HEAD_SHA"
+          --before "$BEFORE_SHA"
+          --base-changed "$BASE_CHANGED"
+          --github-output "$GITHUB_OUTPUT"
+          --json
+
+      - name: Restore previous desktop validation evidence
+        id: previous_desktop_evidence
+        if: >-
+          steps.reuse_plan.outputs.mode == 'exact' ||
+          (steps.reuse_plan.outputs.mode == 'eslint-autofix' &&
+          steps.reuse_plan.outputs.candidate == 'true')
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/pr-validation-evidence/desktop
+          key: >-
+            pr-desktop-evidence-v1-${{ steps.reuse_plan.outputs.evidence_base }}-${{
+            steps.reuse_plan.outputs.evidence_head }}
+
+      - name: Validate previous desktop validation evidence
+        id: validate_desktop_evidence
+        if: steps.previous_desktop_evidence.outputs.cache-hit == 'true'
+        env:
+          EXPECTED_REVISION: >-
+            ${{ steps.reuse_plan.outputs.evidence_base }} ${{ steps.reuse_plan.outputs.evidence_head }}
+        run: |
+          if [[ -f .cache/pr-validation-evidence/desktop/revision ]] &&
+            [[ "$(cat .cache/pr-validation-evidence/desktop/revision)" == "$EXPECTED_REVISION" ]]; then
+            echo "valid=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "valid=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Previous Desktop evidence is incomplete; running the current package smoke."
+          fi
+
+      - name: Setup cached workspace for autofix verification
+        if: >-
+          steps.reuse_plan.outputs.mode == 'eslint-autofix' &&
+          steps.validate_desktop_evidence.outputs.valid == 'true'
+        uses: ./.github/actions/setup-workspace
+
+      - name: Verify ESLint autofix-only revision
+        id: verify_autofix
+        if: >-
+          steps.reuse_plan.outputs.mode == 'eslint-autofix' &&
+          steps.validate_desktop_evidence.outputs.valid == 'true'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: >-
+          node scripts/pr-validation-reuse.cjs
+          --event-name pull_request
+          --action synchronize
+          --base "$BASE_SHA"
+          --head "$HEAD_SHA"
+          --before "$BEFORE_SHA"
+          --base-changed false
+          --verify-eslint-fix
+          --github-output "$GITHUB_OUTPUT"
+          --json
+
+      - name: Resolve desktop validation reuse
+        id: reuse_result
+        env:
+          EVIDENCE_VALID: ${{ steps.validate_desktop_evidence.outputs.valid }}
+          MODE: ${{ steps.reuse_plan.outputs.mode }}
+          SAFE_AUTOFIX: ${{ steps.verify_autofix.outputs.safe }}
+        shell: bash
+        run: |
+          reuse=false
+          if [[ "$EVIDENCE_VALID" == "true" && "$MODE" == "exact" ]]; then
+            reuse=true
+          elif [[ "$EVIDENCE_VALID" == "true" && "$MODE" == "eslint-autofix" && "$SAFE_AUTOFIX" == "true" ]]; then
+            reuse=true
+          fi
+          echo "reuse_desktop=$reuse" >> "$GITHUB_OUTPUT"
 
       - name: Classify validation scope
         id: validation_scope
@@ -105,50 +205,45 @@ jobs:
 
       - name: Validate classifier output contract
         env:
+          DESKTOP_PACKAGE: ${{ steps.validation_scope.outputs.desktop_package }}
           DOCS_ONLY: ${{ steps.validation_scope.outputs.docs_only }}
           FULL: ${{ steps.validation_scope.outputs.full }}
+          REUSE_DESKTOP: ${{ steps.reuse_result.outputs.reuse_desktop }}
         shell: bash
         run: |
           set -euo pipefail
+          [[ "$DESKTOP_PACKAGE" == "true" || "$DESKTOP_PACKAGE" == "false" ]]
           [[ "$DOCS_ONLY" == "true" || "$DOCS_ONLY" == "false" ]]
           [[ "$FULL" == "true" || "$FULL" == "false" ]]
+          [[ "$REUSE_DESKTOP" == "true" || "$REUSE_DESKTOP" == "false" ]]
           [[ "$DOCS_ONLY" != "$FULL" ]]
 
-      - name: Confirm docs-only installer exclusion
-        if: steps.validation_scope.outputs.docs_only == 'true'
-        run: echo "No Desktop source, workflow, configuration, manifest, lockfile, script, or test path changed; installer packaging is not applicable."
+  pr-build:
+    name: macOS package smoke
+    needs: pr-scope
+    if: >-
+      github.event_name == 'pull_request' &&
+      needs.pr-scope.outputs.desktop_package == 'true' &&
+      needs.pr-scope.outputs.reuse_desktop != 'true'
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        if: steps.validation_scope.outputs.docs_only != 'true'
-        uses: pnpm/action-setup@v4
-        with:
-          version: 11.7.0
-
-      - name: Setup Node.js
-        if: steps.validation_scope.outputs.docs_only != 'true'
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: .node-version
-          cache: pnpm
-
-      - name: Install dependencies
-        if: steps.validation_scope.outputs.docs_only != 'true'
-        run: pnpm install --frozen-lockfile
+      - name: Setup cached workspace
+        uses: ./.github/actions/setup-workspace
 
       - name: Confirm release-only packaging policy
-        if: steps.validation_scope.outputs.docs_only != 'true'
-        run: echo "Full-scope pull requests build unsigned app bundles for authority smoke only; installers, signing, and promotion remain release-only."
+        run: echo "Desktop-risk pull requests build unsigned app bundles for authority smoke only; installers, signing, and promotion remain release-only."
 
       - name: Run desktop package preflight
-        if: steps.validation_scope.outputs.docs_only != 'true'
         run: pnpm -C apps/desktop test:package-preflight
 
       - name: Verify source native authority closure
-        if: steps.validation_scope.outputs.docs_only != 'true'
         run: pnpm -C packages/fs-authority-native verify:prebuilds
 
       - name: Package unsigned macOS authority candidates
-        if: steps.validation_scope.outputs.docs_only != 'true'
         env:
           ONEWORKS_DESKTOP_ARCHS: arm64,x64
           ONEWORKS_DESKTOP_ENABLE_AUTO_UPDATE: "false"
@@ -157,7 +252,6 @@ jobs:
         run: pnpm desktop:package
 
       - name: Verify packaged native authority closure
-        if: steps.validation_scope.outputs.docs_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -177,10 +271,76 @@ jobs:
           done
 
       - name: Smoke packaged arm64 authority server
-        if: steps.validation_scope.outputs.docs_only != 'true'
         env:
           ONEWORKS_DESKTOP_SMOKE_ARCH: arm64
         run: pnpm -C apps/desktop smoke:package
+
+  pr-policy:
+    name: macOS installer
+    needs:
+      - pr-scope
+      - pr-build
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce macOS package result
+        env:
+          BUILD_RESULT: ${{ needs.pr-build.result }}
+          DESKTOP_PACKAGE: ${{ needs.pr-scope.outputs.desktop_package }}
+          REUSE_DESKTOP: ${{ needs.pr-scope.outputs.reuse_desktop }}
+          SCOPE_RESULT: ${{ needs.pr-scope.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SCOPE_RESULT" == "success" ]] || {
+            echo "Desktop change classification failed; refusing to bypass package validation." >&2
+            exit 1
+          }
+          case "$DESKTOP_PACKAGE" in
+            true)
+              if [[ "$REUSE_DESKTOP" == "true" ]]; then
+                [[ "$BUILD_RESULT" == "skipped" ]] || {
+                  echo "Reusable Desktop evidence must not schedule a duplicate macOS build (result=$BUILD_RESULT)." >&2
+                  exit 1
+                }
+                echo "The exact prior Desktop package result covers this verified revision."
+              else
+                [[ "$BUILD_RESULT" == "success" ]] || {
+                  echo "Desktop-risk changes require a successful macOS package smoke run (result=$BUILD_RESULT)." >&2
+                  exit 1
+                }
+              fi
+              ;;
+            false)
+              [[ "$BUILD_RESULT" == "skipped" ]] || {
+                echo "A non-Desktop change unexpectedly ran the macOS package smoke (result=$BUILD_RESULT)." >&2
+                exit 1
+              }
+              echo "No Desktop build, native authority, packaging, manifest, lockfile, or packaged-runtime path changed."
+              ;;
+            *)
+              echo "Desktop classifier emitted an incomplete output contract." >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Record reusable Desktop evidence
+        if: needs.pr-scope.outputs.desktop_package == 'true'
+        run: |
+          mkdir -p .cache/pr-validation-evidence/desktop
+          printf '%s\n' "${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }}" > .cache/pr-validation-evidence/desktop/revision
+
+      - name: Save reusable Desktop evidence
+        if: >-
+          needs.pr-scope.outputs.desktop_package == 'true' &&
+          (needs.pr-scope.outputs.reuse_mode != 'exact' ||
+          needs.pr-scope.outputs.reuse_desktop != 'true')
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/pr-validation-evidence/desktop
+          key: >-
+            pr-desktop-evidence-v1-${{ github.event.pull_request.base.sha }}-${{
+            github.event.pull_request.head.sha }}
 
   dispatch-policy:
     name: Desktop workflow request

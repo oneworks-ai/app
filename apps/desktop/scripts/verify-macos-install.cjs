@@ -6,6 +6,7 @@ const net = require('node:net')
 const path = require('node:path')
 
 const { resolveProjectHomePath } = require('@oneworks/register/dotenv')
+const { resolveDesktopHeadlessRuntime } = require('../src/headless-runtime.cjs')
 const {
   isOfficialReleaseBuild,
   resolveDesktopAppMetadata
@@ -91,7 +92,17 @@ const assertInstalledAppMetadata = (appPath) => {
 
   const executablePath = path.join(appPath, 'Contents', 'MacOS', appMetadata.executableName)
   fs.accessSync(executablePath, fs.constants.X_OK)
-  return executablePath
+  const headlessRuntime = resolveDesktopHeadlessRuntime({
+    isPackaged: true,
+    platform: 'darwin',
+    processExecutable: executablePath
+  })
+  const helperInfoPath = path.resolve(path.dirname(headlessRuntime.executable), '..', 'Info.plist')
+  const helperInfo = JSON.parse(run('plutil', ['-convert', 'json', '-o', '-', helperInfoPath]))
+  if (helperInfo.LSUIElement !== true) {
+    throw new Error(`Expected packaged headless runtime to use an LSUIElement helper: ${helperInfoPath}`)
+  }
+  return { executablePath, headlessRuntime }
 }
 
 const assertInstalledAppSignature = ({ appPath, dmgPath, targetArch }) => {
@@ -262,7 +273,7 @@ const waitForServer = ({ port, startedAt = Date.now() }) =>
     request.once('error', retry)
   })
 
-const smokeInstalledServer = async ({ appPath, executablePath }) => {
+const smokeInstalledServer = async ({ appPath, headlessRuntime }) => {
   const appDir = path.join(appPath, 'Contents', 'Resources', 'app')
   const clientDistDir = path.join(appPath, 'Contents', 'Resources', 'dist')
   const serverChildPath = path.join(appDir, 'src', 'server-child.cjs')
@@ -278,12 +289,12 @@ const smokeInstalledServer = async ({ appPath, executablePath }) => {
 
   const logPath = path.join(logDir, 'server.log')
   const logStream = fs.createWriteStream(logPath)
-  const child = spawn(executablePath, [serverChildPath], {
+  const child = spawn(headlessRuntime.executable, [serverChildPath], {
     cwd: workspaceRoot,
     env: {
       ...workspaceEnv,
       DB_PATH: path.join(smokeRoot, 'db.sqlite'),
-      ELECTRON_RUN_AS_NODE: '1',
+      ...headlessRuntime.env,
       __ONEWORKS_PROJECT_CLIENT_BASE__: '/ui',
       __ONEWORKS_PROJECT_CLIENT_DIST_PATH__: clientDistDir,
       __ONEWORKS_PROJECT_CLIENT_MODE__: 'desktop',
@@ -332,10 +343,10 @@ const main = async () => {
   const appPath = path.join('/Applications', `${appMetadata.productName}.app`)
   console.log(`[desktop] verifying install artifact ${dmgPath}`)
   installDmgArtifact({ appPath, dmgPath })
-  const executablePath = assertInstalledAppMetadata(appPath)
+  const { headlessRuntime } = assertInstalledAppMetadata(appPath)
   assertInstalledAppSignature({ appPath, dmgPath, targetArch })
   assertInstalledBuildSource(appPath)
-  await smokeInstalledServer({ appPath, executablePath })
+  await smokeInstalledServer({ appPath, headlessRuntime })
   console.log(`[desktop] installed app verified at ${appPath}`)
 }
 

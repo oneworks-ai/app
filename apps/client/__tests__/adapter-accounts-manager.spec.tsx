@@ -108,6 +108,9 @@ vi.mock('antd', () => ({
     </div>
   ),
   Empty: ({ description }: { description?: ReactNode }) => <div>{description}</div>,
+  Modal: ({ children, open }: { children?: ReactNode; open?: boolean }) => (
+    open ? <div role='dialog'>{children}</div> : null
+  ),
   Input: () => <input readOnly />,
   Popconfirm: ({
     children,

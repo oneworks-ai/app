@@ -310,7 +310,8 @@
   color: var(--placeholder-color);
 }
 
-.route-container-header__breadcrumb-ancestor-button {
+.route-container-header__breadcrumb-ancestor-button,
+.route-container-header__breadcrumb-parent-button {
   border: 0;
   padding: 0;
   background: transparent;

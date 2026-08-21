@@ -1,8 +1,8 @@
 /* eslint-disable max-lines -- account management keeps list, detail, and action flows in one surface. */
 import './AdapterAccountsManager.scss'
 
-import { App, Button, Empty, Input, Popconfirm, Spin, Tooltip } from 'antd'
-import { useMemo, useState } from 'react'
+import { App, Button, Empty, Modal, Popconfirm, Spin, Tooltip } from 'antd'
+import { useMemo, useRef, useState } from 'react'
 import useSWR, { useSWRConfig } from 'swr'
 
 import type {
@@ -15,10 +15,14 @@ import type {
 
 import { getAdapterAccounts, getApiErrorMessage, manageAdapterAccount } from '#~/api'
 import { AccountQuotaPanel } from '#~/components/account-quota/AccountQuotaPanel'
+import { QuotaUsageRing } from '#~/components/account-quota/QuotaUsageRing'
+import { ActionSearchToolbar } from '#~/components/action-search-toolbar/ActionSearchToolbar'
 import { NativeTabs } from '#~/components/native-tabs'
+import { RoomPixelAvatar } from '#~/components/room-pixel-avatar/RoomPixelAvatar'
 import { UsagePanel } from '#~/components/usage/UsagePanel'
 import { focusDesktopWindowIfAvailable } from '#~/desktop/manager-runtime'
 import { useAdapterAccountQuotaDetail } from '#~/hooks/use-adapter-account-quota-detail'
+import { getAccountQuotaWindows } from '#~/utils/account-quota'
 
 import { getConfiguredAdapterAccounts, mergeAdapterAccounts } from './adapter-accounts'
 import { getFieldDescription, getFieldLabel, setValueByPath } from './configUtils'
@@ -44,6 +48,49 @@ const ACCOUNT_STATUS_ICON: Record<NonNullable<AdapterAccountInfo['status']>, str
 
 type AccountDetailTab = 'usage' | 'settings'
 type AccountActionProgressPhase = NonNullable<AdapterManageAccountProgressEvent['phase']>
+
+const AccountLoginProgressDialog = ({
+  canceling,
+  onCancel,
+  open,
+  phase,
+  t
+}: {
+  canceling: boolean
+  onCancel: () => void
+  open: boolean
+  phase?: AccountActionProgressPhase
+  t: TranslationFn
+}) => (
+  <Modal
+    centered
+    closable={!canceling}
+    footer={
+      <Button loading={canceling} onClick={onCancel}>
+        {canceling
+          ? t('config.accounts.loginDialog.canceling')
+          : t('common.cancel')}
+      </Button>
+    }
+    keyboard={!canceling}
+    maskClosable={!canceling}
+    open={open}
+    title={t('config.accounts.loginDialog.title')}
+    onCancel={onCancel}
+  >
+    <div className='adapter-account-manager__login-progress'>
+      <Spin size='small' />
+      <div>
+        <div>
+          {phase == null ? t('config.accounts.actionProgress.preparing') : t(`config.accounts.actionProgress.${phase}`)}
+        </div>
+        <div className='adapter-account-manager__login-progress-description'>
+          {t('config.accounts.loginDialog.description')}
+        </div>
+      </div>
+    </div>
+  </Modal>
+)
 
 const getConfiguredAccounts = (value: Record<string, unknown>) => {
   return getConfiguredAdapterAccounts(value)
@@ -119,6 +166,22 @@ const getAccountInitials = (...values: Array<string | undefined>) => {
 
   return characters.join('').toLocaleUpperCase()
 }
+
+const getAccountListName = (account: AdapterAccountInfo) => (
+  normalizeDisplayText(account.email) || normalizeDisplayText(account.title) || account.key
+)
+
+const getAccountListPlan = (account: AdapterAccountInfo) => {
+  const plan = account.quota?.metrics?.find(metric => metric.id === 'plan')?.value?.trim()
+  return plan === '' || plan == null ? undefined : plan
+}
+
+const getAccountAvatarSeed = (account: AdapterAccountInfo) => (
+  normalizeDisplayText(account.email) ||
+  normalizeDisplayText(account.displayName) ||
+  normalizeDisplayText(account.title) ||
+  account.key
+)
 
 const renderTooltipContent = (label: string, description?: string) => {
   const normalizedDescription = description?.trim()
@@ -334,6 +397,9 @@ const AccountDetailView = ({
     account: accountKey
   })
   const [loadingAction, setLoadingAction] = useState<string>()
+  const [loginProgress, setLoginProgress] = useState<AccountActionProgressPhase>()
+  const [cancelingLogin, setCancelingLogin] = useState(false)
+  const loginAbortRef = useRef<AbortController | undefined>(undefined)
   const [activeTab, setActiveTab] = useState<AccountDetailTab>('usage')
   const detail = data?.account
   const statusMeta = formatStatus(detail?.status, t)
@@ -390,22 +456,29 @@ const AccountDetailView = ({
 
   const handleRunAction = async (action: AdapterAccountActionDescriptor) => {
     const streamsProgress = action.key === 'reauthenticate'
-    const progressMessageKey = `adapter-account-${adapterKey}-${accountKey}-${action.key}`
-    const updateProgress = (phase: AccountActionProgressPhase) =>
-      message.open({
-        key: progressMessageKey,
-        type: 'loading',
-        duration: 0,
-        content: t(`config.accounts.actionProgress.${phase}`)
-      })
+    const abortController = streamsProgress ? new AbortController() : undefined
+    const updateProgress = (phase: AccountActionProgressPhase) => setLoginProgress(phase)
     setLoadingAction(action.key)
-    if (streamsProgress) updateProgress('preparing')
+    if (streamsProgress) {
+      loginAbortRef.current = abortController
+      setCancelingLogin(false)
+      updateProgress('preparing')
+    }
     try {
-      const result = await manageAdapterAccount(adapterKey, {
-        action: action.key,
-        account: accountKey,
-        refresh: action.key === 'refresh'
-      }, streamsProgress ? { onProgress: event => event.phase != null && updateProgress(event.phase) } : undefined)
+      const result = await manageAdapterAccount(
+        adapterKey,
+        {
+          action: action.key,
+          account: accountKey,
+          refresh: action.key === 'refresh'
+        },
+        streamsProgress
+          ? {
+            onProgress: event => event.phase != null && updateProgress(event.phase),
+            signal: abortController?.signal
+          }
+          : undefined
+      )
       if (action.key === 'remove') {
         await onChanged()
         void message.success(result.message ?? t('config.accounts.actionSuccess.remove'))
@@ -422,15 +495,37 @@ const AccountDetailView = ({
       if (streamsProgress) await focusDesktopWindowIfAvailable()
       void message.success(result.message ?? t(`config.accounts.actionSuccess.${action.key}`))
     } catch (error) {
+      if (abortController?.signal.aborted) {
+        void message.info(t('config.accounts.loginDialog.canceled'))
+        return
+      }
       void message.error(getApiErrorMessage(error, t(`config.accounts.actionFailed.${action.key}`)))
     } finally {
-      if (streamsProgress) message.destroy(progressMessageKey)
+      if (loginAbortRef.current === abortController) loginAbortRef.current = undefined
+      if (streamsProgress) {
+        setLoginProgress(undefined)
+        setCancelingLogin(false)
+      }
       setLoadingAction(undefined)
     }
   }
 
+  const cancelLogin = () => {
+    const abortController = loginAbortRef.current
+    if (abortController == null || abortController.signal.aborted) return
+    setCancelingLogin(true)
+    abortController.abort()
+  }
+
   return (
     <div className='adapter-account-manager__detail'>
+      <AccountLoginProgressDialog
+        canceling={cancelingLogin}
+        open={loadingAction === 'reauthenticate' && loginProgress != null}
+        phase={loginProgress}
+        t={t}
+        onCancel={cancelLogin}
+      />
       {isLoading && (
         <div className='adapter-account-manager__state'>
           <Spin size='small' />
@@ -681,31 +776,23 @@ const AccountsListView = ({
 
   return (
     <div className='adapter-account-manager'>
-      <div className='adapter-account-manager__header'>
-        <Input
-          allowClear
-          value={searchValue}
-          onChange={(event) => setSearchValue(event.target.value)}
-          className='adapter-account-manager__search'
-          placeholder={t('config.accounts.searchPlaceholder', { defaultValue: 'Search accounts' })}
-          prefix={<span className='material-symbols-rounded'>search</span>}
-        />
-        {addAction != null && (
-          <Tooltip
-            title={renderTooltipContent(getActionLabel(addAction, t), getActionDescription(addAction, t))}
-          >
-            <Button
-              size='small'
-              type='default'
-              loading={loadingAction === addAction.key}
-              aria-label={getActionLabel(addAction, t)}
-              className='adapter-account-manager__icon-button adapter-account-manager__header-action'
-              icon={<span className='material-symbols-rounded'>{ACCOUNT_ACTION_ICON[addAction.key]}</span>}
-              onClick={() => onRunAction(addAction)}
-            />
-          </Tooltip>
-        )}
-      </div>
+      <ActionSearchToolbar
+        className='adapter-account-manager__toolbar'
+        inset={false}
+        query={searchValue}
+        placeholder={t('config.accounts.searchPlaceholder', { defaultValue: 'Search accounts' })}
+        onQueryChange={setSearchValue}
+        actions={addAction == null
+          ? []
+          : [{
+            ariaLabel: getActionLabel(addAction, t),
+            icon: ACCOUNT_ACTION_ICON[addAction.key],
+            key: 'add-account',
+            loading: loadingAction === addAction.key,
+            onClick: () => onRunAction(addAction),
+            title: getActionDescription(addAction, t)
+          }]}
+      />
 
       {filteredAccounts.length === 0 && (
         <Empty
@@ -721,6 +808,12 @@ const AccountsListView = ({
           {filteredAccounts.map((account) => {
             const isDefault = currentDefaultAccount === account.key || account.isDefault === true
             const showDeleteAction = account.status !== 'missing'
+            const displayName = getAccountListName(account)
+            const plan = getAccountListPlan(account)
+            const quotaWindow = getAccountQuotaWindows(account.quota)[0]
+            const quotaLabel = quotaWindow == null
+              ? undefined
+              : `${quotaWindow.label}: ${quotaWindow.value}`
 
             return (
               <div key={account.key} className='adapter-account-manager__item'>
@@ -729,15 +822,35 @@ const AccountsListView = ({
                   className='adapter-account-manager__item-trigger'
                   onClick={() => onOpenAccount(account.key)}
                 >
+                  <span className='adapter-account-manager__item-avatar' aria-hidden='true'>
+                    <RoomPixelAvatar
+                      className='adapter-account-manager__item-avatar-fallback'
+                      seed={`adapter-account:${getAccountAvatarSeed(account)}`}
+                    />
+                    {account.avatarUrl != null && account.avatarUrl.trim() !== '' && (
+                      <img
+                        src={account.avatarUrl}
+                        alt=''
+                        referrerPolicy='no-referrer'
+                        onError={(event) => {
+                          event.currentTarget.style.display = 'none'
+                        }}
+                      />
+                    )}
+                  </span>
                   <div className='adapter-account-manager__item-main'>
-                    <div className='adapter-account-manager__item-title'>{account.title}</div>
-                    {account.quota?.summary != null && account.quota.summary !== '' && (
+                    <div className='adapter-account-manager__item-title' title={account.title}>{displayName}</div>
+                    {plan != null && (
                       <div className='adapter-account-manager__item-description'>
-                        <span className='material-symbols-rounded'>speed</span>
-                        <span>{account.quota.summary}</span>
+                        <span className='adapter-account-manager__item-plan'>{plan}</span>
                       </div>
                     )}
                   </div>
+                  {quotaWindow != null && (
+                    <span className='adapter-account-manager__item-quota' title={quotaLabel}>
+                      <QuotaUsageRing compact value={quotaWindow.value} ariaLabel={quotaLabel} />
+                    </span>
+                  )}
                 </button>
                 <div className='adapter-account-manager__item-actions'>
                   <Tooltip
@@ -833,6 +946,9 @@ export const AdapterAccountsManager = ({
     }
   )
   const [loadingAction, setLoadingAction] = useState<string>()
+  const [loginProgress, setLoginProgress] = useState<AccountActionProgressPhase>()
+  const [cancelingLogin, setCancelingLogin] = useState(false)
+  const loginAbortRef = useRef<AbortController | undefined>(undefined)
   const [deletingAccountKey, setDeletingAccountKey] = useState<string>()
   const resolvedAccountsData = accountsData ?? localAccountsData
   const configuredAccounts = useMemo(() => getConfiguredAccounts(value), [value])
@@ -864,19 +980,16 @@ export const AdapterAccountsManager = ({
   const handleRunListAction = async (action: AdapterAccountActionDescriptor) => {
     if (action.key !== 'add') return
 
+    const abortController = new AbortController()
     setLoadingAction(action.key)
-    const progressMessageKey = `adapter-account-${adapterKey}-add`
-    const updateProgress = (phase: AccountActionProgressPhase) =>
-      message.open({
-        key: progressMessageKey,
-        type: 'loading',
-        duration: 0,
-        content: t(`config.accounts.actionProgress.${phase}`)
-      })
+    loginAbortRef.current = abortController
+    setCancelingLogin(false)
+    const updateProgress = (phase: AccountActionProgressPhase) => setLoginProgress(phase)
     updateProgress('preparing')
     try {
       const result = await manageAdapterAccount(adapterKey, { action: 'add' }, {
-        onProgress: event => event.phase != null && updateProgress(event.phase)
+        onProgress: event => event.phase != null && updateProgress(event.phase),
+        signal: abortController.signal
       })
       await refreshAccounts()
       if (result.accountKey != null && result.accountKey.trim() !== '') {
@@ -887,11 +1000,24 @@ export const AdapterAccountsManager = ({
       await focusDesktopWindowIfAvailable()
       void message.success(result.message ?? t('config.accounts.actionSuccess.add'))
     } catch (error) {
+      if (abortController.signal.aborted) {
+        void message.info(t('config.accounts.loginDialog.canceled'))
+        return
+      }
       void message.error(getApiErrorMessage(error, t('config.accounts.actionFailed.add')))
     } finally {
-      message.destroy(progressMessageKey)
+      if (loginAbortRef.current === abortController) loginAbortRef.current = undefined
+      setLoginProgress(undefined)
+      setCancelingLogin(false)
       setLoadingAction(undefined)
     }
+  }
+
+  const cancelLogin = () => {
+    const abortController = loginAbortRef.current
+    if (abortController == null || abortController.signal.aborted) return
+    setCancelingLogin(true)
+    abortController.abort()
   }
 
   const handleDeleteAccount = async (accountKey: string) => {
@@ -936,18 +1062,27 @@ export const AdapterAccountsManager = ({
 
   if (isAccountsView) {
     return (
-      <AccountsListView
-        accounts={accounts}
-        actions={actionDescriptors}
-        loadingAction={loadingAction}
-        onOpenAccount={(accountKey) => onOpenNestedPath(['accounts', accountKey])}
-        onRunAction={handleRunListAction}
-        currentDefaultAccount={configuredDefaultAccount}
-        deletingAccountKey={deletingAccountKey}
-        onToggleDefaultAccount={handleToggleDefaultAccount}
-        onDeleteAccount={handleDeleteAccount}
-        t={t}
-      />
+      <>
+        <AccountLoginProgressDialog
+          canceling={cancelingLogin}
+          open={loadingAction === 'add' && loginProgress != null}
+          phase={loginProgress}
+          t={t}
+          onCancel={cancelLogin}
+        />
+        <AccountsListView
+          accounts={accounts}
+          actions={actionDescriptors}
+          loadingAction={loadingAction}
+          onOpenAccount={(accountKey) => onOpenNestedPath(['accounts', accountKey])}
+          onRunAction={handleRunListAction}
+          currentDefaultAccount={configuredDefaultAccount}
+          deletingAccountKey={deletingAccountKey}
+          onToggleDefaultAccount={handleToggleDefaultAccount}
+          onDeleteAccount={handleDeleteAccount}
+          t={t}
+        />
+      </>
     )
   }
 

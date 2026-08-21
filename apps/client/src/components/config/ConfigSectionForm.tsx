@@ -5,13 +5,22 @@ import type { ReactNode } from 'react'
 import { useMemo, useState } from 'react'
 import useSWR from 'swr'
 
-import type { ConfigSource, ConfigUiObjectSchema, ConfigUiSection, ModelProviderDefinition } from '@oneworks/types'
+import type {
+  ConfigSource,
+  ConfigUiField,
+  ConfigUiObjectSchema,
+  ConfigUiSection,
+  ModelProviderDefinition,
+  ModelServiceConfig
+} from '@oneworks/types'
+import { getModelProviderDefinition, resolveModelProviderIdentity } from '@oneworks/utils/model-providers'
 
 import { getAdapterAccounts, listModelProviders } from '#~/api'
 import { builtInAdapterSupportsAccounts } from '#~/resources/adapters'
 import { normalizeSendShortcut, resolveSendShortcut } from '#~/utils/shortcutUtils'
 
 import { MobileAwareSelect as Select } from '#~/components/mobile-aware-select/MobileAwareSelect'
+import { NativeTabs } from '#~/components/native-tabs'
 import { UsagePanel } from '#~/components/usage/UsagePanel'
 import { AdapterAccountsManager } from './AdapterAccountsManager'
 import type { AdapterImportAction } from './AdapterImportRow'
@@ -21,6 +30,7 @@ import { FieldRow } from './ConfigFieldRow'
 import { ShortcutInput } from './ConfigShortcutInput'
 import { DetailCollectionField } from './DetailListField'
 import { McpServerItemEditor } from './McpServerItemEditor'
+import { ModelServiceNativeTabs } from './ModelServiceNativeTabs'
 import { ModelServiceNewApiManagement } from './ModelServiceNewApiManagement'
 import { ModelServiceProviderActions } from './ModelServiceProviderActions'
 import type { ModelServiceProviderPortalRequest } from './ModelServiceProviderPortalBottomPanel'
@@ -179,12 +189,43 @@ const modelServiceDetailTabPathByKey = {
   access: ['access'],
   advanced: ['advanced'],
   display: ['display'],
+  management: ['management'],
   models: ['models'],
   plan: ['plan'],
   service: [],
   usage: ['usage']
 } as const
 type ModelServiceDetailTabKey = keyof typeof modelServiceDetailTabPathByKey
+const modelServiceProfileTabPathByKey = {
+  access: ['access'],
+  advanced: ['advanced'],
+  models: ['models'],
+  service: []
+} as const
+type ModelServiceProfileTabKey = keyof typeof modelServiceProfileTabPathByKey
+const channelDetailTabPathByKey = {
+  overview: ['overview'],
+  connection: ['connection'],
+  access: ['access'],
+  behavior: ['behavior'],
+  advanced: ['advanced']
+} as const
+type ChannelDetailTabKey = keyof typeof channelDetailTabPathByKey
+const channelOverviewFieldKeys = new Set(['title', 'description', 'enabled'])
+const channelBehaviorFieldKeys = new Set([
+  'systemPrompt',
+  'multimodalModel',
+  'commandPrefix',
+  'groupMessageDebounceMs',
+  'language',
+  'enableSessionMcp'
+])
+const channelAdvancedFieldKeys = new Set(['silentSessions', 'serverBaseUrl', 'sessionDetailBaseUrl'])
+const channelBaseDefaultEnabledFieldKeys = new Set(['enabled', 'enableWebhook', 'enableSessionMcp'])
+const channelTypeDefaultEnabledFieldKeys = new Map([
+  ['qq-channel', new Set(['verifyWebhookSignature', 'verifyWebhookAppId'])],
+  ['wechat', new Set(['autoRegisterCallback'])]
+])
 const adapterDetailTabPathByKey = {
   accounts: ['accounts'],
   advanced: ['advanced'],
@@ -206,10 +247,35 @@ const modelServiceDetailTabKeyFromPath = (nestedPath: string[] | undefined): Mod
   if (segment === 'access') return 'access'
   if (segment === 'advanced') return 'advanced'
   if (segment === 'display') return 'display'
+  if (segment === 'management') return 'management'
   if (segment === 'models') return 'models'
   if (segment === 'plan') return 'plan'
   if (segment === 'usage') return 'usage'
   return 'service'
+}
+const modelServiceProfileTabKeyFromPath = (nestedPath: string[] | undefined): ModelServiceProfileTabKey => {
+  const segment = nestedPath?.[0] === 'profiles' ? nestedPath[2] : undefined
+  if (segment === 'access') return 'access'
+  if (segment === 'advanced') return 'advanced'
+  if (segment === 'models') return 'models'
+  return 'service'
+}
+const channelDetailTabKeyFromPath = (nestedPath: string[] | undefined): ChannelDetailTabKey => {
+  const segment = nestedPath?.[0]
+  if (segment === 'connection') return 'connection'
+  if (segment === 'access') return 'access'
+  if (segment === 'behavior') return 'behavior'
+  if (segment === 'advanced') return 'advanced'
+  return 'overview'
+}
+const getChannelDetailTabKey = (field: ConfigUiField): ChannelDetailTabKey | undefined => {
+  const key = field.path[0]
+  if (key == null || key === 'type') return undefined
+  if (channelOverviewFieldKeys.has(key)) return 'overview'
+  if (key === 'access') return 'access'
+  if (channelBehaviorFieldKeys.has(key)) return 'behavior'
+  if (channelAdvancedFieldKeys.has(key)) return 'advanced'
+  return 'connection'
 }
 const adapterDetailTabKeyFromPath = (nestedPath: string[] | undefined): AdapterDetailTabKey => {
   const segment = nestedPath?.[0]
@@ -236,10 +302,27 @@ const getModelServiceDetailTabKey = (
   if (group === 'access' || group === 'providerAccess') return 'access'
   if (group === 'customization') return 'display'
   if (group === 'models') return 'models'
-  if (group === 'management') return undefined
+  if (group === 'management') {
+    const currentService = isRecord(currentValue) ? currentValue as ModelServiceConfig : undefined
+    const resolvedService = isRecord(currentResolvedValue) ? currentResolvedValue as ModelServiceConfig : undefined
+    const providerId = resolveModelProviderIdentity(currentService).provider ??
+      resolveModelProviderIdentity(resolvedService).provider
+    const providerCategory = getModelProviderDefinition(providerId)?.category
+    const hasManagementConfig = isRecord(currentService?.management) || isRecord(resolvedService?.management)
+    return providerCategory === 'relay' || providerCategory === 'gateway' || hasManagementConfig
+      ? 'management'
+      : 'advanced'
+  }
   if (group === 'plan') return 'plan'
   if (group === 'advanced' || group === 'default') return 'advanced'
   return undefined
+}
+const getModelServiceProfileTabKey = (field: FieldSpec): ModelServiceProfileTabKey => {
+  const key = fieldPathKey(field)
+  if (key === 'title' || key === 'description') return 'service'
+  if (key === 'apiBaseUrl' || key === 'apiKey') return 'access'
+  if (key === 'models') return 'models'
+  return 'advanced'
 }
 const tabLabel = (icon: string, label: string) => (
   <span className='config-view__collection-tab-label'>
@@ -1206,6 +1289,7 @@ export const SectionForm = ({
     const modelServiceActions = sectionKey === 'modelServices' && detailMeta.field.path.length === 0
       ? (
         <ModelServiceProviderActions
+          compact
           key={`${source}:${detailMeta.itemKey}:${detailMeta.itemSource}`}
           serviceKey={detailMeta.itemKey}
           source={source}
@@ -1416,35 +1500,119 @@ export const SectionForm = ({
           const resolvedNextProfile = isRecord(nextProfile) ? nextProfile : {}
           writeProfiles({ ...localProfiles, [profileRouteKey]: resolvedNextProfile })
         }
+        const profileTabFields = profileFields.reduce<Record<ModelServiceProfileTabKey, FieldSpec[]>>((acc, field) => {
+          acc[getModelServiceProfileTabKey(field)].push(toFlatField(field))
+          return acc
+        }, {
+          access: [],
+          advanced: [],
+          models: [],
+          service: []
+        })
+        const openProfileTab = (tabKey: ModelServiceProfileTabKey) => {
+          onOpenDetailRoute?.({
+            kind: detailRoute?.kind ?? 'detailCollectionItem',
+            fieldPath: detailMeta.field.path,
+            itemKey: detailMeta.itemKey,
+            nestedPath: [
+              'profiles',
+              profileRouteKey,
+              ...modelServiceProfileTabPathByKey[tabKey]
+            ]
+          })
+        }
+        const profileActiveTab = modelServiceProfileTabKeyFromPath(detailRoute?.nestedPath)
+        const profileTabDefinitions: Array<{
+          key: ModelServiceProfileTabKey
+          icon: string
+          label: string
+        }> = [
+          {
+            key: 'service',
+            icon: 'info',
+            label: t('config.modelServices.collectionTabs.service', { defaultValue: '服务信息' })
+          },
+          {
+            key: 'access',
+            icon: 'key',
+            label: t('config.sectionGroups.access', { defaultValue: '接入配置' })
+          },
+          {
+            key: 'models',
+            icon: 'view_list',
+            label: t('config.sectionGroups.models', { defaultValue: '模型配置' })
+          },
+          {
+            key: 'advanced',
+            icon: 'tune',
+            label: t('config.modelServices.collectionTabs.advanced', { defaultValue: '高级配置' })
+          }
+        ]
+        const profileTabItems = profileTabDefinitions
+          .filter(({ key }) => (
+            (key === 'access' && hasIntegratedProfileManagement) ||
+            profileTabFields[key].some(field => isVisibleConfigField(field, profileValue, profileResolvedValue))
+          ))
+          .map(({ key, icon, label }) => ({
+            key,
+            icon,
+            label,
+            children: (
+              <div className='config-view__subsection-body'>
+                {key === 'access' && hasIntegratedProfileManagement && (
+                  <ModelServiceNewApiManagement
+                    view='profileDetail'
+                    onOpenApiKey={openApiKeyDetail}
+                    onOpenApiKeysTab={() => openCollectionTab('apiKeys')}
+                    onOpenProfile={openProfileDetail}
+                    onProfilesChange={writeProfiles}
+                    profileKey={profileRouteKey}
+                    profiles={localProfiles}
+                    readOnly={isInheritedCollection}
+                    resolvedProfiles={resolvedProfiles}
+                    service={detailMeta.item}
+                    serviceKey={detailMeta.itemKey}
+                    source={source}
+                    t={t}
+                  />
+                )}
+                {profileTabFields[key].length > 0 && renderFieldGroups({
+                  currentFields: profileTabFields[key],
+                  currentValue: profileValue,
+                  currentResolvedValue: profileResolvedValue,
+                  onCurrentValueChange: writeProfile,
+                  keyPrefix: `detail:${detailMeta.itemKey}:profile:${profileRouteKey}:${key}`,
+                  readOnly: isInheritedCollection
+                })}
+              </div>
+            )
+          }))
+        const profileRenderedActiveTab = profileTabItems.some(item => item.key === profileActiveTab)
+          ? profileActiveTab
+          : profileTabItems[0]?.key
+        const profileActiveContent = profileTabItems.find(item => item.key === profileRenderedActiveTab)
 
         return (
           <div className='config-view__detail-panel'>
             {detailNotice}
-            {hasIntegratedProfileManagement && (
-              <ModelServiceNewApiManagement
-                view='profileDetail'
-                onOpenApiKey={openApiKeyDetail}
-                onOpenApiKeysTab={() => openCollectionTab('apiKeys')}
-                onOpenProfile={openProfileDetail}
-                onProfilesChange={writeProfiles}
-                profileKey={profileRouteKey}
-                profiles={localProfiles}
-                readOnly={isInheritedCollection}
-                resolvedProfiles={resolvedProfiles}
-                service={detailMeta.item}
-                serviceKey={detailMeta.itemKey}
-                source={source}
-                t={t}
-              />
-            )}
-            {renderFieldGroups({
-              currentFields: profileFields,
-              currentValue: profileValue,
-              currentResolvedValue: profileResolvedValue,
-              onCurrentValueChange: writeProfile,
-              keyPrefix: `detail:${detailMeta.itemKey}:profile:${profileRouteKey}`,
-              readOnly: isInheritedCollection
-            })}
+            <ModelServiceNativeTabs
+              className='config-view__collection-tabs'
+              activeKey={profileRenderedActiveTab}
+              onChange={key => openProfileTab(key as ModelServiceProfileTabKey)}
+              ariaLabel={t('config.modelServices.profileTabs.ariaLabel')}
+              items={profileTabItems.map(item => ({
+                key: item.key,
+                icon: item.icon,
+                label: item.label
+              }))}
+            />
+            <div
+              className='config-view__collection-tab-panel native-tabs-panel'
+              data-native-tabs-panel='true'
+              role='tabpanel'
+            >
+              {profileActiveContent?.children}
+            </div>
           </div>
         )
       }
@@ -1582,17 +1750,29 @@ export const SectionForm = ({
       const collectionRenderedActiveTab = collectionTabItems.some(item => item.key === collectionActiveTab)
         ? collectionActiveTab
         : collectionTabItems[0]?.key
+      const collectionActiveContent = collectionTabItems.find(item => item.key === collectionRenderedActiveTab)
 
       return (
         <div className='config-view__detail-panel'>
           {detailNotice}
           {modelServiceActions}
-          <Tabs
+          <ModelServiceNativeTabs
             className='config-view__collection-tabs'
             activeKey={collectionRenderedActiveTab}
             onChange={key => openCollectionTab(key as CollectionTabKey)}
-            items={collectionTabItems}
+            ariaLabel={t('config.modelServices.collectionTabs.ariaLabel')}
+            items={collectionTabItems.map(item => ({
+              key: item.key,
+              label: item.label
+            }))}
           />
+          <div
+            className='config-view__collection-tab-panel native-tabs-panel'
+            data-native-tabs-panel='true'
+            role='tabpanel'
+          >
+            {collectionActiveContent?.children}
+          </div>
         </div>
       )
     }
@@ -1611,6 +1791,7 @@ export const SectionForm = ({
         access: [],
         advanced: [],
         display: [],
+        management: [],
         models: [],
         plan: [],
         service: [],
@@ -1649,6 +1830,11 @@ export const SectionForm = ({
           key: 'display',
           icon: 'palette',
           label: t('config.sectionGroups.customization', { defaultValue: '展示与链接' })
+        },
+        {
+          key: 'management',
+          icon: 'admin_panel_settings',
+          label: t('config.sectionGroups.management', { defaultValue: '管理接口' })
         },
         {
           key: 'plan',
@@ -1700,18 +1886,30 @@ export const SectionForm = ({
       const modelServiceRenderedActiveTab = tabItems.some(item => item.key === modelServiceActiveTab)
         ? modelServiceActiveTab
         : tabItems[0]?.key
+      const modelServiceActiveContent = tabItems.find(item => item.key === modelServiceRenderedActiveTab)
 
       if (tabItems.length > 0) {
         return (
           <div className='config-view__detail-panel'>
             {detailNotice}
             {modelServiceActions}
-            <Tabs
+            <ModelServiceNativeTabs
               className='config-view__collection-tabs'
               activeKey={modelServiceRenderedActiveTab}
               onChange={key => openModelServiceTab(key as ModelServiceDetailTabKey)}
-              items={tabItems}
+              ariaLabel={t('config.modelServices.detailTabs.ariaLabel')}
+              items={tabItems.map(item => ({
+                key: item.key,
+                label: item.label
+              }))}
             />
+            <div
+              className='config-view__collection-tab-panel native-tabs-panel'
+              data-native-tabs-panel='true'
+              role='tabpanel'
+            >
+              {modelServiceActiveContent?.children}
+            </div>
           </div>
         )
       }
@@ -1784,6 +1982,39 @@ export const SectionForm = ({
       const accountItemSchema = sectionKey === 'adapters'
         ? itemSchema?.recordFields?.accounts?.itemSchema
         : undefined
+      const isAdapterAccountDetailRoute = sectionKey === 'adapters' &&
+        detailRoute?.nestedPath?.[0] === 'accounts' &&
+        detailRoute.nestedPath[1] != null &&
+        detailRoute.nestedPath[1] !== ''
+      const renderAdapterAccountsManager = () => (
+        <AdapterAccountsManager
+          adapterKey={detailMeta.itemKey}
+          value={detailMeta.item}
+          accountsData={adapterAccountsData}
+          accountItemSchema={accountItemSchema}
+          onChange={writeDetailItem}
+          nestedPath={detailRoute?.nestedPath ?? ['accounts']}
+          onOpenNestedPath={(nextPath) => {
+            onOpenDetailRoute?.({
+              kind: detailRoute?.kind ?? 'detailCollectionItem',
+              fieldPath: detailMeta.field.path,
+              itemKey: detailMeta.itemKey,
+              nestedPath: nextPath
+            })
+          }}
+          t={t}
+        />
+      )
+
+      if (isAdapterAccountDetailRoute && adapterSupportsAccounts) {
+        return (
+          <div className='config-view__detail-panel'>
+            {detailNotice}
+            {renderAdapterAccountsManager()}
+          </div>
+        )
+      }
+
       if (shouldRenderJsonFallback && sectionKey === 'adapters') {
         const openFallbackAdapterTab = (tabKey: 'accounts' | 'base') => {
           onOpenDetailRoute?.({
@@ -1807,26 +2038,8 @@ export const SectionForm = ({
           ...(adapterSupportsAccounts
             ? [{
               key: 'accounts',
-              label: tabLabel('manage_accounts', t('config.accounts.title')),
-              children: (
-                <AdapterAccountsManager
-                  adapterKey={detailMeta.itemKey}
-                  value={detailMeta.item}
-                  accountsData={adapterAccountsData}
-                  accountItemSchema={accountItemSchema}
-                  onChange={writeDetailItem}
-                  nestedPath={detailRoute?.nestedPath ?? ['accounts']}
-                  onOpenNestedPath={(nextPath) => {
-                    onOpenDetailRoute?.({
-                      kind: detailRoute?.kind ?? 'detailCollectionItem',
-                      fieldPath: detailMeta.field.path,
-                      itemKey: detailMeta.itemKey,
-                      nestedPath: nextPath
-                    })
-                  }}
-                  t={t}
-                />
-              )
+              label: tabLabel('manage_accounts', t('config.accounts.listTitle')),
+              children: renderAdapterAccountsManager()
             }]
             : [])
         ]
@@ -1861,6 +2074,77 @@ export const SectionForm = ({
       }
 
       if (itemSchema != null) {
+        if (sectionKey === 'channels') {
+          const fieldsByTab = itemSchema.fields.reduce<Record<ChannelDetailTabKey, ConfigUiField[]>>(
+            (acc, field) => {
+              const tabKey = getChannelDetailTabKey(field)
+              if (tabKey != null) acc[tabKey].push(field)
+              return acc
+            },
+            {
+              overview: [],
+              connection: [],
+              access: [],
+              behavior: [],
+              advanced: []
+            }
+          )
+          const tabDefinitions = [
+            { key: 'overview' as const, label: t('config.channels.tabs.overview') },
+            { key: 'connection' as const, label: t('config.channels.tabs.connection') },
+            { key: 'access' as const, label: t('config.channels.tabs.access') },
+            { key: 'behavior' as const, label: t('config.channels.tabs.behavior') },
+            { key: 'advanced' as const, label: t('config.channels.tabs.advanced') }
+          ].filter(({ key }) => fieldsByTab[key].length > 0)
+          const requestedTab = channelDetailTabKeyFromPath(detailRoute?.nestedPath)
+          const activeTab = tabDefinitions.some(({ key }) => key === requestedTab)
+            ? requestedTab
+            : tabDefinitions[0]?.key
+
+          if (activeTab != null) {
+            return (
+              <div className='config-view__detail-panel'>
+                {detailNotice}
+                <NativeTabs
+                  activeKey={activeTab}
+                  ariaLabel={t('config.channels.tabs.ariaLabel')}
+                  items={tabDefinitions}
+                  onChange={(tabKey) => {
+                    onOpenDetailRoute?.({
+                      kind: detailRoute?.kind ?? 'detailCollectionItem',
+                      fieldPath: detailMeta.field.path,
+                      itemKey: detailMeta.itemKey,
+                      nestedPath: [...channelDetailTabPathByKey[tabKey]]
+                    })
+                  }}
+                />
+                <div className='native-tabs-panel config-view__subsection-body' role='tabpanel'>
+                  <SchemaObjectEditor
+                    value={detailMeta.item}
+                    schema={itemSchema}
+                    onChange={writeDetailItem}
+                    t={t}
+                    visibleFieldPaths={fieldsByTab[activeTab].map(field => field.path)}
+                    resolveFieldValue={(field, currentValue, defaultValue) => {
+                      if (currentValue !== undefined) return currentValue
+                      if (defaultValue !== undefined) return defaultValue
+                      const key = field.path.length === 1 ? field.path[0] : undefined
+                      if (key == null) return undefined
+                      if (channelBaseDefaultEnabledFieldKeys.has(key)) return true
+                      const channelType = typeof detailMeta.item.type === 'string'
+                        ? detailMeta.item.type
+                        : undefined
+                      return channelType != null && channelTypeDefaultEnabledFieldKeys.get(channelType)?.has(key)
+                        ? true
+                        : undefined
+                    }}
+                  />
+                </div>
+              </div>
+            )
+          }
+        }
+
         if (sectionKey === 'adapters') {
           const hiddenFieldPaths = [
             ...(isKnownEntry && uiSection.recordMap.mode === 'discriminated' ? [[discriminatorField]] : []),
@@ -1983,26 +2267,8 @@ export const SectionForm = ({
             ...(adapterSupportsAccounts
               ? [{
                 key: 'accounts',
-                label: tabLabel('manage_accounts', t('config.accounts.title')),
-                children: (
-                  <AdapterAccountsManager
-                    adapterKey={detailMeta.itemKey}
-                    value={detailMeta.item}
-                    accountsData={adapterAccountsData}
-                    accountItemSchema={accountItemSchema}
-                    onChange={writeDetailItem}
-                    nestedPath={detailRoute?.nestedPath ?? ['accounts']}
-                    onOpenNestedPath={(nextPath) => {
-                      onOpenDetailRoute?.({
-                        kind: detailRoute?.kind ?? 'detailCollectionItem',
-                        fieldPath: detailMeta.field.path,
-                        itemKey: detailMeta.itemKey,
-                        nestedPath: nextPath
-                      })
-                    }}
-                    t={t}
-                  />
-                )
+                label: tabLabel('manage_accounts', t('config.accounts.listTitle')),
+                children: renderAdapterAccountsManager()
               }]
               : []),
             ...(visibleAdvancedSections.length > 0

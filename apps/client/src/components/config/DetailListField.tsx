@@ -1,12 +1,13 @@
 /* eslint-disable max-lines -- detail collection list/add/remove flow stays in one renderer for consistency */
 import './record-editors/RecordEditors.scss'
 
-import { Button, Input, Switch, Tooltip } from 'antd'
+import { Button, Input, Modal, Switch, Tooltip } from 'antd'
 import { useMemo, useState } from 'react'
 
 import type { ConfigSource, ConfigUiSection, ModelServiceConfig } from '@oneworks/types'
 import { resolveModelServiceHomepageUrl, resolveModelServiceIcon } from '@oneworks/utils/model-providers'
 
+import { ActionSearchToolbar } from '#~/components/action-search-toolbar/ActionSearchToolbar'
 import { MobileAwareSelect as Select } from '#~/components/mobile-aware-select/MobileAwareSelect'
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
 import { getAdapterDisplay, resolveAdapterDisplayIcon } from '#~/resources/adapters'
@@ -16,7 +17,9 @@ import { AdapterAccountPreview } from './AdapterAccountPreview'
 import { AdapterImportRow } from './AdapterImportRow'
 import type { AdapterImportAction } from './AdapterImportRow'
 import { DetailCollectionFieldActions } from './DetailCollectionFieldActions'
+import { ModelServiceCollectionView } from './ModelServiceCollectionView'
 import { ModelServiceProviderQuotaPreview } from './ModelServiceProviderQuotaPreview'
+import { ChannelCollectionField } from './channel-collection/ChannelCollectionField'
 import type { ConfigDetailRoute, DetailCollectionPlaceholderEntry } from './configDetail'
 import { toDetailCollectionEntries } from './configDetail'
 import type { FieldSpec } from './configSchema'
@@ -114,8 +117,48 @@ export const DetailCollectionField = ({
   const [newRecordKind, setNewRecordKind] = useState(
     uiSection?.kind === 'recordMap' ? (uiSection.recordMap.entryKinds?.[0]?.key ?? '') : ''
   )
+  const [adapterCreateOpen, setAdapterCreateOpen] = useState(false)
+  const [adapterSearchQuery, setAdapterSearchQuery] = useState('')
   const detailCollection = field.detailCollection
   if (detailCollection == null) return null
+
+  if (
+    sectionKey === 'modelServices' &&
+    field.path.length === 0 &&
+    detailCollection.collectionKind === 'recordMap'
+  ) {
+    return (
+      <ModelServiceCollectionView
+        field={field}
+        value={value}
+        resolvedValue={resolvedValue}
+        source={source}
+        onChange={onChange}
+        onOpenDetail={onOpenDetail}
+        creatingModelServiceSessionKey={creatingModelServiceSessionKey}
+        onCreateModelServiceSession={onCreateModelServiceSession}
+        modelServiceImportAction={modelServiceImportAction}
+        t={t}
+      />
+    )
+  }
+
+  if (
+    sectionKey === 'channels' &&
+    detailCollection.collectionKind === 'recordMap'
+  ) {
+    return (
+      <ChannelCollectionField
+        field={field}
+        value={value}
+        resolvedValue={resolvedValue}
+        onChange={onChange}
+        onOpenDetail={onOpenDetail}
+        uiSection={uiSection}
+        t={t}
+      />
+    )
+  }
 
   const items = toDetailCollectionEntries({
     field,
@@ -133,6 +176,7 @@ export const DetailCollectionField = ({
     : getFieldLabel(t, sectionKey, field.path, field.path.at(-1) ?? sectionKey)
   const isListCollection = detailCollection.collectionKind === 'list'
   const isRecordMapCollection = detailCollection.collectionKind === 'recordMap'
+  const isAdapterCollection = isRecordMapCollection && sectionKey === 'adapters'
   const canSelectKind = isRecordMapCollection && uiSection?.kind === 'recordMap' &&
     uiSection.recordMap.mode === 'discriminated'
   const keyPlaceholder = detailCollection.collectionKind === 'recordMap'
@@ -156,6 +200,13 @@ export const DetailCollectionField = ({
     >
     : []
   const createModelServiceActionKey = getModelServiceConfigSessionActionKey({ mode: 'create', source })
+  const normalizedAdapterSearchQuery = adapterSearchQuery.trim().toLocaleLowerCase()
+  const visibleItems = isAdapterCollection && normalizedAdapterSearchQuery !== ''
+    ? items.filter(({ key }) => {
+      const display = getAdapterDisplay(key)
+      return [key, display.title].join(' ').toLocaleLowerCase().includes(normalizedAdapterSearchQuery)
+    })
+    : items
 
   const updateRecordEntry = (itemKey: string, nextItem: Record<string, unknown>) => {
     onChange(setValueByPath(value, [itemKey], nextItem))
@@ -254,10 +305,14 @@ export const DetailCollectionField = ({
     )
   }
 
+  const canAddRecordItem = newRecordKey.trim() !== '' &&
+    !items.some(item => item.key === newRecordKey.trim()) &&
+    (!canSelectKind || newRecordKind.trim() !== '')
+
   const addRecordItem = () => {
     if (!isRecordMapCollection) return
     const itemKey = newRecordKey.trim()
-    if (itemKey === '' || items.some(item => item.key === itemKey)) return
+    if (!canAddRecordItem) return
 
     let nextItem: Record<string, unknown>
     if (uiSection?.kind === 'recordMap') {
@@ -276,6 +331,12 @@ export const DetailCollectionField = ({
     updateRecordEntry(itemKey, nextItem)
     setNewRecordKey('')
     openDetail(itemKey)
+    return true
+  }
+
+  const closeAdapterCreate = () => {
+    setAdapterCreateOpen(false)
+    setNewRecordKey('')
   }
 
   return (
@@ -288,7 +349,7 @@ export const DetailCollectionField = ({
       {isRecordMapCollection && sectionKey === 'modelServices' && modelServiceImportAction != null && (
         <AdapterImportRow action={modelServiceImportAction} />
       )}
-      {isRecordMapCollection && (
+      {isRecordMapCollection && !isAdapterCollection && (
         <div className='config-view__record-add'>
           <div className='config-view__record-add-inputs'>
             <Input
@@ -310,9 +371,7 @@ export const DetailCollectionField = ({
                 className='config-view__icon-button'
                 aria-label={t('common.confirm')}
                 icon={<span className='material-symbols-rounded'>check</span>}
-                disabled={newRecordKey.trim() === '' ||
-                  items.some(item => item.key === newRecordKey.trim()) ||
-                  (canSelectKind && newRecordKind.trim() === '')}
+                disabled={!canAddRecordItem}
                 onClick={addRecordItem}
               />
             </Tooltip>
@@ -338,7 +397,55 @@ export const DetailCollectionField = ({
           </div>
         </div>
       )}
-      {items.map(({
+      {isAdapterCollection && (
+        <>
+          <ActionSearchToolbar
+            className='config-view__adapter-toolbar'
+            inset={false}
+            placeholder={t('config.editor.searchAdapters')}
+            query={adapterSearchQuery}
+            onQueryChange={setAdapterSearchQuery}
+            actions={[{
+              ariaLabel: t('config.editor.addAdapter'),
+              icon: 'add',
+              key: 'add-adapter',
+              onClick: () => setAdapterCreateOpen(true)
+            }]}
+          />
+          <Modal
+            destroyOnHidden
+            open={adapterCreateOpen}
+            title={t('config.editor.addAdapter')}
+            okText={t('common.confirm')}
+            cancelText={t('common.cancel')}
+            okButtonProps={{ disabled: !canAddRecordItem }}
+            onCancel={closeAdapterCreate}
+            onOk={() => {
+              if (addRecordItem()) closeAdapterCreate()
+            }}
+          >
+            <div className='config-view__adapter-create-fields'>
+              <Input
+                autoFocus
+                value={newRecordKey}
+                placeholder={keyPlaceholder}
+                onChange={(event) => setNewRecordKey(event.target.value)}
+                onPressEnter={() => {
+                  if (addRecordItem()) closeAdapterCreate()
+                }}
+              />
+              {canSelectKind && (
+                <Select
+                  value={newRecordKind}
+                  options={kindOptions}
+                  onChange={(nextValue) => setNewRecordKind(nextValue)}
+                />
+              )}
+            </div>
+          </Modal>
+        </>
+      )}
+      {visibleItems.map(({
         item,
         key,
         index,
@@ -521,13 +628,18 @@ export const DetailCollectionField = ({
               key={`${field.path.join('.')}:${key}:${title}`}
               className={`config-view__record-card config-view__adapter-summary-card${
                 itemSource === 'inherited' ? ' config-view__record-card--readonly' : ''
-              }`}
+              }${itemSource === 'placeholder' ? ' config-view__adapter-summary-card--unconfigured' : ''}`}
               data-adapter-key={key}
             >
               <div className='config-view__adapter-summary-header'>
                 <button type='button' className='config-view__detail-list-main' onClick={() => openDetail(key)}>
                   {recordHeading}
                 </button>
+                {itemSource === 'placeholder' && (
+                  <span className='config-view__adapter-summary-state'>
+                    {t('config.editor.unconfiguredAdapter')}
+                  </span>
+                )}
                 {summaryControls}
                 {detailCollectionActions}
               </div>
@@ -592,6 +704,11 @@ export const DetailCollectionField = ({
           </div>
         )
       })}
+      {isAdapterCollection && visibleItems.length === 0 && (
+        <div className='config-view__detail-list-empty config-view__adapter-search-empty'>
+          <div className='config-view__detail-list-empty-desc'>{t('config.editor.noAdaptersMatch')}</div>
+        </div>
+      )}
       {isListCollection && items.length === 0 && (
         <div className='config-view__detail-list-empty'>
           <div className='config-view__detail-list-empty-title'>{fieldLabel}</div>

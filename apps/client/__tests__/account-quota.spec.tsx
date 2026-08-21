@@ -134,8 +134,8 @@ describe('account quota indicators', () => {
     })
   })
 
-  it('starts the quota refresh without waiting for the account snapshot', async () => {
-    const refreshedData = {
+  it('uses the cache-only account snapshot without starting a live quota probe', async () => {
+    const cachedData = {
       accounts: [
         {
           key: 'personal',
@@ -148,11 +148,11 @@ describe('account quota indicators', () => {
         }
       ]
     }
-    getAdapterAccountsMock.mockResolvedValue(refreshedData)
+    getAdapterAccountsMock.mockResolvedValue(cachedData)
     useSWRMock.mockImplementation((key: unknown, fetcher: (() => unknown) | null) => {
       const cacheKey = Array.isArray(key) ? key[0] : undefined
-      if (cacheKey === '/api/adapters/accounts-quota') {
-        return { data: refreshedData, mutate: fetcher }
+      if (cacheKey === '/api/adapters/accounts') {
+        return { data: cachedData, mutate: fetcher }
       }
       return { data: undefined }
     })
@@ -162,21 +162,17 @@ describe('account quota indicators', () => {
       model: 'gpt-5.6-sol'
     })
 
-    expect(useSWRMock).toHaveBeenNthCalledWith(
-      2,
-      ['/api/adapters/accounts-quota', 'codex', 'gpt-5.6-sol'],
-      expect.any(Function),
-      expect.objectContaining({
-        revalidateOnFocus: false
-      })
+    expect(useSWRMock).toHaveBeenCalledTimes(1)
+    expect(useSWRMock).toHaveBeenCalledWith(
+      ['/api/adapters/accounts', 'codex', 'gpt-5.6-sol'],
+      expect.any(Function)
     )
-    const quotaFetcher = useSWRMock.mock.calls[1]?.[1] as (() => Promise<unknown>)
-    await quotaFetcher()
+    const accountsFetcher = useSWRMock.mock.calls[0]?.[1] as (() => Promise<unknown>)
+    await accountsFetcher()
     expect(getAdapterAccountsMock).toHaveBeenCalledWith('codex', {
-      model: 'gpt-5.6-sol',
-      refresh: true
+      model: 'gpt-5.6-sol'
     })
-    expect(result).toEqual(refreshedData)
+    expect(result).toEqual(cachedData)
   })
 
   it('extracts the primary and secondary usage windows', () => {

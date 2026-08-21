@@ -5,6 +5,7 @@ on:
     branches:
       - main
     paths:
+      - assets/avatar
       - assets/avatar/**
       - packages/avatar/**
       - .github/workflows/deploy-avatar.yml

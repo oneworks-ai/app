@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { applyServerRuntimeEnv, runRuntimeEntry } from '#~/cli-runtime.js'
+import { applyServerRuntimeEnv, resolveRuntimeNodeExecutable, runRuntimeEntry } from '#~/cli-runtime.js'
 
 describe('applyServerRuntimeEnv', () => {
   const tempDirs: string[] = []
@@ -49,6 +49,13 @@ describe('applyServerRuntimeEnv', () => {
     expect(env.__ONEWORKS_PROJECT_SERVER_DATA_DIR__).toMatch(/\/server\/data$/)
     expect(env.__ONEWORKS_PROJECT_SERVER_LOG_DIR__).toContain('/.oneworks/projects/')
     expect(env.__ONEWORKS_PROJECT_SERVER_LOG_DIR__).toMatch(/\/logs\/server$/)
+  })
+
+  it('preserves the desktop-selected headless runtime for the loader child', () => {
+    expect(resolveRuntimeNodeExecutable({
+      __ONEWORKS_PROJECT_NODE_PATH__: ' /fixture/One Works Helper '
+    })).toBe('/fixture/One Works Helper')
+    expect(resolveRuntimeNodeExecutable({})).toBe(process.execPath)
   })
 
   it('preserves explicit values for the integrated web entry', () => {
