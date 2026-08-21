@@ -5,7 +5,8 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { PluginRequestPrincipal } from '@oneworks/types'
 
-import { activatePlugin } from '../server/src/index'
+import { activatePlugin as activateClientPlugin } from '../client/src/index'
+import { activatePlugin as activateServerPlugin } from '../server/src/index'
 
 describe('oneWorks Rooms plugin', () => {
   it('registers its redacted product proxy routes only through the host facade', async () => {
@@ -26,7 +27,7 @@ describe('oneWorks Rooms plugin', () => {
     const listShares = vi.fn(async () => [{ roomId: 'room-1', shareRef: 'share-ref' }])
     const revokeRoomShare = vi.fn(async () => true)
     const updateRoomChannelConnection = vi.fn(async () => ({ roomId: 'room-1' }))
-    activatePlugin({
+    activateServerPlugin({
       oneworksChannel: {
         attachRoomChannelConnection,
         createRoom: vi.fn(),
@@ -127,6 +128,65 @@ describe('oneWorks Rooms plugin', () => {
     )
   })
 
+  it('registers workspace navigation from runtime identity without relying on the browser URL', async () => {
+    const appendChild = vi.fn()
+    const disposeNav = vi.fn()
+    const disposeView = vi.fn()
+    const registerNav = vi.fn(() => ({ dispose: disposeNav }))
+    const registerView = vi.fn(() => ({ dispose: disposeView }))
+    const removeStyle = vi.fn()
+    vi.stubGlobal('document', {
+      createElement: vi.fn(() => ({ remove: removeStyle, textContent: '' })),
+      head: { appendChild }
+    })
+    vi.stubGlobal('location', { pathname: '/ui/' })
+
+    const dispose = await activateClientPlugin({
+      runtime: { endpoint: { role: 'workspace' } },
+      scope: 'channel-oneworks',
+      slots: { register: registerNav },
+      views: { register: registerView }
+    })
+
+    expect(registerView).toHaveBeenCalledWith('oneworks-channel', expect.any(Object))
+    expect(registerNav).toHaveBeenCalledWith(
+      'nav.items',
+      expect.objectContaining({
+        id: 'oneworks-channel',
+        route: '/plugins/channel-oneworks/oneworks-channel'
+      })
+    )
+    expect(appendChild).toHaveBeenCalledOnce()
+
+    dispose?.()
+    expect(disposeNav).toHaveBeenCalledOnce()
+    expect(disposeView).toHaveBeenCalledOnce()
+    expect(removeStyle).toHaveBeenCalledOnce()
+    vi.unstubAllGlobals()
+  })
+
+  it('does not register workspace navigation in the manager runtime', async () => {
+    const registerNav = vi.fn(() => ({ dispose: vi.fn() }))
+    const registerView = vi.fn(() => ({ dispose: vi.fn() }))
+    vi.stubGlobal('document', {
+      createElement: vi.fn(() => ({ remove: vi.fn(), textContent: '' })),
+      head: { appendChild: vi.fn() }
+    })
+    vi.stubGlobal('location', { pathname: '/ui/w/w_example123/' })
+
+    const dispose = await activateClientPlugin({
+      runtime: { endpoint: { role: 'manager' } },
+      scope: 'channel-oneworks',
+      slots: { register: registerNav },
+      views: { register: registerView }
+    })
+
+    expect(registerView).toHaveBeenCalledOnce()
+    expect(registerNav).not.toHaveBeenCalled()
+    dispose?.()
+    vi.unstubAllGlobals()
+  })
+
   it('ships a workspace-only chat room route using shared sidebar and header chrome', async () => {
     const [manifest, client, styles] = await Promise.all([
       readFile(new URL('../plugin.json', import.meta.url), 'utf8'),
@@ -166,6 +226,8 @@ describe('oneWorks Rooms plugin', () => {
     expect(client).not.toContain('NativeTabs')
     expect(client).toContain('Synthetic user')
     expect(client).toContain("ctx.slots.register('nav.items'")
+    expect(client).toContain("ctx.runtime.endpoint?.role === 'workspace'")
+    expect(client).not.toContain('globalThis.location?.pathname')
     expect(client).toContain("className='oneworks-channel__room-surface'")
     expect(client).not.toContain("t('Open Room', '打开聊天室')")
     expect(client).not.toContain("t('Refresh', '刷新')")

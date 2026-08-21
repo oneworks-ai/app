@@ -6,6 +6,7 @@
 
 - `plugin.json` 声明 workspace-only 产品路由和插件自有的消息跳转偏好。
 - `client/` 通过 `view.route.setSidebar(...)` 把 Room 接入宿主通用二级列表，并通过宿主 `view.ui.AgentRoom` 在 route body 直接呈现真实会话；不要在详情区重复资源列表或复制聊天逻辑。route 已拥有页面级内容间距时给 `AgentRoom` 传 `inset={false}`，避免宿主与嵌入组件重复制造 padding。所选 Room 名称由通用 Header 展示，页面正文不再重复标题；已分享、链路等稳定入口声明为 `nav.items[].actions` 并由宿主放在左侧「聊天室」旁，Header actions 只保留分享当前 Room 等对象级命令。列表数据通过 `view.data.useQuery(...)` 自动重验证，不提供无必要的手动刷新。
+- workspace-only 客户端入口必须使用宿主注入的 `ctx.runtime.endpoint?.role` 判断运行时身份，不要从 `location.pathname` 推断；packaged Desktop 的兼容 workspace 窗口可能使用共享 `/ui/` 文档，但运行时 endpoint 仍是权威 workspace 身份。
 - `server/` 只通过 host 注入的 `ctx.oneworksChannel` facade 访问受控的房间分享、simulation、场景和链路能力；不要导入 `apps/server`、数据库或 `ChannelConnection`。
 - 飞书、微信和 OneWorks 的 transport、webhook 与消息收发分别属于对应 `@oneworks/channel-*` 包。
 - 插件缺席或未激活时，所有 Channel 仍必须能够独立收发消息。

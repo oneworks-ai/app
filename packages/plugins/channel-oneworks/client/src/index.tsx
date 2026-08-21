@@ -1673,7 +1673,7 @@ export async function activatePlugin(ctx) {
   const disposables = [ctx.views.register('oneworks-channel', {
     renderNode: view => ctx.react.createElement(OneWorksChannelView, { ctx, react: ctx.react, view })
   })]
-  if (/(?:^|\/)w\/[^/]+(?:\/|$)/u.test(globalThis.location?.pathname ?? '')) {
+  if (ctx.runtime.endpoint?.role === 'workspace') {
     const route = buildOneWorksChannelRoute(ctx.scope)
     disposables.push(ctx.slots.register('nav.items', {
       actions: [{
