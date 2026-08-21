@@ -210,22 +210,37 @@ describe('desktop package workflow', () => {
     expect(workflow).toContain('pr-policy:\n    name: macOS installer')
     expect(workflow).toContain("github.event_name != 'pull_request'")
 
-    const prJob = workflow.slice(
+    const scopeJob = workflow.slice(
+      workflow.indexOf('  pr-scope:'),
+      workflow.indexOf('  pr-build:')
+    )
+    const buildJob = workflow.slice(
+      workflow.indexOf('  pr-build:'),
+      workflow.indexOf('  pr-policy:')
+    )
+    const gateJob = workflow.slice(
       workflow.indexOf('  pr-policy:'),
       workflow.indexOf('  dispatch-policy:')
     )
-    expect(prJob).toContain('runs-on: macos-26')
-    expect(prJob).toContain('ONEWORKS_DESKTOP_ARCHS: arm64,x64')
-    expect(prJob).toContain(
+    expect(scopeJob).toContain('runs-on: ubuntu-latest')
+    expect(scopeJob).toContain('desktop_package: $' + '{{ steps.validation_scope.outputs.desktop_package }}')
+    expect(buildJob).toContain('name: macOS package smoke')
+    expect(buildJob).toContain('runs-on: macos-26')
+    expect(buildJob).toContain("needs.pr-scope.outputs.desktop_package == 'true'")
+    expect(buildJob).toContain('ONEWORKS_DESKTOP_ARCHS: arm64,x64')
+    expect(buildJob).toContain(
       'node packages/fs-authority-native/scripts/verify-darwin-prebuilds.mjs "$authority_root"'
     )
-    expect(prJob).toContain('ONEWORKS_DESKTOP_SMOKE_ARCH: arm64')
-    expect(prJob).toContain('run: pnpm -C apps/desktop smoke:package')
-    expect(prJob).not.toContain('desktop:make')
-    expect(prJob).not.toContain('APPLE_')
-    expect(prJob).not.toContain('Upload installer artifacts')
-    expect(macosSigningRule).toContain('纯文档 PR 只运行轻量门禁')
-    expect(macosSigningRule).toContain('其他普通 PR 只构建 unsigned app bundle')
+    expect(buildJob).toContain('ONEWORKS_DESKTOP_SMOKE_ARCH: arm64')
+    expect(buildJob).toContain('run: pnpm -C apps/desktop smoke:package')
+    expect(buildJob).not.toContain('desktop:make')
+    expect(buildJob).not.toContain('APPLE_')
+    expect(buildJob).not.toContain('Upload installer artifacts')
+    expect(gateJob).toContain('name: macOS installer')
+    expect(gateJob).toContain('runs-on: ubuntu-latest')
+    expect(gateJob).toContain('Enforce macOS package result')
+    expect(macosSigningRule).toContain('只有桌面风险路径')
+    expect(macosSigningRule).toContain('普通 client、adapter、品牌资产和文档改动')
 
     const nightlyPolicy = runWithOutput(
       extractRunScript('Resolve desktop build policy'),

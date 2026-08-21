@@ -6,7 +6,7 @@ const { execFileSync } = require('node:child_process')
 const { appendFileSync } = require('node:fs')
 const process = require('node:process')
 
-const prValidationScopeVersion = 1
+const prValidationScopeVersion = 2
 
 const markdownPathPattern = /\.md$/iu
 const documentationMediaPathPattern = /\.(?:avif|gif|jpe?g|mp4|png|svg|webm|webp)$/iu
@@ -20,6 +20,55 @@ const policyRulePaths = new Set([
   '.oo/rules/maintenance/pr-experience-review.md',
   '.oo/rules/maintenance/task-planning.md'
 ])
+const fullTypecheckScopes = [
+  'bundler',
+  'bundler:test',
+  'web',
+  'web:test',
+  'node',
+  'node:test'
+]
+const knownTopLevelPaths = new Set([
+  '.codex',
+  '.github',
+  '.oo',
+  'apps',
+  'assets',
+  'changelog',
+  'docs',
+  'infra',
+  'packages',
+  'scripts'
+])
+const knownRootPaths = new Set([
+  '.editorconfig',
+  '.gitattributes',
+  '.gitignore',
+  '.gitmodules',
+  '.node-version',
+  '.npmrc',
+  '.oo.config.json',
+  'AGENTS.md',
+  'CODE_OF_CONDUCT.md',
+  'LICENSE',
+  'README.md',
+  'README.zh-Hans.md',
+  'dprint.json',
+  'eslint.config.mjs',
+  'eslint.max-lines-baseline.mjs',
+  'package.json',
+  'pnpm-lock.yaml',
+  'pnpm-workspace.yaml',
+  'rfc.md',
+  'tsconfig.json',
+  'vitest.workspace.ts'
+])
+const dependencyGraphPathPattern = /(?:^|\/)package\.json$/u
+const typecheckConfigPathPattern = /(?:^|\/)tsconfig(?:\.[^/]+)?\.json$/u
+const sourceCoupledGitlinkPaths = new Set(['assets/demo-video'])
+const lintablePathPattern = /\.(?:astro|cjs|cts|js|json|json5|jsx|mjs|mts|svelte|ts|tsx|vue|ya?ml)$/iu
+const typecheckPathPattern = /\.(?:cts|mts|ts|tsx)$/iu
+const environmentContractPathPattern = /\.(?:cjs|cts|js|jsx|mjs|mts|ts|tsx)$/iu
 
 const normalizePath = (filePath) => filePath.replaceAll('\\', '/')
 const hasUnsafePathCharacter = (filePath) =>
@@ -52,6 +101,7 @@ const isDocumentationPath = (filePath) => {
 const isPublicDocumentationPath = (filePath) => {
   const normalizedPath = normalizePath(filePath)
   return publicReadmePaths.has(normalizedPath) ||
+    normalizedPath === 'assets/homepage' ||
     normalizedPath === '.oo/docs' ||
     normalizedPath.startsWith('.oo/docs/')
 }
@@ -73,21 +123,153 @@ const isPolicyDocumentationPath = (filePath) => {
     /^\.oo\/rules\/maintenance\/model-routing(?:-[^/]+)?\.md$/u.test(normalizedPath)
 }
 
+const isKnownPath = (filePath) => {
+  if (knownRootPaths.has(filePath)) return true
+  const [topLevelPath] = filePath.split('/')
+  return knownTopLevelPaths.has(topLevelPath)
+}
+
+const isDependencyGraphPath = (filePath) =>
+  dependencyGraphPathPattern.test(filePath) ||
+  typecheckConfigPathPattern.test(filePath) ||
+  sourceCoupledGitlinkPaths.has(filePath) ||
+  filePath === '.gitmodules' ||
+  filePath === '.node-version' ||
+  filePath === 'pnpm-lock.yaml' ||
+  filePath === 'pnpm-workspace.yaml' ||
+  filePath === 'vitest.workspace.ts' ||
+  filePath.startsWith('packages/tsconfigs/')
+
+const isClientTypecheckPath = (filePath) =>
+  filePath.startsWith('apps/client/src/') || filePath.startsWith('apps/client/__tests__/')
+
+const isClientProductionPath = (filePath) =>
+  filePath.startsWith('apps/client/src/') ||
+  filePath.startsWith('apps/client/public/') ||
+  filePath === 'apps/client/index.html' ||
+  filePath === 'apps/client/vite.config.ts' ||
+  /^packages\/(?:adapters|avatar|components|cursor|icon|route-layout)\//u.test(filePath) ||
+  /^packages\/plugins\/(?:china-red|focus-workbench|neo-workshop|warm-cowork)-theme\//u.test(filePath)
+
+const isWebTypecheckPath = (filePath) =>
+  isClientTypecheckPath(filePath) ||
+  filePath.startsWith('apps/relay-admin/src/') ||
+  filePath.startsWith('apps/relay-admin/__tests__/')
+
+const isNodeTypecheckPath = (filePath) =>
+  /^(?:apps\/(?:cli|relay-server|server|vscode-extension)\/(?:src|__tests__)\/|scripts\/)/u.test(filePath) ||
+  filePath === '.oo.config.ts' ||
+  filePath === '.oo.dev.config.ts' ||
+  filePath === 'vitest.workspace.ts' ||
+  /^(?:apps\/client|apps\/relay-admin)\/vite\.config\.ts$/u.test(filePath)
+
+const getTypecheckScopes = (nonDocsFiles, options = {}) => {
+  if (options.forceFull === true || nonDocsFiles.some(isDependencyGraphPath)) {
+    return [...fullTypecheckScopes]
+  }
+
+  const typecheckFiles = nonDocsFiles.filter(filePath =>
+    typecheckPathPattern.test(filePath) ||
+    (filePath.startsWith('apps/client/src/') && filePath.endsWith('.json'))
+  )
+  if (typecheckFiles.length === 0) return []
+
+  const scopes = new Set()
+  for (const filePath of typecheckFiles) {
+    if (isWebTypecheckPath(filePath)) {
+      scopes.add('web')
+      scopes.add('web:test')
+      continue
+    }
+    if (isNodeTypecheckPath(filePath)) {
+      scopes.add('node')
+      scopes.add('node:test')
+      continue
+    }
+    return [...fullTypecheckScopes]
+  }
+
+  return fullTypecheckScopes.filter(scope => scopes.has(scope))
+}
+
+const isDesktopPackageSafePath = (filePath) => {
+  if (isDocumentationPath(filePath)) return true
+  if (
+    /^(?:apps\/(?:android|relay-admin|relay-server|vscode-extension|web)\/|assets\/|infra\/)/u.test(filePath)
+  ) return true
+  if (/^apps\/client\/(?:__tests__|public|src)\//u.test(filePath) || filePath === 'apps/client/index.html') {
+    return true
+  }
+  if (
+    /^packages\/(?:adapters|avatar|components|cursor|icon|route-layout)\//u.test(filePath)
+  ) return true
+  if (/^packages\/plugins\/(?:china-red|focus-workbench|neo-workshop|warm-cowork)-theme\//u.test(filePath)) {
+    return true
+  }
+  if (filePath.startsWith('.codex/')) return true
+  if (filePath.startsWith('.github/') && filePath !== '.github/workflows/desktop-package.yml') {
+    return true
+  }
+  if (filePath.startsWith('scripts/')) {
+    return !(
+      /^scripts\/(?:desktop-|package-|run-workspace-check|workspace-dependency-bootstrap)/u.test(filePath) ||
+      filePath === 'scripts/pr-validation-scope.cjs' ||
+      filePath === 'scripts/pr-validation-scope.d.cts' ||
+      filePath === 'scripts/__tests__/desktop-package-workflow.spec.ts' ||
+      filePath === 'scripts/__tests__/workspace-dependency-bootstrap.spec.ts' ||
+      filePath === 'scripts/__tests__/pr-validation-scope.spec.ts'
+    )
+  }
+  return false
+}
+
+const requiresDesktopPackage = (changedFiles, options = {}) =>
+  options.forceFull === true ||
+  changedFiles.length === 0 ||
+  changedFiles.some(filePath => isDependencyGraphPath(filePath) || !isDesktopPackageSafePath(filePath))
+
 const classifyChangedPaths = (changedFiles, options = {}) => {
   const normalizedFiles = [...new Set(changedFiles.map(normalizePath).filter(filePath => filePath !== ''))].sort()
   const nonDocsFiles = normalizedFiles.filter(filePath => !isDocumentationPath(filePath))
   const docsOnly = options.forceFull !== true && normalizedFiles.length > 0 && nonDocsFiles.length === 0
+  const unknownFiles = normalizedFiles.filter(filePath => hasUnsafePathCharacter(filePath) || !isKnownPath(filePath))
+  const forceFull = options.forceFull === true || normalizedFiles.length === 0 || unknownFiles.length > 0
+  const typecheckScopes = getTypecheckScopes(nonDocsFiles, { forceFull })
 
   return {
     version: prValidationScopeVersion,
     changedFiles: normalizedFiles,
+    clientBuild: forceFull || nonDocsFiles.some(isClientProductionPath),
+    desktopPackage: requiresDesktopPackage(normalizedFiles, { forceFull }),
     docsChanged: normalizedFiles.some(isDocumentationPath),
+    docsMedia: forceFull || normalizedFiles.some(filePath =>
+      isPublicDocumentationPath(filePath) ||
+      filePath === 'assets/demo-video' ||
+      filePath.startsWith('assets/demo-video/') ||
+      /^scripts\/(?:docs-media|docs-only-validation)/u.test(filePath) ||
+      filePath === '.github/workflows/quality.yml'
+    ),
     docsOnly,
+    envContract: forceFull || nonDocsFiles.some(filePath =>
+      environmentContractPathPattern.test(filePath) ||
+      filePath === 'scripts/check-env-contract.mjs'
+    ),
+    format: forceFull || normalizedFiles.length > 0,
     full: !docsOnly,
+    lint: forceFull || nonDocsFiles.some(filePath =>
+      lintablePathPattern.test(filePath) ||
+      filePath === 'eslint.config.mjs' ||
+      filePath === 'eslint.max-lines-baseline.mjs' ||
+      isDependencyGraphPath(filePath)
+    ),
     nonDocsFiles,
     policyDocs: normalizedFiles.some(isPolicyDocumentationPath),
     publicDocs: normalizedFiles.some(isPublicDocumentationPath),
-    releaseDocs: normalizedFiles.some(isReleaseDocumentationPath)
+    releaseDocs: normalizedFiles.some(isReleaseDocumentationPath),
+    typecheck: typecheckScopes.length > 0,
+    typecheckScopes,
+    unknown: forceFull,
+    unknownFiles
   }
 }
 
@@ -187,12 +369,21 @@ const parseArguments = (args) => {
 
 const writeGithubOutputs = (outputPath, scope) => {
   const outputs = {
+    client_build: scope.clientBuild,
+    desktop_package: scope.desktopPackage,
     docs_changed: scope.docsChanged,
+    docs_media: scope.docsMedia,
     docs_only: scope.docsOnly,
+    env_contract: scope.envContract,
+    format: scope.format,
     full: scope.full,
+    lint: scope.lint,
     policy_docs: scope.policyDocs,
     public_docs: scope.publicDocs,
-    release_docs: scope.releaseDocs
+    release_docs: scope.releaseDocs,
+    typecheck: scope.typecheck,
+    typecheck_scopes: scope.typecheckScopes.join(' '),
+    unknown: scope.unknown
   }
   appendFileSync(
     outputPath,
@@ -229,6 +420,7 @@ const runPrValidationScope = (args = process.argv.slice(2)) => {
 module.exports = {
   classifyChangedPaths,
   classifyPrValidationRange,
+  fullTypecheckScopes,
   getChangedFilesFromEntries,
   getChangedPathEntries,
   getChangedFiles,

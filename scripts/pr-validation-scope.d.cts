@@ -1,12 +1,22 @@
 export interface PrValidationScope {
   changedFiles: string[]
+  clientBuild: boolean
+  desktopPackage: boolean
   docsChanged: boolean
+  docsMedia: boolean
   docsOnly: boolean
+  envContract: boolean
+  format: boolean
   full: boolean
+  lint: boolean
   nonDocsFiles: string[]
   policyDocs: boolean
   publicDocs: boolean
   releaseDocs: boolean
+  typecheck: boolean
+  typecheckScopes: string[]
+  unknown: boolean
+  unknownFiles: string[]
   version: number
 }
 
@@ -27,6 +37,7 @@ export interface ChangedPathEntry {
 }
 
 export const prValidationScopeVersion: number
+export const fullTypecheckScopes: string[]
 export function isDocumentationPath(filePath: string): boolean
 export function isPublicDocumentationPath(filePath: string): boolean
 export function isReleaseDocumentationPath(filePath: string): boolean
