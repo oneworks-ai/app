@@ -58,6 +58,37 @@ describe('codex stream approval decision mapping', () => {
 })
 
 describe('codex app-server session cleanup', () => {
+  it('flushes a managed credential owner after cleanup and before releasing the lease', async () => {
+    const events: string[] = []
+    const release = () => events.push('release')
+    const reconcile = async () => {
+      events.push('reconcile')
+    }
+
+    await releaseCodexAppServerAfterCleanup(
+      { release },
+      [Promise.resolve().then(() => events.push('cleanup'))],
+      1_000,
+      reconcile
+    )
+
+    expect(events).toEqual(['cleanup', 'reconcile', 'release'])
+  })
+
+  it('still releases the lease when managed credential reconciliation fails', async () => {
+    const release = vi.fn()
+
+    await expect(releaseCodexAppServerAfterCleanup(
+      { release },
+      [],
+      1_000,
+      async () => {
+        throw new Error('synthetic reconciliation failure')
+      }
+    )).rejects.toThrow('synthetic reconciliation failure')
+    expect(release).toHaveBeenCalledOnce()
+  })
+
   it('waits for delayed teardown work before releasing the lease', async () => {
     let finishUnregister!: () => void
     let finishResponse!: () => void

@@ -896,6 +896,7 @@ export interface CodexSessionBase {
   threadEnv: Record<string, string>
   proxyRouteTokens: string[]
   resolvedAccount: string | undefined
+  reconcileCredentialOwner?: () => Promise<void>
   useYolo: boolean
   approvalPolicy: CodexApprovalPolicy
   sandboxPolicy: CodexSandboxPolicy
@@ -1338,6 +1339,7 @@ export async function resolveSessionBase(
     threadEnv: threadProcessEnv,
     proxyRouteTokens: proxyRoutes.map(activateCodexProxyMetaRoute),
     resolvedAccount: runtimeHome.accountKey,
+    reconcileCredentialOwner: runtimeHome.reconcileCredentialOwner,
     useYolo,
     approvalPolicy,
     sandboxPolicy,

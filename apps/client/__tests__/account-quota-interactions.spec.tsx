@@ -538,7 +538,7 @@ describe('account quota mounted interactions', () => {
     expect(document.querySelector('[data-testid="quota-modal"]')).toBeNull()
   })
 
-  it('requires explicit confirmation and reports refresh failure separately from reset success', async () => {
+  it('requires confirmation, invalidates cached account variants, and separates reset from refresh failure', async () => {
     testState.detailMutate.mockRejectedValueOnce(new Error('refresh failed'))
     testState.manageAccount.mockResolvedValue({
       outcome: 'reset',
@@ -572,6 +572,11 @@ describe('account quota mounted interactions', () => {
     await flushNextTask()
 
     expect(testState.manageAccount).toHaveBeenCalledTimes(1)
+    expect(testState.listMutate).toHaveBeenCalledOnce()
+    const matchesCachedAccountVariant = testState.listMutate.mock.calls[0]?.[0] as (key: unknown) => boolean
+    expect(matchesCachedAccountVariant(['/api/adapters/accounts', 'codex', 'gpt-5.6-sol'])).toBe(true)
+    expect(matchesCachedAccountVariant(['/api/adapters/accounts', 'claude-code', 'claude-opus'])).toBe(false)
+    expect(matchesCachedAccountVariant(['/api/adapters/accounts-quota', 'codex', 'gpt-5.6-sol'])).toBe(false)
     expect(testState.messageSuccess).toHaveBeenCalledWith('Reset credit used.')
     expect(testState.messageWarning).toHaveBeenCalledWith('Refresh failed.')
     expect(testState.messageError).not.toHaveBeenCalled()

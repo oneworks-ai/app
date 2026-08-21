@@ -326,7 +326,8 @@ export const buildCodexMcpElicitationResponse = (
 export const releaseCodexAppServerAfterCleanup = async (
   appServer: Pick<CodexAppServerLease, 'release'>,
   cleanup: Promise<unknown>[],
-  timeoutMs = 5_000
+  timeoutMs = 5_000,
+  afterCleanup?: () => Promise<void>
 ) => {
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
@@ -337,6 +338,7 @@ export const releaseCodexAppServerAfterCleanup = async (
         timer.unref?.()
       })
     ])
+    await afterCleanup?.()
   } finally {
     if (timer != null) clearTimeout(timer)
     appServer.release()
@@ -373,7 +375,8 @@ export async function createStreamCodexSession(
     threadCacheKey,
     cachedThreadId,
     appServerPoolKey,
-    appServerIdleTimeoutMs
+    appServerIdleTimeoutMs,
+    reconcileCredentialOwner
   } = base
   const { cache } = ctx
   const { native: nativeConfig } = resolveCodexAdapterConfig(ctx)
@@ -417,6 +420,14 @@ export async function createStreamCodexSession(
     idleTimeoutMs: appServerIdleTimeoutMs,
     logger,
     profileKey: appServerPoolKey
+  }).catch(async (error) => {
+    await reconcileCredentialOwner?.().catch((reconcileError) => {
+      logger.warn('[codex session] credential owner reconciliation failed after app-server acquisition', {
+        error: getErrorMessage(reconcileError),
+        sessionId
+      })
+    })
+    throw error
   })
   applyCodexAppServerHookEnv(threadConfig, appServer.hookEnv)
   startupProfiler.mark('codex.native.spawn', nativeSpawnStartedAt, {
@@ -595,7 +606,12 @@ export async function createStreamCodexSession(
       )
       if (appServer.drain != null) cleanup.push(appServer.drain())
 
-      await releaseCodexAppServerAfterCleanup(appServer, cleanup)
+      await releaseCodexAppServerAfterCleanup(
+        appServer,
+        cleanup,
+        5_000,
+        reconcileCredentialOwner
+      )
     })().catch((error) => {
       logger.debug('[codex session] release cleanup failed', {
         error: getErrorMessage(error),
@@ -603,6 +619,12 @@ export async function createStreamCodexSession(
       })
     })
     return releaseActiveResourcesPromise
+  }
+
+  const emitExitAfterRelease = (data: Extract<AdapterOutputEvent, { type: 'exit' }>['data']) => {
+    void releaseActiveResources().then(() => {
+      emitEvent({ type: 'exit', data })
+    })
   }
 
   const emitFailureAndExit = (err: unknown) => {
@@ -614,8 +636,7 @@ export async function createStreamCodexSession(
     if (!didEmitFatalError) {
       emitEvent({ type: 'error', data: toAdapterErrorData(err) })
     }
-    emitEvent({ type: 'exit', data: { exitCode: 1, stderr } })
-    void releaseActiveResources()
+    emitExitAfterRelease({ exitCode: 1, stderr })
   }
 
   const readThreadCache = async () => (await cache.get('adapter.codex.threads')) ?? {}
@@ -904,8 +925,7 @@ export async function createStreamCodexSession(
         }
       })
     }
-    void releaseActiveResources()
-    emitEvent({ type: 'exit', data: { exitCode: code ?? undefined } })
+    emitExitAfterRelease({ exitCode: code ?? undefined })
   })
 
   const detachThread = async (options: { remote?: boolean } = {}) => {
@@ -1209,10 +1229,11 @@ export async function createStreamCodexSession(
     if (options.deferInitialFailure === true && !initialTurnCommitted) {
       didEmitExit = true
       finishAllActiveOperations('operation_failed', 'Codex account attempt failed.', getErrorMessage(err))
-      void releaseActiveResources()
+      await releaseActiveResources()
       throw err
     }
     emitFailureAndExit(err)
+    await releaseActiveResources()
     throw err
   }
 
@@ -1256,8 +1277,7 @@ export async function createStreamCodexSession(
         finishAllActiveOperations('operation_completed', 'Codex session stopped.')
         if (!didEmitExit) {
           didEmitExit = true
-          void releaseActiveResources()
-          emitEvent({ type: 'exit', data: { exitCode: 0 } })
+          emitExitAfterRelease({ exitCode: 0 })
         }
         break
       }
@@ -1273,8 +1293,7 @@ export async function createStreamCodexSession(
       finishAllActiveOperations('operation_completed', 'Codex session stopped.')
       if (!didEmitExit) {
         didEmitExit = true
-        void releaseActiveResources()
-        emitEvent({ type: 'exit', data: { exitCode: 0 } })
+        emitExitAfterRelease({ exitCode: 0 })
       }
     },
     emit,
