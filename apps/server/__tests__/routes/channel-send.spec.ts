@@ -166,4 +166,31 @@ describe('channel API routes', () => {
       toolName: 'channel.send'
     })
   })
+
+  it('returns early command invocation failures without optional command output', async () => {
+    invokeChannelCommand.mockResolvedValue({
+      message: 'Channel manager is unavailable.',
+      ok: false,
+      statusCode: 503
+    })
+
+    const response = await fetch(`${baseUrl}/api/channels/oneworks-main/commands/invoke`, {
+      body: JSON.stringify({
+        input: { message: 'hello' },
+        invocationToken: 'token-1',
+        toolName: 'channel.send'
+      }),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST'
+    })
+
+    expect(response.status).toBe(503)
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: 'internal_server_error',
+        message: 'Channel manager is unavailable.'
+      },
+      success: false
+    })
+  })
 })

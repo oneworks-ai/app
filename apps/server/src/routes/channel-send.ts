@@ -76,11 +76,7 @@ export function channelSendRouter(): Router {
 
     if (!result.ok) {
       ctx.status = result.statusCode
-      ctx.body = {
-        message: result.message,
-        replies: result.replies,
-        result: result.result
-      }
+      ctx.body = { message: result.message }
       return
     }
 
