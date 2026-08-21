@@ -142,7 +142,9 @@
 - Ownership / source / exceptions / enforcement: 规则由 `packages/plugins/channel-oneworks`、OneWorks Channel 服务、Agent Room host session、共享 `EntityCard` 和 `Entity.team` 契约拥有；来源为用户 2026-08-14 先要求实体 Leader 单选与关联成员和内置 Auto Leader，随后明确创建页分组三行滚动及手机正方形紧凑卡片。服务端必须权威解析 Leader 模式与 `team.role` / `team.relatedEntities`，Auto Leader 的动态 roster prompt 只包含已选实体且通过统一 runtime protocol 调度；每个可执行请求必须至少委派一次并跟进到终态。外部回复 authority 必须由服务端按 room / host / owning member / active connection 原子绑定到专用实体子会话，回复目标固定为原始入站事件快照，无效委派必须 fail closed，已绑定 session 可幂等恢复 context，未领取授权必须按 TTL 过期，并拒绝跨 session 重放。由 schema、创建服务、外部入站 host 投递、原子 delegation claim、command authority、过期清理、交互测试，以及桌面/中间宽度/手机的行数、滚动、正方形几何和真实页面审阅执行。
 
 ### OW-DM-016–024 — Avatar 设计记忆（已路由）
+
 Avatar 几何表情、编辑 / 相机边界、阴影、视图状态、预设历史、关键帧动画、分段按钮导航、舞台手势和可调毛玻璃面板的规则正文位于 [design-memory-registry/avatar.md](./design-memory-registry/avatar.md)；本登记表保留编号索引，正文与当前状态措辞由该窄作用域文件拥有。
+
 ## 待确认冲突
 
 ### OW-DM-P001 — 主题侧栏是否保留渐变
@@ -152,6 +154,7 @@ Avatar 几何表情、编辑 / 相机边界、阴影、视图状态、预设历�
 - Source: 用户明确要求 Codex 主题移除渐变，2026-07-14；已由 `OW-DM-E002` 的主题范围约束承接。
 
 ## 作用域例外
+
 ### OW-DM-E003 — 文档站可播放宣传视频
 
 - ID: OW-DM-E003
@@ -165,8 +168,7 @@ Avatar 几何表情、编辑 / 相机边界、阴影、视图状态、预设历�
 - Positive example: 中文文档引用中文亮 / 暗 MP4，英文文档引用英文亮 / 暗 MP4；一次页面访问只加载当前语言和外观需要的视频，GIF 提供快速预览与降级。
 - Negative example: 把 1080p 母版直接塞进 README，或在文档首页同时 autoplay / preload 四个语言与主题视频。
 - Source: 用户 2026-08-05 明确要求更新文档站图片并把已确认的视频加入文档站。
-- Effective date: 2026-08-05
-- Automatic enforcement: 文档相对资产检查、媒体 metadata / fast-start / 完整解码验证、locale / theme source 审计、浏览器网络请求与亮暗主题视觉回归，并验证主题切换会暂停已隐藏的视频。
+- Effective date: 2026-08-05; Automatic enforcement: 文档相对资产检查、媒体 metadata / fast-start / 完整解码验证、locale / theme source 审计、浏览器网络请求与亮暗主题视觉回归，并验证主题切换会暂停已隐藏的视频。
 
 ### OW-DM-E001 — 可选主题包紧凑导航间距
 
@@ -180,8 +182,7 @@ Avatar 几何表情、编辑 / 相机边界、阴影、视图状态、预设历�
 - Positive example: 主题内 quick-link rows、quick links 到 search、group / item、footer slot 和 NativeTabs 都由同一个 `5px` token 提供间距。
 - Negative example: 每个 selector 单独硬编码不同 gap，或把主题的 `5px` 间距反向写进默认主题和业务列表。
 - Source: 用户先要求 Codex 主题从通用角度统一调整，随后明确要求其他主题按照同一调整方式保证预期，2026-07-14。
-- Effective date: 2026-07-14
-- Automatic enforcement: 四个可选主题的 computed gap / padding、桌面与窄屏、浅色与深色独立视觉回归。
+- Effective date: 2026-07-14; Automatic enforcement: 四个可选主题的 computed gap / padding、桌面与窄屏、浅色与深色独立视觉回归。
 
 ### OW-DM-E002 — 新粗野主题分割线控件组
 
@@ -195,6 +196,5 @@ Avatar 几何表情、编辑 / 相机边界、阴影、视图状态、预设历�
 - Positive example: 相邻 tab 通过重叠边框共享一条 `2px` 分割线；分组导航和 Footer 都是零 gap；Route Header 的“通过其他应用打开”双动作保持 `40px + 40px`、零 gap 且无内部线，运行指令、下方面板和工作区抽屉等独立 actions 各自由左侧单一 `2px` 线分隔；Sender 的“更多”、通用 Select、推理强度、语音和发送操作紧密拼接，状态栏左右动作组也以单一全高分割线切分，相关 hover / open 状态都使用同一黄色表面、黑色前景且不产生阴影；窗口栏与快捷入口只绘制一条相邻边界且图标在同一水平起点；主题配置行保持直角；菜单浮层使用方形硬框与硬阴影。
 - Negative example: 在快捷入口、分组导航、Footer、tab、Sender 工具栏或 Sender 状态栏的分割线组内部继续保留 `5px` gap、让外层和子项同时拥有 padding、重复绘制相邻边框；在 joined 复合动作内部画线，或只给部分独立 Route Header actions 分隔而留下不一致边界；或让 Sender 的模型、状态栏、账号、额度、适配器分别使用文字变色、圆环缩放、灰底或内描边等不同 hover；或让窗口栏图标偏离下方导航图标、给主题配置行保留圆角、给 tab / Footer / 选中分组条目添加硬阴影、给浮层保留默认蓝灰圆角和模糊阴影、用渐变制造 Footer 上方晕染，或在贴视口的内容区上/右/下边缘重复画框。
 - Source: 用户明确指出新粗野主题应使用分割线切分交互元素，并要求移除 Footer 与 tab 阴影、统一检查结构边框宽度；随后要求 Sender 工具栏和状态栏沿用同一零间距结构，以“更多”为基准统一模型、状态栏、账号、额度和适配器的 hover，并要求上下两行的高度、padding、字体和表面语义完全匹配；最后明确 joined 的“通过其他应用打开”内部不画线，但运行指令、下方面板和工作区抽屉等独立 Header actions 左侧需要一致分割线，2026-07-14 至 2026-07-20。
-- Effective date: 2026-07-14
-- Automatic enforcement: `neo-workshop` 浅色 / 深色、桌面 / 窄屏 computed border / gap / padding / shadow / content inset 与交互视觉回归；Sender 通过共享样式契约测试覆盖工具栏与状态栏的高度、padding、字号、字重、行高、前景色、表面色、hover / open 状态和默认主题回退。
-新增例外时必须使用作用域例外模板；字段不可省略或合并。完整模板见 [`design-memory.md`](./design-memory.md#作用域例外模板)。
+- Effective date: 2026-07-14; Automatic enforcement: `neo-workshop` 浅色 / 深色、桌面 / 窄屏 computed border / gap / padding / shadow / content inset 与交互视觉回归；Sender 通过共享样式契约测试覆盖工具栏与状态栏的高度、padding、字号、字重、行高、前景色、表面色、hover / open 状态和默认主题回退。
+  新增例外时必须使用作用域例外模板；字段不可省略或合并。完整模板见 [`design-memory.md`](./design-memory.md#作用域例外模板)。
