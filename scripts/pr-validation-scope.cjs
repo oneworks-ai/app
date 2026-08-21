@@ -207,17 +207,20 @@ const isDesktopPackageSafePath = (filePath) => {
     return true
   }
   if (filePath.startsWith('.codex/')) return true
-  if (filePath.startsWith('.github/') && filePath !== '.github/workflows/desktop-package.yml') {
+  if (
+    filePath.startsWith('.github/') &&
+    filePath !== '.github/workflows/desktop-package.yml' &&
+    !filePath.startsWith('.github/actions/setup-workspace/')
+  ) {
     return true
   }
   if (filePath.startsWith('scripts/')) {
     return !(
       /^scripts\/(?:desktop-|package-|run-workspace-check|workspace-dependency-bootstrap)/u.test(filePath) ||
-      filePath === 'scripts/pr-validation-scope.cjs' ||
-      filePath === 'scripts/pr-validation-scope.d.cts' ||
+      /^scripts\/pr-validation-(?:reuse|scope)\.(?:cjs|d\.cts)$/u.test(filePath) ||
       filePath === 'scripts/__tests__/desktop-package-workflow.spec.ts' ||
       filePath === 'scripts/__tests__/workspace-dependency-bootstrap.spec.ts' ||
-      filePath === 'scripts/__tests__/pr-validation-scope.spec.ts'
+      /^scripts\/__tests__\/pr-validation-(?:reuse|scope)\.spec\.ts$/u.test(filePath)
     )
   }
   return false
@@ -321,6 +324,17 @@ const getChangedPathEntries = ({ base, cwd = process.cwd(), head = 'HEAD' }) => 
   return parseNameStatus(runGitBuffer(diffArgs, cwd))
 }
 
+const getChangedPathEntriesBetweenTrees = ({ before, cwd = process.cwd(), head = 'HEAD' }) =>
+  parseNameStatus(runGitBuffer([
+    'diff',
+    '--name-status',
+    '-z',
+    '--find-renames',
+    before,
+    head,
+    '--'
+  ], cwd))
+
 const getChangedFilesFromEntries = (changes) => changes.flatMap(change => change.paths)
 
 const getPresentChangedFiles = (changes) =>
@@ -423,6 +437,7 @@ module.exports = {
   fullTypecheckScopes,
   getChangedFilesFromEntries,
   getChangedPathEntries,
+  getChangedPathEntriesBetweenTrees,
   getChangedFiles,
   getPresentChangedFiles,
   isDocumentationPath,

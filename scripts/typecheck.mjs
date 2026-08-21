@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
 import { spawnSync } from 'node:child_process'
+import { mkdirSync } from 'node:fs'
+import path from 'node:path'
 import process from 'node:process'
 
 const TYPECHECK_CONFIGS = [
@@ -51,12 +53,23 @@ const selectedConfigs = requestedScopes.length === 0
   : TYPECHECK_CONFIGS.filter(([name]) => requestedScopes.includes(name))
 
 const pnpmCmd = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
+const cacheDirectory = process.env.ONEWORKS_TYPECHECK_CACHE_DIR?.trim()
+if (cacheDirectory) mkdirSync(cacheDirectory, { recursive: true })
 
 for (const [name, configPath] of selectedConfigs) {
   process.stdout.write(`\n[typecheck] ${name}\n`)
+  const typecheckArgs = ['exec', 'tsc', '-p', configPath, '--pretty', 'false']
+  if (cacheDirectory) {
+    typecheckArgs.push(
+      '--incremental',
+      'true',
+      '--tsBuildInfoFile',
+      path.resolve(cacheDirectory, `${name.replaceAll(':', '-')}.tsbuildinfo`)
+    )
+  }
   const result = spawnSync(
     pnpmCmd,
-    ['exec', 'tsc', '-p', configPath, '--pretty', 'false'],
+    typecheckArgs,
     { stdio: 'inherit' }
   )
 
