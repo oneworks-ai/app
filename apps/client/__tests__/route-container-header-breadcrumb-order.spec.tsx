@@ -29,4 +29,24 @@ describe('route container header breadcrumb order', () => {
     expect(positions.every(position => position >= 0)).toBe(true)
     expect(positions).toEqual([...positions].sort((left, right) => left - right))
   })
+
+  it('renders a direct parent with a destination as a keyboard-accessible button', () => {
+    const markup = renderToStaticMarkup(
+      <RouteContainerHeaderBreadcrumbContent
+        backLabel='返回'
+        currentTitle='账号 A'
+        titleText='账号 A'
+        breadcrumb={{
+          currentTitle: '账号 A',
+          onBack: () => undefined,
+          onParentSelect: () => undefined,
+          parentTitle: '账号列表'
+        }}
+      />
+    )
+
+    expect(markup).toContain('route-container-header__breadcrumb-parent-button')
+    expect(markup).toContain('<button')
+    expect(markup).toContain('>账号列表</button>')
+  })
 })

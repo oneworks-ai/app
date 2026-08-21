@@ -7,6 +7,7 @@
 
 .config-view__detail-list--adapter-grid > .config-view__record-add,
 .config-view__detail-list--adapter-grid > .config-view__adapter-import-row,
+.config-view__detail-list--adapter-grid > .config-view__adapter-toolbar,
 .config-view__detail-list--adapter-grid > .config-view__detail-list-empty {
   grid-column: 1 / -1;
 }
@@ -24,7 +25,7 @@
   align-items: center;
   gap: 8px;
   min-height: 46px;
-  padding: var(--subpage-tertiary-padding);
+  padding: 0;
 }
 
 .config-view__adapter-summary-header .config-view__detail-list-main {
@@ -35,6 +36,43 @@
   justify-content: center;
 }
 
+.config-view__adapter-summary-card--unconfigured {
+  border-style: dashed;
+  background: color-mix(in srgb, var(--subpage-tertiary-bg) 74%, transparent);
+}
+
+.config-view__adapter-summary-card--unconfigured
+  .config-view__detail-list-main {
+  color: var(--sub-text-color);
+}
+
+.config-view__adapter-summary-card--unconfigured .config-view__adapter-icon {
+  filter: saturate(.32);
+  opacity: .62;
+}
+
+.config-view__adapter-summary-state {
+  flex: 0 0 auto;
+  margin-inline-end: var(--subpage-tertiary-padding);
+  color: var(--placeholder-color, var(--sub-text-color));
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.config-view__adapter-toolbar {
+  width: 100%;
+}
+
+.config-view__adapter-create-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.config-view__adapter-search-empty {
+  grid-column: 1 / -1;
+}
+
 .adapter-account-preview {
   --adapter-account-preview-ring-color: var(--success-color, #52c41a);
 
@@ -43,7 +81,7 @@
   min-width: 0;
   flex-direction: column;
   border-top: 1px solid var(--config-interactive-border, var(--border-color));
-  padding: 0 var(--subpage-tertiary-padding);
+  padding: 0;
 }
 
 .adapter-account-preview--empty {
@@ -62,8 +100,8 @@
   gap: 8px;
   width: 100%;
   min-width: 0;
-  min-height: 34px;
-  padding: 7px 2px;
+  min-height: 48px;
+  padding: 7px 0;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -90,11 +128,73 @@
 }
 
 .adapter-account-preview__name {
+  display: block;
   min-width: 0;
   overflow: hidden;
+  color: var(--placeholder-color, var(--sub-text-color));
   font-size: 12px;
-  line-height: 18px;
+  line-height: 16px;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adapter-account-preview__avatar {
+  position: relative;
+  display: inline-flex;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.adapter-account-preview__avatar-fallback.room-pixel-avatar {
+  --room-pixel-avatar-size: 28px;
+  --room-pixel-avatar-radius: 50%;
+  --room-pixel-avatar-border: transparent;
+
+  width: 28px;
+  height: 28px;
+}
+
+.adapter-account-preview__avatar > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.adapter-account-preview__identity {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.adapter-account-preview__meta {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.adapter-account-preview__plan {
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+  color: var(--sub-text-color);
+  font-size: 10px;
+  line-height: 1;
   white-space: nowrap;
 }
 
@@ -142,6 +242,32 @@
   flex: 0 0 auto;
   font-size: 11px;
   font-variant-numeric: tabular-nums;
+}
+
+.config-view__adapter-summary-card[data-adapter-key='goose']
+  .config-view__adapter-icon {
+  width: 28px;
+  height: 28px;
+  transform: scale(1.32);
+}
+
+.config-view__adapter-summary-card[data-adapter-key='qwen-code']
+  .config-view__adapter-icon {
+  width: 26px;
+  height: 26px;
+  transform: scale(1.12);
+}
+
+.config-view__adapter-summary-card--unconfigured[data-adapter-key='dsh']
+  .config-view__adapter-icon {
+  filter: brightness(0);
+  opacity: 1;
+}
+
+.dark
+  .config-view__adapter-summary-card[data-adapter-key='dsh']
+  .config-view__adapter-icon {
+  filter: invert(1);
 }
 
 @media (max-width: 600px) {

@@ -1202,6 +1202,7 @@ export function ConfigView() {
     return {
       ancestors,
       currentTitle: current.title,
+      ...(parent.onSelect == null ? {} : { onParentSelect: parent.onSelect }),
       parentTitle: parent.title,
       onBack: closeConfigDetail
     }

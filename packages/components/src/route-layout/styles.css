@@ -149,7 +149,8 @@
   white-space: nowrap;
 }
 
-.route-container-header__breadcrumb-ancestor-button {
+.route-container-header__breadcrumb-ancestor-button,
+.route-container-header__breadcrumb-parent-button {
   border: 0;
   padding: 0;
   color: var(--placeholder-color, #66707a);
@@ -161,7 +162,9 @@
 }
 
 .route-container-header__breadcrumb-ancestor-button:hover,
-.route-container-header__breadcrumb-ancestor-button:focus-visible {
+.route-container-header__breadcrumb-ancestor-button:focus-visible,
+.route-container-header__breadcrumb-parent-button:hover,
+.route-container-header__breadcrumb-parent-button:focus-visible {
   color: var(--primary-color, #2563eb);
   outline: 0;
 }

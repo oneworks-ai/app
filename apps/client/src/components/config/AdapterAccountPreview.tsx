@@ -5,6 +5,7 @@ import { useMemo } from 'react'
 import type { AdapterAccountInfo } from '@oneworks/types'
 
 import { QuotaUsageRing } from '#~/components/account-quota/QuotaUsageRing'
+import { RoomPixelAvatar } from '#~/components/room-pixel-avatar/RoomPixelAvatar'
 import { getAccountQuotaWindows } from '#~/utils/account-quota'
 
 import { useAdapterAccountPreviewData } from './@hooks/use-adapter-account-preview-data'
@@ -22,6 +23,21 @@ const getAccountStatusLabel = (account: AdapterAccountInfo, t: TranslationFn) =>
     : 'ready'
   return t(`config.accounts.status.${status}`)
 }
+
+const getAccountPreviewIdentity = (account: AdapterAccountInfo) => {
+  const titleParts = account.title.split(' · ').map(part => part.trim()).filter(Boolean)
+  const name = account.email?.trim() || titleParts[0] || account.title
+  return { name }
+}
+
+const getAccountPlan = (account: AdapterAccountInfo) => {
+  const plan = account.quota?.metrics?.find(metric => metric.id === 'plan')?.value?.trim()
+  return plan === '' || plan == null ? undefined : plan
+}
+
+const getAccountAvatarSeed = (account: AdapterAccountInfo, name: string) => (
+  account.email?.trim() || account.displayName?.trim() || name || account.key
+)
 
 const AccountQuotaStatus = ({
   account,
@@ -104,18 +120,12 @@ export const AdapterAccountPreview = ({
   return (
     <div className='adapter-account-preview' aria-label={t('config.accounts.title')}>
       {visibleAccounts.map(account => (
-        <button
+        <AccountPreviewRow
           key={account.key}
-          type='button'
-          className='adapter-account-preview__row'
-          data-account-key={account.key}
-          onClick={() => onOpenAccount(account.key)}
-        >
-          <span className='adapter-account-preview__name' title={account.title}>
-            {account.title}
-          </span>
-          <AccountQuotaStatus account={account} t={t} />
-        </button>
+          account={account}
+          onOpen={() => onOpenAccount(account.key)}
+          t={t}
+        />
       ))}
       {hiddenAccountCount > 0 && (
         <button
@@ -129,5 +139,51 @@ export const AdapterAccountPreview = ({
         </button>
       )}
     </div>
+  )
+}
+
+function AccountPreviewRow({
+  account,
+  onOpen,
+  t
+}: {
+  account: AdapterAccountInfo
+  onOpen: () => void
+  t: TranslationFn
+}) {
+  const identity = getAccountPreviewIdentity(account)
+  const plan = getAccountPlan(account)
+
+  return (
+    <button
+      type='button'
+      className='adapter-account-preview__row'
+      data-account-key={account.key}
+      onClick={onOpen}
+    >
+      <span className='adapter-account-preview__avatar' aria-hidden='true'>
+        <RoomPixelAvatar
+          className='adapter-account-preview__avatar-fallback'
+          seed={`adapter-account:${getAccountAvatarSeed(account, identity.name)}`}
+        />
+        {account.avatarUrl != null && account.avatarUrl.trim() !== '' && (
+          <img
+            src={account.avatarUrl}
+            alt=''
+            referrerPolicy='no-referrer'
+            onError={(event) => {
+              event.currentTarget.style.display = 'none'
+            }}
+          />
+        )}
+      </span>
+      <span className='adapter-account-preview__identity'>
+        <span className='adapter-account-preview__name' title={account.title}>{identity.name}</span>
+        <span className='adapter-account-preview__meta'>
+          {plan != null && <span className='adapter-account-preview__plan'>{plan}</span>}
+        </span>
+      </span>
+      <AccountQuotaStatus account={account} t={t} />
+    </button>
   )
 }

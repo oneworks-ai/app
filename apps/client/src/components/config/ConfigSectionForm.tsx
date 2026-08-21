@@ -1784,6 +1784,39 @@ export const SectionForm = ({
       const accountItemSchema = sectionKey === 'adapters'
         ? itemSchema?.recordFields?.accounts?.itemSchema
         : undefined
+      const isAdapterAccountDetailRoute = sectionKey === 'adapters' &&
+        detailRoute?.nestedPath?.[0] === 'accounts' &&
+        detailRoute.nestedPath[1] != null &&
+        detailRoute.nestedPath[1] !== ''
+      const renderAdapterAccountsManager = () => (
+        <AdapterAccountsManager
+          adapterKey={detailMeta.itemKey}
+          value={detailMeta.item}
+          accountsData={adapterAccountsData}
+          accountItemSchema={accountItemSchema}
+          onChange={writeDetailItem}
+          nestedPath={detailRoute?.nestedPath ?? ['accounts']}
+          onOpenNestedPath={(nextPath) => {
+            onOpenDetailRoute?.({
+              kind: detailRoute?.kind ?? 'detailCollectionItem',
+              fieldPath: detailMeta.field.path,
+              itemKey: detailMeta.itemKey,
+              nestedPath: nextPath
+            })
+          }}
+          t={t}
+        />
+      )
+
+      if (isAdapterAccountDetailRoute && adapterSupportsAccounts) {
+        return (
+          <div className='config-view__detail-panel'>
+            {detailNotice}
+            {renderAdapterAccountsManager()}
+          </div>
+        )
+      }
+
       if (shouldRenderJsonFallback && sectionKey === 'adapters') {
         const openFallbackAdapterTab = (tabKey: 'accounts' | 'base') => {
           onOpenDetailRoute?.({
@@ -1807,26 +1840,8 @@ export const SectionForm = ({
           ...(adapterSupportsAccounts
             ? [{
               key: 'accounts',
-              label: tabLabel('manage_accounts', t('config.accounts.title')),
-              children: (
-                <AdapterAccountsManager
-                  adapterKey={detailMeta.itemKey}
-                  value={detailMeta.item}
-                  accountsData={adapterAccountsData}
-                  accountItemSchema={accountItemSchema}
-                  onChange={writeDetailItem}
-                  nestedPath={detailRoute?.nestedPath ?? ['accounts']}
-                  onOpenNestedPath={(nextPath) => {
-                    onOpenDetailRoute?.({
-                      kind: detailRoute?.kind ?? 'detailCollectionItem',
-                      fieldPath: detailMeta.field.path,
-                      itemKey: detailMeta.itemKey,
-                      nestedPath: nextPath
-                    })
-                  }}
-                  t={t}
-                />
-              )
+              label: tabLabel('manage_accounts', t('config.accounts.listTitle')),
+              children: renderAdapterAccountsManager()
             }]
             : [])
         ]
@@ -1983,26 +1998,8 @@ export const SectionForm = ({
             ...(adapterSupportsAccounts
               ? [{
                 key: 'accounts',
-                label: tabLabel('manage_accounts', t('config.accounts.title')),
-                children: (
-                  <AdapterAccountsManager
-                    adapterKey={detailMeta.itemKey}
-                    value={detailMeta.item}
-                    accountsData={adapterAccountsData}
-                    accountItemSchema={accountItemSchema}
-                    onChange={writeDetailItem}
-                    nestedPath={detailRoute?.nestedPath ?? ['accounts']}
-                    onOpenNestedPath={(nextPath) => {
-                      onOpenDetailRoute?.({
-                        kind: detailRoute?.kind ?? 'detailCollectionItem',
-                        fieldPath: detailMeta.field.path,
-                        itemKey: detailMeta.itemKey,
-                        nestedPath: nextPath
-                      })
-                    }}
-                    t={t}
-                  />
-                )
+                label: tabLabel('manage_accounts', t('config.accounts.listTitle')),
+                children: renderAdapterAccountsManager()
               }]
               : []),
             ...(visibleAdvancedSections.length > 0
