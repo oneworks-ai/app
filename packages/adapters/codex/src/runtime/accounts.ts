@@ -3278,7 +3278,13 @@ const readCodexProbeAuthContent = async (authFilePath: string) => {
   return readFile(authFilePath, 'utf8')
 }
 
-const probeCodexAccount = async (params: {
+const isCodexAccessTokenExpiredError = (error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error)
+  return /\btoken_expired\b/iu.test(message) ||
+    /provided authentication token is expired/iu.test(message)
+}
+
+const probeCodexAccountOnce = async (params: {
   ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'ctxId'>
   homeDir: string
   authFilePath: string
@@ -3373,20 +3379,24 @@ const probeCodexAccount = async (params: {
     let rateLimitsReadSucceeded = false
     let profile: Awaited<ReturnType<typeof fetchCodexProfileFromFile>>
     if (consumeResetCredit == null) {
-      accountResult = await rpc.request('account/read', {
-        ...(refresh === true ? { refreshToken: true } : {})
-      })
-      await readCodexProbeAuthContent(probeAuthFilePath)
+      const readAccountSnapshot = async (refreshToken: boolean) => {
+        accountResult = await rpc.request('account/read', {
+          ...(refreshToken ? { refreshToken: true } : {})
+        })
+        await readCodexProbeAuthContent(probeAuthFilePath)
+        const snapshotResult = await Promise.all([
+          rpc.request('account/rateLimits/read'),
+          fetchProfile === false
+            ? Promise.resolve(undefined)
+            : fetchCodexProfileFromFile(probeAuthFilePath)
+        ])
+        rateLimitsResult = snapshotResult[0]
+        profile = snapshotResult[1]
+      }
+
+      await readAccountSnapshot(refresh === true)
       accountReadSucceeded = true
-      const snapshotResult = await Promise.all([
-        rpc.request('account/rateLimits/read'),
-        fetchProfile === false
-          ? Promise.resolve(undefined)
-          : fetchCodexProfileFromFile(probeAuthFilePath)
-      ])
-      rateLimitsResult = snapshotResult[0]
       rateLimitsReadSucceeded = true
-      profile = snapshotResult[1]
     } else {
       try {
         accountResult = await rpc.request('account/read', {
@@ -3606,6 +3616,42 @@ const probeCodexAccount = async (params: {
     signal?.removeEventListener('abort', abortProbe)
     rpc.destroy('codex account probe finished')
     await terminateCodexChildProcess(proc)
+  }
+}
+
+/**
+ * A Codex app-server loads its access token when it starts. When the usage
+ * endpoint reports that token as expired, refreshing inside that same process
+ * can update auth.json while leaving the in-memory client on the old token.
+ * Retry the complete snapshot with a fresh isolated app-server instead.
+ */
+const probeCodexAccount = async (params: {
+  ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'ctxId'>
+  homeDir: string
+  authFilePath: string
+  binaryPath?: string
+  refresh?: boolean
+  fetchProfile?: boolean
+  logKey: string
+  signal?: AbortSignal
+  consumeResetCredit?: {
+    creditId?: string
+    idempotencyKey: string
+  }
+  timeoutMs?: number
+}): Promise<CodexAccountProbeResult> => {
+  try {
+    return await probeCodexAccountOnce(params)
+  } catch (error) {
+    if (
+      params.refresh === true ||
+      params.consumeResetCredit != null ||
+      !isCodexAccessTokenExpiredError(error)
+    ) {
+      throw error
+    }
+
+    return probeCodexAccountOnce({ ...params, refresh: true })
   }
 }
 
@@ -4155,7 +4201,6 @@ const getCodexAccountProbeUnlocked = async (params: {
       ctx,
       homeDir: authSource.homeDir,
       authFilePath: authSource.authFilePath,
-      refresh: true,
       fetchProfile: normalizeNonEmptyString(descriptor.metadata?.avatarUrl) == null ||
         normalizeNonEmptyString(descriptor.metadata?.displayName) == null,
       logKey: `${scope}-${descriptor.key}`
@@ -5265,6 +5310,12 @@ export const manageCodexAccount = async (
       model: options.model,
       refresh: true
     })
+    if (detail.account.status === 'error') {
+      throw new Error(
+        detail.account.description ??
+          `Codex account "${normalizedAccount}" could not refresh its current credentials.`
+      )
+    }
 
     return {
       accountKey: normalizedAccount,
