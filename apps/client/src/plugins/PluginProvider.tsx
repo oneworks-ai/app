@@ -43,22 +43,41 @@ export function PluginProvider({
 }: PluginProviderProps) {
   const resolvedRuntimeSource = resolvePluginRuntimeSource(runtimeSource)
   const notifications = useNotifications()
-  const registry = useMemo(() => new PluginRegistry(), [])
+  const initialRegistryRef = useRef<PluginRegistry | undefined>(undefined)
+  if (initialRegistryRef.current == null) initialRegistryRef.current = new PluginRegistry()
+  const registryRef = useRef(initialRegistryRef.current)
+  const retiredRegistriesRef = useRef<
+    Array<{
+      instances: PluginRuntimeInstance[]
+      registry: PluginRegistry
+    }>
+  >([])
   const instancesRef = useRef<PluginRuntimeInstance[]>([])
-  const activationVersionsRef = useRef(new Map<string, number>())
+  const activationVersionsRef = useRef(new WeakMap<PluginRegistry, Map<string, number>>())
   const importVersionsRef = useRef(new Map<string, number>())
   const activationRefreshRevisionRef = useRef(0)
+  const bootstrapLoadRef = useRef<Promise<void> | undefined>(undefined)
   const committedRequestRevisionRef = useRef(0)
   const requestRevisionRef = useRef(0)
   const runtimeEndpointRef = useRef<PluginRuntimeEndpoint | undefined>(undefined)
-  const [runtimeEndpoint, setRuntimeEndpoint] = useState<PluginRuntimeEndpoint | undefined>(undefined)
+  const [publishedRuntime, setPublishedRuntime] = useState(() => ({
+    registry: registryRef.current,
+    runtimeEndpoint: undefined as PluginRuntimeEndpoint | undefined,
+    snapshot: registryRef.current.getSnapshot()
+  }))
+  const { registry, runtimeEndpoint, snapshot } = publishedRuntime
   const [pluginSnapshotStatus, setPluginSnapshotStatus] = useState<'error' | 'loading' | 'ready'>('loading')
+  const pluginSnapshotStatusRef = useRef<'error' | 'loading' | 'ready'>('loading')
   const [ready, setReady] = useState(false)
-  const [snapshot, setSnapshot] = useState(() => registry.getSnapshot())
 
   useEffect(() =>
     registry.subscribe(() => {
-      setSnapshot(registry.getSnapshot())
+      if (registryRef.current !== registry) return
+      setPublishedRuntime(current =>
+        current.registry === registry
+          ? { ...current, snapshot: registry.getSnapshot() }
+          : current
+      )
     }), [registry])
 
   const pluginServerBaseUrl = useMemo(() => {
@@ -71,25 +90,38 @@ export function PluginProvider({
   }, [deferUntilRuntimeServerBaseUrl, resolvedRuntimeSource, runtimeServerBaseUrl])
 
   const setRuntimeSnapshot = useCallback((runtime: PluginRuntimeEndpoint | undefined) => {
-    registry.setRuntimeContext({
+    const currentRegistry = registryRef.current
+    currentRegistry.setRuntimeContext({
       runtime,
       surfaces: [surface]
     })
     runtimeEndpointRef.current = runtime
-    setRuntimeEndpoint(runtime)
-  }, [registry, surface])
+    setPublishedRuntime(current =>
+      current.registry === currentRegistry
+        ? { registry: currentRegistry, runtimeEndpoint: runtime, snapshot: currentRegistry.getSnapshot() }
+        : current
+    )
+  }, [surface])
+
+  const updatePluginSnapshotStatus = useCallback((status: 'error' | 'loading' | 'ready') => {
+    pluginSnapshotStatusRef.current = status
+    setPluginSnapshotStatus(status)
+  }, [])
 
   const getImportVersion = useCallback((scope: string) => importVersionsRef.current.get(scope) ?? 0, [])
   const bumpImportVersion = useCallback((scope: string) => {
     importVersionsRef.current.set(scope, (importVersionsRef.current.get(scope) ?? 0) + 1)
   }, [])
-  const nextActivationVersion = useCallback((scope: string) => {
-    const next = (activationVersionsRef.current.get(scope) ?? 0) + 1
-    activationVersionsRef.current.set(scope, next)
+  const nextActivationVersion = useCallback((targetRegistry: PluginRegistry, scope: string) => {
+    const versions = activationVersionsRef.current.get(targetRegistry) ?? new Map<string, number>()
+    activationVersionsRef.current.set(targetRegistry, versions)
+    const next = (versions.get(scope) ?? 0) + 1
+    versions.set(scope, next)
     return next
   }, [])
   const isActivationCurrent = useCallback(
-    (scope: string, version: number) => activationVersionsRef.current.get(scope) === version,
+    (targetRegistry: PluginRegistry, scope: string, version: number) =>
+      activationVersionsRef.current.get(targetRegistry)?.get(scope) === version,
     []
   )
 
@@ -97,17 +129,18 @@ export function PluginProvider({
     if (pluginServerBaseUrl == null) return
     const instance = instancesRef.current.find(item => item.scope === scope)
     if (instance == null) return
+    const currentRegistry = registryRef.current
     bumpImportVersion(scope)
-    const activationVersion = nextActivationVersion(scope)
-    registry.disposeScope(scope)
+    const activationVersion = nextActivationVersion(currentRegistry, scope)
+    currentRegistry.disposeScope(scope)
     if (instance.enabled === false) return
-    registry.registerInstanceContributions(instance)
+    currentRegistry.registerInstanceContributions(instance)
     await activatePluginClient({
       getImportVersion: () => getImportVersion(scope),
       instance,
-      isActivationCurrent: () => isActivationCurrent(scope, activationVersion),
+      isActivationCurrent: () => isActivationCurrent(currentRegistry, scope, activationVersion),
       notifications,
-      registry,
+      registry: currentRegistry,
       reloadPlugin,
       runtimeEndpoint: runtimeEndpointRef.current,
       serverBaseUrl: pluginServerBaseUrl
@@ -118,49 +151,114 @@ export function PluginProvider({
     isActivationCurrent,
     nextActivationVersion,
     notifications,
-    pluginServerBaseUrl,
-    registry
+    pluginServerBaseUrl
   ])
 
-  const activateInstances = useCallback(async (instances: PluginRuntimeInstance[], didCancel: () => boolean) => {
+  const disposeRegistryInstances = useCallback((
+    targetRegistry: PluginRegistry,
+    instances: PluginRuntimeInstance[]
+  ) => {
+    for (const instance of instances) {
+      nextActivationVersion(targetRegistry, instance.scope)
+      targetRegistry.disposeScope(instance.scope)
+    }
+  }, [nextActivationVersion])
+
+  const activateInstances = useCallback(async (
+    instances: PluginRuntimeInstance[],
+    didCancel: () => boolean,
+    options: {
+      isTransactionCommitted: () => boolean
+      replacePublishedRegistry?: boolean
+      runtimeEndpoint?: PluginRuntimeEndpoint
+      targetRegistry?: PluginRegistry
+    }
+  ) => {
     if (pluginServerBaseUrl == null) return
     if (didCancel()) return
-    for (const instance of instancesRef.current) {
-      if (didCancel()) return
-      nextActivationVersion(instance.scope)
-      if (didCancel()) return
-      registry.disposeScope(instance.scope)
+    const targetRegistry = options.targetRegistry ?? registryRef.current
+    const replacePublishedRegistry = options.replacePublishedRegistry ?? true
+    if (replacePublishedRegistry) {
+      disposeRegistryInstances(targetRegistry, instancesRef.current)
     }
     if (didCancel()) return
-    registry.setInstances(instances)
-    instancesRef.current = instances
-    for (const instance of instances) {
-      if (didCancel()) return
-      if (instance.enabled === false) continue
-      const activationVersion = nextActivationVersion(instance.scope)
-      if (didCancel()) return
+    targetRegistry.setInstances(instances)
+    if (replacePublishedRegistry) instancesRef.current = instances
+
+    const activateInstance = async (instance: PluginRuntimeInstance) => {
+      if ((!options.isTransactionCommitted() && didCancel()) || instance.enabled === false) return
+      const activationVersion = nextActivationVersion(targetRegistry, instance.scope)
+      if (!options.isTransactionCommitted() && didCancel()) return
       await activatePluginClient({
         getImportVersion: () => getImportVersion(instance.scope),
         instance,
-        isActivationCurrent: () => !didCancel() && isActivationCurrent(instance.scope, activationVersion),
+        isActivationCurrent: () =>
+          isActivationCurrent(targetRegistry, instance.scope, activationVersion) &&
+          (options.isTransactionCommitted() || !didCancel()),
         notifications,
-        registry,
-        reloadPlugin,
-        runtimeEndpoint: runtimeEndpointRef.current,
+        registry: targetRegistry,
+        reloadPlugin: reloadTargetPlugin,
+        runtimeEndpoint: options.runtimeEndpoint ?? runtimeEndpointRef.current,
         serverBaseUrl: pluginServerBaseUrl
       })
     }
+
+    const reloadTargetPlugin = async (scope: string) => {
+      if (!options.isTransactionCommitted() && didCancel()) return
+      const instance = instances.find(item => item.scope === scope)
+      if (instance == null) return
+      bumpImportVersion(scope)
+      nextActivationVersion(targetRegistry, scope)
+      targetRegistry.disposeScope(scope)
+      if (instance.enabled === false) return
+      targetRegistry.registerInstanceContributions(instance)
+      await activateInstance(instance)
+    }
+
+    for (const instance of instances) {
+      if (didCancel()) return
+      await activateInstance(instance)
+    }
   }, [
+    bumpImportVersion,
+    disposeRegistryInstances,
     getImportVersion,
     isActivationCurrent,
     nextActivationVersion,
     notifications,
-    pluginServerBaseUrl,
-    registry,
-    reloadPlugin
+    pluginServerBaseUrl
   ])
 
-  const loadAndActivatePlugins = useCallback(async (options: PluginRefreshOptions = {}) => {
+  const commitStagedRegistry = useCallback((
+    stagedRegistry: PluginRegistry,
+    instances: PluginRuntimeInstance[],
+    runtime: PluginRuntimeEndpoint | undefined
+  ) => {
+    const previousRegistry = registryRef.current
+    const previousInstances = instancesRef.current
+    registryRef.current = stagedRegistry
+    instancesRef.current = instances
+    runtimeEndpointRef.current = runtime
+    retiredRegistriesRef.current.push({
+      instances: previousInstances,
+      registry: previousRegistry
+    })
+    setPublishedRuntime({
+      registry: stagedRegistry,
+      runtimeEndpoint: runtime,
+      snapshot: stagedRegistry.getSnapshot()
+    })
+  }, [])
+
+  useEffect(() => {
+    const retired = retiredRegistriesRef.current.splice(0)
+    retired.forEach(item => disposeRegistryInstances(item.registry, item.instances))
+  }, [disposeRegistryInstances, registry])
+
+  const loadAndActivatePlugins = useCallback(async (
+    options: PluginRefreshOptions = {},
+    cancelActivationWhenStale = false
+  ) => {
     if (pluginServerBaseUrl == null) return undefined
     const requestRevision = requestRevisionRef.current + 1
     requestRevisionRef.current = requestRevision
@@ -182,62 +280,121 @@ export function PluginProvider({
     activationRefreshRevisionRef.current = activationRevision
     const isActivationCurrent = () => activationRefreshRevisionRef.current === activationRevision
     const isResultCurrent = () => isActivationCurrent() && isRequestCurrent()
-    setRuntimeSnapshot(pluginSnapshot.runtime)
-    await activateInstances(pluginSnapshot.plugins, () => !isActivationCurrent())
+    const didCancelActivation = () => !isActivationCurrent() || (cancelActivationWhenStale && !isRequestCurrent())
+    let transactionCommitted = false
+    const isTransactionCommitted = () => transactionCommitted
+    let stagedRegistry: PluginRegistry | undefined
+    try {
+      if (cancelActivationWhenStale) {
+        stagedRegistry = new PluginRegistry()
+        stagedRegistry.setRuntimeContext({
+          runtime: pluginSnapshot.runtime,
+          surfaces: [surface]
+        })
+        await activateInstances(pluginSnapshot.plugins, didCancelActivation, {
+          isTransactionCommitted,
+          replacePublishedRegistry: false,
+          runtimeEndpoint: pluginSnapshot.runtime,
+          targetRegistry: stagedRegistry
+        })
+        if (didCancelActivation()) {
+          disposeRegistryInstances(stagedRegistry, pluginSnapshot.plugins)
+        } else {
+          transactionCommitted = true
+          commitStagedRegistry(stagedRegistry, pluginSnapshot.plugins, pluginSnapshot.runtime)
+        }
+      } else {
+        setRuntimeSnapshot(pluginSnapshot.runtime)
+        await activateInstances(pluginSnapshot.plugins, didCancelActivation, {
+          isTransactionCommitted,
+          runtimeEndpoint: pluginSnapshot.runtime
+        })
+        if (!didCancelActivation()) transactionCommitted = true
+      }
+    } catch (error) {
+      if (stagedRegistry != null) {
+        disposeRegistryInstances(stagedRegistry, pluginSnapshot.plugins)
+      }
+      throw error
+    }
     return isResultCurrent() ? isResultCurrent : undefined
-  }, [activateInstances, pluginServerBaseUrl, setRuntimeSnapshot])
+  }, [
+    activateInstances,
+    commitStagedRegistry,
+    disposeRegistryInstances,
+    pluginServerBaseUrl,
+    setRuntimeSnapshot,
+    surface
+  ])
 
-  const refreshPlugins = useCallback(async (options?: PluginRefreshOptions) => {
-    const isCurrent = await loadAndActivatePlugins(options)
+  const refreshPlugins = useCallback(async (
+    options?: PluginRefreshOptions,
+    cancelActivationWhenStale = false
+  ) => {
+    const isCurrent = await loadAndActivatePlugins(options, cancelActivationWhenStale)
     if (isCurrent?.() !== true) return { applied: false }
-    setPluginSnapshotStatus('ready')
+    updatePluginSnapshotStatus('ready')
     if (!isCurrent()) return { applied: false }
     setReady(true)
     return { applied: isCurrent() }
-  }, [loadAndActivatePlugins])
+  }, [loadAndActivatePlugins, updatePluginSnapshotStatus])
 
   useEffect(() => {
     let didCancel = false
-    setPluginSnapshotStatus('loading')
+    updatePluginSnapshotStatus('loading')
     if (pluginServerBaseUrl == null) {
+      bootstrapLoadRef.current = undefined
       setReady(true)
       return () => {
         didCancel = true
       }
     }
-    void loadAndActivatePlugins({ isCurrent: () => !didCancel })
+    const bootstrapLoad = loadAndActivatePlugins({ isCurrent: () => !didCancel })
       .then((isCurrent) => {
         if (isCurrent?.() !== true) return
-        setPluginSnapshotStatus('ready')
+        updatePluginSnapshotStatus('ready')
         if (!isCurrent()) return
         setReady(true)
       })
       .catch((error) => {
         if (didCancel) return
-        setPluginSnapshotStatus('error')
-        registry.addDiagnostic({
+        updatePluginSnapshotStatus('error')
+        registryRef.current.addDiagnostic({
           level: 'warning',
           message: `Failed to load plugins: ${error instanceof Error ? error.message : String(error)}`
         })
         setReady(true)
       })
+    bootstrapLoadRef.current = bootstrapLoad
+    void bootstrapLoad
     return () => {
       didCancel = true
+      if (bootstrapLoadRef.current === bootstrapLoad) {
+        bootstrapLoadRef.current = undefined
+      }
       activationRefreshRevisionRef.current += 1
       committedRequestRevisionRef.current = requestRevisionRef.current + 1
-      instancesRef.current.forEach((instance) => {
-        nextActivationVersion(instance.scope)
-        registry.disposeScope(instance.scope)
-      })
+      const currentRegistry = registryRef.current
+      disposeRegistryInstances(currentRegistry, instancesRef.current)
+      const retired = retiredRegistriesRef.current.splice(0)
+      retired.forEach(item => disposeRegistryInstances(item.registry, item.instances))
       setRuntimeSnapshot(undefined)
     }
-  }, [loadAndActivatePlugins, nextActivationVersion, pluginServerBaseUrl, registry, setRuntimeSnapshot])
+  }, [
+    disposeRegistryInstances,
+    loadAndActivatePlugins,
+    pluginServerBaseUrl,
+    setRuntimeSnapshot,
+    updatePluginSnapshotStatus
+  ])
 
   useEffect(() => {
     if (pluginServerBaseUrl == null) return
     let disposed = false
     let socket: WebSocket | undefined
     let connectTimer: ReturnType<typeof setTimeout> | undefined
+    let connectionRevision = 0
+    let hasOpenedConnection = false
 
     const closeSocket = (target: WebSocket | undefined) => {
       if (target == null) return
@@ -262,34 +419,73 @@ export function PluginProvider({
 
     const connect = () => {
       if (disposed) return
-      socket = createSocket<PluginWatchEvent>(
+      connectionRevision += 1
+      const currentConnectionRevision = connectionRevision
+      let currentSocket: WebSocket | undefined
+      const isConnectionCurrent = () =>
+        !disposed &&
+        connectionRevision === currentConnectionRevision &&
+        socket === currentSocket
+      const invalidateConnection = () => {
+        if (!isConnectionCurrent()) return false
+        connectionRevision += 1
+        if (socket === currentSocket) {
+          socket = undefined
+        }
+        return true
+      }
+      const closeAndReconnect = () => {
+        if (!invalidateConnection()) return
+        closeSocket(currentSocket)
+        scheduleConnect(1000)
+      }
+      currentSocket = createSocket<PluginWatchEvent>(
         {
+          onOpen: async () => {
+            if (!isConnectionCurrent()) return
+            const isFirstOpen = !hasOpenedConnection
+            hasOpenedConnection = true
+            if (isFirstOpen) {
+              if (pluginSnapshotStatusRef.current === 'loading') {
+                await bootstrapLoadRef.current
+              }
+              if (!isConnectionCurrent() || pluginSnapshotStatusRef.current === 'ready') return
+            }
+            try {
+              await refreshPlugins({ isCurrent: isConnectionCurrent }, true)
+            } catch {
+              closeAndReconnect()
+            }
+          },
           onMessage: (event) => {
-            if (disposed || event.type !== 'plugin.changed') return
+            if (!isConnectionCurrent() || event.type !== 'plugin.changed') return
             if (event.scope === '*') {
               instancesRef.current.forEach(instance => bumpImportVersion(instance.scope))
             } else {
               bumpImportVersion(event.scope)
             }
-            void refreshPlugins()
+            void refreshPlugins({ isCurrent: isConnectionCurrent }, true).catch(() => {
+              closeAndReconnect()
+            })
           },
           onClose: (event) => {
-            if (disposed) return
-            if (event.code === 1008) return
-            scheduleConnect(1000)
+            if (!invalidateConnection()) return
+            if (event.code !== 1008) scheduleConnect(1000)
           },
           onError: () => {
-            closeSocket(socket)
+            closeAndReconnect()
           }
         },
         { channel: 'plugin', scope: '*' },
         { serverBaseUrl: pluginServerBaseUrl }
       )
+      socket = currentSocket
     }
 
     scheduleConnect()
     return () => {
       disposed = true
+      connectionRevision += 1
       if (connectTimer != null) {
         clearTimeout(connectTimer)
       }
