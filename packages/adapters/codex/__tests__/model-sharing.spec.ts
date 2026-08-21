@@ -9,7 +9,8 @@ const mocks = vi.hoisted(() => ({
   materializeCodexCaCertificate: vi.fn(async (config: unknown) => config),
   prepareCodexSessionHome: vi.fn(async () => ({
     accountKey: 'work',
-    homeDir: '/tmp/codex-model-sharing-home'
+    homeDir: '/tmp/codex-model-sharing-home',
+    reconcileCredentialOwner: undefined as (() => Promise<void>) | undefined
   })),
   resolveCodexAdapterConfig: vi.fn(() => ({
     native: { shareBuiltinModels: true }
@@ -35,6 +36,7 @@ vi.mock('#~/runtime/network.js', () => ({
 const createProcess = () => {
   const proc = new EventEmitter() as EventEmitter & {
     exitCode: number | null
+    pid?: number
     signalCode: NodeJS.Signals | null
     stdin: PassThrough
     stdout: PassThrough
@@ -42,6 +44,7 @@ const createProcess = () => {
     kill: ReturnType<typeof vi.fn>
   }
   proc.exitCode = null
+  proc.pid = 4242
   proc.signalCode = null
   proc.stdin = new PassThrough()
   proc.stdout = new PassThrough()
@@ -124,6 +127,99 @@ describe('codex model sharing bridge', () => {
     bridge.close()
   })
 
+  it('flushes a managed credential owner before reporting app-server exit', async () => {
+    const proc = createProcess()
+    let finishReconciliation!: () => void
+    const reconcileCredentialOwner = vi.fn(() =>
+      new Promise<void>((resolve) => {
+        finishReconciliation = resolve
+      })
+    )
+    mocks.prepareCodexSessionHome.mockResolvedValueOnce({
+      accountKey: 'work',
+      homeDir: '/tmp/codex-model-sharing-home',
+      reconcileCredentialOwner
+    })
+    mocks.spawn.mockReturnValue(proc)
+    const onExit = vi.fn()
+    await (await import('#~/model-sharing.js')).createCodexModelSharingBridge(ctx, {
+      sessionId: 'session-owner-flush',
+      onExit,
+      onMessage: () => undefined
+    })
+
+    proc.emit('exit', 0, null)
+    expect(reconcileCredentialOwner).toHaveBeenCalledOnce()
+    expect(onExit).not.toHaveBeenCalled()
+    finishReconciliation()
+    await vi.waitFor(() => {
+      expect(onExit).toHaveBeenCalledWith(0, null)
+    })
+  })
+
+  it('reports post-spawn errors but waits for close and actual exit before rejecting reconciliation', async () => {
+    const proc = createProcess()
+    const reconciliationError = new Error('synthetic reconciliation failure')
+    const reconcileCredentialOwner = vi.fn(async () => {
+      throw reconciliationError
+    })
+    mocks.prepareCodexSessionHome.mockResolvedValueOnce({
+      accountKey: 'work',
+      homeDir: '/tmp/codex-model-sharing-home',
+      reconcileCredentialOwner
+    })
+    mocks.spawn.mockReturnValue(proc)
+    const onError = vi.fn()
+    const onExit = vi.fn()
+    const bridge = await (await import('#~/model-sharing.js')).createCodexModelSharingBridge(ctx, {
+      sessionId: 'session-owner-error-close',
+      onError,
+      onExit,
+      onMessage: () => undefined
+    })
+
+    const processError = new Error('synthetic signal delivery failure')
+    proc.emit('error', processError)
+    expect(onError).toHaveBeenCalledWith(processError)
+    expect(reconcileCredentialOwner).not.toHaveBeenCalled()
+    expect(onExit).not.toHaveBeenCalled()
+
+    bridge.close()
+    expect(proc.kill).toHaveBeenCalledWith('SIGTERM')
+    proc.emit('exit', null, 'SIGTERM')
+
+    await vi.waitFor(() => {
+      expect(reconcileCredentialOwner).toHaveBeenCalledOnce()
+      expect(onError).toHaveBeenCalledWith(reconciliationError)
+      expect(onExit).toHaveBeenCalledWith(null, 'SIGTERM')
+    })
+  })
+
+  it('flushes after a true app-server spawn failure with no pid', async () => {
+    const proc = createProcess()
+    proc.pid = undefined
+    const reconcileCredentialOwner = vi.fn(async () => undefined)
+    mocks.prepareCodexSessionHome.mockResolvedValueOnce({
+      accountKey: 'work',
+      homeDir: '/tmp/codex-model-sharing-home',
+      reconcileCredentialOwner
+    })
+    mocks.spawn.mockReturnValue(proc)
+    const onExit = vi.fn()
+    await (await import('#~/model-sharing.js')).createCodexModelSharingBridge(ctx, {
+      sessionId: 'session-spawn-failure',
+      onExit,
+      onMessage: () => undefined
+    })
+
+    proc.emit('error', new Error('synthetic spawn failure'))
+
+    await vi.waitFor(() => {
+      expect(reconcileCredentialOwner).toHaveBeenCalledOnce()
+      expect(onExit).toHaveBeenCalledWith(null, null)
+    })
+  })
+
   it('does not spawn after a client disconnects while the account home is still preparing', async () => {
     let releaseHome: (() => void) | undefined
     mocks.prepareCodexSessionHome.mockImplementationOnce(async () => {
@@ -132,7 +228,8 @@ describe('codex model sharing bridge', () => {
       })
       return {
         accountKey: 'work',
-        homeDir: '/tmp/codex-model-sharing-home'
+        homeDir: '/tmp/codex-model-sharing-home',
+        reconcileCredentialOwner: undefined
       }
     })
     const controller = new AbortController()

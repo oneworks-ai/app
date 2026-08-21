@@ -288,7 +288,7 @@ export function AccountQuotaPanel({
   const refreshAccountListQuota = async () => {
     await mutateCache((key) => (
       Array.isArray(key) &&
-      key[0] === '/api/adapters/accounts-quota' &&
+      key[0] === '/api/adapters/accounts' &&
       key[1] === adapter
     ))
   }

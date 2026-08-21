@@ -23,6 +23,7 @@ export function createDirectCodexSession(base: CodexSessionBase, options: Adapte
     configOverrideArgs,
     resolvedModel,
     resolvedAccount,
+    reconcileCredentialOwner,
     cachedThreadId
   } = base
   const { onEvent, description, extraOptions, type: sessionType } = options
@@ -95,7 +96,17 @@ export function createDirectCodexSession(base: CodexSessionBase, options: Adapte
   const emitExit = (data: { exitCode?: number; stderr?: string }) => {
     if (didEmitExit) return
     didEmitExit = true
-    onEvent({ type: 'exit', data })
+    if (reconcileCredentialOwner == null) {
+      onEvent({ type: 'exit', data })
+      return
+    }
+    void reconcileCredentialOwner().catch((error) => {
+      logger.warn('[codex session] credential owner reconciliation failed during direct teardown', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+    }).finally(() => {
+      onEvent({ type: 'exit', data })
+    })
   }
 
   proc.on('error', (err) => {
@@ -108,7 +119,9 @@ export function createDirectCodexSession(base: CodexSessionBase, options: Adapte
         fatal: true
       }
     })
-    emitExit({ exitCode: 1, stderr: message })
+    if (proc.pid == null) {
+      emitExit({ exitCode: 1, stderr: message })
+    }
   })
 
   proc.on('exit', (code) => {

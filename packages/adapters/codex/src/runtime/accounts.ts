@@ -1,10 +1,25 @@
 /* eslint-disable max-lines -- codex account runtime intentionally centralizes the account management flow. */
 import { Buffer } from 'node:buffer'
 import { spawn } from 'node:child_process'
-import { createHash } from 'node:crypto'
-import { access, chmod, lstat, mkdir, readFile, readdir, rm } from 'node:fs/promises'
+import type { ChildProcess } from 'node:child_process'
+import { createHash, randomUUID } from 'node:crypto'
+import { constants as fsConstants } from 'node:fs'
+import {
+  access,
+  chmod,
+  link,
+  lstat,
+  mkdir,
+  open,
+  readFile,
+  readdir,
+  readlink,
+  rename,
+  rm,
+  symlink
+} from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { isAbsolute, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
 
 import { updateGlobalAdapterAccounts, withCanonicalConfigWriteLock } from '@oneworks/config'
@@ -35,6 +50,7 @@ import {
   mergeProcessEnvWithProjectEnv,
   normalizeAdapterAccountTombstones,
   normalizeNonEmptyString,
+  resolveGlobalAdapterAccountDir,
   resolveGlobalOneWorksDir,
   resolveProjectOoPath,
   sanitizeOneWorksLoaderEnv,
@@ -141,6 +157,52 @@ interface CodexGlobalAccountCredentialRevision {
   credentialRevision?: string
 }
 
+interface CodexGlobalAccountCredentialState extends CodexGlobalAccountCredentialRevision {
+  accountKey: string
+  tombstones: string[]
+}
+
+interface CodexResetCreditEffectiveSourceState {
+  contentDigest?: string
+  exists: boolean
+  inlineDigest?: string
+  resolvedPath?: string
+  stableIdentity?: CodexStableCredentialIdentity
+  sourceKind: 'global-config' | 'configured-auth-file' | 'real-home'
+}
+
+interface CodexStableCredentialIdentity {
+  accountId?: string
+  organizationId?: string
+}
+
+interface CodexResetCreditCredentialState {
+  accountKey: string
+  canonicalAccount?: CodexGlobalAccountCredentialRevision
+  canonicalConfigBacked: boolean
+  canonicalConfigExists: boolean
+  effectiveSource: CodexResetCreditEffectiveSourceState
+  tombstones: string[]
+}
+
+interface CodexInlineCredentialSnapshot {
+  credentialRevision: string | null
+  generation: string | null
+  sourceDigest: string
+}
+
+interface CodexInlineCredentialOwnerState {
+  acceptedSnapshots: CodexInlineCredentialSnapshot[]
+  accountKey: string
+  initialized: boolean
+  ownerId: string
+  pendingSnapshot?: {
+    from: CodexInlineCredentialSnapshot
+    to: CodexInlineCredentialSnapshot
+  }
+  version: 1
+}
+
 interface CodexAccountIdentity {
   displayName?: string
   email?: string
@@ -171,12 +233,17 @@ interface CodexAccountDescriptor {
   authFilePath?: string
   authContent?: string
   sourceKind?: 'global-config' | 'configured-auth-file' | 'real-home'
+  credentialSourceKind?: 'global-config' | 'configured-auth-file' | 'real-home'
+  credentialSourceDigest?: string
+  credentialSourceIdentity?: CodexAccountIdentity
+  canonicalConfigBacked?: boolean
   status: NonNullable<AdapterAccountInfo['status']>
   metadata?: CodexStoredAccountMetadata
   identity?: CodexAccountIdentity
   priority: number
   disabled: boolean
   credentialFingerprint?: string
+  inlineCredentialSnapshot?: CodexInlineCredentialSnapshot
 }
 
 interface CodexAccountProbe extends CodexAccountIdentity {
@@ -247,6 +314,7 @@ const CODEX_RESET_CREDIT_OPERATION_TIMEOUT_MS = 20_000
 const CODEX_RESET_CREDIT_OPERATION_TIMEOUT_ENV = '__ONEWORKS_PROJECT_ADAPTER_CODEX_RESET_CREDIT_OPERATION_TIMEOUT_MS__'
 const CODEX_INLINE_AUTH_TYPE = 'codex-auth-json'
 const CODEX_INLINE_AUTH_ENCODING = 'base64'
+const CODEX_INLINE_CREDENTIAL_OWNER_STATE_FILE = 'credential-owner.json'
 const codexAccountQuotaCacheTails = new Map<string, Promise<void>>()
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
@@ -314,6 +382,27 @@ const resolveCodexProbeHomeDir = (
   ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'ctxId'>,
   suffix: string
 ) => resolveProjectOoPath(ctx.cwd, ctx.env, 'caches', ctx.ctxId, 'adapter-codex-accounts', suffix)
+
+const resolveCodexInlineCredentialOwnerPath = (
+  ctx: Pick<AdapterCtx, 'env'>,
+  ownerId: string
+) =>
+  resolve(
+    resolveGlobalOneWorksDir(ctx.env),
+    'caches',
+    'adapter-codex-credentials',
+    ownerId,
+    'auth.json'
+  )
+
+const resolveCodexInlineCredentialOwnerStatePath = (
+  ctx: Pick<AdapterCtx, 'env'>,
+  accountKey: string
+) =>
+  resolve(
+    resolveGlobalAdapterAccountDir(ctx.env, 'codex', accountKey),
+    CODEX_INLINE_CREDENTIAL_OWNER_STATE_FILE
+  )
 
 const MISSING_AUTH_SENTINEL_FILE = '.oneworks-missing-auth.json'
 const CODEX_RUNTIME_STATE_BRIDGE_PATHS = [
@@ -610,6 +699,37 @@ const normalizeCodexIdentity = (
   return Object.values(normalized).some(value => value != null) ? normalized : undefined
 }
 
+const toCodexStableCredentialIdentity = (
+  identity: CodexAccountIdentity | undefined
+): CodexStableCredentialIdentity | undefined => {
+  const normalized = normalizeCodexIdentity(identity)
+  if (normalized?.accountId == null && normalized?.organizationId == null) return undefined
+  return {
+    accountId: normalized.accountId,
+    organizationId: normalized.organizationId
+  }
+}
+
+const mergeCodexProbeWithCredentialIdentityAuthority = (
+  authIdentity: CodexAccountProbe | undefined,
+  metadata: CodexAccountProbe | CodexAccountIdentity | undefined
+) => {
+  const merged = mergeCodexAccountProbes(authIdentity, metadata)
+  const stableAuthIdentity = toCodexStableCredentialIdentity(authIdentity)
+  if (stableAuthIdentity?.accountId == null) return merged
+
+  return {
+    ...merged,
+    accountId: stableAuthIdentity.accountId,
+    organizationId: stableAuthIdentity.organizationId
+  }
+}
+
+const codexStableCredentialIdentitiesMatch = (
+  left: CodexStableCredentialIdentity | undefined,
+  right: CodexStableCredentialIdentity | undefined
+) => left?.accountId === right?.accountId && left?.organizationId === right?.organizationId
+
 const mergeCodexAccountProbes = (
   ...sources: Array<CodexAccountProbe | CodexAccountIdentity | undefined>
 ): CodexAccountProbe | undefined => {
@@ -766,56 +886,23 @@ const isSameCodexAccountIdentity = (
     return false
   }
 
-  const sameAccountId = normalizedLeft.accountId != null &&
-    normalizedRight.accountId != null &&
-    normalizedLeft.accountId === normalizedRight.accountId
-  const sameOrganizationId = normalizedLeft.organizationId != null &&
-    normalizedRight.organizationId != null &&
-    normalizedLeft.organizationId === normalizedRight.organizationId
-  const hasBothAccountIds = normalizedLeft.accountId != null &&
-    normalizedRight.accountId != null
-  const hasBothOrganizationIds = normalizedLeft.organizationId != null &&
-    normalizedRight.organizationId != null
-
-  if (hasBothAccountIds && !sameAccountId) {
-    return false
-  }
-
-  if (hasBothOrganizationIds && !sameOrganizationId) {
+  if (
+    normalizedLeft.accountId == null ||
+    normalizedRight.accountId == null ||
+    normalizedLeft.accountId !== normalizedRight.accountId
+  ) {
     return false
   }
 
   if (
-    sameAccountId && (sameOrganizationId || (
-      normalizedLeft.organizationId == null &&
-      normalizedRight.organizationId == null
-    ))
+    normalizedLeft.organizationId != null &&
+    normalizedRight.organizationId != null &&
+    normalizedLeft.organizationId !== normalizedRight.organizationId
   ) {
-    return true
-  }
-
-  const sameEmail = normalizedLeft.email != null &&
-    normalizedRight.email != null &&
-    normalizedLeft.email.toLowerCase() === normalizedRight.email.toLowerCase()
-  if (!sameEmail) {
     return false
   }
 
-  if (sameOrganizationId) {
-    if (hasBothAccountIds) {
-      return sameAccountId
-    }
-
-    return true
-  }
-
-  if (hasBothAccountIds || hasBothOrganizationIds) {
-    return false
-  }
-
-  return normalizedLeft.organizationTitle != null &&
-    normalizedRight.organizationTitle != null &&
-    normalizedLeft.organizationTitle.toLowerCase() === normalizedRight.organizationTitle.toLowerCase()
+  return true
 }
 
 const buildProbeFromMetadata = (metadata: CodexStoredAccountMetadata | undefined): CodexAccountProbe | undefined => {
@@ -1257,6 +1344,153 @@ const decodeCodexInlineAuthContent = (auth: CodexInlineAuthConfig | undefined) =
   return Buffer.from(token, CODEX_INLINE_AUTH_ENCODING).toString('utf8')
 }
 
+const buildCodexInlineCredentialSnapshot = (
+  configuredAccount: CodexConfiguredAccount,
+  authContent: string
+): CodexInlineCredentialSnapshot => ({
+  credentialRevision: normalizeNonEmptyString(configuredAccount.credentialRevision) ?? null,
+  generation: normalizeNonEmptyString(configuredAccount.generation) ?? null,
+  sourceDigest: createHash('sha256').update(authContent).digest('hex')
+})
+
+const createCodexAuthContentDigest = (authContent: string) => createHash('sha256').update(authContent).digest('hex')
+
+const codexInlineCredentialSnapshotsMatch = (
+  left: CodexInlineCredentialSnapshot,
+  right: CodexInlineCredentialSnapshot
+) => (
+  left.credentialRevision === right.credentialRevision &&
+  left.generation === right.generation &&
+  left.sourceDigest === right.sourceDigest
+)
+
+const appendCodexInlineCredentialSnapshot = (
+  snapshots: CodexInlineCredentialSnapshot[],
+  snapshot: CodexInlineCredentialSnapshot
+) => (
+  snapshots.some(candidate => codexInlineCredentialSnapshotsMatch(candidate, snapshot))
+    ? snapshots
+    : [...snapshots, snapshot].slice(-16)
+)
+
+const buildCodexInlineCredentialOwnerId = (
+  accountKey: string,
+  snapshot: CodexInlineCredentialSnapshot
+) =>
+  createHash('sha256')
+    .update(JSON.stringify({ accountKey, snapshot, version: 2 }))
+    .digest('hex')
+
+const isCodexInlineCredentialSnapshot = (
+  value: unknown
+): value is CodexInlineCredentialSnapshot => (
+  isRecord(value) &&
+  (value.credentialRevision === null || normalizeNonEmptyString(value.credentialRevision) != null) &&
+  (value.generation === null || normalizeNonEmptyString(value.generation) != null) &&
+  typeof value.sourceDigest === 'string' &&
+  /^[a-f0-9]{64}$/u.test(value.sourceDigest)
+)
+
+const readCodexInlineCredentialOwnerState = async (
+  targetPath: string,
+  accountKey: string
+): Promise<CodexInlineCredentialOwnerState | undefined> => {
+  let targetStat
+  try {
+    targetStat = await lstat(targetPath)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+    throw error
+  }
+  if (!targetStat.isFile()) {
+    throw new Error(`Codex account "${accountKey}" has an invalid local credential owner state.`)
+  }
+
+  const parsed = JSON.parse(await readFile(targetPath, 'utf8')) as unknown
+  if (
+    !isRecord(parsed) ||
+    parsed.version !== 1 ||
+    parsed.accountKey !== accountKey ||
+    typeof parsed.initialized !== 'boolean' ||
+    typeof parsed.ownerId !== 'string' ||
+    !/^[a-f0-9]{64}$/u.test(parsed.ownerId) ||
+    !Array.isArray(parsed.acceptedSnapshots) ||
+    parsed.acceptedSnapshots.length === 0 ||
+    !parsed.acceptedSnapshots.every(isCodexInlineCredentialSnapshot) ||
+    (
+      parsed.pendingSnapshot != null &&
+      (
+        !isRecord(parsed.pendingSnapshot) ||
+        !isCodexInlineCredentialSnapshot(parsed.pendingSnapshot.from) ||
+        !isCodexInlineCredentialSnapshot(parsed.pendingSnapshot.to)
+      )
+    )
+  ) {
+    throw new Error(`Codex account "${accountKey}" has an invalid local credential owner state.`)
+  }
+
+  return parsed as unknown as CodexInlineCredentialOwnerState
+}
+
+const writeCodexInlineCredentialOwnerState = async (
+  targetPath: string,
+  state: CodexInlineCredentialOwnerState
+) => {
+  await writeCodexPrivateFileAtomically(targetPath, `${JSON.stringify(state, null, 2)}\n`)
+}
+
+const assertCodexCredentialOwnerContentIsComplete = (
+  accountKey: string,
+  authContent: string
+) => {
+  try {
+    if (!isRecord(JSON.parse(authContent) as unknown)) throw new Error('not an object')
+  } catch {
+    throw new Error(
+      `Codex account "${accountKey}" credential owner is incomplete or invalid. Retry after the active Codex process finishes updating it.`
+    )
+  }
+}
+
+const isCodexCredentialOwnerContentComplete = (authContent: string) => {
+  try {
+    return isRecord(JSON.parse(authContent) as unknown)
+  } catch {
+    return false
+  }
+}
+
+const assertCodexCredentialLineageIdentity = (params: {
+  accountKey: string
+  candidateAuthContent: string
+  sourceAuthContent: string
+}) => {
+  const sourceIdentity = normalizeCodexIdentity(
+    readCodexAuthIdentityFromContent(params.sourceAuthContent)
+  )
+  const candidateIdentity = normalizeCodexIdentity(
+    readCodexAuthIdentityFromContent(params.candidateAuthContent)
+  )
+  const sourceAccountId = sourceIdentity?.accountId
+  const candidateAccountId = candidateIdentity?.accountId
+  const sourceOrganizationId = sourceIdentity?.organizationId
+  const candidateOrganizationId = candidateIdentity?.organizationId
+  if (
+    sourceAccountId == null ||
+    candidateAccountId == null ||
+    sourceAccountId !== candidateAccountId ||
+    (
+      sourceOrganizationId != null &&
+      candidateOrganizationId != null &&
+      sourceOrganizationId !== candidateOrganizationId
+    )
+  ) {
+    throw new Error(
+      `Codex account "${params.accountKey}" changed credential identity during its managed lifecycle. Sign in again to select a different account.`
+    )
+  }
+}
+
 const updateCodexGlobalAdapterConfig = async (
   ctx: CodexAccountFileCtx,
   updater: (
@@ -1284,6 +1518,34 @@ const readCodexGlobalConfiguredAccount = async (targetPath: string, accountKey: 
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       return undefined
+    }
+    throw error
+  }
+}
+
+const readCodexGlobalConfiguredAccountState = async (
+  targetPath: string,
+  accountKey: string
+) => {
+  try {
+    const config = JSON.parse(await readFile(targetPath, 'utf8')) as unknown
+    const adapters = isRecord(config) && isRecord(config.adapters) ? config.adapters : undefined
+    const codexConfig = isRecord(adapters?.codex) ? adapters.codex : undefined
+    const accounts = isRecord(codexConfig?.accounts) ? codexConfig.accounts : undefined
+    return {
+      account: isRecord(accounts?.[accountKey])
+        ? accounts[accountKey] as CodexConfiguredAccount
+        : undefined,
+      accountTombstones: normalizeAdapterAccountTombstones(codexConfig?.accountTombstones),
+      configExists: true
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return {
+        account: undefined,
+        accountTombstones: {},
+        configExists: false
+      }
     }
     throw error
   }
@@ -1324,6 +1586,32 @@ const codexGlobalAccountCredentialRevisionsMatch = (
   left.credentialRevision === right.credentialRevision
 )
 
+const normalizeCodexAccountTombstones = (
+  accountTombstones: Record<string, string[]>,
+  accountKey: string
+) => [...(accountTombstones[accountKey] ?? [])].sort()
+
+const buildCodexGlobalAccountCredentialState = async (params: {
+  account: CodexConfiguredAccount
+  accountKey: string
+  accountTombstones: Record<string, string[]>
+  ctx: Pick<AdapterCtx, 'cwd'>
+}): Promise<CodexGlobalAccountCredentialState> => ({
+  accountKey: params.accountKey,
+  ...await buildCodexGlobalAccountCredentialRevision(params.ctx, params.account),
+  tombstones: normalizeCodexAccountTombstones(params.accountTombstones, params.accountKey)
+})
+
+const codexGlobalAccountCredentialStatesMatch = (
+  left: CodexGlobalAccountCredentialState,
+  right: CodexGlobalAccountCredentialState
+) => (
+  left.accountKey === right.accountKey &&
+  codexGlobalAccountCredentialRevisionsMatch(left, right) &&
+  left.tombstones.length === right.tombstones.length &&
+  left.tombstones.every((value, index) => value === right.tombstones[index])
+)
+
 const readCodexGlobalAccountCredentialRevision = async (
   ctx: Pick<AdapterCtx, 'cwd' | 'env'>,
   accountKey: string
@@ -1342,37 +1630,259 @@ const readCodexGlobalAccountCredentialRevision = async (
     }
   )
 
-const assertCodexGlobalCredentialIsCurrent = async (params: {
-  descriptor: CodexAccountDescriptor
-  targetPath: string
+const buildCodexResetCreditCanonicalState = async (params: {
+  accountKey: string
+  ctx: Pick<AdapterCtx, 'cwd'>
+  state: Awaited<ReturnType<typeof readCodexGlobalConfiguredAccountState>>
 }) => {
-  const config = JSON.parse(await readFile(params.targetPath, 'utf8')) as unknown
-  const adapters = isRecord(config) && isRecord(config.adapters) ? config.adapters : undefined
-  const codexConfig = isRecord(adapters?.codex) ? adapters.codex : undefined
-  const accounts = isRecord(codexConfig?.accounts) ? codexConfig.accounts : undefined
-  const configuredAccount = isRecord(accounts?.[params.descriptor.key])
-    ? accounts[params.descriptor.key] as CodexConfiguredAccount
-    : undefined
-  const currentAuthContent = decodeCodexInlineAuthContent(configuredAccount?.auth)
-  const descriptorAuthDigest = normalizeNonEmptyString(params.descriptor.metadata?.authDigest) ??
-    (
+  return {
+    accountKey: params.accountKey,
+    canonicalAccount: params.state.account == null
+      ? undefined
+      : await buildCodexGlobalAccountCredentialRevision(params.ctx, params.state.account),
+    canonicalConfigExists: params.state.configExists,
+    tombstones: normalizeCodexAccountTombstones(params.state.accountTombstones, params.accountKey)
+  }
+}
+
+const readCodexCredentialSourceDigest = async (targetPath: string | undefined) => {
+  if (targetPath == null) {
+    return { exists: false, contentDigest: undefined, stableIdentity: undefined }
+  }
+  try {
+    const content = await readFile(targetPath, 'utf8')
+    return {
+      exists: true,
+      contentDigest: createHash('sha256').update(content).digest('hex'),
+      stableIdentity: toCodexStableCredentialIdentity(readCodexAuthIdentityFromContent(content))
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return { exists: false, contentDigest: undefined, stableIdentity: undefined }
+    }
+    throw error
+  }
+}
+
+const buildCodexResetCreditEffectiveSourceState = async (params: {
+  descriptor: CodexAccountDescriptor
+}) => {
+  const sourceKind = params.descriptor.credentialSourceKind ?? params.descriptor.sourceKind
+  if (sourceKind == null) {
+    throw new Error(`Codex account "${params.descriptor.key}" has no usable authentication source.`)
+  }
+  if (params.descriptor.authFilePath != null) {
+    const resolvedPath = resolve(params.descriptor.authFilePath)
+    return {
+      contentDigest: normalizeNonEmptyString(params.descriptor.credentialSourceDigest) ??
+        normalizeNonEmptyString(params.descriptor.metadata?.authDigest),
+      exists: true,
+      inlineDigest: undefined,
+      resolvedPath,
+      stableIdentity: toCodexStableCredentialIdentity(params.descriptor.credentialSourceIdentity),
+      sourceKind
+    } satisfies CodexResetCreditEffectiveSourceState
+  }
+  const contentDigest = params.descriptor.authContent == null
+    ? undefined
+    : createHash('sha256').update(params.descriptor.authContent).digest('hex')
+  return {
+    contentDigest,
+    exists: params.descriptor.authContent != null,
+    inlineDigest: contentDigest,
+    resolvedPath: undefined,
+    stableIdentity: toCodexStableCredentialIdentity(
       params.descriptor.authContent == null
         ? undefined
-        : createHash('sha256').update(params.descriptor.authContent).digest('hex')
-    )
-  const currentAuthDigest = currentAuthContent == null
-    ? undefined
-    : createHash('sha256').update(currentAuthContent).digest('hex')
+        : readCodexAuthIdentityFromContent(params.descriptor.authContent)
+    ),
+    sourceKind
+  } satisfies CodexResetCreditEffectiveSourceState
+}
 
+const readCurrentCodexResetCreditEffectiveSourceState = async (params: {
+  accountKey: string
+  allowConfiguredFallback: boolean
+  canonicalAccount?: CodexConfiguredAccount
+  ctx: Pick<AdapterCtx, 'configs' | 'cwd' | 'env'>
+  expected: CodexResetCreditEffectiveSourceState
+}) => {
+  if (params.expected.sourceKind === 'real-home') {
+    const resolvedPath = resolveRealHomeAuthPath(params.ctx)
+    return {
+      ...await readCodexCredentialSourceDigest(resolvedPath),
+      inlineDigest: undefined,
+      resolvedPath,
+      sourceKind: 'real-home'
+    } satisfies CodexResetCreditEffectiveSourceState
+  }
+
+  const configuredAccount = params.canonicalAccount ?? (
+    params.allowConfiguredFallback
+      ? resolveCodexAdapterConfig(params.ctx).accounts[params.accountKey]
+      : undefined
+  )
+  if (params.expected.sourceKind === 'configured-auth-file') {
+    const resolvedPath = resolveConfiguredAuthFilePath(params.ctx, configuredAccount?.authFile)
+    return {
+      ...await readCodexCredentialSourceDigest(resolvedPath),
+      inlineDigest: undefined,
+      resolvedPath,
+      sourceKind: 'configured-auth-file'
+    } satisfies CodexResetCreditEffectiveSourceState
+  }
+
+  const authContent = decodeCodexInlineAuthContent(configuredAccount?.auth)
+  const contentDigest = authContent == null
+    ? undefined
+    : createHash('sha256').update(authContent).digest('hex')
+  return {
+    contentDigest,
+    exists: authContent != null,
+    inlineDigest: contentDigest,
+    resolvedPath: undefined,
+    stableIdentity: toCodexStableCredentialIdentity(
+      authContent == null ? undefined : readCodexAuthIdentityFromContent(authContent)
+    ),
+    sourceKind: 'global-config'
+  } satisfies CodexResetCreditEffectiveSourceState
+}
+
+const codexResetCreditEffectiveSourcesMatch = (
+  left: CodexResetCreditEffectiveSourceState,
+  right: CodexResetCreditEffectiveSourceState
+) => (
+  left.sourceKind === right.sourceKind &&
+  left.resolvedPath === right.resolvedPath &&
+  left.exists === right.exists &&
+  left.contentDigest === right.contentDigest &&
+  left.inlineDigest === right.inlineDigest &&
+  codexStableCredentialIdentitiesMatch(left.stableIdentity, right.stableIdentity)
+)
+
+const assertCodexResetCreditCredentialIsCurrent = async (params: {
+  expected: CodexResetCreditCredentialState
+  ctx: Pick<AdapterCtx, 'configs' | 'cwd' | 'env'>
+  targetPath: string
+}) => {
+  const canonicalState = await readCodexGlobalConfiguredAccountState(
+    params.targetPath,
+    params.expected.accountKey
+  )
+  const currentCanonical = await buildCodexResetCreditCanonicalState({
+    accountKey: params.expected.accountKey,
+    ctx: params.ctx,
+    state: canonicalState
+  })
+  const canonicalMatches = params.expected.canonicalConfigExists === currentCanonical.canonicalConfigExists &&
+    params.expected.tombstones.length === currentCanonical.tombstones.length &&
+    params.expected.tombstones.every((value, index) => value === currentCanonical.tombstones[index]) &&
+    (
+      params.expected.canonicalAccount == null
+        ? currentCanonical.canonicalAccount == null
+        : currentCanonical.canonicalAccount != null &&
+          codexGlobalAccountCredentialRevisionsMatch(
+            params.expected.canonicalAccount,
+            currentCanonical.canonicalAccount
+          )
+    )
+  const currentEffectiveSource = await readCurrentCodexResetCreditEffectiveSourceState({
+    accountKey: params.expected.accountKey,
+    allowConfiguredFallback: !params.expected.canonicalConfigBacked,
+    canonicalAccount: canonicalState.account,
+    ctx: params.ctx,
+    expected: params.expected.effectiveSource
+  })
   if (
-    currentAuthDigest == null ||
-    descriptorAuthDigest == null ||
-    currentAuthDigest !== descriptorAuthDigest
+    !canonicalMatches ||
+    !codexResetCreditEffectiveSourcesMatch(params.expected.effectiveSource, currentEffectiveSource)
   ) {
     throw new Error(
-      `Codex account "${params.descriptor.key}" changed while this reset-credit request was waiting. Retry with the current account.`
+      `Codex account "${params.expected.accountKey}" changed while this reset-credit request was waiting. Retry with the current account.`
     )
   }
+}
+
+const captureCodexResetCreditCredentialState = async (params: {
+  account?: CodexConfiguredAccount
+  descriptor: CodexAccountDescriptor
+  accountKey: string
+  ctx: Pick<AdapterCtx, 'configs' | 'cwd' | 'env'>
+  descriptorTombstones: Record<string, string[]>
+  required: boolean
+}) => {
+  return withCanonicalConfigWriteLock(
+    resolveCodexGlobalConfigPath(params.ctx),
+    async (targetPath) => {
+      const canonicalAccountState = await readCodexGlobalConfiguredAccountState(
+        targetPath,
+        params.accountKey
+      )
+      const canonicalConfigBacked = params.descriptor.canonicalConfigBacked === true ||
+        canonicalAccountState.account != null
+      if (params.account == null && canonicalAccountState.account != null) {
+        throw new Error(
+          `Codex account "${params.accountKey}" changed while this reset-credit request was waiting. Retry with the current account.`
+        )
+      }
+      if (
+        params.account != null &&
+        canonicalAccountState.account == null &&
+        (params.required || canonicalConfigBacked)
+      ) {
+        throw new Error(
+          `Codex account "${params.accountKey}" changed or was removed while this reset-credit request was waiting. Retry with the current account.`
+        )
+      }
+      if (params.account != null && canonicalAccountState.account != null) {
+        const descriptorState = await buildCodexGlobalAccountCredentialState({
+          account: params.account,
+          accountKey: params.accountKey,
+          accountTombstones: params.descriptorTombstones,
+          ctx: params.ctx
+        })
+        const canonicalState = await buildCodexGlobalAccountCredentialState({
+          account: canonicalAccountState.account,
+          accountKey: params.accountKey,
+          accountTombstones: canonicalAccountState.accountTombstones,
+          ctx: params.ctx
+        })
+        if (!codexGlobalAccountCredentialStatesMatch(descriptorState, canonicalState)) {
+          throw new Error(
+            `Codex account "${params.accountKey}" changed while this reset-credit request was waiting. Retry with the current account.`
+          )
+        }
+      }
+      const canonicalState = await buildCodexResetCreditCanonicalState({
+        accountKey: params.accountKey,
+        ctx: params.ctx,
+        state: canonicalAccountState
+      })
+      const effectiveSource = await buildCodexResetCreditEffectiveSourceState({
+        descriptor: params.descriptor
+      })
+      const currentEffectiveSource = await readCurrentCodexResetCreditEffectiveSourceState({
+        accountKey: params.accountKey,
+        allowConfiguredFallback: !canonicalConfigBacked,
+        canonicalAccount: canonicalAccountState.account,
+        ctx: params.ctx,
+        expected: effectiveSource
+      })
+      if (!codexResetCreditEffectiveSourcesMatch(effectiveSource, currentEffectiveSource)) {
+        throw new Error(
+          `Codex account "${params.accountKey}" changed while this reset-credit request was waiting. Retry with the current account.`
+        )
+      }
+      return {
+        accountKey: params.accountKey,
+        canonicalAccount: canonicalState.canonicalAccount,
+        canonicalConfigBacked,
+        canonicalConfigExists: canonicalState.canonicalConfigExists,
+        effectiveSource,
+        tombstones: canonicalState.tombstones
+      } satisfies CodexResetCreditCredentialState
+    }
+  )
 }
 
 const buildMetadataFromConfiguredAccount = (
@@ -1425,6 +1935,7 @@ const buildCodexGlobalAccountConfig = (params: {
   existing?: CodexConfiguredAccount
   accountCreated?: boolean
   credentialChanged?: boolean
+  nextCredentialRevision?: string
 }): CodexConfiguredAccount => ({
   ...params.existing,
   authFile: undefined,
@@ -1453,7 +1964,7 @@ const buildCodexGlobalAccountConfig = (params: {
     params.accountCreated === true ? createAdapterAccountGeneration() : undefined
   ),
   credentialRevision: params.credentialChanged === true
-    ? createAdapterCredentialRevision(params.existing?.credentialRevision)
+    ? params.nextCredentialRevision ?? createAdapterCredentialRevision(params.existing?.credentialRevision)
     : params.existing?.credentialRevision,
   credentialUpdatedAt: params.credentialChanged === true
     ? Date.now()
@@ -1466,14 +1977,57 @@ const upsertCodexGlobalAccountConfig = async (
   params: {
     key: string
     authContent: string
-    metadata: CodexStoredAccountMetadata
+    allocateCollisionSafeKey?: boolean
+    metadata?: CodexStoredAccountMetadata
     expectedCredentialRevision?: CodexGlobalAccountCredentialRevision
+    nextCredentialRevision?: string
   }
 ) => {
+  let resolvedKey = params.key
   await updateCodexGlobalAdapterConfig(ctx, async (codexConfig, accounts) => {
     const accountTombstones = normalizeAdapterAccountTombstones(codexConfig.accountTombstones)
-    const existing = isRecord(accounts[params.key])
-      ? accounts[params.key] as CodexConfiguredAccount
+    const incomingAuthDigest = createHash('sha256').update(params.authContent).digest('hex')
+    const incomingIdentity = mergeCodexProbeWithCredentialIdentityAuthority(
+      readCodexAuthIdentityFromContent(params.authContent),
+      params.metadata
+    )
+    const matchesIncomingCredential = async (account: CodexConfiguredAccount) => {
+      const configuredAuthFilePath = resolveConfiguredAuthFilePath(ctx, account.authFile)
+      let currentAuthContent: string | undefined
+      if (configuredAuthFilePath != null) {
+        currentAuthContent = await readFile(configuredAuthFilePath, 'utf8').catch(() => undefined)
+      } else {
+        currentAuthContent = decodeCodexInlineAuthContent(account.auth)
+      }
+      if (currentAuthContent != null) {
+        const currentAuthDigest = createHash('sha256').update(currentAuthContent).digest('hex')
+        return currentAuthDigest === incomingAuthDigest || isSameCodexAccountIdentity(
+          incomingIdentity,
+          readCodexAuthIdentityFromContent(currentAuthContent)
+        )
+      }
+      return normalizeNonEmptyString(account.authDigest) === incomingAuthDigest ||
+        isSameCodexAccountIdentity(
+          incomingIdentity,
+          buildProbeFromMetadata(buildMetadataFromConfiguredAccount(params.key, account))
+        )
+    }
+
+    if (params.allocateCollisionSafeKey === true && isRecord(accounts[resolvedKey])) {
+      const occupied = accounts[resolvedKey] as CodexConfiguredAccount
+      if (!await matchesIncomingCredential(occupied)) {
+        const digestKey = `${params.key}-${incomingAuthDigest.slice(0, 12)}`
+        resolvedKey = digestKey
+        for (let suffix = 2; isRecord(accounts[resolvedKey]); suffix += 1) {
+          const candidate = accounts[resolvedKey] as CodexConfiguredAccount
+          if (await matchesIncomingCredential(candidate)) break
+          resolvedKey = `${digestKey}-${suffix}`
+        }
+      }
+    }
+
+    const existing = isRecord(accounts[resolvedKey])
+      ? accounts[resolvedKey] as CodexConfiguredAccount
       : undefined
     if (params.expectedCredentialRevision != null) {
       const currentCredentialRevision = existing == null
@@ -1487,34 +2041,40 @@ const upsertCodexGlobalAccountConfig = async (
         )
       ) {
         throw new Error(
-          `Codex account "${params.key}" changed while sign-in was in progress. Refresh and try again.`
+          `Codex account "${resolvedKey}" changed while sign-in was in progress. Refresh and try again.`
         )
       }
     }
     const nextAccount = buildCodexGlobalAccountConfig({
-      key: params.key,
+      key: resolvedKey,
       authContent: params.authContent,
       metadata: {
-        ...params.metadata,
-        createdAt: params.metadata.createdAt ?? existing?.createdAt ?? Date.now(),
-        updatedAt: params.metadata.updatedAt ?? Date.now()
+        ...(params.metadata ?? (
+          existing == null
+            ? {}
+            : buildMetadataFromConfiguredAccount(resolvedKey, existing, params.authContent)
+        )),
+        createdAt: params.metadata?.createdAt ?? existing?.createdAt ?? Date.now(),
+        updatedAt: params.metadata?.updatedAt ?? Date.now()
       },
       existing,
       accountCreated: existing == null,
-      credentialChanged: true
+      credentialChanged: true,
+      nextCredentialRevision: params.nextCredentialRevision
     })
-    if (isAdapterAccountGenerationDeleted(accountTombstones, params.key, nextAccount.generation)) {
-      throw new Error(`Codex account "${params.key}" was deleted while sign-in was in progress.`)
+    if (isAdapterAccountGenerationDeleted(accountTombstones, resolvedKey, nextAccount.generation)) {
+      throw new Error(`Codex account "${resolvedKey}" was deleted while sign-in was in progress.`)
     }
-    accounts[params.key] = nextAccount
+    accounts[resolvedKey] = nextAccount
 
     return {
       ...codexConfig,
-      defaultAccount: normalizeNonEmptyString(codexConfig.defaultAccount) ?? params.key,
+      defaultAccount: normalizeNonEmptyString(codexConfig.defaultAccount) ?? resolvedKey,
       accounts,
       ...(Object.keys(accountTombstones).length === 0 ? { accountTombstones: undefined } : { accountTombstones })
     }
   })
+  return resolvedKey
 }
 
 const removeCodexGlobalAccountConfig = async (
@@ -1681,27 +2241,860 @@ const updateCodexGlobalAccountMetadata = async (
   })
 }
 
+interface CodexInlineCredentialSource {
+  authContent: string
+  canonical: boolean
+  snapshot: CodexInlineCredentialSnapshot
+}
+
+const resolveCodexInlineCredentialSource = async (params: {
+  accountKey: string
+  ctx: Pick<AdapterCtx, 'cwd' | 'env'>
+  fallbackAuthContent?: string
+  fallbackSnapshot?: CodexInlineCredentialSnapshot
+}): Promise<CodexInlineCredentialSource> => {
+  return withCanonicalConfigWriteLock(
+    resolveCodexGlobalConfigPath(params.ctx),
+    async (targetPath) => {
+      const state = await readCodexGlobalConfiguredAccountState(targetPath, params.accountKey)
+      if (!state.configExists) {
+        if (params.fallbackAuthContent == null || params.fallbackSnapshot == null) {
+          throw new Error(`Codex account "${params.accountKey}" has no canonical credential source.`)
+        }
+        return {
+          authContent: params.fallbackAuthContent,
+          canonical: false,
+          snapshot: params.fallbackSnapshot
+        }
+      }
+
+      const configuredAccount = state.account
+      if (configuredAccount == null) {
+        throw new Error(
+          `Codex account "${params.accountKey}" changed or was removed before its credential owner was reconciled.`
+        )
+      }
+      if (
+        isAdapterAccountGenerationDeleted(
+          state.accountTombstones,
+          params.accountKey,
+          configuredAccount.generation
+        )
+      ) {
+        throw new Error(`Codex account "${params.accountKey}" was deleted before its credential owner was reconciled.`)
+      }
+      if (normalizeNonEmptyString(configuredAccount.authFile) != null) {
+        throw new Error(
+          `Codex account "${params.accountKey}" changed to an explicit authFile before its credential owner was reconciled.`
+        )
+      }
+
+      const authContent = decodeCodexInlineAuthContent(configuredAccount.auth)
+      if (authContent == null) {
+        throw new Error(
+          `Codex account "${params.accountKey}" no longer has a portable inline credential.`
+        )
+      }
+      return {
+        authContent,
+        canonical: true,
+        snapshot: buildCodexInlineCredentialSnapshot(configuredAccount, authContent)
+      }
+    }
+  )
+}
+
+const toCodexGlobalAccountCredentialRevision = (
+  snapshot: CodexInlineCredentialSnapshot
+): CodexGlobalAccountCredentialRevision => ({
+  credentialRevision: snapshot.credentialRevision ?? undefined,
+  generation: snapshot.generation ?? undefined,
+  inlineAuthDigest: snapshot.sourceDigest
+})
+
+const codexInlineCredentialOwnerStateAcceptsSnapshot = (
+  state: CodexInlineCredentialOwnerState,
+  snapshot: CodexInlineCredentialSnapshot
+) =>
+  state.acceptedSnapshots.some(candidate => (
+    codexInlineCredentialSnapshotsMatch(candidate, snapshot)
+  )) || (
+    state.pendingSnapshot != null &&
+    (
+      codexInlineCredentialSnapshotsMatch(state.pendingSnapshot.from, snapshot) ||
+      codexInlineCredentialSnapshotsMatch(state.pendingSnapshot.to, snapshot)
+    )
+  )
+
+const canReuseCodexInlineCredentialOwner = async (params: {
+  accountKey: string
+  ctx: Pick<AdapterCtx, 'cwd' | 'env'>
+  currentCredentialRevision: CodexGlobalAccountCredentialRevision
+  descriptorSnapshot: CodexInlineCredentialSnapshot
+}) => {
+  const currentSourceDigest = normalizeNonEmptyString(
+    params.currentCredentialRevision.inlineAuthDigest
+  )
+  if (currentSourceDigest == null) return false
+  const currentSnapshot: CodexInlineCredentialSnapshot = {
+    credentialRevision: normalizeNonEmptyString(
+      params.currentCredentialRevision.credentialRevision
+    ) ?? null,
+    generation: normalizeNonEmptyString(params.currentCredentialRevision.generation) ?? null,
+    sourceDigest: currentSourceDigest
+  }
+  const statePath = resolveCodexInlineCredentialOwnerStatePath(params.ctx, params.accountKey)
+  return withCanonicalConfigWriteLock(statePath, async (targetPath) => {
+    const state = await readCodexInlineCredentialOwnerState(targetPath, params.accountKey)
+    return state?.initialized === true &&
+      codexInlineCredentialOwnerStateAcceptsSnapshot(state, params.descriptorSnapshot) &&
+      codexInlineCredentialOwnerStateAcceptsSnapshot(state, currentSnapshot)
+  })
+}
+
+const reconcileCodexInlineCredentialOwnerLocked = async (params: {
+  accountKey: string
+  ctx: Pick<AdapterCtx, 'cwd' | 'env'>
+  source: CodexInlineCredentialSource
+  state: CodexInlineCredentialOwnerState
+  statePath: string
+}) => {
+  let { source, state } = params
+  if (
+    state.pendingSnapshot != null &&
+    codexInlineCredentialSnapshotsMatch(state.pendingSnapshot.to, source.snapshot)
+  ) {
+    state = {
+      ...state,
+      acceptedSnapshots: appendCodexInlineCredentialSnapshot(
+        state.acceptedSnapshots,
+        state.pendingSnapshot.to
+      ),
+      pendingSnapshot: undefined
+    }
+    await writeCodexInlineCredentialOwnerState(params.statePath, state)
+  } else if (
+    state.pendingSnapshot != null &&
+    !codexInlineCredentialSnapshotsMatch(state.pendingSnapshot.from, source.snapshot)
+  ) {
+    state = { ...state, pendingSnapshot: undefined }
+    await writeCodexInlineCredentialOwnerState(params.statePath, state)
+  }
+
+  const sourceBelongsToLineage = codexInlineCredentialOwnerStateAcceptsSnapshot(
+    state,
+    source.snapshot
+  )
+  const ownerPath = resolveCodexInlineCredentialOwnerPath(params.ctx, state.ownerId)
+  const ownerStat = await lstat(ownerPath).catch(error => {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+    throw error
+  })
+  if (ownerStat == null && state.initialized) {
+    throw new Error(
+      `Codex account "${params.accountKey}" lost its local credential owner. Sign in again before starting another session.`
+    )
+  }
+  if (ownerStat != null && !ownerStat.isFile()) {
+    throw new Error(`Codex account "${params.accountKey}" has an invalid local credential owner.`)
+  }
+  if (ownerStat == null) {
+    await writeCodexPrivateFileAtomically(ownerPath, source.authContent)
+  }
+  if (!state.initialized) {
+    state = { ...state, initialized: true }
+    await writeCodexInlineCredentialOwnerState(params.statePath, state)
+  }
+
+  const ownerContent = await readFile(ownerPath, 'utf8')
+  assertCodexCredentialOwnerContentIsComplete(params.accountKey, ownerContent)
+  const ownerDigest = createHash('sha256').update(ownerContent).digest('hex')
+  if (!sourceBelongsToLineage) {
+    const sameGeneration = state.acceptedSnapshots.some(snapshot => (
+      snapshot.generation === source.snapshot.generation
+    ))
+    if (source.canonical && sameGeneration && ownerDigest === source.snapshot.sourceDigest) {
+      state = {
+        ...state,
+        acceptedSnapshots: appendCodexInlineCredentialSnapshot(
+          state.acceptedSnapshots,
+          source.snapshot
+        )
+      }
+      await writeCodexInlineCredentialOwnerState(params.statePath, state)
+    }
+    return { source, state }
+  }
+  if (ownerDigest === source.snapshot.sourceDigest || !source.canonical) {
+    return { source, state }
+  }
+
+  assertCodexCredentialLineageIdentity({
+    accountKey: params.accountKey,
+    candidateAuthContent: ownerContent,
+    sourceAuthContent: source.authContent
+  })
+
+  const nextSnapshot = state.pendingSnapshot != null &&
+      codexInlineCredentialSnapshotsMatch(state.pendingSnapshot.from, source.snapshot) &&
+      state.pendingSnapshot.to.sourceDigest === ownerDigest
+    ? state.pendingSnapshot.to
+    : {
+      credentialRevision: createAdapterCredentialRevision(source.snapshot.credentialRevision),
+      generation: source.snapshot.generation,
+      sourceDigest: ownerDigest
+    }
+  state = {
+    ...state,
+    pendingSnapshot: {
+      from: source.snapshot,
+      to: nextSnapshot
+    }
+  }
+  await writeCodexInlineCredentialOwnerState(params.statePath, state)
+  await upsertCodexGlobalAccountConfig(params.ctx, {
+    key: params.accountKey,
+    authContent: ownerContent,
+    expectedCredentialRevision: toCodexGlobalAccountCredentialRevision(source.snapshot),
+    nextCredentialRevision: nextSnapshot.credentialRevision ?? undefined
+  })
+  state = {
+    ...state,
+    acceptedSnapshots: appendCodexInlineCredentialSnapshot(
+      state.acceptedSnapshots,
+      nextSnapshot
+    ),
+    pendingSnapshot: undefined
+  }
+  await writeCodexInlineCredentialOwnerState(params.statePath, state)
+  source = {
+    authContent: ownerContent,
+    canonical: true,
+    snapshot: nextSnapshot
+  }
+  return { source, state }
+}
+
+const readCodexFileStat = async (targetPath: string) =>
+  lstat(targetPath).catch(error => {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+    throw error
+  })
+
+const codexFileStatsReferToSameNode = (
+  left: Pick<Awaited<ReturnType<typeof lstat>>, 'dev' | 'ino'>,
+  right: Pick<Awaited<ReturnType<typeof lstat>>, 'dev' | 'ino'>
+) => left.dev === right.dev && left.ino === right.ino
+
+const removeClaimedCodexCredentialCandidate = async (
+  candidatePath: string,
+  claimedStat: Pick<Awaited<ReturnType<typeof lstat>>, 'dev' | 'ino'>
+) => {
+  const currentStat = await readCodexFileStat(candidatePath)
+  if (currentStat != null && codexFileStatsReferToSameNode(currentStat, claimedStat)) {
+    await rm(candidatePath, { force: true })
+  }
+}
+
+const restoreClaimedCodexCredentialCandidate = async (
+  candidatePath: string,
+  authPath: string
+) => {
+  const claimedStat = await readCodexFileStat(candidatePath)
+  if (claimedStat == null) return
+  try {
+    if (claimedStat.isFile()) {
+      await link(candidatePath, authPath)
+    } else if (claimedStat.isSymbolicLink()) {
+      await symlink(await readlink(candidatePath), authPath, 'file')
+    } else {
+      return
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') return
+    throw error
+  }
+  await removeClaimedCodexCredentialCandidate(candidatePath, claimedStat)
+}
+
+const readClaimedCodexCredentialCandidate = async (candidatePath: string) => {
+  const claimedPathStat = await readCodexFileStat(candidatePath)
+  if (claimedPathStat?.isFile() !== true) return undefined
+
+  let handle
+  try {
+    handle = await open(candidatePath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW)
+  } catch (error) {
+    if (['ELOOP', 'ENOENT', 'EINVAL'].includes((error as NodeJS.ErrnoException).code ?? '')) {
+      return undefined
+    }
+    throw error
+  }
+  try {
+    const openedStat = await handle.stat()
+    if (
+      !openedStat.isFile() ||
+      !codexFileStatsReferToSameNode(claimedPathStat, openedStat)
+    ) {
+      return undefined
+    }
+    return {
+      authContent: await handle.readFile({ encoding: 'utf8' }),
+      stat: openedStat
+    }
+  } finally {
+    await handle.close()
+  }
+}
+
+const readCodexInstalledOwnerDigest = async (params: {
+  accountKey: string
+  authPath: string
+  ownerPath: string
+}) => {
+  const firstStat = await readCodexFileStat(params.authPath)
+  if (firstStat?.isSymbolicLink() !== true) return undefined
+  let firstTarget: string
+  try {
+    firstTarget = await readlink(params.authPath)
+  } catch (error) {
+    if (['ENOENT', 'EINVAL'].includes((error as NodeJS.ErrnoException).code ?? '')) return undefined
+    throw error
+  }
+  if (resolve(dirname(params.authPath), firstTarget) !== params.ownerPath) return undefined
+
+  const ownerContent = await readFile(params.ownerPath, 'utf8')
+  assertCodexCredentialOwnerContentIsComplete(params.accountKey, ownerContent)
+  const ownerDigest = createCodexAuthContentDigest(ownerContent)
+
+  const finalStat = await readCodexFileStat(params.authPath)
+  if (
+    finalStat?.isSymbolicLink() !== true ||
+    !codexFileStatsReferToSameNode(firstStat, finalStat)
+  ) {
+    return undefined
+  }
+  let finalTarget: string
+  try {
+    finalTarget = await readlink(params.authPath)
+  } catch (error) {
+    if (['ENOENT', 'EINVAL'].includes((error as NodeJS.ErrnoException).code ?? '')) return undefined
+    throw error
+  }
+  return resolve(dirname(params.authPath), finalTarget) === params.ownerPath
+    ? ownerDigest
+    : undefined
+}
+
+const replaceCodexCredentialSymlink = async (params: {
+  accountKey: string
+  authPath: string
+  observedStat: Pick<Awaited<ReturnType<typeof lstat>>, 'dev' | 'ino'>
+  ownerPath: string
+}) => {
+  let observedTarget: string
+  try {
+    observedTarget = await readlink(params.authPath)
+  } catch (error) {
+    if (['ENOENT', 'EINVAL'].includes((error as NodeJS.ErrnoException).code ?? '')) return undefined
+    throw error
+  }
+  const revalidatedStat = await readCodexFileStat(params.authPath)
+  if (
+    revalidatedStat?.isSymbolicLink() !== true ||
+    !codexFileStatsReferToSameNode(params.observedStat, revalidatedStat)
+  ) {
+    return undefined
+  }
+
+  const candidatePath = `${params.authPath}.oneworks-candidate-${process.pid}-${randomUUID()}`
+  try {
+    await rename(params.authPath, candidatePath)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+    throw error
+  }
+
+  const claimedStat = await readCodexFileStat(candidatePath)
+  if (
+    claimedStat?.isSymbolicLink() !== true ||
+    !codexFileStatsReferToSameNode(params.observedStat, claimedStat)
+  ) {
+    await restoreClaimedCodexCredentialCandidate(candidatePath, params.authPath)
+    return undefined
+  }
+  let claimedTarget: string
+  try {
+    claimedTarget = await readlink(candidatePath)
+  } catch (error) {
+    if (!['ENOENT', 'EINVAL'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error
+    await restoreClaimedCodexCredentialCandidate(candidatePath, params.authPath)
+    return undefined
+  }
+  if (claimedTarget !== observedTarget) {
+    await restoreClaimedCodexCredentialCandidate(candidatePath, params.authPath)
+    return undefined
+  }
+
+  try {
+    await symlink(params.ownerPath, params.authPath, 'file')
+  } catch (error) {
+    await restoreClaimedCodexCredentialCandidate(candidatePath, params.authPath)
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') return undefined
+    throw error
+  }
+
+  const installedStat = await readCodexFileStat(params.authPath)
+  const installedOwnerDigest = await readCodexInstalledOwnerDigest(params)
+  if (installedOwnerDigest == null) {
+    if (installedStat?.isSymbolicLink() === true) {
+      const failedInstallPath = `${params.authPath}.oneworks-candidate-${process.pid}-${randomUUID()}`
+      try {
+        await rename(params.authPath, failedInstallPath)
+        const failedInstallStat = await readCodexFileStat(failedInstallPath)
+        if (
+          failedInstallStat != null &&
+          codexFileStatsReferToSameNode(installedStat, failedInstallStat)
+        ) {
+          await removeClaimedCodexCredentialCandidate(failedInstallPath, failedInstallStat)
+        } else {
+          await restoreClaimedCodexCredentialCandidate(failedInstallPath, params.authPath)
+        }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+      }
+    }
+    await restoreClaimedCodexCredentialCandidate(candidatePath, params.authPath)
+    return undefined
+  }
+  await removeClaimedCodexCredentialCandidate(candidatePath, claimedStat)
+  return installedOwnerDigest
+}
+
+const bindCodexInlineCredentialOwnerPath = async (params: {
+  accountKey: string
+  authPath: string
+  ctx: Pick<AdapterCtx, 'cwd' | 'env'>
+  ownerId: string
+  startingDigest?: string
+}): Promise<string> => {
+  const statePath = resolveCodexInlineCredentialOwnerStatePath(params.ctx, params.accountKey)
+  return withCanonicalConfigWriteLock(statePath, async (targetPath) => {
+    let state = await readCodexInlineCredentialOwnerState(targetPath, params.accountKey)
+    if (state == null || state.ownerId !== params.ownerId) {
+      throw new Error(`Codex account "${params.accountKey}" changed its lifecycle credential owner.`)
+    }
+    let source = await resolveCodexInlineCredentialSource(params)
+    if (!codexInlineCredentialOwnerStateAcceptsSnapshot(state, source.snapshot)) {
+      throw new Error(`Codex account "${params.accountKey}" changed its credential lineage.`)
+    }
+    const ownerPath = resolveCodexInlineCredentialOwnerPath(params.ctx, state.ownerId)
+    let expectedOwnerDigest = params.startingDigest ?? source.snapshot.sourceDigest
+
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const authStat = await readCodexFileStat(params.authPath)
+      if (authStat?.isSymbolicLink()) {
+        let installedOwnerDigest = await readCodexInstalledOwnerDigest({
+          accountKey: params.accountKey,
+          authPath: params.authPath,
+          ownerPath
+        })
+        installedOwnerDigest ??= await replaceCodexCredentialSymlink({
+          accountKey: params.accountKey,
+          authPath: params.authPath,
+          observedStat: authStat,
+          ownerPath
+        })
+        if (installedOwnerDigest == null) continue
+        if (installedOwnerDigest !== source.snapshot.sourceDigest) {
+          const reconciled = await reconcileCodexInlineCredentialOwnerLocked({
+            ...params,
+            source,
+            state,
+            statePath: targetPath
+          })
+          source = reconciled.source
+          state = reconciled.state
+        }
+        return installedOwnerDigest
+      }
+      if (authStat != null && !authStat.isFile()) {
+        throw new Error(`Codex account "${params.accountKey}" has an invalid lifecycle credential path.`)
+      }
+
+      if (authStat?.isFile()) {
+        const candidatePath = `${params.authPath}.oneworks-candidate-${process.pid}-${randomUUID()}`
+        try {
+          await rename(params.authPath, candidatePath)
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue
+          throw error
+        }
+
+        try {
+          const claimedCandidate = await readClaimedCodexCredentialCandidate(candidatePath)
+          if (claimedCandidate == null) {
+            await restoreClaimedCodexCredentialCandidate(candidatePath, params.authPath)
+            continue
+          }
+          const candidateContent = claimedCandidate.authContent
+          assertCodexCredentialOwnerContentIsComplete(params.accountKey, candidateContent)
+          assertCodexCredentialLineageIdentity({
+            accountKey: params.accountKey,
+            candidateAuthContent: candidateContent,
+            sourceAuthContent: source.authContent
+          })
+          const candidateDigest = createCodexAuthContentDigest(candidateContent)
+          const ownerContent = await readFile(ownerPath, 'utf8')
+          assertCodexCredentialOwnerContentIsComplete(params.accountKey, ownerContent)
+          const ownerDigest = createCodexAuthContentDigest(ownerContent)
+          if (ownerDigest !== expectedOwnerDigest && ownerDigest !== candidateDigest) {
+            throw new Error(
+              `Codex account "${params.accountKey}" changed concurrently while its lifecycle credential was reconciled.`
+            )
+          }
+          if (ownerDigest !== candidateDigest) {
+            await writeCodexPrivateFileAtomically(ownerPath, candidateContent)
+          }
+          expectedOwnerDigest = candidateDigest
+          const reconciled = await reconcileCodexInlineCredentialOwnerLocked({
+            ...params,
+            source,
+            state,
+            statePath: targetPath
+          })
+          source = reconciled.source
+          state = reconciled.state
+          await removeClaimedCodexCredentialCandidate(
+            candidatePath,
+            claimedCandidate.stat
+          )
+        } catch (error) {
+          if (await readCodexFileStat(candidatePath) != null) {
+            await restoreClaimedCodexCredentialCandidate(candidatePath, params.authPath)
+          }
+          throw error
+        }
+        continue
+      }
+
+      try {
+        await symlink(ownerPath, params.authPath, 'file')
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'EEXIST') continue
+        throw error
+      }
+      const installedOwnerDigest = await readCodexInstalledOwnerDigest({
+        accountKey: params.accountKey,
+        authPath: params.authPath,
+        ownerPath
+      })
+      if (installedOwnerDigest == null) continue
+      if (installedOwnerDigest !== source.snapshot.sourceDigest) {
+        const reconciled = await reconcileCodexInlineCredentialOwnerLocked({
+          ...params,
+          source,
+          state,
+          statePath: targetPath
+        })
+        source = reconciled.source
+        state = reconciled.state
+      }
+      return installedOwnerDigest
+    }
+
+    throw new Error(
+      `Codex account "${params.accountKey}" changed its lifecycle credential path repeatedly while it was reconciled.`
+    )
+  })
+}
+
+const commitCodexInlineCredentialCandidate = async (params: {
+  accountKey: string
+  authContent: string
+  ctx: Pick<AdapterCtx, 'cwd' | 'env'>
+  ownerId: string
+  startingDigest: string
+}) => {
+  const statePath = resolveCodexInlineCredentialOwnerStatePath(params.ctx, params.accountKey)
+  return withCanonicalConfigWriteLock(statePath, async (targetPath) => {
+    const state = await readCodexInlineCredentialOwnerState(targetPath, params.accountKey)
+    if (state == null || state.ownerId !== params.ownerId) {
+      throw new Error(`Codex account "${params.accountKey}" changed its credential owner.`)
+    }
+    const source = await resolveCodexInlineCredentialSource(params)
+    if (!codexInlineCredentialOwnerStateAcceptsSnapshot(state, source.snapshot)) {
+      throw new Error(`Codex account "${params.accountKey}" changed its credential lineage.`)
+    }
+    assertCodexCredentialOwnerContentIsComplete(params.accountKey, params.authContent)
+    assertCodexCredentialLineageIdentity({
+      accountKey: params.accountKey,
+      candidateAuthContent: params.authContent,
+      sourceAuthContent: source.authContent
+    })
+    const candidateDigest = createCodexAuthContentDigest(params.authContent)
+    const ownerPath = resolveCodexInlineCredentialOwnerPath(params.ctx, state.ownerId)
+    const ownerContent = await readFile(ownerPath, 'utf8')
+    assertCodexCredentialOwnerContentIsComplete(params.accountKey, ownerContent)
+    const ownerDigest = createCodexAuthContentDigest(ownerContent)
+    if (ownerDigest !== params.startingDigest && ownerDigest !== candidateDigest) {
+      throw new Error(
+        `Codex account "${params.accountKey}" changed concurrently while its probe credential was reconciled.`
+      )
+    }
+    if (ownerDigest !== candidateDigest) {
+      await writeCodexPrivateFileAtomically(ownerPath, params.authContent)
+    }
+    return reconcileCodexInlineCredentialOwnerLocked({
+      ...params,
+      source,
+      state,
+      statePath: targetPath
+    })
+  })
+}
+
+const ensureCodexInlineCredentialOwner = async (params: {
+  ctx: Pick<AdapterCtx, 'cwd' | 'env'>
+  descriptor: CodexAccountDescriptor
+}) => {
+  const { ctx, descriptor } = params
+  if (
+    descriptor.sourceKind !== 'global-config' ||
+    descriptor.authFilePath != null ||
+    descriptor.authContent == null ||
+    descriptor.inlineCredentialSnapshot == null
+  ) {
+    return undefined
+  }
+
+  const statePath = resolveCodexInlineCredentialOwnerStatePath(ctx, descriptor.key)
+  return withCanonicalConfigWriteLock(statePath, async (targetPath) => {
+    const source = await resolveCodexInlineCredentialSource({
+      accountKey: descriptor.key,
+      ctx,
+      fallbackAuthContent: descriptor.authContent,
+      fallbackSnapshot: descriptor.inlineCredentialSnapshot
+    })
+    let state = await readCodexInlineCredentialOwnerState(targetPath, descriptor.key)
+    const pendingMatchesCurrent = state?.pendingSnapshot != null && (
+      codexInlineCredentialSnapshotsMatch(state.pendingSnapshot.from, source.snapshot) ||
+      codexInlineCredentialSnapshotsMatch(state.pendingSnapshot.to, source.snapshot)
+    )
+    let acceptedMatchesCurrent = state?.acceptedSnapshots.some(snapshot => (
+      codexInlineCredentialSnapshotsMatch(snapshot, source.snapshot)
+    )) === true
+
+    if (state != null && !acceptedMatchesCurrent && !pendingMatchesCurrent && source.canonical) {
+      const previousOwnerPath = resolveCodexInlineCredentialOwnerPath(ctx, state.ownerId)
+      const previousOwnerContent = await readFile(previousOwnerPath, 'utf8').catch(error => {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+        throw error
+      })
+      if (
+        previousOwnerContent != null &&
+        isCodexCredentialOwnerContentComplete(previousOwnerContent)
+      ) {
+        const previousOwnerDigest = createCodexAuthContentDigest(previousOwnerContent)
+        const sameGeneration = state.acceptedSnapshots.some(snapshot => (
+          snapshot.generation === source.snapshot.generation
+        ))
+        if (sameGeneration && previousOwnerDigest === source.snapshot.sourceDigest) {
+          state = {
+            ...state,
+            acceptedSnapshots: appendCodexInlineCredentialSnapshot(
+              state.acceptedSnapshots,
+              source.snapshot
+            )
+          }
+          await writeCodexInlineCredentialOwnerState(targetPath, state)
+          acceptedMatchesCurrent = true
+        }
+      }
+    }
+
+    if (state == null || (!acceptedMatchesCurrent && !pendingMatchesCurrent)) {
+      state = {
+        acceptedSnapshots: [source.snapshot],
+        accountKey: descriptor.key,
+        initialized: false,
+        ownerId: buildCodexInlineCredentialOwnerId(descriptor.key, source.snapshot),
+        version: 1
+      }
+      await writeCodexInlineCredentialOwnerState(targetPath, state)
+    }
+
+    if (
+      state.pendingSnapshot != null &&
+      codexInlineCredentialSnapshotsMatch(state.pendingSnapshot.to, source.snapshot)
+    ) {
+      state = {
+        ...state,
+        acceptedSnapshots: appendCodexInlineCredentialSnapshot(
+          state.acceptedSnapshots,
+          state.pendingSnapshot.to
+        ),
+        pendingSnapshot: undefined
+      }
+      await writeCodexInlineCredentialOwnerState(targetPath, state)
+    } else if (
+      state.pendingSnapshot != null &&
+      !codexInlineCredentialSnapshotsMatch(state.pendingSnapshot.from, source.snapshot)
+    ) {
+      state = { ...state, pendingSnapshot: undefined }
+      await writeCodexInlineCredentialOwnerState(targetPath, state)
+    }
+
+    const ownerPath = resolveCodexInlineCredentialOwnerPath(ctx, state.ownerId)
+    const ownerStat = await lstat(ownerPath).catch(error => {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+      throw error
+    })
+    if (ownerStat == null && state.initialized) {
+      throw new Error(
+        `Codex account "${descriptor.key}" lost its local credential owner. Sign in again before starting another session.`
+      )
+    }
+    if (ownerStat != null && !ownerStat.isFile()) {
+      throw new Error(`Codex account "${descriptor.key}" has an invalid local credential owner.`)
+    }
+    if (ownerStat == null) {
+      await writeCodexPrivateFileAtomically(ownerPath, source.authContent)
+    }
+    if (!state.initialized) {
+      state = { ...state, initialized: true }
+      await writeCodexInlineCredentialOwnerState(targetPath, state)
+    }
+    const startingAuthContent = await readFile(ownerPath, 'utf8')
+    assertCodexCredentialOwnerContentIsComplete(descriptor.key, startingAuthContent)
+
+    if (source.canonical) {
+      const confirmedSource = await resolveCodexInlineCredentialSource({
+        accountKey: descriptor.key,
+        ctx
+      })
+      if (!codexInlineCredentialSnapshotsMatch(confirmedSource.snapshot, source.snapshot)) {
+        throw new Error(
+          `Codex account "${descriptor.key}" changed while its credential owner was being prepared.`
+        )
+      }
+    }
+
+    descriptor.authContent = source.authContent
+    descriptor.inlineCredentialSnapshot = source.snapshot
+    descriptor.credentialFingerprint = source.snapshot.credentialRevision ?? source.snapshot.sourceDigest
+    if (descriptor.metadata != null) descriptor.metadata.authDigest = source.snapshot.sourceDigest
+
+    const ownerId = state.ownerId
+    const startingDigest = createCodexAuthContentDigest(startingAuthContent)
+    return {
+      ownerId,
+      ownerPath,
+      ownerAuthContent: startingAuthContent,
+      startingDigest,
+      bindCredentialOwner: source.canonical
+        ? async (authPath: string, lifecycleStartingDigest?: string) =>
+          bindCodexInlineCredentialOwnerPath({
+            accountKey: descriptor.key,
+            authPath,
+            ctx,
+            ownerId,
+            startingDigest: lifecycleStartingDigest
+          })
+        : undefined,
+      commitValidatedCredential: source.canonical
+        ? async (authContent: string) =>
+          commitCodexInlineCredentialCandidate({
+            accountKey: descriptor.key,
+            authContent,
+            ctx,
+            ownerId,
+            startingDigest
+          })
+        : undefined
+    }
+  })
+}
+
 const writeDescriptorAuthSourceFile = async (params: {
   ctx: Pick<AdapterCtx, 'cwd' | 'env' | 'ctxId'>
   descriptor: CodexAccountDescriptor
   scope: string
 }) => {
-  if (params.descriptor.authFilePath != null) {
-    return {
-      homeDir: resolveCodexProbeHomeDir(params.ctx, `${params.scope}-${params.descriptor.key}`),
-      authFilePath: params.descriptor.authFilePath
+  const homeDir = resolveCodexProbeHomeDir(
+    params.ctx,
+    `${params.scope}-${params.descriptor.key}-${randomUUID()}`
+  )
+  const lifecycleAuthPath = join(homeDir, '.codex', 'auth.json')
+  await mkdir(dirname(lifecycleAuthPath), { recursive: true })
+
+  try {
+    const descriptorCredentialRevision = params.descriptor.inlineCredentialSnapshot == null
+      ? undefined
+      : toCodexGlobalAccountCredentialRevision(params.descriptor.inlineCredentialSnapshot)
+    const currentCredentialRevision = descriptorCredentialRevision == null
+      ? undefined
+      : await readCodexGlobalAccountCredentialRevision(params.ctx, params.descriptor.key)
+    const descriptorMatchesCurrent = descriptorCredentialRevision != null &&
+      currentCredentialRevision != null &&
+      codexGlobalAccountCredentialRevisionsMatch(
+        descriptorCredentialRevision,
+        currentCredentialRevision
+      )
+    const canReuseCredentialOwner = descriptorMatchesCurrent ||
+      (
+        params.descriptor.inlineCredentialSnapshot != null &&
+        currentCredentialRevision != null &&
+        await canReuseCodexInlineCredentialOwner({
+          accountKey: params.descriptor.key,
+          ctx: params.ctx,
+          currentCredentialRevision,
+          descriptorSnapshot: params.descriptor.inlineCredentialSnapshot
+        })
+      )
+    const credentialOwner = params.descriptor.authFilePath == null && canReuseCredentialOwner
+      ? await ensureCodexInlineCredentialOwner(params)
+      : undefined
+    const sourceAuthContent = credentialOwner?.ownerAuthContent ?? (
+      params.descriptor.authFilePath == null
+        ? params.descriptor.authContent
+        : await readFile(params.descriptor.authFilePath, 'utf8')
+    )
+    if (sourceAuthContent == null) {
+      await rm(homeDir, { recursive: true, force: true })
+      return undefined
     }
+    assertCodexCredentialOwnerContentIsComplete(params.descriptor.key, sourceAuthContent)
+    await writeCodexPrivateFileAtomically(lifecycleAuthPath, sourceAuthContent)
+    const commitValidatedCredential = credentialOwner?.commitValidatedCredential
+    const materializedCredentialDigest = createHash('sha256').update(sourceAuthContent).digest('hex')
+    const materializedCredentialIdentity = toCodexStableCredentialIdentity(
+      readCodexAuthIdentityFromContent(sourceAuthContent)
+    )
+
+    return {
+      homeDir,
+      authFilePath: lifecycleAuthPath,
+      materializedCredentialDigest,
+      materializedCredentialIdentity,
+      cleanup: () => rm(homeDir, { recursive: true, force: true }),
+      commitValidatedCredential: commitValidatedCredential == null
+        ? undefined
+        : async (authContent: string) => {
+          const reconciled = await commitValidatedCredential(authContent)
+          params.descriptor.authContent = reconciled.source.authContent
+          params.descriptor.inlineCredentialSnapshot = reconciled.source.snapshot
+          params.descriptor.credentialFingerprint = reconciled.source.snapshot.credentialRevision ??
+            reconciled.source.snapshot.sourceDigest
+          if (params.descriptor.metadata != null) {
+            params.descriptor.metadata.authDigest = reconciled.source.snapshot.sourceDigest
+          }
+        }
+    }
+  } catch (error) {
+    await rm(homeDir, { recursive: true, force: true }).catch(() => undefined)
+    throw error
   }
-
-  if (params.descriptor.authContent == null) {
-    return undefined
-  }
-
-  const homeDir = resolveCodexProbeHomeDir(params.ctx, `${params.scope}-${params.descriptor.key}`)
-  const authFilePath = join(homeDir, 'auth-source.json')
-  await writeCodexPrivateFileAtomically(authFilePath, params.descriptor.authContent)
-
-  return { homeDir, authFilePath }
 }
 
 const hasCodexAccountAuth = (descriptor: CodexAccountDescriptor | undefined) => (
@@ -1846,6 +3239,37 @@ const resolveProbeLogger = (ctx: Pick<AdapterCtx, 'cwd' | 'ctxId' | 'env'>, key:
   createLogger(ctx.cwd, `${ctx.ctxId}/adapter-codex-accounts`, key, '', 'info', ctx.env as NodeJS.ProcessEnv)
 )
 
+const CODEX_CHILD_SHUTDOWN_GRACE_MS = 500
+
+const terminateCodexChildProcess = async (proc: ChildProcess) => {
+  if (proc.pid == null || proc.exitCode != null || proc.signalCode != null) return
+
+  await new Promise<void>((resolvePromise) => {
+    let settled = false
+    let forceKillTimer: ReturnType<typeof setTimeout> | undefined
+    const finish = () => {
+      if (settled) return
+      settled = true
+      if (forceKillTimer != null) clearTimeout(forceKillTimer)
+      proc.removeListener('exit', finish)
+      proc.removeListener('close', finish)
+      resolvePromise()
+    }
+    proc.once('exit', finish)
+    proc.once('close', finish)
+    if (proc.exitCode != null || proc.signalCode != null) {
+      finish()
+      return
+    }
+
+    proc.kill('SIGTERM')
+    forceKillTimer = setTimeout(() => {
+      if (!settled) proc.kill('SIGKILL')
+    }, CODEX_CHILD_SHUTDOWN_GRACE_MS)
+    forceKillTimer.unref?.()
+  })
+}
+
 const readCodexProbeAuthContent = async (authFilePath: string) => {
   const authFileStat = await lstat(authFilePath)
   if (!authFileStat.isSymbolicLink()) {
@@ -1862,28 +3286,28 @@ const probeCodexAccount = async (params: {
   refresh?: boolean
   fetchProfile?: boolean
   logKey: string
+  signal?: AbortSignal
   consumeResetCredit?: {
     creditId?: string
     idempotencyKey: string
   }
   timeoutMs?: number
 }): Promise<CodexAccountProbeResult> => {
-  const { ctx, homeDir, authFilePath, refresh, fetchProfile, logKey, consumeResetCredit, timeoutMs } = params
+  const { ctx, homeDir, authFilePath, refresh, fetchProfile, logKey, consumeResetCredit, signal, timeoutMs } = params
   const logger = resolveProbeLogger(ctx, logKey)
   const binaryPath = params.binaryPath ?? resolveCodexBinaryPath(ctx.env, ctx.cwd)
   const spawnEnv = buildSpawnEnv(ctx)
-  const authIdentity = await readCodexAuthIdentityFromFile(authFilePath)
   spawnEnv.HOME = homeDir
   spawnEnv.CODEX_HOME = join(homeDir, '.codex')
 
   await mkdir(join(homeDir, '.codex'), { recursive: true })
   const probeAuthFilePath = join(homeDir, '.codex', 'auth.json')
-  await syncSymlinkTarget({
-    sourcePath: authFilePath,
-    targetPath: probeAuthFilePath,
-    type: 'file',
-    onMissingSource: 'remove'
-  })
+  if (resolve(authFilePath) !== resolve(probeAuthFilePath)) {
+    const sourceAuthContent = await readFile(authFilePath, 'utf8')
+    assertCodexCredentialOwnerContentIsComplete(logKey, sourceAuthContent)
+    await writeCodexPrivateFileAtomically(probeAuthFilePath, sourceAuthContent)
+  }
+  const authIdentity = await readCodexAuthIdentityFromFile(probeAuthFilePath)
 
   const proc = spawn(String(binaryPath), ['app-server'], {
     cwd: ctx.cwd,
@@ -1891,16 +3315,19 @@ const probeCodexAccount = async (params: {
     stdio: ['pipe', 'pipe', 'pipe']
   })
   const rpc = new CodexRpcClient(proc, logger)
-  let didExit = false
   const timeout = timeoutMs == null
     ? undefined
     : setTimeout(() => {
       rpc.destroy(`codex account probe timed out after ${timeoutMs}ms`)
-      if (!didExit) {
-        proc.kill('SIGKILL')
-      }
     }, timeoutMs)
   timeout?.unref()
+  const abortProbe = () => {
+    rpc.destroy(
+      signal?.reason instanceof Error
+        ? signal.reason.message
+        : 'Codex account probe was aborted.'
+    )
+  }
 
   proc.stderr?.on('data', (chunk) => {
     logger.debug('[codex account] stderr', { chunk: String(chunk) })
@@ -1909,12 +3336,14 @@ const probeCodexAccount = async (params: {
     rpc.destroy(error instanceof Error ? error.message : String(error))
   })
   proc.once('exit', () => {
-    didExit = true
     rpc.destroy('codex account probe exited')
   })
   rpc.onRequest((id) => {
     rpc.respond(id, {})
   })
+
+  if (signal?.aborted === true) abortProbe()
+  else signal?.addEventListener('abort', abortProbe, { once: true })
 
   try {
     await rpc.request('initialize', {
@@ -2169,12 +3598,14 @@ const probeCodexAccount = async (params: {
       authContent: await readCodexProbeAuthContent(probeAuthFilePath),
       credentialsValidated: accountReadSucceeded && rateLimitsReadSucceeded
     }
+  } catch (error) {
+    if (signal?.aborted === true) throw createAbortError()
+    throw error
   } finally {
     clearTimeout(timeout)
+    signal?.removeEventListener('abort', abortProbe)
     rpc.destroy('codex account probe finished')
-    if (!didExit) {
-      proc.kill()
-    }
+    await terminateCodexChildProcess(proc)
   }
 }
 
@@ -2382,16 +3813,21 @@ const buildRealHomeAccountDescriptor = async (
     priority: 0,
     disabled: false,
     credentialFingerprint: authDigest,
+    credentialSourceDigest: authDigest,
+    credentialSourceIdentity: authIdentity,
     metadata,
     identity: authIdentity
   } satisfies CodexAccountDescriptor
 }
 
 const collectConfiguredAccountDescriptors = async (
-  ctx: Pick<AdapterCtx, 'cwd' | 'env'>,
+  ctx: Pick<AdapterCtx, 'configs' | 'cwd' | 'env'>,
   configuredAccounts: Record<string, CodexConfiguredAccount>
 ) => {
   const descriptors: CodexAccountDescriptor[] = []
+  const globalAdapters = isRecord(ctx.configs[1]?.adapters) ? ctx.configs[1]?.adapters : undefined
+  const globalCodexConfig = isRecord(globalAdapters?.codex) ? globalAdapters.codex : undefined
+  const globalAccounts = isRecord(globalCodexConfig?.accounts) ? globalCodexConfig.accounts : undefined
 
   for (const [key, configuredAccount] of Object.entries(configuredAccounts)) {
     const configuredAuthFilePath = resolveConfiguredAuthFilePath(ctx, configuredAccount.authFile)
@@ -2441,6 +3877,12 @@ const collectConfiguredAccountDescriptors = async (
       disabled: configuredAccount.disabled === true,
       credentialFingerprint: normalizeNonEmptyString(configuredAccount.credentialRevision) ??
         metadata.authDigest ?? authFileFingerprint?.authDigest,
+      credentialSourceDigest: authFileFingerprint?.authDigest,
+      credentialSourceIdentity: authFileFingerprint?.identity,
+      canonicalConfigBacked: isRecord(globalAccounts?.[key]),
+      inlineCredentialSnapshot: hasConfiguredAuthFile || authContent == null
+        ? undefined
+        : buildCodexInlineCredentialSnapshot(configuredAccount, authContent),
       metadata,
       identity: mergedIdentity
     })
@@ -2509,6 +3951,9 @@ const pickPreferredCodexDescriptor = (
       ...configuredAccount,
       authContent: undefined,
       authFilePath: realHomeAccount.authFilePath,
+      credentialSourceKind: 'real-home' as const,
+      credentialSourceDigest: realHomeAccount.credentialSourceDigest,
+      credentialSourceIdentity: realHomeAccount.credentialSourceIdentity,
       credentialFingerprint: realHomeAccount.credentialFingerprint
     }
   }
@@ -2705,33 +4150,36 @@ const getCodexAccountProbeUnlocked = async (params: {
     })
   }
 
-  const liveProbeResult = await probeCodexAccount({
-    ctx,
-    homeDir: authSource.homeDir,
-    authFilePath: authSource.authFilePath,
-    refresh,
-    fetchProfile: normalizeNonEmptyString(descriptor.metadata?.avatarUrl) == null ||
-      normalizeNonEmptyString(descriptor.metadata?.displayName) == null,
-    logKey: `${scope}-${descriptor.key}`
-  })
-  const probe = await mergeProbeWithCachedQuotaUnlocked({
-    ctx,
-    descriptor,
-    probe: liveProbeResult.probe,
-    live: true
-  })
-  if (probe == null) return undefined
-  await writeProbeMetadata({
-    ctx,
-    descriptor,
-    probe,
-    refreshedAuthContent: expectedCredentialRevision == null || !liveProbeResult.credentialsValidated
-      ? undefined
-      : liveProbeResult.authContent,
-    expectedCredentialRevision
-  })
-
-  return probe
+  try {
+    const liveProbeResult = await probeCodexAccount({
+      ctx,
+      homeDir: authSource.homeDir,
+      authFilePath: authSource.authFilePath,
+      fetchProfile: normalizeNonEmptyString(descriptor.metadata?.avatarUrl) == null ||
+        normalizeNonEmptyString(descriptor.metadata?.displayName) == null,
+      logKey: `${scope}-${descriptor.key}`
+    })
+    const probe = await mergeProbeWithCachedQuotaUnlocked({
+      ctx,
+      descriptor,
+      probe: liveProbeResult.probe,
+      live: true
+    })
+    if (probe == null) return undefined
+    if (liveProbeResult.credentialsValidated) {
+      await authSource.commitValidatedCredential?.(liveProbeResult.authContent)
+    }
+    await writeProbeMetadata({
+      ctx,
+      descriptor,
+      probe,
+      refreshedAuthContent: undefined,
+      expectedCredentialRevision
+    })
+    return probe
+  } finally {
+    await authSource.cleanup()
+  }
 }
 
 const getCodexAccountProbe = async (params: {
@@ -3092,6 +4540,7 @@ const runCodexLogin = async (params: {
         stdio: ['ignore', 'pipe', 'pipe']
       })
       let settled = false
+      let requestedFailure: unknown
 
       proc.once('spawn', () => {
         onProgress?.({
@@ -3115,10 +4564,20 @@ const runCodexLogin = async (params: {
         rejectPromise(error)
       }
 
-      const abortLoginFlow = () => {
-        proc.kill()
-        finishReject(createAbortError())
+      const stopLoginFlow = (error: unknown) => {
+        if (settled || requestedFailure != null) return
+        requestedFailure = error
+        if (proc.pid == null) {
+          finishReject(error)
+          return
+        }
+        void terminateCodexChildProcess(proc).then(
+          () => finishReject(error),
+          finishReject
+        )
       }
+
+      const abortLoginFlow = () => stopLoginFlow(createAbortError())
 
       proc.stdout?.on('data', (chunk) => {
         const text = String(chunk)
@@ -3130,8 +4589,12 @@ const runCodexLogin = async (params: {
         stderr += text
         onProgress?.({ stream: 'stderr', message: text })
       })
-      proc.once('error', finishReject)
+      proc.once('error', stopLoginFlow)
       proc.once('exit', (code) => {
+        if (requestedFailure != null) {
+          finishReject(requestedFailure)
+          return
+        }
         if (signal?.aborted === true) {
           finishReject(createAbortError())
           return
@@ -3394,7 +4857,11 @@ export const prepareCodexSessionHome = async (params: {
     throw new Error(`Codex account "${requestedAccount}" is not available.`)
   }
 
-  const accountIdentity = selectedAccount?.metadata?.authDigest ??
+  const inlineCredentialOwner = selectedAccount?.authFilePath == null && selectedAccount?.authContent != null
+    ? await ensureCodexInlineCredentialOwner({ ctx, descriptor: selectedAccount })
+    : undefined
+  const accountIdentity = inlineCredentialOwner?.ownerId ??
+    selectedAccount?.metadata?.authDigest ??
     (selectedAccount?.authContent == null
       ? selectedAccount?.authFilePath ?? selectedAccount?.key ?? selectedAccountKey ?? 'default'
       : createHash('sha256').update(selectedAccount.authContent).digest('hex'))
@@ -3427,7 +4894,7 @@ export const prepareCodexSessionHome = async (params: {
     mockHome: homeDir,
     paths: [
       '.agents/skills',
-      '.codex/auth.json',
+      ...(inlineCredentialOwner == null ? ['.codex/auth.json'] : []),
       '.codex/config.toml',
       '.codex/hooks.json',
       '.codex/sessions',
@@ -3469,11 +4936,14 @@ export const prepareCodexSessionHome = async (params: {
   startupProfiler.mark('codex.accounts.writeSessionConfig', sessionConfigStartedAt)
   const authStartedAt = startupProfiler.now()
   const sessionAuthPath = join(homeDir, '.codex', 'auth.json')
-  if (selectedAccount?.authContent != null && selectedAccount.authFilePath == null) {
-    await writeCodexPrivateFileAtomically(sessionAuthPath, selectedAccount.authContent)
-  } else {
+  const authFilePath = inlineCredentialOwner?.ownerPath ?? selectedAccount?.authFilePath
+  const bindCredentialOwner = inlineCredentialOwner?.bindCredentialOwner
+  const startingDigest = bindCredentialOwner == null
+    ? undefined
+    : await bindCredentialOwner(sessionAuthPath)
+  if (bindCredentialOwner == null) {
     await syncSymlinkTarget({
-      sourcePath: selectedAccount?.authFilePath ?? join(homeDir, MISSING_AUTH_SENTINEL_FILE),
+      sourcePath: authFilePath ?? join(homeDir, MISSING_AUTH_SENTINEL_FILE),
       targetPath: sessionAuthPath,
       type: 'file',
       onMissingSource: 'remove'
@@ -3484,7 +4954,12 @@ export const prepareCodexSessionHome = async (params: {
   return {
     homeDir,
     accountKey: selectedAccount?.key ?? selectedAccountKey,
-    authFilePath: selectedAccount?.authFilePath ?? (selectedAccount?.authContent == null ? undefined : sessionAuthPath)
+    authFilePath,
+    reconcileCredentialOwner: bindCredentialOwner == null || startingDigest == null
+      ? undefined
+      : async () => {
+        await bindCredentialOwner(sessionAuthPath, startingDigest)
+      }
   }
 }
 
@@ -3655,6 +5130,14 @@ export const manageCodexAccount = async (
         ctx,
         normalizedAccount
       )
+      const expectedCredentialState = await captureCodexResetCreditCredentialState({
+        account: configuredAccount,
+        descriptor,
+        accountKey: descriptor.key,
+        ctx,
+        descriptorTombstones: resolveCodexAdapterConfig(ctx).accountTombstones,
+        required: descriptor.sourceKind === 'global-config'
+      })
       const authSource = await writeDescriptorAuthSourceFile({
         ctx,
         descriptor,
@@ -3663,93 +5146,109 @@ export const manageCodexAccount = async (
       if (authSource == null) {
         throw new Error(`Codex account "${normalizedAccount}" has no usable authentication source.`)
       }
-      const expectedCredentialRevision = descriptor.sourceKind === 'global-config' &&
-          descriptor.authContent != null
-        ? await readCodexGlobalAccountCredentialRevision(ctx, descriptor.key)
-        : undefined
+      try {
+        const expectedCredentialRevision = expectedCredentialState.canonicalAccount
 
-      const consume = () =>
-        probeCodexAccount({
-          ctx,
-          homeDir: authSource.homeDir,
-          authFilePath: authSource.authFilePath,
-          refresh: true,
-          fetchProfile: false,
-          logKey: `consume-reset-credit-${descriptor.key}`,
-          consumeResetCredit: {
-            creditId: normalizeNonEmptyString(options.creditId),
-            idempotencyKey: operationId
-          },
-          timeoutMs: resolveCodexResetCreditOperationTimeoutMs(ctx.env)
-        })
-      const liveProbeResult = descriptor.sourceKind === 'global-config'
-        ? await withCanonicalConfigWriteLock(
+        const consume = () =>
+          probeCodexAccount({
+            ctx,
+            homeDir: authSource.homeDir,
+            authFilePath: authSource.authFilePath,
+            refresh: true,
+            fetchProfile: false,
+            logKey: `consume-reset-credit-${descriptor.key}`,
+            consumeResetCredit: {
+              creditId: normalizeNonEmptyString(options.creditId),
+              idempotencyKey: operationId
+            },
+            timeoutMs: resolveCodexResetCreditOperationTimeoutMs(ctx.env)
+          })
+        const liveProbeResult = await withCanonicalConfigWriteLock(
           resolveCodexGlobalConfigPath(ctx),
           async (targetPath) => {
-            await assertCodexGlobalCredentialIsCurrent({ descriptor, targetPath })
+            await assertCodexResetCreditCredentialIsCurrent({
+              ctx,
+              expected: expectedCredentialState,
+              targetPath
+            })
+            if (
+              authSource.materializedCredentialDigest !==
+                expectedCredentialState.effectiveSource.contentDigest ||
+              !codexStableCredentialIdentitiesMatch(
+                authSource.materializedCredentialIdentity,
+                expectedCredentialState.effectiveSource.stableIdentity
+              )
+            ) {
+              throw new Error(
+                `Codex account "${expectedCredentialState.accountKey}" changed while this reset-credit request was waiting. Retry with the current account.`
+              )
+            }
             return consume()
           }
         )
-        : await consume()
-      const liveProbe = liveProbeResult.probe
-      const outcome = liveProbe.resetCreditOutcome
-      if (outcome == null) {
-        throw new Error('Codex returned an unknown reset credit outcome.')
-      }
+        const liveProbe = liveProbeResult.probe
+        const outcome = liveProbe.resetCreditOutcome
+        if (outcome == null) {
+          throw new Error('Codex returned an unknown reset credit outcome.')
+        }
 
-      let probe = liveProbe
-      try {
-        probe = await mergeProbeWithCachedQuotaUnlocked({
-          ctx,
-          descriptor,
-          probe: liveProbe,
-          live: true
-        }) ?? liveProbe
-      } catch (error) {
-        ctx.logger.warn('[codex account] reset credit outcome succeeded, but quota cache update failed', {
-          account: descriptor.key,
-          operationId,
-          error: error instanceof Error ? error.message : String(error)
-        })
-      }
+        let probe = liveProbe
+        try {
+          probe = await mergeProbeWithCachedQuotaUnlocked({
+            ctx,
+            descriptor,
+            probe: liveProbe,
+            live: true
+          }) ?? liveProbe
+        } catch (error) {
+          ctx.logger.warn('[codex account] reset credit outcome succeeded, but quota cache update failed', {
+            account: descriptor.key,
+            operationId,
+            error: error instanceof Error ? error.message : String(error)
+          })
+        }
 
-      try {
-        await writeProbeMetadata({
-          ctx,
-          descriptor,
-          probe,
-          refreshedAuthContent: expectedCredentialRevision == null || !liveProbeResult.credentialsValidated
-            ? undefined
-            : liveProbeResult.authContent,
-          expectedCredentialRevision
-        })
-      } catch (error) {
-        ctx.logger.warn('[codex account] reset credit outcome succeeded, but metadata persistence failed', {
-          account: descriptor.key,
-          operationId,
-          error: error instanceof Error ? error.message : String(error)
-        })
-      }
+        try {
+          if (liveProbeResult.credentialsValidated) {
+            await authSource.commitValidatedCredential?.(liveProbeResult.authContent)
+          }
+          await writeProbeMetadata({
+            ctx,
+            descriptor,
+            probe,
+            refreshedAuthContent: undefined,
+            expectedCredentialRevision
+          })
+        } catch (error) {
+          ctx.logger.warn('[codex account] reset credit outcome succeeded, but metadata persistence failed', {
+            account: descriptor.key,
+            operationId,
+            error: error instanceof Error ? error.message : String(error)
+          })
+        }
 
-      const messages: Record<CodexRateLimitResetCreditOutcome, string> = {
-        reset: probe.quota == null
-          ? 'Used one Codex reset credit. Refresh the quota to load the latest limits.'
-          : 'Used one Codex reset credit and refreshed the quota.',
-        alreadyRedeemed: 'This Codex reset credit was already redeemed.',
-        nothingToReset: 'No eligible Codex rate-limit window needs resetting.',
-        noCredit: 'No Codex reset credit is available.'
-      }
+        const messages: Record<CodexRateLimitResetCreditOutcome, string> = {
+          reset: probe.quota == null
+            ? 'Used one Codex reset credit. Refresh the quota to load the latest limits.'
+            : 'Used one Codex reset credit and refreshed the quota.',
+          alreadyRedeemed: 'This Codex reset credit was already redeemed.',
+          nothingToReset: 'No eligible Codex rate-limit window needs resetting.',
+          noCredit: 'No Codex reset credit is available.'
+        }
 
-      return {
-        accountKey: normalizedAccount,
-        outcome,
-        account: buildCodexAccountDetail({
-          descriptor,
-          defaultAccount,
-          configuredAccount,
-          probe
-        }),
-        message: messages[outcome]
+        return {
+          accountKey: normalizedAccount,
+          outcome,
+          account: buildCodexAccountDetail({
+            descriptor,
+            defaultAccount,
+            configuredAccount,
+            probe
+          }),
+          message: messages[outcome]
+        }
+      } finally {
+        await authSource.cleanup()
       }
     })
   }
@@ -3831,7 +5330,8 @@ export const manageCodexAccount = async (
       authFilePath: loginResult.authFilePath,
       binaryPath: loginResult.binaryPath,
       refresh: true,
-      logKey: `login-${normalizedRequestedKey ?? 'new'}`
+      logKey: `login-${normalizedRequestedKey ?? 'new'}`,
+      signal: options.signal
     })
     const authContent = probeResult.authContent
     const authDigest = createHash('sha256').update(authContent).digest('hex')
@@ -3845,7 +5345,7 @@ export const manageCodexAccount = async (
         authDigest,
         probe
       })
-    const accountKey = reauthenticationTarget?.descriptor.key ??
+    let accountKey = reauthenticationTarget?.descriptor.key ??
       (normalizedRequestedKey != null && slugifyAccountKey(normalizedRequestedKey) !== ''
         ? slugifyAccountKey(normalizedRequestedKey)
         : existingConfiguredAccount?.key != null
@@ -3881,9 +5381,10 @@ export const manageCodexAccount = async (
       message: 'Saving the connected Codex account.'
     })
     await withCodexAccountQuotaCacheLock(ctx, async () => {
-      await upsertCodexGlobalAccountConfig(ctx, {
+      accountKey = await upsertCodexGlobalAccountConfig(ctx, {
         key: accountKey,
         authContent,
+        allocateCollisionSafeKey: options.action === 'add',
         metadata,
         expectedCredentialRevision: reauthenticationCredentialRevision
       })

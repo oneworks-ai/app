@@ -112,7 +112,7 @@
 
 ## 账号额度和头像
 
-- 聊天状态栏和账号下拉的额度数据统一走 `src/hooks/use-adapter-accounts-with-quota.ts`；先展示账号列表快照，再通过带 `refresh: true` 的账号请求刷新，不要在各个 surface 内重复请求或各自维护 TTL。
+- 聊天状态栏和账号下拉的额度数据统一走 `src/hooks/use-adapter-accounts-with-quota.ts`，只读取 adapter 已持久化 / 缓存的账号与额度快照；聊天挂载或启动会话时不得自动发起 `refresh: true` live quota probe，因为 Codex probe 是独立 app-server，可能与会话 app-server 同时进入 OAuth refresh。设置页、额度详情或用户显式刷新继续走对应 detail / action 链路，不要在各个 chat surface 内重复请求。
 - 五小时 / 七天窗口统一由 `src/utils/account-quota.ts` 解析，并复用 `src/components/account-quota/QuotaUsageRing.tsx`；配置详情、状态栏和下拉选项不要各自猜测 metric id、label 或百分比语义。
 - `AccountAvatar` 只消费 adapter 返回的 `avatarUrl`，缺失或图片加载失败时使用本地确定性像素头像；浏览器端不得读取 Codex auth 或自行调用 ChatGPT profile 接口。
 - 状态栏额度环必须放在 `.sender-select-shell--account` 外部，与 select 作为 `.chat-status-bar__account-group` 的 sibling；整个 group 是 popup 宽度锚点。不要把额度环塞进 select shell，否则 trigger 内容会被挤压，popup 也只会继承账号文本宽度。

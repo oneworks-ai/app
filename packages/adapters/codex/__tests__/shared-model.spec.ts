@@ -6,10 +6,17 @@ const handlers = vi.hoisted(() => ({
 }))
 const mocks = vi.hoisted(() => ({
   acquire: vi.fn(),
-  prepareHome: vi.fn(async () => ({ homeDir: '/tmp/ow-shared-model', accountKey: 'work' })),
+  drain: vi.fn(async () => undefined),
+  prepareHome: vi.fn(async () => ({
+    homeDir: '/tmp/ow-shared-model',
+    accountKey: 'work',
+    reconcileCredentialOwner: undefined as (() => Promise<void>) | undefined
+  })),
+  release: vi.fn(),
   resolvePool: vi.fn(async () => ({ enabled: false, candidates: [], cooldownMs: 0 })),
   respond: vi.fn(),
-  request: vi.fn()
+  request: vi.fn(),
+  unregisterThread: vi.fn(async () => undefined)
 }))
 const state = vi.hoisted(() => ({ toolCall: false }))
 const requestedDynamicToolName = () => {
@@ -90,10 +97,11 @@ describe('codex shared model executor', () => {
         handlers.notification = next.onNotification
         handlers.request = next.onRequest
       }),
-      unregisterThread: vi.fn(async () => undefined),
+      unregisterThread: mocks.unregisterThread,
       onExit: vi.fn(),
       runThreadSetup: vi.fn(async (task: () => Promise<unknown>) => await task()),
-      release: vi.fn()
+      drain: mocks.drain,
+      release: mocks.release
     })
   })
 
@@ -124,6 +132,63 @@ describe('codex shared model executor', () => {
     expect(mocks.request).toHaveBeenCalledWith(
       'turn/start',
       expect.objectContaining({ maxOutputTokens: 123 })
+    )
+  })
+
+  it('releases the shared-model lease after lifecycle reconciliation rejects', async () => {
+    const reconcileCredentialOwner = vi.fn(async () => {
+      throw new Error('synthetic reconciliation failure')
+    })
+    mocks.prepareHome.mockResolvedValueOnce({
+      homeDir: '/tmp/ow-shared-model',
+      accountKey: 'work',
+      reconcileCredentialOwner
+    })
+    const { executeCodexSharedModel } = await import('#~/shared-model.js')
+
+    await expect(executeCodexSharedModel(ctx, {
+      sessionId: 'shared-reconciliation-failure',
+      request: {
+        model: 'gpt-example',
+        input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] }]
+      }
+    })).resolves.toMatchObject({ accountKey: 'work' })
+
+    expect(mocks.drain).toHaveBeenCalledOnce()
+    expect(reconcileCredentialOwner).toHaveBeenCalledOnce()
+    expect(mocks.release).toHaveBeenCalledOnce()
+    expect(ctx.logger.warn).toHaveBeenCalledWith(
+      '[codex shared model] credential owner reconciliation failed during teardown',
+      expect.objectContaining({ error: 'synthetic reconciliation failure' })
+    )
+  })
+
+  it('reconciles exactly once and preserves an app-server acquisition error', async () => {
+    const reconcileCredentialOwner = vi.fn(async () => {
+      throw new Error('synthetic reconciliation failure')
+    })
+    mocks.prepareHome.mockResolvedValueOnce({
+      homeDir: '/tmp/ow-shared-model',
+      accountKey: 'work',
+      reconcileCredentialOwner
+    })
+    mocks.acquire.mockRejectedValueOnce(new Error('synthetic acquisition failure'))
+    const { executeCodexSharedModel } = await import('#~/shared-model.js')
+
+    await expect(executeCodexSharedModel(ctx, {
+      sessionId: 'shared-acquisition-failure',
+      request: {
+        model: 'gpt-example',
+        input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] }]
+      }
+    })).rejects.toThrow('synthetic acquisition failure')
+
+    expect(reconcileCredentialOwner).toHaveBeenCalledOnce()
+    expect(mocks.drain).not.toHaveBeenCalled()
+    expect(mocks.release).not.toHaveBeenCalled()
+    expect(ctx.logger.warn).toHaveBeenCalledWith(
+      '[codex shared model] credential owner reconciliation failed after app-server acquisition',
+      expect.objectContaining({ error: 'synthetic reconciliation failure' })
     )
   })
 

@@ -81,6 +81,7 @@ export const createCodexModelSharingBridge = async (
   let stdoutBuffer = ''
   let writeQueue = Promise.resolve()
   let forceKillTimer: ReturnType<typeof setTimeout> | undefined
+  let finalized = false
 
   const reportError = (error: unknown) => {
     if (closed) return
@@ -98,6 +99,23 @@ export const createCodexModelSharingBridge = async (
       }, 2_000)
       forceKillTimer.unref()
     }
+  }
+  const finalize = (code: number | null, signal: NodeJS.Signals | null) => {
+    if (finalized) return
+    finalized = true
+    if (forceKillTimer != null) clearTimeout(forceKillTimer)
+    options.signal?.removeEventListener('abort', close)
+    closed = true
+    const reconciliation = runtimeHome.reconcileCredentialOwner?.()
+    if (reconciliation == null) {
+      options.onExit?.(code, signal)
+      return
+    }
+    void reconciliation.catch((error) => {
+      options.onError?.(error instanceof Error ? error : new Error(String(error)))
+    }).finally(() => {
+      options.onExit?.(code, signal)
+    })
   }
 
   child.stdout.setEncoding('utf8')
@@ -125,12 +143,12 @@ export const createCodexModelSharingBridge = async (
   child.stderr.on('data', () => {
     // Drain stderr without logging paths, account metadata, prompts, or native payloads.
   })
-  child.on('error', reportError)
+  child.on('error', (error) => {
+    reportError(error)
+    if (child.pid == null) finalize(null, null)
+  })
   child.on('exit', (code, signal) => {
-    if (forceKillTimer != null) clearTimeout(forceKillTimer)
-    options.signal?.removeEventListener('abort', close)
-    closed = true
-    options.onExit?.(code, signal)
+    finalize(code, signal)
   })
   options.signal?.addEventListener('abort', close, { once: true })
   if (isAbortSignalAborted(options.signal)) {

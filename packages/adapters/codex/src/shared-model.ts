@@ -200,6 +200,13 @@ const executeAttempt = async (
     logger: ctx.logger,
     profileKey,
     signal: options.signal
+  }).catch(async (error) => {
+    await runtimeHome.reconcileCredentialOwner?.().catch((reconcileError) => {
+      ctx.logger.warn('[codex shared model] credential owner reconciliation failed after app-server acquisition', {
+        error: reconcileError instanceof Error ? reconcileError.message : String(reconcileError)
+      })
+    })
+    throw error
   })
 
   let threadId: string | undefined
@@ -409,6 +416,11 @@ const executeAttempt = async (
       await lease.unregisterThread(threadId).catch(() => undefined)
     }
     await lease.drain?.().catch(() => undefined)
+    await runtimeHome.reconcileCredentialOwner?.().catch((error) => {
+      ctx.logger.warn('[codex shared model] credential owner reconciliation failed during teardown', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+    })
     lease.release()
   }
 }
