@@ -23,6 +23,7 @@
 
 ## 仓库设置与恢复
 
+- 仓库必须启用 `allow_auto_merge`；GitHub CLI 通过自动合入入口把满足条件的 PR 加入 Merge Queue，关闭该开关会在创建 queue entry 前直接拒绝请求。
 - exact `main` branch ruleset 启用 `merge_queue`，不得配置 bypass actor。Branch protection 保留六个绑定 GitHub Actions App 的 required checks；`strict=false` 只关闭旧式“分支必须先与主干同步”要求，最新 base 验证由队列组合 revision 接管。
 - 调整队列并发、合并方式或 required checks 后，必须读取 GitHub API 返回值，核对 exact branch condition、全部 queue 参数、六个 context 及其 App 绑定。不能只把写请求返回 2xx 当作完成。
 - 需要停用队列时，先把 branch protection 的 `strict` 恢复为 `true`，并回读确认六个 required checks 与 App 绑定完整；只有确认成功后才能停用或删除 queue ruleset。若恢复失败，保留 active queue 并停止，避免出现保护空档。
