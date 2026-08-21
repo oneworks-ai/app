@@ -5,12 +5,14 @@ env:
   DESKTOP_RELEASE_TAG_PREFIX: pkg/oneworks-desktop/v
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   NODE_OPTIONS: --max-old-space-size=4096
+  VALIDATION_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || '' }}
+  VALIDATION_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
 
 concurrency:
   group: >-
     desktop-package-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}-${{
     github.event.action || 'none' }}-${{ github.event.changes.base != null }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
 
 on:
   pull_request:
@@ -22,6 +24,9 @@ on:
       - synchronize
       - edited
       - ready_for_review
+  merge_group:
+    types:
+      - checks_requested
   push:
     tags:
       - "pkg/oneworks-desktop/v*"
@@ -89,7 +94,7 @@ permissions:
 
 jobs:
   pr-scope:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     outputs:
       desktop_package: ${{ steps.validation_scope.outputs.desktop_package }}
@@ -105,13 +110,14 @@ jobs:
         id: reuse_plan
         env:
           BASE_CHANGED: ${{ github.event.changes.base != null }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_SHA: ${{ env.VALIDATION_BASE_SHA }}
           BEFORE_SHA: ${{ github.event.before }}
           EVENT_ACTION: ${{ github.event.action }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_SHA: ${{ env.VALIDATION_HEAD_SHA }}
         run: >-
           node scripts/pr-validation-reuse.cjs
-          --event-name pull_request
+          --event-name "$EVENT_NAME"
           --action "$EVENT_ACTION"
           --base "$BASE_SHA"
           --head "$HEAD_SHA"
@@ -194,8 +200,8 @@ jobs:
       - name: Classify validation scope
         id: validation_scope
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ env.VALIDATION_BASE_SHA }}
+          HEAD_SHA: ${{ env.VALIDATION_HEAD_SHA }}
         run: >-
           node scripts/pr-validation-scope.cjs
           --base "$BASE_SHA"
@@ -222,7 +228,7 @@ jobs:
     name: macOS package smoke
     needs: pr-scope
     if: >-
-      github.event_name == 'pull_request' &&
+      (github.event_name == 'pull_request' || github.event_name == 'merge_group') &&
       needs.pr-scope.outputs.desktop_package == 'true' &&
       needs.pr-scope.outputs.reuse_desktop != 'true'
     runs-on: macos-26
@@ -280,7 +286,7 @@ jobs:
     needs:
       - pr-scope
       - pr-build
-    if: always() && github.event_name == 'pull_request'
+    if: always() && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
     runs-on: ubuntu-latest
     steps:
       - name: Enforce macOS package result
@@ -325,13 +331,14 @@ jobs:
           esac
 
       - name: Record reusable Desktop evidence
-        if: needs.pr-scope.outputs.desktop_package == 'true'
+        if: github.event_name == 'pull_request' && needs.pr-scope.outputs.desktop_package == 'true'
         run: |
           mkdir -p .cache/pr-validation-evidence/desktop
           printf '%s\n' "${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }}" > .cache/pr-validation-evidence/desktop/revision
 
       - name: Save reusable Desktop evidence
         if: >-
+          github.event_name == 'pull_request' &&
           needs.pr-scope.outputs.desktop_package == 'true' &&
           (needs.pr-scope.outputs.reuse_mode != 'exact' ||
           needs.pr-scope.outputs.reuse_desktop != 'true')
@@ -461,6 +468,7 @@ jobs:
       always() &&
       (needs.dispatch-policy.result == 'success' || needs.dispatch-policy.result == 'skipped') &&
       github.event_name != 'pull_request' &&
+      github.event_name != 'merge_group' &&
       !(github.event_name == 'workflow_dispatch' && inputs.notarization_history_only) &&
       !(github.event_name == 'workflow_dispatch' && inputs.create_release && inputs.candidate_run_id != '')
     runs-on: macos-26

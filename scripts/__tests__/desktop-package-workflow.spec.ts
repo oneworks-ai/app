@@ -209,6 +209,7 @@ describe('desktop package workflow', () => {
     expect(workflow).toContain('schedule:\n    - cron: "0 18 * * *"')
     expect(workflow).toContain('pr-policy:\n    name: macOS installer')
     expect(workflow).toContain("github.event_name != 'pull_request'")
+    expect(workflow).toContain("github.event_name != 'merge_group'")
 
     const scopeJob = workflow.slice(
       workflow.indexOf('  pr-scope:'),
@@ -223,6 +224,7 @@ describe('desktop package workflow', () => {
       workflow.indexOf('  dispatch-policy:')
     )
     expect(scopeJob).toContain('runs-on: ubuntu-latest')
+    expect(scopeJob).toContain("github.event_name == 'merge_group'")
     expect(scopeJob).toContain('desktop_package: $' + '{{ steps.validation_scope.outputs.desktop_package }}')
     expect(scopeJob).toContain('node scripts/pr-validation-reuse.cjs')
     expect(scopeJob).toContain('Restore previous desktop validation evidence')
@@ -230,6 +232,7 @@ describe('desktop package workflow', () => {
     expect(scopeJob).toContain('reuse_desktop: $' + '{{ steps.reuse_result.outputs.reuse_desktop }}')
     expect(buildJob).toContain('name: macOS package smoke')
     expect(buildJob).toContain('runs-on: macos-26')
+    expect(buildJob).toContain("github.event_name == 'merge_group'")
     expect(buildJob).toContain("needs.pr-scope.outputs.desktop_package == 'true'")
     expect(buildJob).toContain("needs.pr-scope.outputs.reuse_desktop != 'true'")
     expect(buildJob).toContain('uses: ./.github/actions/setup-workspace')
@@ -243,11 +246,13 @@ describe('desktop package workflow', () => {
     expect(buildJob).not.toContain('APPLE_')
     expect(buildJob).not.toContain('Upload installer artifacts')
     expect(gateJob).toContain('name: macOS installer')
+    expect(gateJob).toContain("github.event_name == 'merge_group'")
     expect(gateJob).toContain('runs-on: ubuntu-latest')
     expect(gateJob).toContain('Enforce macOS package result')
     expect(gateJob).toContain('Reusable Desktop evidence must not schedule a duplicate macOS build')
     expect(gateJob).toContain('uses: actions/cache/save@v4')
     expect(gateJob).toContain('pr-desktop-evidence-v1-')
+    expect(gateJob).toContain("github.event_name == 'pull_request' &&")
     expect(macosSigningRule).toContain('只有桌面风险路径')
     expect(macosSigningRule).toContain('普通 client、adapter、品牌资产和文档改动')
 

@@ -388,7 +388,7 @@ describe('required context completion contract', () => {
   const policyWorkflow = readFileSync('.github/workflows/pr-change-policy.yml', 'utf8')
   const workspaceSetupAction = readFileSync('.github/actions/setup-workspace/action.yml', 'utf8')
 
-  it('keeps PR workflows unconditional so required contexts cannot remain pending', () => {
+  it('keeps PR and merge queue workflows unconditional so required contexts cannot remain pending', () => {
     const qualityTrigger = qualityWorkflow.slice(0, qualityWorkflow.indexOf('\npermissions:'))
     const desktopTrigger = desktopWorkflow.slice(
       desktopWorkflow.indexOf('\non:'),
@@ -399,6 +399,13 @@ describe('required context completion contract', () => {
     expect(qualityTrigger).not.toContain('paths-ignore:')
     expect(desktopTrigger).not.toContain('paths:')
     expect(desktopTrigger).not.toContain('paths-ignore:')
+    for (const trigger of [qualityTrigger, desktopTrigger]) {
+      expect(trigger).toContain('merge_group:')
+      expect(trigger).toContain('- checks_requested')
+    }
+    expect(policyWorkflow.slice(0, policyWorkflow.indexOf('\npermissions:'))).toContain(
+      'merge_group:'
+    )
   })
 
   it('preserves every protected required context name', () => {
@@ -474,16 +481,45 @@ describe('required context completion contract', () => {
     expect(policyTrigger).toContain('- edited')
     expect(qualityWorkflow).toContain('github.event.changes.base != null')
     expect(desktopWorkflow).toContain('github.event.changes.base != null')
-    const prOnlyCancellation = 'cancel-in-progress: $' + "{{ github.event_name == 'pull_request' }}"
-    expect(qualityWorkflow).toContain(prOnlyCancellation)
-    expect(desktopWorkflow).toContain(prOnlyCancellation)
+    const sourceCancellation = 'cancel-in-progress: $' +
+      "{{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}"
+    expect(qualityWorkflow).toContain(sourceCancellation)
+    expect(desktopWorkflow).toContain(sourceCancellation)
     expect(qualityWorkflow).toContain('Restore exact source validation evidence')
     expect(desktopWorkflow).toContain('Restore previous desktop validation evidence')
     expect(qualityWorkflow).toContain('pr-quality-evidence-v1-')
     expect(desktopWorkflow).toContain('pr-desktop-evidence-v1-')
     expect(policyWorkflow).toContain(
-      'group: pr-change-policy-$' + '{{ github.event.pull_request.number }}'
+      'group: pr-change-policy-$' +
+        '{{ github.event_name }}-' +
+        '$' +
+        '{{ github.event.pull_request.number || github.ref }}'
     )
+  })
+
+  it('validates the generated merge group revision without reusing PR-head evidence', () => {
+    expect(qualityWorkflow).toContain('github.event.merge_group.base_sha')
+    expect(qualityWorkflow).toContain('github.event.merge_group.head_sha')
+    expect(desktopWorkflow).toContain('github.event.merge_group.base_sha')
+    expect(desktopWorkflow).toContain('github.event.merge_group.head_sha')
+    expect(qualityWorkflow).toContain(
+      'if [[ "$EVENT_NAME" == "pull_request" || "$EVENT_NAME" == "merge_group" ]]; then'
+    )
+    expect(qualityWorkflow).toContain('Confirm queued commit policy')
+    expect(policyWorkflow).toContain('Confirm queued pull request policy')
+    expect(desktopWorkflow).toContain('--event-name "$EVENT_NAME"')
+
+    const desktopGate = desktopWorkflow.slice(
+      desktopWorkflow.indexOf('  pr-policy:'),
+      desktopWorkflow.indexOf('  dispatch-policy:')
+    )
+    const releasePackage = desktopWorkflow.slice(
+      desktopWorkflow.indexOf('  package:'),
+      desktopWorkflow.indexOf('  release:')
+    )
+    expect(desktopGate).toContain("github.event_name == 'merge_group'")
+    expect(desktopGate).toContain("github.event_name == 'pull_request' &&")
+    expect(releasePackage).toContain("github.event_name != 'merge_group'")
   })
 
   it('shares exact dependency and incremental caches without weakening required contexts', () => {

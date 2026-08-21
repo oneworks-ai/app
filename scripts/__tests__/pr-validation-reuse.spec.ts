@@ -40,6 +40,21 @@ const createRepository = () => {
 }
 
 describe('pr validation reuse', () => {
+  it('never reuses pull request evidence for a generated merge group revision', () => {
+    expect(planValidationReuse({
+      action: 'checks_requested',
+      base: 'a'.repeat(40),
+      before: '',
+      eventName: 'merge_group',
+      head: 'b'.repeat(40)
+    })).toMatchObject({
+      candidate: false,
+      mode: 'none',
+      reason: 'non-pull-request-event',
+      safe: false
+    })
+  })
+
   it('reuses exact source evidence for body edits but never for base edits', () => {
     const base = 'a'.repeat(40)
     const head = 'b'.repeat(40)

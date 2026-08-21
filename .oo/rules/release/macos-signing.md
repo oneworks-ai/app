@@ -37,7 +37,7 @@ DMG、PKG、ZIP 逐一通过 `codesign --verify --deep --strict`；不允许发�
 拒绝任何绝对或断裂 symlink；否则换一台机器后会被 Gatekeeper 判为损坏。GitHub Release
 会明确标记为 unsigned；启用时要求完整签名与 notarization。
 
-同一 PR 的后续 revision 只有在上一 base / head 已生成成功 Desktop evidence，且新增 revision 被 dependency-free planner 限定为 mode 未变的普通 source blob 修改、随后用 current base 的受审工具链逐文件证明当前 head Git blob 精确等于 ESLint Autofix 结果时，才允许复用 package smoke。正文编辑只能复用 exact base / head evidence；base retarget、cache miss、文件新增 / 删除 / rename、symlink / gitlink、配置变化或 Autofix 验证异常都必须重新运行当前 Desktop scope。该复用只适用于 PR unsigned smoke，不得用于 tag、候选提升、签名、公证或正式安装包。
+同一 PR 的后续 revision 只有在上一 base / head 已生成成功 Desktop evidence，且新增 revision 被 dependency-free planner 限定为 mode 未变的普通 source blob 修改、随后用 current base 的受审工具链逐文件证明当前 head Git blob 精确等于 ESLint Autofix 结果时，才允许复用 package smoke。正文编辑只能复用 exact base / head evidence；base retarget、cache miss、文件新增 / 删除 / rename、symlink / gitlink、配置变化或 Autofix 验证异常都必须重新运行当前 Desktop scope。Merge Queue 的组合 revision 必须按 `merge_group.base_sha...merge_group.head_sha` 重新分类和验证，不能复用任一 PR evidence；`merge_group` 只允许进入 unsigned PR smoke 和 `macOS installer` required gate，发布 installer、签名、公证与 release job 必须显式排除。该复用只适用于 PR unsigned smoke，不得用于 tag、候选提升、签名、公证或正式安装包。
 
 所有 secret 配好后，还必须设置仓库 variable：
 

@@ -272,9 +272,12 @@ describe('pr-change-check', () => {
     expect(qualityWorkflow).toContain('github.event.changes.base != null')
     expect(qualityWorkflow).not.toContain('name: pr-change-policy')
     expect(policyWorkflow).toContain('      - edited')
+    expect(policyWorkflow).toContain('  merge_group:')
+    expect(policyWorkflow).toContain('      - checks_requested')
     expect(policyWorkflow).toContain('    name: pr-change-policy')
     expect(policyWorkflow).toContain('PR_BODY: $' + '{{ github.event.pull_request.body }}')
     expect(policyWorkflow).not.toContain('gh pr view')
+    expect(policyWorkflow).toContain('Confirm queued pull request policy')
   })
 
   it('gets policy paths from the authoritative rename- and deletion-aware classifier', () => {
