@@ -5313,7 +5313,7 @@ export const manageCodexAccount = async (
     if (detail.account.status === 'error') {
       throw new Error(
         detail.account.description ??
-        `Codex account "${normalizedAccount}" could not refresh its current credentials.`
+          `Codex account "${normalizedAccount}" could not refresh its current credentials.`
       )
     }
 

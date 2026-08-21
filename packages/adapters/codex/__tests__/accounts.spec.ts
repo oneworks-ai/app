@@ -314,7 +314,7 @@ describe('prepareCodexSessionHome', () => {
     await writeFile(globalConfigPath, JSON.stringify(globalConfig))
     await writeFile(
       fakeCodexPath,
-        `#!/usr/bin/env node
+      `#!/usr/bin/env node
 import { existsSync, lstatSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import readline from 'node:readline'
