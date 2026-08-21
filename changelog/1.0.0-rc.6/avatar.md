@@ -4,3 +4,4 @@
 - Added camera/export modes, shape-aware previews, saved presets, and URL-persisted editor state.
 - Added a keyframe animation editor and playback library with reusable expression and motion presets.
 - Added resizable frosted-glass controls for the sidebar and animation panel.
+- Avatar deployment now triggers when the app repository updates the Avatar submodule pointer.
