@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { PluginRequestPrincipal } from '@oneworks/types'
 
-import { activatePlugin } from '../server/src/index'
+import { activatePlugin as activateServerPlugin } from '../server/src/index'
 
 describe('oneWorks Rooms plugin', () => {
   it('registers its redacted product proxy routes only through the host facade', async () => {
@@ -26,7 +26,7 @@ describe('oneWorks Rooms plugin', () => {
     const listShares = vi.fn(async () => [{ roomId: 'room-1', shareRef: 'share-ref' }])
     const revokeRoomShare = vi.fn(async () => true)
     const updateRoomChannelConnection = vi.fn(async () => ({ roomId: 'room-1' }))
-    activatePlugin({
+    activateServerPlugin({
       oneworksChannel: {
         attachRoomChannelConnection,
         createRoom: vi.fn(),
@@ -166,6 +166,8 @@ describe('oneWorks Rooms plugin', () => {
     expect(client).not.toContain('NativeTabs')
     expect(client).toContain('Synthetic user')
     expect(client).toContain("ctx.slots.register('nav.items'")
+    expect(client).toContain("ctx.runtime.endpoint?.role === 'workspace'")
+    expect(client).not.toContain('globalThis.location?.pathname')
     expect(client).toContain("className='oneworks-channel__room-surface'")
     expect(client).not.toContain("t('Open Room', '打开聊天室')")
     expect(client).not.toContain("t('Refresh', '刷新')")
@@ -181,6 +183,7 @@ describe('oneWorks Rooms plugin', () => {
     expect(styles).toContain('display: flex; flex-direction: column; height: 100%')
     expect(styles).toContain('.oneworks-channel__room { flex: 1 1 0;')
     expect(styles).toContain('.oneworks-channel__entity-picker { align-content: safe center;')
+    expect(styles).toContain('background: var(--content-background-color, var(--bg-color));')
     expect(styles).toContain('padding: 20px 0;')
     expect(styles).toContain('@media (max-width: 700px)')
     expect(styles).not.toContain('.oneworks-channel__panel { padding-top: 10px; }')
