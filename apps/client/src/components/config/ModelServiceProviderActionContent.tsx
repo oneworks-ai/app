@@ -22,6 +22,7 @@ export const ModelServiceProviderActionHeader = ({
   providerTitle,
   service,
   serviceStatus,
+  showProviderTitle = true,
   t
 }: {
   headerActions?: ReactNode
@@ -29,6 +30,7 @@ export const ModelServiceProviderActionHeader = ({
   providerTitle: string
   service: ModelServiceConfig
   serviceStatus: ProviderServiceStatus | null
+  showProviderTitle?: boolean
   t: TranslationFn
 }) => {
   const moreMenuItems = moreActions.map(action => ({
@@ -38,17 +40,23 @@ export const ModelServiceProviderActionHeader = ({
   }))
 
   return (
-    <div className='config-view__model-service-action-header'>
-      <div className='config-view__model-service-action-title'>
-        {renderIconRef({
-          icon: resolveModelServiceIcon(service),
-          imageClassName: 'config-view__model-service-action-icon',
-          symbolClassName: 'config-view__model-service-action-icon'
-        })}
-        <div className='config-view__model-service-action-title-text'>
-          <div>{providerTitle}</div>
+    <div
+      className={`config-view__model-service-action-header${
+        showProviderTitle ? '' : ' config-view__model-service-action-header--actions-only'
+      }`}
+    >
+      {showProviderTitle && (
+        <div className='config-view__model-service-action-title'>
+          {renderIconRef({
+            icon: resolveModelServiceIcon(service),
+            imageClassName: 'config-view__model-service-action-icon',
+            symbolClassName: 'config-view__model-service-action-icon'
+          })}
+          <div className='config-view__model-service-action-title-text'>
+            <div>{providerTitle}</div>
+          </div>
         </div>
-      </div>
+      )}
       <div className='config-view__model-service-action-header-actions'>
         {headerActions}
         {serviceStatus != null && (

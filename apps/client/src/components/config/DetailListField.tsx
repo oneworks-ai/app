@@ -17,7 +17,9 @@ import { AdapterAccountPreview } from './AdapterAccountPreview'
 import { AdapterImportRow } from './AdapterImportRow'
 import type { AdapterImportAction } from './AdapterImportRow'
 import { DetailCollectionFieldActions } from './DetailCollectionFieldActions'
+import { ModelServiceCollectionView } from './ModelServiceCollectionView'
 import { ModelServiceProviderQuotaPreview } from './ModelServiceProviderQuotaPreview'
+import { ChannelCollectionField } from './channel-collection/ChannelCollectionField'
 import type { ConfigDetailRoute, DetailCollectionPlaceholderEntry } from './configDetail'
 import { toDetailCollectionEntries } from './configDetail'
 import type { FieldSpec } from './configSchema'
@@ -119,6 +121,44 @@ export const DetailCollectionField = ({
   const [adapterSearchQuery, setAdapterSearchQuery] = useState('')
   const detailCollection = field.detailCollection
   if (detailCollection == null) return null
+
+  if (
+    sectionKey === 'modelServices' &&
+    field.path.length === 0 &&
+    detailCollection.collectionKind === 'recordMap'
+  ) {
+    return (
+      <ModelServiceCollectionView
+        field={field}
+        value={value}
+        resolvedValue={resolvedValue}
+        source={source}
+        onChange={onChange}
+        onOpenDetail={onOpenDetail}
+        creatingModelServiceSessionKey={creatingModelServiceSessionKey}
+        onCreateModelServiceSession={onCreateModelServiceSession}
+        modelServiceImportAction={modelServiceImportAction}
+        t={t}
+      />
+    )
+  }
+
+  if (
+    sectionKey === 'channels' &&
+    detailCollection.collectionKind === 'recordMap'
+  ) {
+    return (
+      <ChannelCollectionField
+        field={field}
+        value={value}
+        resolvedValue={resolvedValue}
+        onChange={onChange}
+        onOpenDetail={onOpenDetail}
+        uiSection={uiSection}
+        t={t}
+      />
+    )
+  }
 
   const items = toDetailCollectionEntries({
     field,

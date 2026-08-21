@@ -42,12 +42,14 @@ import {
 } from './modelServiceProviderActionUtils'
 
 export const ModelServiceProviderActions = ({
+  compact = false,
   item,
   onOpenPortal,
   serviceKey,
   source,
   t
 }: {
+  compact?: boolean
   item: unknown
   onOpenPortal?: (request: ModelServiceProviderPortalRequest) => void
   serviceKey: string
@@ -218,7 +220,9 @@ export const ModelServiceProviderActions = ({
   ]
 
   return (
-    <div className='config-view__model-service-actions'>
+    <div
+      className={`config-view__model-service-actions${compact ? ' config-view__model-service-actions--compact' : ''}`}
+    >
       <ModelServiceProviderActionHeader
         headerActions={
           <ModelServiceProviderActionButtons
@@ -235,6 +239,7 @@ export const ModelServiceProviderActions = ({
         providerTitle={providerTitle}
         service={service}
         serviceStatus={serviceStatus}
+        showProviderTitle={!compact}
         t={t}
       />
       <ModelServiceProviderPlanSummary
