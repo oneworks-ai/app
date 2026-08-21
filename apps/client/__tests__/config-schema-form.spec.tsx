@@ -283,12 +283,15 @@ describe('config schema form', () => {
       )
 
     const kiroHtml = renderAdapter('kiro', ['accounts'])
+    const kiroAccountHtml = renderAdapter('kiro', ['accounts', 'primary'])
     const droidHtml = renderAdapter('droid')
 
     expect(kiroHtml).toContain('config-view__adapter-detail-tabs')
     expect(kiroHtml).toContain('data-node-key="base"')
     expect(kiroHtml).toContain('data-node-key="accounts"')
     expect(kiroHtml).toContain('adapter-account-manager__state')
+    expect(kiroAccountHtml).toContain('adapter-account-manager__state')
+    expect(kiroAccountHtml).not.toContain('config-view__adapter-detail-tabs')
     expect(droidHtml).toContain('config-view__adapter-detail-tabs')
     expect(droidHtml).toContain('data-node-key="base"')
     expect(droidHtml).not.toContain('data-node-key="accounts"')
@@ -426,6 +429,7 @@ describe('config schema form', () => {
     const alphaBaseHtml = renderAdapter('alpha')
     const alphaModelsHtml = renderAdapter('alpha', ['models'])
     const alphaAccountsHtml = renderAdapter('alpha', ['accounts'])
+    const alphaAccountDetailHtml = renderAdapter('alpha', ['accounts', 'primary'])
     const alphaAdvancedHtml = renderAdapter('alpha', ['advanced'])
     const betaHtml = renderAdapter('beta')
 
@@ -439,6 +443,8 @@ describe('config schema form', () => {
     expect(alphaModelsHtml).toContain('Allowed models')
     expect(alphaAccountsHtml).not.toContain('Default account')
     expect(alphaAccountsHtml).toContain('adapter-account-manager__state')
+    expect(alphaAccountDetailHtml).toContain('adapter-account-manager__state')
+    expect(alphaAccountDetailHtml).not.toContain('config-view__adapter-detail-tabs')
     expect(alphaAdvancedHtml).toContain('Configuration override')
     expect(alphaBaseHtml).toContain('data-node-key="accounts"')
     expect(betaHtml).not.toContain('data-node-key="accounts"')

@@ -3882,6 +3882,9 @@
       "newModelServiceName": "New model service name",
       "newChannelName": "New channel name",
       "newAdapterName": "New adapter name",
+      "searchAdapters": "Search adapters",
+      "unconfiguredAdapter": "Not configured",
+      "noAdaptersMatch": "No matching adapters",
       "newPluginName": "New plugin name",
       "newMcpServerName": "New MCP server name",
       "newSpeechToTextServiceName": "New speech-to-text service name",
@@ -4034,6 +4037,12 @@
         "awaiting-authorization": "Finish signing in in your browser...",
         "verifying": "Verifying the sign-in credentials...",
         "saving": "Saving the connected account..."
+      },
+      "loginDialog": {
+        "title": "Complete account sign-in",
+        "description": "Finish signing in in the browser window that opened. You can cancel if this was unintentional.",
+        "canceling": "Canceling...",
+        "canceled": "Account sign-in canceled"
       },
       "actionFailed": {
         "add": "Failed to connect account",

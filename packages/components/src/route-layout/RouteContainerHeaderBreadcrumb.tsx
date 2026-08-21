@@ -10,6 +10,7 @@ export interface RouteContainerHeaderBreadcrumb {
     onSelect?: () => void
   }>
   onBack: () => void
+  onParentSelect?: () => void
   parentTitle: ReactNode
   ariaLabel?: string
   backLabel?: string
@@ -86,12 +87,28 @@ export function RouteContainerHeaderBreadcrumbContent({
       {breadcrumb.ancestors != null && breadcrumb.ancestors.length > 0
         ? renderSeparator('separator:parent')
         : null}
-      <span
-        className='route-container-header__breadcrumb-parent'
-        title={typeof breadcrumb.parentTitle === 'string' ? breadcrumb.parentTitle : undefined}
-      >
-        {breadcrumb.parentTitle}
-      </span>
+      {breadcrumb.onParentSelect == null
+        ? (
+          <span
+            className='route-container-header__breadcrumb-parent'
+            title={typeof breadcrumb.parentTitle === 'string' ? breadcrumb.parentTitle : undefined}
+          >
+            {breadcrumb.parentTitle}
+          </span>
+        )
+        : (
+          <button
+            type='button'
+            className='route-container-header__breadcrumb-parent route-container-header__breadcrumb-parent-button'
+            title={typeof breadcrumb.parentTitle === 'string' ? breadcrumb.parentTitle : undefined}
+            onClick={(event) => {
+              event.stopPropagation()
+              breadcrumb.onParentSelect?.()
+            }}
+          >
+            {breadcrumb.parentTitle}
+          </button>
+        )}
       {renderSeparator('separator:current')}
       <span
         className='route-container-header__breadcrumb-current'
