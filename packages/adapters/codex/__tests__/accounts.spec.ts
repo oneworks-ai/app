@@ -285,6 +285,7 @@ describe('prepareCodexSessionHome', () => {
     const probeAuthTypePath = join(workspace, 'probe-auth-type.txt')
     const probeAuthPathOutput = join(workspace, 'probe-auth-path.txt')
     const probeAccountReadParamsPath = join(workspace, 'probe-account-read-params.json')
+    const probeProcessStartsPath = join(workspace, 'probe-process-starts.txt')
     const globalConfigPath = join(realHome, '.oneworks', '.oo.config.json')
     const authContent = '{"auth_mode":"chatgpt","tokens":{"account_id":"acct_global","refresh_token":"initial"}}\n'
     const probeRotatedAuthContent =
@@ -313,28 +314,48 @@ describe('prepareCodexSessionHome', () => {
     await writeFile(globalConfigPath, JSON.stringify(globalConfig))
     await writeFile(
       fakeCodexPath,
-      `#!/usr/bin/env node
-import { lstatSync, renameSync, writeFileSync } from 'node:fs'
+        `#!/usr/bin/env node
+import { existsSync, lstatSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import readline from 'node:readline'
 
 const authPath = join(process.env.HOME, '.codex', 'auth.json')
 writeFileSync(${JSON.stringify(probeAuthTypePath)}, lstatSync(authPath).isFile() ? 'file' : 'other')
 writeFileSync(${JSON.stringify(probeAuthPathOutput)}, authPath)
+const probeProcessStartsPath = ${JSON.stringify(probeProcessStartsPath)}
+const processStartCount = (existsSync(probeProcessStartsPath)
+  ? Number(readFileSync(probeProcessStartsPath, 'utf8'))
+  : 0) + 1
+writeFileSync(probeProcessStartsPath, String(processStartCount))
+const accountReadParamsPath = ${JSON.stringify(probeAccountReadParamsPath)}
+const accountReadParams = existsSync(accountReadParamsPath)
+  ? JSON.parse(readFileSync(accountReadParamsPath, 'utf8'))
+  : []
 const input = readline.createInterface({ input: process.stdin })
 const respond = (id, result) => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\\n')
 input.on('line', (line) => {
   const message = JSON.parse(line)
   if (message.id == null) return
   if (message.method === 'account/read') {
-    writeFileSync(${JSON.stringify(probeAccountReadParamsPath)}, JSON.stringify(message.params ?? {}))
-    const replacementPath = authPath + '.next'
-    writeFileSync(replacementPath, ${JSON.stringify(probeRotatedAuthContent)})
-    renameSync(replacementPath, authPath)
+    accountReadParams.push(message.params ?? {})
+    writeFileSync(accountReadParamsPath, JSON.stringify(accountReadParams))
+    if (message.params?.refreshToken === true) {
+      const replacementPath = authPath + '.next'
+      writeFileSync(replacementPath, ${JSON.stringify(probeRotatedAuthContent)})
+      renameSync(replacementPath, authPath)
+    }
     respond(message.id, { account: { type: 'chatgpt', planType: 'pro' } })
     return
   }
   if (message.method === 'account/rateLimits/read') {
+    if (processStartCount === 1) {
+      process.stdout.write(JSON.stringify({
+        jsonrpc: '2.0',
+        id: message.id,
+        error: { code: -32603, message: 'Provided authentication token is expired. Please try signing in again. (token_expired)' }
+      }) + '\\n')
+      return
+    }
     respond(message.id, { rateLimits: { limitId: 'codex', planType: 'pro' } })
     return
   }
@@ -417,9 +438,11 @@ input.on('line', (line) => {
     const probeAuthPath = await readFile(probeAuthPathOutput, 'utf8')
     expect(probeAuthPath).not.toBe(first.authFilePath)
     await expect(lstat(probeAuthPath)).rejects.toMatchObject({ code: 'ENOENT' })
-    expect(JSON.parse(await readFile(probeAccountReadParamsPath, 'utf8'))).toMatchObject({
-      refreshToken: true
-    })
+    expect(JSON.parse(await readFile(probeAccountReadParamsPath, 'utf8'))).toEqual([
+      {},
+      { refreshToken: true }
+    ])
+    expect(await readFile(probeProcessStartsPath, 'utf8')).toBe('2')
     expect(await readFile(first.authFilePath!, 'utf8')).toBe(probeRotatedAuthContent)
     const probeFlushedConfig = JSON.parse(await readFile(globalConfigPath, 'utf8')) as any
     expect(Buffer.from(probeFlushedConfig.adapters.codex.accounts.work.auth.token, 'base64').toString('utf8'))
