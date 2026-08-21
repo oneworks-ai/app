@@ -9,6 +9,7 @@ on:
       - opened
       - reopened
       - synchronize
+      - edited
       - ready_for_review
   push:
     branches:
@@ -22,7 +23,9 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 concurrency:
-  group: quality-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  group: >-
+    quality-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}-${{
+    github.event.action || 'none' }}-${{ github.event.changes.base != null }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -42,6 +45,11 @@ jobs:
       policy_docs: ${{ steps.scope.outputs.policy_docs }}
       public_docs: ${{ steps.scope.outputs.public_docs }}
       release_docs: ${{ steps.scope.outputs.release_docs }}
+      reuse_all: ${{ steps.validate_exact_source_evidence.outputs.valid }}
+      reuse_candidate: ${{ steps.reuse_plan.outputs.candidate }}
+      reuse_evidence_base: ${{ steps.reuse_plan.outputs.evidence_base }}
+      reuse_evidence_head: ${{ steps.reuse_plan.outputs.evidence_head }}
+      reuse_mode: ${{ steps.reuse_plan.outputs.mode }}
       typecheck: ${{ steps.scope.outputs.typecheck }}
       typecheck_scopes: ${{ steps.scope.outputs.typecheck_scopes }}
       unknown: ${{ steps.scope.outputs.unknown }}
@@ -50,6 +58,51 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Plan validation evidence reuse
+        id: reuse_plan
+        env:
+          BASE_CHANGED: ${{ github.event.changes.base != null }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+          EVENT_ACTION: ${{ github.event.action }}
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: >-
+          node scripts/pr-validation-reuse.cjs
+          --event-name "$EVENT_NAME"
+          --action "$EVENT_ACTION"
+          --base "$BASE_SHA"
+          --head "$HEAD_SHA"
+          --before "$BEFORE_SHA"
+          --base-changed "$BASE_CHANGED"
+          --github-output "$GITHUB_OUTPUT"
+          --json
+
+      - name: Restore exact source validation evidence
+        id: exact_source_evidence
+        if: steps.reuse_plan.outputs.mode == 'exact'
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/pr-validation-evidence/quality
+          key: >-
+            pr-quality-evidence-v1-${{ steps.reuse_plan.outputs.evidence_base }}-${{
+            steps.reuse_plan.outputs.evidence_head }}
+
+      - name: Validate exact source validation evidence
+        id: validate_exact_source_evidence
+        if: steps.exact_source_evidence.outputs.cache-hit == 'true'
+        env:
+          EXPECTED_REVISION: >-
+            ${{ steps.reuse_plan.outputs.evidence_base }} ${{ steps.reuse_plan.outputs.evidence_head }}
+        run: |
+          if [[ -f .cache/pr-validation-evidence/quality/revision ]] &&
+            [[ "$(cat .cache/pr-validation-evidence/quality/revision)" == "$EXPECTED_REVISION" ]]; then
+            echo "valid=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "valid=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Exact source validation evidence is incomplete; running current checks."
+          fi
 
       - name: Classify validation scope
         id: scope
@@ -127,31 +180,128 @@ jobs:
             esac
           done
 
+      - name: Validate reuse planner output contract
+        env:
+          CANDIDATE: ${{ steps.reuse_plan.outputs.candidate }}
+          MODE: ${{ steps.reuse_plan.outputs.mode }}
+        run: |
+          set -euo pipefail
+          [[ "$CANDIDATE" == "true" || "$CANDIDATE" == "false" ]]
+          case "$MODE" in
+            none|exact|eslint-autofix) ;;
+            *) exit 1 ;;
+          esac
+
+  validation-reuse:
+    name: validation-reuse
+    needs: classify-changes
+    if: always()
+    runs-on: ubuntu-latest
+    outputs:
+      typecheck: ${{ steps.result.outputs.typecheck }}
+    steps:
+      - name: Checkout pull request merge
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Restore previous typecheck evidence
+        id: previous_typecheck_evidence
+        if: >-
+          needs.classify-changes.result == 'success' &&
+          needs.classify-changes.outputs.reuse_mode == 'eslint-autofix' &&
+          needs.classify-changes.outputs.reuse_candidate == 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/pr-validation-evidence/typecheck
+          key: >-
+            pr-typecheck-evidence-v1-${{ needs.classify-changes.outputs.reuse_evidence_base }}-${{
+            needs.classify-changes.outputs.reuse_evidence_head }}
+
+      - name: Validate previous typecheck evidence
+        id: validate_typecheck_evidence
+        if: steps.previous_typecheck_evidence.outputs.cache-hit == 'true'
+        env:
+          EXPECTED_REVISION: >-
+            ${{ needs.classify-changes.outputs.reuse_evidence_base }} ${{
+            needs.classify-changes.outputs.reuse_evidence_head }}
+        run: |
+          if [[ -f .cache/pr-validation-evidence/typecheck/revision ]] &&
+            [[ "$(cat .cache/pr-validation-evidence/typecheck/revision)" == "$EXPECTED_REVISION" ]]; then
+            echo "valid=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "valid=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Previous typecheck evidence is incomplete; running current checks."
+          fi
+
+      - name: Setup cached workspace
+        if: steps.validate_typecheck_evidence.outputs.valid == 'true'
+        uses: ./.github/actions/setup-workspace
+
+      - name: Verify ESLint autofix-only revision
+        id: verify
+        if: steps.validate_typecheck_evidence.outputs.valid == 'true'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: >-
+          node scripts/pr-validation-reuse.cjs
+          --event-name pull_request
+          --action synchronize
+          --base "$BASE_SHA"
+          --head "$HEAD_SHA"
+          --before "$BEFORE_SHA"
+          --base-changed false
+          --verify-eslint-fix
+          --github-output "$GITHUB_OUTPUT"
+          --json
+
+      - name: Resolve reusable typecheck evidence
+        id: result
+        env:
+          EVIDENCE_VALID: ${{ steps.validate_typecheck_evidence.outputs.valid }}
+          SAFE_AUTOFIX: ${{ steps.verify.outputs.safe }}
+        run: |
+          if [[ "$EVIDENCE_VALID" == "true" && "$SAFE_AUTOFIX" == "true" ]]; then
+            echo "typecheck=true" >> "$GITHUB_OUTPUT"
+            echo "Previous successful typecheck and client-build evidence applies to the exact ESLint autofix revision."
+          else
+            echo "typecheck=false" >> "$GITHUB_OUTPUT"
+            echo "No reusable typecheck evidence; current revision will run its affected checks."
+          fi
+
   quality:
     name: ${{ matrix.name }}
-    needs: classify-changes
+    needs:
+      - classify-changes
+      - validation-reuse
     if: always()
     runs-on: ubuntu-latest
     env:
       NEEDS_DEPENDENCIES: >-
         ${{
-          needs.classify-changes.result != 'success' ||
+          needs.classify-changes.outputs.reuse_all != 'true' &&
+          (needs.classify-changes.result != 'success' ||
           (matrix.name == 'lint' && needs.classify-changes.outputs.lint == 'true') ||
           (matrix.name == 'typecheck' &&
           (needs.classify-changes.outputs.typecheck == 'true' ||
-          needs.classify-changes.outputs.client_build == 'true')) ||
-          (matrix.name == 'docs-media' && needs.classify-changes.outputs.docs_media == 'true')
+          needs.classify-changes.outputs.client_build == 'true') &&
+          needs.validation-reuse.outputs.typecheck != 'true') ||
+          (matrix.name == 'docs-media' && needs.classify-changes.outputs.docs_media == 'true'))
         }}
       RUN_CHECK: >-
         ${{
-          needs.classify-changes.result != 'success' ||
+          needs.classify-changes.outputs.reuse_all != 'true' &&
+          (needs.classify-changes.result != 'success' ||
           (matrix.name == 'lint' && needs.classify-changes.outputs.lint == 'true') ||
           (matrix.name == 'format-check' && needs.classify-changes.outputs.format == 'true') ||
           (matrix.name == 'env-contract' && needs.classify-changes.outputs.env_contract == 'true') ||
           (matrix.name == 'typecheck' &&
           (needs.classify-changes.outputs.typecheck == 'true' ||
-          needs.classify-changes.outputs.client_build == 'true')) ||
-          (matrix.name == 'docs-media' && needs.classify-changes.outputs.docs_media == 'true')
+          needs.classify-changes.outputs.client_build == 'true') &&
+          needs.validation-reuse.outputs.typecheck != 'true') ||
+          (matrix.name == 'docs-media' && needs.classify-changes.outputs.docs_media == 'true'))
         }}
       TYPECHECK_SCOPES: ${{ needs.classify-changes.outputs.typecheck_scopes }}
     strategy:
@@ -178,22 +328,35 @@ jobs:
           contains(env.TYPECHECK_SCOPES, 'node'))))
         run: git submodule update --init --depth 1 -- assets/demo-video
 
-      - name: Setup pnpm
+      - name: Setup cached workspace
         if: env.NEEDS_DEPENDENCIES == 'true'
-        uses: pnpm/action-setup@v4
-        with:
-          version: 11.7.0
+        uses: ./.github/actions/setup-workspace
 
-      - name: Setup Node.js
-        if: env.NEEDS_DEPENDENCIES == 'true'
-        uses: actions/setup-node@v4
+      - name: Restore ESLint result cache
+        if: matrix.name == 'lint' && env.RUN_CHECK == 'true'
+        uses: actions/cache@v4
         with:
-          node-version-file: .node-version
-          cache: pnpm
+          path: .cache/eslint
+          key: >-
+            eslint-v1-${{ runner.os }}-${{
+            hashFiles('eslint.config.mjs', 'eslint.max-lines-baseline.mjs', 'pnpm-lock.yaml') }}-${{
+            github.event.pull_request.number || github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            eslint-v1-${{ runner.os }}-${{ hashFiles('eslint.config.mjs', 'eslint.max-lines-baseline.mjs', 'pnpm-lock.yaml') }}-${{ github.event.pull_request.number || github.ref_name }}-
+            eslint-v1-${{ runner.os }}-${{ hashFiles('eslint.config.mjs', 'eslint.max-lines-baseline.mjs', 'pnpm-lock.yaml') }}-
 
-      - name: Install dependencies
-        if: env.NEEDS_DEPENDENCIES == 'true'
-        run: pnpm install --frozen-lockfile
+      - name: Restore TypeScript incremental cache
+        if: matrix.name == 'typecheck' && env.RUN_CHECK == 'true'
+        uses: actions/cache@v4
+        with:
+          path: .cache/typecheck
+          key: >-
+            typecheck-v1-${{ runner.os }}-${{
+            hashFiles('scripts/typecheck.mjs', 'packages/tsconfigs/*.json', 'pnpm-lock.yaml') }}-${{
+            github.event.pull_request.number || github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            typecheck-v1-${{ runner.os }}-${{ hashFiles('scripts/typecheck.mjs', 'packages/tsconfigs/*.json', 'pnpm-lock.yaml') }}-${{ github.event.pull_request.number || github.ref_name }}-
+            typecheck-v1-${{ runner.os }}-${{ hashFiles('scripts/typecheck.mjs', 'packages/tsconfigs/*.json', 'pnpm-lock.yaml') }}-
 
       - name: Install FFmpeg
         if: matrix.name == 'docs-media' && env.RUN_CHECK == 'true'
@@ -203,7 +366,7 @@ jobs:
 
       - name: Run lint
         if: matrix.name == 'lint' && env.RUN_CHECK == 'true'
-        run: pnpm exec eslint .
+        run: pnpm exec eslint . --cache --cache-location .cache/eslint/.eslintcache --cache-strategy content
 
       - name: Run format check
         if: matrix.name == 'format-check' && env.RUN_CHECK == 'true'
@@ -218,16 +381,41 @@ jobs:
       - name: Run affected typecheck scopes
         if: >-
           matrix.name == 'typecheck' &&
+          env.RUN_CHECK == 'true' &&
           (needs.classify-changes.result != 'success' ||
           needs.classify-changes.outputs.typecheck == 'true')
+        env:
+          ONEWORKS_TYPECHECK_CACHE_DIR: .cache/typecheck
         run: pnpm typecheck $TYPECHECK_SCOPES
 
       - name: Build affected client production bundle
         if: >-
           matrix.name == 'typecheck' &&
+          env.RUN_CHECK == 'true' &&
           (needs.classify-changes.result != 'success' ||
           needs.classify-changes.outputs.client_build == 'true')
         run: pnpm -C apps/client exec vite build
+
+      - name: Record reusable typecheck evidence
+        if: >-
+          github.event_name == 'pull_request' &&
+          matrix.name == 'typecheck' &&
+          env.RUN_CHECK == 'true'
+        run: |
+          mkdir -p .cache/pr-validation-evidence/typecheck
+          printf '%s\n' "${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }}" > .cache/pr-validation-evidence/typecheck/revision
+
+      - name: Save reusable typecheck evidence
+        if: >-
+          github.event_name == 'pull_request' &&
+          matrix.name == 'typecheck' &&
+          env.RUN_CHECK == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/pr-validation-evidence/typecheck
+          key: >-
+            pr-typecheck-evidence-v1-${{ github.event.pull_request.base.sha }}-${{
+            github.event.pull_request.head.sha }}
 
       - name: Run documentation media verification
         if: matrix.name == 'docs-media' && env.RUN_CHECK == 'true'
@@ -241,13 +429,23 @@ jobs:
         run: node scripts/docs-only-validation.mjs --base "$BASE_SHA" --head "$HEAD_SHA" --allow-mixed
 
       - name: Confirm check is not applicable
-        if: env.RUN_CHECK != 'true'
+        if: >-
+          env.RUN_CHECK != 'true' &&
+          needs.classify-changes.outputs.reuse_all != 'true' &&
+          (matrix.name != 'typecheck' || needs.validation-reuse.outputs.typecheck != 'true')
         run: echo "${{ matrix.name }} is not affected by this change scope."
+
+      - name: Confirm prior validation evidence
+        if: >-
+          needs.classify-changes.outputs.reuse_all == 'true' ||
+          (matrix.name == 'typecheck' && needs.validation-reuse.outputs.typecheck == 'true')
+        run: echo "${{ matrix.name }} is covered by immutable validation evidence for the applicable prior revision."
 
   public-docs:
     name: public-docs-build
     needs: classify-changes
     if: >-
+      needs.classify-changes.outputs.reuse_all != 'true' &&
       needs.classify-changes.outputs.public_docs == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -279,6 +477,7 @@ jobs:
     name: release-docs-preflight
     needs: classify-changes
     if: >-
+      needs.classify-changes.outputs.reuse_all != 'true' &&
       needs.classify-changes.outputs.release_docs == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -300,14 +499,20 @@ jobs:
 
   commit-message:
     name: commit-message
+    needs: classify-changes
+    if: always()
     runs-on: ubuntu-latest
+    env:
+      REUSE_ALL: ${{ needs.classify-changes.outputs.reuse_all }}
     steps:
       - name: Checkout repository
+        if: env.REUSE_ALL != 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Resolve commit range
+        if: env.REUSE_ALL != 'true'
         id: range
         shell: bash
         run: |
@@ -335,4 +540,43 @@ jobs:
           echo "head=$head" >> "$GITHUB_OUTPUT"
 
       - name: Check commit messages
+        if: env.REUSE_ALL != 'true'
         run: node scripts/check-commit-messages.mjs "${{ steps.range.outputs.base }}" "${{ steps.range.outputs.head }}"
+
+      - name: Confirm exact revision evidence
+        if: env.REUSE_ALL == 'true'
+        run: echo "Commit messages already passed for this exact base and head revision."
+
+  record-pr-source-evidence:
+    name: source-validation-evidence
+    needs:
+      - classify-changes
+      - validation-reuse
+      - quality
+      - public-docs
+      - release-docs
+      - commit-message
+    if: >-
+      always() &&
+      github.event_name == 'pull_request' &&
+      needs.classify-changes.outputs.reuse_all != 'true' &&
+      needs.classify-changes.result == 'success' &&
+      needs.validation-reuse.result == 'success' &&
+      needs.quality.result == 'success' &&
+      (needs.public-docs.result == 'success' || needs.public-docs.result == 'skipped') &&
+      (needs.release-docs.result == 'success' || needs.release-docs.result == 'skipped') &&
+      needs.commit-message.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Record exact source validation evidence
+        run: |
+          mkdir -p .cache/pr-validation-evidence/quality
+          printf '%s\n' "${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }}" > .cache/pr-validation-evidence/quality/revision
+
+      - name: Save exact source validation evidence
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/pr-validation-evidence/quality
+          key: >-
+            pr-quality-evidence-v1-${{ github.event.pull_request.base.sha }}-${{
+            github.event.pull_request.head.sha }}

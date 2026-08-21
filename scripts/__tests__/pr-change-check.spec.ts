@@ -263,11 +263,13 @@ describe('pr-change-check', () => {
     expect(result.violations).toEqual([])
   })
 
-  it('reruns only the PR policy job on PR body edits', () => {
+  it('keeps PR body policy independent while source jobs require exact revision evidence', () => {
     const qualityWorkflow = readFileSync('.github/workflows/quality.yml', 'utf8')
     const policyWorkflow = readFileSync('.github/workflows/pr-change-policy.yml', 'utf8')
 
-    expect(qualityWorkflow).not.toContain('      - edited')
+    expect(qualityWorkflow).toContain('      - edited')
+    expect(qualityWorkflow).toContain('Restore exact source validation evidence')
+    expect(qualityWorkflow).toContain('github.event.changes.base != null')
     expect(qualityWorkflow).not.toContain('name: pr-change-policy')
     expect(policyWorkflow).toContain('      - edited')
     expect(policyWorkflow).toContain('    name: pr-change-policy')

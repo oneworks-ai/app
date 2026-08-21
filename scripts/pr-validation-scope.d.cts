@@ -36,6 +36,12 @@ export interface ChangedPathEntry {
   status: string
 }
 
+export interface ChangedPathTreeRangeInput {
+  before: string
+  cwd?: string
+  head?: string
+}
+
 export const prValidationScopeVersion: number
 export const fullTypecheckScopes: string[]
 export function isDocumentationPath(filePath: string): boolean
@@ -49,6 +55,9 @@ export function classifyChangedPaths(
 export function getChangedFiles(input: PrValidationRangeInput): string[]
 export function getChangedFilesFromEntries(changes: ChangedPathEntry[]): string[]
 export function getChangedPathEntries(input: PrValidationRangeInput): ChangedPathEntry[]
+export function getChangedPathEntriesBetweenTrees(
+  input: ChangedPathTreeRangeInput
+): ChangedPathEntry[]
 export function getPresentChangedFiles(changes: ChangedPathEntry[]): string[]
 export function classifyPrValidationRange(input: PrValidationRangeInput): PrValidationScope
 export function runPrValidationScope(args?: string[]): PrValidationScope

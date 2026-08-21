@@ -38,7 +38,7 @@
   - `Experience Review` checklist 默认未勾选，创建 PR 后由作者按实际情况确认。
 - 硬门禁：`.github/workflows/pr-change-policy.yml` 与 `scripts/pr-change-check.cjs`
   - 独立 workflow 直接调用无 workspace 依赖的 `node scripts/pr-change-check.cjs <base> <head> --body-file <path>`；`scripts/pr-change-check.ts` 只作为本地 Commander 与其他 TS 工具的类型化桥接。
-  - workflow 监听 `opened`、`reopened`、`synchronize`、`edited` 和 `ready_for_review`；正文编辑只重跑这条窄门禁，不会取消或生成 skipped 的 Quality 源码门禁。
+  - workflow 监听 `opened`、`reopened`、`synchronize`、`edited` 和 `ready_for_review`；policy concurrency 与源码检查隔离。正文编辑也会让 Quality / Desktop 核对 exact revision evidence，但不会取消 source run；已有成功证据时只生成轻量 required contexts，cache miss 时按当前范围 fail closed 重检。base edit 不允许复用旧 base 证据。
   - 新增或调整 checklist 文案时，同步更新 `scripts/__tests__/pr-change-check.spec.ts`。
 
 ## Checklist 判定

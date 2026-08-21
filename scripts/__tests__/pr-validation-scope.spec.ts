@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- Validation classification and all protected workflow contracts stay in one audit suite. */
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -160,6 +161,18 @@ describe('pr validation scope', () => {
       typecheckScopes: fullTypecheckScopes,
       unknown: true,
       unknownFiles: ['new-surface/index.ts']
+    })
+  })
+
+  it('treats validation reuse and workspace cache authority as Desktop-risk CI changes', () => {
+    expect(classifyChangedPaths(['scripts/pr-validation-reuse.cjs'])).toMatchObject({
+      desktopPackage: true,
+      lint: true,
+      typecheckScopes: []
+    })
+    expect(classifyChangedPaths(['.github/actions/setup-workspace/action.yml'])).toMatchObject({
+      desktopPackage: true,
+      lint: true
     })
   })
 
@@ -373,6 +386,7 @@ describe('required context completion contract', () => {
   const qualityWorkflow = readFileSync('.github/workflows/quality.yml', 'utf8')
   const desktopWorkflow = readFileSync('.github/workflows/desktop-package.yml', 'utf8')
   const policyWorkflow = readFileSync('.github/workflows/pr-change-policy.yml', 'utf8')
+  const workspaceSetupAction = readFileSync('.github/actions/setup-workspace/action.yml', 'utf8')
 
   it('keeps PR workflows unconditional so required contexts cannot remain pending', () => {
     const qualityTrigger = qualityWorkflow.slice(0, qualityWorkflow.indexOf('\npermissions:'))
@@ -422,7 +436,7 @@ describe('required context completion contract', () => {
       qualityWorkflow.indexOf('      - name: Run documentation media verification')
     )
     expect(typecheckSteps.match(/needs\.classify-changes\.result != 'success'/gu)).toHaveLength(2)
-    expect(qualityWorkflow).toContain("if: env.RUN_CHECK != 'true'")
+    expect(qualityWorkflow).toContain("env.RUN_CHECK != 'true'")
     expect(qualityWorkflow).not.toContain('FULL_VALIDATION')
     expect(desktopWorkflow).toContain('node scripts/pr-validation-scope.cjs')
     expect(desktopWorkflow).toContain('desktop_package: $' + '{{ steps.validation_scope.outputs.desktop_package }}')
@@ -447,16 +461,63 @@ describe('required context completion contract', () => {
     expect(qualityJob).toContain('uses: dprint/check@v2.3')
   })
 
-  it('isolates PR body edits from source validation concurrency', () => {
+  it('reruns base edits without letting metadata edits cancel source validation', () => {
     const qualityTrigger = qualityWorkflow.slice(0, qualityWorkflow.indexOf('\npermissions:'))
+    const desktopTrigger = desktopWorkflow.slice(
+      desktopWorkflow.indexOf('\non:'),
+      desktopWorkflow.indexOf('\npermissions:')
+    )
     const policyTrigger = policyWorkflow.slice(0, policyWorkflow.indexOf('\npermissions:'))
 
-    expect(qualityTrigger).not.toContain('- edited')
+    expect(qualityTrigger).toContain('- edited')
+    expect(desktopTrigger).toContain('- edited')
     expect(policyTrigger).toContain('- edited')
-    expect(qualityWorkflow).not.toContain("github.event.action != 'edited'")
+    expect(qualityWorkflow).toContain('github.event.changes.base != null')
+    expect(desktopWorkflow).toContain('github.event.changes.base != null')
+    const prOnlyCancellation = 'cancel-in-progress: $' + "{{ github.event_name == 'pull_request' }}"
+    expect(qualityWorkflow).toContain(prOnlyCancellation)
+    expect(desktopWorkflow).toContain(prOnlyCancellation)
+    expect(qualityWorkflow).toContain('Restore exact source validation evidence')
+    expect(desktopWorkflow).toContain('Restore previous desktop validation evidence')
+    expect(qualityWorkflow).toContain('pr-quality-evidence-v1-')
+    expect(desktopWorkflow).toContain('pr-desktop-evidence-v1-')
     expect(policyWorkflow).toContain(
       'group: pr-change-policy-$' + '{{ github.event.pull_request.number }}'
     )
+  })
+
+  it('shares exact dependency and incremental caches without weakening required contexts', () => {
+    const reuseJob = qualityWorkflow.slice(
+      qualityWorkflow.indexOf('  validation-reuse:'),
+      qualityWorkflow.indexOf('  quality:')
+    )
+    const desktopScopeJob = desktopWorkflow.slice(
+      desktopWorkflow.indexOf('  pr-scope:'),
+      desktopWorkflow.indexOf('  pr-build:')
+    )
+
+    expect(workspaceSetupAction).toContain('uses: actions/cache@v4')
+    expect(workspaceSetupAction).toContain('workspace-v1-')
+    expect(workspaceSetupAction).toContain('runner.arch')
+    expect(workspaceSetupAction).toContain("'.github/actions/setup-workspace/action.yml'")
+    expect(workspaceSetupAction).toContain("'patches/**/*.patch'")
+    expect(workspaceSetupAction).toContain("if: steps.workspace-cache.outputs.cache-hit != 'true'")
+    expect(workspaceSetupAction).toContain('run: pnpm install --frozen-lockfile')
+    expect(qualityWorkflow).toContain('uses: ./.github/actions/setup-workspace')
+    expect(desktopWorkflow).toContain('uses: ./.github/actions/setup-workspace')
+    expect(qualityWorkflow).toContain('--cache-location .cache/eslint/.eslintcache')
+    expect(qualityWorkflow).toContain('ONEWORKS_TYPECHECK_CACHE_DIR: .cache/typecheck')
+    expect(qualityWorkflow).toContain('pr-typecheck-evidence-v1-')
+    expect(qualityWorkflow).toContain('Verify ESLint autofix-only revision')
+    expect(qualityWorkflow).toContain('Validate previous typecheck evidence')
+    expect(qualityWorkflow).toContain('cat .cache/pr-validation-evidence/typecheck/revision')
+    expect(qualityWorkflow).toContain('needs.validation-reuse.outputs.typecheck')
+    expect(desktopWorkflow).toContain('Validate previous desktop validation evidence')
+    expect(desktopWorkflow).toContain('cat .cache/pr-validation-evidence/desktop/revision')
+    expect(reuseJob).toContain('Checkout pull request merge')
+    expect(reuseJob).not.toContain('ref: ${{ github.event.pull_request.head.sha')
+    expect(desktopScopeJob).toContain('Checkout pull request merge')
+    expect(desktopScopeJob).not.toContain('ref: ${{ github.event.pull_request.head.sha')
   })
 
   it('adds only the relevant public and release documentation gates', () => {
