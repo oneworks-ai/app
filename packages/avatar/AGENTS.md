@@ -12,6 +12,7 @@ Deployment:
 
 - `assets/avatar` is a submodule of `oneworks-ai/avatar`.
 - The Pages site is rebuilt when this package or the avatar asset app changes.
+- `assets/avatar` is not part of the root app pnpm workspace. Its deployment installs the Avatar repository's own toolchain, checks out the app repository as `app-source`, and builds with aliases to `packages/avatar` source and `packages/route-layout` CSS from that app commit.
 - If glyphs, palettes, seed mapping, or exported renderer APIs change, run the package tests and the asset app build before updating the submodule pointer.
 
 Validation:

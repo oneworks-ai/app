@@ -2,7 +2,7 @@
 
 OneWorks avatar pixel emoticon SVG renderer.
 
-The interactive preview/export site lives in the `oneworks-ai/avatar` repository and is mounted in the app monorepo as `assets/avatar`. The site imports this package from the app workspace so preview output matches client runtime output.
+The interactive preview/export site lives in the `oneworks-ai/avatar` repository and is mounted in the app monorepo as `assets/avatar`. The site is not part of the app root pnpm workspace; deployment builds the site independently with its own toolchain and aliases the triggering app commit's avatar source.
 
 ## Exports
 
