@@ -11,6 +11,7 @@
 - [tag 与经验沉淀](../.oo/rules/release/tags.md)
 - [Homepage Docs 维护经验](../.oo/rules/maintenance/homepage-docs.md)
 - [PR 经验复盘门禁](../.oo/rules/maintenance/pr-experience-review.md)
+- [Main Merge Queue 运行约定](../.oo/rules/maintenance/merge-queue.md)
 - [PR Review 标准](../.oo/rules/REVIEW.md)
 
 ## Workflow 地图
