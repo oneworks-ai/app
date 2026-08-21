@@ -1,0 +1,92 @@
+.channel-collection {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--subpage-tertiary-gap, 10px);
+}
+
+.channel-collection .channel-collection__toolbar {
+  padding-inline: 0;
+}
+
+.channel-collection__grid.config-view__record-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr));
+  align-items: stretch;
+  gap: var(--subpage-tertiary-gap, 10px);
+}
+
+.channel-collection__card.config-view__record-card {
+  min-width: 0;
+  height: 100%;
+}
+
+.channel-collection__card--unconfigured.config-view__record-card {
+  border-style: dashed;
+  background: color-mix(in srgb, var(--subpage-tertiary-bg) 74%, transparent);
+}
+
+.channel-collection__card--unconfigured .config-view__detail-list-main {
+  color: var(--sub-text-color);
+}
+
+.channel-collection__subtitle,
+.channel-collection__state-tray {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.channel-collection__subtitle {
+  flex-wrap: wrap;
+}
+
+.channel-collection__state-tray {
+  flex: 0 0 auto;
+}
+
+.channel-collection__state {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--success-color) 12%, transparent);
+  color: var(--success-color);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.channel-collection__state--disabled {
+  background: color-mix(in srgb, var(--warning-color) 12%, transparent);
+  color: var(--warning-color);
+}
+
+.channel-collection__state--unconfigured {
+  background: color-mix(in srgb, var(--sub-text-color) 12%, transparent);
+  color: var(--sub-text-color);
+}
+
+.channel-collection__empty {
+  grid-column: 1 / -1;
+}
+
+.channel-collection__create-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--subpage-tertiary-gap, 10px);
+}
+
+@media (max-width: 600px) {
+  .channel-collection__grid.config-view__record-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .channel-collection__state-tray {
+    align-items: flex-end;
+    flex-direction: column;
+  }
+}

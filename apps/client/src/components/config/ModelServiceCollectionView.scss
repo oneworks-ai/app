@@ -1,0 +1,132 @@
+.model-service-collection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--subpage-tertiary-gap, 10px);
+  min-width: 0;
+}
+
+.model-service-collection__toolbar {
+  min-height: 44px;
+  padding-inline: 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.model-service-collection__create.config-view__record-add-inputs {
+  min-width: 0;
+}
+
+.model-service-collection__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--subpage-tertiary-gap, 10px);
+  min-width: 0;
+}
+
+.model-service-collection__section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  min-height: 18px;
+  gap: 6px;
+  color: var(--sub-text-color);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.model-service-collection__grid.config-view__record-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+  gap: var(--subpage-tertiary-gap, 10px);
+}
+
+.model-service-collection__card.config-view__record-card {
+  min-width: 0;
+  min-height: 104px;
+}
+
+.model-service-collection__card .config-view__detail-list-row {
+  align-items: flex-start;
+  min-width: 0;
+  height: 100%;
+}
+
+.model-service-collection__card .config-view__detail-list-main {
+  align-items: flex-start;
+  min-height: 82px;
+}
+
+.model-service-collection__card .config-view__record-heading {
+  align-items: flex-start;
+}
+
+.model-service-collection__card .config-view__record-heading-text {
+  min-height: 82px;
+}
+
+.model-service-collection__card .config-view__record-desc {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.model-service-collection__card .config-view__record-actions {
+  flex: 0 0 auto;
+  min-height: 28px;
+}
+
+.model-service-collection
+  .model-service-collection__card
+  :is(.config-view__record-actions, .config-view__detail-action-btn) {
+  transform: none;
+}
+
+.model-service-collection__card--available.config-view__record-card {
+  border-style: dashed;
+}
+
+.model-service-collection
+  .model-service-collection__card--available
+  :is(.config-view__record-actions, .config-view__detail-action-btn) {
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+  transform: none;
+}
+
+.model-service-collection__card-title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+}
+
+.model-service-collection__card-title > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-view__detail-badge--configured {
+  background: color-mix(in srgb, var(--success-color) 12%, transparent);
+  color: var(--success-color);
+}
+
+.model-service-collection__available-badge {
+  border: 1px solid color-mix(in srgb, var(--border-color) 74%, transparent);
+  background: transparent;
+}
+
+.model-service-collection__empty {
+  justify-content: center;
+  min-height: 92px;
+}
+
+@media (max-width: 720px) {
+  .model-service-collection__grid.config-view__record-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

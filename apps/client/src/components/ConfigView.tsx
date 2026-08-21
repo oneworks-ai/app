@@ -56,7 +56,7 @@ import {
 import { resolveWorkspaceFileOpenerSelectModels } from '../utils/workspace-file-openers'
 import { BrowserActivityPanel } from './browser-activity/BrowserActivityPanel'
 import { SavedPasswordManagerPanel } from './browser-data-sync/SavedPasswordManagerPanel'
-import { AboutSection, ConfigSectionPanel, DisplayValue } from './config'
+import { AboutSection, ConfigSectionPanel, ConfigTaskTabs, DisplayValue } from './config'
 import { AppSettingsPanel } from './config/AppSettingsPanel'
 import { DesktopSettingsPanel } from './config/DesktopSettingsPanel'
 import { ExternalSessionsPanel } from './config/ExternalSessionsPanel'
@@ -71,6 +71,8 @@ import type { ModelServiceProviderPortalRequest } from './config/ModelServicePro
 import { ThemePackSettingsPanel } from './config/ThemePackSettingsPanel'
 import { WorktreeEnvironmentPanel } from './config/WorktreeEnvironmentPanel'
 import { getAdapterImporterConfigFingerprint } from './config/adapterImporterCache'
+import type { ConfigTaskTabKey } from './config/config-task-tabs'
+import { configTaskTabQueryKey } from './config/config-task-tabs'
 import {
   getConfigDraftKey,
   resolveRemoteConfigChangeAction,
@@ -149,13 +151,20 @@ type ConfigTab = ConfigGroupTab | ConfigContentTab
 interface ConfigQueryParams extends Record<string, string> {
   detail: string
   section: string
+  sectionTab: string
   source: string
   tab: string
 }
 
 const configSourceKeys = ['global', 'project', 'user'] as const
 const configLegacyRouteQueryKeys = ['tab', 'detail', 'section']
-const configQueryDefaults: ConfigQueryParams = { tab: 'general', source: '', detail: '', section: '' }
+const configQueryDefaults: ConfigQueryParams = {
+  tab: 'general',
+  source: '',
+  detail: '',
+  section: '',
+  sectionTab: ''
+}
 const CONFIG_ROUTE_SIDEBAR_KEY = 'config-view'
 const getPluginSettingsPageKey = (scope: string, id: string) => `plugin:${scope}:${id}`
 const modelServiceDetailTabPathSegments = new Set([
@@ -168,6 +177,14 @@ const modelServiceDetailTabPathSegments = new Set([
   'plan',
   'profiles',
   'usage'
+])
+const modelServiceProfileTabPathSegments = new Set(['access', 'advanced', 'models'])
+const channelDetailTabPathSegments = new Set([
+  'overview',
+  'connection',
+  'access',
+  'behavior',
+  'advanced'
 ])
 const isConfigSourceKey = (value: string): value is ConfigSource => (
   configSourceKeys.includes(value as ConfigSource)
@@ -315,6 +332,19 @@ const isModelServiceDetailTabRoute = (
   route.nestedPath?.length === 1 &&
   modelServiceDetailTabPathSegments.has(route.nestedPath[0]!)
 )
+const isChannelDetailTabRoute = (
+  sectionKey: string | undefined,
+  route: ConfigDetailRoute
+) => (
+  sectionKey === 'channels' &&
+  route.fieldPath.length === 0 &&
+  route.nestedPath?.length === 1 &&
+  channelDetailTabPathSegments.has(route.nestedPath[0]!)
+)
+const isTaskGroupedDetailTabRoute = (
+  sectionKey: string | undefined,
+  route: ConfigDetailRoute
+) => isModelServiceDetailTabRoute(sectionKey, route) || isChannelDetailTabRoute(sectionKey, route)
 
 export function ConfigView() {
   const { i18n, t } = useTranslation()
@@ -394,6 +424,7 @@ export function ConfigView() {
         ? ''
         : legacyDetail,
       section: searchParams.get('section') ?? configQueryDefaults.section,
+      sectionTab: searchParams.get(configTaskTabQueryKey) ?? configQueryDefaults.sectionTab,
       source: searchParams.get('source') ?? configQueryDefaults.source,
       tab: pathValues.hasTabPath ? pathValues.tab : legacyTab || configQueryDefaults.tab
     }
@@ -532,12 +563,6 @@ export function ConfigView() {
       label: t('config.sections.environments')
     },
     {
-      key: 'models',
-      icon: 'tune',
-      label: t('config.sections.models'),
-      value: currentSource?.models
-    },
-    {
       key: 'modelServices',
       icon: 'model_training',
       label: t('config.sections.modelServices'),
@@ -564,6 +589,12 @@ export function ConfigView() {
     { key: 'mcp', icon: 'account_tree', label: t('config.sections.mcp'), value: currentSource?.mcp },
     { key: 'voice', icon: 'mic', label: t('config.sections.voice'), value: currentSource?.voice },
     { key: 'shortcuts', icon: 'keyboard', label: t('config.sections.shortcuts'), value: currentSource?.shortcuts },
+    {
+      key: 'models',
+      icon: 'tune',
+      label: t('config.sections.models'),
+      value: currentSource?.models
+    },
     ...(externalControlPages.length > 0
       ? [
         { key: 'group-external-control', type: 'group' as const, label: t('config.groups.externalControl') },
@@ -718,7 +749,10 @@ export function ConfigView() {
   const hasModelServiceImportQuery = useMemo(() => (
     modelServiceImportQueryKeys.some(key => searchParams.has(key))
   ), [searchParams])
-  const updateConfigRoute = useCallback((patch: Partial<ConfigQueryParams>, options?: { state?: unknown }) => {
+  const updateConfigRoute = useCallback((
+    patch: Partial<ConfigQueryParams>,
+    options?: { replace?: boolean; state?: unknown }
+  ) => {
     const nextTab = patch.tab ?? activeTabKey
     const nextDetail = patch.detail ?? detailQuery
     const requestedSource = isConfigSourceKey(patch.source ?? '') ? patch.source as ConfigSource : sourceKey
@@ -726,6 +760,14 @@ export function ConfigView() {
     const nextSearchParams = new URLSearchParams(location.search)
 
     configLegacyRouteQueryKeys.forEach(key => nextSearchParams.delete(key))
+    if (Object.hasOwn(patch, 'sectionTab')) {
+      const nextSectionTab = patch.sectionTab?.trim() ?? ''
+      if (nextSectionTab === '') {
+        nextSearchParams.delete(configTaskTabQueryKey)
+      } else {
+        nextSearchParams.set(configTaskTabQueryKey, nextSectionTab)
+      }
+    }
     if (nextTab !== 'externalSessions') {
       externalSessionsRouteQueryKeys.forEach(key => nextSearchParams.delete(key))
     }
@@ -763,7 +805,10 @@ export function ConfigView() {
       return
     }
 
-    void navigate(target, { replace: true, state: options?.state ?? location.state })
+    void navigate(target, {
+      replace: options?.replace ?? true,
+      state: options?.state ?? location.state
+    })
   }, [
     activeTabKey,
     configPresent,
@@ -856,9 +901,16 @@ export function ConfigView() {
       tab: key,
       detail: '',
       section: '',
+      sectionTab: '',
       ...(nextPreferredSource != null ? { source: nextPreferredSource } : {})
     })
   }, [activeTabKey, updateConfigRoute])
+  const setConfigTaskTab = useCallback((key: ConfigTaskTabKey) => {
+    updateConfigRoute({
+      detail: '',
+      sectionTab: key
+    }, { replace: false })
+  }, [updateConfigRoute])
   const activeTab = useMemo(() => tabs.find(tab => tab.key === activeTabKey), [tabs, activeTabKey])
   const activeContentTab = activeTab != null && activeTab.type !== 'group' ? activeTab : undefined
   const uiSections = schemaData?.workspace.uiSchema?.sections ?? {}
@@ -1080,7 +1132,7 @@ export function ConfigView() {
   const closeConfigDetail = useCallback(() => {
     const route = activeConfigDetail?.route
     if (route != null && (route.nestedPath?.length ?? 0) > 0) {
-      if (isModelServiceDetailTabRoute(activeContentTab?.key, route)) {
+      if (isTaskGroupedDetailTabRoute(activeContentTab?.key, route)) {
         setDetailQuery('')
         return
       }
@@ -1117,7 +1169,19 @@ export function ConfigView() {
     if (activeConfigDetail == null || activeContentTab == null) return undefined
     const route = activeConfigDetail.route
     const rawNestedSegments = route.nestedPath ?? []
-    const nestedSegments = rawNestedSegments.length === 1 && rawNestedSegments[0] === 'profiles'
+    const isModelServiceRootDetail = activeContentTab.key === 'modelServices' && route.fieldPath.length === 0
+    const nestedSegments = isChannelDetailTabRoute(activeContentTab.key, route)
+      ? []
+      : isModelServiceRootDetail &&
+          rawNestedSegments.length === 1 &&
+          modelServiceDetailTabPathSegments.has(rawNestedSegments[0]!)
+      ? []
+      : isModelServiceRootDetail &&
+          rawNestedSegments.length === 3 &&
+          rawNestedSegments[0] === 'profiles' &&
+          modelServiceProfileTabPathSegments.has(rawNestedSegments[2]!)
+      ? rawNestedSegments.slice(0, -1)
+      : rawNestedSegments.length === 1 && rawNestedSegments[0] === 'profiles'
       ? []
       : rawNestedSegments
     const getNestedSegmentLabel = (segment: string, index: number) => {
@@ -1900,6 +1964,99 @@ export function ConfigView() {
     globalAppearanceDraft
   )
 
+  const renderConfigSection = (tab: ConfigContentTab) => {
+    const panelProps = {
+      title: tab.label,
+      icon: tab.icon,
+      uiSection: uiSections[tab.key] as ConfigUiSection | undefined,
+      value: drafts[getDraftKey(tab.key)] ?? cloneValue(tab.value ?? {}) ?? {},
+      resolvedValue: cloneValue(
+        currentResolvedSource != null
+          ? (currentResolvedSource as Record<string, unknown>)[tab.key]
+          : undefined
+      ) ?? {},
+      source: sourceKey,
+      disabled: (isImportingModelServices || isModelServiceImportRefreshPending) && tab.key === 'modelServices',
+      onChange: (next: unknown) => handleDraftChange(tab.key, next),
+      mergedModelServices: mergedModelServices as Record<string, unknown>,
+      mergedAdapters: mergedAdapters as Record<string, unknown>,
+      selectedModelService,
+      worktreeEnvironmentOptions,
+      workspaceFileOpenerOptions,
+      detailQuery: activeTabKey === tab.key ? detailQuery : '',
+      onDetailQueryChange: activeTabKey === tab.key ? setDetailQuery : undefined,
+      onOpenModelServicePortal: activeTabKey === tab.key ? handleOpenModelServicePortal : undefined,
+      creatingModelServiceSessionKey,
+      onCreateModelServiceSession: handleCreateModelServiceSession,
+      modelServiceImportAction: tab.key === 'modelServices'
+        ? {
+          actionLabel: isModelServiceImportRefreshPending
+            ? t('config.modelServices.import.retryRefresh')
+            : selectedModelServiceImporter == null
+            ? t('config.modelServices.import.action')
+            : t('config.modelServices.import.actionWithAdapter', {
+              adapter: selectedModelServiceImporter.title
+            }),
+          adapters: modelServiceImporters,
+          buttonLabel: isModelServiceImportRefreshPending
+            ? t('config.modelServices.import.retryRefresh')
+            : t('config.modelServices.import.action'),
+          disabled: isModelServiceImportRefreshPending
+            ? false
+            : hasModelServiceImporterLoadError ||
+              selectedModelServiceImporter == null ||
+              !selectedModelServiceImporter.supportedSources.includes(sourceKey),
+          emptyLabel: hasModelServiceImporterLoadError
+            ? t('config.modelServices.import.loadFailed')
+            : t('config.modelServices.import.noAdapters'),
+          loading: isImportingModelServices,
+          mobileTitle: t('config.modelServices.import.adapterMobileTitle'),
+          onAdapterChange: setSelectedModelServiceImporterKey,
+          onClick: isModelServiceImportRefreshPending
+            ? () => void handleRetryModelServiceImportRefresh()
+            : selectedModelServiceImporter?.supportedSources.includes(sourceKey) === true
+            ? () => void handleImportModelServices()
+            : undefined,
+          optionsLoading: isLoadingModelServiceImporters,
+          placeholder: hasModelServiceImporterLoadError
+            ? t('config.modelServices.import.loadFailed')
+            : t('config.modelServices.import.adapterPlaceholder'),
+          selectedAdapterKey: selectedModelServiceImporter?.adapterKey,
+          selectDisabled: isModelServiceImportRefreshPending,
+          selectLabel: t('config.modelServices.import.adapterSelectLabel'),
+          title: isModelServiceImportRefreshPending
+            ? t('config.modelServices.import.refreshPending')
+            : hasModelServiceImporterLoadError
+            ? t('config.modelServices.import.loadFailed')
+            : selectedModelServiceImporter == null
+            ? t('config.modelServices.import.noAdapters')
+            : !selectedModelServiceImporter.supportedSources.includes(sourceKey)
+            ? t('config.modelServices.import.sourceUnavailable', {
+              adapter: selectedModelServiceImporter.title
+            })
+            : t('config.modelServices.import.actionWithAdapter', {
+              adapter: selectedModelServiceImporter.title
+            })
+        }
+        : undefined,
+      t,
+      showHeader: false
+    }
+
+    if (tab.key === 'general' || tab.key === 'conversation') {
+      return (
+        <ConfigTaskTabs
+          {...panelProps}
+          onTaskTabChange={setConfigTaskTab}
+          requestedTabKey={queryValues.sectionTab}
+          sectionKey={tab.key}
+        />
+      )
+    }
+
+    return <ConfigSectionPanel {...panelProps} sectionKey={tab.key} />
+  }
+
   const renderTabContent = (tab: ConfigContentTab) => (
     <div key={`${sourceKey}:${tab.key}`} className='config-view__content'>
       {tab.key === 'about' && (
@@ -2049,86 +2206,7 @@ export function ConfigView() {
         !configTabKeys.has(tab.key) && (
           <DisplayValue value={tab.value} sectionKey={tab.key} t={t} />
         )}
-      {configTabKeys.has(tab.key) && tab.key !== 'appearance' && (
-        <ConfigSectionPanel
-          sectionKey={tab.key}
-          title={tab.label}
-          icon={tab.icon}
-          uiSection={uiSections[tab.key] as ConfigUiSection | undefined}
-          value={drafts[getDraftKey(tab.key)] ?? cloneValue(tab.value ?? {}) ?? {}}
-          resolvedValue={cloneValue(
-            currentResolvedSource != null
-              ? (currentResolvedSource as Record<string, unknown>)[tab.key]
-              : undefined
-          ) ?? {}}
-          source={sourceKey}
-          disabled={(isImportingModelServices || isModelServiceImportRefreshPending) && tab.key === 'modelServices'}
-          onChange={(next) => handleDraftChange(tab.key, next)}
-          mergedModelServices={mergedModelServices as Record<string, unknown>}
-          mergedAdapters={mergedAdapters as Record<string, unknown>}
-          selectedModelService={selectedModelService}
-          worktreeEnvironmentOptions={worktreeEnvironmentOptions}
-          workspaceFileOpenerOptions={workspaceFileOpenerOptions}
-          detailQuery={activeTabKey === tab.key ? detailQuery : ''}
-          onDetailQueryChange={activeTabKey === tab.key ? setDetailQuery : undefined}
-          onOpenModelServicePortal={activeTabKey === tab.key ? handleOpenModelServicePortal : undefined}
-          creatingModelServiceSessionKey={creatingModelServiceSessionKey}
-          onCreateModelServiceSession={handleCreateModelServiceSession}
-          modelServiceImportAction={tab.key === 'modelServices'
-            ? {
-              actionLabel: isModelServiceImportRefreshPending
-                ? t('config.modelServices.import.retryRefresh')
-                : selectedModelServiceImporter == null
-                ? t('config.modelServices.import.action')
-                : t('config.modelServices.import.actionWithAdapter', {
-                  adapter: selectedModelServiceImporter.title
-                }),
-              adapters: modelServiceImporters,
-              buttonLabel: isModelServiceImportRefreshPending
-                ? t('config.modelServices.import.retryRefresh')
-                : t('config.modelServices.import.action'),
-              disabled: isModelServiceImportRefreshPending
-                ? false
-                : hasModelServiceImporterLoadError ||
-                  selectedModelServiceImporter == null ||
-                  !selectedModelServiceImporter.supportedSources.includes(sourceKey),
-              emptyLabel: hasModelServiceImporterLoadError
-                ? t('config.modelServices.import.loadFailed')
-                : t('config.modelServices.import.noAdapters'),
-              loading: isImportingModelServices,
-              mobileTitle: t('config.modelServices.import.adapterMobileTitle'),
-              onAdapterChange: setSelectedModelServiceImporterKey,
-              onClick: isModelServiceImportRefreshPending
-                ? () => void handleRetryModelServiceImportRefresh()
-                : selectedModelServiceImporter?.supportedSources.includes(sourceKey) === true
-                ? () => void handleImportModelServices()
-                : undefined,
-              optionsLoading: isLoadingModelServiceImporters,
-              placeholder: hasModelServiceImporterLoadError
-                ? t('config.modelServices.import.loadFailed')
-                : t('config.modelServices.import.adapterPlaceholder'),
-              selectedAdapterKey: selectedModelServiceImporter?.adapterKey,
-              selectDisabled: isModelServiceImportRefreshPending,
-              selectLabel: t('config.modelServices.import.adapterSelectLabel'),
-              title: isModelServiceImportRefreshPending
-                ? t('config.modelServices.import.refreshPending')
-                : hasModelServiceImporterLoadError
-                ? t('config.modelServices.import.loadFailed')
-                : selectedModelServiceImporter == null
-                ? t('config.modelServices.import.noAdapters')
-                : !selectedModelServiceImporter.supportedSources.includes(sourceKey)
-                ? t('config.modelServices.import.sourceUnavailable', {
-                  adapter: selectedModelServiceImporter.title
-                })
-                : t('config.modelServices.import.actionWithAdapter', {
-                  adapter: selectedModelServiceImporter.title
-                })
-            }
-            : undefined}
-          t={t}
-          showHeader={false}
-        />
-      )}
+      {configTabKeys.has(tab.key) && tab.key !== 'appearance' && renderConfigSection(tab)}
     </div>
   )
   const shouldShowSourceSwitch = activeTabKey !== 'appearance' &&

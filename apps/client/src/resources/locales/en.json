@@ -3837,6 +3837,22 @@
       "search": "Search config sections",
       "noResults": "No matching sections"
     },
+    "taskTabs": {
+      "ariaLabel": "Configuration tasks",
+      "general": {
+        "base": "Basics & Language",
+        "models": "Model Defaults",
+        "links": "Links & Files",
+        "tools": "Tools & Environment",
+        "notifications": "Notifications",
+        "advanced": "Advanced"
+      },
+      "conversation": {
+        "defaults": "Conversation Defaults",
+        "presets": "Startup Presets",
+        "actions": "Built-in Actions"
+      }
+    },
     "actions": {
       "edit": "Edit",
       "save": "Save",
@@ -3855,6 +3871,29 @@
       "instructions": "Choose which version to keep before continuing so the two copies do not overwrite each other.",
       "keepLocal": "Keep my edits",
       "useRemote": "Use external change"
+    },
+    "channels": {
+      "add": "Add channel",
+      "searchPlaceholder": "Search channels or channel types",
+      "typePlaceholder": "Select channel type",
+      "noMatches": "No matching channels",
+      "filters": {
+        "configured": "Show configured channels only",
+        "unconfigured": "Show unconfigured channel types only"
+      },
+      "status": {
+        "configured": "Configured",
+        "disabled": "Configured · Disabled",
+        "unconfigured": "Not configured"
+      },
+      "tabs": {
+        "ariaLabel": "Channel configuration tasks",
+        "overview": "Overview",
+        "connection": "Connection & credentials",
+        "access": "Access control",
+        "behavior": "Session behavior",
+        "advanced": "Advanced"
+      }
     },
     "editor": {
       "addField": "Add Field",
@@ -4055,6 +4094,46 @@
       "codexAuthFileDescription": "Optionally select a Codex auth.json file. Leave empty to use the credentials stored for this account."
     },
     "modelServices": {
+      "collection": {
+        "searchPlaceholder": "Search model services and providers",
+        "filters": {
+          "configured": "Show configured services",
+          "available": "Show available providers"
+        },
+        "actions": {
+          "addCustom": "Add custom service",
+          "configure": "Configure {{provider}}"
+        },
+        "groups": {
+          "configured": "Configured services",
+          "available": "Available providers"
+        },
+        "states": {
+          "configured": "Configured",
+          "available": "Not configured",
+          "inherited": "Inherited",
+          "override": "Overridden"
+        },
+        "types": {
+          "api": "API service",
+          "codingPlan": "Coding / Token plan",
+          "relay": "Relay service",
+          "gateway": "AI gateway",
+          "collection": "Service collection",
+          "custom": "Custom compatible service"
+        },
+        "count": "{{count}} items",
+        "empty": {
+          "title": "No matching model services",
+          "description": "Adjust the search or filters, or add a custom service."
+        }
+      },
+      "detailTabs": {
+        "ariaLabel": "Model service settings"
+      },
+      "profileTabs": {
+        "ariaLabel": "Model service profile settings"
+      },
       "identity": {
         "configured": "Official provider selected",
         "hostMatch": "Detected from API host",
@@ -4237,6 +4316,7 @@
         }
       },
       "collectionTabs": {
+        "ariaLabel": "Service collection settings",
         "service": "Service",
         "profiles": "Local profiles",
         "apiKeys": "Token management",

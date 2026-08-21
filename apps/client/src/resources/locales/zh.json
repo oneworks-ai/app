@@ -3827,6 +3827,22 @@
       "search": "搜索配置分类",
       "noResults": "没有匹配的配置分类"
     },
+    "taskTabs": {
+      "ariaLabel": "配置任务",
+      "general": {
+        "base": "基础与语言",
+        "models": "模型默认值",
+        "links": "链接与文件",
+        "tools": "工具与环境",
+        "notifications": "通知",
+        "advanced": "进阶配置"
+      },
+      "conversation": {
+        "defaults": "会话默认值",
+        "presets": "启动预设",
+        "actions": "内置动作"
+      }
+    },
     "actions": {
       "edit": "编辑",
       "save": "保存",
@@ -3845,6 +3861,29 @@
       "instructions": "请先选择保留哪一份，再继续编辑，避免两边互相覆盖。",
       "keepLocal": "保留当前编辑",
       "useRemote": "采用外部修改"
+    },
+    "channels": {
+      "add": "新增频道",
+      "searchPlaceholder": "搜索频道或频道类型",
+      "typePlaceholder": "选择频道类型",
+      "noMatches": "没有匹配的频道",
+      "filters": {
+        "configured": "只看已配置频道",
+        "unconfigured": "只看未配置频道类型"
+      },
+      "status": {
+        "configured": "已配置",
+        "disabled": "已配置 · 已停用",
+        "unconfigured": "尚未配置"
+      },
+      "tabs": {
+        "ariaLabel": "频道配置任务",
+        "overview": "概览",
+        "connection": "连接与凭据",
+        "access": "访问控制",
+        "behavior": "会话行为",
+        "advanced": "高级配置"
+      }
     },
     "editor": {
       "addField": "添加字段",
@@ -4045,6 +4084,46 @@
       "codexAuthFileDescription": "可选填 Codex auth.json 文件路径；留空时使用该账号已存储的登录凭据。"
     },
     "modelServices": {
+      "collection": {
+        "searchPlaceholder": "搜索模型服务与服务商",
+        "filters": {
+          "configured": "显示已配置服务",
+          "available": "显示可添加服务商"
+        },
+        "actions": {
+          "addCustom": "新增自定义服务",
+          "configure": "配置 {{provider}}"
+        },
+        "groups": {
+          "configured": "已配置服务",
+          "available": "可添加服务商"
+        },
+        "states": {
+          "configured": "已配置",
+          "available": "未配置",
+          "inherited": "已继承",
+          "override": "已覆盖"
+        },
+        "types": {
+          "api": "API 服务",
+          "codingPlan": "Coding / Token 套餐",
+          "relay": "中转服务",
+          "gateway": "AI 网关",
+          "collection": "服务集合",
+          "custom": "自定义兼容服务"
+        },
+        "count": "{{count}} 项",
+        "empty": {
+          "title": "没有匹配的模型服务",
+          "description": "可以调整搜索或筛选条件，也可以新增自定义服务。"
+        }
+      },
+      "detailTabs": {
+        "ariaLabel": "模型服务设置"
+      },
+      "profileTabs": {
+        "ariaLabel": "模型服务档案设置"
+      },
       "identity": {
         "configured": "已选择官方服务商",
         "hostMatch": "根据 API 地址识别",
@@ -4227,6 +4306,7 @@
         }
       },
       "collectionTabs": {
+        "ariaLabel": "服务集合设置",
         "service": "服务信息",
         "profiles": "本地档案",
         "apiKeys": "令牌管理",

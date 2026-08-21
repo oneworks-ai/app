@@ -126,8 +126,12 @@
 }
 
 .config-view__collection-tabs {
-  display: flex;
   min-width: 0;
+  flex: 0 0 auto;
+}
+
+.config-view__collection-tabs.ant-tabs {
+  display: flex;
   flex-direction: column;
 }
 
@@ -154,6 +158,14 @@
 .config-view__collection-tabs .ant-tabs-content,
 .config-view__collection-tabs .ant-tabs-tabpane {
   min-width: 0;
+}
+
+.config-view__collection-tab-panel {
+  min-width: 0;
+}
+
+.config-view__collection-tabs + .config-view__collection-tab-panel {
+  margin-block-start: 0;
 }
 
 .config-view__newapi-management-header {

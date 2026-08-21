@@ -41,6 +41,7 @@ export const SchemaObjectEditor = ({
   t,
   hideFieldPaths,
   visibleFieldPaths,
+  resolveFieldValue,
   resolveFieldLabel,
   resolveFieldDescription,
   resolveFieldOptions
@@ -52,6 +53,7 @@ export const SchemaObjectEditor = ({
   t: TranslationFn
   hideFieldPaths?: string[][]
   visibleFieldPaths?: string[][]
+  resolveFieldValue?: (field: ConfigUiField, currentValue: unknown, defaultValue: unknown) => unknown
   resolveFieldLabel?: (field: ConfigUiField, fallback: string) => string
   resolveFieldDescription?: (field: ConfigUiField, fallback: string) => string
   resolveFieldOptions?: (field: ConfigUiField) => ConfigUiFieldOption[] | undefined
@@ -78,7 +80,9 @@ export const SchemaObjectEditor = ({
     }
 
     const currentValue = getValueByPath(value, field.path)
-    const valueToUse = currentValue !== undefined ? currentValue : field.defaultValue
+    const valueToUse = resolveFieldValue == null
+      ? (currentValue !== undefined ? currentValue : field.defaultValue)
+      : resolveFieldValue(field, currentValue, field.defaultValue)
     const fallbackTitle = field.label ?? toLabel(field.path[field.path.length - 1] ?? '')
     const fallbackDescription = field.description ?? ''
     const title = resolveFieldLabel?.(field, fallbackTitle) ?? fallbackTitle

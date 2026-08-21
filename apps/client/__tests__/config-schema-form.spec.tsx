@@ -738,6 +738,11 @@ describe('config schema form', () => {
           {
             key: 'lark',
             label: 'Lark'
+          },
+          {
+            key: 'wechat',
+            label: 'WeChat',
+            description: 'Wechat channel'
           }
         ],
         schemas: {
@@ -790,7 +795,12 @@ describe('config schema form', () => {
     )
 
     expect(html).toContain('teamChat')
-    expect(html).toContain('config-view__detail-list')
+    expect(html).toContain('action-search-toolbar')
+    expect(html).toContain('channel-collection__grid')
+    expect(html).toContain('config.channels.status.configured')
+    expect(html).toContain('config.channels.status.unconfigured')
+    expect(html).toContain('config.channels.filters.configured')
+    expect(html).toContain('config.channels.filters.unconfigured')
   })
 
   it('renders a schema-driven channel detail route as a second-level config page', () => {
@@ -864,6 +874,189 @@ describe('config schema form', () => {
     expect(html).toContain('App ID')
     expect(html).toContain('App Secret')
     expect(html).not.toContain('config-view__detail-list')
+  })
+
+  it('groups channel details into route-backed native tabs and preserves default-enabled semantics', () => {
+    const uiSection: ConfigUiSection = {
+      key: 'channels',
+      kind: 'recordMap',
+      recordMap: {
+        mode: 'discriminated',
+        keyPlaceholder: 'Channel name',
+        discriminatorField: 'type',
+        entryKinds: [{ key: 'lark', label: 'Lark' }],
+        schemas: {
+          lark: {
+            fields: [
+              {
+                path: ['type'],
+                type: 'select',
+                options: [{ value: 'lark' }],
+                defaultValue: 'lark'
+              },
+              {
+                path: ['enabled'],
+                type: 'boolean',
+                label: 'Enabled'
+              },
+              {
+                path: ['appId'],
+                type: 'string',
+                label: 'App ID',
+                defaultValue: ''
+              },
+              {
+                path: ['access'],
+                type: 'json',
+                label: 'Access'
+              },
+              {
+                path: ['systemPrompt'],
+                type: 'multiline',
+                label: 'System prompt'
+              }
+            ]
+          }
+        },
+        unknownSchema: { fields: [] },
+        unknownEditor: 'json'
+      }
+    }
+    const commonProps = {
+      sectionKey: 'channels',
+      uiSection,
+      value: {
+        teamChat: {
+          type: 'lark',
+          appId: 'cli_123'
+        }
+      },
+      onChange: () => undefined,
+      mergedModelServices: {},
+      mergedAdapters: {},
+      t
+    }
+    const overviewHtml = renderToStaticMarkup(
+      <SectionForm
+        {...commonProps}
+        detailRoute={{
+          kind: 'detailCollectionItem',
+          fieldPath: [],
+          itemKey: 'teamChat',
+          nestedPath: ['overview']
+        }}
+      />
+    )
+    const connectionHtml = renderToStaticMarkup(
+      <SectionForm
+        {...commonProps}
+        detailRoute={{
+          kind: 'detailCollectionItem',
+          fieldPath: [],
+          itemKey: 'teamChat',
+          nestedPath: ['connection']
+        }}
+      />
+    )
+
+    expect(overviewHtml).toContain('native-tabs')
+    expect(overviewHtml).toContain('config.channels.tabs.overview')
+    expect(overviewHtml).toContain('config.channels.tabs.connection')
+    expect(overviewHtml).toContain('config.channels.tabs.access')
+    expect(overviewHtml).toContain('config.channels.tabs.behavior')
+    expect(overviewHtml).toContain('ant-switch-checked')
+    expect(overviewHtml).not.toContain('App ID')
+    expect(connectionHtml).toContain('App ID')
+    expect(connectionHtml).not.toContain('Enabled')
+  })
+
+  it('renders channel-type runtime-default switches without overriding explicit false values', () => {
+    const uiSection: ConfigUiSection = {
+      key: 'channels',
+      kind: 'recordMap',
+      recordMap: {
+        mode: 'discriminated',
+        keyPlaceholder: 'Channel name',
+        discriminatorField: 'type',
+        entryKinds: [
+          { key: 'qq-channel', label: 'QQ Channel' },
+          { key: 'wechat', label: 'WeChat' }
+        ],
+        schemas: {
+          'qq-channel': {
+            fields: [
+              {
+                path: ['type'],
+                type: 'select',
+                options: [{ value: 'qq-channel' }],
+                defaultValue: 'qq-channel'
+              },
+              {
+                path: ['verifyWebhookSignature'],
+                type: 'boolean',
+                label: 'Verify webhook signature'
+              },
+              {
+                path: ['verifyWebhookAppId'],
+                type: 'boolean',
+                label: 'Verify webhook app ID'
+              }
+            ]
+          },
+          wechat: {
+            fields: [
+              {
+                path: ['type'],
+                type: 'select',
+                options: [{ value: 'wechat' }],
+                defaultValue: 'wechat'
+              },
+              {
+                path: ['autoRegisterCallback'],
+                type: 'boolean',
+                label: 'Auto-register callback'
+              },
+              {
+                path: ['autoReconnectOnStart'],
+                type: 'boolean',
+                label: 'Auto-reconnect on start'
+              }
+            ]
+          }
+        },
+        unknownSchema: { fields: [] },
+        unknownEditor: 'json'
+      }
+    }
+    const renderConnection = (itemKey: string, item: Record<string, unknown>) =>
+      renderToStaticMarkup(
+        <SectionForm
+          sectionKey='channels'
+          uiSection={uiSection}
+          value={{ [itemKey]: item }}
+          onChange={() => undefined}
+          mergedModelServices={{}}
+          mergedAdapters={{}}
+          detailRoute={{
+            kind: 'detailCollectionItem',
+            fieldPath: [],
+            itemKey,
+            nestedPath: ['connection']
+          }}
+          t={t}
+        />
+      )
+
+    const qqHtml = renderConnection('qq', { type: 'qq-channel' })
+    const wechatHtml = renderConnection('wechat', { type: 'wechat' })
+    const disabledWechatHtml = renderConnection('wechat', {
+      type: 'wechat',
+      autoRegisterCallback: false
+    })
+
+    expect(qqHtml.match(/ant-switch-checked/g)).toHaveLength(2)
+    expect(wechatHtml.match(/ant-switch-checked/g)).toHaveLength(1)
+    expect(disabledWechatHtml).not.toContain('ant-switch-checked')
   })
 
   it('renders unknown channel detail routes with the JSON fallback editor', () => {
@@ -1036,7 +1229,36 @@ describe('config schema form', () => {
     expect(html).not.toContain('config-view__detail-list')
   })
 
-  it('renders model service detail collections as second-level config pages', () => {
+  it('renders model services as searchable configured and available card groups', () => {
+    const html = renderToStaticMarkup(
+      <SectionForm
+        sectionKey='modelServices'
+        value={{
+          openai: {
+            provider: 'openai',
+            title: 'OpenAI',
+            apiKey: 'secret'
+          }
+        }}
+        onChange={() => undefined}
+        mergedModelServices={{}}
+        mergedAdapters={{}}
+        t={t}
+      />
+    )
+
+    expect(html).toContain('model-service-collection__toolbar')
+    expect(html).toContain('config.modelServices.collection.searchPlaceholder')
+    expect(html).toContain('config.modelServices.collection.groups.configured')
+    expect(html).toContain('config.modelServices.collection.groups.available')
+    expect(html).toContain('model-service-collection__card--configured')
+    expect(html).toContain('model-service-collection__card--available')
+    expect(html).toContain('config.modelServices.collection.states.configured')
+    expect(html).toContain('config.modelServices.collection.states.available')
+    expect(html).toContain('config.modelServices.collection.types.api')
+  })
+
+  it('renders model service detail collections as route-backed native tabs', () => {
     const html = renderToStaticMarkup(
       <SectionForm
         sectionKey='modelServices'
@@ -1063,9 +1285,13 @@ describe('config schema form', () => {
     )
 
     expect(html).toContain('config.fields.modelServices.item.provider.label')
-    expect(html).toContain('data-node-key="access"')
-    expect(html).toContain('data-node-key="models"')
-    expect(html).toContain('data-node-key="plan"')
+    expect(html).toContain('role="tablist"')
+    expect(html).toContain('config.modelServices.detailTabs.ariaLabel')
+    expect(html).toContain('>接入配置</span>')
+    expect(html).toContain('>模型配置</span>')
+    expect(html).toContain('>套餐信息</span>')
+    expect(html).toContain('config-view__model-service-actions--compact')
+    expect(html).not.toContain('config-view__model-service-action-title')
     expect(html).toContain('config.modelServices.actions.openApiKeys')
     expect(html).toContain('config.modelServices.actions.more')
     expect(html).not.toContain('config.fields.modelServices.item.apiKey.label')
@@ -1096,8 +1322,81 @@ describe('config schema form', () => {
       />
     )
 
+    expect(accessHtml).toContain('aria-selected="true"')
     expect(accessHtml).toContain('config.fields.modelServices.item.apiKey.label')
     expect(accessHtml).toContain('config.fields.modelServices.item.apiBaseUrl.label')
+  })
+
+  it('routes relay management fields to a dedicated task tab', () => {
+    const html = renderToStaticMarkup(
+      <SectionForm
+        sectionKey='modelServices'
+        value={{
+          relay: {
+            provider: 'openrouter',
+            management: {
+              enabled: true,
+              apiKey: 'management-secret'
+            }
+          }
+        }}
+        onChange={() => undefined}
+        mergedModelServices={{}}
+        mergedAdapters={{}}
+        detailRoute={{
+          kind: 'detailCollectionItem',
+          fieldPath: [],
+          itemKey: 'relay',
+          nestedPath: ['management']
+        }}
+        t={t}
+      />
+    )
+
+    expect(html).toContain('>管理接口</span>')
+    expect(html).toContain('config.fields.modelServices.item.management.enabled.label')
+    expect(html).toContain('config.fields.modelServices.item.management.apiKey.label')
+    expect(html).not.toContain('config.fields.modelServices.item.apiKey.label')
+  })
+
+  it('renders collection profiles as route-backed task tabs', () => {
+    const html = renderToStaticMarkup(
+      <SectionForm
+        sectionKey='modelServices'
+        value={{
+          gateway: {
+            kind: 'collection',
+            title: 'Gateway collection',
+            profiles: {
+              primary: {
+                title: 'Primary profile',
+                apiBaseUrl: 'https://gateway.example/v1',
+                apiKey: 'profile-secret',
+                models: ['gpt-5.4']
+              }
+            }
+          }
+        }}
+        onChange={() => undefined}
+        mergedModelServices={{}}
+        mergedAdapters={{}}
+        detailRoute={{
+          kind: 'detailCollectionItem',
+          fieldPath: [],
+          itemKey: 'gateway',
+          nestedPath: ['profiles', 'primary', 'access']
+        }}
+        t={t}
+      />
+    )
+
+    expect(html).toContain('config.modelServices.profileTabs.ariaLabel')
+    expect(html).toContain('>服务信息</span>')
+    expect(html).toContain('>接入配置</span>')
+    expect(html).toContain('>模型配置</span>')
+    expect(html).toContain('config.fields.modelServices.item.apiBaseUrl.label')
+    expect(html).toContain('config.fields.modelServices.item.apiKey.label')
+    expect(html).not.toContain('config.fields.modelServices.item.title.label')
   })
 
   it('renders adapter model service import as a searchable row separate from manual creation', () => {
@@ -1185,7 +1484,7 @@ describe('config schema form', () => {
       />
     )
 
-    expect(globalHtml.match(/config-view__record-add-inputs/gu)).toHaveLength(2)
+    expect(globalHtml.match(/config-view__record-add-inputs/gu)).toHaveLength(1)
     expect(globalHtml).toContain('config-view__adapter-import-row')
     expect(globalHtml).toContain('aria-label="Model service import adapter"')
     expect(globalHtml).toContain('Codex config.toml')
@@ -1193,14 +1492,15 @@ describe('config schema form', () => {
     expect(globalHtml).toContain('config-view__adapter-import-option-icon')
     expect(globalHtml).not.toContain('<span>Import</span>')
     expect(globalHtml).toContain('file_download')
+    expect(globalHtml).toContain('config.modelServices.collection.actions.addCustom')
     expect(globalHtml.indexOf('config-view__adapter-import-row')).toBeLessThan(
-      globalHtml.indexOf('config.editor.newModelServiceName')
+      globalHtml.indexOf('model-service-collection__toolbar')
     )
-    expect(globalHtml.indexOf('config.editor.newModelServiceName')).toBeLessThan(
+    expect(globalHtml.indexOf('model-service-collection__toolbar')).toBeLessThan(
       globalHtml.indexOf('config-view__record-card')
     )
     expect(globalHtml.indexOf('file_download')).toBeLessThan(
-      globalHtml.indexOf('>check<')
+      globalHtml.indexOf('action-search-toolbar')
     )
     expect(customHtml).toContain('Acme native config')
     expect(customHtml).toContain('config-view__adapter-import-selected')
@@ -1326,8 +1626,8 @@ describe('config schema form', () => {
     )
 
     expect(html).toContain('Alibaba Coding Plan')
-    expect(html).toContain('data-node-key="access"')
-    expect(html).toContain('data-node-key="plan"')
+    expect(html).toContain('>接入配置</span>')
+    expect(html).toContain('>套餐信息</span>')
     expect(html).not.toContain('https://coding.dashscope.aliyuncs.com/apps/anthropic')
   })
 
@@ -1396,7 +1696,7 @@ describe('config schema form', () => {
     expect(html).toContain('Official DeepSeek OpenAI-compatible API service.')
   })
 
-  it('does not render model service keys as summary subtitles when a title exists', () => {
+  it('uses semantic service types instead of record keys as summary subtitles', () => {
     const html = renderToStaticMarkup(
       <SectionForm
         sectionKey='modelServices'
@@ -1416,7 +1716,8 @@ describe('config schema form', () => {
 
     expect(html).toContain('Kimi Code')
     expect(html).toContain('Kimi Code membership benefit endpoint for coding agents.')
-    expect(html).not.toContain('config-view__record-subtitle')
+    expect(html).toContain('config.modelServices.collection.types.codingPlan')
+    expect(html).not.toContain('<div class="config-view__record-subtitle">kimi-code</div>')
   })
 
   it('renders coding plan quota previews in model service summaries', () => {
@@ -1459,7 +1760,7 @@ describe('config schema form', () => {
     )
 
     expect(html).toContain('OpenAI')
-    expect(html).toContain('config.detail.inheritedBadge')
+    expect(html).toContain('config.modelServices.collection.states.inherited')
   })
 
   it('renders inherited detail routes as readonly pages with an explicit override action', () => {
@@ -1591,5 +1892,19 @@ describe('config schema form', () => {
 
     expect(raw).toBe('codex')
     expect(parseConfigDetailRoute({ fields: configSchema.adapters, raw })).toEqual(route)
+  })
+
+  it('serializes route-backed channel tabs into replayable paths', () => {
+    const route = {
+      kind: 'detailCollectionItem' as const,
+      fieldPath: [],
+      itemKey: 'teamChat',
+      nestedPath: ['connection']
+    }
+
+    const raw = serializeConfigDetailRoute(route)
+
+    expect(raw).toBe('teamChat/connection')
+    expect(parseConfigDetailRoute({ fields: configSchema.channels, raw })).toEqual(route)
   })
 })
