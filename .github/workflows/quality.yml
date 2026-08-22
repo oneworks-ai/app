@@ -14,9 +14,6 @@ on:
   merge_group:
     types:
       - checks_requested
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
@@ -206,6 +203,10 @@ jobs:
       typecheck: ${{ steps.result.outputs.typecheck }}
     steps:
       - name: Checkout pull request merge
+        if: >-
+          needs.classify-changes.result == 'success' &&
+          needs.classify-changes.outputs.reuse_mode == 'eslint-autofix' &&
+          needs.classify-changes.outputs.reuse_candidate == 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -320,6 +321,9 @@ jobs:
           - name: docs-media
     steps:
       - name: Checkout repository
+        if: >-
+          env.RUN_CHECK == 'true' ||
+          (matrix.name == 'lint' && needs.classify-changes.outputs.docs_changed == 'true')
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -366,8 +370,12 @@ jobs:
       - name: Install FFmpeg
         if: matrix.name == 'docs-media' && env.RUN_CHECK == 'true'
         run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends --yes ffmpeg
+          if command -v ffmpeg >/dev/null 2>&1; then
+            ffmpeg -version | head -1
+          else
+            sudo apt-get update
+            sudo apt-get install --no-install-recommends --yes ffmpeg
+          fi
 
       - name: Run lint
         if: matrix.name == 'lint' && env.RUN_CHECK == 'true'
@@ -524,9 +532,6 @@ jobs:
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             base="${{ github.event.pull_request.base.sha }}"
             head="${{ github.event.pull_request.head.sha }}"
-          elif [ "${{ github.event_name }}" = "push" ]; then
-            base="${{ github.event.before }}"
-            head="${{ github.sha }}"
           else
             base=""
             head="${{ github.sha }}"

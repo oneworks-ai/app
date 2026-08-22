@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { readFileSync, readdirSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
@@ -25,7 +26,67 @@ function job(workflowSource: string, jobName: string) {
   return result!
 }
 
+interface WorkspaceManifest {
+  dependencies?: Record<string, string>
+  devDependencies?: Record<string, string>
+  name?: string
+  optionalDependencies?: Record<string, string>
+  peerDependencies?: Record<string, string>
+}
+
+const readManifest = (path: string) => JSON.parse(readFileSync(path, 'utf8')) as WorkspaceManifest
+
+const getClientWorkspaceTriggerClosure = () => {
+  const manifestPaths = execFileSync('git', ['ls-files', 'packages/**/package.json'], {
+    encoding: 'utf8'
+  }).trim().split('\n').filter(Boolean)
+  const manifests = manifestPaths.map(path => ({ path, manifest: readManifest(path) }))
+  const manifestsByName = new Map(
+    manifests.flatMap(entry => entry.manifest.name == null ? [] : [[entry.manifest.name, entry]])
+  )
+  const clientManifest = readManifest('apps/client/package.json')
+  const pending = Object.keys({
+    ...clientManifest.dependencies,
+    ...clientManifest.devDependencies,
+    ...clientManifest.optionalDependencies,
+    ...clientManifest.peerDependencies
+  })
+  const visited = new Set<string>()
+  const triggerPaths = new Set<string>()
+
+  while (pending.length > 0) {
+    const packageName = pending.pop()!
+    if (visited.has(packageName)) continue
+    visited.add(packageName)
+    const entry = manifestsByName.get(packageName)
+    if (entry == null) continue
+
+    const directory = entry.path.slice(0, -'/package.json'.length)
+    const [, group] = directory.split('/')
+    triggerPaths.add(group === 'adapters' || group === 'plugins' ? `packages/${group}/**` : `${directory}/**`)
+    pending.push(...Object.keys({
+      ...entry.manifest.dependencies,
+      ...entry.manifest.devDependencies,
+      ...entry.manifest.optionalDependencies,
+      ...entry.manifest.peerDependencies
+    }))
+  }
+
+  return triggerPaths
+}
+
 describe('workflow environment routing', () => {
+  it('limits PWA production approvals to the explicit client workspace closure', () => {
+    const source = workflow('deploy-pwa.yml')
+    const triggerSource = source.slice(0, source.indexOf('\npermissions:'))
+
+    expect(triggerSource).not.toContain('      - packages/**\n')
+    expect(triggerSource).not.toContain('      - .github/workflows/deploy-pwa.yml\n')
+    for (const clientPath of ['apps/client/**', ...getClientWorkspaceTriggerClosure()]) {
+      expect(triggerSource).toContain(`      - ${clientPath}\n`)
+    }
+  })
+
   it.each([
     ['deploy-avatar.yml', 'trigger'],
     ['deploy-pwa.yml', 'trigger'],

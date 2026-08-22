@@ -6,12 +6,32 @@ on:
       - main
     paths:
       - apps/client/**
-      - packages/**
+      - packages/adapters/**
+      - packages/avatar/**
+      - packages/channels/lark/**
+      - packages/cli-helper/**
+      - packages/components/**
+      - packages/config/**
+      - packages/core/**
+      - packages/cursor/**
+      - packages/definition-core/**
+      - packages/definition-loader/**
+      - packages/diagnostics/**
+      - packages/hooks/**
+      - packages/icon/**
+      - packages/model-protocol/**
+      - packages/model-provider-catalog/**
+      - packages/plugins/**
+      - packages/register/**
+      - packages/route-layout/**
+      - packages/runtime-broker/**
+      - packages/types/**
+      - packages/utils/**
+      - packages/workspace-assets/**
       - package.json
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
       - .node-version
-      - .github/workflows/deploy-pwa.yml
   workflow_dispatch:
 
 permissions:

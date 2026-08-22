@@ -397,6 +397,7 @@ describe('required context completion contract', () => {
 
     expect(qualityTrigger).not.toContain('paths:')
     expect(qualityTrigger).not.toContain('paths-ignore:')
+    expect(qualityTrigger).not.toContain('\n  push:')
     expect(desktopTrigger).not.toContain('paths:')
     expect(desktopTrigger).not.toContain('paths-ignore:')
     for (const trigger of [qualityTrigger, desktopTrigger]) {
@@ -464,8 +465,13 @@ describe('required context completion contract', () => {
       qualityWorkflow.indexOf('  public-docs:')
     )
     expect(qualityJob).toContain("if: env.NEEDS_DEPENDENCIES == 'true'")
+    expect(qualityJob).toContain("env.RUN_CHECK == 'true' ||")
+    expect(qualityJob).toContain(
+      "matrix.name == 'lint' && needs.classify-changes.outputs.docs_changed == 'true'"
+    )
     expect(qualityJob).toContain('run: node scripts/check-env-contract.mjs')
     expect(qualityJob).toContain('uses: dprint/check@v2.3')
+    expect(qualityJob).toContain('if command -v ffmpeg >/dev/null 2>&1; then')
   })
 
   it('reruns base edits without letting metadata edits cancel source validation', () => {
@@ -539,6 +545,14 @@ describe('required context completion contract', () => {
     expect(workspaceSetupAction).toContain("'patches/**/*.patch'")
     expect(workspaceSetupAction).toContain("if: steps.workspace-cache.outputs.cache-hit != 'true'")
     expect(workspaceSetupAction).toContain('run: pnpm install --frozen-lockfile')
+    expect(workspaceSetupAction).toContain('name: Setup Node.js from exact workspace cache')
+    expect(workspaceSetupAction).toContain('name: Setup Node.js with pnpm store cache')
+    expect(workspaceSetupAction.indexOf('name: Restore workspace dependencies')).toBeLessThan(
+      workspaceSetupAction.indexOf('name: Setup pnpm')
+    )
+    expect(workspaceSetupAction).toContain(
+      "if: steps.workspace-cache.outputs.cache-hit == 'true'\n      uses: actions/setup-node@v4"
+    )
     expect(qualityWorkflow).toContain('uses: ./.github/actions/setup-workspace')
     expect(desktopWorkflow).toContain('uses: ./.github/actions/setup-workspace')
     expect(qualityWorkflow).toContain('--cache-location .cache/eslint/.eslintcache')
@@ -551,6 +565,8 @@ describe('required context completion contract', () => {
     expect(desktopWorkflow).toContain('Validate previous desktop validation evidence')
     expect(desktopWorkflow).toContain('cat .cache/pr-validation-evidence/desktop/revision')
     expect(reuseJob).toContain('Checkout pull request merge')
+    expect(reuseJob).toContain("needs.classify-changes.outputs.reuse_mode == 'eslint-autofix'")
+    expect(reuseJob).toContain("needs.classify-changes.outputs.reuse_candidate == 'true'")
     expect(reuseJob).not.toContain('ref: ${{ github.event.pull_request.head.sha')
     expect(desktopScopeJob).toContain('Checkout pull request merge')
     expect(desktopScopeJob).not.toContain('ref: ${{ github.event.pull_request.head.sha')
