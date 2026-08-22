@@ -16,10 +16,10 @@
 
 ## Workflow 地图
 
-- `quality.yml`：所有 `main` push / 源码 PR / Merge Queue 组合提交 / 手动触发都保持 `lint`、`format-check`、`typecheck`、`commit-message` 的稳定 check 身份。PR 与 `merge_group` 统一调用 validation-scope v2，按 client / node / shared、env contract 与 docs-media 目标选择检查，未知路径 fail closed 到全量；client production closure 在现有 typecheck runner 内执行 Vite build，format 与 env contract 使用无 workspace install 的轻量入口。依赖安装、ESLint 与 TypeScript 增量状态使用精确 cache key；上一 PR revision 已有成功证据、before / head 都是 mode 未变的普通文件 blob，且当前 head blob 逐字节等于 ESLint 自动修复结果时，只重跑 lint / format / commit message，typecheck 与 client build 复用不可变证据。复用 verifier 必须从 PR merge ref 使用 current base 的受审工具链，不能要求旧 PR head 自带新脚本或读取 mutable worktree；队列生成的组合 revision 必须重新验证，不能复用单个 PR 的证据。
+- `quality.yml`：源码 PR / Merge Queue 组合提交 / 手动基线触发保持 `lint`、`format-check`、`typecheck`、`commit-message` 的稳定 check 身份；Merge Queue 已验证的同一提交进入 `main` 后不重复全量执行。PR 与 `merge_group` 统一调用 validation-scope v2，按 client / node / shared、env contract 与 docs-media 目标选择检查，未知路径 fail closed 到全量；client production closure 在现有 typecheck runner 内执行 Vite build，format 与 env contract 使用无 workspace install 的轻量入口。不适用的矩阵任务只创建稳定 context，不 checkout 仓库或安装 workspace。依赖安装、ESLint 与 TypeScript 增量状态使用精确 cache key；上一 PR revision 已有成功证据、before / head 都是 mode 未变的普通文件 blob，且当前 head blob 逐字节等于 ESLint 自动修复结果时，只重跑 lint / format / commit message，typecheck 与 client build 复用不可变证据。复用 verifier 必须从 PR merge ref 使用 current base 的受审工具链，不能要求旧 PR head 自带新脚本或读取 mutable worktree；队列生成的组合 revision 必须重新验证，不能复用单个 PR 的证据。
 - `pr-change-policy.yml`：保持 `pr-change-policy` required check 身份，使用无 workspace install 的 CJS 入口；独立监听 PR 创建、同步、正文编辑和 `merge_group`。PR 事件验证正文与变更，队列事件只维持稳定 context，因为每个入队 head 已经通过同一门禁；policy concurrency 与 Quality / Desktop 相互独立。
 - GitHub 把正文 / 标题编辑和 PR base 变更都归入 `edited`。Quality / Desktop 用 `changes.base` 隔离 concurrency：普通 metadata edit 只有在 exact base/head 的 required checks 已成功时才复用证据；base retarget 一律禁用复用并针对新 base 完整重检。证据 miss、cache miss、Autofix 判定失败或输出不完整都必须 fail closed 到当前 validation scope。
-- `.github/actions/setup-workspace/action.yml`：Quality 与 Desktop PR smoke 的唯一 workspace 安装入口；cache key 必须同时绑定 runner OS / arch、Node / pnpm authority、全部 workspace manifests 与 `patchedDependencies` 的 patch 字节。cache miss 才运行 frozen install；不得加入不精确 restore key 或跨平台复用 `node_modules`。
+- `.github/actions/setup-workspace/action.yml`：Quality 与 Desktop PR smoke 的唯一 workspace 安装入口；cache key 必须同时绑定 runner OS / arch、Node / pnpm authority、全部 workspace manifests 与 `patchedDependencies` 的 patch 字节。先恢复精确 workspace cache，命中时不再恢复冗余 pnpm store；cache miss 才恢复 store 并运行 frozen install。不得加入不精确 restore key 或跨平台复用 `node_modules`。
 - `pr-experience-review.yml`：PR 创建、编辑或同步时通过 Pull Requests API upsert 经验复盘提醒 review summary；硬门禁由 `pr-change-policy.yml` 调用 `scripts/pr-change-check.cjs` 执行。
 - `release-tags.yml`：按 package version / scripts 相关路径触发，创建 `pkg/*/v*` release tags，并按 tag 显式调度对应自动发布 workflow；VS Code prerelease 不建 tag，stable tag 只创建不自动 dispatch。
 - `npm-publish-alpha.yml`：手动发布 npm 包；默认 `auth_mode=oidc`，在首次 publish 前完成 exact identity 的 npm OIDC exchange，之后核验 registry bytes/provenance。新 identity 仅能用受限的 `new-identity-bootstrap` onboarding token mode。
@@ -30,7 +30,7 @@
 - `deploy-relay-dev.yml`：Cloudflare dev Relay/Admin 由 Actions 部署并 smoke；Vercel dev Relay/Admin 由 Vercel GitHub App 部署，Actions 只轮询 `dev.vc.oneworks.cloud` 做 smoke，不能恢复长期 Vercel CLI token 发布路径。
 - `deploy-relay-server.yml`：手动把已批准的精确 `origin/main` SHA 提升到 Relay production；按必填 `platform` input 选择 external handoff、Cloudflare、Vercel 或两套官方平台，并验证 build SHA、登录、未授权边界和真实 Admin 静态资产。
 - `deploy-relay-admin.yml`：只监听 Relay Admin 前端及其 UI 依赖，构建独立 Admin 平台 artifact 并可按变量触发外部前端部署。
-- `deploy-pwa.yml`：从 app 仓库触发 `oneworks-ai/pwa` 的部署 workflow。
+- `deploy-pwa.yml`：只在 client 与其显式前端 workspace closure 变化时，从 app 仓库触发 `oneworks-ai/pwa` 的部署 workflow；不得用整棵 `packages/**` 扩大 Production 审批范围。
 - `deploy-avatar.yml`：从 app 仓库触发 `oneworks-ai/avatar` 的 GitHub Pages 部署 workflow，只监听 avatar 相关路径。
 - `deploy-homepage.yml`：从 app 仓库触发 `oneworks-ai/oneworks-ai.github.io` 的 GitHub Pages 部署 workflow，只监听 `.oo/docs` 和自身 workflow。
 - `sync-brand-studio.yml`：产品品牌 catalog、adapter / model-provider / channel 元数据变化后向 Brand Studio 发送 `product-catalog-updated`；专用 token 缺失时输出 notice，并保留 Brand Studio 每六小时同步作为兜底。

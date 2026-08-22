@@ -4,18 +4,6 @@ description: Setup Node.js and pnpm, restoring an exact platform-specific worksp
 runs:
   using: composite
   steps:
-    - name: Setup pnpm
-      uses: pnpm/action-setup@v4
-      with:
-        version: 11.7.0
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version-file: .node-version
-        cache: pnpm
-        cache-dependency-path: pnpm-lock.yaml
-
     - name: Restore workspace dependencies
       id: workspace-cache
       uses: actions/cache@v4
@@ -35,6 +23,25 @@ runs:
           'assets/avatar/package.json', 'apps/*/package.json',
           'packages/*/package.json', 'packages/adapters/*/package.json',
           'packages/channels/*/package.json', 'packages/plugins/*/package.json') }}
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 11.7.0
+
+    - name: Setup Node.js from exact workspace cache
+      if: steps.workspace-cache.outputs.cache-hit == 'true'
+      uses: actions/setup-node@v4
+      with:
+        node-version-file: .node-version
+
+    - name: Setup Node.js with pnpm store cache
+      if: steps.workspace-cache.outputs.cache-hit != 'true'
+      uses: actions/setup-node@v4
+      with:
+        node-version-file: .node-version
+        cache: pnpm
+        cache-dependency-path: pnpm-lock.yaml
 
     - name: Install workspace dependencies
       if: steps.workspace-cache.outputs.cache-hit != 'true'
