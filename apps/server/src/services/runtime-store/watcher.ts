@@ -173,6 +173,13 @@ const resolveTerminalDeliveryStatus = (status: string | undefined) => {
   return undefined
 }
 
+const resolveSessionTerminalDeliveryStatus = (status: ReturnType<SqliteDb['getSessionStatus']>) => {
+  if (status === 'completed') return 'completed' as const
+  if (status === 'failed') return 'failed' as const
+  if (status === 'terminated') return 'expired' as const
+  return undefined
+}
+
 const isSessionActivationCommand = (command: RuntimeCommand) =>
   command.type === 'start' || command.type === 'resume' || command.type === 'send_message'
 
@@ -234,7 +241,7 @@ export async function replayRuntimeStore(
   }
 
   const state = await readRuntimeSessionState(store)
-  const session = options.db.getSession(store.sessionId)
+  const sessionStatus = options.db.getSessionStatus(store.sessionId)
   const projectedStateStatus = runtimeStatusToSessionStatus(state?.status)
   const shouldReconcileTerminalState = state != null &&
     isTerminalRuntimeStatus(state.status) &&
@@ -242,7 +249,7 @@ export async function replayRuntimeStore(
     !hasRuntimeEventAfterState(result.checkpoint, state) &&
     !isStartupFailureStateWithinGrace(state) &&
     !hasActivationCommandAfterRuntimeState(commands, state.updatedAt)
-  if (shouldReconcileTerminalState && session?.status !== projectedStateStatus) {
+  if (shouldReconcileTerminalState && sessionStatus !== projectedStateStatus) {
     const projection = projectRuntimeEvent({
       id: `runtime-state:${store.sessionId}:${state.lastSeq ?? 0}:${state.status}`,
       seq: state.lastSeq,
@@ -261,11 +268,16 @@ export async function replayRuntimeStore(
     })
     await deliverProjectedSessionEvents(projection, options.deliverSessionEvent)
   }
+  const finalSessionStatus = options.db.getSessionStatus(store.sessionId)
   const terminalDeliveryStatus = shouldReconcileTerminalState
-    ? resolveTerminalDeliveryStatus(state?.status)
+    ? finalSessionStatus == null
+      ? resolveTerminalDeliveryStatus(state?.status)
+      : resolveSessionTerminalDeliveryStatus(finalSessionStatus)
     : undefined
   if (terminalDeliveryStatus != null && options.deliverSessionTerminal != null) {
-    const stateError = typeof state?.error === 'string' && state.error.trim() !== '' ? state.error : undefined
+    const stateError = finalSessionStatus === 'failed' && typeof state?.error === 'string' && state.error.trim() !== ''
+      ? state.error
+      : undefined
     await options.deliverSessionTerminal({
       ...(stateError == null ? {} : { error: stateError }),
       sessionId: store.sessionId,

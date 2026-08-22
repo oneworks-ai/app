@@ -4,6 +4,10 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 
 import { resolveAuthContext } from '../auth/permissions.js'
 import { deviceTokenMatches } from '../devices/private-metadata.js'
+import {
+  summarizeFirstActionEvents,
+  summarizeFirstActionEventsByCohortDate
+} from '../diagnostics/first-action-summary.js'
 import { normalizeOtlpModelUsage } from '../diagnostics/model-usage.js'
 import { normalizeOtlpLogs } from '../diagnostics/otlp.js'
 import { appendRelayDiagnosticEvents, diagnosticRetention } from '../diagnostics/store.js'
@@ -127,6 +131,7 @@ const summarizeEvents = (events: RelayDiagnosticEvent[]) => {
   const startupDurations = startup.flatMap(operation => (
     operation.readyDurationMs == null ? [] : [operation.readyDurationMs]
   ))
+  const firstAction = summarizeFirstActionEvents(events)
   return {
     affectedUsers: new Set(events.map(event => event.userId)).size,
     byFailure: countBy(events, event => event.errorCode),
@@ -136,6 +141,7 @@ const summarizeEvents = (events: RelayDiagnosticEvent[]) => {
     bySource: countBy(events, event => event.source),
     byVersion: countBy(events, event => event.serviceVersion),
     errorEvents: events.filter(event => event.severity === 'ERROR' || event.errorCode != null).length,
+    firstAction,
     startup: {
       attempts: startupOperations.size,
       p50DurationMs: percentile(startupDurations, 0.5),
@@ -148,6 +154,9 @@ const summarizeEvents = (events: RelayDiagnosticEvent[]) => {
 
 const diagnosticSeries = (events: RelayDiagnosticEvent[]) => {
   const dailyEvents = new Map<string, RelayDiagnosticEvent[]>()
+  const firstActionByDate = new Map(
+    summarizeFirstActionEventsByCohortDate(events).map(item => [item.date, item.summary])
+  )
   for (const event of events) {
     const date = event.occurredAt.slice(0, 10)
     const items = dailyEvents.get(date) ?? []
@@ -156,10 +165,13 @@ const diagnosticSeries = (events: RelayDiagnosticEvent[]) => {
   }
   return [...dailyEvents.entries()].map(([date, items]) => {
     const summary = summarizeEvents(items)
+    const firstAction = firstActionByDate.get(date)
     return {
       activeUsers: summary.affectedUsers,
       date,
       errorEvents: summary.errorEvents,
+      firstActionAttempts: firstAction?.attempts ?? 0,
+      firstActionSuccessRate: firstAction?.successRate,
       startupAttempts: summary.startup.attempts,
       startupSuccessRate: summary.startup.successRate,
       totalEvents: summary.total

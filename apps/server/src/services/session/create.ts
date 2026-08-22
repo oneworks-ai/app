@@ -89,6 +89,7 @@ export const discardIncompleteSessionCreation = async (sessionId: string) => {
 }
 
 export async function createSessionWithInitialMessage(options: {
+  clientActionId?: string
   title?: string
   initialMessage?: string
   initialContent?: ChatMessageContent[]
@@ -114,6 +115,7 @@ export async function createSessionWithInitialMessage(options: {
   workspace?: CreateSessionWorkspaceOptions
 }): Promise<Session> {
   const {
+    clientActionId,
     title,
     initialMessage,
     initialContent,
@@ -247,6 +249,7 @@ export async function createSessionWithInitialMessage(options: {
           systemPrompt,
           adapter,
           account,
+          ...(clientActionId == null ? {} : { clientActionId }),
           ...(channelContext == null ? {} : { channelContext }),
           ...(room == null
             ? {}

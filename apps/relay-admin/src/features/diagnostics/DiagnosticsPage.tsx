@@ -42,6 +42,15 @@ const emptyResponse: RelayAdminDiagnosticsResponse = {
     bySource: {},
     byVersion: {},
     errorEvents: 0,
+    firstAction: {
+      appStartToSubmit: {},
+      attempts: 0,
+      pendingAttempts: 0,
+      submitToAccepted: {},
+      submitToResponse: {},
+      submitToSuccess: {},
+      terminalAttempts: 0
+    },
     startup: { attempts: 0 },
     total: 0
   },

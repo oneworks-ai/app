@@ -6,6 +6,12 @@ import type { SessionPanelState, WSEvent } from '@oneworks/core'
 import { getAuthToken } from '#~/api/auth-token'
 import { createApiUrl } from '#~/api/base'
 import {
+  markDesktopFirstActionClientEventMessageObserved,
+  markDesktopFirstActionClientEventSourceReset,
+  markDesktopFirstActionClientEventStatusObserved
+} from '#~/diagnostics/desktop-first-action/runtime'
+import {
+  isDeletedSessionUpdate,
   revalidateConfigRelatedCaches,
   updateSessionCaches,
   updateWorkspacePanelStateCache
@@ -16,6 +22,7 @@ import { readRememberedWorkspaceConnectionMetadata } from '#~/workspace-connecti
 
 interface ClientEvent {
   channel: string
+  emittedAt?: number
   event?: WSEvent
   hostSessionId?: string
   panelState?: SessionPanelState
@@ -25,6 +32,26 @@ interface ClientEvent {
   type: string
   updatedAt?: number
   workspaceFolder?: string
+}
+
+export const reportDesktopFirstActionClientEvent = (event: ClientEvent) => {
+  if (
+    event.type === 'session_updated' &&
+    event.session != null &&
+    !isDeletedSessionUpdate(event.session)
+  ) {
+    const status = event.session.status
+    if (status === 'completed' || status === 'failed' || status === 'terminated') {
+      markDesktopFirstActionClientEventStatusObserved(event.session.id, status)
+    }
+  }
+  if (event.type === 'session_message_appended' && event.sessionId != null && event.event?.type === 'message') {
+    markDesktopFirstActionClientEventMessageObserved(event.sessionId, event.event.message)
+  }
+}
+
+export const reportDesktopFirstActionClientEventStreamOpen = () => {
+  markDesktopFirstActionClientEventSourceReset()
 }
 
 const buildEventSourceUrl = () => {
@@ -56,8 +83,11 @@ export function useClientEventStream() {
     }
 
     const source = new EventSource(buildEventSourceUrl())
+    source.addEventListener('open', reportDesktopFirstActionClientEventStreamOpen)
+    source.addEventListener('error', reportDesktopFirstActionClientEventStreamOpen)
     const handleGeneralEvent = (message: MessageEvent<string>) => {
       const event = JSON.parse(message.data) as ClientEvent
+      reportDesktopFirstActionClientEvent(event)
       if (event.type === 'session_updated' && event.session != null) {
         updateSessionCaches(mutate, event.session)
         return
@@ -90,6 +120,7 @@ export function useClientEventStream() {
     })
     source.addEventListener('session_message_appended', (message) => {
       const event = JSON.parse(message.data) as ClientEvent
+      reportDesktopFirstActionClientEvent(event)
       void mutate('/api/agent-rooms/summary')
       if (event.sessionId != null) {
         void mutate(`/api/agent-rooms/by-host-session/${encodeURIComponent(event.sessionId)}`)

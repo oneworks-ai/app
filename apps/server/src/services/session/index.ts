@@ -86,6 +86,7 @@ import {
   setAdapterSessionRuntime,
   takeExternalSessionRuntime
 } from '#~/services/session/runtime.js'
+import { resolveSessionTerminalStatus } from '#~/services/session/terminal-status.js'
 import {
   beginSessionWorkspaceChangeTracking,
   clearSessionWorkspaceChangeTracking,
@@ -1413,21 +1414,23 @@ export async function startAdapterSession(
 
               recentPermissionToolUseStore.delete(sessionId)
 
-              void finalizeSessionWorkspaceChangeTracking(sessionId, exitCode === 0 ? 'completed' : 'failed')
-              updateAndNotifySession(sessionId, {
-                status: exitCode === 0 ? 'completed' : 'failed'
-              })
-              commitChannelChildRunTerminal({
-                error: exitCode === 0 ? undefined : stderr,
-                sessionId,
-                status: exitCode === 0 ? 'completed' : 'failed'
-              })
-              if (exitCode === 0) {
-                maybeDispatchQueuedTurn(sessionId, async (content) => {
-                  await processUserMessage(sessionId, content)
+              const latestSession = getDb().getSession(sessionId)
+              const terminalStatus = resolveSessionTerminalStatus(latestSession?.status, exitCode)
+              void finalizeSessionWorkspaceChangeTracking(sessionId, terminalStatus)
+              if (terminalStatus !== 'terminated') {
+                updateAndNotifySession(sessionId, { status: terminalStatus })
+                commitChannelChildRunTerminal({
+                  error: exitCode === 0 ? undefined : stderr,
+                  sessionId,
+                  status: terminalStatus
                 })
               }
-              if (exitCode !== 0 && !sawFatalError) {
+              if (terminalStatus === 'completed') {
+                maybeDispatchQueuedTurn(sessionId, async (content, options) => {
+                  await processUserMessage(sessionId, content, options)
+                })
+              }
+              if (terminalStatus === 'failed' && exitCode !== 0 && !sawFatalError) {
                 const errorMessage = stderr !== ''
                   ? `Process exited with code ${exitCode}, stderr:\n${stderr}`
                   : `Process exited with code ${exitCode}`
@@ -1479,15 +1482,16 @@ export async function startAdapterSession(
               }
               forwardSessionEventToChannel(sessionId, buildChannelSessionStopEvent(stopMessage))
               const latestSession = getDb().getSession(sessionId)
+              const terminalStatus = resolveSessionTerminalStatus(latestSession?.status)
               void finalizeSessionWorkspaceChangeTracking(
                 sessionId,
-                latestSession?.status === 'failed' ? 'failed' : 'completed'
+                terminalStatus
               )
-              if (latestSession?.status !== 'failed') {
+              if (terminalStatus === 'completed') {
                 updateAndNotifySession(sessionId, { status: 'completed' })
                 commitChannelChildRunTerminal({ sessionId, status: 'completed' })
-                maybeDispatchQueuedTurn(sessionId, async (content) => {
-                  await processUserMessage(sessionId, content)
+                maybeDispatchQueuedTurn(sessionId, async (content, options) => {
+                  await processUserMessage(sessionId, content, options)
                 })
               }
               break
@@ -1578,6 +1582,7 @@ const buildExternalRuntimeSessionMessageCommand = (
   sessionId: string,
   content: string | ChatMessageContent[],
   options: {
+    clientActionId?: string
     model?: string
     permissionMode?: SessionPermissionMode
     runtimeContent?: string | ChatMessageContent[]
@@ -1599,7 +1604,7 @@ const buildExternalRuntimeSessionMessageCommand = (
     type: 'send_message',
     priority: 20,
     source: 'user',
-    commandId: `session-message-${uuidv4()}`,
+    commandId: options.clientActionId ?? `session-message-${uuidv4()}`,
     content: message,
     message,
     ...(options.model != null ? { model: options.model } : {}),
@@ -1677,6 +1682,7 @@ export async function processUserMessage(
   content: string | ChatMessageContent[],
   options: {
     channelContext?: Parameters<typeof writeChannelMessageContext>[1]
+    clientActionId?: string
     model?: string
     runtimeContent?: string | ChatMessageContent[]
   } = {}
@@ -1692,7 +1698,7 @@ export async function processUserMessage(
     : [{ type: 'text', text: userText }]
   const summaryText = extractTextFromContent(contentItems) ?? '[内容]'
   const userMessage: ChatMessage = {
-    id: uuidv4(),
+    id: options.clientActionId ?? uuidv4(),
     role: 'user',
     content: Array.isArray(content) ? contentItems : userText,
     createdAt: Date.now()
@@ -1720,13 +1726,14 @@ export async function processUserMessage(
 
   if (isExternalSession) {
     const command = buildExternalRuntimeSessionMessageCommand(sessionId, content, {
+      clientActionId: options.clientActionId,
       model: options.model,
       permissionMode: currentSessionData?.permissionMode,
       runtimeContent: options.runtimeContent
     })
     const externalMessageEvent = buildExternalRuntimeUserMessageEvent(command, content)
-    const didSave = db.saveMessage(sessionId, externalMessageEvent)
     updateAndNotifySession(sessionId, updates)
+    const didSave = db.saveMessage(sessionId, externalMessageEvent)
     if (didSave) {
       broadcastSessionEvent(sessionId, externalMessageEvent)
     }
@@ -1751,6 +1758,7 @@ export async function processUserMessage(
         fastMode: latestSession.fastMode,
         permissionMode: latestSession.permissionMode,
         adapter: latestSession.adapter,
+        ...(options.clientActionId == null ? {} : { clientActionId: options.clientActionId }),
         promptType: latestSession.promptType,
         promptName: latestSession.promptName,
         channelContext: options.channelContext,
@@ -1768,8 +1776,8 @@ export async function processUserMessage(
     return
   }
 
-  db.saveMessage(sessionId, ev)
   updateAndNotifySession(sessionId, updates)
+  db.saveMessage(sessionId, ev)
 
   if (listSessionQueuedMessages(sessionId).next.length > 0) {
     armNextQueueInterrupt(sessionId)
@@ -1833,6 +1841,13 @@ export function killSession(
   const isExternalRuntime = runtimeState?.runtimeKind === 'external'
   const pendingRecovery = clearPendingPermissionRecovery(sessionId)
   const hadPendingInteraction = resolvePendingInteractionAsCancelled(sessionId, pendingRecovery?.interactionId)
+  const shouldMarkTerminated = cached != null || pendingRecovery != null || hadPendingInteraction
+
+  if (shouldMarkTerminated) {
+    // Publish the user-requested terminal state before killing the adapter. Some adapters
+    // synchronously emit `stop` from kill(), and that event must not transiently report success.
+    updateAndNotifySession(sessionId, { status: 'terminated' })
+  }
 
   if (cached != null) {
     activeAdapterRunStore.delete(sessionId)
@@ -1858,8 +1873,7 @@ export function killSession(
     return
   }
 
-  if (cached != null || pendingRecovery != null || hadPendingInteraction) {
-    updateAndNotifySession(sessionId, { status: 'terminated' })
+  if (shouldMarkTerminated) {
     commitChannelChildRunTerminal({ sessionId, status: 'expired' })
   }
 }

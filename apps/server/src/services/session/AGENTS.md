@@ -9,6 +9,8 @@
 - chat-markdown-prompt.ts：OneWorks 聊天消息的稳定 Markdown 展示协议，向 agent 注入显式内部网页、外部浏览器和 workspace 文件链接约定
 - runtime.ts：会话运行态仓库，统一维护 socket、消息缓存、交互等待队列与广播
 
+首动作等客户端 turn correlation 使用 route 校验后的匿名 `client-action-*` ID：`create.ts` 将它作为初始 runtime command ID，`index.ts` 将它作为 follow-up user message / runtime command ID，`queue.ts` 将它作为 queued item ID 并在真正 dispatch 时恢复为 user message ID。follow-up 必须先把 session 标成 `running`，再持久化对应 user message；这样任何包含该 action message 的 history snapshot 都不会携带上一轮 `completed` 状态。用户终止必须先写入 `terminated` 再 kill adapter；后续同步或异步到达的 runtime event 必须通过 `terminal-status.ts` 保留已有 `failed` / `terminated`，`stop` / `exit` 只有在解析为真实 `completed` 时才能 dispatch queued turn。不要改回用客户端/服务端时间戳或裸 `running` 推断 turn 因果。
+
 边界约定：session 子域统一承载所有会话生命周期与运行态逻辑；routes、websocket、channels 只能调用对外服务，不直接操作内部 store。
 
 理解路径建议：先读 runtime.ts 建立运行态模型，再读 index.ts 看主流程，随后阅读 interaction.ts、create.ts 与 events.ts，最后补 notification.ts 理解状态通知分支。

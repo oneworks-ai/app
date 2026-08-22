@@ -24,7 +24,9 @@ import {
   updateAndNotifySession
 } from '#~/services/session/index.js'
 import { handleInteractionResponse } from '#~/services/session/interaction.js'
+import { createSessionQueuedMessage } from '#~/services/session/queue.js'
 import { notifySessionUpdated } from '#~/services/session/runtime.js'
+import { finalizeSessionWorkspaceChangeTracking } from '#~/services/session/workspace-changes.js'
 import {
   createSessionManagedWorktree,
   deleteSessionWorkspace,
@@ -104,6 +106,10 @@ vi.mock('#~/services/session/runtime.js', () => ({
   notifySessionUpdated: vi.fn()
 }))
 
+vi.mock('#~/services/session/workspace-changes.js', () => ({
+  finalizeSessionWorkspaceChangeTracking: vi.fn()
+}))
+
 vi.mock('#~/services/session/workspace.js', () => ({
   createSessionManagedWorktree: vi.fn(),
   deleteSessionWorkspace: vi.fn(),
@@ -167,6 +173,43 @@ describe('sessionsRouter', () => {
 
     expect(db.getSession).toHaveBeenCalledWith(session.id)
     expect(ctx.body).toEqual({ session })
+  })
+
+  it('persists an anonymous first-action ID with a queued sender submit', () => {
+    const clientActionId = 'client-action-00000000-0000-4000-8000-000000000001'
+    const session = { id: 'session-queue', status: 'running' }
+    vi.mocked(getDb).mockReturnValue({ getSession: vi.fn(() => session) } as any)
+    vi.mocked(createSessionQueuedMessage).mockReturnValue({ id: clientActionId } as any)
+    const handleCreateQueuedMessage = findRouteHandler('/:id/queued-messages', 'POST')
+    const content = [{ type: 'text', text: 'run next' }]
+    const ctx = {
+      params: { id: session.id },
+      request: { body: { clientActionId, content, mode: 'next' } },
+      body: undefined
+    }
+
+    handleCreateQueuedMessage(ctx)
+
+    expect(createSessionQueuedMessage).toHaveBeenCalledWith(session.id, 'next', content, { clientActionId })
+  })
+
+  it('rejects a content-bearing or malformed queued action ID', () => {
+    const session = { id: 'session-queue', status: 'running' }
+    vi.mocked(getDb).mockReturnValue({ getSession: vi.fn(() => session) } as any)
+    const handleCreateQueuedMessage = findRouteHandler('/:id/queued-messages', 'POST')
+
+    expect(() =>
+      handleCreateQueuedMessage({
+        params: { id: session.id },
+        request: {
+          body: {
+            clientActionId: 'contains prompt text',
+            content: [{ type: 'text', text: 'run next' }],
+            mode: 'next'
+          }
+        }
+      })
+    ).toThrow('Invalid client action ID')
   })
 
   it('triggers native project history import', async () => {
@@ -528,7 +571,7 @@ describe('sessionsRouter', () => {
     }
 
     expect(() => handleGetMessages(ctx)).toThrow('Session not found')
-    expect(db.getMessageWindowWithCursor).not.toHaveBeenCalled()
+    expect(db.getMessageWindowWithCursor).toHaveBeenCalledWith('missing-session', {})
   })
 
   it('uses the full cursor message window when no message window query is provided', () => {
@@ -595,6 +638,32 @@ describe('sessionsRouter', () => {
     })
   })
 
+  it('reads session status after the history window to keep snapshots causal', () => {
+    const runningWithAction = { createdAt: 1, id: 'session-window-causal', status: 'running' }
+    const db = {
+      getSession: vi.fn(() => runningWithAction),
+      getMessageWindowWithCursor: vi.fn(() => ({
+        cursor: { firstId: 1, lastId: 1 },
+        messages: [{ type: 'message', message: { id: 'client-action-id' } }]
+      }))
+    }
+    vi.mocked(getDb).mockReturnValue(db as any)
+
+    const handleGetMessages = findRouteHandler('/:id/messages', 'GET')
+    const ctx = {
+      params: { id: runningWithAction.id },
+      query: {},
+      body: undefined
+    }
+
+    handleGetMessages(ctx)
+
+    expect(db.getMessageWindowWithCursor.mock.invocationCallOrder[0]).toBeLessThan(
+      db.getSession.mock.invocationCallOrder[0]
+    )
+    expect(ctx.body).toMatchObject({ session: runningWithAction })
+  })
+
   it('passes normalized tags when creating a session', async () => {
     const session = {
       id: 'session-relay'
@@ -623,6 +692,27 @@ describe('sessionsRouter', () => {
     expect(createSessionWithInitialMessage).toHaveBeenCalledWith(expect.objectContaining({
       initialMessage: 'hello',
       tags: ['ow:plugin:relay:relay-server:local', 'alpha']
+    }))
+    expect(ctx.body).toEqual({ session })
+  })
+
+  it('passes a validated client action ID into initial session creation', async () => {
+    const session = { id: 'session-action' }
+    const clientActionId = 'client-action-00000000-0000-4000-8000-000000000001'
+    vi.mocked(getDb).mockReturnValue({} as any)
+    vi.mocked(createSessionWithInitialMessage).mockResolvedValue(session as any)
+
+    const handleCreateSession = findRouteHandler('/', 'POST')
+    const ctx = {
+      request: { body: { clientActionId, initialMessage: 'hello' } },
+      body: undefined
+    }
+
+    await handleCreateSession(ctx)
+
+    expect(createSessionWithInitialMessage).toHaveBeenCalledWith(expect.objectContaining({
+      clientActionId,
+      initialMessage: 'hello'
     }))
     expect(ctx.body).toEqual({ session })
   })
@@ -703,6 +793,48 @@ describe('sessionsRouter', () => {
     expect(db.getSession).toHaveBeenCalledWith(session.id)
     expect(processUserMessage).toHaveBeenCalledWith(session.id, 'follow up')
     expect(ctx.body).toEqual({ ok: true })
+  })
+
+  it('passes a validated client action ID to the exact user turn', () => {
+    const session = { id: 'session-message-action' }
+    const db = { getSession: vi.fn(() => session) }
+    vi.mocked(getDb).mockReturnValue(db as any)
+    const clientActionId = 'client-action-00000000-0000-4000-8000-000000000001'
+
+    const handlePostMessage = findRouteHandler('/:id/messages', 'POST')
+    const ctx = {
+      params: { id: session.id },
+      request: { body: { clientActionId, text: 'follow up' } },
+      body: undefined
+    }
+
+    handlePostMessage(ctx)
+
+    expect(processUserMessage).toHaveBeenCalledWith(session.id, 'follow up', { clientActionId })
+    expect(ctx.body).toEqual({ ok: true })
+  })
+
+  it('rejects malformed client action IDs before mutating message state', () => {
+    const session = { id: 'session-message-action-invalid', permissionMode: 'default' }
+    const db = { getSession: vi.fn(() => session) }
+    vi.mocked(getDb).mockReturnValue(db as any)
+
+    const handlePostMessage = findRouteHandler('/:id/messages', 'POST')
+    const ctx = {
+      params: { id: session.id },
+      request: {
+        body: {
+          clientActionId: 'contains prompt text',
+          permissionMode: 'bypassPermissions',
+          text: 'follow up'
+        }
+      },
+      body: undefined
+    }
+
+    expect(() => handlePostMessage(ctx)).toThrow('Invalid client action ID')
+    expect(updateAndNotifySession).not.toHaveBeenCalled()
+    expect(processUserMessage).not.toHaveBeenCalled()
   })
 
   it('applies the current permission mode before accepting a user message', () => {
@@ -825,6 +957,70 @@ describe('sessionsRouter', () => {
     }
 
     await expect(handlePostEvent(ctx)).rejects.toThrow('Interaction response is no longer pending')
+  })
+
+  it.each([
+    {
+      body: { type: 'error', data: { message: 'late data error', fatal: true } },
+      event: {
+        type: 'error',
+        data: { message: 'late data error', fatal: true },
+        message: 'late data error'
+      }
+    },
+    {
+      body: { type: 'error', message: 'late legacy error' },
+      event: {
+        type: 'error',
+        data: { message: 'late legacy error', fatal: true },
+        message: 'late legacy error'
+      }
+    }
+  ])('normalizes $body error events through the terminal-aware session projector', ({ body, event }) => {
+    const session = { id: 'session-terminated', status: 'terminated' }
+    const db = { getSession: vi.fn(() => session) }
+    vi.mocked(getDb).mockReturnValue(db as any)
+
+    const handlePostEvent = findRouteHandler('/:id/events', 'POST')
+    const ctx = {
+      params: { id: session.id },
+      request: { body },
+      body: undefined
+    }
+
+    handlePostEvent(ctx)
+
+    expect(applySessionEvent).toHaveBeenCalledWith(
+      session.id,
+      event,
+      expect.objectContaining({ onSessionUpdated: expect.any(Function) })
+    )
+    expect(ctx.body).toEqual({ ok: true })
+  })
+
+  it.each([0, 1])('preserves external runtime termination when exit code %i arrives later', (exitCode) => {
+    const session = { id: 'session-terminated', status: 'terminated' }
+    const db = { getSession: vi.fn(() => session) }
+    vi.mocked(getDb).mockReturnValue(db as any)
+
+    const handlePostEvent = findRouteHandler('/:id/events', 'POST')
+    const ctx = {
+      params: { id: session.id },
+      request: {
+        body: {
+          type: 'exit',
+          data: { exitCode }
+        }
+      },
+      body: undefined
+    }
+
+    handlePostEvent(ctx)
+
+    expect(finalizeSessionWorkspaceChangeTracking).toHaveBeenCalledWith(session.id, 'terminated')
+    expect(updateAndNotifySession).not.toHaveBeenCalledWith(session.id, { status: 'completed' })
+    expect(applySessionEvent).not.toHaveBeenCalled()
+    expect(ctx.body).toEqual({ ok: true })
   })
 
   it('records a pending creation cancellation when terminating a session that is not stored yet', async () => {

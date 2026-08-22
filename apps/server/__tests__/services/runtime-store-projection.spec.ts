@@ -13,6 +13,7 @@ import { createSqliteDatabase } from '#~/db/sqlite.js'
 import { createAgentRoomService } from '#~/services/agent-room/index.js'
 import { discoverRuntimeSessionStores } from '#~/services/runtime-store/discovery.js'
 import { projectRuntimeEvent } from '#~/services/runtime-store/projection.js'
+import { projectRuntimeCommand } from '#~/services/runtime-store/session-command-projection.js'
 import type { RuntimeEvent, RuntimeSessionMetadata, RuntimeSessionStore } from '#~/services/runtime-store/types.js'
 import { RuntimeStoreWatcher, replayRuntimeStore } from '#~/services/runtime-store/watcher.js'
 import { createWorkspaceRuntimeEnv } from '#~/services/runtime-store/workspace-env.js'
@@ -452,6 +453,141 @@ describe('runtime store projection', () => {
       })
     ])
   })
+
+  it.each(
+    [
+      ['failed', 'failed', 'run_failed'],
+      ['terminated', 'stopped', 'run_stopped']
+    ] as const
+  )(
+    'keeps authoritative %s status when a late runtime completion arrives',
+    (sessionStatus, roomStatus, eventType) => {
+      project({
+        id: 'evt-start',
+        seq: 1,
+        sessionId: 'sess-dev',
+        type: 'session_started',
+        status: 'running',
+        publicSummary: 'Developer started.'
+      })
+      db.updateSession('sess-dev', { status: sessionStatus })
+
+      project({
+        id: 'evt-late-completed',
+        seq: 2,
+        sessionId: 'sess-dev',
+        type: 'session_completed',
+        publicSummary: 'Late completion.'
+      })
+      project({
+        id: 'evt-late-started',
+        seq: 3,
+        sessionId: 'sess-dev',
+        type: 'session_started',
+        status: 'running',
+        publicSummary: 'Late start.'
+      })
+      project({
+        id: 'evt-late-approval',
+        seq: 4,
+        sessionId: 'sess-dev',
+        type: 'approval_requested',
+        requestId: 'late-approval',
+        question: 'Approve after terminal?',
+        publicSummary: 'Late approval.'
+      })
+
+      expect(db.getSessionStatus('sess-dev')).toBe(sessionStatus)
+      expect(db.getAgentRoomRun('room-1', 'run-dev')).toEqual(expect.objectContaining({
+        status: roomStatus
+      }))
+      const messages = db.getAgentRoomDetail('room-1')?.messages ?? []
+      expect(messages).toEqual(expect.arrayContaining([
+        expect.objectContaining({ eventType })
+      ]))
+      expect(
+        messages.some(message => message.eventType === 'run_completed' || message.eventType === 'attention_requested')
+      ).toBe(false)
+      expect(processLeaderMessage).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(['failed', 'terminated'] as const)(
+    'allows a real resume command to start a new turn after %s',
+    (terminalStatus) => {
+      project({
+        id: 'evt-start',
+        seq: 1,
+        sessionId: 'sess-dev',
+        type: 'session_started',
+        status: 'running',
+        publicSummary: 'Developer started.'
+      })
+      if (terminalStatus === 'failed') {
+        project({
+          id: 'evt-failed',
+          seq: 2,
+          sessionId: 'sess-dev',
+          type: 'session_failed',
+          status: 'failed',
+          error: 'First turn failed.',
+          publicSummary: 'First turn failed.'
+        })
+      } else {
+        db.updateSession('sess-dev', { status: 'terminated' })
+        project({
+          id: 'evt-stopped',
+          seq: 2,
+          sessionId: 'sess-dev',
+          type: 'session_stopped',
+          status: 'stopped',
+          publicSummary: 'First turn stopped.'
+        })
+      }
+
+      projectRuntimeCommand(db, {
+        id: 'cmd-resume',
+        protocolVersion: '1.0.0',
+        ts: 3,
+        sessionId: 'sess-dev',
+        type: 'resume',
+        priority: 20,
+        source: 'web',
+        message: 'Resume with a new turn.'
+      }, false)
+      project({
+        id: 'evt-resumed',
+        seq: 4,
+        sessionId: 'sess-dev',
+        type: 'session_resumed',
+        status: 'running',
+        publicSummary: 'Developer resumed.'
+      })
+      project({
+        id: 'evt-completed',
+        seq: 5,
+        sessionId: 'sess-dev',
+        type: 'session_completed',
+        status: 'completed',
+        publicSummary: 'Resumed turn completed.'
+      })
+
+      expect(db.getSession('sess-dev')).toEqual(expect.objectContaining({
+        lastMessage: 'Resume with a new turn.',
+        lastUserMessage: 'Resume with a new turn.',
+        status: 'completed'
+      }))
+      expect(db.getAgentRoomRun('room-1', 'run-dev')).toEqual(expect.objectContaining({
+        status: 'completed'
+      }))
+      expect(db.getAgentRoomDetail('room-1')?.messages).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          content: 'Resumed turn completed.',
+          eventType: 'run_completed'
+        })
+      ]))
+    }
+  )
 
   it('projects terminal runtime usage into the workspace usage ledger', () => {
     db.createSession('Usage session', 'sess-usage', 'running')
@@ -1672,7 +1808,7 @@ describe('runtime store projection', () => {
     expect(db.getMessages('sess-dev')).toHaveLength(2)
   })
 
-  it('reconciles terminal runtime state after events were already checkpointed', async () => {
+  it('preserves user termination when completed runtime state arrives after the checkpoint', async () => {
     tempRoot = await mkdtemp(path.join(os.tmpdir(), 'ow-runtime-store-'))
     const root = path.join(tempRoot, '.oneworks/runtime')
     const storePath = path.join(root, 'sessions/sess-state-completed')
@@ -1684,7 +1820,7 @@ describe('runtime store projection', () => {
         sessions: {
           'sess-state-completed': {
             storePath: 'sessions/sess-state-completed',
-            status: 'completed'
+            status: 'running'
           }
         }
       })
@@ -1707,11 +1843,10 @@ describe('runtime store projection', () => {
       JSON.stringify({
         protocolVersion: '1.0.0',
         sessionId: 'sess-state-completed',
-        status: 'completed',
+        status: 'running',
         title: 'Runtime session',
-        lastSeq: 5,
-        lastMessage: 'Runtime finished.',
-        updatedAt: 500
+        lastSeq: 1,
+        updatedAt: 100
       })
     )
     await writeFile(
@@ -1732,6 +1867,18 @@ describe('runtime store projection', () => {
     const store = (await discoverRuntimeSessionStores([root]))[0] as RuntimeSessionStore
     const first = await replayRuntimeStore(store, { db, broadcast: false, agentRoomProjectionEnabled: true })
     db.updateSession('sess-state-completed', { status: 'terminated' })
+    await writeFile(
+      path.join(storePath, 'state.json'),
+      JSON.stringify({
+        protocolVersion: '1.0.0',
+        sessionId: 'sess-state-completed',
+        status: 'completed',
+        title: 'Runtime session',
+        lastSeq: 5,
+        lastMessage: 'Runtime finished.',
+        updatedAt: 500
+      })
+    )
     const deliverSessionTerminal = vi.fn()
     await replayRuntimeStore(store, {
       db,
@@ -1742,19 +1889,21 @@ describe('runtime store projection', () => {
     })
 
     expect(db.getSession('sess-state-completed')).toEqual(expect.objectContaining({
-      status: 'completed'
+      status: 'terminated'
     }))
     expect(deliverSessionTerminal).toHaveBeenCalledWith({
       sessionId: 'sess-state-completed',
-      status: 'completed'
+      status: 'expired'
     })
-    expect(db.getAgentRoomDetail('room-state')?.messages).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          content: 'Runtime finished.',
-          eventType: 'run_completed'
-        })
-      ])
-    )
+    const roomMessages = db.getAgentRoomDetail('room-state')?.messages ?? []
+    expect(roomMessages).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        content: 'Run stopped',
+        eventType: 'run_stopped'
+      })
+    ]))
+    expect(roomMessages).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ eventType: 'run_completed' })
+    ]))
   })
 })

@@ -11,6 +11,7 @@
 
   ![Terminal close confirmation in the mobile Workspace overview](./issue-188-terminal-close-confirmation.jpg)
 - Make Launcher settings and update behavior follow the active runtime: Electron retains desktop APIs and readiness, Android and partial device shells use Web API configuration without desktop bridge calls, and installed PWAs are identified by their actual display mode.
+- Add privacy-safe Desktop first-action diagnostics for direct, annotation, and queued submits through accepted, renderer response, and real success/failure/termination, with P50/P95 Relay summaries, reconnect-safe turn correlation, and recovered crash outcomes.
 
   ![Launcher settings on the Web runtime](./launcher-settings-web.jpg)
 - Restore signed and notarized macOS distribution for rc.4, including post-sign native filesystem-authority integrity, fail-fast packaged-authority checks before Apple submission, recoverable bounded notarization, and strict Gatekeeper/install smoke verification for arm64 and x64 DMG, PKG, and ZIP artifacts.

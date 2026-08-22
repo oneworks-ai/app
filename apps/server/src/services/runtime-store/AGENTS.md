@@ -22,6 +22,7 @@
 ## Agent Room 投影规则
 
 - `roomId` 或 `hostSessionId` 来自 runtime event 或 metadata。
+- Agent Room feature flag 只控制从普通 host/child metadata 推导的隐式投影；metadata 显式携带 `roomId` 时始终视为 opt-in，即使已有 checkpoint 且没有新的 runtime event 也必须完成投影。
 - `session_started` 会映射成 room assignment / run running。
 - `approval_requested` / `input_requested` 会映射成 attention，并可转发给 leader host session。
 - `session_completed` / `operation_completed` / completed status 映射成 run completed。
@@ -32,6 +33,7 @@
 ## Agent Room 投影注意事项
 
 - `status_changed` / `session_completed` 可以更新 run 状态，但不一定应该生成用户可见 room message；等待审批的 run 尤其不能被重复 terminal state 覆盖成 completed。
+- Server 已落库的 `failed` / `terminated` 是权威终态；迟到的 runtime event 或 `state.json` reconciliation 不得把它们提升为 `completed`，并且 room / channel terminal 投影必须沿用同一终态。矛盾的迟到 completion 只能投影规范化的 failed/stopped 状态与摘要，不能在 stale 判定前覆盖既有终态摘要或追加 completion 消息。真正的新 turn 会由 command/session 提交入口先显式写回 `running`。
 - channel child run 的终态必须来自 runtime store 的真实 terminal event/status；`dispatched` 只表示投递成功。terminal callback 必须幂等，重复扫描不能重复写回 memory。
 - 给 child session 的 `send_message` / `resume` command 要保留 `roomId`、`runId`、`memberKey`、`source` 等上下文，否则前端无法区分消息来自用户、leader 还是其他实体。
 - runtime consumer 启动或恢复时，避免把 start command、follow-up command 和 adapter 自己产出的 user message 重复投影；去重依据应优先使用 command ack / submitted marker。

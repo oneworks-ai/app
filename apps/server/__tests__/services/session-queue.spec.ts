@@ -3,7 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ChatMessageContent, SessionQueuedMessage } from '@oneworks/core'
 
 import { getDb } from '#~/db/index.js'
-import { consumeQueuedTurn, moveSessionQueuedMessage, shouldInterruptForQueuedNext } from '#~/services/session/queue.js'
+import {
+  consumeQueuedTurn,
+  createSessionQueuedMessage,
+  maybeDispatchQueuedTurn,
+  moveSessionQueuedMessage,
+  shouldInterruptForQueuedNext
+} from '#~/services/session/queue.js'
 import { broadcastSessionEvent, getSessionQueueRuntimeState } from '#~/services/session/runtime.js'
 
 vi.mock('#~/db/index.js', () => ({
@@ -25,6 +31,7 @@ vi.mock('#~/services/session/runtime.js', async () => {
 describe('session queue service', () => {
   const listSessionQueuedMessages = vi.fn()
   const moveSessionQueuedMessageInDb = vi.fn()
+  const createSessionQueuedMessageInDb = vi.fn()
   const deleteSessionQueuedMessage = vi.fn()
   const getSession = vi.fn()
   const runtime = {
@@ -95,6 +102,7 @@ describe('session queue service', () => {
 
     vi.mocked(getDb).mockReturnValue({
       listSessionQueuedMessages,
+      createSessionQueuedMessage: createSessionQueuedMessageInDb,
       moveSessionQueuedMessage: moveSessionQueuedMessageInDb,
       deleteSessionQueuedMessage,
       getSession
@@ -131,6 +139,25 @@ describe('session queue service', () => {
     })).toBe(true)
     expect(runtime.nextInterruptRequested).toBe(false)
     expect(runtime.nextInterruptPending).toBe(true)
+  })
+
+  it('persists and dispatches the queued first-action correlation ID', async () => {
+    const clientActionId = 'client-action-00000000-0000-4000-8000-000000000001'
+    const content = [{ type: 'text' as const, text: 'queued next' }]
+    const queued = createQueuedMessage(clientActionId, 'next', content)
+    createSessionQueuedMessageInDb.mockReturnValue(queued)
+
+    expect(createSessionQueuedMessage('sess-1', 'next', content, { clientActionId })).toEqual(queued)
+    expect(createSessionQueuedMessageInDb).toHaveBeenCalledWith('sess-1', 'next', content, {
+      id: clientActionId
+    })
+
+    queueItems = [queued]
+    const dispatch = vi.fn()
+    expect(maybeDispatchQueuedTurn('sess-1', dispatch)).toBe(true)
+    await vi.waitFor(() => {
+      expect(dispatch).toHaveBeenCalledWith(content, { clientActionId })
+    })
   })
 
   it('consumes next items before steer items', () => {

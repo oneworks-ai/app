@@ -203,6 +203,10 @@ export class SqliteDb {
     return this.sessions.get(id)
   }
 
+  getSessionStatus(id: string) {
+    return this.sessions.getStatus(id)
+  }
+
   getSessionRuntimeState(id: string) {
     return this.sessions.getRuntimeState(id)
   }
@@ -318,9 +322,10 @@ export class SqliteDb {
   createSessionQueuedMessage(
     sessionId: string,
     mode: Parameters<typeof this.sessionQueue.create>[1],
-    content: Parameters<typeof this.sessionQueue.create>[2]
+    content: Parameters<typeof this.sessionQueue.create>[2],
+    options?: Parameters<typeof this.sessionQueue.create>[3]
   ) {
-    return this.sessionQueue.create(sessionId, mode, content)
+    return this.sessionQueue.create(sessionId, mode, content, options)
   }
 
   updateSessionQueuedMessage(

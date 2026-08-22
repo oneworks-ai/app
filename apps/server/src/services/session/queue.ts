@@ -48,9 +48,15 @@ export function broadcastSessionQueueUpdated(sessionId: string) {
 export function createSessionQueuedMessage(
   sessionId: string,
   mode: SessionQueuedMessageMode,
-  content: ChatMessageContent[]
+  content: ChatMessageContent[],
+  options: { clientActionId?: string } = {}
 ) {
-  const created = getDb().createSessionQueuedMessage(sessionId, mode, content)
+  const created = getDb().createSessionQueuedMessage(
+    sessionId,
+    mode,
+    content,
+    options.clientActionId == null ? undefined : { id: options.clientActionId }
+  )
   if (mode === 'next') {
     armNextQueueInterrupt(sessionId)
   }
@@ -172,7 +178,7 @@ export function consumeQueuedTurn(sessionId: string): {
 
 export function maybeDispatchQueuedTurn(
   sessionId: string,
-  dispatch: (content: ChatMessageContent[]) => Promise<void> | void
+  dispatch: (content: ChatMessageContent[], options: { clientActionId?: string }) => Promise<void> | void
 ) {
   const session = getDb().getSession(sessionId)
   if (session == null) {
@@ -188,7 +194,9 @@ export function maybeDispatchQueuedTurn(
     return false
   }
 
-  void Promise.resolve(dispatch(item.content))
+  void Promise.resolve(dispatch(item.content, {
+    ...(item.id.startsWith('client-action-') ? { clientActionId: item.id } : {})
+  }))
     .then(() => {
       if (remaining.next.length > 0) {
         armNextQueueInterrupt(sessionId)

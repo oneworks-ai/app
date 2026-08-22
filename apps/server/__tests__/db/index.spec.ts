@@ -220,6 +220,8 @@ describe('sqliteDb', () => {
     db.updateSessionTags(root.id, ['alpha', 'beta', 'alpha'])
 
     const stored = db.getSession(root.id)
+    expect(db.getSessionStatus(root.id)).toBe('running')
+    expect(db.getSessionStatus('missing-session')).toBeUndefined()
     expect(stored).toEqual({
       id: 'session-root',
       title: 'Root session',

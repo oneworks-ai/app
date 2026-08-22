@@ -746,6 +746,9 @@ interface Window {
     listBrowserPasswordImportSources?: () => Promise<DesktopBrowserPasswordImportSource[]>
     listSavedPasswords?: (query?: string) => Promise<DesktopSavedPasswordRecord[]>
     markDesktopCoreReady?: () => Promise<void>
+    markDesktopFirstActionMilestone?: (
+      input: import('@oneworks/types').DesktopFirstActionMilestoneInput
+    ) => void
     markDesktopInteractive?: () => void
     markDesktopUiReady?: () => Promise<void>
     revealWorkspaceStartupSurface?: () => Promise<void>

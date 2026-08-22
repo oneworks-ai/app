@@ -28,6 +28,7 @@ export const normalizeRelayDiagnosticEvent = (value: Record<string, unknown>): R
   return {
     architecture: optionalString(value.architecture),
     category: category === 'agent' || category === 'auth' || category === 'command' || category === 'error' ||
+        category === 'first-action' ||
         category === 'network' ||
         category === 'startup' || category === 'tool'
       ? category

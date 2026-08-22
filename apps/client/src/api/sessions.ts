@@ -14,6 +14,9 @@ import type {
   WorkspaceFileOpenResponse
 } from '@oneworks/types'
 
+import { markDesktopFirstActionTerminated } from '#~/diagnostics/desktop-first-action/runtime'
+import { submitWithDesktopFirstAction } from '#~/diagnostics/desktop-first-action/submit'
+
 import { createApiUrl, fetchApiJson, fetchApiJsonOrThrow, jsonHeaders } from './base'
 import type { ApiOkResponse, ApiRemoveResponse, SessionMessagesResponse } from './types'
 import type { WorkspaceFileContent, WorkspacePathRevealResponse, WorkspaceTreeEntry } from './workspace'
@@ -279,6 +282,7 @@ export async function createSession(
     }
   },
   request?: {
+    clientActionId?: string
     signal?: AbortSignal
   }
 ): Promise<{ session: Session }> {
@@ -303,7 +307,8 @@ export async function createSession(
       account: options?.account,
       tags: options?.tags,
       updateSkills: options?.updateSkills,
-      workspace: options?.workspace
+      workspace: options?.workspace,
+      clientActionId: request?.clientActionId
     })
   })
 }
@@ -362,18 +367,22 @@ export async function sendSessionMessage(
   id: string,
   content: string | ChatMessageContent[],
   options: {
+    clientActionId?: string
     permissionMode?: SessionPermissionMode
   } = {}
 ): Promise<ApiOkResponse> {
-  const body = Array.isArray(content) ? { content } : { text: content }
-  return fetchApiJson<ApiOkResponse>(`/api/sessions/${id}/messages`, {
-    method: 'POST',
-    headers: jsonHeaders,
-    body: JSON.stringify({
-      ...body,
-      permissionMode: options.permissionMode
+  return submitWithDesktopFirstAction(id, async (clientActionId) => {
+    const body = Array.isArray(content) ? { content } : { text: content }
+    return await fetchApiJson<ApiOkResponse>(`/api/sessions/${id}/messages`, {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        ...body,
+        clientActionId,
+        permissionMode: options.permissionMode
+      })
     })
-  })
+  }, options.clientActionId)
 }
 
 export async function terminateSession(id: string): Promise<ApiOkResponse> {
@@ -533,13 +542,19 @@ export async function updateSessionTitle(id: string, title: string): Promise<Api
 export async function createQueuedMessage(
   sessionId: string,
   mode: SessionQueuedMessageMode,
-  content: ChatMessageContent[]
+  content: ChatMessageContent[],
+  options: { clientActionId?: string } = {}
 ): Promise<{ queuedMessages: SessionMessageQueueState }> {
-  return fetchApiJson<{ queuedMessages: SessionMessageQueueState }>(`/api/sessions/${sessionId}/queued-messages`, {
-    method: 'POST',
-    headers: jsonHeaders,
-    body: JSON.stringify({ mode, content })
-  })
+  return submitWithDesktopFirstAction(sessionId, async (clientActionId) => (
+    await fetchApiJson<{ queuedMessages: SessionMessageQueueState }>(
+      `/api/sessions/${sessionId}/queued-messages`,
+      {
+        method: 'POST',
+        headers: jsonHeaders,
+        body: JSON.stringify({ clientActionId, mode, content })
+      }
+    )
+  ), options.clientActionId)
 }
 
 export async function updateQueuedMessage(
@@ -561,12 +576,14 @@ export async function deleteQueuedMessage(
   sessionId: string,
   queueId: string
 ): Promise<{ queuedMessages: SessionMessageQueueState }> {
-  return fetchApiJson<{ queuedMessages: SessionMessageQueueState }>(
+  const response = await fetchApiJson<{ queuedMessages: SessionMessageQueueState }>(
     `/api/sessions/${sessionId}/queued-messages/${queueId}`,
     {
       method: 'DELETE'
     }
   )
+  markDesktopFirstActionTerminated(sessionId, queueId)
+  return response
 }
 
 export async function moveQueuedMessage(

@@ -1,6 +1,15 @@
 import { requestJson } from '../../shared/api/requestJson'
 
-export type RelayDiagnosticCategory = 'agent' | 'auth' | 'command' | 'error' | 'network' | 'other' | 'startup' | 'tool'
+export type RelayDiagnosticCategory =
+  | 'agent'
+  | 'auth'
+  | 'command'
+  | 'error'
+  | 'first-action'
+  | 'network'
+  | 'other'
+  | 'startup'
+  | 'tool'
 export type RelayDiagnosticSource = 'codex' | 'oneworks' | 'other'
 
 export interface RelayAdminDiagnosticEvent {
@@ -42,6 +51,16 @@ export interface RelayAdminDiagnosticSummary {
   bySource: Record<string, number>
   byVersion: Record<string, number>
   errorEvents: number
+  firstAction: {
+    appStartToSubmit: DiagnosticDurationPercentiles
+    attempts: number
+    pendingAttempts: number
+    submitToAccepted: DiagnosticDurationPercentiles
+    submitToResponse: DiagnosticDurationPercentiles
+    submitToSuccess: DiagnosticDurationPercentiles
+    successRate?: number
+    terminalAttempts: number
+  }
   startup: {
     attempts: number
     p50DurationMs?: number
@@ -51,10 +70,17 @@ export interface RelayAdminDiagnosticSummary {
   total: number
 }
 
+interface DiagnosticDurationPercentiles {
+  p50DurationMs?: number
+  p95DurationMs?: number
+}
+
 export interface RelayAdminDiagnosticSeriesPoint {
   activeUsers: number
   date: string
   errorEvents: number
+  firstActionAttempts: number
+  firstActionSuccessRate?: number
   startupAttempts: number
   startupSuccessRate?: number
   totalEvents: number

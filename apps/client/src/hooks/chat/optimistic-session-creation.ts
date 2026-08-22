@@ -36,6 +36,7 @@ export interface OptimisticSessionCreationOptions {
 }
 
 export interface OptimisticSessionCreationRequest {
+  clientActionId?: string
   id: string
   title?: string
   initialMessage?: string

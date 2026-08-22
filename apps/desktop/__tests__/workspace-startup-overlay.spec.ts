@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 
-import { normalizeDesktopWorkspaceStartupReadiness } from '@oneworks/types'
+import { normalizeDesktopFirstActionMilestone, normalizeDesktopWorkspaceStartupReadiness } from '@oneworks/types'
 import { describe, expect, it } from 'vitest'
 
 const desktopRoot = path.resolve(__dirname, '..')
@@ -44,5 +44,25 @@ describe('desktop workspace startup overlay', () => {
     expect(ipcHandlers).toContain(
       'markWorkspaceStartupWindowReady(windowRecord, normalizeDesktopWorkspaceStartupReadiness(input))'
     )
+  })
+
+  it('keeps first-action IPC closed, non-blocking, and scoped to workspace windows', async () => {
+    const [preload, ipcHandlers] = await Promise.all([
+      readFile(path.join(desktopRoot, 'src/preload/index.ts'), 'utf8'),
+      readFile(path.join(desktopRoot, 'src/main/ipc-handlers.ts'), 'utf8')
+    ])
+
+    expect(normalizeDesktopFirstActionMilestone({ milestone: 'first.response.received' }))
+      .toBe('first.response.received')
+    expect(normalizeDesktopFirstActionMilestone({ milestone: 'first.token' })).toBeUndefined()
+    expect(preload).toContain('normalizeDesktopFirstActionMilestone(input)')
+    expect(preload).toContain(
+      'void ipcRenderer.invoke(desktopFirstActionMilestoneChannel, { milestone }).catch(() => undefined)'
+    )
+    expect(ipcHandlers).toContain('normalizeDesktopFirstActionMilestone(input)')
+    expect(ipcHandlers).toContain("windowRecord.kind !== 'workspace'")
+    expect(ipcHandlers).toContain('markDesktopFirstActionMilestone(')
+    expect(ipcHandlers).toContain('senderFrame.processId')
+    expect(ipcHandlers).toContain('senderFrame.frameToken')
   })
 })

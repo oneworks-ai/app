@@ -31,7 +31,7 @@ const getCommandContent = (command: RuntimeCommand) => {
 }
 
 const isUserMessageCommand = (command: RuntimeCommand) => (
-  command.type === 'start' || command.type === 'send_message'
+  command.type === 'start' || command.type === 'resume' || command.type === 'send_message'
 )
 
 export function projectRuntimeCommand(

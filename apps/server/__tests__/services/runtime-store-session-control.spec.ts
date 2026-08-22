@@ -91,6 +91,23 @@ describe('runtime store session control', () => {
     })
   })
 
+  it('uses the validated client action ID as the projected start command ID', async () => {
+    const workspace = await mkdtemp(path.join(tmpdir(), 'ow-web-runtime-session-action-'))
+    const clientActionId = 'client-action-00000000-0000-4000-8000-000000000001'
+    const result = await createServerRuntimeSession({
+      clientActionId,
+      cwd: workspace,
+      message: 'Run it',
+      sessionId: 'sess-web-action'
+    })
+
+    const commands = (await readFile(path.join(result.storePath, 'commands.jsonl'), 'utf8')).trim()
+      .split('\n')
+      .map(line => JSON.parse(line) as Record<string, unknown>)
+
+    expect(commands[0]).toMatchObject({ commandId: clientActionId })
+  })
+
   it('creates dormant runtime sessions for whole-session forks', async () => {
     const workspace = await mkdtemp(path.join(tmpdir(), 'ow-web-runtime-session-dormant-'))
     const result = await createServerRuntimeSession({

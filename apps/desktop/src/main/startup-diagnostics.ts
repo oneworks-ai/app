@@ -11,7 +11,10 @@ import type {
   DiagnosticOperationSnapshot
 } from '@oneworks/diagnostics'
 import { FileDiagnosticJournal, createOtlpHttpDiagnosticExporterFromEnv } from '@oneworks/diagnostics/node'
+import type { DesktopFirstActionMilestone } from '@oneworks/types'
 import { DEFAULT_GLOBAL_OO_CONFIG_FILE, resolveGlobalOneWorksDir } from '@oneworks/utils/ai-path'
+
+import { createDesktopFirstActionDiagnostics } from './first-action-diagnostics'
 
 const DEFAULT_STABLE_DELAY_MS = 30_000
 const DEFAULT_READY_TIMEOUT_MS = 120_000
@@ -40,7 +43,9 @@ export interface DesktopStartupDiagnostics {
   degrade: (error: unknown, input: DesktopStartupFailureInput) => void
   fail: (error: unknown, input: DesktopStartupFailureInput) => void
   flush: () => Promise<void>
+  getFirstActionSnapshot: () => DiagnosticOperationSnapshot | undefined
   getSnapshot: () => DiagnosticOperationSnapshot
+  markFirstActionMilestone: (milestone: DesktopFirstActionMilestone, sourceId: string) => void
   ready: () => void
   stage: (name: string) => void
 }
@@ -65,13 +70,23 @@ export const createDesktopStartupDiagnostics = (
   const now = options.now ?? (() => new Date())
   const startupId = createId()
   const journal = new FileDiagnosticJournal({ directory: options.directory })
-  journal.recoverInterruptedOperations({ createId, now })
+  const reportOtlpError = (error: unknown) => {
+    const name = error instanceof Error ? error.name : 'UnknownError'
+    console.warn(`[oneworks-desktop] OTLP diagnostic export failed (${name})`)
+  }
   const otlpExporter = options.otlpExporter === false
     ? undefined
     : options.otlpExporter ?? createOtlpHttpDiagnosticExporterFromEnv({
-      onError: error => {
-        const name = error instanceof Error ? error.name : 'UnknownError'
-        console.warn(`[oneworks-desktop] OTLP diagnostic export failed (${name})`)
+      onError: reportOtlpError
+    })
+  const recoveredEvents = journal.recoverInterruptedOperations({ createId, now })
+  const recoveredExportTasks = otlpExporter == null
+    ? []
+    : recoveredEvents.map(async event => {
+      try {
+        await otlpExporter.export(event)
+      } catch (error) {
+        reportOtlpError(error)
       }
     })
 
@@ -95,6 +110,7 @@ export const createDesktopStartupDiagnostics = (
   const operation = client.startOperation('oneworks.app.startup', {
     operationId: startupId
   })
+  const firstAction = createDesktopFirstActionDiagnostics(client)
   const emittedStages = new Set<string>()
   let readyTimer: ReturnType<typeof setTimeout> | undefined
   let stableTimer: ReturnType<typeof setTimeout> | undefined
@@ -137,11 +153,17 @@ export const createDesktopStartupDiagnostics = (
         domain: 'process',
         retryable: true
       })
+      firstAction.cancel()
     },
     degrade: (error, input) => completeWithFailure('degrade', error, input),
     fail: (error, input) => completeWithFailure('fail', error, input),
-    flush: client.flush,
+    flush: async () => {
+      await Promise.all(recoveredExportTasks)
+      await client.flush()
+    },
+    getFirstActionSnapshot: firstAction.getSnapshot,
     getSnapshot: operation.getSnapshot,
+    markFirstActionMilestone: firstAction.mark,
     ready: () => {
       if (operation.isReady() || operation.isTerminal()) return
       if (readyTimer != null) {

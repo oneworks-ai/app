@@ -11,8 +11,15 @@ const mocks = vi.hoisted(() => ({
   branchSessionFromMessage: vi.fn(),
   createQueuedMessage: vi.fn(),
   createSession: vi.fn(),
+  beginDesktopFirstAction: vi.fn(() => 'client-action-00000000-0000-4000-8000-000000000001'),
   deleteQueuedMessage: vi.fn(),
   deleteSession: vi.fn(),
+  markDesktopFirstActionAccepted: vi.fn(),
+  markDesktopFirstActionFailed: vi.fn(),
+  markDesktopFirstActionSubmitted: vi.fn(),
+  markDesktopFirstActionTerminated: vi.fn(),
+  markDesktopFirstActionTransportError: vi.fn(),
+  markDesktopFirstActionUncertain: vi.fn(),
   getSessionMessages: vi.fn(),
   messageError: vi.fn(),
   messageWarning: vi.fn(),
@@ -83,6 +90,19 @@ vi.mock('#~/connectionManager.js', () => ({
   }
 }))
 
+vi.mock('#~/diagnostics/desktop-first-action/runtime', () => ({
+  beginDesktopFirstAction: mocks.beginDesktopFirstAction,
+  markDesktopFirstActionAccepted: mocks.markDesktopFirstActionAccepted,
+  markDesktopFirstActionFailed: mocks.markDesktopFirstActionFailed,
+  markDesktopFirstActionSubmitted: mocks.markDesktopFirstActionSubmitted,
+  markDesktopFirstActionTerminated: mocks.markDesktopFirstActionTerminated,
+  markDesktopFirstActionUncertain: mocks.markDesktopFirstActionUncertain
+}))
+
+vi.mock('#~/diagnostics/desktop-first-action/submit', () => ({
+  markDesktopFirstActionTransportError: mocks.markDesktopFirstActionTransportError
+}))
+
 vi.mock('#~/hooks/use-sender-header-query-state.js', () => ({
   useSenderHeaderQueryState: () => ({
     setHeaderCollapsed: mocks.setHeaderCollapsed
@@ -126,16 +146,17 @@ const queueState = (
   next
 })
 
-const renderActions = () => {
+const renderActions = (currentSession: Session | null = session) => {
   let actions: ReturnType<typeof useChatSessionActions> | undefined
 
   function Harness() {
     actions = useChatSessionActions({
-      session,
+      session: currentSession ?? undefined,
       modelForQuery: 'codex/test',
       hasAvailableModels: true,
       effort: 'default',
       permissionMode: 'default',
+      workspaceConfigReady: true,
       onClearMessages: vi.fn()
     })
     return null
@@ -353,6 +374,52 @@ describe('chat session queued message actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.getSessionMessages.mockReturnValue(new Promise(() => {}))
+  })
+
+  it('sends a real session request through the action-aware API boundary', async () => {
+    mocks.sendSessionMessage.mockResolvedValueOnce(undefined)
+    const actions = renderActions()
+
+    await expect(actions.send('hello')).resolves.toBe(true)
+
+    expect(mocks.beginDesktopFirstAction).not.toHaveBeenCalled()
+    expect(mocks.markDesktopFirstActionSubmitted).not.toHaveBeenCalled()
+    expect(mocks.sendSessionMessage).toHaveBeenCalledWith(session.id, 'hello', {
+      permissionMode: 'default'
+    })
+    expect(mocks.markDesktopFirstActionAccepted).not.toHaveBeenCalled()
+
+    mocks.markDesktopFirstActionAccepted.mockClear()
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    mocks.sendSessionMessage.mockRejectedValueOnce(new Error('request failed'))
+    try {
+      await expect(actions.send('retry')).resolves.toBe(false)
+      expect(mocks.markDesktopFirstActionAccepted).not.toHaveBeenCalled()
+    } finally {
+      consoleError.mockRestore()
+    }
+  })
+
+  it('settles a failed optimistic creation through the shared transport classifier', async () => {
+    const failure = new Error('creation request failed')
+    mocks.createSession.mockRejectedValueOnce(failure)
+    mocks.getSessionMessages.mockRejectedValueOnce(new Error('session was not created'))
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      const actions = renderActions(null)
+      await expect(actions.send('create a session')).resolves.toBe(true)
+      await vi.waitFor(() => {
+        expect(mocks.markDesktopFirstActionTransportError).toHaveBeenCalledWith(
+          expect.any(String),
+          'client-action-00000000-0000-4000-8000-000000000001',
+          failure
+        )
+      })
+    } finally {
+      consoleError.mockRestore()
+      consoleWarn.mockRestore()
+    }
   })
 
   it('syncs the current session queue from successful queued message API responses', async () => {

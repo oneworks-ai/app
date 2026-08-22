@@ -4,9 +4,13 @@ import type { WSEvent } from '@oneworks/core'
 import { createSocket } from './ws'
 import type { WSHandlers } from './ws'
 
+export interface ManagedWSHandlers extends WSHandlers {
+  onConnectionOpen?: () => void
+}
+
 export class ConnectionManager {
   private sockets = new Map<string, WebSocket>()
-  private subscribers = new Map<string, Set<WSHandlers>>()
+  private subscribers = new Map<string, Set<ManagedWSHandlers>>()
   private disconnectTimers = new Map<string, ReturnType<typeof setTimeout>>()
   private reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>()
   private reconnectAttempts = new Map<string, number>()
@@ -26,7 +30,7 @@ export class ConnectionManager {
    * @param handlers Event handlers for this subscription
    * @returns A cleanup function to unsubscribe
    */
-  connect(sessionId: string, handlers: WSHandlers, params?: Record<string, string>): () => void {
+  connect(sessionId: string, handlers: ManagedWSHandlers, params?: Record<string, string>): () => void {
     // 1. Cancel any pending disconnect timer
     if (this.disconnectTimers.has(sessionId)) {
       clearTimeout(this.disconnectTimers.get(sessionId)!)
@@ -38,6 +42,7 @@ export class ConnectionManager {
     }
 
     // 2. Add subscriber
+    const resumesAfterSubscriberGap = this.subscribers.get(sessionId)?.size === 0
     if (!this.subscribers.has(sessionId)) {
       this.subscribers.set(sessionId, new Set())
     }
@@ -60,6 +65,9 @@ export class ConnectionManager {
       this.createConnection(sessionId, nextParams)
     } else if (ws.readyState === WebSocket.OPEN) {
       // If already open, trigger onOpen immediately for this new subscriber
+      if (resumesAfterSubscriberGap) {
+        handlers.onConnectionOpen?.()
+      }
       handlers.onOpen?.()
     }
 
@@ -72,27 +80,28 @@ export class ConnectionManager {
   private createConnection(sessionId: string, params: Record<string, string>) {
     const ws = createSocket({
       onOpen: () => {
+        if (this.sockets.get(sessionId) !== ws) return
         this.reconnectAttempts.delete(sessionId)
+        this.broadcast(sessionId, 'onConnectionOpen')
         this.broadcast(sessionId, 'onOpen')
       },
       onMessage: (data: WSEvent) => {
+        if (this.sockets.get(sessionId) !== ws) return
         this.broadcast(sessionId, 'onMessage', data)
       },
       onError: (err: Event) => {
+        if (this.sockets.get(sessionId) !== ws) return
         this.broadcast(sessionId, 'onError', err)
-        if (this.sockets.get(sessionId) === ws) {
-          this.closeSocket(ws)
-        }
+        this.closeSocket(ws)
       },
       onClose: (event) => {
+        if (this.sockets.get(sessionId) !== ws) return
         this.broadcast(sessionId, 'onClose', event)
-        if (this.sockets.get(sessionId) === ws) {
-          this.sockets.delete(sessionId)
-          if (this.shouldReconnect(sessionId, event)) {
-            this.scheduleReconnect(sessionId)
-          } else {
-            this.reconnectAttempts.delete(sessionId)
-          }
+        this.sockets.delete(sessionId)
+        if (this.shouldReconnect(sessionId, event)) {
+          this.scheduleReconnect(sessionId)
+        } else {
+          this.reconnectAttempts.delete(sessionId)
         }
       }
     }, params)
@@ -135,7 +144,7 @@ export class ConnectionManager {
     )
   }
 
-  private disconnect(sessionId: string, handlers: WSHandlers) {
+  private disconnect(sessionId: string, handlers: ManagedWSHandlers) {
     const subs = this.subscribers.get(sessionId)
     if (subs) {
       subs.delete(handlers)
@@ -161,7 +170,7 @@ export class ConnectionManager {
     }
   }
 
-  private broadcast(sessionId: string, method: keyof WSHandlers, data?: any) {
+  private broadcast(sessionId: string, method: keyof ManagedWSHandlers, data?: any) {
     const subs = this.subscribers.get(sessionId)
     if (subs) {
       // Create a copy to avoid issues if handlers unsubscribe during execution

@@ -4,6 +4,7 @@ import type { AskUserQuestionParams, ChatMessage, Session, SessionStatus, WSEven
 import type { SqliteDb } from '#~/db/index.js'
 import { setSessionInteraction } from '#~/services/session/interaction.js'
 import { broadcastSessionEvent, notifySessionUpdated } from '#~/services/session/runtime.js'
+import { isPreservedSessionTerminalStatus } from '#~/services/session/terminal-status.js'
 
 import { extractTextFromContent, normalizeMessageContent } from './content.js'
 import { projectFailureToSession } from './session-failure-projection.js'
@@ -131,7 +132,7 @@ const projectMessageToSession = (
     createdAt: getEventTime(event)
   }
   const text = extractTextFromContent(event.content) ?? event.summary ?? event.publicSummary
-  const shouldMarkRunning = !isTerminalSessionStatus(db.getSession(event.sessionId)?.status) &&
+  const shouldMarkRunning = !isTerminalSessionStatus(db.getSessionStatus(event.sessionId)) &&
     !shouldPreserveWaitingInteraction(db, event.sessionId, 'running')
 
   const wsEvent: WSEvent = { type: 'message', message }
@@ -145,6 +146,9 @@ const projectMessageToSession = (
 }
 
 const projectApprovalToSession = (db: SqliteDb, event: RuntimeEvent, broadcast: boolean): ProjectedSessionEvent[] => {
+  if (isPreservedSessionTerminalStatus(db.getSessionStatus(event.sessionId))) {
+    return []
+  }
   const interactionId = event.requestId ?? event.id
   const payload: AskUserQuestionParams = {
     sessionId: event.sessionId,

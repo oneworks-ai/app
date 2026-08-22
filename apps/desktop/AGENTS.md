@@ -18,6 +18,7 @@ Review 桌面双运行路径、bundle 外资源、ready 语义或真实安装产
 - `src/main/`
   - `app-runtime.ts`：单实例锁、应用生命周期和各模块装配
   - `startup-diagnostics.ts`：桌面冷启动阶段、可交互 / 稳定终态与本地诊断 Journal；事件契约来自 `@oneworks/diagnostics`
+  - `first-action-diagnostics.ts`：真实首个 submit 到 accepted / renderer response / success、failed 或 terminated 的独立 operation；只消费无内容 milestone，并锁定首次 renderer document source。ACK 不确定的 abandonment timer 必须由 Electron main 持有，renderer retry 或 causal observation 只能通过闭合 milestone 刷新 / 取消
   - `javascript-diagnostics.ts`：Electron 主进程、renderer crash 与客户端受限 IPC 的 JavaScript 异常 Journal / OTLP 门控；只接收归一化后的错误码、类型和不可逆指纹
   - `support-bundle.ts`：从桌面诊断 Journal 生成隐私安全支持包，由 Help 菜单触发
   - `browser-window-factory.ts`：统一 BrowserWindow 创建、titlebar 风格、`window.open` 管控和窗口关闭清理

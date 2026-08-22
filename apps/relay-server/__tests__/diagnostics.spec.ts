@@ -93,6 +93,24 @@ const waitForOpenApiAudit = async (dataPath: string, path: string) => {
   return await readRelayStore(dataPath)
 }
 
+const firstActionEvent = (
+  id: string,
+  occurredAt: string,
+  input: Partial<RelayDiagnosticEvent> = {}
+): RelayDiagnosticEvent => ({
+  category: 'first-action',
+  eventName: 'oneworks.diagnostic.operation.stage',
+  id,
+  occurredAt,
+  operationId: 'cross-midnight-first-action',
+  receivedAt: occurredAt,
+  serviceName: 'oneworks-desktop',
+  severity: 'INFO',
+  source: 'oneworks',
+  userId: 'member-1',
+  ...input
+})
+
 describe('relay diagnostic ingestion', () => {
   it('accepts the shared OneWorks exporter contract end to end', async () => {
     const { args, baseUrl } = await listenRelay()
@@ -119,12 +137,19 @@ describe('relay diagnostic ingestion', () => {
     startup.stage('renderer.loaded')
     startup.ready('renderer.ready')
     startup.stable()
+    const firstAction = client.startOperation('oneworks.app.first_action')
+    firstAction.stage('first.submit')
+    firstAction.stage('submit.accepted')
+    firstAction.ready('first.response.received')
+    firstAction.stage('first.success')
+    firstAction.succeed()
     await client.flush()
 
-    const queried = await requestJson(baseUrl, '/api/admin/diagnostics?userId=member-1&category=startup', {
+    const queried = await requestJson(baseUrl, '/api/admin/diagnostics?userId=member-1', {
       headers: authHeaders('admin-token')
     })
-    const events = queried.body.events as RelayDiagnosticEvent[]
+    const allEvents = queried.body.events as RelayDiagnosticEvent[]
+    const events = allEvents.filter(event => event.category === 'startup')
 
     expect(queried.response.status).toBe(200)
     expect(events).toHaveLength(5)
@@ -143,16 +168,86 @@ describe('relay diagnostic ingestion', () => {
         p95DurationMs: expect.any(Number),
         successRate: 1
       },
-      total: 5
+      total: 12
     })
     expect(queried.body.series).toMatchObject([{
       activeUsers: 1,
       date: expect.any(String),
       startupAttempts: 1,
       startupSuccessRate: 1,
-      totalEvents: 5
+      totalEvents: 12
     }])
     expect(JSON.stringify(events)).not.toContain('private-live-session')
+
+    expect(allEvents.filter(event => event.category === 'first-action')).toHaveLength(7)
+    const firstActionSummary = (queried.body.summary as { firstAction: unknown }).firstAction
+    expect(firstActionSummary).toMatchObject({
+      appStartToSubmit: {
+        p50DurationMs: expect.any(Number),
+        p95DurationMs: expect.any(Number)
+      },
+      attempts: 1,
+      pendingAttempts: 0,
+      submitToAccepted: {
+        p50DurationMs: expect.any(Number),
+        p95DurationMs: expect.any(Number)
+      },
+      submitToResponse: {
+        p50DurationMs: expect.any(Number),
+        p95DurationMs: expect.any(Number)
+      },
+      submitToSuccess: {
+        p50DurationMs: expect.any(Number),
+        p95DurationMs: expect.any(Number)
+      },
+      successRate: 1,
+      terminalAttempts: 1
+    })
+  })
+
+  it('attributes a cross-midnight first action only to its submit cohort date', async () => {
+    const { args, baseUrl } = await listenRelay()
+    await seedUser(args.dataPath)
+    const store = await readRelayStore(args.dataPath)
+    store.diagnosticEvents = [
+      firstActionEvent('started', '2026-08-09T23:59:59.000Z', {
+        eventName: 'oneworks.diagnostic.operation.started'
+      }),
+      firstActionEvent('completed', '2026-08-10T00:00:01.000Z', {
+        eventName: 'oneworks.diagnostic.operation.completed',
+        outcome: 'success'
+      })
+    ]
+    await writeRelayStore(args.dataPath, store)
+
+    const queried = await requestJson(baseUrl, '/api/admin/diagnostics?userId=member-1', {
+      headers: authHeaders('admin-token')
+    })
+    const series = queried.body.series as Array<{
+      date: string
+      firstActionAttempts: number
+      firstActionSuccessRate?: number
+      totalEvents: number
+    }>
+
+    expect(series.find(item => item.date === '2026-08-09')).toMatchObject({
+      firstActionAttempts: 1,
+      firstActionSuccessRate: 1,
+      totalEvents: 1
+    })
+    expect(series.find(item => item.date === '2026-08-10')).toMatchObject({
+      firstActionAttempts: 0,
+      totalEvents: 1
+    })
+
+    const terminalOnly = await requestJson(
+      baseUrl,
+      '/api/admin/diagnostics?userId=member-1&from=2026-08-10T00:00:00.000Z',
+      { headers: authHeaders('admin-token') }
+    )
+    expect(terminalOnly.body.series as Array<{ firstActionAttempts: number }>).toEqual([
+      expect.objectContaining({ firstActionAttempts: 0 })
+    ])
   })
 
   it('accepts OTLP/HTTP JSON, binds authenticated identity, and stores only safe facts', async () => {
