@@ -386,6 +386,7 @@ describe('required context completion contract', () => {
   const qualityWorkflow = readFileSync('.github/workflows/quality.yml', 'utf8')
   const desktopWorkflow = readFileSync('.github/workflows/desktop-package.yml', 'utf8')
   const policyWorkflow = readFileSync('.github/workflows/pr-change-policy.yml', 'utf8')
+  const workspaceCacheWarmWorkflow = readFileSync('.github/workflows/workspace-cache-warm.yml', 'utf8')
   const workspaceSetupAction = readFileSync('.github/actions/setup-workspace/action.yml', 'utf8')
 
   it('keeps PR and merge queue workflows unconditional so required contexts cannot remain pending', () => {
@@ -553,6 +554,39 @@ describe('required context completion contract', () => {
     expect(workspaceSetupAction).toContain(
       "if: steps.workspace-cache.outputs.cache-hit == 'true'\n      uses: actions/setup-node@v4"
     )
+    const cacheWarmTrigger = workspaceCacheWarmWorkflow.slice(
+      0,
+      workspaceCacheWarmWorkflow.indexOf('\npermissions:')
+    )
+    const hashFilesArguments = workspaceSetupAction.match(/hashFiles\(([\s\S]*?)\)/u)?.[1]
+    expect(hashFilesArguments).toBeDefined()
+    const cacheAuthorities = new Set(
+      Array.from(hashFilesArguments!.matchAll(/'([^']+)'/gu), match => match[1]!)
+    )
+    const cacheWarmPaths = new Set(
+      Array.from(
+        cacheWarmTrigger
+          .slice(cacheWarmTrigger.indexOf('    paths:\n'), cacheWarmTrigger.indexOf('  workflow_dispatch:\n'))
+          .matchAll(/^ {6}- (.+)$/gmu),
+        match => match[1]!
+      )
+    )
+    expect(cacheWarmPaths).toEqual(
+      new Set([
+        ...cacheAuthorities,
+        '.github/workflows/workspace-cache-warm.yml'
+      ])
+    )
+    expect(cacheWarmTrigger).toContain('  push:\n')
+    expect(cacheWarmTrigger).toContain('      - main\n')
+    expect(cacheWarmTrigger).toContain('  workflow_dispatch:\n')
+    expect(cacheWarmTrigger).not.toContain('pull_request')
+    expect(cacheWarmTrigger).not.toContain('merge_group')
+    expect(cacheWarmTrigger).toContain('      - .github/actions/setup-workspace/action.yml\n')
+    expect(cacheWarmTrigger).toContain('      - .github/workflows/workspace-cache-warm.yml\n')
+    expect(workspaceCacheWarmWorkflow).toContain('          - ubuntu-latest\n')
+    expect(workspaceCacheWarmWorkflow).toContain('          - macos-26\n')
+    expect(workspaceCacheWarmWorkflow).toContain('uses: ./.github/actions/setup-workspace')
     expect(qualityWorkflow).toContain('uses: ./.github/actions/setup-workspace')
     expect(desktopWorkflow).toContain('uses: ./.github/actions/setup-workspace')
     expect(qualityWorkflow).toContain('--cache-location .cache/eslint/.eslintcache')

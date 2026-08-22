@@ -1,0 +1,49 @@
+name: Workspace Cache Warm
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/actions/setup-workspace/action.yml
+      - .github/workflows/workspace-cache-warm.yml
+      - .node-version
+      - .npmrc
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - patches/**/*.patch
+      - assets/avatar/package.json
+      - apps/*/package.json
+      - packages/*/package.json
+      - packages/adapters/*/package.json
+      - packages/channels/*/package.json
+      - packages/plugins/*/package.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: workspace-cache-warm-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  warm:
+    name: warm-workspace-cache-${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - ubuntu-latest
+          - macos-26
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Populate exact workspace cache
+        uses: ./.github/actions/setup-workspace
