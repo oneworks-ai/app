@@ -2,6 +2,7 @@ import type { Session, SessionStatus } from '@oneworks/core'
 import { Button, Tag, Tooltip } from 'antd'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 
 import { useResolvedThemeMode } from '#~/hooks/use-resolved-theme-mode'
 import { getAdapterDisplay, resolveAdapterDisplayIcon } from '#~/resources/adapters.js'
@@ -379,7 +380,10 @@ export function SessionItem({
             {visibleTags.map((tag: string) => {
               const automationTag = parseAutomationTag(tag)
               if (automationTag) {
-                const href = `/automation?rule=${encodeURIComponent(automationTag.ruleId)}`
+                const searchParams = new URLSearchParams({
+                  rule: automationTag.ruleId,
+                  runQ: session.id
+                })
                 return (
                   <Tooltip
                     key={tag}
@@ -389,13 +393,16 @@ export function SessionItem({
                       className='session-tag session-tag--automation'
                       onClick={(event) => event.stopPropagation()}
                     >
-                      <a
+                      <Link
                         className='session-tag__link'
-                        href={href}
+                        to={{
+                          pathname: '/automation',
+                          search: `?${searchParams.toString()}`
+                        }}
                         onClick={(event) => event.stopPropagation()}
                       >
                         {automationTag.ruleTitle}
-                      </a>
+                      </Link>
                     </Tag>
                   </Tooltip>
                 )
