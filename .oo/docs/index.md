@@ -24,6 +24,7 @@
 ## 先看这些
 
 - [安装与准备](./usage/install.md)
+- [Avatar 编辑器与开发者接入](./usage/avatar.md)
 - [数据资产目录配置](./asset-directories.md)
 - [启动服务](./usage/runtime.md)
 - [适配器 CLI 安装与版本](./usage/adapter-cli.md)
