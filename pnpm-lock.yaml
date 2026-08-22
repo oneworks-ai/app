@@ -893,6 +893,9 @@ importers:
       '@oneworks/route-layout':
         specifier: beta
         version: 0.1.0-beta.10(react@18.3.1)
+      gifenc:
+        specifier: ^1.0.3
+        version: 1.0.3
     devDependencies:
       '@types/react':
         specifier: ^18.3.12
@@ -5769,6 +5772,9 @@ packages:
 
   getpass@0.1.7:
     resolution: {integrity: sha512-0fzj9JxOLfJ+XGLhR8ze3unN0KZCgZwiSSDz168VERjK8Wl8kVSdcu2kspd4s4wtAa1y/qrVRiAA0WclVsu0ng==}
+
+  gifenc@1.0.3:
+    resolution: {integrity: sha512-xdr6AdrfGBcfzncONUOlXMBuc5wJDtOueE3c5rdG0oNgtINLD+f2iFZltrBRZYzACRbKr+mSVU/x98zv2u3jmw==}
 
   gifuct-js@2.1.2:
     resolution: {integrity: sha512-rI2asw77u0mGgwhV3qA+OEgYqaDn5UNqgs+Bx0FGwSpuqfYn+Ir6RQY5ENNQ8SbIiG/m5gVa7CD5RriO4f4Lsg==}
@@ -13500,6 +13506,8 @@ snapshots:
   getpass@0.1.7:
     dependencies:
       assert-plus: 1.0.0
+
+  gifenc@1.0.3: {}
 
   gifuct-js@2.1.2:
     dependencies:
