@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 128 128"
+  width="256"
+  height="256"
+  role="img"
+  aria-label="OWO"
+  shape-rendering="crispEdges"
+>
+  <title>OWO</title>
+  <rect x="0" y="0" width="128" height="128" fill="#075985" />
+  <g>
+    <rect x="12" y="40" width="6" height="6" fill="#ecfeff" />
+    <rect x="19" y="40" width="6" height="6" fill="#ecfeff" />
+    <rect x="26" y="40" width="6" height="6" fill="#ecfeff" />
+    <rect x="5" y="47" width="6" height="6" fill="#ecfeff" />
+    <rect x="33" y="47" width="6" height="6" fill="#ecfeff" />
+    <rect x="5" y="54" width="6" height="6" fill="#ecfeff" />
+    <rect x="33" y="54" width="6" height="6" fill="#ecfeff" />
+    <rect x="5" y="61" width="6" height="6" fill="#ecfeff" />
+    <rect x="33" y="61" width="6" height="6" fill="#ecfeff" />
+    <rect x="5" y="68" width="6" height="6" fill="#ecfeff" />
+    <rect x="33" y="68" width="6" height="6" fill="#ecfeff" />
+    <rect x="5" y="75" width="6" height="6" fill="#ecfeff" />
+    <rect x="33" y="75" width="6" height="6" fill="#ecfeff" />
+    <rect x="12" y="82" width="6" height="6" fill="#ecfeff" />
+    <rect x="19" y="82" width="6" height="6" fill="#ecfeff" />
+    <rect x="26" y="82" width="6" height="6" fill="#ecfeff" />
+    <rect x="47" y="40" width="6" height="6" fill="#ecfeff" />
+    <rect x="75" y="40" width="6" height="6" fill="#ecfeff" />
+    <rect x="47" y="47" width="6" height="6" fill="#ecfeff" />
+    <rect x="75" y="47" width="6" height="6" fill="#ecfeff" />
+    <rect x="47" y="54" width="6" height="6" fill="#ecfeff" />
+    <rect x="75" y="54" width="6" height="6" fill="#ecfeff" />
+    <rect x="47" y="61" width="6" height="6" fill="#ecfeff" />
+    <rect x="61" y="61" width="6" height="6" fill="#ecfeff" />
+    <rect x="75" y="61" width="6" height="6" fill="#ecfeff" />
+    <rect x="47" y="68" width="6" height="6" fill="#ecfeff" />
+    <rect x="61" y="68" width="6" height="6" fill="#ecfeff" />
+    <rect x="75" y="68" width="6" height="6" fill="#ecfeff" />
+    <rect x="47" y="75" width="6" height="6" fill="#ecfeff" />
+    <rect x="54" y="75" width="6" height="6" fill="#ecfeff" />
+    <rect x="61" y="75" width="6" height="6" fill="#ecfeff" />
+    <rect x="68" y="75" width="6" height="6" fill="#ecfeff" />
+    <rect x="75" y="75" width="6" height="6" fill="#ecfeff" />
+    <rect x="54" y="82" width="6" height="6" fill="#ecfeff" />
+    <rect x="68" y="82" width="6" height="6" fill="#ecfeff" />
+    <rect x="96" y="40" width="6" height="6" fill="#ecfeff" />
+    <rect x="103" y="40" width="6" height="6" fill="#ecfeff" />
+    <rect x="110" y="40" width="6" height="6" fill="#ecfeff" />
+    <rect x="89" y="47" width="6" height="6" fill="#ecfeff" />
+    <rect x="117" y="47" width="6" height="6" fill="#ecfeff" />
+    <rect x="89" y="54" width="6" height="6" fill="#ecfeff" />
+    <rect x="117" y="54" width="6" height="6" fill="#ecfeff" />
+    <rect x="89" y="61" width="6" height="6" fill="#ecfeff" />
+    <rect x="117" y="61" width="6" height="6" fill="#ecfeff" />
+    <rect x="89" y="68" width="6" height="6" fill="#ecfeff" />
+    <rect x="117" y="68" width="6" height="6" fill="#ecfeff" />
+    <rect x="89" y="75" width="6" height="6" fill="#ecfeff" />
+    <rect x="117" y="75" width="6" height="6" fill="#ecfeff" />
+    <rect x="96" y="82" width="6" height="6" fill="#ecfeff" />
+    <rect x="103" y="82" width="6" height="6" fill="#ecfeff" />
+    <rect x="110" y="82" width="6" height="6" fill="#ecfeff" />
+  </g>
+</svg>

@@ -13,6 +13,7 @@ import {
   buildResolvedConfigState,
   loadAdapterConfig,
   loadConfig,
+  loadConfigSources,
   loadConfigState,
   resetConfigCache,
   resolveAdapterCommonConfig,
@@ -33,6 +34,79 @@ const restoreEnvValue = (key: string, value: string | undefined) => {
 }
 
 describe('loadConfig', () => {
+  it('reports unresolved variables from the same interpolation pass', async () => {
+    const configVariable = (name: string) => `\${${name}}`
+    const resolvedSecret = `prefix-${configVariable('ROTATE')}-suffix`
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'oneworks-config-unresolved-'))
+    await writeFile(
+      path.join(tempDir, '.oo.config.json'),
+      JSON.stringify({
+        channels: {
+          lark: {
+            type: 'lark',
+            appId: configVariable('1SECRET'),
+            appSecret: configVariable('RESOLVED_SECRET')
+          }
+        },
+        hooks: {
+          smoke: configVariable('ROTATE')
+        }
+      })
+    )
+
+    try {
+      const [projectSource] = await loadConfigSources({
+        cwd: tempDir,
+        disableDevConfig: true,
+        disableGlobalConfig: true,
+        jsonVariables: {
+          RESOLVED_SECRET: resolvedSecret
+        }
+      })
+
+      expect(projectSource?.unresolvedJsonVariableReferences).toEqual([
+        { name: '1SECRET', path: ['channels', 'lark', 'appId'] },
+        { name: 'ROTATE', path: ['hooks', 'smoke'] }
+      ])
+      expect(projectSource?.resolvedConfig?.channels?.lark).toMatchObject({
+        appId: configVariable('1SECRET'),
+        appSecret: resolvedSecret
+      })
+    } finally {
+      resetConfigCache(tempDir)
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('resolves the repository role-bot secrets from environment variables', async () => {
+    const secretVariables = [
+      'ONEWORKS_LARK_PRODUCT_TEAM_APP_SECRET',
+      'ONEWORKS_LARK_WAN_KE_ANALYTICS_APP_SECRET',
+      'ONEWORKS_LARK_WAN_KE_DESIGN_APP_SECRET',
+      'ONEWORKS_LARK_WAN_KE_ENGINEERING_APP_SECRET',
+      'ONEWORKS_LARK_WAN_KE_FRONTEND_APP_SECRET',
+      'ONEWORKS_LARK_WAN_KE_OPERATIONS_APP_SECRET',
+      'ONEWORKS_LARK_WAN_KE_OPS_APP_SECRET',
+      'ONEWORKS_LARK_WAN_KE_PRODUCT_APP_SECRET',
+      'ONEWORKS_LARK_WAN_KE_PROJECT_APP_SECRET',
+      'ONEWORKS_LARK_WAN_KE_TEST_APP_SECRET'
+    ]
+    const jsonVariables = Object.fromEntries(secretVariables.map(name => [name, `test-secret-${name}`]))
+
+    const [projectConfig] = await loadConfig({
+      cwd: process.cwd(),
+      disableDevConfig: true,
+      disableGlobalConfig: true,
+      jsonVariables
+    })
+
+    expect(Object.keys(projectConfig?.channels ?? {})).toHaveLength(secretVariables.length)
+    const productChannel = projectConfig?.channels?.['lark:wan-ke-product'] as { appSecret?: string } | undefined
+    expect(productChannel?.appSecret).toBe(
+      'test-secret-ONEWORKS_LARK_WAN_KE_PRODUCT_APP_SECRET'
+    )
+  })
+
   it('resolves the global disable switch by config precedence', () => {
     expect(resolveDisableGlobalConfig({
       globalConfig: { disableGlobalConfig: true },

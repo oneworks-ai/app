@@ -59,6 +59,27 @@ describe('definitionLoader', () => {
     )
   })
 
+  it('resolves the repository role-bot leaders and their related entities', async () => {
+    const loader = new DefinitionLoader(process.cwd())
+    const expectedRelatedEntities = {
+      '阿里味 Leader': ['wan-ke-project', 'wan-ke-operations', 'wan-ke-product'],
+      '字节式 Leader': ['wan-ke-analytics', 'wan-ke-engineering', 'wan-ke-test'],
+      '腾讯范 Leader': ['wan-ke-product', 'wan-ke-design', 'wan-ke-frontend']
+    } as const
+
+    for (const [entity, relatedEntities] of Object.entries(expectedRelatedEntities)) {
+      const documentSet = await loader.loadEntityDocumentSet(entity)
+      if (documentSet == null) throw new Error(`Missing repository entity fixture: ${entity}`)
+      expect(documentSet.definition.attributes.team).toEqual({
+        relatedEntities,
+        role: 'leader'
+      })
+      for (const relatedEntity of relatedEntities) {
+        await expect(loader.loadEntityDocumentSet(relatedEntity)).resolves.toBeDefined()
+      }
+    }
+  })
+
   it('loads local and remote rule references with overridden descriptions', async () => {
     const workspace = await createWorkspace()
     const loader = new DefinitionLoader(workspace)

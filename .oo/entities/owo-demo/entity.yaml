@@ -1,0 +1,76 @@
+name: owo-demo
+avatar: .oo/entities/wan-ke-team/avatars/demo.png
+description: OWO，万可闲聊群的团队演示服务。
+tags:
+  - wan-ke
+  - demo
+  - coordinator
+team:
+  role: leader
+  relatedEntities:
+    - wan-ke-product
+    - wan-ke-design
+    - wan-ke-frontend
+    - wan-ke-engineering
+    - wan-ke-test
+    - wan-ke-ops
+    - wan-ke-operations
+    - wan-ke-analytics
+    - wan-ke-project
+extends:
+  - wan-ke-team
+inherit:
+  prompt: append
+documents:
+  identity:
+    path: IDENTITY.md
+    inherit: replace
+  soul:
+    path: SOUL.md
+    inherit: append
+  role:
+    path: ROLE.md
+    inherit: append
+  operations:
+    path: OPERATIONS.md
+    inherit: append
+  tools:
+    path: TOOLS.md
+    inherit: append
+  knowledge:
+    path: KNOWLEDGE.md
+    inherit: append
+  memoryPolicy:
+    path: MEMORY_POLICY.md
+    inherit: append
+  memory:
+    path: MEMORY.md
+    inherit: append
+runtime:
+  adapter: codex
+  model: gpt-5.6-luna
+skills:
+  type: exclude
+  list: []
+tools:
+  include: []
+  exclude: []
+mcpServers:
+  include: []
+  exclude: []
+memory:
+  maxCandidatesPerTurn: 24
+  maxItemsPerTurn: 12
+  maxTokensPerTurn: 2400
+  maxItemsPerGroup: 4
+  maxTokensPerGroup: 700
+  defaultTtlSeconds: 2592000
+  requireEvidence: true
+  allowSensitive: false
+  writableScopes:
+    - entity
+    - room
+    - channel
+    - conversation
+    - user
+    - session

@@ -37,11 +37,17 @@ export interface LoadConfigOptions {
 export interface ConfigSourceState {
   rawConfig?: Config
   resolvedConfig?: Config
+  unresolvedJsonVariableReferences?: UnresolvedJsonVariableReference[]
   configPath?: string
   extendPath?: string
   extendPaths: string[]
   resolvedExtendPaths: string[]
   resolvedExtendSources?: ConfigSourceState[]
+}
+
+export interface UnresolvedJsonVariableReference {
+  name: string
+  path: readonly (number | string)[]
 }
 
 export interface ResolvedConfigState {
@@ -205,12 +211,38 @@ const isExistingFilePath = (filePath: string) => {
   }
 }
 
+const JSON_VARIABLE_REFERENCE_PATTERN = /\$\{(\w+)\}/gu
+const UNRESOLVED_JSON_VARIABLE_MARKER_PREFIX = '\uE000ONEWORKS_UNRESOLVED_JSON_VARIABLE_'
+const UNRESOLVED_JSON_VARIABLE_MARKER_SUFFIX = '\uE001'
+
 const replaceJsonVariables = (
   content: string,
   jsonVariables: Record<string, string | null | undefined>
-) => (
-  content.replace(/\$\{(\w+)\}/g, (_, key) => jsonVariables[key] ?? `$\{${key}}`)
-)
+) => {
+  const resolvedContent = content.replace(JSON_VARIABLE_REFERENCE_PATTERN, (_, key: string) => {
+    const resolvedValue = jsonVariables[key]
+    if (resolvedValue != null) return resolvedValue
+    return `$\{${key}}`
+  })
+  const unresolvedMarkers = new Map<string, string>()
+  let markerIndex = 0
+  const provenanceContent = content.replace(JSON_VARIABLE_REFERENCE_PATTERN, (_, key: string) => {
+    const resolvedValue = jsonVariables[key]
+    if (resolvedValue != null) return resolvedValue
+    let marker: string
+    do {
+      marker = `${UNRESOLVED_JSON_VARIABLE_MARKER_PREFIX}${key}_${markerIndex}${UNRESOLVED_JSON_VARIABLE_MARKER_SUFFIX}`
+      markerIndex += 1
+    } while (resolvedContent.includes(marker) || unresolvedMarkers.has(marker))
+    unresolvedMarkers.set(marker, key)
+    return marker
+  })
+  return {
+    provenanceContent,
+    resolvedContent,
+    unresolvedMarkers
+  }
+}
 
 export const buildConfigJsonVariables = (
   cwd: string,
@@ -392,32 +424,104 @@ const readConfigFile = async (
   jsonVariables: Record<string, string | null | undefined>
 ) => {
   const configContent = await readFile(configPath, 'utf-8')
-  const configResolvedContent = replaceJsonVariables(configContent, jsonVariables)
+  const { provenanceContent, resolvedContent, unresolvedMarkers } = replaceJsonVariables(
+    configContent,
+    jsonVariables
+  )
   const extension = extname(configPath).toLowerCase()
 
   if (extension === '.json') {
-    return JSON.parse(configResolvedContent) as unknown
+    return {
+      config: JSON.parse(resolvedContent) as unknown,
+      provenanceConfig: JSON.parse(provenanceContent) as unknown,
+      unresolvedMarkers
+    }
   }
 
   if (extension === '.yaml' || extension === '.yml') {
-    return load(configResolvedContent) as unknown
+    return {
+      config: load(resolvedContent) as unknown,
+      provenanceConfig: load(provenanceContent) as unknown,
+      unresolvedMarkers
+    }
   }
 
   throw new Error(`Unsupported config file extension "${extension || '<none>'}"`)
 }
 
+interface LoadedConfigFileState {
+  rawConfig: Config
+  resolvedConfig: Config
+  provenanceConfig: Config
+  unresolvedMarkers: ReadonlyMap<string, string>
+  extendPaths: string[]
+  resolvedExtendPaths: string[]
+  resolvedExtendSources: ConfigSourceState[]
+}
+
+const replaceUnresolvedMarkers = (
+  value: string,
+  unresolvedMarkers: ReadonlyMap<string, string>
+) => {
+  let normalizedValue = value
+  for (const [marker, name] of unresolvedMarkers) {
+    normalizedValue = normalizedValue.replaceAll(marker, `$\{${name}}`)
+  }
+  return normalizedValue
+}
+
+const collectUnresolvedJsonVariableReferences = (
+  value: unknown,
+  unresolvedMarkers: ReadonlyMap<string, string>,
+  path: readonly (number | string)[] = [],
+  references: UnresolvedJsonVariableReference[] = []
+): UnresolvedJsonVariableReference[] => {
+  if (typeof value === 'string') {
+    for (const [marker, name] of unresolvedMarkers) {
+      if (value.includes(marker)) references.push({ name, path })
+    }
+    return references
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => {
+      collectUnresolvedJsonVariableReferences(item, unresolvedMarkers, [...path, index], references)
+    })
+    return references
+  }
+  if (value != null && typeof value === 'object') {
+    for (const [key, item] of Object.entries(value)) {
+      const normalizedKey = replaceUnresolvedMarkers(key, unresolvedMarkers)
+      const itemPath = [...path, normalizedKey]
+      for (const [marker, name] of unresolvedMarkers) {
+        if (key.includes(marker)) references.push({ name, path: itemPath })
+      }
+      collectUnresolvedJsonVariableReferences(item, unresolvedMarkers, itemPath, references)
+    }
+  }
+  return references
+}
+
+const toConfigSourceState = (
+  state: LoadedConfigFileState,
+  fields: Pick<ConfigSourceState, 'configPath'> & Partial<Pick<ConfigSourceState, 'extendPath'>>
+): ConfigSourceState => ({
+  rawConfig: state.rawConfig,
+  resolvedConfig: state.resolvedConfig,
+  unresolvedJsonVariableReferences: collectUnresolvedJsonVariableReferences(
+    state.provenanceConfig,
+    state.unresolvedMarkers
+  ),
+  extendPaths: state.extendPaths,
+  resolvedExtendPaths: state.resolvedExtendPaths,
+  resolvedExtendSources: state.resolvedExtendSources,
+  ...fields
+})
+
 const loadResolvedConfigFileState = async (
   configPath: string,
   jsonVariables: Record<string, string | null | undefined>,
   loadingStack: Set<string>
-): Promise<
-  Required<
-    Pick<
-      ConfigSourceState,
-      'rawConfig' | 'resolvedConfig' | 'extendPaths' | 'resolvedExtendPaths' | 'resolvedExtendSources'
-    >
-  >
-> => {
+): Promise<LoadedConfigFileState> => {
   if (loadingStack.has(configPath)) {
     throw new Error(`Circular config extend detected: ${
       [
@@ -427,12 +531,14 @@ const loadResolvedConfigFileState = async (
     }`)
   }
 
-  const rawConfig = await readConfigFile(
+  const { config, provenanceConfig, unresolvedMarkers: directUnresolvedMarkers } = await readConfigFile(
     configPath,
     jsonVariables
-  ) as Config & ConfigWithExtend
+  )
+  const rawConfig = config as Config & ConfigWithExtend
+  const rawProvenanceConfig = provenanceConfig as Config & ConfigWithExtend
 
-  if (!isRecord(rawConfig)) {
+  if (!isRecord(rawConfig) || !isRecord(rawProvenanceConfig)) {
     throw new Error(`Config file "${configPath}" must resolve to an object`)
   }
 
@@ -440,8 +546,10 @@ const loadResolvedConfigFileState = async (
   nextLoadingStack.add(configPath)
 
   let mergedExtendedConfig: Config | undefined
+  let mergedExtendedProvenanceConfig: Config | undefined
   const resolvedExtendPaths: string[] = []
   const resolvedExtendSources: ConfigSourceState[] = []
+  const unresolvedMarkers = new Map(directUnresolvedMarkers)
   const appendResolvedExtendSource = (source: ConfigSourceState) => {
     if (source.configPath != null && resolvedExtendSources.some(entry => entry.configPath === source.configPath)) {
       return
@@ -461,11 +569,17 @@ const loadResolvedConfigFileState = async (
       nextLoadingStack
     )
     mergedExtendedConfig = mergeConfigs(mergedExtendedConfig, extendedConfig.resolvedConfig)
-    appendResolvedExtendSource({
-      ...extendedConfig,
+    mergedExtendedProvenanceConfig = mergeConfigs(
+      mergedExtendedProvenanceConfig,
+      extendedConfig.provenanceConfig
+    )
+    for (const [marker, name] of extendedConfig.unresolvedMarkers) {
+      unresolvedMarkers.set(marker, name)
+    }
+    appendResolvedExtendSource(toConfigSourceState(extendedConfig, {
       configPath: extendedConfigPath,
       extendPath
-    })
+    }))
     for (const nestedExtendSource of extendedConfig.resolvedExtendSources) {
       appendResolvedExtendSource(nestedExtendSource)
     }
@@ -480,6 +594,7 @@ const loadResolvedConfigFileState = async (
   }
 
   const rawEntryConfig = omitExtendField(rawConfig)
+  const rawEntryProvenanceConfig = omitExtendField(rawProvenanceConfig)
 
   return {
     rawConfig: rawEntryConfig,
@@ -487,6 +602,11 @@ const loadResolvedConfigFileState = async (
       mergedExtendedConfig,
       rawEntryConfig
     ) ?? rawEntryConfig,
+    provenanceConfig: mergeConfigs(
+      mergedExtendedProvenanceConfig,
+      rawEntryProvenanceConfig
+    ) ?? rawEntryProvenanceConfig,
+    unresolvedMarkers,
     extendPaths: toExtendPaths(rawConfig.extend),
     resolvedExtendPaths,
     resolvedExtendSources
@@ -518,10 +638,9 @@ const loadConfigSourceFromPaths = async (
         jsonVariables,
         new Set()
       )
-      return {
-        ...sourceState,
+      return toConfigSourceState(sourceState, {
         configPath
-      }
+      })
     } catch (e) {
       console.error(`Failed to load config file ${path}: ${e}`)
     }

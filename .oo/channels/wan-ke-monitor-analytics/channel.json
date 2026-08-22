@@ -1,0 +1,26 @@
+{
+  "name": "万可监控 · q0q【数分】",
+  "description": "运维、研发、前端与数分的监控和应急群。",
+  "channel": "lark:wan-ke-analytics",
+  "entity": "wan-ke-analytics",
+  "external": {
+    "type": "chat",
+    "chatId": "oc_4f78c1fbad9da5205b7389000e33f30a"
+  },
+  "ingress": {
+    "ambientRouting": false,
+    "createOnCommand": false,
+    "createOnMention": true,
+    "mentionPatterns": [
+      "@q0q【数分】",
+      "@q0q"
+    ]
+  },
+  "authorization": {
+    "deliveryThrottleMs": 1200000,
+    "resume": {
+      "mode": "immediate",
+      "delayMs": 0
+    }
+  }
+}

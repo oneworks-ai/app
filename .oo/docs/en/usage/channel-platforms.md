@@ -12,7 +12,7 @@ The Lark / Feishu channel connects through a self-built app with the bot capabil
     "lark:team": {
       "type": "lark",
       "appId": "cli_xxx",
-      "appSecret": "replace-with-app-secret",
+      "appSecret": "${ONEWORKS_LARK_APP_SECRET}",
       "domain": "Feishu",
       "access": {
         "allowGroupChat": true,
@@ -23,6 +23,8 @@ The Lark / Feishu channel connects through a self-built app with the bot capabil
   }
 }
 ```
+
+Put `ONEWORKS_LARK_APP_SECRET=...` in the uncommitted `.env.dev` file. The project can version App IDs, chat allowlists, ChannelLinks, and entity definitions. The repository's `.env.dev.example` lists variable names only and contains no credentials. If a variable is missing, the channel stays disconnected and reports the missing variable instead of attempting a platform connection with the placeholder.
 
 Setup notes:
 
@@ -195,6 +197,4 @@ Notes:
 - Configure `appId` explicitly when possible. Without it, the server can use the last valid callback, but active reply after restart may fail.
 - When a callback URL can be built, startup registers it with WechatApi `/login/setCallback` by default. Set `autoRegisterCallback: false` to disable.
 - `autoReconnectOnStart: true` calls `/login/reconnection` before registering the callback.
-- If `access.admins` is missing or empty, startup logs an `/authorize-admin <token>` instruction. The maintainer must send it to the intended user through a trusted path.
-
-Package-level maintenance details live in `packages/channels/wechat/README.md`.
+- If `access.admins` is missing or empty, startup logs an `/authorize-admin <token>` instruction. The maintainer must send it to the intended user through a trusted path. Package-level maintenance details live in `packages/channels/wechat/README.md`.
