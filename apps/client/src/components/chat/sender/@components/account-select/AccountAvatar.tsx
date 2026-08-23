@@ -26,7 +26,7 @@ export function AccountAvatar({
   return (
     <span className={`account-avatar account-avatar--${size}`} aria-hidden='true'>
       <RoomAvatar
-        className='account-avatar__pixel'
+        className='account-avatar__fallback'
         seed={`adapter-account:${getAccountAvatarSeed(option)}`}
       />
       {avatarUrl != null && (

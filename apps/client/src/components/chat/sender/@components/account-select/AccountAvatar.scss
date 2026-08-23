@@ -28,7 +28,7 @@
   object-fit: cover;
 }
 
-.account-avatar__pixel.room-avatar {
+.account-avatar__fallback.room-avatar {
   --room-avatar-size: var(--account-avatar-size);
   --room-avatar-radius: 50%;
   --room-avatar-border: transparent;
