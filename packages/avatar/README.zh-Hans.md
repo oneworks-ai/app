@@ -15,15 +15,16 @@ pnpm add @oneworks/avatar
 ## React 用法
 
 ```tsx
-import { useMemo } from 'react'
 import { createSeededAvatarDataUri } from '@oneworks/avatar'
+import { useMemo } from 'react'
 
 export function AgentAvatar({ id, name }: { id: string; name: string }) {
-  const src = useMemo(() => createSeededAvatarDataUri({
-    seed: `agent:${id}`,
-    size: 128,
-    title: `${name} avatar`
-  }), [id, name])
+  const src = useMemo(() =>
+    createSeededAvatarDataUri({
+      seed: `agent:${id}`,
+      size: 128,
+      title: `${name} avatar`
+    }), [id, name])
 
   return <img src={src} width={64} height={64} alt={`${name} avatar`} />
 }
@@ -34,24 +35,28 @@ export function AgentAvatar({ id, name }: { id: string; name: string }) {
 SVG helper 不依赖 DOM：
 
 ```ts
-import { writeFile } from 'node:fs/promises'
 import {
   createAvatarSvg,
   getAvatarPalette,
   isSupportedAvatarEmoticon
 } from '@oneworks/avatar'
+import { writeFile } from 'node:fs/promises'
 
 const emoticon = '0w0'
 if (!isSupportedAvatarEmoticon(emoticon)) throw new Error('Unsupported avatar')
 
-await writeFile('avatar.svg', createAvatarSvg({
-  emoticon,
-  palette: getAvatarPalette('signal'),
-  backgroundStyle: 'gradient',
-  showShadow: true,
-  size: 256,
-  title: 'Codex avatar'
-}), 'utf8')
+await writeFile(
+  'avatar.svg',
+  createAvatarSvg({
+    emoticon,
+    palette: getAvatarPalette('signal'),
+    backgroundStyle: 'gradient',
+    showShadow: true,
+    size: 256,
+    title: 'Codex avatar'
+  }),
+  'utf8'
+)
 ```
 
 ## 导出入口

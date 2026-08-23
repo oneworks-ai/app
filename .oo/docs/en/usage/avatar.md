@@ -15,11 +15,11 @@ The editor supports Simplified Chinese and English. Its theme can follow the sys
 
 ### Export formats
 
-| Format | Use | Behavior |
-| --- | --- | --- |
-| SVG | Static vector asset | Preserves the current 3D scene projection, camera background, and frame clipping. |
-| PNG | Static raster asset | Supports transparent backgrounds for application avatars, social platforms, and design files. |
-| GIF | Animated asset | Exports the selected animation and is unavailable until an animation is selected. |
+| Format | Use                 | Behavior                                                                                      |
+| ------ | ------------------- | --------------------------------------------------------------------------------------------- |
+| SVG    | Static vector asset | Preserves the current 3D scene projection, camera background, and frame clipping.             |
+| PNG    | Static raster asset | Supports transparent backgrounds for application avatars, social platforms, and design files. |
+| GIF    | Animated asset      | Exports the selected animation and is unavailable until an animation is selected.             |
 
 Export sizes are 128, 256, and 512 pixels. The camera background can be a color or transparent, and the camera frame can be square, rounded, or circular. Pixels outside rounded and circular frames remain transparent.
 
