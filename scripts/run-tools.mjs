@@ -11,7 +11,6 @@ const SOURCE_CONDITION_ARG = '--conditions=__oneworks__'
 const SOURCE_CONDITION_REEXEC_ENV = '__ONEWORKS_RUN_TOOLS_SOURCE_CONDITION__'
 const machineJsonOutput = process.argv.includes('--json')
 const require = createRequire(import.meta.url)
-const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 
 if (!process.execArgv.includes(SOURCE_CONDITION_ARG)) {
   const result = spawnSync(
