@@ -10,4 +10,7 @@
 - Replaced the legacy 2D `@oneworks/avatar` package with the versioned 3D definition and animation runtime, including deterministic seeded definitions.
 - Added matching `1.0.0-rc.6` SDK surfaces for React, Vue, Vanilla JavaScript, and opt-in Web Components, including the complete editor and custom animation libraries.
 - Added configurable eye highlights and vector surface decals for blush, mouth marks, badges, and other pose-aware model details.
+- Added Bun as a built-in avatar with curved crown pleats, face decals, and a pose-aware Claude Spark mark on the back.
 - Avatar deployment now triggers when the app repository updates the Avatar submodule pointer.
+
+![Bun avatar editor](./avatar-bun.png)
