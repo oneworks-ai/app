@@ -24,6 +24,7 @@ This 21-second demo uses real desktop windows to open a workspace from the Launc
 ## Start Here
 
 - [Install and Prepare](./usage/install.md)
+- [Avatar Editor and Developer Integration](./usage/avatar.md)
 - [Data Asset Directories](./asset-directories.md)
 - [Start Services](./usage/runtime.md)
 - [Adapter CLI Installation and Versions](./usage/adapter-cli.md)
