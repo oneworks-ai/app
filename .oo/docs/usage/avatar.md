@@ -36,7 +36,7 @@ OneWorks Avatar 是浏览器端 3D 几何头像编辑器，也提供与在线编
 
 ### Definition 与自定义动画
 
-`AvatarDefinition` 使用 schema `oneworks.avatar`，当前 definition version 为 `1`。场景包含实体部件、面部、姿态、相机、光照、材质效果和可选动画库；它是渲染器和编辑器之间的可携带数据源。
+`AvatarDefinition` 使用 schema `oneworks.avatar`，当前 definition version 为 `1`。Definition 包含承载实体部件、面部、姿态、相机、光照和材质效果的 scene，并可另外携带可选动画库；它是渲染器和编辑器之间的可携带数据源。
 
 ```ts
 import {
@@ -230,13 +230,11 @@ editor.animationLibraries = [supportAnimations]
 
 ### 控制器、事件与捕获
 
-React ref、Vue expose、原生 mount 和 `<oneworks-avatar>` 都提供相同的主要控制语义：
+React ref、Vue expose 和原生 mount 提供 `play`、`pause`、`resume`、`seek`、`stop`、`getDefinition`、`setDefinition` 与 `capture({ format, size, background, frame })`。`<oneworks-avatar>` 提供相同的播放和 capture 方法，但通过 `definition` DOM property 读写 definition，而不是 `getDefinition()` / `setDefinition()`。
 
-- `play`、`pause`、`resume`、`seek`、`stop`；
-- `getDefinition`、`setDefinition`；
-- `capture({ format, size, background, frame })`，返回 SVG 或 PNG `Blob`；
-- `animationstart`、`animationloop`、`animationend`、`avatarerror`、`avatarchange` 等 DOM 事件；
-- 编辑器额外提供 `focus`，并通过 `avatarchange` 交付完整 definition。
+编辑器的 React ref、Vue expose 和原生 mount 提供 `focus`、`getDefinition` 与 `setDefinition`；`<oneworks-avatar-editor>` 则使用 `focus()` 和 `definition` property。
+
+事件按适配器使用各自的原生机制：React 使用 `onAnimationStart`、`onAnimationEnd`、`onDefinitionChange` 等 callback props；Vue 使用 `animation-start`、`animation-end`、`definition-change` 等 emits；原生 mount host 与 Custom Element 派发 `avatarready`、`animationstart`、`animationloop`、`animationend`、`avatarerror`、`avatarchange`，编辑器对应 `editoready` 与 `avatarchange` DOM CustomEvent。
 
 手动旋转或移动交互会停止当前动画。`autoplay` 只会在 animation/autoplay 输入变化时启动，不会在手势更新 definition 后擅自重启。
 

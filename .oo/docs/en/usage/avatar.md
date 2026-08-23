@@ -36,7 +36,7 @@ The existing `@oneworks/avatar` package is intentionally separate: it remains th
 
 ### Definitions and custom animations
 
-`AvatarDefinition` uses the `oneworks.avatar` schema and definition version `1`. A scene carries entity parts, face, pose, camera, lighting, material effects, and an optional animation library. It is the portable data source shared by the renderer and editor.
+`AvatarDefinition` uses the `oneworks.avatar` schema and definition version `1`. A definition contains a scene with entity parts, face, pose, camera, lighting, and material effects, and may additionally carry an optional animation library. It is the portable data source shared by the renderer and editor.
 
 ```ts
 import {
@@ -230,13 +230,11 @@ Pass complex objects through DOM properties. Attributes carry only simple values
 
 ### Controllers, events, and capture
 
-React refs, Vue exposed methods, Vanilla mounts, and `<oneworks-avatar>` share the same main control semantics:
+React refs, Vue exposed methods, and Vanilla mounts provide `play`, `pause`, `resume`, `seek`, `stop`, `getDefinition`, `setDefinition`, and `capture({ format, size, background, frame })`. `<oneworks-avatar>` provides the same playback and capture methods, but reads and writes the definition through its `definition` DOM property instead of `getDefinition()` / `setDefinition()`.
 
-- `play`, `pause`, `resume`, `seek`, and `stop`;
-- `getDefinition` and `setDefinition`;
-- `capture({ format, size, background, frame })`, returning an SVG or PNG `Blob`;
-- DOM events including `animationstart`, `animationloop`, `animationend`, `avatarerror`, and `avatarchange`;
-- the editor additionally exposes `focus` and delivers complete definitions through `avatarchange`.
+Editor refs, Vue exposed methods, and Vanilla mounts provide `focus`, `getDefinition`, and `setDefinition`; `<oneworks-avatar-editor>` instead uses `focus()` and its `definition` property.
+
+Events follow each adapter's native mechanism: React uses callback props such as `onAnimationStart`, `onAnimationEnd`, and `onDefinitionChange`; Vue emits `animation-start`, `animation-end`, and `definition-change`; Vanilla mount hosts and Custom Elements dispatch `avatarready`, `animationstart`, `animationloop`, `animationend`, `avatarerror`, and `avatarchange`, while editors dispatch the `editoready` and `avatarchange` DOM CustomEvents.
 
 A manual rotate or move interaction stops the active animation. `autoplay` starts only when the animation/autoplay input changes and does not silently restart after a gesture updates the definition.
 
