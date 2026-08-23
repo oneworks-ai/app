@@ -53,7 +53,7 @@ describe('pr validation scope', () => {
   it('does not turn shared-package documentation into a client production build', () => {
     expect(classifyChangedPaths([
       'packages/adapters/codex/AGENTS.md',
-      'packages/avatar/README.md'
+      'packages/icon/README.md'
     ])).toMatchObject({
       clientBuild: false,
       desktopPackage: false,
@@ -191,10 +191,13 @@ describe('pr validation scope', () => {
       typecheck: false
     })
     expect(classifyChangedPaths(['assets/avatar'])).toMatchObject({
-      desktopPackage: false,
+      clientBuild: true,
+      desktopPackage: true,
       docsMedia: false,
+      lint: true,
       publicDocs: false,
-      typecheck: false
+      typecheck: true,
+      typecheckScopes: fullTypecheckScopes
     })
   })
 

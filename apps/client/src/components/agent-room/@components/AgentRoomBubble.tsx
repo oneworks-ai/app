@@ -192,7 +192,7 @@ const renderSystemMessageContent = (message: AgentRoomMessageView, t: TFunction)
             <AgentRoomAvatarContent
               imageClassName='agent-room-bubble__joined-avatar-image'
               member={member}
-              pixelClassName='agent-room-bubble__joined-avatar-pixel'
+              generatedClassName='agent-room-bubble__joined-avatar-generated'
             />
           </span>
         ))}
@@ -417,7 +417,7 @@ export function AgentRoomBubble({
                 type='button'
                 className={[
                   'agent-room-bubble__avatar',
-                  avatarMember.avatar == null && avatarLabel == null ? 'agent-room-bubble__avatar--pixel' : '',
+                  avatarMember.avatar == null && avatarLabel == null ? 'agent-room-bubble__avatar--generated' : '',
                   'agent-room-bubble__avatar-button'
                 ].filter(Boolean).join(' ')}
                 aria-expanded={senderPopover.isPinned}
@@ -430,7 +430,7 @@ export function AgentRoomBubble({
                 <AgentRoomAvatarContent
                   imageClassName='agent-room-bubble__avatar-image'
                   member={avatarMember}
-                  pixelClassName='agent-room-bubble__avatar-pixel'
+                  generatedClassName='agent-room-bubble__avatar-generated'
                 />
               </button>
               <PinnedPopoverPortal
@@ -448,7 +448,7 @@ export function AgentRoomBubble({
                     <AgentRoomAvatarContent
                       imageClassName='agent-room-bubble__avatar-image'
                       member={avatarMember}
-                      pixelClassName='agent-room-bubble__avatar-pixel'
+                      generatedClassName='agent-room-bubble__avatar-generated'
                     />
                   </span>
                   <span className='agent-room-bubble__sender-popover-copy'>
@@ -482,14 +482,14 @@ export function AgentRoomBubble({
             <div
               className={[
                 'agent-room-bubble__avatar',
-                avatarMember.avatar == null && avatarLabel == null ? 'agent-room-bubble__avatar--pixel' : ''
+                avatarMember.avatar == null && avatarLabel == null ? 'agent-room-bubble__avatar--generated' : ''
               ].filter(Boolean).join(' ')}
               aria-hidden='true'
             >
               <AgentRoomAvatarContent
                 imageClassName='agent-room-bubble__avatar-image'
                 member={avatarMember}
-                pixelClassName='agent-room-bubble__avatar-pixel'
+                generatedClassName='agent-room-bubble__avatar-generated'
               />
             </div>
           )

@@ -171,7 +171,7 @@ describe('chat header session title', () => {
     expect(html).toContain('chat_bubble')
     expect(html).toContain('chat-header-room-icon')
     expect(html).toContain('chat-header-room-icon--completed')
-    expect(html).toContain('room-pixel-avatar')
+    expect(html).toContain('room-avatar')
   })
 
   it('renders the room title icon without requiring an explicit icon seed', async () => {
@@ -185,7 +185,7 @@ describe('chat header session title', () => {
     })
 
     expect(html).toContain('chat-header-room-icon')
-    expect(html).toContain('room-pixel-avatar')
+    expect(html).toContain('room-avatar')
     expect(html).toContain('Agent Room')
   })
 

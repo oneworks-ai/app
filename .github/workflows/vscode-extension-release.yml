@@ -37,6 +37,8 @@ jobs:
         with:
           fetch-depth: 0
           ref: refs/tags/${{ inputs.release_tag }}
+      - name: Checkout Avatar SDK submodule
+        run: git submodule update --init --depth 1 -- assets/avatar
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -126,6 +128,9 @@ jobs:
         with:
           fetch-depth: 0
           ref: refs/tags/${{ needs.build.outputs.release_tag }}
+
+      - name: Checkout Avatar SDK submodule
+        run: git submodule update --init --depth 1 -- assets/avatar
 
       - name: Validate immutable release source
         env:

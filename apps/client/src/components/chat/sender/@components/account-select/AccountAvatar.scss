@@ -28,10 +28,10 @@
   object-fit: cover;
 }
 
-.account-avatar__pixel.room-pixel-avatar {
-  --room-pixel-avatar-size: var(--account-avatar-size);
-  --room-pixel-avatar-radius: 50%;
-  --room-pixel-avatar-border: transparent;
+.account-avatar__fallback.room-avatar {
+  --room-avatar-size: var(--account-avatar-size);
+  --room-avatar-radius: 50%;
+  --room-avatar-border: transparent;
 
   width: var(--account-avatar-size);
   height: var(--account-avatar-size);

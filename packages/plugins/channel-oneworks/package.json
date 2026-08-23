@@ -35,7 +35,6 @@
     "typecheck": "tsc -p server/tsconfig.json --noEmit && tsc -p client/tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@oneworks/avatar": "workspace:*",
     "@oneworks/types": "workspace:*"
   },
   "devDependencies": {

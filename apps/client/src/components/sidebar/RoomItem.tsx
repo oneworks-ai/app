@@ -4,7 +4,7 @@ import { List, Tooltip } from 'antd'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { RoomPixelAvatar } from '#~/components/room-pixel-avatar/RoomPixelAvatar'
+import { RoomAvatar } from '#~/components/room-avatar/RoomAvatar'
 
 import { RoomContextMenu, isRoomFavorited } from './RoomContextMenu'
 import { RoomItemActions } from './RoomItemActions'
@@ -70,7 +70,7 @@ export function RoomItem({
     >
       <div className='room-item__content'>
         <div className={`room-item__leading room-item__leading--${room.status}`}>
-          <RoomPixelAvatar className='room-item__avatar' seed={room.id} />
+          <RoomAvatar className='room-item__avatar' seed={room.id} />
         </div>
         <div className='room-item__info'>
           <div className='room-item__header'>

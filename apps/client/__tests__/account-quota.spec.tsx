@@ -398,7 +398,7 @@ describe('account quota indicators', () => {
     expect(getAdapterResetCreditOutcomeTone(getAdapterResetCreditOutcome('noCredit'))).toBe('warning')
   })
 
-  it('keeps a deterministic pixel fallback behind a remote account avatar', () => {
+  it('keeps a deterministic 3D fallback behind a remote account avatar', () => {
     const html = renderToStaticMarkup(
       <AccountAvatar
         option={{
@@ -410,7 +410,7 @@ describe('account quota indicators', () => {
       />
     )
 
-    expect(html).toContain('account-avatar__pixel')
+    expect(html).toContain('account-avatar__fallback')
     expect(html).toContain('account-avatar__image')
     expect(html).toContain('referrerPolicy="no-referrer"')
   })

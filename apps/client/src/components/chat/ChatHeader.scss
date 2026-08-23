@@ -55,14 +55,14 @@
   color: var(--sub-text-color);
 }
 
-.chat-header-room-icon.room-pixel-avatar {
-  --room-pixel-avatar-bg: color-mix(
+.chat-header-room-icon.room-avatar {
+  --room-avatar-bg: color-mix(
     in srgb,
     var(--sidebar-active-text) 12%,
     var(--sidebar-active-bg)
   );
-  --room-pixel-avatar-border: var(--sidebar-active-text);
-  --room-pixel-avatar-radius: 6px;
+  --room-avatar-border: var(--sidebar-active-text);
+  --room-avatar-radius: 6px;
 
   width: var(
     --route-container-header-icon-size,
@@ -75,24 +75,24 @@
   padding: 2px;
 }
 
-.chat-header-room-icon--completed.room-pixel-avatar {
-  --room-pixel-avatar-bg: color-mix(
+.chat-header-room-icon--completed.room-avatar {
+  --room-avatar-bg: color-mix(
     in srgb,
     var(--success-color) 18%,
     var(--tag-bg)
   );
 }
 
-.chat-header-room-icon--failed.room-pixel-avatar {
-  --room-pixel-avatar-bg: color-mix(
+.chat-header-room-icon--failed.room-avatar {
+  --room-avatar-bg: color-mix(
     in srgb,
     var(--danger-color) 18%,
     var(--tag-bg)
   );
 }
 
-.chat-header-room-icon--idle.room-pixel-avatar {
-  --room-pixel-avatar-bg: color-mix(
+.chat-header-room-icon--idle.room-avatar {
+  --room-avatar-bg: color-mix(
     in srgb,
     var(--sub-text-color) 14%,
     var(--tag-bg)

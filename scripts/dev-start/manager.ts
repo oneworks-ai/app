@@ -8,7 +8,7 @@ import { withDevServiceOperation } from './coordination'
 import { getDocsUrl } from './docs-process'
 import { buildRuntimeEnv } from './env'
 import { resolveElectronLaunchIdentity, startAndroidEmulator, startElectron } from './external-targets'
-import { ensureGitUpdated, ensureWorkspaceInstall } from './git-workspace'
+import { ensureGitUpdated, ensureRequiredWorkspaceSubmodules, ensureWorkspaceInstall } from './git-workspace'
 import { resolvePorts } from './network'
 import { log, logDir, repoRoot } from './paths'
 import { withDevStartPortLock, withDevStartPreparationLock } from './port-lock'
@@ -134,6 +134,7 @@ export const runMain = async (
 
   await withDevStartPreparationLock(async () => {
     ensureGitUpdated()
+    ensureRequiredWorkspaceSubmodules()
     ensureWorkspaceInstall()
   })
   if (target !== 'docs') {

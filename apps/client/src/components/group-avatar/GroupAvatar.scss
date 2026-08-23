@@ -24,7 +24,8 @@
   padding: 0;
 }
 
-.group-avatar__cell > img {
+.group-avatar__cell > img,
+.group-avatar__cell > .oneworks-avatar {
   display: block;
   width: 100%;
   height: 100%;

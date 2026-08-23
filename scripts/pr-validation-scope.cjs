@@ -6,7 +6,7 @@ const { execFileSync } = require('node:child_process')
 const { appendFileSync } = require('node:fs')
 const process = require('node:process')
 
-const prValidationScopeVersion = 2
+const prValidationScopeVersion = 3
 
 const markdownPathPattern = /\.md$/iu
 const documentationMediaPathPattern = /\.(?:avif|gif|jpe?g|mp4|png|svg|webm|webp)$/iu
@@ -65,7 +65,7 @@ const knownRootPaths = new Set([
 ])
 const dependencyGraphPathPattern = /(?:^|\/)package\.json$/u
 const typecheckConfigPathPattern = /(?:^|\/)tsconfig(?:\.[^/]+)?\.json$/u
-const sourceCoupledGitlinkPaths = new Set(['assets/demo-video'])
+const sourceCoupledGitlinkPaths = new Set(['assets/avatar', 'assets/demo-video'])
 const lintablePathPattern = /\.(?:astro|cjs|cts|js|json|json5|jsx|mjs|mts|svelte|ts|tsx|vue|ya?ml)$/iu
 const typecheckPathPattern = /\.(?:cts|mts|ts|tsx)$/iu
 const environmentContractPathPattern = /\.(?:cjs|cts|js|jsx|mjs|mts|ts|tsx)$/iu
@@ -144,6 +144,7 @@ const isClientTypecheckPath = (filePath) =>
   filePath.startsWith('apps/client/src/') || filePath.startsWith('apps/client/__tests__/')
 
 const isClientProductionPath = (filePath) =>
+  filePath === 'assets/avatar' ||
   filePath.startsWith('apps/client/src/') ||
   filePath.startsWith('apps/client/public/') ||
   filePath === 'apps/client/index.html' ||

@@ -4,6 +4,10 @@ description: Setup Node.js and pnpm, restoring an exact platform-specific worksp
 runs:
   using: composite
   steps:
+    - name: Checkout Avatar SDK submodule
+      shell: bash
+      run: git submodule update --init --depth 1 -- assets/avatar
+
     - name: Restore workspace dependencies
       id: workspace-cache
       uses: actions/cache@v4
@@ -11,6 +15,7 @@ runs:
         path: |
           node_modules
           assets/avatar/node_modules
+          assets/avatar/packages/*/node_modules
           apps/*/node_modules
           packages/*/node_modules
           packages/adapters/*/node_modules
@@ -20,7 +25,8 @@ runs:
           workspace-v1-pnpm-11.7.0-${{ runner.os }}-${{ runner.arch }}-${{
           hashFiles('.github/actions/setup-workspace/action.yml', '.node-version', '.npmrc',
           'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'patches/**/*.patch',
-          'assets/avatar/package.json', 'apps/*/package.json',
+          'assets/avatar/package.json', 'assets/avatar/packages/*/package.json',
+          'apps/*/package.json',
           'packages/*/package.json', 'packages/adapters/*/package.json',
           'packages/channels/*/package.json', 'packages/plugins/*/package.json') }}
 

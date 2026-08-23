@@ -23,16 +23,20 @@ Export sizes are 128, 256, and 512 pixels. The camera background can be a color 
 
 ## Developer integration
 
-The new 3D Runtime is currently versioned `0.1.0-alpha.0`. Its source and clean packed-consumer verification are public in [`oneworks-ai/avatar`](https://github.com/oneworks-ai/avatar). The four new packages have not completed their first npm registry publication, so do not run same-name install commands yet. The imports below are implemented and verified public alpha contracts, not an unimplemented proposal.
+The 3D Runtime and framework adapters share version `1.0.0-rc.6`. `@oneworks/avatar` is now the framework-neutral 3D core package; the old 2D pixel renderer is no longer retained.
+
+```bash
+pnpm add @oneworks/avatar@rc
+# Add one or more adapters for your application.
+pnpm add @oneworks/avatar-react@rc @oneworks/avatar-vue@rc @oneworks/avatar-web@rc
+```
 
 | Package                  | Purpose                                                                  |
 | ------------------------ | ------------------------------------------------------------------------ |
-| `@oneworks/avatar-core`  | Versioned definitions, validation, serialization, and animation runtime. |
+| `@oneworks/avatar`       | Versioned definitions, validation, serialization, and animation runtime. |
 | `@oneworks/avatar-react` | React `Avatar` renderer and full `AvatarEditor`.                         |
 | `@oneworks/avatar-vue`   | Vue `OneWorksAvatar` and `OneWorksAvatarEditor`.                         |
 | `@oneworks/avatar-web`   | Vanilla JavaScript mounts and explicitly registered Web Components.      |
-
-The existing `@oneworks/avatar` package is intentionally separate: it remains the legacy 2D pixel-emoticon SVG renderer and does not consume 3D definitions.
 
 Continue with the guide for your integration target:
 
@@ -69,9 +73,9 @@ The Skill uses the real editor and its 3D scene model instead of redrawing resul
 
 ## Source, local development, and deployment
 
-The legacy pixel renderer lives in [`oneworks-ai/app`](https://github.com/oneworks-ai/app) under `packages/avatar`. The 3D editor, Runtime, framework adapters, and export pipeline live in [`oneworks-ai/avatar`](https://github.com/oneworks-ai/avatar).
+The 3D editor, `@oneworks/avatar` Runtime, framework adapters, and export pipeline all live in [`oneworks-ai/avatar`](https://github.com/oneworks-ai/avatar).
 
-The Avatar repository is mounted into the app repository as the `assets/avatar` submodule. It builds independently from the app root workspace while using an `app-source` checkout or symlink for shared package source.
+The Avatar repository is mounted into the app repository as the `assets/avatar` submodule, and its four public packages are also members of the app root workspace. The Avatar repository can still be checked out independently and use an `app-source` checkout or symlink for shared package source.
 
 ```bash
 pnpm install --no-frozen-lockfile
@@ -82,4 +86,4 @@ ONEWORKS_APP_SOURCE_DIR=app-source pnpm typecheck:sdk
 ONEWORKS_APP_SOURCE_DIR=app-source pnpm smoke:sdk
 ```
 
-The Avatar page is published by the Avatar repository's `deploy-avatar.yml` workflow. The app repository triggers it when `assets/avatar`, `assets/avatar/**`, `packages/avatar/**`, or `.github/workflows/deploy-avatar.yml` changes. The main docs workflow publishes this page from `.oo/docs`.
+The Avatar page is published by the Avatar repository's `deploy-avatar.yml` workflow. The app repository triggers it when `assets/avatar`, `assets/avatar/**`, or `.github/workflows/deploy-avatar.yml` changes. The main docs workflow publishes this page from `.oo/docs`.

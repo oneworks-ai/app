@@ -5,7 +5,7 @@ import { useMemo } from 'react'
 import type { AdapterAccountInfo } from '@oneworks/types'
 
 import { QuotaUsageRing } from '#~/components/account-quota/QuotaUsageRing'
-import { RoomPixelAvatar } from '#~/components/room-pixel-avatar/RoomPixelAvatar'
+import { RoomAvatar } from '#~/components/room-avatar/RoomAvatar'
 import { getAccountQuotaWindows } from '#~/utils/account-quota'
 
 import { useAdapterAccountPreviewData } from './@hooks/use-adapter-account-preview-data'
@@ -162,7 +162,7 @@ function AccountPreviewRow({
       onClick={onOpen}
     >
       <span className='adapter-account-preview__avatar' aria-hidden='true'>
-        <RoomPixelAvatar
+        <RoomAvatar
           className='adapter-account-preview__avatar-fallback'
           seed={`adapter-account:${getAccountAvatarSeed(account, identity.name)}`}
         />

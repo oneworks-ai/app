@@ -1,6 +1,6 @@
 import './AccountAvatar.scss'
 
-import { RoomPixelAvatar } from '#~/components/room-pixel-avatar/RoomPixelAvatar'
+import { RoomAvatar } from '#~/components/room-avatar/RoomAvatar'
 import type { ChatAdapterAccountOption } from '#~/hooks/chat/use-chat-adapter-account-selection'
 
 const normalizeOptionalText = (value: string | undefined) => {
@@ -25,8 +25,8 @@ export function AccountAvatar({
 
   return (
     <span className={`account-avatar account-avatar--${size}`} aria-hidden='true'>
-      <RoomPixelAvatar
-        className='account-avatar__pixel'
+      <RoomAvatar
+        className='account-avatar__fallback'
         seed={`adapter-account:${getAccountAvatarSeed(option)}`}
       />
       {avatarUrl != null && (

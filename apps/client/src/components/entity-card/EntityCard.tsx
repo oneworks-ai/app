@@ -5,7 +5,7 @@ import type { KeyboardEvent } from 'react'
 import { getWorkspaceResourceUrl } from '#~/api'
 import { GroupAvatar } from '#~/components/group-avatar/GroupAvatar'
 import type { GroupAvatarMember } from '#~/components/group-avatar/GroupAvatar'
-import { RoomPixelAvatar } from '#~/components/room-pixel-avatar/RoomPixelAvatar'
+import { RoomAvatar } from '#~/components/room-avatar/RoomAvatar'
 
 const resolveAvatarUrl = (avatar: string | undefined) => {
   const value = avatar?.trim()
@@ -71,7 +71,7 @@ export function EntityCard({
       />
       <span className='entity-card__avatar' aria-hidden='true'>
         {avatarUrl == null
-          ? <RoomPixelAvatar className='entity-card__avatar-pixel' seed={`entity:${entityId}`} />
+          ? <RoomAvatar className='entity-card__avatar-generated' seed={`entity:${entityId}`} />
           : <img alt='' className='entity-card__avatar-image' src={avatarUrl} />}
       </span>
       <span className='entity-card__copy'>

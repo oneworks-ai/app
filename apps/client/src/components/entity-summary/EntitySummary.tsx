@@ -1,7 +1,7 @@
 import './EntitySummary.scss'
 
 import { getWorkspaceResourceUrl } from '#~/api'
-import { RoomPixelAvatar } from '#~/components/room-pixel-avatar/RoomPixelAvatar'
+import { RoomAvatar } from '#~/components/room-avatar/RoomAvatar'
 
 const resolveAvatarUrl = (avatar: string | undefined) => {
   const value = avatar?.trim()
@@ -45,7 +45,7 @@ export function EntitySummary({
     <>
       <span className='entity-summary__avatar' aria-hidden='true'>
         {avatarUrl == null
-          ? <RoomPixelAvatar className='entity-summary__avatar-pixel' seed={`entity:${entityId}`} />
+          ? <RoomAvatar className='entity-summary__avatar-generated' seed={`entity:${entityId}`} />
           : <img alt='' className='entity-summary__avatar-image' src={avatarUrl} />}
       </span>
       <span className='entity-summary__copy'>

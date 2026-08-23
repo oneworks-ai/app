@@ -70,6 +70,9 @@ jobs:
       - name: Checkout repository
         if: steps.credentials.outputs.available == 'true'
         uses: actions/checkout@v4
+      - name: Checkout Avatar SDK submodule
+        if: steps.credentials.outputs.available == 'true'
+        run: git submodule update --init --depth 1 -- assets/avatar
       - name: Setup pnpm
         if: steps.credentials.outputs.available == 'true'
         uses: pnpm/action-setup@v4

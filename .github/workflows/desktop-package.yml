@@ -632,7 +632,9 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ steps.desktop_workspace.outputs.workspace_dir }}
-        run: pnpm install --frozen-lockfile
+        run: |
+          git submodule update --init --depth 1 -- assets/avatar
+          pnpm install --frozen-lockfile
 
       - name: Run desktop package preflight
         working-directory: ${{ steps.desktop_workspace.outputs.workspace_dir }}

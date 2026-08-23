@@ -2,8 +2,8 @@
 
 `assets/` hosts standalone design asset projects that are useful to develop and preview independently from the main apps.
 
-- `avatar/`: preview/export page for the shared pixel-rect SVG avatar system in `packages/avatar`.
+- `avatar/`: editor, public 3D runtime packages, framework adapters, and export surface for OneWorks Avatar.
 
-Asset projects that also publish standalone sites should live in their own repository and be mounted here as submodules. Keep reusable runtime APIs in `packages/*`; asset repositories should own preview/export UX and GitHub Pages deployment only.
+Asset projects that also publish standalone sites should live in their own repository and be mounted here as submodules. Keep reusable runtime APIs in the owning repository's `packages/*`; asset repositories normally own preview/export UX and GitHub Pages deployment only, unless their public package ownership is explicitly approved and protected like `assets/avatar`.
 
-Do not add submodule asset sites such as `assets/avatar` to the root `pnpm-workspace.yaml`. They may have their own app dependencies and lockfile; including them in the root workspace makes unrelated Vercel / CI installs fail when the submodule package changes.
+`assets/avatar` and its public `packages/*` are intentional root workspace members because the main client consumes the same 3D runtime. Do not add other submodule asset sites to the root workspace without equivalent install, build, and clean-consumer coverage.

@@ -645,7 +645,7 @@ describe('agent room transcript rendering', () => {
     ])
   })
 
-  it('uses pixel avatars for room participants without configured avatar labels', async () => {
+  it('uses 3D avatars for room participants without configured avatar labels', async () => {
     const html = await renderRoom({
       room: {
         ...fixtureRoom,
@@ -656,16 +656,16 @@ describe('agent room transcript rendering', () => {
     const reviewerMessage = getMessageMarkup(html, 'msg-reviewer-failed')
 
     expectContains(assignmentMessage, [
-      'agent-room-bubble__avatar--pixel',
-      'class="room-pixel-avatar agent-room-bubble__avatar-pixel"',
-      'class="room-pixel-avatar__image"',
-      'src="data:image/svg+xml'
+      'agent-room-bubble__avatar--generated',
+      'class="room-avatar agent-room-bubble__avatar-generated"',
+      'room-avatar__model',
+      'interactive-avatar__canvas'
     ])
     expectContains(reviewerMessage, [
-      'agent-room-bubble__avatar--pixel',
-      'class="room-pixel-avatar agent-room-bubble__avatar-pixel"',
-      'class="room-pixel-avatar__image"',
-      'src="data:image/svg+xml'
+      'agent-room-bubble__avatar--generated',
+      'class="room-avatar agent-room-bubble__avatar-generated"',
+      'room-avatar__model',
+      'interactive-avatar__canvas'
     ])
   })
 
@@ -1980,7 +1980,7 @@ describe('agent room transcript rendering', () => {
       '.agent-room-bubble__content--targeted {',
       'flex-direction: column;',
       '.agent-room-bubble__content-text--markdown {',
-      '--room-pixel-avatar-radius: 6px;',
+      '--room-avatar-radius: 6px;',
       '.agent-room-bubble__expand {',
       'align-self: flex-start;',
       'justify-content: center;',

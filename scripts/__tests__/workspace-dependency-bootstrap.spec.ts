@@ -49,7 +49,8 @@ describe('workspace dependency bootstrap', () => {
       const name of [
         'fallback-bootstrap-lock.mjs',
         'run-workspace-check.mjs',
-        'workspace-dependency-bootstrap.mjs'
+        'workspace-dependency-bootstrap.mjs',
+        'workspace-submodule-bootstrap.mjs'
       ]
     ) {
       copyFileSync(join(process.cwd(), 'scripts', name), join(scriptsDir, name))

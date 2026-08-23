@@ -84,8 +84,8 @@
   height: 56px;
 }
 
-.entity-summary--detail .entity-summary__avatar-pixel.room-pixel-avatar {
-  --room-pixel-avatar-size: 56px;
+.entity-summary--detail .entity-summary__avatar-generated.room-avatar {
+  --room-avatar-size: 56px;
 }
 
 .entity-summary--detail .entity-summary__copy > strong {
@@ -109,9 +109,9 @@
   object-fit: cover;
 }
 
-.entity-summary__avatar-pixel.room-pixel-avatar {
-  --room-pixel-avatar-size: 44px;
-  --room-pixel-avatar-radius: 6px;
+.entity-summary__avatar-generated.room-avatar {
+  --room-avatar-size: 44px;
+  --room-avatar-radius: 6px;
 }
 
 .entity-summary__copy,

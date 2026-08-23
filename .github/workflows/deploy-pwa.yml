@@ -5,9 +5,10 @@ on:
     branches:
       - main
     paths:
+      - assets/avatar
+      - assets/avatar/**
       - apps/client/**
       - packages/adapters/**
-      - packages/avatar/**
       - packages/channels/lark/**
       - packages/cli-helper/**
       - packages/components/**

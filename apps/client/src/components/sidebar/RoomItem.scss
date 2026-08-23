@@ -8,10 +8,10 @@
   );
   --room-item-avatar-radius: 2px;
   --room-item-card-border: var(--border-color);
-  --room-pixel-avatar-border: var(--room-item-card-border);
-  --room-pixel-avatar-overlay: color-mix(
+  --room-avatar-border: var(--room-item-card-border);
+  --room-avatar-overlay: color-mix(
     in srgb,
-    var(--room-pixel-avatar-accent) 10%,
+    var(--room-avatar-accent) 10%,
     transparent
   );
 
@@ -72,8 +72,8 @@
     background: transparent;
 
     &--completed {
-      .room-pixel-avatar {
-        --room-pixel-avatar-bg: color-mix(
+      .room-avatar {
+        --room-avatar-bg: color-mix(
           in srgb,
           var(--success-color) 18%,
           var(--tag-bg)
@@ -82,8 +82,8 @@
     }
 
     &--failed {
-      .room-pixel-avatar {
-        --room-pixel-avatar-bg: color-mix(
+      .room-avatar {
+        --room-avatar-bg: color-mix(
           in srgb,
           var(--danger-color) 18%,
           var(--tag-bg)
@@ -92,8 +92,8 @@
     }
 
     &--idle {
-      .room-pixel-avatar {
-        --room-pixel-avatar-bg: color-mix(
+      .room-avatar {
+        --room-avatar-bg: color-mix(
           in srgb,
           var(--sub-text-color) 14%,
           var(--tag-bg)
@@ -103,12 +103,12 @@
   }
 
   &__avatar {
-    --room-pixel-avatar-size: var(--room-item-avatar-size);
+    --room-avatar-size: var(--room-item-avatar-size);
 
-    &.room-pixel-avatar {
-      // The element has both room-pixel-avatar and room-item__avatar classes.
-      // Keep this selector stronger than RoomPixelAvatar's own default radius.
-      --room-pixel-avatar-radius: var(--room-item-avatar-radius);
+    &.room-avatar {
+      // The element has both room-avatar and room-item__avatar classes.
+      // Keep this selector stronger than RoomAvatar's own default radius.
+      --room-avatar-radius: var(--room-item-avatar-radius);
 
       border-radius: var(--room-item-avatar-radius);
     }
