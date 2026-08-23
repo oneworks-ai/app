@@ -130,6 +130,7 @@ export function ModelServiceConfiguredCard({
       descriptions={[getModelServiceProviderDescription(service, t)]}
       rightSlot={
         <ModelServiceProviderQuotaPreview
+          variant='cardFooter'
           item={entry.item}
           serviceKey={entry.key}
           source={source}
@@ -143,10 +144,12 @@ export function ModelServiceConfiguredCard({
 }
 
 export function ModelServiceAvailableCard({
+  configuredCount,
   onConfigure,
   provider,
   t
 }: {
+  configuredCount: number
   onConfigure: () => void
   provider: ModelProviderDefinition
   t: TranslationFn
@@ -155,6 +158,7 @@ export function ModelServiceAvailableCard({
   const description = t(`config.options.modelProviderDescriptions.${provider.id}`, {
     defaultValue: provider.description ?? ''
   })
+  const hasConfiguredService = configuredCount > 0
   return (
     <ConfigRecordRow
       className='model-service-collection__card model-service-collection__card--available'
@@ -163,20 +167,15 @@ export function ModelServiceAvailableCard({
         <span className='model-service-collection__card-title'>
           <span>{provider.title}</span>
           <span className='config-view__detail-badge model-service-collection__available-badge'>
-            {t('config.modelServices.collection.states.available')}
+            {hasConfiguredService
+              ? t('config.modelServices.collection.states.configuredCount', { count: configuredCount })
+              : t('config.modelServices.collection.states.available')}
           </span>
         </span>
       }
       subtitle={t(`config.modelServices.collection.types.${getModelServiceTypeKey(service, provider)}`)}
       descriptions={[description]}
-      actions={[{
-        ariaLabel: t('config.modelServices.collection.actions.configure', { provider: provider.title }),
-        icon: <MaterialSymbol name='add' />,
-        key: 'configure',
-        onClick: onConfigure,
-        title: t('config.modelServices.collection.actions.configure', { provider: provider.title }),
-        type: 'primary'
-      }]}
+      onClick={onConfigure}
     />
   )
 }

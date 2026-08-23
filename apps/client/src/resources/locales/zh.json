@@ -3885,6 +3885,10 @@
         "advanced": "高级配置"
       }
     },
+    "conversationTemplates": {
+      "searchPlaceholder": "搜索预设或动作",
+      "noMatches": "没有匹配的条目"
+    },
     "editor": {
       "addField": "添加字段",
       "addItem": "添加项",
@@ -3906,6 +3910,9 @@
       "newModelSelectorName": "新增模型元数据",
       "moveUp": "上移",
       "moveDown": "下移",
+      "moveLeft": "左移",
+      "moveRight": "右移",
+      "reorder": "拖拽排序",
       "shortcutPlaceholder": "按下快捷键",
       "clearShortcut": "清除快捷键",
       "newModelServiceName": "新增模型服务名称",
@@ -4092,7 +4099,8 @@
         },
         "actions": {
           "addCustom": "新增自定义服务",
-          "configure": "配置 {{provider}}"
+          "configure": "配置 {{provider}}",
+          "addAnother": "新增 {{provider}} 配置"
         },
         "groups": {
           "configured": "已配置服务",
@@ -4100,6 +4108,7 @@
         },
         "states": {
           "configured": "已配置",
+          "configuredCount": "已配置 {{count}} 项",
           "available": "未配置",
           "inherited": "已继承",
           "override": "已覆盖"

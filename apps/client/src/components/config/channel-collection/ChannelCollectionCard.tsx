@@ -1,5 +1,7 @@
 import type { ConfigUiRecordKind } from '@oneworks/types'
 
+import { ChannelPlatformIcon } from '#~/components/channel-platform-icon/ChannelPlatformIcon'
+
 import { ConfigRecordRow } from '../ConfigRecordList'
 import { DetailCollectionFieldActions } from '../DetailCollectionFieldActions'
 import type { ConfigDetailRoute, DetailCollectionEntry } from '../configDetail'
@@ -44,6 +46,7 @@ export const ChannelCollectionCard = ({
   return (
     <ConfigRecordRow
       className='channel-collection__card'
+      icon={<ChannelPlatformIcon channelType={type || kind?.key || 'unknown'} className='channel-collection__icon' />}
       title={title}
       subtitle={subtitle}
       descriptions={[getChannelDescription(item, kind)]}
@@ -98,6 +101,7 @@ export const UnconfiguredChannelCard = ({
 }) => (
   <ConfigRecordRow
     className='channel-collection__card channel-collection__card--unconfigured'
+    icon={<ChannelPlatformIcon channelType={kind.key} className='channel-collection__icon' />}
     title={kind.label ?? kind.key}
     subtitle={kind.key}
     descriptions={[kind.description]}

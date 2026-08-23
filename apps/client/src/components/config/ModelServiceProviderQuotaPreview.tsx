@@ -2,12 +2,7 @@ import { Tooltip } from 'antd'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { ConfigSource, ProviderAccountStatus } from '@oneworks/types'
-import {
-  getModelProviderDefinition,
-  resolveModelProviderIdentity,
-  resolveModelServiceBilling,
-  resolveModelServiceCodingPlan
-} from '@oneworks/utils/model-providers'
+import { getModelProviderDefinition, resolveModelProviderIdentity } from '@oneworks/utils/model-providers'
 
 import { getModelServiceBalance } from '#~/api'
 
@@ -23,7 +18,6 @@ import {
   toModelServiceConfig
 } from './modelServiceProviderActionUtils'
 
-const planBillingKinds = new Set(['coding_plan', 'token_plan', 'relay_coding_plan'])
 const previewCircleRadius = 7
 const previewCircleCircumference = 2 * Math.PI * previewCircleRadius
 const previewCircleMaxVisiblePercent = 90
@@ -39,23 +33,22 @@ export const ModelServiceProviderQuotaPreview = ({
   item,
   serviceKey,
   source,
-  t
+  t,
+  variant = 'compact'
 }: {
   item: unknown
   serviceKey: string
   source: ConfigSource
   t: TranslationFn
+  variant?: 'cardFooter' | 'compact'
 }) => {
   const service = useMemo(() => toModelServiceConfig(item), [item])
   const identity = resolveModelProviderIdentity(service)
   const provider = identity.provider == null ? undefined : getModelProviderDefinition(identity.provider)
-  const billing = resolveModelServiceBilling(service)
-  const codingPlan = resolveModelServiceCodingPlan(service)
   const managementEnabled = service.management?.enabled !== false
   const actionCapabilities = resolveProviderActionCapabilities(provider?.capabilities, managementEnabled)
   const serviceFingerprint = buildServiceActionFingerprint(serviceKey, source, service)
-  const isPlanService = codingPlan != null || planBillingKinds.has(billing?.kind ?? '')
-  const canAutoQueryPlanQuota = isPlanService && actionCapabilities.canQueryBalance
+  const canAutoQueryBalance = actionCapabilities.canQueryBalance
   const autoBalanceFingerprintRef = useRef<string | null>(null)
   const [accountStatus, setAccountStatus] = useState<ProviderAccountStatus | null>(() =>
     getCachedModelServiceAccountStatus(serviceFingerprint)
@@ -84,7 +77,7 @@ export const ModelServiceProviderQuotaPreview = ({
   }, [service, serviceFingerprint, serviceKey, source, t])
 
   useEffect(() => {
-    if (!canAutoQueryPlanQuota) return
+    if (!canAutoQueryBalance) return
     const cachedAccountStatus = getCachedModelServiceAccountStatus(serviceFingerprint)
     if (cachedAccountStatus != null) {
       setAccountStatus(cachedAccountStatus)
@@ -94,9 +87,9 @@ export const ModelServiceProviderQuotaPreview = ({
     if (autoBalanceFingerprintRef.current === serviceFingerprint) return
     autoBalanceFingerprintRef.current = serviceFingerprint
     void queryBalance()
-  }, [canAutoQueryPlanQuota, queryBalance, serviceFingerprint])
+  }, [canAutoQueryBalance, queryBalance, serviceFingerprint])
 
-  if (!canAutoQueryPlanQuota) return null
+  if (!canAutoQueryBalance) return null
 
   const quotaRows = buildModelServiceQuotaRows({
     accountError,
@@ -108,9 +101,9 @@ export const ModelServiceProviderQuotaPreview = ({
   }).slice(0, 2)
   if (quotaRows.length === 0) return null
 
-  return (
+  const quotaPreview = (
     <div
-      className='config-view__model-service-list-quota'
+      className={`config-view__model-service-list-quota config-view__model-service-list-quota--${variant}`}
       aria-label={t('config.modelServices.plan.labels.liveQuota')}
     >
       {quotaRows.map(row => {
@@ -137,44 +130,59 @@ export const ModelServiceProviderQuotaPreview = ({
             strokeDasharray: previewCircleCircumference,
             strokeDashoffset
           }
+        const quotaCircle = (
+          <Tooltip title={[row.label, row.value].filter(Boolean).join(' ')}>
+            <div
+              className={circleClassName}
+              aria-busy={isLoadingRow || undefined}
+              role={row.percent == null ? undefined : 'progressbar'}
+              aria-valuemin={row.percent == null ? undefined : 0}
+              aria-valuemax={row.percent == null ? undefined : 100}
+              aria-valuenow={row.percent}
+              aria-label={[row.label, row.value].filter(Boolean).join(' ')}
+            >
+              <svg
+                className='config-view__model-service-list-quota-svg'
+                viewBox='0 0 20 20'
+                aria-hidden='true'
+                focusable='false'
+              >
+                <circle
+                  className='config-view__model-service-list-quota-track'
+                  cx='10'
+                  cy='10'
+                  r={previewCircleRadius}
+                />
+                <circle
+                  className='config-view__model-service-list-quota-progress'
+                  cx='10'
+                  cy='10'
+                  r={previewCircleRadius}
+                  style={progressStyle}
+                />
+              </svg>
+            </div>
+          </Tooltip>
+        )
+        if (variant === 'cardFooter') {
+          return (
+            <div className='config-view__model-service-list-quota-row' key={row.key}>
+              {row.percent != null && quotaCircle}
+              <span className='config-view__model-service-list-quota-label'>{previewLabel}</span>
+              <span className='config-view__model-service-list-quota-value'>{row.value}</span>
+            </div>
+          )
+        }
         return (
           <div className='config-view__model-service-list-quota-row' key={row.key}>
-            <Tooltip title={[row.label, row.value].filter(Boolean).join(' ')}>
-              <div
-                className={circleClassName}
-                aria-busy={isLoadingRow || undefined}
-                role={row.percent == null ? undefined : 'progressbar'}
-                aria-valuemin={row.percent == null ? undefined : 0}
-                aria-valuemax={row.percent == null ? undefined : 100}
-                aria-valuenow={row.percent}
-                aria-label={[row.label, row.value].filter(Boolean).join(' ')}
-              >
-                <svg
-                  className='config-view__model-service-list-quota-svg'
-                  viewBox='0 0 20 20'
-                  aria-hidden='true'
-                  focusable='false'
-                >
-                  <circle
-                    className='config-view__model-service-list-quota-track'
-                    cx='10'
-                    cy='10'
-                    r={previewCircleRadius}
-                  />
-                  <circle
-                    className='config-view__model-service-list-quota-progress'
-                    cx='10'
-                    cy='10'
-                    r={previewCircleRadius}
-                    style={progressStyle}
-                  />
-                </svg>
-              </div>
-            </Tooltip>
+            {quotaCircle}
             <div className='config-view__model-service-list-quota-label'>{previewLabel}</div>
           </div>
         )
       })}
     </div>
   )
+  return variant === 'cardFooter'
+    ? <div className='model-service-collection__quota-footer'>{quotaPreview}</div>
+    : quotaPreview
 }

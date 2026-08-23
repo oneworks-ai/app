@@ -1,18 +1,32 @@
 import { Button, Popconfirm, Tooltip } from 'antd'
+import type { ReactNode } from 'react'
 
 import type { TranslationFn } from './configUtils'
 
+export interface DetailCollectionMoveAction {
+  className?: string
+  direction: -1 | 1
+  icon: string
+  label: string
+}
+
 export const DetailCollectionFieldActions = ({
   actionKind = 'remove',
+  className,
   index,
   itemCount,
+  leadingAction,
+  moveActions,
   onMove,
   onRemove,
   t
 }: {
   actionKind?: 'remove' | 'reset'
+  className?: string
   index: number
   itemCount: number
+  leadingAction?: ReactNode
+  moveActions?: DetailCollectionMoveAction[]
   onMove?: (direction: -1 | 1) => void
   onRemove: () => void
   t: TranslationFn
@@ -23,8 +37,25 @@ export const DetailCollectionFieldActions = ({
     : t('config.editor.remove')
 
   return (
-    <div className='config-view__record-actions'>
-      {onMove != null && (
+    <div className={['config-view__record-actions', className].filter(Boolean).join(' ')}>
+      {leadingAction}
+      {moveActions?.map(action => (
+        <Tooltip key={action.direction} title={action.label}>
+          <Button
+            size='small'
+            type='text'
+            className={[
+              'config-view__icon-button',
+              'config-view__icon-button--compact',
+              action.className
+            ].filter(Boolean).join(' ')}
+            aria-label={action.label}
+            icon={<span className='material-symbols-rounded'>{action.icon}</span>}
+            onClick={() => onMove?.(action.direction)}
+          />
+        </Tooltip>
+      ))}
+      {moveActions == null && onMove != null && (
         <>
           <Tooltip title={t('config.editor.moveUp')}>
             <Button

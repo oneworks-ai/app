@@ -185,7 +185,7 @@
 .config-view__detail-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--subpage-tertiary-gap, 10px);
 }
 
 .config-view__detail-list-row {

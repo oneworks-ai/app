@@ -1,8 +1,11 @@
 import type { ConfigSource } from '@oneworks/types'
+import { useState } from 'react'
 
 import { ActionSearchToolbar } from '#~/components/action-search-toolbar/ActionSearchToolbar'
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
 
+import { AdapterImportDialog } from './AdapterImportDialog'
+import type { AdapterImportAction } from './AdapterImportRow'
 import { ConfigRecordCreateRow } from './ConfigRecordList'
 import type { TranslationFn } from './configUtils'
 import { getModelServiceConfigSessionActionKey } from './modelServiceConfigSession'
@@ -11,6 +14,7 @@ import type { ModelServiceConfigSessionRequest } from './modelServiceConfigSessi
 export function ModelServiceCollectionToolbar({
   creatingModelServiceSessionKey,
   existingKeys,
+  modelServiceImportAction,
   newRecordKey,
   onCreateManual,
   onCreateModelServiceSession,
@@ -28,6 +32,7 @@ export function ModelServiceCollectionToolbar({
 }: {
   creatingModelServiceSessionKey?: string | null
   existingKeys: Set<string>
+  modelServiceImportAction?: AdapterImportAction
   newRecordKey: string
   onCreateManual: (recordKey: string) => void
   onCreateModelServiceSession?: (request: ModelServiceConfigSessionRequest) => void | Promise<void>
@@ -43,6 +48,7 @@ export function ModelServiceCollectionToolbar({
   source: ConfigSource
   t: TranslationFn
 }) {
+  const [isImportDialogOpen, setImportDialogOpen] = useState(false)
   const normalizedRecordKey = newRecordKey.trim()
   const invalidRecordKey = normalizedRecordKey === '' || existingKeys.has(normalizedRecordKey)
   const createSessionActionKey = getModelServiceConfigSessionActionKey({ mode: 'create', source })
@@ -55,6 +61,18 @@ export function ModelServiceCollectionToolbar({
         onQueryChange={onQueryChange}
         placeholder={t('config.modelServices.collection.searchPlaceholder')}
         actions={[
+          ...(modelServiceImportAction == null
+            ? []
+            : [{
+              ariaLabel: modelServiceImportAction.actionLabel,
+              disabled: modelServiceImportAction.disabled || modelServiceImportAction.loading ||
+                modelServiceImportAction.optionsLoading,
+              icon: 'file_download',
+              key: 'import',
+              loading: modelServiceImportAction.loading,
+              onClick: () => setImportDialogOpen(true),
+              title: modelServiceImportAction.title ?? modelServiceImportAction.actionLabel
+            }]),
           {
             active: showConfigured,
             ariaLabel: t('config.modelServices.collection.filters.configured'),
@@ -117,6 +135,16 @@ export function ModelServiceCollectionToolbar({
               type: 'primary'
             }
           ]}
+        />
+      )}
+
+      {modelServiceImportAction != null && (
+        <AdapterImportDialog
+          action={modelServiceImportAction}
+          cancelLabel={t('common.cancel')}
+          open={isImportDialogOpen}
+          title={modelServiceImportAction.actionLabel}
+          onClose={() => setImportDialogOpen(false)}
         />
       )}
     </>

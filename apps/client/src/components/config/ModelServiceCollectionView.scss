@@ -37,13 +37,12 @@
 
 .model-service-collection__grid.config-view__record-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
   gap: var(--subpage-tertiary-gap, 10px);
 }
 
 .model-service-collection__card.config-view__record-card {
   min-width: 0;
-  min-height: 104px;
 }
 
 .model-service-collection__card .config-view__detail-list-row {
@@ -52,17 +51,18 @@
   height: 100%;
 }
 
+.model-service-collection__card
+  .config-view__detail-list-row:has(.model-service-collection__quota-footer) {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
 .model-service-collection__card .config-view__detail-list-main {
   align-items: flex-start;
-  min-height: 82px;
 }
 
 .model-service-collection__card .config-view__record-heading {
   align-items: flex-start;
-}
-
-.model-service-collection__card .config-view__record-heading-text {
-  min-height: 82px;
 }
 
 .model-service-collection__card .config-view__record-desc {
@@ -75,6 +75,53 @@
 .model-service-collection__card .config-view__record-actions {
   flex: 0 0 auto;
   min-height: 28px;
+}
+
+.model-service-collection__quota-footer {
+  order: 1;
+  flex: 1 1 100%;
+  min-width: 0;
+  margin-top: 0;
+  padding-top: 6px;
+  border-top: 1px solid
+    color-mix(in srgb, var(--border-color) 72%, transparent);
+}
+
+.model-service-collection__quota-footer .config-view__model-service-list-quota {
+  justify-content: flex-start;
+  width: 100%;
+  height: auto;
+  gap: 8px;
+}
+
+.model-service-collection__quota-footer
+  .config-view__model-service-list-quota-row {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  justify-items: initial;
+  gap: 6px;
+  width: auto;
+  min-width: 0;
+  height: auto;
+}
+
+.model-service-collection__quota-footer
+  .config-view__model-service-list-quota-label {
+  width: auto;
+  color: var(--sub-text-color);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: left;
+}
+
+.config-view__model-service-list-quota-value {
+  min-width: 0;
+  color: var(--text-color);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .model-service-collection

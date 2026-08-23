@@ -45,7 +45,7 @@
 }
 
 .config-view__field-list.config-view__field-list--grouped {
-  gap: 0;
+  gap: var(--subpage-tertiary-gap, 10px);
 }
 
 .config-view__subsection {
