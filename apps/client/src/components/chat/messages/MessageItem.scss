@@ -381,13 +381,13 @@
 }
 
 .message-source-line__avatar {
-  --room-pixel-avatar-size: 14px;
-  --room-pixel-avatar-radius: 3px;
-  --room-pixel-avatar-bg: rgba(17, 24, 39, .38);
-  --room-pixel-avatar-border: transparent;
-  --room-pixel-avatar-overlay: color-mix(
+  --room-avatar-size: 14px;
+  --room-avatar-radius: 3px;
+  --room-avatar-bg: rgba(17, 24, 39, .38);
+  --room-avatar-border: transparent;
+  --room-avatar-overlay: color-mix(
     in srgb,
-    var(--room-pixel-avatar-accent) 22%,
+    var(--room-avatar-accent) 22%,
     rgba(255, 255, 255, .08)
   );
 

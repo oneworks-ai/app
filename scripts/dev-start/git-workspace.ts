@@ -46,3 +46,8 @@ export const ensureWorkspaceInstall = () => {
   log('workspace install missing or incomplete; running pnpm install')
   runSync('pnpm', ['install'])
 }
+
+export const ensureRequiredWorkspaceSubmodules = () => {
+  log('initializing required workspace submodules')
+  runSync('git', ['submodule', 'update', '--init', '--depth', '1', '--', 'assets/avatar'])
+}

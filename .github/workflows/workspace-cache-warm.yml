@@ -14,6 +14,7 @@ on:
       - pnpm-workspace.yaml
       - patches/**/*.patch
       - assets/avatar/package.json
+      - assets/avatar/packages/*/package.json
       - apps/*/package.json
       - packages/*/package.json
       - packages/adapters/*/package.json

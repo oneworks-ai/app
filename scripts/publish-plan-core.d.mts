@@ -29,6 +29,7 @@ export interface PublishPlanPackageJson {
 export interface PublishPlanPackage {
   name: string
   dir: string
+  independentlyReleased?: boolean
   private: boolean
   json: PublishPlanPackageJson
   publishAliasFor?: string
@@ -55,6 +56,7 @@ export interface PublishPlanItem {
 export interface PublishPlan {
   explicitSelection: boolean
   requestedNames: string[]
+  skippedIndependent: string[]
   skippedPrivate: string[]
   items: PublishPlanItem[]
 }
@@ -63,6 +65,7 @@ export interface PublishPlanSerializeResult {
   summary: {
     mode: 'plan' | 'publish' | 'publish-dry-run'
     packageCount: number
+    skippedIndependent: string[]
     skippedPrivate: string[]
     bump: PublishPlanOptions['bump'] | null
     command: string[] | null

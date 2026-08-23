@@ -28,7 +28,7 @@ This package implements the `lark` channel for Feishu / Lark bot apps.
 - Resolve the current bot `open_id` from `/open-apis/bot/v3/info` before registering the event dispatcher. Group ingress must use the structured mention target and fail closed when a message mentions a different bot; rendered `<at>` text alone is not enough in multi-bot chats.
 - External group support is a published-version setting in the Feishu Open Platform. Saving a draft is not enough; the version must be released and approved before the bot can be added to external groups.
 - Permission, event-subscription, icon, name, and external-group setting changes are effective only after the relevant published version is live.
-- Avatar URLs for OneWorks pixel avatars should come from generated image files. `https://oneworks.cloud/avatar/` is a preview/export UI, not a direct image endpoint.
+- Avatar image URLs should come from exported SVG, PNG, or GIF files. `https://oneworks.cloud/avatar/` is an editor/export UI, not a direct image endpoint; applications that render definitions directly should use the public 3D runtime packages.
 - `open_id` values are app-scoped. Re-resolve admin and external member IDs after switching the channel app or CLI profile.
 - A bot profile reporting `ready` only proves that local credentials exist. Exercise a real bot API before trusting the secret; synchronize a known-good secret through `lark-cli config init --app-secret-stdin` rather than exposing it in argv.
 - When the channel bot lacks member-read scope, capture a known real inbound message to recover that app's sender `open_id`; never copy an admin `open_id` from the CLI app profile.

@@ -18,7 +18,7 @@ import { AccountQuotaPanel } from '#~/components/account-quota/AccountQuotaPanel
 import { QuotaUsageRing } from '#~/components/account-quota/QuotaUsageRing'
 import { ActionSearchToolbar } from '#~/components/action-search-toolbar/ActionSearchToolbar'
 import { NativeTabs } from '#~/components/native-tabs'
-import { RoomPixelAvatar } from '#~/components/room-pixel-avatar/RoomPixelAvatar'
+import { RoomAvatar } from '#~/components/room-avatar/RoomAvatar'
 import { UsagePanel } from '#~/components/usage/UsagePanel'
 import { focusDesktopWindowIfAvailable } from '#~/desktop/manager-runtime'
 import { useAdapterAccountQuotaDetail } from '#~/hooks/use-adapter-account-quota-detail'
@@ -823,7 +823,7 @@ const AccountsListView = ({
                   onClick={() => onOpenAccount(account.key)}
                 >
                   <span className='adapter-account-manager__item-avatar' aria-hidden='true'>
-                    <RoomPixelAvatar
+                    <RoomAvatar
                       className='adapter-account-manager__item-avatar-fallback'
                       seed={`adapter-account:${getAccountAvatarSeed(account)}`}
                     />

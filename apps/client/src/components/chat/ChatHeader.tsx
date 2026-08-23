@@ -33,7 +33,7 @@ import { ConfigSectionPanel } from '../config'
 import type { FieldSpec } from '../config/configSchema'
 import { MaterialSymbol } from '../icons/MaterialSymbol'
 import { RouteContainerHeader } from '../layout/RouteContainerHeader'
-import { RoomPixelAvatar } from '../room-pixel-avatar/RoomPixelAvatar'
+import { RoomAvatar } from '../room-avatar/RoomAvatar'
 import { InteractionPanelWorkspaceActions } from './interaction-panel/InteractionPanelWorkspaceActions'
 import type {
   InteractionPanelRunCommand,
@@ -259,7 +259,7 @@ export function ChatHeader({
   const roomTitleIconSeed = normalizeTitle(roomIconSeed) ?? displayTitle
   const roomTitleIcon = !hideTitleIcon && modeSwitch?.mode === 'room'
     ? (
-      <RoomPixelAvatar
+      <RoomAvatar
         className={[
           'chat-header-room-icon',
           roomIconStatus != null ? `chat-header-room-icon--${roomIconStatus}` : ''

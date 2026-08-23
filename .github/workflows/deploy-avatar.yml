@@ -7,7 +7,6 @@ on:
     paths:
       - assets/avatar
       - assets/avatar/**
-      - packages/avatar/**
       - .github/workflows/deploy-avatar.yml
   workflow_dispatch:
 

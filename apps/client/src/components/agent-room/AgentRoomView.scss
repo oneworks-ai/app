@@ -256,9 +256,9 @@
   object-fit: cover;
 }
 
-.agent-room-bubble__joined-avatar-pixel.room-pixel-avatar {
-  --room-pixel-avatar-size: 20px;
-  --room-pixel-avatar-radius: 4px;
+.agent-room-bubble__joined-avatar-generated.room-avatar {
+  --room-avatar-size: 20px;
+  --room-avatar-radius: 4px;
 }
 
 .agent-room-bubble:focus-visible .agent-room-bubble__surface,
@@ -294,32 +294,32 @@
   font: inherit;
 }
 
-.agent-room-bubble__avatar--pixel,
-.agent-room-roster__avatar--pixel {
+.agent-room-bubble__avatar--generated,
+.agent-room-roster__avatar--generated {
   padding: 0;
   border: 0;
   background: transparent;
 }
 
-.agent-room-bubble__avatar-pixel.room-pixel-avatar,
-.agent-room-roster__avatar-pixel.room-pixel-avatar {
-  --room-pixel-avatar-size: var(--agent-room-bubble-avatar-size, 34px);
-  --room-pixel-avatar-bg: color-mix(
+.agent-room-bubble__avatar-generated.room-avatar,
+.agent-room-roster__avatar-generated.room-avatar {
+  --room-avatar-size: var(--agent-room-bubble-avatar-size, 34px);
+  --room-avatar-bg: color-mix(
     in srgb,
     var(--tag-bg) 86%,
     var(--sub-bg-color)
   );
-  --room-pixel-avatar-border: color-mix(
+  --room-avatar-border: color-mix(
     in srgb,
-    var(--room-pixel-avatar-accent) 54%,
+    var(--room-avatar-accent) 54%,
     var(--border-color)
   );
-  --room-pixel-avatar-overlay: color-mix(
+  --room-avatar-overlay: color-mix(
     in srgb,
-    var(--room-pixel-avatar-accent) 20%,
+    var(--room-avatar-accent) 20%,
     transparent
   );
-  --room-pixel-avatar-radius: 6px;
+  --room-avatar-radius: 6px;
 }
 
 .agent-room-bubble__avatar-spacer {
@@ -404,9 +404,9 @@
   background: var(--tag-bg);
 }
 
-.agent-room-bubble__sender-popover-avatar .room-pixel-avatar {
-  --room-pixel-avatar-size: 36px;
-  --room-pixel-avatar-radius: 6px;
+.agent-room-bubble__sender-popover-avatar .room-avatar {
+  --room-avatar-size: 36px;
+  --room-avatar-radius: 6px;
 }
 
 .agent-room-bubble__sender-popover-copy,
@@ -760,13 +760,13 @@
   box-shadow: none;
 }
 
-.agent-room-bubble--leader .agent-room-bubble__avatar-pixel.room-pixel-avatar {
-  --room-pixel-avatar-bg: color-mix(
+.agent-room-bubble--leader .agent-room-bubble__avatar-generated.room-avatar {
+  --room-avatar-bg: color-mix(
     in srgb,
     var(--primary-color) 10%,
     var(--tag-bg)
   );
-  --room-pixel-avatar-border: color-mix(
+  --room-avatar-border: color-mix(
     in srgb,
     var(--primary-color) 46%,
     var(--border-color)

@@ -23,16 +23,20 @@ OneWorks Avatar 是浏览器端 3D 几何头像编辑器，也提供与在线编
 
 ## 开发者接入
 
-新的 3D Runtime 当前版本为 `0.1.0-alpha.0`，源码与 pack 后的干净 consumer 验证已公开在 [`oneworks-ai/avatar`](https://github.com/oneworks-ai/avatar)。四个新包尚未完成首次 npm registry 发布，因此现在不要执行同名包安装命令；以下 import 是已经实现并验证的公开 alpha 接口，而不是尚未落地的设计稿。
+3D Runtime 与框架适配器统一使用 `1.0.0-rc.6`。`@oneworks/avatar` 已直接升级为框架无关的 3D 核心包，旧的 2D 像素 renderer 不再保留。
+
+```bash
+pnpm add @oneworks/avatar@rc
+# 按项目选择一个或多个适配器
+pnpm add @oneworks/avatar-react@rc @oneworks/avatar-vue@rc @oneworks/avatar-web@rc
+```
 
 | 包                       | 用途                                                 |
 | ------------------------ | ---------------------------------------------------- |
-| `@oneworks/avatar-core`  | 版本化 definition、校验、序列化和动画运行时。        |
+| `@oneworks/avatar`       | 版本化 definition、校验、序列化和动画运行时。        |
 | `@oneworks/avatar-react` | React `Avatar` 渲染组件和完整 `AvatarEditor`。       |
 | `@oneworks/avatar-vue`   | Vue `OneWorksAvatar` 和 `OneWorksAvatarEditor`。     |
 | `@oneworks/avatar-web`   | 原生 JavaScript mount API 和显式注册 Web Component。 |
-
-现有的 `@oneworks/avatar` 不在这张表里：它仍是独立的 legacy 2D 像素表情 SVG renderer，不能读取 3D definition。
 
 按接入目标继续阅读：
 
@@ -69,9 +73,9 @@ npx skills@latest add oneworks-ai/avatar
 
 ## 源码、本地开发与部署
 
-Legacy 像素 renderer 位于 [`oneworks-ai/app`](https://github.com/oneworks-ai/app) 的 `packages/avatar`。3D 编辑器、Runtime、框架适配器和导出链路位于 [`oneworks-ai/avatar`](https://github.com/oneworks-ai/avatar)。
+3D 编辑器、`@oneworks/avatar` Runtime、框架适配器和导出链路统一位于 [`oneworks-ai/avatar`](https://github.com/oneworks-ai/avatar)。
 
-Avatar 仓库作为 `assets/avatar` submodule 挂载回 app 仓库。它独立于 app 根 workspace 构建，并通过 `app-source` checkout 或软链接使用共享包源码。
+Avatar 仓库作为 `assets/avatar` submodule 挂载回 app 仓库；四个公开包同时是 app 根 workspace 的成员。Avatar 仓库也可以单独检出，并通过 `app-source` checkout 或软链接使用共享包源码。
 
 ```bash
 pnpm install --no-frozen-lockfile
@@ -82,4 +86,4 @@ ONEWORKS_APP_SOURCE_DIR=app-source pnpm typecheck:sdk
 ONEWORKS_APP_SOURCE_DIR=app-source pnpm smoke:sdk
 ```
 
-Avatar 页面由 Avatar 仓库的 `deploy-avatar.yml` workflow 发布。app 仓库在 `assets/avatar`、`assets/avatar/**`、`packages/avatar/**` 或 `.github/workflows/deploy-avatar.yml` 变化时触发它。文档页由主站 docs workflow 从 `.oo/docs` 发布。
+Avatar 页面由 Avatar 仓库的 `deploy-avatar.yml` workflow 发布。app 仓库在 `assets/avatar`、`assets/avatar/**` 或 `.github/workflows/deploy-avatar.yml` 变化时触发它。文档页由主站 docs workflow 从 `.oo/docs` 发布。

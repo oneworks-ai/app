@@ -1,7 +1,7 @@
 import { useState } from 'react'
 
 import { getWorkspaceResourceUrl } from '#~/api'
-import { RoomPixelAvatar } from '#~/components/room-pixel-avatar/RoomPixelAvatar'
+import { RoomAvatar } from '#~/components/room-avatar/RoomAvatar'
 
 import type { AgentRoomMemberView } from '../@types/agent-room-view'
 
@@ -16,11 +16,11 @@ export const resolveAgentRoomAvatar = (value: string | undefined) => {
 export function AgentRoomAvatarContent({
   imageClassName,
   member,
-  pixelClassName
+  generatedClassName
 }: {
   imageClassName?: string
   member: Pick<AgentRoomMemberView, 'avatar' | 'avatarLabel' | 'memberKey'>
-  pixelClassName: string
+  generatedClassName: string
 }) {
   const avatar = resolveAgentRoomAvatar(member.avatar)
   const [failedAvatar, setFailedAvatar] = useState<string>()
@@ -31,5 +31,5 @@ export function AgentRoomAvatarContent({
   const avatarLabel = member.avatarLabel?.trim()
   if (avatarLabel != null && avatarLabel !== '') return avatarLabel
 
-  return <RoomPixelAvatar className={pixelClassName} seed={`entity:${member.memberKey}`} />
+  return <RoomAvatar className={generatedClassName} seed={`entity:${member.memberKey}`} />
 }

@@ -1,8 +1,9 @@
 import './GroupAvatar.scss'
 
-import { createSeededAvatarDataUri } from '@oneworks/avatar'
+import { createSeededAvatarDefinition } from '@oneworks/avatar'
+import { Avatar } from '@oneworks/avatar-react'
 import type { CSSProperties } from 'react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import { getWorkspaceResourceUrl } from '#~/api'
 
@@ -14,34 +15,31 @@ export interface GroupAvatarMember {
 
 const resolveAvatarUrl = (member: GroupAvatarMember) => {
   const avatar = member.avatar?.trim()
-  if (avatar != null && avatar !== '') {
-    return /^(?:blob:|data:|https?:\/\/)/u.test(avatar)
-      ? avatar
-      : getWorkspaceResourceUrl(avatar)
-  }
-  return createSeededAvatarDataUri({
-    seed: `entity:${member.key}`,
-    size: 72,
-    title: member.label ?? member.key
-  })
+  if (avatar == null || avatar === '') return undefined
+  return /^(?:blob:|data:|https?:\/\/)/u.test(avatar)
+    ? avatar
+    : getWorkspaceResourceUrl(avatar)
 }
-
-const resolveFallbackAvatarUrl = (member: GroupAvatarMember) =>
-  createSeededAvatarDataUri({
-    seed: `entity:${member.key}`,
-    size: 72,
-    title: member.label ?? member.key
-  })
 
 function GroupAvatarImage({ member }: { member: GroupAvatarMember }) {
   const [failedAvatar, setFailedAvatar] = useState<string>()
   const avatar = resolveAvatarUrl(member)
+  const definition = useMemo(() =>
+    createSeededAvatarDefinition({
+      name: member.label ?? member.key,
+      seed: `entity:${member.key}`
+    }), [member.key, member.label])
+
+  if (avatar == null || failedAvatar === avatar) {
+    return <Avatar aria-hidden='true' definition={definition} />
+  }
+
   return (
     <img
       alt=''
       draggable={false}
       onError={() => setFailedAvatar(avatar)}
-      src={failedAvatar === avatar ? resolveFallbackAvatarUrl(member) : avatar}
+      src={avatar}
     />
   )
 }

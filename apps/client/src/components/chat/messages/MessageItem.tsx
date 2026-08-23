@@ -12,7 +12,7 @@ import { MarkdownContent } from '#~/components/MarkdownContent'
 import type { MarkdownImageRenderProps, MarkdownMediaRenderProps } from '#~/components/MarkdownContent'
 import type { AgentRoomMemberView } from '#~/components/agent-room'
 import { getAppBrowserLinkUrl, openExternalLink } from '#~/components/markdown-link-context-menu-utils'
-import { RoomPixelAvatar } from '#~/components/room-pixel-avatar/RoomPixelAvatar'
+import { RoomAvatar } from '#~/components/room-avatar/RoomAvatar'
 import { parseWorkspaceFileLinkForWorkspaceRoot } from '#~/utils/link-targets'
 import type { WorkspaceFileLinkTarget } from '#~/utils/link-targets'
 import { resolveMarkdownLinkIntentTarget } from '#~/utils/markdown-link-intent'
@@ -619,8 +619,8 @@ function MessageItemComponent({
                               </span>
                             )
                             : (
-                              <RoomPixelAvatar
-                                className='message-source-line__avatar message-source-line__avatar--pixel'
+                              <RoomAvatar
+                                className='message-source-line__avatar message-source-line__avatar--generated'
                                 seed={agentRoomMessageSource.avatarSeed}
                               />
                             )}

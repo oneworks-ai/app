@@ -15,6 +15,10 @@ export const bumpKinds = new Set(['major', 'minor', 'patch'])
 
 export const canonicalRepositoryUrl = 'https://github.com/oneworks-ai/app.git'
 
+const independentlyReleasedRepositoryUrls = new Set([
+  'https://github.com/oneworks-ai/avatar.git'
+])
+
 export const defaultOptions = {
   packages: [],
   publish: false,
@@ -314,6 +318,7 @@ export async function loadWorkspacePackages(repoRoot, fsOps = defaultFs) {
         name: json.name,
         dir,
         json,
+        independentlyReleased: independentlyReleasedRepositoryUrls.has(json.repository?.url),
         private: Boolean(json.private)
       })
     } catch {
@@ -350,6 +355,9 @@ function collectRequestedPackages(packages, requestedNames) {
     const pkg = packages.get(name)
     if (!pkg) {
       throw new Error(`未找到包: ${name}`)
+    }
+    if (pkg.independentlyReleased) {
+      throw new Error(`包 ${name} 由其独立源码仓库发布，不能从 ${canonicalRepositoryUrl} 发布`)
     }
 
     const sourceName = pkg.publishAliasFor ?? pkg.name
@@ -507,6 +515,7 @@ function analyzeDependentImpacts(name, nextVersion, reverseDependencies) {
 
 function collectAllPackages(packages, includePrivate) {
   const selected = new Set()
+  const skippedIndependent = []
   const skippedPrivate = []
 
   for (const [name, pkg] of packages) {
@@ -514,11 +523,16 @@ function collectAllPackages(packages, includePrivate) {
       skippedPrivate.push(name)
       continue
     }
+    if (pkg.independentlyReleased) {
+      skippedIndependent.push(name)
+      continue
+    }
     selected.add(name)
   }
 
   return {
     selected,
+    skippedIndependent: skippedIndependent.sort(),
     skippedPrivate: skippedPrivate.sort()
   }
 }
@@ -526,10 +540,16 @@ function collectAllPackages(packages, includePrivate) {
 export function createPublishPlan(packages, options) {
   const requestedNames = Array.from(new Set(options.packages))
   const explicitSelection = requestedNames.length > 0
+  const skippedIndependent = []
   const skippedPrivate = []
+  const allPackages = collectAllPackages(packages, options.includePrivate)
   const selected = explicitSelection
     ? collectRequestedPackages(packages, requestedNames)
-    : collectAllPackages(packages, options.includePrivate).selected
+    : allPackages.selected
+
+  if (!explicitSelection) {
+    skippedIndependent.push(...allPackages.skippedIndependent)
+  }
 
   if (!explicitSelection && !options.includePrivate) {
     skippedPrivate.push(...collectAllPackages(packages, false).skippedPrivate)
@@ -674,6 +694,7 @@ export function createPublishPlan(packages, options) {
   return {
     explicitSelection,
     requestedNames,
+    skippedIndependent,
     skippedPrivate,
     items
   }
@@ -743,6 +764,9 @@ export function formatPlan(plan, repoRoot, options) {
   if (plan.skippedPrivate.length > 0) {
     lines.push(`跳过 private 包: ${plan.skippedPrivate.join(', ')}`)
   }
+  if (plan.skippedIndependent.length > 0) {
+    lines.push(`跳过由独立仓库发布的包: ${plan.skippedIndependent.join(', ')}`)
+  }
 
   lines.push('', '发布顺序:')
 
@@ -781,6 +805,7 @@ export function serializePlan(plan, repoRoot, options) {
         : 'plan',
       packageCount: plan.items.length,
       skippedPrivate: plan.skippedPrivate,
+      skippedIndependent: plan.skippedIndependent,
       bump: options.bump || null,
       command: options.publish ? ['pnpm', ...buildPublishArgs(options)] : null
     },

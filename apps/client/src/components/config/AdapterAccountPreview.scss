@@ -152,10 +152,10 @@
   background: transparent;
 }
 
-.adapter-account-preview__avatar-fallback.room-pixel-avatar {
-  --room-pixel-avatar-size: 28px;
-  --room-pixel-avatar-radius: 50%;
-  --room-pixel-avatar-border: transparent;
+.adapter-account-preview__avatar-fallback.room-avatar {
+  --room-avatar-size: 28px;
+  --room-avatar-radius: 50%;
+  --room-avatar-border: transparent;
 
   width: 28px;
   height: 28px;

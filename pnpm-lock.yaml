@@ -266,7 +266,10 @@ importers:
     dependencies:
       '@oneworks/avatar':
         specifier: workspace:*
-        version: link:../../packages/avatar
+        version: link:../../assets/avatar/packages/avatar
+      '@oneworks/avatar-react':
+        specifier: workspace:*
+        version: link:../../assets/avatar/packages/react
       '@oneworks/components':
         specifier: workspace:*
         version: link:../../packages/components
@@ -888,11 +891,8 @@ importers:
   assets/avatar:
     dependencies:
       '@oneworks/avatar':
-        specifier: beta
-        version: 0.1.0-beta.10
-      '@oneworks/avatar-core':
-        specifier: link:packages/core
-        version: link:packages/core
+        specifier: link:packages/avatar
+        version: link:packages/avatar
       '@oneworks/route-layout':
         specifier: beta
         version: 0.1.0-beta.10(react@18.3.1)
@@ -942,6 +942,47 @@ importers:
       vue-tsc:
         specifier: ^2.2.12
         version: 2.2.12(typescript@5.9.3)
+
+  assets/avatar/packages/avatar: {}
+
+  assets/avatar/packages/react:
+    dependencies:
+      '@oneworks/avatar':
+        specifier: workspace:*
+        version: link:../avatar
+      react:
+        specifier: '>=18.3.0 <20'
+        version: 18.3.1
+      react-dom:
+        specifier: '>=18.3.0 <20'
+        version: 18.3.1(react@18.3.1)
+
+  assets/avatar/packages/vue:
+    dependencies:
+      '@oneworks/avatar':
+        specifier: workspace:*
+        version: link:../avatar
+      '@oneworks/avatar-web':
+        specifier: workspace:*
+        version: link:../web
+      vue:
+        specifier: '>=3.5.0 <4'
+        version: 3.5.41(typescript@5.9.3)
+
+  assets/avatar/packages/web:
+    dependencies:
+      '@oneworks/avatar':
+        specifier: workspace:*
+        version: link:../avatar
+      '@oneworks/avatar-react':
+        specifier: workspace:*
+        version: link:../react
+      react:
+        specifier: ^18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.1
+        version: 18.3.1(react@18.3.1)
 
   packages/adapters/claude-code:
     dependencies:
@@ -1299,8 +1340,6 @@ importers:
         specifier: workspace:*
         version: link:../task
 
-  packages/avatar: {}
-
   packages/benchmark:
     dependencies:
       '@oneworks/task':
@@ -1575,9 +1614,6 @@ importers:
 
   packages/plugins/channel-oneworks:
     dependencies:
-      '@oneworks/avatar':
-        specifier: workspace:*
-        version: link:../../avatar
       '@oneworks/types':
         specifier: workspace:*
         version: link:../../types
@@ -3120,9 +3156,6 @@ packages:
   '@npmcli/run-script@10.0.4':
     resolution: {integrity: sha512-mGUWr1uMnf0le2TwfOZY4SFxZGXGfm4Jtay/nwAa2FLNAKXUoUwaGwBMNH36UHPtinWfTSJ3nqFQr0091CxVGg==}
     engines: {node: ^20.17.0 || >=22.9.0}
-
-  '@oneworks/avatar@0.1.0-beta.10':
-    resolution: {integrity: sha512-ceWQG2HRG9/sUEBEJAbpcXgQOks5bveI+OOXnLjH7Hm/S3coagpZsjdt9dd3FTyvN9o0woAkl+IjbLUga6vP2Q==}
 
   '@oneworks/icon@0.1.0-beta.10':
     resolution: {integrity: sha512-1sE+Enefrv1kyg8rwOyDs2cQCsPMbU469NXKYxCi1r36wk7FEw8iTi0rMjcH2bhPqa0NKm355OVG/zKwegZzqg==}
@@ -10647,8 +10680,6 @@ snapshots:
       '@npmcli/promise-spawn': 9.0.1
       node-gyp: 12.4.0
       proc-log: 6.1.0
-
-  '@oneworks/avatar@0.1.0-beta.10': {}
 
   '@oneworks/icon@0.1.0-beta.10':
     dependencies:

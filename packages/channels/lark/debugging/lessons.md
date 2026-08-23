@@ -18,7 +18,7 @@
 - 调试权限问题时，要同时看 adapter 启动参数和 settings 文件；只看到 `defaultMode = bypassPermissions` 还不够，headless 模式下往往还需要真实 CLI flag 才能生效。
 - MCP 工具拿 server API 结果时，要确认解包的是统一 envelope 里的真实结果，不能把 `success/data/result` 外层对象直接当最终答案。
 - 开放平台应用基础信息、头像或名称修改后还要提交发布并过审。`application/v7/applications/:app_id/base` 只改草稿；头像要先用 `application/v7/app_avatar/upload` 上传图片拿 `avatar_url`，再 patch 到应用基础信息，最后调用 publish 或在页面发布。
-- OneWorks 头像页是预览 / 导出 UI，不是图片直链。外部平台要上传头像时，先用 `packages/avatar` 生成 SVG，再渲染成 PNG/JPEG；不要把 `https://oneworks.cloud/avatar/` 页面 URL 当图片 URL。
+- OneWorks 头像页是编辑 / 导出 UI，不是图片直链。外部平台要上传头像时，从编辑器导出 SVG 或 PNG 后再上传；不要把 `https://oneworks.cloud/avatar/` 页面 URL 当图片 URL。
 - 飞书开放平台详情页是 SPA，直达 `/app/<app_id>/baseinfo` 或用自动化打开时可能先出现几秒空白 / 黑底。不要立刻判断为打不开；至少等到页面标题和主内容 DOM 都稳定，或重新抓一次 Computer Use 状态后再下结论。若标题已变成目标应用但内容区暂空，优先等待 / 重读状态，不要让用户接手验证。
 - 用户明确要求 `@chrome` 或任务依赖已登录 Chrome 状态时，优先用 Codex Chrome 插件，不要默认退到 CUA、AppleScript 或 CLI。只有 Chrome 插件明确失败并已向用户说明后，才考虑 fallback。
 - Chrome 插件出现 `native pipe is closed` 时，先按插件排障流程做轻量重试和只读检查：确认 Chrome 正在运行、Codex Chrome Extension 已安装启用、native host manifest 正常。若检查都通过，经用户同意后用同 profile 打开一个新 Chrome 窗口再重连；不要直接改 manifest、安装扩展或绕到系统脚本。

@@ -123,17 +123,17 @@ target、状态查询、操作租约和 handoff 见 [开发服务跨会话协作
 - PWA 静态站点由 `oneworks-ai/pwa` 仓库维护，发布分支是该仓库的 `gh-pages`。
 - 本仓库的 `.github/workflows/deploy-pwa.yml` 负责在 `main` 的 client 相关输入变化时触发 `oneworks-ai/pwa` 的 `deploy-pwa.yml` workflow，并等待下游 workflow 成功；不再直接写本仓库的 `gh-pages`。
 - 本仓库需要配置 Actions secret `PWA_DEPLOY_TOKEN`，用于跨仓库触发 `oneworks-ai/pwa` workflow。推荐使用只授予 `oneworks-ai/pwa` Actions 写权限的 fine-grained token。
-- PWA 仓库部署时会 checkout 本仓库 `main` 的指定 commit，使用 `__ONEWORKS_PROJECT_CLIENT_MODE__=standalone` 和 `__ONEWORKS_PROJECT_CLIENT_BASE__=/pwa/` 构建 `apps/client`，然后把 `apps/client/dist/` 发布到 `oneworks-ai/pwa` 的 `gh-pages`。
+- PWA 仓库部署时会 checkout 本仓库 `main` 的指定 commit，先初始化 client 必需的 `assets/avatar` SDK submodule，再使用 `__ONEWORKS_PROJECT_CLIENT_MODE__=standalone` 和 `__ONEWORKS_PROJECT_CLIENT_BASE__=/pwa/` 构建 `apps/client`，然后把 `apps/client/dist/` 发布到 `oneworks-ai/pwa` 的 `gh-pages`。合入前跨仓验证使用 exact `source_sha` 与 `dry_run=true`，只跑 checkout、submodule、install 和 production build，不更新 `gh-pages`。
 - `__ONEWORKS_PROJECT_CLIENT_BASE__=/pwa/` 的官方独立构建会在编译期启用官网首页预览运行时；普通独立部署默认不包含这部分模拟数据和 hook 代码。自定义构建可以用 `__ONEWORKS_PROJECT_CLIENT_HOMEPAGE_PREVIEW__=1` 强制启用，或用 `__ONEWORKS_PROJECT_CLIENT_HOMEPAGE_PREVIEW__=0` 强制关闭。
 - 本仓库自己的 `gh-pages` 不再承载 PWA，后续主要用于项目文档站；维护文档站构建或部署时，不要把 PWA 发布逻辑重新写回本仓库。
 
 ### 7. Avatar 独立部署维护
 
 - Avatar 预览站点由 `oneworks-ai/avatar` 仓库维护，并作为本仓库 `assets/avatar` submodule 挂载。
-- Avatar 的运行时来源是本仓库 `packages/avatar`，client 通过 `@oneworks/avatar` 使用同一套 SVG rect 渲染器。
-- 本仓库的 `.github/workflows/deploy-avatar.yml` 只在 `assets/avatar/**`、`packages/avatar/**` 或 workflow 自身变化时触发，避免其它 package / client 改动误触发 avatar Pages 更新。
+- Avatar 仓库拥有编辑器以及 `@oneworks/avatar`、React、Vue、Vanilla / Web Component 四个 public 3D runtime package；本仓通过 submodule workspace 消费同一份源码，不再维护独立的 legacy 2D renderer。
+- 本仓库的 `.github/workflows/deploy-avatar.yml` 只在 exact `assets/avatar` gitlink、`assets/avatar/**` 或 workflow 自身变化时触发，避免其它 package / client 改动误触发 Avatar Pages 更新。
 - 本仓库需要配置 Actions secret `AVATAR_DEPLOY_TOKEN`，用于跨仓库触发 `oneworks-ai/avatar` 的 `deploy-avatar.yml` workflow。推荐使用只授予 `oneworks-ai/avatar` Actions 写权限的 fine-grained token。
-- Avatar 仓库部署时会 checkout 本仓库 `main` 的指定 commit，并初始化 submodules；构建命令是 `ONEWORKS_AVATAR_BASE=/avatar/ pnpm -C assets/avatar build`，最终发布 `assets/avatar/dist/` 到 GitHub Pages。
+- Avatar 仓库部署时 checkout 自身源码构建编辑器，仅 checkout 本仓指定 commit 读取共享 Node / package metadata；Pages 产物由 Avatar 仓自己的 `pnpm build` 生成并发布。四个 public runtime package 的 npm version、tag、provenance 与 postflight 也由该独立仓库的受保护发布流程负责。
 
 ### 8. Homepage 文档站部署维护
 

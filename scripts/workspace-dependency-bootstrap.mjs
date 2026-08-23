@@ -5,6 +5,7 @@ import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 
 import { acquireFallbackBootstrapLock } from './fallback-bootstrap-lock.mjs'
+import { initializeRequiredSubmodules, requiredSubmodulesReady } from './workspace-submodule-bootstrap.mjs'
 
 const DEFAULT_TIMEOUT_MS = 120_000
 const bootstrapScriptPath = fileURLToPath(import.meta.url)
@@ -26,11 +27,13 @@ const requiredBinPaths = (repoRoot, name) => {
 export const workspaceDependenciesReady = ({
   repoRoot,
   requiredBins = [],
-  requiredPaths = []
+  requiredPaths = [],
+  requiredSubmodules = []
 }) => (
   existsSync(resolve(repoRoot, 'node_modules', '.modules.yaml')) &&
   requiredBins.every(name => requiredBinPaths(repoRoot, name).some(existsSync)) &&
-  requiredPaths.every(path => existsSync(resolve(repoRoot, path)))
+  requiredPaths.every(path => existsSync(resolve(repoRoot, path))) &&
+  requiredSubmodulesReady(repoRoot, requiredSubmodules)
 )
 
 const runWorkspaceDependencyInstall = ({ quiet, repoRoot }) =>
@@ -41,6 +44,9 @@ const runWorkspaceDependencyInstall = ({ quiet, repoRoot }) =>
   })
 
 const installUnderLock = (options) => {
+  if (workspaceDependenciesReady(options)) return successfulResult()
+  const submoduleResult = initializeRequiredSubmodules(options)
+  if (submoduleResult.error != null || submoduleResult.status !== 0) return submoduleResult
   if (workspaceDependenciesReady(options)) return successfulResult()
   if (!options.quiet) {
     console.error('[workspace] dependencies are missing; running pnpm install')
@@ -60,7 +66,12 @@ const serializeBootstrapOptions = (options) => [
   options.repoRoot,
   ...(options.quiet ? ['--quiet'] : []),
   ...options.requiredBins.flatMap(name => ['--require-bin', name]),
-  ...options.requiredPaths.flatMap(path => ['--require-path', path])
+  ...options.requiredPaths.flatMap(path => ['--require-path', path]),
+  ...options.requiredSubmodules.flatMap(({ path, requiredPath }) => [
+    '--require-submodule',
+    path,
+    requiredPath
+  ])
 ]
 
 export const ensureWorkspaceDependencies = ({
@@ -68,9 +79,10 @@ export const ensureWorkspaceDependencies = ({
   repoRoot,
   requiredBins = [],
   requiredPaths = [],
+  requiredSubmodules = [],
   timeoutMs = DEFAULT_TIMEOUT_MS
 }) => {
-  const options = { quiet, repoRoot, requiredBins, requiredPaths }
+  const options = { quiet, repoRoot, requiredBins, requiredPaths, requiredSubmodules }
   if (workspaceDependenciesReady(options)) return successfulResult()
 
   const lockDir = resolve(repoRoot, '.logs')
@@ -115,7 +127,8 @@ const parseBootstrapChildOptions = (args) => {
     quiet: false,
     repoRoot: undefined,
     requiredBins: [],
-    requiredPaths: []
+    requiredPaths: [],
+    requiredSubmodules: []
   }
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]
@@ -136,6 +149,14 @@ const parseBootstrapChildOptions = (args) => {
     if (arg === '--require-path') {
       options.requiredPaths.push(args[index + 1])
       index += 1
+      continue
+    }
+    if (arg === '--require-submodule') {
+      options.requiredSubmodules.push({
+        path: args[index + 1],
+        requiredPath: args[index + 2]
+      })
+      index += 2
       continue
     }
     throw new Error(`Unknown workspace bootstrap argument: ${arg}`)

@@ -11,7 +11,7 @@
 
 ## npm 发布前：身份与登录态
 
-在 dispatch 前，先收敛本次的**完整 npm public identity set**：所有实际会发布的 public workspace package，以及 `apps/bootstrap/package.json` 的 `oneworks.publishAliases` 展开的 publish alias。不要只看 workspace 名称、也不要手工猜 alias；用发布计划和该 manifest 的当前值逐项列出。
+在 dispatch 前，先收敛本次的**完整 npm public identity set**：本仓发布计划中所有实际会发布的 public workspace package，以及 `apps/bootstrap/package.json` 的 `oneworks.publishAliases` 展开的 publish alias。`skippedIndependent` 中由获准独立仓库发布的包不属于本仓 identity set，必须由其源码仓库单独完成相同级别的 trust、provenance 与 postflight。不要只看 workspace 名称、也不要手工猜 alias；用发布计划和该 manifest 的当前值逐项列出。
 
 对每一个 identity 都审计其 Trusted Publisher 配置。浏览器已登录 npm 不表示 CLI 已认证；用 `npm whoami`（必要时完成 CLI login）确认操作者 CLI 身份。它只说明本地 CLI 登录态，**不**说明 GitHub OIDC 是否能发布，也不应被用作 OIDC 状态证明。
 

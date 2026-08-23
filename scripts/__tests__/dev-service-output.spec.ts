@@ -45,21 +45,31 @@ describe('dev service machine output', () => {
     const root = mkdtempSync(join(tmpdir(), 'oneworks-run-tools-bootstrap-'))
     tempDirs.push(root)
     const binDir = join(root, 'bin')
+    const scriptsDir = join(root, 'scripts')
     mkdirSync(binDir)
-    copyFileSync(join(process.cwd(), 'scripts/run-tools.mjs'), join(root, 'run-tools.mjs'))
+    mkdirSync(scriptsDir)
+    mkdirSync(join(root, 'assets/avatar/packages/avatar'), { recursive: true })
+    mkdirSync(join(root, 'assets/demo-video/src'), { recursive: true })
+    writeFileSync(join(root, 'assets/avatar/packages/avatar/package.json'), '{}')
+    writeFileSync(join(root, 'assets/demo-video/src/commands.ts'), '')
+    copyFileSync(join(process.cwd(), 'scripts/run-tools.mjs'), join(scriptsDir, 'run-tools.mjs'))
     copyFileSync(
       join(process.cwd(), 'scripts/workspace-dependency-bootstrap.mjs'),
-      join(root, 'workspace-dependency-bootstrap.mjs')
+      join(scriptsDir, 'workspace-dependency-bootstrap.mjs')
+    )
+    copyFileSync(
+      join(process.cwd(), 'scripts/workspace-submodule-bootstrap.mjs'),
+      join(scriptsDir, 'workspace-submodule-bootstrap.mjs')
     )
     copyFileSync(
       join(process.cwd(), 'scripts/fallback-bootstrap-lock.mjs'),
-      join(root, 'fallback-bootstrap-lock.mjs')
+      join(scriptsDir, 'fallback-bootstrap-lock.mjs')
     )
-    writeFileSync(join(root, 'cli.ts'), 'module.exports = { runScriptsCli: async () => {} }\n')
+    writeFileSync(join(scriptsDir, 'cli.ts'), 'module.exports = { runScriptsCli: async () => {} }\n')
     const pnpmPath = join(binDir, 'pnpm')
     writeFileSync(pnpmPath, `#!/usr/bin/env node\n${installerBody}\n`)
     chmodSync(pnpmPath, 0o755)
-    return { pnpmPath, root, script: join(root, 'run-tools.mjs') }
+    return { pnpmPath, root, script: join(scriptsDir, 'run-tools.mjs') }
   }
 
   const waitForExit = async (child: ReturnType<typeof spawn>) => (

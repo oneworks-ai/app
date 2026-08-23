@@ -11,17 +11,54 @@ import {
   createDefaultAvatarDefinition,
   parseAvatarDefinition,
   serializeAvatarDefinition
-} from '@oneworks/avatar-core'
+} from '@oneworks/avatar'
 
 const definition = createDefaultAvatarDefinition()
 const json = serializeAvatarDefinition(definition)
 const restored = parseAvatarDefinition(json)
 ```
 
+面部可以开启可配置的眼睛内高光。`scene.decals` 用于把矢量颜色形状投影到主体或指定实体部件表面；红晕、嘴部色块、徽标等细节会跟随同一套 3D 姿态与导出链路，而不是变成悬浮的独立几何体。
+
+```ts
+const decorated = {
+  ...definition,
+  scene: {
+    ...definition.scene,
+    face: {
+      ...definition.scene.face,
+      eyeHighlight: {
+        color: '#ffffff',
+        enabled: true,
+        offsetX: -18,
+        offsetY: -20,
+        opacity: 96,
+        size: 30
+      }
+    },
+    decals: [
+      {
+        color: '#f29a93',
+        height: 18,
+        id: 'blush-left',
+        label: '左侧红晕',
+        opacity: 88,
+        rotation: -6,
+        shape: 'ellipse',
+        targetPartId: null,
+        width: 30,
+        x: -50,
+        y: 31
+      }
+    ]
+  }
+}
+```
+
 应用可以传入多个动画库。库由 group 和 clip 组成，播放时也可以直接传 clip。`relative` 会把每个姿态维度各自第一次显式出现的值锚定到当前场景；`absolute` 使用动画中记录的绝对值。
 
 ```ts
-import type { AvatarAnimationLibrary } from '@oneworks/avatar-core'
+import type { AvatarAnimationLibrary } from '@oneworks/avatar'
 
 export const supportAnimations = {
   id: 'support',
@@ -62,7 +99,7 @@ v1 动画 patch 支持 `colorGrade`、`face`，以及 `view` 的 `pitch`、`yaw`
 `Avatar` 和 `AvatarEditor` 接收同一个 definition 和动画库。编辑器是在线产品使用的完整编辑器，不是简化表单。
 
 ```tsx
-import { createDefaultAvatarDefinition } from '@oneworks/avatar-core'
+import { createDefaultAvatarDefinition } from '@oneworks/avatar'
 import { Avatar, AvatarEditor } from '@oneworks/avatar-react'
 import type { AvatarHandle } from '@oneworks/avatar-react'
 import { useRef, useState } from 'react'
@@ -110,7 +147,7 @@ export function AvatarWorkspace() {
 
 ```vue
 <script setup lang="ts">
-import { createDefaultAvatarDefinition } from '@oneworks/avatar-core'
+import { createDefaultAvatarDefinition } from '@oneworks/avatar'
 import { OneWorksAvatar, OneWorksAvatarEditor } from '@oneworks/avatar-vue'
 import { ref } from 'vue'
 import '@oneworks/avatar-vue/style.css'

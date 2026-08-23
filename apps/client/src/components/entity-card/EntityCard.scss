@@ -73,9 +73,9 @@
   object-fit: cover;
 }
 
-.entity-card__avatar-pixel.room-pixel-avatar {
-  --room-pixel-avatar-size: 36px;
-  --room-pixel-avatar-radius: 6px;
+.entity-card__avatar-generated.room-avatar {
+  --room-avatar-size: 36px;
+  --room-avatar-radius: 6px;
 }
 
 .entity-card__copy {

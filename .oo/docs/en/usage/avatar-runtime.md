@@ -11,17 +11,54 @@ import {
   createDefaultAvatarDefinition,
   parseAvatarDefinition,
   serializeAvatarDefinition
-} from '@oneworks/avatar-core'
+} from '@oneworks/avatar'
 
 const definition = createDefaultAvatarDefinition()
 const json = serializeAvatarDefinition(definition)
 const restored = parseAvatarDefinition(json)
 ```
 
+The face can enable a configurable highlight inside each eye. `scene.decals` adds vector color shapes that are projected onto a body or entity-part surface, so blush, mouth marks, badges, and similar details follow the same 3D pose and export path instead of becoming separate floating geometry.
+
+```ts
+const decorated = {
+  ...definition,
+  scene: {
+    ...definition.scene,
+    face: {
+      ...definition.scene.face,
+      eyeHighlight: {
+        color: '#ffffff',
+        enabled: true,
+        offsetX: -18,
+        offsetY: -20,
+        opacity: 96,
+        size: 30
+      }
+    },
+    decals: [
+      {
+        color: '#f29a93',
+        height: 18,
+        id: 'blush-left',
+        label: 'Left blush',
+        opacity: 88,
+        rotation: -6,
+        shape: 'ellipse',
+        targetPartId: null,
+        width: 30,
+        x: -50,
+        y: 31
+      }
+    ]
+  }
+}
+```
+
 Applications can supply multiple animation libraries. A library contains groups and clips, and a clip may also be passed directly to playback. A `relative` clip anchors each pose dimension at that dimension's first explicitly authored value; an `absolute` clip uses the recorded values directly.
 
 ```ts
-import type { AvatarAnimationLibrary } from '@oneworks/avatar-core'
+import type { AvatarAnimationLibrary } from '@oneworks/avatar'
 
 export const supportAnimations = {
   id: 'support',
@@ -62,7 +99,7 @@ Version 1 animation patches support `colorGrade`, `face`, and the `pitch`, `yaw`
 `Avatar` and `AvatarEditor` consume the same definition and animation libraries. The editor is the complete editor used by the hosted product, not a reduced settings form.
 
 ```tsx
-import { createDefaultAvatarDefinition } from '@oneworks/avatar-core'
+import { createDefaultAvatarDefinition } from '@oneworks/avatar'
 import { Avatar, AvatarEditor } from '@oneworks/avatar-react'
 import type { AvatarHandle } from '@oneworks/avatar-react'
 import { useRef, useState } from 'react'
@@ -110,7 +147,7 @@ The renderer ref provides `play`, `pause`, `resume`, `seek`, `stop`, `capture`, 
 
 ```vue
 <script setup lang="ts">
-import { createDefaultAvatarDefinition } from '@oneworks/avatar-core'
+import { createDefaultAvatarDefinition } from '@oneworks/avatar'
 import { OneWorksAvatar, OneWorksAvatarEditor } from '@oneworks/avatar-vue'
 import { ref } from 'vue'
 import '@oneworks/avatar-vue/style.css'

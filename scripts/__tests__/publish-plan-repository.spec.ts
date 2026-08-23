@@ -198,4 +198,34 @@ describe('publish-plan repository metadata', () => {
     expect(result.plan.items.map(item => item.name)).toEqual(['@oneworks/valid'])
     expect(fixture.runCommand).toHaveBeenCalledTimes(1)
   })
+
+  it('leaves packages owned by an independent source repository out of the app publish plan', async () => {
+    const fixture = createFixture([
+      ['packages/valid', {
+        name: '@oneworks/valid',
+        version: '1.0.0',
+        repository: createRepository('packages/valid')
+      }],
+      ['assets/avatar/packages/avatar', {
+        name: '@oneworks/avatar',
+        version: '1.0.0-rc.6',
+        repository: {
+          type: 'git',
+          url: 'https://github.com/oneworks-ai/avatar.git',
+          directory: 'packages/avatar'
+        }
+      }]
+    ])
+    const packages = await loadWorkspacePackages('/repo', fixture.fsOps)
+    const plan = createPublishPlan(packages, parseArgs([]))
+
+    expect(plan.items.map(item => item.name)).toEqual(['@oneworks/valid'])
+    expect(plan.skippedIndependent).toEqual(['@oneworks/avatar'])
+    expect(() =>
+      createPublishPlan(
+        packages,
+        parseArgs(['--package', '@oneworks/avatar'])
+      )
+    ).toThrow('由其独立源码仓库发布')
+  })
 })

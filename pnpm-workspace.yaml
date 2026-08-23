@@ -1,5 +1,6 @@
 packages:
   - assets/avatar
+  - assets/avatar/packages/*
   - apps/*
   - packages/adapters/*
   - packages/channels/*

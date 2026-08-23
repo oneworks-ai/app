@@ -63,14 +63,14 @@ export function AgentRoomRoster({
               <div
                 className={[
                   'agent-room-roster__avatar',
-                  member.avatar == null && avatarLabel == null ? 'agent-room-roster__avatar--pixel' : ''
+                  member.avatar == null && avatarLabel == null ? 'agent-room-roster__avatar--generated' : ''
                 ].filter(Boolean).join(' ')}
                 aria-hidden='true'
               >
                 <AgentRoomAvatarContent
                   imageClassName='agent-room-roster__avatar-image'
                   member={member}
-                  pixelClassName='agent-room-roster__avatar-pixel'
+                  generatedClassName='agent-room-roster__avatar-generated'
                 />
               </div>
               <div className='agent-room-roster__member-copy'>
