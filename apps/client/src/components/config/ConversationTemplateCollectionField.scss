@@ -1,0 +1,73 @@
+.conversation-template-collection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--subpage-tertiary-gap, 10px);
+  min-width: 0;
+}
+
+.conversation-template-collection__grid.config-view__record-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+  align-items: stretch;
+  gap: var(--subpage-tertiary-gap, 10px);
+}
+
+.conversation-template-collection__card.config-view__record-card {
+  position: relative;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+
+  .config-view__record-actions {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 2px;
+    padding-inline: 32px var(--subpage-tertiary-padding);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      var(--subpage-tertiary-bg) 32px
+    );
+    border-radius: inherit;
+    transform: none;
+  }
+
+  &:hover .config-view__record-actions,
+  &:focus-within .config-view__record-actions {
+    transform: none;
+  }
+}
+
+.conversation-template-collection__card.is-dragging {
+  opacity: .55;
+}
+
+.conversation-template-collection__card
+  .conversation-template-collection__narrow-move-action {
+  display: none;
+}
+
+.conversation-template-collection__empty {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 600px) {
+  .conversation-template-collection__grid.config-view__record-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .conversation-template-collection__card
+    .conversation-template-collection__drag-handle {
+    display: none;
+  }
+
+  .conversation-template-collection__card
+    .conversation-template-collection__narrow-move-action {
+    display: inline-flex;
+  }
+}

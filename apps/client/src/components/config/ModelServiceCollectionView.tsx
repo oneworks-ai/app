@@ -9,7 +9,6 @@ import {
   resolveModelProviderIdentity
 } from '@oneworks/utils/model-providers'
 
-import { AdapterImportRow } from './AdapterImportRow'
 import type { AdapterImportAction } from './AdapterImportRow'
 import { ModelServiceAvailableGroup, ModelServiceConfiguredGroup } from './ModelServiceCollectionGroups'
 import { ModelServiceCollectionToolbar } from './ModelServiceCollectionToolbar'
@@ -68,17 +67,19 @@ export function ModelServiceCollectionView({
     ? value as Record<string, unknown>
     : {}
   const existingKeys = useMemo(() => new Set(entries.map(entry => entry.key)), [entries])
-  const configuredProviderIds = useMemo(() =>
-    new Set(
-      entries
-        .map(entry => resolveModelProviderIdentity(entry.item as ModelServiceConfig).provider)
-        .filter((providerId): providerId is string => providerId != null)
-    ), [entries])
-  const availableProviders = useMemo(() =>
-    listModelProviderDefinitions()
-      .filter(provider => provider.category !== 'custom' && !configuredProviderIds.has(provider.id)), [
-    configuredProviderIds
-  ])
+  const providerConfigurationCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    entries.forEach((entry) => {
+      const providerId = resolveModelProviderIdentity(entry.item as ModelServiceConfig).provider
+      if (providerId == null) return
+      counts.set(providerId, (counts.get(providerId) ?? 0) + 1)
+    })
+    return counts
+  }, [entries])
+  const catalogProviders = useMemo(
+    () => listModelProviderDefinitions().filter(provider => provider.category !== 'custom'),
+    []
+  )
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const matchesQuery = (...values: Array<string | undefined>) => (
     normalizedQuery === '' || values.some(value => value?.toLocaleLowerCase().includes(normalizedQuery) === true)
@@ -97,7 +98,7 @@ export function ModelServiceCollectionView({
     })
     : []
   const visibleProviders = showAvailable
-    ? availableProviders.filter(provider =>
+    ? catalogProviders.filter(provider =>
       matchesQuery(
         provider.id,
         provider.title,
@@ -147,9 +148,6 @@ export function ModelServiceCollectionView({
 
   return (
     <div className='model-service-collection'>
-      {modelServiceImportAction != null && (
-        <AdapterImportRow action={modelServiceImportAction} />
-      )}
       <ModelServiceCollectionToolbar
         query={query}
         onQueryChange={setQuery}
@@ -162,6 +160,7 @@ export function ModelServiceCollectionView({
         newRecordKey={newRecordKey}
         onNewRecordKeyChange={setNewRecordKey}
         existingKeys={existingKeys}
+        modelServiceImportAction={modelServiceImportAction}
         onCreateManual={baseKey => createService({ baseKey })}
         source={source}
         creatingModelServiceSessionKey={creatingModelServiceSessionKey}
@@ -181,6 +180,7 @@ export function ModelServiceCollectionView({
 
       <ModelServiceAvailableGroup
         providers={visibleProviders}
+        providerConfigurationCounts={providerConfigurationCounts}
         onConfigure={provider => createService({ baseKey: provider.id, provider })}
         t={t}
       />

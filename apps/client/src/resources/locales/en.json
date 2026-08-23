@@ -3895,6 +3895,10 @@
         "advanced": "Advanced"
       }
     },
+    "conversationTemplates": {
+      "searchPlaceholder": "Search presets and actions",
+      "noMatches": "No matching items"
+    },
     "editor": {
       "addField": "Add Field",
       "addItem": "Add Item",
@@ -3916,6 +3920,9 @@
       "newModelSelectorName": "New model selector",
       "moveUp": "Move Up",
       "moveDown": "Move Down",
+      "moveLeft": "Move Left",
+      "moveRight": "Move Right",
+      "reorder": "Drag to reorder",
       "shortcutPlaceholder": "Press shortcut",
       "clearShortcut": "Clear shortcut",
       "newModelServiceName": "New model service name",
@@ -4102,7 +4109,8 @@
         },
         "actions": {
           "addCustom": "Add custom service",
-          "configure": "Configure {{provider}}"
+          "configure": "Configure {{provider}}",
+          "addAnother": "Add another {{provider}} configuration"
         },
         "groups": {
           "configured": "Configured services",
@@ -4110,6 +4118,7 @@
         },
         "states": {
           "configured": "Configured",
+          "configuredCount": "{{count}} configured",
           "available": "Not configured",
           "inherited": "Inherited",
           "override": "Overridden"

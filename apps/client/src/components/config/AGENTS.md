@@ -38,7 +38,7 @@ Worktree Environment 的 Project / User source switch 属于 route header；列�
 - 列表创建、编辑、删除和进入详情优先复用 `ConfigRecordList` 这类统一记录列表。列表组件必须允许外部决定按钮行为，例如点击行进入详情、打开对话框、执行内联创建或跳转；不要把某个页面的一次性行为写死在通用组件里。
 - record-map 记录列表的新增行放在已有条目上方；如果同一列表还有独立导入行，则顺序为“导入、新增、已有条目”。行内选择器与方形动作按钮必须同高。
 - 主流程保持简洁，低频或实现视角字段放进高级配置。服务图标、管理主页、Base URL 覆盖、扩展 JSON、服务类型等字段，只有没有 provider 或当前类型必须用户配置时才默认展开。
-- 卡片标题、列表行尾、tab chrome 和配置页工具区的按钮优先使用 icon-only + tooltip + `aria-label`，尺寸和 hover 状态跟随现有 config / sidebar inline action 风格。必要快捷动作放在更多按钮左侧，低频动作收进更多菜单。
+- 卡片标题、列表行尾、tab chrome 和配置页工具区的按钮优先使用 icon-only + tooltip + `aria-label`，尺寸和 hover 状态跟随现有 config / sidebar inline action 风格。必要快捷动作放在更多按钮左侧，低频动作收进更多菜单。仅 hover / focus 可见的卡片或列表动作遵循 [`styles.md`](../../../../../.oo/rules/frontend-standard/styles.md) 的覆盖层规则：默认正文不为它预留空槽，出现后覆盖右侧而不挤压正文。
 - 外部网页、管理后台和 provider portal 优先接入配置页底部 dock / portal tabs，不使用一次性的 iframe dialog。底部 dock 是 route 级状态，切换配置 section、detail 或 source 时不能被清空。
 - 查询类信息默认自动触发并使用缓存；界面只展示正在查询、查询失败、实际结果三类状态。额度、余额、状态和模型列表要按数据语义分别呈现，不为了复用 UI 把不同含义混成同一种卡片。
 - PR 证据截图必须覆盖本次改动影响到的服务类型和关键交互，例如普通 API、Coding Plan、collection、standalone、profiles / tokens、portal 下方面板。截图前要等待异步加载完成，不能用旧页面、局部错误页面或未加载完成的状态替代。

@@ -1,6 +1,7 @@
 import { Button, Input, Tooltip } from 'antd'
 import type { ButtonProps } from 'antd'
-import type { ReactNode } from 'react'
+import { forwardRef } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 
 export interface ConfigRecordAction {
   ariaLabel: string
@@ -43,17 +44,14 @@ export const ConfigRecordActions = ({ actions }: { actions: ConfigRecordAction[]
   )
 }
 
-export const ConfigRecordList = ({
-  children,
-  className
-}: {
+export const ConfigRecordList = forwardRef<HTMLDivElement, {
   children: ReactNode
   className?: string
-}) => (
-  <div className={cx('config-view__record-list', className)}>
+}>(({ children, className }, ref) => (
+  <div ref={ref} className={cx('config-view__record-list', className)}>
     {children}
   </div>
-)
+))
 
 export const ConfigRecordCreateRow = ({
   actions,
@@ -89,25 +87,29 @@ export const ConfigRecordCreateRow = ({
   </div>
 )
 
-export const ConfigRecordRow = ({
-  actions = [],
-  className,
-  descriptions = [],
-  icon,
-  onClick,
-  rightSlot,
-  subtitle,
-  title
-}: {
+export interface ConfigRecordRowProps {
   actions?: ConfigRecordAction[]
   className?: string
   descriptions?: ReactNode[]
   icon?: ReactNode
   onClick?: () => void
   rightSlot?: ReactNode
+  style?: CSSProperties
   subtitle?: ReactNode
   title: ReactNode
-}) => {
+}
+
+export const ConfigRecordRow = forwardRef<HTMLDivElement, ConfigRecordRowProps>(({
+  actions = [],
+  className,
+  descriptions = [],
+  icon,
+  onClick,
+  rightSlot,
+  style,
+  subtitle,
+  title
+}, ref) => {
   const mainContent = (
     <div className={cx('config-view__record-heading', icon != null && 'has-adapter-icon')}>
       {icon}
@@ -126,7 +128,7 @@ export const ConfigRecordRow = ({
   )
 
   return (
-    <div className={cx('config-view__record-card', className)}>
+    <div ref={ref} className={cx('config-view__record-card', className)} style={style}>
       <div className='config-view__detail-list-row'>
         {onClick == null
           ? <div className='config-view__detail-list-main'>{mainContent}</div>
@@ -140,4 +142,4 @@ export const ConfigRecordRow = ({
       </div>
     </div>
   )
-}
+})

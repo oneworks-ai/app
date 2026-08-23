@@ -16,6 +16,7 @@ import { renderIconRef } from '#~/utils/model-provider-icons'
 import { AdapterAccountPreview } from './AdapterAccountPreview'
 import { AdapterImportRow } from './AdapterImportRow'
 import type { AdapterImportAction } from './AdapterImportRow'
+import { ConversationTemplateCollectionField } from './ConversationTemplateCollectionField'
 import { DetailCollectionFieldActions } from './DetailCollectionFieldActions'
 import { ModelServiceCollectionView } from './ModelServiceCollectionView'
 import { ModelServiceProviderQuotaPreview } from './ModelServiceProviderQuotaPreview'
@@ -155,6 +156,25 @@ export const DetailCollectionField = ({
         onChange={onChange}
         onOpenDetail={onOpenDetail}
         uiSection={uiSection}
+        t={t}
+      />
+    )
+  }
+
+  if (
+    sectionKey === 'conversation' &&
+    detailCollection.collectionKind === 'list' &&
+    (field.path[0] === 'startupPresets' || field.path[0] === 'builtinActions')
+  ) {
+    return (
+      <ConversationTemplateCollectionField
+        field={field}
+        mergedAdapters={mergedAdapters}
+        mergedModelServices={mergedModelServices}
+        value={value}
+        resolvedValue={resolvedValue}
+        onChange={onChange}
+        onOpenDetail={onOpenDetail}
         t={t}
       />
     )

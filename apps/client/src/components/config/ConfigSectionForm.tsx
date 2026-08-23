@@ -63,6 +63,11 @@ import { resolveConfigUiRecordEntry } from './record-editors/schemaRecordUtils'
 
 const directRecordSections = new Set(['models'])
 const directDetailSections = new Set(['modelServices', 'channels', 'adapters'])
+const isConversationTemplateCollection = (sectionKey: string, field: FieldSpec) => (
+  sectionKey === 'conversation' &&
+  field.type === 'detailCollection' &&
+  (field.path[0] === 'startupPresets' || field.path[0] === 'builtinActions')
+)
 const groupedDefaultSections = new Set(['shortcuts'])
 const defaultGroupOrder = ['base', 'permissions', 'env', 'items', 'default']
 const isRecord = (value: unknown): value is Record<string, unknown> => (
@@ -927,7 +932,10 @@ export const SectionForm = ({
       )
     }
 
-    if (directDetailSections.has(sectionKey) && field.type === 'detailCollection' && field.path.length === 0) {
+    if (
+      (directDetailSections.has(sectionKey) && field.type === 'detailCollection' && field.path.length === 0) ||
+      isConversationTemplateCollection(sectionKey, field)
+    ) {
       return (
         <div key={`${keyPrefix}:${field.path.join('.')}:${field.type}`}>
           {control}

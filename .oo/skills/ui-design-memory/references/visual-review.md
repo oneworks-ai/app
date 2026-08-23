@@ -32,6 +32,17 @@ Check:
 8. known team and project anti-patterns;
 9. evidence provenance and revision identity.
 
+For card or list-row actions that are intentionally hidden until hover or focus, also verify all of the following in the real surface:
+
+- the default card or row has no empty action reservation and its text keeps the same available width and line wrapping;
+- the hover / focus action layer covers the right edge without moving, resizing, reflowing, or clipping the normal content or the card / row itself;
+- any backdrop, fade, or surface behind the overlay keeps both the action and obscured text legible in the reviewed themes;
+- keyboard focus exposes the same action without a mouse-only path; touch or no-hover layouts provide a persistent reachable equivalent, such as a More menu.
+
+An always-visible primary or semantic column action is an exception only when it is intentionally part of the record's normal information layout; reviewers must record that distinction rather than treating a reserved action slot as hover behavior.
+
+When a collection exposes card reordering, reviewers must verify that each rendered direction has a real target in the current layout: use left / right affordances only for same-row horizontal neighbours in a multi-column grid, and up / down only for a true single-column ordered list. A row boundary is not a hidden horizontal target; cross-row reordering needs drag and drop or an explicit destination control. Do not accept an unavailable or ambiguous “move forward” action. Recheck the direction, tooltip / `aria-label`, Tab reachability, Enter / Space activation, and first / last / partial-row behavior at responsive breakpoints; do not assume arrow-key reordering unless the implementation deliberately provides a roving-grid pattern.
+
 ## Output
 
 ```text

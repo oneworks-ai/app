@@ -52,10 +52,12 @@ export function ModelServiceConfiguredGroup({
 
 export function ModelServiceAvailableGroup({
   onConfigure,
+  providerConfigurationCounts,
   providers,
   t
 }: {
   onConfigure: (provider: ModelProviderDefinition) => void
+  providerConfigurationCounts: ReadonlyMap<string, number>
   providers: ModelProviderDefinition[]
   t: TranslationFn
 }) {
@@ -73,6 +75,7 @@ export function ModelServiceAvailableGroup({
           <ModelServiceAvailableCard
             key={provider.id}
             provider={provider}
+            configuredCount={providerConfigurationCounts.get(provider.id) ?? 0}
             onConfigure={() => onConfigure(provider)}
             t={t}
           />

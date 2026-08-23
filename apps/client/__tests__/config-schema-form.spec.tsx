@@ -797,6 +797,8 @@ describe('config schema form', () => {
     expect(html).toContain('teamChat')
     expect(html).toContain('action-search-toolbar')
     expect(html).toContain('channel-collection__grid')
+    expect(html).toContain('channel-collection__icon')
+    expect(html).toContain('assets/brand/channels/wechat.svg')
     expect(html).toContain('config.channels.status.configured')
     expect(html).toContain('config.channels.status.unconfigured')
     expect(html).toContain('config.channels.filters.configured')
@@ -1134,6 +1136,45 @@ describe('config schema form', () => {
     expect(html).toContain('config-view__detail-list')
   })
 
+  it('renders conversation presets and built-in actions as searchable card collections', () => {
+    const conversationFields = configSchema.conversation ?? []
+    const startupPresets = conversationFields.find(field => field.path[0] === 'startupPresets')
+    const builtinActions = conversationFields.find(field => field.path[0] === 'builtinActions')
+    expect(startupPresets).toBeDefined()
+    expect(builtinActions).toBeDefined()
+
+    const html = renderToStaticMarkup(
+      <SectionForm
+        sectionKey='conversation'
+        fields={[startupPresets!, builtinActions!]}
+        value={{
+          startupPresets: [{
+            description: 'Investigate a regression before changing code',
+            mode: 'default',
+            title: 'Bug fix'
+          }],
+          builtinActions: [{
+            description: 'Prepare the release scope and checks',
+            mode: 'default',
+            prompt: 'Prepare release notes',
+            title: 'Release'
+          }]
+        }}
+        onChange={() => undefined}
+        mergedModelServices={{}}
+        mergedAdapters={{}}
+        t={t}
+      />
+    )
+
+    expect(html).toContain('conversation-template-collection')
+    expect(html).toContain('action-search-toolbar--flush')
+    expect(html).toContain('drag_indicator')
+    expect(html).toContain('Bug fix')
+    expect(html).toContain('Release')
+    expect(html).not.toContain('config-view__field-row--stacked')
+  })
+
   it('renders a detail-collection list item route as a second-level config page', () => {
     const html = renderToStaticMarkup(
       <SectionForm
@@ -1255,6 +1296,7 @@ describe('config schema form', () => {
     expect(html).toContain('model-service-collection__card--available')
     expect(html).toContain('config.modelServices.collection.states.configured')
     expect(html).toContain('config.modelServices.collection.states.available')
+    expect(html).toContain('config.modelServices.collection.states.configuredCount')
     expect(html).toContain('config.modelServices.collection.types.api')
   })
 
@@ -1399,7 +1441,7 @@ describe('config schema form', () => {
     expect(html).not.toContain('config.fields.modelServices.item.title.label')
   })
 
-  it('renders adapter model service import as a searchable row separate from manual creation', () => {
+  it('opens adapter model service import from the shared toolbar', () => {
     const importAdapters = [
       {
         adapterKey: 'codex',
@@ -1484,32 +1526,22 @@ describe('config schema form', () => {
       />
     )
 
-    expect(globalHtml.match(/config-view__record-add-inputs/gu)).toHaveLength(1)
-    expect(globalHtml).toContain('config-view__adapter-import-row')
-    expect(globalHtml).toContain('aria-label="Model service import adapter"')
-    expect(globalHtml).toContain('Codex config.toml')
-    expect(globalHtml.match(/class="config-view__adapter-import-selected"/gu)).toHaveLength(1)
-    expect(globalHtml).toContain('config-view__adapter-import-option-icon')
+    expect(globalHtml).not.toContain('config-view__adapter-import-row')
+    expect(globalHtml).not.toContain('config-view__adapter-import-toolbar-control')
+    expect(globalHtml).toContain('aria-label="Import model services from Codex config.toml"')
+    expect(globalHtml).not.toContain('config-view__adapter-import-selected')
     expect(globalHtml).not.toContain('<span>Import</span>')
     expect(globalHtml).toContain('file_download')
     expect(globalHtml).toContain('config.modelServices.collection.actions.addCustom')
-    expect(globalHtml.indexOf('config-view__adapter-import-row')).toBeLessThan(
-      globalHtml.indexOf('model-service-collection__toolbar')
-    )
-    expect(globalHtml.indexOf('model-service-collection__toolbar')).toBeLessThan(
-      globalHtml.indexOf('config-view__record-card')
+    expect(globalHtml.indexOf('action-search-toolbar__search')).toBeLessThan(
+      globalHtml.indexOf('file_download')
     )
     expect(globalHtml.indexOf('file_download')).toBeLessThan(
-      globalHtml.indexOf('action-search-toolbar')
+      globalHtml.indexOf('config-view__record-card')
     )
-    expect(customHtml).toContain('Acme native config')
-    expect(customHtml).toContain('config-view__adapter-import-selected')
-    expect(customHtml).toContain('>deployed_code</span>')
-    expect(loadingHtml).toContain('aria-busy="true"')
-    expect(loadingHtml).toContain('aria-disabled="true"')
+    expect(customHtml).toContain('aria-label="Import model services from Acme native config"')
     expect(loadingHtml).toContain('ant-btn-loading')
     expect(userHtml).toContain('disabled=""')
-    expect(userHtml).toContain('aria-disabled="true"')
   })
 
   it('groups model service detail fields by function', () => {
@@ -1720,13 +1752,13 @@ describe('config schema form', () => {
     expect(html).not.toContain('<div class="config-view__record-subtitle">kimi-code</div>')
   })
 
-  it('renders coding plan quota previews in model service summaries', () => {
+  it('renders balance previews for every configured provider that supports balance queries', () => {
     const html = renderToStaticMarkup(
       <SectionForm
         sectionKey='modelServices'
         value={{
-          kimi: {
-            provider: 'kimi-code',
+          deepseek: {
+            provider: 'deepseek',
             apiKey: 'secret'
           }
         }}
@@ -1738,7 +1770,9 @@ describe('config schema form', () => {
     )
 
     expect(html).toContain('config-view__model-service-list-quota')
-    expect(html.match(/config-view__model-service-list-quota-circle/gu)).toHaveLength(2)
+    expect(html).toContain('model-service-collection__quota-footer')
+    expect(html).toContain('config-view__model-service-list-quota-value')
+    expect(html).not.toContain('config-view__model-service-list-quota-circle')
   })
 
   it('renders inherited detail-collection entries as readonly summaries in source views', () => {

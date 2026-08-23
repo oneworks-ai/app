@@ -21,6 +21,12 @@
   height: 100%;
 }
 
+.channel-collection__icon.channel-platform-icon {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+}
+
 .channel-collection__card--unconfigured.config-view__record-card {
   border-style: dashed;
   background: color-mix(in srgb, var(--subpage-tertiary-bg) 74%, transparent);
