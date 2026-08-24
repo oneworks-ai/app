@@ -30,15 +30,9 @@ import {
 } from '@oneworks/avatar'
 
 const seed = 'v1-agent-42'
-const palette = resolveAvatarSeededOption(
-  seed,
-  AVATAR_SEED_FIELD_PATHS.palette,
-  [
-    'signal',
-    'white',
-    'coral'
-  ]
-)
+const paletteOptions = ['signal', 'white', 'coral']
+const { palette: paletteField } = AVATAR_SEED_FIELD_PATHS
+const palette = resolveAvatarSeededOption(seed, paletteField, paletteOptions)
 const view = resolveSeededAvatarView(seed, definition.scene.view)
 ```
 
