@@ -17,6 +17,7 @@ export interface ModelServiceProviderMoreAction {
 }
 
 export const ModelServiceProviderActionHeader = ({
+  beforeMoreActions,
   headerActions,
   moreActions = [],
   providerTitle,
@@ -25,6 +26,7 @@ export const ModelServiceProviderActionHeader = ({
   showProviderTitle = true,
   t
 }: {
+  beforeMoreActions?: ReactNode
   headerActions?: ReactNode
   moreActions?: ModelServiceProviderMoreAction[]
   providerTitle: string
@@ -66,6 +68,7 @@ export const ModelServiceProviderActionHeader = ({
             })}
           </span>
         )}
+        {beforeMoreActions}
         {moreActions.length > 0 && (
           <Tooltip title={t('config.modelServices.actions.more')}>
             <Dropdown

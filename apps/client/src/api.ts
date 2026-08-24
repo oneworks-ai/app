@@ -93,6 +93,7 @@ export {
   updateEntityMemory
 } from './api/knowledge'
 export {
+  copyModelServiceToProvider,
   createModelServiceManagementToken,
   createModelServiceSecret,
   deleteModelServiceManagementToken,

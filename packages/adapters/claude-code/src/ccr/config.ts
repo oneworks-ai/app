@@ -244,8 +244,9 @@ const resolveDefaultModel = (params: {
   const selectedServiceKey = selectedModel?.includes(',')
     ? selectedModel.split(',', 1)[0]?.trim()
     : undefined
+  const flattenedModelServices = flattenModelServices(params.modelServices)
   const resolvedModelServices = Object.fromEntries(
-    Object.entries(params.modelServices)
+    Object.entries(flattenedModelServices)
       .map(([serviceKey, service]) => {
         const resolved = resolveModelServiceConfig(service, ['modelServices', serviceKey])
         return resolved.service != null ? [serviceKey, resolved.service] as const : undefined
@@ -261,7 +262,7 @@ const resolveDefaultModel = (params: {
       // Catalog defaults describe the general upstream wire protocol. CCR has its
       // own provider-specific compatibility routing, so only an explicit service
       // protocol may override that established behavior here.
-      const explicitApiProtocol = resolveExplicitModelServiceApiProtocol(params.modelServices[name])
+      const explicitApiProtocol = resolveExplicitModelServiceApiProtocol(flattenedModelServices[name])
       const apiBaseUrl = buildProviderBaseUrl(configValue, explicitApiProtocol)
       const runtimeProviderFingerprint = buildRuntimeProviderFingerprint(name, configValue.apiKey, apiBaseUrl)
       return [
@@ -441,7 +442,7 @@ export const generateDefaultCCRConfigJSON = (params: {
   const loggerEnabled = adapterOptions?.ccrTransformers?.logger ?? true
   const apiTimeoutMs = resolveCompatibleApiTimeoutMs({
     defaultService,
-    modelServices,
+    modelServices: resolvedModelServices,
     adapterOptions
   })
   const routerPort = normalizePositiveInteger(

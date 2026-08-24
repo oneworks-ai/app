@@ -1,6 +1,7 @@
 /* eslint-disable max-lines -- provider actions coordinate portal, API actions, live quota, and result rendering. */
 import { App } from 'antd'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 
 import type { ConfigSource, ProviderAccountStatus, ProviderModelInfo, ProviderServiceStatus } from '@oneworks/types'
 import {
@@ -42,16 +43,20 @@ import {
 } from './modelServiceProviderActionUtils'
 
 export const ModelServiceProviderActions = ({
+  actionsOnly = false,
   compact = false,
   item,
   onOpenPortal,
+  recordActions,
   serviceKey,
   source,
   t
 }: {
+  actionsOnly?: boolean
   compact?: boolean
   item: unknown
   onOpenPortal?: (request: ModelServiceProviderPortalRequest) => void
+  recordActions?: ReactNode
   serviceKey: string
   source: ConfigSource
   t: TranslationFn
@@ -81,7 +86,9 @@ export const ModelServiceProviderActions = ({
   const serviceFingerprint = buildServiceActionFingerprint(serviceKey, source, service)
   const showsPlanSummary = codingPlan != null || billing?.kind != null
   const shouldShowAccountSummary = showsPlanSummary || actionCapabilities.canQueryBalance
-  const canAutoQueryAccountStatus = shouldShowAccountSummary && actionCapabilities.canQueryBalance
+  const canAutoQueryAccountStatus = !actionsOnly &&
+    shouldShowAccountSummary &&
+    actionCapabilities.canQueryBalance
 
   useEffect(() => {
     const cachedAccountStatus = getCachedModelServiceAccountStatus(serviceFingerprint)
@@ -219,29 +226,42 @@ export const ModelServiceProviderActions = ({
     }])
   ]
 
+  const actionHeader = (
+    <ModelServiceProviderActionHeader
+      beforeMoreActions={recordActions}
+      headerActions={
+        <ModelServiceProviderActionButtons
+          canCreateSecret={actionCapabilities.canCreateSecret}
+          homepageUrl={homepageUrl}
+          loadingAction={loadingAction}
+          onHomepage={openPortal}
+          onSecret={() => void handleSecret()}
+          secretActionLabel={secretActionLabel}
+          t={t}
+        />
+      }
+      moreActions={moreActions}
+      providerTitle={providerTitle}
+      service={service}
+      serviceStatus={serviceStatus}
+      showProviderTitle={!compact}
+      t={t}
+    />
+  )
+
+  if (actionsOnly) {
+    return (
+      <div className='config-view__model-service-record-actions'>
+        {actionHeader}
+      </div>
+    )
+  }
+
   return (
     <div
       className={`config-view__model-service-actions${compact ? ' config-view__model-service-actions--compact' : ''}`}
     >
-      <ModelServiceProviderActionHeader
-        headerActions={
-          <ModelServiceProviderActionButtons
-            canCreateSecret={actionCapabilities.canCreateSecret}
-            homepageUrl={homepageUrl}
-            loadingAction={loadingAction}
-            onHomepage={openPortal}
-            onSecret={() => void handleSecret()}
-            secretActionLabel={secretActionLabel}
-            t={t}
-          />
-        }
-        moreActions={moreActions}
-        providerTitle={providerTitle}
-        service={service}
-        serviceStatus={serviceStatus}
-        showProviderTitle={!compact}
-        t={t}
-      />
+      {actionHeader}
       <ModelServiceProviderPlanSummary
         accountError={accountError}
         accountStatus={accountStatus}

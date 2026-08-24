@@ -1841,6 +1841,54 @@ describe('createCodexSession RPC approval policy mapping', () => {
     session.kill()
   })
 
+  it('routes a Provider Profile through a collision-safe native provider id', async () => {
+    process.env.HOME = '/tmp'
+    const { proc } = makeProc()
+    spawnMock.mockReturnValue(proc)
+
+    const session = await createCodexSession(
+      makeCtx({
+        configs: [{
+          modelServices: {
+            deepseek: {
+              kind: 'collection',
+              provider: 'deepseek',
+              profiles: {
+                personal: { apiKey: 'personal-key' },
+                work: { apiKey: 'work-key' }
+              }
+            }
+          }
+        }, undefined]
+      }),
+      {
+        type: 'create',
+        runtime: 'server',
+        sessionId: 'session-provider-profile',
+        model: 'deepseek/work,deepseek-chat',
+        description: 'Reply with pong.',
+        onEvent: () => {}
+      } as any
+    )
+
+    const overrides = getConfigOverrides(spawnMock.mock.calls[0]?.[1] as string[])
+    const modelProvider = overrides.find(override => override.startsWith('model_provider='))
+    const runtimeProviderId = modelProvider?.match(/^model_provider="([^"]+)"$/u)?.[1]
+    expect(runtimeProviderId).toMatch(/^deepseek-work-[a-f0-9]{8}$/u)
+    expect(overrides).toContain(`model_providers.${runtimeProviderId}.experimental_bearer_token="oneworks-local-proxy"`)
+    expect(decodeProxyMeta(overrides, runtimeProviderId ?? '')).toMatchObject({
+      headers: {
+        Authorization: 'Bearer work-key'
+      },
+      diagnostics: {
+        routedServiceKey: 'deepseek/work',
+        resolvedModel: 'deepseek-chat'
+      }
+    })
+
+    session.kill()
+  })
+
   it('restores imported native provider settings without starting the local proxy', async () => {
     process.env.HOME = '/tmp'
     const { proc } = makeProc()

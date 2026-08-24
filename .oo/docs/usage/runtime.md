@@ -140,6 +140,27 @@ modelServices:
 - 可选值是 `openai-responses`、`openai-chat-completions`、`anthropic-messages`、`gemini-generate-content` 和 `gemini-interactions`。当前 Codex 转换支持前四种；`gemini-interactions` 会明确报不支持，不会静默按其它协议发送。
 - 内置服务商优先使用 catalog 默认；显式 URL 仍会先做无歧义 endpoint 推断，并继续兼容旧的 `extra.codex.wireApi` hint。自定义网关建议显式声明协议。collection 的 profile 默认继承父级协议，也可以单独覆盖。
   - 当前转换覆盖文本、图片、function tools、JSON schema、reasoning summary、usage 和流式生命周期。内建非 function tools、音频、文件和无法可靠映射的异构内容会 fail closed，以免语义被悄悄丢弃。
+- 同一平台需要维护多个 API Key 时，可以把平台建成一个 Provider，并在 `profiles` 下维护多个 Profile。Profile 是可被模型选择器直接使用的一套 endpoint / API Key 配置，不是新的服务类型：
+
+```yaml
+modelServices:
+  deepseek:
+    kind: collection
+    provider: deepseek
+    profiles:
+      personal:
+        apiKey: ${DEEPSEEK_PERSONAL_KEY}
+      work:
+        apiKey: ${DEEPSEEK_WORK_KEY}
+
+  # 独立 service 仍受支持，同一个 provider 可以有任意多条。
+  deepseek-2:
+    provider: deepseek
+    apiKey: ${DEEPSEEK_BACKUP_KEY}
+```
+
+Profile 的模型选择器使用 `provider/profile,model`，例如 `deepseek/work,deepseek-chat`；独立 service 继续使用 `service,model`。配置页会逐 Profile 查询并展示额度。服务端会标注额度是 credential 独立值还是 account/provider 共享值；共享账号余额不会被错误相加。
+
 - Coding Plan / Token Plan 指服务商的计费套餐，不是 agent Plan Mode。选择这类服务时优先使用专属 provider id，例如 `qwen-coding-plan`、`zhipu-coding-plan`、`minimax-token-plan`、`kimi-code`、`tencent-tokenhub-coding-plan`、`volcengine-ark-coding-plan`、`baidu-qianfan-coding-plan`；不要把套餐 key 和普通 API key、套餐 base URL 和普通 API base URL 混用。
 - 套餐模型列表默认来自内置目录，不假设 `/v1/models` 可用。只有想固定 allowlist 时才写 `models`：
 

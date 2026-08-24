@@ -254,6 +254,56 @@ describe('updateConfigFile', () => {
     }
   })
 
+  it('preserves masked API keys inside model service Profiles', async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'ow-config-update-profiles-'))
+
+    try {
+      const configPath = path.join(tempDir, '.oo.config.json')
+      await writeFile(
+        configPath,
+        JSON.stringify(
+          {
+            modelServices: {
+              deepseek: {
+                kind: 'collection',
+                provider: 'deepseek',
+                profiles: {
+                  personal: { apiKey: 'personal-secret', title: 'Personal' },
+                  work: { apiKey: 'work-secret', title: 'Work' }
+                }
+              }
+            }
+          },
+          null,
+          2
+        )
+      )
+
+      const result = await updateConfigFile({
+        workspaceFolder: tempDir,
+        source: 'project',
+        section: 'modelServices',
+        value: {
+          deepseek: {
+            kind: 'collection',
+            provider: 'deepseek',
+            profiles: {
+              personal: { apiKey: '******', title: 'Personal updated' },
+              work: { apiKey: '******', title: 'Work' }
+            }
+          }
+        }
+      })
+
+      expect(result.updatedConfig.modelServices?.deepseek?.profiles).toEqual({
+        personal: { apiKey: 'personal-secret', title: 'Personal updated' },
+        work: { apiKey: 'work-secret', title: 'Work' }
+      })
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it('preserves masked voice credentials when updating config', async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), 'ow-config-update-voice-'))
 

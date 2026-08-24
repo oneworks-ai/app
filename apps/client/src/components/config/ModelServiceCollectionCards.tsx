@@ -44,6 +44,7 @@ export function ModelServiceConfiguredCard({
   entry,
   onCreateModelServiceSession,
   onOpen,
+  onOpenProfiles,
   onRemove,
   source,
   t
@@ -52,6 +53,7 @@ export function ModelServiceConfiguredCard({
   entry: ModelServiceCollectionEntry
   onCreateModelServiceSession?: (request: ModelServiceConfigSessionRequest) => void | Promise<void>
   onOpen: () => void
+  onOpenProfiles: () => void
   onRemove: () => void
   source: ConfigSource
   t: TranslationFn
@@ -135,6 +137,7 @@ export function ModelServiceConfiguredCard({
           serviceKey={entry.key}
           source={source}
           t={t}
+          onOpenProfiles={onOpenProfiles}
         />
       }
       actions={actions}

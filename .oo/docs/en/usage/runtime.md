@@ -142,6 +142,27 @@ modelServices:
 - Values are `openai-responses`, `openai-chat-completions`, `anthropic-messages`, `gemini-generate-content`, and `gemini-interactions`. Codex conversion currently supports the first four; `gemini-interactions` fails explicitly instead of being sent as another protocol.
 - Built-in providers use their catalog defaults. Explicit URLs still get unambiguous endpoint inference first, and legacy `extra.codex.wireApi` hints remain compatible. Declare the protocol for a custom gateway. Collection profiles inherit it and may override it.
   - Current conversion covers text, images, function tools, JSON schema, reasoning summaries, usage, and streaming lifecycle events. Non-function built-in tools, audio, files, and heterogeneous content that cannot be mapped reliably fail closed rather than being silently discarded.
+- When one platform needs multiple API keys, define the platform as a Provider and keep the endpoint/API-key configurations as Profiles. A Profile is selectable configuration, not another service type:
+
+```yaml
+modelServices:
+  deepseek:
+    kind: collection
+    provider: deepseek
+    profiles:
+      personal:
+        apiKey: ${DEEPSEEK_PERSONAL_KEY}
+      work:
+        apiKey: ${DEEPSEEK_WORK_KEY}
+
+  # Independent services remain supported, including repeated providers.
+  deepseek-2:
+    provider: deepseek
+    apiKey: ${DEEPSEEK_BACKUP_KEY}
+```
+
+Profile selectors use `provider/profile,model`, for example `deepseek/work,deepseek-chat`; independent services continue to use `service,model`. The configuration UI queries and displays quota per Profile. The server marks whether a value is credential-specific or shared by an account/provider, so shared balances are not incorrectly added together.
+
 - Coding Plan and Token Plan mean provider billing products, not agent Plan Mode. Prefer dedicated provider ids such as `qwen-coding-plan`, `zhipu-coding-plan`, `minimax-token-plan`, `kimi-code`, `tencent-tokenhub-coding-plan`, `volcengine-ark-coding-plan`, and `baidu-qianfan-coding-plan`; do not mix plan keys with ordinary API keys or plan base URLs with ordinary API base URLs.
 - Plan model lists come from the built-in catalog by default and do not assume `/v1/models` works. Write `models` only when you want a fixed allowlist:
 

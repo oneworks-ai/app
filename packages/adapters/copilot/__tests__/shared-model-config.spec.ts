@@ -29,6 +29,31 @@ describe('resolveCopilotModelConfig', () => {
     })
   })
 
+  it('routes a Provider Profile with its own API key', () => {
+    const { ctx } = makeCtx({
+      configs: [{
+        modelServices: {
+          deepseek: {
+            kind: 'collection',
+            provider: 'deepseek',
+            profiles: {
+              work: { apiKey: 'work-key' }
+            }
+          }
+        }
+      }, undefined]
+    })
+
+    expect(resolveCopilotModelConfig(ctx, 'deepseek/work,deepseek-chat')).toMatchObject({
+      cliModel: 'deepseek-chat',
+      routedServiceKey: 'deepseek/work',
+      providerEnv: {
+        COPILOT_PROVIDER_API_KEY: 'work-key',
+        COPILOT_PROVIDER_BASE_URL: 'https://api.deepseek.com'
+      }
+    })
+  })
+
   it('normalizes responses provider base URLs when wireApi is responses', () => {
     const { ctx } = makeCtx({
       configs: [{

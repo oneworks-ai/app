@@ -36,21 +36,20 @@ export const buildServiceActionFingerprint = (
   serviceKey: string,
   source: ConfigSource,
   service: ModelServiceConfig
-) =>
-  [
-    serviceKey,
-    source,
-    service.provider,
-    service.apiBaseUrl,
-    service.apiKey,
-    service.management?.apiKey,
-    service.management?.baseUrl,
-    service.management?.endpointKind,
-    JSON.stringify(service.management?.headers ?? {}),
-    service.management?.organizationId,
-    service.management?.projectId,
-    service.management?.userId
-  ].join('\n')
+) => {
+  const serializedServiceIdentity = JSON.stringify({
+    provider: service.provider,
+    apiBaseUrl: service.apiBaseUrl,
+    apiKey: service.apiKey,
+    management: service.management
+  })
+  let digest = 2166136261
+  for (let index = 0; index < serializedServiceIdentity.length; index += 1) {
+    digest ^= serializedServiceIdentity.charCodeAt(index)
+    digest = Math.imul(digest, 16777619)
+  }
+  return [serviceKey, source, (digest >>> 0).toString(16).padStart(8, '0')].join('\n')
+}
 
 export const normalizePortalUrl = (url: unknown) => {
   if (typeof url !== 'string' || url.trim() === '') return undefined

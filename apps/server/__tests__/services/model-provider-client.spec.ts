@@ -101,6 +101,31 @@ describe('model provider client', () => {
     })
   })
 
+  it('caches account status per credential without exposing the credential as identity', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ balance_infos: [{ currency: 'USD', total_balance: '5' }] }), { status: 200 })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const service = {
+      apiBaseUrl: 'https://cache.deepseek.example/v1',
+      apiKey: 'cache-only-secret',
+      provider: 'deepseek'
+    }
+
+    const first = await getProviderAccountStatus(service)
+    const second = await getProviderAccountStatus(service)
+
+    expect(second).toEqual(first)
+    expect(first).toMatchObject({
+      aggregation: 'shared',
+      available: 5,
+      scope: 'account'
+    })
+    expect(first.subjectId).toMatch(/^[a-f0-9]{16}$/u)
+    expect(first.subjectId).not.toContain('cache-only-secret')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
   it('queries Micu token usage from the New API root', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(

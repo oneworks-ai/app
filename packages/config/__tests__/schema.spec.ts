@@ -50,6 +50,44 @@ const writePackage = async (
 }
 
 describe('config schema bundle', () => {
+  it('validates model service Profiles without breaking legacy nested extensions', async () => {
+    const valid = await validateConfigSection('modelServices', {
+      deepseek: {
+        kind: 'collection',
+        provider: 'deepseek',
+        profiles: {
+          personal: {
+            apiKey: 'personal-key',
+            models: ['deepseek-chat']
+          },
+          work: {
+            apiKey: 'work-key',
+            management: { apiKey: 'legacy-management-key' },
+            title: 'Work'
+          }
+        }
+      },
+      'deepseek-2': {
+        apiKey: 'legacy-key',
+        provider: 'deepseek'
+      }
+    })
+    expect(valid.success).toBe(true)
+
+    const invalid = await validateConfigSection('modelServices', {
+      deepseek: {
+        kind: 'collection',
+        provider: 'deepseek',
+        profiles: {
+          nested: {
+            apiKey: 42
+          }
+        }
+      }
+    })
+    expect(invalid.success).toBe(false)
+  })
+
   it('pins config-schema consumers to a core package that exports the subpath', async () => {
     const readPackageJson = async (relativePath: string) => (
       JSON.parse(await readFile(path.resolve(process.cwd(), relativePath), 'utf8')) as {

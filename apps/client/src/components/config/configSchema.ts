@@ -8,6 +8,7 @@ import {
 } from '@oneworks/utils/model-providers'
 
 import type { TranslationFn } from './configUtils'
+import { createProviderModelServiceConfig } from './modelServiceProfileUtils'
 
 export type FieldValueType =
   | 'string'
@@ -119,6 +120,7 @@ export interface DetailRecordCollectionSpec extends DetailCollectionBaseSpec {
 
 export interface DetailRecordMapCollectionSpec extends DetailCollectionBaseSpec {
   collectionKind: 'recordMap'
+  createKinds?: Array<{ key: string; labelKey: string }>
   keyPlaceholderKey?: string
   createItem?: (itemKey: string, itemKind?: string) => Record<string, unknown>
 }
@@ -1489,15 +1491,22 @@ export const configSchema: Record<string, FieldSpec[]> = {
       descriptionKey: 'config.fields.modelServices.items.desc',
       detailCollection: {
         collectionKind: 'recordMap',
+        createKinds: [
+          { key: 'provider', labelKey: 'config.modelServices.createKinds.provider' },
+          { key: 'service', labelKey: 'config.modelServices.createKinds.service' }
+        ],
         keyPlaceholderKey: 'config.editor.newModelServiceName',
-        createItem: () => ({
-          title: '',
-          description: '',
-          apiKey: '',
-          timeoutMs: undefined,
-          maxOutputTokens: undefined,
-          extra: {}
-        }),
+        createItem: (_itemKey, itemKind) =>
+          itemKind === 'provider'
+            ? createProviderModelServiceConfig()
+            : {
+              title: '',
+              description: '',
+              apiKey: '',
+              timeoutMs: undefined,
+              maxOutputTokens: undefined,
+              extra: {}
+            },
         itemFields: modelServiceDetailFields,
         getItemTitle: (item, itemKey) => {
           const title = typeof item.title === 'string' ? item.title.trim() : ''

@@ -152,6 +152,10 @@ export default defineConfig({
   },
   resolve: {
     alias: [
+      sourceAlias(
+        '@oneworks/components/admin-list-surface',
+        '../../packages/components/src/admin-list-surface/index.ts'
+      ),
       sourceAlias('@oneworks/core/channel', '../../packages/core/src/channel.ts'),
       sourceAlias('@oneworks/plugin-chrome-devtools/schema', '../../packages/plugins/chrome-devtools/src/schema.ts'),
       sourceAlias('@oneworks/utils/model-providers', '../../packages/utils/src/model-providers.ts'),

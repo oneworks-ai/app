@@ -1,5 +1,5 @@
 /* eslint-disable max-lines -- provider HTTP clients share normalization and error handling */
-import { createHash } from 'node:crypto'
+import { createHash, createHmac, randomBytes } from 'node:crypto'
 
 import type {
   ModelProviderDefinition,
@@ -68,9 +68,13 @@ const asNumber = (value: unknown) => {
 }
 const STATUS_CACHE_TTL_MS = 90_000
 const NEW_API_MANAGEMENT_CACHE_TTL_MS = 60_000
+const ACCOUNT_STATUS_QUOTA_CACHE_TTL_MS = 60_000
+const ACCOUNT_STATUS_BALANCE_CACHE_TTL_MS = 5 * 60_000
+const ACCOUNT_STATUS_SUBJECT_SALT = randomBytes(32)
 
 const statusCache = new Map<string, { expiresAt: number; status: ProviderServiceStatus }>()
 const newApiManagementCache = new Map<string, { expiresAt: number; payload: unknown; scope: string }>()
+const accountStatusCache = new Map<string, { expiresAt: number; status: ProviderAccountStatus }>()
 
 const resolveApiRoot = (service: ResolvedModelServiceConfig) => {
   const url = new URL(service.apiBaseUrl)
@@ -390,6 +394,12 @@ const hashCacheKey = (value: unknown) =>
     .update(JSON.stringify(stableJsonValue(value)))
     .digest('hex')
 
+const buildAccountStatusSubjectId = (cacheKey: string) =>
+  createHmac('sha256', ACCOUNT_STATUS_SUBJECT_SALT)
+    .update(cacheKey)
+    .digest('hex')
+    .slice(0, 16)
+
 const getNewApiManagementCacheScope = (
   management: ReturnType<typeof requireNewApiManagement>
 ) =>
@@ -479,10 +489,13 @@ const unwrapNewApiData = (payload: unknown) => {
 const normalizeNewApiAccountStatus = (payload: unknown): ProviderAccountStatus => {
   const data = asRecord(unwrapNewApiData(payload))
   return {
+    aggregation: 'shared',
     available: normalizeNewApiQuotaAmount(data.quota),
     currency: 'CNY',
     kind: 'balance',
-    raw: payload
+    observedAt: new Date().toISOString(),
+    raw: payload,
+    scope: 'account'
   }
 }
 
@@ -691,8 +704,9 @@ export const getProviderManagementTokenProfile = async (
   }
 }
 
-export const getProviderAccountStatus = async (serviceConfig: ModelServiceConfig): Promise<ProviderAccountStatus> => {
-  const service = resolveService(serviceConfig)
+const loadProviderAccountStatus = async (
+  service: ResolvedModelServiceConfig
+): Promise<ProviderAccountStatus> => {
   if (service.provider === 'kimi-code') {
     return getKimiCodeAccountStatus(service)
   }
@@ -724,6 +738,45 @@ export const getProviderAccountStatus = async (serviceConfig: ModelServiceConfig
     }
   }
   return { kind: 'unsupported', reason: 'Provider does not expose a supported balance or cost API yet.' }
+}
+
+const getAccountStatusCacheTtl = (status: ProviderAccountStatus) => (
+  status.kind === 'balance' || status.kind === 'cost'
+    ? ACCOUNT_STATUS_BALANCE_CACHE_TTL_MS
+    : ACCOUNT_STATUS_QUOTA_CACHE_TTL_MS
+)
+
+export const getProviderAccountStatus = async (serviceConfig: ModelServiceConfig): Promise<ProviderAccountStatus> => {
+  const service = resolveService(serviceConfig)
+  const usesManagementCredential = service.provider === 'micu' && normalizeString(service.management?.apiKey) != null
+  const cacheKey = hashCacheKey({
+    apiBaseUrl: service.apiBaseUrl,
+    apiKey: service.apiKey,
+    management: service.management,
+    provider: service.provider
+  })
+  const cached = accountStatusCache.get(cacheKey)
+  if (cached != null && cached.expiresAt > Date.now()) return cached.status
+
+  const loaded = await loadProviderAccountStatus(service)
+  const scope = loaded.kind === 'unsupported'
+    ? 'provider'
+    : usesManagementCredential || service.provider === 'deepseek' ||
+        service.provider === 'moonshot-cn' || service.provider === 'moonshot-intl'
+    ? 'account'
+    : 'credential'
+  const status: ProviderAccountStatus = {
+    ...loaded,
+    aggregation: scope === 'account' ? 'shared' : 'unknown',
+    observedAt: new Date().toISOString(),
+    scope,
+    subjectId: buildAccountStatusSubjectId(cacheKey)
+  }
+  accountStatusCache.set(cacheKey, {
+    expiresAt: Date.now() + getAccountStatusCacheTtl(status),
+    status
+  })
+  return status
 }
 
 const mapStatusIndicator = (indicator: unknown): ProviderStatusIndicator => {

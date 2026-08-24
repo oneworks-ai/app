@@ -10,6 +10,55 @@
   gap: 10px;
 }
 
+.model-service-profile-collection__card.config-view__record-card {
+  min-width: 0;
+  height: 100%;
+}
+
+.model-service-profile-collection__card .config-view__detail-list-row,
+.model-service-profile-collection__card .config-view__record-heading {
+  align-items: center;
+}
+
+.model-service-profile-collection__tray {
+  align-self: stretch;
+}
+
+.model-service-profile-collection__tray
+  .config-view__model-service-list-quota--list {
+  display: grid;
+  align-content: center;
+  height: 100%;
+  gap: 4px;
+  border-radius: 0;
+}
+
+.model-service-profile-collection__tray
+  .config-view__model-service-list-quota-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  justify-items: initial;
+  gap: 8px;
+  width: auto;
+  min-width: 88px;
+  height: auto;
+}
+
+.model-service-profile-collection__tray
+  .config-view__model-service-list-quota-label {
+  width: auto;
+  color: var(--sub-text-color);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: left;
+}
+
+.model-service-profile-collection__tray
+  .config-view__model-service-record-actions {
+  display: inline-flex;
+  align-items: center;
+}
+
 .config-view__detail-notice {
   display: flex;
   align-items: center;

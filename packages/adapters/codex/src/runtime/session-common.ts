@@ -8,6 +8,7 @@ import { resolveConfigState } from '@oneworks/config'
 import { NATIVE_HOOK_BRIDGE_ADAPTER_ENV, resolveMockHome } from '@oneworks/hooks'
 import type { AdapterCtx, AdapterQueryOptions, Config, ModelServiceConfig } from '@oneworks/types'
 import {
+  buildModelServiceRuntimeId,
   createStartupProfiler,
   mergeProcessEnvWithProjectEnv,
   resolveModelServiceApiProtocol,
@@ -565,7 +566,7 @@ function buildCodexConfigOverrides(params: {
           wireApi: configuredWireApi
         } = codexExtra
         const wireApi = resolveCodexWireApi(serviceKey, configuredWireApi)
-        const providerId = readOptionalString(configuredProviderId) ?? serviceKey
+        const providerId = readOptionalString(configuredProviderId) ?? buildModelServiceRuntimeId(serviceKey)
         resolvedModelProvider = providerId
         const prefix = `model_providers.${toTomlDottedKeySegment(providerId)}`
         const normalizedBaseUrl = normalizeProviderBaseUrl(apiBaseUrl, apiProtocol)

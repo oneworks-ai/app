@@ -269,8 +269,7 @@ export interface ModelServiceManagementConfig {
   endpointKind?: string
 }
 
-export interface ModelServiceConfig {
-  kind?: 'service' | 'collection'
+export interface ModelServiceEndpointConfig {
   title?: string
   description?: string
   provider?: string
@@ -291,10 +290,18 @@ export interface ModelServiceConfig {
     region?: string
   }
   providerOptions?: Record<string, unknown>
+  extra?: Record<string, unknown>
+}
+
+export interface ModelServiceProfileConfig extends ModelServiceEndpointConfig {
+  kind?: 'service'
+}
+
+export interface ModelServiceConfig extends ModelServiceEndpointConfig {
+  kind?: 'service' | 'collection'
   management?: ModelServiceManagementConfig
   profiles?: Record<string, ModelServiceConfig>
   services?: Record<string, ModelServiceConfig>
-  extra?: Record<string, unknown>
 }
 
 export interface ResolvedModelServiceConfig extends ModelServiceConfig {
@@ -339,30 +346,40 @@ export interface ProviderModelDiscoveryResult {
   warning?: ProviderModelDiscoveryWarning
 }
 
+export interface ProviderAccountStatusMetadata {
+  aggregation?: 'additive' | 'shared' | 'unknown'
+  observedAt?: string
+  scope?: 'credential' | 'profile' | 'account' | 'provider'
+  subjectId?: string
+}
+
 export type ProviderAccountStatus =
-  | { kind: 'balance'; currency?: string; available?: number; raw?: unknown }
-  | { kind: 'cost'; currency?: string; amount?: number; period?: string; raw?: unknown }
-  | {
-    kind: 'quota'
-    currency?: string
-    unit?: ModelServiceQuotaUnit
-    limit?: number
-    remaining?: number
-    resetTime?: string
-    unlimited?: boolean
-    used?: number
-    windows?: Array<{
-      duration?: number
+  & (
+    | { kind: 'balance'; currency?: string; available?: number; raw?: unknown }
+    | { kind: 'cost'; currency?: string; amount?: number; period?: string; raw?: unknown }
+    | {
+      kind: 'quota'
+      currency?: string
+      unit?: ModelServiceQuotaUnit
       limit?: number
       remaining?: number
       resetTime?: string
-      timeUnit?: string
-    }>
-    parallelLimit?: number
-    plan?: string
-    raw?: unknown
-  }
-  | { kind: 'unsupported'; reason: string }
+      unlimited?: boolean
+      used?: number
+      windows?: Array<{
+        duration?: number
+        limit?: number
+        remaining?: number
+        resetTime?: string
+        timeUnit?: string
+      }>
+      parallelLimit?: number
+      plan?: string
+      raw?: unknown
+    }
+    | { kind: 'unsupported'; reason: string }
+  )
+  & ProviderAccountStatusMetadata
 
 export type ProviderStatusIndicator =
   | 'operational'

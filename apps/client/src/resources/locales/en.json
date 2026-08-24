@@ -4101,6 +4101,11 @@
       "codexAuthFileDescription": "Optionally select a Codex auth.json file. Leave empty to use the credentials stored for this account."
     },
     "modelServices": {
+      "profiles": {
+        "searchPlaceholder": "Search profiles",
+        "noMatches": "No matching profiles",
+        "add": "Add profile"
+      },
       "collection": {
         "searchPlaceholder": "Search model services and providers",
         "filters": {
@@ -4128,7 +4133,7 @@
           "codingPlan": "Coding / Token plan",
           "relay": "Relay service",
           "gateway": "AI gateway",
-          "collection": "Service collection",
+          "collection": "Provider",
           "custom": "Custom compatible service"
         },
         "count": "{{count}} items",
@@ -4168,6 +4173,21 @@
         "retryRefresh": "Retry loading",
         "failed": "Failed to import model services from {{adapter}}"
       },
+      "createKinds": {
+        "label": "Configuration type",
+        "provider": "Provider (multiple profiles)",
+        "service": "Independent service"
+      },
+      "standalone": {
+        "serviceTab": "Independent service",
+        "upgradeAction": "Migrate to Provider",
+        "upgradeDescription": "This is a compatibility-preserved independent service. Migrate it to manage multiple Profiles under one Provider.",
+        "upgradeConfirmTitle": "Create a Provider configuration?",
+        "upgradeConfirmDescription": "The existing access settings will be copied unchanged into the new Provider's default Profile. The independent service and existing model selections will be preserved.",
+        "upgradeFailed": "Failed to migrate to Provider"
+      },
+      "profileQuotaSummary": "Quota summary for {{count}} profiles",
+      "profileQuotaMore": "View all ({{count}})",
       "actions": {
         "more": "More",
         "openHomepage": "Management Console",
@@ -4326,9 +4346,9 @@
       },
       "collectionTabs": {
         "ariaLabel": "Service collection settings",
-        "service": "Service",
-        "profiles": "Local profiles",
-        "apiKeys": "Token management",
+        "service": "Provider",
+        "profiles": "Profiles",
+        "apiKeys": "API key management",
         "advanced": "Advanced"
       },
       "portal": {

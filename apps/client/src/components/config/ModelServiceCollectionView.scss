@@ -15,6 +15,11 @@
   min-width: 0;
 }
 
+.model-service-collection__create-kind,
+.model-service-collection__create-kind.mobile-aware-select-trigger-shell {
+  width: min(260px, 100%);
+}
+
 .model-service-collection__section {
   display: flex;
   flex-direction: column;
@@ -53,12 +58,23 @@
 
 .model-service-collection__card
   .config-view__detail-list-row:has(.model-service-collection__quota-footer) {
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(72px, auto) auto;
+  column-gap: 10px;
   row-gap: 4px;
+  align-content: start;
 }
 
 .model-service-collection__card .config-view__detail-list-main {
   align-items: flex-start;
+}
+
+.model-service-collection__card
+  .config-view__detail-list-row:has(.model-service-collection__quota-footer)
+  .config-view__detail-list-main {
+  grid-column: 1;
+  grid-row: 1;
 }
 
 .model-service-collection__card .config-view__record-heading {
@@ -77,9 +93,16 @@
   min-height: 28px;
 }
 
+.model-service-collection__card
+  .config-view__detail-list-row:has(.model-service-collection__quota-footer)
+  .config-view__record-actions {
+  grid-column: 2;
+  grid-row: 1;
+}
+
 .model-service-collection__quota-footer {
-  order: 1;
-  flex: 1 1 100%;
+  grid-column: 1 / -1;
+  grid-row: 2;
   min-width: 0;
   margin-top: 0;
   padding-top: 6px;
@@ -92,6 +115,39 @@
   width: 100%;
   height: auto;
   gap: 8px;
+}
+
+.model-service-collection__quota-footer
+  .config-view__model-service-profile-quota-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 4px;
+  width: 100%;
+}
+
+.model-service-collection__quota-footer
+  .config-view__model-service-profile-quota {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.model-service-collection__quota-footer
+  .config-view__model-service-profile-quota-title {
+  max-width: none;
+  color: var(--sub-text-color);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: left;
+}
+
+.model-service-collection__quota-footer
+  .config-view__model-service-list-quota--list {
+  display: grid;
+  width: auto;
+  gap: 4px;
 }
 
 .model-service-collection__quota-footer
@@ -173,6 +229,15 @@
 }
 
 @media (max-width: 720px) {
+  .model-service-collection > .config-view__record-add {
+    flex-wrap: wrap;
+  }
+
+  .model-service-collection__create-kind,
+  .model-service-collection__create-kind.mobile-aware-select-trigger-shell {
+    width: 100%;
+  }
+
   .model-service-collection__grid.config-view__record-list {
     grid-template-columns: minmax(0, 1fr);
   }

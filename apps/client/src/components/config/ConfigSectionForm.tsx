@@ -1,9 +1,9 @@
 import './ConfigSectionForm.scss'
 
-import { Button, Collapse, Empty, Input, InputNumber, Slider, Switch, Tabs } from 'antd'
+import { App, Button, Collapse, Empty, Input, InputNumber, Popconfirm, Slider, Switch, Tabs } from 'antd'
 import type { ReactNode } from 'react'
 import { useMemo, useState } from 'react'
-import useSWR from 'swr'
+import useSWR, { useSWRConfig } from 'swr'
 
 import type {
   ConfigSource,
@@ -13,9 +13,14 @@ import type {
   ModelProviderDefinition,
   ModelServiceConfig
 } from '@oneworks/types'
-import { getModelProviderDefinition, resolveModelProviderIdentity } from '@oneworks/utils/model-providers'
+import {
+  buildCollectionModelServiceKey,
+  getModelProviderDefinition,
+  resolveCollectionModelService,
+  resolveModelProviderIdentity
+} from '@oneworks/utils/model-providers'
 
-import { getAdapterAccounts, listModelProviders } from '#~/api'
+import { copyModelServiceToProvider, getAdapterAccounts, getApiErrorMessage, listModelProviders } from '#~/api'
 import { builtInAdapterSupportsAccounts } from '#~/resources/adapters'
 import { normalizeSendShortcut, resolveSendShortcut } from '#~/utils/shortcutUtils'
 
@@ -27,13 +32,17 @@ import type { AdapterImportAction } from './AdapterImportRow'
 import { DisplayValue } from './ConfigDisplayValue'
 import { ComplexTextEditor, StringArrayEditor } from './ConfigEditors'
 import { FieldRow } from './ConfigFieldRow'
+import { ConfigRecordCollection, matchesConfigRecordSearch } from './ConfigRecordCollection'
+import { ConfigRecordCreateRow, ConfigRecordRow } from './ConfigRecordList'
 import { ShortcutInput } from './ConfigShortcutInput'
+import { DetailCollectionFieldActions } from './DetailCollectionFieldActions'
 import { DetailCollectionField } from './DetailListField'
 import { McpServerItemEditor } from './McpServerItemEditor'
 import { ModelServiceNativeTabs } from './ModelServiceNativeTabs'
 import { ModelServiceNewApiManagement } from './ModelServiceNewApiManagement'
 import { ModelServiceProviderActions } from './ModelServiceProviderActions'
 import type { ModelServiceProviderPortalRequest } from './ModelServiceProviderPortalBottomPanel'
+import { ModelServiceQuotaPreview } from './ModelServiceQuotaPreview'
 import { RecommendedModelsItemEditor } from './RecommendedModelsItemEditor'
 import type { ConfigDetailRoute } from './configDetail'
 import { resolveConfigDetailRouteMeta } from './configDetail'
@@ -182,6 +191,7 @@ const getProfileText = (
   const value = profile[fieldName]
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : fieldName === 'title' ? key : ''
 }
+const isValidNewModelServiceKey = (value: string) => value.trim() !== '' && !value.includes('/')
 const collectionTabPathByKey = {
   advanced: ['advanced'],
   apiKeys: ['api-keys'],
@@ -377,6 +387,8 @@ export const SectionForm = ({
   modelServiceImportAction?: AdapterImportAction
   t: TranslationFn
 }) => {
+  const { message } = App.useApp()
+  const { mutate } = useSWRConfig()
   const baseFields = providedFields ?? configSchema[sectionKey] ?? []
   const { data: modelProviderCatalog } = useSWR(
     sectionKey === 'modelServices' ? '/api/model-providers' : null,
@@ -392,6 +404,8 @@ export const SectionForm = ({
     [baseFields, modelProviderCatalog?.providers]
   )
   const [newModelServiceProfileKey, setNewModelServiceProfileKey] = useState('')
+  const [modelServiceProfileQuery, setModelServiceProfileQuery] = useState('')
+  const [isCreatingModelServiceProfile, setCreatingModelServiceProfile] = useState(false)
   const detailContext = {
     mergedModelServices,
     mergedAdapters,
@@ -1374,6 +1388,19 @@ export const SectionForm = ({
       const writeProfiles = (nextProfiles: Record<string, unknown>) => {
         writeDetailItem(setModelServiceProfiles(detailMeta.item, nextProfiles))
       }
+      const resolveProfileService = (profileKey: string) => {
+        const localProfile = localProfiles[profileKey]
+        const resolvedProfile = resolvedProfiles[profileKey]
+        const displayProfile = isRecord(localProfile) ? localProfile : resolvedProfile
+        const collection = {
+          ...(isRecord(detailMeta.resolvedItem) ? detailMeta.resolvedItem : {}),
+          ...(isRecord(detailMeta.item) ? detailMeta.item : {}),
+          profiles: {
+            [profileKey]: displayProfile
+          }
+        } as ModelServiceConfig
+        return resolveCollectionModelService(collection, profileKey)
+      }
       const openProfileDetail = (profileKey: string) => {
         onOpenDetailRoute?.({
           kind: detailRoute?.kind ?? 'detailCollectionItem',
@@ -1399,100 +1426,165 @@ export const SectionForm = ({
         })
       }
       const collectionActiveTab = collectionTabKeyFromPath(detailRoute?.nestedPath)
+      const visibleProfileKeys = profileKeys.filter((profileKey) => {
+        const localProfile = localProfiles[profileKey]
+        const resolvedProfile = resolvedProfiles[profileKey]
+        const displayProfile = isRecord(localProfile) ? localProfile : resolvedProfile
+        return matchesConfigRecordSearch(
+          modelServiceProfileQuery,
+          profileKey,
+          getProfileText(displayProfile, profileKey, 'title'),
+          getProfileText(displayProfile, profileKey, 'description')
+        )
+      })
+      const trimmedNewModelServiceProfileKey = newModelServiceProfileKey.trim()
+      const canAddModelServiceProfile = isValidNewModelServiceKey(trimmedNewModelServiceProfileKey) &&
+        localProfiles[trimmedNewModelServiceProfileKey] == null &&
+        resolvedProfiles[trimmedNewModelServiceProfileKey] == null
+      const addModelServiceProfile = () => {
+        if (!canAddModelServiceProfile) return
+        const nextProfile = { title: trimmedNewModelServiceProfileKey }
+        writeProfiles({ ...localProfiles, [trimmedNewModelServiceProfileKey]: nextProfile })
+        setNewModelServiceProfileKey('')
+        setCreatingModelServiceProfile(false)
+        openProfileDetail(trimmedNewModelServiceProfileKey)
+      }
       const profileList = (
-        <div className='config-view__field-list'>
-          {profileKeys.length > 0
-            ? profileKeys.map((profileKey) => {
-              const localProfile = localProfiles[profileKey]
-              const resolvedProfile = resolvedProfiles[profileKey]
-              const displayProfile = isRecord(localProfile) ? localProfile : resolvedProfile
-              const title = getProfileText(displayProfile, profileKey, 'title')
-              const description = getProfileText(displayProfile, profileKey, 'description')
-              return (
-                <div key={profileKey} className='config-view__record-card'>
-                  <div className='config-view__detail-list-row'>
-                    <button
-                      type='button'
-                      className='config-view__detail-list-main'
-                      onClick={() => openProfileDetail(profileKey)}
+        <ConfigRecordCollection
+          className='model-service-profile-collection'
+          emptyText={t('common.noData')}
+          gridClassName='model-service-profile-collection__grid'
+          hasVisibleItems={visibleProfileKeys.length > 0}
+          noMatchesText={t('config.modelServices.profiles.noMatches')}
+          onQueryChange={setModelServiceProfileQuery}
+          query={modelServiceProfileQuery}
+          searchPlaceholder={t('config.modelServices.profiles.searchPlaceholder')}
+          actions={isInheritedCollection
+            ? []
+            : [{
+              ariaLabel: t('config.modelServices.profiles.add'),
+              icon: 'add',
+              key: 'add',
+              title: t('config.modelServices.profiles.add'),
+              onClick: () => setCreatingModelServiceProfile(true)
+            }]}
+          createContent={!isInheritedCollection && isCreatingModelServiceProfile
+            ? (
+              <ConfigRecordCreateRow
+                actions={[
+                  {
+                    ariaLabel: t('common.confirm'),
+                    disabled: !canAddModelServiceProfile,
+                    icon: <span className='material-symbols-rounded'>check</span>,
+                    key: 'confirm',
+                    onClick: addModelServiceProfile,
+                    title: t('common.confirm')
+                  },
+                  {
+                    ariaLabel: t('common.cancel'),
+                    icon: <span className='material-symbols-rounded'>close</span>,
+                    key: 'cancel',
+                    onClick: () => {
+                      setNewModelServiceProfileKey('')
+                      setCreatingModelServiceProfile(false)
+                    },
+                    title: t('common.cancel')
+                  }
+                ]}
+                onSubmit={addModelServiceProfile}
+                onValueChange={setNewModelServiceProfileKey}
+                placeholder={t('config.editor.newModelServiceName')}
+                value={newModelServiceProfileKey}
+              />
+            )
+            : undefined}
+        >
+          {visibleProfileKeys.map((profileKey, index) => {
+            const localProfile = localProfiles[profileKey]
+            const resolvedProfile = resolvedProfiles[profileKey]
+            const displayProfile = isRecord(localProfile) ? localProfile : resolvedProfile
+            const title = getProfileText(displayProfile, profileKey, 'title')
+            const description = getProfileText(displayProfile, profileKey, 'description')
+            const profileService = resolveProfileService(profileKey)
+            const profileServiceKey = buildCollectionModelServiceKey(detailMeta.itemKey, profileKey)
+            return (
+              <ConfigRecordRow
+                key={profileKey}
+                className='model-service-profile-collection__card'
+                descriptions={[description]}
+                icon={
+                  <span className='material-symbols-rounded config-view__record-icon'>
+                    account_tree
+                  </span>
+                }
+                onClick={() => openProfileDetail(profileKey)}
+                subtitle={title === profileKey ? undefined : profileKey}
+                title={title}
+                rightSlot={(profileService != null || !isInheritedCollection)
+                  ? (
+                    <div
+                      className={[
+                        'config-view__model-service-list-tray',
+                        'config-view__model-service-list-tray--overlay-actions',
+                        'model-service-profile-collection__tray'
+                      ].join(' ')}
                     >
-                      <div className='config-view__record-heading'>
-                        <span className='material-symbols-rounded config-view__record-icon'>
-                          account_tree
-                        </span>
-                        <div className='config-view__record-heading-text'>
-                          <div className='config-view__record-title'>{title}</div>
-                          <div className='config-view__record-subtitle'>{profileKey}</div>
-                          {description !== '' && (
-                            <div className='config-view__record-desc'>{description}</div>
-                          )}
-                        </div>
-                      </div>
-                    </button>
-                    {!isInheritedCollection && (
-                      <div className='config-view__record-actions'>
-                        <Button
-                          size='small'
-                          type='text'
-                          className='config-view__icon-button config-view__detail-action-btn'
-                          aria-label={t('common.delete')}
-                          icon={<span className='material-symbols-rounded'>delete</span>}
-                          onClick={() => {
-                            const nextProfiles = { ...localProfiles }
-                            delete nextProfiles[profileKey]
-                            writeProfiles(nextProfiles)
-                          }}
+                      {profileService != null && (
+                        <ModelServiceQuotaPreview
+                          item={profileService}
+                          serviceKey={profileServiceKey}
+                          source={source}
+                          t={t}
+                          variant='list'
                         />
+                      )}
+                      <div className='config-view__model-service-list-actions'>
+                        {profileService != null && (
+                          <ModelServiceProviderActions
+                            actionsOnly
+                            compact
+                            key={`${source}:${profileServiceKey}:${detailMeta.itemSource}`}
+                            item={profileService}
+                            onOpenPortal={onOpenModelServicePortal}
+                            recordActions={!isInheritedCollection
+                              ? (
+                                <DetailCollectionFieldActions
+                                  index={index}
+                                  itemCount={visibleProfileKeys.length}
+                                  onRemove={() => {
+                                    const nextProfiles = { ...localProfiles }
+                                    delete nextProfiles[profileKey]
+                                    writeProfiles(nextProfiles)
+                                  }}
+                                  t={t}
+                                />
+                              )
+                              : undefined}
+                            serviceKey={profileServiceKey}
+                            source={source}
+                            t={t}
+                          />
+                        )}
+                        {profileService == null && !isInheritedCollection && (
+                          <DetailCollectionFieldActions
+                            index={index}
+                            itemCount={visibleProfileKeys.length}
+                            onRemove={() => {
+                              const nextProfiles = { ...localProfiles }
+                              delete nextProfiles[profileKey]
+                              writeProfiles(nextProfiles)
+                            }}
+                            t={t}
+                          />
+                        )}
                       </div>
-                    )}
-                  </div>
-                </div>
-              )
-            })
-            : (
-              <div className='config-view__detail-list-empty'>
-                <div className='config-view__detail-list-empty-title'>
-                  {t('common.noData')}
-                </div>
-                <div className='config-view__detail-list-empty-desc'>
-                  {t('config.fields.modelServices.item.profiles.desc')}
-                </div>
-              </div>
-            )}
-          {!isInheritedCollection && (
-            <div className='config-view__record-add'>
-              <div className='config-view__record-add-inputs'>
-                <Input
-                  value={newModelServiceProfileKey}
-                  onChange={(event) => setNewModelServiceProfileKey(event.target.value)}
-                  placeholder={t('config.editor.newModelServiceName')}
-                  onPressEnter={() => {
-                    const nextKey = newModelServiceProfileKey.trim()
-                    if (nextKey === '' || localProfiles[nextKey] != null || resolvedProfiles[nextKey] != null) return
-                    const nextProfile = { title: nextKey }
-                    writeProfiles({ ...localProfiles, [nextKey]: nextProfile })
-                    setNewModelServiceProfileKey('')
-                    openProfileDetail(nextKey)
-                  }}
-                />
-                <Button
-                  size='small'
-                  className='config-view__icon-button'
-                  icon={<span className='material-symbols-rounded'>check</span>}
-                  onClick={() => {
-                    const nextKey = newModelServiceProfileKey.trim()
-                    if (nextKey === '' || localProfiles[nextKey] != null || resolvedProfiles[nextKey] != null) return
-                    const nextProfile = { title: nextKey }
-                    writeProfiles({ ...localProfiles, [nextKey]: nextProfile })
-                    setNewModelServiceProfileKey('')
-                    openProfileDetail(nextKey)
-                  }}
-                  disabled={newModelServiceProfileKey.trim() === ''}
-                />
-              </div>
-            </div>
-          )}
-        </div>
+                    </div>
+                  )
+                  : undefined}
+              />
+            )
+          })}
+        </ConfigRecordCollection>
       )
 
       if (profileRouteKey != null) {
@@ -1504,6 +1596,8 @@ export const SectionForm = ({
           ? undefined
           : {}
         const profileResolvedValue = isRecord(resolvedProfile) ? resolvedProfile : undefined
+        const profileService = resolveProfileService(profileRouteKey)
+        const profileServiceKey = buildCollectionModelServiceKey(detailMeta.itemKey, profileRouteKey)
         const writeProfile = (nextProfile: unknown) => {
           const resolvedNextProfile = isRecord(nextProfile) ? nextProfile : {}
           writeProfiles({ ...localProfiles, [profileRouteKey]: resolvedNextProfile })
@@ -1603,6 +1697,16 @@ export const SectionForm = ({
         return (
           <div className='config-view__detail-panel'>
             {detailNotice}
+            {profileService != null && (
+              <ModelServiceProviderActions
+                key={`${source}:${profileServiceKey}:${detailMeta.itemSource}`}
+                serviceKey={profileServiceKey}
+                source={source}
+                item={profileService}
+                onOpenPortal={onOpenModelServicePortal}
+                t={t}
+              />
+            )}
             <ModelServiceNativeTabs
               className='config-view__collection-tabs'
               activeKey={profileRenderedActiveTab}
@@ -1763,7 +1867,6 @@ export const SectionForm = ({
       return (
         <div className='config-view__detail-panel'>
           {detailNotice}
-          {modelServiceActions}
           <ModelServiceNativeTabs
             className='config-view__collection-tabs'
             activeKey={collectionRenderedActiveTab}
@@ -1822,7 +1925,7 @@ export const SectionForm = ({
         {
           key: 'service',
           icon: 'info',
-          label: t('config.modelServices.collectionTabs.service', { defaultValue: '服务信息' })
+          label: t('config.modelServices.standalone.serviceTab', { defaultValue: '独立服务' })
         },
         {
           key: 'access',
@@ -1895,11 +1998,50 @@ export const SectionForm = ({
         ? modelServiceActiveTab
         : tabItems[0]?.key
       const modelServiceActiveContent = tabItems.find(item => item.key === modelServiceRenderedActiveTab)
+      const standaloneUpgradeNotice = !isInheritedModelService && !detailMeta.hasResolvedOverlay
+        ? (
+          <div className='config-view__detail-notice'>
+            <div className='config-view__detail-notice-text'>
+              {t('config.modelServices.standalone.upgradeDescription')}
+            </div>
+            <Popconfirm
+              title={t('config.modelServices.standalone.upgradeConfirmTitle')}
+              description={t('config.modelServices.standalone.upgradeConfirmDescription')}
+              okText={t('common.confirm')}
+              cancelText={t('common.cancel')}
+              onConfirm={async () => {
+                try {
+                  const result = await copyModelServiceToProvider(detailMeta.itemKey, {
+                    service: detailMeta.item as ModelServiceConfig,
+                    source
+                  })
+                  await mutate('/api/config')
+                  onOpenDetailRoute?.({
+                    kind: detailRoute?.kind ?? 'detailCollectionItem',
+                    fieldPath: detailMeta.field.path,
+                    itemKey: result.providerKey
+                  })
+                } catch (error) {
+                  void message.error(getApiErrorMessage(
+                    error,
+                    t('config.modelServices.standalone.upgradeFailed')
+                  ))
+                }
+              }}
+            >
+              <Button size='small' type='primary'>
+                {t('config.modelServices.standalone.upgradeAction')}
+              </Button>
+            </Popconfirm>
+          </div>
+        )
+        : null
 
       if (tabItems.length > 0) {
         return (
           <div className='config-view__detail-panel'>
             {detailNotice}
+            {standaloneUpgradeNotice}
             {modelServiceActions}
             <ModelServiceNativeTabs
               className='config-view__collection-tabs'

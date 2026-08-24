@@ -33,6 +33,7 @@ vi.mock('@oneworks/config', async importOriginal => ({
 }))
 
 vi.mock('#~/services/config/index.js', () => ({
+  getWorkspaceFolder: () => '/workspace',
   loadConfigState: mocks.loadConfigState
 }))
 
@@ -152,6 +153,16 @@ describe('model provider routes', () => {
           deepseek: {
             provider: 'deepseek',
             apiKey: 'secret-deepseek'
+          },
+          deepseekProfiles: {
+            kind: 'collection',
+            provider: 'deepseek',
+            profiles: {
+              work: {
+                apiKey: 'secret-deepseek-work',
+                title: 'Work'
+              }
+            }
           },
           kimiCode: {
             provider: 'kimi-code',
@@ -319,6 +330,68 @@ describe('model provider routes', () => {
     }))
     expect(JSON.stringify(payload)).not.toContain('secret-project')
     expect(JSON.stringify(payload)).not.toContain('secret-native')
+  })
+
+  it('copies a standalone service to a Provider without exposing or losing its masked secret', async () => {
+    let persistedModelServices: Record<string, unknown> | undefined
+    mocks.updateConfigFile.mockImplementationOnce(async ({ resolveValue, source }) => {
+      const currentConfig = {
+        modelServices: {
+          deepseek: {
+            provider: 'deepseek',
+            apiBaseUrl: 'https://api.deepseek.com',
+            apiKey: 'raw-secret',
+            models: ['deepseek-chat']
+          }
+        }
+      }
+      persistedModelServices = resolveValue(currentConfig)
+      return {
+        updatedConfig: {
+          ...currentConfig,
+          modelServices: persistedModelServices
+        },
+        source
+      }
+    })
+
+    const response = await request(`${baseUrl}/api/model-services/deepseek/provider-copy`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        service: {
+          provider: 'deepseek',
+          apiBaseUrl: 'https://api.deepseek.com',
+          apiKey: '******',
+          models: ['deepseek-chat']
+        },
+        source: 'global'
+      })
+    })
+    const payload = await response.json() as { providerKey?: string; source?: string }
+
+    expect(response.status).toBe(200)
+    expect(payload).toEqual({ providerKey: 'deepseek-provider', source: 'global' })
+    expect(persistedModelServices).toEqual({
+      deepseek: {
+        provider: 'deepseek',
+        apiBaseUrl: 'https://api.deepseek.com',
+        apiKey: 'raw-secret',
+        models: ['deepseek-chat']
+      },
+      'deepseek-provider': {
+        provider: 'deepseek',
+        kind: 'collection',
+        profiles: {
+          default: {
+            apiBaseUrl: 'https://api.deepseek.com',
+            apiKey: 'raw-secret',
+            models: ['deepseek-chat']
+          }
+        }
+      }
+    })
+    expect(JSON.stringify(payload)).not.toContain('raw-secret')
   })
 
   it('keeps additions-only semantics when a service appears during the locked write', async () => {
@@ -669,6 +742,37 @@ describe('model provider routes', () => {
     })
     expect(fetchMock).toHaveBeenCalledWith('https://api.deepseek.com/user/balance', {
       headers: { Authorization: 'Bearer secret-deepseek' }
+    })
+  })
+
+  it('resolves encoded collection profile keys for balance actions', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          balance_infos: [{ currency: 'USD', total_balance: '8.25' }]
+        }),
+        { status: 200 }
+      )
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const response = await request(
+      `${baseUrl}/api/model-services/${encodeURIComponent('deepseekProfiles/work')}/balance`,
+      { method: 'POST' }
+    )
+    const payload = await response.json() as {
+      account?: { aggregation?: string; available?: number; kind?: string; scope?: string }
+    }
+
+    expect(response.status).toBe(200)
+    expect(payload.account).toMatchObject({
+      aggregation: 'shared',
+      available: 8.25,
+      kind: 'balance',
+      scope: 'account'
+    })
+    expect(fetchMock).toHaveBeenCalledWith('https://api.deepseek.com/user/balance', {
+      headers: { Authorization: 'Bearer secret-deepseek-work' }
     })
   })
 
