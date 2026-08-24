@@ -12,5 +12,6 @@
 - Added configurable eye highlights and vector surface decals for blush, mouth marks, badges, and other pose-aware model details.
 - Added Bun as a built-in avatar with curved crown pleats, face decals, and a pose-aware Claude Spark mark on the back.
 - Avatar deployment now triggers when the app repository updates the Avatar submodule pointer.
+- Added deterministic Seed authoring profiles, constrained Cat types, and procedural coat patterns to the hosted Avatar editor and runtime guidance.
 
 ![Bun avatar editor](./avatar-bun.png)

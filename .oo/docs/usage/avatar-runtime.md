@@ -18,7 +18,37 @@ const json = serializeAvatarDefinition(definition)
 const restored = parseAvatarDefinition(json)
 ```
 
-面部可以开启可配置的眼睛内高光。`scene.decals` 用于把矢量颜色形状投影到主体或指定实体部件表面；红晕、嘴部色块、徽标等细节会跟随同一套 3D 姿态与导出链路，而不是变成悬浮的独立几何体。
+## Seed 与参数级随机
+
+Seed 是版本化的确定性熵，不替代 definition。每个支持随机的参数独立选择是否跟随 Seed；手动值仍作为具体值保存在 definition 中。编辑器会在 `metadata.generation` 记录 Seed 和跟随字段，切换或分享 URL 后仍可继续编辑。
+
+```ts
+import {
+  AVATAR_SEED_FIELD_PATHS,
+  resolveAvatarSeededOption,
+  resolveSeededAvatarView
+} from '@oneworks/avatar'
+
+const seed = 'v1-agent-42'
+const palette = resolveAvatarSeededOption(
+  seed,
+  AVATAR_SEED_FIELD_PATHS.palette,
+  [
+    'signal',
+    'white',
+    'coral'
+  ]
+)
+const view = resolveSeededAvatarView(seed, definition.scene.view)
+```
+
+相同 `seed + 字段路径 + 候选值` 始终得到同一个结果。不同字段使用独立随机域；新增候选只可能让一部分 Seed 选择新候选，不会重排旧候选之间的结果。编辑器中手动操作某个字段会自动关闭该字段的 Seed 跟随，重新开启则恢复同一 Seed 下的稳定值。相框形状仍会写入 URL，也可手动编辑，但不会参与 Seed 随机。
+
+猫模板还提供暹罗猫、英短、蓝猫、大橘、奶牛猫与纯黑猫等受约束的猫咪类型。类型会固定识别性几何、材质关系和毛纹规则，只把符合真实品种特征的范围交给 Seed。例如暹罗猫的脸部色块始终居中，奶油色与深棕色搭配固定，仅允许色块尺寸在合理区间内变化。Seed 控制的视图构图使用统一的适中大小和下沉裁切，只改变左右位置，并在朝向画面中心的基础上加入小幅受限 yaw / pitch；roll 始终为零。用户手动移动或旋转后会自动关闭该视图的 Seed 跟随并保留具体值。
+
+猫模型还提供第一类的程序化 **毛色花纹**。`scene.appearance.coatPattern` 保存算法（随机、鱼骨纹、经典纹、断裂纹、斑点纹）、算法 Seed、纹样布局 Seed、密度、粗细、抖动度、对称度、对比度与断裂度。模型自身的连续底毛材质会包住整个头部；其上只叠加一块从面部连续延伸到下巴的浅毛区，以及额头 M 纹、眼角线、双耳色块与耳根纹等固定猫科识别结构。密度控制正面、侧面和后脑的长曲纹数量；抖动度控制这些纹路的位置、长度、弧度、旋转与左右差异能偏离标准布局多少。算法选择与纹样布局分别跟随 Seed，因此选择固定算法后仍可让全局 Seed 改变纹路位置与弧度；每个参数都能独立跟随 Seed，手动修改后只会固化该参数。渲染器、组件与导出链路会从同一配置实时生成花纹；只有显式执行“转为可编辑贴花”时，才把结果物化到 `scene.decals`。
+
+面部可以开启可配置的眼睛内高光。`scene.decals` 用于把矢量颜色形状投影到主体或指定实体部件表面；红晕、嘴部色块、徽标等细节会跟随同一套 3D 姿态与导出链路，而不是变成悬浮的独立几何体。需要在极端姿态下仍与五官基准面严格对齐的色块可使用 `face` 朝向；常规 `front`、`left`、`right`、`back` 朝向仍会贴合模型真实曲面。
 
 ```ts
 const decorated = {

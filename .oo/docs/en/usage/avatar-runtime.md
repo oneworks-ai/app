@@ -18,7 +18,37 @@ const json = serializeAvatarDefinition(definition)
 const restored = parseAvatarDefinition(json)
 ```
 
-The face can enable a configurable highlight inside each eye. `scene.decals` adds vector color shapes that are projected onto a body or entity-part surface, so blush, mouth marks, badges, and similar details follow the same 3D pose and export path instead of becoming separate floating geometry.
+## Seed and parameter-level randomization
+
+A Seed is versioned deterministic entropy, not a replacement for the definition. Each supported parameter independently chooses whether to follow the Seed, while the definition continues to store concrete resolved values. The editor records the Seed and linked fields in `metadata.generation`, so the authoring state survives editor and share-URL round trips.
+
+```ts
+import {
+  AVATAR_SEED_FIELD_PATHS,
+  resolveAvatarSeededOption,
+  resolveSeededAvatarView
+} from '@oneworks/avatar'
+
+const seed = 'v1-agent-42'
+const palette = resolveAvatarSeededOption(
+  seed,
+  AVATAR_SEED_FIELD_PATHS.palette,
+  [
+    'signal',
+    'white',
+    'coral'
+  ]
+)
+const view = resolveSeededAvatarView(seed, definition.scene.view)
+```
+
+The same `seed + field path + candidate` always produces the same result. Fields use independent random domains; adding a candidate can select the new candidate for some Seeds without reshuffling results among existing candidates. Editing a field manually in the editor automatically disables Seed control for that field. Re-enabling it restores the stable value for the same Seed. Camera-frame shape remains URL-persistent and manually editable, but does not participate in Seed randomization.
+
+The Cat template adds constrained Cat types such as Siamese, British Shorthair, Russian Blue, Orange Tabby, Cow Cat, and Black Cat. A type fixes its identifying geometry, material relationship, and coat rules while exposing only biologically plausible Seed domains. For example, Siamese keeps the face patch centered and its cream-and-brown material family fixed while allowing the patch dimensions to vary. Seeded view composition uses a consistent moderate scale and lower crop, varies horizontal placement, applies only a small bounded center-facing yaw and pitch, and keeps roll at zero. Manual movement or rotation freezes that concrete view by disabling its Seed binding.
+
+The Cat template also exposes a first-class procedural **Coat pattern**. `scene.appearance.coatPattern` stores the algorithm (Random, Mackerel, Classic, Broken, or Spotted), separate algorithm and layout Seeds, density, thickness, jitter, symmetry, contrast, and breakup. The model's continuous base material wraps the whole head; one joined face-to-chin light region and stable feline landmarks such as the forehead M, eye lines, paired ear patches, and ear-root marks sit above it. Density controls the longer variable curves across the front, flanks, and rear; jitter controls how far their positions, lengths, bends, rotations, and left/right differences can drift from the canonical layout. Algorithm selection and layout follow Seed independently, so a fixed algorithm can still receive new stripe placement and curvature from the global Seed; manually editing a parameter freezes only that parameter. Renderers, framework adapters, and exports derive the pattern from the same configuration. The result is materialized into `scene.decals` only after an explicit **Convert to editable decals** action.
+
+The face can enable a configurable highlight inside each eye. `scene.decals` adds vector color shapes that are projected onto a body or entity-part surface, so blush, mouth marks, badges, and similar details follow the same 3D pose and export path instead of becoming separate floating geometry. Use the `face` surface side for a mark that must stay aligned with the facial feature plane at extreme poses; the regular `front`, `left`, `right`, and `back` sides continue to follow the actual model surface.
 
 ```ts
 const decorated = {
