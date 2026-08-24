@@ -418,6 +418,54 @@ describe('prepareClaudeExecution', () => {
     })
   })
 
+  it('uses the selected Provider Profile for an official Anthropic route', async () => {
+    const cacheSet = vi.fn(async (key: string, value: unknown) => {
+      if (key === 'adapter.claude-code.settings') settingsSnapshot = value as Record<string, any>
+      return { cachePath: `/tmp/${key}.json` }
+    })
+
+    const prepared = await prepareClaudeExecution({
+      ctxId: 'ctx-deepseek-profile',
+      cwd: '/repo',
+      env: {},
+      cache: {
+        set: cacheSet as any,
+        get: vi.fn(async () => undefined) as any
+      },
+      logger: {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn()
+      } as any,
+      configs: [{}, {
+        modelServices: {
+          deepseek: {
+            kind: 'collection',
+            provider: 'deepseek',
+            profiles: {
+              personal: { apiKey: 'personal-key' },
+              work: { apiKey: 'work-key' }
+            }
+          }
+        }
+      }]
+    }, {
+      type: 'create',
+      runtime: 'server',
+      sessionId: 'sess-deepseek-profile',
+      model: 'deepseek/work,deepseek-chat',
+      onEvent: vi.fn()
+    })
+
+    expect(ensureClaudeCodeRouterReady).not.toHaveBeenCalled()
+    expect(prepared.args[prepared.args.indexOf('--model') + 1]).toBe('deepseek-chat')
+    expect(settingsSnapshot?.env).toMatchObject({
+      ANTHROPIC_AUTH_TOKEN: 'work-key',
+      ANTHROPIC_MODEL: 'deepseek-chat'
+    })
+  })
+
   it('uses Kimi official Anthropic API directly instead of Claude Code Router', async () => {
     const cacheSet = vi.fn(async (key: string, value: unknown) => {
       if (key === 'adapter.claude-code.settings') {

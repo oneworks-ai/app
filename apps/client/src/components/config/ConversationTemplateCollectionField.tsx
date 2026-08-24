@@ -2,19 +2,17 @@ import './ConversationTemplateCollectionField.scss'
 
 import { useMemo, useState } from 'react'
 
-import { ActionSearchToolbar } from '#~/components/action-search-toolbar/ActionSearchToolbar'
-
-import { ConfigRecordList } from './ConfigRecordList'
+import {
+  ConfigRecordCollection,
+  matchesConfigRecordSearch,
+  normalizeConfigRecordSearch
+} from './ConfigRecordCollection'
 import { ConversationTemplateSortableCard } from './ConversationTemplateSortableCard'
 import { SortableRecordGrid } from './SortableRecordGrid'
 import type { ConfigDetailRoute } from './configDetail'
 import { toDetailCollectionEntries } from './configDetail'
 import type { FieldSpec } from './configSchema'
 import type { TranslationFn } from './configUtils'
-
-const normalizeSearchText = (value: unknown) => (
-  typeof value === 'string' ? value.trim().toLocaleLowerCase() : ''
-)
 
 export const ConversationTemplateCollectionField = ({
   field,
@@ -43,7 +41,7 @@ export const ConversationTemplateCollectionField = ({
       Record<string, unknown>
     >
     : []
-  const normalizedQuery = normalizeSearchText(query)
+  const normalizedQuery = normalizeConfigRecordSearch(query)
   const detailContext = useMemo(
     () => ({ mergedAdapters, mergedModelServices, t }),
     [mergedAdapters, mergedModelServices, t]
@@ -55,8 +53,7 @@ export const ConversationTemplateCollectionField = ({
       const subtitle = detailCollection?.getItemSubtitle?.(entry.item, entry.key, entry.index, detailContext) ?? ''
       const description = detailCollection?.getItemDescription?.(entry.item, entry.key, entry.index, detailContext) ??
         ''
-      return [title, subtitle, description]
-        .some(value => normalizeSearchText(value).includes(normalizedQuery))
+      return matchesConfigRecordSearch(normalizedQuery, title, subtitle, description)
     }), [detailCollection, detailContext, entries, normalizedQuery])
 
   if (detailCollection?.collectionKind !== 'list') return null
@@ -104,61 +101,52 @@ export const ConversationTemplateCollectionField = ({
   }
 
   return (
-    <div className='conversation-template-collection'>
-      <ActionSearchToolbar
-        className='conversation-template-collection__toolbar'
-        inset={false}
-        placeholder={t('config.conversationTemplates.searchPlaceholder')}
-        query={query}
-        onQueryChange={setQuery}
-        actions={[{
-          ariaLabel: t('config.editor.addItem'),
-          icon: 'add',
-          key: 'add',
-          title: t('config.editor.addItem'),
-          onClick: addItem
-        }]}
-      />
-
-      <ConfigRecordList className='conversation-template-collection__grid'>
-        <SortableRecordGrid
-          items={sortableEntries}
-          onReorder={(activeId, overId) => {
-            const activeEntry = visibleEntries.find(entry => entry.key === activeId)
-            const overEntry = visibleEntries.find(entry => entry.key === overId)
-            if (activeEntry?.localIndex == null || overEntry?.localIndex == null) return
-            moveItemToIndex(activeEntry.localIndex, overEntry.localIndex)
-          }}
-        >
-          {(sortableItem, sortable) => {
-            const entry = visibleEntries.find(candidate => candidate.key === sortableItem.id)
-            if (entry == null) return null
-            return (
-              <ConversationTemplateSortableCard
-                detailCollection={detailCollection}
-                detailContext={detailContext}
-                entry={entry}
-                fieldPath={field.path}
-                itemCount={localItems.length}
-                onMove={moveItem}
-                onOpenDetail={onOpenDetail}
-                onRemove={removeItem}
-                searchable={normalizedQuery !== ''}
-                sortable={sortable}
-                t={t}
-              />
-            )
-          }}
-        </SortableRecordGrid>
-
-        {visibleEntries.length === 0 && (
-          <div className='config-view__detail-list-empty conversation-template-collection__empty'>
-            <div className='config-view__detail-list-empty-desc'>
-              {normalizedQuery === '' ? t('common.noData') : t('config.conversationTemplates.noMatches')}
-            </div>
-          </div>
-        )}
-      </ConfigRecordList>
-    </div>
+    <ConfigRecordCollection
+      className='conversation-template-collection'
+      emptyText={t('common.noData')}
+      gridClassName='conversation-template-collection__grid'
+      hasVisibleItems={visibleEntries.length > 0}
+      noMatchesText={t('config.conversationTemplates.noMatches')}
+      searchPlaceholder={t('config.conversationTemplates.searchPlaceholder')}
+      query={query}
+      onQueryChange={setQuery}
+      actions={[{
+        ariaLabel: t('config.editor.addItem'),
+        icon: 'add',
+        key: 'add',
+        title: t('config.editor.addItem'),
+        onClick: addItem
+      }]}
+    >
+      <SortableRecordGrid
+        items={sortableEntries}
+        onReorder={(activeId, overId) => {
+          const activeEntry = visibleEntries.find(entry => entry.key === activeId)
+          const overEntry = visibleEntries.find(entry => entry.key === overId)
+          if (activeEntry?.localIndex == null || overEntry?.localIndex == null) return
+          moveItemToIndex(activeEntry.localIndex, overEntry.localIndex)
+        }}
+      >
+        {(sortableItem, sortable) => {
+          const entry = visibleEntries.find(candidate => candidate.key === sortableItem.id)
+          if (entry == null) return null
+          return (
+            <ConversationTemplateSortableCard
+              detailCollection={detailCollection}
+              detailContext={detailContext}
+              entry={entry}
+              fieldPath={field.path}
+              itemCount={localItems.length}
+              onMove={moveItem}
+              onOpenDetail={onOpenDetail}
+              onRemove={removeItem}
+              searchable={normalizedQuery !== ''}
+              sortable={sortable}
+              t={t}
+            />
+          )
+        }}
+      </SortableRecordGrid>
+    </ConfigRecordCollection>
   )
 }

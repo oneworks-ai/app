@@ -9,6 +9,7 @@ import process from 'node:process'
 
 import type { AdapterCtx, AdapterQueryOptions, Config, ModelServiceConfig } from '@oneworks/types'
 import {
+  buildModelServiceRuntimeId,
   migrateProjectHomeSegment,
   parseServiceModelSelector,
   resolveModelServiceApiProtocol,
@@ -269,10 +270,10 @@ const buildGeneratedModelConfig = (params: {
   const providerType = protocolProviderType ?? inferredProviderType
   const providerKey = typeof extra.providerId === 'string' && extra.providerId.trim() !== ''
     ? extra.providerId.trim()
-    : parsed.serviceKey
+    : buildModelServiceRuntimeId(parsed.serviceKey)
   const modelKey = typeof extra.modelKey === 'string' && extra.modelKey.trim() !== ''
     ? extra.modelKey.trim()
-    : `${parsed.serviceKey}__${parsed.modelName}`
+    : `${buildModelServiceRuntimeId(parsed.serviceKey)}__${parsed.modelName}`
   const customHeaders = normalizeStringRecord(extra.headers)
   const providerEnv = normalizeStringRecord(extra.env)
   const queryParams = normalizeStringRecord(extra.queryParams)

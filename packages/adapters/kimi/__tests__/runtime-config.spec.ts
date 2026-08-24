@@ -419,6 +419,39 @@ exit 2
     }
   })
 
+  it('builds routed config from a Provider Profile', async () => {
+    const { ctx, cleanup } = await createCtx()
+    try {
+      ctx.configs[0]!.modelServices = {
+        deepseek: {
+          kind: 'collection',
+          provider: 'deepseek',
+          profiles: {
+            work: { apiKey: 'work-key' }
+          }
+        }
+      }
+      const base = await resolveKimiSessionBase(ctx, {
+        type: 'create',
+        runtime: 'cli',
+        sessionId: 'session-profile',
+        model: 'deepseek/work,deepseek-chat',
+        onEvent: () => {}
+      })
+
+      expect(base.cliModel).toMatch(/^deepseek-work-[a-f0-9]{8}__deepseek-chat$/u)
+      const configPath = base.turnArgPrefix.at(base.turnArgPrefix.indexOf('--config-file') + 1)
+      const config = JSON.parse(await readFile(configPath as string, 'utf8')) as {
+        providers?: Record<string, { api_key?: string }>
+      }
+      const profileProvider = Object.entries(config.providers ?? {})
+        .find(([key]) => /^deepseek-work-[a-f0-9]{8}$/u.test(key))
+      expect(profileProvider?.[1].api_key).toBe('work-key')
+    } finally {
+      await cleanup()
+    }
+  })
+
   it('does not backfill legacy workspace Kimi share sessions', async () => {
     const { ctx, cleanup } = await createCtx()
     try {

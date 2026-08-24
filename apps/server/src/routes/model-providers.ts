@@ -26,6 +26,7 @@ import {
   importModelServicesFromAdapter,
   listModelServiceImporters
 } from '#~/services/model-providers/model-service-import.js'
+import { copyModelServiceToProvider } from '#~/services/model-providers/model-service-provider-copy.js'
 import { ProviderActionError } from '#~/services/model-providers/provider-client.js'
 import { HttpError, badRequest, internalServerError, notFound } from '#~/utils/http.js'
 
@@ -108,6 +109,19 @@ export function modelServicesRouter(): Router {
   router.get('/importers', async (ctx) => {
     try {
       ctx.body = await listModelServiceImporters()
+    } catch (error) {
+      handleProviderError(error)
+    }
+  })
+
+  router.post('/:serviceKey/provider-copy', async (ctx) => {
+    try {
+      const body = asBodyRecord(ctx.request.body)
+      ctx.body = await copyModelServiceToProvider({
+        draft: body.service,
+        serviceKey: ctx.params.serviceKey,
+        source: body.source
+      })
     } catch (error) {
       handleProviderError(error)
     }

@@ -1,4 +1,5 @@
 import './ModelServiceCollectionView.scss'
+/* eslint-disable max-lines -- provider-first creation keeps catalog, filters, and compatibility creation together. */
 
 import { useMemo, useState } from 'react'
 
@@ -18,15 +19,7 @@ import type { FieldSpec } from './configSchema'
 import type { TranslationFn } from './configUtils'
 import { getModelServiceProviderDescription, normalizeModelServiceText } from './modelServiceCollectionUtils'
 import type { ModelServiceConfigSessionRequest } from './modelServiceConfigSession'
-
-const resolveUniqueServiceKey = (baseKey: string, existingKeys: Set<string>) => {
-  if (!existingKeys.has(baseKey)) return baseKey
-  for (let index = 2; index < 10_000; index += 1) {
-    const candidate = `${baseKey}-${index}`
-    if (!existingKeys.has(candidate)) return candidate
-  }
-  return `${baseKey}-${Date.now()}`
-}
+import { resolveUniqueModelServiceKey } from './modelServiceProfileUtils'
 
 export function ModelServiceCollectionView({
   field,
@@ -56,6 +49,10 @@ export function ModelServiceCollectionView({
   const [showAvailable, setShowAvailable] = useState(true)
   const [showCreateRow, setShowCreateRow] = useState(false)
   const [newRecordKey, setNewRecordKey] = useState('')
+  const createKinds = field.detailCollection?.collectionKind === 'recordMap'
+    ? (field.detailCollection.createKinds ?? [])
+    : []
+  const [newRecordKind, setNewRecordKind] = useState(createKinds[0]?.key ?? 'service')
 
   const entries = useMemo(() =>
     toDetailCollectionEntries({
@@ -115,19 +112,29 @@ export function ModelServiceCollectionView({
       itemKey
     })
   }
+  const openProfiles = (itemKey: string) => {
+    onOpenDetail({
+      kind: 'detailCollectionItem',
+      fieldPath: field.path,
+      itemKey,
+      nestedPath: ['profiles']
+    })
+  }
 
   const createService = ({
     baseKey,
+    itemKind,
     provider
   }: {
     baseKey: string
+    itemKind: string
     provider?: ModelProviderDefinition
   }) => {
     const normalizedBaseKey = baseKey.trim()
     if (normalizedBaseKey === '') return
-    const itemKey = resolveUniqueServiceKey(normalizedBaseKey, existingKeys)
+    const itemKey = resolveUniqueModelServiceKey(normalizedBaseKey, existingKeys)
     const nextItem = field.detailCollection?.collectionKind === 'recordMap'
-      ? field.detailCollection.createItem?.(itemKey) ?? {}
+      ? field.detailCollection.createItem?.(itemKey, itemKind) ?? {}
       : {}
     const service = provider == null
       ? nextItem
@@ -159,9 +166,15 @@ export function ModelServiceCollectionView({
         onShowCreateRowChange={setShowCreateRow}
         newRecordKey={newRecordKey}
         onNewRecordKeyChange={setNewRecordKey}
+        newRecordKind={newRecordKind}
+        onNewRecordKindChange={setNewRecordKind}
+        createKindOptions={createKinds.map(item => ({
+          value: item.key,
+          label: t(item.labelKey)
+        }))}
         existingKeys={existingKeys}
         modelServiceImportAction={modelServiceImportAction}
-        onCreateManual={baseKey => createService({ baseKey })}
+        onCreateManual={baseKey => createService({ baseKey, itemKind: newRecordKind })}
         source={source}
         creatingModelServiceSessionKey={creatingModelServiceSessionKey}
         onCreateModelServiceSession={onCreateModelServiceSession}
@@ -174,6 +187,7 @@ export function ModelServiceCollectionView({
         creatingModelServiceSessionKey={creatingModelServiceSessionKey}
         onCreateModelServiceSession={onCreateModelServiceSession}
         onOpen={openDetail}
+        onOpenProfiles={openProfiles}
         onRemove={removeService}
         t={t}
       />
@@ -181,7 +195,7 @@ export function ModelServiceCollectionView({
       <ModelServiceAvailableGroup
         providers={visibleProviders}
         providerConfigurationCounts={providerConfigurationCounts}
-        onConfigure={provider => createService({ baseKey: provider.id, provider })}
+        onConfigure={provider => createService({ baseKey: provider.id, itemKind: 'provider', provider })}
         t={t}
       />
 

@@ -197,6 +197,36 @@ describe('generateDefaultCCRConfigJSON', () => {
     expect(raw).not.toContain('127.0.0.1:9876')
   })
 
+  it('expands Provider Profiles into independent CCR providers', () => {
+    const raw = generateDefaultCCRConfigJSON({
+      cwd: '/tmp/project',
+      userConfig: {
+        defaultModelService: 'deepseek/work',
+        defaultModel: 'deepseek-chat',
+        modelServices: {
+          deepseek: {
+            kind: 'collection',
+            provider: 'deepseek',
+            profiles: {
+              personal: { apiKey: 'personal-key' },
+              work: { apiKey: 'work-key' }
+            }
+          }
+        }
+      }
+    })
+
+    const config = JSON.parse(raw) as {
+      Providers: Array<{ name: string; api_key: string }>
+      Router: { default: string }
+    }
+    expect(config.Providers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'deepseek/personal', api_key: 'personal-key' }),
+      expect.objectContaining({ name: 'deepseek/work', api_key: 'work-key' })
+    ]))
+    expect(config.Router.default).toBe('deepseek/work,deepseek-chat')
+  })
+
   it('uses chat completions endpoints for Coding Plan OpenAI-compatible roots in CCR', () => {
     const raw = generateDefaultCCRConfigJSON({
       cwd: '/tmp/project',

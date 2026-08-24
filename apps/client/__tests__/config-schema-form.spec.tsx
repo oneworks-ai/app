@@ -13,6 +13,10 @@ import {
 } from '#~/components/config/configDetail'
 import { configGroupMeta, configGroupOrder, configSchema } from '#~/components/config/configSchema'
 import { editableConfigSectionKeys } from '#~/components/config/editableConfigSections'
+import {
+  createProviderCopyFromModelService,
+  promoteModelServiceToProvider
+} from '#~/components/config/modelServiceProfileUtils'
 
 vi.hoisted(() => {
   const storage = new Map<string, string>()
@@ -1168,6 +1172,7 @@ describe('config schema form', () => {
     )
 
     expect(html).toContain('conversation-template-collection')
+    expect(html).toContain('config-record-collection')
     expect(html).toContain('action-search-toolbar--flush')
     expect(html).toContain('drag_indicator')
     expect(html).toContain('Bug fix')
@@ -1329,6 +1334,9 @@ describe('config schema form', () => {
     expect(html).toContain('config.fields.modelServices.item.provider.label')
     expect(html).toContain('role="tablist"')
     expect(html).toContain('config.modelServices.detailTabs.ariaLabel')
+    expect(html).toContain('>独立服务</span>')
+    expect(html).toContain('config.modelServices.standalone.upgradeDescription')
+    expect(html).toContain('config.modelServices.standalone.upgradeAction')
     expect(html).toContain('>接入配置</span>')
     expect(html).toContain('>模型配置</span>')
     expect(html).toContain('>套餐信息</span>')
@@ -1439,6 +1447,69 @@ describe('config schema form', () => {
     expect(html).toContain('config.fields.modelServices.item.apiBaseUrl.label')
     expect(html).toContain('config.fields.modelServices.item.apiKey.label')
     expect(html).not.toContain('config.fields.modelServices.item.title.label')
+  })
+
+  it('keeps Provider-level actions off the collection root and renders them on Profile rows', () => {
+    const value = {
+      deepseek: {
+        kind: 'collection',
+        provider: 'deepseek',
+        profiles: {
+          default: {
+            apiKey: 'profile-secret',
+            title: 'Default profile'
+          }
+        }
+      }
+    }
+    const rootHtml = renderToStaticMarkup(
+      <SectionForm
+        sectionKey='modelServices'
+        value={value}
+        onChange={() => undefined}
+        mergedModelServices={{}}
+        mergedAdapters={{}}
+        detailRoute={{
+          kind: 'detailCollectionItem',
+          fieldPath: [],
+          itemKey: 'deepseek'
+        }}
+        t={t}
+      />
+    )
+    const profilesHtml = renderToStaticMarkup(
+      <SectionForm
+        sectionKey='modelServices'
+        value={value}
+        onChange={() => undefined}
+        mergedModelServices={{}}
+        mergedAdapters={{}}
+        detailRoute={{
+          kind: 'detailCollectionItem',
+          fieldPath: [],
+          itemKey: 'deepseek',
+          nestedPath: ['profiles']
+        }}
+        t={t}
+      />
+    )
+
+    expect(rootHtml).not.toContain('config-view__model-service-actions')
+    expect(profilesHtml).toContain('model-service-profile-collection')
+    expect(profilesHtml).toContain('config-record-collection__grid')
+    expect(profilesHtml).toContain('config.modelServices.profiles.searchPlaceholder')
+    expect(profilesHtml).toContain('config.modelServices.profiles.add')
+    expect(profilesHtml).toContain('config-view__model-service-list-tray')
+    expect(profilesHtml).toContain('config-view__model-service-list-tray--overlay-actions')
+    expect(profilesHtml).toContain('config-view__model-service-list-actions')
+    expect(profilesHtml).toContain('config-view__model-service-record-actions')
+    expect(profilesHtml).toContain('config-view__model-service-list-quota--list')
+    expect(profilesHtml).not.toContain('model-service-profile-collection__aside')
+    expect(profilesHtml).toContain('config.modelServices.actions.openApiKeys')
+    expect(profilesHtml).toContain('config.modelServices.actions.more')
+    expect(profilesHtml.indexOf('config.editor.remove')).toBeLessThan(
+      profilesHtml.indexOf('config.modelServices.actions.more')
+    )
   })
 
   it('opens adapter model service import from the shared toolbar', () => {
@@ -1708,6 +1779,80 @@ describe('config schema form', () => {
     expect(item).not.toHaveProperty('models')
   })
 
+  it('creates Provider profile containers without removing the independent service path', () => {
+    const modelServicesField = configSchema.modelServices?.[0]
+    const detailCollection = modelServicesField?.detailCollection
+    expect(detailCollection?.collectionKind).toBe('recordMap')
+    if (detailCollection?.collectionKind !== 'recordMap') throw new Error('Expected record-map model services')
+    const provider = detailCollection.createItem?.('deepseek', 'provider')
+    const service = detailCollection.createItem?.('deepseek-2', 'service')
+
+    expect(detailCollection.createKinds).toEqual([
+      { key: 'provider', labelKey: 'config.modelServices.createKinds.provider' },
+      { key: 'service', labelKey: 'config.modelServices.createKinds.service' }
+    ])
+    expect(provider).toMatchObject({
+      kind: 'collection',
+      profiles: {
+        default: {
+          extra: {}
+        }
+      }
+    })
+    expect(service).toMatchObject({ apiKey: '' })
+    expect(service).not.toHaveProperty('profiles')
+  })
+
+  it('promotes a standalone service without changing its credential values', () => {
+    const provider = promoteModelServiceToProvider({
+      provider: 'deepseek',
+      title: 'DeepSeek',
+      apiBaseUrl: 'https://api.deepseek.com',
+      apiKey: 'secret',
+      models: ['deepseek-chat'],
+      extra: { region: 'cn' }
+    })
+
+    expect(provider).toEqual({
+      provider: 'deepseek',
+      title: 'DeepSeek',
+      kind: 'collection',
+      profiles: {
+        default: {
+          apiBaseUrl: 'https://api.deepseek.com',
+          apiKey: 'secret',
+          models: ['deepseek-chat'],
+          extra: { region: 'cn' }
+        }
+      }
+    })
+  })
+
+  it('keeps the standalone service when creating its Provider migration copy', () => {
+    const standalone = {
+      provider: 'deepseek',
+      apiKey: 'legacy-key'
+    }
+    const result = createProviderCopyFromModelService({
+      existingKeys: new Set(['deepseek', 'deepseek-provider']),
+      modelServices: { deepseek: standalone },
+      service: standalone,
+      serviceKey: 'deepseek'
+    })
+
+    expect(result.providerKey).toBe('deepseek-provider-2')
+    expect(result.modelServices.deepseek).toBe(standalone)
+    expect(result.modelServices['deepseek-provider-2']).toEqual({
+      provider: 'deepseek',
+      kind: 'collection',
+      profiles: {
+        default: {
+          apiKey: 'legacy-key'
+        }
+      }
+    })
+  })
+
   it('falls back to provider descriptions in model service summaries', () => {
     const html = renderToStaticMarkup(
       <SectionForm
@@ -1772,6 +1917,41 @@ describe('config schema form', () => {
     expect(html).toContain('config-view__model-service-list-quota')
     expect(html).toContain('model-service-collection__quota-footer')
     expect(html).toContain('config-view__model-service-list-quota-value')
+    expect(html).not.toContain('config-view__model-service-list-quota-circle')
+  })
+
+  it('renders a per-profile quota summary for Provider collections', () => {
+    const html = renderToStaticMarkup(
+      <SectionForm
+        sectionKey='modelServices'
+        value={{
+          deepseek: {
+            kind: 'collection',
+            provider: 'deepseek',
+            profiles: {
+              personal: {
+                apiKey: 'personal-key',
+                title: 'Personal'
+              },
+              work: {
+                apiKey: 'work-key',
+                title: 'Work'
+              }
+            }
+          }
+        }}
+        onChange={() => undefined}
+        mergedModelServices={{}}
+        mergedAdapters={{}}
+        t={t}
+      />
+    )
+
+    expect(html).toContain('config-view__model-service-profile-quota-summary')
+    expect(html).toContain('Personal')
+    expect(html).toContain('Work')
+    expect(html.match(/class="config-view__model-service-list-quota(?:\s|")/gu)).toHaveLength(2)
+    expect(html).toContain('config-view__model-service-list-quota--list')
     expect(html).not.toContain('config-view__model-service-list-quota-circle')
   })
 

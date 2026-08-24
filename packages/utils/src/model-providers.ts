@@ -70,12 +70,84 @@ const asRecord = (value: unknown): Record<string, unknown> | undefined => (
     : undefined
 )
 
+export const getModelServiceProfiles = (service: ModelServiceConfig | undefined) => (
+  asRecord(service?.profiles) ?? asRecord(service?.services)
+)
+
 export const isModelServiceCollection = (service: ModelServiceConfig | undefined) => (
-  service?.kind === 'collection' || asRecord(service?.profiles) != null || asRecord(service?.services) != null
+  service?.kind === 'collection' || getModelServiceProfiles(service) != null
 )
 
 export const buildCollectionModelServiceKey = (collectionKey: string, serviceKey: string) =>
   `${collectionKey}${MODEL_SERVICE_COLLECTION_SEPARATOR}${serviceKey}`
+
+export const DEFAULT_MODEL_SERVICE_PROFILE_KEY = 'default'
+
+export const resolveUniqueModelServiceKey = (baseKey: string, existingKeys: Set<string>) => {
+  if (!existingKeys.has(baseKey)) return baseKey
+  for (let index = 2; index < 10_000; index += 1) {
+    const candidate = `${baseKey}-${index}`
+    if (!existingKeys.has(candidate)) return candidate
+  }
+  return `${baseKey}-${Date.now()}`
+}
+
+const modelServiceProfileFieldKeys = [
+  'apiBaseUrl',
+  'apiProtocol',
+  'apiKey',
+  'models',
+  'supportedAdapters',
+  'unsupportedAdapters',
+  'timeoutMs',
+  'maxOutputTokens',
+  'extra'
+] as const satisfies ReadonlyArray<keyof ModelServiceConfig>
+
+export const promoteModelServiceToProvider = (
+  service: ModelServiceConfig
+): ModelServiceConfig => {
+  const provider: ModelServiceConfig = {
+    ...service,
+    kind: 'collection'
+  }
+  const profile: ModelServiceConfig = {}
+
+  for (const fieldKey of modelServiceProfileFieldKeys) {
+    if (provider[fieldKey] === undefined) continue
+    Object.assign(profile, { [fieldKey]: provider[fieldKey] })
+    delete provider[fieldKey]
+  }
+
+  delete provider.services
+  provider.profiles = {
+    [DEFAULT_MODEL_SERVICE_PROFILE_KEY]: profile
+  }
+  return provider
+}
+
+const hashRuntimeId = (value: string) => {
+  let hash = 0x811C9DC5
+  for (const character of value) {
+    hash ^= character.codePointAt(0) ?? 0
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0')
+}
+
+/**
+ * Convert a user-facing service selector into an adapter-safe native identifier.
+ * Plain legacy service keys are preserved; composite Profile selectors get a
+ * deterministic suffix so they cannot collide with a similarly named service.
+ */
+export const buildModelServiceRuntimeId = (serviceKey: string) => {
+  const normalized = serviceKey.trim()
+  if (/^[\w-]+$/u.test(normalized)) return normalized
+  const prefix = normalized
+    .replace(/[^\w-]+/gu, '-')
+    .replace(/^-+|-+$/gu, '') || 'service'
+  return `${prefix}-${hashRuntimeId(normalized)}`
+}
 
 export const parseCollectionModelServiceKey = (serviceKey: string) => {
   const separatorIndex = serviceKey.indexOf(MODEL_SERVICE_COLLECTION_SEPARATOR)
@@ -90,7 +162,7 @@ export const resolveCollectionModelService = (
   collection: ModelServiceConfig,
   serviceKey: string
 ): ModelServiceConfig | undefined => {
-  const profiles = asRecord(collection.profiles) ?? asRecord(collection.services)
+  const profiles = getModelServiceProfiles(collection)
   const child = profiles?.[serviceKey]
   if (child == null || typeof child !== 'object' || Array.isArray(child)) return undefined
   const childService = child as ModelServiceConfig
@@ -181,15 +253,19 @@ export const flattenModelServices = (
     if (normalizedServiceKey == null || service == null) continue
     if (!isModelServiceCollection(service)) {
       flattened[normalizedServiceKey] = service
-      continue
     }
-    const profiles = asRecord(service.profiles) ?? asRecord(service.services)
+  }
+  for (const [serviceKey, service] of Object.entries(modelServices)) {
+    const normalizedServiceKey = normalizeString(serviceKey)
+    if (normalizedServiceKey == null || service == null || !isModelServiceCollection(service)) continue
+    const profiles = getModelServiceProfiles(service)
     for (const childServiceKey of Object.keys(profiles ?? {})) {
       const normalizedChildServiceKey = normalizeString(childServiceKey)
       if (normalizedChildServiceKey == null) continue
       const childService = resolveCollectionModelService(service, normalizedChildServiceKey)
       if (childService == null) continue
-      flattened[buildCollectionModelServiceKey(normalizedServiceKey, normalizedChildServiceKey)] = childService
+      const compositeKey = buildCollectionModelServiceKey(normalizedServiceKey, normalizedChildServiceKey)
+      if (flattened[compositeKey] == null) flattened[compositeKey] = childService
     }
   }
   return flattened

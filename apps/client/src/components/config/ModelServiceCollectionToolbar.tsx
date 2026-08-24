@@ -3,6 +3,7 @@ import { useState } from 'react'
 
 import { ActionSearchToolbar } from '#~/components/action-search-toolbar/ActionSearchToolbar'
 import { MaterialSymbol } from '#~/components/icons/MaterialSymbol'
+import { MobileAwareSelect } from '#~/components/mobile-aware-select/MobileAwareSelect'
 
 import { AdapterImportDialog } from './AdapterImportDialog'
 import type { AdapterImportAction } from './AdapterImportRow'
@@ -12,13 +13,16 @@ import { getModelServiceConfigSessionActionKey } from './modelServiceConfigSessi
 import type { ModelServiceConfigSessionRequest } from './modelServiceConfigSession'
 
 export function ModelServiceCollectionToolbar({
+  createKindOptions,
   creatingModelServiceSessionKey,
   existingKeys,
   modelServiceImportAction,
   newRecordKey,
+  newRecordKind,
   onCreateManual,
   onCreateModelServiceSession,
   onNewRecordKeyChange,
+  onNewRecordKindChange,
   onQueryChange,
   onShowAvailableChange,
   onShowConfiguredChange,
@@ -30,13 +34,16 @@ export function ModelServiceCollectionToolbar({
   source,
   t
 }: {
+  createKindOptions: Array<{ label: string; value: string }>
   creatingModelServiceSessionKey?: string | null
   existingKeys: Set<string>
   modelServiceImportAction?: AdapterImportAction
   newRecordKey: string
+  newRecordKind: string
   onCreateManual: (recordKey: string) => void
   onCreateModelServiceSession?: (request: ModelServiceConfigSessionRequest) => void | Promise<void>
   onNewRecordKeyChange: (value: string) => void
+  onNewRecordKindChange: (value: string) => void
   onQueryChange: (value: string) => void
   onShowAvailableChange: (value: boolean) => void
   onShowConfiguredChange: (value: boolean) => void
@@ -50,7 +57,9 @@ export function ModelServiceCollectionToolbar({
 }) {
   const [isImportDialogOpen, setImportDialogOpen] = useState(false)
   const normalizedRecordKey = newRecordKey.trim()
-  const invalidRecordKey = normalizedRecordKey === '' || existingKeys.has(normalizedRecordKey)
+  const invalidRecordKey = normalizedRecordKey === '' ||
+    normalizedRecordKey.includes('/') ||
+    existingKeys.has(normalizedRecordKey)
   const createSessionActionKey = getModelServiceConfigSessionActionKey({ mode: 'create', source })
 
   return (
@@ -135,6 +144,17 @@ export function ModelServiceCollectionToolbar({
               type: 'primary'
             }
           ]}
+          hint={createKindOptions.length > 0
+            ? (
+              <MobileAwareSelect
+                className='model-service-collection__create-kind'
+                value={newRecordKind}
+                options={createKindOptions}
+                onChange={onNewRecordKindChange}
+                aria-label={t('config.modelServices.createKinds.label')}
+              />
+            )
+            : undefined}
         />
       )}
 

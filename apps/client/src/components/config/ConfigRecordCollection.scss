@@ -1,0 +1,31 @@
+.config-record-collection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--subpage-tertiary-gap, 10px);
+  min-width: 0;
+}
+
+.config-record-collection__grid.config-view__record-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+  align-items: stretch;
+  gap: var(--subpage-tertiary-gap, 10px);
+}
+
+.config-record-collection__create {
+  min-width: 0;
+}
+
+.config-record-collection__create .config-view__record-add {
+  padding-block: var(--subpage-tertiary-padding, 8px);
+}
+
+.config-record-collection__empty {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 600px) {
+  .config-record-collection__grid.config-view__record-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

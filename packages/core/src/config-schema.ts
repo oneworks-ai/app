@@ -143,8 +143,7 @@ export const adapterNativeCliConfigSchema = z.object({
   npmPath: z.string().optional().describe('npm binary used for managed installs')
 })
 
-export const modelServiceConfigSchema = z.object({
-  kind: z.enum(['service', 'collection']).optional().describe('Model service entry kind'),
+const modelServiceEndpointConfigShape = {
   title: z.string().optional().describe('Display title'),
   description: z.string().optional().describe('Display description'),
   provider: z.string().min(1).optional().describe('Known provider id used to apply defaults'),
@@ -162,6 +161,17 @@ export const modelServiceConfigSchema = z.object({
   billing: jsonValueSchema.optional().describe('Provider billing metadata'),
   codingPlan: jsonValueSchema.optional().describe('Provider coding-plan metadata'),
   providerOptions: z.record(z.string(), jsonValueSchema).optional().describe('Provider-specific management options'),
+  extra: z.record(z.string(), jsonValueSchema).optional().describe('Provider-specific extra config')
+}
+
+export const modelServiceProfileConfigSchema = z.object({
+  ...modelServiceEndpointConfigShape,
+  kind: z.enum(['service', 'collection']).optional().describe('Legacy-compatible nested model service kind')
+}).passthrough()
+
+export const modelServiceConfigSchema = z.object({
+  ...modelServiceEndpointConfigShape,
+  kind: z.enum(['service', 'collection']).optional().describe('Model service entry kind'),
   management: z.object({
     enabled: z.boolean().optional().describe('Enable provider management API actions'),
     apiKey: z.string().optional().describe('Provider management API key'),
@@ -172,9 +182,12 @@ export const modelServiceConfigSchema = z.object({
     projectId: z.string().optional().describe('Provider project id'),
     endpointKind: z.string().optional().describe('Provider management endpoint kind')
   }).passthrough().optional().describe('Provider management API credentials and options'),
-  profiles: z.record(z.string(), jsonValueSchema).optional().describe('Collection child model-service profiles'),
-  services: z.record(z.string(), jsonValueSchema).optional().describe('Legacy alias for collection child services'),
-  extra: z.record(z.string(), jsonValueSchema).optional().describe('Provider-specific extra config')
+  profiles: z.record(z.string(), modelServiceProfileConfigSchema)
+    .optional()
+    .describe('Collection child model-service profiles'),
+  services: z.record(z.string(), modelServiceProfileConfigSchema)
+    .optional()
+    .describe('Legacy alias for collection child services')
 }).passthrough()
 
 export const recommendedModelConfigSchema = z.object({

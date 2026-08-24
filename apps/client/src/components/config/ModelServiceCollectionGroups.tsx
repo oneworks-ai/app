@@ -11,6 +11,7 @@ export function ModelServiceConfiguredGroup({
   entries,
   onCreateModelServiceSession,
   onOpen,
+  onOpenProfiles,
   onRemove,
   source,
   t
@@ -19,6 +20,7 @@ export function ModelServiceConfiguredGroup({
   entries: ModelServiceCollectionEntry[]
   onCreateModelServiceSession?: (request: ModelServiceConfigSessionRequest) => void | Promise<void>
   onOpen: (itemKey: string) => void
+  onOpenProfiles: (itemKey: string) => void
   onRemove: (itemKey: string) => void
   source: ConfigSource
   t: TranslationFn
@@ -41,6 +43,7 @@ export function ModelServiceConfiguredGroup({
             creatingModelServiceSessionKey={creatingModelServiceSessionKey}
             onCreateModelServiceSession={onCreateModelServiceSession}
             onOpen={() => onOpen(entry.key)}
+            onOpenProfiles={() => onOpenProfiles(entry.key)}
             onRemove={() => onRemove(entry.key)}
             t={t}
           />

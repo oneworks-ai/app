@@ -1,5 +1,10 @@
 import type { ModelServiceConfig, ResolvedModelServiceConfig } from '@oneworks/types'
-import { resolveModelServiceApiProtocol, resolveModelServiceConfig, resolveModelServiceFromMap } from '@oneworks/utils'
+import {
+  buildModelServiceRuntimeId,
+  resolveModelServiceApiProtocol,
+  resolveModelServiceConfig,
+  resolveModelServiceFromMap
+} from '@oneworks/utils'
 
 import { asPlainRecord, normalizeStringRecord } from './object-utils'
 
@@ -74,7 +79,7 @@ export const resolveOpenCodeModel = (
   const providerExtra = getProviderExtra(resolvedService)
   const providerId = typeof providerExtra.providerId === 'string' && providerExtra.providerId.trim() !== ''
     ? providerExtra.providerId
-    : serviceKey
+    : buildModelServiceRuntimeId(serviceKey)
   const npm = inferProviderPackage(resolvedService, providerExtra)
   const baseURL = appendQueryParams(
     normalizeProviderBaseURL(resolvedService.apiBaseUrl, npm),

@@ -10,6 +10,7 @@ import type {
   ProviderManagementSnapshot,
   ProviderManagementToken
 } from '@oneworks/types'
+import { buildCollectionModelServiceKey, resolveCollectionModelService } from '@oneworks/utils/model-providers'
 
 import {
   createModelServiceManagementToken,
@@ -22,6 +23,7 @@ import {
 import { MobileAwareSelect as Select } from '#~/components/mobile-aware-select/MobileAwareSelect'
 
 import { ConfigRecordCreateRow, ConfigRecordList, ConfigRecordRow } from './ConfigRecordList'
+import { ModelServiceProviderQuotaPreview } from './ModelServiceProviderQuotaPreview'
 import type { TranslationFn } from './configUtils'
 import { formatCurrencyAmount, toModelServiceConfig } from './modelServiceProviderActionUtils'
 
@@ -188,6 +190,7 @@ export const ModelServiceNewApiManagement = ({
       const displayProfile = isRecord(localProfile) ? localProfile : resolvedProfile
       return {
         description: getProfileText(displayProfile, key, 'description'),
+        profile: displayProfile,
         isLocal: isRecord(localProfile),
         key,
         title: getProfileText(displayProfile, key, 'title'),
@@ -195,11 +198,13 @@ export const ModelServiceNewApiManagement = ({
       }
     })
   }, [profiles, resolvedProfiles])
-  const profileKeyByTokenId = useMemo(() => {
-    const entries = profileRows
-      .filter(row => row.tokenId != null)
-      .map(row => [row.tokenId!, row.key] as const)
-    return new Map(entries)
+  const profileKeysByTokenId = useMemo(() => {
+    const result = new Map<string, string[]>()
+    for (const row of profileRows) {
+      if (row.tokenId == null) continue
+      result.set(row.tokenId, [...(result.get(row.tokenId) ?? []), row.key])
+    }
+    return result
   }, [profileRows])
   const profileRowByKey = useMemo(() => (
     new Map(profileRows.map(row => [row.key, row]))
@@ -362,10 +367,10 @@ export const ModelServiceNewApiManagement = ({
       () => deleteModelServiceManagementToken(serviceKey, token.id, { service: modelService, source })
     )
     if (result == null) return
-    const linkedProfileKey = profileKeyByTokenId.get(token.id)
-    if (linkedProfileKey != null && profiles[linkedProfileKey] != null) {
+    const linkedProfileKeys = profileKeysByTokenId.get(token.id) ?? []
+    if (linkedProfileKeys.some(profileKey => profiles[profileKey] != null)) {
       const nextProfiles = { ...profiles }
-      delete nextProfiles[linkedProfileKey]
+      for (const linkedProfileKey of linkedProfileKeys) delete nextProfiles[linkedProfileKey]
       onProfilesChange(nextProfiles)
     }
     void message.success(t('config.modelServices.management.deleteApiKeySuccess', { defaultValue: '令牌已删除' }))
@@ -713,6 +718,22 @@ export const ModelServiceNewApiManagement = ({
                   key: tokenById.get(row.tokenId)?.name ?? row.tokenId
                 })
             ]}
+            rightSlot={(() => {
+              const profileService = resolveCollectionModelService({
+                ...modelService,
+                profiles: { [row.key]: row.profile }
+              } as ModelServiceConfig, row.key)
+              return profileService == null
+                ? null
+                : (
+                  <ModelServiceProviderQuotaPreview
+                    item={profileService}
+                    serviceKey={buildCollectionModelServiceKey(serviceKey, row.key)}
+                    source={source}
+                    t={t}
+                  />
+                )
+            })()}
             onClick={() => onOpenProfile(row.key)}
           />
         ))}

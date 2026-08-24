@@ -116,7 +116,11 @@ export const DetailCollectionField = ({
   const { resolvedThemeMode } = useResolvedThemeMode()
   const [newRecordKey, setNewRecordKey] = useState('')
   const [newRecordKind, setNewRecordKind] = useState(
-    uiSection?.kind === 'recordMap' ? (uiSection.recordMap.entryKinds?.[0]?.key ?? '') : ''
+    uiSection?.kind === 'recordMap'
+      ? (uiSection.recordMap.entryKinds?.[0]?.key ?? '')
+      : (field.detailCollection?.collectionKind === 'recordMap'
+        ? (field.detailCollection.createKinds?.[0]?.key ?? '')
+        : '')
   )
   const [adapterCreateOpen, setAdapterCreateOpen] = useState(false)
   const [adapterSearchQuery, setAdapterSearchQuery] = useState('')
@@ -197,8 +201,12 @@ export const DetailCollectionField = ({
   const isListCollection = detailCollection.collectionKind === 'list'
   const isRecordMapCollection = detailCollection.collectionKind === 'recordMap'
   const isAdapterCollection = isRecordMapCollection && sectionKey === 'adapters'
-  const canSelectKind = isRecordMapCollection && uiSection?.kind === 'recordMap' &&
+  const detailCreateKinds = isRecordMapCollection ? (detailCollection.createKinds ?? []) : []
+  const canSelectUiKind = isRecordMapCollection && uiSection?.kind === 'recordMap' &&
     uiSection.recordMap.mode === 'discriminated'
+  const canSelectDetailKind = isRecordMapCollection &&
+    detailCreateKinds.length > 0
+  const canSelectKind = canSelectUiKind || canSelectDetailKind
   const keyPlaceholder = detailCollection.collectionKind === 'recordMap'
     ? (
       detailCollection.keyPlaceholderKey != null
@@ -212,8 +220,11 @@ export const DetailCollectionField = ({
         value: item.key,
         label: item.label ?? item.key
       }))
-      : []
-  ), [uiSection])
+      : detailCreateKinds.map(item => ({
+        value: item.key,
+        label: t(item.labelKey)
+      }))
+  ), [detailCreateKinds, t, uiSection])
   const localListItems = isListCollection && Array.isArray(value)
     ? value.filter(item => item != null && typeof item === 'object' && !Array.isArray(item)) as Array<
       Record<string, unknown>
@@ -706,6 +717,13 @@ export const DetailCollectionField = ({
                       serviceKey={key}
                       source={source}
                       t={t}
+                      onOpenProfiles={() =>
+                        onOpenDetail({
+                          kind: 'detailCollectionItem',
+                          fieldPath: field.path,
+                          itemKey: key,
+                          nestedPath: ['profiles']
+                        })}
                     />
                     {modelServiceInlineActions != null && (
                       <div className='config-view__model-service-list-actions'>

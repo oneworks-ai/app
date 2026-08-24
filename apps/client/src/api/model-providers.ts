@@ -35,6 +35,26 @@ export interface ModelProviderCatalogResponse {
   providers: ModelProviderDefinition[]
 }
 
+export interface ModelServiceProviderCopyResult {
+  providerKey: string
+  source: ConfigSource
+}
+
+export const copyModelServiceToProvider = (
+  serviceKey: string,
+  params: { service: ModelServiceConfig; source: ConfigSource }
+) => (
+  fetchApiJsonOrThrow<ModelServiceProviderCopyResult>(
+    `/api/model-services/${encodeURIComponent(serviceKey)}/provider-copy`,
+    {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({ service: params.service, source: params.source })
+    },
+    '[api] copy model service to Provider failed:'
+  )
+)
+
 export const listModelProviders = () => (
   fetchApiJsonOrThrow<{
     catalog?: { schemaVersion?: unknown; source?: unknown; version?: unknown }

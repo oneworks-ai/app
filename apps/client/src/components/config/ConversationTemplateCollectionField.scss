@@ -1,17 +1,3 @@
-.conversation-template-collection {
-  display: flex;
-  flex-direction: column;
-  gap: var(--subpage-tertiary-gap, 10px);
-  min-width: 0;
-}
-
-.conversation-template-collection__grid.config-view__record-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
-  align-items: stretch;
-  gap: var(--subpage-tertiary-gap, 10px);
-}
-
 .conversation-template-collection__card.config-view__record-card {
   position: relative;
   min-width: 0;
@@ -52,15 +38,7 @@
   display: none;
 }
 
-.conversation-template-collection__empty {
-  grid-column: 1 / -1;
-}
-
 @media (max-width: 600px) {
-  .conversation-template-collection__grid.config-view__record-list {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   .conversation-template-collection__card
     .conversation-template-collection__drag-handle {
     display: none;

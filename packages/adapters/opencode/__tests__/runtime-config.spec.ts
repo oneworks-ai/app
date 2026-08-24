@@ -112,6 +112,27 @@ describe('openCode config and model helpers', () => {
     ).toThrow(/requires an explicit extra\.opencode\.npm package/)
   })
 
+  it('maps a Provider Profile to a collision-safe OpenCode provider id', () => {
+    const result = resolveOpenCodeModel('deepseek/work,deepseek-chat', {
+      deepseek: {
+        kind: 'collection',
+        provider: 'deepseek',
+        profiles: {
+          work: { apiKey: 'work-key' }
+        }
+      }
+    })
+
+    expect(result.cliModel).toMatch(/^deepseek-work-[a-f0-9]{8}\/deepseek-chat$/u)
+    const providerId = result.cliModel?.split('/')[0]
+    expect(result.providerConfig?.[providerId ?? '']).toMatchObject({
+      options: {
+        apiKey: 'work-key',
+        baseURL: 'https://api.deepseek.com'
+      }
+    })
+  })
+
   it('preserves provider prefix when explicit service syntax has no local mapping', () => {
     expect(resolveOpenCodeModel('openrouter,claude-sonnet-4.5', {})).toEqual({
       cliModel: 'openrouter/claude-sonnet-4.5',

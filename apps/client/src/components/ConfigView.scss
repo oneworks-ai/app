@@ -1167,6 +1167,11 @@
   min-height: 34px;
 }
 
+.config-view__model-service-list-tray:has(.config-view__model-service-profile-quota-summary) {
+  height: 46px;
+  min-height: 46px;
+}
+
 .config-view__model-service-list-tray:not(:has(.config-view__model-service-list-quota)) {
   display: inline-flex;
   min-width: 0;
@@ -1182,6 +1187,53 @@
   height: 34px;
   min-width: 0;
   border-radius: 999px;
+}
+
+.config-view__model-service-profile-quota-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.config-view__model-service-profile-quota {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+}
+
+.config-view__model-service-profile-quota-title {
+  max-width: 64px;
+  overflow: hidden;
+  color: var(--sub-text-color);
+  font-size: 9px;
+  line-height: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-view__model-service-profile-quota-more {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--sub-text-color);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+button.config-view__model-service-profile-quota-more {
+  cursor: pointer;
+}
+
+button.config-view__model-service-profile-quota-more:hover,
+button.config-view__model-service-profile-quota-more:focus-visible {
+  color: var(--primary-color);
 }
 
 .config-view__model-service-list-quota-row {
@@ -1282,6 +1334,8 @@
 }
 
 .config-view__model-service-list-tray:has(.config-view__model-service-list-quota)
+  .config-view__model-service-list-actions,
+.config-view__model-service-list-tray--overlay-actions
   .config-view__model-service-list-actions {
   position: absolute;
   inset-block: calc(0px - var(--config-model-service-card-padding));
@@ -1304,6 +1358,8 @@
 }
 
 .config-view__model-service-list-tray:has(.config-view__model-service-list-quota)
+  .config-view__model-service-list-actions::before,
+.config-view__model-service-list-tray--overlay-actions
   .config-view__model-service-list-actions::before {
   content: '';
   position: absolute;
@@ -1368,6 +1424,15 @@
   box-shadow: none;
   color: var(--sub-text-color);
   transition: color .18s ease;
+}
+
+.config-view__model-service-list-actions
+  :is(.config-view__model-service-action-buttons
+    .ant-btn, .config-view__model-service-more-button.ant-btn) {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  border-radius: 7px;
 }
 
 .config-view__model-service-list-actions

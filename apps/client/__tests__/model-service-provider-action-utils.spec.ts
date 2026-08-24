@@ -1,27 +1,25 @@
 import { describe, expect, it } from 'vitest'
 
-import type { TranslationFn } from '#~/components/config/configUtils'
-import { formatBalance } from '#~/components/config/modelServiceProviderActionUtils'
+import { buildServiceActionFingerprint } from '#~/components/config/modelServiceProviderActionUtils'
 
-const t: TranslationFn = (key) => (
-  key === 'config.modelServices.results.amountUnknown'
-    ? '未知'
-    : key === 'config.modelServices.results.unlimitedQuota'
-    ? '无限额度'
-    : key
-)
+describe('model service provider action fingerprints', () => {
+  it('changes with credentials without retaining raw secrets', () => {
+    const first = buildServiceActionFingerprint('deepseek/work', 'global', {
+      apiKey: 'secret-one',
+      management: {
+        apiKey: 'management-secret',
+        headers: { Authorization: 'private-header' }
+      },
+      provider: 'deepseek'
+    })
+    const second = buildServiceActionFingerprint('deepseek/work', 'global', {
+      apiKey: 'secret-two',
+      provider: 'deepseek'
+    })
 
-describe('model service provider action utils', () => {
-  it('formats common balance currencies with symbols', () => {
-    expect(formatBalance({ available: 12.34, currency: 'USD', kind: 'balance' }, t)).toBe('12.34 $')
-    expect(formatBalance({ available: 56.78, currency: 'CNY', kind: 'balance' }, t)).toBe('56.78 ¥')
-  })
-
-  it('keeps unknown balance currency codes visible', () => {
-    expect(formatBalance({ available: 9, currency: 'EUR', kind: 'balance' }, t)).toBe('EUR 9')
-  })
-
-  it('formats unlimited provider quota without a numeric amount', () => {
-    expect(formatBalance({ kind: 'quota', unlimited: true }, t)).toBe('无限额度')
+    expect(first).not.toBe(second)
+    expect(first).not.toContain('secret-one')
+    expect(first).not.toContain('management-secret')
+    expect(first).not.toContain('private-header')
   })
 })

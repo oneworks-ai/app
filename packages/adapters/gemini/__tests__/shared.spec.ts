@@ -329,6 +329,33 @@ describe('validateGeminiSelection', () => {
     })
   })
 
+  it('resolves a Provider Profile as an independent Gemini route', () => {
+    const ctx = createCtx({
+      adapters: { gemini: {} },
+      modelServices: {
+        deepseek: {
+          kind: 'collection',
+          provider: 'deepseek',
+          profiles: {
+            work: { apiKey: 'work-key' }
+          }
+        }
+      }
+    })
+
+    expect(resolveGeminiModel({
+      ctx,
+      model: 'deepseek/work,deepseek-chat'
+    })).toMatchObject({
+      cliModel: 'deepseek-chat',
+      routedService: {
+        serviceKey: 'deepseek/work',
+        endpoint: 'https://api.deepseek.com/chat/completions',
+        apiKey: 'work-key'
+      }
+    })
+  })
+
   it('rejects service selectors that point to responses-style endpoints', () => {
     expect(() =>
       validateGeminiSelection({

@@ -4091,6 +4091,11 @@
       "codexAuthFileDescription": "可选填 Codex auth.json 文件路径；留空时使用该账号已存储的登录凭据。"
     },
     "modelServices": {
+      "profiles": {
+        "searchPlaceholder": "搜索配置档案",
+        "noMatches": "没有匹配的配置档案",
+        "add": "新增配置档案"
+      },
       "collection": {
         "searchPlaceholder": "搜索模型服务与服务商",
         "filters": {
@@ -4118,7 +4123,7 @@
           "codingPlan": "Coding / Token 套餐",
           "relay": "中转服务",
           "gateway": "AI 网关",
-          "collection": "服务集合",
+          "collection": "Provider",
           "custom": "自定义兼容服务"
         },
         "count": "{{count}} 项",
@@ -4158,6 +4163,21 @@
         "retryRefresh": "重试加载",
         "failed": "从 {{adapter}} 导入模型服务失败"
       },
+      "createKinds": {
+        "label": "配置类型",
+        "provider": "Provider（支持多个 Profile）",
+        "service": "独立服务配置"
+      },
+      "standalone": {
+        "serviceTab": "独立服务",
+        "upgradeAction": "迁移到 Provider",
+        "upgradeDescription": "这是兼容保留的独立服务配置。迁移后，可以在同一平台下管理多个 Profile。",
+        "upgradeConfirmTitle": "创建 Provider 配置？",
+        "upgradeConfirmDescription": "现有接入配置会原样复制到新 Provider 的 default Profile；原独立服务会保留，已有模型选择不会被改写。",
+        "upgradeFailed": "迁移到 Provider 失败"
+      },
+      "profileQuotaSummary": "{{count}} 个配置档案的额度摘要",
+      "profileQuotaMore": "查看全部（{{count}}）",
       "actions": {
         "more": "更多",
         "openHomepage": "管理后台",
@@ -4262,13 +4282,13 @@
         }
       },
       "management": {
-        "title": "本地档案",
+        "title": "配置档案",
         "apiKeyTitle": "远端令牌",
         "balance": "余额",
         "groups": "分组",
         "apiKeys": "远端 Key",
         "tokens": "远端 Key",
-        "profiles": "档案",
+        "profiles": "配置档案",
         "models": "模型",
         "unknown": "-",
         "refresh": "刷新平台数据",
@@ -4316,9 +4336,9 @@
       },
       "collectionTabs": {
         "ariaLabel": "服务集合设置",
-        "service": "服务信息",
-        "profiles": "本地档案",
-        "apiKeys": "令牌管理",
+        "service": "Provider",
+        "profiles": "配置档案",
+        "apiKeys": "API Key 管理",
         "advanced": "高级配置"
       },
       "portal": {
