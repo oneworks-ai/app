@@ -250,12 +250,21 @@ describe('pr validation scope', () => {
     })
     expect(classifyChangedPaths(['assets/avatar'])).toMatchObject({
       clientBuild: true,
-      desktopPackage: true,
+      desktopPackage: false,
       docsMedia: false,
       lint: true,
       publicDocs: false,
       typecheck: true,
       typecheckScopes: fullTypecheckScopes
+    })
+    expect(classifyChangedPaths(['assets/avatar', 'apps/desktop/package.json'])).toMatchObject({
+      desktopPackage: true
+    })
+    expect(classifyChangedPaths(['assets/avatar', 'packages/fs-authority-native/package.json'])).toMatchObject({
+      desktopPackage: true
+    })
+    expect(classifyChangedPaths(['assets/avatar', 'pnpm-lock.yaml'])).toMatchObject({
+      desktopPackage: true
     })
   })
 
@@ -484,6 +493,30 @@ describe('required context completion contract', () => {
     }
     expect(policyWorkflow).toContain('name: pr-change-policy')
     expect(desktopWorkflow).toContain('name: macOS installer')
+  })
+
+  it('makes the protected commit-message context fail closed over every applicable quality gate', () => {
+    const aggregate = qualityWorkflow.slice(
+      qualityWorkflow.indexOf('  commit-message:'),
+      qualityWorkflow.indexOf('  record-pr-source-evidence:')
+    )
+    expect(aggregate).toContain('if: always()')
+    for (
+      const dependency of [
+        'classify-changes',
+        'validation-reuse',
+        'quality',
+        'public-docs',
+        'release-docs',
+        'commit-policy'
+      ]
+    ) {
+      expect(aggregate).toContain(`- ${dependency}`)
+    }
+    expect(aggregate).toContain('A quality matrix check failed, was cancelled, or was skipped.')
+    expect(aggregate).toContain('Applicable public documentation validation did not succeed.')
+    expect(aggregate).toContain('Applicable release documentation validation did not succeed.')
+    expect(aggregate).not.toContain('pnpm install')
   })
 
   it('reuses one classifier and provides lightweight success steps inside required jobs', () => {

@@ -1,6 +1,6 @@
 import { Buffer } from 'node:buffer'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -13,10 +13,67 @@ import {
   loadReleaseTagPlan,
   parseGitNameStatusZ
 } from '../release-tags'
+import { preplan } from '../release-tags-preplan.cjs'
 
 const releaseTagsWorkflow = readFileSync('.github/workflows/release-tags.yml', 'utf8')
 
 describe('release tag planning', () => {
+  it('uses a temporary immutable Git fixture for preplan fast-path and fail-closed identities', () => {
+    const fixture = mkdtempSync(path.join(tmpdir(), 'release-tags-preplan-'))
+    const run = (...args: string[]) => execFileSync('git', args, { cwd: fixture, encoding: 'utf8' }).trim()
+    const runPreplan = (base: string, head: string) =>
+      JSON.parse(execFileSync(
+        process.execPath,
+        [path.resolve('scripts/release-tags-preplan.cjs'), base, head],
+        { cwd: fixture, encoding: 'utf8' }
+      ))
+    try {
+      run('init')
+      run('config', 'user.email', 'test@example.com')
+      run('config', 'user.name', 'Test')
+      mkdirSync(path.join(fixture, 'packages', 'core'), { recursive: true })
+      writeFileSync(
+        path.join(fixture, 'packages/core/package.json'),
+        JSON.stringify({ name: '@oneworks/core', version: '1.0.0' })
+      )
+      run('add', '.')
+      run('commit', '-m', 'base')
+      const base = run('rev-parse', 'HEAD')
+      writeFileSync(path.join(fixture, 'README.md'), 'docs\n')
+      run('add', '.')
+      run('commit', '-m', 'docs')
+      const docs = run('rev-parse', 'HEAD')
+      expect(runPreplan(base, docs)).toMatchObject({ heavy: false })
+      writeFileSync(
+        path.join(fixture, 'packages/core/package.json'),
+        JSON.stringify({ name: '@oneworks/core', version: '1.0.1' })
+      )
+      run('add', '.')
+      run('commit', '-m', 'version')
+      expect(runPreplan(docs, run('rev-parse', 'HEAD'))).toMatchObject({ heavy: true })
+    } finally {
+      rmSync(fixture, { force: true, recursive: true })
+    }
+  })
+  it('keeps the dependency-free preplanner and exact workflow trigger closure', () => {
+    expect(releaseTagsWorkflow).toContain('scripts/release-tags-preplan.cjs')
+    expect(releaseTagsWorkflow).not.toContain('      - scripts/**')
+    expect(releaseTagsWorkflow).toContain(
+      'No release authority or identity change; skipped heavyweight release planning.'
+    )
+    expect(releaseTagsWorkflow).toContain('echo \'count=0\' >> "$GITHUB_OUTPUT"')
+    expect(releaseTagsWorkflow).toContain("if: steps.preplan.outputs.heavy == 'true'")
+    expect(releaseTagsWorkflow).toContain('git submodule update --init --depth 1 -- assets/avatar assets/demo-video')
+  })
+
+  it('fails closed for malformed immutable preplan input', () => {
+    expect(preplan('not-a-sha', 'also-not-a-sha')).toEqual({ heavy: true, reason: 'invalid immutable range' })
+  })
+
+  it('keeps release-authority paths on the heavyweight planner', () => {
+    expect(releaseTagsWorkflow).toContain('apps/vscode-extension/scripts/**')
+    expect(releaseTagsWorkflow).toContain('scripts/release-tags-preplan.d.cts')
+  })
   it('creates release tags for changed workspace package versions', () => {
     const plan = createReleaseTagPlanFromManifestChanges([
       {

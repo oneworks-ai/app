@@ -190,7 +190,7 @@
 
 ## 维护约定
 
-- `pr-validation-scope.cjs` 是 Quality 与 Desktop 共用的 fail-closed 变更分类契约；required workflow 保持无 `paths` 过滤并在 job 内按输出分流。client production closure 变化必须在 Ubuntu typecheck runner 内追加 Vite build 后才能跳过 macOS package。新增顶层路径、构建依赖或打包闭包时，要同步补分类器测试；未知路径必须回退全量检查与 Desktop package smoke。`pr-validation-reuse.cjs` 只消费成功 job 为 exact base / head 写入的不可变 evidence；Autofix 模式仅接受至多 20 个 mode 未变的普通 source blob 修改，并从 immutable before / head Git blob 逐文件核对 ESLint fix 字节；symlink / gitlink / mutable worktree、commit message、label、作者声明或 diff 大小都不能放行，verifier 必须在 PR merge ref 使用 current base 工具链。修改复用规则、workspace cache action 或对应测试本身仍是 Desktop-risk CI authority。
+- `pr-validation-scope.cjs` 是 Quality 与 Desktop 共用的 fail-closed 变更分类契约；required workflow 保持无 `paths` 过滤并在 job 内按输出分流。client production closure 变化必须在 Ubuntu typecheck runner 内追加 Vite build 后才能跳过 macOS package；`assets/avatar` gitlink 是已证明仅由 client 消费的例外，仍强制 full typecheck/lint/client build，但不触发 Desktop package。新增顶层路径、构建依赖或打包闭包时，要同步补分类器测试；未知路径必须回退全量检查与 Desktop package smoke。`pr-validation-reuse.cjs` 只消费成功 job 为 exact base / head 写入的不可变 evidence；Autofix 模式仅接受至多 20 个 mode 未变的普通 source blob 修改，并从 immutable before / head Git blob 逐文件核对 ESLint fix 字节；symlink / gitlink / mutable worktree、commit message、label、作者声明或 diff 大小都不能放行，verifier 必须在 PR merge ref 使用 current base 工具链。修改复用规则、workspace cache action 或对应测试本身仍是 Desktop-risk CI authority。
 - 入口层只做命令解析和调度，不写业务逻辑；测试优先直接 import TS 模块，不要绕兼容 wrapper。
 - adapter E2E 的 case 定义、Vitest spec、mock-llm 单测、snapshot 必须放在 `scripts/__tests__/adapter-e2e/` 一处维护。
 - adapter E2E 新增场景时，先在 `scripts/__tests__/adapter-e2e/cases.ts` 定义 case 的 `prompt/model/mockScenarios/expectations`，再用 `mock-llm/rules.ts` 组合 mock 行为。

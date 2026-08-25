@@ -236,7 +236,14 @@ describe('desktop package workflow', () => {
     expect(buildJob).toContain("needs.pr-scope.outputs.desktop_package == 'true'")
     expect(buildJob).toContain("needs.pr-scope.outputs.reuse_desktop != 'true'")
     expect(buildJob).toContain('uses: ./.github/actions/setup-workspace')
-    expect(buildJob).toContain('ONEWORKS_DESKTOP_ARCHS: arm64,x64')
+    expect(scopeJob).toContain('Resolve fail-closed PR package architectures')
+    expect(scopeJob).toContain('pull_request) archs=arm64')
+    expect(scopeJob).toContain('merge_group) archs=arm64,x64')
+    expect(scopeJob).toContain('Unsupported event cannot select Desktop package architectures')
+    expect(buildJob).toContain('ONEWORKS_DESKTOP_ARCHS: $' + '{{ needs.pr-scope.outputs.pr_archs }}')
+    expect(buildJob).toContain('IFS=, read -r -a target_archs <<< "$DESKTOP_ARCHS"')
+    expect(buildJob).toContain(`for arch in "${String.fromCharCode(36)}{target_archs[@]}"; do`)
+    expect(buildJob).toContain('Unsupported validated Desktop architecture set')
     expect(buildJob).toContain(
       'node packages/fs-authority-native/scripts/verify-darwin-prebuilds.mjs "$authority_root"'
     )

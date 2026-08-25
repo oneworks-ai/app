@@ -22,7 +22,7 @@ Developer ID 签名会改变 native Mach-O 的字节。`@oneworks/fs-authority-n
 - `DESKTOP_SIGN=true`：仓库 variable，只表示签名凭据 / 能力可用；具体版本是否签名由不可变发布策略决定。
 
 桌面 workflow 先在 Ubuntu 用 validation-scope v2 分类；普通 client、adapter、品牌资产和文档改动只运行不构建产物的轻量兼容门禁。只有桌面风险路径（桌面源码、native authority、打包工具、根 manifest / lockfile、正式包内 runtime closure 或未知路径）才构建 unsigned
-arm64+x64 app bundle 并执行 native authority smoke，但不生成安装包，也不读取签名 secret。每日 nightly 使用 unsigned
+PR Desktop-risk smoke 使用 arm64 app bundle，Merge Queue 组合 revision使用 arm64+x64 app bundle，并执行 native authority smoke，但不生成安装包，也不读取签名 secret。每日 nightly 使用 unsigned
 arm64 DMG 跑 package / smoke / install verify。真正的双架构安装包
 只由 `pkg/oneworks-desktop/v*` tag 或手动 dispatch 触发。`apps/desktop/package.json` 的私有
 `oneworks.release.macosSigningPolicy` 把具体版本锁为 `auto` / `signed` / `unsigned`：`auto`

@@ -100,6 +100,7 @@ jobs:
     if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     outputs:
+      pr_archs: ${{ steps.pr_archs.outputs.archs }}
       desktop_package: ${{ steps.validation_scope.outputs.desktop_package }}
       reuse_desktop: ${{ steps.reuse_result.outputs.reuse_desktop }}
       reuse_mode: ${{ steps.reuse_plan.outputs.mode }}
@@ -227,6 +228,23 @@ jobs:
           [[ "$REUSE_DESKTOP" == "true" || "$REUSE_DESKTOP" == "false" ]]
           [[ "$DOCS_ONLY" != "$FULL" ]]
 
+      - name: Resolve fail-closed PR package architectures
+        id: pr_archs
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            pull_request) archs=arm64 ;;
+            merge_group) archs=arm64,x64 ;;
+            *)
+              echo "Unsupported event cannot select Desktop package architectures: $EVENT_NAME" >&2
+              exit 1
+              ;;
+          esac
+          echo "archs=$archs" >> "$GITHUB_OUTPUT"
+
   pr-build:
     name: macOS package smoke
     needs: pr-scope
@@ -254,7 +272,7 @@ jobs:
 
       - name: Package unsigned macOS authority candidates
         env:
-          ONEWORKS_DESKTOP_ARCHS: arm64,x64
+          ONEWORKS_DESKTOP_ARCHS: ${{ needs.pr-scope.outputs.pr_archs }}
           ONEWORKS_DESKTOP_ENABLE_AUTO_UPDATE: "false"
           ONEWORKS_DESKTOP_OFFICIAL_RELEASE_BUILD: "false"
           ONEWORKS_DESKTOP_RELEASE_BUILD: "false"
@@ -262,9 +280,16 @@ jobs:
 
       - name: Verify packaged native authority closure
         shell: bash
+        env:
+          DESKTOP_ARCHS: ${{ needs.pr-scope.outputs.pr_archs }}
         run: |
           set -euo pipefail
-          for arch in arm64 x64; do
+          case "$DESKTOP_ARCHS" in
+            arm64|arm64,x64) ;;
+            *) echo "Unsupported validated Desktop architecture set: $DESKTOP_ARCHS" >&2; exit 1 ;;
+          esac
+          IFS=, read -r -a target_archs <<< "$DESKTOP_ARCHS"
+          for arch in "${target_archs[@]}"; do
             package_dir="$(find apps/desktop/out -mindepth 1 -maxdepth 1 -type d -name "*-darwin-$arch" -print -quit)"
             if [[ -z "$package_dir" ]]; then
               echo "Missing packaged app directory for $arch." >&2
