@@ -6,6 +6,7 @@
 - Added resizable frosted-glass controls for the sidebar and animation panel.
 - Added SVG and PNG downloads for the current 3D camera view, plus animated GIF export for selected animations.
 - Added transparent camera backgrounds with frame-aware SVG, PNG, and GIF output.
+- Camera-frame shadows remain in editor previews but are excluded from SVG, PNG, and GIF exports, while avatar/face shadows and full-frame cropping remain intact.
 - Added a 3D-aware Agent Skill and bilingual developer guidance for sharing editable sources and exported assets.
 - Replaced the legacy 2D `@oneworks/avatar` package with the versioned 3D definition and animation runtime, including deterministic seeded definitions.
 - Added matching `1.0.0-rc.6` SDK surfaces for React, Vue, Vanilla JavaScript, and opt-in Web Components, including the complete editor and custom animation libraries.
