@@ -85,7 +85,7 @@ const createFakePackagedApp = async ({
   await writeFile(
     path.join(authorityRoot, 'testing.cjs'),
     hangAtBrokerStart
-      ? `'use strict'\nmodule.exports = {\n  prepareFilesystemAuthorityTestControlRoot: override => ({ controlRoot: override, secret: 'fixture' }),\n  startFilesystemAuthorityBroker: async () => await new Promise(() => undefined)\n}\n`
+      ? `'use strict'\nmodule.exports = {\n  prepareFilesystemAuthorityTestControlRoot: override => ({ controlRoot: override, secret: 'fixture' }),\n  startFilesystemAuthorityBroker: async () => await new Promise(resolve => setTimeout(resolve, 1_000))\n}\n`
       : failAtBrokerStart
       ? `'use strict'\nmodule.exports = {\n  prepareFilesystemAuthorityTestControlRoot: override => ({ controlRoot: override, secret: 'fixture' }),\n  startFilesystemAuthorityBroker: async () => {\n    process.stderr.write('diagnostic-private-path-sentinel secret-token\\n')\n    throw new Error('private broker failure')\n  }\n}\n`
       : `'use strict'\nconst fs = require('node:fs')\nconst path = require('node:path')\nmodule.exports = {\n  prepareFilesystemAuthorityTestControlRoot: override => ({ controlRoot: override, secret: 'fixture' }),\n  startFilesystemAuthorityBroker: async () => ({ close: async () => undefined }),\n  openFilesystemAuthorityForTest: async workspaceRoot => {\n    let generation = 0\n    return {\n      id: 'fixture-authority',\n      claim: async () => ++generation,\n      publish: async publication => {\n        ${
