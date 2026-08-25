@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { runInNewContext } from 'node:vm'
 
 import { describe, expect, it } from 'vitest'
 
@@ -21,6 +22,63 @@ const runGit = (cwd: string, args: string[]) =>
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe']
   }).trim()
+
+const extractWorkflowConcurrency = (workflow: string) => {
+  const groupMarker = '  group: >-\n'
+  const cancelMarker = '  cancel-in-progress: >-\n'
+  const groupStart = workflow.indexOf(groupMarker)
+  const cancelStart = workflow.indexOf(cancelMarker, groupStart)
+  const cancelEnd = workflow.indexOf('\n\n', cancelStart)
+  expect(groupStart).toBeGreaterThanOrEqual(0)
+  expect(cancelStart).toBeGreaterThanOrEqual(0)
+  expect(cancelEnd).toBeGreaterThanOrEqual(0)
+  const fold = (value: string) => value.split('\n').filter(Boolean).map(line => line.trim()).join(' ')
+  return {
+    cancel: fold(workflow.slice(cancelStart + cancelMarker.length, cancelEnd)),
+    group: fold(workflow.slice(groupStart + groupMarker.length, cancelStart))
+  }
+}
+
+const evaluateGithubTemplate = (template: string, github: Record<string, unknown>) => {
+  const expressionStart = template.indexOf('${{')
+  const expressionEnd = template.indexOf('}}', expressionStart)
+  expect(expressionStart).toBeGreaterThanOrEqual(0)
+  expect(expressionEnd).toBeGreaterThan(expressionStart)
+  const expression = template.slice(expressionStart + 3, expressionEnd).trim()
+  const result = runInNewContext(`(${expression})`, {
+    format: (value: string, ...values: unknown[]) =>
+      values.reduce<string>(
+        (formatted, current, index) => formatted.replaceAll(`{${index}}`, String(current)),
+        value
+      ),
+    github
+  })
+  return `${template.slice(0, expressionStart)}${String(result)}${template.slice(expressionEnd + 2)}`
+}
+
+const workflowEvent = ({
+  action = 'none',
+  baseChanged = false,
+  baseSha = '',
+  eventName,
+  prNumber = '',
+  ref
+}: {
+  action?: string
+  baseChanged?: boolean
+  baseSha?: string
+  eventName: string
+  prNumber?: string
+  ref: string
+}) => ({
+  event: {
+    action,
+    changes: { base: baseChanged ? { ref: 'main' } : null },
+    pull_request: { base: { sha: baseSha }, number: prNumber }
+  },
+  event_name: eventName,
+  ref
+})
 
 describe('pr validation scope', () => {
   it('classifies ordinary Markdown and internal module rules as docs-only', () => {
@@ -478,7 +536,7 @@ describe('required context completion contract', () => {
     expect(qualityJob).toContain('if command -v ffmpeg >/dev/null 2>&1; then')
   })
 
-  it('reruns base edits without letting metadata edits cancel source validation', () => {
+  it('deduplicates same-base PR validation without cancelling metadata evidence consumers', () => {
     const qualityTrigger = qualityWorkflow.slice(0, qualityWorkflow.indexOf('\npermissions:'))
     const desktopTrigger = desktopWorkflow.slice(
       desktopWorkflow.indexOf('\non:'),
@@ -489,12 +547,71 @@ describe('required context completion contract', () => {
     expect(qualityTrigger).toContain('- edited')
     expect(desktopTrigger).toContain('- edited')
     expect(policyTrigger).toContain('- edited')
-    expect(qualityWorkflow).toContain('github.event.changes.base != null')
-    expect(desktopWorkflow).toContain('github.event.changes.base != null')
-    const sourceCancellation = 'cancel-in-progress: $' +
-      "{{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}"
-    expect(qualityWorkflow).toContain(sourceCancellation)
-    expect(desktopWorkflow).toContain(sourceCancellation)
+
+    const concurrency = [
+      extractWorkflowConcurrency(qualityWorkflow),
+      extractWorkflowConcurrency(desktopWorkflow)
+    ]
+    const sourceEvents = ['opened', 'reopened', 'ready_for_review', 'synchronize']
+
+    for (const [index, current] of concurrency.entries()) {
+      const prefix = index === 0 ? 'quality' : 'desktop-package'
+      const evaluate = (template: string, event: Parameters<typeof workflowEvent>[0]) =>
+        evaluateGithubTemplate(template, workflowEvent(event))
+      const sourceEvent = {
+        baseSha: 'base-a',
+        eventName: 'pull_request',
+        prNumber: '425',
+        ref: 'refs/pull/425/merge'
+      }
+      const sourceLane = `${prefix}-pr-425-base-base-a`
+
+      for (const action of sourceEvents) {
+        expect(evaluate(current.group, { ...sourceEvent, action })).toBe(sourceLane)
+        expect(evaluate(current.cancel, { ...sourceEvent, action })).toBe('true')
+      }
+      expect(evaluate(current.group, { ...sourceEvent, action: 'edited' })).toBe(sourceLane)
+      expect(evaluate(current.cancel, { ...sourceEvent, action: 'edited' })).toBe('false')
+      expect(evaluate(current.group, {
+        ...sourceEvent,
+        action: 'edited',
+        baseChanged: true,
+        baseSha: 'base-b'
+      })).toBe(`${prefix}-pr-425-base-base-b`)
+      expect(evaluate(current.cancel, {
+        ...sourceEvent,
+        action: 'edited',
+        baseChanged: true,
+        baseSha: 'base-b'
+      })).toBe('true')
+      expect(evaluate(current.group, { ...sourceEvent, action: 'synchronize', baseSha: 'base-b' }))
+        .toBe(`${prefix}-pr-425-base-base-b`)
+      expect(evaluate(current.cancel, {
+        action: 'checks_requested',
+        eventName: 'merge_group',
+        ref: 'refs/heads/gh-readonly-queue/main/pr-425'
+      })).toBe('true')
+      expect(evaluate(current.group, {
+        action: 'checks_requested',
+        eventName: 'merge_group',
+        ref: 'refs/heads/gh-readonly-queue/main/pr-425'
+      })).toBe(`${prefix}-merge_group-refs/heads/gh-readonly-queue/main/pr-425-checks_requested-false`)
+      expect(evaluate(current.cancel, { eventName: 'workflow_dispatch', ref: 'refs/heads/main' })).toBe('false')
+      expect(evaluate(current.group, { eventName: 'workflow_dispatch', ref: 'refs/heads/main' }))
+        .toBe(`${prefix}-workflow_dispatch-refs/heads/main-none-false`)
+      expect(evaluate(current.cancel, {
+        eventName: 'push',
+        ref: 'refs/tags/pkg/oneworks-desktop/v1.0.0'
+      })).toBe('false')
+      expect(evaluate(current.group, {
+        eventName: 'push',
+        ref: 'refs/tags/pkg/oneworks-desktop/v1.0.0'
+      })).toBe(`${prefix}-push-refs/tags/pkg/oneworks-desktop/v1.0.0-none-false`)
+      expect(evaluate(current.cancel, { eventName: 'schedule', ref: 'refs/heads/main' })).toBe('false')
+      expect(evaluate(current.group, { eventName: 'schedule', ref: 'refs/heads/main' }))
+        .toBe(`${prefix}-schedule-refs/heads/main-none-false`)
+    }
+
     expect(qualityWorkflow).toContain('Restore exact source validation evidence')
     expect(desktopWorkflow).toContain('Restore previous desktop validation evidence')
     expect(qualityWorkflow).toContain('pr-quality-evidence-v1-')

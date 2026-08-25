@@ -10,9 +10,12 @@ env:
 
 concurrency:
   group: >-
-    desktop-package-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}-${{
-    github.event.action || 'none' }}-${{ github.event.changes.base != null }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
+    desktop-package-${{ github.event_name == 'pull_request' && format('pr-{0}-base-{1}',
+    github.event.pull_request.number, github.event.pull_request.base.sha) || format('{0}-{1}-{2}-{3}',
+    github.event_name, github.ref, github.event.action || 'none', github.event.changes.base != null) }}
+  cancel-in-progress: >-
+    ${{ github.event_name == 'merge_group' || (github.event_name == 'pull_request' &&
+    (github.event.action != 'edited' || github.event.changes.base != null)) }}
 
 on:
   pull_request:
