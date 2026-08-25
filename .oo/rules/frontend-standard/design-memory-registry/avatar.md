@@ -10,9 +10,9 @@
 
 ### OW-DM-017 — Avatar 编辑与相机模式边界
 
-- Revision / status / scope: 4 / ACTIVE / OneWorks project，`assets/avatar` 交互预览舞台与导出入口。
-- Rule / examples: Avatar 舞台默认处于无画框编辑模式，左上工具栏持续提供相机入口；进入相机模式后才显示固定尺寸的边框、底色与导出工具，同时隐藏右上角保存预设动作，避免把编辑命令混入拍摄构图。Style 面板拥有相机底色以及正方形、圆角正方形、圆形取景框配置。编辑模式允许旋转、放大或移位后的头像越过名义 SVG viewport 完整展示，只有相机模式按取景框裁切。模式、底色和取景框形状均持久化到 URL，模式或形状切换不得改变头像姿态、位置、大小或表情参数。正例是编辑时大角度方形头像可超出隐形画布，点击相机后原位按所选轮廓裁切并只显示拍摄所需导出工具；反例是编辑模式仍截断头像、默认展示导出条和装饰画框、拍摄画面仍叠加保存预设按钮，或切换相机 / 取景框时头像发生位移 / 缩放。
-- Ownership / source / exceptions / enforcement: 规则由 `assets/avatar/AGENTS.md`、`App.tsx`、`App.scss`、`InteractiveAvatar.scss`、`AvatarControls.tsx` 与 `ExportToolbar` 共同拥有；来源为用户 2026-08-21 明确要求导出工具默认隐藏、以左侧相机按钮切换相机模式、非相机模式不展示边框和背景并支持配置相机底色，随后指出编辑模式不应限制头像显示范围、要求取景框支持圆角正方形、圆形等类型，并要求拍摄模式隐藏舞台右上保存图标。由默认 query 解析、camera / cameraBg / cameraFrame URL 往返、编辑 / 相机 overflow computed style、相机按钮与取景框选择器可访问状态、条件化保存动作、production build 和用户对各状态的视觉验收执行。
+- Revision / status / scope: 5 / ACTIVE / OneWorks project，`assets/avatar` 交互预览舞台与导出入口。
+- Rule / examples: Avatar 舞台默认处于无画框编辑模式，左上工具栏持续提供相机入口；进入相机模式后才显示固定尺寸的边框、底色与导出工具，同时隐藏右上角保存预设动作，避免把编辑命令混入拍摄构图。Style 面板拥有相机底色以及正方形、圆角正方形、圆形取景框配置。编辑模式允许旋转、放大或移位后的头像越过名义 SVG viewport 完整展示，只有相机模式按取景框裁切。相框外阴影属于编辑器预览装饰，不得进入 SVG、PNG、GIF 或本地预设缩略图，也不得为阴影额外缩进画面；头像自身阴影和面部阴影仍属于导出作品。模式、底色和取景框形状均持久化到 URL，模式或形状切换不得改变头像姿态、位置、大小或表情参数。正例是编辑时大角度方形头像可超出隐形画布，点击相机后原位按所选轮廓裁切，预览可显示相框阴影但导出画框铺满画布且透明圆角不带阴影；反例是编辑模式仍截断头像、默认展示导出条和装饰画框、拍摄画面仍叠加保存预设按钮、导出文件包含相框阴影或因阴影缩小头像，或者切换相机 / 取景框时头像发生位移 / 缩放。
+- Ownership / source / exceptions / enforcement: 规则由 `assets/avatar/AGENTS.md`、`App.tsx`、`App.scss`、`InteractiveAvatar.scss`、`AvatarControls.tsx`、`savedAvatarPresets.ts` 与 `ExportToolbar` 共同拥有；来源为用户 2026-08-21 明确要求导出工具默认隐藏、以左侧相机按钮切换相机模式、非相机模式不展示边框和背景并支持配置相机底色，随后指出编辑模式不应限制头像显示范围、要求取景框支持圆角正方形、圆形等类型，并要求拍摄模式隐藏舞台右上保存图标；用户 2026-08-25 进一步明确相框背景阴影不得参与 PNG、GIF 等作品导出。由默认 query 解析、camera / cameraBg / cameraFrame URL 往返、编辑 / 相机 overflow computed style、相机按钮与取景框选择器可访问状态、条件化保存动作、三种相框和像素化导出无相框阴影的回归测试、React 预览与捕获边界测试、production build 和用户对各状态的视觉验收执行。
 
 ### OW-DM-018 — Avatar 几何表情阴影参数
 
