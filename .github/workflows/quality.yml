@@ -50,7 +50,7 @@ jobs:
       policy_docs: ${{ steps.scope.outputs.policy_docs }}
       public_docs: ${{ steps.scope.outputs.public_docs }}
       release_docs: ${{ steps.scope.outputs.release_docs }}
-      reuse_all: ${{ steps.validate_exact_source_evidence.outputs.valid }}
+      reuse_all: ${{ steps.validate_exact_source_evidence.outputs.valid == 'true' }}
       reuse_candidate: ${{ steps.reuse_plan.outputs.candidate }}
       reuse_evidence_base: ${{ steps.reuse_plan.outputs.evidence_base }}
       reuse_evidence_head: ${{ steps.reuse_plan.outputs.evidence_head }}
@@ -513,8 +513,8 @@ jobs:
           --allow-mixed
           --release-preflight
 
-  commit-message:
-    name: commit-message
+  commit-policy:
+    name: commit-policy
     needs: classify-changes
     if: always()
     runs-on: ubuntu-latest
@@ -564,6 +564,52 @@ jobs:
         if: env.REUSE_ALL == 'true'
         run: echo "Commit messages already passed for this exact base and head revision."
 
+  # Keep the protected check name while making it the final, fail-closed aggregate.
+  commit-message:
+    name: commit-message
+    needs:
+      - classify-changes
+      - validation-reuse
+      - quality
+      - public-docs
+      - release-docs
+      - commit-policy
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce complete validation result
+        env:
+          CLASSIFIER_RESULT: ${{ needs.classify-changes.result }}
+          REUSE_RESULT: ${{ needs.validation-reuse.result }}
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          PUBLIC_DOCS_RESULT: ${{ needs.public-docs.result }}
+          PUBLIC_DOCS_REQUIRED: ${{ needs.classify-changes.outputs.public_docs }}
+          RELEASE_DOCS_RESULT: ${{ needs.release-docs.result }}
+          RELEASE_DOCS_REQUIRED: ${{ needs.classify-changes.outputs.release_docs }}
+          REUSE_ALL: ${{ needs.classify-changes.outputs.reuse_all }}
+          COMMIT_POLICY_RESULT: ${{ needs.commit-policy.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$CLASSIFIER_RESULT" == "success" ]] || { echo "Validation classifier failed or was cancelled." >&2; exit 1; }
+          for value in "$PUBLIC_DOCS_REQUIRED" "$RELEASE_DOCS_REQUIRED" "$REUSE_ALL"; do
+            [[ "$value" == "true" || "$value" == "false" ]] || { echo "Classifier emitted an incomplete aggregate contract." >&2; exit 1; }
+          done
+          [[ "$REUSE_RESULT" == "success" ]] || { echo "Validation evidence reuse failed or was cancelled." >&2; exit 1; }
+          [[ "$QUALITY_RESULT" == "success" ]] || { echo "A quality matrix check failed, was cancelled, or was skipped." >&2; exit 1; }
+          [[ "$COMMIT_POLICY_RESULT" == "success" ]] || { echo "Commit policy failed, was cancelled, or was skipped." >&2; exit 1; }
+          if [[ "$PUBLIC_DOCS_REQUIRED" == "true" && "$REUSE_ALL" != "true" ]]; then
+            [[ "$PUBLIC_DOCS_RESULT" == "success" ]] || { echo "Applicable public documentation validation did not succeed." >&2; exit 1; }
+          else
+            case "$PUBLIC_DOCS_RESULT" in success|skipped) ;; *) echo "Public documentation validation failed or was cancelled." >&2; exit 1 ;; esac
+          fi
+          if [[ "$RELEASE_DOCS_REQUIRED" == "true" && "$REUSE_ALL" != "true" ]]; then
+            [[ "$RELEASE_DOCS_RESULT" == "success" ]] || { echo "Applicable release documentation validation did not succeed." >&2; exit 1; }
+          else
+            case "$RELEASE_DOCS_RESULT" in success|skipped) ;; *) echo "Release documentation validation failed or was cancelled." >&2; exit 1 ;; esac
+          fi
+          echo "All applicable validation jobs completed successfully."
+
   record-pr-source-evidence:
     name: source-validation-evidence
     needs:
@@ -572,6 +618,7 @@ jobs:
       - quality
       - public-docs
       - release-docs
+      - commit-policy
       - commit-message
     if: >-
       always() &&
@@ -582,6 +629,7 @@ jobs:
       needs.quality.result == 'success' &&
       (needs.public-docs.result == 'success' || needs.public-docs.result == 'skipped') &&
       (needs.release-docs.result == 'success' || needs.release-docs.result == 'skipped') &&
+      needs.commit-policy.result == 'success' &&
       needs.commit-message.result == 'success'
     runs-on: ubuntu-latest
     steps:

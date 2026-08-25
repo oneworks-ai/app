@@ -5,7 +5,7 @@
 ## 合入模型
 
 - `main` 只能通过 GitHub Merge Queue 合入，使用 squash merge。普通 PR 不因为落后于 `main` 就机械要求开发者 rebase；入队后由 GitHub 创建包含最新 base 与待合入 PR 的组合 revision。
-- PR head 先通过 `lint`、`format-check`、`typecheck`、`commit-message`、`pr-change-policy`、`macOS installer` 六个 required contexts。入队后的组合 revision 必须重新创建并通过同名六个 contexts，不能复用单个 PR head 的证据。
+- PR head 先通过 `lint`、`format-check`、`typecheck`、`commit-message`、`pr-change-policy`、`macOS installer` 六个 required contexts。`commit-message` 是无安装的最终 fail-closed aggregate：它还要求 classifier、evidence reuse、完整 Quality matrix（含 env-contract/docs-media）以及适用的 public/release docs gate 成功。入队后的组合 revision 必须重新创建并通过同名六个 contexts，不能复用单个 PR head 的证据。
 - 队列使用 `ALLGREEN`，常态允许同时构建 2 个 entry，每次最多合入 1 个 PR，最少 1 个 entry 即可合入，不额外等待凑批；check response timeout 为 90 分钟。
 - 小型 ESLint Autofix 可以在同一 PR 的后续 revision 复用符合不可变证据约束的昂贵检查；Merge Queue 仍针对最新 base 的组合 revision 重新分类。docs-only 等低风险范围继续走轻量路径，不安装 workspace，也不申请 macOS runner。
 

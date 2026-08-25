@@ -140,6 +140,11 @@ const isDependencyGraphPath = (filePath) =>
   filePath === 'vitest.workspace.ts' ||
   filePath.startsWith('packages/tsconfigs/')
 
+// Avatar is consumed by the client production bundle, not Desktop's packaged runtime.
+// Keep it dependency-coupled for full typecheck, but do not spend a macOS package smoke on
+// an avatar-only gitlink pointer update.
+const isDesktopDependencyGraphPath = (filePath) => filePath !== 'assets/avatar' && isDependencyGraphPath(filePath)
+
 const isClientTypecheckPath = (filePath) =>
   filePath.startsWith('apps/client/src/') || filePath.startsWith('apps/client/__tests__/')
 
@@ -230,7 +235,7 @@ const isDesktopPackageSafePath = (filePath) => {
 const requiresDesktopPackage = (changedFiles, options = {}) =>
   options.forceFull === true ||
   changedFiles.length === 0 ||
-  changedFiles.some(filePath => isDependencyGraphPath(filePath) || !isDesktopPackageSafePath(filePath))
+  changedFiles.some(filePath => isDesktopDependencyGraphPath(filePath) || !isDesktopPackageSafePath(filePath))
 
 const classifyChangedPaths = (changedFiles, options = {}) => {
   const normalizedFiles = [...new Set(changedFiles.map(normalizePath).filter(filePath => filePath !== ''))].sort()
