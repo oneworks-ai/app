@@ -14,5 +14,6 @@
 - Added Bun as a built-in avatar with curved crown pleats, face decals, and a pose-aware Claude Spark mark on the back.
 - Avatar deployment now triggers when the app repository updates the Avatar submodule pointer.
 - Added deterministic Seed authoring profiles, constrained Cat types, and procedural coat patterns to the hosted Avatar editor and runtime guidance.
+- Fixed the Avatar home carousel so repeated backward navigation wraps safely instead of crashing.
 
 ![Bun avatar editor](./avatar-bun.png)
