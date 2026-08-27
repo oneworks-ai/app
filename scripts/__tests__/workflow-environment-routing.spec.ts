@@ -88,7 +88,6 @@ describe('workflow environment routing', () => {
   })
 
   it.each([
-    ['deploy-avatar.yml', 'trigger'],
     ['deploy-pwa.yml', 'trigger'],
     ['deploy-relay-admin.yml', 'deploy'],
     ['deploy-relay-server.yml', 'deploy-cloudflare'],

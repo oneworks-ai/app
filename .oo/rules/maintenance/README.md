@@ -131,9 +131,8 @@ target、状态查询、操作租约和 handoff 见 [开发服务跨会话协作
 
 - Avatar 预览站点由 `oneworks-ai/avatar` 仓库维护，并作为本仓库 `assets/avatar` submodule 挂载。
 - Avatar 仓库拥有编辑器以及 `@oneworks/avatar`、React、Vue、Vanilla / Web Component 四个 public 3D runtime package；本仓通过 submodule workspace 消费同一份源码，不再维护独立的 legacy 2D renderer。
-- 本仓库的 `.github/workflows/deploy-avatar.yml` 只在 exact `assets/avatar` gitlink、`assets/avatar/**` 或 workflow 自身变化时触发，避免其它 package / client 改动误触发 Avatar Pages 更新。
-- 本仓库需要配置 Actions secret `AVATAR_DEPLOY_TOKEN`，用于跨仓库触发 `oneworks-ai/avatar` 的 `deploy-avatar.yml` workflow。推荐使用只授予 `oneworks-ai/avatar` Actions 写权限的 fine-grained token。
-- Avatar 仓库部署时 checkout 自身源码构建编辑器，仅 checkout 本仓指定 commit 读取共享 Node / package metadata；Pages 产物由 Avatar 仓自己的 `pnpm build` 生成并发布。四个 public runtime package 的 npm version、tag、provenance 与 postflight 也由该独立仓库的受保护发布流程负责。
+- Avatar 仓库独立拥有 Pages 发布版本：Avatar PR 合入后，受保护的 Avatar `main` 必须运行 post-merge `Avatar SDK CI`；仓内 `deploy-avatar.yml` 仅在该次 CI 成功后自动部署其验证的精确 merge commit。本仓不再保留跨仓部署触发 workflow，也不需要 `AVATAR_DEPLOY_TOKEN`。
+- Avatar 构建仍 checkout 本仓受保护 `main` 上的提交读取共享 Node / package metadata；若共享源码不兼容，构建可以正常失败，但 `assets/avatar` submodule 指针不能选择、批准、回退或触发 Avatar Pages 版本。四个 public runtime package 的 npm version、tag、provenance 与 postflight 同样由 Avatar 独立仓库的受保护发布流程负责。
 
 ### 8. Homepage 文档站部署维护
 

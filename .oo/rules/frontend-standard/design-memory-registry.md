@@ -141,9 +141,9 @@
 - Rule / examples: Leader 是独立单选组，系统内置 Auto Leader 并作为没有显式实体 Leader 时的默认选择；Auto Leader 根据已选成员的名称和职责自动拆解、分配、跟进并汇总任务，至少需要一个普通成员，且不拥有实体频道连接。选择实体 Leader 后自动预选其定义中的关联成员，并在 Leader 卡片右下角展示关联成员头像；普通成员保持多选。两个选择组在桌面和中间宽度默认最多展示三行并各自纵向滚动；手机收为两行三列正方形卡片并隐藏描述，仍保留名称、头像、选择状态和 Leader 关联头像。正例是大量实体不会无限拉长页面，手机仍可紧凑扫描和选择且不制造外层与分组之间的竞争滚动；外部频道消息中，Auto Leader 只能把服务端生成的一次性委派交给真正拥有来源连接的实体子会话。反例是把 Leader 混入普通多选列表、要求先注册 Leader 才能创建群聊、给 Auto Leader 或非 owning member 发频道 token、允许同一委派被多会话重放、只在客户端临时保存关联关系，或让任一分组随实体数量无限增高。
 - Ownership / source / exceptions / enforcement: 规则由 `packages/plugins/channel-oneworks`、OneWorks Channel 服务、Agent Room host session、共享 `EntityCard` 和 `Entity.team` 契约拥有；来源为用户 2026-08-14 先要求实体 Leader 单选与关联成员和内置 Auto Leader，随后明确创建页分组三行滚动及手机正方形紧凑卡片。服务端必须权威解析 Leader 模式与 `team.role` / `team.relatedEntities`，Auto Leader 的动态 roster prompt 只包含已选实体且通过统一 runtime protocol 调度；每个可执行请求必须至少委派一次并跟进到终态。外部回复 authority 必须由服务端按 room / host / owning member / active connection 原子绑定到专用实体子会话，回复目标固定为原始入站事件快照，无效委派必须 fail closed，已绑定 session 可幂等恢复 context，未领取授权必须按 TTL 过期，并拒绝跨 session 重放。由 schema、创建服务、外部入站 host 投递、原子 delegation claim、command authority、过期清理、交互测试，以及桌面/中间宽度/手机的行数、滚动、正方形几何和真实页面审阅执行。
 
-### OW-DM-016–024 — Avatar 设计记忆（已路由）
+### OW-DM-016–024、027 — Avatar 设计记忆（已路由）
 
-Avatar 几何表情、编辑 / 相机边界、阴影、视图状态、预设历史、关键帧动画、分段按钮导航、舞台手势和可调毛玻璃面板的规则正文位于 [design-memory-registry/avatar.md](./design-memory-registry/avatar.md)；本登记表保留编号索引，正文与当前状态措辞由该窄作用域文件拥有。
+Avatar 几何表情、编辑 / 相机边界、阴影、视图状态、预设历史、关键帧动画、分段按钮导航、舞台手势、可调毛玻璃面板和粗像素风格基准的规则正文位于 [design-memory-registry/avatar.md](./design-memory-registry/avatar.md)；本登记表保留编号索引，正文与当前状态措辞由该窄作用域文件拥有。
 
 ### OW-DM-025 — 悬停卡片动作覆盖而非占槽
 

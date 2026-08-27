@@ -55,3 +55,9 @@
 - Revision / status / scope: 2 / ACTIVE / OneWorks project，`assets/avatar` 桌面端右侧控制栏与整宽底部 Animation 面板。
 - Rule / examples: 右侧控制栏和底部 Animation 面板使用同一层级的半透明毛玻璃表面，以细边界、背景模糊和适度饱和度维持与舞台的空间关系，不使用完全不透明的大色块把工作区割裂。桌面端控制栏从左边界拖拽调宽，Animation 面板从上边界拖拽调高；拖拽柄支持键盘方向键和双击恢复默认值，并在窄屏单列布局隐藏。Playback 头像库在可用宽度内自动换行并仅纵向滚动。正例是扩大底部面板后出现更多向下排列的动画行、调整侧栏宽度时舞台实时让出空间且所有控件仍可用；反例是动画头像横向无限滚动、面板尺寸写死、拖拽柄遮挡 tab，或毛玻璃导致文字与滑杆对比不足。
 - Ownership / source / exceptions / enforcement: 规则由 `assets/avatar/AGENTS.md`、`App.tsx`、`App.scss`、`AvatarControls.tsx`、`AvatarControls.scss`、`AnimationPanel.tsx` 与 `AnimationPanel.scss` 共同拥有；来源为用户 2026-08-21 明确要求动画列表改为纵向排列与滚动、动画面板可拖拽调高、控制栏可拖拽调宽，并将两个面板改成透明毛玻璃效果，随后要求动画预览行自适应分配 gap 且左右不留残余空块。尺寸偏好属于页面 UI 状态，不写入头像分享 URL；由 CSS flex-wrap / space-between、grid custom property、pointer capture、separator ARIA 与键盘交互、桌面 / 窄屏 media query、overflow computed style、production build 和用户视觉验收执行。
+
+### OW-DM-027 — Avatar 粗像素风格基准
+
+- Revision / status / scope: 1 / ACTIVE / OneWorks project，`assets/avatar` 粗像素效果预设、静态样例和后续模型风格化。
+- Rule / examples: 粗像素风格使用命名效果预设 `chunky-pixel`，其唯一数值源为 `src/avatarEffectStylePresets.json`；它统一拥有像素采样、调色板数量、粗描边、灯光、阴影、取景框和高对比背景，但不改写模型几何、材料配色、表情或构图。首页和模型选择器展示该风格时必须使用由真实编辑器 SVG 导出流程预生成的静态资产，点击后进入对应真实模型并把命名预设展开为普通 URL 参数，用户后续调整不再被预设覆盖。不同动物只能复用同一效果配置，不能为个别动物偷偷分叉参数；若描边与背景失去对比，应修正共享风格基准或模型本身的材料关系，而不是在卡片 CSS 中伪造像素化或描线。正例是尖耳、圆头、蓬松毛发、鸟喙、角和面部纹样等不同轮廓的动物共享同一 `6px / 16 色 / SLIC / 无抖动` 基准并保持各自模型身份；反例是每张首页卡片实时编译模型、仅用 CSS `image-rendering` 冒充像素导出、某只动物单独换描边宽度，或把命名预设长期保留成第二套编辑状态。
+- Ownership / source / exceptions / enforcement: 规则由 `assets/avatar/AGENTS.md`、`src/avatarEffectStylePresets.json`、`src/App.tsx`、`src/avatarHome.ts`、`src/avatarPresetSnapshots.ts` 与 `scripts/generate-avatar-pixel-style-snapshots.mjs` 共同拥有；来源为用户 2026-08-27 在真实 Cat 编辑器中确认效果参数后要求记住该配置、学习风格并生成更多像素画样例。例外仅限用户进入编辑器后的显式手动调整；由命名预设展开测试、静态快照覆盖测试、真实 SVG 中的像素图层断言、首页零额外 live preview、浅色 / 深色与移动端独立视觉审阅执行。
