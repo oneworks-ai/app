@@ -10,7 +10,6 @@
 - `VSCE_PAT`：发布 VS Code 官方 Marketplace 扩展。
 - `OVSX_PAT`：发布 Open VSX Registry 扩展，给 VSCodium、Theia、Code OSS 等 VS Code 兼容 IDE 使用。
 - `PWA_DEPLOY_TOKEN`：从 `oneworks-ai/app` 触发 `oneworks-ai/pwa` 的部署 workflow。
-- `AVATAR_DEPLOY_TOKEN`：从 `oneworks-ai/app` 触发 `oneworks-ai/avatar` 的 GitHub Pages 部署 workflow。
 - `HOMEPAGE_DEPLOY_TOKEN`：从 `oneworks-ai/app` 触发 `oneworks-ai/oneworks-ai.github.io` 的 GitHub Pages 部署 workflow。
 - `RELAY_DEV_CLOUDFLARE_API_TOKEN`、`RELAY_DEV_CLOUDFLARE_ACCOUNT_ID`：部署官方 Cloudflare dev Relay/Admin。
 - `RELAY_PROD_CLOUDFLARE_API_TOKEN`、`RELAY_PROD_CLOUDFLARE_ACCOUNT_ID`：作为完整原子 pair 直接部署官方 Cloudflare production Relay/Admin；production workflow 不回退使用 dev 凭据。
@@ -184,7 +183,7 @@ gh workflow run deploy-pwa.yml --repo oneworks-ai/app --ref main
 
 确认 `oneworks-ai/app` 的 Trigger PWA Deploy 成功、`oneworks-ai/pwa` 的 Deploy PWA 被触发并成功、`https://oneworks.cloud/pwa/` 返回 `200`。如果 `PWA_DEPLOY_TOKEN` 缺失，app 仓库 workflow 必须失败，不能 warning 后成功退出。
 
-Homepage Pages token 的配置、轮换和验证见 [homepage-github-pages.md](./homepage-github-pages.md)；Avatar Pages token 的配置、轮换和验证见 [avatar-github-pages.md](./avatar-github-pages.md)。
+Homepage Pages token 的配置、轮换和验证见 [homepage-github-pages.md](./homepage-github-pages.md)；Avatar Pages 不使用 app 仓库 token，所有权与验证规则见 [avatar-github-pages.md](./avatar-github-pages.md)。
 
 ## Relay Deploy
 

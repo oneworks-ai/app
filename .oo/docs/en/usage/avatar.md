@@ -86,4 +86,4 @@ ONEWORKS_APP_SOURCE_DIR=app-source pnpm typecheck:sdk
 ONEWORKS_APP_SOURCE_DIR=app-source pnpm smoke:sdk
 ```
 
-The Avatar page is published by the Avatar repository's `deploy-avatar.yml` workflow. The app repository triggers it when `assets/avatar`, `assets/avatar/**`, or `.github/workflows/deploy-avatar.yml` changes. The main docs workflow publishes this page from `.oo/docs`.
+The Avatar page is published by the Avatar repository's `deploy-avatar.yml` workflow. After protected Avatar `main` passes `Avatar SDK CI`, the same verified source is deployed automatically. The app repository supplies shared build dependencies only; its submodule pointer does not select the production Avatar version. The main docs workflow publishes this page from `.oo/docs`.

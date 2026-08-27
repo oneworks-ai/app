@@ -32,7 +32,6 @@
 - `deploy-relay-server.yml`：手动把已批准的精确 `origin/main` SHA 提升到 Relay production；按必填 `platform` input 选择 external handoff、Cloudflare、Vercel 或两套官方平台，并验证 build SHA、登录、未授权边界和真实 Admin 静态资产。
 - `deploy-relay-admin.yml`：只监听 Relay Admin 前端及其 UI 依赖，构建独立 Admin 平台 artifact 并可按变量触发外部前端部署。
 - `deploy-pwa.yml`：只在 client 与其显式前端 workspace closure 变化时，从 app 仓库触发 `oneworks-ai/pwa` 的部署 workflow；不得用整棵 `packages/**` 扩大 Production 审批范围。
-- `deploy-avatar.yml`：从 app 仓库触发 `oneworks-ai/avatar` 的 GitHub Pages 部署 workflow，只监听 avatar 相关路径。
 - `deploy-homepage.yml`：从 app 仓库触发 `oneworks-ai/oneworks-ai.github.io` 的 GitHub Pages 部署 workflow，只监听 `.oo/docs` 和自身 workflow。
 - `sync-brand-studio.yml`：产品品牌 catalog、adapter / model-provider / channel 元数据变化后向 Brand Studio 发送 `product-catalog-updated`；专用 token 缺失时输出 notice，并保留 Brand Studio 每六小时同步作为兜底。
 
@@ -44,7 +43,6 @@
 - `VSCE_PAT`
 - `OVSX_PAT`
 - `PWA_DEPLOY_TOKEN`
-- `AVATAR_DEPLOY_TOKEN`
 - `HOMEPAGE_DEPLOY_TOKEN`
 
 Brand Studio 即时同步可使用可选的 `BRAND_STUDIO_SYNC_TOKEN`；缺少时 workflow 不失败或复用其他仓库 token，Brand Studio 的定时同步继续兜底。

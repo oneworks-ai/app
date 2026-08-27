@@ -86,4 +86,4 @@ ONEWORKS_APP_SOURCE_DIR=app-source pnpm typecheck:sdk
 ONEWORKS_APP_SOURCE_DIR=app-source pnpm smoke:sdk
 ```
 
-Avatar 页面由 Avatar 仓库的 `deploy-avatar.yml` workflow 发布。app 仓库在 `assets/avatar`、`assets/avatar/**` 或 `.github/workflows/deploy-avatar.yml` 变化时触发它。文档页由主站 docs workflow 从 `.oo/docs` 发布。
+Avatar 页面由 Avatar 仓库的 `deploy-avatar.yml` workflow 发布。受保护的 Avatar `main` 通过 `Avatar SDK CI` 后会自动部署同一份已验证源码；app 仓库只提供共享构建依赖，其 submodule 指针不决定线上 Avatar 版本。文档页由主站 docs workflow 从 `.oo/docs` 发布。
