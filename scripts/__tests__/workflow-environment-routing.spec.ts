@@ -102,9 +102,9 @@ describe('workflow environment routing', () => {
 
   it('uses one pre-build Production gate for prerelease Desktop promotion', () => {
     const desktop = workflow('desktop-package.yml')
-    const packageJob = job(desktop, 'package')
-    const release = job(desktop, 'release')
-    const homepage = job(desktop, 'homepage')
+    const packageJob = job(desktop, 'desktop-package')
+    const release = job(desktop, 'desktop-release')
+    const homepage = job(desktop, 'desktop-homepage')
     const homepageTrigger = job(workflow('deploy-homepage.yml'), 'trigger')
 
     expect(packageJob).toContain("github.event_name == 'schedule' && 'Preview' || 'Production'")
@@ -143,10 +143,10 @@ describe('workflow environment routing', () => {
       .map(([name]) => name)
       .sort()
 
-    expect(previewJobs).toEqual(['deploy-cloudflare-dev', 'package'])
+    expect(previewJobs).toEqual(['deploy-cloudflare-dev', 'desktop-package'])
     expect(job(workflow('deploy-relay-dev.yml'), 'deploy-cloudflare-dev'))
       .toContain('    environment: Preview\n')
-    expect(job(workflow('desktop-package.yml'), 'package'))
+    expect(job(workflow('desktop-package.yml'), 'desktop-package'))
       .toContain("github.event_name == 'schedule' && 'Preview' || 'Production'")
   })
 
@@ -169,7 +169,7 @@ describe('workflow environment routing', () => {
   })
 
   it('keeps reusable homepage deployment gating inside the called workflow', () => {
-    const desktopHomepage = job(workflow('desktop-package.yml'), 'homepage')
+    const desktopHomepage = job(workflow('desktop-package.yml'), 'desktop-homepage')
     const homepageTrigger = job(workflow('deploy-homepage.yml'), 'trigger')
 
     expect(desktopHomepage).toContain('uses: ./.github/workflows/deploy-homepage.yml')

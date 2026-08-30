@@ -10,7 +10,9 @@ env:
 
 concurrency:
   group: >-
-    desktop-package-${{ github.event_name == 'pull_request' && format('pr-{0}-base-{1}',
+    desktop-package-${{ github.event_name == 'pull_request' && github.event.action == 'edited' &&
+    github.event.changes.base == null && format('metadata-edit-pr-{0}-run-{1}',
+    github.event.pull_request.number, github.run_id) || github.event_name == 'pull_request' && format('pr-{0}-base-{1}',
     github.event.pull_request.number, github.event.pull_request.base.sha) || format('{0}-{1}-{2}-{3}',
     github.event_name, github.ref, github.event.action || 'none', github.event.changes.base != null) }}
   cancel-in-progress: >-
@@ -96,8 +98,11 @@ permissions:
   contents: read
 
 jobs:
-  pr-scope:
-    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+  desktop-pr-scope:
+    name: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'metadata edit skipped — desktop-pr-scope' || 'pr-scope' }}
+    if: >-
+      (github.event_name == 'pull_request' || github.event_name == 'merge_group') &&
+      !(github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null)
     runs-on: ubuntu-latest
     outputs:
       pr_archs: ${{ steps.pr_archs.outputs.archs }}
@@ -245,13 +250,14 @@ jobs:
           esac
           echo "archs=$archs" >> "$GITHUB_OUTPUT"
 
-  pr-build:
-    name: macOS package smoke
-    needs: pr-scope
+  desktop-pr-build:
+    name: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'metadata edit skipped — desktop-pr-build' || 'macOS package smoke' }}
+    needs: desktop-pr-scope
     if: >-
       (github.event_name == 'pull_request' || github.event_name == 'merge_group') &&
-      needs.pr-scope.outputs.desktop_package == 'true' &&
-      needs.pr-scope.outputs.reuse_desktop != 'true'
+      needs.desktop-pr-scope.outputs.desktop_package == 'true' &&
+      needs.desktop-pr-scope.outputs.reuse_desktop != 'true' &&
+      !(github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null)
     runs-on: macos-26
     timeout-minutes: 60
     steps:
@@ -272,7 +278,7 @@ jobs:
 
       - name: Package unsigned macOS authority candidates
         env:
-          ONEWORKS_DESKTOP_ARCHS: ${{ needs.pr-scope.outputs.pr_archs }}
+          ONEWORKS_DESKTOP_ARCHS: ${{ needs.desktop-pr-scope.outputs.pr_archs }}
           ONEWORKS_DESKTOP_ENABLE_AUTO_UPDATE: "false"
           ONEWORKS_DESKTOP_OFFICIAL_RELEASE_BUILD: "false"
           ONEWORKS_DESKTOP_RELEASE_BUILD: "false"
@@ -281,7 +287,7 @@ jobs:
       - name: Verify packaged native authority closure
         shell: bash
         env:
-          DESKTOP_ARCHS: ${{ needs.pr-scope.outputs.pr_archs }}
+          DESKTOP_ARCHS: ${{ needs.desktop-pr-scope.outputs.pr_archs }}
         run: |
           set -euo pipefail
           case "$DESKTOP_ARCHS" in
@@ -309,20 +315,22 @@ jobs:
           ONEWORKS_DESKTOP_SMOKE_ARCH: arm64
         run: pnpm -C apps/desktop smoke:package
 
-  pr-policy:
-    name: macOS installer
+  desktop-pr-policy:
+    name: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'metadata edit skipped — desktop-pr-policy' || 'macOS installer' }}
     needs:
-      - pr-scope
-      - pr-build
-    if: always() && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
+      - desktop-pr-scope
+      - desktop-pr-build
+    if: >-
+      always() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') &&
+      !(github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null)
     runs-on: ubuntu-latest
     steps:
       - name: Enforce macOS package result
         env:
-          BUILD_RESULT: ${{ needs.pr-build.result }}
-          DESKTOP_PACKAGE: ${{ needs.pr-scope.outputs.desktop_package }}
-          REUSE_DESKTOP: ${{ needs.pr-scope.outputs.reuse_desktop }}
-          SCOPE_RESULT: ${{ needs.pr-scope.result }}
+          BUILD_RESULT: ${{ needs.desktop-pr-build.result }}
+          DESKTOP_PACKAGE: ${{ needs.desktop-pr-scope.outputs.desktop_package }}
+          REUSE_DESKTOP: ${{ needs.desktop-pr-scope.outputs.reuse_desktop }}
+          SCOPE_RESULT: ${{ needs.desktop-pr-scope.result }}
         shell: bash
         run: |
           set -euo pipefail
@@ -359,7 +367,7 @@ jobs:
           esac
 
       - name: Record reusable Desktop evidence
-        if: github.event_name == 'pull_request' && needs.pr-scope.outputs.desktop_package == 'true'
+        if: github.event_name == 'pull_request' && needs.desktop-pr-scope.outputs.desktop_package == 'true'
         run: |
           mkdir -p .cache/pr-validation-evidence/desktop
           printf '%s\n' "${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }}" > .cache/pr-validation-evidence/desktop/revision
@@ -367,9 +375,9 @@ jobs:
       - name: Save reusable Desktop evidence
         if: >-
           github.event_name == 'pull_request' &&
-          needs.pr-scope.outputs.desktop_package == 'true' &&
-          (needs.pr-scope.outputs.reuse_mode != 'exact' ||
-          needs.pr-scope.outputs.reuse_desktop != 'true')
+          needs.desktop-pr-scope.outputs.desktop_package == 'true' &&
+          (needs.desktop-pr-scope.outputs.reuse_mode != 'exact' ||
+          needs.desktop-pr-scope.outputs.reuse_desktop != 'true')
         uses: actions/cache/save@v4
         with:
           path: .cache/pr-validation-evidence/desktop
@@ -377,9 +385,11 @@ jobs:
             pr-desktop-evidence-v1-${{ github.event.pull_request.base.sha }}-${{
             github.event.pull_request.head.sha }}
 
-  dispatch-policy:
-    name: Desktop workflow request
-    if: github.event_name == 'workflow_dispatch'
+  desktop-dispatch-policy:
+    name: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'metadata edit skipped — desktop-dispatch-policy' || 'Desktop workflow request' }}
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      !(github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null)
     runs-on: ubuntu-latest
     steps:
       - name: Validate desktop workflow request
@@ -471,10 +481,12 @@ jobs:
             fi
           fi
 
-  notarization-history:
-    name: Apple notarization history
-    needs: dispatch-policy
-    if: github.event_name == 'workflow_dispatch' && inputs.notarization_history_only
+  desktop-notarization-history:
+    name: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'metadata edit skipped — desktop-notarization-history' || 'Apple notarization history' }}
+    needs: desktop-dispatch-policy
+    if: >-
+      github.event_name == 'workflow_dispatch' && inputs.notarization_history_only &&
+      !(github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null)
     runs-on: macos-26
     environment: Production
     timeout-minutes: 10
@@ -489,16 +501,17 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: node apps/desktop/scripts/notarization-state.cjs history
 
-  package:
-    name: macOS release installer
-    needs: dispatch-policy
+  desktop-package:
+    name: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'metadata edit skipped — desktop-package' || 'macOS release installer' }}
+    needs: desktop-dispatch-policy
     if: >-
       always() &&
-      (needs.dispatch-policy.result == 'success' || needs.dispatch-policy.result == 'skipped') &&
+      (needs.desktop-dispatch-policy.result == 'success' || needs.desktop-dispatch-policy.result == 'skipped') &&
       github.event_name != 'pull_request' &&
       github.event_name != 'merge_group' &&
       !(github.event_name == 'workflow_dispatch' && inputs.notarization_history_only) &&
-      !(github.event_name == 'workflow_dispatch' && inputs.create_release && inputs.candidate_run_id != '')
+      !(github.event_name == 'workflow_dispatch' && inputs.create_release && inputs.candidate_run_id != '') &&
+      !(github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null)
     runs-on: macos-26
     environment: ${{ github.event_name == 'schedule' && 'Preview' || 'Production' }}
     timeout-minutes: 120
@@ -1360,11 +1373,11 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ github.event_name == 'schedule' && 3 || (github.event_name == 'workflow_dispatch' && inputs.retention_days || 14) }}
 
-  release:
-    name: GitHub Release
+  desktop-release:
+    name: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'metadata edit skipped — desktop-release' || 'GitHub Release' }}
     needs:
-      - dispatch-policy
-      - package
+      - desktop-dispatch-policy
+      - desktop-package
     runs-on: ubuntu-latest
     # The signed candidate has already crossed the Production gate in package.
     # RC promotion only consumes that verified immutable candidate; stable
@@ -1375,9 +1388,10 @@ jobs:
       always() &&
       (startsWith(github.ref, 'refs/tags/pkg/oneworks-desktop/v') ||
         (github.event_name == 'workflow_dispatch' && inputs.create_release)) &&
-      (needs.dispatch-policy.result == 'success' || needs.dispatch-policy.result == 'skipped') &&
-      (needs.package.result == 'success' ||
-        (github.event_name == 'workflow_dispatch' && inputs.candidate_run_id != ''))
+      (needs.desktop-dispatch-policy.result == 'success' || needs.desktop-dispatch-policy.result == 'skipped') &&
+      (needs.desktop-package.result == 'success' ||
+        (github.event_name == 'workflow_dispatch' && inputs.candidate_run_id != '')) &&
+      !(github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null)
     permissions:
       actions: read
       artifact-metadata: write
@@ -1745,13 +1759,15 @@ jobs:
           fi
           trap - ERR
 
-  homepage:
-    name: Publish Homepage
-    needs: release
-    if: needs.release.result == 'success'
+  desktop-homepage:
+    name: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'metadata edit skipped — desktop-homepage' || 'Publish Homepage' }}
+    needs: desktop-release
+    if: >-
+      needs.desktop-release.result == 'success' &&
+      !(github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null)
     uses: ./.github/workflows/deploy-homepage.yml
     with:
       release_automation: ${{ contains(inputs.release_tag || github.ref_name, '-alpha.') || contains(inputs.release_tag || github.ref_name, '-beta.') || contains(inputs.release_tag || github.ref_name, '-rc.') }}
-      source_sha: ${{ needs.release.outputs.source_sha }}
+      source_sha: ${{ needs.desktop-release.outputs.source_sha }}
     secrets:
       HOMEPAGE_DEPLOY_TOKEN: ${{ secrets.HOMEPAGE_DEPLOY_TOKEN }}

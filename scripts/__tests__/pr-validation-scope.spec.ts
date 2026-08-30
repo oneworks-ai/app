@@ -77,8 +77,37 @@ const workflowEvent = ({
     pull_request: { base: { sha: baseSha }, number: prNumber }
   },
   event_name: eventName,
-  ref
+  ref,
+  run_id: '9001'
 })
+
+const parseWorkflowJobs = (workflowPath: string) =>
+  JSON.parse(execFileSync(
+    'ruby',
+    [
+      '-ryaml',
+      '-rjson',
+      '-e',
+      "workflow = YAML.load_file(ARGV.fetch(0)); puts JSON.generate(workflow.fetch('jobs'))",
+      workflowPath
+    ],
+    { encoding: 'utf8' }
+  )) as Record<string, { if?: string; name?: string }>
+
+const assertNoDuplicateYamlKeys = (workflowPath: string) => {
+  const script = [
+    "require 'psych'",
+    'def verify(node)',
+    '  if node.is_a?(Psych::Nodes::Mapping)',
+    '    keys = node.children.each_slice(2).map { |key, _| key.respond_to?(:value) ? key.value : nil }',
+    "    raise 'duplicate YAML key' if keys.compact.uniq.length != keys.compact.length",
+    '  end',
+    '  Array(node.children).each { |child| verify(child) if child.respond_to?(:children) }',
+    'end',
+    'Psych.parse_stream(File.read(ARGV.fetch(0))).children.each { |node| verify(node) }'
+  ].join('; ')
+  execFileSync('ruby', ['-e', script, workflowPath], { encoding: 'utf8' })
+}
 
 describe('pr validation scope', () => {
   it('classifies ordinary Markdown and internal module rules as docs-only', () => {
@@ -459,6 +488,65 @@ describe('required context completion contract', () => {
   const workspaceCacheWarmWorkflow = readFileSync('.github/workflows/workspace-cache-warm.yml', 'utf8')
   const workspaceSetupAction = readFileSync('.github/actions/setup-workspace/action.yml', 'utf8')
 
+  it('proves parsed YAML name, fallback, and raw-expression values cannot equal source contexts', () => {
+    const bodyOnlyGuard =
+      "github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null"
+    const sourceContexts = new Set([
+      'lint',
+      'format-check',
+      'env-contract',
+      'typecheck',
+      'docs-media',
+      'validation-scope',
+      'validation-reuse',
+      'public-docs-build',
+      'release-docs-preflight',
+      'commit-policy',
+      'commit-message',
+      'pr-change-policy',
+      'source-validation-evidence',
+      'pr-scope',
+      'macOS package smoke',
+      'macOS installer',
+      'Desktop workflow request',
+      'Apple notarization history',
+      'macOS release installer',
+      'GitHub Release',
+      'Publish Homepage'
+    ])
+
+    for (
+      const workflowPath of [
+        '.github/workflows/quality.yml',
+        '.github/workflows/desktop-package.yml'
+      ]
+    ) {
+      assertNoDuplicateYamlKeys(workflowPath)
+      const jobs = parseWorkflowJobs(workflowPath)
+      expect(Object.keys(jobs)).not.toHaveLength(0)
+      for (const [jobId, job] of Object.entries(jobs)) {
+        // This is a set/structure proof, not a GitHub server simulation. GitHub can
+        // publish either the evaluated name, the job ID fallback, or the raw expression.
+        expect(sourceContexts.has(jobId)).toBe(false)
+        expect(job.if).toContain(bodyOnlyGuard)
+        expect(job.name).toContain(`metadata edit skipped — ${jobId}`)
+        expect(sourceContexts.has(job.name!)).toBe(false)
+        expect(
+          evaluateGithubTemplate(
+            job.name!,
+            workflowEvent({
+              action: 'edited',
+              baseSha: 'base-a',
+              eventName: 'pull_request',
+              prNumber: '425',
+              ref: 'refs/pull/425/merge'
+            })
+          )
+        ).toBe(`metadata edit skipped — ${jobId}`)
+      }
+    }
+  })
+
   it('keeps PR and merge queue workflows unconditional so required contexts cannot remain pending', () => {
     const qualityTrigger = qualityWorkflow.slice(0, qualityWorkflow.indexOf('\npermissions:'))
     const desktopTrigger = desktopWorkflow.slice(
@@ -489,26 +577,26 @@ describe('required context completion contract', () => {
         'commit-message'
       ]
     ) {
-      expect(qualityWorkflow).toContain(`name: ${context}`)
+      expect(qualityWorkflow).toContain(`'${context}'`)
     }
     expect(policyWorkflow).toContain('name: pr-change-policy')
-    expect(desktopWorkflow).toContain('name: macOS installer')
+    expect(desktopWorkflow).toContain("|| 'macOS installer' }}")
   })
 
   it('makes the protected commit-message context fail closed over every applicable quality gate', () => {
     const aggregate = qualityWorkflow.slice(
-      qualityWorkflow.indexOf('  commit-message:'),
-      qualityWorkflow.indexOf('  record-pr-source-evidence:')
+      qualityWorkflow.indexOf('  q-commit-message:'),
+      qualityWorkflow.indexOf('  q-record-pr-source-evidence:')
     )
-    expect(aggregate).toContain('if: always()')
+    expect(aggregate).toContain('always()')
     for (
       const dependency of [
-        'classify-changes',
-        'validation-reuse',
-        'quality',
-        'public-docs',
-        'release-docs',
-        'commit-policy'
+        'q-classify-changes',
+        'q-validation-reuse',
+        'q-quality',
+        'q-public-docs',
+        'q-release-docs',
+        'q-commit-policy'
       ]
     ) {
       expect(aggregate).toContain(`- ${dependency}`)
@@ -522,32 +610,32 @@ describe('required context completion contract', () => {
   it('reuses one classifier and provides lightweight success steps inside required jobs', () => {
     expect(qualityWorkflow).toContain('node scripts/pr-validation-scope.cjs')
     expect(qualityWorkflow).toContain('Validate changed documentation scope, privacy, links, anchors, and diff')
-    expect(qualityWorkflow).toContain("needs.classify-changes.outputs.docs_changed == 'true'")
+    expect(qualityWorkflow).toContain("needs.q-classify-changes.outputs.docs_changed == 'true'")
     expect(qualityWorkflow).toContain('Run affected typecheck scopes')
     expect(qualityWorkflow).toContain('Build affected client production bundle')
     expect(qualityWorkflow).toContain('pnpm -C apps/client exec vite build')
     expect(qualityWorkflow).toContain('outputs.client_build')
-    expect(qualityWorkflow).toContain('TYPECHECK_SCOPES: $' + '{{ needs.classify-changes.outputs.typecheck_scopes }}')
+    expect(qualityWorkflow).toContain('TYPECHECK_SCOPES: $' + '{{ needs.q-classify-changes.outputs.typecheck_scopes }}')
     expect(qualityWorkflow).toContain("contains(env.TYPECHECK_SCOPES, 'node')")
     expect(qualityWorkflow).toContain('uses: dprint/check@v2.3')
-    expect(qualityWorkflow).toContain("needs.classify-changes.result != 'success'")
-    expect(qualityWorkflow).toContain("needs.classify-changes.outputs.typecheck == 'true'")
-    expect(qualityWorkflow).toContain("needs.classify-changes.outputs.docs_media == 'true'")
+    expect(qualityWorkflow).toContain("needs.q-classify-changes.result != 'success'")
+    expect(qualityWorkflow).toContain("needs.q-classify-changes.outputs.typecheck == 'true'")
+    expect(qualityWorkflow).toContain("needs.q-classify-changes.outputs.docs_media == 'true'")
     expect(qualityWorkflow).toContain('Validate classifier output contract')
     const typecheckSteps = qualityWorkflow.slice(
       qualityWorkflow.indexOf('      - name: Run affected typecheck scopes'),
       qualityWorkflow.indexOf('      - name: Run documentation media verification')
     )
-    expect(typecheckSteps.match(/needs\.classify-changes\.result != 'success'/gu)).toHaveLength(2)
+    expect(typecheckSteps.match(/needs\.q-classify-changes\.result != 'success'/gu)).toHaveLength(2)
     expect(qualityWorkflow).toContain("env.RUN_CHECK != 'true'")
     expect(qualityWorkflow).not.toContain('FULL_VALIDATION')
     expect(desktopWorkflow).toContain('node scripts/pr-validation-scope.cjs')
     expect(desktopWorkflow).toContain('desktop_package: $' + '{{ steps.validation_scope.outputs.desktop_package }}')
-    expect(desktopWorkflow).toContain('name: macOS package smoke')
-    expect(desktopWorkflow).toContain('name: macOS installer')
+    expect(desktopWorkflow).toContain("|| 'macOS package smoke' }}")
+    expect(desktopWorkflow).toContain("|| 'macOS installer' }}")
     expect(desktopWorkflow).toContain('Enforce macOS package result')
     expect(desktopWorkflow).toContain('Validate classifier output contract')
-    expect(desktopWorkflow).toContain("needs.pr-scope.outputs.desktop_package == 'true'")
+    expect(desktopWorkflow).toContain("needs.desktop-pr-scope.outputs.desktop_package == 'true'")
   })
 
   it('keeps dependency-free checks out of workspace installation paths', () => {
@@ -556,13 +644,13 @@ describe('required context completion contract', () => {
     expect(policyWorkflow).not.toContain('git submodule update')
 
     const qualityJob = qualityWorkflow.slice(
-      qualityWorkflow.indexOf('  quality:'),
-      qualityWorkflow.indexOf('  public-docs:')
+      qualityWorkflow.indexOf('  q-quality:'),
+      qualityWorkflow.indexOf('  q-public-docs:')
     )
     expect(qualityJob).toContain("if: env.NEEDS_DEPENDENCIES == 'true'")
     expect(qualityJob).toContain("env.RUN_CHECK == 'true' ||")
     expect(qualityJob).toContain(
-      "matrix.name == 'lint' && needs.classify-changes.outputs.docs_changed == 'true'"
+      "matrix.name == 'lint' && needs.q-classify-changes.outputs.docs_changed == 'true'"
     )
     expect(qualityJob).toContain('run: node scripts/check-env-contract.mjs')
     expect(qualityJob).toContain('uses: dprint/check@v2.3')
@@ -603,7 +691,8 @@ describe('required context completion contract', () => {
         expect(evaluate(current.group, { ...sourceEvent, action })).toBe(sourceLane)
         expect(evaluate(current.cancel, { ...sourceEvent, action })).toBe('true')
       }
-      expect(evaluate(current.group, { ...sourceEvent, action: 'edited' })).toBe(sourceLane)
+      expect(evaluate(current.group, { ...sourceEvent, action: 'edited' }))
+        .toBe(`${prefix}-metadata-edit-pr-425-run-9001`)
       expect(evaluate(current.cancel, { ...sourceEvent, action: 'edited' })).toBe('false')
       expect(evaluate(current.group, {
         ...sourceEvent,
@@ -670,12 +759,12 @@ describe('required context completion contract', () => {
     expect(desktopWorkflow).toContain('--event-name "$EVENT_NAME"')
 
     const desktopGate = desktopWorkflow.slice(
-      desktopWorkflow.indexOf('  pr-policy:'),
-      desktopWorkflow.indexOf('  dispatch-policy:')
+      desktopWorkflow.indexOf('  desktop-pr-policy:'),
+      desktopWorkflow.indexOf('  desktop-dispatch-policy:')
     )
     const releasePackage = desktopWorkflow.slice(
-      desktopWorkflow.indexOf('  package:'),
-      desktopWorkflow.indexOf('  release:')
+      desktopWorkflow.indexOf('  desktop-package:'),
+      desktopWorkflow.indexOf('  desktop-release:')
     )
     expect(desktopGate).toContain("github.event_name == 'merge_group'")
     expect(desktopGate).toContain("github.event_name == 'pull_request' &&")
@@ -684,12 +773,12 @@ describe('required context completion contract', () => {
 
   it('shares exact dependency and incremental caches without weakening required contexts', () => {
     const reuseJob = qualityWorkflow.slice(
-      qualityWorkflow.indexOf('  validation-reuse:'),
-      qualityWorkflow.indexOf('  quality:')
+      qualityWorkflow.indexOf('  q-validation-reuse:'),
+      qualityWorkflow.indexOf('  q-quality:')
     )
     const desktopScopeJob = desktopWorkflow.slice(
-      desktopWorkflow.indexOf('  pr-scope:'),
-      desktopWorkflow.indexOf('  pr-build:')
+      desktopWorkflow.indexOf('  desktop-pr-scope:'),
+      desktopWorkflow.indexOf('  desktop-pr-build:')
     )
 
     expect(workspaceSetupAction).toContain('uses: actions/cache@v4')
@@ -748,31 +837,31 @@ describe('required context completion contract', () => {
     expect(qualityWorkflow).toContain('Verify ESLint autofix-only revision')
     expect(qualityWorkflow).toContain('Validate previous typecheck evidence')
     expect(qualityWorkflow).toContain('cat .cache/pr-validation-evidence/typecheck/revision')
-    expect(qualityWorkflow).toContain('needs.validation-reuse.outputs.typecheck')
+    expect(qualityWorkflow).toContain('needs.q-validation-reuse.outputs.typecheck')
     expect(desktopWorkflow).toContain('Validate previous desktop validation evidence')
     expect(desktopWorkflow).toContain('cat .cache/pr-validation-evidence/desktop/revision')
     expect(reuseJob).toContain('Checkout pull request merge')
-    expect(reuseJob).toContain("needs.classify-changes.outputs.reuse_mode == 'eslint-autofix'")
-    expect(reuseJob).toContain("needs.classify-changes.outputs.reuse_candidate == 'true'")
+    expect(reuseJob).toContain("needs.q-classify-changes.outputs.reuse_mode == 'eslint-autofix'")
+    expect(reuseJob).toContain("needs.q-classify-changes.outputs.reuse_candidate == 'true'")
     expect(reuseJob).not.toContain('ref: ${{ github.event.pull_request.head.sha')
     expect(desktopScopeJob).toContain('Checkout pull request merge')
     expect(desktopScopeJob).not.toContain('ref: ${{ github.event.pull_request.head.sha')
   })
 
   it('adds only the relevant public and release documentation gates', () => {
-    expect(qualityWorkflow).toContain('name: public-docs-build')
+    expect(qualityWorkflow).toContain("|| 'public-docs-build' }}")
     expect(qualityWorkflow).toContain('package_json_file: assets/homepage/package.json')
     expect(qualityWorkflow).toContain('pnpm -C assets/homepage build:docs')
-    expect(qualityWorkflow).toContain('name: release-docs-preflight')
+    expect(qualityWorkflow).toContain("|| 'release-docs-preflight' }}")
     expect(qualityWorkflow).toContain('--release-preflight')
 
     const publicDocsJob = qualityWorkflow.slice(
-      qualityWorkflow.indexOf('  public-docs:'),
-      qualityWorkflow.indexOf('  release-docs:')
+      qualityWorkflow.indexOf('  q-public-docs:'),
+      qualityWorkflow.indexOf('  q-release-docs:')
     )
     const releaseDocsJob = qualityWorkflow.slice(
-      qualityWorkflow.indexOf('  release-docs:'),
-      qualityWorkflow.indexOf('  commit-message:')
+      qualityWorkflow.indexOf('  q-release-docs:'),
+      qualityWorkflow.indexOf('  q-commit-message:')
     )
     expect(publicDocsJob).not.toContain('outputs.docs_only')
     expect(publicDocsJob).not.toContain('version: 11.7.0')
