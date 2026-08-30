@@ -151,6 +151,17 @@ describe('ui static routing', () => {
     expect(indexBody).toContain('window.__ONEWORKS_PROJECT_RUNTIME_ENV__=')
   })
 
+  it('serves workspace automation backlinks through the spa shell on refresh', async () => {
+    const response = await fetch(
+      `${baseUrl}/ui/w/w_abc123456/automation?rule=rule-1&runQ=session-1`
+    )
+    const body = await response.text()
+
+    expect(response.status).toBe(200)
+    expect(body).toContain('<body>ok</body>')
+    expect(body).toContain('window.__ONEWORKS_PROJECT_RUNTIME_ENV__=')
+  })
+
   it('uses cached client dist when no explicit dist path is configured', async () => {
     const cacheHome = await mkdtemp(path.join(tmpdir(), 'ow-ui-route-cache-home-'))
     const cachedDistDir = path.join(
