@@ -1,4 +1,5 @@
 /* eslint-disable max-lines -- Channel manager initialization and public helpers stay colocated. */
+import type { UnresolvedJsonVariableReference } from '@oneworks/config'
 import type { ConfigSource, WSEvent } from '@oneworks/core'
 import type { ChannelBaseConfig, ChannelInboundEvent, ChannelSessionMcpServer } from '@oneworks/core/channel'
 
@@ -23,13 +24,25 @@ import type { ChannelManager, ChannelRuntimeState } from './types'
 export interface ChannelConfigSourceEntry {
   config?: { channels?: Record<string, unknown> }
   source: ConfigSource
+  unresolvedJsonVariableReferences?: readonly UnresolvedJsonVariableReference[]
 }
 
 const collectChannelEntries = (configs: ReadonlyArray<ChannelConfigSourceEntry>) => {
-  const entries = new Map<string, { source: ConfigSource; value: unknown }>()
-  for (const { config, source } of configs) {
+  const entries = new Map<
+    string,
+    { source: ConfigSource; unresolvedJsonVariables: ReadonlySet<string>; value: unknown }
+  >()
+  for (const { config, source, unresolvedJsonVariableReferences } of configs) {
     for (const [key, value] of Object.entries(config?.channels ?? {})) {
-      entries.set(key, { source, value })
+      entries.set(key, {
+        source,
+        unresolvedJsonVariables: new Set(
+          unresolvedJsonVariableReferences
+            ?.filter(reference => reference.path[0] === 'channels' && reference.path[1] === key)
+            .map(reference => reference.name)
+        ),
+        value
+      })
     }
   }
   return entries
@@ -110,6 +123,20 @@ export const initChannels = async (
 
     const logContext = getChannelLogContext(key, type, entry.source)
     const matchedChannelLinks = channelLinks.filter(link => link.channelKey === key)
+    const unresolvedVariables = [...entry.unresolvedJsonVariables].sort()
+    if (unresolvedVariables.length > 0) {
+      const error = `Missing environment variables: ${unresolvedVariables.join(', ')}`
+      states.set(key, {
+        key,
+        type,
+        status: 'error',
+        error,
+        configSource: entry.source,
+        channelLinks: matchedChannelLinks
+      })
+      logger.error({ ...logContext, error }, '[channels] channel config variables unresolved')
+      continue
+    }
     let connection: ChannelRuntimeState['connection']
     try {
       const mod = loadChannelModule(type)

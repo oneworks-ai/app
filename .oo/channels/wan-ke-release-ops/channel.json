@@ -1,0 +1,26 @@
+{
+  "name": "万可发布 · 0W0【运维】",
+  "description": "项目、前端、研发、测试与运维的发布协同群。",
+  "channel": "lark:wan-ke-ops",
+  "entity": "wan-ke-ops",
+  "external": {
+    "type": "chat",
+    "chatId": "oc_711d58b78dfc1988e0616d956b870d39"
+  },
+  "ingress": {
+    "ambientRouting": false,
+    "createOnCommand": false,
+    "createOnMention": true,
+    "mentionPatterns": [
+      "@0W0【运维】",
+      "@0W0"
+    ]
+  },
+  "authorization": {
+    "deliveryThrottleMs": 1200000,
+    "resume": {
+      "mode": "immediate",
+      "delayMs": 0
+    }
+  }
+}

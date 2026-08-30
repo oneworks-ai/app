@@ -12,7 +12,7 @@ Lark / 飞书频道使用开发者后台里的自建机器人应用接入。最�
     "lark:team": {
       "type": "lark",
       "appId": "cli_xxx",
-      "appSecret": "replace-with-app-secret",
+      "appSecret": "${ONEWORKS_LARK_APP_SECRET}",
       "domain": "Feishu",
       "access": {
         "allowGroupChat": true,
@@ -23,6 +23,8 @@ Lark / 飞书频道使用开发者后台里的自建机器人应用接入。最�
   }
 }
 ```
+
+把 `ONEWORKS_LARK_APP_SECRET=...` 写在不会提交的 `.env.dev` 中；项目可以提交 App ID、群白名单、ChannelLink 和实体定义。仓库中的 `.env.dev.example` 只列变量名，不包含真实凭证。变量缺失时，对应 channel 会保持未连接并报告缺失变量，不会拿占位符尝试连接平台。
 
 配置步骤：
 
@@ -184,8 +186,7 @@ WeChat 频道基于 WechatApi 回调接入，公网入口固定为：
 }
 ```
 
-- WechatApi 文档入口是 https://post.wechatapi.net/a2；管理后台 / TokenId 获取入口是 https://newmanager.wechatapi.net。平台接入页说明：开通 API 权限后，在访问控制里填写消息回调地址并复制 TokenId；本频道的 `token` 就填这个 TokenId。
-- 相关平台文档：消息回调和 API 规范见 https://post.wechatapi.net/doc-4217385；本频道发送回复使用的文本接口是 https://post.wechatapi.net/message/posttext。
+- WechatApi 文档入口是 https://post.wechatapi.net/a2；管理后台 / TokenId 获取入口是 https://newmanager.wechatapi.net。平台接入页说明：开通 API 权限后，在访问控制里填写消息回调地址并复制 TokenId；本频道的 `token` 就填这个 TokenId。消息回调和 API 规范见 https://post.wechatapi.net/doc-4217385；本频道发送回复使用的文本接口是 https://post.wechatapi.net/message/posttext。
 - `server.public.schema` / `domain` / `port` 会拼成 WechatApi 能访问到的公网 server 地址；临时验证可以用 tunnel，长期运行应使用稳定反向代理或 Cloudflare Tunnel。单个 channel 如需覆盖，可继续配置 channel 级 `serverBaseUrl`。
 - 公网 Host 下 server 默认放行 `/channels/*/*/webhook`，不需要在 `publicPaths` 或 channel 配置里重复声明；其他额外公网 path 可以通过 `server.publicPaths` 配置。
 - 是否真正暴露某个 channel webhook 由对应 channel 配置控制，例如 `enableWebhook: false`。
@@ -196,5 +197,4 @@ WeChat 频道基于 WechatApi 回调接入，公网入口固定为：
 - `appId` 建议显式配置；如果缺省，server 会使用最近一次有效回调里的 `Appid`，但重启后已有会话可能无法主动回复。
 - 只要能从 `server.public` 或 channel 级 `serverBaseUrl` 生成回调地址，频道启动时默认会在后台调用 WechatApi `/login/setCallback` 自动写入回调地址；`callbackToken` 未配置时复用 `token`。如需关闭，显式设置 `"autoRegisterCallback": false`。
 - 如果 WechatApi 账号在线但重启后不再推送真实用户消息，可配置 `"autoReconnectOnStart": true`；频道启动时会先对配置的 `appId` 调用 `/login/reconnection`，再重新注册 callback。
-- 如果 `access.admins` 缺失或为空，频道启动时 server 会在日志里打印 `/authorize-admin <token>` 授权指令。该指令不会通过微信自动下发；未授权用户只会收到“管理员尚未初始化，请联系服务维护者获取授权指令。”。维护者从启动日志中取出指令后，通过可信渠道交给目标用户，由对方在同一个 channel 发送该指令完成首次管理员授权。服务重启会生成新的内存 token。
-- package 级维护与配置细节见 `packages/channels/wechat/README.md`。
+- 如果 `access.admins` 缺失或为空，频道启动时 server 会在日志里打印 `/authorize-admin <token>` 授权指令。该指令不会通过微信自动下发；未授权用户只会收到“管理员尚未初始化，请联系服务维护者获取授权指令。”。维护者从启动日志中取出指令后，通过可信渠道交给目标用户，由对方在同一个 channel 发送该指令完成首次管理员授权。服务重启会生成新的内存 token；package 级维护与配置细节见 `packages/channels/wechat/README.md`。

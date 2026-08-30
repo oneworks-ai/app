@@ -1,0 +1,26 @@
+{
+  "name": "万可闲聊 · OwO【产品】",
+  "description": "产品、运营与 OWO 的轻量演示群。",
+  "channel": "lark:wan-ke-product",
+  "entity": "wan-ke-product",
+  "external": {
+    "type": "chat",
+    "chatId": "oc_e533f5906d734ec0061633176b31aedf"
+  },
+  "ingress": {
+    "ambientRouting": false,
+    "createOnCommand": false,
+    "createOnMention": true,
+    "mentionPatterns": [
+      "@OwO【产品】",
+      "@OwO"
+    ]
+  },
+  "authorization": {
+    "deliveryThrottleMs": 1200000,
+    "resume": {
+      "mode": "immediate",
+      "delayMs": 0
+    }
+  }
+}

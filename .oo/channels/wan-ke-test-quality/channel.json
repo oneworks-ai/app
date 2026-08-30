@@ -1,0 +1,26 @@
+{
+  "name": "万可测试 · qwq【测试】",
+  "description": "前端、研发与测试的联调和验收群。",
+  "channel": "lark:wan-ke-test",
+  "entity": "wan-ke-test",
+  "external": {
+    "type": "chat",
+    "chatId": "oc_b857784ed7ae69638288d78a61ec7909"
+  },
+  "ingress": {
+    "ambientRouting": false,
+    "createOnCommand": false,
+    "createOnMention": true,
+    "mentionPatterns": [
+      "@qwq【测试】",
+      "@qwq"
+    ]
+  },
+  "authorization": {
+    "deliveryThrottleMs": 1200000,
+    "resume": {
+      "mode": "immediate",
+      "delayMs": 0
+    }
+  }
+}

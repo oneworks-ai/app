@@ -1,4 +1,6 @@
 {
+  "defaultAdapter": "codex",
+  "defaultModel": "gpt-5.6-luna",
   "adapters": {
     "codex": {},
     "claude-code": {
@@ -49,6 +51,10 @@
     {
       "id": "./packages/plugins/warm-cowork-theme",
       "scope": "warm-cowork-theme",
+      "watch": true
+    },
+    {
+      "id": "@oneworks/plugin-channel-oneworks",
       "watch": true
     }
   ],
@@ -320,5 +326,218 @@
   "appearance": {
     "primaryColor": "#8B9493",
     "iconBackground": "solid"
+  },
+  "channels": {
+    "lark:product-team": {
+      "type": "lark",
+      "title": "OWO 万可演示服务",
+      "description": "OWO 在万可闲聊中的独立演示服务连接。",
+      "appId": "cli_aaba90fcc4389cb3",
+      "appSecret": "${ONEWORKS_LARK_PRODUCT_TEAM_APP_SECRET}",
+      "domain": "Feishu",
+      "language": "zh",
+      "groupMessageDebounceMs": 800,
+      "systemPrompt": "你是 OWO，万可闲聊中的独立演示服务。负责展示 OneWorks 的对话、记忆与团队协调能力，并在需要时明确邀请产品或运营机器人参与。\n\n一介[字节] 是外部体验方，回复保持轻量、具体、可推进；不要冒充其它角色，也不要把其它群的私有上下文带入当前回复。",
+      "access": {
+        "allowPrivateChat": false,
+        "allowGroupChat": true,
+        "allowedGroups": [
+          "oc_e533f5906d734ec0061633176b31aedf"
+        ],
+        "admins": [
+          "ou_4109cc08559eaabc187bba1bb88891c8"
+        ]
+      }
+    },
+    "lark:wan-ke-product": {
+      "type": "lark",
+      "title": "OwO【产品】",
+      "description": "万可产品角色机器人连接。",
+      "appId": "cli_aaa567886c389cca",
+      "appSecret": "${ONEWORKS_LARK_WAN_KE_PRODUCT_APP_SECRET}",
+      "domain": "Feishu",
+      "language": "zh",
+      "groupMessageDebounceMs": 800,
+      "access": {
+        "allowPrivateChat": false,
+        "allowGroupChat": true,
+        "allowedGroups": [
+          "oc_e533f5906d734ec0061633176b31aedf",
+          "oc_20b024001d5a2ab237b8c82f9595a099",
+          "oc_aa463b23f97a13e63b53e5d99cb791d9"
+        ],
+        "admins": [
+          "ou_f9c16d7343f34c839443b980a50c7546"
+        ]
+      }
+    },
+    "lark:wan-ke-design": {
+      "type": "lark",
+      "title": "Ovo【设计】",
+      "description": "万可设计角色机器人连接。",
+      "appId": "cli_aaa5600758789cc9",
+      "appSecret": "${ONEWORKS_LARK_WAN_KE_DESIGN_APP_SECRET}",
+      "domain": "Feishu",
+      "language": "zh",
+      "groupMessageDebounceMs": 800,
+      "access": {
+        "allowPrivateChat": false,
+        "allowGroupChat": true,
+        "allowedGroups": [
+          "oc_20b024001d5a2ab237b8c82f9595a099"
+        ],
+        "admins": [
+          "ou_9d407f5ea1807328f6f2e9f893ffc6b6"
+        ]
+      }
+    },
+    "lark:wan-ke-frontend": {
+      "type": "lark",
+      "title": "Owo【前端】",
+      "description": "万可前端角色机器人连接。",
+      "appId": "cli_aaa5abdf3038dcd2",
+      "appSecret": "${ONEWORKS_LARK_WAN_KE_FRONTEND_APP_SECRET}",
+      "domain": "Feishu",
+      "language": "zh",
+      "groupMessageDebounceMs": 800,
+      "access": {
+        "allowPrivateChat": false,
+        "allowGroupChat": true,
+        "allowedGroups": [
+          "oc_b857784ed7ae69638288d78a61ec7909",
+          "oc_4f78c1fbad9da5205b7389000e33f30a",
+          "oc_711d58b78dfc1988e0616d956b870d39"
+        ],
+        "admins": [
+          "ou_8a5683b6c6436edb19c7361278360b27"
+        ]
+      }
+    },
+    "lark:wan-ke-engineering": {
+      "type": "lark",
+      "title": "qxq【研发】",
+      "description": "万科研发角色机器人连接。",
+      "appId": "cli_aaa567c16df91cbb",
+      "appSecret": "${ONEWORKS_LARK_WAN_KE_ENGINEERING_APP_SECRET}",
+      "domain": "Feishu",
+      "language": "zh",
+      "groupMessageDebounceMs": 800,
+      "access": {
+        "allowPrivateChat": false,
+        "allowGroupChat": true,
+        "allowedGroups": [
+          "oc_b857784ed7ae69638288d78a61ec7909",
+          "oc_4f78c1fbad9da5205b7389000e33f30a",
+          "oc_711d58b78dfc1988e0616d956b870d39"
+        ],
+        "admins": [
+          "ou_85c8b5acc4eeb6bd7633948eca40ae6e"
+        ]
+      }
+    },
+    "lark:wan-ke-test": {
+      "type": "lark",
+      "title": "qwq【测试】",
+      "description": "万可测试角色机器人连接。",
+      "appId": "cli_aaa567f1faf95cdc",
+      "appSecret": "${ONEWORKS_LARK_WAN_KE_TEST_APP_SECRET}",
+      "domain": "Feishu",
+      "language": "zh",
+      "groupMessageDebounceMs": 800,
+      "access": {
+        "allowPrivateChat": false,
+        "allowGroupChat": true,
+        "allowedGroups": [
+          "oc_b857784ed7ae69638288d78a61ec7909",
+          "oc_711d58b78dfc1988e0616d956b870d39"
+        ],
+        "admins": [
+          "ou_7714a798ac7aae953115003528147512"
+        ]
+      }
+    },
+    "lark:wan-ke-ops": {
+      "type": "lark",
+      "title": "0W0【运维】",
+      "description": "万可运维角色机器人连接。",
+      "appId": "cli_aaa567e1b6391cc2",
+      "appSecret": "${ONEWORKS_LARK_WAN_KE_OPS_APP_SECRET}",
+      "domain": "Feishu",
+      "language": "zh",
+      "groupMessageDebounceMs": 800,
+      "access": {
+        "allowPrivateChat": false,
+        "allowGroupChat": true,
+        "allowedGroups": [
+          "oc_4f78c1fbad9da5205b7389000e33f30a",
+          "oc_711d58b78dfc1988e0616d956b870d39"
+        ],
+        "admins": [
+          "ou_de3770ae95b94f4c6638b7ab818a1216"
+        ]
+      }
+    },
+    "lark:wan-ke-operations": {
+      "type": "lark",
+      "title": "UvU【运营】",
+      "description": "万可运营角色机器人连接。",
+      "appId": "cli_aaa5601603385ce7",
+      "appSecret": "${ONEWORKS_LARK_WAN_KE_OPERATIONS_APP_SECRET}",
+      "domain": "Feishu",
+      "language": "zh",
+      "groupMessageDebounceMs": 800,
+      "access": {
+        "allowPrivateChat": false,
+        "allowGroupChat": true,
+        "allowedGroups": [
+          "oc_e533f5906d734ec0061633176b31aedf",
+          "oc_aa463b23f97a13e63b53e5d99cb791d9"
+        ],
+        "admins": [
+          "ou_8b9a9e4d5c1a4104adf19ad013f4fe52"
+        ]
+      }
+    },
+    "lark:wan-ke-analytics": {
+      "type": "lark",
+      "title": "q0q【数分】",
+      "description": "万可数分角色机器人连接。",
+      "appId": "cli_aaa5603707b95ccc",
+      "appSecret": "${ONEWORKS_LARK_WAN_KE_ANALYTICS_APP_SECRET}",
+      "domain": "Feishu",
+      "language": "zh",
+      "groupMessageDebounceMs": 800,
+      "access": {
+        "allowPrivateChat": false,
+        "allowGroupChat": true,
+        "allowedGroups": [
+          "oc_4f78c1fbad9da5205b7389000e33f30a",
+          "oc_aa463b23f97a13e63b53e5d99cb791d9"
+        ],
+        "admins": [
+          "ou_1fea8206ec214ce3c0a915d211626c14"
+        ]
+      }
+    },
+    "lark:wan-ke-project": {
+      "type": "lark",
+      "title": "n_n【项目】",
+      "description": "万可项目管理角色机器人连接。",
+      "appId": "cli_aabaa692a238dcd2",
+      "appSecret": "${ONEWORKS_LARK_WAN_KE_PROJECT_APP_SECRET}",
+      "domain": "Feishu",
+      "language": "zh",
+      "groupMessageDebounceMs": 800,
+      "access": {
+        "allowPrivateChat": false,
+        "allowGroupChat": true,
+        "allowedGroups": [
+          "oc_711d58b78dfc1988e0616d956b870d39"
+        ],
+        "admins": [
+          "ou_6d86fcc87bfe8b1df9ed68ce7edf2c9a"
+        ]
+      }
+    }
   }
 }
