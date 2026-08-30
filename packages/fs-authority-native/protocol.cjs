@@ -10,7 +10,7 @@ const encodeFrame = value => {
   payload.copy(frame, 4)
   return frame
 }
-const createFrameChannel = stream => {
+const createFrameChannel = (stream, initialBytes) => {
   const queued = []
   const waiting = []
   let buffered = Buffer.alloc(0)
@@ -30,7 +30,7 @@ const createFrameChannel = stream => {
     queued.push(value)
     return true
   }
-  stream.on('data', chunk => {
+  const onData = chunk => {
     if (buffered.length + chunk.length > MAX_FRAME_BYTES + 4) {
       fail(new Error('Filesystem authority channel buffer is full'))
       stream.destroy()
@@ -63,9 +63,11 @@ const createFrameChannel = stream => {
         return
       }
     }
-  })
+  }
+  stream.on('data', onData)
   stream.once('error', fail)
   stream.once('close', () => fail(new Error('Filesystem authority connection closed')))
+  if (initialBytes?.length > 0) onData(initialBytes)
   return {
     next(timeoutMs) {
       if (queued.length > 0) return Promise.resolve(queued.shift())
