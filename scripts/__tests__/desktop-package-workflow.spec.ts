@@ -207,21 +207,21 @@ function runProductSourceGuard({
 describe('desktop package workflow', () => {
   it('runs unsigned pull request closure smoke while keeping installers release-only', () => {
     expect(workflow).toContain('schedule:\n    - cron: "0 18 * * *"')
-    expect(workflow).toContain('pr-policy:\n    name: macOS installer')
+    expect(workflow).toContain('desktop-pr-policy:\n    name: ${{ github.event_name')
     expect(workflow).toContain("github.event_name != 'pull_request'")
     expect(workflow).toContain("github.event_name != 'merge_group'")
 
     const scopeJob = workflow.slice(
-      workflow.indexOf('  pr-scope:'),
-      workflow.indexOf('  pr-build:')
+      workflow.indexOf('  desktop-pr-scope:'),
+      workflow.indexOf('  desktop-pr-build:')
     )
     const buildJob = workflow.slice(
-      workflow.indexOf('  pr-build:'),
-      workflow.indexOf('  pr-policy:')
+      workflow.indexOf('  desktop-pr-build:'),
+      workflow.indexOf('  desktop-pr-policy:')
     )
     const gateJob = workflow.slice(
-      workflow.indexOf('  pr-policy:'),
-      workflow.indexOf('  dispatch-policy:')
+      workflow.indexOf('  desktop-pr-policy:'),
+      workflow.indexOf('  desktop-dispatch-policy:')
     )
     expect(scopeJob).toContain('runs-on: ubuntu-latest')
     expect(scopeJob).toContain("github.event_name == 'merge_group'")
@@ -230,17 +230,17 @@ describe('desktop package workflow', () => {
     expect(scopeJob).toContain('Restore previous desktop validation evidence')
     expect(scopeJob).toContain('Verify ESLint autofix-only revision')
     expect(scopeJob).toContain('reuse_desktop: $' + '{{ steps.reuse_result.outputs.reuse_desktop }}')
-    expect(buildJob).toContain('name: macOS package smoke')
+    expect(buildJob).toContain("|| 'macOS package smoke' }}")
     expect(buildJob).toContain('runs-on: macos-26')
     expect(buildJob).toContain("github.event_name == 'merge_group'")
-    expect(buildJob).toContain("needs.pr-scope.outputs.desktop_package == 'true'")
-    expect(buildJob).toContain("needs.pr-scope.outputs.reuse_desktop != 'true'")
+    expect(buildJob).toContain("needs.desktop-pr-scope.outputs.desktop_package == 'true'")
+    expect(buildJob).toContain("needs.desktop-pr-scope.outputs.reuse_desktop != 'true'")
     expect(buildJob).toContain('uses: ./.github/actions/setup-workspace')
     expect(scopeJob).toContain('Resolve fail-closed PR package architectures')
     expect(scopeJob).toContain('pull_request) archs=arm64')
     expect(scopeJob).toContain('merge_group) archs=arm64,x64')
     expect(scopeJob).toContain('Unsupported event cannot select Desktop package architectures')
-    expect(buildJob).toContain('ONEWORKS_DESKTOP_ARCHS: $' + '{{ needs.pr-scope.outputs.pr_archs }}')
+    expect(buildJob).toContain('ONEWORKS_DESKTOP_ARCHS: $' + '{{ needs.desktop-pr-scope.outputs.pr_archs }}')
     expect(buildJob).toContain('IFS=, read -r -a target_archs <<< "$DESKTOP_ARCHS"')
     expect(buildJob).toContain(`for arch in "${String.fromCharCode(36)}{target_archs[@]}"; do`)
     expect(buildJob).toContain('Unsupported validated Desktop architecture set')
@@ -252,7 +252,7 @@ describe('desktop package workflow', () => {
     expect(buildJob).not.toContain('desktop:make')
     expect(buildJob).not.toContain('APPLE_')
     expect(buildJob).not.toContain('Upload installer artifacts')
-    expect(gateJob).toContain('name: macOS installer')
+    expect(gateJob).toContain("|| 'macOS installer' }}")
     expect(gateJob).toContain("github.event_name == 'merge_group'")
     expect(gateJob).toContain('runs-on: ubuntu-latest')
     expect(gateJob).toContain('Enforce macOS package result')
@@ -555,11 +555,11 @@ describe('desktop package workflow', () => {
   })
 
   it('publishes the homepage only after the GitHub Release succeeds', () => {
-    expect(workflow).toContain('homepage:\n    name: Publish Homepage')
-    expect(workflow).toContain("if: needs.release.result == 'success'")
+    expect(workflow).toContain('desktop-homepage:\n    name: ${{ github.event_name')
+    expect(workflow).toContain("needs.desktop-release.result == 'success'")
     expect(workflow).toContain('uses: ./.github/workflows/deploy-homepage.yml')
     expect(workflow).toContain(
-      `source_sha: \${{ needs.release.outputs.source_sha }}`
+      `source_sha: \${{ needs.desktop-release.outputs.source_sha }}`
     )
     expect(workflow).toContain('release_automation: ${{ contains(inputs.release_tag || github.ref_name')
     expect(workflow).not.toContain('secrets: inherit')
@@ -998,7 +998,7 @@ describe('desktop package workflow', () => {
     expect(installerWorkspace.output).toContain(`builder_sha=${'b'.repeat(40)}`)
     expect(appWorkspace.status, appWorkspace.stderr).toBe(0)
     expect(appWorkspace.output).toContain(`builder_sha=${'c'.repeat(40)}`)
-    expect(workflow).toContain('name: Apple notarization history')
+    expect(workflow).toContain("|| 'Apple notarization history' }}")
     expect(workflow).toContain('Query Apple notarization history')
     expect(workflow).toContain('Download notarization recovery state')
     expect(workflow).toContain('inputs.notarization_history_only')

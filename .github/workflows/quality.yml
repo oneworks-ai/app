@@ -26,7 +26,9 @@ env:
 
 concurrency:
   group: >-
-    quality-${{ github.event_name == 'pull_request' && format('pr-{0}-base-{1}',
+    quality-${{ github.event_name == 'pull_request' && github.event.action == 'edited' &&
+    github.event.changes.base == null && format('metadata-edit-pr-{0}-run-{1}',
+    github.event.pull_request.number, github.run_id) || github.event_name == 'pull_request' && format('pr-{0}-base-{1}',
     github.event.pull_request.number, github.event.pull_request.base.sha) || format('{0}-{1}-{2}-{3}',
     github.event_name, github.ref, github.event.action || 'none', github.event.changes.base != null) }}
   cancel-in-progress: >-
@@ -34,8 +36,11 @@ concurrency:
     (github.event.action != 'edited' || github.event.changes.base != null)) }}
 
 jobs:
-  classify-changes:
-    name: validation-scope
+  q-classify-changes:
+    name: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'metadata edit skipped — q-classify-changes' || 'validation-scope' }}
+    if: >-
+      !(github.event_name == 'pull_request' && github.event.action == 'edited' &&
+      github.event.changes.base == null)
     runs-on: ubuntu-latest
     outputs:
       client_build: ${{ steps.scope.outputs.client_build }}
@@ -197,19 +202,21 @@ jobs:
             *) exit 1 ;;
           esac
 
-  validation-reuse:
-    name: validation-reuse
-    needs: classify-changes
-    if: always()
+  q-validation-reuse:
+    name: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'metadata edit skipped — q-validation-reuse' || 'validation-reuse' }}
+    needs: q-classify-changes
+    if: >-
+      always() && !(github.event_name == 'pull_request' && github.event.action == 'edited' &&
+      github.event.changes.base == null)
     runs-on: ubuntu-latest
     outputs:
       typecheck: ${{ steps.result.outputs.typecheck }}
     steps:
       - name: Checkout pull request merge
         if: >-
-          needs.classify-changes.result == 'success' &&
-          needs.classify-changes.outputs.reuse_mode == 'eslint-autofix' &&
-          needs.classify-changes.outputs.reuse_candidate == 'true'
+          needs.q-classify-changes.result == 'success' &&
+          needs.q-classify-changes.outputs.reuse_mode == 'eslint-autofix' &&
+          needs.q-classify-changes.outputs.reuse_candidate == 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -217,23 +224,23 @@ jobs:
       - name: Restore previous typecheck evidence
         id: previous_typecheck_evidence
         if: >-
-          needs.classify-changes.result == 'success' &&
-          needs.classify-changes.outputs.reuse_mode == 'eslint-autofix' &&
-          needs.classify-changes.outputs.reuse_candidate == 'true'
+          needs.q-classify-changes.result == 'success' &&
+          needs.q-classify-changes.outputs.reuse_mode == 'eslint-autofix' &&
+          needs.q-classify-changes.outputs.reuse_candidate == 'true'
         uses: actions/cache/restore@v4
         with:
           path: .cache/pr-validation-evidence/typecheck
           key: >-
-            pr-typecheck-evidence-v1-${{ needs.classify-changes.outputs.reuse_evidence_base }}-${{
-            needs.classify-changes.outputs.reuse_evidence_head }}
+            pr-typecheck-evidence-v1-${{ needs.q-classify-changes.outputs.reuse_evidence_base }}-${{
+            needs.q-classify-changes.outputs.reuse_evidence_head }}
 
       - name: Validate previous typecheck evidence
         id: validate_typecheck_evidence
         if: steps.previous_typecheck_evidence.outputs.cache-hit == 'true'
         env:
           EXPECTED_REVISION: >-
-            ${{ needs.classify-changes.outputs.reuse_evidence_base }} ${{
-            needs.classify-changes.outputs.reuse_evidence_head }}
+            ${{ needs.q-classify-changes.outputs.reuse_evidence_base }} ${{
+            needs.q-classify-changes.outputs.reuse_evidence_head }}
         run: |
           if [[ -f .cache/pr-validation-evidence/typecheck/revision ]] &&
             [[ "$(cat .cache/pr-validation-evidence/typecheck/revision)" == "$EXPECTED_REVISION" ]]; then
@@ -280,39 +287,41 @@ jobs:
             echo "No reusable typecheck evidence; current revision will run its affected checks."
           fi
 
-  quality:
-    name: ${{ matrix.name }}
+  q-quality:
+    name: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'metadata edit skipped — q-quality' || matrix.name }}
     needs:
-      - classify-changes
-      - validation-reuse
-    if: always()
+      - q-classify-changes
+      - q-validation-reuse
+    if: >-
+      always() && !(github.event_name == 'pull_request' && github.event.action == 'edited' &&
+      github.event.changes.base == null)
     runs-on: ubuntu-latest
     env:
       NEEDS_DEPENDENCIES: >-
         ${{
-          needs.classify-changes.outputs.reuse_all != 'true' &&
-          (needs.classify-changes.result != 'success' ||
-          (matrix.name == 'lint' && needs.classify-changes.outputs.lint == 'true') ||
+          needs.q-classify-changes.outputs.reuse_all != 'true' &&
+          (needs.q-classify-changes.result != 'success' ||
+          (matrix.name == 'lint' && needs.q-classify-changes.outputs.lint == 'true') ||
           (matrix.name == 'typecheck' &&
-          (needs.classify-changes.outputs.typecheck == 'true' ||
-          needs.classify-changes.outputs.client_build == 'true') &&
-          needs.validation-reuse.outputs.typecheck != 'true') ||
-          (matrix.name == 'docs-media' && needs.classify-changes.outputs.docs_media == 'true'))
+          (needs.q-classify-changes.outputs.typecheck == 'true' ||
+          needs.q-classify-changes.outputs.client_build == 'true') &&
+          needs.q-validation-reuse.outputs.typecheck != 'true') ||
+          (matrix.name == 'docs-media' && needs.q-classify-changes.outputs.docs_media == 'true'))
         }}
       RUN_CHECK: >-
         ${{
-          needs.classify-changes.outputs.reuse_all != 'true' &&
-          (needs.classify-changes.result != 'success' ||
-          (matrix.name == 'lint' && needs.classify-changes.outputs.lint == 'true') ||
-          (matrix.name == 'format-check' && needs.classify-changes.outputs.format == 'true') ||
-          (matrix.name == 'env-contract' && needs.classify-changes.outputs.env_contract == 'true') ||
+          needs.q-classify-changes.outputs.reuse_all != 'true' &&
+          (needs.q-classify-changes.result != 'success' ||
+          (matrix.name == 'lint' && needs.q-classify-changes.outputs.lint == 'true') ||
+          (matrix.name == 'format-check' && needs.q-classify-changes.outputs.format == 'true') ||
+          (matrix.name == 'env-contract' && needs.q-classify-changes.outputs.env_contract == 'true') ||
           (matrix.name == 'typecheck' &&
-          (needs.classify-changes.outputs.typecheck == 'true' ||
-          needs.classify-changes.outputs.client_build == 'true') &&
-          needs.validation-reuse.outputs.typecheck != 'true') ||
-          (matrix.name == 'docs-media' && needs.classify-changes.outputs.docs_media == 'true'))
+          (needs.q-classify-changes.outputs.typecheck == 'true' ||
+          needs.q-classify-changes.outputs.client_build == 'true') &&
+          needs.q-validation-reuse.outputs.typecheck != 'true') ||
+          (matrix.name == 'docs-media' && needs.q-classify-changes.outputs.docs_media == 'true'))
         }}
-      TYPECHECK_SCOPES: ${{ needs.classify-changes.outputs.typecheck_scopes }}
+      TYPECHECK_SCOPES: ${{ needs.q-classify-changes.outputs.typecheck_scopes }}
     strategy:
       fail-fast: false
       matrix:
@@ -326,7 +335,7 @@ jobs:
       - name: Checkout repository
         if: >-
           env.RUN_CHECK == 'true' ||
-          (matrix.name == 'lint' && needs.classify-changes.outputs.docs_changed == 'true')
+          (matrix.name == 'lint' && needs.q-classify-changes.outputs.docs_changed == 'true')
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -336,7 +345,7 @@ jobs:
           env.RUN_CHECK == 'true' &&
           (matrix.name == 'docs-media' ||
           (matrix.name == 'typecheck' &&
-          (needs.classify-changes.result != 'success' ||
+          (needs.q-classify-changes.result != 'success' ||
           contains(env.TYPECHECK_SCOPES, 'node'))))
         run: git submodule update --init --depth 1 -- assets/demo-video
 
@@ -398,8 +407,8 @@ jobs:
         if: >-
           matrix.name == 'typecheck' &&
           env.RUN_CHECK == 'true' &&
-          (needs.classify-changes.result != 'success' ||
-          needs.classify-changes.outputs.typecheck == 'true')
+          (needs.q-classify-changes.result != 'success' ||
+          needs.q-classify-changes.outputs.typecheck == 'true')
         env:
           ONEWORKS_TYPECHECK_CACHE_DIR: .cache/typecheck
         run: pnpm typecheck $TYPECHECK_SCOPES
@@ -408,8 +417,8 @@ jobs:
         if: >-
           matrix.name == 'typecheck' &&
           env.RUN_CHECK == 'true' &&
-          (needs.classify-changes.result != 'success' ||
-          needs.classify-changes.outputs.client_build == 'true')
+          (needs.q-classify-changes.result != 'success' ||
+          needs.q-classify-changes.outputs.client_build == 'true')
         run: pnpm -C apps/client exec vite build
 
       - name: Record reusable typecheck evidence
@@ -438,7 +447,7 @@ jobs:
         run: pnpm tools docs-media verify
 
       - name: Validate changed documentation scope, privacy, links, anchors, and diff
-        if: needs.classify-changes.outputs.docs_changed == 'true' && matrix.name == 'lint'
+        if: needs.q-classify-changes.outputs.docs_changed == 'true' && matrix.name == 'lint'
         env:
           BASE_SHA: ${{ env.VALIDATION_BASE_SHA }}
           HEAD_SHA: ${{ env.VALIDATION_HEAD_SHA }}
@@ -447,22 +456,23 @@ jobs:
       - name: Confirm check is not applicable
         if: >-
           env.RUN_CHECK != 'true' &&
-          needs.classify-changes.outputs.reuse_all != 'true' &&
-          (matrix.name != 'typecheck' || needs.validation-reuse.outputs.typecheck != 'true')
+          needs.q-classify-changes.outputs.reuse_all != 'true' &&
+          (matrix.name != 'typecheck' || needs.q-validation-reuse.outputs.typecheck != 'true')
         run: echo "${{ matrix.name }} is not affected by this change scope."
 
       - name: Confirm prior validation evidence
         if: >-
-          needs.classify-changes.outputs.reuse_all == 'true' ||
-          (matrix.name == 'typecheck' && needs.validation-reuse.outputs.typecheck == 'true')
+          needs.q-classify-changes.outputs.reuse_all == 'true' ||
+          (matrix.name == 'typecheck' && needs.q-validation-reuse.outputs.typecheck == 'true')
         run: echo "${{ matrix.name }} is covered by immutable validation evidence for the applicable prior revision."
 
-  public-docs:
-    name: public-docs-build
-    needs: classify-changes
+  q-public-docs:
+    name: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'metadata edit skipped — q-public-docs' || 'public-docs-build' }}
+    needs: q-classify-changes
     if: >-
-      needs.classify-changes.outputs.reuse_all != 'true' &&
-      needs.classify-changes.outputs.public_docs == 'true'
+      !(github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null) &&
+      needs.q-classify-changes.outputs.reuse_all != 'true' &&
+      needs.q-classify-changes.outputs.public_docs == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -489,12 +499,13 @@ jobs:
           ONEWORKS_DOCS_SOURCE_DIR: ${{ github.workspace }}/.oo/docs
         run: pnpm -C assets/homepage build:docs
 
-  release-docs:
-    name: release-docs-preflight
-    needs: classify-changes
+  q-release-docs:
+    name: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'metadata edit skipped — q-release-docs' || 'release-docs-preflight' }}
+    needs: q-classify-changes
     if: >-
-      needs.classify-changes.outputs.reuse_all != 'true' &&
-      needs.classify-changes.outputs.release_docs == 'true'
+      !(github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null) &&
+      needs.q-classify-changes.outputs.reuse_all != 'true' &&
+      needs.q-classify-changes.outputs.release_docs == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -513,13 +524,15 @@ jobs:
           --allow-mixed
           --release-preflight
 
-  commit-policy:
-    name: commit-policy
-    needs: classify-changes
-    if: always()
+  q-commit-policy:
+    name: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'metadata edit skipped — q-commit-policy' || 'commit-policy' }}
+    needs: q-classify-changes
+    if: >-
+      always() && !(github.event_name == 'pull_request' && github.event.action == 'edited' &&
+      github.event.changes.base == null)
     runs-on: ubuntu-latest
     env:
-      REUSE_ALL: ${{ needs.classify-changes.outputs.reuse_all }}
+      REUSE_ALL: ${{ needs.q-classify-changes.outputs.reuse_all }}
     steps:
       - name: Checkout repository
         if: env.REUSE_ALL != 'true' && github.event_name != 'merge_group'
@@ -565,29 +578,31 @@ jobs:
         run: echo "Commit messages already passed for this exact base and head revision."
 
   # Keep the protected check name while making it the final, fail-closed aggregate.
-  commit-message:
-    name: commit-message
+  q-commit-message:
+    name: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'metadata edit skipped — q-commit-message' || 'commit-message' }}
     needs:
-      - classify-changes
-      - validation-reuse
-      - quality
-      - public-docs
-      - release-docs
-      - commit-policy
-    if: always()
+      - q-classify-changes
+      - q-validation-reuse
+      - q-quality
+      - q-public-docs
+      - q-release-docs
+      - q-commit-policy
+    if: >-
+      always() && !(github.event_name == 'pull_request' && github.event.action == 'edited' &&
+      github.event.changes.base == null)
     runs-on: ubuntu-latest
     steps:
       - name: Enforce complete validation result
         env:
-          CLASSIFIER_RESULT: ${{ needs.classify-changes.result }}
-          REUSE_RESULT: ${{ needs.validation-reuse.result }}
-          QUALITY_RESULT: ${{ needs.quality.result }}
-          PUBLIC_DOCS_RESULT: ${{ needs.public-docs.result }}
-          PUBLIC_DOCS_REQUIRED: ${{ needs.classify-changes.outputs.public_docs }}
-          RELEASE_DOCS_RESULT: ${{ needs.release-docs.result }}
-          RELEASE_DOCS_REQUIRED: ${{ needs.classify-changes.outputs.release_docs }}
-          REUSE_ALL: ${{ needs.classify-changes.outputs.reuse_all }}
-          COMMIT_POLICY_RESULT: ${{ needs.commit-policy.result }}
+          CLASSIFIER_RESULT: ${{ needs.q-classify-changes.result }}
+          REUSE_RESULT: ${{ needs.q-validation-reuse.result }}
+          QUALITY_RESULT: ${{ needs.q-quality.result }}
+          PUBLIC_DOCS_RESULT: ${{ needs.q-public-docs.result }}
+          PUBLIC_DOCS_REQUIRED: ${{ needs.q-classify-changes.outputs.public_docs }}
+          RELEASE_DOCS_RESULT: ${{ needs.q-release-docs.result }}
+          RELEASE_DOCS_REQUIRED: ${{ needs.q-classify-changes.outputs.release_docs }}
+          REUSE_ALL: ${{ needs.q-classify-changes.outputs.reuse_all }}
+          COMMIT_POLICY_RESULT: ${{ needs.q-commit-policy.result }}
         shell: bash
         run: |
           set -euo pipefail
@@ -610,27 +625,28 @@ jobs:
           fi
           echo "All applicable validation jobs completed successfully."
 
-  record-pr-source-evidence:
-    name: source-validation-evidence
+  q-record-pr-source-evidence:
+    name: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'metadata edit skipped — q-record-pr-source-evidence' || 'source-validation-evidence' }}
     needs:
-      - classify-changes
-      - validation-reuse
-      - quality
-      - public-docs
-      - release-docs
-      - commit-policy
-      - commit-message
+      - q-classify-changes
+      - q-validation-reuse
+      - q-quality
+      - q-public-docs
+      - q-release-docs
+      - q-commit-policy
+      - q-commit-message
     if: >-
       always() &&
       github.event_name == 'pull_request' &&
-      needs.classify-changes.outputs.reuse_all != 'true' &&
-      needs.classify-changes.result == 'success' &&
-      needs.validation-reuse.result == 'success' &&
-      needs.quality.result == 'success' &&
-      (needs.public-docs.result == 'success' || needs.public-docs.result == 'skipped') &&
-      (needs.release-docs.result == 'success' || needs.release-docs.result == 'skipped') &&
-      needs.commit-policy.result == 'success' &&
-      needs.commit-message.result == 'success'
+      !(github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null) &&
+      needs.q-classify-changes.outputs.reuse_all != 'true' &&
+      needs.q-classify-changes.result == 'success' &&
+      needs.q-validation-reuse.result == 'success' &&
+      needs.q-quality.result == 'success' &&
+      (needs.q-public-docs.result == 'success' || needs.q-public-docs.result == 'skipped') &&
+      (needs.q-release-docs.result == 'success' || needs.q-release-docs.result == 'skipped') &&
+      needs.q-commit-policy.result == 'success' &&
+      needs.q-commit-message.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Record exact source validation evidence
