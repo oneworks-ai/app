@@ -17,6 +17,28 @@
 - [运行时 API 与服务契约](.oo/rfcs/0006-standard-voice-runtime.md)
 - [Sender 交互、落地计划与验证](.oo/rfcs/0006-standard-voice-sender-plan.md)
 
+## 插件扩展面 RFC
+
+- [总览与结论](.oo/rfcs/0011-plugin-extensibility.md)
+- [现有扩展面盘点](.oo/rfcs/0011-plugin-extensibility-current-surface.md)
+- [DSH / Cordis 结构对照](.oo/rfcs/0011-plugin-extensibility-dsh-comparison.md)
+- [边界与设计纪律](.oo/rfcs/0011-plugin-extensibility-boundaries.md)
+- [行动项与优先级](.oo/rfcs/0011-plugin-extensibility-actions.md)
+
+## Hook 与插件系统收敛 RFC
+
+- [总览](.oo/rfcs/0012-hook-plugin-convergence.md)
+- [通用事件 API 设计](.oo/rfcs/0012-hook-plugin-convergence-events-api.md)
+- [事件词汇表](.oo/rfcs/0012-hook-plugin-convergence-events.md)
+- [运行时与裁决语义](.oo/rfcs/0012-hook-plugin-convergence-runtime.md)
+- [迁移与兼容](.oo/rfcs/0012-hook-plugin-convergence-migration.md)
+
+## 插件内核 RFC
+
+- [总览与内核定律](.oo/rfcs/0013-plugin-kernel.md)
+- [内核接口](.oo/rfcs/0013-plugin-kernel-surface.md)
+- [迁移路径](.oo/rfcs/0013-plugin-kernel-migration.md)
+
 ## 插件运行时 RFC
 
 - [目录结构、manifest 与共享契约](.oo/rfcs/plugin-runtime-layout-manifest.md)
