@@ -16,9 +16,9 @@ const { createFrameChannel, encodeFrame } = require('./protocol.cjs')
 const { writeSocket } = require('./transport.cjs')
 const failure = (code, committed = false, warnings = []) => ({ error: { code, committed, warnings }, ok: false })
 const createSession = (
-  { allowFaults, binding, claims, controlRoot, database, epoch, secret, socket, workspaceRoot }
+  { allowFaults, binding, claims, controlRoot, database, epoch, initialBytes, secret, socket, workspaceRoot }
 ) => {
-  const channel = createFrameChannel(socket)
+  const channel = createFrameChannel(socket, initialBytes)
   const handshake = createBrokerHandshake(epoch, secret)
   const managedTrees = createManagedTreeHandler({ allowFaults, binding, database, secret })
   const state = { authenticated: false, authority: undefined, claim: undefined, socket }
